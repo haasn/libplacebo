@@ -188,6 +188,7 @@ void pl_shader_linearize(struct pl_shader *s, enum pl_color_transfer trc)
     case PL_COLOR_TRC_GAMMA18:
         GLSL("color.rgb = pow(color.rgb, vec3(1.8));\n");
         break;
+    case PL_COLOR_TRC_UNKNOWN:
     case PL_COLOR_TRC_GAMMA22:
         GLSL("color.rgb = pow(color.rgb, vec3(2.2));\n");
         break;
@@ -265,6 +266,7 @@ void pl_shader_delinearize(struct pl_shader *s, enum pl_color_transfer trc)
     case PL_COLOR_TRC_GAMMA18:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/1.8));\n");
         break;
+    case PL_COLOR_TRC_UNKNOWN:
     case PL_COLOR_TRC_GAMMA22:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.2));\n");
         break;
@@ -315,7 +317,7 @@ void pl_shader_delinearize(struct pl_shader *s, enum pl_color_transfer trc)
 
 void pl_shader_ootf(struct pl_shader *s, enum pl_color_light light, float peak)
 {
-    if (light == PL_COLOR_LIGHT_DISPLAY)
+    if (!light || light == PL_COLOR_LIGHT_DISPLAY)
         return;
 
     GLSL("// pl_shader_ootf      \n"
@@ -351,7 +353,7 @@ void pl_shader_ootf(struct pl_shader *s, enum pl_color_light light, float peak)
 
 void pl_shader_inverse_ootf(struct pl_shader *s, enum pl_color_light light, float peak)
 {
-    if (light == PL_COLOR_LIGHT_DISPLAY)
+    if (!light || light == PL_COLOR_LIGHT_DISPLAY)
         return;
 
     GLSL("// pl_shader_inverse_ootf\n"
@@ -480,6 +482,29 @@ void pl_shader_color_map(struct pl_shader *s,
 {
     GLSL("// pl_shader_color_map\n");
     GLSL("{\n");
+
+    // To be as conservative as possible, color mapping is disabled by default
+    // except for special cases which are considered to be "sufficiently
+    // different" from the source space. For primaries, this means anything
+    // wide gamut; and for transfers, this means anything radically different
+    // from the typical SDR curves.
+    if (!dst.primaries) {
+        dst.primaries = src.primaries;
+        if (pl_color_primaries_is_wide_gamut(dst.primaries))
+            dst.primaries = PL_COLOR_PRIM_BT_709;
+    }
+
+    if (!dst.transfer) {
+        dst.transfer = src.transfer;
+        if (pl_color_transfer_is_hdr(dst.transfer) ||
+                dst.transfer == PL_COLOR_TRC_LINEAR)
+            dst.transfer = PL_COLOR_TRC_GAMMA22;
+    }
+
+    // If the source signal peak information is unknown, infer it from the
+    // transfer function. (Note: The sig peak of the dst space is irrelevant)
+    if (!src.sig_peak)
+        src.sig_peak = pl_color_transfer_nominal_peak(src.transfer);
 
     // Compute the highest encodable level
     float src_range = pl_color_transfer_nominal_peak(src.transfer),
