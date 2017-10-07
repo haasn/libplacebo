@@ -20,9 +20,11 @@ be used for testing purposes. It is not a finished product by any means.
 
 ## Authors
 
-libplacebo's main developer is Niklas Haas (@haasn), but the project would
-not be possible without the immense contributions of Vincent Lang (@wm4), who
-laid the groundwork for most of the code that ended up in libplacebo.
+libplacebo's main developer is Niklas Haas
+([@haasn](https://github.com/haasn)), but the project would not be possible
+without the immense contributions of Vincent Lang
+([@wm4](https://github.com/wm4)), who laid the groundwork for most of the code
+that ended up in libplacebo.
 
 For a full list of past contributors to mpv, see the [mpv authorship
 page](https://github.com/mpv-player/mpv/graphs/contributors).
