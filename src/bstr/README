@@ -1,0 +1,7 @@
+bstr ("byte string") is an abstraction for working with strings in a
+start/length representation rather than scanning for \0 terminators. This is
+important for both handling arbitrary binary data as well as being more
+efficient for large string operations.
+
+bstr is based on the TA/talloc helpers.
+All of the code is ported from mpv (https://mpv.io).
