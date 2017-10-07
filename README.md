@@ -5,11 +5,9 @@
 accomplish the following goals:
 
 - Clean up mpv's internal [RA](#rendering-abstraction) API and make it reusable for other projects.
-
 - Provide a standard library of useful GPU-accelerated image processing
   primitives based on GLSL, so projects like VLC or Firefox can use them
   without incurring a heavy dependency on `libmpv`.
-
 - Rewrite core parts of mpv's GPU-accelerated video renderer on top of
   redesigned abstractions. (Basically, I wanted to eliminate code smell like
   `shader_cache.c` and totally redesign `gpu/video.c`)
@@ -42,29 +40,23 @@ inside the [`src/public/`](src/public/) directory.
 
 - `context.h`: The main entry-point into the library. Controls memory
   allocation, logging. and guards ABI/thread safety.
-
 - `colorspace.h`: A collection of enums and structs for describing color
   spaces, as well as a collection of helper functions for computing various
   color space transformation matrices.
-
 - `common.h`: A collection of miscellaneous utility types and macros that are
   shared among multiple subsystems. Usually does not need to be included
   directly.
-
 - `config.h`: Macros defining information about the way libplacebo was built,
   including the version strings and compiled-in features/dependencies. Usually
   does not need to be included directly.
-
 - `filters.h`: A collection of reusable reconstruction filter kernels, which
   can be used for scaling. The generated weights arrays are semi-tailored to
   the needs of libplacebo, but may be useful to somebody else regardless. Also
   contains the structs needed to define a filter kernel for the purposes of
   libplacebo's upscaling routines.
-
 - `ra.h`: Exports the RA API used by libplacebo internally. For more
   information, see the [rendering abstraction](#rendering-abstraction)
   section.
-
 - `shaders.h`: A collection of reusable GLSL primitives for various individual
   tasks including color space transformations and (eventually) image sampling,
   debanding, etc. These have an optional dependency on RA (ra.h), but can also
