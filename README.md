@@ -81,7 +81,13 @@ uses its own namespace (`ra_` instead of `pl_`).
 **NOTE**: The port of RA into libplacebo is currently very WIP, and right now
 only the public API is exported - none of the actual implementations.
 
-## Building
+## Installing
+
+### Gentoo
+
+An [ebuild](etc/libplacebo-9999.ebuild) is available.
+
+## Building from source
 
 libplacebo is built using the [meson build system](http://mesonbuild.com/).
 You can build the project using the following steps:
