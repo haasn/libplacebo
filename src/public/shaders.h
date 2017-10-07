@@ -18,8 +18,8 @@
 #ifndef LIBPLACEBO_SHADERS_H_
 #define LIBPLACEBO_SHADERS_H_
 
-#include "ra.h"
 #include "colorspace.h"
+#include "ra.h"
 
 // Represents a shader fragment. This is not a complete shader, but a
 // collection of shader text together with description of the input required to

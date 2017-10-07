@@ -18,6 +18,7 @@
 #ifndef LIBPLACEBO_RA_H_
 #define LIBPLACEBO_RA_H_
 
+#include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
 
