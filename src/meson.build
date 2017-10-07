@@ -26,7 +26,7 @@ conf.set('apiver', apiver)
 configure_file(
   input: 'config.h.in',
   output: 'config.h',
-  install_dir: 'libplacebo',
+  install_dir: 'include/libplacebo',
   configuration: conf,
 )
 
