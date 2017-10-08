@@ -270,7 +270,7 @@ struct ra_var_layout {
 
 // Returns the host layout of an input variable as required for a
 // tightly-packed, byte-aligned C data type.
-struct ra_var_layout ra_var_host_layout(const struct ra_var var);
+struct ra_var_layout ra_var_host_layout(struct ra_var var);
 
 // Type of a shader input descriptor.
 enum ra_desc_type {
