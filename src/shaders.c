@@ -413,7 +413,7 @@ static void pl_shader_tone_map(struct pl_shader *s, float ref_peak, var_t luma,
               "return ((x * (%f*x + %f)+%f)/(x * (%f*x + %f) + %f)) - %f; \n"
               "}                                                          \n",
               hable, A, C*B, D*E, A, B, D*F, E/F);
-        GLSL("sig = %s(sig) / %s(sig_peak);", hable, hable);
+        GLSL("sig = %s(sig) / %s(sig_peak);\n", hable, hable);
         break;
     }
 
