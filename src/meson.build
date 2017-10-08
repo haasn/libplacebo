@@ -57,7 +57,7 @@ sources = [
   'ta/talloc.c',
 ]
 
-lib = shared_library('placebo', sources,
+lib = library('placebo', sources,
   install: true,
   dependencies: deps,
   soversion: apiver,
