@@ -515,13 +515,12 @@ void pl_shader_color_map(struct pl_shader *s,
           dst_range = pl_color_transfer_nominal_peak(dst.transfer);
     float ref_peak = src.sig_peak / dst_range;
 
-    // Some operations need access to the video's luma coefficients, so make
-    // them available
+    // OOTF and inverse OOTF need access to the src_luma coefficients
     struct pl_color_matrix rgb2xyz;
-    rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(src.primaries));
-    pl_shader_var_vec3(s, "src_luma", rgb2xyz.m[1]);
-    rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(dst.primaries));
-    pl_shader_var_vec3(s, "dst_luma", rgb2xyz.m[1]);
+    if (src.light != dst.light) {
+        rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(src.primaries));
+        pl_shader_var_vec3(s, "src_luma", rgb2xyz.m[1]);
+    }
 
     // All operations from here on require linear light as a starting point,
     // so we linearize even if src.gamma == dst.gamma when one of the other
@@ -564,8 +563,11 @@ void pl_shader_color_map(struct pl_shader *s,
 
     // Tone map to prevent clipping when the source signal peak exceeds the
     // encodable range or we've reduced the gamut
-    if (ref_peak > 1)
+    if (ref_peak > 1) {
+        rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(dst.primaries));
+        pl_shader_var_vec3(s, "dst_luma", rgb2xyz.m[1]);
         pl_shader_tone_map(s, ref_peak, params);
+    }
 
     if (src.light != dst.light) {
         pl_shader_inverse_ootf(s, dst.light, pl_color_transfer_nominal_peak(dst.transfer));
