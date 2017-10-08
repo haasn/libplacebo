@@ -2,6 +2,8 @@ majorver = '0'
 apiver   = '0'
 fixver   = '0'
 
+version = majorver + '.' + apiver + '.' + fixver
+
 # Build options mostly taken from mpv
 add_global_arguments([
   '-D_ISOC99_SOURCE', '-D_GNU_SOURCE',
@@ -22,7 +24,16 @@ deps = [
 
 # Configuration
 conf = configuration_data()
+conf.set('majorver', majorver)
 conf.set('apiver', apiver)
+conf.set('fixver', fixver)
+
+gitdesc = run_command('git', 'describe')
+if gitdesc.returncode() == 0
+  conf.set_quoted('version', gitdesc.stdout().strip())
+else
+  conf.set_quoted('version', 'v' + version)
+endif
 
 configure_file(
   input: 'config.h.in',
@@ -68,5 +79,5 @@ pkg.generate(
   name: meson.project_name(),
   description: 'Reusable library for GPU-accelerated video/image rendering',
   libraries: '-lplacebo',
-  version: majorver + '.' + apiver + '.' + fixver,
+  version: version,
 )

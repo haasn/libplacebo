@@ -18,7 +18,17 @@
 #ifndef LIBPLACEBO_CONFIG_H_
 #define LIBPLACEBO_CONFIG_H_
 
-// Increased any time the API changes.
+// Increased any time the library changes in a fundamental/major way.
+#define PL_MAJOR_VER @majorver@
+
+// Increased any time the API changes. (Note: Does not reset when PL_MAJOR_VER
+// is increased)
 #define PL_API_VER @apiver@
+
+// Increased any time a fix is made to a given API version.
+#define PL_FIX_VER @fixver@
+
+// Friendly name (`git describe`) for the overall version of the library
+#define PL_VERSION @version@
 
 #endif // LIBPLACEBO_CONTEXT_H_
