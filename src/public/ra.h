@@ -274,6 +274,9 @@ struct ra_var_layout {
 
 // Returns the host layout of an input variable as required for a
 // tightly-packed, byte-aligned C data type.
+//
+// NOTE: matrices are assumed to be column major, since this matches typical
+// graphics APIs.
 struct ra_var_layout ra_var_host_layout(struct ra_var var);
 
 // Type of a shader input descriptor.
