@@ -57,7 +57,7 @@ sources = [
   'ta/talloc.c',
 ]
 
-shared_library('placebo', sources,
+lib = shared_library('placebo', sources,
   install: true,
   dependencies: deps,
   soversion: apiver,
@@ -78,6 +78,6 @@ pkg = import('pkgconfig')
 pkg.generate(
   name: meson.project_name(),
   description: 'Reusable library for GPU-accelerated video/image rendering',
-  libraries: '-lplacebo',
+  libraries: lib,
   version: version,
 )
