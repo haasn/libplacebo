@@ -94,15 +94,6 @@ void pl_shader_linearize(struct pl_shader *s, enum pl_color_transfer trc);
 // reference monitor.
 void pl_shader_delinearize(struct pl_shader *s, enum pl_color_transfer trc);
 
-// Applies the OOTF / inverse OOTF described by a given pl_color_light. That
-// is, the OOTF will always take the `vec4 color` from the specified `light`
-// to display-referred space, and the inverse OOTF will always take the color
-// from display-referred space to the specified `light`.
-// The value of `peak` should be set to the encoded color's nominal peak
-// (which can be obtained from pl_color_transfer_nominal_peak).
-void pl_shader_ootf(struct pl_shader *s, enum pl_color_light light, float peak);
-void pl_shader_inverse_ootf(struct pl_shader *s, enum pl_color_light light, float peak);
-
 // A collection of various tone mapping algorithms supported by libplacebo.
 enum pl_tone_mapping_algorithm {
     // Performs no tone-mapping, just clips out-of-gamut colors. Retains perfect

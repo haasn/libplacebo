@@ -315,7 +315,10 @@ void pl_shader_delinearize(struct pl_shader *s, enum pl_color_transfer trc)
     }
 }
 
-void pl_shader_ootf(struct pl_shader *s, enum pl_color_light light, float peak)
+// Applies the OOTF / inverse OOTF. `peak` corresponds to the nominal peak
+// (needed to scale the functions correctly)
+static void pl_shader_ootf(struct pl_shader *s, enum pl_color_light light,
+                           float peak)
 {
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
         return;
@@ -351,7 +354,8 @@ void pl_shader_ootf(struct pl_shader *s, enum pl_color_light light, float peak)
     GLSL("color.rgb *= vec3(1.0/%f);\n", peak);
 }
 
-void pl_shader_inverse_ootf(struct pl_shader *s, enum pl_color_light light, float peak)
+static void pl_shader_inverse_ootf(struct pl_shader *s, enum pl_color_light light,
+                                   float peak)
 {
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
         return;
