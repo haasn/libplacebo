@@ -56,7 +56,7 @@ const char *ra_var_glsl_type_name(struct ra_var var)
     [RA_VAR_FLOAT][1][1] = "float",
     [RA_VAR_FLOAT][1][2] = "vec2",
     [RA_VAR_FLOAT][1][3] = "vec3",
-    [RA_VAR_FLOAT][1][3] = "vec4",
+    [RA_VAR_FLOAT][1][4] = "vec4",
     // float matrices
     [RA_VAR_FLOAT][2][2] = "mat2",
     [RA_VAR_FLOAT][2][3] = "mat2x3",
@@ -71,12 +71,12 @@ const char *ra_var_glsl_type_name(struct ra_var var)
     [RA_VAR_SINT][1][1] = "int",
     [RA_VAR_SINT][1][2] = "ivec2",
     [RA_VAR_SINT][1][3] = "ivec3",
-    [RA_VAR_SINT][1][3] = "ivec4",
+    [RA_VAR_SINT][1][4] = "ivec4",
     // unsigned integer vectors
     [RA_VAR_UINT][1][1] = "uint",
     [RA_VAR_UINT][1][2] = "uvec2",
     [RA_VAR_UINT][1][3] = "uvec3",
-    [RA_VAR_UINT][1][3] = "uvec4",
+    [RA_VAR_UINT][1][4] = "uvec4",
     };
 
     if (var.dim_v > MAX_DIM || var.dim_m > MAX_DIM)
