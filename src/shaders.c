@@ -57,12 +57,16 @@ bool pl_shader_is_compute(const struct pl_shader *s)
 
 typedef const char * var_t;
 
+static var_t fresh(struct pl_shader *s, const char *name)
+{
+    struct priv *p = s->priv;
+    return talloc_asprintf(s, "_%s_%d", name ? name : "var", p->fresh++);
+}
+
 // Add a new shader var and return its identifier (string)
 static var_t var(struct pl_shader *s, struct pl_shader_var sv)
 {
-    struct priv *p = s->priv;
-    const char *safename = sv.var.name ? sv.var.name : "";
-    sv.var.name = talloc_asprintf(s, "_%s_%d", safename, p->fresh++);
+    sv.var.name = fresh(s, sv.var.name);
     sv.data = talloc_memdup(s, sv.data, ra_var_host_layout(sv.var).size);
 
     TARRAY_APPEND(s, s->variables, s->num_variables, sv);
@@ -404,9 +408,12 @@ static void pl_shader_tone_map(struct pl_shader *s, float ref_peak, var_t luma,
 
     case PL_TONE_MAPPING_HABLE: {
         float A = 0.15, B = 0.50, C = 0.10, D = 0.20, E = 0.02, F = 0.30;
-        GLSL("sig = ((sig * (%f*sig + %f)+%f)/(sig * (%f*sig + %f) + %f)) - %f;\n",
-             A, C*B, D*E, A, B, D*F, E/F);
-        // FIXME: make this benefit from sig_peak
+        var_t hable = fresh(s, "hable");
+        GLSLH("float %s(float x) {                                        \n"
+              "return ((x * (%f*x + %f)+%f)/(x * (%f*x + %f) + %f)) - %f; \n"
+              "}                                                          \n",
+              hable, A, C*B, D*E, A, B, D*F, E/F);
+        GLSL("sig = %s(sig) / %s(sig_peak);", hable, hable);
         break;
     }
 
