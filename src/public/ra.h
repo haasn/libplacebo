@@ -37,6 +37,7 @@
 typedef uint64_t ra_glsl_caps;
 enum {
     RA_GLSL_CAP_SHARED_BINDING = 1 << 0, // descriptor namespaces are separate
+    RA_GLSL_CAP_TEXTURE_GATHER = 1 << 1, // supports GL_ARB_texture_gather
 };
 
 // Structure which wraps metadata describing GLSL capabilities.
@@ -49,33 +50,43 @@ struct ra_glsl_desc {
 
 typedef uint64_t ra_caps;
 enum {
-    RA_CAP_TEX_1D           = 1 << 0, // supports creating 1D textures
-    RA_CAP_TEX_3D           = 1 << 1, // supports creating 3D textures
-    RA_CAP_BLIT             = 1 << 2, // supports ra_fns.blit
-    RA_CAP_COMPUTE          = 1 << 3, // supports compute shaders
-    RA_CAP_UNIFORM_BUFFERS  = 1 << 4, // supports RA_BUF_TYPE_UNIFORM
-    RA_CAP_STORAGE_BUFFERS  = 1 << 5, // supports RA_BUF_TYPE_STORAGE
-    RA_CAP_INPUT_VARIABLES  = 1 << 6, // supports shader input variables
+    RA_CAP_TEX_BLIT         = 1 << 0, // supports ra_tex_blit
+    RA_CAP_COMPUTE          = 1 << 1, // supports compute shaders
+    RA_CAP_INPUT_VARIABLES  = 1 << 2, // supports shader input variables
+};
+
+// Structure defining the physical limits of this RA instance. If a limit is
+// given as 0, that means that feature is unsupported.
+struct ra_limits {
+    int max_tex_1d_dim;    // maximum width for a 1D texture
+    int max_tex_2d_dim;    // maximum width/height for a 2D texture (required)
+    int max_tex_3d_dim;    // maximum width/height/depth for a 3D texture
+    size_t max_pushc_size; // maximum push_constants_size
+    size_t max_shmem_size; // maximum compute shader shared memory size
+    size_t max_ubo_size;   // maximum size of a RA_BUF_UNIFORM
+    size_t max_ssbo_size;  // maximum size of a RA_BUF_STORAGE
 };
 
 // Abstract device context which wraps an underlying graphics context and can
 // be used to dispatch rendering commands.
 struct ra {
     struct pl_context *ctx;     // the pl_context this RA was initialized from
-    const struct ra_fns *fns;   // the functions corresponding to this RA
+    const struct ra_fns *impl;  // the underlying implementation (unique per RA)
     void *priv;
 
     ra_caps caps;               // RA_CAP_* bit field
     struct ra_glsl_desc glsl;   // GLSL version supported by this RA
-    int max_texture_wh;         // maximum W/H of a 2D texture
-    size_t max_shmem;           // maximum shared memory for compute shaders
-    size_t max_pushc;           // maximum push constant size
+    struct ra_limits limits;    // physical device limits
+    // Note: Every RA must support at least one of RA_CAP_INPUT_VARIABLES or
+    // uniform buffers (limits.max_ubo_size > 0).
 
     // Supported texture formats, in preference order. (If there are multiple
     // similar formats, the "better" ones come first)
     const struct ra_format **formats;
     int num_formats;
 };
+
+void ra_destroy(const struct ra **ra);
 
 enum ra_fmt_type {
     RA_FMT_UNKNOWN = 0, // also used for inconsistent multi-component formats
@@ -114,7 +125,6 @@ struct ra_format {
 
     // If usable as a vertex or texel buffer format, this gives the GLSL type
     // corresponding to the data. (e.g. vec4)
-    // (Note: texel buffers are currently unsupported)
     const char *glsl_type;
 };
 
@@ -126,6 +136,19 @@ bool ra_format_is_ordered(const struct ra_format *fmt);
 // unpadded. In other words, a regular format is any where the representation
 // is "trivial" and doesn't require any special re-packing or re-ordering.
 bool ra_format_is_regular(const struct ra_format *fmt);
+
+// Helper function to find a format with a given number of components and depth
+// per component. The format must be usable as a texture format. If `regular`
+// is true, ra_format_is_regular() must be true.
+const struct ra_format *ra_find_texture_format(const struct ra *ra,
+                                               enum ra_fmt_type type,
+                                               int num_components,
+                                               int bits_per_component,
+                                               bool regular);
+
+// Find a format based on its name.
+const struct ra_format *ra_find_named_format(const struct ra *ra,
+                                             const char *name);
 
 enum ra_tex_sample_mode {
     RA_TEX_SAMPLE_NEAREST,  // nearest neighour sampling
@@ -169,10 +192,48 @@ struct ra_tex_params {
 // - framebuffer objects
 // - wrappers for swapchain framebuffers
 // - synchronization needed for upload/rendering/etc.
+//
+// Essentially a ra_tex can be anything ranging from a normal texture, a wrapper
+// external/real framebuffer, a framebuffer object + texture pair, a mapped
+// texture (via ra_hwdec), or other sorts of things that can be sampled from
+// and/or rendered to.
 struct ra_tex {
     struct ra_tex_params params;
     void *priv;
 };
+
+// Create a texture (with undefined contents). Return NULL on failure. This is
+// assumed to be an expensive/rare operation, and may need to perform memory
+// allocation or framebuffer creation.
+const struct ra_tex *ra_tex_create(const struct ra *ra,
+                                   const struct ra_tex_params *params);
+
+void ra_tex_destroy(const struct ra *ra, const struct ra_tex **tex);
+
+// Clear the dst texture with the given color (rgba) and within the given
+// region. This is functionally identical to a blit operation, which means
+// dst->params.blit_dst must be set. Content outside of the scissor is
+// preserved.
+//
+// Note: Clearing a partial region of an image may perform significantly worse
+// than clearing the entire image, and should be avoided if possible.
+void ra_tex_clear(const struct ra *ra, const struct ra_tex *dst,
+                  struct pl_rect3d rect, const float color[4]);
+
+// Copy a sub-rectangle from one texture to another. The source/dest
+// regions must be within the texture bounds. Areas outside the dest region
+// are preserved. The formats of the textures must be loosely compatible -
+// which essentially means that they must have the same texel size.
+// src.blit_src and dst.blit_dst must be set, respectively.
+//
+// The rectangles may be "negative", which leads to the image being flipped
+// while blitting. If the src and dst rects have different sizes, the source
+// image will be scaled according to src->params.sample_mode.
+//
+// If RA_CAP_TEX_BLIT is not present, this is a no-op.
+void ra_tex_blit(const struct ra *ra,
+                 const struct ra_tex *dst, const struct ra_tex *src,
+                 struct pl_rect3d dst_rc, struct pl_rect3d src_rc);
 
 // Structure describing a texture upload operation.
 struct ra_tex_upload_params {
@@ -199,6 +260,14 @@ struct ra_tex_upload_params {
     // the underlying API.
 };
 
+// Upload data to a texture. This is an extremely common operation. When
+// using a buffer, the contants of the buffer must exactly match the format
+// as described by the texture's ra_format - conversions between bit depths
+// and representations are not supported. This operation may mark the buffer
+// as "in use" while the copy is going on. Returns whether successful.
+bool ra_tex_upload(const struct ra *ra,
+                   const struct ra_tex_upload_params *params);
+
 // Buffer usage type. This restricts what types of operations may be performed
 // on a buffer.
 enum ra_buf_type {
@@ -215,7 +284,7 @@ struct ra_buf_params {
     enum ra_buf_type type;
     size_t size;       // size in bytes
     bool host_mapped;  // create a read-writable persistent mapping (ra_buf.data)
-    bool host_mutable; // contents may be updated via buf_update()
+    bool host_mutable; // contents may be updated via ra_buf_update()
 
     // If non-NULL, the buffer will be created with these contents. Otherwise,
     // the initial data is undefined. Using this does *not* require setting
@@ -227,16 +296,28 @@ struct ra_buf_params {
 // storage buffer, uniform buffer, etc.)
 struct ra_buf {
     struct ra_buf_params params;
-    void *data; // for persistently mapped buffers, points to the first byte
+    char *data; // for persistently mapped buffers, points to the first byte
     void *priv;
 };
 
-// Represents a vertex attribute.
-struct ra_vertex_attrib {
-    const char *name;            // name as used in the shader
-    const struct ra_format *fmt; // data format (must have `vertex_format` set)
-    size_t offset;               // byte offset into the vertex struct
-};
+// Create a buffer. The type of buffer depends on the parameters. The buffer
+// parameters must adhere to the restrictions imposed by the ra_limits.
+const struct ra_buf *ra_buf_create(const struct ra *ra,
+                                   const struct ra_buf_params *params);
+
+void ra_buf_destroy(const struct ra *ra, const struct ra_buf **buf);
+
+// Update the contents of a buffer, starting at a given offset (*must* be a
+// multiple of 4) and up to a given size, with the contents of *data. This is
+// an extremely common operation. Calling this while the buffer is considered
+// "in use" is an error. (See: buf_poll)
+void ra_buf_update(const struct ra *ra, const struct ra_buf *buf,
+                   size_t buf_offset, const void *data, size_t size);
+
+// Returns if a buffer is currently "in use" or not. Updating the contents of a
+// buffer (via buf_update or writes to buf->data) while it is still in use is
+// an error and may result in graphical corruption.
+bool ra_buf_poll(const struct ra *ra, const struct ra_buf *buf);
 
 // Data type of a shader input variable (e.g. uniform, or UBO member)
 enum ra_var_type {
@@ -287,12 +368,42 @@ struct ra_var_layout {
 // NOTE: matrices are assumed to be row major, similar to pl_color_matrix.
 struct ra_var_layout ra_var_host_layout(struct ra_var var);
 
+// Returns the layout requirements of a uniform buffer element. If
+// limits.max_ubo_size is 0, then this function returns {0}.
+//
+// Note: This is normally equivalent to std140 layout, but not necessarily
+// (for example, RAs based on d3d11 may internally translate std140 to a
+// different layout). As such, the calling code should not make any
+// assumptions about the buffer layout and instead query the layout
+// requirements explicitly using this function.
+struct ra_var_layout ra_buf_uniform_layout(const struct ra *ra,
+                                           const struct ra_var *var);
+
+// Returns the layout requirements of a storage buffer element. If
+// limits.max_ssbo_size is 0, then this function returns {0}.
+//
+// Note: This is normally equivalent to std430 layout.
+struct ra_var_layout ra_buf_storage_layout(const struct ra *ra,
+                                           const struct ra_var *var);
+
+// Returns the layout requirements of a push constant element. If
+// ra.max_pushc_size is 0, then this function returns {0}.
+struct ra_var_layout ra_push_constant_layout(const struct ra *ra,
+                                             const struct ra_var *var);
+
+// Represents a vertex attribute.
+struct ra_vertex_attrib {
+    const char *name;            // name as used in the shader
+    const struct ra_format *fmt; // data format (must have `vertex_format` set)
+    size_t offset;               // byte offset into the vertex struct
+};
+
 // Type of a shader input descriptor.
 enum ra_desc_type {
     RA_DESC_INVALID = 0,
     RA_DESC_SAMPLED_TEX,    // C: ra_tex*    GLSL: combined texture sampler
                             // (ra_tex->params.sampleable must be set)
-    RA_DESC_STORAGE_IMG,    // C: ra_tex*    GLSL: readonly storage image
+    RA_DESC_STORAGE_IMG,    // C: ra_tex*    GLSL: storage image
                             // (ra_tex->params.storage_image must be set)
     RA_DESC_BUF_UNIFORM,    // C: ra_buf*    GLSL: uniform buffer
                             // (ra_buf->params.type must be RA_BUF_UNIFORM)
@@ -308,6 +419,9 @@ enum ra_desc_access {
     RA_DESC_ACCESS_WRITEONLY,
 };
 
+// Returns the GLSL syntax for a given access mode (e.g. "readonly").
+const char *ra_desc_access_glsl_name(enum ra_desc_access mode);
+
 // Represents a shader descriptor (e.g. texture or buffer binding)
 struct ra_desc {
     const char *name;       // name as used in the shader
@@ -322,7 +436,8 @@ struct ra_desc {
 
     // For storage images and storage buffers, this can be used to restrict
     // the type of access that may be performed on the descriptor. Ignored for
-    // the other descriptor types
+    // the other descriptor types (uniform buffers and sampled textures are
+    // always read-only).
     enum ra_desc_access access;
 
     // For RA_DESC_BUF_*, this specifies the GLSL layout of the buffer (not
@@ -341,25 +456,26 @@ enum ra_blend_mode {
 enum ra_renderpass_type {
     RA_RENDERPASS_INVALID = 0,
     RA_RENDERPASS_RASTER,  // vertex+fragment shader
-    RA_RENDERPASS_COMPUTE, // compute shader
+    RA_RENDERPASS_COMPUTE, // compute shader (requires RA_CAP_COMPUTE)
     RA_RENDERPASS_TYPE_COUNT,
 };
 
 // Description of a rendering pass. It conflates the following:
-//  - GLSL shader and its list of inputs
+//  - GLSL shader(s) and its list of inputs
 //  - target parameters (for raster passes)
 struct ra_renderpass_params {
     enum ra_renderpass_type type;
 
     // Input variables. Only supported if RA_CAP_INPUT_VARIABLES is set.
+    // Otherwise, num_variables must be 0.
     struct ra_var *variables;
     int num_variables;
 
-    // Input descriptors
+    // Input descriptors. (Always supported)
     struct ra_desc *descriptors;
     int num_descriptors;
 
-    // Push constant region. Must be <= ra.max_pushc, and a multiple of 4
+    // Push constant region. Must be be a multiple of 4 <= limits.max_pushc_size
     size_t push_constants_size;
 
     // The shader text in GLSL. For RA_RENDERPASS_RASTER, this is interpreted
@@ -399,10 +515,16 @@ struct ra_renderpass_params {
 // - all synchronization necessary
 // - the current values of all inputs
 struct ra_renderpass {
-    // All fields are read-only after creation.
     struct ra_renderpass_params params;
     void *priv;
 };
+
+// Compile a shader and create a render pass. This is a rare operation.
+const struct ra_renderpass *ra_renderpass_create(const struct ra *ra,
+                                const struct ra_renderpass_params *params);
+
+void ra_renderpass_destroy(const struct ra *ra,
+                           const struct ra_renderpass **pass);
 
 struct ra_desc_update {
     int index;  // index into params.descriptors[]
@@ -433,7 +555,7 @@ struct ra_renderpass_run_params {
     int num_var_updates;
 
     // The push constants for this invocation. This must always be set and
-    // fully defined for every invocation iff params.push_constants_size > 0.
+    // fully defined for every invocation if params.push_constants_size > 0.
     void *push_constants;
 
     // --- pass->params.type==RA_RENDERPASS_TYPE_RASTER only
@@ -454,140 +576,30 @@ struct ra_renderpass_run_params {
     int compute_groups[3];
 };
 
-// This is a fully opaque type provided by the implementation, but we want to
-// at least give it a saner name than void* for code readability purposes.
-typedef void ra_timer;
+// Execute a render pass. This is an extremely common operation.
+void ra_renderpass_run(const struct ra *ra,
+                       const struct ra_renderpass_run_params *params);
 
-// RA functions. These give the operations supported by a RA. All functions
-// must be set except where otherwise noted.
-struct ra_fns {
-    // This also frees the RA.
-    void (*destroy)(const struct ra **ra);
+// This is a fully opaque type representing an abstract timer query object.
+struct ra_timer;
 
-    // Create a texture (with undefined contents). Return NULL on failure.
-    // This is a rare operation, and normally textures and even FBOs for
-    // temporary rendering intermediate data are cached.
-    const struct ra_tex *(*tex_create)(const struct ra *ra,
-                                       const struct ra_tex_params *params);
+// Create a timer object. Returns NULL on failure, or if timers are
+// unavailable for some reason.
+struct ra_timer *ra_timer_create(const struct ra *ra);
 
-    void (*tex_destroy)(const struct ra *ra, const struct ra_tex *tex);
+void ra_timer_destroy(const struct ra *ra, struct ra_timer **timer);
 
-    // Upload data to a texture. This is an extremely common operation. When
-    // using a buffer, the contants of the buffer must exactly match the format
-    // as described by the texture's ra_format - conversions between bit depths
-    // and representations are not supported. This operation may mark the buffer
-    // as "in use" while the copy is going on. Returns whether successful.
-    bool (*tex_upload)(const struct ra *ra,
-                       const struct ra_tex_upload_params *params);
+// Start recording a timer. Note that valid usage requires you to pair every
+// start with a stop. Trying to start a timer twice, or trying to stop a timer
+// before having started it, consistutes invalid usage.
+void ra_timer_start(const struct ra *ra, struct ra_timer *timer);
 
-    // Create a buffer. The type of buffer depends on the parameters. Not all
-    // buffer usage types must be supported; may return NULL if unavailable.
-    const struct ra_buf *(*buf_create)(const struct ra *ra,
-                                       const struct ra_buf_params *params);
-
-    void (*buf_destroy)(const struct ra *ra, const struct ra_buf *buf);
-
-    // Update the contents of a buffer, starting at a given offset (*must* be a
-    // multiple of 4) and up to a given size, with the contents of *data. This
-    // is an extremely common operation. Calling this while the buffer is
-    // considered "in use" is an error. (See: buf_poll)
-    void (*buf_update)(const struct ra *ra, const struct ra_buf *buf,
-                       size_t buf_offset, const void *data, size_t size);
-
-    // Returns if a buffer is currently "in use" or not. Updating the contents
-    // of a buffer (via buf_update or writes to buf->data) while it is still
-    // in use is an error and may result in graphical corruption. Optional, if
-    // NULL then all buffers are always usable.
-    bool (*buf_poll)(const struct ra *ra, const struct ra_buf *buf);
-
-    // Returns the layout requirements of a uniform buffer element. Optional,
-    // but must be implemented if RA_CAP_UNIFORM_BUFFERS is supported.
-    // Note: This is normally equivalent to std140 layout, but not necessarily
-    // (for example, RAs based on d3d11 may internally translate std140 to a
-    // different layout). As such, the calling code should not make any
-    // assumptions about the buffer layout and instead query the layout
-    // requirements using this function.
-    struct ra_var_layout (*uniform_layout)(const struct ra_var *var);
-
-    // Returns the layout requirements of a push constant element. Optional,
-    // but must be implemented if ra.max_pushc > 0.
-    struct ra_var_layout (*push_constant_layout)(const struct ra_var *var);
-
-    // Clear the dst texture with the given color (rgba) and within the given
-    // region. This is functionally identical to a blit operation, which means
-    // dst->params.blit_dst must be set. Content outside of the scissor is
-    // preserved. Note: Clearing a partial region of an image may perform
-    // significantly worse than clearing the entire image, and should be
-    // avoided.
-    void (*clear)(const struct ra *ra, const struct ra_tex *dst,
-                  struct pl_rect3d rect, const float color[4]);
-
-    // Copy a sub-rectangle from one texture to another. The source/dest
-    // regions must be within the texture bounds. Areas outside the dest region
-    // are preserved. The formats of the textures must be loosely compatible -
-    // which essentially means that they must have the same texel size.
-    // src.blit_src and dst.blit_dst must be set, respectively. The rectangles
-    // may be "negative", which leads to the image being flipped while
-    // blitting. If the src and dst rects have different sizes, the source
-    // image will be scaled according to src->params.sample_mode. Required if
-    // RA_CAP_BLIT is present. If RA_CAP_BLIT is not set, this function is
-    // optional - and must not be called even if it's non-NULL.
-    void (*blit)(const struct ra *ra,
-                 const struct ra_tex *dst, const struct ra_tex *src,
-                 struct pl_rect3d dst_rc, struct pl_rect3d src_rc);
-
-    // Compile a shader and create a render pass. This is a rare operation.
-    const struct ra_renderpass *(*renderpass_create)(const struct ra *ra,
-                                    const struct ra_renderpass_params *params);
-
-    void (*renderpass_destroy)(const struct ra *ra,
-                               const struct ra_renderpass *pass);
-
-    // Execute a render pass. This is an extremely common operation.
-    void (*renderpass_run)(const struct ra *ra,
-                           const struct ra_renderpass_run_params *params);
-
-    // Create a timer object. Returns NULL on failure, or if timers are
-    // unavailable for some reason. Optional.
-    const ra_timer *(*timer_create)(const struct ra *ra);
-
-    void (*timer_destroy)(const struct ra *ra, const ra_timer *timer);
-
-    // Start recording a timer. Note that valid usage requires you to pair
-    // every start with a stop. Trying to start a timer twice, or trying to
-    // stop a timer before having started it, consistutes invalid usage.
-    void (*timer_start)(const struct ra *ra, const ra_timer *timer);
-
-    // Stop recording a timer. This also returns any results that have been
-    // measured since the last usage of this ra_timer, in nanoseconds. It's
-    // important to note that GPU timer measurement are asynchronous, so this
-    // function does not always produce a value - and the values it does
-    // produce are typically delayed by a few frames. When no value is
-    // available, this returns 0.
-    uint64_t (*timer_stop)(const struct ra *ra, const ra_timer *timer);
-};
-
-// Utility functions for common operations, to alleviate the need for the
-// ra->fns-> boilerplate.
-const struct ra_tex *ra_tex_create(const struct ra *ra,
-                                   const struct ra_tex_params *params);
-void ra_tex_destroy(const struct ra *ra, const struct ra_tex **tex);
-
-const struct ra_buf *ra_buf_create(const struct ra *ra,
-                                   const struct ra_buf_params *params);
-void ra_buf_destroy(const struct ra *ra, const struct ra_buf **buf);
-
-// Helper function to find a format with a given number of components and depth
-// per component. The format must be usable as a texture format. If `regular`
-// is true, ra_format_is_regular() must be true.
-const struct ra_format *ra_find_texture_format(const struct ra *ra,
-                                               enum ra_fmt_type type,
-                                               int num_components,
-                                               int bits_per_component,
-                                               bool regular);
-
-// Find a format based on its name.
-const struct ra_format *ra_find_named_format(const struct ra *ra,
-                                             const char *name);
+// Stop recording a timer. This also returns any results that have been
+// measured since the last usage of this ra_timer, in nanoseconds. It's
+// important to note that GPU timer measurement are asynchronous, so this
+// function does not always produce a value - and the values it does produce
+// are typically delayed by a few frames. When no value is available, this
+// returns 0.
+uint64_t ra_imer_stop(const struct ra *ra, struct ra_timer *timer);
 
 #endif // LIBPLACEBO_RA_H_

@@ -16,6 +16,16 @@
  */
 
 #include "common.h"
+#include "ra.h"
+
+void ra_destroy(const struct ra **ra)
+{
+    if (!*ra)
+        return;
+
+    (*ra)->impl->destroy(*ra);
+    *ra = NULL;
+}
 
 bool ra_format_is_ordered(const struct ra_format *fmt)
 {
@@ -35,6 +45,110 @@ bool ra_format_is_regular(const struct ra_format *fmt)
     }
 
     return bits == fmt->texel_size * 8;
+}
+
+const struct ra_format *ra_find_texture_format(const struct ra *ra,
+                                               enum ra_fmt_type type,
+                                               int num_components,
+                                               int bits_per_component,
+                                               bool regular)
+{
+    for (int n = 0; n < ra->num_formats; n++) {
+        const struct ra_format *fmt = ra->formats[n];
+        if (fmt->type != type || fmt->num_components != num_components)
+            continue;
+        if (regular && !ra_format_is_regular(fmt))
+            continue;
+
+        for (int i = 0; i < fmt->num_components; i++) {
+            if (fmt->component_depth[i] != bits_per_component)
+                goto next_fmt;
+        }
+
+        return fmt;
+
+next_fmt: ; // equivalent to `continue`
+    }
+
+    // ran out of formats
+    return NULL;
+}
+
+const struct ra_format *ra_find_named_format(const struct ra *ra,
+                                             const char *name)
+{
+    if (!name)
+        return NULL;
+
+    for (int i = 0; i < ra->num_formats; i++) {
+        const struct ra_format *fmt = ra->formats[i];
+        if (strcmp(name, fmt->name) == 0)
+            return fmt;
+    }
+
+    // ran out of formats
+    return NULL;
+}
+
+const struct ra_tex *ra_tex_create(const struct ra *ra,
+                                   const struct ra_tex_params *params)
+{
+    return ra->impl->tex_create(ra, params);
+}
+
+void ra_tex_destroy(const struct ra *ra, const struct ra_tex **tex)
+{
+    if (!*tex)
+        return;
+
+    ra->impl->tex_destroy(ra, *tex);
+    *tex = NULL;
+}
+
+void ra_tex_clear(const struct ra *ra, const struct ra_tex *dst,
+                  struct pl_rect3d rect, const float color[4])
+{
+    ra->impl->tex_clear(ra, dst, rect, color);
+}
+
+void ra_tex_blit(const struct ra *ra,
+                 const struct ra_tex *dst, const struct ra_tex *src,
+                 struct pl_rect3d dst_rc, struct pl_rect3d src_rc)
+{
+    if (ra->caps & RA_CAP_TEX_BLIT)
+        ra->impl->tex_blit(ra, dst, src, dst_rc, src_rc);
+}
+
+bool ra_tex_upload(const struct ra *ra,
+                   const struct ra_tex_upload_params *params)
+{
+    return ra->impl->tex_upload(ra, params);
+}
+
+const struct ra_buf *ra_buf_create(const struct ra *ra,
+                                   const struct ra_buf_params *params)
+{
+    return ra->impl->buf_create(ra, params);
+}
+
+void ra_buf_destroy(const struct ra *ra, const struct ra_buf **buf)
+{
+    if (!*buf)
+        return;
+
+    ra->impl->buf_destroy(ra, *buf);
+    *buf = NULL;
+}
+
+void ra_buf_update(const struct ra *ra, const struct ra_buf *buf,
+                   size_t buf_offset, const void *data, size_t size)
+{
+    ra->impl->buf_update(ra, buf, buf_offset, data, size);
+}
+
+bool ra_buf_poll(const struct ra *ra, const struct ra_buf *buf)
+{
+    return ra->impl->buf_poll ? ra->impl->buf_poll(ra, buf) : true;
 }
 
 size_t ra_var_type_size(enum ra_var_type type)
@@ -113,69 +227,89 @@ struct ra_var_layout ra_var_host_layout(struct ra_var var)
     };
 }
 
-const struct ra_tex *ra_tex_create(const struct ra *ra,
-                                   const struct ra_tex_params *params)
+struct ra_var_layout ra_buf_uniform_layout(const struct ra *ra,
+                                           const struct ra_var *var)
 {
-    return ra->fns->tex_create(ra, params);
-}
-
-void ra_tex_destroy(const struct ra *ra, const struct ra_tex **tex)
-{
-    ra->fns->tex_destroy(ra, *tex);
-    *tex = NULL;
-}
-
-const struct ra_buf *ra_buf_create(const struct ra *ra,
-                                   const struct ra_buf_params *params)
-{
-    return ra->fns->buf_create(ra, params);
-}
-
-void ra_buf_destroy(const struct ra *ra, const struct ra_buf **buf)
-{
-    ra->fns->buf_destroy(ra, *buf);
-    *buf = NULL;
-}
-
-const struct ra_format *ra_find_texture_format(const struct ra *ra,
-                                               enum ra_fmt_type type,
-                                               int num_components,
-                                               int bits_per_component,
-                                               bool regular)
-{
-    for (int n = 0; n < ra->num_formats; n++) {
-        const struct ra_format *fmt = ra->formats[n];
-        if (fmt->type != type || fmt->num_components != num_components)
-            continue;
-        if (regular && !ra_format_is_regular(fmt))
-            continue;
-
-        for (int i = 0; i < fmt->num_components; i++) {
-            if (fmt->component_depth[i] != bits_per_component)
-                goto next_fmt;
-        }
-
-        return fmt;
-
-next_fmt: ; // equivalent to `continue`
+    if (ra->limits.max_ubo_size) {
+        return ra->impl->buf_uniform_layout(ra, var);
+    } else {
+        return (struct ra_var_layout) {0};
     }
-
-    // ran out of formats
-    return NULL;
 }
 
-const struct ra_format *ra_find_named_format(const struct ra *ra,
-                                             const char *name)
+struct ra_var_layout ra_buf_storage_layout(const struct ra *ra,
+                                           const struct ra_var *var)
 {
-    if (!name)
-        return NULL;
-
-    for (int i = 0; i < ra->num_formats; i++) {
-        const struct ra_format *fmt = ra->formats[i];
-        if (strcmp(name, fmt->name) == 0)
-            return fmt;
+    if (ra->limits.max_ssbo_size) {
+        return ra->impl->buf_storage_layout(ra, var);
+    } else {
+        return (struct ra_var_layout) {0};
     }
+}
 
-    // ran out of formats
-    return NULL;
+struct ra_var_layout ra_push_constant_layout(const struct ra *ra,
+                                             const struct ra_var *var)
+{
+    if (ra->limits.max_pushc_size) {
+        return ra->impl->push_constant_layout(ra, var);
+    } else {
+        return (struct ra_var_layout) {0};
+    }
+}
+
+const char *ra_desc_access_glsl_name(enum ra_desc_access mode)
+{
+    switch (mode) {
+    case RA_DESC_ACCESS_READWRITE: return "";
+    case RA_DESC_ACCESS_READONLY:  return "readonly";
+    case RA_DESC_ACCESS_WRITEONLY: return "writeonly";
+    default: abort();
+    }
+}
+
+const struct ra_renderpass *ra_renderpass_create(const struct ra *ra,
+                                const struct ra_renderpass_params *params)
+{
+    return ra->impl->renderpass_create(ra, params);
+}
+
+void ra_renderpass_destroy(const struct ra *ra,
+                           const struct ra_renderpass **pass)
+{
+    if (!*pass)
+        return;
+
+    ra->impl->renderpass_destroy(ra, *pass);
+    *pass = NULL;
+}
+
+void ra_renderpass_run(const struct ra *ra,
+                       const struct ra_renderpass_run_params *params)
+{
+    return ra->impl->renderpass_run(ra, params);
+}
+
+struct ra_timer *ra_timer_create(const struct ra *ra)
+{
+    return ra->impl->timer_create ? ra->impl->timer_create(ra) : NULL;
+}
+
+void ra_timer_destroy(const struct ra *ra, struct ra_timer **timer)
+{
+    if (!*timer)
+        return;
+
+    ra->impl->timer_destroy(ra, *timer);
+    *timer = NULL;
+}
+
+void ra_timer_start(const struct ra *ra, struct ra_timer *timer)
+{
+    if (timer)
+        ra->impl->timer_start(ra, timer);
+}
+
+uint64_t ra_imer_stop(const struct ra *ra, struct ra_timer *timer)
+{
+    return timer ? ra->impl->timer_stop(ra, timer) : 0;
 }
