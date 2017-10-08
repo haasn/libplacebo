@@ -1,5 +1,6 @@
-# Updated any time the API changes
-apiver = 0
+majorver = '0'
+apiver   = '0'
+fixver   = '0'
 
 # Build options mostly taken from mpv
 add_global_arguments([
@@ -61,3 +62,11 @@ headers = [
 ]
 
 install_headers(headers, subdir: 'libplacebo')
+
+pkg = import('pkgconfig')
+pkg.generate(
+  name: meson.project_name(),
+  description: 'Reusable library for GPU-accelerated video/image rendering',
+  libraries: '-lplacebo',
+  version: majorver + '.' + apiver + '.' + fixver,
+)
