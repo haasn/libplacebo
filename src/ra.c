@@ -47,6 +47,44 @@ size_t ra_var_type_size(enum ra_var_type type)
     }
 }
 
+#define MAX_DIM 4
+
+const char *ra_var_glsl_type_name(struct ra_var var)
+{
+    static const char *types[RA_VAR_TYPE_COUNT][MAX_DIM+1][MAX_DIM+1] = {
+    // float vectors
+    [RA_VAR_FLOAT][1][1] = "float",
+    [RA_VAR_FLOAT][1][2] = "vec2",
+    [RA_VAR_FLOAT][1][3] = "vec3",
+    [RA_VAR_FLOAT][1][3] = "vec4",
+    // float matrices
+    [RA_VAR_FLOAT][2][2] = "mat2",
+    [RA_VAR_FLOAT][2][3] = "mat2x3",
+    [RA_VAR_FLOAT][2][4] = "mat2x4",
+    [RA_VAR_FLOAT][3][2] = "mat3x2",
+    [RA_VAR_FLOAT][3][3] = "mat3",
+    [RA_VAR_FLOAT][3][4] = "mat3x4",
+    [RA_VAR_FLOAT][4][2] = "mat4x2",
+    [RA_VAR_FLOAT][4][3] = "mat4x3",
+    [RA_VAR_FLOAT][4][4] = "mat4",
+    // integer vectors
+    [RA_VAR_SINT][1][1] = "int",
+    [RA_VAR_SINT][1][2] = "ivec2",
+    [RA_VAR_SINT][1][3] = "ivec3",
+    [RA_VAR_SINT][1][3] = "ivec4",
+    // unsigned integer vectors
+    [RA_VAR_UINT][1][1] = "uint",
+    [RA_VAR_UINT][1][2] = "uvec2",
+    [RA_VAR_UINT][1][3] = "uvec3",
+    [RA_VAR_UINT][1][3] = "uvec4",
+    };
+
+    if (var.dim_v > MAX_DIM || var.dim_m > MAX_DIM)
+        return NULL;
+
+    return types[var.type][var.dim_m][var.dim_v];
+}
+
 struct ra_var_layout ra_var_host_layout(struct ra_var var)
 {
     size_t row_size = ra_var_type_size(var.type) * var.dim_v;

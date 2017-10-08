@@ -261,6 +261,10 @@ struct ra_var {
     int dim_m;              // matrix dimension (number of columns)
 };
 
+// Returns a GLSL type name (e.g. vec4) for a given ra_var, or NULL if the
+// variable is not legal.
+const char *ra_var_glsl_type_name(struct ra_var var);
+
 // Represents the layout requirements of an input variable
 struct ra_var_layout {
     size_t align;  // the alignment requirements (always a power of two)
