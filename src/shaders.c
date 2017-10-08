@@ -22,7 +22,7 @@
 #include "context.h"
 
 struct priv {
-    struct bstr buffer;
+    struct bstr buffers[2];
     bool flexible_work_groups;
     int fresh;
 };
@@ -34,7 +34,8 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
     *s = (struct pl_shader) {
         .ctx = ctx,
         .ra = ra,
-        .glsl = "",
+        .glsl_header = "",
+        .glsl_body = "",
         .priv = talloc_zero(s, struct priv),
     };
 
@@ -68,23 +69,24 @@ static var_t var(struct pl_shader *s, struct pl_shader_var sv)
     return sv.var.name;
 }
 
-static void pl_shader_append(struct pl_shader *s, const char *fmt, ...)
-    PRINTF_ATTRIBUTE(2, 3);
-
-static void pl_shader_append(struct pl_shader *s, const char *fmt, ...)
+PRINTF_ATTRIBUTE(4, 5)
+static void pl_shader_append(struct pl_shader *s, const char **str, int idx,
+                             const char *fmt, ...)
 {
     struct priv *p = s->priv;
+    assert(idx < PL_ARRAY_SIZE(p->buffers));
 
     va_list ap;
     va_start(ap, fmt);
-    bstr_xappend_vasprintf(s, &p->buffer, fmt, ap);
+    bstr_xappend_vasprintf(s, &p->buffers[idx], fmt, ap);
     va_end(ap);
 
     // Update the GLSL shader body pointer in case the buffer got re-allocated
-    s->glsl = p->buffer.start;
+    *str = p->buffers[idx].start;
 }
 
-#define GLSL(...) pl_shader_append(s, __VA_ARGS__)
+#define GLSLH(...) pl_shader_append(s, &s->glsl_header, 0, __VA_ARGS__)
+#define GLSL(...)  pl_shader_append(s, &s->glsl_body,   1, __VA_ARGS__)
 
 // Colorspace operations
 

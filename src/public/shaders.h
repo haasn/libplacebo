@@ -42,9 +42,12 @@ struct pl_shader {
     const struct ra *ra;
     void *priv;
 
-    // The shader body, as literal GLSL. The exact interpretation of this GLSL
-    // depends on the function generating the pl_shader fragment.
-    const char *glsl;
+    // The shader text, as literal GLSL. The `header` is assumed to be outside
+    // of any function definition, and will be used to define new helper
+    // functions if required. The `body` is assumed to be inside a function
+    // (typically `main`), and defines the requested transformation logic.
+    const char *glsl_header;
+    const char *glsl_body;
 
     // The required work group size, if this is a compute shader. If any of
     // these integers is 0, then the shader is not considered a compute shader
