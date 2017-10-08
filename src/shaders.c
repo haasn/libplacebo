@@ -431,7 +431,7 @@ static void pl_shader_tone_map(struct pl_shader *s, float ref_peak,
              "float b = (j*j - 2.0*j*sig_peak + sig_peak) /                 \n"
              "          max(1e-6, sig_peak - 1.0);                          \n"
              "float scale = (b*b + 2.0*b*j + j*j) / (b-a);                  \n"
-             "sig = mix(sig, scale * (sig + a) / (sig + b), sig > j);       \n",
+             "sig = sig > j ? (scale * (sig + a) / (sig + b)) : sig;         \n",
              param ? param : 0.3);
         break;
 
