@@ -198,7 +198,7 @@ struct pl_color_map_params {
 
 // Contains a built-in definition of pl_color_map_params initialized to the
 // recommended default values.
-const struct pl_color_map_params pl_color_map_recommended_params;
+extern const struct pl_color_map_params pl_color_map_recommended_params;
 
 // Maps `vec4 color` from one color space to another color space according
 // to the parameters (described in greater depth above). If `prelinearized`
