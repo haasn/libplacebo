@@ -21,6 +21,18 @@
 #include "colorspace.h"
 #include "ra.h"
 
+// Represents a bound shared variable / descriptor
+struct pl_shader_var {
+    struct ra_var var;  // the underlying variable description
+    const void *data;   // the raw data (interpretation as with ra_var_update)
+    bool dynamic;       // if true, the value is expected to change frequently
+};
+
+struct pl_shader_desc {
+    struct ra_desc desc; // the underlying descriptor description
+    const void *binding; // the object being bound (as for ra_desc_update)
+};
+
 // Represents a shader fragment. This is not a complete shader, but a
 // collection of shader text together with description of the input required to
 // satisfy it.
@@ -43,17 +55,12 @@ struct pl_shader {
     // size requirements for this shader pass.
     size_t compute_shmem;
 
-    // A set of input variables needed to satisfy this shader fragment, together
-    // with their underlying raw data (as required for ra_var_update).
-    struct ra_var *variables;
-    const void **variable_data;
+    // A set of input variables needed by this shader fragment.
+    struct pl_shader_var *variables;
     int num_variables;
 
-    // A list of input descriptors needed to satisfy this shader fragment,
-    // together with the underlying objects bound to the corresponding
-    // descriptor (as required for ra_desc_update).
-    struct ra_desc *descriptors;
-    const void **descriptor_bindings;
+    // A list of input descriptors needed by this shader fragment,
+    struct pl_shader_desc *descriptors;
     int num_descriptors;
 };
 

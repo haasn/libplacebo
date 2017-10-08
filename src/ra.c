@@ -85,6 +85,24 @@ const char *ra_var_glsl_type_name(struct ra_var var)
     return types[var.type][var.dim_m][var.dim_v];
 }
 
+#define RA_VAR_FV(TYPE, M, V)                           \
+    struct ra_var ra_var_##TYPE(const char *name) {     \
+        return (struct ra_var) {                        \
+            .name  = name,                              \
+            .type  = RA_VAR_FLOAT,                      \
+            .dim_m = M,                                 \
+            .dim_v = V,                                 \
+        };                                              \
+    }
+
+RA_VAR_FV(float, 1, 1)
+RA_VAR_FV(vec2,  1, 2)
+RA_VAR_FV(vec3,  1, 3)
+RA_VAR_FV(vec4,  1, 4)
+RA_VAR_FV(mat2,  2, 2)
+RA_VAR_FV(mat3,  3, 3)
+RA_VAR_FV(mat4,  4, 4)
+
 struct ra_var_layout ra_var_host_layout(struct ra_var var)
 {
     size_t row_size = ra_var_type_size(var.type) * var.dim_v;

@@ -265,6 +265,15 @@ struct ra_var {
 // variable is not legal.
 const char *ra_var_glsl_type_name(struct ra_var var);
 
+// Helper functions for constructing the most common ra_vars.
+struct ra_var ra_var_float(const char *name);
+struct ra_var ra_var_vec2(const char *name);
+struct ra_var ra_var_vec3(const char *name);
+struct ra_var ra_var_vec4(const char *name);
+struct ra_var ra_var_mat2(const char *name);
+struct ra_var ra_var_mat3(const char *name);
+struct ra_var ra_var_mat4(const char *name);
+
 // Represents the layout requirements of an input variable
 struct ra_var_layout {
     size_t align;  // the alignment requirements (always a power of two)
@@ -275,8 +284,7 @@ struct ra_var_layout {
 // Returns the host layout of an input variable as required for a
 // tightly-packed, byte-aligned C data type.
 //
-// NOTE: matrices are assumed to be column major, since this matches typical
-// graphics APIs.
+// NOTE: matrices are assumed to be row major, similar to pl_color_matrix.
 struct ra_var_layout ra_var_host_layout(struct ra_var var);
 
 // Type of a shader input descriptor.

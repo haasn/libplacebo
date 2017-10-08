@@ -24,6 +24,7 @@
 struct priv {
     struct bstr buffer;
     bool flexible_work_groups;
+    int fresh;
 };
 
 struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
@@ -53,68 +54,18 @@ bool pl_shader_is_compute(const struct pl_shader *s)
     return ret;
 }
 
-// Append a raw `struct ra_var` to the pl_shader (while making a copy of
-// the variable name and data).
-static void pl_shader_var(struct pl_shader *s, struct ra_var var,
-                          const void *data)
+typedef const char * var_t;
+
+// Add a new shader var and return its identifier (string)
+static var_t var(struct pl_shader *s, struct pl_shader_var sv)
 {
-    size_t size = ra_var_host_layout(var).size;
-    int idx = s->num_variables++;
-    TARRAY_GROW(s, s->variables, idx);
-    TARRAY_GROW(s, s->variable_data, idx);
+    struct priv *p = s->priv;
+    const char *safename = sv.var.name ? sv.var.name : "";
+    sv.var.name = talloc_asprintf(s, "_%s_%d", safename, p->fresh++);
+    sv.data = talloc_memdup(s, sv.data, ra_var_host_layout(sv.var).size);
 
-    var.name = talloc_strdup(s, var.name);
-    s->variables[idx] = var;
-    s->variable_data[idx] = talloc_memdup(s, data, size);
-}
-
-// Helpers for some of the most common variable types
-static void pl_shader_var_vec3(struct pl_shader *s, const char *name,
-                               const float f[3])
-{
-    pl_shader_var(s, (struct ra_var) {
-        .name = name,
-        .type = RA_VAR_FLOAT,
-        .dim_v = 3,
-        .dim_m = 1,
-    }, f);
-}
-
-static void pl_shader_var_mat3(struct pl_shader *s, const char *name,
-                               bool column_major, const float m[3][3])
-{
-    struct ra_var var = {
-        .name = name,
-        .type = RA_VAR_FLOAT,
-        .dim_v = 3,
-        .dim_m = 3,
-    };
-
-    if (column_major) {
-        pl_shader_var(s, var, m);
-    } else {
-        float tmp[3][3] = {
-            { m[0][0], m[1][0], m[2][0] },
-            { m[0][1], m[1][1], m[2][1] },
-            { m[0][2], m[1][2], m[2][2] },
-        };
-
-        pl_shader_var(s, var, tmp);
-    }
-}
-
-// Append a raw `struct ra_desc` to the pl_shader (while making a copy of
-// the descriptor name).
-static void pl_shader_desc(struct pl_shader *s, struct ra_desc desc,
-                           const void *binding)
-{
-    int idx = s->num_descriptors++;
-    TARRAY_GROW(s, s->descriptors, idx);
-    TARRAY_GROW(s, s->descriptor_bindings, idx);
-
-    desc.name = talloc_strdup(s, desc.name);
-    s->descriptors[idx] = desc;
-    s->descriptor_bindings[idx] = binding;
+    TARRAY_APPEND(s, s->variables, s->num_variables, sv);
+    return sv.var.name;
 }
 
 static void pl_shader_append(struct pl_shader *s, const char *fmt, ...)
@@ -318,7 +269,7 @@ void pl_shader_delinearize(struct pl_shader *s, enum pl_color_transfer trc)
 // Applies the OOTF / inverse OOTF. `peak` corresponds to the nominal peak
 // (needed to scale the functions correctly)
 static void pl_shader_ootf(struct pl_shader *s, enum pl_color_light light,
-                           float peak)
+                           float peak, var_t luma)
 {
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
         return;
@@ -331,8 +282,8 @@ static void pl_shader_ootf(struct pl_shader *s, enum pl_color_light light,
     case PL_COLOR_LIGHT_SCENE_HLG:
         // HLG OOTF from BT.2100, assuming a reference display with a
         // peak of 1000 cd/m² -> gamma = 1.2
-        GLSL("color.rgb *= vec3(%f * pow(dot(src_luma, color.rgb), 0.2));\n",
-             (1000 / PL_COLOR_REF_WHITE) / pow(12, 1.2));
+        GLSL("color.rgb *= vec3(%f * pow(dot(%s, color.rgb), 0.2));\n",
+             (1000 / PL_COLOR_REF_WHITE) / pow(12, 1.2), luma);
         break;
     case PL_COLOR_LIGHT_SCENE_709_1886:
         // This OOTF is defined by encoding the result as 709 and then decoding
@@ -355,7 +306,7 @@ static void pl_shader_ootf(struct pl_shader *s, enum pl_color_light light,
 }
 
 static void pl_shader_inverse_ootf(struct pl_shader *s, enum pl_color_light light,
-                                   float peak)
+                                   float peak, var_t luma)
 {
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
         return;
@@ -367,9 +318,9 @@ static void pl_shader_inverse_ootf(struct pl_shader *s, enum pl_color_light ligh
     {
     case PL_COLOR_LIGHT_SCENE_HLG:
         GLSL("color.rgb *= vec3(1.0/%f);                                \n"
-             "color.rgb /= vec3(max(1e-6, pow(dot(src_luma, color.rgb), \n"
+             "color.rgb /= vec3(max(1e-6, pow(dot(%s, color.rgb),       \n"
              "                                0.2/1.2)));               \n",
-             (1000 / PL_COLOR_REF_WHITE) / pow(12, 1.2));
+             (1000 / PL_COLOR_REF_WHITE) / pow(12, 1.2), luma);
         break;
     case PL_COLOR_LIGHT_SCENE_709_1886:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.4));                         \n"
@@ -395,17 +346,17 @@ const struct pl_color_map_params pl_color_map_recommended_params = {
     .peak_detect_frames      = 50,
 };
 
-static void pl_shader_tone_map(struct pl_shader *s, float ref_peak,
-                     const struct pl_color_map_params *params)
+static void pl_shader_tone_map(struct pl_shader *s, float ref_peak, var_t luma,
+                               const struct pl_color_map_params *params)
 {
     GLSL("// pl_shader_tone_map\n");
 
     // Desaturate the color using a coefficient dependent on the luminance
     if (params->tone_mapping_desaturate > 0) {
-        GLSL("float luma = dot(dst_luma, color.rgb);                     \n"
+        GLSL("float luma = dot(%s, color.rgb);                           \n"
              "float overbright = max(luma - %f, 1e-6) / max(luma, 1e-6); \n"
              "color.rgb = mix(color.rgb, vec3(luma), overbright);        \n",
-             params->tone_mapping_desaturate);
+             luma, params->tone_mapping_desaturate);
     }
 
     // To prevent discoloration due to out-of-bounds clipping, we need to make
@@ -510,17 +461,24 @@ void pl_shader_color_map(struct pl_shader *s,
     if (!src.sig_peak)
         src.sig_peak = pl_color_transfer_nominal_peak(src.transfer);
 
+    // Various operations need access to the src_luma and dst_luma respectively,
+    // so just always make them available
+    struct pl_color_matrix rgb2xyz;
+    rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(src.primaries));
+    var_t src_luma = var(s, (struct pl_shader_var) {
+        .var  = ra_var_vec3("src_luma"),
+        .data = rgb2xyz.m[1], // RGB->Y vector
+    });
+    rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(dst.primaries));
+    var_t dst_luma = var(s, (struct pl_shader_var) {
+        .var  = ra_var_vec3("dst_luma"),
+        .data = rgb2xyz.m[1], // RGB->Y vector
+    });
+
     // Compute the highest encodable level
     float src_range = pl_color_transfer_nominal_peak(src.transfer),
           dst_range = pl_color_transfer_nominal_peak(dst.transfer);
     float ref_peak = src.sig_peak / dst_range;
-
-    // OOTF and inverse OOTF need access to the src_luma coefficients
-    struct pl_color_matrix rgb2xyz;
-    if (src.light != dst.light) {
-        rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(src.primaries));
-        pl_shader_var_vec3(s, "src_luma", rgb2xyz.m[1]);
-    }
 
     // All operations from here on require linear light as a starting point,
     // so we linearize even if src.gamma == dst.gamma when one of the other
@@ -538,7 +496,7 @@ void pl_shader_color_map(struct pl_shader *s,
     }
 
     if (src.light != dst.light)
-        pl_shader_ootf(s, src.light, pl_color_transfer_nominal_peak(src.transfer));
+        pl_shader_ootf(s, src.light, src_range, src_luma);
 
     // Rescale the signal to compensate for differences in the encoding range
     // and reference white level. This is necessary because of the 0-1 value
@@ -552,26 +510,24 @@ void pl_shader_color_map(struct pl_shader *s,
     if (src.primaries != dst.primaries) {
         struct pl_raw_primaries csp_src = pl_raw_primaries_get(src.primaries),
                                 csp_dst = pl_raw_primaries_get(dst.primaries);
-        struct pl_color_matrix cms_matrix;
-        cms_matrix = pl_get_color_mapping_matrix(csp_src, csp_dst, params->intent);
-        pl_shader_var_mat3(s, "cms_matrix", false, cms_matrix.m);
-        GLSL("color.rgb = cms_matrix * color.rgb;\n");
+        struct pl_color_matrix cms_mat;
+        cms_mat = pl_get_color_mapping_matrix(csp_src, csp_dst, params->intent);
+        GLSL("color.rgb = %s * color.rgb;\n", var(s, (struct pl_shader_var) {
+            .var = ra_var_mat3("cms_matrix"),
+            .data = cms_mat.m,
+        }));
         // Since this can reduce the gamut, figure out by how much
         for (int c = 0; c < 3; c++)
-            ref_peak = fmaxf(ref_peak, cms_matrix.m[c][c]);
+            ref_peak = fmaxf(ref_peak, cms_mat.m[c][c]);
     }
 
     // Tone map to prevent clipping when the source signal peak exceeds the
     // encodable range or we've reduced the gamut
-    if (ref_peak > 1) {
-        rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(dst.primaries));
-        pl_shader_var_vec3(s, "dst_luma", rgb2xyz.m[1]);
-        pl_shader_tone_map(s, ref_peak, params);
-    }
+    if (ref_peak > 1)
+        pl_shader_tone_map(s, ref_peak, dst_luma, params);
 
-    if (src.light != dst.light) {
-        pl_shader_inverse_ootf(s, dst.light, pl_color_transfer_nominal_peak(dst.transfer));
-    }
+    if (src.light != dst.light)
+        pl_shader_inverse_ootf(s, dst.light, dst_range, dst_luma);
 
     // Warn for remaining out-of-gamut colors is enabled
     if (params->gamut_warning) {
