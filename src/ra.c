@@ -507,7 +507,7 @@ void ra_timer_start(const struct ra *ra, struct ra_timer *timer)
         ra->impl->timer_start(ra, timer);
 }
 
-uint64_t ra_imer_stop(const struct ra *ra, struct ra_timer *timer)
+uint64_t ra_timer_stop(const struct ra *ra, struct ra_timer *timer)
 {
     return timer ? ra->impl->timer_stop(ra, timer) : 0;
 }

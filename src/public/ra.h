@@ -656,6 +656,6 @@ void ra_timer_start(const struct ra *ra, struct ra_timer *timer);
 // function does not always produce a value - and the values it does produce
 // are typically delayed by a few frames. When no value is available, this
 // returns 0.
-uint64_t ra_imer_stop(const struct ra *ra, struct ra_timer *timer);
+uint64_t ra_timer_stop(const struct ra *ra, struct ra_timer *timer);
 
 #endif // LIBPLACEBO_RA_H_
