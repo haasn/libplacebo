@@ -16,12 +16,6 @@ add_global_arguments([
 
 cc = meson.get_compiler('c')
 
-# Dependencies
-deps = [
-  # libm
-  cc.find_library('m', required: false),
-]
-
 # Configuration
 conf = configuration_data()
 conf.set('majorver', majorver)
@@ -35,12 +29,10 @@ else
   conf.set_quoted('version', 'v' + version)
 endif
 
-configure_file(
-  input: 'config.h.in',
-  output: 'config.h',
-  install_dir: 'include/libplacebo',
-  configuration: conf,
-)
+# Build dependencies
+bdeps = [
+  cc.find_library('m', required: false)
+]
 
 # Source files
 sources = [
@@ -49,6 +41,7 @@ sources = [
   'filters.c',
   'ra.c',
   'shaders.c',
+  'spirv.c',
 
   # Helpers ported from mpv
   'bstr/bstr.c',
@@ -56,12 +49,6 @@ sources = [
   'ta/ta_utils.c',
   'ta/talloc.c',
 ]
-
-lib = library('placebo', sources,
-  install: true,
-  dependencies: deps,
-  soversion: apiver,
-)
 
 headers = [
   'public/colorspace.h',
@@ -72,6 +59,30 @@ headers = [
   'public/shaders.h',
 ]
 
+# Optional features
+
+libshaderc = cc.find_library('shaderc_shared', required: false)
+if libshaderc.found() and cc.has_header('shaderc/shaderc.h')
+  bdeps   += libshaderc
+  sources += [ 'spirv_shaderc.c' ]
+  conf.set('PL_HAVE_SHADERC', true)
+endif
+
+# Build process
+configure_file(
+  input: 'config.h.in',
+  output: 'config.h',
+  install_dir: 'include/libplacebo',
+  configuration: conf,
+)
+
+lib = library('placebo', sources,
+  install: true,
+  dependencies: bdeps,
+  soversion: apiver,
+)
+
+# Install process
 install_headers(headers, subdir: 'libplacebo')
 
 pkg = import('pkgconfig')

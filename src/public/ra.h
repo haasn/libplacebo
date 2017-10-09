@@ -46,7 +46,7 @@ enum {
 
 // Structure which wraps metadata describing GLSL capabilities.
 struct ra_glsl_desc {
-    int glsl_version;   // GLSL version (e.g. 450), for #version
+    int version;        // GLSL version (e.g. 450), for #version
     bool gles;          // GLSL ES semantics (ESSL)
     bool vulkan;        // GL_KHR_vulkan_glsl semantics
     ra_glsl_caps caps;  // RA_GLSL_CAP_* bit field
