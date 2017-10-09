@@ -51,8 +51,9 @@ struct ra_glsl_desc {
 typedef uint64_t ra_caps;
 enum {
     RA_CAP_TEX_BLIT         = 1 << 0, // supports ra_tex_blit
-    RA_CAP_COMPUTE          = 1 << 1, // supports compute shaders
-    RA_CAP_INPUT_VARIABLES  = 1 << 2, // supports shader input variables
+    RA_CAP_TEX_STORAGE      = 1 << 1, // supports tex_params.storage_image
+    RA_CAP_COMPUTE          = 1 << 2, // supports compute shaders
+    RA_CAP_INPUT_VARIABLES  = 1 << 3, // supports shader input variables
 };
 
 // Structure defining the physical limits of this RA instance. If a limit is
@@ -65,6 +66,7 @@ struct ra_limits {
     size_t max_shmem_size; // maximum compute shader shared memory size
     size_t max_ubo_size;   // maximum size of a RA_BUF_UNIFORM
     size_t max_ssbo_size;  // maximum size of a RA_BUF_STORAGE
+    int max_dispatch[3];   // maximum dispatch size for compute shaders
 };
 
 // Abstract device context which wraps an underlying graphics context and can
@@ -168,10 +170,12 @@ struct ra_tex_params {
 
     // The following bools describe what operations can be performed
     bool sampleable;        // usable as a RA_DESC_SAMPLED_TEX
-    bool renderable;        // usable as a render target (ra_renderpass_run.target)
+    bool renderable;        // usable as a render target (ra_renderpass_run)
     bool storage_image;     // must be usable as a storage image (RA_DESC_IMG_*)
     bool blit_src;          // must be usable as a blit source
+                            // (requires RA_CAP_TEX_BLIT)
     bool blit_dst;          // must be usable as a blit destination
+                            // (requires RA_CAP_TEX_BLIT)
     bool host_mutable;      // texture may be updated with tex_upload()
 
     // The following capabilities are only relevant for textures which have
@@ -184,6 +188,11 @@ struct ra_tex_params {
     // data is undefined.
     void *initial_data;
 };
+
+static inline int ra_tex_params_dimension(const struct ra_tex_params params)
+{
+    return params.d ? 3 : params.h ? 2 : 1;
+}
 
 // Conflates the following typical GPU API concepts:
 // - texture itself
@@ -226,11 +235,12 @@ void ra_tex_clear(const struct ra *ra, const struct ra_tex *dst,
 // which essentially means that they must have the same texel size.
 // src.blit_src and dst.blit_dst must be set, respectively.
 //
-// The rectangles may be "negative", which leads to the image being flipped
+// The rectangles may be "flipped", which leads to the image being flipped
 // while blitting. If the src and dst rects have different sizes, the source
 // image will be scaled according to src->params.sample_mode.
 //
-// If RA_CAP_TEX_BLIT is not present, this is a no-op.
+// If RA_CAP_TEX_BLIT is not present, this is a no-op and none of the above
+// restrictions apply.
 void ra_tex_blit(const struct ra *ra,
                  const struct ra_tex *dst, const struct ra_tex *src,
                  struct pl_rect3d dst_rc, struct pl_rect3d src_rc);
@@ -247,7 +257,7 @@ struct ra_tex_upload_params {
 
     // For the data source of an upload operation, there are two valid options:
     // 1. Uploading from buffer:
-    struct ra_buf *buf; // buffer to upload from
+    struct ra_buf *buf; // buffer to upload from (type must be RA_BUF_TEX_UPLOAD)
     size_t buf_offset;  // offset of data within buffer (bytes)
     // 2. Uploading from host memory:
     const void *src;    // address of data
@@ -273,9 +283,9 @@ bool ra_tex_upload(const struct ra *ra,
 enum ra_buf_type {
     RA_BUF_INVALID = 0,
     RA_BUF_TEX_UPLOAD,  // texture upload buffer (for ra_tex_upload)
-    RA_BUF_STORAGE,     // SSBO, for RA_DESC_BUF_STORAGE
     RA_BUF_UNIFORM,     // UBO, for RA_DESC_BUF_UNIFORM
-    RA_BUF_VERTEX,      // for vertex buffers, no public API (RA-internal)
+    RA_BUF_STORAGE,     // SSBO, for RA_DESC_BUF_STORAGE
+    RA_BUF_VERTEX,      // for vertex buffers, no public API yet (RA-internal)
     RA_BUF_TYPE_COUNT,
 };
 
@@ -357,7 +367,7 @@ struct ra_var ra_var_mat4(const char *name);
 
 // Represents the layout requirements of an input variable
 struct ra_var_layout {
-    size_t align;  // the alignment requirements (always a power of two)
+    size_t align;  // the alignment requirements (always a positive power of two)
     size_t stride; // the delta between two rows of an array/matrix
     size_t size;   // the total size of the input
 };
@@ -527,8 +537,8 @@ void ra_renderpass_destroy(const struct ra *ra,
                            const struct ra_renderpass **pass);
 
 struct ra_desc_update {
-    int index;  // index into params.descriptors[]
-    void *data; // ra_* object with type corresponding to ra_desc_type
+    int index;     // index into params.descriptors[]
+    void *binding; // ra_* object with type corresponding to ra_desc_type
 };
 
 struct ra_var_update {
@@ -558,19 +568,19 @@ struct ra_renderpass_run_params {
     // fully defined for every invocation if params.push_constants_size > 0.
     void *push_constants;
 
-    // --- pass->params.type==RA_RENDERPASS_TYPE_RASTER only
+    // --- pass->params.type==RA_RENDERPASS_RASTER only
 
     // target->params.renderable must be true, and target->params.format must
     // match pass->params.target_format. Target must be a 2D texture.
     struct ra_tex *target;
-    struct pl_rect2d viewport;
-    struct pl_rect2d scissors;
+    struct pl_rect2d viewport; // screen space viewport
+    struct pl_rect2d scissors; // target render scissors
 
     enum ra_prim_type vertex_type;
     void *vertex_data;  // raw pointer to vertex data
     int vertex_count;   // number of vertices to render
 
-    // --- pass->params.type==RA_RENDERPASS_TYPE_COMPUTE only
+    // --- pass->params.type==RA_RENDERPASS_COMPUTE only
 
     // Number of work groups to dispatch. (X/Y/Z)
     int compute_groups[3];
