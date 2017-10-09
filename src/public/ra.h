@@ -38,18 +38,11 @@
 // to result in undefined behavior. (if libplacebo is compiled without NDEBUG,
 // this will be checked and libplacebo will terminate safely instead)
 
-typedef uint64_t ra_glsl_caps;
-enum {
-    RA_GLSL_CAP_SHARED_BINDING = 1 << 0, // descriptor namespaces are separate
-    RA_GLSL_CAP_TEXTURE_GATHER = 1 << 1, // supports GL_ARB_texture_gather
-};
-
 // Structure which wraps metadata describing GLSL capabilities.
 struct ra_glsl_desc {
     int version;        // GLSL version (e.g. 450), for #version
     bool gles;          // GLSL ES semantics (ESSL)
     bool vulkan;        // GL_KHR_vulkan_glsl semantics
-    ra_glsl_caps caps;  // RA_GLSL_CAP_* bit field
 };
 
 typedef uint64_t ra_caps;
@@ -71,6 +64,7 @@ struct ra_limits {
     size_t max_ubo_size;   // maximum size of a RA_BUF_UNIFORM
     size_t max_ssbo_size;  // maximum size of a RA_BUF_STORAGE
     int max_dispatch[3];   // maximum dispatch size for compute shaders
+    int max_gather_offset; // maximum textureGatherOffset offset
 };
 
 // Abstract device context which wraps an underlying graphics context and can
