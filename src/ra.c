@@ -93,6 +93,35 @@ const struct ra_format *ra_find_named_format(const struct ra *ra,
 const struct ra_tex *ra_tex_create(const struct ra *ra,
                                    const struct ra_tex_params *params)
 {
+    switch (ra_tex_params_dimension(*params)) {
+    case 1:
+        assert(params->w > 0);
+        assert(params->w <= ra->limits.max_tex_1d_dim);
+        break;
+    case 2:
+        assert(params->w > 0 && params->h > 0);
+        assert(params->w <= ra->limits.max_tex_2d_dim);
+        assert(params->h <= ra->limits.max_tex_2d_dim);
+        break;
+    case 3:
+        assert(params->w > 0 && params->h > 0 && params->d > 0);
+        assert(params->w <= ra->limits.max_tex_3d_dim);
+        assert(params->h <= ra->limits.max_tex_3d_dim);
+        assert(params->d <= ra->limits.max_tex_3d_dim);
+        break;
+    default: abort();
+    }
+
+    const struct ra_format *fmt = params->format;
+    assert(fmt);
+    assert(fmt->texture_format);
+    assert(fmt->sampleable || !params->sampleable);
+    assert(fmt->renderable || !params->renderable);
+    assert((ra->caps & RA_CAP_TEX_STORAGE) || !params->storage_image);
+    assert((ra->caps & RA_CAP_TEX_BLIT) || !params->blit_src);
+    assert((ra->caps & RA_CAP_TEX_BLIT) || !params->blit_dst);
+    assert(fmt->linear_filterable || params->sample_mode != RA_TEX_SAMPLE_LINEAR);
+
     return ra->impl->tex_create(ra, params);
 }
 
@@ -108,6 +137,8 @@ void ra_tex_destroy(const struct ra *ra, const struct ra_tex **tex)
 void ra_tex_clear(const struct ra *ra, const struct ra_tex *dst,
                   struct pl_rect3d rect, const float color[4])
 {
+    assert(dst->params.blit_dst);
+
     ra->impl->tex_clear(ra, dst, rect, color);
 }
 
@@ -115,20 +146,84 @@ void ra_tex_blit(const struct ra *ra,
                  const struct ra_tex *dst, const struct ra_tex *src,
                  struct pl_rect3d dst_rc, struct pl_rect3d src_rc)
 {
-    if (ra->caps & RA_CAP_TEX_BLIT)
+    if (ra->caps & RA_CAP_TEX_BLIT) {
+        assert(src->params.format->texel_size == dst->params.format->texel_size);
+        assert(src->params.blit_src);
+        assert(dst->params.blit_dst);
+        assert(src_rc.x0 >= 0 && src_rc.x0 < src->params.w);
+        assert(src_rc.y0 >= 0 && src_rc.y0 < src->params.h);
+        assert(src_rc.x1 > 0 && src_rc.x1 <= src->params.w);
+        assert(src_rc.y1 > 0 && src_rc.y1 <= src->params.h);
+        assert(dst_rc.x0 >= 0 && dst_rc.x0 < dst->params.w);
+        assert(dst_rc.y0 >= 0 && dst_rc.y0 < dst->params.h);
+        assert(dst_rc.x1 > 0 && dst_rc.x1 <= dst->params.w);
+        assert(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
+
         ra->impl->tex_blit(ra, dst, src, dst_rc, src_rc);
+    }
 }
 
 bool ra_tex_upload(const struct ra *ra,
                    const struct ra_tex_upload_params *params)
 {
+    assert(!params->buf ^ !params->src); // exactly one
+
+    struct ra_tex *tex = params->tex;
+    assert(tex->params.host_mutable);
+
+    int texels;
+    switch (ra_tex_params_dimension(tex->params))
+    {
+    case 1:
+        assert(params->w > 0 && params->w <= tex->params.w);
+        texels = params->w;
+        break;
+    case 2:
+        assert(params->w > 0 && params->w <= tex->params.w);
+        assert(params->h > 0 && params->h <= tex->params.h);
+        assert(params->stride_w >= params->w);
+        texels = params->h * params->stride_w;
+        break;
+    case 3:
+        assert(params->w > 0 && params->w <= tex->params.w);
+        assert(params->h > 0 && params->h <= tex->params.h);
+        assert(params->d > 0 && params->d <= tex->params.d);
+        assert(params->stride_w >= params->w);
+        assert(params->stride_h >= params->h);
+        texels = params->d * params->stride_h * params->stride_w;
+        break;
+    default: abort();
+    }
+
+    if (params->buf) {
+        struct ra_buf *buf = params->buf;
+        assert(buf->params.type == RA_BUF_TEX_UPLOAD);
+        assert(params->buf_offset + texels <= buf->params.size);
+    }
+
     return ra->impl->tex_upload(ra, params);
 }
 
 const struct ra_buf *ra_buf_create(const struct ra *ra,
                                    const struct ra_buf_params *params)
 {
-    return ra->impl->buf_create(ra, params);
+    assert(params->size >= 0);
+    switch (params->type) {
+    case RA_BUF_TEX_UPLOAD: break;
+    case RA_BUF_UNIFORM:
+        assert(ra->limits.max_ubo_size);
+        assert(params->size <= ra->limits.max_ubo_size);
+        break;
+    case RA_BUF_STORAGE:
+        assert(ra->limits.max_ssbo_size);
+        assert(params->size <= ra->limits.max_ssbo_size);
+        break;
+    default: abort();
+    }
+
+    const struct ra_buf *buf = ra->impl->buf_create(ra, params);
+    assert(buf->data || !params->host_mapped);
+    return buf;
 }
 
 void ra_buf_destroy(const struct ra *ra, const struct ra_buf **buf)
@@ -143,12 +238,15 @@ void ra_buf_destroy(const struct ra *ra, const struct ra_buf **buf)
 void ra_buf_update(const struct ra *ra, const struct ra_buf *buf,
                    size_t buf_offset, const void *data, size_t size)
 {
+    assert(buf->params.host_mutable);
+    assert(buf_offset + size <= buf->params.size);
+    assert(!ra_buf_poll(ra, buf));
     ra->impl->buf_update(ra, buf, buf_offset, data, size);
 }
 
 bool ra_buf_poll(const struct ra *ra, const struct ra_buf *buf)
 {
-    return ra->impl->buf_poll ? ra->impl->buf_poll(ra, buf) : true;
+    return ra->impl->buf_poll ? ra->impl->buf_poll(ra, buf) : false;
 }
 
 size_t ra_var_type_size(enum ra_var_type type)
@@ -270,6 +368,43 @@ const char *ra_desc_access_glsl_name(enum ra_desc_access mode)
 const struct ra_renderpass *ra_renderpass_create(const struct ra *ra,
                                 const struct ra_renderpass_params *params)
 {
+    assert(params->glsl_shader);
+    switch(params->type) {
+    case RA_RENDERPASS_RASTER:
+        assert(params->vertex_shader);
+        for (int i = 0; i < params->num_vertex_attribs; i++) {
+            struct ra_vertex_attrib va = params->vertex_attribs[i];
+            assert(va.name);
+            assert(va.fmt);
+            assert(va.fmt->vertex_format);
+            assert(va.offset + va.fmt->texel_size <= params->vertex_stride);
+        }
+
+        assert(params->target_format);
+        assert(params->target_format->renderable);
+        break;
+    case RA_RENDERPASS_COMPUTE:
+        assert(ra->caps & RA_CAP_COMPUTE);
+        break;
+    default: abort();
+    }
+
+    for (int i = 0; i < params->num_variables; i++) {
+        assert(ra->caps & RA_CAP_INPUT_VARIABLES);
+        struct ra_var var = params->variables[i];
+        assert(var.name);
+        assert(ra_var_glsl_type_name(var));
+    }
+
+    for (int i = 0; i < params->num_descriptors; i++) {
+        struct ra_desc desc = params->descriptors[i];
+        assert(desc.name);
+        // TODO: enforce disjoint bindings if possible?
+    }
+
+    assert(params->push_constants_size <= ra->limits.max_pushc_size);
+    assert(params->push_constants_size == PL_ALIGN2(params->push_constants_size, 4));
+
     return ra->impl->renderpass_create(ra, params);
 }
 
@@ -286,6 +421,64 @@ void ra_renderpass_destroy(const struct ra *ra,
 void ra_renderpass_run(const struct ra *ra,
                        const struct ra_renderpass_run_params *params)
 {
+#ifndef NDEBUG
+    struct ra_renderpass *pass = params->pass;
+    for (int i = 0; i < params->num_desc_updates; i++) {
+        struct ra_desc_update du = params->desc_updates[i];
+        assert(du.index >= 0 && du.index < pass->params.num_descriptors);
+
+        struct ra_desc desc = pass->params.descriptors[du.index];
+        switch (desc.type) {
+        case RA_DESC_SAMPLED_TEX: {
+            struct ra_tex *tex = du.binding;
+            assert(tex->params.sampleable);
+            break;
+        }
+        case RA_DESC_STORAGE_IMG: {
+            struct ra_tex *tex = du.binding;
+            assert(tex->params.storage_image);
+            break;
+        }
+        case RA_DESC_BUF_UNIFORM: {
+            struct ra_buf *buf = du.binding;
+            assert(buf->params.type == RA_BUF_UNIFORM);
+            break;
+        }
+        case RA_DESC_BUF_STORAGE: {
+            struct ra_buf *buf = du.binding;
+            assert(buf->params.type == RA_BUF_STORAGE);
+            break;
+        }
+        default: abort();
+        }
+    }
+
+    for (int i = 0; i < params->num_var_updates; i++) {
+        struct ra_var_update vu = params->var_updates[i];
+        assert(vu.index >= 0 && vu.index < pass->params.num_variables);
+        assert(vu.data);
+    }
+
+    assert(params->push_constants || !pass->params.push_constants_size);
+
+    switch (pass->params.type) {
+    case RA_RENDERPASS_RASTER: {
+        struct ra_tex *tex = params->target;
+        assert(ra_tex_params_dimension(tex->params) == 2);
+        assert(tex->params.format == pass->params.target_format);
+        assert(tex->params.renderable);
+        break;
+    }
+    case RA_RENDERPASS_COMPUTE:
+        for (int i = 0; i < PL_ARRAY_SIZE(params->compute_groups); i++) {
+            assert(params->compute_groups[i] >= 0);
+            assert(params->compute_groups[i] <= ra->limits.max_dispatch[i]);
+        }
+        break;
+    default: abort();
+    }
+#endif
+
     return ra->impl->renderpass_run(ra, params);
 }
 
