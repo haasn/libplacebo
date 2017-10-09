@@ -85,6 +85,11 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
 // Frees a pl_shader and all resources associated with it.
 void pl_shader_free(struct pl_shader **shader);
 
+// Resets a pl_shader to a blank slate, without releasing internal memory.
+// If you're going to be re-generating shaders often, this function will let
+// you skip the re-allocation overhead.
+void pl_shader_reset(struct pl_shader *sh);
+
 // Returns whether or not a pl_shader needs to be run as a compute shader.
 bool pl_shader_is_compute(const struct pl_shader *shader);
 

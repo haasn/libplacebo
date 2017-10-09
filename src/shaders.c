@@ -22,6 +22,7 @@
 #include "context.h"
 
 struct priv {
+    void *tmp;
     struct bstr buffers[2];
     bool flexible_work_groups;
     int fresh;
@@ -36,8 +37,10 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
         .ra = ra,
         .glsl_header = "",
         .glsl_body = "",
-        .priv = talloc_zero(s, struct priv),
     };
+
+    struct priv *p = s->priv = talloc_zero(s, struct priv);
+    p->tmp = talloc_new(s);
 
     return s;
 }
@@ -45,6 +48,27 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
 void pl_shader_free(struct pl_shader **s)
 {
     TA_FREEP(s);
+}
+
+void pl_shader_reset(struct pl_shader *sh)
+{
+    struct priv *p = sh->priv;
+    struct priv new = { .tmp = talloc_new(sh) };
+    for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
+        new.buffers[i].start = p->buffers[i].start;
+
+    talloc_free(p->tmp);
+    *p = new;
+
+    // Only persist whitelisted state
+    *sh = (struct pl_shader) {
+        .ctx  = sh->ctx,
+        .ra   = sh->ra,
+        .priv = sh->priv,
+        // Preserve allocations
+        .variables   = sh->variables,
+        .descriptors = sh->descriptors,
+    };
 }
 
 bool pl_shader_is_compute(const struct pl_shader *s)
@@ -60,14 +84,15 @@ typedef const char * var_t;
 static var_t fresh(struct pl_shader *s, const char *name)
 {
     struct priv *p = s->priv;
-    return talloc_asprintf(s, "_%s_%d", name ? name : "var", p->fresh++);
+    return talloc_asprintf(p->tmp, "_%s_%d", name ? name : "var", p->fresh++);
 }
 
 // Add a new shader var and return its identifier (string)
 static var_t var(struct pl_shader *s, struct pl_shader_var sv)
 {
+    struct priv *p = s->priv;
     sv.var.name = fresh(s, sv.var.name);
-    sv.data = talloc_memdup(s, sv.data, ra_var_host_layout(0, sv.var).size);
+    sv.data = talloc_memdup(p->tmp, sv.data, ra_var_host_layout(0, sv.var).size);
 
     TARRAY_APPEND(s, s->variables, s->num_variables, sv);
     return sv.var.name;
