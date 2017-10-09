@@ -315,41 +315,41 @@ RA_VAR_FV(mat2,  2, 2)
 RA_VAR_FV(mat3,  3, 3)
 RA_VAR_FV(mat4,  4, 4)
 
-struct ra_var_layout ra_var_host_layout(struct ra_var var)
+struct ra_var_layout ra_var_host_layout(size_t offset, struct ra_var var)
 {
-    size_t row_size = ra_var_type_size(var.type) * var.dim_v;
+    size_t col_size = ra_var_type_size(var.type) * var.dim_v;
     return (struct ra_var_layout) {
-        .align  = 1,
-        .stride = row_size,
-        .size   = row_size * var.dim_m,
+        .offset = offset,
+        .stride = col_size,
+        .size   = col_size * var.dim_m,
     };
 }
 
-struct ra_var_layout ra_buf_uniform_layout(const struct ra *ra,
+struct ra_var_layout ra_buf_uniform_layout(const struct ra *ra, size_t offset,
                                            const struct ra_var *var)
 {
     if (ra->limits.max_ubo_size) {
-        return ra->impl->buf_uniform_layout(ra, var);
+        return ra->impl->buf_uniform_layout(ra, offset, var);
     } else {
         return (struct ra_var_layout) {0};
     }
 }
 
-struct ra_var_layout ra_buf_storage_layout(const struct ra *ra,
+struct ra_var_layout ra_buf_storage_layout(const struct ra *ra, size_t offset,
                                            const struct ra_var *var)
 {
     if (ra->limits.max_ssbo_size) {
-        return ra->impl->buf_storage_layout(ra, var);
+        return ra->impl->buf_storage_layout(ra, offset, var);
     } else {
         return (struct ra_var_layout) {0};
     }
 }
 
-struct ra_var_layout ra_push_constant_layout(const struct ra *ra,
+struct ra_var_layout ra_push_constant_layout(const struct ra *ra, size_t offset,
                                              const struct ra_var *var)
 {
     if (ra->limits.max_pushc_size) {
-        return ra->impl->push_constant_layout(ra, var);
+        return ra->impl->push_constant_layout(ra, offset, var);
     } else {
         return (struct ra_var_layout) {0};
     }

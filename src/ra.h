@@ -47,11 +47,11 @@ struct ra_fns {
 
     // The following functions are optional if the corresponding ra_limit
     // size restriction is 0
-    struct ra_var_layout (*buf_uniform_layout)(const struct ra *ra,
+    struct ra_var_layout (*buf_uniform_layout)(const struct ra *, size_t offset,
                                                const struct ra_var *var);
-    struct ra_var_layout (*buf_storage_layout)(const struct ra *ra,
+    struct ra_var_layout (*buf_storage_layout)(const struct ra *ra, size_t offset,
                                                const struct ra_var *var);
-    struct ra_var_layout (*push_constant_layout)(const struct ra *ra,
+    struct ra_var_layout (*push_constant_layout)(const struct ra *ra, size_t offset,
                                                  const struct ra_var *var);
 
     const struct ra_renderpass *(*renderpass_create)(const struct ra *ra,

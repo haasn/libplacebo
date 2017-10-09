@@ -67,7 +67,7 @@ static var_t fresh(struct pl_shader *s, const char *name)
 static var_t var(struct pl_shader *s, struct pl_shader_var sv)
 {
     sv.var.name = fresh(s, sv.var.name);
-    sv.data = talloc_memdup(s, sv.data, ra_var_host_layout(sv.var).size);
+    sv.data = talloc_memdup(s, sv.data, ra_var_host_layout(0, sv.var).size);
 
     TARRAY_APPEND(s, s->variables, s->num_variables, sv);
     return sv.var.name;
@@ -523,7 +523,7 @@ void pl_shader_color_map(struct pl_shader *s,
         cms_mat = pl_get_color_mapping_matrix(csp_src, csp_dst, params->intent);
         GLSL("color.rgb = %s * color.rgb;\n", var(s, (struct pl_shader_var) {
             .var = ra_var_mat3("cms_matrix"),
-            .data = cms_mat.m,
+            .data = PL_TRANSPOSE_3X3(cms_mat.m),
         }));
         // Since this can reduce the gamut, figure out by how much
         for (int c = 0; c < 3; c++)

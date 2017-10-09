@@ -56,3 +56,21 @@
         (a) = (b);              \
         (b) = tmp;              \
     } while (0)
+
+// Helper functions for transposing a matrix in-place.
+#define PL_TRANSPOSE_DIM(d, m) \
+    pl_transpose((d), (float[(d)*(d)]){0}, (const float *)(m))
+
+#define PL_TRANSPOSE_2X2(m) PL_TRANSPOSE_DIM(2, m)
+#define PL_TRANSPOSE_3X3(m) PL_TRANSPOSE_DIM(3, m)
+#define PL_TRANSPOSE_4X4(m) PL_TRANSPOSE_DIM(4, m)
+
+static inline float *pl_transpose(int dim, float *out, const float *in)
+{
+    for (int i = 0; i < dim; i++) {
+        for (int j = 0; j < dim; j++)
+            out[i * dim + j] = in[j * dim + i];
+    }
+
+    return out;
+}

@@ -353,7 +353,7 @@ struct ra_var {
     // vec2 would have dim_v = 2 and dim_m = 1. A mat3x4 would have dim_v = 4
     // and dim_m = 3.
     int dim_v;              // vector dimension
-    int dim_m;              // matrix dimension (number of columns)
+    int dim_m;              // matrix dimension (number of columns, see below)
 };
 
 // Returns a GLSL type name (e.g. vec4) for a given ra_var, or NULL if the
@@ -369,40 +369,80 @@ struct ra_var ra_var_mat2(const char *name);
 struct ra_var ra_var_mat3(const char *name);
 struct ra_var ra_var_mat4(const char *name);
 
-// Represents the layout requirements of an input variable
+// Describes the memory layout of a variable, relative to some starting location
+// (typically the offset within a uniform/storage/pushconstant buffer)
+//
+// Note on matrices: All RAs expect column major matrices, for both buffers and
+// input variables. Care needs to be taken to avoid trying to use e.g. a
+// pl_color_matrix (which is row major) directly as a ra_var_update.data!
+//
+// In terms of the host layout, a column-major matrix (e.g. matCxR) with C
+// columns and R rows is treated like an array vecR[C]. The `stride` here refers
+// to the separation between these array elements, i.e. the separation between
+// the individual columns.
+//
+// Visualization of a mat4x3:
+//
+//       0   1   2   3  <- columns
+// 0  [ (A) (D) (G) (J) ]
+// 1  [ (B) (E) (H) (K) ]
+// 2  [ (C) (F) (I) (L) ]
+// ^ rows
+//
+// Layout in GPU memory: (stride=16, size=60)
+//
+// [ A B C ] X <- column 0, offset +0
+// [ D E F ] X <- column 1, offset +16
+// [ G H I ] X <- column 1, offset +32
+// [ J K L ]   <- column 1, offset +48
+//
+// Note the lack of padding on the last column in this example.
+// In general: size <= stride * dim_m
+//
+// C representation: (stride=12, size=48)
+//
+// { { A, B, C },
+//   { D, E, F },
+//   { G, H, I },
+//   { J, K, L } }
+
 struct ra_var_layout {
-    size_t align;  // the alignment requirements (always a positive power of two)
-    size_t stride; // the delta between two rows of an array/matrix
+    size_t offset; // the starting offset of the first byte
+    size_t stride; // the delta between two elements of an array/matrix
     size_t size;   // the total size of the input
 };
 
 // Returns the host layout of an input variable as required for a
-// tightly-packed, byte-aligned C data type.
-//
-// NOTE: matrices are assumed to be row major, similar to pl_color_matrix.
-struct ra_var_layout ra_var_host_layout(struct ra_var var);
+// tightly-packed, byte-aligned C data type, given a starting offset.
+struct ra_var_layout ra_var_host_layout(size_t offset, struct ra_var var);
 
-// Returns the layout requirements of a uniform buffer element. If
-// limits.max_ubo_size is 0, then this function returns {0}.
+// Returns the layout requirements of a uniform buffer element given a current
+// buffer offset. If limits.max_ubo_size is 0, then this function returns {0}.
 //
-// Note: This is normally equivalent to std140 layout, but not necessarily
-// (for example, RAs based on d3d11 may internally translate std140 to a
-// different layout). As such, the calling code should not make any
-// assumptions about the buffer layout and instead query the layout
-// requirements explicitly using this function.
-struct ra_var_layout ra_buf_uniform_layout(const struct ra *ra,
+// Note: In terms of the GLSL, this is always *specified* as std140 layout, but
+// because of the way GLSL gets translated to other APIs (notably D3D11), the
+// actual buffer contents may vary considerably from std140. As such, the
+// calling code should not make any assumptions about the buffer layout and
+// instead query the layout requirements explicitly using this function.
+//
+// The normal way to use this function is when calculating the size and offset
+// requirements of a uniform buffer in an incremental fashion, to calculate the
+// new offset of the next variable in this buffer.
+struct ra_var_layout ra_buf_uniform_layout(const struct ra *ra, size_t offset,
                                            const struct ra_var *var);
 
-// Returns the layout requirements of a storage buffer element. If
-// limits.max_ssbo_size is 0, then this function returns {0}.
+// Returns the layout requirements of a storage buffer element given a current
+// buffer offset. If limits.max_ssbo_size is 0, then this function returns {0}.
 //
-// Note: This is normally equivalent to std430 layout.
-struct ra_var_layout ra_buf_storage_layout(const struct ra *ra,
+// Note: In terms of the GLSL, this is always *specified* as std430 layout, but
+// like with ra_buf_uniform_layout, the actual implementation may disagree.
+struct ra_var_layout ra_buf_storage_layout(const struct ra *ra, size_t offset,
                                            const struct ra_var *var);
 
-// Returns the layout requirements of a push constant element. If
-// ra.max_pushc_size is 0, then this function returns {0}.
-struct ra_var_layout ra_push_constant_layout(const struct ra *ra,
+// Returns the layout requirements of a push constant element given a current
+// push constant offset. If ra.max_pushc_size is 0, then this function returns
+// {0}.
+struct ra_var_layout ra_push_constant_layout(const struct ra *ra, size_t offset,
                                              const struct ra_var *var);
 
 // Represents a vertex attribute.
