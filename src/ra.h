@@ -54,6 +54,7 @@ struct ra_fns {
     struct ra_var_layout (*push_constant_layout)(const struct ra *ra, size_t offset,
                                                  const struct ra_var *var);
 
+    int (*desc_namespace)(const struct ra *ra, enum ra_desc_type type);
     const struct ra_renderpass *(*renderpass_create)(const struct ra *ra,
                                     const struct ra_renderpass_params *params);
     void (*renderpass_destroy)(const struct ra *ra,

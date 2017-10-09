@@ -355,6 +355,11 @@ struct ra_var_layout ra_push_constant_layout(const struct ra *ra, size_t offset,
     }
 }
 
+int ra_desc_namespace(const struct ra *ra, enum ra_desc_type type)
+{
+    return ra->impl->desc_namespace(ra, type);
+}
+
 const char *ra_desc_access_glsl_name(enum ra_desc_access mode)
 {
     switch (mode) {

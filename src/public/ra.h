@@ -460,6 +460,14 @@ enum ra_desc_type {
     RA_DESC_TYPE_COUNT
 };
 
+// Returns an abstract, 0-based namespace index for a given descriptor type.
+// Implementations can use this to figure out which descriptors may share the
+// same value of `binding`. Bindings must only be unique for all descriptors
+// within the same namespace.
+//
+// Calling this function on RA_DESC_INVALID returns the number of namespaces.
+int ra_desc_namespace(const struct ra *ra, enum ra_desc_type type);
+
 // Access mode of a shader input descriptor.
 enum ra_desc_access {
     RA_DESC_ACCESS_READWRITE,
