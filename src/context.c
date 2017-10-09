@@ -20,7 +20,8 @@
 #include "common.h"
 #include "context.h"
 
-struct pl_context *pl_context_create(int api_ver)
+struct pl_context *pl_context_create(const struct pl_context_params *params,
+                                     int api_ver)
 {
     if (api_ver != PL_API_VER) {
         fprintf(stderr,
@@ -34,25 +35,14 @@ struct pl_context *pl_context_create(int api_ver)
     }
 
     struct pl_context *ctx = talloc_zero(NULL, struct pl_context);
+    ctx->params = *params;
+    pl_trace(ctx, "pl_context: initialized\n");
     return ctx;
 }
 
 void pl_context_destroy(struct pl_context **ctx)
 {
     TA_FREEP(ctx);
-}
-
-void pl_context_set_log_cb(struct pl_context *ctx, void *priv,
-                           void (*fun)(void *priv, enum pl_log_level level,
-                                       const char *msg))
-{
-    ctx->logfun = fun;
-    ctx->logpriv = priv;
-}
-
-void pl_context_set_log_level(struct pl_context *ctx, enum pl_log_level level)
-{
-    ctx->loglevel = level;
 }
 
 void pl_msg(struct pl_context *ctx, enum pl_log_level lev, const char *fmt, ...)
@@ -71,5 +61,5 @@ void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
 
     ctx->logbuffer.len = 0;
     bstr_xappend_vasprintf(ctx, &ctx->logbuffer, fmt, va);
-    ctx->logfun(ctx->logpriv, lev, ctx->logbuffer.start);
+    ctx->params.log_cb(ctx->params.log_priv, lev, ctx->logbuffer.start);
 }

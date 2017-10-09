@@ -23,17 +23,14 @@
 #include "common.h"
 
 struct pl_context {
-    // Logging-related state:
-    enum pl_log_level loglevel;
+    struct pl_context_params params;
     struct bstr logbuffer;
-    void *logpriv;
-    void (*logfun)(void *priv, enum pl_log_level level, const char *msg);
 };
 
 // Logging-related functions
 static inline bool pl_msg_test(struct pl_context *ctx, enum pl_log_level lev)
 {
-    return ctx->logfun && ctx->loglevel >= lev;
+    return ctx->params.log_cb && ctx->params.log_level >= lev;
 }
 
 void pl_msg(struct pl_context *ctx, enum pl_log_level lev, const char *fmt, ...)
