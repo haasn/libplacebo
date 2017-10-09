@@ -83,7 +83,7 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
                                   const struct ra *ra);
 
 // Frees a pl_shader and all resources associated with it.
-void pl_shader_free(struct pl_shader **shader);
+void pl_shader_free(struct pl_shader **sh);
 
 // Resets a pl_shader to a blank slate, without releasing internal memory.
 // If you're going to be re-generating shaders often, this function will let
@@ -91,7 +91,7 @@ void pl_shader_free(struct pl_shader **shader);
 void pl_shader_reset(struct pl_shader *sh);
 
 // Returns whether or not a pl_shader needs to be run as a compute shader.
-bool pl_shader_is_compute(const struct pl_shader *shader);
+bool pl_shader_is_compute(const struct pl_shader *sh);
 
 // Built-in shader fragments that represent colorspace transformations. As a
 // convention, all of these operations are assumed to operate in-place a
@@ -102,12 +102,12 @@ bool pl_shader_is_compute(const struct pl_shader *shader);
 // Linearize (expand) `vec4 color`, given a specified color_transfer. In
 // essence, this is the ITU-R EOTF, calculated on an idealized (reference)
 // monitor with a white point of PL_COLOR_REF_WHITE and infinite contrast.
-void pl_shader_linearize(struct pl_shader *s, enum pl_color_transfer trc);
+void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc);
 
 // Delinearize (compress), given a TRC as output. This corresponds to the
 // inverse EOTF (not the OETF) in ITU-R terminology, again assuming a
 // reference monitor.
-void pl_shader_delinearize(struct pl_shader *s, enum pl_color_transfer trc);
+void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc);
 
 // A collection of various tone mapping algorithms supported by libplacebo.
 enum pl_tone_mapping_algorithm {
@@ -210,7 +210,7 @@ extern const struct pl_color_map_params pl_color_map_recommended_params;
 // to the parameters (described in greater depth above). If `prelinearized`
 // is true, the logic will assume the input has already been linearized by the
 // caller (e.g. as part of a previous linear light scaling operation).
-void pl_shader_color_map(struct pl_shader *s,
+void pl_shader_color_map(struct pl_shader *sh,
                          const struct pl_color_map_params *params,
                          struct pl_color_space src, struct pl_color_space dst,
                          bool prelinearized);

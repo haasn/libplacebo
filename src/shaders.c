@@ -31,23 +31,23 @@ struct priv {
 struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
                                   const struct ra *ra)
 {
-    struct pl_shader *s = talloc_ptrtype(ctx, s);
-    *s = (struct pl_shader) {
+    struct pl_shader *sh = talloc_ptrtype(ctx, sh);
+    *sh = (struct pl_shader) {
         .ctx = ctx,
         .ra = ra,
         .glsl_header = "",
         .glsl_body = "",
     };
 
-    struct priv *p = s->priv = talloc_zero(s, struct priv);
-    p->tmp = talloc_new(s);
+    struct priv *p = sh->priv = talloc_zero(sh, struct priv);
+    p->tmp = talloc_new(sh);
 
-    return s;
+    return sh;
 }
 
-void pl_shader_free(struct pl_shader **s)
+void pl_shader_free(struct pl_shader **sh)
 {
-    TA_FREEP(s);
+    TA_FREEP(sh);
 }
 
 void pl_shader_reset(struct pl_shader *sh)
@@ -71,51 +71,51 @@ void pl_shader_reset(struct pl_shader *sh)
     };
 }
 
-bool pl_shader_is_compute(const struct pl_shader *s)
+bool pl_shader_is_compute(const struct pl_shader *sh)
 {
     bool ret = true;
-    for (int i = 0; i < PL_ARRAY_SIZE(s->compute_work_groups); i++)
-        ret &= !!s->compute_work_groups[i];
+    for (int i = 0; i < PL_ARRAY_SIZE(sh->compute_work_groups); i++)
+        ret &= !!sh->compute_work_groups[i];
     return ret;
 }
 
 typedef const char * var_t;
 
-static var_t fresh(struct pl_shader *s, const char *name)
+static var_t fresh(struct pl_shader *sh, const char *name)
 {
-    struct priv *p = s->priv;
+    struct priv *p = sh->priv;
     return talloc_asprintf(p->tmp, "_%s_%d", name ? name : "var", p->fresh++);
 }
 
 // Add a new shader var and return its identifier (string)
-static var_t var(struct pl_shader *s, struct pl_shader_var sv)
+static var_t var(struct pl_shader *sh, struct pl_shader_var sv)
 {
-    struct priv *p = s->priv;
-    sv.var.name = fresh(s, sv.var.name);
+    struct priv *p = sh->priv;
+    sv.var.name = fresh(sh, sv.var.name);
     sv.data = talloc_memdup(p->tmp, sv.data, ra_var_host_layout(0, sv.var).size);
 
-    TARRAY_APPEND(s, s->variables, s->num_variables, sv);
+    TARRAY_APPEND(sh, sh->variables, sh->num_variables, sv);
     return sv.var.name;
 }
 
 PRINTF_ATTRIBUTE(4, 5)
-static void pl_shader_append(struct pl_shader *s, const char **str, int idx,
+static void pl_shader_append(struct pl_shader *sh, const char **str, int idx,
                              const char *fmt, ...)
 {
-    struct priv *p = s->priv;
+    struct priv *p = sh->priv;
     assert(idx < PL_ARRAY_SIZE(p->buffers));
 
     va_list ap;
     va_start(ap, fmt);
-    bstr_xappend_vasprintf(s, &p->buffers[idx], fmt, ap);
+    bstr_xappend_vasprintf(sh, &p->buffers[idx], fmt, ap);
     va_end(ap);
 
     // Update the GLSL shader body pointer in case the buffer got re-allocated
     *str = p->buffers[idx].start;
 }
 
-#define GLSLH(...) pl_shader_append(s, &s->glsl_header, 0, __VA_ARGS__)
-#define GLSL(...)  pl_shader_append(s, &s->glsl_body,   1, __VA_ARGS__)
+#define GLSLH(...) pl_shader_append(sh, &sh->glsl_header, 0, __VA_ARGS__)
+#define GLSL(...)  pl_shader_append(sh, &sh->glsl_body,   1, __VA_ARGS__)
 
 // Colorspace operations
 
@@ -144,7 +144,7 @@ static const float SLOG_A = 0.432699,
                    SLOG_Q = 0.030001,
                    SLOG_K2 = 155.0 / 219.0;
 
-void pl_shader_linearize(struct pl_shader *s, enum pl_color_transfer trc)
+void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc)
 {
     if (trc == PL_COLOR_TRC_LINEAR)
         return;
@@ -226,7 +226,7 @@ void pl_shader_linearize(struct pl_shader *s, enum pl_color_transfer trc)
     GLSL("color.rgb *= vec3(1.0/%f);\n", pl_color_transfer_nominal_peak(trc));
 }
 
-void pl_shader_delinearize(struct pl_shader *s, enum pl_color_transfer trc)
+void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
 {
     if (trc == PL_COLOR_TRC_LINEAR)
         return;
@@ -299,7 +299,7 @@ void pl_shader_delinearize(struct pl_shader *s, enum pl_color_transfer trc)
 
 // Applies the OOTF / inverse OOTF. `peak` corresponds to the nominal peak
 // (needed to scale the functions correctly)
-static void pl_shader_ootf(struct pl_shader *s, enum pl_color_light light,
+static void pl_shader_ootf(struct pl_shader *sh, enum pl_color_light light,
                            float peak, var_t luma)
 {
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
@@ -336,7 +336,7 @@ static void pl_shader_ootf(struct pl_shader *s, enum pl_color_light light,
     GLSL("color.rgb *= vec3(1.0/%f);\n", peak);
 }
 
-static void pl_shader_inverse_ootf(struct pl_shader *s, enum pl_color_light light,
+static void pl_shader_inverse_ootf(struct pl_shader *sh, enum pl_color_light light,
                                    float peak, var_t luma)
 {
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
@@ -377,7 +377,7 @@ const struct pl_color_map_params pl_color_map_recommended_params = {
     .peak_detect_frames      = 50,
 };
 
-static void pl_shader_tone_map(struct pl_shader *s, float ref_peak, var_t luma,
+static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, var_t luma,
                                const struct pl_color_map_params *params)
 {
     GLSL("// pl_shader_tone_map\n");
@@ -397,7 +397,7 @@ static void pl_shader_tone_map(struct pl_shader *s, float ref_peak, var_t luma,
          "float sig_orig = sig;                            \n");
 
     if (params->peak_detect_ssbo) {
-        PL_FATAL(s, "pl_shader_tone_map: peak_detect_ssbo not yet supported!\n");
+        PL_FATAL(sh, "pl_shader_tone_map: peak_detect_ssbo not yet supported!\n");
         abort();
     } else {
         GLSL("const float sig_peak = %f;\n", ref_peak);
@@ -433,7 +433,7 @@ static void pl_shader_tone_map(struct pl_shader *s, float ref_peak, var_t luma,
 
     case PL_TONE_MAPPING_HABLE: {
         float A = 0.15, B = 0.50, C = 0.10, D = 0.20, E = 0.02, F = 0.30;
-        var_t hable = fresh(s, "hable");
+        var_t hable = fresh(sh, "hable");
         GLSLH("float %s(float x) {                                        \n"
               "return ((x * (%f*x + %f)+%f)/(x * (%f*x + %f) + %f)) - %f; \n"
               "}                                                          \n",
@@ -464,7 +464,7 @@ static void pl_shader_tone_map(struct pl_shader *s, float ref_peak, var_t luma,
     GLSL("color.rgb *= sig / sig_orig;\n");
 }
 
-void pl_shader_color_map(struct pl_shader *s,
+void pl_shader_color_map(struct pl_shader *sh,
                          const struct pl_color_map_params *params,
                          struct pl_color_space src, struct pl_color_space dst,
                          bool prelinearized)
@@ -499,12 +499,12 @@ void pl_shader_color_map(struct pl_shader *s,
     // so just always make them available
     struct pl_color_matrix rgb2xyz;
     rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(src.primaries));
-    var_t src_luma = var(s, (struct pl_shader_var) {
+    var_t src_luma = var(sh, (struct pl_shader_var) {
         .var  = ra_var_vec3("src_luma"),
         .data = rgb2xyz.m[1], // RGB->Y vector
     });
     rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(dst.primaries));
-    var_t dst_luma = var(s, (struct pl_shader_var) {
+    var_t dst_luma = var(sh, (struct pl_shader_var) {
         .var  = ra_var_vec3("dst_luma"),
         .data = rgb2xyz.m[1], // RGB->Y vector
     });
@@ -525,12 +525,12 @@ void pl_shader_color_map(struct pl_shader *s,
     bool is_linear = prelinearized;
 
     if (need_linear && !is_linear) {
-        pl_shader_linearize(s, src.transfer);
+        pl_shader_linearize(sh, src.transfer);
         is_linear = true;
     }
 
     if (src.light != dst.light)
-        pl_shader_ootf(s, src.light, src_range, src_luma);
+        pl_shader_ootf(sh, src.light, src_range, src_luma);
 
     // Rescale the signal to compensate for differences in the encoding range
     // and reference white level. This is necessary because of the 0-1 value
@@ -546,7 +546,7 @@ void pl_shader_color_map(struct pl_shader *s,
                                 csp_dst = pl_raw_primaries_get(dst.primaries);
         struct pl_color_matrix cms_mat;
         cms_mat = pl_get_color_mapping_matrix(csp_src, csp_dst, params->intent);
-        GLSL("color.rgb = %s * color.rgb;\n", var(s, (struct pl_shader_var) {
+        GLSL("color.rgb = %s * color.rgb;\n", var(sh, (struct pl_shader_var) {
             .var = ra_var_mat3("cms_matrix"),
             .data = PL_TRANSPOSE_3X3(cms_mat.m),
         }));
@@ -558,10 +558,10 @@ void pl_shader_color_map(struct pl_shader *s,
     // Tone map to prevent clipping when the source signal peak exceeds the
     // encodable range or we've reduced the gamut
     if (ref_peak > 1)
-        pl_shader_tone_map(s, ref_peak, dst_luma, params);
+        pl_shader_tone_map(sh, ref_peak, dst_luma, params);
 
     if (src.light != dst.light)
-        pl_shader_inverse_ootf(s, dst.light, dst_range, dst_luma);
+        pl_shader_inverse_ootf(sh, dst.light, dst_range, dst_luma);
 
     // Warn for remaining out-of-gamut colors is enabled
     if (params->gamut_warning) {
@@ -571,7 +571,7 @@ void pl_shader_color_map(struct pl_shader *s,
     }
 
     if (is_linear)
-        pl_shader_delinearize(s, dst.transfer);
+        pl_shader_delinearize(sh, dst.transfer);
 
     GLSL("}\n");
 }
