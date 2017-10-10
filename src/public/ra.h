@@ -97,6 +97,8 @@ struct ra {
     int num_formats;
 };
 
+// All resources such as textures and buffers allocated from the RA must be
+// destroyed before calling ra_destroy.
 void ra_destroy(const struct ra **ra);
 
 enum ra_fmt_type {
@@ -350,8 +352,7 @@ const struct ra_buf *ra_buf_create(const struct ra *ra,
 void ra_buf_destroy(const struct ra *ra, const struct ra_buf **buf);
 
 // Update the contents of a buffer, starting at a given offset (*must* be a
-// multiple of 4) and up to a given size, with the contents of *data. This is
-// an extremely common operation.
+// multiple of 4) and up to a given size, with the contents of *data.
 void ra_buf_update(const struct ra *ra, const struct ra_buf *buf,
                    size_t buf_offset, const void *data, size_t size);
 
@@ -622,7 +623,8 @@ struct ra_renderpass {
     void *priv;
 };
 
-// Compile a shader and create a render pass. This is a rare operation.
+// Compile a shader and create a render pass. This is a rare/expensive
+// operation and may take a significant amount of time.
 const struct ra_renderpass *ra_renderpass_create(const struct ra *ra,
                                 const struct ra_renderpass_params *params);
 
@@ -680,7 +682,7 @@ struct ra_renderpass_run_params {
     int compute_groups[3];
 };
 
-// Execute a render pass. This is an extremely common operation.
+// Execute a render pass.
 void ra_renderpass_run(const struct ra *ra,
                        const struct ra_renderpass_run_params *params);
 
