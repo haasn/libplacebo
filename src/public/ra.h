@@ -47,10 +47,9 @@ struct ra_glsl_desc {
 
 typedef uint64_t ra_caps;
 enum {
-    RA_CAP_TEX_BLIT         = 1 << 0, // supports ra_tex_blit
-    RA_CAP_TEX_STORAGE      = 1 << 1, // supports tex_params.storage_image
-    RA_CAP_COMPUTE          = 1 << 2, // supports compute shaders
-    RA_CAP_INPUT_VARIABLES  = 1 << 3, // supports shader input variables
+    RA_CAP_COMPUTE          = 1 << 0, // supports compute shaders
+    RA_CAP_PARALLEL_COMPUTE = 1 << 1, // supports multiple compute queues
+    RA_CAP_INPUT_VARIABLES  = 1 << 2, // supports shader input variables
 };
 
 // Structure defining the physical limits of this RA instance. If a limit is
@@ -60,12 +59,16 @@ struct ra_limits {
     int max_tex_2d_dim;    // maximum width/height for a 2D texture (required)
     int max_tex_3d_dim;    // maximum width/height/depth for a 3D texture
     size_t max_pushc_size; // maximum push_constants_size
-    size_t max_shmem_size; // maximum compute shader shared memory size
     size_t max_xfer_size;  // maximum size of a RA_BUF_TEX_TRANSFER
     size_t max_ubo_size;   // maximum size of a RA_BUF_UNIFORM
     size_t max_ssbo_size;  // maximum size of a RA_BUF_STORAGE
-    int max_dispatch[3];   // maximum dispatch size for compute shaders
     int max_gather_offset; // maximum textureGatherOffset offset
+
+    // Compute shader limits. Always available (non-zero) if RA_CAP_COMPUTE set
+    size_t max_shmem_size; // maximum compute shader shared memory size
+    int max_group_threads; // maximum number of local threads per work group
+    int max_group_size[3]; // maximum work group size per dimension
+    int max_dispatch[3];   // maximum dispatch size per dimension
 
     // These don't represent hard limits but indicate performance hints for
     // optimal alignment. For best performance, the corresponding field
@@ -109,7 +112,7 @@ enum ra_fmt_type {
 // Structure describing a texel/vertex format.
 struct ra_format {
     const char *name;       // symbolic name for this format (e.g. rgba32f)
-    void *priv;
+    const void *priv;
 
     enum ra_fmt_type type;  // the format's data type and interpretation
     int num_components;     // number of components for this format
@@ -128,8 +131,11 @@ struct ra_format {
     bool vertex_format;     // may be used as a vertex attribute
     bool texture_format;    // may be used to create textures (ra_tex_create)
     bool sampleable;        // may be sampled from (RA_DESC_SAMPLED_TEX)
+    bool storable;          // may be used as storage image (RA_DESC_STORAGE_IMG)
     bool linear_filterable; // supports linear filtering when sampling
     bool renderable;        // may be rendered to (ra_renderpass_params.target_format)
+    bool blendable;         // may be blended to (ra_renderpass_params.enable_blend)
+    bool blittable;         // may be used with ra_tex_blit
 
     // If usable as a vertex or texel buffer format, this gives the GLSL type
     // corresponding to the data. (e.g. vec4)
@@ -174,14 +180,14 @@ struct ra_tex_params {
     const struct ra_format *format;
     int w, h, d;            // physical dimension; unused dimensions must be 0
 
-    // The following bools describe what operations can be performed
+    // The following bools describe what operations can be performed. The
+    // corresponding ra_format capability must be `true` for every enabled
+    // operation type.
     bool sampleable;        // usable as a RA_DESC_SAMPLED_TEX
     bool renderable;        // usable as a render target (ra_renderpass_run)
     bool storage_image;     // must be usable as a storage image (RA_DESC_IMG_*)
     bool blit_src;          // must be usable as a blit source
-                            // (requires RA_CAP_TEX_BLIT)
     bool blit_dst;          // must be usable as a blit destination
-                            // (requires RA_CAP_TEX_BLIT)
     bool host_mutable;      // texture may be updated with ra_tex_upload()
     bool host_fetchable;    // texture may be fetched with ra_tex_download()
 
@@ -226,15 +232,11 @@ const struct ra_tex *ra_tex_create(const struct ra *ra,
 
 void ra_tex_destroy(const struct ra *ra, const struct ra_tex **tex);
 
-// Clear the dst texture with the given color (rgba) and within the given
-// region. This is functionally identical to a blit operation, which means
-// dst->params.blit_dst must be set. Content outside of the scissor is
-// preserved.
-//
-// Note: Clearing a partial region of an image may perform significantly worse
-// than clearing the entire image, and should be avoided if possible.
+// Clear the dst texture with the given color (rgba). This is functionally
+// identical to a blit operation, which means dst->params.blit_dst must be
+// set.
 void ra_tex_clear(const struct ra *ra, const struct ra_tex *dst,
-                  struct pl_rect3d rect, const float color[4]);
+                  const float color[4]);
 
 // Copy a sub-rectangle from one texture to another. The source/dest
 // regions must be within the texture bounds. Areas outside the dest region
@@ -246,9 +248,6 @@ void ra_tex_clear(const struct ra *ra, const struct ra_tex *dst,
 // while blitting. If the src and dst rects have different sizes, the source
 // image will be scaled according to src->params.sample_mode. That said, the
 // src and dst rects must be fully contained within the src/dst dimensions.
-//
-// If RA_CAP_TEX_BLIT is not present, this is a no-op and none of the above
-// restrictions apply.
 void ra_tex_blit(const struct ra *ra,
                  const struct ra_tex *dst, const struct ra_tex *src,
                  struct pl_rect3d dst_rc, struct pl_rect3d src_rc);
@@ -601,7 +600,7 @@ struct ra_renderpass_params {
     const struct ra_format *target_format;
 
     // Target blending mode. If enable_blend is false, the blend_ fields are
-    // ignored.
+    // ignored. target_format must have `blendable` set.
     bool enable_blend;
     enum ra_blend_mode blend_src_rgb;
     enum ra_blend_mode blend_dst_rgb;
@@ -664,8 +663,8 @@ struct ra_renderpass_run_params {
 
     // --- pass->params.type==RA_RENDERPASS_RASTER only
 
-    // target->params.renderable must be true, and target->params.format must
-    // match pass->params.target_format. Target must be a 2D texture.
+    // Target must be a 2D texture, target->params.renderable must be true, and
+    // target->params.format must match pass->params.target_format.
     struct ra_tex *target;
     struct pl_rect2d viewport; // screen space viewport
     struct pl_rect2d scissors; // target render scissors
@@ -676,7 +675,8 @@ struct ra_renderpass_run_params {
 
     // --- pass->params.type==RA_RENDERPASS_COMPUTE only
 
-    // Number of work groups to dispatch. (X/Y/Z)
+    // Number of work groups to dispatch per dimension (X/Y/Z). Must be <= the
+    // corresponding index of limits.max_dispatch
     int compute_groups[3];
 };
 

@@ -117,9 +117,9 @@ const struct ra_tex *ra_tex_create(const struct ra *ra,
     assert(fmt->texture_format);
     assert(fmt->sampleable || !params->sampleable);
     assert(fmt->renderable || !params->renderable);
-    assert((ra->caps & RA_CAP_TEX_STORAGE) || !params->storage_image);
-    assert((ra->caps & RA_CAP_TEX_BLIT) || !params->blit_src);
-    assert((ra->caps & RA_CAP_TEX_BLIT) || !params->blit_dst);
+    assert(fmt->storable   || !params->storage_image);
+    assert(fmt->blittable  || !params->blit_src);
+    assert(fmt->blittable  || !params->blit_dst);
     assert(fmt->linear_filterable || params->sample_mode != RA_TEX_SAMPLE_LINEAR);
 
     return ra->impl->tex_create(ra, params);
@@ -135,32 +135,30 @@ void ra_tex_destroy(const struct ra *ra, const struct ra_tex **tex)
 }
 
 void ra_tex_clear(const struct ra *ra, const struct ra_tex *dst,
-                  struct pl_rect3d rect, const float color[4])
+                  const float color[4])
 {
     assert(dst->params.blit_dst);
 
-    ra->impl->tex_clear(ra, dst, rect, color);
+    ra->impl->tex_clear(ra, dst, color);
 }
 
 void ra_tex_blit(const struct ra *ra,
                  const struct ra_tex *dst, const struct ra_tex *src,
                  struct pl_rect3d dst_rc, struct pl_rect3d src_rc)
 {
-    if (ra->caps & RA_CAP_TEX_BLIT) {
-        assert(src->params.format->texel_size == dst->params.format->texel_size);
-        assert(src->params.blit_src);
-        assert(dst->params.blit_dst);
-        assert(src_rc.x0 >= 0 && src_rc.x0 < src->params.w);
-        assert(src_rc.y0 >= 0 && src_rc.y0 < src->params.h);
-        assert(src_rc.x1 > 0 && src_rc.x1 <= src->params.w);
-        assert(src_rc.y1 > 0 && src_rc.y1 <= src->params.h);
-        assert(dst_rc.x0 >= 0 && dst_rc.x0 < dst->params.w);
-        assert(dst_rc.y0 >= 0 && dst_rc.y0 < dst->params.h);
-        assert(dst_rc.x1 > 0 && dst_rc.x1 <= dst->params.w);
-        assert(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
+    assert(src->params.format->texel_size == dst->params.format->texel_size);
+    assert(src->params.blit_src);
+    assert(dst->params.blit_dst);
+    assert(src_rc.x0 >= 0 && src_rc.x0 < src->params.w);
+    assert(src_rc.y0 >= 0 && src_rc.y0 < src->params.h);
+    assert(src_rc.x1 > 0 && src_rc.x1 <= src->params.w);
+    assert(src_rc.y1 > 0 && src_rc.y1 <= src->params.h);
+    assert(dst_rc.x0 >= 0 && dst_rc.x0 < dst->params.w);
+    assert(dst_rc.y0 >= 0 && dst_rc.y0 < dst->params.h);
+    assert(dst_rc.x1 > 0 && dst_rc.x1 <= dst->params.w);
+    assert(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
 
-        ra->impl->tex_blit(ra, dst, src, dst_rc, src_rc);
-    }
+    ra->impl->tex_blit(ra, dst, src, dst_rc, src_rc);
 }
 
 static void check_tex_transfer(const struct ra *ra,
@@ -411,6 +409,7 @@ const struct ra_renderpass *ra_renderpass_create(const struct ra *ra,
 
         assert(params->target_format);
         assert(params->target_format->renderable);
+        assert(params->target_format->blendable || !params->enable_blend);
         break;
     case RA_RENDERPASS_COMPUTE:
         assert(ra->caps & RA_CAP_COMPUTE);

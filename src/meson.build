@@ -52,7 +52,9 @@ components = [
     'vulkan',
     dependency('vulkan', version: '>=1.0', required: false),
     [ 'vulkan/command.c',
+      'vulkan/formats.c',
       'vulkan/malloc.c',
+      'vulkan/ra_vk.c',
       'vulkan/utils.c',
     ]
   ]
