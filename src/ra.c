@@ -199,6 +199,7 @@ static void check_tex_transfer(const struct ra *ra,
             case 2: num = pl_rect_h(rc) * params->stride_w; break;
             case 3: num = pl_rect_d(rc) * params->stride_h * params->stride_w; break;
         }
+        assert(params->buf_offset == PL_ALIGN2(params->buf_offset, 4));
         assert(params->buf_offset + num <= buf->params.size);
     }
 #endif
@@ -263,6 +264,7 @@ void ra_buf_update(const struct ra *ra, const struct ra_buf *buf,
 {
     assert(buf->params.host_mutable);
     assert(buf_offset + size <= buf->params.size);
+    assert(buf_offset == PL_ALIGN2(buf_offset, 4));
     ra->impl->buf_update(ra, buf, buf_offset, data, size);
 }
 
