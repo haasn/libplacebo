@@ -128,6 +128,34 @@ const struct ra_tex *ra_tex_create(const struct ra *ra,
     return ra->impl->tex_create(ra, params);
 }
 
+static bool ra_tex_params_eq(struct ra_tex_params a, struct ra_tex_params b)
+{
+    return a.w == b.w && a.h == b.h && a.d == b.d &&
+           a.format         == b.format &&
+           a.sampleable     == b.sampleable &&
+           a.renderable     == b.renderable &&
+           a.storable       == b.storable &&
+           a.blit_src       == b.blit_src &&
+           a.blit_dst       == b.blit_dst &&
+           a.host_writable  == b.host_writable &&
+           a.host_readable  == b.host_readable &&
+           a.sample_mode    == b.sample_mode &&
+           a.address_mode   == b.address_mode;
+}
+
+bool ra_tex_recreate(const struct ra *ra, const struct ra_tex **tex,
+                     const struct ra_tex_params *params)
+{
+    if (*tex && ra_tex_params_eq((*tex)->params, *params))
+        return true;
+
+    PL_DEBUG(ra, "ra_tex_recreate: %dx%dx%d", params->w, params->h,params->d);
+    ra_tex_destroy(ra, tex);
+    *tex = ra_tex_create(ra, params);
+
+    return !!*tex;
+}
+
 void ra_tex_destroy(const struct ra *ra, const struct ra_tex **tex)
 {
     if (!*tex)
@@ -182,7 +210,7 @@ void ra_tex_blit(const struct ra *ra,
     ra->impl->tex_blit(ra, dst, src, dst_rc, src_rc);
 }
 
-static size_t tex_transfer_size(const struct ra_tex_transfer_params *par)
+size_t ra_tex_transfer_size(const struct ra_tex_transfer_params *par)
 {
     const struct ra_tex *tex = par->tex;
 
@@ -225,10 +253,10 @@ static void check_tex_transfer(const struct ra *ra,
     default: abort();
     }
 
-    assert(!params->buf ^ !params->src); // exactly one
+    assert(!params->buf ^ !params->ptr); // exactly one
     if (params->buf) {
         const struct ra_buf *buf = params->buf;
-        size_t size = tex_transfer_size(params);
+        size_t size = ra_tex_transfer_size(params);
         assert(params->buf_offset == PL_ALIGN2(params->buf_offset, 4));
         assert(params->buf_offset + size <= buf->params.size);
     }
@@ -239,7 +267,7 @@ bool ra_tex_upload(const struct ra *ra,
                    const struct ra_tex_transfer_params *params)
 {
     const struct ra_tex *tex = params->tex;
-    assert(tex->params.host_mutable);
+    assert(tex->params.host_writable);
     check_tex_transfer(ra, params);
 
     return ra->impl->tex_upload(ra, params);
@@ -249,7 +277,7 @@ bool ra_tex_download(const struct ra *ra,
                      const struct ra_tex_transfer_params *params)
 {
     const struct ra_tex *tex = params->tex;
-    assert(tex->params.host_fetchable);
+    assert(tex->params.host_readable);
     check_tex_transfer(ra, params);
 
     return ra->impl->tex_download(ra, params);
@@ -289,13 +317,22 @@ void ra_buf_destroy(const struct ra *ra, const struct ra_buf **buf)
     *buf = NULL;
 }
 
-void ra_buf_update(const struct ra *ra, const struct ra_buf *buf,
-                   size_t buf_offset, const void *data, size_t size)
+void ra_buf_write(const struct ra *ra, const struct ra_buf *buf,
+                  size_t buf_offset, const void *data, size_t size)
 {
-    assert(buf->params.host_mutable);
+    assert(buf->params.host_writable);
     assert(buf_offset + size <= buf->params.size);
     assert(buf_offset == PL_ALIGN2(buf_offset, 4));
-    ra->impl->buf_update(ra, buf, buf_offset, data, size);
+    ra->impl->buf_write(ra, buf, buf_offset, data, size);
+}
+
+bool ra_buf_read(const struct ra *ra, const struct ra_buf *buf,
+                 size_t buf_offset, void *dest, size_t size)
+{
+    assert(buf->params.host_readable);
+    assert(buf_offset + size <= buf->params.size);
+    assert(buf_offset == PL_ALIGN2(buf_offset, 4));
+    return ra->impl->buf_read(ra, buf, buf_offset, dest, size);
 }
 
 bool ra_buf_poll(const struct ra *ra, const struct ra_buf *buf, uint64_t t)
@@ -575,6 +612,50 @@ void ra_flush(const struct ra *ra)
 
 // RA-internal helpers
 
+struct ra_var_layout std140_layout(const struct ra *ra, size_t offset,
+                                   const struct ra_var *var)
+{
+    size_t el_size = ra_var_type_size(var->type);
+
+    // std140 packing rules:
+    // 1. The size of generic values is their size in bytes
+    // 2. The size of vectors is the vector length * the base count, with the
+    // exception of *vec3 which is always the same size as *vec4
+    // 3. Matrices are treated like arrays of column vectors
+    // 4. The size of array rows is that of the element size rounded up to
+    // the nearest multiple of vec4
+    // 5. All values are aligned to a multiple of their size (stride for arrays)
+    size_t size = el_size * var->dim_v;
+    if (var->dim_v == 3)
+        size += el_size;
+    if (var->dim_m > 1)
+        size = PL_ALIGN2(size, sizeof(float[4]));
+
+    return (struct ra_var_layout) {
+        .offset = PL_ALIGN2(offset, size),
+        .stride = size,
+        .size   = size * var->dim_m,
+    };
+}
+
+struct ra_var_layout std430_layout(const struct ra *ra, size_t offset,
+                                   const struct ra_var *var)
+{
+    size_t el_size = ra_var_type_size(var->type);
+
+    // std430 packing rules: like std140, except arrays/matrices are always
+    // "tightly" packed, even arrays/matrices of vec3s
+    size_t size = el_size * var->dim_v;
+    if (var->dim_v == 3 && var->dim_m == 1)
+        size += el_size;
+
+    return (struct ra_var_layout) {
+        .offset = PL_ALIGN2(offset, size),
+        .stride = size,
+        .size   = size * var->dim_m,
+    };
+}
+
 void ra_buf_pool_uninit(const struct ra *ra, struct ra_buf_pool *pool)
 {
     for (int i = 0; i < pool->num_buffers; i++)
@@ -590,7 +671,8 @@ static bool ra_buf_params_compatible(const struct ra_buf_params *new,
     return new->type == old->type &&
            new->size <= old->size &&
            new->host_mapped  == old->host_mapped &&
-           new->host_mutable == old->host_mutable;
+           new->host_writable == old->host_writable &&
+           new->host_readable == old->host_readable;
 }
 
 static bool ra_buf_pool_grow(const struct ra *ra, struct ra_buf_pool *pool)
@@ -641,47 +723,50 @@ bool ra_tex_upload_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
 
     struct ra_buf_params bufparams = {
         .type = RA_BUF_TEX_TRANSFER,
-        .size = tex_transfer_size(params),
-        .host_mutable = true,
+        .size = ra_tex_transfer_size(params),
+        .host_writable = true,
     };
 
     const struct ra_buf *buf = ra_buf_pool_get(ra, pbo, &bufparams);
     if (!buf)
         return false;
 
-    ra_buf_update(ra, buf, 0, params->src, bufparams.size);
+    ra_buf_write(ra, buf, 0, params->ptr, bufparams.size);
 
     struct ra_tex_transfer_params newparams = *params;
     newparams.buf = buf;
-    newparams.src = NULL;
+    newparams.ptr = NULL;
 
     return ra_tex_upload(ra, &newparams);
 }
 
-static bool ra_tex_params_eq(struct ra_tex_params a, struct ra_tex_params b)
+bool ra_tex_download_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
+                         const struct ra_tex_transfer_params *params)
 {
-    return a.w == b.w && a.h == b.h && a.d == b.d &&
-           a.format         == b.format &&
-           a.sampleable     == b.sampleable &&
-           a.renderable     == b.renderable &&
-           a.storable       == b.storable &&
-           a.blit_src       == b.blit_src &&
-           a.blit_dst       == b.blit_dst &&
-           a.host_mutable   == b.host_mutable &&
-           a.host_fetchable == b.host_fetchable &&
-           a.sample_mode    == b.sample_mode &&
-           a.address_mode   == b.address_mode;
-}
+    if (params->buf)
+        return ra_tex_download(ra, params);
 
-bool ra_tex_recreate(const struct ra *ra, const struct ra_tex **tex,
-                     const struct ra_tex_params *params)
-{
-    if (*tex && ra_tex_params_eq((*tex)->params, *params))
-        return true;
+    struct ra_buf_params bufparams = {
+        .type = RA_BUF_TEX_TRANSFER,
+        .size = ra_tex_transfer_size(params),
+        .host_readable = true,
+    };
 
-    PL_DEBUG(ra, "ra_tex_recreate: %dx%dx%d", params->w, params->h,params->d);
-    ra_tex_destroy(ra, tex);
-    *tex = ra_tex_create(ra, params);
+    const struct ra_buf *buf = ra_buf_pool_get(ra, pbo, &bufparams);
+    if (!buf)
+        return false;
 
-    return !!*tex;
+    struct ra_tex_transfer_params newparams = *params;
+    newparams.buf = buf;
+    newparams.ptr = NULL;
+
+    if (!ra_tex_download(ra, &newparams))
+        return false;
+
+    if (ra_buf_poll(ra, buf, 0)) {
+        PL_TRACE(ra, "ra_tex_download without buffer: blocking (slow path)");
+        while (ra_buf_poll(ra, buf, 1000000)) ; // 1 ms
+    }
+
+    return ra_buf_read(ra, buf, 0, params->ptr, bufparams.size);
 }

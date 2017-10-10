@@ -35,7 +35,8 @@ struct ra_fns {
     RA_PFN(tex_upload);
     RA_PFN(tex_download);
     RA_PFN(buf_create);
-    RA_PFN(buf_update);
+    RA_PFN(buf_write);
+    RA_PFN(buf_read);
     RA_PFN(buf_poll); // optional: if NULL buffers are always free to use
     RA_PFN(desc_namespace);
     RA_PFN(renderpass_create);
@@ -58,6 +59,15 @@ struct ra_fns {
 };
 #undef RA_PFN
 
+// Recreates a texture with new parameters, no-op if nothing changed
+bool ra_tex_recreate(const struct ra *ra, const struct ra_tex **tex,
+                     const struct ra_tex_params *params);
+
+// RA-internal helpers: these should not be used outside of RA implementations
+
+// Compute the total size (in bytes) of a texture transfer operation
+size_t ra_tex_transfer_size(const struct ra_tex_transfer_params *par);
+
 // Layout rules for GLSL's packing modes
 struct ra_var_layout std140_layout(const struct ra *ra, size_t offset,
                                    const struct ra_var *var);
@@ -79,11 +89,9 @@ const struct ra_buf *ra_buf_pool_get(const struct ra *ra,
                                      struct ra_buf_pool *pool,
                                      const struct ra_buf_params *params);
 
-// Helper that wraps ra_tex_upload using texture upload buffers to ensure that
-// params->buf is always set. This is intended for RA-internal usage.
+// Helper that wraps ra_tex_upload/download using texture upload buffers to
+// ensure that params->buf is always set.
 bool ra_tex_upload_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
                        const struct ra_tex_transfer_params *params);
-
-// Recreates a texture with new parameters, no-op if nothing changed
-bool ra_tex_recreate(const struct ra *ra, const struct ra_tex **tex,
-                     const struct ra_tex_params *params);
+bool ra_tex_download_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
+                         const struct ra_tex_transfer_params *params);

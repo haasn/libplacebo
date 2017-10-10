@@ -185,14 +185,14 @@ struct ra_tex_params {
     // The following bools describe what operations can be performed. The
     // corresponding ra_format capability must be `true` for every enabled
     // operation type.
-    bool sampleable;        // usable as a RA_DESC_SAMPLED_TEX
-    bool renderable;        // usable as a render target (ra_renderpass_run)
-                            // (must only be used with 2D textures)
-    bool storable;          // usable as a storage image (RA_DESC_IMG_*)
-    bool blit_src;          // usable as a blit source
-    bool blit_dst;          // usable as a blit destination
-    bool host_mutable;      // may be updated with ra_tex_upload()
-    bool host_fetchable;    // may be fetched with ra_tex_download()
+    bool sampleable;    // usable as a RA_DESC_SAMPLED_TEX
+    bool renderable;    // usable as a render target (ra_renderpass_run)
+                        // (must only be used with 2D textures)
+    bool storable;      // usable as a storage image (RA_DESC_IMG_*)
+    bool blit_src;      // usable as a blit source
+    bool blit_dst;      // usable as a blit destination
+    bool host_writable; // may be updated with ra_tex_upload()
+    bool host_readable; // may be fetched with ra_tex_download()
 
     // The following capabilities are only relevant for textures which have
     // either sampleable or blit_src enabled.
@@ -200,7 +200,7 @@ struct ra_tex_params {
     enum ra_tex_address_mode address_mode;
 
     // If non-NULL, the texture will be created with these contents. Using
-    // this does *not* require setting host_mutable. Otherwise, the initial
+    // this does *not* require setting host_writable. Otherwise, the initial
     // data is undefined.
     void *initial_data;
 };
@@ -258,7 +258,7 @@ void ra_tex_blit(const struct ra *ra,
 // Structure describing a texture transfer operation.
 struct ra_tex_transfer_params {
     // Texture to transfer to/from. Depending on the type of the operation,
-    // this must have params.host_mutable (uploads) or params.host_fetchable
+    // this must have params.host_writable (uploads) or params.host_readable
     // (downloads) set, respectively.
     const struct ra_tex *tex;
 
@@ -278,7 +278,7 @@ struct ra_tex_transfer_params {
     const struct ra_buf *buf; // buffer to use (type must be RA_BUF_TEX_TRANSFER)
     size_t buf_offset;        // offset of data within buffer, must be a multiple of 4
     // 2. Transferring to/from host memory directly:
-    const void *src;          // address of data
+    void *ptr;                // address of data
     // The contents of the memory region / buffer must exactly match the
     // texture format; i.e. there is no explicit conversion between formats.
 
@@ -320,9 +320,10 @@ enum ra_buf_type {
 // Structure describing a buffer.
 struct ra_buf_params {
     enum ra_buf_type type;
-    size_t size;       // size in bytes
-    bool host_mapped;  // create a read-writable persistent mapping (ra_buf.data)
-    bool host_mutable; // contents may be updated via ra_buf_update()
+    size_t size;        // size in bytes
+    bool host_mapped;   // create a persistent, RW mapping (ra_buf.data)
+    bool host_writable; // contents may be updated via ra_buf_write()
+    bool host_readable; // contents may be read back via ra_buf_read()
 
     // If non-NULL, the buffer will be created with these contents. Otherwise,
     // the initial data is undefined. Using this does *not* require setting
@@ -352,10 +353,16 @@ const struct ra_buf *ra_buf_create(const struct ra *ra,
 
 void ra_buf_destroy(const struct ra *ra, const struct ra_buf **buf);
 
-// Update the contents of a buffer, starting at a given offset (*must* be a
+// Update the contents of a buffer, starting at a given offset (must be a
 // multiple of 4) and up to a given size, with the contents of *data.
-void ra_buf_update(const struct ra *ra, const struct ra_buf *buf,
-                   size_t buf_offset, const void *data, size_t size);
+void ra_buf_write(const struct ra *ra, const struct ra_buf *buf,
+                  size_t buf_offset, const void *data, size_t size);
+
+// Read back the contents of a buffer, starting at a given offset (must be a
+// multiple of 4) and up to a given size, storing the data into *dest.
+// Returns whether successful.
+bool ra_buf_read(const struct ra *ra, const struct ra_buf *buf,
+                 size_t buf_offset, void *dest, size_t size);
 
 // Returns whether or not a buffer is currently "in use". This can either be
 // because of a pending read operation or because of a pending write operation.
@@ -514,7 +521,7 @@ enum ra_desc_type {
 // same value of `binding`. Bindings must only be unique for all descriptors
 // within the same namespace.
 //
-// Calling this function on RA_DESC_INVALID returns the number of namespaces.
+// Calling this function on 0 (RA_DESC_INVALID) returns the number of namespaces.
 int ra_desc_namespace(const struct ra *ra, enum ra_desc_type type);
 
 // Access mode of a shader input descriptor.

@@ -284,6 +284,9 @@ error:
 
 void vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
 {
+    if (timeout && vk->num_cmds_queued)
+        vk_flush_commands(vk);
+
     while (vk->num_cmds_pending > 0) {
         struct vk_cmd *cmd = vk->cmds_pending[0];
         struct vk_cmdpool *pool = cmd->pool;
