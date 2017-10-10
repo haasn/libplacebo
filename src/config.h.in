@@ -34,6 +34,6 @@
 // Feature tests. These aren't described in further detail, but may be useful
 // for programmers wanting to programmatically check for feature support
 // in their compiled libshaderc versions.
-#mesondefine PL_HAVE_SHADERC
+@extra_defs@
 
 #endif // LIBPLACEBO_CONTEXT_H_

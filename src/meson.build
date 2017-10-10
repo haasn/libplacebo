@@ -16,19 +16,6 @@ add_global_arguments([
 
 cc = meson.get_compiler('c')
 
-# Configuration
-conf = configuration_data()
-conf.set('majorver', majorver)
-conf.set('apiver', apiver)
-conf.set('fixver', fixver)
-
-gitdesc = run_command('git', 'describe')
-if gitdesc.returncode() == 0
-  conf.set_quoted('version', gitdesc.stdout().strip())
-else
-  conf.set_quoted('version', 'v' + version)
-endif
-
 # Source files
 headers = [
   'public/colorspace.h',
@@ -64,20 +51,34 @@ components = [
   ],
 ]
 
+# Configuration
+conf = configuration_data()
+conf.set('majorver', majorver)
+conf.set('apiver', apiver)
+conf.set('fixver', fixver)
+
+gitdesc = run_command('git', 'describe')
+if gitdesc.returncode() == 0
+  conf.set_quoted('version', gitdesc.stdout().strip())
+else
+  conf.set_quoted('version', 'v' + version)
+endif
+
 # Build process
 bdeps = [ cc.find_library('m', required: false) ]
+defs = ''
 
 foreach c : components
-  name = c[0]
+  name = c[0].underscorify().to_upper()
   dep  = c[1]
-  srcs = c[2]
-
-  conf.set10('PL_HAVE_' + name.underscorify().to_upper(), dep.found())
+  defs += '#define PL_HAVE_@0@ @1@\n'.format(name, dep.found() ? 1 : 0)
   if dep.found()
     bdeps   += dep
-    sources += srcs
+    sources += c[2]
   endif
 endforeach
+
+conf.set('extra_defs', defs)
 
 configure_file(
   input: 'config.h.in',
