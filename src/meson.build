@@ -48,7 +48,14 @@ components = [
     'shaderc',
     cc.find_library('shaderc_shared', required: false),
     'spirv_shaderc.c',
-  ],
+  ], [
+    'vulkan',
+    dependency('vulkan', version: '>=1.0', required: false),
+    [ 'vulkan/command.c',
+      'vulkan/malloc.c',
+      'vulkan/utils.c',
+    ]
+  ]
 ]
 
 # Configuration
