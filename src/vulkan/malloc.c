@@ -97,7 +97,7 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
     // also implicitly unmaps the memory if needed
     vkFreeMemory(vk->dev, slab->mem, VK_ALLOC);
 
-    PL_INFO(vk, "Freed slab of size %zu.\n", slab->size);
+    PL_INFO(vk, "Freed slab of size %zu", slab->size);
     talloc_free(slab);
 }
 
@@ -122,7 +122,7 @@ static bool find_best_memtype(struct vk_malloc *ma, uint32_t typeBits,
     }
 
     PL_ERR(vk, "Found no memory type matching property flags 0x%x and type "
-           "bits 0x%x!\n", (unsigned)flags, (unsigned)typeBits);
+           "bits 0x%x!", (unsigned)flags, (unsigned)typeBits);
     return false;
 }
 
@@ -179,7 +179,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
     if (!find_best_memtype(ma, typeBits, heap->flags, &type, &index))
         goto error;
 
-    PL_INFO(vk, "Allocating %zu memory of type 0x%x (id %d) in heap %d.\n",
+    PL_INFO(vk, "Allocating %zu memory of type 0x%x (id %d) in heap %d",
             slab->size, (unsigned)type.propertyFlags, index, (int)type.heapIndex);
 
     minfo.memoryTypeIndex = index;
@@ -289,7 +289,7 @@ void vk_free_memslice(struct vk_malloc *ma, struct vk_memslice slice)
     assert(slab->used >= slice.size);
     slab->used -= slice.size;
 
-    PL_DEBUG(vk, "Freeing slice %zu + %zu from slab with size %zu\n",
+    PL_DEBUG(vk, "Freeing slice %zu + %zu from slab with size %zu",
              slice.offset, slice.size, slab->size);
 
     if (slab->dedicated) {
@@ -415,7 +415,7 @@ static bool slice_heap(struct vk_malloc *ma, struct vk_heap *heap, size_t size,
         .priv = slab,
     };
 
-    PL_DEBUG(vk, "Sub-allocating slice %zu + %zu from slab with size %zu\n",
+    PL_DEBUG(vk, "Sub-allocating slice %zu + %zu from slab with size %zu",
              out->offset, out->size, slab->size);
 
     size_t out_end = out->offset + out->size;

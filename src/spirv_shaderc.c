@@ -92,7 +92,7 @@ static bool shaderc_compile(struct spirv_compiler *spirv, void *tactx,
     };
 
     const char *status = s < PL_ARRAY_SIZE(results) ? results[s] : "unknown";
-    PL_MSG(spirv, lev, "shaderc compile status '%s' (%d errors, %d warnings)\n",
+    PL_MSG(spirv, lev, "shaderc compile status '%s' (%d errors, %d warnings)",
            status, errs, warn);
 
     if (success) {

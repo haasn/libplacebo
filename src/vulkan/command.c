@@ -322,9 +322,9 @@ bool vk_flush_commands(struct vk_ctx *vk)
             PL_TRACE(vk, "Submitted command on queue %p (QF %d):",
                      (void *)cmd->queue, pool->qf);
             for (int n = 0; n < cmd->num_deps; n++)
-                PL_TRACE(vk, "    waits on semaphore %p\n", (void *)cmd->deps[n]);
+                PL_TRACE(vk, "    waits on semaphore %p", (void *)cmd->deps[n]);
             for (int n = 0; n < cmd->num_sigs; n++)
-                PL_TRACE(vk, "    signals semaphore %p\n", (void *)cmd->sigs[n]);
+                PL_TRACE(vk, "    signals semaphore %p", (void *)cmd->sigs[n]);
         }
         continue;
 

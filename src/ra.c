@@ -600,7 +600,7 @@ static bool ra_buf_pool_grow(const struct ra *ra, struct ra_buf_pool *pool)
         return false;
 
     TARRAY_INSERT_AT(NULL, pool->buffers, pool->num_buffers, pool->index, buf);
-    PL_DEBUG(ra, "Resized buffer pool of type %u to size %d\n",
+    PL_DEBUG(ra, "Resized buffer pool of type %u to size %d",
              pool->current_params.type, pool->num_buffers);
     return true;
 }
@@ -679,7 +679,7 @@ bool ra_tex_recreate(const struct ra *ra, const struct ra_tex **tex,
     if (*tex && ra_tex_params_eq((*tex)->params, *params))
         return true;
 
-    PL_DEBUG(ra, "ra_tex_recreate: %dx%dx%d\n", params->w, params->h,params->d);
+    PL_DEBUG(ra, "ra_tex_recreate: %dx%dx%d", params->w, params->h,params->d);
     ra_tex_destroy(ra, tex);
     *tex = ra_tex_create(ra, params);
 
