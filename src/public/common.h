@@ -35,4 +35,9 @@ struct pl_rect3d {
 #define pl_rect_h(r) ((r).y1 - (r).y0)
 #define pl_rect_d(r) ((r).z1 - (r).z0)
 
+// "Normalize" a rectangle: This returns an equivalent rectangle with the
+// property that d1 >= d0 for all dimensions.
+struct pl_rect2d pl_rect2d_normalize(struct pl_rect2d rc);
+struct pl_rect3d pl_rect3d_normalize(struct pl_rect3d rc);
+
 #endif // LIBPLACEBO_COMMON_H_

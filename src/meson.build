@@ -37,6 +37,7 @@ bdeps = [
 # Source files
 sources = [
   'colorspace.c',
+  'common.c',
   'context.c',
   'filters.c',
   'ra.c',
