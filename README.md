@@ -123,4 +123,12 @@ void main()
 ```
 
 For a full documentation of the API, refer to the above [API
-Overview](#api-overview) as well as the [public header files](src/public/).
+Overview](#api-overview) as well as the [public header files](src/public/). I
+will create more and expanded samples once the project has a bit more
+functionality worth writing home about.
+
+## Support
+
+If you like what I am doing with libplacebo, and would like to help see this
+project grow beyond its initial scope, feel free to
+[support me on Patreon](https://www.patreon.com/haasn).
