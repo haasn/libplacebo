@@ -706,4 +706,18 @@ void ra_timer_start(const struct ra *ra, struct ra_timer *timer);
 // returns 0.
 uint64_t ra_timer_stop(const struct ra *ra, struct ra_timer *timer);
 
+// This is semantically a no-op, but it provides a hint that you want to flush
+// any partially queued up commands and begin execution. There is normally no
+// need to call this, because queued commands will always be implicitly flushed
+// whenever necessary to make forward progress on commands like `ra_buf_poll`,
+// or when submitting a frame to a swapchain for display. In fact, calling this
+// function can negatively impact performance, because some RAs rely on being
+// able to re-order and modify queued commands in order to enable optimizations
+// retroactively.
+//
+// The only time this might be beneficial to call explicitly is if you're doing
+// lots of offline rendering over a long period of time, and only fetching the
+// results (via ra_tex_download) at the very end.
+void ra_flush(const struct ra *ra);
+
 #endif // LIBPLACEBO_RA_H_

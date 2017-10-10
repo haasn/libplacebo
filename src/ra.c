@@ -535,3 +535,9 @@ uint64_t ra_timer_stop(const struct ra *ra, struct ra_timer *timer)
 {
     return timer ? ra->impl->timer_stop(ra, timer) : 0;
 }
+
+void ra_flush(const struct ra *ra)
+{
+    if (ra->impl->flush)
+        ra->impl->flush(ra);
+}

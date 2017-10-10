@@ -41,6 +41,7 @@ struct ra_fns {
     RA_PFN(desc_namespace);
     RA_PFN(renderpass_create);
     RA_PFN(renderpass_run);
+    RA_PFN(flush); // optional
 
     // The following functions are all optional, but they must either all be
     // supported or all be absent. They will never be called on NULL timers
