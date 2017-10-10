@@ -97,8 +97,7 @@ const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
                                        const struct pl_filter_params *params)
 {
     if (params->lut_entries <= 0 || !params->config.kernel) {
-        pl_fatal(ctx, "pl_filter_generate: Invalid params: missing lut_entries "
-                 "or config.kernel\n");
+        pl_fatal(ctx, "Invalid params: missing lut_entries or config.kernel\n");
         return NULL;
     }
 
