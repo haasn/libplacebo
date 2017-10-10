@@ -20,7 +20,7 @@
 extern const struct spirv_compiler_fns spirv_shaderc;
 
 static const struct spirv_compiler_fns *compilers[] = {
-#ifdef PL_HAVE_SHADERC
+#if PL_HAVE_SHADERC
     &spirv_shaderc,
 #endif
 };

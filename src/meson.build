@@ -29,12 +29,16 @@ else
   conf.set_quoted('version', 'v' + version)
 endif
 
-# Build dependencies
-bdeps = [
-  cc.find_library('m', required: false)
+# Source files
+headers = [
+  'public/colorspace.h',
+  'public/common.h',
+  'public/context.h',
+  'public/filters.h',
+  'public/ra.h',
+  'public/shaders.h',
 ]
 
-# Source files
 sources = [
   'colorspace.c',
   'common.c',
@@ -51,25 +55,30 @@ sources = [
   'ta/talloc.c',
 ]
 
-headers = [
-  'public/colorspace.h',
-  'public/common.h',
-  'public/context.h',
-  'public/filters.h',
-  'public/ra.h',
-  'public/shaders.h',
+# Optional components, in the format [ name, dependency, extra_sources ]
+components = [
+  [
+    'shaderc',
+    cc.find_library('shaderc_shared', required: false),
+    'spirv_shaderc.c',
+  ],
 ]
 
-# Optional features
-
-libshaderc = cc.find_library('shaderc_shared', required: false)
-if libshaderc.found() and cc.has_header('shaderc/shaderc.h')
-  bdeps   += libshaderc
-  sources += [ 'spirv_shaderc.c' ]
-  conf.set('PL_HAVE_SHADERC', true)
-endif
-
 # Build process
+bdeps = [ cc.find_library('m', required: false) ]
+
+foreach c : components
+  name = c[0]
+  dep  = c[1]
+  srcs = c[2]
+
+  conf.set10('PL_HAVE_' + name.underscorify().to_upper(), dep.found())
+  if dep.found()
+    bdeps   += dep
+    sources += srcs
+  endif
+endforeach
+
 configure_file(
   input: 'config.h.in',
   output: 'config.h',
