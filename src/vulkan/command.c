@@ -82,22 +82,24 @@ error:
     return NULL;
 }
 
-void vk_dev_callback(struct vk_ctx *vk, vk_cb callback, void *p, void *arg)
+void vk_dev_callback(struct vk_ctx *vk, vk_cb callback,
+                     const void *priv, const void *arg)
 {
     if (vk->last_cmd) {
-        vk_cmd_callback(vk->last_cmd, callback, p, arg);
+        vk_cmd_callback(vk->last_cmd, callback, priv, arg);
     } else {
         // The device was already idle, so we can just immediately call it
-        callback(p, arg);
+        callback((void *) priv, (void *) arg);
     }
 }
 
-void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback, void *p, void *arg)
+void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback,
+                     const void *priv, const void *arg)
 {
     TARRAY_APPEND(cmd, cmd->callbacks, cmd->num_callbacks, (struct vk_callback) {
         .run  = callback,
-        .priv = p,
-        .arg  = arg,
+        .priv = (void *) priv,
+        .arg  = (void *) arg,
     });
 }
 

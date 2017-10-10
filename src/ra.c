@@ -16,6 +16,7 @@
  */
 
 #include "common.h"
+#include "context.h"
 #include "ra.h"
 
 void ra_destroy(const struct ra **ra)
@@ -97,6 +98,7 @@ const struct ra_tex *ra_tex_create(const struct ra *ra,
     case 1:
         assert(params->w > 0);
         assert(params->w <= ra->limits.max_tex_1d_dim);
+        assert(!params->renderable);
         break;
     case 2:
         assert(params->w > 0 && params->h > 0);
@@ -108,6 +110,7 @@ const struct ra_tex *ra_tex_create(const struct ra *ra,
         assert(params->w <= ra->limits.max_tex_3d_dim);
         assert(params->h <= ra->limits.max_tex_3d_dim);
         assert(params->d <= ra->limits.max_tex_3d_dim);
+        assert(!params->renderable);
         break;
     default: abort();
     }
@@ -117,7 +120,7 @@ const struct ra_tex *ra_tex_create(const struct ra *ra,
     assert(fmt->texture_format);
     assert(fmt->sampleable || !params->sampleable);
     assert(fmt->renderable || !params->renderable);
-    assert(fmt->storable   || !params->storage_image);
+    assert(fmt->storable   || !params->storable);
     assert(fmt->blittable  || !params->blit_src);
     assert(fmt->blittable  || !params->blit_dst);
     assert(fmt->linear_filterable || params->sample_mode != RA_TEX_SAMPLE_LINEAR);
@@ -158,14 +161,47 @@ void ra_tex_blit(const struct ra *ra,
     assert(dst_rc.x1 > 0 && dst_rc.x1 <= dst->params.w);
     assert(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
 
+    // Sanitize the ignored parameters
+    if (!src->params.d) {
+        src_rc.z0 = 0;
+        src_rc.z1 = 1;
+    }
+    if (!src->params.h) {
+        src_rc.y0 = 0;
+        src_rc.y1 = 1;
+    }
+    if (!dst->params.d) {
+        dst_rc.z0 = 0;
+        dst_rc.z1 = 1;
+    }
+    if (!dst->params.h) {
+        dst_rc.y0 = 0;
+        dst_rc.y1 = 1;
+    }
+
     ra->impl->tex_blit(ra, dst, src, dst_rc, src_rc);
+}
+
+static size_t tex_transfer_size(const struct ra_tex_transfer_params *par)
+{
+    const struct ra_tex *tex = par->tex;
+
+    int texels;
+    switch (ra_tex_params_dimension(tex->params)) {
+    case 1: texels = pl_rect_w(par->rc); break;
+    case 2: texels = pl_rect_h(par->rc) * par->stride_w; break;
+    case 3: texels = pl_rect_d(par->rc) * par->stride_w * par->stride_h; break;
+    default: abort();
+    }
+
+    return texels * tex->params.format->texel_size;
 }
 
 static void check_tex_transfer(const struct ra *ra,
                                const struct ra_tex_transfer_params *params)
 {
 #ifndef NDEBUG
-    struct ra_tex *tex = params->tex;
+    const struct ra_tex *tex = params->tex;
     struct pl_rect3d rc = params->rc;
     switch (ra_tex_params_dimension(tex->params))
     {
@@ -191,16 +227,10 @@ static void check_tex_transfer(const struct ra *ra,
 
     assert(!params->buf ^ !params->src); // exactly one
     if (params->buf) {
-        struct ra_buf *buf = params->buf;
-        int num;
-        assert(buf->params.type == RA_BUF_TEX_TRANSFER);
-        switch (ra_tex_params_dimension(tex->params)) {
-            case 1: num = pl_rect_w(rc); break;
-            case 2: num = pl_rect_h(rc) * params->stride_w; break;
-            case 3: num = pl_rect_d(rc) * params->stride_h * params->stride_w; break;
-        }
+        const struct ra_buf *buf = params->buf;
+        size_t size = tex_transfer_size(params);
         assert(params->buf_offset == PL_ALIGN2(params->buf_offset, 4));
-        assert(params->buf_offset + num <= buf->params.size);
+        assert(params->buf_offset + size <= buf->params.size);
     }
 #endif
 }
@@ -208,7 +238,7 @@ static void check_tex_transfer(const struct ra *ra,
 bool ra_tex_upload(const struct ra *ra,
                    const struct ra_tex_transfer_params *params)
 {
-    struct ra_tex *tex = params->tex;
+    const struct ra_tex *tex = params->tex;
     assert(tex->params.host_mutable);
     check_tex_transfer(ra, params);
 
@@ -218,7 +248,7 @@ bool ra_tex_upload(const struct ra *ra,
 bool ra_tex_download(const struct ra *ra,
                      const struct ra_tex_transfer_params *params)
 {
-    struct ra_tex *tex = params->tex;
+    const struct ra_tex *tex = params->tex;
     assert(tex->params.host_fetchable);
     check_tex_transfer(ra, params);
 
@@ -466,7 +496,7 @@ void ra_renderpass_run(const struct ra *ra,
         }
         case RA_DESC_STORAGE_IMG: {
             struct ra_tex *tex = du.binding;
-            assert(tex->params.storage_image);
+            assert(tex->params.storable);
             break;
         }
         case RA_DESC_BUF_UNIFORM: {
@@ -541,4 +571,117 @@ void ra_flush(const struct ra *ra)
 {
     if (ra->impl->flush)
         ra->impl->flush(ra);
+}
+
+// RA-internal helpers
+
+void ra_buf_pool_uninit(const struct ra *ra, struct ra_buf_pool *pool)
+{
+    for (int i = 0; i < pool->num_buffers; i++)
+        ra_buf_destroy(ra, &pool->buffers[i]);
+
+    talloc_free(pool->buffers);
+    *pool = (struct ra_buf_pool){0};
+}
+
+static bool ra_buf_params_compatible(const struct ra_buf_params *new,
+                                     const struct ra_buf_params *old)
+{
+    return new->type == old->type &&
+           new->size <= old->size &&
+           new->host_mapped  == old->host_mapped &&
+           new->host_mutable == old->host_mutable;
+}
+
+static bool ra_buf_pool_grow(const struct ra *ra, struct ra_buf_pool *pool)
+{
+    const struct ra_buf *buf = ra_buf_create(ra, &pool->current_params);
+    if (!buf)
+        return false;
+
+    TARRAY_INSERT_AT(NULL, pool->buffers, pool->num_buffers, pool->index, buf);
+    PL_DEBUG(ra, "Resized buffer pool of type %u to size %d\n",
+             pool->current_params.type, pool->num_buffers);
+    return true;
+}
+
+const struct ra_buf *ra_buf_pool_get(const struct ra *ra,
+                                     struct ra_buf_pool *pool,
+                                     const struct ra_buf_params *params)
+{
+    assert(!params->initial_data);
+
+    if (!ra_buf_params_compatible(params, &pool->current_params)) {
+        ra_buf_pool_uninit(ra, pool);
+        pool->current_params = *params;
+    }
+
+    // Make sure we have at least one buffer available
+    if (!pool->buffers && !ra_buf_pool_grow(ra, pool))
+        return NULL;
+
+    // Make sure the next buffer is available for use
+    if (ra_buf_poll(ra, pool->buffers[pool->index], 0) &&
+        !ra_buf_pool_grow(ra, pool))
+    {
+        return NULL;
+    }
+
+    const struct ra_buf *buf = pool->buffers[pool->index++];
+    pool->index %= pool->num_buffers;
+
+    return buf;
+}
+
+bool ra_tex_upload_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
+                       const struct ra_tex_transfer_params *params)
+{
+    if (params->buf)
+        return ra_tex_upload(ra, params);
+
+    struct ra_buf_params bufparams = {
+        .type = RA_BUF_TEX_TRANSFER,
+        .size = tex_transfer_size(params),
+        .host_mutable = true,
+    };
+
+    const struct ra_buf *buf = ra_buf_pool_get(ra, pbo, &bufparams);
+    if (!buf)
+        return false;
+
+    ra_buf_update(ra, buf, 0, params->src, bufparams.size);
+
+    struct ra_tex_transfer_params newparams = *params;
+    newparams.buf = buf;
+    newparams.src = NULL;
+
+    return ra_tex_upload(ra, &newparams);
+}
+
+static bool ra_tex_params_eq(struct ra_tex_params a, struct ra_tex_params b)
+{
+    return a.w == b.w && a.h == b.h && a.d == b.d &&
+           a.format         == b.format &&
+           a.sampleable     == b.sampleable &&
+           a.renderable     == b.renderable &&
+           a.storable       == b.storable &&
+           a.blit_src       == b.blit_src &&
+           a.blit_dst       == b.blit_dst &&
+           a.host_mutable   == b.host_mutable &&
+           a.host_fetchable == b.host_fetchable &&
+           a.sample_mode    == b.sample_mode &&
+           a.address_mode   == b.address_mode;
+}
+
+bool ra_tex_recreate(const struct ra *ra, const struct ra_tex **tex,
+                     const struct ra_tex_params *params)
+{
+    if (*tex && ra_tex_params_eq((*tex)->params, *params))
+        return true;
+
+    PL_DEBUG(ra, "ra_tex_recreate: %dx%dx%d\n", params->w, params->h,params->d);
+    ra_tex_destroy(ra, tex);
+    *tex = ra_tex_create(ra, params);
+
+    return !!*tex;
 }

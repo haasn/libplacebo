@@ -179,19 +179,20 @@ enum ra_tex_address_mode {
 
 // Structure describing a texture.
 struct ra_tex_params {
-    const struct ra_format *format;
     int w, h, d;            // physical dimension; unused dimensions must be 0
+    const struct ra_format *format;
 
     // The following bools describe what operations can be performed. The
     // corresponding ra_format capability must be `true` for every enabled
     // operation type.
     bool sampleable;        // usable as a RA_DESC_SAMPLED_TEX
     bool renderable;        // usable as a render target (ra_renderpass_run)
-    bool storage_image;     // must be usable as a storage image (RA_DESC_IMG_*)
-    bool blit_src;          // must be usable as a blit source
-    bool blit_dst;          // must be usable as a blit destination
-    bool host_mutable;      // texture may be updated with ra_tex_upload()
-    bool host_fetchable;    // texture may be fetched with ra_tex_download()
+                            // (must only be used with 2D textures)
+    bool storable;          // usable as a storage image (RA_DESC_IMG_*)
+    bool blit_src;          // usable as a blit source
+    bool blit_dst;          // usable as a blit destination
+    bool host_mutable;      // may be updated with ra_tex_upload()
+    bool host_fetchable;    // may be fetched with ra_tex_download()
 
     // The following capabilities are only relevant for textures which have
     // either sampleable or blit_src enabled.
@@ -259,7 +260,7 @@ struct ra_tex_transfer_params {
     // Texture to transfer to/from. Depending on the type of the operation,
     // this must have params.host_mutable (uploads) or params.host_fetchable
     // (downloads) set, respectively.
-    struct ra_tex *tex;
+    const struct ra_tex *tex;
 
     // Note: Superfluous parameters are ignored, i.e. for a 1D texture, the y
     // and z fields of `rc`, as well as the corresponding strides, are ignored.
@@ -274,10 +275,10 @@ struct ra_tex_transfer_params {
     // options:
     //
     // 1. Transferring to/from a buffer:
-    struct ra_buf *buf; // buffer to use (type must be RA_BUF_TEX_TRANSFER)
-    size_t buf_offset;  // offset of data within buffer, must be a multiple of 4
+    const struct ra_buf *buf; // buffer to use (type must be RA_BUF_TEX_TRANSFER)
+    size_t buf_offset;        // offset of data within buffer, must be a multiple of 4
     // 2. Transferring to/from host memory directly:
-    const void *src;    // address of data
+    const void *src;          // address of data
     // The contents of the memory region / buffer must exactly match the
     // texture format; i.e. there is no explicit conversion between formats.
 
@@ -500,7 +501,7 @@ enum ra_desc_type {
     RA_DESC_SAMPLED_TEX,    // C: ra_tex*    GLSL: combined texture sampler
                             // (ra_tex->params.sampleable must be set)
     RA_DESC_STORAGE_IMG,    // C: ra_tex*    GLSL: storage image
-                            // (ra_tex->params.storage_image must be set)
+                            // (ra_tex->params.storable must be set)
     RA_DESC_BUF_UNIFORM,    // C: ra_buf*    GLSL: uniform buffer
                             // (ra_buf->params.type must be RA_BUF_UNIFORM)
     RA_DESC_BUF_STORAGE,    // C: ra_buf*    GLSL: storage buffer

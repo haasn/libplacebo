@@ -38,3 +38,14 @@ struct pl_rect3d pl_rect3d_normalize(struct pl_rect3d rc)
         .z1 = PL_MAX(rc.z0, rc.z1),
     };
 }
+
+bool pl_rect2d_eq(struct pl_rect2d a, struct pl_rect2d b)
+{
+    return a.x0 == b.x0 && a.y0 == b.y0 && a.x1 == b.x1 && a.y1 == b.y1;
+}
+
+bool pl_rect3d_eq(struct pl_rect3d a, struct pl_rect3d b)
+{
+    return a.x0 == b.x0 && a.y0 == b.y0 && a.z0 == b.z0 &&
+           a.x1 == b.x1 && a.y1 == b.y1 && a.z1 == b.z1;
+}

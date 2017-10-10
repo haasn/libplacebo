@@ -31,12 +31,12 @@ struct vk_ctx *ra_vk_get(const struct ra *ra);
 // Allocates a ra_tex that wraps a swapchain image. The contents of the image
 // will be invalidated, and access to it will only be internally synchronized.
 // So the calling could should not do anything else with the VkImage.
-struct ra_tex *ra_vk_wrap_swapchain_img(const struct ra *ra, VkImage vkimg,
-                                        VkSwapchainCreateInfoKHR info);
+const struct ra_tex *ra_vk_wrap_swapchain_img(const struct ra *ra, VkImage vkimg,
+                                              VkSwapchainCreateInfoKHR info);
 
 // Associates an external semaphore (dependency) with a ra_tex, such that this
 // ra_tex will not be used by the ra_vk until the external semaphore fires.
-void ra_tex_vk_external_dep(const struct ra *ra, struct ra_tex *tex,
+void ra_tex_vk_external_dep(const struct ra *ra, const struct ra_tex *tex,
                             VkSemaphore external_dep);
 
 // This function finalizes rendering, transitions `tex` (which must be a

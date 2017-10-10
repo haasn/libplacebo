@@ -20,7 +20,6 @@
 #include "common.h"
 
 #define RA_PFN(name) __typeof__(ra_##name) *name
-
 struct ra_fns {
     // Destructors: These also free the corresponding objects, but they
     // must not be called on NULL. (The NULL checks are done by the ra_*_destroy
@@ -57,5 +56,34 @@ struct ra_fns {
     RA_PFN(buf_storage_layout);
     RA_PFN(push_constant_layout);
 };
-
 #undef RA_PFN
+
+// Layout rules for GLSL's packing modes
+struct ra_var_layout std140_layout(const struct ra *ra, size_t offset,
+                                   const struct ra_var *var);
+struct ra_var_layout std430_layout(const struct ra *ra, size_t offset,
+                                   const struct ra_var *var);
+
+// A pool of buffers, which can grow as needed
+struct ra_buf_pool {
+    struct ra_buf_params current_params;
+    const struct ra_buf **buffers;
+    int num_buffers;
+    int index;
+};
+
+void ra_buf_pool_uninit(const struct ra *ra, struct ra_buf_pool *pool);
+
+// Note: params->initial_data is *not* supported
+const struct ra_buf *ra_buf_pool_get(const struct ra *ra,
+                                     struct ra_buf_pool *pool,
+                                     const struct ra_buf_params *params);
+
+// Helper that wraps ra_tex_upload using texture upload buffers to ensure that
+// params->buf is always set. This is intended for RA-internal usage.
+bool ra_tex_upload_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
+                       const struct ra_tex_transfer_params *params);
+
+// Recreates a texture with new parameters, no-op if nothing changed
+bool ra_tex_recreate(const struct ra *ra, const struct ra_tex **tex,
+                     const struct ra_tex_params *params);

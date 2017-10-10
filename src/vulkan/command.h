@@ -22,17 +22,18 @@
 // resources are no longer in use, provide an abstraction for tracking these.
 // In practice, these are only checked and run when submitting new commands, so
 // the actual execution may be delayed by a frame.
-typedef void (*vk_cb)(void *priv, void *arg);
+typedef void (*vk_cb)(void *p, void *arg);
 
 struct vk_callback {
     vk_cb run;
     void *priv;
-    void *arg; // as a convenience, you also get to pass an arg for "free"
+    void *arg;
 };
 
 // Associate a callback with the completion of all currently pending commands.
 // This will essentially run once the device is completely idle.
-void vk_dev_callback(struct vk_ctx *vk, vk_cb callback, void *p, void *arg);
+void vk_dev_callback(struct vk_ctx *vk, vk_cb callback,
+                     const void *priv, const void *arg);
 
 // Helper wrapper around command buffers that also track dependencies,
 // callbacks and synchronization primitives
@@ -59,7 +60,8 @@ struct vk_cmd {
 
 // Associate a callback with the completion of the current command. This
 // bool will be set to `true` once the command completes, or shortly thereafter.
-void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback, void *p, void *arg);
+void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback,
+                     const void *priv, const void *arg);
 
 // Associate a raw dependency for the current command. This semaphore must
 // signal by the corresponding stage before the command may execute.

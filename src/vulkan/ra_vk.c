@@ -91,15 +91,15 @@ static struct vk_cmd *vk_require_cmd(const struct ra *ra, enum queue_type type)
     return p->cmd;
 }
 
-#define MAKE_LAZY_DESTRUCTOR(fun, argtype)                  \
-    static void fun##_lazy(struct ra *ra, argtype *arg) {   \
-        struct ra_vk *p = ra->priv;                         \
-        struct vk_ctx *vk = ra_vk_get(ra);                \
-        if (p->cmd) {                                       \
-            vk_cmd_callback(p->cmd, (vk_cb) fun, ra, arg);  \
-        } else {                                            \
-            vk_dev_callback(vk, (vk_cb) fun, ra, arg);      \
-        }                                                   \
+#define MAKE_LAZY_DESTRUCTOR(fun, argtype)                              \
+    static void fun##_lazy(const struct ra *ra, const argtype *arg) {   \
+        struct ra_vk *p = ra->priv;                                     \
+        struct vk_ctx *vk = ra_vk_get(ra);                              \
+        if (p->cmd) {                                                   \
+            vk_cmd_callback(p->cmd, (vk_cb) fun, ra, (void *) arg);     \
+        } else {                                                        \
+            vk_dev_callback(vk, (vk_cb) fun, ra, (void *) arg);         \
+        }                                                               \
     }
 
 static void vk_destroy_ra(const struct ra *ra)
@@ -230,7 +230,6 @@ error:
     return NULL;
 }
 
-/*
 // Boilerplate wrapper around vkCreateRenderPass to ensure passes remain
 // compatible. The renderpass will automatically transition the image out of
 // initialLayout and into finalLayout.
@@ -240,14 +239,13 @@ static VkResult vk_create_render_pass(VkDevice dev, const struct ra_format *fmt,
                                       VkImageLayout finalLayout,
                                       VkRenderPass *out)
 {
-    struct vk_format *vk_fmt = fmt->priv;
-    assert(fmt->renderable);
+    const struct vk_format *vk_fmt = fmt->priv;
 
     VkRenderPassCreateInfo rinfo = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = 1,
         .pAttachments = &(VkAttachmentDescription) {
-            .format = vk_fmt->iformat,
+            .format = vk_fmt->ifmt,
             .samples = VK_SAMPLE_COUNT_1_BIT,
             .loadOp = loadOp,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -265,13 +263,13 @@ static VkResult vk_create_render_pass(VkDevice dev, const struct ra_format *fmt,
         },
     };
 
-    return vkCreateRenderPass(dev, &rinfo, MPVK_ALLOCATOR, out);
+    return vkCreateRenderPass(dev, &rinfo, VK_ALLOC, out);
 }
 
 // For ra_tex.priv
 struct ra_tex_vk {
     bool external_img;
-    enum queue_type upload_queue;
+    enum queue_type transfer_queue;
     VkImageType type;
     VkImage img;
     struct vk_memslice mem;
@@ -292,18 +290,20 @@ struct ra_tex_vk {
     VkSemaphore ext_dep; // external semaphore, not owned by the ra_tex
 };
 
-void ra_tex_vk_external_dep(struct ra *ra, struct ra_tex *tex, VkSemaphore dep)
+void ra_tex_vk_external_dep(const struct ra *ra, const struct ra_tex *tex,
+                            VkSemaphore external_dep)
 {
     struct ra_tex_vk *tex_vk = tex->priv;
     assert(!tex_vk->ext_dep);
-    tex_vk->ext_dep = dep;
+    tex_vk->ext_dep = external_dep;
 }
 
 // Small helper to ease image barrier creation. if `discard` is set, the contents
 // of the image will be undefined after the barrier
-static void tex_barrier(struct ra *ra, struct vk_cmd *cmd, struct ra_tex *tex,
-                        VkPipelineStageFlags stage, VkAccessFlags newAccess,
-                        VkImageLayout newLayout, bool discard)
+static void tex_barrier(const struct ra *ra, struct vk_cmd *cmd,
+                        const struct ra_tex *tex, VkPipelineStageFlags stage,
+                        VkAccessFlags newAccess, VkImageLayout newLayout,
+                        bool discard)
 {
     struct vk_ctx *vk = ra_vk_get(ra);
     struct ra_tex_vk *tex_vk = tex->priv;
@@ -322,7 +322,11 @@ static void tex_barrier(struct ra *ra, struct vk_cmd *cmd, struct ra_tex *tex,
         .srcAccessMask = tex_vk->current_access,
         .dstAccessMask = newAccess,
         .image = tex_vk->img,
-        .subresourceRange = vk_range,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .levelCount = 1,
+            .layerCount = 1,
+        },
     };
 
     if (discard) {
@@ -355,8 +359,8 @@ static void tex_barrier(struct ra *ra, struct vk_cmd *cmd, struct ra_tex *tex,
     tex_vk->current_access = newAccess;
 }
 
-static void tex_signal(struct ra *ra, struct vk_cmd *cmd, struct ra_tex *tex,
-                       VkPipelineStageFlags stage)
+static void tex_signal(const struct ra *ra, struct vk_cmd *cmd,
+                       const struct ra_tex *tex, VkPipelineStageFlags stage)
 {
     struct ra_tex_vk *tex_vk = tex->priv;
     struct vk_ctx *vk = ra_vk_get(ra);
@@ -366,23 +370,24 @@ static void tex_signal(struct ra *ra, struct vk_cmd *cmd, struct ra_tex *tex,
     tex_vk->sig_stage = stage;
 }
 
-static void vk_tex_destroy(struct ra *ra, struct ra_tex *tex)
+static void vk_tex_destroy(const struct ra *ra, struct ra_tex *tex)
 {
     if (!tex)
         return;
 
     struct vk_ctx *vk = ra_vk_get(ra);
     struct ra_tex_vk *tex_vk = tex->priv;
+    struct ra_vk *p = ra->priv;
 
     ra_buf_pool_uninit(ra, &tex_vk->pbo);
     vk_signal_destroy(vk, &tex_vk->sig);
-    vkDestroyFramebuffer(vk->dev, tex_vk->framebuffer, MPVK_ALLOCATOR);
-    vkDestroyRenderPass(vk->dev, tex_vk->dummyPass, MPVK_ALLOCATOR);
-    vkDestroySampler(vk->dev, tex_vk->sampler, MPVK_ALLOCATOR);
-    vkDestroyImageView(vk->dev, tex_vk->view, MPVK_ALLOCATOR);
+    vkDestroyFramebuffer(vk->dev, tex_vk->framebuffer, VK_ALLOC);
+    vkDestroyRenderPass(vk->dev, tex_vk->dummyPass, VK_ALLOC);
+    vkDestroySampler(vk->dev, tex_vk->sampler, VK_ALLOC);
+    vkDestroyImageView(vk->dev, tex_vk->view, VK_ALLOC);
     if (!tex_vk->external_img) {
-        vkDestroyImage(vk->dev, tex_vk->img, MPVK_ALLOCATOR);
-        vk_free_memslice(vk, tex_vk->mem);
+        vkDestroyImage(vk->dev, tex_vk->img, VK_ALLOC);
+        vk_free_memslice(p->alloc, tex_vk->mem);
     }
 
     talloc_free(tex);
@@ -391,18 +396,25 @@ static void vk_tex_destroy(struct ra *ra, struct ra_tex *tex)
 MAKE_LAZY_DESTRUCTOR(vk_tex_destroy, struct ra_tex);
 
 // Initializes non-VkImage values like the image view, samplers, etc.
-static bool vk_init_image(struct ra *ra, struct ra_tex *tex)
+static bool vk_init_image(const struct ra *ra, const struct ra_tex *tex)
 {
     struct vk_ctx *vk = ra_vk_get(ra);
 
-    struct ra_tex_params *params = &tex->params;
+    const struct ra_tex_params *params = &tex->params;
     struct ra_tex_vk *tex_vk = tex->priv;
     assert(tex_vk->img);
 
     tex_vk->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
     tex_vk->current_access = 0;
+    tex_vk->transfer_queue = GRAPHICS;
 
-    if (params->render_src || params->render_dst) {
+    // Always use the transfer pool if available, for efficiency
+    if ((params->host_mutable || params->host_fetchable) && vk->pool_transfer)
+        tex_vk->transfer_queue = TRANSFER;
+
+    bool ret = false;
+
+    if (params->sampleable || params->renderable) {
         static const VkImageViewType viewType[] = {
             [VK_IMAGE_TYPE_1D] = VK_IMAGE_VIEW_TYPE_1D,
             [VK_IMAGE_TYPE_2D] = VK_IMAGE_VIEW_TYPE_2D,
@@ -414,35 +426,44 @@ static bool vk_init_image(struct ra *ra, struct ra_tex *tex)
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .image = tex_vk->img,
             .viewType = viewType[tex_vk->type],
-            .format = fmt->iformat,
-            .subresourceRange = vk_range,
+            .format = fmt->ifmt,
+            .subresourceRange = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .levelCount = 1,
+                .layerCount = 1,
+            },
         };
 
-        VK(vkCreateImageView(vk->dev, &vinfo, MPVK_ALLOCATOR, &tex_vk->view));
+        VK(vkCreateImageView(vk->dev, &vinfo, VK_ALLOC, &tex_vk->view));
     }
 
-    if (params->render_src) {
-        assert(params->format->linear_filter || !params->src_linear);
-        VkFilter filter = params->src_linear
-            ? VK_FILTER_LINEAR
-            : VK_FILTER_NEAREST;
-        VkSamplerAddressMode wrap = params->src_repeat
-            ? VK_SAMPLER_ADDRESS_MODE_REPEAT
-            : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    if (params->sampleable) {
+        VkFilter filters[] = {
+            [RA_TEX_SAMPLE_NEAREST] = VK_FILTER_NEAREST,
+            [RA_TEX_SAMPLE_LINEAR]  = VK_FILTER_LINEAR,
+        };
+
+        VkSamplerAddressMode modes[] = {
+            [RA_TEX_ADDRESS_CLAMP]  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            [RA_TEX_ADDRESS_REPEAT] = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            [RA_TEX_ADDRESS_MIRROR] = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+        };
+
         VkSamplerCreateInfo sinfo = {
             .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-            .magFilter = filter,
-            .minFilter = filter,
-            .addressModeU = wrap,
-            .addressModeV = wrap,
-            .addressModeW = wrap,
+            .magFilter = filters[params->sample_mode],
+            .minFilter = filters[params->sample_mode],
+            .addressModeU = modes[params->address_mode],
+            .addressModeV = modes[params->address_mode],
+            .addressModeW = modes[params->address_mode],
             .maxAnisotropy = 1.0,
         };
 
-        VK(vkCreateSampler(vk->dev, &sinfo, MPVK_ALLOCATOR, &tex_vk->sampler));
+        VK(vkCreateSampler(vk->dev, &sinfo, VK_ALLOC, &tex_vk->sampler));
     }
 
-    if (params->render_dst) {
+    VkRenderPass dummyPass = NULL;
+    if (params->renderable) {
         // Framebuffers need to be created against a specific render pass
         // layout, so we need to temporarily create a skeleton/dummy render
         // pass for vulkan to figure out the compatibility
@@ -454,7 +475,7 @@ static bool vk_init_image(struct ra *ra, struct ra_tex *tex)
 
         VkFramebufferCreateInfo finfo = {
             .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-            .renderPass = tex_vk->dummyPass,
+            .renderPass = dummyPass,
             .attachmentCount = 1,
             .pAttachments = &tex_vk->view,
             .width = tex->params.w,
@@ -462,34 +483,41 @@ static bool vk_init_image(struct ra *ra, struct ra_tex *tex)
             .layers = 1,
         };
 
-        VK(vkCreateFramebuffer(vk->dev, &finfo, MPVK_ALLOCATOR,
-                               &tex_vk->framebuffer));
+        if (finfo.width > vk->limits.maxFramebufferWidth ||
+            finfo.height > vk->limits.maxFramebufferHeight)
+        {
+            PL_ERR(ra, "Framebuffer of size %dx%d exceeds the maximum allowed "
+                   "dimensions: %dx%d", finfo.width, finfo.height,
+                   vk->limits.maxFramebufferWidth,
+                   vk->limits.maxFramebufferHeight);
+            goto error;
+        }
 
-        // NOTE: Normally we would free the dummyPass again here, but a bug
-        // in the nvidia vulkan driver causes a segfault if you do.
+        VK(vkCreateFramebuffer(vk->dev, &finfo, VK_ALLOC,
+                               &tex_vk->framebuffer));
     }
 
-    return true;
+    ret = true;
 
 error:
-    return false;
+    vkDestroyRenderPass(vk->dev, dummyPass, VK_ALLOC);
+    return ret;
 }
 
-static struct ra_tex *vk_tex_create(struct ra *ra,
-                                    const struct ra_tex_params *params)
+static const struct ra_tex *vk_tex_create(const struct ra *ra,
+                                          const struct ra_tex_params *params)
 {
     struct vk_ctx *vk = ra_vk_get(ra);
-    assert(!params->format->dummy_format);
+    struct ra_vk *p = ra->priv;
 
     struct ra_tex *tex = talloc_zero(NULL, struct ra_tex);
     tex->params = *params;
     tex->params.initial_data = NULL;
 
     struct ra_tex_vk *tex_vk = tex->priv = talloc_zero(tex, struct ra_tex_vk);
-    tex_vk->upload_queue = GRAPHICS;
 
     const struct vk_format *fmt = params->format->priv;
-    switch (params->dimensions) {
+    switch (ra_tex_params_dimension(*params)) {
     case 1: tex_vk->type = VK_IMAGE_TYPE_1D; break;
     case 2: tex_vk->type = VK_IMAGE_TYPE_2D; break;
     case 3: tex_vk->type = VK_IMAGE_TYPE_3D; break;
@@ -497,45 +525,35 @@ static struct ra_tex *vk_tex_create(struct ra *ra,
     }
 
     VkImageUsageFlags usage = 0;
-    if (params->render_src)
+    if (params->sampleable)
         usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-    if (params->render_dst)
+    if (params->renderable)
         usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    if (params->storage_dst)
+    if (params->storable)
         usage |= VK_IMAGE_USAGE_STORAGE_BIT;
-    if (params->blit_src)
+    if (params->host_fetchable || params->blit_src)
         usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     if (params->host_mutable || params->blit_dst || params->initial_data)
         usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-    // Always use the transfer pool if available, for efficiency
-    if (params->host_mutable && vk->pool_transfer)
-        tex_vk->upload_queue = TRANSFER;
-
-    // Double-check image usage support and fail immediately if invalid
+    // Double-check physical image format limits and fail if invalid
     VkImageFormatProperties iprop;
-    VkResult res = vkGetPhysicalDeviceImageFormatProperties(vk->physd,
-            fmt->iformat, tex_vk->type, VK_IMAGE_TILING_OPTIMAL, usage, 0,
-            &iprop);
+    VkResult res = vkGetPhysicalDeviceImageFormatProperties(vk->physd, fmt->ifmt,
+            tex_vk->type, VK_IMAGE_TILING_OPTIMAL, usage, 0, &iprop);
+
     if (res == VK_ERROR_FORMAT_NOT_SUPPORTED) {
         return NULL;
     } else {
         VK_ASSERT(res, "Querying image format properties");
     }
 
-    VkFormatProperties prop;
-    vkGetPhysicalDeviceFormatProperties(vk->physd, fmt->iformat, &prop);
-    VkFormatFeatureFlags flags = prop.optimalTilingFeatures;
-
-    bool has_blit_src   = flags & VK_FORMAT_FEATURE_BLIT_SRC_BIT,
-         has_src_linear = flags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
-
-    if (params->w > iprop.maxExtent.width ||
-        params->h > iprop.maxExtent.height ||
-        params->d > iprop.maxExtent.depth ||
-        (params->blit_src && !has_blit_src) ||
-        (params->src_linear && !has_src_linear))
+    VkExtent3D max = iprop.maxExtent;
+    if (params->w > max.width || params->h > max.height || params->d > max.depth)
     {
+        PL_ERR(ra, "Requested image size %dx%dx%d exceeds the maximum allowed "
+               "dimensions %dx%dx%d for vulkan image format %x",
+               params->w, params->h, params->d, max.width, max.height, max.depth,
+               (unsigned) fmt->ifmt);
         return NULL;
     }
 
@@ -550,7 +568,7 @@ static struct ra_tex *vk_tex_create(struct ra *ra,
     VkImageCreateInfo iinfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = tex_vk->type,
-        .format = fmt->iformat,
+        .format = fmt->ifmt,
         .extent = (VkExtent3D) { params->w, params->h, params->d },
         .mipLevels = 1,
         .arrayLayers = 1,
@@ -564,14 +582,14 @@ static struct ra_tex *vk_tex_create(struct ra *ra,
         .pQueueFamilyIndices = qfs,
     };
 
-    VK(vkCreateImage(vk->dev, &iinfo, MPVK_ALLOCATOR, &tex_vk->img));
+    VK(vkCreateImage(vk->dev, &iinfo, VK_ALLOC, &tex_vk->img));
 
     VkMemoryPropertyFlags memFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     VkMemoryRequirements reqs;
     vkGetImageMemoryRequirements(vk->dev, tex_vk->img, &reqs);
 
     struct vk_memslice *mem = &tex_vk->mem;
-    if (!vk_malloc_generic(vk, reqs, memFlags, mem))
+    if (!vk_malloc_generic(p->alloc, reqs, memFlags, mem))
         goto error;
 
     VK(vkBindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
@@ -580,13 +598,14 @@ static struct ra_tex *vk_tex_create(struct ra *ra,
         goto error;
 
     if (params->initial_data) {
-        struct ra_tex_upload_params ul_params = {
+        struct ra_tex_transfer_params ul_params = {
             .tex = tex,
-            .invalidate = true,
             .src = params->initial_data,
-            .stride = params->w * fmt->bytes,
+            .rc = { 0, 0, 0, params->w, params->h, params->d },
+            .stride_w = params->w,
+            .stride_h = params->h,
         };
-        if (!ra->fns->tex_upload(ra, &ul_params))
+        if (!ra_tex_upload(ra, &ul_params))
             goto error;
     }
 
@@ -597,39 +616,140 @@ error:
     return NULL;
 }
 
-struct ra_tex *ra_vk_wrap_swapchain_img(struct ra *ra, VkImage vkimg,
-                                        VkSwapchainCreateInfoKHR info)
+static void vk_tex_clear(const struct ra *ra, const struct ra_tex *tex,
+                         const float color[4])
 {
-    struct vk_ctx *vk = ra_vk_get(ra);
+    struct ra_tex_vk *tex_vk = tex->priv;
+
+    struct vk_cmd *cmd = vk_require_cmd(ra, GRAPHICS);
+    if (!cmd)
+        return;
+
+    tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true);
+
+    VkClearColorValue clearColor = {0};
+    for (int c = 0; c < 4; c++)
+        clearColor.float32[c] = color[c];
+
+    static const VkImageSubresourceRange range = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .levelCount = 1,
+        .layerCount = 1,
+    };
+
+    vkCmdClearColorImage(cmd->buf, tex_vk->img, tex_vk->current_layout,
+                         &clearColor, 1, &range);
+
+    tex_signal(ra, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
+}
+
+static void vk_tex_blit(const struct ra *ra,
+                        const struct ra_tex *dst, const struct ra_tex *src,
+                        struct pl_rect3d dst_rc, struct pl_rect3d src_rc)
+{
+    struct ra_tex_vk *src_vk = src->priv;
+    struct ra_tex_vk *dst_vk = dst->priv;
+
+    struct vk_cmd *cmd = vk_require_cmd(ra, GRAPHICS);
+    if (!cmd)
+        return;
+
+    tex_barrier(ra, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_ACCESS_TRANSFER_READ_BIT,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                false);
+
+    bool discard = dst_rc.x0 == 0 &&
+                   dst_rc.y0 == 0 &&
+                   dst_rc.z0 == 0 &&
+                   dst_rc.x1 == dst->params.w &&
+                   dst_rc.y1 == dst->params.h &&
+                   dst_rc.z1 == dst->params.d;
+
+    tex_barrier(ra, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                discard);
+
+
+    static const VkImageSubresourceLayers layers = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .layerCount = 1,
+    };
+
+    // When the blit operation doesn't require scaling, we can use the more
+    // efficient vkCmdCopyImage instead of vkCmdBlitImage
+    if (pl_rect3d_eq(src_rc, dst_rc)) {
+        src_rc = pl_rect3d_normalize(src_rc);
+        dst_rc = pl_rect3d_normalize(src_rc);
+
+        VkImageCopy region = {
+            .srcSubresource = layers,
+            .dstSubresource = layers,
+            .srcOffset = {src_rc.x0, src_rc.y0, src_rc.z0},
+            .dstOffset = {dst_rc.x0, dst_rc.y0, dst_rc.z0},
+            .extent = {
+                pl_rect_w(src_rc),
+                pl_rect_h(src_rc),
+                pl_rect_d(src_rc),
+            },
+        };
+
+        vkCmdCopyImage(cmd->buf, src_vk->img, src_vk->current_layout,
+                       dst_vk->img, dst_vk->current_layout, 1, &region);
+    } else {
+        VkImageBlit region = {
+            .srcSubresource = layers,
+            .dstSubresource = layers,
+            .srcOffsets = {{src_rc.x0, src_rc.y0, src_rc.z0},
+                           {src_rc.x1, src_rc.y1, src_rc.z1}},
+            .dstOffsets = {{dst_rc.x0, dst_rc.y0, src_rc.z0},
+                           {dst_rc.x1, dst_rc.y1, src_rc.z1}},
+        };
+
+        vkCmdBlitImage(cmd->buf, src_vk->img, src_vk->current_layout,
+                       dst_vk->img, dst_vk->current_layout, 1, &region,
+                       VK_FILTER_NEAREST);
+    }
+
+    tex_signal(ra, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    tex_signal(ra, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT);
+}
+
+const struct ra_tex *ra_vk_wrap_swapchain_img(const struct ra *ra, VkImage vkimg,
+                                              VkSwapchainCreateInfoKHR info)
+{
     struct ra_tex *tex = NULL;
 
     const struct ra_format *format = NULL;
     for (int i = 0; i < ra->num_formats; i++) {
         const struct vk_format *fmt = ra->formats[i]->priv;
-        if (fmt->iformat == vk->surf_format.format) {
+        if (fmt->ifmt == info.imageFormat) {
             format = ra->formats[i];
             break;
         }
     }
 
     if (!format) {
-        MP_ERR(ra, "Could not find ra_format suitable for wrapped swchain image "
-                   "with surface format 0x%x\n", vk->surf_format.format);
+        PL_ERR(ra, "Could not find ra_format suitable for wrapped swchain image "
+               "with surface format 0x%x\n", (unsigned) info.imageFormat);
         goto error;
     }
 
     tex = talloc_zero(NULL, struct ra_tex);
     tex->params = (struct ra_tex_params) {
         .format = format,
-        .dimensions = 2,
         .w = info.imageExtent.width,
         .h = info.imageExtent.height,
-        .d = 1,
+        .sampleable  = !!(info.imageUsage & VK_IMAGE_USAGE_SAMPLED_BIT),
+        .renderable  = !!(info.imageUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
+        .storable    = !!(info.imageUsage & VK_IMAGE_USAGE_STORAGE_BIT),
         .blit_src    = !!(info.imageUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
         .blit_dst    = !!(info.imageUsage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
-        .render_src  = !!(info.imageUsage & VK_IMAGE_USAGE_SAMPLED_BIT),
-        .render_dst  = !!(info.imageUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
-        .storage_dst = !!(info.imageUsage & VK_IMAGE_USAGE_STORAGE_BIT),
+        .host_mutable   = !!(info.imageUsage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
+        .host_fetchable = !!(info.imageUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
     };
 
     struct ra_tex_vk *tex_vk = tex->priv = talloc_zero(tex, struct ra_tex_vk);
@@ -646,6 +766,8 @@ error:
     vk_tex_destroy(ra, tex);
     return NULL;
 }
+
+/*
 
 // For ra_buf.priv
 struct ra_buf_vk {
@@ -915,11 +1037,11 @@ static void vk_renderpass_destroy(struct ra *ra, struct ra_renderpass *pass)
     struct ra_renderpass_vk *pass_vk = pass->priv;
 
     ra_buf_pool_uninit(ra, &pass_vk->vbo);
-    vkDestroyPipeline(vk->dev, pass_vk->pipe, MPVK_ALLOCATOR);
-    vkDestroyRenderPass(vk->dev, pass_vk->renderPass, MPVK_ALLOCATOR);
-    vkDestroyPipelineLayout(vk->dev, pass_vk->pipeLayout, MPVK_ALLOCATOR);
-    vkDestroyDescriptorPool(vk->dev, pass_vk->dsPool, MPVK_ALLOCATOR);
-    vkDestroyDescriptorSetLayout(vk->dev, pass_vk->dsLayout, MPVK_ALLOCATOR);
+    vkDestroyPipeline(vk->dev, pass_vk->pipe, VK_ALLOC);
+    vkDestroyRenderPass(vk->dev, pass_vk->renderPass, VK_ALLOC);
+    vkDestroyPipelineLayout(vk->dev, pass_vk->pipeLayout, VK_ALLOC);
+    vkDestroyDescriptorPool(vk->dev, pass_vk->dsPool, VK_ALLOC);
+    vkDestroyDescriptorSetLayout(vk->dev, pass_vk->dsLayout, VK_ALLOC);
 
     talloc_free(pass);
 }
@@ -956,11 +1078,11 @@ static bool vk_get_input_format(struct ra *ra, struct ra_renderpass_input *inp,
 
         // Ensure this format is valid for vertex attributes
         VkFormatProperties prop;
-        vkGetPhysicalDeviceFormatProperties(vk->physd, fmt->iformat, &prop);
+        vkGetPhysicalDeviceFormatProperties(vk->physd, fmt->ifmt, &prop);
         if (!(prop.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT))
             continue;
 
-        *out_fmt = fmt->iformat;
+        *out_fmt = fmt->ifmt;
         return true;
     }
 
@@ -1115,7 +1237,7 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
         .poolSizeCount = poolSizeCount,
     };
 
-    VK(vkCreateDescriptorPool(vk->dev, &pinfo, MPVK_ALLOCATOR, &pass_vk->dsPool));
+    VK(vkCreateDescriptorPool(vk->dev, &pinfo, VK_ALLOC, &pass_vk->dsPool));
 
     pass_vk->dswrite = talloc_array(pass, VkWriteDescriptorSet, num_bindings);
     pass_vk->dsiinfo = talloc_array(pass, VkDescriptorImageInfo, num_bindings);
@@ -1127,7 +1249,7 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
         .bindingCount = num_bindings,
     };
 
-    VK(vkCreateDescriptorSetLayout(vk->dev, &dinfo, MPVK_ALLOCATOR,
+    VK(vkCreateDescriptorSetLayout(vk->dev, &dinfo, VK_ALLOC,
                                    &pass_vk->dsLayout));
 
     VkDescriptorSetLayout layouts[MPVK_NUM_DS];
@@ -1155,7 +1277,7 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
         },
     };
 
-    VK(vkCreatePipelineLayout(vk->dev, &linfo, MPVK_ALLOCATOR,
+    VK(vkCreatePipelineLayout(vk->dev, &linfo, VK_ALLOC,
                               &pass_vk->pipeLayout));
 
     struct bstr vert = {0}, frag = {0}, comp = {0}, pipecache = {0};
@@ -1186,7 +1308,7 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
         .initialDataSize = pipecache.len,
     };
 
-    VK(vkCreatePipelineCache(vk->dev, &pcinfo, MPVK_ALLOCATOR, &pipeCache));
+    VK(vkCreatePipelineCache(vk->dev, &pcinfo, VK_ALLOC, &pipeCache));
 
     VkShaderModuleCreateInfo sinfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1196,11 +1318,11 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
     case RA_RENDERPASS_TYPE_RASTER: {
         sinfo.pCode = (uint32_t *)vert.start;
         sinfo.codeSize = vert.len;
-        VK(vkCreateShaderModule(vk->dev, &sinfo, MPVK_ALLOCATOR, &vert_shader));
+        VK(vkCreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &vert_shader));
 
         sinfo.pCode = (uint32_t *)frag.start;
         sinfo.codeSize = frag.len;
-        VK(vkCreateShaderModule(vk->dev, &sinfo, MPVK_ALLOCATOR, &frag_shader));
+        VK(vkCreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &frag_shader));
 
         VkVertexInputAttributeDescription *attrs = talloc_array(tmp,
                 VkVertexInputAttributeDescription, params->num_vertex_attribs);
@@ -1327,13 +1449,13 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
         };
 
         VK(vkCreateGraphicsPipelines(vk->dev, pipeCache, 1, &cinfo,
-                                     MPVK_ALLOCATOR, &pass_vk->pipe));
+                                     VK_ALLOC, &pass_vk->pipe));
         break;
     }
     case RA_RENDERPASS_TYPE_COMPUTE: {
         sinfo.pCode = (uint32_t *)comp.start;
         sinfo.codeSize = comp.len;
-        VK(vkCreateShaderModule(vk->dev, &sinfo, MPVK_ALLOCATOR, &comp_shader));
+        VK(vkCreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &comp_shader));
 
         VkComputePipelineCreateInfo cinfo = {
             .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
@@ -1347,7 +1469,7 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
         };
 
         VK(vkCreateComputePipelines(vk->dev, pipeCache, 1, &cinfo,
-                                    MPVK_ALLOCATOR, &pass_vk->pipe));
+                                    VK_ALLOC, &pass_vk->pipe));
         break;
     }
     }
@@ -1387,10 +1509,10 @@ error:
         pass = NULL;
     }
 
-    vkDestroyShaderModule(vk->dev, vert_shader, MPVK_ALLOCATOR);
-    vkDestroyShaderModule(vk->dev, frag_shader, MPVK_ALLOCATOR);
-    vkDestroyShaderModule(vk->dev, comp_shader, MPVK_ALLOCATOR);
-    vkDestroyPipelineCache(vk->dev, pipeCache, MPVK_ALLOCATOR);
+    vkDestroyShaderModule(vk->dev, vert_shader, VK_ALLOC);
+    vkDestroyShaderModule(vk->dev, frag_shader, VK_ALLOC);
+    vkDestroyShaderModule(vk->dev, comp_shader, VK_ALLOC);
+    vkDestroyPipelineCache(vk->dev, pipeCache, VK_ALLOC);
     talloc_free(tmp);
     return pass;
 }
@@ -1624,109 +1746,6 @@ error:
     return;
 }
 
-static void vk_blit(struct ra *ra, struct ra_tex *dst, struct ra_tex *src,
-                    struct mp_rect *dst_rc, struct mp_rect *src_rc)
-{
-    assert(src->params.blit_src);
-    assert(dst->params.blit_dst);
-
-    struct ra_tex_vk *src_vk = src->priv;
-    struct ra_tex_vk *dst_vk = dst->priv;
-
-    struct vk_cmd *cmd = vk_require_cmd(ra, GRAPHICS);
-    if (!cmd)
-        return;
-
-    tex_barrier(ra, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_ACCESS_TRANSFER_READ_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                false);
-
-    bool discard = dst_rc->x0 == 0 &&
-                   dst_rc->y0 == 0 &&
-                   dst_rc->x1 == dst->params.w &&
-                   dst_rc->y1 == dst->params.h;
-
-    tex_barrier(ra, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_ACCESS_TRANSFER_WRITE_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                discard);
-
-    // Under certain conditions we can use vkCmdCopyImage instead of
-    // vkCmdBlitImage, namely when the blit operation does not require
-    // scaling. and the formats are compatible.
-    if (src->params.format->pixel_size == dst->params.format->pixel_size &&
-        mp_rect_w(*src_rc) == mp_rect_w(*dst_rc) &&
-        mp_rect_h(*src_rc) == mp_rect_h(*dst_rc) &&
-        mp_rect_w(*src_rc) >= 0 && mp_rect_h(*src_rc) >= 0)
-    {
-        VkImageCopy region = {
-            .srcSubresource = vk_layers,
-            .dstSubresource = vk_layers,
-            .srcOffset = {src_rc->x0, src_rc->y0, 0},
-            .dstOffset = {dst_rc->x0, dst_rc->y0, 0},
-            .extent = {mp_rect_w(*src_rc), mp_rect_h(*src_rc), 1},
-        };
-
-        vkCmdCopyImage(cmd->buf, src_vk->img, src_vk->current_layout,
-                       dst_vk->img, dst_vk->current_layout, 1, &region);
-    } else {
-        VkImageBlit region = {
-            .srcSubresource = vk_layers,
-            .dstSubresource = vk_layers,
-            .srcOffsets = {{src_rc->x0, src_rc->y0, 0},
-                           {src_rc->x1, src_rc->y1, 1}},
-            .dstOffsets = {{dst_rc->x0, dst_rc->y0, 0},
-                           {dst_rc->x1, dst_rc->y1, 1}},
-        };
-
-        vkCmdBlitImage(cmd->buf, src_vk->img, src_vk->current_layout,
-                       dst_vk->img, dst_vk->current_layout, 1, &region,
-                       VK_FILTER_NEAREST);
-    }
-
-    tex_signal(ra, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT);
-    tex_signal(ra, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT);
-}
-
-static void vk_clear(struct ra *ra, struct ra_tex *tex, float color[4],
-                     struct mp_rect *rc)
-{
-    struct ra_vk *p = ra->priv;
-    struct ra_tex_vk *tex_vk = tex->priv;
-    assert(tex->params.blit_dst);
-
-    struct vk_cmd *cmd = vk_require_cmd(ra, GRAPHICS);
-    if (!cmd)
-        return;
-
-    struct mp_rect full = {0, 0, tex->params.w, tex->params.h};
-    if (!rc || mp_rect_equals(rc, &full)) {
-        // To clear the entire image, we can use the efficient clear command
-        tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_WRITE_BIT,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true);
-
-        VkClearColorValue clearColor = {0};
-        for (int c = 0; c < 4; c++)
-            clearColor.float32[c] = color[c];
-
-        vkCmdClearColorImage(cmd->buf, tex_vk->img, tex_vk->current_layout,
-                             &clearColor, 1, &vk_range);
-
-        tex_signal(ra, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
-    } else {
-        // To simulate per-region clearing, we blit from a 1x1 texture instead
-        struct ra_tex_upload_params ul_params = {
-            .tex = p->clear_tex,
-            .invalidate = true,
-            .src = &color[0],
-        };
-        vk_tex_upload(ra, &ul_params);
-        vk_blit(ra, tex, p->clear_tex, rc, &(struct mp_rect){0, 0, 1, 1});
-    }
-}
-
 #define VK_QUERY_POOL_SIZE (MPVK_MAX_STREAMING_DEPTH * 4)
 
 struct vk_timer {
@@ -1743,7 +1762,7 @@ static void vk_timer_destroy(struct ra *ra, ra_timer *ratimer)
     struct vk_ctx *vk = ra_vk_get(ra);
     struct vk_timer *timer = ratimer;
 
-    vkDestroyQueryPool(vk->dev, timer->pool, MPVK_ALLOCATOR);
+    vkDestroyQueryPool(vk->dev, timer->pool, VK_ALLOC);
 
     talloc_free(timer);
 }
@@ -1762,7 +1781,7 @@ static ra_timer *vk_timer_create(struct ra *ra)
         .queryCount = VK_QUERY_POOL_SIZE,
     };
 
-    VK(vkCreateQueryPool(vk->dev, &qinfo, MPVK_ALLOCATOR, &timer->pool));
+    VK(vkCreateQueryPool(vk->dev, &qinfo, VK_ALLOC, &timer->pool));
 
     return (ra_timer *)timer;
 
@@ -1820,11 +1839,11 @@ static uint64_t vk_timer_stop(struct ra *ra, ra_timer *ratimer)
 
 static struct ra_fns ra_fns_vk = {
     .destroy                = vk_destroy_ra,
-/*
     .tex_create             = vk_tex_create,
     .tex_destroy            = vk_tex_destroy_lazy,
     .tex_clear              = vk_tex_clear,
     .tex_blit               = vk_tex_blit,
+/*
     .tex_upload             = vk_tex_upload,
     .tex_download           = vk_tex_download,
     .buf_create             = vk_buf_create,
