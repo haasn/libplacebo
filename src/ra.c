@@ -163,45 +163,67 @@ void ra_tex_blit(const struct ra *ra,
     }
 }
 
-bool ra_tex_upload(const struct ra *ra,
-                   const struct ra_tex_upload_params *params)
+static void check_tex_transfer(const struct ra *ra,
+                               const struct ra_tex_transfer_params *params)
 {
-    assert(!params->buf ^ !params->src); // exactly one
-
+#ifndef NDEBUG
     struct ra_tex *tex = params->tex;
-    assert(tex->params.host_mutable);
-
-    int texels;
+    struct pl_rect3d rc = params->rc;
     switch (ra_tex_params_dimension(tex->params))
     {
-    case 1:
-        assert(params->w > 0 && params->w <= tex->params.w);
-        texels = params->w;
-        break;
-    case 2:
-        assert(params->w > 0 && params->w <= tex->params.w);
-        assert(params->h > 0 && params->h <= tex->params.h);
-        assert(params->stride_w >= params->w);
-        texels = params->h * params->stride_w;
-        break;
     case 3:
-        assert(params->w > 0 && params->w <= tex->params.w);
-        assert(params->h > 0 && params->h <= tex->params.h);
-        assert(params->d > 0 && params->d <= tex->params.d);
-        assert(params->stride_w >= params->w);
-        assert(params->stride_h >= params->h);
-        texels = params->d * params->stride_h * params->stride_w;
+        assert(rc.z1 > rc.z0);
+        assert(rc.z0 >= 0 && rc.z0 <  tex->params.d);
+        assert(rc.z1 >  0 && rc.z1 <= tex->params.d);
+        assert(params->stride_h >= pl_rect_h(rc));
+        // fall through
+    case 2:
+        assert(rc.y1 > rc.y0);
+        assert(rc.y0 >= 0 && rc.y0 <  tex->params.h);
+        assert(rc.y1 >  0 && rc.y1 <= tex->params.h);
+        assert(params->stride_w >= pl_rect_w(rc));
+        // fall through
+    case 1:
+        assert(rc.x1 > rc.x0);
+        assert(rc.x0 >= 0 && rc.x0 <  tex->params.w);
+        assert(rc.x1 >  0 && rc.x1 <= tex->params.w);
         break;
     default: abort();
     }
 
+    assert(!params->buf ^ !params->src); // exactly one
     if (params->buf) {
         struct ra_buf *buf = params->buf;
-        assert(buf->params.type == RA_BUF_TEX_UPLOAD);
-        assert(params->buf_offset + texels <= buf->params.size);
+        int num;
+        assert(buf->params.type == RA_BUF_TEX_TRANSFER);
+        switch (ra_tex_params_dimension(tex->params)) {
+            case 1: num = pl_rect_w(rc); break;
+            case 2: num = pl_rect_h(rc) * params->stride_w; break;
+            case 3: num = pl_rect_d(rc) * params->stride_h * params->stride_w; break;
+        }
+        assert(params->buf_offset + num <= buf->params.size);
     }
+#endif
+}
+
+bool ra_tex_upload(const struct ra *ra,
+                   const struct ra_tex_transfer_params *params)
+{
+    struct ra_tex *tex = params->tex;
+    assert(tex->params.host_mutable);
+    check_tex_transfer(ra, params);
 
     return ra->impl->tex_upload(ra, params);
+}
+
+bool ra_tex_download(const struct ra *ra,
+                     const struct ra_tex_transfer_params *params)
+{
+    struct ra_tex *tex = params->tex;
+    assert(tex->params.host_fetchable);
+    check_tex_transfer(ra, params);
+
+    return ra->impl->tex_download(ra, params);
 }
 
 const struct ra_buf *ra_buf_create(const struct ra *ra,
@@ -209,7 +231,10 @@ const struct ra_buf *ra_buf_create(const struct ra *ra,
 {
     assert(params->size >= 0);
     switch (params->type) {
-    case RA_BUF_TEX_UPLOAD: break;
+    case RA_BUF_TEX_TRANSFER:
+        assert(ra->limits.max_xfer_size);
+        assert(params->size <= ra->limits.max_xfer_size);
+        break;
     case RA_BUF_UNIFORM:
         assert(ra->limits.max_ubo_size);
         assert(params->size <= ra->limits.max_ubo_size);
@@ -240,13 +265,12 @@ void ra_buf_update(const struct ra *ra, const struct ra_buf *buf,
 {
     assert(buf->params.host_mutable);
     assert(buf_offset + size <= buf->params.size);
-    assert(!ra_buf_poll(ra, buf));
     ra->impl->buf_update(ra, buf, buf_offset, data, size);
 }
 
-bool ra_buf_poll(const struct ra *ra, const struct ra_buf *buf)
+bool ra_buf_poll(const struct ra *ra, const struct ra_buf *buf, uint64_t t)
 {
-    return ra->impl->buf_poll ? ra->impl->buf_poll(ra, buf) : false;
+    return ra->impl->buf_poll ? ra->impl->buf_poll(ra, buf, t) : false;
 }
 
 size_t ra_var_type_size(enum ra_var_type type)

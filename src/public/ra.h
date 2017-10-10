@@ -61,10 +61,18 @@ struct ra_limits {
     int max_tex_3d_dim;    // maximum width/height/depth for a 3D texture
     size_t max_pushc_size; // maximum push_constants_size
     size_t max_shmem_size; // maximum compute shader shared memory size
+    size_t max_xfer_size;  // maximum size of a RA_BUF_TEX_TRANSFER
     size_t max_ubo_size;   // maximum size of a RA_BUF_UNIFORM
     size_t max_ssbo_size;  // maximum size of a RA_BUF_STORAGE
     int max_dispatch[3];   // maximum dispatch size for compute shaders
     int max_gather_offset; // maximum textureGatherOffset offset
+
+    // These don't represent hard limits but indicate performance hints for
+    // optimal alignment. For best performance, the corresponding field
+    // should be aligned to a multiple of these. They will always be a power
+    // of two.
+    int align_tex_xfer_stride; // optimal ra_tex_transfer_params.stride_w/h
+    int align_tex_xfer_offset; // optimal ra_tex_transfer_params.buf_offset
 };
 
 // Abstract device context which wraps an underlying graphics context and can
@@ -174,7 +182,8 @@ struct ra_tex_params {
                             // (requires RA_CAP_TEX_BLIT)
     bool blit_dst;          // must be usable as a blit destination
                             // (requires RA_CAP_TEX_BLIT)
-    bool host_mutable;      // texture may be updated with tex_upload()
+    bool host_mutable;      // texture may be updated with ra_tex_upload()
+    bool host_fetchable;    // texture may be fetched with ra_tex_download()
 
     // The following capabilities are only relevant for textures which have
     // either sampleable or blit_src enabled.
@@ -235,7 +244,8 @@ void ra_tex_clear(const struct ra *ra, const struct ra_tex *dst,
 //
 // The rectangles may be "flipped", which leads to the image being flipped
 // while blitting. If the src and dst rects have different sizes, the source
-// image will be scaled according to src->params.sample_mode.
+// image will be scaled according to src->params.sample_mode. That said, the
+// src and dst rects must be fully contained within the src/dst dimensions.
 //
 // If RA_CAP_TEX_BLIT is not present, this is a no-op and none of the above
 // restrictions apply.
@@ -243,47 +253,65 @@ void ra_tex_blit(const struct ra *ra,
                  const struct ra_tex *dst, const struct ra_tex *src,
                  struct pl_rect3d dst_rc, struct pl_rect3d src_rc);
 
-// Structure describing a texture upload operation.
-struct ra_tex_upload_params {
-    struct ra_tex *tex; // texture to upload to
+// Structure describing a texture transfer operation.
+struct ra_tex_transfer_params {
+    // Texture to transfer to/from. Depending on the type of the operation,
+    // this must have params.host_mutable (uploads) or params.host_fetchable
+    // (downloads) set, respectively.
+    struct ra_tex *tex;
 
-    // Note: Superfluous parameters are ignored (e.g. specifying `h` for a 1D
-    // image, or specifying `stride_h` for a 2D image.
-    int w, h, d;        // extent of the data to upload
-    int stride_w;       // the number of texels per horizontal row (x axis)
-    int stride_h;       // the number of texels per vertical column (y axis)
+    // Note: Superfluous parameters are ignored, i.e. for a 1D texture, the y
+    // and z fields of `rc`, as well as the corresponding strides, are ignored.
+    // In all other cases, the stride must be >= the corresponding dimension
+    // of `rc`, and the `rc` must be normalized and fully contained within the
+    // image dimensions.
+    struct pl_rect3d rc; // region of the texture to transfer
+    int stride_w;        // the number of texels per horizontal row (x axis)
+    int stride_h;        // the number of texels per vertical column (y axis)
 
-    // For the data source of an upload operation, there are two valid options:
-    // 1. Uploading from buffer:
-    struct ra_buf *buf; // buffer to upload from (type must be RA_BUF_TEX_UPLOAD)
-    size_t buf_offset;  // offset of data within buffer (bytes)
-    // 2. Uploading from host memory:
+    // For the data source/target of a transfer operation, there are two valid
+    // options:
+    //
+    // 1. Transferring to/from a buffer:
+    struct ra_buf *buf; // buffer to use (type must be RA_BUF_TEX_TRANSFER)
+    size_t buf_offset;  // offset of data within buffer, must be a multiple of 4
+    // 2. Transferring to/from host memory directly:
     const void *src;    // address of data
-    // Which data upload method is used is up to the convenience of the user,
-    // but they are obviously mutually exclusive. Valid API usage requires
-    // that exactly one of *buf or *src is set.
+    // The contents of the memory region / buffer must exactly match the
+    // texture format; i.e. there is no explicit conversion between formats.
 
-    // Host memory uploads are always supported, although they may be
-    // internally translated to buffer pools depending on the capabilities of
-    // the underlying API.
+    // For data uploads, which are typically "fire and forget" operations,
+    // which method used does not matter much; although uploading from a host
+    // mapped buffer requires fewer memory copy operations and is therefore
+    // advised when uploading large amounts of data frequently.
+
+    // For data downloads, downloading directly to host memory is a blocking
+    // operation and should therefore be avoided as much as possible. It's
+    // highyly recommended to always use a texture transfer buffer for texture
+    // downloads if possible, which allows the transfer to happen
+    // asynchronously.
+
+    // When performing a texture transfer using a buffer, the buffer may be
+    // marked as "in use" and should not used for a different type of operation
+    // until ra_buf_poll returns false.
 };
 
-// Upload data to a texture. This is an extremely common operation. When
-// using a buffer, the contants of the buffer must exactly match the format
-// as described by the texture's ra_format - conversions between bit depths
-// and representations are not supported. This operation may mark the buffer
-// as "in use" while the copy is going on. Returns whether successful.
+// Upload data to a texture. Returns whether successful.
 bool ra_tex_upload(const struct ra *ra,
-                   const struct ra_tex_upload_params *params);
+                   const struct ra_tex_transfer_params *params);
+
+// Download data from a texture. Returns whether successful.
+bool ra_tex_download(const struct ra *ra,
+                     const struct ra_tex_transfer_params *params);
 
 // Buffer usage type. This restricts what types of operations may be performed
 // on a buffer.
 enum ra_buf_type {
     RA_BUF_INVALID = 0,
-    RA_BUF_TEX_UPLOAD,  // texture upload buffer (for ra_tex_upload)
-    RA_BUF_UNIFORM,     // UBO, for RA_DESC_BUF_UNIFORM
-    RA_BUF_STORAGE,     // SSBO, for RA_DESC_BUF_STORAGE
-    RA_BUF_VERTEX,      // for vertex buffers, no public API yet (RA-internal)
+    RA_BUF_TEX_TRANSFER, // texture transfer buffer (for ra_tex_upload/download)
+    RA_BUF_UNIFORM,      // UBO, for RA_DESC_BUF_UNIFORM
+    RA_BUF_STORAGE,      // SSBO, for RA_DESC_BUF_STORAGE
+    RA_BUF_VERTEX,       // for vertex buffers, no public API yet (RA-internal)
     RA_BUF_TYPE_COUNT,
 };
 
@@ -300,8 +328,15 @@ struct ra_buf_params {
     void *initial_data;
 };
 
-// A generic buffer, which can be used for multiple purposes (texture upload,
+// A generic buffer, which can be used for multiple purposes (texture transfer,
 // storage buffer, uniform buffer, etc.)
+//
+// Note on efficiency: A ra_buf does not necessarily represent a true "buffer"
+// object on the underlying graphics API. It may also refer to a sub-slice of
+// a larger buffer, depending on the implementation details of the RA. The
+// bottom line is that users do not need to worry about the efficiency of using
+// many small ra_buf objects. Having many small ra_bufs, even lots of few-byte
+// vertex buffers, is designed to be completely fine.
 struct ra_buf {
     struct ra_buf_params params;
     char *data; // for persistently mapped buffers, points to the first byte
@@ -317,15 +352,28 @@ void ra_buf_destroy(const struct ra *ra, const struct ra_buf **buf);
 
 // Update the contents of a buffer, starting at a given offset (*must* be a
 // multiple of 4) and up to a given size, with the contents of *data. This is
-// an extremely common operation. Calling this while the buffer is considered
-// "in use" is an error. (See: buf_poll)
+// an extremely common operation.
 void ra_buf_update(const struct ra *ra, const struct ra_buf *buf,
                    size_t buf_offset, const void *data, size_t size);
 
-// Returns if a buffer is currently "in use" or not. Updating the contents of a
-// buffer (via buf_update or writes to buf->data) while it is still in use is
-// an error and may result in graphical corruption.
-bool ra_buf_poll(const struct ra *ra, const struct ra_buf *buf);
+// Returns whether or not a buffer is currently "in use". This can either be
+// because of a pending read operation or because of a pending write operation.
+// Coalescing multiple types of the same access (e.g. uploading the same buffer
+// to multiple textures) is fine, but trying to read a buffer while it is being
+// written to or trying to write to a buffer while it is being read from will
+// almost surely result in graphical corruption. RA makes no attempt to enforce
+// this, it is up to the user to check and adhere to whatever restrictions are
+// necessary.
+//
+// The `timeout`, specified in nanoseconds, indicates how long to block for
+// before returning. If set to 0, this function will never block, and only
+// returns the current status of the buffer. The actual precision of the
+// timeout may be significantly longer than one nanosecond, and has no upper
+// bound. This function does not provide hard latency guarantees.
+//
+// Note: Destroying a buffer (ra_buf_destroy) is always valid, even if that
+// buffer is in use.
+bool ra_buf_poll(const struct ra *ra, const struct ra_buf *buf, uint64_t timeout);
 
 // Data type of a shader input variable (e.g. uniform, or UBO member)
 enum ra_var_type {

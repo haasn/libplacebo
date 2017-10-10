@@ -34,6 +34,7 @@ struct ra_fns {
     RA_PFN(tex_clear);
     RA_PFN(tex_blit); // optional if RA_CAP_TEX_BLIT is not present
     RA_PFN(tex_upload);
+    RA_PFN(tex_download);
     RA_PFN(buf_create);
     RA_PFN(buf_update);
     RA_PFN(buf_poll); // optional: if NULL buffers are always free to use
