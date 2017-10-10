@@ -495,20 +495,6 @@ void pl_shader_color_map(struct pl_shader *sh,
     if (!src.sig_peak)
         src.sig_peak = pl_color_transfer_nominal_peak(src.transfer);
 
-    // Various operations need access to the src_luma and dst_luma respectively,
-    // so just always make them available
-    struct pl_color_matrix rgb2xyz;
-    rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(src.primaries));
-    var_t src_luma = var(sh, (struct pl_shader_var) {
-        .var  = ra_var_vec3("src_luma"),
-        .data = rgb2xyz.m[1], // RGB->Y vector
-    });
-    rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(dst.primaries));
-    var_t dst_luma = var(sh, (struct pl_shader_var) {
-        .var  = ra_var_vec3("dst_luma"),
-        .data = rgb2xyz.m[1], // RGB->Y vector
-    });
-
     // Compute the highest encodable level
     float src_range = pl_color_transfer_nominal_peak(src.transfer),
           dst_range = pl_color_transfer_nominal_peak(dst.transfer);
@@ -523,6 +509,23 @@ void pl_shader_color_map(struct pl_shader *sh,
                        src.sig_peak > dst_range ||
                        src.light != dst.light;
     bool is_linear = prelinearized;
+
+    // Various operations need access to the src_luma and dst_luma respectively,
+    // so just always make them available if we're doing anything at all
+    var_t src_luma, dst_luma;
+    if (need_linear) {
+        struct pl_color_matrix rgb2xyz;
+        rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(src.primaries));
+        src_luma = var(sh, (struct pl_shader_var) {
+            .var  = ra_var_vec3("src_luma"),
+            .data = rgb2xyz.m[1], // RGB->Y vector
+        });
+        rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(dst.primaries));
+        dst_luma = var(sh, (struct pl_shader_var) {
+            .var  = ra_var_vec3("dst_luma"),
+            .data = rgb2xyz.m[1], // RGB->Y vector
+        });
+    }
 
     if (need_linear && !is_linear) {
         pl_shader_linearize(sh, src.transfer);
