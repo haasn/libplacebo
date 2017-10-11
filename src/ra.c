@@ -188,12 +188,16 @@ void ra_tex_blit(const struct ra *ra,
     assert(dst->params.blit_dst);
     assert(src_rc.x0 >= 0 && src_rc.x0 < src->params.w);
     assert(src_rc.y0 >= 0 && src_rc.y0 < src->params.h);
+    assert(src_rc.z0 >= 0 && src_rc.z0 < src->params.d);
     assert(src_rc.x1 > 0 && src_rc.x1 <= src->params.w);
     assert(src_rc.y1 > 0 && src_rc.y1 <= src->params.h);
+    assert(src_rc.z1 > 0 && src_rc.z1 <= src->params.d);
     assert(dst_rc.x0 >= 0 && dst_rc.x0 < dst->params.w);
     assert(dst_rc.y0 >= 0 && dst_rc.y0 < dst->params.h);
+    assert(dst_rc.z0 >= 0 && dst_rc.z0 < dst->params.d);
     assert(dst_rc.x1 > 0 && dst_rc.x1 <= dst->params.w);
     assert(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
+    assert(dst_rc.z1 > 0 && dst_rc.z1 <= dst->params.d);
 
     // Sanitize the ignored parameters
     if (!src->params.d) {
