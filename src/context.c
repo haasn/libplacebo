@@ -36,7 +36,6 @@ struct pl_context *pl_context_create(const struct pl_context_params *params,
 
     struct pl_context *ctx = talloc_zero(NULL, struct pl_context);
     ctx->params = *params;
-    pl_trace(ctx, "pl_context: initialized\n");
     return ctx;
 }
 
