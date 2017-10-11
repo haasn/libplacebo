@@ -235,6 +235,10 @@ const struct ra_tex *ra_tex_create(const struct ra *ra,
 
 void ra_tex_destroy(const struct ra *ra, const struct ra_tex **tex);
 
+// Invalidates the contents of a texture. After this, the contents are fully
+// undefined.
+void ra_tex_invalidate(const struct ra *ra, const struct ra_tex *tex);
+
 // Clear the dst texture with the given color (rgba). This is functionally
 // identical to a blit operation, which means dst->params.blit_dst must be
 // set.
@@ -313,7 +317,7 @@ enum ra_buf_type {
     RA_BUF_TEX_TRANSFER, // texture transfer buffer (for ra_tex_upload/download)
     RA_BUF_UNIFORM,      // UBO, for RA_DESC_BUF_UNIFORM
     RA_BUF_STORAGE,      // SSBO, for RA_DESC_BUF_STORAGE
-    RA_BUF_VERTEX,       // for vertex buffers, no public API yet (RA-internal)
+    RA_BUF_PRIVATE,      // RA-private usage (interpretation arbitrary)
     RA_BUF_TYPE_COUNT,
 };
 
@@ -616,8 +620,10 @@ struct ra_renderpass_params {
     enum ra_blend_mode blend_src_alpha;
     enum ra_blend_mode blend_dst_alpha;
 
-    // If true, the contents of `target` not written to will become undefined.
-    bool invalidate_target;
+    // If false, the target's existing contents will be discarded before the
+    // renderpass is run. (Semantically equivalent to calling ra_tex_invalidate
+    // before every ra_renderpass_run, but slightly more efficient)
+    bool load_target;
 };
 
 // Conflates the following typical GPU API concepts:

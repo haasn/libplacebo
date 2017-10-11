@@ -170,7 +170,13 @@ void ra_tex_clear(const struct ra *ra, const struct ra_tex *dst,
 {
     assert(dst->params.blit_dst);
 
+    ra_tex_invalidate(ra, dst);
     ra->impl->tex_clear(ra, dst, color);
+}
+
+void ra_tex_invalidate(const struct ra *ra, const struct ra_tex *tex)
+{
+    ra->impl->tex_invalidate(ra, tex);
 }
 
 void ra_tex_blit(const struct ra *ra,
@@ -206,6 +212,10 @@ void ra_tex_blit(const struct ra *ra,
         dst_rc.y0 = 0;
         dst_rc.y1 = 1;
     }
+
+    struct pl_rect3d full = {0, 0, 0, dst->params.w, dst->params.h, dst->params.d};
+    if (pl_rect3d_eq(pl_rect3d_normalize(dst_rc), full))
+        ra_tex_invalidate(ra, dst);
 
     ra->impl->tex_blit(ra, dst, src, dst_rc, src_rc);
 }
@@ -518,8 +528,9 @@ void ra_renderpass_destroy(const struct ra *ra,
 void ra_renderpass_run(const struct ra *ra,
                        const struct ra_renderpass_run_params *params)
 {
-#ifndef NDEBUG
     struct ra_renderpass *pass = params->pass;
+
+#ifndef NDEBUG
     for (int i = 0; i < params->num_desc_updates; i++) {
         struct ra_desc_update du = params->desc_updates[i];
         assert(du.index >= 0 && du.index < pass->params.num_descriptors);
@@ -561,6 +572,7 @@ void ra_renderpass_run(const struct ra *ra,
     switch (pass->params.type) {
     case RA_RENDERPASS_RASTER: {
         struct ra_tex *tex = params->target;
+        assert(tex);
         assert(ra_tex_params_dimension(tex->params) == 2);
         assert(tex->params.format == pass->params.target_format);
         assert(tex->params.renderable);
@@ -575,6 +587,9 @@ void ra_renderpass_run(const struct ra *ra,
     default: abort();
     }
 #endif
+
+    if (params->target && !pass->params.load_target)
+        ra_tex_invalidate(ra, params->target);
 
     return ra->impl->renderpass_run(ra, params);
 }

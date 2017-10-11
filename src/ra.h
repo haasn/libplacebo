@@ -30,6 +30,7 @@ struct ra_fns {
     void (*renderpass_destroy)(const struct ra *, const struct ra_renderpass *);
 
     RA_PFN(tex_create);
+    RA_PFN(tex_invalidate);
     RA_PFN(tex_clear);
     RA_PFN(tex_blit);
     RA_PFN(tex_upload);

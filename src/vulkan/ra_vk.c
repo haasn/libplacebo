@@ -269,6 +269,7 @@ static VkResult vk_create_render_pass(VkDevice dev, const struct ra_format *fmt,
 // For ra_tex.priv
 struct ra_tex_vk {
     bool external_img;
+    bool may_invalidate;
     enum queue_type transfer_queue;
     VkImageType type;
     VkImage img;
@@ -303,8 +304,7 @@ void ra_tex_vk_external_dep(const struct ra *ra, const struct ra_tex *tex,
 // of the image will be undefined after the barrier
 static void tex_barrier(const struct ra *ra, struct vk_cmd *cmd,
                         const struct ra_tex *tex, VkPipelineStageFlags stage,
-                        VkAccessFlags newAccess, VkImageLayout newLayout,
-                        bool discard)
+                        VkAccessFlags newAccess, VkImageLayout newLayout)
 {
     struct vk_ctx *vk = ra_vk_get(ra);
     struct ra_tex_vk *tex_vk = tex->priv;
@@ -330,7 +330,8 @@ static void tex_barrier(const struct ra *ra, struct vk_cmd *cmd,
         },
     };
 
-    if (discard) {
+    if (tex_vk->may_invalidate) {
+        tex_vk->may_invalidate = false;
         imgBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         imgBarrier.srcAccessMask = 0;
     }
@@ -618,6 +619,12 @@ error:
     return NULL;
 }
 
+static void vk_tex_invalidate(const struct ra *ra, const struct ra_tex *tex)
+{
+    struct ra_tex_vk *tex_vk = tex->priv;
+    tex_vk->may_invalidate = true;
+}
+
 static void vk_tex_clear(const struct ra *ra, const struct ra_tex *tex,
                          const float color[4])
 {
@@ -629,7 +636,7 @@ static void vk_tex_clear(const struct ra *ra, const struct ra_tex *tex,
 
     tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true);
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     VkClearColorValue clearColor = {0};
     for (int c = 0; c < 4; c++)
@@ -660,21 +667,11 @@ static void vk_tex_blit(const struct ra *ra,
 
     tex_barrier(ra, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_READ_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                false);
-
-    bool discard = dst_rc.x0 == 0 &&
-                   dst_rc.y0 == 0 &&
-                   dst_rc.z0 == 0 &&
-                   dst_rc.x1 == dst->params.w &&
-                   dst_rc.y1 == dst->params.h &&
-                   dst_rc.z1 == dst->params.d;
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     tex_barrier(ra, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                discard);
-
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     static const VkImageSubresourceLayers layers = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -773,12 +770,14 @@ error:
 struct ra_buf_vk {
     struct vk_bufslice slice;
     int refcount; // 1 = object allocated but not in use, > 1 = in use
-    bool needsflush;
+    bool needs_flush;
     enum queue_type update_queue;
     // "current" metadata, can change during course of execution
     VkPipelineStageFlags current_stage;
     VkAccessFlags current_access;
 };
+
+#define RA_VK_BUF_VERTEX RA_BUF_PRIVATE
 
 static void vk_buf_deref(const struct ra *ra, struct ra_buf *buf)
 {
@@ -809,10 +808,10 @@ static void buf_barrier(const struct ra *ra, struct vk_cmd *cmd,
         .size = size,
     };
 
-    if (buf_vk->needsflush || buf->params.host_mapped) {
+    if (buf_vk->needs_flush || buf->params.host_mapped) {
         buffBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
         buf_vk->current_stage = VK_PIPELINE_STAGE_HOST_BIT;
-        buf_vk->needsflush = false;
+        buf_vk->needs_flush = false;
     }
 
     if (buffBarrier.srcAccessMask != buffBarrier.dstAccessMask) {
@@ -839,7 +838,7 @@ static void vk_buf_write(const struct ra *ra, const struct ra_buf *buf,
     if (buf_vk->slice.data) {
         uintptr_t addr = (uintptr_t) buf_vk->slice.data + (ptrdiff_t) offset;
         memcpy((void *) addr, data, size);
-        buf_vk->needsflush = true;
+        buf_vk->needs_flush = true;
     } else {
         struct vk_cmd *cmd = vk_require_cmd(ra, buf_vk->update_queue);
         if (!cmd) {
@@ -905,7 +904,7 @@ static const struct ra_buf *vk_buf_create(const struct ra *ra,
         align = PL_ALIGN2(align, vk->limits.minStorageBufferOffsetAlignment);
         buf_vk->update_queue = COMPUTE;
         break;
-    case RA_BUF_VERTEX:
+    case RA_VK_BUF_VERTEX:
         bufFlags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
         memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         break;
@@ -990,8 +989,7 @@ static bool vk_tex_upload(const struct ra *ra,
 
     tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                false);
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     vkCmdCopyBufferToImage(cmd->buf, buf_vk->slice.buf, tex_vk->img,
                            tex_vk->current_layout, 1, &region);
@@ -1040,8 +1038,7 @@ static bool vk_tex_download(const struct ra *ra,
 
     tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_READ_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                false);
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     vkCmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->current_layout,
                            buf_vk->slice.buf, 1, &region);
@@ -1899,6 +1896,7 @@ static struct ra_fns ra_fns_vk = {
     .destroy                = vk_destroy_ra,
     .tex_create             = vk_tex_create,
     .tex_destroy            = vk_tex_destroy_lazy,
+    .tex_invalidate         = vk_tex_invalidate,
     .tex_clear              = vk_tex_clear,
     .tex_blit               = vk_tex_blit,
     .tex_upload             = vk_tex_upload,
