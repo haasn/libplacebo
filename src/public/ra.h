@@ -195,7 +195,7 @@ struct ra_tex_params {
     // If non-NULL, the texture will be created with these contents. Using
     // this does *not* require setting host_writable. Otherwise, the initial
     // data is undefined.
-    void *initial_data;
+    const void *initial_data;
 };
 
 static inline int ra_tex_params_dimension(const struct ra_tex_params params)
@@ -325,7 +325,7 @@ struct ra_buf_params {
     // If non-NULL, the buffer will be created with these contents. Otherwise,
     // the initial data is undefined. Using this does *not* require setting
     // host_mutable.
-    void *initial_data;
+    const void *initial_data;
 };
 
 // A generic buffer, which can be used for multiple purposes (texture transfer,

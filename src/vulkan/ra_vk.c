@@ -613,7 +613,7 @@ static const struct ra_tex *vk_tex_create(const struct ra *ra,
     if (params->initial_data) {
         struct ra_tex_transfer_params ul_params = {
             .tex = tex,
-            .ptr = params->initial_data,
+            .ptr = (void *) params->initial_data,
             .rc = { 0, 0, 0, params->w, params->h, params->d },
             .stride_w = params->w,
             .stride_h = params->h,
