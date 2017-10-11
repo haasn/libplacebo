@@ -19,13 +19,12 @@
 #include "context.h"
 #include "ra.h"
 
-void ra_destroy(const struct ra **ra)
+void ra_destroy(const struct ra *ra)
 {
-    if (!*ra)
+    if (!ra)
         return;
 
-    (*ra)->impl->destroy(*ra);
-    *ra = NULL;
+    ra->impl->destroy(ra);
 }
 
 bool ra_format_is_ordered(const struct ra_format *fmt)

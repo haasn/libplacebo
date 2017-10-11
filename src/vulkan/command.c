@@ -233,6 +233,49 @@ void vk_signal_destroy(struct vk_ctx *vk, struct vk_signal **sig)
     *sig = NULL;
 }
 
+struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk,
+                                     VkDeviceQueueCreateInfo qinfo,
+                                     VkQueueFamilyProperties props)
+{
+    struct vk_cmdpool *pool = talloc_ptrtype(NULL, pool);
+    *pool = (struct vk_cmdpool) {
+        .props = props,
+        .qf = qinfo.queueFamilyIndex,
+        .queues = talloc_array(pool, VkQueue, qinfo.queueCount),
+        .num_queues = qinfo.queueCount,
+    };
+
+    for (int n = 0; n < pool->num_queues; n++)
+        vkGetDeviceQueue(vk->dev, pool->qf, n, &pool->queues[n]);
+
+    VkCommandPoolCreateInfo cinfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
+                 VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = pool->qf,
+    };
+
+    VK(vkCreateCommandPool(vk->dev, &cinfo, VK_ALLOC, &pool->pool));
+
+    return pool;
+
+error:
+    vk_cmdpool_destroy(vk, pool);
+    return NULL;
+}
+
+void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool)
+{
+    if (!pool)
+        return;
+
+    for (int i = 0; i < pool->num_cmds; i++)
+        vk_cmd_destroy(vk, pool->cmds[i]);
+
+    vkDestroyCommandPool(vk->dev, pool->pool, VK_ALLOC);
+    talloc_free(pool);
+}
+
 struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool)
 {
     // garbage collect the cmdpool first, to increase the chances of getting

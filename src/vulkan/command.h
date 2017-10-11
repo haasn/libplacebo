@@ -114,6 +114,13 @@ struct vk_cmdpool {
     int num_cmds;
 };
 
+// Set up a vk_cmdpool corresponding to a queue family.
+struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk,
+                                     VkDeviceQueueCreateInfo qinfo,
+                                     VkQueueFamilyProperties props);
+
+void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool);
+
 // Fetch a command buffer from a command pool and begin recording to it.
 // Returns NULL on failure.
 struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool);

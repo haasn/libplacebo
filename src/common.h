@@ -37,6 +37,10 @@
 #include "public/ra.h"
 #include "public/shaders.h"
 
+#if PL_HAVE_VULKAN
+#include "public/vulkan.h"
+#endif
+
 #pragma GCC visibility pop
 
 // Align up to the nearest multiple of an arbitrary alignment, which may also

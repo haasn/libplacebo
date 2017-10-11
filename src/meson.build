@@ -24,6 +24,7 @@ headers = [
   'public/filters.h',
   'public/ra.h',
   'public/shaders.h',
+  'public/vulkan.h',
 ]
 
 sources = [
@@ -52,6 +53,7 @@ components = [
     'vulkan',
     dependency('vulkan', version: '>=1.0', required: false),
     [ 'vulkan/command.c',
+      'vulkan/context.c',
       'vulkan/formats.c',
       'vulkan/malloc.c',
       'vulkan/ra_vk.c',

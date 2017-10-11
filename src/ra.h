@@ -52,6 +52,10 @@ struct ra_fns {
 };
 #undef RA_PFN
 
+// All resources such as textures and buffers allocated from the RA must be
+// destroyed before calling ra_destroy.
+void ra_destroy(const struct ra *ra);
+
 // Recreates a texture with new parameters, no-op if nothing changed
 bool ra_tex_recreate(const struct ra *ra, const struct ra_tex **tex,
                      const struct ra_tex_params *params);

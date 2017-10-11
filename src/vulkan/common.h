@@ -20,7 +20,7 @@
 #include "../common.h"
 #include "../context.h"
 
-#include <vulkan/vulkan.h>
+#include "public/vulkan.h"
 
 // Vulkan allows the optional use of a custom allocator. We don't need one but
 // mark this parameter with a better name in case we ever decide to change this
@@ -33,13 +33,13 @@
 
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
+    bool external_instance;
     struct pl_context *ctx;
     VkInstance inst;
     VkPhysicalDevice physd;
     VkPhysicalDeviceLimits limits;
     VkDebugReportCallbackEXT dbg;
     VkDevice dev;
-    VkSurfaceKHR surf;
 
     struct vk_cmdpool **pools;    // command pools (one per queue family)
     int num_pools;

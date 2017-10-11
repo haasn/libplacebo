@@ -19,8 +19,9 @@
 
 #include "common.h"
 
-// Return a human-readable name for a VkResult
+// Return a human-readable name for various vulkan enums
 const char *vk_res_str(VkResult res);
+const char *vk_obj_str(VkDebugReportObjectTypeEXT obj);
 
 // Convenience macros to simplify a lot of common boilerplate
 #define VK_ASSERT(res, str)                               \

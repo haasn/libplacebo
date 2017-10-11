@@ -97,10 +97,6 @@ struct ra {
     int num_formats;
 };
 
-// All resources such as textures and buffers allocated from the RA must be
-// destroyed before calling ra_destroy.
-void ra_destroy(const struct ra **ra);
-
 enum ra_fmt_type {
     RA_FMT_UNKNOWN = 0, // also used for inconsistent multi-component formats
     RA_FMT_UNORM,       // unsigned, normalized integer format (sampled as float)

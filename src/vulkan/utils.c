@@ -56,5 +56,44 @@ const char *vk_res_str(VkResult res)
 #undef CASE
     }
 
-    return "Unknown error!";
+    return "unknown error";
+}
+
+const char *vk_obj_str(VkDebugReportObjectTypeEXT obj)
+{
+    switch (obj) {
+#define CASE(name, str) case VK_DEBUG_REPORT_OBJECT_TYPE_##name##_EXT: return #str
+    CASE(INSTANCE,              VkInstance);
+    CASE(PHYSICAL_DEVICE,       VkPhysicalDevice);
+    CASE(DEVICE,                VkDevice);
+    CASE(QUEUE,                 VkQueue);
+    CASE(SEMAPHORE,             VkSemaphore);
+    CASE(COMMAND_BUFFER,        VkCommandBuffer);
+    CASE(FENCE,                 VkFence);
+    CASE(DEVICE_MEMORY,         VkDeviceMemory);
+    CASE(BUFFER,                VkBuffer);
+    CASE(IMAGE,                 VkImage);
+    CASE(EVENT,                 VkEvent);
+    CASE(QUERY_POOL,            VkQueryPool);
+    CASE(BUFFER_VIEW,           VkBufferView);
+    CASE(IMAGE_VIEW,            VkImageView);
+    CASE(SHADER_MODULE,         VkShaderModule);
+    CASE(PIPELINE_CACHE,        VkPipelineCache);
+    CASE(PIPELINE_LAYOUT,       VkPipelineLayout);
+    CASE(RENDER_PASS,           VkRenderPass);
+    CASE(PIPELINE,              VkPipeline);
+    CASE(DESCRIPTOR_SET_LAYOUT, VkDescriptorSetLayout);
+    CASE(SAMPLER,               VkSampler);
+    CASE(DESCRIPTOR_POOL,       VkDescriptorPool);
+    CASE(DESCRIPTOR_SET,        VkDescriptorSet);
+    CASE(FRAMEBUFFER,           VkFramebuffer);
+    CASE(COMMAND_POOL,          VkCommandPool);
+    CASE(SURFACE_KHR,           VkSurfaceKHR);
+    CASE(SWAPCHAIN_KHR,         VkSwapchainKHR);
+    CASE(DISPLAY_KHR,           VkDisplayKHR);
+    CASE(DISPLAY_MODE_KHR,      VkDisplayModeKHR);
+    CASE(DEBUG_REPORT,          VkDebugReportCallbackEXT);
+#undef CASE
+    default: return "unknown object";
+    }
 }
