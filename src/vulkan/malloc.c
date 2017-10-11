@@ -261,9 +261,9 @@ static void heap_uninit(struct vk_ctx *vk, struct vk_heap *heap)
 
 struct vk_malloc *vk_malloc_create(struct vk_ctx *vk)
 {
-    assert(vk->physd);
     struct vk_malloc *ma = talloc_zero(NULL, struct vk_malloc);
     vkGetPhysicalDeviceMemoryProperties(vk->physd, &ma->props);
+    ma->vk = vk;
 
     PL_INFO(vk, "Memory heaps supported by device:");
     for (int i = 0; i < ma->props.memoryHeapCount; i++) {

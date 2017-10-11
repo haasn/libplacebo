@@ -117,6 +117,13 @@ void vk_cmd_sig(struct vk_cmd *cmd, VkSemaphore sig)
     TARRAY_APPEND(cmd, cmd->sigs, cmd->num_sigs, sig);
 }
 
+struct vk_signal {
+    VkSemaphore semaphore;
+    VkEvent event;
+    enum vk_wait_type type; // last signal type
+    VkQueue source;         // last signal source
+};
+
 struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
                                 VkPipelineStageFlags stage)
 {
@@ -139,14 +146,16 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
     VK(vkCreateEvent(vk->dev, &einfo, VK_ALLOC, &sig->event));
 
 done:
-    // Signal both the semaphore and the event if possible. (We will only
+    // Signal both the semaphore, and the event if possible. (We will only
     // end up using one or the other)
     vk_cmd_sig(cmd, sig->semaphore);
+    sig->type = VK_WAIT_NONE;
+    sig->source = cmd->queue;
 
     VkQueueFlags req = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
     if (cmd->pool->props.queueFlags & req) {
         vkCmdSetEvent(cmd->buf, sig->event, stage);
-        sig->event_source = cmd->queue;
+        sig->type = VK_WAIT_EVENT;
     }
 
     return sig;
@@ -189,37 +198,42 @@ static void release_signal(struct vk_ctx *vk, struct vk_signal *sig)
     // The semaphore never needs to be recreated, because it's either
     // unsignaled while still queued, or unsignaled as a result of a device
     // wait. But the event *may* need to be reset, so just always reset it.
-    if (sig->event_source)
-        vkResetEvent(vk->dev, sig->event);
-    sig->event_source = NULL;
+    vkResetEvent(vk->dev, sig->event);
+    sig->source = NULL;
     TARRAY_APPEND(NULL, vk->signals, vk->num_signals, sig);
 }
 
-void vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
-                 struct vk_signal **sigptr, VkPipelineStageFlags stage,
-                 VkEvent *out_event)
+enum vk_wait_type vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
+                              struct vk_signal **sigptr,
+                              VkPipelineStageFlags stage,
+                              VkEvent *out_event)
 {
     struct vk_signal *sig = *sigptr;
     if (!sig)
-        return;
+        return VK_WAIT_NONE;
 
-    if (out_event && sig->event && sig->event_source == cmd->queue &&
-        unsignal(vk, cmd, sig->semaphore))
-    {
+    if (sig->source == cmd->queue && unsignal(vk, cmd, sig->semaphore)) {
         // If we can remove the semaphore signal operation from the history and
-        // pretend it never happened, then we get to use the VkEvent. This also
-        // requires that the VkEvent was signalled from the same VkQueue.
-        *out_event = sig->event;
-    } else if (sig->semaphore) {
+        // pretend it never happened, then we get to use the more efficient
+        // synchronization primitives. However, this requires that we're still
+        // in the same VkQueue.
+        if (sig->type == VK_WAIT_EVENT && out_event) {
+            *out_event = sig->event;
+        } else {
+            sig->type = VK_WAIT_BARRIER;
+        }
+    } else {
         // Otherwise, we use the semaphore. (This also unsignals it as a result
         // of the command execution)
         vk_cmd_dep(cmd, sig->semaphore, stage);
+        sig->type = VK_WAIT_NONE;
     }
 
     // In either case, once the command completes, we can release the signal
     // resource back to the pool.
     vk_cmd_callback(cmd, (vk_cb) release_signal, vk, sig);
     *sigptr = NULL;
+    return sig->type;
 }
 
 void vk_signal_destroy(struct vk_ctx *vk, struct vk_signal **sig)
@@ -361,17 +375,17 @@ bool vk_flush_commands(struct vk_ctx *vk)
             .pSignalSemaphores = cmd->sigs,
         };
 
-        VK(vkQueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));
-        TARRAY_APPEND(NULL, vk->cmds_pending, vk->num_cmds_pending, cmd);
-
         if (pl_msg_test(vk->ctx, PL_LOG_TRACE)) {
-            PL_TRACE(vk, "Submitted command on queue %p (QF %d):",
+            PL_TRACE(vk, "Submitting command on queue %p (QF %d):",
                      (void *)cmd->queue, pool->qf);
             for (int n = 0; n < cmd->num_deps; n++)
                 PL_TRACE(vk, "    waits on semaphore %p", (void *)cmd->deps[n]);
             for (int n = 0; n < cmd->num_sigs; n++)
                 PL_TRACE(vk, "    signals semaphore %p", (void *)cmd->sigs[n]);
         }
+
+        VK(vkQueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));
+        TARRAY_APPEND(NULL, vk->cmds_pending, vk->num_cmds_pending, cmd);
         continue;
 
 error:

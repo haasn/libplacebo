@@ -71,14 +71,16 @@ void vk_cmd_dep(struct vk_cmd *cmd, VkSemaphore dep, VkPipelineStageFlags stage)
 // after the command completes.
 void vk_cmd_sig(struct vk_cmd *cmd, VkSemaphore sig);
 
+enum vk_wait_type {
+    VK_WAIT_NONE,    // no synchronization needed
+    VK_WAIT_BARRIER, // synchronization via pipeline barriers
+    VK_WAIT_EVENT,   // synchronization via events
+};
+
 // Signal abstraction: represents an abstract synchronization mechanism.
 // Internally, this may either resolve as a semaphore or an event depending
 // on whether the appropriate conditions are met.
-struct vk_signal {
-    VkSemaphore semaphore;
-    VkEvent event;
-    VkQueue event_source;
-};
+struct vk_signal;
 
 // Generates a signal after the execution of all previous commands matching the
 // given the pipeline stage. The signal is owned by the caller, and must be
@@ -88,13 +90,19 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
                                 VkPipelineStageFlags stage);
 
 // Consumes a previously generated signal. This signal must fire by the
-// indicated stage before the command can run. If *event is not NULL, then it
-// MAY be set to a VkEvent which the caller MUST manually wait on in the most
-// appropriate way. This function takes over ownership of the signal (and the
-// signal will be released/reused automatically)
-void vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
-                 struct vk_signal **sigptr, VkPipelineStageFlags stage,
-                 VkEvent *out_event);
+// indicated stage before the command can run. This function takes over
+// ownership of the signal (and the signal will be released/reused
+// automatically)
+//
+// The return type indicates what the caller needs to do:
+//   VK_SIGNAL_NONE:    no further handling needed, caller can use TOP_OF_PIPE
+//   VK_SIGNAL_BARRIER: caller must use pipeline barrier from last stage
+//   VK_SIGNAL_EVENT:   caller must use VkEvent from last stage
+//                      (never returned if out_event is NULL)
+enum vk_wait_type vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
+                              struct vk_signal **sigptr,
+                              VkPipelineStageFlags stage,
+                              VkEvent *out_event);
 
 // Destroys a currently pending signal, for example if the resource is no
 // longer relevant.

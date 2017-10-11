@@ -279,7 +279,6 @@ struct ra_tex_vk {
     VkSampler sampler;
     // for rendering
     VkFramebuffer framebuffer;
-    VkRenderPass dummyPass;
     // for transfers
     struct ra_buf_pool pbo_write;
     struct ra_buf_pool pbo_read;
@@ -336,7 +335,7 @@ static void tex_barrier(const struct ra *ra, struct vk_cmd *cmd,
     }
 
     VkEvent event = NULL;
-    vk_cmd_wait(vk, cmd, &tex_vk->sig, stage, &event);
+    enum vk_wait_type type = vk_cmd_wait(vk, cmd, &tex_vk->sig, stage, &event);
 
     bool need_trans = tex_vk->current_layout != newLayout ||
                       tex_vk->current_access != newAccess;
@@ -344,15 +343,24 @@ static void tex_barrier(const struct ra *ra, struct vk_cmd *cmd,
     // Transitioning to VK_IMAGE_LAYOUT_UNDEFINED is a pseudo-operation
     // that for us means we don't need to perform the actual transition
     if (need_trans && newLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
-        if (event) {
-            vkCmdWaitEvents(cmd->buf, 1, &event, tex_vk->sig_stage,
-                            stage, 0, NULL, 0, NULL, 1, &imgBarrier);
-        } else {
-            // If we're not using an event, then the source stage is irrelevant
-            // because we're coming from a different queue anyway, so we can
-            // safely set it to TOP_OF_PIPE.
+        switch (type) {
+        case VK_WAIT_NONE:
+            // No synchronization required, so we can safely transition out of
+            // VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+            imgBarrier.srcAccessMask = 0;
             vkCmdPipelineBarrier(cmd->buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                                  stage, 0, 0, NULL, 0, NULL, 1, &imgBarrier);
+            break;
+        case VK_WAIT_BARRIER:
+            // Regular pipeline barrier is required
+            vkCmdPipelineBarrier(cmd->buf, tex_vk->sig_stage, stage, 0, 0, NULL,
+                                 0, NULL, 1, &imgBarrier);
+            break;
+        case VK_WAIT_EVENT:
+            // We can/should use the VkEvent for synchronization
+            vkCmdWaitEvents(cmd->buf, 1, &event, tex_vk->sig_stage,
+                            stage, 0, NULL, 0, NULL, 1, &imgBarrier);
+            break;
         }
     }
 
@@ -384,7 +392,6 @@ static void vk_tex_destroy(const struct ra *ra, struct ra_tex *tex)
     ra_buf_pool_uninit(ra, &tex_vk->pbo_read);
     vk_signal_destroy(vk, &tex_vk->sig);
     vkDestroyFramebuffer(vk->dev, tex_vk->framebuffer, VK_ALLOC);
-    vkDestroyRenderPass(vk->dev, tex_vk->dummyPass, VK_ALLOC);
     vkDestroySampler(vk->dev, tex_vk->sampler, VK_ALLOC);
     vkDestroyImageView(vk->dev, tex_vk->view, VK_ALLOC);
     if (!tex_vk->external_img) {
@@ -473,7 +480,7 @@ static bool vk_init_image(const struct ra *ra, const struct ra_tex *tex)
                                  VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                                  VK_IMAGE_LAYOUT_UNDEFINED,
                                  VK_IMAGE_LAYOUT_UNDEFINED,
-                                 &tex_vk->dummyPass));
+                                 &dummyPass));
 
         VkFramebufferCreateInfo finfo = {
             .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -571,7 +578,11 @@ static const struct ra_tex *vk_tex_create(const struct ra *ra,
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = tex_vk->type,
         .format = fmt->ifmt,
-        .extent = (VkExtent3D) { params->w, params->h, params->d },
+        .extent = (VkExtent3D) {
+            .width  = params->w,
+            .height = PL_MAX(1, params->h),
+            .depth  = PL_MAX(1, params->d)
+        },
         .mipLevels = 1,
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -952,6 +963,18 @@ static bool vk_buf_poll(const struct ra *ra, const struct ra_buf *buf,
     return buf_vk->refcount > 1;
 }
 
+static void fix_copy_region(int dims, VkBufferImageCopy *region)
+{
+    if (dims < 3) {
+        region->imageOffset.z = 0;
+        region->imageExtent.depth = 1;
+    }
+    if (dims < 2) {
+        region->imageOffset.z = 0;
+        region->imageExtent.height = 1;
+    }
+}
+
 static bool vk_tex_upload(const struct ra *ra,
                           const struct ra_tex_transfer_params *params)
 {
@@ -960,6 +983,10 @@ static bool vk_tex_upload(const struct ra *ra,
 
     if (!params->buf)
         return ra_tex_upload_pbo(ra, &tex_vk->pbo_write, params);
+
+    struct vk_cmd *cmd = vk_require_cmd(ra, tex_vk->transfer_queue);
+    if (!cmd)
+        goto error;
 
     assert(params->buf);
     const struct ra_buf *buf = params->buf;
@@ -979,9 +1006,7 @@ static bool vk_tex_upload(const struct ra *ra,
         },
     };
 
-    struct vk_cmd *cmd = vk_require_cmd(ra, tex_vk->transfer_queue);
-    if (!cmd)
-        goto error;
+    fix_copy_region(ra_tex_params_dimension(tex->params), &region);
 
     buf_barrier(ra, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_READ_BIT, region.bufferOffset, size);
@@ -1010,6 +1035,10 @@ static bool vk_tex_download(const struct ra *ra,
     if (!params->buf)
         return ra_tex_download_pbo(ra, &tex_vk->pbo_read, params);
 
+    struct vk_cmd *cmd = vk_require_cmd(ra, tex_vk->transfer_queue);
+    if (!cmd)
+        goto error;
+
     assert(params->buf);
     const struct ra_buf *buf = params->buf;
     struct ra_buf_vk *buf_vk = buf->priv;
@@ -1028,9 +1057,7 @@ static bool vk_tex_download(const struct ra *ra,
         },
     };
 
-    struct vk_cmd *cmd = vk_require_cmd(ra, tex_vk->transfer_queue);
-    if (!cmd)
-        goto error;
+    fix_copy_region(ra_tex_params_dimension(tex->params), &region);
 
     buf_barrier(ra, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT, region.bufferOffset, size);
