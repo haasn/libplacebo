@@ -264,6 +264,21 @@ struct vk_malloc *vk_malloc_create(struct vk_ctx *vk)
     assert(vk->physd);
     struct vk_malloc *ma = talloc_zero(NULL, struct vk_malloc);
     vkGetPhysicalDeviceMemoryProperties(vk->physd, &ma->props);
+
+    PL_INFO(vk, "Memory heaps supported by device:");
+    for (int i = 0; i < ma->props.memoryHeapCount; i++) {
+        VkMemoryHeap heap = ma->props.memoryHeaps[i];
+        PL_INFO(vk, "    heap %d: flags 0x%x size %zu",
+                i, (unsigned) heap.flags, heap.size);
+    }
+
+    PL_INFO(vk, "Memory types supported by device:");
+    for (int i = 0; i < ma->props.memoryTypeCount; i++) {
+        VkMemoryType type = ma->props.memoryTypes[i];
+        PL_INFO(vk, "    type %d: flags 0x%x heap %d",
+                i, (unsigned) type.propertyFlags, (int) type.heapIndex);
+    }
+
     return ma;
 }
 
