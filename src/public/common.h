@@ -43,4 +43,50 @@ bool pl_rect3d_eq(struct pl_rect3d a, struct pl_rect3d b);
 struct pl_rect2d pl_rect2d_normalize(struct pl_rect2d rc);
 struct pl_rect3d pl_rect3d_normalize(struct pl_rect3d rc);
 
+// Represents a row-major matrix, i.e. the following matrix
+//     [ a11 a12 a13 ]
+//     [ a21 a22 a23 ]
+//     [ a31 a32 a33 ]
+// is represented in C like this:
+//   { { a11, a12, a13 },
+//     { a21, a22, a23 },
+//     { a31, a32, a33 } };
+struct pl_matrix3x3 {
+    float m[3][3];
+};
+
+extern const struct pl_matrix3x3 pl_matrix3x3_identity;
+
+// Applies a matrix to a float vector in-place.
+void pl_matrix3x3_apply(struct pl_matrix3x3 mat, float vec[3]);
+
+// Scales a color matrix by a linear factor.
+struct pl_matrix3x3 pl_matrix3x3_scale(struct pl_matrix3x3 mat, float scale);
+
+// Inverts a matrix. Only use where precision is not that important.
+struct pl_matrix3x3 pl_matrix3x3_invert(struct pl_matrix3x3 mat);
+
+// Composes/multiplies two matrices. Returns A * B
+struct pl_matrix3x3 pl_matrix3x3_mul(struct pl_matrix3x3 a, struct pl_matrix3x3 b);
+
+// Represents an affine transformation, which is basically a 3x3 matrix
+// together with a column vector to add onto the output.
+struct pl_transform3x3 {
+    struct pl_matrix3x3 mat;
+    float c[3];
+};
+
+extern const struct pl_transform3x3 pl_transform3x3_identity;
+
+// Applies a transform to a float vector in-place.
+void pl_transform3x3_apply(struct pl_transform3x3 t, float vec[3]);
+
+// Scales the output of a transform by a linear factor. Since an affine
+// transformation is non-linear, this does not commute. If you want to scale
+// the *input* of a transform, use pl_matrix3x3_scale on `t.mat`.
+struct pl_transform3x3 pl_transform3x3_scale(struct pl_transform3x3 t, float scale);
+
+// Inverts a transform. Only use where precision is not that important.
+struct pl_transform3x3 pl_transform3x3_invert(struct pl_transform3x3 t);
+
 #endif // LIBPLACEBO_COMMON_H_

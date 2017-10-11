@@ -421,7 +421,7 @@ struct ra_var ra_var_mat4(const char *name);
 //
 // Note on matrices: All RAs expect column major matrices, for both buffers and
 // input variables. Care needs to be taken to avoid trying to use e.g. a
-// pl_color_matrix (which is row major) directly as a ra_var_update.data!
+// pl_matrix3x3 (which is row major) directly as a ra_var_update.data!
 //
 // In terms of the host layout, a column-major matrix (e.g. matCxR) with C
 // columns and R rows is treated like an array vecR[C]. The `stride` here refers

@@ -22,10 +22,10 @@
 bool pl_color_system_is_ycbcr_like(enum pl_color_system sys)
 {
     switch (sys) {
+    case PL_COLOR_SYSTEM_UNKNOWN:
     case PL_COLOR_SYSTEM_RGB:
     case PL_COLOR_SYSTEM_XYZ:
         return false;
-    case PL_COLOR_SYSTEM_UNKNOWN:
     case PL_COLOR_SYSTEM_BT_601:
     case PL_COLOR_SYSTEM_BT_709:
     case PL_COLOR_SYSTEM_SMPTE_240M:
@@ -48,8 +48,6 @@ enum pl_color_system pl_color_system_guess_ycbcr(int width, int height)
     }
 }
 
-const struct pl_color_repr pl_color_repr_unknown = {0};
-
 void pl_color_repr_merge(struct pl_color_repr *orig,
                          const struct pl_color_repr *new)
 {
@@ -68,26 +66,28 @@ bool pl_color_repr_equal(struct pl_color_repr c1, struct pl_color_repr c2)
            c1.bit_depth == c2.bit_depth;
 }
 
+static enum pl_color_levels guess_levels(struct pl_color_repr repr)
+{
+    if (repr.levels) {
+        return repr.levels;
+    } else {
+        return pl_color_system_is_ycbcr_like(repr.sys)
+                    ? PL_COLOR_LEVELS_TV
+                    : PL_COLOR_LEVELS_PC;
+    }
+}
+
 float pl_color_repr_texture_mul(struct pl_color_repr repr, int new_bits)
 {
-    int old_bits = repr.bit_depth;
-    int hi_bits = old_bits > new_bits ? old_bits : new_bits;
-    int lo_bits = old_bits < new_bits ? old_bits : new_bits;
-    assert(hi_bits >= lo_bits);
+    assert(new_bits && repr.bit_depth);
 
-    float mult = 1.0;
-    if (!hi_bits || !lo_bits)
-        return mult;
-
-    if (pl_color_system_is_ycbcr_like(repr.sys)) {
-        // High bit depth YUV uses a range shifted from 8-bit
-        mult = (1LL << lo_bits) / ((1LL << hi_bits) - 1.0) * 255.0 / 256;
+    if (guess_levels(repr) == PL_COLOR_LEVELS_TV) {
+        // Limit range is always shifted directly
+        return (float) (1LL << new_bits) / (1LL << repr.bit_depth);
     } else {
-        // Non-YUV always uses the full range available
-        mult = ((1LL << lo_bits) - 1.) / ((1LL << hi_bits) - 1.);
+        // Full range always uses the full range available
+        return ((1LL << new_bits) - 1.) / ((1LL << repr.bit_depth) - 1.);
     }
-
-    return new_bits >= old_bits ? mult : 1.0 / mult;
 }
 
 bool pl_color_primaries_is_wide_gamut(enum pl_color_primaries prim)
@@ -352,78 +352,11 @@ struct pl_raw_primaries pl_raw_primaries_get(enum pl_color_primaries prim)
     }
 }
 
-static void invert_matrix3x3(float m[3][3])
-{
-    float m00 = m[0][0], m01 = m[0][1], m02 = m[0][2],
-          m10 = m[1][0], m11 = m[1][1], m12 = m[1][2],
-          m20 = m[2][0], m21 = m[2][1], m22 = m[2][2];
-
-    // calculate the adjoint
-    m[0][0] =  (m11 * m22 - m21 * m12);
-    m[0][1] = -(m01 * m22 - m21 * m02);
-    m[0][2] =  (m01 * m12 - m11 * m02);
-    m[1][0] = -(m10 * m22 - m20 * m12);
-    m[1][1] =  (m00 * m22 - m20 * m02);
-    m[1][2] = -(m00 * m12 - m10 * m02);
-    m[2][0] =  (m10 * m21 - m20 * m11);
-    m[2][1] = -(m00 * m21 - m20 * m01);
-    m[2][2] =  (m00 * m11 - m10 * m01);
-
-    // calculate the determinant (as inverse == 1/det * adjoint,
-    // adjoint * m == identity * det, so this calculates the det)
-    float det = m00 * m[0][0] + m10 * m[0][1] + m20 * m[0][2];
-    det = 1.0f / det;
-
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++)
-            m[i][j] *= det;
-    }
-}
-
-// A := A * B
-static void mul_matrix3x3(float a[3][3], float b[3][3])
-{
-    float a00 = a[0][0], a01 = a[0][1], a02 = a[0][2],
-          a10 = a[1][0], a11 = a[1][1], a12 = a[1][2],
-          a20 = a[2][0], a21 = a[2][1], a22 = a[2][2];
-
-    for (int i = 0; i < 3; i++) {
-        a[0][i] = a00 * b[0][i] + a01 * b[1][i] + a02 * b[2][i];
-        a[1][i] = a10 * b[0][i] + a11 * b[1][i] + a12 * b[2][i];
-        a[2][i] = a20 * b[0][i] + a21 * b[1][i] + a22 * b[2][i];
-    }
-}
-
-struct pl_color_matrix pl_color_matrix_invert(struct pl_color_matrix out)
-{
-    invert_matrix3x3(out.m);
-    return out;
-}
-
-// based on DarkPlaces engine (relicensed from GPL to LGPL)
-struct pl_color_transform pl_color_transform_invert(struct pl_color_transform in)
-{
-    struct pl_color_transform out = { .mat = pl_color_matrix_invert(in.mat) };
-    float m00 = out.mat.m[0][0], m01 = out.mat.m[0][1], m02 = out.mat.m[0][2],
-          m10 = out.mat.m[1][0], m11 = out.mat.m[1][1], m12 = out.mat.m[1][2],
-          m20 = out.mat.m[2][0], m21 = out.mat.m[2][1], m22 = out.mat.m[2][2];
-
-    // fix the constant coefficient
-    // rgb = M * yuv + C
-    // M^-1 * rgb = yuv + M^-1 * C
-    // yuv = M^-1 * rgb - M^-1 * C
-    //                  ^^^^^^^^^^
-    out.c[0] = -(m00 * in.c[0] + m01 * in.c[1] + m02 * in.c[2]);
-    out.c[1] = -(m10 * in.c[0] + m11 * in.c[1] + m12 * in.c[2]);
-    out.c[2] = -(m20 * in.c[0] + m21 * in.c[1] + m22 * in.c[2]);
-    return out;
-}
-
 // Compute the RGB/XYZ matrix as described here:
 // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
-struct pl_color_matrix pl_get_rgb2xyz_matrix(struct pl_raw_primaries prim)
+struct pl_matrix3x3 pl_get_rgb2xyz_matrix(struct pl_raw_primaries prim)
 {
-    struct pl_color_matrix out = {{{0}}};
+    struct pl_matrix3x3 out = {{{0}}};
     float S[3], X[4], Z[4];
 
     // Convert from CIE xyY to XYZ. Note that Y=1 holds true for all primaries
@@ -444,7 +377,7 @@ struct pl_color_matrix pl_get_rgb2xyz_matrix(struct pl_raw_primaries prim)
         out.m[2][i] = Z[i];
     }
 
-    invert_matrix3x3(out.m);
+    out = pl_matrix3x3_invert(out);
 
     for (int i = 0; i < 3; i++)
         S[i] = out.m[i][0] * X[3] + out.m[i][1] * 1 + out.m[i][2] * Z[3];
@@ -459,17 +392,17 @@ struct pl_color_matrix pl_get_rgb2xyz_matrix(struct pl_raw_primaries prim)
     return out;
 }
 
-struct pl_color_matrix pl_get_xyz2rgb_matrix(struct pl_raw_primaries prim)
+struct pl_matrix3x3 pl_get_xyz2rgb_matrix(struct pl_raw_primaries prim)
 {
     // For simplicity, just invert the rgb2xyz matrix
-    struct pl_color_matrix out = pl_get_rgb2xyz_matrix(prim);
-    invert_matrix3x3(out.m);
-    return out;
+    struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
+    return pl_matrix3x3_invert(rgb2xyz);
 }
 
 // M := M * XYZd<-XYZs
 static void apply_chromatic_adaptation(struct pl_cie_xy src,
-                                       struct pl_cie_xy dest, float m[3][3])
+                                       struct pl_cie_xy dest,
+                                       struct pl_matrix3x3 *mat)
 {
     // If the white points are nearly identical, this is a wasteful identity
     // operation.
@@ -478,53 +411,49 @@ static void apply_chromatic_adaptation(struct pl_cie_xy src,
 
     // XYZd<-XYZs = Ma^-1 * (I*[Cd/Cs]) * Ma
     // http://www.brucelindbloom.com/index.html?Eqn_ChromAdapt.html
-    float C[3][2], tmp[3][3] = {{0}};
+    float C[3][2];
 
     // Ma = Bradford matrix, arguably most popular method in use today.
     // This is derived experimentally and thus hard-coded.
-    float bradford[3][3] = {
+    struct pl_matrix3x3 bradford = {{
         {  0.8951,  0.2664, -0.1614 },
         { -0.7502,  1.7135,  0.0367 },
         {  0.0389, -0.0685,  1.0296 },
-    };
+    }};
 
     for (int i = 0; i < 3; i++) {
         // source cone
-        C[i][0] = bradford[i][0] * pl_cie_X(src)
-                + bradford[i][1] * 1
-                + bradford[i][2] * pl_cie_Z(src);
+        C[i][0] = bradford.m[i][0] * pl_cie_X(src)
+                + bradford.m[i][1] * 1
+                + bradford.m[i][2] * pl_cie_Z(src);
 
         // dest cone
-        C[i][1] = bradford[i][0] * pl_cie_X(dest)
-                + bradford[i][1] * 1
-                + bradford[i][2] * pl_cie_Z(dest);
+        C[i][1] = bradford.m[i][0] * pl_cie_X(dest)
+                + bradford.m[i][1] * 1
+                + bradford.m[i][2] * pl_cie_Z(dest);
     }
 
     // tmp := I * [Cd/Cs] * Ma
+    struct pl_matrix3x3 tmp = {0};
     for (int i = 0; i < 3; i++)
-        tmp[i][i] = C[i][1] / C[i][0];
+        tmp.m[i][i] = C[i][1] / C[i][0];
 
-    mul_matrix3x3(tmp, bradford);
+    tmp = pl_matrix3x3_mul(tmp, bradford);
 
     // M := M * Ma^-1 * tmp
-    invert_matrix3x3(bradford);
-    mul_matrix3x3(m, bradford);
-    mul_matrix3x3(m, tmp);
+    struct pl_matrix3x3 bradford_inv = pl_matrix3x3_invert(bradford);
+    *mat = pl_matrix3x3_mul(*mat, bradford_inv);
+    *mat = pl_matrix3x3_mul(*mat, tmp);
 }
 
-struct pl_color_matrix pl_get_color_mapping_matrix(struct pl_raw_primaries src,
-                                                   struct pl_raw_primaries dst,
-                                                   enum pl_rendering_intent intent)
+struct pl_matrix3x3 pl_get_color_mapping_matrix(struct pl_raw_primaries src,
+                                                struct pl_raw_primaries dst,
+                                                enum pl_rendering_intent intent)
 {
     // In saturation mapping, we don't care about accuracy and just want
     // primaries to map to primaries, making this an identity transformation.
-    if (intent == PL_INTENT_SATURATION) {
-        return (struct pl_color_matrix) {{
-            { 1, 0, 0 },
-            { 0, 1, 0 },
-            { 0, 0, 1 }
-        }};
-    }
+    if (intent == PL_INTENT_SATURATION)
+        return pl_matrix3x3_identity;
 
     // RGBd<-RGBs = RGBd<-XYZd * XYZd<-XYZs * XYZs<-RGBs
     // Equations from: http://www.brucelindbloom.com/index.html?Math.html
@@ -532,16 +461,15 @@ struct pl_color_matrix pl_get_color_mapping_matrix(struct pl_raw_primaries src,
     // definition for perceptual other than "make it look good".
 
     // RGBd<-XYZd matrix
-    struct pl_color_matrix out = pl_get_xyz2rgb_matrix(dst);
+    struct pl_matrix3x3 xyz2rgb_d = pl_get_xyz2rgb_matrix(dst);
 
     // Chromatic adaptation, except in absolute colorimetric intent
     if (intent != PL_INTENT_ABSOLUTE_COLORIMETRIC)
-        apply_chromatic_adaptation(src.white, dst.white, out.m);
+        apply_chromatic_adaptation(src.white, dst.white, &xyz2rgb_d);
 
     // XYZs<-RGBs
-    struct pl_color_matrix tmp = pl_get_rgb2xyz_matrix(src);
-    mul_matrix3x3(out.m, tmp.m);
-    return out;
+    struct pl_matrix3x3 rgb2xyz_s = pl_get_rgb2xyz_matrix(src);
+    return pl_matrix3x3_mul(xyz2rgb_d, rgb2xyz_s);
 }
 
 /* Fill in the Y, U, V vectors of a yuv-to-rgb conversion matrix
@@ -564,49 +492,44 @@ struct pl_color_matrix pl_get_color_mapping_matrix(struct pl_raw_primaries src,
  * Under these conditions the given parameters lr, lg, lb uniquely
  * determine the mapping of Y, U, V to R, G, B.
  */
-static struct pl_color_matrix luma_coeffs(float lr, float lg, float lb)
+static struct pl_matrix3x3 luma_coeffs(float lr, float lg, float lb)
 {
     assert(fabs(lr+lg+lb - 1) < 1e-6);
-    return (struct pl_color_matrix) {{
+    return (struct pl_matrix3x3) {{
         {1, 0,                    2 * (1-lr)          },
         {1, -2 * (1-lb) * lb/lg, -2 * (1-lr) * lr/lg  },
         {1,  2 * (1-lb),          0                   },
     }};
 }
 
-struct pl_color_transform pl_get_decoding_matrix(struct pl_color_repr repr,
-                                                 struct pl_color_adjustment params,
-                                                 enum pl_color_levels out_levels,
-                                                 int out_bits)
+struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
+                                              struct pl_color_adjustment params)
 {
-    struct pl_color_matrix m;
+    assert(repr.bit_depth);
+    struct pl_matrix3x3 m;
     switch (repr.sys) {
-    case PL_COLOR_SYSTEM_UNKNOWN: // fall through
     case PL_COLOR_SYSTEM_BT_709:     m = luma_coeffs(0.2126, 0.7152, 0.0722); break;
     case PL_COLOR_SYSTEM_BT_601:     m = luma_coeffs(0.2990, 0.5870, 0.1140); break;
     case PL_COLOR_SYSTEM_SMPTE_240M: m = luma_coeffs(0.2122, 0.7013, 0.0865); break;
     case PL_COLOR_SYSTEM_BT_2020_NC: m = luma_coeffs(0.2627, 0.6780, 0.0593); break;
     case PL_COLOR_SYSTEM_BT_2020_C:
         // Note: This outputs into the [-0.5,0.5] range for chroma information.
-        m = (struct pl_color_matrix) {{
+        m = (struct pl_matrix3x3) {{
             {0, 0, 1},
             {1, 0, 0},
             {0, 1, 0}
         }};
         break;
     case PL_COLOR_SYSTEM_YCGCO:
-        m = (struct pl_color_matrix) {{
+        m = (struct pl_matrix3x3) {{
             {1,  -1,  1},
             {1,   1,  0},
             {1,  -1, -1},
         }};
         break;
+    case PL_COLOR_SYSTEM_UNKNOWN: // fall through
     case PL_COLOR_SYSTEM_RGB:
-        m = (struct pl_color_matrix) {{
-            {1, 0, 0},
-            {0, 1, 0},
-            {0, 0, 1}
-        }};
+        m = pl_matrix3x3_identity;
         break;
     case PL_COLOR_SYSTEM_XYZ:
         // For lack of anything saner to do, just assume the caller wants
@@ -616,7 +539,7 @@ struct pl_color_transform pl_get_decoding_matrix(struct pl_color_repr repr,
     default: abort();
     }
 
-    struct pl_color_transform out = { .mat = m };
+    struct pl_transform3x3 out = { .mat = m };
 
     // Apply hue and saturation in the correct way depending on the colorspace.
     if (pl_color_system_is_ycbcr_like(repr.sys)) {
@@ -632,63 +555,67 @@ struct pl_color_transform pl_get_decoding_matrix(struct pl_color_repr repr,
     }
     // FIXME: apply saturation for RGB
 
-    float s = 1.0;
-    if (repr.bit_depth && out_bits)
-        s = pl_color_repr_texture_mul(repr, out_bits);
+    double ymax, ymin, cmax, cmid;
+    double scale = (1LL << repr.bit_depth) / ((1LL << repr.bit_depth) - 1.0);
 
-    // As a convenience, we use the 255-scale values in the code below
-    s /= 255.0;
-
-    // NOTE: The yuvfull ranges as presented here are arguably ambiguous,
-    // and conflict with at least the full-range YCbCr/ICtCp values as defined
-    // by ITU-R BT.2100. If somebody ever complains about full-range YUV looking
-    // different from their reference display, this comment is probably why.
-    struct yuvlevels { double ymin, ymax, cmax, cmid; }
-        yuvlim  = { 16*s, 235*s, 240*s, 128*s },
-        yuvfull = {  0*s, 255*s, 255*s, 128*s },
-        anyfull = {  0*s, 255*s, 255*s/2, 0 }, // cmax picked to make cmul=ymul
-        yuvlev;
-
-    if (pl_color_system_is_ycbcr_like(repr.sys)) {
-        switch (repr.levels) {
-        case PL_COLOR_LEVELS_UNKNOWN: // fall through
-        case PL_COLOR_LEVELS_TV: yuvlev = yuvlim; break;
-        case PL_COLOR_LEVELS_PC: yuvlev = yuvfull; break;
-        default: abort();
-        }
-    } else {
-        yuvlev = anyfull;
+    switch (guess_levels(repr)) {
+    case PL_COLOR_LEVELS_TV: {
+        ymax = 235 / 256. * scale;
+        ymin =  16 / 256. * scale;
+        cmax = 240 / 256. * scale;
+        cmid = 128 / 256. * scale;
+        break;
     }
-
-    struct rgblevels { double min, max; }
-        rgblim =  { 16/255., 235/255. },
-        rgbfull = {      0,        1  },
-        rgblev;
-
-    switch (out_levels) {
-    case PL_COLOR_LEVELS_UNKNOWN: // fall through
-    case PL_COLOR_LEVELS_PC: rgblev = rgbfull; break;
-    case PL_COLOR_LEVELS_TV: rgblev = rgblim; break;
+    case PL_COLOR_LEVELS_PC:
+        // Note: For full-range YUV, there are multiple, subtly inconsistent
+        // standards. So just pick the sanest implementation, which is to
+        // assume MAX_INT == 1.0.
+        ymax = 1.0;
+        ymin = 0.0;
+        cmax = 1.0;
+        cmid = 128 / 256. * scale; // *not* exactly 0.5
+        break;
     default: abort();
     }
 
-    double ymul = (rgblev.max - rgblev.min) / (yuvlev.ymax - yuvlev.ymin);
-    double cmul = (rgblev.max - rgblev.min) / (yuvlev.cmax - yuvlev.cmid) / 2;
+    double ymul = 1.0 / (ymax - ymin);
+    double cmul = 0.5 / (cmax - cmid);
+
+    double mul[3]   = { ymul, ymul, ymul };
+    double black[3] = { ymin, ymin, ymin };
+
+    if (pl_color_system_is_ycbcr_like(repr.sys)) {
+        mul[1]   = mul[2]   = cmul;
+        black[1] = black[2] = cmid;
+    }
 
     // Contrast scales the output value range (gain)
-    ymul *= params.contrast;
-    cmul *= params.contrast;
-
+    // Brightness scales the constant output bias (black list/boost)
     for (int i = 0; i < 3; i++) {
-        out.mat.m[i][0] *= ymul;
-        out.mat.m[i][1] *= cmul;
-        out.mat.m[i][2] *= cmul;
-        // Set c so that Y=umin,UV=cmid maps to RGB=min (black to black),
-        // also add brightness offset (black lift)
-        out.c[i] = rgblev.min - out.mat.m[i][0] * yuvlev.ymin
-                 - (out.mat.m[i][1] + out.mat.m[i][2]) * yuvlev.cmid
-                 + params.brightness;
+        mul[i]   *= params.contrast;
+        out.c[i] += params.brightness;
+    }
+
+    // Multiply in the texture multiplier and adjust `c` so that black[j] keeps
+    // on mapping to RGB=0 (black to black)
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            out.mat.m[i][j] *= mul[j];
+            out.c[i] -= out.mat.m[i][j] * black[j];
+        }
     }
 
     return out;
+}
+
+struct pl_transform3x3 pl_get_scaled_decoding_matrix(struct pl_color_repr repr,
+                                                     struct pl_color_adjustment params,
+                                                     int texture_depth)
+{
+    float scale = pl_color_repr_texture_mul(repr, texture_depth);
+    repr.bit_depth = texture_depth;
+
+    struct pl_transform3x3 trans = pl_get_decoding_matrix(repr, params);
+    trans.mat = pl_matrix3x3_scale(trans.mat, scale);
+    return trans;
 }

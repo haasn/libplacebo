@@ -514,7 +514,7 @@ void pl_shader_color_map(struct pl_shader *sh,
     // so just always make them available if we're doing anything at all
     var_t src_luma, dst_luma;
     if (need_linear) {
-        struct pl_color_matrix rgb2xyz;
+        struct pl_matrix3x3 rgb2xyz;
         rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(src.primaries));
         src_luma = var(sh, (struct pl_shader_var) {
             .var  = ra_var_vec3("src_luma"),
@@ -547,7 +547,7 @@ void pl_shader_color_map(struct pl_shader *sh,
     if (src.primaries != dst.primaries) {
         struct pl_raw_primaries csp_src = pl_raw_primaries_get(src.primaries),
                                 csp_dst = pl_raw_primaries_get(dst.primaries);
-        struct pl_color_matrix cms_mat;
+        struct pl_matrix3x3 cms_mat;
         cms_mat = pl_get_color_mapping_matrix(csp_src, csp_dst, params->intent);
         GLSL("color.rgb = %s * color.rgb;\n", var(sh, (struct pl_shader_var) {
             .var = ra_var_mat3("cms_matrix"),

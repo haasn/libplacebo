@@ -57,10 +57,8 @@ enum pl_color_levels {
 struct pl_color_repr {
     enum pl_color_system sys;
     enum pl_color_levels levels;
-    int bit_depth; // applies to each component, 0 = unknown
+    int bit_depth; // must be non-zero
 };
-
-extern const struct pl_color_repr pl_color_repr_unknown;
 
 // Replaces unknown values in the first struct by those of the second struct.
 void pl_color_repr_merge(struct pl_color_repr *orig,
@@ -70,8 +68,11 @@ void pl_color_repr_merge(struct pl_color_repr *orig,
 bool pl_color_repr_equal(struct pl_color_repr c1, struct pl_color_repr c2);
 
 // Returns a representation-dependent multiplication factor for converting from
-// one bit depth to another. For YCbCr-like color spaces, this is equal to
-// directly shifting the 8-bit range; i.e. 0-255 becomes 0-1020, not 0-1023.
+// one bit depth to another. For limited range color spaces, this is equal to
+// directly shifting the range; i.e. 16-235 becomes 64-940, not 64.1-942.8
+//
+// The resulting float, if multiplied into the color value, results in a new
+// color in a representation identical to `repr.bit_depth = new_bits`.
 float pl_color_repr_texture_mul(struct pl_color_repr repr, int new_bits);
 
 // The colorspace's primaries (gamut)
@@ -218,7 +219,7 @@ enum pl_chroma_location {
 // chroma location.
 void pl_chroma_location_offset(enum pl_chroma_location loc, int *x, int *y);
 
-// Represents a single CIE xy coordinate (i.e. CIE Yxy with Y = 1.0)
+// Represents a single CIE xy coordinate (e.g. CIE Yxy with Y = 1.0)
 struct pl_cie_xy {
     float x, y;
 };
@@ -241,65 +242,51 @@ struct pl_raw_primaries {
 // Returns the raw primaries for a given color space.
 struct pl_raw_primaries pl_raw_primaries_get(enum pl_color_primaries prim);
 
-// Represents a row-major matrix, i.e. the following matrix
-//     [ a11 a12 a13 ]
-//     [ a21 a22 a23 ]
-//     [ a31 a32 a33 ]
-// is represented in C like this:
-//   { { a11, a12, a13 },
-//     { a21, a22, a23 },
-//     { a31, a32, a33 } };
-struct pl_color_matrix {
-    float m[3][3];
-};
-
-// Inverts a color matrix. Only use where precision is not that important.
-struct pl_color_matrix pl_color_matrix_invert(struct pl_color_matrix m);
-
-// Represents an affine transformation, which is basically a 3x3 color matrix
-// together with a column vector to add onto the output. The interpretation of
-// `m` is identical to `pl_color_matrix`.
-struct pl_color_transform {
-    struct pl_color_matrix mat;
-    float c[3];
-};
-
-// Inverts a color transform. Only use where precision is not that important.
-struct pl_color_transform pl_color_transform_invert(struct pl_color_transform t);
-
 // Returns an RGB->XYZ conversion matrix for a given set of primaries.
 // Multiplying this into the RGB color transforms it to CIE XYZ, centered
 // around the color space's white point.
-struct pl_color_matrix pl_get_rgb2xyz_matrix(struct pl_raw_primaries prim);
+struct pl_matrix3x3 pl_get_rgb2xyz_matrix(struct pl_raw_primaries prim);
 
 // Similar to pl_get_rgb2xyz_matrix, but gives the inverse transformation.
-struct pl_color_matrix pl_get_xyz2rgb_matrix(struct pl_raw_primaries prim);
+struct pl_matrix3x3 pl_get_xyz2rgb_matrix(struct pl_raw_primaries prim);
 
 // Returns a primary adaptation matrix, which converts from one set of
 // primaries to another. This is an RGB->RGB transformation. For rendering
 // intents other than PL_INTENT_ABSOLUTE_COLORIMETRIC, the white point is
 // adapted using the Bradford matrix.
-struct pl_color_matrix pl_get_color_mapping_matrix(struct pl_raw_primaries src,
-                                                   struct pl_raw_primaries dst,
-                                                   enum pl_rendering_intent intent);
+struct pl_matrix3x3 pl_get_color_mapping_matrix(struct pl_raw_primaries src,
+                                                struct pl_raw_primaries dst,
+                                                enum pl_rendering_intent intent);
 
 // Returns a color decoding matrix for a given combination of source color
-// representation, adjustment parameters, destination color levels, and output
-// bit depth. If the output bit depth is specified as 0, the bit depth conversion
-// step is skipped.
+// representation and adjustment parameters. The input and output colors are
+// assumed to be normalized to the range 0.0-1.0, in a manner consistent with
+// GPU texture sampling. (i.e. an 8-bit value of 255 maps to 1.0)
 //
-// This always performs a conversion to RGB; conversions from arbitrary color
-// representations to other arbitrary other color representations, are
-// currently not supported. Not all color systems support all of the color
-// adjustment parameters. (In particular, hue/sat adjustments are currently
-// only supported for YCbCr-like color systems)
+// This function always performs a conversion to RGB; conversions from
+// arbitrary color representations to other arbitrary other color
+// representations are currently not supported. Not all color systems support
+// all of the color adjustment parameters. (In particular, hue/sat adjustments
+// are currently only supported for YCbCr-like color systems)
 //
 // Note: For BT.2020 constant-luminance, this outputs chroma information in the
 // range [-0.5, 0.5]. Since the CL system conversion is non-linear, further
-// processing must be done by the caller. The channel order is CrYCb
-struct pl_color_transform pl_get_decoding_matrix(struct pl_color_repr repr,
-                                                 struct pl_color_adjustment params,
-                                                 enum pl_color_levels out_levels,
-                                                 int out_bits);
+// processing must be done by the caller. The channel order is CrYCb.
+//
+// Note: In situations where the repr.bit_depth does not match the texture
+// bit depth (e.g. uploading 10-bit colors to a 16-bit texture), you can use
+// pl_transform3x3_scale with scale = pl_color_repr_texture_mul(repr).
+struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
+                                              struct pl_color_adjustment params);
+
+// A helper function that combines pl_color_repr_texture_mul and
+// pl_get_decoding_matrix into a single matrix, appropriately scaled such that
+// the original input data is in format `repr` but was uploaded to a texture
+// of format `texture_depth`. This is semantically equivalent to first
+// bringing the range up to the new depth and then performing the decoding
+// matrix.
+struct pl_transform3x3 pl_get_scaled_decoding_matrix(struct pl_color_repr repr,
+                                                     struct pl_color_adjustment params,
+                                                     int texture_depth);
 
 #endif // LIBPLACEBO_COLORSPACE_H_
