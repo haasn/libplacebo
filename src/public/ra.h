@@ -31,9 +31,6 @@
 // those APIs, since it tries targetting a very small common subset of features
 // that is needed to implement libplacebo's rendering.
 //
-// NOTE: This abstraction layer is currently not hooked up to any implementation,
-// but it is being used to provide types needed by the other abstractions.
-//
 // NOTE: When speaking of "valid usage" or "must", invalid usage is assumed
 // to result in undefined behavior. (if libplacebo is compiled without NDEBUG,
 // this will be checked and libplacebo will terminate safely instead)

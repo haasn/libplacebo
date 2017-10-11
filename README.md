@@ -50,7 +50,7 @@ inside the [`src/public/`](src/public/) directory.
   directly.
 - `config.h`: Macros defining information about the way libplacebo was built,
   including the version strings and compiled-in features/dependencies. Usually
-  does not need to be included directly.
+  does not need to be included directly. May be useful for feature tests.
 - `filters.h`: A collection of reusable reconstruction filter kernels, which
   can be used for scaling. The generated weights arrays are semi-tailored to
   the needs of libplacebo, but may be useful to somebody else regardless. Also
@@ -63,13 +63,15 @@ inside the [`src/public/`](src/public/) directory.
   tasks including color space transformations and (eventually) image sampling,
   debanding, etc. These have an optional dependency on RA (ra.h), but can also
   be used independently (with more restrictions).
+- `vulkan.h`: The main interface to the vulkan-based libplacebo code. This
+  API essentially lets you create a vulkan-based RA instance.
 
 ## Rendering Abstraction
 
 As part of the public API, libplacebo exports the **RA** API ("Rendering
 Abstraction"). Basically, this is the API libplacebo uses internally to wrap
 OpenGL, Vulkan, Direct3D etc. into a single unifying API subset that abstracts
-away state, messy details, synchronization etc. into a very high-level API
+away state, messy details, synchronization etc. into a fairly high-level API
 suitable for libplacebo's image processing tasks.
 
 It's made public both because it constitutes part of the public API of various
@@ -79,7 +81,7 @@ entirely independently of libplacebo's image processing, which is why it
 uses its own namespace (`ra_` instead of `pl_`).
 
 **NOTE**: The port of RA into libplacebo is currently very WIP, and right now
-only the public API is exported - none of the actual implementations.
+only the vulkan-based interface is exported. It's also not very tested/stable.
 
 ## Installing
 
