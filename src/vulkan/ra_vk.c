@@ -136,7 +136,7 @@ static void vk_setup_formats(struct ra *ra)
             fmt->component_pad[i] = 0;
         }
 
-        // Detect suppotred features
+        // Detect supported features
         VkFormatFeatureFlags bits = prop.optimalTilingFeatures;
         fmt->sampleable = !!(bits & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
         fmt->storable   = !!(bits & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
