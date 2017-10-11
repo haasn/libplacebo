@@ -43,7 +43,13 @@ sources = [
   'ta/talloc.c',
 ]
 
-# Optional components, in the format [ name, dependency, extra_sources ]
+tests = [
+  'context.c',
+  'colorspace.c',
+]
+
+# Optional components, in the following format:
+# [ name, dependency, extra_sources, extra_tests ]
 components = [
   [
     'shaderc',
@@ -85,7 +91,12 @@ foreach c : components
   defs += '#define PL_HAVE_@0@ @1@\n'.format(name, dep.found() ? 1 : 0)
   if dep.found()
     bdeps   += dep
-    sources += c[2]
+    if (c.length() > 2)
+      sources += c[2]
+    endif
+    if (c.length() > 3)
+      tests += c[3]
+    endif
   endif
 endforeach
 
@@ -114,3 +125,12 @@ pkg.generate(
   libraries: lib,
   version: version,
 )
+
+# Tests
+
+tdeps = declare_dependency(link_with: lib)
+
+foreach t : tests
+  e = executable(t, 'tests/' + t, dependencies: tdeps)
+  test(t, e)
+endforeach
