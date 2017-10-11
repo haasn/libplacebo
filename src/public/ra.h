@@ -119,7 +119,7 @@ struct ra_format {
     int component_depth[4]; // meaningful bits for this component
     int component_pad[4];   // padding bits that come *before* this component
     size_t texel_size;      // the number of bytes per texel
-    // Note: Trailing padding (e.g. RGBX) is implicitly indicated by pixel_size
+    // Note: Trailing padding (e.g. RGBX) is implicitly indicated by texel_size
     // being larger than the sum of component_depth + component_pad.
 
     // The features supported by this format
@@ -211,7 +211,7 @@ static inline int ra_tex_params_dimension(const struct ra_tex_params params)
 // - wrappers for swapchain framebuffers
 // - synchronization needed for upload/rendering/etc.
 //
-// Essentially a ra_tex can be anything ranging from a normal texture, a wrapper
+// Essentially a ra_tex can be anything ranging from a normal texture, a wrapped
 // external/real framebuffer, a framebuffer object + texture pair, a mapped
 // texture (via ra_hwdec), or other sorts of things that can be sampled from
 // and/or rendered to.
@@ -220,7 +220,7 @@ struct ra_tex {
     void *priv;
 };
 
-// Create a texture (with undefined contents). Return NULL on failure. This is
+// Create a texture (with undefined contents). Returns NULL on failure. This is
 // assumed to be an expensive/rare operation, and may need to perform memory
 // allocation or framebuffer creation.
 const struct ra_tex *ra_tex_create(const struct ra *ra,
@@ -344,7 +344,8 @@ struct ra_buf {
 };
 
 // Create a buffer. The type of buffer depends on the parameters. The buffer
-// parameters must adhere to the restrictions imposed by the ra_limits.
+// parameters must adhere to the restrictions imposed by the ra_limits. Returns
+// NULL on failure.
 const struct ra_buf *ra_buf_create(const struct ra *ra,
                                    const struct ra_buf_params *params);
 
@@ -648,7 +649,7 @@ struct ra_renderpass {
 
 // Compile a shader and create a render pass. This is a rare/expensive
 // operation and may take a significant amount of time, even if a cached
-// program is used.
+// program is used. Returns NULL on failure.
 //
 // The resulting ra_renderpass->params.cached_program will be initialized by
 // this function to point to a new, valid cached program (if any).

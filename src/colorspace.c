@@ -590,7 +590,7 @@ struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
     }
 
     // Contrast scales the output value range (gain)
-    // Brightness scales the constant output bias (black list/boost)
+    // Brightness scales the constant output bias (black lift/boost)
     for (int i = 0; i < 3; i++) {
         mul[i]   *= params.contrast;
         out.c[i] += params.brightness;
