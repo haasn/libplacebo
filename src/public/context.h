@@ -70,4 +70,12 @@ struct pl_context *pl_context_create(const struct pl_context_params *params,
 // on NULL itself is invalid.
 void pl_context_destroy(struct pl_context **ctx);
 
+// Two simple, stream-based loggers. You can use these as the log_cb. If you
+// also set log_priv to a FILE* (e.g. stdout or stderr) it will be printed
+// there; otherwise, it will be printed to stdout. The version with colors will
+// use ANSI escape sequences to indicate the log level. The version without
+// will use explicit prefixes.
+void pl_log_simple(void *stream, enum pl_log_level level, const char *msg);
+void pl_log_color(void *stream, enum pl_log_level level, const char *msg);
+
 #endif // LIBPLACEBO_CONTEXT_H_

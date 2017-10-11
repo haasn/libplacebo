@@ -62,3 +62,33 @@ void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
     bstr_xappend_vasprintf(ctx, &ctx->logbuffer, fmt, va);
     ctx->params.log_cb(ctx->params.log_priv, lev, ctx->logbuffer.start);
 }
+
+void pl_log_simple(void *stream, enum pl_log_level level, const char *msg)
+{
+    static const char *prefix[] = {
+        [PL_LOG_FATAL] = "fatal",
+        [PL_LOG_ERR]   = "error",
+        [PL_LOG_WARN]  = "warn",
+        [PL_LOG_INFO]  = "info",
+        [PL_LOG_DEBUG] = "debug",
+        [PL_LOG_TRACE] = "trace",
+    };
+
+    FILE *h = stream ? stream : stdout;
+    fprintf(h, "%5s: %s\n", prefix[level], msg);
+}
+
+void pl_log_color(void *stream, enum pl_log_level level, const char *msg)
+{
+    static const char *color[] = {
+        [PL_LOG_FATAL] = "31;1", // bright red
+        [PL_LOG_ERR]   = "31",   // red
+        [PL_LOG_WARN]  = "33",   // yellow/orange
+        [PL_LOG_INFO]  = "32",   // green
+        [PL_LOG_DEBUG] = "34",   // blue
+        [PL_LOG_TRACE] = "30;1", // bright black
+    };
+
+    FILE *h = stream ? stream : stdout;
+    fprintf(h, "\033[%sm%s\033[0m\n", color[level], msg);
+}
