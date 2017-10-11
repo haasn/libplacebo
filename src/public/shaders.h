@@ -30,7 +30,7 @@ struct pl_shader_var {
 
 struct pl_shader_desc {
     struct ra_desc desc; // the underlying descriptor description
-    const void *binding; // the object being bound (as for ra_desc_update)
+    const void *binding; // the object being bound (as for ra_desc_binding)
 };
 
 // Represents a shader fragment. This is not a complete shader, but a

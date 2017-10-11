@@ -43,4 +43,4 @@ void ra_tex_vk_external_dep(const struct ra *ra, const struct ra_tex *tex,
 // wrapped swapchain image) into a format suitable for presentation, and returns
 // the resulting command buffer (or NULL on error). The caller may add their
 // own semaphores to this command buffer, and must submit it afterwards.
-struct vk_cmd *ra_vk_finish_frame(const struct ra *ra, struct ra_tex *tex);
+struct vk_cmd *ra_vk_finish_frame(const struct ra *ra, const struct ra_tex *tex);

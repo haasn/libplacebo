@@ -504,6 +504,7 @@ struct ra_vertex_attrib {
     const char *name;            // name as used in the shader
     const struct ra_format *fmt; // data format (must have `vertex_format` set)
     size_t offset;               // byte offset into the vertex struct
+    int location;                // vertex location (as used in the shader)
 };
 
 // Type of a shader input descriptor.
@@ -543,11 +544,8 @@ struct ra_desc {
     const char *name;       // name as used in the shader
     enum ra_desc_type type;
 
-    // If RA_GLSL_CAP_SHARED_BINDING is set, the bindings for each descriptor
-    // type are separate, and the same binding point may be used for different
-    // descriptors as long as they have a different type. Otherwise, all
-    // bindings share the same namespace and must be unique for every
-    // descriptor.
+    // The binding of this descriptor, as used in the shader. All bindings
+    // within a namespace must be unique. (see: ra_desc_namespace)
     int binding;
 
     // For storage images and storage buffers, this can be used to restrict
@@ -567,6 +565,12 @@ enum ra_blend_mode {
     RA_BLEND_ONE,
     RA_BLEND_SRC_ALPHA,
     RA_BLEND_ONE_MINUS_SRC_ALPHA,
+};
+
+enum ra_prim_type {
+    RA_PRIM_TRIANGLE_LIST,
+    RA_PRIM_TRIANGLE_STRIP,
+    RA_PRIM_TRIANGLE_FAN,
 };
 
 enum ra_renderpass_type {
@@ -599,9 +603,21 @@ struct ra_renderpass_params {
     // a compute shader.
     const char *glsl_shader;
 
+    // Highly implementation-specific byte array storing a compiled version of
+    // the same shader. Can be used to speed up renderpass creation on already
+    // known/cached shaders.
+    //
+    // Note: There are no restrctions on this. Passing an out-of-date cache,
+    // passing a cache corresponding to a different progam, or passing a cache
+    // belonging to a different RA, are all valid. But obviously, in such cases,
+    // there is no benefit in doing so.
+    const uint8_t *cached_program;
+    size_t cached_program_len;
+
     // --- type==RA_RENDERPASS_RASTER only
 
-    // Describes the format of the vertex data.
+    // Describes the interpretation and layout of the vertex data.
+    enum ra_prim_type vertex_type;
     struct ra_vertex_attrib *vertex_attribs;
     int num_vertex_attribs;
     size_t vertex_stride;
@@ -638,16 +654,19 @@ struct ra_renderpass {
 };
 
 // Compile a shader and create a render pass. This is a rare/expensive
-// operation and may take a significant amount of time.
+// operation and may take a significant amount of time, even if a cached
+// program is used.
+//
+// The resulting ra_renderpass->params.cached_program will be initialized by
+// this function to point to a new, valid cached program (if any).
 const struct ra_renderpass *ra_renderpass_create(const struct ra *ra,
                                 const struct ra_renderpass_params *params);
 
 void ra_renderpass_destroy(const struct ra *ra,
                            const struct ra_renderpass **pass);
 
-struct ra_desc_update {
-    int index;     // index into params.descriptors[]
-    void *binding; // ra_* object with type corresponding to ra_desc_type
+struct ra_desc_binding {
+    const void *object; // ra_* object with type corresponding to ra_desc_type
 };
 
 struct ra_var_update {
@@ -655,23 +674,20 @@ struct ra_var_update {
     void *data; // pointer to raw byte data corresponding to ra_var_host_layout()
 };
 
-enum ra_prim_type {
-    RA_PRIM_TRIANGLE_LIST,
-    RA_PRIM_TRIANGLE_STRIP,
-    RA_PRIM_TRIANGLE_FAN,
-};
-
 // Parameters for running a renderpass. These are expected to change often.
 struct ra_renderpass_run_params {
     struct ra_renderpass *pass;
 
-    // These lists only contain descriptors/variables which have changed
-    // since the previous invocation. All non-mentioned inputs implicitly
+    // This list only contains descriptors/variables which have changed
+    // since the previous invocation. All non-mentioned variables implicitly
     // preserve their state from the last invocation.
-    struct ra_desc_update *desc_updates;
     struct ra_var_update *var_updates;
-    int num_desc_updates;
     int num_var_updates;
+
+    // This list contains all descriptors used by this renderpass. It must
+    // always be filled, even if the descriptors haven't changed. The order
+    // must match that of pass->params.descriptors
+    struct ra_desc_binding *desc_bindings;
 
     // The push constants for this invocation. This must always be set and
     // fully defined for every invocation if params.push_constants_size > 0.
@@ -682,10 +698,9 @@ struct ra_renderpass_run_params {
     // Target must be a 2D texture, target->params.renderable must be true, and
     // target->params.format must match pass->params.target_format.
     struct ra_tex *target;
-    struct pl_rect2d viewport; // screen space viewport
-    struct pl_rect2d scissors; // target render scissors
+    struct pl_rect2d viewport; // screen space viewport (must be normalized)
+    struct pl_rect2d scissors; // target render scissors (must be normalized)
 
-    enum ra_prim_type vertex_type;
     void *vertex_data;  // raw pointer to vertex data
     int vertex_count;   // number of vertices to render
 
@@ -699,28 +714,6 @@ struct ra_renderpass_run_params {
 // Execute a render pass.
 void ra_renderpass_run(const struct ra *ra,
                        const struct ra_renderpass_run_params *params);
-
-// This is a fully opaque type representing an abstract timer query object.
-struct ra_timer;
-
-// Create a timer object. Returns NULL on failure, or if timers are
-// unavailable for some reason.
-struct ra_timer *ra_timer_create(const struct ra *ra);
-
-void ra_timer_destroy(const struct ra *ra, struct ra_timer **timer);
-
-// Start recording a timer. Note that valid usage requires you to pair every
-// start with a stop. Trying to start a timer twice, or trying to stop a timer
-// before having started it, consistutes invalid usage.
-void ra_timer_start(const struct ra *ra, struct ra_timer *timer);
-
-// Stop recording a timer. This also returns any results that have been
-// measured since the last usage of this ra_timer, in nanoseconds. It's
-// important to note that GPU timer measurement are asynchronous, so this
-// function does not always produce a value - and the values it does produce
-// are typically delayed by a few frames. When no value is available, this
-// returns 0.
-uint64_t ra_timer_stop(const struct ra *ra, struct ra_timer *timer);
 
 // This is semantically a no-op, but it provides a hint that you want to flush
 // any partially queued up commands and begin execution. There is normally no

@@ -44,14 +44,6 @@ struct ra_fns {
     RA_PFN(renderpass_run);
     RA_PFN(flush); // optional
 
-    // The following functions are all optional, but they must either all be
-    // supported or all be absent. They will never be called on NULL timers
-    // (the ra_timer_* wrappers check for this).
-    RA_PFN(timer_create);
-    RA_PFN(timer_start);
-    RA_PFN(timer_stop);
-    void (*timer_destroy)(const struct ra *, struct ra_timer *);
-
     // The following functions are optional if the corresponding ra_limit
     // size restriction is 0
     RA_PFN(buf_uniform_layout);
@@ -96,3 +88,6 @@ bool ra_tex_upload_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
                        const struct ra_tex_transfer_params *params);
 bool ra_tex_download_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
                          const struct ra_tex_transfer_params *params);
+
+struct ra_renderpass_params ra_renderpass_params_copy(void *tactx,
+                                    const struct ra_renderpass_params *params);

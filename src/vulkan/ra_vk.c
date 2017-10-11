@@ -289,15 +289,15 @@ struct ra_tex_vk {
     // the signal guards reuse, and can be NULL
     struct vk_signal *sig;
     VkPipelineStageFlags sig_stage;
-    VkSemaphore ext_dep; // external semaphore, not owned by the ra_tex
+    VkSemaphore *ext_deps; // external semaphore, not owned by the ra_tex
+    int num_ext_deps;
 };
 
 void ra_tex_vk_external_dep(const struct ra *ra, const struct ra_tex *tex,
                             VkSemaphore external_dep)
 {
     struct ra_tex_vk *tex_vk = tex->priv;
-    assert(!tex_vk->ext_dep);
-    tex_vk->ext_dep = external_dep;
+    TARRAY_APPEND(tex_vk, tex_vk->ext_deps, tex_vk->num_ext_deps, external_dep);
 }
 
 // Small helper to ease image barrier creation. if `discard` is set, the contents
@@ -309,10 +309,9 @@ static void tex_barrier(const struct ra *ra, struct vk_cmd *cmd,
     struct vk_ctx *vk = ra_vk_get(ra);
     struct ra_tex_vk *tex_vk = tex->priv;
 
-    if (tex_vk->ext_dep) {
-        vk_cmd_dep(cmd, tex_vk->ext_dep, stage);
-        tex_vk->ext_dep = NULL;
-    }
+    for (int i = 0; i < tex_vk->num_ext_deps; i++)
+        vk_cmd_dep(cmd, tex_vk->ext_deps[i], stage);
+    tex_vk->num_ext_deps = 0;
 
     VkImageMemoryBarrier imgBarrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -1056,9 +1055,6 @@ static int vk_desc_namespace(const struct ra *ra, enum ra_desc_type type)
     return type ? 0 : 1;
 }
 
-/*
-#define MPVK_NUM_DS MPVK_MAX_STREAMING_DEPTH
-
 // For ra_renderpass.priv
 struct ra_renderpass_vk {
     // Pipeline / render pass
@@ -1072,8 +1068,10 @@ struct ra_renderpass_vk {
     // Descriptor set (bindings)
     VkDescriptorSetLayout dsLayout;
     VkDescriptorPool dsPool;
-    VkDescriptorSet dss[MPVK_NUM_DS];
-    int dindex;
+    // To keep track of which descriptor sets are and aren't available, we
+    // allocate a fixed number and use a bitmask of all available sets.
+    VkDescriptorSet dss[16];
+    uint16_t dmask;
     // Vertex buffers (vertices)
     struct ra_buf_pool vbo;
 
@@ -1083,7 +1081,7 @@ struct ra_renderpass_vk {
     VkDescriptorBufferInfo *dsbinfo;
 };
 
-static void vk_renderpass_destroy(struct ra *ra, struct ra_renderpass *pass)
+static void vk_renderpass_destroy(const struct ra *ra, struct ra_renderpass *pass)
 {
     if (!pass)
         return;
@@ -1104,45 +1102,11 @@ static void vk_renderpass_destroy(struct ra *ra, struct ra_renderpass *pass)
 MAKE_LAZY_DESTRUCTOR(vk_renderpass_destroy, struct ra_renderpass);
 
 static const VkDescriptorType dsType[] = {
-    [RA_VARTYPE_TEX]    = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-    [RA_VARTYPE_IMG_W]  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-    [RA_VARTYPE_BUF_RO] = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-    [RA_VARTYPE_BUF_RW] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    [RA_DESC_SAMPLED_TEX] = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    [RA_DESC_STORAGE_IMG] = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+    [RA_DESC_BUF_UNIFORM] = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    [RA_DESC_BUF_STORAGE] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 };
-
-static bool vk_get_input_format(struct ra *ra, struct ra_renderpass_input *inp,
-                                VkFormat *out_fmt)
-{
-    struct vk_ctx *vk = ra_vk_get(ra);
-
-    enum ra_ctype ctype;
-    switch (inp->type) {
-    case RA_VARTYPE_FLOAT:      ctype = RA_CTYPE_FLOAT; break;
-    case RA_VARTYPE_BYTE_UNORM: ctype = RA_CTYPE_UNORM; break;
-    default: abort();
-    }
-
-    assert(inp->dim_m == 1);
-    for (const struct vk_format *fmt = vk_formats; fmt->name; fmt++) {
-        if (fmt->ctype != ctype)
-            continue;
-        if (fmt->components != inp->dim_v)
-            continue;
-        if (fmt->bytes != ra_renderpass_input_layout(inp).size)
-            continue;
-
-        // Ensure this format is valid for vertex attributes
-        VkFormatProperties prop;
-        vkGetPhysicalDeviceFormatProperties(vk->physd, fmt->ifmt, &prop);
-        if (!(prop.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT))
-            continue;
-
-        *out_fmt = fmt->ifmt;
-        return true;
-    }
-
-    return false;
-}
 
 static const char vk_cache_magic[4] = {'R','A','V','K'};
 static const int vk_cache_version = 2;
@@ -1165,7 +1129,11 @@ static bool vk_use_cached_program(const struct ra_renderpass_params *params,
                                   struct bstr *comp_spirv,
                                   struct bstr *pipecache)
 {
-    struct bstr cache = params->cached_program;
+    struct bstr cache = {
+        .start = (void*) params->cached_program,
+        .len   =params->cached_program_len,
+    };
+
     if (cache.len < sizeof(struct vk_cache_header))
         return false;
 
@@ -1194,18 +1162,11 @@ static bool vk_use_cached_program(const struct ra_renderpass_params *params,
     return true;
 }
 
-static VkResult vk_compile_glsl(struct ra *ra, void *tactx,
-                                enum glsl_shader type, const char *glsl,
+static VkResult vk_compile_glsl(const struct ra *ra, void *tactx,
+                                enum glsl_shader_stage type, const char *glsl,
                                 struct bstr *spirv)
 {
-    struct vk_ctx *vk = ra_vk_get(ra);
-    VkResult ret = VK_SUCCESS;
-    int msgl = MSGL_DEBUG;
-
-    if (!vk->spirv->fns->compile_glsl(vk->spirv, tactx, type, glsl, spirv)) {
-        ret = VK_ERROR_INVALID_SHADER_NV;
-        msgl = MSGL_ERR;
-    }
+    struct ra_vk *p = ra->priv;
 
     static const char *shader_names[] = {
         [GLSL_SHADER_VERTEX]   = "vertex",
@@ -1213,30 +1174,44 @@ static VkResult vk_compile_glsl(struct ra *ra, void *tactx,
         [GLSL_SHADER_COMPUTE]  = "compute",
     };
 
-    if (mp_msg_test(ra->log, msgl)) {
-        MP_MSG(ra, msgl, "%s shader source:\n", shader_names[type]);
-        mp_log_source(ra->log, msgl, glsl);
+    if (pl_msg_test(ra->ctx, PL_LOG_DEBUG)) {
+        PL_DEBUG(ra, "%s shader source:", shader_names[type]);
+        //pl_log_source(ra->ctx, PL_LOG_DEBUG, glsl);
     }
-    return ret;
+
+    if (!p->spirv->impl->compile_glsl(p->spirv, tactx, type, glsl, spirv)) {
+        PL_ERR(ra, "%s shader source:", shader_names[type]);
+        return VK_ERROR_INVALID_SHADER_NV;
+    }
+
+    return VK_SUCCESS;
 }
 
 static const VkShaderStageFlags stageFlags[] = {
-    [RA_RENDERPASS_TYPE_RASTER]  = VK_SHADER_STAGE_FRAGMENT_BIT,
-    [RA_RENDERPASS_TYPE_COMPUTE] = VK_SHADER_STAGE_COMPUTE_BIT,
+    [RA_RENDERPASS_RASTER]  = VK_SHADER_STAGE_FRAGMENT_BIT,
+    [RA_RENDERPASS_COMPUTE] = VK_SHADER_STAGE_COMPUTE_BIT,
 };
 
-static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
+static const struct ra_renderpass *vk_renderpass_create(const struct ra *ra,
                                     const struct ra_renderpass_params *params)
 {
     struct vk_ctx *vk = ra_vk_get(ra);
+    struct ra_vk *p = ra->priv;
     bool success = false;
-    assert(vk->spirv);
 
     struct ra_renderpass *pass = talloc_zero(NULL, struct ra_renderpass);
-    pass->params = *ra_renderpass_params_copy(pass, params);
-    pass->params.cached_program = (bstr){0};
+    pass->params = ra_renderpass_params_copy(pass, params);
+    pass->params.cached_program = NULL;
+    pass->params.cached_program_len = 0;
+
     struct ra_renderpass_vk *pass_vk = pass->priv =
         talloc_zero(pass, struct ra_renderpass_vk);
+    pass_vk->dmask = -1; // all descriptors available
+
+    int num_desc = params->num_descriptors;
+    pass_vk->dswrite = talloc_array(pass, VkWriteDescriptorSet, num_desc);
+    pass_vk->dsiinfo = talloc_array(pass, VkDescriptorImageInfo, num_desc);
+    pass_vk->dsbinfo = talloc_array(pass, VkDescriptorBufferInfo, num_desc);
 
     // temporary allocations/objects
     void *tmp = talloc_new(NULL);
@@ -1245,76 +1220,64 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
     VkShaderModule frag_shader = NULL;
     VkShaderModule comp_shader = NULL;
 
-    static int dsCount[RA_VARTYPE_COUNT] = {0};
-    VkDescriptorSetLayoutBinding *bindings = NULL;
-    int num_bindings = 0;
+#define NUM_DS (PL_ARRAY_SIZE(pass_vk->dss))
 
-    for (int i = 0; i < params->num_inputs; i++) {
-        struct ra_renderpass_input *inp = &params->inputs[i];
-        switch (inp->type) {
-        case RA_VARTYPE_TEX:
-        case RA_VARTYPE_IMG_W:
-        case RA_VARTYPE_BUF_RO:
-        case RA_VARTYPE_BUF_RW: {
-            VkDescriptorSetLayoutBinding desc = {
-                .binding = inp->binding,
-                .descriptorType = dsType[inp->type],
-                .descriptorCount = 1,
-                .stageFlags = stageFlags[params->type],
-            };
+    static int dsSize[RA_DESC_TYPE_COUNT] = {0};
+    VkDescriptorSetLayoutBinding *bindings =
+        talloc_array(tmp, VkDescriptorSetLayoutBinding, num_desc);
 
-            MP_TARRAY_APPEND(tmp, bindings, num_bindings, desc);
-            dsCount[inp->type]++;
-            break;
-        }
-        default: abort();
-        }
+    for (int i = 0; i < num_desc; i++) {
+        struct ra_desc *desc = &params->descriptors[i];
+
+        dsSize[desc->type]++;
+        bindings[i] = (VkDescriptorSetLayoutBinding) {
+            .binding = desc->binding,
+            .descriptorType = dsType[desc->type],
+            .descriptorCount = 1,
+            .stageFlags = stageFlags[params->type],
+        };
     }
 
     VkDescriptorPoolSize *dsPoolSizes = NULL;
     int poolSizeCount = 0;
 
-    for (enum ra_vartype t = 0; t < RA_VARTYPE_COUNT; t++) {
-        if (dsCount[t] > 0) {
+    for (enum ra_desc_type t = 0; t < RA_DESC_TYPE_COUNT; t++) {
+        if (dsSize[t] > 0) {
             VkDescriptorPoolSize dssize = {
                 .type = dsType[t],
-                .descriptorCount = dsCount[t] * MPVK_NUM_DS,
+                .descriptorCount = dsSize[t] * NUM_DS,
             };
 
-            MP_TARRAY_APPEND(tmp, dsPoolSizes, poolSizeCount, dssize);
+            TARRAY_APPEND(tmp, dsPoolSizes, poolSizeCount, dssize);
         }
     }
 
     VkDescriptorPoolCreateInfo pinfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = MPVK_NUM_DS,
+        .maxSets = NUM_DS,
         .pPoolSizes = dsPoolSizes,
         .poolSizeCount = poolSizeCount,
     };
 
     VK(vkCreateDescriptorPool(vk->dev, &pinfo, VK_ALLOC, &pass_vk->dsPool));
 
-    pass_vk->dswrite = talloc_array(pass, VkWriteDescriptorSet, num_bindings);
-    pass_vk->dsiinfo = talloc_array(pass, VkDescriptorImageInfo, num_bindings);
-    pass_vk->dsbinfo = talloc_array(pass, VkDescriptorBufferInfo, num_bindings);
-
     VkDescriptorSetLayoutCreateInfo dinfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .pBindings = bindings,
-        .bindingCount = num_bindings,
+        .bindingCount = num_desc,
     };
 
     VK(vkCreateDescriptorSetLayout(vk->dev, &dinfo, VK_ALLOC,
                                    &pass_vk->dsLayout));
 
-    VkDescriptorSetLayout layouts[MPVK_NUM_DS];
-    for (int i = 0; i < MPVK_NUM_DS; i++)
+    VkDescriptorSetLayout layouts[NUM_DS];
+    for (int i = 0; i < NUM_DS; i++)
         layouts[i] = pass_vk->dsLayout;
 
     VkDescriptorSetAllocateInfo ainfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = pass_vk->dsPool,
-        .descriptorSetCount = MPVK_NUM_DS,
+        .descriptorSetCount = NUM_DS,
         .pSetLayouts = layouts,
     };
 
@@ -1336,24 +1299,25 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
                               &pass_vk->pipeLayout));
 
     struct bstr vert = {0}, frag = {0}, comp = {0}, pipecache = {0};
-    if (vk_use_cached_program(params, vk->spirv, &vert, &frag, &comp, &pipecache)) {
-        MP_VERBOSE(ra, "Using cached SPIR-V and VkPipeline.\n");
+    if (vk_use_cached_program(params, p->spirv, &vert, &frag, &comp, &pipecache)) {
+        PL_DEBUG(ra, "Using cached SPIR-V and VkPipeline");
     } else {
         pipecache.len = 0;
         switch (params->type) {
-        case RA_RENDERPASS_TYPE_RASTER:
+        case RA_RENDERPASS_RASTER:
             VK(vk_compile_glsl(ra, tmp, GLSL_SHADER_VERTEX,
                                params->vertex_shader, &vert));
             VK(vk_compile_glsl(ra, tmp, GLSL_SHADER_FRAGMENT,
-                               params->frag_shader, &frag));
+                               params->glsl_shader, &frag));
             comp.len = 0;
             break;
-        case RA_RENDERPASS_TYPE_COMPUTE:
+        case RA_RENDERPASS_COMPUTE:
             VK(vk_compile_glsl(ra, tmp, GLSL_SHADER_COMPUTE,
-                               params->compute_shader, &comp));
+                               params->glsl_shader, &comp));
             frag.len = 0;
             vert.len = 0;
             break;
+        default: abort();
         }
     }
 
@@ -1370,12 +1334,12 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
     };
 
     switch (params->type) {
-    case RA_RENDERPASS_TYPE_RASTER: {
-        sinfo.pCode = (uint32_t *)vert.start;
+    case RA_RENDERPASS_RASTER: {
+        sinfo.pCode = (uint32_t *) vert.start;
         sinfo.codeSize = vert.len;
         VK(vkCreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &vert_shader));
 
-        sinfo.pCode = (uint32_t *)frag.start;
+        sinfo.pCode = (uint32_t *) frag.start;
         sinfo.codeSize = frag.len;
         VK(vkCreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &frag_shader));
 
@@ -1383,18 +1347,15 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
                 VkVertexInputAttributeDescription, params->num_vertex_attribs);
 
         for (int i = 0; i < params->num_vertex_attribs; i++) {
-            struct ra_renderpass_input *inp = &params->vertex_attribs[i];
-            attrs[i] = (VkVertexInputAttributeDescription) {
-                .location = i,
-                .binding = 0,
-                .offset = inp->offset,
-            };
+            struct ra_vertex_attrib *va = &params->vertex_attribs[i];
+            const struct vk_format *fmt_vk = va->fmt->priv;
 
-            if (!vk_get_input_format(ra, inp, &attrs[i].format)) {
-                MP_ERR(ra, "No suitable VkFormat for vertex attrib '%s'!\n",
-                       inp->name);
-                goto error;
-            }
+            attrs[i] = (VkVertexInputAttributeDescription) {
+                .binding  = 0,
+                .location = va->location,
+                .offset   = va->offset,
+                .format   = fmt_vk->ifmt,
+            };
         }
 
         // This is the most common case, so optimize towards it. In this case,
@@ -1410,8 +1371,8 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
         if (pass->params.enable_blend)
             loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 
-        // If we're invalidating the target, we don't need to load or transition
-        if (pass->params.invalidate_target) {
+        // If we're ignoring the FBO, we don't need to load or transition
+        if (!pass->params.load_target) {
             pass_vk->initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             pass_vk->initialAccess = 0;
             loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1426,6 +1387,12 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
             [RA_BLEND_ONE]                 = VK_BLEND_FACTOR_ONE,
             [RA_BLEND_SRC_ALPHA]           = VK_BLEND_FACTOR_SRC_ALPHA,
             [RA_BLEND_ONE_MINUS_SRC_ALPHA] = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        };
+
+        static const VkPrimitiveTopology topologies[] = {
+            [RA_PRIM_TRIANGLE_LIST]  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            [RA_PRIM_TRIANGLE_STRIP] = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+            [RA_PRIM_TRIANGLE_FAN]   = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
         };
 
         VkGraphicsPipelineCreateInfo cinfo = {
@@ -1457,7 +1424,7 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
             },
             .pInputAssemblyState = &(VkPipelineInputAssemblyStateCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-                .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                .topology = topologies[params->vertex_type],
             },
             .pViewportState = &(VkPipelineViewportStateCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -1507,7 +1474,7 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
                                      VK_ALLOC, &pass_vk->pipe));
         break;
     }
-    case RA_RENDERPASS_TYPE_COMPUTE: {
+    case RA_RENDERPASS_COMPUTE: {
         sinfo.pCode = (uint32_t *)comp.start;
         sinfo.codeSize = comp.len;
         VK(vkCreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &comp_shader));
@@ -1527,6 +1494,7 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
                                     VK_ALLOC, &pass_vk->pipe));
         break;
     }
+    default: abort();
     }
 
     // Update params->cached_program
@@ -1537,24 +1505,26 @@ static struct ra_renderpass *vk_renderpass_create(struct ra *ra,
 
     struct vk_cache_header header = {
         .cache_version = vk_cache_version,
-        .compiler_version = vk->spirv->compiler_version,
+        .compiler_version = p->spirv->compiler_version,
         .vert_spirv_len = vert.len,
         .frag_spirv_len = frag.len,
         .comp_spirv_len = comp.len,
         .pipecache_len = cache.len,
     };
 
-    for (int i = 0; i < MP_ARRAY_SIZE(header.magic); i++)
+    for (int i = 0; i < PL_ARRAY_SIZE(header.magic); i++)
         header.magic[i] = vk_cache_magic[i];
-    for (int i = 0; i < sizeof(vk->spirv->name); i++)
-        header.compiler[i] = vk->spirv->name[i];
+    for (int i = 0; i < sizeof(p->spirv->name); i++)
+        header.compiler[i] = p->spirv->name[i];
 
-    struct bstr *prog = &pass->params.cached_program;
-    bstr_xappend(pass, prog, (struct bstr){ (char *) &header, sizeof(header) });
-    bstr_xappend(pass, prog, vert);
-    bstr_xappend(pass, prog, frag);
-    bstr_xappend(pass, prog, comp);
-    bstr_xappend(pass, prog, cache);
+    struct bstr prog = {0};
+    bstr_xappend(pass, &prog, (struct bstr){ (char *) &header, sizeof(header) });
+    bstr_xappend(pass, &prog, vert);
+    bstr_xappend(pass, &prog, frag);
+    bstr_xappend(pass, &prog, comp);
+    bstr_xappend(pass, &prog, cache);
+    pass->params.cached_program = prog.start;
+    pass->params.cached_program_len = prog.len;
 
     success = true;
 
@@ -1563,6 +1533,8 @@ error:
         vk_renderpass_destroy(ra, pass);
         pass = NULL;
     }
+
+#undef NUM_DS
 
     vkDestroyShaderModule(vk->dev, vert_shader, VK_ALLOC);
     vkDestroyShaderModule(vk->dev, frag_shader, VK_ALLOC);
@@ -1573,36 +1545,44 @@ error:
 }
 
 static const VkPipelineStageFlags passStages[] = {
-    [RA_RENDERPASS_TYPE_RASTER]  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-    [RA_RENDERPASS_TYPE_COMPUTE] = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+    [RA_RENDERPASS_RASTER]  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+    [RA_RENDERPASS_COMPUTE] = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 };
 
-static void vk_update_descriptor(struct ra *ra, struct vk_cmd *cmd,
-                                 struct ra_renderpass *pass,
-                                 struct ra_renderpass_input_val val,
+static void vk_update_descriptor(const struct ra *ra, struct vk_cmd *cmd,
+                                 const struct ra_renderpass *pass,
+                                 struct ra_desc_binding db,
                                  VkDescriptorSet ds, int idx)
 {
     struct ra_renderpass_vk *pass_vk = pass->priv;
-    struct ra_renderpass_input *inp = &pass->params.inputs[val.index];
+    struct ra_desc *desc = &pass->params.descriptors[idx];
 
     VkWriteDescriptorSet *wds = &pass_vk->dswrite[idx];
     *wds = (VkWriteDescriptorSet) {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstSet = ds,
-        .dstBinding = inp->binding,
+        .dstBinding = desc->binding,
         .descriptorCount = 1,
-        .descriptorType = dsType[inp->type],
+        .descriptorType = dsType[desc->type],
     };
 
-    switch (inp->type) {
-    case RA_VARTYPE_TEX: {
-        struct ra_tex *tex = *(struct ra_tex **)val.data;
+    VkAccessFlags access = 0;
+    switch (desc->access) {
+    case RA_DESC_ACCESS_READONLY:  access = VK_ACCESS_SHADER_READ_BIT; break;
+    case RA_DESC_ACCESS_WRITEONLY: access = VK_ACCESS_SHADER_WRITE_BIT; break;
+    case RA_DESC_ACCESS_READWRITE:
+        access = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        break;
+    }
+
+    switch (desc->type) {
+    case RA_DESC_SAMPLED_TEX: {
+        const struct ra_tex *tex = db.object;
         struct ra_tex_vk *tex_vk = tex->priv;
 
-        assert(tex->params.render_src);
         tex_barrier(ra, cmd, tex, passStages[pass->params.type],
                     VK_ACCESS_SHADER_READ_BIT,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false);
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         VkDescriptorImageInfo *iinfo = &pass_vk->dsiinfo[idx];
         *iinfo = (VkDescriptorImageInfo) {
@@ -1614,14 +1594,12 @@ static void vk_update_descriptor(struct ra *ra, struct vk_cmd *cmd,
         wds->pImageInfo = iinfo;
         break;
     }
-    case RA_VARTYPE_IMG_W: {
-        struct ra_tex *tex = *(struct ra_tex **)val.data;
+    case RA_DESC_STORAGE_IMG: {
+        const struct ra_tex *tex = db.object;
         struct ra_tex_vk *tex_vk = tex->priv;
 
-        assert(tex->params.storage_dst);
-        tex_barrier(ra, cmd, tex, passStages[pass->params.type],
-                    VK_ACCESS_SHADER_WRITE_BIT,
-                    VK_IMAGE_LAYOUT_GENERAL, false);
+        tex_barrier(ra, cmd, tex, passStages[pass->params.type], access,
+                    VK_IMAGE_LAYOUT_GENERAL);
 
         VkDescriptorImageInfo *iinfo = &pass_vk->dsiinfo[idx];
         *iinfo = (VkDescriptorImageInfo) {
@@ -1632,14 +1610,10 @@ static void vk_update_descriptor(struct ra *ra, struct vk_cmd *cmd,
         wds->pImageInfo = iinfo;
         break;
     }
-    case RA_VARTYPE_BUF_RO:
-    case RA_VARTYPE_BUF_RW: {
-        struct ra_buf *buf = *(struct ra_buf **)val.data;
+    case RA_DESC_BUF_UNIFORM:
+    case RA_DESC_BUF_STORAGE: {
+        const struct ra_buf *buf = db.object;
         struct ra_buf_vk *buf_vk = buf->priv;
-
-        VkBufferUsageFlags access = VK_ACCESS_SHADER_READ_BIT;
-        if (inp->type == RA_VARTYPE_BUF_RW)
-            access |= VK_ACCESS_SHADER_WRITE_BIT;
 
         buf_barrier(ra, cmd, buf, passStages[pass->params.type],
                     access, buf_vk->slice.mem.offset, buf->params.size);
@@ -1654,57 +1628,81 @@ static void vk_update_descriptor(struct ra *ra, struct vk_cmd *cmd,
         wds->pBufferInfo = binfo;
         break;
     }
+    default: abort();
     }
 }
 
-static void vk_release_descriptor(struct ra *ra, struct vk_cmd *cmd,
-                                  struct ra_renderpass *pass,
-                                  struct ra_renderpass_input_val val)
+static void vk_release_descriptor(const struct ra *ra, struct vk_cmd *cmd,
+                                  const struct ra_renderpass *pass,
+                                  struct ra_desc_binding db, int idx)
 {
-    struct ra_renderpass_input *inp = &pass->params.inputs[val.index];
+    const struct ra_desc *desc = &pass->params.descriptors[idx];
 
-    switch (inp->type) {
-    case RA_VARTYPE_IMG_W:
-    case RA_VARTYPE_TEX: {
-        struct ra_tex *tex = *(struct ra_tex **)val.data;
+    switch (desc->type) {
+    case RA_DESC_SAMPLED_TEX:
+    case RA_DESC_STORAGE_IMG: {
+        const struct ra_tex *tex = db.object;
         tex_signal(ra, cmd, tex, passStages[pass->params.type]);
         break;
     }
+    default: break;
     }
 }
 
-static void vk_renderpass_run(struct ra *ra,
+static void set_ds(struct ra_renderpass_vk *pass_vk, uintptr_t dsbit)
+{
+    pass_vk->dmask |= dsbit;
+}
+
+static void vk_renderpass_run(const struct ra *ra,
                               const struct ra_renderpass_run_params *params)
 {
     struct vk_ctx *vk = ra_vk_get(ra);
-    struct ra_renderpass *pass = params->pass;
+    const struct ra_renderpass *pass = params->pass;
     struct ra_renderpass_vk *pass_vk = pass->priv;
 
     static const enum queue_type types[] = {
-        [RA_RENDERPASS_TYPE_RASTER]  = GRAPHICS,
-        [RA_RENDERPASS_TYPE_COMPUTE] = COMPUTE,
+        [RA_RENDERPASS_RASTER]  = GRAPHICS,
+        [RA_RENDERPASS_COMPUTE] = COMPUTE,
     };
+
+    // Wait for a free descriptor set
+    while (!pass_vk->dmask) {
+        PL_TRACE(ra, "No free descriptor sets! ...blocking (slow path)");
+        vk_submit(ra);
+        vk_poll_commands(vk, 1000000); // 1ms
+    }
 
     struct vk_cmd *cmd = vk_require_cmd(ra, types[pass->params.type]);
     if (!cmd)
         goto error;
 
     static const VkPipelineBindPoint bindPoint[] = {
-        [RA_RENDERPASS_TYPE_RASTER]  = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        [RA_RENDERPASS_TYPE_COMPUTE] = VK_PIPELINE_BIND_POINT_COMPUTE,
+        [RA_RENDERPASS_RASTER]  = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        [RA_RENDERPASS_COMPUTE] = VK_PIPELINE_BIND_POINT_COMPUTE,
     };
 
     vkCmdBindPipeline(cmd->buf, bindPoint[pass->params.type], pass_vk->pipe);
 
-    VkDescriptorSet ds = pass_vk->dss[pass_vk->dindex++];
-    pass_vk->dindex %= MPVK_NUM_DS;
+    VkDescriptorSet ds = NULL;
+    for (int i = 0; i < PL_ARRAY_SIZE(pass_vk->dss); i++) {
+        uint16_t dsbit = 1u << i;
+        if (pass_vk->dmask & dsbit) {
+            ds = pass_vk->dss[i];
+            pass_vk->dmask &= ~dsbit; // unset
+            vk_cmd_callback(cmd, (vk_cb) set_ds, pass_vk,
+                            (void *)(uintptr_t) dsbit);
+            break;
+        }
+    }
 
-    for (int i = 0; i < params->num_values; i++)
-        vk_update_descriptor(ra, cmd, pass, params->values[i], ds, i);
+    assert(ds);
+    for (int i = 0; i < pass->params.num_descriptors; i++)
+        vk_update_descriptor(ra, cmd, pass, params->desc_bindings[i], ds, i);
 
-    if (params->num_values > 0) {
-        vkUpdateDescriptorSets(vk->dev, params->num_values, pass_vk->dswrite,
-                               0, NULL);
+    if (pass->params.num_descriptors > 0) {
+        vkUpdateDescriptorSets(vk->dev, pass->params.num_descriptors,
+                               pass_vk->dswrite, 0, NULL);
     }
 
     vkCmdBindDescriptorSets(cmd->buf, bindPoint[pass->params.type],
@@ -1718,53 +1716,46 @@ static void vk_renderpass_run(struct ra *ra,
     }
 
     switch (pass->params.type) {
-    case RA_RENDERPASS_TYPE_COMPUTE:
-        vkCmdDispatch(cmd->buf, params->compute_groups[0],
-                      params->compute_groups[1],
-                      params->compute_groups[2]);
-        break;
-    case RA_RENDERPASS_TYPE_RASTER: {
-        struct ra_tex *tex = params->target;
+    case RA_RENDERPASS_RASTER: {
+        const struct ra_tex *tex = params->target;
         struct ra_tex_vk *tex_vk = tex->priv;
-        assert(tex->params.render_dst);
 
-        struct ra_buf_params buf_params = {
-            .type = RA_BUF_TYPE_VERTEX,
+        struct ra_buf_params vparams = {
+            .type = RA_VK_BUF_VERTEX,
             .size = params->vertex_count * pass->params.vertex_stride,
-            .host_mutable = true,
+            .host_writable = true,
         };
 
-        struct ra_buf *buf = ra_buf_pool_get(ra, &pass_vk->vbo, &buf_params);
+        const struct ra_buf *buf = ra_buf_pool_get(ra, &pass_vk->vbo, &vparams);
         if (!buf) {
-            MP_ERR(ra, "Failed allocating vertex buffer!\n");
+            PL_ERR(ra, "Failed allocating vertex buffer!");
             goto error;
         }
-        struct ra_buf_vk *buf_vk = buf->priv;
 
-        vk_buf_update(ra, buf, 0, params->vertex_data, buf_params.size);
+        struct ra_buf_vk *buf_vk = buf->priv;
+        vk_buf_write(ra, buf, 0, params->vertex_data, vparams.size);
 
         buf_barrier(ra, cmd, buf, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
                     VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
-                    buf_vk->slice.mem.offset, buf_params.size);
+                    buf_vk->slice.mem.offset, vparams.size);
 
         vkCmdBindVertexBuffers(cmd->buf, 0, 1, &buf_vk->slice.buf,
                                &buf_vk->slice.mem.offset);
 
         // The renderpass expects the images to be in a certain layout
         tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                    pass_vk->initialAccess, pass_vk->initialLayout,
-                    pass->params.invalidate_target);
+                    pass_vk->initialAccess, pass_vk->initialLayout);
 
         VkViewport viewport = {
             .x = params->viewport.x0,
             .y = params->viewport.y0,
-            .width  = mp_rect_w(params->viewport),
-            .height = mp_rect_h(params->viewport),
+            .width  = pl_rect_w(params->viewport),
+            .height = pl_rect_h(params->viewport),
         };
 
         VkRect2D scissor = {
             .offset = {params->scissors.x0, params->scissors.y0},
-            .extent = {mp_rect_w(params->scissors), mp_rect_h(params->scissors)},
+            .extent = {pl_rect_w(params->scissors), pl_rect_h(params->scissors)},
         };
 
         vkCmdSetViewport(cmd->buf, 0, 1, &viewport);
@@ -1787,110 +1778,31 @@ static void vk_renderpass_run(struct ra *ra,
         tex_signal(ra, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         break;
     }
+    case RA_RENDERPASS_COMPUTE:
+        vkCmdDispatch(cmd->buf, params->compute_groups[0],
+                      params->compute_groups[1],
+                      params->compute_groups[2]);
+        break;
     default: abort();
     };
 
-    for (int i = 0; i < params->num_values; i++)
-        vk_release_descriptor(ra, cmd, pass, params->values[i]);
+    for (int i = 0; i < pass->params.num_descriptors; i++)
+        vk_release_descriptor(ra, cmd, pass, params->desc_bindings[i], i);
 
-    // flush the work so far into its own command buffer, for better cross-frame
-    // granularity
+    // flush the work so far into its own command buffer, for better
+    // intra-frame granularity
     vk_submit(ra);
 
 error:
     return;
 }
 
-#define VK_QUERY_POOL_SIZE (MPVK_MAX_STREAMING_DEPTH * 4)
-
-struct vk_timer {
-    VkQueryPool pool;
-    int index;
-    uint64_t result;
-};
-
-static void vk_timer_destroy(struct ra *ra, ra_timer *ratimer)
-{
-    if (!ratimer)
-        return;
-
-    struct vk_ctx *vk = ra_vk_get(ra);
-    struct vk_timer *timer = ratimer;
-
-    vkDestroyQueryPool(vk->dev, timer->pool, VK_ALLOC);
-
-    talloc_free(timer);
-}
-
-MAKE_LAZY_DESTRUCTOR(vk_timer_destroy, ra_timer);
-
-static ra_timer *vk_timer_create(struct ra *ra)
+static void vk_flush(const struct ra *ra)
 {
     struct vk_ctx *vk = ra_vk_get(ra);
-
-    struct vk_timer *timer = talloc_zero(NULL, struct vk_timer);
-
-    struct VkQueryPoolCreateInfo qinfo = {
-        .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
-        .queryType = VK_QUERY_TYPE_TIMESTAMP,
-        .queryCount = VK_QUERY_POOL_SIZE,
-    };
-
-    VK(vkCreateQueryPool(vk->dev, &qinfo, VK_ALLOC, &timer->pool));
-
-    return (ra_timer *)timer;
-
-error:
-    vk_timer_destroy(ra, timer);
-    return NULL;
+    vk_submit(ra);
+    vk_flush_commands(vk);
 }
-
-static void vk_timer_record(struct ra *ra, VkQueryPool pool, int index,
-                            VkPipelineStageFlags stage)
-{
-    struct vk_cmd *cmd = vk_require_cmd(ra, GRAPHICS);
-    if (!cmd)
-        return;
-
-    vkCmdWriteTimestamp(cmd->buf, stage, pool, index);
-}
-
-static void vk_timer_start(struct ra *ra, ra_timer *ratimer)
-{
-    struct vk_ctx *vk = ra_vk_get(ra);
-    struct vk_timer *timer = ratimer;
-
-    timer->index = (timer->index + 2) % VK_QUERY_POOL_SIZE;
-
-    uint64_t out[2];
-    VkResult res = vkGetQueryPoolResults(vk->dev, timer->pool, timer->index, 2,
-                                         sizeof(out), &out[0], sizeof(uint64_t),
-                                         VK_QUERY_RESULT_64_BIT);
-    switch (res) {
-    case VK_SUCCESS:
-        timer->result = (out[1] - out[0]) * vk->limits.timestampPeriod;
-        break;
-    case VK_NOT_READY:
-        timer->result = 0;
-        break;
-    default:
-        MP_WARN(vk, "Failed reading timer query result: %s\n", vk_err(res));
-        return;
-    };
-
-    vk_timer_record(ra, timer->pool, timer->index,
-                    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
-}
-
-static uint64_t vk_timer_stop(struct ra *ra, ra_timer *ratimer)
-{
-    struct vk_timer *timer = ratimer;
-    vk_timer_record(ra, timer->pool, timer->index + 1,
-                    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
-
-    return timer->result;
-}
-*/
 
 static struct ra_fns ra_fns_vk = {
     .destroy                = vk_destroy_ra,
@@ -1910,20 +1822,13 @@ static struct ra_fns ra_fns_vk = {
     .buf_storage_layout     = std430_layout,
     .push_constant_layout   = std430_layout,
     .desc_namespace         = vk_desc_namespace,
-/*
     .renderpass_create      = vk_renderpass_create,
     .renderpass_destroy     = vk_renderpass_destroy_lazy,
     .renderpass_run         = vk_renderpass_run,
     .flush                  = vk_flush,
-    .timer_create           = vk_timer_create,
-    .timer_destroy          = vk_timer_destroy_lazy,
-    .timer_start            = vk_timer_start,
-    .timer_stop             = vk_timer_stop,
-*/
 };
 
-/*
-struct vk_cmd *ra_vk_submit(struct ra *ra, struct ra_tex *tex)
+struct vk_cmd *ra_vk_finish_frame(const struct ra *ra, const struct ra_tex *tex)
 {
     struct ra_vk *p = ra->priv;
     struct vk_cmd *cmd = vk_require_cmd(ra, GRAPHICS);
@@ -1933,11 +1838,9 @@ struct vk_cmd *ra_vk_submit(struct ra *ra, struct ra_tex *tex)
     struct ra_tex_vk *tex_vk = tex->priv;
     assert(tex_vk->external_img);
     tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                false);
+                VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     // Return this directly instead of going through vk_submit
     p->cmd = NULL;
     return cmd;
 }
-*/

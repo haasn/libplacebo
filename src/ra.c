@@ -535,29 +535,28 @@ void ra_renderpass_run(const struct ra *ra,
     struct ra_renderpass *pass = params->pass;
 
 #ifndef NDEBUG
-    for (int i = 0; i < params->num_desc_updates; i++) {
-        struct ra_desc_update du = params->desc_updates[i];
-        assert(du.index >= 0 && du.index < pass->params.num_descriptors);
-
-        struct ra_desc desc = pass->params.descriptors[du.index];
+    for (int i = 0; i < pass->params.num_descriptors; i++) {
+        struct ra_desc desc = pass->params.descriptors[i];
+        struct ra_desc_binding db = params->desc_bindings[i];
+        assert(db.object);
         switch (desc.type) {
         case RA_DESC_SAMPLED_TEX: {
-            struct ra_tex *tex = du.binding;
+            const struct ra_tex *tex = db.object;
             assert(tex->params.sampleable);
             break;
         }
         case RA_DESC_STORAGE_IMG: {
-            struct ra_tex *tex = du.binding;
+            const struct ra_tex *tex = db.object;
             assert(tex->params.storable);
             break;
         }
         case RA_DESC_BUF_UNIFORM: {
-            struct ra_buf *buf = du.binding;
+            const struct ra_buf *buf = db.object;
             assert(buf->params.type == RA_BUF_UNIFORM);
             break;
         }
         case RA_DESC_BUF_STORAGE: {
-            struct ra_buf *buf = du.binding;
+            const struct ra_buf *buf = db.object;
             assert(buf->params.type == RA_BUF_STORAGE);
             break;
         }
@@ -567,6 +566,7 @@ void ra_renderpass_run(const struct ra *ra,
 
     for (int i = 0; i < params->num_var_updates; i++) {
         struct ra_var_update vu = params->var_updates[i];
+        assert(ra->caps & RA_CAP_INPUT_VARIABLES);
         assert(vu.index >= 0 && vu.index < pass->params.num_variables);
         assert(vu.data);
     }
@@ -580,6 +580,10 @@ void ra_renderpass_run(const struct ra *ra,
         assert(ra_tex_params_dimension(tex->params) == 2);
         assert(tex->params.format == pass->params.target_format);
         assert(tex->params.renderable);
+        struct pl_rect2d vp = params->viewport;
+        struct pl_rect2d sc = params->scissors;
+        assert(pl_rect2d_eq(vp, pl_rect2d_normalize(vp)));
+        assert(pl_rect2d_eq(sc, pl_rect2d_normalize(sc)));
         break;
     }
     case RA_RENDERPASS_COMPUTE:
@@ -596,31 +600,6 @@ void ra_renderpass_run(const struct ra *ra,
         ra_tex_invalidate(ra, params->target);
 
     return ra->impl->renderpass_run(ra, params);
-}
-
-struct ra_timer *ra_timer_create(const struct ra *ra)
-{
-    return ra->impl->timer_create ? ra->impl->timer_create(ra) : NULL;
-}
-
-void ra_timer_destroy(const struct ra *ra, struct ra_timer **timer)
-{
-    if (!*timer)
-        return;
-
-    ra->impl->timer_destroy(ra, *timer);
-    *timer = NULL;
-}
-
-void ra_timer_start(const struct ra *ra, struct ra_timer *timer)
-{
-    if (timer)
-        ra->impl->timer_start(ra, timer);
-}
-
-uint64_t ra_timer_stop(const struct ra *ra, struct ra_timer *timer)
-{
-    return timer ? ra->impl->timer_stop(ra, timer) : 0;
 }
 
 void ra_flush(const struct ra *ra)
@@ -788,4 +767,12 @@ bool ra_tex_download_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
     }
 
     return ra_buf_read(ra, buf, 0, params->ptr, bufparams.size);
+}
+
+struct ra_renderpass_params ra_renderpass_params_copy(void *tactx,
+                                    const struct ra_renderpass_params *params)
+{
+    struct ra_renderpass_params new = *params;
+    // FIXME: implement
+    return new;
 }
