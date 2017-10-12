@@ -352,6 +352,7 @@ const struct ra_buf *ra_buf_create(const struct ra *ra,
         assert(ra->limits.max_ssbo_size);
         assert(params->size <= ra->limits.max_ssbo_size);
         break;
+    case RA_BUF_PRIVATE: break;
     default: abort();
     }
 
@@ -528,9 +529,10 @@ const struct ra_pass *ra_pass_create(const struct ra *ra,
             assert(va.offset + va.fmt->texel_size <= params->vertex_stride);
         }
 
-        assert(params->target_fmt);
-        assert(params->target_fmt->caps & RA_FMT_CAP_RENDERABLE);
-        assert(!params->enable_blend || params->target_fmt->caps & RA_FMT_CAP_BLENDABLE);
+        const struct ra_fmt *target_fmt = params->target_params.format;
+        assert(target_fmt);
+        assert(target_fmt->caps & RA_FMT_CAP_RENDERABLE);
+        assert(!params->enable_blend || target_fmt->caps & RA_FMT_CAP_BLENDABLE);
         break;
     case RA_PASS_COMPUTE:
         assert(ra->caps & RA_CAP_COMPUTE);
@@ -566,9 +568,24 @@ void ra_pass_destroy(const struct ra *ra, const struct ra_pass **pass)
     *pass = NULL;
 }
 
+static bool ra_tex_params_compat(const struct ra_tex_params a,
+                                const struct ra_tex_params b)
+{
+    return a.format         == b.format &&
+           a.sampleable     == b.sampleable &&
+           a.renderable     == b.renderable &&
+           a.storable       == b.storable &&
+           a.blit_src       == b.blit_src &&
+           a.blit_dst       == b.blit_dst &&
+           a.host_writable  == b.host_writable &&
+           a.host_readable  == b.host_readable &&
+           a.sample_mode    == b.sample_mode &&
+           a.address_mode   == b.address_mode;
+}
+
 void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params)
 {
-    struct ra_pass *pass = params->pass;
+    const struct ra_pass *pass = params->pass;
 
 #ifndef NDEBUG
     for (int i = 0; i < pass->params.num_descriptors; i++) {
@@ -611,10 +628,21 @@ void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params)
 
     switch (pass->params.type) {
     case RA_PASS_RASTER: {
-        struct ra_tex *tex = params->target;
+        assert(params->vertex_data);
+        switch (pass->params.vertex_type) {
+        case RA_PRIM_TRIANGLE_LIST:
+            assert(params->vertex_count % 3 == 0);
+            // fall through
+        case RA_PRIM_TRIANGLE_STRIP:
+        case RA_PRIM_TRIANGLE_FAN:
+            assert(params->vertex_count >= 3);
+            break;
+        }
+
+        const struct ra_tex *tex = params->target;
         assert(tex);
         assert(ra_tex_params_dimension(tex->params) == 2);
-        assert(tex->params.format == pass->params.target_fmt);
+        assert(ra_tex_params_compat(tex->params, pass->params.target_params));
         assert(tex->params.renderable);
         struct pl_rect2d vp = params->viewport;
         struct pl_rect2d sc = params->scissors;
@@ -635,7 +663,19 @@ void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params)
     if (params->target && !pass->params.load_target)
         ra_tex_invalidate(ra, params->target);
 
-    return ra->impl->pass_run(ra, params);
+    // Sanitize viewport/scissors
+    struct ra_pass_run_params fixed = *params;
+    if (!fixed.viewport.x1)
+        fixed.viewport.x1 = params->target->params.w;
+    if (!fixed.viewport.y1)
+        fixed.viewport.y1 = params->target->params.h;
+
+    if (!fixed.scissors.x1)
+        fixed.scissors.x1 = params->target->params.w;
+    if (!fixed.scissors.y1)
+        fixed.scissors.y1 = params->target->params.h;
+
+    return ra->impl->pass_run(ra, &fixed);
 }
 
 void ra_flush(const struct ra *ra)

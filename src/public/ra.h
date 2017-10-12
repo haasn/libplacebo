@@ -626,11 +626,14 @@ struct ra_pass_params {
     // The vertex shader itself.
     const char *vertex_shader;
 
-    // Format of the target texture. Must have `renderable` set.
-    const struct ra_fmt *target_fmt;
+    // Parameters of the target texture. This determines the texture
+    // capabilities the render pass is designed for. Note: The dimensions
+    // of the target are ignored, only the format and capabilities matter.
+    // The format must have RA_FMT_CAP_RENDERABLE.
+    struct ra_tex_params target_params;
 
-    // Target blending mode. If `enable_blend` is true, target_fmt must have
-    // RA_FMT_CAP_BLENDABLE. Otherwise, the fields are ignored.
+    // Target blending mode. If `enable_blend` is true, target_params.format
+    // must have RA_FMT_CAP_BLENDABLE. Otherwise, the fields are ignored.
     bool enable_blend;
     enum ra_blend_mode blend_src_rgb;
     enum ra_blend_mode blend_dst_rgb;
@@ -675,7 +678,7 @@ struct ra_var_update {
 };
 
 struct ra_pass_run_params {
-    struct ra_pass *pass;
+    const struct ra_pass *pass;
 
     // This list only contains descriptors/variables which have changed
     // since the previous invocation. All non-mentioned variables implicitly
@@ -695,8 +698,9 @@ struct ra_pass_run_params {
     // --- pass->params.type==RA_PASS_RASTER only
 
     // Target must be a 2D texture, target->params.renderable must be true, and
-    // target->params.format must match pass->params.target_fmt.
-    struct ra_tex *target;
+    // target->params.format must match pass->params.target_fmt. If the viewport
+    // or scissors are left blank, they are inferred from target->params.
+    const struct ra_tex *target;
     struct pl_rect2d viewport; // screen space viewport (must be normalized)
     struct pl_rect2d scissors; // target render scissors (must be normalized)
 

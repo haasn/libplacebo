@@ -1372,12 +1372,33 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
             };
         }
 
-        // This is the most common case, so optimize towards it. In this case,
-        // the renderpass will take care of almost all layout transitions
-        pass_vk->initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        pass_vk->initialAccess = VK_ACCESS_SHADER_READ_BIT;
-        pass_vk->finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        pass_vk->finalAccess = VK_ACCESS_SHADER_READ_BIT;
+        VkImageLayout nextLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        VkAccessFlags nextAccess = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+        // Figure out which case we should try and optimize for
+        if (params->target_params.storable) {
+            nextLayout = VK_IMAGE_LAYOUT_GENERAL;
+            nextAccess = VK_ACCESS_SHADER_WRITE_BIT;
+        }
+        if (params->target_params.blit_src || params->target_params.host_readable) {
+            nextLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            nextAccess = VK_ACCESS_TRANSFER_READ_BIT;
+        }
+        if (params->target_params.blit_dst || params->target_params.host_writable) {
+            nextLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            nextAccess = VK_ACCESS_TRANSFER_WRITE_BIT;
+        }
+        if (params->target_params.sampleable) {
+            nextLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            nextAccess = VK_ACCESS_SHADER_READ_BIT;
+        }
+
+        // Assume we're ping-ponging between a render pass and some other
+        // operation. This is the most likely scenario.
+        pass_vk->initialLayout = nextLayout;
+        pass_vk->initialAccess = nextAccess;
+        pass_vk->finalLayout = nextLayout;
+        pass_vk->finalAccess = nextAccess;
         VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 
         // If we're blending, then we need to explicitly load the previous
@@ -1392,7 +1413,7 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
             loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         }
 
-        VK(vk_create_render_pass(vk->dev, params->target_fmt, loadOp,
+        VK(vk_create_render_pass(vk->dev, params->target_params.format, loadOp,
                                  pass_vk->initialLayout, pass_vk->finalLayout,
                                  &pass_vk->renderPass));
 
