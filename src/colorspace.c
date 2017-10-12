@@ -42,7 +42,6 @@ bool pl_color_system_is_special(enum pl_color_system sys)
     switch (sys) {
     case PL_COLOR_SYSTEM_UNKNOWN:
     case PL_COLOR_SYSTEM_RGB:
-    case PL_COLOR_SYSTEM_XYZ:
     case PL_COLOR_SYSTEM_BT_601:
     case PL_COLOR_SYSTEM_BT_709:
     case PL_COLOR_SYSTEM_SMPTE_240M:
@@ -50,7 +49,7 @@ bool pl_color_system_is_special(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_YCGCO:
         return false;
     case PL_COLOR_SYSTEM_BT_2020_C:
-    case PL_COLOR_SYSTEM_XYZ;
+    case PL_COLOR_SYSTEM_XYZ:
         return true;
     default: abort();
     };
