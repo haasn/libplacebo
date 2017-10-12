@@ -86,13 +86,20 @@ bdeps = [ cc.find_library('m', required: false) ]
 defs = ''
 
 foreach c : components
-  name = c[0].underscorify().to_upper()
+  name = c[0]
   dep  = c[1]
-  has_dep = dep.found() and not get_option('disable-' + c[0])
+  opt  = get_option(name)
 
-  defs += '#define PL_HAVE_@0@ @1@\n'.format(name, has_dep ? 1 : 0)
+  has_dep = opt == 'false' ? false : dep.found()
+  if opt == 'true' and not has_dep
+    error(('Dependency \'@0@\', marked as required, is not found. To build ' +
+           'without support for @0@, use -D@0@=false.').format(name))
+  endif
+
+  pretty = name.underscorify().to_upper()
+  defs += '#define PL_HAVE_@0@ @1@\n'.format(pretty, has_dep ? 1 : 0)
   if has_dep
-    bdeps   += dep
+    bdeps += dep
     if (c.length() > 2)
       sources += c[2]
     endif
