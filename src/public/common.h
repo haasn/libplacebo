@@ -19,6 +19,7 @@
 #define LIBPLACEBO_COMMON_H_
 
 #include "context.h"
+#include <stdbool.h>
 
 // Some common utility types
 struct pl_rect2d {
