@@ -32,11 +32,15 @@ enum pl_color_system {
     PL_COLOR_SYSTEM_YCGCO,       // YCgCo (derived from RGB)
     // Other colorspaces:
     PL_COLOR_SYSTEM_RGB,         // Red, Green and Blue
-    PL_COLOR_SYSTEM_XYZ,         // CIE 1931 XYZ
+    PL_COLOR_SYSTEM_XYZ,         // CIE 1931 XYZ, pre-encoded with gamma 2.8
     PL_COLOR_SYSTEM_COUNT
 };
 
 bool pl_color_system_is_ycbcr_like(enum pl_color_system sys);
+
+// Returns true for color systems that need special handling logic by the
+// user (i.e. aren't simply matrix multiplication)
+bool pl_color_system_is_special(enum pl_color_system sys);
 
 // Guesses the best YCbCr-like colorspace based on a image given resolution.
 // This only picks conservative values. (In particular, BT.2020 is never
@@ -274,6 +278,9 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(struct pl_raw_primaries src,
 // Note: For BT.2020 constant-luminance, this outputs chroma information in the
 // range [-0.5, 0.5]. Since the CL system conversion is non-linear, further
 // processing must be done by the caller. The channel order is CrYCb.
+//
+// Note: For XYZ system, the input/encoding gamma must be pre-applied by the
+// user, typically this has a value of 2.8.
 struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
                                               struct pl_color_adjustment params);
 

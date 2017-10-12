@@ -37,6 +37,25 @@ bool pl_color_system_is_ycbcr_like(enum pl_color_system sys)
     };
 }
 
+bool pl_color_system_is_special(enum pl_color_system sys)
+{
+    switch (sys) {
+    case PL_COLOR_SYSTEM_UNKNOWN:
+    case PL_COLOR_SYSTEM_RGB:
+    case PL_COLOR_SYSTEM_XYZ:
+    case PL_COLOR_SYSTEM_BT_601:
+    case PL_COLOR_SYSTEM_BT_709:
+    case PL_COLOR_SYSTEM_SMPTE_240M:
+    case PL_COLOR_SYSTEM_BT_2020_NC:
+    case PL_COLOR_SYSTEM_YCGCO:
+        return false;
+    case PL_COLOR_SYSTEM_BT_2020_C:
+    case PL_COLOR_SYSTEM_XYZ;
+        return true;
+    default: abort();
+    };
+}
+
 enum pl_color_system pl_color_system_guess_ycbcr(int width, int height)
 {
     if (width >= 1280 || height > 576) {
