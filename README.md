@@ -145,7 +145,11 @@ Building a trivial project using libplacebo is straightforward:
 
 void main()
 {
-    struct pl_context *ctx = pl_context_create(PL_API_VER);
+    struct pl_context *ctx;
+    ctx = pl_context_create(PL_API_VER, &(struct pl_context_params {
+        .log_cb    = pl_log_color,
+        .log_level = PL_LOG_INFO,
+    });
 
     // do something..
 

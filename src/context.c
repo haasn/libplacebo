@@ -20,8 +20,8 @@
 #include "common.h"
 #include "context.h"
 
-struct pl_context *pl_context_create(const struct pl_context_params *params,
-                                     int api_ver)
+struct pl_context *pl_context_create(int api_ver,
+                                     const struct pl_context_params *params)
 {
     if (api_ver != PL_API_VER) {
         fprintf(stderr,
