@@ -27,7 +27,7 @@ void ra_destroy(const struct ra *ra)
     ra->impl->destroy(ra);
 }
 
-bool ra_format_is_ordered(const struct ra_format *fmt)
+bool ra_fmt_is_ordered(const struct ra_fmt *fmt)
 {
     bool ret = true;
     for (int i = 0; i < fmt->num_components; i++)
@@ -35,7 +35,7 @@ bool ra_format_is_ordered(const struct ra_format *fmt)
     return ret;
 }
 
-bool ra_format_is_regular(const struct ra_format *fmt)
+bool ra_fmt_is_regular(const struct ra_fmt *fmt)
 {
     int bits = 0;
     for (int i = 0; i < fmt->num_components; i++) {
@@ -47,17 +47,17 @@ bool ra_format_is_regular(const struct ra_format *fmt)
     return bits == fmt->texel_size * 8;
 }
 
-const struct ra_format *ra_find_texture_format(const struct ra *ra,
-                                               enum ra_fmt_type type,
-                                               int num_components,
-                                               int bits_per_component,
-                                               bool regular)
+const struct ra_fmt *ra_find_fmt(const struct ra *ra, enum ra_fmt_type type,
+                                 int num_components, int bits_per_component,
+                                 bool regular, enum ra_fmt_caps caps)
 {
     for (int n = 0; n < ra->num_formats; n++) {
-        const struct ra_format *fmt = ra->formats[n];
+        const struct ra_fmt *fmt = ra->formats[n];
         if (fmt->type != type || fmt->num_components != num_components)
             continue;
-        if (regular && !ra_format_is_regular(fmt))
+        if ((fmt->caps & caps) != caps)
+            continue;
+        if (regular && !ra_fmt_is_regular(fmt))
             continue;
 
         for (int i = 0; i < fmt->num_components; i++) {
@@ -71,17 +71,31 @@ next_fmt: ; // equivalent to `continue`
     }
 
     // ran out of formats
+    PL_DEBUG(ra, "No matching format found");
     return NULL;
 }
 
-const struct ra_format *ra_find_named_format(const struct ra *ra,
-                                             const char *name)
+const struct ra_fmt *ra_find_vertex_fmt(const struct ra *ra,
+                                        enum ra_fmt_type type, int comps)
+{
+    static const size_t sizes[] = {
+        [RA_FMT_FLOAT] = sizeof(float),
+        [RA_FMT_UNORM] = sizeof(unsigned),
+        [RA_FMT_UINT]  = sizeof(unsigned),
+        [RA_FMT_SNORM] = sizeof(int),
+        [RA_FMT_SINT]  = sizeof(int),
+    };
+
+    return ra_find_fmt(ra, type, comps, 8 * sizes[type], true, RA_FMT_CAP_VERTEX);
+}
+
+const struct ra_fmt *ra_find_named_fmt(const struct ra *ra, const char *name)
 {
     if (!name)
         return NULL;
 
     for (int i = 0; i < ra->num_formats; i++) {
-        const struct ra_format *fmt = ra->formats[i];
+        const struct ra_fmt *fmt = ra->formats[i];
         if (strcmp(name, fmt->name) == 0)
             return fmt;
     }
@@ -111,18 +125,17 @@ const struct ra_tex *ra_tex_create(const struct ra *ra,
         assert(params->d <= ra->limits.max_tex_3d_dim);
         assert(!params->renderable);
         break;
-    default: abort();
     }
 
-    const struct ra_format *fmt = params->format;
+    const struct ra_fmt *fmt = params->format;
     assert(fmt);
-    assert(fmt->texture_format);
-    assert(fmt->sampleable || !params->sampleable);
-    assert(fmt->renderable || !params->renderable);
-    assert(fmt->storable   || !params->storable);
-    assert(fmt->blittable  || !params->blit_src);
-    assert(fmt->blittable  || !params->blit_dst);
-    assert(fmt->linear_filterable || params->sample_mode != RA_TEX_SAMPLE_LINEAR);
+    assert(fmt->caps & RA_FMT_CAP_TEXTURE);
+    assert(!params->sampleable || fmt->caps & RA_FMT_CAP_SAMPLEABLE);
+    assert(!params->renderable || fmt->caps & RA_FMT_CAP_RENDERABLE);
+    assert(!params->storable   || fmt->caps & RA_FMT_CAP_STORABLE);
+    assert(!params->blit_src   || fmt->caps & RA_FMT_CAP_BLITTABLE);
+    assert(!params->blit_dst   || fmt->caps & RA_FMT_CAP_BLITTABLE);
+    assert(params->sample_mode != RA_TEX_SAMPLE_LINEAR || fmt->caps & RA_FMT_CAP_LINEAR);
 
     return ra->impl->tex_create(ra, params);
 }
@@ -178,6 +191,19 @@ void ra_tex_invalidate(const struct ra *ra, const struct ra_tex *tex)
     ra->impl->tex_invalidate(ra, tex);
 }
 
+static void strip_coords(const struct ra_tex *tex, struct pl_rect3d *rc)
+{
+    if (!tex->params.d) {
+        rc->z0 = 0;
+        rc->z1 = 1;
+    }
+
+    if (!tex->params.h) {
+        rc->y0 = 0;
+        rc->y1 = 1;
+    }
+}
+
 void ra_tex_blit(const struct ra *ra,
                  const struct ra_tex *dst, const struct ra_tex *src,
                  struct pl_rect3d dst_rc, struct pl_rect3d src_rc)
@@ -198,25 +224,12 @@ void ra_tex_blit(const struct ra *ra,
     assert(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
     assert(dst_rc.z1 > 0 && dst_rc.z1 <= dst->params.d);
 
-    // Sanitize the ignored parameters
-    if (!src->params.d) {
-        src_rc.z0 = 0;
-        src_rc.z1 = 1;
-    }
-    if (!src->params.h) {
-        src_rc.y0 = 0;
-        src_rc.y1 = 1;
-    }
-    if (!dst->params.d) {
-        dst_rc.z0 = 0;
-        dst_rc.z1 = 1;
-    }
-    if (!dst->params.h) {
-        dst_rc.y0 = 0;
-        dst_rc.y1 = 1;
-    }
+    strip_coords(src, &src_rc);
+    strip_coords(dst, &dst_rc);
 
     struct pl_rect3d full = {0, 0, 0, dst->params.w, dst->params.h, dst->params.d};
+    strip_coords(dst, &full);
+
     if (pl_rect3d_eq(pl_rect3d_normalize(dst_rc), full))
         ra_tex_invalidate(ra, dst);
 
@@ -232,18 +245,32 @@ size_t ra_tex_transfer_size(const struct ra_tex_transfer_params *par)
     case 1: texels = pl_rect_w(par->rc); break;
     case 2: texels = pl_rect_h(par->rc) * par->stride_w; break;
     case 3: texels = pl_rect_d(par->rc) * par->stride_w * par->stride_h; break;
-    default: abort();
     }
 
     return texels * tex->params.format->texel_size;
 }
 
-static void check_tex_transfer(const struct ra *ra,
-                               const struct ra_tex_transfer_params *params)
+static void fix_tex_transfer(const struct ra *ra,
+                             struct ra_tex_transfer_params *params)
 {
-#ifndef NDEBUG
     const struct ra_tex *tex = params->tex;
     struct pl_rect3d rc = params->rc;
+
+    // Infer the default values
+    if (!rc.x0 && !rc.x1)
+        rc.x1 = tex->params.w;
+    if (!rc.y0 && !rc.y1)
+        rc.y1 = tex->params.h;
+    if (!rc.z0 && !rc.z1)
+        rc.z1 = tex->params.d;
+
+    if (!params->stride_w)
+        params->stride_w = tex->params.w;
+    if (!params->stride_h)
+        params->stride_h = tex->params.h;
+
+    // Check the parameters for sanity
+#ifndef NDEBUG
     switch (ra_tex_params_dimension(tex->params))
     {
     case 3:
@@ -263,7 +290,6 @@ static void check_tex_transfer(const struct ra *ra,
         assert(rc.x0 >= 0 && rc.x0 <  tex->params.w);
         assert(rc.x1 >  0 && rc.x1 <= tex->params.w);
         break;
-    default: abort();
     }
 
     assert(!params->buf ^ !params->ptr); // exactly one
@@ -274,26 +300,39 @@ static void check_tex_transfer(const struct ra *ra,
         assert(params->buf_offset + size <= buf->params.size);
     }
 #endif
+
+    // Sanitize superfluous coordinates for the benefit of the RA
+    strip_coords(tex, &rc);
+    if (!tex->params.w)
+        params->stride_w = 1;
+    if (!tex->params.h)
+        params->stride_h = 1;
+
+    params->rc = rc;
 }
 
 bool ra_tex_upload(const struct ra *ra,
                    const struct ra_tex_transfer_params *params)
 {
     const struct ra_tex *tex = params->tex;
+    assert(tex);
     assert(tex->params.host_writable);
-    check_tex_transfer(ra, params);
 
-    return ra->impl->tex_upload(ra, params);
+    struct ra_tex_transfer_params fixed = *params;
+    fix_tex_transfer(ra, &fixed);
+    return ra->impl->tex_upload(ra, &fixed);
 }
 
 bool ra_tex_download(const struct ra *ra,
                      const struct ra_tex_transfer_params *params)
 {
     const struct ra_tex *tex = params->tex;
+    assert(tex);
     assert(tex->params.host_readable);
-    check_tex_transfer(ra, params);
 
-    return ra->impl->tex_download(ra, params);
+    struct ra_tex_transfer_params fixed = *params;
+    fix_tex_transfer(ra, &fixed);
+    return ra->impl->tex_download(ra, &fixed);
 }
 
 const struct ra_buf *ra_buf_create(const struct ra *ra,
@@ -485,13 +524,13 @@ const struct ra_renderpass *ra_renderpass_create(const struct ra *ra,
             struct ra_vertex_attrib va = params->vertex_attribs[i];
             assert(va.name);
             assert(va.fmt);
-            assert(va.fmt->vertex_format);
+            assert(va.fmt->caps & RA_FMT_CAP_VERTEX);
             assert(va.offset + va.fmt->texel_size <= params->vertex_stride);
         }
 
-        assert(params->target_format);
-        assert(params->target_format->renderable);
-        assert(params->target_format->blendable || !params->enable_blend);
+        assert(params->target_fmt);
+        assert(params->target_fmt->caps & RA_FMT_CAP_RENDERABLE);
+        assert(!params->enable_blend || params->target_fmt->caps & RA_FMT_CAP_BLENDABLE);
         break;
     case RA_RENDERPASS_COMPUTE:
         assert(ra->caps & RA_CAP_COMPUTE);
@@ -577,7 +616,7 @@ void ra_renderpass_run(const struct ra *ra,
         struct ra_tex *tex = params->target;
         assert(tex);
         assert(ra_tex_params_dimension(tex->params) == 2);
-        assert(tex->params.format == pass->params.target_format);
+        assert(tex->params.format == pass->params.target_fmt);
         assert(tex->params.renderable);
         struct pl_rect2d vp = params->viewport;
         struct pl_rect2d sc = params->scissors;

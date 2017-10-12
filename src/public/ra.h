@@ -90,7 +90,7 @@ struct ra {
 
     // Supported texture formats, in preference order. (If there are multiple
     // similar formats, the "better" ones come first)
-    const struct ra_format **formats;
+    const struct ra_fmt **formats;
     int num_formats;
 };
 
@@ -104,12 +104,24 @@ enum ra_fmt_type {
     RA_FMT_TYPE_COUNT,
 };
 
+enum ra_fmt_caps {
+    RA_FMT_CAP_VERTEX       = 1 << 0, // may be used as a vertex attribute
+    RA_FMT_CAP_TEXTURE      = 1 << 1, // may be used to create textures (ra_tex_create)
+    RA_FMT_CAP_SAMPLEABLE   = 1 << 2, // may be sampled from (RA_DESC_SAMPLED_TEX)
+    RA_FMT_CAP_STORABLE     = 1 << 3, // may be used as storage image (RA_DESC_STORAGE_IMG)
+    RA_FMT_CAP_LINEAR       = 1 << 4, // may be linearly samplied from (RA_TEX_SAMPLE_LINEAR)
+    RA_FMT_CAP_RENDERABLE   = 1 << 5, // may be rendered to (ra_renderpass_params.target_fmt)
+    RA_FMT_CAP_BLENDABLE    = 1 << 6, // may be blended to (ra_renderpass_params.enable_blend)
+    RA_FMT_CAP_BLITTABLE    = 1 << 7, // may be blitted from/to (ra_tex_blit)
+};
+
 // Structure describing a texel/vertex format.
-struct ra_format {
+struct ra_fmt {
     const char *name;       // symbolic name for this format (e.g. rgba32f)
     const void *priv;
 
     enum ra_fmt_type type;  // the format's data type and interpretation
+    enum ra_fmt_caps caps;  // the features supported by this format
     int num_components;     // number of components for this format
 
     // For the component metadata, the index refers to the index of the
@@ -122,42 +134,36 @@ struct ra_format {
     // Note: Trailing padding (e.g. RGBX) is implicitly indicated by texel_size
     // being larger than the sum of component_depth + component_pad.
 
-    // The features supported by this format
-    bool vertex_format;     // may be used as a vertex attribute
-    bool texture_format;    // may be used to create textures (ra_tex_create)
-    bool sampleable;        // may be sampled from (RA_DESC_SAMPLED_TEX)
-    bool storable;          // may be used as storage image (RA_DESC_STORAGE_IMG)
-    bool linear_filterable; // supports linear filtering when sampling
-    bool renderable;        // may be rendered to (ra_renderpass_params.target_format)
-    bool blendable;         // may be blended to (ra_renderpass_params.enable_blend)
-    bool blittable;         // may be used with ra_tex_blit
-
     // If usable as a vertex or texel buffer format, this gives the GLSL type
     // corresponding to the data. (e.g. vec4)
     const char *glsl_type;
 };
 
-// Returns whether or not a ra_format's components are ordered sequentially
+// Returns whether or not a ra_fmt's components are ordered sequentially
 // in memory in the order RGBA.
-bool ra_format_is_ordered(const struct ra_format *fmt);
+bool ra_fmt_is_ordered(const struct ra_fmt *fmt);
 
-// Returns whether or not a ra_format is "regular"; i.e. it's ordered and
+// Returns whether or not a ra_fmt is "regular"; i.e. it's ordered and
 // unpadded. In other words, a regular format is any where the representation
 // is "trivial" and doesn't require any special re-packing or re-ordering.
-bool ra_format_is_regular(const struct ra_format *fmt);
+bool ra_fmt_is_regular(const struct ra_fmt *fmt);
 
 // Helper function to find a format with a given number of components and depth
-// per component. The format must be usable as a texture format. If `regular`
-// is true, ra_format_is_regular() must be true.
-const struct ra_format *ra_find_texture_format(const struct ra *ra,
-                                               enum ra_fmt_type type,
-                                               int num_components,
-                                               int bits_per_component,
-                                               bool regular);
+// per component. If `regular` is true, the resulting format will always be
+// regular. All `caps` must be supported.
+const struct ra_fmt *ra_find_fmt(const struct ra *ra, enum ra_fmt_type type,
+                                 int num_components, int bits_per_component,
+                                 bool regular, enum ra_fmt_caps caps);
+
+// Finds a vertex format for a given configuration. The resulting vertex will
+// have a component depth equal to to the sizeof() the equivalent host type.
+// (e.g. RA_FMT_FLOAT will always have sizeof(float))
+const struct ra_fmt *ra_find_vertex_fmt(const struct ra *ra,
+                                        enum ra_fmt_type type,
+                                        int num_components);
 
 // Find a format based on its name.
-const struct ra_format *ra_find_named_format(const struct ra *ra,
-                                             const char *name);
+const struct ra_fmt *ra_find_named_fmt(const struct ra *ra, const char *name);
 
 enum ra_tex_sample_mode {
     RA_TEX_SAMPLE_NEAREST,  // nearest neighour sampling
@@ -173,10 +179,10 @@ enum ra_tex_address_mode {
 // Structure describing a texture.
 struct ra_tex_params {
     int w, h, d;            // physical dimension; unused dimensions must be 0
-    const struct ra_format *format;
+    const struct ra_fmt *format;
 
     // The following bools describe what operations can be performed. The
-    // corresponding ra_format capability must be `true` for every enabled
+    // corresponding ra_fmt capability must be set for every enabled
     // operation type.
     bool sampleable;    // usable as a RA_DESC_SAMPLED_TEX
     bool renderable;    // usable as a render target (ra_renderpass_run)
@@ -263,7 +269,8 @@ struct ra_tex_transfer_params {
     // and z fields of `rc`, as well as the corresponding strides, are ignored.
     // In all other cases, the stride must be >= the corresponding dimension
     // of `rc`, and the `rc` must be normalized and fully contained within the
-    // image dimensions.
+    // image dimensions. If any of these parameters are left away (0), they
+    // are inferred from the texture's size.
     struct pl_rect3d rc; // region of the texture to transfer
     int stride_w;        // the number of texels per horizontal row (x axis)
     int stride_h;        // the number of texels per vertical column (y axis)
@@ -495,10 +502,10 @@ struct ra_var_layout ra_push_constant_layout(const struct ra *ra, size_t offset,
 
 // Represents a vertex attribute.
 struct ra_vertex_attrib {
-    const char *name;            // name as used in the shader
-    const struct ra_format *fmt; // data format (must have `vertex_format` set)
-    size_t offset;               // byte offset into the vertex struct
-    int location;                // vertex location (as used in the shader)
+    const char *name;         // name as used in the shader
+    const struct ra_fmt *fmt; // data format (must have RA_FMT_CAP_VERTEX)
+    size_t offset;            // byte offset into the vertex struct
+    int location;             // vertex location (as used in the shader)
 };
 
 // Type of a shader input descriptor.
@@ -620,10 +627,10 @@ struct ra_renderpass_params {
     const char *vertex_shader;
 
     // Format of the target texture. Must have `renderable` set.
-    const struct ra_format *target_format;
+    const struct ra_fmt *target_fmt;
 
-    // Target blending mode. If enable_blend is false, the blend_ fields are
-    // ignored. target_format must have `blendable` set.
+    // Target blending mode. If `enable_blend` is true, target_fmt must have
+    // RA_FMT_CAP_BLENDABLE. Otherwise, the fields are ignored.
     bool enable_blend;
     enum ra_blend_mode blend_src_rgb;
     enum ra_blend_mode blend_dst_rgb;
@@ -690,7 +697,7 @@ struct ra_renderpass_run_params {
     // --- pass->params.type==RA_RENDERPASS_RASTER only
 
     // Target must be a 2D texture, target->params.renderable must be true, and
-    // target->params.format must match pass->params.target_format.
+    // target->params.format must match pass->params.target_fmt.
     struct ra_tex *target;
     struct pl_rect2d viewport; // screen space viewport (must be normalized)
     struct pl_rect2d scissors; // target render scissors (must be normalized)

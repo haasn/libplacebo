@@ -125,7 +125,7 @@ static void vk_setup_formats(struct ra *ra)
         VkFormatProperties prop;
         vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->ifmt, &prop);
 
-        struct ra_format *fmt = talloc_ptrtype(ra, fmt);
+        struct ra_fmt *fmt = talloc_ptrtype(ra, fmt);
         *fmt = vk_fmt->fmt;
         fmt->priv = vk_fmt;
 
@@ -136,22 +136,27 @@ static void vk_setup_formats(struct ra *ra)
             fmt->component_pad[i] = 0;
         }
 
-        // Detect supported features
-        VkFormatFeatureFlags bits = prop.optimalTilingFeatures;
-        fmt->sampleable = !!(bits & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
-        fmt->storable   = !!(bits & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
-        fmt->renderable = !!(bits & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
-        fmt->blendable  = !!(bits & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT);
-        fmt->linear_filterable = !!(bits & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
+        struct { VkFormatFeatureFlags flags; enum ra_fmt_caps caps; } bits[] = {
+            {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT,      RA_FMT_CAP_BLENDABLE},
+            {VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT, RA_FMT_CAP_LINEAR},
 
-        // We don't bother distinguishing between the two blit modes for
-        // texture formats, so both must be supported
-        VkFormatFeatureFlags blitbits = VK_FORMAT_FEATURE_BLIT_SRC_BIT |
-                                        VK_FORMAT_FEATURE_BLIT_DST_BIT;
-        fmt->blittable  = (bits & blitbits) == blitbits;
+            // The following features probably mean it's a sane texture format
+            {VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,
+                RA_FMT_CAP_SAMPLEABLE | RA_FMT_CAP_TEXTURE},
+            {VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT,
+                RA_FMT_CAP_STORABLE   | RA_FMT_CAP_TEXTURE},
+            {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT,
+                RA_FMT_CAP_RENDERABLE | RA_FMT_CAP_TEXTURE},
 
-        // This probably means it's a sane texture format
-        fmt->texture_format = fmt->sampleable || fmt->renderable || fmt->storable;
+            // We don't distinguish between the two blit modes for ra_fmt_caps
+            {VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT,
+                RA_FMT_CAP_BLITTABLE},
+        };
+
+        for (int i = 0; i < PL_ARRAY_SIZE(bits); i++) {
+            if ((prop.optimalTilingFeatures & bits[i].flags) == bits[i].flags)
+                fmt->caps |= bits[i].caps;
+        }
 
         if (prop.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) {
             static const enum ra_var_type vartypes[] = {
@@ -162,7 +167,7 @@ static void vk_setup_formats(struct ra *ra)
                 [RA_FMT_SINT]  = RA_VAR_SINT,
             };
 
-            fmt->vertex_format = true;
+            fmt->caps |= RA_FMT_CAP_VERTEX;
             fmt->glsl_type = ra_var_glsl_type_name((struct ra_var) {
                 .type  = vartypes[fmt->type],
                 .dim_v = fmt->num_components,
@@ -233,7 +238,7 @@ error:
 // Boilerplate wrapper around vkCreateRenderPass to ensure passes remain
 // compatible. The renderpass will automatically transition the image out of
 // initialLayout and into finalLayout.
-static VkResult vk_create_render_pass(VkDevice dev, const struct ra_format *fmt,
+static VkResult vk_create_render_pass(VkDevice dev, const struct ra_fmt *fmt,
                                       VkAttachmentLoadOp loadOp,
                                       VkImageLayout initialLayout,
                                       VkImageLayout finalLayout,
@@ -732,7 +737,7 @@ const struct ra_tex *ra_vk_wrap_swapchain_img(const struct ra *ra, VkImage vkimg
 {
     struct ra_tex *tex = NULL;
 
-    const struct ra_format *format = NULL;
+    const struct ra_fmt *format = NULL;
     for (int i = 0; i < ra->num_formats; i++) {
         const struct vk_format *fmt = ra->formats[i]->priv;
         if (fmt->ifmt == info.imageFormat) {
@@ -742,7 +747,7 @@ const struct ra_tex *ra_vk_wrap_swapchain_img(const struct ra *ra, VkImage vkimg
     }
 
     if (!format) {
-        PL_ERR(ra, "Could not find ra_format suitable for wrapped swchain image "
+        PL_ERR(ra, "Could not find ra_fmt suitable for wrapped swchain image "
                "with surface format 0x%x\n", (unsigned) info.imageFormat);
         goto error;
     }
@@ -963,18 +968,6 @@ static bool vk_buf_poll(const struct ra *ra, const struct ra_buf *buf,
     return buf_vk->refcount > 1;
 }
 
-static void fix_copy_region(int dims, VkBufferImageCopy *region)
-{
-    if (dims < 3) {
-        region->imageOffset.z = 0;
-        region->imageExtent.depth = 1;
-    }
-    if (dims < 2) {
-        region->imageOffset.z = 0;
-        region->imageExtent.height = 1;
-    }
-}
-
 static bool vk_tex_upload(const struct ra *ra,
                           const struct ra_tex_transfer_params *params)
 {
@@ -1005,8 +998,6 @@ static bool vk_tex_upload(const struct ra *ra,
             .layerCount = 1,
         },
     };
-
-    fix_copy_region(ra_tex_params_dimension(tex->params), &region);
 
     buf_barrier(ra, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_READ_BIT, region.bufferOffset, size);
@@ -1056,8 +1047,6 @@ static bool vk_tex_download(const struct ra *ra,
             .layerCount = 1,
         },
     };
-
-    fix_copy_region(ra_tex_params_dimension(tex->params), &region);
 
     buf_barrier(ra, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT, region.bufferOffset, size);
@@ -1403,7 +1392,7 @@ static const struct ra_renderpass *vk_renderpass_create(const struct ra *ra,
             loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         }
 
-        VK(vk_create_render_pass(vk->dev, params->target_format, loadOp,
+        VK(vk_create_render_pass(vk->dev, params->target_fmt, loadOp,
                                  pass_vk->initialLayout, pass_vk->finalLayout,
                                  &pass_vk->renderPass));
 

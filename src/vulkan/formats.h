@@ -21,8 +21,8 @@
 #include "common.h"
 
 struct vk_format {
-    VkFormat ifmt;        // internal vulkan format enum
-    struct ra_format fmt; // ra_format template (features will be auto-detected)
+    VkFormat ifmt;     // internal vulkan format enum
+    struct ra_fmt fmt; // ra_fmt template (features will be auto-detected)
 };
 
 extern const struct vk_format vk_formats[];
