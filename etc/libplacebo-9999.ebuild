@@ -12,9 +12,16 @@ EGIT_REPO_URI="https://github.com/haasn/libplacebo"
 LICENSE="LGPLv2.1+"
 SLOT="0"
 KEYWORDS=""
-IUSE=""
+IUSE="vulkan"
 
-DEPEND=""
+DEPEND="vulkan? ( media-libs/vulkan-loader )"
 RDEPEND="${DEPEND}"
 
 DOCS="README.md"
+
+src_configure() {
+	local emesonargs=(
+		-Dvulkan=$(usex vulkan true false)
+	)
+	meson_src_configure
+}
