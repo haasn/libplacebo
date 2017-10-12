@@ -246,22 +246,22 @@ struct pl_raw_primaries {
 };
 
 // Returns the raw primaries for a given color space.
-struct pl_raw_primaries pl_raw_primaries_get(enum pl_color_primaries prim);
+const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim);
 
 // Returns an RGB->XYZ conversion matrix for a given set of primaries.
 // Multiplying this into the RGB color transforms it to CIE XYZ, centered
 // around the color space's white point.
-struct pl_matrix3x3 pl_get_rgb2xyz_matrix(struct pl_raw_primaries prim);
+struct pl_matrix3x3 pl_get_rgb2xyz_matrix(const struct pl_raw_primaries *prim);
 
 // Similar to pl_get_rgb2xyz_matrix, but gives the inverse transformation.
-struct pl_matrix3x3 pl_get_xyz2rgb_matrix(struct pl_raw_primaries prim);
+struct pl_matrix3x3 pl_get_xyz2rgb_matrix(const struct pl_raw_primaries *prim);
 
 // Returns a primary adaptation matrix, which converts from one set of
 // primaries to another. This is an RGB->RGB transformation. For rendering
 // intents other than PL_INTENT_ABSOLUTE_COLORIMETRIC, the white point is
 // adapted using the Bradford matrix.
-struct pl_matrix3x3 pl_get_color_mapping_matrix(struct pl_raw_primaries src,
-                                                struct pl_raw_primaries dst,
+struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *src,
+                                                const struct pl_raw_primaries *dst,
                                                 enum pl_rendering_intent intent);
 
 // Returns a color decoding matrix for a given combination of source color

@@ -696,8 +696,8 @@ static void vk_tex_blit(const struct ra *ra,
     // When the blit operation doesn't require scaling, we can use the more
     // efficient vkCmdCopyImage instead of vkCmdBlitImage
     if (pl_rect3d_eq(src_rc, dst_rc)) {
-        src_rc = pl_rect3d_normalize(src_rc);
-        dst_rc = pl_rect3d_normalize(src_rc);
+        pl_rect3d_normalize(&src_rc);
+        pl_rect3d_normalize(&src_rc);
 
         VkImageCopy region = {
             .srcSubresource = layers,

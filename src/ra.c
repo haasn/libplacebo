@@ -230,7 +230,9 @@ void ra_tex_blit(const struct ra *ra,
     struct pl_rect3d full = {0, 0, 0, dst->params.w, dst->params.h, dst->params.d};
     strip_coords(dst, &full);
 
-    if (pl_rect3d_eq(pl_rect3d_normalize(dst_rc), full))
+    struct pl_rect3d rcnorm = dst_rc;
+    pl_rect3d_normalize(&rcnorm);
+    if (pl_rect3d_eq(rcnorm, full))
         ra_tex_invalidate(ra, dst);
 
     ra->impl->tex_blit(ra, dst, src, dst_rc, src_rc);
@@ -586,6 +588,18 @@ static bool ra_tex_params_compat(const struct ra_tex_params a,
 void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params)
 {
     const struct ra_pass *pass = params->pass;
+    struct ra_pass_run_params new = *params;
+
+    // Sanitize viewport/scissors
+    if (!new.viewport.x1)
+        new.viewport.x1 = params->target->params.w;
+    if (!new.viewport.y1)
+        new.viewport.y1 = params->target->params.h;
+
+    if (!new.scissors.x1)
+        new.scissors.x1 = params->target->params.w;
+    if (!new.scissors.y1)
+        new.scissors.y1 = params->target->params.h;
 
 #ifndef NDEBUG
     for (int i = 0; i < pass->params.num_descriptors; i++) {
@@ -644,10 +658,12 @@ void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params)
         assert(ra_tex_params_dimension(tex->params) == 2);
         assert(ra_tex_params_compat(tex->params, pass->params.target_dummy.params));
         assert(tex->params.renderable);
-        struct pl_rect2d vp = params->viewport;
-        struct pl_rect2d sc = params->scissors;
-        assert(pl_rect2d_eq(vp, pl_rect2d_normalize(vp)));
-        assert(pl_rect2d_eq(sc, pl_rect2d_normalize(sc)));
+        struct pl_rect2d vp = new.viewport;
+        struct pl_rect2d sc = new.scissors;
+        assert(pl_rect_w(vp) > 0);
+        assert(pl_rect_h(vp) > 0);
+        assert(pl_rect_w(sc) > 0);
+        assert(pl_rect_h(sc) > 0);
         break;
     }
     case RA_PASS_COMPUTE:
@@ -663,19 +679,7 @@ void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params)
     if (params->target && !pass->params.load_target)
         ra_tex_invalidate(ra, params->target);
 
-    // Sanitize viewport/scissors
-    struct ra_pass_run_params fixed = *params;
-    if (!fixed.viewport.x1)
-        fixed.viewport.x1 = params->target->params.w;
-    if (!fixed.viewport.y1)
-        fixed.viewport.y1 = params->target->params.h;
-
-    if (!fixed.scissors.x1)
-        fixed.scissors.x1 = params->target->params.w;
-    if (!fixed.scissors.y1)
-        fixed.scissors.y1 = params->target->params.h;
-
-    return ra->impl->pass_run(ra, &fixed);
+    return ra->impl->pass_run(ra, &new);
 }
 
 void ra_flush(const struct ra *ra)

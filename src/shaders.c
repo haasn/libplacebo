@@ -545,8 +545,9 @@ void pl_shader_color_map(struct pl_shader *sh,
 
     // Adapt to the right colorspace (primaries) if necessary
     if (src.primaries != dst.primaries) {
-        struct pl_raw_primaries csp_src = pl_raw_primaries_get(src.primaries),
-                                csp_dst = pl_raw_primaries_get(dst.primaries);
+        const struct pl_raw_primaries *csp_src, *csp_dst;
+        csp_src = pl_raw_primaries_get(src.primaries),
+        csp_dst = pl_raw_primaries_get(dst.primaries);
         struct pl_matrix3x3 cms_mat;
         cms_mat = pl_get_color_mapping_matrix(csp_src, csp_dst, params->intent);
         GLSL("color.rgb = %s * color.rgb;\n", var(sh, (struct pl_shader_var) {

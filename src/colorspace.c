@@ -258,7 +258,7 @@ void pl_chroma_location_offset(enum pl_chroma_location loc, int *x, int *y)
     }
 }
 
-struct pl_raw_primaries pl_raw_primaries_get(enum pl_color_primaries prim)
+const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim)
 {
     /*
     Values from: ITU-R Recommendations BT.470-6, BT.601-7, BT.709-5, BT.2020-0
@@ -272,124 +272,116 @@ struct pl_raw_primaries pl_raw_primaries_get(enum pl_color_primaries prim)
     */
 
     // CIE standard illuminant series
-    static const struct pl_cie_xy
-        d50 = {0.34577, 0.35850},
-        d65 = {0.31271, 0.32902},
-        c   = {0.31006, 0.31616},
-        e   = {1.0/3.0, 1.0/3.0};
+#define CIE_D50 {0.34577, 0.35850}
+#define CIE_D65 {0.31271, 0.32902}
+#define CIE_C   {0.31006, 0.31616}
+#define CIE_E   {1.0/3.0, 1.0/3.0}
 
-    switch (prim) {
-    case PL_COLOR_PRIM_BT_470M:
-        return (struct pl_raw_primaries) {
+    static const struct pl_raw_primaries primaries[] = {
+        [PL_COLOR_PRIM_BT_470M] = {
             .red   = {0.670, 0.330},
             .green = {0.210, 0.710},
             .blue  = {0.140, 0.080},
-            .white = c
-        };
-    case PL_COLOR_PRIM_BT_601_525:
-        return (struct pl_raw_primaries) {
+            .white = CIE_C
+        },
+
+        [PL_COLOR_PRIM_BT_601_525] = {
             .red   = {0.630, 0.340},
             .green = {0.310, 0.595},
             .blue  = {0.155, 0.070},
-            .white = d65
-        };
-    case PL_COLOR_PRIM_BT_601_625:
-        return (struct pl_raw_primaries) {
+            .white = CIE_D65
+        },
+        [PL_COLOR_PRIM_BT_601_625] = {
             .red   = {0.640, 0.330},
             .green = {0.290, 0.600},
             .blue  = {0.150, 0.060},
-            .white = d65
-        };
-    // This is the default assumption if no colorspace information could
-    // be determined, eg. for files which have no video channel.
-    case PL_COLOR_PRIM_UNKNOWN:
-    case PL_COLOR_PRIM_BT_709:
-        return (struct pl_raw_primaries) {
+            .white = CIE_D65
+        },
+        [PL_COLOR_PRIM_BT_709] = {
             .red   = {0.640, 0.330},
             .green = {0.300, 0.600},
             .blue  = {0.150, 0.060},
-            .white = d65
-        };
-    case PL_COLOR_PRIM_BT_2020:
-        return (struct pl_raw_primaries) {
+            .white = CIE_D65
+        },
+        [PL_COLOR_PRIM_BT_2020] = {
             .red   = {0.708, 0.292},
             .green = {0.170, 0.797},
             .blue  = {0.131, 0.046},
-            .white = d65
-        };
-    case PL_COLOR_PRIM_APPLE:
-        return (struct pl_raw_primaries) {
+            .white = CIE_D65
+        },
+        [PL_COLOR_PRIM_APPLE] = {
             .red   = {0.625, 0.340},
             .green = {0.280, 0.595},
             .blue  = {0.115, 0.070},
-            .white = d65
-        };
-    case PL_COLOR_PRIM_ADOBE:
-        return (struct pl_raw_primaries) {
+            .white = CIE_D65
+        },
+        [PL_COLOR_PRIM_ADOBE] = {
             .red   = {0.640, 0.330},
             .green = {0.210, 0.710},
             .blue  = {0.150, 0.060},
-            .white = d65
-        };
-    case PL_COLOR_PRIM_PRO_PHOTO:
-        return (struct pl_raw_primaries) {
+            .white = CIE_D65
+        },
+        [PL_COLOR_PRIM_PRO_PHOTO] = {
             .red   = {0.7347, 0.2653},
             .green = {0.1596, 0.8404},
             .blue  = {0.0366, 0.0001},
-            .white = d50
-        };
-    case PL_COLOR_PRIM_CIE_1931:
-        return (struct pl_raw_primaries) {
+            .white = CIE_D50
+        },
+        [PL_COLOR_PRIM_CIE_1931] = {
             .red   = {0.7347, 0.2653},
             .green = {0.2738, 0.7174},
             .blue  = {0.1666, 0.0089},
-            .white = e
-        };
+            .white = CIE_E
+        },
     // From SMPTE RP 431-2
-    case PL_COLOR_PRIM_DCI_P3:
-        return (struct pl_raw_primaries) {
+        [PL_COLOR_PRIM_DCI_P3] = {
             .red   = {0.680, 0.320},
             .green = {0.265, 0.690},
             .blue  = {0.150, 0.060},
-            .white = d65
-        };
+            .white = CIE_D65
+        },
     // From Panasonic VARICAM reference manual
-    case PL_COLOR_PRIM_V_GAMUT:
-        return (struct pl_raw_primaries) {
+        [PL_COLOR_PRIM_V_GAMUT] = {
             .red   = {0.730, 0.280},
             .green = {0.165, 0.840},
             .blue  = {0.100, -0.03},
-            .white = d65
-        };
+            .white = CIE_D65
+        },
     // From Sony S-Log reference manual
-    case PL_COLOR_PRIM_S_GAMUT:
-        return (struct pl_raw_primaries) {
+        [PL_COLOR_PRIM_S_GAMUT] = {
             .red   = {0.730, 0.280},
             .green = {0.140, 0.855},
             .blue  = {0.100, -0.05},
-            .white = d65
-        };
-    default: abort();
-    }
+            .white = CIE_D65
+        },
+    };
+
+    // This is the default assumption if no colorspace information could
+    // be determined, eg. for files which have no video channel.
+    if (!prim)
+        prim = PL_COLOR_PRIM_BT_709;
+
+    assert(prim < PL_ARRAY_SIZE(primaries));
+    return &primaries[prim];
 }
 
 // Compute the RGB/XYZ matrix as described here:
 // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
-struct pl_matrix3x3 pl_get_rgb2xyz_matrix(struct pl_raw_primaries prim)
+struct pl_matrix3x3 pl_get_rgb2xyz_matrix(const struct pl_raw_primaries *prim)
 {
     struct pl_matrix3x3 out = {{{0}}};
     float S[3], X[4], Z[4];
 
     // Convert from CIE xyY to XYZ. Note that Y=1 holds true for all primaries
-    X[0] = prim.red.x   / prim.red.y;
-    X[1] = prim.green.x / prim.green.y;
-    X[2] = prim.blue.x  / prim.blue.y;
-    X[3] = prim.white.x / prim.white.y;
+    X[0] = prim->red.x   / prim->red.y;
+    X[1] = prim->green.x / prim->green.y;
+    X[2] = prim->blue.x  / prim->blue.y;
+    X[3] = prim->white.x / prim->white.y;
 
-    Z[0] = (1 - prim.red.x   - prim.red.y)   / prim.red.y;
-    Z[1] = (1 - prim.green.x - prim.green.y) / prim.green.y;
-    Z[2] = (1 - prim.blue.x  - prim.blue.y)  / prim.blue.y;
-    Z[3] = (1 - prim.white.x - prim.white.y) / prim.white.y;
+    Z[0] = (1 - prim->red.x   - prim->red.y)   / prim->red.y;
+    Z[1] = (1 - prim->green.x - prim->green.y) / prim->green.y;
+    Z[2] = (1 - prim->blue.x  - prim->blue.y)  / prim->blue.y;
+    Z[3] = (1 - prim->white.x - prim->white.y) / prim->white.y;
 
     // S = XYZ^-1 * W
     for (int i = 0; i < 3; i++) {
@@ -398,7 +390,7 @@ struct pl_matrix3x3 pl_get_rgb2xyz_matrix(struct pl_raw_primaries prim)
         out.m[2][i] = Z[i];
     }
 
-    out = pl_matrix3x3_invert(out);
+    pl_matrix3x3_invert(&out);
 
     for (int i = 0; i < 3; i++)
         S[i] = out.m[i][0] * X[3] + out.m[i][1] * 1 + out.m[i][2] * Z[3];
@@ -413,11 +405,12 @@ struct pl_matrix3x3 pl_get_rgb2xyz_matrix(struct pl_raw_primaries prim)
     return out;
 }
 
-struct pl_matrix3x3 pl_get_xyz2rgb_matrix(struct pl_raw_primaries prim)
+struct pl_matrix3x3 pl_get_xyz2rgb_matrix(const struct pl_raw_primaries *prim)
 {
     // For simplicity, just invert the rgb2xyz matrix
-    struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
-    return pl_matrix3x3_invert(rgb2xyz);
+    struct pl_matrix3x3 out = pl_get_rgb2xyz_matrix(prim);
+    pl_matrix3x3_invert(&out);
+    return out;
 }
 
 // M := M * XYZd<-XYZs
@@ -459,16 +452,16 @@ static void apply_chromatic_adaptation(struct pl_cie_xy src,
     for (int i = 0; i < 3; i++)
         tmp.m[i][i] = C[i][1] / C[i][0];
 
-    tmp = pl_matrix3x3_mul(tmp, bradford);
+    pl_matrix3x3_mul(&tmp, &bradford);
 
     // M := M * Ma^-1 * tmp
-    struct pl_matrix3x3 bradford_inv = pl_matrix3x3_invert(bradford);
-    *mat = pl_matrix3x3_mul(*mat, bradford_inv);
-    *mat = pl_matrix3x3_mul(*mat, tmp);
+    pl_matrix3x3_invert(&bradford);
+    pl_matrix3x3_mul(mat, &bradford);
+    pl_matrix3x3_mul(mat, &tmp);
 }
 
-struct pl_matrix3x3 pl_get_color_mapping_matrix(struct pl_raw_primaries src,
-                                                struct pl_raw_primaries dst,
+struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *src,
+                                                const struct pl_raw_primaries *dst,
                                                 enum pl_rendering_intent intent)
 {
     // In saturation mapping, we don't care about accuracy and just want
@@ -486,11 +479,12 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(struct pl_raw_primaries src,
 
     // Chromatic adaptation, except in absolute colorimetric intent
     if (intent != PL_INTENT_ABSOLUTE_COLORIMETRIC)
-        apply_chromatic_adaptation(src.white, dst.white, &xyz2rgb_d);
+        apply_chromatic_adaptation(src->white, dst->white, &xyz2rgb_d);
 
     // XYZs<-RGBs
     struct pl_matrix3x3 rgb2xyz_s = pl_get_rgb2xyz_matrix(src);
-    return pl_matrix3x3_mul(xyz2rgb_d, rgb2xyz_s);
+    pl_matrix3x3_mul(&xyz2rgb_d, &rgb2xyz_s);
+    return xyz2rgb_d;
 }
 
 /* Fill in the Y, U, V vectors of a yuv-to-rgb conversion matrix
@@ -552,10 +546,11 @@ struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
     case PL_COLOR_SYSTEM_RGB:
         m = pl_matrix3x3_identity;
         break;
-    case PL_COLOR_SYSTEM_XYZ:
+    case PL_COLOR_SYSTEM_XYZ: {
         // For lack of anything saner to do, just assume the caller wants
         // BT.709 primaries, which is a reasonable assumption.
         m = pl_get_xyz2rgb_matrix(pl_raw_primaries_get(PL_COLOR_PRIM_BT_709));
+    }
         break;
     default: abort();
     }
@@ -638,6 +633,6 @@ struct pl_transform3x3 pl_get_scaled_decoding_matrix(struct pl_color_repr repr,
     repr.bit_depth = texture_depth;
 
     struct pl_transform3x3 trans = pl_get_decoding_matrix(repr, params);
-    trans.mat = pl_matrix3x3_scale(trans.mat, scale);
+    pl_matrix3x3_scale(&trans.mat, scale);
     return trans;
 }
