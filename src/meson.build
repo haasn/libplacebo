@@ -139,7 +139,7 @@ pkg.generate(
 
 tdeps = declare_dependency(link_with: lib)
 
-if get_option('enable-tests')
+if get_option('tests')
   foreach t : tests
     e = executable(t, 'tests/' + t, dependencies: tdeps)
     test(t, e)

@@ -29,7 +29,7 @@ that ended up in libplacebo.
 For a full list of past contributors to mpv, see the [mpv authorship
 page](https://github.com/mpv-player/mpv/graphs/contributors).
 
-## License
+### License
 
 Since the code heavily derives from LGPLv2.1+-licensed parts of mpv, there's
 little choice but to license libplacebo the same way.
@@ -66,7 +66,7 @@ inside the [`src/public/`](src/public/) directory.
 - `vulkan.h`: The main interface to the vulkan-based libplacebo code. This
   API essentially lets you create a vulkan-based RA instance.
 
-## Rendering Abstraction
+### Rendering Abstraction
 
 As part of the public API, libplacebo exports the **RA** API ("Rendering
 Abstraction"). Basically, this is the API libplacebo uses internally to wrap
@@ -89,7 +89,7 @@ only the vulkan-based interface is exported. It's also not very tested/stable.
 
 An [ebuild](etc/libplacebo-9999.ebuild) is available.
 
-## Building from source
+### Building from source
 
 libplacebo is built using the [meson build system](http://mesonbuild.com/).
 You can build the project using the following steps:
@@ -105,21 +105,23 @@ If you wish to install the build products to the configured prefix (typically
 advised except for developers who know what they're doing. Regular users
 should rely on distro packages.
 
+### Configuring
+
 If you want to disable optional components, for example Vulkan support, you
-can do so by passing `-Ddisable-$name=true` as part of the `meson build` step.
+can do so by passing `-Dname=false` as part of the `meson build` step.
 
 You can also reconfigure the build directory in-place, e.g.:
 ```bash
-$ meson configure build -Ddisable-vulkan=true -Ddisable-shaderc=true
+$ meson configure build -Dvulkan=false -Dshaderc=false
 ```
 
-## Testing
+### Testing
 
 To enable building and executing the tests, you need to build with
-`enable-tests`, i.e.:
+`tests` enabled, i.e.:
 
 ```bash
-$ meson build -Denable-tests=true && cd build
+$ meson build -Dtests=true && cd build
 $ ninja test
 ```
 
