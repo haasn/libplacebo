@@ -105,6 +105,24 @@ If you wish to install the build products to the configured prefix (typically
 advised except for developers who know what they're doing. Regular users
 should rely on distro packages.
 
+If you want to disable optional components, for example Vulkan support, you
+can do so by passing `-Ddisable-$name=true` as part of the `meson build` step.
+
+You can also reconfigure the build directory in-place, e.g.:
+```bash
+$ meson configure build -Ddisable-vulkan=true -Ddisable-shaderc=true
+```
+
+## Testing
+
+To enable building and executing the tests, you need to build with
+`enable-tests`, i.e.:
+
+```bash
+$ meson build -Denable-tests=true && cd build
+$ ninja test
+```
+
 ## Using
 
 Building a trivial project using libplacebo is straightforward:

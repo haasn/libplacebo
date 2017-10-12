@@ -88,8 +88,10 @@ defs = ''
 foreach c : components
   name = c[0].underscorify().to_upper()
   dep  = c[1]
-  defs += '#define PL_HAVE_@0@ @1@\n'.format(name, dep.found() ? 1 : 0)
-  if dep.found()
+  has_dep = dep.found() and not get_option('disable-' + c[0])
+
+  defs += '#define PL_HAVE_@0@ @1@\n'.format(name, has_dep ? 1 : 0)
+  if has_dep
     bdeps   += dep
     if (c.length() > 2)
       sources += c[2]
@@ -130,7 +132,9 @@ pkg.generate(
 
 tdeps = declare_dependency(link_with: lib)
 
-foreach t : tests
-  e = executable(t, 'tests/' + t, dependencies: tdeps)
-  test(t, e)
-endforeach
+if get_option('enable-tests')
+  foreach t : tests
+    e = executable(t, 'tests/' + t, dependencies: tdeps)
+    test(t, e)
+  endforeach
+endif

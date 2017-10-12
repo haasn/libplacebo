@@ -1,0 +1,10 @@
+# Optional components
+option('disable-vulkan', type: 'boolean', value: false,
+       description: 'Disable the vulkan-based renderer')
+
+option('disable-shaderc', type: 'boolean', value: false,
+       description: 'Disable the libshaderc SPIR-V compiler')
+
+# Miscellaneous
+option('enable-tests', type: 'boolean', value: false,
+       description: 'Enable building the test cases')
