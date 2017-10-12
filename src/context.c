@@ -63,6 +63,11 @@ void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
     ctx->params.log_cb(ctx->params.log_priv, lev, ctx->logbuffer.start);
 }
 
+static FILE *default_stream(void *stream, enum pl_log_level level)
+{
+    return stream ? stream : level < PL_LOG_WARN ? stderr : stdout;
+}
+
 void pl_log_simple(void *stream, enum pl_log_level level, const char *msg)
 {
     static const char *prefix[] = {
@@ -74,7 +79,7 @@ void pl_log_simple(void *stream, enum pl_log_level level, const char *msg)
         [PL_LOG_TRACE] = "trace",
     };
 
-    FILE *h = stream ? stream : stdout;
+    FILE *h = default_stream(stream, level);
     fprintf(h, "%5s: %s\n", prefix[level], msg);
 }
 
@@ -89,6 +94,6 @@ void pl_log_color(void *stream, enum pl_log_level level, const char *msg)
         [PL_LOG_TRACE] = "30;1", // bright black
     };
 
-    FILE *h = stream ? stream : stdout;
+    FILE *h = default_stream(stream, level);
     fprintf(h, "\033[%sm%s\033[0m\n", color[level], msg);
 }
