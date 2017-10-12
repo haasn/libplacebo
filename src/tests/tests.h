@@ -21,12 +21,21 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <math.h>
 
-static const struct pl_context_params ctx_params = {
-    .log_cb    = pl_log_simple,
-    .log_level = PL_LOG_ALL,
-};
+static inline struct pl_context *pl_test_context()
+{
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
+
+    struct pl_context_params ctx_params = {
+        .log_cb    = isatty(fileno(stdout)) ? pl_log_color : pl_log_simple,
+        .log_level = PL_LOG_ALL,
+    };
+
+    return pl_context_create(&ctx_params, PL_API_VER);
+}
 
 static inline void require(bool b, const char *msg)
 {
@@ -43,3 +52,4 @@ static inline bool feq(float a, float b)
 
 #define REQUIRE(cond) require((cond), #cond)
 #define RANDOM (random() / (float) RAND_MAX)
+#define SKIP 77

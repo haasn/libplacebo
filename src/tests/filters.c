@@ -2,8 +2,7 @@
 
 int main()
 {
-    setbuf(stdout, NULL);
-    struct pl_context *ctx = pl_context_create(&ctx_params, PL_API_VER);
+    struct pl_context *ctx = pl_test_context();
     for (const struct pl_named_filter_config *conf = pl_named_filters;
          conf->filter; conf++)
     {

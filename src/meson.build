@@ -65,7 +65,8 @@ components = [
       'vulkan/malloc.c',
       'vulkan/ra_vk.c',
       'vulkan/utils.c',
-    ]
+    ],
+    'vulkan.c'
   ]
 ]
 

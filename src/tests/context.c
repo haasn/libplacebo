@@ -2,6 +2,6 @@
 
 int main()
 {
-    struct pl_context *ctx = pl_context_create(&ctx_params, PL_API_VER);
+    struct pl_context *ctx = pl_test_context();
     pl_context_destroy(&ctx);
 }
