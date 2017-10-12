@@ -512,7 +512,7 @@ void pl_shader_color_map(struct pl_shader *sh,
 
     // Various operations need access to the src_luma and dst_luma respectively,
     // so just always make them available if we're doing anything at all
-    var_t src_luma, dst_luma;
+    var_t src_luma = NULL, dst_luma = NULL;
     if (need_linear) {
         struct pl_matrix3x3 rgb2xyz;
         rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(src.primaries));
