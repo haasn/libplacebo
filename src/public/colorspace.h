@@ -57,8 +57,10 @@ enum pl_color_levels {
 struct pl_color_repr {
     enum pl_color_system sys;
     enum pl_color_levels levels;
-    int bit_depth; // must be non-zero
+    int bit_depth; // or 0 if unknown
 };
+
+extern const struct pl_color_repr pl_color_repr_unknown;
 
 // Replaces unknown values in the first struct by those of the second struct.
 void pl_color_repr_merge(struct pl_color_repr *orig,
@@ -272,10 +274,6 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(struct pl_raw_primaries src,
 // Note: For BT.2020 constant-luminance, this outputs chroma information in the
 // range [-0.5, 0.5]. Since the CL system conversion is non-linear, further
 // processing must be done by the caller. The channel order is CrYCb.
-//
-// Note: In situations where the repr.bit_depth does not match the texture
-// bit depth (e.g. uploading 10-bit colors to a 16-bit texture), you can use
-// pl_transform3x3_scale with scale = pl_color_repr_texture_mul(repr).
 struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
                                               struct pl_color_adjustment params);
 

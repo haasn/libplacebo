@@ -59,6 +59,8 @@ void pl_color_repr_merge(struct pl_color_repr *orig,
         orig->bit_depth = new->bit_depth;
 }
 
+const struct pl_color_repr pl_color_repr_unknown = {0};
+
 bool pl_color_repr_equal(struct pl_color_repr c1, struct pl_color_repr c2)
 {
     return c1.sys == c2.sys &&
@@ -79,7 +81,8 @@ static enum pl_color_levels guess_levels(struct pl_color_repr repr)
 
 float pl_color_repr_texture_mul(struct pl_color_repr repr, int new_bits)
 {
-    assert(new_bits && repr.bit_depth);
+    if (!new_bits || !repr.bit_depth)
+        return 1.0;
 
     if (guess_levels(repr) == PL_COLOR_LEVELS_TV) {
         // Limit range is always shifted directly
@@ -555,8 +558,9 @@ struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
     }
     // FIXME: apply saturation for RGB
 
+    int bit_depth = repr.bit_depth ? repr.bit_depth : 8;
     double ymax, ymin, cmax, cmid;
-    double scale = (1LL << repr.bit_depth) / ((1LL << repr.bit_depth) - 1.0);
+    double scale = (1LL << bit_depth) / ((1LL << bit_depth) - 1.0);
 
     switch (guess_levels(repr)) {
     case PL_COLOR_LEVELS_TV: {
