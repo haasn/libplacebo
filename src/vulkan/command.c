@@ -350,6 +350,7 @@ void vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
         VkResult res = vk_cmd_poll(vk, cmd, timeout);
         if (res == VK_TIMEOUT)
             break;
+        PL_TRACE(vk, "VkFence signalled: %p", (void *) cmd->fence);
         vk_cmd_reset(vk, cmd);
         TARRAY_REMOVE_AT(vk->cmds_pending, vk->num_cmds_pending, 0);
         TARRAY_APPEND(pool, pool->cmds, pool->num_cmds, cmd);
@@ -379,9 +380,10 @@ bool vk_flush_commands(struct vk_ctx *vk)
             PL_TRACE(vk, "Submitting command on queue %p (QF %d):",
                      (void *)cmd->queue, pool->qf);
             for (int n = 0; n < cmd->num_deps; n++)
-                PL_TRACE(vk, "    waits on semaphore %p", (void *)cmd->deps[n]);
+                PL_TRACE(vk, "    waits on semaphore %p", (void *) cmd->deps[n]);
             for (int n = 0; n < cmd->num_sigs; n++)
-                PL_TRACE(vk, "    signals semaphore %p", (void *)cmd->sigs[n]);
+                PL_TRACE(vk, "    signals semaphore %p", (void *) cmd->sigs[n]);
+            PL_TRACE(vk, "    signals fence %p", (void *) cmd->fence);
         }
 
         VK(vkQueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));

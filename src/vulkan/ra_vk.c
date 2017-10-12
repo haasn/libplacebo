@@ -484,7 +484,7 @@ static bool vk_init_image(const struct ra *ra, const struct ra_tex *tex)
         VK(vk_create_render_pass(vk->dev, params->format,
                                  VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                                  VK_IMAGE_LAYOUT_UNDEFINED,
-                                 VK_IMAGE_LAYOUT_UNDEFINED,
+                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                  &dummyPass));
 
         VkFramebufferCreateInfo finfo = {
@@ -1266,14 +1266,16 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
         }
     }
 
-    VkDescriptorPoolCreateInfo pinfo = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = NUM_DS,
-        .pPoolSizes = dsPoolSizes,
-        .poolSizeCount = poolSizeCount,
-    };
+    if (poolSizeCount) {
+        VkDescriptorPoolCreateInfo pinfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .maxSets = NUM_DS,
+            .pPoolSizes = dsPoolSizes,
+            .poolSizeCount = poolSizeCount,
+        };
 
-    VK(vkCreateDescriptorPool(vk->dev, &pinfo, VK_ALLOC, &pass_vk->dsPool));
+        VK(vkCreateDescriptorPool(vk->dev, &pinfo, VK_ALLOC, &pass_vk->dsPool));
+    }
 
     VkDescriptorSetLayoutCreateInfo dinfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -1288,14 +1290,16 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
     for (int i = 0; i < NUM_DS; i++)
         layouts[i] = pass_vk->dsLayout;
 
-    VkDescriptorSetAllocateInfo ainfo = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = pass_vk->dsPool,
-        .descriptorSetCount = NUM_DS,
-        .pSetLayouts = layouts,
-    };
+    if (pass_vk->dsPool) {
+        VkDescriptorSetAllocateInfo ainfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = pass_vk->dsPool,
+            .descriptorSetCount = NUM_DS,
+            .pSetLayouts = layouts,
+        };
 
-    VK(vkAllocateDescriptorSets(vk->dev, &ainfo, pass_vk->dss));
+        VK(vkAllocateDescriptorSets(vk->dev, &ainfo, pass_vk->dss));
+    }
 
     VkPipelineLayoutCreateInfo linfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -1591,6 +1595,7 @@ static void vk_update_descriptor(const struct ra *ra, struct vk_cmd *cmd,
 {
     struct ra_pass_vk *pass_vk = pass->priv;
     struct ra_desc *desc = &pass->params.descriptors[idx];
+    assert(ds);
 
     VkWriteDescriptorSet *wds = &pass_vk->dswrite[idx];
     *wds = (VkWriteDescriptorSet) {
@@ -1731,7 +1736,6 @@ static void vk_pass_run(const struct ra *ra,
         }
     }
 
-    assert(ds);
     for (int i = 0; i < pass->params.num_descriptors; i++)
         vk_update_descriptor(ra, cmd, pass, params->desc_bindings[i], ds, i);
 
@@ -1740,8 +1744,10 @@ static void vk_pass_run(const struct ra *ra,
                                pass_vk->dswrite, 0, NULL);
     }
 
-    vkCmdBindDescriptorSets(cmd->buf, bindPoint[pass->params.type],
-                            pass_vk->pipeLayout, 0, 1, &ds, 0, NULL);
+    if (ds) {
+        vkCmdBindDescriptorSets(cmd->buf, bindPoint[pass->params.type],
+                                pass_vk->pipeLayout, 0, 1, &ds, 0, NULL);
+    }
 
     if (pass->params.push_constants_size) {
         vkCmdPushConstants(cmd->buf, pass_vk->pipeLayout,
