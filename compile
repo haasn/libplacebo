@@ -1,0 +1,4 @@
+#!/bin/sh
+DIR=./build
+[ -d $DIR ] || meson $DIR
+ninja -C$DIR

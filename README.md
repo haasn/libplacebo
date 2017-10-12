@@ -95,24 +95,33 @@ libplacebo is built using the [meson build system](http://mesonbuild.com/).
 You can build the project using the following steps:
 
 ```bash
-$ meson build && cd build
-$ ninja
+$ DIR=./build
+$ meson $DIR
+$ ninja -C$DIR
 ```
 
-To rebuild the project on changes, re-run `ninja` from the `build` directory.
-If you wish to install the build products to the configured prefix (typically
-`/usr/local/`), you can run `ninja install`. Note that this is normally ill-
-advised except for developers who know what they're doing. Regular users
-should rely on distro packages.
+To rebuild the project on changes, re-run `ninja -Cbuild`. If you wish to
+install the build products to the configured prefix (typically `/usr/local/`),
+you can run `ninja -Cbuild install`. Note that this is normally ill- advised
+except for developers who know what they're doing. Regular users should rely
+on distro packages.
 
 ### Configuring
 
-If you want to disable optional components, for example Vulkan support, you
-can do so by passing `-Dname=false` as part of the `meson build` step.
+To get a list of configuration options supported by libplacebo, after running
+`meson $DIR` you can run `meson configure $DIR`, e.g.:
 
-You can also reconfigure the build directory in-place, e.g.:
 ```bash
-$ meson configure build -Dvulkan=false -Dshaderc=false
+$ meson $DIR
+$ meson configure $DIR
+```
+
+If you want to disable a component, for example Vulkan support, you can
+explicitly set it to `false`, i.e.:
+
+```bash
+$ meson configure $DIR -Dvulkan=false -Dshaderc=false
+$ ninja -C$DIR
 ```
 
 ### Testing
@@ -121,8 +130,8 @@ To enable building and executing the tests, you need to build with
 `tests` enabled, i.e.:
 
 ```bash
-$ meson build -Dtests=true && cd build
-$ ninja test
+$ meson configure $DIR -Dtests=true
+$ ninja -C$DIR test
 ```
 
 ## Using
