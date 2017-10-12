@@ -154,8 +154,11 @@ void main()
 ```
 
 For a full documentation of the API, refer to the above [API
-Overview](#api-overview) as well as the [public header files](src/public/). I
-will create more and expanded samples once the project has a bit more
+Overview](#api-overview) as well as the [public header files](src/public/).
+You can find additional examples of how to use the various components, in the
+[unit tests](src/tests).
+
+I will create more and expanded samples once the project has a bit more
 functionality worth writing home about.
 
 ## Support
