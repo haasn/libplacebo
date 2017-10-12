@@ -1071,8 +1071,8 @@ static int vk_desc_namespace(const struct ra *ra, enum ra_desc_type type)
     return type ? 0 : 1;
 }
 
-// For ra_renderpass.priv
-struct ra_renderpass_vk {
+// For ra_pass.priv
+struct ra_pass_vk {
     // Pipeline / render pass
     VkPipeline pipe;
     VkPipelineLayout pipeLayout;
@@ -1097,13 +1097,13 @@ struct ra_renderpass_vk {
     VkDescriptorBufferInfo *dsbinfo;
 };
 
-static void vk_renderpass_destroy(const struct ra *ra, struct ra_renderpass *pass)
+static void vk_pass_destroy(const struct ra *ra, struct ra_pass *pass)
 {
     if (!pass)
         return;
 
     struct vk_ctx *vk = ra_vk_get(ra);
-    struct ra_renderpass_vk *pass_vk = pass->priv;
+    struct ra_pass_vk *pass_vk = pass->priv;
 
     ra_buf_pool_uninit(ra, &pass_vk->vbo);
     vkDestroyPipeline(vk->dev, pass_vk->pipe, VK_ALLOC);
@@ -1115,7 +1115,7 @@ static void vk_renderpass_destroy(const struct ra *ra, struct ra_renderpass *pas
     talloc_free(pass);
 }
 
-MAKE_LAZY_DESTRUCTOR(vk_renderpass_destroy, struct ra_renderpass);
+MAKE_LAZY_DESTRUCTOR(vk_pass_destroy, struct ra_pass);
 
 static const VkDescriptorType dsType[] = {
     [RA_DESC_SAMPLED_TEX] = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -1138,7 +1138,7 @@ struct vk_cache_header {
     size_t pipecache_len;
 };
 
-static bool vk_use_cached_program(const struct ra_renderpass_params *params,
+static bool vk_use_cached_program(const struct ra_pass_params *params,
                                   const struct spirv_compiler *spirv,
                                   struct bstr *vert_spirv,
                                   struct bstr *frag_spirv,
@@ -1202,24 +1202,24 @@ static VkResult vk_compile_glsl(const struct ra *ra, void *tactx,
 }
 
 static const VkShaderStageFlags stageFlags[] = {
-    [RA_RENDERPASS_RASTER]  = VK_SHADER_STAGE_FRAGMENT_BIT,
-    [RA_RENDERPASS_COMPUTE] = VK_SHADER_STAGE_COMPUTE_BIT,
+    [RA_PASS_RASTER]  = VK_SHADER_STAGE_FRAGMENT_BIT,
+    [RA_PASS_COMPUTE] = VK_SHADER_STAGE_COMPUTE_BIT,
 };
 
-static const struct ra_renderpass *vk_renderpass_create(const struct ra *ra,
-                                    const struct ra_renderpass_params *params)
+static const struct ra_pass *vk_pass_create(const struct ra *ra,
+                                            const struct ra_pass_params *params)
 {
     struct vk_ctx *vk = ra_vk_get(ra);
     struct ra_vk *p = ra->priv;
     bool success = false;
 
-    struct ra_renderpass *pass = talloc_zero(NULL, struct ra_renderpass);
-    pass->params = ra_renderpass_params_copy(pass, params);
+    struct ra_pass *pass = talloc_zero(NULL, struct ra_pass);
+    pass->params = ra_pass_params_copy(pass, params);
     pass->params.cached_program = NULL;
     pass->params.cached_program_len = 0;
 
-    struct ra_renderpass_vk *pass_vk = pass->priv =
-        talloc_zero(pass, struct ra_renderpass_vk);
+    struct ra_pass_vk *pass_vk = pass->priv =
+        talloc_zero(pass, struct ra_pass_vk);
     pass_vk->dmask = -1; // all descriptors available
 
     int num_desc = params->num_descriptors;
@@ -1318,14 +1318,14 @@ static const struct ra_renderpass *vk_renderpass_create(const struct ra *ra,
     } else {
         pipecache.len = 0;
         switch (params->type) {
-        case RA_RENDERPASS_RASTER:
+        case RA_PASS_RASTER:
             VK(vk_compile_glsl(ra, tmp, GLSL_SHADER_VERTEX,
                                params->vertex_shader, &vert));
             VK(vk_compile_glsl(ra, tmp, GLSL_SHADER_FRAGMENT,
                                params->glsl_shader, &frag));
             comp.len = 0;
             break;
-        case RA_RENDERPASS_COMPUTE:
+        case RA_PASS_COMPUTE:
             VK(vk_compile_glsl(ra, tmp, GLSL_SHADER_COMPUTE,
                                params->glsl_shader, &comp));
             frag.len = 0;
@@ -1348,7 +1348,7 @@ static const struct ra_renderpass *vk_renderpass_create(const struct ra *ra,
     };
 
     switch (params->type) {
-    case RA_RENDERPASS_RASTER: {
+    case RA_PASS_RASTER: {
         sinfo.pCode = (uint32_t *) vert.start;
         sinfo.codeSize = vert.len;
         VK(vkCreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &vert_shader));
@@ -1488,7 +1488,7 @@ static const struct ra_renderpass *vk_renderpass_create(const struct ra *ra,
                                      VK_ALLOC, &pass_vk->pipe));
         break;
     }
-    case RA_RENDERPASS_COMPUTE: {
+    case RA_PASS_COMPUTE: {
         sinfo.pCode = (uint32_t *)comp.start;
         sinfo.codeSize = comp.len;
         VK(vkCreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &comp_shader));
@@ -1544,7 +1544,7 @@ static const struct ra_renderpass *vk_renderpass_create(const struct ra *ra,
 
 error:
     if (!success) {
-        vk_renderpass_destroy(ra, pass);
+        vk_pass_destroy(ra, pass);
         pass = NULL;
     }
 
@@ -1559,16 +1559,16 @@ error:
 }
 
 static const VkPipelineStageFlags passStages[] = {
-    [RA_RENDERPASS_RASTER]  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-    [RA_RENDERPASS_COMPUTE] = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+    [RA_PASS_RASTER]  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+    [RA_PASS_COMPUTE] = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 };
 
 static void vk_update_descriptor(const struct ra *ra, struct vk_cmd *cmd,
-                                 const struct ra_renderpass *pass,
+                                 const struct ra_pass *pass,
                                  struct ra_desc_binding db,
                                  VkDescriptorSet ds, int idx)
 {
-    struct ra_renderpass_vk *pass_vk = pass->priv;
+    struct ra_pass_vk *pass_vk = pass->priv;
     struct ra_desc *desc = &pass->params.descriptors[idx];
 
     VkWriteDescriptorSet *wds = &pass_vk->dswrite[idx];
@@ -1647,7 +1647,7 @@ static void vk_update_descriptor(const struct ra *ra, struct vk_cmd *cmd,
 }
 
 static void vk_release_descriptor(const struct ra *ra, struct vk_cmd *cmd,
-                                  const struct ra_renderpass *pass,
+                                  const struct ra_pass *pass,
                                   struct ra_desc_binding db, int idx)
 {
     const struct ra_desc *desc = &pass->params.descriptors[idx];
@@ -1663,21 +1663,21 @@ static void vk_release_descriptor(const struct ra *ra, struct vk_cmd *cmd,
     }
 }
 
-static void set_ds(struct ra_renderpass_vk *pass_vk, uintptr_t dsbit)
+static void set_ds(struct ra_pass_vk *pass_vk, uintptr_t dsbit)
 {
     pass_vk->dmask |= dsbit;
 }
 
-static void vk_renderpass_run(const struct ra *ra,
-                              const struct ra_renderpass_run_params *params)
+static void vk_pass_run(const struct ra *ra,
+                        const struct ra_pass_run_params *params)
 {
     struct vk_ctx *vk = ra_vk_get(ra);
-    const struct ra_renderpass *pass = params->pass;
-    struct ra_renderpass_vk *pass_vk = pass->priv;
+    const struct ra_pass *pass = params->pass;
+    struct ra_pass_vk *pass_vk = pass->priv;
 
     static const enum queue_type types[] = {
-        [RA_RENDERPASS_RASTER]  = GRAPHICS,
-        [RA_RENDERPASS_COMPUTE] = COMPUTE,
+        [RA_PASS_RASTER]  = GRAPHICS,
+        [RA_PASS_COMPUTE] = COMPUTE,
     };
 
     // Wait for a free descriptor set
@@ -1692,8 +1692,8 @@ static void vk_renderpass_run(const struct ra *ra,
         goto error;
 
     static const VkPipelineBindPoint bindPoint[] = {
-        [RA_RENDERPASS_RASTER]  = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        [RA_RENDERPASS_COMPUTE] = VK_PIPELINE_BIND_POINT_COMPUTE,
+        [RA_PASS_RASTER]  = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        [RA_PASS_COMPUTE] = VK_PIPELINE_BIND_POINT_COMPUTE,
     };
 
     vkCmdBindPipeline(cmd->buf, bindPoint[pass->params.type], pass_vk->pipe);
@@ -1730,7 +1730,7 @@ static void vk_renderpass_run(const struct ra *ra,
     }
 
     switch (pass->params.type) {
-    case RA_RENDERPASS_RASTER: {
+    case RA_PASS_RASTER: {
         const struct ra_tex *tex = params->target;
         struct ra_tex_vk *tex_vk = tex->priv;
 
@@ -1792,7 +1792,7 @@ static void vk_renderpass_run(const struct ra *ra,
         tex_signal(ra, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         break;
     }
-    case RA_RENDERPASS_COMPUTE:
+    case RA_PASS_COMPUTE:
         vkCmdDispatch(cmd->buf, params->compute_groups[0],
                       params->compute_groups[1],
                       params->compute_groups[2]);
@@ -1836,9 +1836,9 @@ static struct ra_fns ra_fns_vk = {
     .buf_storage_layout     = std430_layout,
     .push_constant_layout   = std430_layout,
     .desc_namespace         = vk_desc_namespace,
-    .renderpass_create      = vk_renderpass_create,
-    .renderpass_destroy     = vk_renderpass_destroy_lazy,
-    .renderpass_run         = vk_renderpass_run,
+    .pass_create            = vk_pass_create,
+    .pass_destroy           = vk_pass_destroy_lazy,
+    .pass_run               = vk_pass_run,
     .flush                  = vk_flush,
 };
 

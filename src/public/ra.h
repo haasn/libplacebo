@@ -110,8 +110,8 @@ enum ra_fmt_caps {
     RA_FMT_CAP_SAMPLEABLE   = 1 << 2, // may be sampled from (RA_DESC_SAMPLED_TEX)
     RA_FMT_CAP_STORABLE     = 1 << 3, // may be used as storage image (RA_DESC_STORAGE_IMG)
     RA_FMT_CAP_LINEAR       = 1 << 4, // may be linearly samplied from (RA_TEX_SAMPLE_LINEAR)
-    RA_FMT_CAP_RENDERABLE   = 1 << 5, // may be rendered to (ra_renderpass_params.target_fmt)
-    RA_FMT_CAP_BLENDABLE    = 1 << 6, // may be blended to (ra_renderpass_params.enable_blend)
+    RA_FMT_CAP_RENDERABLE   = 1 << 5, // may be rendered to (ra_pass_params.target_fmt)
+    RA_FMT_CAP_BLENDABLE    = 1 << 6, // may be blended to (ra_pass_params.enable_blend)
     RA_FMT_CAP_BLITTABLE    = 1 << 7, // may be blitted from/to (ra_tex_blit)
 };
 
@@ -185,7 +185,7 @@ struct ra_tex_params {
     // corresponding ra_fmt capability must be set for every enabled
     // operation type.
     bool sampleable;    // usable as a RA_DESC_SAMPLED_TEX
-    bool renderable;    // usable as a render target (ra_renderpass_run)
+    bool renderable;    // usable as a render target (ra_pass_run)
                         // (must only be used with 2D textures)
     bool storable;      // usable as a storage image (RA_DESC_IMG_*)
     bool blit_src;      // usable as a blit source
@@ -560,7 +560,7 @@ struct ra_desc {
     const char *buffer_layout;
 };
 
-// Framebuffer blending mode (for raster renderpasses)
+// Framebuffer blending mode (for raster passes)
 enum ra_blend_mode {
     RA_BLEND_ZERO,
     RA_BLEND_ONE,
@@ -574,18 +574,18 @@ enum ra_prim_type {
     RA_PRIM_TRIANGLE_FAN,
 };
 
-enum ra_renderpass_type {
-    RA_RENDERPASS_INVALID = 0,
-    RA_RENDERPASS_RASTER,  // vertex+fragment shader
-    RA_RENDERPASS_COMPUTE, // compute shader (requires RA_CAP_COMPUTE)
-    RA_RENDERPASS_TYPE_COUNT,
+enum ra_pass_type {
+    RA_PASS_INVALID = 0,
+    RA_PASS_RASTER,  // vertex+fragment shader
+    RA_PASS_COMPUTE, // compute shader (requires RA_CAP_COMPUTE)
+    RA_PASS_TYPE_COUNT,
 };
 
 // Description of a rendering pass. It conflates the following:
 //  - GLSL shader(s) and its list of inputs
 //  - target parameters (for raster passes)
-struct ra_renderpass_params {
-    enum ra_renderpass_type type;
+struct ra_pass_params {
+    enum ra_pass_type type;
 
     // Input variables. Only supported if RA_CAP_INPUT_VARIABLES is set.
     // Otherwise, num_variables must be 0.
@@ -599,13 +599,13 @@ struct ra_renderpass_params {
     // Push constant region. Must be be a multiple of 4 <= limits.max_pushc_size
     size_t push_constants_size;
 
-    // The shader text in GLSL. For RA_RENDERPASS_RASTER, this is interpreted
-    // as a fragment shader. For RA_RENDERPASS_COMPUTE, this is interpreted as
+    // The shader text in GLSL. For RA_PASS_RASTER, this is interpreted
+    // as a fragment shader. For RA_PASS_COMPUTE, this is interpreted as
     // a compute shader.
     const char *glsl_shader;
 
     // Highly implementation-specific byte array storing a compiled version of
-    // the same shader. Can be used to speed up renderpass creation on already
+    // the same shader. Can be used to speed up pass creation on already
     // known/cached shaders.
     //
     // Note: There are no restrctions on this. Passing an out-of-date cache,
@@ -615,7 +615,7 @@ struct ra_renderpass_params {
     const uint8_t *cached_program;
     size_t cached_program_len;
 
-    // --- type==RA_RENDERPASS_RASTER only
+    // --- type==RA_PASS_RASTER only
 
     // Describes the interpretation and layout of the vertex data.
     enum ra_prim_type vertex_type;
@@ -638,8 +638,8 @@ struct ra_renderpass_params {
     enum ra_blend_mode blend_dst_alpha;
 
     // If false, the target's existing contents will be discarded before the
-    // renderpass is run. (Semantically equivalent to calling ra_tex_invalidate
-    // before every ra_renderpass_run, but slightly more efficient)
+    // pass is run. (Semantically equivalent to calling ra_tex_invalidate
+    // before every ra_pass_run, but slightly more efficient)
     bool load_target;
 };
 
@@ -649,8 +649,8 @@ struct ra_renderpass_params {
 // - descriptor sets, uniforms, other bindings
 // - all synchronization necessary
 // - the current values of all inputs
-struct ra_renderpass {
-    struct ra_renderpass_params params;
+struct ra_pass {
+    struct ra_pass_params params;
     void *priv;
 };
 
@@ -658,13 +658,12 @@ struct ra_renderpass {
 // operation and may take a significant amount of time, even if a cached
 // program is used. Returns NULL on failure.
 //
-// The resulting ra_renderpass->params.cached_program will be initialized by
+// The resulting ra_pass->params.cached_program will be initialized by
 // this function to point to a new, valid cached program (if any).
-const struct ra_renderpass *ra_renderpass_create(const struct ra *ra,
-                                const struct ra_renderpass_params *params);
+const struct ra_pass *ra_pass_create(const struct ra *ra,
+                                     const struct ra_pass_params *params);
 
-void ra_renderpass_destroy(const struct ra *ra,
-                           const struct ra_renderpass **pass);
+void ra_pass_destroy(const struct ra *ra, const struct ra_pass **pass);
 
 struct ra_desc_binding {
     const void *object; // ra_* object with type corresponding to ra_desc_type
@@ -675,9 +674,8 @@ struct ra_var_update {
     void *data; // pointer to raw byte data corresponding to ra_var_host_layout()
 };
 
-// Parameters for running a renderpass. These are expected to change often.
-struct ra_renderpass_run_params {
-    struct ra_renderpass *pass;
+struct ra_pass_run_params {
+    struct ra_pass *pass;
 
     // This list only contains descriptors/variables which have changed
     // since the previous invocation. All non-mentioned variables implicitly
@@ -685,7 +683,7 @@ struct ra_renderpass_run_params {
     struct ra_var_update *var_updates;
     int num_var_updates;
 
-    // This list contains all descriptors used by this renderpass. It must
+    // This list contains all descriptors used by this pass. It must
     // always be filled, even if the descriptors haven't changed. The order
     // must match that of pass->params.descriptors
     struct ra_desc_binding *desc_bindings;
@@ -694,7 +692,7 @@ struct ra_renderpass_run_params {
     // fully defined for every invocation if params.push_constants_size > 0.
     void *push_constants;
 
-    // --- pass->params.type==RA_RENDERPASS_RASTER only
+    // --- pass->params.type==RA_PASS_RASTER only
 
     // Target must be a 2D texture, target->params.renderable must be true, and
     // target->params.format must match pass->params.target_fmt.
@@ -705,7 +703,7 @@ struct ra_renderpass_run_params {
     void *vertex_data;  // raw pointer to vertex data
     int vertex_count;   // number of vertices to render
 
-    // --- pass->params.type==RA_RENDERPASS_COMPUTE only
+    // --- pass->params.type==RA_PASS_COMPUTE only
 
     // Number of work groups to dispatch per dimension (X/Y/Z). Must be <= the
     // corresponding index of limits.max_dispatch
@@ -713,8 +711,7 @@ struct ra_renderpass_run_params {
 };
 
 // Execute a render pass.
-void ra_renderpass_run(const struct ra *ra,
-                       const struct ra_renderpass_run_params *params);
+void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params);
 
 // This is semantically a no-op, but it provides a hint that you want to flush
 // any partially queued up commands and begin execution. There is normally no

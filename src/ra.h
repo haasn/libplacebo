@@ -27,7 +27,7 @@ struct ra_fns {
     void (*destroy)(const struct ra *ra);
     void (*tex_destroy)(const struct ra *, const struct ra_tex *);
     void (*buf_destroy)(const struct ra *, const struct ra_buf *);
-    void (*renderpass_destroy)(const struct ra *, const struct ra_renderpass *);
+    void (*pass_destroy)(const struct ra *, const struct ra_pass *);
 
     RA_PFN(tex_create);
     RA_PFN(tex_invalidate);
@@ -40,8 +40,8 @@ struct ra_fns {
     RA_PFN(buf_read);
     RA_PFN(buf_poll); // optional: if NULL buffers are always free to use
     RA_PFN(desc_namespace);
-    RA_PFN(renderpass_create);
-    RA_PFN(renderpass_run);
+    RA_PFN(pass_create);
+    RA_PFN(pass_run);
     RA_PFN(flush); // optional
 
     // The following functions are optional if the corresponding ra_limit
@@ -93,5 +93,5 @@ bool ra_tex_upload_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
 bool ra_tex_download_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
                          const struct ra_tex_transfer_params *params);
 
-struct ra_renderpass_params ra_renderpass_params_copy(void *tactx,
-                                    const struct ra_renderpass_params *params);
+struct ra_pass_params ra_pass_params_copy(void *tactx,
+                                          const struct ra_pass_params *params);

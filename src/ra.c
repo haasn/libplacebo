@@ -513,12 +513,12 @@ const char *ra_desc_access_glsl_name(enum ra_desc_access mode)
     }
 }
 
-const struct ra_renderpass *ra_renderpass_create(const struct ra *ra,
-                                const struct ra_renderpass_params *params)
+const struct ra_pass *ra_pass_create(const struct ra *ra,
+                                     const struct ra_pass_params *params)
 {
     assert(params->glsl_shader);
     switch(params->type) {
-    case RA_RENDERPASS_RASTER:
+    case RA_PASS_RASTER:
         assert(params->vertex_shader);
         for (int i = 0; i < params->num_vertex_attribs; i++) {
             struct ra_vertex_attrib va = params->vertex_attribs[i];
@@ -532,7 +532,7 @@ const struct ra_renderpass *ra_renderpass_create(const struct ra *ra,
         assert(params->target_fmt->caps & RA_FMT_CAP_RENDERABLE);
         assert(!params->enable_blend || params->target_fmt->caps & RA_FMT_CAP_BLENDABLE);
         break;
-    case RA_RENDERPASS_COMPUTE:
+    case RA_PASS_COMPUTE:
         assert(ra->caps & RA_CAP_COMPUTE);
         break;
     default: abort();
@@ -554,23 +554,21 @@ const struct ra_renderpass *ra_renderpass_create(const struct ra *ra,
     assert(params->push_constants_size <= ra->limits.max_pushc_size);
     assert(params->push_constants_size == PL_ALIGN2(params->push_constants_size, 4));
 
-    return ra->impl->renderpass_create(ra, params);
+    return ra->impl->pass_create(ra, params);
 }
 
-void ra_renderpass_destroy(const struct ra *ra,
-                           const struct ra_renderpass **pass)
+void ra_pass_destroy(const struct ra *ra, const struct ra_pass **pass)
 {
     if (!*pass)
         return;
 
-    ra->impl->renderpass_destroy(ra, *pass);
+    ra->impl->pass_destroy(ra, *pass);
     *pass = NULL;
 }
 
-void ra_renderpass_run(const struct ra *ra,
-                       const struct ra_renderpass_run_params *params)
+void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params)
 {
-    struct ra_renderpass *pass = params->pass;
+    struct ra_pass *pass = params->pass;
 
 #ifndef NDEBUG
     for (int i = 0; i < pass->params.num_descriptors; i++) {
@@ -612,7 +610,7 @@ void ra_renderpass_run(const struct ra *ra,
     assert(params->push_constants || !pass->params.push_constants_size);
 
     switch (pass->params.type) {
-    case RA_RENDERPASS_RASTER: {
+    case RA_PASS_RASTER: {
         struct ra_tex *tex = params->target;
         assert(tex);
         assert(ra_tex_params_dimension(tex->params) == 2);
@@ -624,7 +622,7 @@ void ra_renderpass_run(const struct ra *ra,
         assert(pl_rect2d_eq(sc, pl_rect2d_normalize(sc)));
         break;
     }
-    case RA_RENDERPASS_COMPUTE:
+    case RA_PASS_COMPUTE:
         for (int i = 0; i < PL_ARRAY_SIZE(params->compute_groups); i++) {
             assert(params->compute_groups[i] >= 0);
             assert(params->compute_groups[i] <= ra->limits.max_dispatch[i]);
@@ -637,7 +635,7 @@ void ra_renderpass_run(const struct ra *ra,
     if (params->target && !pass->params.load_target)
         ra_tex_invalidate(ra, params->target);
 
-    return ra->impl->renderpass_run(ra, params);
+    return ra->impl->pass_run(ra, params);
 }
 
 void ra_flush(const struct ra *ra)
@@ -807,10 +805,10 @@ bool ra_tex_download_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
     return ra_buf_read(ra, buf, 0, params->ptr, bufparams.size);
 }
 
-struct ra_renderpass_params ra_renderpass_params_copy(void *tactx,
-                                    const struct ra_renderpass_params *params)
+struct ra_pass_params ra_pass_params_copy(void *tactx,
+                                          const struct ra_pass_params *params)
 {
-    struct ra_renderpass_params new = *params;
+    struct ra_pass_params new = *params;
     // FIXME: implement
     return new;
 }
