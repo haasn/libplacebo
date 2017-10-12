@@ -54,3 +54,6 @@ void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
 #define PL_INFO(obj, ...)       PL_MSG(obj, PL_LOG_INFO, __VA_ARGS__)
 #define PL_DEBUG(obj, ...)      PL_MSG(obj, PL_LOG_DEBUG, __VA_ARGS__)
 #define PL_TRACE(obj, ...)      PL_MSG(obj, PL_LOG_TRACE, __VA_ARGS__)
+
+// Log something with line numbers included
+void pl_msg_source(struct pl_context *ctx, enum pl_log_level lev, const char *src);

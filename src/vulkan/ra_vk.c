@@ -1201,13 +1201,11 @@ static VkResult vk_compile_glsl(const struct ra *ra, void *tactx,
         [GLSL_SHADER_COMPUTE]  = "compute",
     };
 
-    if (pl_msg_test(ra->ctx, PL_LOG_DEBUG)) {
-        PL_DEBUG(ra, "%s shader source:", shader_names[type]);
-        //pl_log_source(ra->ctx, PL_LOG_DEBUG, glsl);
-    }
+    PL_DEBUG(ra, "%s shader source:", shader_names[type]);
+    pl_msg_source(ra->ctx, PL_LOG_DEBUG, glsl);
 
     if (!p->spirv->impl->compile_glsl(p->spirv, tactx, type, glsl, spirv)) {
-        PL_ERR(ra, "%s shader source:", shader_names[type]);
+        pl_msg_source(ra->ctx, PL_LOG_ERR, glsl);
         return VK_ERROR_INVALID_SHADER_NV;
     }
 

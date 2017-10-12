@@ -44,25 +44,6 @@ void pl_context_destroy(struct pl_context **ctx)
     TA_FREEP(ctx);
 }
 
-void pl_msg(struct pl_context *ctx, enum pl_log_level lev, const char *fmt, ...)
-{
-    va_list va;
-    va_start(va, fmt);
-    pl_msg_va(ctx, lev, fmt, va);
-    va_end(va);
-}
-
-void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
-               va_list va)
-{
-    if (!pl_msg_test(ctx, lev))
-        return;
-
-    ctx->logbuffer.len = 0;
-    bstr_xappend_vasprintf(ctx, &ctx->logbuffer, fmt, va);
-    ctx->params.log_cb(ctx->params.log_priv, lev, ctx->logbuffer.start);
-}
-
 static FILE *default_stream(void *stream, enum pl_log_level level)
 {
     return stream ? stream : level < PL_LOG_WARN ? stderr : stdout;
@@ -96,4 +77,40 @@ void pl_log_color(void *stream, enum pl_log_level level, const char *msg)
 
     FILE *h = default_stream(stream, level);
     fprintf(h, "\033[%sm%s\033[0m\n", color[level], msg);
+}
+
+void pl_msg(struct pl_context *ctx, enum pl_log_level lev, const char *fmt, ...)
+{
+    va_list va;
+    va_start(va, fmt);
+    pl_msg_va(ctx, lev, fmt, va);
+    va_end(va);
+}
+
+void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
+               va_list va)
+{
+    if (!pl_msg_test(ctx, lev))
+        return;
+
+    ctx->logbuffer.len = 0;
+    bstr_xappend_vasprintf(ctx, &ctx->logbuffer, fmt, va);
+    ctx->params.log_cb(ctx->params.log_priv, lev, ctx->logbuffer.start);
+}
+
+void pl_msg_source(struct pl_context *ctx, enum pl_log_level lev, const char *src)
+{
+    if (!pl_msg_test(ctx, lev) || !src)
+        return;
+
+    int line = 1;
+    while (*src) {
+        const char *end = strchr(src, '\n');
+        const char *next = end + 1;
+        if (!end)
+            next = end = src + strlen(src);
+        pl_msg(ctx, lev, "[%3d] %.*s", line, (int)(end - src), src);
+        line++;
+        src = next;
+    }
 }
