@@ -849,6 +849,30 @@ struct ra_pass_params ra_pass_params_copy(void *tactx,
                                           const struct ra_pass_params *params)
 {
     struct ra_pass_params new = *params;
-    // FIXME: implement
+    new.target_dummy.priv = NULL;
+    new.cached_program = NULL;
+    new.cached_program_len = 0;
+
+    new.glsl_shader = talloc_strdup(tactx, new.glsl_shader);
+    new.vertex_shader = talloc_strdup(tactx, new.vertex_shader);
+
+#define DUPNAMES(array, num)                                            \
+    do {                                                                \
+        (array) = TARRAY_DUP(tactx, array, num);                        \
+        for (int i = 0; i < num; i++)                                   \
+            (array)[i].name = talloc_strdup(tactx, (array)[i].name);    \
+    } while (0)
+
+    DUPNAMES(new.variables,      new.num_variables);
+    DUPNAMES(new.descriptors,    new.num_descriptors);
+    DUPNAMES(new.vertex_attribs, new.num_vertex_attribs);
+
+#undef DUPNAMES
+
+    for (int i = 0; i < new.num_descriptors; i++) {
+        new.descriptors[i].buffer_layout =
+            talloc_strdup(tactx, new.descriptors[i].buffer_layout);
+    }
+
     return new;
 }

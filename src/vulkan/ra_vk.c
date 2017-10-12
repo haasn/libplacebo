@@ -1215,8 +1215,6 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
 
     struct ra_pass *pass = talloc_zero(NULL, struct ra_pass);
     pass->params = ra_pass_params_copy(pass, params);
-    pass->params.cached_program = NULL;
-    pass->params.cached_program_len = 0;
 
     struct ra_pass_vk *pass_vk = pass->priv =
         talloc_zero(pass, struct ra_pass_vk);

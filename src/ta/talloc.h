@@ -131,6 +131,9 @@ char *ta_talloc_asprintf_append_buffer(char *s, const char *fmt, ...) TA_PRF(2, 
         : false                                     \
     )
 
+#define TARRAY_DUP(ctx, p, count) \
+    talloc_memdup(ctx, p, (count) * sizeof((p)[0]))
+
 #define talloc_struct(ctx, type, ...) \
     talloc_memdup(ctx, &(type) TA_EXPAND_ARGS(__VA_ARGS__), sizeof(type))
 

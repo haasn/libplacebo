@@ -93,5 +93,7 @@ bool ra_tex_upload_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
 bool ra_tex_download_pbo(const struct ra *ra, struct ra_buf_pool *pbo,
                          const struct ra_tex_transfer_params *params);
 
+// Make a deep-copy of the pass params. Note: cached_program etc. are not
+// copied, but cleared explicitly.
 struct ra_pass_params ra_pass_params_copy(void *tactx,
                                           const struct ra_pass_params *params);
