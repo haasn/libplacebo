@@ -626,11 +626,18 @@ struct ra_pass_params {
     // The vertex shader itself.
     const char *vertex_shader;
 
-    // Parameters of the target texture. This determines the texture
-    // capabilities the render pass is designed for. Note: The dimensions
-    // of the target are ignored, only the format and capabilities matter.
-    // The format must have RA_FMT_CAP_RENDERABLE.
-    struct ra_tex_params target_params;
+    // The target dummy texture this renderpass is intended to be used with.
+    // This doesn't have to be a real texture - the caller can also pass a
+    // blank ra_tex object, as long as target_dummy.params.format is set. The
+    // format must support RA_FMT_CAP_RENDERABLE, and the target dummy must
+    // have `renderable` enabled.
+    //
+    // If you pass a real texture here, the RA backend may be able to optimize
+    // the render pass better for the specific requirements of this texture.
+    // This does not change the semantics of ra_pass_run, just perhaps the
+    // performance. (The `priv` pointer will be cleared by ra_pass_create, so
+    // there is no risk of a dangling reference)
+    struct ra_tex target_dummy;
 
     // Target blending mode. If `enable_blend` is true, target_params.format
     // must have RA_FMT_CAP_BLENDABLE. Otherwise, the fields are ignored.

@@ -1379,30 +1379,44 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
         VkImageLayout nextLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         VkAccessFlags nextAccess = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-        // Figure out which case we should try and optimize for
-        if (params->target_params.storable) {
+        // Figure out which case we should try and optimize for based on some
+        // dumb heuristics. Extremely naive, but good enough for most cases.
+        struct ra_tex_params texparams = params->target_dummy.params;
+        if (texparams.storable) {
             nextLayout = VK_IMAGE_LAYOUT_GENERAL;
             nextAccess = VK_ACCESS_SHADER_WRITE_BIT;
         }
-        if (params->target_params.blit_src || params->target_params.host_readable) {
+        if (texparams.blit_src || texparams.host_readable) {
             nextLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             nextAccess = VK_ACCESS_TRANSFER_READ_BIT;
         }
-        if (params->target_params.blit_dst || params->target_params.host_writable) {
+        if (texparams.blit_dst || texparams.host_writable) {
             nextLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             nextAccess = VK_ACCESS_TRANSFER_WRITE_BIT;
         }
-        if (params->target_params.sampleable) {
+        if (texparams.sampleable) {
             nextLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             nextAccess = VK_ACCESS_SHADER_READ_BIT;
         }
 
-        // Assume we're ping-ponging between a render pass and some other
-        // operation. This is the most likely scenario.
-        pass_vk->initialLayout = nextLayout;
-        pass_vk->initialAccess = nextAccess;
         pass_vk->finalLayout = nextLayout;
         pass_vk->finalAccess = nextAccess;
+
+        struct ra_tex_vk *target_vk = params->target_dummy.priv;
+        if (target_vk) {
+            // If we have a real texture as the target dummy, we can set the
+            // initial layout and access based on what the texture is actually
+            // doing at the moment.
+            pass_vk->initialLayout = target_vk->current_layout;
+            pass_vk->initialAccess = target_vk->current_access;
+        } else {
+            // Assume we're ping-ponging between a render pass and some other
+            // operation. This is the most likely scenario, or rather, the only
+            // one we can really optimize for.
+            pass_vk->initialLayout = nextLayout;
+            pass_vk->initialAccess = nextAccess;
+        }
+
         VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 
         // If we're blending, then we need to explicitly load the previous
@@ -1417,7 +1431,7 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
             loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         }
 
-        VK(vk_create_render_pass(vk->dev, params->target_params.format, loadOp,
+        VK(vk_create_render_pass(vk->dev, texparams.format, loadOp,
                                  pass_vk->initialLayout, pass_vk->finalLayout,
                                  &pass_vk->renderPass));
 

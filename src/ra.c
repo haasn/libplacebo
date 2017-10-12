@@ -529,7 +529,7 @@ const struct ra_pass *ra_pass_create(const struct ra *ra,
             assert(va.offset + va.fmt->texel_size <= params->vertex_stride);
         }
 
-        const struct ra_fmt *target_fmt = params->target_params.format;
+        const struct ra_fmt *target_fmt = params->target_dummy.params.format;
         assert(target_fmt);
         assert(target_fmt->caps & RA_FMT_CAP_RENDERABLE);
         assert(!params->enable_blend || target_fmt->caps & RA_FMT_CAP_BLENDABLE);
@@ -642,7 +642,7 @@ void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params)
         const struct ra_tex *tex = params->target;
         assert(tex);
         assert(ra_tex_params_dimension(tex->params) == 2);
-        assert(ra_tex_params_compat(tex->params, pass->params.target_params));
+        assert(ra_tex_params_compat(tex->params, pass->params.target_dummy.params));
         assert(tex->params.renderable);
         struct pl_rect2d vp = params->viewport;
         struct pl_rect2d sc = params->scissors;
