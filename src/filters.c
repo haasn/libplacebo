@@ -48,20 +48,20 @@ double pl_filter_sample(const struct pl_filter_config *c, double x)
     x = fabs(x);
 
     // Apply the blur and taper coefficients as needed
-    x = c->blur > 0.0 ? x / c->blur : x;
-    x = x <= c->taper ? 0.0 : (x - c->taper) / (1.0 - c->taper / radius);
+    double kx = c->blur > 0.0 ? x / c->blur : x;
+    kx = kx <= c->taper ? 0.0 : (kx - c->taper) / (1.0 - c->taper / radius);
 
     // Return early for values outside of the kernel radius, since the functions
     // are not necessarily valid outside of this interval. No such check is
     // needed for the window, because it's always stretched to fit.
-    if (x > radius)
+    if (kx > radius)
         return 0.0;
 
-    double k = c->kernel->weight(c->kernel, x);
+    double k = c->kernel->weight(c->kernel, kx);
 
     // Apply the optional windowing function
     if (c->window)
-       k *= c->window->weight(c->window, x / radius * c->window->radius);
+        k *= c->window->weight(c->window, x / radius * c->window->radius);
 
     return k < 0 ? (1 - c->clamp) * k : k;
 }
@@ -73,7 +73,7 @@ static void compute_row(struct pl_filter *f, double offset, float *out)
     assert(f->row_size > 0);
     double sum = 0;
     for (int i = 0; i < f->row_size; i++) {
-        double x = offset - (i - f->row_size / 2 + 1);
+        double x = offset - (i - f->row_size / 2.0 + 1);
         // Readjust the value range to account for a stretched kernel.
         x *= f->params.config.kernel->radius / f->radius;
         double weight = pl_filter_sample(&f->params.config, x);
@@ -126,7 +126,7 @@ const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
     } else {
         // Pick the most appropriate row size
         f->row_size = ceil(f->radius * 2.0);
-        if (f->row_size > params->max_row_size) {
+        if (params->max_row_size && f->row_size > params->max_row_size) {
             pl_info(ctx, "Required filter size %d exceeds the maximum allowed "
                     "size of %d. This may result in adverse effects (aliasing, "
                     "or moiré artifacts).", f->row_size, params->max_row_size);
@@ -341,10 +341,12 @@ static double bcspline(const struct pl_filter_function *f, double x)
            q2 = (6.0 * b + 30.0 * c) / 6.0,
            q3 = (-b - 6.0 * c) / 6.0;
 
+    // Needed to ensure the kernel is sanely scaled, i.e. bcspline(0.0) = 1.0
+    double scale = 1.0 / p0;
     if (x < 1.0) {
-        return p0 + x * x * (p2 + x * p3);
+        return scale * (p0 + x * x * (p2 + x * p3));
     } else if (x < 2.0) {
-        return q0 + x * (q1 + x * (q2 + x * q3));
+        return scale * (q0 + x * (q1 + x * (q2 + x * q3)));
     }
     return 0.0;
 }

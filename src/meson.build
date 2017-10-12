@@ -46,6 +46,7 @@ sources = [
 tests = [
   'context.c',
   'colorspace.c',
+  'filters.c',
 ]
 
 # Optional components, in the following format:

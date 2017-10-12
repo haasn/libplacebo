@@ -1,6 +1,7 @@
 #include "tests.h"
 
-int main() {
+int main()
+{
     for (enum pl_color_system sys = 0; sys < PL_COLOR_SYSTEM_COUNT; sys++) {
         bool ycbcr = sys >= PL_COLOR_SYSTEM_BT_601 && sys <= PL_COLOR_SYSTEM_YCGCO;
         REQUIRE(ycbcr == pl_color_system_is_ycbcr_like(sys));
@@ -94,9 +95,10 @@ int main() {
 
     // Ensure the decoding matrix round-trips to white/black
     for (enum pl_color_system sys = 0; sys < PL_COLOR_SYSTEM_COUNT; sys++) {
-        if (sys == PL_COLOR_SYSTEM_BT_2020_C || sys == PL_COLOR_SYSTEM_XYZ)
+        if (pl_color_system_is_special(sys))
             continue;
 
+        printf("testing color system %u\n", (unsigned) sys);
         struct pl_color_repr repr = {
             .levels = PL_COLOR_LEVELS_TV,
             .sys = sys,

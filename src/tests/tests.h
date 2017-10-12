@@ -23,7 +23,10 @@
 #include <stdlib.h>
 #include <math.h>
 
-static const struct pl_context_params ctx_params = { .log_cb = pl_log_simple };
+static const struct pl_context_params ctx_params = {
+    .log_cb    = pl_log_simple,
+    .log_level = PL_LOG_ALL,
+};
 
 static inline void require(bool b, const char *msg)
 {
