@@ -630,7 +630,8 @@ struct pl_transform3x3 pl_get_scaled_decoding_matrix(struct pl_color_repr repr,
                                                      int texture_depth)
 {
     float scale = pl_color_repr_texture_mul(repr, texture_depth);
-    repr.bit_depth = texture_depth;
+    if (texture_depth)
+        repr.bit_depth = texture_depth;
 
     struct pl_transform3x3 trans = pl_get_decoding_matrix(repr, params);
     pl_matrix3x3_scale(&trans.mat, scale);

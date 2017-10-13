@@ -119,6 +119,70 @@ static void pl_shader_append(struct pl_shader *sh, const char **str, int idx,
 
 // Colorspace operations
 
+void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr repr,
+                            struct pl_color_adjustment params, int texture_bits)
+{
+    GLSL("// pl_shader_decode_color\n");
+    struct pl_transform3x3 tr;
+
+    // XYZ needs special handling due to the input gamma logic
+    if (repr.sys == PL_COLOR_SYSTEM_XYZ) {
+        float scale = pl_color_repr_texture_mul(repr, texture_bits);
+        GLSL("color.rgb = pow(%f * color.rgb, vec3(2.6));\n", scale);
+        if (texture_bits)
+            repr.bit_depth = texture_bits;
+        tr = pl_get_decoding_matrix(repr, params);
+    } else {
+        tr = pl_get_scaled_decoding_matrix(repr, params, texture_bits);
+    }
+
+    var_t cmat = var(sh, (struct pl_shader_var) {
+        .var  = ra_var_mat3("cmat"),
+        .data = PL_TRANSPOSE_3X3(tr.mat.m),
+    });
+
+    var_t cmat_c = var(sh, (struct pl_shader_var) {
+        .var  = ra_var_vec3("cmat_m"),
+        .data = tr.c,
+    });
+
+    GLSL("color.rgb = %s * color.rgb + %s;\n", cmat, cmat_c);
+
+    if (repr.sys == PL_COLOR_SYSTEM_BT_2020_C) {
+        // Conversion for C'rcY'cC'bc via the BT.2020 CL system:
+        // C'bc = (B'-Y'c) / 1.9404  | C'bc <= 0
+        //      = (B'-Y'c) / 1.5816  | C'bc >  0
+        //
+        // C'rc = (R'-Y'c) / 1.7184  | C'rc <= 0
+        //      = (R'-Y'c) / 0.9936  | C'rc >  0
+        //
+        // as per the BT.2020 specification, table 4. This is a non-linear
+        // transformation because (constant) luminance receives non-equal
+        // contributions from the three different channels.
+        GLSL("// constant luminance conversion                            \n"
+             "color.br = color.br * mix(vec2(1.5816, 0.9936),             \n"
+             "                          vec2(1.9404, 1.7184),             \n"
+             "                          lessThanEqual(color.br, vec2(0))) \n"
+             "           + color.gg;                                      \n"
+        // Expand channels to camera-linear light. This shader currently just
+        // assumes everything uses the BT.2020 12-bit gamma function, since the
+        // difference between 10 and 12-bit is negligible for anything other
+        // than 12-bit content.
+             "color.rgb = mix(color.rgb * vec3(1.0/4.5),                       \n"
+             "                pow((color.rgb + vec3(0.0993))*vec3(1.0/1.0993), \n"
+             "                    vec3(1.0/0.45)),                             \n"
+             "                lessThanEqual(vec3(0.08145), color.rgb));        \n"
+        // Calculate the green channel from the expanded RYcB
+        // The BT.2020 specification says Yc = 0.2627*R + 0.6780*G + 0.0593*B
+             "color.g = (color.g - 0.2627*color.r - 0.0593*color.b)*1.0/0.6780; \n"
+        // Recompress to receive the R'G'B' result, same as other systems
+             "color.rgb = mix(color.rgb * vec3(4.5),                    \n"
+             "                vec3(1.0993) * pow(color.rgb, vec3(0.45)) \n"
+             "                   - vec3(0.0993),                        \n"
+             "                lessThanEqual(vec3(0.0181), color.rgb));  \n");
+    }
+}
+
 // Common constants for SMPTE ST.2084 (PQ)
 static const float PQ_M1 = 2610./4096 * 1./4,
                    PQ_M2 = 2523./4096 * 128,

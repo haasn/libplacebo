@@ -99,6 +99,14 @@ bool pl_shader_is_compute(const struct pl_shader *sh);
 // operation performed but which is always normalized to the range 0-1 such
 // that a value of 1.0 represents the color space's nominal peak.
 
+// Decode the color into normalized RGB, given a specified color_repr. This
+// also takes care of additional pre- and post-conversions requires for the
+// "special" color systems (XYZ, BT.2020-C, etc.). The int `texture_bits`, if
+// present, indicate the depth of the texture we've sampled the color from -
+// similar to the semantics on `pl_get_scaled_decoding_matrix`.
+void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr repr,
+                            struct pl_color_adjustment params, int texture_bits);
+
 // Linearize (expand) `vec4 color`, given a specified color_transfer. In
 // essence, this is the ITU-R EOTF, calculated on an idealized (reference)
 // monitor with a white point of PL_COLOR_REF_WHITE and infinite contrast.
