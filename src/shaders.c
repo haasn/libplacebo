@@ -26,6 +26,13 @@ struct priv {
     struct bstr buffers[2];
     bool flexible_work_groups;
     int fresh;
+
+    // For vertex attributes, since we need to keep track of their location
+    int current_va_location;
+    size_t current_va_offset;
+
+    // For bindings, since we need to keep the namespaces unique
+    int *current_binding;
 };
 
 struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
@@ -42,6 +49,11 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
     struct priv *p = sh->priv = talloc_zero(sh, struct priv);
     p->tmp = talloc_new(sh);
 
+    if (ra) {
+        int num_namespaces = ra_desc_namespace(ra, 0);
+        p->current_binding = talloc_zero_array(sh, int, num_namespaces);
+    }
+
     return sh;
 }
 
@@ -57,6 +69,14 @@ void pl_shader_reset(struct pl_shader *sh)
     for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
         new.buffers[i].start = p->buffers[i].start;
 
+    // Re-use the current binding array, but clear it first
+    if (sh->ra) {
+        int num_namespaces = ra_desc_namespace(sh->ra, 0);
+        new.current_binding = p->current_binding;
+        for (int i = 0; i < num_namespaces; i++)
+            new.current_binding[i] = 0;
+    }
+
     talloc_free(p->tmp);
     *p = new;
 
@@ -66,8 +86,9 @@ void pl_shader_reset(struct pl_shader *sh)
         .ra   = sh->ra,
         .priv = sh->priv,
         // Preserve allocations
-        .variables   = sh->variables,
-        .descriptors = sh->descriptors,
+        .variables      = sh->variables,
+        .descriptors    = sh->descriptors,
+        .vertex_attribs = sh->vertex_attribs,
     };
 }
 
@@ -79,23 +100,128 @@ bool pl_shader_is_compute(const struct pl_shader *sh)
     return ret;
 }
 
-typedef const char * var_t;
+typedef const char * ident_t;
 
-static var_t fresh(struct pl_shader *sh, const char *name)
+static ident_t fresh(struct pl_shader *sh, const char *name)
 {
     struct priv *p = sh->priv;
     return talloc_asprintf(p->tmp, "_%s_%d", name ? name : "var", p->fresh++);
 }
 
-// Add a new shader var and return its identifier (string)
-static var_t var(struct pl_shader *sh, struct pl_shader_var sv)
+// Add a new shader var and return its identifier
+static ident_t var(struct pl_shader *sh, struct pl_shader_var sv)
 {
     struct priv *p = sh->priv;
     sv.var.name = fresh(sh, sv.var.name);
     sv.data = talloc_memdup(p->tmp, sv.data, ra_var_host_layout(0, sv.var).size);
-
     TARRAY_APPEND(sh, sh->variables, sh->num_variables, sv);
     return sv.var.name;
+}
+
+// Add a new shader desc and return its identifier. This function takes care of
+// setting the binding to a fresh bind point according to the namespace
+// requirements, so the caller may leave it blank.
+static ident_t desc(struct pl_shader *sh, struct pl_shader_desc sd)
+{
+    assert(sh->ra);
+    struct priv *p = sh->priv;
+    int namespace = ra_desc_namespace(sh->ra, sd.desc.type);
+
+    sd.desc.name = fresh(sh, sd.desc.name);
+    sd.desc.binding = p->current_binding[namespace]++;
+
+    TARRAY_APPEND(sh, sh->descriptors, sh->num_descriptors, sd);
+    return sd.desc.name;
+}
+
+// Add a new vec2 vertex attribute from a pl_rect2df, or returns NULL on failure.
+static ident_t attr_vec2(struct pl_shader *sh, const char *name,
+                         const struct pl_rect2df *rc)
+{
+    struct priv *p = sh->priv;
+    if (!sh->ra) {
+        PL_ERR(sh, "Failed adding vertex attr '%s': No RA available!", name);
+        return NULL;
+    }
+
+    const struct ra_fmt *fmt = ra_find_vertex_fmt(sh->ra, RA_FMT_FLOAT, 2);
+    if (!fmt) {
+        PL_ERR(sh, "Failed adding vertex attr '%s': no vertex fmt!", name);
+        return NULL;
+    }
+
+    float vals[4][2] = {
+        // Clockwise from top left
+        { rc->x0, rc->y0 },
+        { rc->x1, rc->y0 },
+        { rc->x1, rc->y1 },
+        { rc->x0, rc->y1 },
+    };
+
+    float *data = talloc_memdup(p->tmp, &vals[0][0], sizeof(vals));
+    struct pl_shader_va va = {
+        .attr = {
+            .name     = fresh(sh, name),
+            .fmt      = ra_find_vertex_fmt(sh->ra, RA_FMT_FLOAT, 2),
+            .offset   = p->current_va_offset,
+            .location = p->current_va_location,
+        },
+        .data = { &data[0], &data[2], &data[4], &data[6] },
+    };
+
+    TARRAY_APPEND(sh, sh->vertex_attribs, sh->num_vertex_attribs, va);
+    p->current_va_offset += sizeof(float[2]);
+    p->current_va_location += 1; // vec2 always consumes one location
+    return va.attr.name;
+}
+
+// Bind a texture under a given transformation and make its attributes
+// available as well. If an output pointer for one of the attributes is left
+// as NULL, that attribute will not be bound. Returns NULL on failure.
+static ident_t bind(struct pl_shader *sh, const struct ra_tex *tex,
+                    const char *name, const struct pl_transform2x2 *tf,
+                    ident_t *out_pos, ident_t *out_size, ident_t *out_pt)
+{
+    if (!sh->ra) {
+        PL_ERR(sh, "Failed binding texture '%s': No RA available!", name);
+        return NULL;
+    }
+
+    assert(ra_tex_params_dimension(tex->params) == 2);
+    ident_t itex = desc(sh, (struct pl_shader_desc) {
+        .desc = {
+            .name = name,
+            .type = RA_DESC_SAMPLED_TEX,
+        },
+        .binding = tex,
+    });
+
+    if (out_pos) {
+        float xy0[2] = {0};
+        float xy1[2] = {tex->params.w, tex->params.h};
+        pl_transform2x2_apply(tf, xy0);
+        pl_transform2x2_apply(tf, xy1);
+        *out_pos = attr_vec2(sh, "pos", &(struct pl_rect2df) {
+            .x0 = xy0[0], .y0 = xy0[1],
+            .x1 = xy1[0], .y1 = xy1[1],
+        });
+    }
+
+    if (out_size) {
+        *out_size = var(sh, (struct pl_shader_var) {
+            .var  = ra_var_vec2("size"),
+            .data = &(float[2]) {tex->params.w, tex->params.h},
+        });
+    }
+
+    if (out_pt) {
+        *out_pt = var(sh, (struct pl_shader_var) {
+            .var  = ra_var_vec2("pt"),
+            .data = &(float[2]) {1.0 / tex->params.w, 1.0 / tex->params.h},
+        });
+    }
+
+    return itex;
 }
 
 PRINTF_ATTRIBUTE(4, 5)
@@ -136,12 +262,12 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr repr,
         tr = pl_get_scaled_decoding_matrix(repr, params, texture_bits);
     }
 
-    var_t cmat = var(sh, (struct pl_shader_var) {
+    ident_t cmat = var(sh, (struct pl_shader_var) {
         .var  = ra_var_mat3("cmat"),
         .data = PL_TRANSPOSE_3X3(tr.mat.m),
     });
 
-    var_t cmat_c = var(sh, (struct pl_shader_var) {
+    ident_t cmat_c = var(sh, (struct pl_shader_var) {
         .var  = ra_var_vec3("cmat_m"),
         .data = tr.c,
     });
@@ -364,7 +490,7 @@ void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
 // Applies the OOTF / inverse OOTF. `peak` corresponds to the nominal peak
 // (needed to scale the functions correctly)
 static void pl_shader_ootf(struct pl_shader *sh, enum pl_color_light light,
-                           float peak, var_t luma)
+                           float peak, ident_t luma)
 {
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
         return;
@@ -401,7 +527,7 @@ static void pl_shader_ootf(struct pl_shader *sh, enum pl_color_light light,
 }
 
 static void pl_shader_inverse_ootf(struct pl_shader *sh, enum pl_color_light light,
-                                   float peak, var_t luma)
+                                   float peak, ident_t luma)
 {
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
         return;
@@ -434,14 +560,14 @@ static void pl_shader_inverse_ootf(struct pl_shader *sh, enum pl_color_light lig
     GLSL("color.rgb *= vec3(1.0/%f);\n", peak);
 }
 
-const struct pl_color_map_params pl_color_map_recommended_params = {
+const struct pl_color_map_params pl_color_map_default_params = {
     .intent                  = PL_INTENT_RELATIVE_COLORIMETRIC,
     .tone_mapping_algo       = PL_TONE_MAPPING_MOBIUS,
     .tone_mapping_desaturate = 2.0,
     .peak_detect_frames      = 50,
 };
 
-static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, var_t luma,
+static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, ident_t luma,
                                const struct pl_color_map_params *params)
 {
     GLSL("// pl_shader_tone_map\n");
@@ -497,7 +623,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, var_t luma,
 
     case PL_TONE_MAPPING_HABLE: {
         float A = 0.15, B = 0.50, C = 0.10, D = 0.20, E = 0.02, F = 0.30;
-        var_t hable = fresh(sh, "hable");
+        ident_t hable = fresh(sh, "hable");
         GLSLH("float %s(float x) {                                        \n"
               "return ((x * (%f*x + %f)+%f)/(x * (%f*x + %f) + %f)) - %f; \n"
               "}                                                          \n",
@@ -576,7 +702,7 @@ void pl_shader_color_map(struct pl_shader *sh,
 
     // Various operations need access to the src_luma and dst_luma respectively,
     // so just always make them available if we're doing anything at all
-    var_t src_luma = NULL, dst_luma = NULL;
+    ident_t src_luma = NULL, dst_luma = NULL;
     if (need_linear) {
         struct pl_matrix3x3 rgb2xyz;
         rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(src.primaries));
@@ -640,6 +766,87 @@ void pl_shader_color_map(struct pl_shader *sh,
 
     if (is_linear)
         pl_shader_delinearize(sh, dst.transfer);
+
+    GLSL("}\n");
+}
+
+const struct pl_deband_params pl_deband_default_params = {
+    .iterations = 1,
+    .threshold  = 4.0,
+    .radius     = 16.0,
+    .grain      = 6.0,
+};
+
+void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
+                      const struct pl_deband_params *params)
+{
+    GLSL("// pl_shader_deband\n");
+    GLSL("vec4 color;\n");
+    GLSL("{\n");
+
+    ident_t tex, pos, pt;
+    tex = bind(sh, ra_tex, "deband", &pl_transform2x2_identity, &pos, NULL, &pt);
+    if (!tex)
+        return;
+
+    // Initialize the PRNG. This is friendly for wide usage and returns in
+    // a very pleasant-looking distribution across frames even if the difference
+    // between input coordinates is very small. Shamelessly stolen from some
+    // GLSL tricks forum post years from a decade ago.
+    ident_t random = fresh(sh, "random"), permute = fresh(sh, "permute");
+    GLSLH("float %s(float x) {                          \n"
+          "    x = (34.0 * x + 1.0) * x;                \n"
+          "    return x - floor(x * 1.0/289.0) * 289.0; \n" // mod 289
+          "}                                            \n"
+          "float %s(inout float state) {                \n"
+          "    state = %s(state);                       \n"
+          "    return fract(state * 1.0/41.0);          \n"
+          "}\n", permute, random, permute);
+
+    ident_t seed = var(sh, (struct pl_shader_var) {
+        .var  = ra_var_float("seed"),
+        .data = &params->seed,
+    });
+
+    GLSL("vec3 _m = vec3(%s, %s) + vec3(1.0);          \n"
+         "float prng = %s(%s(%s(_m.x) + _m.y) + _m.z); \n"
+         "vec4 avg, diff;                              \n"
+         "color = texture(%s, %s);                     \n",
+         pos, seed, permute, permute, permute, tex, pos);
+
+    // Helper function: Compute a stochastic approximation of the avg color
+    // around a pixel, given a specified radius
+    ident_t average = fresh(sh, "average");
+    GLSLH("vec4 %s(float range, inout float prng) {            \n"
+          // Compute a random angle and distance
+          "    float dist = %s(prng) * range;                  \n"
+          "    float dir  = %s(prng) * %f;                     \n"
+          "    vec2 o = dist * vec2(cos(dir), sin(dir));       \n"
+          // Sample at quarter-turn intervals around the source pixel
+          "    vec4 sum = vec4(0.0);                           \n"
+          "    sum += texture(%s, %s + %s * vec2( o.x,  o.y)); \n"
+          "    sum += texture(%s, %s + %s * vec2(-o.x,  o.y)); \n"
+          "    sum += texture(%s, %s + %s * vec2(-o.x, -o.y)); \n"
+          "    sum += texture(%s, %s + %s * vec2( o.x, -o.y)); \n"
+          // Return the (normalized) average
+          "    return 0.25 * sum;                              \n"
+          "}\n", average, random, random, M_PI * 2,
+          tex, pos, pt, tex, pos, pt,
+          tex, pos, pt, tex, pos, pt);
+
+    // For each iteration, compute the average at a given distance and
+    // pick it instead of the color if the difference is below the threshold.
+    for (int i = 1; i <= params->iterations; i++) {
+        GLSL("avg = %s(%f, prng);                                   \n"
+             "diff = abs(color - avg);                              \n"
+             "color = mix(avg, color, greaterThan(diff, vec4(%f))); \n",
+             average, i * params->radius, params->threshold / (1000 * i));
+    }
+
+    // Add some random noise to smooth out residual differences
+    GLSL("vec3 noise = vec3(%s(prng), %s(prng), %s(prng)); \n"
+         "color.rgb += %f * (noise - vec3(0.5));           \n",
+         random, random, random, params->grain / 1000.0);
 
     GLSL("}\n");
 }

@@ -21,7 +21,8 @@
 #include "context.h"
 #include <stdbool.h>
 
-// Some common utility types
+// Some common utility types. These are overloaded to support 2D, 3D and
+// integer/float variants.
 struct pl_rect2d {
     int x0, y0;
     int x1, y1;
@@ -32,20 +33,31 @@ struct pl_rect3d {
     int x1, y1, z1;
 };
 
+struct pl_rect2df {
+    float x0, y0;
+    float x1, y1;
+};
+
+struct pl_rect3df {
+    float x0, y0;
+    float x1, y1;
+    float z0, z1;
+};
+
+// These macros will work for any of the above pl_rect variants (with enough
+// dimensions). Careful: double-evaluation hazard
 #define pl_rect_w(r) ((r).x1 - (r).x0)
 #define pl_rect_h(r) ((r).y1 - (r).y0)
 #define pl_rect_d(r) ((r).z1 - (r).z0)
 
-static inline bool pl_rect2d_eq(struct pl_rect2d a, struct pl_rect2d b)
-{
-    return a.x0 == b.x0 && a.y0 == b.y0 && a.x1 == b.x1 && a.y1 == b.y1;
-}
+#define pl_rect2d_eq(a, b) \
+    ((a).x0 == (b).x0 && (a).x1 == (b).x1 && \
+     (a).y0 == (b).y0 && (a).y1 == (b).y1)
 
-static inline bool pl_rect3d_eq(struct pl_rect3d a, struct pl_rect3d b)
-{
-    return a.x0 == b.x0 && a.y0 == b.y0 && a.z0 == b.z0 &&
-           a.x1 == b.x1 && a.y1 == b.y1 && a.z1 == b.z1;
-}
+#define pl_rect3d_eq(a, b) \
+    ((a).x0 == (b).x0 && (a).x1 == (b).x1 && \
+     (a).y0 == (b).y0 && (a).y1 == (b).y1 && \
+     (a).z0 == (b).z0 && (a).z1 == (b).z1)
 
 // "Normalize" a rectangle: This ensures d1 >= d0 for all dimensions.
 void pl_rect2d_normalize(struct pl_rect2d *rc);
@@ -97,5 +109,24 @@ void pl_transform3x3_scale(struct pl_transform3x3 *t, float scale);
 
 // Inverts a transform. Only use where precision is not that important.
 void pl_transform3x3_invert(struct pl_transform3x3 *t);
+
+// 2D analog of the above structs. Since these are featured less prominently,
+// we omit some of the other helper functions.
+struct pl_matrix2x2 {
+    float m[2][2];
+};
+
+extern const struct pl_matrix2x2 pl_matrix2x2_identity;
+
+void pl_matrix2x2_apply(const struct pl_matrix2x2 *mat, float vec[2]);
+
+struct pl_transform2x2 {
+    struct pl_matrix2x2 mat;
+    float c[2];
+};
+
+extern const struct pl_transform2x2 pl_transform2x2_identity;
+
+void pl_transform2x2_apply(const struct pl_transform2x2 *t, float vec[2]);
 
 #endif // LIBPLACEBO_COMMON_H_

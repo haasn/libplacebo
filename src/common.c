@@ -145,3 +145,31 @@ void pl_transform3x3_invert(struct pl_transform3x3 *t)
     t->c[1] = -(m10 * c0 + m11 * c1 + m12 * c2);
     t->c[2] = -(m20 * c0 + m21 * c1 + m22 * c2);
 }
+
+const struct pl_matrix2x2 pl_matrix2x2_identity = {{
+    { 1, 0 },
+    { 0, 1 },
+}};
+
+void pl_matrix2x2_apply(const struct pl_matrix2x2 *mat, float vec[2])
+{
+    float x = vec[0], y = vec[1];
+
+    for (int i = 0; i < 2; i++)
+        vec[i] = mat->m[i][0] * x + mat->m[i][1] * y;
+}
+
+const struct pl_transform2x2 pl_transform2x2_identity = {
+    .mat = {{
+        { 1, 0 },
+        { 0, 1 },
+    }},
+};
+
+void pl_transform2x2_apply(const struct pl_transform2x2 *t, float vec[2])
+{
+    pl_matrix2x2_apply(&t->mat, vec);
+
+    for (int i = 0; i < 2; i++)
+        vec[i] += t->c[i];
+}

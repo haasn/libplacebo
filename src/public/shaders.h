@@ -21,6 +21,13 @@
 #include "colorspace.h"
 #include "ra.h"
 
+// Represents a vertex attribute. The four values will be bound to the four
+// corner vertices respectively, in clockwise order starting from the top left.
+struct pl_shader_va {
+    struct ra_vertex_attrib attr;
+    const void *data[4];
+};
+
 // Represents a bound shared variable / descriptor
 struct pl_shader_var {
     struct ra_var var;  // the underlying variable description
@@ -58,6 +65,10 @@ struct pl_shader {
     // size requirements for this shader pass.
     size_t compute_shmem;
 
+    // A set of input vertex attributes needed by this shader fragment.
+    struct pl_shader_va *vertex_attribs;
+    int num_vertex_attribs;
+
     // A set of input variables needed by this shader fragment.
     struct pl_shader_var *variables;
     int num_variables;
@@ -93,11 +104,12 @@ void pl_shader_reset(struct pl_shader *sh);
 // Returns whether or not a pl_shader needs to be run as a compute shader.
 bool pl_shader_is_compute(const struct pl_shader *sh);
 
-// Built-in shader fragments that represent colorspace transformations. As a
-// convention, all of these operations are assumed to operate in-place a
-// pre-defined `vec4 color`, the interpretation of which depends on the
-// operation performed but which is always normalized to the range 0-1 such
-// that a value of 1.0 represents the color space's nominal peak.
+//-----------------------------------------------------------------------------
+// Color space transformation shaders. As a convention, all of these operations
+// are assumed to operate in-place a pre-defined `vec4 color`, the
+// interpretation of which depends on the operation performed but which is
+// always normalized to the range 0-1 such that a value of 1.0 represents the
+// color space's nominal peak.
 
 // Decode the color into normalized RGB, given a specified color_repr. This
 // also takes care of additional pre- and post-conversions requires for the
@@ -168,12 +180,13 @@ enum pl_tone_mapping_algorithm {
 
 struct pl_color_map_params {
     // The rendering intent to use for RGB->RGB primary conversions.
+    // Defaults to PL_INTENT_RELATIVE_COLORIMETRIC.
     enum pl_rendering_intent intent;
 
     // Algorithm and configuration used for tone-mapping. For non-tunable
     // algorithms, the `param` is ignored. If the tone mapping parameter is
     // left as 0.0, the tone-mapping curve's preferred default parameter will
-    // be used
+    // be used. The default algorithm is PL_TONE_MAPPING_MOBIUS.
     enum pl_tone_mapping_algorithm tone_mapping_algo;
     float tone_mapping_param;
 
@@ -186,7 +199,7 @@ struct pl_color_map_params {
     // colors exceeding it are gradually desaturated towards white. Values
     // below 1.0 would start to desaturate even in-gamut colors, and values
     // tending towards infinitey would turn this operation into a no-op. A
-    // value of 0.0 completely disables this behavior. A recommended value is
+    // value of 0.0 completely disables this behavior. The default value is
     // 2.0, which provides a good balance between realistic-looking highlights
     // and preserving saturation.
     float tone_mapping_desaturate;
@@ -206,13 +219,12 @@ struct pl_color_map_params {
     // recommend value range is 50-100, which smooths the peak over a time
     // period of typically 1-2 seconds and results in a fairly jitter-free
     // result while still reacting relatively quickly to scene transitions.
+    // The default for peak_detect_frames is 50.
     const struct ra_buf **peak_detect_ssbo;
     int peak_detect_frames;
 };
 
-// Contains a built-in definition of pl_color_map_params initialized to the
-// recommended default values.
-extern const struct pl_color_map_params pl_color_map_recommended_params;
+extern const struct pl_color_map_params pl_color_map_default_params;
 
 // Maps `vec4 color` from one color space to another color space according
 // to the parameters (described in greater depth above). If `prelinearized`
@@ -222,5 +234,52 @@ void pl_shader_color_map(struct pl_shader *sh,
                          const struct pl_color_map_params *params,
                          struct pl_color_space src, struct pl_color_space dst,
                          bool prelinearized);
+
+//-----------------------------------------------------------------------------
+// Sampling operations. These shaders perform some form of sampling operation
+// from a given ra_tex. In order to use these, the pl_shader *must* have been
+// created using the same `ra` as the originating `ra_tex`. Otherwise, this
+// is undefined behavior. They output their results in `vec4 color`, which
+// they introduce into the scope.
+
+struct pl_deband_params {
+    // This is used as a seed for the (frame-local) PRNG. No state is preserved
+    // across invocations, so the user must manually vary this across frames
+    // to achieve temporal randomness.
+    float seed;
+
+    // The number of debanding steps to perform per sample. Each step reduces a
+    // bit more banding, but takes time to compute. Note that the strength of
+    // each step falls off very quickly, so high numbers (>4) are practically
+    // useless. Defaults to 1.
+    int iterations;
+
+    // The debanding filter's cut-off threshold. Higher numbers increase the
+    // debanding strength dramatically, but progressively diminish image
+    // details. Defaults to 4.0.
+    float threshold;
+
+    // The debanding filter's initial radius. The radius increases linearly
+    // for each iteration. A higher radius will find more gradients, but a
+    // lower radius will smooth more aggressively. Defaults to 16.0.
+    float radius;
+
+    // Add some extra noise to the image. This significantly helps cover up
+    // remaining quantization artifacts. Higher numbers add more noise.
+    // Note: When debanding HDR sources, even a small amount of grain can
+    // result in a very big change to the brightness level. It's recommended to
+    // either scale this value down or disable it entirely for HDR.
+    //
+    // Defaults to 6.0, which is very mild.
+    float grain;
+};
+
+extern const struct pl_deband_params pl_deband_default_params;
+
+// Debands a given texture and returns the sampled color in `vec4 color`.
+// Note: This can also be used as a pure grain function, by setting the number
+// of iterations to 0.
+void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *tex,
+                      const struct pl_deband_params *params);
 
 #endif // LIBPLACEBO_SHADERS_H_
