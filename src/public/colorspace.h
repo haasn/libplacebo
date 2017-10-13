@@ -20,27 +20,28 @@
 
 #include <stdbool.h>
 
-// The underlying colorspace representation (e.g. RGB, XYZ or YCbCr)
+// The underlying color representation (e.g. RGB, XYZ or YCbCr)
 enum pl_color_system {
     PL_COLOR_SYSTEM_UNKNOWN = 0,
-    // YCbCr-like colorspaces:
+    // YCbCr-like color systems:
     PL_COLOR_SYSTEM_BT_601,      // ITU-R Rec. BT.601 (SD)
     PL_COLOR_SYSTEM_BT_709,      // ITU-R Rec. BT.709 (HD)
     PL_COLOR_SYSTEM_SMPTE_240M,  // SMPTE-240M
     PL_COLOR_SYSTEM_BT_2020_NC,  // ITU-R Rec. BT.2020 (non-constant luminance)
     PL_COLOR_SYSTEM_BT_2020_C,   // ITU-R Rec. BT.2020 (constant luminance)
     PL_COLOR_SYSTEM_YCGCO,       // YCgCo (derived from RGB)
-    // Other colorspaces:
+    // Other color systems:
     PL_COLOR_SYSTEM_RGB,         // Red, Green and Blue
-    PL_COLOR_SYSTEM_XYZ,         // CIE 1931 XYZ, pre-encoded with gamma 2.8
+    PL_COLOR_SYSTEM_XYZ,         // CIE 1931 XYZ, pre-encoded with gamma 2.6
     PL_COLOR_SYSTEM_COUNT
 };
 
 bool pl_color_system_is_ycbcr_like(enum pl_color_system sys);
 
-// Returns true for color systems that need special handling logic by the
-// user (i.e. aren't simply matrix multiplication)
-bool pl_color_system_is_special(enum pl_color_system sys);
+// Returns true for color systems that are linear transformations of the RGB
+// equivalent, i.e. are simple matrix multiplications. For color systems with
+// this property, pl_get_decoding_matrix is sufficient for conversion to RGB.
+bool pl_color_system_is_linear(enum pl_color_system sys);
 
 // Guesses the best YCbCr-like colorspace based on a image given resolution.
 // This only picks conservative values. (In particular, BT.2020 is never
@@ -280,7 +281,7 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *s
 // processing must be done by the caller. The channel order is CrYCb.
 //
 // Note: For XYZ system, the input/encoding gamma must be pre-applied by the
-// user, typically this has a value of 2.8.
+// user, typically this has a value of 2.6.
 struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
                                               struct pl_color_adjustment params);
 

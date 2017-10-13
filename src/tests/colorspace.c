@@ -98,7 +98,7 @@ int main()
 
     // Ensure the decoding matrix round-trips to white/black
     for (enum pl_color_system sys = 0; sys < PL_COLOR_SYSTEM_COUNT; sys++) {
-        if (pl_color_system_is_special(sys))
+        if (!pl_color_system_is_linear(sys))
             continue;
 
         printf("testing color system %u\n", (unsigned) sys);

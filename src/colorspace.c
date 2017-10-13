@@ -37,7 +37,7 @@ bool pl_color_system_is_ycbcr_like(enum pl_color_system sys)
     };
 }
 
-bool pl_color_system_is_special(enum pl_color_system sys)
+bool pl_color_system_is_linear(enum pl_color_system sys)
 {
     switch (sys) {
     case PL_COLOR_SYSTEM_UNKNOWN:
@@ -47,10 +47,10 @@ bool pl_color_system_is_special(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_SMPTE_240M:
     case PL_COLOR_SYSTEM_BT_2020_NC:
     case PL_COLOR_SYSTEM_YCGCO:
-        return false;
+        return true;
     case PL_COLOR_SYSTEM_BT_2020_C:
     case PL_COLOR_SYSTEM_XYZ:
-        return true;
+        return false;
     default: abort();
     };
 }
