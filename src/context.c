@@ -16,9 +16,18 @@
  */
 
 #include <stdio.h>
+#include <locale.h>
 
 #include "common.h"
 #include "context.h"
+
+// We mostly care about LC_NUMERIC, and how "." vs. "," is treated,
+// Other locale stuff might break too, but probably isn't too bad.
+static bool check_locale(void)
+{
+    char *name = setlocale(LC_NUMERIC, NULL);
+    return !name || strcmp(name, "C") == 0;
+}
 
 struct pl_context *pl_context_create(int api_ver,
                                      const struct pl_context_params *params)
@@ -30,12 +39,20 @@ struct pl_context *pl_context_create(int api_ver,
                "This is usually indicative of a linking mismatch, and will\n"
                "result in serious issues including stack corruption, random\n"
                "crashes and arbitrary code exection. Aborting as a safety\n"
-               "precaution!\n");
+               "precaution. Fix your system!\n");
         abort();
     }
 
     struct pl_context *ctx = talloc_zero(NULL, struct pl_context);
     ctx->params = *params;
+
+    if (!check_locale()) {
+        pl_fatal(ctx, "LC_NUMERIC locale mismatch detected! (must be 'C')");
+        pl_fatal(ctx, "Use 'setlocale' (or 'uselocale') from your code.");
+        pl_context_destroy(&ctx);
+        return NULL;
+    }
+
     return ctx;
 }
 

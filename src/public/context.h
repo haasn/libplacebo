@@ -57,7 +57,8 @@ struct pl_context_params {
 };
 
 // Creates a new, blank pl_context. The argument `api_ver` must be given as
-// PL_API_VER (this is used to detect ABI mismatch due to broken linking)
+// PL_API_VER (this is used to detect ABI mismatch due to broken linking).
+// Returns NULL on failure.
 struct pl_context *pl_context_create(int api_ver,
                                      const struct pl_context_params *params);
 
