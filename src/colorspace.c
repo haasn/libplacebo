@@ -66,49 +66,77 @@ enum pl_color_system pl_color_system_guess_ycbcr(int width, int height)
     }
 }
 
-void pl_color_repr_merge(struct pl_color_repr *orig,
-                         const struct pl_color_repr *new)
+bool pl_bit_encoding_equal(const struct pl_bit_encoding *b1,
+                           const struct pl_bit_encoding *b2)
 {
-    if (!orig->sys)
-        orig->sys = new->sys;
-    if (!orig->levels)
-        orig->levels = new->levels;
-    if (!orig->bit_depth)
-        orig->bit_depth = new->bit_depth;
+    return b1->sample_depth == b2->sample_depth &&
+           b1->color_depth  == b2->color_depth &&
+           b1->bit_shift    == b2->bit_shift;
 }
 
 const struct pl_color_repr pl_color_repr_unknown = {0};
 
-bool pl_color_repr_equal(struct pl_color_repr c1, struct pl_color_repr c2)
+bool pl_color_repr_equal(const struct pl_color_repr *c1,
+                         const struct pl_color_repr *c2)
 {
-    return c1.sys == c2.sys &&
-           c1.levels == c2.levels &&
-           c1.bit_depth == c2.bit_depth;
+    return c1->sys    == c2->sys &&
+           c1->levels == c2->levels &&
+           pl_bit_encoding_equal(&c1->bits, &c2->bits);
 }
 
-static enum pl_color_levels guess_levels(struct pl_color_repr repr)
+static struct pl_bit_encoding pl_bit_encoding_merge(const struct pl_bit_encoding *orig,
+                                                    const struct pl_bit_encoding *new)
 {
-    if (repr.levels) {
-        return repr.levels;
-    } else {
-        return pl_color_system_is_ycbcr_like(repr.sys)
-                    ? PL_COLOR_LEVELS_TV
-                    : PL_COLOR_LEVELS_PC;
+    return (struct pl_bit_encoding) {
+        .sample_depth = PL_DEF(orig->sample_depth, new->sample_depth),
+        .color_depth  = PL_DEF(orig->color_depth,  new->color_depth),
+        .bit_shift    = PL_DEF(orig->bit_shift,    new->bit_shift),
+    };
+}
+
+void pl_color_repr_merge(struct pl_color_repr *orig,
+                         const struct pl_color_repr *new)
+{
+    *orig = (struct pl_color_repr) {
+        .sys    = PL_DEF(orig->sys,    new->sys),
+        .levels = PL_DEF(orig->levels, new->levels),
+        .bits   = pl_bit_encoding_merge(&orig->bits, &new->bits),
+    };
+}
+
+static enum pl_color_levels guess_levels(const struct pl_color_repr *repr)
+{
+    if (repr->levels)
+        return repr->levels;
+
+    return pl_color_system_is_ycbcr_like(repr->sys)
+                ? PL_COLOR_LEVELS_TV
+                : PL_COLOR_LEVELS_PC;
+}
+
+float pl_color_repr_normalize(struct pl_color_repr *repr)
+{
+    float scale = 1.0;
+    struct pl_bit_encoding *bits = &repr->bits;
+
+    if (bits->bit_shift) {
+        scale /= (1LL << bits->bit_shift);
+        bits->bit_shift = 0;
     }
-}
 
-float pl_color_repr_texture_mul(struct pl_color_repr repr, int new_bits)
-{
-    if (!new_bits || !repr.bit_depth)
-        return 1.0;
+    int tex_bits = PL_DEF(bits->sample_depth, 8);
+    int col_bits = PL_DEF(bits->color_depth,  8);
 
     if (guess_levels(repr) == PL_COLOR_LEVELS_TV) {
         // Limit range is always shifted directly
-        return (float) (1LL << new_bits) / (1LL << repr.bit_depth);
+        scale *= (float) (1LL << tex_bits) / (1LL << col_bits);
     } else {
         // Full range always uses the full range available
-        return ((1LL << new_bits) - 1.) / ((1LL << repr.bit_depth) - 1.);
+        scale *= ((1LL << tex_bits) - 1.) / ((1LL << col_bits) - 1.);
     }
+
+    bits->sample_depth = bits->color_depth;
+    return scale;
 }
 
 bool pl_color_primaries_is_wide_gamut(enum pl_color_primaries prim)
@@ -517,12 +545,11 @@ static struct pl_matrix3x3 luma_coeffs(float lr, float lg, float lb)
     }};
 }
 
-struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
-                                              struct pl_color_adjustment params)
+struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
+                                            struct pl_color_adjustment params)
 {
-    assert(repr.bit_depth);
     struct pl_matrix3x3 m;
-    switch (repr.sys) {
+    switch (repr->sys) {
     case PL_COLOR_SYSTEM_BT_709:     m = luma_coeffs(0.2126, 0.7152, 0.0722); break;
     case PL_COLOR_SYSTEM_BT_601:     m = luma_coeffs(0.2990, 0.5870, 0.1140); break;
     case PL_COLOR_SYSTEM_SMPTE_240M: m = luma_coeffs(0.2122, 0.7013, 0.0865); break;
@@ -558,7 +585,7 @@ struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
     struct pl_transform3x3 out = { .mat = m };
 
     // Apply hue and saturation in the correct way depending on the colorspace.
-    if (pl_color_system_is_ycbcr_like(repr.sys)) {
+    if (pl_color_system_is_ycbcr_like(repr->sys)) {
         // Hue is equivalent to rotating input [U, V] subvector around the origin.
         // Saturation scales [U, V].
         float huecos = params.saturation * cos(params.hue);
@@ -571,7 +598,9 @@ struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
     }
     // FIXME: apply saturation for RGB
 
-    int bit_depth = repr.bit_depth ? repr.bit_depth : 8;
+    int bit_depth = PL_DEF(repr->bits.sample_depth,
+                    PL_DEF(repr->bits.color_depth, 8));
+
     double ymax, ymin, cmax, cmid;
     double scale = (1LL << bit_depth) / ((1LL << bit_depth) - 1.0);
 
@@ -601,7 +630,7 @@ struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
     double mul[3]   = { ymul, ymul, ymul };
     double black[3] = { ymin, ymin, ymin };
 
-    if (pl_color_system_is_ycbcr_like(repr.sys)) {
+    if (pl_color_system_is_ycbcr_like(repr->sys)) {
         mul[1]   = mul[2]   = cmul;
         black[1] = black[2] = cmid;
     }
@@ -622,18 +651,13 @@ struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
         }
     }
 
+    // Finally, multiply in the scaling factor required to get the color up to
+    // the correct representation.
+    pl_matrix3x3_scale(&out.mat, pl_color_repr_normalize(repr));
+
+    // Update the metadata to reflect the change.
+    repr->sys    = PL_COLOR_SYSTEM_RGB;
+    repr->levels = PL_COLOR_LEVELS_PC;
+
     return out;
-}
-
-struct pl_transform3x3 pl_get_scaled_decoding_matrix(struct pl_color_repr repr,
-                                                     struct pl_color_adjustment params,
-                                                     int texture_depth)
-{
-    float scale = pl_color_repr_texture_mul(repr, texture_depth);
-    if (texture_depth)
-        repr.bit_depth = texture_depth;
-
-    struct pl_transform3x3 trans = pl_get_decoding_matrix(repr, params);
-    pl_matrix3x3_scale(&trans.mat, scale);
-    return trans;
 }

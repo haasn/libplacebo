@@ -139,11 +139,11 @@ pkg.generate(
 
 # Tests
 
-tdeps = declare_dependency(link_with: lib)
+tdeps = [ declare_dependency(link_with: lib) ]
 
 if get_option('tests')
   foreach t : tests
-    e = executable(t, 'tests/' + t, dependencies: tdeps)
+    e = executable(t, 'tests/' + t, dependencies: bdeps + tdeps)
     test(t, e)
   endforeach
 endif

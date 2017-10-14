@@ -249,18 +249,15 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr repr,
                             struct pl_color_adjustment params, int texture_bits)
 {
     GLSL("// pl_shader_decode_color\n");
-    struct pl_transform3x3 tr;
 
     // XYZ needs special handling due to the input gamma logic
     if (repr.sys == PL_COLOR_SYSTEM_XYZ) {
-        float scale = pl_color_repr_texture_mul(repr, texture_bits);
+        float scale = pl_color_repr_normalize(&repr);
         GLSL("color.rgb = pow(%f * color.rgb, vec3(2.6));\n", scale);
-        if (texture_bits)
-            repr.bit_depth = texture_bits;
-        tr = pl_get_decoding_matrix(repr, params);
-    } else {
-        tr = pl_get_scaled_decoding_matrix(repr, params, texture_bits);
     }
+
+    enum pl_color_system orig_sys = repr.sys;
+    struct pl_transform3x3 tr = pl_color_repr_decode(&repr, params);
 
     ident_t cmat = var(sh, (struct pl_shader_var) {
         .var  = ra_var_mat3("cmat"),

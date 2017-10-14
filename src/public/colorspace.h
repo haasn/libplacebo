@@ -56,31 +56,56 @@ enum pl_color_levels {
     PL_COLOR_LEVELS_COUNT,
 };
 
+// The underlying bit-wise representation of a color sample. For example,
+// a 10-bit TV-range YCbCr value uploaded to a 16 bit texture would have
+// sample_depth=16 color_depth=10 bit_shift=0.
+//
+// For another example, a 12-bit XYZ full range sample shifted to 16-bits with
+// the lower 4 bits all set to 0 would have sample_depth=16 color_depth=12
+// bit_shift=4. (libavcodec likes outputting this type of `xyz12`)
+//
+// To explain the meaning of `sample_depth` further; the consideration factor
+// here is the fact that GPU sampling will normalized the sampled color to the
+// range 0.0 - 1.0 in a manner dependent on the number of bits in the texture
+// format. So if you upload a 10-bit YCbCr value unpadded as 16-bit color
+// samples, all of the sampled values will be extremely close to 0.0. In such a
+// case, `pl_color_repr_normalize` would return a high scaling factor, which
+// would pull the color up to their 16-bit range.
+struct pl_bit_encoding {
+    int sample_depth; // the number of bits the color is stored/sampled as
+    int color_depth;  // the effect number of bits of the color information
+    int bit_shift;    // a representational bit shift applied to the color
+};
+
+// Returns whether two bit encodings are exactly identical.
+bool pl_bit_encoding_equal(const struct pl_bit_encoding *b1,
+                           const struct pl_bit_encoding *b2);
+
 // Struct describing the underlying color system and representation. This
 // information is needed to convert an encoded color to a normalized RGB triple
 // in the range 0-1.
 struct pl_color_repr {
     enum pl_color_system sys;
     enum pl_color_levels levels;
-    int bit_depth; // or 0 if unknown
+    struct pl_bit_encoding bits; // or {0} if unknown
 };
 
 extern const struct pl_color_repr pl_color_repr_unknown;
+
+// Returns whether two colorspace representations are exactly identical.
+bool pl_color_repr_equal(const struct pl_color_repr *c1,
+                         const struct pl_color_repr *c2);
 
 // Replaces unknown values in the first struct by those of the second struct.
 void pl_color_repr_merge(struct pl_color_repr *orig,
                          const struct pl_color_repr *new);
 
-// Returns whether two colorspace representations are exactly identical.
-bool pl_color_repr_equal(struct pl_color_repr c1, struct pl_color_repr c2);
-
-// Returns a representation-dependent multiplication factor for converting from
-// one bit depth to another. For limited range color spaces, this is equal to
-// directly shifting the range; i.e. 16-235 becomes 64-940, not 64.1-942.8
-//
-// The resulting float, if multiplied into the color value, results in a new
-// color in a representation identical to `repr.bit_depth = new_bits`.
-float pl_color_repr_texture_mul(struct pl_color_repr repr, int new_bits);
+// This function normalizes the color representation such that
+// color_depth=sample_depth and bit_shift=0; and returns the scaling factor
+// that must be multiplied into the color value to accomplish this, assuming
+// it has already been sampled by the GPU. If unknown, the color and sample
+// depth will both be inferred as 8 bits for the purposes of this conversion.
+float pl_color_repr_normalize(struct pl_color_repr *repr);
 
 // The colorspace's primaries (gamut)
 enum pl_color_primaries {
@@ -266,9 +291,8 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *s
                                                 enum pl_rendering_intent intent);
 
 // Returns a color decoding matrix for a given combination of source color
-// representation and adjustment parameters. The input and output colors are
-// assumed to be normalized to the range 0.0-1.0, in a manner consistent with
-// GPU texture sampling. (i.e. an 8-bit value of 255 maps to 1.0)
+// representation and adjustment parameters. This mutates the color_repr to
+// reflect the change.
 //
 // This function always performs a conversion to RGB; conversions from
 // arbitrary color representations to other arbitrary other color
@@ -282,17 +306,7 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *s
 //
 // Note: For XYZ system, the input/encoding gamma must be pre-applied by the
 // user, typically this has a value of 2.6.
-struct pl_transform3x3 pl_get_decoding_matrix(struct pl_color_repr repr,
-                                              struct pl_color_adjustment params);
-
-// A helper function that combines pl_color_repr_texture_mul and
-// pl_get_decoding_matrix into a single matrix, appropriately scaled such that
-// the original input data is in format `repr` but was uploaded to a texture
-// of format `texture_depth`. This is semantically equivalent to first
-// bringing the range up to the new depth and then performing the decoding
-// matrix.
-struct pl_transform3x3 pl_get_scaled_decoding_matrix(struct pl_color_repr repr,
-                                                     struct pl_color_adjustment params,
-                                                     int texture_depth);
+struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
+                                            struct pl_color_adjustment params);
 
 #endif // LIBPLACEBO_COLORSPACE_H_

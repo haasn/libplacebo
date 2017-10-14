@@ -79,6 +79,7 @@ static inline float *pl_transpose(int dim, float *out, const float *in)
     return out;
 }
 
-// Helper functions for min/max operations. (Careful: double-evaluation hazard)
+// Helper functions for min/max/default operations (careful: double-eval)
 #define PL_MAX(x, y) ((x) > (y) ? (x) : (y))
 #define PL_MIN(x, y) ((x) < (y) ? (x) : (y))
+#define PL_DEF(x, d) ((x) ? (x) : (d))

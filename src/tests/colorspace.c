@@ -28,15 +28,19 @@ int main()
 
     // Ensure this is a no-op for bits == bits
     for (int bits = 1; bits <= 16; bits++) {
-        tv_repr.bit_depth = bits;
-        pc_repr.bit_depth = bits;
-        REQUIRE(feq(pl_color_repr_texture_mul(tv_repr, bits), 1.0));
-        REQUIRE(feq(pl_color_repr_texture_mul(pc_repr, bits), 1.0));
+        tv_repr.bits.color_depth = tv_repr.bits.sample_depth = bits;
+        pc_repr.bits.color_depth = pc_repr.bits.sample_depth = bits;
+        REQUIRE(feq(pl_color_repr_normalize(&tv_repr), 1.0));
+        REQUIRE(feq(pl_color_repr_normalize(&pc_repr), 1.0));
     }
 
-    tv_repr.bit_depth = 8;
-    float tv8to10 = pl_color_repr_texture_mul(tv_repr, 10);
-    float tv8to12 = pl_color_repr_texture_mul(tv_repr, 12);
+    tv_repr.bits.color_depth  = 8;
+    tv_repr.bits.sample_depth = 10;
+    float tv8to10 = pl_color_repr_normalize(&tv_repr);
+
+    tv_repr.bits.color_depth  = 8;
+    tv_repr.bits.sample_depth = 12;
+    float tv8to12 = pl_color_repr_normalize(&tv_repr);
 
     // Simulate the effect of GPU texture sampling on UNORM texture
     REQUIRE(feq(tv8to10 * 16 /1023.,  64/1023.)); // black
@@ -49,11 +53,26 @@ int main()
     REQUIRE(feq(tv8to12 * 128/4095., 2048/4095.)); // achromatic
     REQUIRE(feq(tv8to12 * 240/4095., 3840/4095.)); // nominal chroma peak
 
+    // Ensure lavc's xyz12 is handled correctly
+    struct pl_color_repr xyz12 = {
+        .sys    = PL_COLOR_SYSTEM_XYZ,
+        .levels = PL_COLOR_LEVELS_UNKNOWN,
+        .bits   = {
+            .sample_depth = 16,
+            .color_depth  = 12,
+            .bit_shift    = 4,
+        },
+    };
+
+    float xyz = pl_color_repr_normalize(&xyz12);
+    REQUIRE(feq(xyz * (4095 << 4), 65535));
+
     // Assume we uploaded a 10-bit source directly (unshifted) as a 16-bit
     // texture. This texture multiplication factor should make it behave as if
     // it was uploaded as a 10-bit texture instead.
-    pc_repr.bit_depth = 10;
-    float pc10to16 = pl_color_repr_texture_mul(pc_repr, 16);
+    pc_repr.bits.color_depth = 10;
+    pc_repr.bits.sample_depth = 16;
+    float pc10to16 = pl_color_repr_normalize(&pc_repr);
     REQUIRE(feq(pc10to16 * 1000/65535., 1000/1023.));
 
     const struct pl_raw_primaries *bt709, *bt2020;
@@ -105,11 +124,10 @@ int main()
         struct pl_color_repr repr = {
             .levels = PL_COLOR_LEVELS_TV,
             .sys = sys,
-            .bit_depth = 8,
         };
 
         struct pl_color_adjustment adj = pl_color_adjustment_neutral;
-        struct pl_transform3x3 yuv2rgb = pl_get_decoding_matrix(repr, adj);
+        struct pl_transform3x3 yuv2rgb = pl_color_repr_decode(&repr, adj);
         static const float white_ycbcr[3] = { 235/255., 128/255., 128/255. };
         static const float black_ycbcr[3] = {  16/255., 128/255., 128/255. };
         static const float white_other[3] = { 235/255., 235/255., 235/255. };
@@ -138,9 +156,10 @@ int main()
     }
 
     // Simulate a typical 10-bit YCbCr -> 16 bit texture conversion
-    tv_repr.bit_depth = 10;
+    tv_repr.bits.color_depth  = 10;
+    tv_repr.bits.sample_depth = 16;
     struct pl_transform3x3 yuv2rgb;
-    yuv2rgb = pl_get_scaled_decoding_matrix(tv_repr, pl_color_adjustment_neutral, 16);
+    yuv2rgb = pl_color_repr_decode(&tv_repr, pl_color_adjustment_neutral);
     float test[3] = { 575/65535., 336/65535., 640/65535. };
     pl_transform3x3_apply(&yuv2rgb, test);
     REQUIRE(feq(test[0], 0.808305));
