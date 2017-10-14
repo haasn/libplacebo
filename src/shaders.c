@@ -16,16 +16,33 @@
  */
 
 #include <math.h>
+#include <stdio.h>
 #include "bstr/bstr.h"
 
 #include "common.h"
 #include "context.h"
 
-struct priv {
-    void *tmp;
-    struct bstr buffers[2];
+// Represents a blank placeholder for the purposes of namespace substitution.
+// This is picked to be a literal string that is impossible to ever occur in
+// valid code.
+#define PLACEHOLDER "\1\2\3"
+
+typedef const char * ident_t;
+
+struct pl_shader {
+    // Read-only fields
+    struct pl_context *ctx;
+    const struct ra *ra;
+
+    // Internal state
+    bool mutable;
+    struct pl_shader_res res; // for accumulating vertex_attribs etc.
+    struct bstr buffer_head;
+    struct bstr buffer_body;
     bool flexible_work_groups;
     int fresh;
+    int namespace;
+    void *tmp;
 
     // For vertex attributes, since we need to keep track of their location
     int current_va_location;
@@ -42,16 +59,13 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
     *sh = (struct pl_shader) {
         .ctx = ctx,
         .ra = ra,
-        .glsl_header = "",
-        .glsl_body = "",
+        .mutable = true,
+        .tmp = talloc_new(sh),
     };
-
-    struct priv *p = sh->priv = talloc_zero(sh, struct priv);
-    p->tmp = talloc_new(sh);
 
     if (ra) {
         int num_namespaces = ra_desc_namespace(ra, 0);
-        p->current_binding = talloc_zero_array(sh, int, num_namespaces);
+        sh->current_binding = talloc_zero_array(sh, int, num_namespaces);
     }
 
     return sh;
@@ -64,57 +78,58 @@ void pl_shader_free(struct pl_shader **sh)
 
 void pl_shader_reset(struct pl_shader *sh)
 {
-    struct priv *p = sh->priv;
-    struct priv new = { .tmp = talloc_new(sh) };
-    for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
-        new.buffers[i].start = p->buffers[i].start;
+    struct pl_shader new = {
+        .ctx = sh->ctx,
+        .ra  = sh->ra,
+        .tmp = talloc_new(sh),
+        .mutable = true,
 
-    // Re-use the current binding array, but clear it first
-    if (sh->ra) {
+        // Preserve array allocations
+        .buffer_head = { sh->buffer_head.start },
+        .buffer_body = { sh->buffer_body.start },
+        .current_binding = sh->current_binding,
+        .res = {
+            .variables      = sh->res.variables,
+            .descriptors    = sh->res.descriptors,
+            .vertex_attribs = sh->res.vertex_attribs,
+        },
+    };
+
+    // Clear the bindings array
+    if (new.current_binding) {
+        assert(sh->ra);
         int num_namespaces = ra_desc_namespace(sh->ra, 0);
-        new.current_binding = p->current_binding;
         for (int i = 0; i < num_namespaces; i++)
             new.current_binding[i] = 0;
     }
 
-    talloc_free(p->tmp);
-    *p = new;
-
-    // Only persist whitelisted state
-    *sh = (struct pl_shader) {
-        .ctx  = sh->ctx,
-        .ra   = sh->ra,
-        .priv = sh->priv,
-        // Preserve allocations
-        .variables      = sh->variables,
-        .descriptors    = sh->descriptors,
-        .vertex_attribs = sh->vertex_attribs,
-    };
+    talloc_free(sh->tmp);
+    *sh = new;
 }
 
 bool pl_shader_is_compute(const struct pl_shader *sh)
 {
     bool ret = true;
-    for (int i = 0; i < PL_ARRAY_SIZE(sh->compute_work_groups); i++)
-        ret &= !!sh->compute_work_groups[i];
+    for (int i = 0; i < PL_ARRAY_SIZE(sh->res.compute_work_groups); i++)
+        ret &= !!sh->res.compute_work_groups[i];
     return ret;
 }
 
-typedef const char * ident_t;
-
+// Helpers for adding new variables/descriptors/etc. with fresh, unique
+// identifier names. These will never conflcit with other identifiers, even
+// if the shaders are merged together.
 static ident_t fresh(struct pl_shader *sh, const char *name)
 {
-    struct priv *p = sh->priv;
-    return talloc_asprintf(p->tmp, "_%s_%d", name ? name : "var", p->fresh++);
+    return talloc_asprintf(sh->tmp, "_" PLACEHOLDER "_%s_%d",
+                           PL_DEF(name, "var"), sh->fresh++);
 }
 
 // Add a new shader var and return its identifier
 static ident_t var(struct pl_shader *sh, struct pl_shader_var sv)
 {
-    struct priv *p = sh->priv;
     sv.var.name = fresh(sh, sv.var.name);
-    sv.data = talloc_memdup(p->tmp, sv.data, ra_var_host_layout(0, sv.var).size);
-    TARRAY_APPEND(sh, sh->variables, sh->num_variables, sv);
+    sv.data = talloc_memdup(sh->tmp, sv.data, ra_var_host_layout(0, sv.var).size);
+    TARRAY_APPEND(sh, sh->res.variables, sh->res.num_variables, sv);
     return sv.var.name;
 }
 
@@ -124,13 +139,12 @@ static ident_t var(struct pl_shader *sh, struct pl_shader_var sv)
 static ident_t desc(struct pl_shader *sh, struct pl_shader_desc sd)
 {
     assert(sh->ra);
-    struct priv *p = sh->priv;
     int namespace = ra_desc_namespace(sh->ra, sd.desc.type);
 
     sd.desc.name = fresh(sh, sd.desc.name);
-    sd.desc.binding = p->current_binding[namespace]++;
+    sd.desc.binding = sh->current_binding[namespace]++;
 
-    TARRAY_APPEND(sh, sh->descriptors, sh->num_descriptors, sd);
+    TARRAY_APPEND(sh, sh->res.descriptors, sh->res.num_descriptors, sd);
     return sd.desc.name;
 }
 
@@ -138,7 +152,6 @@ static ident_t desc(struct pl_shader *sh, struct pl_shader_desc sd)
 static ident_t attr_vec2(struct pl_shader *sh, const char *name,
                          const struct pl_rect2df *rc)
 {
-    struct priv *p = sh->priv;
     if (!sh->ra) {
         PL_ERR(sh, "Failed adding vertex attr '%s': No RA available!", name);
         return NULL;
@@ -158,26 +171,26 @@ static ident_t attr_vec2(struct pl_shader *sh, const char *name,
         { rc->x0, rc->y1 },
     };
 
-    float *data = talloc_memdup(p->tmp, &vals[0][0], sizeof(vals));
+    float *data = talloc_memdup(sh->tmp, &vals[0][0], sizeof(vals));
     struct pl_shader_va va = {
         .attr = {
             .name     = fresh(sh, name),
             .fmt      = ra_find_vertex_fmt(sh->ra, RA_FMT_FLOAT, 2),
-            .offset   = p->current_va_offset,
-            .location = p->current_va_location,
+            .offset   = sh->current_va_offset,
+            .location = sh->current_va_location,
         },
         .data = { &data[0], &data[2], &data[4], &data[6] },
     };
 
-    TARRAY_APPEND(sh, sh->vertex_attribs, sh->num_vertex_attribs, va);
-    p->current_va_offset += sizeof(float[2]);
-    p->current_va_location += 1; // vec2 always consumes one location
+    TARRAY_APPEND(sh, sh->res.vertex_attribs, sh->res.num_vertex_attribs, va);
+    sh->current_va_offset += sizeof(float[2]);
+    sh->current_va_location += 1; // vec2 always consumes one location
     return va.attr.name;
 }
 
 // Bind a texture under a given transformation and make its attributes
 // available as well. If an output pointer for one of the attributes is left
-// as NULL, that attribute will not be bound. Returns NULL on failure.
+// as NULL, that attribute will not be added. Returns NULL on failure.
 static ident_t bind(struct pl_shader *sh, const struct ra_tex *tex,
                     const char *name, const struct pl_transform2x2 *tf,
                     ident_t *out_pos, ident_t *out_size, ident_t *out_pt)
@@ -224,30 +237,141 @@ static ident_t bind(struct pl_shader *sh, const struct ra_tex *tex,
     return itex;
 }
 
-PRINTF_ATTRIBUTE(4, 5)
-static void pl_shader_append(struct pl_shader *sh, const char **str, int idx,
+PRINTF_ATTRIBUTE(3, 4)
+static void pl_shader_append(struct pl_shader *sh, struct bstr *buf,
                              const char *fmt, ...)
 {
-    struct priv *p = sh->priv;
-    assert(idx < PL_ARRAY_SIZE(p->buffers));
-
     va_list ap;
     va_start(ap, fmt);
-    bstr_xappend_vasprintf(sh, &p->buffers[idx], fmt, ap);
+    bstr_xappend_vasprintf(sh, buf, fmt, ap);
     va_end(ap);
-
-    // Update the GLSL shader body pointer in case the buffer got re-allocated
-    *str = p->buffers[idx].start;
 }
 
-#define GLSLH(...) pl_shader_append(sh, &sh->glsl_header, 0, __VA_ARGS__)
-#define GLSL(...)  pl_shader_append(sh, &sh->glsl_body,   1, __VA_ARGS__)
+#define GLSLH(...) pl_shader_append(sh, &sh->buffer_head, __VA_ARGS__)
+#define GLSL(...)  pl_shader_append(sh, &sh->buffer_body, __VA_ARGS__)
+
+// Performs the free variable rename. `buf` must point to a buffer with at
+// least strlen(PLACEHOLDER) valid replacement characters.
+static void rename_str(char *str, const char *buf)
+{
+    if (!str)
+        return;
+
+    while ((str = strstr(str, PLACEHOLDER))) {
+        for (int i = 0; i < sizeof(PLACEHOLDER) - 1; i++)
+            str[i] = buf[i];
+    }
+}
+
+// Replace all of the free variables in the body and input list by literally
+// string replacing it with an encoded representation of the given namespace
+static void rename_vars(struct pl_shader *sh, int namespace)
+{
+    char buf[sizeof(PLACEHOLDER)] = {0};
+    int num = snprintf(buf, sizeof(buf), "%d", namespace);
+
+    // Clear out the remainder of `buf` with a safe character
+    for (int i = num; i < sizeof(buf) - 1; i++)
+        buf[i] = 'z';
+
+    // This is safe, because we never shrink or splice the buffers; and they're
+    // always null-terminated (for the same reason we can directly return them)
+    rename_str(sh->buffer_head.start, buf);
+    rename_str(sh->buffer_body.start, buf);
+
+    // These are all safe to directly mutate, because we've allocated all
+    // identifiers via `fresh`.
+    rename_str((char *) sh->res.name, buf);
+    for (int i = 0; i < sh->res.num_vertex_attribs; i++)
+        rename_str((char *) sh->res.vertex_attribs[i].attr.name, buf);
+    for (int i = 0; i < sh->res.num_variables; i++)
+        rename_str((char *) sh->res.variables[i].var.name, buf);
+    for (int i = 0; i < sh->res.num_descriptors; i++)
+        rename_str((char *) sh->res.descriptors[i].desc.name, buf);
+}
+
+const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
+{
+    if (!sh->mutable) {
+        PL_WARN(sh, "Attempted to finalize a shader twice?");
+        return &sh->res;
+    }
+
+    static const char *outsigs[] = {
+        [PL_SHADER_SIG_NONE]  = "void",
+        [PL_SHADER_SIG_COLOR] = "vec4",
+    };
+
+    static const char *insigs[] = {
+        [PL_SHADER_SIG_NONE]  = "",
+        [PL_SHADER_SIG_COLOR] = "vec4 color",
+    };
+
+    ident_t name = sh->res.name = fresh(sh, "main");
+    GLSLH("%s %s(%s) {\n", outsigs[sh->res.output], name, insigs[sh->res.input]);
+
+    if (sh->buffer_body.len) {
+        GLSLH("%s", sh->buffer_body.start);
+        sh->buffer_body.len = 0;
+        sh->buffer_body.start[0] = '\0'; // sanity, and for rename_vars
+    }
+
+    switch (sh->res.output) {
+    case PL_SHADER_SIG_NONE: break;
+    case PL_SHADER_SIG_COLOR:
+        GLSLH("return color;\n");
+        break;
+    }
+
+    GLSLH("}\n");
+    rename_vars(sh, sh->namespace);
+
+    // Update the result pointer
+    sh->res.glsl = sh->buffer_head.start;
+    sh->mutable = false;
+
+    return &sh->res;
+}
+
+// Requires that the share is mutable and has an output signature compatible
+// with the given input signature. Errors and returns false otherwise.
+static bool require_input(struct pl_shader *sh, enum pl_shader_sig insig)
+{
+    if (!sh->mutable) {
+        PL_ERR(sh, "Attempted to modify an immutable shader!");
+        return false;
+    }
+
+    static const char *names[] = {
+        [PL_SHADER_SIG_NONE]  = "PL_SHADER_SIG_NONE",
+        [PL_SHADER_SIG_COLOR] = "PL_SHADER_SIG_COLOR",
+    };
+
+    // If we require an input, but there is none available - just get it from
+    // the user by turning it into an explicit input signature.
+    if (!sh->res.output && insig) {
+        assert(!sh->res.input);
+        sh->res.input = insig;
+    } else if (sh->res.output != insig) {
+        PL_ERR(sh, "Illegal sequence of shader operations! Current output "
+               "signature is '%s', but called operation expects '%s'!",
+               names[sh->res.output], names[insig]);
+        return false;
+    }
+
+    // All of our shaders end up returning a vec4 color
+    sh->res.output = PL_SHADER_SIG_COLOR;
+    return true;
+}
 
 // Colorspace operations
 
 void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
                             struct pl_color_adjustment params, int texture_bits)
 {
+    if (!require_input(sh, PL_SHADER_SIG_COLOR))
+        return;
+
     GLSL("// pl_shader_decode_color\n");
 
     // For the non-linear color systems we need some special input handling
@@ -347,6 +471,9 @@ static const float SLOG_A = 0.432699,
 
 void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc)
 {
+    if (!require_input(sh, PL_SHADER_SIG_COLOR))
+        return;
+
     if (trc == PL_COLOR_TRC_LINEAR)
         return;
 
@@ -429,6 +556,9 @@ void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc)
 
 void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
 {
+    if (!require_input(sh, PL_SHADER_SIG_COLOR))
+        return;
+
     if (trc == PL_COLOR_TRC_LINEAR)
         return;
 
@@ -503,6 +633,9 @@ void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
 static void pl_shader_ootf(struct pl_shader *sh, enum pl_color_light light,
                            float peak, ident_t luma)
 {
+    if (!require_input(sh, PL_SHADER_SIG_COLOR))
+        return;
+
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
         return;
 
@@ -664,6 +797,9 @@ void pl_shader_color_map(struct pl_shader *sh,
                          struct pl_color_space src, struct pl_color_space dst,
                          bool prelinearized)
 {
+    if (!require_input(sh, PL_SHADER_SIG_COLOR))
+        return;
+
     GLSL("// pl_shader_color_map\n");
     GLSL("{\n");
 
@@ -785,8 +921,11 @@ const struct pl_deband_params pl_deband_default_params = {
 void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
                       const struct pl_deband_params *params)
 {
-    GLSL("// pl_shader_deband\n");
+    if (!require_input(sh, PL_SHADER_SIG_NONE))
+        return;
+
     GLSL("vec4 color;\n");
+    GLSL("// pl_shader_deband\n");
     GLSL("{\n");
 
     ident_t tex, pos, pt;

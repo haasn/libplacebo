@@ -21,44 +21,62 @@
 #include "colorspace.h"
 #include "ra.h"
 
-// Represents a vertex attribute. The four values will be bound to the four
-// corner vertices respectively, in clockwise order starting from the top left.
-struct pl_shader_va {
-    struct ra_vertex_attrib attr;
-    const void *data[4];
+struct pl_shader;
+
+// Creates a new, blank, mutable pl_shader object. The resulting pl_shader s
+// implicitly destroyed when the pl_context is destroyed.
+//
+// If `ra` is non-NULL, then this `ra` will be used to create objects such as
+// textures and buffers, or check for required capabilities, for operations
+// which depend on either of those. This is fully optional, i.e. these GLSL
+// primitives are designed to be used without a dependency on `ra` wherever
+// possible - however, some features may not work, and will be disabled even
+// if requested.
+struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
+                                  const struct ra *ra);
+
+// Frees a pl_shader and all resources associated with it.
+void pl_shader_free(struct pl_shader **sh);
+
+// Resets a pl_shader to a blank slate, without releasing internal memory.
+// If you're going to be re-generating shaders often, this function will let
+// you skip the re-allocation overhead.
+void pl_shader_reset(struct pl_shader *sh);
+
+// Returns whether or not a pl_shader needs to be run as a compute shader. This
+// will never be the case unless the `ra` this pl_shader was created against
+// supports RA_CAP_COMPUTE.
+bool pl_shader_is_compute(const struct pl_shader *sh);
+
+// Indicates the type of signature that is associated with a shader result.
+// Every shader result defines a function that may be called by the user, and
+// this enum indicates the type of value that this function takes and/or
+// returns.
+//
+// Which signature a shader ends up with depends on the type of operation being
+// performed by a shader fragment, as determined by the user's calls. See below
+// for more information.
+enum pl_shader_sig {
+    PL_SHADER_SIG_NONE = 0, // no input / void output
+    PL_SHADER_SIG_COLOR,    // vec4 color (normalized to range 0.0 - 1.0)
 };
 
-// Represents a bound shared variable / descriptor
-struct pl_shader_var {
-    struct ra_var var;  // the underlying variable description
-    const void *data;   // the raw data (interpretation as with ra_var_update)
-    bool dynamic;       // if true, the value is expected to change frequently
-};
-
-struct pl_shader_desc {
-    struct ra_desc desc; // the underlying descriptor description
-    const void *binding; // the object being bound (as for ra_desc_binding)
-};
-
-// Represents a shader fragment. This is not a complete shader, but a
-// collection of shader text together with description of the input required to
-// satisfy it.
-struct pl_shader {
-    // These fields are read-only.
-    struct pl_context *ctx;
-    const struct ra *ra;
-    void *priv;
-
-    // The shader text, as literal GLSL. The `header` is assumed to be outside
-    // of any function definition, and will be used to define new helper
-    // functions if required. The `body` is assumed to be inside a function
-    // (typically `main`), and defines the requested transformation logic.
-    const char *glsl_header;
-    const char *glsl_body;
+// Represents a finalized shader fragment. This is not a complete shader, but a
+// collection of raw shader text together with description of the input
+// attributes, variables and vertexes it expects to be available.
+struct pl_shader_res {
+    // The shader text, as literal GLSL. This will always be a function
+    // definition, such that the the function with the indicated name and
+    // signature may be called by the user.
+    const char *glsl;
+    const char *name;
+    enum pl_shader_sig input;  // what the function expects
+    enum pl_shader_sig output; // what the function returns
 
     // The required work group size, if this is a compute shader. If any of
     // these integers is 0, then the shader is not considered a compute shader
-    // and this field can safely be ignored.
+    // and this field can safely be ignored. (This is equivalent to calling
+    // pl_shader_is_compute)
     int compute_work_groups[3];
 
     // If this pass is a compute shader, this field indicates the shared memory
@@ -78,38 +96,37 @@ struct pl_shader {
     int num_descriptors;
 };
 
-// Creates a new, blank, mutable pl_shader object. The pl_shader_* family of
-// functions will mutate this, which may update any of the pointers referenced
-// by this struct. As such, it should be assumed that every pl_shader_*
-// operation totally invalidates the contents of the struct pl_shader and
-// everything pointed at by it. The resulting struct pl_shader is implicitly
-// destroyed when the pl_context is destroyed.
+// Represents a vertex attribute. The four values will be bound to the four
+// corner vertices respectively, in clockwise order starting from the top left.
+struct pl_shader_va {
+    struct ra_vertex_attrib attr;
+    const void *data[4];
+};
+
+// Represents a bound shared variable / descriptor
+struct pl_shader_var {
+    struct ra_var var;  // the underlying variable description
+    const void *data;   // the raw data (interpretation as with ra_var_update)
+    bool dynamic;       // if true, the value is expected to change frequently
+};
+
+struct pl_shader_desc {
+    struct ra_desc desc; // the underlying descriptor description
+    const void *binding; // the object being bound (as for ra_desc_binding)
+};
+
+// Finalize a pl_shader. It is no longer mutable at this point, and any further
+// attempts to modify it result in an error. (Functions which take a const
+// struct pl_shader * argument do not modify the shader and may be freely
+// called on an already-finalized shader)
 //
-// If `ra` is non-NULL, then this `ra` will be used to create objects such as
-// textures and buffers, or check for required capabilities, for operations
-// which depend on either of those. This is fully optional, i.e. these GLSL
-// primitives are designed to be used without a dependency on `ra` wherever
-// possible.
-struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
-                                  const struct ra *ra);
-
-// Frees a pl_shader and all resources associated with it.
-void pl_shader_free(struct pl_shader **sh);
-
-// Resets a pl_shader to a blank slate, without releasing internal memory.
-// If you're going to be re-generating shaders often, this function will let
-// you skip the re-allocation overhead.
-void pl_shader_reset(struct pl_shader *sh);
-
-// Returns whether or not a pl_shader needs to be run as a compute shader.
-bool pl_shader_is_compute(const struct pl_shader *sh);
+// The returned pl_shader_res is bound to the lifetime of the pl_shader - and
+// will only remain valid until the pl_shader is freed or reset.
+const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh);
 
 //-----------------------------------------------------------------------------
-// Color space transformation shaders. As a convention, all of these operations
-// are assumed to operate in-place a pre-defined `vec4 color`, the
-// interpretation of which depends on the operation performed but which is
-// always normalized to the range 0-1 such that a value of 1.0 represents the
-// color space's nominal peak.
+// Color space transformation shaders. These all input and output a color
+// value (PL_SHADER_SIG_COLOR).
 
 // Decode the color into normalized RGB, given a specified color_repr. This
 // also takes care of additional pre- and post-conversions requires for the
@@ -229,8 +246,8 @@ void pl_shader_color_map(struct pl_shader *sh,
 // Sampling operations. These shaders perform some form of sampling operation
 // from a given ra_tex. In order to use these, the pl_shader *must* have been
 // created using the same `ra` as the originating `ra_tex`. Otherwise, this
-// is undefined behavior. They output their results in `vec4 color`, which
-// they introduce into the scope.
+// is undefined behavior. They require nothing (PL_SHADER_SIG_NONE) and return
+// a color (PL_SHADER_SIG_COLOR).
 
 struct pl_deband_params {
     // This is used as a seed for the (frame-local) PRNG. No state is preserved
