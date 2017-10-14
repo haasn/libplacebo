@@ -116,7 +116,10 @@ bool pl_shader_is_compute(const struct pl_shader *sh);
 // "special" color systems (XYZ, BT.2020-C, etc.). The int `texture_bits`, if
 // present, indicate the depth of the texture we've sampled the color from -
 // similar to the semantics on `pl_get_scaled_decoding_matrix`.
-void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr repr,
+//
+// Note: This function always returns PC-range RGB with pre-multiplied alpha.
+// It mutates the pl_color_repr to reflect the change.
+void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
                             struct pl_color_adjustment params, int texture_bits);
 
 // Linearize (expand) `vec4 color`, given a specified color_transfer. In

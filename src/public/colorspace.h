@@ -56,6 +56,13 @@ enum pl_color_levels {
     PL_COLOR_LEVELS_COUNT,
 };
 
+// The alpha representation mode.
+enum pl_alpha_mode {
+    PL_ALPHA_UNKNOWN = 0,   // or no alpha channel present
+    PL_ALPHA_INDEPENDENT ,  // alpha channel is separate from the video
+    PL_ALPHA_PREMULTIPLIED, // alpha channel is multiplied into the colors
+};
+
 // The underlying bit-wise representation of a color sample. For example,
 // a 10-bit TV-range YCbCr value uploaded to a 16 bit texture would have
 // sample_depth=16 color_depth=10 bit_shift=0.
@@ -87,6 +94,7 @@ bool pl_bit_encoding_equal(const struct pl_bit_encoding *b1,
 struct pl_color_repr {
     enum pl_color_system sys;
     enum pl_color_levels levels;
+    enum pl_alpha_mode alpha;
     struct pl_bit_encoding bits; // or {0} if unknown
 };
 

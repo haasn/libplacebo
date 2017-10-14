@@ -81,6 +81,7 @@ bool pl_color_repr_equal(const struct pl_color_repr *c1,
 {
     return c1->sys    == c2->sys &&
            c1->levels == c2->levels &&
+           c1->alpha  == c2->alpha &&
            pl_bit_encoding_equal(&c1->bits, &c2->bits);
 }
 
@@ -100,6 +101,7 @@ void pl_color_repr_merge(struct pl_color_repr *orig,
     *orig = (struct pl_color_repr) {
         .sys    = PL_DEF(orig->sys,    new->sys),
         .levels = PL_DEF(orig->levels, new->levels),
+        .alpha  = PL_DEF(orig->alpha,  new->alpha),
         .bits   = pl_bit_encoding_merge(&orig->bits, &new->bits),
     };
 }

@@ -245,19 +245,28 @@ static void pl_shader_append(struct pl_shader *sh, const char **str, int idx,
 
 // Colorspace operations
 
-void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr repr,
+void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
                             struct pl_color_adjustment params, int texture_bits)
 {
     GLSL("// pl_shader_decode_color\n");
 
+    // For the non-linear color systems we need some special input handling
+    // to make sure we don't accidentally screw everything up because of the
+    // alpha multiplication, which only commutes with linear operations.
+    bool is_nonlinear = !pl_color_system_is_linear(repr->sys);
+    if (is_nonlinear && repr->alpha == PL_ALPHA_PREMULTIPLIED) {
+        GLSL("color.rgb /= vec3(color.a);\n");
+        repr->alpha = PL_ALPHA_INDEPENDENT;
+    }
+
     // XYZ needs special handling due to the input gamma logic
-    if (repr.sys == PL_COLOR_SYSTEM_XYZ) {
-        float scale = pl_color_repr_normalize(&repr);
+    if (repr->sys == PL_COLOR_SYSTEM_XYZ) {
+        float scale = pl_color_repr_normalize(repr);
         GLSL("color.rgb = pow(%f * color.rgb, vec3(2.6));\n", scale);
     }
 
-    enum pl_color_system orig_sys = repr.sys;
-    struct pl_transform3x3 tr = pl_color_repr_decode(&repr, params);
+    enum pl_color_system orig_sys = repr->sys;
+    struct pl_transform3x3 tr = pl_color_repr_decode(repr, params);
 
     ident_t cmat = var(sh, (struct pl_shader_var) {
         .var  = ra_var_mat3("cmat"),
@@ -271,7 +280,7 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr repr,
 
     GLSL("color.rgb = %s * color.rgb + %s;\n", cmat, cmat_c);
 
-    if (repr.sys == PL_COLOR_SYSTEM_BT_2020_C) {
+    if (orig_sys == PL_COLOR_SYSTEM_BT_2020_C) {
         // Conversion for C'rcY'cC'bc via the BT.2020 CL system:
         // C'bc = (B'-Y'c) / 1.9404  | C'bc <= 0
         //      = (B'-Y'c) / 1.5816  | C'bc >  0
@@ -303,6 +312,11 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr repr,
              "                vec3(1.0993) * pow(color.rgb, vec3(0.45)) \n"
              "                   - vec3(0.0993),                        \n"
              "                lessThanEqual(vec3(0.0181), color.rgb));  \n");
+    }
+
+    if (repr->alpha == PL_ALPHA_INDEPENDENT) {
+        GLSL("color.rgb *= vec3(color.a)\n");
+        repr->alpha = PL_ALPHA_PREMULTIPLIED;
     }
 }
 
