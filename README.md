@@ -12,11 +12,16 @@ accomplish the following goals:
   redesigned abstractions. (Basically, I wanted to eliminate code smell like
   `shader_cache.c` and totally redesign `gpu/video.c`)
 
-**NOTE**: libplacebo is currently in a very early stage. Expect the API to be
-extremely unstable, and many parts to be missing. The API version as exported
-by `common.h` will **NOT** change until I declare the API stable, which will
-coincide with the first release. As such, libplacebo should currently only
-be used for testing purposes. It is not a finished product by any means.
+**NOTE**: libplacebo is currently in an early stage. Expect the API to be
+very unstable, and many parts to be missing. To reflect this, the API version
+as exported by common.h will **NOT** change except on new beta releases
+(v0.x). So using libplacebo directly from git master is not advised; always
+use one of the tagged releases if you want to play around with libplacebo in
+its current stage.
+
+Once the version number hits 1.0, which will mark the first stable release,
+the API version will be bumped for every change to the public API - even
+changes that happen on git master.
 
 ## Authors
 
