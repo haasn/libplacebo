@@ -601,7 +601,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, ident_t lum
     float param = params->tone_mapping_param;
     switch (params->tone_mapping_algo) {
     case PL_TONE_MAPPING_CLIP:
-        GLSL("sig = %f * sig;\n", param ? param : 1.0);
+        GLSL("sig = %f * sig;\n", PL_DEF(param, 1.0));
         break;
 
     case PL_TONE_MAPPING_MOBIUS:
@@ -613,11 +613,11 @@ static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, ident_t lum
              "          max(1e-6, sig_peak - 1.0);                          \n"
              "float scale = (b*b + 2.0*b*j + j*j) / (b-a);                  \n"
              "sig = sig > j ? (scale * (sig + a) / (sig + b)) : sig;         \n",
-             param ? param : 0.3);
+             PL_DEF(param, 0.3));
         break;
 
     case PL_TONE_MAPPING_REINHARD: {
-        float contrast = param ? param : 0.5,
+        float contrast = PL_DEF(param, 0.5),
               offset = (1.0 - contrast) / contrast;
         GLSL("sig = sig / (sig + %f);                   \n"
              "float scale = (sig_peak + %f) / sig_peak; \n"
@@ -641,12 +641,12 @@ static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, ident_t lum
         GLSL("const float cutoff = 0.05, gamma = 1.0/%f;                     \n"
              "float scale = pow(cutoff / sig_peak, gamma) / cutoff;          \n"
              "sig = sig > cutoff ? pow(sig / sig_peak, gamma) : scale * sig; \n",
-             param ? param : 1.8);
+             PL_DEF(param, 1.8));
         break;
     }
 
     case PL_TONE_MAPPING_LINEAR: {
-        GLSL("sig = %f / sig_peak * sig;\n", param ? param : 1.0);
+        GLSL("sig = %f / sig_peak * sig;\n", PL_DEF(param, 1.0));
         break;
     }
 
