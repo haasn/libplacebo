@@ -729,6 +729,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, ident_t lum
     GLSL("float sig = max(max(color.r, color.g), color.b); \n"
          "float sig_orig = sig;                            \n");
 
+    // TODO: implement HDR peak detection
     GLSL("const float sig_peak = %f;\n", ref_peak);
 
     float param = params->tone_mapping_param;
@@ -745,7 +746,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, ident_t lum
              "float b = (j*j - 2.0*j*sig_peak + sig_peak) /                 \n"
              "          max(1e-6, sig_peak - 1.0);                          \n"
              "float scale = (b*b + 2.0*b*j + j*j) / (b-a);                  \n"
-             "sig = sig > j ? (scale * (sig + a) / (sig + b)) : sig;         \n",
+             "sig = sig > j ? (scale * (sig + a) / (sig + b)) : sig;        \n",
              PL_DEF(param, 0.3));
         break;
 
