@@ -575,7 +575,6 @@ const struct pl_color_map_params pl_color_map_default_params = {
     .intent                  = PL_INTENT_RELATIVE_COLORIMETRIC,
     .tone_mapping_algo       = PL_TONE_MAPPING_MOBIUS,
     .tone_mapping_desaturate = 2.0,
-    .peak_detect_frames      = 50,
 };
 
 static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, ident_t luma,
@@ -597,12 +596,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, ident_t lum
     GLSL("float sig = max(max(color.r, color.g), color.b); \n"
          "float sig_orig = sig;                            \n");
 
-    if (params->peak_detect_ssbo) {
-        PL_FATAL(sh, "pl_shader_tone_map: peak_detect_ssbo not yet supported!\n");
-        abort();
-    } else {
-        GLSL("const float sig_peak = %f;\n", ref_peak);
-    }
+    GLSL("const float sig_peak = %f;\n", ref_peak);
 
     float param = params->tone_mapping_param;
     switch (params->tone_mapping_algo) {
