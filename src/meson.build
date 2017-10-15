@@ -24,6 +24,8 @@ headers = [
   'public/filters.h',
   'public/ra.h',
   'public/shaders.h',
+  'public/shaders/colorspace.h',
+  'public/shaders/sampling.h',
   'public/vulkan.h',
 ]
 
@@ -34,6 +36,8 @@ sources = [
   'filters.c',
   'ra.c',
   'shaders.c',
+  'shaders/colorspace.c',
+  'shaders/sampling.c',
   'spirv.c',
 
   # Helpers ported from mpv

@@ -36,6 +36,8 @@
 #include "public/filters.h"
 #include "public/ra.h"
 #include "public/shaders.h"
+#include "public/shaders/colorspace.h"
+#include "public/shaders/sampling.h"
 
 #if PL_HAVE_VULKAN
 #include "public/vulkan.h"
