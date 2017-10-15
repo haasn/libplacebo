@@ -461,13 +461,13 @@ RA_VAR_FV(mat2,  2, 2)
 RA_VAR_FV(mat3,  3, 3)
 RA_VAR_FV(mat4,  4, 4)
 
-struct ra_var_layout ra_var_host_layout(size_t offset, struct ra_var var)
+struct ra_var_layout ra_var_host_layout(size_t offset, const struct ra_var *var)
 {
-    size_t col_size = ra_var_type_size(var.type) * var.dim_v;
+    size_t col_size = ra_var_type_size(var->type) * var->dim_v;
     return (struct ra_var_layout) {
         .offset = offset,
         .stride = col_size,
-        .size   = col_size * var.dim_m,
+        .size   = col_size * var->dim_m,
     };
 }
 

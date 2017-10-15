@@ -469,7 +469,7 @@ struct ra_var_layout {
 
 // Returns the host layout of an input variable as required for a
 // tightly-packed, byte-aligned C data type, given a starting offset.
-struct ra_var_layout ra_var_host_layout(size_t offset, struct ra_var var);
+struct ra_var_layout ra_var_host_layout(size_t offset, const struct ra_var *var);
 
 // Returns the layout requirements of a uniform buffer element given a current
 // buffer offset. If limits.max_ubo_size is 0, then this function returns {0}.
