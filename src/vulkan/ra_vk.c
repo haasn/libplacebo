@@ -427,6 +427,7 @@ static bool vk_init_image(const struct ra *ra, const struct ra_tex *tex)
         tex_vk->transfer_queue = TRANSFER;
 
     bool ret = false;
+    VkRenderPass dummyPass = NULL;
 
     if (params->sampleable || params->renderable) {
         static const VkImageViewType viewType[] = {
@@ -476,7 +477,6 @@ static bool vk_init_image(const struct ra *ra, const struct ra_tex *tex)
         VK(vkCreateSampler(vk->dev, &sinfo, VK_ALLOC, &tex_vk->sampler));
     }
 
-    VkRenderPass dummyPass = NULL;
     if (params->renderable) {
         // Framebuffers need to be created against a specific render pass
         // layout, so we need to temporarily create a skeleton/dummy render

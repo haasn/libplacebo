@@ -93,7 +93,7 @@ static bool find_physical_device(struct vk_ctx *vk,
         [VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU]    = {"virtual",    3},
         [VK_PHYSICAL_DEVICE_TYPE_CPU]            = {"software",   2},
         [VK_PHYSICAL_DEVICE_TYPE_OTHER]          = {"other",      1},
-        [VK_PHYSICAL_DEVICE_TYPE_END_RANGE]      = {0},
+        [VK_PHYSICAL_DEVICE_TYPE_END_RANGE+1]    = {0},
     };
 
     int best = 0;

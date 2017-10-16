@@ -161,7 +161,6 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
             .usage = heap->usage,
             .sharingMode = vk->num_pools > 1 ? VK_SHARING_MODE_CONCURRENT
                                              : VK_SHARING_MODE_EXCLUSIVE,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
             .queueFamilyIndexCount = vk->num_pools,
             .pQueueFamilyIndices = qfs,
         };

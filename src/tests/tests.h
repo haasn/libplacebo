@@ -38,7 +38,7 @@ static inline struct pl_context *pl_test_context()
 static inline void require(bool b, const char *msg)
 {
     if (!b) {
-        fprintf(stderr, msg);
+        fprintf(stderr, "%s", msg);
         exit(1);
     }
 }
