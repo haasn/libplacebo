@@ -503,6 +503,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
             .data  = sv->data,
         };
         TARRAY_APPEND(pass, rparams->var_updates, rparams->num_var_updates, vu);
+        break;
     }
     case PASS_VAR_UBO: {
         assert(pass->ubo);
@@ -512,6 +513,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
             src += host_layout.stride;
             dst += pv->layout.stride;
         }
+        break;
     }
     case PASS_VAR_PUSHC: {
         assert(rparams->push_constants);
