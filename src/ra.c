@@ -860,23 +860,23 @@ struct ra_pass_params ra_pass_params_copy(void *tactx,
     new.glsl_shader = talloc_strdup(tactx, new.glsl_shader);
     new.vertex_shader = talloc_strdup(tactx, new.vertex_shader);
 
-#define DUPNAMES(array, num)                                            \
+#define DUPSTRS(name, array, num)                                       \
     do {                                                                \
         (array) = TARRAY_DUP(tactx, array, num);                        \
-        for (int i = 0; i < num; i++)                                   \
-            (array)[i].name = talloc_strdup(tactx, (array)[i].name);    \
+        for (int j = 0; j < num; j++)                                   \
+            (array)[j].name = talloc_strdup(tactx, (array)[j].name);    \
     } while (0)
 
-    DUPNAMES(new.variables,      new.num_variables);
-    DUPNAMES(new.descriptors,    new.num_descriptors);
-    DUPNAMES(new.vertex_attribs, new.num_vertex_attribs);
-
-#undef DUPNAMES
+    DUPSTRS(name, new.variables,      new.num_variables);
+    DUPSTRS(name, new.descriptors,    new.num_descriptors);
+    DUPSTRS(name, new.vertex_attribs, new.num_vertex_attribs);
 
     for (int i = 0; i < new.num_descriptors; i++) {
-        new.descriptors[i].buffer_layout =
-            talloc_strdup(tactx, new.descriptors[i].buffer_layout);
+        struct ra_desc *desc = &new.descriptors[i];
+        DUPSTRS(var.name, desc->buffer_vars, desc->num_buffer_vars);
     }
+
+#undef DUPNAMES
 
     return new;
 }

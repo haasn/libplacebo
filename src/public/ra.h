@@ -540,6 +540,11 @@ enum ra_desc_access {
 // Returns the GLSL syntax for a given access mode (e.g. "readonly").
 const char *ra_desc_access_glsl_name(enum ra_desc_access mode);
 
+struct ra_buffer_var {
+    struct ra_var var;
+    struct ra_var_layout layout;
+};
+
 // Represents a shader descriptor (e.g. texture or buffer binding)
 struct ra_desc {
     const char *name;       // name as used in the shader
@@ -555,9 +560,10 @@ struct ra_desc {
     // always read-only).
     enum ra_desc_access access;
 
-    // For RA_DESC_BUF_*, this specifies the GLSL layout of the buffer (not
-    // including the surrounding { } braces)
-    const char *buffer_layout;
+    // For RA_DESC_BUF_*, this specifies the layout of the variables contained
+    // by a buffer. Ignored for the other descriptor types
+    struct ra_buffer_var *buffer_vars;
+    int num_buffer_vars;
 };
 
 // Framebuffer blending mode (for raster passes)

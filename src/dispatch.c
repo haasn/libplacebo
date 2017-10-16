@@ -27,8 +27,7 @@ struct pl_dispatch {
     // TODO
 
     // temporary buffers to help avoid re_allocations during pass creation
-    struct bstr tmp_glsl[5];
-    struct bstr tmp_ubo_layout;
+    struct bstr tmp_glsl[4];
 };
 
 enum pass_var_type {
@@ -56,9 +55,11 @@ struct pass {
     ident_t img_name; // name as used in the shader (for `main`)
 
     // for uniform buffer updates
-    const struct ra_buf *ubo;
+    int ubo_index;    // for desc_bindings
     size_t ubo_size;
-    int ubo_index;
+    const struct ra_buf *ubo;
+    struct ra_buffer_var *ubo_vars; // temporary
+    int num_ubo_vars;
 
     // Cached ra_pass_run_params. This will also contain mutable allocations
     // for the push constants, descriptor bindings (including the binding for
@@ -128,9 +129,11 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
         if (new_size <= ra->limits.max_ubo_size) {
             pv->type = PASS_VAR_UBO;
             pass->ubo_size = new_size;
-            bstr_xappend_asprintf(dp, &dp->tmp_ubo_layout,
-                                  "layout(offset=%zu) %s %s;", pv->layout.offset,
-                                  ra_var_glsl_type_name(sv->var), sv->var.name);
+            struct ra_buffer_var bv = {
+                .var = sv->var,
+                .layout = pv->layout,
+            };
+            TARRAY_APPEND(tmp, pass->ubo_vars, pass->num_ubo_vars, bv);
             return true;
         }
     }
@@ -152,15 +155,26 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
     return false;
 }
 
+#define ADD(x, ...) bstr_xappend_asprintf(dp, (x), __VA_ARGS__)
+#define ADD_BSTR(x, s) bstr_xappend(dp, (x), (s))
+
+static void add_buffer_vars(struct pl_dispatch *dp, struct bstr *body,
+                            struct ra_buffer_var *vars, int num)
+{
+    ADD(body, "{\n");
+    for (int i = 0; i < num; i++) {
+        ADD(body, "    layout(offset=%zu) %s %s;\n", vars[i].layout.offset,
+            ra_var_glsl_type_name(vars[i].var), vars[i].var.name);
+    }
+    ADD(body, "};\n");
+}
+
 static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
                              struct ra_pass_params *params,
                              struct pl_shader *sh, ident_t vert_pos)
 {
     const struct ra *ra = dp->ra;
     const struct pl_shader_res *res = pl_shader_finalize(sh);
-
-#define ADD(x, ...) bstr_xappend_asprintf(dp, (x), __VA_ARGS__)
-#define ADD_BSTR(x, s) bstr_xappend(dp, (x), (s))
 
     // Reset the temporary buffers which we use to build the shader
     for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp_glsl); i++)
@@ -305,13 +319,14 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         }
 
         case RA_DESC_BUF_UNIFORM:
-            ADD(body, "layout(std140, binding=%d) uniform %s { %s };\n",
-                desc->binding, desc->name, desc->buffer_layout);
+            ADD(body, "layout(std140, binding=%d) uniform %s ", desc->binding,
+                desc->name);
+            add_buffer_vars(dp, body, desc->buffer_vars, desc->num_buffer_vars);
             break;
         case RA_DESC_BUF_STORAGE:
-            ADD(body, "layout(std430, binding=%d) %s buffer %s { %s };\n",
-                desc->binding, ra_desc_access_glsl_name(desc->access),
-                desc->name, desc->buffer_layout);
+            ADD(body, "layout(std430, binding=%d) %s buffer %s ", desc->binding,
+                ra_desc_access_glsl_name(desc->access), desc->name);
+            add_buffer_vars(dp, body, desc->buffer_vars, desc->num_buffer_vars);
             break;
         default: abort();
         }
@@ -345,10 +360,10 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
 
     ADD(body, "}");
     params->glsl_shader = body->start;
+}
 
 #undef ADD
 #undef ADD_BSTR
-}
 
 static struct pass *pass_create(struct pl_dispatch *dp, struct pl_shader *sh,
                                 const struct ra_tex *target, ident_t vert_pos)
@@ -408,7 +423,6 @@ static struct pass *pass_create(struct pl_dispatch *dp, struct pl_shader *sh,
     // Place all the variables; these will dynamically end up in different
     // locations based on what the underlying RA supports (UBOs, pushc, etc.)
     pass->vars = talloc_zero_array(pass, struct pass_var, res->num_variables);
-    dp->tmp_ubo_layout.len = 0;
     for (int i = 0; i < res->num_variables; i++) {
         if (!add_pass_var(dp, tmp, pass, &params, &res->variables[i], &pass->vars[i]))
             goto error;
@@ -441,12 +455,12 @@ static struct pass *pass_create(struct pl_dispatch *dp, struct pl_shader *sh,
         }
 
         pass->ubo_index = res->num_descriptors;
-        assert(dp->tmp_ubo_layout.len);
         sh_desc(sh, (struct pl_shader_desc) {
             .desc = {
                 .name = "UBO",
                 .type = RA_DESC_BUF_UNIFORM,
-                .buffer_layout = dp->tmp_ubo_layout.start,
+                .buffer_vars = pass->ubo_vars,
+                .num_buffer_vars = pass->num_ubo_vars,
             },
             .object = pass->ubo,
         });
@@ -476,6 +490,7 @@ static struct pass *pass_create(struct pl_dispatch *dp, struct pl_shader *sh,
 
 error:
     pass->img_name = NULL; // allocated via sh_fresh
+    pass->ubo_vars = NULL;
     talloc_free(tmp);
     return pass;
 }
@@ -536,12 +551,12 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
 
     if (!sh->mutable) {
         PL_ERR(dp, "Trying to dispatch non-mutable shader?");
-        return false;
+        goto error;
     }
 
     if (res->input != PL_SHADER_SIG_NONE || res->output != PL_SHADER_SIG_COLOR) {
         PL_ERR(dp, "Trying to dispatch shader with incompatible signature!");
-        return false;
+        goto error;
     }
 
     // Add the vertex information encoding the position
@@ -556,12 +571,12 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
     struct pass *pass = pass_create(dp, sh, target, vert_pos);
     if (!pass) {
         PL_ERR(dp, "Failed to create compatible pass for dispatch.");
-        return false;
+        goto error;
     }
 
     // Silently return on already previously-failed passes
     if (pass->failed)
-        return false;
+        goto error;
 
     struct ra_pass_run_params *rparams = &pass->run_params;
 
@@ -594,7 +609,12 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
     ra_pass_run(dp->ra, &pass->run_params);
 
     // TODO: re-add this to the pool. For now, just clean up
+    pl_shader_reset(sh);
     pl_shader_free(&sh);
     pass_destroy(dp, pass);
     return true;
+
+error:
+    pl_shader_free(&sh);
+    return false;
 }
