@@ -1,6 +1,6 @@
 #include "ra_tests.h"
 
-static void shader_tests(const struct ra *ra)
+static void shader_tests(struct pl_context *ctx, const struct ra *ra)
 {
     const char *vert_shader =
         "#version 450                               \n"
@@ -48,8 +48,8 @@ static void shader_tests(const struct ra *ra)
 
     struct vertex { float pos[2]; float color[3]; } vertices[] = {
         {{-1.0, -1.0}, {0, 0, 0}},
-        {{-1.0,  1.0}, {0, 1, 0}},
         {{ 1.0, -1.0}, {1, 0, 0}},
+        {{-1.0,  1.0}, {0, 1, 0}},
         {{ 1.0,  1.0}, {1, 1, 0}},
     };
 
@@ -87,8 +87,8 @@ static void shader_tests(const struct ra *ra)
 
     static float data[FBO_H * FBO_W * 4] = {0};
     ra_tex_download(ra, &(struct ra_tex_transfer_params) {
-        .tex            = fbo,
-        .ptr            = data,
+        .tex = fbo,
+        .ptr = data,
     });
 
     for (int y = 0; y < FBO_H; y++) {
@@ -103,6 +103,47 @@ static void shader_tests(const struct ra *ra)
     }
 
     ra_pass_destroy(ra, &pass);
+    ra_tex_clear(ra, fbo, (float[4]){0});
+
+    // Test the use of pl_dispatch
+    struct pl_dispatch *dp = pl_dispatch_create(ctx, ra);
+
+    const struct ra_tex *src;
+    src = ra_tex_create(ra, &(struct ra_tex_params) {
+        .format         = fbo_fmt,
+        .w              = FBO_W,
+        .h              = FBO_H,
+        .sampleable     = true,
+        .initial_data   = data,
+    });
+
+    struct pl_shader *sh = pl_dispatch_begin(dp);
+    pl_shader_deband(sh, src, &(struct pl_deband_params) {
+        .iterations     = 0,
+        .grain          = 0.0,
+    });
+
+    pl_shader_linearize(sh, PL_COLOR_TRC_GAMMA22);
+
+    REQUIRE(pl_dispatch_finish(dp, sh, fbo));
+    ra_tex_download(ra, &(struct ra_tex_transfer_params) {
+        .tex = fbo,
+        .ptr = data,
+    });
+
+    for (int y = 0; y < FBO_H; y++) {
+        for (int x = 0; x < FBO_W; x++) {
+            float *color = &data[(y * FBO_W + x) * 4];
+            printf("color: %f %f %f %f\n", color[0], color[1], color[2], color[3]);
+            REQUIRE(feq(color[0], pow((x + 0.5) / FBO_W, 2.2)));
+            REQUIRE(feq(color[1], pow((y + 0.5) / FBO_H, 2.2)));
+            REQUIRE(feq(color[2], 0.0));
+            REQUIRE(feq(color[3], 1.0));
+        }
+    }
+
+    pl_dispatch_destroy(&dp);
+    ra_tex_destroy(ra, &src);
     ra_tex_destroy(ra, &fbo);
 }
 
@@ -118,7 +159,7 @@ int main()
 
     const struct ra *ra = vk->ra;
     ra_texture_tests(ra);
-    shader_tests(ra);
+    shader_tests(ctx, ra);
 
     pl_vulkan_destroy(&vk);
     pl_context_destroy(&ctx);

@@ -4,7 +4,8 @@
 [mpv](https://mpv.io) turned into a library. This grew out of an interest to
 accomplish the following goals:
 
-- Clean up mpv's internal [RA](#rendering-abstraction) API and make it reusable for other projects.
+- Clean up mpv's internal [RA](#tier-1-rendering-abstraction) API and make it
+  reusable for other projects.
 - Provide a standard library of useful GPU-accelerated image processing
   primitives based on GLSL, so projects like VLC or Firefox can use them
   without incurring a heavy dependency on `libmpv`.
@@ -43,16 +44,25 @@ little choice but to license libplacebo the same way.
 
 The public API of libplacebo is currently split up into the following
 components, the header files (and documentation) for which are available
-inside the [`src/public/`](src/public/) directory.
+inside the [`src/public/`](src/public/) directory. The API is available in
+different "tiers", representing levels of abstraction inside libplacebo. The
+APIs in higher tiers depend on those in lower tiers. Which tier is used by
+a user depends on how much power/control they want over the actual rendering.
+The low-level tiers are more suitable for big projects that need strong
+control over the entire rendering pipeline; whereas the high-level tiers are
+more suitable for smaller or simpler projects that want libplacebo to take
+care of everything.
 
-- `context.h`: The main entry-point into the library. Controls memory
-  allocation, logging. and guards ABI/thread safety.
+### Tier 0 (context, raw math primitives)
+
 - `colorspace.h`: A collection of enums and structs for describing color
   spaces, as well as a collection of helper functions for computing various
   color space transformation matrices.
 - `common.h`: A collection of miscellaneous utility types and macros that are
   shared among multiple subsystems. Usually does not need to be included
   directly.
+- `context.h`: The main entry-point into the library. Controls memory
+  allocation, logging. and guards ABI/thread safety.
 - `config.h`: Macros defining information about the way libplacebo was built,
   including the version strings and compiled-in features/dependencies. Usually
   does not need to be included directly. May be useful for feature tests.
@@ -61,17 +71,16 @@ inside the [`src/public/`](src/public/) directory.
   the needs of libplacebo, but may be useful to somebody else regardless. Also
   contains the structs needed to define a filter kernel for the purposes of
   libplacebo's upscaling routines.
-- `ra.h`: Exports the RA API used by libplacebo internally. For more
-  information, see the [rendering abstraction](#rendering-abstraction)
-  section.
-- `shaders.h`: A collection of reusable GLSL primitives for various individual
-  tasks including color space transformations and (eventually) image sampling,
-  debanding, etc. These have an optional dependency on RA (ra.h), but can also
-  be used independently (with more restrictions).
-- `vulkan.h`: The main interface to the vulkan-based libplacebo code. This
-  API essentially lets you create a vulkan-based RA instance.
 
-### Rendering Abstraction
+The API functions in this tier are either used throughout the program
+(context, common etc.) or are low-level implementations of filter kernels,
+color space conversion logic etc.; which are entirely independent of GLSL
+and even the GPU in general.
+
+### Tier 1 (rendering abstraction)
+
+- `ra.h`: Exports the RA API used by libplacebo internally.
+- `vulkan.h`: RA implementation based on Vulkan.
 
 As part of the public API, libplacebo exports the **RA** API ("Rendering
 Abstraction"). Basically, this is the API libplacebo uses internally to wrap
@@ -87,6 +96,36 @@ uses its own namespace (`ra_` instead of `pl_`).
 
 **NOTE**: The port of RA into libplacebo is currently very WIP, and right now
 only the vulkan-based interface is exported. It's also not very tested/stable.
+
+### Tier 2 (GLSL generating primitives)
+
+- `shaders.h`: The low-level interface to shader generation. This can be used
+  to generate GLSL stubs suitable for inclusion in other programs, as part of
+  larger shaders. For example, a program might use this interface to generate
+  a specialized tone-mapping function for performing color space conversions,
+  then call that from their own fragment shader code. This abstraction has an
+  optional dependency on `RA`, but can also be used independently from it.
+
+In addition to this low-level interface, there are several available shader
+routines which libplacebo exports:
+
+- `shaders/colorspace.h`: Shader routines for decoding and transforming
+  colors, tone mapping, and so forth.
+- `shaders/sampling.h`: Shader routines for various algorithms that sample
+  from images. **NOTE**: Currently only includes debanding, but will be
+  expanded to also include various upscaling functions in the near future.
+
+### Tier 3 (shader dispatch)
+
+- `dispatch.h`: A higher-level interface to the `pl_shader` system, based on
+  RA. This dispatch mechanism generates+executes complete GLSL shaders,
+  subject to the constraints and limitations of the underlying RA.
+
+This shader dispatch mechanism is designed to be combined with the shader
+processing routines exported by `shaders/*.h`, but takes care of the low-level
+translation of the resulting `pl_shader_res` objects into legal GLSL. It also
+takes care of resource binding, variable placement, as well as shader caching
+and resource pooling.
 
 ## Installing
 

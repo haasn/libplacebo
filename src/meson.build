@@ -33,6 +33,7 @@ sources = [
   'colorspace.c',
   'common.c',
   'context.c',
+  'dispatch.c',
   'filters.c',
   'ra.c',
   'shaders.c',

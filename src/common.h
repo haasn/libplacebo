@@ -33,6 +33,7 @@
 #include "public/colorspace.h"
 #include "public/common.h"
 #include "public/context.h"
+#include "public/dispatch.h"
 #include "public/filters.h"
 #include "public/ra.h"
 #include "public/shaders.h"
