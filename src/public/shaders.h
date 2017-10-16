@@ -102,7 +102,9 @@ struct pl_shader_res {
 };
 
 // Represents a vertex attribute. The four values will be bound to the four
-// corner vertices respectively, in clockwise order starting from the top left.
+// corner vertices respectively, in row-wise order starting from the top left:
+//   data[0] data[1]
+//   data[2] data[3]
 struct pl_shader_va {
     struct ra_vertex_attrib attr;
     const void *data[4];
@@ -117,7 +119,7 @@ struct pl_shader_var {
 
 struct pl_shader_desc {
     struct ra_desc desc; // the underlying descriptor description
-    const void *binding; // the object being bound (as for ra_desc_binding)
+    const void *object;  // the object being bound (as for ra_desc_binding)
 };
 
 // Finalize a pl_shader. It is no longer mutable at this point, and any further

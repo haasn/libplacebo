@@ -23,6 +23,12 @@
 #include "common.h"
 #include "context.h"
 
+// This represents a (mutable!) handle to an identifier. These identifiers are
+// not constant, since they may be renamed at any time (e.g. via
+// pl_shader_finalize). Care should be taken when passing them to external
+// code like the various RA interfaces until they're finalized.
+typedef char * ident_t;
+
 struct pl_shader {
     // Read-only fields
     struct pl_context *ctx;
@@ -44,9 +50,11 @@ struct pl_shader {
 
     // For bindings, since we need to keep the namespaces unique
     int *current_binding;
-};
 
-typedef const char * ident_t;
+    // Log of all generated identifiers for this pass, for renaming purposes
+    ident_t *identifiers;
+    int num_identifiers;
+};
 
 // Helpers for adding new variables/descriptors/etc. with fresh, unique
 // identifier names. These will never conflcit with other identifiers, even

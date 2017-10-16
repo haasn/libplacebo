@@ -64,6 +64,7 @@ void pl_shader_reset(struct pl_shader *sh)
         .buffer_head = { sh->buffer_head.start },
         .buffer_body = { sh->buffer_body.start },
         .current_binding = sh->current_binding,
+        .identifiers = sh->identifiers,
         .res = {
             .variables      = sh->res.variables,
             .descriptors    = sh->res.descriptors,
@@ -93,8 +94,10 @@ bool pl_shader_is_compute(const struct pl_shader *sh)
 
 ident_t sh_fresh(struct pl_shader *sh, const char *name)
 {
-    return talloc_asprintf(sh->tmp, "_" PLACEHOLDER "_%s_%d",
-                           PL_DEF(name, "var"), sh->fresh++);
+    ident_t ident = talloc_asprintf(sh->tmp, "_" PLACEHOLDER "_%s_%d",
+                                    PL_DEF(name, "var"), sh->fresh++);
+    TARRAY_APPEND(sh, sh->identifiers, sh->num_identifiers, ident);
+    return ident;
 }
 
 ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
@@ -102,7 +105,7 @@ ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
     sv.var.name = sh_fresh(sh, sv.var.name);
     sv.data = talloc_memdup(sh->tmp, sv.data, ra_var_host_layout(0, &sv.var).size);
     TARRAY_APPEND(sh, sh->res.variables, sh->res.num_variables, sv);
-    return sv.var.name;
+    return (ident_t) sv.var.name;
 }
 
 ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
@@ -114,7 +117,7 @@ ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
     sd.desc.binding = sh->current_binding[namespace]++;
 
     TARRAY_APPEND(sh, sh->res.descriptors, sh->res.num_descriptors, sd);
-    return sd.desc.name;
+    return (ident_t) sd.desc.name;
 }
 
 ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
@@ -132,11 +135,10 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
     }
 
     float vals[4][2] = {
-        // Clockwise from top left
         { rc->x0, rc->y0 },
         { rc->x1, rc->y0 },
-        { rc->x1, rc->y1 },
         { rc->x0, rc->y1 },
+        { rc->x1, rc->y1 },
     };
 
     float *data = talloc_memdup(sh->tmp, &vals[0][0], sizeof(vals));
@@ -153,7 +155,7 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
     TARRAY_APPEND(sh, sh->res.vertex_attribs, sh->res.num_vertex_attribs, va);
     sh->current_va_offset += sizeof(float[2]);
     sh->current_va_location += 1; // vec2 always consumes one location
-    return va.attr.name;
+    return (ident_t) va.attr.name;
 }
 
 ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
@@ -171,7 +173,7 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
             .name = name,
             .type = RA_DESC_SAMPLED_TEX,
         },
-        .binding = tex,
+        .object = tex,
     });
 
     if (out_pos) {
@@ -180,8 +182,8 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
         pl_transform2x2_apply(tf, xy0);
         pl_transform2x2_apply(tf, xy1);
         *out_pos = sh_attr_vec2(sh, "pos", &(struct pl_rect2df) {
-            .x0 = xy0[0], .y0 = xy0[1],
-            .x1 = xy1[0], .y1 = xy1[1],
+            .x0 = xy0[0] / tex->params.w, .y0 = xy0[1] / tex->params.w,
+            .x1 = xy1[0] / tex->params.h, .y1 = xy1[1] / tex->params.h,
         });
     }
 
@@ -238,15 +240,10 @@ void sh_rename_vars(struct pl_shader *sh, int namespace)
     rename_str(sh->buffer_head.start, buf);
     rename_str(sh->buffer_body.start, buf);
 
-    // These are all safe to directly mutate, because we've allocated all
-    // identifiers via `sh_fresh`.
-    rename_str((char *) sh->res.name, buf);
-    for (int i = 0; i < sh->res.num_vertex_attribs; i++)
-        rename_str((char *) sh->res.vertex_attribs[i].attr.name, buf);
-    for (int i = 0; i < sh->res.num_variables; i++)
-        rename_str((char *) sh->res.variables[i].var.name, buf);
-    for (int i = 0; i < sh->res.num_descriptors; i++)
-        rename_str((char *) sh->res.descriptors[i].desc.name, buf);
+    // Rename all of the generated identifiers as well. This will also re-name
+    // all references to them, which is basically what we want.
+    for (int i = 0; i < sh->num_identifiers; i++)
+        rename_str(sh->identifiers[i], buf);
 }
 
 const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
@@ -266,8 +263,9 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
         [PL_SHADER_SIG_COLOR] = "vec4 color",
     };
 
-    ident_t name = sh->res.name = sh_fresh(sh, "main");
+    ident_t name = sh_fresh(sh, "main");
     GLSLH("%s %s(%s) {\n", outsigs[sh->res.output], name, insigs[sh->res.input]);
+    sh->res.name = name;
 
     if (sh->buffer_body.len) {
         GLSLH("%s", sh->buffer_body.start);
