@@ -331,7 +331,7 @@ struct ra_buf_params {
 
     // If non-NULL, the buffer will be created with these contents. Otherwise,
     // the initial data is undefined. Using this does *not* require setting
-    // host_mutable.
+    // host_writable.
     const void *initial_data;
 };
 
@@ -608,7 +608,7 @@ struct ra_pass_params {
     // the same shader. Can be used to speed up pass creation on already
     // known/cached shaders.
     //
-    // Note: There are no restrctions on this. Passing an out-of-date cache,
+    // Note: There are no restrictions on this. Passing an out-of-date cache,
     // passing a cache corresponding to a different progam, or passing a cache
     // belonging to a different RA, are all valid. But obviously, in such cases,
     // there is no benefit in doing so.
@@ -680,8 +680,8 @@ struct ra_desc_binding {
 };
 
 struct ra_var_update {
-    int index;  // index into params.variables[]
-    void *data; // pointer to raw byte data corresponding to ra_var_host_layout()
+    int index;        // index into params.variables[]
+    const void *data; // pointer to raw byte data corresponding to ra_var_host_layout()
 };
 
 struct ra_pass_run_params {
@@ -707,6 +707,10 @@ struct ra_pass_run_params {
     // Target must be a 2D texture, target->params.renderable must be true, and
     // target->params.format must match pass->params.target_fmt. If the viewport
     // or scissors are left blank, they are inferred from target->params.
+    //
+    // WARNING: Rendering to a *target that is being read from by the same
+    // shader is undefined behavior. In general, trying to bind the same
+    // resource multiple times to the same shader is undefined behavior.
     const struct ra_tex *target;
     struct pl_rect2d viewport; // screen space viewport (must be normalized)
     struct pl_rect2d scissors; // target render scissors (must be normalized)

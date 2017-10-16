@@ -623,8 +623,13 @@ static const struct ra_tex *vk_tex_create(const struct ra *ra,
             .stride_w = params->w,
             .stride_h = params->h,
         };
+
+        // Since we re-use RA helpers which require writable images, just fake it
+        bool writable = tex->params.host_writable;
+        tex->params.host_writable = true;
         if (!ra_tex_upload(ra, &ul_params))
             goto error;
+        tex->params.host_writable = writable;
     }
 
     return tex;

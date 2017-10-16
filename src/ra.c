@@ -591,14 +591,14 @@ void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params)
     struct ra_pass_run_params new = *params;
 
     // Sanitize viewport/scissors
-    if (!new.viewport.x1)
+    if (!new.viewport.x0 && !new.viewport.x1)
         new.viewport.x1 = params->target->params.w;
-    if (!new.viewport.y1)
+    if (!new.viewport.y0 && !new.viewport.y1)
         new.viewport.y1 = params->target->params.h;
 
-    if (!new.scissors.x1)
+    if (!new.scissors.x0 && !new.scissors.x1)
         new.scissors.x1 = params->target->params.w;
-    if (!new.scissors.y1)
+    if (!new.scissors.y0 && !new.scissors.y1)
         new.scissors.y1 = params->target->params.h;
 
 #ifndef NDEBUG
