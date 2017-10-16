@@ -16,6 +16,11 @@ add_global_arguments([
 
 cc = meson.get_compiler('c')
 
+# clang's version of -Wmissing-braces rejects the common {0} initializers
+if (cc.get_id() == 'clang')
+  add_global_arguments('-Wno-missing-braces', language : 'c')
+endif
+
 # Source files
 headers = [
   'public/colorspace.h',
