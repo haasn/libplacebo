@@ -321,7 +321,9 @@ bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h)
         return false;
     }
 
-    if (PL_DEF(sh->output_w, w) != w || PL_DEF(sh->output_h, h) != h) {
+    if ((w && sh->output_w && sh->output_w != w) ||
+        (h && sh->output_h && sh->output_h != h))
+    {
         PL_ERR(sh, "Illegal sequence of shader operations: Incompatible "
                "output size requirements %dx%d and %dx%d",
                sh->output_w, sh->output_h, w, h);
