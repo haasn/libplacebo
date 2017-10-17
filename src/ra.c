@@ -502,6 +502,43 @@ struct ra_var_layout ra_push_constant_layout(const struct ra *ra, size_t offset,
     }
 }
 
+bool ra_buf_desc_append(void *tactx, const struct ra *ra,
+                        struct ra_desc *buf_desc,
+                        struct ra_var_layout *out_layout,
+                        const struct ra_var new_var)
+{
+    struct ra_buffer_var bv = { .var = new_var };
+    size_t cur_size = ra_buf_desc_size(buf_desc);
+
+    switch (buf_desc->type) {
+    case RA_DESC_BUF_UNIFORM:
+        bv.layout = ra_buf_uniform_layout(ra, cur_size, &new_var);
+        if (bv.layout.offset + bv.layout.size > ra->limits.max_ubo_size)
+            return false;
+        break;
+    case RA_DESC_BUF_STORAGE:
+        bv.layout = ra_buf_storage_layout(ra, cur_size, &new_var);
+        if (bv.layout.offset + bv.layout.size > ra->limits.max_ssbo_size)
+            return false;
+        break;
+    default: abort();
+    }
+
+    *out_layout = bv.layout;
+    TARRAY_APPEND(tactx, buf_desc->buffer_vars, buf_desc->num_buffer_vars, bv);
+    return true;
+}
+
+size_t ra_buf_desc_size(const struct ra_desc *buf_desc)
+{
+    if (!buf_desc->num_buffer_vars)
+        return 0;
+
+    const struct ra_buffer_var *last;
+    last = &buf_desc->buffer_vars[buf_desc->num_buffer_vars - 1];
+    return last->layout.offset + last->layout.size;
+}
+
 int ra_desc_namespace(const struct ra *ra, enum ra_desc_type type)
 {
     return ra->impl->desc_namespace(ra, type);

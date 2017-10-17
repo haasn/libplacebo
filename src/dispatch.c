@@ -18,6 +18,7 @@
 #include "common.h"
 #include "context.h"
 #include "shaders.h"
+#include "ra.h"
 
 struct pl_dispatch {
     struct pl_context *ctx;
@@ -62,10 +63,8 @@ struct pass {
 
     // for uniform buffer updates
     int ubo_index;    // for desc_bindings
-    size_t ubo_size;
     const struct ra_buf *ubo;
-    struct ra_buffer_var *ubo_vars; // temporary
-    int num_ubo_vars;
+    struct ra_desc ubo_desc; // temporary
 
     // Cached ra_pass_run_params. This will also contain mutable allocations
     // for the push constants, descriptor bindings (including the binding for
@@ -144,16 +143,8 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
     // the UBO writes every frame
     bool try_ubo = !(ra->caps & RA_CAP_INPUT_VARIABLES) || !sv->dynamic;
     if (try_ubo && ra->glsl.version >= 440 && ra->limits.max_ubo_size) {
-        pv->layout = ra_buf_uniform_layout(ra, pass->ubo_size, &sv->var);
-        size_t new_size = pv->layout.offset + pv->layout.size;
-        if (new_size <= ra->limits.max_ubo_size) {
+        if (ra_buf_desc_append(tmp, ra, &pass->ubo_desc, &pv->layout, sv->var)) {
             pv->type = PASS_VAR_UBO;
-            pass->ubo_size = new_size;
-            struct ra_buffer_var bv = {
-                .var = sv->var,
-                .layout = pv->layout,
-            };
-            TARRAY_APPEND(tmp, pass->ubo_vars, pass->num_ubo_vars, bv);
             return true;
         }
     }
@@ -407,6 +398,10 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     struct pass *pass = talloc_zero(dp, struct pass);
     pass->signature = sig;
     pass->failed = true; // will be set to false on success
+    pass->ubo_desc = (struct ra_desc) {
+        .name = "UBO",
+        .type = RA_DESC_BUF_UNIFORM,
+    };
 
     struct pl_shader_res *res = &sh->res;
 
@@ -477,10 +472,11 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     }
 
     // Create and attach the UBO if necessary
-    if (pass->ubo_size) {
+    size_t ubo_size = ra_buf_desc_size(&pass->ubo_desc);
+    if (ubo_size) {
         pass->ubo = ra_buf_create(dp->ra, &(struct ra_buf_params) {
             .type = RA_BUF_UNIFORM,
-            .size = pass->ubo_size,
+            .size = ubo_size,
             .host_writable = true,
         });
 
@@ -491,12 +487,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
 
         pass->ubo_index = res->num_descriptors;
         sh_desc(sh, (struct pl_shader_desc) {
-            .desc = {
-                .name = "UBO",
-                .type = RA_DESC_BUF_UNIFORM,
-                .buffer_vars = pass->ubo_vars,
-                .num_buffer_vars = pass->num_ubo_vars,
-            },
+            .desc = pass->ubo_desc,
             .object = pass->ubo,
         });
     }
@@ -525,7 +516,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
 
 error:
     pass->img_name = NULL; // allocated via sh_fresh
-    pass->ubo_vars = NULL;
+    pass->ubo_desc = (struct ra_desc) {0};
     talloc_free(tmp);
     TARRAY_APPEND(dp, dp->passes, dp->num_passes, pass);
     return pass;

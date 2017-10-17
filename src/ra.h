@@ -60,6 +60,18 @@ void ra_destroy(const struct ra *ra);
 bool ra_tex_recreate(const struct ra *ra, const struct ra_tex **tex,
                      const struct ra_tex_params *params);
 
+// Incrementally build up a buffer by adding new variable elements to the
+// buffer, resizing buf.buffer_vars if necessary. Returns whether or not the
+// variable could be successfully added (which may fail if you try exceeding
+// the size limits of the buffer type). If successful, the layout is stored
+// in *out_layout
+bool ra_buf_desc_append(void *tactx, const struct ra *ra,
+                        struct ra_desc *buf_desc,
+                        struct ra_var_layout *out_layout,
+                        const struct ra_var new_var);
+
+size_t ra_buf_desc_size(const struct ra_desc *buf_desc);
+
 // RA-internal helpers: these should not be used outside of RA implementations
 
 // Compute the total size (in bytes) of a texture transfer operation
