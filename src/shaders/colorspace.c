@@ -291,8 +291,9 @@ static void pl_shader_ootf(struct pl_shader *sh, enum pl_color_light light,
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
         return;
 
-    GLSL("// pl_shader_ootf      \n"
-         "color.rgb *= vec3(%f); \n", peak);
+    GLSL("// pl_shader_ootf                \n"
+         "color.rgb = max(color.rgb, 0.0); \n"
+         "color.rgb *= vec3(%f);           \n", peak);
 
     switch (light)
     {
@@ -328,8 +329,9 @@ static void pl_shader_inverse_ootf(struct pl_shader *sh, enum pl_color_light lig
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
         return;
 
-    GLSL("// pl_shader_inverse_ootf\n"
-         "color.rgb *= vec3(%f);\n", peak);
+    GLSL("// pl_shader_inverse_ootf        \n"
+         "color.rgb = max(color.rgb, 0.0); \n"
+         "color.rgb *= vec3(%f);           \n", peak);
 
     switch (light)
     {
@@ -548,15 +550,15 @@ void pl_shader_color_map(struct pl_shader *sh,
     if (ref_peak > 1)
         pl_shader_tone_map(sh, ref_peak, dst_luma, params);
 
-    if (src.light != dst.light)
-        pl_shader_inverse_ootf(sh, dst.light, dst_range, dst_luma);
-
     // Warn for remaining out-of-gamut colors is enabled
     if (params->gamut_warning) {
         GLSL("if (any(greaterThan(color.rgb, vec3(1.01))) ||\n"
              "    any(lessThan(color.rgb, vec3(-0.01))))\n"
              "    color.rgb = vec3(1.0) - color.rgb;) // invert\n");
     }
+
+    if (src.light != dst.light)
+        pl_shader_inverse_ootf(sh, dst.light, dst_range, dst_luma);
 
     if (is_linear)
         pl_shader_delinearize(sh, dst.transfer);
