@@ -362,9 +362,142 @@ const struct pl_color_map_params pl_color_map_default_params = {
     .intent                  = PL_INTENT_RELATIVE_COLORIMETRIC,
     .tone_mapping_algo       = PL_TONE_MAPPING_MOBIUS,
     .tone_mapping_desaturate = 2.0,
+    .peak_detect_frames      = 50,
 };
 
-static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, ident_t luma,
+static bool hdr_detect_peak(struct pl_shader *sh, enum pl_color_transfer trc,
+                            const struct pl_color_map_params *params)
+{
+    if (!params->peak_detect_state)
+        return false;
+
+    int frames = params->peak_detect_frames;
+    if (frames < 1 || frames > 1000) {
+        PL_ERR(sh, "Parameter peak_detect_frames must be >= 1 and <= 1000 "
+               "(was %d).", frames);
+        return false;
+    }
+
+    if (!sh_require_obj(sh, params->peak_detect_state, PL_SHADER_OBJ_PEAK_DETECT))
+        return false;
+
+    if (!sh_try_compute(sh, 8, 8, true, 4)) {
+        PL_WARN(sh, "HDR peak detection requires compute shaders.. disabling");
+        return false;
+    }
+
+    struct pl_shader_obj *obj = *params->peak_detect_state;
+    const struct ra *ra = sh->ra;
+
+    // Attempt packing the peak detection SSBO
+    struct ra_desc ssbo = {
+        .name   = "PeakDetect",
+        .type   = RA_DESC_BUF_STORAGE,
+        .access = RA_DESC_ACCESS_READWRITE,
+    };
+
+    struct ra_var raw, idx, max;
+    raw = ra_var_uint(sh_fresh(sh, "peak_raw")),
+    idx = ra_var_uint(sh_fresh(sh, "index")),
+    max = ra_var_uint(sh_fresh(sh, "frame_max"));
+    max.dim_a = frames;
+
+    struct ra_var_layout raw_l, idx_l, max_l;
+    bool ok = true;
+    ok &= ra_buf_desc_append(sh->tmp, ra, &ssbo, &raw_l, raw);
+    ok &= ra_buf_desc_append(sh->tmp, ra, &ssbo, &idx_l, idx);
+    ok &= ra_buf_desc_append(sh->tmp, ra, &ssbo, &max_l, max);
+
+    if (!ok) {
+        PL_WARN(sh, "HDR peak detection exhausts device limits.. disabling");
+        talloc_free(ssbo.buffer_vars);
+        return false;
+    }
+
+    // Create the SSBO if necessary
+    size_t size = ra_buf_desc_size(&ssbo);
+    if (!obj->buf || obj->buf->params.size != size) {
+        PL_TRACE(sh, "(Re)initializing HDR peak detection SSBO with safe values");
+        int safe = PL_COLOR_REF_WHITE * pl_color_transfer_nominal_peak(trc);
+
+        // Initial values
+        unsigned int peak_raw = safe * frames;
+        static unsigned int index = 0;
+        unsigned int *frame_max = talloc_array(NULL, unsigned int, frames);
+        for (int i = 0; i < frames; i++)
+            frame_max[i] = safe;
+
+        void *data = talloc_zero_size(NULL, size);
+        memcpy_layout(data, raw_l, &peak_raw,  ra_var_host_layout(0, &raw));
+        memcpy_layout(data, idx_l, &index,     ra_var_host_layout(0, &idx));
+        memcpy_layout(data, max_l, &frame_max, ra_var_host_layout(0, &max));
+        talloc_free(frame_max);
+
+        ra_buf_destroy(ra, &obj->buf);
+        obj->buf = ra_buf_create(ra, &(struct ra_buf_params) {
+            .type = RA_BUF_STORAGE,
+            .size = ra_buf_desc_size(&ssbo),
+            .initial_data = data,
+        });
+
+        talloc_free(data);
+    }
+
+    if (!obj->buf) {
+        PL_ERR(sh, "Failed creating peak detection SSBO?");
+        return false;
+    }
+
+    // Attach the SSBO and perform the peak detection logic
+    sh_desc(sh, (struct pl_shader_desc) {
+        .desc = ssbo,
+        .object = obj->buf,
+    });
+
+
+    // For performance, we want to do as few atomic operations on global
+    // memory as possible, so use an atomic in shmem for the work group.
+    // We also want slightly more stable values, so use the group average
+    // instead of the group max
+    ident_t group_sum = sh_fresh(sh, "group_sum");
+    GLSLH("shared uint %s;\n", group_sum);
+    GLSL("if (gl_LocalInvocationIndex == 0)                             \n"
+         "    %s = 0;                                                   \n"
+         "groupMemoryBarrier();                                         \n"
+         "barrier();                                                    \n"
+         "atomicAdd(%s, uint(sig * %f));                                \n"
+        // Have one thread in each work group update the frame maximum
+         "groupMemoryBarrier();                                         \n"
+         "barrier();                                                    \n"
+         "if (gl_LocalInvocationIndex == 0)                             \n"
+         "    atomicMax(%s[%s], %s / (gl_WorkGroupSize.x * gl_WorkGroupSize.y));\n"
+        // Finally, have one thread per invocation update the total maximum
+        // and advance the index
+         "memoryBarrierBuffer();                                        \n"
+         "barrier();                                                    \n"
+         "if (gl_GlobalInvocationID == ivec3(0)) {                      \n"
+         "    uint next = (%s + 1) %% %d;                               \n"
+         "    %s = %s + %s[%s] - %s[next];                              \n"
+         "    %s[next] = %d;                                            \n"
+         "    %s = next;                                                \n"
+         "}                                                             \n"
+         "memoryBarrierBuffer();                                        \n"
+         "barrier();                                                    \n"
+         "float sig_peak = 1.0/%f * float(%s);                          \n",
+         group_sum,
+         group_sum, PL_COLOR_REF_WHITE,
+         max.name, idx.name, group_sum,
+         idx.name, frames + 1,
+         raw.name, raw.name, max.name, idx.name, max.name,
+         max.name, (int) PL_COLOR_REF_WHITE,
+         idx.name,
+         PL_COLOR_REF_WHITE * frames, raw.name);
+
+    return true;
+}
+
+static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak,
+                               enum pl_color_transfer trc, ident_t luma,
                                const struct pl_color_map_params *params)
 {
     GLSL("// pl_shader_tone_map\n");
@@ -383,8 +516,8 @@ static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak, ident_t lum
     GLSL("float sig = max(max(color.r, color.g), color.b); \n"
          "float sig_orig = sig;                            \n");
 
-    // TODO: implement HDR peak detection
-    GLSL("const float sig_peak = %f;\n", ref_peak);
+    if (!hdr_detect_peak(sh, trc, params))
+        GLSL("const float sig_peak = %f;\n", ref_peak);
 
     float param = params->tone_mapping_param;
     switch (params->tone_mapping_algo) {
@@ -548,7 +681,7 @@ void pl_shader_color_map(struct pl_shader *sh,
     // Tone map to prevent clipping when the source signal peak exceeds the
     // encodable range or we've reduced the gamut
     if (ref_peak > 1)
-        pl_shader_tone_map(sh, ref_peak, dst_luma, params);
+        pl_shader_tone_map(sh, ref_peak, src.transfer, dst_luma, params);
 
     // Warn for remaining out-of-gamut colors is enabled
     if (params->gamut_warning) {

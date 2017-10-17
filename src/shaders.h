@@ -108,6 +108,7 @@ bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h);
 
 enum pl_shader_obj_type {
     PL_SHADER_OBJ_INVALID = 0,
+    PL_SHADER_OBJ_PEAK_DETECT,
 };
 
 struct pl_shader_obj {

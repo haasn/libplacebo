@@ -125,6 +125,19 @@ struct pl_color_map_params {
     // clipped as a result of gamut/tone mapping. (Obviously, this feature only
     // makes sense with TONE_MAPPING_CLIP)
     bool gamut_warning;
+
+    // If peak_detect_state is set to a valid pointer, this enables the peak
+    // detection feature. The resource object will be implicitly created and
+    // updated by pl_shader_color_map, but must be destroyed by the caller when
+    // no longer needed. Subsequent calls to pl_color_map for subsequent frames
+    // should re-use the same peak_detect_state. `peak_detect_frames` specifies
+    // how many frames to smooth (average) over, and must be at least 1. A
+    // recommend value range is 50-100, which smooths the peak over a time
+    // period of typically 1-2 seconds and results in a fairly jitter-free
+    // result while still reacting relatively quickly to scene transitions. The
+    // default for peak_detect_frames is 50.
+    struct pl_shader_obj **peak_detect_state;
+    int peak_detect_frames;
 };
 
 extern const struct pl_color_map_params pl_color_map_default_params;
