@@ -25,6 +25,7 @@
 
 #include "osdep/compiler.h"
 #include "ta/talloc.h"
+#include "siphash.h"
 
 /* NOTE: 'len' is size_t, but most string-handling functions below assume
  * that input size has been sanity checked and len fits in an int.
@@ -185,6 +186,11 @@ static inline bool bstr_eatstart0(struct bstr *s, const char *prefix)
 static inline bool bstr_eatend0(struct bstr *s, const char *prefix)
 {
     return bstr_eatend(s, bstr0(prefix));
+}
+
+static inline uint64_t bstr_hash64(struct bstr str)
+{
+    return siphash64(str.start, str.len);
 }
 
 // create a pair (not single value!) for "%.*s" printf syntax

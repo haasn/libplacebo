@@ -92,6 +92,20 @@ bool pl_shader_is_compute(const struct pl_shader *sh)
     return ret;
 }
 
+uint64_t pl_shader_signature(const struct pl_shader *sh)
+{
+    uint64_t res = 0;
+
+    res ^= bstr_hash64(sh->buffer_head);
+    res ^= bstr_hash64(sh->buffer_body);
+
+    // just in case...
+    for (int i = 0; i < sh->num_identifiers; i++)
+        res ^= bstr_hash64(bstr0(sh->identifiers[i]));
+
+    return res;
+}
+
 ident_t sh_fresh(struct pl_shader *sh, const char *name)
 {
     ident_t ident = talloc_asprintf(sh->tmp, "_" PLACEHOLDER "_%s_%d",

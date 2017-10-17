@@ -53,6 +53,16 @@ void pl_shader_reset(struct pl_shader *sh);
 // supports RA_CAP_COMPUTE.
 bool pl_shader_is_compute(const struct pl_shader *sh);
 
+// Returns a signature (like a hash, or checksum) of a shader. This is a
+// collision-resistant number identifying the internal state of a pl_shader.
+// Two pl_shaders will only have the same signature if they are compatible.
+// Compatibility in this context means that they differ only in the contents
+// of variables, vertex attributes or descriptor bindings. The structure,
+// shader text and number/names of input variables/descriptors/attributes must
+// be the same. Note that computing this function takes some time, so the
+// results should be re-used where possible.
+uint64_t pl_shader_signature(const struct pl_shader *sh);
+
 // Indicates the type of signature that is associated with a shader result.
 // Every shader result defines a function that may be called by the user, and
 // this enum indicates the type of value that this function takes and/or

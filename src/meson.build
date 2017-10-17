@@ -46,8 +46,9 @@ sources = [
   'shaders/sampling.c',
   'spirv.c',
 
-  # Helpers ported from mpv
+  # Helpers ported from mpv or other projects
   'bstr/bstr.c',
+  'siphash.c',
   'ta/ta.c',
   'ta/ta_utils.c',
   'ta/talloc.c',
