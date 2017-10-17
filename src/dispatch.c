@@ -536,9 +536,6 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
     memcpy(pv->cached_data, sv->data, host_layout.size);
 
     struct ra_pass_run_params *rparams = &pass->run_params;
-    uintptr_t src = (uintptr_t) sv->data;
-    uintptr_t end = src + (ptrdiff_t) host_layout.size;
-
     switch (pv->type) {
     case PASS_VAR_GLOBAL: {
         struct ra_var_update vu = {
@@ -550,6 +547,8 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
     }
     case PASS_VAR_UBO: {
         assert(pass->ubo);
+        uintptr_t src = (uintptr_t) sv->data;
+        uintptr_t end = src + (ptrdiff_t) host_layout.size;
         size_t dst = pv->layout.offset;
         while (src < end) {
             ra_buf_write(dp->ra, pass->ubo, dst, (void *) src, host_layout.stride);
@@ -558,17 +557,10 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
         }
         break;
     }
-    case PASS_VAR_PUSHC: {
+    case PASS_VAR_PUSHC:
         assert(rparams->push_constants);
-        uintptr_t dst = (uintptr_t) rparams->push_constants +
-                        (ptrdiff_t) pv->layout.offset;
-        while (src < end) {
-            memcpy((void *) dst, (void *) src, host_layout.stride);
-            src += host_layout.stride;
-            dst += pv->layout.stride;
-        }
+        memcpy_layout(rparams->push_constants, pv->layout, sv->data, host_layout);
         break;
-    }
     };
 }
 

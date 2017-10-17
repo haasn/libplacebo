@@ -539,6 +539,26 @@ size_t ra_buf_desc_size(const struct ra_desc *buf_desc)
     return last->layout.offset + last->layout.size;
 }
 
+void memcpy_layout(void *dst_p, struct ra_var_layout dst_layout,
+                   const void *src_p, struct ra_var_layout src_layout)
+{
+    uintptr_t src = (uintptr_t) src_p + src_layout.offset;
+    uintptr_t dst = (uintptr_t) dst_p + dst_layout.offset;
+
+    if (src_layout.stride == dst_layout.stride) {
+        memcpy((void *) dst, (const void *) src, src_layout.size);
+        return;
+    }
+
+    size_t stride = PL_MIN(src_layout.stride, dst_layout.stride);
+    uintptr_t end = src + src_layout.size;
+    while (src < end) {
+        memcpy((void *) dst, (const void *) src, stride);
+        src += src_layout.stride;
+        dst += dst_layout.stride;
+    }
+}
+
 int ra_desc_namespace(const struct ra *ra, enum ra_desc_type type)
 {
     return ra->impl->desc_namespace(ra, type);

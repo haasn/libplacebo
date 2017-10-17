@@ -508,6 +508,12 @@ struct ra_var_layout ra_buf_storage_layout(const struct ra *ra, size_t offset,
 struct ra_var_layout ra_push_constant_layout(const struct ra *ra, size_t offset,
                                              const struct ra_var *var);
 
+// Like memcpy, but copies bytes from `src` to `dst` in a manner governed by
+// the stride and size of `dst_layout` as well as `src_layout`. Also takes
+// into account the respective `offset`.
+void memcpy_layout(void *dst, struct ra_var_layout dst_layout,
+                   const void *src, struct ra_var_layout src_layout);
+
 // Represents a vertex attribute.
 struct ra_vertex_attrib {
     const char *name;         // name as used in the shader
