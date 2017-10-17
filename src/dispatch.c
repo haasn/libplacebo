@@ -446,6 +446,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         rparams->compute_groups[0] = num_x;
         rparams->compute_groups[1] = num_y;
         rparams->compute_groups[2] = 1;
+        break;
     }
     default: abort();
     }
@@ -625,14 +626,16 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
         update_pass_var(dp, pass, &res->variables[i], &pass->vars[i]);
 
     // Update the vertex data
-    uintptr_t vert_base = (uintptr_t) rparams->vertex_data;
-    size_t stride = rparams->pass->params.vertex_stride;
-    for (int i = 0; i < res->num_vertex_attribs; i++) {
-        struct pl_shader_va sva = res->vertex_attribs[i];
-        size_t size = sva.attr.fmt->texel_size;
-        uintptr_t va_base = vert_base + sva.attr.offset;
-        for (int n = 0; n < 4; n++)
-            memcpy((void *) (va_base + n * stride), sva.data[n], size);
+    if (rparams->vertex_data) {
+        uintptr_t vert_base = (uintptr_t) rparams->vertex_data;
+        size_t stride = rparams->pass->params.vertex_stride;
+        for (int i = 0; i < res->num_vertex_attribs; i++) {
+            struct pl_shader_va sva = res->vertex_attribs[i];
+            size_t size = sva.attr.fmt->texel_size;
+            uintptr_t va_base = vert_base + sva.attr.offset;
+            for (int n = 0; n < 4; n++)
+                memcpy((void *) (va_base + n * stride), sva.data[n], size);
+        }
     }
 
     // Dispatch the actual shader
