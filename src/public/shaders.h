@@ -147,4 +147,13 @@ struct pl_shader_desc {
 // will only remain valid until the pl_shader is freed or reset.
 const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh);
 
+// Shader objects represent abstract resources that shaders need to manage in
+// order to ensure their operation. This could include shader storage buffers,
+// generated lookup textures, or other sorts of configured state. The body
+// of a shader object is fully opaque; but the user is in charge of cleaning up
+// after them and passing them to the right shader passes.
+struct pl_shader_obj;
+
+void pl_shader_obj_destroy(struct pl_shader_obj **obj);
+
 #endif // LIBPLACEBO_SHADERS_H_

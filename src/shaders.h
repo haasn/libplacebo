@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "context.h"
+#include "ra.h"
 
 // This represents a (mutable!) handle to an identifier. These identifiers are
 // not constant, since they may be renamed at any time (e.g. via
@@ -102,3 +103,20 @@ void pl_shader_append(struct pl_shader *sh, struct bstr *buf,
 // with the given input signature, as well as an output size compatible with
 // the given size requirements. Errors and returns false otherwise.
 bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h);
+
+// Shader resources
+
+enum pl_shader_obj_type {
+    PL_SHADER_OBJ_INVALID = 0,
+};
+
+struct pl_shader_obj {
+    enum pl_shader_obj_type type;
+    const struct ra *ra;
+    // The following fields are for free use by the shader
+    const struct ra_buf *buf;
+    const struct ra_tex *tex;
+};
+
+bool sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
+                    enum pl_shader_obj_type type);

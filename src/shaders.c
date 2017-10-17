@@ -400,3 +400,46 @@ bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h)
     sh->output_h = h;
     return true;
 }
+
+void pl_shader_obj_destroy(struct pl_shader_obj **ptr)
+{
+    struct pl_shader_obj *obj = *ptr;
+    if (!obj)
+        return;
+
+    if (obj->ra) {
+        ra_buf_destroy(obj->ra, &obj->buf);
+        ra_tex_destroy(obj->ra, &obj->tex);
+    }
+
+    *ptr = NULL;
+    talloc_free(obj);
+}
+
+bool sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
+                    enum pl_shader_obj_type type)
+{
+    if (!ptr)
+        return false;
+
+    struct pl_shader_obj *obj = *ptr;
+    if (obj && obj->ra != sh->ra) {
+        PL_ERR(sh, "Passed pl_shader_obj belongs to different RA!");
+        return false;
+    }
+
+    if (obj && obj->type != type) {
+        PL_ERR(sh, "Passed pl_shader_obj of wrong type! Shader objects must "
+               "always be used with the same type of shader.");
+        return false;
+    }
+
+    if (!obj) {
+        obj = talloc_zero(NULL, struct pl_shader_obj);
+        obj->ra = sh->ra;
+        obj->type = type;
+    }
+
+    *ptr = obj;
+    return true;
+}
