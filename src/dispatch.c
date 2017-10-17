@@ -27,6 +27,10 @@ struct pl_dispatch {
     struct pl_shader **shaders;
     int num_shaders;
 
+    // cache of compiled passes
+    struct pass **passes;
+    int num_passes;
+
     // temporary buffers to help avoid re_allocations during pass creation
     struct bstr tmp_glsl[4];
 };
@@ -45,6 +49,7 @@ struct pass_var {
 };
 
 struct pass {
+    uint64_t signature; // as returned by pl_shader_signature
     const struct ra_pass *pass;
     bool failed;
 
@@ -88,12 +93,19 @@ struct pl_dispatch *pl_dispatch_create(struct pl_context *ctx, const struct ra *
     return dp;
 }
 
-void pl_dispatch_destroy(struct pl_dispatch **dp)
+void pl_dispatch_destroy(struct pl_dispatch **ptr)
 {
-    for (int i = 0; i < (*dp)->num_shaders; i++)
-        pl_shader_free(&(*dp)->shaders[i]);
+    struct pl_dispatch *dp = *ptr;
+    if (!dp)
+        return;
 
-    TA_FREEP(dp);
+    for (int i = 0; i < dp->num_passes; i++)
+        pass_destroy(dp, dp->passes[i]);
+    for (int i = 0; i < dp->num_shaders; i++)
+        pl_shader_free(&dp->shaders[i]);
+
+    talloc_free(dp);
+    *ptr = NULL;
 }
 
 struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp)
@@ -373,12 +385,20 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
 #undef ADD
 #undef ADD_BSTR
 
-static struct pass *pass_create(struct pl_dispatch *dp, struct pl_shader *sh,
-                                const struct ra_tex *target, ident_t vert_pos)
+static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
+                              const struct ra_tex *target, ident_t vert_pos)
 {
+    uint64_t sig = pl_shader_signature(sh);
+
+    for (int i = 0; i < dp->num_passes; i++) {
+        if (dp->passes[i]->signature == sig)
+            return dp->passes[i];
+    }
+
     void *tmp = talloc_new(NULL); // for resources attached to `params`
 
     struct pass *pass = talloc_zero(dp, struct pass);
+    pass->signature = sig;
     pass->failed = true; // will be set to false on success
 
     struct pl_shader_res *res = &sh->res;
@@ -500,6 +520,7 @@ error:
     pass->img_name = NULL; // allocated via sh_fresh
     pass->ubo_vars = NULL;
     talloc_free(tmp);
+    TARRAY_APPEND(dp, dp->passes, dp->num_passes, pass);
     return pass;
 }
 
@@ -576,14 +597,9 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
         .y1 =  1.0,
     });
 
-    // TODO: look this up in some form of cache
-    struct pass *pass = pass_create(dp, sh, target, vert_pos);
-    if (!pass) {
-        PL_ERR(dp, "Failed to create compatible pass for dispatch.");
-        goto error;
-    }
+    struct pass *pass = find_pass(dp, sh, target, vert_pos);
 
-    // Silently return on already previously-failed passes
+    // Silently return on failed passes
     if (pass->failed)
         goto error;
 
@@ -616,9 +632,7 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
     // Dispatch the actual shader
     rparams->target = target;
     ra_pass_run(dp->ra, &pass->run_params);
-
     ret = true;
-    pass_destroy(dp, pass);
 
 error:
     // Re-add the shader to the internal pool of shaders

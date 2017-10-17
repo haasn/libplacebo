@@ -117,15 +117,19 @@ static void shader_tests(struct pl_context *ctx, const struct ra *ra)
         .initial_data   = data,
     });
 
-    struct pl_shader *sh = pl_dispatch_begin(dp);
-    pl_shader_deband(sh, src, &(struct pl_deband_params) {
-        .iterations     = 0,
-        .grain          = 0.0,
-    });
+    // Repeat this a few times to test the caching
+    for (int i = 0; i < 10; i++) {
+        printf("iteration %d\n", i);
+        struct pl_shader *sh = pl_dispatch_begin(dp);
+        pl_shader_deband(sh, src, &(struct pl_deband_params) {
+            .iterations     = 0,
+            .grain          = 0.0,
+        });
 
-    pl_shader_linearize(sh, PL_COLOR_TRC_GAMMA22);
+        pl_shader_linearize(sh, PL_COLOR_TRC_GAMMA22);
+        REQUIRE(pl_dispatch_finish(dp, sh, fbo));
+    }
 
-    REQUIRE(pl_dispatch_finish(dp, sh, fbo));
     ra_tex_download(ra, &(struct ra_tex_transfer_params) {
         .tex = fbo,
         .ptr = data,
