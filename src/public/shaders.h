@@ -95,11 +95,10 @@ struct pl_shader_res {
     enum pl_shader_sig input;  // what the function expects
     enum pl_shader_sig output; // what the function returns
 
-    // The required work group size, if this is a compute shader. If any of
-    // these integers is 0, then the shader is not considered a compute shader
-    // and this field can safely be ignored. (This is equivalent to calling
-    // pl_shader_is_compute)
-    int compute_work_groups[3];
+    // For compute shaders (pl_shader_is_compute), this indicates the requested
+    // work group size. Otherwise, both fields are 0. The interpretation of
+    // these work groups is that they're tiled across the output image.
+    int compute_group_size[2];
 
     // If this pass is a compute shader, this field indicates the shared memory
     // size requirements for this shader pass.

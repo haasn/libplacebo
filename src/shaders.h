@@ -41,6 +41,7 @@ struct pl_shader {
     struct pl_shader_res res; // for accumulating vertex_attribs etc.
     struct bstr buffer_head;
     struct bstr buffer_body;
+    bool is_compute;
     bool flexible_work_groups;
     int fresh;
     int namespace;
@@ -57,6 +58,9 @@ struct pl_shader {
     ident_t *identifiers;
     int num_identifiers;
 };
+
+// Attempt enabling compute shaders for this pass, if possible
+bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem);
 
 // Helpers for adding new variables/descriptors/etc. with fresh, unique
 // identifier names. These will never conflcit with other identifiers, even

@@ -84,12 +84,59 @@ void pl_shader_reset(struct pl_shader *sh)
     *sh = new;
 }
 
+bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem)
+{
+    assert(bw && bh);
+    int *sh_bw = &sh->res.compute_group_size[0];
+    int *sh_bh = &sh->res.compute_group_size[1];
+
+    if (!sh->ra || !(sh->ra->caps & RA_CAP_COMPUTE)) {
+        PL_TRACE(sh, "Disabling compute shader due to missing RA_CAP_COMPUTE");
+        return false;
+    }
+
+    if (sh->res.compute_shmem + mem > sh->ra->limits.max_shmem_size) {
+        PL_TRACE(sh, "Disabling compute shader due to insufficient shmem");
+        return false;
+    }
+
+    sh->res.compute_shmem += mem;
+
+    // If the current shader is either not a compute shader, or we have no
+    // choice but to override the metadata, always do so
+    if (!sh->is_compute || (sh->flexible_work_groups && !flex)) {
+        *sh_bw = bw;
+        *sh_bh = bh;
+        sh->is_compute = true;
+        return true;
+    }
+
+    // If both shaders are flexible, pick the larger of the two
+    if (sh->flexible_work_groups && flex) {
+        *sh_bw = PL_MAX(*sh_bw, bw);
+        *sh_bh = PL_MAX(*sh_bh, bh);
+        return true;
+    }
+
+    // If the other shader is rigid but this is flexible, change nothing
+    if (flex)
+        return true;
+
+    // If neither are flexible, make sure the parameters match
+    assert(!flex && !sh->flexible_work_groups);
+    if (bw != *sh_bw || bh != *sh_bh) {
+        PL_TRACE(sh, "Disabling compute shader due to incompatible group "
+                 "sizes %dx%d and %dx%d", *sh_bw, *sh_bh, bw, bh);
+        sh->res.compute_shmem -= mem;
+        return false;
+    }
+
+    return true;
+}
+
 bool pl_shader_is_compute(const struct pl_shader *sh)
 {
-    bool ret = true;
-    for (int i = 0; i < PL_ARRAY_SIZE(sh->res.compute_work_groups); i++)
-        ret &= !!sh->res.compute_work_groups[i];
-    return ret;
+    return sh->is_compute;
 }
 
 bool pl_shader_output_size(const struct pl_shader *sh, int *w, int *h)

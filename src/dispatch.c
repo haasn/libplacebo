@@ -438,8 +438,8 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     }
     case RA_PASS_COMPUTE: {
         // Round up to make sure we don-t leave off a part of the target
-        int block_w = sh->res.compute_work_groups[0],
-            block_h = sh->res.compute_work_groups[1],
+        int block_w = sh->res.compute_group_size[0],
+            block_h = sh->res.compute_group_size[1],
             num_x   = (target->params.w + block_w - 1) / block_w,
             num_y   = (target->params.h + block_h - 1) / block_h;
 
