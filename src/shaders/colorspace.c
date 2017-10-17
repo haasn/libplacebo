@@ -21,7 +21,7 @@
 void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
                             struct pl_color_adjustment params, int texture_bits)
 {
-    if (!sh_require_input(sh, PL_SHADER_SIG_COLOR))
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
     GLSL("// pl_shader_decode_color\n");
@@ -123,7 +123,7 @@ static const float SLOG_A = 0.432699,
 
 void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc)
 {
-    if (!sh_require_input(sh, PL_SHADER_SIG_COLOR))
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
     if (trc == PL_COLOR_TRC_LINEAR)
@@ -208,7 +208,7 @@ void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc)
 
 void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
 {
-    if (!sh_require_input(sh, PL_SHADER_SIG_COLOR))
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
     if (trc == PL_COLOR_TRC_LINEAR)
@@ -285,7 +285,7 @@ void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
 static void pl_shader_ootf(struct pl_shader *sh, enum pl_color_light light,
                            float peak, ident_t luma)
 {
-    if (!sh_require_input(sh, PL_SHADER_SIG_COLOR))
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
@@ -450,7 +450,7 @@ void pl_shader_color_map(struct pl_shader *sh,
                          struct pl_color_space src, struct pl_color_space dst,
                          bool prelinearized)
 {
-    if (!sh_require_input(sh, PL_SHADER_SIG_COLOR))
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
     GLSL("// pl_shader_color_map\n");

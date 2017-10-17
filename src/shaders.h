@@ -36,6 +36,8 @@ struct pl_shader {
 
     // Internal state
     bool mutable;
+    int output_w;
+    int output_h;
     struct pl_shader_res res; // for accumulating vertex_attribs etc.
     struct bstr buffer_head;
     struct bstr buffer_body;
@@ -92,6 +94,7 @@ void pl_shader_append(struct pl_shader *sh, struct bstr *buf,
 #define GLSLH(...) pl_shader_append(sh, &sh->buffer_head, __VA_ARGS__)
 #define GLSL(...)  pl_shader_append(sh, &sh->buffer_body, __VA_ARGS__)
 
-// Requires that the share is mutable and has an output signature compatible
-// with the given input signature. Errors and returns false otherwise.
-bool sh_require_input(struct pl_shader *sh, enum pl_shader_sig insig);
+// Requires that the share is mutable, has an output signature compatible
+// with the given input signature, as well as an output size compatible with
+// the given size requirements. Errors and returns false otherwise.
+bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h);

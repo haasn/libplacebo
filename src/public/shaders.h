@@ -53,6 +53,13 @@ void pl_shader_reset(struct pl_shader *sh);
 // supports RA_CAP_COMPUTE.
 bool pl_shader_is_compute(const struct pl_shader *sh);
 
+// Returns whether or not the shader has any particular output size
+// requirements. Some shaders, in particular those that sample from other
+// textures, have specific output size requirements which need to be respected
+// by the caller. If this is false, then the shader is compatible with every
+// output size. If true, the size requirements are stored into *w and *h.
+bool pl_shader_output_size(const struct pl_shader *sh, int *w, int *h);
+
 // Returns a signature (like a hash, or checksum) of a shader. This is a
 // collision-resistant number identifying the internal state of a pl_shader.
 // Two pl_shaders will only have the same signature if they are compatible.

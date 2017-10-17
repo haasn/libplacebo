@@ -28,7 +28,7 @@ const struct pl_deband_params pl_deband_default_params = {
 void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
                       const struct pl_deband_params *params)
 {
-    if (!sh_require_input(sh, PL_SHADER_SIG_NONE))
+    if (!sh_require(sh, PL_SHADER_SIG_NONE, ra_tex->params.w, ra_tex->params.h))
         return;
 
     GLSL("vec4 color;\n");

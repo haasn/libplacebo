@@ -589,6 +589,21 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
         goto error;
     }
 
+    const struct ra_tex_params *tpars = &target->params;
+    if (ra_tex_params_dimension(*tpars) != 2 || !tpars->renderable) {
+        PL_ERR(dp, "Trying to dispatch using a shader using an invalid target "
+               "texture. The target must be a renderable 2D texture.");
+        goto error;
+    }
+
+    int w, h;
+    if (pl_shader_output_size(sh, &w, &h) && (w != tpars->w || h != tpars->h)) {
+        PL_ERR(dp, "Trying to dispatch a shader with explicit output size "
+               "requirements %dx%d using a target of size %dx%d.",
+               w, h, tpars->w, tpars->h);
+        goto error;
+    }
+
     // Add the vertex information encoding the position
     ident_t vert_pos = sh_attr_vec2(sh, "position", &(const struct pl_rect2df) {
         .x0 = -1.0,

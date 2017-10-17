@@ -92,6 +92,16 @@ bool pl_shader_is_compute(const struct pl_shader *sh)
     return ret;
 }
 
+bool pl_shader_output_size(const struct pl_shader *sh, int *w, int *h)
+{
+    if (!sh->output_w || !sh->output_h)
+        return false;
+
+    *w = sh->output_w;
+    *h = sh->output_h;
+    return true;
+}
+
 uint64_t pl_shader_signature(const struct pl_shader *sh)
 {
     uint64_t res = 0;
@@ -304,10 +314,17 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
     return &sh->res;
 }
 
-bool sh_require_input(struct pl_shader *sh, enum pl_shader_sig insig)
+bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h)
 {
     if (!sh->mutable) {
         PL_ERR(sh, "Attempted to modify an immutable shader!");
+        return false;
+    }
+
+    if (PL_DEF(sh->output_w, w) != w || PL_DEF(sh->output_h, h) != h) {
+        PL_ERR(sh, "Illegal sequence of shader operations: Incompatible "
+               "output size requirements %dx%d and %dx%d",
+               sh->output_w, sh->output_h, w, h);
         return false;
     }
 
@@ -330,5 +347,7 @@ bool sh_require_input(struct pl_shader *sh, enum pl_shader_sig insig)
 
     // All of our shaders end up returning a vec4 color
     sh->res.output = PL_SHADER_SIG_COLOR;
+    sh->output_w = w;
+    sh->output_h = h;
     return true;
 }
