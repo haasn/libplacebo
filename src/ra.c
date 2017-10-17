@@ -450,6 +450,7 @@ const char *ra_var_glsl_type_name(struct ra_var var)
             .type  = RA_VAR_FLOAT,                      \
             .dim_m = M,                                 \
             .dim_v = V,                                 \
+            .dim_a = 1,                                 \
         };                                              \
     }
 
@@ -467,7 +468,7 @@ struct ra_var_layout ra_var_host_layout(size_t offset, const struct ra_var *var)
     return (struct ra_var_layout) {
         .offset = offset,
         .stride = col_size,
-        .size   = col_size * var->dim_m,
+        .size   = col_size * var->dim_m * var->dim_a,
     };
 }
 
@@ -706,13 +707,13 @@ struct ra_var_layout std140_layout(const struct ra *ra, size_t offset,
     size_t size = el_size * var->dim_v;
     if (var->dim_v == 3)
         size += el_size;
-    if (var->dim_m > 1)
+    if (var->dim_m * var->dim_a > 1)
         size = PL_ALIGN2(size, sizeof(float[4]));
 
     return (struct ra_var_layout) {
         .offset = PL_ALIGN2(offset, size),
         .stride = size,
-        .size   = size * var->dim_m,
+        .size   = size * var->dim_m * var->dim_a,
     };
 }
 
@@ -724,13 +725,13 @@ struct ra_var_layout std430_layout(const struct ra *ra, size_t offset,
     // std430 packing rules: like std140, except arrays/matrices are always
     // "tightly" packed, even arrays/matrices of vec3s
     size_t size = el_size * var->dim_v;
-    if (var->dim_v == 3 && var->dim_m == 1)
+    if (var->dim_v == 3 && var->dim_m == 1 && var->dim_a == 1)
         size += el_size;
 
     return (struct ra_var_layout) {
         .offset = PL_ALIGN2(offset, size),
         .stride = size,
-        .size   = size * var->dim_m,
+        .size   = size * var->dim_m * var->dim_a,
     };
 }
 

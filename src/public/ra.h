@@ -409,10 +409,12 @@ struct ra_var {
     // and dim_m = 3.
     int dim_v;              // vector dimension
     int dim_m;              // matrix dimension (number of columns, see below)
+    int dim_a;              // array dimension
 };
 
 // Returns a GLSL type name (e.g. vec4) for a given ra_var, or NULL if the
-// variable is not legal.
+// variable is not legal. Not that the array dimension is ignored, since the
+// array dimension is usually part of the variable name and not the type name.
 const char *ra_var_glsl_type_name(struct ra_var var);
 
 // Helper functions for constructing the most common ra_vars.
@@ -460,6 +462,12 @@ struct ra_var ra_var_mat4(const char *name);
 //   { D, E, F },
 //   { G, H, I },
 //   { J, K, L } }
+//
+// Note on arrays: `stride` represents both the stride between elements of a
+// matrix, and the stride between elements of an array. That is, there is no
+// distinction between the columns of a matrix and the rows of an array. For
+// example, a mat2[10] and a vec2[20] share the same ra_var_layout - the stride
+// would be sizeof(vec2) and the size would be sizeof(vec2) * 2 * 10.
 
 struct ra_var_layout {
     size_t offset; // the starting offset of the first byte

@@ -125,7 +125,7 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
 
     // Try not to use push constants for "large" values like matrices, since
     // this is likely to exceed the VGPR/pushc size budgets
-    bool try_pushc = sv->var.dim_m == 1 || sv->dynamic;
+    bool try_pushc = (sv->var.dim_m == 1 && sv->var.dim_a == 1) || sv->dynamic;
     if (try_pushc && ra->glsl.vulkan && ra->limits.max_pushc_size) {
         pv->layout = ra_push_constant_layout(ra, params->push_constants_size, &sv->var);
         size_t new_size = pv->layout.offset + pv->layout.size;
@@ -178,13 +178,25 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
 #define ADD(x, ...) bstr_xappend_asprintf(dp, (x), __VA_ARGS__)
 #define ADD_BSTR(x, s) bstr_xappend(dp, (x), (s))
 
+static void add_var(struct pl_dispatch *dp, struct bstr *body,
+                    const struct ra_var *var)
+{
+    ADD(body, "%s %s", ra_var_glsl_type_name(*var), var->name);
+
+    if (var->dim_a > 1) {
+        ADD(body, "[%d];\n", var->dim_a);
+    } else {
+        ADD(body, ";\n");
+    }
+}
+
 static void add_buffer_vars(struct pl_dispatch *dp, struct bstr *body,
-                            struct ra_buffer_var *vars, int num)
+                            const struct ra_buffer_var *vars, int num)
 {
     ADD(body, "{\n");
     for (int i = 0; i < num; i++) {
-        ADD(body, "    layout(offset=%zu) %s %s;\n", vars[i].layout.offset,
-            ra_var_glsl_type_name(vars[i].var), vars[i].var.name);
+        ADD(body, "    layout(offset=%zu) ", vars[i].layout.offset);
+        add_var(dp, body, &vars[i].var);
     }
     ADD(body, "};\n");
 }
@@ -270,8 +282,8 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             struct pass_var *pv = &pass->vars[i];
             if (pv->type != PASS_VAR_PUSHC)
                 continue;
-            ADD(body, "/*offset=%zu*/ %s %s;\n", pv->layout.offset,
-                ra_var_glsl_type_name(*var), var->name);
+            ADD(body, "/*offset=%zu*/ ", pv->layout.offset);
+            add_var(dp, body, var);
         }
         ADD(body, "};\n");
     }
@@ -352,7 +364,8 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         const struct pass_var *pv = &pass->vars[i];
         if (pv->type != PASS_VAR_GLOBAL)
             continue;
-        ADD(body, "uniform %s %s;\n", ra_var_glsl_type_name(*var), var->name);
+        ADD(body, "uniform ");
+        add_var(dp, body, var);
     }
 
     // Set up the main shader body
@@ -533,6 +546,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
 
     struct ra_pass_run_params *rparams = &pass->run_params;
     uintptr_t src = (uintptr_t) sv->data;
+    uintptr_t end = src + (ptrdiff_t) host_layout.size;
 
     switch (pv->type) {
     case PASS_VAR_GLOBAL: {
@@ -546,7 +560,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
     case PASS_VAR_UBO: {
         assert(pass->ubo);
         size_t dst = pv->layout.offset;
-        for (int i = 0; i < sv->var.dim_m; i++) {
+        while (src < end) {
             ra_buf_write(dp->ra, pass->ubo, dst, (void *) src, host_layout.stride);
             src += host_layout.stride;
             dst += pv->layout.stride;
@@ -557,7 +571,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
         assert(rparams->push_constants);
         uintptr_t dst = (uintptr_t) rparams->push_constants +
                         (ptrdiff_t) pv->layout.offset;
-        for (int i = 0; i < sv->var.dim_m; i++) {
+        while (src < end) {
             memcpy((void *) dst, (void *) src, host_layout.stride);
             src += host_layout.stride;
             dst += pv->layout.stride;
