@@ -214,12 +214,6 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             ADD(header, "precision mediump sampler3D;\n");
     }
 
-    if (ra->glsl.vulkan && params->type == RA_PASS_COMPUTE) {
-        // For some reason this isn't defined in vulkan-flavored GLSL
-        ADD(header, "#define gl_GlobalInvocationIndex "
-                    "(gl_WorkGroupID * gl_WorkGroupSize + gl_LocalInvocationID)\n");
-    }
-
     char *vert_in  = ra->glsl.version >= 130 ? "in" : "attribute";
     char *vert_out = ra->glsl.version >= 130 ? "out" : "varying";
     char *frag_in  = ra->glsl.version >= 130 ? "in" : "varying";
