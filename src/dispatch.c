@@ -24,7 +24,8 @@ struct pl_dispatch {
     const struct ra *ra;
 
     // pool of pl_shaders, in order to avoid frequent re-allocations
-    // TODO
+    struct pl_shader **shaders;
+    int num_shaders;
 
     // temporary buffers to help avoid re_allocations during pass creation
     struct bstr tmp_glsl[4];
@@ -89,11 +90,18 @@ struct pl_dispatch *pl_dispatch_create(struct pl_context *ctx, const struct ra *
 
 void pl_dispatch_destroy(struct pl_dispatch **dp)
 {
+    for (int i = 0; i < (*dp)->num_shaders; i++)
+        pl_shader_free(&(*dp)->shaders[i]);
+
     TA_FREEP(dp);
 }
 
 struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp)
 {
+    struct pl_shader *sh;
+    if (TARRAY_POP(dp->shaders, dp->num_shaders, &sh))
+        return sh;
+
     return pl_shader_alloc(dp->ctx, dp->ra);
 }
 
@@ -548,6 +556,7 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
                         const struct ra_tex *target)
 {
     const struct pl_shader_res *res = &sh->res;
+    bool ret = false;
 
     if (!sh->mutable) {
         PL_ERR(dp, "Trying to dispatch non-mutable shader?");
@@ -608,13 +617,12 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
     rparams->target = target;
     ra_pass_run(dp->ra, &pass->run_params);
 
-    // TODO: re-add this to the pool. For now, just clean up
-    pl_shader_reset(sh);
-    pl_shader_free(&sh);
+    ret = true;
     pass_destroy(dp, pass);
-    return true;
 
 error:
-    pl_shader_free(&sh);
-    return false;
+    // Re-add the shader to the internal pool of shaders
+    pl_shader_reset(sh);
+    TARRAY_APPEND(dp, dp->shaders, dp->num_shaders, sh);
+    return ret;
 }
