@@ -443,24 +443,27 @@ const char *ra_var_glsl_type_name(struct ra_var var)
     return types[var.type][var.dim_m][var.dim_v];
 }
 
-#define RA_VAR_FV(TYPE, M, V)                           \
-    struct ra_var ra_var_##TYPE(const char *name) {     \
+#define RA_VAR(TYPE, NAME, M, V)                        \
+    struct ra_var ra_var_##NAME(const char *name) {     \
         return (struct ra_var) {                        \
             .name  = name,                              \
-            .type  = RA_VAR_FLOAT,                      \
+            .type  = RA_VAR_##TYPE,                     \
             .dim_m = M,                                 \
             .dim_v = V,                                 \
             .dim_a = 1,                                 \
         };                                              \
     }
 
-RA_VAR_FV(float, 1, 1)
-RA_VAR_FV(vec2,  1, 2)
-RA_VAR_FV(vec3,  1, 3)
-RA_VAR_FV(vec4,  1, 4)
-RA_VAR_FV(mat2,  2, 2)
-RA_VAR_FV(mat3,  3, 3)
-RA_VAR_FV(mat4,  4, 4)
+RA_VAR(UINT,  uint,  1, 1);
+RA_VAR(FLOAT, float, 1, 1);
+RA_VAR(FLOAT, vec2,  1, 2);
+RA_VAR(FLOAT, vec3,  1, 3);
+RA_VAR(FLOAT, vec4,  1, 4);
+RA_VAR(FLOAT, mat2,  2, 2);
+RA_VAR(FLOAT, mat3,  3, 3);
+RA_VAR(FLOAT, mat4,  4, 4);
+
+#undef RA_VAR
 
 struct ra_var_layout ra_var_host_layout(size_t offset, const struct ra_var *var)
 {

@@ -418,6 +418,7 @@ struct ra_var {
 const char *ra_var_glsl_type_name(struct ra_var var);
 
 // Helper functions for constructing the most common ra_vars.
+struct ra_var ra_var_uint(const char *name);
 struct ra_var ra_var_float(const char *name);
 struct ra_var ra_var_vec2(const char *name);
 struct ra_var ra_var_vec3(const char *name);
