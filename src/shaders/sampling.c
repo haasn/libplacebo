@@ -94,9 +94,11 @@ void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
     }
 
     // Add some random noise to smooth out residual differences
-    GLSL("vec3 noise = vec3(%s(prng), %s(prng), %s(prng)); \n"
-         "color.rgb += %f * (noise - vec3(0.5));           \n",
-         random, random, random, params->grain / 1000.0);
+    if (params->grain > 0) {
+        GLSL("vec3 noise = vec3(%s(prng), %s(prng), %s(prng)); \n"
+             "color.rgb += %f * (noise - vec3(0.5));           \n",
+             random, random, random, params->grain / 1000.0);
+    }
 
     GLSL("}\n");
 }
