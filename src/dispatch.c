@@ -718,7 +718,12 @@ error:
     for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
         dp->tmp[i].len = 0;
 
+    pl_dispatch_abort(dp, sh);
+    return ret;
+}
+
+void pl_dispatch_abort(struct pl_dispatch *dp, struct pl_shader *sh)
+{
     // Re-add the shader to the internal pool of shaders
     TARRAY_APPEND(dp, dp->shaders, dp->num_shaders, sh);
-    return ret;
 }

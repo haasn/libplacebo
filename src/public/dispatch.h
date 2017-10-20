@@ -43,6 +43,10 @@ struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp);
 bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
                         const struct ra_tex *target);
 
+// Cancel an active shader without submitting anything. Useful, for example,
+// if the shader was instead merged into a different shader.
+void pl_dispatch_abort(struct pl_dispatch *dp, struct pl_shader *sh);
+
 // Resets the internal counters of the pl_dispatch. This should be called
 // whenever the user is going to begin with a new frame, in order to ensure
 // that the "same" calls to pl_dispatch_begin end up creating shaders with
