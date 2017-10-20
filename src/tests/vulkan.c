@@ -1,4 +1,5 @@
 #include "ra_tests.h"
+#include "shaders.h"
 
 static void shader_tests(struct pl_context *ctx, const struct ra *ra)
 {
@@ -35,6 +36,8 @@ static void shader_tests(struct pl_context *ctx, const struct ra *ra)
         .w              = FBO_W,
         .h              = FBO_H,
         .renderable     = true,
+        .storable       = (ra->caps & RA_CAP_COMPUTE) &&
+                          (fbo_fmt->caps & RA_FMT_CAP_STORABLE),
         .host_readable  = true,
         .blit_dst       = true,
     });
@@ -121,6 +124,14 @@ static void shader_tests(struct pl_context *ctx, const struct ra *ra)
     for (int i = 0; i < 10; i++) {
         printf("iteration %d\n", i);
         struct pl_shader *sh = pl_dispatch_begin(dp);
+
+        // For testing, force the use of CS if possible
+        if (ra->caps & RA_CAP_COMPUTE) {
+            sh->is_compute = true;
+            sh->res.compute_group_size[0] = 8;
+            sh->res.compute_group_size[1] = 8;
+        }
+
         pl_shader_deband(sh, src, &(struct pl_deband_params) {
             .iterations     = 0,
             .grain          = 0.0,
