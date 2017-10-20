@@ -37,8 +37,14 @@ struct pl_shader;
 // primitives are designed to be used without a dependency on `ra` wherever
 // possible - however, some features may not work, and will be disabled even
 // if requested.
-struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
-                                  const struct ra *ra);
+//
+// The `ident` represents some arbitrary value that identifies this pl_shader.
+// The semantics of the identifier work like a "namespace". This parameter is
+// only relevant if you plan on merging multiple shaders together, which
+// requires that all of the merged shaders have unique identifiers. It can
+// safely be left as 0 if unneeded.
+struct pl_shader *pl_shader_alloc(struct pl_context *ctx, const struct ra *ra,
+                                  uint8_t ident);
 
 // Frees a pl_shader and all resources associated with it.
 void pl_shader_free(struct pl_shader **sh);
@@ -46,7 +52,7 @@ void pl_shader_free(struct pl_shader **sh);
 // Resets a pl_shader to a blank slate, without releasing internal memory.
 // If you're going to be re-generating shaders often, this function will let
 // you skip the re-allocation overhead.
-void pl_shader_reset(struct pl_shader *sh);
+void pl_shader_reset(struct pl_shader *sh, uint8_t ident);
 
 // Returns whether or not a pl_shader needs to be run as a compute shader. This
 // will never be the case unless the `ra` this pl_shader was created against

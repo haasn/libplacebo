@@ -125,7 +125,8 @@ This shader dispatch mechanism is designed to be combined with the shader
 processing routines exported by `shaders/*.h`, but takes care of the low-level
 translation of the resulting `pl_shader_res` objects into legal GLSL. It also
 takes care of resource binding, variable placement, as well as shader caching
-and resource pooling.
+and resource pooling; and makes sure all generated shaders have unique
+identifiers (so they can be freely merged together).
 
 ## Installing
 

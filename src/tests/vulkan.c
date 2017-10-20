@@ -123,6 +123,7 @@ static void shader_tests(struct pl_context *ctx, const struct ra *ra)
     // Repeat this a few times to test the caching
     for (int i = 0; i < 10; i++) {
         printf("iteration %d\n", i);
+        pl_dispatch_reset_frame(dp);
         struct pl_shader *sh = pl_dispatch_begin(dp);
 
         // For testing, force the use of CS if possible

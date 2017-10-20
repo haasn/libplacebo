@@ -22,13 +22,8 @@
 #include "context.h"
 #include "shaders.h"
 
-// Represents a blank placeholder for the purposes of namespace substitution.
-// This is picked to be a literal string that is impossible to ever occur in
-// valid code.
-#define PLACEHOLDER "\1\2\3"
-
-struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
-                                  const struct ra *ra)
+struct pl_shader *pl_shader_alloc(struct pl_context *ctx, const struct ra *ra,
+                                  uint8_t ident)
 {
     assert(ctx);
     struct pl_shader *sh = talloc_ptrtype(ctx, sh);
@@ -37,6 +32,7 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
         .ra = ra,
         .mutable = true,
         .tmp = talloc_new(sh),
+        .ident = ident,
     };
 
     if (ra) {
@@ -52,17 +48,17 @@ void pl_shader_free(struct pl_shader **sh)
     TA_FREEP(sh);
 }
 
-void pl_shader_reset(struct pl_shader *sh)
+void pl_shader_reset(struct pl_shader *sh, uint8_t ident)
 {
     struct pl_shader new = {
         .ctx = sh->ctx,
         .ra  = sh->ra,
         .tmp = talloc_new(sh),
         .mutable = true,
+        .ident = ident,
 
         // Preserve array allocations
         .current_binding = sh->current_binding,
-        .identifiers = sh->identifiers,
         .res = {
             .variables      = sh->res.variables,
             .descriptors    = sh->res.descriptors,
@@ -154,23 +150,18 @@ bool pl_shader_output_size(const struct pl_shader *sh, int *w, int *h)
 uint64_t pl_shader_signature(const struct pl_shader *sh)
 {
     uint64_t res = 0;
-
     for (int i = 0; i < PL_ARRAY_SIZE(sh->buffers); i++)
         res ^= bstr_hash64(sh->buffers[i]);
 
-    // just in case...
-    for (int i = 0; i < sh->num_identifiers; i++)
-        res ^= bstr_hash64(bstr0(sh->identifiers[i]));
+    // FIXME: also hash in the configuration of the descriptors/variables
 
     return res;
 }
 
 ident_t sh_fresh(struct pl_shader *sh, const char *name)
 {
-    ident_t ident = talloc_asprintf(sh->tmp, "_" PLACEHOLDER "_%s_%d",
-                                    PL_DEF(name, "var"), sh->fresh++);
-    TARRAY_APPEND(sh, sh->identifiers, sh->num_identifiers, ident);
-    return ident;
+    return talloc_asprintf(sh->tmp, "_%s_%d_%u", PL_DEF(name, "var"),
+                           sh->fresh++, sh->ident);
 }
 
 ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
@@ -291,42 +282,6 @@ void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
     va_end(ap);
 }
 
-// Performs the free variable rename. `buf` must point to a buffer with at
-// least strlen(PLACEHOLDER) valid replacement characters.
-static void rename_str(char *str, const char *buf)
-{
-    if (!str)
-        return;
-
-    while ((str = strstr(str, PLACEHOLDER))) {
-        for (int i = 0; i < sizeof(PLACEHOLDER) - 1; i++)
-            str[i] = buf[i];
-    }
-}
-
-// Replace all of the free variables in the glsl and input list by literally
-// string replacing it with an encoded representation of the given namespace
-static void sh_rename_vars(struct pl_shader *sh, int namespace)
-{
-    char buf[sizeof(PLACEHOLDER)] = {0};
-    int num = snprintf(buf, sizeof(buf), "%d", namespace);
-
-    // Clear out the remainder of `buf` with a safe character
-    for (int i = num; i < sizeof(buf) - 1; i++)
-        buf[i] = 'z';
-
-    // This is safe, because we never shrink or splice the buffers; and they're
-    // always null-terminated (for the same reason we can directly return them)
-    for (int i = 0; i < PL_ARRAY_SIZE(sh->buffers); i++)
-        rename_str(sh->buffers[i].start, buf);
-
-    // Rename all of the generated identifiers as well. This will also re-name
-    // all references to them (in pl_shader_res etc.), which is basically what
-    // we want to happen
-    for (int i = 0; i < sh->num_identifiers; i++)
-        rename_str(sh->identifiers[i], buf);
-}
-
 // Finish the current shader body and return its function name
 static ident_t sh_split(struct pl_shader *sh)
 {
@@ -360,7 +315,6 @@ static ident_t sh_split(struct pl_shader *sh)
     }
 
     GLSLH("}\n");
-    sh_rename_vars(sh, sh->namespace);
     return name;
 }
 

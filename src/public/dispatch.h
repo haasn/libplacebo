@@ -31,7 +31,9 @@ struct pl_dispatch *pl_dispatch_create(struct pl_context *ctx, const struct ra *
 void pl_dispatch_destroy(struct pl_dispatch **dp);
 
 // Returns a blank pl_shader object, suitable for recording rendering commands.
-// For more information, see the header documentation in `shaders/*.h`.
+// For more information, see the header documentation in `shaders/*.h`. The
+// generated shaders always have unique identifiers, and can therefore be
+// safely merged together.
 struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp);
 
 // Dispatch a generated shader (via the pl_shader mechanism). The results of
@@ -40,5 +42,12 @@ struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp);
 // pl_shader passed to it, and return it back to the internal pool.
 bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
                         const struct ra_tex *target);
+
+// Resets the internal counters of the pl_dispatch. This should be called
+// whenever the user is going to begin with a new frame, in order to ensure
+// that the "same" calls to pl_dispatch_begin end up creating shaders with
+// the same identifier. Failing to follow this rule means shader caching will
+// not work correctly.
+void pl_dispatch_reset_frame(struct pl_dispatch *dp);
 
 #endif // LIBPLACEBO_DISPATCH_H

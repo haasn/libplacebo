@@ -24,14 +24,10 @@
 #include "context.h"
 #include "ra.h"
 
-// This represents a (mutable!) handle to an identifier. These identifiers are
-// *not* constant, since they may be renamed at any time. So these can't be
-// used arbitrarily. They are also only valid until pl_shader_reset is
-// called.
-//
-// Passing an ident_t to pl_shader_append is always safe, but passing it
-// to other code is only safe after pl_shader_finalize.
-typedef char * ident_t;
+// This represents an identifier (e.g. name of function, uniform etc.) for
+// a shader resource. The generated identifiers are immutable, but only live
+// until pl_shader_reset - so make copies when passing to external stuff.
+typedef const char * ident_t;
 
 enum pl_shader_buf {
     SH_BUF_PRELUDE, // extra #defines etc.
@@ -53,8 +49,8 @@ struct pl_shader {
     struct bstr buffers[SH_BUF_COUNT];
     bool is_compute;
     bool flexible_work_groups;
+    uint8_t ident;
     int fresh;
-    int namespace;
     void *tmp;
 
     // For vertex attributes, since we need to keep track of their location
@@ -63,10 +59,6 @@ struct pl_shader {
 
     // For bindings, since we need to keep the namespaces unique
     int *current_binding;
-
-    // Log of all generated identifiers for this pass, for renaming purposes
-    ident_t *identifiers;
-    int num_identifiers;
 };
 
 // Attempt enabling compute shaders for this pass, if possible
