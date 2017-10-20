@@ -92,6 +92,10 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
 // Bind a texture under a given transformation and make its attributes
 // available as well. If an output pointer for one of the attributes is left
 // as NULL, that attribute will not be added. Returns NULL on failure.
+//
+// Note that due to efficiency reasons, the position (out_pos) is cached in
+// a temporary vec2, which is only valid within the GLSL body. Users should
+// avoid hard-coding the position into helper functions.
 ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
                 const char *name, const struct pl_transform2x2 *tf,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt);

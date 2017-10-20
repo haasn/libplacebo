@@ -254,10 +254,13 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
         float xy1[2] = {tex->params.w, tex->params.h};
         pl_transform2x2_apply(tf, xy0);
         pl_transform2x2_apply(tf, xy1);
-        *out_pos = sh_attr_vec2(sh, "pos", &(struct pl_rect2df) {
+        ident_t pos_raw = sh_attr_vec2(sh, "pos_raw", &(struct pl_rect2df) {
             .x0 = xy0[0] / tex->params.w, .y0 = xy0[1] / tex->params.w,
             .x1 = xy1[0] / tex->params.h, .y1 = xy1[1] / tex->params.h,
         });
+
+        *out_pos = sh_fresh(sh, "pos");
+        GLSL("vec2 %s = %s;\n", *out_pos, pos_raw);
     }
 
     if (out_size) {

@@ -68,30 +68,29 @@ void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
     // Helper function: Compute a stochastic approximation of the avg color
     // around a pixel, given a specified radius
     ident_t average = sh_fresh(sh, "average");
-    GLSLH("vec4 %s(float range, inout float prng) {            \n"
+    GLSLH("vec4 %s(vec2 pos, float range, inout float prng) {   \n"
           // Compute a random angle and distance
-          "    float dist = %s(prng) * range;                  \n"
-          "    float dir  = %s(prng) * %f;                     \n"
-          "    vec2 o = dist * vec2(cos(dir), sin(dir));       \n"
+          "    float dist = %s(prng) * range;                   \n"
+          "    float dir  = %s(prng) * %f;                      \n"
+          "    vec2 o = dist * vec2(cos(dir), sin(dir));        \n"
           // Sample at quarter-turn intervals around the source pixel
-          "    vec4 sum = vec4(0.0);                           \n"
-          "    sum += texture(%s, %s + %s * vec2( o.x,  o.y)); \n"
-          "    sum += texture(%s, %s + %s * vec2(-o.x,  o.y)); \n"
-          "    sum += texture(%s, %s + %s * vec2(-o.x, -o.y)); \n"
-          "    sum += texture(%s, %s + %s * vec2( o.x, -o.y)); \n"
+          "    vec4 sum = vec4(0.0);                            \n"
+          "    sum += texture(%s, pos + %s * vec2( o.x,  o.y)); \n"
+          "    sum += texture(%s, pos + %s * vec2(-o.x,  o.y)); \n"
+          "    sum += texture(%s, pos + %s * vec2(-o.x, -o.y)); \n"
+          "    sum += texture(%s, pos + %s * vec2( o.x, -o.y)); \n"
           // Return the (normalized) average
-          "    return 0.25 * sum;                              \n"
+          "    return 0.25 * sum;                               \n"
           "}\n", average, random, random, M_PI * 2,
-          tex, pos, pt, tex, pos, pt,
-          tex, pos, pt, tex, pos, pt);
+          tex, pt, tex, pt, tex, pt, tex, pt);
 
     // For each iteration, compute the average at a given distance and
     // pick it instead of the color if the difference is below the threshold.
     for (int i = 1; i <= params->iterations; i++) {
-        GLSL("avg = %s(%f, prng);                                   \n"
+        GLSL("avg = %s(%s, %f, prng);                               \n"
              "diff = abs(color - avg);                              \n"
              "color = mix(avg, color, greaterThan(diff, vec4(%f))); \n",
-             average, i * params->radius, params->threshold / (1000 * i));
+             average, pos, i * params->radius, params->threshold / (1000 * i));
     }
 
     // Add some random noise to smooth out residual differences
