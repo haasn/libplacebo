@@ -427,6 +427,11 @@ struct ra_var ra_var_mat2(const char *name);
 struct ra_var ra_var_mat3(const char *name);
 struct ra_var ra_var_mat4(const char *name);
 
+// Converts a ra_fmt to an "equivalent" ra_var. Equivalent in this sense means
+// that the ra_var's type will be the same as the vertex's sampled type (e.g.
+// RA_FMT_UNORM gets turned into RA_VAR_FLOAT).
+struct ra_var ra_var_from_fmt(const struct ra_fmt *fmt, const char *name);
+
 // Describes the memory layout of a variable, relative to some starting location
 // (typically the offset within a uniform/storage/pushconstant buffer)
 //

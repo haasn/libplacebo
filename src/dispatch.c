@@ -20,6 +20,14 @@
 #include "shaders.h"
 #include "ra.h"
 
+enum {
+    TMP_PRELUDE,   // GLSL version, global definitions, etc.
+    TMP_MAIN,      // main GLSL shader body
+    TMP_VERT_HEAD, // vertex shader inputs/outputs
+    TMP_VERT_BODY, // vertex shader body
+    TMP_COUNT,
+};
+
 struct pl_dispatch {
     struct pl_context *ctx;
     const struct ra *ra;
@@ -33,7 +41,7 @@ struct pl_dispatch {
     int num_passes;
 
     // temporary buffers to help avoid re_allocations during pass creation
-    struct bstr tmp_glsl[4];
+    struct bstr tmp[TMP_COUNT];
 };
 
 enum pass_var_type {
@@ -42,6 +50,7 @@ enum pass_var_type {
     PASS_VAR_PUSHC   // push constants
 };
 
+// Cached metadata about a variable's effective placement / update method
 struct pass_var {
     int index; // for ra_var_update
     enum pass_var_type type;
@@ -57,12 +66,7 @@ struct pass {
     // contains cached data and update metadata, same order as pl_shader
     struct pass_var *vars;
 
-    // for the attached storage image
-    int img_index;    // index into run_params.var_updates
-    ident_t img_name; // name as used in the shader (for `main`)
-
     // for uniform buffer updates
-    int ubo_index;    // for desc_bindings
     const struct ra_buf *ubo;
     struct ra_desc ubo_desc; // temporary
 
@@ -192,6 +196,16 @@ static void add_buffer_vars(struct pl_dispatch *dp, struct bstr *body,
     ADD(body, "};\n");
 }
 
+static ident_t sh_var_from_va(struct pl_shader *sh, const char *name,
+                              const struct ra_vertex_attrib *va,
+                              const void *data)
+{
+    return sh_var(sh, (struct pl_shader_var) {
+        .var  = ra_var_from_fmt(va->fmt, name),
+        .data = data,
+    });
+}
+
 static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
                              struct ra_pass_params *params,
                              struct pl_shader *sh, ident_t vert_pos)
@@ -199,37 +213,36 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
     const struct ra *ra = dp->ra;
     const struct pl_shader_res *res = pl_shader_finalize(sh);
 
-    // Reset the temporary buffers which we use to build the shader
-    for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp_glsl); i++)
-        dp->tmp_glsl[i].len = 0;
-
-    struct bstr *header = &dp->tmp_glsl[0];
-    ADD(header, "#version %d%s\n", ra->glsl.version, ra->glsl.gles ? " es" : "");
+    struct bstr *pre = &dp->tmp[TMP_PRELUDE];
+    ADD(pre, "#version %d%s\n", ra->glsl.version, ra->glsl.gles ? " es" : "");
     if (params->type == RA_PASS_COMPUTE)
-        ADD(header, "#extension GL_ARB_compute_shader : enable\n");
+        ADD(pre, "#extension GL_ARB_compute_shader : enable\n");
 
     if (ra->glsl.gles) {
-        ADD(header, "precision mediump float;\n");
-        ADD(header, "precision mediump sampler2D;\n");
+        ADD(pre, "precision mediump float;\n");
+        ADD(pre, "precision mediump sampler2D;\n");
         if (ra->limits.max_tex_1d_dim)
-            ADD(header, "precision mediump sampler1D;\n");
+            ADD(pre, "precision mediump sampler1D;\n");
         if (ra->limits.max_tex_3d_dim)
-            ADD(header, "precision mediump sampler3D;\n");
+            ADD(pre, "precision mediump sampler3D;\n");
     }
 
     char *vert_in  = ra->glsl.version >= 130 ? "in" : "attribute";
     char *vert_out = ra->glsl.version >= 130 ? "out" : "varying";
     char *frag_in  = ra->glsl.version >= 130 ? "in" : "varying";
 
-    struct bstr *body = &dp->tmp_glsl[1];
-    ADD_BSTR(body, *header);
+    struct bstr *glsl = &dp->tmp[TMP_MAIN];
+    ADD_BSTR(glsl, *pre);
 
     const char *out_color = "gl_FragColor";
-    if (params->type == RA_PASS_RASTER) {
-        struct bstr *vert_head = &dp->tmp_glsl[2];
-        struct bstr *vert_body = &dp->tmp_glsl[3];
+    switch(params->type) {
+    case RA_PASS_RASTER: {
+        assert(vert_pos);
+        struct bstr *vert_head = &dp->tmp[TMP_VERT_HEAD];
+        struct bstr *vert_body = &dp->tmp[TMP_VERT_BODY];
+
         // Set up a trivial vertex shader
-        ADD_BSTR(vert_head, *header);
+        ADD_BSTR(vert_head, *pre);
         ADD(vert_body, "void main() {\n");
         for (int i = 0; i < res->num_vertex_attribs; i++) {
             const struct ra_vertex_attrib *va = &res->vertex_attribs[i].attr;
@@ -246,9 +259,10 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
                 // Everything else is just blindly passed through
                 ADD(vert_head, "%s%s %s %s;\n", loc, vert_out, type, va->name);
                 ADD(vert_body, "%s = vert%s;\n", va->name, va->name);
-                ADD(body, "%s%s %s %s;\n", loc, frag_in, type, va->name);
+                ADD(glsl, "%s%s %s %s;\n", loc, frag_in, type, va->name);
             }
         }
+
         ADD(vert_body, "}");
         ADD_BSTR(vert_head, *vert_body);
         params->vertex_shader = vert_head->start;
@@ -256,27 +270,29 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         // GLSL 130+ doesn't use the magic gl_FragColor
         if (ra->glsl.version >= 130) {
             out_color = "out_color";
-            ADD(body, "layout(location=0) out vec4 %s;\n", out_color);
+            ADD(glsl, "layout(location=0) out vec4 %s;\n", out_color);
         }
+        break;
     }
-
-    if (params->type == RA_PASS_COMPUTE) {
-        // Simulate fake vertices
-        abort(); // TODO
+    case RA_PASS_COMPUTE:
+        ADD(glsl, "layout (local_size_x = %d, local_size_y = %d) in;\n",
+            res->compute_group_size[0], res->compute_group_size[1]);
+        break;
+    default: abort();
     }
 
     // Add all of the push constants as their own element
     if (params->push_constants_size) {
-        ADD(body, "layout(std430, push_constant) uniform PushC {\n");
+        ADD(glsl, "layout(std430, push_constant) uniform PushC {\n");
         for (int i = 0; i < res->num_variables; i++) {
             struct ra_var *var = &res->variables[i].var;
             struct pass_var *pv = &pass->vars[i];
             if (pv->type != PASS_VAR_PUSHC)
                 continue;
-            ADD(body, "/*offset=%zu*/ ", pv->layout.offset);
-            add_var(dp, body, var);
+            ADD(glsl, "/*offset=%zu*/ ", pv->layout.offset);
+            add_var(dp, glsl, var);
         }
-        ADD(body, "};\n");
+        ADD(glsl, "};\n");
     }
 
     // Add all of the required descriptors
@@ -295,11 +311,11 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             // Vulkan requires explicit bindings; ra_gl always sets the
             // bindings manually to avoid relying on the user doing so
             if (ra->glsl.vulkan)
-                ADD(body, "layout(binding=%d) ", desc->binding);
+                ADD(glsl, "layout(binding=%d) ", desc->binding);
 
             const struct ra_tex *tex = sd->object;
             int dims = ra_tex_params_dimension(tex->params);
-            ADD(body, "uniform %s %s;\n", types[dims], desc->name);
+            ADD(glsl, "uniform %s %s;\n", types[dims], desc->name);
             break;
         }
 
@@ -326,24 +342,24 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             int comps = tex->params.format->num_components;
 
             if (ra->glsl.vulkan) {
-                ADD(body, "layout(binding=%d, %s) ", desc->binding, fmts[comps]);
+                ADD(glsl, "layout(binding=%d, %s) ", desc->binding, fmts[comps]);
             } else {
-                ADD(body, "layout(%s) ", fmts[comps]);
+                ADD(glsl, "layout(%s) ", fmts[comps]);
             }
 
-            ADD(body, "%s uniform %s %s;\n", access, types[dims], desc->name);
+            ADD(glsl, "%s uniform %s %s;\n", access, types[dims], desc->name);
             break;
         }
 
         case RA_DESC_BUF_UNIFORM:
-            ADD(body, "layout(std140, binding=%d) uniform %s ", desc->binding,
+            ADD(glsl, "layout(std140, binding=%d) uniform %s ", desc->binding,
                 desc->name);
-            add_buffer_vars(dp, body, desc->buffer_vars, desc->num_buffer_vars);
+            add_buffer_vars(dp, glsl, desc->buffer_vars, desc->num_buffer_vars);
             break;
         case RA_DESC_BUF_STORAGE:
-            ADD(body, "layout(std430, binding=%d) %s buffer %s ", desc->binding,
+            ADD(glsl, "layout(std430, binding=%d) %s buffer %s ", desc->binding,
                 ra_desc_access_glsl_name(desc->access), desc->name);
-            add_buffer_vars(dp, body, desc->buffer_vars, desc->num_buffer_vars);
+            add_buffer_vars(dp, glsl, desc->buffer_vars, desc->num_buffer_vars);
             break;
         default: abort();
         }
@@ -355,29 +371,29 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         const struct pass_var *pv = &pass->vars[i];
         if (pv->type != PASS_VAR_GLOBAL)
             continue;
-        ADD(body, "uniform ");
-        add_var(dp, body, var);
+        ADD(glsl, "uniform ");
+        add_var(dp, glsl, var);
     }
 
     // Set up the main shader body
-    ADD(body, "%s", res->glsl);
-    ADD(body, "void main() {\n");
-    ADD(body, "vec4 res = %s();\n", res->name);
+    ADD(glsl, "%s", res->glsl);
+    ADD(glsl, "void main() {\n");
 
+    assert(res->input == PL_SHADER_SIG_NONE);
     switch (params->type) {
     case RA_PASS_RASTER:
-        ADD(body, "%s = res;\n", out_color);
+        assert(res->output == PL_SHADER_SIG_COLOR);
+        ADD(glsl, "%s = %s();\n", out_color, res->name);
         break;
     case RA_PASS_COMPUTE:
-        assert(pass->img_name);
-        ADD(body, "imageStore(%s, ivec2(gl_GlobalInvocationID), res);\n",
-            pass->img_name);
+        assert(res->output == PL_SHADER_SIG_NONE);
+        ADD(glsl, "%s();\n", res->name);
         break;
     default: abort();
     }
 
-    ADD(body, "}");
-    params->glsl_shader = body->start;
+    ADD(glsl, "}");
+    params->glsl_shader = glsl->start;
 }
 
 #undef ADD
@@ -459,20 +475,8 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
             goto error;
     }
 
-    // Attach the storage image if necessary
-    if (params.type == RA_PASS_COMPUTE) {
-        pass->img_index = res->num_descriptors;
-        pass->img_name = sh_desc(sh, (struct pl_shader_desc) {
-            .desc = {
-                .name = "out_image",
-                .type = RA_DESC_STORAGE_IMG,
-                .access = RA_DESC_ACCESS_WRITEONLY,
-            },
-            .object = target,
-        });
-    }
-
     // Create and attach the UBO if necessary
+    int ubo_index = -1;
     size_t ubo_size = ra_buf_desc_size(&pass->ubo_desc);
     if (ubo_size) {
         pass->ubo = ra_buf_create(dp->ra, &(struct ra_buf_params) {
@@ -486,7 +490,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
             goto error;
         }
 
-        pass->ubo_index = res->num_descriptors;
+        ubo_index = res->num_descriptors;
         sh_desc(sh, (struct pl_shader_desc) {
             .desc = pass->ubo_desc,
             .object = pass->ubo,
@@ -500,6 +504,12 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     rparams->desc_bindings = talloc_zero_array(pass, struct ra_desc_binding, num);
     for (int i = 0; i < num; i++)
         params.descriptors[i] = res->descriptors[i].desc;
+
+    // Pre-fill the desc_binding for the UBO
+    if (pass->ubo) {
+        assert(ubo_index >= 0);
+        rparams->desc_bindings[ubo_index].object = pass->ubo;
+    }
 
     // Create the push constants region
     params.push_constants_size = PL_ALIGN2(params.push_constants_size, 4);
@@ -516,8 +526,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     pass->failed = false;
 
 error:
-    pass->img_name = NULL; // allocated via sh_fresh
-    pass->ubo_desc = (struct ra_desc) {0};
+    pass->ubo_desc = (struct ra_desc) {0}; // contains temporary pointers
     talloc_free(tmp);
     TARRAY_APPEND(dp, dp->passes, dp->num_passes, pass);
     return pass;
@@ -565,6 +574,54 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
     };
 }
 
+static void translate_compute_shader(struct pl_dispatch *dp,
+                                     struct pl_shader *sh,
+                                     const struct ra_tex *target)
+{
+    // Simulate a framebuffer using storage images
+    assert(target->params.storable);
+    ident_t fbo = sh_desc(sh, (struct pl_shader_desc) {
+        .desc = {
+            .name    = "out_image",
+            .type    = RA_DESC_STORAGE_IMG,
+            .access  = RA_DESC_ACCESS_WRITEONLY,
+        },
+        .object = target,
+    });
+
+    assert(sh->res.output == PL_SHADER_SIG_COLOR);
+    GLSL("imageStore(%s, ivec2(gl_GlobalInvocationID), color);\n", fbo);
+    sh->res.output = PL_SHADER_SIG_NONE;
+
+    // Simulate vertex attributes using global definitions
+    ident_t scale = sh_var(sh, (struct pl_shader_var) {
+        .var     = ra_var_vec2("out_scale"),
+        .data    = &(float[2]){ 1.0 / target->params.w, 1.0 / target->params.h },
+        .dynamic = true,
+    });
+
+    GLSLP("#define frag_pos(id) (%s * (vec2(id) + vec2(0.5)))\n", scale);
+    for (int n = 0; n < sh->res.num_vertex_attribs; n++) {
+        const struct pl_shader_va *sva = &sh->res.vertex_attribs[n];
+
+        ident_t points[4];
+        for (int i = 0; i < PL_ARRAY_SIZE(points); i++) {
+            char name[4];
+            snprintf(name, sizeof(name), "p%d", i);
+            points[i] = sh_var_from_va(sh, name, &sva->attr, sva->data[i]);
+        }
+
+        GLSLP("#define %s_map(id) "
+             "(mix(mix(%s, %s, frag_pos(id).x), "
+             "     mix(%s, %s, frag_pos(id).x), "
+             "frag_pos(id).y))\n"
+             "#define %s (%s_map(gl_GlobalInvocationID))\n",
+             sva->attr.name,
+             points[0], points[1], points[2], points[3],
+             sva->attr.name, sva->attr.name);
+    }
+}
+
 bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
                         const struct ra_tex *target)
 {
@@ -596,13 +653,20 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
         goto error;
     }
 
-    // Add the vertex information encoding the position
-    ident_t vert_pos = sh_attr_vec2(sh, "position", &(const struct pl_rect2df) {
-        .x0 = -1.0,
-        .y0 = -1.0,
-        .x1 =  1.0,
-        .y1 =  1.0,
-    });
+    ident_t vert_pos = NULL;
+
+    if (pl_shader_is_compute(sh)) {
+        // Translate the compute shader to simulate vertices etc.
+        translate_compute_shader(dp, sh, target);
+    } else {
+        // Add the vertex information encoding the position
+        vert_pos = sh_attr_vec2(sh, "position", &(const struct pl_rect2df) {
+            .x0 = -1.0,
+            .y0 = -1.0,
+            .x1 =  1.0,
+            .y1 =  1.0,
+        });
+    }
 
     struct pass *pass = find_pass(dp, sh, target, vert_pos);
 
@@ -615,10 +679,6 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
     // Update the descriptor bindings
     for (int i = 0; i < sh->res.num_descriptors; i++)
         rparams->desc_bindings[i].object = sh->res.descriptors[i].object;
-    if (pass->ubo)
-        rparams->desc_bindings[pass->ubo_index].object = pass->ubo;
-    if (pl_shader_is_compute(sh))
-        rparams->desc_bindings[pass->img_index].object = target;
 
     // Update all of the variables (if needed)
     rparams->num_var_updates = 0;
@@ -644,6 +704,10 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
     ret = true;
 
 error:
+    // Reset the temporary buffers which we use to build the shader
+    for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
+        dp->tmp[i].len = 0;
+
     // Re-add the shader to the internal pool of shaders
     pl_shader_reset(sh);
     TARRAY_APPEND(dp, dp->shaders, dp->num_shaders, sh);

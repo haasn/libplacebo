@@ -159,20 +159,8 @@ static void vk_setup_formats(struct ra *ra)
         }
 
         if (prop.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) {
-            static const enum ra_var_type vartypes[] = {
-                [RA_FMT_FLOAT] = RA_VAR_FLOAT,
-                [RA_FMT_UNORM] = RA_VAR_FLOAT,
-                [RA_FMT_SNORM] = RA_VAR_FLOAT,
-                [RA_FMT_UINT]  = RA_VAR_UINT,
-                [RA_FMT_SINT]  = RA_VAR_SINT,
-            };
-
             fmt->caps |= RA_FMT_CAP_VERTEX;
-            fmt->glsl_type = ra_var_glsl_type_name((struct ra_var) {
-                .type  = vartypes[fmt->type],
-                .dim_v = fmt->num_components,
-                .dim_m = 1,
-            });
+            fmt->glsl_type = ra_var_glsl_type_name(ra_var_from_fmt(fmt, ""));
             assert(fmt->glsl_type);
         }
 

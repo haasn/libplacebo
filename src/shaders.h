@@ -25,10 +25,20 @@
 #include "ra.h"
 
 // This represents a (mutable!) handle to an identifier. These identifiers are
-// not constant, since they may be renamed at any time (e.g. via
-// pl_shader_finalize). Care should be taken when passing them to external
-// code like the various RA interfaces until they're finalized.
+// *not* constant, since they may be renamed at any time. So these can't be
+// used arbitrarily. They are also only valid until pl_shader_reset is
+// called.
+//
+// Passing an ident_t to pl_shader_append is always safe, but passing it
+// to other code is only safe after pl_shader_finalize.
 typedef char * ident_t;
+
+enum pl_shader_buf {
+    SH_BUF_PRELUDE, // extra #defines etc.
+    SH_BUF_HEADER,  // previous passes, helper function definitions, etc.
+    SH_BUF_BODY,    // partial contents of the "current" function
+    SH_BUF_COUNT,
+};
 
 struct pl_shader {
     // Read-only fields
@@ -40,8 +50,7 @@ struct pl_shader {
     int output_w;
     int output_h;
     struct pl_shader_res res; // for accumulating vertex_attribs etc.
-    struct bstr buffer_head;
-    struct bstr buffer_body;
+    struct bstr buffers[SH_BUF_COUNT];
     bool is_compute;
     bool flexible_work_groups;
     int fresh;
@@ -87,17 +96,14 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
                 const char *name, const struct pl_transform2x2 *tf,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt);
 
-// Replace all of the free variables in the glsl and input list by literally
-// string replacing it with an encoded representation of the given namespace
-void sh_rename_vars(struct pl_shader *sh, int namespace);
-
 // Underlying function for appending text to a shader
-void pl_shader_append(struct pl_shader *sh, struct bstr *buf,
+void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
                       const char *fmt, ...)
     PRINTF_ATTRIBUTE(3, 4);
 
-#define GLSLH(...) pl_shader_append(sh, &sh->buffer_head, __VA_ARGS__)
-#define GLSL(...)  pl_shader_append(sh, &sh->buffer_body, __VA_ARGS__)
+#define GLSLP(...) pl_shader_append(sh, SH_BUF_PRELUDE, __VA_ARGS__)
+#define GLSLH(...) pl_shader_append(sh, SH_BUF_HEADER, __VA_ARGS__)
+#define GLSL(...)  pl_shader_append(sh, SH_BUF_BODY, __VA_ARGS__)
 
 // Requires that the share is mutable, has an output signature compatible
 // with the given input signature, as well as an output size compatible with

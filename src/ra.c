@@ -465,6 +465,25 @@ RA_VAR(FLOAT, mat4,  4, 4);
 
 #undef RA_VAR
 
+struct ra_var ra_var_from_fmt(const struct ra_fmt *fmt, const char *name)
+{
+    static const enum ra_var_type vartypes[] = {
+        [RA_FMT_FLOAT] = RA_VAR_FLOAT,
+        [RA_FMT_UNORM] = RA_VAR_FLOAT,
+        [RA_FMT_SNORM] = RA_VAR_FLOAT,
+        [RA_FMT_UINT]  = RA_VAR_UINT,
+        [RA_FMT_SINT]  = RA_VAR_SINT,
+    };
+
+    assert(fmt->type < PL_ARRAY_SIZE(vartypes));
+    return (struct ra_var) {
+        .type  = vartypes[fmt->type],
+        .dim_v = fmt->num_components,
+        .dim_m = 1,
+        .dim_a = 1,
+    };
+}
+
 struct ra_var_layout ra_var_host_layout(size_t offset, const struct ra_var *var)
 {
     size_t col_size = ra_var_type_size(var->type) * var->dim_v;

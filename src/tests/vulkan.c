@@ -35,7 +35,6 @@ static void shader_tests(struct pl_context *ctx, const struct ra *ra)
         .w              = FBO_W,
         .h              = FBO_H,
         .renderable     = true,
-        .storable       = true,
         .host_readable  = true,
         .blit_dst       = true,
     });
@@ -118,8 +117,6 @@ static void shader_tests(struct pl_context *ctx, const struct ra *ra)
         .initial_data   = data,
     });
 
-    struct pl_shader_obj *peak_detect = NULL;
-
     // Repeat this a few times to test the caching
     for (int i = 0; i < 10; i++) {
         printf("iteration %d\n", i);
@@ -129,22 +126,7 @@ static void shader_tests(struct pl_context *ctx, const struct ra *ra)
             .grain          = 0.0,
         });
 
-        struct pl_color_map_params params = pl_color_map_default_params;
-        params.peak_detect_state = &peak_detect;
-
-        struct pl_color_space src_space = {
-            .primaries = PL_COLOR_PRIM_BT_2020,
-            .transfer  = PL_COLOR_TRC_PQ,
-            .light     = PL_COLOR_LIGHT_DISPLAY,
-        };
-
-        struct pl_color_space dst_space = {
-            .primaries = PL_COLOR_PRIM_BT_709,
-            .transfer  = PL_COLOR_TRC_GAMMA22,
-            .light     = PL_COLOR_LIGHT_DISPLAY,
-        };
-
-        pl_shader_color_map(sh, &params, src_space, dst_space, false);
+        pl_shader_linearize(sh, PL_COLOR_TRC_GAMMA22);
         REQUIRE(pl_dispatch_finish(dp, sh, fbo));
     }
 

@@ -61,8 +61,6 @@ void pl_shader_reset(struct pl_shader *sh)
         .mutable = true,
 
         // Preserve array allocations
-        .buffer_head = { sh->buffer_head.start },
-        .buffer_body = { sh->buffer_body.start },
         .current_binding = sh->current_binding,
         .identifiers = sh->identifiers,
         .res = {
@@ -71,6 +69,10 @@ void pl_shader_reset(struct pl_shader *sh)
             .vertex_attribs = sh->res.vertex_attribs,
         },
     };
+
+    // Preserve buffer allocations
+    for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
+        new.buffers[i] = (struct bstr) { .start = sh->buffers[i].start };
 
     // Clear the bindings array
     if (new.current_binding) {
@@ -153,8 +155,8 @@ uint64_t pl_shader_signature(const struct pl_shader *sh)
 {
     uint64_t res = 0;
 
-    res ^= bstr_hash64(sh->buffer_head);
-    res ^= bstr_hash64(sh->buffer_body);
+    for (int i = 0; i < PL_ARRAY_SIZE(sh->buffers); i++)
+        res ^= bstr_hash64(sh->buffers[i]);
 
     // just in case...
     for (int i = 0; i < sh->num_identifiers; i++)
@@ -275,12 +277,14 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
     return itex;
 }
 
-void pl_shader_append(struct pl_shader *sh, struct bstr *buf,
+void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
                       const char *fmt, ...)
 {
+    assert(buf >= 0 && buf < SH_BUF_COUNT);
+
     va_list ap;
     va_start(ap, fmt);
-    bstr_xappend_vasprintf(sh, buf, fmt, ap);
+    bstr_xappend_vasprintf(sh, &sh->buffers[buf], fmt, ap);
     va_end(ap);
 }
 
@@ -297,7 +301,9 @@ static void rename_str(char *str, const char *buf)
     }
 }
 
-void sh_rename_vars(struct pl_shader *sh, int namespace)
+// Replace all of the free variables in the glsl and input list by literally
+// string replacing it with an encoded representation of the given namespace
+static void sh_rename_vars(struct pl_shader *sh, int namespace)
 {
     char buf[sizeof(PLACEHOLDER)] = {0};
     int num = snprintf(buf, sizeof(buf), "%d", namespace);
@@ -308,21 +314,20 @@ void sh_rename_vars(struct pl_shader *sh, int namespace)
 
     // This is safe, because we never shrink or splice the buffers; and they're
     // always null-terminated (for the same reason we can directly return them)
-    rename_str(sh->buffer_head.start, buf);
-    rename_str(sh->buffer_body.start, buf);
+    for (int i = 0; i < PL_ARRAY_SIZE(sh->buffers); i++)
+        rename_str(sh->buffers[i].start, buf);
 
     // Rename all of the generated identifiers as well. This will also re-name
-    // all references to them, which is basically what we want.
+    // all references to them (in pl_shader_res etc.), which is basically what
+    // we want to happen
     for (int i = 0; i < sh->num_identifiers; i++)
         rename_str(sh->identifiers[i], buf);
 }
 
-const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
+// Finish the current shader body and return its function name
+static ident_t sh_split(struct pl_shader *sh)
 {
-    if (!sh->mutable) {
-        PL_WARN(sh, "Attempted to finalize a shader twice?");
-        return &sh->res;
-    }
+    assert(sh->mutable);
 
     static const char *outsigs[] = {
         [PL_SHADER_SIG_NONE]  = "void",
@@ -334,14 +339,14 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
         [PL_SHADER_SIG_COLOR] = "vec4 color",
     };
 
+    // Concatenate the body onto the head as a new function
     ident_t name = sh_fresh(sh, "main");
     GLSLH("%s %s(%s) {\n", outsigs[sh->res.output], name, insigs[sh->res.input]);
-    sh->res.name = name;
 
-    if (sh->buffer_body.len) {
-        GLSLH("%s", sh->buffer_body.start);
-        sh->buffer_body.len = 0;
-        sh->buffer_body.start[0] = '\0'; // sanity, and for sh_rename_vars
+    if (sh->buffers[SH_BUF_BODY].len) {
+        bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_BODY]);
+        sh->buffers[SH_BUF_BODY].len = 0;
+        sh->buffers[SH_BUF_BODY].start[0] = '\0'; // for sanity / efficiency
     }
 
     switch (sh->res.output) {
@@ -353,11 +358,26 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
 
     GLSLH("}\n");
     sh_rename_vars(sh, sh->namespace);
+    return name;
+}
 
-    // Update the result pointer
-    sh->res.glsl = sh->buffer_head.start;
+const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
+{
+    if (!sh->mutable) {
+        PL_WARN(sh, "Attempted to finalize a shader twice?");
+        return &sh->res;
+    }
+
+    // Split the shader. This finalizes the body and adds it to the header
+    sh->res.name = sh_split(sh);
+
+    // Concatenate the header onto the prelude to form the final output
+    struct bstr *glsl = &sh->buffers[SH_BUF_PRELUDE];
+    bstr_xappend(sh, glsl, sh->buffers[SH_BUF_HEADER]);
+
+    // Update the result pointer and return
+    sh->res.glsl = glsl->start;
     sh->mutable = false;
-
     return &sh->res;
 }
 
