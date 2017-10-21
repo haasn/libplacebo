@@ -47,6 +47,84 @@ bool ra_fmt_is_regular(const struct ra_fmt *fmt)
     return bits == fmt->texel_size * 8;
 }
 
+struct glsl_fmt {
+    enum ra_fmt_type type;
+    int num_components;
+    int component_depth[4];
+    const char *glsl_format;
+};
+
+// List taken from the GLSL specification. (Yes, GLSL supports only exactly
+// these formats with exactly these names)
+static const struct glsl_fmt ra_glsl_fmts[] = {
+    {RA_FMT_FLOAT, 1, {16},             "r16f"},
+    {RA_FMT_FLOAT, 1, {32},             "r32f"},
+    {RA_FMT_FLOAT, 2, {16, 16},         "rg16f"},
+    {RA_FMT_FLOAT, 2, {32, 32},         "rg32f"},
+    {RA_FMT_FLOAT, 4, {16, 16, 16, 16}, "rgba16f"},
+    {RA_FMT_FLOAT, 4, {32, 32, 32, 32}, "rgba32f"},
+    {RA_FMT_FLOAT, 3, {11, 11, 10},     "r11f_g11f_b10f"},
+
+    {RA_FMT_UNORM, 1, {8},              "r8"},
+    {RA_FMT_UNORM, 1, {16},             "r16"},
+    {RA_FMT_UNORM, 2, {8,  8},          "rg8"},
+    {RA_FMT_UNORM, 2, {16, 16},         "rg16"},
+    {RA_FMT_UNORM, 4, {8,  8,  8,  8},  "rgba8"},
+    {RA_FMT_UNORM, 4, {16, 16, 16, 16}, "rgba16"},
+    {RA_FMT_UNORM, 4, {10, 10, 10,  2}, "rgb10_a2"},
+
+    {RA_FMT_SNORM, 1, {8},              "r8_snorm"},
+    {RA_FMT_SNORM, 1, {16},             "r16_snorm"},
+    {RA_FMT_SNORM, 2, {8,  8},          "rg8_snorm"},
+    {RA_FMT_SNORM, 2, {16, 16},         "rg16_snorm"},
+    {RA_FMT_SNORM, 4, {8,  8,  8,  8},  "rgba8_snorm"},
+    {RA_FMT_SNORM, 4, {16, 16, 16, 16}, "rgba16_snorm"},
+
+    {RA_FMT_UINT,  1, {8},              "r8ui"},
+    {RA_FMT_UINT,  1, {16},             "r16ui"},
+    {RA_FMT_UINT,  1, {32},             "r32ui"},
+    {RA_FMT_UINT,  2, {8,  8},          "rg8ui"},
+    {RA_FMT_UINT,  2, {16, 16},         "rg16ui"},
+    {RA_FMT_UINT,  2, {32, 32},         "rg32ui"},
+    {RA_FMT_UINT,  4, {8,  8,  8,  8},  "rgba8ui"},
+    {RA_FMT_UINT,  4, {16, 16, 16, 16}, "rgba16ui"},
+    {RA_FMT_UINT,  4, {32, 32, 32, 32}, "rgba32ui"},
+    {RA_FMT_UINT,  4, {10, 10, 10,  2}, "rgb10_a2ui"},
+
+    {RA_FMT_SINT,  1, {8},              "r8i"},
+    {RA_FMT_SINT,  1, {16},             "r16i"},
+    {RA_FMT_SINT,  1, {32},             "r32i"},
+    {RA_FMT_SINT,  2, {8,  8},          "rg8i"},
+    {RA_FMT_SINT,  2, {16, 16},         "rg16i"},
+    {RA_FMT_SINT,  2, {32, 32},         "rg32i"},
+    {RA_FMT_SINT,  4, {8,  8,  8,  8},  "rgba8i"},
+    {RA_FMT_SINT,  4, {16, 16, 16, 16}, "rgba16i"},
+    {RA_FMT_SINT,  4, {32, 32, 32, 32}, "rgba32i"},
+};
+
+const char *ra_fmt_glsl_format(const struct ra_fmt *fmt)
+{
+    for (int n = 0; n < PL_ARRAY_SIZE(ra_glsl_fmts); n++) {
+        const struct glsl_fmt *gfmt = &ra_glsl_fmts[n];
+
+        if (fmt->type != gfmt->type)
+            continue;
+        if (fmt->num_components != gfmt->num_components)
+            continue;
+
+        for (int i = 0; i < fmt->num_components; i++) {
+            if (fmt->component_depth[i] != gfmt->component_depth[i])
+                goto next_fmt;
+        }
+
+        return gfmt->glsl_format;
+
+next_fmt: ; // equivalent to `continue`
+    }
+
+    return NULL;
+}
+
 const struct ra_fmt *ra_find_fmt(const struct ra *ra, enum ra_fmt_type type,
                                  int num_components, int bits_per_component,
                                  bool regular, enum ra_fmt_caps caps)

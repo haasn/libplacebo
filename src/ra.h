@@ -74,6 +74,10 @@ size_t ra_buf_desc_size(const struct ra_desc *buf_desc);
 
 // RA-internal helpers: these should not be used outside of RA implementations
 
+// Look up the right GLSL image format qualifier from a partially filled-in
+// ra_fmt, or NULL if the format does not have a legal matching GLSL name.
+const char *ra_fmt_glsl_format(const struct ra_fmt *fmt);
+
 // Compute the total size (in bytes) of a texture transfer operation
 size_t ra_tex_transfer_size(const struct ra_tex_transfer_params *par);
 

@@ -330,33 +330,25 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         }
 
         case RA_DESC_STORAGE_IMG: {
-            // For better compatibility, we have to explicitly label the
-            // type of data we will be reading/writing to this image. For
-            // simplicity, just pick 32-bit float with however many components.
-            static const char *fmts[] = {
-                [1] = "r32f",
-                [2] = "rg32f",
-                [3] = "rgba32f", // rgb32f doesn't exist
-                [4] = "rgba32f",
-            };
-
             static const char *types[] = {
                 [1] = "image1D",
                 [2] = "image2D",
                 [3] = "image3D",
             };
 
-            const char *access = ra_desc_access_glsl_name(desc->access);
+            // For better compatibility, we have to explicitly label the
+            // type of data we will be reading/writing to this image.
             const struct ra_tex *tex = sd->object;
+            const char *format = tex->params.format->glsl_format;
+            const char *access = ra_desc_access_glsl_name(desc->access);
             int dims = ra_tex_params_dimension(tex->params);
-            int comps = tex->params.format->num_components;
+            assert(format);
 
             if (ra->glsl.vulkan) {
-                ADD(glsl, "layout(binding=%d, %s) ", desc->binding, fmts[comps]);
+                ADD(glsl, "layout(binding=%d, %s)", desc->binding, format);
             } else {
-                ADD(glsl, "layout(%s) ", fmts[comps]);
+                ADD(glsl, "layout(%s)", format);
             }
-
             ADD(glsl, "%s uniform %s %s;\n", access, types[dims], desc->name);
             break;
         }

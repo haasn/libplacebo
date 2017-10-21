@@ -138,6 +138,10 @@ struct ra_fmt {
     // If usable as a vertex or texel buffer format, this gives the GLSL type
     // corresponding to the data. (e.g. vec4)
     const char *glsl_type;
+
+    // If usable as a storage image (RA_FMT_CAP_STORABLE), this gives the
+    // GLSL image format corresponding to the format. (e.g. rgba16ui)
+    const char *glsl_format;
 };
 
 // Returns whether or not a ra_fmt's components are ordered sequentially
