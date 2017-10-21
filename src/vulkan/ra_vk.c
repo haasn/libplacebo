@@ -195,6 +195,7 @@ const struct ra *ra_create_vk(struct vk_ctx *vk)
         .max_xfer_size     = SIZE_MAX, // no limit imposed by vulkan
         .max_ubo_size      = vk->limits.maxUniformBufferRange,
         .max_ssbo_size     = vk->limits.maxStorageBufferRange,
+        .min_gather_offset = vk->limits.minTexelGatherOffset,
         .max_gather_offset = vk->limits.maxTexelGatherOffset,
         .align_tex_xfer_stride = vk->limits.optimalBufferCopyRowPitchAlignment,
         .align_tex_xfer_offset = vk->limits.optimalBufferCopyOffsetAlignment,

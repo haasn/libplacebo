@@ -59,6 +59,7 @@ struct ra_limits {
     size_t max_xfer_size;  // maximum size of a RA_BUF_TEX_TRANSFER
     size_t max_ubo_size;   // maximum size of a RA_BUF_UNIFORM
     size_t max_ssbo_size;  // maximum size of a RA_BUF_STORAGE
+    int min_gather_offset; // minimum textureGatherOffset offset
     int max_gather_offset; // maximum textureGatherOffset offset
 
     // Compute shader limits. Always available (non-zero) if RA_CAP_COMPUTE set
