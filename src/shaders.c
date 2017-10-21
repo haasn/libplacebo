@@ -35,11 +35,6 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx, const struct ra *ra,
         .ident = ident,
     };
 
-    if (ra) {
-        int num_namespaces = ra_desc_namespace(ra, 0);
-        sh->current_binding = talloc_zero_array(sh, int, num_namespaces);
-    }
-
     return sh;
 }
 
@@ -58,7 +53,6 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident)
         .ident = ident,
 
         // Preserve array allocations
-        .current_binding = sh->current_binding,
         .res = {
             .variables      = sh->res.variables,
             .descriptors    = sh->res.descriptors,
@@ -69,14 +63,6 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident)
     // Preserve buffer allocations
     for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
         new.buffers[i] = (struct bstr) { .start = sh->buffers[i].start };
-
-    // Clear the bindings array
-    if (new.current_binding) {
-        assert(sh->ra);
-        int num_namespaces = ra_desc_namespace(sh->ra, 0);
-        for (int i = 0; i < num_namespaces; i++)
-            new.current_binding[i] = 0;
-    }
 
     talloc_free(sh->tmp);
     *sh = new;

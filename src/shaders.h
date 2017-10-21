@@ -58,7 +58,7 @@ struct pl_shader {
     size_t current_va_offset;
 
     // For bindings, since we need to keep the namespaces unique
-    int *current_binding;
+    int current_binding[RA_DESC_TYPE_COUNT];
 };
 
 // Attempt enabling compute shaders for this pass, if possible

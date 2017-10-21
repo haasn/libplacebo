@@ -1061,7 +1061,7 @@ error:
 
 static int vk_desc_namespace(const struct ra *ra, enum ra_desc_type type)
 {
-    return type ? 0 : 1;
+    return 0;
 }
 
 // For ra_pass.priv
