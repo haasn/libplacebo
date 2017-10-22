@@ -51,6 +51,9 @@ struct pl_filter_function {
     float params[PL_FILTER_MAX_PARAMS];
 };
 
+bool pl_filter_function_eq(const struct pl_filter_function *a,
+                           const struct pl_filter_function *b);
+
 // Box filter: Entirely 1.0 within the radius, entirely 0.0 outside of it.
 // This is also sometimes called a Dirichlet window
 extern const struct pl_filter_function pl_filter_function_box;
@@ -170,6 +173,9 @@ struct pl_filter_config {
     // but provides information about how the results are to be interpreted.
     bool polar;
 };
+
+bool pl_filter_config_eq(const struct pl_filter_config *a,
+                         const struct pl_filter_config *b);
 
 // Samples a given filter configuration at a given x coordinate, while
 // respecting all parameters of the configuration.

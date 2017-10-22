@@ -66,4 +66,33 @@ extern const struct pl_deband_params pl_deband_default_params;
 void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *tex,
                       const struct pl_deband_params *params);
 
+// Common parameters for sampling operations
+struct pl_sample_src {
+    const struct ra_tex *tex; // texture to sample
+    struct pl_rect2df rect;   // sub-rect to sample from (optional)
+    int components;           // number of components to sample (optional)
+    int new_w, new_h;         // dimensions of the resulting output (optional)
+};
+
+struct pl_sample_polar_params {
+    // The filter to use for sampling. `filter.polar` must be true.
+    struct pl_filter_config filter;
+    // The precision of the polar LUT. Defaults to 64 if unspecified.
+    int lut_entries;
+    // See `pl_filter_params.cutoff`. Defaults to 0.001 if unspecified.
+    float cutoff;
+
+    // This shader object is used to store the LUT, and will be recreated
+    // if necessary. To avoid thrashing the resource, users should avoid trying
+    // to re-use the same LUT for different filter configurations or scaling
+    // ratios. Must be set to a valid pointer.
+    struct pl_shader_obj **lut;
+};
+
+// Performs polar sampling. This internally chooses between an optimized compute
+// shader, and various fragment shaders, depending on the supported GLSL version
+// and RA features. Returns whether or not it was successful.
+bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *src,
+                            const struct pl_sample_polar_params *params);
+
 #endif // LIBPLACEBO_SHADERS_SAMPLING_H_

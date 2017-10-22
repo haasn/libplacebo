@@ -163,6 +163,89 @@ static void shader_tests(struct pl_context *ctx, const struct ra *ra)
     ra_tex_destroy(ra, &fbo);
 }
 
+static void scaler_tests(struct pl_context *ctx, const struct ra *ra)
+{
+    const struct ra_fmt *src_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 32, true,
+                                               RA_FMT_CAP_SAMPLEABLE |
+                                               RA_FMT_CAP_LINEAR);
+
+    const struct ra_fmt *fbo_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 32, true,
+                                               RA_FMT_CAP_RENDERABLE);
+    if (!src_fmt || !fbo_fmt)
+        return;
+
+    float *fbo_data = NULL;
+    struct pl_shader_obj *lut = NULL;
+
+    static float data_5x5[5][5] = {
+        { 0, 0, 0, 0, 0 },
+        { 0, 0, 0, 0, 0 },
+        { 0, 0, 1, 0, 0 },
+        { 0, 0, 0, 0, 0 },
+        { 0, 0, 0, 0, 0 },
+    };
+
+    const struct ra_tex *dot5x5 = ra_tex_create(ra, &(struct ra_tex_params) {
+        .w              = 5,
+        .h              = 5,
+        .format         = src_fmt,
+        .sampleable     = true,
+        .sample_mode    = RA_TEX_SAMPLE_NEAREST,
+        .address_mode   = RA_TEX_ADDRESS_CLAMP,
+        .initial_data   = &data_5x5[0][0],
+    });
+
+    const struct ra_tex *fbo = ra_tex_create(ra, &(struct ra_tex_params) {
+        .w              = 100,
+        .h              = 100,
+        .format         = fbo_fmt,
+        .renderable     = true,
+        .storable       = fbo_fmt->caps & RA_FMT_CAP_STORABLE,
+        .host_readable  = true,
+    });
+
+    struct pl_dispatch *dp = pl_dispatch_create(ctx, ra);
+    if (!dot5x5 || !fbo || !dp)
+        goto error;
+
+    struct pl_shader *sh = pl_dispatch_begin(dp);
+    REQUIRE(pl_shader_sample_polar(sh,
+        &(struct pl_sample_src) {
+            .tex        = dot5x5,
+            .new_w      = fbo->params.w,
+            .new_h      = fbo->params.h,
+        },
+        &(struct pl_sample_polar_params) {
+            .filter     = pl_filter_ewa_lanczos,
+            .lut        = &lut,
+        }
+    ));
+    REQUIRE(pl_dispatch_finish(dp, sh, fbo));
+
+    fbo_data = malloc(fbo->params.w * fbo->params.h * sizeof(float));
+    REQUIRE(ra_tex_download(ra, &(struct ra_tex_transfer_params) {
+        .tex            = fbo,
+        .ptr            = fbo_data,
+    }));
+
+    int max = 255;
+    printf("P2\n%d %d\n%d\n", fbo->params.w, fbo->params.h, max);
+    for (int y = 0; y < fbo->params.h; y++) {
+        for (int x = 0; x < fbo->params.w; x++) {
+            float v = fbo_data[y * fbo->params.h + x];
+            printf("%d ", (int) round(fmin(fmax(v, 0.0), 1.0) * max));
+        }
+        printf("\n");
+    }
+
+error:
+    free(fbo_data);
+    pl_shader_obj_destroy(&lut);
+    pl_dispatch_destroy(&dp);
+    ra_tex_destroy(ra, &dot5x5);
+    ra_tex_destroy(ra, &fbo);
+}
+
 int main()
 {
     struct pl_context *ctx = pl_test_context();
@@ -176,6 +259,7 @@ int main()
     const struct ra *ra = vk->ra;
     ra_texture_tests(ra);
     shader_tests(ctx, ra);
+    scaler_tests(ctx, ra);
 
     pl_vulkan_destroy(&vk);
     pl_context_destroy(&ctx);

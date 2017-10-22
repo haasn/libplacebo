@@ -83,13 +83,13 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
 
 // Bind a texture under a given transformation and make its attributes
 // available as well. If an output pointer for one of the attributes is left
-// as NULL, that attribute will not be added. Returns NULL on failure.
+// as NULL, that attribute will not be added. Returns NULL on failure. `rect`
+// is optional, and defaults to the full texture if left as NULL.
 //
-// Note that due to efficiency reasons, the position (out_pos) is cached in
-// a temporary vec2, which is only valid within the GLSL body. Users should
-// avoid hard-coding the position into helper functions.
+// Note that for e.g. compute shaders, the vec2 out_pos might be a macro that
+// expands to an expensive computation, and should be cached by the user.
 ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
-                const char *name, const struct pl_transform2x2 *tf,
+                const char *name, const struct pl_rect2df *rect,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt);
 
 // Underlying function for appending text to a shader
@@ -106,11 +106,17 @@ void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
 // the given size requirements. Errors and returns false otherwise.
 bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h);
 
+// Defines a LUT position helper macro. This translates from an absolute texel
+// scale (0.0 - 1.0) to the texture coordinate scale for the corresponding
+// sample in a texture of dimension `lut_size`.
+ident_t sh_lut_pos(struct pl_shader *sh, int lut_size);
+
 // Shader resources
 
 enum pl_shader_obj_type {
     PL_SHADER_OBJ_INVALID = 0,
     PL_SHADER_OBJ_PEAK_DETECT,
+    PL_SHADER_OBJ_LUT,
 };
 
 struct pl_shader_obj {
@@ -119,6 +125,7 @@ struct pl_shader_obj {
     // The following fields are for free use by the shader
     const struct ra_buf *buf;
     const struct ra_tex *tex;
+    const struct pl_filter *filter;
 };
 
 bool sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,

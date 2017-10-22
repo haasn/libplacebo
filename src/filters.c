@@ -39,6 +39,39 @@
 #include "common.h"
 #include "context.h"
 
+bool pl_filter_function_eq(const struct pl_filter_function *a,
+                           const struct pl_filter_function *b)
+{
+    if (!a || !b)
+        return a == b;
+
+    bool r = a->resizable == b->resizable &&
+             a->weight    == b->weight &&
+             a->radius    == b->radius;
+
+    for (int i = 0; i < PL_FILTER_MAX_PARAMS; i++) {
+        r &= a->tunable[i] == b->tunable[i];
+        if (a->tunable[i])
+             r &= a->params[i] == b->params[i];
+    }
+
+    return r;
+}
+
+bool pl_filter_config_eq(const struct pl_filter_config *a,
+                         const struct pl_filter_config *b)
+{
+    if (!a || !b)
+        return a == b;
+
+    return pl_filter_function_eq(a->kernel, b->kernel) &&
+           pl_filter_function_eq(a->window, b->window) &&
+           a->clamp == b->clamp &&
+           a->blur  == b->blur &&
+           a->taper == b->taper &&
+           a->polar == b->polar;
+}
+
 double pl_filter_sample(const struct pl_filter_config *c, double x)
 {
     double radius = c->kernel->radius;

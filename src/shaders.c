@@ -209,7 +209,7 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
 }
 
 ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
-                const char *name, const struct pl_transform2x2 *tf,
+                const char *name, const struct pl_rect2df *rect,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt)
 {
     if (!sh->ra) {
@@ -227,17 +227,16 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
     });
 
     if (out_pos) {
-        float xy0[2] = {0};
-        float xy1[2] = {tex->params.w, tex->params.h};
-        pl_transform2x2_apply(tf, xy0);
-        pl_transform2x2_apply(tf, xy1);
-        ident_t pos_raw = sh_attr_vec2(sh, "pos_raw", &(struct pl_rect2df) {
-            .x0 = xy0[0] / tex->params.w, .y0 = xy0[1] / tex->params.w,
-            .x1 = xy1[0] / tex->params.h, .y1 = xy1[1] / tex->params.h,
-        });
+        struct pl_rect2df full = {
+            .x1 = tex->params.w,
+            .y1 = tex->params.h,
+        };
 
-        *out_pos = sh_fresh(sh, "pos");
-        GLSL("vec2 %s = %s;\n", *out_pos, pos_raw);
+        rect = PL_DEF(rect, &full);
+        *out_pos = sh_attr_vec2(sh, "pos", &(struct pl_rect2df) {
+            .x0 = rect->x0 / tex->params.w, .y0 = rect->y0 / tex->params.h,
+            .x1 = rect->x1 / tex->params.w, .y1 = rect->y1 / tex->params.h,
+        });
     }
 
     if (out_size) {
@@ -405,4 +404,12 @@ bool sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
 
     *ptr = obj;
     return true;
+}
+
+ident_t sh_lut_pos(struct pl_shader *sh, int lut_size)
+{
+    ident_t name = sh_fresh(sh, "LUT_POS");
+    GLSLH("#define %s(x) mix(%f, %f, (x)) \n",
+          name, 0.5 / lut_size, 1.0 - 0.5 / lut_size);
+    return name;
 }
