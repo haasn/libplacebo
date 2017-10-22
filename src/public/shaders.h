@@ -158,6 +158,8 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh);
 // generated lookup textures, or other sorts of configured state. The body
 // of a shader object is fully opaque; but the user is in charge of cleaning up
 // after them and passing them to the right shader passes.
+//
+// Note: pl_shader_obj pointers must be initialized to NULL by the caller.
 struct pl_shader_obj;
 
 void pl_shader_obj_destroy(struct pl_shader_obj **obj);
