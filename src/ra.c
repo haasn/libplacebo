@@ -418,7 +418,6 @@ bool ra_tex_download(const struct ra *ra,
 const struct ra_buf *ra_buf_create(const struct ra *ra,
                                    const struct ra_buf_params *params)
 {
-    assert(params->size >= 0);
     switch (params->type) {
     case RA_BUF_TEX_TRANSFER:
         assert(ra->limits.max_xfer_size);
