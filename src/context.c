@@ -53,6 +53,22 @@ struct pl_context *pl_context_create(int api_ver,
         return NULL;
     }
 
+#ifdef NDEBUG
+    const char *disable_dbg = getenv("LIBPLACEBO_ENABLE_SECURITY_BUGS");
+    if (!disable_dbg || strcmp(disable_dbg, "1") != 0) {
+        pl_warn(ctx, "libplacebo was built without debugging code. This "
+                "configuration is very dangerous and outright irresponsible, "
+                "since it turns several error cases into undefined behavior. "
+                "If you're absolutely sure this is what you want to be doing, "
+                "you can set LIBPLACEBO_ENABLE_SECURITY_BUGS=1 to suppress "
+                "this warning.");
+    }
+#endif
+
+    const char *enable_ta = getenv("LIBPLACEBO_LEAK_REPORT");
+    if (enable_ta && strcmp(enable_ta, "1") == 0)
+        talloc_enable_leak_report();
+
     return ctx;
 }
 
