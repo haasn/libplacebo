@@ -279,7 +279,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         struct vk_cmdpool *pool = vk_cmdpool_create(vk, qinfos[i], qfs[qf]);
         if (!pool)
             goto error;
-        TARRAY_APPEND(NULL, vk->pools, vk->num_pools, pool);
+        TARRAY_APPEND(vk, vk->pools, vk->num_pools, pool);
     }
 
     vk->pool_graphics = vk->pools[idx_gfx];
