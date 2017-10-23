@@ -176,6 +176,9 @@ static void vk_setup_formats(struct ra *ra)
 
         TARRAY_APPEND(ra, ra->formats, ra->num_formats, fmt);
     }
+
+    ra_sort_formats(ra);
+    ra_print_formats(ra, PL_LOG_DEBUG);
 }
 
 static struct ra_fns ra_fns_vk;

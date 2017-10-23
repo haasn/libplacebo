@@ -74,6 +74,14 @@ size_t ra_buf_desc_size(const struct ra_desc *buf_desc);
 
 // RA-internal helpers: these should not be used outside of RA implementations
 
+// Sort the ra_format list into an optimal order. This tries to prefer formats
+// supporting more capabilities, while also trying to maintain a sane order
+// in terms of bit depth / component index.
+void ra_sort_formats(struct ra *ra);
+
+// Pretty-print the format list
+void ra_print_formats(const struct ra *ra, enum pl_log_level lev);
+
 // Look up the right GLSL image format qualifier from a partially filled-in
 // ra_fmt, or NULL if the format does not have a legal matching GLSL name.
 const char *ra_fmt_glsl_format(const struct ra_fmt *fmt);

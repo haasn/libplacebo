@@ -27,6 +27,80 @@ void ra_destroy(const struct ra *ra)
     ra->impl->destroy(ra);
 }
 
+static int cmp_fmt(const void *pa, const void *pb)
+{
+    const struct ra_fmt *a = *(const struct ra_fmt **)pa;
+    const struct ra_fmt *b = *(const struct ra_fmt **)pb;
+
+    int ca = __builtin_popcount(a->caps),
+        cb = __builtin_popcount(b->caps);
+    if (ca != cb)
+        return -PL_CMP(ca, cb); // invert to sort higher values first
+
+    // If the population count is the same but the caps are different, prefer
+    // the caps with a "lower" value (which tend to be more fundamental caps)
+    if (a->caps != b->caps)
+        return PL_CMP(a->caps, b->caps);
+
+    // If the capabilities are equal, sort based on the component attributes
+    for (int i = 0; i < PL_ARRAY_SIZE(a->component_index); i++) {
+        int ia = a->component_index[i],
+            ib = b->component_index[i];
+        if (ia != ib)
+            return PL_CMP(ia, ib);
+
+        int da = a->component_depth[i],
+            db = b->component_depth[i];
+        if (da != db)
+            return PL_CMP(da, db);
+    }
+
+    // Fall back to sorting by the name (for stability)
+    return strcmp(a->name, b->name);
+}
+
+void ra_sort_formats(struct ra *ra)
+{
+    qsort(ra->formats, ra->num_formats, sizeof(struct ra_fmt *), cmp_fmt);
+}
+
+void ra_print_formats(const struct ra *ra, enum pl_log_level lev)
+{
+    if (!pl_msg_test(ra->ctx, lev))
+        return;
+
+    PL_MSG(ra, lev, "RA texture formats:");
+    PL_MSG(ra, lev, "  %-10s %-6s %-4s %-6s %-4s %-13s %-10s %-10s",
+           "NAME", "TYPE", "SIZE", "CAPS", "COMP", "DEPTH", "GLSL_TYPE", "GLSL_FMT");
+    for (int n = 0; n < ra->num_formats; n++) {
+        const struct ra_fmt *fmt = ra->formats[n];
+
+        static const char *types[] = {
+            [RA_FMT_UNKNOWN] = "UNKNOWN",
+            [RA_FMT_UNORM]   = "UNORM",
+            [RA_FMT_SNORM]   = "SNORM",
+            [RA_FMT_UINT]    = "UINT",
+            [RA_FMT_SINT]    = "SINT",
+            [RA_FMT_FLOAT]   = "FLOAT",
+        };
+
+        static const char idx_map[4] = {'R', 'G', 'B', 'A'};
+        char indices[4] = {' ', ' ', ' ', ' '};
+        for (int i = 0; i < fmt->num_components; i++)
+            indices[i] = idx_map[fmt->component_index[i]];
+
+#define IDX4(f) (f)[0], (f)[1], (f)[2], (f)[3]
+
+        PL_MSG(ra, lev, "  %-10s %-6s %-4zu 0x%-4x %c%c%c%c {%-2d %-2d %-2d %-2d} %-10s %-10s",
+               fmt->name, types[fmt->type], fmt->texel_size,
+               (unsigned int) fmt->caps, IDX4(indices),
+               IDX4(fmt->component_depth), PL_DEF(fmt->glsl_type, ""),
+               PL_DEF(fmt->glsl_format, ""));
+
+#undef IDX4
+    }
+}
+
 bool ra_fmt_is_ordered(const struct ra_fmt *fmt)
 {
     bool ret = true;
