@@ -168,7 +168,7 @@ static void vk_setup_formats(struct ra *ra)
         if (fmt->caps & RA_FMT_CAP_STORABLE) {
             fmt->glsl_format = ra_fmt_glsl_format(fmt);
             if (!fmt->glsl_format) {
-                PL_INFO(ra, "Storable format '%s' has no matching GLSL format "
+                PL_WARN(ra, "Storable format '%s' has no matching GLSL format "
                         "qualifier?", fmt->name);
                 fmt->caps &= ~RA_FMT_CAP_STORABLE;
             }

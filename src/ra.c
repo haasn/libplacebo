@@ -124,7 +124,7 @@ bool ra_fmt_is_regular(const struct ra_fmt *fmt)
 struct glsl_fmt {
     enum ra_fmt_type type;
     int num_components;
-    int component_depth[4];
+    int depth[4];
     const char *glsl_format;
 };
 
@@ -186,8 +186,14 @@ const char *ra_fmt_glsl_format(const struct ra_fmt *fmt)
         if (fmt->num_components != gfmt->num_components)
             continue;
 
-        for (int i = 0; i < fmt->num_components; i++) {
-            if (fmt->component_depth[i] != gfmt->component_depth[i])
+        // The component order is irrelevant, so we need to sort the depth
+        // based on the component's index
+        int depth[4] = {0};
+        for (int i = 0; i < fmt->num_components; i++)
+            depth[fmt->component_index[i]] = fmt->component_depth[i];
+
+        for (int i = 0; i < PL_ARRAY_SIZE(depth); i++) {
+            if (depth[i] != gfmt->depth[i])
                 goto next_fmt;
         }
 
