@@ -36,8 +36,7 @@ static void shader_tests(struct pl_context *ctx, const struct ra *ra)
         .w              = FBO_W,
         .h              = FBO_H,
         .renderable     = true,
-        .storable       = (ra->caps & RA_CAP_COMPUTE) &&
-                          (fbo_fmt->caps & RA_FMT_CAP_STORABLE),
+        .storable       = !!(fbo_fmt->caps & RA_FMT_CAP_STORABLE),
         .host_readable  = true,
         .blit_dst       = true,
     });
@@ -166,7 +165,6 @@ static void shader_tests(struct pl_context *ctx, const struct ra *ra)
 static void scaler_tests(struct pl_context *ctx, const struct ra *ra)
 {
     const struct ra_fmt *src_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 32, true,
-                                               RA_FMT_CAP_SAMPLEABLE |
                                                RA_FMT_CAP_LINEAR);
 
     const struct ra_fmt *fbo_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 32, true,
@@ -200,7 +198,7 @@ static void scaler_tests(struct pl_context *ctx, const struct ra *ra)
         .h              = 100,
         .format         = fbo_fmt,
         .renderable     = true,
-        .storable       = fbo_fmt->caps & RA_FMT_CAP_STORABLE,
+        .storable       = !!(fbo_fmt->caps & RA_FMT_CAP_STORABLE),
         .host_readable  = true,
     });
 

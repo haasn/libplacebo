@@ -106,14 +106,17 @@ enum ra_fmt_type {
 };
 
 enum ra_fmt_caps {
-    RA_FMT_CAP_VERTEX       = 1 << 0, // may be used as a vertex attribute
-    RA_FMT_CAP_TEXTURE      = 1 << 1, // may be used to create textures (ra_tex_create)
-    RA_FMT_CAP_SAMPLEABLE   = 1 << 2, // may be sampled from (RA_DESC_SAMPLED_TEX)
-    RA_FMT_CAP_STORABLE     = 1 << 3, // may be used as storage image (RA_DESC_STORAGE_IMG)
-    RA_FMT_CAP_LINEAR       = 1 << 4, // may be linearly samplied from (RA_TEX_SAMPLE_LINEAR)
-    RA_FMT_CAP_RENDERABLE   = 1 << 5, // may be rendered to (ra_pass_params.target_fmt)
-    RA_FMT_CAP_BLENDABLE    = 1 << 6, // may be blended to (ra_pass_params.enable_blend)
-    RA_FMT_CAP_BLITTABLE    = 1 << 7, // may be blitted from/to (ra_tex_blit)
+    RA_FMT_CAP_SAMPLEABLE   = 1 << 0, // may be sampled from (RA_DESC_SAMPLED_TEX)
+    RA_FMT_CAP_STORABLE     = 1 << 1, // may be used as storage image (RA_DESC_STORAGE_IMG)
+    RA_FMT_CAP_LINEAR       = 1 << 2, // may be linearly samplied from (RA_TEX_SAMPLE_LINEAR)
+    RA_FMT_CAP_RENDERABLE   = 1 << 3, // may be rendered to (ra_pass_params.target_fmt)
+    RA_FMT_CAP_BLENDABLE    = 1 << 4, // may be blended to (ra_pass_params.enable_blend)
+    RA_FMT_CAP_BLITTABLE    = 1 << 5, // may be blitted from/to (ra_tex_blit)
+    RA_FMT_CAP_VERTEX       = 1 << 6, // may be used as a vertex attribute
+
+    // Notes:
+    // - RA_FMT_CAP_LINEAR also implies RA_FMT_CAP_SAMPLEABLE
+    // - RA_FMT_CAP_STORABLE also implies RA_CAP_COMPUTE
 };
 
 // Structure describing a texel/vertex format.

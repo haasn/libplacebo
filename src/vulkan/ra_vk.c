@@ -139,19 +139,20 @@ static void vk_setup_formats(struct ra *ra)
         struct { VkFormatFeatureFlags flags; enum ra_fmt_caps caps; } bits[] = {
             {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT,      RA_FMT_CAP_BLENDABLE},
             {VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT, RA_FMT_CAP_LINEAR},
-
-            // The following features probably mean it's a sane texture format
-            {VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,
-                RA_FMT_CAP_SAMPLEABLE | RA_FMT_CAP_TEXTURE},
-            {VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT,
-                RA_FMT_CAP_STORABLE   | RA_FMT_CAP_TEXTURE},
-            {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT,
-                RA_FMT_CAP_RENDERABLE | RA_FMT_CAP_TEXTURE},
+            {VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,               RA_FMT_CAP_SAMPLEABLE},
+            {VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT,               RA_FMT_CAP_STORABLE},
+            {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT,            RA_FMT_CAP_RENDERABLE},
 
             // We don't distinguish between the two blit modes for ra_fmt_caps
             {VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT,
                 RA_FMT_CAP_BLITTABLE},
         };
+
+        // Disable implied capabilities where the dependencies are unavailable
+        if (!(fmt->caps & RA_FMT_CAP_SAMPLEABLE))
+            fmt->caps &= ~RA_FMT_CAP_LINEAR;
+        if (!(ra->caps & RA_CAP_COMPUTE))
+            fmt->caps &= ~RA_FMT_CAP_STORABLE;
 
         for (int i = 0; i < PL_ARRAY_SIZE(bits); i++) {
             if ((prop.optimalTilingFeatures & bits[i].flags) == bits[i].flags)

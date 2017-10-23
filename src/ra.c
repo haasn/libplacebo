@@ -207,7 +207,6 @@ const struct ra_tex *ra_tex_create(const struct ra *ra,
 
     const struct ra_fmt *fmt = params->format;
     assert(fmt);
-    assert(fmt->caps & RA_FMT_CAP_TEXTURE);
     assert(!params->sampleable || fmt->caps & RA_FMT_CAP_SAMPLEABLE);
     assert(!params->renderable || fmt->caps & RA_FMT_CAP_RENDERABLE);
     assert(!params->storable   || fmt->caps & RA_FMT_CAP_STORABLE);
