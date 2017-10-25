@@ -361,7 +361,7 @@ static void pl_shader_inverse_ootf(struct pl_shader *sh, enum pl_color_light lig
 const struct pl_color_map_params pl_color_map_default_params = {
     .intent                  = PL_INTENT_RELATIVE_COLORIMETRIC,
     .tone_mapping_algo       = PL_TONE_MAPPING_MOBIUS,
-    .tone_mapping_desaturate = 2.0,
+    .tone_mapping_desaturate = 1.0,
     .peak_detect_frames      = 50,
 };
 
@@ -502,22 +502,26 @@ static void pl_shader_tone_map(struct pl_shader *sh, float ref_peak,
 {
     GLSL("// pl_shader_tone_map\n");
 
-    // Desaturate the color using a coefficient dependent on the luminance
-    if (params->tone_mapping_desaturate > 0) {
-        GLSL("float luma = dot(%s, color.rgb);                           \n"
-             "float overbright = max(luma - %f, 1e-6) / max(luma, 1e-6); \n"
-             "color.rgb = mix(color.rgb, vec3(luma), overbright);        \n",
-             luma, params->tone_mapping_desaturate);
-    }
-
     // To prevent discoloration due to out-of-bounds clipping, we need to make
     // sure to reduce the value range as far as necessary to keep the entire
     // signal in range, so tone map based on the brightest component.
-    GLSL("float sig = max(max(color.r, color.g), color.b); \n"
-         "float sig_orig = sig;                            \n");
+    GLSL("float sig = max(max(color.r, color.g), color.b);\n");
+
+    // Desaturate the color using a coefficient dependent on the signal
+    if (params->tone_mapping_desaturate > 0) {
+        GLSL("float luma = dot(%s, color.rgb);                      \n"
+             "float coeff = max(sig - 0.18, 1e-6) / max(sig, 1e-6); \n"
+             "coeff = pow(coeff, %f);                               \n"
+             "color.rgb = mix(color.rgb, vec3(luma), coeff);        \n"
+             "sig = mix(sig, luma, coeff);                          \n",
+             luma, 10.0 / params->tone_mapping_desaturate);
+    }
 
     if (!hdr_detect_peak(sh, trc, params))
         GLSL("const float sig_peak = %f;\n", ref_peak);
+
+    // Store the original signal level for later re-use
+    GLSL("float sig_orig = sig;\n");
 
     float param = params->tone_mapping_param;
     switch (params->tone_mapping_algo) {

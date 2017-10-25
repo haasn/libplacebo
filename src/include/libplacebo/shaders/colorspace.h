@@ -109,15 +109,10 @@ struct pl_color_map_params {
     // Desaturation coefficient. This essentially desaturates very bright
     // spectral colors towards white, resulting in a more natural-looking
     // depiction of very bright sunlit regions or images of the sunlit sky. The
-    // interpretation of the coefficient is the brightness level at which
-    // desaturation starts. For example, if this is set to a value of 1.2,
-    // colors within 1.2 times the reference white level are preserved, and
-    // colors exceeding it are gradually desaturated towards white. Values
-    // below 1.0 would start to desaturate even in-gamut colors, and values
-    // tending towards infinitey would turn this operation into a no-op. A
-    // value of 0.0 completely disables this behavior. The default value is
-    // 2.0, which provides a good balance between realistic-looking highlights
-    // and preserving saturation.
+    // coefficient indicates the strength of the desaturation - higher values
+    // desaturate more strongly. The default value is 1.0, which roughly
+    // matches the desaturation strength used by e.g. ACES ODT. A setting of
+    // 0.0 disables this.
     float tone_mapping_desaturate;
 
     // If true, enables the gamut warning feature. This will visibly highlight
