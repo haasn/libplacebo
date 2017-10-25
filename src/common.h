@@ -30,18 +30,18 @@
 // as being externally visible. (Otherwise, all symbols are hidden by default)
 #pragma GCC visibility push(default)
 
-#include "public/colorspace.h"
-#include "public/common.h"
-#include "public/context.h"
-#include "public/dispatch.h"
-#include "public/filters.h"
-#include "public/ra.h"
-#include "public/shaders.h"
-#include "public/shaders/colorspace.h"
-#include "public/shaders/sampling.h"
+#include "include/libplacebo/colorspace.h"
+#include "include/libplacebo/common.h"
+#include "include/libplacebo/context.h"
+#include "include/libplacebo/dispatch.h"
+#include "include/libplacebo/filters.h"
+#include "include/libplacebo/ra.h"
+#include "include/libplacebo/shaders.h"
+#include "include/libplacebo/shaders/colorspace.h"
+#include "include/libplacebo/shaders/sampling.h"
 
 #if PL_HAVE_VULKAN
-#include "public/vulkan.h"
+#include "include/libplacebo/vulkan.h"
 #endif
 
 #pragma GCC visibility pop

@@ -22,18 +22,6 @@ if (cc.get_id() == 'clang')
 endif
 
 # Source files
-headers = [
-  'public/colorspace.h',
-  'public/common.h',
-  'public/context.h',
-  'public/filters.h',
-  'public/ra.h',
-  'public/shaders.h',
-  'public/shaders/colorspace.h',
-  'public/shaders/sampling.h',
-  'public/vulkan.h',
-]
-
 sources = [
   'colorspace.c',
   'common.c',
@@ -138,7 +126,7 @@ lib = library('placebo', sources,
 )
 
 # Install process
-install_headers(headers, subdir: 'libplacebo')
+install_subdir('include/libplacebo', install_dir: get_option('includedir'))
 
 pkg = import('pkgconfig')
 pkg.generate(

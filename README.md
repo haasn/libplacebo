@@ -44,14 +44,14 @@ little choice but to license libplacebo the same way.
 
 The public API of libplacebo is currently split up into the following
 components, the header files (and documentation) for which are available
-inside the [`src/public/`](src/public/) directory. The API is available in
-different "tiers", representing levels of abstraction inside libplacebo. The
-APIs in higher tiers depend on those in lower tiers. Which tier is used by
-a user depends on how much power/control they want over the actual rendering.
-The low-level tiers are more suitable for big projects that need strong
-control over the entire rendering pipeline; whereas the high-level tiers are
-more suitable for smaller or simpler projects that want libplacebo to take
-care of everything.
+inside the [`src/include/libplacebo`](src/include/libplacebo) directory. The
+API is available in different "tiers", representing levels of abstraction
+inside libplacebo. The APIs in higher tiers depend on those in lower tiers.
+Which tier is used by a user depends on how much power/control they want over
+the actual rendering. The low-level tiers are more suitable for big projects
+that need strong control over the entire rendering pipeline; whereas the
+high-level tiers are more suitable for smaller or simpler projects that want
+libplacebo to take care of everything.
 
 ### Tier 0 (context, raw math primitives)
 
@@ -203,9 +203,9 @@ void main()
 ```
 
 For a full documentation of the API, refer to the above [API
-Overview](#api-overview) as well as the [public header files](src/public/).
-You can find additional examples of how to use the various components, in the
-[unit tests](src/tests).
+Overview](#api-overview) as well as the [public header
+files](src/include/libplacebo). You can find additional examples of how to use
+the various components, in the [unit tests](src/tests).
 
 I will create more and expanded samples once the project has a bit more
 functionality worth writing home about.

@@ -20,8 +20,6 @@
 #include "../common.h"
 #include "../context.h"
 
-#include "public/vulkan.h"
-
 // Vulkan allows the optional use of a custom allocator. We don't need one but
 // mark this parameter with a better name in case we ever decide to change this
 // in the future. (And to make the code more readable)
