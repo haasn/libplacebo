@@ -1086,8 +1086,6 @@ struct ra_pass_vk {
     VkRenderPass renderPass;
     VkImageLayout initialLayout;
     VkImageLayout finalLayout;
-    VkAccessFlags initialAccess;
-    VkAccessFlags finalAccess;
     // Descriptor set (bindings)
     VkDescriptorSetLayout dsLayout;
     VkDescriptorPool dsPool;
@@ -1381,45 +1379,31 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
             };
         }
 
-        VkImageLayout nextLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        VkAccessFlags nextAccess = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        pass_vk->finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         // Figure out which case we should try and optimize for based on some
         // dumb heuristics. Extremely naive, but good enough for most cases.
         struct ra_tex_params texparams = params->target_dummy.params;
-        if (texparams.storable) {
-            nextLayout = VK_IMAGE_LAYOUT_GENERAL;
-            nextAccess = VK_ACCESS_SHADER_WRITE_BIT;
-        }
-        if (texparams.blit_src || texparams.host_readable) {
-            nextLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            nextAccess = VK_ACCESS_TRANSFER_READ_BIT;
-        }
-        if (texparams.blit_dst || texparams.host_writable) {
-            nextLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            nextAccess = VK_ACCESS_TRANSFER_WRITE_BIT;
-        }
-        if (texparams.sampleable) {
-            nextLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            nextAccess = VK_ACCESS_SHADER_READ_BIT;
-        }
-
-        pass_vk->finalLayout = nextLayout;
-        pass_vk->finalAccess = nextAccess;
+        if (texparams.storable)
+            pass_vk->finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+        if (texparams.blit_src || texparams.host_readable)
+            pass_vk->finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        if (texparams.blit_dst || texparams.host_writable)
+            pass_vk->finalLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        if (texparams.sampleable)
+            pass_vk->finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         struct ra_tex_vk *target_vk = params->target_dummy.priv;
         if (target_vk) {
             // If we have a real texture as the target dummy, we can set the
-            // initial layout and access based on what the texture is actually
-            // doing at the moment.
+            // initial layout based on what the texture is actually in at the
+            // moment.
             pass_vk->initialLayout = target_vk->current_layout;
-            pass_vk->initialAccess = target_vk->current_access;
         } else {
             // Assume we're ping-ponging between a render pass and some other
             // operation. This is the most likely scenario, or rather, the only
             // one we can really optimize for.
-            pass_vk->initialLayout = nextLayout;
-            pass_vk->initialAccess = nextAccess;
+            pass_vk->initialLayout = pass_vk->finalLayout;
         }
 
         VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1432,7 +1416,6 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
         // If we're ignoring the FBO, we don't need to load or transition
         if (!pass->params.load_target) {
             pass_vk->initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            pass_vk->initialAccess = 0;
             loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         }
 
@@ -1802,9 +1785,9 @@ static void vk_pass_run(const struct ra *ra,
         vkCmdBindVertexBuffers(cmd->buf, 0, 1, &buf_vk->slice.buf,
                                &buf_vk->slice.mem.offset);
 
-        // The renderpass expects the images to be in a certain layout
         tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                    pass_vk->initialAccess, pass_vk->initialLayout);
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    pass_vk->initialLayout);
 
         VkViewport viewport = {
             .x = params->viewport.x0,
@@ -1834,7 +1817,6 @@ static void vk_pass_run(const struct ra *ra,
 
         // The renderPass implicitly transitions the texture to this layout
         tex_vk->current_layout = pass_vk->finalLayout;
-        tex_vk->current_access = pass_vk->finalAccess;
         tex_signal(ra, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         break;
     }
