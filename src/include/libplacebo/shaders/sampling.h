@@ -74,6 +74,13 @@ struct pl_sample_src {
     int new_w, new_h;         // dimensions of the resulting output (optional)
 };
 
+// Performs hardware-accelerated / efficient bicubic sampling. This is more
+// efficient than using the generalized sampling routines and
+// pl_filter_function_bicubic. Requires the source texture to be set up with
+// sample_mode RA_TEX_SAMPLE_LINEAR. Only works well when upscaling - avoid
+// for downscaling.
+bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *src);
+
 struct pl_sample_polar_params {
     // The filter to use for sampling. `filter.polar` must be true.
     struct pl_filter_config filter;

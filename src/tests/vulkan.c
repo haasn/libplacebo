@@ -188,7 +188,7 @@ static void scaler_tests(struct pl_context *ctx, const struct ra *ra)
         .h              = 5,
         .format         = src_fmt,
         .sampleable     = true,
-        .sample_mode    = RA_TEX_SAMPLE_NEAREST,
+        .sample_mode    = RA_TEX_SAMPLE_LINEAR,
         .address_mode   = RA_TEX_ADDRESS_CLAMP,
         .initial_data   = &data_5x5[0][0],
     });

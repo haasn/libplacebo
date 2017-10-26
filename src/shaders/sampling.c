@@ -105,6 +105,109 @@ void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
     GLSL("}\n");
 }
 
+// Helper function to compute the src/dst sizes and upscaling ratios
+static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
+                      ident_t *src_tex, ident_t *pos, ident_t *size, ident_t *pt,
+                      float *ratio_x, float *ratio_y, int *components)
+{
+    float src_w = pl_rect_w(src->rect);
+    float src_h = pl_rect_h(src->rect);
+    src_w = PL_DEF(src_w, src->tex->params.w);
+    src_h = PL_DEF(src_h, src->tex->params.h);
+
+    int out_w = PL_DEF(src->new_w, src_w);
+    int out_h = PL_DEF(src->new_h, src_h);
+
+    if (ratio_x)
+        *ratio_x = out_w / src_w;
+    if (ratio_y)
+        *ratio_y = out_h / src_h;
+
+    if (components) {
+        const struct ra_fmt *fmt = src->tex->params.format;
+        *components = PL_DEF(src->components, fmt->num_components);
+    }
+
+    if (!sh_require(sh, PL_SHADER_SIG_NONE, out_w, out_h))
+        return false;
+
+    struct pl_rect2df rect = {
+        .x0 = src->rect.x0,
+        .y0 = src->rect.y0,
+        .x1 = src->rect.x0 + src_w,
+        .y1 = src->rect.x0 + src_h,
+    };
+
+    *src_tex = sh_bind(sh, src->tex, "src_tex", &rect, pos, size, pt);
+    return true;
+}
+
+static void bicubic_calcweights(struct pl_shader *sh, const char *t, const char *s)
+{
+    // Explanation of how bicubic scaling with only 4 texel fetches is done:
+    //   http://www.mate.tue.nl/mate/pdfs/10318.pdf
+    //   'Efficient GPU-Based Texture Interpolation using Uniform B-Splines'
+    GLSL("vec4 %s = vec4(-0.5, 0.1666, 0.3333, -0.3333) * %s \n"
+         "          + vec4(1, 0, -0.5, 0.5);                 \n"
+         "%s = %s * %s + vec4(0.0, 0.0, -0.5, 0.5);          \n"
+         "%s = %s * %s + vec4(-0.6666, 0, 0.8333, 0.1666);   \n"
+         "%s.xy /= %s.zw;                                    \n"
+         "%s.xy += vec2(1.0 + %s, 1.0 - %s);                 \n",
+         t, s,
+         t, t, s,
+         t, t, s,
+         t, t,
+         t, s, s);
+}
+
+bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *src)
+{
+    if (src->tex->params.sample_mode != RA_TEX_SAMPLE_LINEAR) {
+        PL_ERR(sh, "Trying to use fast bicubic sampling from a texture without "
+               "RA_TEX_SAMPLE_LINEAR");
+        return false;
+    }
+
+    ident_t tex, pos, size, pt;
+    float rx, ry;
+    if (!setup_src(sh, src, &tex, &pos, &size, &pt, &rx, &ry, NULL))
+        return false;
+
+    if (rx < 1 || ry < 1) {
+        PL_WARN(sh, "Trying to use fast bicubic sampling when downscaling. This "
+                "will most likely result in nasty aliasing");
+    }
+
+    GLSL("// pl_shader_sample_bicubic                   \n"
+         "vec4 color = vec4(0.0);                       \n"
+         "{                                             \n"
+         "vec2 pos  = %s;                               \n"
+         "vec2 pt   = %s;                               \n"
+         "vec2 size = %s;                               \n"
+         "vec2 fcoord = fract(pos * size + vec2(0.5));  \n",
+         pos, pt, size);
+
+    bicubic_calcweights(sh, "parmx", "fcoord.x");
+    bicubic_calcweights(sh, "parmy", "fcoord.y");
+
+    GLSL("vec4 cdelta;                                  \n"
+         "cdelta.xz = parmx.rg * vec2(-pt.x, pt.x);     \n"
+         "cdelta.yw = parmy.rg * vec2(-pt.y, pt.y);     \n"
+         // first y-interpolation
+         "vec4 ar = texture(%s, pos + cdelta.xy);       \n"
+         "vec4 ag = texture(%s, pos + cdelta.xw);       \n"
+         "vec4 ab = mix(ag, ar, parmy.b);               \n"
+         // second y-interpolation
+         "vec4 br = texture(%s, pos + cdelta.zy);       \n"
+         "vec4 bg = texture(%s, pos + cdelta.zw);       \n"
+         "vec4 aa = mix(bg, br, parmy.b);               \n"
+         // x-interpolation
+         "color = mix(aa, ab, parmx.b);                 \n"
+         "}                                             \n",
+         tex, tex, tex, tex);
+    return true;
+}
+
 static bool filter_compat(const struct pl_filter *filter, float inv_scale,
                           int lut_entries,
                           const struct pl_sample_polar_params *params)
@@ -172,17 +275,10 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
     const struct ra_tex *tex = src->tex;
     assert(ra && tex);
 
-    int comps = PL_DEF(src->components, tex->params.format->num_components);
-    float src_w = pl_rect_w(src->rect), src_h = pl_rect_h(src->rect);
-    src_w = PL_DEF(src_w, tex->params.w);
-    src_h = PL_DEF(src_h, tex->params.h);
-
-    int out_w = PL_DEF(src->new_w, src_w),
-        out_h = PL_DEF(src->new_h, src_h);
-    float ratio_x = out_w / src_w,
-          ratio_y = out_h / src_h;
-
-    if (!sh_require(sh, PL_SHADER_SIG_NONE, out_w, out_h))
+    int comps;
+    float ratio_x, ratio_y;
+    ident_t src_tex, pos, size, pt;
+    if (!setup_src(sh, src, &src_tex, &pos, &size, &pt, &ratio_x, &ratio_y, &comps))
         return false;
     if (!sh_require_obj(sh, params->lut, PL_SHADER_OBJ_LUT))
         return false;
@@ -239,6 +335,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
     }
 
     assert(lut->filter && lut->tex);
+    ident_t lut_pos = sh_lut_pos(sh, lut_entries);
     ident_t lut_tex = sh_desc(sh, (struct pl_shader_desc) {
         .desc = {
             .name = "polar_lut",
@@ -246,17 +343,6 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
         },
         .object = lut->tex,
     });
-
-    struct pl_rect2df rect = {
-        .x0 = src->rect.x0,
-        .y0 = src->rect.y0,
-        .x1 = src->rect.x0 + src_w,
-        .y1 = src->rect.x0 + src_h,
-    };
-
-    ident_t pos, size, pt;
-    ident_t src_tex = sh_bind(sh, tex, "src_tex", &rect, &pos, &size, &pt);
-    ident_t lut_pos = sh_lut_pos(sh, lut_entries);
 
     GLSL("// pl_shader_sample_polar                     \n"
          "vec4 color = vec4(0.0);                       \n"
