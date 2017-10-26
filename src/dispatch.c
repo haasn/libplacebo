@@ -259,7 +259,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             const char *type = va->fmt->glsl_type;
 
             char loc[32];
-            snprintf(loc, sizeof(loc), "layout(location=%d) ", va->location);
+            snprintf_c(loc, sizeof(loc), "layout(location=%d) ", va->location);
             ADD(vert_head, "%s%s %s vert%s;\n", loc, vert_in, type, va->name);
 
             if (strcmp(va->name, vert_pos) == 0) {
@@ -609,7 +609,7 @@ static void translate_compute_shader(struct pl_dispatch *dp,
         ident_t points[4];
         for (int i = 0; i < PL_ARRAY_SIZE(points); i++) {
             char name[4];
-            snprintf(name, sizeof(name), "p%d", i);
+            snprintf_c(name, sizeof(name), "p%d", i);
             points[i] = sh_var_from_va(sh, name, &sva->attr, sva->data[i]);
         }
 

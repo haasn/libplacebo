@@ -21,42 +21,6 @@
 #include "common.h"
 #include "context.h"
 
-// We mostly care about LC_NUMERIC, and how "." vs. "," is treated,
-// Other locale stuff might break too, but probably isn't too bad.
-static bool check_locale(struct pl_context *ctx)
-{
-    char *name = setlocale(LC_NUMERIC, NULL);
-    bool seems_ok = !name || strcmp(name, "C") == 0;
-
-    // Since `setlocale` doesn't necessarily have any correlation with the
-    // calling thread's locale, also do a check to see if `printf` succeeds.
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%f", 1234.0);
-    bool works = strncmp(buf, "1234.00", sizeof(buf)) == 0;
-
-    if (works && seems_ok) {
-        return true;
-    } else if (works && !seems_ok) {
-        pl_warn(ctx, "LC_NUMERIC is specified as '%s'. This *seems* to work "
-                "okay, but if this is a result of user configuration, then "
-                "libplacebo could randomly break on some platforms. It's "
-                "recommended to explicitly set LC_NUMERIC to 'C'. Note that "
-                "you may ignore this warning if you are using `uselocale` to "
-                "set the correct locale, as this cannot be queried.", name);
-        return true;
-    } else if (!works && seems_ok) {
-        pl_fatal(ctx, "LC_NUMERIC value seems okay, but the result of "
-                 "printf('%%f') appears to contain garbage: '%s'. Unable to "
-                 "continue. This situation may be the case if using `uselocale` "
-                 "to override the locale of the calling thread.", buf);
-        return false;
-    } else { // if (!works && !seems_ok)
-        pl_fatal(ctx, "LC_NUMERIC is specified as '%s', which produces garbage "
-               "for printf('%%f'): '%s'. Unable to continue.", name, buf);
-        return false;
-    }
-}
-
 struct pl_context *pl_context_create(int api_ver,
                                      const struct pl_context_params *params)
 {
@@ -73,11 +37,6 @@ struct pl_context *pl_context_create(int api_ver,
 
     struct pl_context *ctx = talloc_zero(NULL, struct pl_context);
     ctx->params = *params;
-
-    if (!check_locale(ctx)) {
-        pl_context_destroy(&ctx);
-        return NULL;
-    }
 
 #ifdef NDEBUG
     const char *disable_dbg = getenv("LIBPLACEBO_ENABLE_SECURITY_BUGS");

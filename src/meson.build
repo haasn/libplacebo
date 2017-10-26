@@ -5,21 +5,27 @@ fixver   = '0'
 version = majorver + '.' + apiver + '.' + fixver
 
 # Build options mostly taken from mpv
-add_global_arguments([
+build_opts = [
   '-D_ISOC99_SOURCE', '-D_GNU_SOURCE',
   '-fvisibility=hidden',
 
   # Warnings
   '-Wall', '-Wundef', '-Wmissing-prototypes', '-Wshadow', '-Wparentheses',
   '-Wpointer-arith', '-Wno-pointer-sign',
-], language: 'c')
+]
 
 cc = meson.get_compiler('c')
 
 # clang's version of -Wmissing-braces rejects the common {0} initializers
-if (cc.get_id() == 'clang')
-  add_global_arguments('-Wno-missing-braces', language : 'c')
+if cc.get_id() == 'clang'
+  build_opts += ['-Wno-missing-braces']
 endif
+
+# Global dependencies
+build_deps = [
+  dependency('threads'),
+  cc.find_library('m', required: false),
+]
 
 # Source files
 sources = [
@@ -69,6 +75,20 @@ components = [
   ]
 ]
 
+# OS-dependent files and feature checks
+has_useloc = cc.has_header_symbol(
+  'locale.h', 'uselocale',
+  prefix: '#define _XOPEN_SOURCE 700'
+)
+
+## osdep/printf.h
+if has_useloc
+  sources += 'osdep/printf_useloc.c'
+  build_opts += ['-D_XOPEN_SOURCE=700']
+else
+  error('Could not find any suitable implementation of `osdep/printf.h`!')
+endif
+
 # Configuration
 conf = configuration_data()
 conf.set('majorver', majorver)
@@ -83,7 +103,6 @@ else
 endif
 
 # Build process
-bdeps = [ cc.find_library('m', required: false) ]
 defs = ''
 
 foreach c : components
@@ -100,7 +119,7 @@ foreach c : components
   pretty = name.underscorify().to_upper()
   defs += '#define PL_HAVE_@0@ @1@\n'.format(pretty, has_dep ? 1 : 0)
   if has_dep
-    bdeps += dep
+    build_deps += dep
     if (c.length() > 2)
       sources += c[2]
     endif
@@ -119,9 +138,10 @@ configure_file(
   configuration: conf,
 )
 
+add_project_arguments(build_opts, language: 'c')
 lib = library('placebo', sources,
   install: true,
-  dependencies: bdeps,
+  dependencies: build_deps,
   soversion: apiver,
 )
 
@@ -142,7 +162,7 @@ tdeps = [ declare_dependency(link_with: lib) ]
 
 if get_option('tests')
   foreach t : tests
-    e = executable('test.' + t, 'tests/' + t, dependencies: bdeps + tdeps)
+    e = executable('test.' + t, 'tests/' + t, dependencies: build_deps + tdeps)
     test(t, e)
   endforeach
 endif

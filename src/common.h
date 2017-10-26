@@ -24,6 +24,7 @@
 #include <stdint.h>
 
 #include "ta/talloc.h"
+#include "osdep/printf.h"
 #include "config.h"
 
 // Include all of the symbols that should be public in a way that marks them
