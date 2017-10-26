@@ -411,6 +411,11 @@ static void vk_tex_destroy(const struct ra *ra, struct ra_tex *tex)
 
 MAKE_LAZY_DESTRUCTOR(vk_tex_destroy, struct ra_tex);
 
+static const VkFilter filters[] = {
+    [RA_TEX_SAMPLE_NEAREST] = VK_FILTER_NEAREST,
+    [RA_TEX_SAMPLE_LINEAR]  = VK_FILTER_LINEAR,
+};
+
 // Initializes non-VkImage values like the image view, samplers, etc.
 static bool vk_init_image(const struct ra *ra, const struct ra_tex *tex)
 {
@@ -455,12 +460,7 @@ static bool vk_init_image(const struct ra *ra, const struct ra_tex *tex)
     }
 
     if (params->sampleable) {
-        VkFilter filters[] = {
-            [RA_TEX_SAMPLE_NEAREST] = VK_FILTER_NEAREST,
-            [RA_TEX_SAMPLE_LINEAR]  = VK_FILTER_LINEAR,
-        };
-
-        VkSamplerAddressMode modes[] = {
+        static const VkSamplerAddressMode modes[] = {
             [RA_TEX_ADDRESS_CLAMP]  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             [RA_TEX_ADDRESS_REPEAT] = VK_SAMPLER_ADDRESS_MODE_REPEAT,
             [RA_TEX_ADDRESS_MIRROR] = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
@@ -732,7 +732,7 @@ static void vk_tex_blit(const struct ra *ra,
 
         vkCmdBlitImage(cmd->buf, src_vk->img, src_vk->current_layout,
                        dst_vk->img, dst_vk->current_layout, 1, &region,
-                       VK_FILTER_NEAREST);
+                       filters[src->params.sample_mode]);
     }
 
     tex_signal(ra, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT);
