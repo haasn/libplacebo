@@ -152,7 +152,7 @@ static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
             GLSL("color[%d] += w * in%d[idx];\n", n, n);
     } else {
         GLSL("in0 = texture(%s, base + pt * vec2(%d.0, %d.0)); \n"
-             "color += vec4(w) * in0);                         \n",
+             "color += vec4(w) * in0;                          \n",
              tex, x, y);
     }
 
@@ -258,13 +258,15 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
     ident_t src_tex = sh_bind(sh, tex, "src_tex", &rect, &pos, &size, &pt);
     ident_t lut_pos = sh_lut_pos(sh, lut_entries);
 
-    GLSL("// pl_shader_sample_polar          \n"
-         "vec4 color = vec4(0.0);            \n"
-         "{                                  \n"
-         "vec2 pos = %s, size = %s, pt = %s; \n"
-         "float w, d, wsum = 0.0;            \n"
-         "int idx;                           \n"
-         "vec4 c;                            \n",
+    GLSL("// pl_shader_sample_polar                     \n"
+         "vec4 color = vec4(0.0);                       \n"
+         "{                                             \n"
+         "vec2 pos = %s, size = %s, pt = %s;            \n"
+         "vec2 fcoord = fract(pos * size - vec2(0.5));  \n"
+         "vec2 base = pos - pt * fcoord;                \n"
+         "float w, d, wsum = 0.0;                       \n"
+         "int idx;                                      \n"
+         "vec4 c;                                       \n",
          pos, size, pt);
 
     int bound   = ceil(lut->filter->radius_cutoff);
@@ -291,8 +293,6 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
         // Compute shader kernel
         GLSL("vec2 wpos = %s_map(gl_WorkGroupID * gl_WorkGroupSize);        \n"
              "vec2 wbase = wpos - pt * fract(wpos * size - vec2(0.5));      \n"
-             "vec2 fcoord = fract(pos * size - vec2(0.5));                  \n"
-             "vec2 base = pos - pt * fcoord;                                \n"
              "ivec2 rel = ivec2(round((base - wbase) * size));              \n",
              pos);
 
@@ -322,7 +322,58 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
         }
     } else {
         // Fragment shader sampling
-        abort(); // TODO
+        for (int n = 0; n < comps; n++)
+            GLSL("vec4 in%d;\n", n);
+
+        // Iterate over the LUT space in groups of 4 texels at a time, and
+        // decide for each texel group whether to use gathering or direct
+        // sampling.
+        for (int y = 1 - bound; y <= bound; y += 2) {
+            for (int x = 1 - bound; x <= bound; x += 2) {
+                // Using texture gathering is only more efficient than direct
+                // sampling in the case where we expect to be able to use all
+                // four gathered texels, without having to discard any. So
+                // only do it if we suspsect it will be a win rather than a
+                // loss.
+                bool use_gather = sqrt(x*x + y*y) < lut->filter->radius_cutoff;
+
+                // Make sure all required features are supported
+                use_gather &= ra->glsl.version >= 400;
+                use_gather &= PL_MAX(x, y) <= ra->limits.max_gather_offset;
+                use_gather &= PL_MIN(x, y) >= ra->limits.min_gather_offset;
+
+                if (!use_gather) {
+                    // Switch to direct sampling instead
+                    for (int yy = y; yy <= bound && yy <= y + 1; yy++) {
+                        for (int xx = x; xx <= bound && xx <= x + 1; xx++) {
+                            polar_sample(sh, lut->filter, src_tex, lut_tex,
+                                         lut_pos, xx, yy, comps, false);
+                        }
+                    }
+                    continue; // next group of 4
+                }
+
+                // Gather the four surrounding texels simultaneously
+                for (int n = 0; n < comps; n++) {
+                    GLSL("in%d = textureGatherOffset(%s, base, "
+                         "ivec2(%d, %d), %d);\n", n, src_tex, x, y, n);
+                }
+
+                // Mix in all of the points with their weights
+                for (int p = 0; p < 4; p++) {
+                    // The four texels are gathered counterclockwise starting
+                    // from the bottom left
+                    static const int xo[4] = {0, 1, 1, 0};
+                    static const int yo[4] = {1, 1, 0, 0};
+                    if (x+xo[p] > bound || y+yo[p] > bound)
+                        continue; // next subpixel
+
+                    GLSL("idx = %d;\n", p);
+                    polar_sample(sh, lut->filter, src_tex, lut_tex, lut_pos,
+                                 x+xo[p], y+yo[p], comps, true);
+                }
+            }
+        }
     }
 
     GLSL("color = color / vec4(wsum); \n"
