@@ -74,6 +74,15 @@ struct pl_sample_src {
     int new_w, new_h;         // dimensions of the resulting output (optional)
 };
 
+// Performs direct / native texture sampling. This uses whatever built-in GPU
+// sampling is built into the GPU and specified using src->params.sample_mode.
+//
+// Note: This is generally very low quality and should be avoided if possible,
+// for both upscaling and downscaling. The only exception to this rule of thumb
+// is exact 2x downscaling with RA_TEX_SAMPLE_LINEAR, as well as integer
+// upscaling with RA_TEX_SAMPLE_NEAREST.
+bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *src);
+
 // Performs hardware-accelerated / efficient bicubic sampling. This is more
 // efficient than using the generalized sampling routines and
 // pl_filter_function_bicubic. Requires the source texture to be set up with

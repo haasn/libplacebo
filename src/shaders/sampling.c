@@ -142,6 +142,18 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
     return true;
 }
 
+bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *src)
+{
+    ident_t tex, pos;
+    if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, NULL))
+        return false;
+
+    GLSL("// pl_shader_sample_direct    \n"
+         "vec4 color = texture(%s, %s); \n",
+         tex, pos);
+    return true;
+}
+
 static void bicubic_calcweights(struct pl_shader *sh, const char *t, const char *s)
 {
     // Explanation of how bicubic scaling with only 4 texel fetches is done:
