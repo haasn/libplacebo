@@ -28,7 +28,7 @@ const char *vk_res_str(VkResult res)
     CASE(VK_EVENT_SET);
     CASE(VK_EVENT_RESET);
     CASE(VK_INCOMPLETE);
-    CASE(VK_SUBOPTIMAL_KHR);
+
     // error codes
     CASE(VK_ERROR_OUT_OF_HOST_MEMORY);
     CASE(VK_ERROR_OUT_OF_DEVICE_MEMORY);
@@ -42,15 +42,38 @@ const char *vk_res_str(VkResult res)
     CASE(VK_ERROR_TOO_MANY_OBJECTS);
     CASE(VK_ERROR_FORMAT_NOT_SUPPORTED);
     CASE(VK_ERROR_FRAGMENTED_POOL);
-    CASE(VK_ERROR_INVALID_SHADER_NV);
-    CASE(VK_ERROR_OUT_OF_DATE_KHR);
+
+    // Symbols introduced by extensions (explicitly guarded against so we can
+    // make this switch exhaustive without requiring bleeding edge versions
+    // of vulkan.h)
+#ifdef VK_KHR_maintenance1
+    CASE(VK_ERROR_OUT_OF_POOL_MEMORY_KHR);
+#endif
+#ifdef VK_KHR_external_memory
+    CASE(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+#endif
+#ifdef VK_KHR_surface
     CASE(VK_ERROR_SURFACE_LOST_KHR);
     CASE(VK_ERROR_NATIVE_WINDOW_IN_USE_KHR);
+#endif
+#ifdef VK_KHR_swapchain
+    CASE(VK_SUBOPTIMAL_KHR);
+    CASE(VK_ERROR_OUT_OF_DATE_KHR);
+#endif
+#ifdef VK_KHR_display_swapchain
     CASE(VK_ERROR_INCOMPATIBLE_DISPLAY_KHR);
+#endif
+#ifdef VK_NV_glsl_shader
+    CASE(VK_ERROR_INVALID_SHADER_NV);
+#endif
+#ifdef VK_EXT_debug_report
     CASE(VK_ERROR_VALIDATION_FAILED_EXT);
-    CASE(VK_ERROR_OUT_OF_POOL_MEMORY_KHR);
-    CASE(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
-    // misc (to satisfy the switch coverage check
+#endif
+#ifdef VK_EXT_global_priority
+    CASE(VK_ERROR_NOT_PERMITTED_EXT);
+#endif
+
+    // Included to satisfy the switch coverage check
     CASE(VK_RESULT_RANGE_SIZE);
     CASE(VK_RESULT_MAX_ENUM);
 #undef CASE
@@ -63,37 +86,67 @@ const char *vk_obj_str(VkDebugReportObjectTypeEXT obj)
 {
     switch (obj) {
 #define CASE(name, str) case VK_DEBUG_REPORT_OBJECT_TYPE_##name##_EXT: return #str
-    CASE(INSTANCE,              VkInstance);
-    CASE(PHYSICAL_DEVICE,       VkPhysicalDevice);
-    CASE(DEVICE,                VkDevice);
-    CASE(QUEUE,                 VkQueue);
-    CASE(SEMAPHORE,             VkSemaphore);
-    CASE(COMMAND_BUFFER,        VkCommandBuffer);
-    CASE(FENCE,                 VkFence);
-    CASE(DEVICE_MEMORY,         VkDeviceMemory);
-    CASE(BUFFER,                VkBuffer);
-    CASE(IMAGE,                 VkImage);
-    CASE(EVENT,                 VkEvent);
-    CASE(QUERY_POOL,            VkQueryPool);
-    CASE(BUFFER_VIEW,           VkBufferView);
-    CASE(IMAGE_VIEW,            VkImageView);
-    CASE(SHADER_MODULE,         VkShaderModule);
-    CASE(PIPELINE_CACHE,        VkPipelineCache);
-    CASE(PIPELINE_LAYOUT,       VkPipelineLayout);
-    CASE(RENDER_PASS,           VkRenderPass);
-    CASE(PIPELINE,              VkPipeline);
-    CASE(DESCRIPTOR_SET_LAYOUT, VkDescriptorSetLayout);
-    CASE(SAMPLER,               VkSampler);
-    CASE(DESCRIPTOR_POOL,       VkDescriptorPool);
-    CASE(DESCRIPTOR_SET,        VkDescriptorSet);
-    CASE(FRAMEBUFFER,           VkFramebuffer);
-    CASE(COMMAND_POOL,          VkCommandPool);
-    CASE(SURFACE_KHR,           VkSurfaceKHR);
-    CASE(SWAPCHAIN_KHR,         VkSwapchainKHR);
-    CASE(DISPLAY_KHR,           VkDisplayKHR);
-    CASE(DISPLAY_MODE_KHR,      VkDisplayModeKHR);
-    CASE(DEBUG_REPORT,          VkDebugReportCallbackEXT);
+    CASE(INSTANCE,                          VkInstance);
+    CASE(PHYSICAL_DEVICE,                   VkPhysicalDevice);
+    CASE(DEVICE,                            VkDevice);
+    CASE(QUEUE,                             VkQueue);
+    CASE(SEMAPHORE,                         VkSemaphore);
+    CASE(COMMAND_BUFFER,                    VkCommandBuffer);
+    CASE(FENCE,                             VkFence);
+    CASE(DEVICE_MEMORY,                     VkDeviceMemory);
+    CASE(BUFFER,                            VkBuffer);
+    CASE(IMAGE,                             VkImage);
+    CASE(EVENT,                             VkEvent);
+    CASE(QUERY_POOL,                        VkQueryPool);
+    CASE(BUFFER_VIEW,                       VkBufferView);
+    CASE(IMAGE_VIEW,                        VkImageView);
+    CASE(SHADER_MODULE,                     VkShaderModule);
+    CASE(PIPELINE_CACHE,                    VkPipelineCache);
+    CASE(PIPELINE_LAYOUT,                   VkPipelineLayout);
+    CASE(RENDER_PASS,                       VkRenderPass);
+    CASE(PIPELINE,                          VkPipeline);
+    CASE(DESCRIPTOR_SET_LAYOUT,             VkDescriptorSetLayout);
+    CASE(SAMPLER,                           VkSampler);
+    CASE(DESCRIPTOR_POOL,                   VkDescriptorPool);
+    CASE(DESCRIPTOR_SET,                    VkDescriptorSet);
+    CASE(FRAMEBUFFER,                       VkFramebuffer);
+    CASE(COMMAND_POOL,                      VkCommandPool);
+
+    // Objects introduced by extensions
+#ifdef VK_KHR_surface
+    CASE(SURFACE_KHR,                       VkSurfaceKHR);
+#endif
+#ifdef VK_KHR_swapchain
+    CASE(SWAPCHAIN_KHR,                     VkSwapchainKHR);
+#endif
+#ifdef VK_KHR_display
+    CASE(DISPLAY_KHR,                       VkDisplayKHR);
+    CASE(DISPLAY_MODE_KHR,                  VkDisplayModeKHR);
+#endif
+#ifdef VK_KHR_descriptor_update_template
+    CASE(DESCRIPTOR_UPDATE_TEMPLATE_KHR,    VkDescriptorUpdateTemplateKHR);
+#endif
+#ifdef VK_KHR_sampler_ycbcr_conversion
+    CASE(SAMPLER_YCBCR_CONVERSION_KHR,      VkSamplerYcbcrConversionInfoKHR);
+#endif
+#ifdef VK_EXT_validation_cache
+    CASE(VALIDATION_CACHE,                  VkValidationCacheEXT);
+#endif
+#ifdef VK_EXT_debug_report
+    CASE(DEBUG_REPORT,                      VkDebugReportCallbackEXT);
+#endif
+#ifdef VK_NVX_device_generated_commands
+    CASE(OBJECT_TABLE_NVX,                  VkObjectTableNVX);
+    CASE(INDIRECT_COMMANDS_LAYOUT_NVX,      VkIndirectCommandsLayoutNVX);
+#endif
+
+    // Included to satisfy the switch coverage check
+    case VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT:
+    case VK_DEBUG_REPORT_OBJECT_TYPE_RANGE_SIZE_EXT:
+    case VK_DEBUG_REPORT_OBJECT_TYPE_MAX_ENUM_EXT:
+        break;
 #undef CASE
-    default: return "unknown object";
     }
+
+    return "unknown object";
 }

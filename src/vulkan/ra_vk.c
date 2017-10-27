@@ -1200,7 +1200,7 @@ static VkResult vk_compile_glsl(const struct ra *ra, void *tactx,
 
     if (!p->spirv->impl->compile_glsl(p->spirv, tactx, type, glsl, spirv)) {
         pl_msg_source(ra->ctx, PL_LOG_ERR, glsl);
-        return VK_ERROR_INVALID_SHADER_NV;
+        return VK_ERROR_INITIALIZATION_FAILED;
     }
 
     return VK_SUCCESS;
