@@ -15,6 +15,8 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _XOPEN_SOURCE 700
+
 #include <stdlib.h>
 #include <locale.h>
 #include <pthread.h>

@@ -84,7 +84,6 @@ has_useloc = cc.has_header_symbol(
 ## osdep/printf.h
 if has_useloc
   sources += 'osdep/printf_useloc.c'
-  build_opts += ['-D_XOPEN_SOURCE=700']
 else
   error('Could not find any suitable implementation of `osdep/printf.h`!')
 endif
