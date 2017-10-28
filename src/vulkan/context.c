@@ -280,11 +280,15 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         if (!pool)
             goto error;
         TARRAY_APPEND(vk, vk->pools, vk->num_pools, pool);
-    }
 
-    vk->pool_graphics = vk->pools[idx_gfx];
-    vk->pool_compute  = idx_comp >= 0 ? vk->pools[idx_comp] : NULL;
-    vk->pool_transfer = idx_tf   >= 0 ? vk->pools[idx_tf] : NULL;
+        // Update the pool_* pointers based on the corresponding index
+        if (qf == idx_gfx)
+            vk->pool_graphics = pool;
+        if (qf == idx_comp)
+            vk->pool_compute = pool;
+        if (qf == idx_tf)
+            vk->pool_transfer = pool;
+    }
 
     talloc_free(tmp);
     return true;
