@@ -595,6 +595,18 @@ void pl_shader_color_map(struct pl_shader *sh,
     GLSL("// pl_shader_color_map\n");
     GLSL("{\n");
 
+    // If the source signal peak information is unknown, infer it from the
+    // transfer function. (Note: The sig peak of the dst space is irrelevant)
+    if (!src.sig_peak)
+        src.sig_peak = pl_color_transfer_nominal_peak(src.transfer);
+
+    // If the source light type is unknown, infer it from the transfer function.
+    if (!src.light) {
+        src.light = (src.transfer == PL_COLOR_TRC_HLG)
+            ? PL_COLOR_LIGHT_SCENE_HLG
+            : PL_COLOR_LIGHT_DISPLAY;
+    }
+
     // To be as conservative as possible, color mapping is disabled by default
     // except for special cases which are considered to be "sufficiently
     // different" from the source space. For primaries, this means anything
@@ -613,10 +625,8 @@ void pl_shader_color_map(struct pl_shader *sh,
             dst.transfer = PL_COLOR_TRC_GAMMA22;
     }
 
-    // If the source signal peak information is unknown, infer it from the
-    // transfer function. (Note: The sig peak of the dst space is irrelevant)
-    if (!src.sig_peak)
-        src.sig_peak = pl_color_transfer_nominal_peak(src.transfer);
+    // 99 times out of 100, this is what we want
+    dst.light = PL_DEF(dst.light, PL_COLOR_LIGHT_DISPLAY);
 
     // Compute the highest encodable level
     float src_range = pl_color_transfer_nominal_peak(src.transfer),
