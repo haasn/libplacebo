@@ -19,6 +19,11 @@
 #include "context.h"
 #include "ra.h"
 
+int ra_optimal_transfer_stride(const struct ra *ra, int dimension)
+{
+    return PL_ALIGN2(dimension, ra->limits.align_tex_xfer_stride);
+}
+
 void ra_destroy(const struct ra *ra)
 {
     if (!ra)

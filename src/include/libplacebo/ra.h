@@ -72,8 +72,8 @@ struct ra_limits {
     // optimal alignment. For best performance, the corresponding field
     // should be aligned to a multiple of these. They will always be a power
     // of two.
-    int align_tex_xfer_stride; // optimal ra_tex_transfer_params.stride_w/h
-    int align_tex_xfer_offset; // optimal ra_tex_transfer_params.buf_offset
+    int align_tex_xfer_stride;    // optimal ra_tex_transfer_params.stride_w/h
+    size_t align_tex_xfer_offset; // optimal ra_tex_transfer_params.buf_offset
 };
 
 // Abstract device context which wraps an underlying graphics context and can
@@ -94,6 +94,10 @@ struct ra {
     const struct ra_fmt **formats;
     int num_formats;
 };
+
+// Helper function to align the given dimension (e.g. width or height) to a
+// multiple of the optimal texture transfer stride.
+int ra_optimal_transfer_stride(const struct ra *ra, int dimension);
 
 enum ra_fmt_type {
     RA_FMT_UNKNOWN = 0, // also used for inconsistent multi-component formats
