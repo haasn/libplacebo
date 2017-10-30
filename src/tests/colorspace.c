@@ -126,8 +126,7 @@ int main()
             .sys = sys,
         };
 
-        struct pl_color_adjustment adj = pl_color_adjustment_neutral;
-        struct pl_transform3x3 yuv2rgb = pl_color_repr_decode(&repr, adj);
+        struct pl_transform3x3 yuv2rgb = pl_color_repr_decode(&repr, NULL);
         static const float white_ycbcr[3] = { 235/255., 128/255., 128/255. };
         static const float black_ycbcr[3] = {  16/255., 128/255., 128/255. };
         static const float white_other[3] = { 235/255., 235/255., 235/255. };
@@ -159,7 +158,7 @@ int main()
     tv_repr.bits.color_depth  = 10;
     tv_repr.bits.sample_depth = 16;
     struct pl_transform3x3 yuv2rgb;
-    yuv2rgb = pl_color_repr_decode(&tv_repr, pl_color_adjustment_neutral);
+    yuv2rgb = pl_color_repr_decode(&tv_repr, NULL);
     float test[3] = { 575/65535., 336/65535., 640/65535. };
     pl_transform3x3_apply(&yuv2rgb, test);
     REQUIRE(feq(test[0], 0.808305));

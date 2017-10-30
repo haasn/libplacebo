@@ -300,7 +300,8 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *s
 
 // Returns a color decoding matrix for a given combination of source color
 // representation and adjustment parameters. This mutates the color_repr to
-// reflect the change.
+// reflect the change. If `params` is left as NULL, it defaults to
+// &pl_color_adjustment_neutral.
 //
 // This function always performs a conversion to RGB; conversions from
 // arbitrary color representations to other arbitrary other color
@@ -315,6 +316,6 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *s
 // Note: For XYZ system, the input/encoding gamma must be pre-applied by the
 // user, typically this has a value of 2.6.
 struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
-                                            struct pl_color_adjustment params);
+                                    const struct pl_color_adjustment *params);
 
 #endif // LIBPLACEBO_COLORSPACE_H_

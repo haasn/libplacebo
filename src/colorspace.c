@@ -548,8 +548,10 @@ static struct pl_matrix3x3 luma_coeffs(float lr, float lg, float lb)
 }
 
 struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
-                                            struct pl_color_adjustment params)
+                                    const struct pl_color_adjustment *params)
 {
+    params = PL_DEF(params, &pl_color_adjustment_neutral);
+
     struct pl_matrix3x3 m;
     switch (repr->sys) {
     case PL_COLOR_SYSTEM_BT_709:     m = luma_coeffs(0.2126, 0.7152, 0.0722); break;
@@ -590,8 +592,8 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     if (pl_color_system_is_ycbcr_like(repr->sys)) {
         // Hue is equivalent to rotating input [U, V] subvector around the origin.
         // Saturation scales [U, V].
-        float huecos = params.saturation * cos(params.hue);
-        float huesin = params.saturation * sin(params.hue);
+        float huecos = params->saturation * cos(params->hue);
+        float huesin = params->saturation * sin(params->hue);
         for (int i = 0; i < 3; i++) {
             float u = out.mat.m[i][1], v = out.mat.m[i][2];
             out.mat.m[i][1] = huecos * u - huesin * v;
@@ -640,8 +642,8 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     // Contrast scales the output value range (gain)
     // Brightness scales the constant output bias (black lift/boost)
     for (int i = 0; i < 3; i++) {
-        mul[i]   *= params.contrast;
-        out.c[i] += params.brightness;
+        mul[i]   *= params->contrast;
+        out.c[i] += params->brightness;
     }
 
     // Multiply in the texture multiplier and adjust `c` so that black[j] keeps

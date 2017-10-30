@@ -129,6 +129,7 @@ static struct pl_filter_function *dupfilter(void *tactx,
 const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
                                        const struct pl_filter_params *params)
 {
+    assert(params);
     if (params->lut_entries <= 0 || !params->config.kernel) {
         pl_fatal(ctx, "Invalid params: missing lut_entries or config.kernel");
         return NULL;

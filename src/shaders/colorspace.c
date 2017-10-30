@@ -19,7 +19,8 @@
 #include "shaders.h"
 
 void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
-                            struct pl_color_adjustment params, int texture_bits)
+                            const struct pl_color_adjustment *params,
+                            int texture_bits)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
@@ -594,6 +595,7 @@ void pl_shader_color_map(struct pl_shader *sh,
 
     GLSL("// pl_shader_color_map\n");
     GLSL("{\n");
+    params = PL_DEF(params, &pl_color_map_default_params);
 
     // If the source signal peak information is unknown, infer it from the
     // transfer function. (Note: The sig peak of the dst space is irrelevant)

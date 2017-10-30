@@ -34,6 +34,7 @@ void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
     GLSL("vec4 color;\n");
     GLSL("// pl_shader_deband\n");
     GLSL("{\n");
+    params = PL_DEF(params, &pl_deband_default_params);
 
     ident_t tex, pos, pt;
     tex = sh_bind(sh, ra_tex, "deband", NULL, &pos, NULL, &pt);
@@ -278,6 +279,7 @@ static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
 bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *src,
                             const struct pl_sample_polar_params *params)
 {
+    assert(params);
     if (!params->filter.polar) {
         PL_ERR(sh, "Trying to use polar sampling with a non-polar filter?");
         return false;

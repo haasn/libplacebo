@@ -28,12 +28,14 @@
 // also takes care of additional pre- and post-conversions requires for the
 // "special" color systems (XYZ, BT.2020-C, etc.). The int `texture_bits`, if
 // present, indicate the depth of the texture we've sampled the color from -
-// similar to the semantics on `pl_get_scaled_decoding_matrix`.
+// similar to the semantics on `pl_get_scaled_decoding_matrix`. If `params`
+// is left as NULL, it defaults to &pl_color_adjustment_neutral.
 //
 // Note: This function always returns PC-range RGB with pre-multiplied alpha.
 // It mutates the pl_color_repr to reflect the change.
 void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
-                            struct pl_color_adjustment params, int texture_bits);
+                            const struct pl_color_adjustment *params,
+                            int texture_bits);
 
 // Linearize (expand) `vec4 color`, given a specified color_transfer. In
 // essence, this is the ITU-R EOTF, calculated on an idealized (reference)
@@ -138,7 +140,8 @@ struct pl_color_map_params {
 extern const struct pl_color_map_params pl_color_map_default_params;
 
 // Maps `vec4 color` from one color space to another color space according
-// to the parameters (described in greater depth above). If `prelinearized`
+// to the parameters (described in greater depth above). If `params` is left
+// as NULL, it defaults to &pl_color_map_default_params. If `prelinearized`
 // is true, the logic will assume the input has already been linearized by the
 // caller (e.g. as part of a previous linear light scaling operation).
 void pl_shader_color_map(struct pl_shader *sh,

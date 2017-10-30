@@ -328,6 +328,7 @@ static VkBool32 vk_dbg_callback(VkDebugReportFlagsEXT flags,
 const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
                                          const struct pl_vulkan_params *params)
 {
+    params = PL_DEF(params, &pl_vulkan_default_params);
     struct pl_vulkan *pl_vk = talloc_zero(NULL, struct pl_vulkan);
     struct vk_ctx *vk = pl_vk->priv = talloc_zero(pl_vk, struct vk_ctx);
     vk->ctx = ctx;
