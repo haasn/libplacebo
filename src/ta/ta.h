@@ -155,6 +155,7 @@ void *ta_oom_p(void *p);
 #define ta_oom_g(ptr) (TA_TYPEOF(ptr))ta_oom_p(ptr)
 
 void ta_enable_leak_report(void);
+void ta_print_leak_report(void); // no-op when disabled
 void *ta_dbg_set_loc(void *ptr, const char *name);
 void *ta_dbg_mark_as_string(void *ptr);
 

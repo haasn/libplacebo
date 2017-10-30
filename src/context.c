@@ -17,9 +17,40 @@
 
 #include <stdio.h>
 #include <locale.h>
+#include <pthread.h>
 
 #include "common.h"
 #include "context.h"
+
+static pthread_mutex_t pl_ctx_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int pl_ctx_refcount;
+
+static void global_init(void)
+{
+    printf_c_init();
+
+    const char *enable_leak = getenv("LIBPLACEBO_LEAK_REPORT");
+    if (enable_leak && strcmp(enable_leak, "1") == 0)
+        talloc_enable_leak_report();
+
+#ifdef NDEBUG
+    const char *disable_dbg = getenv("LIBPLACEBO_ENABLE_SECURITY_BUGS");
+    if (!disable_dbg || strcmp(disable_dbg, "1") != 0) {
+        fprintf(stderr, "libplacebo was built without debugging code. This "
+                "configuration is very dangerous and outright irresponsible, "
+                "since it turns several error cases into undefined behavior. "
+                "If you're absolutely sure this is what you want to be doing, "
+                "you can set LIBPLACEBO_ENABLE_SECURITY_BUGS=1 to suppress "
+                "this warning.");
+    }
+#endif
+}
+
+static void global_uninit(void)
+{
+    printf_c_uninit();
+    talloc_print_leak_report();
+}
 
 struct pl_context *pl_context_create(int api_ver,
                                      const struct pl_context_params *params)
@@ -35,31 +66,26 @@ struct pl_context *pl_context_create(int api_ver,
         abort();
     }
 
+    // Do global initialization only when refcount is 0
+    pthread_mutex_lock(&pl_ctx_mutex);
+    if (pl_ctx_refcount++ == 0)
+        global_init();
+    pthread_mutex_unlock(&pl_ctx_mutex);
+
     struct pl_context *ctx = talloc_zero(NULL, struct pl_context);
     ctx->params = *params;
-
-#ifdef NDEBUG
-    const char *disable_dbg = getenv("LIBPLACEBO_ENABLE_SECURITY_BUGS");
-    if (!disable_dbg || strcmp(disable_dbg, "1") != 0) {
-        pl_warn(ctx, "libplacebo was built without debugging code. This "
-                "configuration is very dangerous and outright irresponsible, "
-                "since it turns several error cases into undefined behavior. "
-                "If you're absolutely sure this is what you want to be doing, "
-                "you can set LIBPLACEBO_ENABLE_SECURITY_BUGS=1 to suppress "
-                "this warning.");
-    }
-#endif
-
-    const char *enable_ta = getenv("LIBPLACEBO_LEAK_REPORT");
-    if (enable_ta && strcmp(enable_ta, "1") == 0)
-        talloc_enable_leak_report();
-
     return ctx;
 }
 
 void pl_context_destroy(struct pl_context **ctx)
 {
     TA_FREEP(ctx);
+
+    // Do global uninitialization only when refcount reaches 0
+    pthread_mutex_lock(&pl_ctx_mutex);
+    if (--pl_ctx_refcount == 0)
+        global_uninit();
+    pthread_mutex_unlock(&pl_ctx_mutex);
 }
 
 static FILE *default_stream(void *stream, enum pl_log_level level)

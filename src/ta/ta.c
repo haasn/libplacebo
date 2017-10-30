@@ -360,8 +360,11 @@ static size_t get_children_size(struct ta_header *h)
     return size;
 }
 
-static void print_leak_report(void)
+void ta_print_leak_report(void)
 {
+    if (!enable_leak_check)
+        return;
+
     pthread_mutex_lock(&ta_dbg_mutex);
     if (leak_node.leak_next && leak_node.leak_next != &leak_node) {
         size_t size = 0;
@@ -407,7 +410,6 @@ void ta_enable_leak_report(void)
     if (!leak_node.leak_prev && !leak_node.leak_next) {
         leak_node.leak_prev = &leak_node;
         leak_node.leak_next = &leak_node;
-        atexit(print_leak_report);
     }
     pthread_mutex_unlock(&ta_dbg_mutex);
 }

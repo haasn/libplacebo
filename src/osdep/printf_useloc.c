@@ -19,23 +19,26 @@
 
 #include <stdlib.h>
 #include <locale.h>
-#include <pthread.h>
 
 #include "osdep/printf.h"
 
 static locale_t cloc;
-static pthread_once_t once = PTHREAD_ONCE_INIT;
 
-static void init_cloc()
+void printf_c_init()
 {
     cloc = newlocale(0, "C", (locale_t) 0);
     if (!cloc)
         abort();
 }
 
+void printf_c_uninit()
+{
+    freelocale(cloc);
+    cloc = (locale_t) 0;
+}
+
 #define WRAP_VA(fn, ...)                            \
     ({                                              \
-        pthread_once(&once, init_cloc);             \
         locale_t oldloc = uselocale((locale_t) 0);  \
         uselocale(cloc);                            \
         int ret_va = fn(__VA_ARGS__);               \

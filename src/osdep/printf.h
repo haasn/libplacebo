@@ -35,3 +35,7 @@ PRINTF_WRAP(vprintf);
 PRINTF_WRAP(vfprintf);
 PRINTF_WRAP(vsprintf);
 PRINTF_WRAP(vsnprintf);
+
+// Initialization/uninitialization functions. (Not thread safe!)
+void printf_c_init(void);
+void printf_c_uninit(void);

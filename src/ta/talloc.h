@@ -40,6 +40,7 @@
 #define talloc_set_destructor           ta_xset_destructor
 #define talloc_parent                   ta_find_parent
 #define talloc_enable_leak_report       ta_enable_leak_report
+#define talloc_print_leak_report        ta_print_leak_report
 #define talloc_size                     ta_xalloc_size
 #define talloc_zero_size                ta_xzalloc_size
 #define talloc_get_size                 ta_get_size
