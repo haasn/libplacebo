@@ -58,9 +58,13 @@ struct pl_context_params {
 
 // Creates a new, blank pl_context. The argument `api_ver` must be given as
 // PL_API_VER (this is used to detect ABI mismatch due to broken linking).
+// `params` defaults to pl_context_default_params if left as NULL.
 // Returns NULL on failure.
 struct pl_context *pl_context_create(int api_ver,
                                      const struct pl_context_params *params);
+
+// Equal to (struct pl_context_params) {0}
+extern const struct pl_context_params pl_context_default_params;
 
 // Except where otherwise noted, all objects allocated from this pl_context
 // must be destroyed by the user before the pl_context is destroyed.

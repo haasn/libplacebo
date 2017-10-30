@@ -73,9 +73,11 @@ struct pl_context *pl_context_create(int api_ver,
     pthread_mutex_unlock(&pl_ctx_mutex);
 
     struct pl_context *ctx = talloc_zero(NULL, struct pl_context);
-    ctx->params = *params;
+    ctx->params = *PL_DEF(params, &pl_context_default_params);
     return ctx;
 }
+
+const struct pl_context_params pl_context_default_params = {0};
 
 void pl_context_destroy(struct pl_context **ctx)
 {
