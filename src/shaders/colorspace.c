@@ -350,9 +350,9 @@ static void pl_shader_inverse_ootf(struct pl_shader *sh,
 
 const struct pl_color_map_params pl_color_map_default_params = {
     .intent                  = PL_INTENT_RELATIVE_COLORIMETRIC,
-    .tone_mapping_algo       = PL_TONE_MAPPING_MOBIUS,
-    .tone_mapping_desaturate = 1.0,
-    .peak_detect_frames      = 50,
+    .tone_mapping_algo       = PL_TONE_MAPPING_HABLE,
+    .tone_mapping_desaturate = 0.5,
+    .peak_detect_frames      = 10,
 };
 
 static void hdr_update_peak(struct pl_shader *sh,
@@ -361,7 +361,7 @@ static void hdr_update_peak(struct pl_shader *sh,
     if (!params->peak_detect_state)
         return;
 
-    int frames = params->peak_detect_frames;
+    int frames = PL_DEF(params->peak_detect_frames, 10);
     if (frames < 1 || frames > 1000) {
         PL_ERR(sh, "Parameter peak_detect_frames must be >= 1 and <= 1000 "
                "(was %d).", frames);

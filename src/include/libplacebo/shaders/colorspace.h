@@ -77,8 +77,10 @@ enum pl_tone_mapping_algorithm {
     // use in Uncharted 2, inspired by a similar tone-mapping algorithm used by
     // Kodak. Popularized by its use in video games with HDR rendering.
     // Preserves both dark and bright details very well, but comes with the
-    // drawback of darkening the overall image quite significantly. This is
-    // sort of similar to REINHARD tone-mapping + parameter 0.24.
+    // drawback of darkening the overall image quite significantly. Users are
+    // recommended to use HDR peak detection to compensate for the missing
+    // brightness. This is sort of similar to REINHARD tone-mapping + parameter
+    // 0.24.
     PL_TONE_MAPPING_HABLE,
 
     // Fits a gamma (power) function to transfer between the source and target
@@ -104,7 +106,7 @@ struct pl_color_map_params {
     // Algorithm and configuration used for tone-mapping. For non-tunable
     // algorithms, the `param` is ignored. If the tone mapping parameter is
     // left as 0.0, the tone-mapping curve's preferred default parameter will
-    // be used. The default algorithm is PL_TONE_MAPPING_MOBIUS.
+    // be used. The default algorithm is PL_TONE_MAPPING_HABLE.
     enum pl_tone_mapping_algorithm tone_mapping_algo;
     float tone_mapping_param;
 
@@ -112,27 +114,26 @@ struct pl_color_map_params {
     // spectral colors towards white, resulting in a more natural-looking
     // depiction of very bright sunlit regions or images of the sunlit sky. The
     // coefficient indicates the strength of the desaturation - higher values
-    // desaturate more strongly. The default value is 1.0, which roughly
-    // matches the desaturation strength used by e.g. ACES ODT. A setting of
-    // 0.0 disables this.
+    // desaturate more strongly. The default value is 0.5, which is fairly
+    // conservative - due in part to the excessive use of extremely bright
+    // scenes in badly mastered HDR content. Using a value of 1.0 makes it
+    // approximately match the desaturation strength used by the ACES ODT. A
+    // setting of 0.0 disables this.
     float tone_mapping_desaturate;
 
     // If true, enables the gamut warning feature. This will visibly highlight
     // all out-of-gamut colors (by inverting them), if they would have been
     // clipped as a result of gamut/tone mapping. (Obviously, this feature only
-    // makes sense with TONE_MAPPING_CLIP)
+    // really makes sense with TONE_MAPPING_CLIP)
     bool gamut_warning;
 
     // If peak_detect_state is set to a valid pointer, this enables the peak
     // detection feature. The resource object will be implicitly created and
     // updated by pl_shader_color_map, but must be destroyed by the caller when
     // no longer needed. Subsequent calls to pl_color_map for subsequent frames
-    // should re-use the same peak_detect_state. `peak_detect_frames` specifies
-    // how many frames to smooth (average) over, and must be at least 1. A
-    // recommend value range is 50-100, which smooths the peak over a time
-    // period of typically 1-2 seconds and results in a fairly jitter-free
-    // result while still reacting relatively quickly to scene transitions. The
-    // default for peak_detect_frames is 50.
+    // should re-use the same peak_detect_state. `peak_detect_frames` defaults
+    // to 10 and specifies how many frames to smooth (average) over, and must
+    // be at least 1.
     struct pl_shader_obj **peak_detect_state;
     int peak_detect_frames;
 };
