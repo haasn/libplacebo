@@ -92,7 +92,7 @@ void pl_context_destroy(struct pl_context **ctx)
 
 static FILE *default_stream(void *stream, enum pl_log_level level)
 {
-    return PL_DEF(stream, level < PL_LOG_WARN ? stderr : stdout);
+    return PL_DEF(stream, level <= PL_LOG_WARN ? stderr : stdout);
 }
 
 void pl_log_simple(void *stream, enum pl_log_level level, const char *msg)
