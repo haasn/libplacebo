@@ -122,6 +122,7 @@ enum pl_shader_obj_type {
 struct pl_shader_obj {
     enum pl_shader_obj_type type;
     const struct ra *ra;
+
     // The following fields are for free use by the shader
     const struct ra_buf *buf;
     const struct ra_tex *tex;

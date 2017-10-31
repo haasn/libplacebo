@@ -86,7 +86,7 @@ uint64_t pl_shader_signature(const struct pl_shader *sh);
 // for more information.
 enum pl_shader_sig {
     PL_SHADER_SIG_NONE = 0, // no input / void output
-    PL_SHADER_SIG_COLOR,    // vec4 color (normalized to range 0.0 - 1.0)
+    PL_SHADER_SIG_COLOR,    // vec4 color (normalized so that 1.0 is the ref white)
 };
 
 // Represents a finalized shader fragment. This is not a complete shader, but a

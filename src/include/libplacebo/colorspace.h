@@ -211,6 +211,10 @@ struct pl_color_space {
     // The highest value that occurs in the signal, relative to the reference
     // white. (0 = unknown)
     float sig_peak;
+
+    // The average light level that occurs in the signal, relative to the
+    // reference white. (0 = unknown)
+    float sig_avg;
 };
 
 // Replaces unknown values in the first struct by those of the second struct.
