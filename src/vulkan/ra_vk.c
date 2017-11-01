@@ -815,9 +815,14 @@ static void vk_buf_deref(const struct ra *ra, struct ra_buf *buf)
     }
 }
 
+// visible_writes: whether or not this buffer access consistites a write to the
+// buffer that modifies the contents in a way that the host should be able to
+// see. This includes any synchronization necessary to ensure the writes are
+// made visible to the host.
 static void buf_barrier(const struct ra *ra, struct vk_cmd *cmd,
                         const struct ra_buf *buf, VkPipelineStageFlags newStage,
-                        VkAccessFlags newAccess, int offset, size_t size)
+                        VkAccessFlags newAccess, int offset, size_t size,
+                        bool visible_writes)
 {
     struct ra_buf_vk *buf_vk = buf->priv;
 
@@ -831,9 +836,14 @@ static void buf_barrier(const struct ra *ra, struct vk_cmd *cmd,
     };
 
     if (buf_vk->needs_flush || buf->params.host_mapped) {
-        buffBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        buf_vk->current_stage = VK_PIPELINE_STAGE_HOST_BIT;
+        buffBarrier.srcAccessMask |= VK_ACCESS_HOST_WRITE_BIT;
+        buf_vk->current_stage |= VK_PIPELINE_STAGE_HOST_BIT;
         buf_vk->needs_flush = false;
+    }
+
+    if (visible_writes && (buf->params.host_readable || buf->params.host_mapped)) {
+        buffBarrier.dstAccessMask |= VK_ACCESS_HOST_READ_BIT;
+        newStage |= VK_PIPELINE_STAGE_HOST_BIT;
     }
 
     if (buffBarrier.srcAccessMask != buffBarrier.dstAccessMask) {
@@ -869,7 +879,7 @@ static void vk_buf_write(const struct ra *ra, const struct ra_buf *buf,
         }
 
         buf_barrier(ra, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_WRITE_BIT, offset, size);
+                    VK_ACCESS_TRANSFER_WRITE_BIT, offset, size, true);
 
         VkDeviceSize bufOffset = buf_vk->slice.mem.offset + offset;
         vkCmdUpdateBuffer(cmd->buf, buf_vk->slice.buf, bufOffset, size, data);
@@ -1007,7 +1017,7 @@ static bool vk_tex_upload(const struct ra *ra,
     };
 
     buf_barrier(ra, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_ACCESS_TRANSFER_READ_BIT, region.bufferOffset, size);
+                VK_ACCESS_TRANSFER_READ_BIT, region.bufferOffset, size, false);
 
     tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -1056,7 +1066,7 @@ static bool vk_tex_download(const struct ra *ra,
     };
 
     buf_barrier(ra, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_ACCESS_TRANSFER_WRITE_BIT, region.bufferOffset, size);
+                VK_ACCESS_TRANSFER_WRITE_BIT, region.bufferOffset, size, true);
 
     tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_READ_BIT,
@@ -1658,7 +1668,8 @@ static void vk_update_descriptor(const struct ra *ra, struct vk_cmd *cmd,
         struct ra_buf_vk *buf_vk = buf->priv;
 
         buf_barrier(ra, cmd, buf, passStages[pass->params.type],
-                    access, buf_vk->slice.mem.offset, buf->params.size);
+                    access, buf_vk->slice.mem.offset, buf->params.size,
+                    access != RA_DESC_ACCESS_READONLY);
 
         VkDescriptorBufferInfo *binfo = &pass_vk->dsbinfo[idx];
         *binfo = (VkDescriptorBufferInfo) {
@@ -1780,7 +1791,7 @@ static void vk_pass_run(const struct ra *ra,
 
         buf_barrier(ra, cmd, buf, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
                     VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
-                    buf_vk->slice.mem.offset, vparams.size);
+                    buf_vk->slice.mem.offset, vparams.size, false);
 
         vkCmdBindVertexBuffers(cmd->buf, 0, 1, &buf_vk->slice.buf,
                                &buf_vk->slice.mem.offset);
