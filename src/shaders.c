@@ -48,7 +48,7 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident)
     struct pl_shader new = {
         .ctx = sh->ctx,
         .ra  = sh->ra,
-        .tmp = talloc_new(sh),
+        .tmp = sh->tmp,
         .mutable = true,
         .ident = ident,
 
@@ -64,7 +64,7 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident)
     for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
         new.buffers[i] = (struct bstr) { .start = sh->buffers[i].start };
 
-    talloc_free(sh->tmp);
+    talloc_free_children(sh->tmp);
     *sh = new;
 }
 
