@@ -181,8 +181,6 @@ static void vk_setup_formats(struct ra *ra)
     ra_print_formats(ra, PL_LOG_DEBUG);
 }
 
-static struct ra_fns ra_fns_vk;
-
 const struct ra *ra_create_vk(struct vk_ctx *vk)
 {
     assert(vk->dev);
@@ -1857,6 +1855,23 @@ static void vk_flush(const struct ra *ra)
     vk_flush_commands(vk);
 }
 
+struct vk_cmd *ra_vk_finish_frame(const struct ra *ra, const struct ra_tex *tex)
+{
+    struct ra_vk *p = ra->priv;
+    struct vk_cmd *cmd = vk_require_cmd(ra, GRAPHICS);
+    if (!cmd)
+        return NULL;
+
+    struct ra_tex_vk *tex_vk = tex->priv;
+    assert(tex_vk->external_img);
+    tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+    // Return this directly instead of going through vk_submit
+    p->cmd = NULL;
+    return cmd;
+}
+
 static struct ra_fns ra_fns_vk = {
     .destroy                = vk_destroy_ra,
     .tex_create             = vk_tex_create,
@@ -1880,20 +1895,3 @@ static struct ra_fns ra_fns_vk = {
     .pass_run               = vk_pass_run,
     .flush                  = vk_flush,
 };
-
-struct vk_cmd *ra_vk_finish_frame(const struct ra *ra, const struct ra_tex *tex)
-{
-    struct ra_vk *p = ra->priv;
-    struct vk_cmd *cmd = vk_require_cmd(ra, GRAPHICS);
-    if (!cmd)
-        return NULL;
-
-    struct ra_tex_vk *tex_vk = tex->priv;
-    assert(tex_vk->external_img);
-    tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-
-    // Return this directly instead of going through vk_submit
-    p->cmd = NULL;
-    return cmd;
-}
