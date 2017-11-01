@@ -19,6 +19,7 @@
 #define LIBPLACEBO_COLORSPACE_H_
 
 #include <stdbool.h>
+#include "common.h"
 
 // The underlying color representation (e.g. RGB, XYZ or YCbCr)
 enum pl_color_system {
