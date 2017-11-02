@@ -81,6 +81,12 @@ has_useloc = cc.has_header_symbol(
   prefix: '#define _XOPEN_SOURCE 700'
 )
 
+if not has_useloc
+  has_useloc = cc.has_header_symbol(
+    'xlocale.h', 'uselocale',
+  )
+endif
+
 ## osdep/printf.h
 if has_useloc
   sources += 'osdep/printf_useloc.c'

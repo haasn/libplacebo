@@ -20,6 +20,11 @@
 #include <stdlib.h>
 #include <locale.h>
 
+#ifdef __APPLE__
+# include <string.h>
+# include <xlocale.h>
+#endif
+
 #include "osdep/printf.h"
 
 static locale_t cloc;
