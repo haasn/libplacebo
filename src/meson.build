@@ -87,11 +87,22 @@ if not has_useloc
   )
 endif
 
+if not has_useloc
+  has_usewinloc = cc.has_header_symbol(
+    'locale.h', '_create_locale'
+  )
+endif
+
 ## osdep/printf.h
 if has_useloc
   sources += 'osdep/printf_useloc.c'
 else
-  error('Could not find any suitable implementation of `osdep/printf.h`!')
+  if has_usewinloc
+    sources += 'osdep/printf_usewinloc.c'
+    build_deps += cc.find_library('msvcr100', required: true)
+  else
+    error('Could not find any suitable implementation of `osdep/printf.h`!')
+  endif
 endif
 
 # Configuration
