@@ -442,6 +442,7 @@ static void ta_dbg_add(struct ta_header *h){}
 static void ta_dbg_check_header(struct ta_header *h){}
 static void ta_dbg_remove(struct ta_header *h){}
 
+void ta_print_leak_report(void){}
 void ta_enable_leak_report(void){}
 void *ta_dbg_set_loc(void *ptr, const char *loc){return ptr;}
 void *ta_dbg_mark_as_string(void *ptr){return ptr;}
