@@ -89,7 +89,7 @@ static void pass_destroy(struct pl_dispatch *dp, struct pass *pass)
 
 struct pl_dispatch *pl_dispatch_create(struct pl_context *ctx, const struct ra *ra)
 {
-    assert(ctx);
+    pl_assert(ctx);
     struct pl_dispatch *dp = talloc_zero(ctx, struct pl_dispatch);
     dp->ctx = ctx;
     dp->ra = ra;
@@ -247,7 +247,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
     const char *out_color = "gl_FragColor";
     switch(params->type) {
     case RA_PASS_RASTER: {
-        assert(vert_pos);
+        pl_assert(vert_pos);
         struct bstr *vert_head = &dp->tmp[TMP_VERT_HEAD];
         struct bstr *vert_body = &dp->tmp[TMP_VERT_BODY];
 
@@ -263,7 +263,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             ADD(vert_head, "%s%s %s vert%s;\n", loc, vert_in, type, va->name);
 
             if (strcmp(va->name, vert_pos) == 0) {
-                assert(va->fmt->num_components == 2);
+                pl_assert(va->fmt->num_components == 2);
                 ADD(vert_body, "gl_Position = vec4(vert%s, 0.0, 1.0);\n", va->name);
             } else {
                 // Everything else is just blindly passed through
@@ -342,7 +342,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             const char *format = tex->params.format->glsl_format;
             const char *access = ra_desc_access_glsl_name(desc->access);
             int dims = ra_tex_params_dimension(tex->params);
-            assert(format);
+            pl_assert(format);
 
             if (ra->glsl.vulkan) {
                 ADD(glsl, "layout(binding=%d, %s)", desc->binding, format);
@@ -381,14 +381,14 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
     ADD(glsl, "%s", res->glsl);
     ADD(glsl, "void main() {\n");
 
-    assert(res->input == PL_SHADER_SIG_NONE);
+    pl_assert(res->input == PL_SHADER_SIG_NONE);
     switch (params->type) {
     case RA_PASS_RASTER:
-        assert(res->output == PL_SHADER_SIG_COLOR);
+        pl_assert(res->output == PL_SHADER_SIG_COLOR);
         ADD(glsl, "%s = %s();\n", out_color, res->name);
         break;
     case RA_PASS_COMPUTE:
-        assert(res->output == PL_SHADER_SIG_NONE);
+        pl_assert(res->output == PL_SHADER_SIG_NONE);
         ADD(glsl, "%s();\n", res->name);
         break;
     default: abort();
@@ -509,7 +509,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
 
     // Pre-fill the desc_binding for the UBO
     if (pass->ubo) {
-        assert(ubo_index >= 0);
+        pl_assert(ubo_index >= 0);
         rparams->desc_bindings[ubo_index].object = pass->ubo;
     }
 
@@ -538,7 +538,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
                             const struct pl_shader_var *sv, struct pass_var *pv)
 {
     struct ra_var_layout host_layout = ra_var_host_layout(0, &sv->var);
-    assert(host_layout.size);
+    pl_assert(host_layout.size);
 
     // Use the cache to skip updates if possible
     if (pv->cached_data && !memcmp(sv->data, pv->cached_data, host_layout.size))
@@ -558,7 +558,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
         break;
     }
     case PASS_VAR_UBO: {
-        assert(pass->ubo);
+        pl_assert(pass->ubo);
         uintptr_t src = (uintptr_t) sv->data;
         uintptr_t end = src + (ptrdiff_t) host_layout.size;
         size_t dst = pv->layout.offset;
@@ -570,7 +570,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
         break;
     }
     case PASS_VAR_PUSHC:
-        assert(rparams->push_constants);
+        pl_assert(rparams->push_constants);
         memcpy_layout(rparams->push_constants, pv->layout, sv->data, host_layout);
         break;
     };
@@ -581,7 +581,7 @@ static void translate_compute_shader(struct pl_dispatch *dp,
                                      const struct ra_tex *target)
 {
     // Simulate a framebuffer using storage images
-    assert(target->params.storable);
+    pl_assert(target->params.storable);
     ident_t fbo = sh_desc(sh, (struct pl_shader_desc) {
         .desc = {
             .name    = "out_image",
@@ -591,7 +591,7 @@ static void translate_compute_shader(struct pl_dispatch *dp,
         .object = target,
     });
 
-    assert(sh->res.output == PL_SHADER_SIG_COLOR);
+    pl_assert(sh->res.output == PL_SHADER_SIG_COLOR);
     GLSL("imageStore(%s, ivec2(gl_GlobalInvocationID), color);\n", fbo);
     sh->res.output = PL_SHADER_SIG_NONE;
 

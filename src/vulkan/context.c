@@ -37,8 +37,8 @@ void pl_vulkan_destroy(const struct pl_vulkan **pl_vk)
     if (vk->dev) {
         PL_DEBUG(vk, "Flushing remaining commands...");
         vk_poll_commands(vk, UINT64_MAX);
-        assert(vk->num_cmds_queued == 0);
-        assert(vk->num_cmds_pending == 0);
+        pl_assert(vk->num_cmds_queued == 0);
+        pl_assert(vk->num_cmds_pending == 0);
         for (int i = 0; i < vk->num_pools; i++)
             vk_cmdpool_destroy(vk, vk->pools[i]);
         for (int i = 0; i < vk->num_signals; i++)
@@ -198,7 +198,7 @@ static void add_qinfo(void *tactx, VkDeviceQueueCreateInfo **qinfos,
 
 static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params)
 {
-    assert(vk->physd);
+    pl_assert(vk->physd);
     void *tmp = talloc_new(NULL);
 
     // Enumerate the queue families and find suitable families for each task
@@ -223,7 +223,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     // Vulkan requires at least one GRAPHICS queue, so if this fails something
     // is horribly wrong.
-    assert(idx_gfx >= 0);
+    pl_assert(idx_gfx >= 0);
     PL_INFO(vk, "Using graphics queue (QF %d)", idx_gfx);
 
     // If needed, ensure we can actually present to the surface using this queue

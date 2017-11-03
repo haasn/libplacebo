@@ -82,7 +82,7 @@ static struct vk_cmd *vk_require_cmd(const struct ra *ra, enum queue_type type)
     default: abort();
     }
 
-    assert(pool);
+    pl_assert(pool);
     if (p->cmd && p->cmd->pool == pool)
         return p->cmd;
 
@@ -162,7 +162,7 @@ static void vk_setup_formats(struct ra *ra)
         if (prop.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) {
             fmt->caps |= RA_FMT_CAP_VERTEX;
             fmt->glsl_type = ra_var_glsl_type_name(ra_var_from_fmt(fmt, ""));
-            assert(fmt->glsl_type);
+            pl_assert(fmt->glsl_type);
         }
 
         if (fmt->caps & RA_FMT_CAP_STORABLE) {
@@ -183,7 +183,7 @@ static void vk_setup_formats(struct ra *ra)
 
 const struct ra *ra_create_vk(struct vk_ctx *vk)
 {
-    assert(vk->dev);
+    pl_assert(vk->dev);
 
     struct ra *ra = talloc_zero(NULL, struct ra);
     ra->ctx = vk->ctx;
@@ -378,7 +378,7 @@ static void tex_signal(const struct ra *ra, struct vk_cmd *cmd,
 {
     struct ra_tex_vk *tex_vk = tex->priv;
     struct vk_ctx *vk = ra_vk_get(ra);
-    assert(!tex_vk->sig);
+    pl_assert(!tex_vk->sig);
 
     tex_vk->sig = vk_cmd_signal(vk, cmd, stage);
     tex_vk->sig_stage = stage;
@@ -421,7 +421,7 @@ static bool vk_init_image(const struct ra *ra, const struct ra_tex *tex)
 
     const struct ra_tex_params *params = &tex->params;
     struct ra_tex_vk *tex_vk = tex->priv;
-    assert(tex_vk->img);
+    pl_assert(tex_vk->img);
 
     tex_vk->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
     tex_vk->current_access = 0;
@@ -888,7 +888,7 @@ static bool vk_buf_read(const struct ra *ra, const struct ra_buf *buf,
                         size_t offset, void *dest, size_t size)
 {
     struct ra_buf_vk *buf_vk = buf->priv;
-    assert(buf_vk->slice.data);
+    pl_assert(buf_vk->slice.data);
 
     uintptr_t addr = (uintptr_t) buf_vk->slice.data + (ptrdiff_t) offset;
     memcpy(dest, (void *) addr, size);
@@ -996,7 +996,7 @@ static bool vk_tex_upload(const struct ra *ra,
     if (!cmd)
         goto error;
 
-    assert(params->buf);
+    pl_assert(params->buf);
     const struct ra_buf *buf = params->buf;
     struct ra_buf_vk *buf_vk = buf->priv;
     struct pl_rect3d rc = params->rc;
@@ -1045,7 +1045,7 @@ static bool vk_tex_download(const struct ra *ra,
     if (!cmd)
         goto error;
 
-    assert(params->buf);
+    pl_assert(params->buf);
     const struct ra_buf *buf = params->buf;
     struct ra_buf_vk *buf_vk = buf->priv;
     struct pl_rect3d rc = params->rc;
@@ -1605,7 +1605,7 @@ static void vk_update_descriptor(const struct ra *ra, struct vk_cmd *cmd,
 {
     struct ra_pass_vk *pass_vk = pass->priv;
     struct ra_desc *desc = &pass->params.descriptors[idx];
-    assert(ds);
+    pl_assert(ds);
 
     VkWriteDescriptorSet *wds = &pass_vk->dswrite[idx];
     *wds = (VkWriteDescriptorSet) {
@@ -1863,7 +1863,7 @@ struct vk_cmd *ra_vk_finish_frame(const struct ra *ra, const struct ra_tex *tex)
         return NULL;
 
     struct ra_tex_vk *tex_vk = tex->priv;
-    assert(tex_vk->external_img);
+    pl_assert(tex_vk->external_img);
     tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                 VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 

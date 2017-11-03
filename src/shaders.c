@@ -25,7 +25,7 @@
 struct pl_shader *pl_shader_alloc(struct pl_context *ctx, const struct ra *ra,
                                   uint8_t ident)
 {
-    assert(ctx);
+    pl_assert(ctx);
     struct pl_shader *sh = talloc_ptrtype(ctx, sh);
     *sh = (struct pl_shader) {
         .ctx = ctx,
@@ -70,7 +70,7 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident)
 
 bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem)
 {
-    assert(bw && bh);
+    pl_assert(bw && bh);
     int *sh_bw = &sh->res.compute_group_size[0];
     int *sh_bh = &sh->res.compute_group_size[1];
 
@@ -107,7 +107,7 @@ bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem)
         return true;
 
     // If neither are flexible, make sure the parameters match
-    assert(!flex && !sh->flexible_work_groups);
+    pl_assert(!flex && !sh->flexible_work_groups);
     if (bw != *sh_bw || bh != *sh_bh) {
         PL_TRACE(sh, "Disabling compute shader due to incompatible group "
                  "sizes %dx%d and %dx%d", *sh_bw, *sh_bh, bw, bh);
@@ -160,7 +160,7 @@ ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
 
 ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
 {
-    assert(sh->ra);
+    pl_assert(sh->ra);
     int namespace = ra_desc_namespace(sh->ra, sd.desc.type);
 
     sd.desc.name = sh_fresh(sh, sd.desc.name);
@@ -217,7 +217,7 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
         return NULL;
     }
 
-    assert(ra_tex_params_dimension(tex->params) == 2);
+    pl_assert(ra_tex_params_dimension(tex->params) == 2);
     ident_t itex = sh_desc(sh, (struct pl_shader_desc) {
         .desc = {
             .name = name,
@@ -259,7 +259,7 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
 void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
                       const char *fmt, ...)
 {
-    assert(buf >= 0 && buf < SH_BUF_COUNT);
+    pl_assert(buf >= 0 && buf < SH_BUF_COUNT);
 
     va_list ap;
     va_start(ap, fmt);
@@ -270,7 +270,7 @@ void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
 // Finish the current shader body and return its function name
 static ident_t sh_split(struct pl_shader *sh)
 {
-    assert(sh->mutable);
+    pl_assert(sh->mutable);
 
     static const char *outsigs[] = {
         [PL_SHADER_SIG_NONE]  = "void",
@@ -347,7 +347,7 @@ bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h)
     // If we require an input, but there is none available - just get it from
     // the user by turning it into an explicit input signature.
     if (!sh->res.output && insig) {
-        assert(!sh->res.input);
+        pl_assert(!sh->res.input);
         sh->res.input = insig;
     } else if (sh->res.output != insig) {
         PL_ERR(sh, "Illegal sequence of shader operations! Current output "

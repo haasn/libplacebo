@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include <assert.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -26,6 +25,7 @@
 #include "ta/talloc.h"
 #include "osdep/printf.h"
 #include "config.h"
+#include "pl_assert.h"
 
 // Include all of the symbols that should be public in a way that marks them
 // as being externally visible. (Otherwise, all symbols are hidden by default)

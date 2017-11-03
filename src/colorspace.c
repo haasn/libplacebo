@@ -394,7 +394,7 @@ const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim
     if (!prim)
         prim = PL_COLOR_PRIM_BT_709;
 
-    assert(prim < PL_ARRAY_SIZE(primaries));
+    pl_assert(prim < PL_ARRAY_SIZE(primaries));
     return &primaries[prim];
 }
 
@@ -542,7 +542,7 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *s
  */
 static struct pl_matrix3x3 luma_coeffs(float lr, float lg, float lb)
 {
-    assert(fabs(lr+lg+lb - 1) < 1e-6);
+    pl_assert(fabs(lr+lg+lb - 1) < 1e-6);
     return (struct pl_matrix3x3) {{
         {1, 0,                    2 * (1-lr)          },
         {1, -2 * (1-lb) * lb/lg, -2 * (1-lr) * lr/lg  },

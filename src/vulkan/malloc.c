@@ -92,7 +92,7 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
     if (!slab)
         return;
 
-    assert(slab->used == 0);
+    pl_assert(slab->used == 0);
     vkDestroyBuffer(vk->dev, slab->buffer, VK_ALLOC);
     // also implicitly unmaps the memory if needed
     vkFreeMemory(vk->dev, slab->mem, VK_ALLOC);
@@ -300,7 +300,7 @@ void vk_free_memslice(struct vk_malloc *ma, struct vk_memslice slice)
     if (!slab)
         return;
 
-    assert(slab->used >= slice.size);
+    pl_assert(slab->used >= slice.size);
     slab->used -= slice.size;
 
     PL_DEBUG(vk, "Freeing slice %zu + %zu from slab with size %zu",
@@ -397,14 +397,14 @@ static bool heap_get_region(struct vk_malloc *ma, struct vk_heap *heap,
     size_t slab_size = PLVK_HEAP_SLAB_GROWTH_RATE * cur_size;
     slab_size = PL_MAX(PLVK_HEAP_MINIMUM_SLAB_SIZE, slab_size);
     slab_size = PL_MIN(PLVK_HEAP_MAXIMUM_SLAB_SIZE, slab_size);
-    assert(slab_size >= size);
+    pl_assert(slab_size >= size);
     slab = slab_alloc(ma, heap, slab_size);
     if (!slab)
         return false;
     TARRAY_APPEND(NULL, heap->slabs, heap->num_slabs, slab);
 
     // Return the only region there is in a newly allocated slab
-    assert(slab->num_regions == 1);
+    pl_assert(slab->num_regions == 1);
     *out_slab = slab;
     *out_index = 0;
     return true;

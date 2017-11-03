@@ -279,7 +279,7 @@ static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
 bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *src,
                             const struct pl_sample_polar_params *params)
 {
-    assert(params);
+    pl_assert(params);
     if (!params->filter.polar) {
         PL_ERR(sh, "Trying to use polar sampling with a non-polar filter?");
         return false;
@@ -287,7 +287,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
 
     const struct ra *ra = sh->ra;
     const struct ra_tex *tex = src->tex;
-    assert(ra && tex);
+    pl_assert(ra && tex);
 
     int comps;
     float ratio_x, ratio_y;
@@ -348,7 +348,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
         }
     }
 
-    assert(lut->filter && lut->tex);
+    pl_assert(lut->filter && lut->tex);
     ident_t lut_pos = sh_lut_pos(sh, lut_entries);
     ident_t lut_tex = sh_desc(sh, (struct pl_shader_desc) {
         .desc = {

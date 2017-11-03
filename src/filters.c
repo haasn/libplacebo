@@ -103,7 +103,7 @@ double pl_filter_sample(const struct pl_filter_config *c, double x)
 // subpixel offset `offset`. Writes exactly f->row_size values to *out.
 static void compute_row(struct pl_filter *f, double offset, float *out)
 {
-    assert(f->row_size > 0);
+    pl_assert(f->row_size > 0);
     double sum = 0;
     for (int i = 0; i < f->row_size; i++) {
         double x = offset - (i - f->row_size / 2.0 + 1);
@@ -129,7 +129,7 @@ static struct pl_filter_function *dupfilter(void *tactx,
 const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
                                        const struct pl_filter_params *params)
 {
-    assert(params);
+    pl_assert(params);
     if (params->lut_entries <= 0 || !params->config.kernel) {
         pl_fatal(ctx, "Invalid params: missing lut_entries or config.kernel");
         return NULL;

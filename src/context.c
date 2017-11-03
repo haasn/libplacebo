@@ -32,18 +32,6 @@ static void global_init(void)
     const char *enable_leak = getenv("LIBPLACEBO_LEAK_REPORT");
     if (enable_leak && strcmp(enable_leak, "1") == 0)
         talloc_enable_leak_report();
-
-#ifdef NDEBUG
-    const char *disable_dbg = getenv("LIBPLACEBO_ENABLE_SECURITY_BUGS");
-    if (!disable_dbg || strcmp(disable_dbg, "1") != 0) {
-        fprintf(stderr, "libplacebo was built without debugging code. This "
-                "configuration is very dangerous and outright irresponsible, "
-                "since it turns several error cases into undefined behavior. "
-                "If you're absolutely sure this is what you want to be doing, "
-                "you can set LIBPLACEBO_ENABLE_SECURITY_BUGS=1 to suppress "
-                "this warning.");
-    }
-#endif
 }
 
 static void global_uninit(void)

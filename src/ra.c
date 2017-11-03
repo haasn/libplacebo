@@ -272,32 +272,32 @@ const struct ra_tex *ra_tex_create(const struct ra *ra,
 {
     switch (ra_tex_params_dimension(*params)) {
     case 1:
-        assert(params->w > 0);
-        assert(params->w <= ra->limits.max_tex_1d_dim);
-        assert(!params->renderable);
+        pl_assert(params->w > 0);
+        pl_assert(params->w <= ra->limits.max_tex_1d_dim);
+        pl_assert(!params->renderable);
         break;
     case 2:
-        assert(params->w > 0 && params->h > 0);
-        assert(params->w <= ra->limits.max_tex_2d_dim);
-        assert(params->h <= ra->limits.max_tex_2d_dim);
+        pl_assert(params->w > 0 && params->h > 0);
+        pl_assert(params->w <= ra->limits.max_tex_2d_dim);
+        pl_assert(params->h <= ra->limits.max_tex_2d_dim);
         break;
     case 3:
-        assert(params->w > 0 && params->h > 0 && params->d > 0);
-        assert(params->w <= ra->limits.max_tex_3d_dim);
-        assert(params->h <= ra->limits.max_tex_3d_dim);
-        assert(params->d <= ra->limits.max_tex_3d_dim);
-        assert(!params->renderable);
+        pl_assert(params->w > 0 && params->h > 0 && params->d > 0);
+        pl_assert(params->w <= ra->limits.max_tex_3d_dim);
+        pl_assert(params->h <= ra->limits.max_tex_3d_dim);
+        pl_assert(params->d <= ra->limits.max_tex_3d_dim);
+        pl_assert(!params->renderable);
         break;
     }
 
     const struct ra_fmt *fmt = params->format;
-    assert(fmt);
-    assert(!params->sampleable || fmt->caps & RA_FMT_CAP_SAMPLEABLE);
-    assert(!params->renderable || fmt->caps & RA_FMT_CAP_RENDERABLE);
-    assert(!params->storable   || fmt->caps & RA_FMT_CAP_STORABLE);
-    assert(!params->blit_src   || fmt->caps & RA_FMT_CAP_BLITTABLE);
-    assert(!params->blit_dst   || fmt->caps & RA_FMT_CAP_BLITTABLE);
-    assert(params->sample_mode != RA_TEX_SAMPLE_LINEAR || fmt->caps & RA_FMT_CAP_LINEAR);
+    pl_assert(fmt);
+    pl_assert(!params->sampleable || fmt->caps & RA_FMT_CAP_SAMPLEABLE);
+    pl_assert(!params->renderable || fmt->caps & RA_FMT_CAP_RENDERABLE);
+    pl_assert(!params->storable   || fmt->caps & RA_FMT_CAP_STORABLE);
+    pl_assert(!params->blit_src   || fmt->caps & RA_FMT_CAP_BLITTABLE);
+    pl_assert(!params->blit_dst   || fmt->caps & RA_FMT_CAP_BLITTABLE);
+    pl_assert(params->sample_mode != RA_TEX_SAMPLE_LINEAR || fmt->caps & RA_FMT_CAP_LINEAR);
 
     return ra->impl->tex_create(ra, params);
 }
@@ -342,7 +342,7 @@ void ra_tex_destroy(const struct ra *ra, const struct ra_tex **tex)
 void ra_tex_clear(const struct ra *ra, const struct ra_tex *dst,
                   const float color[4])
 {
-    assert(dst->params.blit_dst);
+    pl_assert(dst->params.blit_dst);
 
     ra_tex_invalidate(ra, dst);
     ra->impl->tex_clear(ra, dst, color);
@@ -370,21 +370,21 @@ void ra_tex_blit(const struct ra *ra,
                  const struct ra_tex *dst, const struct ra_tex *src,
                  struct pl_rect3d dst_rc, struct pl_rect3d src_rc)
 {
-    assert(src->params.format->texel_size == dst->params.format->texel_size);
-    assert(src->params.blit_src);
-    assert(dst->params.blit_dst);
-    assert(src_rc.x0 >= 0 && src_rc.x0 < src->params.w);
-    assert(src_rc.y0 >= 0 && src_rc.y0 < src->params.h);
-    assert(src_rc.z0 >= 0 && src_rc.z0 < src->params.d);
-    assert(src_rc.x1 > 0 && src_rc.x1 <= src->params.w);
-    assert(src_rc.y1 > 0 && src_rc.y1 <= src->params.h);
-    assert(src_rc.z1 > 0 && src_rc.z1 <= src->params.d);
-    assert(dst_rc.x0 >= 0 && dst_rc.x0 < dst->params.w);
-    assert(dst_rc.y0 >= 0 && dst_rc.y0 < dst->params.h);
-    assert(dst_rc.z0 >= 0 && dst_rc.z0 < dst->params.d);
-    assert(dst_rc.x1 > 0 && dst_rc.x1 <= dst->params.w);
-    assert(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
-    assert(dst_rc.z1 > 0 && dst_rc.z1 <= dst->params.d);
+    pl_assert(src->params.format->texel_size == dst->params.format->texel_size);
+    pl_assert(src->params.blit_src);
+    pl_assert(dst->params.blit_dst);
+    pl_assert(src_rc.x0 >= 0 && src_rc.x0 < src->params.w);
+    pl_assert(src_rc.y0 >= 0 && src_rc.y0 < src->params.h);
+    pl_assert(src_rc.z0 >= 0 && src_rc.z0 < src->params.d);
+    pl_assert(src_rc.x1 > 0 && src_rc.x1 <= src->params.w);
+    pl_assert(src_rc.y1 > 0 && src_rc.y1 <= src->params.h);
+    pl_assert(src_rc.z1 > 0 && src_rc.z1 <= src->params.d);
+    pl_assert(dst_rc.x0 >= 0 && dst_rc.x0 < dst->params.w);
+    pl_assert(dst_rc.y0 >= 0 && dst_rc.y0 < dst->params.h);
+    pl_assert(dst_rc.z0 >= 0 && dst_rc.z0 < dst->params.d);
+    pl_assert(dst_rc.x1 > 0 && dst_rc.x1 <= dst->params.w);
+    pl_assert(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
+    pl_assert(dst_rc.z1 > 0 && dst_rc.z1 <= dst->params.d);
 
     strip_coords(src, &src_rc);
     strip_coords(dst, &dst_rc);
@@ -438,30 +438,30 @@ static void fix_tex_transfer(const struct ra *ra,
     switch (ra_tex_params_dimension(tex->params))
     {
     case 3:
-        assert(rc.z1 > rc.z0);
-        assert(rc.z0 >= 0 && rc.z0 <  tex->params.d);
-        assert(rc.z1 >  0 && rc.z1 <= tex->params.d);
-        assert(params->stride_h >= pl_rect_h(rc));
+        pl_assert(rc.z1 > rc.z0);
+        pl_assert(rc.z0 >= 0 && rc.z0 <  tex->params.d);
+        pl_assert(rc.z1 >  0 && rc.z1 <= tex->params.d);
+        pl_assert(params->stride_h >= pl_rect_h(rc));
         // fall through
     case 2:
-        assert(rc.y1 > rc.y0);
-        assert(rc.y0 >= 0 && rc.y0 <  tex->params.h);
-        assert(rc.y1 >  0 && rc.y1 <= tex->params.h);
-        assert(params->stride_w >= pl_rect_w(rc));
+        pl_assert(rc.y1 > rc.y0);
+        pl_assert(rc.y0 >= 0 && rc.y0 <  tex->params.h);
+        pl_assert(rc.y1 >  0 && rc.y1 <= tex->params.h);
+        pl_assert(params->stride_w >= pl_rect_w(rc));
         // fall through
     case 1:
-        assert(rc.x1 > rc.x0);
-        assert(rc.x0 >= 0 && rc.x0 <  tex->params.w);
-        assert(rc.x1 >  0 && rc.x1 <= tex->params.w);
+        pl_assert(rc.x1 > rc.x0);
+        pl_assert(rc.x0 >= 0 && rc.x0 <  tex->params.w);
+        pl_assert(rc.x1 >  0 && rc.x1 <= tex->params.w);
         break;
     }
 
-    assert(!params->buf ^ !params->ptr); // exactly one
+    pl_assert(!params->buf ^ !params->ptr); // exactly one
     if (params->buf) {
         const struct ra_buf *buf = params->buf;
         size_t size = ra_tex_transfer_size(params);
-        assert(params->buf_offset == PL_ALIGN2(params->buf_offset, 4));
-        assert(params->buf_offset + size <= buf->params.size);
+        pl_assert(params->buf_offset == PL_ALIGN2(params->buf_offset, 4));
+        pl_assert(params->buf_offset + size <= buf->params.size);
     }
 #endif
 
@@ -479,8 +479,8 @@ bool ra_tex_upload(const struct ra *ra,
                    const struct ra_tex_transfer_params *params)
 {
     const struct ra_tex *tex = params->tex;
-    assert(tex);
-    assert(tex->params.host_writable);
+    pl_assert(tex);
+    pl_assert(tex->params.host_writable);
 
     struct ra_tex_transfer_params fixed = *params;
     fix_tex_transfer(ra, &fixed);
@@ -491,8 +491,8 @@ bool ra_tex_download(const struct ra *ra,
                      const struct ra_tex_transfer_params *params)
 {
     const struct ra_tex *tex = params->tex;
-    assert(tex);
-    assert(tex->params.host_readable);
+    pl_assert(tex);
+    pl_assert(tex->params.host_readable);
 
     struct ra_tex_transfer_params fixed = *params;
     fix_tex_transfer(ra, &fixed);
@@ -504,23 +504,23 @@ const struct ra_buf *ra_buf_create(const struct ra *ra,
 {
     switch (params->type) {
     case RA_BUF_TEX_TRANSFER:
-        assert(ra->limits.max_xfer_size);
-        assert(params->size <= ra->limits.max_xfer_size);
+        pl_assert(ra->limits.max_xfer_size);
+        pl_assert(params->size <= ra->limits.max_xfer_size);
         break;
     case RA_BUF_UNIFORM:
-        assert(ra->limits.max_ubo_size);
-        assert(params->size <= ra->limits.max_ubo_size);
+        pl_assert(ra->limits.max_ubo_size);
+        pl_assert(params->size <= ra->limits.max_ubo_size);
         break;
     case RA_BUF_STORAGE:
-        assert(ra->limits.max_ssbo_size);
-        assert(params->size <= ra->limits.max_ssbo_size);
+        pl_assert(ra->limits.max_ssbo_size);
+        pl_assert(params->size <= ra->limits.max_ssbo_size);
         break;
     case RA_BUF_PRIVATE: break;
     default: abort();
     }
 
     const struct ra_buf *buf = ra->impl->buf_create(ra, params);
-    assert(buf->data || !params->host_mapped);
+    pl_assert(buf->data || !params->host_mapped);
     return buf;
 }
 
@@ -536,18 +536,18 @@ void ra_buf_destroy(const struct ra *ra, const struct ra_buf **buf)
 void ra_buf_write(const struct ra *ra, const struct ra_buf *buf,
                   size_t buf_offset, const void *data, size_t size)
 {
-    assert(buf->params.host_writable);
-    assert(buf_offset + size <= buf->params.size);
-    assert(buf_offset == PL_ALIGN2(buf_offset, 4));
+    pl_assert(buf->params.host_writable);
+    pl_assert(buf_offset + size <= buf->params.size);
+    pl_assert(buf_offset == PL_ALIGN2(buf_offset, 4));
     ra->impl->buf_write(ra, buf, buf_offset, data, size);
 }
 
 bool ra_buf_read(const struct ra *ra, const struct ra_buf *buf,
                  size_t buf_offset, void *dest, size_t size)
 {
-    assert(buf->params.host_readable);
-    assert(buf_offset + size <= buf->params.size);
-    assert(buf_offset == PL_ALIGN2(buf_offset, 4));
+    pl_assert(buf->params.host_readable);
+    pl_assert(buf_offset + size <= buf->params.size);
+    pl_assert(buf_offset == PL_ALIGN2(buf_offset, 4));
     return ra->impl->buf_read(ra, buf, buf_offset, dest, size);
 }
 
@@ -636,7 +636,7 @@ struct ra_var ra_var_from_fmt(const struct ra_fmt *fmt, const char *name)
         [RA_FMT_SINT]  = RA_VAR_SINT,
     };
 
-    assert(fmt->type < PL_ARRAY_SIZE(vartypes));
+    pl_assert(fmt->type < PL_ARRAY_SIZE(vartypes));
     return (struct ra_var) {
         .type  = vartypes[fmt->type],
         .dim_v = fmt->num_components,
@@ -760,44 +760,44 @@ const char *ra_desc_access_glsl_name(enum ra_desc_access mode)
 const struct ra_pass *ra_pass_create(const struct ra *ra,
                                      const struct ra_pass_params *params)
 {
-    assert(params->glsl_shader);
+    pl_assert(params->glsl_shader);
     switch(params->type) {
     case RA_PASS_RASTER:
-        assert(params->vertex_shader);
+        pl_assert(params->vertex_shader);
         for (int i = 0; i < params->num_vertex_attribs; i++) {
             struct ra_vertex_attrib va = params->vertex_attribs[i];
-            assert(va.name);
-            assert(va.fmt);
-            assert(va.fmt->caps & RA_FMT_CAP_VERTEX);
-            assert(va.offset + va.fmt->texel_size <= params->vertex_stride);
+            pl_assert(va.name);
+            pl_assert(va.fmt);
+            pl_assert(va.fmt->caps & RA_FMT_CAP_VERTEX);
+            pl_assert(va.offset + va.fmt->texel_size <= params->vertex_stride);
         }
 
         const struct ra_fmt *target_fmt = params->target_dummy.params.format;
-        assert(target_fmt);
-        assert(target_fmt->caps & RA_FMT_CAP_RENDERABLE);
-        assert(!params->enable_blend || target_fmt->caps & RA_FMT_CAP_BLENDABLE);
+        pl_assert(target_fmt);
+        pl_assert(target_fmt->caps & RA_FMT_CAP_RENDERABLE);
+        pl_assert(!params->enable_blend || target_fmt->caps & RA_FMT_CAP_BLENDABLE);
         break;
     case RA_PASS_COMPUTE:
-        assert(ra->caps & RA_CAP_COMPUTE);
+        pl_assert(ra->caps & RA_CAP_COMPUTE);
         break;
     default: abort();
     }
 
     for (int i = 0; i < params->num_variables; i++) {
-        assert(ra->caps & RA_CAP_INPUT_VARIABLES);
+        pl_assert(ra->caps & RA_CAP_INPUT_VARIABLES);
         struct ra_var var = params->variables[i];
-        assert(var.name);
-        assert(ra_var_glsl_type_name(var));
+        pl_assert(var.name);
+        pl_assert(ra_var_glsl_type_name(var));
     }
 
     for (int i = 0; i < params->num_descriptors; i++) {
         struct ra_desc desc = params->descriptors[i];
-        assert(desc.name);
+        pl_assert(desc.name);
         // TODO: enforce disjoint bindings if possible?
     }
 
-    assert(params->push_constants_size <= ra->limits.max_pushc_size);
-    assert(params->push_constants_size == PL_ALIGN2(params->push_constants_size, 4));
+    pl_assert(params->push_constants_size <= ra->limits.max_pushc_size);
+    pl_assert(params->push_constants_size == PL_ALIGN2(params->push_constants_size, 4));
 
     return ra->impl->pass_create(ra, params);
 }
@@ -842,30 +842,29 @@ void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params)
     if (!new.scissors.y0 && !new.scissors.y1)
         new.scissors.y1 = params->target->params.h;
 
-#ifndef NDEBUG
     for (int i = 0; i < pass->params.num_descriptors; i++) {
         struct ra_desc desc = pass->params.descriptors[i];
         struct ra_desc_binding db = params->desc_bindings[i];
-        assert(db.object);
+        pl_assert(db.object);
         switch (desc.type) {
         case RA_DESC_SAMPLED_TEX: {
             const struct ra_tex *tex = db.object;
-            assert(tex->params.sampleable);
+            pl_assert(tex->params.sampleable);
             break;
         }
         case RA_DESC_STORAGE_IMG: {
             const struct ra_tex *tex = db.object;
-            assert(tex->params.storable);
+            pl_assert(tex->params.storable);
             break;
         }
         case RA_DESC_BUF_UNIFORM: {
             const struct ra_buf *buf = db.object;
-            assert(buf->params.type == RA_BUF_UNIFORM);
+            pl_assert(buf->params.type == RA_BUF_UNIFORM);
             break;
         }
         case RA_DESC_BUF_STORAGE: {
             const struct ra_buf *buf = db.object;
-            assert(buf->params.type == RA_BUF_STORAGE);
+            pl_assert(buf->params.type == RA_BUF_STORAGE);
             break;
         }
         default: abort();
@@ -874,48 +873,47 @@ void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params)
 
     for (int i = 0; i < params->num_var_updates; i++) {
         struct ra_var_update vu = params->var_updates[i];
-        assert(ra->caps & RA_CAP_INPUT_VARIABLES);
-        assert(vu.index >= 0 && vu.index < pass->params.num_variables);
-        assert(vu.data);
+        pl_assert(ra->caps & RA_CAP_INPUT_VARIABLES);
+        pl_assert(vu.index >= 0 && vu.index < pass->params.num_variables);
+        pl_assert(vu.data);
     }
 
-    assert(params->push_constants || !pass->params.push_constants_size);
+    pl_assert(params->push_constants || !pass->params.push_constants_size);
 
     switch (pass->params.type) {
     case RA_PASS_RASTER: {
-        assert(params->vertex_data);
+        pl_assert(params->vertex_data);
         switch (pass->params.vertex_type) {
         case RA_PRIM_TRIANGLE_LIST:
-            assert(params->vertex_count % 3 == 0);
+            pl_assert(params->vertex_count % 3 == 0);
             // fall through
         case RA_PRIM_TRIANGLE_STRIP:
         case RA_PRIM_TRIANGLE_FAN:
-            assert(params->vertex_count >= 3);
+            pl_assert(params->vertex_count >= 3);
             break;
         }
 
         const struct ra_tex *tex = params->target;
-        assert(tex);
-        assert(ra_tex_params_dimension(tex->params) == 2);
-        assert(ra_tex_params_compat(tex->params, pass->params.target_dummy.params));
-        assert(tex->params.renderable);
+        pl_assert(tex);
+        pl_assert(ra_tex_params_dimension(tex->params) == 2);
+        pl_assert(ra_tex_params_compat(tex->params, pass->params.target_dummy.params));
+        pl_assert(tex->params.renderable);
         struct pl_rect2d vp = new.viewport;
         struct pl_rect2d sc = new.scissors;
-        assert(pl_rect_w(vp) > 0);
-        assert(pl_rect_h(vp) > 0);
-        assert(pl_rect_w(sc) > 0);
-        assert(pl_rect_h(sc) > 0);
+        pl_assert(pl_rect_w(vp) > 0);
+        pl_assert(pl_rect_h(vp) > 0);
+        pl_assert(pl_rect_w(sc) > 0);
+        pl_assert(pl_rect_h(sc) > 0);
         break;
     }
     case RA_PASS_COMPUTE:
         for (int i = 0; i < PL_ARRAY_SIZE(params->compute_groups); i++) {
-            assert(params->compute_groups[i] >= 0);
-            assert(params->compute_groups[i] <= ra->limits.max_dispatch[i]);
+            pl_assert(params->compute_groups[i] >= 0);
+            pl_assert(params->compute_groups[i] <= ra->limits.max_dispatch[i]);
         }
         break;
     default: abort();
     }
-#endif
 
     if (params->target && !pass->params.load_target)
         ra_tex_invalidate(ra, params->target);
@@ -1010,7 +1008,7 @@ const struct ra_buf *ra_buf_pool_get(const struct ra *ra,
                                      struct ra_buf_pool *pool,
                                      const struct ra_buf_params *params)
 {
-    assert(!params->initial_data);
+    pl_assert(!params->initial_data);
 
     if (!ra_buf_params_compatible(params, &pool->current_params)) {
         ra_buf_pool_uninit(ra, pool);
