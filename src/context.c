@@ -29,15 +29,20 @@ static void global_init(void)
 {
     printf_c_init();
 
+#ifndef NDEBUG
     const char *enable_leak = getenv("LIBPLACEBO_LEAK_REPORT");
     if (enable_leak && strcmp(enable_leak, "1") == 0)
         talloc_enable_leak_report();
+#endif
 }
 
 static void global_uninit(void)
 {
     printf_c_uninit();
+
+#ifndef NDEBUG
     talloc_print_leak_report();
+#endif
 }
 
 struct pl_context *pl_context_create(int api_ver,
