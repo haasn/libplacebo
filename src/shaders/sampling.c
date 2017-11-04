@@ -41,40 +41,21 @@ void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
     if (!tex)
         return;
 
-    GLSL("vec2 pos = %s;\n", pos);
+    ident_t prng, state;
+    prng = sh_prng(sh, params->seed, pos, &state);
 
-    // Initialize the PRNG. This is friendly for wide usage and returns in
-    // a very pleasant-looking distribution across frames even if the difference
-    // between input coordinates is very small. Shamelessly stolen from some
-    // GLSL tricks forum post years from a decade ago.
-    ident_t random = sh_fresh(sh, "random"), permute = sh_fresh(sh, "permute");
-    GLSLH("float %s(float x) {                          \n"
-          "    x = (34.0 * x + 1.0) * x;                \n"
-          "    return x - floor(x * 1.0/289.0) * 289.0; \n" // mod 289
-          "}                                            \n"
-          "float %s(inout float state) {                \n"
-          "    state = %s(state);                       \n"
-          "    return fract(state * 1.0/41.0);          \n"
-          "}\n", permute, random, permute);
-
-    ident_t seed = sh_var(sh, (struct pl_shader_var) {
-        .var  = ra_var_float("seed"),
-        .data = &params->seed,
-    });
-
-    GLSL("vec3 _m = vec3(pos, %s) + vec3(1.0);         \n"
-         "float prng = %s(%s(%s(_m.x) + _m.y) + _m.z); \n"
-         "vec4 avg, diff;                              \n"
-         "color = texture(%s, pos);                    \n",
-         seed, permute, permute, permute, tex);
+    GLSL("vec2 pos = %s;            \n"
+         "vec4 avg, diff;           \n"
+         "color = texture(%s, pos); \n",
+         pos, tex);
 
     // Helper function: Compute a stochastic approximation of the avg color
     // around a pixel, given a specified radius
     ident_t average = sh_fresh(sh, "average");
-    GLSLH("vec4 %s(vec2 pos, float range, inout float prng) {   \n"
+    GLSLH("vec4 %s(vec2 pos, float range, inout float %s) {     \n"
           // Compute a random angle and distance
-          "    float dist = %s(prng) * range;                   \n"
-          "    float dir  = %s(prng) * %f;                      \n"
+          "    float dist = %s * range;                         \n"
+          "    float dir  = %s * %f;                            \n"
           "    vec2 o = dist * vec2(cos(dir), sin(dir));        \n"
           // Sample at quarter-turn intervals around the source pixel
           "    vec4 sum = vec4(0.0);                            \n"
@@ -84,23 +65,25 @@ void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
           "    sum += texture(%s, pos + %s * vec2( o.x, -o.y)); \n"
           // Return the (normalized) average
           "    return 0.25 * sum;                               \n"
-          "}\n", average, random, random, M_PI * 2,
+          "}\n",
+          average, state, prng, prng, M_PI * 2,
           tex, pt, tex, pt, tex, pt, tex, pt);
 
     // For each iteration, compute the average at a given distance and
     // pick it instead of the color if the difference is below the threshold.
     for (int i = 1; i <= params->iterations; i++) {
-        GLSL("avg = %s(pos, %f, prng);                              \n"
+        GLSL("avg = %s(pos, %f, %s);                                \n"
              "diff = abs(color - avg);                              \n"
              "color = mix(avg, color, greaterThan(diff, vec4(%f))); \n",
-             average, i * params->radius, params->threshold / (1000 * i));
+             average, i * params->radius, state,
+             params->threshold / (1000 * i));
     }
 
     // Add some random noise to smooth out residual differences
     if (params->grain > 0) {
-        GLSL("vec3 noise = vec3(%s(prng), %s(prng), %s(prng)); \n"
-             "color.rgb += %f * (noise - vec3(0.5));           \n",
-             random, random, random, params->grain / 1000.0);
+        GLSL("vec3 noise = vec3(%s, %s, %s);         \n"
+             "color.rgb += %f * (noise - vec3(0.5)); \n",
+             prng, prng, prng, params->grain / 1000.0);
     }
 
     GLSL("}\n");
