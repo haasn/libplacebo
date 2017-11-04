@@ -413,3 +413,48 @@ ident_t sh_lut_pos(struct pl_shader *sh, int lut_size)
           name, 0.5 / lut_size, 1.0 - 0.5 / lut_size);
     return name;
 }
+
+ident_t sh_prng(struct pl_shader *sh, float seedval, ident_t coord,
+                ident_t *p_state)
+{
+    // Initialize the PRNG. This is friendly for wide usage and returns in
+    // a very pleasant-looking distribution across frames even if the difference
+    // between input coordinates is very small. This is based on BlumBlumShub,
+    // with some modifications for speed / aesthetics.
+    // cf. https://briansharpe.wordpress.com/2011/10/01/gpu-texture-free-noise/
+    ident_t randfun = sh_fresh(sh, "random"), permute = sh_fresh(sh, "permute");
+    GLSLH("float %s(float x) {                      \n"
+          "    x = (34.0 * x + 1.0) * x;            \n"
+          "    return fract(x * 1.0/289.0) * 289.0; \n" // (almost) mod 289
+          "}                                        \n"
+          "float %s(inout float state) {            \n"
+          "    state = %s(state);                   \n"
+          "    return fract(state * 1.0/41.0);      \n"
+          "}\n", permute, randfun, permute);
+
+    ident_t seed = sh_var(sh, (struct pl_shader_var) {
+        .var  = ra_var_float("seed"),
+        .data = &seedval,
+        .dynamic = true,
+    });
+
+    if (!coord) {
+        coord = sh_attr_vec2(sh, "randcoord", &(struct pl_rect2df) {
+            0.0, 0.0,
+            1.0, 1.0,
+        });
+    }
+
+    ident_t state = sh_fresh(sh, "prng");
+    GLSL("vec3 %s_m = vec3(vec2(%s), %s) + vec3(1.0); \n"
+         "float %s = %s(%s(%s(%s_m.x) + %s_m.y) + %s_m.z); \n",
+         state, coord, seed,
+         state, permute, permute, permute, state, state, state);
+
+    if (p_state)
+        *p_state = state;
+
+    ident_t res = sh_fresh(sh, "RAND");
+    GLSLH("#define %s (%s(%s))\n", res, randfun, state);
+    return res;
+}

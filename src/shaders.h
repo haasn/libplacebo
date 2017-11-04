@@ -131,3 +131,13 @@ struct pl_shader_obj {
 
 bool sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
                     enum pl_shader_obj_type type);
+
+// Initializes a PRNG. The resulting string will directly evaluate to a
+// pseudorandom, uniformly distributed float from [0.0,1.0]. If `coord` is set
+// to the name of a vec2, it will be used as the per-pixel seed value.
+// Otherwise, this function will internally attach a vec2 vertex attrib.
+//
+// Since this algorithm works by mutating a state variable, if the user wants
+// to use the resulting PRNG inside a subfunction, they must add an extra
+// `inout float %s` with the name of `state` to the signature. (Optional)
+ident_t sh_prng(struct pl_shader *sh, float seed, ident_t coord, ident_t *state);
