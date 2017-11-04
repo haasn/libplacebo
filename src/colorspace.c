@@ -243,6 +243,12 @@ const struct pl_color_space pl_color_space_bt2020_hlg = {
     .light     = PL_COLOR_LIGHT_SCENE_HLG,
 };
 
+const struct pl_color_space pl_color_space_monitor = {
+    .primaries = PL_COLOR_PRIM_BT_709, // sRGB primaries
+    .transfer  = PL_COLOR_TRC_GAMMA22, // typical response
+    .light     = PL_COLOR_LIGHT_DISPLAY,
+};
+
 void pl_color_space_merge(struct pl_color_space *orig,
                           const struct pl_color_space *new)
 {

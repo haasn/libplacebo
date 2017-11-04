@@ -231,6 +231,7 @@ extern const struct pl_color_space pl_color_space_srgb;
 extern const struct pl_color_space pl_color_space_bt709;
 extern const struct pl_color_space pl_color_space_hdr10;
 extern const struct pl_color_space pl_color_space_bt2020_hlg;
+extern const struct pl_color_space pl_color_space_monitor; // typical display
 
 // This represents metadata about extra operations to perform during colorspace
 // conversion, which correspond to artistic adjustments of the color.
