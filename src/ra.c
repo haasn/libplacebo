@@ -639,6 +639,7 @@ struct ra_var ra_var_from_fmt(const struct ra_fmt *fmt, const char *name)
     pl_assert(fmt->type < PL_ARRAY_SIZE(vartypes));
     return (struct ra_var) {
         .type  = vartypes[fmt->type],
+        .name  = name,
         .dim_v = fmt->num_components,
         .dim_m = 1,
         .dim_a = 1,
