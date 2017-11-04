@@ -24,6 +24,15 @@
 struct pl_vulkan {
     const struct ra *ra;
     void *priv;
+
+    // The vulkan objects in use. The user may use this for their own purposes,
+    // but please note that the lifetime is tied to the lifetime of the
+    // pl_vulkan object. The user must not destroy these themselves. Also,
+    // the created vulkan device may have any number of queues and queue
+    // family assignments; so using it for queue submission is ill-advised.
+    VkInstance instance;
+    VkPhysicalDevice phys_device;
+    VkDevice device;
 };
 
 struct pl_vulkan_params {
@@ -36,7 +45,7 @@ struct pl_vulkan_params {
 
     // The vulkan instance. May be set by the caller to inherit an existing
     // vulkan instace. If left as NULL, libplacebo will create its own vulkan
-    // context.
+    // instance.
     VkInstance instance;
 
     // When creating a new VkInstance, this controls whether or not to load the
@@ -65,28 +74,30 @@ struct pl_vulkan_params {
     // Controls whether or not to allow asynchronous transfers, using transfer
     // queue families, if supported by the device. This can be significantly
     // faster and more power efficient, and also allows streaming uploads in
-    // parallel with rendering commands. Generally safe to enable.
+    // parallel with rendering commands. Enabled by default.
     bool async_transfer;
 
     // Controls whether or not to allow asynchronous compute, using dedicated
     // compute queue families, if supported by the device. On some devices,
     // these can allow the GPU to schedule compute shaders in parallel with
-    // fragment shaders.
-    //
-    // Warning: Buggy on some drivers, may result in crashes.
+    // fragment shaders. Enabled by default.
     bool async_compute;
 
     // Limits the number of queues to request. If left as 0, this will enable
     // as many queues as the device supports. Multiple queues can result in
     // improved efficiency when submitting multiple commands that can entirely
-    // or partially execute in parallel.
-    //
-    // Warning: Setting this to a value higher than 1 can cause deadlocks on
-    // some drivers.
+    // or partially execute in parallel. Defaults to 1, since using more queues
+    // can actually decrease performance.
     int queue_count;
+
+    // Enables extra device extensions. Device creation will fail if these
+    // extensions are not all supported. The user may use this to enable e.g.
+    // interop extensions.
+    const char **extensions;
+    int num_extensions;
 };
 
-// Default/recommended parameters. Should generally be safe.
+// Default/recommended parameters. Should generally be safe and efficient.
 extern const struct pl_vulkan_params pl_vulkan_default_params;
 
 // Creates a new vulkan device based on the given parameters and initializes

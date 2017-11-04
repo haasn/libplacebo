@@ -21,9 +21,9 @@
 #include "ra_vk.h"
 
 const struct pl_vulkan_params pl_vulkan_default_params = {
-    // This combination should be pretty safe/stable
     .async_transfer = true,
-    .queue_count    = 1,
+    .async_compute  = true,
+    .queue_count    = 1, // enabling multiple queues often decreases perf
 };
 
 void pl_vulkan_destroy(const struct pl_vulkan **pl_vk)
@@ -256,8 +256,14 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     const char **exts = NULL;
     int num_exts = 0;
-    if (params->surface)
+    if (params->surface) {
+        TARRAY_APPEND(tmp, exts, num_exts, VK_KHR_SURFACE_EXTENSION_NAME);
         TARRAY_APPEND(tmp, exts, num_exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    }
+
+    // Add extra user extensions
+    for (int i = 0; i < params->num_extensions; i++)
+        TARRAY_APPEND(tmp, exts, num_exts, params->extensions[i]);
 
     VkDeviceCreateInfo dinfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -431,6 +437,10 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     if (!pl_vk->ra)
         goto error;
 
+    // Expose the resulting vulkan objects
+    pl_vk->instance = vk->inst;
+    pl_vk->phys_device = vk->physd;
+    pl_vk->device = vk->dev;
     return pl_vk;
 
 error:
