@@ -1,6 +1,6 @@
 majorver = '0'
 apiver   = '1'
-fixver   = '0'
+fixver   = '1'
 
 version = majorver + '.' + apiver + '.' + fixver
 
