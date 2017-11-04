@@ -345,9 +345,9 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             pl_assert(format);
 
             if (ra->glsl.vulkan) {
-                ADD(glsl, "layout(binding=%d, %s)", desc->binding, format);
+                ADD(glsl, "layout(binding=%d, %s) ", desc->binding, format);
             } else {
-                ADD(glsl, "layout(%s)", format);
+                ADD(glsl, "layout(%s) ", format);
             }
             ADD(glsl, "%s uniform %s %s;\n", access, types[dims], desc->name);
             break;
