@@ -74,6 +74,9 @@ size_t ra_buf_desc_size(const struct ra_desc *buf_desc);
 
 // RA-internal helpers: these should not be used outside of RA implementations
 
+// Log some metadata about the created RA
+void ra_print_info(const struct ra *ra, enum pl_log_level lev);
+
 // Sort the ra_format list into an optimal order. This tries to prefer formats
 // supporting more capabilities, while also trying to maintain a sane order
 // in terms of bit depth / component index.

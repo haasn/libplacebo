@@ -178,7 +178,6 @@ static void vk_setup_formats(struct ra *ra)
     }
 
     ra_sort_formats(ra);
-    ra_print_formats(ra, PL_LOG_DEBUG);
 }
 
 const struct ra *ra_create_vk(struct vk_ctx *vk)
@@ -228,6 +227,9 @@ const struct ra *ra_create_vk(struct vk_ctx *vk)
     }
 
     vk_setup_formats(ra);
+
+    ra_print_info(ra, PL_LOG_INFO);
+    ra_print_formats(ra, PL_LOG_DEBUG);
     return ra;
 
 error:

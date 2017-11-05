@@ -32,6 +32,43 @@ void ra_destroy(const struct ra *ra)
     ra->impl->destroy(ra);
 }
 
+void ra_print_info(const struct ra *ra, enum pl_log_level lev)
+{
+    PL_MSG(ra, lev, "RA information:");
+    PL_MSG(ra, lev, "    GLSL version: %d%s", ra->glsl.version,
+           ra->glsl.vulkan ? " (vulkan)" : ra->glsl.gles ? " es" : "");
+    PL_MSG(ra, lev, "    Capabilities: 0x%x", (unsigned int) ra->caps);
+    PL_MSG(ra, lev, "    Limits:");
+
+#define LOG(fmt, field) \
+    PL_MSG(ra, lev, "      %-26s " fmt, #field ":", ra->limits.field)
+
+    LOG("%d", max_tex_1d_dim);
+    LOG("%d", max_tex_2d_dim);
+    LOG("%d", max_tex_3d_dim);
+    LOG("%zu", max_pushc_size);
+    LOG("%zu", max_xfer_size);
+    LOG("%zu", max_ubo_size);
+    LOG("%zu", max_ssbo_size);
+    LOG("%d", min_gather_offset);
+    LOG("%d", max_gather_offset);
+
+    if (ra->caps & RA_CAP_COMPUTE) {
+        LOG("%zu", max_shmem_size);
+        LOG("%d", max_group_threads);
+        LOG("%d", max_group_size[0]);
+        LOG("%d", max_group_size[1]);
+        LOG("%d", max_group_size[2]);
+        LOG("%d", max_dispatch[0]);
+        LOG("%d", max_dispatch[1]);
+        LOG("%d", max_dispatch[2]);
+    }
+
+    LOG("%d", align_tex_xfer_stride);
+    LOG("%zu", align_tex_xfer_offset);
+#undef LOG
+}
+
 static int cmp_fmt(const void *pa, const void *pb)
 {
     const struct ra_fmt *a = *(const struct ra_fmt **)pa;
@@ -75,7 +112,7 @@ void ra_print_formats(const struct ra *ra, enum pl_log_level lev)
         return;
 
     PL_MSG(ra, lev, "RA texture formats:");
-    PL_MSG(ra, lev, "  %-10s %-6s %-4s %-6s %-4s %-13s %-10s %-10s",
+    PL_MSG(ra, lev, "    %-10s %-6s %-4s %-6s %-4s %-13s %-10s %-10s",
            "NAME", "TYPE", "SIZE", "CAPS", "COMP", "DEPTH", "GLSL_TYPE", "GLSL_FMT");
     for (int n = 0; n < ra->num_formats; n++) {
         const struct ra_fmt *fmt = ra->formats[n];
@@ -96,7 +133,7 @@ void ra_print_formats(const struct ra *ra, enum pl_log_level lev)
 
 #define IDX4(f) (f)[0], (f)[1], (f)[2], (f)[3]
 
-        PL_MSG(ra, lev, "  %-10s %-6s %-4zu 0x%-4x %c%c%c%c {%-2d %-2d %-2d %-2d} %-10s %-10s",
+        PL_MSG(ra, lev, "    %-10s %-6s %-4zu 0x%-4x %c%c%c%c {%-2d %-2d %-2d %-2d} %-10s %-10s",
                fmt->name, types[fmt->type], fmt->texel_size,
                (unsigned int) fmt->caps, IDX4(indices),
                IDX4(fmt->component_depth), PL_DEF(fmt->glsl_type, ""),
