@@ -596,13 +596,17 @@ static void translate_compute_shader(struct pl_dispatch *dp,
     sh->res.output = PL_SHADER_SIG_NONE;
 
     // Simulate vertex attributes using global definitions
-    ident_t scale = sh_var(sh, (struct pl_shader_var) {
+    ident_t out_scale = sh_var(sh, (struct pl_shader_var) {
         .var     = ra_var_vec2("out_scale"),
         .data    = &(float[2]){ 1.0 / target->params.w, 1.0 / target->params.h },
         .dynamic = true,
     });
 
-    GLSLP("#define frag_pos(id) (%s * (vec2(id) + vec2(0.5)))\n", scale);
+    GLSLP("#define frag_pos(id) (vec2(id) + vec2(0.5)) \n"
+          "#define frag_map(id) (%s * frag_pos(id))    \n"
+          "#define gl_FragCoord vec4(frag_pos(gl_GlobalInvocationID), 0.0, 1.0) \n",
+          out_scale);
+
     for (int n = 0; n < sh->res.num_vertex_attribs; n++) {
         const struct pl_shader_va *sva = &sh->res.vertex_attribs[n];
 
@@ -614,9 +618,9 @@ static void translate_compute_shader(struct pl_dispatch *dp,
         }
 
         GLSLP("#define %s_map(id) "
-             "(mix(mix(%s, %s, frag_pos(id).x), "
-             "     mix(%s, %s, frag_pos(id).x), "
-             "frag_pos(id).y))\n"
+             "(mix(mix(%s, %s, frag_map(id).x), "
+             "     mix(%s, %s, frag_map(id).x), "
+             "frag_map(id).y))\n"
              "#define %s (%s_map(gl_GlobalInvocationID))\n",
              sva->attr.name,
              points[0], points[1], points[2], points[3],
