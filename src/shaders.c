@@ -414,8 +414,7 @@ ident_t sh_lut_pos(struct pl_shader *sh, int lut_size)
     return name;
 }
 
-ident_t sh_prng(struct pl_shader *sh, float seedval, ident_t coord,
-                ident_t *p_state)
+ident_t sh_prng(struct pl_shader *sh, float seedval, ident_t *p_state)
 {
     // Initialize the PRNG. This is friendly for wide usage and returns in
     // a very pleasant-looking distribution across frames even if the difference
@@ -438,17 +437,10 @@ ident_t sh_prng(struct pl_shader *sh, float seedval, ident_t coord,
         .dynamic = true,
     });
 
-    if (!coord) {
-        coord = sh_attr_vec2(sh, "randcoord", &(struct pl_rect2df) {
-            0.0, 0.0,
-            1.0, 1.0,
-        });
-    }
-
     ident_t state = sh_fresh(sh, "prng");
-    GLSL("vec3 %s_m = vec3(vec2(%s), %s) + vec3(1.0); \n"
-         "float %s = %s(%s(%s(%s_m.x) + %s_m.y) + %s_m.z); \n",
-         state, coord, seed,
+    GLSL("vec3 %s_m = vec3(gl_FragCoord.xy, %s) + vec3(1.0); \n"
+         "float %s = %s(%s(%s(%s_m.x) + %s_m.y) + %s_m.z);   \n",
+         state, seed,
          state, permute, permute, permute, state, state, state);
 
     if (p_state)

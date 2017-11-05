@@ -42,7 +42,7 @@ void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
         return;
 
     ident_t prng, state;
-    prng = sh_prng(sh, params->seed, pos, &state);
+    prng = sh_prng(sh, params->seed, &state);
 
     GLSL("vec2 pos = %s;            \n"
          "vec4 avg, diff;           \n"
