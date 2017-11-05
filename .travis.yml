@@ -1,20 +1,34 @@
 language: c
+os: linux
+dist: trusty
+sudo: false
 
 compiler:
   - clang
   - gcc
 
-os: linux
-dist: trusty
-sudo: false
+branches:
+  only:
+    - master
+    - ci
+
+notifications:
+  email: false
+  irc:
+    channels:
+      - "irc.freenode.org#libplacebo"
+    on_success: change
+    on_failure: always
 
 script:
-  - meson builddir
-  - ninja -C builddir
-  - ninja -C builddir test
+  - meson build -D tests=true
+  - ninja -C build
+  - ninja -C build test
+
+after_failure: cat ./build/meson-logs/testlog.txt
 
 install:
-  - export PATH="`pwd`/build:${PATH}"
+  - export PATH="`pwd`/bin:${PATH}"
   - pyenv global system 3.5
-  - wget https://github.com/ninja-build/ninja/releases/download/v1.7.2/ninja-linux.zip && unzip -q ninja-linux.zip -d build
+  - wget https://github.com/ninja-build/ninja/releases/download/v1.7.2/ninja-linux.zip && unzip -q ninja-linux.zip -d bin
   - pip3 install meson
