@@ -1,5 +1,7 @@
 # libplacebo
 
+![travis-ci badge](https://travis-ci.org/haasn/libplacebo.svg?branch=master)
+
 **libplacebo** is essentially the core rendering engine of
 [mpv](https://mpv.io) turned into a library. This grew out of an interest to
 accomplish the following goals:
