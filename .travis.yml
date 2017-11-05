@@ -1,0 +1,20 @@
+language: c
+
+compiler:
+  - clang
+  - gcc
+
+os: linux
+dist: trusty
+sudo: false
+
+script:
+  - meson builddir
+  - ninja -C builddir
+  - ninja -C builddir test
+
+install:
+  - export PATH="`pwd`/build:${PATH}"
+  - pyenv global system 3.5
+  - wget https://github.com/ninja-build/ninja/releases/download/v1.7.2/ninja-linux.zip && unzip -q ninja-linux.zip -d build
+  - pip3 install meson
