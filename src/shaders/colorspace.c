@@ -744,3 +744,74 @@ void pl_shader_color_map(struct pl_shader *sh,
 
     GLSL("}\n");
 }
+
+void pl_shader_dither(struct pl_shader *sh, int new_depth,
+                      const struct pl_dither_params *params)
+{
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
+    if (new_depth <= 0 || new_depth > 256) {
+        PL_WARN(sh, "Invalid dither depth: %d.. ignoring", new_depth);
+        return;
+    }
+
+    GLSL("// pl_shader_dither \n"
+        "{                    \n"
+        "float bias;          \n");
+
+    switch (params->method) {
+    case PL_DITHER_WHITE_NOISE: {
+        float seed = 0.0;
+        if (params->temporal)
+            seed = (float) params->temporal_index / UINT8_MAX;
+        ident_t prng = sh_prng(sh, seed, NULL);
+        GLSL("bias = %s - 0.5;\n", prng);
+        break;
+    }
+
+    case PL_DITHER_ORDERED:
+        // Dither size is hard-coded to 16x16 for this algorithm
+        GLSL("vec2 pos = fract(gl_FragCoord.xy * 1.0/16.0);\n");
+
+        if (params->temporal) {
+            int phase = params->temporal_index % 8;
+            float r = phase * (M_PI / 2); // rotate
+            float m = phase < 4 ? 1 : -1; // mirror
+            float mat[2][2] = {
+                {cos(r),     -sin(r)    },
+                {sin(r) * m,  cos(r) * m},
+            };
+
+            ident_t rot = sh_var(sh, (struct pl_shader_var) {
+                .var  = ra_var_mat2("dither_rot"),
+                .data = &mat[0][0],
+                .dynamic = true,
+            });
+            GLSL("pos = %s * pos + vec2(1.0);\n", rot);
+        }
+
+        // Bitwise ordered dither using only 32-bit uints
+        GLSL("uvec2 xy = uvec2(16.0 * pos) %% 16u;     \n"
+             // Bitwise merge (morton number)
+             "xy.x = xy.x ^ xy.y;                      \n"
+             "xy = (xy | xy << 2) & uvec2(0x33333333); \n"
+             "xy = (xy | xy << 1) & uvec2(0x55555555); \n"
+             // Bitwise inversion
+             "uint b = xy.x + (xy.y << 1);             \n"
+             "b = (b * 0x0802u & 0x22110u) |           \n"
+             "    (b * 0x8020u & 0x88440u);            \n"
+             "b = 0x10101u * b;                        \n"
+             "b = (b >> 16) & 0xFFu;                   \n"
+             // Generate bias value
+             "bias = float(b) * 1.0/256.0 - 0.5;       \n");
+        break;
+    }
+
+    int scale = (1 << new_depth) - 1;
+    GLSL("color = vec4(%d.0) * color + vec4(bias); \n"
+         "color = round(color) * vec4(1.0/%d.0);   \n"
+         "}                                        \n",
+         scale, scale);
+
+}

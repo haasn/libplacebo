@@ -21,6 +21,8 @@
 // Color space transformation shaders. These all input and output a color
 // value (PL_SHADER_SIG_COLOR).
 
+#include <stdint.h>
+
 #include "../colorspace.h"
 #include "../shaders.h"
 
@@ -149,5 +151,42 @@ void pl_shader_color_map(struct pl_shader *sh,
                          const struct pl_color_map_params *params,
                          struct pl_color_space src, struct pl_color_space dst,
                          bool prelinearized);
+
+enum pl_dither_method {
+    // Ordered dither. Low quality, but cheap. Requires GLSL 130+.
+    PL_DITHER_ORDERED,
+
+    // Dither with white noise. Also fairly cheap, and unlike the other modes
+    // it doesn't show any repeating patterns either spatially or temporally,
+    // but the downside is that this is visually fairly jarring due to the
+    // presence of low frequencies.
+    PL_DITHER_WHITE_NOISE,
+};
+
+struct pl_dither_params {
+    // The source of the dither noise to use.
+    enum pl_dither_method method;
+
+    // Enables temporal dithering. This reduces the persistence of dithering
+    // artifacts by perturbing the dithering matrix per frame. When enabled,
+    // `temporal_dither_index` should be incremented by 1 for successive frames.
+    //
+    // Warning: This can cause nasty aliasing artifacts on some LCD screens.
+    bool temporal;
+    uint8_t temporal_index;
+};
+
+// Dither the colors to a lower depth, given in bits. This can be used on input
+// colors of any precision. Basically, this rounds the colors to only linear
+// multiples of the stated bit depth. The average intensity of the result
+// will not change (i.e., the dither noise is balanced in both directions)
+//
+// Warning: This dithering algorithm is not gamma-invariant; so using it for
+// very low bit depths (below 4 or so) will noticeably increase the brightness
+// of the resulting image. When doing low bit depth dithering for aesthetic
+// purposes, it's recommended that the user explicitly (de)linearize the colors
+// before and after this algorithm.
+void pl_shader_dither(struct pl_shader *sh, int new_depth,
+                      const struct pl_dither_params *params);
 
 #endif // LIBPLACEBO_SHADERS_COLORSPACE_H_
