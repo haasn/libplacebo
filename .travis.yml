@@ -22,8 +22,9 @@ notifications:
 
 script:
   - meson build -D tests=true
-  - ninja -C build
-  - ninja -C build test
+  - cat ./build/meson-logs/meson-log.txt
+  - ninja -v -C build
+  - ninja -v -C build test
 
 after_failure: cat ./build/meson-logs/testlog.txt
 
