@@ -50,6 +50,7 @@ struct pl_shader {
     bool is_compute;
     bool flexible_work_groups;
     uint8_t ident;
+    uint8_t index;
     int fresh;
     void *tmp;
 
@@ -137,4 +138,6 @@ bool sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
 // algorithm works by mutating a state variable, if the user wants to use the
 // resulting PRNG inside a subfunction, they must add an extra `inout float %s`
 // with the name of `state` to the signature. (Optional)
-ident_t sh_prng(struct pl_shader *sh, float seed, ident_t *state);
+//
+// If `temporal` is set, the PRNG will vary across frames.
+ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *state);

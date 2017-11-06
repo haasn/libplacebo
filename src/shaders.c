@@ -16,14 +16,15 @@
  */
 
 #include <stdio.h>
-#include "bstr/bstr.h"
+#include <math.h>
 
+#include "bstr/bstr.h"
 #include "common.h"
 #include "context.h"
 #include "shaders.h"
 
 struct pl_shader *pl_shader_alloc(struct pl_context *ctx, const struct ra *ra,
-                                  uint8_t ident)
+                                  uint8_t ident, uint8_t index)
 {
     pl_assert(ctx);
     struct pl_shader *sh = talloc_ptrtype(ctx, sh);
@@ -33,6 +34,7 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx, const struct ra *ra,
         .mutable = true,
         .tmp = talloc_new(sh),
         .ident = ident,
+        .index = index,
     };
 
     return sh;
@@ -43,7 +45,7 @@ void pl_shader_free(struct pl_shader **sh)
     TA_FREEP(sh);
 }
 
-void pl_shader_reset(struct pl_shader *sh, uint8_t ident)
+void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index)
 {
     struct pl_shader new = {
         .ctx = sh->ctx,
@@ -51,6 +53,7 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident)
         .tmp = sh->tmp,
         .mutable = true,
         .ident = ident,
+        .index = index,
 
         // Preserve array allocations
         .res = {
@@ -414,7 +417,7 @@ ident_t sh_lut_pos(struct pl_shader *sh, int lut_size)
     return name;
 }
 
-ident_t sh_prng(struct pl_shader *sh, float seedval, ident_t *p_state)
+ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *p_state)
 {
     // Initialize the PRNG. This is friendly for wide usage and returns in
     // a very pleasant-looking distribution across frames even if the difference
@@ -431,11 +434,15 @@ ident_t sh_prng(struct pl_shader *sh, float seedval, ident_t *p_state)
           "    return fract(state * 1.0/41.0);      \n"
           "}\n", permute, randfun, permute);
 
-    ident_t seed = sh_var(sh, (struct pl_shader_var) {
-        .var  = ra_var_float("seed"),
-        .data = &seedval,
-        .dynamic = true,
-    });
+    const char *seed = "0.0";
+    if (temporal) {
+        float seedval = modff(M_PI * sh->index, &(float){0});
+        seed = sh_var(sh, (struct pl_shader_var) {
+            .var  = ra_var_float("seed"),
+            .data = &seedval,
+            .dynamic = true,
+        });
+    }
 
     ident_t state = sh_fresh(sh, "prng");
     GLSL("vec3 %s_m = vec3(gl_FragCoord.xy, %s) + vec3(1.0); \n"

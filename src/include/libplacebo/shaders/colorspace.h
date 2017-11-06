@@ -168,12 +168,9 @@ struct pl_dither_params {
     enum pl_dither_method method;
 
     // Enables temporal dithering. This reduces the persistence of dithering
-    // artifacts by perturbing the dithering matrix per frame. When enabled,
-    // `temporal_dither_index` should be incremented by 1 for successive frames.
-    //
+    // artifacts by perturbing the dithering matrix per frame.
     // Warning: This can cause nasty aliasing artifacts on some LCD screens.
     bool temporal;
-    uint8_t temporal_index;
 };
 
 // Dither the colors to a lower depth, given in bits. This can be used on input

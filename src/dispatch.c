@@ -31,7 +31,8 @@ enum {
 struct pl_dispatch {
     struct pl_context *ctx;
     const struct ra *ra;
-    int current_ident;
+    uint8_t current_ident;
+    uint8_t current_index;
 
     // pool of pl_shaders, in order to avoid frequent re-allocations
     struct pl_shader **shaders;
@@ -118,16 +119,17 @@ struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp)
 
     struct pl_shader *sh;
     if (TARRAY_POP(dp->shaders, dp->num_shaders, &sh)) {
-        pl_shader_reset(sh, ident);
+        pl_shader_reset(sh, ident, dp->current_index);
         return sh;
     }
 
-    return pl_shader_alloc(dp->ctx, dp->ra, ident);
+    return pl_shader_alloc(dp->ctx, dp->ra, ident, dp->current_index);
 }
 
 void pl_dispatch_reset_frame(struct pl_dispatch *dp)
 {
     dp->current_ident = 0;
+    dp->current_index++;
 }
 
 static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,

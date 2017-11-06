@@ -47,11 +47,11 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
 // if the shader was instead merged into a different shader.
 void pl_dispatch_abort(struct pl_dispatch *dp, struct pl_shader *sh);
 
-// Resets the internal counters of the pl_dispatch. This should be called
-// whenever the user is going to begin with a new frame, in order to ensure
-// that the "same" calls to pl_dispatch_begin end up creating shaders with
-// the same identifier. Failing to follow this rule means shader caching will
-// not work correctly.
+// Reset/increments the internal counters of the pl_dispatch. This should be
+// called whenever the user is going to begin with a new frame, in order to
+// ensure that the "same" calls to pl_dispatch_begin end up creating shaders
+// with the same identifier. Failing to follow this rule means shader caching,
+// as well as features such as temporal dithering, will not work correctly.
 void pl_dispatch_reset_frame(struct pl_dispatch *dp);
 
 #endif // LIBPLACEBO_DISPATCH_H

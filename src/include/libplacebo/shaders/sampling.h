@@ -28,11 +28,6 @@
 #include "../shaders.h"
 
 struct pl_deband_params {
-    // This is used as a seed for the (frame-local) PRNG. No state is preserved
-    // across invocations, so the user must manually vary this across frames
-    // to achieve temporal randomness. Range should be [0.0, 1.0]
-    float seed;
-
     // The number of debanding steps to perform per sample. Each step reduces a
     // bit more banding, but takes time to compute. Note that the strength of
     // each step falls off very quickly, so high numbers (>4) are practically

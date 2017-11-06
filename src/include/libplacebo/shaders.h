@@ -43,8 +43,14 @@ struct pl_shader;
 // only relevant if you plan on merging multiple shaders together, which
 // requires that all of the merged shaders have unique identifiers. It can
 // safely be left as 0 if unneeded.
+//
+// The `index` represents an abstract frame index, which shaders may use
+// internally to do things like temporal dithering or seeding PRNGs. If the
+// user does not care about temporal dithering/debanding, or wants determinstic
+// rendering, this may safely be left as 0. Otherwise, it should be incremented
+// by 1 on successive frames.
 struct pl_shader *pl_shader_alloc(struct pl_context *ctx, const struct ra *ra,
-                                  uint8_t ident);
+                                  uint8_t ident, uint8_t index);
 
 // Frees a pl_shader and all resources associated with it.
 void pl_shader_free(struct pl_shader **sh);
@@ -52,7 +58,7 @@ void pl_shader_free(struct pl_shader **sh);
 // Resets a pl_shader to a blank slate, without releasing internal memory.
 // If you're going to be re-generating shaders often, this function will let
 // you skip the re-allocation overhead.
-void pl_shader_reset(struct pl_shader *sh, uint8_t ident);
+void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index);
 
 // Returns whether or not a pl_shader needs to be run as a compute shader. This
 // will never be the case unless the `ra` this pl_shader was created against

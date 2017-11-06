@@ -762,10 +762,7 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
 
     switch (params->method) {
     case PL_DITHER_WHITE_NOISE: {
-        float seed = 0.0;
-        if (params->temporal)
-            seed = (float) params->temporal_index / UINT8_MAX;
-        ident_t prng = sh_prng(sh, seed, NULL);
+        ident_t prng = sh_prng(sh, params->temporal, NULL);
         GLSL("bias = %s - 0.5;\n", prng);
         break;
     }
@@ -775,7 +772,7 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
         GLSL("vec2 pos = fract(gl_FragCoord.xy * 1.0/16.0);\n");
 
         if (params->temporal) {
-            int phase = params->temporal_index % 8;
+            int phase = sh->index % 8;
             float r = phase * (M_PI / 2); // rotate
             float m = phase < 4 ? 1 : -1; // mirror
             float mat[2][2] = {
