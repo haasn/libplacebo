@@ -355,10 +355,10 @@ const struct pl_color_map_params pl_color_map_default_params = {
     .peak_detect_frames      = 10,
 };
 
-static void hdr_update_peak(struct pl_shader *sh,
+static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
                             const struct pl_color_map_params *params)
 {
-    if (!params->peak_detect_state)
+    if (!state)
         return;
 
     int frames = PL_DEF(params->peak_detect_frames, 10);
@@ -368,7 +368,7 @@ static void hdr_update_peak(struct pl_shader *sh,
         return;
     }
 
-    if (!sh_require_obj(sh, params->peak_detect_state, PL_SHADER_OBJ_PEAK_DETECT))
+    if (!sh_require_obj(sh, state, PL_SHADER_OBJ_PEAK_DETECT))
         return;
 
     if (!sh_try_compute(sh, 8, 8, true, sizeof(uint32_t))) {
@@ -376,7 +376,7 @@ static void hdr_update_peak(struct pl_shader *sh,
         return;
     }
 
-    struct pl_shader_obj *obj = *params->peak_detect_state;
+    struct pl_shader_obj *obj = *state;
     const struct ra *ra = sh->ra;
 
     struct ra_var idx, num, ctr, max, sum;
@@ -504,6 +504,7 @@ static const float sdr_avg = 0.25;
 
 static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
                                struct pl_color_space dst, ident_t luma,
+                               struct pl_shader_obj **peak_detect_state,
                                const struct pl_color_map_params *params)
 {
     // no-op if no tone mapping necessary
@@ -522,7 +523,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
 
     // HDR peak detection is done before scaling based on the dst.sig_peak/avg
     // in order to make the detected values stable / averageable.
-    hdr_update_peak(sh, params);
+    hdr_update_peak(sh, peak_detect_state, params);
 
     // Rescale the variables in order to bring it into a representation where
     // 1.0 represents the dst_peak. This is because all of the tone mapping
@@ -615,6 +616,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
 void pl_shader_color_map(struct pl_shader *sh,
                          const struct pl_color_map_params *params,
                          struct pl_color_space src, struct pl_color_space dst,
+                         struct pl_shader_obj **peak_detect_state,
                          bool prelinearized)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
@@ -727,7 +729,7 @@ void pl_shader_color_map(struct pl_shader *sh,
     }
 
     // Tone map to rescale the signal average/peak.
-    pl_shader_tone_map(sh, src, dst, dst_luma, params);
+    pl_shader_tone_map(sh, src, dst, dst_luma, peak_detect_state, params);
 
     // Warn for remaining out-of-gamut colors is enabled
     if (params->gamut_warning) {

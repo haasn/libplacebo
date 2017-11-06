@@ -129,14 +129,9 @@ struct pl_color_map_params {
     // really makes sense with TONE_MAPPING_CLIP)
     bool gamut_warning;
 
-    // If peak_detect_state is set to a valid pointer, this enables the peak
-    // detection feature. The resource object will be implicitly created and
-    // updated by pl_shader_color_map, but must be destroyed by the caller when
-    // no longer needed. Subsequent calls to pl_color_map for subsequent frames
-    // should re-use the same peak_detect_state. `peak_detect_frames` defaults
-    // to 10 and specifies how many frames to smooth (average) over, and must
-    // be at least 1.
-    struct pl_shader_obj **peak_detect_state;
+    // If set to something nonzero, this enables the peak detection feature.
+    // Controls how many frames to smooth (average) the results over, in order
+    // to prevent jitter due to sparkling highlights. Defaults to 10.
     int peak_detect_frames;
 };
 
@@ -147,9 +142,20 @@ extern const struct pl_color_map_params pl_color_map_default_params;
 // as NULL, it defaults to &pl_color_map_default_params. If `prelinearized`
 // is true, the logic will assume the input has already been linearized by the
 // caller (e.g. as part of a previous linear light scaling operation).
+//
+// When the user wishes to use peak detection, `peak_detect_state` should be
+// set to the pointer of an object that will hold the state for the frame
+// averaging, which must be destroyed by the user when no longer required.
+// Successive calls to the same shader should re-use the same object. May
+// be safely left as NULL, which will disable the peak detection feature.
+//
+// Note: Due to the nature of the peak detection implementation, the detected
+// metadata is delayed by one frame. This may cause a single frame of wrong
+// metadata on rapid scene transitions, or following the start of playback.
 void pl_shader_color_map(struct pl_shader *sh,
                          const struct pl_color_map_params *params,
                          struct pl_color_space src, struct pl_color_space dst,
+                         struct pl_shader_obj **peak_detect_state,
                          bool prelinearized);
 
 enum pl_dither_method {
