@@ -261,9 +261,9 @@ enum pl_chroma_location {
     PL_CHROMA_COUNT,
 };
 
-// Fills *x and *y with the offset in half-pixels corresponding to a given
+// Fills *x and *y with the offset in luma pixels corresponding to a given
 // chroma location.
-void pl_chroma_location_offset(enum pl_chroma_location loc, int *x, int *y);
+void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y);
 
 // Represents a single CIE xy coordinate (e.g. CIE Yxy with Y = 1.0)
 struct pl_cie_xy {

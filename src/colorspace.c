@@ -281,7 +281,7 @@ const struct pl_color_adjustment pl_color_adjustment_neutral = {
     .gamma      = 1.0,
 };
 
-void pl_chroma_location_offset(enum pl_chroma_location loc, int *x, int *y)
+void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y)
 {
     switch (loc) {
     case PL_CHROMA_UNKNOWN:
@@ -290,7 +290,7 @@ void pl_chroma_location_offset(enum pl_chroma_location loc, int *x, int *y)
         *y = 0;
         return;
     case PL_CHROMA_LEFT:
-        *x = -1;
+        *x = -0.5;
         *y = 0;
         return;
     default: abort();
