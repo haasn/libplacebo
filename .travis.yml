@@ -11,6 +11,7 @@ branches:
   only:
     - master
     - ci
+    - /^v[\d.]+$/
 
 notifications:
   email: false
