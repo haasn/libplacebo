@@ -420,7 +420,11 @@ void ra_tex_blit(const struct ra *ra,
                  const struct ra_tex *dst, const struct ra_tex *src,
                  struct pl_rect3d dst_rc, struct pl_rect3d src_rc)
 {
-    pl_assert(src->params.format->texel_size == dst->params.format->texel_size);
+    const struct ra_fmt *src_fmt = src->params.format;
+    const struct ra_fmt *dst_fmt = dst->params.format;
+    pl_assert(src_fmt->texel_size == dst_fmt->texel_size);
+    pl_assert((src_fmt->type == RA_FMT_UINT) == (dst_fmt->type == RA_FMT_UINT));
+    pl_assert((src_fmt->type == RA_FMT_SINT) == (dst_fmt->type == RA_FMT_SINT));
     pl_assert(src->params.blit_src);
     pl_assert(dst->params.blit_dst);
     pl_assert(src_rc.x0 >= 0 && src_rc.x0 < src->params.w);

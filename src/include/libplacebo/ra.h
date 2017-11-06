@@ -255,11 +255,13 @@ void ra_tex_invalidate(const struct ra *ra, const struct ra_tex *tex);
 void ra_tex_clear(const struct ra *ra, const struct ra_tex *dst,
                   const float color[4]);
 
-// Copy a sub-rectangle from one texture to another. The source/dest
-// regions must be within the texture bounds. Areas outside the dest region
-// are preserved. The formats of the textures must be loosely compatible -
-// which essentially means that they must have the same texel size.
-// src.blit_src and dst.blit_dst must be set, respectively.
+// Copy a sub-rectangle from one texture to another. The source/dest regions
+// must be within the texture bounds. Areas outside the dest region are
+// preserved. The formats of the textures must be loosely compatible - which
+// essentially means that they must have the same texel size. Additionally,
+// UINT textures can only be blitted to other UINT textures, and SINT textures
+// can only be blitted to other SINT textures. Finally, src.blit_src and
+// dst.blit_dst must be set, respectively.
 //
 // The rectangles may be "flipped", which leads to the image being flipped
 // while blitting. If the src and dst rects have different sizes, the source
