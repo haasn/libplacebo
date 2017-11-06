@@ -293,7 +293,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
 
     if (!lut->tex || !filter_compat(lut->filter, inv_scale, lut_entries, params))
     {
-        const struct ra_fmt *fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 32, true,
+        const struct ra_fmt *fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 16, 32,
                                                RA_FMT_CAP_SAMPLEABLE |
                                                RA_FMT_CAP_LINEAR);
         if (!fmt) {

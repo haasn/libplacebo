@@ -23,7 +23,7 @@ static void shader_tests(struct pl_context *ctx, const struct ra *ra)
 
     const struct ra_fmt *fbo_fmt;
     enum ra_fmt_caps caps = RA_FMT_CAP_RENDERABLE | RA_FMT_CAP_BLITTABLE;
-    fbo_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 4, 32, true, caps);
+    fbo_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 4, 16, 32, caps);
     if (!fbo_fmt)
         return;
 
@@ -164,10 +164,10 @@ static void shader_tests(struct pl_context *ctx, const struct ra *ra)
 
 static void scaler_tests(struct pl_context *ctx, const struct ra *ra)
 {
-    const struct ra_fmt *src_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 32, true,
+    const struct ra_fmt *src_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 16, 32,
                                                RA_FMT_CAP_LINEAR);
 
-    const struct ra_fmt *fbo_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 32, true,
+    const struct ra_fmt *fbo_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 16, 32,
                                                RA_FMT_CAP_RENDERABLE);
     if (!src_fmt || !fbo_fmt)
         return;

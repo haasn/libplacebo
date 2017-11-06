@@ -74,6 +74,10 @@ static int cmp_fmt(const void *pa, const void *pb)
     const struct ra_fmt *a = *(const struct ra_fmt **)pa;
     const struct ra_fmt *b = *(const struct ra_fmt **)pb;
 
+    // Always prefer non-opaque formats
+    if (a->opaque != b->opaque)
+        return PL_CMP(a->opaque, b->opaque);
+
     int ca = __builtin_popcount(a->caps),
         cb = __builtin_popcount(b->caps);
     if (ca != cb)
@@ -85,16 +89,21 @@ static int cmp_fmt(const void *pa, const void *pb)
         return PL_CMP(a->caps, b->caps);
 
     // If the capabilities are equal, sort based on the component attributes
-    for (int i = 0; i < PL_ARRAY_SIZE(a->component_index); i++) {
-        int ia = a->component_index[i],
-            ib = b->component_index[i];
-        if (ia != ib)
-            return PL_CMP(ia, ib);
-
+    for (int i = 0; i < PL_ARRAY_SIZE(a->component_depth); i++) {
         int da = a->component_depth[i],
             db = b->component_depth[i];
         if (da != db)
             return PL_CMP(da, db);
+
+        int ha = a->host_bits[i],
+            hb = b->host_bits[i];
+        if (ha != hb)
+            return PL_CMP(ha, hb);
+
+        int oa = a->sample_order[i],
+            ob = b->sample_order[i];
+        if (oa != ob)
+            return PL_CMP(oa, ob);
     }
 
     // Fall back to sorting by the name (for stability)
@@ -112,8 +121,9 @@ void ra_print_formats(const struct ra *ra, enum pl_log_level lev)
         return;
 
     PL_MSG(ra, lev, "RA texture formats:");
-    PL_MSG(ra, lev, "    %-10s %-6s %-4s %-6s %-4s %-13s %-10s %-10s",
-           "NAME", "TYPE", "SIZE", "CAPS", "COMP", "DEPTH", "GLSL_TYPE", "GLSL_FMT");
+    PL_MSG(ra, lev, "    %-10s %-6s %-6s %-4s %-4s %-13s %-13s %-10s %-10s",
+           "NAME", "TYPE", "CAPS", "SIZE", "COMP", "DEPTH", "BITS",
+           "GLSL_TYPE", "GLSL_FMT");
     for (int n = 0; n < ra->num_formats; n++) {
         const struct ra_fmt *fmt = ra->formats[n];
 
@@ -128,15 +138,18 @@ void ra_print_formats(const struct ra *ra, enum pl_log_level lev)
 
         static const char idx_map[4] = {'R', 'G', 'B', 'A'};
         char indices[4] = {' ', ' ', ' ', ' '};
-        for (int i = 0; i < fmt->num_components; i++)
-            indices[i] = idx_map[fmt->component_index[i]];
+        if (!fmt->opaque) {
+            for (int i = 0; i < fmt->num_components; i++)
+                indices[i] = idx_map[fmt->sample_order[i]];
+        }
 
 #define IDX4(f) (f)[0], (f)[1], (f)[2], (f)[3]
 
-        PL_MSG(ra, lev, "    %-10s %-6s %-4zu 0x%-4x %c%c%c%c {%-2d %-2d %-2d %-2d} %-10s %-10s",
-               fmt->name, types[fmt->type], fmt->texel_size,
-               (unsigned int) fmt->caps, IDX4(indices),
-               IDX4(fmt->component_depth), PL_DEF(fmt->glsl_type, ""),
+        PL_MSG(ra, lev, "    %-10s %-6s 0x%-4x %-4zu %c%c%c%c "
+               "{%-2d %-2d %-2d %-2d} {%-2d %-2d %-2d %-2d} %-10s %-10s",
+               fmt->name, types[fmt->type], (unsigned int) fmt->caps,
+               fmt->texel_size, IDX4(indices), IDX4(fmt->component_depth),
+               IDX4(fmt->host_bits), PL_DEF(fmt->glsl_type, ""),
                PL_DEF(fmt->glsl_format, ""));
 
 #undef IDX4
@@ -145,22 +158,10 @@ void ra_print_formats(const struct ra *ra, enum pl_log_level lev)
 
 bool ra_fmt_is_ordered(const struct ra_fmt *fmt)
 {
-    bool ret = true;
+    bool ret = !fmt->opaque;
     for (int i = 0; i < fmt->num_components; i++)
-        ret &= fmt->component_index[i] == i;
+        ret &= fmt->sample_order[i] == i;
     return ret;
-}
-
-bool ra_fmt_is_regular(const struct ra_fmt *fmt)
-{
-    int bits = 0;
-    for (int i = 0; i < fmt->num_components; i++) {
-        if (fmt->component_index[i] != i || fmt->component_pad[i])
-            return false;
-        bits += fmt->component_depth[i];
-    }
-
-    return bits == fmt->texel_size * 8;
 }
 
 struct glsl_fmt {
@@ -220,6 +221,9 @@ static const struct glsl_fmt ra_glsl_fmts[] = {
 
 const char *ra_fmt_glsl_format(const struct ra_fmt *fmt)
 {
+    if (fmt->opaque)
+        return NULL;
+
     for (int n = 0; n < PL_ARRAY_SIZE(ra_glsl_fmts); n++) {
         const struct glsl_fmt *gfmt = &ra_glsl_fmts[n];
 
@@ -232,7 +236,7 @@ const char *ra_fmt_glsl_format(const struct ra_fmt *fmt)
         // based on the component's index
         int depth[4] = {0};
         for (int i = 0; i < fmt->num_components; i++)
-            depth[fmt->component_index[i]] = fmt->component_depth[i];
+            depth[fmt->sample_order[i]] = fmt->component_depth[i];
 
         for (int i = 0; i < PL_ARRAY_SIZE(depth); i++) {
             if (depth[i] != gfmt->depth[i])
@@ -248,8 +252,8 @@ next_fmt: ; // equivalent to `continue`
 }
 
 const struct ra_fmt *ra_find_fmt(const struct ra *ra, enum ra_fmt_type type,
-                                 int num_components, int bits_per_component,
-                                 bool regular, enum ra_fmt_caps caps)
+                                 int num_components, int min_depth,
+                                 int host_bits, enum ra_fmt_caps caps)
 {
     for (int n = 0; n < ra->num_formats; n++) {
         const struct ra_fmt *fmt = ra->formats[n];
@@ -257,11 +261,20 @@ const struct ra_fmt *ra_find_fmt(const struct ra *ra, enum ra_fmt_type type,
             continue;
         if ((fmt->caps & caps) != caps)
             continue;
-        if (regular && !ra_fmt_is_regular(fmt))
+
+        // When specifying some particular host representation, ensure the
+        // format is non-opaque, ordered and unpadded
+        if (host_bits && fmt->opaque)
+            continue;
+        if (host_bits && fmt->texel_size * 8 != host_bits * num_components)
+            continue;
+        if (host_bits && !ra_fmt_is_ordered(fmt))
             continue;
 
         for (int i = 0; i < fmt->num_components; i++) {
-            if (fmt->component_depth[i] != bits_per_component)
+            if (fmt->component_depth[i] < min_depth)
+                goto next_fmt;
+            if (fmt->host_bits[i] != host_bits)
                 goto next_fmt;
         }
 
@@ -286,7 +299,7 @@ const struct ra_fmt *ra_find_vertex_fmt(const struct ra *ra,
         [RA_FMT_SINT]  = sizeof(int),
     };
 
-    return ra_find_fmt(ra, type, comps, 8 * sizes[type], true, RA_FMT_CAP_VERTEX);
+    return ra_find_fmt(ra, type, comps, 0, 8 * sizes[type], RA_FMT_CAP_VERTEX);
 }
 
 const struct ra_fmt *ra_find_named_fmt(const struct ra *ra, const char *name)

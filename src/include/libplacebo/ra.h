@@ -121,6 +121,7 @@ enum ra_fmt_caps {
     // Notes:
     // - RA_FMT_CAP_LINEAR also implies RA_FMT_CAP_SAMPLEABLE
     // - RA_FMT_CAP_STORABLE also implies RA_CAP_COMPUTE
+    // - RA_FMT_CAP_VERTEX implies that the format is non-opaque
 };
 
 // Structure describing a texel/vertex format.
@@ -131,16 +132,18 @@ struct ra_fmt {
     enum ra_fmt_type type;  // the format's data type and interpretation
     enum ra_fmt_caps caps;  // the features supported by this format
     int num_components;     // number of components for this format
+    int component_depth[4]; // meaningful bits per component, texture precision
 
-    // For the component metadata, the index refers to the index of the
-    // component's physical layout - i.e. component_depth[2] refers to the depth
-    // of the third physical channel, regardless of whether that's B or R.
-    int component_index[4]; // for example, bgra would be {2, 1, 0, 3}
-    int component_depth[4]; // meaningful bits for this component
-    int component_pad[4];   // padding bits that come *before* this component
-    size_t texel_size;      // the number of bytes per texel
-    // Note: Trailing padding (e.g. RGBX) is implicitly indicated by texel_size
-    // being larger than the sum of component_depth + component_pad.
+    // This controls the relationship between the data as seen by the host and
+    // the way it's interpreted by the texture. If `opaque` is true, then
+    // there's no meaningful correspondence between the two, and all of the
+    // remaining fields in this section are unset. The host representation is
+    // always tightly packed (no padding bits in between each component).
+    bool opaque;
+    size_t texel_size;      // total size in bytes per texel
+    int host_bits[4];       // number of meaningful bits in host memory
+    int sample_order[4];    // sampled index for each component, e.g.
+                            // {2, 1, 0, 3} for BGRA textures
 
     // If usable as a vertex or texel buffer format, this gives the GLSL type
     // corresponding to the data. (e.g. vec4)
@@ -155,20 +158,16 @@ struct ra_fmt {
 // in memory in the order RGBA.
 bool ra_fmt_is_ordered(const struct ra_fmt *fmt);
 
-// Returns whether or not a ra_fmt is "regular"; i.e. it's ordered and
-// unpadded. In other words, a regular format is any where the representation
-// is "trivial" and doesn't require any special re-packing or re-ordering.
-bool ra_fmt_is_regular(const struct ra_fmt *fmt);
-
-// Helper function to find a format with a given number of components and depth
-// per component. If `regular` is true, the resulting format will always be
-// regular. All `caps` must be supported.
+// Helper function to find a format with a given number of components and
+// minimum effective precision per component. If `host_bits` is set, then the
+// format will always be non-opaque, unpadded, ordered and have exactly this
+// bit depth for each component. Finally, all `caps` must be supported.
 const struct ra_fmt *ra_find_fmt(const struct ra *ra, enum ra_fmt_type type,
-                                 int num_components, int bits_per_component,
-                                 bool regular, enum ra_fmt_caps caps);
+                                 int num_components, int min_depth,
+                                 int host_bits, enum ra_fmt_caps caps);
 
 // Finds a vertex format for a given configuration. The resulting vertex will
-// have a component depth equal to to the sizeof() the equivalent host type.
+// have a component depth equivalent to to the sizeof() the equivalent host type.
 // (e.g. RA_FMT_FLOAT will always have sizeof(float))
 const struct ra_fmt *ra_find_vertex_fmt(const struct ra *ra,
                                         enum ra_fmt_type type,

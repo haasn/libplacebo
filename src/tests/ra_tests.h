@@ -29,7 +29,7 @@ static void ra_test_roundtrip(const struct ra *ra, const struct ra_tex *tex,
 static void ra_texture_tests(const struct ra *ra)
 {
     const struct ra_fmt *fmt;
-    fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 32, true, 0);
+    fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 16, 32, 0);
     if (!fmt)
         return;
 

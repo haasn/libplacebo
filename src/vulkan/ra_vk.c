@@ -131,9 +131,9 @@ static void vk_setup_formats(struct ra *ra)
 
         // For sanity, clear the superfluous fields
         for (int i = fmt->num_components; i < 4; i++) {
-            fmt->component_index[i] = 0;
             fmt->component_depth[i] = 0;
-            fmt->component_pad[i] = 0;
+            fmt->sample_order[i] = 0;
+            fmt->host_bits[i] = 0;
         }
 
         struct { VkFormatFeatureFlags flags; enum ra_fmt_caps caps; } bits[] = {

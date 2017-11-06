@@ -21,10 +21,12 @@
     (struct ra_fmt) {                           \
         .name = _name,                          \
         .type = RA_FMT_##ftype,                 \
-        .num_components = num,                  \
-        .component_index = idx,                 \
+        .num_components  = num,                 \
         .component_depth = bits,                \
+        .opaque          = false,               \
         .texel_size      = size,                \
+        .host_bits       = bits,                \
+        .sample_order    = idx,                 \
     }
 
 #define IDX(...)  {__VA_ARGS__}
