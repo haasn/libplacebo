@@ -266,7 +266,7 @@ struct pl_filter {
     struct pl_filter_params params;
 
     // Contains the true radius of the computed filter. This may be
-    // larger than `config.radius` depending on the `scale` passed to
+    // larger than `config.kernel->radius` depending on the `scale` passed to
     // pl_filter_generate. This is only relevant for polar filters, where it
     // affects the value range of *weights.
     float radius;
