@@ -76,6 +76,25 @@ char *ta_talloc_vasprintf_append_buffer(char *s, const char *fmt, va_list ap) TA
 char *ta_talloc_asprintf_append(char *s, const char *fmt, ...) TA_PRF(2, 3);
 char *ta_talloc_asprintf_append_buffer(char *s, const char *fmt, ...) TA_PRF(2, 3);
 
+// Talloc refcounting
+
+struct ta_ref;
+
+// ta_ref_deref will free the ref and all of its children as soon as the
+// internal refcount reaches 0
+struct ta_ref *ta_ref_new(void *t);
+struct ta_ref *ta_ref_dup(struct ta_ref *ref);
+void ta_ref_deref(struct ta_ref **ref);
+
+// Attaches a reference as a child of another talloc ctx, such that freeing
+// `t` is like dereferencing the ta_ref.
+bool ta_ref_attach(void *t, struct ta_ref *ref);
+
+#define talloc_ref_new(...)             ta_oom_p(ta_ref_new(__VA_ARGS__))
+#define talloc_ref_dup(...)             ta_oom_p(ta_ref_dup(__VA_ARGS__))
+#define talloc_ref_deref(...)           ta_ref_deref(__VA_ARGS__)
+#define talloc_ref_attach(...)          ta_oom_b(ta_ref_attach(__VA_ARGS__))
+
 // Utility functions (ported from mpv)
 
 #define TA_FREEP(pctx) do {talloc_free(*(pctx)); *(pctx) = NULL;} while(0)

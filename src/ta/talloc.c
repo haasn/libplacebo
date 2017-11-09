@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <pthread.h>
 
 #include "talloc.h"
 
@@ -73,4 +74,76 @@ char *ta_talloc_asprintf_append_buffer(char *s, const char *fmt, ...)
     res = talloc_vasprintf_append_buffer(s, fmt, ap);
     va_end(ap);
     return res;
+}
+
+struct ta_ref {
+    pthread_mutex_t lock;
+    int refcount;
+};
+
+struct ta_ref *ta_ref_new(void *t)
+{
+    struct ta_ref *ref = ta_znew(t, struct ta_ref);
+    if (!ref)
+        return NULL;
+
+    *ref = (struct ta_ref) {
+        .lock = PTHREAD_MUTEX_INITIALIZER,
+        .refcount = 1,
+    };
+
+    return ref;
+}
+
+struct ta_ref *ta_ref_dup(struct ta_ref *ref)
+{
+    if (!ref)
+        return NULL;
+
+    pthread_mutex_lock(&ref->lock);
+    ref->refcount++;
+    pthread_mutex_unlock(&ref->lock);
+    return ref;
+}
+
+void ta_ref_deref(struct ta_ref **refp)
+{
+    struct ta_ref *ref = *refp;
+    if (!ref)
+        return;
+
+    pthread_mutex_lock(&ref->lock);
+    if (--ref->refcount > 0) {
+        pthread_mutex_unlock(&ref->lock);
+        return;
+    }
+
+    pthread_mutex_destroy(&ref->lock);
+    ta_free(ref);
+    *refp = NULL;
+}
+
+// Indirection object, used to associate the destructor with a ta_ref_deref
+struct ta_ref_indirect {
+    struct ta_ref *ref;
+};
+
+static void ta_ref_indir_dtor(void *p)
+{
+    struct ta_ref_indirect *indir = p;
+    ta_ref_deref(&indir->ref);
+}
+
+bool ta_ref_attach(void *t, struct ta_ref *ref)
+{
+    if (!ref)
+        return true;
+
+    struct ta_ref_indirect *indir = ta_new_ptrtype(t, indir);
+    if (!indir)
+        return false;
+
+    indir->ref = ta_ref_dup(ref);
+    ta_set_destructor(indir, ta_ref_indir_dtor);
+    return true;
 }
