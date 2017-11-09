@@ -42,6 +42,7 @@ struct pl_shader {
     const struct ra *ra;
 
     // Internal state
+    struct ta_ref *tmp;
     bool mutable;
     int output_w;
     int output_h;
@@ -52,7 +53,6 @@ struct pl_shader {
     uint8_t ident;
     uint8_t index;
     int fresh;
-    void *tmp;
 
     // For vertex attributes, since we need to keep track of their location
     int current_va_location;
@@ -64,6 +64,11 @@ struct pl_shader {
 
 // Attempt enabling compute shaders for this pass, if possible
 bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem);
+
+// Attempt merging a secondary shader into the current shader. Returns NULL if
+// merging fails (e.g. incompatible signatures); otherwise returns an identifier
+// corresponding to the generated subpass function.
+ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub);
 
 // Helpers for adding new variables/descriptors/etc. with fresh, unique
 // identifier names. These will never conflcit with other identifiers, even

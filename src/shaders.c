@@ -32,7 +32,7 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx, const struct ra *ra,
         .ctx = ctx,
         .ra = ra,
         .mutable = true,
-        .tmp = talloc_new(sh),
+        .tmp = talloc_ref_new(NULL),
         .ident = ident,
         .index = index,
     };
@@ -40,9 +40,14 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx, const struct ra *ra,
     return sh;
 }
 
-void pl_shader_free(struct pl_shader **sh)
+void pl_shader_free(struct pl_shader **psh)
 {
-    TA_FREEP(sh);
+    struct pl_shader *sh = *psh;
+    if (!sh)
+        return;
+
+    talloc_ref_deref(&sh->tmp);
+    TA_FREEP(psh);
 }
 
 void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index)
@@ -50,7 +55,7 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index)
     struct pl_shader new = {
         .ctx = sh->ctx,
         .ra  = sh->ra,
-        .tmp = sh->tmp,
+        .tmp = talloc_ref_new(NULL),
         .mutable = true,
         .ident = ident,
         .index = index,
@@ -67,7 +72,7 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index)
     for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
         new.buffers[i] = (struct bstr) { .start = sh->buffers[i].start };
 
-    talloc_free_children(sh->tmp);
+    ta_ref_deref(&sh->tmp);
     *sh = new;
 }
 
@@ -270,20 +275,75 @@ void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
     va_end(ap);
 }
 
+static const char *outsigs[] = {
+    [PL_SHADER_SIG_NONE]  = "void",
+    [PL_SHADER_SIG_COLOR] = "vec4",
+};
+
+static const char *insigs[] = {
+    [PL_SHADER_SIG_NONE]  = "",
+    [PL_SHADER_SIG_COLOR] = "vec4 color",
+};
+
+static const char *retvals[] = {
+    [PL_SHADER_SIG_NONE]  = "",
+    [PL_SHADER_SIG_COLOR] = "return color;",
+};
+
+ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
+{
+    pl_assert(sh->mutable);
+
+    // Check for shader compatibility
+    int res_w = PL_DEF(sh->output_w, sub->output_w),
+        res_h = PL_DEF(sh->output_h, sub->output_h);
+
+    if (res_w != sub->output_w || res_h != sub->output_h) {
+        PL_ERR(sh, "Failed merging shaders: incompatible sizes");
+        return NULL;
+    }
+
+    if (sub->is_compute) {
+        int subw = sub->res.compute_group_size[0],
+            subh = sub->res.compute_group_size[1];
+        bool flex = sub->flexible_work_groups;
+
+        if (!sh_try_compute(sh, subw, subh, flex, sub->res.compute_shmem)) {
+            PL_ERR(sh, "Failed merging shaders: incompatible block sizes or "
+                   "exceeded shared memory resource capabilities");
+            return NULL;
+        }
+    }
+
+    sh->output_w = res_w;
+    sh->output_h = res_h;
+
+    // Append the prelude and header
+    bstr_xappend(sh, &sh->buffers[SH_BUF_PRELUDE], sub->buffers[SH_BUF_PRELUDE]);
+    bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER],  sub->buffers[SH_BUF_HEADER]);
+
+    // Append the body as a new header function
+    ident_t name = sh_fresh(sh, "sub");
+    GLSLH("%s %s(%s) {\n", outsigs[sub->res.output], name, insigs[sub->res.input]);
+    bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_BODY]);
+    GLSLH("%s }\n", retvals[sub->res.output]);
+
+    // Copy over all of the descriptors etc.
+    talloc_ref_attach(sh->tmp, sub->tmp);
+#define COPY(f) TARRAY_CONCAT(sh, sh->res.f, sh->res.num_##f, \
+                              sub->res.f, sub->res.num_##f)
+    COPY(variables);
+    COPY(descriptors);
+    COPY(vertex_attribs);
+#undef COPY
+
+    return name;
+}
+
 // Finish the current shader body and return its function name
 static ident_t sh_split(struct pl_shader *sh)
 {
     pl_assert(sh->mutable);
-
-    static const char *outsigs[] = {
-        [PL_SHADER_SIG_NONE]  = "void",
-        [PL_SHADER_SIG_COLOR] = "vec4",
-    };
-
-    static const char *insigs[] = {
-        [PL_SHADER_SIG_NONE]  = "",
-        [PL_SHADER_SIG_COLOR] = "vec4 color",
-    };
 
     // Concatenate the body onto the head as a new function
     ident_t name = sh_fresh(sh, "main");
@@ -295,14 +355,7 @@ static ident_t sh_split(struct pl_shader *sh)
         sh->buffers[SH_BUF_BODY].start[0] = '\0'; // for sanity / efficiency
     }
 
-    switch (sh->res.output) {
-    case PL_SHADER_SIG_NONE: break;
-    case PL_SHADER_SIG_COLOR:
-        GLSLH("return color;\n");
-        break;
-    }
-
-    GLSLH("}\n");
+    GLSLH("%s }\n", retvals[sh->res.output]);
     return name;
 }
 
