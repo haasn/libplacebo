@@ -761,6 +761,7 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
     GLSL("// pl_shader_dither \n"
         "{                    \n"
         "float bias;          \n");
+    params = PL_DEF(params, &pl_dither_default_params);
 
     switch (params->method) {
     case PL_DITHER_WHITE_NOISE: {
@@ -812,5 +813,9 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
          "color = round(color) * vec4(1.0/%d.0);   \n"
          "}                                        \n",
          scale, scale);
-
 }
+
+const struct pl_dither_params pl_dither_default_params = {
+    .method     = PL_DITHER_ORDERED,
+    .temporal   = false, // commonly flickers on LCDs
+};

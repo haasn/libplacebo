@@ -159,7 +159,7 @@ void pl_shader_color_map(struct pl_shader *sh,
                          bool prelinearized);
 
 enum pl_dither_method {
-    // Ordered dither. Low quality, but cheap. Requires GLSL 130+.
+    // Ordered dither. Low quality, but cheap. Requires GLSL 130+. Default.
     PL_DITHER_ORDERED,
 
     // Dither with white noise. Also fairly cheap, and unlike the other modes
@@ -179,10 +179,13 @@ struct pl_dither_params {
     bool temporal;
 };
 
+extern const struct pl_dither_params pl_dither_default_params;
+
 // Dither the colors to a lower depth, given in bits. This can be used on input
 // colors of any precision. Basically, this rounds the colors to only linear
 // multiples of the stated bit depth. The average intensity of the result
-// will not change (i.e., the dither noise is balanced in both directions)
+// will not change (i.e., the dither noise is balanced in both directions).
+// If `params` is NULL, it defaults to &pl_dither_default_params.
 //
 // Warning: This dithering algorithm is not gamma-invariant; so using it for
 // very low bit depths (below 4 or so) will noticeably increase the brightness
