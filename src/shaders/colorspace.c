@@ -19,8 +19,7 @@
 #include "shaders.h"
 
 void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
-                            const struct pl_color_adjustment *params,
-                            int texture_bits)
+                            const struct pl_color_adjustment *params)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;

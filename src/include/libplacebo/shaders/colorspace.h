@@ -28,16 +28,13 @@
 
 // Decode the color into normalized RGB, given a specified color_repr. This
 // also takes care of additional pre- and post-conversions requires for the
-// "special" color systems (XYZ, BT.2020-C, etc.). The int `texture_bits`, if
-// present, indicate the depth of the texture we've sampled the color from -
-// similar to the semantics on `pl_get_scaled_decoding_matrix`. If `params`
-// is left as NULL, it defaults to &pl_color_adjustment_neutral.
+// "special" color systems (XYZ, BT.2020-C, etc.). If `params` is left as NULL,
+// it defaults to &pl_color_adjustment_neutral.
 //
 // Note: This function always returns PC-range RGB with pre-multiplied alpha.
 // It mutates the pl_color_repr to reflect the change.
 void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
-                            const struct pl_color_adjustment *params,
-                            int texture_bits);
+                            const struct pl_color_adjustment *params);
 
 // Linearize (expand) `vec4 color`, given a specified color_transfer. In
 // essence, this is the ITU-R EOTF, calculated on an idealized (reference)
