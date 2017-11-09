@@ -132,6 +132,10 @@ bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *s
     if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, NULL))
         return false;
 
+    // Special-case: this shader can be freely resized
+    sh->output_w = 0;
+    sh->output_h = 0;
+
     GLSL("// pl_shader_sample_direct    \n"
          "vec4 color = texture(%s, %s); \n",
          tex, pos);
