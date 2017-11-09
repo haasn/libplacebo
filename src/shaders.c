@@ -225,7 +225,11 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
         return NULL;
     }
 
-    pl_assert(ra_tex_params_dimension(tex->params) == 2);
+    if (ra_tex_params_dimension(tex->params) != 2 || !tex->params.sampleable) {
+        PL_ERR(sh, "Failed binding texture '%s': incompatible params!", name);
+        return NULL;
+    }
+
     ident_t itex = sh_desc(sh, (struct pl_shader_desc) {
         .desc = {
             .name = name,

@@ -28,6 +28,11 @@ const struct pl_deband_params pl_deband_default_params = {
 void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
                       const struct pl_deband_params *params)
 {
+    if (ra_tex->params.sample_mode != RA_TEX_SAMPLE_LINEAR) {
+        PL_ERR(sh, "Debanding requires sample_mode = RA_TEX_SAMPLE_LINEAR!");
+        return;
+    }
+
     if (!sh_require(sh, PL_SHADER_SIG_NONE, ra_tex->params.w, ra_tex->params.h))
         return;
 

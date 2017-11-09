@@ -57,7 +57,9 @@ struct pl_deband_params {
 extern const struct pl_deband_params pl_deband_default_params;
 
 // Debands a given texture and returns the sampled color in `vec4 color`. If
-// `params` is left as NULL, it defaults to &pl_deband_default_params.
+// `params` is left as NULL, it defaults to &pl_deband_default_params. Note
+// that `tex->params.sample_mode` must be RA_TEX_SAMPLE_LINEAR.
+//
 // Note: This can also be used as a pure grain function, by setting the number
 // of iterations to 0.
 void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *tex,
