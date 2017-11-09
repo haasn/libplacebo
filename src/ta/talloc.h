@@ -134,6 +134,15 @@ bool ta_ref_attach(void *t, struct ta_ref *ref);
         (p)[at_] = (TA_EXPAND_ARGS(__VA_ARGS__));   \
     } while (0)
 
+// Appends all of `op` to `p`
+#define TARRAY_CONCAT(ctx, p, idxvar, op, oidxvar)  \
+    do {                                            \
+        TARRAY_GROW(ctx, p, (idxvar) + (oidxvar));  \
+        memmove((p) + (idxvar), (op),               \
+                (oidxvar) * sizeof((op)[0]));       \
+        (idxvar) += (oidxvar);                      \
+    } while (0)
+
 // Doesn't actually free any memory, or do any other talloc calls.
 #define TARRAY_REMOVE_AT(p, idxvar, at)             \
     do {                                            \
