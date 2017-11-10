@@ -35,6 +35,7 @@ sources = [
   'dispatch.c',
   'filters.c',
   'ra.c',
+  'renderer.c',
   'shaders.c',
   'shaders/colorspace.c',
   'shaders/sampling.c',
