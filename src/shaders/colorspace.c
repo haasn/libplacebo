@@ -807,10 +807,10 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
         break;
     }
 
-    int scale = (1 << new_depth) - 1;
-    GLSL("color = vec4(%d.0) * color + vec4(bias); \n"
-         "color = round(color) * vec4(1.0/%d.0);   \n"
-         "}                                        \n",
+    unsigned long long scale = (1LLU << new_depth) - 1;
+    GLSL("color = vec4(%llu.0) * color + vec4(bias); \n"
+         "color = round(color) * vec4(1.0/%llu.0);   \n"
+         "}                                          \n",
          scale, scale);
 }
 
