@@ -799,7 +799,9 @@ void memcpy_layout(void *dst_p, struct ra_var_layout dst_layout,
 
 int ra_desc_namespace(const struct ra *ra, enum ra_desc_type type)
 {
-    return ra->impl->desc_namespace(ra, type);
+    int ret = ra->impl->desc_namespace(ra, type);
+    pl_assert(ret >= 0 && ret < RA_DESC_TYPE_COUNT);
+    return ret;
 }
 
 const char *ra_desc_access_glsl_name(enum ra_desc_access mode)

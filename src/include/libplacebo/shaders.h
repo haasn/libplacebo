@@ -134,7 +134,7 @@ struct pl_shader_res {
 //   data[0] data[1]
 //   data[2] data[3]
 struct pl_shader_va {
-    struct ra_vertex_attrib attr;
+    struct ra_vertex_attrib attr; // VA type, excluding `offset` and `location`
     const void *data[4];
 };
 
@@ -146,7 +146,7 @@ struct pl_shader_var {
 };
 
 struct pl_shader_desc {
-    struct ra_desc desc; // the underlying descriptor description
+    struct ra_desc desc; // descriptor type, excluding `binding`
     const void *object;  // the object being bound (as for ra_desc_binding)
 };
 

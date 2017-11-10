@@ -53,13 +53,6 @@ struct pl_shader {
     uint8_t ident;
     uint8_t index;
     int fresh;
-
-    // For vertex attributes, since we need to keep track of their location
-    int current_va_location;
-    size_t current_va_offset;
-
-    // For bindings, since we need to keep the namespaces unique
-    int current_binding[RA_DESC_TYPE_COUNT];
 };
 
 // Attempt enabling compute shaders for this pass, if possible

@@ -168,12 +168,7 @@ ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
 
 ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
 {
-    pl_assert(sh->ra);
-    int namespace = ra_desc_namespace(sh->ra, sd.desc.type);
-
     sd.desc.name = sh_fresh(sh, sd.desc.name);
-    sd.desc.binding = sh->current_binding[namespace]++;
-
     TARRAY_APPEND(sh, sh->res.descriptors, sh->res.num_descriptors, sd);
     return (ident_t) sd.desc.name;
 }
@@ -204,15 +199,11 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
         .attr = {
             .name     = sh_fresh(sh, name),
             .fmt      = ra_find_vertex_fmt(sh->ra, RA_FMT_FLOAT, 2),
-            .offset   = sh->current_va_offset,
-            .location = sh->current_va_location,
         },
         .data = { &data[0], &data[2], &data[4], &data[6] },
     };
 
     TARRAY_APPEND(sh, sh->res.vertex_attribs, sh->res.num_vertex_attribs, va);
-    sh->current_va_offset += sizeof(float[2]);
-    sh->current_va_location += 1; // vec2 always consumes one location
     return (ident_t) va.attr.name;
 }
 

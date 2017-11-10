@@ -257,21 +257,26 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         ADD_BSTR(vert_head, *pre);
         ADD(vert_body, "void main() {\n");
         for (int i = 0; i < res->num_vertex_attribs; i++) {
-            const struct ra_vertex_attrib *va = &res->vertex_attribs[i].attr;
+            const struct ra_vertex_attrib *va = &params->vertex_attribs[i];
+            const struct pl_shader_va *sva = &res->vertex_attribs[i];
             const char *type = va->fmt->glsl_type;
+
+            // Use the pl_shader_va for the name in the fragment shader since
+            // the ra_vertex_attrib is already mangled for the vertex shader
+            const char *name = sva->attr.name;
 
             char loc[32];
             snprintf_c(loc, sizeof(loc), "layout(location=%d) ", va->location);
-            ADD(vert_head, "%s%s %s vert%s;\n", loc, vert_in, type, va->name);
+            ADD(vert_head, "%s%s %s %s;\n", loc, vert_in, type, va->name);
 
-            if (strcmp(va->name, vert_pos) == 0) {
+            if (strcmp(name, vert_pos) == 0) {
                 pl_assert(va->fmt->num_components == 2);
-                ADD(vert_body, "gl_Position = vec4(vert%s, 0.0, 1.0);\n", va->name);
+                ADD(vert_body, "gl_Position = vec4(%s, 0.0, 1.0);\n", va->name);
             } else {
                 // Everything else is just blindly passed through
-                ADD(vert_head, "%s%s %s %s;\n", loc, vert_out, type, va->name);
-                ADD(vert_body, "%s = vert%s;\n", va->name, va->name);
-                ADD(glsl, "%s%s %s %s;\n", loc, frag_in, type, va->name);
+                ADD(vert_head, "%s%s %s %s;\n", loc, vert_out, type, name);
+                ADD(vert_body, "%s = %s;\n", name, va->name);
+                ADD(glsl, "%s%s %s %s;\n", loc, frag_in, type, name);
             }
         }
 
@@ -310,7 +315,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
     // Add all of the required descriptors
     for (int i = 0; i < res->num_descriptors; i++) {
         const struct pl_shader_desc *sd = &res->descriptors[i];
-        const struct ra_desc *desc = &sd->desc;
+        const struct ra_desc *desc = &params->descriptors[i];
 
         switch (desc->type) {
         case RA_DESC_SAMPLED_TEX: {
@@ -440,21 +445,33 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         params.vertex_attribs = talloc_zero_array(tmp, struct ra_vertex_attrib,
                                                   res->num_vertex_attribs);
 
+        int va_loc = 0;
         for (int i = 0; i < res->num_vertex_attribs; i++) {
             struct ra_vertex_attrib *va = &params.vertex_attribs[i];
             *va = res->vertex_attribs[i].attr;
+
             // Mangle the name to make sure it doesn't conflict with the
             // fragment shader input
             va->name = talloc_asprintf(tmp, "vert%s", va->name);
+
+            // Place the vertex attribute
+            va->offset = params.vertex_stride;
+            va->location = va_loc;
+            params.vertex_stride += va->fmt->texel_size;
+
+            // The number of vertex attribute locations consumed by a vertex
+            // attribute is the number of vec4s it consumes, rounded up
+            const size_t va_loc_size = sizeof(float[4]);
+            va_loc += (va->fmt->texel_size + va_loc_size - 1) / va_loc_size;
         }
 
         // Generate the vertex array placeholder
-        params.vertex_stride = sh->current_va_offset;
         params.vertex_type = RA_PRIM_TRIANGLE_STRIP;
         rparams->vertex_count = 4; // single quad
         size_t vert_size = rparams->vertex_count * params.vertex_stride;
         rparams->vertex_data = talloc_zero_size(pass, vert_size);
         break;
+
     }
     case RA_PASS_COMPUTE: {
         // Round up to make sure we don-t leave off a part of the target
@@ -501,13 +518,17 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         });
     }
 
-    // Fill in the descriptors
+    // Place and fill in the descriptors
     int num = res->num_descriptors;
+    int binding[RA_DESC_TYPE_COUNT] = {0};
     params.num_descriptors = num;
     params.descriptors = talloc_zero_array(tmp, struct ra_desc, num);
     rparams->desc_bindings = talloc_zero_array(pass, struct ra_desc_binding, num);
-    for (int i = 0; i < num; i++)
-        params.descriptors[i] = res->descriptors[i].desc;
+    for (int i = 0; i < num; i++) {
+        struct ra_desc *desc = &params.descriptors[i];
+        *desc = res->descriptors[i].desc;
+        desc->binding = binding[ra_desc_namespace(dp->ra, desc->type)]++;
+    }
 
     // Pre-fill the desc_binding for the UBO
     if (pass->ubo) {
@@ -698,11 +719,13 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
         uintptr_t vert_base = (uintptr_t) rparams->vertex_data;
         size_t stride = rparams->pass->params.vertex_stride;
         for (int i = 0; i < res->num_vertex_attribs; i++) {
-            struct pl_shader_va sva = res->vertex_attribs[i];
-            size_t size = sva.attr.fmt->texel_size;
-            uintptr_t va_base = vert_base + sva.attr.offset;
+            struct pl_shader_va *sva = &res->vertex_attribs[i];
+            struct ra_vertex_attrib *va = &rparams->pass->params.vertex_attribs[i];
+
+            size_t size = sva->attr.fmt->texel_size;
+            uintptr_t va_base = vert_base + va->offset; // use placed offset
             for (int n = 0; n < 4; n++)
-                memcpy((void *) (va_base + n * stride), sva.data[n], size);
+                memcpy((void *) (va_base + n * stride), sva->data[n], size);
         }
     }
 
