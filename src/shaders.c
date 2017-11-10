@@ -236,7 +236,7 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
         };
 
         rect = PL_DEF(rect, &full);
-        *out_pos = sh_attr_vec2(sh, "pos", &(struct pl_rect2df) {
+        *out_pos = sh_attr_vec2(sh, "tex_coord", &(struct pl_rect2df) {
             .x0 = rect->x0 / tex->params.w, .y0 = rect->y0 / tex->params.h,
             .x1 = rect->x1 / tex->params.w, .y1 = rect->y1 / tex->params.h,
         });
@@ -244,14 +244,14 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
 
     if (out_size) {
         *out_size = sh_var(sh, (struct pl_shader_var) {
-            .var  = ra_var_vec2("size"),
+            .var  = ra_var_vec2("tex_size"),
             .data = &(float[2]) {tex->params.w, tex->params.h},
         });
     }
 
     if (out_pt) {
         *out_pt = sh_var(sh, (struct pl_shader_var) {
-            .var  = ra_var_vec2("pt"),
+            .var  = ra_var_vec2("tex_pt"),
             .data = &(float[2]) {1.0 / tex->params.w, 1.0 / tex->params.h},
         });
     }
@@ -293,8 +293,11 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
     int res_w = PL_DEF(sh->output_w, sub->output_w),
         res_h = PL_DEF(sh->output_h, sub->output_h);
 
-    if (res_w != sub->output_w || res_h != sub->output_h) {
-        PL_ERR(sh, "Failed merging shaders: incompatible sizes");
+    if ((sub->output_w && res_w != sub->output_w) ||
+        (sub->output_h && res_h != sub->output_h))
+    {
+        PL_ERR(sh, "Failed merging shaders: incompatible sizes: %dx%d and %dx%d",
+               sh->output_w, sh->output_h, sub->output_w, sub->output_h);
         return NULL;
     }
 
