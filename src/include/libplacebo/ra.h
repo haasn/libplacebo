@@ -284,9 +284,9 @@ struct ra_tex_transfer_params {
     // of `rc`, and the `rc` must be normalized and fully contained within the
     // image dimensions. If any of these parameters are left away (0), they
     // are inferred from the texture's size.
-    struct pl_rect3d rc; // region of the texture to transfer
-    int stride_w;        // the number of texels per horizontal row (x axis)
-    int stride_h;        // the number of texels per vertical column (y axis)
+    struct pl_rect3d rc;   // region of the texture to transfer
+    unsigned int stride_w; // the number of texels per horizontal row (x axis)
+    unsigned int stride_h; // the number of texels per vertical column (y axis)
 
     // For the data source/target of a transfer operation, there are two valid
     // options:
