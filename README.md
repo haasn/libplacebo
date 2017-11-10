@@ -2,7 +2,7 @@
 
 ![travis-ci badge](https://travis-ci.org/haasn/libplacebo.svg?branch=master)
 
-**libplacebo** is essentially the core rendering engine of
+**libplacebo** is essentially the core rendering algorithms and ideas of
 [mpv](https://mpv.io) turned into a library. This grew out of an interest to
 accomplish the following goals:
 
@@ -22,7 +22,7 @@ as exported by common.h will **NOT** change except on new beta releases
 use one of the tagged releases if you want to play around with libplacebo in
 its current stage.
 
-Once the version number hits 1.0, which will mark the first stable release,
+Once the version number hits 1.X, which will mark the first stable release,
 the API version will be bumped for every change to the public API - even
 changes that happen on git master.
 
@@ -30,17 +30,20 @@ changes that happen on git master.
 
 libplacebo's main developer is Niklas Haas
 ([@haasn](https://github.com/haasn)), but the project would not be possible
-without the immense contributions of Vincent Lang
-([@wm4](https://github.com/wm4)), who laid the groundwork for most of the code
-that ended up in libplacebo.
+without the development of mpv, which was done primarily by Vincent Lang
+([@wm4](https://github.com/wm4)).
 
 For a full list of past contributors to mpv, see the [mpv authorship
 page](https://github.com/mpv-player/mpv/graphs/contributors).
 
 ### License
 
-Since the code heavily derives from LGPLv2.1+-licensed parts of mpv, there's
-little choice but to license libplacebo the same way.
+Since the code derives from several LGPLv2.1+-licensed parts of mpv, there's
+little choice but to license libplacebo the same way. It's worth pointing out
+that, except for some minor exceptions (e.g. filters.c and colorspace.c), most
+of the code is either original work or can be attributed to only a small
+number of developers, so a relicensing to a more permissive license might be
+possible in principle.
 
 ## API Overview
 
@@ -97,7 +100,7 @@ entirely independently of libplacebo's image processing, which is why it
 uses its own namespace (`ra_` instead of `pl_`).
 
 **NOTE**: The port of RA into libplacebo is currently very WIP, and right now
-only the vulkan-based interface is exported. It's also not very tested/stable.
+only the vulkan-based interface is exported.
 
 ### Tier 2 (GLSL generating primitives)
 
@@ -112,10 +115,9 @@ In addition to this low-level interface, there are several available shader
 routines which libplacebo exports:
 
 - `shaders/colorspace.h`: Shader routines for decoding and transforming
-  colors, tone mapping, and so forth.
+  colors, tone mapping, dithering, and so forth.
 - `shaders/sampling.h`: Shader routines for various algorithms that sample
-  from images. **NOTE**: Currently only includes debanding, but will be
-  expanded to also include various upscaling functions in the near future.
+  from images, such as debanding and scaling.
 
 ### Tier 3 (shader dispatch)
 
@@ -126,9 +128,21 @@ routines which libplacebo exports:
 This shader dispatch mechanism is designed to be combined with the shader
 processing routines exported by `shaders/*.h`, but takes care of the low-level
 translation of the resulting `pl_shader_res` objects into legal GLSL. It also
-takes care of resource binding, variable placement, as well as shader caching
-and resource pooling; and makes sure all generated shaders have unique
+takes care of resource binding, shader input placement, as well as shader
+caching and resource pooling; and makes sure all generated shaders have unique
 identifiers (so they can be freely merged together).
+
+### Tier 4 (high level renderer)
+
+- `renderer.h`: A high-level renderer which combines the shader primitives
+  and dispatch mechanism into a fully-fledged rendering pipeline that takes
+  raw texture data and transforms it into the desired output image.
+
+This is the "primary" interface to libplacebo, and the one most users will be
+interested in. It takes care of internal details such as degrading to simpler
+algorithms depending on the hardware's capabilities, combining the correct
+sequence of colorspace transformations and shader passes in order to get the
+best overall image quality, and so forth.
 
 ## Installing
 
