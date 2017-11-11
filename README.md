@@ -144,6 +144,10 @@ algorithms depending on the hardware's capabilities, combining the correct
 sequence of colorspace transformations and shader passes in order to get the
 best overall image quality, and so forth.
 
+**WARNING**: The `renderer` is a WIP component and currently doesn't really do
+much other than forced bilinear scaling. If you trigger any unimplemented
+paths, it will abort().
+
 ## Installing
 
 ### Gentoo
