@@ -97,6 +97,9 @@ struct pl_sample_polar_params {
     // See `pl_filter_params.cutoff`. Defaults to 0.001 if unspecified.
     float cutoff;
 
+    // Disable the use of compute shaders (e.g. if rendering to non-storable tex)
+    bool no_compute;
+
     // This shader object is used to store the LUT, and will be recreated
     // if necessary. To avoid thrashing the resource, users should avoid trying
     // to re-use the same LUT for different filter configurations or scaling

@@ -381,7 +381,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
         ih = (int) ceil(bh / ratio_y) + padding + 1;
 
     int shmem_req = iw * ih * comps * sizeof(float);
-    if (sh_try_compute(sh, bw, bh, false, shmem_req)) {
+    if (!params->no_compute && sh_try_compute(sh, bw, bh, false, shmem_req)) {
         // Compute shader kernel
         GLSL("vec2 wpos = %s_map(gl_WorkGroupID * gl_WorkGroupSize);        \n"
              "vec2 wbase = wpos - pt * fract(wpos * size - vec2(0.5));      \n"

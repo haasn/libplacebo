@@ -55,6 +55,9 @@ struct pl_render_params {
     const struct pl_filter_config *upscaler;
     const struct pl_filter_config *downscaler;
 
+    // The number of entries for the scaler LUTs. Defaults to 64 if left unset.
+    int lut_entries;
+
     // Configures the algorithm used for frame mixing (when using
     // `pl_render_image_mix`). Ignored otherwise. As a special requirement,
     // this must be a filter config with `polar` set to false, since it's only
