@@ -104,13 +104,13 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
     src_w = PL_DEF(src_w, src->tex->params.w);
     src_h = PL_DEF(src_h, src->tex->params.h);
 
-    int out_w = PL_DEF(src->new_w, src_w);
-    int out_h = PL_DEF(src->new_h, src_h);
+    int out_w = PL_DEF(src->new_w, fabs(src_w));
+    int out_h = PL_DEF(src->new_h, fabs(src_h));
 
     if (ratio_x)
-        *ratio_x = out_w / src_w;
+        *ratio_x = out_w / fabs(src_w);
     if (ratio_y)
-        *ratio_y = out_h / src_h;
+        *ratio_y = out_h / fabs(src_h);
 
     if (components) {
         const struct ra_fmt *fmt = src->tex->params.format;
