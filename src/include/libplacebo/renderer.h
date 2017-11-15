@@ -102,11 +102,6 @@ struct pl_render_params {
     // Significantly speeds up downscaling with high downscaling ratios.
     bool skip_anti_aliasing;
 
-    // Disables the user of the configured upscaler/downscaler for the alpha
-    // channels of images. Often justified due to the relative unimportance of
-    // the alpha channel, and the fact that it usually contains nothing.
-    bool skip_alpha_scaling;
-
     // --- Performance tuning / debugging options
     // These may affect performance or may make debugging problems easier,
     // but shouldn't have any effect on the quality.

@@ -288,6 +288,7 @@ static void ra_scaler_tests(struct pl_context *ctx, const struct ra *ra)
         &(struct pl_sample_polar_params) {
             .filter     = pl_filter_ewa_lanczos,
             .lut        = &lut,
+            .no_compute = !fbo->params.storable,
         }
     ));
     REQUIRE(pl_dispatch_finish(dp, sh, fbo));
@@ -329,11 +330,11 @@ static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
 
     float *fbo_data = NULL;
     static float data_5x5[5][5] = {
-        { 1,   0,   0,   0,   0.5 },
-        { 0,   1,   0,   0.5, 0 },
-        { 0,   0,   1,   0,   0 },
-        { 0,   0.5, 0,   1,   0 },
-        { 0.5, 0,   0,   0,   1 },
+        { 0.0, 0.0, 0.0, 0.0, 0.0 },
+        { 0.0, 0.0, 0.0, 0.0, 0.0 },
+        { 1.0, 0.0, 0.5, 0.0, 0.0 },
+        { 0.0, 0.0, 0.0, 1.0, 0.0 },
+        { 0.0, 0.3, 0.0, 0.0, 0.0 },
     };
 
     const struct ra_tex *img5x5 = ra_tex_create(ra, &(struct ra_tex_params) {

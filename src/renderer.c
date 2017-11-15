@@ -15,18 +15,37 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <math.h>
+
 #include "common.h"
 #include "shaders.h"
 
 enum {
     // The scalers for each plane are set up to be just the index itself
     SCALER_PLANE0 = 0,
-    SCALER_PLANE1,
-    SCALER_PLANE2,
-    SCALER_PLANE3,
+    SCALER_PLANE1 = 1,
+    SCALER_PLANE2 = 2,
+    SCALER_PLANE3 = 3,
 
     SCALER_MAIN,
     SCALER_COUNT,
+};
+
+// Canonical plane order aliases
+enum {
+    PLANE_R = 0,
+    PLANE_G = 1,
+    PLANE_B = 2,
+    PLANE_A = 3,
+
+    // aliases for other systems
+    PLANE_Y    = PLANE_R,
+    PLANE_CB   = PLANE_G,
+    PLANE_CR   = PLANE_B,
+
+    PLANE_CIEX = PLANE_R,
+    PLANE_CIEY = PLANE_G,
+    PLANE_CIEZ = PLANE_B,
 };
 
 struct pl_renderer {
@@ -47,6 +66,9 @@ struct pl_renderer {
     struct pl_shader_obj *peak_detect_state;
     struct pl_shader_obj *upscaler_state; // shared since the LUT is static
     struct pl_shader_obj *downscaler_state[SCALER_COUNT];
+
+    // Intermediate textures (FBOs)
+    const struct ra_tex *main_scale_fbo;
 };
 
 static void find_fbo_format(struct pl_renderer *rr)
@@ -125,6 +147,9 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
     if (!rr)
         return;
 
+    // Free all intermediate FBOs
+    ra_tex_destroy(rr->ra, &rr->main_scale_fbo);
+
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
     pl_shader_obj_destroy(&rr->upscaler_state);
@@ -141,8 +166,8 @@ void pl_renderer_flush_cache(struct pl_renderer *rr)
 }
 
 const struct pl_render_params pl_render_default_params = {
-    .upscaler         = &pl_filter_spline36,
-    .downscaler       = &pl_filter_mitchell,
+    .upscaler         = &pl_filter_ewa_lanczos, // XXX: only until separated works
+    .downscaler       = NULL,
     .frame_mixer      = NULL,
 
     .deband_params    = &pl_deband_default_params,
@@ -150,12 +175,11 @@ const struct pl_render_params pl_render_default_params = {
     .dither_params    = &pl_dither_default_params,
 };
 
-// Represents an intermediate image, which either a source texture, or an
-// in-flight shader that's in the process of reading from a texture.
+// Represents a "in-flight" image, which is a shader that's in the process of
+// producing some sort of image
 struct img {
-    // The following two are mutually exclusive:
-    const struct ra_tex *tex;
     struct pl_shader *sh;
+    int w, h;
 
     // Accumulated texture offset, which will need to be accounted for by
     // the main scaler.
@@ -164,6 +188,7 @@ struct img {
     // The current effective colorspace
     struct pl_color_repr repr;
     struct pl_color_space color;
+    int comps;
 };
 
 struct pass_state {
@@ -181,7 +206,7 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
     if (!rr->fbofmt || rr->disable_sampling)
         goto fallback;
 
-    const struct pl_filter_config *config;
+    const struct pl_filter_config *config = NULL;
     struct pl_shader_obj **lut;
 
     if (ratio > 1.0) {
@@ -191,8 +216,11 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
         config = params->downscaler;
         lut = &rr->downscaler_state[idx];
     } else { // ratio == 1.0
-        goto fallback;
+        goto direct;
     }
+
+    if (!config)
+        goto fallback;
 
     if (config->polar) {
         bool r = pl_shader_sample_polar(sh, src, &(struct pl_sample_polar_params) {
@@ -200,6 +228,7 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
             .lut_entries = params->lut_entries,
             .lut         = lut,
             .no_compute  = rr->disable_compute,
+            .no_widening = params->skip_anti_aliasing,
         });
 
         if (!r) {
@@ -215,13 +244,15 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
     }
 
 fallback:
-
-    // Dispatch the highest quality LUT-free shader we can
-    if (src->tex->params.sample_mode == RA_TEX_SAMPLE_LINEAR) {
+    // Use bicubic sampling if supported
+    if (rr->fbofmt && src->tex->params.sample_mode == RA_TEX_SAMPLE_LINEAR) {
         pl_shader_sample_bicubic(sh, src);
-    } else {
-        pl_shader_sample_direct(sh, src);
+        return;
     }
+
+direct:
+    // If all else fails, fall back to bilinear/nearest
+    pl_shader_sample_direct(sh, src);
 }
 
 // This scales and merges all of the source images, and initializes the cur_img.
@@ -243,28 +274,62 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
          "vec4 tmp;                              \n",
          neutral);
 
-    // TODO: implement proper upscaling/downscaling, debanding, etc.
-    // For now, just bilinear sample everything for proof of concept
+    // First of all, we have to pick a "reference" plane for alignment.
+    // This should ideally be the plane that most closely matches the target
+    // image size
+    const struct pl_plane *refplane = NULL;
+    int best_diff, best_off;
+
+    for (int i = 0; i < image->num_planes; i++) {
+        const struct pl_plane *plane = &image->planes[i];
+        const struct ra_tex *tex = plane->texture;
+        int diff = PL_MAX(abs(tex->params.w - image->width),
+                          abs(tex->params.h - image->height));
+        int off = PL_MAX(plane->shift_x, plane->shift_y);
+
+        if (!refplane || diff < best_diff || (diff == best_diff && off < best_off)) {
+            refplane = plane;
+            best_diff = diff;
+            best_off = off;
+        }
+    }
+
+    if (!refplane) {
+        PL_ERR(rr, "Image contains no planes?");
+        return false;
+    }
+
+    float target_w = fabs(pl_rect_w(image->src_rect)),
+          target_h = fabs(pl_rect_h(image->src_rect));
+    bool has_alpha = false;
 
     for (int i = 0; i < image->num_planes; i++) {
         const struct pl_plane *plane = &image->planes[i];
         struct pl_shader *psh = pl_dispatch_begin(rr->dp);
+        pl_assert(refplane);
 
-        // Compute the source shift relative to the reference size
+        // Compute the source shift/scale relative to the reference size
         float pw = plane->texture->params.w,
               ph = plane->texture->params.h,
-              rx = image->width  / pw,
-              ry = image->height / ph,
-              ox = plane->shift_x / rx,
-              oy = plane->shift_y / ry;
+              rx = refplane->texture->params.w / pw,
+              ry = refplane->texture->params.h / ph,
+              sx = plane->shift_x - refplane->shift_x,
+              sy = plane->shift_y - refplane->shift_y;
 
-        dispatch_sampler(rr, psh, PL_MIN(rx, ry), i, params, &(struct pl_sample_src) {
+        struct pl_sample_src src = {
             .tex        = plane->texture,
             .components = plane->components,
-            .new_w      = image->width,
-            .new_h      = image->height,
-            .rect       = { ox, oy, pw + ox, pw + oy },
-        });
+            .new_w      = target_w,
+            .new_h      = target_h,
+            .rect       = {
+                (image->src_rect.x0 + sx) / rx,
+                (image->src_rect.y0 + sy) / ry,
+                (image->src_rect.x1 + sx) / rx,
+                (image->src_rect.y1 + sy) / ry,
+            },
+        };
+
+        dispatch_sampler(rr, psh, PL_MIN(rx, ry), i, params, &src);
 
         ident_t sub = sh_subpass(sh, psh);
         if (!sub) {
@@ -280,9 +345,11 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         }
 
         GLSL("tmp = %s();\n", sub);
-        for (int c = 0; c < plane->components; c++) {
+        for (int c = 0; c < src.components; c++) {
             GLSL("color[%d] = tmp[%d];\n", plane->component_mapping[i],
                  plane->texture->params.format->sample_order[i]);
+
+            has_alpha |= plane->component_mapping[i] == PLANE_A;
         }
 
         // we don't need it anymore
@@ -291,10 +358,13 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
 
     pass->cur_img = (struct img) {
         .sh     = sh,
-        .offx   = 0.0,
-        .offy   = 0.0,
+        .w      = target_w,
+        .h      = target_h,
+        .offx   = refplane->shift_x,
+        .offy   = refplane->shift_y,
         .repr   = image->repr,
         .color  = image->color,
+        .comps  = has_alpha ? 4 : 3,
     };
 
     // Convert the image colorspace
@@ -303,19 +373,101 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     return true;
 }
 
+static const struct ra_tex *finalize_img(struct pl_renderer *rr,
+                                         struct img *img,
+                                         const struct ra_fmt *fmt,
+                                         const struct ra_tex **tex)
+{
+    pl_assert(fmt);
+
+    if (*tex) {
+        const struct ra_tex_params *cur = &(*tex)->params;
+        if (cur->w == img->w && cur->h == img->h && cur->format == fmt)
+            return *tex;
+    }
+
+    PL_INFO(rr, "Resizing texture: %dx%d", img->w, img->h);
+
+    ra_tex_destroy(rr->ra, tex);
+    *tex = ra_tex_create(rr->ra, &(struct ra_tex_params) {
+        .w = img->w,
+        .h = img->h,
+        .format = fmt,
+        .sampleable = true,
+        .renderable = true,
+        // Just enable what we can
+        .storable   = !!(fmt->caps & RA_FMT_CAP_STORABLE),
+        .sample_mode = (fmt->caps & RA_FMT_CAP_LINEAR)
+                            ? RA_TEX_SAMPLE_LINEAR
+                            : RA_TEX_SAMPLE_NEAREST,
+    });
+
+    if (!*tex) {
+        PL_ERR(rr, "Failed creating FBO texture! Disabling advanced rendering..");
+        rr->fbofmt = NULL;
+        return NULL;
+    }
+
+    if (!pl_dispatch_finish(rr->dp, img->sh, *tex)) {
+        PL_ERR(rr, "Failed dispatching intermediate pass!");
+        return NULL;
+    }
+
+    return *tex;
+}
+
 static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_image *image,
                             const struct pl_render_target *target,
                             const struct pl_render_params *params)
 {
-    // TODO: cache to indirect texture and dispatch real scaler if needed.
-    // For now, just assume the plane subpasses are directly scaleable
-    struct pl_shader *sh = pass->cur_img.sh;
-    bool fixed = pl_shader_output_size(sh, &(int){0}, &(int){0});
-    pl_assert(!fixed);
+    struct img *img = &pass->cur_img;
+    float rx = pl_rect_w(target->dst_rect) / pl_rect_w(image->src_rect),
+          ry = pl_rect_h(target->dst_rect) / pl_rect_h(image->src_rect);
 
-    // TODO: consult src_rect/dst_rect etc.
+    float target_w = fabs(pl_rect_w(target->dst_rect)),
+          target_h = fabs(pl_rect_h(target->dst_rect));
+
+    // The check for 1.0 also implies a check for flipping (which would be -1.0)
+    if (rx == 1.0 && ry == 1.0 && !img->offx && !img->offy) {
+        PL_TRACE(rr, "Skipping main scaler (would be no-op)");
+        return true;
+    }
+
+    if (!rr->fbofmt) {
+        PL_TRACE(rr, "Skipping main scaler (no FBOs)");
+        return true;
+    }
+
     // TODO: linearization/sigmoidization
+
+    struct pl_sample_src src = {
+        .tex        = finalize_img(rr, img, rr->fbofmt, &rr->main_scale_fbo),
+        .components = img->comps,
+        .new_w      = target_w,
+        .new_h      = target_h,
+        .rect = {
+            image->src_rect.x0 + img->offx,
+            image->src_rect.y0 + img->offy,
+            image->src_rect.x1 + img->offx,
+            image->src_rect.y1 + img->offy,
+        },
+    };
+
+    if (!src.tex)
+        return false;
+
+    struct pl_shader *sh = pl_dispatch_begin(rr->dp);
+    dispatch_sampler(rr, sh, PL_MIN(fabs(rx), fabs(ry)), SCALER_MAIN, params, &src);
+    pass->cur_img = (struct img) {
+        .sh     = sh,
+        .w      = target_w,
+        .h      = target_h,
+        .repr   = img->repr,
+        .color  = img->color,
+        .comps  = img->comps,
+    };
+
     return true;
 }
 
