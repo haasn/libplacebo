@@ -1797,7 +1797,7 @@ static void vk_pass_run(const struct ra *ra,
                                &buf_vk->slice.mem.offset);
 
         tex_barrier(ra, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                     pass_vk->initialLayout);
 
         VkViewport viewport = {
