@@ -294,6 +294,9 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
     float inv_scale = 1.0 / PL_MIN(ratio_x, ratio_y);
     inv_scale = PL_MAX(inv_scale, 1.0);
 
+    if (params->no_widening)
+        inv_scale = 1.0;
+
     if (ra->limits.max_tex_1d_dim < lut_entries) {
         PL_ERR(sh, "LUT of size %d exceeds the max 1D texture dimension (%d)",
                lut_entries, ra->limits.max_tex_1d_dim);
