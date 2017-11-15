@@ -274,7 +274,7 @@ const struct ra_fmt *ra_find_fmt(const struct ra *ra, enum ra_fmt_type type,
         for (int i = 0; i < fmt->num_components; i++) {
             if (fmt->component_depth[i] < min_depth)
                 goto next_fmt;
-            if (fmt->host_bits[i] != host_bits)
+            if (host_bits && fmt->host_bits[i] != host_bits)
                 goto next_fmt;
         }
 
