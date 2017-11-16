@@ -31,7 +31,7 @@ static locale_t cloc;
 
 void printf_c_init()
 {
-    cloc = newlocale(0, "C", (locale_t) 0);
+    cloc = newlocale(LC_NUMERIC_MASK, "C", (locale_t) 0);
     if (!cloc)
         abort();
 }
