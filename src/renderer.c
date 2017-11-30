@@ -299,8 +299,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         return false;
     }
 
-    float target_w = fabs(pl_rect_w(image->src_rect)),
-          target_h = fabs(pl_rect_h(image->src_rect));
+    float target_w = refplane->texture->params.w,
+          target_h = refplane->texture->params.h;
     bool has_alpha = false;
 
     for (int i = 0; i < image->num_planes; i++) {
@@ -311,8 +311,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         // Compute the source shift/scale relative to the reference size
         float pw = plane->texture->params.w,
               ph = plane->texture->params.h,
-              rx = refplane->texture->params.w / pw,
-              ry = refplane->texture->params.h / ph,
+              rx = target_w / pw,
+              ry = target_h / ph,
               sx = plane->shift_x - refplane->shift_x,
               sy = plane->shift_y - refplane->shift_y;
 
@@ -322,10 +322,10 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             .new_w      = target_w,
             .new_h      = target_h,
             .rect       = {
-                (image->src_rect.x0 + sx) / rx,
-                (image->src_rect.y0 + sy) / ry,
-                (image->src_rect.x1 + sx) / rx,
-                (image->src_rect.y1 + sy) / ry,
+                sx / rx,
+                sy / ry,
+                sx / rx,
+                sy / ry,
             },
         };
 
