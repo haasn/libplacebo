@@ -210,7 +210,7 @@ static void ra_shader_tests(struct pl_context *ctx, const struct ra *ra)
         });
 
         pl_shader_linearize(sh, PL_COLOR_TRC_GAMMA22);
-        REQUIRE(pl_dispatch_finish(dp, sh, fbo));
+        REQUIRE(pl_dispatch_finish(dp, sh, fbo, NULL));
     }
 
     ra_tex_download(ra, &(struct ra_tex_transfer_params) {
@@ -291,7 +291,7 @@ static void ra_scaler_tests(struct pl_context *ctx, const struct ra *ra)
             .no_compute = !fbo->params.storable,
         }
     ));
-    REQUIRE(pl_dispatch_finish(dp, sh, fbo));
+    REQUIRE(pl_dispatch_finish(dp, sh, fbo, NULL));
 
     fbo_data = malloc(fbo->params.w * fbo->params.h * sizeof(float));
     REQUIRE(ra_tex_download(ra, &(struct ra_tex_transfer_params) {
@@ -323,7 +323,8 @@ static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
                                                RA_FMT_CAP_SAMPLEABLE);
 
     const struct ra_fmt *fbo_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 4, 16, 32,
-                                               RA_FMT_CAP_RENDERABLE);
+                                               RA_FMT_CAP_RENDERABLE |
+                                               RA_FMT_CAP_BLITTABLE);
 
     if (!src_fmt || !fbo_fmt)
         return;
@@ -354,6 +355,7 @@ static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
         .h              = 40,
         .format         = fbo_fmt,
         .renderable     = true,
+        .blit_dst       = true,
         .storable       = !!(fbo_fmt->caps & RA_FMT_CAP_STORABLE),
         .host_readable  = true,
     });
@@ -377,12 +379,12 @@ static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
         .color          = pl_color_space_bt709,
         .width          = img5x5->params.w,
         .height         = img5x5->params.h,
-        .src_rect       = {0, 0, img5x5->params.w, img5x5->params.h},
+        .src_rect       = {-1.0, 0.0, img5x5->params.w - 1.0, img5x5->params.h},
     };
 
     struct pl_render_target target = {
         .fbo            = fbo,
-        .dst_rect       = {0, 0, fbo->params.w, fbo->params.h},
+        .dst_rect       = {2, 2, fbo->params.w - 2, fbo->params.h - 2},
         .repr = {
             .sys        = PL_COLOR_SYSTEM_RGB,
             .levels     = PL_COLOR_LEVELS_PC,
@@ -390,6 +392,7 @@ static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
         .color          = pl_color_space_srgb,
     };
 
+    ra_tex_clear(ra, fbo, (float[4]){0});
     REQUIRE(pl_render_image(rr, &image, &target, NULL));
 
     fbo_data = malloc(fbo->params.w * fbo->params.h * sizeof(float[4]));

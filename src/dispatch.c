@@ -652,7 +652,7 @@ static void translate_compute_shader(struct pl_dispatch *dp,
 }
 
 bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
-                        const struct ra_tex *target)
+                        const struct ra_tex *target, const struct pl_rect2d *rc)
 {
     const struct pl_shader_res *res = &sh->res;
     bool ret = false;
@@ -674,11 +674,15 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
         goto error;
     }
 
-    int w, h;
-    if (pl_shader_output_size(sh, &w, &h) && (w != tpars->w || h != tpars->h)) {
+    struct pl_rect2d full = {0, 0, tpars->w, tpars->h};
+    rc = PL_DEF(rc, &full);
+
+    int w, h, tw = abs(pl_rect_w(*rc)), th = abs(pl_rect_h(*rc));
+    if (pl_shader_output_size(sh, &w, &h) && (w != tw || h != th))
+    {
         PL_ERR(dp, "Trying to dispatch a shader with explicit output size "
-               "requirements %dx%d using a target of size %dx%d.",
-               w, h, tpars->w, tpars->h);
+               "requirements %dx%d using a target rect of size %dx%d.",
+               w, h, tw, th);
         goto error;
     }
 
@@ -686,15 +690,17 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
 
     if (pl_shader_is_compute(sh)) {
         // Translate the compute shader to simulate vertices etc.
+        // FIXME: take into account *rc
         translate_compute_shader(dp, sh, target);
     } else {
         // Add the vertex information encoding the position
         vert_pos = sh_attr_vec2(sh, "position", &(const struct pl_rect2df) {
-            .x0 = -1.0,
-            .y0 = -1.0,
-            .x1 =  1.0,
-            .y1 =  1.0,
+            .x0 = 2.0 * rc->x0 / tpars->w - 1.0,
+            .y0 = 2.0 * rc->y0 / tpars->h - 1.0,
+            .x1 = 2.0 * rc->x1 / tpars->w - 1.0,
+            .y1 = 2.0 * rc->y1 / tpars->h - 1.0,
         });
+        // TODO: also update the stencil for performance
     }
 
     struct pass *pass = find_pass(dp, sh, target, vert_pos);

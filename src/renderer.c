@@ -166,7 +166,7 @@ void pl_renderer_flush_cache(struct pl_renderer *rr)
 }
 
 const struct pl_render_params pl_render_default_params = {
-    .upscaler         = &pl_filter_ewa_lanczos, // XXX: only until separated works
+    .upscaler         = NULL, // XXX: only until separated works
     .downscaler       = NULL,
     .frame_mixer      = NULL,
 
@@ -408,7 +408,7 @@ static const struct ra_tex *finalize_img(struct pl_renderer *rr,
         return NULL;
     }
 
-    if (!pl_dispatch_finish(rr->dp, img->sh, *tex)) {
+    if (!pl_dispatch_finish(rr->dp, img->sh, *tex, NULL)) {
         PL_ERR(rr, "Failed dispatching intermediate pass!");
         return NULL;
     }
@@ -422,13 +422,12 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_render_params *params)
 {
     struct img *img = &pass->cur_img;
-    float rx = pl_rect_w(target->dst_rect) / pl_rect_w(image->src_rect),
-          ry = pl_rect_h(target->dst_rect) / pl_rect_h(image->src_rect);
-
     float target_w = fabs(pl_rect_w(target->dst_rect)),
           target_h = fabs(pl_rect_h(target->dst_rect));
 
-    // The check for 1.0 also implies a check for flipping (which would be -1.0)
+    float rx = target_w / fabs(pl_rect_w(image->src_rect)),
+          ry = target_w / fabs(pl_rect_h(image->src_rect));
+
     if (rx == 1.0 && ry == 1.0 && !img->offx && !img->offy) {
         PL_TRACE(rr, "Skipping main scaler (would be no-op)");
         return true;
@@ -497,7 +496,7 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
     }
 
     pl_assert(fbo->params.renderable);
-    return pl_dispatch_finish(rr->dp, sh, fbo);
+    return pl_dispatch_finish(rr->dp, sh, fbo, &target->dst_rect);
 }
 
 bool pl_render_image(struct pl_renderer *rr, const struct pl_image *image,
