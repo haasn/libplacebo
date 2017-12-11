@@ -354,6 +354,18 @@ const struct pl_color_map_params pl_color_map_default_params = {
     .peak_detect_frames      = 10,
 };
 
+struct sh_peak_obj {
+    const struct ra *ra;
+    const struct ra_buf *buf;
+};
+
+static void sh_peak_uninit(const struct ra *ra, void *ptr)
+{
+    struct sh_peak_obj *obj = ptr;
+    ra_buf_destroy(obj->ra, &obj->buf);
+    *obj = (struct sh_peak_obj) {0};
+}
+
 static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
                             const struct pl_color_map_params *params)
 {
@@ -367,7 +379,10 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
         return;
     }
 
-    if (!sh_require_obj(sh, state, PL_SHADER_OBJ_PEAK_DETECT))
+    struct sh_peak_obj *obj;
+    obj = SH_OBJ(sh, state, PL_SHADER_OBJ_PEAK_DETECT, struct sh_peak_obj,
+                 sh_peak_uninit);
+    if (!obj)
         return;
 
     if (!sh_try_compute(sh, 8, 8, true, sizeof(uint32_t))) {
@@ -375,7 +390,6 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
         return;
     }
 
-    struct pl_shader_obj *obj = *state;
     const struct ra *ra = sh->ra;
 
     struct ra_var idx, num, ctr, max, sum;

@@ -232,8 +232,8 @@ static bool filter_compat(const struct pl_filter *filter, float inv_scale,
 // If planar is true, takes the pixel from inX[idx] where X is the component and
 // `idx` must be defined by the caller
 static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
-                         ident_t tex, ident_t lut, ident_t lut_pos,
-                         int x, int y, int comps, bool planar)
+                         ident_t tex, ident_t lut, int x, int y, int comps,
+                         bool planar)
 {
     // Since we can't know the subpixel position in advance, assume a
     // worst case scenario
@@ -251,9 +251,9 @@ static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
         GLSL("if (d < %f) {\n", filter->radius_cutoff);
 
     // Get the weight for this pixel
-    GLSL("w = texture(%s, %s(d * 1.0/%f)).r; \n"
-         "wsum += w;                        \n",
-         lut, lut_pos, filter->radius);
+    GLSL("w = %s(d * 1.0/%f); \n"
+         "wsum += w;          \n",
+         lut, filter->radius);
 
     if (planar) {
         for (int n = 0; n < comps; n++)
@@ -266,6 +266,26 @@ static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
 
     if (maybe_skippable)
         GLSL("}\n");
+}
+
+struct sh_sampler_obj {
+    const struct pl_filter *filter;
+    struct pl_shader_obj *lut;
+};
+
+static void sh_sampler_uninit(const struct ra *ra, void *ptr)
+{
+    struct sh_sampler_obj *obj = ptr;
+    pl_shader_obj_destroy(&obj->lut);
+    pl_filter_free(&obj->filter);
+    *obj = (struct sh_sampler_obj) {0};
+}
+
+static void fill_sampler_lut(void *ptr, float *data)
+{
+    const struct sh_sampler_obj *obj = ptr;
+    const struct pl_filter *filt = obj->filter;
+    memcpy(data, filt->weights, filt->params.lut_entries * sizeof(float));
 }
 
 bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *src,
@@ -286,10 +306,13 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
     ident_t src_tex, pos, size, pt;
     if (!setup_src(sh, src, &src_tex, &pos, &size, &pt, &ratio_x, &ratio_y, &comps))
         return false;
-    if (!sh_require_obj(sh, params->lut, PL_SHADER_OBJ_LUT))
+
+    struct sh_sampler_obj *obj;
+    obj = SH_OBJ(sh, params->lut, PL_SHADER_OBJ_SAMPLER, struct sh_sampler_obj,
+                 sh_sampler_uninit);
+    if (!obj)
         return false;
 
-    struct pl_shader_obj *lut = *params->lut;
     int lut_entries = PL_DEF(params->lut_entries, 64);
     float inv_scale = 1.0 / PL_MIN(ratio_x, ratio_y);
     inv_scale = PL_MAX(inv_scale, 1.0);
@@ -297,61 +320,29 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
     if (params->no_widening)
         inv_scale = 1.0;
 
-    if (ra->limits.max_tex_1d_dim < lut_entries) {
-        PL_ERR(sh, "LUT of size %d exceeds the max 1D texture dimension (%d)",
-               lut_entries, ra->limits.max_tex_1d_dim);
-        return false;
-    }
-
-    if (!lut->tex || !filter_compat(lut->filter, inv_scale, lut_entries, params))
-    {
-        const struct ra_fmt *fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 16, 32,
-                                               RA_FMT_CAP_SAMPLEABLE |
-                                               RA_FMT_CAP_LINEAR);
-        if (!fmt) {
-            PL_WARN(sh, "Found no matching texture format for polar LUT");
-            return false;
-        }
-
-        PL_INFO(sh, "Recreating polar filter LUT");
-        pl_filter_free(&lut->filter);
-        lut->filter = pl_filter_generate(sh->ctx, &(struct pl_filter_params) {
+    bool update = !filter_compat(obj->filter, inv_scale, lut_entries, params);
+    if (update) {
+        pl_filter_free(&obj->filter);
+        obj->filter = pl_filter_generate(sh->ctx, &(struct pl_filter_params) {
             .config         = params->filter,
             .lut_entries    = lut_entries,
             .filter_scale   = inv_scale,
             .cutoff         = PL_DEF(params->cutoff, 0.001),
         });
 
-        if (!lut->filter) {
+        if (!obj->filter) {
             // This should never happen, but just in case ..
             PL_ERR(sh, "Failed initializing polar filter!");
             return false;
         }
-
-        lut->tex = ra_tex_create(ra, &(struct ra_tex_params) {
-            .w              = lut_entries,
-            .format         = fmt,
-            .sampleable     = true,
-            .sample_mode    = RA_TEX_SAMPLE_LINEAR,
-            .address_mode   = RA_TEX_ADDRESS_CLAMP,
-            .initial_data   = lut->filter->weights,
-        });
-
-        if (!lut->tex) {
-            PL_ERR(sh, "Failed creating polar LUT texture!");
-            return false;
-        }
     }
 
-    pl_assert(lut->filter && lut->tex);
-    ident_t lut_pos = sh_lut_pos(sh, lut_entries);
-    ident_t lut_tex = sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name = "polar_lut",
-            .type = RA_DESC_SAMPLED_TEX,
-        },
-        .object = lut->tex,
-    });
+    ident_t lut = sh_lut(sh, &obj->lut, SH_LUT_LINEAR, lut_entries, 0, 0,
+                         update, fill_sampler_lut, obj);
+    if (!lut) {
+        PL_ERR(sh, "Failed initializing polar LUT!");
+        return false;
+    }
 
     GLSL("// pl_shader_sample_polar                     \n"
          "vec4 color = vec4(0.0);                       \n"
@@ -364,7 +355,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
          "vec4 c;                                       \n",
          pos, size, pt);
 
-    int bound   = ceil(lut->filter->radius_cutoff);
+    int bound   = ceil(obj->filter->radius_cutoff);
     int offset  = bound - 1; // padding top/left
     int padding = offset + bound; // total padding
 
@@ -411,8 +402,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
             for (int x = 1 - bound; x <= bound; x++) {
                 GLSL("idx = %d * rel.y + rel.x + %d;\n",
                      iw, iw * (y + offset) + x + offset);
-                polar_sample(sh, lut->filter, src_tex, lut_tex, lut_pos, x, y,
-                             comps, true);
+                polar_sample(sh, obj->filter, src_tex, lut, x, y, comps, true);
             }
         }
     } else {
@@ -430,7 +420,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
                 // four gathered texels, without having to discard any. So
                 // only do it if we suspsect it will be a win rather than a
                 // loss.
-                bool use_gather = sqrt(x*x + y*y) < lut->filter->radius_cutoff;
+                bool use_gather = sqrt(x*x + y*y) < obj->filter->radius_cutoff;
 
                 // Make sure all required features are supported
                 use_gather &= ra->glsl.version >= 400;
@@ -441,8 +431,8 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
                     // Switch to direct sampling instead
                     for (int yy = y; yy <= bound && yy <= y + 1; yy++) {
                         for (int xx = x; xx <= bound && xx <= x + 1; xx++) {
-                            polar_sample(sh, lut->filter, src_tex, lut_tex,
-                                         lut_pos, xx, yy, comps, false);
+                            polar_sample(sh, obj->filter, src_tex, lut,
+                                         xx, yy, comps, false);
                         }
                     }
                     continue; // next group of 4
@@ -464,7 +454,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
                         continue; // next subpixel
 
                     GLSL("idx = %d;\n", p);
-                    polar_sample(sh, lut->filter, src_tex, lut_tex, lut_pos,
+                    polar_sample(sh, obj->filter, src_tex, lut,
                                  x+xo[p], y+yo[p], comps, true);
                 }
             }

@@ -165,4 +165,3 @@ int main()
     REQUIRE(feq(test[1], 0.553254));
     REQUIRE(feq(test[2], 0.218841));
 }
-

@@ -423,49 +423,42 @@ void pl_shader_obj_destroy(struct pl_shader_obj **ptr)
     if (!obj)
         return;
 
-    if (obj->ra) {
-        ra_buf_destroy(obj->ra, &obj->buf);
-        ra_tex_destroy(obj->ra, &obj->tex);
-    }
+    if (obj->uninit)
+        obj->uninit(obj->ra, obj->priv);
 
     *ptr = NULL;
     talloc_free(obj);
 }
 
-bool sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
-                    enum pl_shader_obj_type type)
+void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
+                     enum pl_shader_obj_type type, size_t priv_size,
+                     void (*uninit)(const struct ra *ra, void *priv))
 {
     if (!ptr)
-        return false;
+        return NULL;
 
     struct pl_shader_obj *obj = *ptr;
     if (obj && obj->ra != sh->ra) {
         PL_ERR(sh, "Passed pl_shader_obj belongs to different RA!");
-        return false;
+        return NULL;
     }
 
     if (obj && obj->type != type) {
         PL_ERR(sh, "Passed pl_shader_obj of wrong type! Shader objects must "
                "always be used with the same type of shader.");
-        return false;
+        return NULL;
     }
 
     if (!obj) {
         obj = talloc_zero(NULL, struct pl_shader_obj);
         obj->ra = sh->ra;
         obj->type = type;
+        obj->priv = talloc_zero_size(obj, priv_size);
+        obj->uninit = uninit;
     }
 
     *ptr = obj;
-    return true;
-}
-
-ident_t sh_lut_pos(struct pl_shader *sh, int lut_size)
-{
-    ident_t name = sh_fresh(sh, "LUT_POS");
-    GLSLH("#define %s(x) mix(%f, %f, (x)) \n",
-          name, 0.5 / lut_size, 1.0 - 0.5 / lut_size);
-    return name;
+    return obj->priv;
 }
 
 ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *p_state)
@@ -507,4 +500,287 @@ ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *p_state)
     ident_t res = sh_fresh(sh, "RAND");
     GLSLH("#define %s (%s(%s))\n", res, randfun, state);
     return res;
+}
+
+// Defines a LUT position helper macro. This translates from an absolute texel
+// scale (0.0 - 1.0) to the texture coordinate scale for the corresponding
+// sample in a texture of dimension `lut_size`.
+static ident_t sh_lut_pos(struct pl_shader *sh, int lut_size)
+{
+    ident_t name = sh_fresh(sh, "LUT_POS");
+    GLSLH("#define %s(x) mix(%f, %f, (x)) \n",
+          name, 0.5 / lut_size, 1.0 - 0.5 / lut_size);
+    return name;
+}
+
+struct sh_lut_obj {
+    enum sh_lut_method method;
+    int width, height, depth;
+    union {
+        const struct ra_buf *buf;
+        const struct ra_tex *tex;
+        struct bstr str;
+    } weights;
+};
+
+static void sh_lut_uninit(const struct ra *ra, void *ptr)
+{
+    struct sh_lut_obj *lut = ptr;
+    switch (lut->method) {
+    case SH_LUT_TEXTURE:
+    case SH_LUT_LINEAR:
+        ra_tex_destroy(ra, &lut->weights.tex);
+        break;
+    case SH_LUT_UBO:
+    case SH_LUT_SSBO:
+        ra_buf_destroy(ra, &lut->weights.buf);
+        break;
+    case SH_LUT_LITERAL:
+        talloc_free(lut->weights.str.start);
+        break;
+    default: break;
+    }
+
+    *lut = (struct sh_lut_obj) {0};
+}
+
+// Maximum number of floats to embed as a literal array (when using SH_LUT_AUTO)
+#define SH_LUT_MAX_LITERAL 1024
+
+ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
+               enum sh_lut_method method, int width, int height, int depth,
+               bool update, void (*fill)(void *priv, float *data), void *priv)
+{
+    const struct ra *ra = sh->ra;
+    float *tmp = NULL;
+    ident_t ret = NULL;
+
+    pl_assert(width > 0 && height >= 0 && depth >= 0);
+    int sizes[] = { width, height, depth };
+    int size = width * PL_DEF(height, 1) * PL_DEF(depth, 1);
+    int dims = depth ? 3 : height ? 2 : 1;
+
+    int texdim = 0;
+    int max_tex_dim[] = {
+        ra->limits.max_tex_1d_dim,
+        ra->limits.max_tex_2d_dim,
+        ra->limits.max_tex_3d_dim,
+    };
+
+    for (int d = dims; d <= PL_ARRAY_SIZE(max_tex_dim); d++) {
+        if (size <= max_tex_dim[d - 1]) {
+            texdim = d;
+            break;
+        }
+    }
+
+    struct sh_lut_obj *lut = SH_OBJ(sh, obj, PL_SHADER_OBJ_LUT,
+                                    struct sh_lut_obj, sh_lut_uninit);
+
+    if (!lut) {
+        PL_ERR(sh, "Failed initializing LUT object!");
+        goto error;
+    }
+
+    if (!ra && method == SH_LUT_LINEAR) {
+        PL_ERR(sh, "Linear LUTs require the use of a RA!");
+        goto error;
+    }
+
+    if (!ra) {
+        PL_TRACE(sh, "No RA available, falling back to literal LUT embedding");
+        method = SH_LUT_LITERAL;
+    }
+
+    // Pick the best method
+    if (!method && size <= SH_LUT_MAX_LITERAL)
+        method = SH_LUT_LITERAL;
+
+    if (!method && texdim)
+        method = SH_LUT_TEXTURE;
+
+    if (!method && size * sizeof(float) <= ra->limits.max_ubo_size)
+        method = SH_LUT_UBO;
+
+    if (!method && size * sizeof(float) <= ra->limits.max_ssbo_size)
+        method = SH_LUT_SSBO;
+
+    // No other method found
+    if (!method) {
+        PL_TRACE(sh, "No other LUT method works, falling back to literal "
+                 "embedding.. this is most likely a slow path!");
+        method = SH_LUT_LITERAL;
+    }
+
+    // Forcibly reinitialize the existing LUT if needed
+    if (method != lut->method || width != lut->width || height != lut->height
+        || depth != lut->depth)
+    {
+        PL_DEBUG(sh, "LUT method or size changed, reinitializing..");
+        sh_lut_uninit(ra, lut);
+        update = true;
+    }
+
+    if (update) {
+        tmp = talloc_zero_size(NULL, size * sizeof(float));
+        fill(priv, tmp);
+
+        switch (method) {
+        case SH_LUT_TEXTURE:
+        case SH_LUT_LINEAR: {
+            if (!texdim) {
+                PL_ERR(sh, "Texture LUT exceeds texture dimensions!");
+                goto error;
+            }
+
+            enum ra_fmt_caps caps = RA_FMT_CAP_SAMPLEABLE;
+            enum ra_tex_sample_mode mode = RA_TEX_SAMPLE_NEAREST;
+
+            if (method == SH_LUT_LINEAR) {
+                caps |= RA_FMT_CAP_LINEAR;
+                mode = RA_TEX_SAMPLE_LINEAR;
+            }
+
+            const struct ra_fmt *fmt;
+            fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 16, 32, caps);
+            if (!fmt) {
+                PL_ERR(sh, "Found no compatible texture format for LUT!");
+                goto error;
+            }
+
+            pl_assert(!lut->weights.tex);
+            lut->weights.tex = ra_tex_create(ra, &(struct ra_tex_params) {
+                .w              = width,
+                .h              = PL_DEF(height, texdim >= 2 ? 1 : 0),
+                .d              = PL_DEF(depth,  texdim >= 3 ? 1 : 0),
+                .format         = fmt,
+                .sampleable     = true,
+                .sample_mode    = mode,
+                .address_mode   = RA_TEX_ADDRESS_CLAMP,
+                .initial_data   = tmp,
+            });
+
+            if (!lut->weights.tex) {
+                PL_ERR(sh, "Failed creating LUT texture!");
+                goto error;
+            }
+            break;
+        }
+
+        case SH_LUT_UBO:
+        case SH_LUT_SSBO: {
+            enum ra_buf_type type = (method == SH_LUT_UBO)
+                ? RA_BUF_UNIFORM : RA_BUF_STORAGE;
+
+            pl_assert(!lut->weights.buf);
+            lut->weights.buf = ra_buf_create(ra, &(struct ra_buf_params) {
+                .type           = type,
+                .size           = sizeof(float) * size,
+                .initial_data   = tmp,
+            });
+
+            if (!lut->weights.buf) {
+                PL_ERR(sh, "Failed creating LUT buffer!");
+                goto error;
+            }
+            break;
+        }
+
+        case SH_LUT_LITERAL: {
+            pl_assert(!lut->weights.str.len);
+            for (int i = 0; i < size; i++) {
+                bstr_xappend_asprintf(lut, &lut->weights.str, "%s%f",
+                                      i > 0 ? "," : "", tmp[i]);
+            }
+            break;
+        }
+
+        case SH_LUT_AUTO: abort();
+        }
+
+        lut->method = method;
+        lut->width = width;
+        lut->height = height;
+        lut->depth = depth;
+    }
+
+    // Done updating, generate the GLSL
+    ident_t name = sh_fresh(sh, "lut");
+    switch (method) {
+    case SH_LUT_TEXTURE:
+    case SH_LUT_LINEAR: {
+        ident_t tex = sh_desc(sh, (struct pl_shader_desc) {
+            .desc = {
+                .name = "weights",
+                .type = RA_DESC_SAMPLED_TEX,
+            },
+            .object = lut->weights.tex,
+        });
+
+        ident_t pos_macros[PL_ARRAY_SIZE(sizes)] = {0};
+        for (int i = 0; i < dims; i++)
+            pos_macros[i] = sh_lut_pos(sh, sizes[i]);
+
+        const char *types[] = {"float", "vec2", "vec3", "vec4"};
+        GLSLH("#define %s(pos) (texture(%s, %s(\\\n", name, tex, types[texdim-1]);
+        for (int i = 0; i < texdim; i++) {
+            char sep = i == 0 ? ' ' : ',';
+            if (pos_macros[i]) {
+                GLSLH("   %c%s((pos).%c)\\\n", sep, pos_macros[i], "xyzw"[i]);
+            } else {
+                GLSLH("   %c%f\\\n", sep, 0.5);
+            }
+        }
+        GLSLH("  )).r)\n");
+        ret = name;
+        break;
+    }
+
+    case SH_LUT_UBO:
+    case SH_LUT_SSBO: {
+        enum ra_desc_type type = (method == SH_LUT_UBO)
+            ? RA_DESC_BUF_UNIFORM : RA_DESC_BUF_STORAGE;
+
+        struct ra_desc buf = {
+            .name = "lut",
+            .type = type,
+            .access = RA_DESC_ACCESS_READONLY,
+        };
+
+        struct ra_var weights = ra_var_float(sh_fresh(sh, "weights"));
+        weights.dim_a = size;
+
+        struct ra_var_layout layout;
+        if (!ra_buf_desc_append(tmp, ra, &buf, &layout, weights)) {
+            PL_ERR(sh, "Failed packing LUT weights into buffer?");
+            goto error;
+        }
+
+        sh_desc(sh, (struct pl_shader_desc) {
+            .desc = buf,
+            .object = lut->weights.buf,
+        });
+
+        GLSLH("#define %s(pos) (%s[pos.x\\\n", name, weights.name);
+        int shift = width;
+        for (int i = 1; i < dims; i++) {
+            GLSLH("    + %d * pos[%d]\\\n", shift, i);
+            shift *= sizes[i];
+        }
+        GLSLH("  ])\n");
+        ret = name;
+        break;
+    }
+
+    case SH_LUT_LITERAL:
+        // TODO
+        abort();
+
+    case SH_LUT_AUTO: abort();
+    }
+
+    // fall through
+error:
+    talloc_free(tmp);
+    return ret;
 }

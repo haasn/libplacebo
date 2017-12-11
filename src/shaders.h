@@ -105,31 +105,29 @@ void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
 // the given size requirements. Errors and returns false otherwise.
 bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h);
 
-// Defines a LUT position helper macro. This translates from an absolute texel
-// scale (0.0 - 1.0) to the texture coordinate scale for the corresponding
-// sample in a texture of dimension `lut_size`.
-ident_t sh_lut_pos(struct pl_shader *sh, int lut_size);
-
 // Shader resources
 
 enum pl_shader_obj_type {
     PL_SHADER_OBJ_INVALID = 0,
     PL_SHADER_OBJ_PEAK_DETECT,
+    PL_SHADER_OBJ_SAMPLER,
     PL_SHADER_OBJ_LUT,
 };
 
 struct pl_shader_obj {
     enum pl_shader_obj_type type;
     const struct ra *ra;
-
-    // The following fields are for free use by the shader
-    const struct ra_buf *buf;
-    const struct ra_tex *tex;
-    const struct pl_filter *filter;
+    void (*uninit)(const struct ra *ra, void *priv);
+    void *priv;
 };
 
-bool sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
-                    enum pl_shader_obj_type type);
+// Returns (*ptr)->priv, or NULL on failure
+void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
+                     enum pl_shader_obj_type type, size_t priv_size,
+                     void (*uninit)(const struct ra *ra, void *priv));
+
+#define SH_OBJ(sh, ptr, type, t, uninit) \
+    ((t*) sh_require_obj(sh, ptr, type, sizeof(t), uninit))
 
 // Initializes a PRNG. The resulting string will directly evaluate to a
 // pseudorandom, uniformly distributed float from [0.0,1.0]. Since this
@@ -139,3 +137,33 @@ bool sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
 //
 // If `temporal` is set, the PRNG will vary across frames.
 ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *state);
+
+enum sh_lut_method {
+    SH_LUT_AUTO = 0, // pick whatever makes the most sense
+    SH_LUT_TEXTURE,  // upload as texture
+    SH_LUT_UBO,      // uniform buffer array
+    SH_LUT_SSBO,     // shader storage buffer array
+    SH_LUT_LITERAL,  // constant / literal array in shader source (fallback)
+
+    // this is never picked by SH_DATA_AUTO
+    SH_LUT_LINEAR,   // upload as linearly-sampleable texture
+};
+
+// Makes a table of float values available as a shader variable, using an a
+// given method (falling back if needed). The resulting identifier can be
+// sampled directly as %s(pos), where pos is a vector with the right number of
+// dimensions. `pos` must be an integer vector within the bounds of the array,
+// unless the method is `SH_LUT_LINEAR` or `SH_LUT_TEXTURE` in which case it's
+// a float vector that gets interpolated and clamped as needed. Returns NULL on
+// error.
+//
+// This function also acts as `sh_require_obj`, and uses the `buf`, `tex`
+// and `text` fields of the resulting `obj`. (The other fields may be used by
+// the caller)
+//
+// The `fill` function will be called with a zero-initialized buffer whenever
+// the data needs to be computed, which happens whenever the size is changed,
+// the shader object is invalidated, or `update` is set to true.
+ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
+               enum sh_lut_method method, int width, int height, int depth,
+               bool update, void (*fill)(void *priv, float *data), void *priv);
