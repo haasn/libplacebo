@@ -31,6 +31,6 @@ after_failure: cat ./build/meson-logs/testlog.txt
 
 install:
   - export PATH="`pwd`/bin:${PATH}"
-  - pyenv global system 3.5
+  - pyenv global system 3.6
   - wget https://github.com/ninja-build/ninja/releases/download/v1.7.2/ninja-linux.zip && unzip -q ninja-linux.zip -d bin
   - pip3 install meson
