@@ -898,7 +898,7 @@ done: ;
     switch (method) {
     case PL_DITHER_WHITE_NOISE: {
         ident_t prng = sh_prng(sh, params->temporal, NULL);
-        GLSL("bias = %s - 0.5;\n", prng);
+        GLSL("bias = %s;\n", prng);
         break;
     }
 
@@ -916,18 +916,18 @@ done: ;
              "b = 0x10101u * b;                        \n"
              "b = (b >> 16) & 0xFFu;                   \n"
              // Generate bias value
-             "bias = float(b) * 1.0/256.0 - 0.5;       \n");
+             "bias = float(b) * 1.0/256.0;             \n");
         break;
 
     default: // LUT-based methods
         pl_assert(lut);
-        GLSL("bias = %s(pos) - 0.5;\n", lut);
+        GLSL("bias = %s(pos);\n", lut);
         break;
     }
 
     unsigned long long scale = (1LLU << new_depth) - 1;
     GLSL("color = vec4(%llu.0) * color + vec4(bias); \n"
-         "color = round(color) * vec4(1.0/%llu.0);   \n"
+         "color = floor(color) * vec4(1.0/%llu.0);   \n"
          "}                                          \n",
          scale, scale);
 }
