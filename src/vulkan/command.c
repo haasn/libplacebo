@@ -339,8 +339,10 @@ error:
     TARRAY_APPEND(pool, pool->cmds, pool->num_cmds, cmd);
 }
 
-void vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
+bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
 {
+    bool ret = false;
+
     if (timeout && vk->num_cmds_queued)
         vk_flush_commands(vk);
 
@@ -354,7 +356,17 @@ void vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
         vk_cmd_reset(vk, cmd);
         TARRAY_REMOVE_AT(vk->cmds_pending, vk->num_cmds_pending, 0);
         TARRAY_APPEND(pool, pool->cmds, pool->num_cmds, cmd);
+        ret = true;
+
+        // If we've successfully spent some time waiting for at least one
+        // command, disable the timeout. This has the dual purpose of both
+        // making sure we don't over-wait due to repeat timeout applicaiton,
+        // but also makes sure we don't block on future commands if we've
+        // already spend time waiting for one.
+        timeout = 0;
     }
+
+    return ret;
 }
 
 bool vk_flush_commands(struct vk_ctx *vk)
@@ -405,4 +417,9 @@ error:
     }
 
     return ret;
+}
+
+void vk_wait_idle(struct vk_ctx *vk)
+{
+    while (vk_poll_commands(vk, UINT64_MAX)) ;
 }

@@ -137,16 +137,20 @@ struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool);
 // takes over ownership of *cmd, i.e. the caller should not touch it again.
 void vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd *cmd);
 
-// Wait for all currently pending commands to have completed. This is the only
-// function that actually processes the callbacks. Will wait at most `timeout`
-// nanoseconds for the completion of each command. Using it with a value of
-// UINT64_MAX effectively means waiting until the pool/device is idle. The
-// timeout may also be passed as 0, in which case this function will not block,
-// but only poll for completed commands.
-void vk_poll_commands(struct vk_ctx *vk, uint64_t timeout);
+// Block until some commands complete executing. This is the only function that
+// actually processes the callbacks. Will wait at most `timeout` nanoseconds
+// for the completion of any command. The timeout may also be passed as 0, in
+// which case this function will not block, but only poll for completed
+// commands. Returns whether any forward progress was made.
+bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout);
 
 // Flush all currently queued commands. Call this once per frame, after
 // submitting all of the command buffers for that frame. Calling this more
 // often than that is possible but bad for performance.
 // Returns whether successful. Failed commands will be implicitly dropped.
 bool vk_flush_commands(struct vk_ctx *vk);
+
+// Wait until all commands are complete, i.e. the device is idle. This is
+// basically equivalent to calling `vk_poll_commands` with a timeout of
+// UINT64_MAX until it returns `false`.
+void vk_wait_idle(struct vk_ctx *vk);

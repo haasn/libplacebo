@@ -108,8 +108,7 @@ static void vk_destroy_ra(const struct ra *ra)
     struct vk_ctx *vk = ra_vk_get(ra);
 
     vk_submit(ra);
-    vk_flush_commands(vk);
-    vk_poll_commands(vk, UINT64_MAX);
+    vk_wait_idle(vk);
 
     vk_malloc_destroy(&p->alloc);
     spirv_compiler_destroy(&p->spirv);

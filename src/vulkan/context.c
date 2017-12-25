@@ -36,7 +36,7 @@ void pl_vulkan_destroy(const struct pl_vulkan **pl_vk)
     struct vk_ctx *vk = (*pl_vk)->priv;
     if (vk->dev) {
         PL_DEBUG(vk, "Flushing remaining commands...");
-        vk_poll_commands(vk, UINT64_MAX);
+        vk_wait_idle(vk);
         pl_assert(vk->num_cmds_queued == 0);
         pl_assert(vk->num_cmds_pending == 0);
         for (int i = 0; i < vk->num_pools; i++)
