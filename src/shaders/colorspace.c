@@ -391,6 +391,7 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
     }
 
     const struct ra *ra = sh->ra;
+    obj->ra = ra;
 
     struct ra_var idx, num, ctr, max, sum;
     idx = ra_var_uint(sh_fresh(sh, "index"));
