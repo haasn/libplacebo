@@ -141,8 +141,7 @@ ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *state);
 enum sh_lut_method {
     SH_LUT_AUTO = 0, // pick whatever makes the most sense
     SH_LUT_TEXTURE,  // upload as texture
-    SH_LUT_UBO,      // uniform buffer array
-    SH_LUT_SSBO,     // shader storage buffer array
+    SH_LUT_UNIFORM,  // uniform array
     SH_LUT_LITERAL,  // constant / literal array in shader source (fallback)
 
     // this is never picked by SH_DATA_AUTO
@@ -166,4 +165,5 @@ enum sh_lut_method {
 // the shader object is invalidated, or `update` is set to true.
 ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
                enum sh_lut_method method, int width, int height, int depth,
-               bool update, void (*fill)(void *priv, float *data), void *priv);
+               bool update, void *priv,
+               void (*fill)(void *priv, float *data, int w, int h, int d));

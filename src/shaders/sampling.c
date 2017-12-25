@@ -281,11 +281,13 @@ static void sh_sampler_uninit(const struct ra *ra, void *ptr)
     *obj = (struct sh_sampler_obj) {0};
 }
 
-static void fill_sampler_lut(void *ptr, float *data)
+static void fill_sampler_lut(void *priv, float *data, int w, int h, int d)
 {
-    const struct sh_sampler_obj *obj = ptr;
+    const struct sh_sampler_obj *obj = priv;
     const struct pl_filter *filt = obj->filter;
-    memcpy(data, filt->weights, filt->params.lut_entries * sizeof(float));
+
+    pl_assert(w == filt->params.lut_entries);
+    memcpy(data, filt->weights, w * sizeof(float));
 }
 
 bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *src,
@@ -338,7 +340,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
     }
 
     ident_t lut = sh_lut(sh, &obj->lut, SH_LUT_LINEAR, lut_entries, 0, 0,
-                         update, fill_sampler_lut, obj);
+                         update, obj, fill_sampler_lut);
     if (!lut) {
         PL_ERR(sh, "Failed initializing polar LUT!");
         return false;

@@ -517,9 +517,9 @@ struct sh_lut_obj {
     enum sh_lut_method method;
     int width, height, depth;
     union {
-        const struct ra_buf *buf;
         const struct ra_tex *tex;
         struct bstr str;
+        float *data;
     } weights;
 };
 
@@ -531,9 +531,8 @@ static void sh_lut_uninit(const struct ra *ra, void *ptr)
     case SH_LUT_LINEAR:
         ra_tex_destroy(ra, &lut->weights.tex);
         break;
-    case SH_LUT_UBO:
-    case SH_LUT_SSBO:
-        ra_buf_destroy(ra, &lut->weights.buf);
+    case SH_LUT_UNIFORM:
+        talloc_free(lut->weights.data);
         break;
     case SH_LUT_LITERAL:
         talloc_free(lut->weights.str.start);
@@ -549,7 +548,8 @@ static void sh_lut_uninit(const struct ra *ra, void *ptr)
 
 ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
                enum sh_lut_method method, int width, int height, int depth,
-               bool update, void (*fill)(void *priv, float *data), void *priv)
+               bool update, void *priv,
+               void (*fill)(void *priv, float *data, int w, int h, int d))
 {
     const struct ra *ra = sh->ra;
     float *tmp = NULL;
@@ -599,11 +599,8 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
     if (!method && texdim)
         method = SH_LUT_TEXTURE;
 
-    if (!method && size * sizeof(float) <= ra->limits.max_ubo_size)
-        method = SH_LUT_UBO;
-
-    if (!method && size * sizeof(float) <= ra->limits.max_ssbo_size)
-        method = SH_LUT_SSBO;
+    if (!method && ra->caps & RA_CAP_INPUT_VARIABLES)
+        method = SH_LUT_UNIFORM;
 
     // No other method found
     if (!method) {
@@ -623,7 +620,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
 
     if (update) {
         tmp = talloc_zero_size(NULL, size * sizeof(float));
-        fill(priv, tmp);
+        fill(priv, tmp, width, height, depth);
 
         switch (method) {
         case SH_LUT_TEXTURE:
@@ -667,24 +664,11 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
             break;
         }
 
-        case SH_LUT_UBO:
-        case SH_LUT_SSBO: {
-            enum ra_buf_type type = (method == SH_LUT_UBO)
-                ? RA_BUF_UNIFORM : RA_BUF_STORAGE;
-
-            pl_assert(!lut->weights.buf);
-            lut->weights.buf = ra_buf_create(ra, &(struct ra_buf_params) {
-                .type           = type,
-                .size           = sizeof(float) * size,
-                .initial_data   = tmp,
-            });
-
-            if (!lut->weights.buf) {
-                PL_ERR(sh, "Failed creating LUT buffer!");
-                goto error;
-            }
+        case SH_LUT_UNIFORM:
+            pl_assert(!lut->weights.data);
+            lut->weights.data = tmp; // re-use `tmp`
+            tmp = NULL;
             break;
-        }
 
         case SH_LUT_LITERAL: {
             pl_assert(!lut->weights.str.len);
@@ -706,6 +690,8 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
 
     // Done updating, generate the GLSL
     ident_t name = sh_fresh(sh, "lut");
+    ident_t arr_name = NULL;
+
     switch (method) {
     case SH_LUT_TEXTURE:
     case SH_LUT_LINEAR: {
@@ -736,47 +722,38 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
         break;
     }
 
-    case SH_LUT_UBO:
-    case SH_LUT_SSBO: {
-        enum ra_desc_type type = (method == SH_LUT_UBO)
-            ? RA_DESC_BUF_UNIFORM : RA_DESC_BUF_STORAGE;
-
-        struct ra_desc buf = {
-            .name = "lut",
-            .type = type,
-            .access = RA_DESC_ACCESS_READONLY,
-        };
-
-        struct ra_var weights = ra_var_float(sh_fresh(sh, "weights"));
-        weights.dim_a = size;
-
-        struct ra_var_layout layout;
-        if (!ra_buf_desc_append(tmp, ra, &buf, &layout, weights)) {
-            PL_ERR(sh, "Failed packing LUT weights into buffer?");
-            goto error;
-        }
-
-        sh_desc(sh, (struct pl_shader_desc) {
-            .desc = buf,
-            .object = lut->weights.buf,
+    case SH_LUT_UNIFORM:
+        arr_name = sh_var(sh, (struct pl_shader_var) {
+            .var = {
+                .name = "weights",
+                .type = RA_VAR_FLOAT,
+                .dim_v = 1,
+                .dim_m = 1,
+                .dim_a = size,
+            },
+            .data = lut->weights.data,
         });
+        break;
 
-        GLSLH("#define %s(pos) (%s[pos.x\\\n", name, weights.name);
+    case SH_LUT_LITERAL:
+        arr_name = sh_fresh(sh, "weights");
+        GLSLH("const float %s[%d] = float[](\n  ", arr_name, size);
+        bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], lut->weights.str);
+        GLSLH(");\n");
+        break;
+
+    default: abort();
+    }
+
+    if (arr_name) {
+        GLSLH("#define %s(pos) (%s[int(%d * (pos).x)\\\n", name, arr_name, width);
         int shift = width;
         for (int i = 1; i < dims; i++) {
-            GLSLH("    + %d * pos[%d]\\\n", shift, i);
+            GLSLH("    + %d * int(%d * (pos)[%d])\\\n", shift, sizes[i], i);
             shift *= sizes[i];
         }
         GLSLH("  ])\n");
         ret = name;
-        break;
-    }
-
-    case SH_LUT_LITERAL:
-        // TODO
-        abort();
-
-    case SH_LUT_AUTO: abort();
     }
 
     // fall through
