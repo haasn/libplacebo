@@ -35,6 +35,7 @@
 #include "include/libplacebo/common.h"
 #include "include/libplacebo/context.h"
 #include "include/libplacebo/dispatch.h"
+#include "include/libplacebo/dither.h"
 #include "include/libplacebo/filters.h"
 #include "include/libplacebo/ra.h"
 #include "include/libplacebo/renderer.h"
@@ -54,6 +55,9 @@
 
 // This is faster but must only be called on positive powers of two.
 #define PL_ALIGN2(x, align) (((x) + (align) - 1) & ~((align) - 1))
+
+// Returns the log base 2 of an unsigned long long
+#define PL_LOG2(x) ((unsigned) (8*sizeof (unsigned long long) - __builtin_clzll((x)) - 1))
 
 // Returns the size of a static array with known size.
 #define PL_ARRAY_SIZE(s) (sizeof(s) / sizeof((s)[0]))

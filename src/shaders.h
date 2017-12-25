@@ -111,6 +111,7 @@ enum pl_shader_obj_type {
     PL_SHADER_OBJ_INVALID = 0,
     PL_SHADER_OBJ_PEAK_DETECT,
     PL_SHADER_OBJ_SAMPLER,
+    PL_SHADER_OBJ_DITHER,
     PL_SHADER_OBJ_LUT,
 };
 

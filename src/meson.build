@@ -32,6 +32,7 @@ sources = [
   'colorspace.c',
   'common.c',
   'context.c',
+  'dither.c',
   'dispatch.c',
   'filters.c',
   'ra.c',
@@ -52,6 +53,7 @@ sources = [
 tests = [
   'context.c',
   'colorspace.c',
+  'dither.c',
   'filters.c',
 ]
 

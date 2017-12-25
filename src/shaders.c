@@ -544,7 +544,7 @@ static void sh_lut_uninit(const struct ra *ra, void *ptr)
 }
 
 // Maximum number of floats to embed as a literal array (when using SH_LUT_AUTO)
-#define SH_LUT_MAX_LITERAL 1024
+#define SH_LUT_MAX_LITERAL 256
 
 ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
                enum sh_lut_method method, int width, int height, int depth,

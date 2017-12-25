@@ -761,7 +761,52 @@ void pl_shader_color_map(struct pl_shader *sh,
     GLSL("}\n");
 }
 
+struct sh_dither_obj {
+    enum pl_dither_method method;
+    struct pl_shader_obj *lut;
+};
+
+static void sh_dither_uninit(const struct ra *ra, void *ptr)
+{
+    struct sh_dither_obj *obj = ptr;
+    pl_shader_obj_destroy(&obj->lut);
+    *obj = (struct sh_dither_obj) {0};
+}
+
+static void fill_dither_matrix(void *priv, float *data, int w, int h, int d)
+{
+    pl_assert(w > 0 && h > 0 && d == 0);
+
+    const struct sh_dither_obj *obj = priv;
+    switch (obj->method) {
+    case PL_DITHER_ORDERED_LUT:
+        pl_assert(w == h);
+        pl_generate_bayer_matrix(data, w);
+        break;
+
+    case PL_DITHER_BLUE_NOISE:
+        pl_generate_blue_noise(data, w);
+        break;
+
+    default: abort();
+    }
+}
+
+static bool dither_method_is_lut(enum pl_dither_method method)
+{
+    switch (method) {
+    case PL_DITHER_BLUE_NOISE:
+    case PL_DITHER_ORDERED_LUT:
+        return true;
+    case PL_DITHER_ORDERED_FIXED:
+    case PL_DITHER_WHITE_NOISE:
+        return false;
+    default: abort();
+    }
+}
+
 void pl_shader_dither(struct pl_shader *sh, int new_depth,
+                      struct pl_shader_obj **dither_state,
                       const struct pl_dither_params *params)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
@@ -775,18 +820,62 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
     GLSL("// pl_shader_dither \n"
         "{                    \n"
         "float bias;          \n");
-    params = PL_DEF(params, &pl_dither_default_params);
 
-    switch (params->method) {
-    case PL_DITHER_WHITE_NOISE: {
-        ident_t prng = sh_prng(sh, params->temporal, NULL);
-        GLSL("bias = %s - 0.5;\n", prng);
-        break;
+    params = PL_DEF(params, &pl_dither_default_params);
+    if (params->lut_size < 0 || params->lut_size > 8) {
+        PL_ERR(sh, "Invalid `lut_size` specified: %d", params->lut_size);
+        return;
     }
 
-    case PL_DITHER_ORDERED:
-        // Dither size is hard-coded to 16x16 for this algorithm
-        GLSL("vec2 pos = fract(gl_FragCoord.xy * 1.0/16.0);\n");
+    enum pl_dither_method method = params->method;
+    ident_t lut = NULL;
+    int lut_size = 0;
+
+    if (dither_method_is_lut(method)) {
+        if (!dither_state) {
+            PL_TRACE(sh, "LUT-based dither method specified but no dither state "
+                     "object given, falling back to non-LUT based methods.");
+            goto fallback;
+        }
+
+        struct sh_dither_obj *obj;
+        obj = SH_OBJ(sh, dither_state, PL_SHADER_OBJ_DITHER,
+                     struct sh_dither_obj, sh_dither_uninit);
+        if (!obj)
+            goto fallback;
+
+        bool changed = obj->method != method;
+        obj->method = method;
+
+        lut_size = 1 << PL_DEF(params->lut_size, 6);
+        lut = sh_lut(sh, &obj->lut, SH_LUT_AUTO, lut_size, lut_size, 0,
+                     changed, obj, fill_dither_matrix);
+        if (!lut)
+            goto fallback;
+    }
+
+    goto done;
+
+fallback:
+    if (sh->ra && sh->ra->glsl.version >= 130) {
+        method = PL_DITHER_ORDERED_FIXED;
+    } else {
+        method = PL_DITHER_WHITE_NOISE;
+    }
+
+    // fall through
+done: ;
+
+    int size = 0;
+    if (lut) {
+        size = lut_size;
+    } else if (method == PL_DITHER_ORDERED_FIXED) {
+        size = 16; // hard-coded size
+    }
+
+    if (size) {
+        // Transform the screen position to the cyclic range [0,1)
+        GLSL("vec2 pos = fract(gl_FragCoord.xy * 1.0/%d.0);\n", size);
 
         if (params->temporal) {
             int phase = sh->index % 8;
@@ -802,11 +891,20 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
                 .data = &mat[0][0],
                 .dynamic = true,
             });
-            GLSL("pos = %s * pos + vec2(1.0);\n", rot);
+            GLSL("pos = fract(%s * pos + vec2(1.0));\n", rot);
         }
+    }
 
+    switch (method) {
+    case PL_DITHER_WHITE_NOISE: {
+        ident_t prng = sh_prng(sh, params->temporal, NULL);
+        GLSL("bias = %s - 0.5;\n", prng);
+        break;
+    }
+
+    case PL_DITHER_ORDERED_FIXED:
         // Bitwise ordered dither using only 32-bit uints
-        GLSL("uvec2 xy = uvec2(16.0 * pos) %% 16u;     \n"
+        GLSL("uvec2 xy = uvec2(pos * 16.0) %% 16u;     \n"
              // Bitwise merge (morton number)
              "xy.x = xy.x ^ xy.y;                      \n"
              "xy = (xy | xy << 2) & uvec2(0x33333333); \n"
@@ -820,6 +918,11 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
              // Generate bias value
              "bias = float(b) * 1.0/256.0 - 0.5;       \n");
         break;
+
+    default: // LUT-based methods
+        pl_assert(lut);
+        GLSL("bias = %s(pos) - 0.5;\n", lut);
+        break;
     }
 
     unsigned long long scale = (1LLU << new_depth) - 1;
@@ -830,6 +933,6 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
 }
 
 const struct pl_dither_params pl_dither_default_params = {
-    .method     = PL_DITHER_ORDERED,
+    .method     = PL_DITHER_BLUE_NOISE,
     .temporal   = false, // commonly flickers on LCDs
 };

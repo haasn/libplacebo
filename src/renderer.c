@@ -64,6 +64,7 @@ struct pl_renderer {
 
     // Shader resource objects
     struct pl_shader_obj *peak_detect_state;
+    struct pl_shader_obj *dither_state;
     struct pl_shader_obj *upscaler_state; // shared since the LUT is static
     struct pl_shader_obj *downscaler_state[SCALER_COUNT];
 
@@ -152,6 +153,7 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
 
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
+    pl_shader_obj_destroy(&rr->dither_state);
     pl_shader_obj_destroy(&rr->upscaler_state);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->downscaler_state); i++)
         pl_shader_obj_destroy(&rr->downscaler_state[i]);
@@ -486,7 +488,10 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
         // in practice, since for cases like rgb565 we want to use the lower
         // depth anyway. Plus, every format has at least one component.
         int depth = fbo->params.format->component_depth[0];
-        pl_shader_dither(sh, depth, params->dither_params);
+
+        // Ignore dithering for >16-bit FBOs, since it's pretty pointless
+        if (depth <= 16)
+            pl_shader_dither(sh, depth, &rr->dither_state, params->dither_params);
     }
 
     bool is_comp = pl_shader_is_compute(sh);
