@@ -562,9 +562,9 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
 
     int texdim = 0;
     int max_tex_dim[] = {
-        ra->limits.max_tex_1d_dim,
-        ra->limits.max_tex_2d_dim,
-        ra->limits.max_tex_3d_dim,
+        ra ? ra->limits.max_tex_1d_dim : 0,
+        ra ? ra->limits.max_tex_2d_dim : 0,
+        ra ? ra->limits.max_tex_3d_dim : 0,
     };
 
     for (int d = dims; d <= PL_ARRAY_SIZE(max_tex_dim); d++) {
@@ -599,7 +599,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
     if (!method && texdim)
         method = SH_LUT_TEXTURE;
 
-    if (!method && ra->caps & RA_CAP_INPUT_VARIABLES)
+    if (!method && ra && ra->caps & RA_CAP_INPUT_VARIABLES)
         method = SH_LUT_UNIFORM;
 
     // No other method found
