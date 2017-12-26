@@ -34,6 +34,7 @@
 void pl_generate_bayer_matrix(float *data, int size)
 {
     pl_assert(size >= 0);
+
     // Start with a single entry of 0
     data[0] = 0;
 
@@ -73,7 +74,7 @@ struct ctx {
 
 static void makegauss(struct ctx *k, unsigned int sizeb)
 {
-    assert(sizeb >= 1 && sizeb <= MAX_SIZEB);
+    pl_assert(sizeb >= 1 && sizeb <= MAX_SIZEB);
 
     k->sizeb = sizeb;
     k->size = 1 << k->sizeb;
