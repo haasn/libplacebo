@@ -26,6 +26,9 @@ void pl_generate_bayer_matrix(float *data, int size);
 // Generates a random NxN blue noise texture. storing the result in `data`.
 // `size` must be a positive power of two no larger than 256. The resulting
 // texture will be roughly uniformly distributed within the range [0,1).
+//
+// Note: This function is very, *very* slow for large sizes. Generating a
+// dither matrix with size 256 can take several seconds on a modern processor.
 void pl_generate_blue_noise(float *data, int size);
 
 #endif // LIBPLACEBO_DITHER_H_

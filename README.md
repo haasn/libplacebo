@@ -71,6 +71,8 @@ libplacebo to take care of everything.
 - `config.h`: Macros defining information about the way libplacebo was built,
   including the version strings and compiled-in features/dependencies. Usually
   does not need to be included directly. May be useful for feature tests.
+- `dither.h`: Some helper functions for generating various noise and dithering
+  matrices. Might be useful for somebody else.
 - `filters.h`: A collection of reusable reconstruction filter kernels, which
   can be used for scaling. The generated weights arrays are semi-tailored to
   the needs of libplacebo, but may be useful to somebody else regardless. Also
