@@ -159,7 +159,7 @@ enum pl_dither_method {
     // Dither with blue noise. Very high quality, but requires the use of a
     // LUT. Warning: Computing a blue noise texture with a large size can be
     // very slow, however this only needs to be performed once. Even so, using
-    // this with a `lut_size` greater than 8 is generally ill-advised. This is
+    // this with a `lut_size` greater than 6 is generally ill-advised. This is
     // the preferred/default dither method.
     PL_DITHER_BLUE_NOISE,
 
