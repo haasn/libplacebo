@@ -749,7 +749,7 @@ void pl_shader_color_map(struct pl_shader *sh,
     if (params->gamut_warning) {
         GLSL("if (any(greaterThan(color.rgb, vec3(1.01))) ||\n"
              "    any(lessThan(color.rgb, vec3(-0.01))))\n"
-             "    color.rgb = vec3(1.0) - color.rgb;) // invert\n");
+             "    color.rgb = vec3(1.0) - color.rgb; // invert\n");
     }
 
     if (src.light != dst.light)
