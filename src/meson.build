@@ -100,12 +100,15 @@ conf = configuration_data()
 conf.set('majorver', majorver)
 conf.set('apiver', apiver)
 conf.set('fixver', fixver)
+conf.set_quoted('version', 'v' + version)
 
-gitdesc = run_command('git', 'describe')
-if gitdesc.returncode() == 0
-  conf.set_quoted('version', gitdesc.stdout().strip())
-else
-  conf.set_quoted('version', 'v' + version)
+## Update PL_VERSION with `git describe` information if available
+git = find_program('git', required: false)
+if git.found()
+  gitdesc = run_command(git, 'describe')
+  if gitdesc.returncode() == 0
+    conf.set_quoted('version', gitdesc.stdout().strip())
+  endif
 endif
 
 # Build process
