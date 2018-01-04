@@ -54,7 +54,7 @@ struct pl_context *pl_context_create(int api_ver,
                "libplacebo: ABI mismatch detected!\n\n"
                "This is usually indicative of a linking mismatch, and will\n"
                "result in serious issues including stack corruption, random\n"
-               "crashes and arbitrary code exection. Aborting as a safety\n"
+               "crashes and arbitrary code execution. Aborting as a safety\n"
                "precaution. Fix your system!\n");
         abort();
     }
