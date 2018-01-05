@@ -349,8 +349,6 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
             .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         };
 
-        struct VkValidationFlagsEXT vflags;
-
         if (params->debug) {
             PL_INFO(vk, "Enabling vulkan debug layers");
             // Enables the LunarG standard validation layer, which
@@ -365,19 +363,6 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
             info.enabledLayerCount = PL_ARRAY_SIZE(layers);
             info.ppEnabledExtensionNames = extensions;
             info.enabledExtensionCount = PL_ARRAY_SIZE(extensions);
-
-            // As a work-around for VLV issue #2087, disable shader validation
-            // FIXME: remove once fixed upstream
-            enum VkValidationCheckEXT disabled_checks[] = {
-                VK_VALIDATION_CHECK_SHADERS_EXT,
-            };
-
-            info.pNext = &vflags;
-            vflags = (VkValidationFlagsEXT) {
-                .sType = VK_STRUCTURE_TYPE_VALIDATION_FLAGS_EXT,
-                .pDisabledValidationChecks = disabled_checks,
-                .disabledValidationCheckCount = PL_ARRAY_SIZE(disabled_checks),
-            };
         }
 
         VkResult res = vkCreateInstance(&info, VK_ALLOC, &vk->inst);
