@@ -66,7 +66,7 @@ components = [
     'spirv_shaderc.c',
   ], [
     'vulkan',
-    dependency('vulkan', version: '>=1.0', required: false),
+    dependency('vulkan', version: '>=1.0.42', required: false),
     [ 'vulkan/command.c',
       'vulkan/context.c',
       'vulkan/formats.c',
