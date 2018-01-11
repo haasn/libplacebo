@@ -4,7 +4,7 @@
 #define TEX_SIZE 2048
 #define CUBE_SIZE 64
 #define NUM_FBOS 10
-#define BENCH_DUR 1
+#define BENCH_DUR 3
 
 static const struct ra_tex *create_test_img(const struct ra *ra)
 {
@@ -176,6 +176,12 @@ static void bench_deband_heavy(struct pl_shader *sh, struct pl_shader_obj **stat
     });
 }
 
+static void bench_bilinear(struct pl_shader *sh, struct pl_shader_obj **state,
+                          const struct ra_tex *src)
+{
+    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+}
+
 static void bench_bicubic(struct pl_shader *sh, struct pl_shader_obj **state,
                           const struct ra_tex *src)
 {
@@ -301,6 +307,9 @@ static void bench_hdr_desat(struct pl_shader *sh, struct pl_shader_obj **state,
 
 int main()
 {
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
+
     struct pl_context *ctx;
     ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
         .log_cb     = isatty(fileno(stdout)) ? pl_log_color : pl_log_simple,
@@ -312,7 +321,7 @@ int main()
         return SKIP;
 
     printf("= Running benchmarks =\n");
-    benchmark(vk->ra, "bt2020c", bench_bt2020c);
+    benchmark(vk->ra, "bilinear", bench_bilinear);
     benchmark(vk->ra, "bicubic", bench_bicubic);
     benchmark(vk->ra, "deband", bench_deband);
     benchmark(vk->ra, "deband_heavy", bench_deband_heavy);
@@ -334,6 +343,9 @@ int main()
     benchmark(vk->ra, "hdr_desaturate", bench_hdr_desat);
     if (vk->ra->caps & RA_CAP_COMPUTE)
         benchmark(vk->ra, "hdr_peakdetect", bench_hdr_peak);
+
+    // Misc stuff
+    benchmark(vk->ra, "bt2020c", bench_bt2020c);
 
     return 0;
 }
