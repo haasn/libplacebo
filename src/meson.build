@@ -27,6 +27,8 @@ build_deps = [
   cc.find_library('m', required: false),
 ]
 
+vulkan = dependency('vulkan', version: '>=1.0.42', required: false)
+
 # Source files
 sources = [
   'colorspace.c',
@@ -66,7 +68,7 @@ components = [
     'spirv_shaderc.c',
   ], [
     'vulkan',
-    dependency('vulkan', version: '>=1.0.42', required: false),
+    vulkan,
     [ 'vulkan/command.c',
       'vulkan/context.c',
       'vulkan/formats.c',
@@ -174,4 +176,13 @@ if get_option('tests')
     e = executable('test.' + t, 'tests/' + t, dependencies: build_deps + tdeps)
     test(t, e)
   endforeach
+endif
+
+if get_option('bench')
+  if not vulkan.found()
+    error('Compiling the benchmark suite requires vulkan support!')
+  endif
+
+  bench = executable('bench', 'tests/bench.c', dependencies: build_deps + tdeps)
+  test('benchmark', bench, is_parallel: false, timeout: 600)
 endif

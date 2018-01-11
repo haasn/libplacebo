@@ -8,3 +8,6 @@ option('shaderc', type: 'combo', choices: ['auto', 'true', 'false'],
 # Miscellaneous
 option('tests', type: 'boolean', value: false,
        description: 'Enable building the test cases')
+
+option('bench', type: 'boolean', value: false,
+       description: 'Enable building benchmarks (`meson test benchmark`)')

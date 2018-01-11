@@ -169,7 +169,7 @@ $ ninja -C$DIR
 
 To rebuild the project on changes, re-run `ninja -Cbuild`. If you wish to
 install the build products to the configured prefix (typically `/usr/local/`),
-you can run `ninja -Cbuild install`. Note that this is normally ill- advised
+you can run `ninja -Cbuild install`. Note that this is normally ill-advised
 except for developers who know what they're doing. Regular users should rely
 on distro packages.
 
@@ -199,6 +199,17 @@ To enable building and executing the tests, you need to build with
 ```bash
 $ meson configure $DIR -Dtests=true
 $ ninja -C$DIR test
+```
+
+### Benchmarking
+
+A naive benchmark suite is provided as an extra test case, disabled by default
+(due to the high execution time required). To enable it, use the `bench`
+option:
+
+```bash
+$ meson configure $DIR -Dbench=true
+$ meson test -C$DIR benchmark --verbose
 ```
 
 ## Using
