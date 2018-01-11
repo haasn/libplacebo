@@ -55,6 +55,7 @@ static void create_fbos(const struct ra *ra, struct fbo fbos[NUM_FBOS])
             .h              = TEX_SIZE,
             .renderable     = true,
             .host_readable  = true,
+            .storable       = !!(fmt->caps & RA_FMT_CAP_STORABLE),
         });
         REQUIRE(fbos[i].tex);
 
@@ -152,6 +153,17 @@ static void bench_deband(struct pl_shader *sh, struct pl_shader_obj **state,
     pl_shader_deband(sh, src, NULL);
 }
 
+static void bench_deband_heavy(struct pl_shader *sh, struct pl_shader_obj **state,
+                               const struct ra_tex *src)
+{
+    pl_shader_deband(sh, src, &(struct pl_deband_params) {
+        .iterations = 4,
+        .threshold  = 4.0,
+        .radius     = 4.0,
+        .grain      = 16.0,
+    });
+}
+
 static void bench_bicubic(struct pl_shader *sh, struct pl_shader_obj **state,
                           const struct ra_tex *src)
 {
@@ -200,6 +212,81 @@ static void bench_dither_ordered_fix(struct pl_shader *sh,
     pl_shader_dither(sh, 8, state, &params);
 }
 
+static void bench_polar(struct pl_shader *sh, struct pl_shader_obj **state,
+                        const struct ra_tex *src)
+{
+    struct pl_sample_polar_params params = {
+        .filter = pl_filter_ewa_lanczos,
+        .lut = state,
+    };
+
+    pl_shader_sample_polar(sh, &(struct pl_sample_src) { .tex = src }, &params);
+}
+
+static void bench_polar_nocompute(struct pl_shader *sh,
+                                  struct pl_shader_obj **state,
+                                  const struct ra_tex *src)
+{
+    struct pl_sample_polar_params params = {
+        .filter = pl_filter_ewa_lanczos,
+        .no_compute = true,
+        .lut = state,
+    };
+
+    pl_shader_sample_polar(sh, &(struct pl_sample_src) { .tex = src }, &params);
+}
+
+
+static void bench_hdr_hable(struct pl_shader *sh, struct pl_shader_obj **state,
+                            const struct ra_tex *src)
+{
+    struct pl_color_map_params params = {
+        .tone_mapping_algo = PL_TONE_MAPPING_HABLE,
+    };
+
+    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+    pl_shader_color_map(sh, &params, pl_color_space_hdr10, pl_color_space_monitor,
+                        state, false);
+}
+
+static void bench_hdr_mobius(struct pl_shader *sh, struct pl_shader_obj **state,
+                             const struct ra_tex *src)
+{
+    struct pl_color_map_params params = {
+        .tone_mapping_algo = PL_TONE_MAPPING_MOBIUS,
+    };
+
+    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+    pl_shader_color_map(sh, &params, pl_color_space_hdr10, pl_color_space_monitor,
+                        state, false);
+}
+
+static void bench_hdr_peak(struct pl_shader *sh, struct pl_shader_obj **state,
+                            const struct ra_tex *src)
+{
+    struct pl_color_map_params params = {
+        .tone_mapping_algo = PL_TONE_MAPPING_CLIP,
+        .peak_detect_frames = 10,
+    };
+
+    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+    pl_shader_color_map(sh, &params, pl_color_space_hdr10, pl_color_space_monitor,
+                        state, false);
+}
+
+static void bench_hdr_desat(struct pl_shader *sh, struct pl_shader_obj **state,
+                            const struct ra_tex *src)
+{
+    struct pl_color_map_params params = {
+        .tone_mapping_algo = PL_TONE_MAPPING_CLIP,
+        .tone_mapping_desaturate = 1.0,
+    };
+
+    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+    pl_shader_color_map(sh, &params, pl_color_space_hdr10, pl_color_space_monitor,
+                        state, false);
+}
+
 int main()
 {
     struct pl_context *ctx;
@@ -214,13 +301,27 @@ int main()
 
     printf("= Running benchmarks =\n");
     benchmark(vk->ra, "bt2020c", bench_bt2020c);
-    benchmark(vk->ra, "deband", bench_deband);
     benchmark(vk->ra, "bicubic", bench_bicubic);
+    benchmark(vk->ra, "deband", bench_deband);
+    benchmark(vk->ra, "deband_heavy", bench_deband_heavy);
 
     // Dithering algorithms
     benchmark(vk->ra, "dither_blue", bench_dither_blue);
     benchmark(vk->ra, "dither_white", bench_dither_white);
     benchmark(vk->ra, "dither_ordered_lut", bench_dither_ordered_lut);
     benchmark(vk->ra, "dither_ordered_fixed", bench_dither_ordered_fix);
+
+    // Polar sampling
+    benchmark(vk->ra, "polar", bench_polar);
+    if (vk->ra->caps & RA_CAP_COMPUTE)
+        benchmark(vk->ra, "polar_nocompute", bench_polar_nocompute);
+
+    // HDR tone mapping
+    benchmark(vk->ra, "hdr_hable", bench_hdr_hable);
+    benchmark(vk->ra, "hdr_mobius", bench_hdr_mobius);
+    benchmark(vk->ra, "hdr_desaturate", bench_hdr_desat);
+    if (vk->ra->caps & RA_CAP_COMPUTE)
+        benchmark(vk->ra, "hdr_peakdetect", bench_hdr_peak);
+
     return 0;
 }
