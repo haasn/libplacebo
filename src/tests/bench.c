@@ -2,6 +2,7 @@
 #include "time.h"
 
 #define TEX_SIZE 2048
+#define CUBE_SIZE 64
 #define NUM_FBOS 10
 #define BENCH_DUR 1
 
@@ -11,15 +12,26 @@ static const struct ra_tex *create_test_img(const struct ra *ra)
     fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 4, 16, 32, RA_FMT_CAP_LINEAR);
     REQUIRE(fmt);
 
-    float *data = malloc(TEX_SIZE * TEX_SIZE * sizeof(float[4]));
+    int cube_stride = TEX_SIZE / CUBE_SIZE;
+    int cube_count  = cube_stride * cube_stride;
 
-    for (int y = 0; y < TEX_SIZE; y++) {
-        for (int x = 0; x < TEX_SIZE; x++) {
-            float *color = &data[4 * (y * TEX_SIZE + x)];
-            color[0] = (float) x / TEX_SIZE;
-            color[1] = (float) y / TEX_SIZE;
-            color[2] = 1.0 - 0.5 * (color[0] + color[1]);
-            color[3] = 1.0;
+    assert(cube_count * CUBE_SIZE * CUBE_SIZE == TEX_SIZE * TEX_SIZE);
+    float *data = malloc(TEX_SIZE * TEX_SIZE * sizeof(float[4]));
+    for (int n = 0; n < cube_count; n++) {
+        int xbase = (n % cube_stride) * CUBE_SIZE;
+        int ybase = (n / cube_stride) * CUBE_SIZE;
+        for (int g = 0; g < CUBE_SIZE; g++) {
+            for (int r = 0; r < CUBE_SIZE; r++) {
+                int xpos = xbase + r;
+                int ypos = ybase + g;
+                assert(xpos < TEX_SIZE && ypos < TEX_SIZE);
+
+                float *color = &data[(ypos * TEX_SIZE + xpos) * 4];
+                color[0] = (float) r / CUBE_SIZE;
+                color[1] = (float) g / CUBE_SIZE;
+                color[2] = (float) n / cube_count;
+                color[3] = 1.0;
+            }
         }
     }
 
