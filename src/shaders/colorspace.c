@@ -24,7 +24,8 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
-    GLSL("// pl_shader_decode_color\n");
+    GLSL("// pl_shader_decode_color \n"
+         "{ \n");
 
     // For the non-linear color systems we need some special input handling
     // to make sure we don't accidentally screw everything up because of the
@@ -76,24 +77,24 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
         // assumes everything uses the BT.2020 12-bit gamma function, since the
         // difference between 10 and 12-bit is negligible for anything other
         // than 12-bit content.
-             "color.rgb = mix(color.rgb * vec3(1.0/4.5),                       \n"
+             "vec3 lin = mix(color.rgb * vec3(1.0/4.5),                        \n"
              "                pow((color.rgb + vec3(0.0993))*vec3(1.0/1.0993), \n"
              "                    vec3(1.0/0.45)),                             \n"
              "                lessThanEqual(vec3(0.08145), color.rgb));        \n"
-        // Calculate the green channel from the expanded RYcB
+        // Calculate the green channel from the expanded RYcB, and recompress to G'
         // The BT.2020 specification says Yc = 0.2627*R + 0.6780*G + 0.0593*B
-             "color.g = (color.g - 0.2627*color.r - 0.0593*color.b)*1.0/0.6780; \n"
-        // Recompress to receive the R'G'B' result, same as other systems
-             "color.rgb = mix(color.rgb * vec3(4.5),                    \n"
-             "                vec3(1.0993) * pow(color.rgb, vec3(0.45)) \n"
-             "                   - vec3(0.0993),                        \n"
-             "                lessThanEqual(vec3(0.0181), color.rgb));  \n");
+             "color.g = (lin.g - 0.2627*lin.r - 0.0593*lin.b)*1.0/0.6780; \n"
+             "color.g = mix(color.g * 4.5,                        \n"
+             "              1.0993 * pow(color.g, 0.45) - 0.0993, \n"
+             "              0.0181 <= color.g);                   \n");
     }
 
     if (repr->alpha == PL_ALPHA_INDEPENDENT) {
         GLSL("color.rgb *= vec3(color.a)\n");
         repr->alpha = PL_ALPHA_PREMULTIPLIED;
     }
+
+    GLSL("}");
 }
 
 // Common constants for SMPTE ST.2084 (PQ)
