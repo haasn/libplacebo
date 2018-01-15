@@ -24,16 +24,18 @@
 
 #include "common.h"
 
-// This file containings the definition of an API referred to as "RA", which
+// This file contains the definition of an API referred to as "RA", which
 // stands for Rendering Abstraction (or Rendering API) and is designed to
 // abstract away from platform-specific APIs like the various OpenGL variants,
 // Direct3D and Vulkan in a common way. It is a much more limited API than
 // those APIs, since it tries targetting a very small common subset of features
 // that is needed to implement libplacebo's rendering.
 //
-// NOTE: When speaking of "valid usage" or "must", invalid usage is assumed
-// to result in undefined behavior. (if libplacebo is compiled without NDEBUG,
-// this will be checked and libplacebo will terminate safely instead)
+// NOTE: When speaking of "valid usage" or "must", invalid usage is assumed to
+// result in undefined behavior. (Typically, an error message is printed to
+// stderr and libplacebo aborts). So ensuring valid API usage by the RA user is
+// absolutely crucial. If you want to be freed from this reponsibility, use the
+// higher level abstractions provided by libplacebo alongside ra.h.
 
 // Structure which wraps metadata describing GLSL capabilities.
 struct ra_glsl_desc {
