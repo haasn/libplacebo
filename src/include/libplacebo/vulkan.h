@@ -21,39 +21,60 @@
 #include <vulkan/vulkan.h>
 #include "ra.h"
 
+// Structure representing a VkInstance. Using this is not required.
+struct pl_vk_inst {
+    VkInstance instance;
+    uint64_t priv;
+};
+
+struct pl_vk_inst_params {
+    // If set, enable the debugging and validation layers.
+    bool debug;
+
+    // Enables extra instance extensions. Instance creation will fail if these
+    // extensions are not all supported. The user may use this to enable e.g.
+    // windowing system integration.
+    const char **extensions;
+    int num_extensions;
+};
+
+extern const struct pl_vk_inst_params pl_vk_inst_default_params;
+
+// Helper function to simplify instance creation. The user could also bypass
+// these helpers and do it manually, but this function is provided as a
+// convenience. It also sets up a debug callback which forwards all vulkan
+// messages to the `pl_context` log callback.
+const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
+                                           const struct pl_vk_inst_params *params);
+
+void pl_vk_inst_destroy(const struct pl_vk_inst **inst);
+
+// Structure representing the actual vulkan device and associated RA implementation
 struct pl_vulkan {
-    const struct ra *ra; // The RA instance representing this vulkan device
+    const struct ra *ra;
     void *priv;
 
     // The vulkan objects in use. The user may use this for their own purposes,
     // but please note that the lifetime is tied to the lifetime of the
-    // pl_vulkan object, and must not be destroyed by the user until
-    // `pl_vulkan_destroy` has been called (which will itself destroy all
-    // objects created by libplacebo). Note that the created vulkan device may
-    // have any number of queues and queue family assignments; so using it for
-    // queue submission commands is ill-advised.
+    // pl_vulkan object, and must not be destroyed by the user. Note that the
+    // created vulkan device may have any number of queues and queue family
+    // assignments; so using it for queue submission commands is ill-advised.
     VkInstance instance;
     VkPhysicalDevice phys_device;
     VkDevice device;
 };
 
 struct pl_vulkan_params {
+    // The vulkan instance. Optional, if NULL then libplacebo will internally
+    // create a VkInstance with no extra extensions or layers - but note that
+    // this is not useful except for offline rendering.
+    VkInstance instance;
+
     // When choosing the device, rule out all devices that don't support
     // presenting to this surface. When creating a device, enable all extensions
     // needed to ensure we can present to this surface. Optional. Only legal
     // when specifying an existing VkInstance to use.
     VkSurfaceKHR surface;
-
-    // --- Instance creation options
-
-    // The vulkan instance. May be set by the caller to inherit an existing
-    // vulkan instace. If left as NULL, libplacebo will create its own vulkan
-    // instance.
-    VkInstance instance;
-
-    // When creating a new VkInstance, this controls whether or not to load the
-    // debugging and validation layers. No effect if `instance` is set.
-    bool debug;
 
     // --- Physical device selection options
 
@@ -111,10 +132,10 @@ extern const struct pl_vulkan_params pl_vulkan_default_params;
 const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
                                          const struct pl_vulkan_params *params);
 
-// Destroys the vulkan instance and all associated objects, with the exception
-// of a VkInstance that was initially provided by the user.
+// Destroys the vulkan device and all associated objects, except for the
+// VkInstance provided by the user.
 //
-// Note that all resources allocated from this vulkan instance (e.g. via the
+// Note that all resources allocated from this vulkan object (e.g. via the
 // `vk->ra` or using `pl_vulkan_create_swapchain`) *must* be explicitly
 // destroyed by the user before calling this.
 void pl_vulkan_destroy(const struct pl_vulkan **vk);

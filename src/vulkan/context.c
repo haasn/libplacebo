@@ -20,6 +20,125 @@
 #include "utils.h"
 #include "ra_vk.h"
 
+const struct pl_vk_inst_params pl_vk_inst_default_params = {0};
+
+void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
+{
+    const struct pl_vk_inst *inst = *inst_ptr;
+    if (!inst)
+        return;
+
+    VkDebugReportCallbackEXT debug = (VkDebugReportCallbackEXT) inst->priv;
+    if (debug) {
+        VK_LOAD_PFN(inst->instance, vkDestroyDebugReportCallbackEXT)
+        pfn_vkDestroyDebugReportCallbackEXT(inst->instance, debug, VK_ALLOC);
+    }
+
+    vkDestroyInstance(inst->instance, VK_ALLOC);
+    TA_FREEP((void **) inst_ptr);
+}
+
+static VkBool32 vk_dbg_callback(VkDebugReportFlagsEXT flags,
+                                VkDebugReportObjectTypeEXT objType,
+                                uint64_t obj, size_t loc, int32_t msgCode,
+                                const char *layer, const char *msg, void *priv)
+{
+    struct pl_context *ctx = priv;
+    enum pl_log_level lev = PL_LOG_INFO;
+
+    switch (flags) {
+    case VK_DEBUG_REPORT_ERROR_BIT_EXT:               lev = PL_LOG_ERR;   break;
+    case VK_DEBUG_REPORT_WARNING_BIT_EXT:             lev = PL_LOG_WARN;  break;
+    case VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT: lev = PL_LOG_WARN;  break;
+    case VK_DEBUG_REPORT_DEBUG_BIT_EXT:               lev = PL_LOG_DEBUG; break;
+    case VK_DEBUG_REPORT_INFORMATION_BIT_EXT:         lev = PL_LOG_TRACE; break;
+    };
+
+    pl_msg(ctx, lev, "vk [%s] %d: %s (obj 0x%llx (%s), loc 0x%zx)",
+           layer, (int) msgCode, msg, (unsigned long long) obj,
+           vk_obj_str(objType), loc);
+
+    // The return value of this function determines whether the call will
+    // be explicitly aborted (to prevent GPU errors) or not. In this case,
+    // we generally want this to be on for the errors.
+    return (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT);
+}
+
+const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
+                                           const struct pl_vk_inst_params *params)
+{
+    void *tmp = talloc_new(NULL);
+    params = PL_DEF(params, &pl_vk_inst_default_params);
+
+    const char **exts = NULL;
+    int num_exts = 0;
+
+    VkInstanceCreateInfo info = {
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+    };
+
+    // Add extra user extensions
+    for (int i = 0; i < params->num_extensions; i++)
+        TARRAY_APPEND(tmp, exts, num_exts, params->extensions[i]);
+
+    if (params->debug) {
+        pl_info(ctx, "Enabling vulkan debug layers");
+        // Enables the LunarG standard validation layer, which
+        // is a meta-layer that loads lots of other validators
+        static const char *layers[] = {
+            "VK_LAYER_LUNARG_standard_validation",
+        };
+        info.ppEnabledLayerNames = layers;
+        info.enabledLayerCount = PL_ARRAY_SIZE(layers);
+
+        // Enable support for debug callbacks, so we get useful messages
+        TARRAY_APPEND(tmp, exts, num_exts, VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+    }
+
+    info.ppEnabledExtensionNames = exts;
+    info.enabledExtensionCount = num_exts;
+
+    VkInstance inst = NULL;
+    VkResult res = vkCreateInstance(&info, VK_ALLOC, &inst);
+    if (res != VK_SUCCESS) {
+        pl_fatal(ctx, "Failed creating instance: %s", vk_res_str(res));
+        goto error;
+    }
+
+    VkDebugReportCallbackEXT debug = NULL;
+    if (params->debug) {
+        // Set up a debug callback to catch validation messages
+        VkDebugReportCallbackCreateInfoEXT dinfo = {
+            .sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
+            .flags = VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
+                     VK_DEBUG_REPORT_WARNING_BIT_EXT |
+                     VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
+                     VK_DEBUG_REPORT_ERROR_BIT_EXT |
+                     VK_DEBUG_REPORT_DEBUG_BIT_EXT,
+            .pfnCallback = vk_dbg_callback,
+            .pUserData = ctx,
+        };
+
+        // Since this is not part of the core spec, we need to load it. This
+        // can't fail because we've already successfully created an instance
+        // with this extension enabled.
+        VK_LOAD_PFN(inst, vkCreateDebugReportCallbackEXT)
+        pfn_vkCreateDebugReportCallbackEXT(inst, &dinfo, VK_ALLOC, &debug);
+    }
+
+    talloc_free(tmp);
+    return talloc_struct(NULL, struct pl_vk_inst, {
+        .instance = inst,
+        .priv = (uint64_t) debug,
+    });
+
+error:
+    pl_fatal(ctx, "Failed initializing vulkan instance");
+    pl_vk_inst_destroy((const struct pl_vk_inst **) &inst);
+    talloc_free(tmp);
+    return NULL;
+}
+
 const struct pl_vulkan_params pl_vulkan_default_params = {
     .async_transfer = true,
     .async_compute  = true,
@@ -46,15 +165,7 @@ void pl_vulkan_destroy(const struct pl_vulkan **pl_vk)
         vkDestroyDevice(vk->dev, VK_ALLOC);
     }
 
-    if (!vk->external_instance) {
-        if (vk->dbg) {
-            VK_LOAD_PFN(vkDestroyDebugReportCallbackEXT)
-            pfn_vkDestroyDebugReportCallbackEXT(vk->inst, vk->dbg, VK_ALLOC);
-        }
-
-        vkDestroyInstance(vk->inst, VK_ALLOC);
-    }
-
+    pl_vk_inst_destroy(&vk->internal_instance);
     TA_FREEP((void **) pl_vk);
 }
 
@@ -303,32 +414,6 @@ error:
     return false;
 }
 
-static VkBool32 vk_dbg_callback(VkDebugReportFlagsEXT flags,
-                                VkDebugReportObjectTypeEXT objType,
-                                uint64_t obj, size_t loc, int32_t msgCode,
-                                const char *layer, const char *msg, void *priv)
-{
-    struct vk_ctx *vk = priv;
-    enum pl_log_level lev = PL_LOG_INFO;
-
-    switch (flags) {
-    case VK_DEBUG_REPORT_ERROR_BIT_EXT:               lev = PL_LOG_ERR;   break;
-    case VK_DEBUG_REPORT_WARNING_BIT_EXT:             lev = PL_LOG_WARN;  break;
-    case VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT: lev = PL_LOG_WARN;  break;
-    case VK_DEBUG_REPORT_DEBUG_BIT_EXT:               lev = PL_LOG_DEBUG; break;
-    case VK_DEBUG_REPORT_INFORMATION_BIT_EXT:         lev = PL_LOG_TRACE; break;
-    };
-
-    PL_MSG(vk, lev, "vk [%s] %d: %s (obj 0x%llx (%s), loc 0x%zx)",
-           layer, (int) msgCode, msg, (unsigned long long) obj,
-           vk_obj_str(objType), loc);
-
-    // The return value of this function determines whether the call will
-    // be explicitly aborted (to prevent GPU errors) or not. In this case,
-    // we generally want this to be on for the errors.
-    return (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT);
-}
-
 const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
                                          const struct pl_vulkan_params *params)
 {
@@ -336,60 +421,16 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     struct pl_vulkan *pl_vk = talloc_zero(NULL, struct pl_vulkan);
     struct vk_ctx *vk = pl_vk->priv = talloc_zero(pl_vk, struct vk_ctx);
     vk->ctx = ctx;
+    vk->inst = params->instance;
 
-    // Set up the VkInstance
-    if (params->instance) {
-        PL_DEBUG(vk, "Using external VkInstance %p", params->instance);
-        vk->inst = params->instance;
-        vk->external_instance = true;
-    } else {
+    if (!vk->inst) {
         pl_assert(!params->surface);
         pl_assert(!params->device);
-        VkInstanceCreateInfo info = {
-            .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        };
-
-        if (params->debug) {
-            PL_INFO(vk, "Enabling vulkan debug layers");
-            // Enables the LunarG standard validation layer, which
-            // is a meta-layer that loads lots of other validators
-            static const char *layers[] = {
-                "VK_LAYER_LUNARG_standard_validation",
-            };
-            static const char *extensions[] = {
-                VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
-            };
-            info.ppEnabledLayerNames = layers;
-            info.enabledLayerCount = PL_ARRAY_SIZE(layers);
-            info.ppEnabledExtensionNames = extensions;
-            info.enabledExtensionCount = PL_ARRAY_SIZE(extensions);
-        }
-
-        VkResult res = vkCreateInstance(&info, VK_ALLOC, &vk->inst);
-        if (res != VK_SUCCESS) {
-            PL_FATAL(vk, "Failed creating instance: %s", vk_res_str(res));
+        PL_DEBUG(vk, "No VkInstance provided, creating one...");
+        vk->internal_instance = pl_vk_inst_create(ctx, NULL);
+        if (!vk->internal_instance)
             goto error;
-        }
-
-        if (params->debug) {
-            // Set up a debug callback to catch validation messages
-            VkDebugReportCallbackCreateInfoEXT dinfo = {
-                .sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
-                .flags = VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
-                         VK_DEBUG_REPORT_WARNING_BIT_EXT |
-                         VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
-                         VK_DEBUG_REPORT_ERROR_BIT_EXT |
-                         VK_DEBUG_REPORT_DEBUG_BIT_EXT,
-                .pfnCallback = vk_dbg_callback,
-                .pUserData = vk,
-            };
-
-            // Since this is not part of the core spec, we need to load it. This
-            // can't fail because we've already successfully created an instance
-            // with this extension enabled.
-            VK_LOAD_PFN(vkCreateDebugReportCallbackEXT)
-            pfn_vkCreateDebugReportCallbackEXT(vk->inst, &dinfo, VK_ALLOC, &vk->dbg);
-        }
+        vk->inst = vk->internal_instance->instance;
     }
 
     // Choose the physical device
@@ -429,7 +470,7 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     return pl_vk;
 
 error:
-    PL_FATAL(vk, "Failed initializing vulkan context");
+    PL_FATAL(vk, "Failed initializing vulkan device");
     pl_vulkan_destroy((const struct pl_vulkan **) &pl_vk);
     return NULL;
 }

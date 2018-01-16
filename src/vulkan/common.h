@@ -26,17 +26,16 @@
 #define VK_ALLOC NULL
 
 // Needed to load some extension-specific functions (for whatever reason)
-#define VK_LOAD_PFN(name) PFN_##name pfn_##name = (PFN_##name) \
-                            vkGetInstanceProcAddr(vk->inst, #name);
+#define VK_LOAD_PFN(inst, name) PFN_##name pfn_##name = (PFN_##name) \
+                            vkGetInstanceProcAddr(inst, #name);
 
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
-    bool external_instance;
+    const struct pl_vk_inst *internal_instance;
     struct pl_context *ctx;
     VkInstance inst;
     VkPhysicalDevice physd;
     VkPhysicalDeviceLimits limits;
-    VkDebugReportCallbackEXT dbg;
     VkDevice dev;
 
     struct vk_cmdpool **pools;    // command pools (one per queue family)
