@@ -345,6 +345,8 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
         vk->inst = params->instance;
         vk->external_instance = true;
     } else {
+        pl_assert(!params->surface);
+        pl_assert(!params->device);
         VkInstanceCreateInfo info = {
             .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         };

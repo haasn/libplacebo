@@ -22,14 +22,16 @@
 #include "ra.h"
 
 struct pl_vulkan {
-    const struct ra *ra;
+    const struct ra *ra; // The RA instance representing this vulkan device
     void *priv;
 
     // The vulkan objects in use. The user may use this for their own purposes,
     // but please note that the lifetime is tied to the lifetime of the
-    // pl_vulkan object. The user must not destroy these themselves. Also,
-    // the created vulkan device may have any number of queues and queue
-    // family assignments; so using it for queue submission is ill-advised.
+    // pl_vulkan object, and must not be destroyed by the user until
+    // `pl_vulkan_destroy` has been called (which will itself destroy all
+    // objects created by libplacebo). Note that the created vulkan device may
+    // have any number of queues and queue family assignments; so using it for
+    // queue submission commands is ill-advised.
     VkInstance instance;
     VkPhysicalDevice phys_device;
     VkDevice device;
@@ -38,7 +40,8 @@ struct pl_vulkan {
 struct pl_vulkan_params {
     // When choosing the device, rule out all devices that don't support
     // presenting to this surface. When creating a device, enable all extensions
-    // needed to ensure we can present to this surface. Optional.
+    // needed to ensure we can present to this surface. Optional. Only legal
+    // when specifying an existing VkInstance to use.
     VkSurfaceKHR surface;
 
     // --- Instance creation options
@@ -57,7 +60,8 @@ struct pl_vulkan_params {
     // The vulkan physical device. May be set by the caller to indicate the
     // physical device to use. Otherwise, libplacebo will pick the "best"
     // available GPU, based on the advertised device type. (i.e., it will
-    // prefer discrete GPUs over integrated GPUs)
+    // prefer discrete GPUs over integrated GPUs). Only legal when specifying
+    // an existing VkInstance to use.
     VkPhysicalDevice device;
 
     // When choosing the device, only choose a device with this exact name.
@@ -107,8 +111,12 @@ extern const struct pl_vulkan_params pl_vulkan_default_params;
 const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
                                          const struct pl_vulkan_params *params);
 
-// All resources allocated from the `ra` contained by this pl_vulkan must be
-// explicitly destroyed by the user before calling pl_vulkan_destroy.
+// Destroys the vulkan instance and all associated objects, with the exception
+// of a VkInstance that was initially provided by the user.
+//
+// Note that all resources allocated from this vulkan instance (e.g. via the
+// `vk->ra` or using `pl_vulkan_create_swapchain`) *must* be explicitly
+// destroyed by the user before calling this.
 void pl_vulkan_destroy(const struct pl_vulkan **vk);
 
 #endif // LIBPLACEBO_VULKAN_H_
