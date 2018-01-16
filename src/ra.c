@@ -428,17 +428,28 @@ void ra_tex_blit(const struct ra *ra,
     pl_assert(src->params.blit_src);
     pl_assert(dst->params.blit_dst);
     pl_assert(src_rc.x0 >= 0 && src_rc.x0 < src->params.w);
-    pl_assert(src_rc.y0 >= 0 && src_rc.y0 < src->params.h);
-    pl_assert(src_rc.z0 >= 0 && src_rc.z0 < src->params.d);
     pl_assert(src_rc.x1 > 0 && src_rc.x1 <= src->params.w);
-    pl_assert(src_rc.y1 > 0 && src_rc.y1 <= src->params.h);
-    pl_assert(src_rc.z1 > 0 && src_rc.z1 <= src->params.d);
     pl_assert(dst_rc.x0 >= 0 && dst_rc.x0 < dst->params.w);
-    pl_assert(dst_rc.y0 >= 0 && dst_rc.y0 < dst->params.h);
-    pl_assert(dst_rc.z0 >= 0 && dst_rc.z0 < dst->params.d);
     pl_assert(dst_rc.x1 > 0 && dst_rc.x1 <= dst->params.w);
-    pl_assert(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
-    pl_assert(dst_rc.z1 > 0 && dst_rc.z1 <= dst->params.d);
+
+    if (src->params.h) {
+        pl_assert(dst->params.h);
+        pl_assert(src_rc.y0 >= 0 && src_rc.y0 < src->params.h);
+        pl_assert(src_rc.y1 > 0 && src_rc.y1 <= src->params.h);
+    }
+    if (dst->params.h) {
+        pl_assert(dst_rc.y0 >= 0 && dst_rc.y0 < dst->params.h);
+        pl_assert(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
+    }
+    if (src->params.d) {
+        pl_assert(dst->params.d);
+        pl_assert(src_rc.z0 >= 0 && src_rc.z0 < src->params.d);
+        pl_assert(src_rc.z1 > 0 && src_rc.z1 <= src->params.d);
+    }
+    if (dst->params.d) {
+        pl_assert(dst_rc.z0 >= 0 && dst_rc.z0 < dst->params.d);
+        pl_assert(dst_rc.z1 > 0 && dst_rc.z1 <= dst->params.d);
+    }
 
     strip_coords(src, &src_rc);
     strip_coords(dst, &dst_rc);
