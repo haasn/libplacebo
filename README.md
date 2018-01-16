@@ -16,11 +16,11 @@ accomplish the following goals:
   `shader_cache.c` and totally redesign `gpu/video.c`)
 
 **NOTE**: libplacebo is currently in an early stage. Expect the API to be
-very unstable, and many parts to be missing. To reflect this, the API version
-as exported by common.h will **NOT** change except on new beta releases
-(v0.x). So using libplacebo directly from git master is not advised; always
-use one of the tagged releases if you want to play around with libplacebo in
-its current stage.
+unstable, and many parts to be missing. To reflect this, the API version as
+exported by common.h will **NOT** change except on new beta releases (v0.x).
+So using libplacebo directly from git master is not advised; always use one of
+the tagged releases if you want to play around with libplacebo in its current
+stage.
 
 Once the version number hits 1.X, which will mark the first stable release,
 the API version will be bumped for every change to the public API - even
@@ -104,8 +104,10 @@ other developers of GPU-accelerated image processing software. RA can be used
 entirely independently of libplacebo's image processing, which is why it
 uses its own namespace (`ra_` instead of `pl_`).
 
-**NOTE**: The port of RA into libplacebo is currently very WIP, and right now
-only the vulkan-based interface is exported.
+**NOTE**: The port of RA into libplacebo is still WIP, and right now only the
+vulkan-based interface is exported. OpenGL and D3D11 support are
+planned/possible (and the code has already been written for `mpv`), but
+currently missing.
 
 ### Tier 2 (GLSL generating primitives)
 
