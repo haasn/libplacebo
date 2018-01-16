@@ -43,6 +43,7 @@ sources = [
   'shaders/colorspace.c',
   'shaders/sampling.c',
   'spirv.c',
+  'swapchain.c',
 
   # Helpers ported from mpv or other projects
   'bstr/bstr.c',

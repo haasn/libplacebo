@@ -87,6 +87,9 @@ and even the GPU in general.
 ### Tier 1 (rendering abstraction)
 
 - `ra.h`: Exports the RA API used by libplacebo internally.
+- `swapchain.h`: Exports an API for wrapping platform-specific swapchains and
+  other display APIs. This is the API used to actually queue up rendered
+  frames for presentation (e.g. to a window or display device).
 - `vulkan.h`: RA implementation based on Vulkan.
 
 As part of the public API, libplacebo exports the **RA** API ("Rendering
