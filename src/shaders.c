@@ -413,7 +413,7 @@ bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h)
     // All of our shaders end up returning a vec4 color
     sh->res.output = PL_SHADER_SIG_COLOR;
     sh->output_w = PL_DEF(sh->output_w, w);
-    sh->output_h = PL_DEF(sh->output_w, h);
+    sh->output_h = PL_DEF(sh->output_h, h);
     return true;
 }
 
