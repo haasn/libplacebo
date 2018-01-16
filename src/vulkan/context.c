@@ -256,10 +256,8 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     const char **exts = NULL;
     int num_exts = 0;
-    if (params->surface) {
-        TARRAY_APPEND(tmp, exts, num_exts, VK_KHR_SURFACE_EXTENSION_NAME);
+    if (params->surface)
         TARRAY_APPEND(tmp, exts, num_exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    }
 
     // Add extra user extensions
     for (int i = 0; i < params->num_extensions; i++)

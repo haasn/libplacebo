@@ -119,4 +119,40 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
 // destroyed by the user before calling this.
 void pl_vulkan_destroy(const struct pl_vulkan **vk);
 
+struct pl_vulkan_swapchain_params {
+    // The surface to use for rendering. Required, the user is in charge of
+    // creating this. Must belong to the same VkInstance as `vk->instance`.
+    VkSurfaceKHR surface;
+
+    // The image format and colorspace we should be using. Optional, if left
+    // as {0}, libplacebo will pick the best surface format based on what the
+    // GPU/surface seems to support.
+    VkSurfaceFormatKHR surface_format;
+
+    // The preferred presentation mode. See the vulkan documentation for more
+    // information about these. If the device/surface combination does not
+    // support this mode, libplacebo will fall back to VK_PRESENT_MODE_FIFO_KHR.
+    //
+    // Warning: Leaving this zero-initialized is the same as having specified
+    // VK_PRESENT_MODE_IMMEDIATE_KHR, which is probably not what the user
+    // wants!
+    VkPresentModeKHR present_mode;
+
+    // Allow up to N in-flight frames. This essentially controls how many
+    // rendering commands may be queued up at the same time. See the
+    // documentation for `ra_swapchain_get_latency` for more information. For
+    // vulkan specifically, we are only able to wait until the GPU has finished
+    // rendering a frame - we are unable to wait until the display has actually
+    // finished displaying it. So this only provides a rough guideline.
+    // Optional, defaults to 3.
+    int swapchain_depth;
+};
+
+// Creates a new vulkan swapchain based on an existing VkSurfaceKHR. Using this
+// function requires that the vulkan device was created with the
+// VK_KHR_swapchain extension. The easiest way of accomplishing this is to set
+// the `pl_vulkan_params.surface` explicitly at creation time.
+const struct ra_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *vk,
+                              const struct pl_vulkan_swapchain_params *params);
+
 #endif // LIBPLACEBO_VULKAN_H_

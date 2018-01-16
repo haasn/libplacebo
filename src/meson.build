@@ -75,6 +75,7 @@ components = [
       'vulkan/formats.c',
       'vulkan/malloc.c',
       'vulkan/ra_vk.c',
+      'vulkan/swapchain.c',
       'vulkan/utils.c',
     ],
     'vulkan.c'
