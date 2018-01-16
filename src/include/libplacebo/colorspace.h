@@ -81,7 +81,7 @@ enum pl_alpha_mode {
 // would pull the color up to their 16-bit range.
 struct pl_bit_encoding {
     int sample_depth; // the number of bits the color is stored/sampled as
-    int color_depth;  // the effect number of bits of the color information
+    int color_depth;  // the effective number of bits of the color information
     int bit_shift;    // a representational bit shift applied to the color
 };
 
