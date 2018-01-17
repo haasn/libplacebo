@@ -424,11 +424,11 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_render_params *params)
 {
     struct img *img = &pass->cur_img;
-    float target_w = fabs(pl_rect_w(target->dst_rect)),
-          target_h = fabs(pl_rect_h(target->dst_rect));
+    int target_w = abs(pl_rect_w(target->dst_rect)),
+        target_h = abs(pl_rect_h(target->dst_rect));
 
     float rx = target_w / fabs(pl_rect_w(image->src_rect)),
-          ry = target_w / fabs(pl_rect_h(image->src_rect));
+          ry = target_h / fabs(pl_rect_h(image->src_rect));
 
     if (rx == 1.0 && ry == 1.0 && !img->offx && !img->offy) {
         PL_TRACE(rr, "Skipping main scaler (would be no-op)");
