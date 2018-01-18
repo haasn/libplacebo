@@ -43,6 +43,7 @@
 #include "include/libplacebo/shaders/colorspace.h"
 #include "include/libplacebo/shaders/sampling.h"
 #include "include/libplacebo/swapchain.h"
+#include "include/libplacebo/utils/upload.h"
 
 #if PL_HAVE_VULKAN
 #include "include/libplacebo/vulkan.h"

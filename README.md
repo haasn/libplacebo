@@ -144,6 +144,12 @@ identifiers (so they can be freely merged together).
 - `renderer.h`: A high-level renderer which combines the shader primitives
   and dispatch mechanism into a fully-fledged rendering pipeline that takes
   raw texture data and transforms it into the desired output image.
+- `utils/upload.h`: A high-level helper for uploading generic data in some
+  user-described format to a plane texture suitable for use with `renderer.h`.
+  These helpers essentially take care of picking/mapping a good image format
+  supported by the GPU. (Note: Eventually, this function will also support
+  on-CPU conversions to a different format where necessary, but for now, it
+  will just fail)
 
 This is the "primary" interface to libplacebo, and the one most users will be
 interested in. It takes care of internal details such as degrading to simpler
@@ -151,9 +157,9 @@ algorithms depending on the hardware's capabilities, combining the correct
 sequence of colorspace transformations and shader passes in order to get the
 best overall image quality, and so forth.
 
-**WARNING**: The `renderer` is a WIP component and currently doesn't really do
-much other than forced bilinear scaling. If you trigger any unimplemented
-paths, it will abort().
+**WARNING**: The `renderer.h` is a WIP component and currently doesn't support
+the full advertised featureset yet. If you trigger any unimplemented paths, it
+will abort(). Use at your own risk.
 
 ## Installing
 

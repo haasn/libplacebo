@@ -44,6 +44,7 @@ sources = [
   'shaders/sampling.c',
   'spirv.c',
   'swapchain.c',
+  'utils/upload.c',
 
   # Helpers ported from mpv or other projects
   'bstr/bstr.c',
@@ -58,6 +59,7 @@ tests = [
   'colorspace.c',
   'dither.c',
   'filters.c',
+  'utils.c',
 ]
 
 # Optional components, in the following format:

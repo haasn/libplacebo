@@ -156,7 +156,8 @@ struct pl_plane {
     // Example; if the user has a plane with just {Y} and a plane with just
     // {Cb Cr}, and a GPU that only supports bgra formats, you would still
     // specify the component mapping as {0} and {1 2} respectively, even though
-    // the GPU is sampling the data in the order BGRA.
+    // the GPU is sampling the data in the order BGRA. Use -1 for "ignored"
+    // components.
     int components;           // number of relevant components
     int component_mapping[4]; // semantic index of each component
 

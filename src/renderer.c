@@ -348,6 +348,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
 
         GLSL("tmp = %s();\n", sub);
         for (int c = 0; c < src.components; c++) {
+            if (plane->component_mapping < 0)
+                continue;
             GLSL("color[%d] = tmp[%d];\n", plane->component_mapping[i],
                  plane->texture->params.format->sample_order[i]);
 
@@ -388,7 +390,7 @@ static const struct ra_tex *finalize_img(struct pl_renderer *rr,
             return *tex;
     }
 
-    PL_INFO(rr, "Resizing texture: %dx%d", img->w, img->h);
+    PL_INFO(rr, "Resizing intermediate FBO texture: %dx%d", img->w, img->h);
 
     ra_tex_destroy(rr->ra, tex);
     *tex = ra_tex_create(rr->ra, &(struct ra_tex_params) {
