@@ -348,12 +348,12 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
 
         GLSL("tmp = %s();\n", sub);
         for (int c = 0; c < src.components; c++) {
-            if (plane->component_mapping < 0)
+            if (plane->component_mapping[c] < 0)
                 continue;
-            GLSL("color[%d] = tmp[%d];\n", plane->component_mapping[i],
-                 plane->texture->params.format->sample_order[i]);
+            GLSL("color[%d] = tmp[%d];\n", plane->component_mapping[c],
+                 plane->texture->params.format->sample_order[c]);
 
-            has_alpha |= plane->component_mapping[i] == PLANE_A;
+            has_alpha |= plane->component_mapping[c] == PLANE_A;
         }
 
         // we don't need it anymore
