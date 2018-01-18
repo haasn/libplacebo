@@ -387,7 +387,7 @@ static const struct ra_tex *finalize_img(struct pl_renderer *rr,
     if (*tex) {
         const struct ra_tex_params *cur = &(*tex)->params;
         if (cur->w == img->w && cur->h == img->h && cur->format == fmt)
-            return *tex;
+            goto resized;
     }
 
     PL_INFO(rr, "Resizing intermediate FBO texture: %dx%d", img->w, img->h);
@@ -409,9 +409,12 @@ static const struct ra_tex *finalize_img(struct pl_renderer *rr,
     if (!*tex) {
         PL_ERR(rr, "Failed creating FBO texture! Disabling advanced rendering..");
         rr->fbofmt = NULL;
+        pl_dispatch_abort(rr->dp, &img->sh);
         return NULL;
     }
 
+
+resized:
     if (!pl_dispatch_finish(rr->dp, &img->sh, *tex, NULL)) {
         PL_ERR(rr, "Failed dispatching intermediate pass!");
         return NULL;
