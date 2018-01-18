@@ -319,14 +319,10 @@ error:
 
 static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
 {
-    const struct ra_fmt *src_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 16, 32,
-                                               RA_FMT_CAP_SAMPLEABLE);
-
     const struct ra_fmt *fbo_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 4, 16, 32,
                                                RA_FMT_CAP_RENDERABLE |
                                                RA_FMT_CAP_BLITTABLE);
-
-    if (!src_fmt || !fbo_fmt)
+    if (!fbo_fmt)
         return;
 
     float *fbo_data = NULL;
@@ -338,17 +334,23 @@ static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
         { 0.0, 0.3, 0.0, 0.0, 0.0 },
     };
 
-    const struct ra_tex *img5x5 = ra_tex_create(ra, &(struct ra_tex_params) {
-        .w              = 5,
-        .h              = 5,
-        .format         = src_fmt,
-        .sampleable     = true,
-        .sample_mode    = (src_fmt->caps & RA_FMT_CAP_LINEAR)
-                            ? RA_TEX_SAMPLE_LINEAR
-                            : RA_TEX_SAMPLE_NEAREST,
-        .address_mode   = RA_TEX_ADDRESS_CLAMP,
-        .initial_data   = &data_5x5[0][0],
+    const int width = 5, height = 5;
+
+    struct pl_plane img5x5 = {0};
+    bool ok = pl_upload_plane(ra, &img5x5, &(struct pl_plane_data) {
+        .type = RA_FMT_FLOAT,
+        .width = width,
+        .height = height,
+        .component_size = { 8 * sizeof(float) },
+        .component_map  = { 0 },
+        .pixel_stride = sizeof(float),
+        .pixels = &data_5x5,
     });
+
+    if (!ok) {
+        ra_tex_destroy(ra, &img5x5.texture);
+        return;
+    }
 
     const struct ra_tex *fbo = ra_tex_create(ra, &(struct ra_tex_params) {
         .w              = 40,
@@ -361,25 +363,21 @@ static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
     });
 
     struct pl_renderer *rr = pl_renderer_create(ctx, ra);
-    if (!img5x5 || !fbo || !rr)
+    if (!fbo || !rr)
         goto error;
 
     struct pl_image image = {
         .signature      = 0,
         .num_planes     = 1,
-        .planes = {{
-            .texture    = img5x5,
-            .components = 1,
-            .component_mapping = {0},
-        }},
+        .planes         = { img5x5 },
         .repr = {
             .sys        = PL_COLOR_SYSTEM_BT_709,
             .levels     = PL_COLOR_LEVELS_PC,
         },
         .color          = pl_color_space_bt709,
-        .width          = img5x5->params.w,
-        .height         = img5x5->params.h,
-        .src_rect       = {-1.0, 0.0, img5x5->params.w - 1.0, img5x5->params.h},
+        .width          = width,
+        .height         = height,
+        .src_rect       = {-1.0, 0.0, width - 1.0, height},
     };
 
     struct pl_render_target target = {
@@ -415,7 +413,7 @@ static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
 error:
     free(fbo_data);
     pl_renderer_destroy(&rr);
-    ra_tex_destroy(ra, &img5x5);
+    ra_tex_destroy(ra, &img5x5.texture);
     ra_tex_destroy(ra, &fbo);
 }
 
