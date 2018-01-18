@@ -22,11 +22,9 @@
 #include <SDL2/SDL_image.h>
 #include <vulkan/vulkan.h>
 
-#include <libplacebo/colorspace.h>
 #include <libplacebo/context.h>
-#include <libplacebo/dispatch.h>
-#include <libplacebo/shaders/colorspace.h>
-#include <libplacebo/shaders/sampling.h>
+#include <libplacebo/colorspace.h>
+#include <libplacebo/renderer.h>
 #include <libplacebo/swapchain.h>
 #include <libplacebo/utils/upload.h>
 #include <libplacebo/vulkan.h>
@@ -44,8 +42,7 @@ const struct ra_swapchain *swapchain;
 
 // for rendering
 struct pl_plane plane;
-struct pl_dispatch *dispatch;
-struct pl_shader_obj *dither_state;
+struct pl_renderer *renderer;
 
 static void init_sdl() {
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -171,33 +168,38 @@ static void init_rendering(const char *filename)
         exit(2);
     }
 
-    // create a shader dispatch object
-    dispatch = pl_dispatch_create(ctx, vk->ra);
+    // Create a renderer instance
+    renderer = pl_renderer_create(ctx, vk->ra);
 }
 
 static void render_frame(const struct ra_swapchain_frame *frame)
 {
+    const struct ra_tex *img = plane.texture;
+    struct pl_image image = {
+        .num_planes = 1,
+        .planes = { plane },
+        .repr = pl_color_repr_unknown,
+        .color = pl_color_space_unknown,
+        .width = img->params.w,
+        .height = img->params.h,
+        .src_rect = { 0, 0, img->params.w, img->params.h },
+    };
+
     const struct ra_tex *fbo = frame->fbo;
+    struct pl_render_target target = {
+        .fbo = fbo,
+        .repr = frame->color_repr,
+        .color = frame->color_space,
+        .dst_rect = { 0, 0, fbo->params.w, fbo->params.h },
+    };
 
-    // Record some example rendering commands
-    struct pl_shader *sh = pl_dispatch_begin(dispatch);
-    pl_shader_sample_bicubic(sh, &(struct pl_sample_src) {
-        .tex   = plane.texture,
-        .new_w = fbo->params.w,
-        .new_h = fbo->params.h,
-    });
-
-    int depth = frame->color_repr.bits.color_depth;
-    pl_shader_dither(sh, depth, &dither_state, NULL);
-
-    ra_tex_clear(vk->ra, fbo, (float[4]){ 1.0, 0.5, 0.0, 1.0 });
-    pl_dispatch_finish(dispatch, &sh, fbo, NULL);
+    if (!pl_render_image(renderer, &image, &target, NULL))
+        fprintf(stderr, "Failed rendering frame!\n");
 }
 
 static void uninit()
 {
-    pl_shader_obj_destroy(&dither_state);
-    pl_dispatch_destroy(&dispatch);
+    pl_renderer_destroy(&renderer);
     ra_tex_destroy(vk->ra, &plane.texture);
     ra_swapchain_destroy(&swapchain);
     pl_vulkan_destroy(&vk);
@@ -230,7 +232,6 @@ int main(int argc, const char **argv)
         }
 
         struct ra_swapchain_frame frame;
-        pl_dispatch_reset_frame(dispatch);
         bool ok = ra_swapchain_start_frame(swapchain, &frame);
         if (!ok) {
             SDL_Delay(10);
