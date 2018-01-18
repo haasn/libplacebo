@@ -436,8 +436,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         .num_descriptors = res->num_descriptors,
     };
 
-    switch (params.type) {
-    case RA_PASS_RASTER: {
+    if (params.type == RA_PASS_RASTER) {
         params.target_dummy = *target;
 
         // Fill in the vertex attributes array
@@ -470,22 +469,6 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         rparams->vertex_count = 4; // single quad
         size_t vert_size = rparams->vertex_count * params.vertex_stride;
         rparams->vertex_data = talloc_zero_size(pass, vert_size);
-        break;
-
-    }
-    case RA_PASS_COMPUTE: {
-        // Round up to make sure we don-t leave off a part of the target
-        int block_w = sh->res.compute_group_size[0],
-            block_h = sh->res.compute_group_size[1],
-            num_x   = (target->params.w + block_w - 1) / block_w,
-            num_y   = (target->params.h + block_h - 1) / block_h;
-
-        rparams->compute_groups[0] = num_x;
-        rparams->compute_groups[1] = num_y;
-        rparams->compute_groups[2] = 1;
-        break;
-    }
-    default: abort();
     }
 
     // Place all the variables; these will dynamically end up in different
@@ -734,6 +717,19 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
             for (int n = 0; n < 4; n++)
                 memcpy((void *) (va_base + n * stride), sva->data[n], size);
         }
+    }
+
+    // For compute shaders: also update the dispatch dimensions
+    if (pl_shader_is_compute(sh)) {
+        // Round up to make sure we don-t leave off a part of the target
+        int block_w = sh->res.compute_group_size[0],
+            block_h = sh->res.compute_group_size[1],
+            num_x   = (target->params.w + block_w - 1) / block_w,
+            num_y   = (target->params.h + block_h - 1) / block_h;
+
+        rparams->compute_groups[0] = num_x;
+        rparams->compute_groups[1] = num_y;
+        rparams->compute_groups[2] = 1;
     }
 
     // Dispatch the actual shader
