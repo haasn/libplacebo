@@ -255,7 +255,7 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     }
 
     // Image count as required
-    PL_DEBUG(vk, "Requested image count: %d (min %d max %d)\n",
+    PL_DEBUG(vk, "Requested image count: %d (min %d max %d)",
              (int) info->minImageCount, (int) caps.minImageCount,
              (int) caps.maxImageCount);
 
