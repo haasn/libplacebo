@@ -521,10 +521,6 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
                                struct pl_shader_obj **peak_detect_state,
                                const struct pl_color_map_params *params)
 {
-    // no-op if no tone mapping necessary
-    if (src.sig_peak <= dst.sig_peak)
-        return;
-
     GLSL("// pl_shader_tone_map\n");
 
     // To prevent discoloration due to out-of-bounds clipping, we need to make
@@ -742,10 +738,11 @@ void pl_shader_color_map(struct pl_shader *sh,
             src.sig_peak = fmaxf(src.sig_peak, cms_mat.m[c][c]);
     }
 
-    // Tone map to rescale the signal average/peak.
-    pl_shader_tone_map(sh, src, dst, dst_luma, peak_detect_state, params);
+    // Tone map to rescale the signal average/peak if needed
+    if (src.sig_peak > dst.sig_peak)
+        pl_shader_tone_map(sh, src, dst, dst_luma, peak_detect_state, params);
 
-    // Warn for remaining out-of-gamut colors is enabled
+    // Warn for remaining out-of-gamut colors if enabled
     if (params->gamut_warning) {
         GLSL("if (any(greaterThan(color.rgb, vec3(1.01))) ||\n"
              "    any(lessThan(color.rgb, vec3(-0.01))))\n"
