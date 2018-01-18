@@ -32,7 +32,7 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx, const struct ra *ra,
         .ctx = ctx,
         .ra = ra,
         .mutable = true,
-        .tmp = talloc_ref_new(NULL),
+        .tmp = talloc_ref_new(ctx),
         .ident = ident,
         .index = index,
     };
@@ -55,7 +55,7 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index)
     struct pl_shader new = {
         .ctx = sh->ctx,
         .ra  = sh->ra,
-        .tmp = talloc_ref_new(NULL),
+        .tmp = talloc_ref_new(sh->ctx),
         .mutable = true,
         .ident = ident,
         .index = index,
@@ -72,7 +72,7 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index)
     for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
         new.buffers[i] = (struct bstr) { .start = sh->buffers[i].start };
 
-    ta_ref_deref(&sh->tmp);
+    talloc_ref_deref(&sh->tmp);
     *sh = new;
 }
 
