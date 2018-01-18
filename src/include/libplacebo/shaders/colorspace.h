@@ -23,8 +23,8 @@
 
 #include <stdint.h>
 
-#include "../colorspace.h"
-#include "../shaders.h"
+#include <libplacebo/colorspace.h>
+#include <libplacebo/shaders.h>
 
 // Decode the color into normalized RGB, given a specified color_repr. This
 // also takes care of additional pre- and post-conversions requires for the

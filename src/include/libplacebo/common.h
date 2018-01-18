@@ -18,7 +18,7 @@
 #ifndef LIBPLACEBO_COMMON_H_
 #define LIBPLACEBO_COMMON_H_
 
-#include "context.h"
+#include <libplacebo/context.h>
 #include <stdbool.h>
 
 // Some common utility types. These are overloaded to support 2D, 3D and

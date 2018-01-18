@@ -19,7 +19,7 @@
 #define LIBPLACEBO_VULKAN_H_
 
 #include <vulkan/vulkan.h>
-#include "ra.h"
+#include <libplacebo/ra.h>
 
 struct pl_vulkan {
     const struct ra *ra; // The RA instance representing this vulkan device

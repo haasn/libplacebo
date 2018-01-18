@@ -148,10 +148,12 @@ configure_file(
 )
 
 add_project_arguments(build_opts, language: 'c')
+inc = include_directories('./include')
 lib = library('placebo', sources,
   install: true,
   dependencies: build_deps,
   soversion: apiver,
+  include_directories: inc,
 )
 
 # Install process
@@ -171,7 +173,11 @@ tdeps = [ declare_dependency(link_with: lib) ]
 
 if get_option('tests')
   foreach t : tests
-    e = executable('test.' + t, 'tests/' + t, dependencies: build_deps + tdeps)
+    e = executable('test.' + t, 'tests/' + t,
+        dependencies: build_deps + tdeps,
+        include_directories: inc
+    )
+
     test(t, e)
   endforeach
 endif

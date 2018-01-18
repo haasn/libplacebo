@@ -24,7 +24,7 @@
 // own rendering process. This API is normally not used for operation with
 // libplacebo's higher-level constructs such as `pl_dispatch` or `pl_renderer`.
 
-#include "ra.h"
+#include <libplacebo/ra.h>
 
 struct pl_shader;
 
