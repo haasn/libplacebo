@@ -185,14 +185,8 @@ static void render_frame(const struct ra_swapchain_frame *frame)
         .src_rect = { 0, 0, img->params.w, img->params.h },
     };
 
-    const struct ra_tex *fbo = frame->fbo;
-    struct pl_render_target target = {
-        .fbo = fbo,
-        .repr = frame->color_repr,
-        .color = frame->color_space,
-        .dst_rect = { 0, 0, fbo->params.w, fbo->params.h },
-    };
-
+    struct pl_render_target target;
+    pl_render_target_from_swapchain(&target, frame);
     if (!pl_render_image(renderer, &image, &target, NULL))
         fprintf(stderr, "Failed rendering frame!\n");
 }

@@ -19,6 +19,7 @@
 #define LIBPLACEBO_RENDERER_H_
 
 #include <libplacebo/colorspace.h>
+#include <libplacebo/swapchain.h>
 #include <libplacebo/ra.h>
 
 struct pl_renderer;
@@ -246,6 +247,10 @@ struct pl_render_target {
     struct pl_color_repr repr;
     struct pl_color_space color;
 };
+
+// Fills in a pl_render_target based on a swapchain frame's FBO and metadata.
+void pl_render_target_from_swapchain(struct pl_render_target *out_target,
+                                     const struct ra_swapchain_frame *frame);
 
 // Render a single image to a target using the given parameters. This is
 // fully dynamic, i.e. the params can change at any time. libplacebo will

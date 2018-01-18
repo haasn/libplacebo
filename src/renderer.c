@@ -536,3 +536,15 @@ error:
     PL_ERR(rr, "Failed rendering image!");
     return false;
 }
+
+void pl_render_target_from_swapchain(struct pl_render_target *out_target,
+                                     const struct ra_swapchain_frame *frame)
+{
+    const struct ra_tex *fbo = frame->fbo;
+    *out_target = (struct pl_render_target) {
+        .fbo = fbo,
+        .dst_rect = { 0, 0, fbo->params.w, fbo->params.h },
+        .repr = frame->color_repr,
+        .color = frame->color_space,
+    };
+}
