@@ -322,6 +322,10 @@ static bool vk_sw_recreate(const struct ra_swapchain *sw)
     if (!update_swapchain_info(p, &sinfo))
         goto error;
 
+    PL_INFO(sw, "(Re)creating swapchain of size %dx%d",
+            sinfo.imageExtent.width,
+            sinfo.imageExtent.height);
+
     VK(vkCreateSwapchainKHR(vk->dev, &sinfo, VK_ALLOC, &p->swapchain));
 
     // Freeing the old swapchain while it's still in use is an error, so do it
