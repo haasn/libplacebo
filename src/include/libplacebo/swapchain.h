@@ -18,9 +18,9 @@
 #ifndef LIBPLACEBO_SWAPCHAIN_H_
 #define LIBPLACEBO_SWAPCHAIN_H_
 
-#include "common.h"
-#include "colorspace.h"
-#include "ra.h"
+#include <libplacebo/common.h>
+#include <libplacebo/colorspace.h>
+#include <libplacebo/ra.h>
 
 // This abstraction represents a low-level interface to visible surfaces
 // exposed by a graphics API (and accompanying RA instance), allowing users to

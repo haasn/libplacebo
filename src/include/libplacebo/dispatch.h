@@ -18,8 +18,8 @@
 #ifndef LIBPLACEBO_DISPATCH_H_
 #define LIBPLACEBO_DISPATCH_H_
 
-#include "shaders.h"
-#include "ra.h"
+#include <libplacebo/shaders.h>
+#include <libplacebo/ra.h>
 
 struct pl_dispatch;
 

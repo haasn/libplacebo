@@ -18,7 +18,7 @@
 #ifndef LIBPLACEBO_RENDERER_H_
 #define LIBPLACEBO_RENDERER_H_
 
-#include "ra.h"
+#include <libplacebo/ra.h>
 
 struct pl_renderer;
 

@@ -22,7 +22,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "common.h"
+#include <libplacebo/common.h>
 
 // This file contains the definition of an API referred to as "RA", which
 // stands for Rendering Abstraction (or Rendering API) and is designed to

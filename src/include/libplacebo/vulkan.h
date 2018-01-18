@@ -19,7 +19,7 @@
 #define LIBPLACEBO_VULKAN_H_
 
 #include <vulkan/vulkan.h>
-#include "ra.h"
+#include <libplacebo/ra.h>
 
 // Structure representing a VkInstance. Using this is not required.
 struct pl_vk_inst {

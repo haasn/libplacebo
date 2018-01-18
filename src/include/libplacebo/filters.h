@@ -19,7 +19,7 @@
 #define LIBPLACEBO_FILTER_KERNELS_H_
 
 #include <stdbool.h>
-#include "context.h"
+#include <libplacebo/context.h>
 
 #define PL_FILTER_MAX_PARAMS 2
 

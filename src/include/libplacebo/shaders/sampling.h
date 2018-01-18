@@ -24,8 +24,8 @@
 // is undefined behavior. They require nothing (PL_SHADER_SIG_NONE) and return
 // a color (PL_SHADER_SIG_COLOR).
 
-#include "../filters.h"
-#include "../shaders.h"
+#include <libplacebo/filters.h>
+#include <libplacebo/shaders.h>
 
 struct pl_deband_params {
     // The number of debanding steps to perform per sample. Each step reduces a
