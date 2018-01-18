@@ -19,8 +19,11 @@
 #define LIBPLACEBO_RENDERER_H_
 
 #include <libplacebo/colorspace.h>
-#include <libplacebo/swapchain.h>
+#include <libplacebo/filters.h>
 #include <libplacebo/ra.h>
+#include <libplacebo/shaders/colorspace.h>
+#include <libplacebo/shaders/sampling.h>
+#include <libplacebo/swapchain.h>
 
 struct pl_renderer;
 
