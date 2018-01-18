@@ -20,6 +20,7 @@
 
 #include <vulkan/vulkan.h>
 #include <libplacebo/ra.h>
+#include <libplacebo/swapchain.h>
 
 // Structure representing a VkInstance. Using this is not required.
 struct pl_vk_inst {
