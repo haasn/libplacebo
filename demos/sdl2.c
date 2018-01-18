@@ -191,7 +191,7 @@ static void render_frame(const struct ra_swapchain_frame *frame)
     pl_shader_dither(sh, depth, &dither_state, NULL);
 
     ra_tex_clear(vk->ra, fbo, (float[4]){ 1.0, 0.5, 0.0, 1.0 });
-    pl_dispatch_finish(dispatch, sh, fbo, NULL);
+    pl_dispatch_finish(dispatch, &sh, fbo, NULL);
 }
 
 static void uninit()

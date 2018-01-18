@@ -651,9 +651,10 @@ static void translate_compute_shader(struct pl_dispatch *dp,
     }
 }
 
-bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader *sh,
+bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
                         const struct ra_tex *target, const struct pl_rect2d *rc)
 {
+    struct pl_shader *sh = *psh;
     const struct pl_shader_res *res = &sh->res;
     bool ret = false;
 
@@ -745,12 +746,17 @@ error:
     for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
         dp->tmp[i].len = 0;
 
-    pl_dispatch_abort(dp, sh);
+    pl_dispatch_abort(dp, psh);
     return ret;
 }
 
-void pl_dispatch_abort(struct pl_dispatch *dp, struct pl_shader *sh)
+void pl_dispatch_abort(struct pl_dispatch *dp, struct pl_shader **psh)
 {
+    struct pl_shader *sh = *psh;
+    if (!sh)
+        return;
+
     // Re-add the shader to the internal pool of shaders
     TARRAY_APPEND(dp, dp->shaders, dp->num_shaders, sh);
+    *psh = NULL;
 }

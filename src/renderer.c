@@ -338,8 +338,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             PL_ERR(sh, "Failed dispatching subpass for plane.. disabling "
                    "scalers");
             rr->disable_sampling = true;
-            pl_dispatch_abort(rr->dp, psh);
-            pl_dispatch_abort(rr->dp, sh);
+            pl_dispatch_abort(rr->dp, &psh);
+            pl_dispatch_abort(rr->dp, &sh);
 
             // FIXME: instead of erroring here, instead render out to a cache
             // FBO and sample from that instead
@@ -357,7 +357,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         }
 
         // we don't need it anymore
-        pl_dispatch_abort(rr->dp, psh);
+        pl_dispatch_abort(rr->dp, &psh);
     }
 
     pass->cur_img = (struct img) {
@@ -412,7 +412,7 @@ static const struct ra_tex *finalize_img(struct pl_renderer *rr,
         return NULL;
     }
 
-    if (!pl_dispatch_finish(rr->dp, img->sh, *tex, NULL)) {
+    if (!pl_dispatch_finish(rr->dp, &img->sh, *tex, NULL)) {
         PL_ERR(rr, "Failed dispatching intermediate pass!");
         return NULL;
     }
@@ -503,7 +503,7 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
     }
 
     pl_assert(fbo->params.renderable);
-    return pl_dispatch_finish(rr->dp, sh, fbo, &target->dst_rect);
+    return pl_dispatch_finish(rr->dp, &sh, fbo, &target->dst_rect);
 }
 
 bool pl_render_image(struct pl_renderer *rr, const struct pl_image *image,
@@ -529,6 +529,7 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *image,
     return true;
 
 error:
+    pl_dispatch_abort(rr->dp, &pass.cur_img.sh);
     PL_ERR(rr, "Failed rendering image!");
     return false;
 }

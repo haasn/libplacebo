@@ -210,7 +210,7 @@ static void ra_shader_tests(struct pl_context *ctx, const struct ra *ra)
         });
 
         pl_shader_linearize(sh, PL_COLOR_TRC_GAMMA22);
-        REQUIRE(pl_dispatch_finish(dp, sh, fbo, NULL));
+        REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL));
     }
 
     ra_tex_download(ra, &(struct ra_tex_transfer_params) {
@@ -291,7 +291,7 @@ static void ra_scaler_tests(struct pl_context *ctx, const struct ra *ra)
             .no_compute = !fbo->params.storable,
         }
     ));
-    REQUIRE(pl_dispatch_finish(dp, sh, fbo, NULL));
+    REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL));
 
     fbo_data = malloc(fbo->params.w * fbo->params.h * sizeof(float));
     REQUIRE(ra_tex_download(ra, &(struct ra_tex_transfer_params) {
