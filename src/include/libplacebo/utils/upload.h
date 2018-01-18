@@ -15,8 +15,10 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "stdint.h"
-#include "ra.h"
+#include <stdint.h>
+
+#include "../ra.h"
+#include "../renderer.h"
 
 #ifndef LIBPLACEBO_UPLOAD_H_
 #define LIBPLACEBO_UPLOAD_H_
