@@ -10,12 +10,6 @@
  *   what you should be doing for a real program, but I wanted to avoid the
  *   example becoming too complicated.
  *
- * - The format handling is currently hard-coded to just use SDL conversion
- *   functions to force the format to be the one we want it to be, and we also
- *   ignore the possibility of the stride being different from the width. I
- *   wanted to avoid this example turning into an exercise in image format
- *   picking. (I have other helpers for that planned)
- *
  * License: CC0 / Public Domain
  */
 
@@ -34,6 +28,7 @@
 #include <libplacebo/shaders/colorspace.h>
 #include <libplacebo/shaders/sampling.h>
 #include <libplacebo/swapchain.h>
+#include <libplacebo/utils/upload.h>
 #include <libplacebo/vulkan.h>
 
 #define WINDOW_WIDTH 640
@@ -48,7 +43,7 @@ const struct pl_vk_inst *vk_inst;
 const struct ra_swapchain *swapchain;
 
 // for rendering
-const struct ra_tex *lena;
+struct pl_plane plane;
 struct pl_dispatch *dispatch;
 struct pl_shader_obj *dither_state;
 
@@ -135,48 +130,44 @@ static void init_vulkan()
     }
 }
 
-static void init_rendering()
+static void init_rendering(const char *filename)
 {
-    // Pick a good texture format
-    const struct ra_fmt *fmt;
-    fmt = ra_find_fmt(vk->ra, RA_FMT_UNORM, 4, 8, 8, RA_FMT_CAP_LINEAR);
-    if (!fmt) {
-        fprintf(stderr, "Failed picking any suitable ra_fmt!\n");
-        exit(2);
-    }
-
-    SDL_Surface *jpg = IMG_Load("lena.jpg");
-    if (!jpg) {
-        fprintf(stderr, "Failed loading 'lena.jpg': %s\n", SDL_GetError());
+    SDL_Surface *img = IMG_Load(filename);
+    if (!img) {
+        fprintf(stderr, "Failed loading '%s': %s\n", filename, SDL_GetError());
         exit(1);
     }
 
-    // For simplicity, just always convert the loaded image to our chosen fmt
-    // Note: SDL2 treats pixels as a single word, so on little-endian platforms
-    // we need to specify ABGR in order to have the R bits be the first byte in
-    // memory. For big endian this would have to be a different magic constant,
-    // but this is a hack anyway so I won't worry about it.
-    SDL_Surface *img = SDL_CreateRGBSurfaceWithFormat(0, jpg->w, jpg->h, 32,
-                                                      SDL_PIXELFORMAT_ABGR8888);
-    SDL_BlitSurface(jpg, NULL, img, NULL);
+    const SDL_PixelFormat *fmt = img->format;
+    if (SDL_ISPIXELFORMAT_INDEXED(fmt->format) || fmt->BytesPerPixel == 3) {
+        // Work-around for real-world GPU limitations.
+        // FIXME: Get rid of this once libplacebo supports built-in conversions!
+        SDL_Surface *fixed;
+        fixed = SDL_CreateRGBSurfaceWithFormat(0, img->w, img->h, 32,
+                                               SDL_PIXELFORMAT_ABGR8888);
+        SDL_BlitSurface(img, NULL, fixed, NULL);
+        SDL_FreeSurface(img);
+        img = fixed;
+        fmt = img->format;
+    }
 
-    // for simplicity, ignore the stride so we can use initial_data and not
-    // have to worry about it
-    assert(img->pitch == img->w * img->format->BytesPerPixel);
-    lena = ra_tex_create(vk->ra, &(struct ra_tex_params) {
-        .w = img->w,
-        .h = img->h,
-        .format = fmt,
-        .sampleable = true,
-        .sample_mode = RA_TEX_SAMPLE_LINEAR,
-        .initial_data = img->pixels,
-    });
+    struct pl_plane_data data = {
+        .type = RA_FMT_UNORM,
+        .width = img->w,
+        .height = img->h,
+        .pixel_stride = fmt->BytesPerPixel,
+        .row_stride = img->pitch,
+        .pixels = img->pixels,
+    };
 
+    uint64_t masks[4] = { fmt->Rmask, fmt->Gmask, fmt->Bmask, fmt->Amask };
+    pl_plane_data_from_mask(&data, masks);
+
+    bool ok = pl_upload_plane(vk->ra, &plane, &data);
     SDL_FreeSurface(img);
-    SDL_FreeSurface(jpg);
 
-    if (!lena) {
-        fprintf(stderr, "Failed creating lena texture!\n");
+    if (!ok) {
+        fprintf(stderr, "Failed uploading texture to GPU!\n");
         exit(2);
     }
 
@@ -191,7 +182,7 @@ static void render_frame(const struct ra_swapchain_frame *frame)
     // Record some example rendering commands
     struct pl_shader *sh = pl_dispatch_begin(dispatch);
     pl_shader_sample_bicubic(sh, &(struct pl_sample_src) {
-        .tex   = lena,
+        .tex   = plane.texture,
         .new_w = fbo->params.w,
         .new_h = fbo->params.h,
     });
@@ -207,7 +198,7 @@ static void uninit()
 {
     pl_shader_obj_destroy(&dither_state);
     pl_dispatch_destroy(&dispatch);
-    ra_tex_destroy(vk->ra, &lena);
+    ra_tex_destroy(vk->ra, &plane.texture);
     ra_swapchain_destroy(&swapchain);
     pl_vulkan_destroy(&vk);
     vkDestroySurfaceKHR(vk_inst->instance, surf, NULL);
@@ -218,13 +209,18 @@ static void uninit()
     SDL_Quit();
 }
 
-int main()
+int main(int argc, const char **argv)
 {
+    if (argc != 2) {
+        fprintf(stderr, "Usage: ./sdl2 <filename>\n");
+        return 255;
+    }
+
     int ret = 0;
     init_sdl();
     init_placebo();
     init_vulkan();
-    init_rendering();
+    init_rendering(argv[1]);
 
     while (true) {
         SDL_Event evt;
