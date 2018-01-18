@@ -326,8 +326,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             .rect       = {
                 sx / rx,
                 sy / ry,
-                sx / rx,
-                sy / ry,
+                pw + sx / rx,
+                ph + sy / ry,
             },
         };
 
