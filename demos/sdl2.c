@@ -22,15 +22,21 @@
 #include <SDL2/SDL_image.h>
 #include <vulkan/vulkan.h>
 
-#include <libplacebo/context.h>
-#include <libplacebo/colorspace.h>
 #include <libplacebo/renderer.h>
-#include <libplacebo/swapchain.h>
 #include <libplacebo/utils/upload.h>
 #include <libplacebo/vulkan.h>
 
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
+
+const struct pl_render_params render_params = {
+    // due to current limitations
+    .upscaler = NULL,
+    .downscaler = NULL,
+
+    .deband_params = &pl_deband_default_params,
+    .dither_params = &pl_dither_default_params,
+};
 
 SDL_Window *window;
 VkSurfaceKHR surf;
@@ -187,7 +193,7 @@ static void render_frame(const struct ra_swapchain_frame *frame)
 
     struct pl_render_target target;
     pl_render_target_from_swapchain(&target, frame);
-    if (!pl_render_image(renderer, &image, &target, NULL))
+    if (!pl_render_image(renderer, &image, &target, &render_params))
         fprintf(stderr, "Failed rendering frame!\n");
 }
 
