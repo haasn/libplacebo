@@ -636,6 +636,12 @@ void pl_shader_color_map(struct pl_shader *sh,
     GLSL("{\n");
     params = PL_DEF(params, &pl_color_map_default_params);
 
+    // Defaults the primaries/transfer to sensible values. This isn't strictly
+    // necessary, but it avoids some redundant operations in the cases where
+    // src and dst are equal but one is set and the other is unknown
+    src.primaries = PL_DEF(src.primaries, PL_COLOR_PRIM_BT_709);
+    src.transfer = PL_DEF(src.transfer, PL_COLOR_TRC_GAMMA22);
+
     // If the source light type is unknown, infer it from the transfer function.
     if (!src.light) {
         src.light = (src.transfer == PL_COLOR_TRC_HLG)
