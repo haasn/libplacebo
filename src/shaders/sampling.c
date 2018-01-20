@@ -388,7 +388,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
         GLSL("for (int y = int(gl_LocalInvocationID.y); y < %d; y += %d) {  \n"
              "for (int x = int(gl_LocalInvocationID.x); x < %d; x += %d) {  \n"
              "c = texture(%s, wbase + pt * vec2(x - %d, y - %d));           \n",
-             iw, bh, iw, bw, src_tex, offset, offset);
+             ih, bh, iw, bw, src_tex, offset, offset);
 
         for (int c = 0; c < comps; c++) {
             GLSLH("shared float in%d[%d];   \n", c, ih * iw);
@@ -464,6 +464,6 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
     }
 
     GLSL("color = color / vec4(wsum); \n"
-         "}");
+         "}                           \n");
     return true;
 }
