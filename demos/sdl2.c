@@ -31,7 +31,7 @@
 
 const struct pl_render_params render_params = {
     // due to current limitations
-    .upscaler = NULL,
+    .upscaler = &pl_filter_ewa_lanczos,
     .downscaler = NULL,
 
     .deband_params = &pl_deband_default_params,
@@ -125,8 +125,9 @@ static void init_vulkan()
 
     swapchain = pl_vulkan_create_swapchain(vk, &(struct pl_vulkan_swapchain_params) {
         .surface = surf,
-        .present_mode = VK_PRESENT_MODE_FIFO_KHR,
+        .present_mode = VK_PRESENT_MODE_IMMEDIATE_KHR,
     });
+
     if (!swapchain) {
         fprintf(stderr, "Failed creating vulkan swapchain!");
         exit(2);
@@ -218,11 +219,16 @@ int main(int argc, const char **argv)
         return 255;
     }
 
+    unsigned int start = SDL_GetTicks();
+
     int ret = 0;
     init_sdl();
     init_placebo();
     init_vulkan();
     init_rendering(argv[1]);
+
+    unsigned int last = SDL_GetTicks(), frames = 0;
+    printf("Took %u ms for initialization\n", last - start);
 
     while (true) {
         SDL_Event evt;
@@ -247,6 +253,15 @@ int main(int argc, const char **argv)
         }
 
         ra_swapchain_swap_buffers(swapchain);
+        frames++;
+
+        unsigned int now = SDL_GetTicks();
+        if (now - last > 5000) {
+            printf("%u frames in %u ms = %f FPS\n", frames, now - last,
+                   1000.0f * frames / (now - last));
+            last = now;
+            frames = 0;
+        }
     }
 
 cleanup:
