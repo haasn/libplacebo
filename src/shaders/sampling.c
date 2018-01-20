@@ -179,8 +179,8 @@ bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *
         return false;
 
     if (rx < 1 || ry < 1) {
-        PL_WARN(sh, "Trying to use fast bicubic sampling when downscaling. This "
-                "will most likely result in nasty aliasing");
+        PL_TRACE(sh, "Using fast bicubic sampling when downscaling. This "
+                 "will most likely result in nasty aliasing!");
     }
 
     GLSL("// pl_shader_sample_bicubic                   \n"
