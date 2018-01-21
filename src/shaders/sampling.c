@@ -283,7 +283,7 @@ static void sh_sampler_uninit(const struct ra *ra, void *ptr)
     *obj = (struct sh_sampler_obj) {0};
 }
 
-static void fill_sampler_lut(void *priv, float *data, int w, int h, int d)
+static void fill_polar_lut(void *priv, float *data, int w, int h, int d)
 {
     const struct sh_sampler_obj *obj = priv;
     const struct pl_filter *filt = obj->filter;
@@ -346,7 +346,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     }
 
     ident_t lut = sh_lut(sh, &obj->lut, SH_LUT_LINEAR, lut_entries, 0, 0, 1,
-                         update, obj, fill_sampler_lut);
+                         update, obj, fill_polar_lut);
     if (!lut) {
         PL_ERR(sh, "Failed initializing polar LUT!");
         return false;
@@ -471,5 +471,174 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
 
     GLSL("color = color / vec4(wsum); \n"
          "}                           \n");
+    return true;
+}
+
+struct sh_sampler_sep_obj {
+    struct pl_shader_obj *samplers[2];
+};
+
+static void sh_sampler_sep_uninit(const struct ra *ra, void *ptr)
+{
+    struct sh_sampler_sep_obj *obj = ptr;
+    for (int i = 0; i < PL_ARRAY_SIZE(obj->samplers); i++)
+        pl_shader_obj_destroy(&obj->samplers[i]);
+    *obj = (struct sh_sampler_sep_obj) {0};
+}
+
+static void fill_ortho_lut(void *priv, float *data, int w, int h, int d)
+{
+    const struct sh_sampler_obj *obj = priv;
+    const struct pl_filter *filt = obj->filter;
+
+    pl_assert(w * h * 4 == filt->params.lut_entries * filt->row_stride);
+    memcpy(data, filt->weights, w * h * 4 * sizeof(float));
+}
+
+bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
+                            const struct pl_sample_src *src,
+                            const struct pl_sample_filter_params *params)
+{
+    pl_assert(params);
+    if (params->filter.polar) {
+        PL_ERR(sh, "Trying to use separated sampling with a polar filter?");
+        return false;
+    }
+
+    const struct ra *ra = sh->ra;
+    const struct ra_tex *tex = src->tex;
+    pl_assert(ra && tex);
+
+    struct pl_sample_src srcfix = *src;
+    switch (pass) {
+    case PL_SEP_VERT:
+        srcfix.rect.x0 = 0;
+        srcfix.rect.x1 = srcfix.new_w = tex->params.w;
+        break;
+    case PL_SEP_HORIZ:
+        srcfix.rect.y0 = 0;
+        srcfix.rect.y1 = srcfix.new_h = tex->params.h;
+        break;
+    case PL_SEP_PASSES:
+    default:
+        abort();
+    }
+
+    int comps;
+    float ratio[2];
+    ident_t src_tex, pos, size, pt;
+    if (!setup_src(sh, &srcfix, &src_tex, &pos, &size, &pt, &ratio[1], &ratio[0], &comps))
+        return false;
+
+    // We can store a separate sampler object per dimension, so dispatch the
+    // right one. This is needed for two reasons:
+    // 1. Anamorphic content can have a different scaling ratio for each
+    //    dimension. In particular, you could be upscaling in one and
+    //    downscaling in the other.
+    // 2. After fixing the source for `setup_src`, we lose information about
+    //    the scaling ratio of the other component. (Although this is only a
+    //    minor reason and could easily be changed with some boilerplate)
+    struct sh_sampler_sep_obj *sepobj;
+    sepobj = SH_OBJ(sh, params->lut, PL_SHADER_OBJ_SAMPLER_SEP,
+                    struct sh_sampler_sep_obj, sh_sampler_sep_uninit);
+    if (!sepobj)
+        return false;
+
+    struct sh_sampler_obj *obj;
+    obj = SH_OBJ(sh, &sepobj->samplers[pass], PL_SHADER_OBJ_SAMPLER,
+                 struct sh_sampler_obj, sh_sampler_uninit);
+    if (!obj)
+        return false;
+
+    float inv_scale = 1.0 / ratio[pass];
+    inv_scale = PL_MAX(inv_scale, 1.0);
+
+    if (params->no_widening)
+        inv_scale = 1.0;
+
+    int lut_entries = PL_DEF(params->lut_entries, 64);
+    bool update = !filter_compat(obj->filter, inv_scale, lut_entries, 0.0,
+                                 &params->filter);
+
+    if (update) {
+        pl_filter_free(&obj->filter);
+        obj->filter = pl_filter_generate(sh->ctx, &(struct pl_filter_params) {
+            .config             = params->filter,
+            .lut_entries        = lut_entries,
+            .filter_scale       = inv_scale,
+            .max_row_size       = ra->limits.max_tex_2d_dim / 4,
+            .row_stride_align   = 4,
+        });
+
+        if (!obj->filter) {
+            // This should never happen, but just in case ..
+            PL_ERR(sh, "Failed initializing separated filter!");
+            return false;
+        }
+    }
+
+    int N = obj->filter->row_size; // number of samples to convolve
+    int width = obj->filter->row_stride / 4; // width of the LUT texture
+    ident_t lut = sh_lut(sh, &obj->lut, SH_LUT_LINEAR, width, lut_entries, 0, 4,
+                         update, obj, fill_ortho_lut);
+    if (!lut) {
+        PL_ERR(sh, "Failed initializing separated LUT!");
+        return false;
+    }
+
+    const float dir[PL_SEP_PASSES][2] = {
+        [PL_SEP_HORIZ] = {1.0, 0.0},
+        [PL_SEP_VERT]  = {0.0, 1.0},
+    };
+
+    GLSL("// pl_shader_sample_ortho                        \n"
+         "vec4 color = vec4(0.0);                          \n"
+         "{                                                \n"
+         "vec2 pos = %s, size = %s, pt = %s;               \n"
+         "vec2 dir = vec2(%f, %f);                         \n"
+         "pt *= dir;                                       \n"
+         "vec2 fcoord2 = fract(pos * size - vec2(0.5));    \n"
+         "float fcoord = dot(fcoord2, dir);                \n"
+         "vec2 base = pos - fcoord * pt - pt * vec2(%d.0); \n"
+         "float weight;                                    \n"
+         "vec4 ws, c;                                      \n",
+         pos, size, pt,
+         dir[pass][0], dir[pass][1],
+         N / 2 - 1);
+
+    bool use_ar = params->antiring > 0;
+    if (use_ar) {
+        GLSL("vec4 hi = vec4(0.0); \n"
+             "vec4 lo = vec4(1e9); \n");
+    }
+
+    // Dispatch all of the samples
+    GLSL("// scaler samples\n");
+    for (int n = 0; n < N; n++) {
+        // Load the right weight for this instance. For every 4th weight, we
+        // need to fetch another LUT entry. Otherwise, just use the previous
+        if (n % 4 == 0) {
+            float denom = PL_MAX(1, width - 1); // avoid division by zero
+            GLSL("ws = %s(vec2(%f, fcoord));\n", lut, (n / 4) / denom);
+        }
+        GLSL("weight = ws[%d];\n", n % 4);
+
+        // Load the input texel and add it to the running sum
+        GLSL("c = texture(%s, base + pt * vec2(%d.0)); \n"
+             "color += vec4(weight) * c;               \n",
+             src_tex, n);
+
+        if (use_ar && (n == N / 2 - 1 || n == N / 2)) {
+            GLSL("lo = min(lo, c); \n"
+                 "hi = max(hi, c); \n");
+        }
+    }
+
+    if (use_ar) {
+        GLSL("color = mix(color, clamp(color, lo, hi), %f);\n",
+             params->antiring);
+    }
+
+    GLSL("}\n");
     return true;
 }

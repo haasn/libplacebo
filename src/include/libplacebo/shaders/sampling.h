@@ -97,7 +97,10 @@ struct pl_sample_filter_params {
     // See `pl_filter_params.cutoff`. Defaults to 0.001 if unspecified. Only
     // relevant for polar filters.
     float cutoff;
-
+    // Antiringing strength. A value of 0.0 disables antiringing, and a value
+    // of 1.0 enables full-strength antiringing. Defaults to 0.0 if
+    // unspecified. Only relevant for separated/orthogonal filters.
+    float antiring;
     // Disable the use of compute shaders (e.g. if rendering to non-storable tex)
     bool no_compute;
     // Disable the use of filter widening / anti-aliasing (for downscaling)
@@ -116,6 +119,29 @@ struct pl_sample_filter_params {
 //
 // Note: `params->filter.polar` must be true to use this function.
 bool pl_shader_sample_polar(struct pl_shader *sh,
+                            const struct pl_sample_src *src,
+                            const struct pl_sample_filter_params *params);
+
+enum {
+    PL_SEP_VERT = 0,
+    PL_SEP_HORIZ,
+    PL_SEP_PASSES
+};
+
+// Performs orthogonal (1D) sampling. Using this twice in a row (once vertical
+// and once horizontal) effectively performs a 2D upscale. This is lower
+// quality than polar sampling, but significantly faster, and therefore the
+// recommended default. Returns whether or not it was successful.
+//
+// 0 <= pass < PL_SEP_PASSES indicates which component of the transformation to
+// apply. PL_SEP_VERT only applies the vertical component, and PL_SEP_HORIZ
+// only the horizontal. The non-relevant component of the `src->rect` is ignored
+// entirely.
+//
+// Note: Due to internal limitations, this may currently only be used on 2D
+// textures - even though the basic principle would work for 1D and 3D textures
+// as well.
+bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
                             const struct pl_sample_src *src,
                             const struct pl_sample_filter_params *params);
 
