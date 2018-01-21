@@ -89,31 +89,34 @@ bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *s
 // for downscaling.
 bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *src);
 
-struct pl_sample_polar_params {
-    // The filter to use for sampling. `filter.polar` must be true.
+struct pl_sample_filter_params {
+    // The filter to use for sampling.
     struct pl_filter_config filter;
-    // The precision of the polar LUT. Defaults to 64 if unspecified.
+    // The precision of the LUT. Defaults to 64 if unspecified.
     int lut_entries;
-    // See `pl_filter_params.cutoff`. Defaults to 0.001 if unspecified.
+    // See `pl_filter_params.cutoff`. Defaults to 0.001 if unspecified. Only
+    // relevant for polar filters.
     float cutoff;
 
     // Disable the use of compute shaders (e.g. if rendering to non-storable tex)
     bool no_compute;
-
     // Disable the use of filter widening / anti-aliasing (for downscaling)
     bool no_widening;
 
     // This shader object is used to store the LUT, and will be recreated
     // if necessary. To avoid thrashing the resource, users should avoid trying
     // to re-use the same LUT for different filter configurations or scaling
-    // ratios. Must be set to a valid pointer.
+    // ratios. Must be set to a valid pointer, and the target NULL-initialized.
     struct pl_shader_obj **lut;
 };
 
 // Performs polar sampling. This internally chooses between an optimized compute
 // shader, and various fragment shaders, depending on the supported GLSL version
 // and RA features. Returns whether or not it was successful.
-bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *src,
-                            const struct pl_sample_polar_params *params);
+//
+// Note: `params->filter.polar` must be true to use this function.
+bool pl_shader_sample_polar(struct pl_shader *sh,
+                            const struct pl_sample_src *src,
+                            const struct pl_sample_filter_params *params);
 
 #endif // LIBPLACEBO_SHADERS_SAMPLING_H_

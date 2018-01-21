@@ -285,7 +285,7 @@ static void ra_scaler_tests(struct pl_context *ctx, const struct ra *ra)
             .new_w      = fbo->params.w,
             .new_h      = fbo->params.h,
         },
-        &(struct pl_sample_polar_params) {
+        &(struct pl_sample_filter_params) {
             .filter     = pl_filter_ewa_lanczos,
             .lut        = &lut,
             .no_compute = !fbo->params.storable,

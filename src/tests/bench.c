@@ -233,7 +233,7 @@ static void bench_dither_ordered_fix(struct pl_shader *sh,
 static void bench_polar(struct pl_shader *sh, struct pl_shader_obj **state,
                         const struct ra_tex *src)
 {
-    struct pl_sample_polar_params params = {
+    struct pl_sample_filter_params params = {
         .filter = pl_filter_ewa_lanczos,
         .lut = state,
     };
@@ -245,7 +245,7 @@ static void bench_polar_nocompute(struct pl_shader *sh,
                                   struct pl_shader_obj **state,
                                   const struct ra_tex *src)
 {
-    struct pl_sample_polar_params params = {
+    struct pl_sample_filter_params params = {
         .filter = pl_filter_ewa_lanczos,
         .no_compute = true,
         .lut = state,

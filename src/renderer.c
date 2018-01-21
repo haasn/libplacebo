@@ -225,7 +225,7 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
         goto fallback;
 
     if (config->polar) {
-        bool r = pl_shader_sample_polar(sh, src, &(struct pl_sample_polar_params) {
+        bool r = pl_shader_sample_polar(sh, src, &(struct pl_sample_filter_params) {
             .filter      = *config,
             .lut_entries = params->lut_entries,
             .lut         = lut,

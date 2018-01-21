@@ -214,8 +214,8 @@ bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *
 }
 
 static bool filter_compat(const struct pl_filter *filter, float inv_scale,
-                          int lut_entries,
-                          const struct pl_sample_polar_params *params)
+                          int lut_entries, float cutoff,
+                          const struct pl_filter_config *params)
 {
     if (!filter)
         return false;
@@ -223,8 +223,10 @@ static bool filter_compat(const struct pl_filter *filter, float inv_scale,
         return false;
     if (fabs(filter->params.filter_scale - inv_scale) > 1e-3)
         return false;
+    if (filter->params.cutoff != cutoff)
+        return false;
 
-    return pl_filter_config_eq(&filter->params.config, &params->filter);
+    return pl_filter_config_eq(&filter->params.config, params);
 }
 
 // Subroutine for computing and adding an individual texel contribution
@@ -290,8 +292,9 @@ static void fill_sampler_lut(void *priv, float *data, int w, int h, int d)
     memcpy(data, filt->weights, w * sizeof(float));
 }
 
-bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *src,
-                            const struct pl_sample_polar_params *params)
+bool pl_shader_sample_polar(struct pl_shader *sh,
+                            const struct pl_sample_src *src,
+                            const struct pl_sample_filter_params *params)
 {
     pl_assert(params);
     if (!params->filter.polar) {
@@ -315,21 +318,24 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
     if (!obj)
         return false;
 
-    int lut_entries = PL_DEF(params->lut_entries, 64);
     float inv_scale = 1.0 / PL_MIN(ratio_x, ratio_y);
     inv_scale = PL_MAX(inv_scale, 1.0);
 
     if (params->no_widening)
         inv_scale = 1.0;
 
-    bool update = !filter_compat(obj->filter, inv_scale, lut_entries, params);
+    int lut_entries = PL_DEF(params->lut_entries, 64);
+    float cutoff = PL_DEF(params->cutoff, 0.001);
+    bool update = !filter_compat(obj->filter, inv_scale, lut_entries, cutoff,
+                                 &params->filter);
+
     if (update) {
         pl_filter_free(&obj->filter);
         obj->filter = pl_filter_generate(sh->ctx, &(struct pl_filter_params) {
             .config         = params->filter,
             .lut_entries    = lut_entries,
             .filter_scale   = inv_scale,
-            .cutoff         = PL_DEF(params->cutoff, 0.001),
+            .cutoff         = cutoff,
         });
 
         if (!obj->filter) {
