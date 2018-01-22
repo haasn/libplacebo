@@ -684,7 +684,6 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
             .x1 = 2.0 * rc->x1 / tpars->w - 1.0,
             .y1 = 2.0 * rc->y1 / tpars->h - 1.0,
         });
-        // TODO: also update the stencil for performance
     }
 
     struct pass *pass = find_pass(dp, sh, target, vert_pos);
@@ -730,6 +729,10 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
         rparams->compute_groups[0] = num_x;
         rparams->compute_groups[1] = num_y;
         rparams->compute_groups[2] = 1;
+    } else {
+        // Update the scissors for performance
+        rparams->scissors = *rc;
+        pl_rect2d_normalize(&rparams->scissors);
     }
 
     // Dispatch the actual shader
