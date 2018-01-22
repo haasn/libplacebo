@@ -471,8 +471,8 @@ struct ra_var ra_var_from_fmt(const struct ra_fmt *fmt, const char *name);
 //
 // [ A B C ] X <- column 0, offset +0
 // [ D E F ] X <- column 1, offset +16
-// [ G H I ] X <- column 1, offset +32
-// [ J K L ]   <- column 1, offset +48
+// [ G H I ] X <- column 2, offset +32
+// [ J K L ]   <- column 3, offset +48
 //
 // Note the lack of padding on the last column in this example.
 // In general: size <= stride * dim_m
