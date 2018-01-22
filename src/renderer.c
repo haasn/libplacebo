@@ -210,6 +210,7 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
 
     const struct pl_filter_config *config = NULL;
     struct pl_shader_obj **lut;
+    bool is_linear = src->tex->params.sample_mode == RA_TEX_SAMPLE_LINEAR;
 
     if (ratio > 1.0) {
         config = params->upscaler;
@@ -224,30 +225,44 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
     if (!config)
         goto fallback;
 
+    // Try using faster replacements for GPU built-in scalers
+    bool can_fast = ratio > 1.0 || params->skip_anti_aliasing;
+    if (is_linear && can_fast && config == &pl_filter_bicubic)
+        goto fallback;
+    if (is_linear && can_fast && config == &pl_filter_triangle)
+        goto direct;
+    if (!is_linear && can_fast && config == &pl_filter_box)
+        goto direct;
+
+    // TODO: expose options for cutoff / antiringing
+    struct pl_sample_filter_params fparams = {
+        .filter      = *config,
+        .lut_entries = params->lut_entries,
+        .no_compute  = rr->disable_compute,
+        .no_widening = params->skip_anti_aliasing,
+        .lut         = lut,
+    };
+
+    bool ok;
     if (config->polar) {
-        bool r = pl_shader_sample_polar(sh, src, &(struct pl_sample_filter_params) {
-            .filter      = *config,
-            .lut_entries = params->lut_entries,
-            .lut         = lut,
-            .no_compute  = rr->disable_compute,
-            .no_widening = params->skip_anti_aliasing,
-        });
-
-        if (!r) {
-            PL_ERR(rr, "Failed dispatching (polar) scaler.. disabling");
-            rr->disable_sampling = true;
-            goto fallback;
-        }
-        return;
-
-    } else { // non-polar
-        // TODO
+        ok = pl_shader_sample_polar(sh, src, &fparams);
+    } else {
+        // TODO: implement
+        PL_FATAL(rr, "Non-polar sampling currently unimplemented!");
         abort();
     }
 
+    if (!ok) {
+        PL_ERR(rr, "Failed dispatching scaler.. disabling");
+        rr->disable_sampling = true;
+        goto fallback;
+    }
+
+    return;
+
 fallback:
     // Use bicubic sampling if supported
-    if (rr->fbofmt && src->tex->params.sample_mode == RA_TEX_SAMPLE_LINEAR) {
+    if (rr->fbofmt && is_linear) {
         pl_shader_sample_bicubic(sh, src);
         return;
     }
