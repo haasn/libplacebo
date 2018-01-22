@@ -571,7 +571,7 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
     }
 
     pl_assert(fbo->params.renderable);
-    return pl_dispatch_finish(rr->dp, &sh, fbo, &target->dst_rect);
+    return pl_dispatch_finish(rr->dp, &pass->cur_img.sh, fbo, &target->dst_rect);
 }
 
 // pimage/ptarget: point to the (possibly fixed) struct
