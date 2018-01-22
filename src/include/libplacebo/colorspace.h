@@ -60,7 +60,7 @@ enum pl_color_levels {
 // The alpha representation mode.
 enum pl_alpha_mode {
     PL_ALPHA_UNKNOWN = 0,   // or no alpha channel present
-    PL_ALPHA_INDEPENDENT ,  // alpha channel is separate from the video
+    PL_ALPHA_INDEPENDENT,   // alpha channel is separate from the video
     PL_ALPHA_PREMULTIPLIED, // alpha channel is multiplied into the colors
 };
 
