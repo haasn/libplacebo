@@ -29,15 +29,6 @@
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
 
-const struct pl_render_params render_params = {
-    .upscaler = &pl_filter_ewa_lanczos,
-    .downscaler = &pl_filter_mitchell,
-
-    .deband_params  = &pl_deband_default_params,
-    .sigmoid_params = &pl_sigmoid_default_params,
-    .dither_params  = &pl_dither_default_params,
-};
-
 SDL_Window *window;
 VkSurfaceKHR surf;
 struct pl_context *ctx;
@@ -191,6 +182,10 @@ static void render_frame(const struct ra_swapchain_frame *frame)
         .height = img->params.h,
         .src_rect = { 0, 0, img->params.w, img->params.h },
     };
+
+    // Use a slightly heavier upscaler
+    struct pl_render_params render_params = pl_render_default_params;
+    render_params.upscaler = &pl_filter_ewa_lanczos;
 
     struct pl_render_target target;
     pl_render_target_from_swapchain(&target, frame);
