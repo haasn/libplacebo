@@ -196,6 +196,9 @@ static void render_frame(const struct ra_swapchain_frame *frame)
         .height = img->params.h,
     };
 
+    // This seems to be the case for SDL2_image
+    image.repr.alpha = PL_ALPHA_INDEPENDENT;
+
     // Use a slightly heavier upscaler
     struct pl_render_params render_params = pl_render_default_params;
     render_params.upscaler = &pl_filter_ewa_lanczos;
