@@ -552,12 +552,19 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
     struct pl_shader *sh = pass->cur_img.sh;
     pl_shader_color_map(sh, params->color_map_params, pass->cur_img.color,
                         target->color, &rr->peak_detect_state, false);
+    pl_shader_encode_color(sh, &target->repr);
+
+    // FIXME: Technically we should try dithering before bit shifting if we're
+    // going to be encoding to a low bit depth, since the caller might end up
+    // discarding the extra bits. Ideally, we would pull the `bit_shift` out
+    // of the `target->repr` and apply it separately after dithering.
 
     if (params->dither_params) {
         // Just assume the first component's depth is canonical. This works
         // in practice, since for cases like rgb565 we want to use the lower
         // depth anyway. Plus, every format has at least one component.
-        int depth = fbo->params.format->component_depth[0];
+        int fmt_depth = fbo->params.format->component_depth[0];
+        int depth = PL_DEF(target->repr.bits.sample_depth, fmt_depth);
 
         // Ignore dithering for >16-bit FBOs, since it's pretty pointless
         if (depth <= 16)
