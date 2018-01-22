@@ -584,27 +584,14 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
 
 static void translate_compute_shader(struct pl_dispatch *dp,
                                      struct pl_shader *sh,
-                                     const struct ra_tex *target)
+                                     const struct ra_tex *target,
+                                     const struct pl_rect2d *rc)
 {
-    // Simulate a framebuffer using storage images
-    pl_assert(target->params.storable);
-    ident_t fbo = sh_desc(sh, (struct pl_shader_desc) {
-        .desc = {
-            .name    = "out_image",
-            .type    = RA_DESC_STORAGE_IMG,
-            .access  = RA_DESC_ACCESS_WRITEONLY,
-        },
-        .object = target,
-    });
-
-    pl_assert(sh->res.output == PL_SHADER_SIG_COLOR);
-    GLSL("imageStore(%s, ivec2(gl_GlobalInvocationID), color);\n", fbo);
-    sh->res.output = PL_SHADER_SIG_NONE;
-
     // Simulate vertex attributes using global definitions
+    int width = abs(pl_rect_w(*rc)), height = abs(pl_rect_h(*rc));
     ident_t out_scale = sh_var(sh, (struct pl_shader_var) {
         .var     = ra_var_vec2("out_scale"),
-        .data    = &(float[2]){ 1.0 / target->params.w, 1.0 / target->params.h },
+        .data    = &(float[2]){ 1.0 / width, 1.0 / height },
         .dynamic = true,
     });
 
@@ -632,6 +619,38 @@ static void translate_compute_shader(struct pl_dispatch *dp,
              points[0], points[1], points[2], points[3],
              sva->attr.name, sva->attr.name);
     }
+
+    // Simulate a framebuffer using storage images
+    pl_assert(target->params.storable);
+    pl_assert(sh->res.output == PL_SHADER_SIG_COLOR);
+    ident_t fbo = sh_desc(sh, (struct pl_shader_desc) {
+        .desc = {
+            .name    = "out_image",
+            .type    = RA_DESC_STORAGE_IMG,
+            .access  = RA_DESC_ACCESS_WRITEONLY,
+        },
+        .object = target,
+    });
+
+    ident_t base = sh_var(sh, (struct pl_shader_var) {
+        .data    = &(int[2]){ rc->x0, rc->y0 },
+        .dynamic = true,
+        .var     = {
+            .name  = "base",
+            .type  = RA_VAR_SINT,
+            .dim_v = 2,
+            .dim_m = 1,
+            .dim_a = 1,
+        },
+    });
+
+    int dx = rc->x0 > rc->x1 ? -1 : 1, dy = rc->y0 > rc->y1 ? -1 : 1;
+    GLSL("ivec2 dir = ivec2(%d, %d);\n", dx, dy); // hard-code, not worth var
+    GLSL("ivec2 pos = %s + dir * ivec2(gl_GlobalInvocationID);\n", base);
+    GLSL("vec2 fpos = %s * vec2(gl_GlobalInvocationID);\n", out_scale);
+    GLSL("if (max(fpos.x, fpos.y) < 1.0)\n");
+    GLSL("    imageStore(%s, pos, color);\n", fbo);
+    sh->res.output = PL_SHADER_SIG_NONE;
 }
 
 bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
@@ -674,8 +693,7 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
 
     if (pl_shader_is_compute(sh)) {
         // Translate the compute shader to simulate vertices etc.
-        // FIXME: take into account *rc
-        translate_compute_shader(dp, sh, target);
+        translate_compute_shader(dp, sh, target, rc);
     } else {
         // Add the vertex information encoding the position
         vert_pos = sh_attr_vec2(sh, "position", &(const struct pl_rect2df) {
@@ -721,10 +739,12 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
     // For compute shaders: also update the dispatch dimensions
     if (pl_shader_is_compute(sh)) {
         // Round up to make sure we don-t leave off a part of the target
-        int block_w = sh->res.compute_group_size[0],
+        int width = abs(pl_rect_w(*rc)),
+            height = abs(pl_rect_h(*rc)),
+            block_w = sh->res.compute_group_size[0],
             block_h = sh->res.compute_group_size[1],
-            num_x   = (target->params.w + block_w - 1) / block_w,
-            num_y   = (target->params.h + block_h - 1) / block_h;
+            num_x   = (width  + block_w - 1) / block_w,
+            num_y   = (height + block_h - 1) / block_h;
 
         rparams->compute_groups[0] = num_x;
         rparams->compute_groups[1] = num_y;
