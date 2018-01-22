@@ -97,6 +97,50 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
     GLSL("}");
 }
 
+void pl_shader_encode_color(struct pl_shader *sh,
+                            const struct pl_color_repr *repr)
+{
+    // Since this is a relatively rare operation, bypass it as much as possible
+    bool skip = true;
+    skip &= PL_DEF(repr->sys, PL_COLOR_SYSTEM_RGB) == PL_COLOR_SYSTEM_RGB;
+    skip &= PL_DEF(repr->levels, PL_COLOR_LEVELS_PC) == PL_COLOR_LEVELS_PC;
+    skip &= PL_DEF(repr->alpha, PL_ALPHA_PREMULTIPLIED) == PL_ALPHA_PREMULTIPLIED;
+    skip &= repr->bits.sample_depth == repr->bits.color_depth;
+    skip &= !repr->bits.bit_shift;
+    if (skip)
+        return;
+
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
+    GLSL("// pl_shader_encode_color \n"
+         "{ \n");
+
+    if (!pl_color_system_is_linear(repr->sys)) {
+        PL_ERR(sh, "Non-linear color encoding currently unimplemented!");
+        return;
+    }
+
+    struct pl_color_repr copy = *repr;
+    struct pl_transform3x3 tr = pl_color_repr_decode(&copy, NULL);
+    pl_transform3x3_invert(&tr);
+
+    ident_t cmat = sh_var(sh, (struct pl_shader_var) {
+        .var  = ra_var_mat3("cmat"),
+        .data = PL_TRANSPOSE_3X3(tr.mat.m),
+    });
+
+    ident_t cmat_c = sh_var(sh, (struct pl_shader_var) {
+        .var  = ra_var_vec3("cmat_m"),
+        .data = tr.c,
+    });
+
+    GLSL("color.rgb = %s * color.rgb + %s;\n", cmat, cmat_c);
+    if (repr->alpha == PL_ALPHA_INDEPENDENT)
+        GLSL("color.rgb /= vec3(max(color.a, 1e-6));\n");
+    GLSL("}\n");
+}
+
 // Common constants for SMPTE ST.2084 (PQ)
 static const float PQ_M1 = 2610./4096 * 1./4,
                    PQ_M2 = 2523./4096 * 128,

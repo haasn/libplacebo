@@ -36,6 +36,12 @@
 void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
                             const struct pl_color_adjustment *params);
 
+// Encodes a color from normalized, PC-range, pre-multiplied RGB into a given
+// representation. That is, this performs the inverse operation of
+// `pl_shader_decode_color` (sans color adjustments).
+void pl_shader_encode_color(struct pl_shader *sh,
+                            const struct pl_color_repr *repr);
+
 // Linearize (expand) `vec4 color`, given a specified color_transfer. In
 // essence, this is the ITU-R EOTF, calculated on an idealized (reference)
 // monitor with a white point of PL_COLOR_REF_WHITE and infinite contrast.
