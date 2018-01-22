@@ -70,6 +70,8 @@ struct pl_renderer {
 
     // Intermediate textures (FBOs)
     const struct ra_tex *main_scale_fbo;
+    const struct ra_tex *sep_fbo_up[SCALER_COUNT];
+    const struct ra_tex *sep_fbo_down[SCALER_COUNT];
 };
 
 static void find_fbo_format(struct pl_renderer *rr)
@@ -150,6 +152,10 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
 
     // Free all intermediate FBOs
     ra_tex_destroy(rr->ra, &rr->main_scale_fbo);
+    for (int i = 0; i < PL_ARRAY_SIZE(rr->sep_fbo_up); i++) {
+        ra_tex_destroy(rr->ra, &rr->sep_fbo_up[i]);
+        ra_tex_destroy(rr->ra, &rr->sep_fbo_down[i]);
+    }
 
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
@@ -168,8 +174,8 @@ void pl_renderer_flush_cache(struct pl_renderer *rr)
 }
 
 const struct pl_render_params pl_render_default_params = {
-    .upscaler         = NULL, // XXX: only until separated works
-    .downscaler       = NULL,
+    .upscaler         = &pl_filter_spline36,
+    .downscaler       = &pl_filter_mitchell,
     .frame_mixer      = NULL,
 
     .deband_params    = &pl_deband_default_params,
@@ -193,6 +199,52 @@ struct img {
     int comps;
 };
 
+static const struct ra_tex *finalize_img(struct pl_renderer *rr,
+                                         struct img *img,
+                                         const struct ra_fmt *fmt,
+                                         const struct ra_tex **tex)
+{
+    pl_assert(fmt);
+
+    if (*tex) {
+        const struct ra_tex_params *cur = &(*tex)->params;
+        if (cur->w == img->w && cur->h == img->h && cur->format == fmt)
+            goto resized;
+    }
+
+    PL_INFO(rr, "Resizing intermediate FBO texture: %dx%d", img->w, img->h);
+
+    ra_tex_destroy(rr->ra, tex);
+    *tex = ra_tex_create(rr->ra, &(struct ra_tex_params) {
+        .w = img->w,
+        .h = img->h,
+        .format = fmt,
+        .sampleable = true,
+        .renderable = true,
+        // Just enable what we can
+        .storable   = !!(fmt->caps & RA_FMT_CAP_STORABLE),
+        .sample_mode = (fmt->caps & RA_FMT_CAP_LINEAR)
+                            ? RA_TEX_SAMPLE_LINEAR
+                            : RA_TEX_SAMPLE_NEAREST,
+    });
+
+    if (!*tex) {
+        PL_ERR(rr, "Failed creating FBO texture! Disabling advanced rendering..");
+        rr->fbofmt = NULL;
+        pl_dispatch_abort(rr->dp, &img->sh);
+        return NULL;
+    }
+
+
+resized:
+    if (!pl_dispatch_finish(rr->dp, &img->sh, *tex, NULL)) {
+        PL_ERR(rr, "Failed dispatching intermediate pass!");
+        return NULL;
+    }
+
+    return *tex;
+}
+
 struct pass_state {
     // Represents the "current" image which we're in the process of rendering.
     // This is initially set by pass_read_image, and all of the subsequent
@@ -209,15 +261,18 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
         goto fallback;
 
     const struct pl_filter_config *config = NULL;
-    struct pl_shader_obj **lut;
     bool is_linear = src->tex->params.sample_mode == RA_TEX_SAMPLE_LINEAR;
+    struct pl_shader_obj **lut;
+    const struct ra_tex **sep_fbo;
 
     if (ratio > 1.0) {
         config = params->upscaler;
         lut = &rr->upscaler_state;
+        sep_fbo = &rr->sep_fbo_up[idx];
     } else if (ratio < 1.0) {
         config = params->downscaler;
         lut = &rr->downscaler_state[idx];
+        sep_fbo = &rr->sep_fbo_down[idx];
     } else { // ratio == 1.0
         goto direct;
     }
@@ -228,7 +283,7 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
     // Try using faster replacements for GPU built-in scalers
     bool can_fast = ratio > 1.0 || params->skip_anti_aliasing;
     if (is_linear && can_fast && config == &pl_filter_bicubic)
-        goto fallback;
+        goto fallback; // the bicubic check will succeed
     if (is_linear && can_fast && config == &pl_filter_triangle)
         goto direct;
     if (!is_linear && can_fast && config == &pl_filter_box)
@@ -247,11 +302,25 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
     if (config->polar) {
         ok = pl_shader_sample_polar(sh, src, &fparams);
     } else {
-        // TODO: implement
-        PL_FATAL(rr, "Non-polar sampling currently unimplemented!");
-        abort();
+        struct pl_shader *tsh = pl_dispatch_begin(rr->dp);
+        ok = pl_shader_sample_ortho(tsh, PL_SEP_VERT, src, &fparams);
+        if (!ok) {
+            pl_dispatch_abort(rr->dp, &tsh);
+            goto done;
+        }
+
+        struct img img = {
+            .sh = tsh,
+            .w  = src->tex->params.w,
+            .h  = src->new_h,
+        };
+
+        struct pl_sample_src src2 = *src;
+        src2.tex = finalize_img(rr, &img, rr->fbofmt, sep_fbo);
+        ok = pl_shader_sample_ortho(sh, PL_SEP_HORIZ, &src2, &fparams);
     }
 
+done:
     if (!ok) {
         PL_ERR(rr, "Failed dispatching scaler.. disabling");
         rr->disable_sampling = true;
@@ -390,52 +459,6 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     pl_shader_decode_color(sh, &pass->cur_img.repr, params->color_adjustment);
     GLSL("}\n");
     return true;
-}
-
-static const struct ra_tex *finalize_img(struct pl_renderer *rr,
-                                         struct img *img,
-                                         const struct ra_fmt *fmt,
-                                         const struct ra_tex **tex)
-{
-    pl_assert(fmt);
-
-    if (*tex) {
-        const struct ra_tex_params *cur = &(*tex)->params;
-        if (cur->w == img->w && cur->h == img->h && cur->format == fmt)
-            goto resized;
-    }
-
-    PL_INFO(rr, "Resizing intermediate FBO texture: %dx%d", img->w, img->h);
-
-    ra_tex_destroy(rr->ra, tex);
-    *tex = ra_tex_create(rr->ra, &(struct ra_tex_params) {
-        .w = img->w,
-        .h = img->h,
-        .format = fmt,
-        .sampleable = true,
-        .renderable = true,
-        // Just enable what we can
-        .storable   = !!(fmt->caps & RA_FMT_CAP_STORABLE),
-        .sample_mode = (fmt->caps & RA_FMT_CAP_LINEAR)
-                            ? RA_TEX_SAMPLE_LINEAR
-                            : RA_TEX_SAMPLE_NEAREST,
-    });
-
-    if (!*tex) {
-        PL_ERR(rr, "Failed creating FBO texture! Disabling advanced rendering..");
-        rr->fbofmt = NULL;
-        pl_dispatch_abort(rr->dp, &img->sh);
-        return NULL;
-    }
-
-
-resized:
-    if (!pl_dispatch_finish(rr->dp, &img->sh, *tex, NULL)) {
-        PL_ERR(rr, "Failed dispatching intermediate pass!");
-        return NULL;
-    }
-
-    return *tex;
 }
 
 static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
