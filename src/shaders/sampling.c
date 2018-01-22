@@ -306,6 +306,16 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     const struct ra_tex *tex = src->tex;
     pl_assert(ra && tex);
 
+    bool has_compute = ra->caps & RA_CAP_COMPUTE && !params->no_compute;
+    bool flipped = src->rect.x0 > src->rect.x1 || src->rect.y0 > src->rect.y1;
+    if (flipped && has_compute) {
+        PL_WARN(sh, "Trying to use a flipped src.rect with polar sampling! "
+                "This prevents the use of compute shaders, which is a "
+                "potentially massive performance hit. If you're really sure you "
+                "want this, set params.no_compute to suppress this warning.");
+        has_compute = false;
+    }
+
     int comps;
     float ratio_x, ratio_y;
     ident_t src_tex, pos, size, pt;
@@ -383,7 +393,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
         ih = (int) ceil(bh / ratio_y) + padding + 1;
 
     int shmem_req = iw * ih * comps * sizeof(float);
-    if (!params->no_compute && sh_try_compute(sh, bw, bh, false, shmem_req)) {
+    if (has_compute && sh_try_compute(sh, bw, bh, false, shmem_req)) {
         // Compute shader kernel
         GLSL("vec2 wpos = %s_map(gl_WorkGroupID * gl_WorkGroupSize);        \n"
              "vec2 wbase = wpos - pt * fract(wpos * size - vec2(0.5));      \n"
