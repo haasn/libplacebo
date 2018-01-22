@@ -244,7 +244,7 @@ struct pl_image {
     // reference dimensions. Pixels outside of this rectangle will ostensibly
     // be ignored, but note that they may still contribute to the output data
     // due to the effects of texture filtering. `src_rect` may be flipped, and
-    // may be partially or wholly outside the bounds of the texture.
+    // may be partially or wholly outside the bounds of the texture. (Optional)
     struct pl_rect2df src_rect;
 };
 
@@ -258,7 +258,7 @@ struct pl_render_target {
     // The destination rectangle which we want to render into. If this is
     // larger or smaller than the src_rect, or if the aspect ratio is
     // different, scaling will occur. `dst_rect` may be flipped, and may be
-    // partially or wholly outside the bounds of the fbo.
+    // partially or wholly outside the bounds of the fbo. (Optional)
     struct pl_rect2d dst_rect;
 
     // The color representation and space of the output. If this does not match

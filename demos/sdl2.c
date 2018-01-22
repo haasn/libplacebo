@@ -180,7 +180,6 @@ static void render_frame(const struct ra_swapchain_frame *frame)
         .color = pl_color_space_unknown,
         .width = img->params.w,
         .height = img->params.h,
-        .src_rect = { 0, 0, img->params.w, img->params.h },
     };
 
     // Use a slightly heavier upscaler
