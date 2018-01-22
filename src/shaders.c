@@ -515,7 +515,7 @@ static ident_t sh_lut_pos(struct pl_shader *sh, int lut_size)
 
 struct sh_lut_obj {
     enum sh_lut_method method;
-    int width, height, depth;
+    int width, height, depth, comps;
     union {
         const struct ra_tex *tex;
         struct bstr str;
@@ -548,7 +548,7 @@ static void sh_lut_uninit(const struct ra *ra, void *ptr)
 
 ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
                enum sh_lut_method method, int width, int height, int depth,
-               bool update, void *priv,
+               int comps, bool update, void *priv,
                void (*fill)(void *priv, float *data, int w, int h, int d))
 {
     const struct ra *ra = sh->ra;
@@ -611,15 +611,16 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
 
     // Forcibly reinitialize the existing LUT if needed
     if (method != lut->method || width != lut->width || height != lut->height
-        || depth != lut->depth)
+        || depth != lut->depth || comps != lut->comps)
     {
         PL_DEBUG(sh, "LUT method or size changed, reinitializing..");
-        sh_lut_uninit(ra, lut);
         update = true;
     }
 
     if (update) {
-        tmp = talloc_zero_size(NULL, size * sizeof(float));
+        sh_lut_uninit(ra, lut);
+
+        tmp = talloc_zero_size(NULL, size * comps * sizeof(float));
         fill(priv, tmp, width, height, depth);
 
         switch (method) {
@@ -639,7 +640,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
             }
 
             const struct ra_fmt *fmt;
-            fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 16, 32, caps);
+            fmt = ra_find_fmt(ra, RA_FMT_FLOAT, comps, 16, 32, caps);
             if (!fmt) {
                 PL_ERR(sh, "Found no compatible texture format for LUT!");
                 goto error;
@@ -672,9 +673,18 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
 
         case SH_LUT_LITERAL: {
             pl_assert(!lut->weights.str.len);
-            for (int i = 0; i < size; i++) {
-                bstr_xappend_asprintf(lut, &lut->weights.str, "%s%f",
-                                      i > 0 ? "," : "", tmp[i]);
+            for (int i = 0; i < size * comps; i += comps) {
+                if (i > 0)
+                    bstr_xappend_asprintf(lut, &lut->weights.str, ",");
+                if (comps > 0)
+                    bstr_xappend_asprintf(lut, &lut->weights.str, "vec%d(", comps);
+                for (int c = 0; c < comps; c++) {
+                    bstr_xappend_asprintf(lut, &lut->weights.str, "%s%f",
+                                          c > 0 ? "," : "",
+                                          tmp[i+c]);
+                }
+                if (comps > 0)
+                    bstr_xappend_asprintf(lut, &lut->weights.str, ")");
             }
             break;
         }
@@ -686,11 +696,15 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
         lut->width = width;
         lut->height = height;
         lut->depth = depth;
+        lut->comps = comps;
     }
 
     // Done updating, generate the GLSL
     ident_t name = sh_fresh(sh, "lut");
     ident_t arr_name = NULL;
+
+    static const char * const types[] = {"float", "vec2", "vec3", "vec4"};
+    static const char * const swizzles[] = {"x", "xy", "xyz", "xyzw"};
 
     switch (method) {
     case SH_LUT_TEXTURE:
@@ -707,8 +721,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
         for (int i = 0; i < dims; i++)
             pos_macros[i] = sh_lut_pos(sh, sizes[i]);
 
-        const char *types[] = {"float", "vec2", "vec3", "vec4"};
-        GLSLH("#define %s(pos) (texture(%s, %s(\\\n", name, tex, types[texdim-1]);
+        GLSLH("#define %s(pos) (texture(%s, %s(\\\n", name, tex, types[texdim - 1]);
         for (int i = 0; i < texdim; i++) {
             char sep = i == 0 ? ' ' : ',';
             if (pos_macros[i]) {
@@ -717,7 +730,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
                 GLSLH("   %c%f\\\n", sep, 0.5);
             }
         }
-        GLSLH("  )).r)\n");
+        GLSLH("  )).%s)\n", swizzles[comps - 1]);
         ret = name;
         break;
     }
@@ -727,7 +740,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
             .var = {
                 .name = "weights",
                 .type = RA_VAR_FLOAT,
-                .dim_v = 1,
+                .dim_v = comps,
                 .dim_m = 1,
                 .dim_a = size,
             },
@@ -737,7 +750,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
 
     case SH_LUT_LITERAL:
         arr_name = sh_fresh(sh, "weights");
-        GLSLH("const float %s[%d] = float[](\n  ", arr_name, size);
+        GLSLH("const %s %s[%d] = float[](\n  ", types[comps - 1], arr_name, size);
         bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], lut->weights.str);
         GLSLH(");\n");
         break;

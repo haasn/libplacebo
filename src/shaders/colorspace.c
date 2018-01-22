@@ -852,7 +852,7 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
         obj->method = method;
 
         lut_size = 1 << PL_DEF(params->lut_size, 6);
-        lut = sh_lut(sh, &obj->lut, SH_LUT_AUTO, lut_size, lut_size, 0,
+        lut = sh_lut(sh, &obj->lut, SH_LUT_AUTO, lut_size, lut_size, 0, 1,
                      changed, obj, fill_dither_matrix);
         if (!lut)
             goto fallback;

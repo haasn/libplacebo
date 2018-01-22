@@ -345,7 +345,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
         }
     }
 
-    ident_t lut = sh_lut(sh, &obj->lut, SH_LUT_LINEAR, lut_entries, 0, 0,
+    ident_t lut = sh_lut(sh, &obj->lut, SH_LUT_LINEAR, lut_entries, 0, 0, 1,
                          update, obj, fill_sampler_lut);
     if (!lut) {
         PL_ERR(sh, "Failed initializing polar LUT!");

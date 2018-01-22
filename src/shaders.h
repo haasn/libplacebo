@@ -149,8 +149,8 @@ enum sh_lut_method {
     SH_LUT_LINEAR,   // upload as linearly-sampleable texture
 };
 
-// Makes a table of float values available as a shader variable, using an a
-// given method (falling back if needed). The resulting identifier can be
+// Makes a table of float vecs values available as a shader variable, using an
+// a given method (falling back if needed). The resulting identifier can be
 // sampled directly as %s(pos), where pos is a vector with the right number of
 // dimensions. `pos` must be an integer vector within the bounds of the array,
 // unless the method is `SH_LUT_LINEAR` or `SH_LUT_TEXTURE` in which case it's
@@ -166,5 +166,5 @@ enum sh_lut_method {
 // the shader object is invalidated, or `update` is set to true.
 ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
                enum sh_lut_method method, int width, int height, int depth,
-               bool update, void *priv,
+               int components, bool update, void *priv,
                void (*fill)(void *priv, float *data, int w, int h, int d));
