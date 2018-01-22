@@ -292,10 +292,11 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
             goto direct;
     }
 
-    // TODO: expose options for cutoff / antiringing
     struct pl_sample_filter_params fparams = {
         .filter      = *config,
         .lut_entries = params->lut_entries,
+        .cutoff      = params->polar_cutoff,
+        .antiring    = params->antiringing_strength,
         .no_compute  = rr->disable_compute,
         .no_widening = params->skip_anti_aliasing,
         .lut         = lut,

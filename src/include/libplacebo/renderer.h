@@ -63,6 +63,10 @@ struct pl_render_params {
     // The number of entries for the scaler LUTs. Defaults to 64 if left unset.
     int lut_entries;
 
+    // The anti-ringing strength to apply to non-polar filters. See the
+    // equivalent option in `pl_sample_filter_params` for more information.
+    float antiringing_strength;
+
     // Configures the algorithm used for frame mixing (when using
     // `pl_render_image_mix`). Ignored otherwise. As a special requirement,
     // this must be a filter config with `polar` set to false, since it's only
@@ -110,6 +114,10 @@ struct pl_render_params {
     //
     // Significantly speeds up downscaling with high downscaling ratios.
     bool skip_anti_aliasing;
+
+    // Cutoff value for polar sampling. See the equivalent option in
+    // `pl_sample_filter_params` for more information.
+    float polar_cutoff;
 
     // --- Performance tuning / debugging options
     // These may affect performance or may make debugging problems easier,
