@@ -506,24 +506,63 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
     return pl_dispatch_finish(rr->dp, sh, fbo, &target->dst_rect);
 }
 
-bool pl_render_image(struct pl_renderer *rr, const struct pl_image *image,
-                     const struct pl_render_target *target,
+// pimage/ptarget: point to the (possibly fixed) struct
+// timage/ttarget: pointers to temporary storage
+static void fix_rects(struct pl_image *image, struct pl_render_target *target)
+{
+    pl_assert(image->width && image->height);
+
+    // Initialize the rects to the full size if missing
+    if ((!image->src_rect.x0 && !image->src_rect.x1) ||
+        (!image->src_rect.y0 && !image->src_rect.y1))
+    {
+        image->src_rect = (struct pl_rect2df) {
+            0, 0, image->width, image->height,
+        };
+    }
+
+    if ((!target->dst_rect.x0 && !target->dst_rect.x1) ||
+        (!target->dst_rect.y0 && !target->dst_rect.y1))
+    {
+        target->dst_rect = (struct pl_rect2d) {
+            0, 0, target->fbo->params.w, target->fbo->params.h,
+        };
+    }
+
+    // We always want to prefer flipping in the dst_rect over flipping in
+    // the src_rect. They're functionally equivalent either way.
+    if (image->src_rect.x0 > image->src_rect.x1) {
+        PL_SWAP(image->src_rect.x0, image->src_rect.x1);
+        PL_SWAP(target->dst_rect.x0, target->dst_rect.x1);
+    }
+
+    if (image->src_rect.y0 > image->src_rect.y1) {
+        PL_SWAP(image->src_rect.y0, image->src_rect.y1);
+        PL_SWAP(target->dst_rect.y0, target->dst_rect.y1);
+    }
+}
+
+bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
+                     const struct pl_render_target *ptarget,
                      const struct pl_render_params *params)
 {
     params = PL_DEF(params, &pl_render_default_params);
 
-    // TODO: validate pl_image correctness
+    struct pl_image image = *pimage;
+    struct pl_render_target target = *ptarget;
+    fix_rects(&image, &target);
+
     // TODO: output caching
     pl_dispatch_reset_frame(rr->dp);
 
     struct pass_state pass = {0};
-    if (!pass_read_image(rr, &pass, image, params))
+    if (!pass_read_image(rr, &pass, &image, params))
         goto error;
 
-    if (!pass_scale_main(rr, &pass, image, target, params))
+    if (!pass_scale_main(rr, &pass, &image, &target, params))
         goto error;
 
-    if (!pass_output_target(rr, &pass, target, params))
+    if (!pass_output_target(rr, &pass, &target, params))
         goto error;
 
     return true;

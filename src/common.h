@@ -63,11 +63,11 @@
 #define PL_ARRAY_SIZE(s) (sizeof(s) / sizeof((s)[0]))
 
 // Swaps two variables
-#define PL_SWAP(a, b)           \
-    do {                        \
-        __typeof__ tmp = (a);   \
-        (a) = (b);              \
-        (b) = tmp;              \
+#define PL_SWAP(a, b)             \
+    do {                          \
+        __typeof__ (a) tmp = (a); \
+        (a) = (b);                \
+        (b) = tmp;                \
     } while (0)
 
 // Helper functions for transposing a matrix in-place.
