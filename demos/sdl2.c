@@ -41,6 +41,20 @@ const struct ra_swapchain *swapchain;
 struct pl_plane plane;
 struct pl_renderer *renderer;
 
+static void uninit()
+{
+    pl_renderer_destroy(&renderer);
+    ra_tex_destroy(vk->ra, &plane.texture);
+    ra_swapchain_destroy(&swapchain);
+    pl_vulkan_destroy(&vk);
+    vkDestroySurfaceKHR(vk_inst->instance, surf, NULL);
+    pl_vk_inst_destroy(&vk_inst);
+    pl_context_destroy(&ctx);
+
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+}
+
 static void init_sdl() {
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         fprintf(stderr, "Failed to initialize SDL2: %s\n", SDL_GetError());
@@ -188,22 +202,11 @@ static void render_frame(const struct ra_swapchain_frame *frame)
 
     struct pl_render_target target;
     pl_render_target_from_swapchain(&target, frame);
-    if (!pl_render_image(renderer, &image, &target, &render_params))
+    if (!pl_render_image(renderer, &image, &target, &render_params)) {
         fprintf(stderr, "Failed rendering frame!\n");
-}
-
-static void uninit()
-{
-    pl_renderer_destroy(&renderer);
-    ra_tex_destroy(vk->ra, &plane.texture);
-    ra_swapchain_destroy(&swapchain);
-    pl_vulkan_destroy(&vk);
-    vkDestroySurfaceKHR(vk_inst->instance, surf, NULL);
-    pl_vk_inst_destroy(&vk_inst);
-    pl_context_destroy(&ctx);
-
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+        uninit();
+        exit(2);
+    }
 }
 
 int main(int argc, const char **argv)
