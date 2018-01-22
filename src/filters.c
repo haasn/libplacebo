@@ -216,13 +216,13 @@ const struct pl_named_filter_config *pl_find_named_filter(const char *name)
 
 static double box(const struct pl_filter_function *f, double x)
 {
-    return 1.0;
+    return x < 0.5 ? 1.0 : 0.0;
 }
 
 const struct pl_filter_function pl_filter_function_box = {
     .resizable = true,
     .weight    = box,
-    .radius    = 0.5,
+    .radius    = 1.0,
 };
 
 static double triangle(const struct pl_filter_function *f, double x)
