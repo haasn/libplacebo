@@ -30,9 +30,8 @@
 #define WINDOW_HEIGHT 480
 
 const struct pl_render_params render_params = {
-    // due to current limitations
     .upscaler = &pl_filter_ewa_lanczos,
-    .downscaler = NULL,
+    .downscaler = &pl_filter_mitchell,
 
     .deband_params = &pl_deband_default_params,
     .dither_params = &pl_dither_default_params,
