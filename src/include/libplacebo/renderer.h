@@ -79,6 +79,10 @@ struct pl_render_params {
     // NULL disables debanding.
     const struct pl_deband_params *deband_params;
 
+    // Configures the settings used to sigmoidize the image before upscaling.
+    // This is not always used. If NULL, disables sigmoidization.
+    const struct pl_sigmoid_params *sigmoid_params;
+
     // Configures the color adjustment parameters used to decode the color.
     // This can be used to apply additional artistic settings such as
     // desaturation, etc. If NULL, defaults to &pl_color_adjustment_neutral.
@@ -128,6 +132,11 @@ struct pl_render_params {
     // example, if the hardware does not support the required features
     // (typically the presence of blittable texture formats).
     bool skip_redraw_caching;
+
+    // Disables linearization / sigmoidization before scaling. This might be
+    // useful when tracking down unexpected image artifacts or excessing
+    // ringing, but it shouldn't normally be necessary.
+    bool disable_linear_scaling;
 
     // Forces the use of the "general" scaling algorithms even when using the
     // special-cased built-in presets like `pl_filter_bicubic`. Basically, this

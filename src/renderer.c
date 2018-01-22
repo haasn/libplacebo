@@ -179,6 +179,7 @@ const struct pl_render_params pl_render_default_params = {
     .frame_mixer      = NULL,
 
     .deband_params    = &pl_deband_default_params,
+    .sigmoid_params   = &pl_sigmoid_default_params,
     .color_map_params = &pl_color_map_default_params,
     .dither_params    = &pl_dither_default_params,
 };
@@ -485,7 +486,27 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         return true;
     }
 
-    // TODO: linearization/sigmoidization
+    bool downscaling = rx < 1.0 || ry < 1.0;
+    bool upscaling = !downscaling && (rx > 1.0 || ry > 1.0);
+
+    bool use_sigmoid = upscaling && params->sigmoid_params;
+    bool use_linear  = use_sigmoid || downscaling;
+
+    // Hard-disable both sigmoidization and linearization when requested
+    if (params->disable_linear_scaling)
+        use_sigmoid = use_linear = false;
+
+    // Avoid sigmoidization for HDR content because it clips to [0,1]
+    if (pl_color_transfer_is_hdr(img->color.transfer))
+        use_sigmoid = false;
+
+    if (use_linear) {
+        pl_shader_linearize(img->sh, img->color.transfer);
+        img->color.transfer = PL_COLOR_TRC_LINEAR;
+    }
+
+    if (use_sigmoid)
+        pl_shader_sigmoidize(img->sh, params->sigmoid_params);
 
     struct pl_sample_src src = {
         .tex        = finalize_img(rr, img, rr->fbofmt, &rr->main_scale_fbo),
@@ -513,6 +534,9 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         .color  = img->color,
         .comps  = img->comps,
     };
+
+    if (use_sigmoid)
+        pl_shader_unsigmoidize(sh, params->sigmoid_params);
 
     return true;
 }

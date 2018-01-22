@@ -64,7 +64,7 @@ extern const struct pl_sigmoid_params pl_sigmoid_default_params;
 // &pl_sigmoid_default_params.
 //
 // Warning: This function clamps the input to the interval [0,1]; and as such
-// it should *NOT* be used on already-linearized high-dynamic range content.
+// it should *NOT* be used on already-decoded high-dynamic range content.
 void pl_shader_sigmoidize(struct pl_shader *sh,
                           const struct pl_sigmoid_params *params);
 

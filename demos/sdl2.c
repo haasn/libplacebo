@@ -33,8 +33,9 @@ const struct pl_render_params render_params = {
     .upscaler = &pl_filter_ewa_lanczos,
     .downscaler = &pl_filter_mitchell,
 
-    .deband_params = &pl_deband_default_params,
-    .dither_params = &pl_dither_default_params,
+    .deband_params  = &pl_deband_default_params,
+    .sigmoid_params = &pl_sigmoid_default_params,
+    .dither_params  = &pl_dither_default_params,
 };
 
 SDL_Window *window;
