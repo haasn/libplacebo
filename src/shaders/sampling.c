@@ -124,7 +124,7 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
         .x0 = src->rect.x0,
         .y0 = src->rect.y0,
         .x1 = src->rect.x0 + src_w,
-        .y1 = src->rect.x0 + src_h,
+        .y1 = src->rect.y0 + src_h,
     };
 
     *src_tex = sh_bind(sh, src->tex, "src_tex", &rect, pos, size, pt);
