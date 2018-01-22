@@ -32,7 +32,7 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
     // alpha multiplication, which only commutes with linear operations.
     bool is_nonlinear = !pl_color_system_is_linear(repr->sys);
     if (is_nonlinear && repr->alpha == PL_ALPHA_PREMULTIPLIED) {
-        GLSL("color.rgb /= vec3(color.a);\n");
+        GLSL("color.rgb /= vec3(max(color.a, 1e-6));\n");
         repr->alpha = PL_ALPHA_INDEPENDENT;
     }
 
@@ -90,7 +90,7 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
     }
 
     if (repr->alpha == PL_ALPHA_INDEPENDENT) {
-        GLSL("color.rgb *= vec3(color.a)\n");
+        GLSL("color.rgb *= vec3(color.a);\n");
         repr->alpha = PL_ALPHA_PREMULTIPLIED;
     }
 
