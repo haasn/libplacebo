@@ -277,6 +277,53 @@ void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
     }
 }
 
+const struct pl_sigmoid_params pl_sigmoid_default_params = {
+    .center = 0.75,
+    .slope  = 6.50,
+};
+
+void pl_shader_sigmoidize(struct pl_shader *sh,
+                          const struct pl_sigmoid_params *params)
+{
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
+    params = PL_DEF(params, &pl_sigmoid_default_params);
+    float center = PL_DEF(params->center, 0.75);
+    float slope  = PL_DEF(params->slope, 6.5);
+
+    // This function needs to go through (0,0) and (1,1), so we compute the
+    // values at 1 and 0, and then scale/shift them, respectively.
+    float offset = 1.0 / (1 + expf(slope * center));
+    float scale  = 1.0 / (1 + expf(slope * (center - 1))) - offset;
+
+    GLSL("// pl_shader_sigmoidize                                          \n"
+         "color = clamp(color, 0.0, 1.0);                                  \n"
+         "color = vec4(%f) - log(vec4(1.0) / (color * vec4(%f) + vec4(%f)) \n"
+         "                         - vec4(1.0)) * vec4(%f);                \n",
+         center, scale, offset, 1.0 / slope);
+}
+
+void pl_shader_unsigmoidize(struct pl_shader *sh,
+                            const struct pl_sigmoid_params *params)
+{
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
+    // See: pl_shader_sigmoidize
+    params = PL_DEF(params, &pl_sigmoid_default_params);
+    float center = PL_DEF(params->center, 0.75);
+    float slope  = PL_DEF(params->slope, 6.5);
+    float offset = 1.0 / (1 + expf(slope * center));
+    float scale  = 1.0 / (1 + expf(slope * (center - 1))) - offset;
+
+    GLSL("// pl_shader_unsigmoidize                                           \n"
+         "color = clamp(color, 0.0, 1.0);                                     \n"
+         "color = vec4(%f) / (vec4(1.0) + exp(vec4(%f) * (vec4(%f) - color))) \n"
+         "           - vec4(%f);                                              \n",
+         1.0 / scale, slope, center, offset / scale);
+}
+
 // Applies the OOTF / inverse OOTF
 static void pl_shader_ootf(struct pl_shader *sh, enum pl_color_light light,
                            ident_t luma)

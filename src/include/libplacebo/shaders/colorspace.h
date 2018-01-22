@@ -46,6 +46,32 @@ void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc);
 // reference monitor.
 void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc);
 
+struct pl_sigmoid_params {
+    // The center (bias) of the sigmoid curve. Must be between 0.0 and 1.0.
+    // If left as NULL, defaults to 0.75
+    float center;
+
+    // The slope (steepness) of the sigmoid curve. Must be between 1.0 and 20.0.
+    // If left as NULL, defaults to 6.5.
+    float slope;
+};
+
+extern const struct pl_sigmoid_params pl_sigmoid_default_params;
+
+// Applies a sigmoidal color transform to all channels. This helps avoid
+// ringing artifacts during upscaling by bringing the color information closer
+// to neutral and away from the extremes. If `params` is NULL, it defaults to
+// &pl_sigmoid_default_params.
+//
+// Warning: This function clamps the input to the interval [0,1]; and as such
+// it should *NOT* be used on already-linearized high-dynamic range content.
+void pl_shader_sigmoidize(struct pl_shader *sh,
+                          const struct pl_sigmoid_params *params);
+
+// This performs the inverse operation to `pl_shader_sigmoidize`.
+void pl_shader_unsigmoidize(struct pl_shader *sh,
+                            const struct pl_sigmoid_params *params);
+
 // A collection of various tone mapping algorithms supported by libplacebo.
 enum pl_tone_mapping_algorithm {
     // Performs no tone-mapping, just clips out-of-gamut colors. Retains perfect
