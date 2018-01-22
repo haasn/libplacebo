@@ -282,12 +282,14 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
 
     // Try using faster replacements for GPU built-in scalers
     bool can_fast = ratio > 1.0 || params->skip_anti_aliasing;
-    if (is_linear && can_fast && config == &pl_filter_bicubic)
-        goto fallback; // the bicubic check will succeed
-    if (is_linear && can_fast && config == &pl_filter_triangle)
-        goto direct;
-    if (!is_linear && can_fast && config == &pl_filter_box)
-        goto direct;
+    if (can_fast && !params->disable_builtin_scalers) {
+        if (is_linear && config == &pl_filter_bicubic)
+            goto fallback; // the bicubic check will succeed
+        if (is_linear && config == &pl_filter_triangle)
+            goto direct;
+        if (!is_linear && config == &pl_filter_box)
+            goto direct;
+    }
 
     // TODO: expose options for cutoff / antiringing
     struct pl_sample_filter_params fparams = {
