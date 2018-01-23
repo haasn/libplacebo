@@ -1562,6 +1562,9 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
         .pipecache_len = cache.len,
     };
 
+    PL_DEBUG(vk, "Pass statistics: size %zu, SPIR-V: vert %zu frag %zu comp %zu",
+             cache.len, vert.len, frag.len, comp.len);
+
     for (int i = 0; i < PL_ARRAY_SIZE(header.magic); i++)
         header.magic[i] = vk_cache_magic[i];
     for (int i = 0; i < sizeof(p->spirv->name); i++)
