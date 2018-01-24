@@ -117,6 +117,7 @@ void pl_shader_encode_color(struct pl_shader *sh,
          "{ \n");
 
     if (!pl_color_system_is_linear(repr->sys)) {
+        // FIXME: implement this case
         PL_ERR(sh, "Non-linear color encoding currently unimplemented!");
         return;
     }
