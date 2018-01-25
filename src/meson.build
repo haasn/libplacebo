@@ -44,7 +44,7 @@ sources = [
 
   # Helpers ported from mpv or other projects
   'bstr/bstr.c',
-  'siphash.c',
+  '3rdparty/siphash.c',
   'ta/ta.c',
   'ta/ta_utils.c',
   'ta/talloc.c',
