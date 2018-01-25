@@ -25,7 +25,7 @@
 
 #include "osdep/compiler.h"
 #include "ta/talloc.h"
-#include "siphash.h"
+#include "3rdparty/siphash.h"
 
 /* NOTE: 'len' is size_t, but most string-handling functions below assume
  * that input size has been sanity checked and len fits in an int.
