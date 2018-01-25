@@ -48,6 +48,13 @@ enum {
     PLANE_CIEZ = PLANE_B,
 };
 
+struct sampler {
+    struct pl_shader_obj *upscaler_state;
+    struct pl_shader_obj *downscaler_state;
+    const struct ra_tex *sep_fbo_up;
+    const struct ra_tex *sep_fbo_down;
+};
+
 struct pl_renderer {
     const struct ra *ra;
     struct pl_context *ctx;
@@ -61,17 +68,16 @@ struct pl_renderer {
     bool disable_sampling;   // disable use of advanced scalers
     bool disable_linear_hdr; // disable linear scaling for HDR signals
     bool disable_linear_sdr; // disable linear scaling for SDR signals
+    bool disable_blending;   // disable blending for the target/fbofmt
+    bool disable_overlay;    // disable rendering overlays
 
-    // Shader resource objects
+    // Shader resource objects and intermediate textures (FBOs)
     struct pl_shader_obj *peak_detect_state;
     struct pl_shader_obj *dither_state;
-    struct pl_shader_obj *upscaler_state; // shared since the LUT is static
-    struct pl_shader_obj *downscaler_state[SCALER_COUNT];
-
-    // Intermediate textures (FBOs)
     const struct ra_tex *main_scale_fbo;
-    const struct ra_tex *sep_fbo_up[SCALER_COUNT];
-    const struct ra_tex *sep_fbo_down[SCALER_COUNT];
+    struct sampler samplers[SCALER_COUNT];
+    struct sampler *osd_samplers;
+    int num_osd_samplers;
 };
 
 static void find_fbo_format(struct pl_renderer *rr)
@@ -144,6 +150,14 @@ struct pl_renderer *pl_renderer_create(struct pl_context *ctx,
     return rr;
 }
 
+static void sampler_destroy(struct pl_renderer *rr, struct sampler *sampler)
+{
+    pl_shader_obj_destroy(&sampler->upscaler_state);
+    pl_shader_obj_destroy(&sampler->downscaler_state);
+    ra_tex_destroy(rr->ra, &sampler->sep_fbo_up);
+    ra_tex_destroy(rr->ra, &sampler->sep_fbo_down);
+}
+
 void pl_renderer_destroy(struct pl_renderer **p_rr)
 {
     struct pl_renderer *rr = *p_rr;
@@ -152,17 +166,16 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
 
     // Free all intermediate FBOs
     ra_tex_destroy(rr->ra, &rr->main_scale_fbo);
-    for (int i = 0; i < PL_ARRAY_SIZE(rr->sep_fbo_up); i++) {
-        ra_tex_destroy(rr->ra, &rr->sep_fbo_up[i]);
-        ra_tex_destroy(rr->ra, &rr->sep_fbo_down[i]);
-    }
 
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
     pl_shader_obj_destroy(&rr->dither_state);
-    pl_shader_obj_destroy(&rr->upscaler_state);
-    for (int i = 0; i < PL_ARRAY_SIZE(rr->downscaler_state); i++)
-        pl_shader_obj_destroy(&rr->downscaler_state[i]);
+
+    // Free all samplers
+    for (int i = 0; i < PL_ARRAY_SIZE(rr->samplers); i++)
+        sampler_destroy(rr, &rr->samplers[i]);
+    for (int i = 0; i < rr->num_osd_samplers; i++)
+        sampler_destroy(rr, &rr->osd_samplers[i]);
 
     pl_dispatch_destroy(&rr->dp);
     TA_FREEP(p_rr);
@@ -254,11 +267,11 @@ struct pass_state {
 };
 
 static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
-                             float ratio, int idx,
+                             float ratio, struct sampler *sampler,
                              const struct pl_render_params *params,
                              const struct pl_sample_src *src)
 {
-    if (!rr->fbofmt || rr->disable_sampling)
+    if (!rr->fbofmt || rr->disable_sampling || !sampler)
         goto fallback;
 
     const struct pl_filter_config *config = NULL;
@@ -268,12 +281,12 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
 
     if (ratio > 1.0) {
         config = params->upscaler;
-        lut = &rr->upscaler_state;
-        sep_fbo = &rr->sep_fbo_up[idx];
+        lut = &sampler->upscaler_state;
+        sep_fbo = &sampler->sep_fbo_up;
     } else if (ratio < 1.0) {
         config = params->downscaler;
-        lut = &rr->downscaler_state[idx];
-        sep_fbo = &rr->sep_fbo_down[idx];
+        lut = &sampler->downscaler_state;
+        sep_fbo = &sampler->sep_fbo_down;
     } else { // ratio == 1.0
         goto direct;
     }
@@ -419,7 +432,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             },
         };
 
-        dispatch_sampler(rr, psh, PL_MIN(rx, ry), i, params, &src);
+        dispatch_sampler(rr, psh, PL_MIN(rx, ry), &rr->samplers[i], params, &src);
 
         ident_t sub = sh_subpass(sh, psh);
         if (!sub) {
@@ -522,11 +535,14 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         },
     };
 
+    // TODO: render overlay on top of the image
+
     if (!src.tex)
         return false;
 
+    float ratio = PL_MIN(fabs(rx), fabs(ry));
     struct pl_shader *sh = pl_dispatch_begin(rr->dp);
-    dispatch_sampler(rr, sh, PL_MIN(fabs(rx), fabs(ry)), SCALER_MAIN, params, &src);
+    dispatch_sampler(rr, sh, ratio, &rr->samplers[SCALER_MAIN], params, &src);
     pass->cur_img = (struct img) {
         .sh     = sh,
         .w      = target_w,
@@ -582,6 +598,101 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
                               &target->dst_rect, NULL);
 }
 
+static void pass_draw_overlay(struct pl_renderer *rr,
+                              const struct pl_render_target *target,
+                              const struct pl_render_params *params)
+{
+    if (!target->num_overlays || rr->disable_overlay)
+        return;
+
+    enum ra_fmt_caps caps = target->fbo->params.format->caps;
+    if (!rr->disable_blending && !(caps & RA_FMT_CAP_BLENDABLE)) {
+        PL_WARN(rr, "Trying to draw an overlay to a non-blendable target. "
+                "Alpha blending is disabled, results may be incorrect!");
+        rr->disable_blending = true;
+    }
+
+    while (target->num_overlays > rr->num_osd_samplers) {
+        TARRAY_APPEND(rr, rr->osd_samplers, rr->num_osd_samplers,
+                      (struct sampler) {0});
+    }
+
+    for (int n = 0; n < target->num_overlays; n++) {
+        const struct pl_overlay *ol = &target->overlays[n];
+        const struct pl_plane *plane = &ol->plane;
+        const struct ra_tex *tex = plane->texture;
+
+        struct pl_sample_src src = {
+            .tex        = tex,
+            .components = ol->mode == PL_OVERLAY_MONOCHROME ? 1 : plane->components,
+            .new_w      = abs(pl_rect_w(ol->rect)),
+            .new_h      = abs(pl_rect_h(ol->rect)),
+            .rect = {
+                -plane->shift_x,
+                -plane->shift_y,
+                tex->params.w - plane->shift_x,
+                tex->params.h - plane->shift_y,
+            },
+        };
+
+        float rx = (float) src.new_w / src.tex->params.w,
+              ry = (float) src.new_h / src.tex->params.h;
+        float ratio = PL_MIN(fabs(rx), fabs(ry));
+
+        struct sampler *sampler = &rr->osd_samplers[n];
+        if (params->disable_overlay_sampling)
+            sampler = NULL;
+
+        struct pl_shader *sh = pl_dispatch_begin(rr->dp);
+        dispatch_sampler(rr, sh, ratio, sampler, params, &src);
+
+        GLSL("vec4 osd_color;\n");
+        for (int c = 0; c < src.components; c++) {
+            if (plane->component_mapping[c] < 0)
+                continue;
+            GLSL("osd_color[%d] = color[%d];\n", plane->component_mapping[c],
+                 tex->params.format->sample_order[c]);
+        }
+
+        switch (ol->mode) {
+        case PL_OVERLAY_NORMAL:
+            GLSL("color = osd_color;\n");
+            break;
+        case PL_OVERLAY_MONOCHROME:
+            GLSL("color.a = osd_color[0];\n");
+            GLSL("color.rgb = %s;\n", sh_var(sh, (struct pl_shader_var) {
+                .var  = ra_var_vec3("base_color"),
+                .data = &ol->base_color,
+                .dynamic = true,
+            }));
+            break;
+        default: abort();
+        }
+
+        struct pl_color_repr repr = ol->repr;
+        pl_shader_decode_color(sh, &repr, NULL);
+        pl_shader_color_map(sh, params->color_map_params, ol->color,
+                            target->color, NULL, false);
+
+        static const struct ra_blend_params blend_params = {
+            .src_rgb = RA_BLEND_SRC_ALPHA,
+            .dst_rgb = RA_BLEND_ONE_MINUS_SRC_ALPHA,
+            .src_alpha = RA_BLEND_ONE,
+            .dst_alpha = RA_BLEND_ONE_MINUS_SRC_ALPHA,
+        };
+
+        const struct ra_blend_params *blend = &blend_params;
+        if (rr->disable_blending)
+            blend = NULL;
+
+        if (!pl_dispatch_finish(rr->dp, &sh, target->fbo, &ol->rect, blend)) {
+            PL_ERR(rr, "Failed rendering overlay texture!");
+            rr->disable_overlay = true;
+            return;
+        }
+    }
+}
+
 static void fix_rects(struct pl_image *image, struct pl_render_target *target)
 {
     pl_assert(image->width && image->height);
@@ -633,14 +744,13 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     if (!pass_read_image(rr, &pass, &image, params))
         goto error;
 
-    // TODO: overlay rendering
-
     if (!pass_scale_main(rr, &pass, &image, &target, params))
         goto error;
 
     if (!pass_output_target(rr, &pass, &target, params))
         goto error;
 
+    pass_draw_overlay(rr, &target, params);
     return true;
 
 error:
