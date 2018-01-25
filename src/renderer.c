@@ -582,8 +582,6 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
                               &target->dst_rect, NULL);
 }
 
-// pimage/ptarget: point to the (possibly fixed) struct
-// timage/ttarget: pointers to temporary storage
 static void fix_rects(struct pl_image *image, struct pl_render_target *target)
 {
     pl_assert(image->width && image->height);
