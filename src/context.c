@@ -27,8 +27,6 @@ static int pl_ctx_refcount;
 
 static void global_init(void)
 {
-    printf_c_init();
-
 #ifndef NDEBUG
     const char *enable_leak = getenv("LIBPLACEBO_LEAK_REPORT");
     if (enable_leak && strcmp(enable_leak, "1") == 0)
@@ -38,8 +36,6 @@ static void global_init(void)
 
 static void global_uninit(void)
 {
-    printf_c_uninit();
-
 #ifndef NDEBUG
     talloc_print_leak_report();
 #endif

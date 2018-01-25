@@ -18,8 +18,6 @@
 #include <stdio.h>
 #include <assert.h>
 
-#include "osdep/printf.h"
-
 #define TA_NO_WRAPPERS
 #include "ta.h"
 
@@ -194,7 +192,7 @@ static bool ta_vasprintf_append_at(char **str, size_t at, const char *fmt,
     va_list copy;
     va_copy(copy, ap);
     char c;
-    size = vsnprintf_c(&c, 1, fmt, copy);
+    size = vsnprintf(&c, 1, fmt, copy);
     va_end(copy);
 
     if (size < 0)
@@ -206,7 +204,7 @@ static bool ta_vasprintf_append_at(char **str, size_t at, const char *fmt,
             return false;
         *str = t;
     }
-    vsnprintf_c(*str + at, size + 1, fmt, ap);
+    vsnprintf(*str + at, size + 1, fmt, ap);
 
     ta_dbg_mark_as_string(*str);
 

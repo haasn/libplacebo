@@ -182,7 +182,7 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
     return false;
 }
 
-#define ADD(x, ...) bstr_xappend_asprintf(dp, (x), __VA_ARGS__)
+#define ADD(x, ...) bstr_xappend_asprintf_c(dp, (x), __VA_ARGS__)
 #define ADD_BSTR(x, s) bstr_xappend(dp, (x), (s))
 
 static void add_var(struct pl_dispatch *dp, struct bstr *body,
@@ -266,7 +266,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             const char *name = sva->attr.name;
 
             char loc[32];
-            snprintf_c(loc, sizeof(loc), "layout(location=%d) ", va->location);
+            snprintf(loc, sizeof(loc), "layout(location=%d) ", va->location);
             ADD(vert_head, "%s%s %s %s;\n", loc, vert_in, type, va->name);
 
             if (strcmp(name, vert_pos) == 0) {
@@ -619,7 +619,7 @@ static void translate_compute_shader(struct pl_dispatch *dp,
         ident_t points[4];
         for (int i = 0; i < PL_ARRAY_SIZE(points); i++) {
             char name[4];
-            snprintf_c(name, sizeof(name), "p%d", i);
+            snprintf(name, sizeof(name), "p%d", i);
             points[i] = sh_var_from_va(sh, name, &sva->attr, sva->data[i]);
         }
 

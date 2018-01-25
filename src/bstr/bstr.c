@@ -24,7 +24,6 @@
 #include <stdio.h>
 
 #include "ta/talloc.h"
-#include "osdep/printf.h"
 #include "bstr.h"
 #include "ctype.h"
 
@@ -316,7 +315,7 @@ void bstr_xappend_vasprintf(void *talloc_ctx, bstr *s, const char *fmt,
     char c;
     if (avail < 1)
         dest = &c;
-    size = vsnprintf_c(dest, MAX(avail, 1), fmt, copy);
+    size = vsnprintf(dest, MAX(avail, 1), fmt, copy);
     va_end(copy);
 
     if (size < 0)
@@ -324,7 +323,7 @@ void bstr_xappend_vasprintf(void *talloc_ctx, bstr *s, const char *fmt,
 
     if (avail < 1 || size + 1 > avail) {
         resize_append(talloc_ctx, s, size + 1);
-        vsnprintf_c(s->start + s->len, size + 1, fmt, ap);
+        vsnprintf(s->start + s->len, size + 1, fmt, ap);
     }
     s->len += size;
 }

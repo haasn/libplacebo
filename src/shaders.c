@@ -266,7 +266,7 @@ void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
 
     va_list ap;
     va_start(ap, fmt);
-    bstr_xappend_vasprintf(sh, &sh->buffers[buf], fmt, ap);
+    bstr_xappend_vasprintf_c(sh, &sh->buffers[buf], fmt, ap);
     va_end(ap);
 }
 
@@ -673,7 +673,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
         case SH_LUT_LITERAL: {
             pl_assert(!lut->weights.str.len);
             for (int i = 0; i < size; i++) {
-                bstr_xappend_asprintf(lut, &lut->weights.str, "%s%f",
+                bstr_xappend_asprintf_c(lut, &lut->weights.str, "%s%f",
                                       i > 0 ? "," : "", tmp[i]);
             }
             break;
