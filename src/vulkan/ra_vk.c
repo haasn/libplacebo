@@ -827,6 +827,8 @@ static void buf_barrier(const struct ra *ra, struct vk_cmd *cmd,
 
     VkBufferMemoryBarrier buffBarrier = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .srcAccessMask = buf_vk->current_access,
         .dstAccessMask = newAccess,
         .buffer = buf_vk->slice.buf,
