@@ -119,6 +119,15 @@ struct pl_render_params {
     // `pl_sample_filter_params` for more information.
     float polar_cutoff;
 
+    // Skips the dithering pass for overlay textures. Has no efffect if
+    // `dither_params` is NULL.
+    bool skip_overlay_dithering;
+
+    // Skips dispatching the high-quality scalers for overlay textures, and
+    // always falls back to built-in GPU samplers. Note: The scalers are
+    // already disabled if the overlay texture does not need to be scaled.
+    bool skip_overlay_scaling;
+
     // --- Performance tuning / debugging options
     // These may affect performance or may make debugging problems easier,
     // but shouldn't have any effect on the quality.
@@ -210,6 +219,43 @@ struct pl_plane {
     float shift_x, shift_y;
 };
 
+enum pl_coord_type {
+    PL_COORD_ABSOLUTE = 0,  // coordinates are absolute (pixels)
+    PL_COORD_RELATIVE_SIZE, // coordinates are relative to the total size
+    PL_COORD_RELATIVE_RECT, // coordinates are relative to the src/dst_rect
+};
+
+enum pl_overlay_mode {
+    PL_OVERLAY_NORMAL = 0, // treat the texture as a normal, full-color texture
+    PL_OVERLAY_MONOCHROME, // treat the texture as a single-component alpha map
+};
+
+// A struct representing an image overlay (e.g. for subtitles or on-screen
+// status messages, controls, ...)
+struct pl_overlay {
+    // The texture to overlay. The texture must be 2D, and `params.sampleable`
+    // must be true. Note: Multi-plane overlays are not supported. If necessary,
+    // multiple planes can be combined by treating them as separate overlays
+    // with different base colors.
+    const struct ra_tex *texture;
+
+    // This controls the coloring mode of this overlay.
+    enum pl_overlay_mode mode;
+    // If `mode` is PL_OVERLAY_MONOCHROME, then the texture is treated as an
+    // alpha map and multiplied by this base color. Ignored for the other modes.
+    float base_color[3];
+
+    // This controls the interpretation of the rectangle given in `rect`.
+    enum pl_coord_type coords;
+    // The coordinates at which to render this overlay texture.
+    struct pl_rect2df rect;
+
+    // This controls the colorspace information for this overlay. The contents
+    // of the texture / the value of `color` are interpreted according to this.
+    struct pl_color_repr repr;
+    struct pl_color_space color;
+};
+
 // High-level description of a source image to render
 struct pl_image {
     // A generic signature uniquely identifying this image. The contents don't
@@ -246,6 +292,13 @@ struct pl_image {
     // due to the effects of texture filtering. `src_rect` may be flipped, and
     // may be partially or wholly outside the bounds of the texture. (Optional)
     struct pl_rect2df src_rect;
+
+    // A list of additional overlays to render directly on top of this image.
+    // These overlays will be treated as though they were part of the image,
+    // which means they will be affected by the main scaler as well as by
+    // frame mixing algorithms. See also `pl_target.overlays`
+    const struct pl_overlay *overlays;
+    int num_overlays;
 };
 
 // Represents the target of a rendering operation
@@ -266,6 +319,13 @@ struct pl_render_target {
     // automatically.
     struct pl_color_repr repr;
     struct pl_color_space color;
+
+    // A list of additional overlays to render directly onto the output. These
+    // overlays will be rendered after the image itself has been fully scaled
+    // and output, and will not be affected by e.g. frame mixing. See also
+    // `pl_image.overlays`
+    const struct pl_overlay *overlays;
+    int num_overlays;
 };
 
 // Fills in a pl_render_target based on a swapchain frame's FBO and metadata.

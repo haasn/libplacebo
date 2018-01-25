@@ -635,6 +635,8 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     if (!pass_read_image(rr, &pass, &image, params))
         goto error;
 
+    // TODO: overlay rendering
+
     if (!pass_scale_main(rr, &pass, &image, &target, params))
         goto error;
 
