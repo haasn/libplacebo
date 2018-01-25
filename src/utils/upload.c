@@ -47,7 +47,7 @@ void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4])
 
     for (int i = 0; i < PL_ARRAY_SIZE(comps); i++) {
         comps[i].size = __builtin_popcount(mask[i]);
-        comps[i].shift = PL_MAX(0, ffsll(mask[i]) - 1);
+        comps[i].shift = PL_MAX(0, __builtin_ffsll(mask[i]) - 1);
     }
 
     // Sort the components by shift
