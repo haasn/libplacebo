@@ -66,8 +66,7 @@ static void init_sdl() {
     window = SDL_CreateWindow("libplacebo demo",
                               SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                               WINDOW_WIDTH, WINDOW_HEIGHT,
-                              SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE |
-                              SDL_WINDOW_VULKAN);
+                              SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
 
     if (!window) {
         fprintf(stderr, "Failed creating window: %s\n", SDL_GetError());
@@ -252,6 +251,10 @@ int main(int argc, const char **argv)
     init_placebo();
     init_vulkan();
     init_rendering(argv[1], argc > 2 ? argv[2] : NULL);
+
+    // Resize the window to match the content
+    const struct ra_tex *img = img_plane.texture;
+    SDL_SetWindowSize(window, img->params.w, img->params.h);
 
     unsigned int last = SDL_GetTicks(), frames = 0;
     printf("Took %u ms for initialization\n", last - start);
