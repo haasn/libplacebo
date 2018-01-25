@@ -86,7 +86,9 @@ static void init_placebo() {
 static void init_vulkan()
 {
     struct pl_vk_inst_params iparams = pl_vk_inst_default_params;
+#ifndef NDEBUG
     iparams.debug = true;
+#endif
 
     unsigned int num = 0;
     if (!SDL_Vulkan_GetInstanceExtensions(window, &num, NULL)) {
