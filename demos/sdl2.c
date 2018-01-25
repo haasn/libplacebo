@@ -38,13 +38,15 @@ const struct pl_vk_inst *vk_inst;
 const struct ra_swapchain *swapchain;
 
 // for rendering
-struct pl_plane plane;
+struct pl_plane img_plane;
+struct pl_plane osd_plane;
 struct pl_renderer *renderer;
 
 static void uninit()
 {
     pl_renderer_destroy(&renderer);
-    ra_tex_destroy(vk->ra, &plane.texture);
+    ra_tex_destroy(vk->ra, &img_plane.texture);
+    ra_tex_destroy(vk->ra, &osd_plane.texture);
     ra_swapchain_destroy(&swapchain);
     pl_vulkan_destroy(&vk);
     vkDestroySurfaceKHR(vk_inst->instance, surf, NULL);
@@ -139,12 +141,15 @@ static void init_vulkan()
     }
 }
 
-static void init_rendering(const char *filename)
+static bool upload_plane(const char *filename, struct pl_plane *plane)
 {
+    if (!filename)
+        return true;
+
     SDL_Surface *img = IMG_Load(filename);
     if (!img) {
         fprintf(stderr, "Failed loading '%s': %s\n", filename, SDL_GetError());
-        exit(1);
+        return false;
     }
 
     const SDL_PixelFormat *fmt = img->format;
@@ -161,24 +166,32 @@ static void init_rendering(const char *filename)
     }
 
     struct pl_plane_data data = {
-        .type = RA_FMT_UNORM,
-        .width = img->w,
-        .height = img->h,
-        .pixel_stride = fmt->BytesPerPixel,
-        .row_stride = img->pitch,
-        .pixels = img->pixels,
+        .type           = RA_FMT_UNORM,
+        .width          = img->w,
+        .height         = img->h,
+        .pixel_stride   = fmt->BytesPerPixel,
+        .row_stride     = img->pitch,
+        .pixels         = img->pixels,
     };
 
     uint64_t masks[4] = { fmt->Rmask, fmt->Gmask, fmt->Bmask, fmt->Amask };
     pl_plane_data_from_mask(&data, masks);
 
-    bool ok = pl_upload_plane(vk->ra, &plane, &data);
+    bool ok = pl_upload_plane(vk->ra, plane, &data);
     SDL_FreeSurface(img);
 
-    if (!ok) {
-        fprintf(stderr, "Failed uploading texture to GPU!\n");
+    return ok;
+}
+
+static void init_rendering(const char *img, const char *osd)
+{
+    if (!upload_plane(img, &img_plane)) {
+        fprintf(stderr, "Failed uploading image plane!\n");
         exit(2);
     }
+
+    if (!upload_plane(osd, &osd_plane))
+        fprintf(stderr, "Failed uploading OSD plane.. continuing anyway\n");
 
     // Create a renderer instance
     renderer = pl_renderer_create(ctx, vk->ra);
@@ -186,14 +199,14 @@ static void init_rendering(const char *filename)
 
 static void render_frame(const struct ra_swapchain_frame *frame)
 {
-    const struct ra_tex *img = plane.texture;
+    const struct ra_tex *img = img_plane.texture;
     struct pl_image image = {
         .num_planes = 1,
-        .planes = { plane },
-        .repr = pl_color_repr_unknown,
-        .color = pl_color_space_unknown,
-        .width = img->params.w,
-        .height = img->params.h,
+        .planes     = { img_plane },
+        .repr       = pl_color_repr_unknown,
+        .color      = pl_color_space_unknown,
+        .width      = img->params.w,
+        .height     = img->params.h,
     };
 
     // This seems to be the case for SDL2_image
@@ -205,6 +218,19 @@ static void render_frame(const struct ra_swapchain_frame *frame)
 
     struct pl_render_target target;
     pl_render_target_from_swapchain(&target, frame);
+
+    const struct ra_tex *osd = osd_plane.texture;
+        if (osd) {
+        target.num_overlays = 1;
+        target.overlays = &(struct pl_overlay) {
+            .plane      = osd_plane,
+            .rect       = { 0, 0, osd->params.w, osd->params.h },
+            .mode       = PL_OVERLAY_NORMAL,
+            .repr       = image.repr,
+            .color      = image.color,
+        };
+    }
+
     if (!pl_render_image(renderer, &image, &target, &render_params)) {
         fprintf(stderr, "Failed rendering frame!\n");
         uninit();
@@ -214,8 +240,8 @@ static void render_frame(const struct ra_swapchain_frame *frame)
 
 int main(int argc, const char **argv)
 {
-    if (argc != 2) {
-        fprintf(stderr, "Usage: ./sdl2 <filename>\n");
+    if (argc < 2 || argc > 3) {
+        fprintf(stderr, "Usage: ./sdl2 <image> [<overlay>]\n");
         return 255;
     }
 
@@ -225,7 +251,7 @@ int main(int argc, const char **argv)
     init_sdl();
     init_placebo();
     init_vulkan();
-    init_rendering(argv[1]);
+    init_rendering(argv[1], argc > 2 ? argv[2] : NULL);
 
     unsigned int last = SDL_GetTicks(), frames = 0;
     printf("Took %u ms for initialization\n", last - start);
