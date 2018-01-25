@@ -239,7 +239,7 @@ static void render_frame(const struct ra_swapchain_frame *frame)
     }
 }
 
-int main(int argc, const char **argv)
+int main(int argc, char **argv)
 {
     if (argc < 2 || argc > 3) {
         fprintf(stderr, "Usage: ./sdl2 <image> [<overlay>]\n");
