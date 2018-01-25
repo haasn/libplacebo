@@ -41,8 +41,10 @@ struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp);
 // dispatch was successful. This operation will take over ownership of the
 // pl_shader passed to it, and return it back to the internal pool.
 // If `rc` is NULL, renders to the entire texture.
+// If set, `blend_params` enables and controls blending for this pass.
 bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **sh,
-                        const struct ra_tex *target, const struct pl_rect2d *rc);
+                        const struct ra_tex *target, const struct pl_rect2d *rc,
+                        const struct ra_blend_params *blend_params);
 
 // Cancel an active shader without submitting anything. Useful, for example,
 // if the shader was instead merged into a different shader.

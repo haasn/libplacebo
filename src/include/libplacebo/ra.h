@@ -607,6 +607,13 @@ enum ra_blend_mode {
     RA_BLEND_ONE_MINUS_SRC_ALPHA,
 };
 
+struct ra_blend_params {
+    enum ra_blend_mode src_rgb;
+    enum ra_blend_mode dst_rgb;
+    enum ra_blend_mode src_alpha;
+    enum ra_blend_mode dst_alpha;
+};
+
 enum ra_prim_type {
     RA_PRIM_TRIANGLE_LIST,
     RA_PRIM_TRIANGLE_STRIP,
@@ -678,13 +685,9 @@ struct ra_pass_params {
     // there is no risk of a dangling reference)
     struct ra_tex target_dummy;
 
-    // Target blending mode. If `enable_blend` is true, target_params.format
-    // must have RA_FMT_CAP_BLENDABLE. Otherwise, the fields are ignored.
-    bool enable_blend;
-    enum ra_blend_mode blend_src_rgb;
-    enum ra_blend_mode blend_dst_rgb;
-    enum ra_blend_mode blend_src_alpha;
-    enum ra_blend_mode blend_dst_alpha;
+    // Target blending mode. If this is NULL, blending is disabled. Otherwise,
+    // the `target_dummy.params.format` must have RA_FMT_CAP_BLENDABLE.
+    const struct ra_blend_params *blend_params;
 
     // If false, the target's existing contents will be discarded before the
     // pass is run. (Semantically equivalent to calling ra_tex_invalidate

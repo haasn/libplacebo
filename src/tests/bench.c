@@ -93,7 +93,7 @@ static void run_bench(const struct ra *ra, struct pl_dispatch *dp,
     pl_dispatch_reset_frame(dp);
     struct pl_shader *sh = pl_dispatch_begin(dp);
     bench(sh, state, src);
-    pl_dispatch_finish(dp, &sh, fbo.tex, NULL);
+    pl_dispatch_finish(dp, &sh, fbo.tex, NULL, NULL);
 
     bool ok = ra_tex_download(ra, &(struct ra_tex_transfer_params) {
         .tex        = fbo.tex,

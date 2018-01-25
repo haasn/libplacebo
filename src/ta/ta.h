@@ -97,7 +97,7 @@ bool ta_vasprintf_append_buffer(char **str, const char *fmt, va_list ap) TA_PRF(
 #define ta_steal(ta_parent, ptr) (TA_TYPEOF(ptr))ta_steal_(ta_parent, ptr)
 
 #define ta_dup_ptrtype(ta_parent, ptr) \
-    (TA_TYPEOF(ptr))ta_memdup(ta_parent, ptr, sizeof(*(ptr)))
+    (TA_TYPEOF(ptr))ta_memdup(ta_parent, (void*) (ptr), sizeof(*(ptr)))
 
 // Ugly macros that crash on OOM.
 // All of these mirror real functions (with a 'x' added after the 'ta_'
@@ -152,7 +152,7 @@ void ta_oom_b(bool b);
 char *ta_oom_s(char *s);
 void *ta_oom_p(void *p);
 // Generic pointer
-#define ta_oom_g(ptr) (TA_TYPEOF(ptr))ta_oom_p(ptr)
+#define ta_oom_g(ptr) (TA_TYPEOF(ptr))ta_oom_p((void*) ptr)
 
 void ta_enable_leak_report(void);
 void ta_print_leak_report(void); // no-op when disabled

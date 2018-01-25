@@ -1419,7 +1419,7 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
 
         // If we're blending, then we need to explicitly load the previous
         // contents of the color attachment
-        if (pass->params.enable_blend)
+        if (pass->params.blend_params)
             loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 
         // If we're ignoring the FBO, we don't need to load or transition
@@ -1438,6 +1438,24 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
             [RA_BLEND_SRC_ALPHA]           = VK_BLEND_FACTOR_SRC_ALPHA,
             [RA_BLEND_ONE_MINUS_SRC_ALPHA] = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
         };
+
+        VkPipelineColorBlendAttachmentState blendState = {
+            .colorBlendOp = VK_BLEND_OP_ADD,
+            .alphaBlendOp = VK_BLEND_OP_ADD,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                              VK_COLOR_COMPONENT_G_BIT |
+                              VK_COLOR_COMPONENT_B_BIT |
+                              VK_COLOR_COMPONENT_A_BIT,
+        };
+
+        const struct ra_blend_params *blend = params->blend_params;
+        if (blend) {
+            blendState.blendEnable = true;
+            blendState.srcColorBlendFactor = blendFactors[blend->src_rgb];
+            blendState.dstColorBlendFactor = blendFactors[blend->dst_rgb];
+            blendState.srcAlphaBlendFactor = blendFactors[blend->src_alpha];
+            blendState.dstAlphaBlendFactor = blendFactors[blend->dst_alpha];
+        }
 
         static const VkPrimitiveTopology topologies[] = {
             [RA_PRIM_TRIANGLE_LIST]  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
@@ -1494,19 +1512,7 @@ static const struct ra_pass *vk_pass_create(const struct ra *ra,
             .pColorBlendState = &(VkPipelineColorBlendStateCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
                 .attachmentCount = 1,
-                .pAttachments = &(VkPipelineColorBlendAttachmentState) {
-                    .blendEnable = params->enable_blend,
-                    .colorBlendOp = VK_BLEND_OP_ADD,
-                    .srcColorBlendFactor = blendFactors[params->blend_src_rgb],
-                    .dstColorBlendFactor = blendFactors[params->blend_dst_rgb],
-                    .alphaBlendOp = VK_BLEND_OP_ADD,
-                    .srcAlphaBlendFactor = blendFactors[params->blend_src_alpha],
-                    .dstAlphaBlendFactor = blendFactors[params->blend_dst_alpha],
-                    .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-                                      VK_COLOR_COMPONENT_G_BIT |
-                                      VK_COLOR_COMPONENT_B_BIT |
-                                      VK_COLOR_COMPONENT_A_BIT,
-                },
+                .pAttachments = &blendState,
             },
             .pDynamicState = &(VkPipelineDynamicStateCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,

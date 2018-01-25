@@ -843,7 +843,7 @@ const struct ra_pass *ra_pass_create(const struct ra *ra,
         const struct ra_fmt *target_fmt = params->target_dummy.params.format;
         pl_assert(target_fmt);
         pl_assert(target_fmt->caps & RA_FMT_CAP_RENDERABLE);
-        pl_assert(!params->enable_blend || target_fmt->caps & RA_FMT_CAP_BLENDABLE);
+        pl_assert(!params->blend_params || target_fmt->caps & RA_FMT_CAP_BLENDABLE);
         break;
     case RA_PASS_COMPUTE:
         pl_assert(ra->caps & RA_CAP_COMPUTE);
@@ -1166,6 +1166,8 @@ struct ra_pass_params ra_pass_params_copy(void *tactx,
 
     new.glsl_shader = talloc_strdup(tactx, new.glsl_shader);
     new.vertex_shader = talloc_strdup(tactx, new.vertex_shader);
+    if (new.blend_params)
+        new.blend_params = talloc_ptrdup(tactx, new.blend_params);
 
 #define DUPSTRS(name, array, num)                                       \
     do {                                                                \

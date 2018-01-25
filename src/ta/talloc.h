@@ -49,6 +49,7 @@
 #define talloc_memdup                   ta_xmemdup
 #define talloc_strdup                   ta_xstrdup
 #define talloc_strndup                  ta_xstrndup
+#define talloc_ptrdup                   ta_xdup_ptrtype
 #define talloc_asprintf                 ta_xasprintf
 #define talloc_vasprintf                ta_xvasprintf
 

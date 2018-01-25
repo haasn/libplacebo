@@ -408,13 +408,27 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
 #undef ADD
 #undef ADD_BSTR
 
+static bool blend_equal(const struct ra_blend_params *a,
+                        const struct ra_blend_params *b)
+{
+    if (!a && !b)
+        return true;
+    if (!a || !b)
+        return false;
+
+    return a->src_rgb == b->src_rgb && a->dst_rgb == b->dst_rgb &&
+           a->src_alpha == b->src_alpha && a->dst_alpha == b->dst_alpha;
+}
+
 static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
-                              const struct ra_tex *target, ident_t vert_pos)
+                              const struct ra_tex *target, ident_t vert_pos,
+                              const struct ra_blend_params *blend)
 {
     uint64_t sig = pl_shader_signature(sh);
 
     for (int i = 0; i < dp->num_passes; i++) {
-        if (dp->passes[i]->signature == sig)
+        const struct pass *p = dp->passes[i];
+        if (p->signature == sig && blend_equal(p->pass->params.blend_params, blend))
             return dp->passes[i];
     }
 
@@ -434,6 +448,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     struct ra_pass_params params = {
         .type = pl_shader_is_compute(sh) ? RA_PASS_COMPUTE : RA_PASS_RASTER,
         .num_descriptors = res->num_descriptors,
+        .blend_params = blend, // set this for all pass types (for caching)
     };
 
     if (params.type == RA_PASS_RASTER) {
@@ -585,7 +600,8 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
 static void translate_compute_shader(struct pl_dispatch *dp,
                                      struct pl_shader *sh,
                                      const struct ra_tex *target,
-                                     const struct pl_rect2d *rc)
+                                     const struct pl_rect2d *rc,
+                                     const struct ra_blend_params *blend)
 {
     // Simulate vertex attributes using global definitions
     int width = abs(pl_rect_w(*rc)), height = abs(pl_rect_h(*rc));
@@ -627,7 +643,8 @@ static void translate_compute_shader(struct pl_dispatch *dp,
         .desc = {
             .name    = "out_image",
             .type    = RA_DESC_STORAGE_IMG,
-            .access  = RA_DESC_ACCESS_WRITEONLY,
+            .access  = blend ? RA_DESC_ACCESS_READWRITE
+                             : RA_DESC_ACCESS_WRITEONLY,
         },
         .object = target,
     });
@@ -648,13 +665,30 @@ static void translate_compute_shader(struct pl_dispatch *dp,
     GLSL("ivec2 dir = ivec2(%d, %d);\n", dx, dy); // hard-code, not worth var
     GLSL("ivec2 pos = %s + dir * ivec2(gl_GlobalInvocationID);\n", base);
     GLSL("vec2 fpos = %s * vec2(gl_GlobalInvocationID);\n", out_scale);
-    GLSL("if (max(fpos.x, fpos.y) < 1.0)\n");
-    GLSL("    imageStore(%s, pos, color);\n", fbo);
+    GLSL("if (max(fpos.x, fpos.y) < 1.0) {\n");
+    if (blend) {
+        GLSL("vec4 orig = imageLoad(%s, pos);\n", fbo);
+
+        static const char *modes[] = {
+            [RA_BLEND_ZERO] = "0.0",
+            [RA_BLEND_ONE]  = "1.0",
+            [RA_BLEND_SRC_ALPHA] = "color.a",
+            [RA_BLEND_ONE_MINUS_SRC_ALPHA] = "(1.0 - color.a)",
+        };
+
+        GLSL("color = vec4(color.rgb * vec3(%s), color.a * %s) \n"
+             "      + vec4(orig.rgb  * vec3(%s), orig.a  * %s);\n",
+             modes[blend->src_rgb], modes[blend->src_alpha],
+             modes[blend->dst_rgb], modes[blend->dst_alpha]);
+    }
+    GLSL("imageStore(%s, pos, color);\n", fbo);
+    GLSL("}\n");
     sh->res.output = PL_SHADER_SIG_NONE;
 }
 
 bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
-                        const struct ra_tex *target, const struct pl_rect2d *rc)
+                        const struct ra_tex *target, const struct pl_rect2d *rc,
+                        const struct ra_blend_params *blend)
 {
     struct pl_shader *sh = *psh;
     const struct pl_shader_res *res = &sh->res;
@@ -693,7 +727,7 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
 
     if (pl_shader_is_compute(sh)) {
         // Translate the compute shader to simulate vertices etc.
-        translate_compute_shader(dp, sh, target, rc);
+        translate_compute_shader(dp, sh, target, rc, blend);
     } else {
         // Add the vertex information encoding the position
         vert_pos = sh_attr_vec2(sh, "position", &(const struct pl_rect2df) {
@@ -704,7 +738,7 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
         });
     }
 
-    struct pass *pass = find_pass(dp, sh, target, vert_pos);
+    struct pass *pass = find_pass(dp, sh, target, vert_pos, blend);
 
     // Silently return on failed passes
     if (pass->failed)
