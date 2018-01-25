@@ -48,6 +48,7 @@ sources = [
 
   # Helpers ported from mpv or other projects
   'bstr/bstr.c',
+  'bstr/format.c',
   '3rdparty/siphash.c',
   'ta/ta.c',
   'ta/ta_utils.c',
