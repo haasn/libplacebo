@@ -266,7 +266,7 @@ void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
 
     va_list ap;
     va_start(ap, fmt);
-    bstr_xappend_vasprintf(sh, &sh->buffers[buf], fmt, ap);
+    bstr_xappend_vasprintf_c(sh, &sh->buffers[buf], fmt, ap);
     va_end(ap);
 }
 
@@ -675,16 +675,16 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
             pl_assert(!lut->weights.str.len);
             for (int i = 0; i < size * comps; i += comps) {
                 if (i > 0)
-                    bstr_xappend_asprintf(lut, &lut->weights.str, ",");
+                    bstr_xappend_asprintf_c(lut, &lut->weights.str, ",");
                 if (comps > 0)
-                    bstr_xappend_asprintf(lut, &lut->weights.str, "vec%d(", comps);
+                    bstr_xappend_asprintf_c(lut, &lut->weights.str, "vec%d(", comps);
                 for (int c = 0; c < comps; c++) {
-                    bstr_xappend_asprintf(lut, &lut->weights.str, "%s%f",
-                                          c > 0 ? "," : "",
-                                          tmp[i+c]);
+                    bstr_xappend_asprintf_c(lut, &lut->weights.str, "%s%f",
+                                            c > 0 ? "," : "",
+                                            tmp[i+c]);
                 }
                 if (comps > 0)
-                    bstr_xappend_asprintf(lut, &lut->weights.str, ")");
+                    bstr_xappend_asprintf_c(lut, &lut->weights.str, ")");
             }
             break;
         }

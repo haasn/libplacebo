@@ -23,7 +23,6 @@
 #include <stdint.h>
 
 #include "ta/talloc.h"
-#include "osdep/printf.h"
 #include "config.h"
 #include "pl_assert.h"
 

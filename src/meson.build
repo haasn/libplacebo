@@ -85,23 +85,6 @@ components = [
   ]
 ]
 
-# OS-dependent files and feature checks
-has_useloc_apple = cc.has_header_symbol('xlocale.h', 'uselocale')
-has_useloc_win   = cc.has_header_symbol('locale.h', '_create_locale')
-has_useloc_posix = cc.has_header_symbol('locale.h', 'uselocale',
-  prefix: '#define _XOPEN_SOURCE 700'
-)
-
-## osdep/printf.h
-if has_useloc_posix or has_useloc_apple
-  sources += 'osdep/printf_useloc_posix.c'
-elif has_useloc_win
-  sources += 'osdep/printf_useloc_win.c'
-  build_deps += cc.find_library('msvcr100', required: true)
-else
-  error('Could not find any suitable implementation of `osdep/printf.h`!')
-endif
-
 # Configuration
 conf = configuration_data()
 conf.set('majorver', majorver)
