@@ -49,5 +49,5 @@ static inline bool feq(float a, float b)
 }
 
 #define REQUIRE(cond) require((cond), #cond)
-#define RANDOM (random() / (float) RAND_MAX)
+#define RANDOM (rand() / (float) RAND_MAX)
 #define SKIP 77
