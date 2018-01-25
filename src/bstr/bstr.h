@@ -104,6 +104,16 @@ void bstr_xappend_asprintf(void *talloc_ctx, bstr *s, const char *fmt, ...)
 void bstr_xappend_vasprintf(void *talloc_ctx, bstr *s, const char *fmt, va_list va)
     PRINTF_ATTRIBUTE(3, 0);
 
+// Locale-invariant versions of xappend_(v)asprintf
+//
+// NOTE: These only support %d, %zu, %f, %c and %s, with no other length
+// modifiers or combinations. Calling them on an invalid string will abort, so
+// only use on known format strings!
+void bstr_xappend_asprintf_c(void *talloc_ctx, bstr *s, const char *fmt, ...)
+    PRINTF_ATTRIBUTE(3, 4);
+void bstr_xappend_vasprintf_c(void *talloc_ctx, bstr *s, const char *fmt, va_list va)
+    PRINTF_ATTRIBUTE(3, 0);
+
 // If s starts/ends with prefix, return true and return the rest of the string
 // in s.
 bool bstr_eatstart(struct bstr *s, struct bstr prefix);
