@@ -184,6 +184,9 @@ struct pl_plane {
     // X-------X
     //
     // For 4:2:0 subsampling, this corresponds to PL_CHROMA_LEFT.
+    //
+    // Note: It's recommended to fill this using `pl_chroma_location_offset` on
+    // the chroma planes.
     float shift_x, shift_y;
 };
 
