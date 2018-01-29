@@ -61,9 +61,11 @@ void bstr_xappend_vasprintf_c(void *tactx, bstr *s, const char *fmt,
             buf[0] = (char) va_arg(ap, int);
             bstr_xappend(tactx, s, (struct bstr) { buf, 1 });
             continue;
-        case 's':
-            bstr_xappend(tactx, s, bstr0(va_arg(ap, const char *)));
+        case 's': {
+            const char *arg = va_arg(ap, void *);
+            bstr_xappend(tactx, s, bstr0(arg));
             continue;
+        }
         case 'd':
             len = ccStrPrintInt32(buf, va_arg(ap, int));
             bstr_xappend(tactx, s, (struct bstr) { buf, len });
