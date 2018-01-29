@@ -425,10 +425,10 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             .new_w      = target_w,
             .new_h      = target_h,
             .rect       = {
-                sx / rx,
-                sy / ry,
-                pw + sx / rx,
-                ph + sy / ry,
+                -sx / rx,
+                -sy / ry,
+                pw - sx / rx,
+                ph - sy / ry,
             },
         };
 
@@ -528,10 +528,10 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         .new_w      = target_w,
         .new_h      = target_h,
         .rect = {
-            image->src_rect.x0 + img->offx,
-            image->src_rect.y0 + img->offy,
-            image->src_rect.x1 + img->offx,
-            image->src_rect.y1 + img->offy,
+            image->src_rect.x0 - img->offx,
+            image->src_rect.y0 - img->offy,
+            image->src_rect.x1 - img->offx,
+            image->src_rect.y1 - img->offy,
         },
     };
 
