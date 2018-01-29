@@ -76,6 +76,31 @@ bool pl_bit_encoding_equal(const struct pl_bit_encoding *b1,
 
 const struct pl_color_repr pl_color_repr_unknown = {0};
 
+const struct pl_color_repr pl_color_repr_rgb = {
+    .sys    = PL_COLOR_SYSTEM_RGB,
+    .levels = PL_COLOR_LEVELS_PC,
+};
+
+const struct pl_color_repr pl_color_repr_sdtv = {
+    .sys    = PL_COLOR_SYSTEM_BT_601,
+    .levels = PL_COLOR_LEVELS_TV,
+};
+
+const struct pl_color_repr pl_color_repr_hdtv = {
+    .sys    = PL_COLOR_SYSTEM_BT_709,
+    .levels = PL_COLOR_LEVELS_TV,
+};
+
+const struct pl_color_repr pl_color_repr_uhdtv = {
+    .sys    = PL_COLOR_SYSTEM_BT_2020_NC,
+    .levels = PL_COLOR_LEVELS_TV,
+};
+
+const struct pl_color_repr pl_color_repr_jpeg = {
+    .sys    = PL_COLOR_SYSTEM_BT_601,
+    .levels = PL_COLOR_LEVELS_PC,
+};
+
 bool pl_color_repr_equal(const struct pl_color_repr *c1,
                          const struct pl_color_repr *c2)
 {

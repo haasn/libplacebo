@@ -99,7 +99,15 @@ struct pl_color_repr {
     struct pl_bit_encoding bits; // or {0} if unknown
 };
 
+// Some common color representations. It's worth pointing out that all of these
+// presets leave `alpha` and `bits` as unknown - that is, only the system and
+// levels are predefined
 extern const struct pl_color_repr pl_color_repr_unknown;
+extern const struct pl_color_repr pl_color_repr_rgb;
+extern const struct pl_color_repr pl_color_repr_sdtv;
+extern const struct pl_color_repr pl_color_repr_hdtv;  // also Blu-ray
+extern const struct pl_color_repr pl_color_repr_uhdtv; // SDR, NCL system
+extern const struct pl_color_repr pl_color_repr_jpeg;
 
 // Returns whether two colorspace representations are exactly identical.
 bool pl_color_repr_equal(const struct pl_color_repr *c1,
