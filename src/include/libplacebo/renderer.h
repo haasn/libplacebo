@@ -289,6 +289,22 @@ struct pl_image {
     // frame mixing algorithms. See also `pl_target.overlays`
     const struct pl_overlay *overlays;
     int num_overlays;
+
+    // Note on subsampling and plane correspondence: All planes belonging to
+    // the same image will only be streched by an integer multiple (or inverse
+    // thereof) in order to match the reference dimensions of this image. For
+    // example, suppose you have an 8x4 image. A valid plane scaling would be
+    // 4x2 -> 8x4 or 4x4 -> 4x4, but not 6x4 -> 8x4. So if a 6x4 plane is
+    // given, then it would be treated like a cropped 8x4 plane (since 1.0 is
+    // the closest scaling ratio to the actual ratio of 1.3).
+    //
+    // For an explanation of why this makes sense, consider the relatively
+    // common example of a subsampled, oddly sized (e.g. jpeg) image. In such
+    // cases, for example a 35x23 image, the 4:2:0 subsampled chroma plane
+    // would have to end up as 17.5x11.5, which gets rounded up to 18x12 by
+    // implementations. So in this example, the 18x12 chroma plane would get
+    // treated by libplacebo as an oversized chroma plane - i.e. the plane
+    // would get sampled as if it was 17.5 pixels wide and 11.5 pixels large.
 };
 
 // Represents the target of a rendering operation

@@ -419,6 +419,14 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
               sx = plane->shift_x - refplane->shift_x,
               sy = plane->shift_y - refplane->shift_y;
 
+        // Only accept integer scaling ratios. This accounts for the fact
+        // that fractionally subsampled planes get rounded up to the nearest
+        // integer size, which we want to discard.
+        float rrx = rx >= 1 ? roundf(rx) : 1.0 / roundf(1.0 / rx),
+              rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry),
+              rpw = target_w / rrx,
+              rph = target_h / rry;
+
         struct pl_sample_src src = {
             .tex        = plane->texture,
             .components = plane->components,
@@ -427,8 +435,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             .rect       = {
                 -sx / rx,
                 -sy / ry,
-                pw - sx / rx,
-                ph - sy / ry,
+                rpw - sx / rx,
+                rph - sy / ry,
             },
         };
 
