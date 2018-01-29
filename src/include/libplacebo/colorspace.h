@@ -185,7 +185,7 @@ enum pl_color_light {
     PL_COLOR_LIGHT_UNKNOWN = 0,
     PL_COLOR_LIGHT_DISPLAY,     // Display-referred, output as-is
     PL_COLOR_LIGHT_SCENE_HLG,   // Scene-referred, HLG OOTF
-    PL_COLOR_LIGHT_SCENE_709_1886, // Scene-referred, OOTF = 709/1886 interaction
+    PL_COLOR_LIGHT_SCENE_709_1886, // Scene-referred, OOTF = BT.709+1886 interaction
     PL_COLOR_LIGHT_SCENE_1_2,   // Scene-referred, OOTF = gamma 1.2
     PL_COLOR_LIGHT_COUNT
 };
