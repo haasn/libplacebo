@@ -37,6 +37,7 @@ enum {
     PLANE_G = 1,
     PLANE_B = 2,
     PLANE_A = 3,
+    PLANE_COUNT,
 
     // aliases for other systems
     PLANE_Y    = PLANE_R,
@@ -66,6 +67,7 @@ struct pl_renderer {
     // Cached feature checks (inverted)
     bool disable_compute;    // disable the use of compute shaders
     bool disable_sampling;   // disable use of advanced scalers
+    bool disable_debanding;  // disable the use of debanding shaders
     bool disable_linear_hdr; // disable linear scaling for HDR signals
     bool disable_linear_sdr; // disable linear scaling for SDR signals
     bool disable_blending;   // disable blending for the target/fbofmt
@@ -75,6 +77,7 @@ struct pl_renderer {
     struct pl_shader_obj *peak_detect_state;
     struct pl_shader_obj *dither_state;
     const struct ra_tex *main_scale_fbo;
+    const struct ra_tex *deband_fbos[PLANE_COUNT];
     struct sampler samplers[SCALER_COUNT];
     struct sampler *osd_samplers;
     int num_osd_samplers;
@@ -166,6 +169,8 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
 
     // Free all intermediate FBOs
     ra_tex_destroy(rr->ra, &rr->main_scale_fbo);
+    for (int i = 0; i < PL_ARRAY_SIZE(rr->deband_fbos); i++)
+        ra_tex_destroy(rr->ra, &rr->deband_fbos[i]);
 
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
@@ -358,6 +363,41 @@ direct:
     pl_shader_sample_direct(sh, src);
 }
 
+static void deband_plane(struct pl_renderer *rr, struct pl_plane *plane,
+                         const struct ra_tex **fbo,
+                         const struct pl_render_params *params)
+{
+    if (!rr->fbofmt || rr->disable_debanding || !params->deband_params)
+        return;
+
+    const struct ra_tex *tex = plane->texture;
+    if (tex->params.sample_mode != RA_TEX_SAMPLE_LINEAR) {
+        PL_WARN(rr, "Debanding requires uploaded textures to be linearly "
+                "sampleable (params.sample_mode = RA_TEX_SAMPLE_LINEAR)! "
+                "Disabling debanding..");
+        rr->disable_debanding = true;
+        return;
+    }
+
+    struct pl_shader *sh = pl_dispatch_begin(rr->dp);
+    pl_shader_deband(sh, tex, params->deband_params);
+
+    struct img img = {
+        .sh = sh,
+        .w  = tex->params.w,
+        .h  = tex->params.h,
+    };
+
+    const struct ra_tex *new = finalize_img(rr, &img, rr->fbofmt, fbo);
+    if (!new) {
+        PL_ERR(rr, "Failed dispatching debanding shader.. disabling debanding!");
+        rr->disable_debanding = true;
+        return;
+    }
+
+    plane->texture = new;
+}
+
 // This scales and merges all of the source images, and initializes the cur_img.
 static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_image *image,
@@ -380,11 +420,15 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     // First of all, we have to pick a "reference" plane for alignment.
     // This should ideally be the plane that most closely matches the target
     // image size
-    const struct pl_plane *refplane = NULL;
+    struct pl_plane planes[4];
+    const struct pl_plane *refplane = NULL; // points to one of `planes`
     int best_diff, best_off;
 
+    pl_assert(image->num_planes < PLANE_COUNT);
     for (int i = 0; i < image->num_planes; i++) {
-        const struct pl_plane *plane = &image->planes[i];
+        struct pl_plane *plane = &planes[i];
+        *plane = image->planes[i];
+
         const struct ra_tex *tex = plane->texture;
         int diff = PL_MAX(abs(tex->params.w - image->width),
                           abs(tex->params.h - image->height));
@@ -407,9 +451,9 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     bool has_alpha = false;
 
     for (int i = 0; i < image->num_planes; i++) {
-        const struct pl_plane *plane = &image->planes[i];
         struct pl_shader *psh = pl_dispatch_begin(rr->dp);
-        pl_assert(refplane);
+        struct pl_plane *plane = &planes[i];
+        deband_plane(rr, plane, &rr->deband_fbos[i], params);
 
         // Compute the source shift/scale relative to the reference size
         float pw = plane->texture->params.w,
@@ -440,6 +484,9 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             },
         };
 
+        // FIXME: in theory, we could reuse the debanding result from
+        // `deband_plane` if available, instead of having to dispatch a no-op
+        // shader, for trivial sampling cases (no scaling or shifting)
         dispatch_sampler(rr, psh, PL_MIN(rx, ry), &rr->samplers[i], params, &src);
 
         ident_t sub = sh_subpass(sh, psh);
