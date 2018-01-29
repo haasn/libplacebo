@@ -230,12 +230,12 @@ static bool filter_compat(const struct pl_filter *filter, float inv_scale,
 }
 
 // Subroutine for computing and adding an individual texel contribution
-// If planar is false, samples directly
-// If planar is true, takes the pixel from inX[idx] where X is the component and
-// `idx` must be defined by the caller
+// If `in` is NULL, samples directly
+// If `in` is set, takes the pixel from inX[idx] where X is the component,
+// `in` is the given identifier, and `idx` must be defined by the caller
 static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
                          ident_t tex, ident_t lut, int x, int y, int comps,
-                         bool planar)
+                         ident_t in)
 {
     // Since we can't know the subpixel position in advance, assume a
     // worst case scenario
@@ -257,9 +257,9 @@ static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
          "wsum += w;          \n",
          lut, filter->radius);
 
-    if (planar) {
+    if (in) {
         for (int n = 0; n < comps; n++)
-            GLSL("color[%d] += w * in%d[idx];\n", n, n);
+            GLSL("color[%d] += w * %s%d[idx];\n", n, in, n);
     } else {
         GLSL("in0 = texture(%s, base + pt * vec2(%d.0, %d.0)); \n"
              "color += vec4(w) * in0;                          \n",
@@ -392,6 +392,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     int iw = (int) ceil(bw / ratio_x) + padding + 1,
         ih = (int) ceil(bh / ratio_y) + padding + 1;
 
+    ident_t in = NULL;
     int shmem_req = iw * ih * comps * sizeof(float);
     if (has_compute && sh_try_compute(sh, bw, bh, false, shmem_req)) {
         // Compute shader kernel
@@ -406,9 +407,10 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
              "c = texture(%s, wbase + pt * vec2(x - %d, y - %d));           \n",
              ih, bh, iw, bw, src_tex, offset, offset);
 
+        in = sh_fresh(sh, "in");
         for (int c = 0; c < comps; c++) {
-            GLSLH("shared float in%d[%d];   \n", c, ih * iw);
-            GLSL("in%d[%d * y + x] = c[%d]; \n", c, iw, c);
+            GLSLH("shared float %s%d[%d];   \n", in, c, ih * iw);
+            GLSL("%s%d[%d * y + x] = c[%d]; \n", in, c, iw, c);
         }
 
         GLSL("}}                    \n"
@@ -420,7 +422,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
             for (int x = 1 - bound; x <= bound; x++) {
                 GLSL("idx = %d * rel.y + rel.x + %d;\n",
                      iw, iw * (y + offset) + x + offset);
-                polar_sample(sh, obj->filter, src_tex, lut, x, y, comps, true);
+                polar_sample(sh, obj->filter, src_tex, lut, x, y, comps, in);
             }
         }
     } else {
@@ -450,7 +452,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
                     for (int yy = y; yy <= bound && yy <= y + 1; yy++) {
                         for (int xx = x; xx <= bound && xx <= x + 1; xx++) {
                             polar_sample(sh, obj->filter, src_tex, lut,
-                                         xx, yy, comps, false);
+                                         xx, yy, comps, NULL);
                         }
                     }
                     continue; // next group of 4
@@ -473,7 +475,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
 
                     GLSL("idx = %d;\n", p);
                     polar_sample(sh, obj->filter, src_tex, lut,
-                                 x+xo[p], y+yo[p], comps, true);
+                                 x+xo[p], y+yo[p], comps, "in");
                 }
             }
         }
