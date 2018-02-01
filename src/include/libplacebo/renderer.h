@@ -200,6 +200,15 @@ struct pl_image {
     // If the user can't ensure the uniqueness of this signature for whatever
     // reason, they must set `pl_render_params.skip_redraw_caching`, in which
     // case the contents of this field are ignored.
+    //
+    // NOTE: Re-using the same `signature` also requires that the contents of
+    // the planes (plane[i].texture) as well as any overlays has not changed
+    // since the previous usage. In other words, touching the texture in any
+    // way using the ra_tex_* APIs and then trying to re-use them for the same
+    // signature, or trying to re-use the same signature with different
+    // textures, is undefined behavior. (It's the *contents* that matter here,
+    // the actual texture object can be a different one, as long as the
+    // contents and parameters are the same)
     uint64_t signature;
 
     // Each frame is split up into some number of planes, each of which may
