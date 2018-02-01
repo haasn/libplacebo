@@ -221,7 +221,7 @@ static void render_frame(const struct ra_swapchain_frame *frame)
     pl_render_target_from_swapchain(&target, frame);
 
     const struct ra_tex *osd = osd_plane.texture;
-        if (osd) {
+    if (osd) {
         target.num_overlays = 1;
         target.overlays = &(struct pl_overlay) {
             .plane      = osd_plane,

@@ -363,6 +363,115 @@ direct:
     pl_shader_sample_direct(sh, src);
 }
 
+static void draw_overlays(struct pl_renderer *rr, const struct ra_tex *fbo,
+                          const struct pl_overlay *overlays, int num,
+                          struct pl_color_space color, bool use_sigmoid,
+                          struct pl_transform2x2 *scale,
+                          const struct pl_render_params *params)
+{
+    if (num <= 0 || rr->disable_overlay)
+        return;
+
+    enum ra_fmt_caps caps = fbo->params.format->caps;
+    if (!rr->disable_blending && !(caps & RA_FMT_CAP_BLENDABLE)) {
+        PL_WARN(rr, "Trying to draw an overlay to a non-blendable target. "
+                "Alpha blending is disabled, results may be incorrect!");
+        rr->disable_blending = true;
+    }
+
+    while (num > rr->num_osd_samplers) {
+        TARRAY_APPEND(rr, rr->osd_samplers, rr->num_osd_samplers,
+                      (struct sampler) {0});
+    }
+
+    for (int n = 0; n < num; n++) {
+        const struct pl_overlay *ol = &overlays[n];
+        const struct pl_plane *plane = &ol->plane;
+        const struct ra_tex *tex = plane->texture;
+
+        struct pl_rect2d rect = ol->rect;
+        if (scale) {
+            float v0[2] = { rect.x0, rect.y0 };
+            float v1[2] = { rect.x1, rect.y1 };
+            pl_transform2x2_apply(scale, v0);
+            pl_transform2x2_apply(scale, v1);
+            rect = (struct pl_rect2d) { v0[0], v0[1], v1[0], v1[1] };
+        }
+
+        struct pl_sample_src src = {
+            .tex        = tex,
+            .components = ol->mode == PL_OVERLAY_MONOCHROME ? 1 : plane->components,
+            .new_w      = abs(pl_rect_w(rect)),
+            .new_h      = abs(pl_rect_h(rect)),
+            .rect = {
+                -plane->shift_x,
+                -plane->shift_y,
+                tex->params.w - plane->shift_x,
+                tex->params.h - plane->shift_y,
+            },
+        };
+
+        float rx = (float) src.new_w / src.tex->params.w,
+              ry = (float) src.new_h / src.tex->params.h;
+        float ratio = PL_MIN(fabs(rx), fabs(ry));
+
+        struct sampler *sampler = &rr->osd_samplers[n];
+        if (params->disable_overlay_sampling)
+            sampler = NULL;
+
+        struct pl_shader *sh = pl_dispatch_begin(rr->dp);
+        dispatch_sampler(rr, sh, ratio, sampler, params, &src);
+
+        GLSL("vec4 osd_color;\n");
+        for (int c = 0; c < src.components; c++) {
+            if (plane->component_mapping[c] < 0)
+                continue;
+            GLSL("osd_color[%d] = color[%d];\n", plane->component_mapping[c],
+                 tex->params.format->sample_order[c]);
+        }
+
+        switch (ol->mode) {
+        case PL_OVERLAY_NORMAL:
+            GLSL("color = osd_color;\n");
+            break;
+        case PL_OVERLAY_MONOCHROME:
+            GLSL("color.a = osd_color[0];\n");
+            GLSL("color.rgb = %s;\n", sh_var(sh, (struct pl_shader_var) {
+                .var  = ra_var_vec3("base_color"),
+                .data = &ol->base_color,
+                .dynamic = true,
+            }));
+            break;
+        default: abort();
+        }
+
+        struct pl_color_repr repr = ol->repr;
+        pl_shader_decode_color(sh, &repr, NULL);
+        pl_shader_color_map(sh, params->color_map_params, ol->color, color,
+                            NULL, false);
+
+        if (use_sigmoid)
+            pl_shader_sigmoidize(sh, params->sigmoid_params);
+
+        static const struct ra_blend_params blend_params = {
+            .src_rgb = RA_BLEND_SRC_ALPHA,
+            .dst_rgb = RA_BLEND_ONE_MINUS_SRC_ALPHA,
+            .src_alpha = RA_BLEND_ONE,
+            .dst_alpha = RA_BLEND_ONE_MINUS_SRC_ALPHA,
+        };
+
+        const struct ra_blend_params *blend = &blend_params;
+        if (rr->disable_blending)
+            blend = NULL;
+
+        if (!pl_dispatch_finish(rr->dp, &sh, fbo, &rect, blend)) {
+            PL_ERR(rr, "Failed rendering overlay texture!");
+            rr->disable_overlay = true;
+            return;
+        }
+    }
+}
+
 static void deband_plane(struct pl_renderer *rr, struct pl_plane *plane,
                          const struct ra_tex **fbo,
                          const struct pl_render_params *params)
@@ -545,13 +654,14 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     float rx = target_w / fabs(pl_rect_w(image->src_rect)),
           ry = target_h / fabs(pl_rect_h(image->src_rect));
 
-    if (rx == 1.0 && ry == 1.0 && !img->offx && !img->offy) {
-        PL_TRACE(rr, "Skipping main scaler (would be no-op)");
+    if (!rr->fbofmt) {
+        PL_TRACE(rr, "Skipping main scaler (no FBOs)");
         return true;
     }
 
-    if (!rr->fbofmt) {
-        PL_TRACE(rr, "Skipping main scaler (no FBOs)");
+    bool need_osd = image->num_overlays > 0;
+    if (rx == 1.0 && ry == 1.0 && !img->offx && !img->offy && !need_osd) {
+        PL_TRACE(rr, "Skipping main scaler (would be no-op)");
         return true;
     }
 
@@ -590,10 +700,12 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         },
     };
 
-    // TODO: render overlay on top of the image
-
     if (!src.tex)
         return false;
+
+    // Draw overlay on top of the intermediate image if needed
+    draw_overlays(rr, src.tex, image->overlays, image->num_overlays,
+                  img->color, use_sigmoid, NULL, params);
 
     float ratio = PL_MIN(fabs(rx), fabs(ry));
     struct pl_shader *sh = pl_dispatch_begin(rr->dp);
@@ -653,101 +765,6 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
                               &target->dst_rect, NULL);
 }
 
-static void pass_draw_overlay(struct pl_renderer *rr,
-                              const struct pl_render_target *target,
-                              const struct pl_render_params *params)
-{
-    if (!target->num_overlays || rr->disable_overlay)
-        return;
-
-    enum ra_fmt_caps caps = target->fbo->params.format->caps;
-    if (!rr->disable_blending && !(caps & RA_FMT_CAP_BLENDABLE)) {
-        PL_WARN(rr, "Trying to draw an overlay to a non-blendable target. "
-                "Alpha blending is disabled, results may be incorrect!");
-        rr->disable_blending = true;
-    }
-
-    while (target->num_overlays > rr->num_osd_samplers) {
-        TARRAY_APPEND(rr, rr->osd_samplers, rr->num_osd_samplers,
-                      (struct sampler) {0});
-    }
-
-    for (int n = 0; n < target->num_overlays; n++) {
-        const struct pl_overlay *ol = &target->overlays[n];
-        const struct pl_plane *plane = &ol->plane;
-        const struct ra_tex *tex = plane->texture;
-
-        struct pl_sample_src src = {
-            .tex        = tex,
-            .components = ol->mode == PL_OVERLAY_MONOCHROME ? 1 : plane->components,
-            .new_w      = abs(pl_rect_w(ol->rect)),
-            .new_h      = abs(pl_rect_h(ol->rect)),
-            .rect = {
-                -plane->shift_x,
-                -plane->shift_y,
-                tex->params.w - plane->shift_x,
-                tex->params.h - plane->shift_y,
-            },
-        };
-
-        float rx = (float) src.new_w / src.tex->params.w,
-              ry = (float) src.new_h / src.tex->params.h;
-        float ratio = PL_MIN(fabs(rx), fabs(ry));
-
-        struct sampler *sampler = &rr->osd_samplers[n];
-        if (params->disable_overlay_sampling)
-            sampler = NULL;
-
-        struct pl_shader *sh = pl_dispatch_begin(rr->dp);
-        dispatch_sampler(rr, sh, ratio, sampler, params, &src);
-
-        GLSL("vec4 osd_color;\n");
-        for (int c = 0; c < src.components; c++) {
-            if (plane->component_mapping[c] < 0)
-                continue;
-            GLSL("osd_color[%d] = color[%d];\n", plane->component_mapping[c],
-                 tex->params.format->sample_order[c]);
-        }
-
-        switch (ol->mode) {
-        case PL_OVERLAY_NORMAL:
-            GLSL("color = osd_color;\n");
-            break;
-        case PL_OVERLAY_MONOCHROME:
-            GLSL("color.a = osd_color[0];\n");
-            GLSL("color.rgb = %s;\n", sh_var(sh, (struct pl_shader_var) {
-                .var  = ra_var_vec3("base_color"),
-                .data = &ol->base_color,
-                .dynamic = true,
-            }));
-            break;
-        default: abort();
-        }
-
-        struct pl_color_repr repr = ol->repr;
-        pl_shader_decode_color(sh, &repr, NULL);
-        pl_shader_color_map(sh, params->color_map_params, ol->color,
-                            target->color, NULL, false);
-
-        static const struct ra_blend_params blend_params = {
-            .src_rgb = RA_BLEND_SRC_ALPHA,
-            .dst_rgb = RA_BLEND_ONE_MINUS_SRC_ALPHA,
-            .src_alpha = RA_BLEND_ONE,
-            .dst_alpha = RA_BLEND_ONE_MINUS_SRC_ALPHA,
-        };
-
-        const struct ra_blend_params *blend = &blend_params;
-        if (rr->disable_blending)
-            blend = NULL;
-
-        if (!pl_dispatch_finish(rr->dp, &sh, target->fbo, &ol->rect, blend)) {
-            PL_ERR(rr, "Failed rendering overlay texture!");
-            rr->disable_overlay = true;
-            return;
-        }
-    }
-}
-
 static void fix_rects(struct pl_image *image, struct pl_render_target *target)
 {
     pl_assert(image->width && image->height);
@@ -805,7 +822,28 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     if (!pass_output_target(rr, &pass, &target, params))
         goto error;
 
-    pass_draw_overlay(rr, &target, params);
+    // If we don't have FBOs available, simulate the on-image overlays at
+    // this stage
+    if (image.num_overlays > 0 && !rr->fbofmt) {
+        float rx = pl_rect_w(target.dst_rect) / pl_rect_w(image.src_rect),
+              ry = pl_rect_h(target.dst_rect) / pl_rect_h(image.src_rect);
+
+        struct pl_transform2x2 scale = {
+            .mat = {{{ rx, 0.0 }, { 0.0, ry }}},
+            .c = {
+                target.dst_rect.x0 - image.src_rect.x0 * rx,
+                target.dst_rect.y0 - image.src_rect.y0 * ry
+            },
+        };
+
+        draw_overlays(rr, target.fbo, image.overlays, image.num_overlays,
+                      target.color, false, &scale, params);
+    }
+
+    // Draw the final output overlays
+    draw_overlays(rr, target.fbo, target.overlays, target.num_overlays,
+                  target.color, false, NULL, params);
+
     return true;
 
 error:
