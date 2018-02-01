@@ -966,12 +966,25 @@ void ra_pass_run(const struct ra *ra, const struct ra_pass_run_params *params)
         pl_assert(ra_tex_params_dimension(tex->params) == 2);
         pl_assert(ra_tex_params_compat(tex->params, pass->params.target_dummy.params));
         pl_assert(tex->params.renderable);
-        struct pl_rect2d vp = new.viewport;
-        struct pl_rect2d sc = new.scissors;
-        pl_assert(pl_rect_w(vp) > 0);
-        pl_assert(pl_rect_h(vp) > 0);
-        pl_assert(pl_rect_w(sc) > 0);
-        pl_assert(pl_rect_h(sc) > 0);
+        struct pl_rect2d *vp = &new.viewport;
+        struct pl_rect2d *sc = &new.scissors;
+
+        // Constrain the scissors to the target dimension (to sanitize the
+        // underlying graphics API calls)
+        sc->x0 = PL_MAX(0, PL_MIN(tex->params.w, sc->x0));
+        sc->y0 = PL_MAX(0, PL_MIN(tex->params.h, sc->y0));
+        sc->x1 = PL_MAX(0, PL_MIN(tex->params.w, sc->x1));
+        sc->y1 = PL_MAX(0, PL_MIN(tex->params.h, sc->y1));
+
+        // Scissors wholly outside target -> silently drop pass (also needed
+        // to ensure we don't cause UB by specifying invalid scissors)
+        if (!pl_rect_w(*sc) || !pl_rect_h(*sc))
+            return;
+
+        pl_assert(pl_rect_w(*vp) > 0);
+        pl_assert(pl_rect_h(*vp) > 0);
+        pl_assert(pl_rect_w(*sc) > 0);
+        pl_assert(pl_rect_h(*sc) > 0);
         break;
     }
     case RA_PASS_COMPUTE:
