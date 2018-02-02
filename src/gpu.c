@@ -373,7 +373,7 @@ bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
     if (*tex && pl_tex_params_eq((*tex)->params, *params))
         return true;
 
-    PL_DEBUG(gpu, "pl_tex_recreate: %dx%dx%d", params->w, params->h,params->d);
+    PL_INFO(gpu, "(Re)creating %dx%dx%d texture", params->w, params->h, params->d);
     pl_tex_destroy(gpu, tex);
     *tex = pl_tex_create(gpu, params);
 
