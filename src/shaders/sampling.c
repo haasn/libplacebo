@@ -33,7 +33,7 @@ void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
         return;
     }
 
-    if (!sh_require(sh, PL_SHADER_SIG_NONE, ra_tex->params.w, ra_tex->params.h))
+    if (!sh_require(sh, PL_SHADER_SIG_NONE, 0, 0))
         return;
 
     GLSL("vec4 color;\n");
@@ -97,7 +97,8 @@ void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
 // Helper function to compute the src/dst sizes and upscaling ratios
 static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
                       ident_t *src_tex, ident_t *pos, ident_t *size, ident_t *pt,
-                      float *ratio_x, float *ratio_y, int *components)
+                      float *ratio_x, float *ratio_y, int *components,
+                      bool resizeable)
 {
     float src_w = pl_rect_w(src->rect);
     float src_h = pl_rect_h(src->rect);
@@ -117,6 +118,8 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
         *components = PL_DEF(src->components, fmt->num_components);
     }
 
+    if (resizeable)
+        out_w = out_h = 0;
     if (!sh_require(sh, PL_SHADER_SIG_NONE, out_w, out_h))
         return false;
 
@@ -134,12 +137,8 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
 bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *src)
 {
     ident_t tex, pos;
-    if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, NULL))
+    if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, NULL, true))
         return false;
-
-    // Special-case: this shader can be freely resized
-    sh->output_w = 0;
-    sh->output_h = 0;
 
     GLSL("// pl_shader_sample_direct    \n"
          "vec4 color = texture(%s, %s); \n",
@@ -175,7 +174,7 @@ bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *
 
     ident_t tex, pos, size, pt;
     float rx, ry;
-    if (!setup_src(sh, src, &tex, &pos, &size, &pt, &rx, &ry, NULL))
+    if (!setup_src(sh, src, &tex, &pos, &size, &pt, &rx, &ry, NULL, true))
         return false;
 
     if (rx < 1 || ry < 1) {
@@ -317,9 +316,9 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     }
 
     int comps;
-    float ratio_x, ratio_y;
+    float rx, ry;
     ident_t src_tex, pos, size, pt;
-    if (!setup_src(sh, src, &src_tex, &pos, &size, &pt, &ratio_x, &ratio_y, &comps))
+    if (!setup_src(sh, src, &src_tex, &pos, &size, &pt, &rx, &ry, &comps, false))
         return false;
 
     struct sh_sampler_obj *obj;
@@ -328,7 +327,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     if (!obj)
         return false;
 
-    float inv_scale = 1.0 / PL_MIN(ratio_x, ratio_y);
+    float inv_scale = 1.0 / PL_MIN(rx, ry);
     inv_scale = PL_MAX(inv_scale, 1.0);
 
     if (params->no_widening)
@@ -389,8 +388,8 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
 
     // We need to sample everything from base_min to base_max, so make sure
     // we have enough room in shmem
-    int iw = (int) ceil(bw / ratio_x) + padding + 1,
-        ih = (int) ceil(bh / ratio_y) + padding + 1;
+    int iw = (int) ceil(bw / rx) + padding + 1,
+        ih = (int) ceil(bh / ry) + padding + 1;
 
     ident_t in = NULL;
     int shmem_req = iw * ih * comps * sizeof(float);
@@ -539,8 +538,11 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
     int comps;
     float ratio[2];
     ident_t src_tex, pos, size, pt;
-    if (!setup_src(sh, &srcfix, &src_tex, &pos, &size, &pt, &ratio[1], &ratio[0], &comps))
+    if (!setup_src(sh, &srcfix, &src_tex, &pos, &size, &pt, &ratio[1], &ratio[0],
+                   &comps, false))
+    {
         return false;
+    }
 
     // We can store a separate sampler object per dimension, so dispatch the
     // right one. This is needed for two reasons:
