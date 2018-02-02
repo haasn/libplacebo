@@ -19,7 +19,7 @@
 #define LIBPLACEBO_VULKAN_H_
 
 #include <vulkan/vulkan.h>
-#include <libplacebo/ra.h>
+#include <libplacebo/gpu.h>
 #include <libplacebo/swapchain.h>
 
 // Structure representing a VkInstance. Using this is not required.
@@ -50,9 +50,9 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
 
 void pl_vk_inst_destroy(const struct pl_vk_inst **inst);
 
-// Structure representing the actual vulkan device and associated RA implementation
+// Structure representing the actual vulkan device and associated GPU instance
 struct pl_vulkan {
-    const struct ra *ra;
+    const struct pl_gpu *gpu;
     void *priv;
 
     // The vulkan objects in use. The user may use this for their own purposes,
@@ -127,7 +127,7 @@ struct pl_vulkan_params {
 extern const struct pl_vulkan_params pl_vulkan_default_params;
 
 // Creates a new vulkan device based on the given parameters and initializes
-// a new RA. This function will internally initialize a VkDevice. There is
+// a new GPU. This function will internally initialize a VkDevice. There is
 // currently no way to share a vulkan device with the caller. If `params` is
 // left as NULL, it defaults to &pl_vulkan_default_params.
 const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
@@ -162,7 +162,7 @@ struct pl_vulkan_swapchain_params {
 
     // Allow up to N in-flight frames. This essentially controls how many
     // rendering commands may be queued up at the same time. See the
-    // documentation for `ra_swapchain_get_latency` for more information. For
+    // documentation for `pl_swapchain_get_latency` for more information. For
     // vulkan specifically, we are only able to wait until the GPU has finished
     // rendering a frame - we are unable to wait until the display has actually
     // finished displaying it. So this only provides a rough guideline.
@@ -174,7 +174,7 @@ struct pl_vulkan_swapchain_params {
 // function requires that the vulkan device was created with the
 // VK_KHR_swapchain extension. The easiest way of accomplishing this is to set
 // the `pl_vulkan_params.surface` explicitly at creation time.
-const struct ra_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *vk,
+const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *vk,
                               const struct pl_vulkan_swapchain_params *params);
 
 #endif // LIBPLACEBO_VULKAN_H_

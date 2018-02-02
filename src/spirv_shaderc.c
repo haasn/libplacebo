@@ -66,7 +66,7 @@ static bool shaderc_init(struct spirv_compiler *spirv)
     int ver, rev;
     shaderc_get_spv_version(&ver, &rev);
     spirv->compiler_version = ver * 100 + rev;
-    spirv->glsl = (struct ra_glsl_desc) {
+    spirv->glsl = (struct pl_glsl_desc) {
         .version = 450, // this is impossible to query, so hard-code it
         .vulkan  = true,
     };

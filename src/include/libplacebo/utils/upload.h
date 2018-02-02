@@ -17,7 +17,7 @@
 
 #include <stdint.h>
 
-#include <libplacebo/ra.h>
+#include <libplacebo/gpu.h>
 #include <libplacebo/renderer.h>
 
 #ifndef LIBPLACEBO_UPLOAD_H_
@@ -29,7 +29,7 @@
 
 // Description of the host representation of an image plane
 struct pl_plane_data {
-    enum ra_fmt_type type; // meaning of the data (must not be UINT or SINT)
+    enum pl_fmt_type type; // meaning of the data (must not be UINT or SINT)
     int width, height;     // dimensions of the plane
     int component_size[4]; // size in bits of each coordinate
     int component_pad[4];  // ignored bits preceding each component
@@ -81,11 +81,11 @@ struct pl_plane_data {
 // result is undefined and probably not useful.
 void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4]);
 
-// Helper function to find a suitable `ra_fmt` based on a pl_plane_data's
+// Helper function to find a suitable `pl_fmt` based on a pl_plane_data's
 // requirements. This is called internally by `pl_upload_plane`, but it's
 // exposed to users both as a convenience and so they may pre-emptively check
 // if a format would be supported without actually having to attempt the upload.
-const struct ra_fmt *pl_plane_find_fmt(const struct ra *ra, int out_map[4],
+const struct pl_fmt *pl_plane_find_fmt(const struct pl_gpu *gpu, int out_map[4],
                                        const struct pl_plane_data *data);
 
 // Upload an image plane to a texture, and update the resulting `pl_plane`
@@ -98,7 +98,7 @@ const struct ra_fmt *pl_plane_find_fmt(const struct ra *ra, int out_map[4],
 //
 // Important: The user must (eventually) destroy `plane->texture` before
 // discarding the struct, even if this function returns false!
-bool pl_upload_plane(const struct ra *ra, struct pl_plane *plane,
+bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *plane,
                      const struct pl_plane_data *data);
 
 #endif // LIBPLACEBO_UPLOAD_H_

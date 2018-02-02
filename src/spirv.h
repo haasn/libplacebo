@@ -35,7 +35,7 @@ struct spirv_compiler {
 
     // implementation-specific fields
     void *priv;
-    struct ra_glsl_desc glsl;      // supported GLSL capabilities
+    struct pl_glsl_desc glsl;      // supported GLSL capabilities
     int compiler_version;          // for cache invalidation, may be left as 0
 };
 

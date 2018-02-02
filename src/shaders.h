@@ -22,7 +22,7 @@
 
 #include "common.h"
 #include "context.h"
-#include "ra.h"
+#include "gpu.h"
 
 // This represents an identifier (e.g. name of function, uniform etc.) for
 // a shader resource. The generated identifiers are immutable, but only live
@@ -39,7 +39,7 @@ enum pl_shader_buf {
 struct pl_shader {
     // Read-only fields
     struct pl_context *ctx;
-    const struct ra *ra;
+    const struct pl_gpu *gpu;
 
     // Internal state
     struct ta_ref *tmp;
@@ -87,7 +87,7 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
 //
 // Note that for e.g. compute shaders, the vec2 out_pos might be a macro that
 // expands to an expensive computation, and should be cached by the user.
-ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
+ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
                 const char *name, const struct pl_rect2df *rect,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt);
 
@@ -118,15 +118,15 @@ enum pl_shader_obj_type {
 
 struct pl_shader_obj {
     enum pl_shader_obj_type type;
-    const struct ra *ra;
-    void (*uninit)(const struct ra *ra, void *priv);
+    const struct pl_gpu *gpu;
+    void (*uninit)(const struct pl_gpu *gpu, void *priv);
     void *priv;
 };
 
 // Returns (*ptr)->priv, or NULL on failure
 void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
                      enum pl_shader_obj_type type, size_t priv_size,
-                     void (*uninit)(const struct ra *ra, void *priv));
+                     void (*uninit)(const struct pl_gpu *gpu, void *priv));
 
 #define SH_OBJ(sh, ptr, type, t, uninit) \
     ((t*) sh_require_obj(sh, ptr, type, sizeof(t), uninit))

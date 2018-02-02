@@ -6,10 +6,10 @@
 #define NUM_FBOS 10
 #define BENCH_DUR 3
 
-static const struct ra_tex *create_test_img(const struct ra *ra)
+static const struct pl_tex *create_test_img(const struct pl_gpu *gpu)
 {
-    const struct ra_fmt *fmt;
-    fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 4, 16, 32, RA_FMT_CAP_LINEAR);
+    const struct pl_fmt *fmt;
+    fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32, PL_FMT_CAP_LINEAR);
     REQUIRE(fmt);
 
     int cube_stride = TEX_SIZE / CUBE_SIZE;
@@ -35,12 +35,12 @@ static const struct ra_tex *create_test_img(const struct ra *ra)
         }
     }
 
-    const struct ra_tex *tex = ra_tex_create(ra, &(struct ra_tex_params) {
+    const struct pl_tex *tex = pl_tex_create(gpu, &(struct pl_tex_params) {
         .format         = fmt,
         .w              = TEX_SIZE,
         .h              = TEX_SIZE,
         .sampleable     = true,
-        .sample_mode    = RA_TEX_SAMPLE_LINEAR,
+        .sample_mode    = PL_TEX_SAMPLE_LINEAR,
         .initial_data   = data,
     });
 
@@ -50,29 +50,29 @@ static const struct ra_tex *create_test_img(const struct ra *ra)
 }
 
 struct fbo {
-    const struct ra_buf *buf;
-    const struct ra_tex *tex;
+    const struct pl_buf *buf;
+    const struct pl_tex *tex;
 };
 
-static void create_fbos(const struct ra *ra, struct fbo fbos[NUM_FBOS])
+static void create_fbos(const struct pl_gpu *gpu, struct fbo fbos[NUM_FBOS])
 {
-    const struct ra_fmt *fmt;
-    fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 4, 16, 0, RA_FMT_CAP_RENDERABLE);
+    const struct pl_fmt *fmt;
+    fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 0, PL_FMT_CAP_RENDERABLE);
     REQUIRE(fmt);
 
     for (int i = 0; i < NUM_FBOS; i++) {
-        fbos[i].tex = ra_tex_create(ra, &(struct ra_tex_params) {
+        fbos[i].tex = pl_tex_create(gpu, &(struct pl_tex_params) {
             .format         = fmt,
             .w              = TEX_SIZE,
             .h              = TEX_SIZE,
             .renderable     = true,
             .host_readable  = true,
-            .storable       = !!(fmt->caps & RA_FMT_CAP_STORABLE),
+            .storable       = !!(fmt->caps & PL_FMT_CAP_STORABLE),
         });
         REQUIRE(fbos[i].tex);
 
-        fbos[i].buf = ra_buf_create(ra, &(struct ra_buf_params) {
-            .type           = RA_BUF_TEX_TRANSFER,
+        fbos[i].buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+            .type           = PL_BUF_TEX_TRANSFER,
             .size           = fmt->texel_size,
             .host_readable  = true,
         });
@@ -81,21 +81,21 @@ static void create_fbos(const struct ra *ra, struct fbo fbos[NUM_FBOS])
 }
 
 typedef void (*bench_fn)(struct pl_shader *sh, struct pl_shader_obj **state,
-                         const struct ra_tex *src);
+                         const struct pl_tex *src);
 
-static void run_bench(const struct ra *ra, struct pl_dispatch *dp,
-                      struct pl_shader_obj **state, const struct ra_tex *src,
+static void run_bench(const struct pl_gpu *gpu, struct pl_dispatch *dp,
+                      struct pl_shader_obj **state, const struct pl_tex *src,
                       struct fbo fbo, bench_fn bench)
 {
     // Hard block until the FBO is free
-    while (ra_buf_poll(ra, fbo.buf, 1000000)); // 1 ms
+    while (pl_buf_poll(gpu, fbo.buf, 1000000)); // 1 ms
 
     pl_dispatch_reset_frame(dp);
     struct pl_shader *sh = pl_dispatch_begin(dp);
     bench(sh, state, src);
     pl_dispatch_finish(dp, &sh, fbo.tex, NULL, NULL);
 
-    bool ok = ra_tex_download(ra, &(struct ra_tex_transfer_params) {
+    bool ok = pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
         .tex        = fbo.tex,
         .buf        = fbo.buf,
         // Transfer a single pixel:
@@ -108,18 +108,18 @@ static void run_bench(const struct ra *ra, struct pl_dispatch *dp,
     REQUIRE(ok);
 }
 
-static void benchmark(const struct ra *ra, const char *name, bench_fn bench)
+static void benchmark(const struct pl_gpu *gpu, const char *name, bench_fn bench)
 {
-    struct pl_dispatch *dp = pl_dispatch_create(ra->ctx, ra);
+    struct pl_dispatch *dp = pl_dispatch_create(gpu->ctx, gpu);
     struct pl_shader_obj *state = NULL;
-    const struct ra_tex *src = create_test_img(ra);
+    const struct pl_tex *src = create_test_img(gpu);
     struct fbo fbos[NUM_FBOS] = {0};
-    create_fbos(ra, fbos);
+    create_fbos(gpu, fbos);
 
     // Run the benchmark and flush+block once to force shader compilation etc.
-    run_bench(ra, dp, &state, src, fbos[0], bench);
-    ra_flush(ra);
-    while (ra_buf_poll(ra, fbos[0].buf, 1000000000)); // 1 s
+    run_bench(gpu, dp, &state, src, fbos[0], bench);
+    pl_gpu_flush(gpu);
+    while (pl_buf_poll(gpu, fbos[0].buf, 1000000000)); // 1 s
 
     // Perform the actual benchmark
     clock_t start = clock(), stop = {0};
@@ -128,7 +128,7 @@ static void benchmark(const struct ra *ra, const char *name, bench_fn bench)
 
     do {
         frames++;
-        run_bench(ra, dp, &state, src, fbos[index++], bench);
+        run_bench(gpu, dp, &state, src, fbos[index++], bench);
         index %= NUM_FBOS;
         stop = clock();
     } while (stop - start < BENCH_DUR * CLOCKS_PER_SEC);
@@ -139,16 +139,16 @@ static void benchmark(const struct ra *ra, const char *name, bench_fn bench)
 
     pl_shader_obj_destroy(&state);
     pl_dispatch_destroy(&dp);
-    ra_tex_destroy(ra, &src);
+    pl_tex_destroy(gpu, &src);
     for (int i = 0; i < NUM_FBOS; i++) {
-        ra_tex_destroy(ra, &fbos[i].tex);
-        ra_buf_destroy(ra, &fbos[i].buf);
+        pl_tex_destroy(gpu, &fbos[i].tex);
+        pl_buf_destroy(gpu, &fbos[i].buf);
     }
 }
 
 // List of benchmarks
 static void bench_bt2020c(struct pl_shader *sh, struct pl_shader_obj **state,
-                          const struct ra_tex *src)
+                          const struct pl_tex *src)
 {
     struct pl_color_repr repr = {
         .sys    = PL_COLOR_SYSTEM_BT_2020_C,
@@ -160,13 +160,13 @@ static void bench_bt2020c(struct pl_shader *sh, struct pl_shader_obj **state,
 }
 
 static void bench_deband(struct pl_shader *sh, struct pl_shader_obj **state,
-                         const struct ra_tex *src)
+                         const struct pl_tex *src)
 {
     pl_shader_deband(sh, src, NULL);
 }
 
 static void bench_deband_heavy(struct pl_shader *sh, struct pl_shader_obj **state,
-                               const struct ra_tex *src)
+                               const struct pl_tex *src)
 {
     pl_shader_deband(sh, src, &(struct pl_deband_params) {
         .iterations = 4,
@@ -177,19 +177,19 @@ static void bench_deband_heavy(struct pl_shader *sh, struct pl_shader_obj **stat
 }
 
 static void bench_bilinear(struct pl_shader *sh, struct pl_shader_obj **state,
-                          const struct ra_tex *src)
+                          const struct pl_tex *src)
 {
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
 }
 
 static void bench_bicubic(struct pl_shader *sh, struct pl_shader_obj **state,
-                          const struct ra_tex *src)
+                          const struct pl_tex *src)
 {
     pl_shader_sample_bicubic(sh, &(struct pl_sample_src) { .tex = src });
 }
 
 static void bench_dither_blue(struct pl_shader *sh, struct pl_shader_obj **state,
-                              const struct ra_tex *src)
+                              const struct pl_tex *src)
 {
     struct pl_dither_params params = pl_dither_default_params;
     params.method = PL_DITHER_BLUE_NOISE;
@@ -199,7 +199,7 @@ static void bench_dither_blue(struct pl_shader *sh, struct pl_shader_obj **state
 }
 
 static void bench_dither_white(struct pl_shader *sh, struct pl_shader_obj **state,
-                               const struct ra_tex *src)
+                               const struct pl_tex *src)
 {
     struct pl_dither_params params = pl_dither_default_params;
     params.method = PL_DITHER_WHITE_NOISE;
@@ -210,7 +210,7 @@ static void bench_dither_white(struct pl_shader *sh, struct pl_shader_obj **stat
 
 static void bench_dither_ordered_lut(struct pl_shader *sh,
                                      struct pl_shader_obj **state,
-                                     const struct ra_tex *src)
+                                     const struct pl_tex *src)
 {
     struct pl_dither_params params = pl_dither_default_params;
     params.method = PL_DITHER_ORDERED_LUT;
@@ -221,7 +221,7 @@ static void bench_dither_ordered_lut(struct pl_shader *sh,
 
 static void bench_dither_ordered_fix(struct pl_shader *sh,
                                      struct pl_shader_obj **state,
-                                     const struct ra_tex *src)
+                                     const struct pl_tex *src)
 {
     struct pl_dither_params params = pl_dither_default_params;
     params.method = PL_DITHER_ORDERED_FIXED;
@@ -231,7 +231,7 @@ static void bench_dither_ordered_fix(struct pl_shader *sh,
 }
 
 static void bench_polar(struct pl_shader *sh, struct pl_shader_obj **state,
-                        const struct ra_tex *src)
+                        const struct pl_tex *src)
 {
     struct pl_sample_filter_params params = {
         .filter = pl_filter_ewa_lanczos,
@@ -243,7 +243,7 @@ static void bench_polar(struct pl_shader *sh, struct pl_shader_obj **state,
 
 static void bench_polar_nocompute(struct pl_shader *sh,
                                   struct pl_shader_obj **state,
-                                  const struct ra_tex *src)
+                                  const struct pl_tex *src)
 {
     struct pl_sample_filter_params params = {
         .filter = pl_filter_ewa_lanczos,
@@ -256,7 +256,7 @@ static void bench_polar_nocompute(struct pl_shader *sh,
 
 
 static void bench_hdr_hable(struct pl_shader *sh, struct pl_shader_obj **state,
-                            const struct ra_tex *src)
+                            const struct pl_tex *src)
 {
     struct pl_color_map_params params = {
         .tone_mapping_algo = PL_TONE_MAPPING_HABLE,
@@ -268,7 +268,7 @@ static void bench_hdr_hable(struct pl_shader *sh, struct pl_shader_obj **state,
 }
 
 static void bench_hdr_mobius(struct pl_shader *sh, struct pl_shader_obj **state,
-                             const struct ra_tex *src)
+                             const struct pl_tex *src)
 {
     struct pl_color_map_params params = {
         .tone_mapping_algo = PL_TONE_MAPPING_MOBIUS,
@@ -280,7 +280,7 @@ static void bench_hdr_mobius(struct pl_shader *sh, struct pl_shader_obj **state,
 }
 
 static void bench_hdr_peak(struct pl_shader *sh, struct pl_shader_obj **state,
-                            const struct ra_tex *src)
+                            const struct pl_tex *src)
 {
     struct pl_color_map_params params = {
         .tone_mapping_algo = PL_TONE_MAPPING_CLIP,
@@ -293,7 +293,7 @@ static void bench_hdr_peak(struct pl_shader *sh, struct pl_shader_obj **state,
 }
 
 static void bench_hdr_desat(struct pl_shader *sh, struct pl_shader_obj **state,
-                            const struct ra_tex *src)
+                            const struct pl_tex *src)
 {
     struct pl_color_map_params params = {
         .tone_mapping_algo = PL_TONE_MAPPING_CLIP,
@@ -321,31 +321,31 @@ int main()
         return SKIP;
 
     printf("= Running benchmarks =\n");
-    benchmark(vk->ra, "bilinear", bench_bilinear);
-    benchmark(vk->ra, "bicubic", bench_bicubic);
-    benchmark(vk->ra, "deband", bench_deband);
-    benchmark(vk->ra, "deband_heavy", bench_deband_heavy);
+    benchmark(vk->gpu, "bilinear", bench_bilinear);
+    benchmark(vk->gpu, "bicubic", bench_bicubic);
+    benchmark(vk->gpu, "deband", bench_deband);
+    benchmark(vk->gpu, "deband_heavy", bench_deband_heavy);
 
     // Dithering algorithms
-    benchmark(vk->ra, "dither_blue", bench_dither_blue);
-    benchmark(vk->ra, "dither_white", bench_dither_white);
-    benchmark(vk->ra, "dither_ordered_lut", bench_dither_ordered_lut);
-    benchmark(vk->ra, "dither_ordered_fixed", bench_dither_ordered_fix);
+    benchmark(vk->gpu, "dither_blue", bench_dither_blue);
+    benchmark(vk->gpu, "dither_white", bench_dither_white);
+    benchmark(vk->gpu, "dither_ordered_lut", bench_dither_ordered_lut);
+    benchmark(vk->gpu, "dither_ordered_fixed", bench_dither_ordered_fix);
 
     // Polar sampling
-    benchmark(vk->ra, "polar", bench_polar);
-    if (vk->ra->caps & RA_CAP_COMPUTE)
-        benchmark(vk->ra, "polar_nocompute", bench_polar_nocompute);
+    benchmark(vk->gpu, "polar", bench_polar);
+    if (vk->gpu->caps & PL_GPU_CAP_COMPUTE)
+        benchmark(vk->gpu, "polar_nocompute", bench_polar_nocompute);
 
     // HDR tone mapping
-    benchmark(vk->ra, "hdr_hable", bench_hdr_hable);
-    benchmark(vk->ra, "hdr_mobius", bench_hdr_mobius);
-    benchmark(vk->ra, "hdr_desaturate", bench_hdr_desat);
-    if (vk->ra->caps & RA_CAP_COMPUTE)
-        benchmark(vk->ra, "hdr_peakdetect", bench_hdr_peak);
+    benchmark(vk->gpu, "hdr_hable", bench_hdr_hable);
+    benchmark(vk->gpu, "hdr_mobius", bench_hdr_mobius);
+    benchmark(vk->gpu, "hdr_desaturate", bench_hdr_desat);
+    if (vk->gpu->caps & PL_GPU_CAP_COMPUTE)
+        benchmark(vk->gpu, "hdr_peakdetect", bench_hdr_peak);
 
     // Misc stuff
-    benchmark(vk->ra, "bt2020c", bench_bt2020c);
+    benchmark(vk->gpu, "bt2020c", bench_bt2020c);
 
     return 0;
 }

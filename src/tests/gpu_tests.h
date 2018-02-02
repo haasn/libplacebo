@@ -1,7 +1,7 @@
 #include "tests.h"
 #include "shaders.h"
 
-static void ra_test_roundtrip(const struct ra *ra, const struct ra_tex *tex,
+static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex,
                               float *src, float *dst)
 {
     REQUIRE(tex);
@@ -13,12 +13,12 @@ static void ra_test_roundtrip(const struct ra *ra, const struct ra_tex *tex,
     for (int i = 0; i < texels; i++)
         src[i] = RANDOM;
 
-    REQUIRE(ra_tex_upload(ra, &(struct ra_tex_transfer_params){
+    REQUIRE(pl_tex_upload(gpu, &(struct pl_tex_transfer_params){
         .tex = tex,
         .ptr = src,
     }));
 
-    REQUIRE(ra_tex_download(ra, &(struct ra_tex_transfer_params){
+    REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params){
         .tex = tex,
         .ptr = dst,
     }));
@@ -27,14 +27,14 @@ static void ra_test_roundtrip(const struct ra *ra, const struct ra_tex *tex,
         REQUIRE(src[i] == dst[i]);
 }
 
-static void ra_texture_tests(const struct ra *ra)
+static void pl_texture_tests(const struct pl_gpu *gpu)
 {
-    const struct ra_fmt *fmt;
-    fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 16, 32, 0);
+    const struct pl_fmt *fmt;
+    fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 32, 0);
     if (!fmt)
         return;
 
-    struct ra_tex_params params = {
+    struct pl_tex_params params = {
         .format        = fmt,
         .host_writable = true,
         .host_readable = true,
@@ -43,33 +43,33 @@ static void ra_texture_tests(const struct ra *ra)
     static float src[16*16*16] = {0};
     static float dst[16*16*16] = {0};
 
-    const struct ra_tex *tex = NULL;
-    if (ra->limits.max_tex_1d_dim >= 16) {
+    const struct pl_tex *tex = NULL;
+    if (gpu->limits.max_tex_1d_dim >= 16) {
         params.w = 16;
-        tex = ra_tex_create(ra, &params);
-        ra_test_roundtrip(ra, tex, src, dst);
-        ra_tex_destroy(ra, &tex);
+        tex = pl_tex_create(gpu, &params);
+        pl_test_roundtrip(gpu, tex, src, dst);
+        pl_tex_destroy(gpu, &tex);
     }
 
-    if (ra->limits.max_tex_2d_dim >= 16) {
+    if (gpu->limits.max_tex_2d_dim >= 16) {
         params.w = params.h = 16;
-        tex = ra_tex_create(ra, &params);
-        ra_test_roundtrip(ra, tex, src, dst);
-        ra_tex_destroy(ra, &tex);
+        tex = pl_tex_create(gpu, &params);
+        pl_test_roundtrip(gpu, tex, src, dst);
+        pl_tex_destroy(gpu, &tex);
     }
 
-    if (ra->limits.max_tex_3d_dim >= 16) {
+    if (gpu->limits.max_tex_3d_dim >= 16) {
         params.w = params.h = params.d = 16;
-        tex = ra_tex_create(ra, &params);
-        ra_test_roundtrip(ra, tex, src, dst);
-        ra_tex_destroy(ra, &tex);
+        tex = pl_tex_create(gpu, &params);
+        pl_test_roundtrip(gpu, tex, src, dst);
+        pl_tex_destroy(gpu, &tex);
     }
 }
 
 
-static void ra_shader_tests(struct pl_context *ctx, const struct ra *ra)
+static void pl_shader_tests(const struct pl_gpu *gpu)
 {
-    if (ra->glsl.version < 410)
+    if (gpu->glsl.version < 410)
         return;
 
     const char *vert_shader =
@@ -90,33 +90,33 @@ static void ra_shader_tests(struct pl_context *ctx, const struct ra *ra)
         "    out_color = vec4(frag_color, 1.0);     \n"
         "}";
 
-    const struct ra_fmt *fbo_fmt;
-    enum ra_fmt_caps caps = RA_FMT_CAP_RENDERABLE | RA_FMT_CAP_BLITTABLE |
-                            RA_FMT_CAP_LINEAR;
+    const struct pl_fmt *fbo_fmt;
+    enum pl_fmt_caps caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE |
+                            PL_FMT_CAP_LINEAR;
 
-    fbo_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 4, 16, 32, caps);
+    fbo_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32, caps);
     if (!fbo_fmt)
         return;
 
 #define FBO_W 16
 #define FBO_H 16
 
-    const struct ra_tex *fbo;
-    fbo = ra_tex_create(ra, &(struct ra_tex_params) {
+    const struct pl_tex *fbo;
+    fbo = pl_tex_create(gpu, &(struct pl_tex_params) {
         .format         = fbo_fmt,
         .w              = FBO_W,
         .h              = FBO_H,
         .renderable     = true,
-        .storable       = !!(fbo_fmt->caps & RA_FMT_CAP_STORABLE),
+        .storable       = !!(fbo_fmt->caps & PL_FMT_CAP_STORABLE),
         .host_readable  = true,
         .blit_dst       = true,
     });
     REQUIRE(fbo);
 
-    ra_tex_clear(ra, fbo, (float[4]){0});
+    pl_tex_clear(gpu, fbo, (float[4]){0});
 
-    const struct ra_fmt *vert_fmt;
-    vert_fmt = ra_find_vertex_fmt(ra, RA_FMT_FLOAT, 3);
+    const struct pl_fmt *vert_fmt;
+    vert_fmt = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 3);
     REQUIRE(vert_fmt);
 
     struct vertex { float pos[2]; float color[3]; } vertices[] = {
@@ -126,24 +126,24 @@ static void ra_shader_tests(struct pl_context *ctx, const struct ra *ra)
         {{ 1.0,  1.0}, {1, 1, 0}},
     };
 
-    const struct ra_pass *pass;
-    pass = ra_pass_create(ra, &(struct ra_pass_params) {
-        .type           = RA_PASS_RASTER,
+    const struct pl_pass *pass;
+    pass = pl_pass_create(gpu, &(struct pl_pass_params) {
+        .type           = PL_PASS_RASTER,
         .target_dummy   = *fbo,
         .vertex_shader  = vert_shader,
         .glsl_shader    = frag_shader,
 
-        .vertex_type    = RA_PRIM_TRIANGLE_STRIP,
+        .vertex_type    = PL_PRIM_TRIANGLE_STRIP,
         .vertex_stride  = sizeof(struct vertex),
         .num_vertex_attribs = 2,
-        .vertex_attribs = (struct ra_vertex_attrib[]) {{
+        .vertex_attribs = (struct pl_vertex_attrib[]) {{
             .name     = "vertex_pos",
-            .fmt      = ra_find_vertex_fmt(ra, RA_FMT_FLOAT, 2),
+            .fmt      = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 2),
             .location = 0,
             .offset   = offsetof(struct vertex, pos),
         }, {
             .name     = "vertex_color",
-            .fmt      = ra_find_vertex_fmt(ra, RA_FMT_FLOAT, 3),
+            .fmt      = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 3),
             .location = 1,
             .offset   = offsetof(struct vertex, color),
         }},
@@ -151,7 +151,7 @@ static void ra_shader_tests(struct pl_context *ctx, const struct ra *ra)
     REQUIRE(pass);
     REQUIRE(pass->params.cached_program_len);
 
-    ra_pass_run(ra, &(struct ra_pass_run_params) {
+    pl_pass_run(gpu, &(struct pl_pass_run_params) {
         .pass           = pass,
         .target         = fbo,
         .vertex_data    = vertices,
@@ -159,7 +159,7 @@ static void ra_shader_tests(struct pl_context *ctx, const struct ra *ra)
     });
 
     static float data[FBO_H * FBO_W * 4] = {0};
-    ra_tex_download(ra, &(struct ra_tex_transfer_params) {
+    pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
         .tex = fbo,
         .ptr = data,
     });
@@ -175,19 +175,19 @@ static void ra_shader_tests(struct pl_context *ctx, const struct ra *ra)
         }
     }
 
-    ra_pass_destroy(ra, &pass);
-    ra_tex_clear(ra, fbo, (float[4]){0});
+    pl_pass_destroy(gpu, &pass);
+    pl_tex_clear(gpu, fbo, (float[4]){0});
 
     // Test the use of pl_dispatch
-    struct pl_dispatch *dp = pl_dispatch_create(ctx, ra);
+    struct pl_dispatch *dp = pl_dispatch_create(gpu->ctx, gpu);
 
-    const struct ra_tex *src;
-    src = ra_tex_create(ra, &(struct ra_tex_params) {
+    const struct pl_tex *src;
+    src = pl_tex_create(gpu, &(struct pl_tex_params) {
         .format         = fbo_fmt,
         .w              = FBO_W,
         .h              = FBO_H,
         .sampleable     = true,
-        .sample_mode    = RA_TEX_SAMPLE_LINEAR,
+        .sample_mode    = PL_TEX_SAMPLE_LINEAR,
         .initial_data   = data,
     });
 
@@ -198,7 +198,7 @@ static void ra_shader_tests(struct pl_context *ctx, const struct ra *ra)
         struct pl_shader *sh = pl_dispatch_begin(dp);
 
         // For testing, force the use of CS if possible
-        if (ra->caps & RA_CAP_COMPUTE) {
+        if (gpu->caps & PL_GPU_CAP_COMPUTE) {
             sh->is_compute = true;
             sh->res.compute_group_size[0] = 8;
             sh->res.compute_group_size[1] = 8;
@@ -213,7 +213,7 @@ static void ra_shader_tests(struct pl_context *ctx, const struct ra *ra)
         REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
     }
 
-    ra_tex_download(ra, &(struct ra_tex_transfer_params) {
+    pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
         .tex = fbo,
         .ptr = data,
     });
@@ -230,17 +230,17 @@ static void ra_shader_tests(struct pl_context *ctx, const struct ra *ra)
     }
 
     pl_dispatch_destroy(&dp);
-    ra_tex_destroy(ra, &src);
-    ra_tex_destroy(ra, &fbo);
+    pl_tex_destroy(gpu, &src);
+    pl_tex_destroy(gpu, &fbo);
 }
 
-static void ra_scaler_tests(struct pl_context *ctx, const struct ra *ra)
+static void pl_scaler_tests(const struct pl_gpu *gpu)
 {
-    const struct ra_fmt *src_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 16, 32,
-                                               RA_FMT_CAP_LINEAR);
+    const struct pl_fmt *src_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 32,
+                                               PL_FMT_CAP_LINEAR);
 
-    const struct ra_fmt *fbo_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 1, 16, 32,
-                                               RA_FMT_CAP_RENDERABLE);
+    const struct pl_fmt *fbo_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 32,
+                                               PL_FMT_CAP_RENDERABLE);
     if (!src_fmt || !fbo_fmt)
         return;
 
@@ -255,26 +255,26 @@ static void ra_scaler_tests(struct pl_context *ctx, const struct ra *ra)
         { 0, 0, 0, 0, 0 },
     };
 
-    const struct ra_tex *dot5x5 = ra_tex_create(ra, &(struct ra_tex_params) {
+    const struct pl_tex *dot5x5 = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w              = 5,
         .h              = 5,
         .format         = src_fmt,
         .sampleable     = true,
-        .sample_mode    = RA_TEX_SAMPLE_LINEAR,
-        .address_mode   = RA_TEX_ADDRESS_CLAMP,
+        .sample_mode    = PL_TEX_SAMPLE_LINEAR,
+        .address_mode   = PL_TEX_ADDRESS_CLAMP,
         .initial_data   = &data_5x5[0][0],
     });
 
-    const struct ra_tex *fbo = ra_tex_create(ra, &(struct ra_tex_params) {
+    const struct pl_tex *fbo = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w              = 100,
         .h              = 100,
         .format         = fbo_fmt,
         .renderable     = true,
-        .storable       = !!(fbo_fmt->caps & RA_FMT_CAP_STORABLE),
+        .storable       = !!(fbo_fmt->caps & PL_FMT_CAP_STORABLE),
         .host_readable  = true,
     });
 
-    struct pl_dispatch *dp = pl_dispatch_create(ctx, ra);
+    struct pl_dispatch *dp = pl_dispatch_create(gpu->ctx, gpu);
     if (!dot5x5 || !fbo || !dp)
         goto error;
 
@@ -294,7 +294,7 @@ static void ra_scaler_tests(struct pl_context *ctx, const struct ra *ra)
     REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
 
     fbo_data = malloc(fbo->params.w * fbo->params.h * sizeof(float));
-    REQUIRE(ra_tex_download(ra, &(struct ra_tex_transfer_params) {
+    REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
         .tex            = fbo,
         .ptr            = fbo_data,
     }));
@@ -313,15 +313,15 @@ error:
     free(fbo_data);
     pl_shader_obj_destroy(&lut);
     pl_dispatch_destroy(&dp);
-    ra_tex_destroy(ra, &dot5x5);
-    ra_tex_destroy(ra, &fbo);
+    pl_tex_destroy(gpu, &dot5x5);
+    pl_tex_destroy(gpu, &fbo);
 }
 
-static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
+static void pl_render_tests(const struct pl_gpu *gpu)
 {
-    const struct ra_fmt *fbo_fmt = ra_find_fmt(ra, RA_FMT_FLOAT, 4, 16, 32,
-                                               RA_FMT_CAP_RENDERABLE |
-                                               RA_FMT_CAP_BLITTABLE);
+    const struct pl_fmt *fbo_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32,
+                                               PL_FMT_CAP_RENDERABLE |
+                                               PL_FMT_CAP_BLITTABLE);
     if (!fbo_fmt)
         return;
 
@@ -337,8 +337,8 @@ static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
     const int width = 5, height = 5;
 
     struct pl_plane img5x5 = {0};
-    bool ok = pl_upload_plane(ra, &img5x5, &(struct pl_plane_data) {
-        .type = RA_FMT_FLOAT,
+    bool ok = pl_upload_plane(gpu, &img5x5, &(struct pl_plane_data) {
+        .type = PL_FMT_FLOAT,
         .width = width,
         .height = height,
         .component_size = { 8 * sizeof(float) },
@@ -348,21 +348,21 @@ static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
     });
 
     if (!ok) {
-        ra_tex_destroy(ra, &img5x5.texture);
+        pl_tex_destroy(gpu, &img5x5.texture);
         return;
     }
 
-    const struct ra_tex *fbo = ra_tex_create(ra, &(struct ra_tex_params) {
+    const struct pl_tex *fbo = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w              = 40,
         .h              = 40,
         .format         = fbo_fmt,
         .renderable     = true,
         .blit_dst       = true,
-        .storable       = !!(fbo_fmt->caps & RA_FMT_CAP_STORABLE),
+        .storable       = !!(fbo_fmt->caps & PL_FMT_CAP_STORABLE),
         .host_readable  = true,
     });
 
-    struct pl_renderer *rr = pl_renderer_create(ctx, ra);
+    struct pl_renderer *rr = pl_renderer_create(gpu->ctx, gpu);
     if (!fbo || !rr)
         goto error;
 
@@ -390,11 +390,11 @@ static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
         .color          = pl_color_space_srgb,
     };
 
-    ra_tex_clear(ra, fbo, (float[4]){0});
+    pl_tex_clear(gpu, fbo, (float[4]){0});
     REQUIRE(pl_render_image(rr, &image, &target, NULL));
 
     fbo_data = malloc(fbo->params.w * fbo->params.h * sizeof(float[4]));
-    REQUIRE(ra_tex_download(ra, &(struct ra_tex_transfer_params) {
+    REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
         .tex            = fbo,
         .ptr            = fbo_data,
     }));
@@ -413,14 +413,14 @@ static void ra_render_tests(struct pl_context *ctx, const struct ra *ra)
 error:
     free(fbo_data);
     pl_renderer_destroy(&rr);
-    ra_tex_destroy(ra, &img5x5.texture);
-    ra_tex_destroy(ra, &fbo);
+    pl_tex_destroy(gpu, &img5x5.texture);
+    pl_tex_destroy(gpu, &fbo);
 }
 
-static void ra_tests(const struct ra *ra)
+static void gpu_tests(const struct pl_gpu *gpu)
 {
-    ra_texture_tests(ra);
-    ra_shader_tests(ra->ctx, ra);
-    ra_scaler_tests(ra->ctx, ra);
-    ra_render_tests(ra->ctx, ra);
+    pl_texture_tests(gpu);
+    pl_shader_tests(gpu);
+    pl_scaler_tests(gpu);
+    pl_render_tests(gpu);
 }

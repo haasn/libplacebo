@@ -19,14 +19,14 @@
 
 #include "common.h"
 
-#define RA_SW_PFN(name) __typeof__(ra_swapchain_##name) *name
-struct ra_sw {
-    // This destructor follows the same rules as `ra_fns`
-    void (*destroy)(const struct ra_swapchain *sw);
+#define SW_PFN(name) __typeof__(pl_swapchain_##name) *name
+struct pl_sw_fns {
+    // This destructor follows the same rules as `pl_gpu_fns`
+    void (*destroy)(const struct pl_swapchain *sw);
 
-    RA_SW_PFN(latency); // optional
-    RA_SW_PFN(start_frame);
-    RA_SW_PFN(submit_frame);
-    RA_SW_PFN(swap_buffers);
+    SW_PFN(latency); // optional
+    SW_PFN(start_frame);
+    SW_PFN(submit_frame);
+    SW_PFN(swap_buffers);
 };
-#undef RA_SW_PFN
+#undef SW_PFN

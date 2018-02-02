@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include "ra.h"
+#include "gpu.h"
 #include "common.h"
 
 struct vk_format {
     VkFormat ifmt;     // internal vulkan format enum
-    struct ra_fmt fmt; // ra_fmt template (features will be auto-detected)
+    struct pl_fmt fmt; // pl_fmt template (features will be auto-detected)
 };
 
 extern const struct vk_format vk_formats[];

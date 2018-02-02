@@ -36,7 +36,7 @@
 #include "include/libplacebo/dispatch.h"
 #include "include/libplacebo/dither.h"
 #include "include/libplacebo/filters.h"
-#include "include/libplacebo/ra.h"
+#include "include/libplacebo/gpu.h"
 #include "include/libplacebo/renderer.h"
 #include "include/libplacebo/shaders.h"
 #include "include/libplacebo/shaders/colorspace.h"

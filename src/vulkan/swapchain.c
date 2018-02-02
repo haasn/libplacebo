@@ -19,7 +19,7 @@
 #include "command.h"
 #include "formats.h"
 #include "utils.h"
-#include "ra_vk.h"
+#include "gpu.h"
 #include "swapchain.h"
 
 struct priv {
@@ -36,7 +36,7 @@ struct priv {
     struct pl_color_space color_space;
 
     // state of the images:
-    const struct ra_tex **images; // ra_tex wrappers for the VkImages
+    const struct pl_tex **images; // pl_tex wrappers for the VkImages
     int num_images;         // size of `images`
     VkSemaphore *sems_in;   // pool of semaphores used to synchronize images
     VkSemaphore *sems_out;  // outgoing semaphores (rendering complete)
@@ -45,9 +45,9 @@ struct priv {
     int last_imgidx;        // the image index last acquired (for submit)
 };
 
-static const struct ra_sw vulkan_swapchain;
+static struct pl_sw_fns vulkan_swapchain;
 
-static bool pick_surf_format(const struct ra *ra, const struct vk_ctx *vk,
+static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
                              VkSurfaceKHR surf, VkSurfaceFormatKHR *out_format)
 {
     VkSurfaceFormatKHR *formats = NULL;
@@ -88,13 +88,13 @@ static bool pick_surf_format(const struct ra *ra, const struct vk_ctx *vk,
         default: continue;
         }
 
-        // Make sure we can wrap this format to a meaningful, renderable ra_format
-        for (int n = 0; n < ra->num_formats; n++) {
-            const struct ra_fmt *rafmt = ra->formats[n];
+        // Make sure we can wrap this format to a meaningful, renderable pl_format
+        for (int n = 0; n < gpu->num_formats; n++) {
+            const struct pl_fmt *rafmt = gpu->formats[n];
             const struct vk_format *vkfmt = rafmt->priv;
             if (vkfmt->ifmt != formats[i].format)
                 continue;
-            if (!(rafmt->caps & RA_FMT_CAP_RENDERABLE))
+            if (!(rafmt->caps & PL_FMT_CAP_RENDERABLE))
                 continue;
             // format valid, use it
             *out_format = formats[i];
@@ -110,20 +110,20 @@ error:
     return false;
 }
 
-const struct ra_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *plvk,
+const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *plvk,
                               const struct pl_vulkan_swapchain_params *params)
 {
     struct vk_ctx *vk = plvk->priv;
-    const struct ra *ra = plvk->ra;
+    const struct pl_gpu *gpu = plvk->gpu;
 
     VkSurfaceFormatKHR sfmt = params->surface_format;
-    if (!sfmt.format && !pick_surf_format(ra, vk, params->surface, &sfmt))
+    if (!sfmt.format && !pick_surf_format(gpu, vk, params->surface, &sfmt))
         return NULL;
 
-    struct ra_swapchain *sw = talloc_zero(NULL, struct ra_swapchain);
+    struct pl_swapchain *sw = talloc_zero(NULL, struct pl_swapchain);
     sw->impl = &vulkan_swapchain;
     sw->ctx = vk->ctx;
-    sw->ra = ra;
+    sw->gpu = gpu;
 
     struct priv *p = sw->priv = talloc_zero(sw, struct priv);
     p->vk = vk;
@@ -177,16 +177,16 @@ error:
     return NULL;
 }
 
-static void vk_sw_destroy(const struct ra_swapchain *sw)
+static void vk_sw_destroy(const struct pl_swapchain *sw)
 {
-    const struct ra *ra = sw->ra;
+    const struct pl_gpu *gpu = sw->gpu;
     struct priv *p = sw->priv;
     struct vk_ctx *vk = p->vk;
 
-    ra_flush(ra);
+    pl_gpu_flush(gpu);
     vk_wait_idle(vk);
     for (int i = 0; i < p->num_images; i++)
-        ra_tex_destroy(ra, &p->images[i]);
+        pl_tex_destroy(gpu, &p->images[i]);
     for (int i = 0; i < p->num_sems; i++) {
         vkDestroySemaphore(vk->dev, p->sems_in[i], VK_ALLOC);
         vkDestroySemaphore(vk->dev, p->sems_out[i], VK_ALLOC);
@@ -196,7 +196,7 @@ static void vk_sw_destroy(const struct ra_swapchain *sw)
     talloc_free((void *) sw);
 }
 
-static int vk_sw_latency(const struct ra_swapchain *sw)
+static int vk_sw_latency(const struct pl_swapchain *sw)
 {
     struct priv *p = sw->priv;
     return p->swapchain_depth;
@@ -234,7 +234,7 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     }
 
     // Note: We could probably also allow picking a surface transform that
-    // flips the framebuffer and set `ra_swapchain_frame.flipped`, but this
+    // flips the framebuffer and set `pl_swapchain_frame.flipped`, but this
     // doesn't appear to be necessary for any vulkan implementations.
     static const VkSurfaceTransformFlagsKHR rotModes[] = {
         VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
@@ -284,8 +284,8 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
 
     info->imageExtent = caps.currentExtent;
 
-    // We just request whatever usage we can, and let the ra_vk decide what
-    // ra_tex_params that translates to. This makes the images as flexible
+    // We just request whatever usage we can, and let the pl_vk decide what
+    // pl_tex_params that translates to. This makes the images as flexible
     // as possible.
     info->imageUsage = caps.supportedUsageFlags;
     return true;
@@ -301,9 +301,9 @@ static void destroy_swapchain(struct vk_ctx *vk, struct priv *p)
     p->old_swapchain = NULL;
 }
 
-static bool vk_sw_recreate(const struct ra_swapchain *sw)
+static bool vk_sw_recreate(const struct pl_swapchain *sw)
 {
-    const struct ra *ra = sw->ra;
+    const struct pl_gpu *gpu = sw->gpu;
     struct priv *p = sw->priv;
     struct vk_ctx *vk = p->vk;
 
@@ -356,14 +356,14 @@ static bool vk_sw_recreate(const struct ra_swapchain *sw)
         p->sems_out[idx] = sem_out;
     }
 
-    // Recreate the ra_tex wrappers
+    // Recreate the pl_tex wrappers
     for (int i = 0; i < p->num_images; i++)
-        ra_tex_destroy(ra, &p->images[i]);
+        pl_tex_destroy(gpu, &p->images[i]);
 
     p->num_images = num_images;
     TARRAY_GROW(p, p->images, num_images);
     for (int i = 0; i < num_images; i++) {
-        p->images[i] = ra_vk_wrap_swapchain_img(ra, vkimages[i], sinfo);
+        p->images[i] = pl_vk_wrap_swimg(gpu, vkimages[i], sinfo);
         if (!p->images[i])
             goto error;
     }
@@ -375,7 +375,7 @@ static bool vk_sw_recreate(const struct ra_swapchain *sw)
     // the actual color information (consider e.g. a2bgr10). Slight downside
     // in that it results in rounding r/b for e.g. rgb565, but we don't pick
     // surfaces with fewer than 8 bits anyway, so let's not care for now.
-    const struct ra_fmt *fmt = p->images[0]->params.format;
+    const struct pl_fmt *fmt = p->images[0]->params.format;
     for (int i = 0; i < fmt->num_components; i++)
         bits = PL_MAX(bits, fmt->component_depth[i]);
 
@@ -393,8 +393,8 @@ error:
     return false;
 }
 
-static bool vk_sw_start_frame(const struct ra_swapchain *sw,
-                              struct ra_swapchain_frame *out_frame)
+static bool vk_sw_start_frame(const struct pl_swapchain *sw,
+                              struct pl_swapchain_frame *out_frame)
 {
     struct priv *p = sw->priv;
     struct vk_ctx *vk = p->vk;
@@ -412,13 +412,13 @@ static bool vk_sw_start_frame(const struct ra_swapchain *sw,
         switch (res) {
         case VK_SUCCESS:
             p->last_imgidx = imgidx;
-            *out_frame = (struct ra_swapchain_frame) {
+            *out_frame = (struct pl_swapchain_frame) {
                 .fbo = p->images[imgidx],
                 .flipped = false,
                 .color_repr = p->color_repr,
                 .color_space = p->color_space,
             };
-            ra_tex_vk_external_dep(sw->ra, out_frame->fbo, sem_in);
+            pl_tex_vk_external_dep(sw->gpu, out_frame->fbo, sem_in);
             return true;
 
         case VK_ERROR_OUT_OF_DATE_KHR: {
@@ -444,15 +444,15 @@ static void present_cb(struct priv *p, void *arg)
     p->frames_in_flight--;
 }
 
-static bool vk_sw_submit_frame(const struct ra_swapchain *sw)
+static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
 {
-    const struct ra *ra = sw->ra;
+    const struct pl_gpu *gpu = sw->gpu;
     struct priv *p = sw->priv;
     struct vk_ctx *vk = p->vk;
     if (!p->swapchain)
         return false;
 
-    struct vk_cmd *cmd = ra_vk_finish_frame(ra, p->images[p->last_imgidx]);
+    struct vk_cmd *cmd = pl_vk_finish_frame(gpu, p->images[p->last_imgidx]);
     if (!cmd)
         return false;
 
@@ -502,7 +502,7 @@ static bool vk_sw_submit_frame(const struct ra_swapchain *sw)
     }
 }
 
-static void vk_sw_swap_buffers(const struct ra_swapchain *sw)
+static void vk_sw_swap_buffers(const struct pl_swapchain *sw)
 {
     struct priv *p = sw->priv;
 
@@ -510,7 +510,7 @@ static void vk_sw_swap_buffers(const struct ra_swapchain *sw)
         vk_poll_commands(p->vk, 1000000); // 1 ms
 }
 
-static const struct ra_sw vulkan_swapchain = {
+static struct pl_sw_fns vulkan_swapchain = {
     .destroy      = vk_sw_destroy,
     .latency      = vk_sw_latency,
     .start_frame  = vk_sw_start_frame,

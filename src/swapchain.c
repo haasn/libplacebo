@@ -19,9 +19,9 @@
 #include "context.h"
 #include "swapchain.h"
 
-void ra_swapchain_destroy(const struct ra_swapchain **ptr)
+void pl_swapchain_destroy(const struct pl_swapchain **ptr)
 {
-    const struct ra_swapchain *sw = *ptr;
+    const struct pl_swapchain *sw = *ptr;
     if (!sw)
         return;
 
@@ -29,7 +29,7 @@ void ra_swapchain_destroy(const struct ra_swapchain **ptr)
     *ptr = NULL;
 }
 
-int ra_swapchain_latency(const struct ra_swapchain *sw)
+int pl_swapchain_latency(const struct pl_swapchain *sw)
 {
     if (!sw->impl->latency)
         return 0;
@@ -37,19 +37,19 @@ int ra_swapchain_latency(const struct ra_swapchain *sw)
     return sw->impl->latency(sw);
 }
 
-bool ra_swapchain_start_frame(const struct ra_swapchain *sw,
-                              struct ra_swapchain_frame *out_frame)
+bool pl_swapchain_start_frame(const struct pl_swapchain *sw,
+                              struct pl_swapchain_frame *out_frame)
 {
-    *out_frame = (struct ra_swapchain_frame) {0}; // sanity
+    *out_frame = (struct pl_swapchain_frame) {0}; // sanity
     return sw->impl->start_frame(sw, out_frame);
 }
 
-bool ra_swapchain_submit_frame(const struct ra_swapchain *sw)
+bool pl_swapchain_submit_frame(const struct pl_swapchain *sw)
 {
     return sw->impl->submit_frame(sw);
 }
 
-void ra_swapchain_swap_buffers(const struct ra_swapchain *sw)
+void pl_swapchain_swap_buffers(const struct pl_swapchain *sw)
 {
     sw->impl->swap_buffers(sw);
 }

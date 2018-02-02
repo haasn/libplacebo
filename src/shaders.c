@@ -23,14 +23,15 @@
 #include "context.h"
 #include "shaders.h"
 
-struct pl_shader *pl_shader_alloc(struct pl_context *ctx, const struct ra *ra,
+struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
+                                  const struct pl_gpu *gpu,
                                   uint8_t ident, uint8_t index)
 {
     pl_assert(ctx);
     struct pl_shader *sh = talloc_ptrtype(ctx, sh);
     *sh = (struct pl_shader) {
         .ctx = ctx,
-        .ra = ra,
+        .gpu = gpu,
         .mutable = true,
         .tmp = talloc_ref_new(ctx),
         .ident = ident,
@@ -54,7 +55,7 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index)
 {
     struct pl_shader new = {
         .ctx = sh->ctx,
-        .ra  = sh->ra,
+        .gpu  = sh->gpu,
         .tmp = talloc_ref_new(sh->ctx),
         .mutable = true,
         .ident = ident,
@@ -82,12 +83,12 @@ bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem)
     int *sh_bw = &sh->res.compute_group_size[0];
     int *sh_bh = &sh->res.compute_group_size[1];
 
-    if (!sh->ra || !(sh->ra->caps & RA_CAP_COMPUTE)) {
-        PL_TRACE(sh, "Disabling compute shader due to missing RA_CAP_COMPUTE");
+    if (!sh->gpu || !(sh->gpu->caps & PL_GPU_CAP_COMPUTE)) {
+        PL_TRACE(sh, "Disabling compute shader due to missing PL_GPU_CAP_COMPUTE");
         return false;
     }
 
-    if (sh->res.compute_shmem + mem > sh->ra->limits.max_shmem_size) {
+    if (sh->res.compute_shmem + mem > sh->gpu->limits.max_shmem_size) {
         PL_TRACE(sh, "Disabling compute shader due to insufficient shmem");
         return false;
     }
@@ -161,7 +162,7 @@ ident_t sh_fresh(struct pl_shader *sh, const char *name)
 ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
 {
     sv.var.name = sh_fresh(sh, sv.var.name);
-    sv.data = talloc_memdup(sh->tmp, sv.data, ra_var_host_layout(0, &sv.var).size);
+    sv.data = talloc_memdup(sh->tmp, sv.data, pl_var_host_layout(0, &sv.var).size);
     TARRAY_APPEND(sh, sh->res.variables, sh->res.num_variables, sv);
     return (ident_t) sv.var.name;
 }
@@ -176,12 +177,12 @@ ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
 ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
                      const struct pl_rect2df *rc)
 {
-    if (!sh->ra) {
-        PL_ERR(sh, "Failed adding vertex attr '%s': No RA available!", name);
+    if (!sh->gpu) {
+        PL_ERR(sh, "Failed adding vertex attr '%s': No GPU available!", name);
         return NULL;
     }
 
-    const struct ra_fmt *fmt = ra_find_vertex_fmt(sh->ra, RA_FMT_FLOAT, 2);
+    const struct pl_fmt *fmt = pl_find_vertex_fmt(sh->gpu, PL_FMT_FLOAT, 2);
     if (!fmt) {
         PL_ERR(sh, "Failed adding vertex attr '%s': no vertex fmt!", name);
         return NULL;
@@ -198,7 +199,7 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
     struct pl_shader_va va = {
         .attr = {
             .name     = sh_fresh(sh, name),
-            .fmt      = ra_find_vertex_fmt(sh->ra, RA_FMT_FLOAT, 2),
+            .fmt      = pl_find_vertex_fmt(sh->gpu, PL_FMT_FLOAT, 2),
         },
         .data = { &data[0], &data[2], &data[4], &data[6] },
     };
@@ -207,16 +208,16 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
     return (ident_t) va.attr.name;
 }
 
-ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
+ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
                 const char *name, const struct pl_rect2df *rect,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt)
 {
-    if (!sh->ra) {
-        PL_ERR(sh, "Failed binding texture '%s': No RA available!", name);
+    if (!sh->gpu) {
+        PL_ERR(sh, "Failed binding texture '%s': No GPU available!", name);
         return NULL;
     }
 
-    if (ra_tex_params_dimension(tex->params) != 2 || !tex->params.sampleable) {
+    if (pl_tex_params_dimension(tex->params) != 2 || !tex->params.sampleable) {
         PL_ERR(sh, "Failed binding texture '%s': incompatible params!", name);
         return NULL;
     }
@@ -224,7 +225,7 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
     ident_t itex = sh_desc(sh, (struct pl_shader_desc) {
         .desc = {
             .name = name,
-            .type = RA_DESC_SAMPLED_TEX,
+            .type = PL_DESC_SAMPLED_TEX,
         },
         .object = tex,
     });
@@ -244,14 +245,14 @@ ident_t sh_bind(struct pl_shader *sh, const struct ra_tex *tex,
 
     if (out_size) {
         *out_size = sh_var(sh, (struct pl_shader_var) {
-            .var  = ra_var_vec2("tex_size"),
+            .var  = pl_var_vec2("tex_size"),
             .data = &(float[2]) {tex->params.w, tex->params.h},
         });
     }
 
     if (out_pt) {
         *out_pt = sh_var(sh, (struct pl_shader_var) {
-            .var  = ra_var_vec2("tex_pt"),
+            .var  = pl_var_vec2("tex_pt"),
             .data = &(float[2]) {1.0 / tex->params.w, 1.0 / tex->params.h},
         });
     }
@@ -424,7 +425,7 @@ void pl_shader_obj_destroy(struct pl_shader_obj **ptr)
         return;
 
     if (obj->uninit)
-        obj->uninit(obj->ra, obj->priv);
+        obj->uninit(obj->gpu, obj->priv);
 
     *ptr = NULL;
     talloc_free(obj);
@@ -432,14 +433,14 @@ void pl_shader_obj_destroy(struct pl_shader_obj **ptr)
 
 void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
                      enum pl_shader_obj_type type, size_t priv_size,
-                     void (*uninit)(const struct ra *ra, void *priv))
+                     void (*uninit)(const struct pl_gpu *gpu, void *priv))
 {
     if (!ptr)
         return NULL;
 
     struct pl_shader_obj *obj = *ptr;
-    if (obj && obj->ra != sh->ra) {
-        PL_ERR(sh, "Passed pl_shader_obj belongs to different RA!");
+    if (obj && obj->gpu != sh->gpu) {
+        PL_ERR(sh, "Passed pl_shader_obj belongs to different GPU!");
         return NULL;
     }
 
@@ -451,7 +452,7 @@ void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
 
     if (!obj) {
         obj = talloc_zero(NULL, struct pl_shader_obj);
-        obj->ra = sh->ra;
+        obj->gpu = sh->gpu;
         obj->type = type;
         obj->priv = talloc_zero_size(obj, priv_size);
         obj->uninit = uninit;
@@ -482,7 +483,7 @@ ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *p_state)
     if (temporal) {
         float seedval = modff(M_PI * sh->index, &(float){0});
         seed = sh_var(sh, (struct pl_shader_var) {
-            .var  = ra_var_float("seed"),
+            .var  = pl_var_float("seed"),
             .data = &seedval,
             .dynamic = true,
         });
@@ -517,19 +518,19 @@ struct sh_lut_obj {
     enum sh_lut_method method;
     int width, height, depth, comps;
     union {
-        const struct ra_tex *tex;
+        const struct pl_tex *tex;
         struct bstr str;
         float *data;
     } weights;
 };
 
-static void sh_lut_uninit(const struct ra *ra, void *ptr)
+static void sh_lut_uninit(const struct pl_gpu *gpu, void *ptr)
 {
     struct sh_lut_obj *lut = ptr;
     switch (lut->method) {
     case SH_LUT_TEXTURE:
     case SH_LUT_LINEAR:
-        ra_tex_destroy(ra, &lut->weights.tex);
+        pl_tex_destroy(gpu, &lut->weights.tex);
         break;
     case SH_LUT_UNIFORM:
         talloc_free(lut->weights.data);
@@ -551,7 +552,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
                int comps, bool update, void *priv,
                void (*fill)(void *priv, float *data, int w, int h, int d))
 {
-    const struct ra *ra = sh->ra;
+    const struct pl_gpu *gpu = sh->gpu;
     float *tmp = NULL;
     ident_t ret = NULL;
 
@@ -562,9 +563,9 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
 
     int texdim = 0;
     int max_tex_dim[] = {
-        ra ? ra->limits.max_tex_1d_dim : 0,
-        ra ? ra->limits.max_tex_2d_dim : 0,
-        ra ? ra->limits.max_tex_3d_dim : 0,
+        gpu ? gpu->limits.max_tex_1d_dim : 0,
+        gpu ? gpu->limits.max_tex_2d_dim : 0,
+        gpu ? gpu->limits.max_tex_3d_dim : 0,
     };
 
     for (int d = dims; d <= PL_ARRAY_SIZE(max_tex_dim); d++) {
@@ -582,13 +583,13 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
         goto error;
     }
 
-    if (!ra && method == SH_LUT_LINEAR) {
-        PL_ERR(sh, "Linear LUTs require the use of a RA!");
+    if (!gpu && method == SH_LUT_LINEAR) {
+        PL_ERR(sh, "Linear LUTs require the use of a GPU!");
         goto error;
     }
 
-    if (!ra) {
-        PL_TRACE(sh, "No RA available, falling back to literal LUT embedding");
+    if (!gpu) {
+        PL_TRACE(sh, "No GPU available, falling back to literal LUT embedding");
         method = SH_LUT_LITERAL;
     }
 
@@ -599,7 +600,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
     if (!method && texdim)
         method = SH_LUT_TEXTURE;
 
-    if (!method && ra && ra->caps & RA_CAP_INPUT_VARIABLES)
+    if (!method && gpu && gpu->caps & PL_GPU_CAP_INPUT_VARIABLES)
         method = SH_LUT_UNIFORM;
 
     // No other method found
@@ -618,7 +619,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
     }
 
     if (update) {
-        sh_lut_uninit(ra, lut);
+        sh_lut_uninit(gpu, lut);
 
         tmp = talloc_zero_size(NULL, size * comps * sizeof(float));
         fill(priv, tmp, width, height, depth);
@@ -631,30 +632,30 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
                 goto error;
             }
 
-            enum ra_fmt_caps caps = RA_FMT_CAP_SAMPLEABLE;
-            enum ra_tex_sample_mode mode = RA_TEX_SAMPLE_NEAREST;
+            enum pl_fmt_caps caps = PL_FMT_CAP_SAMPLEABLE;
+            enum pl_tex_sample_mode mode = PL_TEX_SAMPLE_NEAREST;
 
             if (method == SH_LUT_LINEAR) {
-                caps |= RA_FMT_CAP_LINEAR;
-                mode = RA_TEX_SAMPLE_LINEAR;
+                caps |= PL_FMT_CAP_LINEAR;
+                mode = PL_TEX_SAMPLE_LINEAR;
             }
 
-            const struct ra_fmt *fmt;
-            fmt = ra_find_fmt(ra, RA_FMT_FLOAT, comps, 16, 32, caps);
+            const struct pl_fmt *fmt;
+            fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, comps, 16, 32, caps);
             if (!fmt) {
                 PL_ERR(sh, "Found no compatible texture format for LUT!");
                 goto error;
             }
 
             pl_assert(!lut->weights.tex);
-            lut->weights.tex = ra_tex_create(ra, &(struct ra_tex_params) {
+            lut->weights.tex = pl_tex_create(gpu, &(struct pl_tex_params) {
                 .w              = width,
                 .h              = PL_DEF(height, texdim >= 2 ? 1 : 0),
                 .d              = PL_DEF(depth,  texdim >= 3 ? 1 : 0),
                 .format         = fmt,
                 .sampleable     = true,
                 .sample_mode    = mode,
-                .address_mode   = RA_TEX_ADDRESS_CLAMP,
+                .address_mode   = PL_TEX_ADDRESS_CLAMP,
                 .initial_data   = tmp,
             });
 
@@ -712,7 +713,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
         ident_t tex = sh_desc(sh, (struct pl_shader_desc) {
             .desc = {
                 .name = "weights",
-                .type = RA_DESC_SAMPLED_TEX,
+                .type = PL_DESC_SAMPLED_TEX,
             },
             .object = lut->weights.tex,
         });
@@ -739,7 +740,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
         arr_name = sh_var(sh, (struct pl_shader_var) {
             .var = {
                 .name = "weights",
-                .type = RA_VAR_FLOAT,
+                .type = PL_VAR_FLOAT,
                 .dim_v = comps,
                 .dim_m = 1,
                 .dim_a = size,

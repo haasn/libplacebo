@@ -24,17 +24,17 @@
 // own rendering process. This API is normally not used for operation with
 // libplacebo's higher-level constructs such as `pl_dispatch` or `pl_renderer`.
 
-#include <libplacebo/ra.h>
+#include <libplacebo/gpu.h>
 
 struct pl_shader;
 
 // Creates a new, blank, mutable pl_shader object. The resulting pl_shader s
 // implicitly destroyed when the pl_context is destroyed.
 //
-// If `ra` is non-NULL, then this `ra` will be used to create objects such as
+// If `gpu` is non-NULL, then this `gpu` will be used to create objects such as
 // textures and buffers, or check for required capabilities, for operations
 // which depend on either of those. This is fully optional, i.e. these GLSL
-// primitives are designed to be used without a dependency on `ra` wherever
+// primitives are designed to be used without a dependency on `gpu` wherever
 // possible - however, some features may not work, and will be disabled even
 // if requested.
 //
@@ -49,7 +49,8 @@ struct pl_shader;
 // user does not care about temporal dithering/debanding, or wants determinstic
 // rendering, this may safely be left as 0. Otherwise, it should be incremented
 // by 1 on successive frames.
-struct pl_shader *pl_shader_alloc(struct pl_context *ctx, const struct ra *ra,
+struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
+                                  const struct pl_gpu *gpu,
                                   uint8_t ident, uint8_t index);
 
 // Frees a pl_shader and all resources associated with it.
@@ -61,8 +62,8 @@ void pl_shader_free(struct pl_shader **sh);
 void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index);
 
 // Returns whether or not a pl_shader needs to be run as a compute shader. This
-// will never be the case unless the `ra` this pl_shader was created against
-// supports RA_CAP_COMPUTE.
+// will never be the case unless the `gpu` this pl_shader was created against
+// supports PL_GPU_CAP_COMPUTE.
 bool pl_shader_is_compute(const struct pl_shader *sh);
 
 // Returns whether or not the shader has any particular output size
@@ -134,20 +135,20 @@ struct pl_shader_res {
 //   data[0] data[1]
 //   data[2] data[3]
 struct pl_shader_va {
-    struct ra_vertex_attrib attr; // VA type, excluding `offset` and `location`
+    struct pl_vertex_attrib attr; // VA type, excluding `offset` and `location`
     const void *data[4];
 };
 
 // Represents a bound shared variable / descriptor
 struct pl_shader_var {
-    struct ra_var var;  // the underlying variable description
-    const void *data;   // the raw data (interpretation as with ra_var_update)
+    struct pl_var var;  // the underlying variable description
+    const void *data;   // the raw data (interpretation as with pl_var_update)
     bool dynamic;       // if true, the value is expected to change frequently
 };
 
 struct pl_shader_desc {
-    struct ra_desc desc; // descriptor type, excluding `binding`
-    const void *object;  // the object being bound (as for ra_desc_binding)
+    struct pl_desc desc; // descriptor type, excluding `binding`
+    const void *object;  // the object being bound (as for pl_desc_binding)
 };
 
 // Finalize a pl_shader. It is no longer mutable at this point, and any further

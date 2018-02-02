@@ -19,7 +19,7 @@
 #define LIBPLACEBO_DISPATCH_H_
 
 #include <libplacebo/shaders.h>
-#include <libplacebo/ra.h>
+#include <libplacebo/gpu.h>
 
 struct pl_dispatch;
 
@@ -27,7 +27,8 @@ struct pl_dispatch;
 // layer between generated shaders (pl_shader) and the ra context such that it
 // can be used to execute shaders. This dispatch object will also provide
 // shader caching (for efficient re-use).
-struct pl_dispatch *pl_dispatch_create(struct pl_context *ctx, const struct ra *ra);
+struct pl_dispatch *pl_dispatch_create(struct pl_context *ctx,
+                                       const struct pl_gpu *gpu);
 void pl_dispatch_destroy(struct pl_dispatch **dp);
 
 // Returns a blank pl_shader object, suitable for recording rendering commands.
@@ -43,8 +44,8 @@ struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp);
 // If `rc` is NULL, renders to the entire texture.
 // If set, `blend_params` enables and controls blending for this pass.
 bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **sh,
-                        const struct ra_tex *target, const struct pl_rect2d *rc,
-                        const struct ra_blend_params *blend_params);
+                        const struct pl_tex *target, const struct pl_rect2d *rc,
+                        const struct pl_blend_params *blend_params);
 
 // Cancel an active shader without submitting anything. Useful, for example,
 // if the shader was instead merged into a different shader.

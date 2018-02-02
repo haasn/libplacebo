@@ -67,7 +67,7 @@ void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4])
     }
 }
 
-const struct ra_fmt *pl_plane_find_fmt(const struct ra *ra, int out_map[4],
+const struct pl_fmt *pl_plane_find_fmt(const struct pl_gpu *gpu, int out_map[4],
                                        const struct pl_plane_data *data)
 {
     // Count the number of components and initialize out_map
@@ -78,13 +78,13 @@ const struct ra_fmt *pl_plane_find_fmt(const struct ra *ra, int out_map[4],
             num = i+1;
     }
 
-    for (int n = 0; n < ra->num_formats; n++) {
-        const struct ra_fmt *fmt = ra->formats[n];
+    for (int n = 0; n < gpu->num_formats; n++) {
+        const struct pl_fmt *fmt = gpu->formats[n];
         if (fmt->opaque || fmt->num_components < num)
             continue;
         if (fmt->type != data->type || fmt->texel_size != data->pixel_stride)
             continue;
-        if (!(fmt->caps & RA_FMT_CAP_SAMPLEABLE))
+        if (!(fmt->caps & PL_FMT_CAP_SAMPLEABLE))
             continue;
 
         int idx = 0;
@@ -112,51 +112,51 @@ next_fmt: ; // acts as `continue`
     return NULL;
 }
 
-bool pl_upload_plane(const struct ra *ra, struct pl_plane *plane,
+bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *plane,
                      const struct pl_plane_data *data)
 {
     size_t row_stride = PL_DEF(data->row_stride, data->pixel_stride * data->width);
     unsigned int stride_texels = row_stride / data->pixel_stride;
     if (stride_texels * data->pixel_stride != row_stride) {
-        PL_ERR(ra, "data->row_stride must be a multiple of data->pixel_stride!");
+        PL_ERR(gpu, "data->row_stride must be a multiple of data->pixel_stride!");
         return false;
     }
 
     int out_map[4];
-    const struct ra_fmt *fmt = pl_plane_find_fmt(ra, out_map, data);
+    const struct pl_fmt *fmt = pl_plane_find_fmt(gpu, out_map, data);
     if (!fmt) {
-        PL_ERR(ra, "Failed picking any compatible texture format for a plane!");
+        PL_ERR(gpu, "Failed picking any compatible texture format for a plane!");
         return false;
 
         // TODO: try soft-converting to a supported format using e.g zimg?
     }
 
-    struct ra_tex_params params = {0};
+    struct pl_tex_params params = {0};
     if (plane->texture)
         params = plane->texture->params;
 
     if (params.format != fmt || !params.sampleable || !params.host_writable ||
         params.w != data->width || params.h != data->height)
     {
-        PL_INFO(ra, "Reinitializing %dx%d plane texture (size or fmt change)",
+        PL_INFO(gpu, "Reinitializing %dx%d plane texture (size or fmt change)",
                 data->width, data->height);
 
-        ra_tex_destroy(ra, &plane->texture);
-        plane->texture = ra_tex_create(ra, &(struct ra_tex_params) {
+        pl_tex_destroy(gpu, &plane->texture);
+        plane->texture = pl_tex_create(gpu, &(struct pl_tex_params) {
             .w = data->width,
             .h = data->height,
             .format = fmt,
             .sampleable = true,
             .host_writable = true,
-            .blit_src = !!(fmt->caps & RA_FMT_CAP_BLITTABLE),
-            .address_mode = RA_TEX_ADDRESS_CLAMP,
-            .sample_mode = (fmt->caps & RA_FMT_CAP_LINEAR)
-                                ? RA_TEX_SAMPLE_LINEAR
-                                : RA_TEX_SAMPLE_NEAREST,
+            .blit_src = !!(fmt->caps & PL_FMT_CAP_BLITTABLE),
+            .address_mode = PL_TEX_ADDRESS_CLAMP,
+            .sample_mode = (fmt->caps & PL_FMT_CAP_LINEAR)
+                                ? PL_TEX_SAMPLE_LINEAR
+                                : PL_TEX_SAMPLE_NEAREST,
         });
 
         if (!plane->texture) {
-            PL_ERR(ra, "Failed initializing plane texture!");
+            PL_ERR(gpu, "Failed initializing plane texture!");
             return false;
         }
     }
@@ -167,7 +167,7 @@ bool pl_upload_plane(const struct ra *ra, struct pl_plane *plane,
             plane->components = i+1;
     }
 
-    return ra_tex_upload(ra, &(struct ra_tex_transfer_params) {
+    return pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
         .tex      = plane->texture,
         .stride_w = stride_texels,
         .ptr      = (void *) data->pixels,

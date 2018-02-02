@@ -25,11 +25,11 @@ const struct pl_deband_params pl_deband_default_params = {
     .grain      = 6.0,
 };
 
-void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
+void pl_shader_deband(struct pl_shader *sh, const struct pl_tex *pl_tex,
                       const struct pl_deband_params *params)
 {
-    if (ra_tex->params.sample_mode != RA_TEX_SAMPLE_LINEAR) {
-        PL_ERR(sh, "Debanding requires sample_mode = RA_TEX_SAMPLE_LINEAR!");
+    if (pl_tex->params.sample_mode != PL_TEX_SAMPLE_LINEAR) {
+        PL_ERR(sh, "Debanding requires sample_mode = PL_TEX_SAMPLE_LINEAR!");
         return;
     }
 
@@ -42,7 +42,7 @@ void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *ra_tex,
     params = PL_DEF(params, &pl_deband_default_params);
 
     ident_t tex, pos, pt;
-    tex = sh_bind(sh, ra_tex, "deband", NULL, &pos, NULL, &pt);
+    tex = sh_bind(sh, pl_tex, "deband", NULL, &pos, NULL, &pt);
     if (!tex)
         return;
 
@@ -114,7 +114,7 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
         *ratio_y = out_h / fabs(src_h);
 
     if (components) {
-        const struct ra_fmt *fmt = src->tex->params.format;
+        const struct pl_fmt *fmt = src->tex->params.format;
         *components = PL_DEF(src->components, fmt->num_components);
     }
 
@@ -166,9 +166,9 @@ static void bicubic_calcweights(struct pl_shader *sh, const char *t, const char 
 
 bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *src)
 {
-    if (src->tex->params.sample_mode != RA_TEX_SAMPLE_LINEAR) {
+    if (src->tex->params.sample_mode != PL_TEX_SAMPLE_LINEAR) {
         PL_ERR(sh, "Trying to use fast bicubic sampling from a texture without "
-               "RA_TEX_SAMPLE_LINEAR");
+               "PL_TEX_SAMPLE_LINEAR");
         return false;
     }
 
@@ -274,7 +274,7 @@ struct sh_sampler_obj {
     struct pl_shader_obj *lut;
 };
 
-static void sh_sampler_uninit(const struct ra *ra, void *ptr)
+static void sh_sampler_uninit(const struct pl_gpu *gpu, void *ptr)
 {
     struct sh_sampler_obj *obj = ptr;
     pl_shader_obj_destroy(&obj->lut);
@@ -301,11 +301,11 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
         return false;
     }
 
-    const struct ra *ra = sh->ra;
-    const struct ra_tex *tex = src->tex;
-    pl_assert(ra && tex);
+    const struct pl_gpu *gpu = sh->gpu;
+    const struct pl_tex *tex = src->tex;
+    pl_assert(gpu && tex);
 
-    bool has_compute = ra->caps & RA_CAP_COMPUTE && !params->no_compute;
+    bool has_compute = gpu->caps & PL_GPU_CAP_COMPUTE && !params->no_compute;
     bool flipped = src->rect.x0 > src->rect.x1 || src->rect.y0 > src->rect.y1;
     if (flipped && has_compute) {
         PL_WARN(sh, "Trying to use a flipped src.rect with polar sampling! "
@@ -442,9 +442,9 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
                 bool use_gather = sqrt(x*x + y*y) < obj->filter->radius_cutoff;
 
                 // Make sure all required features are supported
-                use_gather &= ra->glsl.version >= 400;
-                use_gather &= PL_MAX(x, y) <= ra->limits.max_gather_offset;
-                use_gather &= PL_MIN(x, y) >= ra->limits.min_gather_offset;
+                use_gather &= gpu->glsl.version >= 400;
+                use_gather &= PL_MAX(x, y) <= gpu->limits.max_gather_offset;
+                use_gather &= PL_MIN(x, y) >= gpu->limits.min_gather_offset;
 
                 if (!use_gather) {
                     // Switch to direct sampling instead
@@ -489,7 +489,7 @@ struct sh_sampler_sep_obj {
     struct pl_shader_obj *samplers[2];
 };
 
-static void sh_sampler_sep_uninit(const struct ra *ra, void *ptr)
+static void sh_sampler_sep_uninit(const struct pl_gpu *gpu, void *ptr)
 {
     struct sh_sampler_sep_obj *obj = ptr;
     for (int i = 0; i < PL_ARRAY_SIZE(obj->samplers); i++)
@@ -516,9 +516,9 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
         return false;
     }
 
-    const struct ra *ra = sh->ra;
-    const struct ra_tex *tex = src->tex;
-    pl_assert(ra && tex);
+    const struct pl_gpu *gpu = sh->gpu;
+    const struct pl_tex *tex = src->tex;
+    pl_assert(gpu && tex);
 
     struct pl_sample_src srcfix = *src;
     switch (pass) {
@@ -580,7 +580,7 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
             .config             = params->filter,
             .lut_entries        = lut_entries,
             .filter_scale       = inv_scale,
-            .max_row_size       = ra->limits.max_tex_2d_dim / 4,
+            .max_row_size       = gpu->limits.max_tex_2d_dim / 4,
             .row_stride_align   = 4,
         });
 

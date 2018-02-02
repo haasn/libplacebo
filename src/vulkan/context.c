@@ -18,7 +18,7 @@
 #include "common.h"
 #include "command.h"
 #include "utils.h"
-#include "ra_vk.h"
+#include "gpu.h"
 
 const struct pl_vk_inst_params pl_vk_inst_default_params = {0};
 
@@ -150,7 +150,7 @@ void pl_vulkan_destroy(const struct pl_vulkan **pl_vk)
     if (!*pl_vk)
         return;
 
-    ra_destroy((*pl_vk)->ra);
+    pl_gpu_destroy((*pl_vk)->gpu);
 
     struct vk_ctx *vk = (*pl_vk)->priv;
     if (vk->dev) {
@@ -459,8 +459,8 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     if (!device_init(vk, params))
         goto error;
 
-    pl_vk->ra = ra_create_vk(vk);
-    if (!pl_vk->ra)
+    pl_vk->gpu = pl_gpu_create_vk(vk);
+    if (!pl_vk->gpu)
         goto error;
 
     // Expose the resulting vulkan objects

@@ -1,4 +1,4 @@
-#include "ra_tests.h"
+#include "gpu_tests.h"
 
 int main()
 {
@@ -15,7 +15,7 @@ int main()
     if (!vk)
         return SKIP;
 
-    ra_tests(vk->ra);
+    gpu_tests(vk->gpu);
     pl_vulkan_destroy(&vk);
     pl_vk_inst_destroy(&vkinst);
     pl_context_destroy(&ctx);

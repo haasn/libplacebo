@@ -46,12 +46,12 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
     struct pl_transform3x3 tr = pl_color_repr_decode(repr, params);
 
     ident_t cmat = sh_var(sh, (struct pl_shader_var) {
-        .var  = ra_var_mat3("cmat"),
+        .var  = pl_var_mat3("cmat"),
         .data = PL_TRANSPOSE_3X3(tr.mat.m),
     });
 
     ident_t cmat_c = sh_var(sh, (struct pl_shader_var) {
-        .var  = ra_var_vec3("cmat_m"),
+        .var  = pl_var_vec3("cmat_m"),
         .data = tr.c,
     });
 
@@ -127,12 +127,12 @@ void pl_shader_encode_color(struct pl_shader *sh,
     pl_transform3x3_invert(&tr);
 
     ident_t cmat = sh_var(sh, (struct pl_shader_var) {
-        .var  = ra_var_mat3("cmat"),
+        .var  = pl_var_mat3("cmat"),
         .data = PL_TRANSPOSE_3X3(tr.mat.m),
     });
 
     ident_t cmat_c = sh_var(sh, (struct pl_shader_var) {
-        .var  = ra_var_vec3("cmat_m"),
+        .var  = pl_var_vec3("cmat_m"),
         .data = tr.c,
     });
 
@@ -448,14 +448,14 @@ const struct pl_color_map_params pl_color_map_default_params = {
 };
 
 struct sh_peak_obj {
-    const struct ra *ra;
-    const struct ra_buf *buf;
+    const struct pl_gpu *gpu;
+    const struct pl_buf *buf;
 };
 
-static void sh_peak_uninit(const struct ra *ra, void *ptr)
+static void sh_peak_uninit(const struct pl_gpu *gpu, void *ptr)
 {
     struct sh_peak_obj *obj = ptr;
-    ra_buf_destroy(obj->ra, &obj->buf);
+    pl_buf_destroy(obj->gpu, &obj->buf);
     *obj = (struct sh_peak_obj) {0};
 }
 
@@ -483,37 +483,37 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
         return;
     }
 
-    const struct ra *ra = sh->ra;
-    obj->ra = ra;
+    const struct pl_gpu *gpu = sh->gpu;
+    obj->gpu = gpu;
 
-    struct ra_var idx, num, ctr, max, sum;
-    idx = ra_var_uint(sh_fresh(sh, "index"));
-    num = ra_var_uint(sh_fresh(sh, "number"));
-    ctr = ra_var_uint(sh_fresh(sh, "counter"));
-    max = ra_var_uint(sh_fresh(sh, "frames_max"));
-    sum = ra_var_uint(sh_fresh(sh, "frames_sum"));
+    struct pl_var idx, num, ctr, max, sum;
+    idx = pl_var_uint(sh_fresh(sh, "index"));
+    num = pl_var_uint(sh_fresh(sh, "number"));
+    ctr = pl_var_uint(sh_fresh(sh, "counter"));
+    max = pl_var_uint(sh_fresh(sh, "frames_max"));
+    sum = pl_var_uint(sh_fresh(sh, "frames_sum"));
     max.dim_a = sum.dim_a = frames + 1;
 
-    struct ra_var max_total, sum_total;
-    max_total = ra_var_uint(sh_fresh(sh, "max_total"));
-    sum_total = ra_var_uint(sh_fresh(sh, "sum_total"));
+    struct pl_var max_total, sum_total;
+    max_total = pl_var_uint(sh_fresh(sh, "max_total"));
+    sum_total = pl_var_uint(sh_fresh(sh, "sum_total"));
 
     // Attempt packing the peak detection SSBO
-    struct ra_desc ssbo = {
+    struct pl_desc ssbo = {
         .name   = "PeakDetect",
-        .type   = RA_DESC_BUF_STORAGE,
-        .access = RA_DESC_ACCESS_READWRITE,
+        .type   = PL_DESC_BUF_STORAGE,
+        .access = PL_DESC_ACCESS_READWRITE,
     };
 
-    struct ra_var_layout idx_l, num_l, ctr_l, max_l, sum_l, max_tl, sum_tl;
+    struct pl_var_layout idx_l, num_l, ctr_l, max_l, sum_l, max_tl, sum_tl;
     bool ok = true;
-    ok &= ra_buf_desc_append(sh->tmp, ra, &ssbo, &idx_l, idx);
-    ok &= ra_buf_desc_append(sh->tmp, ra, &ssbo, &num_l, num);
-    ok &= ra_buf_desc_append(sh->tmp, ra, &ssbo, &ctr_l, ctr);
-    ok &= ra_buf_desc_append(sh->tmp, ra, &ssbo, &max_l, max);
-    ok &= ra_buf_desc_append(sh->tmp, ra, &ssbo, &sum_l, sum);
-    ok &= ra_buf_desc_append(sh->tmp, ra, &ssbo, &max_tl, max_total);
-    ok &= ra_buf_desc_append(sh->tmp, ra, &ssbo, &sum_tl, sum_total);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &idx_l, idx);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &num_l, num);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &ctr_l, ctr);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &max_l, max);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &sum_l, sum);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &max_tl, max_total);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &sum_tl, sum_total);
 
     if (!ok) {
         PL_WARN(sh, "HDR peak detection exhausts device limits.. disabling");
@@ -522,15 +522,15 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
     }
 
     // Create the SSBO if necessary
-    size_t size = ra_buf_desc_size(&ssbo);
+    size_t size = pl_buf_desc_size(&ssbo);
     if (!obj->buf || obj->buf->params.size != size) {
         PL_TRACE(sh, "(Re)creating HDR peak detection SSBO");
 
         void *data = talloc_zero_size(NULL, size);
-        ra_buf_destroy(ra, &obj->buf);
-        obj->buf = ra_buf_create(ra, &(struct ra_buf_params) {
-            .type = RA_BUF_STORAGE,
-            .size = ra_buf_desc_size(&ssbo),
+        pl_buf_destroy(gpu, &obj->buf);
+        obj->buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+            .type = PL_BUF_STORAGE,
+            .size = pl_buf_desc_size(&ssbo),
             .initial_data = data,
         });
         talloc_free(data);
@@ -802,12 +802,12 @@ void pl_shader_color_map(struct pl_shader *sh,
         struct pl_matrix3x3 rgb2xyz;
         rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(src.primaries));
         src_luma = sh_var(sh, (struct pl_shader_var) {
-            .var  = ra_var_vec3("src_luma"),
+            .var  = pl_var_vec3("src_luma"),
             .data = rgb2xyz.m[1], // RGB->Y vector
         });
         rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(dst.primaries));
         dst_luma = sh_var(sh, (struct pl_shader_var) {
-            .var  = ra_var_vec3("dst_luma"),
+            .var  = pl_var_vec3("dst_luma"),
             .data = rgb2xyz.m[1], // RGB->Y vector
         });
     }
@@ -829,7 +829,7 @@ void pl_shader_color_map(struct pl_shader *sh,
         struct pl_matrix3x3 cms_mat;
         cms_mat = pl_get_color_mapping_matrix(csp_src, csp_dst, params->intent);
         GLSL("color.rgb = %s * color.rgb;\n", sh_var(sh, (struct pl_shader_var) {
-            .var = ra_var_mat3("cms_matrix"),
+            .var = pl_var_mat3("cms_matrix"),
             .data = PL_TRANSPOSE_3X3(cms_mat.m),
         }));
         // Since this can reduce the gamut, figure out by how much
@@ -862,7 +862,7 @@ struct sh_dither_obj {
     struct pl_shader_obj *lut;
 };
 
-static void sh_dither_uninit(const struct ra *ra, void *ptr)
+static void sh_dither_uninit(const struct pl_gpu *gpu, void *ptr)
 {
     struct sh_dither_obj *obj = ptr;
     pl_shader_obj_destroy(&obj->lut);
@@ -953,7 +953,7 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
     goto done;
 
 fallback:
-    if (sh->ra && sh->ra->glsl.version >= 130) {
+    if (sh->gpu && sh->gpu->glsl.version >= 130) {
         method = PL_DITHER_ORDERED_FIXED;
     } else {
         method = PL_DITHER_WHITE_NOISE;
@@ -983,7 +983,7 @@ done: ;
             };
 
             ident_t rot = sh_var(sh, (struct pl_shader_var) {
-                .var  = ra_var_mat2("dither_rot"),
+                .var  = pl_var_mat2("dither_rot"),
                 .data = &mat[0][0],
                 .dynamic = true,
             });

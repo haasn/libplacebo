@@ -52,17 +52,17 @@ enum {
 struct sampler {
     struct pl_shader_obj *upscaler_state;
     struct pl_shader_obj *downscaler_state;
-    const struct ra_tex *sep_fbo_up;
-    const struct ra_tex *sep_fbo_down;
+    const struct pl_tex *sep_fbo_up;
+    const struct pl_tex *sep_fbo_down;
 };
 
 struct pl_renderer {
-    const struct ra *ra;
+    const struct pl_gpu *gpu;
     struct pl_context *ctx;
     struct pl_dispatch *dp;
 
     // Texture format to use for intermediate textures
-    const struct ra_fmt *fbofmt;
+    const struct pl_fmt *fbofmt;
 
     // Cached feature checks (inverted)
     bool disable_compute;    // disable the use of compute shaders
@@ -76,8 +76,8 @@ struct pl_renderer {
     // Shader resource objects and intermediate textures (FBOs)
     struct pl_shader_obj *peak_detect_state;
     struct pl_shader_obj *dither_state;
-    const struct ra_tex *main_scale_fbo;
-    const struct ra_tex *deband_fbos[PLANE_COUNT];
+    const struct pl_tex *main_scale_fbo;
+    const struct pl_tex *deband_fbos[PLANE_COUNT];
     struct sampler samplers[SCALER_COUNT];
     struct sampler *osd_samplers;
     int num_osd_samplers;
@@ -86,29 +86,29 @@ struct pl_renderer {
 static void find_fbo_format(struct pl_renderer *rr)
 {
     struct {
-        enum ra_fmt_type type;
+        enum pl_fmt_type type;
         int depth;
-        enum ra_fmt_caps caps;
+        enum pl_fmt_caps caps;
     } configs[] = {
         // Prefer floating point formats first
-        {RA_FMT_FLOAT, 16, RA_FMT_CAP_LINEAR},
-        {RA_FMT_FLOAT, 16, RA_FMT_CAP_SAMPLEABLE},
+        {PL_FMT_FLOAT, 16, PL_FMT_CAP_LINEAR},
+        {PL_FMT_FLOAT, 16, PL_FMT_CAP_SAMPLEABLE},
 
         // Otherwise, fall back to unorm/snorm, preferring linearly sampleable
-        {RA_FMT_UNORM, 16, RA_FMT_CAP_LINEAR},
-        {RA_FMT_SNORM, 16, RA_FMT_CAP_LINEAR},
-        {RA_FMT_UNORM, 16, RA_FMT_CAP_SAMPLEABLE},
-        {RA_FMT_SNORM, 16, RA_FMT_CAP_SAMPLEABLE},
+        {PL_FMT_UNORM, 16, PL_FMT_CAP_LINEAR},
+        {PL_FMT_SNORM, 16, PL_FMT_CAP_LINEAR},
+        {PL_FMT_UNORM, 16, PL_FMT_CAP_SAMPLEABLE},
+        {PL_FMT_SNORM, 16, PL_FMT_CAP_SAMPLEABLE},
 
         // As a final fallback, allow 8-bit FBO formats (for UNORM only)
-        {RA_FMT_UNORM, 8, RA_FMT_CAP_LINEAR},
-        {RA_FMT_UNORM, 8, RA_FMT_CAP_SAMPLEABLE},
+        {PL_FMT_UNORM, 8, PL_FMT_CAP_LINEAR},
+        {PL_FMT_UNORM, 8, PL_FMT_CAP_SAMPLEABLE},
     };
 
     for (int i = 0; i < PL_ARRAY_SIZE(configs); i++) {
-        const struct ra_fmt *fmt;
-        fmt = ra_find_fmt(rr->ra, configs[i].type, 4, configs[i].depth, 0,
-                          configs[i].caps | RA_FMT_CAP_RENDERABLE);
+        const struct pl_fmt *fmt;
+        fmt = pl_find_fmt(rr->gpu, configs[i].type, 4, configs[i].depth, 0,
+                          configs[i].caps | PL_FMT_CAP_RENDERABLE);
         if (fmt) {
             rr->fbofmt = fmt;
             break;
@@ -120,12 +120,12 @@ static void find_fbo_format(struct pl_renderer *rr)
         return;
     }
 
-    if (!(rr->fbofmt->caps & RA_FMT_CAP_STORABLE)) {
+    if (!(rr->fbofmt->caps & PL_FMT_CAP_STORABLE)) {
         PL_INFO(rr, "Found no storable FBO format; compute shaders disabled");
         rr->disable_compute = true;
     }
 
-    if (rr->fbofmt->type != RA_FMT_FLOAT) {
+    if (rr->fbofmt->type != PL_FMT_FLOAT) {
         PL_INFO(rr, "Found no floating point FBO format; linear light "
                 "processing disabled for HDR material");
         rr->disable_linear_hdr = true;
@@ -139,13 +139,13 @@ static void find_fbo_format(struct pl_renderer *rr)
 }
 
 struct pl_renderer *pl_renderer_create(struct pl_context *ctx,
-                                       const struct ra *ra)
+                                       const struct pl_gpu *gpu)
 {
     struct pl_renderer *rr = talloc_ptrtype(NULL, rr);
     *rr = (struct pl_renderer) {
-        .ra  = ra,
+        .gpu  = gpu,
         .ctx = ctx,
-        .dp  = pl_dispatch_create(ctx, ra),
+        .dp  = pl_dispatch_create(ctx, gpu),
     };
 
     assert(rr->dp);
@@ -157,8 +157,8 @@ static void sampler_destroy(struct pl_renderer *rr, struct sampler *sampler)
 {
     pl_shader_obj_destroy(&sampler->upscaler_state);
     pl_shader_obj_destroy(&sampler->downscaler_state);
-    ra_tex_destroy(rr->ra, &sampler->sep_fbo_up);
-    ra_tex_destroy(rr->ra, &sampler->sep_fbo_down);
+    pl_tex_destroy(rr->gpu, &sampler->sep_fbo_up);
+    pl_tex_destroy(rr->gpu, &sampler->sep_fbo_down);
 }
 
 void pl_renderer_destroy(struct pl_renderer **p_rr)
@@ -168,9 +168,9 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
         return;
 
     // Free all intermediate FBOs
-    ra_tex_destroy(rr->ra, &rr->main_scale_fbo);
+    pl_tex_destroy(rr->gpu, &rr->main_scale_fbo);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->deband_fbos); i++)
-        ra_tex_destroy(rr->ra, &rr->deband_fbos[i]);
+        pl_tex_destroy(rr->gpu, &rr->deband_fbos[i]);
 
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
@@ -217,33 +217,33 @@ struct img {
     int comps;
 };
 
-static const struct ra_tex *finalize_img(struct pl_renderer *rr,
+static const struct pl_tex *finalize_img(struct pl_renderer *rr,
                                          struct img *img,
-                                         const struct ra_fmt *fmt,
-                                         const struct ra_tex **tex)
+                                         const struct pl_fmt *fmt,
+                                         const struct pl_tex **tex)
 {
     pl_assert(fmt);
 
     if (*tex) {
-        const struct ra_tex_params *cur = &(*tex)->params;
+        const struct pl_tex_params *cur = &(*tex)->params;
         if (cur->w == img->w && cur->h == img->h && cur->format == fmt)
             goto resized;
     }
 
     PL_INFO(rr, "Resizing intermediate FBO texture: %dx%d", img->w, img->h);
 
-    ra_tex_destroy(rr->ra, tex);
-    *tex = ra_tex_create(rr->ra, &(struct ra_tex_params) {
+    pl_tex_destroy(rr->gpu, tex);
+    *tex = pl_tex_create(rr->gpu, &(struct pl_tex_params) {
         .w = img->w,
         .h = img->h,
         .format = fmt,
         .sampleable = true,
         .renderable = true,
         // Just enable what we can
-        .storable   = !!(fmt->caps & RA_FMT_CAP_STORABLE),
-        .sample_mode = (fmt->caps & RA_FMT_CAP_LINEAR)
-                            ? RA_TEX_SAMPLE_LINEAR
-                            : RA_TEX_SAMPLE_NEAREST,
+        .storable   = !!(fmt->caps & PL_FMT_CAP_STORABLE),
+        .sample_mode = (fmt->caps & PL_FMT_CAP_LINEAR)
+                            ? PL_TEX_SAMPLE_LINEAR
+                            : PL_TEX_SAMPLE_NEAREST,
     });
 
     if (!*tex) {
@@ -280,9 +280,9 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
         goto fallback;
 
     const struct pl_filter_config *config = NULL;
-    bool is_linear = src->tex->params.sample_mode == RA_TEX_SAMPLE_LINEAR;
+    bool is_linear = src->tex->params.sample_mode == PL_TEX_SAMPLE_LINEAR;
     struct pl_shader_obj **lut;
-    const struct ra_tex **sep_fbo;
+    const struct pl_tex **sep_fbo;
 
     rx = fabs(rx);
     ry = fabs(ry);
@@ -366,7 +366,7 @@ direct:
     pl_shader_sample_direct(sh, src);
 }
 
-static void draw_overlays(struct pl_renderer *rr, const struct ra_tex *fbo,
+static void draw_overlays(struct pl_renderer *rr, const struct pl_tex *fbo,
                           const struct pl_overlay *overlays, int num,
                           struct pl_color_space color, bool use_sigmoid,
                           struct pl_transform2x2 *scale,
@@ -375,8 +375,8 @@ static void draw_overlays(struct pl_renderer *rr, const struct ra_tex *fbo,
     if (num <= 0 || rr->disable_overlay)
         return;
 
-    enum ra_fmt_caps caps = fbo->params.format->caps;
-    if (!rr->disable_blending && !(caps & RA_FMT_CAP_BLENDABLE)) {
+    enum pl_fmt_caps caps = fbo->params.format->caps;
+    if (!rr->disable_blending && !(caps & PL_FMT_CAP_BLENDABLE)) {
         PL_WARN(rr, "Trying to draw an overlay to a non-blendable target. "
                 "Alpha blending is disabled, results may be incorrect!");
         rr->disable_blending = true;
@@ -390,7 +390,7 @@ static void draw_overlays(struct pl_renderer *rr, const struct ra_tex *fbo,
     for (int n = 0; n < num; n++) {
         const struct pl_overlay *ol = &overlays[n];
         const struct pl_plane *plane = &ol->plane;
-        const struct ra_tex *tex = plane->texture;
+        const struct pl_tex *tex = plane->texture;
 
         struct pl_rect2d rect = ol->rect;
         if (scale) {
@@ -439,7 +439,7 @@ static void draw_overlays(struct pl_renderer *rr, const struct ra_tex *fbo,
         case PL_OVERLAY_MONOCHROME:
             GLSL("color.a = osd_color[0];\n");
             GLSL("color.rgb = %s;\n", sh_var(sh, (struct pl_shader_var) {
-                .var  = ra_var_vec3("base_color"),
+                .var  = pl_var_vec3("base_color"),
                 .data = &ol->base_color,
                 .dynamic = true,
             }));
@@ -455,14 +455,14 @@ static void draw_overlays(struct pl_renderer *rr, const struct ra_tex *fbo,
         if (use_sigmoid)
             pl_shader_sigmoidize(sh, params->sigmoid_params);
 
-        static const struct ra_blend_params blend_params = {
-            .src_rgb = RA_BLEND_SRC_ALPHA,
-            .dst_rgb = RA_BLEND_ONE_MINUS_SRC_ALPHA,
-            .src_alpha = RA_BLEND_ONE,
-            .dst_alpha = RA_BLEND_ONE_MINUS_SRC_ALPHA,
+        static const struct pl_blend_params blend_params = {
+            .src_rgb = PL_BLEND_SRC_ALPHA,
+            .dst_rgb = PL_BLEND_ONE_MINUS_SRC_ALPHA,
+            .src_alpha = PL_BLEND_ONE,
+            .dst_alpha = PL_BLEND_ONE_MINUS_SRC_ALPHA,
         };
 
-        const struct ra_blend_params *blend = &blend_params;
+        const struct pl_blend_params *blend = &blend_params;
         if (rr->disable_blending)
             blend = NULL;
 
@@ -475,16 +475,16 @@ static void draw_overlays(struct pl_renderer *rr, const struct ra_tex *fbo,
 }
 
 static void deband_plane(struct pl_renderer *rr, struct pl_plane *plane,
-                         const struct ra_tex **fbo,
+                         const struct pl_tex **fbo,
                          const struct pl_render_params *params)
 {
     if (!rr->fbofmt || rr->disable_debanding || !params->deband_params)
         return;
 
-    const struct ra_tex *tex = plane->texture;
-    if (tex->params.sample_mode != RA_TEX_SAMPLE_LINEAR) {
+    const struct pl_tex *tex = plane->texture;
+    if (tex->params.sample_mode != PL_TEX_SAMPLE_LINEAR) {
         PL_WARN(rr, "Debanding requires uploaded textures to be linearly "
-                "sampleable (params.sample_mode = RA_TEX_SAMPLE_LINEAR)! "
+                "sampleable (params.sample_mode = PL_TEX_SAMPLE_LINEAR)! "
                 "Disabling debanding..");
         rr->disable_debanding = true;
         return;
@@ -499,7 +499,7 @@ static void deband_plane(struct pl_renderer *rr, struct pl_plane *plane,
         .h  = tex->params.h,
     };
 
-    const struct ra_tex *new = finalize_img(rr, &img, rr->fbofmt, fbo);
+    const struct pl_tex *new = finalize_img(rr, &img, rr->fbofmt, fbo);
     if (!new) {
         PL_ERR(rr, "Failed dispatching debanding shader.. disabling debanding!");
         rr->disable_debanding = true;
@@ -540,7 +540,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         struct pl_plane *plane = &planes[i];
         *plane = image->planes[i];
 
-        const struct ra_tex *tex = plane->texture;
+        const struct pl_tex *tex = plane->texture;
         int diff = PL_MAX(abs(tex->params.w - image->width),
                           abs(tex->params.h - image->height));
         int off = PL_MAX(plane->shift_x, plane->shift_y);
@@ -751,7 +751,7 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
                                const struct pl_render_target *target,
                                const struct pl_render_params *params)
 {
-    const struct ra_tex *fbo = target->fbo;
+    const struct pl_tex *fbo = target->fbo;
 
     // Color management
     struct pl_shader *sh = pass->cur_img.sh;
@@ -875,9 +875,9 @@ error:
 }
 
 void pl_render_target_from_swapchain(struct pl_render_target *out_target,
-                                     const struct ra_swapchain_frame *frame)
+                                     const struct pl_swapchain_frame *frame)
 {
-    const struct ra_tex *fbo = frame->fbo;
+    const struct pl_tex *fbo = frame->fbo;
     *out_target = (struct pl_render_target) {
         .fbo = fbo,
         .dst_rect = { 0, 0, fbo->params.w, fbo->params.h },

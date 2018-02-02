@@ -86,28 +86,21 @@ and even the GPU in general.
 
 ### Tier 1 (rendering abstraction)
 
-- `ra.h`: Exports the RA API used by libplacebo internally.
+- `gpu.h`: Exports the GPU abstraction API used by libplacebo internally.
 - `swapchain.h`: Exports an API for wrapping platform-specific swapchains and
   other display APIs. This is the API used to actually queue up rendered
   frames for presentation (e.g. to a window or display device).
-- `vulkan.h`: RA implementation based on Vulkan.
+- `vulkan.h`: GPU API implementation based on Vulkan.
 
-As part of the public API, libplacebo exports the **RA** API ("Rendering
-Abstraction"). Basically, this is the API libplacebo uses internally to wrap
-OpenGL, Vulkan, Direct3D etc. into a single unifying API subset that abstracts
-away state, messy details, synchronization etc. into a fairly high-level API
-suitable for libplacebo's image processing tasks.
+As part of the public API, libplacebo exports a middle-level abstraction for
+dealing with GPU objects and state. Basically, this is the API libplacebo uses
+internally to wrap OpenGL, Vulkan, Direct3D etc. into a single unifying API
+subset that abstracts away state, messy details, synchronization etc. into a
+fairly high-level API suitable for libplacebo's image processing tasks.
 
 It's made public both because it constitutes part of the public API of various
 image processing functions, but also in the hopes that it will be useful for
-other developers of GPU-accelerated image processing software. RA can be used
-entirely independently of libplacebo's image processing, which is why it
-uses its own namespace (`ra_` instead of `pl_`).
-
-**NOTE**: The port of RA into libplacebo is still WIP, and right now only the
-vulkan-based interface is exported. OpenGL and D3D11 support are
-planned/possible (and the code has already been written for `mpv`), but
-currently missing.
+other developers of GPU-accelerated image processing software.
 
 ### Tier 2 (GLSL generating primitives)
 
@@ -116,7 +109,7 @@ currently missing.
   larger shaders. For example, a program might use this interface to generate
   a specialized tone-mapping function for performing color space conversions,
   then call that from their own fragment shader code. This abstraction has an
-  optional dependency on `RA`, but can also be used independently from it.
+  optional dependency on `gpu.h`, but can also be used independently from it.
 
 In addition to this low-level interface, there are several available shader
 routines which libplacebo exports:
@@ -129,8 +122,8 @@ routines which libplacebo exports:
 ### Tier 3 (shader dispatch)
 
 - `dispatch.h`: A higher-level interface to the `pl_shader` system, based on
-  RA. This dispatch mechanism generates+executes complete GLSL shaders,
-  subject to the constraints and limitations of the underlying RA.
+  `gpu.h`. This dispatch mechanism generates+executes complete GLSL shaders,
+  subject to the constraints and limitations of the underlying GPU.
 
 This shader dispatch mechanism is designed to be combined with the shader
 processing routines exported by `shaders/*.h`, but takes care of the low-level

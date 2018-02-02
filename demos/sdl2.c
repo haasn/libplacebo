@@ -35,7 +35,7 @@ struct pl_context *ctx;
 
 const struct pl_vulkan *vk;
 const struct pl_vk_inst *vk_inst;
-const struct ra_swapchain *swapchain;
+const struct pl_swapchain *swapchain;
 
 // for rendering
 struct pl_plane img_plane;
@@ -45,9 +45,9 @@ struct pl_renderer *renderer;
 static void uninit()
 {
     pl_renderer_destroy(&renderer);
-    ra_tex_destroy(vk->ra, &img_plane.texture);
-    ra_tex_destroy(vk->ra, &osd_plane.texture);
-    ra_swapchain_destroy(&swapchain);
+    pl_tex_destroy(vk->gpu, &img_plane.texture);
+    pl_tex_destroy(vk->gpu, &osd_plane.texture);
+    pl_swapchain_destroy(&swapchain);
     pl_vulkan_destroy(&vk);
     vkDestroySurfaceKHR(vk_inst->instance, surf, NULL);
     pl_vk_inst_destroy(&vk_inst);
@@ -167,7 +167,7 @@ static bool upload_plane(const char *filename, struct pl_plane *plane)
     }
 
     struct pl_plane_data data = {
-        .type           = RA_FMT_UNORM,
+        .type           = PL_FMT_UNORM,
         .width          = img->w,
         .height         = img->h,
         .pixel_stride   = fmt->BytesPerPixel,
@@ -178,7 +178,7 @@ static bool upload_plane(const char *filename, struct pl_plane *plane)
     uint64_t masks[4] = { fmt->Rmask, fmt->Gmask, fmt->Bmask, fmt->Amask };
     pl_plane_data_from_mask(&data, masks);
 
-    bool ok = pl_upload_plane(vk->ra, plane, &data);
+    bool ok = pl_upload_plane(vk->gpu, plane, &data);
     SDL_FreeSurface(img);
 
     return ok;
@@ -195,12 +195,12 @@ static void init_rendering(const char *img, const char *osd)
         fprintf(stderr, "Failed uploading OSD plane.. continuing anyway\n");
 
     // Create a renderer instance
-    renderer = pl_renderer_create(ctx, vk->ra);
+    renderer = pl_renderer_create(ctx, vk->gpu);
 }
 
-static void render_frame(const struct ra_swapchain_frame *frame)
+static void render_frame(const struct pl_swapchain_frame *frame)
 {
-    const struct ra_tex *img = img_plane.texture;
+    const struct pl_tex *img = img_plane.texture;
     struct pl_image image = {
         .num_planes = 1,
         .planes     = { img_plane },
@@ -220,7 +220,7 @@ static void render_frame(const struct ra_swapchain_frame *frame)
     struct pl_render_target target;
     pl_render_target_from_swapchain(&target, frame);
 
-    const struct ra_tex *osd = osd_plane.texture;
+    const struct pl_tex *osd = osd_plane.texture;
     if (osd) {
         target.num_overlays = 1;
         target.overlays = &(struct pl_overlay) {
@@ -255,7 +255,7 @@ int main(int argc, char **argv)
     init_rendering(argv[1], argc > 2 ? argv[2] : NULL);
 
     // Resize the window to match the content
-    const struct ra_tex *img = img_plane.texture;
+    const struct pl_tex *img = img_plane.texture;
     SDL_SetWindowSize(window, img->params.w, img->params.h);
 
     unsigned int last = SDL_GetTicks(), frames = 0;
@@ -268,22 +268,22 @@ int main(int argc, char **argv)
                 goto cleanup;
         }
 
-        struct ra_swapchain_frame frame;
-        bool ok = ra_swapchain_start_frame(swapchain, &frame);
+        struct pl_swapchain_frame frame;
+        bool ok = pl_swapchain_start_frame(swapchain, &frame);
         if (!ok) {
             SDL_Delay(10);
             continue;
         }
 
         render_frame(&frame);
-        ok = ra_swapchain_submit_frame(swapchain);
+        ok = pl_swapchain_submit_frame(swapchain);
         if (!ok) {
             fprintf(stderr, "Failed submitting frame!");
             ret = 3;
             goto cleanup;
         }
 
-        ra_swapchain_swap_buffers(swapchain);
+        pl_swapchain_swap_buffers(swapchain);
         frames++;
 
         unsigned int now = SDL_GetTicks();

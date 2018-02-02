@@ -19,8 +19,8 @@
 #define LIBPLACEBO_SHADERS_SAMPLING_H_
 
 // Sampling operations. These shaders perform some form of sampling operation
-// from a given ra_tex. In order to use these, the pl_shader *must* have been
-// created using the same `ra` as the originating `ra_tex`. Otherwise, this
+// from a given pl_tex. In order to use these, the pl_shader *must* have been
+// created using the same `ra` as the originating `pl_tex`. Otherwise, this
 // is undefined behavior. They require nothing (PL_SHADER_SIG_NONE) and return
 // a color (PL_SHADER_SIG_COLOR).
 
@@ -58,16 +58,16 @@ extern const struct pl_deband_params pl_deband_default_params;
 
 // Debands a given texture and returns the sampled color in `vec4 color`. If
 // `params` is left as NULL, it defaults to &pl_deband_default_params. Note
-// that `tex->params.sample_mode` must be RA_TEX_SAMPLE_LINEAR.
+// that `tex->params.sample_mode` must be PL_TEX_SAMPLE_LINEAR.
 //
 // Note: This can also be used as a pure grain function, by setting the number
 // of iterations to 0.
-void pl_shader_deband(struct pl_shader *sh, const struct ra_tex *tex,
+void pl_shader_deband(struct pl_shader *sh, const struct pl_tex *tex,
                       const struct pl_deband_params *params);
 
 // Common parameters for sampling operations
 struct pl_sample_src {
-    const struct ra_tex *tex; // texture to sample
+    const struct pl_tex *tex; // texture to sample
     struct pl_rect2df rect;   // sub-rect to sample from (optional)
     int components;           // number of components to sample (optional)
     int new_w, new_h;         // dimensions of the resulting output (optional)
@@ -78,14 +78,14 @@ struct pl_sample_src {
 //
 // Note: This is generally very low quality and should be avoided if possible,
 // for both upscaling and downscaling. The only exception to this rule of thumb
-// is exact 2x downscaling with RA_TEX_SAMPLE_LINEAR, as well as integer
-// upscaling with RA_TEX_SAMPLE_NEAREST.
+// is exact 2x downscaling with PL_TEX_SAMPLE_LINEAR, as well as integer
+// upscaling with PL_TEX_SAMPLE_NEAREST.
 bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *src);
 
 // Performs hardware-accelerated / efficient bicubic sampling. This is more
 // efficient than using the generalized sampling routines and
 // pl_filter_function_bicubic. Requires the source texture to be set up with
-// sample_mode RA_TEX_SAMPLE_LINEAR. Only works well when upscaling - avoid
+// sample_mode PL_TEX_SAMPLE_LINEAR. Only works well when upscaling - avoid
 // for downscaling.
 bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *src);
 
@@ -115,7 +115,7 @@ struct pl_sample_filter_params {
 
 // Performs polar sampling. This internally chooses between an optimized compute
 // shader, and various fragment shaders, depending on the supported GLSL version
-// and RA features. Returns whether or not it was successful.
+// and GPU features. Returns whether or not it was successful.
 //
 // Note: `params->filter.polar` must be true to use this function.
 bool pl_shader_sample_polar(struct pl_shader *sh,

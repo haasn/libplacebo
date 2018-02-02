@@ -20,18 +20,18 @@
 
 #include <libplacebo/colorspace.h>
 #include <libplacebo/filters.h>
-#include <libplacebo/ra.h>
+#include <libplacebo/gpu.h>
 #include <libplacebo/shaders/colorspace.h>
 #include <libplacebo/shaders/sampling.h>
 #include <libplacebo/swapchain.h>
 
 struct pl_renderer;
 
-// Creates a new renderer object, which is backed by a RA context. This is a
+// Creates a new renderer object, which is backed by a GPU context. This is a
 // high-level object that takes care of the rendering chain as a whole, from
 // the source textures to the finished frame.
 struct pl_renderer *pl_renderer_create(struct pl_context *ctx,
-                                       const struct ra *ra);
+                                       const struct pl_gpu *gpu);
 void pl_renderer_destroy(struct pl_renderer **rr);
 
 // Flushes the internal redraw cache of this renderer. This is normally not
@@ -170,7 +170,7 @@ extern const struct pl_render_params pl_render_default_params;
 struct pl_plane {
     // The texture underlying this plane. The texture must be 2D, and
     // `texture->params.sampleable` must be true.
-    const struct ra_tex *texture;
+    const struct pl_tex *texture;
 
     // Describes the number and interpretation of the components in this plane.
     // This defines the mapping from component index to the canonical component
@@ -263,7 +263,7 @@ struct pl_image {
     // NOTE: Re-using the same `signature` also requires that the contents of
     // the planes (plane[i].texture) as well as any overlays has not changed
     // since the previous usage. In other words, touching the texture in any
-    // way using the ra_tex_* APIs and then trying to re-use them for the same
+    // way using the pl_tex_* APIs and then trying to re-use them for the same
     // signature, or trying to re-use the same signature with different
     // textures, is undefined behavior. (It's the *contents* that matter here,
     // the actual texture object can be a different one, as long as the
@@ -324,7 +324,7 @@ struct pl_render_target {
     // The framebuffer (or texture) we want to render to. Must have `renderable`
     // set. The other capabilities are optional, but in particular `storable`
     // and `blittable` can help boost performance if available.
-    const struct ra_tex *fbo;
+    const struct pl_tex *fbo;
 
     // The destination rectangle which we want to render into. If this is
     // larger or smaller than the src_rect, or if the aspect ratio is
@@ -348,7 +348,7 @@ struct pl_render_target {
 
 // Fills in a pl_render_target based on a swapchain frame's FBO and metadata.
 void pl_render_target_from_swapchain(struct pl_render_target *out_target,
-                                     const struct ra_swapchain_frame *frame);
+                                     const struct pl_swapchain_frame *frame);
 
 // Render a single image to a target using the given parameters. This is
 // fully dynamic, i.e. the params can change at any time. libplacebo will

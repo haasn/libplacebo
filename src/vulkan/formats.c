@@ -18,9 +18,9 @@
 #include "formats.h"
 
 #define FMT(_name, num, size, ftype, bits, idx) \
-    (struct ra_fmt) {                           \
+    (struct pl_fmt) {                           \
         .name = _name,                          \
-        .type = RA_FMT_##ftype,                 \
+        .type = PL_FMT_##ftype,                 \
         .num_components  = num,                 \
         .component_depth = bits,                \
         .opaque          = false,               \
