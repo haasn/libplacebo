@@ -72,7 +72,10 @@ tests = [
 # Optional components, in the following format:
 # [ name, dependency, extra_sources, extra_tests ]
 components = [
-  [
+  [ 'lcms',
+    cc.find_library('lcms2', version: '>=2.6', required: false),
+    [ 'lcms.c' ],
+  ], [
     'shaderc',
     cc.find_library('shaderc_shared', required: false),
     'spirv_shaderc.c',

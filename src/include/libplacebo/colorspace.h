@@ -348,4 +348,23 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *s
 struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
                                     const struct pl_color_adjustment *params);
 
+// Common struct to describe an ICC profile
+struct pl_icc_profile {
+    // Points to the in-memory representation of the ICC profile. This is
+    // allowed to be NULL, in which case the `pl_icc_profile` represents "no
+    // profile”.
+    const void *data;
+    size_t len;
+
+    // If a profile is set, this signature must uniquely identify it. It could
+    // be, for example, a checksum of the profile contents. Alternatively, it
+    // could be the pointer to the ICC profile itself, as long as the user
+    // makes sure that this memory is used in an immutable way.
+    uint64_t signature;
+};
+
+// This doesn't do a comparison of the actual contents, only of the signature.
+bool pl_icc_profile_equal(const struct pl_icc_profile *p1,
+                          const struct pl_icc_profile *p2);
+
 #endif // LIBPLACEBO_COLORSPACE_H_

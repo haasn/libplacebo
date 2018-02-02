@@ -113,6 +113,7 @@ enum pl_shader_obj_type {
     PL_SHADER_OBJ_SAMPLER,
     PL_SHADER_OBJ_SAMPLER_SEP,
     PL_SHADER_OBJ_DITHER,
+    PL_SHADER_OBJ_3DLUT,
     PL_SHADER_OBJ_LUT,
 };
 

@@ -745,3 +745,14 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
 
     return out;
 }
+
+bool pl_icc_profile_equal(const struct pl_icc_profile *p1,
+                          const struct pl_icc_profile *p2)
+{
+    // Test for presence of a pointer first
+    if (!!p1->data != !!p2->data)
+        return false;
+
+    // Otherwise, test for equality of signature+len (if a profile is present)
+    return !p1->data || (p1->signature == p2->signature && p1->len == p2->len);
+}

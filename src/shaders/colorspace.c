@@ -1069,3 +1069,108 @@ const struct pl_dither_params pl_dither_default_params = {
     .method     = PL_DITHER_BLUE_NOISE,
     .temporal   = false, // commonly flickers on LCDs
 };
+
+#if PL_HAVE_LCMS
+
+#include "lcms.h"
+
+struct sh_3dlut_obj {
+    struct pl_context *ctx;
+    enum pl_rendering_intent intent;
+    struct pl_3dlut_profile src, dst;
+    struct pl_3dlut_result result;
+    struct pl_shader_obj *lut_obj;
+    bool updated; // to detect misuse of the API
+    bool ok;
+    ident_t lut;
+};
+
+static void sh_3dlut_uninit(const struct pl_gpu *gpu, void *ptr)
+{
+    struct sh_3dlut_obj *obj = ptr;
+    pl_shader_obj_destroy(&obj->lut_obj);
+    *obj = (struct sh_3dlut_obj) {0};
+}
+
+static void fill_3dlut(void *priv, float *data, int s_r, int s_g, int s_b)
+{
+    struct sh_3dlut_obj *obj = priv;
+    struct pl_context *ctx = obj->ctx;
+
+    obj->ok = pl_lcms_compute_lut(ctx, obj->intent, obj->src, obj->dst,
+                                  data, s_r, s_g, s_b, &obj->result);
+
+    if (!obj->ok)
+        pl_err(ctx, "Failed computing 3DLUT!");
+}
+
+static bool color_profile_eq(const struct pl_3dlut_profile *a,
+                             const struct pl_3dlut_profile *b)
+{
+    return pl_icc_profile_equal(&a->profile, &b->profile) &&
+           pl_color_space_equal(&a->color, &b->color);
+}
+
+bool pl_3dlut_update(struct pl_shader *sh,
+                     const struct pl_3dlut_profile *src,
+                     const struct pl_3dlut_profile *dst,
+                     struct pl_shader_obj **lut3d, struct pl_3dlut_result *out,
+                     const struct pl_3dlut_params *params)
+{
+    params = PL_DEF(params, &pl_3dlut_default_params);
+    size_t s_r = PL_DEF(params->size_r, 64),
+           s_g = PL_DEF(params->size_g, 64),
+           s_b = PL_DEF(params->size_b, 64);
+
+    struct sh_3dlut_obj *obj;
+    obj = SH_OBJ(sh, lut3d, PL_SHADER_OBJ_3DLUT,
+                 struct sh_3dlut_obj, sh_3dlut_uninit);
+    if (!obj)
+        return false;
+
+    bool changed = !color_profile_eq(&obj->src, src) ||
+                   !color_profile_eq(&obj->dst, dst) ||
+                   obj->intent != params->intent;
+
+    // Update the object, since we need this information from `fill_3dlut`
+    obj->ctx = sh->ctx;
+    obj->intent = params->intent;
+    obj->src = *src;
+    obj->dst = *dst;
+    obj->lut = sh_lut(sh, &obj->lut_obj, SH_LUT_LINEAR, s_r, s_g, s_b, 4,
+                      changed, obj, fill_3dlut);
+    if (!obj->lut || !obj->ok)
+        return false;
+
+    obj->updated = true;
+    *out = obj->result;
+    return true;
+}
+
+void pl_3dlut_apply(struct pl_shader *sh, struct pl_shader_obj **lut3d)
+{
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
+    struct sh_3dlut_obj *obj;
+    obj = SH_OBJ(sh, lut3d, PL_SHADER_OBJ_3DLUT,
+                 struct sh_3dlut_obj, sh_3dlut_uninit);
+    if (!obj || !obj->lut || !obj->updated || !obj->ok) {
+        PL_ERR(sh, "pl_shader_3dlut called without prior pl_3dlut_update?");
+        return;
+    }
+
+    GLSL("// pl_shader_3dlut\n");
+    GLSL("color.rgba = %s(color.rgb);\n", obj->lut);
+
+    obj->updated = false;
+}
+
+const struct pl_3dlut_params pl_3dlut_default_params = {
+    .intent = PL_INTENT_RELATIVE_COLORIMETRIC,
+    .size_r = 64,
+    .size_g = 64,
+    .size_b = 64,
+};
+
+#endif // PL_HAVE_LCMS
