@@ -19,6 +19,7 @@
 
 #include "context.h"
 #include "common.h"
+#include "gpu.h"
 
 struct comp {
     int order; // e.g. 0, 1, 2, 3 for RGBA
@@ -131,34 +132,22 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *plane,
         // TODO: try soft-converting to a supported format using e.g zimg?
     }
 
-    struct pl_tex_params params = {0};
-    if (plane->texture)
-        params = plane->texture->params;
+    bool ok = pl_tex_recreate(gpu, &plane->texture, &(struct pl_tex_params) {
+        .w = data->width,
+        .h = data->height,
+        .format = fmt,
+        .sampleable = true,
+        .host_writable = true,
+        .blit_src = !!(fmt->caps & PL_FMT_CAP_BLITTABLE),
+        .address_mode = PL_TEX_ADDRESS_CLAMP,
+        .sample_mode = (fmt->caps & PL_FMT_CAP_LINEAR)
+                            ? PL_TEX_SAMPLE_LINEAR
+                            : PL_TEX_SAMPLE_NEAREST,
+    });
 
-    if (params.format != fmt || !params.sampleable || !params.host_writable ||
-        params.w != data->width || params.h != data->height)
-    {
-        PL_INFO(gpu, "Reinitializing %dx%d plane texture (size or fmt change)",
-                data->width, data->height);
-
-        pl_tex_destroy(gpu, &plane->texture);
-        plane->texture = pl_tex_create(gpu, &(struct pl_tex_params) {
-            .w = data->width,
-            .h = data->height,
-            .format = fmt,
-            .sampleable = true,
-            .host_writable = true,
-            .blit_src = !!(fmt->caps & PL_FMT_CAP_BLITTABLE),
-            .address_mode = PL_TEX_ADDRESS_CLAMP,
-            .sample_mode = (fmt->caps & PL_FMT_CAP_LINEAR)
-                                ? PL_TEX_SAMPLE_LINEAR
-                                : PL_TEX_SAMPLE_NEAREST,
-        });
-
-        if (!plane->texture) {
-            PL_ERR(gpu, "Failed initializing plane texture!");
-            return false;
-        }
+    if (!ok) {
+        PL_ERR(gpu, "Failed initializing plane texture!");
+        return false;
     }
 
     for (int i = 0; i < PL_ARRAY_SIZE(out_map); i++) {
