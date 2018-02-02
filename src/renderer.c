@@ -284,11 +284,11 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
     struct pl_shader_obj **lut;
     const struct ra_tex **sep_fbo;
 
-    if (ratio > 1.0) {
+    if (ratio > 1.0 + 1e-6) {
         config = params->upscaler;
         lut = &sampler->upscaler_state;
         sep_fbo = &sampler->sep_fbo_up;
-    } else if (ratio < 1.0) {
+    } else if (ratio < 1.0 - 1e-6) {
         config = params->downscaler;
         lut = &sampler->downscaler_state;
         sep_fbo = &sampler->sep_fbo_down;
@@ -300,7 +300,7 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
         goto fallback;
 
     // Try using faster replacements for GPU built-in scalers
-    bool can_fast = ratio > 1.0 || params->skip_anti_aliasing;
+    bool can_fast = config == params->upscaler || params->skip_anti_aliasing;
     if (can_fast && !params->disable_builtin_scalers) {
         if (is_linear && config == &pl_filter_bicubic)
             goto fallback; // the bicubic check will succeed
@@ -659,14 +659,14 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         return true;
     }
 
+    bool downscaling = rx < 1.0 - 1e-6 || ry < 1.0 - 1e-6;
+    bool upscaling = !downscaling && (rx > 1.0 + 1e-6 || ry > 1.0 + 1e-6);
     bool need_osd = image->num_overlays > 0;
-    if (rx == 1.0 && ry == 1.0 && !img->offx && !img->offy && !need_osd) {
+
+    if (!downscaling && !upscaling && !img->offx && !img->offy && !need_osd) {
         PL_TRACE(rr, "Skipping main scaler (would be no-op)");
         return true;
     }
-
-    bool downscaling = rx < 1.0 || ry < 1.0;
-    bool upscaling = !downscaling && (rx > 1.0 || ry > 1.0);
 
     bool use_sigmoid = upscaling && params->sigmoid_params;
     bool use_linear  = use_sigmoid || downscaling;
