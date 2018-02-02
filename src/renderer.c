@@ -222,18 +222,7 @@ static const struct pl_tex *finalize_img(struct pl_renderer *rr,
                                          const struct pl_fmt *fmt,
                                          const struct pl_tex **tex)
 {
-    pl_assert(fmt);
-
-    if (*tex) {
-        const struct pl_tex_params *cur = &(*tex)->params;
-        if (cur->w == img->w && cur->h == img->h && cur->format == fmt)
-            goto resized;
-    }
-
-    PL_INFO(rr, "Resizing intermediate FBO texture: %dx%d", img->w, img->h);
-
-    pl_tex_destroy(rr->gpu, tex);
-    *tex = pl_tex_create(rr->gpu, &(struct pl_tex_params) {
+    bool ok = pl_tex_recreate(rr->gpu, tex, &(struct pl_tex_params) {
         .w = img->w,
         .h = img->h,
         .format = fmt,
@@ -246,15 +235,13 @@ static const struct pl_tex *finalize_img(struct pl_renderer *rr,
                             : PL_TEX_SAMPLE_NEAREST,
     });
 
-    if (!*tex) {
+    if (!ok) {
         PL_ERR(rr, "Failed creating FBO texture! Disabling advanced rendering..");
         rr->fbofmt = NULL;
         pl_dispatch_abort(rr->dp, &img->sh);
         return NULL;
     }
 
-
-resized:
     if (!pl_dispatch_finish(rr->dp, &img->sh, *tex, NULL, NULL)) {
         PL_ERR(rr, "Failed dispatching intermediate pass!");
         return NULL;
