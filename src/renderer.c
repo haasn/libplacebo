@@ -208,9 +208,8 @@ struct img {
     struct pl_shader *sh;
     int w, h;
 
-    // Accumulated texture offset, which will need to be accounted for by
-    // the main scaler.
-    float offx, offy;
+    // Current effective source area, will be sampled by the main scaler
+    struct pl_rect2df rect;
 
     // The current effective colorspace
     struct pl_color_repr repr;
@@ -272,11 +271,12 @@ struct pass_state {
 };
 
 static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
-                             float ratio, struct sampler *sampler,
+                             float rx, float ry, struct sampler *sampler,
                              const struct pl_render_params *params,
                              const struct pl_sample_src *src)
 {
-    if (!rr->fbofmt || rr->disable_sampling || !sampler)
+    bool no_samplers = !params->upscaler && !params->downscaler;
+    if (!rr->fbofmt || rr->disable_sampling || !sampler || no_samplers)
         goto fallback;
 
     const struct pl_filter_config *config = NULL;
@@ -284,15 +284,18 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
     struct pl_shader_obj **lut;
     const struct ra_tex **sep_fbo;
 
-    if (ratio > 1.0 + 1e-6) {
-        config = params->upscaler;
-        lut = &sampler->upscaler_state;
-        sep_fbo = &sampler->sep_fbo_up;
-    } else if (ratio < 1.0 - 1e-6) {
+    rx = fabs(rx);
+    ry = fabs(ry);
+
+    if (rx < 1.0 - 1e-6 || ry < 1.0 - 1e-6) {
         config = params->downscaler;
         lut = &sampler->downscaler_state;
         sep_fbo = &sampler->sep_fbo_down;
-    } else { // ratio == 1.0
+    } else if (rx > 1.0 + 1e-6 || ry > 1.0 + 1e-6) {
+        config = params->upscaler;
+        lut = &sampler->upscaler_state;
+        sep_fbo = &sampler->sep_fbo_up;
+    } else { // no scaling
         goto direct;
     }
 
@@ -413,14 +416,13 @@ static void draw_overlays(struct pl_renderer *rr, const struct ra_tex *fbo,
 
         float rx = (float) src.new_w / src.tex->params.w,
               ry = (float) src.new_h / src.tex->params.h;
-        float ratio = PL_MIN(fabs(rx), fabs(ry));
 
         struct sampler *sampler = &rr->osd_samplers[n];
         if (params->disable_overlay_sampling)
             sampler = NULL;
 
         struct pl_shader *sh = pl_dispatch_begin(rr->dp);
-        dispatch_sampler(rr, sh, ratio, sampler, params, &src);
+        dispatch_sampler(rr, sh, rx, ry, sampler, params, &src);
 
         GLSL("vec4 osd_color;\n");
         for (int c = 0; c < src.components; c++) {
@@ -555,10 +557,22 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         return false;
     }
 
-    float target_w = refplane->texture->params.w,
-          target_h = refplane->texture->params.h;
-    bool has_alpha = false;
+    float ref_w = refplane->texture->params.w,
+          ref_h = refplane->texture->params.h;
 
+    // Round the src_rect up to the nearest integer size
+    struct pl_rect2d rc = {
+        floorf(image->src_rect.x0),
+        floorf(image->src_rect.y0),
+        ceilf(image->src_rect.x1),
+        ceilf(image->src_rect.y1),
+    };
+
+    int target_w = pl_rect_w(rc),
+        target_h = pl_rect_h(rc);
+    pl_assert(target_w > 0 && target_h > 0);
+
+    bool has_alpha = false;
     for (int i = 0; i < image->num_planes; i++) {
         struct pl_shader *psh = pl_dispatch_begin(rr->dp);
         struct pl_plane *plane = &planes[i];
@@ -567,8 +581,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         // Compute the source shift/scale relative to the reference size
         float pw = plane->texture->params.w,
               ph = plane->texture->params.h,
-              rx = target_w / pw,
-              ry = target_h / ph,
+              rx = ref_w / pw,
+              ry = ref_h / ph,
               sx = plane->shift_x - refplane->shift_x,
               sy = plane->shift_y - refplane->shift_y;
 
@@ -576,9 +590,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         // that fractionally subsampled planes get rounded up to the nearest
         // integer size, which we want to discard.
         float rrx = rx >= 1 ? roundf(rx) : 1.0 / roundf(1.0 / rx),
-              rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry),
-              rpw = target_w / rrx,
-              rph = target_h / rry;
+              rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry);
 
         struct pl_sample_src src = {
             .tex        = plane->texture,
@@ -586,17 +598,17 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             .new_w      = target_w,
             .new_h      = target_h,
             .rect       = {
-                -sx / rx,
-                -sy / ry,
-                rpw - sx / rx,
-                rph - sy / ry,
+                rc.x0 / rrx - sx / rx,
+                rc.y0 / rry - sy / ry,
+                rc.x1 / rrx - sx / rx,
+                rc.y1 / rry - sy / ry,
             },
         };
 
         // FIXME: in theory, we could reuse the debanding result from
         // `deband_plane` if available, instead of having to dispatch a no-op
         // shader, for trivial sampling cases (no scaling or shifting)
-        dispatch_sampler(rr, psh, PL_MIN(rx, ry), &rr->samplers[i], params, &src);
+        dispatch_sampler(rr, psh, rrx, rry, &rr->samplers[i], params, &src);
 
         ident_t sub = sh_subpass(sh, psh);
         if (!sub) {
@@ -625,15 +637,22 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         pl_dispatch_abort(rr->dp, &psh);
     }
 
+    float basex = image->src_rect.x0 - rc.x0 - refplane->shift_x,
+          basey = image->src_rect.y0 - rc.y0 - refplane->shift_y;
+
     pass->cur_img = (struct img) {
         .sh     = sh,
         .w      = target_w,
         .h      = target_h,
-        .offx   = refplane->shift_x,
-        .offy   = refplane->shift_y,
         .repr   = image->repr,
         .color  = image->color,
         .comps  = has_alpha ? 4 : 3,
+        .rect   = {
+            basex,
+            basey,
+            basex + pl_rect_w(image->src_rect),
+            basey + pl_rect_h(image->src_rect),
+        },
     };
 
     // Convert the image colorspace
@@ -651,11 +670,20 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     int target_w = abs(pl_rect_w(target->dst_rect)),
         target_h = abs(pl_rect_h(target->dst_rect));
 
-    float rx = target_w / fabs(pl_rect_w(image->src_rect)),
-          ry = target_h / fabs(pl_rect_h(image->src_rect));
+    float src_w = pl_rect_w(image->src_rect),
+          src_h = pl_rect_h(image->src_rect);
+    pl_assert(src_w > 0 && src_h > 0);
+
+    float rx = target_w / src_w,
+          ry = target_h / src_h;
 
     if (!rr->fbofmt) {
         PL_TRACE(rr, "Skipping main scaler (no FBOs)");
+        return true;
+    }
+
+    if ((!params->upscaler && !params->downscaler) || rr->disable_sampling) {
+        PL_TRACE(rr, "Skipping main scaler (no samplers)");
         return true;
     }
 
@@ -663,7 +691,7 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     bool upscaling = !downscaling && (rx > 1.0 + 1e-6 || ry > 1.0 + 1e-6);
     bool need_osd = image->num_overlays > 0;
 
-    if (!downscaling && !upscaling && !img->offx && !img->offy && !need_osd) {
+    if (!downscaling && !upscaling && !need_osd) {
         PL_TRACE(rr, "Skipping main scaler (would be no-op)");
         return true;
     }
@@ -692,12 +720,7 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         .components = img->comps,
         .new_w      = target_w,
         .new_h      = target_h,
-        .rect = {
-            image->src_rect.x0 - img->offx,
-            image->src_rect.y0 - img->offy,
-            image->src_rect.x1 - img->offx,
-            image->src_rect.y1 - img->offy,
-        },
+        .rect       = img->rect,
     };
 
     if (!src.tex)
@@ -707,9 +730,8 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     draw_overlays(rr, src.tex, image->overlays, image->num_overlays,
                   img->color, use_sigmoid, NULL, params);
 
-    float ratio = PL_MIN(fabs(rx), fabs(ry));
     struct pl_shader *sh = pl_dispatch_begin(rr->dp);
-    dispatch_sampler(rr, sh, ratio, &rr->samplers[SCALER_MAIN], params, &src);
+    dispatch_sampler(rr, sh, rx, ry, &rr->samplers[SCALER_MAIN], params, &src);
     pass->cur_img = (struct img) {
         .sh     = sh,
         .w      = target_w,
