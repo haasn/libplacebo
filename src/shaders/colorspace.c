@@ -444,7 +444,7 @@ const struct pl_color_map_params pl_color_map_default_params = {
     .intent                  = PL_INTENT_RELATIVE_COLORIMETRIC,
     .tone_mapping_algo       = PL_TONE_MAPPING_HABLE,
     .tone_mapping_desaturate = 0.5,
-    .peak_detect_frames      = 10,
+    .peak_detect_frames      = 20,
 };
 
 struct sh_peak_obj {
@@ -465,7 +465,7 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
     if (!state)
         return;
 
-    int frames = PL_DEF(params->peak_detect_frames, 10);
+    int frames = PL_DEF(params->peak_detect_frames, 20);
     if (frames < 1 || frames > 1000) {
         PL_ERR(sh, "Parameter peak_detect_frames must be >= 1 and <= 1000 "
                "(was %d).", frames);
@@ -602,7 +602,7 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
          max_total.name, max.name, idx.name, max.name,
          sum_total.name, sum.name, idx.name, sum.name,
          max.name, sum.name, idx.name,
-         num.name, num.name, frames + 1);
+         num.name, num.name, frames);
 }
 
 // Average light level for SDR signals. This is equal to a signal level of 0.5

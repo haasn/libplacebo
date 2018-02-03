@@ -160,7 +160,7 @@ struct pl_color_map_params {
 
     // If set to something nonzero, this enables the peak detection feature.
     // Controls how many frames to smooth (average) the results over, in order
-    // to prevent jitter due to sparkling highlights. Defaults to 10.
+    // to prevent jitter due to sparkling highlights. Defaults to 20.
     int peak_detect_frames;
 };
 
