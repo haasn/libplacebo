@@ -437,6 +437,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh, const struct pl_sample_src *sr
 
                 // Make sure all required features are supported
                 use_gather &= ra->glsl.version >= 400;
+                use_gather &= ra->limits.max_gather_offset != 0;
                 use_gather &= PL_MAX(x, y) <= ra->limits.max_gather_offset;
                 use_gather &= PL_MIN(x, y) >= ra->limits.min_gather_offset;
 

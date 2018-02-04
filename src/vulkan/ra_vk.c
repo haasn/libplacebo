@@ -225,6 +225,11 @@ const struct ra *ra_create_vk(struct vk_ctx *vk)
             ra->caps |= RA_CAP_PARALLEL_COMPUTE;
     }
 
+    if (!vk->features.shaderImageGatherExtended) {
+        ra->limits.min_gather_offset = 0;
+        ra->limits.max_gather_offset = 0;
+    }
+
     vk_setup_formats(ra);
 
     ra_print_info(ra, PL_LOG_INFO);
