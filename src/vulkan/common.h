@@ -36,6 +36,7 @@ struct vk_ctx {
     VkInstance inst;
     VkPhysicalDevice physd;
     VkPhysicalDeviceLimits limits;
+    VkPhysicalDeviceFeatures features;
     VkDevice dev;
 
     struct vk_cmdpool **pools;    // command pools (one per queue family)

@@ -374,12 +374,22 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     for (int i = 0; i < params->num_extensions; i++)
         TARRAY_APPEND(tmp, exts, num_exts, params->extensions[i]);
 
+    // Enable all features that we might need (whitelisted)
+    vkGetPhysicalDeviceFeatures(vk->physd, &vk->features);
+#define FEATURE(name) .name = vk->features.name
+    vk->features = (VkPhysicalDeviceFeatures) {
+        FEATURE(shaderImageGatherExtended),
+        FEATURE(shaderStorageImageExtendedFormats),
+    };
+#undef FEATURE
+
     VkDeviceCreateInfo dinfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pQueueCreateInfos = qinfos,
         .queueCreateInfoCount = num_qinfos,
         .ppEnabledExtensionNames = exts,
         .enabledExtensionCount = num_exts,
+        .pEnabledFeatures = &vk->features,
     };
 
     PL_INFO(vk, "Creating vulkan device%s", num_exts ? " with extensions:" : "");

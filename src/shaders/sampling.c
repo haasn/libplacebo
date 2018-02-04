@@ -443,6 +443,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
 
                 // Make sure all required features are supported
                 use_gather &= gpu->glsl.version >= 400;
+                use_gather &= gpu->limits.max_gather_offset != 0;
                 use_gather &= PL_MAX(x, y) <= gpu->limits.max_gather_offset;
                 use_gather &= PL_MIN(x, y) >= gpu->limits.min_gather_offset;
 
