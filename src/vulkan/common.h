@@ -29,6 +29,9 @@
 #define VK_LOAD_PFN(inst, name) PFN_##name pfn_##name = (PFN_##name) \
                             vkGetInstanceProcAddr(inst, #name);
 
+// Hard-coded limit on the number of pending commands, to avoid OOM loops
+#define PL_VK_MAX_PENDING_CMDS 64
+
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
     const struct pl_vk_inst *internal_instance;
@@ -55,7 +58,7 @@ struct vk_ctx {
     int num_cmds_pending;
 
     // A dynamic reference to the most recently submitted command that has not
-    // yet completed. Used to implemented vk_dev_callback. Gets cleared when
+    // yet completed. Used to implement vk_dev_callback. Gets cleared when
     // the command completes.
     struct vk_cmd *last_cmd;
 
