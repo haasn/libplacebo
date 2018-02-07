@@ -71,6 +71,9 @@ void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4])
 const struct pl_fmt *pl_plane_find_fmt(const struct pl_gpu *gpu, int out_map[4],
                                        const struct pl_plane_data *data)
 {
+    int dummy[4] = {0};
+    out_map = PL_DEF(out_map, dummy);
+
     // Count the number of components and initialize out_map
     int num = 0;
     for (int i = 0; i < PL_ARRAY_SIZE(data->component_size); i++) {
