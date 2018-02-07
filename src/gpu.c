@@ -1126,13 +1126,23 @@ const struct pl_buf *pl_buf_pool_get(const struct pl_gpu *gpu,
     if (!pool->buffers && !pl_buf_pool_grow(gpu, pool))
         return NULL;
 
-    // Make sure the next buffer is available for use
-    if (pl_buf_poll(gpu, pool->buffers[pool->index], 0) &&
-        !pl_buf_pool_grow(gpu, pool))
-    {
+    bool usable = !pl_buf_poll(gpu, pool->buffers[pool->index], 0);
+    if (usable)
+        goto done;
+
+    if (pool->num_buffers < PL_BUF_POOL_MAX_BUFFERS) {
+        if (pl_buf_pool_grow(gpu, pool))
+            goto done;
+
+        // Failed growing the buffer pool, so just error out early
         return NULL;
     }
 
+    // Can't resize any further, so just loop until the buffer is usable
+    while (pl_buf_poll(gpu, pool->buffers[pool->index], 1000000000)) // 1s
+        PL_TRACE(gpu, "Blocked on buffer pool availability! (slow path)");
+
+done: ;
     const struct pl_buf *buf = pool->buffers[pool->index++];
     pool->index %= pool->num_buffers;
 

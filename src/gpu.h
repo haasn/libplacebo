@@ -98,6 +98,9 @@ struct pl_var_layout std140_layout(const struct pl_gpu *gpu, size_t offset,
 struct pl_var_layout std430_layout(const struct pl_gpu *gpu, size_t offset,
                                    const struct pl_var *var);
 
+// A hard-coded upper limit on a pl_buf_pool's size, to prevent OOM loops
+#define PL_BUF_POOL_MAX_BUFFERS 8
+
 // A pool of buffers, which can grow as needed
 struct pl_buf_pool {
     struct pl_buf_params current_params;
