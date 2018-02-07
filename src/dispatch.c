@@ -366,11 +366,31 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
                 desc->name);
             add_buffer_vars(dp, glsl, desc->buffer_vars, desc->num_buffer_vars);
             break;
+
         case PL_DESC_BUF_STORAGE:
             ADD(glsl, "layout(std430, binding=%d) %s buffer %s ", desc->binding,
                 pl_desc_access_glsl_name(desc->access), desc->name);
             add_buffer_vars(dp, glsl, desc->buffer_vars, desc->num_buffer_vars);
             break;
+
+        case PL_DESC_BUF_TEXEL_UNIFORM:
+            if (gpu->glsl.vulkan)
+                ADD(glsl, "layout(binding=%d) ", desc->binding);
+            ADD(glsl, "uniform samplerBuffer %s;\n", desc->name);
+            break;
+
+        case PL_DESC_BUF_TEXEL_STORAGE: {
+            const struct pl_buf *buf = sd->object;
+            const char *format = buf->params.format->glsl_format;
+            const char *access = pl_desc_access_glsl_name(desc->access);
+            if (gpu->glsl.vulkan) {
+                ADD(glsl, "layout(binding=%d, %s) ", desc->binding, format);
+            } else {
+                ADD(glsl, "layout(%s) ", format);
+            }
+            ADD(glsl, "%s uniform imageBuffer %s;\n", access, desc->name);
+            break;
+        }
         default: abort();
         }
     }

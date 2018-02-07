@@ -580,6 +580,20 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
         pl_assert(gpu->limits.max_ssbo_size);
         pl_assert(params->size <= gpu->limits.max_ssbo_size);
         break;
+    case PL_BUF_TEXEL_UNIFORM: {
+        pl_assert(params->format);
+        pl_assert(params->format->caps & PL_FMT_CAP_TEXEL_UNIFORM);
+        size_t limit = gpu->limits.max_buffer_texels * params->format->texel_size;
+        pl_assert(params->size <= limit);
+        break;
+    }
+    case PL_BUF_TEXEL_STORAGE: {
+        pl_assert(params->format);
+        pl_assert(params->format->caps & PL_FMT_CAP_TEXEL_STORAGE);
+        size_t limit = gpu->limits.max_buffer_texels * params->format->texel_size;
+        pl_assert(params->size <= limit);
+        break;
+    }
     case PL_BUF_PRIVATE: break;
     default: abort();
     }
@@ -933,6 +947,16 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         case PL_DESC_BUF_STORAGE: {
             const struct pl_buf *buf = db.object;
             pl_assert(buf->params.type == PL_BUF_STORAGE);
+            break;
+        }
+        case PL_DESC_BUF_TEXEL_UNIFORM: {
+            const struct pl_buf *buf = db.object;
+            pl_assert(buf->params.type == PL_BUF_TEXEL_UNIFORM);
+            break;
+        }
+        case PL_DESC_BUF_TEXEL_STORAGE: {
+            const struct pl_buf *buf = db.object;
+            pl_assert(buf->params.type == PL_BUF_TEXEL_STORAGE);
             break;
         }
         default: abort();

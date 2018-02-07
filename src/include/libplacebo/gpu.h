@@ -60,6 +60,7 @@ struct pl_gpu_limits {
     size_t max_xfer_size;  // maximum size of a PL_BUF_TEX_TRANSFER
     size_t max_ubo_size;   // maximum size of a PL_BUF_UNIFORM
     size_t max_ssbo_size;  // maximum size of a PL_BUF_STORAGE
+    int max_buffer_texels; // maximum texels in a PL_BUF_TEXEL_*
     int min_gather_offset; // minimum textureGatherOffset offset
     int max_gather_offset; // maximum textureGatherOffset offset
 
@@ -118,6 +119,8 @@ enum pl_fmt_caps {
     PL_FMT_CAP_BLENDABLE    = 1 << 4, // may be blended to (pl_pass_params.enable_blend)
     PL_FMT_CAP_BLITTABLE    = 1 << 5, // may be blitted from/to (pl_tex_blit)
     PL_FMT_CAP_VERTEX       = 1 << 6, // may be used as a vertex attribute
+    PL_FMT_CAP_TEXEL_UNIFORM = 1 << 7, // may be used as a texel uniform buffer
+    PL_FMT_CAP_TEXEL_STORAGE = 1 << 8, // may be used as a texel storage buffer
 
     // Notes:
     // - PL_FMT_CAP_LINEAR also implies PL_FMT_CAP_SAMPLEABLE
@@ -150,8 +153,9 @@ struct pl_fmt {
     // corresponding to the data. (e.g. vec4)
     const char *glsl_type;
 
-    // If usable as a storage image (PL_FMT_CAP_STORABLE), this gives the
-    // GLSL image format corresponding to the format. (e.g. rgba16ui)
+    // If usable as a storage image or texel storage buffer
+    // (PL_FMT_CAP_STORABLE / PL_FMT_CAP_TEXEL_STORAGE), this gives the GLSL
+    // texel format corresponding to the format. (e.g. rgba16ui)
     const char *glsl_format;
 };
 
@@ -331,6 +335,8 @@ enum pl_buf_type {
     PL_BUF_TEX_TRANSFER, // texture transfer buffer (for pl_tex_upload/download)
     PL_BUF_UNIFORM,      // UBO, for PL_DESC_BUF_UNIFORM
     PL_BUF_STORAGE,      // SSBO, for PL_DESC_BUF_STORAGE
+    PL_BUF_TEXEL_UNIFORM,// texel buffer, for PL_DESC_BUF_TEXEL_UNIFORM
+    PL_BUF_TEXEL_STORAGE,// texel buffer, for PL_DESC_BUF_TEXEL_STORAGE
     PL_BUF_PRIVATE,      // GPU-private usage (interpretation arbitrary)
     PL_BUF_TYPE_COUNT,
 };
@@ -342,6 +348,11 @@ struct pl_buf_params {
     bool host_mapped;   // create a persistent, RW mapping (pl_buf.data)
     bool host_writable; // contents may be updated via pl_buf_write()
     bool host_readable; // contents may be read back via pl_buf_read()
+
+    // For texel buffers (PL_BUF_TEXEL_*), this gives the interpretation of the
+    // buffer's contents. `format->caps` must include the corresponding
+    // PL_FMT_CAP_TEXEL_* for the texel buffer type in use.
+    const struct pl_fmt *format;
 
     // If non-NULL, the buffer will be created with these contents. Otherwise,
     // the initial data is undefined. Using this does *not* require setting
@@ -553,6 +564,10 @@ enum pl_desc_type {
                             // (pl_buf->params.type must be PL_BUF_UNIFORM)
     PL_DESC_BUF_STORAGE,    // C: pl_buf*    GLSL: storage buffer
                             // (pl_buf->params.type must be PL_BUF_STORAGE)
+    PL_DESC_BUF_TEXEL_UNIFORM,// C: pl_buf*  GLSL: uniform samplerBuffer
+                              // (pl_buf->params.type must be PL_BUF_TEXEL_UNIFORM)
+    PL_DESC_BUF_TEXEL_STORAGE,// C: pl_buf*  GLSL: uniform imageBuffer
+                              // (pl_buf->params.type must be PL_BUF_TEXEL_STORAGE)
     PL_DESC_TYPE_COUNT
 };
 
@@ -592,8 +607,8 @@ struct pl_desc {
     // always read-only).
     enum pl_desc_access access;
 
-    // For PL_DESC_BUF_*, this specifies the layout of the variables contained
-    // by a buffer. Ignored for the other descriptor types
+    // For PL_DESC_BUF_UNIFORM/STORAGE, this specifies the layout of the
+    // variables contained by a buffer. Ignored for the other descriptor types
     struct pl_buffer_var *buffer_vars;
     int num_buffer_vars;
 };

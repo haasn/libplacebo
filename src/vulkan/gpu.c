@@ -136,6 +136,22 @@ static void vk_setup_formats(struct pl_gpu *gpu)
             fmt->host_bits[i] = 0;
         }
 
+        struct { VkFormatFeatureFlags flags; enum pl_fmt_caps caps; } bufbits[] = {
+            {VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT,        PL_FMT_CAP_VERTEX},
+            {VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT, PL_FMT_CAP_TEXEL_UNIFORM},
+            {VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT, PL_FMT_CAP_TEXEL_STORAGE},
+        };
+
+        for (int i = 0; i < PL_ARRAY_SIZE(bufbits); i++) {
+            if ((prop.bufferFeatures & bufbits[i].flags) == bufbits[i].flags)
+                fmt->caps |= bufbits[i].caps;
+        }
+
+        if (fmt->caps) {
+            fmt->glsl_type = pl_var_glsl_type_name(pl_var_from_fmt(fmt, ""));
+            pl_assert(fmt->glsl_type);
+        }
+
         struct { VkFormatFeatureFlags flags; enum pl_fmt_caps caps; } bits[] = {
             {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT,      PL_FMT_CAP_BLENDABLE},
             {VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT, PL_FMT_CAP_LINEAR},
@@ -148,29 +164,24 @@ static void vk_setup_formats(struct pl_gpu *gpu)
                 PL_FMT_CAP_BLITTABLE},
         };
 
-        // Disable implied capabilities where the dependencies are unavailable
-        if (!(fmt->caps & PL_FMT_CAP_SAMPLEABLE))
-            fmt->caps &= ~PL_FMT_CAP_LINEAR;
-        if (!(gpu->caps & PL_GPU_CAP_COMPUTE))
-            fmt->caps &= ~PL_FMT_CAP_STORABLE;
-
         for (int i = 0; i < PL_ARRAY_SIZE(bits); i++) {
             if ((prop.optimalTilingFeatures & bits[i].flags) == bits[i].flags)
                 fmt->caps |= bits[i].caps;
         }
 
-        if (prop.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT) {
-            fmt->caps |= PL_FMT_CAP_VERTEX;
-            fmt->glsl_type = pl_var_glsl_type_name(pl_var_from_fmt(fmt, ""));
-            pl_assert(fmt->glsl_type);
-        }
+        // Disable implied capabilities where the dependencies are unavailable
+        if (!(fmt->caps & PL_FMT_CAP_SAMPLEABLE))
+            fmt->caps &= ~PL_FMT_CAP_LINEAR;
+        if (!(gpu->caps & PL_GPU_CAP_COMPUTE))
+            fmt->caps &= ~(PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE);
 
-        if (fmt->caps & PL_FMT_CAP_STORABLE) {
+        enum pl_fmt_caps storable = PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE;
+        if (fmt->caps & storable) {
             fmt->glsl_format = pl_fmt_glsl_format(fmt);
             if (!fmt->glsl_format) {
                 PL_WARN(gpu, "Storable format '%s' has no matching GLSL format "
                         "qualifier?", fmt->name);
-                fmt->caps &= ~PL_FMT_CAP_STORABLE;
+                fmt->caps &= ~storable;
             }
         }
 
@@ -205,6 +216,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         .max_xfer_size     = SIZE_MAX, // no limit imposed by vulkan
         .max_ubo_size      = vk->limits.maxUniformBufferRange,
         .max_ssbo_size     = vk->limits.maxStorageBufferRange,
+        .max_buffer_texels = vk->limits.maxTexelBufferElements,
         .min_gather_offset = vk->limits.minTexelGatherOffset,
         .max_gather_offset = vk->limits.maxTexelGatherOffset,
         .align_tex_xfer_stride = vk->limits.optimalBufferCopyRowPitchAlignment,
@@ -799,6 +811,7 @@ struct pl_buf_vk {
     int refcount; // 1 = object allocated but not in use, > 1 = in use
     bool needs_flush;
     enum queue_type update_queue;
+    VkBufferView view; // for texel buffers
     // "current" metadata, can change during course of execution
     VkPipelineStageFlags current_stage;
     VkAccessFlags current_access;
@@ -811,10 +824,12 @@ static void vk_buf_deref(const struct pl_gpu *gpu, struct pl_buf *buf)
     if (!buf)
         return;
 
+    struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_buf_vk *buf_vk = buf->priv;
     struct pl_vk *p = gpu->priv;
 
     if (--buf_vk->refcount == 0) {
+        vkDestroyBufferView(vk->dev, buf_vk->view, VK_ALLOC);
         vk_free_memslice(p->alloc, buf_vk->slice.mem);
         talloc_free(buf);
     }
@@ -923,6 +938,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     VkMemoryPropertyFlags memFlags = 0;
     VkDeviceSize align = 4; // alignment 4 is needed for buf_update
 
+    bool is_texel = false;
     switch (params->type) {
     case PL_BUF_TEX_TRANSFER:
         bufFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
@@ -942,6 +958,19 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         align = PL_ALIGN2(align, vk->limits.minStorageBufferOffsetAlignment);
         buf_vk->update_queue = COMPUTE;
+        break;
+    case PL_BUF_TEXEL_UNIFORM:
+        bufFlags |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+        memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        align = PL_ALIGN2(align, vk->limits.minTexelBufferOffsetAlignment);
+        is_texel = true;
+        break;
+    case PL_BUF_TEXEL_STORAGE:
+        bufFlags |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
+        memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        align = PL_ALIGN2(align, vk->limits.minTexelBufferOffsetAlignment);
+        buf_vk->update_queue = COMPUTE;
+        is_texel = true;
         break;
     case PL_VK_BUF_VERTEX:
         bufFlags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
@@ -967,6 +996,19 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
 
     if (params->host_mapped)
         buf->data = buf_vk->slice.data;
+
+    if (is_texel) {
+        const struct vk_format *vk_fmt = params->format->priv;
+        VkBufferViewCreateInfo vinfo = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
+            .buffer = buf_vk->slice.buf,
+            .format = vk_fmt->ifmt,
+            .offset = buf_vk->slice.mem.offset,
+            .range = params->size,
+        };
+
+        VK(vkCreateBufferView(vk->dev, &vinfo, VK_ALLOC, &buf_vk->view));
+    }
 
     if (params->initial_data)
         vk_buf_write(gpu, buf, 0, params->initial_data, params->size);
@@ -1144,6 +1186,8 @@ static const VkDescriptorType dsType[] = {
     [PL_DESC_STORAGE_IMG] = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
     [PL_DESC_BUF_UNIFORM] = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
     [PL_DESC_BUF_STORAGE] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    [PL_DESC_BUF_TEXEL_UNIFORM] = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+    [PL_DESC_BUF_TEXEL_STORAGE] = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
 };
 
 static const char vk_cache_magic[4] = {'R','A','V','K'};
@@ -1641,6 +1685,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     case PL_DESC_ACCESS_READWRITE:
         access = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
         break;
+    default: abort();
     }
 
     switch (desc->type) {
@@ -1695,6 +1740,18 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         };
 
         wds->pBufferInfo = binfo;
+        break;
+    }
+    case PL_DESC_BUF_TEXEL_UNIFORM:
+    case PL_DESC_BUF_TEXEL_STORAGE: {
+        const struct pl_buf *buf = db.object;
+        struct pl_buf_vk *buf_vk = buf->priv;
+
+        buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
+                    access, buf_vk->slice.mem.offset, buf->params.size,
+                    access != PL_DESC_ACCESS_READONLY);
+
+        wds->pTexelBufferView = &buf_vk->view;
         break;
     }
     default: abort();
