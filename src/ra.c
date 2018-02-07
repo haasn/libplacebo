@@ -498,6 +498,15 @@ static void fix_tex_transfer(const struct ra *ra,
     if (!params->stride_h)
         params->stride_h = tex->params.h;
 
+    // Sanitize superfluous coordinates for the benefit of the RA
+    strip_coords(tex, &rc);
+    if (!tex->params.w)
+        params->stride_w = 1;
+    if (!tex->params.h)
+        params->stride_h = 1;
+
+    params->rc = rc;
+
     // Check the parameters for sanity
 #ifndef NDEBUG
     switch (ra_tex_params_dimension(tex->params))
@@ -529,15 +538,6 @@ static void fix_tex_transfer(const struct ra *ra,
         pl_assert(params->buf_offset + size <= buf->params.size);
     }
 #endif
-
-    // Sanitize superfluous coordinates for the benefit of the RA
-    strip_coords(tex, &rc);
-    if (!tex->params.w)
-        params->stride_w = 1;
-    if (!tex->params.h)
-        params->stride_h = 1;
-
-    params->rc = rc;
 }
 
 bool ra_tex_upload(const struct ra *ra,
