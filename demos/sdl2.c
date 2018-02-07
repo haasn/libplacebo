@@ -154,9 +154,7 @@ static bool upload_plane(const char *filename, struct pl_plane *plane)
     }
 
     const SDL_PixelFormat *fmt = img->format;
-    if (SDL_ISPIXELFORMAT_INDEXED(fmt->format) || fmt->BytesPerPixel == 3) {
-        // Work-around for real-world GPU limitations.
-        // FIXME: Get rid of this once libplacebo supports built-in conversions!
+    if (SDL_ISPIXELFORMAT_INDEXED(fmt->format)) {
         SDL_Surface *fixed;
         fixed = SDL_CreateRGBSurfaceWithFormat(0, img->w, img->h, 32,
                                                SDL_PIXELFORMAT_ABGR8888);

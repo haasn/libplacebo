@@ -35,6 +35,12 @@ struct pl_vk {
     struct vk_malloc *alloc;
     struct spirv_compiler *spirv;
 
+    // This is a pl_dispatch used (on ourselves!) for the purposes of
+    // dispatching compute shaders for performing various emulation tasks
+    // (e.g. partial clears, blits or emulated texture transfers).
+    // Warning: Care must be taken to avoid recursive calls.
+    struct pl_dispatch *dp;
+
     // The "currently recording" command. This will be queued and replaced by
     // a new command every time we need to "switch" between queue families.
     struct vk_cmd *cmd;
@@ -108,6 +114,7 @@ static void vk_destroy_ra(const struct pl_gpu *gpu)
     struct pl_vk *p = gpu->priv;
     struct vk_ctx *vk = pl_vk_get(gpu);
 
+    pl_dispatch_destroy(&p->dp);
     vk_submit(gpu);
     vk_wait_idle(vk);
 
@@ -150,6 +157,13 @@ static void vk_setup_formats(struct pl_gpu *gpu)
         if (fmt->caps) {
             fmt->glsl_type = pl_var_glsl_type_name(pl_var_from_fmt(fmt, ""));
             pl_assert(fmt->glsl_type);
+        }
+
+        // For the texture capabilities, try falling back to the emulation
+        // format if this format is wholly unsupported.
+        if (!prop.optimalTilingFeatures && vk_fmt->emufmt) {
+            fmt->emulated = true;
+            vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->emufmt, &prop);
         }
 
         struct { VkFormatFeatureFlags flags; enum pl_fmt_caps caps; } bits[] = {
@@ -245,6 +259,8 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
 
     vk_setup_formats(gpu);
 
+    // Create the dispatch last, after any setup of `gpu` is done
+    p->dp = pl_dispatch_create(vk->ctx, gpu);
     pl_gpu_print_info(gpu, PL_LOG_INFO);
     pl_gpu_print_formats(gpu, PL_LOG_DEBUG);
     return gpu;
@@ -269,7 +285,7 @@ static VkResult vk_create_render_pass(VkDevice dev, const struct pl_fmt *fmt,
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = 1,
         .pAttachments = &(VkAttachmentDescription) {
-            .format = vk_fmt->ifmt,
+            .format = fmt->emulated ? vk_fmt->emufmt : vk_fmt->ifmt,
             .samples = VK_SAMPLE_COUNT_1_BIT,
             .loadOp = loadOp,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -306,6 +322,10 @@ struct pl_tex_vk {
     // for transfers
     struct pl_buf_pool pbo_write;
     struct pl_buf_pool pbo_read;
+    // for transfer emulation using texel buffers
+    const struct pl_fmt *texel_fmt;
+    struct pl_buf_pool texel_write;
+    struct pl_buf_pool texel_read;
     // "current" metadata, can change during the course of execution
     VkImageLayout current_layout;
     VkAccessFlags current_access;
@@ -412,6 +432,8 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
     struct pl_tex_vk *tex_vk = tex->priv;
     struct pl_vk *p = gpu->priv;
 
+    pl_buf_pool_uninit(gpu, &tex_vk->texel_write);
+    pl_buf_pool_uninit(gpu, &tex_vk->texel_read);
     pl_buf_pool_uninit(gpu, &tex_vk->pbo_write);
     pl_buf_pool_uninit(gpu, &tex_vk->pbo_read);
     vk_signal_destroy(vk, &tex_vk->sig);
@@ -450,6 +472,11 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
     if ((params->host_writable || params->host_readable) && vk->pool_transfer)
         tex_vk->transfer_queue = TRANSFER;
 
+    // For emulated formats: force usage of the compute queue, because we
+    // can't properly track cross-queue dependencies for buffers (yet?)
+    if (params->format->emulated)
+        tex_vk->transfer_queue = COMPUTE;
+
     bool ret = false;
     VkRenderPass dummyPass = NULL;
 
@@ -465,7 +492,7 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .image = tex_vk->img,
             .viewType = viewType[tex_vk->type],
-            .format = fmt->ifmt,
+            .format = params->format->emulated ? fmt->emufmt : fmt->ifmt,
             .subresourceRange = {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                 .levelCount = 1,
@@ -557,12 +584,27 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     default: abort();
     }
 
+    if (params->format->emulated) {
+        tex_vk->texel_fmt = pl_find_fmt(gpu, params->format->type, 1, 0,
+                                        params->format->host_bits[0],
+                                        PL_FMT_CAP_TEXEL_UNIFORM);
+        if (!tex_vk->texel_fmt) {
+            PL_ERR(gpu, "Failed picking texel format for emulated texture!");
+            goto error;
+        }
+
+        // Our format emulation requires storage image support. In order to
+        // make a bunch of checks happy, just mark it off as storable (and also
+        // enable VK_IMAGE_USAGE_STORAGE_BIT, which we do below)
+        tex->params.storable = true;
+    }
+
     VkImageUsageFlags usage = 0;
     if (params->sampleable)
         usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
     if (params->renderable)
         usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    if (params->storable)
+    if (params->storable || params->format->emulated)
         usage |= VK_IMAGE_USAGE_STORAGE_BIT;
     if (params->host_readable || params->blit_src)
         usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -571,7 +613,8 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
 
     // Double-check physical image format limits and fail if invalid
     VkImageFormatProperties iprop;
-    VkResult res = vkGetPhysicalDeviceImageFormatProperties(vk->physd, fmt->ifmt,
+    VkFormat ifmt = params->format->emulated ? fmt->emufmt : fmt->ifmt;
+    VkResult res = vkGetPhysicalDeviceImageFormatProperties(vk->physd, ifmt,
             tex_vk->type, VK_IMAGE_TILING_OPTIMAL, usage, 0, &iprop);
 
     if (res == VK_ERROR_FORMAT_NOT_SUPPORTED) {
@@ -601,7 +644,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     VkImageCreateInfo iinfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = tex_vk->type,
-        .format = fmt->ifmt,
+        .format = ifmt,
         .extent = (VkExtent3D) {
             .width  = params->w,
             .height = PL_MAX(1, params->h),
@@ -959,16 +1002,20 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         align = PL_ALIGN2(align, vk->limits.minStorageBufferOffsetAlignment);
         buf_vk->update_queue = COMPUTE;
         break;
-    case PL_BUF_TEXEL_UNIFORM:
+    case PL_BUF_TEXEL_UNIFORM: // for emulated upload
         bufFlags |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+        bufFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         align = PL_ALIGN2(align, vk->limits.minTexelBufferOffsetAlignment);
+        align = PL_ALIGN2(align, vk->limits.optimalBufferCopyOffsetAlignment);
         is_texel = true;
         break;
-    case PL_BUF_TEXEL_STORAGE:
+    case PL_BUF_TEXEL_STORAGE: // for emulated download
         bufFlags |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
+        bufFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         align = PL_ALIGN2(align, vk->limits.minTexelBufferOffsetAlignment);
+        align = PL_ALIGN2(align, vk->limits.optimalBufferCopyOffsetAlignment);
         buf_vk->update_queue = COMPUTE;
         is_texel = true;
         break;
@@ -1037,15 +1084,12 @@ static bool vk_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
 static bool vk_tex_upload(const struct pl_gpu *gpu,
                           const struct pl_tex_transfer_params *params)
 {
+    struct pl_vk *p = gpu->priv;
     const struct pl_tex *tex = params->tex;
     struct pl_tex_vk *tex_vk = tex->priv;
 
     if (!params->buf)
         return pl_tex_upload_pbo(gpu, &tex_vk->pbo_write, params);
-
-    struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
-    if (!cmd)
-        goto error;
 
     pl_assert(params->buf);
     const struct pl_buf *buf = params->buf;
@@ -1053,29 +1097,77 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
     struct pl_rect3d rc = params->rc;
     size_t size = pl_tex_transfer_size(params);
 
-    VkBufferImageCopy region = {
-        .bufferOffset = buf_vk->slice.mem.offset + params->buf_offset,
-        .bufferRowLength = params->stride_w,
-        .bufferImageHeight = params->stride_h,
-        .imageOffset = { rc.x0, rc.y0, rc.z0 },
-        .imageExtent = { rc.x1, rc.y1, rc.z1 },
-        .imageSubresource = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .layerCount = 1,
-        },
-    };
+    if (tex->params.format->emulated) {
+        // Copy the buffer into a texel buffer for software texture blit purposes
+        const struct pl_buf *tbuf;
+        tbuf = pl_buf_pool_get(gpu, &tex_vk->texel_write, &(struct pl_buf_params) {
+            .type = PL_BUF_TEXEL_UNIFORM,
+            .size = size,
+            .format = tex_vk->texel_fmt,
+        });
+        if (!tbuf) {
+            PL_ERR(gpu, "Failed creating texel buffer for emulated tex upload!");
+            goto error;
+        }
 
-    buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_ACCESS_TRANSFER_READ_BIT, region.bufferOffset, size, false);
+        // Note: Make sure to run vk_require_cmd *after* pl_buf_pool_get, since
+        // the former could imply polling which could imply submitting the
+        // command we just required!
+        struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
+        if (!cmd)
+            goto error;
 
-    tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_ACCESS_TRANSFER_WRITE_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        struct pl_buf_vk *tbuf_vk = tbuf->priv;
+        VkBufferCopy region = {
+            .srcOffset = buf_vk->slice.mem.offset + params->buf_offset,
+            .dstOffset = tbuf_vk->slice.mem.offset,
+            .size = size,
+        };
 
-    vkCmdCopyBufferToImage(cmd->buf, buf_vk->slice.buf, tex_vk->img,
-                           tex_vk->current_layout, 1, &region);
+        buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_ACCESS_TRANSFER_READ_BIT, region.srcOffset, size, false);
 
-    tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_ACCESS_TRANSFER_WRITE_BIT, region.dstOffset, size, false);
+
+        vkCmdCopyBuffer(cmd->buf, buf_vk->slice.buf, tbuf_vk->slice.buf,
+                        1, &region);
+
+        struct pl_tex_transfer_params fixed = *params;
+        fixed.buf = tbuf;
+        fixed.buf_offset = 0;
+        return pl_tex_upload_texel(gpu, p->dp, &fixed);
+
+    } else {
+        struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
+        if (!cmd)
+            goto error;
+
+        VkBufferImageCopy region = {
+            .bufferOffset = buf_vk->slice.mem.offset + params->buf_offset,
+            .bufferRowLength = params->stride_w,
+            .bufferImageHeight = params->stride_h,
+            .imageOffset = { rc.x0, rc.y0, rc.z0 },
+            .imageExtent = { rc.x1, rc.y1, rc.z1 },
+            .imageSubresource = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .layerCount = 1,
+            },
+        };
+
+        buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_ACCESS_TRANSFER_READ_BIT, region.bufferOffset, size,
+                    false);
+
+        tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_ACCESS_TRANSFER_WRITE_BIT,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        vkCmdCopyBufferToImage(cmd->buf, buf_vk->slice.buf, tex_vk->img,
+                               tex_vk->current_layout, 1, &region);
+
+        tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    }
 
     return true;
 
@@ -1086,15 +1178,12 @@ error:
 static bool vk_tex_download(const struct pl_gpu *gpu,
                             const struct pl_tex_transfer_params *params)
 {
+    struct pl_vk *p = gpu->priv;
     const struct pl_tex *tex = params->tex;
     struct pl_tex_vk *tex_vk = tex->priv;
 
     if (!params->buf)
         return pl_tex_download_pbo(gpu, &tex_vk->pbo_read, params);
-
-    struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
-    if (!cmd)
-        goto error;
 
     pl_assert(params->buf);
     const struct pl_buf *buf = params->buf;
@@ -1102,29 +1191,74 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
     struct pl_rect3d rc = params->rc;
     size_t size = pl_tex_transfer_size(params);
 
-    VkBufferImageCopy region = {
-        .bufferOffset = buf_vk->slice.mem.offset + params->buf_offset,
-        .bufferRowLength = params->stride_w,
-        .bufferImageHeight = params->stride_h,
-        .imageOffset = { rc.x0, rc.y0, rc.z0 },
-        .imageExtent = { rc.x1, rc.y1, rc.z1 },
-        .imageSubresource = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .layerCount = 1,
-        },
-    };
+    if (tex->params.format->emulated) {
+        // Blit the image into a texel storage buffer using compute shaders
+        const struct pl_buf *tbuf;
+        tbuf = pl_buf_pool_get(gpu, &tex_vk->texel_read, &(struct pl_buf_params) {
+            .type = PL_BUF_TEXEL_STORAGE,
+            .size = size,
+            .format = tex_vk->texel_fmt,
+        });
+        if (!tbuf) {
+            PL_ERR(gpu, "Failed creating texel buffer for emulated tex download!");
+            goto error;
+        }
 
-    buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_ACCESS_TRANSFER_WRITE_BIT, region.bufferOffset, size, true);
+        struct pl_tex_transfer_params fixed = *params;
+        fixed.buf = tbuf;
+        fixed.buf_offset = 0;
+        if (!pl_tex_download_texel(gpu, p->dp, &fixed))
+            goto error;
 
-    tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_ACCESS_TRANSFER_READ_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
+        if (!cmd)
+            goto error;
 
-    vkCmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->current_layout,
-                           buf_vk->slice.buf, 1, &region);
+        struct pl_buf_vk *tbuf_vk = tbuf->priv;
+        VkBufferCopy region = {
+            .srcOffset = tbuf_vk->slice.mem.offset,
+            .dstOffset = buf_vk->slice.mem.offset + params->buf_offset,
+            .size = size,
+        };
 
-    tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_ACCESS_TRANSFER_READ_BIT, region.srcOffset, size, false);
+
+        buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_ACCESS_TRANSFER_WRITE_BIT, region.dstOffset, size, true);
+
+        vkCmdCopyBuffer(cmd->buf, tbuf_vk->slice.buf, buf_vk->slice.buf,
+                        1, &region);
+    } else {
+        struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
+        if (!cmd)
+            goto error;
+
+        VkBufferImageCopy region = {
+            .bufferOffset = buf_vk->slice.mem.offset + params->buf_offset,
+            .bufferRowLength = params->stride_w,
+            .bufferImageHeight = params->stride_h,
+            .imageOffset = { rc.x0, rc.y0, rc.z0 },
+            .imageExtent = { rc.x1, rc.y1, rc.z1 },
+            .imageSubresource = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .layerCount = 1,
+            },
+        };
+
+        buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_ACCESS_TRANSFER_WRITE_BIT, region.bufferOffset, size,
+                    true);
+
+        tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_ACCESS_TRANSFER_READ_BIT,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+        vkCmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->current_layout,
+                               buf_vk->slice.buf, 1, &region);
+
+        tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    }
 
     return true;
 

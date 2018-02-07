@@ -41,11 +41,13 @@ const struct vk_format vk_formats[] = {
     // Regular, byte-aligned integer formats
     {VK_FORMAT_R8_UNORM,              REGFMT("r8",       1,  8, UNORM)},
     {VK_FORMAT_R8G8_UNORM,            REGFMT("rg8",      2,  8, UNORM)},
-    {VK_FORMAT_R8G8B8_UNORM,          REGFMT("rgb8",     3,  8, UNORM)},
+    {VK_FORMAT_R8G8B8_UNORM,          REGFMT("rgb8",     3,  8, UNORM),
+        .emufmt = VK_FORMAT_R8G8B8A8_UNORM},
     {VK_FORMAT_R8G8B8A8_UNORM,        REGFMT("rgba8",    4,  8, UNORM)},
     {VK_FORMAT_R16_UNORM,             REGFMT("r16",      1, 16, UNORM)},
     {VK_FORMAT_R16G16_UNORM,          REGFMT("rg16",     2, 16, UNORM)},
-    {VK_FORMAT_R16G16B16_UNORM,       REGFMT("rgb16",    3, 16, UNORM)},
+    {VK_FORMAT_R16G16B16_UNORM,       REGFMT("rgb16",    3, 16, UNORM),
+        .emufmt = VK_FORMAT_R16G16B16A16_UNORM},
     {VK_FORMAT_R16G16B16A16_UNORM,    REGFMT("rgba16",   4, 16, UNORM)},
 
     {VK_FORMAT_R8_SNORM,              REGFMT("r8s",      1,  8, SNORM)},

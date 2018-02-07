@@ -17,6 +17,7 @@
 
 #include "common.h"
 #include "context.h"
+#include "shaders.h"
 #include "gpu.h"
 
 int pl_optimal_transfer_stride(const struct pl_gpu *gpu, int dimension)
@@ -77,6 +78,10 @@ static int cmp_fmt(const void *pa, const void *pb)
     // Always prefer non-opaque formats
     if (a->opaque != b->opaque)
         return PL_CMP(a->opaque, b->opaque);
+
+    // Always prefer non-emulated formats
+    if (a->emulated != b->emulated)
+        return PL_CMP(a->emulated, b->emulated);
 
     int ca = __builtin_popcount(a->caps),
         cb = __builtin_popcount(b->caps);
@@ -224,12 +229,16 @@ const char *pl_fmt_glsl_format(const struct pl_fmt *fmt)
     if (fmt->opaque)
         return NULL;
 
+    int components = fmt->num_components;
+    if (fmt->emulated && components == 3)
+        components = 4;
+
     for (int n = 0; n < PL_ARRAY_SIZE(pl_glsl_fmts); n++) {
         const struct glsl_fmt *gfmt = &pl_glsl_fmts[n];
 
         if (fmt->type != gfmt->type)
             continue;
-        if (fmt->num_components != gfmt->num_components)
+        if (components != gfmt->num_components)
             continue;
 
         // The component order is irrelevant, so we need to sort the depth
@@ -237,6 +246,10 @@ const char *pl_fmt_glsl_format(const struct pl_fmt *fmt)
         int depth[4] = {0};
         for (int i = 0; i < fmt->num_components; i++)
             depth[fmt->sample_order[i]] = fmt->component_depth[i];
+
+        // Copy over any emulated components
+        for (int i = fmt->num_components; i < components; i++)
+            depth[i] = gfmt->depth[i];
 
         for (int i = 0; i < PL_ARRAY_SIZE(depth); i++) {
             if (depth[i] != gfmt->depth[i])
@@ -352,25 +365,25 @@ const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
     return gpu->impl->tex_create(gpu, params);
 }
 
-static bool pl_tex_params_eq(struct pl_tex_params a, struct pl_tex_params b)
+static bool pl_tex_params_superset(struct pl_tex_params a, struct pl_tex_params b)
 {
     return a.w == b.w && a.h == b.h && a.d == b.d &&
-           a.format         == b.format &&
-           a.sampleable     == b.sampleable &&
-           a.renderable     == b.renderable &&
-           a.storable       == b.storable &&
-           a.blit_src       == b.blit_src &&
-           a.blit_dst       == b.blit_dst &&
-           a.host_writable  == b.host_writable &&
-           a.host_readable  == b.host_readable &&
-           a.sample_mode    == b.sample_mode &&
-           a.address_mode   == b.address_mode;
+           a.format          == b.format &&
+           a.sample_mode     == b.sample_mode &&
+           a.address_mode    == b.address_mode &&
+           (a.sampleable     || !b.sampleable) &&
+           (a.renderable     || !b.renderable) &&
+           (a.storable       || !b.storable) &&
+           (a.blit_src       || !b.blit_src) &&
+           (a.blit_dst       || !b.blit_dst) &&
+           (a.host_writable  || !b.host_writable) &&
+           (a.host_readable  || !b.host_readable);
 }
 
 bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
                      const struct pl_tex_params *params)
 {
-    if (*tex && pl_tex_params_eq((*tex)->params, *params))
+    if (*tex && pl_tex_params_superset((*tex)->params, *params))
         return true;
 
     PL_INFO(gpu, "(Re)creating %dx%dx%d texture", params->w, params->h, params->d);
@@ -896,7 +909,7 @@ void pl_pass_destroy(const struct pl_gpu *gpu, const struct pl_pass **pass)
 }
 
 static bool pl_tex_params_compat(const struct pl_tex_params a,
-                                const struct pl_tex_params b)
+                                 const struct pl_tex_params b)
 {
     return a.format         == b.format &&
            a.sampleable     == b.sampleable &&
@@ -1203,6 +1216,131 @@ bool pl_tex_download_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
     }
 
     return pl_buf_read(gpu, buf, 0, params->ptr, bufparams.size);
+}
+
+bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
+                         const struct pl_tex_transfer_params *params)
+{
+    const int threads = 256;
+    const struct pl_tex *tex = params->tex;
+    const struct pl_fmt *fmt = tex->params.format;
+    pl_assert(params->buf);
+    pl_assert(params->buf->params.type == PL_BUF_TEXEL_UNIFORM);
+
+    pl_dispatch_reset_frame(dp);
+    struct pl_shader *sh = pl_dispatch_begin(dp);
+    if (!sh_try_compute(sh, threads, 1, true, 0)) {
+        PL_ERR(gpu, "Failed emulating texture transfer!");
+        pl_dispatch_abort(dp, &sh);
+        return false;
+    }
+
+    ident_t buf = sh_desc(sh, (struct pl_shader_desc) {
+        .desc = {
+            .name = "data",
+            .type = PL_DESC_BUF_TEXEL_UNIFORM,
+        },
+        .object = params->buf,
+    });
+
+    ident_t img = sh_desc(sh, (struct pl_shader_desc) {
+        .desc = {
+            .name = "image",
+            .type = PL_DESC_STORAGE_IMG,
+            .access = PL_DESC_ACCESS_WRITEONLY,
+        },
+        .object = params->tex,
+    });
+
+    GLSL("vec4 color = vec4(0.0);                                       \n"
+         "ivec3 pos = ivec3(gl_GlobalInvocationID) + ivec3(%d, %d, %d); \n"
+         "int base = ((pos.z * %d + pos.y) * %d + pos.x) * %d;          \n",
+         params->rc.x0, params->rc.y0, params->rc.z0,
+         params->stride_h, params->stride_w, fmt->num_components);
+
+    for (int i = 0; i < fmt->num_components; i++)
+        GLSL("color[%d] = texelFetch(%s, base + %d).r; \n", i, buf, i);
+
+    // If the transfer width is a natural multiple of the thread size, we
+    // can skip the bounds check. Otherwise, make sure we aren't blitting out
+    // of the range since this would violate semantics
+    int groups_x = (pl_rect_w(params->rc) + threads - 1) / threads;
+    bool is_crop = params->rc.x1 != params->tex->params.w;
+    if (is_crop && groups_x * threads != pl_rect_w(params->rc))
+        GLSL("if (gl_GlobalInvocationID.x < %d)\n", pl_rect_w(params->rc));
+
+    int dims = pl_tex_params_dimension(tex->params);
+    static const char *coord_types[] = {
+        [1] = "int",
+        [2] = "ivec2",
+        [3] = "ivec3",
+    };
+
+    GLSL("imageStore(%s, %s(pos), color);\n", img, coord_types[dims]);
+    int groups[3] = { groups_x, pl_rect_h(params->rc), pl_rect_d(params->rc) };
+    return pl_dispatch_compute(dp, &sh, groups);
+}
+
+bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
+                           const struct pl_tex_transfer_params *params)
+{
+    const int threads = 256;
+    const struct pl_tex *tex = params->tex;
+    const struct pl_fmt *fmt = tex->params.format;
+    pl_assert(params->buf);
+    pl_assert(params->buf->params.type == PL_BUF_TEXEL_STORAGE);
+
+    pl_dispatch_reset_frame(dp);
+    struct pl_shader *sh = pl_dispatch_begin(dp);
+    if (!sh_try_compute(sh, threads, 1, true, 0)) {
+        PL_ERR(gpu, "Failed emulating texture transfer!");
+        pl_dispatch_abort(dp, &sh);
+        return false;
+    }
+
+    ident_t buf = sh_desc(sh, (struct pl_shader_desc) {
+        .desc = {
+            .name = "data",
+            .type = PL_DESC_BUF_TEXEL_STORAGE,
+        },
+        .object = params->buf,
+    });
+
+    ident_t img = sh_desc(sh, (struct pl_shader_desc) {
+        .desc = {
+            .name = "image",
+            .type = PL_DESC_STORAGE_IMG,
+            .access = PL_DESC_ACCESS_READONLY,
+        },
+        .object = params->tex,
+    });
+
+    int dims = pl_tex_params_dimension(tex->params);
+    static const char *coord_types[] = {
+        [1] = "int",
+        [2] = "ivec2",
+        [3] = "ivec3",
+    };
+
+    GLSL("ivec3 pos = ivec3(gl_GlobalInvocationID) + ivec3(%d, %d, %d); \n"
+         "int base = ((pos.z * %d + pos.y) * %d + pos.x) * %d;          \n"
+         "vec4 color = imageLoad(%s, %s(pos));                          \n",
+         params->rc.x0, params->rc.y0, params->rc.z0,
+         params->stride_h, params->stride_w, fmt->num_components,
+         img, coord_types[dims]);
+
+    int groups_x = (pl_rect_w(params->rc) + threads - 1) / threads;
+    bool is_crop = params->rc.x1 != params->tex->params.w;
+    if (is_crop && groups_x * threads != pl_rect_w(params->rc))
+        GLSL("if (gl_GlobalInvocationID.x < %d)\n", pl_rect_w(params->rc));
+
+    GLSL("{\n");
+    for (int i = 0; i < fmt->num_components; i++)
+        GLSL("imageStore(%s, base + %d, vec4(color[%d])); \n", buf, i, i);
+    GLSL("}\n");
+
+    int groups[3] = { groups_x, pl_rect_h(params->rc), pl_rect_d(params->rc) };
+    return pl_dispatch_compute(dp, &sh, groups);
 }
 
 struct pl_pass_params pl_pass_params_copy(void *tactx,

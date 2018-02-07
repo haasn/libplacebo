@@ -139,11 +139,17 @@ struct pl_fmt {
     int component_depth[4]; // meaningful bits per component, texture precision
 
     // This controls the relationship between the data as seen by the host and
-    // the way it's interpreted by the texture. If `opaque` is true, then
-    // there's no meaningful correspondence between the two, and all of the
-    // remaining fields in this section are unset. The host representation is
+    // the way it's interpreted by the texture. The host representation is
     // always tightly packed (no padding bits in between each component).
+    //
+    // If `opaque` is true, then there's no meaningful correspondence between
+    // the two, and all of the remaining fields in this section are unset.
+    //
+    // If `emulated` is true, then this format doesn't actually exist on the
+    // GPU as an uploadable texture format - and any apparent support is being
+    // emulated (typically using compute shaders in the upload path).
     bool opaque;
+    bool emulated;
     size_t texel_size;      // total size in bytes per texel
     int host_bits[4];       // number of meaningful bits in host memory
     int sample_order[4];    // sampled index for each component, e.g.

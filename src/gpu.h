@@ -87,6 +87,9 @@ void pl_gpu_print_formats(const struct pl_gpu *gpu, enum pl_log_level lev);
 
 // Look up the right GLSL image format qualifier from a partially filled-in
 // pl_fmt, or NULL if the format does not have a legal matching GLSL name.
+//
+// Warning: If `fmt->emulated` is true, this function makes the hard assumption
+// that 3-channel formats are being emulated as equivalent 4-channel formats!
 const char *pl_fmt_glsl_format(const struct pl_fmt *fmt);
 
 // Compute the total size (in bytes) of a texture transfer operation
@@ -122,6 +125,12 @@ bool pl_tex_upload_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
                        const struct pl_tex_transfer_params *params);
 bool pl_tex_download_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
                          const struct pl_tex_transfer_params *params);
+
+// This requires that params.buf has been set and is of type PL_BUF_TEXEL_*
+bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
+                         const struct pl_tex_transfer_params *params);
+bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
+                           const struct pl_tex_transfer_params *params);
 
 // Make a deep-copy of the pass params. Note: cached_program etc. are not
 // copied, but cleared explicitly.

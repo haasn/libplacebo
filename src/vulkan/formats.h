@@ -23,6 +23,7 @@
 struct vk_format {
     VkFormat ifmt;     // internal vulkan format enum
     struct pl_fmt fmt; // pl_fmt template (features will be auto-detected)
+    VkFormat emufmt;   // alternate format for texture emulation
 };
 
 extern const struct vk_format vk_formats[];
