@@ -498,6 +498,15 @@ static void fix_tex_transfer(const struct pl_gpu *gpu,
     if (!params->stride_h)
         params->stride_h = tex->params.h;
 
+    // Sanitize superfluous coordinates for the benefit of the GPU
+    strip_coords(tex, &rc);
+    if (!tex->params.w)
+        params->stride_w = 1;
+    if (!tex->params.h)
+        params->stride_h = 1;
+
+    params->rc = rc;
+
     // Check the parameters for sanity
 #ifndef NDEBUG
     switch (pl_tex_params_dimension(tex->params))
@@ -529,15 +538,6 @@ static void fix_tex_transfer(const struct pl_gpu *gpu,
         pl_assert(params->buf_offset + size <= buf->params.size);
     }
 #endif
-
-    // Sanitize superfluous coordinates for the benefit of the GPU
-    strip_coords(tex, &rc);
-    if (!tex->params.w)
-        params->stride_w = 1;
-    if (!tex->params.h)
-        params->stride_h = 1;
-
-    params->rc = rc;
 }
 
 bool pl_tex_upload(const struct pl_gpu *gpu,
