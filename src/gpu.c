@@ -915,17 +915,6 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
     const struct pl_pass *pass = params->pass;
     struct pl_pass_run_params new = *params;
 
-    // Sanitize viewport/scissors
-    if (!new.viewport.x0 && !new.viewport.x1)
-        new.viewport.x1 = params->target->params.w;
-    if (!new.viewport.y0 && !new.viewport.y1)
-        new.viewport.y1 = params->target->params.h;
-
-    if (!new.scissors.x0 && !new.scissors.x1)
-        new.scissors.x1 = params->target->params.w;
-    if (!new.scissors.y0 && !new.scissors.y1)
-        new.scissors.y1 = params->target->params.h;
-
     for (int i = 0; i < pass->params.num_descriptors; i++) {
         struct pl_desc desc = pass->params.descriptors[i];
         struct pl_desc_binding db = params->desc_bindings[i];
@@ -994,6 +983,17 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         pl_assert(tex->params.renderable);
         struct pl_rect2d *vp = &new.viewport;
         struct pl_rect2d *sc = &new.scissors;
+
+        // Sanitize viewport/scissors
+        if (!vp->x0 && !vp->x1)
+            vp->x1 = tex->params.w;
+        if (!vp->y0 && !vp->y1)
+            vp->y1 = tex->params.h;
+
+        if (!sc->x0 && !sc->x1)
+            sc->x1 = tex->params.w;
+        if (!sc->y0 && !sc->y1)
+            sc->y1 = tex->params.h;
 
         // Constrain the scissors to the target dimension (to sanitize the
         // underlying graphics API calls)
