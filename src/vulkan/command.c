@@ -332,6 +332,13 @@ void vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd *cmd)
     VK(vkResetFences(vk->dev, 1, &cmd->fence));
     TARRAY_APPEND(vk, vk->cmds_queued, vk->num_cmds_queued, cmd);
     vk->last_cmd = cmd;
+
+    if (vk->num_cmds_queued >= PL_VK_MAX_QUEUED_CMDS) {
+        PL_WARN(vk, "Exhausted the queued command limit.. forcing a flush now. "
+                "Consider using pl_flush after submitting a batch of work?");
+        vk_flush_commands(vk);
+    }
+
     return;
 
 error:
