@@ -585,7 +585,9 @@ const struct ra_buf *ra_buf_create(const struct ra *ra,
     }
 
     const struct ra_buf *buf = ra->impl->buf_create(ra, params);
-    pl_assert(buf->data || !params->host_mapped);
+    if (buf)
+        pl_assert(buf->data || !params->host_mapped);
+
     return buf;
 }
 
