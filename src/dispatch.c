@@ -824,6 +824,69 @@ error:
     return ret;
 }
 
+bool pl_dispatch_compute(struct pl_dispatch *dp, struct pl_shader **psh,
+                         int dispatch_size[3])
+{
+    struct pl_shader *sh = *psh;
+    const struct pl_shader_res *res = &sh->res;
+    bool ret = false;
+
+    if (!sh->mutable) {
+        PL_ERR(dp, "Trying to dispatch non-mutable shader?");
+        goto error;
+    }
+
+    if (res->input != PL_SHADER_SIG_NONE || res->output != PL_SHADER_SIG_NONE) {
+        PL_ERR(dp, "Trying to dispatch shader with incompatible signature!");
+        goto error;
+    }
+
+    if (!pl_shader_is_compute(sh)) {
+        PL_ERR(dp, "Trying to dispatch a non-compute shader using "
+               "`pl_dispatch_compute`!");
+        goto error;
+    }
+
+    if (sh->res.num_vertex_attribs) {
+        PL_ERR(dp, "Trying to dispatch a targetless compute shader that uses "
+               "vertex attributes!");
+        goto error;
+    }
+
+    struct pass *pass = find_pass(dp, sh, NULL, NULL, NULL);
+
+    // Silently return on failed passes
+    if (pass->failed)
+        goto error;
+
+    struct pl_pass_run_params *rparams = &pass->run_params;
+
+    // Update the descriptor bindings
+    for (int i = 0; i < sh->res.num_descriptors; i++)
+        rparams->desc_bindings[i].object = sh->res.descriptors[i].object;
+
+    // Update all of the variables (if needed)
+    rparams->num_var_updates = 0;
+    for (int i = 0; i < res->num_variables; i++)
+        update_pass_var(dp, pass, &res->variables[i], &pass->vars[i]);
+
+    // Update the dispatch size
+    for (int i = 0; i < 3; i++)
+        rparams->compute_groups[i] = dispatch_size[i];
+
+    // Dispatch the actual shader
+    pl_pass_run(dp->gpu, &pass->run_params);
+    ret = true;
+
+error:
+    // Reset the temporary buffers which we use to build the shader
+    for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
+        dp->tmp[i].len = 0;
+
+    pl_dispatch_abort(dp, psh);
+    return ret;
+}
+
 void pl_dispatch_abort(struct pl_dispatch *dp, struct pl_shader **psh)
 {
     struct pl_shader *sh = *psh;

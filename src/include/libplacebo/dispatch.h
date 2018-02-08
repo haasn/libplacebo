@@ -47,6 +47,15 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **sh,
                         const struct pl_tex *target, const struct pl_rect2d *rc,
                         const struct pl_blend_params *blend_params);
 
+// A variant of `pl_dispatch_finish`, this one only dispatches a compute shader
+// that has no output.
+//
+// Note: There is currently no way to actually construct such a shader with the
+// currently available public APIs. (However, it's still used internally, and
+// may be needed in the future)
+bool pl_dispatch_compute(struct pl_dispatch *dp, struct pl_shader **sh,
+                         int dispatch_size[3]);
+
 // Cancel an active shader without submitting anything. Useful, for example,
 // if the shader was instead merged into a different shader.
 void pl_dispatch_abort(struct pl_dispatch *dp, struct pl_shader **sh);
