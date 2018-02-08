@@ -599,7 +599,9 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
     }
 
     const struct pl_buf *buf = gpu->impl->buf_create(gpu, params);
-    pl_assert(buf->data || !params->host_mapped);
+    if (buf)
+        pl_assert(buf->data || !params->host_mapped);
+
     return buf;
 }
 
