@@ -677,14 +677,14 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
             for (int i = 0; i < size * comps; i += comps) {
                 if (i > 0)
                     bstr_xappend_asprintf_c(lut, &lut->weights.str, ",");
-                if (comps > 0)
+                if (comps > 1)
                     bstr_xappend_asprintf_c(lut, &lut->weights.str, "vec%d(", comps);
                 for (int c = 0; c < comps; c++) {
                     bstr_xappend_asprintf_c(lut, &lut->weights.str, "%s%f",
                                             c > 0 ? "," : "",
                                             tmp[i+c]);
                 }
-                if (comps > 0)
+                if (comps > 1)
                     bstr_xappend_asprintf_c(lut, &lut->weights.str, ")");
             }
             break;
