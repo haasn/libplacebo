@@ -448,7 +448,8 @@ const struct pl_color_map_params pl_color_map_default_params = {
     .intent                  = PL_INTENT_RELATIVE_COLORIMETRIC,
     .tone_mapping_algo       = PL_TONE_MAPPING_HABLE,
     .tone_mapping_desaturate = 0.5,
-    .peak_detect_frames      = 20,
+    .peak_detect_frames      = 63,
+    .scene_threshold         = 0.2,
 };
 
 struct sh_peak_obj {
@@ -598,6 +599,31 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
          "    %s[%s] /= num_wg;                                                 \n",
          ctr.name, ctr.name,
          avg.name, idx.name);
+
+    // Scene change detection
+    if (params->scene_threshold > 0) {
+    GLSL("    uint cur_max = %s[%s];                  \n"
+         "    uint cur_avg = %s[%s];                  \n"
+         "    int diff = int(%s * cur_avg) - int(%s); \n"
+         "    if (abs(diff) > %s * %d) {              \n"
+         "        %s = 0;                             \n"
+         "        %s = %s = 0;                        \n"
+         "        for (uint i = 0; i < %d; i++)       \n"
+         "            %s[i] = %s[i] = 0;              \n"
+         "       %s[%s] = cur_max;                    \n"
+         "       %s[%s] = cur_avg;                    \n"
+         "    }                                       \n",
+         max.name, idx.name,
+         avg.name, idx.name,
+         num.name, avg_total.name,
+         num.name, (int) (params->scene_threshold * PL_COLOR_REF_WHITE),
+         num.name,
+         max_total.name, avg_total.name,
+         frames + 1,
+         max.name, avg.name,
+         max.name, idx.name,
+         avg.name, idx.name);
+    }
 
     // Add the current frame, then subtract and reset the next frame
     GLSL("    uint next = (%s + 1) %% %d; \n"

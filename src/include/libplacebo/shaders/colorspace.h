@@ -160,8 +160,16 @@ struct pl_color_map_params {
 
     // If set to something nonzero, this enables the peak detection feature.
     // Controls how many frames to smooth (average) the results over, in order
-    // to prevent jitter due to sparkling highlights. Defaults to 20.
+    // to prevent jitter due to sparkling highlights. Defaults to 63.
     int peak_detect_frames;
+
+    // When using peak detection, setting this to a nonzero value enables
+    // scene change detection. If the current frame's average brightness
+    // differs from the averaged frame brightness of the previous frames by
+    // this much or more, the averaged value will be discarded and the state
+    // reset. Doing so helps prevent annoying "eye adaptation"-like effects
+    // when transitioning between dark and bright scenes. Defaults to 0.2.
+    float scene_threshold;
 };
 
 extern const struct pl_color_map_params pl_color_map_default_params;
