@@ -440,6 +440,10 @@ static void pl_shader_inverse_ootf(struct pl_shader *sh,
     }
 }
 
+// Average light level for SDR signals. This is equal to a signal level of 0.5
+// under a typical presentation gamma of about 2.0.
+static const float sdr_avg = 0.25;
+
 const struct pl_color_map_params pl_color_map_default_params = {
     .intent                  = PL_INTENT_RELATIVE_COLORIMETRIC,
     .tone_mapping_algo       = PL_TONE_MAPPING_HABLE,
@@ -486,17 +490,17 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
     const struct pl_gpu *gpu = sh->gpu;
     obj->gpu = gpu;
 
-    struct pl_var idx, num, ctr, max, sum;
+    struct pl_var idx, num, ctr, max, avg;
     idx = pl_var_uint(sh_fresh(sh, "index"));
     num = pl_var_uint(sh_fresh(sh, "number"));
     ctr = pl_var_uint(sh_fresh(sh, "counter"));
     max = pl_var_uint(sh_fresh(sh, "frames_max"));
-    sum = pl_var_uint(sh_fresh(sh, "frames_sum"));
-    max.dim_a = sum.dim_a = frames + 1;
+    avg = pl_var_uint(sh_fresh(sh, "frames_avg"));
+    max.dim_a = avg.dim_a = frames + 1;
 
-    struct pl_var max_total, sum_total;
+    struct pl_var max_total, avg_total;
     max_total = pl_var_uint(sh_fresh(sh, "max_total"));
-    sum_total = pl_var_uint(sh_fresh(sh, "sum_total"));
+    avg_total = pl_var_uint(sh_fresh(sh, "avg_total"));
 
     // Attempt packing the peak detection SSBO
     struct pl_desc ssbo = {
@@ -505,15 +509,15 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
         .access = PL_DESC_ACCESS_READWRITE,
     };
 
-    struct pl_var_layout idx_l, num_l, ctr_l, max_l, sum_l, max_tl, sum_tl;
+    struct pl_var_layout idx_l, num_l, ctr_l, max_l, avg_l, max_tl, avg_tl;
     bool ok = true;
     ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &idx_l, idx);
     ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &num_l, num);
     ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &ctr_l, ctr);
     ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &max_l, max);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &sum_l, sum);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &avg_l, avg);
     ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &max_tl, max_total);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &sum_tl, sum_total);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &avg_tl, avg_total);
 
     if (!ok) {
         PL_WARN(sh, "HDR peak detection exhausts device limits.. disabling");
@@ -570,44 +574,49 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
          "}                                                                 \n",
          wg_sum,
          max.name, idx.name,
-         sum.name, idx.name);
+         avg.name, idx.name);
 
     // Update the sig_peak/sig_avg from the old SSBO state
-    GLSL("uint num_wg = gl_NumWorkGroups.x * gl_NumWorkGroups.y; \n"
-         "if (%s > 0) {                                          \n"
-         "    sig_peak = float(%s) / (%f * float(%s));           \n"
-         "    sig_avg  = float(%s) / (%f * float(%s * num_wg));  \n"
-         "}                                                      \n",
+    GLSL("if (%s > 0) {                                  \n"
+         "    float peak = float(%s) / (%f * float(%s)); \n"
+         "    float avg  = float(%s) / (%f * float(%s)); \n"
+         "    sig_peak   = max(1.0, peak);               \n"
+         "    sig_avg    = max(%f, avg);                 \n"
+         "}                                              \n",
          num.name,
          max_total.name, PL_COLOR_REF_WHITE, num.name,
-         sum_total.name, PL_COLOR_REF_WHITE, num.name);
+         avg_total.name, PL_COLOR_REF_WHITE, num.name,
+         sdr_avg);
 
     // Finally, to update the global state, we increment a counter per dispatch
     GLSL("memoryBarrierBuffer();                                                \n"
          "barrier();                                                            \n"
+         "uint num_wg = gl_NumWorkGroups.x * gl_NumWorkGroups.y;                \n"
          "if (gl_LocalInvocationIndex == 0 && atomicAdd(%s, 1) == num_wg - 1) { \n"
          "    %s = 0;                                                           \n"
-         // Add the current frame, then subtract and reset the next frame
-         "    uint next = (%s + 1) %% %d;                                       \n"
-         "    %s += %s[%s] - %s[next];                                          \n"
-         "    %s += %s[%s] - %s[next];                                          \n"
-         "    %s[next] = %s[next] = 0;                                          \n"
-         // Update the index and count
-         "    %s = next;                                                        \n"
+         // Divide out the workgroup sum by the number of work groups
+         "    %s[%s] /= num_wg;                                                 \n",
+         ctr.name, ctr.name,
+         avg.name, idx.name);
+
+    // Add the current frame, then subtract and reset the next frame
+    GLSL("    uint next = (%s + 1) %% %d; \n"
+         "    %s += %s[%s] - %s[next];    \n"
+         "    %s += %s[%s] - %s[next];    \n"
+         "    %s[next] = %s[next] = 0;    \n",
+         idx.name, frames + 1,
+         max_total.name, max.name, idx.name, max.name,
+         avg_total.name, avg.name, idx.name, avg.name,
+         max.name, avg.name);
+
+    // Update the index and count
+    GLSL("    %s = next;                                                        \n"
          "    %s = min(%s + 1, %d);                                             \n"
          "    memoryBarrierBuffer();                                            \n"
          "}                                                                     \n",
-         ctr.name, ctr.name,
-         idx.name, frames + 1,
-         max_total.name, max.name, idx.name, max.name,
-         sum_total.name, sum.name, idx.name, sum.name,
-         max.name, sum.name, idx.name,
+         idx.name,
          num.name, num.name, frames);
 }
-
-// Average light level for SDR signals. This is equal to a signal level of 0.5
-// under a typical presentation gamma of about 2.0.
-static const float sdr_avg = 0.25;
 
 static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
                                struct pl_color_space dst, ident_t luma,
