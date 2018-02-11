@@ -374,7 +374,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
             .sys        = PL_COLOR_SYSTEM_BT_709,
             .levels     = PL_COLOR_LEVELS_PC,
         },
-        .color          = pl_color_space_bt709,
+        .color          = pl_color_space_hdr10, // test tone-mapping
         .width          = width,
         .height         = height,
         .src_rect       = {-1.0, 0.0, width - 1.0, height},
