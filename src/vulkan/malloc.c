@@ -97,7 +97,7 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
     // also implicitly unmaps the memory if needed
     vkFreeMemory(vk->dev, slab->mem, VK_ALLOC);
 
-    PL_INFO(vk, "Freed slab of size %zu", slab->size);
+    PL_INFO(vk, "Freed slab of size %zu", (size_t) slab->size);
     talloc_free(slab);
 }
 
@@ -179,7 +179,8 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
         goto error;
 
     PL_INFO(vk, "Allocating %zu memory of type 0x%x (id %d) in heap %d",
-            slab->size, (unsigned)type.propertyFlags, index, (int)type.heapIndex);
+            (size_t) slab->size, (unsigned) type.propertyFlags, index,
+            (int) type.heapIndex);
 
     minfo.memoryTypeIndex = index;
     VK(vkAllocateMemory(vk->dev, &minfo, VK_ALLOC, &slab->mem));
@@ -268,7 +269,7 @@ struct vk_malloc *vk_malloc_create(struct vk_ctx *vk)
     for (int i = 0; i < ma->props.memoryHeapCount; i++) {
         VkMemoryHeap heap = ma->props.memoryHeaps[i];
         PL_INFO(vk, "    heap %d: flags 0x%x size %zu",
-                i, (unsigned) heap.flags, heap.size);
+                i, (unsigned) heap.flags, (size_t) heap.size);
     }
 
     PL_INFO(vk, "Memory types supported by device:");
@@ -304,7 +305,7 @@ void vk_free_memslice(struct vk_malloc *ma, struct vk_memslice slice)
     slab->used -= slice.size;
 
     PL_DEBUG(vk, "Freeing slice %zu + %zu from slab with size %zu",
-             slice.offset, slice.size, slab->size);
+             (size_t) slice.offset, (size_t) slice.size, (size_t) slab->size);
 
     if (slab->dedicated) {
         // If the slab was purpose-allocated for this memslice, we can just
@@ -430,7 +431,7 @@ static bool slice_heap(struct vk_malloc *ma, struct vk_heap *heap, size_t size,
     };
 
     PL_DEBUG(vk, "Sub-allocating slice %zu + %zu from slab with size %zu",
-             out->offset, out->size, slab->size);
+             (size_t) out->offset, (size_t) out->size, (size_t) slab->size);
 
     size_t out_end = out->offset + out->size;
     insert_region(slab, (struct vk_region) { reg.start, out->offset });

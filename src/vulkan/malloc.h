@@ -28,8 +28,8 @@ void vk_malloc_destroy(struct vk_malloc **ma);
 // metadata for accounting. This struct is essentially read-only.
 struct vk_memslice {
     VkDeviceMemory vkmem;
-    size_t offset;
-    size_t size;
+    VkDeviceSize offset;
+    VkDeviceSize size;
     void *priv;
 };
 
