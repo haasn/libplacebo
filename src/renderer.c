@@ -262,12 +262,12 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
                              const struct pl_render_params *params,
                              const struct pl_sample_src *src)
 {
+    bool is_linear = src->tex->params.sample_mode == PL_TEX_SAMPLE_LINEAR;
     bool no_samplers = !params->upscaler && !params->downscaler;
     if (!rr->fbofmt || rr->disable_sampling || !sampler || no_samplers)
         goto fallback;
 
     const struct pl_filter_config *config = NULL;
-    bool is_linear = src->tex->params.sample_mode == PL_TEX_SAMPLE_LINEAR;
     struct pl_shader_obj **lut;
     const struct pl_tex **sep_fbo;
 
@@ -520,7 +520,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     // image size
     struct pl_plane planes[4];
     const struct pl_plane *refplane = NULL; // points to one of `planes`
-    int best_diff, best_off;
+    int best_diff = 0, best_off = 0;
 
     pl_assert(image->num_planes < PLANE_COUNT);
     for (int i = 0; i < image->num_planes; i++) {
