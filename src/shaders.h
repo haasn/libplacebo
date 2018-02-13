@@ -168,3 +168,8 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
                enum sh_lut_method method, int width, int height, int depth,
                bool update, void *priv,
                void (*fill)(void *priv, float *data, int w, int h, int d));
+
+// Returns a GLSL-version appropriate "bvec"-like type. For GLSL 130+, this
+// returns bvecN. For GLSL 120, this returns vecN instead. The intended use of
+// this function is with mix(), which only accepts bvec in GLSL 130+.
+const char *sh_bvec(const struct pl_shader *sh, int dims);
