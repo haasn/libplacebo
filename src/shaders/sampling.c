@@ -77,11 +77,11 @@ void pl_shader_deband(struct pl_shader *sh, const struct pl_tex *pl_tex,
     // For each iteration, compute the average at a given distance and
     // pick it instead of the color if the difference is below the threshold.
     for (int i = 1; i <= params->iterations; i++) {
-        GLSL("avg = %s(pos, %f, %s);                                \n"
-             "diff = abs(color - avg);                              \n"
-             "color = mix(avg, color, greaterThan(diff, vec4(%f))); \n",
+        GLSL("avg = %s(pos, %f, %s);                                    \n"
+             "diff = abs(color - avg);                                  \n"
+             "color = mix(avg, color, %s(greaterThan(diff, vec4(%f)))); \n",
              average, i * params->radius, state,
-             params->threshold / (1000 * i));
+             sh_bvec(sh, 4), params->threshold / (1000 * i));
     }
 
     // Add some random noise to smooth out residual differences

@@ -775,3 +775,27 @@ error:
     talloc_free(tmp);
     return ret;
 }
+
+const char *sh_bvec(const struct pl_shader *sh, int dims)
+{
+    static const char *bvecs[] = {
+        [1] = "bool",
+        [2] = "bvec2",
+        [3] = "bvec3",
+        [4] = "bvec4",
+    };
+
+    static const char *vecs[] = {
+        [1] = "float",
+        [2] = "vec2",
+        [3] = "vec3",
+        [4] = "vec4",
+    };
+
+    pl_assert(dims > 0 && dims < PL_ARRAY_SIZE(bvecs));
+    if (sh->gpu && sh->gpu->glsl.version >= 130) {
+        return bvecs[dims];
+    } else {
+        return vecs[dims];
+    }
+}
