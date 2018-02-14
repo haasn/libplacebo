@@ -61,7 +61,7 @@ static VkBool32 vk_dbg_callback(VkDebugReportFlagsEXT flags,
     // The return value of this function determines whether the call will
     // be explicitly aborted (to prevent GPU errors) or not. In this case,
     // we generally want this to be on for the errors.
-    return (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT);
+    return !!(flags & VK_DEBUG_REPORT_ERROR_BIT_EXT);
 }
 
 const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
