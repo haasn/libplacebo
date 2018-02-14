@@ -380,7 +380,7 @@ void pl_shader_unsigmoidize(struct pl_shader *sh,
 
 // Applies the OOTF / inverse OOTF
 static void pl_shader_ootf(struct pl_shader *sh, enum pl_color_light light,
-                           ident_t luma)
+                           ident_t luma, float peak)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
@@ -393,12 +393,14 @@ static void pl_shader_ootf(struct pl_shader *sh, enum pl_color_light light,
 
     switch (light)
     {
-    case PL_COLOR_LIGHT_SCENE_HLG:
-        // HLG OOTF from BT.2100, assuming a reference display with a
-        // peak of 1000 cd/m² -> gamma = 1.2
-        GLSL("color.rgb *= vec3(%f * pow(dot(%s, color.rgb), 0.2));\n",
-             (1000 / PL_COLOR_REF_WHITE) / pow(12, 1.2), luma);
+    case PL_COLOR_LIGHT_SCENE_HLG: {
+        // HLG OOTF from BT.2100, tuned to the indicated peak
+        float gamma = 1.2 + 0.42 * log10(peak * PL_COLOR_REF_WHITE / 1000.0);
+        gamma = PL_MAX(gamma, 1.0);
+        GLSL("color.rgb *= vec3(%f * pow(dot(%s, color.rgb), %f));\n",
+             peak / pow(12, gamma), luma, gamma - 1.0);
         break;
+    }
     case PL_COLOR_LIGHT_SCENE_709_1886:
         // This OOTF is defined by encoding the result as 709 and then decoding
         // it as 1886; although this is called 709_1886 we actually use the
@@ -419,7 +421,8 @@ static void pl_shader_ootf(struct pl_shader *sh, enum pl_color_light light,
 }
 
 static void pl_shader_inverse_ootf(struct pl_shader *sh,
-                                   enum pl_color_light light, ident_t luma)
+                                   enum pl_color_light light, ident_t luma,
+                                   float peak)
 {
     if (!light || light == PL_COLOR_LIGHT_DISPLAY)
         return;
@@ -429,12 +432,15 @@ static void pl_shader_inverse_ootf(struct pl_shader *sh,
 
     switch (light)
     {
-    case PL_COLOR_LIGHT_SCENE_HLG:
+    case PL_COLOR_LIGHT_SCENE_HLG: {
+        float gamma = 1.2 + 0.42 * log10(peak * PL_COLOR_REF_WHITE / 1000.0);
+        gamma = PL_MAX(gamma, 1.0);
         GLSL("color.rgb *= vec3(1.0/%f);                                \n"
              "color.rgb /= vec3(max(1e-6, pow(dot(%s, color.rgb),       \n"
-             "                                0.2/1.2)));               \n",
-             (1000 / PL_COLOR_REF_WHITE) / pow(12, 1.2), luma);
+             "                                %f)));                    \n",
+             peak / pow(12, gamma), luma, (gamma - 1.0) / gamma);
         break;
+    }
     case PL_COLOR_LIGHT_SCENE_709_1886:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.4));                         \n"
              "color.rgb = mix(color.rgb * vec3(1.0/4.5),                         \n"
@@ -831,6 +837,12 @@ void pl_shader_color_map(struct pl_shader *sh,
         dst.sig_avg = src_hdr && !dst_hdr ? sdr_avg : src.sig_avg;
     }
 
+    // HLG's OOTF is parametrized by the sig peak, so enable OOTF conversion
+    // if necessary, even if the output light is the same
+    bool need_ootf = src.light != dst.light;
+    if (src.transfer == PL_COLOR_TRC_HLG && src.sig_peak != dst.sig_peak)
+        need_ootf = true;
+
     // All operations from here on require linear light as a starting point,
     // so we linearize even if src.gamma == dst.gamma when one of the other
     // operations needs it
@@ -839,7 +851,7 @@ void pl_shader_color_map(struct pl_shader *sh,
                        src_range != dst_range ||
                        src.sig_peak > dst.sig_peak ||
                        src.sig_avg != dst.sig_avg ||
-                       src.light != dst.light;
+                       need_ootf;
 
     // Various operations need access to the src_luma and dst_luma respectively,
     // so just always make them available if we're doing anything at all
@@ -864,8 +876,8 @@ void pl_shader_color_map(struct pl_shader *sh,
         is_linear = true;
     }
 
-    if (src.light != dst.light)
-        pl_shader_ootf(sh, src.light, src_luma);
+    if (need_ootf)
+        pl_shader_ootf(sh, src.light, src_luma, src.sig_peak);
 
     // Adapt to the right colorspace (primaries) if necessary
     if (src.primaries != dst.primaries) {
@@ -894,8 +906,8 @@ void pl_shader_color_map(struct pl_shader *sh,
              "    color.rgb = vec3(1.0) - color.rgb; // invert\n");
     }
 
-    if (src.light != dst.light)
-        pl_shader_inverse_ootf(sh, dst.light, dst_luma);
+    if (need_ootf)
+        pl_shader_inverse_ootf(sh, dst.light, dst_luma, dst.sig_peak);
 
     if (is_linear)
         pl_shader_delinearize(sh, dst.transfer);
