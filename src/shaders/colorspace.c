@@ -910,6 +910,9 @@ void pl_shader_color_map(struct pl_shader *sh,
     if (need_ootf)
         pl_shader_inverse_ootf(sh, dst.light, dst_luma, dst.sig_peak);
 
+    if (params->hdr_simulation && !pl_color_transfer_is_hdr(dst.transfer))
+        GLSL("color.rgb *= vec3(%f);\n", 1.0 / dst.sig_peak);
+
     if (is_linear)
         pl_shader_delinearize(sh, dst.transfer);
 
