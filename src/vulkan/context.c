@@ -69,6 +69,7 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
 {
     void *tmp = talloc_new(NULL);
     params = PL_DEF(params, &pl_vk_inst_default_params);
+    VkInstance inst = NULL;
 
     const char **exts = NULL;
     int num_exts = 0;
@@ -98,7 +99,6 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     info.ppEnabledExtensionNames = exts;
     info.enabledExtensionCount = num_exts;
 
-    VkInstance inst = NULL;
     VkResult res = vkCreateInstance(&info, VK_ALLOC, &inst);
     if (res != VK_SUCCESS) {
         pl_fatal(ctx, "Failed creating instance: %s", vk_res_str(res));
@@ -134,7 +134,7 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
 
 error:
     pl_fatal(ctx, "Failed initializing vulkan instance");
-    pl_vk_inst_destroy((const struct pl_vk_inst **) &inst);
+    vkDestroyInstance(inst, VK_ALLOC);
     talloc_free(tmp);
     return NULL;
 }
