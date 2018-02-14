@@ -685,12 +685,12 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
 
     // Desaturate the color using a coefficient dependent on the signal level
     if (params->tone_mapping_desaturate > 0) {
-        GLSL("float luma = dot(%s, color.rgb);                      \n"
+        GLSL("float luma = %f * dot(%s, color.rgb);                 \n"
              "float coeff = max(sig - 0.18, 1e-6) / max(sig, 1e-6); \n"
              "coeff = pow(coeff, %f);                               \n"
              "color.rgb = mix(color.rgb, vec3(luma), coeff);        \n"
              "sig = mix(sig, luma, coeff);                          \n",
-             luma, 10.0 / params->tone_mapping_desaturate);
+             1.0 / dst.sig_peak, luma, 10.0 / params->tone_mapping_desaturate);
     }
 
     // Store the original signal level for later re-use
