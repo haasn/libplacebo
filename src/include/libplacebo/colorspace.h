@@ -266,6 +266,10 @@ enum pl_chroma_location {
     PL_CHROMA_UNKNOWN = 0,
     PL_CHROMA_LEFT,             // MPEG2/4, H.264
     PL_CHROMA_CENTER,           // MPEG1, JPEG
+    PL_CHROMA_TOP_LEFT,
+    PL_CHROMA_TOP_CENTER,
+    PL_CHROMA_BOTTOM_LEFT,
+    PL_CHROMA_BOTTOM_CENTER,
     PL_CHROMA_COUNT,
 };
 

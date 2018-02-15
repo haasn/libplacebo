@@ -308,17 +308,31 @@ const struct pl_color_adjustment pl_color_adjustment_neutral = {
 
 void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y)
 {
+    *x = *y = 0;
+
     switch (loc) {
-    case PL_CHROMA_UNKNOWN:
-    case PL_CHROMA_CENTER:
-        *x = 0;
-        *y = 0;
-        return;
     case PL_CHROMA_LEFT:
+    case PL_CHROMA_TOP_LEFT:
+    case PL_CHROMA_BOTTOM_LEFT:
         *x = -0.5;
-        *y = 0;
-        return;
-    default: abort();
+        break;
+    default: break;
+    }
+
+    switch (loc) {
+    case PL_CHROMA_TOP_LEFT:
+    case PL_CHROMA_TOP_CENTER:
+        *y = -0.5;
+        break;
+    default: break;
+    }
+
+    switch (loc) {
+    case PL_CHROMA_BOTTOM_LEFT:
+    case PL_CHROMA_BOTTOM_CENTER:
+        *y = 0.5;
+        break;
+    default: break;
     }
 }
 
