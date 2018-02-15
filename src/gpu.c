@@ -482,7 +482,7 @@ size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par)
 {
     const struct pl_tex *tex = par->tex;
 
-    int texels;
+    int texels = 0;
     switch (pl_tex_params_dimension(tex->params)) {
     case 1: texels = pl_rect_w(par->rc); break;
     case 2: texels = pl_rect_h(par->rc) * par->stride_w; break;
