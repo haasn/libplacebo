@@ -287,12 +287,19 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
         goto error;
     }
 
-    info->imageExtent = caps.currentExtent;
-
     // We just request whatever usage we can, and let the pl_vk decide what
     // pl_tex_params that translates to. This makes the images as flexible
-    // as possible.
+    // as possible. However, require at least blitting and rendering.
+    VkImageUsageFlags required_flags = 0;
+    required_flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    required_flags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if ((caps.supportedUsageFlags & required_flags) != required_flags) {
+        PL_ERR(vk, "The swapchain doesn't support rendering and blitting!");
+        goto error;
+    }
+
     info->imageUsage = caps.supportedUsageFlags;
+    info->imageExtent = caps.currentExtent;
     return true;
 
 error:
