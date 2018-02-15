@@ -88,14 +88,19 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
         default: continue;
         }
 
-        // Make sure we can wrap this format to a meaningful, renderable pl_format
+        // Make sure we can wrap this format to a meaningful, valid pl_format
         for (int n = 0; n < gpu->num_formats; n++) {
             const struct pl_fmt *rafmt = gpu->formats[n];
             const struct vk_format *vkfmt = rafmt->priv;
             if (vkfmt->ifmt != formats[i].format)
                 continue;
-            if (!(rafmt->caps & PL_FMT_CAP_RENDERABLE))
+
+            enum pl_fmt_caps render_caps = 0;
+            render_caps |= PL_FMT_CAP_RENDERABLE;
+            render_caps |= PL_FMT_CAP_BLITTABLE;
+            if ((rafmt->caps & render_caps) != render_caps)
                 continue;
+
             // format valid, use it
             *out_format = formats[i];
             talloc_free(formats);

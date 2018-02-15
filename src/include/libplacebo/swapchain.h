@@ -50,8 +50,9 @@ int pl_swapchain_latency(const struct pl_swapchain *sw);
 // The struct used to hold the results of `pl_swapchain_start_frame`
 struct pl_swapchain_frame {
     // A texture representing the framebuffer users should use for rendering.
-    // It's guaranteed that `fbo->params.renderable` will be true, but no other
-    // guarantees are made - not even that `fbo->params.format` is a real format.
+    // It's guaranteed that `fbo->params.renderable` and `fbo->params.blit_dst`
+    // will be true, but no other guarantees are made - not even that
+    // `fbo->params.format` is a real format.
     const struct pl_tex *fbo;
 
     // If true, the user should assume that this framebuffer will be flipped
