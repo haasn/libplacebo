@@ -38,6 +38,8 @@ const struct pl_vk_inst *vk_inst;
 const struct pl_swapchain *swapchain;
 
 // for rendering
+const struct pl_tex *img_tex;
+const struct pl_tex *osd_tex;
 struct pl_plane img_plane;
 struct pl_plane osd_plane;
 struct pl_renderer *renderer;
@@ -45,8 +47,8 @@ struct pl_renderer *renderer;
 static void uninit()
 {
     pl_renderer_destroy(&renderer);
-    pl_tex_destroy(vk->gpu, &img_plane.texture);
-    pl_tex_destroy(vk->gpu, &osd_plane.texture);
+    pl_tex_destroy(vk->gpu, &img_tex);
+    pl_tex_destroy(vk->gpu, &osd_tex);
     pl_swapchain_destroy(&swapchain);
     pl_vulkan_destroy(&vk);
     vkDestroySurfaceKHR(vk_inst->instance, surf, NULL);
@@ -142,7 +144,8 @@ static void init_vulkan()
     }
 }
 
-static bool upload_plane(const char *filename, struct pl_plane *plane)
+static bool upload_plane(const char *filename, const struct pl_tex **tex,
+                         struct pl_plane *plane)
 {
     if (!filename)
         return true;
@@ -176,7 +179,7 @@ static bool upload_plane(const char *filename, struct pl_plane *plane)
     uint64_t masks[4] = { fmt->Rmask, fmt->Gmask, fmt->Bmask, fmt->Amask };
     pl_plane_data_from_mask(&data, masks);
 
-    bool ok = pl_upload_plane(vk->gpu, plane, &data);
+    bool ok = pl_upload_plane(vk->gpu, plane, tex, &data);
     SDL_FreeSurface(img);
 
     return ok;
@@ -184,12 +187,12 @@ static bool upload_plane(const char *filename, struct pl_plane *plane)
 
 static void init_rendering(const char *img, const char *osd)
 {
-    if (!upload_plane(img, &img_plane)) {
+    if (!upload_plane(img, &img_tex, &img_plane)) {
         fprintf(stderr, "Failed uploading image plane!\n");
         exit(2);
     }
 
-    if (!upload_plane(osd, &osd_plane))
+    if (!upload_plane(osd, &osd_tex, &osd_plane))
         fprintf(stderr, "Failed uploading OSD plane.. continuing anyway\n");
 
     // Create a renderer instance

@@ -88,17 +88,15 @@ void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4]);
 const struct pl_fmt *pl_plane_find_fmt(const struct pl_gpu *gpu, int out_map[4],
                                        const struct pl_plane_data *data);
 
-// Upload an image plane to a texture, and update the resulting `pl_plane`
-// struct. The `plane->texture` will be destroyed and reinitialized if it
-// does not already exist or is incompatible. Returns whether successful.
+// Upload an image plane to a texture, and output the resulting `pl_plane`
+// struct. `tex` must be a valid pointer to a texture (or NULL), which will be
+// destroyed and reinitialized if it does not already exist or is incompatible.
+// Returns whether successful.
 //
 // The resulting texture is guaranteed to be `sampleable`, and it will also try
 // and maximize compatibility with the other `pl_renderer` requirements
 // (blittable, linear filterable, etc.).
-//
-// Important: The user must (eventually) destroy `plane->texture` before
-// discarding the struct, even if this function returns false!
-bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *plane,
-                     const struct pl_plane_data *data);
+bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
+                     const struct pl_tex **tex, const struct pl_plane_data *data);
 
 #endif // LIBPLACEBO_UPLOAD_H_

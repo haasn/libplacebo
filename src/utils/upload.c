@@ -116,8 +116,8 @@ next_fmt: ; // acts as `continue`
     return NULL;
 }
 
-bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *plane,
-                     const struct pl_plane_data *data)
+bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
+                     const struct pl_tex **tex, const struct pl_plane_data *data)
 {
     size_t row_stride = PL_DEF(data->row_stride, data->pixel_stride * data->width);
     unsigned int stride_texels = row_stride / data->pixel_stride;
@@ -135,7 +135,7 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *plane,
         // TODO: try soft-converting to a supported format using e.g zimg?
     }
 
-    bool ok = pl_tex_recreate(gpu, &plane->texture, &(struct pl_tex_params) {
+    bool ok = pl_tex_recreate(gpu, tex, &(struct pl_tex_params) {
         .w = data->width,
         .h = data->height,
         .format = fmt,
@@ -153,14 +153,15 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *plane,
         return false;
     }
 
+    *out_plane = (struct pl_plane) { .texture = *tex };
     for (int i = 0; i < PL_ARRAY_SIZE(out_map); i++) {
-        plane->component_mapping[i] = out_map[i];
+        out_plane->component_mapping[i] = out_map[i];
         if (out_map[i] >= 0)
-            plane->components = i+1;
+            out_plane->components = i+1;
     }
 
     return pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
-        .tex      = plane->texture,
+        .tex      = *tex,
         .stride_w = stride_texels,
         .ptr      = (void *) data->pixels,
     });

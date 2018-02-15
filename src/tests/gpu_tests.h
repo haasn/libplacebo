@@ -337,7 +337,8 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     const int width = 5, height = 5;
 
     struct pl_plane img5x5 = {0};
-    bool ok = pl_upload_plane(gpu, &img5x5, &(struct pl_plane_data) {
+    const struct pl_tex *img5x5_tex = NULL;
+    bool ok = pl_upload_plane(gpu, &img5x5, &img5x5_tex, &(struct pl_plane_data) {
         .type = PL_FMT_FLOAT,
         .width = width,
         .height = height,
@@ -413,7 +414,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
 error:
     free(fbo_data);
     pl_renderer_destroy(&rr);
-    pl_tex_destroy(gpu, &img5x5.texture);
+    pl_tex_destroy(gpu, &img5x5_tex);
     pl_tex_destroy(gpu, &fbo);
 }
 
