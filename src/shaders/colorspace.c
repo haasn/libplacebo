@@ -487,7 +487,7 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
     if (!state)
         return;
 
-    int frames = PL_DEF(params->peak_detect_frames, 20);
+    int frames = PL_DEF(params->peak_detect_frames, 63);
     if (frames < 1 || frames > 1000) {
         PL_ERR(sh, "Parameter peak_detect_frames must be >= 1 and <= 1000 "
                "(was %d).", frames);
