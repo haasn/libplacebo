@@ -653,10 +653,10 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
          max.name, avg.name);
 
     // Update the index and count
-    GLSL("    %s = next;                                                        \n"
-         "    %s = min(%s + 1, %d);                                             \n"
-         "    memoryBarrierBuffer();                                            \n"
-         "}                                                                     \n",
+    GLSL("    %s = next;             \n"
+         "    %s = min(%s + 1, %d);  \n"
+         "    memoryBarrierBuffer(); \n"
+         "}                          \n",
          idx.name,
          num.name, num.name, frames);
 }
