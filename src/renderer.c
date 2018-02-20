@@ -217,24 +217,32 @@ struct img {
     int comps;
 };
 
+// Returns the texture parameters an `img` would have if finalized
+static inline struct pl_tex_params img_params(struct pl_renderer *rr,
+                                              struct img *img,
+                                              const struct pl_fmt *fmt)
+{
+    return (struct pl_tex_params) {
+            .w = img->w,
+            .h = img->h,
+            .format = fmt,
+            .sampleable = true,
+            .renderable = true,
+            // Just enable what we can
+            .storable   = !!(fmt->caps & PL_FMT_CAP_STORABLE),
+            .sample_mode = (fmt->caps & PL_FMT_CAP_LINEAR)
+                                ? PL_TEX_SAMPLE_LINEAR
+                                : PL_TEX_SAMPLE_NEAREST,
+    };
+}
+
 static const struct pl_tex *finalize_img(struct pl_renderer *rr,
                                          struct img *img,
                                          const struct pl_fmt *fmt,
                                          const struct pl_tex **tex)
 {
-    bool ok = pl_tex_recreate(rr->gpu, tex, &(struct pl_tex_params) {
-        .w = img->w,
-        .h = img->h,
-        .format = fmt,
-        .sampleable = true,
-        .renderable = true,
-        // Just enable what we can
-        .storable   = !!(fmt->caps & PL_FMT_CAP_STORABLE),
-        .sample_mode = (fmt->caps & PL_FMT_CAP_LINEAR)
-                            ? PL_TEX_SAMPLE_LINEAR
-                            : PL_TEX_SAMPLE_NEAREST,
-    });
-
+    struct pl_tex_params tex_params = img_params(rr, img, fmt);
+    bool ok = pl_tex_recreate(rr->gpu, tex, &tex_params);
     if (!ok) {
         PL_ERR(rr, "Failed creating FBO texture! Disabling advanced rendering..");
         rr->fbofmt = NULL;
@@ -257,51 +265,104 @@ struct pass_state {
     struct img cur_img;
 };
 
+enum sampler_type {
+    SAMPLER_DIRECT, // texture()'s built in sampling
+    SAMPLER_BICUBIC, // fast bicubic scaling
+    SAMPLER_COMPLEX, // complex custom filters
+};
+
+enum sampler_dir {
+    SAMPLER_NOOP, // 1:1 scaling
+    SAMPLER_UP,   // upscaling
+    SAMPLER_DOWN, // downscaling
+};
+
+struct sampler_info {
+    const struct pl_filter_config *config; // if applicable
+    enum sampler_type type;
+    enum sampler_dir dir;
+};
+
+static struct sampler_info sample_src_info(struct pl_renderer *rr,
+                                           const struct pl_sample_src *src,
+                                           const struct pl_render_params *params)
+{
+    struct sampler_info info;
+
+    float rx = src->new_w / fabs(pl_rect_w(src->rect));
+    float ry = src->new_h / fabs(pl_rect_h(src->rect));
+    if (rx < 1.0 - 1e-6 || ry < 1.0 - 1e-6) {
+        info.dir = SAMPLER_DOWN;
+        info.config = params->downscaler;
+    } else if (rx > 1.0 + 1e-6 || ry > 1.0 + 1e-6) {
+        info.dir = SAMPLER_UP;
+        info.config = params->upscaler;
+    } else {
+        info.dir = SAMPLER_NOOP;
+        info.type = SAMPLER_DIRECT;
+        info.config = NULL;
+        return info;
+    }
+
+    bool is_linear = src->tex->params.sample_mode == PL_TEX_SAMPLE_LINEAR;
+    if (!rr->fbofmt || rr->disable_sampling || !info.config) {
+        info.type = is_linear ? SAMPLER_BICUBIC : SAMPLER_DIRECT;
+    } else {
+        info.type = SAMPLER_COMPLEX;
+
+        // Try using faster replacements for GPU built-in scalers
+        bool can_fast = info.config == params->upscaler ||
+                        params->skip_anti_aliasing;
+        if (can_fast && !params->disable_builtin_scalers) {
+            if (is_linear && info.config == &pl_filter_bicubic)
+                info.type = SAMPLER_BICUBIC;
+            if (is_linear && info.config == &pl_filter_triangle)
+                info.type = SAMPLER_DIRECT;
+            if (!is_linear && info.config == &pl_filter_box)
+                info.type = SAMPLER_DIRECT;
+        }
+    }
+
+    return info;
+}
+
 static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
-                             float rx, float ry, struct sampler *sampler,
+                             struct sampler *sampler,
                              const struct pl_render_params *params,
                              const struct pl_sample_src *src)
 {
-    bool is_linear = src->tex->params.sample_mode == PL_TEX_SAMPLE_LINEAR;
-    bool no_samplers = !params->upscaler && !params->downscaler;
-    if (!rr->fbofmt || rr->disable_sampling || !sampler || no_samplers)
+    if (!sampler)
         goto fallback;
 
-    const struct pl_filter_config *config = NULL;
-    struct pl_shader_obj **lut;
-    const struct pl_tex **sep_fbo;
-
-    rx = fabs(rx);
-    ry = fabs(ry);
-
-    if (rx < 1.0 - 1e-6 || ry < 1.0 - 1e-6) {
-        config = params->downscaler;
+    struct sampler_info info = sample_src_info(rr, src, params);
+    struct pl_shader_obj **lut = NULL;
+    const struct pl_tex **sep_fbo = NULL;
+    switch (info.dir) {
+    case SAMPLER_NOOP:
+        goto fallback;
+    case SAMPLER_DOWN:
         lut = &sampler->downscaler_state;
         sep_fbo = &sampler->sep_fbo_down;
-    } else if (rx > 1.0 + 1e-6 || ry > 1.0 + 1e-6) {
-        config = params->upscaler;
+        break;
+    case SAMPLER_UP:
         lut = &sampler->upscaler_state;
         sep_fbo = &sampler->sep_fbo_up;
-    } else { // no scaling
-        goto direct;
+        break;
     }
 
-    if (!config)
+    switch (info.type) {
+    case SAMPLER_DIRECT:
         goto fallback;
-
-    // Try using faster replacements for GPU built-in scalers
-    bool can_fast = config == params->upscaler || params->skip_anti_aliasing;
-    if (can_fast && !params->disable_builtin_scalers) {
-        if (is_linear && config == &pl_filter_bicubic)
-            goto fallback; // the bicubic check will succeed
-        if (is_linear && config == &pl_filter_triangle)
-            goto direct;
-        if (!is_linear && config == &pl_filter_box)
-            goto direct;
+    case SAMPLER_BICUBIC:
+        pl_shader_sample_bicubic(sh, src);
+        return;
+    case SAMPLER_COMPLEX:
+        break; // continue below
     }
 
+    pl_assert(lut && sep_fbo);
     struct pl_sample_filter_params fparams = {
-        .filter      = *config,
+        .filter      = *info.config,
         .lut_entries = params->lut_entries,
         .cutoff      = params->polar_cutoff,
         .antiring    = params->antiringing_strength,
@@ -311,7 +372,7 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
     };
 
     bool ok;
-    if (config->polar) {
+    if (info.config->polar) {
         ok = pl_shader_sample_polar(sh, src, &fparams);
     } else {
         struct pl_shader *tsh = pl_dispatch_begin(rr->dp);
@@ -342,13 +403,6 @@ done:
     return;
 
 fallback:
-    // Use bicubic sampling if supported
-    if (rr->fbofmt && is_linear) {
-        pl_shader_sample_bicubic(sh, src);
-        return;
-    }
-
-direct:
     // If all else fails, fall back to bilinear/nearest
     pl_shader_sample_direct(sh, src);
 }
@@ -401,15 +455,12 @@ static void draw_overlays(struct pl_renderer *rr, const struct pl_tex *fbo,
             },
         };
 
-        float rx = (float) src.new_w / src.tex->params.w,
-              ry = (float) src.new_h / src.tex->params.h;
-
         struct sampler *sampler = &rr->osd_samplers[n];
         if (params->disable_overlay_sampling)
             sampler = NULL;
 
         struct pl_shader *sh = pl_dispatch_begin(rr->dp);
-        dispatch_sampler(rr, sh, rx, ry, sampler, params, &src);
+        dispatch_sampler(rr, sh, sampler, params, &src);
 
         GLSL("vec4 osd_color;\n");
         for (int c = 0; c < src.components; c++) {
@@ -483,11 +534,8 @@ static int deband_src(struct pl_renderer *rr, struct pl_shader *psh,
         return DEBAND_NOOP;
     }
 
-    // Without support for FBOs or sampling, we're either forced or it would be
-    // more efficient to have the debanding shader take care of free bilinear
-    // scaling as well
-    bool no_samplers = !params->upscaler && !params->downscaler;
-    bool deband_scales = !rr->fbofmt || rr->disable_sampling || no_samplers;
+    // The debanding shader can replace direct GPU sampling
+    bool deband_scales = sample_src_info(rr, psrc, params).type == SAMPLER_DIRECT;
 
     struct pl_shader *sh = psh;
     struct pl_sample_src *src = psrc;
@@ -639,7 +687,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         };
 
         if (deband_src(rr, psh, &src, &rr->deband_fbos[i], params) != DEBAND_SCALED)
-            dispatch_sampler(rr, psh, rrx, rry, &rr->samplers[i], params, &src);
+            dispatch_sampler(rr, psh, &rr->samplers[i], params, &src);
 
         ident_t sub = sh_subpass(sh, psh);
         if (!sub) {
@@ -697,38 +745,34 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_render_target *target,
                             const struct pl_render_params *params)
 {
-    struct img *img = &pass->cur_img;
-    int target_w = abs(pl_rect_w(target->dst_rect)),
-        target_h = abs(pl_rect_h(target->dst_rect));
-
-    float src_w = pl_rect_w(image->src_rect),
-          src_h = pl_rect_h(image->src_rect);
-    pl_assert(src_w > 0 && src_h > 0);
-
-    float rx = target_w / src_w,
-          ry = target_h / src_h;
-
     if (!rr->fbofmt) {
         PL_TRACE(rr, "Skipping main scaler (no FBOs)");
         return true;
     }
 
-    if ((!params->upscaler && !params->downscaler) || rr->disable_sampling) {
-        PL_TRACE(rr, "Skipping main scaler (no samplers)");
+    struct img *img = &pass->cur_img;
+    struct pl_sample_src src = {
+        .tex        = &(struct pl_tex) { .params = img_params(rr, img, rr->fbofmt) },
+        .components = img->comps,
+        .new_w      = abs(pl_rect_w(target->dst_rect)),
+        .new_h      = abs(pl_rect_h(target->dst_rect)),
+        .rect       = img->rect,
+    };
+
+    struct sampler_info info = sample_src_info(rr, &src, params);
+    bool need_osd = image->num_overlays > 0;
+    if (info.type == SAMPLER_DIRECT && !need_osd) {
+        PL_TRACE(rr, "Skipping main scaler (free sampling)");
         return true;
     }
 
-    bool downscaling = rx < 1.0 - 1e-6 || ry < 1.0 - 1e-6;
-    bool upscaling = !downscaling && (rx > 1.0 + 1e-6 || ry > 1.0 + 1e-6);
-    bool need_osd = image->num_overlays > 0;
-
-    if (!downscaling && !upscaling && !need_osd) {
+    if (info.dir == SAMPLER_NOOP && !need_osd) {
         PL_TRACE(rr, "Skipping main scaler (would be no-op)");
         return true;
     }
 
-    bool use_sigmoid = upscaling && params->sigmoid_params;
-    bool use_linear  = use_sigmoid || downscaling;
+    bool use_sigmoid = info.dir == SAMPLER_UP && params->sigmoid_params;
+    bool use_linear  = use_sigmoid || info.dir == SAMPLER_DOWN;
 
     // Hard-disable both sigmoidization and linearization when requested
     if (params->disable_linear_scaling)
@@ -746,14 +790,7 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     if (use_sigmoid)
         pl_shader_sigmoidize(img->sh, params->sigmoid_params);
 
-    struct pl_sample_src src = {
-        .tex        = finalize_img(rr, img, rr->fbofmt, &rr->main_scale_fbo),
-        .components = img->comps,
-        .new_w      = target_w,
-        .new_h      = target_h,
-        .rect       = img->rect,
-    };
-
+    src.tex = finalize_img(rr, img, rr->fbofmt, &rr->main_scale_fbo);
     if (!src.tex)
         return false;
 
@@ -762,11 +799,11 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
                   img->color, use_sigmoid, NULL, params);
 
     struct pl_shader *sh = pl_dispatch_begin(rr->dp);
-    dispatch_sampler(rr, sh, rx, ry, &rr->samplers[SCALER_MAIN], params, &src);
+    dispatch_sampler(rr, sh, &rr->samplers[SCALER_MAIN], params, &src);
     pass->cur_img = (struct img) {
         .sh     = sh,
-        .w      = target_w,
-        .h      = target_h,
+        .w      = src.new_w,
+        .h      = src.new_h,
         .repr   = img->repr,
         .color  = img->color,
         .comps  = img->comps,
