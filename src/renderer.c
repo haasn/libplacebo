@@ -655,6 +655,9 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     pl_assert(target_w > 0 && target_h > 0);
 
     bool has_alpha = false;
+    struct pl_color_repr repr = image->repr;
+    float scale = pl_color_repr_normalize(&repr);
+
     for (int i = 0; i < image->num_planes; i++) {
         struct pl_shader *psh = pl_dispatch_begin(rr->dp);
         struct pl_plane *plane = &planes[i];
@@ -676,6 +679,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         struct pl_sample_src src = {
             .tex        = plane->texture,
             .components = plane->components,
+            .scale      = scale,
             .new_w      = target_w,
             .new_h      = target_h,
             .rect       = {
@@ -723,7 +727,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         .sh     = sh,
         .w      = target_w,
         .h      = target_h,
-        .repr   = image->repr,
+        .repr   = repr,
         .color  = image->color,
         .comps  = has_alpha ? 4 : 3,
         .rect   = {
