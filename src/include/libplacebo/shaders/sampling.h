@@ -67,11 +67,12 @@ extern const struct pl_deband_params pl_deband_default_params;
 
 // Debands a given texture and returns the sampled color in `vec4 color`. If
 // `params` is left as NULL, it defaults to &pl_deband_default_params. Note
-// that `tex->params.sample_mode` must be PL_TEX_SAMPLE_LINEAR.
+// that `tex->params.sample_mode` must be PL_TEX_SAMPLE_LINEAR. When the given
+// `pl_sample_src` implies scaling, this effectively performs bilinear sampling.
 //
 // Note: This can also be used as a pure grain function, by setting the number
 // of iterations to 0.
-void pl_shader_deband(struct pl_shader *sh, const struct pl_tex *tex,
+void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
                       const struct pl_deband_params *params);
 
 // Performs direct / native texture sampling. This uses whatever built-in GPU

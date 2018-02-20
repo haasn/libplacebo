@@ -25,26 +25,65 @@ const struct pl_deband_params pl_deband_default_params = {
     .grain      = 6.0,
 };
 
-void pl_shader_deband(struct pl_shader *sh, const struct pl_tex *pl_tex,
+// Helper function to compute the src/dst sizes and upscaling ratios
+static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
+                      ident_t *src_tex, ident_t *pos, ident_t *size, ident_t *pt,
+                      float *ratio_x, float *ratio_y, int *components,
+                      float *scale, bool resizeable)
+{
+    float src_w = pl_rect_w(src->rect);
+    float src_h = pl_rect_h(src->rect);
+    src_w = PL_DEF(src_w, src->tex->params.w);
+    src_h = PL_DEF(src_h, src->tex->params.h);
+
+    int out_w = PL_DEF(src->new_w, fabs(src_w));
+    int out_h = PL_DEF(src->new_h, fabs(src_h));
+
+    if (ratio_x)
+        *ratio_x = out_w / fabs(src_w);
+    if (ratio_y)
+        *ratio_y = out_h / fabs(src_h);
+    if (scale)
+        *scale = PL_DEF(src->scale, 1.0);
+
+    if (components) {
+        const struct pl_fmt *fmt = src->tex->params.format;
+        *components = PL_DEF(src->components, fmt->num_components);
+    }
+
+    if (resizeable)
+        out_w = out_h = 0;
+    if (!sh_require(sh, PL_SHADER_SIG_NONE, out_w, out_h))
+        return false;
+
+    struct pl_rect2df rect = {
+        .x0 = src->rect.x0,
+        .y0 = src->rect.y0,
+        .x1 = src->rect.x0 + src_w,
+        .y1 = src->rect.y0 + src_h,
+    };
+
+    *src_tex = sh_bind(sh, src->tex, "src_tex", &rect, pos, size, pt);
+    return true;
+}
+
+void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
                       const struct pl_deband_params *params)
 {
-    if (pl_tex->params.sample_mode != PL_TEX_SAMPLE_LINEAR) {
+    if (src->tex->params.sample_mode != PL_TEX_SAMPLE_LINEAR) {
         PL_ERR(sh, "Debanding requires sample_mode = PL_TEX_SAMPLE_LINEAR!");
         return;
     }
 
-    if (!sh_require(sh, PL_SHADER_SIG_NONE, 0, 0))
+    float scale;
+    ident_t tex, pos, pt;
+    if (!setup_src(sh, src, &tex, &pos, NULL, &pt, NULL, NULL, NULL, &scale, true))
         return;
 
     GLSL("vec4 color;\n");
     GLSL("// pl_shader_deband\n");
     GLSL("{\n");
     params = PL_DEF(params, &pl_deband_default_params);
-
-    ident_t tex, pos, pt;
-    tex = sh_bind(sh, pl_tex, "deband", NULL, &pos, NULL, &pt);
-    if (!tex)
-        return;
 
     ident_t prng, state;
     prng = sh_prng(sh, true, &state);
@@ -81,8 +120,10 @@ void pl_shader_deband(struct pl_shader *sh, const struct pl_tex *pl_tex,
              "diff = abs(color - avg);                                  \n"
              "color = mix(avg, color, %s(greaterThan(diff, vec4(%f)))); \n",
              average, i * params->radius, state,
-             sh_bvec(sh, 4), params->threshold / (1000 * i));
+             sh_bvec(sh, 4), params->threshold / (1000 * i * scale));
     }
+
+    GLSL("color *= vec4(%f);\n", scale);
 
     // Add some random noise to smooth out residual differences
     if (params->grain > 0) {
@@ -92,46 +133,6 @@ void pl_shader_deband(struct pl_shader *sh, const struct pl_tex *pl_tex,
     }
 
     GLSL("}\n");
-}
-
-// Helper function to compute the src/dst sizes and upscaling ratios
-static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
-                      ident_t *src_tex, ident_t *pos, ident_t *size, ident_t *pt,
-                      float *ratio_x, float *ratio_y, int *components,
-                      bool resizeable)
-{
-    float src_w = pl_rect_w(src->rect);
-    float src_h = pl_rect_h(src->rect);
-    src_w = PL_DEF(src_w, src->tex->params.w);
-    src_h = PL_DEF(src_h, src->tex->params.h);
-
-    int out_w = PL_DEF(src->new_w, fabs(src_w));
-    int out_h = PL_DEF(src->new_h, fabs(src_h));
-
-    if (ratio_x)
-        *ratio_x = out_w / fabs(src_w);
-    if (ratio_y)
-        *ratio_y = out_h / fabs(src_h);
-
-    if (components) {
-        const struct pl_fmt *fmt = src->tex->params.format;
-        *components = PL_DEF(src->components, fmt->num_components);
-    }
-
-    if (resizeable)
-        out_w = out_h = 0;
-    if (!sh_require(sh, PL_SHADER_SIG_NONE, out_w, out_h))
-        return false;
-
-    struct pl_rect2df rect = {
-        .x0 = src->rect.x0,
-        .y0 = src->rect.y0,
-        .x1 = src->rect.x0 + src_w,
-        .y1 = src->rect.y0 + src_h,
-    };
-
-    *src_tex = sh_bind(sh, src->tex, "src_tex", &rect, pos, size, pt);
-    return true;
 }
 
 bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *src)

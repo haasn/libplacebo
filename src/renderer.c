@@ -461,39 +461,86 @@ static void draw_overlays(struct pl_renderer *rr, const struct pl_tex *fbo,
     }
 }
 
-static void deband_plane(struct pl_renderer *rr, struct pl_plane *plane,
-                         const struct pl_tex **fbo,
-                         const struct pl_render_params *params)
-{
-    if (!rr->fbofmt || rr->disable_debanding || !params->deband_params)
-        return;
+// `deband_src` results
+enum {
+    DEBAND_NOOP = 0, // no debanding was performing
+    DEBAND_NORMAL,   // debanding was performed, the plane should still be scaled
+    DEBAND_SCALED,   // debanding took care of scaling as well
+};
 
-    const struct pl_tex *tex = plane->texture;
-    if (tex->params.sample_mode != PL_TEX_SAMPLE_LINEAR) {
+static int deband_src(struct pl_renderer *rr, struct pl_shader *psh,
+                      struct pl_sample_src *psrc, const struct pl_tex **fbo,
+                      const struct pl_render_params *params)
+{
+    if (rr->disable_debanding || !params->deband_params)
+        return DEBAND_NOOP;
+
+    if (psrc->tex->params.sample_mode != PL_TEX_SAMPLE_LINEAR) {
         PL_WARN(rr, "Debanding requires uploaded textures to be linearly "
                 "sampleable (params.sample_mode = PL_TEX_SAMPLE_LINEAR)! "
                 "Disabling debanding..");
         rr->disable_debanding = true;
-        return;
+        return DEBAND_NOOP;
     }
 
-    struct pl_shader *sh = pl_dispatch_begin(rr->dp);
-    pl_shader_deband(sh, tex, params->deband_params);
+    // Without support for FBOs or sampling, we're either forced or it would be
+    // more efficient to have the debanding shader take care of free bilinear
+    // scaling as well
+    bool no_samplers = !params->upscaler && !params->downscaler;
+    bool deband_scales = !rr->fbofmt || rr->disable_sampling || no_samplers;
+
+    struct pl_shader *sh = psh;
+    struct pl_sample_src *src = psrc;
+    if (!deband_scales) {
+        // Only sample/deband the relevant cut-out, but round it to the nearest
+        // integer to avoid doing fractional scaling
+        struct pl_sample_src fixed = *src;
+        fixed.rect.x0 = floorf(fixed.rect.x0);
+        fixed.rect.y0 = floorf(fixed.rect.y0);
+        fixed.rect.x1 = ceilf(fixed.rect.x1);
+        fixed.rect.y1 = ceilf(fixed.rect.y1);
+        fixed.new_w = pl_rect_w(fixed.rect);
+        fixed.new_h = pl_rect_h(fixed.rect);
+        src = &fixed;
+
+        if (fixed.new_w == psrc->new_w &&
+            fixed.new_h == psrc->new_h &&
+            pl_rect2d_eq(fixed.rect, psrc->rect))
+        {
+            // If there's nothing left to be done (i.e. we're already rendering
+            // an exact integer crop without scaling), also skip the scalers
+            deband_scales = true;
+        } else {
+            sh = pl_dispatch_begin(rr->dp);
+        }
+    }
+
+    pl_shader_deband(sh, src, params->deband_params);
+
+    if (deband_scales)
+        return DEBAND_SCALED;
 
     struct img img = {
         .sh = sh,
-        .w  = tex->params.w,
-        .h  = tex->params.h,
+        .w  = src->new_w,
+        .h  = src->new_h,
     };
 
     const struct pl_tex *new = finalize_img(rr, &img, rr->fbofmt, fbo);
     if (!new) {
         PL_ERR(rr, "Failed dispatching debanding shader.. disabling debanding!");
         rr->disable_debanding = true;
-        return;
+        return DEBAND_NOOP;
     }
 
-    plane->texture = new;
+    // Update the original pl_sample_src to point to the new texture
+    psrc->tex = new;
+    psrc->rect.x0 -= src->rect.x0;
+    psrc->rect.y0 -= src->rect.y0;
+    psrc->rect.x1 -= src->rect.x0;
+    psrc->rect.y1 -= src->rect.y0;
+    psrc->scale = 1.0;
+    return DEBAND_NORMAL;
 }
 
 // This scales and merges all of the source images, and initializes the cur_img.
@@ -563,7 +610,6 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     for (int i = 0; i < image->num_planes; i++) {
         struct pl_shader *psh = pl_dispatch_begin(rr->dp);
         struct pl_plane *plane = &planes[i];
-        deband_plane(rr, plane, &rr->deband_fbos[i], params);
 
         // Compute the source shift/scale relative to the reference size
         float pw = plane->texture->params.w,
@@ -592,10 +638,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             },
         };
 
-        // FIXME: in theory, we could reuse the debanding result from
-        // `deband_plane` if available, instead of having to dispatch a no-op
-        // shader, for trivial sampling cases (no scaling or shifting)
-        dispatch_sampler(rr, psh, rrx, rry, &rr->samplers[i], params, &src);
+        if (deband_src(rr, psh, &src, &rr->deband_fbos[i], params) != DEBAND_SCALED)
+            dispatch_sampler(rr, psh, rrx, rry, &rr->samplers[i], params, &src);
 
         ident_t sub = sh_subpass(sh, psh);
         if (!sub) {
@@ -615,7 +659,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             if (plane->component_mapping[c] < 0)
                 continue;
             GLSL("color[%d] = tmp[%d];\n", plane->component_mapping[c],
-                 plane->texture->params.format->sample_order[c]);
+                 src.tex->params.format->sample_order[c]);
 
             has_alpha |= plane->component_mapping[c] == PLANE_A;
         }

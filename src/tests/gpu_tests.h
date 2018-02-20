@@ -204,9 +204,13 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
             sh->res.compute_group_size[1] = 8;
         }
 
-        pl_shader_deband(sh, src, &(struct pl_deband_params) {
-            .iterations     = 0,
-            .grain          = 0.0,
+        pl_shader_deband(sh,
+            &(struct pl_sample_src) {
+                .tex            = src,
+            },
+            &(struct pl_deband_params) {
+                .iterations     = 0,
+                .grain          = 0.0,
         });
 
         pl_shader_linearize(sh, PL_COLOR_TRC_GAMMA22);
