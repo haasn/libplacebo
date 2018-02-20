@@ -136,13 +136,14 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
 
 bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *src)
 {
+    float scale;
     ident_t tex, pos;
-    if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, NULL, true))
+    if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, NULL, &scale, true))
         return false;
 
-    GLSL("// pl_shader_sample_direct    \n"
-         "vec4 color = texture(%s, %s); \n",
-         tex, pos);
+    GLSL("// pl_shader_sample_direct               \n"
+         "vec4 color = vec4(%f) * texture(%s, %s); \n",
+         scale, tex, pos);
     return true;
 }
 
@@ -173,8 +174,8 @@ bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *
     }
 
     ident_t tex, pos, size, pt;
-    float rx, ry;
-    if (!setup_src(sh, src, &tex, &pos, &size, &pt, &rx, &ry, NULL, true))
+    float rx, ry, scale;
+    if (!setup_src(sh, src, &tex, &pos, &size, &pt, &rx, &ry, NULL, &scale, true))
         return false;
 
     if (rx < 1 || ry < 1) {
@@ -206,9 +207,9 @@ bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *
          "vec4 bg = texture(%s, pos + cdelta.zw);       \n"
          "vec4 aa = mix(bg, br, parmy.b);               \n"
          // x-interpolation
-         "color = mix(aa, ab, parmx.b);                 \n"
+         "color = vec4(%f) * mix(aa, ab, parmx.b);      \n"
          "}                                             \n",
-         tex, tex, tex, tex);
+         tex, tex, tex, tex, scale);
     return true;
 }
 
@@ -316,9 +317,9 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     }
 
     int comps;
-    float rx, ry;
+    float rx, ry, scale;
     ident_t src_tex, pos, size, pt;
-    if (!setup_src(sh, src, &src_tex, &pos, &size, &pt, &rx, &ry, &comps, false))
+    if (!setup_src(sh, src, &src_tex, &pos, &size, &pt, &rx, &ry, &comps, &scale, false))
         return false;
 
     struct sh_sampler_obj *obj;
@@ -481,8 +482,9 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
         }
     }
 
-    GLSL("color = color / vec4(wsum); \n"
-         "}                           \n");
+    GLSL("color = vec4(%f / wsum) * color; \n"
+         "}                                \n",
+         scale);
     return true;
 }
 
@@ -537,10 +539,10 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
     }
 
     int comps;
-    float ratio[2];
+    float ratio[2], scale;
     ident_t src_tex, pos, size, pt;
     if (!setup_src(sh, &srcfix, &src_tex, &pos, &size, &pt, &ratio[1], &ratio[0],
-                   &comps, false))
+                   &comps, &scale, false))
     {
         return false;
     }
@@ -654,6 +656,7 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
              params->antiring);
     }
 
+    GLSL("color *= vec4(%f);\n", scale);
     GLSL("}\n");
     return true;
 }

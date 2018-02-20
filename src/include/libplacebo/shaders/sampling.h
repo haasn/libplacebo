@@ -27,6 +27,15 @@
 #include <libplacebo/filters.h>
 #include <libplacebo/shaders.h>
 
+// Common parameters for sampling operations
+struct pl_sample_src {
+    const struct pl_tex *tex; // texture to sample
+    struct pl_rect2df rect;   // sub-rect to sample from (optional)
+    int components;           // number of components to sample (optional)
+    int new_w, new_h;         // dimensions of the resulting output (optional)
+    float scale;              // factor to multiply into sampled signal (optional)
+};
+
 struct pl_deband_params {
     // The number of debanding steps to perform per sample. Each step reduces a
     // bit more banding, but takes time to compute. Note that the strength of
@@ -64,14 +73,6 @@ extern const struct pl_deband_params pl_deband_default_params;
 // of iterations to 0.
 void pl_shader_deband(struct pl_shader *sh, const struct pl_tex *tex,
                       const struct pl_deband_params *params);
-
-// Common parameters for sampling operations
-struct pl_sample_src {
-    const struct pl_tex *tex; // texture to sample
-    struct pl_rect2df rect;   // sub-rect to sample from (optional)
-    int components;           // number of components to sample (optional)
-    int new_w, new_h;         // dimensions of the resulting output (optional)
-};
 
 // Performs direct / native texture sampling. This uses whatever built-in GPU
 // sampling is built into the GPU and specified using src->params.sample_mode.
