@@ -890,9 +890,6 @@ void pl_shader_color_map(struct pl_shader *sh,
             .var = pl_var_mat3("cms_matrix"),
             .data = PL_TRANSPOSE_3X3(cms_mat.m),
         }));
-        // Since this can reduce the gamut, figure out by how much
-        for (int c = 0; c < 3; c++)
-            src.sig_peak = fmaxf(src.sig_peak, cms_mat.m[c][c]);
     }
 
     // Tone map to rescale the signal average/peak if needed
