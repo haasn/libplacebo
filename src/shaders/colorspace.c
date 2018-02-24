@@ -715,14 +715,19 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
         break;
 
     case PL_TONE_MAPPING_MOBIUS:
-        GLSL("const float j = %f;                                           \n"
+        // Mobius isn't well-defined for sig_peak <= 1.0, but the limit of
+        // mobius as sig_peak -> 1.0 is a linear function, so we can just skip
+        // tone-mapping in this case
+        GLSL("if (sig_peak > 1.0 + 1e-6) {                                      \n"
+             "    const float j = %f;                                           \n"
              // solve for M(j) = j; M(sig_peak) = 1.0; M'(j) = 1.0
              // where M(x) = scale * (x+a)/(x+b)
-             "float a = -j*j * (sig_peak - 1.0) / (j*j - 2.0*j + sig_peak); \n"
-             "float b = (j*j - 2.0*j*sig_peak + sig_peak) /                 \n"
-             "          max(1e-6, sig_peak - 1.0);                          \n"
-             "float scale = (b*b + 2.0*b*j + j*j) / (b-a);                  \n"
-             "sig = sig > j ? (scale * (sig + a) / (sig + b)) : sig;        \n",
+             "    float a = -j*j * (sig_peak - 1.0) / (j*j - 2.0*j + sig_peak); \n"
+             "    float b = (j*j - 2.0*j*sig_peak + sig_peak) /                 \n"
+             "              max(1e-6, sig_peak - 1.0);                          \n"
+             "    float scale = (b*b + 2.0*b*j + j*j) / (b-a);                  \n"
+             "    sig = sig > j ? (scale * (sig + a) / (sig + b)) : sig;        \n"
+             "}                                                                 \n",
              PL_DEF(param, 0.3));
         break;
 
