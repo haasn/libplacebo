@@ -6,12 +6,15 @@ version = majorver + '.' + apiver + '.' + fixver
 
 # Build options mostly taken from mpv
 build_opts = [
-  '-D_ISOC99_SOURCE', '-D_GNU_SOURCE',
-  '-fvisibility=hidden',
+  '-D_ISOC99_SOURCE', '-D_GNU_SOURCE', '-D_XOPEN_SOURCE=700',
+  '-U__STRICT_ANSI__', '-fvisibility=hidden',
 
   # Warnings
   '-Wall', '-Wundef', '-Wmissing-prototypes', '-Wshadow', '-Wparentheses',
   '-Wpointer-arith', '-Wno-pointer-sign',
+
+  # Warnings to treat as errors
+  '-Werror=implicit-function-declaration', '-Werror=incompatible-pointer-types',
 ]
 
 cc = meson.get_compiler('c')
