@@ -31,7 +31,10 @@
 struct priv {
     shaderc_compiler_t compiler;
     shaderc_compile_options_t opts;
+
+#ifndef _WIN32
     locale_t cloc;
+#endif
 };
 
 static void shaderc_uninit(struct spirv_compiler *spirv)
@@ -39,18 +42,23 @@ static void shaderc_uninit(struct spirv_compiler *spirv)
     struct priv *p = spirv->priv;
     shaderc_compile_options_release(p->opts);
     shaderc_compiler_release(p->compiler);
+#ifndef _WIN32
     freelocale(p->cloc);
+#endif
     TA_FREEP(&spirv->priv);
 }
 
 static bool shaderc_init(struct spirv_compiler *spirv)
 {
     struct priv *p = spirv->priv = talloc_zero(spirv, struct priv);
+
+#ifndef _WIN32
     p->cloc = newlocale(LC_NUMERIC_MASK, "C", (locale_t) 0);
     if (!p->cloc) {
         PL_FATAL(spirv, "Failed initializing C locale?!");
         goto error;
     }
+#endif
 
     p->compiler = shaderc_compiler_initialize();
     if (!p->compiler)
@@ -103,8 +111,16 @@ static bool shaderc_compile(struct spirv_compiler *spirv, void *tactx,
     struct priv *p = spirv->priv;
 
     // Switch to C locale to work around libshaderc bugs
+#ifndef _WIN32
     locale_t oldloc = uselocale((locale_t) 0);
     uselocale(p->cloc);
+#else
+    int oldthread = _configthreadlocale(_ENABLE_PER_THREAD_LOCALE);
+    wchar_t *oldloc = _wcsdup(_wsetlocale(LC_NUMERIC, NULL));
+    _wsetlocale(LC_NUMERIC, L"C");
+    if (!oldloc)
+        abort();
+#endif
 
     shaderc_compilation_result_t res = compile(p, type, glsl, false);
     int errs = shaderc_result_get_num_errors(res),
@@ -150,7 +166,13 @@ static bool shaderc_compile(struct spirv_compiler *spirv, void *tactx,
     }
 
     shaderc_result_release(res);
+#ifndef _WIN32
     uselocale(oldloc);
+#else
+    _wsetlocale(LC_NUMERIC, oldloc);
+    _configthreadlocale(oldthread);
+    free(oldloc);
+#endif
     return success;
 }
 
