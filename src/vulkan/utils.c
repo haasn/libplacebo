@@ -72,6 +72,9 @@ const char *vk_res_str(VkResult res)
 #ifdef VK_EXT_global_priority
     CASE(VK_ERROR_NOT_PERMITTED_EXT);
 #endif
+#ifdef VK_KHX_external_semaphore_fd
+    CASE(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHX);
+#endif
 
     // Included to satisfy the switch coverage check
     CASE(VK_RESULT_RANGE_SIZE);
