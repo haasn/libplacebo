@@ -162,13 +162,14 @@ static void bench_bt2020c(struct pl_shader *sh, struct pl_shader_obj **state,
 static void bench_deband(struct pl_shader *sh, struct pl_shader_obj **state,
                          const struct pl_tex *src)
 {
-    pl_shader_deband(sh, src, NULL);
+    pl_shader_deband(sh, &(struct pl_sample_src) { .tex = src }, NULL);
 }
 
 static void bench_deband_heavy(struct pl_shader *sh, struct pl_shader_obj **state,
                                const struct pl_tex *src)
 {
-    pl_shader_deband(sh, src, &(struct pl_deband_params) {
+    pl_shader_deband(sh, &(struct pl_sample_src) { .tex = src },
+        &(struct pl_deband_params) {
         .iterations = 4,
         .threshold  = 4.0,
         .radius     = 4.0,
