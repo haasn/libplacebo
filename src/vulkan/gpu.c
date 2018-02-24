@@ -1917,6 +1917,7 @@ static void set_ds(struct pl_pass_vk *pass_vk, uintptr_t dsbit)
 static void vk_pass_run(const struct pl_gpu *gpu,
                         const struct pl_pass_run_params *params)
 {
+    struct pl_vk *p = gpu->priv;
     struct vk_ctx *vk = pl_vk_get(gpu);
     const struct pl_pass *pass = params->pass;
     struct pl_pass_vk *pass_vk = pass->priv;
@@ -1931,6 +1932,26 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         PL_TRACE(gpu, "No free descriptor sets! ...blocking (slow path)");
         vk_submit(gpu);
         vk_poll_commands(vk, 1000000); // 1ms
+    }
+
+    // Update the vertex buffer before dispatching the pass, do this
+    // before vk_require_cmd since it can trigger its own commands
+    const struct pl_buf *vert = NULL;
+    struct pl_buf_vk *vert_vk = NULL;
+    if (pass->params.type == PL_PASS_RASTER) {
+        vert = pl_buf_pool_get(gpu, &pass_vk->vbo, &(struct pl_buf_params) {
+            .type = PL_VK_BUF_VERTEX,
+            .size = params->vertex_count * pass->params.vertex_stride,
+            .host_writable = true,
+        });
+
+        if (!vert) {
+            PL_ERR(gpu, "Failed allocating vertex buffer!");
+            goto error;
+        }
+
+        vk_buf_write(gpu, vert, 0, params->vertex_data, vert->params.size);
+        vert_vk = vert->priv;
     }
 
     struct vk_cmd *cmd = vk_require_cmd(gpu, types[pass->params.type]);
@@ -1981,27 +2002,12 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         const struct pl_tex *tex = params->target;
         struct pl_tex_vk *tex_vk = tex->priv;
 
-        struct pl_buf_params vparams = {
-            .type = PL_VK_BUF_VERTEX,
-            .size = params->vertex_count * pass->params.vertex_stride,
-            .host_writable = true,
-        };
-
-        const struct pl_buf *buf = pl_buf_pool_get(gpu, &pass_vk->vbo, &vparams);
-        if (!buf) {
-            PL_ERR(gpu, "Failed allocating vertex buffer!");
-            goto error;
-        }
-
-        struct pl_buf_vk *buf_vk = buf->priv;
-        vk_buf_write(gpu, buf, 0, params->vertex_data, vparams.size);
-
-        buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+        buf_barrier(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
                     VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
-                    buf_vk->slice.mem.offset, vparams.size, false);
+                    vert_vk->slice.mem.offset, vert->params.size, false);
 
-        vkCmdBindVertexBuffers(cmd->buf, 0, 1, &buf_vk->slice.buf,
-                               &buf_vk->slice.mem.offset);
+        vkCmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->slice.buf,
+                               &vert_vk->slice.mem.offset);
 
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                     VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -2051,6 +2057,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
 
     // flush the work so far into its own command buffer, for better
     // intra-frame granularity
+    pl_assert(cmd == p->cmd); // make sure this is still the case
     vk_submit(gpu);
 
 error:
