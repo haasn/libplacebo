@@ -298,6 +298,30 @@ bool pl_color_space_equal(struct pl_color_space c1, struct pl_color_space c2)
            c1.sig_avg  == c2.sig_avg;
 }
 
+// Average light level for SDR signals. This is equal to a signal level of 0.5
+// under a typical presentation gamma of about 2.0.
+static const float sdr_avg = 0.25;
+
+void pl_color_space_infer(struct pl_color_space *space)
+{
+    if (!space->primaries)
+        space->primaries = PL_COLOR_PRIM_BT_709;
+    if (!space->transfer)
+        space->transfer = PL_COLOR_TRC_GAMMA22;
+    if (!space->light) {
+        space->light = (space->transfer == PL_COLOR_TRC_HLG)
+            ? PL_COLOR_LIGHT_SCENE_HLG
+            : PL_COLOR_LIGHT_DISPLAY;
+    }
+    if (!space->sig_peak)
+        space->sig_peak = pl_color_transfer_nominal_peak(space->transfer);
+
+    // In theory, for HDR signals, this is typically no longer true - but
+    // without adequate metadata there's not much else we can assume
+    if (!space->sig_avg)
+        space->sig_avg = sdr_avg;
+}
+
 const struct pl_color_adjustment pl_color_adjustment_neutral = {
     .brightness = 0.0,
     .contrast   = 1.0,

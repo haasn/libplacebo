@@ -233,6 +233,11 @@ void pl_color_space_merge(struct pl_color_space *orig,
 // Returns whether two colorspaces are exactly identical.
 bool pl_color_space_equal(struct pl_color_space c1, struct pl_color_space c2);
 
+// Go through a color-space and explicitly default all unknown fields to
+// reasonable values. After this function is called, none of the values will be
+// PL_COLOR_*_UNKNOWN or 0.0.
+void pl_color_space_infer(struct pl_color_space *space);
+
 // Some common color spaces
 extern const struct pl_color_space pl_color_space_unknown;
 extern const struct pl_color_space pl_color_space_srgb;
