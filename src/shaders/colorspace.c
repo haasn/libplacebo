@@ -457,10 +457,6 @@ static void pl_shader_inverse_ootf(struct pl_shader *sh,
     }
 }
 
-// Average light level for SDR signals. This is equal to a signal level of 0.5
-// under a typical presentation gamma of about 2.0.
-static const float sdr_avg = 0.25;
-
 const struct pl_color_map_params pl_color_map_default_params = {
     .intent                  = PL_INTENT_RELATIVE_COLORIMETRIC,
     .tone_mapping_algo       = PL_TONE_MAPPING_HABLE,
@@ -599,12 +595,11 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
          "    float peak = float(%s) / (%f * float(%s)); \n"
          "    float avg  = float(%s) / (%f * float(%s)); \n"
          "    sig_peak   = max(1.0, peak);               \n"
-         "    sig_avg    = max(%f, avg);                 \n"
+         "    sig_avg    = max(0.25, avg);               \n"
          "}                                              \n",
          num.name,
          max_total.name, PL_COLOR_REF_WHITE, num.name,
-         avg_total.name, PL_COLOR_REF_WHITE, num.name,
-         sdr_avg);
+         avg_total.name, PL_COLOR_REF_WHITE, num.name);
 
     // Finally, to update the global state, we increment a counter per dispatch
     GLSL("memoryBarrierBuffer();                                                \n"
@@ -786,18 +781,8 @@ void pl_shader_color_map(struct pl_shader *sh,
     GLSL("{\n");
     params = PL_DEF(params, &pl_color_map_default_params);
 
-    // Defaults the primaries/transfer to sensible values. This isn't strictly
-    // necessary, but it avoids some redundant operations in the cases where
-    // src and dst are equal but one is set and the other is unknown
-    src.primaries = PL_DEF(src.primaries, PL_COLOR_PRIM_BT_709);
-    src.transfer = PL_DEF(src.transfer, PL_COLOR_TRC_GAMMA22);
-
-    // If the source light type is unknown, infer it from the transfer function.
-    if (!src.light) {
-        src.light = (src.transfer == PL_COLOR_TRC_HLG)
-            ? PL_COLOR_LIGHT_SCENE_HLG
-            : PL_COLOR_LIGHT_DISPLAY;
-    }
+    // Default the source color space to reasonable values
+    pl_color_space_infer(&src);
 
     // To be as conservative as possible, color mapping is disabled by default
     // except for special cases which are considered to be "sufficiently
@@ -817,30 +802,17 @@ void pl_shader_color_map(struct pl_shader *sh,
             dst.transfer = PL_COLOR_TRC_GAMMA22;
     }
 
-    // 99 times out of 100, this is what we want
-    dst.light = PL_DEF(dst.light, PL_COLOR_LIGHT_DISPLAY);
-
-    // Compute the highest encodable level
-    float src_range = pl_color_transfer_nominal_peak(src.transfer),
-          dst_range = pl_color_transfer_nominal_peak(dst.transfer);
-
-    // Default the src/dst peak information based on the encodable range. For
-    // the source peak, this is the safest possible value (no clipping). For
-    // the dest peak, this makes full use of the available dynamic range.
-    src.sig_peak = PL_DEF(src.sig_peak, src_range);
-    dst.sig_peak = PL_DEF(dst.sig_peak, dst_range);
-
-    // Defaults the signal average based on the SDR signal average.
-    // Note: For HDR, this assumes well-mastered HDR content.
-    src.sig_avg = PL_DEF(src.sig_avg, sdr_avg);
-
     // Defaults the dest average based on the source average, unless the source
-    // is HDR and the destination is not, in which case fall back to SDR avg.
+    // is HDR and the destination is not
     if (!dst.sig_avg) {
         bool src_hdr = pl_color_transfer_is_hdr(src.transfer);
         bool dst_hdr = pl_color_transfer_is_hdr(dst.transfer);
-        dst.sig_avg = src_hdr && !dst_hdr ? sdr_avg : src.sig_avg;
+        if (!(src_hdr && !dst_hdr))
+            dst.sig_avg = src.sig_avg;
     }
+
+    // Infer the remaining fields after making the above choices
+    pl_color_space_infer(&dst);
 
     // HLG's OOTF is parametrized by the sig peak, so enable OOTF conversion
     // if necessary, even if the output light is the same
@@ -853,7 +825,6 @@ void pl_shader_color_map(struct pl_shader *sh,
     // operations needs it
     bool need_linear = src.transfer != dst.transfer ||
                        src.primaries != dst.primaries ||
-                       src_range != dst_range ||
                        src.sig_peak > dst.sig_peak ||
                        src.sig_avg != dst.sig_avg ||
                        need_ootf;
