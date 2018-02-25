@@ -902,6 +902,8 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     struct pl_image image = *pimage;
     struct pl_render_target target = *ptarget;
     fix_rects(&image, &target);
+    pl_color_space_infer(&image.color);
+    pl_color_space_infer(&target.color);
 
     // TODO: output caching
     pl_dispatch_reset_frame(rr->dp);
