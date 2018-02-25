@@ -1288,6 +1288,9 @@ struct pl_pass_vk {
     uint16_t dmask;
     // Vertex buffers (vertices)
     struct pl_buf_pool vbo;
+    const struct pl_buf *cached_vert;
+    void *cached_data;
+    size_t cached_size;
 
     // For updating
     VkWriteDescriptorSet *dswrite;
@@ -1939,18 +1942,41 @@ static void vk_pass_run(const struct pl_gpu *gpu,
     const struct pl_buf *vert = NULL;
     struct pl_buf_vk *vert_vk = NULL;
     if (pass->params.type == PL_PASS_RASTER) {
-        vert = pl_buf_pool_get(gpu, &pass_vk->vbo, &(struct pl_buf_params) {
-            .type = PL_VK_BUF_VERTEX,
-            .size = params->vertex_count * pass->params.vertex_stride,
-            .host_writable = true,
-        });
+        size_t size = params->vertex_count * pass->params.vertex_stride;
+        if (pass_vk->cached_vert && pass_vk->cached_size == size &&
+            memcmp(params->vertex_data, pass_vk->cached_data, size) == 0)
+        {
+            // Re-use cached vertex buffer
+            vert = pass_vk->cached_vert;
+        } else {
+            // Invalidate existing cache
+            pass_vk->cached_vert = NULL;
 
-        if (!vert) {
-            PL_ERR(gpu, "Failed allocating vertex buffer!");
-            goto error;
+            // Fetch new vertex buffer and update it
+            vert = pl_buf_pool_get(gpu, &pass_vk->vbo, &(struct pl_buf_params) {
+                .type = PL_VK_BUF_VERTEX,
+                .size = params->vertex_count * pass->params.vertex_stride,
+                .host_writable = true,
+            });
+
+            if (!vert) {
+                PL_ERR(gpu, "Failed allocating vertex buffer!");
+                goto error;
+            }
+
+            vk_buf_write(gpu, vert, 0, params->vertex_data, vert->params.size);
+
+            // Update the cached information, for small vertex buffers
+            if (size <= 128*1024) { // 128 KiB
+                pass_vk->cached_vert = vert;
+                pass_vk->cached_size = size;
+                pass_vk->cached_data =
+                    talloc_realloc_size(pass_vk, pass_vk->cached_data, size);
+                memmove(pass_vk->cached_data, params->vertex_data, size);
+            }
         }
 
-        vk_buf_write(gpu, vert, 0, params->vertex_data, vert->params.size);
+        pl_assert(vert);
         vert_vk = vert->priv;
     }
 
