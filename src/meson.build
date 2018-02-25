@@ -14,10 +14,13 @@ build_opts = [
   '-Wpointer-arith', '-Wno-pointer-sign',
 
   # Warnings to treat as errors
-  '-Werror=implicit-function-declaration', '-Werror=incompatible-pointer-types',
+  '-Werror=implicit-function-declaration',
 ]
 
 cc = meson.get_compiler('c')
+if cc.has_argument('-Wincompatible-pointer-types')
+  build_opts += ['-Werror=incompatible-pointer-types']
+endif
 
 # clang's version of -Wmissing-braces rejects the common {0} initializers
 if cc.get_id() == 'clang'
