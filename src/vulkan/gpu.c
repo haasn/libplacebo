@@ -128,6 +128,20 @@ static void vk_setup_formats(struct pl_gpu *gpu)
 {
     struct vk_ctx *vk = pl_vk_get(gpu);
 
+    // Figure out the largest texture size we expect to see
+    uint64_t tsize[] = {
+        gpu->limits.max_tex_1d_dim,
+        PL_SQUARE((uint64_t) gpu->limits.max_tex_2d_dim),
+        PL_CUBE((uint64_t) gpu->limits.max_tex_3d_dim),
+    };
+
+    // For texture emulation we need large enough texel buffers to cover
+    // the full range of possible textures, as well as compute shaders.
+    uint64_t max_texels = PL_MAX(tsize[0], PL_MAX(tsize[1], tsize[2]));
+    bool has_emu = gpu->limits.max_buffer_texels >= max_texels;
+    if (!(gpu->caps & PL_GPU_CAP_COMPUTE))
+        has_emu = false;
+
     for (const struct vk_format *vk_fmt = vk_formats; vk_fmt->ifmt; vk_fmt++) {
         VkFormatProperties prop;
         vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->ifmt, &prop);
@@ -161,7 +175,7 @@ static void vk_setup_formats(struct pl_gpu *gpu)
 
         // For the texture capabilities, try falling back to the emulation
         // format if this format is wholly unsupported.
-        if (!prop.optimalTilingFeatures && vk_fmt->emufmt) {
+        if (has_emu && !prop.optimalTilingFeatures && vk_fmt->emufmt) {
             fmt->emulated = true;
             vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->emufmt, &prop);
         }
