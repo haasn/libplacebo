@@ -42,31 +42,32 @@ void pl_gpu_print_info(const struct pl_gpu *gpu, enum pl_log_level lev)
     PL_MSG(gpu, lev, "    Limits:");
 
 #define LOG(fmt, field) \
-    PL_MSG(gpu, lev, "      %-26s " fmt, #field ":", gpu->limits.field)
+    PL_MSG(gpu, lev, "      %-26s %" fmt, #field ":", gpu->limits.field)
 
-    LOG("%d", max_tex_1d_dim);
-    LOG("%d", max_tex_2d_dim);
-    LOG("%d", max_tex_3d_dim);
-    LOG("%zu", max_pushc_size);
-    LOG("%zu", max_xfer_size);
-    LOG("%zu", max_ubo_size);
-    LOG("%zu", max_ssbo_size);
-    LOG("%d", min_gather_offset);
-    LOG("%d", max_gather_offset);
+    LOG(PRIu32, max_tex_1d_dim);
+    LOG(PRIu32, max_tex_2d_dim);
+    LOG(PRIu32, max_tex_3d_dim);
+    LOG("zu", max_pushc_size);
+    LOG("zu", max_xfer_size);
+    LOG("zu", max_ubo_size);
+    LOG("zu", max_ssbo_size);
+    LOG(PRIu64, max_buffer_texels);
+    LOG(PRId16, min_gather_offset);
+    LOG(PRId16, max_gather_offset);
 
     if (gpu->caps & PL_GPU_CAP_COMPUTE) {
-        LOG("%zu", max_shmem_size);
-        LOG("%d", max_group_threads);
-        LOG("%d", max_group_size[0]);
-        LOG("%d", max_group_size[1]);
-        LOG("%d", max_group_size[2]);
-        LOG("%d", max_dispatch[0]);
-        LOG("%d", max_dispatch[1]);
-        LOG("%d", max_dispatch[2]);
+        LOG("zu", max_shmem_size);
+        LOG(PRIu32, max_group_threads);
+        LOG(PRIu32, max_group_size[0]);
+        LOG(PRIu32, max_group_size[1]);
+        LOG(PRIu32, max_group_size[2]);
+        LOG(PRIu32, max_dispatch[0]);
+        LOG(PRIu32, max_dispatch[1]);
+        LOG(PRIu32, max_dispatch[2]);
     }
 
-    LOG("%d", align_tex_xfer_stride);
-    LOG("%zu", align_tex_xfer_offset);
+    LOG(PRIu32, align_tex_xfer_stride);
+    LOG("zu", align_tex_xfer_offset);
 #undef LOG
 }
 

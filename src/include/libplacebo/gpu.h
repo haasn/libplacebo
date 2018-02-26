@@ -53,29 +53,29 @@ enum {
 // Structure defining the physical limits of this GPU instance. If a limit is
 // given as 0, that means that feature is unsupported.
 struct pl_gpu_limits {
-    int max_tex_1d_dim;    // maximum width for a 1D texture
-    int max_tex_2d_dim;    // maximum width/height for a 2D texture (required)
-    int max_tex_3d_dim;    // maximum width/height/depth for a 3D texture
-    size_t max_pushc_size; // maximum push_constants_size
-    size_t max_xfer_size;  // maximum size of a PL_BUF_TEX_TRANSFER
-    size_t max_ubo_size;   // maximum size of a PL_BUF_UNIFORM
-    size_t max_ssbo_size;  // maximum size of a PL_BUF_STORAGE
-    int max_buffer_texels; // maximum texels in a PL_BUF_TEXEL_*
-    int min_gather_offset; // minimum textureGatherOffset offset
-    int max_gather_offset; // maximum textureGatherOffset offset
+    uint32_t max_tex_1d_dim;    // maximum width for a 1D texture
+    uint32_t max_tex_2d_dim;    // maximum width/height for a 2D texture (required)
+    uint32_t max_tex_3d_dim;    // maximum width/height/depth for a 3D texture
+    size_t max_pushc_size;      // maximum push_constants_size
+    size_t max_xfer_size;       // maximum size of a PL_BUF_TEX_TRANSFER
+    size_t max_ubo_size;        // maximum size of a PL_BUF_UNIFORM
+    size_t max_ssbo_size;       // maximum size of a PL_BUF_STORAGE
+    uint64_t max_buffer_texels; // maximum texels in a PL_BUF_TEXEL_*
+    int16_t min_gather_offset;  // minimum textureGatherOffset offset
+    int16_t max_gather_offset;  // maximum textureGatherOffset offset
 
     // Compute shader limits. Always available (non-zero) if PL_GPU_CAP_COMPUTE set
-    size_t max_shmem_size; // maximum compute shader shared memory size
-    int max_group_threads; // maximum number of local threads per work group
-    int max_group_size[3]; // maximum work group size per dimension
-    int max_dispatch[3];   // maximum dispatch size per dimension
+    size_t max_shmem_size;      // maximum compute shader shared memory size
+    uint32_t max_group_threads; // maximum number of local threads per work group
+    uint32_t max_group_size[3]; // maximum work group size per dimension
+    uint32_t max_dispatch[3];   // maximum dispatch size per dimension
 
     // These don't represent hard limits but indicate performance hints for
     // optimal alignment. For best performance, the corresponding field
     // should be aligned to a multiple of these. They will always be a power
     // of two.
-    int align_tex_xfer_stride;    // optimal pl_tex_transfer_params.stride_w/h
-    size_t align_tex_xfer_offset; // optimal pl_tex_transfer_params.buf_offset
+    uint32_t align_tex_xfer_stride; // optimal pl_tex_transfer_params.stride_w/h
+    size_t align_tex_xfer_offset;   // optimal pl_tex_transfer_params.buf_offset
 };
 
 // Abstract device context which wraps an underlying graphics context and can

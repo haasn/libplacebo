@@ -17,10 +17,12 @@
 
 #pragma once
 
+#define __STDC_FORMAT_MACROS
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #include "ta/talloc.h"
 #include "config.h"
