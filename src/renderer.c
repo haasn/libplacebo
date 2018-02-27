@@ -390,7 +390,7 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
 
         struct pl_sample_src src2 = *src;
         src2.tex = finalize_img(rr, &img, rr->fbofmt, sep_fbo);
-        ok = pl_shader_sample_ortho(sh, PL_SEP_HORIZ, &src2, &fparams);
+        ok = src2.tex && pl_shader_sample_ortho(sh, PL_SEP_HORIZ, &src2, &fparams);
     }
 
 done:
