@@ -143,7 +143,14 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
         .sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO,
     };
 
-    VK(vkCreateEvent(vk->dev, &einfo, VK_ALLOC, &sig->event));
+    VkResult res = vkCreateEvent(vk->dev, &einfo, VK_ALLOC, &sig->event);
+    if (res == VK_ERROR_FEATURE_NOT_PRESENT) {
+        // Some vulkan implementations don't support VkEvents since they are
+        // not part of the vulkan portable subset. So fail gracefully here.
+        sig->event = VK_NULL_HANDLE;
+    } else {
+        VK_ASSERT(res, "Creating VkEvent");
+    }
 
 done:
     // Signal both the semaphore, and the event if possible. (We will only
@@ -153,7 +160,7 @@ done:
     sig->source = cmd->queue;
 
     VkQueueFlags req = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-    if (cmd->pool->props.queueFlags & req) {
+    if (sig->event && (cmd->pool->props.queueFlags & req)) {
         vkCmdSetEvent(cmd->buf, sig->event, stage);
         sig->type = VK_WAIT_EVENT;
     }
@@ -198,7 +205,8 @@ static void release_signal(struct vk_ctx *vk, struct vk_signal *sig)
     // The semaphore never needs to be recreated, because it's either
     // unsignaled while still queued, or unsignaled as a result of a device
     // wait. But the event *may* need to be reset, so just always reset it.
-    vkResetEvent(vk->dev, sig->event);
+    if (sig->event)
+        vkResetEvent(vk->dev, sig->event);
     sig->source = NULL;
     TARRAY_APPEND(vk, vk->signals, vk->num_signals, sig);
 }
