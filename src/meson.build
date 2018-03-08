@@ -18,6 +18,22 @@ build_opts = [
 ]
 
 cc = meson.get_compiler('c')
+vulkan = dependency('vulkan', version: '>=1.0.42', required: false)
+
+# Global dependencies
+build_deps = [
+  dependency('threads'),
+  cc.find_library('m', required: false),
+]
+
+if build_machine.system() == 'darwin'
+  build_deps += [cc.find_library('stdc++', required: true)]
+
+  if not vulkan.found()
+    vulkan = dependency('appleframeworks', modules : ['MoltenVK','Metal','IOSurface','QuartzCore','IOKit','Foundation'], required : false)
+  endif
+endif
+
 if cc.has_argument('-Wincompatible-pointer-types')
   build_opts += ['-Werror=incompatible-pointer-types']
 endif
@@ -26,14 +42,6 @@ endif
 if cc.get_id() == 'clang'
   build_opts += ['-Wno-missing-braces']
 endif
-
-# Global dependencies
-build_deps = [
-  dependency('threads'),
-  cc.find_library('m', required: false),
-]
-
-vulkan = dependency('vulkan', version: '>=1.0.42', required: false)
 
 # Source files
 sources = [
