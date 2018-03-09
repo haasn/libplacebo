@@ -128,19 +128,8 @@ static void vk_setup_formats(struct pl_gpu *gpu)
 {
     struct vk_ctx *vk = pl_vk_get(gpu);
 
-    // Figure out the largest texture size we expect to see
-    uint64_t tsize[] = {
-        gpu->limits.max_tex_1d_dim,
-        PL_SQUARE((uint64_t) gpu->limits.max_tex_2d_dim),
-        PL_CUBE((uint64_t) gpu->limits.max_tex_3d_dim),
-    };
-
-    // For texture emulation we need large enough texel buffers to cover
-    // the full range of possible textures, as well as compute shaders.
-    uint64_t max_texels = PL_MAX(tsize[0], PL_MAX(tsize[1], tsize[2]));
-    bool has_emu = gpu->limits.max_buffer_texels >= max_texels;
-    if (!(gpu->caps & PL_GPU_CAP_COMPUTE))
-        has_emu = false;
+    // Texture format emulation requires at least support for texel buffers
+    bool has_emu = (gpu->caps & PL_GPU_CAP_COMPUTE) && gpu->limits.max_buffer_texels;
 
     for (const struct vk_format *vk_fmt = vk_formats; vk_fmt->ifmt; vk_fmt++) {
         VkFormatProperties prop;
@@ -604,6 +593,20 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
                                         PL_FMT_CAP_TEXEL_UNIFORM);
         if (!tex_vk->texel_fmt) {
             PL_ERR(gpu, "Failed picking texel format for emulated texture!");
+            goto error;
+        }
+
+        // Statically check to see if we'd even be able to upload it at all
+        // and refuse right away if not. In theory, uploading can still fail
+        // based on the size of pl_tex_transfer_params.stride_w, but for now
+        // this should be enough.
+        uint64_t texels = params->w * params->h * params->d *
+                          params->format->num_components;
+
+        if (texels > gpu->limits.max_buffer_texels) {
+            PL_ERR(gpu, "Failed creating texture with emulated texture format: "
+                   "texture dimensions exceed maximum texel buffer size! Try "
+                   "again with a different (non-emulated) format?");
             goto error;
         }
 
@@ -1119,6 +1122,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
             .size = size,
             .format = tex_vk->texel_fmt,
         });
+
         if (!tbuf) {
             PL_ERR(gpu, "Failed creating texel buffer for emulated tex upload!");
             goto error;
@@ -1213,6 +1217,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
             .size = size,
             .format = tex_vk->texel_fmt,
         });
+
         if (!tbuf) {
             PL_ERR(gpu, "Failed creating texel buffer for emulated tex download!");
             goto error;
