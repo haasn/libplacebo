@@ -482,14 +482,12 @@ void pl_tex_blit(const struct pl_gpu *gpu,
 size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par)
 {
     const struct pl_tex *tex = par->tex;
+    int w = pl_rect_w(par->rc), h = pl_rect_h(par->rc), d = pl_rect_d(par->rc);
 
-    int texels = 0;
-    switch (pl_tex_params_dimension(tex->params)) {
-    case 1: texels = pl_rect_w(par->rc); break;
-    case 2: texels = pl_rect_h(par->rc) * par->stride_w; break;
-    case 3: texels = pl_rect_d(par->rc) * par->stride_w * par->stride_h; break;
-    }
-
+    // This generates the absolute bare minimum size of a buffer required to
+    // hold the data of a texture upload/download, by including stride padding
+    // only where strictly necessary.
+    int texels = ((d - 1) * par->stride_h + (h - 1)) * par->stride_w + w;
     return texels * tex->params.format->texel_size;
 }
 
