@@ -506,9 +506,9 @@ static void fix_tex_transfer(const struct pl_gpu *gpu,
         rc.z1 = tex->params.d;
 
     if (!params->stride_w)
-        params->stride_w = tex->params.w;
+        params->stride_w = pl_rect_w(rc);
     if (!params->stride_h)
-        params->stride_h = tex->params.h;
+        params->stride_h = pl_rect_h(rc);
 
     // Sanitize superfluous coordinates for the benefit of the GPU
     strip_coords(tex, &rc);

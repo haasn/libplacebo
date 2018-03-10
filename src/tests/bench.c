@@ -98,12 +98,7 @@ static void run_bench(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     bool ok = pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
         .tex        = fbo.tex,
         .buf        = fbo.buf,
-        // Transfer a single pixel:
-        .stride_w   = 1,
-        .rc         = {
-            0, 0, 0,
-            1, 1, 1
-        },
+        .rc         = { .x1 = 1, .y1 = 1 }, // 1x1 pixels
     });
     REQUIRE(ok);
 }

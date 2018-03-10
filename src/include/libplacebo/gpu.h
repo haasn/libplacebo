@@ -291,10 +291,11 @@ struct pl_tex_transfer_params {
 
     // Note: Superfluous parameters are ignored, i.e. for a 1D texture, the y
     // and z fields of `rc`, as well as the corresponding strides, are ignored.
-    // In all other cases, the stride must be >= the corresponding dimension
-    // of `rc`, and the `rc` must be normalized and fully contained within the
-    // image dimensions. If any of these parameters are left away (0), they
-    // are inferred from the texture's size.
+    // In all other cases, the stride must be >= the corresponding dimension of
+    // `rc`, and the `rc` must be normalized and fully contained within the
+    // image dimensions. Missing fields in the `rc` are inferred from the image
+    // size. If unset, the strides are inferred from `rc` (that is, it's
+    // assumed that the data is tightly packed in the buffer).
     struct pl_rect3d rc;   // region of the texture to transfer
     unsigned int stride_w; // the number of texels per horizontal row (x axis)
     unsigned int stride_h; // the number of texels per vertical column (y axis)
