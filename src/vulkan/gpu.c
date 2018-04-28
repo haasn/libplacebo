@@ -35,6 +35,9 @@ struct pl_vk {
     struct vk_malloc *alloc;
     struct spirv_compiler *spirv;
 
+    // Some additional cached device limits
+    uint32_t max_push_descriptors;
+
     // This is a pl_dispatch used (on ourselves!) for the purposes of
     // dispatching compute shaders for performing various emulation tasks
     // (e.g. partial clears, blits or emulated texture transfers).
@@ -239,6 +242,21 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         .align_tex_xfer_stride = vk->limits.optimalBufferCopyRowPitchAlignment,
         .align_tex_xfer_offset = vk->limits.optimalBufferCopyOffsetAlignment,
     };
+
+    if (vk->vkCmdPushDescriptorSetKHR) {
+        VkPhysicalDevicePushDescriptorPropertiesKHR pushd = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR,
+        };
+
+        VkPhysicalDeviceProperties2KHR props = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR,
+            .pNext = &pushd,
+        };
+
+        VK_LOAD_FUN(vk->inst, vkGetPhysicalDeviceProperties2KHR);
+        vkGetPhysicalDeviceProperties2KHR(vk->physd, &props);
+        p->max_push_descriptors = pushd.maxPushDescriptors;
+    }
 
     if (vk->pool_compute) {
         gpu->caps |= PL_GPU_CAP_COMPUTE;
@@ -1299,6 +1317,7 @@ struct pl_pass_vk {
     VkImageLayout initialLayout;
     VkImageLayout finalLayout;
     // Descriptor set (bindings)
+    bool use_pushd;
     VkDescriptorSetLayout dsLayout;
     VkDescriptorPool dsPool;
     // To keep track of which descriptor sets are and aren't available, we
@@ -1472,53 +1491,62 @@ static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
         };
     }
 
-    VkDescriptorPoolSize *dsPoolSizes = NULL;
-    int poolSizeCount = 0;
-
-    for (enum pl_desc_type t = 0; t < PL_DESC_TYPE_COUNT; t++) {
-        if (dsSize[t] > 0) {
-            VkDescriptorPoolSize dssize = {
-                .type = dsType[t],
-                .descriptorCount = dsSize[t] * NUM_DS,
-            };
-
-            TARRAY_APPEND(tmp, dsPoolSizes, poolSizeCount, dssize);
-        }
-    }
-
-    if (poolSizeCount) {
-        VkDescriptorPoolCreateInfo pinfo = {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .maxSets = NUM_DS,
-            .pPoolSizes = dsPoolSizes,
-            .poolSizeCount = poolSizeCount,
-        };
-
-        VK(vkCreateDescriptorPool(vk->dev, &pinfo, VK_ALLOC, &pass_vk->dsPool));
-    }
-
     VkDescriptorSetLayoutCreateInfo dinfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .pBindings = bindings,
         .bindingCount = num_desc,
     };
 
+    if (num_desc <= p->max_push_descriptors) {
+        dinfo.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+        pass_vk->use_pushd = true;
+    } else if (p->max_push_descriptors) {
+        PL_INFO(gpu, "Pass with %d descriptors exceeds the maximum push "
+                "descriptor count (%d). Falling back to descriptor sets!",
+                num_desc, p->max_push_descriptors);
+    }
+
     VK(vkCreateDescriptorSetLayout(vk->dev, &dinfo, VK_ALLOC,
                                    &pass_vk->dsLayout));
 
-    VkDescriptorSetLayout layouts[NUM_DS];
-    for (int i = 0; i < NUM_DS; i++)
-        layouts[i] = pass_vk->dsLayout;
+    if (!pass_vk->use_pushd) {
+        VkDescriptorPoolSize *dsPoolSizes = NULL;
+        int poolSizeCount = 0;
 
-    if (pass_vk->dsPool) {
-        VkDescriptorSetAllocateInfo ainfo = {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .descriptorPool = pass_vk->dsPool,
-            .descriptorSetCount = NUM_DS,
-            .pSetLayouts = layouts,
-        };
+        for (enum pl_desc_type t = 0; t < PL_DESC_TYPE_COUNT; t++) {
+            if (dsSize[t] > 0) {
+                VkDescriptorPoolSize dssize = {
+                    .type = dsType[t],
+                    .descriptorCount = dsSize[t] * NUM_DS,
+                };
 
-        VK(vkAllocateDescriptorSets(vk->dev, &ainfo, pass_vk->dss));
+                TARRAY_APPEND(tmp, dsPoolSizes, poolSizeCount, dssize);
+            }
+        }
+
+        if (poolSizeCount) {
+            VkDescriptorPoolCreateInfo pinfo = {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                .maxSets = NUM_DS,
+                .pPoolSizes = dsPoolSizes,
+                .poolSizeCount = poolSizeCount,
+            };
+
+            VK(vkCreateDescriptorPool(vk->dev, &pinfo, VK_ALLOC, &pass_vk->dsPool));
+
+            VkDescriptorSetLayout layouts[NUM_DS];
+            for (int i = 0; i < NUM_DS; i++)
+                layouts[i] = pass_vk->dsLayout;
+
+            VkDescriptorSetAllocateInfo ainfo = {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                .descriptorPool = pass_vk->dsPool,
+                .descriptorSetCount = NUM_DS,
+                .pSetLayouts = layouts,
+            };
+
+            VK(vkAllocateDescriptorSets(vk->dev, &ainfo, pass_vk->dss));
+        }
     }
 
     VkPipelineLayoutCreateInfo linfo = {
@@ -1823,7 +1851,6 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 {
     struct pl_pass_vk *pass_vk = pass->priv;
     struct pl_desc *desc = &pass->params.descriptors[idx];
-    pl_assert(ds);
 
     VkWriteDescriptorSet *wds = &pass_vk->dswrite[idx];
     *wds = (VkWriteDescriptorSet) {
@@ -1949,13 +1976,6 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         [PL_PASS_COMPUTE] = COMPUTE,
     };
 
-    // Wait for a free descriptor set
-    while (!pass_vk->dmask) {
-        PL_TRACE(gpu, "No free descriptor sets! ...blocking (slow path)");
-        vk_submit(gpu);
-        vk_poll_commands(vk, 1000000); // 1ms
-    }
-
     // Update the vertex buffer before dispatching the pass, do this
     // before vk_require_cmd since it can trigger its own commands
     const struct pl_buf *vert = NULL;
@@ -1999,10 +2019,44 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         vert_vk = vert->priv;
     }
 
+    if (!pass_vk->use_pushd) {
+        // Wait for a free descriptor set
+        while (!pass_vk->dmask) {
+            PL_TRACE(gpu, "No free descriptor sets! ...blocking (slow path)");
+            vk_submit(gpu);
+            vk_poll_commands(vk, 1000000); // 1ms
+        }
+    }
+
     struct vk_cmd *cmd = vk_require_cmd(gpu, types[pass->params.type]);
     if (!cmd)
         goto error;
 
+    // Find a descriptor set to use
+    VkDescriptorSet ds = NULL;
+    if (!pass_vk->use_pushd) {
+        for (int i = 0; i < PL_ARRAY_SIZE(pass_vk->dss); i++) {
+            uint16_t dsbit = 1u << i;
+            if (pass_vk->dmask & dsbit) {
+                ds = pass_vk->dss[i];
+                pass_vk->dmask &= ~dsbit; // unset
+                vk_cmd_callback(cmd, (vk_cb) set_ds, pass_vk,
+                                (void *)(uintptr_t) dsbit);
+                break;
+            }
+        }
+    }
+
+    // Update the dswrite structure with all of the new values
+    for (int i = 0; i < pass->params.num_descriptors; i++)
+        vk_update_descriptor(gpu, cmd, pass, params->desc_bindings[i], ds, i);
+
+    if (!pass_vk->use_pushd) {
+        vkUpdateDescriptorSets(vk->dev, pass->params.num_descriptors,
+                               pass_vk->dswrite, 0, NULL);
+    }
+
+    // Bind the pipeline, descriptor set, etc.
     static const VkPipelineBindPoint bindPoint[] = {
         [PL_PASS_RASTER]  = VK_PIPELINE_BIND_POINT_GRAPHICS,
         [PL_PASS_COMPUTE] = VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -2010,29 +2064,16 @@ static void vk_pass_run(const struct pl_gpu *gpu,
 
     vkCmdBindPipeline(cmd->buf, bindPoint[pass->params.type], pass_vk->pipe);
 
-    VkDescriptorSet ds = NULL;
-    for (int i = 0; i < PL_ARRAY_SIZE(pass_vk->dss); i++) {
-        uint16_t dsbit = 1u << i;
-        if (pass_vk->dmask & dsbit) {
-            ds = pass_vk->dss[i];
-            pass_vk->dmask &= ~dsbit; // unset
-            vk_cmd_callback(cmd, (vk_cb) set_ds, pass_vk,
-                            (void *)(uintptr_t) dsbit);
-            break;
-        }
-    }
-
-    for (int i = 0; i < pass->params.num_descriptors; i++)
-        vk_update_descriptor(gpu, cmd, pass, params->desc_bindings[i], ds, i);
-
-    if (pass->params.num_descriptors > 0) {
-        vkUpdateDescriptorSets(vk->dev, pass->params.num_descriptors,
-                               pass_vk->dswrite, 0, NULL);
-    }
-
     if (ds) {
         vkCmdBindDescriptorSets(cmd->buf, bindPoint[pass->params.type],
                                 pass_vk->pipeLayout, 0, 1, &ds, 0, NULL);
+    }
+
+    if (pass_vk->use_pushd) {
+        vk->vkCmdPushDescriptorSetKHR(cmd->buf, bindPoint[pass->params.type],
+                                      pass_vk->pipeLayout, 0,
+                                      pass->params.num_descriptors,
+                                      pass_vk->dswrite);
     }
 
     if (pass->params.push_constants_size) {
