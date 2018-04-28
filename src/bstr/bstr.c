@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <limits.h>
 
 #include "ta/talloc.h"
 #include "bstr.h"
