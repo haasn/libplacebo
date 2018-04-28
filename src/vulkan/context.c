@@ -22,6 +22,32 @@
 
 const struct pl_vk_inst_params pl_vk_inst_default_params = {0};
 
+struct vk_ext_fun {
+    const char *name;
+    size_t offset;
+};
+
+struct vk_ext {
+    const char *name;
+    struct vk_ext_fun *funs;
+};
+
+#define VK_DEV_FUN(N)                       \
+    { .name = #N,                           \
+      .offset = offsetof(struct vk_ctx, N), \
+    }
+
+// Table of vulkan device extensions and functions they load
+static const struct vk_ext vk_device_extensions[] = {
+    {
+        .name = VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
+        .funs = (struct vk_ext_fun[]) {
+            VK_DEV_FUN(vkCmdPushDescriptorSetKHR),
+            {0},
+        },
+    }
+};
+
 void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
 {
     const struct pl_vk_inst *inst = *inst_ptr;
@@ -30,8 +56,8 @@ void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
 
     VkDebugReportCallbackEXT debug = (VkDebugReportCallbackEXT) inst->priv;
     if (debug) {
-        VK_LOAD_PFN(inst->instance, vkDestroyDebugReportCallbackEXT)
-        pfn_vkDestroyDebugReportCallbackEXT(inst->instance, debug, VK_ALLOC);
+        VK_LOAD_FUN(inst->instance, vkDestroyDebugReportCallbackEXT)
+        vkDestroyDebugReportCallbackEXT(inst->instance, debug, VK_ALLOC);
     }
 
     vkDestroyInstance(inst->instance, VK_ALLOC);
@@ -78,6 +104,9 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
     };
 
+    // Add mandatory extensions
+    TARRAY_APPEND(tmp, exts, num_exts, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+
     // Add extra user extensions
     for (int i = 0; i < params->num_extensions; i++)
         TARRAY_APPEND(tmp, exts, num_exts, params->extensions[i]);
@@ -122,8 +151,8 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
         // Since this is not part of the core spec, we need to load it. This
         // can't fail because we've already successfully created an instance
         // with this extension enabled.
-        VK_LOAD_PFN(inst, vkCreateDebugReportCallbackEXT)
-        pfn_vkCreateDebugReportCallbackEXT(inst, &dinfo, VK_ALLOC, &debug);
+        VK_LOAD_FUN(inst, vkCreateDebugReportCallbackEXT)
+        vkCreateDebugReportCallbackEXT(inst, &dinfo, VK_ALLOC, &debug);
     }
 
     talloc_free(tmp);
@@ -365,10 +394,32 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     add_qinfo(tmp, &qinfos, &num_qinfos, qfs, idx_comp, params->queue_count);
     add_qinfo(tmp, &qinfos, &num_qinfos, qfs, idx_tf, params->queue_count);
 
+    // Enumerate all supported extensions
+    int num_exts_avail = 0;
+    VK(vkEnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, NULL));
+    VkExtensionProperties *exts_avail = talloc_array(tmp, VkExtensionProperties, num_exts_avail);
+    VK(vkEnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, exts_avail));
+
+    // Add all extensions we need
     const char **exts = NULL;
     int num_exts = 0;
     if (params->surface)
         TARRAY_APPEND(tmp, exts, num_exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+    // Add all extensions we can benefit from, and remember their functions
+    const struct vk_ext_fun **ext_funs = NULL;
+    int num_ext_funs = 0;
+    for (int i = 0; i < PL_ARRAY_SIZE(vk_device_extensions); i++) {
+        const struct vk_ext *ext = &vk_device_extensions[i];
+        for (int n = 0; n < num_exts_avail; n++) {
+            if (strcmp(ext->name, exts_avail[n].extensionName) == 0) {
+                TARRAY_APPEND(tmp, exts, num_exts, ext->name);
+                for (const struct vk_ext_fun *f = ext->funs; f->name; f++)
+                    TARRAY_APPEND(tmp, ext_funs, num_ext_funs, f);
+                break;
+            }
+        }
+    }
 
     // Add extra user extensions
     for (int i = 0; i < params->num_extensions; i++)
@@ -397,6 +448,13 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         PL_INFO(vk, "    %s", exts[i]);
 
     VK(vkCreateDevice(vk->physd, &dinfo, VK_ALLOC, &vk->dev));
+
+    // Load all of the functions from the extensions we enabled
+    for (int i = 0; i < num_ext_funs; i++) {
+        const struct vk_ext_fun *fun = ext_funs[i];
+        void *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
+        *((PFN_vkVoidFunction *) pfn) = vkGetDeviceProcAddr(vk->dev, fun->name);
+    }
 
     // Create the command pools and memory allocator
     for (int i = 0; i < num_qinfos; i++) {

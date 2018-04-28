@@ -25,8 +25,11 @@
 // in the future. (And to make the code more readable)
 #define VK_ALLOC NULL
 
-// Needed to load some extension-specific functions (for whatever reason)
-#define VK_LOAD_PFN(inst, name) PFN_##name pfn_##name = (PFN_##name) \
+// Type of a vulkan function that needs to be loaded
+#define VK_FUN(name) PFN_##name name
+
+// Load a vulkan instance-level extension function directly (on the stack)
+#define VK_LOAD_FUN(inst, name) VK_FUN(name) = (PFN_##name) \
                             vkGetInstanceProcAddr(inst, #name);
 
 // Hard-coded limit on the number of pending commands, to avoid OOM loops
@@ -66,4 +69,7 @@ struct vk_ctx {
     // Common pool of signals, to avoid having to re-create these objects often
     struct vk_signal **signals;
     int num_signals;
+
+    // Device-level function pointers
+    VK_FUN(vkCmdPushDescriptorSetKHR);
 };
