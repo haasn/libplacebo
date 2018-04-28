@@ -62,7 +62,7 @@ void bstr_xappend_vasprintf_c(void *tactx, bstr *s, const char *fmt,
             bstr_xappend(tactx, s, (struct bstr) { buf, 1 });
             continue;
         case 's': {
-            const char *arg = va_arg(ap, void *);
+            const char *arg = va_arg(ap, const char *);
             bstr_xappend(tactx, s, bstr0(arg));
             continue;
         }
