@@ -75,6 +75,9 @@ const char *vk_res_str(VkResult res)
 #ifdef VK_KHX_external_semaphore_fd
     CASE(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHX);
 #endif
+#ifdef VK_EXT_descriptor_indexing
+    CASE(VK_ERROR_FRAGMENTATION_EXT);
+#endif
 
     // Included to satisfy the switch coverage check
     CASE(VK_RESULT_RANGE_SIZE);
