@@ -577,7 +577,7 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
          wg_sum, PL_COLOR_REF_WHITE);
 
     // Have one thread per work group update the global atomics. We use the
-    // work group average even for the global sum, to make the values slightly
+    // work group average even for the global max, to make the values slightly
     // more stable and smooth out tiny super-highlights.
     GLSL("memoryBarrierShared();                                            \n"
          "barrier();                                                        \n"
