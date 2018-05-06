@@ -778,13 +778,17 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     bool use_sigmoid = info.dir == SAMPLER_UP && params->sigmoid_params;
     bool use_linear  = use_sigmoid || info.dir == SAMPLER_DOWN;
 
-    // Hard-disable both sigmoidization and linearization when requested
-    if (params->disable_linear_scaling)
+    // Hard-disable both sigmoidization and linearization when required
+    if (params->disable_linear_scaling || rr->disable_linear_sdr)
         use_sigmoid = use_linear = false;
 
     // Avoid sigmoidization for HDR content because it clips to [0,1]
-    if (pl_color_transfer_is_hdr(img->color.transfer))
+    if (pl_color_transfer_is_hdr(img->color.transfer)) {
         use_sigmoid = false;
+        // Also disable linearization if necessary
+        if (rr->disable_linear_hdr)
+            use_linear = false;
+    }
 
     if (use_linear) {
         pl_shader_linearize(img->sh, img->color.transfer);
