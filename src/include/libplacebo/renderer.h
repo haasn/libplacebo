@@ -360,7 +360,10 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *image,
 
 /* TODO
 
-// Represents a mixture of input images, distributed temporally
+// Represents a mixture of input images, distributed temporally.
+//
+// NOTE: Images must be sorted by timestamp, i.e. `distances` must be
+// monotonically increasing.
 struct pl_image_mix {
     // The number of images in this mixture. The number of images should be
     // sufficient to meet the needs of the configured frame mixer. See the
@@ -371,7 +374,7 @@ struct pl_image_mix {
     // colorspaces, configurations of planes, or even sizes. Note: when using
     // frame mixing, it's absolutely critical that all of the images have
     // a unique value of `pl_image.signature`.
-    struct pl_image *images;
+    const struct pl_image *images;
 
     // A list of relative distance vectors for each image, respectively.
     // Basically, the "current" instant is always assigned a position of 0.0;
@@ -382,16 +385,25 @@ struct pl_image_mix {
     // always have distances like e.g. {-2.3, -1.3, -0.3, 0.7, 1.7, 2.7}, using
     // an example radius of 3.
     //
+    // The interpretation of timestamps is that frames are momentary samples
+    // centered on this timestamp. In other words, in the example above, the
+    // frame with timestamp 0.7 should (theoretically) be visible in the
+    // interval [0.2, 1.2] on a zero-order-hold (nearest neighbour) display.
+    //
     // In cases where the framerate is variable (e.g. VFR video), the choice of
     // what to scale to use can be difficult to answer. A typical choice would
     // be either to use the canonical (container-tagged) framerate, or the
-    // highest momentary framerate, as a reference.
-    float *distances;
+    // highest momentary framerate, as a reference. If all else fails, you
+    // could also use the display's framerate.
+    const float *distances;
 
     // The duration for which the resulting image will be held, using the same
     // scale as the `distance`. This duration is centered around the instant
-    // 0.0. Basically, the image is assumed to be displayed from the time
-    // -vsync_duration/2 up to the time vsync_duration/2.
+    // 0.0. Basically, the image being rendered is assumed to be displayed from
+    // the time -vsync_duration/2 up to the time vsync_duration/2. If the
+    // display has a variable frame-rate (e.g. Adaptive Sync), then you're
+    // better off not using this function and instead just painting the frames
+    // directly using `pl_render_image` as they come in.
     float vsync_duration;
 
     // Explanation of the frame mixing radius: The algorithm chosen in
@@ -403,7 +415,7 @@ struct pl_image_mix {
     // lie outside it.
     //
     // The built-in frame mixing (`pl_render_params.frame_mixing == NULL`) has
-    // a canonical radius equal to vsync_duration/2.
+    // a canonical radius equal to `vsync_duration/2`.
 };
 
 // Render a mixture of images to the target using the given parameters. This
