@@ -37,6 +37,7 @@ struct pl_vk {
 
     // Some additional cached device limits
     uint32_t max_push_descriptors;
+    size_t min_texel_alignment;
 
     // This is a pl_dispatch used (on ourselves!) for the purposes of
     // dispatching compute shaders for performing various emulation tasks
@@ -279,6 +280,14 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     }
 
     vk_setup_formats(gpu);
+
+    // Compute the correct minimum texture alignment
+    p->min_texel_alignment = 1;
+    for (int i = 0; i < gpu->num_formats; i++) {
+        size_t texel_size = gpu->formats[i]->texel_size;
+        p->min_texel_alignment = pl_lcm(p->min_texel_alignment, texel_size);
+    }
+    PL_DEBUG(gpu, "Minimum texel alignment: %zu", p->min_texel_alignment);
 
     // Create the dispatch last, after any setup of `gpu` is done
     p->dp = pl_dispatch_create(vk->ctx, gpu);
@@ -1022,6 +1031,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         bufFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                     VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         memFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        align = pl_lcm(align, p->min_texel_alignment);
         // Use TRANSFER-style updates for large enough buffers for efficiency
         if (params->size > 1024*1024) // 1 MB
             buf_vk->update_queue = TRANSFER;
@@ -1029,28 +1039,28 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     case PL_BUF_UNIFORM:
         bufFlags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
         memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        align = PL_ALIGN2(align, vk->limits.minUniformBufferOffsetAlignment);
+        align = pl_lcm(align, vk->limits.minUniformBufferOffsetAlignment);
         break;
     case PL_BUF_STORAGE:
         bufFlags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        align = PL_ALIGN2(align, vk->limits.minStorageBufferOffsetAlignment);
+        align = pl_lcm(align, vk->limits.minStorageBufferOffsetAlignment);
         buf_vk->update_queue = COMPUTE;
         break;
     case PL_BUF_TEXEL_UNIFORM: // for emulated upload
         bufFlags |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
         bufFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        align = PL_ALIGN2(align, vk->limits.minTexelBufferOffsetAlignment);
-        align = PL_ALIGN2(align, vk->limits.optimalBufferCopyOffsetAlignment);
+        align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
+        align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
         is_texel = true;
         break;
     case PL_BUF_TEXEL_STORAGE: // for emulated download
         bufFlags |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
         bufFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        align = PL_ALIGN2(align, vk->limits.minTexelBufferOffsetAlignment);
-        align = PL_ALIGN2(align, vk->limits.optimalBufferCopyOffsetAlignment);
+        align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
+        align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
         buf_vk->update_queue = COMPUTE;
         is_texel = true;
         break;
@@ -1063,7 +1073,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
 
     if (params->host_writable || params->initial_data) {
         bufFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        align = PL_ALIGN2(align, vk->limits.optimalBufferCopyOffsetAlignment);
+        align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
     }
 
     if (params->host_mapped || params->host_readable) {

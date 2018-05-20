@@ -98,3 +98,20 @@ static inline float *pl_transpose(int dim, float *out, const float *in)
 #define PL_DEF(x, d) ((x) ? (x) : (d))
 #define PL_SQUARE(x) ((x) * (x))
 #define PL_CUBE(x) ((x) * (x) * (x))
+
+// Helpers for doing alignment calculations
+static inline size_t pl_gcd(size_t x, size_t y)
+{
+    while (y) {
+        size_t tmp = y;
+        y = x % y;
+        x = tmp;
+    }
+
+    return x;
+}
+
+static inline size_t pl_lcm(size_t x, size_t y)
+{
+    return x * (y / pl_gcd(x, y));
+}
