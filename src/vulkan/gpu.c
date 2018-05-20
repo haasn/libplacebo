@@ -1497,7 +1497,7 @@ static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
         .bindingCount = num_desc,
     };
 
-    if (num_desc <= p->max_push_descriptors) {
+    if (p->max_push_descriptors && num_desc <= p->max_push_descriptors) {
         dinfo.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
         pass_vk->use_pushd = true;
     } else if (p->max_push_descriptors) {
