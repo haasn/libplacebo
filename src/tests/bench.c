@@ -1,5 +1,5 @@
 #include "tests.h"
-#include "time.h"
+#include <sys/time.h>
 
 #define TEX_SIZE 2048
 #define CUBE_SIZE 64
@@ -117,18 +117,20 @@ static void benchmark(const struct pl_gpu *gpu, const char *name, bench_fn bench
     while (pl_buf_poll(gpu, fbos[0].buf, 1000000000)); // 1 s
 
     // Perform the actual benchmark
-    clock_t start = clock(), stop = {0};
+    struct timeval start = {0}, stop = {0};
     unsigned long frames = 0;
     int index = 0;
 
+    gettimeofday(&start, NULL);
     do {
         frames++;
         run_bench(gpu, dp, &state, src, fbos[index++], bench);
         index %= NUM_FBOS;
-        stop = clock();
-    } while (stop - start < BENCH_DUR * CLOCKS_PER_SEC);
+        gettimeofday(&stop, NULL);
+    } while (stop.tv_sec - start.tv_sec < BENCH_DUR);
 
-    float secs = (float) (stop - start) / CLOCKS_PER_SEC;
+    float secs = (float) (stop.tv_sec - start.tv_sec) +
+                 1e-6 * (stop.tv_usec - start.tv_usec);
     printf("'%s':\t%4lu frames in %1.6f seconds => %2.6f ms/frame (%5.2f FPS)\n",
           name, frames, secs, 1000 * secs / frames, frames / secs);
 
