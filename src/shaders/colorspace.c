@@ -684,16 +684,6 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
              dst.sig_peak, dst.sig_peak);
     }
 
-    // Desaturate the color using a coefficient dependent on the signal level
-    if (params->tone_mapping_desaturate > 0) {
-        GLSL("float luma = %f * dot(%s, color.rgb);                 \n"
-             "float coeff = max(sig - 0.18, 1e-6) / max(sig, 1e-6); \n"
-             "coeff = pow(coeff, %f);                               \n"
-             "color.rgb = mix(color.rgb, vec3(luma), coeff);        \n"
-             "sig = mix(sig, luma, coeff);                          \n",
-             1.0 / dst.sig_peak, luma, 10.0 / params->tone_mapping_desaturate);
-    }
-
     // Store the original signal level for later re-use
     GLSL("float sig_orig = sig;\n");
 
@@ -702,6 +692,18 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
          "sig *= slope;                         \n"
          "sig_peak *= slope;                    \n",
          dst.sig_avg);
+
+    // Desaturate the color using a coefficient dependent on the signal level.
+    // Do this after the brightness adjustment stage to prevent catastrophic
+    // saturation loss on overly bright HDR sources.
+    if (params->tone_mapping_desaturate > 0) {
+        GLSL("float luma = %f * dot(%s, color.rgb);                 \n"
+             "float coeff = max(sig - 0.18, 1e-6) / max(sig, 1e-6); \n"
+             "coeff = pow(coeff, %f);                               \n"
+             "color.rgb = mix(color.rgb, vec3(luma), coeff);        \n"
+             "sig = mix(sig, luma * slope, coeff);                  \n",
+             1.0 / dst.sig_peak, luma, 10.0 / params->tone_mapping_desaturate);
+    }
 
     float param = params->tone_mapping_param;
     switch (params->tone_mapping_algo) {
