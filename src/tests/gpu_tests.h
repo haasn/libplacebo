@@ -66,7 +66,6 @@ static void pl_texture_tests(const struct pl_gpu *gpu)
     }
 }
 
-
 static void pl_shader_tests(const struct pl_gpu *gpu)
 {
     if (gpu->glsl.version < 410)

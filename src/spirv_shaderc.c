@@ -149,6 +149,7 @@ static bool shaderc_compile(struct spirv_compiler *spirv, void *tactx,
 
     if (success) {
         void *bytes = (void *) shaderc_result_get_bytes(res);
+        pl_assert(bytes);
         out_spirv->len = shaderc_result_get_length(res);
         out_spirv->start = talloc_memdup(tactx, bytes, out_spirv->len);
     }
