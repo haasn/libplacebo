@@ -568,11 +568,21 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
         gpu ? gpu->limits.max_tex_3d_dim : 0,
     };
 
+    // Try picking the right number of dimensions for the texture LUT. This
+    // allows e.g. falling back to 2D textures if 1D textures are unsupported.
     for (int d = dims; d <= PL_ARRAY_SIZE(max_tex_dim); d++) {
-        if (size <= max_tex_dim[d - 1]) {
-            texdim = d;
-            break;
+        // For a given dimension to be compatible, all coordinates need to be
+        // within the maximum texture size for that dimension
+        for (int i = 0; i < d; i++) {
+            if (sizes[i] > max_tex_dim[d - 1])
+                goto next_dim;
         }
+
+        // All dimensions are compatible, so pick this texture dimension
+        texdim = d;
+        break;
+
+next_dim: ; // `continue` out of the inner loop
     }
 
     struct sh_lut_obj *lut = SH_OBJ(sh, obj, PL_SHADER_OBJ_LUT,
