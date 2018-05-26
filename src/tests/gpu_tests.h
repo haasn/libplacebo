@@ -232,6 +232,26 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         }
     }
 
+#if PL_HAVE_LCMS
+    // Test the use of 3DLUTs if available
+    pl_dispatch_reset_frame(dp);
+    struct pl_shader *sh = pl_dispatch_begin(dp);
+    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+
+    struct pl_shader_obj *lut3d = NULL;
+    struct pl_3dlut_profile src_color = { .color = pl_color_space_bt709 };
+    struct pl_3dlut_profile dst_color = { .color = pl_color_space_srgb };
+    struct pl_3dlut_result out;
+
+    if (pl_3dlut_update(sh, &src_color, &dst_color, &lut3d, &out, NULL)) {
+        pl_3dlut_apply(sh, &lut3d);
+        REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
+    }
+
+    pl_dispatch_abort(dp, &sh);
+    pl_shader_obj_destroy(&lut3d);
+#endif
+
     pl_dispatch_destroy(&dp);
     pl_tex_destroy(gpu, &src);
     pl_tex_destroy(gpu, &fbo);
