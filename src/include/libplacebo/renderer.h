@@ -101,6 +101,10 @@ struct pl_render_params {
     // as NULL disables dithering.
     const struct pl_dither_params *dither_params;
 
+    // Configures the settings used to generate a 3DLUT, if required. If NULL,
+    // defaults to `&pl_3dlut_default_params`.
+    const struct pl_3dlut_params *lut3d_params;
+
     // --- Performance / quality trade-off options:
     // These should generally be left off where quality is desired, as they can
     // degrade the result quite noticeably; but may be useful for older or
@@ -156,6 +160,11 @@ struct pl_render_params {
     // disables the more efficient implementations in favor of the slower,
     // general-purpose ones.
     bool disable_builtin_scalers;
+
+    // Forces the use of a 3DLUT, even in cases where the use of one is
+    // unnecessary. This is slower, but may improve the quality of the gamut
+    // reduction step, if one is performed.
+    bool force_3dlut;
 };
 
 // This contains the default/recommended options for reasonable image quality,
@@ -275,9 +284,12 @@ struct pl_image {
     int num_planes;
     struct pl_plane planes[PL_MAX_PLANES];
 
-    // Color representation / encoding / semantics associated with this image
+    // Color representation / encoding / semantics associated with this image.
     struct pl_color_repr repr;
     struct pl_color_space color;
+
+    // Optional ICC profile associated with this image.
+    struct pl_icc_profile profile;
 
     // The reference dimensions of this image. For typical content, this is the
     // dimensions of the largest (non-subsampled) plane, e.g. luma. Note that
@@ -337,6 +349,9 @@ struct pl_render_target {
     // automatically.
     struct pl_color_repr repr;
     struct pl_color_space color;
+
+    // Optional ICC profile associated with this render target.
+    struct pl_icc_profile profile;
 
     // A list of additional overlays to render directly onto the output. These
     // overlays will be rendered after the image itself has been fully scaled

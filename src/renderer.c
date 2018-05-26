@@ -72,10 +72,12 @@ struct pl_renderer {
     bool disable_linear_sdr; // disable linear scaling for SDR signals
     bool disable_blending;   // disable blending for the target/fbofmt
     bool disable_overlay;    // disable rendering overlays
+    bool disable_3dlut;      // disable usage of a 3DLUT
 
     // Shader resource objects and intermediate textures (FBOs)
     struct pl_shader_obj *peak_detect_state;
     struct pl_shader_obj *dither_state;
+    struct pl_shader_obj *lut3d_state;
     const struct pl_tex *main_scale_fbo;
     const struct pl_tex *deband_fbos[PLANE_COUNT];
     struct sampler samplers[SCALER_COUNT];
@@ -175,6 +177,7 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
     pl_shader_obj_destroy(&rr->dither_state);
+    pl_shader_obj_destroy(&rr->lut3d_state);
 
     // Free all samplers
     for (int i = 0; i < PL_ARRAY_SIZE(rr->samplers); i++)
@@ -824,15 +827,69 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
 }
 
 static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
+                               const struct pl_image *image,
                                const struct pl_render_target *target,
                                const struct pl_render_params *params)
 {
     const struct pl_tex *fbo = target->fbo;
+    struct pl_shader *sh = pass->cur_img.sh;
 
     // Color management
-    struct pl_shader *sh = pass->cur_img.sh;
-    pl_shader_color_map(sh, params->color_map_params, pass->cur_img.color,
-                        target->color, &rr->peak_detect_state, false);
+    bool use_3dlut = image->profile.data || target->profile.data ||
+                     params->force_3dlut;
+    if (rr->disable_3dlut)
+        use_3dlut = false;
+
+#if PL_HAVE_LCMS
+
+    if (use_3dlut) {
+        struct pl_3dlut_profile src = {
+            .color = pass->cur_img.color,
+            .profile = image->profile,
+        };
+
+        struct pl_3dlut_profile dst = {
+            .color = target->color,
+            .profile = target->profile,
+        };
+
+        struct pl_3dlut_result res;
+        bool ok = pl_3dlut_update(sh, &src, &dst, &rr->lut3d_state, &res,
+                                  params->lut3d_params);
+        if (!ok) {
+            rr->disable_3dlut = true;
+            use_3dlut = false;
+            goto fallback;
+        }
+
+        // current -> 3DLUT in
+        pl_shader_color_map(sh, params->color_map_params, pass->cur_img.color,
+                            res.src_color, &rr->peak_detect_state, false);
+        // 3DLUT in -> 3DLUT out
+        pl_3dlut_apply(sh, &rr->lut3d_state);
+        // 3DLUT out -> target
+        pl_shader_color_map(sh, params->color_map_params, res.dst_color,
+                            target->color, &rr->peak_detect_state, false);
+    }
+
+#else // PL_HAVE_LCMS
+
+    if (use_3dlut) {
+        PL_WARN(rr, "An ICC profile was set, but libplacebo is built without "
+                "support for LittleCMS! Disabling..");
+        rr->disable_3dlut = true;
+        use_3dlut = false;
+    }
+
+#endif // !PL_HAVE_LCMS
+
+fallback:
+    if (!use_3dlut) {
+        // current -> target
+        pl_shader_color_map(sh, params->color_map_params, pass->cur_img.color,
+                            target->color, &rr->peak_detect_state, false);
+    }
+
     pl_shader_encode_color(sh, &target->repr);
 
     // FIXME: Technically we should try dithering before bit shifting if we're
@@ -919,7 +976,7 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     if (!pass_scale_main(rr, &pass, &image, &target, params))
         goto error;
 
-    if (!pass_output_target(rr, &pass, &target, params))
+    if (!pass_output_target(rr, &pass, &image, &target, params))
         goto error;
 
     // If we don't have FBOs available, simulate the on-image overlays at
