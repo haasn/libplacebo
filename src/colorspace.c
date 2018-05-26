@@ -289,13 +289,14 @@ void pl_color_space_merge(struct pl_color_space *orig,
         orig->sig_avg = new->sig_avg;
 }
 
-bool pl_color_space_equal(struct pl_color_space c1, struct pl_color_space c2)
+bool pl_color_space_equal(const struct pl_color_space *c1,
+                          const struct pl_color_space *c2)
 {
-    return c1.primaries == c2.primaries &&
-           c1.transfer  == c2.transfer &&
-           c1.light     == c2.light &&
-           c1.sig_peak  == c2.sig_peak &&
-           c1.sig_avg  == c2.sig_avg;
+    return c1->primaries == c2->primaries &&
+           c1->transfer  == c2->transfer &&
+           c1->light     == c2->light &&
+           c1->sig_peak  == c2->sig_peak &&
+           c1->sig_avg   == c2->sig_avg;
 }
 
 // Average light level for SDR signals. This is equal to a signal level of 0.5

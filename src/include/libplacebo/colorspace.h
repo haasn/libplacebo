@@ -237,7 +237,8 @@ void pl_color_space_merge(struct pl_color_space *orig,
                           const struct pl_color_space *new);
 
 // Returns whether two colorspaces are exactly identical.
-bool pl_color_space_equal(struct pl_color_space c1, struct pl_color_space c2);
+bool pl_color_space_equal(const struct pl_color_space *c1,
+                          const struct pl_color_space *c2);
 
 // Go through a color-space and explicitly default all unknown fields to
 // reasonable values. After this function is called, none of the values will be
