@@ -73,7 +73,7 @@ tests = [
 # [ name, dependency, extra_sources, extra_tests ]
 components = [
   [ 'lcms',
-    cc.find_library('lcms2', version: '>=2.6', required: false),
+    dependency('lcms2', version: '>=2.6', required: false),
     [ 'lcms.c' ],
   ], [
     'shaderc',
