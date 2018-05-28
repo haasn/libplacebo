@@ -17,6 +17,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
 #include <SDL2/SDL_image.h>
@@ -43,6 +48,50 @@ const struct pl_tex *osd_tex;
 struct pl_plane img_plane;
 struct pl_plane osd_plane;
 struct pl_renderer *renderer;
+struct file icc_profile;
+
+struct file
+{
+    int fd;
+    void *data;
+    size_t size;
+};
+
+static bool open_file(const char *path, struct file *out)
+{
+    int fd = open(path, O_RDONLY);
+    if (fd < 0)
+        return false;
+
+    struct stat st;
+    if (fstat(fd, &st) < 0) {
+        close(fd);
+        return false;
+    }
+
+    void *data = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+    if (data == MAP_FAILED) {
+        close(fd);
+        return false;
+    }
+
+    *out = (struct file) {
+        .fd = fd,
+        .data = data,
+        .size = st.st_size,
+    };
+    return true;
+}
+
+static void close_file(struct file *file)
+{
+    if (!file->data)
+        return;
+
+    munmap(file->data, file->size);
+    close(file->fd);
+    *file = (struct file) {0};
+}
 
 static void uninit()
 {
@@ -54,6 +103,7 @@ static void uninit()
     vkDestroySurfaceKHR(vk_inst->instance, surf, NULL);
     pl_vk_inst_destroy(&vk_inst);
     pl_context_destroy(&ctx);
+    close_file(&icc_profile);
 
     SDL_DestroyWindow(window);
     SDL_Quit();
@@ -185,7 +235,7 @@ static bool upload_plane(const char *filename, const struct pl_tex **tex,
     return ok;
 }
 
-static void init_rendering(const char *img, const char *osd)
+static void init_rendering(const char *img, const char *osd, const char *icc)
 {
     if (!upload_plane(img, &img_tex, &img_plane)) {
         fprintf(stderr, "Failed uploading image plane!\n");
@@ -194,6 +244,9 @@ static void init_rendering(const char *img, const char *osd)
 
     if (!upload_plane(osd, &osd_tex, &osd_plane))
         fprintf(stderr, "Failed uploading OSD plane.. continuing anyway\n");
+
+    if (!open_file(icc, &icc_profile))
+        fprintf(stderr, "Failed opening ICC profile.. continuing anyway\n");
 
     // Create a renderer instance
     renderer = pl_renderer_create(ctx, vk->gpu);
@@ -220,6 +273,10 @@ static void render_frame(const struct pl_swapchain_frame *frame)
 
     struct pl_render_target target;
     pl_render_target_from_swapchain(&target, frame);
+    target.profile = (struct pl_icc_profile) {
+        .data = icc_profile.data,
+        .len = icc_profile.size,
+    };
 
     const struct pl_tex *osd = osd_plane.texture;
     if (osd) {
@@ -242,8 +299,8 @@ static void render_frame(const struct pl_swapchain_frame *frame)
 
 int main(int argc, char **argv)
 {
-    if (argc < 2 || argc > 3) {
-        fprintf(stderr, "Usage: ./sdl2 <image> [<overlay>]\n");
+    if (argc < 2 || argc > 4) {
+        fprintf(stderr, "Usage: ./sdl2 <image> [<overlay>] [<icc profile>]\n");
         return 255;
     }
 
@@ -253,7 +310,7 @@ int main(int argc, char **argv)
     init_sdl();
     init_placebo();
     init_vulkan();
-    init_rendering(argv[1], argc > 2 ? argv[2] : NULL);
+    init_rendering(argv[1], argc > 2 ? argv[2] : NULL, argc > 3 ? argv[3] : NULL);
 
     // Resize the window to match the content
     const struct pl_tex *img = img_plane.texture;
