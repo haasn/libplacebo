@@ -872,7 +872,9 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
                             target->color, &rr->peak_detect_state, false);
     }
 
-#else // PL_HAVE_LCMS
+fallback:
+
+#else // !PL_HAVE_LCMS
 
     if (use_3dlut) {
         PL_WARN(rr, "An ICC profile was set, but libplacebo is built without "
@@ -881,9 +883,8 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
         use_3dlut = false;
     }
 
-#endif // !PL_HAVE_LCMS
+#endif
 
-fallback:
     if (!use_3dlut) {
         // current -> target
         pl_shader_color_map(sh, params->color_map_params, pass->cur_img.color,
