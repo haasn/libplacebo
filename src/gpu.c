@@ -1100,7 +1100,7 @@ void pl_buf_pool_uninit(const struct pl_gpu *gpu, struct pl_buf_pool *pool)
         pl_buf_destroy(gpu, &pool->buffers[i]);
 
     talloc_free(pool->buffers);
-    *pool = (struct pl_buf_pool){0};
+    *pool = (struct pl_buf_pool) {0};
 }
 
 static bool pl_buf_params_compatible(const struct pl_buf_params *new,
