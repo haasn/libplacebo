@@ -379,7 +379,7 @@ struct pl_buf_params {
 // vertex buffers, is designed to be completely fine.
 struct pl_buf {
     struct pl_buf_params params;
-    char *data; // for persistently mapped buffers, points to the first byte
+    uint8_t *data; // for persistently mapped buffers, points to the first byte
     void *priv;
 };
 
