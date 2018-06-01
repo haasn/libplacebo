@@ -119,6 +119,13 @@ next_fmt: ; // acts as `continue`
 bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
                      const struct pl_tex **tex, const struct pl_plane_data *data)
 {
+    pl_assert(!data->buf ^ !data->pixels); // exactly one
+
+    if (data->buf) {
+        pl_assert(data->buf_offset == PL_ALIGN2(data->buf_offset, 4));
+        pl_assert(data->buf_offset == PL_ALIGN(data->buf_offset, data->pixel_stride));
+    }
+
     size_t row_stride = PL_DEF(data->row_stride, data->pixel_stride * data->width);
     unsigned int stride_texels = row_stride / data->pixel_stride;
     if (stride_texels * data->pixel_stride != row_stride) {
@@ -161,8 +168,10 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
     }
 
     return pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
-        .tex      = *tex,
-        .stride_w = stride_texels,
-        .ptr      = (void *) data->pixels,
+        .tex        = *tex,
+        .stride_w   = stride_texels,
+        .ptr        = (void *) data->pixels,
+        .buf        = data->buf,
+        .buf_offset = data->buf_offset,
     });
 }

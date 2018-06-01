@@ -36,7 +36,18 @@ struct pl_plane_data {
     int component_map[4];  // semantic meaning of each component (pixel order)
     size_t pixel_stride;   // offset in bytes between pixels (required)
     size_t row_stride;     // offset in bytes between rows (optional)
+
+    // Similar to `pl_tex_transfer_params`, you can either upload from a raw
+    // pointer address, or a buffer + offset. Again, the use of these two
+    // mechanisms is mutually exclusive.
+    //
+    // 1. Uploading from host memory
     const void *pixels;    // the actual data underlying this plane
+
+    // 2. Uploading from a buffer
+    const struct pl_buf *buf;   // the buffer to use (type must be PL_BUF_TEX_TRANSFER)
+    size_t buf_offset;          // offset of data within buffer, must be a
+                                // multiple of `pixel_stride` as well as of 4
 
     // Note: When using this together with `pl_image`, there is some amount of
     // overlap between `component_pad` and `pl_color_repr.bits`. Some key
