@@ -104,12 +104,29 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
     };
 
+    // Enumerate all supported extensions
+    uint32_t num_exts_avail = 0;
+    vkEnumerateInstanceExtensionProperties(NULL, &num_exts_avail, NULL);
+    VkExtensionProperties *exts_avail = talloc_array(tmp, VkExtensionProperties, num_exts_avail);
+    vkEnumerateInstanceExtensionProperties(NULL, &num_exts_avail, exts_avail);
+
     // Add mandatory extensions
     TARRAY_APPEND(tmp, exts, num_exts, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
     // Add extra user extensions
     for (int i = 0; i < params->num_extensions; i++)
         TARRAY_APPEND(tmp, exts, num_exts, params->extensions[i]);
+
+    // Add extra optional user extensions
+    for (int i = 0; i < params->num_opt_extensions; i++) {
+        const char *ext = params->opt_extensions[i];
+        for (int n = 0; n < num_exts_avail; n++) {
+            if (strcmp(ext, exts_avail[n].extensionName) == 0) {
+                TARRAY_APPEND(tmp, exts, num_exts, ext);
+                break;
+            }
+        }
+    }
 
     if (params->debug) {
         pl_info(ctx, "Enabling vulkan debug layers");
@@ -155,11 +172,16 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
         vkCreateDebugReportCallbackEXT(inst, &dinfo, VK_ALLOC, &debug);
     }
 
-    talloc_free(tmp);
-    return talloc_struct(NULL, struct pl_vk_inst, {
+    struct pl_vk_inst *pl_vk = talloc_struct(NULL, struct pl_vk_inst, {
         .instance = inst,
         .priv = (uint64_t) debug,
+        .extensions = exts,
+        .num_extensions = num_exts,
     });
+
+    pl_vk->extensions = talloc_steal(pl_vk, pl_vk->extensions);
+    talloc_free(tmp);
+    return pl_vk;
 
 error:
     pl_fatal(ctx, "Failed initializing vulkan instance");
@@ -395,16 +417,16 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     add_qinfo(tmp, &qinfos, &num_qinfos, qfs, idx_tf, params->queue_count);
 
     // Enumerate all supported extensions
-    int num_exts_avail = 0;
+    uint32_t num_exts_avail = 0;
     VK(vkEnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, NULL));
     VkExtensionProperties *exts_avail = talloc_array(tmp, VkExtensionProperties, num_exts_avail);
     VK(vkEnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, exts_avail));
 
     // Add all extensions we need
-    const char **exts = NULL;
-    int num_exts = 0;
+    const char ***exts = &vk->exts;
+    int *num_exts = &vk->num_exts;
     if (params->surface)
-        TARRAY_APPEND(tmp, exts, num_exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        TARRAY_APPEND(vk, *exts, *num_exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
     // Add all extensions we can benefit from, and remember their functions
     const struct vk_ext_fun **ext_funs = NULL;
@@ -413,7 +435,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         const struct vk_ext *ext = &vk_device_extensions[i];
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext->name, exts_avail[n].extensionName) == 0) {
-                TARRAY_APPEND(tmp, exts, num_exts, ext->name);
+                TARRAY_APPEND(vk, *exts, *num_exts, ext->name);
                 for (const struct vk_ext_fun *f = ext->funs; f->name; f++)
                     TARRAY_APPEND(tmp, ext_funs, num_ext_funs, f);
                 break;
@@ -423,7 +445,18 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     // Add extra user extensions
     for (int i = 0; i < params->num_extensions; i++)
-        TARRAY_APPEND(tmp, exts, num_exts, params->extensions[i]);
+        TARRAY_APPEND(vk, *exts, *num_exts, params->extensions[i]);
+
+    // Add optional extra user extensions
+    for (int i = 0; i < params->num_opt_extensions; i++) {
+        const char *ext = params->opt_extensions[i];
+        for (int n = 0; n < num_exts_avail; n++) {
+            if (strcmp(ext, exts_avail[n].extensionName) == 0) {
+                TARRAY_APPEND(vk, *exts, *num_exts, ext);
+                break;
+            }
+        }
+    }
 
     // Enable all features that we might need (whitelisted)
     vkGetPhysicalDeviceFeatures(vk->physd, &vk->features);
@@ -438,14 +471,14 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pQueueCreateInfos = qinfos,
         .queueCreateInfoCount = num_qinfos,
-        .ppEnabledExtensionNames = exts,
-        .enabledExtensionCount = num_exts,
+        .ppEnabledExtensionNames = *exts,
+        .enabledExtensionCount = *num_exts,
         .pEnabledFeatures = &vk->features,
     };
 
-    PL_INFO(vk, "Creating vulkan device%s", num_exts ? " with extensions:" : "");
-    for (int i = 0; i < num_exts; i++)
-        PL_INFO(vk, "    %s", exts[i]);
+    PL_INFO(vk, "Creating vulkan device%s", *num_exts ? " with extensions:" : "");
+    for (int i = 0; i < *num_exts; i++)
+        PL_INFO(vk, "    %s", *exts[i]);
 
     VK(vkCreateDevice(vk->physd, &dinfo, VK_ALLOC, &vk->dev));
 
@@ -535,6 +568,8 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     pl_vk->instance = vk->inst;
     pl_vk->phys_device = vk->physd;
     pl_vk->device = vk->dev;
+    pl_vk->extensions = vk->exts;
+    pl_vk->num_extensions = vk->num_exts;
     return pl_vk;
 
 error:

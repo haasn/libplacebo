@@ -46,6 +46,10 @@ struct vk_ctx {
     VkPhysicalDeviceFeatures features;
     VkDevice dev;
 
+    // Enabled extensions
+    const char **exts;
+    int num_exts;
+
     struct vk_cmdpool **pools;    // command pools (one per queue family)
     int num_pools;
 

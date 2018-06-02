@@ -26,6 +26,11 @@
 struct pl_vk_inst {
     VkInstance instance;
     uint64_t priv;
+
+    // The instance extensions that were successfully enabled, including
+    // extensions enabled by libplacebo internally. May contain duplicates.
+    const char **extensions;
+    int num_extensions;
 };
 
 struct pl_vk_inst_params {
@@ -37,6 +42,11 @@ struct pl_vk_inst_params {
     // windowing system integration.
     const char **extensions;
     int num_extensions;
+
+    // Enables extra optional instance extensions. These are opportunistically
+    // enabled if supported by the device, but otherwise skipped.
+    const char **opt_extensions;
+    int num_opt_extensions;
 };
 
 extern const struct pl_vk_inst_params pl_vk_inst_default_params;
@@ -63,6 +73,11 @@ struct pl_vulkan {
     VkInstance instance;
     VkPhysicalDevice phys_device;
     VkDevice device;
+
+    // The device extensions that were successfully enabled, including
+    // extensions enabled by libplacebo internally. May contain duplicates.
+    const char **extensions;
+    int num_extensions;
 };
 
 struct pl_vulkan_params {
@@ -124,6 +139,11 @@ struct pl_vulkan_params {
     // interop extensions.
     const char **extensions;
     int num_extensions;
+
+    // Enables extra optional device extensions. These are opportunistically
+    // enabled if supported by the device, but otherwise skipped.
+    const char **opt_extensions;
+    int num_opt_extensions;
 };
 
 // Default/recommended parameters. Should generally be safe and efficient.
