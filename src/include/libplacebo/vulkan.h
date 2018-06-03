@@ -78,6 +78,17 @@ struct pl_vulkan {
     // extensions enabled by libplacebo internally. May contain duplicates.
     const char **extensions;
     int num_extensions;
+
+    // The list of enabled queue families and their queue counts. This may
+    // include secondary queue families providing compute or transfer
+    // capabilities.
+    const struct pl_vulkan_queue *queues;
+    int num_queues;
+};
+
+struct pl_vulkan_queue {
+    int index; // Queue family index
+    int count; // Queue family count
 };
 
 struct pl_vulkan_params {
@@ -199,5 +210,52 @@ struct pl_vulkan_swapchain_params {
 // the `pl_vulkan_params.surface` explicitly at creation time.
 const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *vk,
                               const struct pl_vulkan_swapchain_params *params);
+
+// VkImage interop API
+
+// Wraps an external VkImage into a pl_tex abstraction. By default, the image
+// is considered "held" by the user and will not be touched or used by
+// libplacebo until released (see `pl_vulkan_release`). Releasing an image
+// makes libplacebo take ownership of the image until the user calls
+// `pl_vulkan_hold` on it again. During this time, the user should not use
+// the VkImage in any way.
+//
+// This wrapper can be destroyed by simply calling `pl_tex_destroy` on it,
+// which will not destroy the underlying VkImage. If a pl_tex wrapper is
+// destroyed while an image is not currently being held by the user, that
+// image is left in an undefined state.
+//
+// Wrapping the same VkImage multiple times is undefined behavior, as is trying
+// to wrap an image belonging to a different VkDevice than the one in use by
+// `gpu`.
+//
+// The VkImage must be usable concurrently by all of the queue family indices
+// listed in `pl_vulkan->queues`. Note that this requires the use of
+// VK_SHARING_MODE_CONCURRENT if `pl_vulkan->num_queues` is greater than 1. If
+// this is difficult to achieve for the user, then `async_transfer` /
+// `async_compute` should be turned off, which guarantees the use of only one
+// queue family.
+//
+// This function may fail, for example if the VkFormat specified does not
+// map to any corresponding `pl_fmt`.
+const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
+                                    VkImage image, int w, int h, int d,
+                                    VkFormat format, VkImageUsageFlags usage);
+
+// "Hold" an external image. This will transition the image into the layout and
+// access mode specified by the user, and fire the given semaphore when this is
+// done. This marks the image as held. Attempting to perform any pl_tex_*
+// operation (except pl_tex_destroy) on a held image is undefined behavior.
+void pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                    VkImageLayout layout, VkAccessFlags access,
+                    VkSemaphore sem_out);
+
+// "Release" an external image. `layout` and `access` describe the current
+// state of the image at the point in time when the user is releasing it. If
+// `sem_in` is specified, it must fire before libplacebo will actually use or
+// modify the image.
+void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                       VkImageLayout layout, VkAccessFlags access,
+                       VkSemaphore sem_in);
 
 #endif // LIBPLACEBO_VULKAN_H_

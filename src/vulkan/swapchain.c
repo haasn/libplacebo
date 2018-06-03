@@ -375,7 +375,9 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw)
     p->num_images = num_images;
     TARRAY_GROW(p, p->images, num_images);
     for (int i = 0; i < num_images; i++) {
-        p->images[i] = pl_vk_wrap_swimg(gpu, vkimages[i], sinfo);
+        const VkExtent2D *ext = &sinfo.imageExtent;
+        p->images[i] = pl_vulkan_wrap(gpu, vkimages[i], ext->width, ext->height,
+                                      0, sinfo.imageFormat, sinfo.imageUsage);
         if (!p->images[i])
             goto error;
     }
@@ -424,13 +426,14 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
         switch (res) {
         case VK_SUCCESS:
             p->last_imgidx = imgidx;
+            pl_vulkan_release(sw->gpu, p->images[imgidx],
+                              VK_IMAGE_LAYOUT_UNDEFINED, 0, sem_in);
             *out_frame = (struct pl_swapchain_frame) {
                 .fbo = p->images[imgidx],
                 .flipped = false,
                 .color_repr = p->color_repr,
                 .color_space = p->color_space,
             };
-            pl_tex_vk_external_dep(sw->gpu, out_frame->fbo, sem_in);
             return true;
 
         case VK_ERROR_OUT_OF_DATE_KHR: {
@@ -464,13 +467,16 @@ static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
     if (!p->swapchain)
         return false;
 
-    struct vk_cmd *cmd = pl_vk_finish_frame(gpu, p->images[p->last_imgidx]);
-    if (!cmd)
-        return false;
-
     VkSemaphore sem_out = p->sems_out[p->idx_sems++];
     p->idx_sems %= p->num_sems;
-    vk_cmd_sig(cmd, sem_out);
+
+    pl_vulkan_hold(gpu, p->images[p->last_imgidx],
+                   VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                   VK_ACCESS_MEMORY_READ_BIT, sem_out);
+
+    struct vk_cmd *cmd = pl_vk_steal_cmd(gpu);
+    if (!cmd)
+        return false;
 
     p->frames_in_flight++;
     vk_cmd_callback(cmd, (vk_cb) present_cb, p, NULL);

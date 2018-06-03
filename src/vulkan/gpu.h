@@ -28,20 +28,12 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk);
 // a vulkan ra.
 struct vk_ctx *pl_vk_get(const struct pl_gpu *gpu);
 
-// Allocates a pl_tex that wraps a swapchain image. The contents of the image
-// will be invalidated, and access to it will only be internally synchronized.
-// So the calling could should not do anything else with the VkImage.
-const struct pl_tex *pl_vk_wrap_swimg(const struct pl_gpu *gpu, VkImage vkimg,
-                                      VkSwapchainCreateInfoKHR info);
-
 // Associates an external semaphore (dependency) with a pl_tex, such that this
 // pl_tex will not be used by the pl_vk until the external semaphore fires.
 void pl_tex_vk_external_dep(const struct pl_gpu *gpu, const struct pl_tex *tex,
                             VkSemaphore external_dep);
 
-// This function finalizes rendering, transitions `tex` (which must be a
-// wrapped swapchain image) into a format suitable for presentation, and returns
-// the resulting command buffer (or NULL on error). The caller may add their
-// own semaphores to this command buffer, and must submit it afterwards.
-struct vk_cmd *pl_vk_finish_frame(const struct pl_gpu *gpu,
-                                  const struct pl_tex *tex);
+// This function takes the current graphics command and steals it from the
+// GPU, so the caller can do custom vk_cmd_ calls on it. The caller should
+// submit it as well.
+struct vk_cmd *pl_vk_steal_cmd(const struct pl_gpu *gpu);

@@ -570,6 +570,16 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     pl_vk->device = vk->dev;
     pl_vk->extensions = vk->exts;
     pl_vk->num_extensions = vk->num_exts;
+    pl_vk->num_queues = vk->num_pools;
+    pl_vk->queues = talloc_array(pl_vk, struct pl_vulkan_queue, vk->num_pools);
+    for (int i = 0; i < vk->num_pools; i++) {
+        struct pl_vulkan_queue *queues = (struct pl_vulkan_queue *) pl_vk->queues;
+        queues[i] = (struct pl_vulkan_queue) {
+            .index = vk->pools[i]->qf,
+            .count = vk->pools[i]->num_queues,
+        };
+    }
+
     return pl_vk;
 
 error:

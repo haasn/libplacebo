@@ -338,6 +338,7 @@ static VkResult vk_create_render_pass(VkDevice dev, const struct pl_fmt *fmt,
 
 // For pl_tex.priv
 struct pl_tex_vk {
+    bool held;
     bool external_img;
     bool may_invalidate;
     enum queue_type transfer_queue;
@@ -369,6 +370,9 @@ struct pl_tex_vk {
 void pl_tex_vk_external_dep(const struct pl_gpu *gpu, const struct pl_tex *tex,
                             VkSemaphore external_dep)
 {
+    if (!external_dep)
+        return;
+
     struct pl_tex_vk *tex_vk = tex->priv;
     TARRAY_APPEND(tex_vk, tex_vk->ext_deps, tex_vk->num_ext_deps, external_dep);
 }
@@ -381,6 +385,7 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 {
     struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_tex_vk *tex_vk = tex->priv;
+    assert(!tex_vk->held);
 
     for (int i = 0; i < tex_vk->num_ext_deps; i++)
         vk_cmd_dep(cmd, tex_vk->ext_deps[i], stage);
@@ -843,44 +848,48 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
     tex_signal(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT);
 }
 
-const struct pl_tex *pl_vk_wrap_swimg(const struct pl_gpu *gpu, VkImage vkimg,
-                                      VkSwapchainCreateInfoKHR info)
+const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
+                                    VkImage image, int w, int h, int d,
+                                    VkFormat imageFormat,
+                                    VkImageUsageFlags imageUsage)
 {
     struct pl_tex *tex = NULL;
 
     const struct pl_fmt *format = NULL;
     for (int i = 0; i < gpu->num_formats; i++) {
         const struct vk_format *fmt = gpu->formats[i]->priv;
-        if (fmt->ifmt == info.imageFormat) {
+        if (fmt->ifmt == imageFormat) {
             format = gpu->formats[i];
             break;
         }
     }
 
     if (!format) {
-        PL_ERR(gpu, "Could not find pl_fmt suitable for wrapped swchain image "
-               "with surface format 0x%x\n", (unsigned) info.imageFormat);
+        PL_ERR(gpu, "Could not find pl_fmt suitable for wrapped image "
+               "with VkFormat 0x%x\n", (unsigned) imageFormat);
         goto error;
     }
 
     tex = talloc_zero(NULL, struct pl_tex);
     tex->params = (struct pl_tex_params) {
         .format = format,
-        .w = info.imageExtent.width,
-        .h = info.imageExtent.height,
-        .sampleable  = !!(info.imageUsage & VK_IMAGE_USAGE_SAMPLED_BIT),
-        .renderable  = !!(info.imageUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
-        .storable    = !!(info.imageUsage & VK_IMAGE_USAGE_STORAGE_BIT),
-        .blit_src    = !!(info.imageUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
-        .blit_dst    = !!(info.imageUsage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
-        .host_writable = !!(info.imageUsage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
-        .host_readable = !!(info.imageUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
+        .w = w,
+        .h = h,
+        .d = d,
+        .sampleable  = !!(imageUsage & VK_IMAGE_USAGE_SAMPLED_BIT),
+        .renderable  = !!(imageUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
+        .storable    = !!(imageUsage & VK_IMAGE_USAGE_STORAGE_BIT),
+        .blit_src    = !!(imageUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
+        .blit_dst    = !!(imageUsage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
+        .host_writable = !!(imageUsage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
+        .host_readable = !!(imageUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
     };
 
     struct pl_tex_vk *tex_vk = tex->priv = talloc_zero(tex, struct pl_tex_vk);
     tex_vk->type = VK_IMAGE_TYPE_2D;
     tex_vk->external_img = true;
-    tex_vk->img = vkimg;
+    tex_vk->held = true;
+    tex_vk->img = image;
 
     if (!vk_init_image(gpu, tex))
         goto error;
@@ -890,6 +899,41 @@ const struct pl_tex *pl_vk_wrap_swimg(const struct pl_gpu *gpu, VkImage vkimg,
 error:
     vk_tex_destroy(gpu, tex);
     return NULL;
+}
+
+void pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                    VkImageLayout layout, VkAccessFlags access,
+                    VkSemaphore sem_out)
+{
+    struct pl_tex_vk *tex_vk = tex->priv;
+    pl_assert(tex_vk->external_img);
+    pl_assert(!tex_vk->held);
+    pl_assert(sem_out);
+
+    struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
+    if (!cmd) {
+        PL_ERR(gpu, "Failed holding external image!");
+        return;
+    }
+
+    tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                access, layout);
+    vk_cmd_sig(cmd, sem_out);
+    pl_gpu_flush(gpu);
+    tex_vk->held = true;
+}
+
+void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                       VkImageLayout layout, VkAccessFlags access,
+                       VkSemaphore sem_in)
+{
+    struct pl_tex_vk *tex_vk = tex->priv;
+    pl_assert(tex_vk->held);
+    pl_tex_vk_external_dep(gpu, tex, sem_in);
+
+    tex_vk->current_layout = layout;
+    tex_vk->current_access = access;
+    tex_vk->held = false;
 }
 
 // For pl_buf.priv
@@ -2173,20 +2217,10 @@ static void vk_gpu_flush(const struct pl_gpu *gpu)
     vk_flush_commands(vk);
 }
 
-struct vk_cmd *pl_vk_finish_frame(const struct pl_gpu *gpu,
-                                  const struct pl_tex *tex)
+struct vk_cmd *pl_vk_steal_cmd(const struct pl_gpu *gpu)
 {
     struct pl_vk *p = gpu->priv;
     struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
-    if (!cmd)
-        return NULL;
-
-    struct pl_tex_vk *tex_vk = tex->priv;
-    pl_assert(tex_vk->external_img);
-    tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-
-    // Return this directly instead of going through vk_submit
     p->cmd = NULL;
     return cmd;
 }
