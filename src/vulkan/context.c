@@ -478,7 +478,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     PL_INFO(vk, "Creating vulkan device%s", *num_exts ? " with extensions:" : "");
     for (int i = 0; i < *num_exts; i++)
-        PL_INFO(vk, "    %s", *exts[i]);
+        PL_INFO(vk, "    %s", (*exts)[i]);
 
     VK(vkCreateDevice(vk->physd, &dinfo, VK_ALLOC, &vk->dev));
 
