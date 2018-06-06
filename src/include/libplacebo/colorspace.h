@@ -139,6 +139,7 @@ enum pl_color_primaries {
     PL_COLOR_PRIM_PRO_PHOTO,    // ProPhoto RGB (ROMM)
     PL_COLOR_PRIM_CIE_1931,     // CIE 1931 RGB primaries
     PL_COLOR_PRIM_DCI_P3,       // DCI-P3 (Digital Cinema)
+    PL_COLOR_PRIM_DISPLAY_P3,   // DCI-P3 (Digital Cinema) with D65 white point
     PL_COLOR_PRIM_V_GAMUT,      // Panasonic V-Gamut (VARICAM)
     PL_COLOR_PRIM_S_GAMUT,      // Sony S-Gamut
     PL_COLOR_PRIM_COUNT

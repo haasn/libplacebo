@@ -384,6 +384,7 @@ const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim
     // CIE standard illuminant series
 #define CIE_D50 {0.34577, 0.35850}
 #define CIE_D65 {0.31271, 0.32902}
+#define CIE_DCI {0.31400, 0.35100}
 #define CIE_C   {0.31006, 0.31616}
 #define CIE_E   {1.0/3.0, 1.0/3.0}
 
@@ -392,77 +393,83 @@ const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim
             .red   = {0.670, 0.330},
             .green = {0.210, 0.710},
             .blue  = {0.140, 0.080},
-            .white = CIE_C
+            .white = CIE_C,
         },
 
         [PL_COLOR_PRIM_BT_601_525] = {
             .red   = {0.630, 0.340},
             .green = {0.310, 0.595},
             .blue  = {0.155, 0.070},
-            .white = CIE_D65
+            .white = CIE_D65,
         },
         [PL_COLOR_PRIM_BT_601_625] = {
             .red   = {0.640, 0.330},
             .green = {0.290, 0.600},
             .blue  = {0.150, 0.060},
-            .white = CIE_D65
+            .white = CIE_D65,
         },
         [PL_COLOR_PRIM_BT_709] = {
             .red   = {0.640, 0.330},
             .green = {0.300, 0.600},
             .blue  = {0.150, 0.060},
-            .white = CIE_D65
+            .white = CIE_D65,
         },
         [PL_COLOR_PRIM_BT_2020] = {
             .red   = {0.708, 0.292},
             .green = {0.170, 0.797},
             .blue  = {0.131, 0.046},
-            .white = CIE_D65
+            .white = CIE_D65,
         },
         [PL_COLOR_PRIM_APPLE] = {
             .red   = {0.625, 0.340},
             .green = {0.280, 0.595},
             .blue  = {0.115, 0.070},
-            .white = CIE_D65
+            .white = CIE_D65,
         },
         [PL_COLOR_PRIM_ADOBE] = {
             .red   = {0.640, 0.330},
             .green = {0.210, 0.710},
             .blue  = {0.150, 0.060},
-            .white = CIE_D65
+            .white = CIE_D65,
         },
         [PL_COLOR_PRIM_PRO_PHOTO] = {
             .red   = {0.7347, 0.2653},
             .green = {0.1596, 0.8404},
             .blue  = {0.0366, 0.0001},
-            .white = CIE_D50
+            .white = CIE_D50,
         },
         [PL_COLOR_PRIM_CIE_1931] = {
             .red   = {0.7347, 0.2653},
             .green = {0.2738, 0.7174},
             .blue  = {0.1666, 0.0089},
-            .white = CIE_E
+            .white = CIE_E,
         },
     // From SMPTE RP 431-2
         [PL_COLOR_PRIM_DCI_P3] = {
             .red   = {0.680, 0.320},
             .green = {0.265, 0.690},
             .blue  = {0.150, 0.060},
-            .white = CIE_D65
+            .white = CIE_DCI,
+        },
+        [PL_COLOR_PRIM_DISPLAY_P3] = {
+            .red   = {0.680, 0.320},
+            .green = {0.265, 0.690},
+            .blue  = {0.150, 0.060},
+            .white = CIE_D65,
         },
     // From Panasonic VARICAM reference manual
         [PL_COLOR_PRIM_V_GAMUT] = {
             .red   = {0.730, 0.280},
             .green = {0.165, 0.840},
             .blue  = {0.100, -0.03},
-            .white = CIE_D65
+            .white = CIE_D65,
         },
     // From Sony S-Log reference manual
         [PL_COLOR_PRIM_S_GAMUT] = {
             .red   = {0.730, 0.280},
             .green = {0.140, 0.855},
             .blue  = {0.100, -0.05},
-            .white = CIE_D65
+            .white = CIE_D65,
         },
     };
 
