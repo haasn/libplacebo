@@ -37,6 +37,12 @@ struct vk_ext {
       .offset = offsetof(struct vk_ctx, N), \
     }
 
+// Table of vulkan instance extensions
+// TODO: add support for loading function pointers
+static const char *vk_instance_extensions[] = {
+    VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME,
+};
+
 // Table of vulkan device extensions and functions they load
 static const struct vk_ext vk_device_extensions[] = {
     {
@@ -112,6 +118,17 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
 
     // Add mandatory extensions
     TARRAY_APPEND(tmp, exts, num_exts, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+
+    // Add optional extensions
+    for (int i = 0; i < PL_ARRAY_SIZE(vk_instance_extensions); i++) {
+        const char *ext = vk_instance_extensions[i];
+        for (int n = 0; n < num_exts_avail; n++) {
+            if (strcmp(ext, exts_avail[n].extensionName) == 0) {
+                TARRAY_APPEND(tmp, exts, num_exts, ext);
+                break;
+            }
+        }
+    }
 
     // Add extra user extensions
     for (int i = 0; i < params->num_extensions; i++)

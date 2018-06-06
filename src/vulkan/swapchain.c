@@ -47,11 +47,107 @@ struct priv {
 
 static struct pl_sw_fns vulkan_swapchain;
 
+static bool vk_map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
+{
+    switch (space) {
+    // Note: This is technically against the spec, but more often than not
+    // it's the correct result since `SRGB_NONLINEAR` is just a catch-all
+    // for any sort of typical SDR curve, which is better approximated by
+    // `pl_color_space_monitor`.
+    case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+    case VK_COLOR_SPACE_BT709_NONLINEAR_EXT:
+        *out = pl_color_space_monitor;
+        return true;
+    case VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT:
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_DISPLAY_P3,
+            .transfer  = PL_COLOR_TRC_BT_1886,
+        };
+        return true;
+    case VK_COLOR_SPACE_DCI_P3_LINEAR_EXT:
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_DCI_P3,
+            .transfer  = PL_COLOR_TRC_LINEAR,
+        };
+        return true;
+    case VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT:
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_DCI_P3,
+            .transfer  = PL_COLOR_TRC_BT_1886,
+        };
+        return true;
+    case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
+    case VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT:
+        // TODO
+        return false;
+    case VK_COLOR_SPACE_BT709_LINEAR_EXT:
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_DCI_P3,
+            .transfer  = PL_COLOR_TRC_LINEAR,
+        };
+        return true;
+    case VK_COLOR_SPACE_BT2020_LINEAR_EXT:
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_BT_2020,
+            .transfer  = PL_COLOR_TRC_LINEAR,
+        };
+        return true;
+    case VK_COLOR_SPACE_HDR10_ST2084_EXT:
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_BT_2020,
+            .transfer  = PL_COLOR_TRC_PQ,
+        };
+        return true;
+    case VK_COLOR_SPACE_DOLBYVISION_EXT:
+        // Unlikely to ever be implemented
+        return false;
+    case VK_COLOR_SPACE_HDR10_HLG_EXT:
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_BT_2020,
+            .transfer  = PL_COLOR_TRC_HLG,
+        };
+        return true;
+    case VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT:
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_ADOBE,
+            .transfer  = PL_COLOR_TRC_LINEAR,
+        };
+        return true;
+    case VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT:
+        *out = (struct pl_color_space) {
+            .primaries = PL_COLOR_PRIM_ADOBE,
+            .transfer  = PL_COLOR_TRC_GAMMA22,
+        };
+        return true;
+    case VK_COLOR_SPACE_PASS_THROUGH_EXT:
+        *out = pl_color_space_unknown;
+        return true;
+
+    // Included to satisfy the switch coverage check
+    case VK_COLOR_SPACE_RANGE_SIZE_KHR:
+    case VK_COLOR_SPACE_MAX_ENUM_KHR:
+        break;
+    }
+
+    return false;
+}
+
 static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
-                             VkSurfaceKHR surf, VkSurfaceFormatKHR *out_format)
+                             VkSurfaceKHR surf, VkSurfaceFormatKHR *out_format,
+                             struct pl_color_space *space)
 {
     VkSurfaceFormatKHR *formats = NULL;
     int num = 0;
+
+    // Specific format requested by user
+    if (out_format->format) {
+        if (vk_map_color_space(out_format->format, space)) {
+            return true;
+        } else {
+            PL_ERR(gpu, "User-supplied surface format unsupported: 0x%x",
+                   (unsigned int) out_format->format);
+        }
+    }
 
     VK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physd, surf, &num, NULL));
     formats = talloc_array(NULL, VkSurfaceFormatKHR, num);
@@ -62,29 +158,45 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
         if (formats[i].format == VK_FORMAT_UNDEFINED) {
             *out_format = (VkSurfaceFormatKHR) {
                 .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
-                .format = VK_FORMAT_R16G16B16A16_UNORM,
+                .format = VK_FORMAT_R8G8B8A8_UNORM,
             };
             talloc_free(formats);
             return true;
         }
 
-        // Try and avoid exotic color spaces like HDR output for now
-        // TODO: support these and map the correct `pl_color_space`
-        if (formats[i].colorSpace != VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        // Color space / format whitelist
+        if (!vk_map_color_space(formats[i].colorSpace, space))
             continue;
 
-        // Format whitelist, since we want only >= 8 bit _UNORM formats
         switch (formats[i].format) {
+        // Only accept floating point formats for linear curves
+        case VK_FORMAT_R16G16B16_SFLOAT:
+        case VK_FORMAT_R16G16B16A16_SFLOAT:
+        case VK_FORMAT_R32G32B32_SFLOAT:
+        case VK_FORMAT_R32G32B32A32_SFLOAT:
+        case VK_FORMAT_R64G64B64_SFLOAT:
+        case VK_FORMAT_R64G64B64A64_SFLOAT:
+            if (space->transfer == PL_COLOR_TRC_LINEAR)
+                break; // accept
+            continue;
+
+        // Only accept 8 bit for non-HDR curves
         case VK_FORMAT_R8G8B8_UNORM:
         case VK_FORMAT_B8G8R8_UNORM:
         case VK_FORMAT_R8G8B8A8_UNORM:
         case VK_FORMAT_B8G8R8A8_UNORM:
         case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
+            if (!pl_color_transfer_is_hdr(space->transfer))
+                break; // accept
+            continue;
+
+        // Accept 10/16 bit formats universally
         case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
         case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
         case VK_FORMAT_R16G16B16_UNORM:
         case VK_FORMAT_R16G16B16A16_UNORM:
              break; // accept
+
         default: continue;
         }
 
@@ -122,7 +234,8 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
     const struct pl_gpu *gpu = plvk->gpu;
 
     VkSurfaceFormatKHR sfmt = params->surface_format;
-    if (!sfmt.format && !pick_surf_format(gpu, vk, params->surface, &sfmt))
+    struct pl_color_space csp;
+    if (!pick_surf_format(gpu, vk, params->surface, &sfmt, &csp))
         return NULL;
 
     struct pl_swapchain *sw = talloc_zero(NULL, struct pl_swapchain);
@@ -147,7 +260,7 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
         .clipped = true,
     };
 
-    p->color_space = pl_color_space_monitor;
+    p->color_space = csp;
     p->color_repr = (struct pl_color_repr) {
         .sys    = PL_COLOR_SYSTEM_RGB,
         .levels = PL_COLOR_LEVELS_PC,
