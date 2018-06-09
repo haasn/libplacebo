@@ -80,6 +80,7 @@ struct pl_renderer {
     struct pl_shader_obj *lut3d_state;
     const struct pl_tex *main_scale_fbo;
     const struct pl_tex *deband_fbos[PLANE_COUNT];
+    const struct pl_tex *output_fbo;
     struct sampler samplers[SCALER_COUNT];
     struct sampler *osd_samplers;
     int num_osd_samplers;
@@ -173,6 +174,7 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
     pl_tex_destroy(rr->gpu, &rr->main_scale_fbo);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->deband_fbos); i++)
         pl_tex_destroy(rr->gpu, &rr->deband_fbos[i]);
+    pl_tex_destroy(rr->gpu, &rr->output_fbo);
 
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
@@ -891,6 +893,20 @@ fallback:
                             target->color, &rr->peak_detect_state, false);
     }
 
+    bool is_comp = pl_shader_is_compute(sh);
+    if (is_comp && !fbo->params.storable) {
+        bool ok = finalize_img(rr, &pass->cur_img, rr->fbofmt, &rr->output_fbo);
+        if (!ok) {
+            PL_ERR(rr, "Failed dispatching compute shader to intermediate FBO?");
+            return false;
+        }
+
+        sh = pass->cur_img.sh = pl_dispatch_begin(rr->dp);
+        pl_shader_sample_direct(sh, &(struct pl_sample_src) {
+            .tex = rr->output_fbo,
+        });
+    }
+
     pl_shader_encode_color(sh, &target->repr);
 
     // FIXME: Technically we should try dithering before bit shifting if we're
@@ -908,12 +924,6 @@ fallback:
         // Ignore dithering for >16-bit FBOs, since it's pretty pointless
         if (depth <= 16)
             pl_shader_dither(sh, depth, &rr->dither_state, params->dither_params);
-    }
-
-    bool is_comp = pl_shader_is_compute(sh);
-    if (is_comp && !fbo->params.storable) {
-        // TODO: force caching
-        abort();
     }
 
     pl_assert(fbo->params.renderable);
