@@ -72,6 +72,8 @@ tests = [
 ]
 
 # Work-arounds for glslang braindeath
+glslang_combined = disabler()
+glslang_min_ver = 2763
 glslang_deps = [
   cxx.find_library('glslang',     required: false),
   cxx.find_library('HLSL',        required: false),
@@ -86,19 +88,16 @@ foreach d : glslang_deps
   glslang_found = glslang_found and d.found()
 endforeach
 
-glslang_combined = disabler()
-glslang_ver_test = '''
-#include <glslang/Include/revision.h>
-#if GLSLANG_PATCH_LEVEL < 2763
-#error glslang version too old
-#endif
-'''
-
 if glslang_found
-  if cxx.compiles(glslang_ver_test, dependencies: glslang_deps)
+  glslang_ver = cxx.get_define('GLSLANG_PATCH_LEVEL',
+      prefix: '#include <glslang/Include/revision.h>'
+  ).to_int()
+
+  if glslang_ver >= glslang_min_ver
     glslang_combined = declare_dependency(dependencies: glslang_deps)
   else
-    error('glslang version too old! GLSLANG_PATCH_LEVEL must be at least 2763')
+    error('glslang revision @0@ too old! Must be at least @1@'
+          .format(glslang_ver, glslang_min_ver))
   endif
 endif
 
