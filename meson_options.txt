@@ -2,6 +2,9 @@
 option('vulkan', type: 'combo', choices: ['auto', 'true', 'false'],
        description: 'Vulkan-based renderer')
 
+option('glslang', type: 'combo', choices: ['auto', 'true', 'false'],
+       description: 'glslang SPIR-V compiler')
+
 option('shaderc', type: 'combo', choices: ['auto', 'true', 'false'],
        description: 'libshaderc SPIR-V compiler')
 

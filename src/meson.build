@@ -18,6 +18,8 @@ build_opts = [
 ]
 
 cc = meson.get_compiler('c')
+cxx = meson.get_compiler('cpp')
+
 if cc.has_argument('-Wincompatible-pointer-types')
   build_opts += ['-Werror=incompatible-pointer-types']
 endif
@@ -69,12 +71,49 @@ tests = [
   'utils.c',
 ]
 
+# Work-arounds for glslang braindeath
+glslang_deps = [
+  cxx.find_library('glslang',     required: false),
+  cxx.find_library('HLSL',        required: false),
+  cxx.find_library('OGLCompiler', required: false),
+  cxx.find_library('OSDependent', required: false),
+  cxx.find_library('SPIRV',       required: false),
+  cxx.find_library('SPVRemapper', required: false),
+]
+
+glslang_found = true
+foreach d : glslang_deps
+  glslang_found = glslang_found and d.found()
+endforeach
+
+glslang_combined = disabler()
+glslang_ver_test = '''
+#include <glslang/Include/revision.h>
+#if GLSLANG_PATCH_LEVEL < 2763
+#error glslang version too old
+#endif
+'''
+
+if glslang_found
+  if cxx.compiles(glslang_ver_test, dependencies: glslang_deps)
+    glslang_combined = declare_dependency(dependencies: glslang_deps)
+  else
+    error('glslang version too old! GLSLANG_PATCH_LEVEL must be at least 2763')
+  endif
+endif
+
 # Optional components, in the following format:
 # [ name, dependency, extra_sources, extra_tests ]
 components = [
   [ 'lcms',
     dependency('lcms2', version: '>=2.6', required: false),
-    [ 'lcms.c' ],
+    'lcms.c',
+  ], [
+    'glslang',
+    glslang_combined,
+    [ 'glsl/glslang.cc',
+      'spirv_glslang.c',
+    ],
   ], [
     'shaderc',
     cc.find_library('shaderc_shared', required: false),

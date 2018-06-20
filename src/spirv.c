@@ -18,10 +18,14 @@
 #include "spirv.h"
 
 extern const struct spirv_compiler_fns spirv_shaderc;
+extern const struct spirv_compiler_fns spirv_glslang;
 
 static const struct spirv_compiler_fns *compilers[] = {
 #if PL_HAVE_SHADERC
     &spirv_shaderc,
+#endif
+#if PL_HAVE_GLSLANG
+    &spirv_glslang,
 #endif
 };
 
@@ -41,8 +45,8 @@ struct spirv_compiler *spirv_compiler_create(struct pl_context *ctx)
         talloc_free(spirv);
     }
 
-    pl_fatal(ctx, "Failed initializing any SPIR-V compiler! Maybe "
-             "libplacebo was built without support for libshaderc?");
+    pl_fatal(ctx, "Failed initializing any SPIR-V compiler! Maybe libplacebo "
+             "was built without support for either libshaderc or glslang?");
     return NULL;
 }
 

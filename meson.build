@@ -1,4 +1,4 @@
-project('libplacebo', 'c',
+project('libplacebo', ['c', 'cpp'],
   license: 'LGPL2.1+',
   default_options: ['c_std=c99'],
 )
