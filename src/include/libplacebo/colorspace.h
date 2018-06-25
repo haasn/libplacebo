@@ -263,8 +263,8 @@ struct pl_color_adjustment {
     float contrast;
     // Saturation gain. 1.0 = neutral, 0.0 = grayscale
     float saturation;
-    // Hue shift, corresponding to a rotation around the [U, V] subvector.
-    // Only meaningful for YCbCr-like colorspaces. 0.0 = neutral
+    // Hue shift, corresponding to a rotation around the [U, V] subvector, in
+    // radians. Only meaningful for YCbCr-like colorspaces. 0.0 = neutral
     float hue;
     // Gamma adjustment. 1.0 = neutral, 0.0 = solid black
     float gamma;
