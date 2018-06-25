@@ -1067,6 +1067,7 @@ done: ;
 
 const struct pl_dither_params pl_dither_default_params = {
     .method     = PL_DITHER_BLUE_NOISE,
+    .lut_size   = 6,
     .temporal   = false, // commonly flickers on LCDs
 };
 
