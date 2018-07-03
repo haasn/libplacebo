@@ -150,6 +150,7 @@ endif
 
 # Build process
 defs = ''
+comps = configuration_data()
 
 foreach c : components
   name = c[0]
@@ -165,6 +166,7 @@ foreach c : components
   pretty = name.underscorify().to_upper()
   defs += '#define PL_HAVE_@0@ @1@\n'.format(pretty, has_dep ? 1 : 0)
   if has_dep
+    comps.set(name, 1)
     build_deps += dep
     if (c.length() > 2)
       sources += c[2]
@@ -175,6 +177,21 @@ foreach c : components
   endif
 endforeach
 
+# Check to see if libplacebo built this way is sane
+if not comps.has('vulkan')
+  warning('Building without support for Vulkan. Currently, libplacebo only ' +
+          'supports the Vulkan graphics API. libplacebo built this way still ' +
+          'has some limited use (e.g. generating GLSL shaders), but most of ' +
+          'its functionality will be missing or impaired!')
+endif
+
+if comps.has('vulkan') and not comps.has('shaderc') and not comps.has('glslang')
+  error('Building with support for Vulkan requires either `shaderc` or ' +
+        '`glslang` to be of any use, otherwise libplacebo would fail to ' +
+        'compile GLSL to SPIR-V (needed by the Vulkan API)!')
+endif
+
+# Generate the config.h file
 conf.set('extra_defs', defs)
 
 configure_file(
@@ -184,6 +201,7 @@ configure_file(
   configuration: conf,
 )
 
+# Build process
 add_project_arguments(build_opts, language: 'c')
 inc = include_directories('./include')
 lib = library('placebo', sources,
@@ -205,7 +223,6 @@ pkg.generate(
 )
 
 # Tests
-
 tdeps = [ declare_dependency(link_with: lib) ]
 
 if get_option('tests')
