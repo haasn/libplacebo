@@ -194,6 +194,18 @@ you can run `ninja -Cbuild install`. Note that this is normally ill-advised
 except for developers who know what they're doing. Regular users should rely
 on distro packages.
 
+### Dependencies
+
+In principle, libplacebo has no mandatory dependencies - only optional ones.
+However, to get a useful version of libplacebo. you most likely want to build
+with support for both `vulkan` and at least one of `shaderc` (preferred) or
+`glslang` (fallback/alternative).
+
+libplacebo built without these can still be used (e.g. to generate GLSL
+shaders such as the ones used in VLC), but the usefulness is severely
+impacted since most components will be missing, impaired or otherwise not
+functional.
+
 ### Configuring
 
 To get a list of configuration options supported by libplacebo, after running
