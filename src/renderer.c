@@ -544,10 +544,11 @@ static int deband_src(struct pl_renderer *rr, struct pl_shader *psh,
 
     struct pl_shader *sh = psh;
     struct pl_sample_src *src = psrc;
+    struct pl_sample_src fixed;
     if (!deband_scales) {
         // Only sample/deband the relevant cut-out, but round it to the nearest
         // integer to avoid doing fractional scaling
-        struct pl_sample_src fixed = *src;
+        fixed = *src;
         fixed.rect.x0 = floorf(fixed.rect.x0);
         fixed.rect.y0 = floorf(fixed.rect.y0);
         fixed.rect.x1 = ceilf(fixed.rect.x1);
