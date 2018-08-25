@@ -141,7 +141,7 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
 
     // Specific format requested by user
     if (out_format->format) {
-        if (vk_map_color_space(out_format->format, space)) {
+        if (vk_map_color_space(out_format->colorSpace, space)) {
             return true;
         } else {
             PL_ERR(gpu, "User-supplied surface format unsupported: 0x%x",
