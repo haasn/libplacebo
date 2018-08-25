@@ -185,7 +185,7 @@ if not comps.has('vulkan')
           'its functionality will be missing or impaired!')
 endif
 
-if comps.has('vulkan') and not comps.has('shaderc') and not comps.has('glslang')
+if comps.has('vulkan') and not (comps.has('shaderc') or comps.has('glslang'))
   error('Building with support for Vulkan requires either `shaderc` or ' +
         '`glslang` to be of any use, otherwise libplacebo would fail to ' +
         'compile GLSL to SPIR-V (needed by the Vulkan API)!')
