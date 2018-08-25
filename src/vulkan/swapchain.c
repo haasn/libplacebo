@@ -55,6 +55,10 @@ static bool vk_map_color_space(VkColorSpaceKHR space, struct pl_color_space *out
     // for any sort of typical SDR curve, which is better approximated by
     // `pl_color_space_monitor`.
     case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+        *out = pl_color_space_monitor;
+        return true;
+
+#ifdef VK_EXT_swapchain_colorspace
     case VK_COLOR_SPACE_BT709_NONLINEAR_EXT:
         *out = pl_color_space_monitor;
         return true;
@@ -122,6 +126,7 @@ static bool vk_map_color_space(VkColorSpaceKHR space, struct pl_color_space *out
     case VK_COLOR_SPACE_PASS_THROUGH_EXT:
         *out = pl_color_space_unknown;
         return true;
+#endif
 
     // Included to satisfy the switch coverage check
     case VK_COLOR_SPACE_RANGE_SIZE_KHR:
