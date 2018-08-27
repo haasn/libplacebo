@@ -4,11 +4,17 @@ fixver   = '0'
 
 version = majorver + '.' + apiver + '.' + fixver
 
-# Build options mostly taken from mpv
-build_opts = [
+c_opts = [
   '-D_ISOC99_SOURCE', '-D_GNU_SOURCE', '-D_XOPEN_SOURCE=700',
   '-U__STRICT_ANSI__', '-fvisibility=hidden',
+]
+# glslang need c++11
+cpp_opts = [
+  '-std=c++11',
+]
 
+# Build options mostly taken from mpv
+build_opts = [
   # Warnings
   '-Wall', '-Wundef', '-Wmissing-prototypes', '-Wshadow', '-Wparentheses',
   '-Wpointer-arith', '-Wno-pointer-sign',
@@ -202,7 +208,10 @@ configure_file(
 )
 
 # Build process
-add_project_arguments(build_opts, language: 'c')
+c_opts += build_opts
+cpp_opts += build_opts
+add_project_arguments(c_opts, language: 'c')
+add_project_arguments(cpp_opts, language: 'cpp')
 inc = include_directories('./include')
 lib = library('placebo', sources,
   install: true,
