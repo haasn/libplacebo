@@ -7,6 +7,7 @@ version = majorver + '.' + apiver + '.' + fixver
 c_opts = [
   '-D_ISOC99_SOURCE', '-D_GNU_SOURCE', '-D_XOPEN_SOURCE=700',
   '-U__STRICT_ANSI__', '-fvisibility=hidden',
+  '-Wmissing-prototypes', '-Wno-pointer-sign'
 ]
 
 # glslang needs c++11
@@ -17,8 +18,7 @@ cpp_opts = [
 # Build options mostly taken from mpv
 build_opts = [
   # Warnings
-  '-Wall', '-Wundef', '-Wmissing-prototypes', '-Wshadow', '-Wparentheses',
-  '-Wpointer-arith', '-Wno-pointer-sign',
+  '-Wall', '-Wundef', '-Wshadow', '-Wparentheses', '-Wpointer-arith',
 
   # Warnings to treat as errors
   '-Werror=implicit-function-declaration',
