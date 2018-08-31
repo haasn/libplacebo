@@ -160,8 +160,8 @@ defs = ''
 comps = configuration_data()
 
 foreach c : components
-  name = c.get('name')
-  deps = c.get('deps')
+  name = c['name']
+  deps = c['deps']
   opt  = get_option(name)
 
   avail = opt == 'false' ? false : deps.found()
