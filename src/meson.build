@@ -108,35 +108,35 @@ if glslang_found
   endif
 endif
 
-# Optional components, in the following format:
-# [ name, dependency, extra_sources, extra_tests ]
+# Optional dependencies / components
 components = [
-  [ 'lcms',
-    dependency('lcms2', version: '>=2.6', required: false),
-    'lcms.c',
-  ], [
-    'glslang',
-    glslang_combined,
-    [ 'glsl/glslang.cc',
-      'spirv_glslang.c',
-    ],
-  ], [
-    'shaderc',
-    cc.find_library('shaderc_shared', required: false),
-    'spirv_shaderc.c',
-  ], [
-    'vulkan',
-    vulkan,
-    [ 'vulkan/command.c',
-      'vulkan/context.c',
-      'vulkan/formats.c',
-      'vulkan/gpu.c',
-      'vulkan/malloc.c',
-      'vulkan/swapchain.c',
-      'vulkan/utils.c',
-    ],
-    'vulkan.c'
-  ]
+  {
+    'name': 'lcms',
+    'deps':  dependency('lcms2', version: '>=2.6', required: false),
+    'srcs': 'lcms.c',
+  }, {
+    'name': 'glslang',
+    'deps': glslang_combined,
+    'srcs': [ 'glsl/glslang.cc',
+              'spirv_glslang.c',
+            ],
+  }, {
+    'name': 'shaderc',
+    'deps': cc.find_library('shaderc_shared', required: false),
+    'srcs': 'spirv_shaderc.c',
+  }, {
+    'name': 'vulkan',
+    'deps': vulkan,
+    'srcs': [ 'vulkan/command.c',
+              'vulkan/context.c',
+              'vulkan/formats.c',
+              'vulkan/gpu.c',
+              'vulkan/malloc.c',
+              'vulkan/swapchain.c',
+              'vulkan/utils.c',
+            ],
+    'test': 'vulkan.c'
+  }
 ]
 
 # Configuration
@@ -160,27 +160,23 @@ defs = ''
 comps = configuration_data()
 
 foreach c : components
-  name = c[0]
-  dep  = c[1]
+  name = c.get('name')
+  deps = c.get('deps')
   opt  = get_option(name)
 
-  has_dep = opt == 'false' ? false : dep.found()
-  if opt == 'true' and not has_dep
+  avail = opt == 'false' ? false : deps.found()
+  if opt == 'true' and not avail
     error(('Dependency \'@0@\', marked as required, is not found. To build ' +
            'without support for @0@, use -D@0@=false.').format(name))
   endif
 
   pretty = name.underscorify().to_upper()
-  defs += '#define PL_HAVE_@0@ @1@\n'.format(pretty, has_dep ? 1 : 0)
-  if has_dep
+  defs += '#define PL_HAVE_@0@ @1@\n'.format(pretty, avail ? 1 : 0)
+  if avail
     comps.set(name, 1)
-    build_deps += dep
-    if (c.length() > 2)
-      sources += c[2]
-    endif
-    if (c.length() > 3)
-      tests += c[3]
-    endif
+    build_deps += deps
+    sources += c.get('srcs', [])
+    tests += c.get('test', [])
   endif
 endforeach
 
