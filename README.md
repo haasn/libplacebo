@@ -220,7 +220,7 @@ If you want to disable a component, for example Vulkan support, you can
 explicitly set it to `false`, i.e.:
 
 ```bash
-$ meson configure $DIR -Dvulkan=false -Dshaderc=false
+$ meson configure $DIR -Dvulkan=disabled -Dshaderc=disabled
 $ ninja -C$DIR
 ```
 

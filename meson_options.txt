@@ -1,14 +1,14 @@
 # Optional components
-option('vulkan', type: 'combo', choices: ['auto', 'true', 'false'],
+option('vulkan', type: 'feature', value: 'auto',
        description: 'Vulkan-based renderer')
 
-option('glslang', type: 'combo', choices: ['auto', 'true', 'false'],
+option('glslang', type: 'feature', value: 'auto',
        description: 'glslang SPIR-V compiler')
 
-option('shaderc', type: 'combo', choices: ['auto', 'true', 'false'],
+option('shaderc', type: 'feature', value: 'auto',
        description: 'libshaderc SPIR-V compiler')
 
-option('lcms', type: 'combo', choices: ['auto', 'true', 'false'],
+option('lcms', type: 'feature', value: 'auto',
        description: 'LittleCMS 2 support')
 
 # Miscellaneous

@@ -42,7 +42,7 @@ build_deps = [
   cc.find_library('m', required: false),
 ]
 
-vulkan = dependency('vulkan', version: '>=1.0.42', required: false)
+vulkan = dependency('vulkan', version: '>=1.0.42', required: get_option('vulkan'))
 
 # Source files
 sources = [
@@ -81,13 +81,14 @@ tests = [
 # Work-arounds for glslang braindeath
 glslang_combined = disabler()
 glslang_min_ver = 2763
+glslang_req = get_option('glslang')
 glslang_deps = [
-  cxx.find_library('glslang',     required: false),
-  cxx.find_library('HLSL',        required: false),
-  cxx.find_library('OGLCompiler', required: false),
-  cxx.find_library('OSDependent', required: false),
-  cxx.find_library('SPIRV',       required: false),
-  cxx.find_library('SPVRemapper', required: false),
+  cxx.find_library('glslang',     required: glslang_req),
+  cxx.find_library('HLSL',        required: glslang_req),
+  cxx.find_library('OGLCompiler', required: glslang_req),
+  cxx.find_library('OSDependent', required: glslang_req),
+  cxx.find_library('SPIRV',       required: glslang_req),
+  cxx.find_library('SPVRemapper', required: glslang_req),
 ]
 
 glslang_found = true
@@ -112,7 +113,7 @@ endif
 components = [
   {
     'name': 'lcms',
-    'deps':  dependency('lcms2', version: '>=2.6', required: false),
+    'deps':  dependency('lcms2', version: '>=2.6', required: get_option('lcms')),
     'srcs': 'lcms.c',
   }, {
     'name': 'glslang',
@@ -122,7 +123,7 @@ components = [
             ],
   }, {
     'name': 'shaderc',
-    'deps': cc.find_library('shaderc_shared', required: false),
+    'deps': cc.find_library('shaderc_shared', required: get_option('shaderc')),
     'srcs': 'spirv_shaderc.c',
   }, {
     'name': 'vulkan',
@@ -162,17 +163,11 @@ comps = configuration_data()
 foreach c : components
   name = c['name']
   deps = c['deps']
-  opt  = get_option(name)
-
-  avail = opt == 'false' ? false : deps.found()
-  if opt == 'true' and not avail
-    error(('Dependency \'@0@\', marked as required, is not found. To build ' +
-           'without support for @0@, use -D@0@=false.').format(name))
-  endif
 
   pretty = name.underscorify().to_upper()
-  defs += '#define PL_HAVE_@0@ @1@\n'.format(pretty, avail ? 1 : 0)
-  if avail
+  defs += '#define PL_HAVE_@0@ @1@\n'.format(pretty, deps.found() ? 1 : 0)
+
+  if deps.found()
     comps.set(name, 1)
     build_deps += deps
     sources += c.get('srcs', [])
