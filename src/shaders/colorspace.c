@@ -480,12 +480,12 @@ static void sh_peak_uninit(const struct pl_gpu *gpu, void *ptr)
 static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
                             const struct pl_color_map_params *params)
 {
-    if (!state)
+    int frames = params->peak_detect_frames;
+    if (!state || !frames)
         return;
 
-    int frames = PL_DEF(params->peak_detect_frames, 63);
-    if (frames < 1 || frames > 1000) {
-        PL_ERR(sh, "Parameter peak_detect_frames must be >= 1 and <= 1000 "
+    if (frames < 0 || frames > 1000) {
+        PL_ERR(sh, "Parameter peak_detect_frames must be >= 0 and <= 1000 "
                "(was %d).", frames);
         return;
     }
