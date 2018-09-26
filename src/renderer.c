@@ -311,7 +311,7 @@ static struct sampler_info sample_src_info(struct pl_renderer *rr,
 
     bool is_linear = src->tex->params.sample_mode == PL_TEX_SAMPLE_LINEAR;
     if (!rr->fbofmt || rr->disable_sampling || !info.config) {
-        info.type = is_linear ? SAMPLER_BICUBIC : SAMPLER_DIRECT;
+        info.type = SAMPLER_DIRECT;
     } else {
         info.type = SAMPLER_COMPLEX;
 

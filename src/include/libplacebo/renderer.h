@@ -48,8 +48,8 @@ void pl_renderer_flush_cache(struct pl_renderer *rr);
 struct pl_render_params {
     // Configures the algorithms used for upscaling and downscaling,
     // respectively. If left as NULL, then libplacebo will only use inexpensive
-    // sampling (bicubic, bilinear or neareast neighbour depending on the
-    // capabilities of the hardware).
+    // sampling (bilinear or neareast neighbour depending on the capabilities
+    // of the hardware / texture).
     //
     // Note: Setting `downscaler` to NULL also implies `skip_anti_aliasing`,
     // since the built-in GPU sampling algorithms can't anti-alias.
