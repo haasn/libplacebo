@@ -894,6 +894,10 @@ fallback:
                             target->color, &rr->peak_detect_state, false);
     }
 
+    // Apply color blindness simulation if requested
+    if (params->cone_params)
+        pl_shader_cone_distort(sh, target->color, params->cone_params);
+
     bool is_comp = pl_shader_is_compute(sh);
     if (is_comp && !fbo->params.storable) {
         bool ok = finalize_img(rr, &pass->cur_img, rr->fbofmt, &rr->output_fbo);

@@ -105,6 +105,10 @@ struct pl_render_params {
     // defaults to `&pl_3dlut_default_params`.
     const struct pl_3dlut_params *lut3d_params;
 
+    // Configures the settings used to simulate color blindness, if desired.
+    // If NULL, this feature is disabled.
+    const struct pl_cone_params *cone_params;
+
     // --- Performance / quality trade-off options:
     // These should generally be left off where quality is desired, as they can
     // degrade the result quite noticeably; but may be useful for older or
