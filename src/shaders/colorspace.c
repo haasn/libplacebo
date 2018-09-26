@@ -894,6 +894,32 @@ void pl_shader_color_map(struct pl_shader *sh,
     GLSL("}\n");
 }
 
+void pl_shader_cone_distort(struct pl_shader *sh, struct pl_color_space csp,
+                            const struct pl_cone_params *params)
+{
+    if (!params || !params->cones)
+        return;
+
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
+    GLSL("// pl_shader_cone_distort\n");
+    GLSL("{\n");
+
+    pl_color_space_infer(&csp);
+    pl_shader_linearize(sh, csp.transfer);
+
+    struct pl_matrix3x3 cone_mat;
+    cone_mat = pl_get_cone_matrix(params, pl_raw_primaries_get(csp.primaries));
+    GLSL("color.rgb = %s * color.rgb;\n", sh_var(sh, (struct pl_shader_var) {
+        .var = pl_var_mat3("cone_mat"),
+        .data = PL_TRANSPOSE_3X3(cone_mat.m),
+    }));
+
+    pl_shader_delinearize(sh, csp.transfer);
+    GLSL("}\n");
+}
+
 struct sh_dither_obj {
     enum pl_dither_method method;
     struct pl_shader_obj *lut;

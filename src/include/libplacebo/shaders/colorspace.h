@@ -210,6 +210,12 @@ void pl_shader_color_map(struct pl_shader *sh,
                          struct pl_shader_obj **peak_detect_state,
                          bool prelinearized);
 
+// Applies a set of cone distortion parameters to `vec4 color` in a given color
+// space. This can be used to simulate color blindness. See `pl_cone_params`
+// for more information.
+void pl_shader_cone_distort(struct pl_shader *sh, struct pl_color_space csp,
+                            const struct pl_cone_params *params);
+
 enum pl_dither_method {
     // Dither with blue noise. Very high quality, but requires the use of a
     // LUT. Warning: Computing a blue noise texture with a large size can be

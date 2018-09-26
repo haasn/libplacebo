@@ -329,6 +329,44 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *s
                                                 const struct pl_raw_primaries *dst,
                                                 enum pl_rendering_intent intent);
 
+// Cone types involved in human vision
+enum pl_cone {
+    PL_CONE_L = 1 << 0,
+    PL_CONE_M = 1 << 1,
+    PL_CONE_S = 1 << 2,
+
+    // Convenience aliases
+    PL_CONE_NONE = 0,
+    PL_CONE_LM   = PL_CONE_L | PL_CONE_M,
+    PL_CONE_MS   = PL_CONE_M | PL_CONE_S,
+    PL_CONE_LS   = PL_CONE_L | PL_CONE_S,
+    PL_CONE_LMS  = PL_CONE_L | PL_CONE_M | PL_CONE_S,
+};
+
+// Structure describing parameters for simulating color blindness
+struct pl_cone_params {
+    enum pl_cone cones; // Which cones are *affected* by the vision model
+    float strength;     // Coefficient for how strong the defect is
+                        // (1.0 = Unaffected, 0.0 = Full blindness)
+};
+
+// Built-in color blindness models
+extern const struct pl_cone_params pl_vision_normal;        // No distortion (92%)
+extern const struct pl_cone_params pl_vision_protanomaly;   // Red deficiency (0.66%)
+extern const struct pl_cone_params pl_vision_protanopia;    // Red absence (0.59%)
+extern const struct pl_cone_params pl_vision_deuteranomaly; // Green deficiency (2.7%)
+extern const struct pl_cone_params pl_vision_deuteranopia;  // Green absence (0.56%)
+extern const struct pl_cone_params pl_vision_tritanomaly;   // Blue deficiency (0.01%)
+extern const struct pl_cone_params pl_vision_tritanopia;    // Blue absence (0.016%)
+extern const struct pl_cone_params pl_vision_monochromacy;  // Blue cones only (<0.001%)
+extern const struct pl_cone_params pl_vision_achromatopsia; // Rods only (<0.0001%)
+
+// Returns a cone adaptation matrix. Applying this to an RGB color in the given
+// color space will apply the given cone adaptation coefficients for simulating
+// a type of color blindness.
+struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
+                                       const struct pl_raw_primaries *prim);
+
 // Returns a color decoding matrix for a given combination of source color
 // representation and adjustment parameters. This mutates the color_repr to
 // reflect the change. If `params` is left as NULL, it defaults to
