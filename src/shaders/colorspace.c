@@ -871,7 +871,7 @@ void pl_shader_color_map(struct pl_shader *sh,
     }
 
     // Tone map to rescale the signal average/peak if needed
-    if (src.sig_peak > dst.sig_peak)
+    if (src.sig_peak > dst.sig_peak + 1e-6)
         pl_shader_tone_map(sh, src, dst, dst_luma, peak_detect_state, params);
 
     // Warn for remaining out-of-gamut colors if enabled
