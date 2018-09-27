@@ -364,6 +364,12 @@ extern const struct pl_cone_params pl_vision_achromatopsia; // Rods only (<0.000
 // Returns a cone adaptation matrix. Applying this to an RGB color in the given
 // color space will apply the given cone adaptation coefficients for simulating
 // a type of color blindness.
+//
+// For the color blindness models which don't entail complete loss of a cone,
+// you can partially counteract the effect by using a similar model with the
+// `strength` set to its inverse. For example, to partially counteract
+// deuteranomaly, you could generate a cone matrix for PL_CONE_M with the
+// strength 2.0 (or some other number above 1.0).
 struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
                                        const struct pl_raw_primaries *prim);
 
