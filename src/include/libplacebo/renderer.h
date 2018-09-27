@@ -373,6 +373,10 @@ void pl_render_target_from_swapchain(struct pl_render_target *out_target,
 // fully dynamic, i.e. the params can change at any time. libplacebo will
 // internally detect and flush whatever caches are invalidated as a result of
 // changing colorspace, size etc.
+//
+// Note on lifetime: Once this call returns, the passed structures may be
+// freely overwritten or discarded by the caller, even the referenced
+// `pl_tex` objects may be freely reused.
 bool pl_render_image(struct pl_renderer *rr, const struct pl_image *image,
                      const struct pl_render_target *target,
                      const struct pl_render_params *params);
