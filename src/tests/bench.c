@@ -90,7 +90,6 @@ static void run_bench(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     // Hard block until the FBO is free
     while (pl_buf_poll(gpu, fbo.buf, 1000000)); // 1 ms
 
-    pl_dispatch_reset_frame(dp);
     struct pl_shader *sh = pl_dispatch_begin(dp);
     bench(sh, state, src);
     pl_dispatch_finish(dp, &sh, fbo.tex, NULL, NULL);

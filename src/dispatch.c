@@ -18,6 +18,7 @@
 #include "common.h"
 #include "context.h"
 #include "shaders.h"
+#include "dispatch.h"
 #include "gpu.h"
 
 enum {
@@ -114,9 +115,9 @@ void pl_dispatch_destroy(struct pl_dispatch **ptr)
     *ptr = NULL;
 }
 
-struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp)
+struct pl_shader *pl_dispatch_begin_ex(struct pl_dispatch *dp, bool unique)
 {
-    uint8_t ident = dp->current_ident++;
+    uint8_t ident = unique ? dp->current_ident++ : 0;
 
     struct pl_shader *sh;
     if (TARRAY_POP(dp->shaders, dp->num_shaders, &sh)) {
@@ -124,13 +125,18 @@ struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp)
         return sh;
     }
 
-    return pl_shader_alloc(dp->ctx, dp->gpu, ident, dp->current_index);
+    return pl_shader_alloc_ex(dp->ctx, dp->gpu, dp->current_index, ident);
 }
 
 void pl_dispatch_reset_frame(struct pl_dispatch *dp)
 {
     dp->current_ident = 0;
     dp->current_index++;
+}
+
+struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp)
+{
+    return pl_dispatch_begin_ex(dp, false);
 }
 
 static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,

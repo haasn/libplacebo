@@ -1228,7 +1228,6 @@ bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     pl_assert(params->buf);
     pl_assert(params->buf->params.type == PL_BUF_TEXEL_UNIFORM);
 
-    pl_dispatch_reset_frame(dp);
     struct pl_shader *sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, threads, 1, true, 0)) {
         PL_ERR(gpu, "Failed emulating texture transfer!");
@@ -1291,7 +1290,6 @@ bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     pl_assert(params->buf);
     pl_assert(params->buf->params.type == PL_BUF_TEXEL_STORAGE);
 
-    pl_dispatch_reset_frame(dp);
     struct pl_shader *sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, threads, 1, true, 0)) {
         PL_ERR(gpu, "Failed emulating texture transfer!");

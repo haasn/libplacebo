@@ -55,6 +55,14 @@ struct pl_shader {
     int fresh;
 };
 
+// Like `pl_shader_alloc`, but also has an extra `uint8_t ident` which can be
+// used to namespace shaders in order to allow safely merging together multiple
+// shaders using `sh_subpass`. This is not exposed publicly since there's no
+// reasonable public API for `sh_subpass`.
+struct pl_shader *pl_shader_alloc_ex(struct pl_context *ctx,
+                                     const struct pl_gpu *gpu,
+                                     uint8_t index, uint8_t ident);
+
 // Attempt enabling compute shaders for this pass, if possible
 bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem);
 

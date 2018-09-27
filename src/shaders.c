@@ -23,9 +23,9 @@
 #include "context.h"
 #include "shaders.h"
 
-struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
-                                  const struct pl_gpu *gpu,
-                                  uint8_t ident, uint8_t index)
+struct pl_shader *pl_shader_alloc_ex(struct pl_context *ctx,
+                                     const struct pl_gpu *gpu,
+                                     uint8_t index, uint8_t ident)
 {
     pl_assert(ctx);
     struct pl_shader *sh = talloc_ptrtype(ctx, sh);
@@ -39,6 +39,12 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
     };
 
     return sh;
+}
+
+struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
+                                  const struct pl_gpu *gpu, uint8_t index)
+{
+    return pl_shader_alloc_ex(ctx, gpu, index, 0);
 }
 
 void pl_shader_free(struct pl_shader **psh)
@@ -289,6 +295,11 @@ static const char *retvals[] = {
 ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
 {
     pl_assert(sh->mutable);
+
+    if (sh->ident == sub->ident) {
+        PL_ERR(sh, "Failed merging shaders: conflicting identifiers!");
+        return NULL;
+    }
 
     // Check for shader compatibility
     int res_w = PL_DEF(sh->output_w, sub->output_w),

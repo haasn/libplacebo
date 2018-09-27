@@ -19,6 +19,7 @@
 
 #include "common.h"
 #include "shaders.h"
+#include "dispatch.h"
 
 enum {
     // The scalers for each plane are set up to be just the index itself
@@ -380,7 +381,7 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
     if (info.config->polar) {
         ok = pl_shader_sample_polar(sh, src, &fparams);
     } else {
-        struct pl_shader *tsh = pl_dispatch_begin(rr->dp);
+        struct pl_shader *tsh = pl_dispatch_begin_ex(rr->dp, true);
         ok = pl_shader_sample_ortho(tsh, PL_SEP_VERT, src, &fparams);
         if (!ok) {
             pl_dispatch_abort(rr->dp, &tsh);
@@ -565,7 +566,7 @@ static int deband_src(struct pl_renderer *rr, struct pl_shader *psh,
             // an exact integer crop without scaling), also skip the scalers
             deband_scales = true;
         } else {
-            sh = pl_dispatch_begin(rr->dp);
+            sh = pl_dispatch_begin_ex(rr->dp, true);
         }
     }
 
@@ -602,7 +603,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_image *image,
                             const struct pl_render_params *params)
 {
-    struct pl_shader *sh = pl_dispatch_begin(rr->dp);
+    struct pl_shader *sh = pl_dispatch_begin_ex(rr->dp, true);
     sh_require(sh, PL_SHADER_SIG_NONE, 0, 0);
 
     // Initialize the color to black
@@ -665,7 +666,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     float scale = pl_color_repr_normalize(&repr);
 
     for (int i = 0; i < image->num_planes; i++) {
-        struct pl_shader *psh = pl_dispatch_begin(rr->dp);
+        struct pl_shader *psh = pl_dispatch_begin_ex(rr->dp, true);
         struct pl_plane *plane = &planes[i];
 
         // Compute the source shift/scale relative to the reference size
@@ -812,7 +813,7 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     draw_overlays(rr, src.tex, image->overlays, image->num_overlays,
                   img->color, use_sigmoid, NULL, params);
 
-    struct pl_shader *sh = pl_dispatch_begin(rr->dp);
+    struct pl_shader *sh = pl_dispatch_begin_ex(rr->dp, true);
     dispatch_sampler(rr, sh, &rr->samplers[SCALER_MAIN], params, &src);
     pass->cur_img = (struct img) {
         .sh     = sh,

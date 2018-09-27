@@ -38,12 +38,6 @@ struct pl_shader;
 // possible - however, some features may not work, and will be disabled even
 // if requested.
 //
-// The `ident` represents some arbitrary value that identifies this pl_shader.
-// The semantics of the identifier work like a "namespace". This parameter is
-// only relevant if you plan on merging multiple shaders together, which
-// requires that all of the merged shaders have unique identifiers. It can
-// safely be left as 0 if unneeded.
-//
 // The `index` represents an abstract frame index, which shaders may use
 // internally to do things like temporal dithering or seeding PRNGs. If the
 // user does not care about temporal dithering/debanding, or wants determinstic
@@ -51,7 +45,7 @@ struct pl_shader;
 // by 1 on successive frames.
 struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
                                   const struct pl_gpu *gpu,
-                                  uint8_t ident, uint8_t index);
+                                  uint8_t ident);
 
 // Frees a pl_shader and all resources associated with it.
 void pl_shader_free(struct pl_shader **sh);

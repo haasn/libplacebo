@@ -193,7 +193,6 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     // Repeat this a few times to test the caching
     for (int i = 0; i < 10; i++) {
         printf("iteration %d\n", i);
-        pl_dispatch_reset_frame(dp);
         struct pl_shader *sh = pl_dispatch_begin(dp);
 
         // For testing, force the use of CS if possible
@@ -234,7 +233,6 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
 
 #if PL_HAVE_LCMS
     // Test the use of 3DLUTs if available
-    pl_dispatch_reset_frame(dp);
     struct pl_shader *sh = pl_dispatch_begin(dp);
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
 
