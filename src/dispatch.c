@@ -313,7 +313,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             struct pass_var *pv = &pass->vars[i];
             if (pv->type != PASS_VAR_PUSHC)
                 continue;
-            ADD(glsl, "/*offset=%zu*/ ", pv->layout.offset);
+            ADD(glsl, "    layout(offset=%zu) ", pv->layout.offset);
             add_var(dp, glsl, var);
         }
         ADD(glsl, "};\n");
