@@ -490,9 +490,13 @@ ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *p_state)
           "    return fract(state * 1.0/41.0);      \n"
           "}\n", permute, randfun, permute);
 
+    // Phi is the most irrational number, so it's a good candidate for
+    // generating seed values to the PRNG
+    static const double phi = sqrt(5.0)/2.0 + 0.5;
+
     const char *seed = "0.0";
     if (temporal) {
-        float seedval = modff(M_PI * sh->index, &(float){0});
+        float seedval = modff(phi * sh->index, &(float){0});
         seed = sh_var(sh, (struct pl_shader_var) {
             .var  = pl_var_float("seed"),
             .data = &seedval,
@@ -501,8 +505,10 @@ ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *p_state)
     }
 
     ident_t state = sh_fresh(sh, "prng");
-    GLSL("vec3 %s_m = vec3(gl_FragCoord.xy, %s) + vec3(1.0); \n"
-         "float %s = %s(%s(%s(%s_m.x) + %s_m.y) + %s_m.z);   \n",
+    GLSL("vec2 init = fract(gl_FragCoord.xy * vec2(%f));   \n"
+         "vec3 %s_m = vec3(init, %s) + vec3(1.0);          \n"
+         "float %s = %s(%s(%s(%s_m.x) + %s_m.y) + %s_m.z); \n",
+         phi,
          state, seed,
          state, permute, permute, permute, state, state, state);
 
