@@ -287,7 +287,7 @@ static bool find_physical_device(struct vk_ctx *vk,
             continue;
         }
 
-        if (params->device_name) {
+        if (params->device_name && params->device_name[0] != '\0') {
             if (strcmp(params->device_name, props.deviceName) == 0) {
                 vk->physd = devices[i];
                 best = 10; // high number...
