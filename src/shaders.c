@@ -492,7 +492,7 @@ ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *p_state)
 
     // Phi is the most irrational number, so it's a good candidate for
     // generating seed values to the PRNG
-    static const double phi = sqrt(5.0)/2.0 + 0.5;
+    static const double phi = 1.618033988749895;
 
     const char *seed = "0.0";
     if (temporal) {
