@@ -1057,22 +1057,23 @@ struct pl_var_layout std140_layout(const struct pl_gpu *gpu, size_t offset,
 
     // std140 packing rules:
     // 1. The size of generic values is their size in bytes
-    // 2. The size of vectors is the vector length * the base count, with the
-    // exception of *vec3 which is always the same size as *vec4
+    // 2. The size of vectors is the vector length * the base count
     // 3. Matrices are treated like arrays of column vectors
     // 4. The size of array rows is that of the element size rounded up to
     // the nearest multiple of vec4
-    // 5. All values are aligned to a multiple of their size (stride for arrays)
-    size_t size = el_size * var->dim_v;
+    // 5. All values are aligned to a multiple of their size (stride for arrays),
+    // with the exception of vec3 which is aligned like vec4
+    size_t stride = el_size * var->dim_v;
+    size_t align = stride;
     if (var->dim_v == 3)
-        size += el_size;
+        align += el_size;
     if (var->dim_m * var->dim_a > 1)
-        size = PL_ALIGN2(size, sizeof(float[4]));
+        stride = align = PL_ALIGN2(stride, sizeof(float[4]));
 
     return (struct pl_var_layout) {
-        .offset = PL_ALIGN2(offset, size),
-        .stride = size,
-        .size   = size * var->dim_m * var->dim_a,
+        .offset = PL_ALIGN2(offset, align),
+        .stride = stride,
+        .size   = stride * var->dim_m * var->dim_a,
     };
 }
 
@@ -1083,14 +1084,15 @@ struct pl_var_layout std430_layout(const struct pl_gpu *gpu, size_t offset,
 
     // std430 packing rules: like std140, except arrays/matrices are always
     // "tightly" packed, even arrays/matrices of vec3s
-    size_t size = el_size * var->dim_v;
+    size_t stride = el_size * var->dim_v;
+    size_t align = stride;
     if (var->dim_v == 3 && var->dim_m == 1 && var->dim_a == 1)
-        size += el_size;
+        align += el_size;
 
     return (struct pl_var_layout) {
-        .offset = PL_ALIGN2(offset, size),
-        .stride = size,
-        .size   = size * var->dim_m * var->dim_a,
+        .offset = PL_ALIGN2(offset, align),
+        .stride = stride,
+        .size   = stride * var->dim_m * var->dim_a,
     };
 }
 
