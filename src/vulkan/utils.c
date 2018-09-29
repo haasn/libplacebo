@@ -145,6 +145,9 @@ const char *vk_obj_str(VkDebugReportObjectTypeEXT obj)
     CASE(OBJECT_TABLE_NVX,                  VkObjectTableNVX);
     CASE(INDIRECT_COMMANDS_LAYOUT_NVX,      VkIndirectCommandsLayoutNVX);
 #endif
+#ifdef VK_NVX_raytracing
+    CASE(ACCELERATION_STRUCTURE_NVX,        VkAccelerationStructureNVX);
+#endif
 
     // Included to satisfy the switch coverage check
     case VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT:
