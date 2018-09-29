@@ -228,6 +228,7 @@ if get_option('tests')
   foreach t : tests
     e = executable('test.' + t, 'tests/' + t,
         dependencies: build_deps + tdeps,
+        objects: lib.extract_all_objects(),
         include_directories: inc
     )
 
