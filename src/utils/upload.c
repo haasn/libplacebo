@@ -21,6 +21,8 @@
 #include "common.h"
 #include "gpu.h"
 
+#include <libplacebo/utils/upload.h>
+
 struct comp {
     int order; // e.g. 0, 1, 2, 3 for RGBA
     int size;  // size in bits

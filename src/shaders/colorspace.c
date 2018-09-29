@@ -18,6 +18,9 @@
 #include <math.h>
 #include "shaders.h"
 
+#include <libplacebo/dither.h>
+#include <libplacebo/shaders/colorspace.h>
+
 void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
                             const struct pl_color_adjustment *params)
 {

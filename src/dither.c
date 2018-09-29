@@ -30,6 +30,7 @@
 #include <math.h>
 
 #include "common.h"
+#include <libplacebo/dither.h>
 
 void pl_generate_bayer_matrix(float *data, int size)
 {

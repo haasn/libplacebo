@@ -18,6 +18,7 @@
 #include <math.h>
 
 #include "common.h"
+#include <libplacebo/colorspace.h>
 
 bool pl_color_system_is_ycbcr_like(enum pl_color_system sys)
 {

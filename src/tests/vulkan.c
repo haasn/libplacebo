@@ -1,4 +1,5 @@
 #include "gpu_tests.h"
+#include <libplacebo/vulkan.h>
 
 int main()
 {

@@ -18,6 +18,7 @@
 #pragma once
 
 #include "common.h"
+#include <libplacebo/swapchain.h>
 
 #define SW_PFN(name) __typeof__(pl_swapchain_##name) *name
 struct pl_sw_fns {

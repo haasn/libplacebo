@@ -16,6 +16,7 @@
  */
 
 #include "common.h"
+#include <libplacebo/common.h>
 
 void pl_rect2d_normalize(struct pl_rect2d *rc)
 {

@@ -18,6 +18,8 @@
 #include <math.h>
 #include "shaders.h"
 
+#include <libplacebo/shaders/sampling.h>
+
 const struct pl_deband_params pl_deband_default_params = {
     .iterations = 1,
     .threshold  = 4.0,

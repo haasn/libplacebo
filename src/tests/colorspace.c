@@ -1,4 +1,5 @@
 #include "tests.h"
+#include <libplacebo/colorspace.h>
 
 int main()
 {

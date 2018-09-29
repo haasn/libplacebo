@@ -18,6 +18,8 @@
 #pragma once
 
 #include "common.h"
+#include <libplacebo/gpu.h>
+#include <libplacebo/dispatch.h>
 
 #define GPU_PFN(name) __typeof__(pl_##name) *name
 struct pl_gpu_fns {
