@@ -507,6 +507,8 @@ struct pl_var pl_var_from_fmt(const struct pl_fmt *fmt, const char *name);
 // distinction between the columns of a matrix and the rows of an array. For
 // example, a mat2[10] and a vec2[20] share the same pl_var_layout - the stride
 // would be sizeof(vec2) and the size would be sizeof(vec2) * 2 * 10.
+//
+// For non-array/matrix types, `stride` is equal to `size`.
 
 struct pl_var_layout {
     size_t offset; // the starting offset of the first byte
