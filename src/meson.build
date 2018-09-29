@@ -12,7 +12,7 @@ c_opts = [
 
 # glslang needs c++11
 cpp_opts = [
-  '-std=c++11',
+  '-std=c++11', '-fvisibility=hidden',
 ]
 
 # Build options mostly taken from mpv
