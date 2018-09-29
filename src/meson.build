@@ -6,13 +6,12 @@ version = majorver + '.' + apiver + '.' + fixver
 
 c_opts = [
   '-D_ISOC99_SOURCE', '-D_GNU_SOURCE', '-D_XOPEN_SOURCE=700',
-  '-U__STRICT_ANSI__', '-fvisibility=hidden',
-  '-Wmissing-prototypes', '-Wno-pointer-sign'
+  '-U__STRICT_ANSI__', '-Wmissing-prototypes', '-Wno-pointer-sign'
 ]
 
 # glslang needs c++11
 cpp_opts = [
-  '-std=c++11', '-fvisibility=hidden',
+  '-std=c++11',
 ]
 
 # Build options mostly taken from mpv
@@ -199,15 +198,21 @@ configure_file(
   configuration: conf,
 )
 
+# Symbol visibility
+symfile = 'libplacebo.sym'
+vflag = '-Wl,--version-script,@0@/@1@'.format(meson.current_source_dir(), symfile)
+
 # Build process
 add_project_arguments(build_opts + c_opts, language: 'c')
 add_project_arguments(build_opts + cpp_opts, language: 'cpp')
 inc = include_directories('./include')
+
 lib = library('placebo', sources,
   install: true,
   dependencies: build_deps,
   soversion: apiver,
   include_directories: inc,
+  link_args: vflag,
 )
 
 # Install process
