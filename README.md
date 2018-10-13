@@ -15,33 +15,15 @@ accomplish the following goals:
   redesigned abstractions. (Basically, I wanted to eliminate code smell like
   `shader_cache.c` and totally redesign `gpu/video.c`)
 
-**NOTE**: libplacebo is currently in an early stage. Expect the API to be
-unstable, and many parts to be missing. To reflect this, the API version as
-exported by common.h will **NOT** change except on new beta releases (v0.x).
-So using libplacebo directly from git master is not advised; always use one of
-the tagged releases if you want to play around with libplacebo in its current
-stage.
+**NOTE**: libplacebo is currently in a relatively early stage. To reflect
+this, the API version as exported by common.h will **NOT** change except on
+new beta releases (v0.x). So using libplacebo directly from git master is not
+advised; always use one of the tagged releases if you want to play around with
+libplacebo in its current stage.
 
 Once the version number hits 1.X, which will mark the first stable release,
 the API version will be bumped for every change to the public API - even
 changes that happen on git master.
-
-## Note to distributors
-
-If you are planning to package libplacebo for your distribution, you should
-either start with v0.4.0+ (rolling release / bleeding edge distros), or
-alternatively stay on the v0.2 branch (which will get backports for the most
-important fixes).
-
-The v0.2 branch is rather incomplete and doesn't have a fully-functioning
-renderer yet, but it's the minimum version required by e.g. VLC 3, as well as
-the version they vendor, so it will receive VLC 3.0-related bug fix releases
-(such as v0.2.1) for the foreseeable future - at least until VLC 4. If you
-don't care about support for the renderer, and simply want a stable basis to
-avoid ABI breaks mid-release, you can stay on this branch.
-
-I do not recommend packaging or using v0.3.0 at this time, since it has some
-known issues affecting its use by VLC (fixed in v0.4.0 and v0.2.1).
 
 ## Authors
 
