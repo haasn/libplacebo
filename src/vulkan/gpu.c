@@ -1162,12 +1162,13 @@ static bool vk_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
     struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_buf_vk *buf_vk = buf->priv;
 
-    if (timeout > 0) {
+    bool inuse = buf_vk->refcount > 1;
+    if (inuse && timeout > 0) {
         vk_submit(gpu);
         vk_poll_commands(vk, timeout);
     }
 
-    return buf_vk->refcount > 1;
+    return inuse;
 }
 
 static bool vk_tex_upload(const struct pl_gpu *gpu,
