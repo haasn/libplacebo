@@ -37,7 +37,7 @@ struct spirv_compiler *spirv_compiler_create(struct pl_context *ctx)
         struct spirv_compiler *spirv = talloc_zero(NULL, struct spirv_compiler);
         spirv->ctx = ctx;
         spirv->impl = impl;
-        strncpy(spirv->name, impl->name, sizeof(spirv->name));
+        strncpy(spirv->name, impl->name, sizeof(spirv->name) - 1);
 
         pl_info(ctx, "Initializing SPIR-V compiler '%s'", impl->name);
         if (impl->init(spirv))
