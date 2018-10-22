@@ -505,11 +505,11 @@ ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *p_state)
     }
 
     ident_t state = sh_fresh(sh, "prng");
-    GLSL("vec2 init = fract(gl_FragCoord.xy * vec2(%f));   \n"
-         "vec3 %s_m = vec3(init, %s) + vec3(1.0);          \n"
-         "float %s = %s(%s(%s(%s_m.x) + %s_m.y) + %s_m.z); \n",
-         phi,
-         state, seed,
+    GLSL("vec2 %s_init = fract(gl_FragCoord.xy * vec2(%f)); \n"
+         "vec3 %s_m = vec3(%s_init, %s) + vec3(1.0);        \n"
+         "float %s = %s(%s(%s(%s_m.x) + %s_m.y) + %s_m.z);  \n",
+         state, phi,
+         state, state, seed,
          state, permute, permute, permute, state, state, state);
 
     if (p_state)
