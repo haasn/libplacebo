@@ -1079,7 +1079,7 @@ done: ;
 
     default: // LUT-based methods
         pl_assert(lut);
-        GLSL("bias = %s(pos);\n", lut);
+        GLSL("bias = %s(ivec2(pos * %d));\n", lut, lut_size);
         break;
     }
 

@@ -821,10 +821,10 @@ next_dim: ; // `continue` out of the inner loop
     }
 
     if (arr_name) {
-        GLSLH("#define %s(pos) (%s[int(%d * (pos).x)\\\n", name, arr_name, width);
+        GLSLH("#define %s(pos) (%s[int((pos).x)\\\n", name, arr_name);
         int shift = width;
         for (int i = 1; i < dims; i++) {
-            GLSLH("    + %d * int(%d * (pos)[%d])\\\n", shift, sizes[i], i);
+            GLSLH("    + %d * int((pos)[%d])\\\n", shift, i);
             shift *= sizes[i];
         }
         GLSLH("  ])\n");

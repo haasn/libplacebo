@@ -169,9 +169,8 @@ enum sh_lut_method {
 // a given method (falling back if needed). The resulting identifier can be
 // sampled directly as %s(pos), where pos is a vector with the right number of
 // dimensions. `pos` must be an integer vector within the bounds of the array,
-// unless the method is `SH_LUT_LINEAR` or `SH_LUT_TEXTURE` in which case it's
-// a float vector that gets interpolated and clamped as needed. Returns NULL on
-// error.
+// unless the method is `SH_LUT_LINEAR`, in which case it's a float vector that
+// gets interpolated and clamped as needed. Returns NULL on error.
 //
 // This function also acts as `sh_require_obj`, and uses the `buf`, `tex`
 // and `text` fields of the resulting `obj`. (The other fields may be used by
