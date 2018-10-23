@@ -745,10 +745,31 @@ next_dim: ; // `continue` out of the inner loop
     ident_t arr_name = NULL;
 
     static const char * const types[] = {"float", "vec2", "vec3", "vec4"};
+    static const char * const itypes[] = {"uint", "ivec2", "ivec3", "ivec4"};
     static const char * const swizzles[] = {"x", "xy", "xyz", "xyzw"};
 
     switch (method) {
-    case SH_LUT_TEXTURE:
+    case SH_LUT_TEXTURE: {
+        ident_t tex = sh_desc(sh, (struct pl_shader_desc) {
+            .desc = {
+                .name = "weights",
+                .type = PL_DESC_SAMPLED_TEX,
+            },
+            .object = lut->weights.tex,
+        });
+
+        GLSLH("#define %s(pos) (texelFetch(%s, %s(pos",
+              name, tex, itypes[texdim - 1]);
+
+        // Fill up extra components of the index
+        for (int i = dims; i < texdim; i++)
+            GLSLH(", 0");
+
+        GLSLH("), 0).%s)\n", swizzles[comps - 1]);
+        ret = name;
+        break;
+    }
+
     case SH_LUT_LINEAR: {
         ident_t tex = sh_desc(sh, (struct pl_shader_desc) {
             .desc = {
