@@ -523,15 +523,14 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
         .access = PL_DESC_ACCESS_READWRITE,
     };
 
-    struct pl_var_layout idx_l, num_l, ctr_l, max_l, avg_l, max_tl, avg_tl;
     bool ok = true;
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &idx_l, idx);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &num_l, num);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &ctr_l, ctr);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &max_l, max);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &avg_l, avg);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &max_tl, max_total);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, &avg_tl, avg_total);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, idx);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, num);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, ctr);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, max);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, avg);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, max_total);
+    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, avg_total);
 
     if (!ok) {
         PL_WARN(sh, "HDR peak detection exhausts device limits.. disabling");

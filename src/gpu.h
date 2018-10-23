@@ -61,7 +61,7 @@ void pl_gpu_destroy(const struct pl_gpu *gpu);
 // buffer, resizing buf.buffer_vars if necessary. Returns whether or not the
 // variable could be successfully added (which may fail if you try exceeding
 // the size limits of the buffer type). If successful, the layout is stored
-// in *out_layout
+// in *out_layout (may be NULL).
 bool pl_buf_desc_append(void *tactx, const struct pl_gpu *gpu,
                         struct pl_desc *buf_desc,
                         struct pl_var_layout *out_layout,

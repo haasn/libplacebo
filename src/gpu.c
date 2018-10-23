@@ -836,7 +836,8 @@ bool pl_buf_desc_append(void *tactx, const struct pl_gpu *gpu,
     default: abort();
     }
 
-    *out_layout = bv.layout;
+    if (out_layout)
+        *out_layout = bv.layout;
     TARRAY_APPEND(tactx, buf_desc->buffer_vars, buf_desc->num_buffer_vars, bv);
     return true;
 }
