@@ -49,6 +49,25 @@ bool pl_color_system_is_linear(enum pl_color_system sys);
 // auto-guessed, even for 4K resolution content)
 enum pl_color_system pl_color_system_guess_ycbcr(int width, int height);
 
+// Friendly names for the canonical channel names and order.
+enum pl_channel {
+    PL_CHANNEL_NONE = -1,
+    PL_CHANNEL_A = 3, // alpha
+    // RGB system
+    PL_CHANNEL_R = 0,
+    PL_CHANNEL_G = 1,
+    PL_CHANNEL_B = 2,
+    // YCbCr-like systems
+    PL_CHANNEL_Y = 0,
+    PL_CHANNEL_CB = 1,
+    PL_CHANNEL_CR = 2,
+    // Aliases for Cb/Cr
+    PL_CHANNEL_U = 1,
+    PL_CHANNEL_V = 2
+    // There are deliberately no names for the XYZ system to avoid
+    // confusion due to PL_CHANNEL_Y.
+};
+
 // The numerical range of the representation (where applicable).
 enum pl_color_levels {
     PL_COLOR_LEVELS_UNKNOWN = 0,
