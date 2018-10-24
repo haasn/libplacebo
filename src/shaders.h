@@ -129,6 +129,7 @@ enum pl_shader_obj_type {
     PL_SHADER_OBJ_DITHER,
     PL_SHADER_OBJ_3DLUT,
     PL_SHADER_OBJ_LUT,
+    PL_SHADER_OBJ_AV1_GRAIN,
 };
 
 struct pl_shader_obj {

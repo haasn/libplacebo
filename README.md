@@ -113,6 +113,8 @@ other developers of GPU-accelerated image processing software.
 In addition to this low-level interface, there are several available shader
 routines which libplacebo exports:
 
+- `shaders/av1.h`: Helper shaders for AV1 decoding, currently only implements
+  a film grain synthesis shader.
 - `shaders/colorspace.h`: Shader routines for decoding and transforming
   colors, tone mapping, dithering, and so forth.
 - `shaders/sampling.h`: Shader routines for various algorithms that sample

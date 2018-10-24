@@ -62,6 +62,7 @@ sources = [
   'gpu.c',
   'renderer.c',
   'shaders.c',
+  'shaders/av1.c',
   'shaders/colorspace.c',
   'shaders/sampling.c',
   'spirv.c',
