@@ -1048,6 +1048,11 @@ void pl_gpu_flush(const struct pl_gpu *gpu)
         gpu->impl->gpu_flush(gpu);
 }
 
+void pl_gpu_finish(const struct pl_gpu *gpu)
+{
+    gpu->impl->gpu_finish(gpu);
+}
+
 // GPU-internal helpers
 
 struct pl_var_layout std140_layout(const struct pl_gpu *gpu, size_t offset,

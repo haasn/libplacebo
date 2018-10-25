@@ -45,6 +45,7 @@ struct pl_gpu_fns {
     GPU_PFN(pass_create);
     GPU_PFN(pass_run);
     GPU_PFN(gpu_flush); // optional
+    GPU_PFN(gpu_finish);
 
     // The following functions are optional if the corresponding pl_limit
     // size restriction is 0

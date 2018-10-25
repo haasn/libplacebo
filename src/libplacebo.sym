@@ -111,6 +111,7 @@
         pl_get_cone_matrix;
         pl_get_rgb2xyz_matrix;
         pl_get_xyz2rgb_matrix;
+        pl_gpu_finish;
         pl_gpu_flush;
         pl_icc_profile_equal;
         pl_log_color;

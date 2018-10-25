@@ -2218,6 +2218,13 @@ static void vk_gpu_flush(const struct pl_gpu *gpu)
     vk_flush_commands(vk);
 }
 
+static void vk_gpu_finish(const struct pl_gpu *gpu)
+{
+    struct vk_ctx *vk = pl_vk_get(gpu);
+    vk_submit(gpu);
+    vk_wait_idle(vk);
+}
+
 struct vk_cmd *pl_vk_steal_cmd(const struct pl_gpu *gpu)
 {
     struct pl_vk *p = gpu->priv;
@@ -2248,4 +2255,5 @@ static struct pl_gpu_fns pl_fns_vk = {
     .pass_destroy           = vk_pass_destroy_lazy,
     .pass_run               = vk_pass_run,
     .gpu_flush              = vk_gpu_flush,
+    .gpu_finish             = vk_gpu_finish,
 };

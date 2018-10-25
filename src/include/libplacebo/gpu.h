@@ -808,4 +808,19 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
 // results (via pl_tex_download) at the very end.
 void pl_gpu_flush(const struct pl_gpu *gpu);
 
+// This is like `pl_gpu_flush` but also blocks until the GPU is fully idle
+// before returning. Using this in your rendering loop is seriously disadvised,
+// and almost never the right solution. The intended use case is for deinit
+// logic, where users may want to force the all pending GPU operations to
+// finish so they can clean up their state more easily.
+//
+// After this operation is called, it's guaranteed that all pending buffer
+// operations are complete - i.e. `pl_buf_poll` is guaranteed to return false.
+// Also, if you only care about buffer operations, you can accomplish this more
+// easily by using `pl_buf_poll` with the timeout set to `UINT64_MAX`. But
+// if you have many buffers it may be more convenient to call this function
+// instead. The difference is that this function will also affect e.g.
+// renders to a `pl_swapchain`.
+void pl_gpu_finish(const struct pl_gpu *gpu);
+
 #endif // LIBPLACEBO_GPU_H_
