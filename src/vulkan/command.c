@@ -343,7 +343,7 @@ void vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd *cmd)
 
     if (vk->num_cmds_queued >= PL_VK_MAX_QUEUED_CMDS) {
         PL_WARN(vk, "Exhausted the queued command limit.. forcing a flush now. "
-                "Consider using pl_flush after submitting a batch of work?");
+                "Consider using pl_gpu_flush after submitting a batch of work?");
         vk_flush_commands(vk);
     }
 
