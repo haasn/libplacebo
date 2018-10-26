@@ -21,8 +21,6 @@
 #include "shaders.h"
 #include "dispatch.h"
 
-#include <libplacebo/renderer.h>
-
 enum {
     // The scalers for each plane are set up to be just the index itself
     SCALER_PLANE0 = 0,

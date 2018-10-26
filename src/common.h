@@ -28,6 +28,24 @@
 #include "config.h"
 #include "pl_assert.h"
 
+#include "include/libplacebo/colorspace.h"
+#include "include/libplacebo/common.h"
+#include "include/libplacebo/context.h"
+#include "include/libplacebo/dispatch.h"
+#include "include/libplacebo/dither.h"
+#include "include/libplacebo/filters.h"
+#include "include/libplacebo/gpu.h"
+#include "include/libplacebo/renderer.h"
+#include "include/libplacebo/shaders.h"
+#include "include/libplacebo/shaders/colorspace.h"
+#include "include/libplacebo/shaders/sampling.h"
+#include "include/libplacebo/swapchain.h"
+#include "include/libplacebo/utils/upload.h"
+
+#if PL_HAVE_VULKAN
+#include "include/libplacebo/vulkan.h"
+#endif
+
 // Align up to the nearest multiple of an arbitrary alignment, which may also
 // be 0 to signal no alignment requirements.
 #define PL_ALIGN(x, align) ((align) ? ((x) + (align) - 1) / (align) * (align) : (x))

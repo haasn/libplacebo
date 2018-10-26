@@ -1,12 +1,6 @@
 #include "tests.h"
 #include "shaders.h"
 
-#include <libplacebo/gpu.h>
-#include <libplacebo/renderer.h>
-#include <libplacebo/shaders/colorspace.h>
-#include <libplacebo/shaders/sampling.h>
-#include <libplacebo/utils/upload.h>
-
 static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex,
                               float *src, float *dst)
 {

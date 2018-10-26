@@ -18,7 +18,6 @@
 #pragma once
 
 #include "common.h"
-#include <libplacebo/dispatch.h>
 
 // Like `pl_dispatch_begin`, but has an extra `unique` parameter. If this is
 // true, the generated shader will be uniquely namespaced `unique` and may be

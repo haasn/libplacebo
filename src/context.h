@@ -21,7 +21,6 @@
 #include "bstr/bstr.h"
 
 #include "common.h"
-#include <libplacebo/context.h>
 
 struct pl_context {
     struct pl_context_params params;

@@ -39,8 +39,6 @@
 #include "common.h"
 #include "context.h"
 
-#include <libplacebo/filters.h>
-
 bool pl_filter_function_eq(const struct pl_filter_function *a,
                            const struct pl_filter_function *b)
 {

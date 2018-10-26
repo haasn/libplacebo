@@ -1,5 +1,4 @@
 #include "tests.h"
-#include <libplacebo/dither.h>
 
 #define SHIFT 4
 #define SIZE (1 << SHIFT)

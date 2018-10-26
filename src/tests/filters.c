@@ -1,5 +1,4 @@
 #include "tests.h"
-#include <libplacebo/filters.h>
 
 int main()
 {

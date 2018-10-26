@@ -18,7 +18,6 @@
 #pragma once
 
 #include "common.h"
-#include <libplacebo/context.h>
 
 #include <stdio.h>
 #include <stdlib.h>

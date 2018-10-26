@@ -24,8 +24,6 @@
 #include "context.h"
 #include "gpu.h"
 
-#include <libplacebo/shaders.h>
-
 // This represents an identifier (e.g. name of function, uniform etc.) for
 // a shader resource. The generated identifiers are immutable, but only live
 // until pl_shader_reset - so make copies when passing to external stuff.

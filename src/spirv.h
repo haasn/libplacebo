@@ -20,8 +20,6 @@
 #include "common.h"
 #include "context.h"
 
-#include <libplacebo/gpu.h>
-
 enum glsl_shader_stage {
     GLSL_SHADER_VERTEX,
     GLSL_SHADER_FRAGMENT,
