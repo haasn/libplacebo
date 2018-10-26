@@ -253,8 +253,8 @@ void main()
 For a full documentation of the API, refer to the above [API
 Overview](#api-overview) as well as the [public header
 files](src/include/libplacebo). You can find additional examples of how to use
-the various components, in the [unit tests](src/tests), as well as the
-[demo programs](demos).
+the various components in the [demo programs](demos) as well as in the [unit
+tests](src/tests).
 
 I will create more and expanded tutorials/examples once libplacebo is a bit
 more feature-complete.
