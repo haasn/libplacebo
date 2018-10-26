@@ -624,6 +624,34 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
     return buf;
 }
 
+static bool pl_buf_params_superset(struct pl_buf_params a, struct pl_buf_params b)
+{
+    return a.type            == b.type &&
+           a.format          == b.format &&
+           a.size            >= b.size &&
+           (a.host_mapped    || !b.host_mapped) &&
+           (a.host_writable  || !b.host_writable) &&
+           (a.host_readable  || !b.host_readable);
+}
+
+bool pl_buf_recreate(const struct pl_gpu *gpu, const struct pl_buf **buf,
+                     const struct pl_buf_params *params)
+{
+    if (params->initial_data) {
+        PL_ERR(gpu, "pl_buf_recreate may not be used with `initial_data`!");
+        return false;
+    }
+
+    if (*buf && pl_buf_params_superset((*buf)->params, *params))
+        return true;
+
+    PL_INFO(gpu, "(Re)creating %zu buffer", params->size);
+    pl_buf_destroy(gpu, buf);
+    *buf = pl_buf_create(gpu, params);
+
+    return !!*buf;
+}
+
 void pl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf **buf)
 {
     if (!*buf)

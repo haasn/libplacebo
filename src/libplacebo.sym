@@ -8,6 +8,7 @@
         pl_buf_destroy;
         pl_buf_poll;
         pl_buf_read;
+        pl_buf_recreate;
         pl_buf_storage_layout;
         pl_buf_uniform_layout;
         pl_buf_write;

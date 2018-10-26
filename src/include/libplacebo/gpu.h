@@ -399,6 +399,18 @@ struct pl_buf {
 const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
                                    const struct pl_buf_params *params);
 
+
+// This behaves like `pl_buf_create`, but if the buffer already exists and has
+// incompatible parameters, it will get destroyed first. A buffer is considered
+// "compatible" if it has the same buffer type and texel format, a size greater
+// than or equal to the requested size, and it has a superset of the features
+// the user requested.
+//
+// Note: due to its unpredictability, using `initial_data` with
+// `pl_tex_recreate` is considered an error.
+bool pl_buf_recreate(const struct pl_gpu *gpu, const struct pl_buf **buf,
+                     const struct pl_buf_params *params);
+
 void pl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf **buf);
 
 // Update the contents of a buffer, starting at a given offset (must be a
