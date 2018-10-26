@@ -384,6 +384,11 @@ static bool pl_tex_params_superset(struct pl_tex_params a, struct pl_tex_params 
 bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
                      const struct pl_tex_params *params)
 {
+    if (params->initial_data) {
+        PL_ERR(gpu, "pl_tex_recreate may not be used with `initial_data`!");
+        return false;
+    }
+
     if (*tex && pl_tex_params_superset((*tex)->params, *params))
         return true;
 

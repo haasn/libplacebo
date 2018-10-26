@@ -256,6 +256,16 @@ const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
 
 void pl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex **tex);
 
+// This works like `pl_tex_create`, but if the texture already exists and has
+// incompatible texture parameters, it will get destroyed first. A texture is
+// considered "compatible" if it has the same texture format and sample/address
+// mode and it supports a superset of the features the user requested.
+//
+// Note: due to its unpredictability, using `initial_data` with
+// `pl_tex_recreate` is considered an error.
+bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
+                     const struct pl_tex_params *params);
+
 // Invalidates the contents of a texture. After this, the contents are fully
 // undefined.
 void pl_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex);

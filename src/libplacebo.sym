@@ -175,6 +175,7 @@
         pl_tex_destroy;
         pl_tex_download;
         pl_tex_invalidate;
+        pl_tex_recreate;
         pl_tex_upload;
         pl_transform2x2_apply;
         pl_transform2x2_identity;

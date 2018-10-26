@@ -59,10 +59,6 @@ struct pl_gpu_fns {
 // destroyed before calling pl_destroy.
 void pl_gpu_destroy(const struct pl_gpu *gpu);
 
-// Recreates a texture with new parameters, no-op if nothing changed
-bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
-                     const struct pl_tex_params *params);
-
 // Incrementally build up a buffer by adding new variable elements to the
 // buffer, resizing buf.buffer_vars if necessary. Returns whether or not the
 // variable could be successfully added (which may fail if you try exceeding
