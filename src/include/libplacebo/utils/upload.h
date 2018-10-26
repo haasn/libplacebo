@@ -100,9 +100,9 @@ const struct pl_fmt *pl_plane_find_fmt(const struct pl_gpu *gpu, int out_map[4],
                                        const struct pl_plane_data *data);
 
 // Upload an image plane to a texture, and output the resulting `pl_plane`
-// struct. `tex` must be a valid pointer to a texture (or NULL), which will be
-// destroyed and reinitialized if it does not already exist or is incompatible.
-// Returns whether successful.
+// struct to `out_plane` (optional). `tex` must be a valid pointer to a texture
+// (or NULL), which will be destroyed and reinitialized if it does not already
+// exist or is incompatible. Returns whether successful.
 //
 // The resulting texture is guaranteed to be `sampleable`, and it will also try
 // and maximize compatibility with the other `pl_renderer` requirements

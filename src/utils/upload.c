@@ -162,11 +162,13 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
         return false;
     }
 
-    *out_plane = (struct pl_plane) { .texture = *tex };
-    for (int i = 0; i < PL_ARRAY_SIZE(out_map); i++) {
-        out_plane->component_mapping[i] = out_map[i];
-        if (out_map[i] >= 0)
-            out_plane->components = i+1;
+    if (out_plane) {
+        *out_plane = (struct pl_plane) { .texture = *tex };
+        for (int i = 0; i < PL_ARRAY_SIZE(out_map); i++) {
+            out_plane->component_mapping[i] = out_map[i];
+            if (out_map[i] >= 0)
+                out_plane->components = i+1;
+        }
     }
 
     return pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
