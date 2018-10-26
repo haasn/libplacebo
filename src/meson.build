@@ -24,6 +24,8 @@ build_opts = [
   '-Werror=implicit-function-declaration',
 ]
 
+link_args = []
+
 cc = meson.get_compiler('c')
 cxx = meson.get_compiler('cpp')
 
@@ -34,6 +36,11 @@ endif
 # clang's version of -Wmissing-braces rejects the common {0} initializers
 if cc.get_id() == 'clang'
   build_opts += ['-Wno-missing-braces']
+endif
+
+vflag = '-Wl,--exclude-libs=ALL'
+if cc.has_link_argument(vflag)
+  link_args += [vflag]
 endif
 
 # Global dependencies
@@ -208,6 +215,7 @@ lib = library('placebo', sources,
   dependencies: build_deps,
   soversion: apiver,
   include_directories: inc,
+  link_args: link_args,
 )
 
 # Install process
