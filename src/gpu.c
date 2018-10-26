@@ -1143,16 +1143,6 @@ void pl_buf_pool_uninit(const struct pl_gpu *gpu, struct pl_buf_pool *pool)
     *pool = (struct pl_buf_pool) {0};
 }
 
-static bool pl_buf_params_compatible(const struct pl_buf_params *new,
-                                     const struct pl_buf_params *old)
-{
-    return new->type == old->type &&
-           new->size <= old->size &&
-           new->host_mapped  == old->host_mapped &&
-           new->host_writable == old->host_writable &&
-           new->host_readable == old->host_readable;
-}
-
 static bool pl_buf_pool_grow(const struct pl_gpu *gpu, struct pl_buf_pool *pool)
 {
     const struct pl_buf *buf = pl_buf_create(gpu, &pool->current_params);
@@ -1171,7 +1161,7 @@ const struct pl_buf *pl_buf_pool_get(const struct pl_gpu *gpu,
 {
     pl_assert(!params->initial_data);
 
-    if (!pl_buf_params_compatible(params, &pool->current_params)) {
+    if (!pl_buf_params_superset(pool->current_params, *params)) {
         pl_buf_pool_uninit(gpu, pool);
         pool->current_params = *params;
     }
