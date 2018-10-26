@@ -28,6 +28,10 @@
 #include "config.h"
 #include "pl_assert.h"
 
+// Include all of the symbols that should be public in a way that marks them
+// as being externally visible. (Otherwise, all symbols are hidden by default)
+#pragma GCC visibility push(default)
+
 #include "include/libplacebo/colorspace.h"
 #include "include/libplacebo/common.h"
 #include "include/libplacebo/context.h"
@@ -45,6 +49,8 @@
 #if PL_HAVE_VULKAN
 #include "include/libplacebo/vulkan.h"
 #endif
+
+#pragma GCC visibility pop
 
 // Align up to the nearest multiple of an arbitrary alignment, which may also
 // be 0 to signal no alignment requirements.
