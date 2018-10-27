@@ -455,12 +455,15 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
 
     for (int i = 0; i < dp->num_passes; i++) {
         const struct pass *p = dp->passes[i];
+        if (p->signature != sig)
+            continue;
+
         const struct pl_fmt *tfmt = p->pass->params.target_dummy.params.format;
-        if (p->signature == sig && target->params.format == tfmt &&
-            blend_equal(p->pass->params.blend_params, blend))
-        {
+        bool raster_ok = target->params.format == tfmt;
+        raster_ok &= blend_equal(p->pass->params.blend_params, blend);
+
+        if (pl_shader_is_compute(sh) || raster_ok)
             return dp->passes[i];
-        }
     }
 
     void *tmp = talloc_new(NULL); // for resources attached to `params`
