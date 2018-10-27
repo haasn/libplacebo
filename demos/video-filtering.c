@@ -13,7 +13,7 @@
  *
  * AMDVLK:
  *   api1: 10000 frames in 17.027370 s => 1.702737 ms/frame (587.29 fps)
- *   api2: api2: 10000 frames in 8.882183 s => 0.888218 ms/frame (1125.85 fps)
+ *   api2: 10000 frames in 8.882183 s => 0.888218 ms/frame (1125.85 fps)
  *
  * You can see that AMDVLK is much better at doing texture streaming than
  * RADV - this is because as of writing RADV still does not support
