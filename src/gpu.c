@@ -942,21 +942,6 @@ void pl_pass_destroy(const struct pl_gpu *gpu, const struct pl_pass **pass)
     *pass = NULL;
 }
 
-static bool pl_tex_params_compat(const struct pl_tex_params a,
-                                 const struct pl_tex_params b)
-{
-    return a.format         == b.format &&
-           a.sampleable     == b.sampleable &&
-           a.renderable     == b.renderable &&
-           a.storable       == b.storable &&
-           a.blit_src       == b.blit_src &&
-           a.blit_dst       == b.blit_dst &&
-           a.host_writable  == b.host_writable &&
-           a.host_readable  == b.host_readable &&
-           a.sample_mode    == b.sample_mode &&
-           a.address_mode   == b.address_mode;
-}
-
 void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *params)
 {
     const struct pl_pass *pass = params->pass;
@@ -1026,7 +1011,7 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         const struct pl_tex *tex = params->target;
         pl_assert(tex);
         pl_assert(pl_tex_params_dimension(tex->params) == 2);
-        pl_assert(pl_tex_params_compat(tex->params, pass->params.target_dummy.params));
+        pl_assert(tex->params.format == pass->params.target_dummy.params.format);
         pl_assert(tex->params.renderable);
         struct pl_rect2d *vp = &new.viewport;
         struct pl_rect2d *sc = &new.scissors;
