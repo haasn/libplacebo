@@ -5,23 +5,23 @@
  *
  * For sake of a simple example, let's assume this is a debanding filter.
  * For those of you too lazy to compile/run this file but still want to see
- * results, these are from my machine (RX 560 with mesa/amdgpu git 2018-09-27):
+ * results, these are from my machine (RX 560 with mesa/amdvlk git 2018-09-27):
  *
  * RADV:
- *   api1: 10000 frames in 21.293901 s => 2.129390 ms/frame (469.62 fps)
- *   api2: 10000 frames in 15.037124 s => 1.503712 ms/frame (665.02 fps)
+ *   api1: 10000 frames in 22.279652 s => 2.227965 ms/frame (448.84 fps)
+ *   api2: 10000 frames in 14.220453 s => 1.422045 ms/frame (703.21 fps)
  *
  * AMDVLK:
- *   api1: 10000 frames in 18.357798 s => 1.835780 ms/frame (544.73 fps)
- *   api2: 10000 frames in 10.250310 s => 1.025031 ms/frame (975.58 fps)
+ *   api1: 10000 frames in 17.956402 s => 1.795640 ms/frame (556.90 fps)
+ *   api2: 10000 frames in 6.790107 s => 0.679011 ms/frame (1472.73 fps)
  *
  * You can see that AMDVLK is much better at doing texture streaming than
  * RADV - this is because as of writing RADV still does not support
  * asynchronous texture queues / DMA engine transfers. If we disable the
  * `async_transfer` option with AMDVLK we get this:
  *
- *   api1: 10000 frames in 22.537271 s => 2.253727 ms/frame (443.71 fps)
- *   api2: 10000 frames in 19.460306 s => 1.946031 ms/frame (513.87 fps)
+ *   api1: 10000 frames in 21.202768 s => 2.120277 ms/frame (471.64 fps)
+ *   api2: 10000 frames in 19.426628 s => 1.942663 ms/frame (514.76 fps)
  *
  * Compiling:
  *
@@ -489,6 +489,9 @@ static enum api2_status submit_work(struct priv *p, struct entry *e,
         e->image.planes[i].stride = stride[i];
     }
 
+    // Make sure this work starts processing in the background, and especially
+    // so we can move on to the next queue on the gPU
+    pl_gpu_flush(p->gpu);
     return API2_OK;
 }
 
@@ -540,9 +543,6 @@ enum api2_status api2_process(void *priv)
     if (p->idx_out != p->idx_in)
         ret |= API2_HAVE_MORE;
 
-    // Note: It might be faster to call this at the end of `submit_work`
-    // instead of at the end of this function. Specific testing recommended.
-    pl_gpu_flush(p->gpu);
     return ret;
 }
 
