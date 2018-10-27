@@ -248,10 +248,10 @@ void setup_plane_data(const struct image *img,
         const struct plane *plane = &img->planes[i];
 
         out[i] = (struct pl_plane_data) {
-            .type = PL_FMT_UINT,
+            .type = PL_FMT_UNORM,
             .width = img->width >> plane->subx,
             .height = img->height >> plane->suby,
-            .pixel_stride = plane->fmt.num_comps * plane->fmt.bitdepth,
+            .pixel_stride = plane->fmt.num_comps * plane->fmt.bitdepth / 8,
             .row_stride = plane->stride,
             .pixels = plane->data,
         };
@@ -292,6 +292,7 @@ bool api1_reconfig(void *priv, const struct image *proxy)
             .format = fmt,
             .sampleable = true,
             .host_writable = true,
+            .sample_mode = PL_TEX_SAMPLE_LINEAR,
         });
 
         ok &= pl_tex_recreate(p->gpu, &p->tex_out[i], &(struct pl_tex_params) {
@@ -374,6 +375,7 @@ static enum api2_status submit_work(struct priv *p, struct entry *e,
     // while our upload is in progress
     if (img->associated_buf) {
         assert(!e->held_image);
+        image_lock(img);
         e->held_image = img;
         e->held_buf = img->associated_buf->priv;
     }
