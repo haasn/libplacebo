@@ -23,6 +23,22 @@
  *   api1: 10000 frames in 21.202768 s => 2.120277 ms/frame (471.64 fps)
  *   api2: 10000 frames in 19.426628 s => 1.942663 ms/frame (514.76 fps)
  *
+ * Some contributed results from NVIDIA systems (driver 410.66):
+ *
+ * GTX 1050:
+ *   api1: 10000 frames in 28.592386 s => 2.859239 ms/frame (349.74 fps)
+ *   api2: 10000 frames in 14.765165 s => 1.476516 ms/frame (677.27 fps)
+ *
+ * GTX 1080Ti:
+ *   api1: 10000 frames in 10.271872 s => 1.027187 ms/frame (973.53 fps)
+ *   api2: 10000 frames in 7.741683 s => 0.774168 ms/frame (1291.71 fps)
+ *
+ * Even though the GTX 1080 Ti is vastly more powerful than the RX 560, the
+ * cheap AMD card still outperforms it because of its much better asynchronous
+ * compute processing / work scheduling - but only for the efficient "API2"
+ * style procesisng. In single threaded workloads (api1) the more powerful
+ * GPU easily outperforms the cheaper one.
+ *
  * Compiling:
  *
  *   gcc -O2 video-filtering.c -lplacebo -o video-filtering
