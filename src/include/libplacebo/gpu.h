@@ -827,8 +827,13 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
 // retroactively.
 //
 // The only time this might be beneficial to call explicitly is if you're doing
-// lots of offline rendering over a long period of time, and only fetching the
-// results (via pl_tex_download) at the very end.
+// lots of offline processing where you submit a bunch of work and then
+// use asynchronous texture downloads (via pl_tex_download) to retrieve the
+// results. In that case you should call this function after each work item
+// to ensure good parallelism between them.
+//
+// It's worth noting that this function may block if you're over-feeding the
+// GPU without waiting for existing results to finish.
 void pl_gpu_flush(const struct pl_gpu *gpu);
 
 // This is like `pl_gpu_flush` but also blocks until the GPU is fully idle
