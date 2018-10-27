@@ -1705,7 +1705,7 @@ no_descriptors: ;
             pass_vk->finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         struct pl_tex_vk *target_vk = params->target_dummy.priv;
-        if (target_vk) {
+        if (target_vk && target_vk->current_layout) {
             // If we have a real texture as the target dummy, we can set the
             // initial layout based on what the texture is actually in at the
             // moment.
