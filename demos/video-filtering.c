@@ -4,6 +4,24 @@
  * would like to use libplacebo.
  *
  * For sake of a simple example, let's assume this is a debanding filter.
+ * For those of you too lazy to compile/run this file but still want to see
+ * results, these are from my machine (RX 560 with mesa/amdgpu git 2018-09-27):
+ *
+ * RADV:
+ *   api1: 10000 frames in 21.113829 s => 2.111383 ms/frame (473.62 fps)
+ *   api2: 10000 frames in 14.314918 s => 1.431492 ms/frame (698.57 fps)
+ *
+ * AMDVLK:
+ *   api1: 10000 frames in 17.027370 s => 1.702737 ms/frame (587.29 fps)
+ *   api2: api2: 10000 frames in 8.882183 s => 0.888218 ms/frame (1125.85 fps)
+ *
+ * You can see that AMDVLK is much better at doing texture streaming than
+ * RADV - this is because as of writing RADV still does not support
+ * asynchronous texture queues / DMA engine transfers. If we disable the
+ * `async_transfer` option with AMDVLK we get this:
+ *
+ *   api1: 10000 frames in 20.377153 s => 2.037715 ms/frame (490.75 fps)
+ *   api2: 10000 frames in 14.874546 s => 1.487455 ms/frame (672.29 fps)
  *
  * License: CC0 / Public Domain
  */
@@ -13,6 +31,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
+#include <time.h>
 
 #include <libplacebo/dispatch.h>
 #include <libplacebo/shaders/sampling.h>
@@ -538,4 +558,225 @@ void api2_free(void *priv, const struct api2_buf *buf)
     struct priv *p = priv;
     const struct pl_buf *plbuf = buf->priv;
     pl_buf_destroy(p->gpu, &plbuf);
+}
+
+
+////////////////////////////////////
+/// Proof of Concept / Benchmark ///
+////////////////////////////////////
+
+#define FRAMES 10000
+
+// Let's say we're processing a 1920x1080 4:2:0 8-bit NV12 video, arbitrarily
+// with a stride of 2048 pixels per row
+#define TEXELSZ sizeof(uint8_t)
+#define WIDTH   1920
+#define HEIGHT  1080
+#define STRIDE  (2048 * TEXELSZ)
+// Subsampled planes
+#define SWIDTH  (WIDTH >> 1)
+#define SHEIGHT (HEIGHT >> 1)
+#define SSTRIDE (STRIDE >> 1)
+// Plane offsets / sizes
+#define SIZE    (HEIGHT * STRIDE * TEXELSZ)
+#define SSIZE   (SHEIGHT * SSTRIDE * TEXELSZ)
+
+#define SIZE0   (HEIGHT * STRIDE * TEXELSZ)
+#define SIZE1   (2 * SHEIGHT * SSTRIDE * TEXELSZ)
+#define OFFSET0 0
+#define OFFSET1 SIZE0
+#define BUFSIZE (OFFSET1 + SIZE1)
+
+// Skeleton of an example image
+static const struct image example_image = {
+    .width = WIDTH,
+    .height = HEIGHT,
+    .num_planes = 2,
+    .planes = {
+        {
+            .subx = 0,
+            .suby = 0,
+            .stride = STRIDE,
+            .fmt = {
+                .num_comps = 1,
+                .bitdepth = 8 * TEXELSZ,
+            },
+        }, {
+            .subx = 1,
+            .suby = 1,
+            .stride = SSTRIDE * 2,
+            .fmt = {
+                .num_comps = 2,
+                .bitdepth = 8 * TEXELSZ,
+            },
+        },
+    },
+};
+
+// API #1: Nice and simple (but slow)
+void api1_example()
+{
+    void *vf = init();
+    if (!vf)
+        return;
+
+    if (!api1_reconfig(vf, &example_image)) {
+        fprintf(stderr, "api1: Failed configuring video filter!\n");
+        return;
+    }
+
+    // Allocate two buffers to hold the example data, and fill the source
+    // buffer arbitrarily with a "simple" pattern. (Decoding the data into
+    // the buffer is not meant to be part of this benchmark)
+    uint8_t *srcbuf = malloc(BUFSIZE),
+            *dstbuf = malloc(BUFSIZE);
+    if (!srcbuf || !dstbuf)
+        goto done;
+
+    for (int i = 0; i < BUFSIZE; i++)
+        srcbuf[i] = i;
+
+    struct image src = example_image, dst = example_image;
+    src.planes[0].data = srcbuf + OFFSET0;
+    src.planes[1].data = srcbuf + OFFSET1;
+    dst.planes[0].data = dstbuf + OFFSET0;
+    dst.planes[1].data = dstbuf + OFFSET1;
+
+    struct timeval start = {0}, stop = {0};
+    gettimeofday(&start, NULL);
+
+    // Process this dummy frame a bunch of times
+    unsigned frames = 0;
+    for (frames = 0; frames < FRAMES; frames++) {
+        if (!api1_filter(vf, &dst, &src)) {
+            fprintf(stderr, "api1: Failed filtering frame... aborting\n");
+            break;
+        }
+    }
+
+    gettimeofday(&stop, NULL);
+    float secs = (float) (stop.tv_sec - start.tv_sec) +
+                 1e-6 * (stop.tv_usec - start.tv_usec);
+
+    printf("api1: %4u frames in %1.6f s => %2.6f ms/frame (%5.2f fps)\n",
+           frames, secs, 1000 * secs / frames, frames / secs);
+
+done:
+    if (srcbuf)
+        free(srcbuf);
+    if (dstbuf)
+        free(dstbuf);
+    uninit(vf);
+}
+
+
+// API #2: Pretend we have some fancy pool of images.
+#define POOLSIZE 32
+
+static struct api2_buf buffers[POOLSIZE] = {0};
+static struct image images[POOLSIZE] = {0};
+static int refcount[POOLSIZE] = {0};
+static unsigned api2_frames_in = 0;
+static unsigned api2_frames_out = 0;
+
+void api2_example()
+{
+    void *vf = init();
+    if (!vf)
+        return;
+
+    // Set up a bunch of dummy images
+    for (int i = 0; i < POOLSIZE; i++) {
+        uint8_t *data;
+        images[i] = example_image;
+        if (api2_alloc(vf, BUFSIZE, &buffers[i])) {
+            data = buffers[i].data;
+            images[i].associated_buf = &buffers[i];
+        } else {
+            // Fall back in case mapped buffers are unsupported
+            data = malloc(BUFSIZE);
+        }
+        // Fill with some "data" (like in API #1)
+        for (int i = 0; i < BUFSIZE; i++)
+            data[i] = i;
+        images[i].planes[0].data = data + OFFSET0;
+        images[i].planes[1].data = data + OFFSET1;
+    }
+
+    struct timeval start = {0}, stop = {0};
+    gettimeofday(&start, NULL);
+
+    // Just keep driving the event loop regardless of the return status
+    // until we reach the critical number of frames. (Good enough for this PoC)
+    while (api2_frames_out < FRAMES) {
+        enum api2_status ret = api2_process(vf);
+        if (ret < 0) {
+            fprintf(stderr, "api2: Failed processing... aborting\n");
+            break;
+        }
+
+        // Sleep a short time (100us) to prevent busy waiting the CPU
+        nanosleep(&(struct timespec) { .tv_nsec = 100000 }, NULL);
+    }
+
+    gettimeofday(&stop, NULL);
+    float secs = (float) (stop.tv_sec - start.tv_sec) +
+                 1e-6 * (stop.tv_usec - start.tv_usec);
+
+    printf("api2: %4u frames in %1.6f s => %2.6f ms/frame (%5.2f fps)\n",
+           api2_frames_out, secs, 1000 * secs / api2_frames_out,
+           api2_frames_out / secs);
+
+done:
+
+    for (int i = 0; i < POOLSIZE; i++) {
+        if (images[i].associated_buf) {
+            api2_free(vf, images[i].associated_buf);
+        } else {
+            // This is what we originally malloc'd
+            free(images[i].planes[0].data);
+        }
+    }
+
+    uninit(vf);
+}
+
+struct image *get_image()
+{
+    if (api2_frames_in == FRAMES)
+        return NULL; // simulate EOF, to avoid queueing up "extra" work
+
+    // if we can find a free (unlocked) image, give it that
+    for (int i = 0; i < POOLSIZE; i++) {
+        if (refcount[i] == 0) {
+            api2_frames_in++;
+            return &images[i];
+        }
+    }
+
+    return NULL; // no free image available
+}
+
+void put_image(struct image img)
+{
+    api2_frames_out++;
+}
+
+void image_lock(struct image *img)
+{
+    int index = img - images; // cheat, for lack of having actual image management
+    refcount[index]++;
+}
+
+void image_unlock(struct image *img)
+{
+    int index = img - images;
+    refcount[index]--;
+}
+
+void main()
+{
+    printf("Running benchmarks...\n");
+    api1_example();
+    api2_example();
 }
