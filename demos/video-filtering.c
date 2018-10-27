@@ -572,7 +572,7 @@ void api2_free(void *priv, const struct api2_buf *buf)
 #define TEXELSZ sizeof(uint8_t)
 #define WIDTH   1920
 #define HEIGHT  1080
-#define STRIDE  (2048 * TEXELSZ)
+#define STRIDE  (ALIGN2(WIDTH, 256) * TEXELSZ)
 // Subsampled planes
 #define SWIDTH  (WIDTH >> 1)
 #define SHEIGHT (HEIGHT >> 1)
@@ -671,7 +671,7 @@ done:
 
 
 // API #2: Pretend we have some fancy pool of images.
-#define POOLSIZE 32
+#define POOLSIZE (PARALLELISM + 1)
 
 static struct api2_buf buffers[POOLSIZE] = {0};
 static struct image images[POOLSIZE] = {0};
@@ -694,6 +694,7 @@ void api2_example()
             images[i].associated_buf = &buffers[i];
         } else {
             // Fall back in case mapped buffers are unsupported
+            fprintf(stderr, "warning: falling back to malloc, may be slow\n");
             data = malloc(BUFSIZE);
         }
         // Fill with some "data" (like in API #1)
