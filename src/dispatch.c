@@ -740,8 +740,14 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
 
     const struct pl_tex_params *tpars = &target->params;
     if (pl_tex_params_dimension(*tpars) != 2 || !tpars->renderable) {
-        PL_ERR(dp, "Trying to dispatch using a shader using an invalid target "
+        PL_ERR(dp, "Trying to dispatch a shader using an invalid target "
                "texture. The target must be a renderable 2D texture.");
+        goto error;
+    }
+
+    if (pl_shader_is_compute(sh) && !tpars->storable) {
+        PL_ERR(dp, "Trying to dispatch using a compute shader with a "
+               "non-storable target texture.");
         goto error;
     }
 
