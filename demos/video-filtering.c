@@ -8,20 +8,24 @@
  * results, these are from my machine (RX 560 with mesa/amdgpu git 2018-09-27):
  *
  * RADV:
- *   api1: 10000 frames in 21.113829 s => 2.111383 ms/frame (473.62 fps)
- *   api2: 10000 frames in 14.314918 s => 1.431492 ms/frame (698.57 fps)
+ *   api1: 10000 frames in 21.293901 s => 2.129390 ms/frame (469.62 fps)
+ *   api2: 10000 frames in 15.037124 s => 1.503712 ms/frame (665.02 fps)
  *
  * AMDVLK:
- *   api1: 10000 frames in 17.027370 s => 1.702737 ms/frame (587.29 fps)
- *   api2: 10000 frames in 8.882183 s => 0.888218 ms/frame (1125.85 fps)
+ *   api1: 10000 frames in 18.357798 s => 1.835780 ms/frame (544.73 fps)
+ *   api2: 10000 frames in 10.250310 s => 1.025031 ms/frame (975.58 fps)
  *
  * You can see that AMDVLK is much better at doing texture streaming than
  * RADV - this is because as of writing RADV still does not support
  * asynchronous texture queues / DMA engine transfers. If we disable the
  * `async_transfer` option with AMDVLK we get this:
  *
- *   api1: 10000 frames in 20.377153 s => 2.037715 ms/frame (490.75 fps)
- *   api2: 10000 frames in 14.874546 s => 1.487455 ms/frame (672.29 fps)
+ *   api1: 10000 frames in 22.537271 s => 2.253727 ms/frame (443.71 fps)
+ *   api2: 10000 frames in 19.460306 s => 1.946031 ms/frame (513.87 fps)
+ *
+ * Compiling:
+ *
+ *   gcc -O2 video-filtering.c -lplacebo -o video-filtering
  *
  * License: CC0 / Public Domain
  */
@@ -180,6 +184,7 @@ struct priv {
     const struct pl_vulkan *vk;
     const struct pl_gpu *gpu;
     struct pl_dispatch *dp;
+    struct pl_shader_obj *dither_state;
 
     // API #1: A simple pair of input and output textures
     const struct pl_tex *tex_in[MAX_PLANES];
@@ -253,6 +258,7 @@ void uninit(void *priv)
             image_unlock(p->entries[i].held_image);
     }
 
+    pl_shader_obj_destroy(&p->dither_state);
     pl_dispatch_destroy(&p->dp);
     pl_vulkan_destroy(&p->vk);
     pl_context_destroy(&p->ctx);
@@ -282,6 +288,18 @@ void setup_plane_data(const struct image *img,
             out[i].component_map[c] = c;
         }
     }
+}
+
+bool do_plane(struct priv *p, const struct pl_tex *dst, const struct pl_tex *src)
+{
+    int new_depth = dst->params.format->component_depth[0];
+
+    // Do some debanding, and then also make sure to dither to the new depth
+    // so that our debanded gradients are actually preserved well
+    struct pl_shader *sh = pl_dispatch_begin(p->dp);
+    pl_shader_deband(sh, &(struct pl_sample_src){ .tex = src }, NULL);
+    pl_shader_dither(sh, new_depth, &p->dither_state, NULL);
+    return pl_dispatch_finish(p->dp, &sh, dst, NULL, NULL);
 }
 
 // API #1 implementation:
@@ -357,9 +375,7 @@ bool api1_filter(void *priv, struct image *dst, struct image *src)
 
     // Process planes
     for (int i = 0; i < src->num_planes; i++) {
-        struct pl_shader *sh = pl_dispatch_begin(p->dp);
-        pl_shader_deband(sh, &(struct pl_sample_src){ .tex = p->tex_in[i] }, NULL);
-        if (!pl_dispatch_finish(p->dp, &sh, p->tex_out[i], NULL, NULL)) {
+        if (!do_plane(p, p->tex_out[i], p->tex_in[i])) {
             fprintf(stderr, "Failed processing planes!\n");
             return false;
         }
@@ -426,9 +442,7 @@ static enum api2_status submit_work(struct priv *p, struct entry *e,
 
     // Dispatch the work for this image
     for (int i = 0; i < img->num_planes; i++) {
-        struct pl_shader *sh = pl_dispatch_begin(p->dp);
-        pl_shader_deband(sh, &(struct pl_sample_src){ .tex = e->tex_in[i] }, NULL);
-        if (!pl_dispatch_finish(p->dp, &sh, e->tex_out[i], NULL, NULL))
+        if (!do_plane(p, e->tex_out[i], e->tex_in[i]))
             return API2_ERR_UNKNOWN;
     }
 
@@ -568,7 +582,7 @@ void api2_free(void *priv, const struct api2_buf *buf)
 #define FRAMES 10000
 
 // Let's say we're processing a 1920x1080 4:2:0 8-bit NV12 video, arbitrarily
-// with a stride of 2048 pixels per row
+// with a stride aligned to 256 bytes. (For no particular reason)
 #define TEXELSZ sizeof(uint8_t)
 #define WIDTH   1920
 #define HEIGHT  1080
@@ -576,13 +590,10 @@ void api2_free(void *priv, const struct api2_buf *buf)
 // Subsampled planes
 #define SWIDTH  (WIDTH >> 1)
 #define SHEIGHT (HEIGHT >> 1)
-#define SSTRIDE (STRIDE >> 1)
+#define SSTRIDE (ALIGN2(SWIDTH, 256) * TEXELSZ)
 // Plane offsets / sizes
-#define SIZE    (HEIGHT * STRIDE * TEXELSZ)
-#define SSIZE   (SHEIGHT * SSTRIDE * TEXELSZ)
-
-#define SIZE0   (HEIGHT * STRIDE * TEXELSZ)
-#define SIZE1   (2 * SHEIGHT * SSTRIDE * TEXELSZ)
+#define SIZE0   (HEIGHT * STRIDE)
+#define SIZE1   (2 * SHEIGHT * SSTRIDE)
 #define OFFSET0 0
 #define OFFSET1 SIZE0
 #define BUFSIZE (OFFSET1 + SIZE1)
