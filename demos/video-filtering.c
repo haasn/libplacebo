@@ -25,18 +25,18 @@
  *
  * Some contributed results from NVIDIA systems (driver 410.66):
  *
- * GTX 1050:
+ * GTX 1050 Ti:
  *   api1: 10000 frames in 28.592386 s => 2.859239 ms/frame (349.74 fps)
  *   api2: 10000 frames in 14.765165 s => 1.476516 ms/frame (677.27 fps)
  *
- * GTX 1080Ti:
+ * GTX 1080 Ti:
  *   api1: 10000 frames in 10.271872 s => 1.027187 ms/frame (973.53 fps)
  *   api2: 10000 frames in 7.741683 s => 0.774168 ms/frame (1291.71 fps)
  *
  * Even though the GTX 1080 Ti is vastly more powerful than the RX 560, the
  * cheap AMD card still outperforms it because of its much better asynchronous
  * compute processing / work scheduling - but only for the efficient "API2"
- * style procesisng. In single threaded workloads (api1) the more powerful
+ * style processing. In single threaded workloads (api1) the more powerful
  * GPU easily outperforms the cheaper one.
  *
  * Compiling:
@@ -366,9 +366,6 @@ bool api1_reconfig(void *priv, const struct image *proxy)
     return true;
 }
 
-
-// API #1 implementation:
-
 bool api1_filter(void *priv, struct image *dst, struct image *src)
 {
     struct priv *p = priv;
@@ -416,6 +413,12 @@ bool api1_filter(void *priv, struct image *dst, struct image *src)
 
 
 // API #2 implementation:
+//
+// In this implementation we maintain a queue (implemented as ring buffer)
+// of "work entries", which are isolated structs that hold independent GPU
+// resources - so that the GPU has no cross-entry dependencies on any of the
+// textures or other resources. (Side note: It still has a dependency on the
+// dither state, but this is just a shared LUT anyway)
 
 // Align up to the nearest multiple of a power of two
 #define ALIGN2(x, align) (((x) + (align) - 1) & ~((align) - 1))
