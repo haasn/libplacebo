@@ -793,8 +793,9 @@ struct pl_pass_run_params {
     // --- pass->params.type==PL_PASS_RASTER only
 
     // Target must be a 2D texture, target->params.renderable must be true, and
-    // target->params.format must match pass->params.target_fmt. If the viewport
-    // or scissors are left blank, they are inferred from target->params.
+    // target->params.format must match pass->params.target_dummy.paras.format.
+    // If the viewport or scissors are left blank, they are inferred from
+    // target->params.
     //
     // WARNING: Rendering to a *target that is being read from by the same
     // shader is undefined behavior. In general, trying to bind the same
