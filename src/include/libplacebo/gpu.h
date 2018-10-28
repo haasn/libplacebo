@@ -721,8 +721,8 @@ struct pl_pass_params {
     // The target dummy texture this renderpass is intended to be used with.
     // This doesn't have to be a real texture - the caller can also pass a
     // blank pl_tex object, as long as target_dummy.params.format is set. The
-    // format must support PL_FMT_CAP_RENDERABLE, and the target dummy must
-    // have `renderable` enabled.
+    // format must support PL_FMT_CAP_RENDERABLE, and if the target dummy is
+    // an actual texture, it must have `renderable` enabled.
     //
     // If you pass a real texture here, the GPU backend may be able to optimize
     // the render pass better for the specific requirements of this texture.
