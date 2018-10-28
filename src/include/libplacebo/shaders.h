@@ -55,6 +55,14 @@ void pl_shader_free(struct pl_shader **sh);
 // you skip the re-allocation overhead.
 void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index);
 
+// Returns whether or not a shader is in a "failed" state. Trying to modify a
+// shader in illegal ways (e.g. signature mismatch) will result in the shader
+// being marked as "failed". Since most pl_shader_ operations have a void
+// return type, the user can use this function to figure out whether a specific
+// shader operation has failed or not. This function is somewhat redundant
+// since `pl_shader_finalize` will also return NULL in this case.
+bool pl_shader_is_failed(const struct pl_shader *sh);
+
 // Returns whether or not a pl_shader needs to be run as a compute shader. This
 // will never be the case unless the `gpu` this pl_shader was created against
 // supports PL_GPU_CAP_COMPUTE.
@@ -152,6 +160,9 @@ struct pl_shader_desc {
 //
 // The returned pl_shader_res is bound to the lifetime of the pl_shader - and
 // will only remain valid until the pl_shader is freed or reset.
+//
+// This function will return NULL if the shader is considered to be in a
+// "failed" state (see pl_shader_is_failed).
 const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh);
 
 // Shader objects represent abstract resources that shaders need to manage in

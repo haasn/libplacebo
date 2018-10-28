@@ -83,6 +83,11 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index)
     *sh = new;
 }
 
+bool pl_shader_is_failed(const struct pl_shader *sh)
+{
+    return sh->failed;
+}
+
 bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem)
 {
     pl_assert(bw && bh);
@@ -184,13 +189,13 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
                      const struct pl_rect2df *rc)
 {
     if (!sh->gpu) {
-        PL_ERR(sh, "Failed adding vertex attr '%s': No GPU available!", name);
+        SH_FAIL(sh, "Failed adding vertex attr '%s': No GPU available!", name);
         return NULL;
     }
 
     const struct pl_fmt *fmt = pl_find_vertex_fmt(sh->gpu, PL_FMT_FLOAT, 2);
     if (!fmt) {
-        PL_ERR(sh, "Failed adding vertex attr '%s': no vertex fmt!", name);
+        SH_FAIL(sh, "Failed adding vertex attr '%s': no vertex fmt!", name);
         return NULL;
     }
 
@@ -219,12 +224,12 @@ ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt)
 {
     if (!sh->gpu) {
-        PL_ERR(sh, "Failed binding texture '%s': No GPU available!", name);
+        SH_FAIL(sh, "Failed binding texture '%s': No GPU available!", name);
         return NULL;
     }
 
     if (pl_tex_params_dimension(tex->params) != 2 || !tex->params.sampleable) {
-        PL_ERR(sh, "Failed binding texture '%s': incompatible params!", name);
+        SH_FAIL(sh, "Failed binding texture '%s': incompatible params!", name);
         return NULL;
     }
 
@@ -297,7 +302,7 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
     pl_assert(sh->mutable);
 
     if (sh->ident == sub->ident) {
-        PL_ERR(sh, "Failed merging shaders: conflicting identifiers!");
+        SH_FAIL(sh, "Failed merging shaders: conflicting identifiers!");
         return NULL;
     }
 
@@ -308,8 +313,8 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
     if ((sub->output_w && res_w != sub->output_w) ||
         (sub->output_h && res_h != sub->output_h))
     {
-        PL_ERR(sh, "Failed merging shaders: incompatible sizes: %dx%d and %dx%d",
-               sh->output_w, sh->output_h, sub->output_w, sub->output_h);
+        SH_FAIL(sh, "Failed merging shaders: incompatible sizes: %dx%d and %dx%d",
+                sh->output_w, sh->output_h, sub->output_w, sub->output_h);
         return NULL;
     }
 
@@ -319,8 +324,8 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
         bool flex = sub->flexible_work_groups;
 
         if (!sh_try_compute(sh, subw, subh, flex, sub->res.compute_shmem)) {
-            PL_ERR(sh, "Failed merging shaders: incompatible block sizes or "
-                   "exceeded shared memory resource capabilities");
+            SH_FAIL(sh, "Failed merging shaders: incompatible block sizes or "
+                    "exceeded shared memory resource capabilities");
             return NULL;
         }
     }
@@ -371,6 +376,9 @@ static ident_t sh_split(struct pl_shader *sh)
 
 const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
 {
+    if (sh->failed)
+        return NULL;
+
     if (!sh->mutable) {
         PL_WARN(sh, "Attempted to finalize a shader twice?");
         return &sh->res;
@@ -391,17 +399,22 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
 
 bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h)
 {
+    if (sh->failed) {
+        PL_ERR(sh, "Attempting to modify a failed shader!");
+        return false;
+    }
+
     if (!sh->mutable) {
-        PL_ERR(sh, "Attempted to modify an immutable shader!");
+        SH_FAIL(sh, "Attempted to modify an immutable shader!");
         return false;
     }
 
     if ((w && sh->output_w && sh->output_w != w) ||
         (h && sh->output_h && sh->output_h != h))
     {
-        PL_ERR(sh, "Illegal sequence of shader operations: Incompatible "
-               "output size requirements %dx%d and %dx%d",
-               sh->output_w, sh->output_h, w, h);
+        SH_FAIL(sh, "Illegal sequence of shader operations: Incompatible "
+                "output size requirements %dx%d and %dx%d",
+                sh->output_w, sh->output_h, w, h);
         return false;
     }
 
@@ -416,9 +429,9 @@ bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h)
         pl_assert(!sh->res.input);
         sh->res.input = insig;
     } else if (sh->res.output != insig) {
-        PL_ERR(sh, "Illegal sequence of shader operations! Current output "
-               "signature is '%s', but called operation expects '%s'!",
-               names[sh->res.output], names[insig]);
+        SH_FAIL(sh, "Illegal sequence of shader operations! Current output "
+                "signature is '%s', but called operation expects '%s'!",
+                names[sh->res.output], names[insig]);
         return false;
     }
 
@@ -451,13 +464,13 @@ void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
 
     struct pl_shader_obj *obj = *ptr;
     if (obj && obj->gpu != sh->gpu) {
-        PL_ERR(sh, "Passed pl_shader_obj belongs to different GPU!");
+        SH_FAIL(sh, "Passed pl_shader_obj belongs to different GPU!");
         return NULL;
     }
 
     if (obj && obj->type != type) {
-        PL_ERR(sh, "Passed pl_shader_obj of wrong type! Shader objects must "
-               "always be used with the same type of shader.");
+        SH_FAIL(sh, "Passed pl_shader_obj of wrong type! Shader objects must "
+                "always be used with the same type of shader.");
         return NULL;
     }
 
@@ -606,12 +619,12 @@ next_dim: ; // `continue` out of the inner loop
                                     struct sh_lut_obj, sh_lut_uninit);
 
     if (!lut) {
-        PL_ERR(sh, "Failed initializing LUT object!");
+        SH_FAIL(sh, "Failed initializing LUT object!");
         goto error;
     }
 
     if (!gpu && method == SH_LUT_LINEAR) {
-        PL_ERR(sh, "Linear LUTs require the use of a GPU!");
+        SH_FAIL(sh, "Linear LUTs require the use of a GPU!");
         goto error;
     }
 
@@ -655,7 +668,7 @@ next_dim: ; // `continue` out of the inner loop
         case SH_LUT_TEXTURE:
         case SH_LUT_LINEAR: {
             if (!texdim) {
-                PL_ERR(sh, "Texture LUT exceeds texture dimensions!");
+                SH_FAIL(sh, "Texture LUT exceeds texture dimensions!");
                 goto error;
             }
 
@@ -670,7 +683,7 @@ next_dim: ; // `continue` out of the inner loop
             const struct pl_fmt *fmt;
             fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, comps, 16, 32, caps);
             if (!fmt) {
-                PL_ERR(sh, "Found no compatible texture format for LUT!");
+                SH_FAIL(sh, "Found no compatible texture format for LUT!");
                 goto error;
             }
 
@@ -687,7 +700,7 @@ next_dim: ; // `continue` out of the inner loop
             });
 
             if (!lut->weights.tex) {
-                PL_ERR(sh, "Failed creating LUT texture!");
+                SH_FAIL(sh, "Failed creating LUT texture!");
                 goto error;
             }
             break;

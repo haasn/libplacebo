@@ -43,6 +43,7 @@ struct pl_shader {
 
     // Internal state
     struct ta_ref *tmp;
+    bool failed;
     bool mutable;
     int output_w;
     int output_h;
@@ -54,6 +55,11 @@ struct pl_shader {
     uint8_t index;
     int fresh;
 };
+
+#define SH_FAIL(sh, ...) do {    \
+        sh->failed = true;       \
+        PL_ERR(sh, __VA_ARGS__); \
+    } while (0)
 
 // Like `pl_shader_alloc`, but also has an extra `uint8_t ident` which can be
 // used to namespace shaders in order to allow safely merging together multiple

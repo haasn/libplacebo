@@ -71,7 +71,7 @@ void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
                       const struct pl_deband_params *params)
 {
     if (src->tex->params.sample_mode != PL_TEX_SAMPLE_LINEAR) {
-        PL_ERR(sh, "Debanding requires sample_mode = PL_TEX_SAMPLE_LINEAR!");
+        SH_FAIL(sh, "Debanding requires sample_mode = PL_TEX_SAMPLE_LINEAR!");
         return;
     }
 
@@ -169,8 +169,8 @@ static void bicubic_calcweights(struct pl_shader *sh, const char *t, const char 
 bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *src)
 {
     if (src->tex->params.sample_mode != PL_TEX_SAMPLE_LINEAR) {
-        PL_ERR(sh, "Trying to use fast bicubic sampling from a texture without "
-               "PL_TEX_SAMPLE_LINEAR");
+        SH_FAIL(sh, "Trying to use fast bicubic sampling from a texture without "
+                "PL_TEX_SAMPLE_LINEAR");
         return false;
     }
 
@@ -299,7 +299,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
 {
     pl_assert(params);
     if (!params->filter.polar) {
-        PL_ERR(sh, "Trying to use polar sampling with a non-polar filter?");
+        SH_FAIL(sh, "Trying to use polar sampling with a non-polar filter?");
         return false;
     }
 
@@ -351,7 +351,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
 
         if (!obj->filter) {
             // This should never happen, but just in case ..
-            PL_ERR(sh, "Failed initializing polar filter!");
+            SH_FAIL(sh, "Failed initializing polar filter!");
             return false;
         }
     }
@@ -359,7 +359,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     ident_t lut = sh_lut(sh, &obj->lut, SH_LUT_LINEAR, lut_entries, 0, 0, 1,
                          update, obj, fill_polar_lut);
     if (!lut) {
-        PL_ERR(sh, "Failed initializing polar LUT!");
+        SH_FAIL(sh, "Failed initializing polar LUT!");
         return false;
     }
 
@@ -516,7 +516,7 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
 {
     pl_assert(params);
     if (params->filter.polar) {
-        PL_ERR(sh, "Trying to use separated sampling with a polar filter?");
+        SH_FAIL(sh, "Trying to use separated sampling with a polar filter?");
         return false;
     }
 
@@ -590,7 +590,7 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
 
         if (!obj->filter) {
             // This should never happen, but just in case ..
-            PL_ERR(sh, "Failed initializing separated filter!");
+            SH_FAIL(sh, "Failed initializing separated filter!");
             return false;
         }
     }
@@ -600,7 +600,7 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
     ident_t lut = sh_lut(sh, &obj->lut, SH_LUT_LINEAR, width, lut_entries, 0, 4,
                          update, obj, fill_ortho_lut);
     if (!lut) {
-        PL_ERR(sh, "Failed initializing separated LUT!");
+        SH_FAIL(sh, "Failed initializing separated LUT!");
         return false;
     }
 

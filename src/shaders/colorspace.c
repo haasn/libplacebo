@@ -121,7 +121,7 @@ void pl_shader_encode_color(struct pl_shader *sh,
 
     if (!pl_color_system_is_linear(repr->sys)) {
         // FIXME: implement this case
-        PL_ERR(sh, "Non-linear color encoding currently unimplemented!");
+        SH_FAIL(sh, "Non-linear color encoding currently unimplemented!");
         return;
     }
 
@@ -485,8 +485,8 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
         return;
 
     if (frames < 0 || frames > 1000) {
-        PL_ERR(sh, "Parameter peak_detect_frames must be >= 0 and <= 1000 "
-               "(was %d).", frames);
+        SH_FAIL(sh, "Parameter peak_detect_frames must be >= 0 and <= 1000 "
+                "(was %d).", frames);
         return;
     }
 
@@ -555,7 +555,7 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
     }
 
     if (!obj->buf) {
-        PL_ERR(sh, "Failed creating peak detection SSBO!");
+        SH_FAIL(sh, "Failed creating peak detection SSBO!");
         return;
     }
 
@@ -982,7 +982,7 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
 
     params = PL_DEF(params, &pl_dither_default_params);
     if (params->lut_size < 0 || params->lut_size > 8) {
-        PL_ERR(sh, "Invalid `lut_size` specified: %d", params->lut_size);
+        SH_FAIL(sh, "Invalid `lut_size` specified: %d", params->lut_size);
         return;
     }
 
@@ -1183,7 +1183,7 @@ void pl_3dlut_apply(struct pl_shader *sh, struct pl_shader_obj **lut3d)
     obj = SH_OBJ(sh, lut3d, PL_SHADER_OBJ_3DLUT,
                  struct sh_3dlut_obj, sh_3dlut_uninit);
     if (!obj || !obj->lut || !obj->updated || !obj->ok) {
-        PL_ERR(sh, "pl_shader_3dlut called without prior pl_3dlut_update?");
+        SH_FAIL(sh, "pl_shader_3dlut called without prior pl_3dlut_update?");
         return;
     }
 

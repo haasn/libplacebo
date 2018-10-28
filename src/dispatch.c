@@ -728,6 +728,11 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
     const struct pl_shader_res *res = &sh->res;
     bool ret = false;
 
+    if (sh->failed) {
+        PL_ERR(sh, "Trying to dispatch a failed shader.");
+        goto error;
+    }
+
     if (!sh->mutable) {
         PL_ERR(dp, "Trying to dispatch non-mutable shader?");
         goto error;
@@ -849,6 +854,11 @@ bool pl_dispatch_compute(struct pl_dispatch *dp, struct pl_shader **psh,
     struct pl_shader *sh = *psh;
     const struct pl_shader_res *res = &sh->res;
     bool ret = false;
+
+    if (sh->failed) {
+        PL_ERR(sh, "Trying to dispatch a failed shader.");
+        goto error;
+    }
 
     if (!sh->mutable) {
         PL_ERR(dp, "Trying to dispatch non-mutable shader?");
