@@ -586,6 +586,7 @@ bool pl_tex_download(const struct pl_gpu *gpu,
 const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
                                    const struct pl_buf_params *params)
 {
+    pl_assert((params->ext_handles & gpu->handle_caps) == params->ext_handles);
     switch (params->type) {
     case PL_BUF_TEX_TRANSFER:
         pl_assert(gpu->limits.max_xfer_size);
@@ -677,6 +678,12 @@ bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
     pl_assert(buf_offset + size <= buf->params.size);
     pl_assert(buf_offset == PL_ALIGN2(buf_offset, 4));
     return gpu->impl->buf_read(gpu, buf, buf_offset, dest, size);
+}
+
+bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
+{
+    pl_assert(buf->params.ext_handles);
+    return gpu->impl->buf_export(gpu, buf);
 }
 
 bool pl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf, uint64_t t)

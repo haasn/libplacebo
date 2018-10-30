@@ -51,6 +51,21 @@ enum {
     PL_GPU_CAP_INPUT_VARIABLES  = 1 << 2, // supports shader input variables
 };
 
+// Some `pl_gpu` operations allow sharing resources (memory or images) with
+// external APIs - examples include interop with other graphics APIs such as
+// CUDA, and also various hardware decoding APIs. This defines the mechanism
+// underpinning the communication of such an interoperation.
+typedef uint64_t pl_handle_types;
+enum {
+    PL_HANDLE_FD    = (1 << 0), // `int fd` for POSIX-style APIs
+};
+
+struct pl_gpu_handle {
+    size_t size;    // the total size of the memory referenced by this handle
+    // List of all requested handles:
+    int fd;         // PL_HANDLE_FD
+};
+
 // Structure defining the physical limits of this GPU instance. If a limit is
 // given as 0, that means that feature is unsupported.
 struct pl_gpu_limits {
@@ -89,6 +104,7 @@ struct pl_gpu {
     pl_gpu_caps caps;            // PL_GPU_CAP_* bit field
     struct pl_glsl_desc glsl;    // GLSL version supported by this GPU
     struct pl_gpu_limits limits; // physical device limits
+    pl_handle_types handle_caps; // supported handle types for external memory
     // Note: Every GPU must support at least one of PL_GPU_CAP_INPUT_VARIABLES
     // or uniform buffers (limits.max_ubo_size > 0).
 
@@ -360,6 +376,12 @@ enum pl_buf_type {
     PL_BUF_TYPE_COUNT,
 };
 
+enum pl_buf_mem_type {
+    PL_BUF_MEM_AUTO = 0, // use whatever seems most appropriate
+    PL_BUF_MEM_HOST,     // try allocating from host memory (RAM)
+    PL_BUF_MEM_DEVICE,   // try allocating from device memory (VRAM)
+};
+
 // Structure describing a buffer.
 struct pl_buf_params {
     enum pl_buf_type type;
@@ -372,6 +394,11 @@ struct pl_buf_params {
     // buffer's contents. `format->caps` must include the corresponding
     // PL_FMT_CAP_TEXEL_* for the texel buffer type in use.
     const struct pl_fmt *format;
+
+    // Setting this indicates that a buffer should be shared with external
+    // APIs, and is treated as a bit mask of all handle types you want to
+    // receive. This *must* be a subset of `pl_gpu.handle_caps`.
+    pl_handle_types ext_handles;
 
     // If non-NULL, the buffer will be created with these contents. Otherwise,
     // the initial data is undefined. Using this does *not* require setting
@@ -392,11 +419,23 @@ struct pl_buf {
     struct pl_buf_params params;
     uint8_t *data; // for persistently mapped buffers, points to the first byte
     void *priv;
+
+    // When using external memory handles, this contains the handles, plus the
+    // offset of this paricular `pl_buf` within the handle. These handles are
+    // owned by the `pl_gpu` - if a user wishes to use them in a way that takes
+    // over ownership (e.g. importing into some APIs), they must clone the
+    // handle before doing so (e.g. using `dup` for fds).
+    struct pl_gpu_handle handles;
+    size_t handle_offset;
 };
 
 // Create a buffer. The type of buffer depends on the parameters. The buffer
 // parameters must adhere to the restrictions imposed by the pl_gpu_limits.
 // Returns NULL on failure.
+//
+// For buffers with external handles, the buffer is considered to be in an
+// "exported" state by default, and may be used directly by the external API
+// after being created (until the first libplacebo operation on the buffer).
 const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
                                    const struct pl_buf_params *params);
 
@@ -408,8 +447,10 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
 // undefined.
 //
 // Note: Due to its unpredictability, it's not allowed to use this with
-// `params->initial_data` being set. Conversely, it *is* allowed on a buffer
-// with `params->host_mapped`, and the corresponding `buf->data` pointer *may*
+// `params->initial_data` being set. Similarly, it's not allowed on a buffer
+// with `params->ext_handles`. since this may invalidate the corresponding
+// external API's handle. Conversely, it *is* allowed on a buffer with
+// `params->host_mapped`, and the corresponding `buf->data` pointer *may*
 // change as a result of doing so.
 bool pl_buf_recreate(const struct pl_gpu *gpu, const struct pl_buf **buf,
                      const struct pl_buf_params *params);
@@ -426,6 +467,42 @@ void pl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
 // Returns whether successful.
 bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                  size_t buf_offset, void *dest, size_t size);
+
+// Initiates a buffer export operation, allowing a buffer to be accessed by an
+// external API. This is only valid for buffers with `params->ext_handles`.
+// Calling this twice in a row is a harmless no-op. Returns whether successful.
+//
+// There is no corresponding "buffer import" operation, the next libplacebo
+// operation that touches the buffer (e.g. pl_tex_upload, but also pl_buf_write
+// and pl_buf_read) will implicitly import the buffer back to libplacebo. Users
+// must ensure that all pending operations made by the external API are fully
+// completed before using it in libplacebo again.
+//
+// Please note that this function returning does not mean the memory is
+// immediately available as such. In general, it will mark a buffer as "in use"
+// in the same way a read or write would, and it is the user's responsibility
+// to wait until `pl_buf_poll` returns false before accessing the memory from
+// the external API.
+//
+// In terms of the access performed by this operation, it is not considered a
+// "read" or "write" and therefore does not technically conflict with reads or
+// writes to the buffer performed by the host (via mapped memory - any use of
+// `pl_buf_read` or `pl_buf_write` would defeat the purpose of the export).
+// However, restrictions made by the external API may apply that prevent this.
+//
+// The recommended use pattern is something like this:
+//
+// while (loop) {
+//    const struct pl_buf *buf = get_free_buffer(); // or block on pl_buf_poll
+//    // write to the buffer using the external API
+//    pl_tex_upload(gpu, /* ... buf ... */); // implicitly imports
+//    pl_buf_export(gpu, buf);
+// }
+//
+// i.e. perform an external API operation, then use and immediately export the
+// buffer in libplacebo, and finally wait until `pl_buf_poll` is false before
+// re-using it. (Or get a new, fresh buffer in the meantime)
+bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf);
 
 // Returns whether or not a buffer is currently "in use". This can either be
 // because of a pending read operation, a pending write operation or a pending
