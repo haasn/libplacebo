@@ -41,6 +41,7 @@ struct vk_ext {
 // TODO: add support for loading function pointers
 static const char *vk_instance_extensions[] = {
     VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME,
+    VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
 };
 
 // Table of vulkan device extensions and functions they load
@@ -49,6 +50,15 @@ static const struct vk_ext vk_device_extensions[] = {
         .name = VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
         .funs = (struct vk_ext_fun[]) {
             VK_DEV_FUN(vkCmdPushDescriptorSetKHR),
+            {0},
+        },
+    }, {
+        .name = VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+        .funs = (struct vk_ext_fun[]) {{0}},
+    }, {
+        .name = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+        .funs = (struct vk_ext_fun[]) {
+            VK_DEV_FUN(vkGetMemoryFdKHR),
             {0},
         },
     }
