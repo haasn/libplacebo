@@ -1021,6 +1021,7 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
     // For host-mapped buffers, we can just directly memcpy the buffer contents.
     // Otherwise, we can update the buffer from the GPU using a command buffer.
     if (buf_vk->slice.data) {
+        pl_assert(buf_vk->refcount == 1);
         uintptr_t addr = (uintptr_t) buf_vk->slice.data + (ptrdiff_t) offset;
         memcpy((void *) addr, data, size);
         buf_vk->needs_flush = true;

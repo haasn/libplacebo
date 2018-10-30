@@ -32,9 +32,10 @@
 //
 // NOTE: When speaking of "valid usage" or "must", invalid usage is assumed to
 // result in undefined behavior. (Typically, an error message is printed to
-// stderr and libplacebo aborts). So ensuring valid API usage by the API user is
-// absolutely crucial. If you want to be freed from this reponsibility, use the
-// higher level abstractions provided by libplacebo alongside gpu.h.
+// stderr and libplacebo aborts - but this is not guaranteed). So ensuring
+// valid API usage by the API user is absolutely crucial. If you want to be
+// freed from this reponsibility, use the higher level abstractions provided by
+// libplacebo alongside gpu.h.
 
 // Structure which wraps metadata describing GLSL capabilities.
 struct pl_glsl_desc {
@@ -425,13 +426,12 @@ bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                  size_t buf_offset, void *dest, size_t size);
 
 // Returns whether or not a buffer is currently "in use". This can either be
-// because of a pending read operation or because of a pending write operation.
-// Coalescing multiple types of the same access (e.g. uploading the same buffer
-// to multiple textures) is fine, but trying to read a buffer while it is being
-// written to or trying to write to a buffer while it is being read from will
-// almost surely result in graphical corruption. The GPU makes no attempt to
-// enforce this, it is up to the user to check and adhere to whatever
-// restrictions are necessary.
+// because of a pending read operation, a pending write operation or a pending
+// buffer import/export operation. Any access to the buffer by the user is
+// forbidden while a buffer is "in use". This includes using `pl_buf_read` or
+// `pl_buf_write` or accessing mapped memory directly. The only exception to
+// this rule is multiple reads, for example reading from a buffer with
+// `pl_tex_upload` while simultaneously reading from it using mapped memory.
 //
 // The `timeout`, specified in nanoseconds, indicates how long to block for
 // before returning. If set to 0, this function will never block, and only
@@ -439,9 +439,16 @@ bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
 // timeout may be significantly longer than one nanosecond, and has no upper
 // bound. This function does not provide hard latency guarantees.
 //
-// Note: Destroying a buffer (pl_buf_destroy) is always valid, even if that
-// buffer is in use.
-bool pl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf, uint64_t timeout);
+// Note: Performing multiple libplacebo operations at the same time is always
+// valid, for example it's perfectly valid to submit a `pl_tex_upload`
+// immediately followed by a `pl_tex_download` to the same buffer. However,
+// when this is the case, it's undefined as to when exactly the upload is
+// happening versus when exactly the download is happening. So in this example,
+// any access to the buffer by the host would be forbidden, including reads,
+// until the user has verified that `pl_buf_poll` returned false. It's also
+// always valid to call `pl_buf_destroy`, even on in-use buffers.
+bool pl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
+                 uint64_t timeout);
 
 // Data type of a shader input variable (e.g. uniform, or UBO member)
 enum pl_var_type {
