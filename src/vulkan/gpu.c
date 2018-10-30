@@ -966,14 +966,9 @@ static void vk_buf_deref(const struct pl_gpu *gpu, struct pl_buf *buf)
     }
 }
 
-// visible_writes: whether or not this buffer access consistites a write to the
-// buffer that modifies the contents in a way that the host should be able to
-// see. This includes any synchronization necessary to ensure the writes are
-// made visible to the host.
 static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                         const struct pl_buf *buf, VkPipelineStageFlags newStage,
-                        VkAccessFlags newAccess, int offset, size_t size,
-                        bool visible_writes)
+                        VkAccessFlags newAccess, int offset, size_t size)
 {
     struct pl_buf_vk *buf_vk = buf->priv;
 
@@ -994,11 +989,6 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         buf_vk->needs_flush = false;
     }
 
-    if (visible_writes && (buf->params.host_readable || buf->params.host_mapped)) {
-        buffBarrier.dstAccessMask |= VK_ACCESS_HOST_READ_BIT;
-        newStage |= VK_PIPELINE_STAGE_HOST_BIT;
-    }
-
     if (buffBarrier.srcAccessMask != buffBarrier.dstAccessMask) {
         vkCmdPipelineBarrier(cmd->buf, buf_vk->current_stage, newStage, 0,
                              0, NULL, 1, &buffBarrier, 0, NULL);
@@ -1008,6 +998,39 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     buf_vk->current_access = newAccess;
     buf_vk->refcount++;
     vk_cmd_callback(cmd, (vk_cb) vk_buf_deref, gpu, buf);
+}
+
+// Flush visible writes to a buffer made by the API
+static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
+                      const struct pl_buf *buf, int offset, size_t size)
+{
+    struct pl_buf_vk *buf_vk = buf->priv;
+
+    // We need to perform a flush if the host is capable of reading back from
+    // the buffer, or if we intend to overwrite it using mapped memory
+    bool can_read = buf->params.host_readable;
+    bool can_write = buf_vk->slice.data && buf->params.host_writable;
+    if (buf->params.host_mapped)
+        can_read = can_write = true;
+
+    if (!can_read && !can_write)
+        return;
+
+    VkBufferMemoryBarrier buffBarrier = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .srcAccessMask = buf_vk->current_access,
+        .dstAccessMask = can_read ? VK_ACCESS_HOST_READ_BIT : 0
+                       | can_write ? VK_ACCESS_HOST_WRITE_BIT : 0,
+        .buffer = buf_vk->slice.buf,
+        .offset = offset,
+        .size = size,
+    };
+
+    vkCmdPipelineBarrier(cmd->buf, buf_vk->current_stage,
+                         VK_PIPELINE_STAGE_HOST_BIT, 0,
+                         0, NULL, 1, &buffBarrier, 0, NULL);
 }
 
 #define vk_buf_destroy vk_buf_deref
@@ -1033,10 +1056,11 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
         }
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_WRITE_BIT, offset, size, true);
+                    VK_ACCESS_TRANSFER_WRITE_BIT, offset, size);
 
         VkDeviceSize bufOffset = buf_vk->slice.mem.offset + offset;
         vkCmdUpdateBuffer(cmd->buf, buf_vk->slice.buf, bufOffset, size, data);
+        pl_assert(!buf->params.host_readable); // no flush needed due to this
     }
 }
 
@@ -1222,10 +1246,10 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         };
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_READ_BIT, region.srcOffset, size, false);
+                    VK_ACCESS_TRANSFER_READ_BIT, region.srcOffset, size);
 
         buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_WRITE_BIT, region.dstOffset, size, false);
+                    VK_ACCESS_TRANSFER_WRITE_BIT, region.dstOffset, size);
 
         vkCmdCopyBuffer(cmd->buf, buf_vk->slice.buf, tbuf_vk->slice.buf,
                         1, &region);
@@ -1253,8 +1277,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         };
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_READ_BIT, region.bufferOffset, size,
-                    false);
+                    VK_ACCESS_TRANSFER_READ_BIT, region.bufferOffset, size);
 
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -1320,13 +1343,12 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         };
 
         buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_READ_BIT, region.srcOffset, size, false);
-
+                    VK_ACCESS_TRANSFER_READ_BIT, region.srcOffset, size);
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_WRITE_BIT, region.dstOffset, size, true);
-
+                    VK_ACCESS_TRANSFER_WRITE_BIT, region.dstOffset, size);
         vkCmdCopyBuffer(cmd->buf, tbuf_vk->slice.buf, buf_vk->slice.buf,
                         1, &region);
+        buf_flush(gpu, cmd, buf, region.dstOffset, size);
     } else {
         struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
         if (!cmd)
@@ -1345,16 +1367,13 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         };
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_WRITE_BIT, region.bufferOffset, size,
-                    true);
-
+                    VK_ACCESS_TRANSFER_WRITE_BIT, region.bufferOffset, size);
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_READ_BIT,
                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-
         vkCmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->current_layout,
                                buf_vk->slice.buf, 1, &region);
-
+        buf_flush(gpu, cmd, buf, region.bufferOffset, size);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
     }
 
@@ -1979,8 +1998,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         struct pl_buf_vk *buf_vk = buf->priv;
 
         buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
-                    access, buf_vk->slice.mem.offset, buf->params.size,
-                    access != PL_DESC_ACCESS_READONLY);
+                    access, buf_vk->slice.mem.offset, buf->params.size);
 
         VkDescriptorBufferInfo *binfo = &pass_vk->dsbinfo[idx];
         *binfo = (VkDescriptorBufferInfo) {
@@ -1998,8 +2016,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         struct pl_buf_vk *buf_vk = buf->priv;
 
         buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
-                    access, buf_vk->slice.mem.offset, buf->params.size,
-                    access != PL_DESC_ACCESS_READONLY);
+                    access, buf_vk->slice.mem.offset, buf->params.size);
 
         wds->pTexelBufferView = &buf_vk->view;
         break;
@@ -2015,6 +2032,18 @@ static void vk_release_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     const struct pl_desc *desc = &pass->params.descriptors[idx];
 
     switch (desc->type) {
+    case PL_DESC_BUF_UNIFORM:
+    case PL_DESC_BUF_STORAGE:
+    case PL_DESC_BUF_TEXEL_UNIFORM:
+    case PL_DESC_BUF_TEXEL_STORAGE: {
+        const struct pl_buf *buf = db.object;
+        struct pl_buf_vk *buf_vk = buf->priv;
+        if (desc->access != PL_DESC_ACCESS_READONLY) {
+            buf_flush(gpu, cmd, buf, buf_vk->slice.mem.offset,
+                      buf->params.size);
+        }
+        break;
+    }
     case PL_DESC_SAMPLED_TEX:
     case PL_DESC_STORAGE_IMG: {
         const struct pl_tex *tex = db.object;
@@ -2157,7 +2186,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
 
         buf_barrier(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
                     VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
-                    vert_vk->slice.mem.offset, vert->params.size, false);
+                    vert_vk->slice.mem.offset, vert->params.size);
 
         vkCmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->slice.buf,
                                &vert_vk->slice.mem.offset);
