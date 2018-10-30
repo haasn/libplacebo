@@ -351,12 +351,12 @@ bool pl_tex_download(const struct pl_gpu *gpu,
 // on a buffer.
 enum pl_buf_type {
     PL_BUF_INVALID = 0,
-    PL_BUF_TEX_TRANSFER, // texture transfer buffer (for pl_tex_upload/download)
-    PL_BUF_UNIFORM,      // UBO, for PL_DESC_BUF_UNIFORM
-    PL_BUF_STORAGE,      // SSBO, for PL_DESC_BUF_STORAGE
-    PL_BUF_TEXEL_UNIFORM,// texel buffer, for PL_DESC_BUF_TEXEL_UNIFORM
-    PL_BUF_TEXEL_STORAGE,// texel buffer, for PL_DESC_BUF_TEXEL_STORAGE
-    PL_BUF_PRIVATE,      // GPU-private usage (interpretation arbitrary)
+    PL_BUF_TEX_TRANSFER,  // texture transfer buffer (for pl_tex_upload/download)
+    PL_BUF_UNIFORM,       // UBO, for PL_DESC_BUF_UNIFORM
+    PL_BUF_STORAGE,       // SSBO, for PL_DESC_BUF_STORAGE
+    PL_BUF_TEXEL_UNIFORM, // texel buffer, for PL_DESC_BUF_TEXEL_UNIFORM
+    PL_BUF_TEXEL_STORAGE, // texel buffer, for PL_DESC_BUF_TEXEL_STORAGE
+    PL_BUF_PRIVATE,       // GPU-private usage (interpretation arbitrary)
     PL_BUF_TYPE_COUNT,
 };
 
