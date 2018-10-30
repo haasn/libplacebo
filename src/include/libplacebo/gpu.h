@@ -390,6 +390,12 @@ struct pl_buf_params {
     bool host_writable; // contents may be updated via pl_buf_write()
     bool host_readable; // contents may be read back via pl_buf_read()
 
+    // Provide a hint for the memory type you want to use when allocating
+    // this buffer's memory. Currently, this field is ignored for all buffer
+    // types except `PL_BUF_TEX_TRANSFER`, since uniform/storage buffers only
+    // make sense when allocated from device memory.
+    enum pl_buf_mem_type memory_type;
+
     // For texel buffers (PL_BUF_TEXEL_*), this gives the interpretation of the
     // buffer's contents. `format->caps` must include the corresponding
     // PL_FMT_CAP_TEXEL_* for the texel buffer type in use.
