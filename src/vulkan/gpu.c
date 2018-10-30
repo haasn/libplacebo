@@ -966,9 +966,10 @@ static void vk_buf_deref(const struct pl_gpu *gpu, struct pl_buf *buf)
     }
 }
 
+// offset: relative to pl_buf
 static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                         const struct pl_buf *buf, VkPipelineStageFlags newStage,
-                        VkAccessFlags newAccess, int offset, size_t size)
+                        VkAccessFlags newAccess, size_t offset, size_t size)
 {
     struct pl_buf_vk *buf_vk = buf->priv;
 
@@ -979,7 +980,7 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         .srcAccessMask = buf_vk->current_access,
         .dstAccessMask = newAccess,
         .buffer = buf_vk->slice.buf,
-        .offset = offset,
+        .offset = buf_vk->slice.mem.offset + offset,
         .size = size,
     };
 
@@ -1001,8 +1002,9 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 }
 
 // Flush visible writes to a buffer made by the API
+// offset: relative to pl_buf
 static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
-                      const struct pl_buf *buf, int offset, size_t size)
+                      const struct pl_buf *buf, size_t offset, size_t size)
 {
     struct pl_buf_vk *buf_vk = buf->priv;
 
@@ -1024,7 +1026,7 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         .dstAccessMask = can_read ? VK_ACCESS_HOST_READ_BIT : 0
                        | can_write ? VK_ACCESS_HOST_WRITE_BIT : 0,
         .buffer = buf_vk->slice.buf,
-        .offset = offset,
+        .offset = buf_vk->slice.mem.offset + offset,
         .size = size,
     };
 
@@ -1246,11 +1248,9 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         };
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_READ_BIT, region.srcOffset, size);
-
+                    VK_ACCESS_TRANSFER_READ_BIT, params->buf_offset, size);
         buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_WRITE_BIT, region.dstOffset, size);
-
+                    VK_ACCESS_TRANSFER_WRITE_BIT, 0, size);
         vkCmdCopyBuffer(cmd->buf, buf_vk->slice.buf, tbuf_vk->slice.buf,
                         1, &region);
 
@@ -1277,15 +1277,12 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         };
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_READ_BIT, region.bufferOffset, size);
-
+                    VK_ACCESS_TRANSFER_READ_BIT, params->buf_offset, size);
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
         vkCmdCopyBufferToImage(cmd->buf, buf_vk->slice.buf, tex_vk->img,
                                tex_vk->current_layout, 1, &region);
-
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
     }
 
@@ -1343,12 +1340,12 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         };
 
         buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_READ_BIT, region.srcOffset, size);
+                    VK_ACCESS_TRANSFER_READ_BIT, 0, size);
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_WRITE_BIT, region.dstOffset, size);
+                    VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size);
         vkCmdCopyBuffer(cmd->buf, tbuf_vk->slice.buf, buf_vk->slice.buf,
                         1, &region);
-        buf_flush(gpu, cmd, buf, region.dstOffset, size);
+        buf_flush(gpu, cmd, buf, params->buf_offset, size);
     } else {
         struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
         if (!cmd)
@@ -1367,13 +1364,13 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         };
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_WRITE_BIT, region.bufferOffset, size);
+                    VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size);
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_READ_BIT,
                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
         vkCmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->current_layout,
                                buf_vk->slice.buf, 1, &region);
-        buf_flush(gpu, cmd, buf, region.bufferOffset, size);
+        buf_flush(gpu, cmd, buf, params->buf_offset, size);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
     }
 
@@ -1998,7 +1995,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         struct pl_buf_vk *buf_vk = buf->priv;
 
         buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
-                    access, buf_vk->slice.mem.offset, buf->params.size);
+                    access, 0, buf->params.size);
 
         VkDescriptorBufferInfo *binfo = &pass_vk->dsbinfo[idx];
         *binfo = (VkDescriptorBufferInfo) {
@@ -2016,7 +2013,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         struct pl_buf_vk *buf_vk = buf->priv;
 
         buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
-                    access, buf_vk->slice.mem.offset, buf->params.size);
+                    access, 0, buf->params.size);
 
         wds->pTexelBufferView = &buf_vk->view;
         break;
@@ -2037,11 +2034,8 @@ static void vk_release_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     case PL_DESC_BUF_TEXEL_UNIFORM:
     case PL_DESC_BUF_TEXEL_STORAGE: {
         const struct pl_buf *buf = db.object;
-        struct pl_buf_vk *buf_vk = buf->priv;
-        if (desc->access != PL_DESC_ACCESS_READONLY) {
-            buf_flush(gpu, cmd, buf, buf_vk->slice.mem.offset,
-                      buf->params.size);
-        }
+        if (desc->access != PL_DESC_ACCESS_READONLY)
+            buf_flush(gpu, cmd, buf, 0, buf->params.size);
         break;
     }
     case PL_DESC_SAMPLED_TEX:
@@ -2185,8 +2179,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         struct pl_tex_vk *tex_vk = tex->priv;
 
         buf_barrier(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
-                    VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
-                    vert_vk->slice.mem.offset, vert->params.size);
+                    VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT, 0, vert->params.size);
 
         vkCmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->slice.buf,
                                &vert_vk->slice.mem.offset);
