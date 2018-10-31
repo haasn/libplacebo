@@ -791,7 +791,7 @@ void pl_shader_av1_grain(struct pl_shader *sh,
     }
 
     // Update the scaling LUTs
-    ident_t scaling[3];
+    ident_t scaling[3] = {0};
     for (int i = 0; i < 3; i++) {
         struct {
             int num;
@@ -895,6 +895,8 @@ void pl_shader_av1_grain(struct pl_shader *sh,
     for (int i = 0; i < 3; i++) {
         enum pl_channel c = channels[i];
         if (c == PL_CHANNEL_NONE)
+            continue;
+        if (!scaling[c])
             continue;
 
         get_grain_for_channel(sh, c, params);
