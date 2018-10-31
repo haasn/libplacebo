@@ -108,6 +108,7 @@ static bool strndup_append_at(char **str, size_t at, const char *append,
         *str = t;
     }
 
+    assert(*str);
     if (append_len)
         memcpy(*str + at, append, append_len);
 

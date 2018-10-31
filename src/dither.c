@@ -149,6 +149,7 @@ static index_t getmin(struct ctx *k)
             k->randomat[resnum++] = c;
         }
     }
+    assert(resnum > 0);
     if (resnum == 1)
         return k->randomat[0];
     if (resnum == size2)

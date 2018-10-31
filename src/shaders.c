@@ -750,6 +750,7 @@ next_dim: ; // `continue` out of the inner loop
 
     switch (method) {
     case SH_LUT_TEXTURE: {
+        assert(texdim);
         ident_t tex = sh_desc(sh, (struct pl_shader_desc) {
             .desc = {
                 .name = "weights",
@@ -771,6 +772,7 @@ next_dim: ; // `continue` out of the inner loop
     }
 
     case SH_LUT_LINEAR: {
+        assert(texdim);
         ident_t tex = sh_desc(sh, (struct pl_shader_desc) {
             .desc = {
                 .name = "weights",

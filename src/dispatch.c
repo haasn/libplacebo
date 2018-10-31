@@ -493,6 +493,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     };
 
     if (params.type == PL_PASS_RASTER) {
+        assert(target);
         params.target_dummy = *target;
 
         // Fill in the vertex attributes array

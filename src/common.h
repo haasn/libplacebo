@@ -103,6 +103,7 @@ static inline float *pl_transpose(int dim, float *out, const float *in)
 // Helpers for doing alignment calculations
 static inline size_t pl_gcd(size_t x, size_t y)
 {
+    assert(x && y);
     while (y) {
         size_t tmp = y;
         y = x % y;
@@ -114,5 +115,6 @@ static inline size_t pl_gcd(size_t x, size_t y)
 
 static inline size_t pl_lcm(size_t x, size_t y)
 {
+    assert(x && y);
     return x * (y / pl_gcd(x, y));
 }
