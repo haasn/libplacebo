@@ -901,10 +901,11 @@ error:
     return NULL;
 }
 
-void pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
+bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
                     VkImageLayout layout, VkAccessFlags access,
                     VkSemaphore sem_out)
 {
+    struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_tex_vk *tex_vk = tex->priv;
     pl_assert(tex_vk->external_img);
     pl_assert(!tex_vk->held);
@@ -913,14 +914,16 @@ void pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
     struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
     if (!cmd) {
         PL_ERR(gpu, "Failed holding external image!");
-        return;
+        return false;
     }
 
     tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                 access, layout);
     vk_cmd_sig(cmd, sem_out);
-    pl_gpu_flush(gpu);
-    tex_vk->held = true;
+    vk_submit(gpu);
+    tex_vk->held = vk_flush_commands(vk);
+
+    return tex_vk->held;
 }
 
 void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,

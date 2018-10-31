@@ -251,7 +251,9 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
 // access mode specified by the user, and fire the given semaphore when this is
 // done. This marks the image as held. Attempting to perform any pl_tex_*
 // operation (except pl_tex_destroy) on a held image is undefined behavior.
-void pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
+//
+// Returns whether successful.
+bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
                     VkImageLayout layout, VkAccessFlags access,
                     VkSemaphore sem_out);
 
