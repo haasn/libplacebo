@@ -1544,6 +1544,11 @@ static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
     // temporary allocations
     void *tmp = talloc_new(NULL);
 
+    VkPipelineCache pipeCache = NULL;
+    VkShaderModule vert_shader = NULL;
+    VkShaderModule frag_shader = NULL;
+    VkShaderModule comp_shader = NULL;
+
     int num_desc = params->num_descriptors;
     if (!num_desc)
         goto no_descriptors;
@@ -1551,11 +1556,6 @@ static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
     pass_vk->dswrite = talloc_array(pass, VkWriteDescriptorSet, num_desc);
     pass_vk->dsiinfo = talloc_array(pass, VkDescriptorImageInfo, num_desc);
     pass_vk->dsbinfo = talloc_array(pass, VkDescriptorBufferInfo, num_desc);
-
-    VkPipelineCache pipeCache = NULL;
-    VkShaderModule vert_shader = NULL;
-    VkShaderModule frag_shader = NULL;
-    VkShaderModule comp_shader = NULL;
 
 #define NUM_DS (PL_ARRAY_SIZE(pass_vk->dss))
 
