@@ -364,7 +364,7 @@ static void generate_grain_uv(float *out, int16_t buf[GRAIN_HEIGHT][GRAIN_WIDTH]
     int chromaW = params->subX ? SUB_GRAIN_WIDTH  : GRAIN_WIDTH;
     int chromaH = params->subY ? SUB_GRAIN_HEIGHT : GRAIN_HEIGHT;
 
-    const uint8_t *coeffs[] = {
+    const int8_t *coeffs[] = {
         [PL_CHANNEL_CB] = params->ar_coeffs_uv[0],
         [PL_CHANNEL_CR] = params->ar_coeffs_uv[1],
     };
