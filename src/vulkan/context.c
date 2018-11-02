@@ -70,10 +70,11 @@ void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
     TA_FREEP((void **) inst_ptr);
 }
 
-static VkBool32 vk_dbg_callback(VkDebugReportFlagsEXT flags,
-                                VkDebugReportObjectTypeEXT objType,
-                                uint64_t obj, size_t loc, int32_t msgCode,
-                                const char *layer, const char *msg, void *priv)
+static VkBool32 VKAPI_PTR vk_dbg_callback(VkDebugReportFlagsEXT flags,
+                                          VkDebugReportObjectTypeEXT objType,
+                                          uint64_t obj, size_t loc,
+                                          int32_t msgCode, const char *layer,
+                                          const char *msg, void *priv)
 {
     struct pl_context *ctx = priv;
     enum pl_log_level lev = PL_LOG_INFO;
