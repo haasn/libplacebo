@@ -168,7 +168,7 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
         goto error;
     }
 
-    VkDebugReportCallbackEXT debug = NULL;
+    VkDebugReportCallbackEXT debug = VK_NULL_HANDLE;
     if (params->debug) {
         // Set up a debug callback to catch validation messages
         VkDebugReportCallbackCreateInfoEXT dinfo = {

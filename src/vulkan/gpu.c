@@ -413,7 +413,7 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         imgBarrier.srcAccessMask = 0;
     }
 
-    VkEvent event = NULL;
+    VkEvent event = VK_NULL_HANDLE;
     enum vk_wait_type type = vk_cmd_wait(vk, cmd, &tex_vk->sig, stage, &event);
 
     bool need_trans = tex_vk->current_layout != newLayout ||
@@ -513,7 +513,7 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
         tex_vk->transfer_queue = COMPUTE;
 
     bool ret = false;
-    VkRenderPass dummyPass = NULL;
+    VkRenderPass dummyPass = VK_NULL_HANDLE;
 
     if (params->sampleable || params->renderable) {
         static const VkImageViewType viewType[] = {
@@ -1544,10 +1544,10 @@ static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
     // temporary allocations
     void *tmp = talloc_new(NULL);
 
-    VkPipelineCache pipeCache = NULL;
-    VkShaderModule vert_shader = NULL;
-    VkShaderModule frag_shader = NULL;
-    VkShaderModule comp_shader = NULL;
+    VkPipelineCache pipeCache = VK_NULL_HANDLE;
+    VkShaderModule vert_shader = VK_NULL_HANDLE;
+    VkShaderModule frag_shader = VK_NULL_HANDLE;
+    VkShaderModule comp_shader = VK_NULL_HANDLE;
 
     int num_desc = params->num_descriptors;
     if (!num_desc)
@@ -2126,7 +2126,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         goto error;
 
     // Find a descriptor set to use
-    VkDescriptorSet ds = NULL;
+    VkDescriptorSet ds = VK_NULL_HANDLE;
     if (!pass_vk->use_pushd) {
         for (int i = 0; i < PL_ARRAY_SIZE(pass_vk->dss); i++) {
             uint16_t dsbit = 1u << i;

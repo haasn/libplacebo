@@ -429,7 +429,7 @@ static void destroy_swapchain(struct vk_ctx *vk, struct priv *p)
 {
     assert(p->old_swapchain);
     vkDestroySwapchainKHR(vk->dev, p->old_swapchain, VK_ALLOC);
-    p->old_swapchain = NULL;
+    p->old_swapchain = VK_NULL_HANDLE;
 }
 
 static bool vk_sw_recreate(const struct pl_swapchain *sw)
@@ -522,7 +522,7 @@ error:
     PL_ERR(vk, "Failed (re)creating swapchain!");
     talloc_free(vkimages);
     vkDestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
-    p->swapchain = NULL;
+    p->swapchain = VK_NULL_HANDLE;
     return false;
 }
 
@@ -540,7 +540,7 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
     for (int attempts = 0; attempts < 2; attempts++) {
         uint32_t imgidx = 0;
         VkResult res = vkAcquireNextImageKHR(vk->dev, p->swapchain, UINT64_MAX,
-                                             sem_in, NULL, &imgidx);
+                                             sem_in, VK_NULL_HANDLE, &imgidx);
 
         switch (res) {
         case VK_SUCCESS:
