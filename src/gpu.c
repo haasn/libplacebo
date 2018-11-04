@@ -389,8 +389,10 @@ bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
         return false;
     }
 
-    if (*tex && pl_tex_params_superset((*tex)->params, *params))
+    if (*tex && pl_tex_params_superset((*tex)->params, *params)) {
+        pl_tex_invalidate(gpu, *tex);
         return true;
+    }
 
     PL_INFO(gpu, "(Re)creating %dx%dx%d texture", params->w, params->h, params->d);
     pl_tex_destroy(gpu, tex);

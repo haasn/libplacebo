@@ -278,8 +278,9 @@ void pl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex **tex);
 // considered "compatible" if it has the same texture format and sample/address
 // mode and it supports a superset of the features the user requested.
 //
-// Note: due to its unpredictability, using `initial_data` with
-// `pl_tex_recreate` is considered an error.
+// Even if the texture is not recreated, calling this function will still
+// invalidate the contents of the texture. (Note: Because of this,
+// `initial_data` may not be used with `pl_tex_recreate`. Doing so is an error)
 bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
                      const struct pl_tex_params *params);
 
