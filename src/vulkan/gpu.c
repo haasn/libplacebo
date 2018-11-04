@@ -1060,6 +1060,7 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
         memcpy((void *) addr, data, size);
         buf_vk->needs_flush = true;
     } else {
+        pl_assert(size <= 64 * 1024);
         struct vk_cmd *cmd = vk_require_cmd(gpu, buf_vk->update_queue);
         if (!cmd) {
             PL_ERR(gpu, "Failed updating buffer!");
@@ -1179,6 +1180,10 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     if (params->host_writable || params->initial_data) {
         bufFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
+
+        // Large buffers must be written using mapped memory
+        if (params->size > 64 * 1024)
+            memFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
     }
 
     if (params->host_mapped || params->host_readable) {
