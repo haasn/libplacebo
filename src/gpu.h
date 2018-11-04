@@ -30,7 +30,7 @@ struct pl_gpu_fns {
     void (*pass_destroy)(const struct pl_gpu *, const struct pl_pass *);
 
     GPU_PFN(tex_create);
-    GPU_PFN(tex_invalidate);
+    GPU_PFN(tex_invalidate); // optional
     GPU_PFN(tex_clear);
     GPU_PFN(tex_blit);
     GPU_PFN(tex_upload);

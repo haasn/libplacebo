@@ -419,7 +419,8 @@ void pl_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *dst,
 
 void pl_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex)
 {
-    gpu->impl->tex_invalidate(gpu, tex);
+    if (gpu->impl->tex_invalidate)
+        gpu->impl->tex_invalidate(gpu, tex);
 }
 
 static void strip_coords(const struct pl_tex *tex, struct pl_rect3d *rc)
