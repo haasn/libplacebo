@@ -836,8 +836,8 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
             .dstSubresource = layers,
             .srcOffsets = {{src_rc.x0, src_rc.y0, src_rc.z0},
                            {src_rc.x1, src_rc.y1, src_rc.z1}},
-            .dstOffsets = {{dst_rc.x0, dst_rc.y0, src_rc.z0},
-                           {dst_rc.x1, dst_rc.y1, src_rc.z1}},
+            .dstOffsets = {{dst_rc.x0, dst_rc.y0, dst_rc.z0},
+                           {dst_rc.x1, dst_rc.y1, dst_rc.z1}},
         };
 
         vkCmdBlitImage(cmd->buf, src_vk->img, src_vk->current_layout,
