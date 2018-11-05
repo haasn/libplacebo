@@ -814,7 +814,7 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
     // efficient vkCmdCopyImage instead of vkCmdBlitImage
     if (pl_rect3d_eq(src_rc, dst_rc)) {
         pl_rect3d_normalize(&src_rc);
-        pl_rect3d_normalize(&src_rc);
+        pl_rect3d_normalize(&dst_rc);
 
         VkImageCopy region = {
             .srcSubresource = layers,
