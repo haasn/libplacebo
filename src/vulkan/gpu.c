@@ -1125,23 +1125,13 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     VkMemoryPropertyFlags memFlags = 0;
     VkDeviceSize align = 4; // alignment 4 is needed for buf_update
 
-    static const VkMemoryPropertyFlags pl_buf_mem_flags[] = {
-        [PL_BUF_MEM_DEVICE] = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        [PL_BUF_MEM_HOST]   = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-    };
-
-    enum pl_buf_mem_type preferred_type = params->memory_type;
-    if (!preferred_type) {
-        bool want_host = params->host_writable || params->host_readable;
-        preferred_type = want_host ? PL_BUF_MEM_HOST : PL_BUF_MEM_DEVICE;
-    }
+    enum pl_buf_mem_type mem_type = params->memory_type;
 
     bool is_texel = false;
     switch (params->type) {
     case PL_BUF_TEX_TRANSFER:
         bufFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                     VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        memFlags |= pl_buf_mem_flags[preferred_type];
         align = pl_lcm(align, p->min_texel_alignment);
         // Use TRANSFER-style updates for large enough buffers for efficiency
         if (params->size > 1024*1024) // 1 MB
@@ -1149,19 +1139,19 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         break;
     case PL_BUF_UNIFORM:
         bufFlags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        mem_type = PL_BUF_MEM_DEVICE;
         align = pl_lcm(align, vk->limits.minUniformBufferOffsetAlignment);
         break;
     case PL_BUF_STORAGE:
         bufFlags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        mem_type = PL_BUF_MEM_DEVICE;
         align = pl_lcm(align, vk->limits.minStorageBufferOffsetAlignment);
         buf_vk->update_queue = COMPUTE;
         break;
     case PL_BUF_TEXEL_UNIFORM: // for emulated upload
         bufFlags |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
         bufFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        mem_type = PL_BUF_MEM_DEVICE;
         align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
         align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
         is_texel = true;
@@ -1169,7 +1159,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     case PL_BUF_TEXEL_STORAGE: // for emulated download
         bufFlags |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
         bufFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        mem_type = PL_BUF_MEM_DEVICE;
         align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
         align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
         buf_vk->update_queue = COMPUTE;
@@ -1177,7 +1167,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         break;
     case PL_VK_BUF_VERTEX:
         bufFlags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        mem_type = PL_BUF_MEM_DEVICE;
         break;
     default: abort();
     }
@@ -1195,6 +1185,21 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         memFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
                     VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+    }
+
+    if (params->host_writable || params->host_readable) {
+        // Prefer buffers requiring frequent host operations in host mem
+        mem_type = PL_DEF(mem_type, PL_BUF_MEM_HOST);
+    }
+
+    switch (mem_type) {
+    case PL_BUF_MEM_DEVICE:
+        memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        break;
+    case PL_BUF_MEM_HOST:
+        memFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        break;
+    default: break;
     }
 
     if (!vk_malloc_buffer(p->alloc, bufFlags, memFlags, params->size, align,
