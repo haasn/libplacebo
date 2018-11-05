@@ -469,7 +469,6 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
             raster_ok &= blend_equal(p->pass->params.blend_params, blend);
             if (raster_ok)
                 return dp->passes[i];
-            break;
         }
     }
 
