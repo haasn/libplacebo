@@ -30,6 +30,8 @@ enum pl_color_system {
     PL_COLOR_SYSTEM_SMPTE_240M,  // SMPTE-240M
     PL_COLOR_SYSTEM_BT_2020_NC,  // ITU-R Rec. BT.2020 (non-constant luminance)
     PL_COLOR_SYSTEM_BT_2020_C,   // ITU-R Rec. BT.2020 (constant luminance)
+    PL_COLOR_SYSTEM_BT_2100_PQ,  // ITU-R Rec. BT.2100 ICtCp PQ variant
+    PL_COLOR_SYSTEM_BT_2100_HLG, // ITU-R Rec. BT.2100 ICtCp HLG variant
     PL_COLOR_SYSTEM_YCGCO,       // YCgCo (derived from RGB)
     // Other color systems:
     PL_COLOR_SYSTEM_RGB,         // Red, Green and Blue
@@ -406,6 +408,9 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
 // Note: For BT.2020 constant-luminance, this outputs chroma information in the
 // range [-0.5, 0.5]. Since the CL system conversion is non-linear, further
 // processing must be done by the caller. The channel order is CrYCb.
+//
+// Note: For BT.2100 ICtCp, this outputs in the color space L'M'S'. Further
+// non-linear processing must be done by the caller.
 //
 // Note: For XYZ system, the input/encoding gamma must be pre-applied by the
 // user, typically this has a value of 2.6.

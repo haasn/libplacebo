@@ -57,7 +57,8 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
 
     GLSL("color.rgb = %s * color.rgb + %s;\n", cmat, cmat_c);
 
-    if (orig_sys == PL_COLOR_SYSTEM_BT_2020_C) {
+    switch (orig_sys) {
+    case PL_COLOR_SYSTEM_BT_2020_C:
         // Conversion for C'rcY'cC'bc via the BT.2020 CL system:
         // C'bc = (B'-Y'c) / 1.9404  | C'bc <= 0
         //      = (B'-Y'c) / 1.5816  | C'bc >  0
@@ -90,6 +91,35 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
              "              1.0993 * pow(color.g, 0.45) - 0.0993, \n"
              "              %s(0.0181 <= color.g));               \n",
              sh_bvec(sh, 1));
+        break;
+
+    case PL_COLOR_SYSTEM_BT_2100_PQ:
+    case PL_COLOR_SYSTEM_BT_2100_HLG: {
+        // Conversion process from the spec:
+        //
+        // 1. L'M'S' = cmat * ICtCp
+        // 2. LMS = linearize(L'M'S')  (EOTF for PQ, inverse OETF for HLG)
+        // 3. RGB = lms2rgb * LMS
+        //
+        // After this we need to invert step 2 to arrive at non-linear RGB.
+        // (It's important we keep the transfer function conversion separate
+        // from the color system decoding, so we have to partially undo our
+        // work here even though we will end up linearizing later on anyway)
+        enum pl_color_transfer trc = orig_sys == PL_COLOR_SYSTEM_BT_2100_PQ
+                                        ? PL_COLOR_TRC_PQ
+                                        : PL_COLOR_TRC_HLG;
+
+        // Inverted from the matrix in the spec, transposed to column major
+        static const char *bt2100_lms2rgb = "mat3("
+            "  3.43661,  -0.79133, -0.0259499, "
+            " -2.50645,    1.9836, -0.0989137, "
+            "0.0698454, -0.192271,    1.12486) ";
+
+        pl_shader_linearize(sh, trc);
+        GLSL("color.rgb = %s * color.rgb; \n", bt2100_lms2rgb);
+        pl_shader_delinearize(sh, trc);
+        break;
+    }
     }
 
     if (repr->alpha == PL_ALPHA_INDEPENDENT) {
