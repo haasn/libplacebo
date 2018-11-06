@@ -556,7 +556,7 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
         pl_assert(!params->surface);
         pl_assert(!params->device);
         PL_DEBUG(vk, "No VkInstance provided, creating one...");
-        vk->internal_instance = pl_vk_inst_create(ctx, NULL);
+        vk->internal_instance = pl_vk_inst_create(ctx, params->instance_params);
         if (!vk->internal_instance)
             goto error;
         vk->inst = vk->internal_instance->instance;

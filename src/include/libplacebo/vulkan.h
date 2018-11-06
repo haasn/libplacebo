@@ -98,12 +98,15 @@ struct pl_vulkan_queue {
 
 struct pl_vulkan_params {
     // The vulkan instance. Optional, if NULL then libplacebo will internally
-    // create a VkInstance with no extra extensions or layers - but note that
-    // this is not useful except for offline rendering.
+    // create a VkInstance with the settings from `instance_params`.
     //
     // NOTE: The VkInstance provided by the user *MUST* be created with the
     // `VK_KHR_get_physical_device_properties2` extension enabled!
     VkInstance instance;
+
+    // Configures the settings used for creating an internal vulkan instance.
+    // May be NULL. Ignored if `instance` is set.
+    const struct pl_vk_inst_params *instance_params;
 
     // When choosing the device, rule out all devices that don't support
     // presenting to this surface. When creating a device, enable all extensions
