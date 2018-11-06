@@ -811,8 +811,8 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         // For lack of anything saner to do, just assume the caller wants
         // BT.709 primaries, which is a reasonable assumption.
         m = pl_get_xyz2rgb_matrix(pl_raw_primaries_get(PL_COLOR_PRIM_BT_709));
-    }
         break;
+    }
     default: abort();
     }
 
