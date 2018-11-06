@@ -159,7 +159,10 @@ will abort(). Use at your own risk.
 
 ### Gentoo
 
-An [ebuild](etc/libplacebo-9999.ebuild) is available.
+An
+[ebuild](https://github.com/sjnewbury/gentoo-gpu/blob/master/media-libs/libplacebo/libplacebo-9999.ebuild)
+is available in the overlay `gentoo-gpu`. (Currently pending being merged into
+upstream gentoo)
 
 ### Building from source
 
