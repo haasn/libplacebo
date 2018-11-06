@@ -346,6 +346,9 @@ struct pl_tex_vk {
     VkImageType type;
     VkImage img;
     struct vk_memslice mem;
+    // cached properties
+    VkFormat img_fmt;
+    VkImageUsageFlags usage_flags;
     // for sampling
     VkImageView view;
     VkSampler sampler;
@@ -713,6 +716,8 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     };
 
     VK(vkCreateImage(vk->dev, &iinfo, VK_ALLOC, &tex_vk->img));
+    tex_vk->img_fmt = ifmt;
+    tex_vk->usage_flags = usage;
 
     VkMemoryPropertyFlags memFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     VkMemoryRequirements reqs;
@@ -891,6 +896,8 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
     tex_vk->external_img = true;
     tex_vk->held = true;
     tex_vk->img = image;
+    tex_vk->img_fmt = imageFormat;
+    tex_vk->usage_flags = imageUsage;
 
     if (!vk_init_image(gpu, tex))
         goto error;
@@ -902,13 +909,25 @@ error:
     return NULL;
 }
 
+VkImage pl_vulkan_unwrap(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                         VkFormat *out_format, VkImageUsageFlags *out_flags)
+{
+    struct pl_tex_vk *tex_vk = tex->priv;
+
+    if (out_format)
+        *out_format = tex_vk->img_fmt;
+    if (out_flags)
+        *out_flags = tex_vk->usage_flags;
+
+    return tex_vk->img;
+}
+
 bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
                     VkImageLayout layout, VkAccessFlags access,
                     VkSemaphore sem_out)
 {
     struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_tex_vk *tex_vk = tex->priv;
-    pl_assert(tex_vk->external_img);
     pl_assert(!tex_vk->held);
     pl_assert(sem_out);
 

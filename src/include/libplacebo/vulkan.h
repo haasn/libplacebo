@@ -250,20 +250,34 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
                                     VkImage image, int w, int h, int d,
                                     VkFormat format, VkImageUsageFlags usage);
 
-// "Hold" an external image. This will transition the image into the layout and
-// access mode specified by the user, and fire the given semaphore when this is
-// done. This marks the image as held. Attempting to perform any pl_tex_*
-// operation (except pl_tex_destroy) on a held image is undefined behavior.
+// Analogous to `pl_vulkan_wrap`, this function takes any `pl_tex` (including
+// one created by libplacebo) and unwraps it to expose the underlying VkImage
+// to the user. Unlike `pl_vulkan_wrap`, this `pl_tex` is *not* considered held
+// by default - the user must explicitly `pl_vulkan_hold` before accessing the
+// VkImage for the first time.
+//
+// `out_format` and `out_flags` will be updated to hold the VkImage's
+// format and usage flags. (Optional)
+VkImage pl_vulkan_unwrap(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                         VkFormat *out_format, VkImageUsageFlags *out_flags);
+
+// "Hold" a shared image. This will transition the image into the layout and
+// access mode specified by the user, and fire the given semaphore (required!)
+// when this is done. This marks the image as held. Attempting to perform any
+// pl_tex_* operation (except pl_tex_destroy) on a held image is an error.
 //
 // Returns whether successful.
 bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
                     VkImageLayout layout, VkAccessFlags access,
                     VkSemaphore sem_out);
 
-// "Release" an external image. `layout` and `access` describe the current
-// state of the image at the point in time when the user is releasing it. If
-// `sem_in` is specified, it must fire before libplacebo will actually use or
-// modify the image.
+// "Release" a shared image, meaning it is no longer held. `layout` and
+// `access` describe the current state of the image at the point in time when
+// the user is releasing it. Performing any operation on the VkImage underlying
+// this `pl_tex` while it is not being held by the user is undefined behavior.
+//
+// If `sem_in` is specified, it must fire before libplacebo will actually use
+// or modify the image. (Optional)
 void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
                        VkImageLayout layout, VkAccessFlags access,
                        VkSemaphore sem_in);
