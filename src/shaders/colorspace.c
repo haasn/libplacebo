@@ -120,6 +120,13 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
         pl_shader_delinearize(sh, trc);
         break;
     }
+
+    case PL_COLOR_SYSTEM_XYZ:
+        break; // no special post-processing needed
+
+    default:
+        assert(pl_color_system_is_linear(orig_sys));
+        break;
     }
 
     if (repr->alpha == PL_ALPHA_INDEPENDENT) {
