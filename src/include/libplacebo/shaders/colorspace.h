@@ -43,12 +43,16 @@ void pl_shader_encode_color(struct pl_shader *sh,
                             const struct pl_color_repr *repr);
 
 // Linearize (expand) `vec4 color`, given a specified color_transfer. In
-// essence, this is the ITU-R EOTF, calculated on an idealized (reference)
-// monitor with a white point of PL_COLOR_REF_WHITE and infinite contrast.
+// essence, this loosely corresponds to the ITU-R EOTF, calculated on an
+// idealized (reference) monitor with a white point of PL_COLOR_REF_WHITE and
+// infinite contrast.
+//
+// Note: Unlike the ITU-R EOTF, it never includes the OOTF - even for systems
+// where the EOTF includes the OOTF (such as HLG).
 void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc);
 
-// Delinearize (compress), given a TRC as output. This corresponds to the
-// inverse EOTF (not the OETF) in ITU-R terminology, again assuming a
+// Delinearize (compress), given a TRC as output. This loosely corresponds to
+// the inverse EOTF (not the OETF) in ITU-R terminology, again assuming a
 // reference monitor.
 void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc);
 
