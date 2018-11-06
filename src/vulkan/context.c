@@ -173,6 +173,10 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     info.ppEnabledExtensionNames = exts;
     info.enabledExtensionCount = num_exts;
 
+    pl_info(ctx, "Creating vulkan instance%s", num_exts ? " with extensions:" : "");
+    for (int i = 0; i < num_exts; i++)
+        pl_info(ctx, "    %s", exts[i]);
+
     VkResult res = vkCreateInstance(&info, VK_ALLOC, &inst);
     if (res != VK_SUCCESS) {
         pl_fatal(ctx, "Failed creating instance: %s", vk_res_str(res));
