@@ -692,10 +692,8 @@ void api1_example()
            frames, secs, 1000 * secs / frames, frames / secs);
 
 done:
-    if (srcbuf)
-        free(srcbuf);
-    if (dstbuf)
-        free(dstbuf);
+    free(srcbuf);
+    free(dstbuf);
     uninit(vf);
 }
 
