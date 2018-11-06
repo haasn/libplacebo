@@ -792,7 +792,7 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         m = (struct pl_matrix3x3) {{
             { 2048/4096.,   2048/4096.,          0},
             { 6610/4096., -13613/4096., 7003/4096.},
-            {17933/4096.  -17390/4096., -543/4096.},
+            {17933/4096., -17390/4096., -543/4096.},
         }};
         pl_matrix3x3_invert(&m);
         break;
