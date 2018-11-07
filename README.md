@@ -15,16 +15,6 @@ accomplish the following goals:
   redesigned abstractions. (Basically, I wanted to eliminate code smell like
   `shader_cache.c` and totally redesign `gpu/video.c`)
 
-**NOTE**: libplacebo is currently in a relatively early stage. To reflect
-this, the API version as exported by common.h will **NOT** change except on
-new beta releases (v0.x). So using libplacebo directly from git master is not
-advised; always use one of the tagged releases if you want to play around with
-libplacebo in its current stage.
-
-Once the version number hits 1.X, which will mark the first stable release,
-the API version will be bumped for every change to the public API - even
-changes that happen on git master.
-
 ## Authors
 
 libplacebo's main developer is Niklas Haas
@@ -150,10 +140,6 @@ interested in. It takes care of internal details such as degrading to simpler
 algorithms depending on the hardware's capabilities, combining the correct
 sequence of colorspace transformations and shader passes in order to get the
 best overall image quality, and so forth.
-
-**WARNING**: The `renderer.h` is a WIP component and currently doesn't support
-the full advertised featureset yet. If you trigger any unimplemented paths, it
-will abort(). Use at your own risk.
 
 ## Installing
 
