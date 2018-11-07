@@ -298,6 +298,14 @@ void setup_plane_data(const struct image *img,
             .pixels = plane->data,
         };
 
+        // For API 2 (direct rendering)
+        if (img->associated_buf) {
+            const struct pl_buf *buf = img->associated_buf->priv;
+            out[i].pixels = NULL;
+            out[i].buf = buf;
+            out[i].buf_offset = (size_t) (plane->data - (ptrdiff_t) buf->data);
+        }
+
         for (int c = 0; c < plane->fmt.num_comps; c++) {
             out[i].component_size[c] = plane->fmt.bitdepth;
             out[i].component_pad[c] = 0;
@@ -537,6 +545,12 @@ enum api2_status api2_process(void *priv)
         struct entry *e = &p->entries[p->idx_out];
         if (pl_buf_poll(p->gpu, e->buf, 0))
             break;
+
+        if (e->held_image) {
+            image_unlock(e->held_image);
+            e->held_image = NULL;
+            e->held_buf = NULL;
+        }
 
         // download buffer is no longer busy, dequeue the frame
         put_image(e->image);
