@@ -1,5 +1,5 @@
-majorver = '0'
-apiver   = '6'
+majorver = '1'
+apiver   = '7'
 fixver   = '0'
 
 version = majorver + '.' + apiver + '.' + fixver
