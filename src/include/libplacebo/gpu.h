@@ -432,6 +432,10 @@ struct pl_buf {
     // owned by the `pl_gpu` - if a user wishes to use them in a way that takes
     // over ownership (e.g. importing into some APIs), they must clone the
     // handle before doing so (e.g. using `dup` for fds).
+    //
+    // If the `pl_buf` is destroyed (pl_buf_destroy), the contents of the
+    // memory associated with these handles become undefined - including the
+    // contents of any external API objects imported from them.
     struct pl_gpu_handle handles;
     size_t handle_offset;
 };
