@@ -110,7 +110,13 @@ if glslang_found
   ).to_int()
 
   if glslang_ver >= glslang_min_ver
-    glslang_combined = declare_dependency(dependencies: glslang_deps)
+    # glslang must be linked against pthreads on platforms where pthreads is
+    # available. Because of their horrible architecture, gcc can't do it
+    # automatically, and for some reason dependency('threads') (which uses
+    # -pthread) doesn't work. We actually need -lpthreads for the glslang
+    # object files to link, for whatever weird reason.
+    pthread = cxx.find_library('pthread', required: false)
+    glslang_combined = declare_dependency(dependencies: glslang_deps + [pthread])
   else
     error('glslang revision @0@ too old! Must be at least @1@'
           .format(glslang_ver, glslang_min_ver))
