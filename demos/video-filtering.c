@@ -817,9 +817,10 @@ void image_unlock(struct image *img)
     refcount[index]--;
 }
 
-void main()
+int main()
 {
     printf("Running benchmarks...\n");
     api1_example();
     api2_example();
+    return 0;
 }
