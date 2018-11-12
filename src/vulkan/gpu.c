@@ -1120,7 +1120,12 @@ static bool vk_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
         return false;
     }
 
-    buf_barrier(gpu, cmd, buf, 0, 0, 0, buf->params.size, true);
+    // For the queue family ownership transfer, we can ignore all pipeline
+    // stages since the synchronization via fences/semaphores is required
+    buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
+                0, buf->params.size, true);
+    buf_vk->current_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
     vk_submit(gpu);
     return vk_flush_commands(vk);
 }
