@@ -240,7 +240,7 @@ void *init(void) {
     p->gpu = p->vk->gpu;
 
     p->dp = pl_dispatch_create(p->ctx, p->gpu);
-    if (!p->vk) {
+    if (!p->dp) {
         fprintf(stderr, "Failed creating shader dispatch object\n");
         goto error;
     }
