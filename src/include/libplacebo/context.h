@@ -49,7 +49,7 @@ struct pl_context_params {
     void *log_priv;
 
     // The current log level. Controls the level of message that will be
-    // redirected ot the log callback. Setting this to PL_LOG_ALL means all
+    // redirected to the log callback. Setting this to PL_LOG_ALL means all
     // messages will be forwarded, but doing so indiscriminately can result
     // in increased CPU usage as it may enable extra debug paths based on the
     // configured log level.
