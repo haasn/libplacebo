@@ -53,4 +53,3 @@ void pl_swapchain_swap_buffers(const struct pl_swapchain *sw)
 {
     sw->impl->swap_buffers(sw);
 }
-
