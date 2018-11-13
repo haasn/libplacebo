@@ -35,7 +35,7 @@
 // before calling into these functions.
 struct pl_grain_params {
     int width, height;           // dimensions of the image (luma)
-    int subX, subY;              // subsampling shifts for the chroma planes
+    int sub_x, sub_y;            // subsampling shifts for the chroma planes
     struct pl_color_repr repr;   // underlying color system
     // Some notes apply to `repr`:
     //  - repr.bits affects the rounding for grain generation
