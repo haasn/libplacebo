@@ -169,7 +169,7 @@ void api2_free(void *priv, const struct api2_buf *buf);
 // are enqueued, dequeued and locked are not really important here, so just
 // do something unrealistic but simple to demonstrate with.
 struct image *get_image(void);
-void put_image(struct image img);
+void put_image(struct image *img);
 void image_lock(struct image *img);
 void image_unlock(struct image *img);
 
@@ -213,11 +213,10 @@ struct priv {
 };
 
 void *init(void) {
-    struct priv *p = malloc(sizeof(struct priv));
+    struct priv *p = calloc(1, sizeof(struct priv));
     if (!p)
         return NULL;
 
-    *p = (struct priv) {0};
     p->ctx = pl_context_create(PL_API_VER, NULL);
     if (!p->ctx) {
         fprintf(stderr, "Failed initializing libplacebo\n");
@@ -340,7 +339,6 @@ bool api1_reconfig(void *priv, const struct image *proxy)
     setup_plane_data(proxy, data);
 
     for (int i = 0; i < proxy->num_planes; i++) {
-        const struct plane *plane = &proxy->planes[i];
         const struct pl_fmt *fmt = pl_plane_find_fmt(p->gpu, NULL, &data[i]);
         if (!fmt) {
             fprintf(stderr, "Failed configuring filter: no good texture format!\n");
@@ -553,7 +551,7 @@ enum api2_status api2_process(void *priv)
         }
 
         // download buffer is no longer busy, dequeue the frame
-        put_image(e->image);
+        put_image(&e->image);
         p->idx_out = (p->idx_out + 1) % PARALLELISM;
     }
 
@@ -677,7 +675,7 @@ void api1_example(void)
     if (!srcbuf || !dstbuf)
         goto done;
 
-    for (int i = 0; i < BUFSIZE; i++)
+    for (size_t i = 0; i < BUFSIZE; i++)
         srcbuf[i] = i;
 
     struct image src = example_image, dst = example_image;
@@ -740,7 +738,7 @@ void api2_example(void)
             data = malloc(BUFSIZE);
         }
         // Fill with some "data" (like in API #1)
-        for (int i = 0; i < BUFSIZE; i++)
+        for (size_t i = 0; i < BUFSIZE; i++)
             data[i] = i;
         images[i].planes[0].data = data + OFFSET0;
         images[i].planes[1].data = data + OFFSET1;
@@ -770,8 +768,6 @@ void api2_example(void)
            api2_frames_out, secs, 1000 * secs / api2_frames_out,
            api2_frames_out / secs);
 
-done:
-
     for (int i = 0; i < POOLSIZE; i++) {
         if (images[i].associated_buf) {
             api2_free(vf, images[i].associated_buf);
@@ -800,8 +796,9 @@ struct image *get_image(void)
     return NULL; // no free image available
 }
 
-void put_image(struct image img)
+void put_image(struct image *img)
 {
+    (void)img;
     api2_frames_out++;
 }
 
