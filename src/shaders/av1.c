@@ -521,15 +521,15 @@ static void get_grain_for_channel(struct pl_shader *sh, enum pl_channel c,
     GLSL("grain = val; \n");
 
     if (params->overlap) {
-        bool luma = c == PL_CHANNEL_Y;
-        const char *weights = luma ? "vec2(27.0, 17.0)" : "vec2(23.0, 22.0)";
-        int border = luma ? 2 : 1;
+        int subx = c == PL_CHANNEL_Y ? 0 : params->subX;
+        int suby = c == PL_CHANNEL_Y ? 0 : params->subY;
+        const char *weights[] = { "vec2(27.0, 17.0)", "vec2(23.0, 22.0)" };
 
         // X-direction overlapping
         GLSL("if (block_id.x > 0 && local_id.x < %d) { \n"
              "vec2 w = %s / 32.0;                      \n"
              "if (local_id.x == 1) w.xy = w.yx;        \n",
-             border, weights);
+             2 >> subx, weights[subx]);
         sample(sh, OFFSET_L, c, params);
         GLSL("grain = dot(vec2(val, grain), w);        \n"
              "}                                        \n");
@@ -538,14 +538,14 @@ static void get_grain_for_channel(struct pl_shader *sh, enum pl_channel c,
         GLSL("if (block_id.y > 0 && local_id.y < %d) { \n"
              "vec2 w = %s / 32.0;                      \n"
              "if (local_id.y == 1) w.xy = w.yx;        \n",
-             border, weights);
+             2 >> suby, weights[suby]);
 
         // We need to special-case the top left pixels since these need to
         // pre-blend the top-left offset block before blending vertically
         GLSL("    if (block_id.x > 0 && local_id.x < %d) {  \n"
              "        vec2 w2 = %s / 32.0;                  \n"
              "        if (local_id.x == 1) w2.xy = w2.yx;   \n",
-             border, weights);
+             2 >> subx, weights[subx]);
                       sample(sh, OFFSET_TL, c, params);
         GLSL("        float tmp = val;                      \n");
                       sample(sh, OFFSET_T, c, params);
