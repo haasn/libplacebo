@@ -65,7 +65,7 @@
 
 // Stuff that would be common to each API
 
-void *init();
+void *init(void);
 void uninit(void *priv);
 
 struct format {
@@ -168,7 +168,7 @@ void api2_free(void *priv, const struct api2_buf *buf);
 // These functions are provided by the API. The exact details of how images
 // are enqueued, dequeued and locked are not really important here, so just
 // do something unrealistic but simple to demonstrate with.
-struct image *get_image();
+struct image *get_image(void);
 void put_image(struct image img);
 void image_lock(struct image *img);
 void image_unlock(struct image *img);
@@ -212,7 +212,7 @@ struct priv {
     struct entry entries[PARALLELISM];
 };
 
-void *init() {
+void *init(void) {
     struct priv *p = malloc(sizeof(struct priv));
     if (!p)
         return NULL;
@@ -658,7 +658,7 @@ static const struct image example_image = {
 };
 
 // API #1: Nice and simple (but slow)
-void api1_example()
+void api1_example(void)
 {
     void *vf = init();
     if (!vf)
@@ -721,7 +721,7 @@ static int refcount[POOLSIZE] = {0};
 static unsigned api2_frames_in = 0;
 static unsigned api2_frames_out = 0;
 
-void api2_example()
+void api2_example(void)
 {
     void *vf = init();
     if (!vf)
@@ -784,7 +784,7 @@ done:
     uninit(vf);
 }
 
-struct image *get_image()
+struct image *get_image(void)
 {
     if (api2_frames_in == FRAMES)
         return NULL; // simulate EOF, to avoid queueing up "extra" work
@@ -817,7 +817,7 @@ void image_unlock(struct image *img)
     refcount[index]--;
 }
 
-int main()
+int main(void)
 {
     printf("Running benchmarks...\n");
     api1_example();
