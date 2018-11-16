@@ -63,29 +63,13 @@ const char *vk_res_str(VkResult res)
 #ifdef VK_KHR_display_swapchain
     CASE(VK_ERROR_INCOMPATIBLE_DISPLAY_KHR);
 #endif
-#ifdef VK_NV_glsl_shader
-    CASE(VK_ERROR_INVALID_SHADER_NV);
-#endif
 #ifdef VK_EXT_debug_report
     CASE(VK_ERROR_VALIDATION_FAILED_EXT);
 #endif
-#ifdef VK_EXT_global_priority
-    CASE(VK_ERROR_NOT_PERMITTED_EXT);
-#endif
-#ifdef VK_KHX_external_semaphore_fd
-    CASE(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHX);
-#endif
-#ifdef VK_EXT_descriptor_indexing
-    CASE(VK_ERROR_FRAGMENTATION_EXT);
-#endif
-
-    // Included to satisfy the switch coverage check
-    CASE(VK_RESULT_RANGE_SIZE);
-    CASE(VK_RESULT_MAX_ENUM);
 #undef CASE
-    }
 
-    return "unknown error";
+    default: return "unknown error";
+    }
 }
 
 const char *vk_obj_str(VkDebugReportObjectTypeEXT obj)
@@ -129,33 +113,11 @@ const char *vk_obj_str(VkDebugReportObjectTypeEXT obj)
     CASE(DISPLAY_KHR,                       VkDisplayKHR);
     CASE(DISPLAY_MODE_KHR,                  VkDisplayModeKHR);
 #endif
-#ifdef VK_KHR_descriptor_update_template
-    CASE(DESCRIPTOR_UPDATE_TEMPLATE_KHR,    VkDescriptorUpdateTemplateKHR);
-#endif
-#ifdef VK_KHR_sampler_ycbcr_conversion
-    CASE(SAMPLER_YCBCR_CONVERSION_KHR,      VkSamplerYcbcrConversionInfoKHR);
-#endif
-#ifdef VK_EXT_validation_cache
-    CASE(VALIDATION_CACHE,                  VkValidationCacheEXT);
-#endif
 #ifdef VK_EXT_debug_report
     CASE(DEBUG_REPORT,                      VkDebugReportCallbackEXT);
 #endif
-#ifdef VK_NVX_device_generated_commands
-    CASE(OBJECT_TABLE_NVX,                  VkObjectTableNVX);
-    CASE(INDIRECT_COMMANDS_LAYOUT_NVX,      VkIndirectCommandsLayoutNVX);
-#endif
-#ifdef VK_NVX_raytracing
-    CASE(ACCELERATION_STRUCTURE_NVX,        VkAccelerationStructureNVX);
-#endif
-
-    // Included to satisfy the switch coverage check
-    case VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT:
-    case VK_DEBUG_REPORT_OBJECT_TYPE_RANGE_SIZE_EXT:
-    case VK_DEBUG_REPORT_OBJECT_TYPE_MAX_ENUM_EXT:
-        break;
 #undef CASE
-    }
 
-    return "unknown object";
+    default: return "unknown object";
+    }
 }
