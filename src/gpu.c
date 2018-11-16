@@ -794,34 +794,48 @@ struct pl_var_layout pl_var_host_layout(size_t offset, const struct pl_var *var)
     };
 }
 
-struct pl_var_layout pl_buf_uniform_layout(const struct pl_gpu *gpu, size_t offset,
-                                           const struct pl_var *var)
+struct pl_var_layout pl_std140_layout(size_t offset, const struct pl_var *var)
 {
-    if (gpu->limits.max_ubo_size) {
-        return gpu->impl->buf_uniform_layout(gpu, offset, var);
-    } else {
-        return (struct pl_var_layout) {0};
-    }
+    size_t el_size = pl_var_type_size(var->type);
+
+    // std140 packing rules:
+    // 1. The size of generic values is their size in bytes
+    // 2. The size of vectors is the vector length * the base count
+    // 3. Matrices are treated like arrays of column vectors
+    // 4. The size of array rows is that of the element size rounded up to
+    // the nearest multiple of vec4
+    // 5. All values are aligned to a multiple of their size (stride for arrays),
+    // with the exception of vec3 which is aligned like vec4
+    size_t stride = el_size * var->dim_v;
+    size_t align = stride;
+    if (var->dim_v == 3)
+        align += el_size;
+    if (var->dim_m * var->dim_a > 1)
+        stride = align = PL_ALIGN2(stride, sizeof(float[4]));
+
+    return (struct pl_var_layout) {
+        .offset = PL_ALIGN2(offset, align),
+        .stride = stride,
+        .size   = stride * var->dim_m * var->dim_a,
+    };
 }
 
-struct pl_var_layout pl_buf_storage_layout(const struct pl_gpu *gpu, size_t offset,
-                                           const struct pl_var *var)
+struct pl_var_layout pl_std430_layout(size_t offset, const struct pl_var *var)
 {
-    if (gpu->limits.max_ssbo_size) {
-        return gpu->impl->buf_storage_layout(gpu, offset, var);
-    } else {
-        return (struct pl_var_layout) {0};
-    }
-}
+    size_t el_size = pl_var_type_size(var->type);
 
-struct pl_var_layout pl_push_constant_layout(const struct pl_gpu *gpu, size_t offset,
-                                             const struct pl_var *var)
-{
-    if (gpu->limits.max_pushc_size) {
-        return gpu->impl->push_constant_layout(gpu, offset, var);
-    } else {
-        return (struct pl_var_layout) {0};
-    }
+    // std430 packing rules: like std140, except arrays/matrices are always
+    // "tightly" packed, even arrays/matrices of vec3s
+    size_t stride = el_size * var->dim_v;
+    size_t align = stride;
+    if (var->dim_v == 3 && var->dim_m == 1 && var->dim_a == 1)
+        align += el_size;
+
+    return (struct pl_var_layout) {
+        .offset = PL_ALIGN2(offset, align),
+        .stride = stride,
+        .size   = stride * var->dim_m * var->dim_a,
+    };
 }
 
 bool pl_buf_desc_append(void *tactx, const struct pl_gpu *gpu,
@@ -834,12 +848,12 @@ bool pl_buf_desc_append(void *tactx, const struct pl_gpu *gpu,
 
     switch (buf_desc->type) {
     case PL_DESC_BUF_UNIFORM:
-        bv.layout = pl_buf_uniform_layout(gpu, cur_size, &new_var);
+        bv.layout = pl_std140_layout(cur_size, &new_var);
         if (bv.layout.offset + bv.layout.size > gpu->limits.max_ubo_size)
             return false;
         break;
     case PL_DESC_BUF_STORAGE:
-        bv.layout = pl_buf_storage_layout(gpu, cur_size, &new_var);
+        bv.layout = pl_std430_layout(cur_size, &new_var);
         if (bv.layout.offset + bv.layout.size > gpu->limits.max_ssbo_size)
             return false;
         break;
@@ -1083,52 +1097,6 @@ void pl_gpu_finish(const struct pl_gpu *gpu)
 }
 
 // GPU-internal helpers
-
-struct pl_var_layout std140_layout(const struct pl_gpu *gpu, size_t offset,
-                                   const struct pl_var *var)
-{
-    size_t el_size = pl_var_type_size(var->type);
-
-    // std140 packing rules:
-    // 1. The size of generic values is their size in bytes
-    // 2. The size of vectors is the vector length * the base count
-    // 3. Matrices are treated like arrays of column vectors
-    // 4. The size of array rows is that of the element size rounded up to
-    // the nearest multiple of vec4
-    // 5. All values are aligned to a multiple of their size (stride for arrays),
-    // with the exception of vec3 which is aligned like vec4
-    size_t stride = el_size * var->dim_v;
-    size_t align = stride;
-    if (var->dim_v == 3)
-        align += el_size;
-    if (var->dim_m * var->dim_a > 1)
-        stride = align = PL_ALIGN2(stride, sizeof(float[4]));
-
-    return (struct pl_var_layout) {
-        .offset = PL_ALIGN2(offset, align),
-        .stride = stride,
-        .size   = stride * var->dim_m * var->dim_a,
-    };
-}
-
-struct pl_var_layout std430_layout(const struct pl_gpu *gpu, size_t offset,
-                                   const struct pl_var *var)
-{
-    size_t el_size = pl_var_type_size(var->type);
-
-    // std430 packing rules: like std140, except arrays/matrices are always
-    // "tightly" packed, even arrays/matrices of vec3s
-    size_t stride = el_size * var->dim_v;
-    size_t align = stride;
-    if (var->dim_v == 3 && var->dim_m == 1 && var->dim_a == 1)
-        align += el_size;
-
-    return (struct pl_var_layout) {
-        .offset = PL_ALIGN2(offset, align),
-        .stride = stride,
-        .size   = stride * var->dim_m * var->dim_a,
-    };
-}
 
 void pl_buf_pool_uninit(const struct pl_gpu *gpu, struct pl_buf_pool *pool)
 {

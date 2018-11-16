@@ -45,12 +45,6 @@ struct pl_gpu_fns {
     GPU_PFN(pass_run);
     GPU_PFN(gpu_flush); // optional
     GPU_PFN(gpu_finish);
-
-    // The following functions are optional if the corresponding pl_limit
-    // size restriction is 0
-    GPU_PFN(buf_uniform_layout);
-    GPU_PFN(buf_storage_layout);
-    GPU_PFN(push_constant_layout);
 };
 #undef GPU_PFN
 
@@ -92,12 +86,6 @@ const char *pl_fmt_glsl_format(const struct pl_fmt *fmt);
 
 // Compute the total size (in bytes) of a texture transfer operation
 size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par);
-
-// Layout rules for GLSL's packing modes
-struct pl_var_layout std140_layout(const struct pl_gpu *gpu, size_t offset,
-                                   const struct pl_var *var);
-struct pl_var_layout std430_layout(const struct pl_gpu *gpu, size_t offset,
-                                   const struct pl_var *var);
 
 // A hard-coded upper limit on a pl_buf_pool's size, to prevent OOM loops
 #define PL_BUF_POOL_MAX_BUFFERS 8

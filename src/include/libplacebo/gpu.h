@@ -639,34 +639,18 @@ struct pl_var_layout {
 // tightly-packed, byte-aligned C data type, given a starting offset.
 struct pl_var_layout pl_var_host_layout(size_t offset, const struct pl_var *var);
 
-// Returns the layout requirements of a uniform buffer element given a current
-// buffer offset. If limits.max_ubo_size is 0, then this function returns {0}.
-//
-// Note: In terms of the GLSL, this is always *specified* as std140 layout, but
-// because of the way GLSL gets translated to other APIs (notably D3D11), the
-// actual buffer contents may vary considerably from std140. As such, the
-// calling code should not make any assumptions about the buffer layout and
-// instead query the layout requirements explicitly using this function.
+// Returns the GLSL std140 layout of an input variable given a current buffer
+// offset, as required for a buffer of type PL_BUF_UNIFORM.
 //
 // The normal way to use this function is when calculating the size and offset
 // requirements of a uniform buffer in an incremental fashion, to calculate the
 // new offset of the next variable in this buffer.
-struct pl_var_layout pl_buf_uniform_layout(const struct pl_gpu *gpu, size_t offset,
-                                           const struct pl_var *var);
+struct pl_var_layout pl_std140_layout(size_t offset, const struct pl_var *var);
 
-// Returns the layout requirements of a storage buffer element given a current
-// buffer offset. If limits.max_ssbo_size is 0, then this function returns {0}.
-//
-// Note: In terms of the GLSL, this is always *specified* as std430 layout, but
-// like with pl_buf_uniform_layout, the actual implementation may disagree.
-struct pl_var_layout pl_buf_storage_layout(const struct pl_gpu *gpu, size_t offset,
-                                           const struct pl_var *var);
-
-// Returns the layout requirements of a push constant element given a current
-// push constant offset. If `gpu->limits.max_pushc_size` is 0, then this
-// function returns {0}.
-struct pl_var_layout pl_push_constant_layout(const struct pl_gpu *gpu, size_t offset,
-                                             const struct pl_var *var);
+// Returns the GLSL std430 layout of an input variable given a current buffer
+// offset, as required for a buffer of type PL_BUF_STORAGE, and for push
+// constants.
+struct pl_var_layout pl_std430_layout(size_t offset, const struct pl_var *var);
 
 // Like memcpy, but copies bytes from `src` to `dst` in a manner governed by
 // the stride and size of `dst_layout` as well as `src_layout`. Also takes

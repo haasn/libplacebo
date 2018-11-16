@@ -149,7 +149,7 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
     // this is likely to exceed the VGPR/pushc size budgets
     bool try_pushc = (sv->var.dim_m == 1 && sv->var.dim_a == 1) || sv->dynamic;
     if (try_pushc && gpu->glsl.vulkan && gpu->limits.max_pushc_size) {
-        pv->layout = pl_push_constant_layout(gpu, params->push_constants_size, &sv->var);
+        pv->layout = pl_std430_layout(params->push_constants_size, &sv->var);
         size_t new_size = pv->layout.offset + pv->layout.size;
         if (new_size <= gpu->limits.max_pushc_size) {
             params->push_constants_size = new_size;

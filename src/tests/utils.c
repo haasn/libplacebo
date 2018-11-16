@@ -35,27 +35,27 @@ int main()
                   mat3 = pl_var_mat3("");
 
     struct pl_var_layout layout;
-    layout = std140_layout(NULL, 0, &vec2);
+    layout = pl_std140_layout(0, &vec2);
     REQUIRE(layout.offset == 0);
     REQUIRE(layout.stride == 2 * sizeof(float));
     REQUIRE(layout.size == 2 * sizeof(float));
 
-    layout = std140_layout(NULL, 3 * sizeof(float), &vec3);
+    layout = pl_std140_layout(3 * sizeof(float), &vec3);
     REQUIRE(layout.offset == 4 * sizeof(float));
     REQUIRE(layout.stride == 3 * sizeof(float));
     REQUIRE(layout.size == 3 * sizeof(float));
 
-    layout = std140_layout(NULL, 2 * sizeof(float), &mat3);
+    layout = pl_std140_layout(2 * sizeof(float), &mat3);
     REQUIRE(layout.offset == 4 * sizeof(float));
     REQUIRE(layout.stride == 4 * sizeof(float));
     REQUIRE(layout.size == 3 * 4 * sizeof(float));
 
-    layout = std430_layout(NULL, 2 * sizeof(float), &mat3);
+    layout = pl_std430_layout(2 * sizeof(float), &mat3);
     REQUIRE(layout.offset == 4 * sizeof(float));
     REQUIRE(layout.stride == 3 * sizeof(float));
     REQUIRE(layout.size == 3 * 3 * sizeof(float));
 
-    layout = std140_layout(NULL, 3 * sizeof(float), &vec1);
+    layout = pl_std140_layout(3 * sizeof(float), &vec1);
     REQUIRE(layout.offset == 3 * sizeof(float));
     REQUIRE(layout.stride == sizeof(float));
     REQUIRE(layout.size == sizeof(float));
@@ -63,12 +63,12 @@ int main()
     struct pl_var vec2a = vec2;
     vec2a.dim_a = 50;
 
-    layout = std140_layout(NULL, sizeof(float), &vec2a);
+    layout = pl_std140_layout(sizeof(float), &vec2a);
     REQUIRE(layout.offset == 4 * sizeof(float));
     REQUIRE(layout.stride == 4 * sizeof(float));
     REQUIRE(layout.size == 50 * 4 * sizeof(float));
 
-    layout = std430_layout(NULL, sizeof(float), &vec2a);
+    layout = pl_std430_layout(sizeof(float), &vec2a);
     REQUIRE(layout.offset == 2 * sizeof(float));
     REQUIRE(layout.stride == 2 * sizeof(float));
     REQUIRE(layout.size == 50 * 2 * sizeof(float));
@@ -76,12 +76,12 @@ int main()
     struct pl_var mat2a = mat2;
     mat2a.dim_a = 20;
 
-    layout = std140_layout(NULL, 5 * sizeof(float), &mat2a);
+    layout = pl_std140_layout(5 * sizeof(float), &mat2a);
     REQUIRE(layout.offset == 8 * sizeof(float));
     REQUIRE(layout.stride == 4 * sizeof(float));
     REQUIRE(layout.size == 20 * 2 * 4 * sizeof(float));
 
-    layout = std430_layout(NULL, 5 * sizeof(float), &mat2a);
+    layout = pl_std430_layout(5 * sizeof(float), &mat2a);
     REQUIRE(layout.offset == 6 * sizeof(float));
     REQUIRE(layout.stride == 2 * sizeof(float));
     REQUIRE(layout.size == 20 * 2 * 2 * sizeof(float));
