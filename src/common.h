@@ -26,6 +26,7 @@
 
 #include "ta/talloc.h"
 #include "config.h"
+#include "config_internal.h"
 #include "pl_assert.h"
 
 // Include all of the symbols that should be public in a way that marks them

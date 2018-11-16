@@ -45,8 +45,13 @@ static bool shaderc_init(struct spirv_compiler *spirv)
     if (!p->opts)
         goto error;
 
+#ifdef SHADERC_HAS_PERF
     shaderc_compile_options_set_optimization_level(p->opts,
             shaderc_optimization_level_performance);
+#else
+    shaderc_compile_options_set_optimization_level(p->opts,
+            shaderc_optimization_level_size);
+#endif
 
     int ver, rev;
     shaderc_get_spv_version(&ver, &rev);

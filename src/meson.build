@@ -4,6 +4,23 @@ fixver   = '0'
 
 version = majorver + '.' + apiver + '.' + fixver
 
+# Configuration
+conf_public = configuration_data()
+conf_internal = configuration_data()
+conf_public.set('majorver', majorver)
+conf_public.set('apiver', apiver)
+conf_public.set('fixver', fixver)
+conf_public.set_quoted('version', 'v' + version)
+
+## Update PL_VERSION with `git describe` information if available
+git = find_program('git', required: false)
+if git.found()
+  gitdesc = run_command(git, 'describe')
+  if gitdesc.returncode() == 0
+    conf_public.set_quoted('version', gitdesc.stdout().strip())
+  endif
+endif
+
 c_opts = [
   '-D_ISOC99_SOURCE', '-D_GNU_SOURCE', '-D_XOPEN_SOURCE=700',
   '-U__STRICT_ANSI__', '-fvisibility=hidden',
@@ -123,6 +140,28 @@ if glslang_found
   endif
 endif
 
+# Work-arounds for shaderc braindeath
+shaderc_names = [
+    'shaderc_shared',
+    'shaderc_combined',
+    'shaderc',
+]
+
+shaderc = disabler()
+foreach n : shaderc_names
+  if not shaderc.found()
+    shaderc = cc.find_library(n, required: get_option('shaderc'))
+  endif
+endforeach
+
+if shaderc.found()
+  conf_internal.set('SHADERC_HAS_PERF', cc.has_header_symbol(
+    'shaderc/shaderc.h',
+    'shaderc_optimization_level_performance',
+    dependencies: shaderc,
+  ))
+endif
+
 # Optional dependencies / components
 components = [
   {
@@ -153,22 +192,6 @@ components = [
     'test': 'vulkan.c'
   }
 ]
-
-# Configuration
-conf = configuration_data()
-conf.set('majorver', majorver)
-conf.set('apiver', apiver)
-conf.set('fixver', fixver)
-conf.set_quoted('version', 'v' + version)
-
-## Update PL_VERSION with `git describe` information if available
-git = find_program('git', required: false)
-if git.found()
-  gitdesc = run_command(git, 'describe')
-  if gitdesc.returncode() == 0
-    conf.set_quoted('version', gitdesc.stdout().strip())
-  endif
-endif
 
 # Build process
 defs = ''
@@ -203,14 +226,19 @@ if comps.has('vulkan') and not (comps.has('shaderc') or comps.has('glslang'))
         'compile GLSL to SPIR-V (needed by the Vulkan API)!')
 endif
 
-# Generate the config.h file
-conf.set('extra_defs', defs)
+# Generate the config headers
+conf_public.set('extra_defs', defs)
 
 configure_file(
   input: 'config.h.in',
   output: 'config.h',
   install_dir: 'include/libplacebo',
-  configuration: conf,
+  configuration: conf_public,
+)
+
+configure_file(
+  output: 'config_internal.h',
+  configuration: conf_internal
 )
 
 # Build process
