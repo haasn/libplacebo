@@ -273,17 +273,17 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             const char *name = sva->attr.name;
 
             char loc[32];
-            snprintf(loc, sizeof(loc), "layout(location=%d) ", va->location);
-            ADD(vert_head, "%s%s %s %s;\n", loc, vert_in, type, va->name);
+            snprintf(loc, sizeof(loc), "layout(location=%d)", va->location);
+            ADD(vert_head, "%s %s %s %s;\n", loc, vert_in, type, va->name);
 
             if (strcmp(name, vert_pos) == 0) {
                 pl_assert(va->fmt->num_components == 2);
                 ADD(vert_body, "gl_Position = vec4(%s, 0.0, 1.0);\n", va->name);
             } else {
                 // Everything else is just blindly passed through
-                ADD(vert_head, "%s%s %s %s;\n", loc, vert_out, type, name);
+                ADD(vert_head, "%s %s %s %s;\n", loc, vert_out, type, name);
                 ADD(vert_body, "%s = %s;\n", name, va->name);
-                ADD(glsl, "%s%s %s %s;\n", loc, frag_in, type, name);
+                ADD(glsl, "%s %s %s %s;\n", loc, frag_in, type, name);
             }
         }
 
