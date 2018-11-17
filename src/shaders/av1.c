@@ -567,8 +567,7 @@ static void get_grain_for_channel(struct pl_shader *sh, enum pl_channel c,
 struct sh_grain_obj {
     // SSBO state and layout
     struct pl_buf_pool ssbos;
-    const struct pl_buf *last_buf;
-    struct pl_desc desc;
+    struct pl_shader_desc desc;
     struct pl_var_layout layout_y;
     struct pl_var_layout layout_cb;
     struct pl_var_layout layout_cr;
@@ -689,10 +688,12 @@ void pl_shader_av1_grain(struct pl_shader *sh,
             obj->tmp = talloc_new(obj);
         }
 
-        obj->desc = (struct pl_desc) {
-            .name   = "AV1GrainBuf",
-            .type   = PL_DESC_BUF_STORAGE,
-            .access = PL_DESC_ACCESS_READONLY,
+        obj->desc = (struct pl_shader_desc) {
+            .desc = {
+                .name   = "AV1GrainBuf",
+                .type   = PL_DESC_BUF_STORAGE,
+                .access = PL_DESC_ACCESS_READONLY,
+            },
         };
 
         bool ok = true;
@@ -703,22 +704,22 @@ void pl_shader_av1_grain(struct pl_shader *sh,
         // SSBO layout in this case
         struct pl_var grain_y = pl_var_float("grain_y");
         grain_y.dim_a = GRAIN_WIDTH_LUT * GRAIN_HEIGHT_LUT;
-        ok &= pl_buf_desc_append(obj->tmp, sh->gpu, &obj->desc,
+        ok &= sh_buf_desc_append(obj->tmp, sh->gpu, &obj->desc,
                                  &obj->layout_y, grain_y);
 
         struct pl_var grain_cb = pl_var_float("grain_cb");
         grain_cb.dim_a = chroma_lut_size;
-        ok &= pl_buf_desc_append(obj->tmp, sh->gpu, &obj->desc,
+        ok &= sh_buf_desc_append(obj->tmp, sh->gpu, &obj->desc,
                                  &obj->layout_cb, grain_cb);
 
         struct pl_var grain_cr = pl_var_float("grain_cr");
         grain_cr.dim_a = chroma_lut_size;
-        ok &= pl_buf_desc_append(obj->tmp, sh->gpu, &obj->desc,
+        ok &= sh_buf_desc_append(obj->tmp, sh->gpu, &obj->desc,
                                  &obj->layout_cr, grain_cr);
 
         struct pl_var offsets = pl_var_uint("offsets");
         offsets.dim_a = offsets_x * offsets_y;
-        ok &= pl_buf_desc_append(obj->tmp, sh->gpu, &obj->desc,
+        ok &= sh_buf_desc_append(obj->tmp, sh->gpu, &obj->desc,
                                  &obj->layout_off, offsets);
 
         if (!ok) {
@@ -734,20 +735,21 @@ void pl_shader_av1_grain(struct pl_shader *sh,
     }
 
     const struct pl_buf *ssbo;
-    if (obj->last_buf && !needs_update) {
-        ssbo = obj->last_buf;
+    if (obj->desc.object && !needs_update) {
+        ssbo = obj->desc.object;
     } else {
         needs_update = true;
 
         // Get the next free SSBO buffer, regenerate if necessary
         struct pl_buf_params ssbo_params = {
             .type = PL_BUF_STORAGE,
-            .size = pl_buf_desc_size(&obj->desc),
+            .size = sh_buf_desc_size(&obj->desc),
             .host_writable = true,
         };
 
-        if (obj->last_buf && obj->last_buf->params.size > ssbo_params.size)
-            ssbo_params.size = obj->last_buf->params.size;
+        const struct pl_buf *last_buf = obj->desc.object;
+        if (last_buf && last_buf->params.size > ssbo_params.size)
+            ssbo_params.size = last_buf->params.size;
 
         ssbo = pl_buf_pool_get(sh->gpu, &obj->ssbos, &ssbo_params);
         if (!ssbo) {
@@ -755,7 +757,7 @@ void pl_shader_av1_grain(struct pl_shader *sh,
             return;
         }
 
-        obj->last_buf = ssbo;
+        obj->desc.object = ssbo;
     }
 
     if (needs_update) {
@@ -821,10 +823,7 @@ void pl_shader_av1_grain(struct pl_shader *sh,
     }
 
     // Attach the SSBO
-    sh_desc(sh, (struct pl_shader_desc) {
-        .desc = obj->desc,
-        .object = ssbo,
-    });
+    sh_desc(sh, obj->desc);
 
     GLSL("// pl_shader_av1_grain \n"
          "{                      \n"

@@ -271,6 +271,44 @@ ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
     return itex;
 }
 
+bool sh_buf_desc_append(void *tactx, const struct pl_gpu *gpu,
+                        struct pl_shader_desc *buf_desc,
+                        struct pl_var_layout *out_layout,
+                        const struct pl_var new_var)
+{
+    struct pl_buffer_var bv = { .var = new_var };
+    size_t cur_size = sh_buf_desc_size(buf_desc);
+
+    switch (buf_desc->desc.type) {
+    case PL_DESC_BUF_UNIFORM:
+        bv.layout = pl_std140_layout(cur_size, &new_var);
+        if (bv.layout.offset + bv.layout.size > gpu->limits.max_ubo_size)
+            return false;
+        break;
+    case PL_DESC_BUF_STORAGE:
+        bv.layout = pl_std430_layout(cur_size, &new_var);
+        if (bv.layout.offset + bv.layout.size > gpu->limits.max_ssbo_size)
+            return false;
+        break;
+    default: abort();
+    }
+
+    if (out_layout)
+        *out_layout = bv.layout;
+    TARRAY_APPEND(tactx, buf_desc->buffer_vars, buf_desc->num_buffer_vars, bv);
+    return true;
+}
+
+size_t sh_buf_desc_size(const struct pl_shader_desc *buf_desc)
+{
+    if (!buf_desc->num_buffer_vars)
+        return 0;
+
+    const struct pl_buffer_var *last;
+    last = &buf_desc->buffer_vars[buf_desc->num_buffer_vars - 1];
+    return last->layout.offset + last->layout.size;
+}
+
 void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
                       const char *fmt, ...)
 {

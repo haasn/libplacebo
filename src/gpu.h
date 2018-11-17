@@ -52,18 +52,6 @@ struct pl_gpu_fns {
 // destroyed before calling pl_destroy.
 void pl_gpu_destroy(const struct pl_gpu *gpu);
 
-// Incrementally build up a buffer by adding new variable elements to the
-// buffer, resizing buf.buffer_vars if necessary. Returns whether or not the
-// variable could be successfully added (which may fail if you try exceeding
-// the size limits of the buffer type). If successful, the layout is stored
-// in *out_layout (may be NULL).
-bool pl_buf_desc_append(void *tactx, const struct pl_gpu *gpu,
-                        struct pl_desc *buf_desc,
-                        struct pl_var_layout *out_layout,
-                        const struct pl_var new_var);
-
-size_t pl_buf_desc_size(const struct pl_desc *buf_desc);
-
 // GPU-internal helpers: these should not be used outside of GPU implementations
 
 // Log some metadata about the created GPU

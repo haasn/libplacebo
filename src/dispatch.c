@@ -71,7 +71,7 @@ struct pass {
 
     // for uniform buffer updates
     const struct pl_buf *ubo;
-    struct pl_desc ubo_desc; // temporary
+    struct pl_shader_desc ubo_desc; // temporary
 
     // Cached pl_pass_run_params. This will also contain mutable allocations
     // for the push constants, descriptor bindings (including the binding for
@@ -166,7 +166,7 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
     // the UBO writes every frame
     bool try_ubo = !(gpu->caps & PL_GPU_CAP_INPUT_VARIABLES) || !sv->dynamic;
     if (try_ubo && gpu->glsl.version >= 440 && gpu->limits.max_ubo_size) {
-        if (pl_buf_desc_append(tmp, gpu, &pass->ubo_desc, &pv->layout, sv->var)) {
+        if (sh_buf_desc_append(tmp, gpu, &pass->ubo_desc, &pv->layout, sv->var)) {
             pv->type = PASS_VAR_UBO;
             return true;
         }
@@ -370,13 +370,13 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         case PL_DESC_BUF_UNIFORM:
             ADD(glsl, "layout(std140, binding=%d) uniform %s ", desc->binding,
                 desc->name);
-            add_buffer_vars(dp, glsl, desc->buffer_vars, desc->num_buffer_vars);
+            add_buffer_vars(dp, glsl, sd->buffer_vars, sd->num_buffer_vars);
             break;
 
         case PL_DESC_BUF_STORAGE:
             ADD(glsl, "layout(std430, binding=%d) %s buffer %s ", desc->binding,
                 pl_desc_access_glsl_name(desc->access), desc->name);
-            add_buffer_vars(dp, glsl, desc->buffer_vars, desc->num_buffer_vars);
+            add_buffer_vars(dp, glsl, sd->buffer_vars, sd->num_buffer_vars);
             break;
 
         case PL_DESC_BUF_TEXEL_UNIFORM:
@@ -477,9 +477,11 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     struct pass *pass = talloc_zero(dp, struct pass);
     pass->signature = sig;
     pass->failed = true; // will be set to false on success
-    pass->ubo_desc = (struct pl_desc) {
-        .name = "UBO",
-        .type = PL_DESC_BUF_UNIFORM,
+    pass->ubo_desc = (struct pl_shader_desc) {
+        .desc = {
+            .name = "UBO",
+            .type = PL_DESC_BUF_UNIFORM,
+        },
     };
 
     struct pl_shader_res *res = &sh->res;
@@ -537,7 +539,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
 
     // Create and attach the UBO if necessary
     int ubo_index = -1;
-    size_t ubo_size = pl_buf_desc_size(&pass->ubo_desc);
+    size_t ubo_size = sh_buf_desc_size(&pass->ubo_desc);
     if (ubo_size) {
         pass->ubo = pl_buf_create(dp->gpu, &(struct pl_buf_params) {
             .type = PL_BUF_UNIFORM,
@@ -551,10 +553,8 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         }
 
         ubo_index = res->num_descriptors;
-        sh_desc(sh, (struct pl_shader_desc) {
-            .desc = pass->ubo_desc,
-            .object = pass->ubo,
-        });
+        pass->ubo_desc.object = pass->ubo;
+        sh_desc(sh, pass->ubo_desc);
     }
 
     // Place and fill in the descriptors
@@ -590,7 +590,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     pass->failed = false;
 
 error:
-    pass->ubo_desc = (struct pl_desc) {0}; // contains temporary pointers
+    pass->ubo_desc = (struct pl_shader_desc) {0}; // contains temporary pointers
     talloc_free(tmp);
     TARRAY_APPEND(dp, dp->passes, dp->num_passes, pass);
     return pass;

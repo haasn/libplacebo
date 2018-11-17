@@ -105,6 +105,19 @@ ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
                 const char *name, const struct pl_rect2df *rect,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt);
 
+// Incrementally build up a buffer by adding new variable elements to the
+// buffer, resizing buf.buffer_vars if necessary. Returns whether or not the
+// variable could be successfully added (which may fail if you try exceeding
+// the size limits of the buffer type). If successful, the layout is stored
+// in *out_layout (may be NULL).
+bool sh_buf_desc_append(void *tactx, const struct pl_gpu *gpu,
+                        struct pl_shader_desc *buf_desc,
+                        struct pl_var_layout *out_layout,
+                        const struct pl_var new_var);
+
+size_t sh_buf_desc_size(const struct pl_shader_desc *buf_desc);
+
+
 // Underlying function for appending text to a shader
 void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
                       const char *fmt, ...)

@@ -554,20 +554,22 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
     avg_total = pl_var_uint(sh_fresh(sh, "avg_total"));
 
     // Attempt packing the peak detection SSBO
-    struct pl_desc ssbo = {
-        .name   = "PeakDetect",
-        .type   = PL_DESC_BUF_STORAGE,
-        .access = PL_DESC_ACCESS_READWRITE,
+    struct pl_shader_desc ssbo = {
+        .desc = {
+            .name   = "PeakDetect",
+            .type   = PL_DESC_BUF_STORAGE,
+            .access = PL_DESC_ACCESS_READWRITE,
+        },
     };
 
     bool ok = true;
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, idx);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, num);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, ctr);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, max);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, avg);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, max_total);
-    ok &= pl_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, avg_total);
+    ok &= sh_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, idx);
+    ok &= sh_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, num);
+    ok &= sh_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, ctr);
+    ok &= sh_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, max);
+    ok &= sh_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, avg);
+    ok &= sh_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, max_total);
+    ok &= sh_buf_desc_append(sh->tmp, gpu, &ssbo, NULL, avg_total);
 
     if (!ok) {
         PL_WARN(sh, "HDR peak detection exhausts device limits.. disabling");
@@ -576,7 +578,7 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
     }
 
     // Create the SSBO if necessary
-    size_t size = pl_buf_desc_size(&ssbo);
+    size_t size = sh_buf_desc_size(&ssbo);
     if (!obj->buf || obj->buf->params.size != size) {
         PL_TRACE(sh, "(Re)creating HDR peak detection SSBO");
 
@@ -584,7 +586,7 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
         pl_buf_destroy(gpu, &obj->buf);
         obj->buf = pl_buf_create(gpu, &(struct pl_buf_params) {
             .type = PL_BUF_STORAGE,
-            .size = pl_buf_desc_size(&ssbo),
+            .size = size,
             .initial_data = data,
         });
         talloc_free(data);
@@ -596,10 +598,8 @@ static void hdr_update_peak(struct pl_shader *sh, struct pl_shader_obj **state,
     }
 
     // Attach the SSBO and perform the peak detection logic
-    sh_desc(sh, (struct pl_shader_desc) {
-        .desc = ssbo,
-        .object = obj->buf,
-    });
+    ssbo.object = obj->buf;
+    sh_desc(sh, ssbo);
 
     // For performance, we want to do as few atomic operations on global
     // memory as possible, so use an atomic in shmem for the work group.

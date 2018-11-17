@@ -700,11 +700,6 @@ enum pl_desc_access {
 // Returns the GLSL syntax for a given access mode (e.g. "readonly").
 const char *pl_desc_access_glsl_name(enum pl_desc_access mode);
 
-struct pl_buffer_var {
-    struct pl_var var;
-    struct pl_var_layout layout;
-};
-
 // Represents a shader descriptor (e.g. texture or buffer binding)
 struct pl_desc {
     const char *name;       // name as used in the shader
@@ -719,11 +714,6 @@ struct pl_desc {
     // the other descriptor types (uniform buffers and sampled textures are
     // always read-only).
     enum pl_desc_access access;
-
-    // For PL_DESC_BUF_UNIFORM/STORAGE, this specifies the layout of the
-    // variables contained by a buffer. Ignored for the other descriptor types
-    struct pl_buffer_var *buffer_vars;
-    int num_buffer_vars;
 };
 
 // Framebuffer blending mode (for raster passes)

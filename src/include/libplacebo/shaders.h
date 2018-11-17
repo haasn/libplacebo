@@ -148,9 +148,19 @@ struct pl_shader_var {
     bool dynamic;       // if true, the value is expected to change frequently
 };
 
+struct pl_buffer_var {
+    struct pl_var var;
+    struct pl_var_layout layout;
+};
+
 struct pl_shader_desc {
     struct pl_desc desc; // descriptor type, excluding `binding`
     const void *object;  // the object being bound (as for pl_desc_binding)
+
+    // For PL_DESC_BUF_UNIFORM/STORAGE, this specifies the layout of the
+    // variables contained by a buffer. Ignored for the other descriptor types
+    struct pl_buffer_var *buffer_vars;
+    int num_buffer_vars;
 };
 
 // Finalize a pl_shader. It is no longer mutable at this point, and any further
