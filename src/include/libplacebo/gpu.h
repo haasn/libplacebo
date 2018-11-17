@@ -874,7 +874,7 @@ struct pl_pass_run_params {
     // --- pass->params.type==PL_PASS_RASTER only
 
     // Target must be a 2D texture, target->params.renderable must be true, and
-    // target->params.format must match pass->params.target_dummy.paras.format.
+    // target->params.format must match pass->params.target_dummy.params.format.
     // If the viewport or scissors are left blank, they are inferred from
     // target->params.
     //
