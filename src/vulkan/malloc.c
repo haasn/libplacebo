@@ -496,9 +496,10 @@ static bool slice_heap(struct vk_malloc *ma, struct vk_heap *heap, size_t size,
 }
 
 bool vk_malloc_generic(struct vk_malloc *ma, VkMemoryRequirements reqs,
-                       VkMemoryPropertyFlags flags, struct vk_memslice *out)
+                       VkMemoryPropertyFlags flags, pl_handle_types ext_handles,
+                       struct vk_memslice *out)
 {
-    struct vk_heap *heap = find_heap(ma, 0, flags, 0, &reqs);
+    struct vk_heap *heap = find_heap(ma, 0, flags, ext_handles, &reqs);
     return slice_heap(ma, heap, reqs.size, reqs.alignment, out);
 }
 

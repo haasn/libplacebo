@@ -39,7 +39,8 @@ struct vk_memslice {
 
 void vk_free_memslice(struct vk_malloc *ma, struct vk_memslice slice);
 bool vk_malloc_generic(struct vk_malloc *ma, VkMemoryRequirements reqs,
-                       VkMemoryPropertyFlags flags, struct vk_memslice *out);
+                       VkMemoryPropertyFlags flags, pl_handle_types ext_handles,
+                       struct vk_memslice *out);
 
 // Represents a single "slice" of a larger buffer
 struct vk_bufslice {

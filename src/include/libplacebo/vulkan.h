@@ -271,6 +271,17 @@ bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
                     VkImageLayout layout, VkAccessFlags access,
                     VkSemaphore sem_out);
 
+// "Hold" a shared image for external use. This will transition the image into
+// a general layout and access mode, and the external queue. It will fire the
+// given semaphore (required!) when this is done. This marks the image as held.
+// Attempting to perform any pl_tex_* operation (except pl_tex_destroy) on a
+// held image is an error.
+//
+// Returns whether successful.
+bool pl_vulkan_hold_external(const struct pl_gpu *gpu,
+                             const struct pl_tex *tex,
+                             VkSemaphore sem_out);
+
 // "Release" a shared image, meaning it is no longer held. `layout` and
 // `access` describe the current state of the image at the point in time when
 // the user is releasing it. Performing any operation on the VkImage underlying
@@ -281,5 +292,12 @@ bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
 void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
                        VkImageLayout layout, VkAccessFlags access,
                        VkSemaphore sem_in);
+
+// "Release" a shared image from external use. This is a convenience wrapper
+// around `pl_vulkan_release` that automatically sets the layout and access
+// mode to those used for external sharing.
+void pl_vulkan_release_external(const struct pl_gpu *gpu,
+                                const struct pl_tex *tex,
+                                VkSemaphore sem_in);
 
 #endif // LIBPLACEBO_VULKAN_H_
