@@ -124,6 +124,7 @@ struct pl_gpu {
     // Structure defining the handle types for external API interop
     struct {
         pl_handle_caps shared_mem;  // supported handles for pl_shared_mem
+        pl_handle_caps sync;        // supported handles for pl_sync
     } handle_caps;
 
     // Supported texture formats, in preference order. (If there are multiple
@@ -906,6 +907,40 @@ struct pl_pass_run_params {
 
 // Execute a render pass.
 void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *params);
+
+// A generic synchronization object intended for use with an external API. This
+// is not required when solely using libplacebo API functions, as all required
+// synchronisation is done internally. This comes in the form of a pair of
+// semaphores - one to synchronize access in each direction.
+struct pl_sync {
+    enum pl_handle_type handle_type;
+    void *priv;
+
+    // This handle is signalled by the `pl_gpu`, and waited on by the user. It
+    // fires when it is safe for the user to access the shared resource.
+    union pl_handle wait_handle;
+
+    // This handle is signalled by the user, and waited on by the `pl_gpu`. It
+    // must fire when the user has finished accessing the shared resource.
+    union pl_handle signal_handle;
+};
+
+// Create a synchronization object. Returns NULL on failure.
+//
+// `handle_type` must be exactly *one* of `pl_gpu.handle_caps.sync`, and
+// indicates which type of handle to generate for sharing this sync object.
+const struct pl_sync *pl_sync_create(const struct pl_gpu *gpu,
+                                     enum pl_handle_type handle_type);
+
+// Destroy a `pl_sync`. Note that this invalidates the externally imported
+// semaphores. Users should therefore make sure that all operations that
+// wait on or signal any of the semaphore have been fully submitted and
+// processed by the external API before destroying the `pl_sync`.
+//
+// Despite this, it's safe to destroy a `pl_sync` if the only pending
+// operations that involve it are internal to libplacebo.
+void pl_sync_destroy(const struct pl_gpu *gpu,
+                     const struct pl_sync **sync);
 
 // This is semantically a no-op, but it provides a hint that you want to flush
 // any partially queued up commands and begin execution. There is normally no
