@@ -369,6 +369,7 @@ struct pl_tex_vk {
     VkPipelineStageFlags sig_stage;
     VkSemaphore *ext_deps; // external semaphore, not owned by the pl_tex
     int num_ext_deps;
+    bool exported;
 };
 
 void pl_tex_vk_external_dep(const struct pl_gpu *gpu, const struct pl_tex *tex,
@@ -385,7 +386,8 @@ void pl_tex_vk_external_dep(const struct pl_gpu *gpu, const struct pl_tex *tex,
 // of the image will be undefined after the barrier
 static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                         const struct pl_tex *tex, VkPipelineStageFlags stage,
-                        VkAccessFlags newAccess, VkImageLayout newLayout)
+                        VkAccessFlags newAccess, VkImageLayout newLayout,
+                        bool export)
 {
     struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_tex_vk *tex_vk = tex->priv;
@@ -399,8 +401,10 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .oldLayout = tex_vk->current_layout,
         .newLayout = newLayout,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .srcQueueFamilyIndex = tex_vk->exported ? VK_QUEUE_FAMILY_EXTERNAL_KHR
+                                                : VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR
+                                      : VK_QUEUE_FAMILY_IGNORED,
         .srcAccessMask = tex_vk->current_access,
         .dstAccessMask = newAccess,
         .image = tex_vk->img,
@@ -449,6 +453,7 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
     tex_vk->current_layout = newLayout;
     tex_vk->current_access = newAccess;
+    tex_vk->exported = export;
 }
 
 static void tex_signal(const struct pl_gpu *gpu, struct vk_cmd *cmd,
@@ -724,13 +729,20 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     vkGetImageMemoryRequirements(vk->dev, tex_vk->img, &reqs);
 
     struct vk_memslice *mem = &tex_vk->mem;
-    if (!vk_malloc_generic(p->alloc, reqs, memFlags, mem))
+    if (!vk_malloc_generic(p->alloc, reqs, memFlags, params->ext_handles, mem))
         goto error;
 
     VK(vkBindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
 
     if (!vk_init_image(gpu, tex))
         goto error;
+
+    if (params->ext_handles) {
+        tex->handles = tex_vk->mem.handles;
+        tex->handle_offset = tex_vk->mem.offset;
+        // Texture is not initially exported;
+        // pl_vulkan_hold must be used to export it.
+    }
 
     if (params->initial_data) {
         struct pl_tex_transfer_params ul_params = {
@@ -773,7 +785,8 @@ static void vk_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
 
     tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                false);
 
     VkClearColorValue clearColor = {0};
     for (int c = 0; c < 4; c++)
@@ -804,11 +817,13 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
 
     tex_barrier(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_READ_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                false);
 
     tex_barrier(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                false);
 
     static const VkImageSubresourceLayers layers = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -922,9 +937,9 @@ VkImage pl_vulkan_unwrap(const struct pl_gpu *gpu, const struct pl_tex *tex,
     return tex_vk->img;
 }
 
-bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                    VkImageLayout layout, VkAccessFlags access,
-                    VkSemaphore sem_out)
+static bool vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                        VkImageLayout layout, VkAccessFlags access,
+                        bool export, VkSemaphore sem_out)
 {
     struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_tex_vk *tex_vk = tex->priv;
@@ -938,12 +953,26 @@ bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
     }
 
     tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                access, layout);
+                access, layout, export);
     vk_cmd_sig(cmd, sem_out);
     vk_submit(gpu);
     tex_vk->held = vk_flush_commands(vk);
 
     return tex_vk->held;
+}
+
+bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                    VkImageLayout layout, VkAccessFlags access,
+                    VkSemaphore sem_out)
+{
+    return vulkan_hold(gpu, tex, layout, access, false, sem_out);
+}
+
+bool pl_vulkan_hold_external(const struct pl_gpu *gpu,
+                             const struct pl_tex *tex,
+                             VkSemaphore sem_out)
+{
+    return vulkan_hold(gpu, tex, VK_IMAGE_LAYOUT_GENERAL, 0, true, sem_out);
 }
 
 void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
@@ -957,6 +986,13 @@ void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
     tex_vk->current_layout = layout;
     tex_vk->current_access = access;
     tex_vk->held = false;
+}
+
+void pl_vulkan_release_external(const struct pl_gpu *gpu,
+                                const struct pl_tex *tex,
+                                VkSemaphore sem_in)
+{
+    return pl_vulkan_release(gpu, tex, VK_IMAGE_LAYOUT_GENERAL, 0, sem_in);
 }
 
 // For pl_buf.priv
@@ -1361,7 +1397,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
                     false);
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, false);
         vkCmdCopyBufferToImage(cmd->buf, buf_vk->slice.buf, tex_vk->img,
                                tex_vk->current_layout, 1, &region);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -1450,7 +1486,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
                     false);
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_READ_BIT,
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, false);
         vkCmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->current_layout,
                                buf_vk->slice.buf, 1, &region);
         buf_flush(gpu, cmd, buf, params->buf_offset, size);
@@ -2044,7 +2080,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
         tex_barrier(gpu, cmd, tex, passStages[pass->params.type],
                     VK_ACCESS_SHADER_READ_BIT,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false);
 
         VkDescriptorImageInfo *iinfo = &pass_vk->dsiinfo[idx];
         *iinfo = (VkDescriptorImageInfo) {
@@ -2061,7 +2097,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         struct pl_tex_vk *tex_vk = tex->priv;
 
         tex_barrier(gpu, cmd, tex, passStages[pass->params.type], access,
-                    VK_IMAGE_LAYOUT_GENERAL);
+                    VK_IMAGE_LAYOUT_GENERAL, false);
 
         VkDescriptorImageInfo *iinfo = &pass_vk->dsiinfo[idx];
         *iinfo = (VkDescriptorImageInfo) {
@@ -2270,7 +2306,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
 
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                     VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                    pass_vk->initialLayout);
+                    pass_vk->initialLayout, false);
 
         VkViewport viewport = {
             .x = params->viewport.x0,

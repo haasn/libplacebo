@@ -237,6 +237,11 @@ struct pl_tex_params {
     enum pl_tex_sample_mode sample_mode;
     enum pl_tex_address_mode address_mode;
 
+    // Setting this indicates that a texture should be shared with external
+    // APIs, and is treated as a bit mask of all handle types you want to
+    // receive. This *must* be a subset of `pl_gpu.handle_caps`.
+    pl_handle_types ext_handles;
+
     // If non-NULL, the texture will be created with these contents. Using
     // this does *not* require setting host_writable. Otherwise, the initial
     // data is undefined.
@@ -263,6 +268,18 @@ static inline int pl_tex_params_dimension(const struct pl_tex_params params)
 struct pl_tex {
     struct pl_tex_params params;
     void *priv;
+
+    // When using external memory handles, this contains the handles, plus the
+    // offset of this paricular `pl_tex` within the handle. These handles are
+    // owned by the `pl_gpu` - if a user wishes to use them in a way that takes
+    // over ownership (e.g. importing into some APIs), they must clone the
+    // handle before doing so (e.g. using `dup` for fds).
+    //
+    // If the `pl_tex` is destroyed (pl_tex_destroy), the contents of the
+    // memory associated with these handles become undefined - including the
+    // contents of any external API objects imported from them.
+    struct pl_gpu_handle handles;
+    size_t handle_offset;
 };
 
 // Create a texture (with undefined contents). Returns NULL on failure. This is
