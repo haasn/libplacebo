@@ -113,7 +113,7 @@ static struct vk_cmd *vk_require_cmd(const struct pl_gpu *gpu,
         }                                                                   \
     }
 
-static void vk_destroy_ra(const struct pl_gpu *gpu)
+static void vk_destroy_gpu(const struct pl_gpu *gpu)
 {
     struct pl_vk *p = gpu->priv;
     struct vk_ctx *vk = pl_vk_get(gpu);
@@ -297,7 +297,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     return gpu;
 
 error:
-    vk_destroy_ra(gpu);
+    vk_destroy_gpu(gpu);
     return NULL;
 }
 
@@ -2346,7 +2346,7 @@ struct vk_cmd *pl_vk_steal_cmd(const struct pl_gpu *gpu)
 }
 
 static struct pl_gpu_fns pl_fns_vk = {
-    .destroy                = vk_destroy_ra,
+    .destroy                = vk_destroy_gpu,
     .tex_create             = vk_tex_create,
     .tex_destroy            = vk_tex_destroy_lazy,
     .tex_invalidate         = vk_tex_invalidate,
