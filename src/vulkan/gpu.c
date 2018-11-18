@@ -2201,9 +2201,10 @@ static void vk_pass_run(const struct pl_gpu *gpu,
             pass_vk->cached_vert = NULL;
 
             // Fetch new vertex buffer and update it
+            size_t vert_size = params->vertex_count * pass->params.vertex_stride;
             vert = pl_buf_pool_get(gpu, &pass_vk->vbo, &(struct pl_buf_params) {
                 .type = PL_VK_BUF_VERTEX,
-                .size = params->vertex_count * pass->params.vertex_stride,
+                .size = vert_size,
                 .host_writable = true,
             });
 
@@ -2212,7 +2213,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
                 goto error;
             }
 
-            vk_buf_write(gpu, vert, 0, params->vertex_data, vert->params.size);
+            vk_buf_write(gpu, vert, 0, params->vertex_data, vert_size);
 
             // Update the cached information, for small vertex buffers
             if (size <= 128*1024) { // 128 KiB
