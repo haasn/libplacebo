@@ -470,7 +470,7 @@ static bool slice_heap(struct vk_malloc *ma, struct vk_heap *heap, size_t size,
     struct vk_ctx *vk = ma->vk;
     struct vk_slab *slab;
     int index;
-    alignment = PL_ALIGN2(alignment, vk->limits.bufferImageGranularity);
+    alignment = pl_lcm(alignment, vk->limits.bufferImageGranularity);
     if (!heap_get_region(ma, heap, size, alignment, &slab, &index))
         return false;
 
@@ -478,7 +478,7 @@ static bool slice_heap(struct vk_malloc *ma, struct vk_heap *heap, size_t size,
     TARRAY_REMOVE_AT(slab->regions, slab->num_regions, index);
     *out = (struct vk_memslice) {
         .vkmem = slab->mem,
-        .offset = PL_ALIGN2(reg.start, alignment),
+        .offset = PL_ALIGN(reg.start, alignment),
         .size = size,
         .handles = slab->handles,
         .priv = slab,
