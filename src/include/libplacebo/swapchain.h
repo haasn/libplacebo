@@ -74,12 +74,11 @@ struct pl_swapchain_frame {
 
 // Retrieve a new frame from the swapchain. Returns whether successful. It's
 // worth noting that this function can fail sporadically for benign reasons,
-// for example the window being invisible or inaccessible. This function may
-// block until an image is available, which may be the case if the GPU is
-// rendering frames significantly faster than the display can output them. It
-// may also be non-blocking, so users shouldn't rely on this call alone in
-// order to meter rendering speed. (Specifics depend on the underlying graphics
-// API)
+// for example the window being invisible or inaccessible. This function *may*
+// block until an image is available, which may be the case if the user not
+// calling `pl_swapchain_swap_buffers` often enough to meter rendering. It may
+// also be non-blocking, so users shouldn't rely on this call alone in order to
+// meter rendering speed. (Specifics depend on the underlying graphics API)
 bool pl_swapchain_start_frame(const struct pl_swapchain *sw,
                               struct pl_swapchain_frame *out_frame);
 
@@ -96,8 +95,9 @@ bool pl_swapchain_submit_frame(const struct pl_swapchain *sw);
 
 // Performs a "buffer swap", or some generalization of the concept. In layman's
 // terms, this blocks until the execution of the Nth previously submitted frame
-// has been "made complete" in some sense. (The N derives from the swapchain's
-// built-in latency. See `pl_swapchain_latency` for more information).
+// has been "made complete/visible" in some sense. (The N derives from the
+// swapchain's built-in latency. See `pl_swapchain_latency` for more
+// information).
 //
 // Users should include this call in their rendering loops in order to make
 // sure they aren't submitting rendering commands faster than the GPU can
@@ -110,11 +110,11 @@ bool pl_swapchain_submit_frame(const struct pl_swapchain *sw);
 //         struct pl_swapchain_frame frame;
 //         bool ok = pl_swapchain_start_frame(swapchain, &frame);
 //         if (!ok) {
-//             /* wait some time, or decide to stop rendering */
+//             // wait some time, or decide to stop rendering
 //             continue;
 //         }
 //
-//         /* do some rendering with frame.fbo */
+//         // do some rendering with frame.fbo
 //
 //         ok = pl_swapchain_submit_frame(swapchain);
 //         if (!ok)
@@ -125,8 +125,7 @@ bool pl_swapchain_submit_frame(const struct pl_swapchain *sw);
 //
 // The duration this function blocks for, if at all, may be very inconsistent
 // and should not be used as an authoritative source of vsync timing
-// information without sufficient smoothing/filtering (and if so, the time that
-// `start_frame` blocked for should also be included).
+// information without sufficient smoothing/filtering.
 void pl_swapchain_swap_buffers(const struct pl_swapchain *sw);
 
 #endif // LIBPLACEBO_SWAPCHAIN_H_
