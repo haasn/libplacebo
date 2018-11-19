@@ -403,7 +403,7 @@ static struct vk_heap *find_heap(struct vk_malloc *ma, VkBufferUsageFlags usage,
 
 static inline bool region_fits(struct vk_region r, size_t size, size_t align)
 {
-    return PL_ALIGN2(r.start, align) + size <= r.end;
+    return PL_ALIGN(r.start, align) + size <= r.end;
 }
 
 // Finds the best-fitting region in a heap. If the heap is too small or too
