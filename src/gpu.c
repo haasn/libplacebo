@@ -334,6 +334,7 @@ const struct pl_fmt *pl_find_named_fmt(const struct pl_gpu *gpu, const char *nam
 const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
                                    const struct pl_tex_params *params)
 {
+    pl_assert((params->ext_handles & gpu->handle_caps) == params->ext_handles);
     switch (pl_tex_params_dimension(*params)) {
     case 1:
         pl_assert(params->w > 0);
