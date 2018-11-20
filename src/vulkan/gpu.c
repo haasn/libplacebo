@@ -229,7 +229,6 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         goto error;
 
     gpu->glsl = p->spirv->glsl;
-    gpu->handle_caps = vk_malloc_handle_caps(p->alloc);
     gpu->limits = (struct pl_gpu_limits) {
         .max_tex_1d_dim    = vk->limits.maxImageDimension1D,
         .max_tex_2d_dim    = vk->limits.maxImageDimension2D,
@@ -244,6 +243,8 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         .align_tex_xfer_stride = vk->limits.optimalBufferCopyRowPitchAlignment,
         .align_tex_xfer_offset = vk->limits.optimalBufferCopyOffsetAlignment,
     };
+
+    gpu->handle_caps.shared_mem = vk_malloc_handle_caps(p->alloc);
 
     if (vk->vkCmdPushDescriptorSetKHR) {
         VkPhysicalDevicePushDescriptorPropertiesKHR pushd = {
@@ -729,7 +730,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     vkGetImageMemoryRequirements(vk->dev, tex_vk->img, &reqs);
 
     struct vk_memslice *mem = &tex_vk->mem;
-    if (!vk_malloc_generic(p->alloc, reqs, memFlags, params->ext_handles, mem))
+    if (!vk_malloc_generic(p->alloc, reqs, memFlags, params->handle_type, mem))
         goto error;
 
     VK(vkBindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
@@ -737,9 +738,8 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     if (!vk_init_image(gpu, tex))
         goto error;
 
-    if (params->ext_handles) {
-        tex->handles = tex_vk->mem.handles;
-        tex->handle_offset = tex_vk->mem.offset;
+    if (params->handle_type) {
+        tex->shared_mem = tex_vk->mem.shared_mem;
         // Texture is not initially exported;
         // pl_vulkan_hold must be used to export it.
     }
@@ -1263,15 +1263,14 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     }
 
     if (!vk_malloc_buffer(p->alloc, bufFlags, memFlags, params->size, align,
-                          params->ext_handles, &buf_vk->slice))
+                          params->handle_type, &buf_vk->slice))
         goto error;
 
     if (params->host_mapped)
         buf->data = buf_vk->slice.data;
 
-    if (params->ext_handles) {
-        buf->handles = buf_vk->slice.mem.handles;
-        buf->handle_offset = buf_vk->slice.mem.offset;
+    if (params->handle_type) {
+        buf->shared_mem = buf_vk->slice.mem.shared_mem;
         buf_vk->exported = true;
     }
 

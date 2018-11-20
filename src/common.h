@@ -64,6 +64,9 @@
 // Returns the log base 2 of an unsigned long long
 #define PL_LOG2(x) ((unsigned) (8*sizeof (unsigned long long) - __builtin_clzll((x)) - 1))
 
+// Returns whether or not a number is a power of two (or zero)
+#define PL_ISPOT(x) (((x) & ((x) - 1)) == 0)
+
 // Returns the size of a static array with known size.
 #define PL_ARRAY_SIZE(s) (sizeof(s) / sizeof((s)[0]))
 

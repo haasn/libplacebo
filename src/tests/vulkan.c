@@ -2,16 +2,16 @@
 
 static void vulkan_tests(const struct pl_gpu *gpu)
 {
-    if (gpu->handle_caps & PL_HANDLE_FD) {
+    if (gpu->handle_caps.shared_mem & PL_HANDLE_FD) {
         const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
             .type = PL_BUF_TEX_TRANSFER,
             .size = 1024,
-            .ext_handles = PL_HANDLE_FD,
+            .handle_type = PL_HANDLE_FD,
         });
 
         REQUIRE(buf);
-        REQUIRE(buf->handles.fd);
-        REQUIRE(buf->handles.size >= buf->params.size);
+        REQUIRE(buf->shared_mem.handle.fd);
+        REQUIRE(buf->shared_mem.size >= buf->params.size);
         REQUIRE(pl_buf_export(gpu, buf));
         pl_buf_destroy(gpu, &buf);
     }

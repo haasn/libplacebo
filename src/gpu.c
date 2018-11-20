@@ -334,7 +334,11 @@ const struct pl_fmt *pl_find_named_fmt(const struct pl_gpu *gpu, const char *nam
 const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
                                    const struct pl_tex_params *params)
 {
-    pl_assert((params->ext_handles & gpu->handle_caps) == params->ext_handles);
+    if (params->handle_type) {
+        pl_assert(params->handle_type & gpu->handle_caps.shared_mem);
+        pl_assert(PL_ISPOT(params->handle_type));
+    }
+
     switch (pl_tex_params_dimension(*params)) {
     case 1:
         pl_assert(params->w > 0);
@@ -590,7 +594,11 @@ bool pl_tex_download(const struct pl_gpu *gpu,
 const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
                                    const struct pl_buf_params *params)
 {
-    pl_assert((params->ext_handles & gpu->handle_caps) == params->ext_handles);
+    if (params->handle_type) {
+        pl_assert(params->handle_type & gpu->handle_caps.shared_mem);
+        pl_assert(PL_ISPOT(params->handle_type));
+    }
+
     switch (params->type) {
     case PL_BUF_TEX_TRANSFER:
         pl_assert(gpu->limits.max_xfer_size);
@@ -686,7 +694,7 @@ bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
 
 bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
 {
-    pl_assert(buf->params.ext_handles);
+    pl_assert(buf->params.handle_type);
     return gpu->impl->buf_export(gpu, buf);
 }
 

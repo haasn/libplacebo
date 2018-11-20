@@ -25,7 +25,7 @@ struct vk_malloc *vk_malloc_create(struct vk_ctx *vk);
 void vk_malloc_destroy(struct vk_malloc **ma);
 
 // Get the supported handle types for this malloc instance
-pl_handle_types vk_malloc_handle_caps(struct vk_malloc *ma);
+pl_handle_caps vk_malloc_handle_caps(struct vk_malloc *ma);
 
 // Represents a single "slice" of generic (non-buffer) memory, plus some
 // metadata for accounting. This struct is essentially read-only.
@@ -33,13 +33,14 @@ struct vk_memslice {
     VkDeviceMemory vkmem;
     VkDeviceSize offset;
     VkDeviceSize size;
-    struct pl_gpu_handle handles;
+    struct pl_shared_mem shared_mem;
     void *priv;
 };
 
 void vk_free_memslice(struct vk_malloc *ma, struct vk_memslice slice);
 bool vk_malloc_generic(struct vk_malloc *ma, VkMemoryRequirements reqs,
-                       VkMemoryPropertyFlags flags, pl_handle_types ext_handles,
+                       VkMemoryPropertyFlags flags,
+                       enum pl_handle_type handle_type,
                        struct vk_memslice *out);
 
 // Represents a single "slice" of a larger buffer
@@ -57,5 +58,5 @@ struct vk_bufslice {
 // of two.
 bool vk_malloc_buffer(struct vk_malloc *ma, VkBufferUsageFlags bufFlags,
                       VkMemoryPropertyFlags memFlags, VkDeviceSize size,
-                      VkDeviceSize alignment, pl_handle_types ext_handles,
+                      VkDeviceSize alignment, enum pl_handle_type handle_type,
                       struct vk_bufslice *out);
