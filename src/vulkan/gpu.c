@@ -387,7 +387,7 @@ struct pl_tex_vk {
     VkPipelineStageFlags sig_stage;
     VkSemaphore *ext_deps; // external semaphore, not owned by the pl_tex
     int num_ext_deps;
-    bool exported;
+    const struct pl_sync *ext_sync; // indicates an exported image
 };
 
 void pl_tex_vk_external_dep(const struct pl_gpu *gpu, const struct pl_tex *tex,
@@ -399,6 +399,8 @@ void pl_tex_vk_external_dep(const struct pl_gpu *gpu, const struct pl_tex *tex,
     struct pl_tex_vk *tex_vk = tex->priv;
     TARRAY_APPEND(tex_vk, tex_vk->ext_deps, tex_vk->num_ext_deps, external_dep);
 }
+
+static void vk_sync_deref(const struct pl_gpu *gpu, const struct pl_sync *sync);
 
 // Small helper to ease image barrier creation. if `discard` is set, the contents
 // of the image will be undefined after the barrier
@@ -419,8 +421,7 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .oldLayout = tex_vk->current_layout,
         .newLayout = newLayout,
-        .srcQueueFamilyIndex = tex_vk->exported ? VK_QUEUE_FAMILY_EXTERNAL_KHR
-                                                : VK_QUEUE_FAMILY_IGNORED,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR
                                       : VK_QUEUE_FAMILY_IGNORED,
         .srcAccessMask = tex_vk->current_access,
@@ -433,6 +434,13 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         },
     };
 
+    if (tex_vk->ext_sync) {
+        if (tex_vk->current_layout != VK_IMAGE_LAYOUT_UNDEFINED)
+            imgBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL_KHR;
+        vk_cmd_callback(cmd, (vk_cb) vk_sync_deref, gpu, tex_vk->ext_sync);
+        tex_vk->ext_sync = NULL;
+    }
+
     if (tex_vk->may_invalidate) {
         tex_vk->may_invalidate = false;
         imgBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -443,7 +451,9 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     enum vk_wait_type type = vk_cmd_wait(vk, cmd, &tex_vk->sig, stage, &event);
 
     bool need_trans = tex_vk->current_layout != newLayout ||
-                      tex_vk->current_access != newAccess;
+                      tex_vk->current_access != newAccess ||
+                      (imgBarrier.srcQueueFamilyIndex !=
+                       imgBarrier.dstQueueFamilyIndex);
 
     // Transitioning to VK_IMAGE_LAYOUT_UNDEFINED is a pseudo-operation
     // that for us means we don't need to perform the actual transition
@@ -471,7 +481,6 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
     tex_vk->current_layout = newLayout;
     tex_vk->current_access = newAccess;
-    tex_vk->exported = export;
 }
 
 static void tex_signal(const struct pl_gpu *gpu, struct vk_cmd *cmd,
@@ -498,6 +507,7 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
     pl_buf_pool_uninit(gpu, &tex_vk->texel_read);
     pl_buf_pool_uninit(gpu, &tex_vk->pbo_write);
     pl_buf_pool_uninit(gpu, &tex_vk->pbo_read);
+    vk_sync_deref(gpu, tex_vk->ext_sync);
     vk_signal_destroy(vk, &tex_vk->sig);
     vkDestroyFramebuffer(vk->dev, tex_vk->framebuffer, VK_ALLOC);
     vkDestroySampler(vk->dev, tex_vk->sampler, VK_ALLOC);
@@ -954,9 +964,9 @@ VkImage pl_vulkan_unwrap(const struct pl_gpu *gpu, const struct pl_tex *tex,
     return tex_vk->img;
 }
 
-static bool vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                        VkImageLayout layout, VkAccessFlags access,
-                        bool export, VkSemaphore sem_out)
+bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                    VkImageLayout layout, VkAccessFlags access,
+                    VkSemaphore sem_out)
 {
     struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_tex_vk *tex_vk = tex->priv;
@@ -970,26 +980,13 @@ static bool vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
     }
 
     tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                access, layout, export);
+                access, layout, false);
+
     vk_cmd_sig(cmd, sem_out);
     vk_submit(gpu);
     tex_vk->held = vk_flush_commands(vk);
 
     return tex_vk->held;
-}
-
-bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                    VkImageLayout layout, VkAccessFlags access,
-                    VkSemaphore sem_out)
-{
-    return vulkan_hold(gpu, tex, layout, access, false, sem_out);
-}
-
-bool pl_vulkan_hold_external(const struct pl_gpu *gpu,
-                             const struct pl_tex *tex,
-                             VkSemaphore sem_out)
-{
-    return vulkan_hold(gpu, tex, VK_IMAGE_LAYOUT_GENERAL, 0, true, sem_out);
 }
 
 void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
@@ -1003,13 +1000,6 @@ void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
     tex_vk->current_layout = layout;
     tex_vk->current_access = access;
     tex_vk->held = false;
-}
-
-void pl_vulkan_release_external(const struct pl_gpu *gpu,
-                                const struct pl_tex *tex,
-                                VkSemaphore sem_in)
-{
-    return pl_vulkan_release(gpu, tex, VK_IMAGE_LAYOUT_GENERAL, 0, sem_in);
 }
 
 // For pl_buf.priv
@@ -2377,6 +2367,7 @@ error:
 }
 
 struct pl_sync_vk {
+    int refcount;
     VkSemaphore wait;
     VkSemaphore signal;
 };
@@ -2403,7 +2394,16 @@ static void vk_sync_destroy(const struct pl_gpu *gpu, struct pl_sync *sync)
 
     talloc_free(sync);
 }
-MAKE_LAZY_DESTRUCTOR(vk_sync_destroy, struct pl_sync);
+
+static void vk_sync_deref(const struct pl_gpu *gpu, const struct pl_sync *sync)
+{
+    if (!sync)
+        return;
+
+    struct pl_sync_vk *sync_vk = sync->priv;
+    if (--sync_vk->refcount == 0)
+        vk_sync_destroy(gpu, (struct pl_sync *) sync);
+}
 
 static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
                                             enum pl_handle_type handle_type)
@@ -2414,6 +2414,7 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
     sync->handle_type = handle_type;
 
     struct pl_sync_vk *sync_vk = sync->priv = talloc_zero(sync, struct pl_sync_vk);
+    sync_vk->refcount = 1;
 
     VkExportSemaphoreCreateInfoKHR einfo = {
         .sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO_KHR,
@@ -2455,6 +2456,37 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
 error:
     vk_sync_destroy(gpu, sync);
     return NULL;
+}
+
+bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                   const struct pl_sync *sync)
+{
+    struct pl_vk *p = gpu->priv;
+    struct vk_ctx *vk = pl_vk_get(gpu);
+    struct pl_tex_vk *tex_vk = tex->priv;
+    struct pl_sync_vk *sync_vk = sync->priv;
+
+    struct vk_cmd *cmd = p->cmd ? p->cmd : vk_require_cmd(gpu, GRAPHICS);
+    if (!cmd)
+        goto error;
+
+    tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                0, VK_IMAGE_LAYOUT_GENERAL, true);
+
+    vk_cmd_sig(cmd, sync_vk->wait);
+    vk_submit(gpu);
+    if (!vk_flush_commands(vk))
+        goto error;
+
+    // Remember the other dependency and hold on to the sync object
+    pl_tex_vk_external_dep(gpu, tex, sync_vk->signal);
+    sync_vk->refcount++;
+    tex_vk->ext_sync = sync;
+    return true;
+
+error:
+    PL_ERR(gpu, "Failed exporting shared texture!");
+    return false;
 }
 
 static void vk_gpu_flush(const struct pl_gpu *gpu)
@@ -2499,7 +2531,7 @@ static struct pl_gpu_fns pl_fns_vk = {
     .pass_destroy           = vk_pass_destroy_lazy,
     .pass_run               = vk_pass_run,
     .sync_create            = vk_sync_create,
-    .sync_destroy           = vk_sync_destroy_lazy,
+    .sync_destroy           = vk_sync_deref,
     .gpu_flush              = vk_gpu_flush,
     .gpu_finish             = vk_gpu_finish,
 };

@@ -942,6 +942,23 @@ const struct pl_sync *pl_sync_create(const struct pl_gpu *gpu,
 void pl_sync_destroy(const struct pl_gpu *gpu,
                      const struct pl_sync **sync);
 
+// Initiates a texture export operation, allowing a texture to be accessed by
+// an external API. This is only valid for textures with `params.handle_type`.
+// Returns whether successful. After this operation successfully returns, it is
+// guaranteed that `sync->wait_handle` will eventually be signalled.
+//
+// There is no corresponding "import" operation - the next operation that uses
+// a texture will implicitly import the texture. Valid API usage requires that
+// the user *must* submit a semaphore signal operation on `sync->signal_handle`
+// before doing so. Not doing so is undefined behavior and may very well
+// deadlock the calling process and/or the graphics card!
+//
+// Note that despite this restriction, it is always valid to call
+// `pl_tex_destroy`, even if the texture is in an exported state, without
+// having to signal the corresponding sync object first.
+bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                   const struct pl_sync *sync);
+
 // This is semantically a no-op, but it provides a hint that you want to flush
 // any partially queued up commands and begin execution. There is normally no
 // need to call this, because queued commands will always be implicitly flushed
