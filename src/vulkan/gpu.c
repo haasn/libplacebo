@@ -2465,6 +2465,16 @@ error:
     return NULL;
 }
 
+void pl_vk_sync_unwrap(const struct pl_sync *sync, VkSemaphore *out_wait,
+                       VkSemaphore *out_signal)
+{
+    struct pl_sync_vk *sync_vk = sync->priv;
+    if (out_wait)
+        *out_wait = sync_vk->wait;
+    if (out_signal)
+        *out_signal = sync_vk->signal;
+}
+
 bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
                    const struct pl_sync *sync)
 {

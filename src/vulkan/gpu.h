@@ -37,3 +37,7 @@ void pl_tex_vk_external_dep(const struct pl_gpu *gpu, const struct pl_tex *tex,
 // GPU, so the caller can do custom vk_cmd_ calls on it. The caller should
 // submit it as well.
 struct vk_cmd *pl_vk_steal_cmd(const struct pl_gpu *gpu);
+
+// Unwraps a `pl_sync` into its constituent VkSemaphore pair.
+void pl_vk_sync_unwrap(const struct pl_sync *sync, VkSemaphore *out_wait,
+                       VkSemaphore *out_signal);
