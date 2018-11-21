@@ -697,6 +697,13 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     if (params->host_writable || params->blit_dst || params->initial_data)
         usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
+    if (!usage) {
+        // Vulkan requires images have at least *some* image usage set, but our
+        // API is perfectly happy with a (useless) image. So just put
+        // VK_IMAGE_USAGE_TRANSFER_DST_BIT since this harmless.
+        usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    }
+
     // Double-check physical image format limits and fail if invalid
     VkImageFormatProperties iprop;
     VkFormat ifmt = params->format->emulated ? fmt->emufmt : fmt->ifmt;
