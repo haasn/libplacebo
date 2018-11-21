@@ -21,6 +21,10 @@
 #include "malloc.h"
 #include "spirv.h"
 
+#ifdef VK_HAVE_UNIX
+#include <unistd.h>
+#endif
+
 static struct pl_gpu_fns pl_fns_vk;
 
 enum queue_type {
@@ -212,6 +216,18 @@ static void vk_setup_formats(struct pl_gpu *gpu)
     pl_gpu_sort_formats(gpu);
 }
 
+static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
+{
+    pl_handle_caps ret = 0;
+
+#if VK_HAVE_UNIX
+    if (vk->vkGetSemaphoreFdKHR)
+        ret |= PL_HANDLE_FD;
+#endif
+
+    return ret;
+}
+
 const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
 {
     pl_assert(vk->dev);
@@ -245,6 +261,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     };
 
     gpu->handle_caps.shared_mem = vk_malloc_handle_caps(p->alloc);
+    gpu->handle_caps.sync = vk_sync_handle_caps(vk);
 
     if (vk->vkCmdPushDescriptorSetKHR) {
         VkPhysicalDevicePushDescriptorPropertiesKHR pushd = {
@@ -2359,6 +2376,87 @@ error:
     return;
 }
 
+struct pl_sync_vk {
+    VkSemaphore wait;
+    VkSemaphore signal;
+};
+
+static void vk_sync_destroy(const struct pl_gpu *gpu, struct pl_sync *sync)
+{
+    if (!sync)
+        return;
+
+    struct vk_ctx *vk = pl_vk_get(gpu);
+    struct pl_sync_vk *sync_vk = sync->priv;
+
+#ifdef VK_HAVE_UNIX
+    if (sync->handle_type == PL_HANDLE_FD) {
+        if (sync->wait_handle.fd > -1)
+            close(sync->wait_handle.fd);
+        if (sync->signal_handle.fd > -1)
+            close(sync->signal_handle.fd);
+    }
+#endif
+
+    vkDestroySemaphore(vk->dev, sync_vk->wait, VK_ALLOC);
+    vkDestroySemaphore(vk->dev, sync_vk->signal, VK_ALLOC);
+
+    talloc_free(sync);
+}
+MAKE_LAZY_DESTRUCTOR(vk_sync_destroy, struct pl_sync);
+
+static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
+                                            enum pl_handle_type handle_type)
+{
+    struct vk_ctx *vk = pl_vk_get(gpu);
+
+    struct pl_sync *sync = talloc_zero(NULL, struct pl_sync);
+    sync->handle_type = handle_type;
+
+    struct pl_sync_vk *sync_vk = sync->priv = talloc_zero(sync, struct pl_sync_vk);
+
+    VkExportSemaphoreCreateInfoKHR einfo = {
+        .sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO_KHR,
+        .handleTypes = 0,
+    };
+
+    switch (handle_type) {
+    case PL_HANDLE_FD:
+        einfo.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+        sync->wait_handle.fd = -1;
+        sync->signal_handle.fd = -1;
+        break;
+    }
+
+    const VkSemaphoreCreateInfo sinfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = &einfo,
+    };
+
+    VK(vkCreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sync_vk->wait));
+    VK(vkCreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sync_vk->signal));
+
+#ifdef VK_HAVE_UNIX
+    if (handle_type == PL_HANDLE_FD) {
+        VkSemaphoreGetFdInfoKHR finfo = {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR,
+            .semaphore = sync_vk->wait,
+            .handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR,
+        };
+        VK(vk->vkGetSemaphoreFdKHR(vk->dev, &finfo, &sync->wait_handle.fd));
+
+        finfo.semaphore = sync_vk->signal;
+        VK(vk->vkGetSemaphoreFdKHR(vk->dev, &finfo, &sync->signal_handle.fd));
+    }
+#endif
+
+    return sync;
+
+error:
+    vk_sync_destroy(gpu, sync);
+    return NULL;
+}
+
 static void vk_gpu_flush(const struct pl_gpu *gpu)
 {
     struct vk_ctx *vk = pl_vk_get(gpu);
@@ -2400,6 +2498,8 @@ static struct pl_gpu_fns pl_fns_vk = {
     .pass_create            = vk_pass_create,
     .pass_destroy           = vk_pass_destroy_lazy,
     .pass_run               = vk_pass_run,
+    .sync_create            = vk_sync_create,
+    .sync_destroy           = vk_sync_destroy_lazy,
     .gpu_flush              = vk_gpu_flush,
     .gpu_finish             = vk_gpu_finish,
 };
