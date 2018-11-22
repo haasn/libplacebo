@@ -233,6 +233,28 @@ error:
     return false;
 }
 
+static void vk_sw_destroy(const struct pl_swapchain *sw)
+{
+    const struct pl_gpu *gpu = sw->gpu;
+    struct priv *p = sw->priv;
+    struct vk_ctx *vk = p->vk;
+
+    pl_gpu_flush(gpu);
+    vk_wait_idle(vk);
+    for (int i = 0; i < p->num_images; i++)
+        pl_tex_destroy(gpu, &p->images[i]);
+    for (int i = 0; i < p->num_sems; i++) {
+        vkDestroySemaphore(vk->dev, p->sems_in[i], VK_ALLOC);
+        vkDestroySemaphore(vk->dev, p->sems_out[i], VK_ALLOC);
+    }
+
+    vkDestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
+    talloc_free((void *) sw);
+}
+
+static bool vk_sw_start_frame(const struct pl_swapchain *sw,
+                              struct pl_swapchain_frame *out_frame);
+
 const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *plvk,
                               const struct pl_vulkan_swapchain_params *params)
 {
@@ -293,31 +315,16 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
         p->protoInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
     }
 
+    // Attempt creating the first swapchain image
+    if (!vk_sw_start_frame(sw, &p->cached_frame))
+        goto error;
+
     return sw;
 
 error:
     talloc_free(modes);
-    talloc_free(sw);
+    vk_sw_destroy(sw);
     return NULL;
-}
-
-static void vk_sw_destroy(const struct pl_swapchain *sw)
-{
-    const struct pl_gpu *gpu = sw->gpu;
-    struct priv *p = sw->priv;
-    struct vk_ctx *vk = p->vk;
-
-    pl_gpu_flush(gpu);
-    vk_wait_idle(vk);
-    for (int i = 0; i < p->num_images; i++)
-        pl_tex_destroy(gpu, &p->images[i]);
-    for (int i = 0; i < p->num_sems; i++) {
-        vkDestroySemaphore(vk->dev, p->sems_in[i], VK_ALLOC);
-        vkDestroySemaphore(vk->dev, p->sems_out[i], VK_ALLOC);
-    }
-
-    vkDestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
-    talloc_free((void *) sw);
 }
 
 static int vk_sw_latency(const struct pl_swapchain *sw)
