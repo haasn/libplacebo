@@ -307,7 +307,7 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
     bool supported = false;
     for (int i = 0; i < num_modes; i++)
         supported |= (modes[i] == p->protoInfo.presentMode);
-    talloc_free(modes);
+    TA_FREEP(&modes);
 
     if (!supported) {
         PL_WARN(vk, "Requested swap mode unsupported by this device, falling "
