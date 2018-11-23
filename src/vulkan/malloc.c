@@ -422,6 +422,7 @@ static bool heap_get_region(struct vk_malloc *ma, struct vk_heap *heap,
     // with the heap
     if (size > PLVK_HEAP_MAXIMUM_SLAB_SIZE) {
         slab = slab_alloc(ma, heap, size);
+        slab->dedicated = true;
         *out_slab = slab;
         *out_index = 0;
         return !!slab;
