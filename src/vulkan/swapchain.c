@@ -34,7 +34,6 @@ struct priv {
     int frames_in_flight;   // number of frames currently queued
     struct pl_color_repr color_repr;
     struct pl_color_space color_space;
-    struct pl_swapchain_frame cached_frame; // cached next frame
 
     // state of the images:
     const struct pl_tex **images; // pl_tex wrappers for the VkImages
@@ -441,8 +440,6 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw)
 
     VkImage *vkimages = NULL;
     int num_images = 0;
-    p->cached_frame.fbo = NULL;
-    p->last_imgidx = -1;
 
     // It's invalid to trigger another swapchain recreation while there's more
     // than one swapchain already active, so we need to flush any pending
@@ -537,18 +534,6 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
     if (!p->swapchain && !vk_sw_recreate(sw))
         return false;
 
-    // If we already had a cached frame, re-use that directly
-    if (p->cached_frame.fbo) {
-        *out_frame = p->cached_frame;
-        p->cached_frame.fbo = NULL;
-        return true;
-    }
-
-    if (p->last_imgidx >= 0) {
-        PL_ERR(sw, "pl_swapchain_start_frame called twice in a row?");
-        return false;
-    }
-
     VkSemaphore sem_in = p->sems_in[p->idx_sems];
     PL_TRACE(vk, "vkAcquireNextImageKHR signals %p", (void *) sem_in);
 
@@ -585,7 +570,6 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
 
     // If we've exhausted the number of attempts to recreate the swapchain,
     // just give up silently and let the user retry some time later.
-    p->last_imgidx = -1;
     return false;
 }
 
@@ -602,18 +586,10 @@ static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
     if (!p->swapchain)
         return false;
 
-    if (p->last_imgidx < 0) {
-        PL_ERR(sw, "pl_swapchain_submit_frame called without start_frame?");
-        return false;
-    }
-
-    uint32_t imgidx = p->last_imgidx;
-    p->last_imgidx = -1;
-
     VkSemaphore sem_out = p->sems_out[p->idx_sems++];
     p->idx_sems %= p->num_sems;
 
-    pl_vulkan_hold(gpu, p->images[imgidx],
+    pl_vulkan_hold(gpu, p->images[p->last_imgidx],
                    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                    VK_ACCESS_MEMORY_READ_BIT, sem_out);
 
@@ -641,7 +617,7 @@ static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
         .pWaitSemaphores = &sem_out,
         .swapchainCount = 1,
         .pSwapchains = &p->swapchain,
-        .pImageIndices = &imgidx,
+        .pImageIndices = &p->last_imgidx,
     };
 
     PL_TRACE(vk, "vkQueuePresentKHR waits on %p", (void *) sem_out);
@@ -669,14 +645,6 @@ static void vk_sw_swap_buffers(const struct pl_swapchain *sw)
 
     while (p->frames_in_flight >= p->swapchain_depth)
         vk_poll_commands(p->vk, 1000000); // 1 ms
-
-    // Pre-fetch the next swapchain image (if possible), since this will also
-    // typically block. If not possible, just ignore the error (the user
-    // will most likely run into it on the next `start_frame` call)
-    if (!p->cached_frame.fbo && p->last_imgidx < 0) {
-        if (!vk_sw_start_frame(sw, &p->cached_frame))
-            p->cached_frame.fbo = NULL;
-    }
 }
 
 static struct pl_sw_fns vulkan_swapchain = {
