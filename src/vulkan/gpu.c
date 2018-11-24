@@ -263,6 +263,22 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     gpu->handle_caps.shared_mem = vk_malloc_handle_caps(p->alloc);
     gpu->handle_caps.sync = vk_sync_handle_caps(vk);
 
+    if (pl_gpu_supports_interop(gpu)) {
+        VkPhysicalDeviceIDPropertiesKHR id_props = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR,
+        };
+
+        VkPhysicalDeviceProperties2KHR props = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR,
+            .pNext = &id_props,
+        };
+
+        VK_LOAD_FUN(vk->inst, vkGetPhysicalDeviceProperties2KHR);
+        vkGetPhysicalDeviceProperties2KHR(vk->physd, &props);
+        assert(sizeof(gpu->uuid) == VK_UUID_SIZE);
+        memcpy(gpu->uuid, id_props.deviceUUID, sizeof(gpu->uuid));
+    }
+
     if (vk->vkCmdPushDescriptorSetKHR) {
         VkPhysicalDevicePushDescriptorPropertiesKHR pushd = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR,

@@ -121,7 +121,9 @@ struct pl_gpu {
     // Note: Every GPU must support at least one of PL_GPU_CAP_INPUT_VARIABLES
     // or uniform buffers (limits.max_ubo_size > 0).
 
-    // Structure defining the handle types for external API interop
+    // Fields relevant to external API interop. If the underlying device does
+    // not support interop with other APIs, these will all be {0}.
+    uint8_t uuid[16];               // underlying device UUID
     struct {
         pl_handle_caps shared_mem;  // supported handles for pl_shared_mem
         pl_handle_caps sync;        // supported handles for pl_sync

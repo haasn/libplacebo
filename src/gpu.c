@@ -69,6 +69,26 @@ void pl_gpu_print_info(const struct pl_gpu *gpu, enum pl_log_level lev)
     LOG(PRIu32, align_tex_xfer_stride);
     LOG("zu", align_tex_xfer_offset);
 #undef LOG
+
+    if (pl_gpu_supports_interop(gpu)) {
+        PL_MSG(gpu, lev, "    External API interop:");
+
+        // Pretty-print the device UUID
+        static const char *hexdigits = "0123456789ABCDEF";
+        char buf[3 * sizeof(gpu->uuid)];
+        for (int i = 0; i < sizeof(gpu->uuid); i++) {
+            uint8_t x = gpu->uuid[i];
+            buf[3 * i + 0] = hexdigits[x >> 4];
+            buf[3 * i + 1] = hexdigits[x & 0xF];
+            buf[3 * i + 2] = i == sizeof(gpu->uuid) - 1 ? '\0' : ':';
+        }
+
+        PL_MSG(gpu, lev, "      UUID: %s", buf);
+        PL_MSG(gpu, lev, "      shared memory caps: 0x%x",
+               (unsigned int) gpu->handle_caps.shared_mem);
+        PL_MSG(gpu, lev, "      sync caps: 0x%x",
+               (unsigned int) gpu->handle_caps.sync);
+    }
 }
 
 static int cmp_fmt(const void *pa, const void *pb)

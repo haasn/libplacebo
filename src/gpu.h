@@ -54,6 +54,13 @@ struct pl_gpu_fns {
 // destroyed before calling pl_destroy.
 void pl_gpu_destroy(const struct pl_gpu *gpu);
 
+// Returns true if the device supports interop. This is considered to be
+// the case if at least one of `gpu->handle_caps` is nonzero.
+static inline bool pl_gpu_supports_interop(const struct pl_gpu *gpu)
+{
+    return gpu->handle_caps.shared_mem || gpu->handle_caps.sync;
+}
+
 // GPU-internal helpers: these should not be used outside of GPU implementations
 
 // Log some metadata about the created GPU
