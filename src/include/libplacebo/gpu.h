@@ -86,13 +86,13 @@ struct pl_gpu_limits {
     uint32_t max_tex_1d_dim;    // maximum width for a 1D texture
     uint32_t max_tex_2d_dim;    // maximum width/height for a 2D texture (required)
     uint32_t max_tex_3d_dim;    // maximum width/height/depth for a 3D texture
-    size_t max_pushc_size;      // maximum push_constants_size
+    size_t max_pushc_size;      // maximum `push_constants_size`
     size_t max_xfer_size;       // maximum size of a PL_BUF_TEX_TRANSFER
     size_t max_ubo_size;        // maximum size of a PL_BUF_UNIFORM
     size_t max_ssbo_size;       // maximum size of a PL_BUF_STORAGE
     uint64_t max_buffer_texels; // maximum texels in a PL_BUF_TEXEL_*
-    int16_t min_gather_offset;  // minimum textureGatherOffset offset
-    int16_t max_gather_offset;  // maximum textureGatherOffset offset
+    int16_t min_gather_offset;  // minimum `textureGatherOffset` offset
+    int16_t max_gather_offset;  // maximum `textureGatherOffset` offset
 
     // Compute shader limits. Always available (non-zero) if PL_GPU_CAP_COMPUTE set
     size_t max_shmem_size;      // maximum compute shader shared memory size
@@ -104,14 +104,14 @@ struct pl_gpu_limits {
     // optimal alignment. For best performance, the corresponding field
     // should be aligned to a multiple of these. They will always be a power
     // of two.
-    uint32_t align_tex_xfer_stride; // optimal pl_tex_transfer_params.stride_w/h
-    size_t align_tex_xfer_offset;   // optimal pl_tex_transfer_params.buf_offset
+    uint32_t align_tex_xfer_stride; // optimal `pl_tex_transfer_params.stride_w/h`
+    size_t align_tex_xfer_offset;   // optimal `pl_tex_transfer_params.buf_offset`
 };
 
 // Abstract device context which wraps an underlying graphics context and can
 // be used to dispatch rendering commands.
 struct pl_gpu {
-    struct pl_context *ctx;  // the pl_context this GPU was initialized from
+    struct pl_context *ctx;  // the `pl_context` this GPU was initialized from
     struct pl_gpu_fns *impl; // the underlying implementation (unique per GPU)
     void *priv;
 
@@ -125,8 +125,8 @@ struct pl_gpu {
     // not support interop with other APIs, these will all be {0}.
     uint8_t uuid[16];               // underlying device UUID
     struct {
-        pl_handle_caps shared_mem;  // supported handles for pl_shared_mem
-        pl_handle_caps sync;        // supported handles for pl_sync
+        pl_handle_caps shared_mem;  // supported handles for `pl_shared_mem`
+        pl_handle_caps sync;        // supported handles for `pl_sync`
     } handle_caps;
 
     // Supported texture formats, in preference order. (If there are multiple
