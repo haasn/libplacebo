@@ -292,6 +292,9 @@ struct pl_tex {
 
     // If `params.handle_type` is set, this structure references the shared
     // memory backing this buffer, via the requested handle type.
+    //
+    // While this texture is not in an "exported" state, the contents of the
+    // memory are undefined. (See: `pl_tex_export`)
     struct pl_shared_mem shared_mem;
 };
 
@@ -459,6 +462,9 @@ struct pl_buf {
 
     // If `params.handle_type` is set, this structure references the shared
     // memory backing this buffer, via the requested handle type.
+    //
+    // While this buffer is not in an "exported" state, the contents of the
+    // memory are undefined. (See: `pl_buf_export`)
     struct pl_shared_mem shared_mem;
 };
 
@@ -539,8 +545,8 @@ bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf);
 
 // Returns whether or not a buffer is currently "in use". This can either be
 // because of a pending read operation, a pending write operation or a pending
-// buffer import/export operation. Any access to the buffer by the user is
-// forbidden while a buffer is "in use". This includes using `pl_buf_read` or
+// buffer export operation. Any access to the buffer by the user is forbidden
+// while a buffer is "in use". This includes using `pl_buf_read` or
 // `pl_buf_write` or accessing mapped memory directly. The only exception to
 // this rule is multiple reads, for example reading from a buffer with
 // `pl_tex_upload` while simultaneously reading from it using mapped memory.
