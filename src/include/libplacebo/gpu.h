@@ -672,6 +672,11 @@ struct pl_var_layout pl_std140_layout(size_t offset, const struct pl_var *var);
 // constants.
 struct pl_var_layout pl_std430_layout(size_t offset, const struct pl_var *var);
 
+// Convenience definitions / friendly names for these
+#define pl_buf_uniform_layout pl_std140_layout
+#define pl_buf_storage_layout pl_std430_layout
+#define pl_push_constant_layout pl_std430_layout
+
 // Like memcpy, but copies bytes from `src` to `dst` in a manner governed by
 // the stride and size of `dst_layout` as well as `src_layout`. Also takes
 // into account the respective `offset`.
