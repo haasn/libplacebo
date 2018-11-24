@@ -58,8 +58,11 @@ struct pl_context_params {
 
 // Creates a new, blank pl_context. The argument `api_ver` must be given as
 // PL_API_VER (this is used to detect ABI mismatch due to broken linking).
-// `params` defaults to pl_context_default_params if left as NULL.
+// `params` defaults to `pl_context_default_params` if left as NULL.
 // Returns NULL on failure.
+//
+// Note: As a general rule, any `params` struct used as an argument to a
+// function need only live until the corresponding function returns.
 struct pl_context *pl_context_create(int api_ver,
                                      const struct pl_context_params *params);
 
@@ -69,7 +72,7 @@ extern const struct pl_context_params pl_context_default_params;
 // Except where otherwise noted, all objects allocated from this pl_context
 // must be destroyed by the user before the pl_context is destroyed.
 //
-// Note: As a rule of thumb, all _destroy functions take the pointer to the
+// Note: As a general rule, all `_destroy` functions take the pointer to the
 // object to free as their parameter. This pointer is overwritten by NULL
 // afterwards. Calling a _destroy function on &{NULL} is valid, but calling it
 // on NULL itself is invalid.
