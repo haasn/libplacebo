@@ -958,7 +958,9 @@ void pl_sync_destroy(const struct pl_gpu *gpu,
 // Initiates a texture export operation, allowing a texture to be accessed by
 // an external API. This is only valid for textures with `params.handle_type`.
 // Returns whether successful. After this operation successfully returns, it is
-// guaranteed that `sync->wait_handle` will eventually be signalled.
+// guaranteed that `sync->wait_handle` will eventually be signalled. For APIs
+// where this is relevant, the image layout should be specified as "general",
+// e.g. `GL_LAYOUT_GENERAL_EXT` for OpenGL.
 //
 // There is no corresponding "import" operation - the next operation that uses
 // a texture will implicitly import the texture. Valid API usage requires that
