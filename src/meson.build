@@ -103,43 +103,6 @@ tests = [
   'utils.c',
 ]
 
-# Work-arounds for glslang braindeath
-glslang_combined = disabler()
-glslang_min_ver = 2763
-glslang_req = get_option('glslang')
-glslang_deps = [
-  cxx.find_library('glslang',     required: glslang_req),
-  cxx.find_library('HLSL',        required: glslang_req),
-  cxx.find_library('OGLCompiler', required: glslang_req),
-  cxx.find_library('OSDependent', required: glslang_req),
-  cxx.find_library('SPIRV',       required: glslang_req),
-  cxx.find_library('SPVRemapper', required: glslang_req),
-]
-
-glslang_found = true
-foreach d : glslang_deps
-  glslang_found = glslang_found and d.found()
-endforeach
-
-if glslang_found
-  glslang_ver = cxx.get_define('GLSLANG_PATCH_LEVEL',
-      prefix: '#include <glslang/Include/revision.h>'
-  ).to_int()
-
-  if glslang_ver >= glslang_min_ver
-    # glslang must be linked against pthreads on platforms where pthreads is
-    # available. Because of their horrible architecture, gcc can't do it
-    # automatically, and for some reason dependency('threads') (which uses
-    # -pthread) doesn't work. We actually need -lpthreads for the glslang
-    # object files to link, for whatever weird reason.
-    pthread = cxx.find_library('pthread', required: false)
-    glslang_combined = declare_dependency(dependencies: glslang_deps + [pthread])
-  else
-    error('glslang revision @0@ too old! Must be at least @1@'
-          .format(glslang_ver, glslang_min_ver))
-  endif
-endif
-
 # Work-arounds for shaderc braindeath
 shaderc_names = [
     'shaderc_shared',
@@ -160,6 +123,55 @@ if shaderc.found()
     'shaderc_optimization_level_performance',
     dependencies: shaderc,
   ))
+endif
+
+# Work-arounds for glslang braindeath
+glslang_combined = disabler()
+glslang_min_ver = 2763
+glslang_req = get_option('glslang')
+
+if glslang_req.auto() and shaderc.found()
+
+  # we only need one or the other, and shaderc is preferred
+  message('Skipping `glslang` because `shaderc` is available')
+  glslang_req = false
+  glslang_found = false
+
+else
+
+  glslang_deps = [
+    cxx.find_library('glslang',     required: glslang_req),
+    cxx.find_library('HLSL',        required: glslang_req),
+    cxx.find_library('OGLCompiler', required: glslang_req),
+    cxx.find_library('OSDependent', required: glslang_req),
+    cxx.find_library('SPIRV',       required: glslang_req),
+    cxx.find_library('SPVRemapper', required: glslang_req),
+  ]
+
+  glslang_found = true
+  foreach d : glslang_deps
+    glslang_found = glslang_found and d.found()
+  endforeach
+
+endif
+
+if glslang_found
+  glslang_ver = cxx.get_define('GLSLANG_PATCH_LEVEL',
+      prefix: '#include <glslang/Include/revision.h>'
+  ).to_int()
+
+  if glslang_ver >= glslang_min_ver
+    # glslang must be linked against pthreads on platforms where pthreads is
+    # available. Because of their horrible architecture, gcc can't do it
+    # automatically, and for some reason dependency('threads') (which uses
+    # -pthread) doesn't work. We actually need -lpthreads for the glslang
+    # object files to link, for whatever weird reason.
+    pthread = cxx.find_library('pthread', required: false)
+    glslang_combined = declare_dependency(dependencies: glslang_deps + [pthread])
+  else
+    error('glslang revision @0@ too old! Must be at least @1@'
+          .format(glslang_ver, glslang_min_ver))
+  endif
 endif
 
 # Optional dependencies / components
