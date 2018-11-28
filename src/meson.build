@@ -107,7 +107,6 @@ tests = [
 shaderc_names = [
     'shaderc_shared',
     'shaderc_combined',
-    'shaderc',
 ]
 
 shaderc = disabler()
