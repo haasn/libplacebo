@@ -153,24 +153,19 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
         .end   = slab->size,
     });
 
-    VkExportMemoryAllocateInfoKHR ext_info = {
-        .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_KHR,
-        .handleTypes = 0,
-    };
-
-    VkExternalMemoryBufferCreateInfoKHR ext_buf_info = {
-        .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR,
-        .handleTypes = 0,
-    };
-
+    VkExternalMemoryHandleTypeFlags handle_type_vk = 0;
     switch (heap->handle_type) {
     case PL_HANDLE_FD:
-        ext_info.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
-        ext_buf_info.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+        handle_type_vk = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
         slab->handle_type = PL_HANDLE_FD;
         slab->handle.fd = -1;
         break;
     }
+
+    VkExportMemoryAllocateInfoKHR ext_info = {
+        .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_KHR,
+        .handleTypes = handle_type_vk,
+    };
 
     VkMemoryAllocateInfo minfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -187,6 +182,11 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
         uint32_t qfs[3] = {0};
         for (int i = 0; i < vk->num_pools; i++)
             qfs[i] = vk->pools[i]->qf;
+
+        VkExternalMemoryBufferCreateInfoKHR ext_buf_info = {
+            .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR,
+            .handleTypes = handle_type_vk,
+        };
 
         VkBufferCreateInfo binfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
