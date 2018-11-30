@@ -158,9 +158,15 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
         .handleTypes = 0,
     };
 
+    VkExternalMemoryBufferCreateInfoKHR ext_buf_info = {
+        .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR,
+        .handleTypes = 0,
+    };
+
     switch (heap->handle_type) {
     case PL_HANDLE_FD:
         ext_info.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+        ext_buf_info.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
         slab->handle_type = PL_HANDLE_FD;
         slab->handle.fd = -1;
         break;
@@ -184,6 +190,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
 
         VkBufferCreateInfo binfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = heap->handle_type ? &ext_buf_info : NULL,
             .size  = slab->size,
             .usage = heap->usage,
             .sharingMode = vk->num_pools > 1 ? VK_SHARING_MODE_CONCURRENT
