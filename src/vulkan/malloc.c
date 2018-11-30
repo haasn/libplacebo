@@ -153,7 +153,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
         .end   = slab->size,
     });
 
-    VkExternalMemoryHandleTypeFlags handle_type_vk = 0;
+    VkExternalMemoryHandleTypeFlagsKHR handle_type_vk = 0;
     switch (heap->handle_type) {
     case PL_HANDLE_FD:
         handle_type_vk = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
