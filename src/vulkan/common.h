@@ -48,6 +48,7 @@ struct vk_ctx {
     VkPhysicalDevice physd;
     VkPhysicalDeviceLimits limits;
     VkPhysicalDeviceFeatures features;
+    VkExtent3D transfer_alignment; // for pool_transfer
     VkDevice dev;
 
     // Enabled extensions

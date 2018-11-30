@@ -451,6 +451,10 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     if (idx_comp < 0 && qfs[idx_gfx].queueFlags & VK_QUEUE_COMPUTE_BIT)
         idx_comp = idx_gfx;
 
+    // Cache the transfer queue alignment requirements
+    if (idx_tf >= 0)
+        vk->transfer_alignment = qfs[idx_tf].minImageTransferGranularity;
+
     // Now that we know which QFs we want, we can create the logical device
     VkDeviceQueueCreateInfo *qinfos = NULL;
     int num_qinfos = 0;

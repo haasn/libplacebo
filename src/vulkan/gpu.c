@@ -1372,6 +1372,50 @@ static bool vk_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
     return buf_vk->refcount > 1;
 }
 
+static enum queue_type vk_img_copy_queue(const struct pl_gpu *gpu,
+                                         const struct VkBufferImageCopy *region,
+                                         const struct pl_tex *tex)
+{
+    const struct pl_tex_vk *tex_vk = tex->priv;
+    enum queue_type queue = tex_vk->transfer_queue;
+    if (queue != TRANSFER)
+        return queue;
+
+    struct vk_ctx *vk = pl_vk_get(gpu);
+    VkExtent3D alignment = vk->transfer_alignment;
+
+    enum queue_type fallback = GRAPHICS;
+    if (gpu->caps & PL_GPU_CAP_PARALLEL_COMPUTE)
+        fallback = COMPUTE; // prefer async compute queue
+
+    if (alignment.width) {
+
+        bool unaligned = false;
+        unaligned |= region->imageOffset.x % alignment.width;
+        unaligned |= region->imageOffset.y % alignment.height;
+        unaligned |= region->imageOffset.z % alignment.depth;
+        unaligned |= region->imageExtent.width  % alignment.width;
+        unaligned |= region->imageExtent.height % alignment.height;
+        unaligned |= region->imageExtent.depth  % alignment.depth;
+
+        return unaligned ? fallback : queue;
+
+    } else {
+
+        // an alignment of {0} means the copy must span the entire image
+        bool unaligned = false;
+        unaligned |= region->imageOffset.x;
+        unaligned |= region->imageOffset.y;
+        unaligned |= region->imageOffset.z;
+        unaligned |= region->imageExtent.width  != tex->params.w;
+        unaligned |= region->imageExtent.height != tex->params.h;
+        unaligned |= region->imageExtent.depth  != tex->params.d;
+
+        return unaligned ? fallback : queue;
+
+    }
+}
+
 static bool vk_tex_upload(const struct pl_gpu *gpu,
                           const struct pl_tex_transfer_params *params)
 {
@@ -1438,10 +1482,6 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
 
     } else {
 
-        struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
-        if (!cmd)
-            goto error;
-
         VkBufferImageCopy region = {
             .bufferOffset = buf_vk->slice.mem.offset + params->buf_offset,
             .bufferRowLength = params->stride_w,
@@ -1453,6 +1493,11 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
                 .layerCount = 1,
             },
         };
+
+        enum queue_type queue = vk_img_copy_queue(gpu, &region, tex);
+        struct vk_cmd *cmd = vk_require_cmd(gpu, queue);
+        if (!cmd)
+            goto error;
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_READ_BIT, params->buf_offset, size,
@@ -1537,10 +1582,6 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
 
     } else {
 
-        struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
-        if (!cmd)
-            goto error;
-
         VkBufferImageCopy region = {
             .bufferOffset = buf_vk->slice.mem.offset + params->buf_offset,
             .bufferRowLength = params->stride_w,
@@ -1552,6 +1593,11 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
                 .layerCount = 1,
             },
         };
+
+        enum queue_type queue = vk_img_copy_queue(gpu, &region, tex);
+        struct vk_cmd *cmd = vk_require_cmd(gpu, queue);
+        if (!cmd)
+            goto error;
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size,
