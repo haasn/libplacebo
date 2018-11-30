@@ -750,8 +750,20 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     for (int i = 0; i < vk->num_pools; i++)
         qfs[i] = vk->pools[i]->qf;
 
+    VkExternalMemoryImageCreateInfoKHR ext_info = {
+        .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_KHR,
+        .handleTypes = 0,
+    };
+
+    switch (params->handle_type) {
+    case PL_HANDLE_FD:
+        ext_info.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+        break;
+    }
+
     VkImageCreateInfo iinfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext = params->handle_type ? &ext_info : NULL,
         .imageType = tex_vk->type,
         .format = ifmt,
         .extent = (VkExtent3D) {
