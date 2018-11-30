@@ -580,7 +580,6 @@ static void fix_tex_transfer(const struct pl_gpu *gpu,
         const struct pl_buf *buf = params->buf;
         size_t size = pl_tex_transfer_size(params);
         size_t texel = tex->params.format->texel_size;
-        pl_assert(params->buf_offset == PL_ALIGN2(params->buf_offset, 4));
         pl_assert(params->buf_offset == PL_ALIGN(params->buf_offset, texel));
         pl_assert(params->buf_offset + size <= buf->params.size);
     }

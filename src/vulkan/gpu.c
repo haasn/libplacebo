@@ -257,7 +257,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         .min_gather_offset = vk->limits.minTexelGatherOffset,
         .max_gather_offset = vk->limits.maxTexelGatherOffset,
         .align_tex_xfer_stride = vk->limits.optimalBufferCopyRowPitchAlignment,
-        .align_tex_xfer_offset = vk->limits.optimalBufferCopyOffsetAlignment,
+        .align_tex_xfer_offset = pl_lcm(vk->limits.optimalBufferCopyOffsetAlignment, 4),
     };
 
     gpu->handle_caps.shared_mem = vk_malloc_handle_caps(p->alloc);
@@ -391,10 +391,10 @@ struct pl_tex_vk {
     // for transfers
     struct pl_buf_pool pbo_write;
     struct pl_buf_pool pbo_read;
-    // for transfer emulation using texel buffers
+    // for vk_tex_upload/download fallback code
     const struct pl_fmt *texel_fmt;
-    struct pl_buf_pool texel_write;
-    struct pl_buf_pool texel_read;
+    struct pl_buf_pool tmp_write;
+    struct pl_buf_pool tmp_read;
     // "current" metadata, can change during the course of execution
     VkImageLayout current_layout;
     VkAccessFlags current_access;
@@ -519,8 +519,8 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
     struct pl_tex_vk *tex_vk = tex->priv;
     struct pl_vk *p = gpu->priv;
 
-    pl_buf_pool_uninit(gpu, &tex_vk->texel_write);
-    pl_buf_pool_uninit(gpu, &tex_vk->texel_read);
+    pl_buf_pool_uninit(gpu, &tex_vk->tmp_write);
+    pl_buf_pool_uninit(gpu, &tex_vk->tmp_read);
     pl_buf_pool_uninit(gpu, &tex_vk->pbo_write);
     pl_buf_pool_uninit(gpu, &tex_vk->pbo_read);
     vk_sync_deref(gpu, tex_vk->ext_sync);
@@ -1375,17 +1375,22 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
     struct pl_rect3d rc = params->rc;
     size_t size = pl_tex_transfer_size(params);
 
-    if (tex->params.format->emulated) {
-        // Copy the buffer into a texel buffer for software texture blit purposes
+    bool emulated = tex->params.format->emulated;
+    bool unaligned = params->buf_offset % 4 != 0;
+
+    if (emulated || unaligned) {
+
+        // Copy the source data buffer into an intermediate buffer
         const struct pl_buf *tbuf;
-        tbuf = pl_buf_pool_get(gpu, &tex_vk->texel_write, &(struct pl_buf_params) {
-            .type = PL_BUF_TEXEL_UNIFORM,
+        tbuf = pl_buf_pool_get(gpu, &tex_vk->tmp_write, &(struct pl_buf_params) {
+            .type = emulated ? PL_BUF_TEXEL_UNIFORM : PL_BUF_TEX_TRANSFER,
             .size = size,
+            .memory_type = PL_BUF_MEM_DEVICE,
             .format = tex_vk->texel_fmt,
         });
 
         if (!tbuf) {
-            PL_ERR(gpu, "Failed creating texel buffer for emulated tex upload!");
+            PL_ERR(gpu, "Failed creating buffer for tex upload fallback!");
             goto error;
         }
 
@@ -1414,9 +1419,12 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         struct pl_tex_transfer_params fixed = *params;
         fixed.buf = tbuf;
         fixed.buf_offset = 0;
-        return pl_tex_upload_texel(gpu, p->dp, &fixed);
+
+        return emulated ? pl_tex_upload_texel(gpu, p->dp, &fixed)
+                        : pl_tex_upload(gpu, &fixed);
 
     } else {
+
         struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
         if (!cmd)
             goto error;
@@ -1466,24 +1474,32 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
     struct pl_rect3d rc = params->rc;
     size_t size = pl_tex_transfer_size(params);
 
-    if (tex->params.format->emulated) {
-        // Blit the image into a texel storage buffer using compute shaders
+    bool emulated = tex->params.format->emulated;
+    bool unaligned = params->buf_offset % 4 != 0;
+
+    if (emulated || unaligned) {
+
+        // Download into an intermediate buffer first
         const struct pl_buf *tbuf;
-        tbuf = pl_buf_pool_get(gpu, &tex_vk->texel_read, &(struct pl_buf_params) {
-            .type = PL_BUF_TEXEL_STORAGE,
+        tbuf = pl_buf_pool_get(gpu, &tex_vk->tmp_read, &(struct pl_buf_params) {
+            .type = emulated ? PL_BUF_TEXEL_STORAGE : PL_BUF_TEX_TRANSFER,
             .size = size,
+            .memory_type = PL_BUF_MEM_DEVICE,
             .format = tex_vk->texel_fmt,
         });
 
         if (!tbuf) {
-            PL_ERR(gpu, "Failed creating texel buffer for emulated tex download!");
+            PL_ERR(gpu, "Failed creating buffer for tex download fallback!");
             goto error;
         }
 
         struct pl_tex_transfer_params fixed = *params;
         fixed.buf = tbuf;
         fixed.buf_offset = 0;
-        if (!pl_tex_download_texel(gpu, p->dp, &fixed))
+
+        bool ok = emulated ? pl_tex_download_texel(gpu, p->dp, &fixed)
+                           : pl_tex_download(gpu, &fixed);
+        if (!ok)
             goto error;
 
         struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
@@ -1505,7 +1521,9 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         vkCmdCopyBuffer(cmd->buf, tbuf_vk->slice.buf, buf_vk->slice.buf,
                         1, &region);
         buf_flush(gpu, cmd, buf, params->buf_offset, size);
+
     } else {
+
         struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
         if (!cmd)
             goto error;
