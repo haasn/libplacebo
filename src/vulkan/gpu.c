@@ -1167,8 +1167,20 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT, offset, size, false);
 
-        VkDeviceSize bufOffset = buf_vk->slice.mem.offset + offset;
-        vkCmdUpdateBuffer(cmd->buf, buf_vk->slice.buf, bufOffset, size, data);
+        // Vulkan requires `size` to be a multiple of 4, so we need to make
+        // sure to handle the end separately if the original data is not
+        size_t size_rem = size % 4;
+        size_t size_base = size - size_rem;
+        VkDeviceSize buf_offset = buf_vk->slice.mem.offset + offset;
+
+        vkCmdUpdateBuffer(cmd->buf, buf_vk->slice.buf, buf_offset, size_base, data);
+        if (size_rem) {
+            uint8_t tail[4] = {0};
+            memcpy(tail, data, size_rem);
+            vkCmdUpdateBuffer(cmd->buf, buf_vk->slice.buf, buf_offset + size_base,
+                              sizeof(tail), tail);
+        }
+
         pl_assert(!buf->params.host_readable); // no flush needed due to this
     }
 }
@@ -1226,6 +1238,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     VkBufferUsageFlags bufFlags = 0;
     VkMemoryPropertyFlags memFlags = 0;
     VkDeviceSize align = 4; // alignment 4 is needed for buf_update
+    VkDeviceSize size = PL_ALIGN2(params->size, 4); // for vk_buf_write
 
     enum pl_buf_mem_type mem_type = params->memory_type;
 
@@ -1304,7 +1317,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     default: break;
     }
 
-    if (!vk_malloc_buffer(p->alloc, bufFlags, memFlags, params->size, align,
+    if (!vk_malloc_buffer(p->alloc, bufFlags, memFlags, size, align,
                           params->handle_type, &buf_vk->slice))
         goto error;
 
