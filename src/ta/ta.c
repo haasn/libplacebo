@@ -247,8 +247,11 @@ void ta_free_children(void *ptr)
     struct ta_ext_header *eh = h ? h->ext : NULL;
     if (!eh)
         return;
-    while (eh->children.next != &eh->children)
-        ta_free(PTR_FROM_HEADER(eh->children.next));
+    while (eh->children.next != &eh->children) {
+        struct ta_header *next = eh->children.next;
+        ta_free(PTR_FROM_HEADER(next));
+        assert(eh->children.next != next);
+    }
 }
 
 /* Free the given allocation, and all of its direct and indirect children.
