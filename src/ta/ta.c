@@ -394,6 +394,7 @@ void ta_print_leak_report(void)
             size += cur->size;
             num_blocks += 1;
             // Unlink, and don't confuse valgrind by leaving live pointers.
+            assert(cur->leak_next && cur->leak_prev);
             cur->leak_next->leak_prev = cur->leak_prev;
             cur->leak_prev->leak_next = cur->leak_next;
             cur->leak_next = cur->leak_prev = NULL;
