@@ -17,6 +17,7 @@
 #define TA_TALLOC_H_
 
 #include <string.h>
+#include <assert.h>
 
 #include "ta.h"
 
@@ -115,6 +116,7 @@ bool ta_ref_attach(void *t, struct ta_ref *ref);
         size_t nextidx_ = (nextidx);                \
         if (nextidx_ >= TALLOC_AVAIL(p))            \
             TARRAY_RESIZE(ctx, p, ta_calc_prealloc_elems(nextidx_)); \
+        assert(p);                                  \
     } while (0)
 
 #define TARRAY_APPEND(ctx, p, idxvar, ...)          \
