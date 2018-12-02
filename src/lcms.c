@@ -187,7 +187,7 @@ bool pl_lcms_compute_lut(struct pl_context *ctx, enum pl_rendering_intent intent
     if (!trafo)
         goto error;
 
-    pl_assert(s_r && s_g && s_b);
+    pl_assert(s_r > 1 && s_g > 1 && s_b > 1);
     tmp = talloc_array(NULL, uint16_t, s_r * 3);
 
     for (int b = 0; b < s_b; b++) {
