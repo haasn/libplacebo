@@ -1,0 +1,141 @@
+stages:
+    - build
+    - test
+
+build-ubuntu:
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    stage: build
+    tags:
+        - debian
+        - amd64
+    script:
+        - meson build --buildtype release
+                      --werror
+                      -Dtests=true
+                      -Dshaderc=enabled
+                      -Dglslang=enabled
+        - ninja -C build
+        - cd build && LD_LIBRARY_PATH=/usr/local/lib meson test -v
+
+build-ubuntu-static:
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    stage: build
+    tags:
+        - debian
+        - amd64
+    script:
+        - meson build --buildtype release
+                      --default-library static
+                      --werror
+                      -Dtests=true
+                      -Dshaderc=enabled
+                      -Dglslang=enabled
+        - ninja -C build
+        - cd build && LD_LIBRARY_PATH=/usr/local/lib meson test -v
+
+build-win32:
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    stage: build
+    tags:
+        - win32
+    script:
+        - meson build --buildtype release
+                      --werror
+                      --libdir lib
+                      --cross-file /opt/crossfiles/i686-w64-mingw32.meson
+        - ninja -C build
+
+build-win64:
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    stage: build
+    tags:
+        - win64
+    script:
+        - meson build --buildtype release
+                      --werror
+                      --libdir lib
+                      --cross-file /opt/crossfiles/x86_64-w64-mingw32.meson
+        - ninja -C build
+
+build-debian-aarch64:
+    stage: build
+    image: registry.videolan.org:5000/dav1d-debian-unstable-aarch64:20181122182457
+    tags:
+        - aarch64
+        - debian
+    script:
+        - meson build --buildtype release --werror -Dtests=true
+        - ninja -C build
+        - cd build && meson test -v
+
+build-macos:
+    stage: build
+    tags:
+        - macos
+    script:
+        - meson build --buildtype release
+                      -Ddefault_library=both
+                      -Dtests=true
+                      --werror
+        - ninja -C build
+        - cd build && meson test -v
+
+test-ubuntu-asan:
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    stage: test
+    tags:
+        - debian
+        - amd64
+    variables:
+        ASAN_OPTIONS: 'detect_leaks=0'
+    script:
+        - meson build --buildtype debugoptimized -Dtests=true -Db_sanitize=address
+        - ninja -C build
+        - cd build && time LD_LIBRARY_PATH=/usr/local/lib meson test -v
+
+test-ubuntu-msan:
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    stage: test
+    tags:
+        - debian
+        - amd64
+    variables:
+        MSAN_OPTIONS: 'exitcode=1'
+    script:
+        - env CC=clang meson build --buildtype debugoptimized
+                                   -Dtests=true
+                                   -Db_sanitize=memory
+                                   -Db_lundef=false
+                                   -Dvulkan=disabled # fails under msan
+        - ninja -C build
+        - cd build && time LD_LIBRARY_PATH=/usr/local/lib meson test -v
+
+test-ubuntu-ubsan:
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    stage: test
+    tags:
+        - debian
+        - amd64
+    variables:
+        UBSAN_OPTIONS: 'print_stacktrace=1:halt_on_error=1'
+    script:
+        - env CC=clang meson build --buildtype debugoptimized
+                                   -Dtests=true
+                                   -Db_sanitize=undefined
+                                   -Db_lundef=false
+        - ninja -C build
+        - cd build && time LD_LIBRARY_PATH=/usr/local/lib meson test -v
+
+test-ubuntu-scan:
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    stage: test
+    tags:
+        - debian
+        - amd64
+    script:
+        - env CC=clang meson build --buildtype debugoptimized
+                                   --werror
+                                   -Dtests=true
+                                   -Dshaderc=enabled
+                                   -Dglslang=enabled
+        - ninja -C build scan-build
