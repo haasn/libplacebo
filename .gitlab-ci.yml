@@ -3,7 +3,7 @@ stages:
     - test
 
 build-ubuntu:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181204200145
     stage: build
     tags:
         - debian
@@ -15,10 +15,10 @@ build-ubuntu:
                       -Dshaderc=enabled
                       -Dglslang=enabled
         - ninja -C build
-        - cd build && LD_LIBRARY_PATH=/usr/local/lib meson test -v
+        - cd build && meson test -v
 
 build-ubuntu-static:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181204200145
     stage: build
     tags:
         - debian
@@ -31,10 +31,10 @@ build-ubuntu-static:
                       -Dshaderc=enabled
                       -Dglslang=enabled
         - ninja -C build
-        - cd build && LD_LIBRARY_PATH=/usr/local/lib meson test -v
+        - cd build && meson test -v
 
 build-win32:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181204200145
     stage: build
     tags:
         - win32
@@ -46,7 +46,7 @@ build-win32:
         - ninja -C build
 
 build-win64:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181204200145
     stage: build
     tags:
         - win64
@@ -81,7 +81,7 @@ build-macos:
         - cd build && meson test -v
 
 test-ubuntu-asan:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181204200145
     stage: test
     tags:
         - debian
@@ -91,10 +91,10 @@ test-ubuntu-asan:
     script:
         - meson build --buildtype debugoptimized -Dtests=true -Db_sanitize=address
         - ninja -C build
-        - cd build && time LD_LIBRARY_PATH=/usr/local/lib meson test -v
+        - cd build && time meson test -v
 
 test-ubuntu-msan:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181204200145
     stage: test
     tags:
         - debian
@@ -108,10 +108,10 @@ test-ubuntu-msan:
                                    -Db_lundef=false
                                    -Dvulkan=disabled # fails under msan
         - ninja -C build
-        - cd build && time LD_LIBRARY_PATH=/usr/local/lib meson test -v
+        - cd build && time meson test -v
 
 test-ubuntu-ubsan:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181204200145
     stage: test
     tags:
         - debian
@@ -124,10 +124,10 @@ test-ubuntu-ubsan:
                                    -Db_sanitize=undefined
                                    -Db_lundef=false
         - ninja -C build
-        - cd build && time LD_LIBRARY_PATH=/usr/local/lib meson test -v
+        - cd build && time meson test -v
 
 test-ubuntu-scan:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181203182539
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181204200145
     stage: test
     tags:
         - debian
