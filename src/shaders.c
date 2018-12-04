@@ -18,7 +18,6 @@
 #include <stdio.h>
 #include <math.h>
 
-#include "bstr/bstr.h"
 #include "common.h"
 #include "context.h"
 #include "shaders.h"

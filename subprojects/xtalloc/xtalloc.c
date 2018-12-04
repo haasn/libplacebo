@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <pthread.h>
 
-#include "talloc.h"
+#include "include/xtalloc.h"
 
 char *ta_talloc_strdup_append(char *s, const char *a)
 {

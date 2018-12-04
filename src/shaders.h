@@ -18,7 +18,6 @@
 #pragma once
 
 #include <stdio.h>
-#include "bstr/bstr.h"
 
 #include "common.h"
 #include "context.h"

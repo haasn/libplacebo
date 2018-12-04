@@ -19,7 +19,7 @@
 #include <pthread.h>
 
 extern "C" {
-#include "ta/talloc.h"
+#include <xtalloc.h>
 }
 
 #include <glslang/Include/ResourceLimits.h>

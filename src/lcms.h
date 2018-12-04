@@ -18,7 +18,6 @@
 #pragma once
 
 #include "common.h"
-#include "bstr/bstr.h"
 
 // Compute a transformation from one color profile to another, and fill the
 // provided array by the resulting 3DLUT. The array must have room for four

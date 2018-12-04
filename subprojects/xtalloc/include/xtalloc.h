@@ -13,13 +13,13 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef TA_TALLOC_H_
-#define TA_TALLOC_H_
+#ifndef TA_XTALLOC_H_
+#define TA_XTALLOC_H_
 
 #include <string.h>
 #include <assert.h>
 
-#include "ta.h"
+#include "../ta.h"
 
 // Note: all talloc wrappers are wired to the "x" functions, which abort on OOM.
 //       libtalloc doesn't do that, but the mplayer2/mpv internal copies of it did.

@@ -24,10 +24,12 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-#include "ta/talloc.h"
 #include "config.h"
 #include "config_internal.h"
 #include "pl_assert.h"
+
+#include <xtalloc.h>
+#include <bstr.h>
 
 // Include all of the symbols that should be public in a way that marks them
 // as being externally visible. (Otherwise, all symbols are hidden by default)

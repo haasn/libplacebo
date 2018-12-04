@@ -20,7 +20,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#include "bstr.h"
+#include "include/bstr.h"
 
 int ccStrPrintInt32( char *str, int32_t n );
 int ccStrPrintUint32( char *str, uint32_t n );

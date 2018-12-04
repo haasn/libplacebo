@@ -18,8 +18,6 @@
 #pragma once
 
 #include <stdarg.h>
-#include "bstr/bstr.h"
-
 #include "common.h"
 
 struct pl_context {

@@ -1,109 +1,25 @@
-majorver = '1'
-apiver   = '7'
-fixver   = '0'
+# Depedencies
+cc = meson.get_compiler('c')
+cxx = meson.get_compiler('cpp')
 
-version = majorver + '.' + apiver + '.' + fixver
+build_deps = [
+  cc.find_library('m', required: false),
+  subproject('xtalloc').get_variable('dep'),
+  subproject('bstr').get_variable('dep'),
+]
 
-# Configuration
+vulkan = dependency('vulkan', version: '>=1.0.42', required: get_option('vulkan'))
+
+# configuration data
 conf_public = configuration_data()
 conf_internal = configuration_data()
 conf_public.set('majorver', majorver)
 conf_public.set('apiver', apiver)
 conf_public.set('fixver', fixver)
-conf_public.set_quoted('version', 'v' + version)
+conf_public.set_quoted('version', version_pretty)
 
-## Update PL_VERSION with `git describe` information if available
-git = find_program('git', required: false)
-if git.found()
-  gitdesc = run_command(git, 'describe')
-  if gitdesc.returncode() == 0
-    conf_public.set_quoted('version', gitdesc.stdout().strip())
-  endif
-endif
 
-c_opts = [
-  '-D_ISOC99_SOURCE', '-D_GNU_SOURCE', '-D_XOPEN_SOURCE=700',
-  '-U__STRICT_ANSI__', '-fvisibility=hidden',
-  '-Wmissing-prototypes', '-Wno-pointer-sign'
-]
-
-# glslang needs c++11
-cpp_opts = [
-  '-std=c++11', '-fvisibility=hidden',
-]
-
-# Build options mostly taken from mpv
-build_opts = [
-  # Warnings
-  '-Wall', '-Wundef', '-Wshadow', '-Wparentheses', '-Wpointer-arith',
-
-  # Warnings to treat as errors
-  '-Werror=implicit-function-declaration',
-]
-
-link_args = []
-
-cc = meson.get_compiler('c')
-cxx = meson.get_compiler('cpp')
-
-if cc.has_argument('-Wincompatible-pointer-types')
-  build_opts += ['-Werror=incompatible-pointer-types']
-endif
-
-# clang's version of -Wmissing-braces rejects the common {0} initializers
-if cc.get_id() == 'clang'
-  build_opts += ['-Wno-missing-braces']
-endif
-
-vflag = '-Wl,--exclude-libs=ALL'
-if cc.has_link_argument(vflag)
-  link_args += [vflag]
-endif
-
-# Global dependencies
-build_deps = [
-  dependency('threads'),
-  cc.find_library('m', required: false),
-]
-
-vulkan = dependency('vulkan', version: '>=1.0.42', required: get_option('vulkan'))
-
-# Source files
-sources = [
-  'colorspace.c',
-  'common.c',
-  'context.c',
-  'dither.c',
-  'dispatch.c',
-  'filters.c',
-  'gpu.c',
-  'renderer.c',
-  'shaders.c',
-  'shaders/av1.c',
-  'shaders/colorspace.c',
-  'shaders/sampling.c',
-  'spirv.c',
-  'swapchain.c',
-  'utils/upload.c',
-
-  # Helpers ported from mpv or other projects
-  'bstr/bstr.c',
-  'bstr/format.c',
-  '3rdparty/siphash.c',
-  'ta/ta.c',
-  'ta/ta_utils.c',
-  'ta/talloc.c',
-]
-
-tests = [
-  'context.c',
-  'colorspace.c',
-  'dither.c',
-  'filters.c',
-  'utils.c',
-]
-
-# Work-arounds for shaderc braindeath
+# work-arounds for shaderc braindeath
 shaderc_names = [
     'shaderc_shared',
     'shaderc_combined',
@@ -124,7 +40,7 @@ if shaderc.found()
   ))
 endif
 
-# Work-arounds for glslang braindeath
+# work-arounds for glslang braindeath
 glslang_combined = disabler()
 glslang_min_ver = 2763
 glslang_req = get_option('glslang')
@@ -173,6 +89,35 @@ if glslang_found
   endif
 endif
 
+
+# Source files
+sources = [
+  'colorspace.c',
+  'common.c',
+  'context.c',
+  'dither.c',
+  'dispatch.c',
+  'filters.c',
+  'gpu.c',
+  'renderer.c',
+  'shaders.c',
+  'shaders/av1.c',
+  'shaders/colorspace.c',
+  'shaders/sampling.c',
+  'spirv.c',
+  'swapchain.c',
+  'utils/upload.c',
+]
+
+tests = [
+  'context.c',
+  'colorspace.c',
+  'dither.c',
+  'filters.c',
+  'utils.c',
+]
+
+
 # Optional dependencies / components
 components = [
   {
@@ -204,7 +149,6 @@ components = [
   }
 ]
 
-# Build process
 defs = ''
 comps = configuration_data()
 
@@ -223,7 +167,7 @@ foreach c : components
   endif
 endforeach
 
-# Check to see if libplacebo built this way is sane
+# check to see if libplacebo built this way is sane
 if not comps.has('vulkan')
   warning('Building without support for Vulkan. Currently, libplacebo only ' +
           'supports the Vulkan graphics API. libplacebo built this way still ' +
@@ -237,7 +181,8 @@ if comps.has('vulkan') and not (comps.has('shaderc') or comps.has('glslang'))
         'compile GLSL to SPIR-V (needed by the Vulkan API)!')
 endif
 
-# Generate the config headers
+
+# Build process
 conf_public.set('extra_defs', defs)
 
 configure_file(
@@ -252,9 +197,6 @@ configure_file(
   configuration: conf_internal
 )
 
-# Build process
-add_project_arguments(build_opts + c_opts, language: 'c')
-add_project_arguments(build_opts + cpp_opts, language: 'cpp')
 inc = include_directories('./include')
 lib = library('placebo', sources,
   install: true,
@@ -263,6 +205,7 @@ lib = library('placebo', sources,
   include_directories: inc,
   link_args: link_args,
 )
+
 
 # Install process
 install_subdir('include/libplacebo', install_dir: get_option('includedir'))
@@ -274,6 +217,7 @@ pkg.generate(
   libraries: lib,
   version: version,
 )
+
 
 # Tests
 tdeps = [ declare_dependency(link_with: lib) ]

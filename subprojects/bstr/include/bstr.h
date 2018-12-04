@@ -23,9 +23,10 @@
 #include <stdbool.h>
 #include <stdarg.h>
 
-#include "osdep/compiler.h"
-#include "ta/talloc.h"
-#include "3rdparty/siphash.h"
+#include "../osdep.h"
+#include "../siphash.h"
+
+#include <xtalloc.h>
 
 /* NOTE: 'len' is size_t, but most string-handling functions below assume
  * that input size has been sanity checked and len fits in an int.
