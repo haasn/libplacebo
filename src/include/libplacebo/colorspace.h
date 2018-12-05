@@ -267,7 +267,8 @@ bool pl_color_space_equal(const struct pl_color_space *c1,
 // PL_COLOR_*_UNKNOWN or 0.0.
 void pl_color_space_infer(struct pl_color_space *space);
 
-// Some common color spaces
+// Some common color spaces. Note: These don't necessarily have all fields
+// filled, in particular `sig_peak` and `sig_avg` are left unset.
 extern const struct pl_color_space pl_color_space_unknown;
 extern const struct pl_color_space pl_color_space_srgb;
 extern const struct pl_color_space pl_color_space_bt709;
