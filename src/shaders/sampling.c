@@ -274,12 +274,14 @@ static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
 struct sh_sampler_obj {
     const struct pl_filter *filter;
     struct pl_shader_obj *lut;
+    struct pl_shader_obj *pass2; // for pl_shader_sample_ortho
 };
 
 static void sh_sampler_uninit(const struct pl_gpu *gpu, void *ptr)
 {
     struct sh_sampler_obj *obj = ptr;
     pl_shader_obj_destroy(&obj->lut);
+    pl_shader_obj_destroy(&obj->pass2);
     pl_filter_free(&obj->filter);
     *obj = (struct sh_sampler_obj) {0};
 }
@@ -489,18 +491,6 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     return true;
 }
 
-struct sh_sampler_sep_obj {
-    struct pl_shader_obj *samplers[2];
-};
-
-static void sh_sampler_sep_uninit(const struct pl_gpu *gpu, void *ptr)
-{
-    struct sh_sampler_sep_obj *obj = ptr;
-    for (int i = 0; i < PL_ARRAY_SIZE(obj->samplers); i++)
-        pl_shader_obj_destroy(&obj->samplers[i]);
-    *obj = (struct sh_sampler_sep_obj) {0};
-}
-
 static void fill_ortho_lut(void *priv, float *data, int w, int h, int d)
 {
     const struct sh_sampler_obj *obj = priv;
@@ -556,17 +546,17 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
     // 2. After fixing the source for `setup_src`, we lose information about
     //    the scaling ratio of the other component. (Although this is only a
     //    minor reason and could easily be changed with some boilerplate)
-    struct sh_sampler_sep_obj *sepobj;
-    sepobj = SH_OBJ(sh, params->lut, PL_SHADER_OBJ_SAMPLER_SEP,
-                    struct sh_sampler_sep_obj, sh_sampler_sep_uninit);
-    if (!sepobj)
-        return false;
-
     struct sh_sampler_obj *obj;
-    obj = SH_OBJ(sh, &sepobj->samplers[pass], PL_SHADER_OBJ_SAMPLER,
+    obj = SH_OBJ(sh, params->lut, PL_SHADER_OBJ_SAMPLER,
                  struct sh_sampler_obj, sh_sampler_uninit);
     if (!obj)
         return false;
+
+    if (pass != 0) {
+        obj = SH_OBJ(sh, &obj->pass2, PL_SHADER_OBJ_SAMPLER,
+                     struct sh_sampler_obj, sh_sampler_uninit);
+        assert(obj);
+    }
 
     float inv_scale = 1.0 / ratio[pass];
     inv_scale = PL_MAX(inv_scale, 1.0);
