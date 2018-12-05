@@ -154,6 +154,18 @@ int main()
         REQUIRE(feq(black[2], 0.0));
     }
 
+    // Make sure chromatic adaptation works
+    struct pl_raw_primaries bt709_d50;
+    bt709_d50 = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_709);
+    bt709_d50.white = (struct pl_cie_xy) { 0.34567, 0.35850 };
+
+    struct pl_matrix3x3 d50_d65;
+    d50_d65 = pl_get_color_mapping_matrix(&bt709_d50, bt709, PL_INTENT_RELATIVE_COLORIMETRIC);
+
+    float white[3] = { 1.0, 1.0, 1.0 };
+    pl_matrix3x3_apply(&d50_d65, white);
+    REQUIRE(feq(white[0], 1.0) && feq(white[1], 1.0) && feq(white[2], 1.0));
+
     // Simulate a typical 10-bit YCbCr -> 16 bit texture conversion
     tv_repr.bits.color_depth  = 10;
     tv_repr.bits.sample_depth = 16;
@@ -164,4 +176,130 @@ int main()
     REQUIRE(feq(test[0], 0.808305));
     REQUIRE(feq(test[1], 0.553254));
     REQUIRE(feq(test[2], 0.218841));
+
+    // DVD
+    REQUIRE(pl_color_system_guess_ycbcr(720, 480) == PL_COLOR_SYSTEM_BT_601);
+    REQUIRE(pl_color_system_guess_ycbcr(720, 576) == PL_COLOR_SYSTEM_BT_601);
+    REQUIRE(pl_color_primaries_guess(720, 576) == PL_COLOR_PRIM_BT_601_625);
+    REQUIRE(pl_color_primaries_guess(720, 480) == PL_COLOR_PRIM_BT_601_525);
+    // PAL 16:9
+    REQUIRE(pl_color_system_guess_ycbcr(1024, 576) == PL_COLOR_SYSTEM_BT_601);
+    REQUIRE(pl_color_primaries_guess(1024, 576) == PL_COLOR_PRIM_BT_601_625);
+    // HD
+    REQUIRE(pl_color_system_guess_ycbcr(1280, 720)  == PL_COLOR_SYSTEM_BT_709);
+    REQUIRE(pl_color_system_guess_ycbcr(1920, 1080) == PL_COLOR_SYSTEM_BT_709);
+    REQUIRE(pl_color_primaries_guess(1280, 720)  == PL_COLOR_PRIM_BT_709);
+    REQUIRE(pl_color_primaries_guess(1920, 1080) == PL_COLOR_PRIM_BT_709);
+
+    // Odd/weird videos
+    REQUIRE(pl_color_primaries_guess(2000, 576) == PL_COLOR_PRIM_BT_709);
+    REQUIRE(pl_color_primaries_guess(200, 200) == PL_COLOR_PRIM_BT_709);
+
+    REQUIRE(pl_color_repr_equal(&pl_color_repr_sdtv, &pl_color_repr_sdtv));
+    REQUIRE(!pl_color_repr_equal(&pl_color_repr_sdtv, &pl_color_repr_hdtv));
+
+    struct pl_color_repr repr = pl_color_repr_unknown;
+    pl_color_repr_merge(&repr, &pl_color_repr_uhdtv);
+    REQUIRE(pl_color_repr_equal(&repr, &pl_color_repr_uhdtv));
+
+    REQUIRE(!pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_UNKNOWN));
+    REQUIRE(!pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_BT_601_525));
+    REQUIRE(!pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_BT_601_625));
+    REQUIRE(!pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_BT_709));
+    REQUIRE(!pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_BT_470M));
+    REQUIRE(pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_BT_2020));
+    REQUIRE(pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_APPLE));
+    REQUIRE(pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_ADOBE));
+    REQUIRE(pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_PRO_PHOTO));
+    REQUIRE(pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_CIE_1931));
+    REQUIRE(pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_DCI_P3));
+    REQUIRE(pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_DISPLAY_P3));
+    REQUIRE(pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_V_GAMUT));
+    REQUIRE(pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_S_GAMUT));
+
+    REQUIRE(!pl_color_light_is_scene_referred(PL_COLOR_LIGHT_UNKNOWN));
+    REQUIRE(!pl_color_light_is_scene_referred(PL_COLOR_LIGHT_DISPLAY));
+    REQUIRE(pl_color_light_is_scene_referred(PL_COLOR_LIGHT_SCENE_HLG));
+    REQUIRE(pl_color_light_is_scene_referred(PL_COLOR_LIGHT_SCENE_709_1886));
+    REQUIRE(pl_color_light_is_scene_referred(PL_COLOR_LIGHT_SCENE_1_2));
+
+    struct pl_color_space space = pl_color_space_unknown;
+    pl_color_space_merge(&space, &pl_color_space_bt709);
+    REQUIRE(pl_color_space_equal(&space, &pl_color_space_bt709));
+
+    // Infer some color spaces
+    struct pl_color_space hlg = {
+        .primaries = PL_COLOR_PRIM_BT_2020,
+        .transfer = PL_COLOR_TRC_HLG,
+    };
+
+    pl_color_space_infer(&hlg);
+    REQUIRE(hlg.light == PL_COLOR_LIGHT_SCENE_HLG);
+
+    struct pl_color_space unknown = {0};
+    struct pl_color_space display = {
+        .primaries = PL_COLOR_PRIM_BT_709,
+        .transfer = PL_COLOR_TRC_GAMMA22,
+        .light = PL_COLOR_LIGHT_DISPLAY,
+        .sig_peak = 1.0,
+        .sig_avg = 0.25,
+    };
+
+    pl_color_space_infer(&unknown);
+    REQUIRE(pl_color_space_equal(&unknown, &display));
+
+    float x, y;
+    pl_chroma_location_offset(PL_CHROMA_LEFT, &x, &y);
+    REQUIRE(x == -0.5 && y == 0.0);
+    pl_chroma_location_offset(PL_CHROMA_TOP_LEFT, &x, &y);
+    REQUIRE(x == -0.5 && y == -0.5);
+    pl_chroma_location_offset(PL_CHROMA_CENTER, &x, &y);
+    REQUIRE(x == 0.0 && y == 0.0);
+    pl_chroma_location_offset(PL_CHROMA_BOTTOM_CENTER, &x, &y);
+    REQUIRE(x == 0.0 && y == 0.5);
+
+    REQUIRE(pl_raw_primaries_get(PL_COLOR_PRIM_UNKNOWN) ==
+            pl_raw_primaries_get(PL_COLOR_PRIM_BT_709));
+
+    // Color blindness tests
+    float red[3]   = { 1.0, 0.0, 0.0 };
+    float green[3] = { 0.0, 1.0, 0.0 };
+    float blue[3]  = { 0.0, 0.0, 1.0 };
+
+#define TEST_CONE(model, color)                                                 \
+    do {                                                                        \
+        float tmp[3] = { (color)[0], (color)[1], (color)[2] };                  \
+        struct pl_matrix3x3 mat = pl_get_cone_matrix(&(model), bt709);          \
+        pl_matrix3x3_apply(&mat, tmp);                                          \
+        printf("%s + %s = %f %f %f\n", #model, #color, tmp[0], tmp[1], tmp[2]); \
+        for (int i = 0; i < 3; i++)                                             \
+            REQUIRE(fabs((color)[i] - tmp[i]) < 1e-3);                          \
+    } while(0)
+
+    struct pl_cone_params red_only = { .cones = PL_CONE_MS };
+    struct pl_cone_params green_only = { .cones = PL_CONE_LS };
+    struct pl_cone_params blue_only = pl_vision_monochromacy;
+
+    // These models should all round-trip white
+    TEST_CONE(pl_vision_normal, white);
+    TEST_CONE(pl_vision_protanomaly, white);
+    TEST_CONE(pl_vision_deuteranomaly, white);
+    TEST_CONE(pl_vision_tritanomaly, white);
+    TEST_CONE(pl_vision_achromatopsia, white);
+    TEST_CONE(red_only, white);
+    TEST_CONE(green_only, white);
+    TEST_CONE(blue_only, white);
+
+    // These models should round-trip blue
+    TEST_CONE(pl_vision_normal, blue);
+    TEST_CONE(pl_vision_protanomaly, blue);
+    TEST_CONE(pl_vision_deuteranomaly, blue);
+
+    // These models should round-trip red
+    TEST_CONE(pl_vision_normal, red);
+    TEST_CONE(pl_vision_tritanomaly, red);
+    TEST_CONE(pl_vision_tritanopia, red);
+
+    // These models should round-trip green
+    TEST_CONE(pl_vision_normal, green);
 }
