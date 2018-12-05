@@ -412,8 +412,33 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         .color          = pl_color_space_srgb,
     };
 
-    pl_tex_clear(gpu, fbo, (float[4]){0});
-    REQUIRE(pl_render_image(rr, &image, &target, NULL));
+    for (int i = 0; i < 10; i ++) {
+        pl_tex_clear(gpu, fbo, (float[4]){0});
+        REQUIRE(pl_render_image(rr, &image, &target, NULL));
+    }
+
+    // Test some custom params
+    struct pl_render_params params = pl_render_default_params;
+    params.upscaler = &pl_filter_ewa_lanczos;
+
+    params.color_adjustment = &(struct pl_color_adjustment) {
+        .brightness = 0.1,
+        .contrast = 0.9,
+        .saturation = 1.5,
+        .gamma = 0.8,
+    };
+
+    params.color_map_params = &(struct pl_color_map_params) {
+        .intent = PL_INTENT_SATURATION,
+        .tone_mapping_algo = PL_TONE_MAPPING_CLIP,
+        .hdr_simulation = true,
+        .gamut_warning = true,
+    };
+
+    for (int i = 0; i < 5; i++) {
+        pl_tex_clear(gpu, fbo, (float[4]){0});
+        REQUIRE(pl_render_image(rr, &image, &target, &params));
+    }
 
     fbo_data = malloc(fbo->params.w * fbo->params.h * sizeof(float[4]));
     REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
@@ -431,6 +456,8 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         }
         printf("\n");
     }
+
+    // TODO: embed a reference texture and ensure it matches
 
 error:
     free(fbo_data);
