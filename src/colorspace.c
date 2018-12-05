@@ -35,8 +35,10 @@ bool pl_color_system_is_ycbcr_like(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_BT_2100_HLG:
     case PL_COLOR_SYSTEM_YCGCO:
         return true;
-    default: abort();
+    case PL_COLOR_SYSTEM_COUNT: break;
     };
+
+    abort();
 }
 
 bool pl_color_system_is_linear(enum pl_color_system sys)
@@ -55,8 +57,10 @@ bool pl_color_system_is_linear(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_BT_2100_HLG:
     case PL_COLOR_SYSTEM_XYZ:
         return false;
-    default: abort();
+    case PL_COLOR_SYSTEM_COUNT: break;
     };
+
+    abort();
 }
 
 enum pl_color_system pl_color_system_guess_ycbcr(int width, int height)
@@ -185,11 +189,14 @@ bool pl_color_primaries_is_wide_gamut(enum pl_color_primaries prim)
     case PL_COLOR_PRIM_PRO_PHOTO:
     case PL_COLOR_PRIM_CIE_1931:
     case PL_COLOR_PRIM_DCI_P3:
+    case PL_COLOR_PRIM_DISPLAY_P3:
     case PL_COLOR_PRIM_V_GAMUT:
     case PL_COLOR_PRIM_S_GAMUT:
         return true;
-    default: abort();
+    case PL_COLOR_PRIM_COUNT: break;
     }
+
+    abort();
 }
 
 enum pl_color_primaries pl_color_primaries_guess(int width, int height)
@@ -228,8 +235,10 @@ float pl_color_transfer_nominal_peak(enum pl_color_transfer trc)
     case PL_COLOR_TRC_V_LOG:    return 46.0855;
     case PL_COLOR_TRC_S_LOG1:   return 6.52;
     case PL_COLOR_TRC_S_LOG2:   return 9.212;
-    default: abort();
+    case PL_COLOR_TRC_COUNT: break;
     }
+
+    abort();
 }
 
 bool pl_color_light_is_scene_referred(enum pl_color_light light)
@@ -242,8 +251,10 @@ bool pl_color_light_is_scene_referred(enum pl_color_light light)
     case PL_COLOR_LIGHT_SCENE_709_1886:
     case PL_COLOR_LIGHT_SCENE_1_2:
         return true;
-    default: abort();
+    case PL_COLOR_LIGHT_COUNT: break;
     }
+
+    abort();
 }
 
 const struct pl_color_space pl_color_space_unknown = {0};
