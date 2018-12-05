@@ -703,9 +703,9 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
         // color model, so this is only a rough approximation.
         a = 1.0 - c;
         distort = (struct pl_matrix3x3) {{
-            {c + a * 0.361,     a * 0.642,     a * -0.002},
-            {    a * 0.361, c + a * 0.642,     a * -0.002},
-            {    a * 0.361,     a * 0.642, c + a * -0.002},
+            {c + a * 0.3605,     a * 0.6415,     a * -0.002},
+            {    a * 0.3605, c + a * 0.6415,     a * -0.002},
+            {    a * 0.3605,     a * 0.6415, c + a * -0.002},
         }};
         break;
 
