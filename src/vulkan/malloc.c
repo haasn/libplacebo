@@ -106,6 +106,11 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
     if (slab->handle_type == PL_HANDLE_FD && slab->handle.fd > -1)
         close(slab->handle.fd);
 #endif
+#ifdef VK_HAVE_WIN32
+    if (slab->handle_type == PL_HANDLE_WIN32 && slab->handle.handle != NULL)
+        CloseHandle(slab->handle.handle);
+    // PL_HANDLE_WIN32_KMT is just an identifier. It doesn't get closed.
+#endif
 
     // also implicitly unmaps the memory if needed
     vkFreeMemory(vk->dev, slab->mem, VK_ALLOC);
@@ -159,6 +164,16 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
         handle_type_vk = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
         slab->handle_type = PL_HANDLE_FD;
         slab->handle.fd = -1;
+        break;
+    case PL_HANDLE_WIN32:
+        handle_type_vk = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
+        slab->handle_type = PL_HANDLE_WIN32;
+        slab->handle.handle = NULL;
+        break;
+    case PL_HANDLE_WIN32_KMT:
+        handle_type_vk = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
+        slab->handle_type = PL_HANDLE_WIN32_KMT;
+        slab->handle.handle = NULL;
         break;
     }
 
@@ -234,6 +249,24 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
         };
 
         VK(vk->vkGetMemoryFdKHR(vk->dev, &fd_info, &slab->handle.fd));
+    }
+#endif
+#ifdef VK_HAVE_WIN32
+    VkExternalMemoryHandleTypeFlagBits handle_type = 0;
+    if (slab->handle_type == PL_HANDLE_WIN32) {
+        handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
+    } else if (slab->handle_type == PL_HANDLE_WIN32_KMT) {
+        handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
+    }
+    if (handle_type) {
+        VkMemoryGetWin32HandleInfoKHR handle_info = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_GET_WIN32_HANDLE_INFO_KHR,
+            .memory = slab->mem,
+            .handleType = handle_type,
+        };
+
+        VK(vk->vkGetMemoryWin32HandleKHR(vk->dev, &handle_info,
+                                         &slab->handle.handle));
     }
 #endif
 
@@ -345,9 +378,13 @@ pl_handle_caps vk_malloc_handle_caps(struct vk_malloc *ma)
     struct vk_ctx *vk = ma->vk;
     pl_handle_caps ret = 0;
 
-#if VK_HAVE_UNIX
+#ifdef VK_HAVE_UNIX
     if (vk->vkGetMemoryFdKHR)
         ret |= PL_HANDLE_FD;
+#endif
+#ifdef VK_HAVE_WIN32
+    if (vk->vkGetMemoryWin32HandleKHR)
+        ret |= (PL_HANDLE_WIN32 | PL_HANDLE_WIN32_KMT)
 #endif
 
     return ret;
