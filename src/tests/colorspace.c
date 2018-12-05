@@ -273,7 +273,7 @@ int main()
         pl_matrix3x3_apply(&mat, tmp);                                          \
         printf("%s + %s = %f %f %f\n", #model, #color, tmp[0], tmp[1], tmp[2]); \
         for (int i = 0; i < 3; i++)                                             \
-            REQUIRE(fabs((color)[i] - tmp[i]) < 1e-3);                          \
+            REQUIRE(fabs((color)[i] - tmp[i]) < 1e-6);                          \
     } while(0)
 
     struct pl_cone_params red_only = { .cones = PL_CONE_MS };
@@ -282,6 +282,7 @@ int main()
 
     // These models should all round-trip white
     TEST_CONE(pl_vision_normal, white);
+    TEST_CONE(pl_vision_protanopia, white);
     TEST_CONE(pl_vision_protanomaly, white);
     TEST_CONE(pl_vision_deuteranomaly, white);
     TEST_CONE(pl_vision_tritanomaly, white);

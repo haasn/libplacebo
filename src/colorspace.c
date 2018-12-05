@@ -545,6 +545,14 @@ struct pl_matrix3x3 pl_get_xyz2rgb_matrix(const struct pl_raw_primaries *prim)
     return out;
 }
 
+// LMS<-XYZ revised matrix from CIECAM97, based on a linear transform and
+// normalized for equal energy on monochrome inputs
+static const struct pl_matrix3x3 m_cat97 = {{
+    {  0.8562,  0.3372, -0.1934 },
+    { -0.8360,  1.8327,  0.0033 },
+    {  0.0357, -0.0469,  1.0112 },
+}};
+
 // M := M * XYZd<-XYZs
 static void apply_chromatic_adaptation(struct pl_cie_xy src,
                                        struct pl_cie_xy dest,
@@ -557,26 +565,19 @@ static void apply_chromatic_adaptation(struct pl_cie_xy src,
 
     // XYZd<-XYZs = Ma^-1 * (I*[Cd/Cs]) * Ma
     // http://www.brucelindbloom.com/index.html?Eqn_ChromAdapt.html
+    // For Ma, we use the CIECAM97 revised (linear) matrix
     float C[3][2];
-
-    // Ma = Bradford matrix, arguably most popular method in use today.
-    // This is derived experimentally and thus hard-coded.
-    struct pl_matrix3x3 bradford = {{
-        {  0.8951,  0.2664, -0.1614 },
-        { -0.7502,  1.7135,  0.0367 },
-        {  0.0389, -0.0685,  1.0296 },
-    }};
 
     for (int i = 0; i < 3; i++) {
         // source cone
-        C[i][0] = bradford.m[i][0] * pl_cie_X(src)
-                + bradford.m[i][1] * 1
-                + bradford.m[i][2] * pl_cie_Z(src);
+        C[i][0] = m_cat97.m[i][0] * pl_cie_X(src)
+                + m_cat97.m[i][1] * 1
+                + m_cat97.m[i][2] * pl_cie_Z(src);
 
         // dest cone
-        C[i][1] = bradford.m[i][0] * pl_cie_X(dest)
-                + bradford.m[i][1] * 1
-                + bradford.m[i][2] * pl_cie_Z(dest);
+        C[i][1] = m_cat97.m[i][0] * pl_cie_X(dest)
+                + m_cat97.m[i][1] * 1
+                + m_cat97.m[i][2] * pl_cie_Z(dest);
     }
 
     // tmp := I * [Cd/Cs] * Ma
@@ -584,11 +585,12 @@ static void apply_chromatic_adaptation(struct pl_cie_xy src,
     for (int i = 0; i < 3; i++)
         tmp.m[i][i] = C[i][1] / C[i][0];
 
-    pl_matrix3x3_mul(&tmp, &bradford);
+    pl_matrix3x3_mul(&tmp, &m_cat97);
 
     // M := M * Ma^-1 * tmp
-    pl_matrix3x3_invert(&bradford);
-    pl_matrix3x3_mul(mat, &bradford);
+    struct pl_matrix3x3 ma_inv = m_cat97;
+    pl_matrix3x3_invert(&ma_inv);
+    pl_matrix3x3_mul(mat, &ma_inv);
     pl_matrix3x3_mul(mat, &tmp);
 }
 
@@ -605,24 +607,19 @@ const struct pl_cone_params pl_vision_achromatopsia = {PL_CONE_LMS,  0.0};
 struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
                                        const struct pl_raw_primaries *prim)
 {
-    // Hunt-Pointer-Estevez transformation matrix (LMS)
-    struct pl_matrix3x3 hpe = {{
-        { 0.4002, 0.7076, -0.0808},
-        {-0.2263, 1.1653,  0.0457},
-        { 0.0,    0.0,     0.9182},
-    }};
-
     // LMS<-RGB := LMS<-XYZ * XYZ<-RGB
-    struct pl_matrix3x3 rgb2lms = hpe;
+    struct pl_matrix3x3 rgb2lms = m_cat97;
     struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
     pl_matrix3x3_mul(&rgb2lms, &rgb2xyz);
 
-    // LMS versions of the two opposing primaries
+    // LMS versions of the two opposing primaries, plus neutral
     float lms_r[3] = {1.0, 0.0, 0.0},
-          lms_b[3] = {0.0, 0.0, 1.0};
+          lms_b[3] = {0.0, 0.0, 1.0},
+          lms_w[3] = {1.0, 1.0, 1.0};
 
     pl_matrix3x3_apply(&rgb2lms, lms_r);
     pl_matrix3x3_apply(&rgb2lms, lms_b);
+    pl_matrix3x3_apply(&rgb2lms, lms_w);
 
     float a, b, c = params->strength;
     struct pl_matrix3x3 distort;
@@ -633,8 +630,11 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
 
     case PL_CONE_L:
         // Solve to preserve neutral and blue
-        a = (lms_b[0] - lms_b[2]) / (lms_b[1] - lms_b[2]);
-        b = (lms_b[0] - lms_b[1]) / (lms_b[2] - lms_b[1]);
+        a = (lms_b[0] - lms_b[2] * lms_w[0] / lms_w[2]) /
+            (lms_b[1] - lms_b[2] * lms_w[1] / lms_w[2]);
+        b = (lms_b[0] - lms_b[1] * lms_w[0] / lms_w[1]) /
+            (lms_b[2] - lms_b[1] * lms_w[2] / lms_w[1]);
+        assert(fabs(a * lms_w[1] + b * lms_w[2] - lms_w[0]) < 1e-6);
 
         distort = (struct pl_matrix3x3) {{
             {            c, (1.0 - c) * a, (1.0 - c) * b},
@@ -645,8 +645,11 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
 
     case PL_CONE_M:
         // Solve to preserve neutral and blue
-        a = (lms_b[1] - lms_b[2]) / (lms_b[0] - lms_b[2]);
-        b = (lms_b[1] - lms_b[0]) / (lms_b[2] - lms_b[0]);
+        a = (lms_b[1] - lms_b[2] * lms_w[1] / lms_w[2]) /
+            (lms_b[0] - lms_b[2] * lms_w[0] / lms_w[2]);
+        b = (lms_b[1] - lms_b[0] * lms_w[1] / lms_w[0]) /
+            (lms_b[2] - lms_b[0] * lms_w[2] / lms_w[0]);
+        assert(fabs(a * lms_w[0] + b * lms_w[2] - lms_w[1]) < 1e-6);
 
         distort = (struct pl_matrix3x3) {{
             {          1.0,           0.0,           0.0},
@@ -657,8 +660,11 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
 
     case PL_CONE_S:
         // Solve to preserve neutral and red
-        a = (lms_r[2] - lms_r[1]) / (lms_r[0] - lms_r[1]);
-        b = (lms_r[2] - lms_r[0]) / (lms_r[1] - lms_r[0]);
+        a = (lms_r[2] - lms_r[1] * lms_w[2] / lms_w[1]) /
+            (lms_r[0] - lms_r[1] * lms_w[0] / lms_w[1]);
+        b = (lms_r[2] - lms_r[0] * lms_w[2] / lms_w[0]) /
+            (lms_r[1] - lms_r[0] * lms_w[1] / lms_w[0]);
+        assert(fabs(a * lms_w[0] + b * lms_w[1] - lms_w[2]) < 1e-6);
 
         distort = (struct pl_matrix3x3) {{
             {          1.0,           0.0,           0.0},
@@ -669,45 +675,56 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
 
     case PL_CONE_LM:
         // Solve to preserve neutral
-        a = b = 1.0 - c;
+        a = lms_w[0] / lms_w[2];
+        b = lms_w[1] / lms_w[2];
+
         distort = (struct pl_matrix3x3) {{
-            {c, 0, a},
-            {0, c, b},
-            {0, 0, 1},
+            {            c,           0.0, (1.0 - c) * a},
+            {          0.0,             c, (1.0 - c) * b},
+            {          0.0,           0.0,           1.0},
         }};
         break;
 
     case PL_CONE_MS:
         // Solve to preserve neutral
-        a = b = 1.0 - c;
+        a = lms_w[1] / lms_w[0];
+        b = lms_w[2] / lms_w[0];
+
         distort = (struct pl_matrix3x3) {{
-            {1, 0, 0},
-            {a, c, 0},
-            {b, 0, c},
+            {          1.0,           0.0,           0.0},
+            {(1.0 - c) * a,             c,           0.0},
+            {(1.0 - c) * b,           0.0,             c},
         }};
         break;
 
     case PL_CONE_LS:
         // Solve to preserve neutral
-        a = b = 1.0 - c;
+        a = lms_w[0] / lms_w[1];
+        b = lms_w[2] / lms_w[1];
+
         distort = (struct pl_matrix3x3) {{
-            {c, a, 0},
-            {0, 1, 0},
-            {0, b, c},
+            {            c, (1.0 - c) * a,           0.0},
+            {          0.0,           1.0,           0.0},
+            {          0.0, (1.0 - c) * b,             c},
         }};
         break;
 
-    case PL_CONE_LMS:
+    case PL_CONE_LMS: {
         // Rod cells only, which can be modelled somewhat as a combination of
         // L and M cones. Either way, this is pushing the limits of the our
         // color model, so this is only a rough approximation.
-        a = 1.0 - c;
-        distort = (struct pl_matrix3x3) {{
-            {c + a * 0.3605,     a * 0.6415,     a * -0.002},
-            {    a * 0.3605, c + a * 0.6415,     a * -0.002},
-            {    a * 0.3605,     a * 0.6415, c + a * -0.002},
-        }};
+        const float w[3] = {0.3605, 0.6415, -0.002};
+        assert(fabs(w[0] + w[1] + w[2] - 1.0) < 1e-6);
+
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                distort.m[i][j] = (1.0 - c) * w[j] * lms_w[i] / lms_w[j];
+                if (i == j)
+                    distort.m[i][j] += c;
+            }
+        }
         break;
+    }
 
     default: abort();
     }
