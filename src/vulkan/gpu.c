@@ -220,9 +220,13 @@ static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
 {
     pl_handle_caps ret = 0;
 
-#if VK_HAVE_UNIX
+#ifdef VK_HAVE_UNIX
     if (vk->vkGetSemaphoreFdKHR)
         ret |= PL_HANDLE_FD;
+#endif
+#ifdef VK_HAVE_WIN32
+    if (vk->vkGetSemaphoreWin32HandleKHR)
+        ret |= (PL_HANDLE_WIN32 | PL_HANDLE_WIN32_KMT);
 #endif
 
     return ret;
@@ -758,6 +762,12 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     switch (params->handle_type) {
     case PL_HANDLE_FD:
         ext_info.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+        break;
+    case PL_HANDLE_WIN32:
+        ext_info.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
+        break;
+    case PL_HANDLE_WIN32_KMT:
+        ext_info.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
         break;
     }
 
@@ -2500,6 +2510,15 @@ static void vk_sync_destroy(const struct pl_gpu *gpu, struct pl_sync *sync)
             close(sync->signal_handle.fd);
     }
 #endif
+#ifdef VK_HAVE_WIN32
+    if (slab->handle_type == PL_HANDLE_WIN32) {
+        if (sync->wait_handle.handle != NULL)
+            CloseHandle(sync->wait_handle.handle);
+        if (sync->signal_handle.handle != NULL)
+            CloseHandle(sync->signal_handle.handle);
+    }
+    // PL_HANDLE_WIN32_KMT is just an identifier. It doesn't get closed.
+#endif
 
     vkDestroySemaphore(vk->dev, sync_vk->wait, VK_ALLOC);
     vkDestroySemaphore(vk->dev, sync_vk->signal, VK_ALLOC);
@@ -2539,6 +2558,16 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
         sync->wait_handle.fd = -1;
         sync->signal_handle.fd = -1;
         break;
+    case PL_HANDLE_WIN32:
+        einfo.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
+        sync->wait_handle.handle = NULL;
+        sync->signal_handle.handle = NULL;
+        break;
+    case PL_HANDLE_WIN32_KMT:
+        einfo.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
+        sync->wait_handle.handle = NULL;
+        sync->signal_handle.handle = NULL;
+        break;
     }
 
     const VkSemaphoreCreateInfo sinfo = {
@@ -2560,6 +2589,27 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
 
         finfo.semaphore = sync_vk->signal;
         VK(vk->vkGetSemaphoreFdKHR(vk->dev, &finfo, &sync->signal_handle.fd));
+    }
+#endif
+#ifdef VK_HAVE_WIN32
+    VkExternalSemaphoreHandleTypeFlagBits win32_handle_type = 0;
+    if (slab->handle_type == PL_HANDLE_WIN32) {
+        win32_handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
+    } else if (slab->handle_type == PL_HANDLE_WIN32_KMT) {
+        win32_handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
+    }
+    if (win32_handle_type) {
+        VkSemaphoreGetWin32HandleInfoKHR handle_info = {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_WIN32_HANDLE_INFO_KHR,
+            .semaphore = sync_vk->wait,
+            .handleType = win32_handle_type,
+        };
+        VK(vk->vkGetSemaphoreWin32HandleKHR(vk->dev, &handle_info,
+                                            &sync->wait_handle.handle));
+
+        handle_info.semaphore = sync_vk->signal;
+        VK(vk->vkGetSemaphoreWin32HandleKHR(vk->dev, &handle_info,
+                                            &sync->signal_handle.handle));
     }
 #endif
 

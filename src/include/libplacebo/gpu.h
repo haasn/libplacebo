@@ -57,15 +57,21 @@ enum {
 // communication of such an interoperation.
 typedef uint64_t pl_handle_caps;
 enum pl_handle_type {
-    PL_HANDLE_FD    = (1 << 0), // `int fd` for POSIX-style APIs
+    PL_HANDLE_FD        = (1 << 0), // `int fd` for POSIX-style APIs
+    PL_HANDLE_WIN32     = (1 << 1), // `HANDLE` for win32 API
+    PL_HANDLE_WIN32_KMT = (1 << 2), // `HANDLE` for pre-Windows-8 win32 API
 };
 
 // Wrapper for the handle used to communicate a shared resource externally.
 // This handle is owned by the `pl_gpu` - if a user wishes to use it in a way
 // that takes over ownership (e.g. importing into some APIs), they must clone
-// the handle before doing so (e.g. using `dup` for fds).
+// the handle before doing so (e.g. using `dup` for fds). It is important to
+// read the external API documentation _very_ carefully as different handle
+// types may be managed in different ways. (eg: CUDA takes ownership of an fd,
+// but does not take ownership of a win32 handle).
 union pl_handle {
     int fd;         // PL_HANDLE_FD
+    void *handle;   // PL_HANDLE_WIN32 / PL_HANDLE_WIN32_KMT
 };
 
 // Structure encapsulating memory that is shared between libplacebo and the

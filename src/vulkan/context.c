@@ -62,6 +62,14 @@ static const struct vk_ext vk_device_extensions[] = {
             VK_DEV_FUN(vkGetMemoryFdKHR),
             {0},
         },
+#ifdef VK_HAVE_WIN32
+    }, {
+        .name = VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
+        .funs = (struct vk_ext_fun[]) {
+            VK_DEV_FUN(vkGetMemoryWin32HandleKHR),
+            {0},
+        },
+#endif
     }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
         .funs = (struct vk_ext_fun[]) {{0}},
@@ -71,6 +79,14 @@ static const struct vk_ext vk_device_extensions[] = {
             VK_DEV_FUN(vkGetSemaphoreFdKHR),
             {0},
         },
+#ifdef VK_HAVE_WIN32
+    }, {
+        .name = VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
+        .funs = (struct vk_ext_fun[]) {
+            VK_DEV_FUN(vkGetSemaphoreWin32HandleKHR),
+            {0},
+        },
+#endif
     }
 };
 

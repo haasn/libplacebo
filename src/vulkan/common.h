@@ -24,6 +24,10 @@
 #define VK_HAVE_UNIX 1
 #endif
 
+#if defined(_WIN32)
+#define VK_HAVE_WIN32 1
+#endif
+
 // Vulkan allows the optional use of a custom allocator. We don't need one but
 // mark this parameter with a better name in case we ever decide to change this
 // in the future. (And to make the code more readable)
@@ -83,4 +87,8 @@ struct vk_ctx {
     VK_FUN(vkCmdPushDescriptorSetKHR);
     VK_FUN(vkGetMemoryFdKHR);
     VK_FUN(vkGetSemaphoreFdKHR);
+#ifdef VK_HAVE_WIN32
+    VK_FUN(vkGetMemoryWin32HandleKHR);
+    VK_FUN(vkGetSemaphoreWin32HandleKHR);
+#endif
 };
