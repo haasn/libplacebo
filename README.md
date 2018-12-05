@@ -1,6 +1,7 @@
 # libplacebo
 
 ![gitlab-ci badge](https://code.videolan.org/videolan/libplacebo/badges/master/build.svg)
+![gitlab-ci coverage](https://code.videolan.org/videolan/libplacebo/badges/master/coverage.svg)
 
 **libplacebo** is essentially the core rendering algorithms and ideas of
 [mpv](https://mpv.io) turned into a library. This grew out of an interest to
