@@ -39,9 +39,8 @@ struct pl_rect2df {
 };
 
 struct pl_rect3df {
-    float x0, y0;
-    float x1, y1;
-    float z0, z1;
+    float x0, y0, z0;
+    float x1, y1, z1;
 };
 
 // These macros will work for any of the above pl_rect variants (with enough
