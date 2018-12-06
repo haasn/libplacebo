@@ -67,7 +67,10 @@ static const struct vk_ext vk_device_extensions[] = {
         },
     }, {
         .name = VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-        .funs = (struct vk_ext_fun[]) {{0}},
+        .funs = (struct vk_ext_fun[]) {
+            VK_INST_FUN(vkGetPhysicalDeviceExternalBufferPropertiesKHR),
+            {0}
+        },
     }, {
         .name = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
         .funs = (struct vk_ext_fun[]) {

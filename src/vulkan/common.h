@@ -85,6 +85,7 @@ struct vk_ctx {
 
     // Instance-level function pointers
     VK_FUN(vkGetPhysicalDeviceProperties2KHR);
+    VK_FUN(vkGetPhysicalDeviceExternalBufferPropertiesKHR);
 
     // Device-level function pointers
     VK_FUN(vkCmdPushDescriptorSetKHR);

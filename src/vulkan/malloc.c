@@ -76,6 +76,9 @@ struct vk_slab {
 // combination of buffer type and memory selection parameters. This shouldn't
 // actually be that many in practice, because some combinations simply never
 // occur, and others will generally be the same for the same objects.
+//
+// Note: `vk_heap` addresses are not immutable, so we musn't expose any dangling
+// references to a `vk_heap` from e.g. `vk_memslice.priv = vk_slab`.
 struct vk_heap {
     VkBufferUsageFlags usage;    // the buffer usage type (or 0)
     VkMemoryPropertyFlags flags; // the memory type flags (or 0)
@@ -144,6 +147,44 @@ static bool find_best_memtype(struct vk_malloc *ma, uint32_t typeBits,
     return false;
 }
 
+static bool buf_export_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
+                             enum pl_handle_type handle_type)
+{
+    if (!handle_type)
+        return true;
+
+    if (!vk->vkGetPhysicalDeviceExternalBufferPropertiesKHR)
+        return false;
+
+    VkPhysicalDeviceExternalBufferInfoKHR info = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO_KHR,
+        .usage = usage,
+        .handleType = vk_handle_type(handle_type),
+    };
+
+    VkExternalBufferPropertiesKHR props = {
+        .sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES_KHR,
+    };
+
+    vk->vkGetPhysicalDeviceExternalBufferPropertiesKHR(vk->physd, &info, &props);
+    VkExternalMemoryFeatureFlagsKHR flags;
+    flags = props.externalMemoryProperties.externalMemoryFeatures;
+
+    // No support for this handle type;
+    if (!(props.externalMemoryProperties.compatibleHandleTypes & info.handleType))
+        return false;
+
+    // We currently only care about exporting memory, not importing
+    if (!(flags & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR))
+        return false;
+
+    // We can't handle VkMemoryDedicatedAllocateInfo currently. (Maybe soon?)
+    if (flags & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT_KHR)
+        return false;
+
+    return true;
+}
+
 static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
                                   size_t size)
 {
@@ -205,6 +246,12 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
             .queueFamilyIndexCount = vk->num_pools,
             .pQueueFamilyIndices = qfs,
         };
+
+        if (!buf_export_check(vk, binfo.usage, slab->handle_type)) {
+            PL_ERR(vk, "Failed allocating shared memory buffer: possibly "
+                   "the handle type is unsupported?");
+            goto error;
+        }
 
         VK(vkCreateBuffer(vk->dev, &binfo, VK_ALLOC, &slab->buffer));
 
