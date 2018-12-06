@@ -722,28 +722,6 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
 
-    // Double-check physical image format limits and fail if invalid
-    VkImageFormatProperties iprop;
-    VkFormat ifmt = params->format->emulated ? fmt->emufmt : fmt->ifmt;
-    VkResult res = vkGetPhysicalDeviceImageFormatProperties(vk->physd, ifmt,
-            tex_vk->type, VK_IMAGE_TILING_OPTIMAL, usage, 0, &iprop);
-
-    if (res == VK_ERROR_FORMAT_NOT_SUPPORTED) {
-        return NULL;
-    } else {
-        VK_ASSERT(res, "Querying image format properties");
-    }
-
-    VkExtent3D max = iprop.maxExtent;
-    if (params->w > max.width || params->h > max.height || params->d > max.depth)
-    {
-        PL_ERR(gpu, "Requested image size %dx%dx%d exceeds the maximum allowed "
-               "dimensions %dx%dx%d for vulkan image format %x",
-               params->w, params->h, params->d, max.width, max.height, max.depth,
-               (unsigned) fmt->ifmt);
-        return NULL;
-    }
-
     // FIXME: Since we can't keep track of queue family ownership properly,
     // and we don't know in advance what types of queue families this image
     // will belong to, we're forced to share all of our images between all
@@ -761,7 +739,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = params->handle_type ? &ext_info : NULL,
         .imageType = tex_vk->type,
-        .format = ifmt,
+        .format = params->format->emulated ? fmt->emufmt : fmt->ifmt,
         .extent = (VkExtent3D) {
             .width  = params->w,
             .height = PL_MAX(1, params->h),
@@ -779,9 +757,64 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         .pQueueFamilyIndices = qfs,
     };
 
+    // Double-check physical image format limits and fail if invalid
+    VkPhysicalDeviceExternalImageFormatInfoKHR ext_pinfo = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR,
+        .handleType = ext_info.handleTypes,
+    };
+
+    VkPhysicalDeviceImageFormatInfo2KHR pinfo = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR,
+        .pNext = params->handle_type ? &ext_pinfo : NULL,
+        .format = iinfo.format,
+        .type = iinfo.imageType,
+        .tiling = iinfo.tiling,
+        .usage = iinfo.usage,
+        .flags = iinfo.flags,
+    };
+
+    VkExternalImageFormatPropertiesKHR ext_props = {
+        .sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES_KHR,
+    };
+
+    VkImageFormatProperties2KHR props = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2_KHR,
+        .pNext = params->handle_type ? &ext_props : NULL,
+    };
+
+    VkResult res;
+    res = vk->vkGetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
+    if (res == VK_ERROR_FORMAT_NOT_SUPPORTED) {
+        goto error;
+    } else {
+        VK_ASSERT(res, "Querying image format properties");
+    }
+
+    VkExtent3D max = props.imageFormatProperties.maxExtent;
+    if (params->w > max.width || params->h > max.height || params->d > max.depth)
+    {
+        PL_ERR(gpu, "Requested image size %dx%dx%d exceeds the maximum allowed "
+               "dimensions %dx%dx%d for vulkan image format %x",
+               params->w, params->h, params->d, max.width, max.height, max.depth,
+               (unsigned) iinfo.format);
+        goto error;
+    }
+
+    // Ensure the handle types are supported
+    if (params->handle_type) {
+        bool ok = vk_external_mem_check(&ext_props.externalMemoryProperties,
+                                        params->handle_type);
+        if (!ok) {
+            PL_ERR(gpu, "Requested handle type is not compatible with the "
+                   "specified combination of image parameters. Possibly the "
+                   "handle type is unsupported altogether?");
+            goto error;
+        }
+    }
+
     VK(vkCreateImage(vk->dev, &iinfo, VK_ALLOC, &tex_vk->img));
-    tex_vk->img_fmt = ifmt;
-    tex_vk->usage_flags = usage;
+    tex_vk->img_fmt = iinfo.format;
+    tex_vk->usage_flags = iinfo.usage;
 
     VkMemoryPropertyFlags memFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     VkMemoryRequirements reqs;

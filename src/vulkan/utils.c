@@ -139,3 +139,23 @@ vk_handle_type(enum pl_handle_type handle_type)
 
     abort();
 }
+
+bool vk_external_mem_check(const VkExternalMemoryPropertiesKHR *props,
+                           enum pl_handle_type handle_type)
+{
+    VkExternalMemoryFeatureFlagsKHR flags = props->externalMemoryFeatures;
+
+    // No support for this handle type;
+    if (!(props->compatibleHandleTypes & vk_handle_type(handle_type)))
+        return false;
+
+    // We currently only care about exporting memory, not importing
+    if (!(flags & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR))
+        return false;
+
+    // We can't handle VkMemoryDedicatedAllocateInfo currently. (Maybe soon?)
+    if (flags & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT_KHR)
+        return false;
+
+    return true;
+}

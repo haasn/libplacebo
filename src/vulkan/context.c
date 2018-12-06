@@ -54,6 +54,7 @@ static const char *vk_instance_extensions[] = {
 // Functions associated with mandatory instance extensions
 static const struct vk_ext_fun vk_inst_funs[] = {
     VK_INST_FUN(vkGetPhysicalDeviceProperties2KHR),
+    VK_INST_FUN(vkGetPhysicalDeviceImageFormatProperties2KHR),
 };
 
 // Table of vulkan device extensions and functions they load, including

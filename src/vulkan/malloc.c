@@ -167,22 +167,7 @@ static bool buf_export_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
     };
 
     vk->vkGetPhysicalDeviceExternalBufferPropertiesKHR(vk->physd, &info, &props);
-    VkExternalMemoryFeatureFlagsKHR flags;
-    flags = props.externalMemoryProperties.externalMemoryFeatures;
-
-    // No support for this handle type;
-    if (!(props.externalMemoryProperties.compatibleHandleTypes & info.handleType))
-        return false;
-
-    // We currently only care about exporting memory, not importing
-    if (!(flags & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR))
-        return false;
-
-    // We can't handle VkMemoryDedicatedAllocateInfo currently. (Maybe soon?)
-    if (flags & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT_KHR)
-        return false;
-
-    return true;
+    return vk_external_mem_check(&props.externalMemoryProperties, handle_type);
 }
 
 static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
