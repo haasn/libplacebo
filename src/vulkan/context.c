@@ -88,7 +88,10 @@ static const struct vk_ext vk_device_extensions[] = {
 #endif
     }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
-        .funs = (struct vk_ext_fun[]) {{0}},
+        .funs = (struct vk_ext_fun[]) {
+            VK_INST_FUN(vkGetPhysicalDeviceExternalSemaphorePropertiesKHR),
+            {0},
+        },
     }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
         .funs = (struct vk_ext_fun[]) {

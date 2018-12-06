@@ -397,29 +397,19 @@ void vk_malloc_destroy(struct vk_malloc **ma_ptr)
 pl_handle_caps vk_malloc_handle_caps(struct vk_malloc *ma)
 {
     struct vk_ctx *vk = ma->vk;
-    pl_handle_caps ret = 0;
+    pl_handle_caps caps = 0;
 
-    static const pl_handle_caps cap_list[] = {
-#ifdef VK_HAVE_UNIX
-        PL_HANDLE_FD,
-#endif
-#ifdef VK_HAVE_WIN32
-        PL_HANDLE_WIN32,
-        PL_HANDLE_WIN32_KMT,
-#endif
-    };
-
-    for (int i = 0; i < PL_ARRAY_SIZE(cap_list); i++) {
+    for (int i = 0; vk_handle_list[i]; i++) {
         // Try seeing if we could allocate a "basic" buffer using these
         // capabilities, with no fancy buffer usage. More specific checks will
         // happen down the line at VkBuffer creation time, but this should give
         // us a rough idea of what the driver supports.
-        enum pl_handle_type cap = cap_list[i];
-        if (buf_export_check(vk, VK_BUFFER_USAGE_TRANSFER_DST_BIT, cap))
-            ret |= cap;
+        enum pl_handle_type type = vk_handle_list[i];
+        if (buf_export_check(vk, VK_BUFFER_USAGE_TRANSFER_DST_BIT, type))
+            caps |= type;
     }
 
-    return ret;
+    return caps;
 }
 
 void vk_free_memslice(struct vk_malloc *ma, struct vk_memslice slice)

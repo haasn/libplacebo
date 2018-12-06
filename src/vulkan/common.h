@@ -20,11 +20,11 @@
 #include "../common.h"
 #include "../context.h"
 
-#if defined(__unix__)
+#ifdef __unix__
 #define VK_HAVE_UNIX 1
 #endif
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #define VK_HAVE_WIN32 1
 #endif
 
@@ -87,6 +87,7 @@ struct vk_ctx {
     VK_FUN(vkGetPhysicalDeviceProperties2KHR);
     VK_FUN(vkGetPhysicalDeviceImageFormatProperties2KHR);
     VK_FUN(vkGetPhysicalDeviceExternalBufferPropertiesKHR);
+    VK_FUN(vkGetPhysicalDeviceExternalSemaphorePropertiesKHR);
 
     // Device-level function pointers
     VK_FUN(vkCmdPushDescriptorSetKHR);

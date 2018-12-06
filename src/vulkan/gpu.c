@@ -218,18 +218,33 @@ static void vk_setup_formats(struct pl_gpu *gpu)
 
 static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
 {
-    pl_handle_caps ret = 0;
+    pl_handle_caps caps = 0;
 
-#ifdef VK_HAVE_UNIX
-    if (vk->vkGetSemaphoreFdKHR)
-        ret |= PL_HANDLE_FD;
-#endif
-#ifdef VK_HAVE_WIN32
-    if (vk->vkGetSemaphoreWin32HandleKHR)
-        ret |= (PL_HANDLE_WIN32 | PL_HANDLE_WIN32_KMT);
-#endif
+    if (!vk->vkGetPhysicalDeviceExternalSemaphorePropertiesKHR)
+        return caps;
 
-    return ret;
+    for (int i = 0; vk_handle_list[i]; i++) {
+        enum pl_handle_type type = vk_handle_list[i];
+
+        VkPhysicalDeviceExternalSemaphoreInfoKHR info = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO_KHR,
+            .handleType = vk_handle_type(type),
+        };
+
+        VkExternalSemaphorePropertiesKHR props = {
+            .sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES_KHR,
+        };
+
+        vk->vkGetPhysicalDeviceExternalSemaphorePropertiesKHR(vk->physd, &info, &props);
+        VkExternalSemaphoreFeatureFlagsKHR flags = props.externalSemaphoreFeatures;
+        if ((props.compatibleHandleTypes & info.handleType) &&
+            (flags & VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT_KHR))
+        {
+            caps |= type;
+        }
+    }
+
+    return caps;
 }
 
 const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)

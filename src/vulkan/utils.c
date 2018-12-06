@@ -159,3 +159,14 @@ bool vk_external_mem_check(const VkExternalMemoryPropertiesKHR *props,
 
     return true;
 }
+
+const enum pl_handle_type vk_handle_list[] = {
+#ifdef VK_HAVE_UNIX
+        PL_HANDLE_FD,
+#endif
+#ifdef VK_HAVE_WIN32
+        PL_HANDLE_WIN32,
+        PL_HANDLE_WIN32_KMT,
+#endif
+        0
+};
