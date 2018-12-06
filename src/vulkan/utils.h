@@ -23,6 +23,9 @@
 const char *vk_res_str(VkResult res);
 const char *vk_obj_str(VkDebugReportObjectTypeEXT obj);
 
+// Enum translation boilerplate
+VkExternalMemoryHandleTypeFlagBitsKHR vk_handle_type(enum pl_handle_type);
+
 // Convenience macros to simplify a lot of common boilerplate
 #define VK_ASSERT(res, str)                               \
     do {                                                  \

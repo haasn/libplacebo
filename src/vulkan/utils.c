@@ -121,3 +121,21 @@ const char *vk_obj_str(VkDebugReportObjectTypeEXT obj)
     default: return "unknown object";
     }
 }
+
+VkExternalMemoryHandleTypeFlagBitsKHR
+vk_handle_type(enum pl_handle_type handle_type)
+{
+    if (!handle_type)
+        return 0;
+
+    switch (handle_type) {
+    case PL_HANDLE_FD:
+        return VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
+    case PL_HANDLE_WIN32:
+        return VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
+    case PL_HANDLE_WIN32_KMT:
+        return VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
+    }
+
+    abort();
+}

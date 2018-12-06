@@ -756,20 +756,8 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
 
     VkExternalMemoryImageCreateInfoKHR ext_info = {
         .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_KHR,
-        .handleTypes = 0,
+        .handleTypes = vk_handle_type(params->handle_type),
     };
-
-    switch (params->handle_type) {
-    case PL_HANDLE_FD:
-        ext_info.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
-        break;
-    case PL_HANDLE_WIN32:
-        ext_info.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
-        break;
-    case PL_HANDLE_WIN32_KMT:
-        ext_info.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
-        break;
-    }
 
     VkImageCreateInfo iinfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -2549,22 +2537,16 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
 
     VkExportSemaphoreCreateInfoKHR einfo = {
         .sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO_KHR,
-        .handleTypes = 0,
+        .handleTypes = vk_handle_type(handle_type),
     };
 
     switch (handle_type) {
     case PL_HANDLE_FD:
-        einfo.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
         sync->wait_handle.fd = -1;
         sync->signal_handle.fd = -1;
         break;
     case PL_HANDLE_WIN32:
-        einfo.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
-        sync->wait_handle.handle = NULL;
-        sync->signal_handle.handle = NULL;
-        break;
     case PL_HANDLE_WIN32_KMT:
-        einfo.handleTypes |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
         sync->wait_handle.handle = NULL;
         sync->signal_handle.handle = NULL;
         break;
@@ -2583,27 +2565,26 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
         VkSemaphoreGetFdInfoKHR finfo = {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR,
             .semaphore = sync_vk->wait,
-            .handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR,
+            .handleType = einfo.handleTypes,
         };
+
         VK(vk->vkGetSemaphoreFdKHR(vk->dev, &finfo, &sync->wait_handle.fd));
 
         finfo.semaphore = sync_vk->signal;
         VK(vk->vkGetSemaphoreFdKHR(vk->dev, &finfo, &sync->signal_handle.fd));
     }
 #endif
+
 #ifdef VK_HAVE_WIN32
-    VkExternalSemaphoreHandleTypeFlagBits win32_handle_type = 0;
-    if (slab->handle_type == PL_HANDLE_WIN32) {
-        win32_handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
-    } else if (slab->handle_type == PL_HANDLE_WIN32_KMT) {
-        win32_handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
-    }
-    if (win32_handle_type) {
+    if (slab->handle_type == PL_HANDLE_WIN32 ||
+        slab->handle_type == PL_HANDLE_WIN32_KMT)
+    {
         VkSemaphoreGetWin32HandleInfoKHR handle_info = {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_WIN32_HANDLE_INFO_KHR,
             .semaphore = sync_vk->wait,
-            .handleType = win32_handle_type,
+            .handleType = einfo.handleTypes,
         };
+
         VK(vk->vkGetSemaphoreWin32HandleKHR(vk->dev, &handle_info,
                                             &sync->wait_handle.handle));
 

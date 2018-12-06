@@ -151,6 +151,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
     struct vk_slab *slab = talloc_ptrtype(NULL, slab);
     *slab = (struct vk_slab) {
         .size = size,
+        .handle_type = heap->handle_type,
     };
 
     TARRAY_APPEND(slab, slab->regions, slab->num_regions, (struct vk_region) {
@@ -158,28 +159,19 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
         .end   = slab->size,
     });
 
-    VkExternalMemoryHandleTypeFlagsKHR handle_type_vk = 0;
-    switch (heap->handle_type) {
+    switch (slab->handle_type) {
     case PL_HANDLE_FD:
-        handle_type_vk = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
-        slab->handle_type = PL_HANDLE_FD;
         slab->handle.fd = -1;
         break;
     case PL_HANDLE_WIN32:
-        handle_type_vk = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
-        slab->handle_type = PL_HANDLE_WIN32;
-        slab->handle.handle = NULL;
-        break;
     case PL_HANDLE_WIN32_KMT:
-        handle_type_vk = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
-        slab->handle_type = PL_HANDLE_WIN32_KMT;
         slab->handle.handle = NULL;
         break;
     }
 
     VkExportMemoryAllocateInfoKHR ext_info = {
         .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_KHR,
-        .handleTypes = handle_type_vk,
+        .handleTypes = vk_handle_type(slab->handle_type),
     };
 
     VkMemoryAllocateInfo minfo = {
@@ -200,7 +192,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
 
         VkExternalMemoryBufferCreateInfoKHR ext_buf_info = {
             .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR,
-            .handleTypes = handle_type_vk,
+            .handleTypes = ext_info.handleTypes,
         };
 
         VkBufferCreateInfo binfo = {
@@ -245,12 +237,13 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
         VkMemoryGetFdInfoKHR fd_info = {
             .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
             .memory = slab->mem,
-            .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR,
+            .handleType = ext_info.handleTypes,
         };
 
         VK(vk->vkGetMemoryFdKHR(vk->dev, &fd_info, &slab->handle.fd));
     }
 #endif
+
 #ifdef VK_HAVE_WIN32
     if (slab->handle_type == PL_HANDLE_WIN32 ||
         slab->handle_type == PL_HANDLE_WIN32_KMT)
@@ -258,7 +251,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
         VkMemoryGetWin32HandleInfoKHR handle_info = {
             .sType = VK_STRUCTURE_TYPE_MEMORY_GET_WIN32_HANDLE_INFO_KHR,
             .memory = slab->mem,
-            .handleType = handle_type_vk,
+            .handleType = ext_info.handleTypes,
         };
 
         VK(vk->vkGetMemoryWin32HandleKHR(vk->dev, &handle_info,
