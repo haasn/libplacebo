@@ -83,6 +83,9 @@ struct vk_ctx {
     struct vk_signal **signals;
     int num_signals;
 
+    // Instance-level function pointers
+    VK_FUN(vkGetPhysicalDeviceProperties2KHR);
+
     // Device-level function pointers
     VK_FUN(vkCmdPushDescriptorSetKHR);
     VK_FUN(vkGetMemoryFdKHR);

@@ -277,8 +277,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
             .pNext = &id_props,
         };
 
-        VK_LOAD_FUN(vk->inst, vkGetPhysicalDeviceProperties2KHR);
-        vkGetPhysicalDeviceProperties2KHR(vk->physd, &props);
+        vk->vkGetPhysicalDeviceProperties2KHR(vk->physd, &props);
         assert(sizeof(gpu->uuid) == VK_UUID_SIZE);
         memcpy(gpu->uuid, id_props.deviceUUID, sizeof(gpu->uuid));
     }
@@ -293,8 +292,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
             .pNext = &pushd,
         };
 
-        VK_LOAD_FUN(vk->inst, vkGetPhysicalDeviceProperties2KHR);
-        vkGetPhysicalDeviceProperties2KHR(vk->physd, &props);
+        vk->vkGetPhysicalDeviceProperties2KHR(vk->physd, &props);
         p->max_push_descriptors = pushd.maxPushDescriptors;
     }
 

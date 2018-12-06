@@ -25,6 +25,7 @@ const struct pl_vk_inst_params pl_vk_inst_default_params = {0};
 struct vk_ext_fun {
     const char *name;
     size_t offset;
+    bool device_level;
 };
 
 struct vk_ext {
@@ -32,20 +33,31 @@ struct vk_ext {
     struct vk_ext_fun *funs;
 };
 
-#define VK_DEV_FUN(N)                       \
+#define VK_INST_FUN(N)                      \
     { .name = #N,                           \
       .offset = offsetof(struct vk_ctx, N), \
     }
 
-// Table of vulkan instance extensions
-// TODO: add support for loading function pointers
+#define VK_DEV_FUN(N)                       \
+    { .name = #N,                           \
+      .offset = offsetof(struct vk_ctx, N), \
+      .device_level = true,                 \
+    }
+
+// Table of optional vulkan instance extensions
 static const char *vk_instance_extensions[] = {
     VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME,
     VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
     VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
 };
 
-// Table of vulkan device extensions and functions they load
+// Functions associated with mandatory instance extensions
+static const struct vk_ext_fun vk_inst_funs[] = {
+    VK_INST_FUN(vkGetPhysicalDeviceProperties2KHR),
+};
+
+// Table of vulkan device extensions and functions they load, including
+// functions exported by dependent instance-level extensions
 static const struct vk_ext vk_device_extensions[] = {
     {
         .name = VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
@@ -490,9 +502,13 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     if (params->surface)
         TARRAY_APPEND(vk, *exts, *num_exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
-    // Add all extensions we can benefit from, and remember their functions
+    // Keep track of function pointers we need to load
     const struct vk_ext_fun **ext_funs = NULL;
     int num_ext_funs = 0;
+    for (int i = 0; i < PL_ARRAY_SIZE(vk_inst_funs); i++)
+        TARRAY_APPEND(tmp, ext_funs, num_ext_funs, &vk_inst_funs[i]);
+
+    // Add all optional device-level extensions extensions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_device_extensions); i++) {
         const struct vk_ext *ext = &vk_device_extensions[i];
         for (int n = 0; n < num_exts_avail; n++) {
@@ -547,8 +563,12 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     // Load all of the functions from the extensions we enabled
     for (int i = 0; i < num_ext_funs; i++) {
         const struct vk_ext_fun *fun = ext_funs[i];
-        void *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
-        *((PFN_vkVoidFunction *) pfn) = vkGetDeviceProcAddr(vk->dev, fun->name);
+        PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
+        if (fun->device_level) {
+            *pfn = vkGetDeviceProcAddr(vk->dev, fun->name);
+        } else {
+            *pfn = vkGetInstanceProcAddr(vk->inst, fun->name);
+        };
     }
 
     // Create the command pools and memory allocator
