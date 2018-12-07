@@ -197,11 +197,12 @@ configure_file(
   configuration: conf_internal
 )
 
+inc = include_directories('./include')
 lib = library('placebo', sources,
   install: true,
   dependencies: build_deps,
   soversion: apiver,
-  include_directories: include_directories('./include'),
+  include_directories: inc,
   link_args: link_args,
 )
 
@@ -222,6 +223,7 @@ pkg.generate(
 tdep = declare_dependency(
     link_with: lib,
     dependencies: build_deps,
+    include_directories: inc,
 )
 
 if get_option('tests')
