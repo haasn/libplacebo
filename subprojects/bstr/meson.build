@@ -10,13 +10,15 @@ deps = [
   subproject('xtalloc').get_variable('dep'),
 ]
 
+inc = include_directories('include')
 lib = static_library('bstr',
   sources,
+  include_directories: inc,
   dependencies: deps,
   install: false,
 )
 
 dep = declare_dependency(
-  include_directories: include_directories('include'),
-  link_with: lib
+  include_directories: inc,
+  link_with: lib,
 )

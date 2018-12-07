@@ -24,7 +24,7 @@
 #include <stdio.h>
 #include <limits.h>
 
-#include "include/bstr.h"
+#include <bstr.h>
 #include "ctype.h"
 
 #define MIN(a, b) ((a) > (b) ? (b) : (a))

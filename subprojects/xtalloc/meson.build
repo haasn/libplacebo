@@ -10,13 +10,15 @@ deps = [
   dependency('threads'),
 ]
 
+inc = include_directories('include')
 lib = static_library('xtalloc',
   sources,
+  include_directories: inc,
   dependencies: deps,
   install: false,
 )
 
 dep = declare_dependency(
-  include_directories: include_directories('include'),
+  include_directories: inc,
   link_with: lib
 )
