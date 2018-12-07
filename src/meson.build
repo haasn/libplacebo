@@ -197,12 +197,11 @@ configure_file(
   configuration: conf_internal
 )
 
-inc = include_directories('./include')
 lib = library('placebo', sources,
   install: true,
   dependencies: build_deps,
   soversion: apiver,
-  include_directories: inc,
+  include_directories: include_directories('./include'),
   link_args: link_args,
 )
 
@@ -220,14 +219,16 @@ pkg.generate(
 
 
 # Tests
-tdeps = [ declare_dependency(link_with: lib) ]
+tdep = declare_dependency(
+    link_with: lib,
+    dependencies: build_deps,
+)
 
 if get_option('tests')
   foreach t : tests
     e = executable('test.' + t, 'tests/' + t,
-        dependencies: build_deps + tdeps,
-        objects: lib.extract_all_objects(),
-        include_directories: inc
+        objects: lib.extract_all_objects(recursive: false),
+        dependencies: tdep,
     )
 
     test(t, e)
@@ -239,10 +240,6 @@ if get_option('bench')
     error('Compiling the benchmark suite requires vulkan support!')
   endif
 
-  bench = executable('bench', 'tests/bench.c',
-      dependencies: build_deps + tdeps,
-      include_directories: inc
-  )
-
+  bench = executable('bench', 'tests/bench.c', dependencies: tdep)
   test('benchmark', bench, is_parallel: false, timeout: 600)
 endif
