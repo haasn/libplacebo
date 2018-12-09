@@ -2545,7 +2545,7 @@ static void vk_sync_destroy(const struct pl_gpu *gpu, struct pl_sync *sync)
     }
 #endif
 #ifdef VK_HAVE_WIN32
-    if (slab->handle_type == PL_HANDLE_WIN32) {
+    if (sync->handle_type == PL_HANDLE_WIN32) {
         if (sync->wait_handle.handle != NULL)
             CloseHandle(sync->wait_handle.handle);
         if (sync->signal_handle.handle != NULL)
@@ -2622,8 +2622,8 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
 #endif
 
 #ifdef VK_HAVE_WIN32
-    if (slab->handle_type == PL_HANDLE_WIN32 ||
-        slab->handle_type == PL_HANDLE_WIN32_KMT)
+    if (handle_type == PL_HANDLE_WIN32 ||
+        handle_type == PL_HANDLE_WIN32_KMT)
     {
         VkSemaphoreGetWin32HandleInfoKHR handle_info = {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_WIN32_HANDLE_INFO_KHR,
