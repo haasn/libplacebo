@@ -4,8 +4,11 @@ cxx = meson.get_compiler('cpp')
 
 build_deps = [
   cc.find_library('m', required: false),
-  subproject('xtalloc').get_variable('dep'),
-  subproject('bstr').get_variable('dep'),
+]
+
+subprojects = [
+  subproject('xtalloc'),
+  subproject('bstr'),
 ]
 
 vulkan = dependency('vulkan', version: '>=1.0.42', required: get_option('vulkan'))
@@ -197,12 +200,21 @@ configure_file(
   configuration: conf_internal
 )
 
-inc = include_directories('./include')
+# work around meson bugs
+build_deps += dependency('threads')
+inc = [ include_directories('./include') ]
+obj = []
+foreach s : subprojects
+  inc += s.get_variable('inc')
+  obj += s.get_variable('lib').extract_all_objects(recursive: false)
+endforeach
+
 lib = library('placebo', sources,
   install: true,
   dependencies: build_deps,
   soversion: apiver,
   include_directories: inc,
+  objects: obj,
   link_args: link_args,
 )
 
@@ -220,11 +232,15 @@ pkg.generate(
 
 
 # Tests
-tdep = declare_dependency(
+tdep = [ declare_dependency(
     link_with: lib,
     dependencies: build_deps,
     include_directories: inc,
-)
+) ]
+
+foreach s : subprojects
+    tdep += s.get_variable('dep')
+endforeach
 
 if get_option('tests')
   foreach t : tests
