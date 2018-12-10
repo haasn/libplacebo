@@ -26,6 +26,7 @@
 
 #ifdef _WIN32
 #define VK_HAVE_WIN32 1
+#include <vulkan/vulkan_win32.h>
 #endif
 
 // Vulkan allows the optional use of a custom allocator. We don't need one but
