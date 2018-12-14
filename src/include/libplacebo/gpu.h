@@ -62,6 +62,11 @@ enum pl_handle_type {
     PL_HANDLE_WIN32_KMT = (1 << 2), // `HANDLE` for pre-Windows-8 win32 API
 };
 
+struct pl_gpu_handle_caps {
+    pl_handle_caps shared_mem; // supported handles for `pl_shared_mem`
+    pl_handle_caps sync;       // supported handles for `pl_sync`
+};
+
 // Wrapper for the handle used to communicate a shared resource externally.
 // This handle is owned by the `pl_gpu` - if a user wishes to use it in a way
 // that takes over ownership (e.g. importing into some APIs), they must clone
@@ -129,11 +134,9 @@ struct pl_gpu {
 
     // Fields relevant to external API interop. If the underlying device does
     // not support interop with other APIs, these will all be {0}.
-    uint8_t uuid[16];               // underlying device UUID
-    struct {
-        pl_handle_caps shared_mem;  // supported handles for `pl_shared_mem`
-        pl_handle_caps sync;        // supported handles for `pl_sync`
-    } handle_caps;
+    struct pl_gpu_handle_caps export_caps; // supported handles for exporting
+    struct pl_gpu_handle_caps import_caps; // supported handles for importing
+    uint8_t uuid[16];                      // underlying device UUID
 
     // Supported texture formats, in preference order. (If there are multiple
     // similar formats, the "better" ones come first)

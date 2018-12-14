@@ -147,8 +147,8 @@ static bool find_best_memtype(struct vk_malloc *ma, uint32_t typeBits,
     return false;
 }
 
-static bool buf_export_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
-                             enum pl_handle_type handle_type)
+static bool buf_external_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
+                               enum pl_handle_type handle_type, bool import)
 {
     if (!handle_type)
         return true;
@@ -167,7 +167,8 @@ static bool buf_export_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
     };
 
     vk->vkGetPhysicalDeviceExternalBufferPropertiesKHR(vk->physd, &info, &props);
-    return vk_external_mem_check(&props.externalMemoryProperties, handle_type);
+    return vk_external_mem_check(&props.externalMemoryProperties, handle_type,
+                                 import);
 }
 
 static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
@@ -232,7 +233,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
             .pQueueFamilyIndices = qfs,
         };
 
-        if (!buf_export_check(vk, binfo.usage, slab->handle_type)) {
+        if (!buf_external_check(vk, binfo.usage, slab->handle_type, false)) {
             PL_ERR(vk, "Failed allocating shared memory buffer: possibly "
                    "the handle type is unsupported?");
             goto error;
@@ -394,7 +395,7 @@ void vk_malloc_destroy(struct vk_malloc **ma_ptr)
     TA_FREEP(ma_ptr);
 }
 
-pl_handle_caps vk_malloc_handle_caps(struct vk_malloc *ma)
+pl_handle_caps vk_malloc_handle_caps(struct vk_malloc *ma, bool import)
 {
     struct vk_ctx *vk = ma->vk;
     pl_handle_caps caps = 0;
@@ -405,7 +406,7 @@ pl_handle_caps vk_malloc_handle_caps(struct vk_malloc *ma)
         // happen down the line at VkBuffer creation time, but this should give
         // us a rough idea of what the driver supports.
         enum pl_handle_type type = vk_handle_list[i];
-        if (buf_export_check(vk, VK_BUFFER_USAGE_TRANSFER_DST_BIT, type))
+        if (buf_external_check(vk, VK_BUFFER_USAGE_TRANSFER_DST_BIT, type, import))
             caps |= type;
     }
 

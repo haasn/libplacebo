@@ -279,8 +279,10 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         .align_tex_xfer_offset = pl_lcm(vk->limits.optimalBufferCopyOffsetAlignment, 4),
     };
 
-    gpu->handle_caps.shared_mem = vk_malloc_handle_caps(p->alloc);
-    gpu->handle_caps.sync = vk_sync_handle_caps(vk);
+    gpu->export_caps.shared_mem = vk_malloc_handle_caps(p->alloc, false);
+    gpu->import_caps.shared_mem = vk_malloc_handle_caps(p->alloc, true);
+    gpu->export_caps.sync = vk_sync_handle_caps(vk);
+    gpu->import_caps.sync = 0; // Not supported yet
 
     if (pl_gpu_supports_interop(gpu)) {
         VkPhysicalDeviceIDPropertiesKHR id_props = {
@@ -818,7 +820,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     // Ensure the handle types are supported
     if (params->handle_type) {
         bool ok = vk_external_mem_check(&ext_props.externalMemoryProperties,
-                                        params->handle_type);
+                                        params->handle_type, false);
         if (!ok) {
             PL_ERR(gpu, "Requested handle type is not compatible with the "
                    "specified combination of image parameters. Possibly the "

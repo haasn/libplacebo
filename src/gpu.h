@@ -58,7 +58,8 @@ void pl_gpu_destroy(const struct pl_gpu *gpu);
 // the case if at least one of `gpu->handle_caps` is nonzero.
 static inline bool pl_gpu_supports_interop(const struct pl_gpu *gpu)
 {
-    return gpu->handle_caps.shared_mem || gpu->handle_caps.sync;
+    return gpu->export_caps.shared_mem || gpu->export_caps.sync ||
+           gpu->import_caps.shared_mem || gpu->import_caps.sync;
 }
 
 // GPU-internal helpers: these should not be used outside of GPU implementations

@@ -84,10 +84,14 @@ void pl_gpu_print_info(const struct pl_gpu *gpu, enum pl_log_level lev)
         }
 
         PL_MSG(gpu, lev, "      UUID: %s", buf);
-        PL_MSG(gpu, lev, "      shared memory caps: 0x%x",
-               (unsigned int) gpu->handle_caps.shared_mem);
-        PL_MSG(gpu, lev, "      sync caps: 0x%x",
-               (unsigned int) gpu->handle_caps.sync);
+        PL_MSG(gpu, lev, "      shared memory export caps: 0x%x",
+               (unsigned int) gpu->export_caps.shared_mem);
+        PL_MSG(gpu, lev, "      shared memory import caps: 0x%x",
+               (unsigned int) gpu->import_caps.shared_mem);
+        PL_MSG(gpu, lev, "      sync export caps: 0x%x",
+               (unsigned int) gpu->export_caps.sync);
+        PL_MSG(gpu, lev, "      sync import caps: 0x%x",
+               (unsigned int) gpu->import_caps.sync);
     }
 }
 
@@ -355,7 +359,7 @@ const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
                                    const struct pl_tex_params *params)
 {
     if (params->handle_type) {
-        pl_assert(params->handle_type & gpu->handle_caps.shared_mem);
+        pl_assert(params->handle_type & gpu->export_caps.shared_mem);
         pl_assert(PL_ISPOT(params->handle_type));
     }
 
@@ -614,7 +618,7 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
                                    const struct pl_buf_params *params)
 {
     if (params->handle_type) {
-        pl_assert(params->handle_type & gpu->handle_caps.shared_mem);
+        pl_assert(params->handle_type & gpu->export_caps.shared_mem);
         pl_assert(PL_ISPOT(params->handle_type));
     }
 
@@ -1359,7 +1363,7 @@ const struct pl_sync *pl_sync_create(const struct pl_gpu *gpu,
                                      enum pl_handle_type handle_type)
 {
     pl_assert(handle_type);
-    pl_assert(handle_type & gpu->handle_caps.sync);
+    pl_assert(handle_type & gpu->export_caps.sync);
     pl_assert(PL_ISPOT(handle_type));
     return gpu->impl->sync_create(gpu, handle_type);
 }

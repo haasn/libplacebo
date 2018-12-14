@@ -28,7 +28,8 @@ VkExternalMemoryHandleTypeFlagBitsKHR vk_handle_type(enum pl_handle_type);
 
 // Check for compatibility of a VkExternalMemoryProperties
 bool vk_external_mem_check(const VkExternalMemoryPropertiesKHR *props,
-                           enum pl_handle_type handle_type);
+                           enum pl_handle_type handle_type,
+                           bool check_import);
 
 // Static list of external handle types we should try probing for
 extern const enum pl_handle_type vk_handle_list[];
