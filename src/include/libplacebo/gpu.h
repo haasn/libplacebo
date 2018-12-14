@@ -269,10 +269,22 @@ struct pl_tex_params {
     enum pl_tex_sample_mode sample_mode;
     enum pl_tex_address_mode address_mode;
 
+    // At most one of `export_handle` and `import_handle` can be set for a
+    // texture.
+
     // Setting this indicates that the memory backing this texture should be
     // shared with external APIs, If so, this must be exactly *one* of
-    // `pl_gpu.handle_caps.shared_mem`.
-    enum pl_handle_type handle_type;
+    // `pl_gpu.export_caps.tex`.
+    enum pl_handle_type export_handle;
+
+    // Setting this indicates that the memory backing this texture will be
+    // imported from an external API. If so, this must be exactly *one* of
+    // `pl_gpu.import_caps.tex`.
+    enum pl_handle_type import_handle;
+
+    // If the shared memory is being imported, the import handle must be
+    // specified here. Otherwise, this is ignored.
+    struct pl_shared_mem shared_mem;
 
     // If non-NULL, the texture will be created with these contents. Using
     // this does *not* require setting host_writable. Otherwise, the initial
@@ -301,7 +313,7 @@ struct pl_tex {
     struct pl_tex_params params;
     void *priv;
 
-    // If `params.handle_type` is set, this structure references the shared
+    // If `params.export_handle` is set, this structure references the shared
     // memory backing this buffer, via the requested handle type.
     //
     // While this texture is not in an "exported" state, the contents of the

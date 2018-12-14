@@ -60,3 +60,10 @@ bool vk_malloc_buffer(struct vk_malloc *ma, VkBufferUsageFlags bufFlags,
                       VkMemoryPropertyFlags memFlags, VkDeviceSize size,
                       VkDeviceSize alignment, enum pl_handle_type handle_type,
                       struct vk_bufslice *out);
+
+// Import and track external memory. This can be called repeatedly for the
+// same external memory allocation and it will be imported again and tracked
+// separately each time. This is explicitly allowed by the Vulkan spec.
+bool vk_malloc_import(struct vk_malloc *ma, enum pl_handle_type handle_type,
+                      const struct pl_shared_mem *shared_mem,
+                      struct vk_memslice *out);

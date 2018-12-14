@@ -728,6 +728,9 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_vk *p = gpu->priv;
 
+    enum pl_handle_type handle_type = params->export_handle |
+                                      params->import_handle;
+
     struct pl_tex *tex = talloc_zero(NULL, struct pl_tex);
     tex->params = *params;
     tex->params.initial_data = NULL;
@@ -800,12 +803,12 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
 
     VkExternalMemoryImageCreateInfoKHR ext_info = {
         .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_KHR,
-        .handleTypes = vk_handle_type(params->handle_type),
+        .handleTypes = vk_handle_type(handle_type),
     };
 
     VkImageCreateInfo iinfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .pNext = params->handle_type ? &ext_info : NULL,
+        .pNext = handle_type ? &ext_info : NULL,
         .imageType = tex_vk->type,
         .format = params->format->emulated ? fmt->emufmt : fmt->ifmt,
         .extent = (VkExtent3D) {
@@ -833,7 +836,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
 
     VkPhysicalDeviceImageFormatInfo2KHR pinfo = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR,
-        .pNext = params->handle_type ? &ext_pinfo : NULL,
+        .pNext = handle_type ? &ext_pinfo : NULL,
         .format = iinfo.format,
         .type = iinfo.imageType,
         .tiling = iinfo.tiling,
@@ -847,7 +850,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
 
     VkImageFormatProperties2KHR props = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2_KHR,
-        .pNext = params->handle_type ? &ext_props : NULL,
+        .pNext = handle_type ? &ext_props : NULL,
     };
 
     VkResult res;
@@ -868,10 +871,10 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         goto error;
     }
 
-    // Ensure the handle types are supported
-    if (params->handle_type) {
+    // Ensure the handle type is supported
+    if (handle_type) {
         bool ok = vk_external_mem_check(&ext_props.externalMemoryProperties,
-                                        params->handle_type, false);
+                                        handle_type, params->import_handle);
         if (!ok) {
             PL_ERR(gpu, "Requested handle type is not compatible with the "
                    "specified combination of image parameters. Possibly the "
@@ -889,15 +892,22 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     vkGetImageMemoryRequirements(vk->dev, tex_vk->img, &reqs);
 
     struct vk_memslice *mem = &tex_vk->mem;
-    if (!vk_malloc_generic(p->alloc, reqs, memFlags, params->handle_type, mem))
-        goto error;
-
+    if (params->import_handle) {
+        if (!vk_malloc_import(p->alloc, params->import_handle,
+                              &params->shared_mem, mem))
+        {
+            goto error;
+        }
+    } else {
+        if (!vk_malloc_generic(p->alloc, reqs, memFlags, params->export_handle, mem))
+            goto error;
+    }
     VK(vkBindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
 
     if (!vk_init_image(gpu, tex))
         goto error;
 
-    if (params->handle_type) {
+    if (params->export_handle) {
         tex->shared_mem = tex_vk->mem.shared_mem;
         // Texture is not initially exported;
         // pl_vulkan_hold must be used to export it.

@@ -20,6 +20,8 @@
 #include "utils.h"
 
 #ifdef VK_HAVE_UNIX
+#include <errno.h>
+#include <strings.h>
 #include <unistd.h>
 #endif
 
@@ -62,6 +64,7 @@ struct vk_slab {
     size_t size;          // total size of `slab`
     size_t used;          // number of bytes actually in use (for GC accounting)
     bool dedicated;       // slab is allocated specifically for one object
+    bool imported;        // slab represents an imported memory allocation
     // free space map: a sorted list of memory regions that are available
     struct vk_region *regions;
     int num_regions;
@@ -103,31 +106,37 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
         return;
 
     pl_assert(slab->used == 0);
-    vkDestroyBuffer(vk->dev, slab->buffer, VK_ALLOC);
+    if (!slab->imported) {
+        vkDestroyBuffer(vk->dev, slab->buffer, VK_ALLOC);
 
-    switch (slab->handle_type) {
-    case PL_HANDLE_FD:
-    case PL_HANDLE_DMA_BUF:
+        switch (slab->handle_type) {
+        case PL_HANDLE_FD:
+        case PL_HANDLE_DMA_BUF:
 #ifdef VK_HAVE_UNIX
-        if (slab->handle.fd > -1)
-            close(slab->handle.fd);
+            if (slab->handle.fd > -1)
+                close(slab->handle.fd);
 #endif
-        break;
-    case PL_HANDLE_WIN32:
+            break;
+        case PL_HANDLE_WIN32:
 #ifdef VK_HAVE_WIN32
-        if (slab->handle.handle != NULL)
-            CloseHandle(slab->handle.handle);
+            if (slab->handle.handle != NULL)
+                CloseHandle(slab->handle.handle);
 #endif
-        break;
-    case PL_HANDLE_WIN32_KMT:
-        // PL_HANDLE_WIN32_KMT is just an identifier. It doesn't get closed.
-        break;
+            break;
+        case PL_HANDLE_WIN32_KMT:
+            // PL_HANDLE_WIN32_KMT is just an identifier. It doesn't get closed.
+            break;
+        }
+
+        PL_INFO(vk, "Freed slab of size %zu", (size_t) slab->size);
+    } else {
+        PL_INFO(vk, "Freed slab of size %zu from imported fd: %d",
+                (size_t) slab->size, slab->handle.fd);
     }
 
     // also implicitly unmaps the memory if needed
     vkFreeMemory(vk->dev, slab->mem, VK_ALLOC);
 
-    PL_INFO(vk, "Freed slab of size %zu", (size_t) slab->size);
     talloc_free(slab);
 }
 
@@ -608,4 +617,104 @@ bool vk_malloc_buffer(struct vk_malloc *ma, VkBufferUsageFlags bufFlags,
         out->data = (void *)((uintptr_t)slab->data + (ptrdiff_t)out->mem.offset);
 
     return true;
+}
+
+bool vk_malloc_import(struct vk_malloc *ma, enum pl_handle_type handle_type,
+                      const struct pl_shared_mem *shared_mem,
+                      struct vk_memslice *out)
+{
+    struct vk_ctx *vk = ma->vk;
+    int fd = -1;
+
+#ifndef VK_HAVE_UNIX
+
+    PL_ERR(vk, "Importing external memory is only supported on POSIX platforms.");
+    return false;
+
+#else
+
+    if (handle_type != PL_HANDLE_DMA_BUF) {
+        PL_ERR(vk, "Importing external memory is only supported for PL_HANDLE_DMA_BUF.");
+        return false;
+    } else if (!vk->vkGetMemoryFdPropertiesKHR) {
+        PL_ERR(vk, "Importing external memory requires %s.",
+               VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+        return false;
+    }
+
+    VkDeviceMemory vkmem = NULL;
+    VkMemoryFdPropertiesKHR fdprops = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
+    };
+
+    VK(vk->vkGetMemoryFdPropertiesKHR(vk->dev,
+                                      vk_handle_type(handle_type),
+                                      shared_mem->handle.fd,
+                                      &fdprops));
+
+    // We pick the first compatible memory type because we have no other basis
+    // for choosing if there is more than one available.
+    int first_mem_type = ffs(fdprops.memoryTypeBits);
+    if (!first_mem_type) {
+       PL_ERR(vk, "No compatible memory types offered for imported memory");
+       return false;
+    }
+
+    // We dup() the fd to make it safe to import the same original fd
+    // multiple times.
+    fd = dup(shared_mem->handle.fd);
+    if (fd == -1) {
+        PL_ERR(vk, "Failed to dup() fd (%d) when importing memory: %s",
+               fd, strerror(errno));
+        return false;
+    }
+
+    const VkImportMemoryFdInfoKHR iinfo = {
+        .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
+        .pNext = NULL,
+        .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+        .fd = fd,
+    };
+
+    const VkMemoryAllocateInfo ainfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = &iinfo,
+        .allocationSize = shared_mem->size,
+        .memoryTypeIndex = first_mem_type - 1,
+    };
+
+    VK(vkAllocateMemory(vk->dev, &ainfo, VK_ALLOC, &vkmem));
+    // fd ownership is transferred at this point.
+
+    struct vk_slab *slab = talloc_ptrtype(NULL, slab);
+    *slab = (struct vk_slab) {
+        .mem = vkmem,
+        .dedicated = true,
+        .imported = true,
+        .size = shared_mem->size,
+        .used = shared_mem->size,
+        .handle = {
+            .fd = fd,
+        },
+        .handle_type = handle_type,
+    };
+    *out = (struct vk_memslice) {
+        .vkmem = vkmem,
+        .size = shared_mem->size,
+        .offset = shared_mem->offset,
+        .shared_mem = *shared_mem,
+        .priv = slab,
+    };
+
+    PL_INFO(vk, "Allocating %zu of imported memory from fd: %d",
+            (size_t) slab->size, fd);
+
+    return true;
+
+error:
+    if (fd > -1)
+        close(fd);
+    return false;
+
+#endif // VK_HAVE_UNIX
 }

@@ -362,9 +362,14 @@ const struct pl_fmt *pl_find_named_fmt(const struct pl_gpu *gpu, const char *nam
 const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
                                    const struct pl_tex_params *params)
 {
-    if (params->handle_type) {
-        pl_assert(params->handle_type & gpu->export_caps.tex);
-        pl_assert(PL_ISPOT(params->handle_type));
+    pl_assert(!params->import_handle || !params->export_handle);
+    if (params->export_handle) {
+        pl_assert(params->export_handle & gpu->export_caps.tex);
+        pl_assert(PL_ISPOT(params->export_handle));
+    }
+    if (params->import_handle) {
+        pl_assert(params->import_handle & gpu->import_caps.tex);
+        pl_assert(PL_ISPOT(params->import_handle));
     }
 
     switch (pl_tex_params_dimension(*params)) {
