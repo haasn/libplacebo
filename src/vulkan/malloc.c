@@ -105,15 +105,24 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
     pl_assert(slab->used == 0);
     vkDestroyBuffer(vk->dev, slab->buffer, VK_ALLOC);
 
+    switch (slab->handle_type) {
+    case PL_HANDLE_FD:
+    case PL_HANDLE_DMA_BUF:
 #ifdef VK_HAVE_UNIX
-    if (slab->handle_type == PL_HANDLE_FD && slab->handle.fd > -1)
-        close(slab->handle.fd);
+        if (slab->handle.fd > -1)
+            close(slab->handle.fd);
 #endif
+        break;
+    case PL_HANDLE_WIN32:
 #ifdef VK_HAVE_WIN32
-    if (slab->handle_type == PL_HANDLE_WIN32 && slab->handle.handle != NULL)
-        CloseHandle(slab->handle.handle);
-    // PL_HANDLE_WIN32_KMT is just an identifier. It doesn't get closed.
+        if (slab->handle.handle != NULL)
+            CloseHandle(slab->handle.handle);
 #endif
+        break;
+    case PL_HANDLE_WIN32_KMT:
+        // PL_HANDLE_WIN32_KMT is just an identifier. It doesn't get closed.
+        break;
+    }
 
     // also implicitly unmaps the memory if needed
     vkFreeMemory(vk->dev, slab->mem, VK_ALLOC);
@@ -188,6 +197,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
 
     switch (slab->handle_type) {
     case PL_HANDLE_FD:
+    case PL_HANDLE_DMA_BUF:
         slab->handle.fd = -1;
         break;
     case PL_HANDLE_WIN32:
@@ -266,7 +276,9 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
         VK(vkBindBufferMemory(vk->dev, slab->buffer, slab->mem, 0));
 
 #ifdef VK_HAVE_UNIX
-    if (slab->handle_type == PL_HANDLE_FD) {
+    if (slab->handle_type == PL_HANDLE_FD ||
+        slab->handle_type == PL_HANDLE_DMA_BUF)
+    {
         VkMemoryGetFdInfoKHR fd_info = {
             .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
             .memory = slab->mem,
@@ -400,12 +412,12 @@ pl_handle_caps vk_malloc_handle_caps(struct vk_malloc *ma, bool import)
     struct vk_ctx *vk = ma->vk;
     pl_handle_caps caps = 0;
 
-    for (int i = 0; vk_handle_list[i]; i++) {
+    for (int i = 0; vk_mem_handle_list[i]; i++) {
         // Try seeing if we could allocate a "basic" buffer using these
         // capabilities, with no fancy buffer usage. More specific checks will
         // happen down the line at VkBuffer creation time, but this should give
         // us a rough idea of what the driver supports.
-        enum pl_handle_type type = vk_handle_list[i];
+        enum pl_handle_type type = vk_mem_handle_list[i];
         if (buf_external_check(vk, VK_BUFFER_USAGE_TRANSFER_DST_BIT, type, import))
             caps |= type;
     }

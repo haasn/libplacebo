@@ -71,6 +71,7 @@ int main()
     gpu_tests(vk->gpu);
 #ifdef VK_HAVE_UNIX
     vulkan_tests(vk, PL_HANDLE_FD);
+    vulkan_tests(vk, PL_HANDLE_DMA_BUF);
 #endif
 #ifdef VK_HAVE_WIN32
     vulkan_tests(vk, PL_HANDLE_WIN32);

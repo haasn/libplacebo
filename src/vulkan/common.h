@@ -94,6 +94,7 @@ struct vk_ctx {
     // Device-level function pointers
     VK_FUN(vkCmdPushDescriptorSetKHR);
     VK_FUN(vkGetMemoryFdKHR);
+    VK_FUN(vkGetMemoryFdPropertiesKHR);
     VK_FUN(vkGetSemaphoreFdKHR);
 #ifdef VK_HAVE_WIN32
     VK_FUN(vkGetMemoryWin32HandleKHR);

@@ -60,6 +60,7 @@ enum pl_handle_type {
     PL_HANDLE_FD        = (1 << 0), // `int fd` for POSIX-style APIs
     PL_HANDLE_WIN32     = (1 << 1), // `HANDLE` for win32 API
     PL_HANDLE_WIN32_KMT = (1 << 2), // `HANDLE` for pre-Windows-8 win32 API
+    PL_HANDLE_DMA_BUF   = (1 << 3), // 'int fd' for a dma_buf fd
 };
 
 struct pl_gpu_handle_caps {
@@ -76,7 +77,7 @@ struct pl_gpu_handle_caps {
 // types may be managed in different ways. (eg: CUDA takes ownership of an fd,
 // but does not take ownership of a win32 handle).
 union pl_handle {
-    int fd;         // PL_HANDLE_FD
+    int fd;         // PL_HANDLE_FD / PL_HANDLE_DMA_BUF
     void *handle;   // PL_HANDLE_WIN32 / PL_HANDLE_WIN32_KMT
 };
 

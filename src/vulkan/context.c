@@ -78,6 +78,12 @@ static const struct vk_ext vk_device_extensions[] = {
             VK_DEV_FUN(vkGetMemoryFdKHR),
             {0},
         },
+    }, {
+        .name = VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
+        .funs = (struct vk_ext_fun[]) {
+            VK_DEV_FUN(vkGetMemoryFdPropertiesKHR),
+            {0},
+        },
 #ifdef VK_HAVE_WIN32
     }, {
         .name = VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,

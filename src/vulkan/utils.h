@@ -31,8 +31,9 @@ bool vk_external_mem_check(const VkExternalMemoryPropertiesKHR *props,
                            enum pl_handle_type handle_type,
                            bool check_import);
 
-// Static list of external handle types we should try probing for
-extern const enum pl_handle_type vk_handle_list[];
+// Static lists of external handle types we should try probing for
+extern const enum pl_handle_type vk_mem_handle_list[];
+extern const enum pl_handle_type vk_sync_handle_list[];
 
 // Convenience macros to simplify a lot of common boilerplate
 #define VK_ASSERT(res, str)                               \

@@ -223,8 +223,8 @@ static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
     if (!vk->vkGetPhysicalDeviceExternalSemaphorePropertiesKHR)
         return caps;
 
-    for (int i = 0; vk_handle_list[i]; i++) {
-        enum pl_handle_type type = vk_handle_list[i];
+    for (int i = 0; vk_sync_handle_list[i]; i++) {
+        enum pl_handle_type type = vk_sync_handle_list[i];
 
         VkPhysicalDeviceExternalSemaphoreInfoKHR info = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO_KHR,
@@ -254,8 +254,8 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
     if (!vk->vkGetPhysicalDeviceExternalBufferPropertiesKHR)
         return caps;
 
-    for (int i = 0; vk_handle_list[i]; i++) {
-        enum pl_handle_type handle_type = vk_handle_list[i];
+    for (int i = 0; vk_mem_handle_list[i]; i++) {
+        enum pl_handle_type handle_type = vk_mem_handle_list[i];
 
         // Query whether creation of a "basic" dummy texture would work
         VkPhysicalDeviceExternalImageFormatInfoKHR ext_pinfo = {
@@ -2649,6 +2649,8 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
         sync->wait_handle.handle = NULL;
         sync->signal_handle.handle = NULL;
         break;
+    case PL_HANDLE_DMA_BUF:
+        abort();
     }
 
     const VkSemaphoreCreateInfo sinfo = {

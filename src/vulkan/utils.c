@@ -135,6 +135,8 @@ vk_handle_type(enum pl_handle_type handle_type)
         return VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
     case PL_HANDLE_WIN32_KMT:
         return VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
+    case PL_HANDLE_DMA_BUF:
+        return VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
     }
 
     abort();
@@ -165,7 +167,19 @@ bool vk_external_mem_check(const VkExternalMemoryPropertiesKHR *props,
     return true;
 }
 
-const enum pl_handle_type vk_handle_list[] = {
+const enum pl_handle_type vk_mem_handle_list[] = {
+#ifdef VK_HAVE_UNIX
+        PL_HANDLE_FD,
+        PL_HANDLE_DMA_BUF,
+#endif
+#ifdef VK_HAVE_WIN32
+        PL_HANDLE_WIN32,
+        PL_HANDLE_WIN32_KMT,
+#endif
+        0
+};
+
+const enum pl_handle_type vk_sync_handle_list[] = {
 #ifdef VK_HAVE_UNIX
         PL_HANDLE_FD,
 #endif
