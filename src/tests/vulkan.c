@@ -15,7 +15,7 @@ static void vulkan_tests(const struct pl_vulkan *pl_vk,
         });
 
         REQUIRE(buf);
-        REQUIRE(buf->shared_mem.handle.fd);
+        REQUIRE(buf->shared_mem.handle.fd > -1);
         REQUIRE(buf->shared_mem.size >= buf->params.size);
         REQUIRE(pl_buf_export(gpu, buf));
         pl_buf_destroy(gpu, &buf);
@@ -58,6 +58,42 @@ static void vulkan_tests(const struct pl_vulkan *pl_vk,
     }
 }
 
+static void vulkan_test_export_import(const struct pl_vulkan *pl_vk,
+                                      enum pl_handle_type handle_type)
+{
+    const struct pl_gpu *gpu = pl_vk->gpu;
+
+    if (!(gpu->export_caps.tex & handle_type) ||
+        !(gpu->import_caps.tex & handle_type))
+        return;
+
+    const struct pl_fmt *fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0,
+                                           PL_FMT_CAP_BLITTABLE);
+    if (!fmt)
+        return;
+
+    const struct pl_tex *export = pl_tex_create(gpu, &(struct pl_tex_params) {
+        .w = 32,
+        .h = 32,
+        .format = fmt,
+        .export_handle = handle_type,
+    });
+    REQUIRE(export);
+    REQUIRE(export->shared_mem.handle.fd > -1);
+
+    const struct pl_tex *import = pl_tex_create(gpu, &(struct pl_tex_params) {
+        .w = 32,
+        .h = 32,
+        .format = fmt,
+        .import_handle = handle_type,
+        .shared_mem = export->shared_mem,
+    });
+    REQUIRE(import);
+
+    pl_tex_destroy(gpu, &import);
+    pl_tex_destroy(gpu, &export);
+}
+
 int main()
 {
     struct pl_context *ctx = pl_test_context();
@@ -72,6 +108,7 @@ int main()
 #ifdef VK_HAVE_UNIX
     vulkan_tests(vk, PL_HANDLE_FD);
     vulkan_tests(vk, PL_HANDLE_DMA_BUF);
+    vulkan_test_export_import(vk, PL_HANDLE_DMA_BUF);
 #endif
 #ifdef VK_HAVE_WIN32
     vulkan_tests(vk, PL_HANDLE_WIN32);
