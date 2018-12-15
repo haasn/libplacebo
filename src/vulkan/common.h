@@ -26,6 +26,7 @@
 
 #ifdef _WIN32
 #define VK_HAVE_WIN32 1
+#include <windows.h>
 #include <vulkan/vulkan_win32.h>
 #endif
 
