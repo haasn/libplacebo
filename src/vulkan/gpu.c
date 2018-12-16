@@ -1765,7 +1765,7 @@ static bool vk_use_cached_program(const struct pl_pass_params *params,
         return false;
 
 #define GET(ptr) \
-    if (cache.len < header->ptr##_len)                      \
+        if (cache.len < header->ptr##_len)                  \
             return false;                                   \
         *ptr = bstr_splice(cache, 0, header->ptr##_len);    \
         cache = bstr_cut(cache, ptr->len);
