@@ -431,9 +431,11 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     params.color_map_params = &(struct pl_color_map_params) {
         .intent = PL_INTENT_SATURATION,
         .tone_mapping_algo = PL_TONE_MAPPING_CLIP,
-        .hdr_simulation = true,
         .gamut_warning = true,
     };
+
+    image.color.sig_scale = 0.9;
+    target.color.sig_scale = 2.0;
 
     for (int i = 0; i < 5; i++) {
         pl_tex_clear(gpu, fbo, (float[4]){0});

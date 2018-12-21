@@ -252,7 +252,22 @@ struct pl_color_space {
     // The average light level that occurs in the signal, relative to the
     // reference white. (0 = unknown)
     float sig_avg;
+
+    // Additional scale factor for the signal's reference white. If this is set
+    // to a value higher than 1.0, then it's assumed that the signal's encoded
+    // reference white is assumed to be brighter than normal by this factor.
+    // This can be used to over- or under-expose content, especially HDR
+    // content. (0 = unknown)
+    //
+    // An example of where this could come in use is for using an SDR transfer
+    // function (e.g. PL_COLOR_TRC_LINEAR) to encode a HDR image or display.
+    float sig_scale;
 };
+
+// Returns whether or not a color space is considered as effectively HDR.
+// This is true when the effective signal peak is greater than the SDR
+// reference white (1.0), after application of the `sig_scale`.
+bool pl_color_space_is_hdr(struct pl_color_space csp);
 
 // Replaces unknown values in the first struct by those of the second struct.
 void pl_color_space_merge(struct pl_color_space *orig,

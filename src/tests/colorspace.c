@@ -243,6 +243,7 @@ int main()
         .light = PL_COLOR_LIGHT_DISPLAY,
         .sig_peak = 1.0,
         .sig_avg = 0.25,
+        .sig_scale = 1.0,
     };
 
     pl_color_space_infer(&unknown);

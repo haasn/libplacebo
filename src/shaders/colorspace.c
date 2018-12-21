@@ -705,7 +705,8 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
     GLSL("float sig = max(max(color.r, color.g), color.b); \n"
          "float sig_peak = %f;                             \n"
          "float sig_avg = %f;                              \n",
-         src.sig_peak, src.sig_avg);
+         src.sig_peak * src.sig_scale,
+         src.sig_avg * src.sig_scale);
 
     // HDR peak detection is done before scaling based on the dst.sig_peak/avg
     // in order to make the detected values stable / averageable.
@@ -714,10 +715,11 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
     // Rescale the variables in order to bring it into a representation where
     // 1.0 represents the dst_peak. This is because all of the tone mapping
     // algorithms are defined in such a way that they map to the range [0.0, 1.0].
-    if (dst.sig_peak > 1.0) {
-        GLSL("sig *= 1.0/%f;      \n"
-             "sig_peak *= 1.0/%f; \n",
-             dst.sig_peak, dst.sig_peak);
+    float dst_range = dst.sig_peak * dst.sig_scale;
+    if (dst_range > 1.0) {
+        GLSL("sig *= 1.0 / %f;      \n"
+             "sig_peak *= 1.0 / %f; \n",
+             dst_range, dst_range);
     }
 
     // Store the original signal level for later re-use
@@ -727,7 +729,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
     GLSL("float slope = min(1.0, %f / sig_avg); \n"
          "sig *= slope;                         \n"
          "sig_peak *= slope;                    \n",
-         dst.sig_avg);
+         dst.sig_avg * dst.sig_scale);
 
     // Desaturate the color using a coefficient dependent on the signal level.
     // Do this after the brightness adjustment stage to prevent catastrophic
@@ -738,7 +740,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
              "coeff = pow(coeff, %f);                               \n"
              "color.rgb = mix(color.rgb, vec3(luma), coeff);        \n"
              "sig = mix(sig, luma * slope, coeff);                  \n",
-             1.0 / dst.sig_peak, luma, 10.0 / params->tone_mapping_desaturate);
+             1.0 / dst_range, luma, 10.0 / params->tone_mapping_desaturate);
     }
 
     float param = params->tone_mapping_param;
@@ -843,8 +845,8 @@ void pl_shader_color_map(struct pl_shader *sh,
     // Defaults the dest average based on the source average, unless the source
     // is HDR and the destination is not
     if (!dst.sig_avg) {
-        bool src_hdr = pl_color_transfer_is_hdr(src.transfer);
-        bool dst_hdr = pl_color_transfer_is_hdr(dst.transfer);
+        bool src_hdr = pl_color_space_is_hdr(src);
+        bool dst_hdr = pl_color_space_is_hdr(dst);
         if (!(src_hdr && !dst_hdr))
             dst.sig_avg = src.sig_avg;
     }
@@ -865,6 +867,7 @@ void pl_shader_color_map(struct pl_shader *sh,
                        src.primaries != dst.primaries ||
                        src.sig_peak > dst.sig_peak ||
                        src.sig_avg != dst.sig_avg ||
+                       src.sig_scale != dst.sig_scale ||
                        need_ootf;
 
     // Various operations need access to the src_luma and dst_luma respectively,
@@ -890,6 +893,10 @@ void pl_shader_color_map(struct pl_shader *sh,
         is_linear = true;
     }
 
+    // Re-scale the signal to account for a change in reference system
+    if (src.sig_scale != 1.0)
+        GLSL("color.rgb *= vec3(%f); \n", src.sig_scale);
+
     if (need_ootf)
         pl_shader_ootf(sh, src.light, src_luma, src.sig_peak);
 
@@ -907,22 +914,22 @@ void pl_shader_color_map(struct pl_shader *sh,
     }
 
     // Tone map to rescale the signal average/peak if needed
-    if (src.sig_peak > dst.sig_peak + 1e-6)
+    if (src.sig_peak * src.sig_scale > dst.sig_peak * dst.sig_scale + 1e-6)
         pl_shader_tone_map(sh, src, dst, dst_luma, peak_detect_state, params);
 
     // Warn for remaining out-of-gamut colors if enabled
     if (params->gamut_warning) {
         GLSL("if (any(greaterThan(color.rgb, vec3(%f + 0.005))) ||\n"
              "    any(lessThan(color.rgb, vec3(-0.005))))\n"
-             "    color.rgb = vec3(1.0) - color.rgb; // invert\n",
-             dst.sig_peak);
+             "    color.rgb = vec3(%f) - color.rgb; // invert\n",
+             dst.sig_peak * dst.sig_scale, src.sig_peak * src.sig_scale);
     }
 
     if (need_ootf)
         pl_shader_inverse_ootf(sh, dst.light, dst_luma, dst.sig_peak);
 
-    if (params->hdr_simulation && !pl_color_transfer_is_hdr(dst.transfer))
-        GLSL("color.rgb *= vec3(%f);\n", 1.0 / dst.sig_peak);
+    if (dst.sig_scale != 1.0)
+        GLSL("color.rgb *= vec3(1.0 / %f); \n", dst.sig_scale);
 
     if (is_linear)
         pl_shader_delinearize(sh, dst.transfer);

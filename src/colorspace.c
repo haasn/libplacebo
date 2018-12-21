@@ -289,6 +289,14 @@ const struct pl_color_space pl_color_space_monitor = {
     .light     = PL_COLOR_LIGHT_DISPLAY,
 };
 
+bool pl_color_space_is_hdr(struct pl_color_space csp)
+{
+    float peak = pl_color_transfer_nominal_peak(csp.transfer);
+    peak *= PL_DEF(csp.sig_scale, 1.0);
+
+    return peak > 1.0;
+}
+
 void pl_color_space_merge(struct pl_color_space *orig,
                           const struct pl_color_space *new)
 {
@@ -302,6 +310,8 @@ void pl_color_space_merge(struct pl_color_space *orig,
         orig->sig_peak = new->sig_peak;
     if (!orig->sig_avg)
         orig->sig_avg = new->sig_avg;
+    if (!orig->sig_scale)
+        orig->sig_scale = new->sig_scale;
 }
 
 bool pl_color_space_equal(const struct pl_color_space *c1,
@@ -311,7 +321,8 @@ bool pl_color_space_equal(const struct pl_color_space *c1,
            c1->transfer  == c2->transfer &&
            c1->light     == c2->light &&
            c1->sig_peak  == c2->sig_peak &&
-           c1->sig_avg   == c2->sig_avg;
+           c1->sig_avg   == c2->sig_avg &&
+           c1->sig_scale == c2->sig_scale;
 }
 
 // Average light level for SDR signals. This is equal to a signal level of 0.5
@@ -339,10 +350,13 @@ void pl_color_space_infer(struct pl_color_space *space)
             space->sig_peak = 10.0;
     }
 
+    if (!space->sig_scale)
+        space->sig_scale = 1.0;
+
     // In theory, for HDR signals, this is typically no longer true - but
     // without adequate metadata there's not much else we can assume
     if (!space->sig_avg)
-        space->sig_avg = sdr_avg;
+        space->sig_avg = sdr_avg / space->sig_scale;
 }
 
 const struct pl_color_adjustment pl_color_adjustment_neutral = {

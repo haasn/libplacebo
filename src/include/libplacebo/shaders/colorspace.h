@@ -99,6 +99,11 @@ enum pl_tone_mapping_algorithm {
     // good balance between colorimetric accuracy and preserving out-of-gamut
     // details. The name is derived from its function shape (ax+b)/(cx+d), which
     // is known as a Möbius transformation in mathematics.
+    //
+    // This is the recommended tone mapping function to use when stretching an
+    // SDR curve over an HDR display (i.e. `dst.sig_scale > 1.0`), which can
+    // come in handy when calibrating a true HDR display to an SDR curve
+    // for compatibility with legacy display stacks.
     PL_TONE_MAPPING_MOBIUS,
 
     // Simple non-linear, global tone mapping algorithm. Named after Erik
@@ -155,21 +160,6 @@ struct pl_color_map_params {
     // approximately match the desaturation strength used by the ACES ODT. A
     // setting of 0.0 disables this.
     float tone_mapping_desaturate;
-
-    // If true, allow treating the output colorspace as HDR even when the
-    // transfer function is SDR. Basically, this configuration allows using
-    // such displays as pseudo-HDR, and may be useful in environments where the
-    // necessary operating system interactions / signalling is unavailable. The
-    // display's true brightness will be taken from `dst.sig_peak`, which must
-    // be set to a value greater than 1.0 for this to have any effect.
-    //
-    // For example, if you have a 600 cd/m^2 HDR display but no HDR signalling,
-    // you can calibrate it to that brightness using e.g. PL_COLOR_TRC_GAMMA28,
-    // set `dst.sig_peak` to 600 / PL_COLOR_REF_WHITE, and enable this field.
-    //
-    // Note: When enabling this, it's strongly recommended to set the
-    // `tone_mapping_algo` to PL_TONE_MAPPING_MOBIUS.
-    bool hdr_simulation;
 
     // If true, enables the gamut warning feature. This will visibly highlight
     // all out-of-gamut colors (by inverting them), if they would have been
