@@ -2,8 +2,8 @@
 #include "vulkan/command.h"
 #include "vulkan/gpu.h"
 
-static void vulkan_tests(const struct pl_vulkan *pl_vk,
-                         enum pl_handle_type handle_type)
+static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
+                                 enum pl_handle_type handle_type)
 {
     const struct pl_gpu *gpu = pl_vk->gpu;
 
@@ -105,14 +105,16 @@ int main()
         return SKIP;
 
     gpu_tests(vk->gpu);
+
+    // Run these tests last because they disable some validation layers
 #ifdef VK_HAVE_UNIX
-    vulkan_tests(vk, PL_HANDLE_FD);
-    vulkan_tests(vk, PL_HANDLE_DMA_BUF);
+    vulkan_interop_tests(vk, PL_HANDLE_FD);
+    vulkan_interop_tests(vk, PL_HANDLE_DMA_BUF);
     vulkan_test_export_import(vk, PL_HANDLE_DMA_BUF);
 #endif
 #ifdef VK_HAVE_WIN32
-    vulkan_tests(vk, PL_HANDLE_WIN32);
-    vulkan_tests(vk, PL_HANDLE_WIN32_KMT);
+    vulkan_interop_tests(vk, PL_HANDLE_WIN32);
+    vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
     pl_vulkan_destroy(&vk);
     pl_context_destroy(&ctx);
