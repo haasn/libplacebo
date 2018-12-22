@@ -7,7 +7,7 @@ static void vulkan_tests(const struct pl_vulkan *pl_vk,
 {
     const struct pl_gpu *gpu = pl_vk->gpu;
 
-    if (gpu->export_caps.shared_mem & handle_type) {
+    if (gpu->export_caps.buf & handle_type) {
         const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
             .type = PL_BUF_TEX_TRANSFER,
             .size = 1024,

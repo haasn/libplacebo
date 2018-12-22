@@ -63,8 +63,9 @@ enum pl_handle_type {
 };
 
 struct pl_gpu_handle_caps {
-    pl_handle_caps shared_mem; // supported handles for `pl_shared_mem`
-    pl_handle_caps sync;       // supported handles for `pl_sync`
+    pl_handle_caps tex;  // supported handles for `pl_tex` + `pl_shared_mem`
+    pl_handle_caps buf;  // supported handles for `pl_buf` + `pl_shared_mem`
+    pl_handle_caps sync; // supported handles for `pl_sync`
 };
 
 // Wrapper for the handle used to communicate a shared resource externally.
@@ -447,7 +448,7 @@ struct pl_buf_params {
 
     // Setting this indicates that the memory backing this buffer should be
     // shared with external APIs, If so, this must be exactly *one* of
-    // `pl_gpu.handle_caps.shared_mem`.
+    // `pl_gpu.handle_caps.buf`.
     enum pl_handle_type handle_type;
 
     // If non-NULL, the buffer will be created with these contents. Otherwise,

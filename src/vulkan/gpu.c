@@ -247,6 +247,55 @@ static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
     return caps;
 }
 
+static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
+{
+    pl_handle_caps caps = 0;
+
+    if (!vk->vkGetPhysicalDeviceExternalBufferPropertiesKHR)
+        return caps;
+
+    for (int i = 0; vk_handle_list[i]; i++) {
+        enum pl_handle_type handle_type = vk_handle_list[i];
+
+        // Query whether creation of a "basic" dummy texture would work
+        VkPhysicalDeviceExternalImageFormatInfoKHR ext_pinfo = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR,
+            .handleType = handle_type,
+        };
+
+        VkPhysicalDeviceImageFormatInfo2KHR pinfo = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR,
+            .pNext = &ext_pinfo,
+            .format = VK_FORMAT_R8_UNORM,
+            .type = VK_IMAGE_TYPE_2D,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        };
+
+        VkExternalImageFormatPropertiesKHR ext_props = {
+            .sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES_KHR,
+        };
+
+        VkImageFormatProperties2KHR props = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2_KHR,
+            .pNext = &ext_props,
+        };
+
+        VkResult res;
+        res = vk->vkGetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
+        if (res != VK_SUCCESS)
+            continue;
+
+        if (vk_external_mem_check(&ext_props.externalMemoryProperties,
+                                  handle_type, import))
+        {
+            caps |= handle_type;
+        }
+    }
+
+    return caps;
+}
+
 const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
 {
     pl_assert(vk->dev);
@@ -279,8 +328,10 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         .align_tex_xfer_offset = pl_lcm(vk->limits.optimalBufferCopyOffsetAlignment, 4),
     };
 
-    gpu->export_caps.shared_mem = vk_malloc_handle_caps(p->alloc, false);
-    gpu->import_caps.shared_mem = vk_malloc_handle_caps(p->alloc, true);
+    gpu->export_caps.buf = vk_malloc_handle_caps(p->alloc, false);
+    gpu->import_caps.buf = vk_malloc_handle_caps(p->alloc, true);
+    gpu->export_caps.tex = vk_tex_handle_caps(vk, false);
+    gpu->import_caps.tex = vk_tex_handle_caps(vk, true);
     gpu->export_caps.sync = vk_sync_handle_caps(vk);
     gpu->import_caps.sync = 0; // Not supported yet
 
