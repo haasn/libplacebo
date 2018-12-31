@@ -260,7 +260,7 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
         // Query whether creation of a "basic" dummy texture would work
         VkPhysicalDeviceExternalImageFormatInfoKHR ext_pinfo = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR,
-            .handleType = handle_type,
+            .handleType = vk_handle_type(handle_type),
         };
 
         VkPhysicalDeviceImageFormatInfo2KHR pinfo = {
