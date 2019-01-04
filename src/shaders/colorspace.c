@@ -855,8 +855,10 @@ void pl_shader_color_map(struct pl_shader *sh,
     if (!dst.transfer) {
         dst.transfer = src.transfer;
         if (pl_color_transfer_is_hdr(dst.transfer) ||
-                dst.transfer == PL_COLOR_TRC_LINEAR)
+            dst.transfer == PL_COLOR_TRC_LINEAR)
+        {
             dst.transfer = PL_COLOR_TRC_GAMMA22;
+        }
     }
 
     // Defaults the dest average based on the source average, unless the source
