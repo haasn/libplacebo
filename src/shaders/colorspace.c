@@ -906,6 +906,10 @@ void pl_shader_color_map(struct pl_shader *sh,
     if (need_linear)
         pl_shader_ootf(sh, src);
 
+    // Tone map to rescale the signal average/peak if needed
+    if (src.sig_peak * src.sig_scale > dst.sig_peak * dst.sig_scale + 1e-6)
+        pl_shader_tone_map(sh, src, dst, peak_detect_state, params);
+
     // Adapt to the right colorspace (primaries) if necessary
     if (src.primaries != dst.primaries) {
         const struct pl_raw_primaries *csp_src, *csp_dst;
@@ -918,10 +922,6 @@ void pl_shader_color_map(struct pl_shader *sh,
             .data = PL_TRANSPOSE_3X3(cms_mat.m),
         }));
     }
-
-    // Tone map to rescale the signal average/peak if needed
-    if (src.sig_peak * src.sig_scale > dst.sig_peak * dst.sig_scale + 1e-6)
-        pl_shader_tone_map(sh, src, dst, peak_detect_state, params);
 
     // Warn for remaining out-of-gamut colors if enabled
     if (params->gamut_warning) {

@@ -180,8 +180,7 @@ struct pl_color_map_params {
 
     // If true, enables the gamut warning feature. This will visibly highlight
     // all out-of-gamut colors (by inverting them), if they would have been
-    // clipped as a result of gamut/tone mapping. (Obviously, this feature only
-    // really makes sense with TONE_MAPPING_CLIP)
+    // clipped as a result of gamut or tone mapping.
     bool gamut_warning;
 
     // If set to something nonzero, this enables the peak detection feature.
