@@ -150,16 +150,33 @@ struct pl_color_map_params {
     enum pl_tone_mapping_algorithm tone_mapping_algo;
     float tone_mapping_param;
 
-    // Desaturation coefficient. This essentially desaturates very bright
-    // spectral colors towards white, resulting in a more natural-looking
-    // depiction of very bright sunlit regions or images of the sunlit sky. The
-    // coefficient indicates the strength of the desaturation - higher values
-    // desaturate more strongly. The default value is 0.5, which is fairly
-    // conservative - due in part to the excessive use of extremely bright
-    // scenes in badly mastered HDR content. Using a value of 1.0 makes it
-    // approximately match the desaturation strength used by the ACES ODT. A
-    // setting of 0.0 disables this.
-    float tone_mapping_desaturate;
+    // The tone mapping algorithm can operate in two modes: The first is known
+    // as "desaturating" (per-channel) mode, aka "hollywood/TV" style tone
+    // mapping; and the second is called "saturating" (linear) mode, aka
+    // "chromatic/colorimetric" tone mapping. The saturating tone mapping
+    // algorithm preserves colors from the source faithfully, but can suffer
+    // from weird-looking, blown out highlights in very bright regions. To
+    // provide a trade-off between these two approaches, we mix the result
+    // between the two approaches based on the overall brightness of the pixel.
+    //
+    // These settings control the parameter of this mixing. The `strength`
+    // controls how much of the desaturating result is mixed into the pixel,
+    // with values ranging from 0.0 to 1.0 - while the `base` and `exponent`
+    // controls the placement and steepness of the mixing curve.
+    //
+    // If you want to always use the saturating/colorimetric tone mapping, set
+    // the strength to 0.0. If you want to always use the desaturating/hollywood
+    // tone mapping, set the strength to 1.0 and the exponent to 0.0. The
+    // default settings are strength 0.75, exponent 1.5 and base 0.18, which
+    // provides a reasonable balance.
+    float desaturation_strength;
+    float desaturation_exponent;
+    float desaturation_base;
+
+    // When tone mapping, this represents the upper limit of how much the
+    // scene may be over-exposed in order to hit the `dst.sig_avg` target.
+    // If left unset, defaults to 1.0, which corresponds to no boost.
+    float max_boost;
 
     // If true, enables the gamut warning feature. This will visibly highlight
     // all out-of-gamut colors (by inverting them), if they would have been
