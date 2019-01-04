@@ -92,6 +92,11 @@ struct pl_render_params {
     // desaturation, etc. If NULL, defaults to &pl_color_adjustment_neutral.
     const struct pl_color_adjustment *color_adjustment;
 
+    // Configures the settings used to detect the peak of the source content,
+    // for HDR sources. Has no effect on SDR content. If NULL, peak detection
+    // is disabled.
+    const struct pl_peak_detect_params *peak_detect_params;
+
     // Configures the settings used to tone map from HDR to SDR, or from higher
     // gamut to standard gamut content. If NULL, defaults to
     // `&pl_color_map_default_params`.
@@ -131,6 +136,12 @@ struct pl_render_params {
     // always falls back to built-in GPU samplers. Note: The scalers are
     // already disabled if the overlay texture does not need to be scaled.
     bool disable_overlay_sampling;
+
+    // Allows the peak detection result to be delayed by up to a single frame,
+    // which can sometimes (not always) allow skipping some otherwise redundant
+    // sampling work. Only relevant when peak detection is active (i.e.
+    // params->peak_detect_params is set and the source is HDR).
+    bool allow_delayed_peak_detect;
 
     // --- Performance tuning / debugging options
     // These may affect performance or may make debugging problems easier,

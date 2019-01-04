@@ -66,14 +66,15 @@ struct pl_renderer {
     const struct pl_fmt *fbofmt;
 
     // Cached feature checks (inverted)
-    bool disable_compute;    // disable the use of compute shaders
-    bool disable_sampling;   // disable use of advanced scalers
-    bool disable_debanding;  // disable the use of debanding shaders
-    bool disable_linear_hdr; // disable linear scaling for HDR signals
-    bool disable_linear_sdr; // disable linear scaling for SDR signals
-    bool disable_blending;   // disable blending for the target/fbofmt
-    bool disable_overlay;    // disable rendering overlays
-    bool disable_3dlut;      // disable usage of a 3DLUT
+    bool disable_compute;       // disable the use of compute shaders
+    bool disable_sampling;      // disable use of advanced scalers
+    bool disable_debanding;     // disable the use of debanding shaders
+    bool disable_linear_hdr;    // disable linear scaling for HDR signals
+    bool disable_linear_sdr;    // disable linear scaling for SDR signals
+    bool disable_blending;      // disable blending for the target/fbofmt
+    bool disable_overlay;       // disable rendering overlays
+    bool disable_3dlut;         // disable usage of a 3DLUT
+    bool disable_peak_detect;   // disable peak detection shader
 
     // Shader resource objects and intermediate textures (FBOs)
     struct pl_shader_obj *peak_detect_state;
@@ -198,14 +199,15 @@ void pl_renderer_flush_cache(struct pl_renderer *rr)
 }
 
 const struct pl_render_params pl_render_default_params = {
-    .upscaler         = &pl_filter_spline36,
-    .downscaler       = &pl_filter_mitchell,
-    .frame_mixer      = NULL,
+    .upscaler           = &pl_filter_spline36,
+    .downscaler         = &pl_filter_mitchell,
+    .frame_mixer        = NULL,
 
-    .deband_params    = &pl_deband_default_params,
-    .sigmoid_params   = &pl_sigmoid_default_params,
-    .color_map_params = &pl_color_map_default_params,
-    .dither_params    = &pl_dither_default_params,
+    .deband_params      = &pl_deband_default_params,
+    .sigmoid_params     = &pl_sigmoid_default_params,
+    .peak_detect_params = &pl_peak_detect_default_params,
+    .color_map_params   = &pl_color_map_default_params,
+    .dither_params      = &pl_dither_default_params,
 };
 
 // Represents a "in-flight" image, which is a shader that's in the process of
@@ -598,6 +600,41 @@ static int deband_src(struct pl_renderer *rr, struct pl_shader *psh,
     return DEBAND_NORMAL;
 }
 
+static void hdr_update_peak(struct pl_renderer *rr, struct pl_shader *sh,
+                            const struct pass_state *pass,
+                            const struct pl_render_params *params)
+{
+    if (!params->peak_detect_params || !pl_color_space_is_hdr(pass->cur_img.color))
+        goto cleanup;
+
+    if (rr->disable_compute || rr->disable_peak_detect)
+        goto cleanup;
+
+    if (!rr->fbofmt && !params->allow_delayed_peak_detect) {
+        PL_WARN(rr, "Disabling peak detection because "
+                "`allow_delayed_peak_detect` is false, but lack of FBOs "
+                "forces the result to be delayed.");
+        rr->disable_peak_detect = true;
+        goto cleanup;
+    }
+
+    bool ok = pl_shader_detect_peak(sh, pass->cur_img.color,
+                                    &rr->peak_detect_state,
+                                    params->peak_detect_params);
+    if (!ok) {
+        PL_WARN(rr, "Failed creating HDR peak detection shader.. disabling");
+        rr->disable_peak_detect = true;
+        goto cleanup;
+    }
+
+    return;
+
+cleanup:
+    // No peak detection required or supported, so clean up the state to avoid
+    // confusing it with later frames where peak detection is enabled again
+    pl_shader_obj_destroy(&rr->peak_detect_state);
+}
+
 // This scales and merges all of the source images, and initializes the cur_img.
 static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_image *image,
@@ -747,6 +784,10 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
 
     // Convert the image colorspace
     pl_shader_decode_color(sh, &pass->cur_img.repr, params->color_adjustment);
+
+    // HDR peak detection, do this as early as possible
+    hdr_update_peak(rr, sh, pass, params);
+
     GLSL("}\n");
     return true;
 }
@@ -770,14 +811,16 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         .rect       = img->rect,
     };
 
+    bool need_fbo = image->num_overlays > 0;
+    need_fbo |= rr->peak_detect_state && !params->allow_delayed_peak_detect;
+
     struct sampler_info info = sample_src_info(rr, &src, params);
-    bool need_osd = image->num_overlays > 0;
-    if (info.type == SAMPLER_DIRECT && !need_osd) {
+    if (info.type == SAMPLER_DIRECT && !need_fbo) {
         PL_TRACE(rr, "Skipping main scaler (free sampling)");
         return true;
     }
 
-    if (info.dir == SAMPLER_NOOP && !need_osd) {
+    if (info.dir == SAMPLER_NOOP && !need_fbo) {
         PL_TRACE(rr, "Skipping main scaler (would be no-op)");
         return true;
     }
@@ -873,7 +916,7 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
         pl_3dlut_apply(sh, &rr->lut3d_state);
         // 3DLUT out -> target
         pl_shader_color_map(sh, params->color_map_params, res.dst_color,
-                            target->color, &rr->peak_detect_state, false);
+                            target->color, NULL, false);
     }
 
 fallback:
