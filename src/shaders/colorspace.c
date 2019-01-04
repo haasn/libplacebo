@@ -415,24 +415,38 @@ void pl_shader_unsigmoidize(struct pl_shader *sh,
          1.0 / scale, slope, center, offset / scale);
 }
 
-// Applies the OOTF / inverse OOTF
-static void pl_shader_ootf(struct pl_shader *sh, enum pl_color_light light,
-                           ident_t luma, float peak)
+static ident_t sh_luma_coeffs(struct pl_shader *sh, enum pl_color_primaries prim)
 {
-    if (!light || light == PL_COLOR_LIGHT_DISPLAY)
+    struct pl_matrix3x3 rgb2xyz;
+    rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(prim));
+    return sh_var(sh, (struct pl_shader_var) {
+        .var = pl_var_vec3("luma_coeffs"),
+        .data = rgb2xyz.m[1], // RGB->Y vector
+    });
+}
+
+// Applies the OOTF / inverse OOTF - including the sig_scale adaptation
+static void pl_shader_ootf(struct pl_shader *sh, struct pl_color_space csp)
+{
+    if (csp.sig_scale != 1.0)
+        GLSL("color.rgb *= vec3(%f); \n", csp.sig_scale);
+
+    if (!csp.light || csp.light == PL_COLOR_LIGHT_DISPLAY)
         return;
 
     GLSL("// pl_shader_ootf                \n"
          "color.rgb = max(color.rgb, 0.0); \n");
 
-    switch (light)
+    switch (csp.light)
     {
     case PL_COLOR_LIGHT_SCENE_HLG: {
         // HLG OOTF from BT.2100, tuned to the indicated peak
-        float gamma = 1.2 + 0.42 * log10(peak * PL_COLOR_REF_WHITE / 1000.0);
+        float gamma = 1.2 + 0.42 * log10(csp.sig_peak * PL_COLOR_REF_WHITE / 1000.0);
         gamma = PL_MAX(gamma, 1.0);
         GLSL("color.rgb *= vec3(%f * pow(dot(%s, color.rgb), %f));\n",
-             peak / pow(12, gamma), luma, gamma - 1.0);
+             csp.sig_peak / pow(12, gamma),
+             sh_luma_coeffs(sh, csp.primaries),
+             gamma - 1.0);
         break;
     }
     case PL_COLOR_LIGHT_SCENE_709_1886:
@@ -454,25 +468,25 @@ static void pl_shader_ootf(struct pl_shader *sh, enum pl_color_light light,
     }
 }
 
-static void pl_shader_inverse_ootf(struct pl_shader *sh,
-                                   enum pl_color_light light, ident_t luma,
-                                   float peak)
+static void pl_shader_inverse_ootf(struct pl_shader *sh, struct pl_color_space csp)
 {
-    if (!light || light == PL_COLOR_LIGHT_DISPLAY)
-        return;
+    if (!csp.light || csp.light == PL_COLOR_LIGHT_DISPLAY)
+        goto skip;
 
     GLSL("// pl_shader_inverse_ootf        \n"
          "color.rgb = max(color.rgb, 0.0); \n");
 
-    switch (light)
+    switch (csp.light)
     {
     case PL_COLOR_LIGHT_SCENE_HLG: {
-        float gamma = 1.2 + 0.42 * log10(peak * PL_COLOR_REF_WHITE / 1000.0);
+        float gamma = 1.2 + 0.42 * log10(csp.sig_peak * PL_COLOR_REF_WHITE / 1000.0);
         gamma = PL_MAX(gamma, 1.0);
         GLSL("color.rgb *= vec3(1.0/%f);                                \n"
              "color.rgb /= vec3(max(1e-6, pow(dot(%s, color.rgb),       \n"
              "                                %f)));                    \n",
-             peak / pow(12, gamma), luma, (gamma - 1.0) / gamma);
+             csp.sig_peak / pow(12, gamma),
+             sh_luma_coeffs(sh, csp.primaries),
+             (gamma - 1.0) / gamma);
         break;
     }
     case PL_COLOR_LIGHT_SCENE_709_1886:
@@ -489,6 +503,10 @@ static void pl_shader_inverse_ootf(struct pl_shader *sh,
     default:
         abort();
     }
+
+skip:
+    if (csp.sig_scale != 1.0)
+        GLSL("color.rgb *= vec3(1.0 / %f); \n", csp.sig_scale);
 }
 
 const struct pl_color_map_params pl_color_map_default_params = {
@@ -879,35 +897,14 @@ void pl_shader_color_map(struct pl_shader *sh,
                        src.sig_scale != dst.sig_scale ||
                        src.light != dst.light;
 
-    // Various operations need access to the src_luma and dst_luma respectively,
-    // so just always make them available if we're doing anything at all
-    ident_t src_luma = NULL, dst_luma = NULL;
-    if (need_linear) {
-        struct pl_matrix3x3 rgb2xyz;
-        rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(src.primaries));
-        src_luma = sh_var(sh, (struct pl_shader_var) {
-            .var  = pl_var_vec3("src_luma"),
-            .data = rgb2xyz.m[1], // RGB->Y vector
-        });
-        rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(dst.primaries));
-        dst_luma = sh_var(sh, (struct pl_shader_var) {
-            .var  = pl_var_vec3("dst_luma"),
-            .data = rgb2xyz.m[1], // RGB->Y vector
-        });
-    }
-
     bool is_linear = prelinearized;
     if (need_linear && !is_linear) {
         pl_shader_linearize(sh, src.transfer);
         is_linear = true;
     }
 
-    // Re-scale the signal to account for a change in reference system
-    if (src.sig_scale != 1.0)
-        GLSL("color.rgb *= vec3(%f); \n", src.sig_scale);
-
     if (need_linear)
-        pl_shader_ootf(sh, src.light, src_luma, src.sig_peak);
+        pl_shader_ootf(sh, src);
 
     // Adapt to the right colorspace (primaries) if necessary
     if (src.primaries != dst.primaries) {
@@ -935,10 +932,7 @@ void pl_shader_color_map(struct pl_shader *sh,
     }
 
     if (need_linear)
-        pl_shader_inverse_ootf(sh, dst.light, dst_luma, dst.sig_peak);
-
-    if (dst.sig_scale != 1.0)
-        GLSL("color.rgb *= vec3(1.0 / %f); \n", dst.sig_scale);
+        pl_shader_inverse_ootf(sh, dst);
 
     if (is_linear)
         pl_shader_delinearize(sh, dst.transfer);
