@@ -179,6 +179,21 @@ ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
 
 ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
 {
+    // Skip re-attaching the same buffer desc twice
+    // FIXME: define aliases if the variable names differ
+    switch (sd.desc.type) {
+    case PL_DESC_BUF_UNIFORM:
+    case PL_DESC_BUF_STORAGE:
+    case PL_DESC_BUF_TEXEL_UNIFORM:
+    case PL_DESC_BUF_TEXEL_STORAGE:
+        for (int i = 0; i < sh->res.num_descriptors; i++) {
+            if (sh->res.descriptors[i].object == sd.object)
+                return (ident_t) sh->res.descriptors[i].desc.name;
+        }
+
+    default: break;
+    }
+
     sd.desc.name = sh_fresh(sh, sd.desc.name);
     TARRAY_APPEND(sh, sh->res.descriptors, sh->res.num_descriptors, sd);
     return (ident_t) sd.desc.name;
