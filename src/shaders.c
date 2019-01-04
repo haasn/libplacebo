@@ -422,6 +422,12 @@ static ident_t sh_split(struct pl_shader *sh)
         sh->buffers[SH_BUF_BODY].start[0] = '\0'; // for sanity / efficiency
     }
 
+    if (sh->buffers[SH_BUF_FOOTER].len) {
+        bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_FOOTER]);
+        sh->buffers[SH_BUF_FOOTER].len = 0;
+        sh->buffers[SH_BUF_FOOTER].start[0] = '\0';
+    }
+
     GLSLH("%s }\n", retvals[sh->res.output]);
     return name;
 }

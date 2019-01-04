@@ -82,6 +82,64 @@ void pl_shader_sigmoidize(struct pl_shader *sh,
 void pl_shader_unsigmoidize(struct pl_shader *sh,
                             const struct pl_sigmoid_params *params);
 
+struct pl_peak_detect_params {
+    // Smoothing coefficient for the detected values. This controls the time
+    // parameter (tau) of an IIR low pass filter. In other words, it represent
+    // the cutoff period (= 1 / cutoff frequency) in frames. Frequencies below
+    // this length will be suppressed. This helps block out annoying
+    // "sparkling" or "flickering" due to small variations in frame-to-frame
+    // brightness.
+    //
+    // If left unset, this defaults to 100.0.
+    float smoothing_period;
+
+    // In order to avoid reacting sluggishly on scene changes as a result of
+    // the low-pass filter, we disable it when the difference betwen the
+    // current frame brightness and the average frame brightness exceeds a
+    // given threshold difference. But rather than a single hard cutoff, which
+    // would lead to weird discontinuities on fades, we gradually disable it
+    // over a small window of brightness ranges. These parameters control the
+    // lower and upper bounds of this window, in dB.
+    //
+    // The default values are 5.5 and 10.0, respectively. To disable this logic
+    // entirely, set either one to a negative value.
+    float scene_threshold_low;
+    float scene_threshold_high;
+};
+
+extern const struct pl_peak_detect_params pl_peak_detect_default_params;
+
+// This function can be used to measure the `sig_peak` and `sig_avg` of a
+// video source automatically, using a compute shader. The measured values
+// are smoothed automatically (depending on the parameters), so to keep track
+// of the measured results over time, a shader object is used to hold the state.
+// Returns false on failure initializing the peak detection object, or if
+// compute shaders are not supported.
+//
+// It's important that the same shader object is used for successive frames
+// belonging to the same source. If the source changes (e.g. due to a file
+// change or seek), the user should not re-use the same state object.
+//
+// The parameter `csp` holds the representation of the color values that are
+// the input to this function. (They must already be in decoded RGB form, i.e.
+// alternate color representations are not supported)
+bool pl_shader_detect_peak(struct pl_shader *sh,
+                           struct pl_color_space csp,
+                           struct pl_shader_obj **state,
+                           const struct pl_peak_detect_params *params);
+
+// After dispatching the above shader, this function *may* be used to read out
+// the detected `sig_peak` and `sig_avg` directly. If the shader has never been
+// dispatched yet, i.e. no information is available, this will return false.
+//
+// Note: This function will block until the shader object is no longer in use
+// by the GPU, so its use should be avoided due to performance reasons. This
+// function is *not* needed when the user only wants to use `pl_shader_color_map`,
+// since that can ingest the peak detection state object directly. It only
+// serves as a utility/debugging function.
+bool pl_get_detected_peak(const struct pl_shader_obj **state,
+                          float *out_peak, float *out_avg);
+
 // A collection of various tone mapping algorithms supported by libplacebo.
 enum pl_tone_mapping_algorithm {
     // Performs no tone-mapping, just clips out-of-gamut colors. Retains perfect
@@ -182,38 +240,26 @@ struct pl_color_map_params {
     // all out-of-gamut colors (by inverting them), if they would have been
     // clipped as a result of gamut or tone mapping.
     bool gamut_warning;
-
-    // If set to something nonzero, this enables the peak detection feature.
-    // Controls how many frames to smooth (average) the results over, in order
-    // to prevent jitter due to sparkling highlights. Defaults to 63.
-    int peak_detect_frames;
-
-    // When using peak detection, setting this to a nonzero value enables
-    // scene change detection. If the current frame's average brightness
-    // differs from the averaged frame brightness of the previous frames by
-    // this much or more, the averaged value will be discarded and the state
-    // reset. Doing so helps prevent annoying "eye adaptation"-like effects
-    // when transitioning between dark and bright scenes. Defaults to 0.2.
-    float scene_threshold;
 };
 
 extern const struct pl_color_map_params pl_color_map_default_params;
 
 // Maps `vec4 color` from one color space to another color space according
 // to the parameters (described in greater depth above). If `params` is left
-// as NULL, it defaults to &pl_color_map_default_params. If `prelinearized`
+// as NULL, it defaults to `&pl_color_map_default_params`. If `prelinearized`
 // is true, the logic will assume the input has already been linearized by the
 // caller (e.g. as part of a previous linear light scaling operation).
 //
-// When the user wishes to use peak detection, `peak_detect_state` should be
-// set to the pointer of an object that will hold the state for the frame
-// averaging, which must be destroyed by the user when no longer required.
-// Successive calls to the same shader should re-use the same object. May
-// be safely left as NULL, which will disable the peak detection feature.
+// If `peak_detect_state` is set to a valid peak detection state object (as
+// created by `pl_shader_detect_peak`), the detected values will be used in
+// place of `src.sig_peak` / `src.sig_avg`.
 //
-// Note: Due to the nature of the peak detection implementation, the detected
-// metadata is delayed by one frame. This may cause a single frame of wrong
-// metadata on rapid scene transitions, or following the start of playback.
+// Note: The peak detection state object is only updated after the shader is
+// dispatched, so if `pl_shader_detect_peak` is called as part of the same
+// shader as `pl_shader_color_map`, the results will end up delayed by one
+// frame. If frame-level accuracy is desired, then users should call
+// `pl_shader_detect_peak` separately and dispatch the resulting shader
+// *before* dispatching this one.
 void pl_shader_color_map(struct pl_shader *sh,
                          const struct pl_color_map_params *params,
                          struct pl_color_space src, struct pl_color_space dst,

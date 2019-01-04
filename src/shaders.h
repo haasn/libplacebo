@@ -32,6 +32,7 @@ enum pl_shader_buf {
     SH_BUF_PRELUDE, // extra #defines etc.
     SH_BUF_HEADER,  // previous passes, helper function definitions, etc.
     SH_BUF_BODY,    // partial contents of the "current" function
+    SH_BUF_FOOTER,  // will be appended to the end of the current function
     SH_BUF_COUNT,
 };
 
@@ -125,6 +126,7 @@ void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
 #define GLSLP(...) pl_shader_append(sh, SH_BUF_PRELUDE, __VA_ARGS__)
 #define GLSLH(...) pl_shader_append(sh, SH_BUF_HEADER, __VA_ARGS__)
 #define GLSL(...)  pl_shader_append(sh, SH_BUF_BODY, __VA_ARGS__)
+#define GLSLF(...) pl_shader_append(sh, SH_BUF_FOOTER, __VA_ARGS__)
 
 // Requires that the share is mutable, has an output signature compatible
 // with the given input signature, as well as an output size compatible with

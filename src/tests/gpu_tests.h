@@ -453,7 +453,6 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     TEST_PARAMS(sigmoid, center, 1);
     TEST_PARAMS(color_map, intent, PL_INTENT_ABSOLUTE_COLORIMETRIC);
     TEST_PARAMS(color_map, gamut_warning, 1);
-    TEST_PARAMS(color_map, scene_threshold, 1);
     TEST_PARAMS(dither, method, PL_DITHER_WHITE_NOISE);
     TEST(cone_params, pl_cone_params, pl_vision_deuteranomaly, strength, 0);
 
