@@ -388,6 +388,8 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     if (!fbo || !rr)
         goto error;
 
+    pl_tex_clear(gpu, fbo, (float[4]){0});
+
     struct pl_image image = {
         .signature      = 0,
         .num_planes     = 1,
@@ -396,7 +398,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
             .sys        = PL_COLOR_SYSTEM_BT_709,
             .levels     = PL_COLOR_LEVELS_PC,
         },
-        .color          = pl_color_space_hdr10, // test tone-mapping
+        .color          = pl_color_space_bt709,
         .width          = width,
         .height         = height,
         .src_rect       = {-1.0, 0.0, width - 1.0, height},
@@ -412,35 +414,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         .color          = pl_color_space_srgb,
     };
 
-    for (int i = 0; i < 10; i ++) {
-        pl_tex_clear(gpu, fbo, (float[4]){0});
-        REQUIRE(pl_render_image(rr, &image, &target, NULL));
-    }
-
-    // Test some custom params
-    struct pl_render_params params = pl_render_default_params;
-    params.upscaler = &pl_filter_ewa_lanczos;
-
-    params.color_adjustment = &(struct pl_color_adjustment) {
-        .brightness = 0.1,
-        .contrast = 0.9,
-        .saturation = 1.5,
-        .gamma = 0.8,
-    };
-
-    params.color_map_params = &(struct pl_color_map_params) {
-        .intent = PL_INTENT_SATURATION,
-        .tone_mapping_algo = PL_TONE_MAPPING_CLIP,
-        .gamut_warning = true,
-    };
-
-    image.color.sig_scale = 0.9;
-    target.color.sig_scale = 2.0;
-
-    for (int i = 0; i < 5; i++) {
-        pl_tex_clear(gpu, fbo, (float[4]){0});
-        REQUIRE(pl_render_image(rr, &image, &target, &params));
-    }
+    REQUIRE(pl_render_image(rr, &image, &target, NULL));
 
     fbo_data = malloc(fbo->params.w * fbo->params.h * sizeof(float[4]));
     REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
@@ -448,18 +422,58 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         .ptr            = fbo_data,
     }));
 
-    int max = 255;
-    printf("P3\n%d %d\n%d\n", fbo->params.w, fbo->params.h, max);
-    for (int y = 0; y < fbo->params.h; y++) {
-        for (int x = 0; x < fbo->params.w; x++) {
-            float *v = &fbo_data[(y * fbo->params.h + x) * 4];
-            for (int i = 0; i < 3; i++)
-                printf("%d ", (int) round(fmin(fmax(v[i], 0.0), 1.0) * max));
-        }
-        printf("\n");
+    // TODO: embed a reference texture and ensure it matches
+
+    // Test a bunch of different params
+#define TEST(SNAME, STYPE, DEFAULT, FIELD, LIMIT)                       \
+    do {                                                                \
+        for (int i = 0; i <= LIMIT; i++) {                              \
+            struct pl_render_params params = pl_render_default_params;  \
+            struct STYPE tmp = DEFAULT;                                 \
+            tmp.FIELD = i;                                              \
+            params.SNAME = &tmp;                                        \
+            for (int p = 0; p < 5; p++) {                               \
+                REQUIRE(pl_render_image(rr, &image, &target, &params)); \
+                pl_gpu_flush(gpu);                                      \
+            }                                                           \
+        }                                                               \
+    } while (0)
+
+#define TEST_PARAMS(NAME, FIELD, LIMIT) \
+    TEST(NAME##_params, pl_##NAME##_params, pl_##NAME##_default_params, FIELD, LIMIT)
+
+    for (const struct pl_named_filter_config *f = pl_named_filters; f->name; f++) {
+        struct pl_render_params params = pl_render_default_params;
+        params.upscaler = f->filter;
+        REQUIRE(pl_render_image(rr, &image, &target, &params));
+        pl_gpu_flush(gpu);
     }
 
-    // TODO: embed a reference texture and ensure it matches
+    TEST_PARAMS(deband, iterations, 3);
+    TEST_PARAMS(sigmoid, center, 1);
+    TEST_PARAMS(color_map, intent, PL_INTENT_ABSOLUTE_COLORIMETRIC);
+    TEST_PARAMS(color_map, gamut_warning, 1);
+    TEST_PARAMS(color_map, scene_threshold, 1);
+    TEST_PARAMS(dither, method, PL_DITHER_WHITE_NOISE);
+    TEST(cone_params, pl_cone_params, pl_vision_deuteranomaly, strength, 0);
+
+    // Test HDR stuff
+    image.color.sig_scale = 10.0;
+    target.color.sig_scale = 2.0;
+    TEST_PARAMS(color_map, tone_mapping_algo, PL_TONE_MAPPING_LINEAR);
+    TEST_PARAMS(color_map, desaturation_strength, 1);
+    image.color.sig_scale = target.color.sig_scale = 0.0;
+
+    // Test some misc stuff
+    struct pl_render_params params = pl_render_default_params;
+    params.color_adjustment = &(struct pl_color_adjustment) {
+        .brightness = 0.1,
+        .contrast = 0.9,
+        .saturation = 1.5,
+        .gamma = 0.8,
+    };
+
+    REQUIRE(pl_render_image(rr, &image, &target, &params));
 
 error:
     free(fbo_data);

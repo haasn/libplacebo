@@ -100,6 +100,7 @@ int main()
 
     struct pl_vulkan_params params = pl_vulkan_default_params;
     params.instance_params = &(struct pl_vk_inst_params) { .debug = true };
+    params.queue_count = 8; // test inter-queue stuff
     const struct pl_vulkan *vk = pl_vulkan_create(ctx, &params);
     if (!vk)
         return SKIP;
