@@ -622,6 +622,7 @@ struct pl_var {
 const char *pl_var_glsl_type_name(struct pl_var var);
 
 // Helper functions for constructing the most common pl_vars.
+struct pl_var pl_var_int(const char *name);
 struct pl_var pl_var_uint(const char *name);
 struct pl_var pl_var_float(const char *name);
 struct pl_var pl_var_vec2(const char *name);

@@ -794,6 +794,7 @@ const char *pl_var_glsl_type_name(struct pl_var var)
         };                                              \
     }
 
+PL_VAR(SINT,  int,   1, 1);
 PL_VAR(UINT,  uint,  1, 1);
 PL_VAR(FLOAT, float, 1, 1);
 PL_VAR(FLOAT, vec2,  1, 2);
