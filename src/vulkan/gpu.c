@@ -1151,10 +1151,12 @@ struct pl_buf_vk {
     enum queue_type update_queue;
     VkBufferView view; // for texel buffers
     // "current" metadata, can change during course of execution
-    VkPipelineStageFlags current_stage;
     VkAccessFlags current_access;
     bool exported;
     bool needs_flush;
+    // the signal guards reuse, and can be NULL
+    struct vk_signal *sig;
+    VkPipelineStageFlags sig_stage;
 };
 
 #define PL_VK_BUF_VERTEX PL_BUF_PRIVATE
@@ -1169,6 +1171,7 @@ static void vk_buf_deref(const struct pl_gpu *gpu, struct pl_buf *buf)
     struct pl_vk *p = gpu->priv;
 
     if (--buf_vk->refcount == 0) {
+        vk_signal_destroy(vk, &buf_vk->sig);
         vkDestroyBufferView(vk->dev, buf_vk->view, VK_ALLOC);
         vk_free_memslice(p->alloc, buf_vk->slice.mem);
         talloc_free(buf);
@@ -1177,10 +1180,11 @@ static void vk_buf_deref(const struct pl_gpu *gpu, struct pl_buf *buf)
 
 // offset: relative to pl_buf
 static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
-                        const struct pl_buf *buf, VkPipelineStageFlags newStage,
+                        const struct pl_buf *buf, VkPipelineStageFlags stage,
                         VkAccessFlags newAccess, size_t offset, size_t size,
                         bool export)
 {
+    struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_buf_vk *buf_vk = buf->priv;
 
     VkBufferMemoryBarrier buffBarrier = {
@@ -1196,22 +1200,61 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         .size = size,
     };
 
+    VkEvent event = VK_NULL_HANDLE;
+    enum vk_wait_type type = vk_cmd_wait(vk, cmd, &buf_vk->sig, stage, &event);
+    VkPipelineStageFlags src_stages = 0;
+
+    bool need_trans = buf_vk->current_access != newAccess ||
+                      (buffBarrier.srcQueueFamilyIndex !=
+                       buffBarrier.dstQueueFamilyIndex);
+
     if ((buf_vk->needs_flush || buf->params.host_mapped) && !buf_vk->exported) {
         buffBarrier.srcAccessMask |= VK_ACCESS_HOST_WRITE_BIT;
-        buf_vk->current_stage |= VK_PIPELINE_STAGE_HOST_BIT;
+        src_stages |= VK_PIPELINE_STAGE_HOST_BIT;
         buf_vk->needs_flush = false;
+        need_trans = true;
+        if (type == VK_WAIT_EVENT)
+            type = VK_WAIT_BARRIER;
     }
 
-    if (buffBarrier.srcAccessMask != buffBarrier.dstAccessMask) {
-        vkCmdPipelineBarrier(cmd->buf, buf_vk->current_stage, newStage, 0,
-                             0, NULL, 1, &buffBarrier, 0, NULL);
+    if (need_trans) {
+        switch (type) {
+        case VK_WAIT_NONE:
+            // No synchronization required, so we can safely transition out of
+            // VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+            buffBarrier.srcAccessMask = 0;
+            src_stages |= VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            vkCmdPipelineBarrier(cmd->buf, src_stages, stage, 0, 0, NULL,
+                                 1, &buffBarrier, 0, NULL);
+            break;
+        case VK_WAIT_BARRIER:
+            // Regular pipeline barrier is required
+            vkCmdPipelineBarrier(cmd->buf, buf_vk->sig_stage | src_stages,
+                                 stage, 0, 0, NULL, 1, &buffBarrier, 0, NULL);
+            break;
+        case VK_WAIT_EVENT:
+            // We can/should use the VkEvent for synchronization
+            vkCmdWaitEvents(cmd->buf, 1, &event, buf_vk->sig_stage,
+                            stage, 0, NULL, 1, &buffBarrier, 0, NULL);
+            break;
+        }
     }
 
-    buf_vk->current_stage = newStage;
     buf_vk->current_access = newAccess;
     buf_vk->exported = export;
     buf_vk->refcount++;
     vk_cmd_callback(cmd, (vk_cb) vk_buf_deref, gpu, buf);
+}
+
+static void buf_signal(const struct pl_gpu *gpu, struct vk_cmd *cmd,
+                       const struct pl_buf *buf, VkPipelineStageFlags stage)
+{
+    struct pl_buf_vk *buf_vk = buf->priv;
+    struct vk_ctx *vk = pl_vk_get(gpu);
+    pl_assert(!buf_vk->sig);
+
+    buf_vk->sig = vk_cmd_signal(vk, cmd, stage);
+    buf_vk->sig_stage = stage;
 }
 
 // Flush visible writes to a buffer made by the API
@@ -1243,7 +1286,7 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         .size = size,
     };
 
-    vkCmdPipelineBarrier(cmd->buf, buf_vk->current_stage,
+    vkCmdPipelineBarrier(cmd->buf, buf_vk->sig_stage,
                          VK_PIPELINE_STAGE_HOST_BIT, 0,
                          0, NULL, 1, &buffBarrier, 0, NULL);
 }
@@ -1289,6 +1332,7 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
         }
 
         pl_assert(!buf->params.host_readable); // no flush needed due to this
+        buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
     }
 }
 
@@ -1321,7 +1365,6 @@ static bool vk_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
     // stages since the synchronization via fences/semaphores is required
     buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
                 0, buf->params.size, true);
-    buf_vk->current_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
     vk_submit(gpu);
     return vk_flush_commands(vk);
@@ -1338,7 +1381,6 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     buf->params.initial_data = NULL;
 
     struct pl_buf_vk *buf_vk = buf->priv = talloc_zero(buf, struct pl_buf_vk);
-    buf_vk->current_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
     buf_vk->current_access = 0;
     buf_vk->refcount = 1;
 
@@ -1580,6 +1622,9 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         vkCmdCopyBuffer(cmd->buf, buf_vk->slice.buf, tbuf_vk->slice.buf,
                         1, &region);
 
+        buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        buf_signal(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
         struct pl_tex_transfer_params fixed = *params;
         fixed.buf = tbuf;
         fixed.buf_offset = 0;
@@ -1614,6 +1659,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, false);
         vkCmdCopyBufferToImage(cmd->buf, buf_vk->slice.buf, tex_vk->img,
                                tex_vk->current_layout, 1, &region);
+        buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
     }
 
@@ -1685,6 +1731,8 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
                     false);
         vkCmdCopyBuffer(cmd->buf, tbuf_vk->slice.buf, buf_vk->slice.buf,
                         1, &region);
+        buf_signal(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_flush(gpu, cmd, buf, params->buf_offset, size);
 
     } else {
@@ -1714,8 +1762,9 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, false);
         vkCmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->current_layout,
                                buf_vk->slice.buf, 1, &region);
-        buf_flush(gpu, cmd, buf, params->buf_offset, size);
+        buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        buf_flush(gpu, cmd, buf, params->buf_offset, size);
     }
 
     return true;
@@ -2378,6 +2427,7 @@ static void vk_release_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     case PL_DESC_BUF_TEXEL_UNIFORM:
     case PL_DESC_BUF_TEXEL_STORAGE: {
         const struct pl_buf *buf = db.object;
+        buf_signal(gpu, cmd, buf, passStages[pass->params.type]);
         if (desc->access != PL_DESC_ACCESS_READONLY)
             buf_flush(gpu, cmd, buf, 0, buf->params.size);
         break;
@@ -2559,6 +2609,8 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         vkCmdBeginRenderPass(cmd->buf, &binfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdDraw(cmd->buf, params->vertex_count, 1, 0, 0);
         vkCmdEndRenderPass(cmd->buf);
+
+        buf_signal(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
 
         // The renderPass implicitly transitions the texture to this layout
         tex_vk->current_layout = pass_vk->finalLayout;
