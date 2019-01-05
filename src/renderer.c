@@ -194,7 +194,7 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
 
 void pl_renderer_flush_cache(struct pl_renderer *rr)
 {
-    // TODO
+    pl_shader_obj_destroy(&rr->peak_detect_state);
 }
 
 const struct pl_render_params pl_render_default_params = {
