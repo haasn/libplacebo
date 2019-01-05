@@ -239,7 +239,7 @@ static void bench_hdr_hable(struct pl_shader *sh, struct pl_shader_obj **state,
 
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
     pl_shader_color_map(sh, &params, pl_color_space_hdr10, pl_color_space_monitor,
-                        state, false);
+                        NULL, false);
 }
 
 static void bench_hdr_mobius(struct pl_shader *sh, struct pl_shader_obj **state,
@@ -251,20 +251,14 @@ static void bench_hdr_mobius(struct pl_shader *sh, struct pl_shader_obj **state,
 
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
     pl_shader_color_map(sh, &params, pl_color_space_hdr10, pl_color_space_monitor,
-                        state, false);
+                        NULL, false);
 }
 
 static void bench_hdr_peak(struct pl_shader *sh, struct pl_shader_obj **state,
                             const struct pl_tex *src)
 {
-    struct pl_color_map_params params = {
-        .tone_mapping_algo = PL_TONE_MAPPING_CLIP,
-        .peak_detect_frames = 10,
-    };
-
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
-    pl_shader_color_map(sh, &params, pl_color_space_hdr10, pl_color_space_monitor,
-                        state, false);
+    pl_shader_detect_peak(sh, pl_color_space_hdr10, state, NULL);
 }
 
 static void bench_hdr_desat(struct pl_shader *sh, struct pl_shader_obj **state,
@@ -272,12 +266,14 @@ static void bench_hdr_desat(struct pl_shader *sh, struct pl_shader_obj **state,
 {
     struct pl_color_map_params params = {
         .tone_mapping_algo = PL_TONE_MAPPING_CLIP,
-        .tone_mapping_desaturate = 1.0,
+        .desaturation_strength = 0.75,
+        .desaturation_exponent = 1.5,
+        .desaturation_base = 0.18,
     };
 
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
     pl_shader_color_map(sh, &params, pl_color_space_hdr10, pl_color_space_monitor,
-                        state, false);
+                        NULL, false);
 }
 
 static const struct pl_grain_params grain_params = {
