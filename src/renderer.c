@@ -882,6 +882,13 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
     struct pl_shader *sh = pass->cur_img.sh;
 
     // Color management
+    bool prelinearized = false;
+    struct pl_color_space ref = image->color;
+    assert(ref.primaries == pass->cur_img.color.primaries);
+    assert(ref.light == pass->cur_img.color.light);
+    if (pass->cur_img.color.transfer == PL_COLOR_TRC_LINEAR)
+        prelinearized = true;
+
     bool use_3dlut = image->profile.data || target->profile.data ||
                      params->force_3dlut;
     if (rr->disable_3dlut)
@@ -891,7 +898,7 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
 
     if (use_3dlut) {
         struct pl_3dlut_profile src = {
-            .color = pass->cur_img.color,
+            .color = ref,
             .profile = image->profile,
         };
 
@@ -910,8 +917,8 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
         }
 
         // current -> 3DLUT in
-        pl_shader_color_map(sh, params->color_map_params, pass->cur_img.color,
-                            res.src_color, &rr->peak_detect_state, false);
+        pl_shader_color_map(sh, params->color_map_params, ref, res.src_color,
+                            &rr->peak_detect_state, prelinearized);
         // 3DLUT in -> 3DLUT out
         pl_3dlut_apply(sh, &rr->lut3d_state);
         // 3DLUT out -> target
@@ -934,8 +941,8 @@ fallback:
 
     if (!use_3dlut) {
         // current -> target
-        pl_shader_color_map(sh, params->color_map_params, pass->cur_img.color,
-                            target->color, &rr->peak_detect_state, false);
+        pl_shader_color_map(sh, params->color_map_params, ref, target->color,
+                            &rr->peak_detect_state, prelinearized);
     }
 
     // Apply color blindness simulation if requested
