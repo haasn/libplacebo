@@ -461,7 +461,7 @@ struct pl_buf_params {
 
     // Setting this indicates that the memory backing this buffer should be
     // shared with external APIs, If so, this must be exactly *one* of
-    // `pl_gpu.handle_caps.buf`.
+    // `pl_gpu.export_caps.buf`.
     enum pl_handle_type handle_type;
 
     // If non-NULL, the buffer will be created with these contents. Otherwise,
@@ -965,7 +965,7 @@ struct pl_sync {
 
 // Create a synchronization object. Returns NULL on failure.
 //
-// `handle_type` must be exactly *one* of `pl_gpu.handle_caps.sync`, and
+// `handle_type` must be exactly *one* of `pl_gpu.export_caps.sync`, and
 // indicates which type of handle to generate for sharing this sync object.
 const struct pl_sync *pl_sync_create(const struct pl_gpu *gpu,
                                      enum pl_handle_type handle_type);
@@ -981,11 +981,10 @@ void pl_sync_destroy(const struct pl_gpu *gpu,
                      const struct pl_sync **sync);
 
 // Initiates a texture export operation, allowing a texture to be accessed by
-// an external API. This is only valid for textures with `params.handle_type`.
-// Returns whether successful. After this operation successfully returns, it is
-// guaranteed that `sync->wait_handle` will eventually be signalled. For APIs
-// where this is relevant, the image layout should be specified as "general",
-// e.g. `GL_LAYOUT_GENERAL_EXT` for OpenGL.
+// an external API. Returns whether successful. After this operation
+// successfully returns, it is guaranteed that `sync->wait_handle` will
+// eventually be signalled. For APIs where this is relevant, the image layout
+// should be specified as "general", e.g. `GL_LAYOUT_GENERAL_EXT` for OpenGL.
 //
 // There is no corresponding "import" operation - the next operation that uses
 // a texture will implicitly import the texture. Valid API usage requires that

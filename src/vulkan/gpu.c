@@ -2774,8 +2774,8 @@ void pl_vk_sync_unwrap(const struct pl_sync *sync, VkSemaphore *out_wait,
         *out_signal = sync_vk->signal;
 }
 
-bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                   const struct pl_sync *sync)
+static bool vk_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                          const struct pl_sync *sync)
 {
     struct pl_vk *p = gpu->priv;
     struct vk_ctx *vk = pl_vk_get(gpu);
@@ -2848,6 +2848,7 @@ static struct pl_gpu_fns pl_fns_vk = {
     .pass_run               = vk_pass_run,
     .sync_create            = vk_sync_create,
     .sync_destroy           = vk_sync_deref,
+    .tex_export             = vk_tex_export,
     .gpu_flush              = vk_gpu_flush,
     .gpu_finish             = vk_gpu_finish,
 };

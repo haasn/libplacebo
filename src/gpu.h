@@ -39,12 +39,13 @@ struct pl_gpu_fns {
     GPU_PFN(buf_create);
     GPU_PFN(buf_write);
     GPU_PFN(buf_read);
-    GPU_PFN(buf_export); // optional if !gpu->handle_caps.shared_mem
+    GPU_PFN(buf_export); // optional if !gpu->export_caps.buf
     GPU_PFN(buf_poll); // optional: if NULL buffers are always free to use
     GPU_PFN(desc_namespace);
     GPU_PFN(pass_create);
     GPU_PFN(pass_run);
-    GPU_PFN(sync_create); // optional if !gpu->handle_caps.sync
+    GPU_PFN(sync_create); // optional if !gpu->export_caps.sync
+    GPU_PFN(tex_export); // optional if !gpu->export_caps.sync
     GPU_PFN(gpu_flush); // optional
     GPU_PFN(gpu_finish);
 };

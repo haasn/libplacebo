@@ -1387,3 +1387,9 @@ void pl_sync_destroy(const struct pl_gpu *gpu,
     gpu->impl->sync_destroy(gpu, *sync);
     *sync = NULL;
 }
+
+bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                   const struct pl_sync *sync)
+{
+    return gpu->impl->tex_export(gpu, tex, sync);
+}
