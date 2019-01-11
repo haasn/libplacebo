@@ -45,7 +45,7 @@ struct pl_shader;
 // by 1 on successive frames.
 struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
                                   const struct pl_gpu *gpu,
-                                  uint8_t ident);
+                                  uint8_t index);
 
 // Frees a pl_shader and all resources associated with it.
 void pl_shader_free(struct pl_shader **sh);
