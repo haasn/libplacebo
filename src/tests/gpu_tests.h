@@ -231,9 +231,11 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         }
     }
 
+    struct pl_shader *sh;
+
 #if PL_HAVE_LCMS
     // Test the use of 3DLUTs if available
-    struct pl_shader *sh = pl_dispatch_begin(dp);
+    sh = pl_dispatch_begin(dp);
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
 
     struct pl_shader_obj *lut3d = NULL;
