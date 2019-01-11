@@ -286,9 +286,9 @@ struct pl_tex_params {
     // specified here. Otherwise, this is ignored.
     struct pl_shared_mem shared_mem;
 
-    // If non-NULL, the texture will be created with these contents. Using
-    // this does *not* require setting host_writable. Otherwise, the initial
-    // data is undefined.
+    // If non-NULL, the texture will be created with these contents (tightly
+    // packed). Using this does *not* require setting host_writable. Otherwise,
+    // the initial data is undefined.
     const void *initial_data;
 };
 
