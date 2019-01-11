@@ -276,42 +276,11 @@ static void bench_hdr_desat(struct pl_shader *sh, struct pl_shader_obj **state,
                         NULL, false);
 }
 
-static const struct pl_grain_params grain_params = {
-    .width = TEX_SIZE,
-    .height = TEX_SIZE,
-    .repr = {
-        .sys = PL_COLOR_SYSTEM_BT_709,
-        .levels = PL_COLOR_LEVELS_TV,
-        .bits = { .color_depth = 10, .sample_depth = 10 },
-    },
-    .grain_seed = 48476,
-
-    .num_points_y = 6,
-    .points_y = {{0, 4}, {27, 33}, {54, 55}, {67, 61}, {108, 71}, {255, 72}},
-    .chroma_scaling_from_luma = false,
-    .num_points_uv = {2, 2},
-    .points_uv = {{{0, 64}, {255, 64}}, {{0, 64}, {255, 64}}},
-    .scaling_shift = 11,
-    .ar_coeff_lag = 3,
-    .ar_coeffs_y = {4,   1, 3,   0,  1, -3,  8, -3,  7, -23, 1, -25,
-                    0, -10, 6, -17, -4, 53, 36,  5, -5, -17, 8,  66},
-    .ar_coeffs_uv = {
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127},
-        {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127},
-    },
-    .ar_coeff_shift = 7,
-    .grain_scale_shift = 0,
-    .uv_mult = {0, 0},
-    .uv_mult_luma = {64, 64},
-    .uv_offset = {0, 0},
-};
-
 static void bench_av1_grain(struct pl_shader *sh, struct pl_shader_obj **state,
                             const struct pl_tex *src)
 {
-    struct pl_grain_params params = grain_params;
+    struct pl_grain_params params = av1_grain_params;
+    params.width = params.height = TEX_SIZE;
     params.grain_seed = rand();
 
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
@@ -321,7 +290,8 @@ static void bench_av1_grain(struct pl_shader *sh, struct pl_shader_obj **state,
 static void bench_av1_grain_lap(struct pl_shader *sh, struct pl_shader_obj **state,
                                 const struct pl_tex *src)
 {
-    struct pl_grain_params params = grain_params;
+    struct pl_grain_params params = av1_grain_params;
+    params.width = params.height = TEX_SIZE;
     params.grain_seed = rand();
     params.overlap = true;
 

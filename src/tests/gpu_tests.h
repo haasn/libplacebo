@@ -250,6 +250,22 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     pl_shader_obj_destroy(&lut3d);
 #endif
 
+    // Test AV1 grain synthesis
+    struct pl_shader_obj *grain = NULL;
+    for (int i = 0; i < 2; i++) {
+        struct pl_grain_params grain_params = av1_grain_params;
+        grain_params.width = FBO_W;
+        grain_params.height = FBO_H;
+        grain_params.grain_seed = rand();
+        grain_params.overlap = !!i;
+        sh = pl_dispatch_begin(dp);
+        pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+        pl_shader_av1_grain(sh, &grain, (enum pl_channel[]){0, 1, 2}, NULL,
+                            &grain_params);
+        REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
+    }
+    pl_shader_obj_destroy(&grain);
+
     pl_dispatch_destroy(&dp);
     pl_tex_destroy(gpu, &src);
     pl_tex_destroy(gpu, &fbo);
