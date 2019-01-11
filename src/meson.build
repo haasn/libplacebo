@@ -100,6 +100,7 @@ sources = [
   'context.c',
   'dither.c',
   'dispatch.c',
+  'dummy.c',
   'filters.c',
   'gpu.c',
   'renderer.c',

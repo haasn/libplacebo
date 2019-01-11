@@ -18,6 +18,7 @@
 #pragma once
 
 #include "common.h"
+#include "context.h"
 
 #define GPU_PFN(name) __typeof__(pl_##name) *name
 struct pl_gpu_fns {
@@ -33,7 +34,7 @@ struct pl_gpu_fns {
     GPU_PFN(tex_create);
     GPU_PFN(tex_invalidate); // optional
     GPU_PFN(tex_clear);
-    GPU_PFN(tex_blit);
+    GPU_PFN(tex_blit); // optional if no blittable formats
     GPU_PFN(tex_upload);
     GPU_PFN(tex_download);
     GPU_PFN(buf_create);

@@ -40,6 +40,7 @@
 #include "include/libplacebo/context.h"
 #include "include/libplacebo/dispatch.h"
 #include "include/libplacebo/dither.h"
+#include "include/libplacebo/dummy.h"
 #include "include/libplacebo/filters.h"
 #include "include/libplacebo/gpu.h"
 #include "include/libplacebo/renderer.h"
