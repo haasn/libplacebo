@@ -290,6 +290,9 @@ struct pl_tex_params {
     // packed). Using this does *not* require setting host_writable. Otherwise,
     // the initial data is undefined.
     const void *initial_data;
+
+    // Arbitrary user data. libplacebo does not use this at all.
+    void *user_data;
 };
 
 static inline int pl_tex_params_dimension(const struct pl_tex_params params)
@@ -337,6 +340,10 @@ void pl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex **tex);
 // Even if the texture is not recreated, calling this function will still
 // invalidate the contents of the texture. (Note: Because of this,
 // `initial_data` may not be used with `pl_tex_recreate`. Doing so is an error)
+//
+// Note: If the `user_data` alone changes, this does not trigger a texture
+// recreation. In theory, this can be used to detect when the texture ended
+// up being recreated.
 bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
                      const struct pl_tex_params *params);
 
@@ -468,6 +475,9 @@ struct pl_buf_params {
     // the initial data is undefined. Using this does *not* require setting
     // host_writable.
     const void *initial_data;
+
+    // Arbitrary user data. libplacebo does not use this at all.
+    void *user_data;
 };
 
 // A generic buffer, which can be used for multiple purposes (texture transfer,
@@ -515,6 +525,10 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
 // external API's handle. Conversely, it *is* allowed on a buffer with
 // `params->host_mapped`, and the corresponding `buf->data` pointer *may*
 // change as a result of doing so.
+//
+// Note: If the `user_data` alone changes, this does not trigger a buffer
+// recreation. In theory, this can be used to detect when the texture ended
+// up being recreated.
 bool pl_buf_recreate(const struct pl_gpu *gpu, const struct pl_buf **buf,
                      const struct pl_buf_params *params);
 
