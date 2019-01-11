@@ -56,7 +56,7 @@ void pl_shader_free(struct pl_shader **psh)
     TA_FREEP(psh);
 }
 
-void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index)
+void pl_shader_reset_ex(struct pl_shader *sh, uint8_t index, uint8_t ident)
 {
     struct pl_shader new = {
         .ctx = sh->ctx,
@@ -80,6 +80,11 @@ void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index)
 
     talloc_ref_deref(&sh->tmp);
     *sh = new;
+}
+
+void pl_shader_reset(struct pl_shader *sh, uint8_t index)
+{
+    pl_shader_reset_ex(sh, index, 0);
 }
 
 bool pl_shader_is_failed(const struct pl_shader *sh)

@@ -53,7 +53,7 @@ void pl_shader_free(struct pl_shader **sh);
 // Resets a pl_shader to a blank slate, without releasing internal memory.
 // If you're going to be re-generating shaders often, this function will let
 // you skip the re-allocation overhead.
-void pl_shader_reset(struct pl_shader *sh, uint8_t ident, uint8_t index);
+void pl_shader_reset(struct pl_shader *sh, uint8_t index);
 
 // Returns whether or not a shader is in a "failed" state. Trying to modify a
 // shader in illegal ways (e.g. signature mismatch) will result in the shader

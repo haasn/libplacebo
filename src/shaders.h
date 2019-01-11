@@ -69,6 +69,9 @@ struct pl_shader *pl_shader_alloc_ex(struct pl_context *ctx,
                                      const struct pl_gpu *gpu,
                                      uint8_t index, uint8_t ident);
 
+// Like `pl_shader_reset`, but also has this extra `uint8_t ident`.
+void pl_shader_reset_ex(struct pl_shader *sh, uint8_t index, uint8_t ident);
+
 // Attempt enabling compute shaders for this pass, if possible
 bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem);
 

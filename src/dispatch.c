@@ -121,7 +121,7 @@ struct pl_shader *pl_dispatch_begin_ex(struct pl_dispatch *dp, bool unique)
 
     struct pl_shader *sh;
     if (TARRAY_POP(dp->shaders, dp->num_shaders, &sh)) {
-        pl_shader_reset(sh, ident, dp->current_index);
+        pl_shader_reset_ex(sh, dp->current_index, ident);
         return sh;
     }
 
