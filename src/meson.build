@@ -117,6 +117,7 @@ tests = [
   'context.c',
   'colorspace.c',
   'dither.c',
+  'dummy.c',
   'filters.c',
   'utils.c',
 ]
@@ -247,6 +248,7 @@ if get_option('tests')
   foreach t : tests
     e = executable('test.' + t, 'tests/' + t,
         objects: lib.extract_all_objects(recursive: false),
+        c_args: [ '-Wno-unused-function' ],
         dependencies: tdep,
     )
 
