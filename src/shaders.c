@@ -650,7 +650,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
     int dims = depth ? 3 : height ? 2 : 1;
 
     int texdim = 0;
-    int max_tex_dim[] = {
+    uint32_t max_tex_dim[] = {
         gpu ? gpu->limits.max_tex_1d_dim : 0,
         gpu ? gpu->limits.max_tex_2d_dim : 0,
         gpu ? gpu->limits.max_tex_3d_dim : 0,
