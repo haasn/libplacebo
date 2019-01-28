@@ -79,6 +79,12 @@ void pl_context_destroy(struct pl_context **ctx)
     pthread_mutex_unlock(&pl_ctx_mutex);
 }
 
+void pl_context_update(struct pl_context *ctx,
+                       const struct pl_context_params *params)
+{
+    ctx->params = *PL_DEF(params, &pl_context_default_params);
+}
+
 static FILE *default_stream(void *stream, enum pl_log_level level)
 {
     return PL_DEF(stream, level <= PL_LOG_WARN ? stderr : stdout);

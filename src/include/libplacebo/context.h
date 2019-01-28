@@ -58,7 +58,7 @@ struct pl_context_params {
 
 // Creates a new, blank pl_context. The argument `api_ver` must be given as
 // PL_API_VER (this is used to detect ABI mismatch due to broken linking).
-// `params` defaults to `pl_context_default_params` if left as NULL.
+// `params` defaults to `&pl_context_default_params` if left as NULL.
 // Returns NULL on failure.
 //
 // Note: As a general rule, any `params` struct used as an argument to a
@@ -77,6 +77,12 @@ extern const struct pl_context_params pl_context_default_params;
 // afterwards. Calling a _destroy function on &{NULL} is valid, but calling it
 // on NULL itself is invalid.
 void pl_context_destroy(struct pl_context **ctx);
+
+// Update the parameters of a `pl_context` without destroying it. This can be
+// used to change the log function, log context or log level retroactively.
+// `params` defaults to `&pl_context_default_params` if left as NULL.
+void pl_context_update(struct pl_context *ctx,
+                       const struct pl_context_params *params);
 
 // Two simple, stream-based loggers. You can use these as the log_cb. If you
 // also set log_priv to a FILE* (e.g. stdout or stderr) it will be printed

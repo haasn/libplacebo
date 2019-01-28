@@ -8,6 +8,7 @@ static int irand()
 int main()
 {
     struct pl_context *ctx = pl_test_context();
+    pl_context_update(ctx, NULL);
     pl_context_destroy(&ctx);
 
     // Test some misc helper functions
