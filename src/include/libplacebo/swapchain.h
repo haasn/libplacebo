@@ -47,6 +47,19 @@ void pl_swapchain_destroy(const struct pl_swapchain **sw);
 // next for submission.
 int pl_swapchain_latency(const struct pl_swapchain *sw);
 
+// Update/query the swapchain size. This function performs both roles: it tries
+// setting the swapchain size to the values requested by the user, and returns
+// in the same variables what width/height the swapchain was actually set to -
+// which may be (substantially) different from the values requested by the
+// user. A value of 0 means "unknown/none" (in which case, libplacebo won't try
+// updating the size - it will simply return the current state of the
+// swapchain). It's also possible for libplacebo to return values of 0, such as
+// in the case that the swapchain doesn't exist yet.
+//
+// Returns false on significant errors (e.g. dead surface). This function can
+// effectively be used to probe if creating a swapchain works.
+bool pl_swapchain_resize(const struct pl_swapchain *sw, int *width, int *height);
+
 // The struct used to hold the results of `pl_swapchain_start_frame`
 struct pl_swapchain_frame {
     // A texture representing the framebuffer users should use for rendering.

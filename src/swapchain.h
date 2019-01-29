@@ -25,6 +25,7 @@ struct pl_sw_fns {
     void (*destroy)(const struct pl_swapchain *sw);
 
     SW_PFN(latency); // optional
+    SW_PFN(resize); // optional
     SW_PFN(start_frame);
     SW_PFN(submit_frame);
     SW_PFN(swap_buffers);

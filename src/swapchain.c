@@ -37,6 +37,20 @@ int pl_swapchain_latency(const struct pl_swapchain *sw)
     return sw->impl->latency(sw);
 }
 
+bool pl_swapchain_resize(const struct pl_swapchain *sw, int *width, int *height)
+{
+    int dummy[2] = {0};
+    width = PL_DEF(width, &dummy[0]);
+    height = PL_DEF(height, &dummy[1]);
+
+    if (!sw->impl->resize) {
+        *width = *height = 0;
+        return true;
+    }
+
+    return sw->impl->resize(sw, width, height);
+}
+
 bool pl_swapchain_start_frame(const struct pl_swapchain *sw,
                               struct pl_swapchain_frame *out_frame)
 {

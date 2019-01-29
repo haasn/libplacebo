@@ -30,6 +30,7 @@ struct priv {
     VkSwapchainCreateInfoKHR protoInfo; // partially filled-in prototype
     VkSwapchainKHR swapchain;
     VkSwapchainKHR old_swapchain;
+    int cur_width, cur_height;
     int swapchain_depth;
     int frames_in_flight;   // number of frames currently queued
     struct pl_color_repr color_repr;
@@ -325,7 +326,8 @@ static int vk_sw_latency(const struct pl_swapchain *sw)
     return p->swapchain_depth;
 }
 
-static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info)
+static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info,
+                                  int w, int h)
 {
     struct vk_ctx *vk = p->vk;
 
@@ -387,24 +389,24 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     if (caps.maxImageCount)
         info->minImageCount = PL_MIN(info->minImageCount, caps.maxImageCount);
 
-    // This seems to be an obscure case, and doesn't make sense anyway. So just
-    // ignore it and assume we're using a sane environment where the current
-    // window size is known.
-    if (caps.currentExtent.width == 0xFFFFFFFF ||
-        caps.currentExtent.height == 0xFFFFFFFF)
-    {
-        PL_ERR(vk, "The swapchain's current extent is reported as unknown. "
-               "In other words, we don't know the size of the window. Giving up!");
+    // Default the requested size based on the reported extent
+    if (caps.currentExtent.width != 0xFFFFFFFF)
+        w = PL_DEF(w, caps.currentExtent.width);
+    if (caps.currentExtent.height != 0xFFFFFFFF)
+        h = PL_DEF(h, caps.currentExtent.height);
+
+    // Otherwise, re-use the existing size if available
+    w = PL_DEF(w, info->imageExtent.width);
+    h = PL_DEF(h, info->imageExtent.height);
+
+    if (!w || !h) {
+        PL_ERR(vk, "Failed resizing swapchain: unknown size?");
         goto error;
     }
 
-    // This seems to be an obscure case that should technically violate the spec
-    // anyway, but better safe than sorry..
-    if (!caps.currentExtent.width || !caps.currentExtent.height) {
-        PL_WARN(vk, "Unable to recreate swapchain: image extent is 0, possibly "
-                "the window is minimized or hidden?");
-        goto error;
-    }
+    // Clamp the extent based on the supported limits
+    w = PL_MIN(PL_MAX(w, caps.minImageExtent.width), caps.maxImageExtent.width);
+    h = PL_MIN(PL_MAX(h, caps.minImageExtent.height), caps.maxImageExtent.height);
 
     // We just request whatever usage we can, and let the pl_vk decide what
     // pl_tex_params that translates to. This makes the images as flexible
@@ -418,7 +420,7 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     }
 
     info->imageUsage = caps.supportedUsageFlags;
-    info->imageExtent = caps.currentExtent;
+    info->imageExtent = (VkExtent2D) { w, h };
     return true;
 
 error:
@@ -432,7 +434,7 @@ static void destroy_swapchain(struct vk_ctx *vk, struct priv *p)
     p->old_swapchain = VK_NULL_HANDLE;
 }
 
-static bool vk_sw_recreate(const struct pl_swapchain *sw)
+static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
 {
     const struct pl_gpu *gpu = sw->gpu;
     struct priv *p = sw->priv;
@@ -450,7 +452,7 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw)
     VkSwapchainCreateInfoKHR sinfo = p->protoInfo;
     sinfo.oldSwapchain = p->swapchain;
 
-    if (!update_swapchain_info(p, &sinfo))
+    if (!update_swapchain_info(p, &sinfo, w, h))
         goto error;
 
     PL_INFO(sw, "(Re)creating swapchain of size %dx%d",
@@ -458,6 +460,9 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw)
             sinfo.imageExtent.height);
 
     VK(vkCreateSwapchainKHR(vk->dev, &sinfo, VK_ALLOC, &p->swapchain));
+
+    p->cur_width = sinfo.imageExtent.width;
+    p->cur_height = sinfo.imageExtent.height;
 
     // Freeing the old swapchain while it's still in use is an error, so do it
     // asynchronously once the device is idle
@@ -523,6 +528,7 @@ error:
     talloc_free(vkimages);
     vkDestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
     p->swapchain = VK_NULL_HANDLE;
+    p->cur_width = p->cur_height = 0;
     return false;
 }
 
@@ -531,7 +537,7 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
 {
     struct priv *p = sw->priv;
     struct vk_ctx *vk = p->vk;
-    if (!p->swapchain && !vk_sw_recreate(sw))
+    if (!p->swapchain && !vk_sw_recreate(sw, 0, 0))
         return false;
 
     VkSemaphore sem_in = p->sems_in[p->idx_sems];
@@ -555,9 +561,10 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
             };
             return true;
 
+        case VK_SUBOPTIMAL_KHR:
         case VK_ERROR_OUT_OF_DATE_KHR: {
             // In these cases try recreating the swapchain
-            if (!vk_sw_recreate(sw))
+            if (!vk_sw_recreate(sw, 0, 0))
                 return false;
             continue;
         }
@@ -647,9 +654,23 @@ static void vk_sw_swap_buffers(const struct pl_swapchain *sw)
         vk_poll_commands(p->vk, 1000000); // 1 ms
 }
 
+static bool vk_sw_resize(const struct pl_swapchain *sw, int *width, int *height)
+{
+    struct priv *p = sw->priv;
+    bool ok = true;
+
+    if ((*width && *width != p->cur_width) || (*height && *height != p->cur_height))
+        ok = vk_sw_recreate(sw, *width, *height);
+
+    *width = p->cur_width;
+    *height = p->cur_height;
+    return ok;
+}
+
 static struct pl_sw_fns vulkan_swapchain = {
     .destroy      = vk_sw_destroy,
     .latency      = vk_sw_latency,
+    .resize       = vk_sw_resize,
     .start_frame  = vk_sw_start_frame,
     .submit_frame = vk_sw_submit_frame,
     .swap_buffers = vk_sw_swap_buffers,
