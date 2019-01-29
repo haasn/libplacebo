@@ -192,6 +192,15 @@ static void init_vulkan()
         fprintf(stderr, "Failed creating vulkan swapchain!");
         exit(2);
     }
+
+    int w = WINDOW_WIDTH, h = WINDOW_HEIGHT;
+    if (!pl_swapchain_resize(swapchain, &w, &h)) {
+        fprintf(stderr, "Failed resizing vulkan swapchain!");
+        exit(2);
+    }
+
+    if (w != WINDOW_WIDTH || h != WINDOW_HEIGHT)
+        printf("Note: window dimensions differ (got %dx%d)\n", w, h);
 }
 
 static bool upload_plane(const char *filename, const struct pl_tex **tex,
