@@ -206,7 +206,7 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
         default: continue;
         }
 
-        // Make sure we can wrap this format to a meaningful, valid pl_format
+        // Make sure we can wrap this format to a meaningful, valid pl_fmt
         for (int n = 0; n < gpu->num_formats; n++) {
             const struct pl_fmt *rafmt = gpu->formats[n];
             const struct vk_format *vkfmt = rafmt->priv;

@@ -73,9 +73,9 @@ static inline bool pl_gpu_supports_interop(const struct pl_gpu *gpu)
 // Log some metadata about the created GPU
 void pl_gpu_print_info(const struct pl_gpu *gpu, enum pl_log_level lev);
 
-// Sort the pl_format list into an optimal order. This tries to prefer formats
-// supporting more capabilities, while also trying to maintain a sane order
-// in terms of bit depth / component index.
+// Sort the pl_fmt list into an optimal order. This tries to prefer formats
+// supporting more capabilities, while also trying to maintain a sane order in
+// terms of bit depth / component index.
 void pl_gpu_sort_formats(struct pl_gpu *gpu);
 
 // Pretty-print the format list
