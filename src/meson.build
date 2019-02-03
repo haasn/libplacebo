@@ -137,7 +137,7 @@ components = [
             ],
   }, {
     'name': 'shaderc',
-    'deps': cc.find_library('shaderc_shared', required: get_option('shaderc')),
+    'deps': shaderc,
     'srcs': 'spirv_shaderc.c',
   }, {
     'name': 'vulkan',
