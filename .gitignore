@@ -1,4 +1,5 @@
 /demos/sdl2
+/demos/glfw
 /demos/video-filtering
 /build*
 /tags
