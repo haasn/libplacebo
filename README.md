@@ -1,7 +1,9 @@
 # libplacebo
 
-![gitlab-ci badge](https://code.videolan.org/videolan/libplacebo/badges/master/build.svg)
-![gitlab-ci coverage](https://code.videolan.org/videolan/libplacebo/badges/master/coverage.svg)
+[![gitlab-ci badge](https://code.videolan.org/videolan/libplacebo/badges/master/build.svg)](https://code.videolan.org/videolan/libplacebo/pipelines)
+[![gitlab-ci coverage](https://code.videolan.org/videolan/libplacebo/badges/master/coverage.svg)](https://code.videolan.org/videolan/libplacebo/-/jobs)
+[![PayPal](https://img.shields.io/badge/donate-PayPal-blue.svg?logo=paypal)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=SFJUTMPSZEAHC)
+[![Patreon](https://img.shields.io/badge/pledge-Patreon-red.svg?logo=patreon)](https://www.patreon.com/haasn)
 
 **libplacebo** is essentially the core rendering algorithms and ideas of
 [mpv](https://mpv.io) turned into a library. This grew out of an interest to
@@ -254,5 +256,5 @@ more feature-complete.
 ## Support
 
 If you like what I am doing with libplacebo, and would like to help see this
-project grow beyond its initial scope, feel free to
-[support me on Patreon](https://www.patreon.com/haasn).
+project grow beyond its initial scope, feel free to support me via the links
+at the top of this file.
