@@ -163,7 +163,7 @@ static void init_vulkan()
 
     vk_inst = pl_vk_inst_create(ctx, &iparams);
     if (!vk_inst) {
-        fprintf(stderr, "Failed creating vulkan instance!");
+        fprintf(stderr, "Failed creating vulkan instance!\n");
         exit(2);
     }
 
@@ -179,7 +179,7 @@ static void init_vulkan()
     params.allow_software = true;
     vk = pl_vulkan_create(ctx, &params);
     if (!vk) {
-        fprintf(stderr, "Failed creating vulkan device!");
+        fprintf(stderr, "Failed creating vulkan device!\n");
         exit(2);
     }
 
@@ -189,13 +189,13 @@ static void init_vulkan()
     });
 
     if (!swapchain) {
-        fprintf(stderr, "Failed creating vulkan swapchain!");
+        fprintf(stderr, "Failed creating vulkan swapchain!\n");
         exit(2);
     }
 
     int w = WINDOW_WIDTH, h = WINDOW_HEIGHT;
     if (!pl_swapchain_resize(swapchain, &w, &h)) {
-        fprintf(stderr, "Failed resizing vulkan swapchain!");
+        fprintf(stderr, "Failed resizing vulkan swapchain!\n");
         exit(2);
     }
 
@@ -345,7 +345,7 @@ int main(int argc, char **argv)
         render_frame(&frame);
         ok = pl_swapchain_submit_frame(swapchain);
         if (!ok) {
-            fprintf(stderr, "Failed submitting frame!");
+            fprintf(stderr, "Failed submitting frame!\n");
             ret = 3;
             goto cleanup;
         }
