@@ -2,6 +2,8 @@
 
 [![gitlab-ci badge](https://code.videolan.org/videolan/libplacebo/badges/master/build.svg)](https://code.videolan.org/videolan/libplacebo/pipelines)
 [![gitlab-ci coverage](https://code.videolan.org/videolan/libplacebo/badges/master/coverage.svg)](https://code.videolan.org/videolan/libplacebo/-/jobs)
+[![Backers on Open Collective](https://opencollective.com/libplacebo/backers/badge.svg)](#backers) 
+[![Sponsors on Open Collective](https://opencollective.com/libplacebo/sponsors/badge.svg)](#sponsors) 
 [![PayPal](https://img.shields.io/badge/donate-PayPal-blue.svg?logo=paypal)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=SFJUTMPSZEAHC)
 [![Patreon](https://img.shields.io/badge/pledge-Patreon-red.svg?logo=patreon)](https://www.patreon.com/haasn)
 
@@ -27,6 +29,36 @@ without the development of mpv, which was done primarily by Vincent Lang
 
 For a full list of past contributors to mpv, see the [mpv authorship
 page](https://github.com/mpv-player/mpv/graphs/contributors).
+
+### Contributors
+
+This project exists thanks to all the people who contribute. 
+<a href="https://github.com/haasn/libplacebo/graphs/contributors"><img src="https://opencollective.com/libplacebo/contributors.svg?width=890&button=false" /></a>
+
+
+### Backers
+
+Thank you to all our backers! 🙏 [[Become a backer](https://opencollective.com/libplacebo#backer)]
+
+<a href="https://opencollective.com/libplacebo#backers" target="_blank"><img src="https://opencollective.com/libplacebo/backers.svg?width=890"></a>
+
+
+### Sponsors
+
+Support this project by becoming a sponsor. Your logo will show up here with a link to your website. [[Become a sponsor](https://opencollective.com/libplacebo#sponsor)]
+
+<a href="https://opencollective.com/libplacebo/sponsor/0/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/0/avatar.svg"></a>
+<a href="https://opencollective.com/libplacebo/sponsor/1/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/1/avatar.svg"></a>
+<a href="https://opencollective.com/libplacebo/sponsor/2/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/2/avatar.svg"></a>
+<a href="https://opencollective.com/libplacebo/sponsor/3/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/3/avatar.svg"></a>
+<a href="https://opencollective.com/libplacebo/sponsor/4/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/4/avatar.svg"></a>
+<a href="https://opencollective.com/libplacebo/sponsor/5/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/5/avatar.svg"></a>
+<a href="https://opencollective.com/libplacebo/sponsor/6/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/6/avatar.svg"></a>
+<a href="https://opencollective.com/libplacebo/sponsor/7/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/7/avatar.svg"></a>
+<a href="https://opencollective.com/libplacebo/sponsor/8/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/8/avatar.svg"></a>
+<a href="https://opencollective.com/libplacebo/sponsor/9/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/9/avatar.svg"></a>
+
+
 
 ### License
 
