@@ -20,51 +20,6 @@ accomplish the following goals:
   redesigned abstractions. (Basically, I wanted to eliminate code smell like
   `shader_cache.c` and totally redesign `gpu/video.c`)
 
-## Authors
-
-libplacebo's main developer is Niklas Haas
-([@haasn](https://github.com/haasn)), but the project would not be possible
-without the development of mpv, which was done primarily by Vincent Lang
-([@wm4](https://github.com/wm4)).
-
-For a full list of past contributors to mpv, see the [mpv authorship
-page](https://github.com/mpv-player/mpv/graphs/contributors).
-
-### Contributors
-
-This project exists thanks to all the people who contribute.
-<a href="https://github.com/haasn/libplacebo/graphs/contributors"><img src="https://opencollective.com/libplacebo/contributors.svg?width=890&button=false" /></a>
-
-### Backers
-
-Thank you to all our backers! 🙏 [[Become a backer](https://opencollective.com/libplacebo#backer)]
-
-<a href="https://opencollective.com/libplacebo#backers" target="_blank"><img src="https://opencollective.com/libplacebo/backers.svg?width=890"></a>
-
-### Sponsors
-
-Support this project by becoming a sponsor. Your logo will show up here with a link to your website. [[Become a sponsor](https://opencollective.com/libplacebo#sponsor)]
-
-<a href="https://opencollective.com/libplacebo/sponsor/0/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/0/avatar.svg"></a>
-<a href="https://opencollective.com/libplacebo/sponsor/1/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/1/avatar.svg"></a>
-<a href="https://opencollective.com/libplacebo/sponsor/2/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/2/avatar.svg"></a>
-<a href="https://opencollective.com/libplacebo/sponsor/3/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/3/avatar.svg"></a>
-<a href="https://opencollective.com/libplacebo/sponsor/4/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/4/avatar.svg"></a>
-<a href="https://opencollective.com/libplacebo/sponsor/5/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/5/avatar.svg"></a>
-<a href="https://opencollective.com/libplacebo/sponsor/6/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/6/avatar.svg"></a>
-<a href="https://opencollective.com/libplacebo/sponsor/7/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/7/avatar.svg"></a>
-<a href="https://opencollective.com/libplacebo/sponsor/8/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/8/avatar.svg"></a>
-<a href="https://opencollective.com/libplacebo/sponsor/9/website" target="_blank"><img src="https://opencollective.com/libplacebo/sponsor/9/avatar.svg"></a>
-
-### License
-
-Since the code derives from several LGPLv2.1+-licensed parts of mpv, there's
-little choice but to license libplacebo the same way. It's worth pointing out
-that, except for some minor exceptions (e.g. filters.c and colorspace.c), most
-of the code is either original work or can be attributed to only a small
-number of developers, so a relicensing to a more permissive license might be
-possible in principle.
-
 ## API Overview
 
 The public API of libplacebo is currently split up into the following
@@ -171,6 +126,48 @@ interested in. It takes care of internal details such as degrading to simpler
 algorithms depending on the hardware's capabilities, combining the correct
 sequence of colorspace transformations and shader passes in order to get the
 best overall image quality, and so forth.
+
+## Authors
+
+libplacebo was founded by Niklas Haas ([@haasn](https://github.com/haasn)),
+but it would not be possible without the contributions of others. Special note
+also goes out ([@wm4](https://github.com/wm4)), the developer of mpv, whose
+ideas helped shape the foundation of the shader dispatch system. This library
+also includes various excerpts from mpv. For a full list of past contributors
+to mpv, see the [mpv authorship
+page](https://github.com/mpv-player/mpv/graphs/contributors)
+
+[![contributor list](https://opencollective.com/libplacebo/contributors.svg?width=890&button=false)](https://github.com/haasn/libplacebo/graphs/contributors)
+
+### Backers
+
+Thank you to all our backers! 🙏 [[Become a backer](https://opencollective.com/libplacebo#backer)]
+
+[![backer list](https://opencollective.com/libplacebo/backers.svg?width=890)](https://opencollective.com/libplacebo#backers)
+
+### Sponsors
+
+Support this project by becoming a sponsor. Your logo will show up here with a link to your website. [[Become a sponsor](https://opencollective.com/libplacebo#sponsor)]
+
+[![sponsor 0](https://opencollective.com/libplacebo/sponsor/0/avatar.svg)](https://opencollective.com/libplacebo/sponsor/0/website)
+[![sponsor 0](https://opencollective.com/libplacebo/sponsor/1/avatar.svg)](https://opencollective.com/libplacebo/sponsor/1/website)
+[![sponsor 0](https://opencollective.com/libplacebo/sponsor/2/avatar.svg)](https://opencollective.com/libplacebo/sponsor/2/website)
+[![sponsor 0](https://opencollective.com/libplacebo/sponsor/3/avatar.svg)](https://opencollective.com/libplacebo/sponsor/3/website)
+[![sponsor 0](https://opencollective.com/libplacebo/sponsor/4/avatar.svg)](https://opencollective.com/libplacebo/sponsor/4/website)
+[![sponsor 0](https://opencollective.com/libplacebo/sponsor/5/avatar.svg)](https://opencollective.com/libplacebo/sponsor/5/website)
+[![sponsor 0](https://opencollective.com/libplacebo/sponsor/6/avatar.svg)](https://opencollective.com/libplacebo/sponsor/6/website)
+[![sponsor 0](https://opencollective.com/libplacebo/sponsor/7/avatar.svg)](https://opencollective.com/libplacebo/sponsor/7/website)
+[![sponsor 0](https://opencollective.com/libplacebo/sponsor/8/avatar.svg)](https://opencollective.com/libplacebo/sponsor/8/website)
+[![sponsor 0](https://opencollective.com/libplacebo/sponsor/9/avatar.svg)](https://opencollective.com/libplacebo/sponsor/9/website)
+
+### License
+
+Since the code derives from several LGPLv2.1+-licensed parts of mpv, there's
+little choice but to license libplacebo the same way. It's worth pointing out
+that, except for some minor exceptions (e.g. filters.c and colorspace.c), most
+of the code is either original work or can be attributed to only a small
+number of developers, so a relicensing to a more permissive license might be
+possible in principle.
 
 ## Installing
 
@@ -280,9 +277,3 @@ tests](src/tests).
 
 I will create more and expanded tutorials/examples once libplacebo is a bit
 more feature-complete.
-
-## Support
-
-If you like what I am doing with libplacebo, and would like to help see this
-project grow beyond its initial scope, feel free to support me via the links
-at the top of this file.
