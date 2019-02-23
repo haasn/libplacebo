@@ -14,10 +14,8 @@ build-ubuntu:
                       -Dtests=true
                       -Dshaderc=enabled
                       -Dglslang=enabled
-                      -Db_coverage=true
         - ninja -C build
         - cd build && meson test -v
-        - ninja coverage-text && cat meson-logs/coverage.txt
 
 build-ubuntu-static:
     image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181205095959
@@ -141,3 +139,19 @@ test-ubuntu-scan:
                                    -Dshaderc=enabled
                                    -Dglslang=enabled
         - ninja -C build scan-build
+
+test-gpu:
+    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181205095959
+    stage: test
+    tags:
+        - gpu
+    script:
+        - meson build --buildtype release
+                      --werror
+                      -Dtests=true
+                      -Dshaderc=enabled
+                      -Dglslang=enabled
+                      -Db_coverage=true
+        - ninja -C build
+        - cd build && meson test -v
+        - ninja coverage-text && cat meson-logs/coverage.txt
