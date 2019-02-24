@@ -71,6 +71,7 @@ struct vk_slab {
     // optional, depends on the memory type:
     VkBuffer buffer;        // buffer spanning the entire slab
     void *data;             // mapped memory corresponding to `mem`
+    bool coherent;          // mapped memory is coherent
     union pl_handle handle; // handle associated with this device memory
     enum pl_handle_type handle_type;
 };
@@ -278,8 +279,10 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
     minfo.memoryTypeIndex = index;
     VK(vkAllocateMemory(vk->dev, &minfo, VK_ALLOC, &slab->mem));
 
-    if (heap->flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+    if (heap->flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
         VK(vkMapMemory(vk->dev, slab->mem, 0, VK_WHOLE_SIZE, 0, &slab->data));
+        slab->coherent = heap->flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    }
 
     if (slab->buffer)
         VK(vkBindBufferMemory(vk->dev, slab->buffer, slab->mem, 0));
@@ -574,13 +577,18 @@ static bool slice_heap(struct vk_malloc *ma, struct vk_heap *heap, size_t size,
         .vkmem = slab->mem,
         .offset = offset,
         .size = size,
+        .priv = slab,
         .shared_mem = {
             .handle = slab->handle,
             .offset = offset,
             .size = slab->size,
         },
-        .priv = slab,
     };
+
+    if (slab->data) {
+        out->data = (void *) ((uintptr_t) slab->data + offset);
+        out->coherent = slab->coherent;
+    }
 
     PL_DEBUG(vk, "Sub-allocating slice %zu + %zu from slab with size %zu",
              (size_t) out->offset, (size_t) out->size, (size_t) slab->size);
@@ -613,8 +621,6 @@ bool vk_malloc_buffer(struct vk_malloc *ma, VkBufferUsageFlags bufFlags,
 
     struct vk_slab *slab = out->mem.priv;
     out->buf = slab->buffer;
-    if (slab->data)
-        out->data = (void *)((uintptr_t)slab->data + (ptrdiff_t)out->mem.offset);
 
     return true;
 }

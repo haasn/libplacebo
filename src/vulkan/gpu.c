@@ -1213,20 +1213,39 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     enum vk_wait_type type = vk_cmd_wait(vk, cmd, &buf_vk->sig, stage, &event);
     VkPipelineStageFlags src_stages = 0;
 
-    bool need_trans = buf_vk->current_access != newAccess ||
-                      (buffBarrier.srcQueueFamilyIndex !=
-                       buffBarrier.dstQueueFamilyIndex);
+    if (buf_vk->needs_flush || buf->params.host_mapped) {
+        if (!buf_vk->exported) {
+            buffBarrier.srcAccessMask |= VK_ACCESS_HOST_WRITE_BIT;
+            src_stages |= VK_PIPELINE_STAGE_HOST_BIT;
+        }
 
-    if ((buf_vk->needs_flush || buf->params.host_mapped) && !buf_vk->exported) {
-        buffBarrier.srcAccessMask |= VK_ACCESS_HOST_WRITE_BIT;
-        src_stages |= VK_PIPELINE_STAGE_HOST_BIT;
+        if (buf_vk->slice.mem.data && !buf_vk->slice.mem.coherent) {
+            if (buf_vk->exported) {
+                // TODO: figure out and clean up the semantics?
+                PL_WARN(vk, "Mixing host-mapped or user-writable buffers with "
+                        "external APIs is risky and untested. If you run into "
+                        "any issues, please try using a non-mapped buffer and "
+                        "avoid pl_buf_write.");
+            }
+
+            VK(vkFlushMappedMemoryRanges(vk->dev, 1, &(struct VkMappedMemoryRange) {
+                .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory = buf_vk->slice.mem.vkmem,
+                .offset = buf_vk->slice.mem.offset,
+                .size = buf_vk->slice.mem.size,
+            }));
+
+            // Just ignore errors, not much we can do about them other than
+            // logging them and moving on...
+        error: ;
+        }
+
         buf_vk->needs_flush = false;
-        need_trans = true;
-        if (type == VK_WAIT_EVENT)
-            type = VK_WAIT_BARRIER;
     }
 
-    if (need_trans) {
+    if (buffBarrier.srcAccessMask != buffBarrier.dstAccessMask ||
+        buffBarrier.srcQueueFamilyIndex != buffBarrier.dstQueueFamilyIndex)
+    {
         switch (type) {
         case VK_WAIT_NONE:
             // No synchronization required, so we can safely transition out of
@@ -1266,17 +1285,31 @@ static void buf_signal(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     buf_vk->sig_stage = stage;
 }
 
+static void invalidate_memslice(struct vk_ctx *vk, const struct vk_memslice *mem)
+{
+    VK(vkInvalidateMappedMemoryRanges(vk->dev, 1, &(VkMappedMemoryRange) {
+        .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+        .memory = mem->vkmem,
+        .offset = mem->offset,
+        .size = mem->size,
+    }));
+
+    // Ignore errors (after logging), nothing useful we can do anyway
+error: ;
+}
+
 // Flush visible writes to a buffer made by the API
 // offset: relative to pl_buf
 static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                       const struct pl_buf *buf, size_t offset, size_t size)
 {
+    struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_buf_vk *buf_vk = buf->priv;
 
     // We need to perform a flush if the host is capable of reading back from
     // the buffer, or if we intend to overwrite it using mapped memory
     bool can_read = buf->params.host_readable;
-    bool can_write = buf_vk->slice.data && buf->params.host_writable;
+    bool can_write = buf_vk->slice.mem.data && buf->params.host_writable;
     if (buf->params.host_mapped)
         can_read = can_write = true;
 
@@ -1298,6 +1331,10 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     vkCmdPipelineBarrier(cmd->buf, buf_vk->sig_stage,
                          VK_PIPELINE_STAGE_HOST_BIT, 0,
                          0, NULL, 1, &buffBarrier, 0, NULL);
+
+    // Invalidate the mapped memory as soon as this barrier completes
+    if (buf_vk->slice.mem.data && !buf_vk->slice.mem.coherent)
+        vk_cmd_callback(cmd, (vk_cb) invalidate_memslice, vk, &buf_vk->slice.mem);
 }
 
 #define vk_buf_destroy vk_buf_deref
@@ -1310,9 +1347,9 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
 
     // For host-mapped buffers, we can just directly memcpy the buffer contents.
     // Otherwise, we can update the buffer from the GPU using a command buffer.
-    if (buf_vk->slice.data) {
+    if (buf_vk->slice.mem.data) {
         pl_assert(buf_vk->refcount == 1);
-        uintptr_t addr = (uintptr_t) buf_vk->slice.data + (ptrdiff_t) offset;
+        uintptr_t addr = (uintptr_t) buf_vk->slice.mem.data + offset;
         memcpy((void *) addr, data, size);
         buf_vk->needs_flush = true;
     } else {
@@ -1361,9 +1398,9 @@ static bool vk_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                         size_t offset, void *dest, size_t size)
 {
     struct pl_buf_vk *buf_vk = buf->priv;
-    pl_assert(buf_vk->slice.data);
+    pl_assert(buf_vk->slice.mem.data);
 
-    uintptr_t addr = (uintptr_t) buf_vk->slice.data + (ptrdiff_t) offset;
+    uintptr_t addr = (uintptr_t) buf_vk->slice.mem.data + (size_t) offset;
     memcpy(dest, (void *) addr, size);
     return true;
 }
@@ -1457,6 +1494,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     default: abort();
     }
 
+    bool host_mapped = params->host_mapped;
     if (params->host_writable || params->initial_data) {
         bufFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
@@ -1464,13 +1502,12 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         // Large buffers should be written using mapped memory for performance,
         // unless this is not possible due to buffer memory type restrictions
         if (params->size > 64 * 1024 && mem_type != PL_BUF_MEM_DEVICE)
-            memFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+            host_mapped = true;
     }
 
     if (params->host_mapped || params->host_readable) {
-        memFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-                    VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+        memFlags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+        host_mapped = true;
     }
 
     if (params->host_writable || params->host_readable) {
@@ -1483,9 +1520,17 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         break;
     case PL_BUF_MEM_HOST:
-        memFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        host_mapped = true;
         break;
     default: break;
+    }
+
+    if (host_mapped) {
+        // Include any alignment restraints required for possibly
+        // noncoherent, mapped memory
+        memFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        align = pl_lcm(align, vk->limits.nonCoherentAtomSize);
+        size = PL_ALIGN(size, vk->limits.nonCoherentAtomSize);
     }
 
     if (!vk_malloc_buffer(p->alloc, bufFlags, memFlags, size, align,
@@ -1493,7 +1538,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         goto error;
 
     if (params->host_mapped)
-        buf->data = buf_vk->slice.data;
+        buf->data = buf_vk->slice.mem.data;
 
     if (params->handle_type) {
         buf->shared_mem = buf_vk->slice.mem.shared_mem;

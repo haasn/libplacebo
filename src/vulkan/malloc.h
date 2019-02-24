@@ -33,8 +33,11 @@ struct vk_memslice {
     VkDeviceMemory vkmem;
     VkDeviceSize offset;
     VkDeviceSize size;
-    struct pl_shared_mem shared_mem;
     void *priv;
+    // depending on the type/flags:
+    struct pl_shared_mem shared_mem;
+    void *data;             // pointer to slice (for persistently mapped slices)
+    bool coherent;          // whether `data` is coherent
 };
 
 void vk_free_memslice(struct vk_malloc *ma, struct vk_memslice slice);
@@ -47,9 +50,6 @@ bool vk_malloc_generic(struct vk_malloc *ma, VkMemoryRequirements reqs,
 struct vk_bufslice {
     struct vk_memslice mem; // must be freed by the user when done
     VkBuffer buf;           // the buffer this memory was sliced from
-    // For persistently mapped buffers, this points to the first usable byte of
-    // this slice.
-    void *data;
 };
 
 // Allocate a buffer slice. This is more efficient than vk_malloc_generic for
