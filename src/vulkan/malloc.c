@@ -177,7 +177,7 @@ static bool buf_external_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
     VkPhysicalDeviceExternalBufferInfoKHR info = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO_KHR,
         .usage = usage,
-        .handleType = vk_handle_type(handle_type),
+        .handleType = vk_mem_handle_type(handle_type),
     };
 
     VkExternalBufferPropertiesKHR props = {
@@ -217,7 +217,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
 
     VkExportMemoryAllocateInfoKHR ext_info = {
         .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_KHR,
-        .handleTypes = vk_handle_type(slab->handle_type),
+        .handleTypes = vk_mem_handle_type(slab->handle_type),
     };
 
     VkMemoryAllocateInfo minfo = {
@@ -624,7 +624,6 @@ bool vk_malloc_import(struct vk_malloc *ma, enum pl_handle_type handle_type,
                       struct vk_memslice *out)
 {
     struct vk_ctx *vk = ma->vk;
-    int fd = -1;
 
 #ifndef VK_HAVE_UNIX
 
@@ -633,6 +632,7 @@ bool vk_malloc_import(struct vk_malloc *ma, enum pl_handle_type handle_type,
 
 #else
 
+    int fd = -1;
     if (handle_type != PL_HANDLE_DMA_BUF) {
         PL_ERR(vk, "Importing external memory is only supported for PL_HANDLE_DMA_BUF.");
         return false;
@@ -648,7 +648,7 @@ bool vk_malloc_import(struct vk_malloc *ma, enum pl_handle_type handle_type,
     };
 
     VK(vk->vkGetMemoryFdPropertiesKHR(vk->dev,
-                                      vk_handle_type(handle_type),
+                                      vk_mem_handle_type(handle_type),
                                       shared_mem->handle.fd,
                                       &fdprops));
 

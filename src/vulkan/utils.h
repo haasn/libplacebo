@@ -24,7 +24,8 @@ const char *vk_res_str(VkResult res);
 const char *vk_obj_str(VkDebugReportObjectTypeEXT obj);
 
 // Enum translation boilerplate
-VkExternalMemoryHandleTypeFlagBitsKHR vk_handle_type(enum pl_handle_type);
+VkExternalMemoryHandleTypeFlagBitsKHR vk_mem_handle_type(enum pl_handle_type);
+VkExternalSemaphoreHandleTypeFlagBitsKHR vk_sync_handle_type(enum pl_handle_type);
 
 // Check for compatibility of a VkExternalMemoryProperties
 bool vk_external_mem_check(const VkExternalMemoryPropertiesKHR *props,
