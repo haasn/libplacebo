@@ -80,6 +80,17 @@ bool pl_shader_is_failed(const struct pl_shader *sh)
     return sh->failed;
 }
 
+struct pl_glsl_desc sh_glsl(const struct pl_shader *sh)
+{
+    if (SH_PARAMS(sh).glsl.version)
+        return SH_PARAMS(sh).glsl;
+
+    if (SH_GPU(sh))
+        return SH_GPU(sh)->glsl;
+
+    return (struct pl_glsl_desc) { .version = 130 };
+}
+
 bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem)
 {
     pl_assert(bw && bh);

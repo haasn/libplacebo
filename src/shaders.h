@@ -50,6 +50,13 @@ struct pl_shader {
     int fresh;
 };
 
+// Helper functions for convenience
+#define SH_PARAMS(sh) ((sh)->res.params)
+#define SH_GPU(sh) (SH_PARAMS(sh).gpu)
+
+// Returns the GLSL description, defaulting to desktop 130.
+struct pl_glsl_desc sh_glsl(const struct pl_shader *sh);
+
 #define SH_FAIL(sh, ...) do {    \
         sh->failed = true;       \
         PL_ERR(sh, __VA_ARGS__); \
@@ -188,19 +195,3 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
 // returns bvecN. For GLSL 120, this returns vecN instead. The intended use of
 // this function is with mix(), which only accepts bvec in GLSL 130+.
 const char *sh_bvec(const struct pl_shader *sh, int dims);
-
-// Helper functions for convenience
-#define SH_PARAMS(sh) ((sh)->res.params)
-#define SH_GPU(sh) (SH_PARAMS(sh).gpu)
-
-// Returns the GLSL description, defaulting to desktop 130.
-static inline struct pl_glsl_desc sh_glsl(const struct pl_shader *sh)
-{
-    if (SH_PARAMS(sh).glsl.version)
-        return SH_PARAMS(sh).glsl;
-
-    if (SH_GPU(sh))
-        return SH_GPU(sh)->glsl;
-
-    return (struct pl_glsl_desc) { .version = 130 };
-}
