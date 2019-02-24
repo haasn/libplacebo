@@ -1019,7 +1019,7 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
     }
 
     enum pl_dither_method method = params->method;
-    bool can_fixed = sh_glsl_ver(sh) >= 130;
+    bool can_fixed = sh_glsl(sh).version >= 130;
     ident_t lut = NULL;
     int lut_size = 0;
 

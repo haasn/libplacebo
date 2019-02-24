@@ -193,8 +193,14 @@ const char *sh_bvec(const struct pl_shader *sh, int dims);
 #define SH_PARAMS(sh) ((sh)->res.params)
 #define SH_GPU(sh) (SH_PARAMS(sh).gpu)
 
-// Returns the GLSL version, defaulting to 130 if no information is known
-static inline int sh_glsl_ver(const struct pl_shader *sh)
+// Returns the GLSL description, defaulting to desktop 130.
+static inline struct pl_glsl_desc sh_glsl(const struct pl_shader *sh)
 {
-    return SH_GPU(sh) ? SH_GPU(sh)->glsl.version : 130;
+    if (SH_PARAMS(sh).glsl.version)
+        return SH_PARAMS(sh).glsl;
+
+    if (SH_GPU(sh))
+        return SH_GPU(sh)->glsl;
+
+    return (struct pl_glsl_desc) { .version = 130 };
 }

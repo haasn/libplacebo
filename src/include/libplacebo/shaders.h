@@ -50,6 +50,11 @@ struct pl_shader_params {
     // determinstic rendering, this may safely be left as 0. Otherwise, it
     // should be incremented by 1 on successive frames.
     uint8_t index;
+
+    // If `glsl.version` is nonzero, then this structure will be used to
+    // determine the effective GLSL mode and capabilities. If `gpu` is also
+    // set, then this overrides `gpu->glsl`.
+    struct pl_glsl_desc glsl;
 };
 
 // Creates a new, blank, mutable pl_shader object.

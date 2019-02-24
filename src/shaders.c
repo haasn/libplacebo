@@ -909,5 +909,5 @@ const char *sh_bvec(const struct pl_shader *sh, int dims)
     };
 
     pl_assert(dims > 0 && dims < PL_ARRAY_SIZE(bvecs));
-    return sh_glsl_ver(sh) >= 130 ? bvecs[dims] : vecs[dims];
+    return sh_glsl(sh).version >= 130 ? bvecs[dims] : vecs[dims];
 }
