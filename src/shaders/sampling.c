@@ -29,8 +29,9 @@ const struct pl_deband_params pl_deband_default_params = {
 static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
                       ident_t *src_tex, ident_t *pos, ident_t *size, ident_t *pt,
                       float *ratio_x, float *ratio_y, int *components,
-                      float *scale, bool resizeable)
+                      float *scale, bool resizeable, const char **fn)
 {
+    pl_assert(pl_tex_params_dimension(src->tex->params) == 2);
     float src_w = pl_rect_w(src->rect);
     float src_h = pl_rect_h(src->rect);
     src_w = PL_DEF(src_w, src->tex->params.w);
@@ -63,6 +64,9 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
         .y1 = src->rect.y0 + src_h,
     };
 
+    if (fn)
+        *fn = sh_tex_fn(sh, src->tex);
+
     *src_tex = sh_bind(sh, src->tex, "src_tex", &rect, pos, size, pt);
     return true;
 }
@@ -77,7 +81,8 @@ void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
 
     float scale;
     ident_t tex, pos, pt;
-    if (!setup_src(sh, src, &tex, &pos, NULL, &pt, NULL, NULL, NULL, &scale, true))
+    const char *fn;
+    if (!setup_src(sh, src, &tex, &pos, NULL, &pt, NULL, NULL, NULL, &scale, true, &fn))
         return;
 
     GLSL("vec4 color;\n");
@@ -88,10 +93,10 @@ void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
     ident_t prng, state;
     prng = sh_prng(sh, true, &state);
 
-    GLSL("vec2 pos = %s;            \n"
-         "vec4 avg, diff;           \n"
-         "color = texture(%s, pos); \n",
-         pos, tex);
+    GLSL("vec2 pos = %s;       \n"
+         "vec4 avg, diff;      \n"
+         "color = %s(%s, pos); \n",
+         pos, fn, tex);
 
     // Helper function: Compute a stochastic approximation of the avg color
     // around a pixel, given a specified radius
@@ -103,15 +108,15 @@ void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
           "    vec2 o = dist * vec2(cos(dir), sin(dir));        \n"
           // Sample at quarter-turn intervals around the source pixel
           "    vec4 sum = vec4(0.0);                            \n"
-          "    sum += texture(%s, pos + %s * vec2( o.x,  o.y)); \n"
-          "    sum += texture(%s, pos + %s * vec2(-o.x,  o.y)); \n"
-          "    sum += texture(%s, pos + %s * vec2(-o.x, -o.y)); \n"
-          "    sum += texture(%s, pos + %s * vec2( o.x, -o.y)); \n"
+          "    sum += %s(%s, pos + %s * vec2( o.x,  o.y)); \n"
+          "    sum += %s(%s, pos + %s * vec2(-o.x,  o.y)); \n"
+          "    sum += %s(%s, pos + %s * vec2(-o.x, -o.y)); \n"
+          "    sum += %s(%s, pos + %s * vec2( o.x, -o.y)); \n"
           // Return the (normalized) average
           "    return 0.25 * sum;                               \n"
           "}\n",
           average, state, prng, prng, M_PI * 2,
-          tex, pt, tex, pt, tex, pt, tex, pt);
+          fn, tex, pt, fn, tex, pt, fn, tex, pt, fn, tex, pt);
 
     // For each iteration, compute the average at a given distance and
     // pick it instead of the color if the difference is below the threshold.
@@ -139,12 +144,13 @@ bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *s
 {
     float scale;
     ident_t tex, pos;
-    if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, NULL, &scale, true))
+    const char *fn;
+    if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, NULL, &scale, true, &fn))
         return false;
 
-    GLSL("// pl_shader_sample_direct               \n"
-         "vec4 color = vec4(%f) * texture(%s, %s); \n",
-         scale, tex, pos);
+    GLSL("// pl_shader_sample_direct          \n"
+         "vec4 color = vec4(%f) * %s(%s, %s); \n",
+         scale, fn, tex, pos);
     return true;
 }
 
@@ -176,7 +182,8 @@ bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *
 
     ident_t tex, pos, size, pt;
     float rx, ry, scale;
-    if (!setup_src(sh, src, &tex, &pos, &size, &pt, &rx, &ry, NULL, &scale, true))
+    const char *fn;
+    if (!setup_src(sh, src, &tex, &pos, &size, &pt, &rx, &ry, NULL, &scale, true, &fn))
         return false;
 
     if (rx < 1 || ry < 1) {
@@ -196,21 +203,21 @@ bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *
     bicubic_calcweights(sh, "parmx", "fcoord.x");
     bicubic_calcweights(sh, "parmy", "fcoord.y");
 
-    GLSL("vec4 cdelta;                                  \n"
-         "cdelta.xz = parmx.rg * vec2(-pt.x, pt.x);     \n"
-         "cdelta.yw = parmy.rg * vec2(-pt.y, pt.y);     \n"
+    GLSL("vec4 cdelta;                              \n"
+         "cdelta.xz = parmx.rg * vec2(-pt.x, pt.x); \n"
+         "cdelta.yw = parmy.rg * vec2(-pt.y, pt.y); \n"
          // first y-interpolation
-         "vec4 ar = texture(%s, pos + cdelta.xy);       \n"
-         "vec4 ag = texture(%s, pos + cdelta.xw);       \n"
-         "vec4 ab = mix(ag, ar, parmy.b);               \n"
+         "vec4 ar = %s(%s, pos + cdelta.xy);        \n"
+         "vec4 ag = %s(%s, pos + cdelta.xw);        \n"
+         "vec4 ab = mix(ag, ar, parmy.b);           \n"
          // second y-interpolation
-         "vec4 br = texture(%s, pos + cdelta.zy);       \n"
-         "vec4 bg = texture(%s, pos + cdelta.zw);       \n"
-         "vec4 aa = mix(bg, br, parmy.b);               \n"
+         "vec4 br = %s(%s, pos + cdelta.zy);        \n"
+         "vec4 bg = %s(%s, pos + cdelta.zw);        \n"
+         "vec4 aa = mix(bg, br, parmy.b);           \n"
          // x-interpolation
-         "color = vec4(%f) * mix(aa, ab, parmx.b);      \n"
-         "}                                             \n",
-         tex, tex, tex, tex, scale);
+         "color = vec4(%f) * mix(aa, ab, parmx.b);  \n"
+         "}                                         \n",
+         fn, tex, fn, tex, fn, tex, fn, tex, scale);
     return true;
 }
 
@@ -235,8 +242,8 @@ static bool filter_compat(const struct pl_filter *filter, float inv_scale,
 // If `in` is set, takes the pixel from inX[idx] where X is the component,
 // `in` is the given identifier, and `idx` must be defined by the caller
 static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
-                         ident_t tex, ident_t lut, int x, int y, int comps,
-                         ident_t in)
+                         const char *fn, ident_t tex, ident_t lut, int x, int y,
+                         int comps, ident_t in)
 {
     // Since we can't know the subpixel position in advance, assume a
     // worst case scenario
@@ -262,9 +269,9 @@ static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
         for (int n = 0; n < comps; n++)
             GLSL("color[%d] += w * %s%d[idx];\n", n, in, n);
     } else {
-        GLSL("in0 = texture(%s, base + pt * vec2(%d.0, %d.0)); \n"
-             "color += vec4(w) * in0;                          \n",
-             tex, x, y);
+        GLSL("in0 = %s(%s, base + pt * vec2(%d.0, %d.0)); \n"
+             "color += vec4(w) * in0;                     \n",
+             fn, tex, x, y);
     }
 
     if (maybe_skippable)
@@ -322,7 +329,8 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     int comps;
     float rx, ry, scale;
     ident_t src_tex, pos, size, pt;
-    if (!setup_src(sh, src, &src_tex, &pos, &size, &pt, &rx, &ry, &comps, &scale, false))
+    const char *fn;
+    if (!setup_src(sh, src, &src_tex, &pos, &size, &pt, &rx, &ry, &comps, &scale, false, &fn))
         return false;
 
     struct sh_sampler_obj *obj;
@@ -407,8 +415,8 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
         // Load all relevant texels into shmem
         GLSL("for (int y = int(gl_LocalInvocationID.y); y < %d; y += %d) {  \n"
              "for (int x = int(gl_LocalInvocationID.x); x < %d; x += %d) {  \n"
-             "c = texture(%s, wbase + pt * vec2(x - %d, y - %d));           \n",
-             ih, bh, iw, bw, src_tex, offset, offset);
+             "c = %s(%s, wbase + pt * vec2(x - %d, y - %d));                \n",
+             ih, bh, iw, bw, fn, src_tex, offset, offset);
 
         in = sh_fresh(sh, "in");
         for (int c = 0; c < comps; c++) {
@@ -425,7 +433,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
             for (int x = 1 - bound; x <= bound; x++) {
                 GLSL("idx = %d * rel.y + rel.x + %d;\n",
                      iw, iw * (y + offset) + x + offset);
-                polar_sample(sh, obj->filter, src_tex, lut, x, y, comps, in);
+                polar_sample(sh, obj->filter, fn, src_tex, lut, x, y, comps, in);
             }
         }
     } else {
@@ -455,7 +463,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
                     // Switch to direct sampling instead
                     for (int yy = y; yy <= bound && yy <= y + 1; yy++) {
                         for (int xx = x; xx <= bound && xx <= x + 1; xx++) {
-                            polar_sample(sh, obj->filter, src_tex, lut,
+                            polar_sample(sh, obj->filter, fn, src_tex, lut,
                                          xx, yy, comps, NULL);
                         }
                     }
@@ -478,7 +486,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
                         continue; // next subpixel
 
                     GLSL("idx = %d;\n", p);
-                    polar_sample(sh, obj->filter, src_tex, lut,
+                    polar_sample(sh, obj->filter, fn, src_tex, lut,
                                  x+xo[p], y+yo[p], comps, "in");
                 }
             }
@@ -532,8 +540,9 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
     int comps;
     float ratio[2], scale;
     ident_t src_tex, pos, size, pt;
+    const char *fn;
     if (!setup_src(sh, &srcfix, &src_tex, &pos, &size, &pt, &ratio[1], &ratio[0],
-                   &comps, &scale, false))
+                   &comps, &scale, false, &fn))
     {
         return false;
     }
@@ -632,9 +641,9 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
         GLSL("weight = ws[%d];\n", n % 4);
 
         // Load the input texel and add it to the running sum
-        GLSL("c = texture(%s, base + pt * vec2(%d.0)); \n"
-             "color += vec4(weight) * c;               \n",
-             src_tex, n);
+        GLSL("c = %s(%s, base + pt * vec2(%d.0)); \n"
+             "color += vec4(weight) * c;          \n",
+             fn, src_tex, n);
 
         if (use_ar && (n == N / 2 - 1 || n == N / 2)) {
             GLSL("lo = min(lo, c); \n"

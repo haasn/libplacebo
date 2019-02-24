@@ -195,3 +195,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
 // returns bvecN. For GLSL 120, this returns vecN instead. The intended use of
 // this function is with mix(), which only accepts bvec in GLSL 130+.
 const char *sh_bvec(const struct pl_shader *sh, int dims);
+
+// Returns the appropriate `texture`-equivalent function for the shader and
+// given texture.
+const char *sh_tex_fn(const struct pl_shader *sh, const struct pl_tex *tex);

@@ -849,7 +849,9 @@ next_dim: ; // `continue` out of the inner loop
         for (int i = 0; i < dims; i++)
             pos_macros[i] = sh_lut_pos(sh, sizes[i]);
 
-        GLSLH("#define %s(pos) (texture(%s, %s(\\\n", name, tex, types[texdim - 1]);
+        GLSLH("#define %s(pos) (%s(%s, %s(\\\n",
+              name, sh_tex_fn(sh, lut->weights.tex), tex, types[texdim - 1]);
+
         for (int i = 0; i < texdim; i++) {
             char sep = i == 0 ? ' ' : ',';
             if (pos_macros[i]) {
@@ -921,4 +923,16 @@ const char *sh_bvec(const struct pl_shader *sh, int dims)
 
     pl_assert(dims > 0 && dims < PL_ARRAY_SIZE(bvecs));
     return sh_glsl(sh).version >= 130 ? bvecs[dims] : vecs[dims];
+}
+
+const char *sh_tex_fn(const struct pl_shader *sh, const struct pl_tex *tex)
+{
+    static const char *suffixed[] = {
+        [1] = "texture1D",
+        [2] = "texture2D",
+        [3] = "texture3D",
+    };
+
+    int dims = pl_tex_params_dimension(tex->params);
+    return sh_glsl(sh).version >= 130 ? "texture" : suffixed[dims];
 }
