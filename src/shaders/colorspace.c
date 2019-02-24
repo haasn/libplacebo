@@ -1019,13 +1019,20 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
     }
 
     enum pl_dither_method method = params->method;
+    bool can_fixed = sh_glsl_ver(sh) >= 130;
     ident_t lut = NULL;
     int lut_size = 0;
 
+    if (method == PL_DITHER_ORDERED_FIXED && !can_fixed) {
+        PL_WARN(sh, "PL_DITHER_ORDERED_FIXED requires glsl version >= 130.."
+                " falling back.");
+        goto fallback;
+    }
+
     if (dither_method_is_lut(method)) {
         if (!dither_state) {
-            PL_TRACE(sh, "LUT-based dither method specified but no dither state "
-                     "object given, falling back to non-LUT based methods.");
+            PL_WARN(sh, "LUT-based dither method specified but no dither state "
+                    "object given, falling back to non-LUT based methods.");
             goto fallback;
         }
 
@@ -1048,13 +1055,9 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
     goto done;
 
 fallback:
-    if (sh->gpu && sh->gpu->glsl.version >= 130) {
-        method = PL_DITHER_ORDERED_FIXED;
-    } else {
-        method = PL_DITHER_WHITE_NOISE;
-    }
-
+    method = can_fixed ? PL_DITHER_ORDERED_FIXED : PL_DITHER_WHITE_NOISE;
     // fall through
+
 done: ;
 
     int size = 0;

@@ -919,9 +919,5 @@ const char *sh_bvec(const struct pl_shader *sh, int dims)
     };
 
     pl_assert(dims > 0 && dims < PL_ARRAY_SIZE(bvecs));
-    if (sh->gpu && sh->gpu->glsl.version >= 130) {
-        return bvecs[dims];
-    } else {
-        return vecs[dims];
-    }
+    return sh_glsl_ver(sh) >= 130 ? bvecs[dims] : vecs[dims];
 }
