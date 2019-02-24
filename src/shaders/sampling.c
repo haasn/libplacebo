@@ -305,7 +305,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
         return false;
     }
 
-    const struct pl_gpu *gpu = sh->gpu;
+    const struct pl_gpu *gpu = SH_GPU(sh);
     const struct pl_tex *tex = src->tex;
     pl_assert(gpu && tex);
 
@@ -510,7 +510,7 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
         return false;
     }
 
-    const struct pl_gpu *gpu = sh->gpu;
+    const struct pl_gpu *gpu = SH_GPU(sh);
     const struct pl_tex *tex = src->tex;
     pl_assert(gpu && tex);
 

@@ -28,24 +28,41 @@
 
 struct pl_shader;
 
-// Creates a new, blank, mutable pl_shader object. The resulting pl_shader s
-// implicitly destroyed when the pl_context is destroyed.
+struct pl_shader_params {
+    // The `id` represents an abstract identifier for the shader, to avoid
+    // collisions with other shaders being used as part of the same larger,
+    // overarching shader. This is relevant for users which want to combine
+    // multiple `pl_shader` objects together, in which case all `pl_shader`
+    // objects should have a unique `id`.
+    uint8_t id;
+
+    // If `gpu` is non-NULL, then this `gpu` will be used to create objects
+    // such as textures and buffers, or check for required capabilities, for
+    // operations which depend on either of those. This is fully optional, i.e.
+    // these GLSL primitives are designed to be used without a dependency on
+    // `gpu` wherever possible - however, some features may not work, and will
+    // be disabled even if requested.
+    const struct pl_gpu *gpu;
+
+    // The `index` represents an abstract frame index, which shaders may use
+    // internally to do things like temporal dithering or seeding PRNGs. If the
+    // user does not care about temporal dithering/debanding, or wants
+    // determinstic rendering, this may safely be left as 0. Otherwise, it
+    // should be incremented by 1 on successive frames.
+    uint8_t index;
+};
+
+// Creates a new, blank, mutable pl_shader object.
 //
-// If `gpu` is non-NULL, then this `gpu` will be used to create objects such as
-// textures and buffers, or check for required capabilities, for operations
-// which depend on either of those. This is fully optional, i.e. these GLSL
-// primitives are designed to be used without a dependency on `gpu` wherever
-// possible - however, some features may not work, and will be disabled even
-// if requested.
+// Note: The lifetime of this pl_shader is tied to `pl_context`. It's not
+// needed to `pl_shader_destroy` before `pl_context_destroy`, except where
+// users want to release associated memory allocations.
 //
-// The `index` represents an abstract frame index, which shaders may use
-// internally to do things like temporal dithering or seeding PRNGs. If the
-// user does not care about temporal dithering/debanding, or wants determinstic
-// rendering, this may safely be left as 0. Otherwise, it should be incremented
-// by 1 on successive frames.
+// Note: Rather than allocating and destroying many shaders, users are
+// encouraged to reuse them (using `pl_shader_reset`) for efficiency.
 struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
-                                  const struct pl_gpu *gpu,
-                                  uint8_t index);
+                                  const struct pl_shader_params *params);
+
 
 // Frees a pl_shader and all resources associated with it.
 void pl_shader_free(struct pl_shader **sh);
@@ -53,7 +70,7 @@ void pl_shader_free(struct pl_shader **sh);
 // Resets a pl_shader to a blank slate, without releasing internal memory.
 // If you're going to be re-generating shaders often, this function will let
 // you skip the re-allocation overhead.
-void pl_shader_reset(struct pl_shader *sh, uint8_t index);
+void pl_shader_reset(struct pl_shader *sh, const struct pl_shader_params *params);
 
 // Returns whether or not a shader is in a "failed" state. Trying to modify a
 // shader in illegal ways (e.g. signature mismatch) will result in the shader
@@ -102,6 +119,9 @@ enum pl_shader_sig {
 // collection of raw shader text together with description of the input
 // attributes, variables and vertexes it expects to be available.
 struct pl_shader_res {
+    // A copy of the parameters used to create the shader.
+    struct pl_shader_params params;
+
     // The shader text, as literal GLSL. This will always be a function
     // definition, such that the the function with the indicated name and
     // signature may be called by the user.

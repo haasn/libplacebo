@@ -22,28 +22,21 @@
 #include "context.h"
 #include "shaders.h"
 
-struct pl_shader *pl_shader_alloc_ex(struct pl_context *ctx,
-                                     const struct pl_gpu *gpu,
-                                     uint8_t index, uint8_t ident)
+struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
+                                  const struct pl_shader_params *params)
 {
     pl_assert(ctx);
     struct pl_shader *sh = talloc_ptrtype(ctx, sh);
     *sh = (struct pl_shader) {
         .ctx = ctx,
-        .gpu = gpu,
         .mutable = true,
         .tmp = talloc_ref_new(ctx),
-        .ident = ident,
-        .index = index,
     };
 
-    return sh;
-}
+    if (params)
+        sh->res.params = *params;
 
-struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
-                                  const struct pl_gpu *gpu, uint8_t index)
-{
-    return pl_shader_alloc_ex(ctx, gpu, index, 0);
+    return sh;
 }
 
 void pl_shader_free(struct pl_shader **psh)
@@ -56,15 +49,12 @@ void pl_shader_free(struct pl_shader **psh)
     TA_FREEP(psh);
 }
 
-void pl_shader_reset_ex(struct pl_shader *sh, uint8_t index, uint8_t ident)
+void pl_shader_reset(struct pl_shader *sh, const struct pl_shader_params *params)
 {
     struct pl_shader new = {
         .ctx = sh->ctx,
-        .gpu  = sh->gpu,
         .tmp = talloc_ref_new(sh->ctx),
         .mutable = true,
-        .ident = ident,
-        .index = index,
 
         // Preserve array allocations
         .res = {
@@ -74,17 +64,15 @@ void pl_shader_reset_ex(struct pl_shader *sh, uint8_t index, uint8_t ident)
         },
     };
 
+    if (params)
+        new.res.params = *params;
+
     // Preserve buffer allocations
     for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
         new.buffers[i] = (struct bstr) { .start = sh->buffers[i].start };
 
     talloc_ref_deref(&sh->tmp);
     *sh = new;
-}
-
-void pl_shader_reset(struct pl_shader *sh, uint8_t index)
-{
-    pl_shader_reset_ex(sh, index, 0);
 }
 
 bool pl_shader_is_failed(const struct pl_shader *sh)
@@ -98,12 +86,13 @@ bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem)
     int *sh_bw = &sh->res.compute_group_size[0];
     int *sh_bh = &sh->res.compute_group_size[1];
 
-    if (!sh->gpu || !(sh->gpu->caps & PL_GPU_CAP_COMPUTE)) {
+    const struct pl_gpu *gpu = SH_GPU(sh);
+    if (!gpu || !(gpu->caps & PL_GPU_CAP_COMPUTE)) {
         PL_TRACE(sh, "Disabling compute shader due to missing PL_GPU_CAP_COMPUTE");
         return false;
     }
 
-    if (sh->res.compute_shmem + mem > sh->gpu->limits.max_shmem_size) {
+    if (sh->res.compute_shmem + mem > gpu->limits.max_shmem_size) {
         PL_TRACE(sh, "Disabling compute shader due to insufficient shmem");
         return false;
     }
@@ -171,7 +160,7 @@ uint64_t pl_shader_signature(const struct pl_shader *sh)
 ident_t sh_fresh(struct pl_shader *sh, const char *name)
 {
     return talloc_asprintf(sh->tmp, "_%s_%d_%u", PL_DEF(name, "var"),
-                           sh->fresh++, sh->ident);
+                           sh->fresh++, SH_PARAMS(sh).id);
 }
 
 ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
@@ -207,12 +196,13 @@ ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
 ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
                      const struct pl_rect2df *rc)
 {
-    if (!sh->gpu) {
+    const struct pl_gpu *gpu = SH_GPU(sh);
+    if (!gpu) {
         SH_FAIL(sh, "Failed adding vertex attr '%s': No GPU available!", name);
         return NULL;
     }
 
-    const struct pl_fmt *fmt = pl_find_vertex_fmt(sh->gpu, PL_FMT_FLOAT, 2);
+    const struct pl_fmt *fmt = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 2);
     if (!fmt) {
         SH_FAIL(sh, "Failed adding vertex attr '%s': no vertex fmt!", name);
         return NULL;
@@ -229,7 +219,7 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
     struct pl_shader_va va = {
         .attr = {
             .name     = sh_fresh(sh, name),
-            .fmt      = pl_find_vertex_fmt(sh->gpu, PL_FMT_FLOAT, 2),
+            .fmt      = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 2),
         },
         .data = { &data[0], &data[2], &data[4], &data[6] },
     };
@@ -242,7 +232,7 @@ ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
                 const char *name, const struct pl_rect2df *rect,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt)
 {
-    if (!sh->gpu) {
+    if (!SH_GPU(sh)) {
         SH_FAIL(sh, "Failed binding texture '%s': No GPU available!", name);
         return NULL;
     }
@@ -358,7 +348,7 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
 {
     pl_assert(sh->mutable);
 
-    if (sh->ident == sub->ident) {
+    if (SH_PARAMS(sh).id == SH_PARAMS(sub).id) {
         SH_FAIL(sh, "Failed merging shaders: conflicting identifiers!");
         return NULL;
     }
@@ -526,7 +516,7 @@ void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
         return NULL;
 
     struct pl_shader_obj *obj = *ptr;
-    if (obj && obj->gpu != sh->gpu) {
+    if (obj && obj->gpu != SH_GPU(sh)) {
         SH_FAIL(sh, "Passed pl_shader_obj belongs to different GPU!");
         return NULL;
     }
@@ -539,7 +529,7 @@ void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
 
     if (!obj) {
         obj = talloc_zero(NULL, struct pl_shader_obj);
-        obj->gpu = sh->gpu;
+        obj->gpu = SH_GPU(sh);
         obj->type = type;
         obj->priv = talloc_zero_size(obj, priv_size);
         obj->uninit = uninit;
@@ -572,7 +562,7 @@ ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *p_state)
 
     const char *seed = "0.0";
     if (temporal) {
-        float seedval = modff(phi * sh->index, &(float){0});
+        float seedval = modff(phi * SH_PARAMS(sh).index, &(float){0});
         seed = sh_var(sh, (struct pl_shader_var) {
             .var  = pl_var_float("seed"),
             .data = &seedval,
@@ -645,7 +635,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
                int comps, bool update, void *priv,
                void (*fill)(void *priv, float *data, int w, int h, int d))
 {
-    const struct pl_gpu *gpu = sh->gpu;
+    const struct pl_gpu *gpu = SH_GPU(sh);
     float *tmp = NULL;
     ident_t ret = NULL;
 

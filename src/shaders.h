@@ -37,22 +37,16 @@ enum pl_shader_buf {
 };
 
 struct pl_shader {
-    // Read-only fields
     struct pl_context *ctx;
-    const struct pl_gpu *gpu;
-
-    // Internal state
+    struct pl_shader_res res; // for accumulating vertex_attribs etc.
     struct ta_ref *tmp;
     bool failed;
     bool mutable;
     int output_w;
     int output_h;
-    struct pl_shader_res res; // for accumulating vertex_attribs etc.
     struct bstr buffers[SH_BUF_COUNT];
     bool is_compute;
     bool flexible_work_groups;
-    uint8_t ident;
-    uint8_t index;
     int fresh;
 };
 
@@ -60,17 +54,6 @@ struct pl_shader {
         sh->failed = true;       \
         PL_ERR(sh, __VA_ARGS__); \
     } while (0)
-
-// Like `pl_shader_alloc`, but also has an extra `uint8_t ident` which can be
-// used to namespace shaders in order to allow safely merging together multiple
-// shaders using `sh_subpass`. This is not exposed publicly since there's no
-// reasonable public API for `sh_subpass`.
-struct pl_shader *pl_shader_alloc_ex(struct pl_context *ctx,
-                                     const struct pl_gpu *gpu,
-                                     uint8_t index, uint8_t ident);
-
-// Like `pl_shader_reset`, but also has this extra `uint8_t ident`.
-void pl_shader_reset_ex(struct pl_shader *sh, uint8_t index, uint8_t ident);
 
 // Attempt enabling compute shaders for this pass, if possible
 bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem);
@@ -206,8 +189,12 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
 // this function is with mix(), which only accepts bvec in GLSL 130+.
 const char *sh_bvec(const struct pl_shader *sh, int dims);
 
+// Helper functions for convenience
+#define SH_PARAMS(sh) ((sh)->res.params)
+#define SH_GPU(sh) (SH_PARAMS(sh).gpu)
+
 // Returns the GLSL version, defaulting to 130 if no information is known
 static inline int sh_glsl_ver(const struct pl_shader *sh)
 {
-    return sh->gpu ? sh->gpu->glsl.version : 130;
+    return SH_GPU(sh) ? SH_GPU(sh)->glsl.version : 130;
 }

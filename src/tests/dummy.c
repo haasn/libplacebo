@@ -27,7 +27,8 @@ int main()
         .lut = &lut,
     };
 
-    struct pl_shader *sh = pl_shader_alloc(ctx, gpu, 0);
+    struct pl_shader *sh;
+    sh = pl_shader_alloc(ctx, &(struct pl_shader_params) { .gpu = gpu });
     REQUIRE(pl_shader_sample_polar(sh, &src, &filter_params));
     const struct pl_shader_res *res = pl_shader_finalize(sh);
     REQUIRE(res);

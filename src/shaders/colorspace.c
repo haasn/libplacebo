@@ -554,7 +554,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
     if (!obj)
         return false;
 
-    const struct pl_gpu *gpu = sh->gpu;
+    const struct pl_gpu *gpu = SH_GPU(sh);
     obj->gpu = gpu;
 
     if (!obj->buf) {
@@ -1072,7 +1072,7 @@ done: ;
         GLSL("vec2 pos = fract(gl_FragCoord.xy * 1.0/%d.0);\n", size);
 
         if (params->temporal) {
-            int phase = sh->index % 8;
+            int phase = SH_PARAMS(sh).index % 8;
             float r = phase * (M_PI / 2); // rotate
             float m = phase < 4 ? 1 : -1; // mirror
             float mat[2][2] = {

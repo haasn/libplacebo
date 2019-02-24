@@ -117,15 +117,19 @@ void pl_dispatch_destroy(struct pl_dispatch **ptr)
 
 struct pl_shader *pl_dispatch_begin_ex(struct pl_dispatch *dp, bool unique)
 {
-    uint8_t ident = unique ? dp->current_ident++ : 0;
+    struct pl_shader_params params = {
+        .id = unique ? dp->current_ident++ : 0,
+        .gpu = dp->gpu,
+        .index = dp->current_index,
+    };
 
     struct pl_shader *sh;
     if (TARRAY_POP(dp->shaders, dp->num_shaders, &sh)) {
-        pl_shader_reset_ex(sh, dp->current_index, ident);
+        pl_shader_reset(sh, &params);
         return sh;
     }
 
-    return pl_shader_alloc_ex(dp->ctx, dp->gpu, dp->current_index, ident);
+    return pl_shader_alloc(dp->ctx, &params);
 }
 
 void pl_dispatch_reset_frame(struct pl_dispatch *dp)
