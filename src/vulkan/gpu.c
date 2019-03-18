@@ -1537,15 +1537,23 @@ static enum queue_type vk_img_copy_queue(const struct pl_gpu *gpu,
     if (gpu->caps & PL_GPU_CAP_PARALLEL_COMPUTE)
         fallback = COMPUTE; // prefer async compute queue
 
+    int tex_w = PL_DEF(tex->params.w, 1),
+        tex_h = PL_DEF(tex->params.h, 1),
+        tex_d = PL_DEF(tex->params.d, 1);
+
+    bool full_w = region->imageOffset.x + region->imageExtent.width  == tex_w,
+         full_h = region->imageOffset.y + region->imageExtent.height == tex_h,
+         full_d = region->imageOffset.z + region->imageExtent.depth  == tex_d;
+
     if (alignment.width) {
 
         bool unaligned = false;
         unaligned |= region->imageOffset.x % alignment.width;
         unaligned |= region->imageOffset.y % alignment.height;
         unaligned |= region->imageOffset.z % alignment.depth;
-        unaligned |= region->imageExtent.width  % alignment.width;
-        unaligned |= region->imageExtent.height % alignment.height;
-        unaligned |= region->imageExtent.depth  % alignment.depth;
+        unaligned |= (region->imageExtent.width  % alignment.width)  && !full_w;
+        unaligned |= (region->imageExtent.height % alignment.height) && !full_h;
+        unaligned |= (region->imageExtent.depth  % alignment.depth)  && !full_d;
 
         return unaligned ? fallback : queue;
 
@@ -1553,12 +1561,9 @@ static enum queue_type vk_img_copy_queue(const struct pl_gpu *gpu,
 
         // an alignment of {0} means the copy must span the entire image
         bool unaligned = false;
-        unaligned |= region->imageOffset.x;
-        unaligned |= region->imageOffset.y;
-        unaligned |= region->imageOffset.z;
-        unaligned |= region->imageExtent.width  != tex->params.w;
-        unaligned |= region->imageExtent.height != tex->params.h;
-        unaligned |= region->imageExtent.depth  != tex->params.d;
+        unaligned |= region->imageOffset.x || !full_w;
+        unaligned |= region->imageOffset.y || !full_h;
+        unaligned |= region->imageOffset.z || !full_d;
 
         return unaligned ? fallback : queue;
 
