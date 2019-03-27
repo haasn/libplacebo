@@ -134,7 +134,7 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
         repr->alpha = PL_ALPHA_PREMULTIPLIED;
     }
 
-    GLSL("}");
+    GLSL("}\n");
 }
 
 void pl_shader_encode_color(struct pl_shader *sh,
