@@ -19,6 +19,7 @@
 #define LIBPLACEBO_COLORSPACE_H_
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <libplacebo/common.h>
 
 // The underlying color representation (e.g. RGB, XYZ or YCbCr)
