@@ -340,6 +340,13 @@ void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
     va_end(ap);
 }
 
+void pl_shader_append_bstr(struct pl_shader *sh, enum pl_shader_buf buf,
+                           struct bstr str)
+{
+    pl_assert(buf >= 0 && buf < SH_BUF_COUNT);
+    bstr_xappend(sh, &sh->buffers[buf], str);
+}
+
 static const char *outsigs[] = {
     [PL_SHADER_SIG_NONE]  = "void",
     [PL_SHADER_SIG_COLOR] = "vec4",

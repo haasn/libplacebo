@@ -128,6 +128,7 @@ sources = [
   'shaders.c',
   'shaders/av1.c',
   'shaders/colorspace.c',
+  'shaders/custom.c',
   'shaders/sampling.c',
   'spirv.c',
   'swapchain.c',

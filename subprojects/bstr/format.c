@@ -66,6 +66,16 @@ void bstr_xappend_vasprintf_c(void *tactx, bstr *s, const char *fmt,
             bstr_xappend(tactx, s, bstr0(arg));
             continue;
         }
+        case '.': { // only used for %.*s
+            assert(c[1] == '*');
+            assert(c[2] == 's');
+            struct bstr str;
+            str.len = va_arg(ap, size_t);
+            str.start = va_arg(ap, char *);
+            bstr_xappend(tactx, s, str);
+            c += 2; // skip '*s'
+            continue;
+        }
         case 'd':
             len = ccStrPrintInt32(buf, va_arg(ap, int));
             bstr_xappend(tactx, s, (struct bstr) { buf, len });

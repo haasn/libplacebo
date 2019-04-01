@@ -509,6 +509,55 @@ error:
     pl_tex_destroy(gpu, &fbo);
 }
 
+static const char *user_shader_tests[] = {
+
+    // Test hooking, saving and loading
+    "// Example of a comment at the beginning                               \n"
+    "                                                                       \n"
+    "//!HOOK NATIVE                                                         \n"
+    "//!DESC upscale image                                                  \n"
+    "//!BIND HOOKED                                                         \n"
+    "//!WIDTH HOOKED.w 10 *                                                 \n"
+    "//!HEIGHT HOOKED.h 10 *                                                \n"
+    "//!SAVE NATIVEBIG                                                      \n"
+    "//!WHEN NATIVE.w 500 <                                                 \n"
+    "                                                                       \n"
+    "vec4 hook()                                                            \n"
+    "{                                                                      \n"
+    "    return HOOKED_texOff(0);                                           \n"
+    "}                                                                      \n"
+    "                                                                       \n"
+    "//!HOOK MAIN                                                           \n"
+    "//!DESC downscale bigger image                                         \n"
+    "//!WHEN NATIVE.w 500 <                                                 \n"
+    "//!BIND NATIVEBIG                                                      \n"
+    "                                                                       \n"
+    "vec4 hook()                                                            \n"
+    "{                                                                      \n"
+    "    return NATIVEBIG_texOff(0);                                        \n"
+    "}                                                                      \n",
+
+    // Test use of textures
+    "//!HOOK MAIN                                                           \n"
+    "//!DESC turn everything into colorful pixels                           \n"
+    "//!BIND HOOKED                                                         \n"
+    "//!BIND DISCO                                                          \n"
+    "//!COMPONENTS 3                                                        \n"
+    "                                                                       \n"
+    "vec4 hook()                                                            \n"
+    "{                                                                      \n"
+    "    return vec4(DISCO_tex(HOOKED_pos * 10.0).rgb, 1);                  \n"
+    "}                                                                      \n"
+    "                                                                       \n"
+    "//!TEXTURE DISCO                                                       \n"
+    "//!SIZE 3 3                                                            \n"
+    "//!FORMAT rgba32f                                                      \n"
+    "//!FILTER NEAREST                                                      \n"
+    "//!BORDER REPEAT                                                       \n"
+    "0000803f000000000000000000000000000000000000803f000000000000000000000000000000000000803f00000000000000000000803f0000803f000000000000803f000000000000803f000000000000803f0000803f00000000000000009a99993e9a99993e9a99993e000000009a99193f9a99193f9a99193f000000000000803f0000803f0000803f00000000 \n",
+
+};
+
 static void pl_render_tests(const struct pl_gpu *gpu)
 {
     const struct pl_fmt *fbo_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32,
@@ -652,6 +701,22 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     image.av1_grain = av1_grain_data;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     image.av1_grain = (struct pl_av1_grain_data) {0};
+
+    // Test mpv-style custom shaders
+    for (int i = 0; i < PL_ARRAY_SIZE(user_shader_tests); i++) {
+        printf("testing user shader:\n\n%s\n", user_shader_tests[i]);
+        const struct pl_hook *hook;
+        hook = pl_mpv_user_shader_parse(gpu, user_shader_tests[i],
+                                        strlen(user_shader_tests[i]));
+        REQUIRE(hook);
+
+        params.hooks = &hook;
+        params.num_hooks = 1;
+        REQUIRE(pl_render_image(rr, &image, &target, &params));
+
+        pl_mpv_user_shader_destroy(&hook);
+    }
+    params = pl_render_default_params;
 
     // Test overlays
     image.num_overlays = 1;

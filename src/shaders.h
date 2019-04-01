@@ -116,6 +116,9 @@ void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
                       const char *fmt, ...)
     PRINTF_ATTRIBUTE(3, 4);
 
+void pl_shader_append_bstr(struct pl_shader *sh, enum pl_shader_buf buf,
+                           struct bstr str);
+
 #define GLSLP(...) pl_shader_append(sh, SH_BUF_PRELUDE, __VA_ARGS__)
 #define GLSLH(...) pl_shader_append(sh, SH_BUF_HEADER, __VA_ARGS__)
 #define GLSL(...)  pl_shader_append(sh, SH_BUF_BODY, __VA_ARGS__)
