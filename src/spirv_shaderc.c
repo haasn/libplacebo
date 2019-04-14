@@ -140,7 +140,7 @@ static bool shaderc_compile(struct spirv_compiler *spirv, void *tactx,
     return success;
 }
 
-const struct spirv_compiler_fns spirv_shaderc = {
+const struct spirv_compiler_fns pl_spirv_shaderc = {
     .name = "shaderc",
     .compile_glsl = shaderc_compile,
     .init = shaderc_init,

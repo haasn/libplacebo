@@ -61,7 +61,7 @@ static bool glslang_compile(struct spirv_compiler *spirv, void *tactx,
     return true;
 }
 
-const struct spirv_compiler_fns spirv_glslang = {
+const struct spirv_compiler_fns pl_spirv_glslang = {
     .name = "glslang",
     .compile_glsl = glslang_compile,
     .init = glslang_init,

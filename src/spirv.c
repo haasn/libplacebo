@@ -17,15 +17,15 @@
 
 #include "spirv.h"
 
-extern const struct spirv_compiler_fns spirv_shaderc;
-extern const struct spirv_compiler_fns spirv_glslang;
+extern const struct spirv_compiler_fns pl_spirv_shaderc;
+extern const struct spirv_compiler_fns pl_spirv_glslang;
 
 static const struct spirv_compiler_fns *compilers[] = {
 #if PL_HAVE_SHADERC
-    &spirv_shaderc,
+    &pl_spirv_shaderc,
 #endif
 #if PL_HAVE_GLSLANG
-    &spirv_glslang,
+    &pl_spirv_glslang,
 #endif
 };
 
