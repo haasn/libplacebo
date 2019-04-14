@@ -20,43 +20,43 @@
 
 #include <xtalloc.h>
 
-char *ta_talloc_strdup_append(char *s, const char *a)
+char *xta_talloc_strdup_append(char *s, const char *a)
 {
-    ta_xstrdup_append(&s, a);
+    xta_xstrdup_append(&s, a);
     return s;
 }
 
-char *ta_talloc_strdup_append_buffer(char *s, const char *a)
+char *xta_talloc_strdup_append_buffer(char *s, const char *a)
 {
-    ta_xstrdup_append_buffer(&s, a);
+    xta_xstrdup_append_buffer(&s, a);
     return s;
 }
 
-char *ta_talloc_strndup_append(char *s, const char *a, size_t n)
+char *xta_talloc_strndup_append(char *s, const char *a, size_t n)
 {
-    ta_xstrndup_append(&s, a, n);
+    xta_xstrndup_append(&s, a, n);
     return s;
 }
 
-char *ta_talloc_strndup_append_buffer(char *s, const char *a, size_t n)
+char *xta_talloc_strndup_append_buffer(char *s, const char *a, size_t n)
 {
-    ta_xstrndup_append_buffer(&s, a, n);
+    xta_xstrndup_append_buffer(&s, a, n);
     return s;
 }
 
-char *ta_talloc_vasprintf_append(char *s, const char *fmt, va_list ap)
+char *xta_talloc_vasprintf_append(char *s, const char *fmt, va_list ap)
 {
-    ta_xvasprintf_append(&s, fmt, ap);
+    xta_xvasprintf_append(&s, fmt, ap);
     return s;
 }
 
-char *ta_talloc_vasprintf_append_buffer(char *s, const char *fmt, va_list ap)
+char *xta_talloc_vasprintf_append_buffer(char *s, const char *fmt, va_list ap)
 {
-    ta_xvasprintf_append_buffer(&s, fmt, ap);
+    xta_xvasprintf_append_buffer(&s, fmt, ap);
     return s;
 }
 
-char *ta_talloc_asprintf_append(char *s, const char *fmt, ...)
+char *xta_talloc_asprintf_append(char *s, const char *fmt, ...)
 {
     char *res;
     va_list ap;
@@ -66,7 +66,7 @@ char *ta_talloc_asprintf_append(char *s, const char *fmt, ...)
     return res;
 }
 
-char *ta_talloc_asprintf_append_buffer(char *s, const char *fmt, ...)
+char *xta_talloc_asprintf_append_buffer(char *s, const char *fmt, ...)
 {
     char *res;
     va_list ap;
@@ -76,18 +76,18 @@ char *ta_talloc_asprintf_append_buffer(char *s, const char *fmt, ...)
     return res;
 }
 
-struct ta_ref {
+struct xta_ref {
     pthread_mutex_t lock;
     int refcount;
 };
 
-struct ta_ref *ta_ref_new(void *t)
+struct xta_ref *xta_ref_new(void *t)
 {
-    struct ta_ref *ref = ta_znew(t, struct ta_ref);
+    struct xta_ref *ref = xta_znew(t, struct xta_ref);
     if (!ref)
         return NULL;
 
-    *ref = (struct ta_ref) {
+    *ref = (struct xta_ref) {
         .lock = PTHREAD_MUTEX_INITIALIZER,
         .refcount = 1,
     };
@@ -95,7 +95,7 @@ struct ta_ref *ta_ref_new(void *t)
     return ref;
 }
 
-struct ta_ref *ta_ref_dup(struct ta_ref *ref)
+struct xta_ref *xta_ref_dup(struct xta_ref *ref)
 {
     if (!ref)
         return NULL;
@@ -106,9 +106,9 @@ struct ta_ref *ta_ref_dup(struct ta_ref *ref)
     return ref;
 }
 
-void ta_ref_deref(struct ta_ref **refp)
+void xta_ref_deref(struct xta_ref **refp)
 {
-    struct ta_ref *ref = *refp;
+    struct xta_ref *ref = *refp;
     if (!ref)
         return;
 
@@ -119,31 +119,31 @@ void ta_ref_deref(struct ta_ref **refp)
     }
 
     pthread_mutex_destroy(&ref->lock);
-    ta_free(ref);
+    xta_free(ref);
     *refp = NULL;
 }
 
-// Indirection object, used to associate the destructor with a ta_ref_deref
-struct ta_ref_indirect {
-    struct ta_ref *ref;
+// Indirection object, used to associate the destructor with a xta_ref_deref
+struct xta_ref_indirect {
+    struct xta_ref *ref;
 };
 
-static void ta_ref_indir_dtor(void *p)
+static void xta_ref_indir_dtor(void *p)
 {
-    struct ta_ref_indirect *indir = p;
-    ta_ref_deref(&indir->ref);
+    struct xta_ref_indirect *indir = p;
+    xta_ref_deref(&indir->ref);
 }
 
-bool ta_ref_attach(void *t, struct ta_ref *ref)
+bool xta_ref_attach(void *t, struct xta_ref *ref)
 {
     if (!ref)
         return true;
 
-    struct ta_ref_indirect *indir = ta_new_ptrtype(t, indir);
+    struct xta_ref_indirect *indir = xta_new_ptrtype(t, indir);
     if (!indir)
         return false;
 
-    indir->ref = ta_ref_dup(ref);
-    ta_set_destructor(indir, ta_ref_indir_dtor);
+    indir->ref = xta_ref_dup(ref);
+    xta_set_destructor(indir, xta_ref_indir_dtor);
     return true;
 }

@@ -24,78 +24,78 @@
 // Note: all talloc wrappers are wired to the "x" functions, which abort on OOM.
 //       libtalloc doesn't do that, but the mplayer2/mpv internal copies of it did.
 
-#define talloc                          ta_xnew
-#define talloc_zero                     ta_xznew
+#define talloc                          xta_xnew
+#define talloc_zero                     xta_xznew
 
-#define talloc_array                    ta_xnew_array
-#define talloc_zero_array               ta_xznew_array
+#define talloc_array                    xta_xnew_array
+#define talloc_zero_array               xta_xznew_array
 
-#define talloc_array_size               ta_xnew_array_size
-#define talloc_realloc                  ta_xrealloc
-#define talloc_ptrtype                  ta_xnew_ptrtype
-#define talloc_array_ptrtype            ta_xnew_array_ptrtype
+#define talloc_array_size               xta_xnew_array_size
+#define talloc_realloc                  xta_xrealloc
+#define talloc_ptrtype                  xta_xnew_ptrtype
+#define talloc_array_ptrtype            xta_xnew_array_ptrtype
 
-#define talloc_steal                    ta_xsteal
-#define talloc_realloc_size             ta_xrealloc_size
-#define talloc_new                      ta_xnew_context
-#define talloc_set_destructor           ta_xset_destructor
-#define talloc_parent                   ta_find_parent
-#define talloc_enable_leak_report       ta_enable_leak_report
-#define talloc_print_leak_report        ta_print_leak_report
-#define talloc_size                     ta_xalloc_size
-#define talloc_zero_size                ta_xzalloc_size
-#define talloc_get_size                 ta_get_size
-#define talloc_free_children            ta_free_children
-#define talloc_free                     ta_free
-#define talloc_memdup                   ta_xmemdup
-#define talloc_strdup                   ta_xstrdup
-#define talloc_strndup                  ta_xstrndup
-#define talloc_ptrdup                   ta_xdup_ptrtype
-#define talloc_asprintf                 ta_xasprintf
-#define talloc_vasprintf                ta_xvasprintf
+#define talloc_steal                    xta_xsteal
+#define talloc_realloc_size             xta_xrealloc_size
+#define talloc_new                      xta_xnew_context
+#define talloc_set_destructor           xta_xset_destructor
+#define talloc_parent                   xta_find_parent
+#define talloc_enable_leak_report       xta_enable_leak_report
+#define talloc_print_leak_report        xta_print_leak_report
+#define talloc_size                     xta_xalloc_size
+#define talloc_zero_size                xta_xzalloc_size
+#define talloc_get_size                 xta_get_size
+#define talloc_free_children            xta_free_children
+#define talloc_free                     xta_free
+#define talloc_memdup                   xta_xmemdup
+#define talloc_strdup                   xta_xstrdup
+#define talloc_strndup                  xta_xstrndup
+#define talloc_ptrdup                   xta_xdup_ptrtype
+#define talloc_asprintf                 xta_xasprintf
+#define talloc_vasprintf                xta_xvasprintf
 
 // Don't define linker-level symbols, as that would clash with real libtalloc.
-#define talloc_strdup_append            ta_talloc_strdup_append
-#define talloc_strdup_append_buffer     ta_talloc_strdup_append_buffer
-#define talloc_strndup_append           ta_talloc_strndup_append
-#define talloc_strndup_append_buffer    ta_talloc_strndup_append_buffer
-#define talloc_vasprintf_append         ta_talloc_vasprintf_append
-#define talloc_vasprintf_append_buffer  ta_talloc_vasprintf_append_buffer
-#define talloc_asprintf_append          ta_talloc_asprintf_append
-#define talloc_asprintf_append_buffer   ta_talloc_asprintf_append_buffer
+#define talloc_strdup_append            xta_talloc_strdup_append
+#define talloc_strdup_append_buffer     xta_talloc_strdup_append_buffer
+#define talloc_strndup_append           xta_talloc_strndup_append
+#define talloc_strndup_append_buffer    xta_talloc_strndup_append_buffer
+#define talloc_vasprintf_append         xta_talloc_vasprintf_append
+#define talloc_vasprintf_append_buffer  xta_talloc_vasprintf_append_buffer
+#define talloc_asprintf_append          xta_talloc_asprintf_append
+#define talloc_asprintf_append_buffer   xta_talloc_asprintf_append_buffer
 
-char *ta_talloc_strdup(void *t, const char *p);
-char *ta_talloc_strdup_append(char *s, const char *a);
-char *ta_talloc_strdup_append_buffer(char *s, const char *a);
+char *xta_talloc_strdup(void *t, const char *p);
+char *xta_talloc_strdup_append(char *s, const char *a);
+char *xta_talloc_strdup_append_buffer(char *s, const char *a);
 
-char *ta_talloc_strndup(void *t, const char *p, size_t n);
-char *ta_talloc_strndup_append(char *s, const char *a, size_t n);
-char *ta_talloc_strndup_append_buffer(char *s, const char *a, size_t n);
+char *xta_talloc_strndup(void *t, const char *p, size_t n);
+char *xta_talloc_strndup_append(char *s, const char *a, size_t n);
+char *xta_talloc_strndup_append_buffer(char *s, const char *a, size_t n);
 
-char *ta_talloc_vasprintf_append(char *s, const char *fmt, va_list ap) TA_PRF(2, 0);
-char *ta_talloc_vasprintf_append_buffer(char *s, const char *fmt, va_list ap) TA_PRF(2, 0);
+char *xta_talloc_vasprintf_append(char *s, const char *fmt, va_list ap) TA_PRF(2, 0);
+char *xta_talloc_vasprintf_append_buffer(char *s, const char *fmt, va_list ap) TA_PRF(2, 0);
 
-char *ta_talloc_asprintf_append(char *s, const char *fmt, ...) TA_PRF(2, 3);
-char *ta_talloc_asprintf_append_buffer(char *s, const char *fmt, ...) TA_PRF(2, 3);
+char *xta_talloc_asprintf_append(char *s, const char *fmt, ...) TA_PRF(2, 3);
+char *xta_talloc_asprintf_append_buffer(char *s, const char *fmt, ...) TA_PRF(2, 3);
 
 // Talloc refcounting
 
-struct ta_ref;
+struct xta_ref;
 
-// ta_ref_deref will free the ref and all of its children as soon as the
+// xta_ref_deref will free the ref and all of its children as soon as the
 // internal refcount reaches 0
-struct ta_ref *ta_ref_new(void *t);
-struct ta_ref *ta_ref_dup(struct ta_ref *ref);
-void ta_ref_deref(struct ta_ref **ref);
+struct xta_ref *xta_ref_new(void *t);
+struct xta_ref *xta_ref_dup(struct xta_ref *ref);
+void xta_ref_deref(struct xta_ref **ref);
 
 // Attaches a reference as a child of another talloc ctx, such that freeing
-// `t` is like dereferencing the ta_ref.
-bool ta_ref_attach(void *t, struct ta_ref *ref);
+// `t` is like dereferencing the xta_ref.
+bool xta_ref_attach(void *t, struct xta_ref *ref);
 
-#define talloc_ref_new(...)             ta_oom_p(ta_ref_new(__VA_ARGS__))
-#define talloc_ref_dup(...)             ta_oom_p(ta_ref_dup(__VA_ARGS__))
-#define talloc_ref_deref(...)           ta_ref_deref(__VA_ARGS__)
-#define talloc_ref_attach(...)          ta_oom_b(ta_ref_attach(__VA_ARGS__))
+#define talloc_ref_new(...)             xta_oom_p(xta_ref_new(__VA_ARGS__))
+#define talloc_ref_dup(...)             xta_oom_p(xta_ref_dup(__VA_ARGS__))
+#define talloc_ref_deref(...)           xta_ref_deref(__VA_ARGS__)
+#define talloc_ref_attach(...)          xta_oom_b(xta_ref_attach(__VA_ARGS__))
 
 // Utility functions (ported from mpv)
 
@@ -107,15 +107,15 @@ bool ta_ref_attach(void *t, struct ta_ref *ref);
 
 #define TARRAY_RESIZE(ctx, p, count)                            \
     do {                                                        \
-        (p) = ta_xrealloc_size(ctx, p,                          \
-                    ta_calc_array_size(sizeof((p)[0]), count)); \
+        (p) = xta_xrealloc_size(ctx, p,                          \
+                    xta_calc_array_size(sizeof((p)[0]), count)); \
     } while (0)
 
 #define TARRAY_GROW(ctx, p, nextidx)                \
     do {                                            \
         size_t nextidx_ = (nextidx);                \
         if (nextidx_ >= TALLOC_AVAIL(p))            \
-            TARRAY_RESIZE(ctx, p, ta_calc_prealloc_elems(nextidx_)); \
+            TARRAY_RESIZE(ctx, p, xta_calc_prealloc_elems(nextidx_)); \
         assert(p);                                  \
     } while (0)
 

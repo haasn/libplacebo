@@ -39,7 +39,7 @@ enum pl_shader_buf {
 struct pl_shader {
     struct pl_context *ctx;
     struct pl_shader_res res; // for accumulating vertex_attribs etc.
-    struct ta_ref *tmp;
+    struct xta_ref *tmp;
     bool failed;
     bool mutable;
     int output_w;

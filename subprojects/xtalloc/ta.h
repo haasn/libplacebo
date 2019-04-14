@@ -44,119 +44,119 @@
 #endif
 
 // Core functions
-void *ta_alloc_size(void *ta_parent, size_t size);
-void *ta_zalloc_size(void *ta_parent, size_t size);
-void *ta_realloc_size(void *ta_parent, void *ptr, size_t size);
-size_t ta_get_size(void *ptr);
-void ta_free(void *ptr);
-void ta_free_children(void *ptr);
-bool ta_set_destructor(void *ptr, void (*destructor)(void *));
-bool ta_set_parent(void *ptr, void *ta_parent);
-void *ta_find_parent(void *ptr);
+void *xta_alloc_size(void *xta_parent, size_t size);
+void *xta_zalloc_size(void *xta_parent, size_t size);
+void *xta_realloc_size(void *xta_parent, void *ptr, size_t size);
+size_t xta_get_size(void *ptr);
+void xta_free(void *ptr);
+void xta_free_children(void *ptr);
+bool xta_set_destructor(void *ptr, void (*destructor)(void *));
+bool xta_set_parent(void *ptr, void *xta_parent);
+void *xta_find_parent(void *ptr);
 
 // Utility functions
-size_t ta_calc_array_size(size_t element_size, size_t count);
-size_t ta_calc_prealloc_elems(size_t nextidx);
-void *ta_new_context(void *ta_parent);
-void *ta_steal_(void *ta_parent, void *ptr);
-void *ta_memdup(void *ta_parent, const void *ptr, size_t size);
-char *ta_strdup(void *ta_parent, const char *str);
-bool ta_strdup_append(char **str, const char *a);
-bool ta_strdup_append_buffer(char **str, const char *a);
-char *ta_strndup(void *ta_parent, const char *str, size_t n);
-bool ta_strndup_append(char **str, const char *a, size_t n);
-bool ta_strndup_append_buffer(char **str, const char *a, size_t n);
-char *ta_asprintf(void *ta_parent, const char *fmt, ...) TA_PRF(2, 3);
-char *ta_vasprintf(void *ta_parent, const char *fmt, va_list ap) TA_PRF(2, 0);
-bool ta_asprintf_append(char **str, const char *fmt, ...) TA_PRF(2, 3);
-bool ta_vasprintf_append(char **str, const char *fmt, va_list ap) TA_PRF(2, 0);
-bool ta_asprintf_append_buffer(char **str, const char *fmt, ...) TA_PRF(2, 3);
-bool ta_vasprintf_append_buffer(char **str, const char *fmt, va_list ap) TA_PRF(2, 0);
+size_t xta_calc_array_size(size_t element_size, size_t count);
+size_t xta_calc_prealloc_elems(size_t nextidx);
+void *xta_new_context(void *xta_parent);
+void *xta_steal_(void *xta_parent, void *ptr);
+void *xta_memdup(void *xta_parent, const void *ptr, size_t size);
+char *xta_strdup(void *xta_parent, const char *str);
+bool xta_strdup_append(char **str, const char *a);
+bool xta_strdup_append_buffer(char **str, const char *a);
+char *xta_strndup(void *xta_parent, const char *str, size_t n);
+bool xta_strndup_append(char **str, const char *a, size_t n);
+bool xta_strndup_append_buffer(char **str, const char *a, size_t n);
+char *xta_asprintf(void *xta_parent, const char *fmt, ...) TA_PRF(2, 3);
+char *xta_vasprintf(void *xta_parent, const char *fmt, va_list ap) TA_PRF(2, 0);
+bool xta_asprintf_append(char **str, const char *fmt, ...) TA_PRF(2, 3);
+bool xta_vasprintf_append(char **str, const char *fmt, va_list ap) TA_PRF(2, 0);
+bool xta_asprintf_append_buffer(char **str, const char *fmt, ...) TA_PRF(2, 3);
+bool xta_vasprintf_append_buffer(char **str, const char *fmt, va_list ap) TA_PRF(2, 0);
 
-#define ta_new(ta_parent, type)  (type *)ta_alloc_size(ta_parent, sizeof(type))
-#define ta_znew(ta_parent, type) (type *)ta_zalloc_size(ta_parent, sizeof(type))
+#define xta_new(xta_parent, type)  (type *)xta_alloc_size(xta_parent, sizeof(type))
+#define xta_znew(xta_parent, type) (type *)xta_zalloc_size(xta_parent, sizeof(type))
 
-#define ta_new_array(ta_parent, type, count) \
-    (type *)ta_alloc_size(ta_parent, ta_calc_array_size(sizeof(type), count))
+#define xta_new_array(xta_parent, type, count) \
+    (type *)xta_alloc_size(xta_parent, xta_calc_array_size(sizeof(type), count))
 
-#define ta_znew_array(ta_parent, type, count) \
-    (type *)ta_zalloc_size(ta_parent, ta_calc_array_size(sizeof(type), count))
+#define xta_znew_array(xta_parent, type, count) \
+    (type *)xta_zalloc_size(xta_parent, xta_calc_array_size(sizeof(type), count))
 
-#define ta_new_array_size(ta_parent, element_size, count) \
-    ta_alloc_size(ta_parent, ta_calc_array_size(element_size, count))
+#define xta_new_array_size(xta_parent, element_size, count) \
+    xta_alloc_size(xta_parent, xta_calc_array_size(element_size, count))
 
-#define ta_realloc(ta_parent, ptr, type, count) \
-    (type *)ta_realloc_size(ta_parent, ptr, ta_calc_array_size(sizeof(type), count))
+#define xta_realloc(xta_parent, ptr, type, count) \
+    (type *)xta_realloc_size(xta_parent, ptr, xta_calc_array_size(sizeof(type), count))
 
-#define ta_new_ptrtype(ta_parent, ptr) \
-    (TA_TYPEOF(ptr))ta_alloc_size(ta_parent, sizeof(*ptr))
+#define xta_new_ptrtype(xta_parent, ptr) \
+    (TA_TYPEOF(ptr))xta_alloc_size(xta_parent, sizeof(*ptr))
 
-#define ta_new_array_ptrtype(ta_parent, ptr, count) \
-    (TA_TYPEOF(ptr))ta_new_array_size(ta_parent, sizeof(*(ptr)), count)
+#define xta_new_array_ptrtype(xta_parent, ptr, count) \
+    (TA_TYPEOF(ptr))xta_new_array_size(xta_parent, sizeof(*(ptr)), count)
 
-#define ta_steal(ta_parent, ptr) (TA_TYPEOF(ptr))ta_steal_(ta_parent, ptr)
+#define xta_steal(xta_parent, ptr) (TA_TYPEOF(ptr))xta_steal_(xta_parent, ptr)
 
-#define ta_dup_ptrtype(ta_parent, ptr) \
-    (TA_TYPEOF(ptr))ta_memdup(ta_parent, (void*) (ptr), sizeof(*(ptr)))
+#define xta_dup_ptrtype(xta_parent, ptr) \
+    (TA_TYPEOF(ptr))xta_memdup(xta_parent, (void*) (ptr), sizeof(*(ptr)))
 
 // Ugly macros that crash on OOM.
-// All of these mirror real functions (with a 'x' added after the 'ta_'
+// All of these mirror real functions (with a 'x' added after the 'xta_'
 // prefix), and the only difference is that they will call abort() on allocation
 // failures (such as out of memory conditions), instead of returning an error
 // code.
-#define ta_xalloc_size(...)             ta_oom_p(ta_alloc_size(__VA_ARGS__))
-#define ta_xzalloc_size(...)            ta_oom_p(ta_zalloc_size(__VA_ARGS__))
-#define ta_xset_destructor(...)         ta_oom_b(ta_set_destructor(__VA_ARGS__))
-#define ta_xset_parent(...)             ta_oom_b(ta_set_parent(__VA_ARGS__))
-#define ta_xnew_context(...)            ta_oom_p(ta_new_context(__VA_ARGS__))
-#define ta_xstrdup_append(...)          ta_oom_b(ta_strdup_append(__VA_ARGS__))
-#define ta_xstrdup_append_buffer(...)   ta_oom_b(ta_strdup_append_buffer(__VA_ARGS__))
-#define ta_xstrndup_append(...)         ta_oom_b(ta_strndup_append(__VA_ARGS__))
-#define ta_xstrndup_append_buffer(...)  ta_oom_b(ta_strndup_append_buffer(__VA_ARGS__))
-#define ta_xasprintf(...)               ta_oom_s(ta_asprintf(__VA_ARGS__))
-#define ta_xvasprintf(...)              ta_oom_s(ta_vasprintf(__VA_ARGS__))
-#define ta_xasprintf_append(...)        ta_oom_b(ta_asprintf_append(__VA_ARGS__))
-#define ta_xvasprintf_append(...)       ta_oom_b(ta_vasprintf_append(__VA_ARGS__))
-#define ta_xasprintf_append_buffer(...) ta_oom_b(ta_asprintf_append_buffer(__VA_ARGS__))
-#define ta_xvasprintf_append_buffer(...) ta_oom_b(ta_vasprintf_append_buffer(__VA_ARGS__))
-#define ta_xnew(...)                    ta_oom_g(ta_new(__VA_ARGS__))
-#define ta_xznew(...)                   ta_oom_g(ta_znew(__VA_ARGS__))
-#define ta_xnew_array(...)              ta_oom_g(ta_new_array(__VA_ARGS__))
-#define ta_xznew_array(...)             ta_oom_g(ta_znew_array(__VA_ARGS__))
-#define ta_xnew_array_size(...)         ta_oom_p(ta_new_array_size(__VA_ARGS__))
-#define ta_xnew_ptrtype(...)            ta_oom_g(ta_new_ptrtype(__VA_ARGS__))
-#define ta_xnew_array_ptrtype(...)      ta_oom_g(ta_new_array_ptrtype(__VA_ARGS__))
-#define ta_xdup_ptrtype(...)            ta_oom_g(ta_dup_ptrtype(__VA_ARGS__))
+#define xta_xalloc_size(...)             xta_oom_p(xta_alloc_size(__VA_ARGS__))
+#define xta_xzalloc_size(...)            xta_oom_p(xta_zalloc_size(__VA_ARGS__))
+#define xta_xset_destructor(...)         xta_oom_b(xta_set_destructor(__VA_ARGS__))
+#define xta_xset_parent(...)             xta_oom_b(xta_set_parent(__VA_ARGS__))
+#define xta_xnew_context(...)            xta_oom_p(xta_new_context(__VA_ARGS__))
+#define xta_xstrdup_append(...)          xta_oom_b(xta_strdup_append(__VA_ARGS__))
+#define xta_xstrdup_append_buffer(...)   xta_oom_b(xta_strdup_append_buffer(__VA_ARGS__))
+#define xta_xstrndup_append(...)         xta_oom_b(xta_strndup_append(__VA_ARGS__))
+#define xta_xstrndup_append_buffer(...)  xta_oom_b(xta_strndup_append_buffer(__VA_ARGS__))
+#define xta_xasprintf(...)               xta_oom_s(xta_asprintf(__VA_ARGS__))
+#define xta_xvasprintf(...)              xta_oom_s(xta_vasprintf(__VA_ARGS__))
+#define xta_xasprintf_append(...)        xta_oom_b(xta_asprintf_append(__VA_ARGS__))
+#define xta_xvasprintf_append(...)       xta_oom_b(xta_vasprintf_append(__VA_ARGS__))
+#define xta_xasprintf_append_buffer(...) xta_oom_b(xta_asprintf_append_buffer(__VA_ARGS__))
+#define xta_xvasprintf_append_buffer(...) xta_oom_b(xta_vasprintf_append_buffer(__VA_ARGS__))
+#define xta_xnew(...)                    xta_oom_g(xta_new(__VA_ARGS__))
+#define xta_xznew(...)                   xta_oom_g(xta_znew(__VA_ARGS__))
+#define xta_xnew_array(...)              xta_oom_g(xta_new_array(__VA_ARGS__))
+#define xta_xznew_array(...)             xta_oom_g(xta_znew_array(__VA_ARGS__))
+#define xta_xnew_array_size(...)         xta_oom_p(xta_new_array_size(__VA_ARGS__))
+#define xta_xnew_ptrtype(...)            xta_oom_g(xta_new_ptrtype(__VA_ARGS__))
+#define xta_xnew_array_ptrtype(...)      xta_oom_g(xta_new_array_ptrtype(__VA_ARGS__))
+#define xta_xdup_ptrtype(...)            xta_oom_g(xta_dup_ptrtype(__VA_ARGS__))
 
-#define ta_xsteal(ta_parent, ptr) (TA_TYPEOF(ptr))ta_xsteal_(ta_parent, ptr)
-#define ta_xrealloc(ta_parent, ptr, type, count) \
-    (type *)ta_xrealloc_size(ta_parent, ptr, ta_calc_array_size(sizeof(type), count))
+#define xta_xsteal(xta_parent, ptr) (TA_TYPEOF(ptr))xta_xsteal_(xta_parent, ptr)
+#define xta_xrealloc(xta_parent, ptr, type, count) \
+    (type *)xta_xrealloc_size(xta_parent, ptr, xta_calc_array_size(sizeof(type), count))
 
 // Can't be macros, because the OOM logic is slightly less trivial.
-char *ta_xstrdup(void *ta_parent, const char *str);
-char *ta_xstrndup(void *ta_parent, const char *str, size_t n);
-void *ta_xsteal_(void *ta_parent, void *ptr);
-void *ta_xmemdup(void *ta_parent, const void *ptr, size_t size);
-void *ta_xrealloc_size(void *ta_parent, void *ptr, size_t size);
+char *xta_xstrdup(void *xta_parent, const char *str);
+char *xta_xstrndup(void *xta_parent, const char *str, size_t n);
+void *xta_xsteal_(void *xta_parent, void *ptr);
+void *xta_xmemdup(void *xta_parent, const void *ptr, size_t size);
+void *xta_xrealloc_size(void *xta_parent, void *ptr, size_t size);
 
 #ifndef TA_NO_WRAPPERS
-#define ta_alloc_size(...)      ta_dbg_set_loc(ta_alloc_size(__VA_ARGS__), TA_LOC)
-#define ta_zalloc_size(...)     ta_dbg_set_loc(ta_zalloc_size(__VA_ARGS__), TA_LOC)
-#define ta_realloc_size(...)    ta_dbg_set_loc(ta_realloc_size(__VA_ARGS__), TA_LOC)
-#define ta_memdup(...)          ta_dbg_set_loc(ta_memdup(__VA_ARGS__), TA_LOC)
-#define ta_xmemdup(...)         ta_dbg_set_loc(ta_xmemdup(__VA_ARGS__), TA_LOC)
-#define ta_xrealloc_size(...)   ta_dbg_set_loc(ta_xrealloc_size(__VA_ARGS__), TA_LOC)
+#define xta_alloc_size(...)      xta_dbg_set_loc(xta_alloc_size(__VA_ARGS__), TA_LOC)
+#define xta_zalloc_size(...)     xta_dbg_set_loc(xta_zalloc_size(__VA_ARGS__), TA_LOC)
+#define xta_realloc_size(...)    xta_dbg_set_loc(xta_realloc_size(__VA_ARGS__), TA_LOC)
+#define xta_memdup(...)          xta_dbg_set_loc(xta_memdup(__VA_ARGS__), TA_LOC)
+#define xta_xmemdup(...)         xta_dbg_set_loc(xta_xmemdup(__VA_ARGS__), TA_LOC)
+#define xta_xrealloc_size(...)   xta_dbg_set_loc(xta_xrealloc_size(__VA_ARGS__), TA_LOC)
 #endif
 
-void ta_oom_b(bool b);
-char *ta_oom_s(char *s);
-void *ta_oom_p(void *p);
+void xta_oom_b(bool b);
+char *xta_oom_s(char *s);
+void *xta_oom_p(void *p);
 // Generic pointer
-#define ta_oom_g(ptr) (TA_TYPEOF(ptr))ta_oom_p((void*) ptr)
+#define xta_oom_g(ptr) (TA_TYPEOF(ptr))xta_oom_p((void*) ptr)
 
-void ta_enable_leak_report(void);
-void ta_print_leak_report(void); // no-op when disabled
-void *ta_dbg_set_loc(void *ptr, const char *name);
-void *ta_dbg_mark_as_string(void *ptr);
+void xta_enable_leak_report(void);
+void xta_print_leak_report(void); // no-op when disabled
+void *xta_dbg_set_loc(void *ptr, const char *name);
+void *xta_dbg_mark_as_string(void *ptr);
 
 #endif
