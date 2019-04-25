@@ -17,11 +17,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
-
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
 #include <SDL2/SDL_image.h>
@@ -52,35 +47,41 @@ struct file icc_profile;
 
 struct file
 {
-    int fd;
     void *data;
     size_t size;
 };
 
 static bool open_file(const char *path, struct file *out)
 {
-    int fd = open(path, O_RDONLY);
-    if (fd < 0)
-        return false;
+    FILE *fp = NULL;
+    bool success = false;
 
-    struct stat st;
-    if (fstat(fd, &st) < 0) {
-        close(fd);
-        return false;
-    }
+    fp = fopen(path, "rb");
+    if (!fp)
+        goto done;
 
-    void *data = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
-    if (data == MAP_FAILED) {
-        close(fd);
-        return false;
-    }
+    if (fseeko(fp, 0, SEEK_END))
+        goto done;
+    off_t size = ftello(fp);
+    if (size < 0)
+        goto done;
+    if (fseeko(fp, 0, SEEK_SET))
+        goto done;
+
+    void *data = malloc(size);
+    if (!fread(data, size, 1, fp))
+        goto done;
 
     *out = (struct file) {
-        .fd = fd,
         .data = data,
-        .size = st.st_size,
+        .size = size,
     };
-    return true;
+
+    success = true;
+done:
+    if (fp)
+        fclose(fp);
+    return success;
 }
 
 static void close_file(struct file *file)
@@ -88,8 +89,7 @@ static void close_file(struct file *file)
     if (!file->data)
         return;
 
-    munmap(file->data, file->size);
-    close(file->fd);
+    free(file->data);
     *file = (struct file) {0};
 }
 
