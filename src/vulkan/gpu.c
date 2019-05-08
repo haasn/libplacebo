@@ -1307,7 +1307,6 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
         memcpy((void *) addr, data, size);
         buf_vk->needs_flush = true;
     } else {
-        pl_assert(size <= 64 * 1024);
         struct vk_cmd *cmd = vk_require_cmd(gpu, buf_vk->update_queue);
         if (!cmd) {
             PL_ERR(gpu, "Failed updating buffer!");
@@ -1319,11 +1318,24 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
 
         // Vulkan requires `size` to be a multiple of 4, so we need to make
         // sure to handle the end separately if the original data is not
+        const size_t max_transfer = 64 * 1024;
         size_t size_rem = size % 4;
         size_t size_base = size - size_rem;
         VkDeviceSize buf_offset = buf_vk->slice.mem.offset + offset;
 
-        vkCmdUpdateBuffer(cmd->buf, buf_vk->slice.buf, buf_offset, size_base, data);
+        if (size_base > max_transfer) {
+            PL_TRACE(gpu, "Using multiple vkCmdUpdateBuffer calls to upload "
+                     "large buffer. Consider using buffer-buffer transfers "
+                     "instead!");
+        }
+
+        for (size_t xfer = 0; xfer < size_base; xfer += max_transfer) {
+            vkCmdUpdateBuffer(cmd->buf, buf_vk->slice.buf,
+                              buf_offset + xfer,
+                              PL_MIN(size_base, max_transfer),
+                              (void *) ((uint8_t *) data + xfer));
+        }
+
         if (size_rem) {
             uint8_t tail[4] = {0};
             memcpy(tail, data, size_rem);
@@ -1440,8 +1452,9 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         bufFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
 
-        // Large buffers must be written using mapped memory
-        if (params->size > 64 * 1024)
+        // Large buffers should be written using mapped memory for performance,
+        // unless this is not possible due to buffer memory type restrictions
+        if (params->size > 64 * 1024 && mem_type != PL_BUF_MEM_DEVICE)
             memFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
     }
 
