@@ -193,7 +193,7 @@ conf_public.set('extra_defs', defs)
 configure_file(
   input: 'config.h.in',
   output: 'config.h',
-  install_dir: 'include/libplacebo',
+  install_dir: join_paths(get_option('includedir'), 'libplacebo'),
   configuration: conf_public,
 )
 
