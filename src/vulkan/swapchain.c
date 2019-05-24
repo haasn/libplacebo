@@ -407,6 +407,7 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     // Clamp the extent based on the supported limits
     w = PL_MIN(PL_MAX(w, caps.minImageExtent.width), caps.maxImageExtent.width);
     h = PL_MIN(PL_MAX(h, caps.minImageExtent.height), caps.maxImageExtent.height);
+    info->imageExtent = (VkExtent2D) { w, h };
 
     // We just request whatever usage we can, and let the pl_vk decide what
     // pl_tex_params that translates to. This makes the images as flexible
@@ -419,8 +420,20 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
         goto error;
     }
 
+
+    // We need to intersect the swapchain supported usage flags with the
+    // format supported usage flags
     info->imageUsage = caps.supportedUsageFlags;
-    info->imageExtent = (VkExtent2D) { w, h };
+    VkFormatProperties fmtprop;
+    vkGetPhysicalDeviceFormatProperties(vk->physd, info->imageFormat, &fmtprop);
+
+#define CHECK(usage, feature) \
+    if (!((fmtprop.optimalTilingFeatures & VK_FORMAT_FEATURE_##feature##_BIT))) \
+        info->imageUsage &= ~VK_IMAGE_USAGE_##usage##_BIT
+
+    CHECK(SAMPLED, SAMPLED_IMAGE);
+    CHECK(COLOR_ATTACHMENT, COLOR_ATTACHMENT);
+    CHECK(STORAGE, STORAGE_IMAGE);
     return true;
 
 error:
