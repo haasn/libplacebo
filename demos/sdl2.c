@@ -288,15 +288,17 @@ static void render_frame(const struct pl_swapchain_frame *frame)
     };
 
     const struct pl_tex *osd = osd_plane.texture;
+    struct pl_overlay target_ol;
     if (osd) {
-        target.num_overlays = 1;
-        target.overlays = &(struct pl_overlay) {
+        target_ol = (struct pl_overlay) {
             .plane      = osd_plane,
             .rect       = { 0, 0, osd->params.w, osd->params.h },
             .mode       = PL_OVERLAY_NORMAL,
             .repr       = image.repr,
             .color      = image.color,
         };
+        target.overlays = &target_ol;
+        target.num_overlays = 1;
     }
 
     if (!pl_render_image(renderer, &image, &target, &render_params)) {
