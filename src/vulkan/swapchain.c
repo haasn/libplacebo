@@ -460,7 +460,7 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
     // than one swapchain already active, so we need to flush any pending
     // asynchronous swapchain release operations that may be ongoing
     while (p->old_swapchain)
-        vk_poll_commands(vk, 1000000); // 1 ms
+        vk_poll_commands(vk, UINT64_MAX);
 
     VkSwapchainCreateInfoKHR sinfo = p->protoInfo;
     sinfo.oldSwapchain = p->swapchain;
@@ -664,7 +664,7 @@ static void vk_sw_swap_buffers(const struct pl_swapchain *sw)
     struct priv *p = sw->priv;
 
     while (p->frames_in_flight >= p->swapchain_depth)
-        vk_poll_commands(p->vk, 1000000); // 1 ms
+        vk_poll_commands(p->vk, UINT64_MAX);
 }
 
 static bool vk_sw_resize(const struct pl_swapchain *sw, int *width, int *height)

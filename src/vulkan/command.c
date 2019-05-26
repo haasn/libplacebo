@@ -433,7 +433,7 @@ error:
 
     // Wait until we've processed some of the now pending commands
     while (vk->num_cmds_pending > PL_VK_MAX_PENDING_CMDS)
-        vk_poll_commands(vk, 1000000000); // 1s
+        vk_poll_commands(vk, UINT64_MAX);
 
     return ret;
 }

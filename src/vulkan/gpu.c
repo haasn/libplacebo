@@ -2527,7 +2527,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         while (!pass_vk->dmask) {
             PL_TRACE(gpu, "No free descriptor sets! ...blocking (slow path)");
             vk_submit(gpu);
-            vk_poll_commands(vk, 1000000); // 1ms
+            vk_poll_commands(vk, 10000000); // 10 ms
         }
     }
 
