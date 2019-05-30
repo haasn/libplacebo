@@ -140,6 +140,13 @@ static VkBool32 VKAPI_PTR vk_dbg_callback(VkDebugReportFlagsEXT flags,
     struct pl_context *ctx = priv;
     enum pl_log_level lev = PL_LOG_INFO;
 
+    // We will ignore errors for a designated object, but we need to explicitly
+    // handle the case where no object is designated, because errors can have no
+    // object associated with them, and we don't want to suppress those errors.
+    if (ctx->suppress_errors_for_object != VK_NULL_HANDLE &&
+        ctx->suppress_errors_for_object == obj)
+        return false;
+
     switch (flags) {
     case VK_DEBUG_REPORT_ERROR_BIT_EXT:               lev = PL_LOG_ERR;   break;
     case VK_DEBUG_REPORT_WARNING_BIT_EXT:             lev = PL_LOG_WARN;  break;

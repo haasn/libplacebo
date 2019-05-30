@@ -23,6 +23,8 @@
 struct pl_context {
     struct pl_context_params params;
     struct bstr logbuffer;
+    // Provide a place for implementations to track suppression of errors
+    uint64_t suppress_errors_for_object;
 };
 
 // Logging-related functions
