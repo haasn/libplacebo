@@ -18,8 +18,8 @@ conf_public = configuration_data()
 conf_internal = configuration_data()
 conf_public.set('majorver', majorver)
 conf_public.set('apiver', apiver)
-conf_public.set('fixver', fixver)
-conf_public.set_quoted('version', version_pretty)
+conf_internal.set('BUILD_FIX_VER', fixver)
+conf_internal.set_quoted('BUILD_VERSION', version_pretty)
 
 
 # work-arounds for shaderc braindeath

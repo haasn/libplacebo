@@ -26,10 +26,13 @@
 #define PL_API_VER @apiver@
 
 // Increased any time a fix is made to a given API version.
-#define PL_FIX_VER @fixver@
+#define PL_FIX_VER (pl_fix_ver())
 
 // Friendly name (`git describe`) for the overall version of the library
-#define PL_VERSION @version@
+#define PL_VERSION (pl_version())
+
+int pl_fix_ver(void);
+const char *pl_version(void);
 
 // Feature tests. These aren't described in further detail, but may be useful
 // for programmers wanting to programmatically check for feature support

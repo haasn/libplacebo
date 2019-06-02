@@ -22,6 +22,16 @@
 #include "common.h"
 #include "context.h"
 
+int pl_fix_ver()
+{
+    return BUILD_FIX_VER;
+}
+
+const char *pl_version()
+{
+    return BUILD_VERSION;
+}
+
 static pthread_mutex_t pl_ctx_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int pl_ctx_refcount;
 
