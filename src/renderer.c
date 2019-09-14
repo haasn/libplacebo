@@ -529,6 +529,7 @@ enum {
 
 static int deband_src(struct pl_renderer *rr, struct pl_shader *psh,
                       struct pl_sample_src *psrc, const struct pl_tex **fbo,
+                      const struct pl_image *image,
                       const struct pl_render_params *params)
 {
     if (rr->disable_debanding || !params->deband_params)
@@ -572,7 +573,16 @@ static int deband_src(struct pl_renderer *rr, struct pl_shader *psh,
         }
     }
 
-    pl_shader_deband(sh, src, params->deband_params);
+    // Divide the deband grain scale by the effective current colorspace nominal
+    // peak, to make sure the output intensity of the grain is as independent
+    // of the source as possible, even though it happens this early in the
+    // process (well before any linearization / output adaptation)
+    struct pl_deband_params dparams = *params->deband_params;
+    float scale = pl_color_transfer_nominal_peak(image->color.transfer)
+                * image->color.sig_scale;
+    dparams.grain /= scale;
+
+    pl_shader_deband(sh, src, &dparams);
 
     if (deband_scales)
         return DEBAND_SCALED;
@@ -734,7 +744,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             },
         };
 
-        if (deband_src(rr, psh, &src, &rr->deband_fbos[i], params) != DEBAND_SCALED)
+        if (deband_src(rr, psh, &src, &rr->deband_fbos[i], image, params) != DEBAND_SCALED)
             dispatch_sampler(rr, psh, &rr->samplers[i], params, &src);
 
         ident_t sub = sh_subpass(sh, psh);

@@ -81,6 +81,9 @@ struct pl_render_params {
 
     // Configures the settings used to deband source textures. Leaving this as
     // NULL disables debanding.
+    //
+    // Note: The `deband_params.grain` setting is automatically adjusted to
+    // prevent blowing up on HDR sources. The user need not account for this.
     const struct pl_deband_params *deband_params;
 
     // Configures the settings used to sigmoidize the image before upscaling.
