@@ -63,6 +63,8 @@ else
     cxx.find_library('OGLCompiler', required: glslang_req),
     cxx.find_library('OSDependent', required: glslang_req),
     cxx.find_library('SPIRV',       required: glslang_req),
+    cxx.find_library('SPIRV-Tools', required: glslang_req),
+    cxx.find_library('SPIRV-Tools-opt', required: glslang_req),
     cxx.find_library('SPVRemapper', required: glslang_req),
   ]
 
