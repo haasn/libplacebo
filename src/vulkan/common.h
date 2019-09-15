@@ -84,6 +84,7 @@ struct vk_ctx {
     // Common pool of signals, to avoid having to re-create these objects often
     struct vk_signal **signals;
     int num_signals;
+    bool events_unsupported;
 
     // Instance-level function pointers
     VK_FUN(vkGetPhysicalDeviceProperties2KHR);

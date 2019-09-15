@@ -143,13 +143,17 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
         .sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO,
     };
 
-    VkResult res = vkCreateEvent(vk->dev, &einfo, VK_ALLOC, &sig->event);
-    if (res == VK_ERROR_FEATURE_NOT_PRESENT) {
-        // Some vulkan implementations don't support VkEvents since they are
-        // not part of the vulkan portable subset. So fail gracefully here.
-        sig->event = VK_NULL_HANDLE;
-    } else {
-        VK_ASSERT(res, "Creating VkEvent");
+    // XXX: Work-around for MoltenVK error spam, remove if possible
+    if (!vk->events_unsupported) {
+        VkResult res = vkCreateEvent(vk->dev, &einfo, VK_ALLOC, &sig->event);
+        if (res == VK_ERROR_FEATURE_NOT_PRESENT) {
+            // Some vulkan implementations don't support VkEvents since they are
+            // not part of the vulkan portable subset. So fail gracefully here.
+            sig->event = VK_NULL_HANDLE;
+            vk->events_unsupported = true;
+        } else {
+            VK_ASSERT(res, "Creating VkEvent");
+        }
     }
 
 done:
