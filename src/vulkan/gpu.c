@@ -1240,6 +1240,11 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         error: ;
         }
 
+        // Forcibly degrade to non-event based pipeline barrier, because
+        // mixing events with host writes is nonsensical
+        if (type == VK_WAIT_EVENT)
+            type = VK_WAIT_BARRIER;
+
         buf_vk->needs_flush = false;
     }
 
@@ -1262,6 +1267,7 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
             break;
         case VK_WAIT_EVENT:
             // We can/should use the VkEvent for synchronization
+            pl_assert(!src_stages);
             vkCmdWaitEvents(cmd->buf, 1, &event, buf_vk->sig_stage,
                             stage, 0, NULL, 1, &buffBarrier, 0, NULL);
             break;
