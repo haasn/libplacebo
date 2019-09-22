@@ -71,19 +71,35 @@ struct pl_context *pl_context_create(int api_ver,
     pthread_mutex_lock(&pl_ctx_mutex);
     if (pl_ctx_refcount++ == 0)
         global_init();
-    pthread_mutex_unlock(&pl_ctx_mutex);
 
     struct pl_context *ctx = talloc_zero(NULL, struct pl_context);
     ctx->params = *PL_DEF(params, &pl_context_default_params);
+    int err = pthread_mutex_init(&ctx->lock, NULL);
+    if (err != 0) {
+        fprintf(stderr, "Failed initializing pthread mutex: %s\n", strerror(err));
+        pl_ctx_refcount--;
+        talloc_free(ctx);
+        ctx = NULL;
+    }
+
+    pthread_mutex_unlock(&pl_ctx_mutex);
     pl_info(ctx, "Initialized libplacebo %s (API v%d)", PL_VERSION, PL_API_VER);
+
     return ctx;
 }
 
 const struct pl_context_params pl_context_default_params = {0};
 
-void pl_context_destroy(struct pl_context **ctx)
+void pl_context_destroy(struct pl_context **pctx)
 {
-    TA_FREEP(ctx);
+    struct pl_context *ctx = *pctx;
+    if (!ctx)
+        return;
+
+    pthread_mutex_lock(&ctx->lock);
+    pthread_mutex_destroy(&ctx->lock);
+    talloc_free(ctx);
+    *pctx = NULL;
 
     // Do global uninitialization only when refcount reaches 0
     pthread_mutex_lock(&pl_ctx_mutex);
@@ -95,7 +111,9 @@ void pl_context_destroy(struct pl_context **ctx)
 void pl_context_update(struct pl_context *ctx,
                        const struct pl_context_params *params)
 {
+    pthread_mutex_lock(&ctx->lock);
     ctx->params = *PL_DEF(params, &pl_context_default_params);
+    pthread_mutex_unlock(&ctx->lock);
 }
 
 static FILE *default_stream(void *stream, enum pl_log_level level)
@@ -148,12 +166,26 @@ void pl_msg(struct pl_context *ctx, enum pl_log_level lev, const char *fmt, ...)
 void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
                va_list va)
 {
+    // Test log message without taking the lock, to avoid thrashing the
+    // lock for thousands of trace messages unless those are actually
+    // enabled. This may be a false negative, in which case log messages may
+    // be lost as a result. But this shouldn't be a big deal, since any
+    // situation leading to lost log messages would itself be a race condition.
     if (!pl_msg_test(ctx, lev))
         return;
+
+    // Re-test the log message level with held lock to avoid false positives,
+    // which would be a considerably bigger deal than false negatives
+    pthread_mutex_lock(&ctx->lock);
+    if (!pl_msg_test(ctx, lev))
+        goto done;
 
     ctx->logbuffer.len = 0;
     bstr_xappend_vasprintf(ctx, &ctx->logbuffer, fmt, va);
     ctx->params.log_cb(ctx->params.log_priv, lev, ctx->logbuffer.start);
+
+done:
+    pthread_mutex_unlock(&ctx->lock);
 }
 
 void pl_msg_source(struct pl_context *ctx, enum pl_log_level lev, const char *src)
