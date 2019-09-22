@@ -63,9 +63,12 @@ else
     cxx.find_library('OGLCompiler', required: glslang_req),
     cxx.find_library('OSDependent', required: glslang_req),
     cxx.find_library('SPIRV',       required: glslang_req),
-    cxx.find_library('SPIRV-Tools', required: glslang_req),
-    cxx.find_library('SPIRV-Tools-opt', required: glslang_req),
     cxx.find_library('SPVRemapper', required: glslang_req),
+  ]
+
+  glslang_opt_deps = [
+    cxx.find_library('SPIRV-Tools',     required: false),
+    cxx.find_library('SPIRV-Tools-opt', required: false),
   ]
 
   glslang_found = true
@@ -87,7 +90,8 @@ if glslang_found
     # -pthread) doesn't work. We actually need -lpthreads for the glslang
     # object files to link, for whatever weird reason.
     pthread = cxx.find_library('pthread', required: false)
-    glslang_combined = declare_dependency(dependencies: glslang_deps + [pthread])
+    glslang_all_deps = glslang_deps + glslang_opt_deps + [pthread]
+    glslang_combined = declare_dependency(dependencies: glslang_all_deps)
   else
     error('glslang revision @0@ too old! Must be at least @1@'
           .format(glslang_ver, glslang_min_ver))
