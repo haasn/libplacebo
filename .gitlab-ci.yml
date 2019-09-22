@@ -3,7 +3,7 @@ stages:
     - test
 
 build-ubuntu:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181205095959
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
     stage: build
     tags:
         - debian
@@ -18,7 +18,7 @@ build-ubuntu:
         - cd build && meson test -v
 
 build-ubuntu-static:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181205095959
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
     stage: build
     tags:
         - debian
@@ -34,7 +34,7 @@ build-ubuntu-static:
         - cd build && meson test -v
 
 build-win32:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181205095959
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
     stage: build
     tags:
         - win32
@@ -46,7 +46,7 @@ build-win32:
         - ninja -C build
 
 build-win64:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181205095959
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
     stage: build
     tags:
         - win64
@@ -59,7 +59,7 @@ build-win64:
 
 build-debian-aarch64:
     stage: build
-    image: registry.videolan.org:5000/dav1d-debian-unstable-aarch64:20181122182457
+    image: registry.videolan.org/dav1d-debian-unstable-aarch64:20181122182457
     tags:
         - aarch64
         - debian
@@ -81,7 +81,7 @@ build-macos:
         - cd build && meson test -v
 
 test-ubuntu-asan:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181205095959
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
     stage: test
     tags:
         - debian
@@ -94,7 +94,7 @@ test-ubuntu-asan:
         - cd build && time meson test -v
 
 test-ubuntu-msan:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181205095959
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
     stage: test
     tags:
         - debian
@@ -111,7 +111,7 @@ test-ubuntu-msan:
         - cd build && time meson test -v
 
 test-ubuntu-ubsan:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181205095959
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
     stage: test
     tags:
         - debian
@@ -127,7 +127,7 @@ test-ubuntu-ubsan:
         - cd build && time meson test -v
 
 test-ubuntu-scan:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181205095959
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
     stage: test
     tags:
         - debian
@@ -141,7 +141,7 @@ test-ubuntu-scan:
         - ninja -C build scan-build
 
 test-gpu:
-    image: registry.videolan.org:5000/libplacebo-ubuntu-cosmic:20181205095959
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
     stage: test
     tags:
         - gpu
@@ -153,5 +153,6 @@ test-gpu:
                       -Dglslang=enabled
                       -Db_coverage=true
         - ninja -C build
+        - vulkaninfo
         - cd build && meson test -v
         - ninja coverage-text && cat meson-logs/coverage.txt
