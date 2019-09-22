@@ -64,6 +64,9 @@ struct vk_ctx {
     struct vk_cmdpool **pools;    // command pools (one per queue family)
     int num_pools;
 
+    // Quirks
+    bool disable_compute;
+
     // Pointers into *pools
     struct vk_cmdpool *pool_graphics; // required
     struct vk_cmdpool *pool_compute;  // optional
