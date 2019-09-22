@@ -129,6 +129,12 @@ static bool vk_map_color_space(VkColorSpaceKHR space, struct pl_color_space *out
         return true;
 #endif
 
+#ifdef VK_AMD_display_native_hdr
+    case VK_COLOR_SPACE_DISPLAY_NATIVE_AMD:
+        // TODO
+        return false;
+#endif
+
     // Included to satisfy the switch coverage check
     case VK_COLOR_SPACE_RANGE_SIZE_KHR:
     case VK_COLOR_SPACE_MAX_ENUM_KHR:
