@@ -28,9 +28,6 @@ endif
 build_opts = [
   # Warnings
   '-Wall', '-Wundef', '-Wshadow', '-Wparentheses', '-Wpointer-arith',
-
-  # Warnings to treat as errors
-  '-Werror=implicit-function-declaration',
 ]
 
 link_args = []
@@ -41,7 +38,10 @@ cxx = meson.get_compiler('cpp')
 c_opts = [
   '-D_ISOC99_SOURCE', '-D_GNU_SOURCE', '-D_XOPEN_SOURCE=700',
   '-U__STRICT_ANSI__', '-fvisibility=hidden',
-  '-Wmissing-prototypes', '-Wno-pointer-sign'
+  '-Wmissing-prototypes', '-Wno-pointer-sign',
+
+  # Warnings to treat as errors
+  '-Werror=implicit-function-declaration',
 ]
 
 # glslang needs c++11
@@ -50,12 +50,12 @@ cpp_opts = [
 ]
 
 if cc.has_argument('-Wincompatible-pointer-types')
-  build_opts += ['-Werror=incompatible-pointer-types']
+  c_opts += ['-Werror=incompatible-pointer-types']
 endif
 
 # clang's version of -Wmissing-braces rejects the common {0} initializers
 if cc.get_id() == 'clang'
-  build_opts += ['-Wno-missing-braces']
+  c_opts += ['-Wno-missing-braces']
 endif
 
 # don't leak library symbols if possible
