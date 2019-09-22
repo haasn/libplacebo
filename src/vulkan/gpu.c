@@ -1474,7 +1474,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         bufFlags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         mem_type = PL_BUF_MEM_DEVICE;
         align = pl_lcm(align, vk->limits.minStorageBufferOffsetAlignment);
-        buf_vk->update_queue = COMPUTE;
+        buf_vk->update_queue = vk->pool_compute ? COMPUTE : GRAPHICS;
         break;
     case PL_BUF_TEXEL_UNIFORM: // for emulated upload
         bufFlags |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
@@ -1490,7 +1490,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         mem_type = PL_BUF_MEM_DEVICE;
         align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
         align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
-        buf_vk->update_queue = COMPUTE;
+        buf_vk->update_queue = vk->pool_compute ? COMPUTE : GRAPHICS;
         is_texel = true;
         break;
     case PL_VK_BUF_VERTEX:
