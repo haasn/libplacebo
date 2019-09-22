@@ -18,16 +18,24 @@
 #pragma once
 
 #include <stdarg.h>
+#include <pthread.h>
 #include "common.h"
 
 struct pl_context {
     struct pl_context_params params;
     struct bstr logbuffer;
+    pthread_mutex_t lock;
     // Provide a place for implementations to track suppression of errors
+    // FIXME: This is a hack. Get rid of it ASAP. It's also not thread-safe.
     uint64_t suppress_errors_for_object;
 };
 
 // Logging-related functions
+
+// Warning: Not entirely thread-safe. Exercise caution when using. May result
+// in either false positives or false negatives. Make sure to re-run this
+// function while `ctx->lock` is held, to ensure no race conditions on the
+// check.
 static inline bool pl_msg_test(struct pl_context *ctx, enum pl_log_level lev)
 {
     return ctx->params.log_cb && ctx->params.log_level >= lev;
