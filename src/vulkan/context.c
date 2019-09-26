@@ -185,6 +185,10 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     VkExtensionProperties *exts_avail = talloc_array(tmp, VkExtensionProperties, num_exts_avail);
     vkEnumerateInstanceExtensionProperties(NULL, &num_exts_avail, exts_avail);
 
+    pl_debug(ctx, "Available instance extensions:");
+    for (int i = 0; i < num_exts_avail; i++)
+        pl_debug(ctx, "    %s", exts_avail[i].extensionName);
+
     // Add mandatory extensions
     TARRAY_APPEND(tmp, exts, num_exts, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
@@ -213,6 +217,16 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
             }
         }
     }
+
+    // Enumerate all supported layers
+    uint32_t num_layers_avail = 0;
+    vkEnumerateInstanceLayerProperties(&num_layers_avail, NULL);
+    VkLayerProperties *layers_avail = talloc_array(tmp, VkLayerProperties, num_layers_avail);
+    vkEnumerateInstanceLayerProperties(&num_layers_avail, layers_avail);
+
+    pl_debug(ctx, "Available layers:");
+    for (int i = 0; i < num_layers_avail; i++)
+        pl_debug(ctx, "    %s", layers_avail[i].layerName);
 
     if (params->debug) {
         pl_info(ctx, "Enabling vulkan debug layers");
@@ -520,6 +534,10 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     VK(vkEnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, NULL));
     VkExtensionProperties *exts_avail = talloc_array(tmp, VkExtensionProperties, num_exts_avail);
     VK(vkEnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, exts_avail));
+
+    PL_DEBUG(vk, "Available device extensions:");
+    for (int i = 0; i < num_exts_avail; i++)
+        PL_DEBUG(vk, "    %s", exts_avail[i].extensionName);
 
     // Add all extensions we need
     const char ***exts = &vk->exts;
