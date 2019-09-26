@@ -121,10 +121,10 @@ void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
     if (!inst)
         return;
 
-    VkDebugReportCallbackEXT debug = (VkDebugReportCallbackEXT) inst->priv;
-    if (debug) {
+    VkDebugReportCallbackEXT debug_cb = (VkDebugReportCallbackEXT) inst->priv;
+    if (debug_cb) {
         VK_LOAD_FUN(inst->instance, vkDestroyDebugReportCallbackEXT)
-        vkDestroyDebugReportCallbackEXT(inst->instance, debug, VK_ALLOC);
+        vkDestroyDebugReportCallbackEXT(inst->instance, debug_cb, VK_ALLOC);
     }
 
     vkDestroyInstance(inst->instance, VK_ALLOC);
@@ -228,19 +228,35 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     for (int i = 0; i < num_layers_avail; i++)
         pl_debug(ctx, "    %s", layers_avail[i].layerName);
 
-    if (params->debug) {
-        pl_info(ctx, "Enabling vulkan debug layers");
-        // Enables the LunarG standard validation layer, which
-        // is a meta-layer that loads lots of other validators
-        static const char *layers[] = {
-            "VK_LAYER_LUNARG_standard_validation",
-        };
-        info.ppEnabledLayerNames = layers;
-        info.enabledLayerCount = PL_ARRAY_SIZE(layers);
+    // Sorted by priority
+    static const char *debug_layers[] = {
+        "VK_LAYER_KHRONOS_validation",
+        "VK_LAYER_LUNARG_standard_validation",
+    };
 
-        // Enable support for debug callbacks, so we get useful messages
-        TARRAY_APPEND(tmp, exts, num_exts, VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+    bool debug = params->debug;
+    if (debug) {
+        for (int i = 0; i < PL_ARRAY_SIZE(debug_layers); i++) {
+            for (int n = 0; n < num_layers_avail; n++) {
+                if (strcmp(debug_layers[i], layers_avail[n].layerName) != 0)
+                    continue;
+
+                pl_info(ctx, "Enabling debug meta layer: %s", debug_layers[i]);
+                info.ppEnabledLayerNames = &debug_layers[i];
+                info.enabledLayerCount = 1;
+
+                // Enable support for debug callbacks, so we get useful messages
+                TARRAY_APPEND(tmp, exts, num_exts, VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+                goto layers_done;
+            }
+        }
+
+        // No layer found..
+        pl_warn(ctx, "API debugging requested but no debug meta layers present... ignoring");
+        debug = false;
     }
+
+layers_done:
 
     info.ppEnabledExtensionNames = exts;
     info.enabledExtensionCount = num_exts;
@@ -255,8 +271,8 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
         goto error;
     }
 
-    VkDebugReportCallbackEXT debug = VK_NULL_HANDLE;
-    if (params->debug) {
+    VkDebugReportCallbackEXT debug_cb = VK_NULL_HANDLE;
+    if (debug) {
         // Set up a debug callback to catch validation messages
         VkDebugReportCallbackCreateInfoEXT dinfo = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
@@ -273,12 +289,12 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
         // can't fail because we've already successfully created an instance
         // with this extension enabled.
         VK_LOAD_FUN(inst, vkCreateDebugReportCallbackEXT)
-        vkCreateDebugReportCallbackEXT(inst, &dinfo, VK_ALLOC, &debug);
+        vkCreateDebugReportCallbackEXT(inst, &dinfo, VK_ALLOC, &debug_cb);
     }
 
     struct pl_vk_inst *pl_vk = talloc_struct(NULL, struct pl_vk_inst, {
         .instance = inst,
-        .priv = (uint64_t) debug,
+        .priv = (uint64_t) debug_cb,
         .extensions = exts,
         .num_extensions = num_exts,
     });
