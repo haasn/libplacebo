@@ -121,6 +121,15 @@ int main()
         params.instance = inst->instance;
         params.device = devices[i];
         params.queue_count = 8; // test inter-queue stuff
+
+        if (props.vendorID == 0x8086 &&
+            props.deviceID == 0x3185 &&
+            props.driverVersion <= 79695878)
+        {
+            // Blacklist compute shaders for the CI's old intel iGPU..
+            params.blacklist_caps = PL_GPU_CAP_COMPUTE;
+        }
+
         const struct pl_vulkan *vk = pl_vulkan_create(ctx, &params);
         if (!vk)
             continue;
