@@ -1,6 +1,7 @@
 #include "gpu_tests.h"
 #include "vulkan/command.h"
 #include "vulkan/gpu.h"
+#include <vulkan/vulkan.h>
 
 static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
                                  enum pl_handle_type handle_type)
@@ -97,26 +98,48 @@ static void vulkan_test_export_import(const struct pl_vulkan *pl_vk,
 int main()
 {
     struct pl_context *ctx = pl_test_context();
+    const struct pl_vk_inst *inst;
+    inst = pl_vk_inst_create(ctx, &(struct pl_vk_inst_params) { .debug = true });
 
-    struct pl_vulkan_params params = pl_vulkan_default_params;
-    params.instance_params = &(struct pl_vk_inst_params) { .debug = true };
-    params.queue_count = 8; // test inter-queue stuff
-    const struct pl_vulkan *vk = pl_vulkan_create(ctx, &params);
-    if (!vk)
+    uint32_t num = 0;
+    vkEnumeratePhysicalDevices(inst->instance, &num, NULL);
+    if (!num)
         return SKIP;
 
-    gpu_tests(vk->gpu);
+    VkPhysicalDevice *devices = calloc(num, sizeof(*devices));
+    if (!devices)
+        return 1;
+    vkEnumeratePhysicalDevices(inst->instance, &num, devices);
 
-    // Run these tests last because they disable some validation layers
+    // Test all attached devices
+    for (int i = 0; i < num; i++) {
+        VkPhysicalDeviceProperties props;
+        vkGetPhysicalDeviceProperties(devices[i], &props);
+        printf("Testing device %d: %s\n", i, props.deviceName);
+
+        struct pl_vulkan_params params = pl_vulkan_default_params;
+        params.instance = inst->instance;
+        params.device = devices[i];
+        params.queue_count = 8; // test inter-queue stuff
+        const struct pl_vulkan *vk = pl_vulkan_create(ctx, &params);
+        if (!vk)
+            continue;
+
+        gpu_tests(vk->gpu);
+
+        // Run these tests last because they disable some validation layers
 #ifdef VK_HAVE_UNIX
-    vulkan_interop_tests(vk, PL_HANDLE_FD);
-    vulkan_interop_tests(vk, PL_HANDLE_DMA_BUF);
-    vulkan_test_export_import(vk, PL_HANDLE_DMA_BUF);
+        vulkan_interop_tests(vk, PL_HANDLE_FD);
+        vulkan_interop_tests(vk, PL_HANDLE_DMA_BUF);
+        vulkan_test_export_import(vk, PL_HANDLE_DMA_BUF);
 #endif
 #ifdef VK_HAVE_WIN32
-    vulkan_interop_tests(vk, PL_HANDLE_WIN32);
-    vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
+        vulkan_interop_tests(vk, PL_HANDLE_WIN32);
+        vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
-    pl_vulkan_destroy(&vk);
-    pl_context_destroy(&ctx);
+        pl_vulkan_destroy(&vk);
+        pl_context_destroy(&ctx);
+    }
+
+    free(devices);
 }
