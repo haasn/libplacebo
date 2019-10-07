@@ -498,7 +498,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     int idx_gfx = -1, idx_comp = -1, idx_tf = -1;
     idx_gfx = find_qf(qfs, qfnum, VK_QUEUE_GRAPHICS_BIT);
-    if (params->async_compute && !vk->disable_compute)
+    if (params->async_compute)
         idx_comp = find_qf(qfs, qfnum, VK_QUEUE_COMPUTE_BIT);
     if (params->async_transfer)
         idx_tf = find_qf(qfs, qfnum, VK_QUEUE_TRANSFER_BIT);
@@ -528,11 +528,6 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     // devices which support compute shaders but not async compute.
     if (idx_comp < 0 && qfs[idx_gfx].queueFlags & VK_QUEUE_COMPUTE_BIT)
         idx_comp = idx_gfx;
-
-    if (vk->disable_compute) {
-        PL_WARN(vk, "Disabling compute shaders (driver quirk)!");
-        idx_comp = -1;
-    }
 
     // Cache the transfer queue alignment requirements
     if (idx_tf >= 0)
@@ -696,15 +691,6 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
             (int) VK_VERSION_MAJOR(prop.apiVersion),
             (int) VK_VERSION_MINOR(prop.apiVersion),
             (int) VK_VERSION_PATCH(prop.apiVersion));
-
-    // Enable quirks based on the detected device name
-    if (prop.vendorID == 0x8086) { // Intel
-        // ANV currently deadlocks when using HDR peak detection shaders, work
-        // around by brute force disabling compute shaders on intel. We can
-        // probably restrict this to only old versions of mesa once a fix is
-        // debugged.
-        vk->disable_compute = true;
-    }
 
     // Finally, initialize the logical device and the rest of the vk_ctx
     if (!device_init(vk, params))
