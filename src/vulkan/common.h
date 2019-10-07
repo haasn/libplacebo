@@ -43,8 +43,8 @@
                             vkGetInstanceProcAddr(inst, #name);
 
 // Hard-coded limit on the number of pending commands, to avoid OOM loops
-#define PL_VK_MAX_QUEUED_CMDS 64
-#define PL_VK_MAX_PENDING_CMDS 64
+#define PL_VK_MAX_QUEUED_CMDS 1024
+#define PL_VK_MAX_PENDING_CMDS 1024
 
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
