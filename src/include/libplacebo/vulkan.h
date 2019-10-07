@@ -163,6 +163,10 @@ struct pl_vulkan_params {
     // enabled if supported by the device, but otherwise skipped.
     const char **opt_extensions;
     int num_opt_extensions;
+
+    // Restrict specific features to e.g. work around driver bugs, or simply
+    // for testing purposes
+    pl_gpu_caps blacklist_caps; // capabilities to be excluded
 };
 
 // Default/recommended parameters. Should generally be safe and efficient.

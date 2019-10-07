@@ -519,15 +519,20 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         }
     }
 
-    if (idx_tf >= 0 && idx_tf != idx_gfx)
-        PL_INFO(vk, "Using async transfer (QF %d)", idx_tf);
-    if (idx_comp >= 0 && idx_comp != idx_gfx)
-        PL_INFO(vk, "Using async compute (QF %d)", idx_comp);
-
     // Fall back to supporting compute shaders via the graphics pool for
     // devices which support compute shaders but not async compute.
     if (idx_comp < 0 && qfs[idx_gfx].queueFlags & VK_QUEUE_COMPUTE_BIT)
         idx_comp = idx_gfx;
+
+    if (params->blacklist_caps & PL_GPU_CAP_COMPUTE) {
+        PL_INFO(vk, "Disabling compute shaders (blacklisted)");
+        idx_comp = -1;
+    }
+
+    if (idx_tf >= 0 && idx_tf != idx_gfx)
+        PL_INFO(vk, "Using async transfer (QF %d)", idx_tf);
+    if (idx_comp >= 0 && idx_comp != idx_gfx)
+        PL_INFO(vk, "Using async compute (QF %d)", idx_comp);
 
     // Cache the transfer queue alignment requirements
     if (idx_tf >= 0)
@@ -699,6 +704,10 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     pl_vk->gpu = pl_gpu_create_vk(vk);
     if (!pl_vk->gpu)
         goto error;
+
+    // Blacklist / restrict features
+    pl_gpu_caps *caps = (pl_gpu_caps*) &pl_vk->gpu->caps;
+    *caps &= ~(params->blacklist_caps);
 
     // Expose the resulting vulkan objects
     pl_vk->instance = vk->inst;
