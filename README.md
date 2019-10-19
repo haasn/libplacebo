@@ -17,7 +17,7 @@ accomplish the following goals:
   primitives based on GLSL, so projects like VLC or Firefox can use them
   without incurring a heavy dependency on `libmpv`.
 - Rewrite core parts of mpv's GPU-accelerated video renderer on top of
-  redesigned abstractions. (Basically, I wanted to eliminate code smell like
+  redesigned abstractions. (Basically, I wanted to eliminate stateful APIs like
   `shader_cache.c` and totally redesign `gpu/video.c`)
 
 ## API Overview
