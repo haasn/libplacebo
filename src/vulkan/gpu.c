@@ -497,7 +497,7 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 {
     struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_tex_vk *tex_vk = tex->priv;
-    assert(!tex_vk->held);
+    pl_assert(!tex_vk->held);
 
     for (int i = 0; i < tex_vk->num_ext_deps; i++)
         vk_cmd_dep(cmd, tex_vk->ext_deps[i], stage);
@@ -1121,8 +1121,12 @@ bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
 {
     struct vk_ctx *vk = pl_vk_get(gpu);
     struct pl_tex_vk *tex_vk = tex->priv;
-    pl_assert(!tex_vk->held);
     pl_assert(sem_out);
+
+    if (tex_vk->held) {
+        PL_ERR(gpu, "Attempting to hold an already held image!");
+        return false;
+    }
 
     struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
     if (!cmd) {
@@ -1145,7 +1149,11 @@ void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
                        VkSemaphore sem_in)
 {
     struct pl_tex_vk *tex_vk = tex->priv;
-    pl_assert(tex_vk->held);
+    if (!tex_vk->held) {
+        PL_ERR(gpu, "Attempting to release an unheld image?");
+        return;
+    }
+
     pl_tex_vk_external_dep(gpu, tex, sem_in);
 
     tex_vk->current_layout = layout;

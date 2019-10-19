@@ -268,7 +268,8 @@ VkImage pl_vulkan_unwrap(const struct pl_gpu *gpu, const struct pl_tex *tex,
 // "Hold" a shared image. This will transition the image into the layout and
 // access mode specified by the user, and fire the given semaphore (required!)
 // when this is done. This marks the image as held. Attempting to perform any
-// pl_tex_* operation (except pl_tex_destroy) on a held image is an error.
+// pl_tex_* operation (except pl_tex_destroy) on a held image is undefined
+// behavior.
 //
 // Returns whether successful.
 bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,

@@ -30,12 +30,9 @@
 // since it tries targetting a very small common subset of features that is
 // needed to implement libplacebo's rendering.
 //
-// NOTE: When speaking of "valid usage" or "must", invalid usage is assumed to
-// result in undefined behavior. (Typically, an error message is printed to
-// stderr and libplacebo aborts - but this is not guaranteed). So ensuring
-// valid API usage by the API user is absolutely crucial. If you want to be
-// freed from this reponsibility, use the higher level abstractions provided by
-// libplacebo alongside gpu.h.
+// NOTE: Most, but not all, parameter conditions (phrases such as "must" or
+// "valid usage" are explicitly tested and result in error messages followed by
+// graceful failure. Exceptions are noted where they exist.
 
 // Structure which wraps metadata describing GLSL capabilities.
 struct pl_glsl_desc {
@@ -536,12 +533,20 @@ void pl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf **buf);
 
 // Update the contents of a buffer, starting at a given offset (must be a
 // multiple of 4) and up to a given size, with the contents of *data.
+//
+// Note: This operation may write directly to the buffer, i.e. it is not
+// synchronized. Writing to an in-use buffer is undefined behavior. Use
+// `pl_buff_poll` to ensure write consistency.
 void pl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                   size_t buf_offset, const void *data, size_t size);
 
 // Read back the contents of a buffer, starting at a given offset (must be a
 // multiple of 4) and up to a given size, storing the data into *dest.
 // Returns whether successful.
+//
+// Note: This operation will never block, so reading from a buffer that is
+// currently being written to results in the read memory regions containing
+// undefined values. Use `pl_buf_poll` to ensure read consistency.
 bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                  size_t buf_offset, void *dest, size_t size);
 
@@ -553,7 +558,8 @@ bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
 // operation that touches the buffer (e.g. pl_tex_upload, but also pl_buf_write
 // and pl_buf_read) will implicitly import the buffer back to libplacebo. Users
 // must ensure that all pending operations made by the external API are fully
-// completed before using it in libplacebo again.
+// completed before using it in libplacebo again. (Otherwise, the bahviour
+// is undefined)
 //
 // Please note that this function returning does not mean the memory is
 // immediately available as such. In general, it will mark a buffer as "in use"

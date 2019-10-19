@@ -20,6 +20,15 @@
 #include "shaders.h"
 #include "gpu.h"
 
+#define require(expr)                                           \
+  do {                                                          \
+      if (!(expr)) {                                            \
+          PL_ERR(gpu, "Validation failed: %s (%s:%d)\n",        \
+                  #expr, __FILE__, __LINE__);                   \
+          goto error;                                           \
+      }                                                         \
+  } while (0)
+
 int pl_optimal_transfer_stride(const struct pl_gpu *gpu, int dimension)
 {
     return PL_ALIGN2(dimension, gpu->limits.align_tex_xfer_stride);
@@ -362,46 +371,49 @@ const struct pl_fmt *pl_find_named_fmt(const struct pl_gpu *gpu, const char *nam
 const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
                                    const struct pl_tex_params *params)
 {
-    pl_assert(!params->import_handle || !params->export_handle);
+    require(!params->import_handle || !params->export_handle);
     if (params->export_handle) {
-        pl_assert(params->export_handle & gpu->export_caps.tex);
-        pl_assert(PL_ISPOT(params->export_handle));
+        require(params->export_handle & gpu->export_caps.tex);
+        require(PL_ISPOT(params->export_handle));
     }
     if (params->import_handle) {
-        pl_assert(params->import_handle & gpu->import_caps.tex);
-        pl_assert(PL_ISPOT(params->import_handle));
+        require(params->import_handle & gpu->import_caps.tex);
+        require(PL_ISPOT(params->import_handle));
     }
 
     switch (pl_tex_params_dimension(*params)) {
     case 1:
-        pl_assert(params->w > 0);
-        pl_assert(params->w <= gpu->limits.max_tex_1d_dim);
-        pl_assert(!params->renderable);
+        require(params->w > 0);
+        require(params->w <= gpu->limits.max_tex_1d_dim);
+        require(!params->renderable);
         break;
     case 2:
-        pl_assert(params->w > 0 && params->h > 0);
-        pl_assert(params->w <= gpu->limits.max_tex_2d_dim);
-        pl_assert(params->h <= gpu->limits.max_tex_2d_dim);
+        require(params->w > 0 && params->h > 0);
+        require(params->w <= gpu->limits.max_tex_2d_dim);
+        require(params->h <= gpu->limits.max_tex_2d_dim);
         break;
     case 3:
-        pl_assert(params->w > 0 && params->h > 0 && params->d > 0);
-        pl_assert(params->w <= gpu->limits.max_tex_3d_dim);
-        pl_assert(params->h <= gpu->limits.max_tex_3d_dim);
-        pl_assert(params->d <= gpu->limits.max_tex_3d_dim);
-        pl_assert(!params->renderable);
+        require(params->w > 0 && params->h > 0 && params->d > 0);
+        require(params->w <= gpu->limits.max_tex_3d_dim);
+        require(params->h <= gpu->limits.max_tex_3d_dim);
+        require(params->d <= gpu->limits.max_tex_3d_dim);
+        require(!params->renderable);
         break;
     }
 
     const struct pl_fmt *fmt = params->format;
-    pl_assert(fmt);
-    pl_assert(!params->sampleable || fmt->caps & PL_FMT_CAP_SAMPLEABLE);
-    pl_assert(!params->renderable || fmt->caps & PL_FMT_CAP_RENDERABLE);
-    pl_assert(!params->storable   || fmt->caps & PL_FMT_CAP_STORABLE);
-    pl_assert(!params->blit_src   || fmt->caps & PL_FMT_CAP_BLITTABLE);
-    pl_assert(!params->blit_dst   || fmt->caps & PL_FMT_CAP_BLITTABLE);
-    pl_assert(params->sample_mode != PL_TEX_SAMPLE_LINEAR || fmt->caps & PL_FMT_CAP_LINEAR);
+    require(fmt);
+    require(!params->sampleable || fmt->caps & PL_FMT_CAP_SAMPLEABLE);
+    require(!params->renderable || fmt->caps & PL_FMT_CAP_RENDERABLE);
+    require(!params->storable   || fmt->caps & PL_FMT_CAP_STORABLE);
+    require(!params->blit_src   || fmt->caps & PL_FMT_CAP_BLITTABLE);
+    require(!params->blit_dst   || fmt->caps & PL_FMT_CAP_BLITTABLE);
+    require(params->sample_mode != PL_TEX_SAMPLE_LINEAR || fmt->caps & PL_FMT_CAP_LINEAR);
 
     return gpu->impl->tex_create(gpu, params);
+
+error:
+    return NULL;
 }
 
 static bool pl_tex_params_superset(struct pl_tex_params a, struct pl_tex_params b)
@@ -451,10 +463,13 @@ void pl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex **tex)
 void pl_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *dst,
                   const float color[4])
 {
-    pl_assert(dst->params.blit_dst);
+    require(dst->params.blit_dst);
 
     pl_tex_invalidate(gpu, dst);
     gpu->impl->tex_clear(gpu, dst, color);
+
+error:
+    return;
 }
 
 void pl_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex)
@@ -482,33 +497,33 @@ void pl_tex_blit(const struct pl_gpu *gpu,
 {
     const struct pl_fmt *src_fmt = src->params.format;
     const struct pl_fmt *dst_fmt = dst->params.format;
-    pl_assert(src_fmt->texel_size == dst_fmt->texel_size);
-    pl_assert((src_fmt->type == PL_FMT_UINT) == (dst_fmt->type == PL_FMT_UINT));
-    pl_assert((src_fmt->type == PL_FMT_SINT) == (dst_fmt->type == PL_FMT_SINT));
-    pl_assert(src->params.blit_src);
-    pl_assert(dst->params.blit_dst);
-    pl_assert(src_rc.x0 >= 0 && src_rc.x0 < src->params.w);
-    pl_assert(src_rc.x1 > 0 && src_rc.x1 <= src->params.w);
-    pl_assert(dst_rc.x0 >= 0 && dst_rc.x0 < dst->params.w);
-    pl_assert(dst_rc.x1 > 0 && dst_rc.x1 <= dst->params.w);
+    require(src_fmt->texel_size == dst_fmt->texel_size);
+    require((src_fmt->type == PL_FMT_UINT) == (dst_fmt->type == PL_FMT_UINT));
+    require((src_fmt->type == PL_FMT_SINT) == (dst_fmt->type == PL_FMT_SINT));
+    require(src->params.blit_src);
+    require(dst->params.blit_dst);
+    require(src_rc.x0 >= 0 && src_rc.x0 < src->params.w);
+    require(src_rc.x1 > 0 && src_rc.x1 <= src->params.w);
+    require(dst_rc.x0 >= 0 && dst_rc.x0 < dst->params.w);
+    require(dst_rc.x1 > 0 && dst_rc.x1 <= dst->params.w);
 
     if (src->params.h) {
-        pl_assert(dst->params.h);
-        pl_assert(src_rc.y0 >= 0 && src_rc.y0 < src->params.h);
-        pl_assert(src_rc.y1 > 0 && src_rc.y1 <= src->params.h);
+        require(dst->params.h);
+        require(src_rc.y0 >= 0 && src_rc.y0 < src->params.h);
+        require(src_rc.y1 > 0 && src_rc.y1 <= src->params.h);
     }
     if (dst->params.h) {
-        pl_assert(dst_rc.y0 >= 0 && dst_rc.y0 < dst->params.h);
-        pl_assert(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
+        require(dst_rc.y0 >= 0 && dst_rc.y0 < dst->params.h);
+        require(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
     }
     if (src->params.d) {
-        pl_assert(dst->params.d);
-        pl_assert(src_rc.z0 >= 0 && src_rc.z0 < src->params.d);
-        pl_assert(src_rc.z1 > 0 && src_rc.z1 <= src->params.d);
+        require(dst->params.d);
+        require(src_rc.z0 >= 0 && src_rc.z0 < src->params.d);
+        require(src_rc.z1 > 0 && src_rc.z1 <= src->params.d);
     }
     if (dst->params.d) {
-        pl_assert(dst_rc.z0 >= 0 && dst_rc.z0 < dst->params.d);
-        pl_assert(dst_rc.z1 > 0 && dst_rc.z1 <= dst->params.d);
+        require(dst_rc.z0 >= 0 && dst_rc.z0 < dst->params.d);
+        require(dst_rc.z1 > 0 && dst_rc.z1 <= dst->params.d);
     }
 
     strip_coords(src, &src_rc);
@@ -523,6 +538,9 @@ void pl_tex_blit(const struct pl_gpu *gpu,
         pl_tex_invalidate(gpu, dst);
 
     gpu->impl->tex_blit(gpu, dst, src, dst_rc, src_rc);
+
+error:
+    return;
 }
 
 size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par)
@@ -537,7 +555,7 @@ size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par)
     return texels * tex->params.format->texel_size;
 }
 
-static void fix_tex_transfer(const struct pl_gpu *gpu,
+static bool fix_tex_transfer(const struct pl_gpu *gpu,
                              struct pl_tex_transfer_params *params)
 {
     const struct pl_tex *tex = params->tex;
@@ -566,96 +584,107 @@ static void fix_tex_transfer(const struct pl_gpu *gpu,
     params->rc = rc;
 
     // Check the parameters for sanity
-#ifndef NDEBUG
     switch (pl_tex_params_dimension(tex->params))
     {
     case 3:
-        pl_assert(rc.z1 > rc.z0);
-        pl_assert(rc.z0 >= 0 && rc.z0 <  tex->params.d);
-        pl_assert(rc.z1 >  0 && rc.z1 <= tex->params.d);
-        pl_assert(params->stride_h >= pl_rect_h(rc));
+        require(rc.z1 > rc.z0);
+        require(rc.z0 >= 0 && rc.z0 <  tex->params.d);
+        require(rc.z1 >  0 && rc.z1 <= tex->params.d);
+        require(params->stride_h >= pl_rect_h(rc));
         // fall through
     case 2:
-        pl_assert(rc.y1 > rc.y0);
-        pl_assert(rc.y0 >= 0 && rc.y0 <  tex->params.h);
-        pl_assert(rc.y1 >  0 && rc.y1 <= tex->params.h);
-        pl_assert(params->stride_w >= pl_rect_w(rc));
+        require(rc.y1 > rc.y0);
+        require(rc.y0 >= 0 && rc.y0 <  tex->params.h);
+        require(rc.y1 >  0 && rc.y1 <= tex->params.h);
+        require(params->stride_w >= pl_rect_w(rc));
         // fall through
     case 1:
-        pl_assert(rc.x1 > rc.x0);
-        pl_assert(rc.x0 >= 0 && rc.x0 <  tex->params.w);
-        pl_assert(rc.x1 >  0 && rc.x1 <= tex->params.w);
+        require(rc.x1 > rc.x0);
+        require(rc.x0 >= 0 && rc.x0 <  tex->params.w);
+        require(rc.x1 >  0 && rc.x1 <= tex->params.w);
         break;
     }
 
-    pl_assert(!params->buf ^ !params->ptr); // exactly one
+    require(!params->buf ^ !params->ptr); // exactly one
     if (params->buf) {
         const struct pl_buf *buf = params->buf;
         size_t size = pl_tex_transfer_size(params);
         size_t texel = tex->params.format->texel_size;
-        pl_assert(params->buf_offset == PL_ALIGN(params->buf_offset, texel));
-        pl_assert(params->buf_offset + size <= buf->params.size);
+        require(params->buf_offset == PL_ALIGN(params->buf_offset, texel));
+        require(params->buf_offset + size <= buf->params.size);
     }
-#endif
+
+    return true;
+
+error:
+    return false;
 }
 
 bool pl_tex_upload(const struct pl_gpu *gpu,
                    const struct pl_tex_transfer_params *params)
 {
     const struct pl_tex *tex = params->tex;
-    pl_assert(tex);
-    pl_assert(tex->params.host_writable);
+    require(tex);
+    require(tex->params.host_writable);
 
     struct pl_tex_transfer_params fixed = *params;
-    fix_tex_transfer(gpu, &fixed);
+    if (!fix_tex_transfer(gpu, &fixed))
+        goto error;
     return gpu->impl->tex_upload(gpu, &fixed);
+
+error:
+    return false;
 }
 
 bool pl_tex_download(const struct pl_gpu *gpu,
                      const struct pl_tex_transfer_params *params)
 {
     const struct pl_tex *tex = params->tex;
-    pl_assert(tex);
-    pl_assert(tex->params.host_readable);
+    require(tex);
+    require(tex->params.host_readable);
 
     struct pl_tex_transfer_params fixed = *params;
-    fix_tex_transfer(gpu, &fixed);
+    if (!fix_tex_transfer(gpu, &fixed))
+        goto error;
     return gpu->impl->tex_download(gpu, &fixed);
+
+error:
+    return false;
 }
 
 const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
                                    const struct pl_buf_params *params)
 {
     if (params->handle_type) {
-        pl_assert(params->handle_type & gpu->export_caps.buf);
-        pl_assert(PL_ISPOT(params->handle_type));
+        require(params->handle_type & gpu->export_caps.buf);
+        require(PL_ISPOT(params->handle_type));
     }
 
     switch (params->type) {
     case PL_BUF_TEX_TRANSFER:
-        pl_assert(gpu->limits.max_xfer_size);
-        pl_assert(params->size <= gpu->limits.max_xfer_size);
+        require(gpu->limits.max_xfer_size);
+        require(params->size <= gpu->limits.max_xfer_size);
         break;
     case PL_BUF_UNIFORM:
-        pl_assert(gpu->limits.max_ubo_size);
-        pl_assert(params->size <= gpu->limits.max_ubo_size);
+        require(gpu->limits.max_ubo_size);
+        require(params->size <= gpu->limits.max_ubo_size);
         break;
     case PL_BUF_STORAGE:
-        pl_assert(gpu->limits.max_ssbo_size);
-        pl_assert(params->size <= gpu->limits.max_ssbo_size);
+        require(gpu->limits.max_ssbo_size);
+        require(params->size <= gpu->limits.max_ssbo_size);
         break;
     case PL_BUF_TEXEL_UNIFORM: {
-        pl_assert(params->format);
-        pl_assert(params->format->caps & PL_FMT_CAP_TEXEL_UNIFORM);
+        require(params->format);
+        require(params->format->caps & PL_FMT_CAP_TEXEL_UNIFORM);
         size_t limit = gpu->limits.max_buffer_texels * params->format->texel_size;
-        pl_assert(params->size <= limit);
+        require(params->size <= limit);
         break;
     }
     case PL_BUF_TEXEL_STORAGE: {
-        pl_assert(params->format);
-        pl_assert(params->format->caps & PL_FMT_CAP_TEXEL_STORAGE);
+        require(params->format);
+        require(params->format->caps & PL_FMT_CAP_TEXEL_STORAGE);
         size_t limit = gpu->limits.max_buffer_texels * params->format->texel_size;
-        pl_assert(params->size <= limit);
+        require(params->size <= limit);
         break;
     }
     case PL_BUF_PRIVATE: break;
@@ -664,9 +693,12 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
 
     const struct pl_buf *buf = gpu->impl->buf_create(gpu, params);
     if (buf)
-        pl_assert(buf->data || !params->host_mapped);
+        require(buf->data || !params->host_mapped);
 
     return buf;
+
+error:
+    return NULL;
 }
 
 static bool pl_buf_params_superset(struct pl_buf_params a, struct pl_buf_params b)
@@ -709,25 +741,34 @@ void pl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf **buf)
 void pl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                   size_t buf_offset, const void *data, size_t size)
 {
-    pl_assert(buf->params.host_writable);
-    pl_assert(buf_offset + size <= buf->params.size);
-    pl_assert(buf_offset == PL_ALIGN2(buf_offset, 4));
+    require(buf->params.host_writable);
+    require(buf_offset + size <= buf->params.size);
+    require(buf_offset == PL_ALIGN2(buf_offset, 4));
     gpu->impl->buf_write(gpu, buf, buf_offset, data, size);
+
+error:
+    return;
 }
 
 bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                  size_t buf_offset, void *dest, size_t size)
 {
-    pl_assert(buf->params.host_readable);
-    pl_assert(buf_offset + size <= buf->params.size);
-    pl_assert(buf_offset == PL_ALIGN2(buf_offset, 4));
+    require(buf->params.host_readable);
+    require(buf_offset + size <= buf->params.size);
+    require(buf_offset == PL_ALIGN2(buf_offset, 4));
     return gpu->impl->buf_read(gpu, buf, buf_offset, dest, size);
+
+error:
+    return false;
 }
 
 bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
 {
-    pl_assert(buf->params.handle_type);
+    require(buf->params.handle_type);
     return gpu->impl->buf_export(gpu, buf);
+
+error:
+    return false;
 }
 
 bool pl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf, uint64_t t)
@@ -920,46 +961,49 @@ const char *pl_desc_access_glsl_name(enum pl_desc_access mode)
 const struct pl_pass *pl_pass_create(const struct pl_gpu *gpu,
                                      const struct pl_pass_params *params)
 {
-    pl_assert(params->glsl_shader);
+    require(params->glsl_shader);
     switch(params->type) {
     case PL_PASS_RASTER:
-        pl_assert(params->vertex_shader);
+        require(params->vertex_shader);
         for (int i = 0; i < params->num_vertex_attribs; i++) {
             struct pl_vertex_attrib va = params->vertex_attribs[i];
-            pl_assert(va.name);
-            pl_assert(va.fmt);
-            pl_assert(va.fmt->caps & PL_FMT_CAP_VERTEX);
-            pl_assert(va.offset + va.fmt->texel_size <= params->vertex_stride);
+            require(va.name);
+            require(va.fmt);
+            require(va.fmt->caps & PL_FMT_CAP_VERTEX);
+            require(va.offset + va.fmt->texel_size <= params->vertex_stride);
         }
 
         const struct pl_fmt *target_fmt = params->target_dummy.params.format;
-        pl_assert(target_fmt);
-        pl_assert(target_fmt->caps & PL_FMT_CAP_RENDERABLE);
-        pl_assert(!params->blend_params || target_fmt->caps & PL_FMT_CAP_BLENDABLE);
+        require(target_fmt);
+        require(target_fmt->caps & PL_FMT_CAP_RENDERABLE);
+        require(!params->blend_params || target_fmt->caps & PL_FMT_CAP_BLENDABLE);
         break;
     case PL_PASS_COMPUTE:
-        pl_assert(gpu->caps & PL_GPU_CAP_COMPUTE);
+        require(gpu->caps & PL_GPU_CAP_COMPUTE);
         break;
     default: abort();
     }
 
     for (int i = 0; i < params->num_variables; i++) {
-        pl_assert(gpu->caps & PL_GPU_CAP_INPUT_VARIABLES);
+        require(gpu->caps & PL_GPU_CAP_INPUT_VARIABLES);
         struct pl_var var = params->variables[i];
-        pl_assert(var.name);
-        pl_assert(pl_var_glsl_type_name(var));
+        require(var.name);
+        require(pl_var_glsl_type_name(var));
     }
 
     for (int i = 0; i < params->num_descriptors; i++) {
         struct pl_desc desc = params->descriptors[i];
-        pl_assert(desc.name);
+        require(desc.name);
         // TODO: enforce disjoint bindings if possible?
     }
 
-    pl_assert(params->push_constants_size <= gpu->limits.max_pushc_size);
-    pl_assert(params->push_constants_size == PL_ALIGN2(params->push_constants_size, 4));
+    require(params->push_constants_size <= gpu->limits.max_pushc_size);
+    require(params->push_constants_size == PL_ALIGN2(params->push_constants_size, 4));
 
     return gpu->impl->pass_create(gpu, params);
+
+error:
+    return NULL;
 }
 
 void pl_pass_destroy(const struct pl_gpu *gpu, const struct pl_pass **pass)
@@ -979,36 +1023,36 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
     for (int i = 0; i < pass->params.num_descriptors; i++) {
         struct pl_desc desc = pass->params.descriptors[i];
         struct pl_desc_binding db = params->desc_bindings[i];
-        pl_assert(db.object);
+        require(db.object);
         switch (desc.type) {
         case PL_DESC_SAMPLED_TEX: {
             const struct pl_tex *tex = db.object;
-            pl_assert(tex->params.sampleable);
+            require(tex->params.sampleable);
             break;
         }
         case PL_DESC_STORAGE_IMG: {
             const struct pl_tex *tex = db.object;
-            pl_assert(tex->params.storable);
+            require(tex->params.storable);
             break;
         }
         case PL_DESC_BUF_UNIFORM: {
             const struct pl_buf *buf = db.object;
-            pl_assert(buf->params.type == PL_BUF_UNIFORM);
+            require(buf->params.type == PL_BUF_UNIFORM);
             break;
         }
         case PL_DESC_BUF_STORAGE: {
             const struct pl_buf *buf = db.object;
-            pl_assert(buf->params.type == PL_BUF_STORAGE);
+            require(buf->params.type == PL_BUF_STORAGE);
             break;
         }
         case PL_DESC_BUF_TEXEL_UNIFORM: {
             const struct pl_buf *buf = db.object;
-            pl_assert(buf->params.type == PL_BUF_TEXEL_UNIFORM);
+            require(buf->params.type == PL_BUF_TEXEL_UNIFORM);
             break;
         }
         case PL_DESC_BUF_TEXEL_STORAGE: {
             const struct pl_buf *buf = db.object;
-            pl_assert(buf->params.type == PL_BUF_TEXEL_STORAGE);
+            require(buf->params.type == PL_BUF_TEXEL_STORAGE);
             break;
         }
         default: abort();
@@ -1017,31 +1061,31 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
 
     for (int i = 0; i < params->num_var_updates; i++) {
         struct pl_var_update vu = params->var_updates[i];
-        pl_assert(gpu->caps & PL_GPU_CAP_INPUT_VARIABLES);
-        pl_assert(vu.index >= 0 && vu.index < pass->params.num_variables);
-        pl_assert(vu.data);
+        require(gpu->caps & PL_GPU_CAP_INPUT_VARIABLES);
+        require(vu.index >= 0 && vu.index < pass->params.num_variables);
+        require(vu.data);
     }
 
-    pl_assert(params->push_constants || !pass->params.push_constants_size);
+    require(params->push_constants || !pass->params.push_constants_size);
 
     switch (pass->params.type) {
     case PL_PASS_RASTER: {
-        pl_assert(params->vertex_data);
+        require(params->vertex_data);
         switch (pass->params.vertex_type) {
         case PL_PRIM_TRIANGLE_LIST:
-            pl_assert(params->vertex_count % 3 == 0);
+            require(params->vertex_count % 3 == 0);
             // fall through
         case PL_PRIM_TRIANGLE_STRIP:
         case PL_PRIM_TRIANGLE_FAN:
-            pl_assert(params->vertex_count >= 3);
+            require(params->vertex_count >= 3);
             break;
         }
 
         const struct pl_tex *tex = params->target;
-        pl_assert(tex);
-        pl_assert(pl_tex_params_dimension(tex->params) == 2);
-        pl_assert(tex->params.format == pass->params.target_dummy.params.format);
-        pl_assert(tex->params.renderable);
+        require(tex);
+        require(pl_tex_params_dimension(tex->params) == 2);
+        require(tex->params.format == pass->params.target_dummy.params.format);
+        require(tex->params.renderable);
         struct pl_rect2d *vp = &new.viewport;
         struct pl_rect2d *sc = &new.scissors;
 
@@ -1068,16 +1112,16 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         if (!pl_rect_w(*sc) || !pl_rect_h(*sc))
             return;
 
-        pl_assert(pl_rect_w(*vp) > 0);
-        pl_assert(pl_rect_h(*vp) > 0);
-        pl_assert(pl_rect_w(*sc) > 0);
-        pl_assert(pl_rect_h(*sc) > 0);
+        require(pl_rect_w(*vp) > 0);
+        require(pl_rect_h(*vp) > 0);
+        require(pl_rect_w(*sc) > 0);
+        require(pl_rect_h(*sc) > 0);
         break;
     }
     case PL_PASS_COMPUTE:
         for (int i = 0; i < PL_ARRAY_SIZE(params->compute_groups); i++) {
-            pl_assert(params->compute_groups[i] >= 0);
-            pl_assert(params->compute_groups[i] <= gpu->limits.max_dispatch[i]);
+            require(params->compute_groups[i] >= 0);
+            require(params->compute_groups[i] <= gpu->limits.max_dispatch[i]);
         }
         break;
     default: abort();
@@ -1087,6 +1131,9 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         pl_tex_invalidate(gpu, params->target);
 
     return gpu->impl->pass_run(gpu, &new);
+
+error:
+    return;
 }
 
 void pl_gpu_flush(const struct pl_gpu *gpu)
@@ -1127,7 +1174,7 @@ const struct pl_buf *pl_buf_pool_get(const struct pl_gpu *gpu,
                                      struct pl_buf_pool *pool,
                                      const struct pl_buf_params *params)
 {
-    pl_assert(!params->initial_data);
+    require(!params->initial_data);
 
     if (!pl_buf_params_superset(pool->current_params, *params)) {
         pl_buf_pool_uninit(gpu, pool);
@@ -1159,6 +1206,9 @@ done: ;
     pool->index %= pool->num_buffers;
 
     return buf;
+
+error:
+    return NULL;
 }
 
 bool pl_tex_upload_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
@@ -1223,8 +1273,8 @@ bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     const int threads = 256;
     const struct pl_tex *tex = params->tex;
     const struct pl_fmt *fmt = tex->params.format;
-    pl_assert(params->buf);
-    pl_assert(params->buf->params.type == PL_BUF_TEXEL_UNIFORM);
+    require(params->buf);
+    require(params->buf->params.type == PL_BUF_TEXEL_UNIFORM);
 
     struct pl_shader *sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, threads, 1, true, 0)) {
@@ -1277,6 +1327,9 @@ bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     GLSL("imageStore(%s, %s(pos), color);\n", img, coord_types[dims]);
     int groups[3] = { groups_x, pl_rect_h(params->rc), pl_rect_d(params->rc) };
     return pl_dispatch_compute(dp, &sh, groups);
+
+error:
+    return false;
 }
 
 bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
@@ -1285,8 +1338,8 @@ bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     const int threads = 256;
     const struct pl_tex *tex = params->tex;
     const struct pl_fmt *fmt = tex->params.format;
-    pl_assert(params->buf);
-    pl_assert(params->buf->params.type == PL_BUF_TEXEL_STORAGE);
+    require(params->buf);
+    require(params->buf->params.type == PL_BUF_TEXEL_STORAGE);
 
     struct pl_shader *sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, threads, 1, true, 0)) {
@@ -1338,6 +1391,9 @@ bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
 
     int groups[3] = { groups_x, pl_rect_h(params->rc), pl_rect_d(params->rc) };
     return pl_dispatch_compute(dp, &sh, groups);
+
+error:
+    return false;
 }
 
 struct pl_pass_params pl_pass_params_copy(void *tactx,
@@ -1372,10 +1428,13 @@ struct pl_pass_params pl_pass_params_copy(void *tactx,
 const struct pl_sync *pl_sync_create(const struct pl_gpu *gpu,
                                      enum pl_handle_type handle_type)
 {
-    pl_assert(handle_type);
-    pl_assert(handle_type & gpu->export_caps.sync);
-    pl_assert(PL_ISPOT(handle_type));
+    require(handle_type);
+    require(handle_type & gpu->export_caps.sync);
+    require(PL_ISPOT(handle_type));
     return gpu->impl->sync_create(gpu, handle_type);
+
+error:
+    return NULL;
 }
 
 void pl_sync_destroy(const struct pl_gpu *gpu,
