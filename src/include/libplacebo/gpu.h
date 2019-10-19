@@ -599,10 +599,16 @@ bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf);
 // before returning. If set to 0, this function will never block, and only
 // returns the current status of the buffer. The actual precision of the
 // timeout may be significantly longer than one nanosecond, and has no upper
-// bound. This function does not provide hard latency guarantees.
+// bound. This function does not provide hard latency guarantees. This function
+// may also return at any time, even if the buffer is still in use. If the user
+// wishes to block until the buffer is definitely no longer in use, the
+// recommended usage is:
 //
-// Note: Performing multiple libplacebo operations at the same time is always
-// valid, for example it's perfectly valid to submit a `pl_tex_upload`
+// while (pl_buf_poll(gpu, buf, UINT64_MAX))
+//      ; // do nothing
+//
+// Note: Performing multiple libplacebo-internal operations at the same time is
+// always valid, for example it's perfectly valid to submit a `pl_tex_upload`
 // immediately followed by a `pl_tex_download` to the same buffer. However,
 // when this is the case, it's undefined as to when exactly the upload is
 // happening versus when exactly the download is happening. So in this example,
