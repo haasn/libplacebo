@@ -204,8 +204,8 @@ static void vk_setup_formats(struct pl_gpu *gpu)
         if (fmt->caps & storable) {
             fmt->glsl_format = pl_fmt_glsl_format(fmt);
             if (!fmt->glsl_format) {
-                PL_WARN(gpu, "Storable format '%s' has no matching GLSL format "
-                        "qualifier?", fmt->name);
+                PL_INFO(gpu, "Storable format '%s' has no matching GLSL format "
+                        "qualifier, ignoring", fmt->name);
                 fmt->caps &= ~storable;
             }
         }
