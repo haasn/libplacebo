@@ -131,8 +131,8 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
 
         PL_INFO(vk, "Freed slab of size %zu", (size_t) slab->size);
     } else {
-        PL_INFO(vk, "Freed slab of size %zu from imported fd: %d",
-                (size_t) slab->size, slab->handle.fd);
+        PL_DEBUG(vk, "Unimporting slab of size %zu from fd: %d",
+                 (size_t) slab->size, slab->handle.fd);
     }
 
     // also implicitly unmaps the memory if needed
@@ -712,8 +712,8 @@ bool vk_malloc_import(struct vk_malloc *ma, enum pl_handle_type handle_type,
         .priv = slab,
     };
 
-    PL_INFO(vk, "Allocating %zu of imported memory from fd: %d",
-            (size_t) slab->size, fd);
+    PL_DEBUG(vk, "Importing %zu of memory from fd: %d",
+             (size_t) slab->size, fd);
 
     return true;
 
