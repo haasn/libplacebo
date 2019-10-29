@@ -137,7 +137,9 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     };
 
-    VK(vkCreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sig->semaphore));
+    // We can skip creating the semaphores if there's only one queue
+    if (vk->num_pools > 1 || vk->pools[0]->num_queues > 1)
+        VK(vkCreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sig->semaphore));
 
     static const VkEventCreateInfo einfo = {
         .sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO,
@@ -159,9 +161,10 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
 done:
     // Signal both the semaphore, and the event if possible. (We will only
     // end up using one or the other)
-    vk_cmd_sig(cmd, sig->semaphore);
     sig->type = VK_WAIT_NONE;
     sig->source = cmd->queue;
+    if (sig->semaphore)
+        vk_cmd_sig(cmd, sig->semaphore);
 
     VkQueueFlags req = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
     if (sig->event && (cmd->pool->props.queueFlags & req)) {
@@ -178,6 +181,9 @@ error:
 
 static bool unsignal_cmd(struct vk_cmd *cmd, VkSemaphore sem)
 {
+    if (!sem)
+        return true;
+
     for (int n = 0; n < cmd->num_sigs; n++) {
         if (cmd->sigs[n] == sem) {
             TARRAY_REMOVE_AT(cmd->sigs, cmd->num_sigs, n);
