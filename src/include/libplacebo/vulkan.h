@@ -167,6 +167,7 @@ struct pl_vulkan_params {
     // Restrict specific features to e.g. work around driver bugs, or simply
     // for testing purposes
     pl_gpu_caps blacklist_caps; // capabilities to be excluded
+    bool disable_events;        // disables usage of VkEvent completely
 };
 
 // Default/recommended parameters. Should generally be safe and efficient.

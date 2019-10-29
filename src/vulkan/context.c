@@ -708,6 +708,7 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     // Blacklist / restrict features
     pl_gpu_caps *caps = (pl_gpu_caps*) &pl_vk->gpu->caps;
     *caps &= ~(params->blacklist_caps);
+    vk->disable_events = params->disable_events;
 
     // Expose the resulting vulkan objects
     pl_vk->instance = vk->inst;
