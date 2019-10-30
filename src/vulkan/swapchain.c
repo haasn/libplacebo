@@ -545,9 +545,11 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
 error:
     PL_ERR(vk, "Failed (re)creating swapchain!");
     talloc_free(vkimages);
-    vkDestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
-    p->swapchain = VK_NULL_HANDLE;
-    p->cur_width = p->cur_height = 0;
+    if (p->swapchain != sinfo.oldSwapchain) {
+        vkDestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
+        p->swapchain = VK_NULL_HANDLE;
+        p->cur_width = p->cur_height = 0;
+    }
     return false;
 }
 
