@@ -2,16 +2,20 @@
 #include "shaders.h"
 
 static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                              float *src, float *dst)
+                              uint8_t *src, uint8_t *dst)
 {
-    REQUIRE(tex);
+    if (!tex)
+        return;
 
     int texels = tex->params.w;
     texels *= tex->params.h ? tex->params.h : 1;
     texels *= tex->params.d ? tex->params.d : 1;
 
-    for (int i = 0; i < texels; i++)
-        src[i] = RANDOM;
+    size_t bytes = texels * tex->params.format->texel_size;
+    memset(src, 0, bytes);
+    memset(dst, 0, bytes);
+    for (size_t i = 0; i < bytes; i++)
+        src[i] = (RANDOM * 256);
 
     REQUIRE(pl_tex_upload(gpu, &(struct pl_tex_transfer_params){
         .tex = tex,
@@ -23,46 +27,50 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
         .ptr = dst,
     }));
 
-    for (int i = 0; i < texels; i++)
-        REQUIRE(src[i] == dst[i]);
+    REQUIRE(memcmp(src, dst, bytes) == 0);
 }
+
+static uint8_t test_src[16*16*16 * 4 * sizeof(double)] = {0};
+static uint8_t test_dst[16*16*16 * 4 * sizeof(double)] = {0};
 
 static void pl_texture_tests(const struct pl_gpu *gpu)
 {
-    const struct pl_fmt *fmt;
-    fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 32, 0);
-    if (!fmt)
-        return;
+    for (int i = 0; i < gpu->num_formats; i++) {
+        const struct pl_fmt *fmt = gpu->formats[i];
+        if (fmt->opaque)
+            continue;
 
-    struct pl_tex_params params = {
-        .format        = fmt,
-        .host_writable = true,
-        .host_readable = true,
-    };
+        printf("testing texture roundtrip for format %s\n", fmt->name);
+        assert(fmt->texel_size <= 4 * sizeof(double));
 
-    static float src[16*16*16] = {0};
-    static float dst[16*16*16] = {0};
+        struct pl_tex_params params = {
+            .format        = fmt,
+            .host_writable = true,
+            .host_readable = true,
+        };
 
-    const struct pl_tex *tex = NULL;
-    if (gpu->limits.max_tex_1d_dim >= 16) {
-        params.w = 16;
-        tex = pl_tex_create(gpu, &params);
-        pl_test_roundtrip(gpu, tex, src, dst);
-        pl_tex_destroy(gpu, &tex);
-    }
+        const struct pl_tex *tex = NULL;
 
-    if (gpu->limits.max_tex_2d_dim >= 16) {
-        params.w = params.h = 16;
-        tex = pl_tex_create(gpu, &params);
-        pl_test_roundtrip(gpu, tex, src, dst);
-        pl_tex_destroy(gpu, &tex);
-    }
+        if (gpu->limits.max_tex_1d_dim >= 16) {
+            params.w = 16;
+            tex = pl_tex_create(gpu, &params);
+            pl_test_roundtrip(gpu, tex, test_src, test_dst);
+            pl_tex_destroy(gpu, &tex);
+        }
 
-    if (gpu->limits.max_tex_3d_dim >= 16) {
-        params.w = params.h = params.d = 16;
-        tex = pl_tex_create(gpu, &params);
-        pl_test_roundtrip(gpu, tex, src, dst);
-        pl_tex_destroy(gpu, &tex);
+        if (gpu->limits.max_tex_2d_dim >= 16) {
+            params.w = params.h = 16;
+            tex = pl_tex_create(gpu, &params);
+            pl_test_roundtrip(gpu, tex, test_src, test_dst);
+            pl_tex_destroy(gpu, &tex);
+        }
+
+        if (gpu->limits.max_tex_3d_dim >= 16) {
+            params.w = params.h = params.d = 16;
+            tex = pl_tex_create(gpu, &params);
+            pl_test_roundtrip(gpu, tex, test_src, test_dst);
+            pl_tex_destroy(gpu, &tex);
+        }
     }
 }
 
