@@ -638,7 +638,9 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
     bool ret = false;
     VkRenderPass dummyPass = VK_NULL_HANDLE;
 
-    if (params->sampleable || params->renderable) {
+    if (params->sampleable || params->renderable || params->storable ||
+        params->format->emulated)
+    {
         static const VkImageViewType viewType[] = {
             [VK_IMAGE_TYPE_1D] = VK_IMAGE_VIEW_TYPE_1D,
             [VK_IMAGE_TYPE_2D] = VK_IMAGE_VIEW_TYPE_2D,
