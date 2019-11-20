@@ -1380,8 +1380,7 @@ bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
          img, coord_types[dims]);
 
     int groups_x = (pl_rect_w(params->rc) + threads - 1) / threads;
-    bool is_crop = params->rc.x1 != params->tex->params.w;
-    if (is_crop && groups_x * threads != pl_rect_w(params->rc))
+    if (groups_x * threads != pl_rect_w(params->rc))
         GLSL("if (gl_GlobalInvocationID.x < %d)\n", pl_rect_w(params->rc));
 
     GLSL("{\n");
