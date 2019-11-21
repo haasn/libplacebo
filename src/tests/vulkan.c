@@ -147,6 +147,7 @@ int main()
         vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
         pl_vulkan_destroy(&vk);
+        pl_vk_inst_destroy(&inst);
         pl_context_destroy(&ctx);
     }
 
