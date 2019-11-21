@@ -760,7 +760,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         // and refuse right away if not. In theory, uploading can still fail
         // based on the size of pl_tex_transfer_params.stride_w, but for now
         // this should be enough.
-        uint64_t texels = params->w * params->h * params->d *
+        uint64_t texels = params->w * PL_DEF(params->h, 1) * PL_DEF(params->d, 1) *
                           params->format->num_components;
 
         if (texels > gpu->limits.max_buffer_texels) {
