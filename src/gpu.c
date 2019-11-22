@@ -497,7 +497,7 @@ void pl_tex_blit(const struct pl_gpu *gpu,
 {
     const struct pl_fmt *src_fmt = src->params.format;
     const struct pl_fmt *dst_fmt = dst->params.format;
-    require(src_fmt->texel_size == dst_fmt->texel_size);
+    require(src_fmt->internal_size == dst_fmt->internal_size);
     require((src_fmt->type == PL_FMT_UINT) == (dst_fmt->type == PL_FMT_UINT));
     require((src_fmt->type == PL_FMT_SINT) == (dst_fmt->type == PL_FMT_SINT));
     require(src->params.blit_src);

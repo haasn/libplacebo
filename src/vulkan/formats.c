@@ -23,6 +23,7 @@
         .type = PL_FMT_##ftype,                 \
         .num_components  = num,                 \
         .component_depth = bits,                \
+        .internal_size   = size,                \
         .opaque          = false,               \
         .texel_size      = size,                \
         .host_bits       = bits,                \

@@ -183,6 +183,7 @@ struct pl_fmt {
     enum pl_fmt_caps caps;  // the features supported by this format
     int num_components;     // number of components for this format
     int component_depth[4]; // meaningful bits per component, texture precision
+    size_t internal_size;   // internal texel size (for blit compatibility)
 
     // This controls the relationship between the data as seen by the host and
     // the way it's interpreted by the texture. The host representation is
@@ -357,7 +358,7 @@ void pl_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *dst,
 // Copy a sub-rectangle from one texture to another. The source/dest regions
 // must be within the texture bounds. Areas outside the dest region are
 // preserved. The formats of the textures must be loosely compatible - which
-// essentially means that they must have the same texel size. Additionally,
+// essentially means that they must have the same `internal_size`. Additionally,
 // UINT textures can only be blitted to other UINT textures, and SINT textures
 // can only be blitted to other SINT textures. Finally, src.blit_src and
 // dst.blit_dst must be set, respectively.

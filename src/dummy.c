@@ -101,6 +101,7 @@ const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
                     .type = type,
                     .num_components = comps,
                     .opaque = false,
+                    .internal_size = comps * depth / 8,
                     .texel_size = comps * depth / 8,
                     .caps = PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_LINEAR |
                             PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLENDABLE |
