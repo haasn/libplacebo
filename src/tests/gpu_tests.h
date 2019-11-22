@@ -11,9 +11,11 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
     texels *= tex->params.h ? tex->params.h : 1;
     texels *= tex->params.d ? tex->params.d : 1;
 
-    size_t bytes = texels * tex->params.format->texel_size;
+    const struct pl_fmt *fmt = tex->params.format;
+    size_t bytes = texels * fmt->texel_size;
     memset(src, 0, bytes);
     memset(dst, 0, bytes);
+
     for (size_t i = 0; i < bytes; i++)
         src[i] = (RANDOM * 256);
 
@@ -27,7 +29,13 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
         .ptr = dst,
     }));
 
-    REQUIRE(memcmp(src, dst, bytes) == 0);
+    if (fmt->emulated && fmt->type == PL_FMT_FLOAT) {
+        // TODO: can't memcmp here because bits might be lost due to the
+        // emulated 16/32 bit upload paths, figure out a better way to
+        // generate data and verify the roundtrip!
+    } else {
+        REQUIRE(memcmp(src, dst, bytes) == 0);
+    }
 }
 
 static uint8_t test_src[16*16*16 * 4 * sizeof(double)] = {0};
