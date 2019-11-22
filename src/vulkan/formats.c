@@ -38,17 +38,41 @@
         BITS(bits, bits, bits, bits),           \
         IDX(0, 1, 2, 3))
 
+#define EMUFMT(_name, in, en, ib, eb, ftype)       \
+    (struct pl_fmt) {                           \
+        .name = _name,                          \
+        .type = PL_FMT_##ftype,                 \
+        .num_components  = en,                  \
+        .component_depth = BITS(ib, ib, ib, ib),\
+        .internal_size   = (in) * (ib) / 8,     \
+        .opaque          = false,               \
+        .emulated        = true,                \
+        .texel_size      = (en) * (eb) / 8,     \
+        .host_bits       = BITS(eb, eb, eb, eb),\
+        .sample_order    = IDX(0, 1, 2, 3),     \
+    }
+
+static const struct vk_format rgb8e = {
+    .ifmt   = VK_FORMAT_R8G8B8A8_UNORM,
+    .icomps = 4,
+    .fmt    = EMUFMT("rgb8", 4, 3, 8, 8, UNORM),
+};
+
+static const struct vk_format rgb16e = {
+    .ifmt   = VK_FORMAT_R16G16B16A16_UNORM,
+    .icomps = 4,
+    .fmt    = EMUFMT("rgb16", 4, 3, 16, 16, UNORM),
+};
+
 const struct vk_format vk_formats[] = {
     // Regular, byte-aligned integer formats
     {VK_FORMAT_R8_UNORM,              REGFMT("r8",       1,  8, UNORM)},
     {VK_FORMAT_R8G8_UNORM,            REGFMT("rg8",      2,  8, UNORM)},
-    {VK_FORMAT_R8G8B8_UNORM,          REGFMT("rgb8",     3,  8, UNORM),
-        .emufmt = VK_FORMAT_R8G8B8A8_UNORM},
+    {VK_FORMAT_R8G8B8_UNORM,          REGFMT("rgb8",     3,  8, UNORM), .emufmt = &rgb8e},
     {VK_FORMAT_R8G8B8A8_UNORM,        REGFMT("rgba8",    4,  8, UNORM)},
     {VK_FORMAT_R16_UNORM,             REGFMT("r16",      1, 16, UNORM)},
     {VK_FORMAT_R16G16_UNORM,          REGFMT("rg16",     2, 16, UNORM)},
-    {VK_FORMAT_R16G16B16_UNORM,       REGFMT("rgb16",    3, 16, UNORM),
-        .emufmt = VK_FORMAT_R16G16B16A16_UNORM},
+    {VK_FORMAT_R16G16B16_UNORM,       REGFMT("rgb16",    3, 16, UNORM), .emufmt = &rgb16e},
     {VK_FORMAT_R16G16B16A16_UNORM,    REGFMT("rgba16",   4, 16, UNORM)},
 
     {VK_FORMAT_R8_SNORM,              REGFMT("r8s",      1,  8, SNORM)},

@@ -139,9 +139,21 @@ static void vk_setup_formats(struct pl_gpu *gpu)
     // Texture format emulation requires at least support for texel buffers
     bool has_emu = (gpu->caps & PL_GPU_CAP_COMPUTE) && gpu->limits.max_buffer_texels;
 
-    for (const struct vk_format *vk_fmt = vk_formats; vk_fmt->ifmt; vk_fmt++) {
+    for (const struct vk_format *pvk_fmt = vk_formats; pvk_fmt->ifmt; pvk_fmt++) {
+        const struct vk_format *vk_fmt = pvk_fmt;
+
+        // Skip formats with innately emulated representation if unsupported
+        if (vk_fmt->fmt.emulated && !has_emu)
+            continue;
+
         VkFormatProperties prop;
         vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->ifmt, &prop);
+
+        // If wholly unsupported, try falling back to the emulation formats
+        while (has_emu && !prop.optimalTilingFeatures && vk_fmt->emufmt) {
+            vk_fmt = vk_fmt->emufmt;
+            vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->ifmt, &prop);
+        }
 
         struct pl_fmt *fmt = talloc_ptrtype(gpu, fmt);
         *fmt = vk_fmt->fmt;
@@ -170,13 +182,6 @@ static void vk_setup_formats(struct pl_gpu *gpu)
             pl_assert(fmt->glsl_type);
         }
 
-        // For the texture capabilities, try falling back to the emulation
-        // format if this format is wholly unsupported.
-        if (has_emu && !prop.optimalTilingFeatures && vk_fmt->emufmt) {
-            fmt->emulated = true;
-            vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->emufmt, &prop);
-        }
-
         struct { VkFormatFeatureFlags flags; enum pl_fmt_caps caps; } bits[] = {
             {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT,      PL_FMT_CAP_BLENDABLE},
             {VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT, PL_FMT_CAP_LINEAR},
@@ -202,7 +207,8 @@ static void vk_setup_formats(struct pl_gpu *gpu)
 
         enum pl_fmt_caps storable = PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE;
         if (fmt->caps & storable) {
-            fmt->glsl_format = pl_fmt_glsl_format(fmt);
+            int real_comps = PL_DEF(vk_fmt->icomps, fmt->num_components);
+            fmt->glsl_format = pl_fmt_glsl_format(fmt, real_comps);
             if (!fmt->glsl_format) {
                 PL_INFO(gpu, "Storable format '%s' has no matching GLSL format "
                         "qualifier, ignoring", fmt->name);
@@ -420,7 +426,7 @@ static VkResult vk_create_render_pass(VkDevice dev, const struct pl_fmt *fmt,
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = 1,
         .pAttachments = &(VkAttachmentDescription) {
-            .format = fmt->emulated ? vk_fmt->emufmt : vk_fmt->ifmt,
+            .format = vk_fmt->ifmt,
             .samples = VK_SAMPLE_COUNT_1_BIT,
             .loadOp = loadOp,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -647,12 +653,11 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
             [VK_IMAGE_TYPE_3D] = VK_IMAGE_VIEW_TYPE_3D,
         };
 
-        const struct vk_format *fmt = params->format->priv;
         VkImageViewCreateInfo vinfo = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .image = tex_vk->img,
             .viewType = viewType[tex_vk->type],
-            .format = params->format->emulated ? fmt->emufmt : fmt->ifmt,
+            .format = tex_vk->img_fmt,
             .subresourceRange = {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                 .levelCount = 1,
@@ -740,6 +745,8 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     struct pl_tex_vk *tex_vk = tex->priv = talloc_zero(tex, struct pl_tex_vk);
 
     const struct vk_format *fmt = params->format->priv;
+    tex_vk->img_fmt = fmt->ifmt;
+
     switch (pl_tex_params_dimension(*params)) {
     case 1: tex_vk->type = VK_IMAGE_TYPE_1D; break;
     case 2: tex_vk->type = VK_IMAGE_TYPE_2D; break;
@@ -812,7 +819,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = handle_type ? &ext_info : NULL,
         .imageType = tex_vk->type,
-        .format = params->format->emulated ? fmt->emufmt : fmt->ifmt,
+        .format = tex_vk->img_fmt,
         .extent = (VkExtent3D) {
             .width  = params->w,
             .height = PL_MAX(1, params->h),
@@ -886,7 +893,6 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     }
 
     VK(vkCreateImage(vk->dev, &iinfo, VK_ALLOC, &tex_vk->img));
-    tex_vk->img_fmt = iinfo.format;
     tex_vk->usage_flags = iinfo.usage;
 
     VkMemoryPropertyFlags memFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;

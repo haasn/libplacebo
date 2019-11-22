@@ -165,7 +165,7 @@ void pl_gpu_print_formats(const struct pl_gpu *gpu, enum pl_log_level lev)
 
     PL_MSG(gpu, lev, "GPU texture formats:");
     PL_MSG(gpu, lev, "    %-10s %-6s %-6s %-4s %-4s %-13s %-13s %-10s %-10s",
-           "NAME", "TYPE", "CAPS", "SIZE", "COMP", "DEPTH", "BITS",
+           "NAME", "TYPE", "CAPS", "SIZE", "COMP", "DEPTH", "HOST_BITS",
            "GLSL_TYPE", "GLSL_FMT");
     for (int n = 0; n < gpu->num_formats; n++) {
         const struct pl_fmt *fmt = gpu->formats[n];
@@ -262,14 +262,10 @@ static const struct glsl_fmt pl_glsl_fmts[] = {
     {PL_FMT_SINT,  4, {32, 32, 32, 32}, "rgba32i"},
 };
 
-const char *pl_fmt_glsl_format(const struct pl_fmt *fmt)
+const char *pl_fmt_glsl_format(const struct pl_fmt *fmt, int components)
 {
     if (fmt->opaque)
         return NULL;
-
-    int components = fmt->num_components;
-    if (fmt->emulated && components == 3)
-        components = 4;
 
     for (int n = 0; n < PL_ARRAY_SIZE(pl_glsl_fmts); n++) {
         const struct glsl_fmt *gfmt = &pl_glsl_fmts[n];

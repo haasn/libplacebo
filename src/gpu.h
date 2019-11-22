@@ -84,9 +84,8 @@ void pl_gpu_print_formats(const struct pl_gpu *gpu, enum pl_log_level lev);
 // Look up the right GLSL image format qualifier from a partially filled-in
 // pl_fmt, or NULL if the format does not have a legal matching GLSL name.
 //
-// Warning: If `fmt->emulated` is true, this function makes the hard assumption
-// that 3-channel formats are being emulated as equivalent 4-channel formats!
-const char *pl_fmt_glsl_format(const struct pl_fmt *fmt);
+// `components` may differ from fmt->num_components (for emulated formats)
+const char *pl_fmt_glsl_format(const struct pl_fmt *fmt, int components);
 
 // Compute the total size (in bytes) of a texture transfer operation
 size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par);
