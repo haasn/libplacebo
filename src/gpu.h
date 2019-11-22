@@ -78,6 +78,9 @@ void pl_gpu_print_info(const struct pl_gpu *gpu, enum pl_log_level lev);
 // terms of bit depth / component index.
 void pl_gpu_sort_formats(struct pl_gpu *gpu);
 
+// Perform some basic validity checks on all pl_fmts
+void pl_gpu_verify_formats(struct pl_gpu *gpu);
+
 // Pretty-print the format list
 void pl_gpu_print_formats(const struct pl_gpu *gpu, enum pl_log_level lev);
 

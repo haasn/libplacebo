@@ -131,6 +131,7 @@ const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
     }
 
     pl_gpu_sort_formats(gpu);
+    pl_gpu_verify_formats(gpu);
     pl_gpu_print_info(gpu, PL_LOG_INFO);
     pl_gpu_print_formats(gpu, PL_LOG_DEBUG);
     return gpu;

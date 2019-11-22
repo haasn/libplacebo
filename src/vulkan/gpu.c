@@ -220,6 +220,7 @@ static void vk_setup_formats(struct pl_gpu *gpu)
     }
 
     pl_gpu_sort_formats(gpu);
+    pl_gpu_verify_formats(gpu);
 }
 
 static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)

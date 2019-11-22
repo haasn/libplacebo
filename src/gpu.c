@@ -153,6 +153,31 @@ static int cmp_fmt(const void *pa, const void *pb)
     return strcmp(a->name, b->name);
 }
 
+void pl_gpu_verify_formats(struct pl_gpu *gpu)
+{
+    for (int n = 0; n < gpu->num_formats; n++) {
+        const struct pl_fmt *fmt = gpu->formats[n];
+        pl_assert(fmt->name);
+        pl_assert(fmt->type);
+        pl_assert(fmt->num_components);
+        pl_assert(fmt->internal_size);
+        pl_assert(fmt->opaque ? !fmt->texel_size : fmt->texel_size);
+        for (int i = 0; i < fmt->num_components; i++) {
+            pl_assert(fmt->component_depth[i]);
+            pl_assert(fmt->opaque ? !fmt->host_bits[i] : fmt->host_bits[i]);
+        }
+
+        enum pl_fmt_caps texel_caps = PL_FMT_CAP_VERTEX |
+                                      PL_FMT_CAP_TEXEL_UNIFORM |
+                                      PL_FMT_CAP_TEXEL_STORAGE;
+
+        if (fmt->caps & texel_caps)
+            pl_assert(fmt->glsl_type);
+        if (fmt->caps & (PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE))
+            pl_assert(fmt->glsl_format);
+    }
+}
+
 void pl_gpu_sort_formats(struct pl_gpu *gpu)
 {
     qsort(gpu->formats, gpu->num_formats, sizeof(struct pl_fmt *), cmp_fmt);
