@@ -371,6 +371,10 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         p->max_push_descriptors = pushd.maxPushDescriptors;
     }
 
+    // We ostensibly support this, although it can still fail on buffer
+    // creation (for certain combinations of buffers)
+    gpu->caps |= PL_GPU_CAP_MAPPED_BUFFERS;
+
     if (vk->pool_compute) {
         gpu->caps |= PL_GPU_CAP_COMPUTE;
         gpu->limits.max_shmem_size = vk->limits.maxComputeSharedMemorySize;

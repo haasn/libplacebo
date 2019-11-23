@@ -712,6 +712,8 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
     default: abort();
     }
 
+    require(!params->host_mapped || (gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS));
+
     const struct pl_buf *buf = gpu->impl->buf_create(gpu, params);
     if (buf)
         require(buf->data || !params->host_mapped);

@@ -21,7 +21,7 @@
 #include "gpu.h"
 
 const struct pl_gpu_dummy_params pl_gpu_dummy_default_params = {
-    .caps = PL_GPU_CAP_COMPUTE | PL_GPU_CAP_INPUT_VARIABLES,
+    .caps = PL_GPU_CAP_COMPUTE | PL_GPU_CAP_INPUT_VARIABLES | PL_GPU_CAP_MAPPED_BUFFERS,
     .glsl = {
         .version    = 450,
         .gles       = false,

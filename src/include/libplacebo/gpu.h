@@ -46,6 +46,7 @@ enum {
     PL_GPU_CAP_COMPUTE          = 1 << 0, // supports compute shaders
     PL_GPU_CAP_PARALLEL_COMPUTE = 1 << 1, // supports multiple compute queues
     PL_GPU_CAP_INPUT_VARIABLES  = 1 << 2, // supports shader input variables
+    PL_GPU_CAP_MAPPED_BUFFERS   = 1 << 3, // supports host-mapped buffers
 };
 
 // Some `pl_gpu` operations allow sharing GPU resources with external APIs -
@@ -449,9 +450,10 @@ enum pl_buf_mem_type {
 struct pl_buf_params {
     enum pl_buf_type type;
     size_t size;        // size in bytes
-    bool host_mapped;   // create a persistent, RW mapping (pl_buf.data)
     bool host_writable; // contents may be updated via pl_buf_write()
     bool host_readable; // contents may be read back via pl_buf_read()
+    bool host_mapped;   // create a persistent, RW mapping (pl_buf.data)
+                        // (requires PL_GPU_CAP_MAPPED_BUFFERS)
 
     // Provide a hint for the memory type you want to use when allocating
     // this buffer's memory. Currently, this field is ignored for all buffer
