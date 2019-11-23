@@ -66,6 +66,7 @@ and even the GPU in general.
   other display APIs. This is the API used to actually queue up rendered
   frames for presentation (e.g. to a window or display device).
 - `vulkan.h`: GPU API implementation based on Vulkan.
+- `opengl.h`: GPU API implementation based on OpenGL.
 
 As part of the public API, libplacebo exports a middle-level abstraction for
 dealing with GPU objects and state. Basically, this is the API libplacebo uses
@@ -196,8 +197,7 @@ on distro packages.
 
 In principle, libplacebo has no mandatory dependencies - only optional ones.
 However, to get a useful version of libplacebo. you most likely want to build
-with support for both `vulkan` and at least one of `shaderc` (preferred) or
-`glslang` (fallback/alternative).
+with support for either `opengl` or `vulkan`.
 
 libplacebo built without these can still be used (e.g. to generate GLSL
 shaders such as the ones used in VLC), but the usefulness is severely

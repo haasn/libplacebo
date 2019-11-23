@@ -103,7 +103,8 @@ bool pl_swapchain_start_frame(const struct pl_swapchain *sw,
 // platform-specific APIs for more info).
 //
 // Returns whether successful. This should normally never fail, unless the
-// GPU/surface has been lost or some other critical error has occurred.
+// GPU/surface has been lost or some other critical error has occurred. The
+// "started" frame is consumed even in the event of failure.
 bool pl_swapchain_submit_frame(const struct pl_swapchain *sw);
 
 // Performs a "buffer swap", or some generalization of the concept. In layman's

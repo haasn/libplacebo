@@ -55,6 +55,10 @@
 #include "include/libplacebo/vulkan.h"
 #endif
 
+#if PL_HAVE_OPENGL
+#include "include/libplacebo/opengl.h"
+#endif
+
 #pragma GCC visibility pop
 
 // Align up to the nearest multiple of an arbitrary alignment, which may also

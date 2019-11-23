@@ -1,7 +1,12 @@
 /* Compiling:
  *
- *   gcc glfw.c -o ./glfw -O2 \
+ *   gcc glfw.c -o ./glfw -O2 -DUSE_VK \
  *       $(pkg-config --cflags --libs glfw3 vulkan libplacebo)
+ *
+ *  or:
+ *
+ *   gcc glfw.c -o ./glfw -O2 -DUSE_GL \
+ *       $(pkg-config --cflags --libs glfw3 libplacebo)
  *
  * Notes:
  *
@@ -15,38 +20,65 @@
  * License: CC0 / Public Domain
  */
 
+#if !defined(USE_GL) && !defined(USE_VK) || defined(USE_GL) && defined(USE_VK)
+#error Specify exactly one of -DUSE_GL or -DUSE_VULKAN when compiling!
+#endif
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
+#ifdef USE_VK
 #define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#endif
 
+#include <GLFW/glfw3.h>
 #include <libplacebo/renderer.h>
+
+#ifdef USE_VK
 #include <libplacebo/vulkan.h>
+#endif
+
+#ifdef USE_GL
+#include <libplacebo/opengl.h>
+#endif
 
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
 
 struct pl_context *ctx;
 static GLFWwindow *win;
-VkSurfaceKHR surf;
+const struct pl_gpu *gpu;
+const struct pl_swapchain *swapchain;
 
+#ifdef USE_VK
+VkSurfaceKHR surf;
 const struct pl_vulkan *vk;
 const struct pl_vk_inst *vk_inst;
-const struct pl_swapchain *swapchain;
+#endif
+
+#ifdef USE_GL
+const struct pl_opengl *gl;
+#endif
 
 static void uninit(int ret)
 {
     // Destroy all libplacebo state
     pl_swapchain_destroy(&swapchain);
+
+#ifdef USE_VK
     pl_vulkan_destroy(&vk);
     if (surf)
         vkDestroySurfaceKHR(vk_inst->instance, surf, NULL);
     pl_vk_inst_destroy(&vk_inst);
-    pl_context_destroy(&ctx);
+#endif
 
+#ifdef USE_GL
+    pl_opengl_destroy(&gl);
+#endif
+
+    pl_context_destroy(&ctx);
     glfwTerminate();
     exit(ret);
 }
@@ -58,12 +90,19 @@ static void init_glfw()
         uninit(1);
     }
 
+#ifdef USE_VK
     if (!glfwVulkanSupported()) {
         fprintf(stderr, "GLFW: no vulkan support\n");
         uninit(1);
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+#endif
+
+#ifdef USE_GL
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+#endif
+
     win = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "libplacebo GLFW demo",
                             NULL, NULL);
     if (!win) {
@@ -72,7 +111,11 @@ static void init_glfw()
     }
 }
 
-static void init_vulkan()
+
+static void init_api();
+
+#ifdef USE_VK
+static void init_api()
 {
     struct pl_vk_inst_params iparams = pl_vk_inst_default_params;
 #ifndef NDEBUG
@@ -115,7 +158,48 @@ static void init_vulkan()
         fprintf(stderr, "libplacebo: failed creating vulkan swapchain\n");
         uninit(2);
     }
+
+    gpu = vk->gpu;
 }
+#endif // USE_VK
+
+#ifdef USE_GL
+static void init_api()
+{
+    struct pl_opengl_params params = pl_opengl_default_params;
+#ifndef NDEBUG
+    params.debug = true;
+#endif
+
+    glfwMakeContextCurrent(win);
+
+    gl = pl_opengl_create(ctx, &params);
+    if (!gl) {
+        fprintf(stderr, "libplacebo: failed creating opengl device\n");
+        uninit(2);
+    }
+
+    swapchain = pl_opengl_create_swapchain(gl, &(struct pl_opengl_swapchain_params) {
+        .swap_buffers = (void (*)(void *)) glfwSwapBuffers,
+        .priv = win,
+    });
+
+    if (!swapchain) {
+        fprintf(stderr, "libplacebo: failed creating opengl swapchain\n");
+        uninit(2);
+    }
+
+    gpu = gl->gpu;
+
+
+    int w, h;
+    glfwGetFramebufferSize(win, &w, &h);
+    if (!pl_swapchain_resize(swapchain, &w, &h)) {
+        fprintf(stderr, "libplacebo: failed initializing swapchain\n");
+        uninit(2);
+    }
+}
+#endif // USE_GL
 
 static void err_cb(int code, const char *desc)
 {
@@ -125,7 +209,7 @@ static void err_cb(int code, const char *desc)
 static void resize_cb(GLFWwindow *win, int w, int h)
 {
     if (!pl_swapchain_resize(swapchain, &w, &h)) {
-        fprintf(stderr, "libplacebo: failed resizing vulkan swapchain\n");
+        fprintf(stderr, "libplacebo: failed resizing swapchain\n");
         uninit(2);
     }
 }
@@ -146,7 +230,7 @@ int main(int argc, char **argv)
     assert(ctx);
 
     init_glfw();
-    init_vulkan();
+    init_api();
 
     // Set up GLFW event callbacks
     glfwSetFramebufferSizeCallback(win, resize_cb);
@@ -163,7 +247,7 @@ int main(int argc, char **argv)
         }
 
         assert(frame.fbo->params.blit_dst);
-        pl_tex_clear(vk->gpu, frame.fbo, (float[4]){0.5, 0.0, 1.0, 1.0});
+        pl_tex_clear(gpu, frame.fbo, (float[4]){0.5, 0.0, 1.0, 1.0});
 
         ok = pl_swapchain_submit_frame(swapchain);
         if (!ok) {

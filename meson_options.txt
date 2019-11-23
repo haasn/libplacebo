@@ -5,6 +5,9 @@ option('vulkan', type: 'feature', value: 'auto',
 option('vulkan-link', type: 'boolean', value: true,
        description: 'Link directly againt vkGetInstanceProcAddr from libvulkan.so')
 
+option('opengl', type: 'feature', value: 'auto',
+       description: 'OpenGL-based renderer')
+
 option('glslang', type: 'feature', value: 'auto',
        description: 'glslang SPIR-V compiler')
 

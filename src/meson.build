@@ -6,12 +6,25 @@ build_deps = [
   cc.find_library('m', required: false),
 ]
 
+test_deps = []
+
 subprojects = [
   subproject('xtalloc'),
   subproject('bstr'),
 ]
 
 vulkan = dependency('vulkan', version: '>=1.0.42', required: get_option('vulkan'))
+
+# OpenGL stuff. Since the test framework needs to create a GL context,
+# we have to do this in a platform dependent way.
+opengl = dependency('epoxy', version: '>=1.4.0', required: get_option('opengl'))
+x11 = dependency('x11', required: false)
+
+gl_tests = []
+if opengl.found() and x11.found()
+  gl_tests  += 'opengl_x11.c'
+  test_deps += [x11]
+endif
 
 # configuration data
 conf_public = configuration_data()
@@ -169,6 +182,16 @@ components = [
               'vulkan/utils.c',
             ],
     'test': 'vulkan.c'
+  }, {
+    'name': 'opengl',
+    'deps': opengl,
+    'srcs': [ 'opengl/context.c',
+              'opengl/formats.c',
+              'opengl/gpu.c',
+              'opengl/swapchain.c',
+              'opengl/utils.c',
+            ],
+    'test': gl_tests,
   }
 ]
 
@@ -258,7 +281,7 @@ pkg.generate(
 # Tests
 tdep = [ declare_dependency(
     link_with: lib,
-    dependencies: build_deps,
+    dependencies: build_deps + test_deps,
     include_directories: inc,
 ) ]
 
