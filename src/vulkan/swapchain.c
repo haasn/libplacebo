@@ -165,6 +165,12 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
     formats = talloc_array(NULL, VkSurfaceFormatKHR, num);
     VK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physd, surf, &num, formats));
 
+    PL_DEBUG(gpu, "Available surface formats:");
+    for (int i = 0; i < num; i++) {
+        PL_DEBUG(gpu, "    %d: format: 0x%x, space: 0x%x", i,
+                 formats[i].format, formats[i].colorSpace);
+    }
+
     for (int i = 0; i < num; i++) {
         // A value of VK_FORMAT_UNDEFINED means we can pick anything we want
         if (formats[i].format == VK_FORMAT_UNDEFINED) {
