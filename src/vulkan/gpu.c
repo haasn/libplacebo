@@ -139,7 +139,7 @@ static void vk_setup_formats(struct pl_gpu *gpu)
     // Texture format emulation requires at least support for texel buffers
     bool has_emu = (gpu->caps & PL_GPU_CAP_COMPUTE) && gpu->limits.max_buffer_texels;
 
-    for (const struct vk_format *pvk_fmt = vk_formats; pvk_fmt->ifmt; pvk_fmt++) {
+    for (const struct vk_format *pvk_fmt = vk_formats; pvk_fmt->tfmt; pvk_fmt++) {
         const struct vk_format *vk_fmt = pvk_fmt;
 
         // Skip formats with innately emulated representation if unsupported
@@ -147,12 +147,27 @@ static void vk_setup_formats(struct pl_gpu *gpu)
             continue;
 
         VkFormatProperties prop;
-        vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->ifmt, &prop);
+        vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->tfmt, &prop);
 
         // If wholly unsupported, try falling back to the emulation formats
+        // for texture operations
         while (has_emu && !prop.optimalTilingFeatures && vk_fmt->emufmt) {
             vk_fmt = vk_fmt->emufmt;
-            vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->ifmt, &prop);
+            vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->tfmt, &prop);
+        }
+
+        VkFormatFeatureFlags texflags = prop.optimalTilingFeatures;
+        VkFormatFeatureFlags bufflags = prop.bufferFeatures;
+        if (vk_fmt->fmt.emulated) {
+            // Emulated formats might have a different buffer representation
+            // than their texture representation. If they don't, assume their
+            // buffer representation is nonsensical (e.g. r16f)
+            if (vk_fmt->bfmt) {
+                vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->bfmt, &prop);
+                bufflags = prop.bufferFeatures;
+            } else {
+                bufflags = 0;
+            }
         }
 
         struct pl_fmt *fmt = talloc_ptrtype(gpu, fmt);
@@ -173,7 +188,7 @@ static void vk_setup_formats(struct pl_gpu *gpu)
         };
 
         for (int i = 0; i < PL_ARRAY_SIZE(bufbits); i++) {
-            if ((prop.bufferFeatures & bufbits[i].flags) == bufbits[i].flags)
+            if ((bufflags & bufbits[i].flags) == bufbits[i].flags)
                 fmt->caps |= bufbits[i].caps;
         }
 
@@ -195,7 +210,7 @@ static void vk_setup_formats(struct pl_gpu *gpu)
         };
 
         for (int i = 0; i < PL_ARRAY_SIZE(bits); i++) {
-            if ((prop.optimalTilingFeatures & bits[i].flags) == bits[i].flags)
+            if ((texflags & bits[i].flags) == bits[i].flags)
                 fmt->caps |= bits[i].caps;
         }
 
@@ -431,7 +446,7 @@ static VkResult vk_create_render_pass(VkDevice dev, const struct pl_fmt *fmt,
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = 1,
         .pAttachments = &(VkAttachmentDescription) {
-            .format = vk_fmt->ifmt,
+            .format = vk_fmt->tfmt,
             .samples = VK_SAMPLE_COUNT_1_BIT,
             .loadOp = loadOp,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -750,7 +765,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     struct pl_tex_vk *tex_vk = tex->priv = talloc_zero(tex, struct pl_tex_vk);
 
     const struct vk_format *fmt = params->format->priv;
-    tex_vk->img_fmt = fmt->ifmt;
+    tex_vk->img_fmt = fmt->tfmt;
 
     switch (pl_tex_params_dimension(*params)) {
     case 1: tex_vk->type = VK_IMAGE_TYPE_1D; break;
@@ -1070,7 +1085,7 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
     const struct pl_fmt *format = NULL;
     for (int i = 0; i < gpu->num_formats; i++) {
         const struct vk_format *fmt = gpu->formats[i]->priv;
-        if (fmt->ifmt == imageFormat) {
+        if (fmt->tfmt == imageFormat) {
             format = gpu->formats[i];
             break;
         }
@@ -1577,7 +1592,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         VkBufferViewCreateInfo vinfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
             .buffer = buf_vk->slice.buf,
-            .format = vk_fmt->ifmt,
+            .format = PL_DEF(vk_fmt->bfmt, vk_fmt->tfmt),
             .offset = buf_vk->slice.mem.offset,
             .range = params->size,
         };
@@ -2195,7 +2210,7 @@ no_descriptors: ;
                 .binding  = 0,
                 .location = va->location,
                 .offset   = va->offset,
-                .format   = fmt_vk->ifmt,
+                .format   = PL_DEF(fmt_vk->bfmt, fmt_vk->tfmt),
             };
         }
 

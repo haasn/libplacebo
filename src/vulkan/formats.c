@@ -53,13 +53,15 @@
     }
 
 static const struct vk_format rgb8e = {
-    .ifmt   = VK_FORMAT_R8G8B8A8_UNORM,
+    .tfmt   = VK_FORMAT_R8G8B8A8_UNORM,
+    .bfmt   = VK_FORMAT_R8G8B8_UNORM,
     .icomps = 4,
     .fmt    = EMUFMT("rgb8", 4, 3, 8, 8, UNORM),
 };
 
 static const struct vk_format rgb16e = {
-    .ifmt   = VK_FORMAT_R16G16B16A16_UNORM,
+    .tfmt   = VK_FORMAT_R16G16B16A16_UNORM,
+    .bfmt   = VK_FORMAT_R16G16B16_UNORM,
     .icomps = 4,
     .fmt    = EMUFMT("rgb16", 4, 3, 16, 16, UNORM),
 };

@@ -21,9 +21,10 @@
 #include "common.h"
 
 struct vk_format {
-    VkFormat ifmt;     // internal vulkan format enum
+    VkFormat tfmt;     // internal vulkan format enum (textures)
     struct pl_fmt fmt; // pl_fmt template (features will be auto-detected)
     int icomps;        // internal component count (or 0 to infer from `fmt`)
+    VkFormat bfmt;     // vulkan format for use as buffers (or 0 to use `tfmt`)
     const struct vk_format *emufmt; // alternate format for emulation
 };
 

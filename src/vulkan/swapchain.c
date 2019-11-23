@@ -216,7 +216,7 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
         for (int n = 0; n < gpu->num_formats; n++) {
             const struct pl_fmt *rafmt = gpu->formats[n];
             const struct vk_format *vkfmt = rafmt->priv;
-            if (vkfmt->ifmt != formats[i].format)
+            if (vkfmt->tfmt != formats[i].format)
                 continue;
 
             enum pl_fmt_caps render_caps = 0;
