@@ -52,8 +52,8 @@ int main()
 
     layout = pl_std430_layout(2 * sizeof(float), &mat3);
     REQUIRE(layout.offset == 4 * sizeof(float));
-    REQUIRE(layout.stride == 3 * sizeof(float));
-    REQUIRE(layout.size == 3 * 3 * sizeof(float));
+    REQUIRE(layout.stride == 4 * sizeof(float));
+    REQUIRE(layout.size == 4 * 3 * sizeof(float));
 
     layout = pl_std140_layout(3 * sizeof(float), &vec1);
     REQUIRE(layout.offset == 3 * sizeof(float));

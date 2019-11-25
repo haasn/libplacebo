@@ -923,7 +923,7 @@ struct pl_var_layout pl_std140_layout(size_t offset, const struct pl_var *var)
     if (var->dim_v == 3)
         align += el_size;
     if (var->dim_m * var->dim_a > 1)
-        stride = align = PL_ALIGN2(stride, sizeof(float[4]));
+        stride = align = PL_ALIGN2(align, sizeof(float[4]));
 
     return (struct pl_var_layout) {
         .offset = PL_ALIGN2(offset, align),
@@ -940,8 +940,10 @@ struct pl_var_layout pl_std430_layout(size_t offset, const struct pl_var *var)
     // "tightly" packed, even arrays/matrices of vec3s
     size_t stride = el_size * var->dim_v;
     size_t align = stride;
-    if (var->dim_v == 3 && var->dim_m == 1 && var->dim_a == 1)
+    if (var->dim_v == 3)
         align += el_size;
+    if (var->dim_m * var->dim_a > 1)
+        stride = align;
 
     return (struct pl_var_layout) {
         .offset = PL_ALIGN2(offset, align),
@@ -957,6 +959,7 @@ void memcpy_layout(void *dst_p, struct pl_var_layout dst_layout,
     uintptr_t dst = (uintptr_t) dst_p + dst_layout.offset;
 
     if (src_layout.stride == dst_layout.stride) {
+        pl_assert(dst_layout.size == src_layout.size);
         memcpy((void *) dst, (const void *) src, src_layout.size);
         return;
     }
@@ -964,6 +967,7 @@ void memcpy_layout(void *dst_p, struct pl_var_layout dst_layout,
     size_t stride = PL_MIN(src_layout.stride, dst_layout.stride);
     uintptr_t end = src + src_layout.size;
     while (src < end) {
+        pl_assert(dst < dst + dst_layout.size);
         memcpy((void *) dst, (const void *) src, stride);
         src += src_layout.stride;
         dst += dst_layout.stride;
