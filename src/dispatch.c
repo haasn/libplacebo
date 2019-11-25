@@ -48,6 +48,7 @@ struct pl_dispatch {
 };
 
 enum pass_var_type {
+    PASS_VAR_NONE = 0,
     PASS_VAR_GLOBAL, // regular/global uniforms (PL_GPU_CAP_INPUT_VARIABLES)
     PASS_VAR_UBO,    // uniform buffers
     PASS_VAR_PUSHC   // push constants
@@ -145,13 +146,16 @@ struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp)
 
 static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
                          struct pl_pass_params *params,
-                         const struct pl_shader_var *sv, struct pass_var *pv)
+                         const struct pl_shader_var *sv, struct pass_var *pv,
+                         bool greedy)
 {
     const struct pl_gpu *gpu = dp->gpu;
+    if (pv->type)
+        return true;
 
-    // Try not to use push constants for "large" values like matrices, since
-    // this is likely to exceed the VGPR/pushc size budgets
-    bool try_pushc = (sv->var.dim_m == 1 && sv->var.dim_a == 1) || sv->dynamic;
+    // Try not to use push constants for "large" values like matrices in the
+    // first pass, since this is likely to exceed the VGPR/pushc size budgets
+    bool try_pushc = greedy || (sv->var.dim_m == 1 && sv->var.dim_a == 1) || sv->dynamic;
     if (try_pushc && gpu->glsl.vulkan && gpu->limits.max_pushc_size) {
         pv->layout = pl_std430_layout(params->push_constants_size, &sv->var);
         size_t new_size = pv->layout.offset + pv->layout.size;
@@ -161,6 +165,11 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
             return true;
         }
     }
+
+    // If we haven't placed all PCs yet, don't place anything else, since
+    // we want to try and fit more stuff into PCs before "giving up"
+    if (!greedy)
+        return true;
 
     // Attempt using uniform buffer next. The GLSL version 440 check is due
     // to explicit offsets on UBO entries. In theory we could leave away
@@ -317,6 +326,8 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             struct pass_var *pv = &pass->vars[i];
             if (pv->type != PASS_VAR_PUSHC)
                 continue;
+            // Note: Don't remove this offset, since the push constants
+            // can be out-of-order in `pass->vars`!
             ADD(glsl, "    layout(offset=%zu) ", pv->layout.offset);
             add_var(dp, glsl, var);
         }
@@ -535,9 +546,17 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
 
     // Place all the variables; these will dynamically end up in different
     // locations based on what the underlying GPU supports (UBOs, pushc, etc.)
+    //
+    // We go through the list twice, once to place stuff that we definitely
+    // want inside PCs, and then a second time to opportunistically place the rest.
     pass->vars = talloc_zero_array(pass, struct pass_var, res->num_variables);
     for (int i = 0; i < res->num_variables; i++) {
-        if (!add_pass_var(dp, tmp, pass, &params, &res->variables[i], &pass->vars[i]))
+        if (!add_pass_var(dp, tmp, pass, &params, &res->variables[i], &pass->vars[i], false))
+            goto error;
+    }
+
+    for (int i = 0; i < res->num_variables; i++) {
+        if (!add_pass_var(dp, tmp, pass, &params, &res->variables[i], &pass->vars[i], true))
             goto error;
     }
 
@@ -615,6 +634,8 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
 
     struct pl_pass_run_params *rparams = &pass->run_params;
     switch (pv->type) {
+    case PASS_VAR_NONE:
+        abort();
     case PASS_VAR_GLOBAL: {
         struct pl_var_update vu = {
             .index = pv->index,
