@@ -829,15 +829,18 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         }};
         break;
     case PL_COLOR_SYSTEM_BT_2100_PQ:
-    case PL_COLOR_SYSTEM_BT_2100_HLG:
-        // This is the ICtCp<-LMS matrix from the spec, so invert it
+    case PL_COLOR_SYSTEM_BT_2100_HLG: {
+        // Reversed from the matrix in the spec, hard-coded for efficiency
+        // and precision reasons. Exact values truncated from ITU-T H-series
+        // Supplement 18.
+        static const float lm_t = 0.008609, lm_p = 0.111029625;
         m = (struct pl_matrix3x3) {{
-            { 2048/4096.,   2048/4096.,          0},
-            { 6610/4096., -13613/4096., 7003/4096.},
-            {17933/4096., -17390/4096., -543/4096.},
+            {1.0,  lm_t,  lm_p},
+            {1.0, -lm_t, -lm_p},
+            {1.0, 0.560031, -0.320627},
         }};
-        pl_matrix3x3_invert(&m);
         break;
+    }
     case PL_COLOR_SYSTEM_YCGCO:
         m = (struct pl_matrix3x3) {{
             {1,  -1,  1},
