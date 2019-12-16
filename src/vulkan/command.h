@@ -144,11 +144,14 @@ void vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd *cmd);
 // commands. Returns whether any forward progress was made.
 bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout);
 
-// Flush all currently queued commands. Call this once per frame, after
+// Flush all currently queued commands. Returns whether successful. Failed
+// commands will be implicitly dropped.
+bool vk_flush_commands(struct vk_ctx *vk);
+
+// Rotate through queues in each command pool. Call this once per frame, after
 // submitting all of the command buffers for that frame. Calling this more
 // often than that is possible but bad for performance.
-// Returns whether successful. Failed commands will be implicitly dropped.
-bool vk_flush_commands(struct vk_ctx *vk);
+void vk_rotate_queues(struct vk_ctx *vk);
 
 // Wait until all commands are complete, i.e. the device is idle. This is
 // basically equivalent to calling `vk_poll_commands` with a timeout of

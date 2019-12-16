@@ -2924,6 +2924,7 @@ static void vk_gpu_flush(const struct pl_gpu *gpu)
     struct vk_ctx *vk = pl_vk_get(gpu);
     vk_submit(gpu);
     vk_flush_commands(vk);
+    vk_rotate_queues(vk);
 }
 
 static void vk_gpu_finish(const struct pl_gpu *gpu)

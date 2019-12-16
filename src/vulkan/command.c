@@ -368,7 +368,7 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
 {
     bool ret = false;
 
-    if (timeout && vk->num_cmds_queued)
+    if (timeout)
         vk_flush_commands(vk);
 
     while (vk->num_cmds_pending > 0) {
@@ -435,12 +435,6 @@ error:
 
     vk->num_cmds_queued = 0;
 
-    // Rotate the queues to ensure good parallelism across frames
-    for (int i = 0; i < vk->num_pools; i++) {
-        struct vk_cmdpool *pool = vk->pools[i];
-        pool->idx_queues = (pool->idx_queues + 1) % pool->num_queues;
-    }
-
     // Wait until we've processed some of the now pending commands
     while (vk->num_cmds_pending > PL_VK_MAX_PENDING_CMDS)
         vk_poll_commands(vk, UINT64_MAX);
@@ -448,7 +442,18 @@ error:
     return ret;
 }
 
+void vk_rotate_queues(struct vk_ctx *vk)
+{
+    // Rotate the queues to ensure good parallelism across frames
+    for (int i = 0; i < vk->num_pools; i++) {
+        struct vk_cmdpool *pool = vk->pools[i];
+        pool->idx_queues = (pool->idx_queues + 1) % pool->num_queues;
+        PL_TRACE(vk, "QF %d: %d/%d", pool->qf, pool->idx_queues, pool->num_queues);
+    }
+}
+
 void vk_wait_idle(struct vk_ctx *vk)
 {
+    // This also implicitly flushes the commands
     while (vk_poll_commands(vk, UINT64_MAX)) ;
 }

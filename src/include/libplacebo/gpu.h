@@ -1037,10 +1037,9 @@ bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
 // retroactively.
 //
 // The only time this might be beneficial to call explicitly is if you're doing
-// lots of offline processing where you submit a bunch of work and then
-// use asynchronous texture downloads (via pl_tex_download) to retrieve the
-// results. In that case you should call this function after each work item
-// to ensure good parallelism between them.
+// lots of offline processing, i.e. you aren't rendering to a swapchain but to
+// textures that you download from again. In that case you should call this
+// function after each "work item" to ensure good parallelism between them.
 //
 // It's worth noting that this function may block if you're over-feeding the
 // GPU without waiting for existing results to finish.
