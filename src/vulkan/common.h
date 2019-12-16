@@ -57,6 +57,9 @@ struct vk_ctx {
     VkExtent3D transfer_alignment; // for pool_transfer
     VkDevice dev;
 
+    // Generic error flag for catching "failed" devices
+    bool failed;
+
     // Enabled extensions
     const char **exts;
     int num_exts;

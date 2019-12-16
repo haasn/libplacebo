@@ -653,6 +653,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 error:
     PL_FATAL(vk, "Failed creating logical device!");
     talloc_free(tmp);
+    vk->failed = true;
     return false;
 }
 
@@ -731,5 +732,6 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
 error:
     PL_FATAL(vk, "Failed initializing vulkan device");
     pl_vulkan_destroy((const struct pl_vulkan **) &pl_vk);
+    vk->failed = true;
     return NULL;
 }

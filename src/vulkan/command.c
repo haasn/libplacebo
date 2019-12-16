@@ -79,6 +79,7 @@ static struct vk_cmd *vk_cmd_create(struct vk_ctx *vk, struct vk_cmdpool *pool)
 
 error:
     vk_cmd_destroy(vk, cmd);
+    vk->failed = true;
     return NULL;
 }
 
@@ -176,6 +177,7 @@ done:
 
 error:
     vk_signal_destroy(vk, &sig);
+    vk->failed = true;
     return NULL;
 }
 
@@ -293,6 +295,7 @@ struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk,
 
 error:
     vk_cmdpool_destroy(vk, pool);
+    vk->failed = true;
     return NULL;
 }
 
@@ -338,10 +341,11 @@ done: ;
 error:
     // Something has to be seriously messed up if we get to this point
     vk_cmd_destroy(vk, cmd);
+    vk->failed = true;
     return NULL;
 }
 
-void vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd *cmd)
+bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd *cmd)
 {
     struct vk_cmdpool *pool = cmd->pool;
 
@@ -357,11 +361,13 @@ void vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd *cmd)
         vk_flush_commands(vk);
     }
 
-    return;
+    return true;
 
 error:
     vk_cmd_reset(vk, cmd);
     TARRAY_APPEND(pool, pool->cmds, pool->num_cmds, cmd);
+    vk->failed = true;
+    return false;
 }
 
 bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
@@ -430,6 +436,7 @@ bool vk_flush_commands(struct vk_ctx *vk)
 error:
         vk_cmd_reset(vk, cmd);
         TARRAY_APPEND(pool, pool->cmds, pool->num_cmds, cmd);
+        vk->failed = true;
         ret = false;
     }
 
