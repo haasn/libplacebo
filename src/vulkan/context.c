@@ -340,9 +340,11 @@ void pl_vulkan_destroy(const struct pl_vulkan **pl_vk)
     TA_FREEP((void **) pl_vk);
 }
 
-static bool supports_surf(struct vk_ctx *vk, VkPhysicalDevice physd,
+static bool supports_surf(struct pl_context *ctx, VkPhysicalDevice physd,
                           VkSurfaceKHR surf)
 {
+    struct { struct pl_context *ctx; } *vk = (void *) &ctx;
+
     uint32_t qfnum;
     vkGetPhysicalDeviceQueueFamilyProperties(physd, &qfnum, NULL);
 
@@ -357,17 +359,20 @@ error:
     return false;
 }
 
-static bool find_physical_device(struct vk_ctx *vk,
-                                 const struct pl_vulkan_params *params)
+VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
+                                         const struct pl_vulkan_device_params *params)
 {
+    struct { struct pl_context *ctx; } *vk = (void *) &ctx;
+
+    pl_assert(params->instance);
     PL_INFO(vk, "Probing for vulkan devices:");
-    bool ret = false;
+    VkPhysicalDevice dev = VK_NULL_HANDLE;
 
     VkPhysicalDevice *devices = NULL;
     uint32_t num = 0;
-    VK(vkEnumeratePhysicalDevices(vk->inst, &num, NULL));
+    VK(vkEnumeratePhysicalDevices(params->instance, &num, NULL));
     devices = talloc_array(NULL, VkPhysicalDevice, num);
-    VK(vkEnumeratePhysicalDevices(vk->inst, &num, devices));
+    VK(vkEnumeratePhysicalDevices(params->instance, &num, devices));
 
     static const struct { const char *name; int priority; } types[] = {
         [VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU]   = {"discrete",   5},
@@ -385,14 +390,14 @@ static bool find_physical_device(struct vk_ctx *vk,
         VkPhysicalDeviceType t = props.deviceType;
         PL_INFO(vk, "    GPU %d: %s (%s)", i, props.deviceName, types[t].name);
 
-        if (params->surface && !supports_surf(vk, devices[i], params->surface)) {
+        if (params->surface && !supports_surf(ctx, devices[i], params->surface)) {
             PL_DEBUG(vk, "      -> excluding due to lack of surface support");
             continue;
         }
 
         if (params->device_name && params->device_name[0] != '\0') {
             if (strcmp(params->device_name, props.deviceName) == 0) {
-                vk->physd = devices[i];
+                dev = devices[i];
                 best = 10; // high number...
             } else {
                 PL_DEBUG(vk, "      -> excluding due to name mismatch");
@@ -406,21 +411,14 @@ static bool find_physical_device(struct vk_ctx *vk,
         }
 
         if (types[t].priority > best) {
-            vk->physd = devices[i];
+            dev = devices[i];
             best = types[t].priority;
         }
     }
 
-    if (!vk->physd) {
-        PL_FATAL(vk, "Found no suitable device, giving up.");
-        goto error;
-    }
-
-    ret = true;
-
 error:
     talloc_free(devices);
-    return ret;
+    return dev;
 }
 
 // Find the most specialized queue supported a combination of flags. In cases
@@ -680,8 +678,18 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     if (params->device) {
         PL_DEBUG(vk, "Using specified VkPhysicalDevice");
         vk->physd = params->device;
-    } else if (!find_physical_device(vk, params)) {
-        goto error;
+    } else {
+        vk->physd = pl_vulkan_choose_device(ctx, &(struct pl_vulkan_device_params) {
+            .instance       = vk->inst,
+            .surface        = params->surface,
+            .device_name    = params->device_name,
+            .allow_software = params->allow_software,
+        });
+
+        if (!vk->physd) {
+            PL_FATAL(vk, "Found no suitable device, giving up.");
+            goto error;
+        }
     }
 
     VkPhysicalDeviceProperties prop;

@@ -111,11 +111,26 @@ int main()
         return 1;
     vkEnumeratePhysicalDevices(inst->instance, &num, devices);
 
+    // Make sure choosing any device works
+    VkPhysicalDevice dev;
+    dev = pl_vulkan_choose_device(ctx, &(struct pl_vulkan_device_params) {
+        .instance = inst->instance,
+        .allow_software = true,
+    });
+    REQUIRE(dev);
+
     // Test all attached devices
     for (int i = 0; i < num; i++) {
         VkPhysicalDeviceProperties props;
         vkGetPhysicalDeviceProperties(devices[i], &props);
         printf("Testing device %d: %s\n", i, props.deviceName);
+
+        // Make sure we can choose this device by name
+        dev = pl_vulkan_choose_device(ctx, &(struct pl_vulkan_device_params) {
+            .instance = inst->instance,
+            .device_name = props.deviceName,
+        });
+        REQUIRE(dev == devices[i]);
 
         struct pl_vulkan_params params = pl_vulkan_default_params;
         params.instance = inst->instance;

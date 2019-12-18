@@ -188,6 +188,22 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
 // destroyed by the user before calling this.
 void pl_vulkan_destroy(const struct pl_vulkan **vk);
 
+struct pl_vulkan_device_params {
+    // The instance to use. Required!
+    VkInstance instance;
+
+    // Mirrored from `pl_vulkan_params`. All of these fields are optional.
+    VkSurfaceKHR surface;
+    const char *device_name;
+    bool allow_software;
+};
+
+// Helper function to choose the best VkPhysicalDevice, given a VkInstance.
+// This uses the same logic as `pl_vulkan_create` uses internally. If no
+// matching device was found, this returns VK_NULL_HANDLE.
+VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
+                                         const struct pl_vulkan_device_params *params);
+
 struct pl_vulkan_swapchain_params {
     // The surface to use for rendering. Required, the user is in charge of
     // creating this. Must belong to the same VkInstance as `vk->instance`.
