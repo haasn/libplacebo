@@ -401,6 +401,11 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     if (caps.maxImageCount)
         info->minImageCount = PL_MIN(info->minImageCount, caps.maxImageCount);
 
+    PL_DEBUG(vk, "Requested image size: %dx%d (min %dx%d < cur %dx%d < max %dx%d)",
+             w, h, caps.minImageExtent.width, caps.minImageExtent.height,
+             caps.currentExtent.width, caps.currentExtent.height,
+             caps.maxImageExtent.width, caps.maxImageExtent.height);
+
     // Default the requested size based on the reported extent
     if (caps.currentExtent.width != 0xFFFFFFFF)
         w = PL_DEF(w, caps.currentExtent.width);
