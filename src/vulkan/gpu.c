@@ -966,6 +966,8 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     return tex;
 
 error:
+    if (params->import_handle)
+        vk->ctx->suppress_errors_for_object = VK_NULL_HANDLE;
     vk_tex_destroy(gpu, tex);
     return NULL;
 }
