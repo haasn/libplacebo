@@ -115,16 +115,21 @@ static const struct vk_ext vk_device_extensions[] = {
     }
 };
 
+// Private struct for pl_vk_inst
+struct priv {
+    VkDebugReportCallbackEXT debug_cb;
+};
+
 void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
 {
     const struct pl_vk_inst *inst = *inst_ptr;
     if (!inst)
         return;
 
-    VkDebugReportCallbackEXT debug_cb = (VkDebugReportCallbackEXT) inst->priv;
-    if (debug_cb) {
+    struct priv *p = TA_PRIV(inst);
+    if (p->debug_cb) {
         VK_LOAD_FUN(inst->instance, vkDestroyDebugReportCallbackEXT)
-        vkDestroyDebugReportCallbackEXT(inst->instance, debug_cb, VK_ALLOC);
+        vkDestroyDebugReportCallbackEXT(inst->instance, p->debug_cb, VK_ALLOC);
     }
 
     vkDestroyInstance(inst->instance, VK_ALLOC);
@@ -292,12 +297,15 @@ layers_done:
         vkCreateDebugReportCallbackEXT(inst, &dinfo, VK_ALLOC, &debug_cb);
     }
 
-    struct pl_vk_inst *pl_vk = talloc_struct(NULL, struct pl_vk_inst, {
+    struct pl_vk_inst *pl_vk = talloc_priv(NULL, struct pl_vk_inst, struct priv);
+    *pl_vk = (struct pl_vk_inst) {
         .instance = inst,
-        .priv = (uint64_t) debug_cb,
         .extensions = exts,
         .num_extensions = num_exts,
-    });
+    };
+
+    struct priv *p = TA_PRIV(pl_vk);
+    p->debug_cb = debug_cb;
 
     pl_vk->extensions = talloc_steal(pl_vk, pl_vk->extensions);
     talloc_free(tmp);
@@ -323,7 +331,7 @@ void pl_vulkan_destroy(const struct pl_vulkan **pl_vk)
 
     pl_gpu_destroy((*pl_vk)->gpu);
 
-    struct vk_ctx *vk = (*pl_vk)->priv;
+    struct vk_ctx *vk = TA_PRIV(*pl_vk);
     if (vk->dev) {
         PL_DEBUG(vk, "Flushing remaining commands...");
         vk_wait_idle(vk);
@@ -557,7 +565,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     const char ***exts = &vk->exts;
     int *num_exts = &vk->num_exts;
     if (params->surface)
-        TARRAY_APPEND(vk, *exts, *num_exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        TARRAY_APPEND(vk->ta, *exts, *num_exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
     // Keep track of function pointers we need to load
     const struct vk_ext_fun **ext_funs = NULL;
@@ -570,7 +578,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         const struct vk_ext *ext = &vk_device_extensions[i];
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext->name, exts_avail[n].extensionName) == 0) {
-                TARRAY_APPEND(vk, *exts, *num_exts, ext->name);
+                TARRAY_APPEND(vk->ta, *exts, *num_exts, ext->name);
                 for (const struct vk_ext_fun *f = ext->funs; f->name; f++)
                     TARRAY_APPEND(tmp, ext_funs, num_ext_funs, f);
                 break;
@@ -580,14 +588,14 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     // Add extra user extensions
     for (int i = 0; i < params->num_extensions; i++)
-        TARRAY_APPEND(vk, *exts, *num_exts, params->extensions[i]);
+        TARRAY_APPEND(vk->ta, *exts, *num_exts, params->extensions[i]);
 
     // Add optional extra user extensions
     for (int i = 0; i < params->num_opt_extensions; i++) {
         const char *ext = params->opt_extensions[i];
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext, exts_avail[n].extensionName) == 0) {
-                TARRAY_APPEND(vk, *exts, *num_exts, ext);
+                TARRAY_APPEND(vk->ta, *exts, *num_exts, ext);
                 break;
             }
         }
@@ -634,7 +642,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         struct vk_cmdpool *pool = vk_cmdpool_create(vk, qinfos[i], qfs[qf]);
         if (!pool)
             goto error;
-        TARRAY_APPEND(vk, vk->pools, vk->num_pools, pool);
+        TARRAY_APPEND(vk->ta, vk->pools, vk->num_pools, pool);
 
         // Update the pool_* pointers based on the corresponding index
         if (qf == idx_gfx)
@@ -659,8 +667,9 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
                                          const struct pl_vulkan_params *params)
 {
     params = PL_DEF(params, &pl_vulkan_default_params);
-    struct pl_vulkan *pl_vk = talloc_zero(NULL, struct pl_vulkan);
-    struct vk_ctx *vk = pl_vk->priv = talloc_zero(pl_vk, struct vk_ctx);
+    struct pl_vulkan *pl_vk = talloc_zero_priv(NULL, struct pl_vulkan, struct vk_ctx);
+    struct vk_ctx *vk = TA_PRIV(pl_vk);
+    vk->ta = pl_vk;
     vk->ctx = ctx;
     vk->inst = params->instance;
 

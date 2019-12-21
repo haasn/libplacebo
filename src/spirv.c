@@ -33,16 +33,15 @@ struct spirv_compiler *spirv_compiler_create(struct pl_context *ctx)
 {
     for (int i = 0; i < PL_ARRAY_SIZE(compilers); i++) {
         const struct spirv_compiler_fns *impl = compilers[i];
+        pl_info(ctx, "Initializing SPIR-V compiler '%s'", impl->name);
+        struct spirv_compiler *spirv = impl->create(ctx);
+        if (!spirv)
+            continue;
 
-        struct spirv_compiler *spirv = talloc_zero(NULL, struct spirv_compiler);
         spirv->ctx = ctx;
         spirv->impl = impl;
         strncpy(spirv->name, impl->name, sizeof(spirv->name) - 1);
-
-        pl_info(ctx, "Initializing SPIR-V compiler '%s'", impl->name);
-        if (impl->init(spirv))
-            return spirv;
-        talloc_free(spirv);
+        return spirv;
     }
 
     pl_fatal(ctx, "Failed initializing any SPIR-V compiler! Maybe libplacebo "
@@ -55,6 +54,5 @@ void spirv_compiler_destroy(struct spirv_compiler **spirv)
     if (!*spirv)
         return;
 
-    (*spirv)->impl->uninit(*spirv);
-    TA_FREEP(spirv);
+    (*spirv)->impl->destroy(*spirv);
 }

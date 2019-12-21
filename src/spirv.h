@@ -34,7 +34,6 @@ struct spirv_compiler {
     const struct spirv_compiler_fns *impl;
 
     // implementation-specific fields
-    void *priv;
     struct pl_glsl_desc glsl;      // supported GLSL capabilities
     int compiler_version;          // for cache invalidation, may be left as 0
 };
@@ -48,8 +47,8 @@ struct spirv_compiler_fns {
                          struct bstr *out_spirv);
 
     // Only needs to initialize the implementation-specific fields
-    bool (*init)(struct spirv_compiler *spirv);
-    void (*uninit)(struct spirv_compiler *spirv);
+    struct spirv_compiler *(*create)(struct pl_context *ctx);
+    void (*destroy)(struct spirv_compiler *spirv);
 };
 
 // Initialize a SPIR-V compiler instance, or returns NULL on failure.

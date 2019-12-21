@@ -18,24 +18,26 @@
 #include "spirv.h"
 #include "glsl/glslang.h"
 
-static void glslang_uninit(struct spirv_compiler *spirv)
+static void glslang_destroy(struct spirv_compiler *spirv)
 {
     pl_glslang_uninit();
+    talloc_free(spirv);
 }
 
-static bool glslang_init(struct spirv_compiler *spirv)
+static struct spirv_compiler *glslang_create(struct pl_context *ctx)
 {
     if (!pl_glslang_init()) {
-        PL_FATAL(spirv, "Failed initializing glslang SPIR-V compiler!");
-        return false;
+        pl_fatal(ctx, "Failed initializing glslang SPIR-V compiler!");
+        return NULL;
     }
 
+    struct spirv_compiler *spirv = talloc_zero(NULL, struct spirv_compiler);
     spirv->compiler_version = pl_glslang_version();
     spirv->glsl = (struct pl_glsl_desc) {
         .version = 450,
         .vulkan  = true,
     };
-    return true;
+    return spirv;
 }
 
 static bool glslang_compile(struct spirv_compiler *spirv, void *tactx,
@@ -64,6 +66,6 @@ static bool glslang_compile(struct spirv_compiler *spirv, void *tactx,
 const struct spirv_compiler_fns pl_spirv_glslang = {
     .name = "glslang",
     .compile_glsl = glslang_compile,
-    .init = glslang_init,
-    .uninit = glslang_uninit,
+    .create = glslang_create,
+    .destroy = glslang_destroy,
 };

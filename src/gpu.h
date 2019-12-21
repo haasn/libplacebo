@@ -20,6 +20,9 @@
 #include "common.h"
 #include "context.h"
 
+// This struct must be the first member of the gpu's priv struct. The `pl_gpu`
+// helpers will cast the priv struct to this struct!
+
 #define GPU_PFN(name) __typeof__(pl_##name) *name
 struct pl_gpu_fns {
     // Destructors: These also free the corresponding objects, but they

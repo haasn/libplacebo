@@ -18,6 +18,7 @@
 
 #include <string.h>
 #include <assert.h>
+#include <stdint.h>
 
 #include "../ta.h"
 
@@ -97,6 +98,23 @@ bool xta_ref_attach(void *t, struct xta_ref *ref);
 #define talloc_ref_deref(...)           xta_ref_deref(__VA_ARGS__)
 #define talloc_ref_attach(...)          xta_oom_b(xta_ref_attach(__VA_ARGS__))
 
+// Talloc public/private struct helpers
+#define talloc_alignment (offsetof(struct { char c; intmax_t x; }, x))
+#define talloc_align(size) \
+    (((size) + talloc_alignment - 1) & ~(talloc_alignment - 1))
+
+#define TA_PRIV(pub) \
+    ((void *) ((uintptr_t) (pub) + talloc_align(sizeof(*(pub)))))
+
+#define talloc_priv(ta, pub, priv) \
+    ((pub *) talloc_size((ta), talloc_align(sizeof(pub)) + sizeof(priv)))
+
+#define talloc_zero_priv(ta, pub, priv) \
+    ((pub *) talloc_zero_size((ta), talloc_align(sizeof(pub)) + sizeof(priv)))
+
+#define talloc_ptrtype_priv(ta, ptr, priv) \
+    ((TA_TYPEOF(ptr)) talloc_size((ta), talloc_align(sizeof(*ptr)) + sizeof(priv)))
+
 // Utility functions (ported from mpv)
 
 #define TA_FREEP(pctx) do {talloc_free(*(pctx)); *(pctx) = NULL;} while(0)
@@ -107,8 +125,8 @@ bool xta_ref_attach(void *t, struct xta_ref *ref);
 
 #define TARRAY_RESIZE(ctx, p, count)                            \
     do {                                                        \
-        (p) = xta_xrealloc_size(ctx, p,                          \
-                    xta_calc_array_size(sizeof((p)[0]), count)); \
+        (p) = xta_xrealloc_size((void*) ctx, p,                 \
+                    xta_calc_array_size(sizeof((p)[0]), count));\
     } while (0)
 
 #define TARRAY_GROW(ctx, p, nextidx)                \

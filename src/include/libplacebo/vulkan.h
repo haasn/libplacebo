@@ -30,7 +30,6 @@
 // Structure representing a VkInstance. Using this is not required.
 struct pl_vk_inst {
     VkInstance instance;
-    uint64_t priv;
 
     // The instance extensions that were successfully enabled, including
     // extensions enabled by libplacebo internally. May contain duplicates.
@@ -68,7 +67,6 @@ void pl_vk_inst_destroy(const struct pl_vk_inst **inst);
 // Structure representing the actual vulkan device and associated GPU instance
 struct pl_vulkan {
     const struct pl_gpu *gpu;
-    void *priv;
 
     // The vulkan objects in use. The user may use this for their own purposes,
     // but please note that the lifetime is tied to the lifetime of the

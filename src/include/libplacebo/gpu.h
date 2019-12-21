@@ -123,8 +123,6 @@ struct pl_gpu_limits {
 // be used to dispatch rendering commands.
 struct pl_gpu {
     struct pl_context *ctx;  // the `pl_context` this GPU was initialized from
-    struct pl_gpu_fns *impl; // the underlying implementation (unique per GPU)
-    void *priv;
 
     pl_gpu_caps caps;            // PL_GPU_CAP_* bit field
     struct pl_glsl_desc glsl;    // GLSL version supported by this GPU
@@ -178,7 +176,6 @@ enum pl_fmt_caps {
 // Structure describing a texel/vertex format.
 struct pl_fmt {
     const char *name;       // symbolic name for this format (e.g. rgba32f)
-    const void *priv;
 
     enum pl_fmt_type type;  // the format's data type and interpretation
     enum pl_fmt_caps caps;  // the features supported by this format
@@ -313,7 +310,6 @@ static inline int pl_tex_params_dimension(const struct pl_tex_params params)
 // and/or rendered to.
 struct pl_tex {
     struct pl_tex_params params;
-    void *priv;
 
     // If `params.export_handle` is set, this structure references the shared
     // memory backing this buffer, via the requested handle type.
@@ -492,7 +488,6 @@ struct pl_buf_params {
 struct pl_buf {
     struct pl_buf_params params;
     uint8_t *data; // for persistently mapped buffers, points to the first byte
-    void *priv;
 
     // If `params.handle_type` is set, this structure references the shared
     // memory backing this buffer, via the requested handle type.
@@ -876,17 +871,12 @@ struct pl_pass_params {
     // The vertex shader itself.
     const char *vertex_shader;
 
-    // The target dummy texture this renderpass is intended to be used with.
-    // This doesn't have to be a real texture - the caller can also pass a
-    // blank pl_tex object, as long as target_dummy.params.format is set. The
-    // format must support PL_FMT_CAP_RENDERABLE, and if the target dummy is
-    // an actual texture, it must have `renderable` enabled.
-    //
-    // If you pass a real texture here, the GPU backend may be able to optimize
-    // the render pass better for the specific requirements of this texture.
-    // This does not change the semantics of pl_pass_run, just perhaps the
-    // performance. (The `priv` pointer will be cleared by pl_pass_create, so
-    // there is no risk of a dangling reference)
+    // The target texture this render pass is intended to be used with. This
+    // doesn't have to come from a real texture - the caller can also invent
+    // values or pass a blank struct, as long as `target_dummy.params.format`
+    // is set. The format must support `PL_FMT_CAP_RENDERABLE`. If any other
+    // fields are set, the GPU may be able to further optimize the render pass
+    // for this particular type of texture.
     struct pl_tex target_dummy;
 
     // Target blending mode. If this is NULL, blending is disabled. Otherwise,
@@ -907,7 +897,6 @@ struct pl_pass_params {
 // - the current values of all inputs
 struct pl_pass {
     struct pl_pass_params params;
-    void *priv;
 };
 
 // Compile a shader and create a render pass. This is a rare/expensive
@@ -981,7 +970,6 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
 // semaphores - one to synchronize access in each direction.
 struct pl_sync {
     enum pl_handle_type handle_type;
-    void *priv;
 
     // This handle is signalled by the `pl_gpu`, and waited on by the user. It
     // fires when it is safe for the user to access the shared resource.

@@ -220,7 +220,7 @@ static void release_signal(struct vk_ctx *vk, struct vk_signal *sig)
     if (sig->event)
         vkResetEvent(vk->dev, sig->event);
     sig->source = NULL;
-    TARRAY_APPEND(vk, vk->signals, vk->num_signals, sig);
+    TARRAY_APPEND(vk->ta, vk->signals, vk->num_signals, sig);
 }
 
 enum vk_wait_type vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
@@ -352,7 +352,7 @@ bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd *cmd)
     VK(vkEndCommandBuffer(cmd->buf));
 
     VK(vkResetFences(vk->dev, 1, &cmd->fence));
-    TARRAY_APPEND(vk, vk->cmds_queued, vk->num_cmds_queued, cmd);
+    TARRAY_APPEND(vk->ta, vk->cmds_queued, vk->num_cmds_queued, cmd);
     vk->last_cmd = cmd;
 
     if (vk->num_cmds_queued >= PL_VK_MAX_QUEUED_CMDS) {
@@ -430,7 +430,7 @@ bool vk_flush_commands(struct vk_ctx *vk)
         }
 
         VK(vkQueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));
-        TARRAY_APPEND(vk, vk->cmds_pending, vk->num_cmds_pending, cmd);
+        TARRAY_APPEND(vk->ta, vk->cmds_pending, vk->num_cmds_pending, cmd);
         continue;
 
 error:

@@ -25,17 +25,19 @@ struct priv {
     shaderc_compile_options_t opts;
 };
 
-static void shaderc_uninit(struct spirv_compiler *spirv)
+static void shaderc_destroy(struct spirv_compiler *spirv)
 {
-    struct priv *p = spirv->priv;
+    struct priv *p = TA_PRIV(spirv);
     shaderc_compile_options_release(p->opts);
     shaderc_compiler_release(p->compiler);
-    TA_FREEP(&spirv->priv);
+    talloc_free(spirv);
 }
 
-static bool shaderc_init(struct spirv_compiler *spirv)
+static struct spirv_compiler *shaderc_create(struct pl_context *ctx)
 {
-    struct priv *p = spirv->priv = talloc_zero(spirv, struct priv);
+    struct spirv_compiler *spirv = talloc_ptrtype_priv(NULL, spirv, struct priv);
+    struct priv *p = TA_PRIV(spirv);
+    *spirv = (struct spirv_compiler) {0};
 
     p->compiler = shaderc_compiler_initialize();
     if (!p->compiler)
@@ -60,11 +62,11 @@ static bool shaderc_init(struct spirv_compiler *spirv)
         .version = 450, // this is impossible to query, so hard-code it
         .vulkan  = true,
     };
-    return true;
+    return spirv;
 
 error:
-    shaderc_uninit(spirv);
-    return false;
+    shaderc_destroy(spirv);
+    return NULL;
 }
 
 static shaderc_compilation_result_t compile(struct priv *p,
@@ -90,7 +92,7 @@ static bool shaderc_compile(struct spirv_compiler *spirv, void *tactx,
                             enum glsl_shader_stage type, const char *glsl,
                             struct bstr *out_spirv)
 {
-    struct priv *p = spirv->priv;
+    struct priv *p = TA_PRIV(spirv);
 
     shaderc_compilation_result_t res = compile(p, type, glsl, false);
     int errs = shaderc_result_get_num_errors(res),
@@ -143,6 +145,6 @@ static bool shaderc_compile(struct spirv_compiler *spirv, void *tactx,
 const struct spirv_compiler_fns pl_spirv_shaderc = {
     .name = "shaderc",
     .compile_glsl = shaderc_compile,
-    .init = shaderc_init,
-    .uninit = shaderc_uninit,
+    .create = shaderc_create,
+    .destroy = shaderc_destroy,
 };

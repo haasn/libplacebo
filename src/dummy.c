@@ -48,24 +48,27 @@ const struct pl_gpu_dummy_params pl_gpu_dummy_default_params = {
     },
 };
 
-static struct pl_gpu_fns pl_fns_dummy;
+static const struct pl_gpu_fns pl_fns_dummy;
+
+struct priv {
+    struct pl_gpu_fns impl;
+    struct pl_gpu_dummy_params params;
+};
 
 const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
                                          const struct pl_gpu_dummy_params *params)
 {
-    struct pl_gpu *gpu = talloc_zero(NULL, struct pl_gpu);
-    if (params) {
-        params = talloc_memdup(gpu, params, sizeof(*params));
-    } else {
-        params = &pl_gpu_dummy_default_params;
-    }
+    params = PL_DEF(params, &pl_gpu_dummy_default_params);
 
-    gpu->priv = (void *) params;
+    struct pl_gpu *gpu = talloc_zero_priv(NULL, struct pl_gpu, struct priv);
     gpu->ctx = ctx;
-    gpu->impl = &pl_fns_dummy;
     gpu->caps = params->caps;
     gpu->glsl = params->glsl;
     gpu->limits = params->limits;
+
+    struct priv *p = TA_PRIV(gpu);
+    p->impl = pl_fns_dummy;
+    p->params = *params;
 
     // Forcibly override these, because we know for sure what the values are
     gpu->limits.align_tex_xfer_stride = 1;
@@ -139,7 +142,6 @@ const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
 
 static void dumb_destroy(const struct pl_gpu *gpu)
 {
-    pl_assert(gpu->impl == &pl_fns_dummy);
     talloc_free((void *) gpu);
 }
 
@@ -149,53 +151,66 @@ void pl_gpu_dummy_destroy(const struct pl_gpu **gpu)
     *gpu = NULL;
 }
 
+struct buf_priv {
+    void *data;
+};
+
 static const struct pl_buf *dumb_buf_create(const struct pl_gpu *gpu,
                                             const struct pl_buf_params *params)
 {
-    struct pl_buf *buf = talloc_zero(NULL, struct pl_buf);
+    struct pl_buf *buf = talloc_zero_priv(NULL, struct pl_buf, struct buf_priv);
     buf->params = *params;
     buf->params.initial_data = NULL;
 
-    buf->priv = malloc(params->size);
-    if (!buf->priv) {
+    struct buf_priv *p = TA_PRIV(buf);
+    p->data = malloc(params->size);
+    if (!p->data) {
         PL_ERR(gpu, "Failed allocating memory for dummy buffer!");
         talloc_free(buf);
         return NULL;
     }
 
     if (params->initial_data)
-        memcpy(buf->priv, params->initial_data, params->size);
+        memcpy(p->data, params->initial_data, params->size);
     if (params->host_mapped)
-        buf->data = buf->priv;
+        buf->data = p->data;
 
     return buf;
 }
 
 static void dumb_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf *buf)
 {
-    free(buf->priv);
+    struct buf_priv *p = TA_PRIV(buf);
+    free(p->data);
     talloc_free((void *) buf);
 }
 
 uint8_t *pl_buf_dummy_data(const struct pl_buf *buf)
 {
-    return buf->priv;
+    struct buf_priv *p = TA_PRIV(buf);
+    return p->data;
 }
 
 static void dumb_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                            size_t buf_offset, const void *data, size_t size)
 {
-    uint8_t *dst = buf->priv;
+    struct buf_priv *p = TA_PRIV(buf);
+    uint8_t *dst = p->data;
     memcpy(&dst[buf_offset], data, size);
 }
 
 static bool dumb_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                           size_t buf_offset, void *dest, size_t size)
 {
-    const uint8_t *src = buf->priv;
+    struct buf_priv *p = TA_PRIV(buf);
+    const uint8_t *src = p->data;
     memcpy(dest, &src[buf_offset], size);
     return true;
 }
+
+struct tex_priv {
+    void *data;
+};
 
 static size_t tex_size(const struct pl_gpu *gpu, const struct pl_tex *tex)
 {
@@ -208,19 +223,20 @@ static size_t tex_size(const struct pl_gpu *gpu, const struct pl_tex *tex)
 static const struct pl_tex *dumb_tex_create(const struct pl_gpu *gpu,
                                             const struct pl_tex_params *params)
 {
-    struct pl_tex *tex = talloc_zero(NULL, struct pl_tex);
+    struct pl_tex *tex = talloc_zero_priv(NULL, struct pl_tex, void *);
     tex->params = *params;
     tex->params.initial_data = NULL;
 
-    tex->priv = malloc(tex_size(gpu, tex));
-    if (!tex->priv) {
+    struct tex_priv *p = TA_PRIV(tex);
+    p->data = malloc(tex_size(gpu, tex));
+    if (!p->data) {
         PL_ERR(gpu, "Failed allocating memory for dummy texture!");
         talloc_free(tex);
         return NULL;
     }
 
     if (params->initial_data)
-        memcpy(tex->priv, params->initial_data, tex_size(gpu, tex));
+        memcpy(p->data, params->initial_data, tex_size(gpu, tex));
 
     return tex;
 }
@@ -231,7 +247,7 @@ const struct pl_tex *pl_tex_dummy_create(const struct pl_gpu *gpu,
     // Only do minimal sanity checking, since this is just a dummy texture
     pl_assert(params->format && params->w >= 0 && params->h >= 0 && params->d >= 0);
 
-    struct pl_tex *tex = talloc_zero(NULL, struct pl_tex);
+    struct pl_tex *tex = talloc_zero_priv(NULL, struct pl_tex, struct tex_priv);
     tex->params = (struct pl_tex_params) {
         // Whitelist options
         .w = params->w,
@@ -249,21 +265,24 @@ const struct pl_tex *pl_tex_dummy_create(const struct pl_gpu *gpu,
 
 static void dumb_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
 {
-    if (tex->priv)
-        free(tex->priv);
+    struct tex_priv *p = TA_PRIV(tex);
+    if (p->data)
+        free(p->data);
     talloc_free((void *) tex);
 }
 
 uint8_t *pl_tex_dummy_data(const struct pl_tex *tex)
 {
-    return tex->priv;
+    struct tex_priv *p = TA_PRIV(tex);
+    return p->data;
 }
 
 static void dumb_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
                            const float color[4])
 {
     const struct pl_fmt *fmt = tex->params.format;
-    pl_assert(tex->priv);
+    struct tex_priv *p = TA_PRIV(tex);
+    pl_assert(p->data);
 
     // Convert from float[4] to whatever internal representation we need
     union {
@@ -325,11 +344,11 @@ static void dumb_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
         fast_path &= data.bytes[i] == data.bytes[0];
 
     if (fast_path) {
-        memset(tex->priv, data.bytes[0], tex_size(gpu, tex));
+        memset(p->data, data.bytes[0], tex_size(gpu, tex));
         return;
     }
 
-    uint8_t *dst = tex->priv;
+    uint8_t *dst = p->data;
     for (size_t pos = 0; pos < tex_size(gpu, tex); pos += fmt->texel_size)
         memcpy(&dst[pos], &data.bytes[0], fmt->texel_size);
 }
@@ -338,12 +357,15 @@ static bool dumb_tex_upload(const struct pl_gpu *gpu,
                             const struct pl_tex_transfer_params *params)
 {
     const struct pl_tex *tex = params->tex;
-    pl_assert(tex->priv);
+    struct tex_priv *p = TA_PRIV(tex);
+    pl_assert(p->data);
 
     const uint8_t *src = params->ptr;
-    uint8_t *dst = tex->priv;
-    if (params->buf)
-        src = (uint8_t *) params->buf->priv + params->buf_offset;
+    uint8_t *dst = p->data;
+    if (params->buf) {
+        struct buf_priv *bufp = TA_PRIV(params->buf);
+        src = (uint8_t *) bufp->data + params->buf_offset;
+    }
 
     size_t texel_size = tex->params.format->texel_size;
     size_t row_size = pl_rect_w(params->rc) * texel_size;
@@ -365,12 +387,15 @@ static bool dumb_tex_download(const struct pl_gpu *gpu,
                               const struct pl_tex_transfer_params *params)
 {
     const struct pl_tex *tex = params->tex;
-    pl_assert(tex->priv);
+    struct tex_priv *p = TA_PRIV(tex);
+    pl_assert(p->data);
 
-    const uint8_t *src = tex->priv;
+    const uint8_t *src = p->data;
     uint8_t *dst = params->ptr;
-    if (params->buf)
-        dst = (uint8_t *) params->buf->priv + params->buf_offset;
+    if (params->buf) {
+        struct buf_priv *bufp = TA_PRIV(params->buf);
+        dst = (uint8_t *) bufp->data + params->buf_offset;
+    }
 
     size_t texel_size = tex->params.format->texel_size;
     size_t row_size = pl_rect_w(params->rc) * texel_size;
@@ -416,7 +441,7 @@ static void dumb_gpu_finish(const struct pl_gpu *gpu)
     // no-op
 }
 
-static struct pl_gpu_fns pl_fns_dummy = {
+static const struct pl_gpu_fns pl_fns_dummy = {
     .destroy = dumb_destroy,
     .buf_create = dumb_buf_create,
     .buf_destroy = dumb_buf_destroy,
