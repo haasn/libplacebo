@@ -33,6 +33,7 @@ struct priv {
     int cur_width, cur_height;
     int swapchain_depth;
     int frames_in_flight;   // number of frames currently queued
+    bool suboptimal;        // true once VK_SUBOPTIMAL_KHR is returned
     struct pl_color_repr color_repr;
     struct pl_color_space color_space;
 
@@ -491,6 +492,7 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
 
     VK(vkCreateSwapchainKHR(vk->dev, &sinfo, VK_ALLOC, &p->swapchain));
 
+    p->suboptimal = false;
     p->cur_width = sinfo.imageExtent.width;
     p->cur_height = sinfo.imageExtent.height;
 
@@ -569,7 +571,7 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
 {
     struct priv *p = TA_PRIV(sw);
     struct vk_ctx *vk = p->vk;
-    if (!p->swapchain && !vk_sw_recreate(sw, 0, 0))
+    if ((!p->swapchain || p->suboptimal) && !vk_sw_recreate(sw, 0, 0))
         return false;
 
     VkSemaphore sem_in = p->sems_in[p->idx_sems];
@@ -581,6 +583,9 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
                                              sem_in, VK_NULL_HANDLE, &imgidx);
 
         switch (res) {
+        case VK_SUBOPTIMAL_KHR:
+            p->suboptimal = true;
+            // fall through
         case VK_SUCCESS:
             p->last_imgidx = imgidx;
             pl_vulkan_release(sw->gpu, p->images[imgidx],
@@ -593,7 +598,6 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
             };
             return true;
 
-        case VK_SUBOPTIMAL_KHR:
         case VK_ERROR_OUT_OF_DATE_KHR: {
             // In these cases try recreating the swapchain
             if (!vk_sw_recreate(sw, 0, 0))
@@ -664,8 +668,10 @@ static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
     PL_TRACE(vk, "vkQueuePresentKHR waits on %p", (void *) sem_out);
     VkResult res = vkQueuePresentKHR(queue, &pinfo);
     switch (res) {
-    case VK_SUCCESS:
     case VK_SUBOPTIMAL_KHR:
+        p->suboptimal = true;
+        // fall through
+    case VK_SUCCESS:
         return true;
 
     case VK_ERROR_OUT_OF_DATE_KHR:
