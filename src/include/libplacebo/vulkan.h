@@ -229,6 +229,14 @@ struct pl_vulkan_swapchain_params {
     // finished displaying it. So this only provides a rough guideline.
     // Optional, defaults to 3.
     int swapchain_depth;
+
+    // This suppresses automatic recreation of the swapchain when any call
+    // returns VK_SUBOPTIMAL_KHR. Normally, libplacebo will recreate the
+    // swapchain internally on the next `pl_swapchain_start_frame`. If enabled,
+    // clients are assumed to take care of swapchain recreations themselves, by
+    // calling `pl_swapchain_resize` as appropriate. libplacebo will tolerate
+    // the "suboptimal" status indefinitely.
+    bool allow_suboptimal;
 };
 
 // Creates a new vulkan swapchain based on an existing VkSurfaceKHR. Using this
@@ -237,6 +245,11 @@ struct pl_vulkan_swapchain_params {
 // the `pl_vulkan_params.surface` explicitly at creation time.
 const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *vk,
                               const struct pl_vulkan_swapchain_params *params);
+
+// This will return true if the vulkan swapchain is internally detected
+// as being suboptimal (VK_SUBOPTIMAL_KHR). This might be of use to clients
+// who have `params->allow_suboptimal` enabled.
+bool pl_vulkan_swapchain_suboptimal(const struct pl_vulkan *vk);
 
 // VkImage interop API
 

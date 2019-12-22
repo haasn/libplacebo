@@ -27,6 +27,7 @@ struct priv {
     VkSurfaceKHR surf;
 
     // current swapchain and metadata:
+    struct pl_vulkan_swapchain_params params;
     VkSwapchainCreateInfoKHR protoInfo; // partially filled-in prototype
     VkSwapchainKHR swapchain;
     VkSwapchainKHR old_swapchain;
@@ -263,6 +264,7 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
     sw->gpu = gpu;
 
     struct priv *p = TA_PRIV(sw);
+    p->params = *params;
     p->vk = vk;
     p->surf = params->surface;
     p->swapchain_depth = PL_DEF(params->swapchain_depth, 3);
@@ -572,8 +574,14 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
 {
     struct priv *p = TA_PRIV(sw);
     struct vk_ctx *vk = p->vk;
-    if ((!p->swapchain || p->suboptimal) && !vk_sw_recreate(sw, 0, 0))
+    if (!p->swapchain && !vk_sw_recreate(sw, 0, 0))
         return false;
+
+    if (p->suboptimal && !p->params.allow_suboptimal) {
+        PL_TRACE(vk, "Swapchain is suboptimal, recreating...");
+        if (!vk_sw_recreate(sw, 0, 0))
+            return false;
+    }
 
     VkSemaphore sem_in = p->sems_in[p->idx_sems];
     PL_TRACE(vk, "vkAcquireNextImageKHR signals %p", (void *) sem_in);
@@ -706,6 +714,12 @@ static bool vk_sw_resize(const struct pl_swapchain *sw, int *width, int *height)
     *width = p->cur_width;
     *height = p->cur_height;
     return ok;
+}
+
+bool pl_vulkan_swapchain_suboptimal(const struct pl_vulkan *vk)
+{
+    struct priv *p = TA_PRIV(vk);
+    return p->suboptimal;
 }
 
 static struct pl_sw_fns vulkan_swapchain = {
