@@ -562,6 +562,7 @@ error:
         vkDestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
         p->swapchain = VK_NULL_HANDLE;
         p->cur_width = p->cur_height = 0;
+        p->suboptimal = false;
     }
     return false;
 }
