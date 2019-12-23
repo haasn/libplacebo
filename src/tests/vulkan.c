@@ -100,6 +100,8 @@ int main()
     struct pl_context *ctx = pl_test_context();
     const struct pl_vk_inst *inst;
     inst = pl_vk_inst_create(ctx, &(struct pl_vk_inst_params) { .debug = true });
+    if (!inst)
+        return SKIP;
 
     uint32_t num = 0;
     vkEnumeratePhysicalDevices(inst->instance, &num, NULL);
@@ -162,9 +164,9 @@ int main()
         vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
         pl_vulkan_destroy(&vk);
-        pl_vk_inst_destroy(&inst);
-        pl_context_destroy(&ctx);
     }
 
+    pl_vk_inst_destroy(&inst);
+    pl_context_destroy(&ctx);
     free(devices);
 }
