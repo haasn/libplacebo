@@ -350,6 +350,12 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     VkSurfaceCapabilitiesKHR caps;
     VK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk->physd, p->surf, &caps));
 
+    // Check for hidden/invisible window
+    if (!caps.currentExtent.width || !caps.currentExtent.height) {
+        PL_DEBUG(vk, "maxImageExtent reported as 0x0, hidden window? skipping");
+        return false;
+    }
+
     // Sorted by preference
     static const struct { VkCompositeAlphaFlagsKHR vk_mode;
                           enum pl_alpha_mode pl_mode;
@@ -486,7 +492,7 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
     sinfo.oldSwapchain = p->swapchain;
 
     if (!update_swapchain_info(p, &sinfo, w, h))
-        goto error;
+        return false;
 
     PL_INFO(sw, "(Re)creating swapchain of size %dx%d",
             sinfo.imageExtent.width,
