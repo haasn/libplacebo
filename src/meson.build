@@ -92,6 +92,18 @@ if glslang_found
     pthread = cxx.find_library('pthread', required: false)
     glslang_all_deps = glslang_deps + glslang_opt_deps + [pthread]
     glslang_combined = declare_dependency(dependencies: glslang_all_deps)
+
+    # Work around a glslang include path bug w.r.t stuff previously namespaced
+    # under /usr/include/SPIRV now being moved to /usr/include/glslang/SPIRV.
+    extra_glslang_inc = [
+      '/usr/include/glslang',
+      get_option('prefix') / get_option('includedir') / 'glslang',
+    ]
+
+    foreach i : extra_glslang_inc
+      add_project_arguments('-I' + i, language: 'cpp')
+    endforeach
+
   else
     error('glslang revision @0@ too old! Must be at least @1@'
           .format(glslang_ver, glslang_min_ver))
