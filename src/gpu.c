@@ -94,6 +94,8 @@ void pl_gpu_print_info(const struct pl_gpu *gpu, enum pl_log_level lev)
         }
 
         PL_MSG(gpu, lev, "      UUID: %s", buf);
+        PL_MSG(gpu, lev, "      PCI: %04x:%02x:%02x:%x",
+               gpu->pci.domain, gpu->pci.bus, gpu->pci.device, gpu->pci.function);
         PL_MSG(gpu, lev, "      buf export caps: 0x%x",
                (unsigned int) gpu->export_caps.buf);
         PL_MSG(gpu, lev, "      buf import caps: 0x%x",

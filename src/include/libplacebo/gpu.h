@@ -119,6 +119,14 @@ struct pl_gpu_limits {
     size_t align_tex_xfer_offset;   // optimal `pl_tex_transfer_params.buf_offset`
 };
 
+// Structure grouping PCI bus address fields for GPU devices
+struct pl_gpu_pci_address {
+    uint32_t domain;
+    uint32_t bus;
+    uint32_t device;
+    uint32_t function;
+};
+
 // Abstract device context which wraps an underlying graphics context and can
 // be used to dispatch rendering commands.
 struct pl_gpu {
@@ -140,6 +148,10 @@ struct pl_gpu {
     // similar formats, the "better" ones come first)
     const struct pl_fmt **formats;
     int num_formats;
+
+    // PCI Bus address of the underlying device, to help with interop.
+    // This will only be filled in if interop is supported.
+    struct pl_gpu_pci_address pci;
 };
 
 // Helper function to align the given dimension (e.g. width or height) to a

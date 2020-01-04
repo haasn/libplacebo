@@ -352,8 +352,13 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     gpu->import_caps.sync = 0; // Not supported yet
 
     if (pl_gpu_supports_interop(gpu)) {
+        VkPhysicalDevicePCIBusInfoPropertiesEXT pci_props = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT,
+        };
+
         VkPhysicalDeviceIDPropertiesKHR id_props = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR,
+            .pNext = &pci_props,
         };
 
         VkPhysicalDeviceProperties2KHR props = {
@@ -364,6 +369,11 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         vk->vkGetPhysicalDeviceProperties2KHR(vk->physd, &props);
         assert(sizeof(gpu->uuid) == VK_UUID_SIZE);
         memcpy(gpu->uuid, id_props.deviceUUID, sizeof(gpu->uuid));
+
+        gpu->pci.domain = pci_props.pciDomain;
+        gpu->pci.bus = pci_props.pciBus;
+        gpu->pci.device = pci_props.pciDevice;
+        gpu->pci.function = pci_props.pciFunction;
     }
 
     if (vk->vkCmdPushDescriptorSetKHR) {
