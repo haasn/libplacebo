@@ -173,10 +173,7 @@ possible in principle.
 
 ### Gentoo
 
-An
-[ebuild](https://github.com/sjnewbury/gentoo-gpu/blob/master/media-libs/libplacebo/libplacebo-9999.ebuild)
-is available in the overlay `gentoo-gpu`. (Currently pending being merged into
-upstream gentoo)
+An ebuild is available as `media-libs/libplacebo` in the gentoo repository.
 
 ### Building from source
 
