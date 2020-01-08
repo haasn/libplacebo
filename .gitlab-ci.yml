@@ -57,16 +57,16 @@ build-win64:
                       --cross-file /opt/crossfiles/x86_64-w64-mingw32.meson
         - ninja -C build
 
-#build-debian-aarch64:
-#    stage: build
-#    image: registry.videolan.org/dav1d-debian-unstable-aarch64:20181122182457
-#    tags:
-#        - aarch64
-#        - debian
-#    script:
-#        - meson build --buildtype release --werror -Dtests=true
-#        - ninja -C build
-#        - cd build && meson test -v
+build-aarch64:
+    image: registry.videolan.org/libplacebo-ubuntu-eoan-aarch64:20200108100921
+    stage: build
+    tags:
+        - aarch64
+        - debian
+    script:
+        - meson build --buildtype release --werror -Dtests=true
+        - ninja -C build
+        - cd build && meson test -v
 
 build-macos:
     stage: build
