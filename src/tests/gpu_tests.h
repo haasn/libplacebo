@@ -1,6 +1,65 @@
 #include "tests.h"
 #include "shaders.h"
 
+static uint8_t test_src[16*16*16 * 4 * sizeof(double)] = {0};
+static uint8_t test_dst[16*16*16 * 4 * sizeof(double)] = {0};
+
+static void pl_buffer_tests(const struct pl_gpu *gpu)
+{
+    const size_t buf_size = 1024;
+    assert(buf_size <= sizeof(test_src));
+
+    memset(test_dst, 0, buf_size);
+    for (int i = 0; i < buf_size; i++)
+        test_src[i] = (RANDOM * 256);
+
+    const struct pl_buf *buf = NULL;
+    if (buf_size > gpu->limits.max_xfer_size)
+        return;
+
+    printf("test xfer buffer static creation and readback\n");
+    buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        .type = PL_BUF_TEX_TRANSFER,
+        .size = buf_size,
+        .host_readable = true,
+        .initial_data = test_src,
+    });
+
+    REQUIRE(buf);
+    REQUIRE(pl_buf_read(gpu, buf, 0, test_dst, buf_size));
+    REQUIRE(memcmp(test_src, test_dst, buf_size) == 0);
+    pl_buf_destroy(gpu, &buf);
+
+    printf("test xfer buffer empty creation, update and readback\n");
+    memset(test_dst, 0, buf_size);
+    buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        .type = PL_BUF_TEX_TRANSFER,
+        .size = buf_size,
+        .host_writable = true,
+        .host_readable = true,
+    });
+
+    REQUIRE(buf);
+    pl_buf_write(gpu, buf, 0, test_src, buf_size);
+    REQUIRE(pl_buf_read(gpu, buf, 0, test_dst, buf_size));
+    REQUIRE(memcmp(test_src, test_dst, buf_size) == 0);
+    pl_buf_destroy(gpu, &buf);
+
+    if (gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS) {
+        printf("test host mapped buffer readback\n");
+        buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+            .type = PL_BUF_TEX_TRANSFER,
+            .size = buf_size,
+            .host_mapped = true,
+            .initial_data = test_src,
+        });
+
+        REQUIRE(buf);
+        REQUIRE(memcmp(test_src, buf->data, buf_size) == 0);
+        pl_buf_destroy(gpu, &buf);
+    }
+}
+
 static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex,
                               uint8_t *src, uint8_t *dst)
 {
@@ -37,9 +96,6 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
         REQUIRE(memcmp(src, dst, bytes) == 0);
     }
 }
-
-static uint8_t test_src[16*16*16 * 4 * sizeof(double)] = {0};
-static uint8_t test_dst[16*16*16 * 4 * sizeof(double)] = {0};
 
 static void pl_texture_tests(const struct pl_gpu *gpu)
 {
@@ -528,6 +584,7 @@ error:
 
 static void gpu_tests(const struct pl_gpu *gpu)
 {
+    pl_buffer_tests(gpu);
     pl_texture_tests(gpu);
     pl_shader_tests(gpu);
     pl_scaler_tests(gpu);
