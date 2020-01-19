@@ -1943,9 +1943,6 @@ struct pl_pass_vk {
 
 static void vk_pass_destroy(const struct pl_gpu *gpu, struct pl_pass *pass)
 {
-    if (!pass)
-        return;
-
     struct pl_vk *p = TA_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     struct pl_pass_vk *pass_vk = TA_PRIV(pass);
@@ -1971,8 +1968,9 @@ static const VkDescriptorType dsType[] = {
     [PL_DESC_BUF_TEXEL_STORAGE] = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
 };
 
-static const char vk_cache_magic[4] = {'R','A','V','K'};
-static const int vk_cache_version = 2;
+#define VK_CACHE_MAGIC {'R','A','V','K'}
+#define VK_CACHE_VERSION 2
+static const char vk_cache_magic[4] = VK_CACHE_MAGIC;
 
 struct vk_cache_header {
     char magic[sizeof(vk_cache_magic)];
@@ -1994,18 +1992,18 @@ static bool vk_use_cached_program(const struct pl_pass_params *params,
 {
     struct bstr cache = {
         .start = (void*) params->cached_program,
-        .len   =params->cached_program_len,
+        .len   = params->cached_program_len,
     };
 
     if (cache.len < sizeof(struct vk_cache_header))
         return false;
 
-    struct vk_cache_header *header = (struct vk_cache_header *)cache.start;
+    struct vk_cache_header *header = (struct vk_cache_header *) cache.start;
     cache = bstr_cut(cache, sizeof(*header));
 
     if (strncmp(header->magic, vk_cache_magic, sizeof(vk_cache_magic)) != 0)
         return false;
-    if (header->cache_version != vk_cache_version)
+    if (header->cache_version != VK_CACHE_VERSION)
         return false;
     if (strncmp(header->compiler, spirv->name, sizeof(header->compiler)) != 0)
         return false;
@@ -2399,7 +2397,8 @@ no_descriptors: ;
     VK(vk->GetPipelineCacheData(vk->dev, pipeCache, &cache.len, cache.start));
 
     struct vk_cache_header header = {
-        .cache_version = vk_cache_version,
+        .magic = VK_CACHE_MAGIC,
+        .cache_version = VK_CACHE_VERSION,
         .compiler_version = p->spirv->compiler_version,
         .vert_spirv_len = vert.len,
         .frag_spirv_len = frag.len,
@@ -2410,8 +2409,6 @@ no_descriptors: ;
     PL_DEBUG(vk, "Pass statistics: size %zu, SPIR-V: vert %zu frag %zu comp %zu",
              cache.len, vert.len, frag.len, comp.len);
 
-    for (int i = 0; i < PL_ARRAY_SIZE(header.magic); i++)
-        header.magic[i] = vk_cache_magic[i];
     for (int i = 0; i < sizeof(p->spirv->name); i++)
         header.compiler[i] = p->spirv->name[i];
 
