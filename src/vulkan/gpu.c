@@ -140,13 +140,13 @@ static void vk_setup_formats(struct pl_gpu *gpu)
             continue;
 
         VkFormatProperties prop;
-        vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->tfmt, &prop);
+        vk->GetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->tfmt, &prop);
 
         // If wholly unsupported, try falling back to the emulation formats
         // for texture operations
         while (has_emu && !prop.optimalTilingFeatures && vk_fmt->emufmt) {
             vk_fmt = vk_fmt->emufmt;
-            vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->tfmt, &prop);
+            vk->GetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->tfmt, &prop);
         }
 
         VkFormatFeatureFlags texflags = prop.optimalTilingFeatures;
@@ -156,7 +156,7 @@ static void vk_setup_formats(struct pl_gpu *gpu)
             // than their texture representation. If they don't, assume their
             // buffer representation is nonsensical (e.g. r16f)
             if (vk_fmt->bfmt) {
-                vkGetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->bfmt, &prop);
+                vk->GetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->bfmt, &prop);
                 bufflags = prop.bufferFeatures;
             } else {
                 bufflags = 0;
@@ -236,7 +236,7 @@ static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
 {
     pl_handle_caps caps = 0;
 
-    if (!vk->vkGetPhysicalDeviceExternalSemaphorePropertiesKHR)
+    if (!vk->GetPhysicalDeviceExternalSemaphorePropertiesKHR)
         return caps;
 
     for (int i = 0; vk_sync_handle_list[i]; i++) {
@@ -251,7 +251,7 @@ static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
             .sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES_KHR,
         };
 
-        vk->vkGetPhysicalDeviceExternalSemaphorePropertiesKHR(vk->physd, &info, &props);
+        vk->GetPhysicalDeviceExternalSemaphorePropertiesKHR(vk->physd, &info, &props);
         VkExternalSemaphoreFeatureFlagsKHR flags = props.externalSemaphoreFeatures;
         if ((props.compatibleHandleTypes & info.handleType) &&
             (flags & VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT_KHR))
@@ -267,7 +267,7 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
 {
     pl_handle_caps caps = 0;
 
-    if (!vk->vkGetPhysicalDeviceExternalBufferPropertiesKHR)
+    if (!vk->GetPhysicalDeviceExternalBufferPropertiesKHR)
         return caps;
 
     for (int i = 0; vk_mem_handle_list[i]; i++) {
@@ -298,7 +298,7 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
         };
 
         VkResult res;
-        res = vk->vkGetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
+        res = vk->GetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
         if (res != VK_SUCCESS)
             continue;
 
@@ -366,7 +366,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
             .pNext = &id_props,
         };
 
-        vk->vkGetPhysicalDeviceProperties2KHR(vk->physd, &props);
+        vk->GetPhysicalDeviceProperties2KHR(vk->physd, &props);
         assert(sizeof(gpu->uuid) == VK_UUID_SIZE);
         memcpy(gpu->uuid, id_props.deviceUUID, sizeof(gpu->uuid));
 
@@ -376,7 +376,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         gpu->pci.function = pci_props.pciFunction;
     }
 
-    if (vk->vkCmdPushDescriptorSetKHR) {
+    if (vk->CmdPushDescriptorSetKHR) {
         VkPhysicalDevicePushDescriptorPropertiesKHR pushd = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR,
         };
@@ -386,7 +386,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
             .pNext = &pushd,
         };
 
-        vk->vkGetPhysicalDeviceProperties2KHR(vk->physd, &props);
+        vk->GetPhysicalDeviceProperties2KHR(vk->physd, &props);
         p->max_push_descriptors = pushd.maxPushDescriptors;
     }
 
@@ -438,7 +438,7 @@ error:
 // Boilerplate wrapper around vkCreateRenderPass to ensure passes remain
 // compatible. The renderpass will automatically transition the image out of
 // initialLayout and into finalLayout.
-static VkResult vk_create_render_pass(VkDevice dev, const struct pl_fmt *fmt,
+static VkResult vk_create_render_pass(struct vk_ctx *vk, const struct pl_fmt *fmt,
                                       VkAttachmentLoadOp loadOp,
                                       VkImageLayout initialLayout,
                                       VkImageLayout finalLayout,
@@ -468,7 +468,7 @@ static VkResult vk_create_render_pass(VkDevice dev, const struct pl_fmt *fmt,
         },
     };
 
-    return vkCreateRenderPass(dev, &rinfo, VK_ALLOC, out);
+    return vk->CreateRenderPass(vk->dev, &rinfo, VK_ALLOC, out);
 }
 
 // For pl_tex.priv
@@ -580,18 +580,18 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
             // No synchronization required, so we can safely transition out of
             // VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
             imgBarrier.srcAccessMask = 0;
-            vkCmdPipelineBarrier(cmd->buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                 stage, 0, 0, NULL, 0, NULL, 1, &imgBarrier);
+            vk->CmdPipelineBarrier(cmd->buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                   stage, 0, 0, NULL, 0, NULL, 1, &imgBarrier);
             break;
         case VK_WAIT_BARRIER:
             // Regular pipeline barrier is required
-            vkCmdPipelineBarrier(cmd->buf, tex_vk->sig_stage, stage, 0, 0, NULL,
-                                 0, NULL, 1, &imgBarrier);
+            vk->CmdPipelineBarrier(cmd->buf, tex_vk->sig_stage, stage, 0, 0, NULL,
+                                   0, NULL, 1, &imgBarrier);
             break;
         case VK_WAIT_EVENT:
             // We can/should use the VkEvent for synchronization
-            vkCmdWaitEvents(cmd->buf, 1, &event, tex_vk->sig_stage,
-                            stage, 0, NULL, 0, NULL, 1, &imgBarrier);
+            vk->CmdWaitEvents(cmd->buf, 1, &event, tex_vk->sig_stage,
+                              stage, 0, NULL, 0, NULL, 1, &imgBarrier);
             break;
         }
     }
@@ -627,11 +627,11 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
     pl_buf_pool_uninit(gpu, &tex_vk->pbo_read);
     vk_sync_deref(gpu, tex_vk->ext_sync);
     vk_signal_destroy(vk, &tex_vk->sig);
-    vkDestroyFramebuffer(vk->dev, tex_vk->framebuffer, VK_ALLOC);
-    vkDestroySampler(vk->dev, tex_vk->sampler, VK_ALLOC);
-    vkDestroyImageView(vk->dev, tex_vk->view, VK_ALLOC);
+    vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, VK_ALLOC);
+    vk->DestroySampler(vk->dev, tex_vk->sampler, VK_ALLOC);
+    vk->DestroyImageView(vk->dev, tex_vk->view, VK_ALLOC);
     if (!tex_vk->external_img) {
-        vkDestroyImage(vk->dev, tex_vk->img, VK_ALLOC);
+        vk->DestroyImage(vk->dev, tex_vk->img, VK_ALLOC);
         vk_free_memslice(p->alloc, tex_vk->mem);
     }
 
@@ -692,7 +692,7 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
             },
         };
 
-        VK(vkCreateImageView(vk->dev, &vinfo, VK_ALLOC, &tex_vk->view));
+        VK(vk->CreateImageView(vk->dev, &vinfo, VK_ALLOC, &tex_vk->view));
     }
 
     if (params->sampleable) {
@@ -712,14 +712,14 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
             .maxAnisotropy = 1.0,
         };
 
-        VK(vkCreateSampler(vk->dev, &sinfo, VK_ALLOC, &tex_vk->sampler));
+        VK(vk->CreateSampler(vk->dev, &sinfo, VK_ALLOC, &tex_vk->sampler));
     }
 
     if (params->renderable) {
         // Framebuffers need to be created against a specific render pass
         // layout, so we need to temporarily create a skeleton/dummy render
         // pass for vulkan to figure out the compatibility
-        VK(vk_create_render_pass(vk->dev, params->format,
+        VK(vk_create_render_pass(vk, params->format,
                                  VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                                  VK_IMAGE_LAYOUT_UNDEFINED,
                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -745,14 +745,14 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
             goto error;
         }
 
-        VK(vkCreateFramebuffer(vk->dev, &finfo, VK_ALLOC,
-                               &tex_vk->framebuffer));
+        VK(vk->CreateFramebuffer(vk->dev, &finfo, VK_ALLOC,
+                                 &tex_vk->framebuffer));
     }
 
     ret = true;
 
 error:
-    vkDestroyRenderPass(vk->dev, dummyPass, VK_ALLOC);
+    vk->DestroyRenderPass(vk->dev, dummyPass, VK_ALLOC);
     return ret;
 }
 
@@ -889,7 +889,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     };
 
     VkResult res;
-    res = vk->vkGetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
+    res = vk->GetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
     if (res == VK_ERROR_FORMAT_NOT_SUPPORTED) {
         goto error;
     } else {
@@ -918,12 +918,12 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         }
     }
 
-    VK(vkCreateImage(vk->dev, &iinfo, VK_ALLOC, &tex_vk->img));
+    VK(vk->CreateImage(vk->dev, &iinfo, VK_ALLOC, &tex_vk->img));
     tex_vk->usage_flags = iinfo.usage;
 
     VkMemoryPropertyFlags memFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     VkMemoryRequirements reqs;
-    vkGetImageMemoryRequirements(vk->dev, tex_vk->img, &reqs);
+    vk->GetImageMemoryRequirements(vk->dev, tex_vk->img, &reqs);
 
     struct vk_memslice *mem = &tex_vk->mem;
     if (params->import_handle) {
@@ -943,7 +943,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         if (!vk_malloc_generic(p->alloc, reqs, memFlags, params->export_handle, mem))
             goto error;
     }
-    VK(vkBindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
+    VK(vk->BindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
     if (params->import_handle)
         vk->ctx->suppress_errors_for_object = VK_NULL_HANDLE;
 
@@ -991,6 +991,8 @@ static void vk_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex
 static void vk_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
                          const float color[4])
 {
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
     struct pl_tex_vk *tex_vk = TA_PRIV(tex);
 
     struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
@@ -1012,8 +1014,8 @@ static void vk_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
         .layerCount = 1,
     };
 
-    vkCmdClearColorImage(cmd->buf, tex_vk->img, tex_vk->current_layout,
-                         &clearColor, 1, &range);
+    vk->CmdClearColorImage(cmd->buf, tex_vk->img, tex_vk->current_layout,
+                           &clearColor, 1, &range);
 
     tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
 }
@@ -1022,6 +1024,8 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
                         const struct pl_tex *dst, const struct pl_tex *src,
                         struct pl_rect3d dst_rc, struct pl_rect3d src_rc)
 {
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
     struct pl_tex_vk *src_vk = TA_PRIV(src);
     struct pl_tex_vk *dst_vk = TA_PRIV(dst);
 
@@ -1062,8 +1066,8 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
             },
         };
 
-        vkCmdCopyImage(cmd->buf, src_vk->img, src_vk->current_layout,
-                       dst_vk->img, dst_vk->current_layout, 1, &region);
+        vk->CmdCopyImage(cmd->buf, src_vk->img, src_vk->current_layout,
+                         dst_vk->img, dst_vk->current_layout, 1, &region);
     } else {
         VkImageBlit region = {
             .srcSubresource = layers,
@@ -1074,9 +1078,9 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
                            {dst_rc.x1, dst_rc.y1, dst_rc.z1}},
         };
 
-        vkCmdBlitImage(cmd->buf, src_vk->img, src_vk->current_layout,
-                       dst_vk->img, dst_vk->current_layout, 1, &region,
-                       filters[src->params.sample_mode]);
+        vk->CmdBlitImage(cmd->buf, src_vk->img, src_vk->current_layout,
+                         dst_vk->img, dst_vk->current_layout, 1, &region,
+                         filters[src->params.sample_mode]);
     }
 
     tex_signal(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -1226,7 +1230,7 @@ static void vk_buf_deref(const struct pl_gpu *gpu, struct pl_buf *buf)
 
     if (--buf_vk->refcount == 0) {
         vk_signal_destroy(vk, &buf_vk->sig);
-        vkDestroyBufferView(vk->dev, buf_vk->view, VK_ALLOC);
+        vk->DestroyBufferView(vk->dev, buf_vk->view, VK_ALLOC);
         vk_free_memslice(p->alloc, buf_vk->slice.mem);
         talloc_free(buf);
     }
@@ -1274,7 +1278,7 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                         "avoid pl_buf_write.");
             }
 
-            VK(vkFlushMappedMemoryRanges(vk->dev, 1, &(struct VkMappedMemoryRange) {
+            VK(vk->FlushMappedMemoryRanges(vk->dev, 1, &(struct VkMappedMemoryRange) {
                 .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
                 .memory = buf_vk->slice.mem.vkmem,
                 .offset = buf_vk->slice.mem.offset,
@@ -1303,19 +1307,19 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
             // VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
             buffBarrier.srcAccessMask = 0;
             src_stages |= VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            vkCmdPipelineBarrier(cmd->buf, src_stages, stage, 0, 0, NULL,
-                                 1, &buffBarrier, 0, NULL);
+            vk->CmdPipelineBarrier(cmd->buf, src_stages, stage, 0, 0, NULL,
+                                   1, &buffBarrier, 0, NULL);
             break;
         case VK_WAIT_BARRIER:
             // Regular pipeline barrier is required
-            vkCmdPipelineBarrier(cmd->buf, buf_vk->sig_stage | src_stages,
-                                 stage, 0, 0, NULL, 1, &buffBarrier, 0, NULL);
+            vk->CmdPipelineBarrier(cmd->buf, buf_vk->sig_stage | src_stages,
+                                   stage, 0, 0, NULL, 1, &buffBarrier, 0, NULL);
             break;
         case VK_WAIT_EVENT:
             // We can/should use the VkEvent for synchronization
             pl_assert(!src_stages);
-            vkCmdWaitEvents(cmd->buf, 1, &event, buf_vk->sig_stage,
-                            stage, 0, NULL, 1, &buffBarrier, 0, NULL);
+            vk->CmdWaitEvents(cmd->buf, 1, &event, buf_vk->sig_stage,
+                              stage, 0, NULL, 1, &buffBarrier, 0, NULL);
             break;
         }
     }
@@ -1339,7 +1343,7 @@ static void buf_signal(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
 static void invalidate_memslice(struct vk_ctx *vk, const struct vk_memslice *mem)
 {
-    VK(vkInvalidateMappedMemoryRanges(vk->dev, 1, &(VkMappedMemoryRange) {
+    VK(vk->InvalidateMappedMemoryRanges(vk->dev, 1, &(VkMappedMemoryRange) {
         .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
         .memory = mem->vkmem,
         .offset = mem->offset,
@@ -1381,9 +1385,9 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         .size = size,
     };
 
-    vkCmdPipelineBarrier(cmd->buf, buf_vk->sig_stage,
-                         VK_PIPELINE_STAGE_HOST_BIT, 0,
-                         0, NULL, 1, &buffBarrier, 0, NULL);
+    vk->CmdPipelineBarrier(cmd->buf, buf_vk->sig_stage,
+                           VK_PIPELINE_STAGE_HOST_BIT, 0,
+                           0, NULL, 1, &buffBarrier, 0, NULL);
 
     // Invalidate the mapped memory as soon as this barrier completes
     if (buf_vk->slice.mem.data && !buf_vk->slice.mem.coherent)
@@ -1396,6 +1400,8 @@ MAKE_LAZY_DESTRUCTOR(vk_buf_destroy, struct pl_buf);
 static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                          size_t offset, const void *data, size_t size)
 {
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
     struct pl_buf_vk *buf_vk = TA_PRIV(buf);
 
     // For host-mapped buffers, we can just directly memcpy the buffer contents.
@@ -1429,17 +1435,17 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
         }
 
         for (size_t xfer = 0; xfer < size_base; xfer += max_transfer) {
-            vkCmdUpdateBuffer(cmd->buf, buf_vk->slice.buf,
-                              buf_offset + xfer,
-                              PL_MIN(size_base, max_transfer),
-                              (void *) ((uint8_t *) data + xfer));
+            vk->CmdUpdateBuffer(cmd->buf, buf_vk->slice.buf,
+                                buf_offset + xfer,
+                                PL_MIN(size_base, max_transfer),
+                                (void *) ((uint8_t *) data + xfer));
         }
 
         if (size_rem) {
             uint8_t tail[4] = {0};
             memcpy(tail, data, size_rem);
-            vkCmdUpdateBuffer(cmd->buf, buf_vk->slice.buf, buf_offset + size_base,
-                              sizeof(tail), tail);
+            vk->CmdUpdateBuffer(cmd->buf, buf_vk->slice.buf, buf_offset + size_base,
+                                sizeof(tail), tail);
         }
 
         pl_assert(!buf->params.host_readable); // no flush needed due to this
@@ -1608,7 +1614,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
             .range = params->size,
         };
 
-        VK(vkCreateBufferView(vk->dev, &vinfo, VK_ALLOC, &buf_vk->view));
+        VK(vk->CreateBufferView(vk->dev, &vinfo, VK_ALLOC, &buf_vk->view));
     }
 
     if (params->initial_data)
@@ -1696,6 +1702,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
                           const struct pl_tex_transfer_params *params)
 {
     struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
     const struct pl_tex *tex = params->tex;
     struct pl_tex_vk *tex_vk = TA_PRIV(tex);
 
@@ -1746,8 +1753,8 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
                     false);
         buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT, 0, size, false);
-        vkCmdCopyBuffer(cmd->buf, buf_vk->slice.buf, tbuf_vk->slice.buf,
-                        1, &region);
+        vk->CmdCopyBuffer(cmd->buf, buf_vk->slice.buf, tbuf_vk->slice.buf,
+                          1, &region);
 
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_signal(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -1784,8 +1791,8 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, false);
-        vkCmdCopyBufferToImage(cmd->buf, buf_vk->slice.buf, tex_vk->img,
-                               tex_vk->current_layout, 1, &region);
+        vk->CmdCopyBufferToImage(cmd->buf, buf_vk->slice.buf, tex_vk->img,
+                                 tex_vk->current_layout, 1, &region);
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
     }
@@ -1800,6 +1807,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
                             const struct pl_tex_transfer_params *params)
 {
     struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
     const struct pl_tex *tex = params->tex;
     struct pl_tex_vk *tex_vk = TA_PRIV(tex);
 
@@ -1856,8 +1864,8 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size,
                     false);
-        vkCmdCopyBuffer(cmd->buf, tbuf_vk->slice.buf, buf_vk->slice.buf,
-                        1, &region);
+        vk->CmdCopyBuffer(cmd->buf, tbuf_vk->slice.buf, buf_vk->slice.buf,
+                          1, &region);
         buf_signal(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_flush(gpu, cmd, buf, params->buf_offset, size);
@@ -1887,8 +1895,8 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_READ_BIT,
                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, false);
-        vkCmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->current_layout,
-                               buf_vk->slice.buf, 1, &region);
+        vk->CmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->current_layout,
+                                 buf_vk->slice.buf, 1, &region);
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_flush(gpu, cmd, buf, params->buf_offset, size);
@@ -1943,11 +1951,11 @@ static void vk_pass_destroy(const struct pl_gpu *gpu, struct pl_pass *pass)
     struct pl_pass_vk *pass_vk = TA_PRIV(pass);
 
     pl_buf_pool_uninit(gpu, &pass_vk->vbo);
-    vkDestroyPipeline(vk->dev, pass_vk->pipe, VK_ALLOC);
-    vkDestroyRenderPass(vk->dev, pass_vk->renderPass, VK_ALLOC);
-    vkDestroyPipelineLayout(vk->dev, pass_vk->pipeLayout, VK_ALLOC);
-    vkDestroyDescriptorPool(vk->dev, pass_vk->dsPool, VK_ALLOC);
-    vkDestroyDescriptorSetLayout(vk->dev, pass_vk->dsLayout, VK_ALLOC);
+    vk->DestroyPipeline(vk->dev, pass_vk->pipe, VK_ALLOC);
+    vk->DestroyRenderPass(vk->dev, pass_vk->renderPass, VK_ALLOC);
+    vk->DestroyPipelineLayout(vk->dev, pass_vk->pipeLayout, VK_ALLOC);
+    vk->DestroyDescriptorPool(vk->dev, pass_vk->dsPool, VK_ALLOC);
+    vk->DestroyDescriptorSetLayout(vk->dev, pass_vk->dsLayout, VK_ALLOC);
 
     talloc_free(pass);
 }
@@ -2107,8 +2115,8 @@ static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
                 num_desc, p->max_push_descriptors);
     }
 
-    VK(vkCreateDescriptorSetLayout(vk->dev, &dinfo, VK_ALLOC,
-                                   &pass_vk->dsLayout));
+    VK(vk->CreateDescriptorSetLayout(vk->dev, &dinfo, VK_ALLOC,
+                                     &pass_vk->dsLayout));
 
     if (!pass_vk->use_pushd) {
         VkDescriptorPoolSize *dsPoolSizes = NULL;
@@ -2133,7 +2141,7 @@ static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
                 .poolSizeCount = poolSizeCount,
             };
 
-            VK(vkCreateDescriptorPool(vk->dev, &pinfo, VK_ALLOC, &pass_vk->dsPool));
+            VK(vk->CreateDescriptorPool(vk->dev, &pinfo, VK_ALLOC, &pass_vk->dsPool));
 
             VkDescriptorSetLayout layouts[NUM_DS];
             for (int i = 0; i < NUM_DS; i++)
@@ -2146,7 +2154,7 @@ static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
                 .pSetLayouts = layouts,
             };
 
-            VK(vkAllocateDescriptorSets(vk->dev, &ainfo, pass_vk->dss));
+            VK(vk->AllocateDescriptorSets(vk->dev, &ainfo, pass_vk->dss));
         }
     }
 
@@ -2164,8 +2172,8 @@ no_descriptors: ;
         },
     };
 
-    VK(vkCreatePipelineLayout(vk->dev, &linfo, VK_ALLOC,
-                              &pass_vk->pipeLayout));
+    VK(vk->CreatePipelineLayout(vk->dev, &linfo, VK_ALLOC,
+                                &pass_vk->pipeLayout));
 
     struct bstr vert = {0}, frag = {0}, comp = {0}, pipecache = {0};
     if (vk_use_cached_program(params, p->spirv, &vert, &frag, &comp, &pipecache)) {
@@ -2196,7 +2204,7 @@ no_descriptors: ;
         .initialDataSize = pipecache.len,
     };
 
-    VK(vkCreatePipelineCache(vk->dev, &pcinfo, VK_ALLOC, &pipeCache));
+    VK(vk->CreatePipelineCache(vk->dev, &pcinfo, VK_ALLOC, &pipeCache));
 
     VkShaderModuleCreateInfo sinfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -2206,11 +2214,11 @@ no_descriptors: ;
     case PL_PASS_RASTER: {
         sinfo.pCode = (uint32_t *) vert.start;
         sinfo.codeSize = vert.len;
-        VK(vkCreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &vert_shader));
+        VK(vk->CreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &vert_shader));
 
         sinfo.pCode = (uint32_t *) frag.start;
         sinfo.codeSize = frag.len;
-        VK(vkCreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &frag_shader));
+        VK(vk->CreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &frag_shader));
 
         VkVertexInputAttributeDescription *attrs = talloc_array(tmp,
                 VkVertexInputAttributeDescription, params->num_vertex_attribs);
@@ -2259,7 +2267,7 @@ no_descriptors: ;
             loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         }
 
-        VK(vk_create_render_pass(vk->dev, texparams.format, loadOp,
+        VK(vk_create_render_pass(vk, texparams.format, loadOp,
                                  pass_vk->initialLayout, pass_vk->finalLayout,
                                  &pass_vk->renderPass));
 
@@ -2357,14 +2365,14 @@ no_descriptors: ;
             .renderPass = pass_vk->renderPass,
         };
 
-        VK(vkCreateGraphicsPipelines(vk->dev, pipeCache, 1, &cinfo,
-                                     VK_ALLOC, &pass_vk->pipe));
+        VK(vk->CreateGraphicsPipelines(vk->dev, pipeCache, 1, &cinfo,
+                                       VK_ALLOC, &pass_vk->pipe));
         break;
     }
     case PL_PASS_COMPUTE: {
         sinfo.pCode = (uint32_t *)comp.start;
         sinfo.codeSize = comp.len;
-        VK(vkCreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &comp_shader));
+        VK(vk->CreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &comp_shader));
 
         VkComputePipelineCreateInfo cinfo = {
             .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
@@ -2377,8 +2385,8 @@ no_descriptors: ;
             .layout = pass_vk->pipeLayout,
         };
 
-        VK(vkCreateComputePipelines(vk->dev, pipeCache, 1, &cinfo,
-                                    VK_ALLOC, &pass_vk->pipe));
+        VK(vk->CreateComputePipelines(vk->dev, pipeCache, 1, &cinfo,
+                                      VK_ALLOC, &pass_vk->pipe));
         break;
     }
     default: abort();
@@ -2386,9 +2394,9 @@ no_descriptors: ;
 
     // Update params->cached_program
     struct bstr cache = {0};
-    VK(vkGetPipelineCacheData(vk->dev, pipeCache, &cache.len, NULL));
+    VK(vk->GetPipelineCacheData(vk->dev, pipeCache, &cache.len, NULL));
     cache.start = talloc_size(tmp, cache.len);
-    VK(vkGetPipelineCacheData(vk->dev, pipeCache, &cache.len, cache.start));
+    VK(vk->GetPipelineCacheData(vk->dev, pipeCache, &cache.len, cache.start));
 
     struct vk_cache_header header = {
         .cache_version = vk_cache_version,
@@ -2426,10 +2434,10 @@ error:
 
 #undef NUM_DS
 
-    vkDestroyShaderModule(vk->dev, vert_shader, VK_ALLOC);
-    vkDestroyShaderModule(vk->dev, frag_shader, VK_ALLOC);
-    vkDestroyShaderModule(vk->dev, comp_shader, VK_ALLOC);
-    vkDestroyPipelineCache(vk->dev, pipeCache, VK_ALLOC);
+    vk->DestroyShaderModule(vk->dev, vert_shader, VK_ALLOC);
+    vk->DestroyShaderModule(vk->dev, frag_shader, VK_ALLOC);
+    vk->DestroyShaderModule(vk->dev, comp_shader, VK_ALLOC);
+    vk->DestroyPipelineCache(vk->dev, pipeCache, VK_ALLOC);
     talloc_free(tmp);
     return pass;
 }
@@ -2656,8 +2664,8 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         vk_update_descriptor(gpu, cmd, pass, params->desc_bindings[i], ds, i);
 
     if (!pass_vk->use_pushd) {
-        vkUpdateDescriptorSets(vk->dev, pass->params.num_descriptors,
-                               pass_vk->dswrite, 0, NULL);
+        vk->UpdateDescriptorSets(vk->dev, pass->params.num_descriptors,
+                                 pass_vk->dswrite, 0, NULL);
     }
 
     // Bind the pipeline, descriptor set, etc.
@@ -2666,25 +2674,25 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         [PL_PASS_COMPUTE] = VK_PIPELINE_BIND_POINT_COMPUTE,
     };
 
-    vkCmdBindPipeline(cmd->buf, bindPoint[pass->params.type], pass_vk->pipe);
+    vk->CmdBindPipeline(cmd->buf, bindPoint[pass->params.type], pass_vk->pipe);
 
     if (ds) {
-        vkCmdBindDescriptorSets(cmd->buf, bindPoint[pass->params.type],
-                                pass_vk->pipeLayout, 0, 1, &ds, 0, NULL);
+        vk->CmdBindDescriptorSets(cmd->buf, bindPoint[pass->params.type],
+                                  pass_vk->pipeLayout, 0, 1, &ds, 0, NULL);
     }
 
     if (pass_vk->use_pushd) {
-        vk->vkCmdPushDescriptorSetKHR(cmd->buf, bindPoint[pass->params.type],
-                                      pass_vk->pipeLayout, 0,
-                                      pass->params.num_descriptors,
-                                      pass_vk->dswrite);
+        vk->CmdPushDescriptorSetKHR(cmd->buf, bindPoint[pass->params.type],
+                                    pass_vk->pipeLayout, 0,
+                                    pass->params.num_descriptors,
+                                    pass_vk->dswrite);
     }
 
     if (pass->params.push_constants_size) {
-        vkCmdPushConstants(cmd->buf, pass_vk->pipeLayout,
-                           stageFlags[pass->params.type], 0,
-                           pass->params.push_constants_size,
-                           params->push_constants);
+        vk->CmdPushConstants(cmd->buf, pass_vk->pipeLayout,
+                             stageFlags[pass->params.type], 0,
+                             pass->params.push_constants_size,
+                             params->push_constants);
     }
 
     switch (pass->params.type) {
@@ -2696,8 +2704,8 @@ static void vk_pass_run(const struct pl_gpu *gpu,
                     VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT, 0, vert->params.size,
                     false);
 
-        vkCmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->slice.buf,
-                               &vert_vk->slice.mem.offset);
+        vk->CmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->slice.buf,
+                                 &vert_vk->slice.mem.offset);
 
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                     VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -2715,8 +2723,8 @@ static void vk_pass_run(const struct pl_gpu *gpu,
             .extent = {pl_rect_w(params->scissors), pl_rect_h(params->scissors)},
         };
 
-        vkCmdSetViewport(cmd->buf, 0, 1, &viewport);
-        vkCmdSetScissor(cmd->buf, 0, 1, &scissor);
+        vk->CmdSetViewport(cmd->buf, 0, 1, &viewport);
+        vk->CmdSetScissor(cmd->buf, 0, 1, &scissor);
 
         VkRenderPassBeginInfo binfo = {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -2725,9 +2733,9 @@ static void vk_pass_run(const struct pl_gpu *gpu,
             .renderArea = (VkRect2D){{0, 0}, {tex->params.w, tex->params.h}},
         };
 
-        vkCmdBeginRenderPass(cmd->buf, &binfo, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdDraw(cmd->buf, params->vertex_count, 1, 0, 0);
-        vkCmdEndRenderPass(cmd->buf);
+        vk->CmdBeginRenderPass(cmd->buf, &binfo, VK_SUBPASS_CONTENTS_INLINE);
+        vk->CmdDraw(cmd->buf, params->vertex_count, 1, 0, 0);
+        vk->CmdEndRenderPass(cmd->buf);
 
         buf_signal(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
 
@@ -2737,9 +2745,9 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         break;
     }
     case PL_PASS_COMPUTE:
-        vkCmdDispatch(cmd->buf, params->compute_groups[0],
-                      params->compute_groups[1],
-                      params->compute_groups[2]);
+        vk->CmdDispatch(cmd->buf, params->compute_groups[0],
+                        params->compute_groups[1],
+                        params->compute_groups[2]);
         break;
     default: abort();
     };
@@ -2789,8 +2797,8 @@ static void vk_sync_destroy(const struct pl_gpu *gpu, struct pl_sync *sync)
     // PL_HANDLE_WIN32_KMT is just an identifier. It doesn't get closed.
 #endif
 
-    vkDestroySemaphore(vk->dev, sync_vk->wait, VK_ALLOC);
-    vkDestroySemaphore(vk->dev, sync_vk->signal, VK_ALLOC);
+    vk->DestroySemaphore(vk->dev, sync_vk->wait, VK_ALLOC);
+    vk->DestroySemaphore(vk->dev, sync_vk->signal, VK_ALLOC);
 
     talloc_free(sync);
 }
@@ -2841,8 +2849,8 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
         .pNext = &einfo,
     };
 
-    VK(vkCreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sync_vk->wait));
-    VK(vkCreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sync_vk->signal));
+    VK(vk->CreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sync_vk->wait));
+    VK(vk->CreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sync_vk->signal));
 
 #ifdef VK_HAVE_UNIX
     if (handle_type == PL_HANDLE_FD) {
@@ -2852,10 +2860,10 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
             .handleType = einfo.handleTypes,
         };
 
-        VK(vk->vkGetSemaphoreFdKHR(vk->dev, &finfo, &sync->wait_handle.fd));
+        VK(vk->GetSemaphoreFdKHR(vk->dev, &finfo, &sync->wait_handle.fd));
 
         finfo.semaphore = sync_vk->signal;
-        VK(vk->vkGetSemaphoreFdKHR(vk->dev, &finfo, &sync->signal_handle.fd));
+        VK(vk->GetSemaphoreFdKHR(vk->dev, &finfo, &sync->signal_handle.fd));
     }
 #endif
 
@@ -2869,12 +2877,12 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
             .handleType = einfo.handleTypes,
         };
 
-        VK(vk->vkGetSemaphoreWin32HandleKHR(vk->dev, &handle_info,
-                                            &sync->wait_handle.handle));
+        VK(vk->GetSemaphoreWin32HandleKHR(vk->dev, &handle_info,
+                                          &sync->wait_handle.handle));
 
         handle_info.semaphore = sync_vk->signal;
-        VK(vk->vkGetSemaphoreWin32HandleKHR(vk->dev, &handle_info,
-                                            &sync->signal_handle.handle));
+        VK(vk->GetSemaphoreWin32HandleKHR(vk->dev, &handle_info,
+                                          &sync->signal_handle.handle));
     }
 #endif
 

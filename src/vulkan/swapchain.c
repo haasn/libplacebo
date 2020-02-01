@@ -163,9 +163,9 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
         }
     }
 
-    VK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physd, surf, &num, NULL));
+    VK(vk->GetPhysicalDeviceSurfaceFormatsKHR(vk->physd, surf, &num, NULL));
     formats = talloc_array(NULL, VkSurfaceFormatKHR, num);
-    VK(vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physd, surf, &num, formats));
+    VK(vk->GetPhysicalDeviceSurfaceFormatsKHR(vk->physd, surf, &num, formats));
 
     PL_DEBUG(gpu, "Available surface formats:");
     for (int i = 0; i < num; i++) {
@@ -291,11 +291,11 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
     // Make sure the swapchain present mode is supported
     VkPresentModeKHR *modes = NULL;
     int num_modes;
-    VK(vkGetPhysicalDeviceSurfacePresentModesKHR(vk->physd, p->surf,
-                                                 &num_modes, NULL));
+    VK(vk->GetPhysicalDeviceSurfacePresentModesKHR(vk->physd, p->surf,
+                                                   &num_modes, NULL));
     modes = talloc_array(NULL, VkPresentModeKHR, num_modes);
-    VK(vkGetPhysicalDeviceSurfacePresentModesKHR(vk->physd, p->surf,
-                                                 &num_modes, modes));
+    VK(vk->GetPhysicalDeviceSurfacePresentModesKHR(vk->physd, p->surf,
+                                                   &num_modes, modes));
 
     bool supported = false;
     for (int i = 0; i < num_modes; i++)
@@ -327,11 +327,11 @@ static void vk_sw_destroy(const struct pl_swapchain *sw)
     for (int i = 0; i < p->num_images; i++)
         pl_tex_destroy(gpu, &p->images[i]);
     for (int i = 0; i < p->num_sems; i++) {
-        vkDestroySemaphore(vk->dev, p->sems_in[i], VK_ALLOC);
-        vkDestroySemaphore(vk->dev, p->sems_out[i], VK_ALLOC);
+        vk->DestroySemaphore(vk->dev, p->sems_in[i], VK_ALLOC);
+        vk->DestroySemaphore(vk->dev, p->sems_out[i], VK_ALLOC);
     }
 
-    vkDestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
+    vk->DestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
     talloc_free((void *) sw);
 }
 
@@ -348,7 +348,7 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
 
     // Query the supported capabilities and update this struct as needed
     VkSurfaceCapabilitiesKHR caps;
-    VK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk->physd, p->surf, &caps));
+    VK(vk->GetPhysicalDeviceSurfaceCapabilitiesKHR(vk->physd, p->surf, &caps));
 
     // Check for hidden/invisible window
     if (!caps.currentExtent.width || !caps.currentExtent.height) {
@@ -451,7 +451,7 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     // format supported usage flags
     info->imageUsage = caps.supportedUsageFlags;
     VkFormatProperties fmtprop;
-    vkGetPhysicalDeviceFormatProperties(vk->physd, info->imageFormat, &fmtprop);
+    vk->GetPhysicalDeviceFormatProperties(vk->physd, info->imageFormat, &fmtprop);
 
 #define CHECK(usage, feature) \
     if (!((fmtprop.optimalTilingFeatures & VK_FORMAT_FEATURE_##feature##_BIT))) \
@@ -469,7 +469,7 @@ error:
 static void destroy_swapchain(struct vk_ctx *vk, struct priv *p)
 {
     assert(p->old_swapchain);
-    vkDestroySwapchainKHR(vk->dev, p->old_swapchain, VK_ALLOC);
+    vk->DestroySwapchainKHR(vk->dev, p->old_swapchain, VK_ALLOC);
     p->old_swapchain = VK_NULL_HANDLE;
 }
 
@@ -498,7 +498,7 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
             sinfo.imageExtent.width,
             sinfo.imageExtent.height);
 
-    VK(vkCreateSwapchainKHR(vk->dev, &sinfo, VK_ALLOC, &p->swapchain));
+    VK(vk->CreateSwapchainKHR(vk->dev, &sinfo, VK_ALLOC, &p->swapchain));
 
     p->suboptimal = false;
     p->cur_width = sinfo.imageExtent.width;
@@ -512,9 +512,9 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
     }
 
     // Get the new swapchain images
-    VK(vkGetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, NULL));
+    VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, NULL));
     vkimages = talloc_array(NULL, VkImage, num_images);
-    VK(vkGetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, vkimages));
+    VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, vkimages));
 
     // If needed, allocate some more semaphores
     while (num_images > p->num_sems) {
@@ -522,8 +522,8 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
         static const VkSemaphoreCreateInfo seminfo = {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         };
-        VK(vkCreateSemaphore(vk->dev, &seminfo, VK_ALLOC, &sem_in));
-        VK(vkCreateSemaphore(vk->dev, &seminfo, VK_ALLOC, &sem_out));
+        VK(vk->CreateSemaphore(vk->dev, &seminfo, VK_ALLOC, &sem_in));
+        VK(vk->CreateSemaphore(vk->dev, &seminfo, VK_ALLOC, &sem_out));
 
         int idx = p->num_sems++;
         TARRAY_GROW(sw, p->sems_in, idx);
@@ -567,7 +567,7 @@ error:
     PL_ERR(vk, "Failed (re)creating swapchain!");
     talloc_free(vkimages);
     if (p->swapchain != sinfo.oldSwapchain) {
-        vkDestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
+        vk->DestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
         p->swapchain = VK_NULL_HANDLE;
         p->cur_width = p->cur_height = 0;
         p->suboptimal = false;
@@ -594,8 +594,8 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
 
     for (int attempts = 0; attempts < 2; attempts++) {
         uint32_t imgidx = 0;
-        VkResult res = vkAcquireNextImageKHR(vk->dev, p->swapchain, UINT64_MAX,
-                                             sem_in, VK_NULL_HANDLE, &imgidx);
+        VkResult res = vk->AcquireNextImageKHR(vk->dev, p->swapchain, UINT64_MAX,
+                                               sem_in, VK_NULL_HANDLE, &imgidx);
 
         switch (res) {
         case VK_SUBOPTIMAL_KHR:
@@ -681,7 +681,7 @@ static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
     };
 
     PL_TRACE(vk, "vkQueuePresentKHR waits on %p", (void *) sem_out);
-    VkResult res = vkQueuePresentKHR(queue, &pinfo);
+    VkResult res = vk->QueuePresentKHR(queue, &pinfo);
     switch (res) {
     case VK_SUBOPTIMAL_KHR:
         p->suboptimal = true;

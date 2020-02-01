@@ -108,7 +108,7 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
 
     pl_assert(slab->used == 0);
     if (!slab->imported) {
-        vkDestroyBuffer(vk->dev, slab->buffer, VK_ALLOC);
+        vk->DestroyBuffer(vk->dev, slab->buffer, VK_ALLOC);
 
         switch (slab->handle_type) {
         case PL_HANDLE_FD:
@@ -136,7 +136,7 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
     }
 
     // also implicitly unmaps the memory if needed
-    vkFreeMemory(vk->dev, slab->mem, VK_ALLOC);
+    vk->FreeMemory(vk->dev, slab->mem, VK_ALLOC);
 
     talloc_free(slab);
 }
@@ -172,7 +172,7 @@ static bool buf_external_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
     if (!handle_type)
         return true;
 
-    if (!vk->vkGetPhysicalDeviceExternalBufferPropertiesKHR)
+    if (!vk->GetPhysicalDeviceExternalBufferPropertiesKHR)
         return false;
 
     VkPhysicalDeviceExternalBufferInfoKHR info = {
@@ -185,7 +185,7 @@ static bool buf_external_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
         .sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES_KHR,
     };
 
-    vk->vkGetPhysicalDeviceExternalBufferPropertiesKHR(vk->physd, &info, &props);
+    vk->GetPhysicalDeviceExternalBufferPropertiesKHR(vk->physd, &info, &props);
     return vk_external_mem_check(&props.externalMemoryProperties, handle_type,
                                  import);
 }
@@ -259,10 +259,10 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
             goto error;
         }
 
-        VK(vkCreateBuffer(vk->dev, &binfo, VK_ALLOC, &slab->buffer));
+        VK(vk->CreateBuffer(vk->dev, &binfo, VK_ALLOC, &slab->buffer));
 
         VkMemoryRequirements reqs;
-        vkGetBufferMemoryRequirements(vk->dev, slab->buffer, &reqs);
+        vk->GetBufferMemoryRequirements(vk->dev, slab->buffer, &reqs);
         minfo.allocationSize = reqs.size; // this can be larger than slab->size
         typeBits &= reqs.memoryTypeBits;  // this can restrict the types
     }
@@ -277,15 +277,15 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
             (int) type.heapIndex);
 
     minfo.memoryTypeIndex = index;
-    VK(vkAllocateMemory(vk->dev, &minfo, VK_ALLOC, &slab->mem));
+    VK(vk->AllocateMemory(vk->dev, &minfo, VK_ALLOC, &slab->mem));
 
     if (heap->flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-        VK(vkMapMemory(vk->dev, slab->mem, 0, VK_WHOLE_SIZE, 0, &slab->data));
+        VK(vk->MapMemory(vk->dev, slab->mem, 0, VK_WHOLE_SIZE, 0, &slab->data));
         slab->coherent = heap->flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     }
 
     if (slab->buffer)
-        VK(vkBindBufferMemory(vk->dev, slab->buffer, slab->mem, 0));
+        VK(vk->BindBufferMemory(vk->dev, slab->buffer, slab->mem, 0));
 
 #ifdef VK_HAVE_UNIX
     if (slab->handle_type == PL_HANDLE_FD ||
@@ -297,7 +297,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
             .handleType = ext_info.handleTypes,
         };
 
-        VK(vk->vkGetMemoryFdKHR(vk->dev, &fd_info, &slab->handle.fd));
+        VK(vk->GetMemoryFdKHR(vk->dev, &fd_info, &slab->handle.fd));
     }
 #endif
 
@@ -311,8 +311,8 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
             .handleType = ext_info.handleTypes,
         };
 
-        VK(vk->vkGetMemoryWin32HandleKHR(vk->dev, &handle_info,
-                                         &slab->handle.handle));
+        VK(vk->GetMemoryWin32HandleKHR(vk->dev, &handle_info,
+                                       &slab->handle.handle));
     }
 #endif
 
@@ -387,7 +387,7 @@ static void heap_uninit(struct vk_ctx *vk, struct vk_heap *heap)
 struct vk_malloc *vk_malloc_create(struct vk_ctx *vk)
 {
     struct vk_malloc *ma = talloc_zero(NULL, struct vk_malloc);
-    vkGetPhysicalDeviceMemoryProperties(vk->physd, &ma->props);
+    vk->GetPhysicalDeviceMemoryProperties(vk->physd, &ma->props);
     ma->vk = vk;
 
     PL_INFO(vk, "Memory heaps supported by device:");
@@ -642,7 +642,7 @@ bool vk_malloc_import(struct vk_malloc *ma, enum pl_handle_type handle_type,
     if (handle_type != PL_HANDLE_DMA_BUF) {
         PL_ERR(vk, "Importing external memory is only supported for PL_HANDLE_DMA_BUF.");
         return false;
-    } else if (!vk->vkGetMemoryFdPropertiesKHR) {
+    } else if (!vk->GetMemoryFdPropertiesKHR) {
         PL_ERR(vk, "Importing external memory requires %s.",
                VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
         return false;
@@ -653,10 +653,10 @@ bool vk_malloc_import(struct vk_malloc *ma, enum pl_handle_type handle_type,
         .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
     };
 
-    VK(vk->vkGetMemoryFdPropertiesKHR(vk->dev,
-                                      vk_mem_handle_type(handle_type),
-                                      shared_mem->handle.fd,
-                                      &fdprops));
+    VK(vk->GetMemoryFdPropertiesKHR(vk->dev,
+                                    vk_mem_handle_type(handle_type),
+                                    shared_mem->handle.fd,
+                                    &fdprops));
 
     // We pick the first compatible memory type because we have no other basis
     // for choosing if there is more than one available.
@@ -689,7 +689,7 @@ bool vk_malloc_import(struct vk_malloc *ma, enum pl_handle_type handle_type,
         .memoryTypeIndex = first_mem_type - 1,
     };
 
-    VK(vkAllocateMemory(vk->dev, &ainfo, VK_ALLOC, &vkmem));
+    VK(vk->AllocateMemory(vk->dev, &ainfo, VK_ALLOC, &vkmem));
     // fd ownership is transferred at this point.
 
     struct vk_slab *slab = talloc_ptrtype(NULL, slab);

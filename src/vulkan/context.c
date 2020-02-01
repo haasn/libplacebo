@@ -22,7 +22,7 @@
 
 const struct pl_vk_inst_params pl_vk_inst_default_params = {0};
 
-struct vk_ext_fun {
+struct vk_fun {
     const char *name;
     size_t offset;
     bool device_level;
@@ -30,16 +30,16 @@ struct vk_ext_fun {
 
 struct vk_ext {
     const char *name;
-    struct vk_ext_fun *funs;
+    struct vk_fun *funs;
 };
 
 #define VK_INST_FUN(N)                      \
-    { .name = #N,                           \
+    { .name = "vk" #N,                      \
       .offset = offsetof(struct vk_ctx, N), \
     }
 
 #define VK_DEV_FUN(N)                       \
-    { .name = #N,                           \
+    { .name = "vk" #N,                      \
       .offset = offsetof(struct vk_ctx, N), \
       .device_level = true,                 \
     }
@@ -51,10 +51,23 @@ static const char *vk_instance_extensions[] = {
     VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
 };
 
-// Functions associated with mandatory instance extensions
-static const struct vk_ext_fun vk_inst_funs[] = {
-    VK_INST_FUN(vkGetPhysicalDeviceProperties2KHR),
-    VK_INST_FUN(vkGetPhysicalDeviceImageFormatProperties2KHR),
+// List of mandatory instance-level function pointers, including functions
+// associated with mandatory instance extensions
+static const struct vk_fun vk_inst_funs[] = {
+    VK_INST_FUN(CreateDevice),
+    VK_INST_FUN(EnumerateDeviceExtensionProperties),
+    VK_INST_FUN(GetDeviceProcAddr),
+    VK_INST_FUN(GetPhysicalDeviceFeatures),
+    VK_INST_FUN(GetPhysicalDeviceFormatProperties),
+    VK_INST_FUN(GetPhysicalDeviceImageFormatProperties2KHR),
+    VK_INST_FUN(GetPhysicalDeviceMemoryProperties),
+    VK_INST_FUN(GetPhysicalDeviceProperties),
+    VK_INST_FUN(GetPhysicalDeviceProperties2KHR),
+    VK_INST_FUN(GetPhysicalDeviceQueueFamilyProperties),
+    VK_INST_FUN(GetPhysicalDeviceSurfaceCapabilitiesKHR),
+    VK_INST_FUN(GetPhysicalDeviceSurfaceFormatsKHR),
+    VK_INST_FUN(GetPhysicalDeviceSurfacePresentModesKHR),
+    VK_INST_FUN(GetPhysicalDeviceSurfaceSupportKHR),
 };
 
 // Table of vulkan device extensions and functions they load, including
@@ -62,62 +75,151 @@ static const struct vk_ext_fun vk_inst_funs[] = {
 static const struct vk_ext vk_device_extensions[] = {
     {
         .name = VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
-        .funs = (struct vk_ext_fun[]) {
-            VK_DEV_FUN(vkCmdPushDescriptorSetKHR),
+        .funs = (struct vk_fun[]) {
+            VK_DEV_FUN(CmdPushDescriptorSetKHR),
             {0},
         },
     }, {
         .name = VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-        .funs = (struct vk_ext_fun[]) {
-            VK_INST_FUN(vkGetPhysicalDeviceExternalBufferPropertiesKHR),
+        .funs = (struct vk_fun[]) {
+            VK_INST_FUN(GetPhysicalDeviceExternalBufferPropertiesKHR),
             {0}
         },
     }, {
         .name = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-        .funs = (struct vk_ext_fun[]) {
-            VK_DEV_FUN(vkGetMemoryFdKHR),
+        .funs = (struct vk_fun[]) {
+            VK_DEV_FUN(GetMemoryFdKHR),
             {0},
         },
     }, {
         .name = VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
-        .funs = (struct vk_ext_fun[]) {
-            VK_DEV_FUN(vkGetMemoryFdPropertiesKHR),
+        .funs = (struct vk_fun[]) {
+            VK_DEV_FUN(GetMemoryFdPropertiesKHR),
             {0},
         },
 #ifdef VK_HAVE_WIN32
     }, {
         .name = VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
-        .funs = (struct vk_ext_fun[]) {
-            VK_DEV_FUN(vkGetMemoryWin32HandleKHR),
+        .funs = (struct vk_fun[]) {
+            VK_DEV_FUN(GetMemoryWin32HandleKHR),
             {0},
         },
 #endif
     }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
-        .funs = (struct vk_ext_fun[]) {
-            VK_INST_FUN(vkGetPhysicalDeviceExternalSemaphorePropertiesKHR),
+        .funs = (struct vk_fun[]) {
+            VK_INST_FUN(GetPhysicalDeviceExternalSemaphorePropertiesKHR),
             {0},
         },
     }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
-        .funs = (struct vk_ext_fun[]) {
-            VK_DEV_FUN(vkGetSemaphoreFdKHR),
+        .funs = (struct vk_fun[]) {
+            VK_DEV_FUN(GetSemaphoreFdKHR),
             {0},
         },
 #ifdef VK_HAVE_WIN32
     }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
-        .funs = (struct vk_ext_fun[]) {
-            VK_DEV_FUN(vkGetSemaphoreWin32HandleKHR),
+        .funs = (struct vk_fun[]) {
+            VK_DEV_FUN(GetSemaphoreWin32HandleKHR),
             {0},
         },
 #endif
     }, {
         .name = VK_EXT_PCI_BUS_INFO_EXTENSION_NAME,
-        .funs = (struct vk_ext_fun[]) {
+        .funs = (struct vk_fun[]) {
             {0}
         },
     }
+};
+
+// List of mandatory device-level functions
+static const struct vk_fun vk_dev_funs[] = {
+    VK_DEV_FUN(AcquireNextImageKHR),
+    VK_DEV_FUN(AllocateCommandBuffers),
+    VK_DEV_FUN(AllocateDescriptorSets),
+    VK_DEV_FUN(AllocateMemory),
+    VK_DEV_FUN(BeginCommandBuffer),
+    VK_DEV_FUN(BindBufferMemory),
+    VK_DEV_FUN(BindImageMemory),
+    VK_DEV_FUN(CmdBeginRenderPass),
+    VK_DEV_FUN(CmdBindDescriptorSets),
+    VK_DEV_FUN(CmdBindPipeline),
+    VK_DEV_FUN(CmdBindVertexBuffers),
+    VK_DEV_FUN(CmdBlitImage),
+    VK_DEV_FUN(CmdClearColorImage),
+    VK_DEV_FUN(CmdCopyBuffer),
+    VK_DEV_FUN(CmdCopyBufferToImage),
+    VK_DEV_FUN(CmdCopyImage),
+    VK_DEV_FUN(CmdCopyImageToBuffer),
+    VK_DEV_FUN(CmdDispatch),
+    VK_DEV_FUN(CmdDraw),
+    VK_DEV_FUN(CmdEndRenderPass),
+    VK_DEV_FUN(CmdPipelineBarrier),
+    VK_DEV_FUN(CmdPushConstants),
+    VK_DEV_FUN(CmdSetEvent),
+    VK_DEV_FUN(CmdSetScissor),
+    VK_DEV_FUN(CmdSetViewport),
+    VK_DEV_FUN(CmdUpdateBuffer),
+    VK_DEV_FUN(CmdWaitEvents),
+    VK_DEV_FUN(CreateBuffer),
+    VK_DEV_FUN(CreateBufferView),
+    VK_DEV_FUN(CreateCommandPool),
+    VK_DEV_FUN(CreateComputePipelines),
+    VK_DEV_FUN(CreateDebugReportCallbackEXT),
+    VK_DEV_FUN(CreateDescriptorPool),
+    VK_DEV_FUN(CreateDescriptorSetLayout),
+    VK_DEV_FUN(CreateEvent),
+    VK_DEV_FUN(CreateFence),
+    VK_DEV_FUN(CreateFramebuffer),
+    VK_DEV_FUN(CreateGraphicsPipelines),
+    VK_DEV_FUN(CreateImage),
+    VK_DEV_FUN(CreateImageView),
+    VK_DEV_FUN(CreatePipelineCache),
+    VK_DEV_FUN(CreatePipelineLayout),
+    VK_DEV_FUN(CreateRenderPass),
+    VK_DEV_FUN(CreateSampler),
+    VK_DEV_FUN(CreateSemaphore),
+    VK_DEV_FUN(CreateShaderModule),
+    VK_DEV_FUN(CreateSwapchainKHR),
+    VK_DEV_FUN(DestroyBuffer),
+    VK_DEV_FUN(DestroyBufferView),
+    VK_DEV_FUN(DestroyCommandPool),
+    VK_DEV_FUN(DestroyDebugReportCallbackEXT),
+    VK_DEV_FUN(DestroyDescriptorPool),
+    VK_DEV_FUN(DestroyDescriptorSetLayout),
+    VK_DEV_FUN(DestroyDevice),
+    VK_DEV_FUN(DestroyEvent),
+    VK_DEV_FUN(DestroyFence),
+    VK_DEV_FUN(DestroyFramebuffer),
+    VK_DEV_FUN(DestroyImage),
+    VK_DEV_FUN(DestroyImageView),
+    VK_DEV_FUN(DestroyInstance),
+    VK_DEV_FUN(DestroyPipeline),
+    VK_DEV_FUN(DestroyPipelineCache),
+    VK_DEV_FUN(DestroyPipelineLayout),
+    VK_DEV_FUN(DestroyRenderPass),
+    VK_DEV_FUN(DestroySampler),
+    VK_DEV_FUN(DestroySemaphore),
+    VK_DEV_FUN(DestroyShaderModule),
+    VK_DEV_FUN(DestroySwapchainKHR),
+    VK_DEV_FUN(EndCommandBuffer),
+    VK_DEV_FUN(FlushMappedMemoryRanges),
+    VK_DEV_FUN(FreeCommandBuffers),
+    VK_DEV_FUN(FreeMemory),
+    VK_DEV_FUN(GetBufferMemoryRequirements),
+    VK_DEV_FUN(GetDeviceQueue),
+    VK_DEV_FUN(GetImageMemoryRequirements),
+    VK_DEV_FUN(GetPipelineCacheData),
+    VK_DEV_FUN(GetSwapchainImagesKHR),
+    VK_DEV_FUN(InvalidateMappedMemoryRanges),
+    VK_DEV_FUN(MapMemory),
+    VK_DEV_FUN(QueuePresentKHR),
+    VK_DEV_FUN(QueueSubmit),
+    VK_DEV_FUN(ResetEvent),
+    VK_DEV_FUN(ResetFences),
+    VK_DEV_FUN(UpdateDescriptorSets),
+    VK_DEV_FUN(WaitForFences),
 };
 
 // Private struct for pl_vk_inst
@@ -133,11 +235,12 @@ void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
 
     struct priv *p = TA_PRIV(inst);
     if (p->debug_cb) {
-        VK_LOAD_FUN(inst->instance, vkDestroyDebugReportCallbackEXT)
-        vkDestroyDebugReportCallbackEXT(inst->instance, p->debug_cb, VK_ALLOC);
+        VK_LOAD_FUN(inst->instance, DestroyDebugReportCallbackEXT, inst->get_proc_addr);
+        DestroyDebugReportCallbackEXT(inst->instance, p->debug_cb, VK_ALLOC);
     }
 
-    vkDestroyInstance(inst->instance, VK_ALLOC);
+    VK_LOAD_FUN(inst->instance, DestroyInstance, inst->get_proc_addr);
+    DestroyInstance(inst->instance, VK_ALLOC);
     TA_FREEP((void **) inst_ptr);
 }
 
@@ -175,6 +278,21 @@ static VkBool32 VKAPI_PTR vk_dbg_callback(VkDebugReportFlagsEXT flags,
     return !!(flags & VK_DEBUG_REPORT_ERROR_BIT_EXT);
 }
 
+static PFN_vkGetInstanceProcAddr get_proc_addr_fallback(struct pl_context *ctx,
+                                    PFN_vkGetInstanceProcAddr get_proc_addr)
+{
+    if (get_proc_addr)
+        return get_proc_addr;
+
+#ifdef VK_HAVE_PROC_ADDR
+    return vkGetInstanceProcAddr;
+#else
+    pl_fatal(ctx, "No `vkGetInstanceProcAddr` function provided, and "
+             "libplacebo built without linking against this function!");
+    return NULL;
+#endif
+}
+
 const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
                                            const struct pl_vk_inst_params *params)
 {
@@ -189,11 +307,16 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
     };
 
+    PFN_vkGetInstanceProcAddr get_addr;
+    if (!(get_addr = get_proc_addr_fallback(ctx, params->get_proc_addr)))
+        goto error;
+
     // Enumerate all supported extensions
+    VK_LOAD_FUN(NULL, EnumerateInstanceExtensionProperties, get_addr);
     uint32_t num_exts_avail = 0;
-    vkEnumerateInstanceExtensionProperties(NULL, &num_exts_avail, NULL);
+    EnumerateInstanceExtensionProperties(NULL, &num_exts_avail, NULL);
     VkExtensionProperties *exts_avail = talloc_array(tmp, VkExtensionProperties, num_exts_avail);
-    vkEnumerateInstanceExtensionProperties(NULL, &num_exts_avail, exts_avail);
+    EnumerateInstanceExtensionProperties(NULL, &num_exts_avail, exts_avail);
 
     pl_debug(ctx, "Available instance extensions:");
     for (int i = 0; i < num_exts_avail; i++)
@@ -229,10 +352,11 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     }
 
     // Enumerate all supported layers
+    VK_LOAD_FUN(NULL, EnumerateInstanceLayerProperties, get_addr);
     uint32_t num_layers_avail = 0;
-    vkEnumerateInstanceLayerProperties(&num_layers_avail, NULL);
+    EnumerateInstanceLayerProperties(&num_layers_avail, NULL);
     VkLayerProperties *layers_avail = talloc_array(tmp, VkLayerProperties, num_layers_avail);
-    vkEnumerateInstanceLayerProperties(&num_layers_avail, layers_avail);
+    EnumerateInstanceLayerProperties(&num_layers_avail, layers_avail);
 
     pl_debug(ctx, "Available layers:");
     for (int i = 0; i < num_layers_avail; i++)
@@ -275,7 +399,8 @@ layers_done:
     for (int i = 0; i < num_exts; i++)
         pl_info(ctx, "    %s", exts[i]);
 
-    VkResult res = vkCreateInstance(&info, VK_ALLOC, &inst);
+    VK_LOAD_FUN(NULL, CreateInstance, get_addr);
+    VkResult res = CreateInstance(&info, VK_ALLOC, &inst);
     if (res != VK_SUCCESS) {
         pl_fatal(ctx, "Failed creating instance: %s", vk_res_str(res));
         goto error;
@@ -298,13 +423,14 @@ layers_done:
         // Since this is not part of the core spec, we need to load it. This
         // can't fail because we've already successfully created an instance
         // with this extension enabled.
-        VK_LOAD_FUN(inst, vkCreateDebugReportCallbackEXT)
-        vkCreateDebugReportCallbackEXT(inst, &dinfo, VK_ALLOC, &debug_cb);
+        VK_LOAD_FUN(inst, CreateDebugReportCallbackEXT, get_addr)
+        CreateDebugReportCallbackEXT(inst, &dinfo, VK_ALLOC, &debug_cb);
     }
 
     struct pl_vk_inst *pl_vk = talloc_priv(NULL, struct pl_vk_inst, struct priv);
     *pl_vk = (struct pl_vk_inst) {
         .instance = inst,
+        .get_proc_addr = get_addr,
         .extensions = exts,
         .num_extensions = num_exts,
     };
@@ -318,7 +444,10 @@ layers_done:
 
 error:
     pl_fatal(ctx, "Failed initializing vulkan instance");
-    vkDestroyInstance(inst, VK_ALLOC);
+    if (inst) {
+        VK_LOAD_FUN(inst, DestroyInstance, get_addr);
+        DestroyInstance(inst, VK_ALLOC);
+    }
     talloc_free(tmp);
     return NULL;
 }
@@ -346,24 +475,28 @@ void pl_vulkan_destroy(const struct pl_vulkan **pl_vk)
             vk_cmdpool_destroy(vk, vk->pools[i]);
         for (int i = 0; i < vk->num_signals; i++)
             vk_signal_destroy(vk, &vk->signals[i]);
-        vkDestroyDevice(vk->dev, VK_ALLOC);
+        vk->DestroyDevice(vk->dev, VK_ALLOC);
     }
 
     pl_vk_inst_destroy(&vk->internal_instance);
     TA_FREEP((void **) pl_vk);
 }
 
-static bool supports_surf(struct pl_context *ctx, VkPhysicalDevice physd,
-                          VkSurfaceKHR surf)
+static bool supports_surf(struct pl_context *ctx, VkInstance inst,
+                          PFN_vkGetInstanceProcAddr get_addr,
+                          VkPhysicalDevice physd, VkSurfaceKHR surf)
 {
+    // Hack for the VK macro's logging to work
     struct { struct pl_context *ctx; } *vk = (void *) &ctx;
 
+    VK_LOAD_FUN(inst, GetPhysicalDeviceQueueFamilyProperties, get_addr);
+    VK_LOAD_FUN(inst, GetPhysicalDeviceSurfaceSupportKHR, get_addr);
     uint32_t qfnum;
-    vkGetPhysicalDeviceQueueFamilyProperties(physd, &qfnum, NULL);
+    GetPhysicalDeviceQueueFamilyProperties(physd, &qfnum, NULL);
 
     for (int i = 0; i < qfnum; i++) {
         VkBool32 sup;
-        VK(vkGetPhysicalDeviceSurfaceSupportKHR(physd, i, surf, &sup));
+        VK(GetPhysicalDeviceSurfaceSupportKHR(physd, i, surf, &sup));
         if (sup)
             return true;
     }
@@ -375,17 +508,26 @@ error:
 VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
                                          const struct pl_vulkan_device_params *params)
 {
+    // Hack for the VK macro's logging to work
     struct { struct pl_context *ctx; } *vk = (void *) &ctx;
+    PL_INFO(vk, "Probing for vulkan devices:");
 
     pl_assert(params->instance);
-    PL_INFO(vk, "Probing for vulkan devices:");
+    VkInstance inst = params->instance;
     VkPhysicalDevice dev = VK_NULL_HANDLE;
+
+    PFN_vkGetInstanceProcAddr get_addr;
+    if (!(get_addr = get_proc_addr_fallback(ctx, params->get_proc_addr)))
+        return NULL;
+
+    VK_LOAD_FUN(inst, EnumeratePhysicalDevices, get_addr);
+    VK_LOAD_FUN(inst, GetPhysicalDeviceProperties, get_addr);
 
     VkPhysicalDevice *devices = NULL;
     uint32_t num = 0;
-    VK(vkEnumeratePhysicalDevices(params->instance, &num, NULL));
+    VK(EnumeratePhysicalDevices(inst, &num, NULL));
     devices = talloc_array(NULL, VkPhysicalDevice, num);
-    VK(vkEnumeratePhysicalDevices(params->instance, &num, devices));
+    VK(EnumeratePhysicalDevices(inst, &num, devices));
 
     static const struct { const char *name; int priority; } types[] = {
         [VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU]   = {"discrete",   5},
@@ -399,13 +541,15 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
     int best = 0;
     for (int i = 0; i < num; i++) {
         VkPhysicalDeviceProperties props;
-        vkGetPhysicalDeviceProperties(devices[i], &props);
+        GetPhysicalDeviceProperties(devices[i], &props);
         VkPhysicalDeviceType t = props.deviceType;
         PL_INFO(vk, "    GPU %d: %s (%s)", i, props.deviceName, types[t].name);
 
-        if (params->surface && !supports_surf(ctx, devices[i], params->surface)) {
-            PL_DEBUG(vk, "      -> excluding due to lack of surface support");
-            continue;
+        if (params->surface) {
+            if (!supports_surf(ctx, inst, get_addr, devices[i], params->surface)) {
+                PL_DEBUG(vk, "      -> excluding due to lack of surface support");
+                continue;
+            }
         }
 
         if (params->device_name && params->device_name[0] != '\0') {
@@ -496,9 +640,9 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     // Enumerate the queue families and find suitable families for each task
     int qfnum;
-    vkGetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, NULL);
+    vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, NULL);
     VkQueueFamilyProperties *qfs = talloc_array(tmp, VkQueueFamilyProperties, qfnum);
-    vkGetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, qfs);
+    vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, qfs);
 
     PL_INFO(vk, "Queue families supported by device:");
 
@@ -522,8 +666,8 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     // If needed, ensure we can actually present to the surface using this queue
     if (params->surface) {
         VkBool32 sup;
-        VK(vkGetPhysicalDeviceSurfaceSupportKHR(vk->physd, idx_gfx,
-                                                params->surface, &sup));
+        VK(vk->GetPhysicalDeviceSurfaceSupportKHR(vk->physd, idx_gfx,
+                                                  params->surface, &sup));
         if (!sup) {
             PL_FATAL(vk, "Queue family does not support surface presentation!");
             goto error;
@@ -558,9 +702,9 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     // Enumerate all supported extensions
     uint32_t num_exts_avail = 0;
-    VK(vkEnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, NULL));
+    VK(vk->EnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, NULL));
     VkExtensionProperties *exts_avail = talloc_array(tmp, VkExtensionProperties, num_exts_avail);
-    VK(vkEnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, exts_avail));
+    VK(vk->EnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, exts_avail));
 
     PL_DEBUG(vk, "Available device extensions:");
     for (int i = 0; i < num_exts_avail; i++)
@@ -572,11 +716,9 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     if (params->surface)
         TARRAY_APPEND(vk->ta, *exts, *num_exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
-    // Keep track of function pointers we need to load
-    const struct vk_ext_fun **ext_funs = NULL;
+    // Keep track of all optional function pointers associated with extensions
+    const struct vk_fun **ext_funs = NULL;
     int num_ext_funs = 0;
-    for (int i = 0; i < PL_ARRAY_SIZE(vk_inst_funs); i++)
-        TARRAY_APPEND(tmp, ext_funs, num_ext_funs, &vk_inst_funs[i]);
 
     // Add all optional device-level extensions extensions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_device_extensions); i++) {
@@ -584,7 +726,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext->name, exts_avail[n].extensionName) == 0) {
                 TARRAY_APPEND(vk->ta, *exts, *num_exts, ext->name);
-                for (const struct vk_ext_fun *f = ext->funs; f->name; f++)
+                for (const struct vk_fun *f = ext->funs; f->name; f++)
                     TARRAY_APPEND(tmp, ext_funs, num_ext_funs, f);
                 break;
             }
@@ -607,7 +749,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     }
 
     // Enable all features that we might need (whitelisted)
-    vkGetPhysicalDeviceFeatures(vk->physd, &vk->features);
+    vk->GetPhysicalDeviceFeatures(vk->physd, &vk->features);
 #define FEATURE(name) .name = vk->features.name
     vk->features = (VkPhysicalDeviceFeatures) {
         FEATURE(shaderImageGatherExtended),
@@ -628,16 +770,24 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     for (int i = 0; i < *num_exts; i++)
         PL_INFO(vk, "    %s", (*exts)[i]);
 
-    VK(vkCreateDevice(vk->physd, &dinfo, VK_ALLOC, &vk->dev));
+    VK(vk->CreateDevice(vk->physd, &dinfo, VK_ALLOC, &vk->dev));
 
-    // Load all of the functions from the extensions we enabled
+    // Load all mandatory device-level functions
+    for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++) {
+        const struct vk_fun *fun = &vk_dev_funs[i];
+        PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
+        pl_assert(fun->device_level);
+        *pfn = vk->GetDeviceProcAddr(vk->dev, fun->name);
+    }
+
+    // Load all of the optional functions from the extensions we enabled
     for (int i = 0; i < num_ext_funs; i++) {
-        const struct vk_ext_fun *fun = ext_funs[i];
+        const struct vk_fun *fun = ext_funs[i];
         PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
         if (fun->device_level) {
-            *pfn = vkGetDeviceProcAddr(vk->dev, fun->name);
+            *pfn = vk->GetDeviceProcAddr(vk->dev, fun->name);
         } else {
-            *pfn = vkGetInstanceProcAddr(vk->inst, fun->name);
+            *pfn = vk->GetInstanceProcAddr(vk->inst, fun->name);
         };
     }
 
@@ -678,14 +828,31 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     vk->ctx = ctx;
     vk->inst = params->instance;
 
+    if (!(vk->GetInstanceProcAddr = get_proc_addr_fallback(ctx, params->get_proc_addr)))
+        goto error;
+
     if (!vk->inst) {
         pl_assert(!params->surface);
         pl_assert(!params->device);
         PL_DEBUG(vk, "No VkInstance provided, creating one...");
-        vk->internal_instance = pl_vk_inst_create(ctx, params->instance_params);
+
+        // Mirror the instance params here to set `get_proc_addr` correctly
+        struct pl_vk_inst_params iparams;
+        iparams = *PL_DEF(params->instance_params, &pl_vk_inst_default_params);
+        iparams.get_proc_addr = params->get_proc_addr;
+        vk->internal_instance = pl_vk_inst_create(ctx, &iparams);
         if (!vk->internal_instance)
             goto error;
         vk->inst = vk->internal_instance->instance;
+    }
+
+    // Directly load all mandatory instance-level function pointers, since
+    // these will be required for all further device creation logic
+    for (int i = 0; i < PL_ARRAY_SIZE(vk_inst_funs); i++) {
+        const struct vk_fun *fun = &vk_inst_funs[i];
+        PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
+        pl_assert(!fun->device_level);
+        *pfn = vk->GetInstanceProcAddr(vk->inst, fun->name);
     }
 
     // Choose the physical device
@@ -707,7 +874,7 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     }
 
     VkPhysicalDeviceProperties prop;
-    vkGetPhysicalDeviceProperties(vk->physd, &prop);
+    vk->GetPhysicalDeviceProperties(vk->physd, &prop);
     vk->limits = prop.limits;
 
     PL_INFO(vk, "Vulkan device properties:");

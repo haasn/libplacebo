@@ -36,11 +36,11 @@
 #define VK_ALLOC NULL
 
 // Type of a vulkan function that needs to be loaded
-#define VK_FUN(name) PFN_##name name
+#define VK_FUN(name) PFN_vk##name name
 
 // Load a vulkan instance-level extension function directly (on the stack)
-#define VK_LOAD_FUN(inst, name) VK_FUN(name) = (PFN_##name) \
-                            vkGetInstanceProcAddr(inst, #name);
+#define VK_LOAD_FUN(inst, name, get_addr) \
+    VK_FUN(name) = (PFN_vk##name) get_addr(inst, "vk" #name);
 
 // Hard-coded limit on the number of pending commands, to avoid OOM loops
 #define PL_VK_MAX_QUEUED_CMDS 1024
@@ -91,18 +91,117 @@ struct vk_ctx {
     bool disable_events;
 
     // Instance-level function pointers
-    VK_FUN(vkGetPhysicalDeviceProperties2KHR);
-    VK_FUN(vkGetPhysicalDeviceImageFormatProperties2KHR);
-    VK_FUN(vkGetPhysicalDeviceExternalBufferPropertiesKHR);
-    VK_FUN(vkGetPhysicalDeviceExternalSemaphorePropertiesKHR);
+    VK_FUN(CreateDevice);
+    VK_FUN(EnumerateDeviceExtensionProperties);
+    VK_FUN(GetDeviceProcAddr);
+    VK_FUN(GetInstanceProcAddr);
+    VK_FUN(GetPhysicalDeviceExternalBufferPropertiesKHR);
+    VK_FUN(GetPhysicalDeviceExternalSemaphorePropertiesKHR);
+    VK_FUN(GetPhysicalDeviceFeatures);
+    VK_FUN(GetPhysicalDeviceFormatProperties);
+    VK_FUN(GetPhysicalDeviceImageFormatProperties2KHR);
+    VK_FUN(GetPhysicalDeviceMemoryProperties);
+    VK_FUN(GetPhysicalDeviceProperties);
+    VK_FUN(GetPhysicalDeviceProperties2KHR);
+    VK_FUN(GetPhysicalDeviceQueueFamilyProperties);
+    VK_FUN(GetPhysicalDeviceSurfaceCapabilitiesKHR);
+    VK_FUN(GetPhysicalDeviceSurfaceFormatsKHR);
+    VK_FUN(GetPhysicalDeviceSurfacePresentModesKHR);
+    VK_FUN(GetPhysicalDeviceSurfaceSupportKHR);
 
     // Device-level function pointers
-    VK_FUN(vkCmdPushDescriptorSetKHR);
-    VK_FUN(vkGetMemoryFdKHR);
-    VK_FUN(vkGetMemoryFdPropertiesKHR);
-    VK_FUN(vkGetSemaphoreFdKHR);
+    VK_FUN(AcquireNextImageKHR);
+    VK_FUN(AllocateCommandBuffers);
+    VK_FUN(AllocateDescriptorSets);
+    VK_FUN(AllocateMemory);
+    VK_FUN(BeginCommandBuffer);
+    VK_FUN(BindBufferMemory);
+    VK_FUN(BindImageMemory);
+    VK_FUN(CmdBeginRenderPass);
+    VK_FUN(CmdBindDescriptorSets);
+    VK_FUN(CmdBindPipeline);
+    VK_FUN(CmdBindVertexBuffers);
+    VK_FUN(CmdBlitImage);
+    VK_FUN(CmdClearColorImage);
+    VK_FUN(CmdCopyBuffer);
+    VK_FUN(CmdCopyBufferToImage);
+    VK_FUN(CmdCopyImage);
+    VK_FUN(CmdCopyImageToBuffer);
+    VK_FUN(CmdDispatch);
+    VK_FUN(CmdDraw);
+    VK_FUN(CmdEndRenderPass);
+    VK_FUN(CmdPipelineBarrier);
+    VK_FUN(CmdPushConstants);
+    VK_FUN(CmdPushDescriptorSetKHR);
+    VK_FUN(CmdSetEvent);
+    VK_FUN(CmdSetScissor);
+    VK_FUN(CmdSetViewport);
+    VK_FUN(CmdUpdateBuffer);
+    VK_FUN(CmdWaitEvents);
+    VK_FUN(CreateBuffer);
+    VK_FUN(CreateBufferView);
+    VK_FUN(CreateCommandPool);
+    VK_FUN(CreateComputePipelines);
+    VK_FUN(CreateDebugReportCallbackEXT);
+    VK_FUN(CreateDescriptorPool);
+    VK_FUN(CreateDescriptorSetLayout);
+    VK_FUN(CreateEvent);
+    VK_FUN(CreateFence);
+    VK_FUN(CreateFramebuffer);
+    VK_FUN(CreateGraphicsPipelines);
+    VK_FUN(CreateImage);
+    VK_FUN(CreateImageView);
+    VK_FUN(CreatePipelineCache);
+    VK_FUN(CreatePipelineLayout);
+    VK_FUN(CreateRenderPass);
+    VK_FUN(CreateSampler);
+    VK_FUN(CreateSemaphore);
+    VK_FUN(CreateShaderModule);
+    VK_FUN(CreateSwapchainKHR);
+    VK_FUN(DestroyBuffer);
+    VK_FUN(DestroyBufferView);
+    VK_FUN(DestroyCommandPool);
+    VK_FUN(DestroyDebugReportCallbackEXT);
+    VK_FUN(DestroyDescriptorPool);
+    VK_FUN(DestroyDescriptorSetLayout);
+    VK_FUN(DestroyDevice);
+    VK_FUN(DestroyEvent);
+    VK_FUN(DestroyFence);
+    VK_FUN(DestroyFramebuffer);
+    VK_FUN(DestroyImage);
+    VK_FUN(DestroyImageView);
+    VK_FUN(DestroyInstance);
+    VK_FUN(DestroyPipeline);
+    VK_FUN(DestroyPipelineCache);
+    VK_FUN(DestroyPipelineLayout);
+    VK_FUN(DestroyRenderPass);
+    VK_FUN(DestroySampler);
+    VK_FUN(DestroySemaphore);
+    VK_FUN(DestroyShaderModule);
+    VK_FUN(DestroySwapchainKHR);
+    VK_FUN(EndCommandBuffer);
+    VK_FUN(FlushMappedMemoryRanges);
+    VK_FUN(FreeCommandBuffers);
+    VK_FUN(FreeMemory);
+    VK_FUN(GetBufferMemoryRequirements);
+    VK_FUN(GetDeviceQueue);
+    VK_FUN(GetImageMemoryRequirements);
+    VK_FUN(GetMemoryFdKHR);
+    VK_FUN(GetMemoryFdPropertiesKHR);
+    VK_FUN(GetPipelineCacheData);
+    VK_FUN(GetSemaphoreFdKHR);
+    VK_FUN(GetSwapchainImagesKHR);
+    VK_FUN(InvalidateMappedMemoryRanges);
+    VK_FUN(MapMemory);
+    VK_FUN(QueuePresentKHR);
+    VK_FUN(QueueSubmit);
+    VK_FUN(ResetEvent);
+    VK_FUN(ResetFences);
+    VK_FUN(UpdateDescriptorSets);
+    VK_FUN(WaitForFences);
+
 #ifdef VK_HAVE_WIN32
-    VK_FUN(vkGetMemoryWin32HandleKHR);
-    VK_FUN(vkGetSemaphoreWin32HandleKHR);
+    VK_FUN(GetMemoryWin32HandleKHR);
+    VK_FUN(GetSemaphoreWin32HandleKHR);
 #endif
 };

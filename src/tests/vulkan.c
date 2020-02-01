@@ -103,15 +103,18 @@ int main()
     if (!inst)
         return SKIP;
 
+    VK_LOAD_FUN(inst->instance, EnumeratePhysicalDevices, vkGetInstanceProcAddr);
+    VK_LOAD_FUN(inst->instance, GetPhysicalDeviceProperties, vkGetInstanceProcAddr);
+
     uint32_t num = 0;
-    vkEnumeratePhysicalDevices(inst->instance, &num, NULL);
+    EnumeratePhysicalDevices(inst->instance, &num, NULL);
     if (!num)
         return SKIP;
 
     VkPhysicalDevice *devices = calloc(num, sizeof(*devices));
     if (!devices)
         return 1;
-    vkEnumeratePhysicalDevices(inst->instance, &num, devices);
+    EnumeratePhysicalDevices(inst->instance, &num, devices);
 
     // Make sure choosing any device works
     VkPhysicalDevice dev;
@@ -124,7 +127,7 @@ int main()
     // Test all attached devices
     for (int i = 0; i < num; i++) {
         VkPhysicalDeviceProperties props;
-        vkGetPhysicalDeviceProperties(devices[i], &props);
+        GetPhysicalDeviceProperties(devices[i], &props);
         printf("Testing device %d: %s\n", i, props.deviceName);
 
         // Make sure we can choose this device by name

@@ -190,6 +190,10 @@ foreach c : components
   endif
 endforeach
 
+if comps.has('vulkan') and get_option('vulkan-link')
+  defs += '#define VK_HAVE_PROC_ADDR 1'
+endif
+
 # check to see if libplacebo built this way is sane
 if not comps.has('vulkan')
   warning('Building without support for Vulkan. Currently, libplacebo only ' +
@@ -275,7 +279,7 @@ if get_option('tests')
 endif
 
 if get_option('bench')
-  if not vulkan.found()
+  if not vulkan.found() or not get_option('vulkan-link')
     error('Compiling the benchmark suite requires vulkan support!')
   endif
 

@@ -22,7 +22,7 @@
 static VkResult vk_cmd_poll(struct vk_ctx *vk, struct vk_cmd *cmd,
                             uint64_t timeout)
 {
-    return vkWaitForFences(vk->dev, 1, &cmd->fence, false, timeout);
+    return vk->WaitForFences(vk->dev, 1, &cmd->fence, false, timeout);
 }
 
 static void vk_cmd_reset(struct vk_ctx *vk, struct vk_cmd *cmd)
@@ -48,8 +48,8 @@ static void vk_cmd_destroy(struct vk_ctx *vk, struct vk_cmd *cmd)
 
     vk_cmd_poll(vk, cmd, UINT64_MAX);
     vk_cmd_reset(vk, cmd);
-    vkDestroyFence(vk->dev, cmd->fence, VK_ALLOC);
-    vkFreeCommandBuffers(vk->dev, cmd->pool->pool, 1, &cmd->buf);
+    vk->DestroyFence(vk->dev, cmd->fence, VK_ALLOC);
+    vk->FreeCommandBuffers(vk->dev, cmd->pool->pool, 1, &cmd->buf);
 
     talloc_free(cmd);
 }
@@ -66,14 +66,14 @@ static struct vk_cmd *vk_cmd_create(struct vk_ctx *vk, struct vk_cmdpool *pool)
         .commandBufferCount = 1,
     };
 
-    VK(vkAllocateCommandBuffers(vk->dev, &ainfo, &cmd->buf));
+    VK(vk->AllocateCommandBuffers(vk->dev, &ainfo, &cmd->buf));
 
     VkFenceCreateInfo finfo = {
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .flags = VK_FENCE_CREATE_SIGNALED_BIT,
     };
 
-    VK(vkCreateFence(vk->dev, &finfo, VK_ALLOC, &cmd->fence));
+    VK(vk->CreateFence(vk->dev, &finfo, VK_ALLOC, &cmd->fence));
 
     return cmd;
 
@@ -140,14 +140,14 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
 
     // We can skip creating the semaphores if there's only one queue
     if (vk->num_pools > 1 || vk->pools[0]->num_queues > 1)
-        VK(vkCreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sig->semaphore));
+        VK(vk->CreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sig->semaphore));
 
     static const VkEventCreateInfo einfo = {
         .sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO,
     };
 
     if (!vk->disable_events) {
-        VkResult res = vkCreateEvent(vk->dev, &einfo, VK_ALLOC, &sig->event);
+        VkResult res = vk->CreateEvent(vk->dev, &einfo, VK_ALLOC, &sig->event);
         if (res == VK_ERROR_FEATURE_NOT_PRESENT) {
             // Some vulkan implementations don't support VkEvents since they are
             // not part of the vulkan portable subset. So fail gracefully here.
@@ -169,7 +169,7 @@ done:
 
     VkQueueFlags req = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
     if (sig->event && (cmd->pool->props.queueFlags & req)) {
-        vkCmdSetEvent(cmd->buf, sig->event, stage);
+        vk->CmdSetEvent(cmd->buf, sig->event, stage);
         sig->type = VK_WAIT_EVENT;
     }
 
@@ -218,7 +218,7 @@ static void release_signal(struct vk_ctx *vk, struct vk_signal *sig)
     // unsignaled while still queued, or unsignaled as a result of a device
     // wait. But the event *may* need to be reset, so just always reset it.
     if (sig->event)
-        vkResetEvent(vk->dev, sig->event);
+        vk->ResetEvent(vk->dev, sig->event);
     sig->source = NULL;
     TARRAY_APPEND(vk->ta, vk->signals, vk->num_signals, sig);
 }
@@ -261,8 +261,8 @@ void vk_signal_destroy(struct vk_ctx *vk, struct vk_signal **sig)
     if (!*sig)
         return;
 
-    vkDestroySemaphore(vk->dev, (*sig)->semaphore, VK_ALLOC);
-    vkDestroyEvent(vk->dev, (*sig)->event, VK_ALLOC);
+    vk->DestroySemaphore(vk->dev, (*sig)->semaphore, VK_ALLOC);
+    vk->DestroyEvent(vk->dev, (*sig)->event, VK_ALLOC);
     talloc_free(*sig);
     *sig = NULL;
 }
@@ -280,7 +280,7 @@ struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk,
     };
 
     for (int n = 0; n < pool->num_queues; n++)
-        vkGetDeviceQueue(vk->dev, pool->qf, n, &pool->queues[n]);
+        vk->GetDeviceQueue(vk->dev, pool->qf, n, &pool->queues[n]);
 
     VkCommandPoolCreateInfo cinfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -289,7 +289,7 @@ struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk,
         .queueFamilyIndex = pool->qf,
     };
 
-    VK(vkCreateCommandPool(vk->dev, &cinfo, VK_ALLOC, &pool->pool));
+    VK(vk->CreateCommandPool(vk->dev, &cinfo, VK_ALLOC, &pool->pool));
 
     return pool;
 
@@ -307,7 +307,7 @@ void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool)
     for (int i = 0; i < pool->num_cmds; i++)
         vk_cmd_destroy(vk, pool->cmds[i]);
 
-    vkDestroyCommandPool(vk->dev, pool->pool, VK_ALLOC);
+    vk->DestroyCommandPool(vk->dev, pool->pool, VK_ALLOC);
     talloc_free(pool);
 }
 
@@ -333,7 +333,7 @@ done: ;
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
 
-    VK(vkBeginCommandBuffer(cmd->buf, &binfo));
+    VK(vk->BeginCommandBuffer(cmd->buf, &binfo));
 
     cmd->queue = pool->queues[pool->idx_queues];
     return cmd;
@@ -349,9 +349,9 @@ bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd *cmd)
 {
     struct vk_cmdpool *pool = cmd->pool;
 
-    VK(vkEndCommandBuffer(cmd->buf));
+    VK(vk->EndCommandBuffer(cmd->buf));
 
-    VK(vkResetFences(vk->dev, 1, &cmd->fence));
+    VK(vk->ResetFences(vk->dev, 1, &cmd->fence));
     TARRAY_APPEND(vk->ta, vk->cmds_queued, vk->num_cmds_queued, cmd);
     vk->last_cmd = cmd;
 
@@ -429,7 +429,7 @@ bool vk_flush_commands(struct vk_ctx *vk)
             PL_TRACE(vk, "    signals fence %p", (void *) cmd->fence);
         }
 
-        VK(vkQueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));
+        VK(vk->QueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));
         TARRAY_APPEND(vk->ta, vk->cmds_pending, vk->num_cmds_pending, cmd);
         continue;
 

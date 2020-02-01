@@ -31,6 +31,9 @@
 struct pl_vk_inst {
     VkInstance instance;
 
+    // The associated vkGetInstanceProcAddr pointer.
+    PFN_vkGetInstanceProcAddr get_proc_addr;
+
     // The instance extensions that were successfully enabled, including
     // extensions enabled by libplacebo internally. May contain duplicates.
     const char **extensions;
@@ -40,6 +43,10 @@ struct pl_vk_inst {
 struct pl_vk_inst_params {
     // If set, enable the debugging and validation layers.
     bool debug;
+
+    // Pointer to a user-provided `vkGetInstanceProcAddr`. If this is NULL,
+    // libplacebo will use the directly linked version (if available).
+    PFN_vkGetInstanceProcAddr get_proc_addr;
 
     // Enables extra instance extensions. Instance creation will fail if these
     // extensions are not all supported. The user may use this to enable e.g.
@@ -101,6 +108,12 @@ struct pl_vulkan_params {
     // NOTE: The VkInstance provided by the user *MUST* be created with the
     // `VK_KHR_get_physical_device_properties2` extension enabled!
     VkInstance instance;
+
+    // Pointer to `vkGetInstanceProcAddr`. If this is NULL, libplacebo will
+    // use the directly linked version (if available).
+    //
+    // Note: This overwrites the same value from `instance_params`.
+    PFN_vkGetInstanceProcAddr get_proc_addr;
 
     // Configures the settings used for creating an internal vulkan instance.
     // May be NULL. Ignored if `instance` is set.
@@ -191,6 +204,7 @@ struct pl_vulkan_device_params {
     VkInstance instance;
 
     // Mirrored from `pl_vulkan_params`. All of these fields are optional.
+    PFN_vkGetInstanceProcAddr get_proc_addr;
     VkSurfaceKHR surface;
     const char *device_name;
     bool allow_software;
