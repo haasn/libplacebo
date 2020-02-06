@@ -23,7 +23,7 @@
 #define require(expr)                                           \
   do {                                                          \
       if (!(expr)) {                                            \
-          PL_ERR(gpu, "Validation failed: %s (%s:%d)\n",        \
+          PL_ERR(gpu, "Validation failed: %s (%s:%d)",          \
                   #expr, __FILE__, __LINE__);                   \
           goto error;                                           \
       }                                                         \
