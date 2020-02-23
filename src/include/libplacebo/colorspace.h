@@ -247,11 +247,13 @@ struct pl_color_space {
     enum pl_color_light light;
 
     // The highest value that occurs in the signal, relative to the reference
-    // white. (0 = unknown)
+    // white, alternatively the brightest color value supported by a given
+    // color space. (0 = unknown)
     float sig_peak;
 
     // The average light level that occurs in the signal, relative to the
-    // reference white. (0 = unknown)
+    // reference white, alternatively the desired average brightness level of a
+    // given color space. (0 = unknown)
     float sig_avg;
 
     // Additional scale factor for the signal's reference white. If this is set
