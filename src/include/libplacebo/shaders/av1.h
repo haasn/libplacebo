@@ -35,22 +35,14 @@
 #include <libplacebo/colorspace.h>
 #include <libplacebo/shaders.h>
 
-// AV1 film grain parameters. For the exact meaning of these, see the
+// AV1 film grain parameters. For the exact meaning of these, see the AV1
 // specification (section 6.8.20).
 //
 // NOTE: These parameters are currently *not* sanity checked. Calling these
 // functions with e.g. too large `num_points_y` or negative width/height is UB!
 // Please make sure to sanity check the grain parameters signalled by the file
 // before calling into these functions.
-struct pl_grain_params {
-    int width, height;           // dimensions of the image (luma)
-    int sub_x, sub_y;            // subsampling shifts for the chroma planes
-    struct pl_color_repr repr;   // underlying color system
-    // Some notes apply to `repr`:
-    //  - repr.bits affects the rounding for grain generation
-    //  - repr.levels affects whether or not we clip to full range or not
-    //  - repr.sys affects whether channels 1 and 2 are treated like chroma
-
+struct pl_av1_grain_data {
     uint16_t grain_seed;
     int num_points_y;
     uint8_t points_y[14][2];     // [n][0] = value, [n][1] = scaling
@@ -69,28 +61,45 @@ struct pl_grain_params {
     bool overlap;
 };
 
-// Apply AV1 film grain to the channels given in `channel_map`, which maps
-// from the component index of the vec4 color to the channel contained in that
-// index, or PL_CHANNEL_NONE for unused channels.
+// Struct containing extra options for the `pl_shader_av1_grain` call.
+struct pl_av1_grain_params {
+    struct pl_av1_grain_data data;  // av1 grain metadata itself
+    const struct pl_tex *luma_tex;  // reference texture (always required!)
+    struct pl_color_repr repr;      // underlying color system
+    enum pl_channel channels[3];    // map from vec4 index to channel type
+    int sub_x, sub_y;               // subsampling shifts for the chroma planes
+
+    // Some notes apply to `repr`:
+    //  - repr.bits affects the rounding for grain generation
+    //  - repr.levels affects whether or not we clip to full range or not
+    //  - repr.sys affects whether channels 1 and 2 are treated like chroma
+};
+
+// Test if AV1 film grain needs to be applied. This is a helper function
+// that users can use to decide whether or not `pl_shader_av1_grain` needs
+// to be called, based on the given grain metadata.
+bool pl_needs_av1_grain(const struct pl_av1_grain_params *params);
+
+// Apply AV1 film grain to the channels given in `params->channels`, which maps
+// from the component index of the `vec4 color` to the channel contained in
+// that index, or PL_CHANNEL_NONE for unused channels. Returns if successful.
 //
 // For example, if this is the pass for the subsampled Cb and Cr planes, which
-// are currently available in color.xy, then `channels` would be:
+// are currently available in color.xy, then `params->channels` would be:
 // {PL_CHANNEL_CB, PL_CHANNEL_CR, PL_CHANNEL_NONE} = {1, 2, -1}
 //
 // When applying grain to the channels 1 and 2 channels, access to information
 // from channel 0 is needed. It's important to take this information from the
 // undistorted plane (before applying grain), and must be passed as the texture
-// `luma_tex` - unless the channel map already includes channel 0 channel.
+// `luma_tex`.
 //
 // So for example, for planar YCbCr content, grain must be added to the chroma
 // channels first, then followed by the luma channels. (For packed content like
 // rgb24 where all channels are part of the same pass, this is unnecessary)
 //
 // Note: all of this applies even if params->repr.sys == PL_COLOR_SYSTEM_RGB (!)
-void pl_shader_av1_grain(struct pl_shader *sh,
+bool pl_shader_av1_grain(struct pl_shader *sh,
                          struct pl_shader_obj **grain_state,
-                         const enum pl_channel channels[3],
-                         const struct pl_tex *luma_tex,
-                         const struct pl_grain_params *params);
+                         const struct pl_av1_grain_params *params);
 
 #endif // LIBPLACEBO_SHADERS_AV1_H_

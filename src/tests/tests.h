@@ -52,12 +52,7 @@ static inline bool feq(float a, float b)
 #define RANDOM (rand() / (float) RAND_MAX)
 #define SKIP 77
 
-static const struct pl_grain_params av1_grain_params = {
-    .repr = {
-        .sys = PL_COLOR_SYSTEM_BT_709,
-        .levels = PL_COLOR_LEVELS_TV,
-        .bits = { .color_depth = 10, .sample_depth = 10 },
-    },
+static const struct pl_av1_grain_data av1_grain_data = {
     .grain_seed = 48476,
 
     .num_points_y = 6,
