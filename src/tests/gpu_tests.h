@@ -515,6 +515,10 @@ static void pl_render_tests(const struct pl_gpu *gpu)
 
     REQUIRE(pl_render_image(rr, &image, &target, &params));
 
+    params = pl_render_default_params;
+    image.av1_grain = av1_grain_data;
+    REQUIRE(pl_render_image(rr, &image, &target, &params));
+
 error:
     free(fbo_data);
     pl_renderer_destroy(&rr);

@@ -75,13 +75,16 @@ struct pl_renderer {
     bool disable_overlay;       // disable rendering overlays
     bool disable_3dlut;         // disable usage of a 3DLUT
     bool disable_peak_detect;   // disable peak detection shader
+    bool disable_grain;         // disable AV1 grain code
 
     // Shader resource objects and intermediate textures (FBOs)
     struct pl_shader_obj *peak_detect_state;
     struct pl_shader_obj *dither_state;
     struct pl_shader_obj *lut3d_state;
+    struct pl_shader_obj *grain_state;
     const struct pl_tex *main_scale_fbo;
     const struct pl_tex *deband_fbos[PLANE_COUNT];
+    const struct pl_tex *grain_fbos[PLANE_COUNT];
     const struct pl_tex *output_fbo;
     struct sampler samplers[SCALER_COUNT];
     struct sampler *osd_samplers;
@@ -176,12 +179,15 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
     pl_tex_destroy(rr->gpu, &rr->main_scale_fbo);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->deband_fbos); i++)
         pl_tex_destroy(rr->gpu, &rr->deband_fbos[i]);
+    for (int i = 0; i < PL_ARRAY_SIZE(rr->grain_fbos); i++)
+        pl_tex_destroy(rr->gpu, &rr->grain_fbos[i]);
     pl_tex_destroy(rr->gpu, &rr->output_fbo);
 
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
     pl_shader_obj_destroy(&rr->dither_state);
     pl_shader_obj_destroy(&rr->lut3d_state);
+    pl_shader_obj_destroy(&rr->grain_state);
 
     // Free all samplers
     for (int i = 0; i < PL_ARRAY_SIZE(rr->samplers); i++)
@@ -713,8 +719,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     float scale = pl_color_repr_normalize(&repr);
 
     for (int i = 0; i < image->num_planes; i++) {
-        struct pl_shader *psh = pl_dispatch_begin_ex(rr->dp, true);
         struct pl_plane *plane = &planes[i];
+        float plane_scale = scale;
 
         // Compute the source shift/scale relative to the reference size
         float pw = plane->texture->params.w,
@@ -730,10 +736,76 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         float rrx = rx >= 1 ? roundf(rx) : 1.0 / roundf(1.0 / rx),
               rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry);
 
+        // Perform AV1 grain first (before debanding) for several reasons:
+        // 1. It's closer to the intent of the spec to add grain first
+        // 2. Debanding implicitly crops, which screws with the AV1 grain code
+        // 3. Debanding may finalize the image (work-aroundable but annoying)
+
+        struct pl_av1_grain_params grain_params = {
+            .data = image->av1_grain,
+            .luma_tex = refplane->texture,
+            .repr = repr,
+            .channels = {PL_CHANNEL_NONE, PL_CHANNEL_NONE, PL_CHANNEL_NONE},
+            .sub_x = ilogbf(rrx),
+            .sub_y = ilogbf(rry),
+        };
+
+        for (int c = 0; c < plane->components; c++) {
+            int idx = plane->texture->params.format->sample_order[c];
+            if (idx < 0 || idx >= PL_ARRAY_SIZE(grain_params.channels))
+                continue;
+            grain_params.channels[idx] = plane->component_mapping[c];
+        }
+
+        const struct pl_fmt *grain_fmt = plane->texture->params.format;
+        if (!(grain_fmt->caps & PL_FMT_CAP_RENDERABLE))
+            grain_fmt = rr->fbofmt;
+
+        bool needs_grain = !rr->disable_grain && pl_needs_av1_grain(&grain_params);
+        if (needs_grain && !grain_fmt) {
+            PL_ERR(rr, "AV1 grain required but no renderable format available.. "
+                  "disabling!");
+            rr->disable_grain = true;
+            needs_grain = false;
+        }
+
+        if (needs_grain) {
+            struct pl_shader *gsh = pl_dispatch_begin_ex(rr->dp, false);
+            const struct pl_tex *new_tex;
+            bool ok = pl_shader_sample_direct(gsh, &(struct pl_sample_src) {
+                .tex = plane->texture,
+                .scale = plane_scale,
+            });
+
+            if (ok)
+                ok = pl_shader_av1_grain(gsh, &rr->grain_state, &grain_params);
+
+            if (ok) {
+                struct img grain_img = {
+                    .sh = gsh,
+                    .w = plane->texture->params.w,
+                    .h = plane->texture->params.h,
+                };
+
+                new_tex = finalize_img(rr, &grain_img, grain_fmt, &rr->grain_fbos[i]);
+                ok = !!new_tex;
+                gsh = NULL;
+            }
+
+            if (ok) {
+                plane->texture = new_tex;
+                plane_scale = 1.0;
+            } else {
+                PL_ERR(rr, "Failed applying AV1 grain.. disabling!");
+                rr->disable_grain = true;
+                pl_dispatch_abort(rr->dp, &gsh);
+            }
+        }
+
         struct pl_sample_src src = {
             .tex        = plane->texture,
             .components = plane->components,
-            .scale      = scale,
+            .scale      = plane_scale,
             .new_w      = target_w,
             .new_h      = target_h,
             .rect       = {
@@ -744,6 +816,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             },
         };
 
+        struct pl_shader *psh = pl_dispatch_begin_ex(rr->dp, true);
         if (deband_src(rr, psh, &src, &rr->deband_fbos[i], image, params) != DEBAND_SCALED)
             dispatch_sampler(rr, psh, &rr->samplers[i], params, &src);
 

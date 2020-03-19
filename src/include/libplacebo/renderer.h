@@ -21,6 +21,7 @@
 #include <libplacebo/colorspace.h>
 #include <libplacebo/filters.h>
 #include <libplacebo/gpu.h>
+#include <libplacebo/shaders/av1.h>
 #include <libplacebo/shaders/colorspace.h>
 #include <libplacebo/shaders/sampling.h>
 #include <libplacebo/swapchain.h>
@@ -347,6 +348,10 @@ struct pl_image {
     // implementations. So in this example, the 18x12 chroma plane would get
     // treated by libplacebo as an oversized chroma plane - i.e. the plane
     // would get sampled as if it was 17.5 pixels wide and 11.5 pixels large.
+
+    // Associated AV1 grain params (see <libplacebo/shaders/av1.h>). This is
+    // entirely optional, the default of {0} corresponds to no extra grain.
+    struct pl_av1_grain_data av1_grain;
 };
 
 // Represents the target of a rendering operation
