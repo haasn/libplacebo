@@ -876,7 +876,7 @@ void pl_shader_av1_grain(struct pl_shader *sh,
                 .object = luma_tex,
             });
 
-            GLSL("pos = local_id * uvec2(%d, %d0;                \n"
+            GLSL("pos = local_id * uvec2(%d, %d0);               \n"
                  "averageLuma = texelFetch(%s, ivec2(pos), 0).r; \n",
                  1 << params->sub_x, 1 << params->sub_y,
                  luma);
