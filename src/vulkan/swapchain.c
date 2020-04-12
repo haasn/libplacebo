@@ -722,9 +722,9 @@ static bool vk_sw_resize(const struct pl_swapchain *sw, int *width, int *height)
     return ok;
 }
 
-bool pl_vulkan_swapchain_suboptimal(const struct pl_vulkan *vk)
+bool pl_vulkan_swapchain_suboptimal(const struct pl_swapchain *sw)
 {
-    struct priv *p = TA_PRIV(vk);
+    struct priv *p = TA_PRIV(sw);
     return p->suboptimal;
 }
 

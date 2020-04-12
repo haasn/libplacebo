@@ -263,7 +263,7 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *vk
 // This will return true if the vulkan swapchain is internally detected
 // as being suboptimal (VK_SUBOPTIMAL_KHR). This might be of use to clients
 // who have `params->allow_suboptimal` enabled.
-bool pl_vulkan_swapchain_suboptimal(const struct pl_vulkan *vk);
+bool pl_vulkan_swapchain_suboptimal(const struct pl_swapchain *sw);
 
 // VkImage interop API
 
