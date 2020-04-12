@@ -714,7 +714,10 @@ static bool vk_sw_resize(const struct pl_swapchain *sw, int *width, int *height)
     struct priv *p = TA_PRIV(sw);
     bool ok = true;
 
-    if ((*width && *width != p->cur_width) || (*height && *height != p->cur_height))
+    bool width_changed = *width && *width != p->cur_width,
+         height_changed = *height && *height != p->cur_height;
+
+    if (p->suboptimal || width_changed || height_changed)
         ok = vk_sw_recreate(sw, *width, *height);
 
     *width = p->cur_width;
