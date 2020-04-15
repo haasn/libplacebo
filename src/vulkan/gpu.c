@@ -1378,8 +1378,8 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .srcAccessMask = buf_vk->current_access,
-        .dstAccessMask = can_read ? VK_ACCESS_HOST_READ_BIT : 0
-                       | can_write ? VK_ACCESS_HOST_WRITE_BIT : 0,
+        .dstAccessMask = (can_read ? VK_ACCESS_HOST_READ_BIT : 0)
+                       | (can_write ? VK_ACCESS_HOST_WRITE_BIT : 0),
         .buffer = buf_vk->slice.buf,
         .offset = buf_vk->slice.mem.offset + offset,
         .size = size,
