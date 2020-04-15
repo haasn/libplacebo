@@ -22,7 +22,6 @@
 
 struct pl_opengl {
     const struct pl_gpu *gpu;
-    void *priv;
 };
 
 struct pl_opengl_params {
