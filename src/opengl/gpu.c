@@ -38,14 +38,14 @@ static void gl_destroy_gpu(const struct pl_gpu *gpu)
 
 #define get(pname, field)               \
     do {                                \
-        GLint tmp;                      \
+        GLint tmp = 0;                  \
         glGetIntegerv((pname), &tmp);   \
         *(field) = tmp;                 \
     } while (0)
 
 #define geti(pname, i, field)               \
     do {                                    \
-        GLint tmp;                          \
+        GLint tmp = 0;                      \
         glGetIntegeri_v((pname), i, &tmp);  \
         *(field) = tmp;                     \
     } while (0)
