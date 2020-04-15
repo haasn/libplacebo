@@ -18,7 +18,7 @@
 #ifndef LIBPLACEBO_VULKAN_H_
 #define LIBPLACEBO_VULKAN_H_
 
-#include "config.h"
+#include <libplacebo/config.h>
 #if !PL_HAVE_VULKAN
 #error Included <libplacebo/vulkan.h> but libplacebo built without vulkan!
 #endif

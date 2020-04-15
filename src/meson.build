@@ -249,7 +249,10 @@ configure_file(
 
 # work around meson bugs
 build_deps += dependency('threads')
-inc = [ include_directories('./include') ]
+inc = [
+  include_directories('./include'),
+  include_directories('./include/dummy'),
+]
 obj = []
 foreach s : subprojects
   inc += s.get_variable('inc')

@@ -18,7 +18,7 @@
 #ifndef LIBPLACEBO_CONTEXT_H_
 #define LIBPLACEBO_CONTEXT_H_
 
-#include "config.h"
+#include <libplacebo/config.h>
 
 // Meta-object to serve as a global entrypoint for the purposes of resource
 // allocation, logging, etc.. Note on thread safety: the pl_context and
