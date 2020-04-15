@@ -157,11 +157,13 @@ void pl_msg_source(struct pl_context *ctx, enum pl_log_level lev, const char *sr
     int line = 1;
     while (*src) {
         const char *end = strchr(src, '\n');
-        const char *next = end + 1;
-        if (!end)
-            next = end = src + strlen(src);
+        if (!end) {
+            pl_msg(ctx, lev, "[%3d] %s", line, src);
+            break;
+        }
+
         pl_msg(ctx, lev, "[%3d] %.*s", line, (int)(end - src), src);
+        src = end + 1;
         line++;
-        src = next;
     }
 }
