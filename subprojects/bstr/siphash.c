@@ -50,6 +50,9 @@
 
 uint64_t siphash64(const uint8_t *in, const size_t inlen)
 {
+    if (!inlen)
+        return 0x8533321381b8254bULL;
+
     uint64_t v0 = 0x736f6d6570736575ULL;
     uint64_t v1 = 0x646f72616e646f6dULL;
     uint64_t v2 = 0x6c7967656e657261ULL;
