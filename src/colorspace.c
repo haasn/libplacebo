@@ -139,7 +139,7 @@ void pl_color_repr_merge(struct pl_color_repr *orig,
     };
 }
 
-static enum pl_color_levels guess_levels(const struct pl_color_repr *repr)
+enum pl_color_levels pl_color_levels_guess(const struct pl_color_repr *repr)
 {
     if (repr->levels)
         return repr->levels;
@@ -162,7 +162,7 @@ float pl_color_repr_normalize(struct pl_color_repr *repr)
     int tex_bits = PL_DEF(bits->sample_depth, 8);
     int col_bits = PL_DEF(bits->color_depth,  8);
 
-    if (guess_levels(repr) == PL_COLOR_LEVELS_TV) {
+    if (pl_color_levels_guess(repr) == PL_COLOR_LEVELS_TV) {
         // Limit range is always shifted directly
         scale *= (float) (1LL << tex_bits) / (1LL << col_bits);
     } else {
@@ -883,7 +883,7 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     double ymax, ymin, cmax, cmid;
     double scale = (1LL << bit_depth) / ((1LL << bit_depth) - 1.0);
 
-    switch (guess_levels(repr)) {
+    switch (pl_color_levels_guess(repr)) {
     case PL_COLOR_LEVELS_TV: {
         ymax = 235 / 256. * scale;
         ymin =  16 / 256. * scale;

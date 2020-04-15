@@ -146,6 +146,11 @@ void pl_color_repr_merge(struct pl_color_repr *orig,
 // depth will both be inferred as 8 bits for the purposes of this conversion.
 float pl_color_repr_normalize(struct pl_color_repr *repr);
 
+// Guesses the best color levels based on the specified color levels and
+// falling back to using the color system instead. YCbCr-like systems are
+// assumed to be TV range, otherwise this defaults to PC range.
+enum pl_color_levels pl_color_levels_guess(const struct pl_color_repr *repr);
+
 // The colorspace's primaries (gamut)
 enum pl_color_primaries {
     PL_COLOR_PRIM_UNKNOWN = 0,
