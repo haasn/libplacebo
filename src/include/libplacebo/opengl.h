@@ -26,6 +26,9 @@ struct pl_opengl {
 };
 
 struct pl_opengl_params {
+    // Enable OpenGL debug report callbacks. May have little effect depending
+    // on whether or not the GL context was initialized with appropriate
+    // debugging enabled.
     bool debug;
 };
 
