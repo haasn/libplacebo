@@ -118,6 +118,7 @@ void xta_ref_deref(struct xta_ref **refp)
         return;
     }
 
+    pthread_mutex_unlock(&ref->lock);
     pthread_mutex_destroy(&ref->lock);
     xta_free(ref);
     *refp = NULL;
