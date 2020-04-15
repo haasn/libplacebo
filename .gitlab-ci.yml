@@ -80,51 +80,6 @@ build-macos:
         - ninja -C build
         - cd build && meson test -v
 
-test-ubuntu-asan:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
-    stage: test
-    tags:
-        - debian
-        - amd64
-    variables:
-        ASAN_OPTIONS: 'detect_leaks=0'
-    script:
-        - meson build --buildtype debugoptimized -Dtests=true -Db_sanitize=address
-        - ninja -C build
-        - cd build && time meson test -v
-
-test-ubuntu-msan:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
-    stage: test
-    tags:
-        - debian
-        - amd64
-    variables:
-        MSAN_OPTIONS: 'exitcode=1'
-    script:
-        - env CC=clang meson build --buildtype debugoptimized
-                                   -Dtests=true
-                                   -Db_sanitize=memory
-                                   -Db_lundef=false
-        - ninja -C build
-        - cd build && time meson test -v
-
-test-ubuntu-ubsan:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
-    stage: test
-    tags:
-        - debian
-        - amd64
-    variables:
-        UBSAN_OPTIONS: 'print_stacktrace=1:halt_on_error=1'
-    script:
-        - env CC=clang meson build --buildtype debugoptimized
-                                   -Dtests=true
-                                   -Db_sanitize=undefined
-                                   -Db_lundef=false
-        - ninja -C build
-        - cd build && time meson test -v
-
 test-ubuntu-scan:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
     stage: test
@@ -155,3 +110,45 @@ test-gpu:
         - vulkaninfo
         - cd build && meson test -v
         - ninja coverage-text && cat meson-logs/coverage.txt
+
+test-gpu-asan:
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
+    stage: test
+    tags:
+        - gpu
+    variables:
+        ASAN_OPTIONS: 'detect_leaks=0'
+    script:
+        - meson build --buildtype debugoptimized -Dtests=true -Db_sanitize=address
+        - ninja -C build
+        - cd build && time meson test -v
+
+test-gpu-msan:
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
+    stage: test
+    tags:
+        - gpu
+    variables:
+        MSAN_OPTIONS: 'exitcode=1'
+    script:
+        - env CC=clang meson build --buildtype debugoptimized
+                                   -Dtests=true
+                                   -Db_sanitize=memory
+                                   -Db_lundef=false
+        - ninja -C build
+        - cd build && time meson test -v
+
+test-gpu-ubsan:
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
+    stage: test
+    tags:
+        - gpu
+    variables:
+        UBSAN_OPTIONS: 'print_stacktrace=1:halt_on_error=1'
+    script:
+        - env CC=clang meson build --buildtype debugoptimized
+                                   -Dtests=true
+                                   -Db_sanitize=undefined
+                                   -Db_lundef=false
+        - ninja -C build
+        - cd build && time meson test -v
