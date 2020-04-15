@@ -275,7 +275,7 @@ struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk,
     *pool = (struct vk_cmdpool) {
         .props = props,
         .qf = qinfo.queueFamilyIndex,
-        .queues = talloc_array(pool, VkQueue, qinfo.queueCount),
+        .queues = talloc_zero_array(pool, VkQueue, qinfo.queueCount),
         .num_queues = qinfo.queueCount,
     };
 

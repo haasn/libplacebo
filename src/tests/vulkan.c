@@ -126,7 +126,7 @@ int main()
 
     // Test all attached devices
     for (int i = 0; i < num; i++) {
-        VkPhysicalDeviceProperties props;
+        VkPhysicalDeviceProperties props = {0};
         GetPhysicalDeviceProperties(devices[i], &props);
         printf("Testing device %d: %s\n", i, props.deviceName);
 

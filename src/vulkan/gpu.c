@@ -139,7 +139,7 @@ static void vk_setup_formats(struct pl_gpu *gpu)
         if (vk_fmt->fmt.emulated && !has_emu)
             continue;
 
-        VkFormatProperties prop;
+        VkFormatProperties prop = {0};
         vk->GetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->tfmt, &prop);
 
         // If wholly unsupported, try falling back to the emulation formats
@@ -922,7 +922,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     tex_vk->usage_flags = iinfo.usage;
 
     VkMemoryPropertyFlags memFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    VkMemoryRequirements reqs;
+    VkMemoryRequirements reqs = {0};
     vk->GetImageMemoryRequirements(vk->dev, tex_vk->img, &reqs);
 
     struct vk_memslice *mem = &tex_vk->mem;

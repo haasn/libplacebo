@@ -261,7 +261,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
 
         VK(vk->CreateBuffer(vk->dev, &binfo, VK_ALLOC, &slab->buffer));
 
-        VkMemoryRequirements reqs;
+        VkMemoryRequirements reqs = {0};
         vk->GetBufferMemoryRequirements(vk->dev, slab->buffer, &reqs);
         minfo.allocationSize = reqs.size; // this can be larger than slab->size
         typeBits &= reqs.memoryTypeBits;  // this can restrict the types

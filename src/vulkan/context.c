@@ -315,7 +315,7 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     VK_LOAD_FUN(NULL, EnumerateInstanceExtensionProperties, get_addr);
     uint32_t num_exts_avail = 0;
     EnumerateInstanceExtensionProperties(NULL, &num_exts_avail, NULL);
-    VkExtensionProperties *exts_avail = talloc_array(tmp, VkExtensionProperties, num_exts_avail);
+    VkExtensionProperties *exts_avail = talloc_zero_array(tmp, VkExtensionProperties, num_exts_avail);
     EnumerateInstanceExtensionProperties(NULL, &num_exts_avail, exts_avail);
 
     pl_debug(ctx, "Available instance extensions:");
@@ -355,7 +355,7 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     VK_LOAD_FUN(NULL, EnumerateInstanceLayerProperties, get_addr);
     uint32_t num_layers_avail = 0;
     EnumerateInstanceLayerProperties(&num_layers_avail, NULL);
-    VkLayerProperties *layers_avail = talloc_array(tmp, VkLayerProperties, num_layers_avail);
+    VkLayerProperties *layers_avail = talloc_zero_array(tmp, VkLayerProperties, num_layers_avail);
     EnumerateInstanceLayerProperties(&num_layers_avail, layers_avail);
 
     pl_debug(ctx, "Available layers:");
@@ -526,7 +526,7 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
     VkPhysicalDevice *devices = NULL;
     uint32_t num = 0;
     VK(EnumeratePhysicalDevices(inst, &num, NULL));
-    devices = talloc_array(NULL, VkPhysicalDevice, num);
+    devices = talloc_zero_array(NULL, VkPhysicalDevice, num);
     VK(EnumeratePhysicalDevices(inst, &num, devices));
 
     static const struct { const char *name; int priority; } types[] = {
@@ -540,7 +540,7 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
 
     int best = 0;
     for (int i = 0; i < num; i++) {
-        VkPhysicalDeviceProperties props;
+        VkPhysicalDeviceProperties props = {0};
         GetPhysicalDeviceProperties(devices[i], &props);
         VkPhysicalDeviceType t = props.deviceType;
         PL_INFO(vk, "    GPU %d: %s (%s)", i, props.deviceName, types[t].name);
@@ -639,9 +639,9 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     void *tmp = talloc_new(NULL);
 
     // Enumerate the queue families and find suitable families for each task
-    int qfnum;
+    int qfnum = 0;
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, NULL);
-    VkQueueFamilyProperties *qfs = talloc_array(tmp, VkQueueFamilyProperties, qfnum);
+    VkQueueFamilyProperties *qfs = talloc_zero_array(tmp, VkQueueFamilyProperties, qfnum);
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, qfs);
 
     PL_INFO(vk, "Queue families supported by device:");
@@ -703,7 +703,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     // Enumerate all supported extensions
     uint32_t num_exts_avail = 0;
     VK(vk->EnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, NULL));
-    VkExtensionProperties *exts_avail = talloc_array(tmp, VkExtensionProperties, num_exts_avail);
+    VkExtensionProperties *exts_avail = talloc_zero_array(tmp, VkExtensionProperties, num_exts_avail);
     VK(vk->EnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, exts_avail));
 
     PL_DEBUG(vk, "Available device extensions:");
@@ -873,7 +873,7 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
         }
     }
 
-    VkPhysicalDeviceProperties prop;
+    VkPhysicalDeviceProperties prop = {0};
     vk->GetPhysicalDeviceProperties(vk->physd, &prop);
     vk->limits = prop.limits;
 
