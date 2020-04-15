@@ -110,7 +110,7 @@ static cmsHPROFILE get_profile(struct pl_context *ctx, cmsContext cms,
         if (!xyz2src)
             return false;
 
-        double src_black[3];
+        double src_black[3] = {0};
         cmsDoTransform(xyz2src, &bp_XYZ, src_black, 1);
         cmsDeleteTransform(xyz2src);
 
