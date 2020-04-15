@@ -918,7 +918,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     pl_assert(bits >= 8);
 
     float minValue, maxLuma, maxChroma;
-    if (params->repr.levels == PL_COLOR_LEVELS_TV) {
+    if (pl_color_levels_guess(&params->repr) == PL_COLOR_LEVELS_TV) {
         float out_scale = (1 << bits) / ((1 << bits) - 1.0);
         out_scale /= scale.texture_scale;
         minValue  = 16  / 256.0 * out_scale;
