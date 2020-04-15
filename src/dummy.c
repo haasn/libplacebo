@@ -307,10 +307,10 @@ static void dumb_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
         case PL_FMT_UNORM:
         case PL_FMT_UINT:
             switch (fmt->component_depth[0]) {
-            case 8:  data.u8[c]  = UINT8_MAX  * color[c]; break;
-            case 16: data.u16[c] = UINT16_MAX * color[c]; break;
-            case 32: data.u32[c] = UINT32_MAX * color[c]; break;
-            case 64: data.u64[c] = UINT64_MAX * color[c]; break;
+            case 8:  data.u8[c]  = (float) UINT8_MAX  * color[c]; break;
+            case 16: data.u16[c] = (float) UINT16_MAX * color[c]; break;
+            case 32: data.u32[c] = (float) UINT32_MAX * color[c]; break;
+            case 64: data.u64[c] = (float) UINT64_MAX * color[c]; break;
             default: abort();
             }
             break;
@@ -318,10 +318,10 @@ static void dumb_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
         case PL_FMT_SNORM:
         case PL_FMT_SINT:
             switch (fmt->component_depth[0]) {
-            case 8:  data.i8[c]  = INT8_MAX  * color[c]; break;
-            case 16: data.i16[c] = INT16_MAX * color[c]; break;
-            case 32: data.i32[c] = INT32_MAX * color[c]; break;
-            case 64: data.i64[c] = INT64_MAX * color[c]; break;
+            case 8:  data.i8[c]  = (float) INT8_MAX  * color[c]; break;
+            case 16: data.i16[c] = (float) INT16_MAX * color[c]; break;
+            case 32: data.i32[c] = (float) INT32_MAX * color[c]; break;
+            case 64: data.i64[c] = (float) INT64_MAX * color[c]; break;
             default: abort();
             }
             break;
