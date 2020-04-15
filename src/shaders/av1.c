@@ -280,7 +280,8 @@ struct grain_scale {
 
 static struct grain_scale get_grain_scale(const struct pl_av1_grain_params *params)
 {
-    int bit_depth = params->repr.bits.color_depth;
+    int bit_depth = PL_DEF(params->repr.bits.color_depth, 8);
+    pl_assert(bit_depth >= 8);
     struct grain_scale ret = {
         .grain_center = 128 << (bit_depth - 8),
     };
@@ -316,8 +317,9 @@ static void generate_grain_y(float out[GRAIN_HEIGHT_LUT][GRAIN_WIDTH_LUT],
     const struct pl_av1_grain_data *data = &params->data;
     struct grain_scale scale = get_grain_scale(params);
     uint16_t seed = data->grain_seed;
-    int bit_depth = params->repr.bits.color_depth;
+    int bit_depth = PL_DEF(params->repr.bits.color_depth, 8);
     int shift = 12 - bit_depth + data->grain_scale_shift;
+    pl_assert(shift >= 0);
 
     for (int y = 0; y < GRAIN_HEIGHT; y++) {
         for (int x = 0; x < GRAIN_WIDTH; x++) {
@@ -362,8 +364,9 @@ static void generate_grain_uv(float *out, int16_t buf[GRAIN_HEIGHT][GRAIN_WIDTH]
 {
     const struct pl_av1_grain_data *data = &params->data;
     struct grain_scale scale = get_grain_scale(params);
-    int bit_depth = params->repr.bits.color_depth;
+    int bit_depth = PL_DEF(params->repr.bits.color_depth, 8);
     int shift = 12 - bit_depth + data->grain_scale_shift;
+    pl_assert(shift >= 0);
 
     uint16_t seed = data->grain_seed;
     if (channel == PL_CHANNEL_CB) {
@@ -456,10 +459,10 @@ static void generate_offsets(uint32_t *buf, int offsets_x, int offsets_y,
             // Encode four offsets into a single 32-bit integer for
             // the convenience of the GPU. That way only one SSBO read is
             // required for the entire block.
-            *offsets = (val_tl << OFFSET_TL)
-                     | (val_t  << OFFSET_T)
-                     | (val_l  << OFFSET_L)
-                     | (val    << OFFSET_N);
+            *offsets = ((uint32_t) val_tl << OFFSET_TL)
+                     | ((uint32_t) val_t  << OFFSET_T)
+                     | ((uint32_t) val_l  << OFFSET_L)
+                     | ((uint32_t) val    << OFFSET_N);
         }
     }
 }
@@ -911,7 +914,9 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     }
 
     struct grain_scale scale = get_grain_scale(params);
-    int bits = params->repr.bits.color_depth;
+    int bits = PL_DEF(params->repr.bits.color_depth, 8);
+    pl_assert(bits >= 8);
+
     float minValue, maxLuma, maxChroma;
     if (params->repr.levels == PL_COLOR_LEVELS_TV) {
         float out_scale = (1 << bits) / ((1 << bits) - 1.0);
