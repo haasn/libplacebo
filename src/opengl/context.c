@@ -15,8 +15,6 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <pthread.h>
-
 #include "common.h"
 #include "gpu.h"
 
@@ -27,14 +25,22 @@ struct priv {
     bool is_debug;
 };
 
-// OpenGL can't destroy allocators, so we need to use global state to make sure
-// we properly clean up after ourselves to avoid logging to contexts after they
-// stopped existing
-static pthread_mutex_t debug_ctx_mutex = PTHREAD_MUTEX_INITIALIZER;
+static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
+                                GLenum severity, GLsizei length,
+                                const GLchar *message, const void *userParam)
+{
+    struct pl_context *ctx = (void *) userParam;
+    enum pl_log_level level = PL_LOG_ERR;
 
-static bool debug_cb_set;
-static struct pl_context *debug_ctx;
-static int debug_ctx_refcount;
+    switch (severity) {
+    case GL_DEBUG_SEVERITY_NOTIFICATION:level = PL_LOG_DEBUG; break;
+    case GL_DEBUG_SEVERITY_LOW:         level = PL_LOG_INFO; break;
+    case GL_DEBUG_SEVERITY_MEDIUM:      level = PL_LOG_WARN; break;
+    case GL_DEBUG_SEVERITY_HIGH:        level = PL_LOG_ERR; break;
+    }
+
+    pl_msg(ctx, level, "GL: %s", message);
+}
 
 void pl_opengl_destroy(const struct pl_opengl **ptr)
 {
@@ -43,37 +49,11 @@ void pl_opengl_destroy(const struct pl_opengl **ptr)
         return;
 
     struct priv *p = TA_PRIV(pl_gl);
-    if (p->is_debug) {
-        pthread_mutex_lock(&debug_ctx_mutex);
-        if (--debug_ctx_refcount == 0)
-            debug_ctx = NULL;
-        pthread_mutex_unlock(&debug_ctx_mutex);
-    }
+    if (p->is_debug)
+        glDebugMessageCallback(NULL, NULL);
 
     pl_gpu_destroy(pl_gl->gpu);
     TA_FREEP((void **) ptr);
-}
-
-static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
-                                GLenum severity, GLsizei length,
-                                const GLchar *message, const void *userParam)
-{
-    pthread_mutex_lock(&debug_ctx_mutex);
-    if (!debug_ctx)
-        goto done;
-
-    enum pl_log_level level = PL_LOG_ERR;
-    switch (severity) {
-    case GL_DEBUG_SEVERITY_NOTIFICATION:level = PL_LOG_DEBUG; break;
-    case GL_DEBUG_SEVERITY_LOW:         level = PL_LOG_INFO; break;
-    case GL_DEBUG_SEVERITY_MEDIUM:      level = PL_LOG_WARN; break;
-    case GL_DEBUG_SEVERITY_HIGH:        level = PL_LOG_ERR; break;
-    }
-
-    pl_msg(debug_ctx, level, "GL: %s", message);
-
-done:
-    pthread_mutex_unlock(&debug_ctx_mutex);
 }
 
 const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
@@ -98,20 +78,8 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
 
     if (params->debug) {
         if (epoxy_has_gl_extension("GL_ARB_debug_output")) {
-            pthread_mutex_lock(&debug_ctx_mutex);
-            if (debug_ctx && debug_ctx != ctx) {
-                PL_WARN(p, "Tried creating multiple `pl_opengl` objects with "
-                        "debugging enabled on different `pl_context`, this is "
-                        "not supported.. ignoring!");
-            } else {
-                debug_ctx = ctx;
-                debug_ctx_refcount++;
-                p->is_debug = true;
-
-                if (!debug_cb_set)
-                    glDebugMessageCallback(debug_cb, NULL);
-            }
-            pthread_mutex_unlock(&debug_ctx_mutex);
+            glDebugMessageCallback(debug_cb, ctx);
+            p->is_debug = true;
         } else {
             PL_WARN(p, "OpenGL debugging requested but GL_ARB_debug_output "
                     "unavailable.. ignoring!");

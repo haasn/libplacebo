@@ -38,7 +38,12 @@ extern const struct pl_opengl_params pl_opengl_default_params;
 // internally use whatever platform-defined mechanism (WGL, X11, EGL) is
 // appropriate for loading the OpenGL function calls, so the user doesn't need
 // to pass in a `getProcAddress` callback. If `params` is left as NULL, it
-// defaults to `&pl_opengl_default_params`.
+// defaults to `&pl_opengl_default_params`. The context must be active when
+// calling this function, and must remain active whenever calling any
+// libplacebo function on the resulting `pl_opengl` or `pl_gpu`.
+//
+// Note that creating multiple `pl_opengl` instances from the same OpenGL
+// context is undefined behavior.
 const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
                                          const struct pl_opengl_params *params);
 
