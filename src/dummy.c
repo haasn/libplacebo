@@ -300,8 +300,9 @@ static void dumb_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
         double d[4];
 
         uint8_t bytes[sizeof(double[4])]; // raw data
-    } data;
+    } data = {0};
 
+    assert(fmt->num_components > 0);
     for (int c = 0; c < fmt->num_components; c++) {
         switch (fmt->type) {
         case PL_FMT_UNORM:
