@@ -21,4 +21,3 @@
 #include "../context.h"
 
 #include <epoxy/gl.h>
-#include <epoxy/glx.h>
