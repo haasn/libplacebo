@@ -106,7 +106,6 @@ test-ubuntu-msan:
                                    -Dtests=true
                                    -Db_sanitize=memory
                                    -Db_lundef=false
-                                   -Dvulkan=disabled # fails under msan
         - ninja -C build
         - cd build && time meson test -v
 
