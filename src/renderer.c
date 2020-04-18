@@ -216,6 +216,8 @@ const struct pl_render_params pl_render_default_params = {
     .dither_params      = &pl_dither_default_params,
 };
 
+#define FBOFMT (params->disable_fbos ? NULL : rr->fbofmt)
+
 // Represents a "in-flight" image, which is a shader that's in the process of
 // producing some sort of image
 struct img {
@@ -319,7 +321,7 @@ static struct sampler_info sample_src_info(struct pl_renderer *rr,
     }
 
     bool is_linear = src->tex->params.sample_mode == PL_TEX_SAMPLE_LINEAR;
-    if (!rr->fbofmt || rr->disable_sampling || !info.config) {
+    if (!FBOFMT || rr->disable_sampling || !info.config) {
         info.type = SAMPLER_DIRECT;
     } else {
         info.type = SAMPLER_COMPLEX;
@@ -403,7 +405,7 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
         };
 
         struct pl_sample_src src2 = *src;
-        src2.tex = finalize_img(rr, &img, rr->fbofmt, sep_fbo);
+        src2.tex = finalize_img(rr, &img, FBOFMT, sep_fbo);
         ok = src2.tex && pl_shader_sample_ortho(sh, PL_SEP_HORIZ, &src2, &fparams);
     }
 
@@ -599,7 +601,7 @@ static int deband_src(struct pl_renderer *rr, struct pl_shader *psh,
         .h  = src->new_h,
     };
 
-    const struct pl_tex *new = finalize_img(rr, &img, rr->fbofmt, fbo);
+    const struct pl_tex *new = finalize_img(rr, &img, FBOFMT, fbo);
     if (!new) {
         PL_ERR(rr, "Failed dispatching debanding shader.. disabling debanding!");
         rr->disable_debanding = true;
@@ -626,7 +628,7 @@ static void hdr_update_peak(struct pl_renderer *rr, struct pl_shader *sh,
     if (rr->disable_compute || rr->disable_peak_detect)
         goto cleanup;
 
-    if (!rr->fbofmt && !params->allow_delayed_peak_detect) {
+    if (!FBOFMT && !params->allow_delayed_peak_detect) {
         PL_WARN(rr, "Disabling peak detection because "
                 "`allow_delayed_peak_detect` is false, but lack of FBOs "
                 "forces the result to be delayed.");
@@ -759,7 +761,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
 
         const struct pl_fmt *grain_fmt = plane->texture->params.format;
         if (!(grain_fmt->caps & PL_FMT_CAP_RENDERABLE))
-            grain_fmt = rr->fbofmt;
+            grain_fmt = FBOFMT;
 
         bool needs_grain = !rr->disable_grain && pl_needs_av1_grain(&grain_params);
         if (needs_grain && !grain_fmt) {
@@ -880,14 +882,14 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_render_target *target,
                             const struct pl_render_params *params)
 {
-    if (!rr->fbofmt) {
+    if (!FBOFMT) {
         PL_TRACE(rr, "Skipping main scaler (no FBOs)");
         return true;
     }
 
     struct img *img = &pass->cur_img;
     struct pl_sample_src src = {
-        .tex        = &(struct pl_tex) { .params = img_params(rr, img, rr->fbofmt) },
+        .tex        = &(struct pl_tex) { .params = img_params(rr, img, FBOFMT) },
         .components = img->comps,
         .new_w      = abs(pl_rect_w(target->dst_rect)),
         .new_h      = abs(pl_rect_h(target->dst_rect)),
@@ -931,7 +933,7 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     if (use_sigmoid)
         pl_shader_sigmoidize(img->sh, params->sigmoid_params);
 
-    src.tex = finalize_img(rr, img, rr->fbofmt, &rr->main_scale_fbo);
+    src.tex = finalize_img(rr, img, FBOFMT, &rr->main_scale_fbo);
     if (!src.tex)
         return false;
 
@@ -1034,7 +1036,7 @@ fallback:
 
     bool is_comp = pl_shader_is_compute(sh);
     if (is_comp && !fbo->params.storable) {
-        bool ok = finalize_img(rr, &pass->cur_img, rr->fbofmt, &rr->output_fbo);
+        bool ok = finalize_img(rr, &pass->cur_img, FBOFMT, &rr->output_fbo);
         if (!ok) {
             PL_ERR(rr, "Failed dispatching compute shader to intermediate FBO?");
             return false;
@@ -1131,7 +1133,7 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
 
     // If we don't have FBOs available, simulate the on-image overlays at
     // this stage
-    if (image.num_overlays > 0 && !rr->fbofmt) {
+    if (image.num_overlays > 0 && !FBOFMT) {
         float rx = pl_rect_w(target.dst_rect) / pl_rect_w(image.src_rect),
               ry = pl_rect_h(target.dst_rect) / pl_rect_h(image.src_rect);
 

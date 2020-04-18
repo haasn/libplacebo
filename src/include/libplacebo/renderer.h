@@ -190,6 +190,10 @@ struct pl_render_params {
     // depth that rounding errors are below the human perception threshold,
     // but this can be used to test the dither code.
     bool force_dither;
+
+    // Completely overrides the use of FBOs, as if there were no renderable
+    // texture format available. This disables most features.
+    bool disable_fbos;
 };
 
 // This contains the default/recommended options for reasonable image quality,
