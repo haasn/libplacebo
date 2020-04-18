@@ -399,7 +399,7 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
     ident_t name = sh_fresh(sh, "sub");
     GLSLH("%s %s(%s) {\n", outsigs[sub->res.output], name, insigs[sub->res.input]);
     bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_BODY]);
-    GLSLH("%s }\n", retvals[sub->res.output]);
+    GLSLH("%s\n}\n\n", retvals[sub->res.output]);
 
     // Copy over all of the descriptors etc.
     talloc_ref_attach(sh->tmp, sub->tmp);
@@ -434,7 +434,7 @@ static ident_t sh_split(struct pl_shader *sh)
         sh->buffers[SH_BUF_FOOTER].start[0] = '\0';
     }
 
-    GLSLH("%s }\n", retvals[sh->res.output]);
+    GLSLH("%s\n}\n\n", retvals[sh->res.output]);
     return name;
 }
 
@@ -450,6 +450,9 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
 
     // Split the shader. This finalizes the body and adds it to the header
     sh->res.name = sh_split(sh);
+
+    // Padding for readability
+    GLSLP("\n");
 
     // Concatenate the header onto the prelude to form the final output
     struct bstr *glsl = &sh->buffers[SH_BUF_PRELUDE];
