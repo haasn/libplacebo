@@ -214,6 +214,10 @@ static void vk_setup_formats(struct pl_gpu *gpu)
         if (!(gpu->caps & PL_GPU_CAP_COMPUTE))
             fmt->caps &= ~(PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE);
 
+        // Only set this gpu-wide cap if at least one blittable fmt exists
+        if (fmt->caps & PL_FMT_CAP_BLITTABLE)
+            gpu->caps |= PL_GPU_CAP_BLITTABLE_1D_3D;
+
         enum pl_fmt_caps storable = PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE;
         if (fmt->caps & storable) {
             int real_comps = PL_DEF(vk_fmt->icomps, fmt->num_components);

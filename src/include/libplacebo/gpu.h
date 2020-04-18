@@ -47,6 +47,7 @@ enum {
     PL_GPU_CAP_PARALLEL_COMPUTE = 1 << 1, // supports multiple compute queues
     PL_GPU_CAP_INPUT_VARIABLES  = 1 << 2, // supports shader input variables
     PL_GPU_CAP_MAPPED_BUFFERS   = 1 << 3, // supports host-mapped buffers
+    PL_GPU_CAP_BLITTABLE_1D_3D  = 1 << 4, // supports blittable 1D/3D textures
 };
 
 // Some `pl_gpu` operations allow sharing GPU resources with external APIs -
@@ -272,6 +273,9 @@ struct pl_tex_params {
     bool host_writable; // may be updated with pl_tex_upload()
     bool host_readable; // may be fetched with pl_tex_download()
 
+    // Note: For `blit_src`, `blit_dst`, the texture must either be
+    // 2-dimensional or `PL_GPU_CAP_BLITTABLE_1D_3D` must set.
+
     // The following capabilities are only relevant for textures which have
     // either sampleable or blit_src enabled.
     enum pl_tex_sample_mode sample_mode;
@@ -359,7 +363,7 @@ bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
 void pl_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex);
 
 // Clear the dst texture with the given color (rgba). This is functionally
-// identical to a blit operation, which means dst->params.blit_dst must be
+// identical to a blit operation, which means `dst->params.blit_dst` must be
 // set.
 void pl_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *dst,
                   const float color[4]);
@@ -369,12 +373,12 @@ void pl_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *dst,
 // preserved. The formats of the textures must be loosely compatible - which
 // essentially means that they must have the same `internal_size`. Additionally,
 // UINT textures can only be blitted to other UINT textures, and SINT textures
-// can only be blitted to other SINT textures. Finally, src.blit_src and
-// dst.blit_dst must be set, respectively.
+// can only be blitted to other SINT textures. Finally, `src.blit_src` and
+// `dst.blit_dst` must be set, respectively.
 //
 // The rectangles may be "flipped", which leads to the image being flipped
 // while blitting. If the src and dst rects have different sizes, the source
-// image will be scaled according to src->params.sample_mode. That said, the
+// image will be scaled according to `src->params.sample_mode`. That said, the
 // src and dst rects must be fully contained within the src/dst dimensions.
 void pl_tex_blit(const struct pl_gpu *gpu,
                  const struct pl_tex *dst, const struct pl_tex *src,

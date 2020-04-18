@@ -418,6 +418,8 @@ const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
         require(params->w > 0);
         require(params->w <= gpu->limits.max_tex_1d_dim);
         require(!params->renderable);
+        require(!params->blit_src || gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D);
+        require(!params->blit_dst || gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D);
         break;
     case 2:
         require(params->w > 0 && params->h > 0);
@@ -430,6 +432,8 @@ const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
         require(params->h <= gpu->limits.max_tex_3d_dim);
         require(params->d <= gpu->limits.max_tex_3d_dim);
         require(!params->renderable);
+        require(!params->blit_src || gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D);
+        require(!params->blit_dst || gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D);
         break;
     }
 
