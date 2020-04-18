@@ -277,83 +277,6 @@ uint8_t *pl_tex_dummy_data(const struct pl_tex *tex)
     return p->data;
 }
 
-static void dumb_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                           const float color[4])
-{
-    const struct pl_fmt *fmt = tex->params.format;
-    struct tex_priv *p = TA_PRIV(tex);
-    pl_assert(p->data);
-
-    // Convert from float[4] to whatever internal representation we need
-    union {
-        uint8_t u8[4];
-        uint16_t u16[4];
-        uint32_t u32[4];
-        uint64_t u64[4];
-
-        int8_t i8[4];
-        int16_t i16[4];
-        int32_t i32[4];
-        int64_t i64[4];
-
-        float f[4];
-        double d[4];
-
-        uint8_t bytes[sizeof(double[4])]; // raw data
-    } data = {0};
-
-    assert(fmt->num_components > 0);
-    for (int c = 0; c < fmt->num_components; c++) {
-        switch (fmt->type) {
-        case PL_FMT_UNORM:
-        case PL_FMT_UINT:
-            switch (fmt->component_depth[0]) {
-            case 8:  data.u8[c]  = (float) UINT8_MAX  * color[c]; break;
-            case 16: data.u16[c] = (float) UINT16_MAX * color[c]; break;
-            case 32: data.u32[c] = (float) UINT32_MAX * color[c]; break;
-            case 64: data.u64[c] = (float) UINT64_MAX * color[c]; break;
-            default: abort();
-            }
-            break;
-
-        case PL_FMT_SNORM:
-        case PL_FMT_SINT:
-            switch (fmt->component_depth[0]) {
-            case 8:  data.i8[c]  = (float) INT8_MAX  * color[c]; break;
-            case 16: data.i16[c] = (float) INT16_MAX * color[c]; break;
-            case 32: data.i32[c] = (float) INT32_MAX * color[c]; break;
-            case 64: data.i64[c] = (float) INT64_MAX * color[c]; break;
-            default: abort();
-            }
-            break;
-
-        case PL_FMT_FLOAT:
-            switch (fmt->component_depth[0]) {
-            case 32: data.f[c] = color[c]; break;
-            case 64: data.d[c] = color[c]; break;
-            default: abort();
-            }
-            break;
-
-        default: abort();
-        }
-    }
-
-    // Fast path: clearing to a constant value
-    bool fast_path = true;
-    for (size_t i = 1; i < fmt->texel_size; i++)
-        fast_path &= data.bytes[i] == data.bytes[0];
-
-    if (fast_path) {
-        memset(p->data, data.bytes[0], tex_size(gpu, tex));
-        return;
-    }
-
-    uint8_t *dst = p->data;
-    for (size_t pos = 0; pos < tex_size(gpu, tex); pos += fmt->texel_size)
-        memcpy(&dst[pos], &data.bytes[0], fmt->texel_size);
-}
-
 static bool dumb_tex_upload(const struct pl_gpu *gpu,
                             const struct pl_tex_transfer_params *params)
 {
@@ -426,17 +349,6 @@ static const struct pl_pass *dumb_pass_create(const struct pl_gpu *gpu,
     return NULL;
 }
 
-static void dumb_pass_destroy(const struct pl_gpu *gpu, const struct pl_pass *pass)
-{
-    pl_assert(!"unreachable");
-}
-
-static void dumb_pass_run(const struct pl_gpu *gpu,
-                          const struct pl_pass_run_params *params)
-{
-    pl_assert(!"unreachable");
-}
-
 static void dumb_gpu_finish(const struct pl_gpu *gpu)
 {
     // no-op
@@ -450,12 +362,9 @@ static const struct pl_gpu_fns pl_fns_dummy = {
     .buf_read = dumb_buf_read,
     .tex_create = dumb_tex_create,
     .tex_destroy = dumb_tex_destroy,
-    .tex_clear = dumb_tex_clear,
     .tex_upload = dumb_tex_upload,
     .tex_download = dumb_tex_download,
     .desc_namespace = dumb_desc_namespace,
     .pass_create = dumb_pass_create,
-    .pass_destroy = dumb_pass_destroy,
-    .pass_run = dumb_pass_run,
     .gpu_finish = dumb_gpu_finish,
 };
