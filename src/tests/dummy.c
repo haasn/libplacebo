@@ -4,6 +4,7 @@ int main()
 {
     struct pl_context *ctx = pl_test_context();
     const struct pl_gpu *gpu = pl_gpu_dummy_create(ctx, NULL);
+    pl_buffer_tests(gpu);
     pl_texture_tests(gpu);
 
     // Attempt creating a shader and accessing the resulting LUT

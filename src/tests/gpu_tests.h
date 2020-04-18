@@ -55,6 +55,7 @@ static void pl_buffer_tests(const struct pl_gpu *gpu)
         });
 
         REQUIRE(buf);
+        REQUIRE(!pl_buf_poll(gpu, buf, 0));
         REQUIRE(memcmp(test_src, buf->data, buf_size) == 0);
         pl_buf_destroy(gpu, &buf);
     }
