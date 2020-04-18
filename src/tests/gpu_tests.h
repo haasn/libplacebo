@@ -601,10 +601,34 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     };
 
     REQUIRE(pl_render_image(rr, &image, &target, &params));
-
     params = pl_render_default_params;
+
     image.av1_grain = av1_grain_data;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
+    image.av1_grain = (struct pl_av1_grain_data) {0};
+
+    // Test overlays
+    image.num_overlays = 1;
+    image.overlays = &(struct pl_overlay) {
+        .plane = img5x5,
+        .rect = {0, 0, 2, 2},
+        .mode = PL_OVERLAY_NORMAL,
+    };
+    REQUIRE(pl_render_image(rr, &image, &target, &params));
+    params.disable_fbos = true;
+    REQUIRE(pl_render_image(rr, &image, &target, &params));
+    image.num_overlays = 0;
+    params = pl_render_default_params;
+
+    target.num_overlays = 1;
+    target.overlays = &(struct pl_overlay) {
+        .plane = img5x5,
+        .rect = {5, 5, 15, 15},
+        .mode = PL_OVERLAY_MONOCHROME,
+        .base_color = {1.0, 0.5, 0.0},
+    };
+    REQUIRE(pl_render_image(rr, &image, &target, &params));
+    target.num_overlays = 0;
 
 error:
     free(fbo_data);
