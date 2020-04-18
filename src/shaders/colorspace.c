@@ -69,11 +69,11 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
         // as per the BT.2020 specification, table 4. This is a non-linear
         // transformation because (constant) luminance receives non-equal
         // contributions from the three different channels.
-        GLSL("// constant luminance conversion                                \n"
-             "color.br = color.br * mix(vec2(1.5816, 0.9936),                 \n"
-             "                          vec2(1.9404, 1.7184),                 \n"
-             "                          %s(lessThanEqual(color.br, vec2(0)))) \n"
-             "           + color.gg;                                          \n",
+        GLSL("// constant luminance conversion                                  \n"
+             "color.br = color.br * mix(vec2(1.5816, 0.9936),                   \n"
+             "                          vec2(1.9404, 1.7184),                   \n"
+             "                          %s(lessThanEqual(color.br, vec2(0.0)))) \n"
+             "           + color.gg;                                            \n",
              sh_bvec(sh, 2));
         // Expand channels to camera-linear light. This shader currently just
         // assumes everything uses the BT.2020 12-bit gamma function, since the
@@ -86,10 +86,10 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
              sh_bvec(sh, 3));
         // Calculate the green channel from the expanded RYcB, and recompress to G'
         // The BT.2020 specification says Yc = 0.2627*R + 0.6780*G + 0.0593*B
-        GLSL("color.g = (lin.g - 0.2627*lin.r - 0.0593*lin.b)*1.0/0.6780; \n"
-             "color.g = mix(color.g * 4.5,                        \n"
-             "              1.0993 * pow(color.g, 0.45) - 0.0993, \n"
-             "              %s(0.0181 <= color.g));               \n",
+        GLSL("color.g = (lin.g - 0.2627*lin.r - 0.0593*lin.b)*1.0/0.6780;   \n"
+             "color.g = mix(color.g * 4.5,                                  \n"
+             "              1.0993 * pow(color.g, 0.45) - 0.0993,           \n"
+             "              %s(0.0181 <= color.g));                         \n",
              sh_bvec(sh, 1));
         break;
 
