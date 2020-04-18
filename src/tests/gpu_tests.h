@@ -60,17 +60,17 @@ static void pl_buffer_tests(const struct pl_gpu *gpu)
     }
 }
 
-static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex,
+static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex[2],
                               uint8_t *src, uint8_t *dst)
 {
-    if (!tex)
+    if (!tex[0] || !tex[1])
         return;
 
-    int texels = tex->params.w;
-    texels *= tex->params.h ? tex->params.h : 1;
-    texels *= tex->params.d ? tex->params.d : 1;
+    int texels = tex[0]->params.w;
+    texels *= tex[0]->params.h ? tex[0]->params.h : 1;
+    texels *= tex[0]->params.d ? tex[0]->params.d : 1;
 
-    const struct pl_fmt *fmt = tex->params.format;
+    const struct pl_fmt *fmt = tex[0]->params.format;
     size_t bytes = texels * fmt->texel_size;
     memset(src, 0, bytes);
     memset(dst, 0, bytes);
@@ -79,12 +79,29 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
         src[i] = (RANDOM * 256);
 
     REQUIRE(pl_tex_upload(gpu, &(struct pl_tex_transfer_params){
-        .tex = tex,
+        .tex = tex[0],
         .ptr = src,
     }));
 
+    // Test blitting, if possible for this format
+    const struct pl_tex *dst_tex = tex[0];
+    if (tex[0]->params.blit_src && tex[1]->params.blit_dst) {
+        struct pl_rect3d rc = {
+            .x0 = 0,
+            .y0 = 0,
+            .z0 = 0,
+            .x1 = tex[0]->params.w,
+            .y1 = tex[0]->params.h,
+            .z1 = tex[0]->params.d,
+        };
+
+        pl_tex_clear(gpu, tex[1], (float[4]){0.0}); // for testing
+        pl_tex_blit(gpu, tex[1], tex[0], rc, rc);
+        dst_tex = tex[1];
+    }
+
     REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params){
-        .tex = tex,
+        .tex = dst_tex,
         .ptr = dst,
     }));
 
@@ -99,41 +116,56 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
 
 static void pl_texture_tests(const struct pl_gpu *gpu)
 {
-    for (int i = 0; i < gpu->num_formats; i++) {
-        const struct pl_fmt *fmt = gpu->formats[i];
+    for (int f = 0; f < gpu->num_formats; f++) {
+        const struct pl_fmt *fmt = gpu->formats[f];
         if (fmt->opaque)
             continue;
 
         printf("testing texture roundtrip for format %s\n", fmt->name);
         assert(fmt->texel_size <= 4 * sizeof(double));
 
-        struct pl_tex_params params = {
+        struct pl_tex_params ref_params = {
             .format        = fmt,
+            .blit_src      = (fmt->caps & PL_FMT_CAP_BLITTABLE),
+            .blit_dst      = (fmt->caps & PL_FMT_CAP_BLITTABLE),
             .host_writable = true,
             .host_readable = true,
         };
 
-        const struct pl_tex *tex = NULL;
+        const struct pl_tex *tex[2];
 
         if (gpu->limits.max_tex_1d_dim >= 16) {
+            struct pl_tex_params params = ref_params;
             params.w = 16;
-            tex = pl_tex_create(gpu, &params);
+            if (!(gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D))
+                params.blit_src = params.blit_dst = false;
+            for (int i = 0; i < PL_ARRAY_SIZE(tex); i++)
+                tex[i] = pl_tex_create(gpu, &params);
             pl_test_roundtrip(gpu, tex, test_src, test_dst);
-            pl_tex_destroy(gpu, &tex);
+            for (int i = 0; i < PL_ARRAY_SIZE(tex); i++)
+                pl_tex_destroy(gpu, &tex[i]);
         }
 
         if (gpu->limits.max_tex_2d_dim >= 16) {
+            struct pl_tex_params params = ref_params;
             params.w = params.h = 16;
-            tex = pl_tex_create(gpu, &params);
+            for (int i = 0; i < PL_ARRAY_SIZE(tex); i++)
+                tex[i] = pl_tex_create(gpu, &params);
             pl_test_roundtrip(gpu, tex, test_src, test_dst);
-            pl_tex_destroy(gpu, &tex);
+            for (int i = 0; i < PL_ARRAY_SIZE(tex); i++)
+                pl_tex_destroy(gpu, &tex[i]);
         }
 
         if (gpu->limits.max_tex_3d_dim >= 16) {
+            struct pl_tex_params params = ref_params;
             params.w = params.h = params.d = 16;
-            tex = pl_tex_create(gpu, &params);
+            if (!(gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D))
+                params.blit_src = params.blit_dst = false;
+            for (int i = 0; i < PL_ARRAY_SIZE(tex); i++)
+                tex[i] = pl_tex_create(gpu, &params);
             pl_test_roundtrip(gpu, tex, test_src, test_dst);
-            pl_tex_destroy(gpu, &tex);
+            for (int i = 0; i < PL_ARRAY_SIZE(tex); i++)
+                pl_tex_destroy(gpu, &tex[i]);
         }
     }
 }
