@@ -555,6 +555,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     do {                                                                \
         for (int i = 0; i <= LIMIT; i++) {                              \
             struct pl_render_params params = pl_render_default_params;  \
+            params.force_dither = true;                                 \
             struct STYPE tmp = DEFAULT;                                 \
             tmp.FIELD = i;                                              \
             params.SNAME = &tmp;                                        \
@@ -580,6 +581,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     TEST_PARAMS(color_map, intent, PL_INTENT_ABSOLUTE_COLORIMETRIC);
     TEST_PARAMS(color_map, gamut_warning, 1);
     TEST_PARAMS(dither, method, PL_DITHER_WHITE_NOISE);
+    TEST_PARAMS(dither, temporal, true);
     TEST(cone_params, pl_cone_params, pl_vision_deuteranomaly, strength, 0);
 
     // Test HDR stuff

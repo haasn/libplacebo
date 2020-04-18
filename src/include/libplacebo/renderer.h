@@ -184,6 +184,12 @@ struct pl_render_params {
     // unnecessary. This is slower, but may improve the quality of the gamut
     // reduction step, if one is performed.
     bool force_3dlut;
+
+    // Forces the use of dithering, even when rendering to 16-bit FBOs. This is
+    // generally pretty pointless because most 16-bit FBOs have high enough
+    // depth that rounding errors are below the human perception threshold,
+    // but this can be used to test the dither code.
+    bool force_dither;
 };
 
 // This contains the default/recommended options for reasonable image quality,
