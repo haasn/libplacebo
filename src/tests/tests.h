@@ -43,9 +43,9 @@ static inline void require(bool b, const char *msg)
     }
 }
 
-static inline bool feq(float a, float b)
+static inline bool feq(float a, float b, float epsilon)
 {
-    return fabs(a - b) < 1e-6 * fmax(1.0, fabs(a));
+    return fabs(a - b) < epsilon * fmax(1.0, fabs(a));
 }
 
 #define REQUIRE(cond) require((cond), #cond)

@@ -17,8 +17,8 @@ int main()
 
         if (params.config.polar) {
             // Ensure the kernel seems sanely scaled
-            REQUIRE(feq(flt->weights[0], 1.0));
-            REQUIRE(feq(flt->weights[params.lut_entries - 1], 0.0));
+            REQUIRE(feq(flt->weights[0], 1.0, 1e-7));
+            REQUIRE(feq(flt->weights[params.lut_entries - 1], 0.0, 1e-7));
         } else {
             // Ensure the weights for each row add up to unity
             for (int i = 0; i < params.lut_entries; i++) {
@@ -29,7 +29,7 @@ int main()
                     float w = flt->weights[i * flt->row_stride + n];
                     sum += w;
                 }
-                REQUIRE(feq(sum, 1.0));
+                REQUIRE(feq(sum, 1.0, 1e-6));
             }
         }
 

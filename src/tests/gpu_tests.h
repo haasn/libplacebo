@@ -229,28 +229,37 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         .vertex_count   = sizeof(vertices) / sizeof(struct vertex),
     });
 
-    static float data[FBO_H * FBO_W * 4] = {0};
-    pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
-        .tex = fbo,
-        .ptr = data,
-    });
-
-    for (int y = 0; y < FBO_H; y++) {
-        for (int x = 0; x < FBO_W; x++) {
-            float *color = &data[(y * FBO_W + x) * 4];
-            printf("color: %f %f %f %f\n", color[0], color[1], color[2], color[3]);
-            REQUIRE(feq(color[0], (x + 0.5) / FBO_W));
-            REQUIRE(feq(color[1], (y + 0.5) / FBO_H));
-            REQUIRE(feq(color[2], 0.0));
-            REQUIRE(feq(color[3], 1.0));
-        }
-    }
-
     pl_pass_destroy(gpu, &pass);
-    pl_tex_clear(gpu, fbo, (float[4]){0});
+
+    static float data[FBO_H * FBO_W * 4] = {0};
+
+    // Test against the known pattern of `src`, only useful for roundtrip tests
+#define TEST_FBO_PATTERN(eps, fmt, ...)                                     \
+    do {                                                                    \
+        printf("testing pattern of " fmt "\n", __VA_ARGS__);                \
+        REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {     \
+            .tex = fbo,                                                     \
+            .ptr = data,                                                    \
+        }));                                                                \
+                                                                            \
+        for (int y = 0; y < FBO_H; y++) {                                   \
+            for (int x = 0; x < FBO_W; x++) {                               \
+                float *color = &data[(y * FBO_W + x) * 4];                  \
+                printf("color[%d][%d] = %f %f %f %f\n",                     \
+                       y, x, color[0], color[1], color[2], color[3]);       \
+                REQUIRE(feq(color[0], (x + 0.5) / FBO_W, eps));             \
+                REQUIRE(feq(color[1], (y + 0.5) / FBO_H, eps));             \
+                REQUIRE(feq(color[2], 0.0, eps));                           \
+                REQUIRE(feq(color[3], 1.0, eps));                           \
+            }                                                               \
+        }                                                                   \
+    } while (0)
+
+    TEST_FBO_PATTERN(1e-6, "%s", "initial rendering");
 
     // Test the use of pl_dispatch
     struct pl_dispatch *dp = pl_dispatch_create(gpu->ctx, gpu);
+    struct pl_shader *sh;
 
     const struct pl_tex *src;
     src = pl_tex_create(gpu, &(struct pl_tex_params) {
@@ -264,8 +273,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
 
     // Repeat this a few times to test the caching
     for (int i = 0; i < 10; i++) {
-        printf("iteration %d\n", i);
-        struct pl_shader *sh = pl_dispatch_begin(dp);
+        sh = pl_dispatch_begin(dp);
 
         // For testing, force the use of CS if possible
         if (gpu->caps & PL_GPU_CAP_COMPUTE) {
@@ -283,27 +291,9 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
                 .grain          = 0.0,
         });
 
-        pl_shader_linearize(sh, PL_COLOR_TRC_GAMMA22);
         REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
+        TEST_FBO_PATTERN(1e-6, "deband iter %d", i);
     }
-
-    pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
-        .tex = fbo,
-        .ptr = data,
-    });
-
-    for (int y = 0; y < FBO_H; y++) {
-        for (int x = 0; x < FBO_W; x++) {
-            float *color = &data[(y * FBO_W + x) * 4];
-            printf("color: %f %f %f %f\n", color[0], color[1], color[2], color[3]);
-            REQUIRE(feq(color[0], pow((x + 0.5) / FBO_W, 2.2)));
-            REQUIRE(feq(color[1], pow((y + 0.5) / FBO_H, 2.2)));
-            REQUIRE(feq(color[2], 0.0));
-            REQUIRE(feq(color[3], 1.0));
-        }
-    }
-
-    struct pl_shader *sh;
 
 #if PL_HAVE_LCMS
     // Test the use of 3DLUTs if available
