@@ -599,7 +599,10 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         .saturation = 1.5,
         .gamma = 0.8,
     };
+    REQUIRE(pl_render_image(rr, &image, &target, &params));
+    params = pl_render_default_params;
 
+    params.force_3dlut = true;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     params = pl_render_default_params;
 
