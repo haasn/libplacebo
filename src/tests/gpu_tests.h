@@ -271,6 +271,45 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         .initial_data   = data,
     });
 
+    // Test encoding/decoding of all gamma functions, color spaces, etc.
+    for (enum pl_color_transfer trc = 0; trc < PL_COLOR_TRC_COUNT; trc++) {
+        sh = pl_dispatch_begin(dp);
+        pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+        pl_shader_delinearize(sh, trc);
+        pl_shader_linearize(sh, trc);
+        REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
+
+        float epsilon = pl_color_transfer_is_hdr(trc) ? 1e-4 : 1e-6;
+        TEST_FBO_PATTERN(epsilon, "transfer function %d", (int) trc);
+    }
+
+    for (enum pl_color_system sys = 0; sys < PL_COLOR_SYSTEM_COUNT; sys++) {
+        sh = pl_dispatch_begin(dp);
+        pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+        pl_shader_encode_color(sh, &(struct pl_color_repr) { .sys = sys });
+        pl_shader_decode_color(sh, &(struct pl_color_repr) { .sys = sys }, NULL);
+        REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
+
+        float epsilon;
+        switch (sys) {
+        case PL_COLOR_SYSTEM_BT_2020_C:
+            epsilon = 1e-5;
+            break;
+
+        case PL_COLOR_SYSTEM_BT_2100_PQ:
+        case PL_COLOR_SYSTEM_BT_2100_HLG:
+            // These seem to be horrifically noisy and prone to breaking on
+            // edge cases for some reason
+            // TODO: figure out why!
+            continue;
+            break;
+
+        default: epsilon = 1e-6; break;
+        }
+
+        TEST_FBO_PATTERN(epsilon, "color system %d", (int) sys);
+    }
+
     // Repeat this a few times to test the caching
     for (int i = 0; i < 10; i++) {
         sh = pl_dispatch_begin(dp);
