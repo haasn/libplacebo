@@ -167,13 +167,61 @@ void pl_shader_encode_color(struct pl_shader *sh,
     GLSL("// pl_shader_encode_color \n"
          "{ \n");
 
-    if (!pl_color_system_is_linear(repr->sys)) {
-        // FIXME: implement this case
-        SH_FAIL(sh, "Non-linear color encoding currently unimplemented!");
-        return;
+    switch (repr->sys) {
+    case PL_COLOR_SYSTEM_BT_2020_C:
+        // Expand R'G'B' to RGB
+        GLSL("vec3 lin = mix(color.rgb * vec3(1.0/4.5),                        \n"
+             "                pow((color.rgb + vec3(0.0993))*vec3(1.0/1.0993), \n"
+             "                    vec3(1.0/0.45)),                             \n"
+             "                %s(lessThanEqual(vec3(0.08145), color.rgb)));    \n",
+             sh_bvec(sh, 3));
+
+        // Compute Yc from RGB and compress to R'Y'cB'
+        GLSL("color.g = dot(vec3(0.2627, 0.6780, 0.0593), lin);     \n"
+             "color.g = mix(color.g * 4.5,                          \n"
+             "              1.0993 * pow(color.g, 0.45) - 0.0993,   \n"
+             "              %s(0.0181 <= color.g));                 \n",
+             sh_bvec(sh, 1));
+
+        // Compute C'bc and C'rc into color.br
+        GLSL("color.br = color.br - color.gg;                           \n"
+             "color.br *= mix(vec2(1.0/1.5816, 1.0/0.9936),             \n"
+             "                vec2(1.0/1.9404, 1.0/1.7184),             \n"
+             "                %s(lessThanEqual(color.br, vec2(0.0))));  \n",
+             sh_bvec(sh, 2));
+        break;
+
+    case PL_COLOR_SYSTEM_BT_2100_PQ:
+    case PL_COLOR_SYSTEM_BT_2100_HLG: {
+        enum pl_color_transfer trc = repr->sys == PL_COLOR_SYSTEM_BT_2100_PQ
+                                        ? PL_COLOR_TRC_PQ
+                                        : PL_COLOR_TRC_HLG;
+
+        // Inverse of the matrix above
+        static const char *bt2100_rgb2lms = "mat3("
+            "0.412109, 0.166748, 0.024170, "
+            "0.523925, 0.720459, 0.075440, "
+            "0.063965, 0.112793, 0.900394) ";
+
+        pl_shader_linearize(sh, trc);
+        GLSL("color.rgb = %s * color.rgb; \n", bt2100_rgb2lms);
+        pl_shader_delinearize(sh, trc);
+        break;
+    }
+
+    case PL_COLOR_SYSTEM_XYZ:
+        break; // no special pre-processing needed
+
+    default:
+        assert(pl_color_system_is_linear(repr->sys));
+        break;
     }
 
     struct pl_color_repr copy = *repr;
+    float xyzscale = (repr->sys == PL_COLOR_SYSTEM_XYZ)
+                        ? pl_color_repr_normalize(&copy)
+                        : 0.0;
+
     struct pl_transform3x3 tr = pl_color_repr_decode(&copy, NULL);
     pl_transform3x3_invert(&tr);
 
@@ -188,6 +236,8 @@ void pl_shader_encode_color(struct pl_shader *sh,
     });
 
     GLSL("color.rgb = %s * color.rgb + %s;\n", cmat, cmat_c);
+    if (repr->sys == PL_COLOR_SYSTEM_XYZ)
+        GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.6)) * vec3(1.0/%f); \n", xyzscale);
     if (repr->alpha == PL_ALPHA_INDEPENDENT)
         GLSL("color.rgb /= vec3(max(color.a, 1e-6));\n");
     GLSL("}\n");
