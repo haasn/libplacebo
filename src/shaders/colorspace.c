@@ -39,7 +39,7 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
     // XYZ needs special handling due to the input gamma logic
     if (repr->sys == PL_COLOR_SYSTEM_XYZ) {
         float scale = pl_color_repr_normalize(repr);
-        GLSL("color.rgb = pow(%f * color.rgb, vec3(2.6));\n", scale);
+        GLSL("color.rgb = pow(vec3(%f) * color.rgb, vec3(2.6));\n", scale);
     }
 
     enum pl_color_system orig_sys = repr->sys;
