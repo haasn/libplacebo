@@ -311,6 +311,22 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     if (!(get_addr = get_proc_addr_fallback(ctx, params->get_proc_addr)))
         goto error;
 
+    // Enumerate all supported layers
+    VK_LOAD_FUN(NULL, EnumerateInstanceLayerProperties, get_addr);
+    uint32_t num_layers_avail = 0;
+    EnumerateInstanceLayerProperties(&num_layers_avail, NULL);
+    VkLayerProperties *layers_avail = talloc_zero_array(tmp, VkLayerProperties, num_layers_avail);
+    EnumerateInstanceLayerProperties(&num_layers_avail, layers_avail);
+
+    pl_debug(ctx, "Available layers:");
+    for (int i = 0; i < num_layers_avail; i++)
+        pl_debug(ctx, "    %s", layers_avail[i].layerName);
+
+    const char **layers = NULL;
+    int num_layers = 0;
+
+    // TODO: allow enabling custom layers
+
     // Enumerate all supported extensions
     VK_LOAD_FUN(NULL, EnumerateInstanceExtensionProperties, get_addr);
     uint32_t num_exts_avail = 0;
@@ -318,9 +334,41 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     VkExtensionProperties *exts_avail = talloc_zero_array(tmp, VkExtensionProperties, num_exts_avail);
     EnumerateInstanceExtensionProperties(NULL, &num_exts_avail, exts_avail);
 
+    struct {
+        VkExtensionProperties *exts;
+        int num_exts;
+    } *layer_exts = talloc_zero_array(tmp, __typeof__(*layer_exts), num_layers_avail);
+
+    // Enumerate extensions from layers
+    for (int i = 0; i < num_layers_avail; i++) {
+        EnumerateInstanceExtensionProperties(layers_avail[i].layerName, &layer_exts[i].num_exts, NULL);
+        layer_exts[i].exts = talloc_zero_array(tmp, VkExtensionProperties, layer_exts[i].num_exts);
+        EnumerateInstanceExtensionProperties(layers_avail[i].layerName,
+                                             &layer_exts[i].num_exts,
+                                             layer_exts[i].exts);
+
+        // Replace all extensions that are already available globally by {0}
+        for (int j = 0; j < layer_exts[i].num_exts; j++) {
+            for (int k = 0; k < num_exts_avail; k++) {
+                if (strcmp(layer_exts[i].exts[j].extensionName, exts_avail[k].extensionName) == 0)
+                    layer_exts[i].exts[j] = (VkExtensionProperties) {0};
+            }
+        }
+    }
+
     pl_debug(ctx, "Available instance extensions:");
     for (int i = 0; i < num_exts_avail; i++)
         pl_debug(ctx, "    %s", exts_avail[i].extensionName);
+    for (int i = 0; i < num_layers_avail; i++) {
+        for (int j = 0; j < layer_exts[i].num_exts; j++) {
+            if (!layer_exts[i].exts[j].extensionName[0])
+                continue;
+
+            pl_debug(ctx, "    %s (via %s)",
+                     layer_exts[i].exts[j].extensionName,
+                     layers_avail[i].layerName);
+        }
+    }
 
     // Add mandatory extensions
     TARRAY_APPEND(tmp, exts, num_exts, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -346,21 +394,24 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext, exts_avail[n].extensionName) == 0) {
                 TARRAY_APPEND(tmp, exts, num_exts, ext);
-                break;
+                goto next_user_ext;
             }
         }
+
+        for (int n = 0; n < num_layers_avail; n++) {
+            for (int j = 0; j < layer_exts[n].num_exts; j++) {
+                if (!layer_exts[n].exts[j].extensionName[0])
+                    continue;
+                if (strcmp(ext, layer_exts[n].exts[j].extensionName) == 0) {
+                    TARRAY_APPEND(tmp, exts, num_exts, ext);
+                    TARRAY_APPEND(tmp, layers, num_layers, layers_avail[n].layerName);
+                    goto next_user_ext;
+                }
+            }
+        }
+
+next_user_ext: ;
     }
-
-    // Enumerate all supported layers
-    VK_LOAD_FUN(NULL, EnumerateInstanceLayerProperties, get_addr);
-    uint32_t num_layers_avail = 0;
-    EnumerateInstanceLayerProperties(&num_layers_avail, NULL);
-    VkLayerProperties *layers_avail = talloc_zero_array(tmp, VkLayerProperties, num_layers_avail);
-    EnumerateInstanceLayerProperties(&num_layers_avail, layers_avail);
-
-    pl_debug(ctx, "Available layers:");
-    for (int i = 0; i < num_layers_avail; i++)
-        pl_debug(ctx, "    %s", layers_avail[i].layerName);
 
     // Sorted by priority
     static const char *debug_layers[] = {
@@ -376,11 +427,9 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
                     continue;
 
                 pl_info(ctx, "Enabling debug meta layer: %s", debug_layers[i]);
-                info.ppEnabledLayerNames = &debug_layers[i];
-                info.enabledLayerCount = 1;
-
                 // Enable support for debug callbacks, so we get useful messages
                 TARRAY_APPEND(tmp, exts, num_exts, VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+                TARRAY_APPEND(tmp, layers, num_layers, debug_layers[i]);
                 goto layers_done;
             }
         }
@@ -394,10 +443,18 @@ layers_done:
 
     info.ppEnabledExtensionNames = exts;
     info.enabledExtensionCount = num_exts;
+    info.ppEnabledLayerNames = layers;
+    info.enabledLayerCount = num_layers;
 
     pl_info(ctx, "Creating vulkan instance%s", num_exts ? " with extensions:" : "");
     for (int i = 0; i < num_exts; i++)
         pl_info(ctx, "    %s", exts[i]);
+
+    if (num_layers) {
+        pl_info(ctx, "  and layers:");
+        for (int i = 0; i < num_layers; i++)
+            pl_info(ctx, "    %s", layers[i]);
+    }
 
     VK_LOAD_FUN(NULL, CreateInstance, get_addr);
     VkResult res = CreateInstance(&info, VK_ALLOC, &inst);
