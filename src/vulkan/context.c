@@ -325,6 +325,36 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     const char **layers = NULL;
     int num_layers = 0;
 
+    // Sorted by priority
+    static const char *debug_layers[] = {
+        "VK_LAYER_KHRONOS_validation",
+        "VK_LAYER_LUNARG_standard_validation",
+    };
+
+    // This layer has to be initialized first, otherwise all sorts of weirdness
+    // happens (random segfaults, yum)
+    bool debug = params->debug;
+    if (debug) {
+        for (int i = 0; i < PL_ARRAY_SIZE(debug_layers); i++) {
+            for (int n = 0; n < num_layers_avail; n++) {
+                if (strcmp(debug_layers[i], layers_avail[n].layerName) != 0)
+                    continue;
+
+                pl_info(ctx, "Enabling debug meta layer: %s", debug_layers[i]);
+                // Enable support for debug callbacks, so we get useful messages
+                TARRAY_APPEND(tmp, exts, num_exts, VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+                TARRAY_APPEND(tmp, layers, num_layers, debug_layers[i]);
+                goto debug_layers_done;
+            }
+        }
+
+        // No layer found..
+        pl_warn(ctx, "API debugging requested but no debug meta layers present... ignoring");
+        debug = false;
+    }
+
+debug_layers_done: ;
+
     // TODO: allow enabling custom layers
 
     // Enumerate all supported extensions
@@ -412,34 +442,6 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
 
 next_user_ext: ;
     }
-
-    // Sorted by priority
-    static const char *debug_layers[] = {
-        "VK_LAYER_KHRONOS_validation",
-        "VK_LAYER_LUNARG_standard_validation",
-    };
-
-    bool debug = params->debug;
-    if (debug) {
-        for (int i = 0; i < PL_ARRAY_SIZE(debug_layers); i++) {
-            for (int n = 0; n < num_layers_avail; n++) {
-                if (strcmp(debug_layers[i], layers_avail[n].layerName) != 0)
-                    continue;
-
-                pl_info(ctx, "Enabling debug meta layer: %s", debug_layers[i]);
-                // Enable support for debug callbacks, so we get useful messages
-                TARRAY_APPEND(tmp, exts, num_exts, VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-                TARRAY_APPEND(tmp, layers, num_layers, debug_layers[i]);
-                goto layers_done;
-            }
-        }
-
-        // No layer found..
-        pl_warn(ctx, "API debugging requested but no debug meta layers present... ignoring");
-        debug = false;
-    }
-
-layers_done:
 
     info.ppEnabledExtensionNames = exts;
     info.enabledExtensionCount = num_exts;
