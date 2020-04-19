@@ -95,11 +95,59 @@ static void vulkan_test_export_import(const struct pl_vulkan *pl_vk,
     pl_tex_destroy(gpu, &export);
 }
 
+static void vulkan_swapchain_tests(const struct pl_vulkan *vk, VkSurfaceKHR surf)
+{
+    if (!surf)
+        return;
+
+    const struct pl_gpu *gpu = vk->gpu;
+    const struct pl_swapchain *sw;
+    sw = pl_vulkan_create_swapchain(vk, &(struct pl_vulkan_swapchain_params) {
+        .surface = surf,
+    });
+    REQUIRE(sw);
+
+    // Attempt actually initializing the swapchain
+    int w = 640, h = 480;
+    REQUIRE(pl_swapchain_resize(sw, &w, &h));
+
+    for (int i = 0; i < 10; i++) {
+        struct pl_swapchain_frame frame;
+        REQUIRE(pl_swapchain_start_frame(sw, &frame));
+        if (frame.fbo->params.blit_dst)
+            pl_tex_clear(gpu, frame.fbo, (float[4]){0});
+
+        // TODO: test this with an actual pl_renderer instance
+        struct pl_render_target target;
+        pl_render_target_from_swapchain(&target, &frame);
+
+        REQUIRE(pl_swapchain_submit_frame(sw));
+        pl_swapchain_swap_buffers(sw);
+
+        // Try resizing the swapchain in the middle of rendering
+        if (i == 5) {
+            w = 320;
+            h = 240;
+            REQUIRE(pl_swapchain_resize(sw, &w, &h));
+        }
+    }
+
+    pl_swapchain_destroy(&sw);
+}
+
 int main()
 {
     struct pl_context *ctx = pl_test_context();
     const struct pl_vk_inst *inst;
-    inst = pl_vk_inst_create(ctx, &(struct pl_vk_inst_params) { .debug = true });
+    inst = pl_vk_inst_create(ctx, &(struct pl_vk_inst_params) {
+        .debug = true,
+        .opt_extensions = (const char *[]){
+            VK_KHR_SURFACE_EXTENSION_NAME,
+            "VK_EXT_headless_surface", // in case it isn't defined
+        },
+        .num_opt_extensions = 2,
+    });
+
     if (!inst)
         return SKIP;
 
@@ -116,11 +164,26 @@ int main()
         return 1;
     EnumeratePhysicalDevices(inst->instance, &num, devices);
 
+    VkSurfaceKHR surf = NULL;
+
+#ifdef VK_EXT_headless_surface
+    VK_LOAD_FUN(inst->instance, CreateHeadlessSurfaceEXT, vkGetInstanceProcAddr);
+    if (CreateHeadlessSurfaceEXT) {
+        VkHeadlessSurfaceCreateInfoEXT info = {
+            .sType = VK_STRUCTURE_TYPE_HEADLESS_SURFACE_CREATE_INFO_EXT,
+        };
+
+        VkResult res = CreateHeadlessSurfaceEXT(inst->instance, &info, NULL, &surf);
+        REQUIRE(res == VK_SUCCESS);
+    }
+#endif // VK_EXT_headless_surface
+
     // Make sure choosing any device works
     VkPhysicalDevice dev;
     dev = pl_vulkan_choose_device(ctx, &(struct pl_vulkan_device_params) {
         .instance = inst->instance,
         .allow_software = true,
+        .surface = surf,
     });
     REQUIRE(dev);
 
@@ -141,6 +204,7 @@ int main()
         params.instance = inst->instance;
         params.device = devices[i];
         params.queue_count = 8; // test inter-queue stuff
+        params.surface = surf;
 
         if (props.vendorID == 0x8086 &&
             props.deviceID == 0x3185 &&
@@ -155,6 +219,7 @@ int main()
             continue;
 
         gpu_tests(vk->gpu);
+        vulkan_swapchain_tests(vk, surf);
 
         // Run these tests last because they disable some validation layers
 #ifdef VK_HAVE_UNIX
@@ -169,6 +234,7 @@ int main()
         pl_vulkan_destroy(&vk);
     }
 
+    vkDestroySurfaceKHR(inst->instance, surf, NULL);
     pl_vk_inst_destroy(&inst);
     pl_context_destroy(&ctx);
     free(devices);
