@@ -14,17 +14,7 @@ subprojects = [
 ]
 
 vulkan = dependency('vulkan', version: '>=1.0.42', required: get_option('vulkan'))
-
-# OpenGL stuff. Since the test framework needs to create a GL context,
-# we have to do this in a platform dependent way.
 opengl = dependency('epoxy', version: '>=1.4.0', required: get_option('opengl'))
-x11 = dependency('x11', required: false)
-
-gl_tests = []
-if opengl.found() and x11.found()
-  gl_tests  += 'opengl_x11.c'
-  test_deps += [x11]
-endif
 
 # configuration data
 conf_public = configuration_data()
@@ -191,7 +181,7 @@ components = [
               'opengl/swapchain.c',
               'opengl/utils.c',
             ],
-    'test': gl_tests,
+    'test': 'opengl_surfaceless.c',
   }
 ]
 
