@@ -101,6 +101,12 @@ static void init_glfw()
 
 #ifdef USE_GL
     glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+
+    /* Request OpenGL 3.2 (or higher) core profile */
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #endif
 
     win = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "libplacebo GLFW demo",
