@@ -222,7 +222,9 @@ static void add_buffer_vars(struct pl_dispatch *dp, struct bstr *body,
 {
     ADD(body, "{\n");
     for (int i = 0; i < num; i++) {
-        ADD(body, "    layout(offset=%zu) ", vars[i].layout.offset);
+        // Add an explicit offset wherever possible
+        if (dp->gpu->glsl.version >= 440)
+            ADD(body, "    layout(offset=%zu) ", vars[i].layout.offset);
         add_var(dp, body, &vars[i].var);
     }
     ADD(body, "};\n");
@@ -249,6 +251,28 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
     ADD(pre, "#version %d%s\n", gpu->glsl.version, gpu->glsl.gles ? " es" : "");
     if (params->type == PL_PASS_COMPUTE)
         ADD(pre, "#extension GL_ARB_compute_shader : enable\n");
+
+    // Enable all extensions needed for different types of input
+    bool has_ssbo = false, has_ubo = false, has_img = false, has_texel = false;
+    for (int i = 0; i < res->num_descriptors; i++) {
+        switch (params->descriptors[i].type) {
+        case PL_DESC_STORAGE_IMG: has_img = true; break;
+        case PL_DESC_BUF_UNIFORM: has_ubo = true; break;
+        case PL_DESC_BUF_STORAGE: has_ssbo = true; break;
+        case PL_DESC_BUF_TEXEL_UNIFORM: // fall through
+        case PL_DESC_BUF_TEXEL_STORAGE: has_texel = true; break;
+        default: break;
+        }
+    }
+
+    if (has_img)
+        ADD(pre, "#extension GL_ARB_shader_image_load_store : enable\n");
+    if (has_ubo)
+        ADD(pre, "#extension GL_ARB_uniform_buffer_object : enable\n");
+    if (has_ssbo)
+        ADD(pre, "#extension GL_ARB_shader_storage_buffer_object : enable\n");
+    if (has_texel)
+        ADD(pre, "#extension GL_ARB_texture_buffer_object : enable\n");
 
     if (gpu->glsl.gles) {
         ADD(pre, "precision mediump float;\n");
@@ -287,8 +311,8 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
 
             char loc[32];
             snprintf(loc, sizeof(loc), "layout(location=%d)", va->location);
-            // GLES doesn't support the use of explicit locations
-            if (gpu->glsl.gles && gpu->glsl.version < 320)
+            // Older GLSL doesn't support the use of explicit locations
+            if (gpu->glsl.version < 430)
                 loc[0] = '\0';
             ADD(vert_head, "%s %s %s %s;\n", loc, vert_in, type, va->name);
 
@@ -310,8 +334,9 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         // GLSL 130+ doesn't use the magic gl_FragColor
         if (gpu->glsl.version >= 130) {
             out_color = "out_color";
-            static const char *loc = "layout(location=0) ";
-            ADD(glsl, "%s out vec4 %s;\n", gpu->glsl.gles ? "" : loc, out_color);
+            ADD(glsl, "%s out vec4 %s;\n",
+                gpu->glsl.version >= 430 ? "layout(location=0) " : "",
+                out_color);
         }
         break;
     }
@@ -387,14 +412,23 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         }
 
         case PL_DESC_BUF_UNIFORM:
-            ADD(glsl, "layout(std140, binding=%d) uniform %s ", desc->binding,
-                desc->name);
+            if (gpu->glsl.vulkan) {
+                ADD(glsl, "layout(std140, binding=%d) ", desc->binding);
+            } else {
+                ADD(glsl, "layout(std140) ");
+            }
+            ADD(glsl, "uniform %s ", desc->name);
             add_buffer_vars(dp, glsl, sd->buffer_vars, sd->num_buffer_vars);
             break;
 
         case PL_DESC_BUF_STORAGE:
-            ADD(glsl, "layout(std430, binding=%d) %s buffer %s ", desc->binding,
-                pl_desc_access_glsl_name(desc->access), desc->name);
+            if (gpu->glsl.vulkan) {
+                ADD(glsl, "layout(std430, binding=%d) ", desc->binding);
+            } else {
+                ADD(glsl, "layout(std430) ");
+            }
+            ADD(glsl, "%s buffer %s ", pl_desc_access_glsl_name(desc->access),
+                desc->name);
             add_buffer_vars(dp, glsl, sd->buffer_vars, sd->num_buffer_vars);
             break;
 
