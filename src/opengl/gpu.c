@@ -445,9 +445,12 @@ static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
             if (read_type != tex_gl->type || read_fmt != tex_gl->format) {
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 PL_ERR(gpu, "Trying to create host_readable texture whose "
-                       "implementation-defined pixel read format does not "
-                       "match the texture's internal format! This is a driver "
-                       "limitation, there's little we can do about it.");
+                       "implementation-defined pixel read format "
+                       "(type=0x%X, fmt=0x%X) does not match the texture's "
+                       "internal format (type=0x%X, fmt=0x%X)! This is a "
+                       "GLES/driver limitation, there's little we can do "
+                       "about it.",
+                       read_type, read_fmt, tex_gl->type, tex_gl->format);
                 goto error;
             }
         }
