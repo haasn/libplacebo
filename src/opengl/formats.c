@@ -152,22 +152,22 @@ const struct gl_format gl_formats[] = {
 // Return an or-ed combination of all F_ flags that apply.
 int gl_format_feature_flags(const struct pl_gpu *gpu)
 {
-    int gl_ver = !gpu->glsl.gles ? gpu->glsl.version : 0;
-    int es_ver =  gpu->glsl.gles ? gpu->glsl.version : 0;
+    int gl_ver =  epoxy_is_desktop_gl() ? epoxy_gl_version() : 0;
+    int es_ver = !epoxy_is_desktop_gl() ? epoxy_gl_version() : 0;
 
-    int flags = (gl_ver == 210 ? F_GL2 : 0)
-              | (gl_ver >= 300 ? F_GL3 : 0)
-              | (es_ver == 200 ? F_ES2 : 0)
-              | (es_ver >= 300 ? F_ES3 : 0)
-              | (es_ver >= 320 ? F_ES32 : 0);
+    int flags = (gl_ver == 21 ? F_GL2 : 0)
+              | (gl_ver >= 30 ? F_GL3 : 0)
+              | (es_ver == 20 ? F_ES2 : 0)
+              | (es_ver >= 30 ? F_ES3 : 0)
+              | (es_ver >= 32 ? F_ES32 : 0);
 
     if (epoxy_has_gl_extension("GL_EXT_texture_norm16"))
         flags |= F_EXT16;
 
-    if (es_ver >= 300 && epoxy_has_gl_extension("GL_EXT_color_buffer_half_float"))
+    if (es_ver >= 30 && epoxy_has_gl_extension("GL_EXT_color_buffer_half_float"))
         flags |= F_EXTF16;
 
-    if (gl_ver == 210 &&
+    if (gl_ver == 21 &&
         epoxy_has_gl_extension("GL_ARB_texture_float") &&
         epoxy_has_gl_extension("GL_ARB_texture_rg") &&
         epoxy_has_gl_extension("GL_ARB_framebuffer_object"))

@@ -74,6 +74,13 @@ static bool gl_setup_formats(struct pl_gpu *gpu)
         if (!(gl_fmt->flags & features))
             continue;
 
+        // Eliminate duplicate formats
+        for (int i = 0; i < gpu->num_formats; i++) {
+            const struct gl_format **fmtp = TA_PRIV(gpu->formats[i]);
+            if ((*fmtp)->ifmt == gl_fmt->ifmt)
+                goto next_gl_fmt;
+        }
+
         struct pl_fmt *fmt = talloc_ptrtype_priv(gpu, fmt, gl_fmt);
         const struct gl_format **fmtp = TA_PRIV(fmt);
         *fmt = gl_fmt->tmpl;
@@ -175,6 +182,8 @@ static bool gl_setup_formats(struct pl_gpu *gpu)
         // TODO: Texel buffers
 
         TARRAY_APPEND(gpu, gpu->formats, gpu->num_formats, fmt);
+
+next_gl_fmt: ;
     }
 
     pl_gpu_sort_formats(gpu);
