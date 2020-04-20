@@ -69,6 +69,7 @@ static bool gl_setup_formats(struct pl_gpu *gpu)
     struct pl_gl *p = TA_PRIV(gpu);
     int features = gl_format_feature_flags(gpu);
     bool has_fbos = test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20);
+    bool has_storage = test_ext(gpu, "GL_ARB_shader_image_load_store", 42, 0);
 
     for (const struct gl_format *gl_fmt = gl_formats; gl_fmt->ifmt; gl_fmt++) {
         if (gl_fmt->ver && !(gl_fmt->ver & features))
@@ -164,7 +165,7 @@ static bool gl_setup_formats(struct pl_gpu *gpu)
         if (p->gl_ver || (fmt->caps & PL_FMT_CAP_RENDERABLE))
             fmt->caps |= PL_FMT_CAP_HOST_READABLE;
 
-        if ((gpu->caps & PL_GPU_CAP_COMPUTE) && fmt->glsl_format)
+        if ((gpu->caps & PL_GPU_CAP_COMPUTE) && fmt->glsl_format && has_storage)
             fmt->caps |= PL_FMT_CAP_STORABLE;
 
         // Only float-type formats are considered blendable in OpenGL
@@ -244,8 +245,12 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
         l->max_xfer_size = SIZE_MAX; // no limit imposed by GL
     if (test_ext(gpu, "GL_ARB_uniform_buffer_object", 31, 0))
         get(GL_MAX_UNIFORM_BLOCK_SIZE, &l->max_ubo_size);
-    if (test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0))
+    if (test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0) &&
+        test_ext(gpu, "GL_ARB_shader_image_load_store", 42, 0))
+    {
+        // storage image support is needed for glMemoryBarrier!
         get(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &l->max_ssbo_size);
+    }
 
     if (test_ext(gpu, "GL_ARB_texture_gather", 0, 0)) { // FIXME: when is this core?
         get(GL_MIN_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &l->min_gather_offset);
