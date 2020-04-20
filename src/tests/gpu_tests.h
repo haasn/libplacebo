@@ -450,14 +450,21 @@ static void pl_scaler_tests(const struct pl_gpu *gpu)
         .initial_data   = &data_5x5[0][0],
     });
 
-    const struct pl_tex *fbo = pl_tex_create(gpu, &(struct pl_tex_params) {
+    struct pl_tex_params fbo_params = {
         .w              = 100,
         .h              = 100,
         .format         = fbo_fmt,
         .renderable     = true,
         .storable       = !!(fbo_fmt->caps & PL_FMT_CAP_STORABLE),
         .host_readable  = true,
-    });
+    };
+
+    const struct pl_tex *fbo = pl_tex_create(gpu, &fbo_params);
+    if (!fbo) {
+        printf("Failed creating readable FBO... falling back to non-readable\n");
+        fbo_params.host_readable = false;
+        fbo = pl_tex_create(gpu, &fbo_params);
+    }
 
     struct pl_dispatch *dp = pl_dispatch_create(gpu->ctx, gpu);
     if (!dot5x5 || !fbo || !dp)
@@ -478,20 +485,22 @@ static void pl_scaler_tests(const struct pl_gpu *gpu)
     ));
     REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
 
-    fbo_data = malloc(fbo->params.w * fbo->params.h * sizeof(float));
-    REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
-        .tex            = fbo,
-        .ptr            = fbo_data,
-    }));
+    if (fbo->params.host_readable) {
+        fbo_data = malloc(fbo->params.w * fbo->params.h * sizeof(float));
+        REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
+            .tex            = fbo,
+            .ptr            = fbo_data,
+        }));
 
-    int max = 255;
-    printf("P2\n%d %d\n%d\n", fbo->params.w, fbo->params.h, max);
-    for (int y = 0; y < fbo->params.h; y++) {
-        for (int x = 0; x < fbo->params.w; x++) {
-            float v = fbo_data[y * fbo->params.h + x];
-            printf("%d ", (int) round(fmin(fmax(v, 0.0), 1.0) * max));
+        int max = 255;
+        printf("P2\n%d %d\n%d\n", fbo->params.w, fbo->params.h, max);
+        for (int y = 0; y < fbo->params.h; y++) {
+            for (int x = 0; x < fbo->params.w; x++) {
+                float v = fbo_data[y * fbo->params.h + x];
+                printf("%d ", (int) round(fmin(fmax(v, 0.0), 1.0) * max));
+            }
+            printf("\n");
         }
-        printf("\n");
     }
 
 error:
