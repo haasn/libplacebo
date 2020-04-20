@@ -694,7 +694,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
     // Have one thread per work group update the global atomics. Do this
     // at the end of the shader to avoid clobbering `average`, in case the
     // state object will be used by the same pass.
-    GLSLF("if (gl_LocalInvocationIndex == 0) {                                  \n"
+    GLSLF("if (gl_LocalInvocationIndex == 0u) {                                 \n"
           "    int wg_avg = %s / int(gl_WorkGroupSize.x * gl_WorkGroupSize.y);  \n"
           "    atomicAdd(frame_sum, wg_avg);                                    \n"
           "    atomicMax(frame_max, %s);                                        \n"
@@ -704,7 +704,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
 
     // Finally, to update the global state per dispatch, we increment a counter
     GLSLF("    uint num_wg = gl_NumWorkGroups.x * gl_NumWorkGroups.y;           \n"
-          "    if (atomicAdd(counter, 1) == num_wg - 1) {                       \n"
+          "    if (atomicAdd(counter, 1u) == num_wg - 1u) {                     \n"
           "        vec2 cur = vec2(float(frame_sum) / float(num_wg), frame_max);\n"
           "        cur *= vec2(1.0 / %f, 1.0 / %f);                             \n"
           "        cur.x = exp(cur.x);                                          \n",
@@ -730,7 +730,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
     // Reset SSBO state for the next frame
     GLSLF("        frame_sum = 0;            \n"
           "        frame_max = 0;            \n"
-          "        counter = 0;              \n"
+          "        counter = 0u;             \n"
           "        memoryBarrierBuffer();    \n"
           "    }                             \n"
           "}                                 \n");

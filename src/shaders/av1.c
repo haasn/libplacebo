@@ -518,7 +518,7 @@ static void sample(struct pl_shader *sh, enum offset off, enum pl_channel c,
     GLSL("offset = %du * uvec2((data >> %d) & 0xFu,   \n"
          "                     (data >> %d) & 0xFu);  \n"
          "pos = offset + local_id.xy + uvec2(%d, %d); \n"
-         "val = grain_%s[ pos.y * %d + pos.x ];       \n",
+         "val = grain_%s[ pos.y * %du + pos.x ];      \n",
          luma ? 2 : 1, off + 4, off,
          (BLOCK_SIZE >> sub_x) * delta[off].dx,
          (BLOCK_SIZE >> sub_y) * delta[off].dy,
@@ -883,7 +883,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     }
 
     // Load the data vector which holds the offsets
-    GLSL("uint data = offsets[block_id.y * %d + block_id.x]; \n", offsets_x);
+    GLSL("uint data = offsets[block_id.y * %du + block_id.x]; \n", offsets_x);
 
     // If we need access to the external luma plane, load it now
     if (is_chroma) {
