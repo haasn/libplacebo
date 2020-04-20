@@ -858,7 +858,11 @@ next_dim: ; // `continue` out of the inner loop
         for (int i = 0; i < texdim; i++) {
             char sep = i == 0 ? ' ' : ',';
             if (pos_macros[i]) {
-                GLSLH("   %c%s((pos).%c)\\\n", sep, pos_macros[i], "xyzw"[i]);
+                if (dims > 1) {
+                    GLSLH("   %c%s((pos).%c)\\\n", sep, pos_macros[i], "xyzw"[i]);
+                } else {
+                    GLSLH("   %c%s((pos))\\\n", sep, pos_macros[i]);
+                }
             } else {
                 GLSLH("   %c%f\\\n", sep, 0.5);
             }
