@@ -287,6 +287,9 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
 
             char loc[32];
             snprintf(loc, sizeof(loc), "layout(location=%d)", va->location);
+            // GLES doesn't support the use of explicit locations
+            if (gpu->glsl.gles && gpu->glsl.version < 320)
+                loc[0] = '\0';
             ADD(vert_head, "%s %s %s %s;\n", loc, vert_in, type, va->name);
 
             if (strcmp(name, vert_pos) == 0) {
@@ -307,7 +310,8 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         // GLSL 130+ doesn't use the magic gl_FragColor
         if (gpu->glsl.version >= 130) {
             out_color = "out_color";
-            ADD(glsl, "layout(location=0) out vec4 %s;\n", out_color);
+            static const char *loc = "layout(location=0) ";
+            ADD(glsl, "%s out vec4 %s;\n", gpu->glsl.gles ? "" : loc, out_color);
         }
         break;
     }
