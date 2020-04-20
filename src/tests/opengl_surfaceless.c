@@ -86,6 +86,9 @@ int main()
             egl = eglCreateContext(dpy, config, EGL_NO_CONTEXT, egl_attribs);
         }
 
+        if (!egl)
+            continue;
+
         if (!eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, egl))
             continue;
 
