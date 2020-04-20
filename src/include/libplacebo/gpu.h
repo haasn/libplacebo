@@ -184,6 +184,7 @@ enum pl_fmt_caps {
     // Notes:
     // - PL_FMT_CAP_LINEAR also implies PL_FMT_CAP_SAMPLEABLE
     // - PL_FMT_CAP_STORABLE also implies PL_GPU_CAP_COMPUTE
+    // - PL_FMT_CAP_BLENDABLE implies PL_FMT_CAP_RENDERABLE
     // - PL_FMT_CAP_VERTEX implies that the format is non-opaque
     // - PL_FMT_CAP_HOST_READABLE implies that the format is non-opaque
 };

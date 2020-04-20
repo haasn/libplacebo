@@ -71,7 +71,7 @@ static bool gl_setup_formats(struct pl_gpu *gpu)
     bool has_fbos = test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20);
 
     for (const struct gl_format *gl_fmt = gl_formats; gl_fmt->ifmt; gl_fmt++) {
-        if (!(gl_fmt->flags & features))
+        if (gl_fmt->ver && !(gl_fmt->ver & features))
             continue;
 
         // Eliminate duplicate formats
@@ -153,12 +153,12 @@ static bool gl_setup_formats(struct pl_gpu *gpu)
         fmt->glsl_format = pl_fmt_glsl_format(fmt, fmt->num_components);
         pl_assert(fmt->glsl_type);
 
-        // Detect format capabilities based on the flags
-        fmt->caps |= PL_FMT_CAP_SAMPLEABLE;
-        if (gl_fmt->flags & F_TF)
-            fmt->caps |= PL_FMT_CAP_LINEAR;
-        if ((gl_fmt->flags & F_CR) && has_fbos)
-            fmt->caps |= PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE;
+        // Add format capabilities based on the flags
+        fmt->caps = gl_fmt->caps;
+
+        // Mask renderable/blittable if no FBOs available
+        if (!has_fbos)
+            fmt->caps &= ~(PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE);
 
         // Reading from FBOs on GLES requires FBO support for this fmt
         if (p->gl_ver || (fmt->caps & PL_FMT_CAP_RENDERABLE))
@@ -167,15 +167,13 @@ static bool gl_setup_formats(struct pl_gpu *gpu)
         if ((gpu->caps & PL_GPU_CAP_COMPUTE) && fmt->glsl_format)
             fmt->caps |= PL_FMT_CAP_STORABLE;
 
-        if (gl_fmt->flags & F_VF)
-            fmt->caps |= PL_FMT_CAP_VERTEX;
-
         // Only float-type formats are considered blendable in OpenGL
         switch (fmt->type) {
         case PL_FMT_FLOAT:
         case PL_FMT_UNORM:
         case PL_FMT_SNORM:
-            fmt->caps |= PL_FMT_CAP_BLENDABLE;
+            if (fmt->caps & PL_FMT_CAP_RENDERABLE)
+                fmt->caps |= PL_FMT_CAP_BLENDABLE;
         default: break;
         }
 
@@ -511,7 +509,7 @@ static bool gl_fb_query(const struct pl_gpu *gpu, int fbo, struct pl_fmt *fmt)
 
 static const struct gl_format fbo_dummy_format = {
     .fmt = GL_RGBA,
-    .flags = F_CR,
+    .caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE,
 };
 
 const struct pl_tex *pl_opengl_wrap_fb(const struct pl_gpu *gpu, GLuint fbo,
