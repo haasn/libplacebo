@@ -66,6 +66,7 @@ static void gl_destroy_gpu(const struct pl_gpu *gpu)
 
 static bool gl_setup_formats(struct pl_gpu *gpu)
 {
+    struct pl_gl *p = TA_PRIV(gpu);
     int features = gl_format_feature_flags(gpu);
     bool has_fbos = test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20);
 
@@ -151,6 +152,10 @@ static bool gl_setup_formats(struct pl_gpu *gpu)
             fmt->caps |= PL_FMT_CAP_LINEAR;
         if ((gl_fmt->flags & F_CR) && has_fbos)
             fmt->caps |= PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE;
+
+        // Reading from FBOs on GLES requires FBO support for this fmt
+        if (p->gl_ver || (fmt->caps & PL_FMT_CAP_RENDERABLE))
+            fmt->caps |= PL_FMT_CAP_HOST_READABLE;
 
         if ((gpu->caps & PL_GPU_CAP_COMPUTE) && fmt->glsl_format)
             fmt->caps |= PL_FMT_CAP_STORABLE;

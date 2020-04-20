@@ -208,6 +208,11 @@ static void vk_setup_formats(struct pl_gpu *gpu)
                 fmt->caps |= bits[i].caps;
         }
 
+        // This is technically supported for all textures, but the semantics
+        // of pl_gpu require it only be listed for non-opaque ones
+        if (!fmt->opaque)
+            fmt->caps |= PL_FMT_CAP_HOST_READABLE;
+
         // Disable implied capabilities where the dependencies are unavailable
         if (!(fmt->caps & PL_FMT_CAP_SAMPLEABLE))
             fmt->caps &= ~PL_FMT_CAP_LINEAR;

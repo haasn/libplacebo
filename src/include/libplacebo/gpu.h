@@ -179,11 +179,13 @@ enum pl_fmt_caps {
     PL_FMT_CAP_VERTEX       = 1 << 6, // may be used as a vertex attribute
     PL_FMT_CAP_TEXEL_UNIFORM = 1 << 7, // may be used as a texel uniform buffer
     PL_FMT_CAP_TEXEL_STORAGE = 1 << 8, // may be used as a texel storage buffer
+    PL_FMT_CAP_HOST_READABLE = 1 << 9, // may be used with `host_readable` textures
 
     // Notes:
     // - PL_FMT_CAP_LINEAR also implies PL_FMT_CAP_SAMPLEABLE
     // - PL_FMT_CAP_STORABLE also implies PL_GPU_CAP_COMPUTE
     // - PL_FMT_CAP_VERTEX implies that the format is non-opaque
+    // - PL_FMT_CAP_HOST_READABLE implies that the format is non-opaque
 };
 
 // Structure describing a texel/vertex format.

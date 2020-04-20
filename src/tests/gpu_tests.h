@@ -119,7 +119,7 @@ static void pl_texture_tests(const struct pl_gpu *gpu)
 {
     for (int f = 0; f < gpu->num_formats; f++) {
         const struct pl_fmt *fmt = gpu->formats[f];
-        if (fmt->opaque)
+        if (fmt->opaque || !(fmt->caps & PL_FMT_CAP_HOST_READABLE))
             continue;
 
         printf("testing texture roundtrip for format %s\n", fmt->name);

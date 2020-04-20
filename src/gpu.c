@@ -178,6 +178,7 @@ void pl_gpu_verify_formats(struct pl_gpu *gpu)
             pl_assert(fmt->glsl_type);
             pl_assert(!fmt->opaque);
         }
+        pl_assert(!fmt->opaque || !(fmt->caps & PL_FMT_CAP_HOST_READABLE));
         if (fmt->internal_size != fmt->texel_size && !fmt->opaque)
             pl_assert(fmt->emulated);
         if (fmt->caps & (PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE))
@@ -439,6 +440,7 @@ const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
 
     const struct pl_fmt *fmt = params->format;
     require(fmt);
+    require(!params->host_readable || fmt->caps & PL_FMT_CAP_HOST_READABLE);
     require(!params->host_readable || !fmt->opaque);
     require(!params->host_writable || !fmt->opaque);
     require(!params->sampleable || fmt->caps & PL_FMT_CAP_SAMPLEABLE);
