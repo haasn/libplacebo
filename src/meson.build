@@ -208,9 +208,8 @@ if comps.has('vulkan') and get_option('vulkan-link')
 endif
 
 # check to see if libplacebo built this way is sane
-if not comps.has('vulkan')
-  warning('Building without support for Vulkan. Currently, libplacebo only ' +
-          'supports the Vulkan graphics API. libplacebo built this way still ' +
+if not (comps.has('vulkan') or comps.has('opengl'))
+  warning('Building without any graphics API. libplacebo built this way still ' +
           'has some limited use (e.g. generating GLSL shaders), but most of ' +
           'its functionality will be missing or impaired!')
 endif
