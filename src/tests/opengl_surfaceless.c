@@ -3,9 +3,6 @@
 #include <epoxy/gl.h>
 #include <epoxy/egl.h>
 
-#include <fcntl.h>
-#include <gbm.h>
-
 int main()
 {
     // Create the OpenGL context
