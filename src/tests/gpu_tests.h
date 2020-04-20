@@ -64,8 +64,10 @@ static void pl_buffer_tests(const struct pl_gpu *gpu)
 static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex[2],
                               uint8_t *src, uint8_t *dst)
 {
-    if (!tex[0] || !tex[1])
+    if (!tex[0] || !tex[1]) {
+        printf("failed creating test textures... skipping this test\n");
         return;
+    }
 
     int texels = tex[0]->params.w;
     texels *= tex[0]->params.h ? tex[0]->params.h : 1;
@@ -136,6 +138,7 @@ static void pl_texture_tests(const struct pl_gpu *gpu)
         const struct pl_tex *tex[2];
 
         if (gpu->limits.max_tex_1d_dim >= 16) {
+            printf("... 1D\n");
             struct pl_tex_params params = ref_params;
             params.w = 16;
             if (!(gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D))
@@ -148,6 +151,7 @@ static void pl_texture_tests(const struct pl_gpu *gpu)
         }
 
         if (gpu->limits.max_tex_2d_dim >= 16) {
+            printf("... 2D\n");
             struct pl_tex_params params = ref_params;
             params.w = params.h = 16;
             for (int i = 0; i < PL_ARRAY_SIZE(tex); i++)
@@ -158,6 +162,7 @@ static void pl_texture_tests(const struct pl_gpu *gpu)
         }
 
         if (gpu->limits.max_tex_3d_dim >= 16) {
+            printf("... 3D\n");
             struct pl_tex_params params = ref_params;
             params.w = params.h = params.d = 16;
             if (!(gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D))
