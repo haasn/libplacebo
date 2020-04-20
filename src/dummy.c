@@ -108,7 +108,7 @@ const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
                     .texel_size = comps * depth / 8,
                     .caps = PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_LINEAR |
                             PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLENDABLE |
-                            PL_FMT_CAP_VERTEX,
+                            PL_FMT_CAP_VERTEX | PL_FMT_CAP_HOST_READABLE,
                 };
 
                 for (int i = 0; i < comps; i++) {
