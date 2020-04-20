@@ -19,6 +19,7 @@ int main()
         return SKIP;
 
     printf("Initialized EGL v%d.%d\n", major, minor);
+    int egl_ver = major * 10 + minor;
 
     struct {
         EGLenum api;
@@ -64,8 +65,8 @@ int main()
         if (egl_vers[i].api == EGL_OPENGL_ES_API) {
             // OpenGL ES
             const int egl_attribs[] = {
-                EGL_CONTEXT_OPENGL_DEBUG, EGL_TRUE,
                 EGL_CONTEXT_CLIENT_VERSION, egl_vers[i].major,
+                (egl_ver >= 15) ? EGL_CONTEXT_OPENGL_DEBUG : EGL_NONE, EGL_TRUE,
                 EGL_NONE
             };
 
@@ -74,10 +75,10 @@ int main()
         } else {
             // Desktop OpenGL
             const int egl_attribs[] = {
-                EGL_CONTEXT_OPENGL_DEBUG, EGL_TRUE,
                 EGL_CONTEXT_MAJOR_VERSION, egl_vers[i].major,
                 EGL_CONTEXT_MINOR_VERSION, egl_vers[i].minor,
                 EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT,
+                (egl_ver >= 15) ? EGL_CONTEXT_OPENGL_DEBUG : EGL_NONE, EGL_TRUE,
                 EGL_NONE
             };
 
