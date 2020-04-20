@@ -1,11 +1,11 @@
 /* Compiling:
  *
- *   gcc glfw.c -o ./glfw -O2 -DUSE_VK \
+ *   gcc glfw.c -o ./glfw -O2 -lm -DUSE_VK \
  *       $(pkg-config --cflags --libs glfw3 vulkan libplacebo)
  *
  *  or:
  *
- *   gcc glfw.c -o ./glfw -O2 -DUSE_GL \
+ *   gcc glfw.c -o ./glfw -O2 -lm -DUSE_GL \
  *       $(pkg-config --cflags --libs glfw3 libplacebo)
  *
  * Notes:
