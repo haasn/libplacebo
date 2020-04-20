@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <math.h>
 
 #ifdef USE_VK
 #define GLFW_INCLUDE_VULKAN
@@ -225,6 +226,19 @@ static void exit_cb(GLFWwindow *win)
     uninit(0);
 }
 
+static void evolve_rgba(float rgba[4], int *pos)
+{
+    const int scale = 512;
+    const float circle = 2.0 * M_PI;
+    const float piece  = (float)(*pos % scale) / (scale - 1);
+
+    rgba[0] = (sinf(circle * piece + 0.0) + 1.0) / 2.0;
+    rgba[1] = (sinf(circle * piece + 2.0) + 1.0) / 2.0;
+    rgba[2] = (sinf(circle * piece + 4.0) + 1.0) / 2.0;
+
+    *pos += 1;
+}
+
 int main(int argc, char **argv)
 {
     glfwSetErrorCallback(&err_cb);
@@ -242,6 +256,9 @@ int main(int argc, char **argv)
     glfwSetFramebufferSizeCallback(win, resize_cb);
     glfwSetWindowCloseCallback(win, exit_cb);
 
+    float rgba[4] = {0};
+    int rainbow_pos = 0;
+
     while (true) {
         struct pl_swapchain_frame frame;
         bool ok = pl_swapchain_start_frame(swapchain, &frame);
@@ -253,7 +270,9 @@ int main(int argc, char **argv)
         }
 
         assert(frame.fbo->params.blit_dst);
-        pl_tex_clear(gpu, frame.fbo, (float[4]){0.5, 0.0, 1.0, 1.0});
+        pl_tex_clear(gpu, frame.fbo, rgba);
+
+        evolve_rgba(rgba, &rainbow_pos);
 
         ok = pl_swapchain_submit_frame(swapchain);
         if (!ok) {
