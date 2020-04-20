@@ -93,7 +93,7 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
     return pl_gl;
 
 error:
-    PL_FATAL(p, "Failed initializing opengl context");
+    PL_FATAL(p, "Failed initializing opengl context!");
     pl_opengl_destroy((const struct pl_opengl **) &pl_gl);
     return NULL;
 }

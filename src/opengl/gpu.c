@@ -27,9 +27,22 @@ struct pl_gl {
 
     // Cached capabilities
     int gl_ver;
+    int gles_ver;
     bool has_stride;
     bool has_vao;
 };
+
+static bool test_ext(const struct pl_gpu *gpu, const char *ext,
+                     int gl_ver, int gles_ver)
+{
+    struct pl_gl *p = TA_PRIV(gpu);
+    if (gl_ver && p->gl_ver >= gl_ver)
+        return true;
+    if (gles_ver && p->gles_ver >= gles_ver)
+        return true;
+
+    return ext ? epoxy_has_gl_extension(ext) : false;
+}
 
 static void gl_destroy_gpu(const struct pl_gpu *gpu)
 {
@@ -54,7 +67,7 @@ static void gl_destroy_gpu(const struct pl_gpu *gpu)
 static bool gl_setup_formats(struct pl_gpu *gpu)
 {
     int features = gl_format_feature_flags(gpu);
-    bool has_fbos = epoxy_has_gl_extension("GL_ARB_framebuffer_object");
+    bool has_fbos = test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20);
 
     for (const struct gl_format *gl_fmt = gl_formats; gl_fmt->ifmt; gl_fmt++) {
         if (!(gl_fmt->flags & features))
@@ -172,13 +185,15 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
 
     struct pl_gl *p = TA_PRIV(gpu);
     p->impl = pl_fns_gl;
-    p->gl_ver = epoxy_gl_version();
+    int ver = epoxy_gl_version();
+    p->gl_ver = gpu->glsl.gles ? 0 : ver;
+    p->gles_ver = gpu->glsl.gles ? ver : 0;
 
     // Query support for the capabilities
     gpu->caps |= PL_GPU_CAP_INPUT_VARIABLES;
-    if (epoxy_has_gl_extension("GL_ARB_compute_shader"))
+    if (test_ext(gpu, "GL_ARB_compute_shader", 43, 0))
         gpu->caps |= PL_GPU_CAP_COMPUTE;
-    if (epoxy_has_gl_extension("GL_ARB_buffer_storage"))
+    if (test_ext(gpu, "GL_ARB_buffer_storage", 44, 0))
         gpu->caps |= PL_GPU_CAP_MAPPED_BUFFERS;
 
     // If possible, query the GLSL version from the implementation
@@ -188,12 +203,14 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
         int major = 0, minor = 0;
         if (sscanf(glslver, "%d.%d", &major, &minor) == 2)
             gpu->glsl.version = major * 100 + minor;
-    } else {
+    }
+
+    if (!gpu->glsl.version) {
         // Otherwise, use the fixed magic versions 200 and 300 for early GLES,
         // and otherwise fall back to 110 if all else fails.
-        if (gpu->glsl.gles && p->gl_ver >= 30) {
+        if (p->gles_ver >= 30) {
             gpu->glsl.version = 300;
-        } else if (gpu->glsl.gles && p->gl_ver >= 20) {
+        } else if (p->gles_ver >= 20) {
             gpu->glsl.version = 200;
         } else {
             gpu->glsl.version = 110;
@@ -203,21 +220,22 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
     // Query all device limits
     struct pl_gpu_limits *l = &gpu->limits;
     get(GL_MAX_TEXTURE_SIZE, &l->max_tex_2d_dim);
-    get(GL_MAX_3D_TEXTURE_SIZE, &l->max_tex_3d_dim);
+    if (test_ext(gpu, NULL, 21, 30)) // FIXME: is there an ext for this?
+        get(GL_MAX_3D_TEXTURE_SIZE, &l->max_tex_3d_dim);
 
     // There's no equivalent limit for 1D textures for whatever reason, so
     // just set it to the same as the 2D limit
-    if (p->gl_ver > 20)
+    if (p->gl_ver >= 21)
         l->max_tex_1d_dim = l->max_tex_2d_dim;
 
-    if (epoxy_has_gl_extension("GL_ARB_pixel_buffer_object"))
+    if (test_ext(gpu, "GL_ARB_pixel_buffer_object", 0, 0)) // FIXME: when is this core?
         l->max_xfer_size = SIZE_MAX; // no limit imposed by GL
-    if (epoxy_has_gl_extension("GL_ARB_uniform_buffer_object"))
+    if (test_ext(gpu, "GL_ARB_uniform_buffer_object", 31, 0))
         get(GL_MAX_UNIFORM_BLOCK_SIZE, &l->max_ubo_size);
-    if (epoxy_has_gl_extension("GL_ARB_shader_storage_buffer_object"))
+    if (test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0))
         get(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &l->max_ssbo_size);
 
-    if (epoxy_has_gl_extension("GL_ARB_texture_gather")) {
+    if (test_ext(gpu, "GL_ARB_texture_gather", 0, 0)) { // FIXME: when is this core?
         get(GL_MIN_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &l->min_gather_offset);
         get(GL_MAX_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &l->max_gather_offset);
     }
@@ -232,16 +250,13 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
     }
 
     // Cached some existing capability checks
-    p->has_stride = epoxy_has_gl_extension("GL_EXT_unpack_subimage") ||
-                    p->gl_ver > 21;
-
-    p->has_vao = epoxy_has_gl_extension("GL_ARB_vertex_array_object") ||
-                 p->gl_ver > 30;
+    p->has_stride = test_ext(gpu, "GL_EXT_unpack_subimage", 11, 30);
+    p->has_vao = test_ext(gpu, "GL_ARB_vertex_array_object", 30, 0);
 
     // We simply don't know, so make up some values
     gpu->limits.align_tex_xfer_offset = 32;
     gpu->limits.align_tex_xfer_stride = 1;
-    if (epoxy_has_gl_extension("GL_EXT_unpack_subimage"))
+    if (test_ext(gpu, "GL_EXT_unpack_subimage", 11, 30))
         gpu->limits.align_tex_xfer_stride = 4;
 
     if (!gl_check_err(gpu, "pl_gpu_create_gl"))
@@ -287,6 +302,8 @@ static void gl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
 static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
                                           const struct pl_tex_params *params)
 {
+    struct pl_gl *p = TA_PRIV(gpu);
+
     struct pl_tex *tex = talloc_zero_priv(NULL, struct pl_tex, struct pl_tex_gl);
     tex->params = *params;
     tex->params.initial_data = NULL;
@@ -374,13 +391,14 @@ static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
                    tex->params.d == 0;
 
     // Try creating an FBO for host-readable textures, since this allows
-    // reading back with glReadPixels instead of glGetTexImage
-    if (can_fbo && tex->params.host_readable)
+    // reading back with glReadPixels instead of glGetTexImage. (Additionally,
+    // GLES does not support glGetTexImage)
+    if (tex->params.host_readable && (can_fbo || p->gles_ver))
         need_fbo = true;
 
     if (need_fbo) {
         if (!can_fbo) {
-            PL_ERR(gpu, "Trying to create a renderable/blittable "
+            PL_ERR(gpu, "Trying to create a renderable/blittable/readable "
                    "texture with an incompatible (non-renderable) format!");
             goto error;
         }
@@ -400,13 +418,27 @@ static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
         }
 
         GLenum err = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
         if (err != GL_FRAMEBUFFER_COMPLETE) {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
             PL_ERR(gpu, "Failed creating framebuffer: error code %d", err);
             goto error;
         }
 
+        if (params->host_readable && p->gles_ver) {
+            GLint read_type = 0, read_fmt = 0;
+            glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
+            glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &read_fmt);
+            if (read_type != tex_gl->type || read_fmt != tex_gl->format) {
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                PL_ERR(gpu, "Trying to create host_readable texture whose "
+                       "implementation-defined pixel read format does not "
+                       "match the texture's internal format! This is a driver "
+                       "limitation, there's little we can do about it.");
+                goto error;
+            }
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
         if (!gl_check_err(gpu, "gl_tex_create: fbo"))
             goto error;
     }
@@ -420,7 +452,7 @@ error:
 
 static bool gl_fb_query(const struct pl_gpu *gpu, int fbo, struct pl_fmt *fmt)
 {
-    if (!epoxy_has_gl_extension("GL_ARB_framebuffer_object"))
+    if (!test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20))
         return true;
 
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -517,14 +549,12 @@ static void gl_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex
 {
     struct pl_gl *p = TA_PRIV(gpu);
     struct pl_tex_gl *tex_gl = TA_PRIV(tex);
-    if (p->gl_ver < 43)
-        return;
 
-    if (tex_gl->wrapped_fb) {
+    if (tex_gl->wrapped_fb && (p->gl_ver >= 43 || p->gles_ver >= 30)) {
         glBindFramebuffer(GL_FRAMEBUFFER, tex_gl->fbo);
         glInvalidateFramebuffer(GL_FRAMEBUFFER, 1, (GLenum[]){GL_COLOR});
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    } else {
+    } else if (p->gl_ver >= 43) {
         glInvalidateTexImage(tex_gl->texture, 0);
     }
 
@@ -611,7 +641,7 @@ static const struct pl_buf *gl_buf_create(const struct pl_gpu *gpu,
 
     glBindBuffer(buf_gl->target, buf_gl->buffer);
 
-    if (epoxy_has_gl_extension("GL_ARB_buffer_storage")) {
+    if (test_ext(gpu, "GL_ARB_buffer_storage", 44, 0)) {
         GLbitfield mapflags = 0, storflags = 0;
         if (params->host_writable)
             storflags |= GL_DYNAMIC_STORAGE_BIT;
@@ -840,8 +870,10 @@ static bool gl_tex_download(const struct pl_gpu *gpu,
 
     if (tex_gl->fbo || tex_gl->wrapped_fb) {
         // We can use a more efficient path when we have an FBO available
-        if (dims > 1)
-            glPixelStorei(GL_PACK_ALIGNMENT, get_alignment(params->stride_w));
+        if (dims > 1) {
+            size_t real_stride = params->stride_w * tex->params.format->texel_size;
+            glPixelStorei(GL_PACK_ALIGNMENT, get_alignment(real_stride));
+        }
 
         int rows = pl_rect_h(params->rc);
         if (params->stride_w != tex->params.w) {
@@ -856,7 +888,7 @@ static bool gl_tex_download(const struct pl_gpu *gpu,
         pl_assert(pl_rect_d(params->rc) == 1);
 
         glBindFramebuffer(GL_FRAMEBUFFER, tex_gl->fbo);
-        for (int y = params->rc.y0; y < params->rc.y1; y+= rows) {
+        for (int y = params->rc.y0; y < params->rc.y1; y += rows) {
             glReadPixels(params->rc.x0, y, pl_rect_w(params->rc), rows,
                          tex_gl->format, tex_gl->type, dst);
         }
@@ -903,7 +935,7 @@ struct gl_cache_header {
 static GLuint load_cached_program(const struct pl_gpu *gpu,
                                   const struct pl_pass_params *params)
 {
-    if (!epoxy_has_gl_extension("GL_ARB_get_program_binary"))
+    if (!test_ext(gpu, "GL_ARB_get_program_binary", 41, 30))
         return 0;
 
     struct bstr cache = {
@@ -1100,7 +1132,7 @@ static const struct pl_pass *gl_pass_create(const struct pl_gpu *gpu,
         goto error;
 
     // Update program cache if possible
-    if (epoxy_has_gl_extension("GL_ARB_get_program_binary")) {
+    if (test_ext(gpu, "GL_ARB_get_program_binary", 41, 30)) {
         GLint size = 0;
         glGetProgramiv(pass_gl->program, GL_PROGRAM_BINARY_LENGTH, &size);
 
