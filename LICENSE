@@ -2,9 +2,8 @@ libplacebo's code base is heavily derived from mpv, which is a fork of mplayer2,
 which is a fork of MPlayer. Currently, this includes files inside the following
 directories:
 
-  bstr/*
-  osdep/*
-  ta/*
+  subprojects/bstr/*
+  subprojects/xtalloc/*
 
 All of the affected MPlayer/mplayer2/mpv code has been successfully relicensed
 to LGPLv2.1+; which means that libplacebo as a whole is licensed under the GNU
