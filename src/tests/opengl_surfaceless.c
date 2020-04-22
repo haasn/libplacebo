@@ -79,7 +79,7 @@ int main()
             const int egl_attribs[] = {
                 EGL_CONTEXT_MAJOR_VERSION, egl_vers[i].major,
                 EGL_CONTEXT_MINOR_VERSION, egl_vers[i].minor,
-                EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT,
+                EGL_CONTEXT_OPENGL_PROFILE_MASK, egl_vers[i].profile,
                 (egl_ver >= 15) ? EGL_CONTEXT_OPENGL_DEBUG : EGL_NONE, EGL_TRUE,
                 EGL_NONE
             };
