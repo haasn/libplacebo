@@ -248,7 +248,8 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
     const struct pl_shader_res *res = pl_shader_finalize(sh);
 
     struct bstr *pre = &dp->tmp[TMP_PRELUDE];
-    ADD(pre, "#version %d%s\n", gpu->glsl.version, gpu->glsl.gles ? " es" : "");
+    ADD(pre, "#version %d%s\n", gpu->glsl.version,
+        (gpu->glsl.gles && gpu->glsl.version > 100) ? " es" : "");
     if (params->type == PL_PASS_COMPUTE)
         ADD(pre, "#extension GL_ARB_compute_shader : enable\n");
 
@@ -279,7 +280,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         ADD(pre, "precision mediump sampler2D;\n");
         if (gpu->limits.max_tex_1d_dim)
             ADD(pre, "precision mediump sampler1D;\n");
-        if (gpu->limits.max_tex_3d_dim)
+        if (gpu->limits.max_tex_3d_dim && gpu->glsl.version > 100)
             ADD(pre, "precision mediump sampler3D;\n");
     }
 
@@ -404,7 +405,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
 
             if (gpu->glsl.vulkan) {
                 ADD(glsl, "layout(binding=%d, %s) ", desc->binding, format);
-            } else {
+            } else if (gpu->glsl.version >= 130) {
                 ADD(glsl, "layout(%s) ", format);
             }
             ADD(glsl, "%s uniform %s %s;\n", access, types[dims], desc->name);
@@ -424,7 +425,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         case PL_DESC_BUF_STORAGE:
             if (gpu->glsl.vulkan) {
                 ADD(glsl, "layout(std430, binding=%d) ", desc->binding);
-            } else {
+            } else if (gpu->glsl.version >= 140) {
                 ADD(glsl, "layout(std430) ");
             }
             ADD(glsl, "%s buffer %s ", pl_desc_access_glsl_name(desc->access),
