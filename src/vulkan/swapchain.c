@@ -258,6 +258,9 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
     if (!pick_surf_format(gpu, vk, params->surface, &sfmt, &csp))
         return NULL;
 
+    PL_DEBUG(gpu, "Picked surface format 0x%x, space 0x%x",
+             sfmt.format, sfmt.colorSpace);
+
     struct pl_swapchain *sw = talloc_zero_priv(NULL, struct pl_swapchain, struct priv);
     sw->impl = &vulkan_swapchain;
     sw->ctx = vk->ctx;
@@ -370,6 +373,8 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
         if (caps.supportedCompositeAlpha & alphaModes[i].vk_mode) {
             info->compositeAlpha = alphaModes[i].vk_mode;
             p->color_repr.alpha = alphaModes[i].pl_mode;
+            PL_DEBUG(vk, "Requested alpha compositing mode: 0x%x",
+                     info->compositeAlpha);
             break;
         }
     }
@@ -391,6 +396,7 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     for (int i = 0; i < PL_ARRAY_SIZE(rotModes); i++) {
         if (caps.supportedTransforms & rotModes[i]) {
             info->preTransform = rotModes[i];
+            PL_DEBUG(vk, "Requested surface transform: 0x%x", info->preTransform);
             break;
         }
     }
