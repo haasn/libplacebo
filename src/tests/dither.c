@@ -21,4 +21,18 @@ int main()
             printf(" %3d", (int)(data[y][x] * SIZE * SIZE));
         printf("\n");
     }
+
+    // Generate an example of a dither shader
+    struct pl_context *ctx = pl_test_context();
+    struct pl_shader *sh = pl_shader_alloc(ctx, NULL);
+    struct pl_shader_obj *obj = NULL;
+
+    pl_shader_dither(sh, 8, &obj, NULL);
+    const struct pl_shader_res *res = pl_shader_finalize(sh);
+    REQUIRE(res);
+    printf("Generated dither shader:\n%s\n", res->glsl);
+
+    pl_shader_obj_destroy(&obj);
+    pl_shader_free(&sh);
+    pl_context_destroy(&ctx);
 }
