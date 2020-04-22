@@ -37,8 +37,11 @@ cxx = meson.get_compiler('cpp')
 
 c_opts = [
   '-D_ISOC99_SOURCE', '-D_GNU_SOURCE', '-D_XOPEN_SOURCE=700',
-  '-U__STRICT_ANSI__', '-fvisibility=hidden',
-  '-Wmissing-prototypes', '-Wno-pointer-sign',
+  '-U__STRICT_ANSI__', '-fvisibility=hidden', '-Wmissing-prototypes',
+
+  # Warnings to ignore
+  '-Wno-pointer-sign', '-Wno-sign-compare', '-Wno-unused-parameter',
+  '-Wno-missing-field-initializers',
 
   # Warnings to treat as errors
   '-Werror=implicit-function-declaration',
