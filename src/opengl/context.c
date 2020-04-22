@@ -99,7 +99,7 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
     }
 
     if (params->max_glsl_version) {
-        struct pl_glsl_desc *desc = &pl_gl->gpu->glsl;
+        struct pl_glsl_desc *desc = (struct pl_glsl_desc *) &pl_gl->gpu->glsl;
         desc->version = PL_MIN(desc->version, params->max_glsl_version);
         PL_INFO(p, "Restricting GLSL version to %d... new version is %d",
                 params->max_glsl_version, desc->version);
