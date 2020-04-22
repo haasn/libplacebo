@@ -392,7 +392,7 @@ void xta_print_leak_report(void)
                         name[n] = '.';
                 }
                 fprintf(stderr, "  %-20p %10zu %10zu  %s\n",
-                        cur, cur->size, c_size, name);
+                        (void *) cur, cur->size, c_size, name);
             }
             size += cur->size;
             num_blocks += 1;

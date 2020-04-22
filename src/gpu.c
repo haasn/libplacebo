@@ -896,15 +896,15 @@ const char *pl_var_glsl_type_name(struct pl_var var)
         };                                              \
     }
 
-PL_VAR(SINT,  int,   1, 1);
-PL_VAR(UINT,  uint,  1, 1);
-PL_VAR(FLOAT, float, 1, 1);
-PL_VAR(FLOAT, vec2,  1, 2);
-PL_VAR(FLOAT, vec3,  1, 3);
-PL_VAR(FLOAT, vec4,  1, 4);
-PL_VAR(FLOAT, mat2,  2, 2);
-PL_VAR(FLOAT, mat3,  3, 3);
-PL_VAR(FLOAT, mat4,  4, 4);
+PL_VAR(SINT,  int,   1, 1)
+PL_VAR(UINT,  uint,  1, 1)
+PL_VAR(FLOAT, float, 1, 1)
+PL_VAR(FLOAT, vec2,  1, 2)
+PL_VAR(FLOAT, vec3,  1, 3)
+PL_VAR(FLOAT, vec4,  1, 4)
+PL_VAR(FLOAT, mat2,  2, 2)
+PL_VAR(FLOAT, mat3,  3, 3)
+PL_VAR(FLOAT, mat4,  4, 4)
 
 #undef PL_VAR
 
@@ -1199,7 +1199,7 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         pl_tex_invalidate(gpu, params->target);
 
     const struct pl_gpu_fns *impl = TA_PRIV(gpu);
-    return impl->pass_run(gpu, &new);
+    impl->pass_run(gpu, &new);
 
 error:
     return;

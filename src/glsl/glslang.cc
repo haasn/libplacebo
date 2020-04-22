@@ -69,14 +69,16 @@ struct pl_glslang_res *pl_glslang_compile(const char *glsl,
 {
     struct pl_glslang_res *res = talloc_zero(NULL, struct pl_glslang_res);
 
-    static const EShLanguage lang[] = {
-        [PL_GLSLANG_VERTEX]   = EShLangVertex,
-        [PL_GLSLANG_FRAGMENT] = EShLangFragment,
-        [PL_GLSLANG_COMPUTE]  = EShLangCompute,
-    };
+    EShLanguage lang;
+    switch (stage) {
+    case PL_GLSLANG_VERTEX:     lang = EShLangVertex; break;
+    case PL_GLSLANG_FRAGMENT:   lang = EShLangFragment; break;
+    case PL_GLSLANG_COMPUTE:    lang = EShLangCompute; break;
+    default: abort();
+    }
 
     assert(pl_glslang_refcount);
-    TShader *shader = new TShader(lang[stage]);
+    TShader *shader = new TShader(lang);
     shader->setEnvClient(EShClientVulkan, GLSL_VERSION);
     shader->setEnvTarget(EShTargetSpv, SPIRV_VERSION);
     shader->setStrings(&glsl, 1);
@@ -96,7 +98,7 @@ struct pl_glslang_res *pl_glslang_compile(const char *glsl,
     }
 
     std::vector<unsigned int> spirv;
-    GlslangToSpv(*prog->getIntermediate(lang[stage]), spirv);
+    GlslangToSpv(*prog->getIntermediate(lang), spirv);
 
     res->success = true;
     res->size = spirv.size() * sizeof(unsigned int);

@@ -647,7 +647,7 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
     talloc_free(tex);
 }
 
-MAKE_LAZY_DESTRUCTOR(vk_tex_destroy, struct pl_tex);
+MAKE_LAZY_DESTRUCTOR(vk_tex_destroy, struct pl_tex)
 
 static const VkFilter filters[] = {
     [PL_TEX_SAMPLE_NEAREST] = VK_FILTER_NEAREST,
@@ -1404,7 +1404,7 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 }
 
 #define vk_buf_destroy vk_buf_deref
-MAKE_LAZY_DESTRUCTOR(vk_buf_destroy, struct pl_buf);
+MAKE_LAZY_DESTRUCTOR(vk_buf_destroy, struct pl_buf)
 
 static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                          size_t offset, const void *data, size_t size)
@@ -1966,7 +1966,7 @@ static void vk_pass_destroy(const struct pl_gpu *gpu, struct pl_pass *pass)
     talloc_free(pass);
 }
 
-MAKE_LAZY_DESTRUCTOR(vk_pass_destroy, struct pl_pass);
+MAKE_LAZY_DESTRUCTOR(vk_pass_destroy, struct pl_pass)
 
 static const VkDescriptorType dsType[] = {
     [PL_DESC_SAMPLED_TEX] = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -2575,9 +2575,9 @@ static void vk_release_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     }
 }
 
-static void set_ds(struct pl_pass_vk *pass_vk, uintptr_t dsbit)
+static void set_ds(struct pl_pass_vk *pass_vk, void *dsbit)
 {
-    pass_vk->dmask |= dsbit;
+    pass_vk->dmask |= (uintptr_t) dsbit;
 }
 
 static void vk_pass_run(const struct pl_gpu *gpu,
