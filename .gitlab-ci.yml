@@ -41,9 +41,11 @@ build-win32:
     script:
         - meson build --buildtype release
                       --werror
+                      -Dtests=true
                       --libdir lib
                       --cross-file /opt/crossfiles/i686-w64-mingw32.meson
-        - ninja -C build && meson test -t 5 -v
+        - ninja -C build
+        - cd build && meson test -t 5 -v
 
 build-win64:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200415100119
@@ -53,9 +55,11 @@ build-win64:
     script:
         - meson build --buildtype release
                       --werror
+                      -Dtests=true
                       --libdir lib
                       --cross-file /opt/crossfiles/x86_64-w64-mingw32.meson
-        - ninja -C build && meson test -t 5 -v
+        - ninja -C build
+        - cd build && meson test -t 5 -v
 
 build-aarch64:
     image: registry.videolan.org/libplacebo-ubuntu-eoan-aarch64:20200108100921
