@@ -415,8 +415,24 @@ debug_layers_done: ;
     }
 
     // Add extra user extensions
-    for (int i = 0; i < params->num_extensions; i++)
-        TARRAY_APPEND(tmp, exts, num_exts, params->extensions[i]);
+    for (int i = 0; i < params->num_extensions; i++) {
+        const char *ext = params->extensions[i];
+        TARRAY_APPEND(tmp, exts, num_exts, ext);
+
+        // Enable any additional layers that are required for this extension
+        for (int n = 0; n < num_layers_avail; n++) {
+            for (int j = 0; j < layer_exts[n].num_exts; j++) {
+                if (!layer_exts[n].exts[j].extensionName[0])
+                    continue;
+                if (strcmp(ext, layer_exts[n].exts[j].extensionName) == 0) {
+                    TARRAY_APPEND(tmp, layers, num_layers, layers_avail[n].layerName);
+                    goto next_user_ext;
+                }
+            }
+        }
+
+next_user_ext: ;
+    }
 
     // Add extra optional user extensions
     for (int i = 0; i < params->num_opt_extensions; i++) {
@@ -424,7 +440,7 @@ debug_layers_done: ;
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext, exts_avail[n].extensionName) == 0) {
                 TARRAY_APPEND(tmp, exts, num_exts, ext);
-                goto next_user_ext;
+                goto next_opt_user_ext;
             }
         }
 
@@ -435,12 +451,12 @@ debug_layers_done: ;
                 if (strcmp(ext, layer_exts[n].exts[j].extensionName) == 0) {
                     TARRAY_APPEND(tmp, exts, num_exts, ext);
                     TARRAY_APPEND(tmp, layers, num_layers, layers_avail[n].layerName);
-                    goto next_user_ext;
+                    goto next_opt_user_ext;
                 }
             }
         }
 
-next_user_ext: ;
+next_opt_user_ext: ;
     }
 
     info.ppEnabledExtensionNames = exts;
