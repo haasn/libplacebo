@@ -25,19 +25,21 @@ int main()
         EGLenum api;
         EGLenum render;
         int major, minor;
+        int glsl_ver;
         EGLenum profile;
     } egl_vers[] = {
-        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     4, 6, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT },
-        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     4, 5, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT },
-        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     4, 4, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT },
-        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     4, 0, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT },
-        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     3, 3, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT },
-        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     3, 2, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT },
-        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     3, 1, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT, },
-        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     3, 0, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT, },
-        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     2, 1, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT, },
-        { EGL_OPENGL_ES_API,    EGL_OPENGL_ES3_BIT, 3, 0, },
-        { EGL_OPENGL_ES_API,    EGL_OPENGL_ES2_BIT, 2, 0, },
+        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     4, 6, 460, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT },
+        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     4, 5, 450, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT },
+        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     4, 4, 440, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT },
+        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     4, 0, 400, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT },
+        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     3, 3, 330, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT },
+        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     3, 2, 150, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT },
+        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     3, 1, 140, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT, },
+        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     3, 0, 130, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT, },
+        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     2, 1, 120, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT, },
+        { EGL_OPENGL_API,       EGL_OPENGL_BIT,     2, 0, 110, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT, },
+        { EGL_OPENGL_ES_API,    EGL_OPENGL_ES3_BIT, 3, 0, 300, },
+        { EGL_OPENGL_ES_API,    EGL_OPENGL_ES2_BIT, 2, 0, 100, },
     };
 
     pl_gpu_caps last_caps = 0;
@@ -95,6 +97,7 @@ int main()
 
         struct pl_context *ctx = pl_test_context();
         struct pl_opengl_params params = pl_opengl_default_params;
+        params.max_glsl_version = egl_vers[i].glsl_ver;
         params.debug = true;
 
         const struct pl_opengl *gl = pl_opengl_create(ctx, &params);
