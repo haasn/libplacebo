@@ -38,6 +38,11 @@ struct pl_vk_inst {
     // extensions enabled by libplacebo internally. May contain duplicates.
     const char **extensions;
     int num_extensions;
+
+    // The instance layers that were successfully enabled, including
+    // layers enabled by libplacebo internally. May contain duplicates.
+    const char **layers;
+    int num_layers;
 };
 
 struct pl_vk_inst_params {
@@ -58,6 +63,20 @@ struct pl_vk_inst_params {
     // enabled if supported by the device, but otherwise skipped.
     const char **opt_extensions;
     int num_opt_extensions;
+
+    // Enables extra layers. Instance creation will fail if these layers are
+    // not all supported.
+    //
+    // NOTE: Layers needed for required/optional extensions are automatically
+    // enabled. The user does not specifically need to enable layers related
+    // to extension support.
+    const char **layers;
+    int num_layers;
+
+    // Enables extra optional layers. These are opportunistically enabled if
+    // supported by the platform, but otherwise skipped.
+    const char **opt_layers;
+    int num_opt_layers;
 };
 
 extern const struct pl_vk_inst_params pl_vk_inst_default_params;

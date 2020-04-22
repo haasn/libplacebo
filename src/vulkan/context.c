@@ -355,7 +355,18 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
 
 debug_layers_done: ;
 
-    // TODO: allow enabling custom layers
+    for (int i = 0; i < params->num_layers; i++)
+        TARRAY_APPEND(tmp, layers, num_layers, params->layers[i]);
+
+    for (int i = 0; i < params->num_opt_layers; i++) {
+        const char *layer = params->opt_layers[i];
+        for (int n = 0; n < num_layers_avail; n++) {
+            if (strcmp(layer, layers_avail[n].layerName) == 0) {
+                TARRAY_APPEND(tmp, layers, num_layers, layer);
+                break;
+            }
+        }
+    }
 
     // Enumerate all supported extensions
     VK_LOAD_FUN(NULL, EnumerateInstanceExtensionProperties, get_addr);
@@ -508,12 +519,15 @@ next_opt_user_ext: ;
         .get_proc_addr = get_addr,
         .extensions = exts,
         .num_extensions = num_exts,
+        .layers = layers,
+        .num_layers = num_layers,
     };
 
     struct priv *p = TA_PRIV(pl_vk);
     p->debug_cb = debug_cb;
 
     pl_vk->extensions = talloc_steal(pl_vk, pl_vk->extensions);
+    pl_vk->layers = talloc_steal(pl_vk, pl_vk->layers);
     talloc_free(tmp);
     return pl_vk;
 
