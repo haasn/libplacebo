@@ -41,7 +41,7 @@ c_opts = [
 
   # Warnings to ignore
   '-Wno-pointer-sign', '-Wno-sign-compare', '-Wno-unused-parameter',
-  '-Wno-missing-field-initializers',
+  '-Wno-missing-field-initializers', '-Wno-type-limits',
 
   # Warnings to treat as errors
   '-Werror=implicit-function-declaration',
