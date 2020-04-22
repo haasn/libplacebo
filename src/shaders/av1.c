@@ -671,6 +671,11 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return false;
 
+    if (SH_GPU(sh)->glsl.version < 130) {
+        PL_ERR(sh, "pl_shader_av1_grain requires GLSL >= 130!");
+        return false;
+    }
+
     int bw = BLOCK_SIZE >> (is_chroma ? params->sub_x : 0);
     int bh = BLOCK_SIZE >> (is_chroma ? params->sub_y : 0);
     bool is_compute = sh_try_compute(sh, bw, bh, false, 0);

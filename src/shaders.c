@@ -710,6 +710,10 @@ next_dim: ; // `continue` out of the inner loop
     if (!method && gpu && gpu->caps & PL_GPU_CAP_INPUT_VARIABLES)
         method = SH_LUT_UNIFORM;
 
+    // texelFetch requires GLSL >= 130, so fall back to the LINEAR code
+    if (method == SH_LUT_TEXTURE && gpu->glsl.version < 130)
+        method = SH_LUT_LINEAR;
+
     // No other method found
     if (!method) {
         PL_TRACE(sh, "No other LUT method works, falling back to literal "
@@ -859,9 +863,10 @@ next_dim: ; // `continue` out of the inner loop
             char sep = i == 0 ? ' ' : ',';
             if (pos_macros[i]) {
                 if (dims > 1) {
-                    GLSLH("   %c%s((pos).%c)\\\n", sep, pos_macros[i], "xyzw"[i]);
+                    GLSLH("   %c%s(%s(pos).%c)\\\n", sep, pos_macros[i],
+                          types[dims - 1], "xyzw"[i]);
                 } else {
-                    GLSLH("   %c%s((pos))\\\n", sep, pos_macros[i]);
+                    GLSLH("   %c%s(float(pos))\\\n", sep, pos_macros[i]);
                 }
             } else {
                 GLSLH("   %c%f\\\n", sep, 0.5);
