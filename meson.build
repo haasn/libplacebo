@@ -1,6 +1,6 @@
 project('libplacebo', ['c', 'cpp'],
   license: 'LGPL2.1+',
-  default_options: ['c_std=c99'],
+  default_options: ['c_std=c99', 'cpp_std=c++11', 'warning_level=3'],
   meson_version: '>=0.49',
   version: '1.43.0',
 )
@@ -27,7 +27,7 @@ endif
 # Global build options
 build_opts = [
   # Warnings
-  '-Wall', '-Wundef', '-Wshadow', '-Wparentheses', '-Wpointer-arith',
+  '-Wundef', '-Wshadow', '-Wparentheses', '-Wpointer-arith',
 ]
 
 link_args = []
@@ -46,7 +46,7 @@ c_opts = [
 
 # glslang needs c++11
 cpp_opts = [
-  '-std=c++11', '-fvisibility=hidden',
+  '-fvisibility=hidden',
 ]
 
 if cc.has_argument('-Wincompatible-pointer-types')
