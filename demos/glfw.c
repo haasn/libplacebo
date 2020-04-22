@@ -110,6 +110,9 @@ static void init_glfw()
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #endif
 
+    // Attempt creating a transparent window
+    glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
+
     win = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "libplacebo GLFW demo",
                             NULL, NULL);
     if (!win) {
@@ -117,7 +120,6 @@ static void init_glfw()
         uninit(1);
     }
 }
-
 
 static void init_api();
 
@@ -232,9 +234,11 @@ static void evolve_rgba(float rgba[4], int *pos)
     const float circle = 2.0 * M_PI;
     const float piece  = (float)(*pos % scale) / (scale - 1);
 
-    rgba[0] = (sinf(circle * piece + 0.0) + 1.0) / 2.0;
-    rgba[1] = (sinf(circle * piece + 2.0) + 1.0) / 2.0;
-    rgba[2] = (sinf(circle * piece + 4.0) + 1.0) / 2.0;
+    float alpha = (cosf(circle * (*pos) / scale * 0.5) + 1.0) / 2.0;
+    rgba[0] = alpha * (sinf(circle * piece + 0.0) + 1.0) / 2.0;
+    rgba[1] = alpha * (sinf(circle * piece + 2.0) + 1.0) / 2.0;
+    rgba[2] = alpha * (sinf(circle * piece + 4.0) + 1.0) / 2.0;
+    rgba[3] = alpha;
 
     *pos += 1;
 }
@@ -256,7 +260,7 @@ int main(int argc, char **argv)
     glfwSetFramebufferSizeCallback(win, resize_cb);
     glfwSetWindowCloseCallback(win, exit_cb);
 
-    float rgba[4] = {0};
+    float rgba[4] = {0.0, 0.0, 0.0, 1.0};
     int rainbow_pos = 0;
 
     while (true) {
@@ -270,9 +274,8 @@ int main(int argc, char **argv)
         }
 
         assert(frame.fbo->params.blit_dst);
-        pl_tex_clear(gpu, frame.fbo, rgba);
-
         evolve_rgba(rgba, &rainbow_pos);
+        pl_tex_clear(gpu, frame.fbo, rgba);
 
         ok = pl_swapchain_submit_frame(swapchain);
         if (!ok) {
