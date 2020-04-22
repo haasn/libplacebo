@@ -29,6 +29,11 @@ struct pl_opengl_params {
     // on whether or not the GL context was initialized with appropriate
     // debugging enabled.
     bool debug;
+
+    // Restrict specific features to e.g. work around driver bugs, or simply
+    // for testing purposes
+    pl_gpu_caps blacklist_caps; // capabilities to be excluded
+    int max_glsl_version;       // limit the maximum GLSL version
 };
 
 // Default/recommended parameters

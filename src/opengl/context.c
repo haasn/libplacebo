@@ -90,6 +90,21 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
     if (!pl_gl->gpu)
         goto error;
 
+    // Restrict caps/version
+    if (params->blacklist_caps) {
+        pl_gpu_caps *caps = (pl_gpu_caps*) &pl_gl->gpu->caps;
+        *caps &= ~(params->blacklist_caps);
+        PL_INFO(p, "Restricting capabilities 0x%x... new caps are 0x%x",
+                (unsigned int) params->blacklist_caps, (unsigned int) *caps);
+    }
+
+    if (params->max_glsl_version) {
+        struct pl_glsl_desc *desc = &pl_gl->gpu->glsl;
+        desc->version = PL_MIN(desc->version, params->max_glsl_version);
+        PL_INFO(p, "Restricting GLSL version to %d... new version is %d",
+                params->max_glsl_version, desc->version);
+    }
+
     return pl_gl;
 
 error:

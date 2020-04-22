@@ -197,6 +197,7 @@ struct pl_vulkan_params {
     // Restrict specific features to e.g. work around driver bugs, or simply
     // for testing purposes
     pl_gpu_caps blacklist_caps; // capabilities to be excluded
+    int max_glsl_version;       // limit the maximum GLSL version
     bool disable_events;        // disables usage of VkEvent completely
 };
 

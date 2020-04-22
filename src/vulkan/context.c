@@ -985,8 +985,20 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
         goto error;
 
     // Blacklist / restrict features
-    pl_gpu_caps *caps = (pl_gpu_caps*) &pl_vk->gpu->caps;
-    *caps &= ~(params->blacklist_caps);
+    if (params->blacklist_caps) {
+        pl_gpu_caps *caps = (pl_gpu_caps*) &pl_vk->gpu->caps;
+        *caps &= ~(params->blacklist_caps);
+        PL_INFO(vk, "Restricting capabilities 0x%x... new caps are 0x%x",
+                (unsigned int) params->blacklist_caps, (unsigned int) *caps);
+    }
+
+    if (params->max_glsl_version) {
+        struct pl_glsl_desc *desc = (struct pl_glsl_desc *) &pl_vk->gpu->glsl;
+        desc->version = PL_MIN(desc->version, params->max_glsl_version);
+        PL_INFO(vk, "Restricting GLSL version to %d... new version is %d",
+                params->max_glsl_version, desc->version);
+    }
+
     vk->disable_events = params->disable_events;
 
     // Expose the resulting vulkan objects
