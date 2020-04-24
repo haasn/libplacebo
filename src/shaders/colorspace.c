@@ -609,7 +609,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
         return false;
     }
 
-    if (SH_GLSL(sh).version < 130) {
+    if (sh_glsl(sh).version < 130) {
         // uint was added in GLSL 130
         SH_FAIL(sh, "HDR peak detection requires GLSL >= 130!");
         return false;
