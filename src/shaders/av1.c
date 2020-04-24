@@ -489,7 +489,7 @@ static void generate_scaling(void *priv, float *data, int w, int h, int d)
         int by = ctx->points[i][1];
         int dx = ctx->points[i + 1][0] - bx;
         int dy = ctx->points[i + 1][1] - by;
-        int delta = dy * ((0xFFFF + (dx >> 1))) / dx;
+        int delta = dy * ((0x10000 + (dx >> 1)) / dx);
         for (int x = 0; x < dx; x++) {
             int v = by + ((x * delta + 0x8000) >> 16);
             data[bx + x] = v / range;
