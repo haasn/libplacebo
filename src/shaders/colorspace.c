@@ -600,8 +600,6 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
                            struct pl_shader_obj **state,
                            const struct pl_peak_detect_params *params)
 {
-    const struct pl_gpu *gpu = SH_GPU(sh);
-
     params = PL_DEF(params, &pl_peak_detect_default_params);
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return false;
@@ -611,7 +609,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
         return false;
     }
 
-    if (gpu->glsl.version < 130) {
+    if (SH_GLSL(sh).version < 130) {
         // uint was added in GLSL 130
         PL_ERR(sh, "HDR peak detection requires GLSL >= 130!");
         return false;
@@ -623,6 +621,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
     if (!obj)
         return false;
 
+    const struct pl_gpu *gpu = SH_GPU(sh);
     obj->gpu = gpu;
 
     if (!obj->buf) {
