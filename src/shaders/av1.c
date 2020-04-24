@@ -671,7 +671,13 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return false;
 
-    if (SH_GPU(sh)->glsl.version < 130) {
+    const struct pl_gpu *gpu = SH_GPU(sh);
+    if (!gpu) {
+        PL_ERR(sh, "pl_shader_av1_grain requires a non-NULL pl_gpu!");
+        return false;
+    }
+
+    if (sh_glsl(sh).version < 130) {
         PL_ERR(sh, "pl_shader_av1_grain requires GLSL >= 130!");
         return false;
     }
@@ -746,22 +752,22 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
         // SSBO layout in this case
         struct pl_var grain_y = pl_var_float("grain_y");
         grain_y.dim_a = GRAIN_WIDTH_LUT * GRAIN_HEIGHT_LUT;
-        ok &= sh_buf_desc_append(obj->tmp, SH_GPU(sh), &obj->desc,
+        ok &= sh_buf_desc_append(obj->tmp, gpu, &obj->desc,
                                  &obj->layout_y, grain_y);
 
         struct pl_var grain_cb = pl_var_float("grain_cb");
         grain_cb.dim_a = chroma_lut_size;
-        ok &= sh_buf_desc_append(obj->tmp, SH_GPU(sh), &obj->desc,
+        ok &= sh_buf_desc_append(obj->tmp, gpu, &obj->desc,
                                  &obj->layout_cb, grain_cb);
 
         struct pl_var grain_cr = pl_var_float("grain_cr");
         grain_cr.dim_a = chroma_lut_size;
-        ok &= sh_buf_desc_append(obj->tmp, SH_GPU(sh), &obj->desc,
+        ok &= sh_buf_desc_append(obj->tmp, gpu, &obj->desc,
                                  &obj->layout_cr, grain_cr);
 
         struct pl_var offsets = pl_var_uint("offsets");
         offsets.dim_a = offsets_x * offsets_y;
-        ok &= sh_buf_desc_append(obj->tmp, SH_GPU(sh), &obj->desc,
+        ok &= sh_buf_desc_append(obj->tmp, gpu, &obj->desc,
                                  &obj->layout_off, offsets);
 
         if (!ok) {
@@ -793,7 +799,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
         if (last_buf && last_buf->params.size > ssbo_params.size)
             ssbo_params.size = last_buf->params.size;
 
-        ssbo = pl_buf_pool_get(SH_GPU(sh), &obj->ssbos, &ssbo_params);
+        ssbo = pl_buf_pool_get(gpu, &obj->ssbos, &ssbo_params);
         if (!ssbo) {
             PL_ERR(sh, "Failed creating/getting SSBO buffer for AV1 grain!");
             return false;
@@ -808,7 +814,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
 
         if (has_luma) {
             pl_assert(obj->layout_y.stride == sizeof(float));
-            pl_buf_write(SH_GPU(sh), ssbo, obj->layout_y.offset, obj->grain,
+            pl_buf_write(gpu, ssbo, obj->layout_y.offset, obj->grain,
                          sizeof(obj->grain));
         }
 
@@ -816,19 +822,19 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
             generate_grain_uv(&obj->grain[0][0], obj->grain_tmp_uv,
                               obj->grain_tmp_y, PL_CHANNEL_CB, params);
             pl_assert(obj->layout_cb.stride == sizeof(float));
-            pl_buf_write(SH_GPU(sh), ssbo, obj->layout_cb.offset, obj->grain,
+            pl_buf_write(gpu, ssbo, obj->layout_cb.offset, obj->grain,
                          sizeof(float) * chroma_lut_size);
 
             generate_grain_uv(&obj->grain[0][0], obj->grain_tmp_uv,
                               obj->grain_tmp_y, PL_CHANNEL_CR, params);
             pl_assert(obj->layout_cr.stride == sizeof(float));
-            pl_buf_write(SH_GPU(sh), ssbo, obj->layout_cr.offset, obj->grain,
+            pl_buf_write(gpu, ssbo, obj->layout_cr.offset, obj->grain,
                          sizeof(float) * chroma_lut_size);
         }
 
         generate_offsets(obj->offsets, offsets_x, offsets_y, data);
         pl_assert(obj->layout_off.stride == sizeof(uint32_t));
-        pl_buf_write(SH_GPU(sh), ssbo, obj->layout_off.offset, obj->offsets,
+        pl_buf_write(gpu, ssbo, obj->layout_off.offset, obj->offsets,
                      obj->num_offsets * obj->layout_off.stride);
 
         obj->data = *data;
