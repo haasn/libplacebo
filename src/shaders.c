@@ -467,7 +467,7 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
 bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h)
 {
     if (sh->failed) {
-        PL_ERR(sh, "Attempting to modify a failed shader!");
+        SH_FAIL(sh, "Attempting to modify a failed shader!");
         return false;
     }
 

@@ -662,9 +662,9 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     bool is_luma = chmask & 0x1;
     bool is_chroma = chmask & 0x6;
     if (is_luma && is_chroma && (params->sub_x || params->sub_y)) {
-        PL_ERR(sh, "pl_shader_av1_grain can't be called on luma and chroma "
-               "at the same time with subsampled chroma! Please only call "
-               "this function on the correctly sized textures.");
+        SH_FAIL(sh, "pl_shader_av1_grain can't be called on luma and chroma "
+                "at the same time with subsampled chroma! Please only call "
+                "this function on the correctly sized textures.");
         return false;
     }
 
@@ -673,12 +673,12 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
 
     const struct pl_gpu *gpu = SH_GPU(sh);
     if (!gpu) {
-        PL_ERR(sh, "pl_shader_av1_grain requires a non-NULL pl_gpu!");
+        SH_FAIL(sh, "pl_shader_av1_grain requires a non-NULL pl_gpu!");
         return false;
     }
 
     if (sh_glsl(sh).version < 130) {
-        PL_ERR(sh, "pl_shader_av1_grain requires GLSL >= 130!");
+        SH_FAIL(sh, "pl_shader_av1_grain requires GLSL >= 130!");
         return false;
     }
 
@@ -771,8 +771,8 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
                                  &obj->layout_off, offsets);
 
         if (!ok) {
-            PL_ERR(sh, "Failed generating SSBO buffer placement: Either GPU "
-                   "limits exceeded or width/height nonsensical?");
+            SH_FAIL(sh, "Failed generating SSBO buffer placement: Either GPU "
+                    "limits exceeded or width/height nonsensical?");
             return false;
         }
 
@@ -801,7 +801,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
 
         ssbo = pl_buf_pool_get(gpu, &obj->ssbos, &ssbo_params);
         if (!ssbo) {
-            PL_ERR(sh, "Failed creating/getting SSBO buffer for AV1 grain!");
+            SH_FAIL(sh, "Failed creating/getting SSBO buffer for AV1 grain!");
             return false;
         }
 
@@ -866,7 +866,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
                                 &priv, generate_scaling);
 
             if (!scaling[i]) {
-                PL_ERR(sh, "Failed generating/uploading scaling LUTs!");
+                SH_FAIL(sh, "Failed generating/uploading scaling LUTs!");
                 return false;
             }
         }
