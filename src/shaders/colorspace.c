@@ -605,13 +605,13 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
         return false;
 
     if (!sh_try_compute(sh, 8, 8, true, 2 * sizeof(int32_t))) {
-        SH_FAIL(sh, "HDR peak detection requires compute shaders!");
+        PL_ERR(sh, "HDR peak detection requires compute shaders!");
         return false;
     }
 
     if (sh_glsl(sh).version < 130) {
         // uint was added in GLSL 130
-        SH_FAIL(sh, "HDR peak detection requires GLSL >= 130!");
+        PL_ERR(sh, "HDR peak detection requires GLSL >= 130!");
         return false;
     }
 
@@ -639,7 +639,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
         ok &= sh_buf_desc_append(obj, gpu, &obj->desc, NULL, pl_var_uint("counter"));
 
         if (!ok) {
-            SH_FAIL(sh, "HDR peak detection exhausts device limits!");
+            PL_ERR(sh, "HDR peak detection exhausts device limits!");
             return false;
         }
 

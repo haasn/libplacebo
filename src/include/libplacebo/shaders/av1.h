@@ -84,6 +84,8 @@ bool pl_needs_av1_grain(const struct pl_av1_grain_params *params);
 // from the component index of the `vec4 color` to the channel contained in
 // that index, or PL_CHANNEL_NONE for unused channels. Returns if successful.
 //
+// Returns false on any error, or if AV1 grain generation is not supported.
+//
 // For example, if this is the pass for the subsampled Cb and Cr planes, which
 // are currently available in color.xy, then `params->channels` would be:
 // {PL_CHANNEL_CB, PL_CHANNEL_CR, PL_CHANNEL_NONE} = {1, 2, -1}
