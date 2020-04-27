@@ -125,11 +125,13 @@ static const struct vk_ext vk_device_extensions[] = {
             {0},
         },
 #endif
+#ifdef VK_EXT_pci_bus_info
     }, {
         .name = VK_EXT_PCI_BUS_INFO_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
             {0}
         },
+#endif
     }
 };
 
