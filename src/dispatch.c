@@ -217,15 +217,29 @@ static void add_var(struct pl_dispatch *dp, struct bstr *body,
     }
 }
 
-static void add_buffer_vars(struct pl_dispatch *dp, struct bstr *body,
-                            const struct pl_buffer_var *vars, int num)
+static int cmp_buffer_var(const void *pa, const void *pb)
 {
+    const struct pl_buffer_var * const *a = pa, * const *b = pb;
+    return PL_CMP((*a)->layout.offset, (*b)->layout.offset);
+}
+
+static void add_buffer_vars(struct pl_dispatch *dp, struct bstr *body,
+                            const struct pl_buffer_var *vars, int num,
+                            void *tmp)
+{
+    // Sort buffer vars
+    const struct pl_buffer_var **sorted_vars = NULL;
+    TARRAY_RESIZE(tmp, sorted_vars, num);
+    for (int i = 0; i < num; i++)
+        sorted_vars[i] = &vars[i];
+    qsort(sorted_vars, num, sizeof(sorted_vars[0]), cmp_buffer_var);
+
     ADD(body, "{\n");
     for (int i = 0; i < num; i++) {
         // Add an explicit offset wherever possible
         if (dp->gpu->glsl.version >= 440)
-            ADD(body, "    layout(offset=%zu) ", vars[i].layout.offset);
-        add_var(dp, body, &vars[i].var);
+            ADD(body, "    layout(offset=%zu) ", sorted_vars[i]->layout.offset);
+        add_var(dp, body, &sorted_vars[i]->var);
     }
     ADD(body, "};\n");
 }
@@ -242,7 +256,8 @@ static ident_t sh_var_from_va(struct pl_shader *sh, const char *name,
 
 static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
                              struct pl_pass_params *params,
-                             struct pl_shader *sh, ident_t vert_pos)
+                             struct pl_shader *sh, ident_t vert_pos,
+                             void *tmp)
 {
     const struct pl_gpu *gpu = dp->gpu;
     const struct pl_shader_res *res = pl_shader_finalize(sh);
@@ -419,7 +434,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
                 ADD(glsl, "layout(std140) ");
             }
             ADD(glsl, "uniform %s ", desc->name);
-            add_buffer_vars(dp, glsl, sd->buffer_vars, sd->num_buffer_vars);
+            add_buffer_vars(dp, glsl, sd->buffer_vars, sd->num_buffer_vars, tmp);
             break;
 
         case PL_DESC_BUF_STORAGE:
@@ -430,7 +445,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             }
             ADD(glsl, "%s buffer %s ", pl_desc_access_glsl_name(desc->access),
                 desc->name);
-            add_buffer_vars(dp, glsl, sd->buffer_vars, sd->num_buffer_vars);
+            add_buffer_vars(dp, glsl, sd->buffer_vars, sd->num_buffer_vars, tmp);
             break;
 
         case PL_DESC_BUF_TEXEL_UNIFORM:
@@ -642,7 +657,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     rparams->push_constants = talloc_zero_size(pass, params.push_constants_size);
 
     // Finally, finalize the shaders and create the pass itself
-    generate_shaders(dp, pass, &params, sh, vert_pos);
+    generate_shaders(dp, pass, &params, sh, vert_pos, tmp);
     pass->pass = rparams->pass = pl_pass_create(dp->gpu, &params);
     if (!pass->pass) {
         PL_ERR(dp, "Failed creating render pass for dispatch");
