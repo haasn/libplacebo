@@ -1060,7 +1060,14 @@ const struct pl_pass *pl_pass_create(const struct pl_gpu *gpu,
     for (int i = 0; i < params->num_descriptors; i++) {
         struct pl_desc desc = params->descriptors[i];
         require(desc.name);
-        // TODO: enforce disjoint bindings if possible?
+
+        // enforce disjoint descriptor bindings for each namespace
+        int namespace = pl_desc_namespace(gpu, desc.type);
+        for (int j = i+1; j < params->num_descriptors; j++) {
+            struct pl_desc other = params->descriptors[j];
+            require(desc.binding != other.binding ||
+                    namespace != pl_desc_namespace(gpu, other.type));
+        }
     }
 
     require(params->push_constants_size <= gpu->limits.max_pushc_size);
