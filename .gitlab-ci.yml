@@ -94,6 +94,7 @@ test-ubuntu-scan:
         - env CC=clang meson build --buildtype debugoptimized
                                    --werror
                                    -Dtests=true
+                                   -Dbench=true
                                    -Dshaderc=enabled
                                    -Dglslang=enabled
         - ninja -C build scan-build
