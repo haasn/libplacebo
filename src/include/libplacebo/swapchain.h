@@ -59,6 +59,28 @@ int pl_swapchain_latency(const struct pl_swapchain *sw);
 // effectively be used to probe if creating a swapchain works.
 bool pl_swapchain_resize(const struct pl_swapchain *sw, int *width, int *height);
 
+// Represents raw HDR metadata as defined by SMPTE 2086 / CTA 861.3, which
+// is often attached to HDR sources and can be forwarded to HDR-capable
+// displays in order to enhance their tone mapping. It's worth pointing out
+// that libplacebo does not make use of this information in its own internal
+// tone mapping routines, instead consulting the functionally similar fields
+// in `pl_color_space`.
+struct pl_hdr_metadata {
+    struct pl_raw_primaries prim; // mastering display primaries
+    float min_luma, max_luma;     // min/max luminance (in cd/m²)
+    float max_cll;                // max content light level (in cd/m²)
+    float max_fall;               // max frame average light level (in cd/m²)
+};
+
+// Attempt setting the HDR metadata of the display to the given struct. Returns
+// false if HDR metadata is not supported by the swapchain or hardware.
+//
+// This can be called on `NULL` to effectively query for HDR support without
+// attempting to change anything. Such usage is a no-op. To "reset" metadata
+// after having set it, call this with a {0} struct.
+bool pl_swapchain_hdr_metadata(const struct pl_swapchain *sw,
+                               const struct pl_hdr_metadata *metadata);
+
 // The struct used to hold the results of `pl_swapchain_start_frame`
 struct pl_swapchain_frame {
     // A texture representing the framebuffer users should use for rendering.

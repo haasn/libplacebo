@@ -51,6 +51,15 @@ bool pl_swapchain_resize(const struct pl_swapchain *sw, int *width, int *height)
     return sw->impl->resize(sw, width, height);
 }
 
+bool pl_swapchain_hdr_metadata(const struct pl_swapchain *sw,
+                               const struct pl_hdr_metadata *metadata)
+{
+    if (!sw->impl->hdr_metadata)
+        return false;
+
+    return sw->impl->hdr_metadata(sw, metadata);
+}
+
 bool pl_swapchain_start_frame(const struct pl_swapchain *sw,
                               struct pl_swapchain_frame *out_frame)
 {
