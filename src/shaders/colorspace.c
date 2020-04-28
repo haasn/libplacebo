@@ -151,16 +151,6 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
 void pl_shader_encode_color(struct pl_shader *sh,
                             const struct pl_color_repr *repr)
 {
-    // Since this is a relatively rare operation, bypass it as much as possible
-    bool skip = true;
-    skip &= PL_DEF(repr->sys, PL_COLOR_SYSTEM_RGB) == PL_COLOR_SYSTEM_RGB;
-    skip &= PL_DEF(repr->levels, PL_COLOR_LEVELS_PC) == PL_COLOR_LEVELS_PC;
-    skip &= PL_DEF(repr->alpha, PL_ALPHA_PREMULTIPLIED) == PL_ALPHA_PREMULTIPLIED;
-    skip &= repr->bits.sample_depth == repr->bits.color_depth;
-    skip &= !repr->bits.bit_shift;
-    if (skip)
-        return;
-
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
@@ -217,29 +207,41 @@ void pl_shader_encode_color(struct pl_shader *sh,
         break;
     }
 
-    struct pl_color_repr copy = *repr;
-    float xyzscale = (repr->sys == PL_COLOR_SYSTEM_XYZ)
-                        ? pl_color_repr_normalize(&copy)
-                        : 0.0;
+    // Since this is a relatively rare operation, bypass it as much as possible
+    bool skip = true;
+    skip &= PL_DEF(repr->sys, PL_COLOR_SYSTEM_RGB) == PL_COLOR_SYSTEM_RGB;
+    skip &= PL_DEF(repr->levels, PL_COLOR_LEVELS_PC) == PL_COLOR_LEVELS_PC;
+    skip &= repr->bits.sample_depth == repr->bits.color_depth;
+    skip &= !repr->bits.bit_shift;
 
-    struct pl_transform3x3 tr = pl_color_repr_decode(&copy, NULL);
-    pl_transform3x3_invert(&tr);
+    if (!skip) {
+        struct pl_color_repr copy = *repr;
+        float xyzscale = (repr->sys == PL_COLOR_SYSTEM_XYZ)
+                            ? pl_color_repr_normalize(&copy)
+                            : 0.0;
 
-    ident_t cmat = sh_var(sh, (struct pl_shader_var) {
-        .var  = pl_var_mat3("cmat"),
-        .data = PL_TRANSPOSE_3X3(tr.mat.m),
-    });
+        struct pl_transform3x3 tr = pl_color_repr_decode(&copy, NULL);
+        pl_transform3x3_invert(&tr);
 
-    ident_t cmat_c = sh_var(sh, (struct pl_shader_var) {
-        .var  = pl_var_vec3("cmat_c"),
-        .data = tr.c,
-    });
+        ident_t cmat = sh_var(sh, (struct pl_shader_var) {
+            .var  = pl_var_mat3("cmat"),
+            .data = PL_TRANSPOSE_3X3(tr.mat.m),
+        });
 
-    GLSL("color.rgb = %s * color.rgb + %s;\n", cmat, cmat_c);
-    if (repr->sys == PL_COLOR_SYSTEM_XYZ)
-        GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.6)) * vec3(1.0/%f); \n", xyzscale);
+        ident_t cmat_c = sh_var(sh, (struct pl_shader_var) {
+            .var  = pl_var_vec3("cmat_c"),
+            .data = tr.c,
+        });
+
+        GLSL("color.rgb = %s * color.rgb + %s;\n", cmat, cmat_c);
+
+        if (repr->sys == PL_COLOR_SYSTEM_XYZ)
+            GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.6)) * vec3(1.0/%f); \n", xyzscale);
+    }
+
     if (repr->alpha == PL_ALPHA_INDEPENDENT)
         GLSL("color.rgb /= vec3(max(color.a, 1e-6));\n");
+
     GLSL("}\n");
 }
 
