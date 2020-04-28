@@ -279,24 +279,30 @@ static void bench_hdr_desat(struct pl_shader *sh, struct pl_shader_obj **state,
 static void bench_av1_grain(struct pl_shader *sh, struct pl_shader_obj **state,
                             const struct pl_tex *src)
 {
-    struct pl_grain_params params = av1_grain_params;
-    params.width = params.height = TEX_SIZE;
-    params.grain_seed = rand();
+    struct pl_av1_grain_params params = {
+        .data = av1_grain_data,
+        .luma_tex = src,
+        .channels = {0, 1, 2},
+    };
 
+    params.data.grain_seed = rand();
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
-    pl_shader_av1_grain(sh, state, (enum pl_channel[]){0, 1, 2}, NULL, &params);
+    pl_shader_av1_grain(sh, state, &params);
 }
 
 static void bench_av1_grain_lap(struct pl_shader *sh, struct pl_shader_obj **state,
                                 const struct pl_tex *src)
 {
-    struct pl_grain_params params = av1_grain_params;
-    params.width = params.height = TEX_SIZE;
-    params.grain_seed = rand();
-    params.overlap = true;
+    struct pl_av1_grain_params params = {
+        .data = av1_grain_data,
+        .luma_tex = src,
+        .channels = {0, 1, 2},
+    };
 
+    params.data.overlap = true;
+    params.data.grain_seed = rand();
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
-    pl_shader_av1_grain(sh, state, (enum pl_channel[]){0, 1, 2}, NULL, &params);
+    pl_shader_av1_grain(sh, state, &params);
 }
 
 int main()
