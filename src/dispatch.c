@@ -365,18 +365,24 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
 
     // Add all of the push constants as their own element
     if (params->push_constants_size) {
-        ADD(glsl, "layout(std430, push_constant) uniform PushC {\n");
+        // We re-use add_buffer_vars to make sure variables are sorted, this
+        // is important because the push constants can be out-of-order in
+        // `pass->vars`
+        struct pl_buffer_var *pc_bvars = NULL;
+        int num_bvars = 0;
+
         for (int i = 0; i < res->num_variables; i++) {
-            struct pl_var *var = &res->variables[i].var;
-            struct pass_var *pv = &pass->vars[i];
-            if (pv->type != PASS_VAR_PUSHC)
+            if (pass->vars[i].type != PASS_VAR_PUSHC)
                 continue;
-            // Note: Don't remove this offset, since the push constants
-            // can be out-of-order in `pass->vars`!
-            ADD(glsl, "    layout(offset=%zu) ", pv->layout.offset);
-            add_var(dp, glsl, var);
+
+            TARRAY_APPEND(tmp, pc_bvars, num_bvars, (struct pl_buffer_var) {
+                .var = res->variables[i].var,
+                .layout = pass->vars[i].layout,
+            });
         }
-        ADD(glsl, "};\n");
+
+        ADD(glsl, "layout(std430, push_constant) uniform PushC ");
+        add_buffer_vars(dp, glsl, pc_bvars, num_bvars, tmp);
     }
 
     // Add all of the required descriptors
