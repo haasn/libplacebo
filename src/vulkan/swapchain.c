@@ -37,6 +37,7 @@ struct priv {
     bool suboptimal;        // true once VK_SUBOPTIMAL_KHR is returned
     struct pl_color_repr color_repr;
     struct pl_color_space color_space;
+    struct pl_hdr_metadata hdr_metadata;
 
     // state of the images:
     const struct pl_tex **images; // pl_tex wrappers for the VkImages
@@ -566,6 +567,9 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
     p->color_repr.bits.sample_depth = bits;
     p->color_repr.bits.color_depth = bits;
 
+    // Re-set the HDR metadata
+    pl_swapchain_hdr_metadata(sw, &p->hdr_metadata);
+
     talloc_free(vkimages);
     return true;
 
@@ -731,6 +735,41 @@ static bool vk_sw_resize(const struct pl_swapchain *sw, int *width, int *height)
     return ok;
 }
 
+static bool vk_sw_hdr_metadata(const struct pl_swapchain *sw,
+                               const struct pl_hdr_metadata *metadata)
+{
+    struct priv *p = TA_PRIV(sw);
+    struct vk_ctx *vk = p->vk;
+    if (!vk->SetHdrMetadataEXT)
+        return false;
+
+    if (!pl_color_transfer_is_hdr(p->color_space.transfer))
+        return false;
+
+    if (!p->swapchain && !vk_sw_recreate(sw, 0, 0))
+        return false;
+
+    if (!metadata)
+        return true;
+
+    // Remember the metadata so we can re-apply it after swapchain recreation
+    p->hdr_metadata = *metadata;
+
+    vk->SetHdrMetadataEXT(vk->dev, 1, &p->swapchain, &(VkHdrMetadataEXT) {
+        .sType = VK_STRUCTURE_TYPE_HDR_METADATA_EXT,
+        .displayPrimaryRed   = { metadata->prim.red.x,   metadata->prim.red.y },
+        .displayPrimaryGreen = { metadata->prim.green.x, metadata->prim.green.y },
+        .displayPrimaryBlue  = { metadata->prim.blue.x,  metadata->prim.blue.y },
+        .whitePoint = { metadata->prim.white.x, metadata->prim.white.y },
+        .maxLuminance = metadata->max_luma,
+        .minLuminance = metadata->min_luma,
+        .maxContentLightLevel = metadata->max_cll,
+        .maxFrameAverageLightLevel = metadata->max_fall,
+    });
+
+    return true;
+}
+
 bool pl_vulkan_swapchain_suboptimal(const struct pl_swapchain *sw)
 {
     struct priv *p = TA_PRIV(sw);
@@ -741,6 +780,7 @@ static struct pl_sw_fns vulkan_swapchain = {
     .destroy      = vk_sw_destroy,
     .latency      = vk_sw_latency,
     .resize       = vk_sw_resize,
+    .hdr_metadata = vk_sw_hdr_metadata,
     .start_frame  = vk_sw_start_frame,
     .submit_frame = vk_sw_submit_frame,
     .swap_buffers = vk_sw_swap_buffers,

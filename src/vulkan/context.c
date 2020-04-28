@@ -130,7 +130,13 @@ static const struct vk_ext vk_device_extensions[] = {
         .funs = (struct vk_fun[]) {
             {0}
         },
-    }
+    }, {
+        .name = VK_EXT_HDR_METADATA_EXTENSION_NAME,
+        .funs = (struct vk_fun[]) {
+            VK_DEV_FUN(SetHdrMetadataEXT),
+            {0},
+        },
+    },
 };
 
 // List of mandatory device-level functions

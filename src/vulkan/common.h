@@ -197,6 +197,7 @@ struct vk_ctx {
     VK_FUN(QueueSubmit);
     VK_FUN(ResetEvent);
     VK_FUN(ResetFences);
+    VK_FUN(SetHdrMetadataEXT);
     VK_FUN(UpdateDescriptorSets);
     VK_FUN(WaitForFences);
 
