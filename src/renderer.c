@@ -1171,4 +1171,7 @@ void pl_render_target_from_swapchain(struct pl_render_target *out_target,
         .repr = frame->color_repr,
         .color = frame->color_space,
     };
+
+    if (frame->flipped)
+        PL_SWAP(out_target->dst_rect.y0, out_target->dst_rect.y1);
 }
