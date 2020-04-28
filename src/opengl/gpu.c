@@ -29,6 +29,7 @@ struct pl_gl {
     int gl_ver;
     int gles_ver;
     bool has_stride;
+    bool has_invalidate;
     bool has_vao;
 };
 
@@ -269,6 +270,7 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
     // Cached some existing capability checks
     p->has_stride = test_ext(gpu, "GL_EXT_unpack_subimage", 11, 30);
     p->has_vao = test_ext(gpu, "GL_ARB_vertex_array_object", 30, 0);
+    p->has_invalidate = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
 
     // We simply don't know, so make up some values
     gpu->limits.align_tex_xfer_offset = 32;
@@ -570,11 +572,14 @@ static void gl_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex
     struct pl_gl *p = TA_PRIV(gpu);
     struct pl_tex_gl *tex_gl = TA_PRIV(tex);
 
-    if (tex_gl->wrapped_fb && (p->gl_ver >= 43 || p->gles_ver >= 30)) {
+    if (!p->has_invalidate)
+        return;
+
+    if (tex_gl->wrapped_fb) {
         glBindFramebuffer(GL_FRAMEBUFFER, tex_gl->fbo);
         glInvalidateFramebuffer(GL_FRAMEBUFFER, 1, (GLenum[]){GL_COLOR});
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    } else if (p->gl_ver >= 43) {
+    } else {
         glInvalidateTexImage(tex_gl->texture, 0);
     }
 
@@ -1379,6 +1384,7 @@ static void gl_pass_run(const struct pl_gpu *gpu,
 {
     const struct pl_pass *pass = params->pass;
     struct pl_pass_gl *pass_gl = TA_PRIV(pass);
+    struct pl_gl *p = TA_PRIV(gpu);
 
     glUseProgram(pass_gl->program);
 
@@ -1395,7 +1401,7 @@ static void gl_pass_run(const struct pl_gpu *gpu,
     case PL_PASS_RASTER: {
         struct pl_tex_gl *target_gl = TA_PRIV(params->target);
         glBindFramebuffer(GL_FRAMEBUFFER, target_gl->fbo);
-        if (!pass->params.load_target) {
+        if (!pass->params.load_target && p->has_invalidate) {
             GLenum fb = target_gl->fbo ? GL_COLOR_ATTACHMENT0 : GL_COLOR;
             glInvalidateFramebuffer(GL_FRAMEBUFFER, 1, &fb);
         }
