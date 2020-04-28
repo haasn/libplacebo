@@ -474,12 +474,13 @@ error:
 
 static bool gl_fb_query(const struct pl_gpu *gpu, int fbo, struct pl_fmt *fmt)
 {
+    struct pl_gl *p = TA_PRIV(gpu);
     if (!test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20))
         return true;
 
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-    GLenum obj = gpu->glsl.gles ? GL_BACK : GL_BACK_LEFT;
+    GLenum obj = p->gles_ver ? GL_BACK : GL_BACK_LEFT;
     if (fbo != 0)
         obj = GL_COLOR_ATTACHMENT0;
 
