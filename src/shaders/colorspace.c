@@ -51,7 +51,7 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
     });
 
     ident_t cmat_c = sh_var(sh, (struct pl_shader_var) {
-        .var  = pl_var_vec3("cmat_m"),
+        .var  = pl_var_vec3("cmat_c"),
         .data = tr.c,
     });
 
@@ -231,7 +231,7 @@ void pl_shader_encode_color(struct pl_shader *sh,
     });
 
     ident_t cmat_c = sh_var(sh, (struct pl_shader_var) {
-        .var  = pl_var_vec3("cmat_m"),
+        .var  = pl_var_vec3("cmat_c"),
         .data = tr.c,
     });
 
