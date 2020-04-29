@@ -313,8 +313,8 @@ void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool)
 
 struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool)
 {
-    // garbage collect the cmdpool first, to increase the chances of getting
-    // an already-available command buffer
+    // Garbage collect the cmdpool first, to increase the chances of getting
+    // an already-available command buffer.
     vk_poll_commands(vk, 0);
 
     struct vk_cmd *cmd = NULL;
@@ -373,9 +373,6 @@ error:
 bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
 {
     bool ret = false;
-
-    if (timeout)
-        vk_flush_commands(vk);
 
     while (vk->num_cmds_pending > 0) {
         struct vk_cmd *cmd = vk->cmds_pending[0];
@@ -461,6 +458,6 @@ void vk_rotate_queues(struct vk_ctx *vk)
 
 void vk_wait_idle(struct vk_ctx *vk)
 {
-    // This also implicitly flushes the commands
+    vk_flush_commands(vk);
     while (vk_poll_commands(vk, UINT64_MAX)) ;
 }

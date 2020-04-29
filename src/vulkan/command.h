@@ -59,7 +59,7 @@ struct vk_cmd {
 };
 
 // Associate a callback with the completion of the current command. This
-// bool will be set to `true` once the command completes, or shortly thereafter.
+// function will be run once the command completes, or shortly thereafter.
 void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback,
                      const void *priv, const void *arg);
 
@@ -142,6 +142,10 @@ bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd *cmd);
 // for the completion of any command. The timeout may also be passed as 0, in
 // which case this function will not block, but only poll for completed
 // commands. Returns whether any forward progress was made.
+//
+// This does *not* flush any queued commands, forgetting to do so may result
+// in infinite loops if waiting for the completion of callbacks that were
+// never flushed!
 bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout);
 
 // Flush all currently queued commands. Returns whether successful. Failed

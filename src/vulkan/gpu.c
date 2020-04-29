@@ -1652,6 +1652,7 @@ static bool vk_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
     // user is guaranteed to see progress eventually, even if they call
     // this in a tight loop
     vk_submit(gpu);
+    vk_flush_commands(vk);
     vk_poll_commands(vk, timeout);
 
     return buf_vk->refcount > 1;
@@ -2642,6 +2643,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         while (!pass_vk->dmask) {
             PL_TRACE(gpu, "No free descriptor sets! ...blocking (slow path)");
             vk_submit(gpu);
+            vk_flush_commands(vk);
             vk_poll_commands(vk, 10000000); // 10 ms
         }
     }

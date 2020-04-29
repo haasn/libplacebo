@@ -494,8 +494,10 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
     // It's invalid to trigger another swapchain recreation while there's more
     // than one swapchain already active, so we need to flush any pending
     // asynchronous swapchain release operations that may be ongoing
-    while (p->old_swapchain)
+    while (p->old_swapchain) {
+        vk_flush_commands(vk);
         vk_poll_commands(vk, UINT64_MAX);
+    }
 
     VkSwapchainCreateInfoKHR sinfo = p->protoInfo;
     sinfo.oldSwapchain = p->swapchain;
