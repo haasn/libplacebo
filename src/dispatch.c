@@ -524,7 +524,7 @@ static bool blend_equal(const struct pl_blend_params *a,
 
 static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
                               const struct pl_tex *target, ident_t vert_pos,
-                              const struct pl_blend_params *blend)
+                              const struct pl_blend_params *blend, bool load)
 {
     uint64_t sig = pl_shader_signature(sh);
 
@@ -542,6 +542,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
             tfmt = p->pass->params.target_dummy.params.format;
             bool raster_ok = target->params.format == tfmt;
             raster_ok &= blend_equal(p->pass->params.blend_params, blend);
+            raster_ok &= load == p->pass->params.load_target;
             if (raster_ok)
                 return dp->passes[i];
         }
@@ -571,6 +572,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     if (params.type == PL_PASS_RASTER) {
         assert(target);
         params.target_dummy = *target;
+        params.load_target = load;
 
         // Fill in the vertex attributes array
         params.num_vertex_attribs = res->num_vertex_attribs;
@@ -875,7 +877,13 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
         });
     }
 
-    struct pass *pass = find_pass(dp, sh, target, vert_pos, blend);
+    // We need to set pl_pass_params.load_target when either blending is
+    // enabled or we're drawing to some scissored sub-rect of the texture
+    struct pl_rect2d rc_norm = *rc;
+    pl_rect2d_normalize(&rc_norm);
+    bool load = blend || !pl_rect2d_eq(rc_norm, full);
+
+    struct pass *pass = find_pass(dp, sh, target, vert_pos, blend, load);
 
     // Silently return on failed passes
     if (pass->failed)
@@ -974,7 +982,7 @@ bool pl_dispatch_compute(struct pl_dispatch *dp, struct pl_shader **psh,
         goto error;
     }
 
-    struct pass *pass = find_pass(dp, sh, NULL, NULL, NULL);
+    struct pass *pass = find_pass(dp, sh, NULL, NULL, NULL, false);
 
     // Silently return on failed passes
     if (pass->failed)
