@@ -346,14 +346,18 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
 #ifdef VK_EXT_validation_features
     // Try enabling as many validation features as possible. Ignored for
     // instances not supporting VK_EXT_validation_features.
+    VkValidationFeatureEnableEXT validation_features[] = {
+        VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+        VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
+# if VK_EXT_VALIDATION_FEATURES_SPEC_VERSION >= 2
+        VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
+# endif
+    };
+
     VkValidationFeaturesEXT vinfo = {
         .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
-        .enabledValidationFeatureCount = 3,
-        .pEnabledValidationFeatures = (VkValidationFeatureEnableEXT[]) {
-            VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-            VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
-            VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
-        }
+        .pEnabledValidationFeatures = validation_features,
+        .enabledValidationFeatureCount = PL_ARRAY_SIZE(validation_features),
     };
 
     if (params->debug_extra)
