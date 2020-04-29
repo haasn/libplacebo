@@ -349,7 +349,7 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
 
     VkInstanceCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pNext = params->debug ? &vinfo : NULL,
+        .pNext = params->debug_extra ? &vinfo : NULL,
         .pApplicationInfo = &(VkApplicationInfo) {
             .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
             .apiVersion = api_ver,

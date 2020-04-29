@@ -141,6 +141,7 @@ int main()
     const struct pl_vk_inst *inst;
     inst = pl_vk_inst_create(ctx, &(struct pl_vk_inst_params) {
         .debug = true,
+        .debug_extra = true,
         .opt_extensions = (const char *[]){
             VK_KHR_SURFACE_EXTENSION_NAME,
             "VK_EXT_headless_surface", // in case it isn't defined

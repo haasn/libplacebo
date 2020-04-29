@@ -49,8 +49,14 @@ struct pl_vk_inst {
 };
 
 struct pl_vk_inst_params {
-    // If set, enable the debugging and validation layers.
+    // If set, enable the debugging and validation layers. These should
+    // generally be lightweight and relatively harmless to enable.
     bool debug;
+
+    // If set, also enable GPU-assisted verification and best practices
+    // layers. (Note: May cause substantial slowdown and/or result in lots of
+    // false positive spam)
+    bool debug_extra;
 
     // If nonzero, restricts the Vulkan API version to be at most this. This
     // is only really useful for explicitly testing backwards compatibility.
