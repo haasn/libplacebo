@@ -335,6 +335,15 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
                 PRINTF_VER(params->max_api_version), PRINTF_VER(api_ver));
     }
 
+    VkInstanceCreateInfo info = {
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pApplicationInfo = &(VkApplicationInfo) {
+            .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .apiVersion = api_ver,
+        },
+    };
+
+#ifdef VK_EXT_validation_features
     // Try enabling as many validation features as possible. Ignored for
     // instances not supporting VK_EXT_validation_features.
     VkValidationFeaturesEXT vinfo = {
@@ -347,14 +356,14 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
         }
     };
 
-    VkInstanceCreateInfo info = {
-        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pNext = params->debug_extra ? &vinfo : NULL,
-        .pApplicationInfo = &(VkApplicationInfo) {
-            .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-            .apiVersion = api_ver,
-        },
-    };
+    if (params->debug_extra)
+        info.pNext = &vinfo;
+#else
+    if (params->debug_extra) {
+        pl_warn(ctx, "Enabled extra debugging but vulkan headers too old to "
+                "support it, please update vulkan and recompile libplacebo!");
+    }
+#endif
 
     // Enumerate all supported layers
     VK_LOAD_FUN(NULL, EnumerateInstanceLayerProperties, get_addr);
