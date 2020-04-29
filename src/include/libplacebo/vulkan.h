@@ -31,6 +31,9 @@
 struct pl_vk_inst {
     VkInstance instance;
 
+    // The Vulkan API version supported by this VkInstance.
+    uint32_t api_version;
+
     // The associated vkGetInstanceProcAddr pointer.
     PFN_vkGetInstanceProcAddr get_proc_addr;
 
@@ -48,6 +51,10 @@ struct pl_vk_inst {
 struct pl_vk_inst_params {
     // If set, enable the debugging and validation layers.
     bool debug;
+
+    // If nonzero, restricts the Vulkan API version to be at most this. This
+    // is only really useful for explicitly testing backwards compatibility.
+    uint32_t max_api_version;
 
     // Pointer to a user-provided `vkGetInstanceProcAddr`. If this is NULL,
     // libplacebo will use the directly linked version (if available).
@@ -102,6 +109,9 @@ struct pl_vulkan {
     VkInstance instance;
     VkPhysicalDevice phys_device;
     VkDevice device;
+
+    // The Vulkan API version supported by this VkPhysicalDevice.
+    uint32_t api_version;
 
     // The device extensions that were successfully enabled, including
     // extensions enabled by libplacebo internally. May contain duplicates.
@@ -199,6 +209,7 @@ struct pl_vulkan_params {
     pl_gpu_caps blacklist_caps; // capabilities to be excluded
     int max_glsl_version;       // limit the maximum GLSL version
     bool disable_events;        // disables usage of VkEvent completely
+    uint32_t max_api_version;   // limit that maximum vulkan API version
 };
 
 // Default/recommended parameters. Should generally be safe and efficient.

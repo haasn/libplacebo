@@ -299,6 +299,11 @@ static PFN_vkGetInstanceProcAddr get_proc_addr_fallback(struct pl_context *ctx,
 #endif
 }
 
+#define PRINTF_VER(ver) \
+    (int) VK_VERSION_MAJOR(ver), \
+    (int) VK_VERSION_MINOR(ver), \
+    (int) VK_VERSION_PATCH(ver)
+
 const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
                                            const struct pl_vk_inst_params *params)
 {
@@ -309,13 +314,31 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     const char **exts = NULL;
     int num_exts = 0;
 
-    VkInstanceCreateInfo info = {
-        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-    };
-
     PFN_vkGetInstanceProcAddr get_addr;
     if (!(get_addr = get_proc_addr_fallback(ctx, params->get_proc_addr)))
         goto error;
+
+    // Query instance version support
+    uint32_t api_ver = VK_API_VERSION_1_0;
+    VK_LOAD_FUN(NULL, EnumerateInstanceVersion, get_addr);
+    if (EnumerateInstanceVersion && EnumerateInstanceVersion(&api_ver) != VK_SUCCESS)
+        goto error;
+
+    pl_debug(ctx, "Available instance version: %d.%d.%d", PRINTF_VER(api_ver));
+
+    if (params->max_api_version) {
+        api_ver = PL_MIN(api_ver, params->max_api_version);
+        pl_info(ctx, "Restricting API version to %d.%d.%d... new version %d.%d.%d",
+                PRINTF_VER(params->max_api_version), PRINTF_VER(api_ver));
+    }
+
+    VkInstanceCreateInfo info = {
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pApplicationInfo = &(VkApplicationInfo) {
+            .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .apiVersion = api_ver,
+        },
+    };
 
     // Enumerate all supported layers
     VK_LOAD_FUN(NULL, EnumerateInstanceLayerProperties, get_addr);
@@ -325,8 +348,10 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     EnumerateInstanceLayerProperties(&num_layers_avail, layers_avail);
 
     pl_debug(ctx, "Available layers:");
-    for (int i = 0; i < num_layers_avail; i++)
-        pl_debug(ctx, "    %s", layers_avail[i].layerName);
+    for (int i = 0; i < num_layers_avail; i++) {
+        pl_debug(ctx, "    %s (v%d.%d.%d)", layers_avail[i].layerName,
+                 PRINTF_VER(layers_avail[i].specVersion));
+    }
 
     const char **layers = NULL;
     int num_layers = 0;
@@ -522,6 +547,7 @@ next_opt_user_ext: ;
     struct pl_vk_inst *pl_vk = talloc_priv(NULL, struct pl_vk_inst, struct priv);
     *pl_vk = (struct pl_vk_inst) {
         .instance = inst,
+        .api_version = api_ver,
         .get_proc_addr = get_addr,
         .extensions = exts,
         .num_extensions = num_exts,
@@ -971,16 +997,14 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     VkPhysicalDeviceProperties prop = {0};
     vk->GetPhysicalDeviceProperties(vk->physd, &prop);
     vk->limits = prop.limits;
+    vk->api_ver = prop.apiVersion;
 
     PL_INFO(vk, "Vulkan device properties:");
     PL_INFO(vk, "    Device Name: %s", prop.deviceName);
     PL_INFO(vk, "    Device ID: %x:%x", (unsigned) prop.vendorID,
             (unsigned) prop.deviceID);
     PL_INFO(vk, "    Driver version: %d", (int) prop.driverVersion);
-    PL_INFO(vk, "    API version: %d.%d.%d",
-            (int) VK_VERSION_MAJOR(prop.apiVersion),
-            (int) VK_VERSION_MINOR(prop.apiVersion),
-            (int) VK_VERSION_PATCH(prop.apiVersion));
+    PL_INFO(vk, "    API version: %d.%d.%d", PRINTF_VER(prop.apiVersion));
 
     // Finally, initialize the logical device and the rest of the vk_ctx
     if (!device_init(vk, params))
@@ -1005,12 +1029,19 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
                 params->max_glsl_version, desc->version);
     }
 
+    if (params->max_api_version) {
+        vk->api_ver = PL_MIN(vk->api_ver, params->max_api_version);
+        PL_INFO(vk, "Restricting API version to %d.%d.%d... new version %d.%d.%d",
+                PRINTF_VER(params->max_api_version), PRINTF_VER(vk->api_ver));
+    }
+
     vk->disable_events = params->disable_events;
 
     // Expose the resulting vulkan objects
     pl_vk->instance = vk->inst;
     pl_vk->phys_device = vk->physd;
     pl_vk->device = vk->dev;
+    pl_vk->api_version = vk->api_ver;
     pl_vk->extensions = vk->exts;
     pl_vk->num_extensions = vk->num_exts;
     pl_vk->num_queues = vk->num_pools;

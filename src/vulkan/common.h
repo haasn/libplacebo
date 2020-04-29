@@ -56,6 +56,7 @@ struct vk_ctx {
     VkPhysicalDeviceLimits limits;
     VkPhysicalDeviceFeatures features;
     VkExtent3D transfer_alignment; // for pool_transfer
+    uint32_t api_ver; // device API version
     VkDevice dev;
 
     // Generic error flag for catching "failed" devices
