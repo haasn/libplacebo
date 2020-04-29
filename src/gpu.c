@@ -1339,7 +1339,7 @@ bool pl_tex_download_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
 
     if (pl_buf_poll(gpu, buf, 0)) {
         PL_TRACE(gpu, "pl_tex_download without buffer: blocking (slow path)");
-        while (pl_buf_poll(gpu, buf, 1000000)) ; // 1 ms
+        while (pl_buf_poll(gpu, buf, UINT64_MAX)) ;
     }
 
     return pl_buf_read(gpu, buf, 0, params->ptr, bufparams.size);
