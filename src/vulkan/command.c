@@ -35,6 +35,7 @@ static void vk_cmd_reset(struct vk_ctx *vk, struct vk_cmd *cmd)
     cmd->num_callbacks = 0;
     cmd->num_deps = 0;
     cmd->num_sigs = 0;
+    cmd->num_objs = 0;
 
     // also make sure to reset vk->last_cmd in case this was the last command
     if (vk->last_cmd == cmd)
@@ -111,6 +112,11 @@ void vk_cmd_dep(struct vk_cmd *cmd, VkSemaphore dep, VkPipelineStageFlags stage)
     TARRAY_GROW(cmd, cmd->depstages, idx);
     cmd->deps[idx] = dep;
     cmd->depstages[idx] = stage;
+}
+
+void vk_cmd_obj(struct vk_cmd *cmd, const void *obj)
+{
+    TARRAY_APPEND(cmd, cmd->objs, cmd->num_objs, obj);
 }
 
 void vk_cmd_sig(struct vk_cmd *cmd, VkSemaphore sig)
@@ -399,9 +405,37 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
 
 bool vk_flush_commands(struct vk_ctx *vk)
 {
+    return vk_flush_obj(vk, NULL);
+}
+
+bool vk_flush_obj(struct vk_ctx *vk, const void *obj)
+{
+    // Count how many commands we want to flush
+    int num_to_flush = vk->num_cmds_queued;
+    if (obj) {
+        num_to_flush = 0;
+        for (int i = 0; i < vk->num_cmds_queued; i++) {
+            struct vk_cmd *cmd = vk->cmds_queued[i];
+            for (int o = 0; o < cmd->num_objs; o++) {
+                if (cmd->objs[o] == obj) {
+                    num_to_flush = i+1;
+                    goto next_cmd;
+                }
+            }
+
+next_cmd: ;
+        }
+    }
+
+    if (!num_to_flush)
+        return true;
+
+    PL_TRACE(vk, "Flushing %d/%d queued commands",
+             num_to_flush, vk->num_cmds_queued);
+
     bool ret = true;
 
-    for (int i = 0; i < vk->num_cmds_queued; i++) {
+    for (int i = 0; i < num_to_flush; i++) {
         struct vk_cmd *cmd = vk->cmds_queued[i];
         struct vk_cmdpool *pool = cmd->pool;
 
@@ -419,11 +453,15 @@ bool vk_flush_commands(struct vk_ctx *vk)
         if (pl_msg_test(vk->ctx, PL_LOG_TRACE)) {
             PL_TRACE(vk, "Submitting command on queue %p (QF %d):",
                      (void *)cmd->queue, pool->qf);
+            for (int n = 0; n < cmd->num_objs; n++)
+                PL_TRACE(vk, "    uses object %p", cmd->objs[n]);
             for (int n = 0; n < cmd->num_deps; n++)
                 PL_TRACE(vk, "    waits on semaphore %p", (void *) cmd->deps[n]);
             for (int n = 0; n < cmd->num_sigs; n++)
                 PL_TRACE(vk, "    signals semaphore %p", (void *) cmd->sigs[n]);
             PL_TRACE(vk, "    signals fence %p", (void *) cmd->fence);
+            if (cmd->num_callbacks)
+                PL_TRACE(vk, "    signals %d callbacks", cmd->num_callbacks);
         }
 
         VK(vk->QueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));
@@ -437,7 +475,12 @@ error:
         ret = false;
     }
 
-    vk->num_cmds_queued = 0;
+    // Move remaining commands back to index 0
+    vk->num_cmds_queued -= num_to_flush;
+    if (vk->num_cmds_queued) {
+        memmove(vk->cmds_queued, &vk->cmds_queued[num_to_flush],
+                vk->num_cmds_queued * sizeof(vk->cmds_queued[0]));
+    }
 
     // Wait until we've processed some of the now pending commands
     while (vk->num_cmds_pending > PL_VK_MAX_PENDING_CMDS)

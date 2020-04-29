@@ -1337,6 +1337,7 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     buf_vk->exported = export;
     buf_vk->refcount++;
     vk_cmd_callback(cmd, (vk_cb) vk_buf_deref, gpu, buf);
+    vk_cmd_obj(cmd, buf);
 }
 
 static void buf_signal(const struct pl_gpu *gpu, struct vk_cmd *cmd,
@@ -1652,7 +1653,7 @@ static bool vk_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
     // user is guaranteed to see progress eventually, even if they call
     // this in a tight loop
     vk_submit(gpu);
-    vk_flush_commands(vk);
+    vk_flush_obj(vk, buf);
     vk_poll_commands(vk, timeout);
 
     return buf_vk->refcount > 1;
@@ -2642,8 +2643,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         // Wait for a free descriptor set
         while (!pass_vk->dmask) {
             PL_TRACE(gpu, "No free descriptor sets! ...blocking (slow path)");
-            vk_submit(gpu);
-            vk_flush_commands(vk);
+            vk_flush_obj(vk, pass);
             vk_poll_commands(vk, 10000000); // 10 ms
         }
     }
@@ -2660,6 +2660,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
             if (pass_vk->dmask & dsbit) {
                 ds = pass_vk->dss[i];
                 pass_vk->dmask &= ~dsbit; // unset
+                vk_cmd_obj(cmd, pass);
                 vk_cmd_callback(cmd, (vk_cb) set_ds, pass_vk,
                                 (void *)(uintptr_t) dsbit);
                 break;

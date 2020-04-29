@@ -56,6 +56,10 @@ struct vk_cmd {
     // ranging from garbage collection (resource deallocation) to fencing.
     struct vk_callback *callbacks;
     int num_callbacks;
+    // Abstract objects associated with this command. Can be used to
+    // selectively flush.
+    const void **objs;
+    int num_objs;
 };
 
 // Associate a callback with the completion of the current command. This
@@ -66,6 +70,10 @@ void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback,
 // Associate a raw dependency for the current command. This semaphore must
 // signal by the corresponding stage before the command may execute.
 void vk_cmd_dep(struct vk_cmd *cmd, VkSemaphore dep, VkPipelineStageFlags stage);
+
+// Associate an object with a command. This can be used to partially flush
+// commands only involving the object in question.
+void vk_cmd_obj(struct vk_cmd *cmd, const void *obj);
 
 // Associate a raw signal with the current command. This semaphore will signal
 // after the command completes.
@@ -151,6 +159,10 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout);
 // Flush all currently queued commands. Returns whether successful. Failed
 // commands will be implicitly dropped.
 bool vk_flush_commands(struct vk_ctx *vk);
+
+// Like `vk_flush_commands`, but only flushes up to the last command involving
+// `obj`, inclusive. If `obj` is NULL, behaves as `vk_flush_commands`.
+bool vk_flush_obj(struct vk_ctx *vk, const void *obj);
 
 // Rotate through queues in each command pool. Call this once per frame, after
 // submitting all of the command buffers for that frame. Calling this more
