@@ -30,6 +30,7 @@ struct vk_fun {
 
 struct vk_ext {
     const char *name;
+    uint32_t core_ver;
     struct vk_fun *funs;
 };
 
@@ -81,6 +82,7 @@ static const struct vk_ext vk_device_extensions[] = {
         },
     }, {
         .name = VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+        .core_ver = VK_API_VERSION_1_1,
         .funs = (struct vk_fun[]) {
             VK_INST_FUN(GetPhysicalDeviceExternalBufferPropertiesKHR),
             {0}
@@ -107,6 +109,7 @@ static const struct vk_ext vk_device_extensions[] = {
 #endif
     }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
+        .core_ver = VK_API_VERSION_1_1,
         .funs = (struct vk_fun[]) {
             VK_INST_FUN(GetPhysicalDeviceExternalSemaphorePropertiesKHR),
             {0},
@@ -844,6 +847,13 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     // Add all optional device-level extensions extensions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_device_extensions); i++) {
         const struct vk_ext *ext = &vk_device_extensions[i];
+        if (ext->core_ver && vk->api_ver >= ext->core_ver) {
+            // Layer is already implicitly enabled by the API version
+            for (const struct vk_fun *f = ext->funs; f->name; f++)
+                TARRAY_APPEND(tmp, ext_funs, num_ext_funs, f);
+            continue;
+        }
+
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext->name, exts_avail[n].extensionName) == 0) {
                 TARRAY_APPEND(vk->ta, *exts, *num_exts, ext->name);
@@ -997,7 +1007,6 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     VkPhysicalDeviceProperties prop = {0};
     vk->GetPhysicalDeviceProperties(vk->physd, &prop);
     vk->limits = prop.limits;
-    vk->api_ver = prop.apiVersion;
 
     PL_INFO(vk, "Vulkan device properties:");
     PL_INFO(vk, "    Device Name: %s", prop.deviceName);
@@ -1005,6 +1014,14 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
             (unsigned) prop.deviceID);
     PL_INFO(vk, "    Driver version: %d", (int) prop.driverVersion);
     PL_INFO(vk, "    API version: %d.%d.%d", PRINTF_VER(prop.apiVersion));
+
+    // Needed by device_init
+    vk->api_ver = prop.apiVersion;
+    if (params->max_api_version) {
+        vk->api_ver = PL_MIN(vk->api_ver, params->max_api_version);
+        PL_INFO(vk, "Restricting API version to %d.%d.%d... new version %d.%d.%d",
+                PRINTF_VER(params->max_api_version), PRINTF_VER(vk->api_ver));
+    }
 
     // Finally, initialize the logical device and the rest of the vk_ctx
     if (!device_init(vk, params))
@@ -1027,12 +1044,6 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
         desc->version = PL_MIN(desc->version, params->max_glsl_version);
         PL_INFO(vk, "Restricting GLSL version to %d... new version is %d",
                 params->max_glsl_version, desc->version);
-    }
-
-    if (params->max_api_version) {
-        vk->api_ver = PL_MIN(vk->api_ver, params->max_api_version);
-        PL_INFO(vk, "Restricting API version to %d.%d.%d... new version %d.%d.%d",
-                PRINTF_VER(params->max_api_version), PRINTF_VER(vk->api_ver));
     }
 
     vk->disable_events = params->disable_events;
