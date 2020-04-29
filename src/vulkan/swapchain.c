@@ -442,20 +442,10 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     h = PL_MIN(PL_MAX(h, caps.minImageExtent.height), caps.maxImageExtent.height);
     info->imageExtent = (VkExtent2D) { w, h };
 
-    // We just request whatever usage we can, and let the pl_vk decide what
-    // pl_tex_params that translates to. This makes the images as flexible
-    // as possible. However, require at least blitting and rendering.
-    VkImageUsageFlags required_flags = 0;
-    required_flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    required_flags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    if ((caps.supportedUsageFlags & required_flags) != required_flags) {
-        PL_ERR(vk, "The swapchain doesn't support rendering and blitting!");
-        goto error;
-    }
-
-
-    // We need to intersect the swapchain supported usage flags with the
-    // format supported usage flags
+    // We just request whatever we can, and let the pl_vk decide what
+    // pl_tex_params that translates to. This makes the image as flexible as
+    // possible. That said, we still need to intersect the swapchain supported
+    // usage flags with the format supported usage flags
     info->imageUsage = caps.supportedUsageFlags;
     VkFormatProperties fmtprop;
     vk->GetPhysicalDeviceFormatProperties(vk->physd, info->imageFormat, &fmtprop);
@@ -464,9 +454,21 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     if (!((fmtprop.optimalTilingFeatures & VK_FORMAT_FEATURE_##feature##_BIT))) \
         info->imageUsage &= ~VK_IMAGE_USAGE_##usage##_BIT
 
+    CHECK(TRANSFER_SRC, TRANSFER_SRC);
+    CHECK(TRANSFER_DST, TRANSFER_DST);
     CHECK(SAMPLED, SAMPLED_IMAGE);
-    CHECK(COLOR_ATTACHMENT, COLOR_ATTACHMENT);
     CHECK(STORAGE, STORAGE_IMAGE);
+    CHECK(COLOR_ATTACHMENT, COLOR_ATTACHMENT);
+
+    // Make sure we support at least rendering and blitting!
+    VkImageUsageFlags required_flags = 0;
+    required_flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    required_flags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if ((info->imageUsage & required_flags) != required_flags) {
+        PL_ERR(vk, "The swapchain doesn't support rendering and blitting!");
+        goto error;
+    }
+
     return true;
 
 error:
