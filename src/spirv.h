@@ -47,10 +47,13 @@ struct spirv_compiler_fns {
                          struct bstr *out_spirv);
 
     // Only needs to initialize the implementation-specific fields
-    struct spirv_compiler *(*create)(struct pl_context *ctx);
+    struct spirv_compiler *(*create)(struct pl_context *ctx, uint32_t api_ver);
     void (*destroy)(struct spirv_compiler *spirv);
 };
 
 // Initialize a SPIR-V compiler instance, or returns NULL on failure.
-struct spirv_compiler *spirv_compiler_create(struct pl_context *ctx);
+// `api_version` is the Vulkan API version we're targetting.
+struct spirv_compiler *spirv_compiler_create(struct pl_context *ctx,
+                                             uint32_t api_version);
+
 void spirv_compiler_destroy(struct spirv_compiler **spirv);

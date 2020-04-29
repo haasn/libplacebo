@@ -332,7 +332,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     p->impl = pl_fns_vk;
     p->vk = vk;
 
-    p->spirv = spirv_compiler_create(vk->ctx);
+    p->spirv = spirv_compiler_create(vk->ctx, vk->api_ver);
     p->alloc = vk_malloc_create(vk);
     if (!p->alloc || !p->spirv)
         goto error;

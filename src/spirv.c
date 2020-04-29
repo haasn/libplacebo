@@ -29,12 +29,13 @@ static const struct spirv_compiler_fns *compilers[] = {
 #endif
 };
 
-struct spirv_compiler *spirv_compiler_create(struct pl_context *ctx)
+struct spirv_compiler *spirv_compiler_create(struct pl_context *ctx,
+                                             uint32_t api_version)
 {
     for (int i = 0; i < PL_ARRAY_SIZE(compilers); i++) {
         const struct spirv_compiler_fns *impl = compilers[i];
         pl_info(ctx, "Initializing SPIR-V compiler '%s'", impl->name);
-        struct spirv_compiler *spirv = impl->create(ctx);
+        struct spirv_compiler *spirv = impl->create(ctx, api_version);
         if (!spirv)
             continue;
 

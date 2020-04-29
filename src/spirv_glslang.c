@@ -18,25 +18,35 @@
 #include "spirv.h"
 #include "glsl/glslang.h"
 
+struct priv {
+    uint32_t api_ver;
+};
+
 static void glslang_destroy(struct spirv_compiler *spirv)
 {
     pl_glslang_uninit();
     talloc_free(spirv);
 }
 
-static struct spirv_compiler *glslang_create(struct pl_context *ctx)
+static struct spirv_compiler *glslang_create(struct pl_context *ctx,
+                                             uint32_t api_version)
 {
     if (!pl_glslang_init()) {
         pl_fatal(ctx, "Failed initializing glslang SPIR-V compiler!");
         return NULL;
     }
 
-    struct spirv_compiler *spirv = talloc_zero(NULL, struct spirv_compiler);
+    struct spirv_compiler *spirv;
+    spirv = talloc_zero_priv(NULL, struct spirv_compiler, struct priv);
     spirv->compiler_version = pl_glslang_version();
     spirv->glsl = (struct pl_glsl_desc) {
         .version = 450,
         .vulkan  = true,
     };
+
+    struct priv *p = TA_PRIV(spirv);
+    p->api_ver = api_version;
+
     return spirv;
 }
 
@@ -44,13 +54,15 @@ static bool glslang_compile(struct spirv_compiler *spirv, void *tactx,
                             enum glsl_shader_stage type, const char *glsl,
                             struct bstr *out_spirv)
 {
+    struct priv *p = TA_PRIV(spirv);
+
     static const enum pl_glslang_stage stages[] = {
         [GLSL_SHADER_VERTEX]   = PL_GLSLANG_VERTEX,
         [GLSL_SHADER_FRAGMENT] = PL_GLSLANG_FRAGMENT,
         [GLSL_SHADER_COMPUTE]  = PL_GLSLANG_COMPUTE,
     };
 
-    struct pl_glslang_res *res = pl_glslang_compile(glsl, stages[type]);
+    struct pl_glslang_res *res = pl_glslang_compile(glsl, p->api_ver, stages[type]);
     if (!res || !res->success) {
         PL_ERR(spirv, "glslang failed: %s", res ? res->error_msg : "(null)");
         talloc_free(res);

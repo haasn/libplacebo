@@ -33,7 +33,8 @@ static void shaderc_destroy(struct spirv_compiler *spirv)
     talloc_free(spirv);
 }
 
-static struct spirv_compiler *shaderc_create(struct pl_context *ctx)
+static struct spirv_compiler *shaderc_create(struct pl_context *ctx,
+                                             uint32_t api_version)
 {
     struct spirv_compiler *spirv = talloc_ptrtype_priv(NULL, spirv, struct priv);
     struct priv *p = TA_PRIV(spirv);
@@ -54,6 +55,10 @@ static struct spirv_compiler *shaderc_create(struct pl_context *ctx)
     shaderc_compile_options_set_optimization_level(p->opts,
             shaderc_optimization_level_size);
 #endif
+
+    shaderc_compile_options_set_target_env(p->opts,
+            shaderc_target_env_vulkan,
+            api_version);
 
     int ver, rev;
     shaderc_get_spv_version(&ver, &rev);

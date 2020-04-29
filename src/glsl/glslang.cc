@@ -59,12 +59,9 @@ void pl_glslang_uninit()
     pthread_mutex_unlock(&pl_glslang_mutex);
 }
 
-#define GLSL_VERSION EShTargetVulkan_1_0
-#define SPIRV_VERSION EShTargetSpv_1_0
-
 extern const TBuiltInResource DefaultTBuiltInResource;
 
-struct pl_glslang_res *pl_glslang_compile(const char *glsl,
+struct pl_glslang_res *pl_glslang_compile(const char *glsl, uint32_t api_ver,
                                           enum pl_glslang_stage stage)
 {
     struct pl_glslang_res *res = talloc_zero(NULL, struct pl_glslang_res);
@@ -77,12 +74,18 @@ struct pl_glslang_res *pl_glslang_compile(const char *glsl,
     default: abort();
     }
 
+    EShTargetLanguageVersion spirv_version = EShTargetSpv_1_0;
+    if (api_ver >= EShTargetVulkan_1_1)
+        spirv_version = EShTargetSpv_1_3;
+    if (api_ver >= EShTargetVulkan_1_2)
+        spirv_version = EShTargetSpv_1_5;
+
     assert(pl_glslang_refcount);
     TShader *shader = new TShader(lang);
-    shader->setEnvClient(EShClientVulkan, GLSL_VERSION);
-    shader->setEnvTarget(EShTargetSpv, SPIRV_VERSION);
+    shader->setEnvClient(EShClientVulkan, (EShTargetClientVersion) api_ver);
+    shader->setEnvTarget(EShTargetSpv, spirv_version);
     shader->setStrings(&glsl, 1);
-    if (!shader->parse(&DefaultTBuiltInResource, GLSL_VERSION, true, EShMsgDefault)) {
+    if (!shader->parse(&DefaultTBuiltInResource, api_ver, true, EShMsgDefault)) {
         res->error_msg = talloc_strdup(res, shader->getInfoLog());
         delete shader;
         return res;
