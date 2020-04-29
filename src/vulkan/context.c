@@ -335,8 +335,21 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
                 PRINTF_VER(params->max_api_version), PRINTF_VER(api_ver));
     }
 
+    // Try enabling as many validation features as possible. Ignored for
+    // instances not supporting VK_EXT_validation_features.
+    VkValidationFeaturesEXT vinfo = {
+        .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
+        .enabledValidationFeatureCount = 3,
+        .pEnabledValidationFeatures = (VkValidationFeatureEnableEXT[]) {
+            VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
+            VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+            VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
+        }
+    };
+
     VkInstanceCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pNext = params->debug ? &vinfo : NULL,
         .pApplicationInfo = &(VkApplicationInfo) {
             .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
             .apiVersion = api_ver,
@@ -885,6 +898,10 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     vk->features = (VkPhysicalDeviceFeatures) {
         FEATURE(shaderImageGatherExtended),
         FEATURE(shaderStorageImageExtendedFormats),
+        // Needed for GPU-assisted validation
+        FEATURE(fragmentStoresAndAtomics),
+        FEATURE(vertexPipelineStoresAndAtomics),
+        FEATURE(shaderInt64),
     };
 #undef FEATURE
 
