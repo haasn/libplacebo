@@ -77,8 +77,11 @@ struct pl_glslang_res *pl_glslang_compile(const char *glsl, uint32_t api_ver,
     EShTargetLanguageVersion spirv_version = EShTargetSpv_1_0;
     if (api_ver >= EShTargetVulkan_1_1)
         spirv_version = EShTargetSpv_1_3;
+
+#if GLSLANG_PATCH_LEVEL >= 3667
     if (api_ver >= EShTargetVulkan_1_2)
         spirv_version = EShTargetSpv_1_5;
+#endif
 
     assert(pl_glslang_refcount);
     TShader *shader = new TShader(lang);
