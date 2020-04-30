@@ -905,6 +905,8 @@ struct pl_pass_params {
     // If false, the target's existing contents will be discarded before the
     // pass is run. (Semantically equivalent to calling pl_tex_invalidate
     // before every pl_pass_run, but slightly more efficient)
+    //
+    // Specifying `blend_params` requires `load_target` to be true.
     bool load_target;
 };
 

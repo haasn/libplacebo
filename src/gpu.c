@@ -1043,6 +1043,7 @@ const struct pl_pass *pl_pass_create(const struct pl_gpu *gpu,
         require(target_fmt);
         require(target_fmt->caps & PL_FMT_CAP_RENDERABLE);
         require(!params->blend_params || target_fmt->caps & PL_FMT_CAP_BLENDABLE);
+        require(!params->blend_params || params->load_target);
         break;
     case PL_PASS_COMPUTE:
         require(gpu->caps & PL_GPU_CAP_COMPUTE);
