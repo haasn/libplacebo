@@ -881,6 +881,10 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
     // enabled or we're drawing to some scissored sub-rect of the texture
     struct pl_rect2d rc_norm = *rc;
     pl_rect2d_normalize(&rc_norm);
+    rc_norm.x0 = PL_MAX(rc_norm.x0, 0);
+    rc_norm.y0 = PL_MAX(rc_norm.y0, 0);
+    rc_norm.x1 = PL_MIN(rc_norm.x1, tpars->w);
+    rc_norm.y1 = PL_MIN(rc_norm.y1, tpars->h);
     bool load = blend || !pl_rect2d_eq(rc_norm, full);
 
     struct pass *pass = find_pass(dp, sh, target, vert_pos, blend, load);
@@ -930,8 +934,7 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
         rparams->compute_groups[2] = 1;
     } else {
         // Update the scissors for performance
-        rparams->scissors = *rc;
-        pl_rect2d_normalize(&rparams->scissors);
+        rparams->scissors = rc_norm;
     }
 
     // Dispatch the actual shader
