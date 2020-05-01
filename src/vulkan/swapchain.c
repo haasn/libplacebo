@@ -672,7 +672,7 @@ static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
     p->frames_in_flight++;
     vk_cmd_callback(cmd, (vk_cb) present_cb, p, NULL);
 
-    vk_cmd_queue(vk, cmd);
+    vk_cmd_queue(vk, &cmd);
     if (!vk_flush_commands(vk))
         return false;
 

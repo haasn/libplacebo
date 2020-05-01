@@ -47,7 +47,7 @@ static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
         REQUIRE(cmd);
         pl_vk_sync_unwrap(sync, NULL, &signal);
         vk_cmd_sig(cmd, signal);
-        vk_cmd_queue(vk, cmd);
+        vk_cmd_queue(vk, &cmd);
         REQUIRE(vk_flush_commands(vk));
 
         // Do something with the image again to "import" it

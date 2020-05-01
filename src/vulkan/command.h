@@ -142,8 +142,8 @@ void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool);
 struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool);
 
 // Finish recording a command buffer and queue it for execution. This function
-// takes over ownership of *cmd, i.e. the caller should not touch it again.
-bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd *cmd);
+// takes over ownership of **cmd, and sets *cmd to NULL in doing so.
+bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd **cmd);
 
 // Block until some commands complete executing. This is the only function that
 // actually processes the callbacks. Will wait at most `timeout` nanoseconds

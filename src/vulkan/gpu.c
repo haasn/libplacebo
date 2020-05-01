@@ -60,10 +60,8 @@ static void vk_submit(const struct pl_gpu *gpu)
     struct pl_vk *p = TA_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    if (p->cmd) {
-        vk_cmd_queue(vk, p->cmd);
-        p->cmd = NULL;
-    }
+    if (p->cmd)
+        vk_cmd_queue(vk, &p->cmd);
 }
 
 // Returns a command buffer, or NULL on error
