@@ -572,8 +572,6 @@ static void pl_render_tests(const struct pl_gpu *gpu)
             .levels     = PL_COLOR_LEVELS_PC,
         },
         .color          = pl_color_space_bt709,
-        .width          = width,
-        .height         = height,
         .src_rect       = {-1.0, 0.0, width - 1.0, height},
     };
 

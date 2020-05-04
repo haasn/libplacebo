@@ -32,24 +32,6 @@ enum {
     SCALER_COUNT,
 };
 
-// Canonical plane order aliases
-enum {
-    PLANE_R = 0,
-    PLANE_G = 1,
-    PLANE_B = 2,
-    PLANE_A = 3,
-    PLANE_COUNT,
-
-    // aliases for other systems
-    PLANE_Y    = PLANE_R,
-    PLANE_CB   = PLANE_G,
-    PLANE_CR   = PLANE_B,
-
-    PLANE_CIEX = PLANE_R,
-    PLANE_CIEY = PLANE_G,
-    PLANE_CIEZ = PLANE_B,
-};
-
 struct sampler {
     struct pl_shader_obj *upscaler_state;
     struct pl_shader_obj *downscaler_state;
@@ -83,8 +65,8 @@ struct pl_renderer {
     struct pl_shader_obj *lut3d_state;
     struct pl_shader_obj *grain_state;
     const struct pl_tex *main_scale_fbo;
-    const struct pl_tex *deband_fbos[PLANE_COUNT];
-    const struct pl_tex *grain_fbos[PLANE_COUNT];
+    const struct pl_tex *deband_fbos[4];
+    const struct pl_tex *grain_fbos[4];
     const struct pl_tex *output_fbo;
     struct sampler samplers[SCALER_COUNT];
     struct sampler *osd_samplers;
@@ -653,6 +635,187 @@ cleanup:
     pl_shader_obj_destroy(&rr->peak_detect_state);
 }
 
+// Plane 'type', ordered by incrementing priority
+enum plane_type {
+    PLANE_ALPHA,
+    PLANE_CHROMA,
+    PLANE_LUMA,
+    PLANE_RGB,
+    PLANE_XYZ,
+};
+
+static const char *plane_type_names[] = {
+    [PLANE_ALPHA]   = "alpha",
+    [PLANE_CHROMA]  = "chroma",
+    [PLANE_LUMA]    = "luma",
+    [PLANE_RGB]     = "rgb",
+    [PLANE_XYZ]     = "xyz",
+};
+
+struct plane_state {
+    enum plane_type type;
+    struct pl_plane plane;
+    struct pl_color_repr repr;
+    struct pl_rect2df rc;
+};
+
+static void log_plane_info(struct pl_renderer *rr, const struct plane_state *st)
+{
+    const struct pl_plane *plane = &st->plane;
+    PL_TRACE(rr, "    Type: %s", plane_type_names[st->type]);
+
+    switch (plane->components) {
+    case 0:
+        PL_TRACE(rr, "    Components: (none)");
+        break;
+    case 1:
+        PL_TRACE(rr, "    Components: {%d}",
+                 plane->component_mapping[0]);
+        break;
+    case 2:
+        PL_TRACE(rr, "    Components: {%d %d}",
+                 plane->component_mapping[0],
+                 plane->component_mapping[1]);
+        break;
+    case 3:
+        PL_TRACE(rr, "    Components: {%d %d %d}",
+                 plane->component_mapping[0],
+                 plane->component_mapping[1],
+                 plane->component_mapping[2]);
+        break;
+    case 4:
+        PL_TRACE(rr, "    Components: {%d %d %d %d}",
+                 plane->component_mapping[0],
+                 plane->component_mapping[1],
+                 plane->component_mapping[2],
+                 plane->component_mapping[3]);
+        break;
+    }
+
+    PL_TRACE(rr, "    Rect: {%f %f} -> {%f %f}",
+             st->rc.x0, st->rc.y0, st->rc.x1, st->rc.y1);
+
+    PL_TRACE(rr, "    Bits: %d (used) / %d (sampled), shift %d",
+             st->repr.bits.color_depth,
+             st->repr.bits.sample_depth,
+             st->repr.bits.bit_shift);
+}
+
+static enum plane_type detect_plane_type(const struct plane_state *st)
+{
+    const struct pl_plane *plane = &st->plane;
+
+    if (pl_color_system_is_ycbcr_like(st->repr.sys)) {
+        int t = -1;
+        for (int c = 0; c < plane->components; c++) {
+            switch (plane->component_mapping[c]) {
+            case PL_CHANNEL_Y: t = PL_MAX(t, PLANE_LUMA); continue;
+            case PL_CHANNEL_A: t = PL_MAX(t, PLANE_ALPHA); continue;
+
+            case PL_CHANNEL_CB:
+            case PL_CHANNEL_CR:
+                t = PL_MAX(t, PLANE_CHROMA);
+                continue;
+
+            default: continue;
+            }
+        }
+
+        pl_assert(t >= 0);
+        return t;
+    }
+
+    // Extra test for exclusive / separated alpha plane
+    if (plane->components == 1 && plane->component_mapping[0] == PL_CHANNEL_A)
+        return PLANE_ALPHA;
+
+    switch (st->repr.sys) {
+    case PL_COLOR_SYSTEM_UNKNOWN: // fall through to RGB
+    case PL_COLOR_SYSTEM_RGB: return PLANE_RGB;
+    case PL_COLOR_SYSTEM_XYZ: return PLANE_XYZ;
+    default: abort();
+    }
+}
+
+// Returns true if grain was applied
+static bool plane_av1_grain(struct pl_renderer *rr, int plane_idx,
+                            struct plane_state *st,
+                            int subx, int suby,
+                            const struct pl_tex *ref_tex,
+                            const struct pl_image *image,
+                            const struct pl_render_params *params)
+{
+    if (rr->disable_grain)
+        return false;
+
+    struct pl_plane *plane = &st->plane;
+    struct pl_av1_grain_params grain_params = {
+        .data = image->av1_grain,
+        .luma_tex = ref_tex,
+        .repr = st->repr,
+        .channels = {PL_CHANNEL_NONE, PL_CHANNEL_NONE, PL_CHANNEL_NONE},
+        .sub_x = subx,
+        .sub_y = suby,
+    };
+
+    for (int c = 0; c < plane->components; c++) {
+        int idx = plane->texture->params.format->sample_order[c];
+        if (idx < 0 || idx >= PL_ARRAY_SIZE(grain_params.channels))
+            continue;
+        grain_params.channels[idx] = plane->component_mapping[c];
+    }
+
+    if (!pl_needs_av1_grain(&grain_params))
+        return false;
+
+    const struct pl_fmt *grain_fmt = plane->texture->params.format;
+    if (!(grain_fmt->caps & PL_FMT_CAP_RENDERABLE))
+        grain_fmt = FBOFMT;
+
+    if (!grain_fmt) {
+        PL_ERR(rr, "AV1 grain required but no renderable format available.. "
+              "disabling!");
+        rr->disable_grain = true;
+        return false;
+    }
+
+    struct pl_shader *sh = pl_dispatch_begin_ex(rr->dp, false);
+    struct pl_color_repr repr = st->repr;
+    const struct pl_tex *new_tex;
+
+    bool ok = pl_shader_sample_direct(sh, &(struct pl_sample_src) {
+        .tex = plane->texture,
+        .scale = pl_color_repr_normalize(&repr),
+    });
+
+    if (ok)
+        ok = pl_shader_av1_grain(sh, &rr->grain_state, &grain_params);
+
+    if (ok) {
+        struct img grain_img = {
+            .sh = sh,
+            .w = plane->texture->params.w,
+            .h = plane->texture->params.h,
+        };
+
+        new_tex = finalize_img(rr, &grain_img, grain_fmt,
+                               &rr->grain_fbos[plane_idx]);
+        ok = !!new_tex;
+        sh = NULL;
+    }
+
+    if (ok) {
+        plane->texture = new_tex;
+        st->repr = repr;
+        return true;
+    } else {
+        PL_ERR(rr, "Failed applying AV1 grain.. disabling!");
+        rr->disable_grain = true;
+        pl_dispatch_abort(rr->dp, &sh);
+        return false;
+    }
+}
+
 // This scales and merges all of the source images, and initializes the cur_img.
 static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_image *image,
@@ -675,41 +838,104 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     // First of all, we have to pick a "reference" plane for alignment.
     // This should ideally be the plane that most closely matches the target
     // image size
-    struct pl_plane planes[4];
-    const struct pl_plane *refplane = NULL; // points to one of `planes`
-    int best_diff = 0, best_off = 0;
+    struct plane_state planes[4];
+    struct plane_state *ref = NULL;
 
-    pl_assert(image->num_planes < PLANE_COUNT);
+    // Do a first pass to figure out each plane's type and find the ref plane
+    pl_assert(image->num_planes < PL_ARRAY_SIZE(planes));
     for (int i = 0; i < image->num_planes; i++) {
-        struct pl_plane *plane = &planes[i];
-        *plane = image->planes[i];
+        struct plane_state *st = &planes[i];
+        *st = (struct plane_state) {
+            .plane = image->planes[i],
+            .repr = image->repr,
+        };
 
-        const struct pl_tex *tex = plane->texture;
-        int diff = PL_MAX(abs(tex->params.w - image->width),
-                          abs(tex->params.h - image->height));
-        int off = PL_MAX(plane->shift_x, plane->shift_y);
-
-        if (!refplane || diff < best_diff || (diff == best_diff && off < best_off)) {
-            refplane = plane;
-            best_diff = diff;
-            best_off = off;
+        st->type = detect_plane_type(st);
+        pl_assert(st->type >= 0);
+        switch (st->type) {
+        case PLANE_RGB:
+        case PLANE_LUMA:
+        case PLANE_XYZ:
+            ref = st;
+            break;
+        default: break;
         }
     }
 
-    if (!refplane) {
-        PL_ERR(rr, "Image contains no planes?");
+    if (!ref) {
+        PL_ERR(rr, "Image contains no LUMA, RGB or XYZ planes?");
         return false;
     }
 
-    float ref_w = refplane->texture->params.w,
-          ref_h = refplane->texture->params.h;
+    // Original ref texture, even after preprocessing
+    const struct pl_tex *ref_tex = ref->plane.texture;
 
-    // Round the src_rect up to the nearest integer size
+    struct pl_rect2df src_rect = image->src_rect;
+    if (!pl_rect_w(src_rect)) {
+        src_rect.x0 = 0;
+        src_rect.x1 = ref_tex->params.w;
+    }
+
+    if (!pl_rect_h(src_rect)) {
+        src_rect.y0 = 0;
+        src_rect.y1 = ref_tex->params.h;
+    }
+
+    // Do a second pass to compute the rc of each plane
+    for (int i = 0; i < image->num_planes; i++) {
+        struct plane_state *st = &planes[i];
+        float rx = ref_tex->params.w / st->plane.texture->params.w,
+              ry = ref_tex->params.h / st->plane.texture->params.h;
+
+        // Only accept integer scaling ratios. This accounts for the fact that
+        // fractionally subsampled planes get rounded up to the nearest integer
+        // size, which we want to discard.
+        float rrx = rx >= 1 ? roundf(rx) : 1.0 / roundf(1.0 / rx),
+              rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry);
+
+        float sx = st->plane.shift_x,
+              sy = st->plane.shift_y;
+
+        st->rc = (struct pl_rect2df) {
+            .x0 = image->src_rect.x0 / rrx - sx / rx,
+            .y0 = image->src_rect.y0 / rry - sy / ry,
+            .x1 = image->src_rect.x1 / rrx - sx / rx,
+            .y1 = image->src_rect.y1 / rry - sy / ry,
+        };
+
+        if (st == ref) {
+            // Make sure st->rc == image->src_rect
+            pl_assert(rrx == 1 && rry == 1 && sx == 0 && sy == 0);
+        }
+
+        PL_TRACE(rr, "Plane %d:", i);
+        log_plane_info(rr, st);
+
+        // Perform AV1 grain synthesis if needed. Do this first because it
+        // requires unmodified plane sizes, and also because it's closer to the
+        // intent of the spec (which is to apply synthesis effectively during
+        // decoding)
+
+        int subx = ilogbf(rrx), suby = ilogbf(rry);
+        if (plane_av1_grain(rr, i, st, subx, suby, ref_tex, image, params)) {
+            PL_TRACE(rr, "After AV1 grain:");
+            log_plane_info(rr, st);
+        }
+    }
+
+    // Round the ref rc up to the nearest integer size
     struct pl_rect2d rc = {
-        floorf(image->src_rect.x0),
-        floorf(image->src_rect.y0),
-        ceilf(image->src_rect.x1),
-        ceilf(image->src_rect.y1),
+        floorf(ref->rc.x0), floorf(ref->rc.y0),
+        ceilf(ref->rc.x1), ceilf(ref->rc.y1),
+    };
+
+    // This encapsulates the shift contained by 'rc'
+    struct pl_transform2x2 rc_tf = {
+        .mat = {{
+            { pl_rect_w(rc) / pl_rect_w(ref->rc), 0 },
+            { 0, pl_rect_h(rc) / pl_rect_h(ref->rc) },
+        }},
+        .c = { rc.x0 - ref->rc.x0, rc.y0 - ref->rc.y0 },
     };
 
     int target_w = pl_rect_w(rc),
@@ -717,106 +943,22 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     pl_assert(target_w > 0 && target_h > 0);
 
     bool has_alpha = false;
-    struct pl_color_repr repr = image->repr;
-    float scale = pl_color_repr_normalize(&repr);
-
     for (int i = 0; i < image->num_planes; i++) {
-        struct pl_plane *plane = &planes[i];
-        float plane_scale = scale;
-
-        // Compute the source shift/scale relative to the reference size
-        float pw = plane->texture->params.w,
-              ph = plane->texture->params.h,
-              rx = ref_w / pw,
-              ry = ref_h / ph,
-              sx = plane->shift_x - refplane->shift_x,
-              sy = plane->shift_y - refplane->shift_y;
-
-        // Only accept integer scaling ratios. This accounts for the fact
-        // that fractionally subsampled planes get rounded up to the nearest
-        // integer size, which we want to discard.
-        float rrx = rx >= 1 ? roundf(rx) : 1.0 / roundf(1.0 / rx),
-              rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry);
-
-        // Perform AV1 grain first (before debanding) for several reasons:
-        // 1. It's closer to the intent of the spec to add grain first
-        // 2. Debanding implicitly crops, which screws with the AV1 grain code
-        // 3. Debanding may finalize the image (work-aroundable but annoying)
-
-        struct pl_av1_grain_params grain_params = {
-            .data = image->av1_grain,
-            .luma_tex = refplane->texture,
-            .repr = repr,
-            .channels = {PL_CHANNEL_NONE, PL_CHANNEL_NONE, PL_CHANNEL_NONE},
-            .sub_x = ilogbf(rrx),
-            .sub_y = ilogbf(rry),
-        };
-
-        for (int c = 0; c < plane->components; c++) {
-            int idx = plane->texture->params.format->sample_order[c];
-            if (idx < 0 || idx >= PL_ARRAY_SIZE(grain_params.channels))
-                continue;
-            grain_params.channels[idx] = plane->component_mapping[c];
-        }
-
-        const struct pl_fmt *grain_fmt = plane->texture->params.format;
-        if (!(grain_fmt->caps & PL_FMT_CAP_RENDERABLE))
-            grain_fmt = FBOFMT;
-
-        bool needs_grain = !rr->disable_grain && pl_needs_av1_grain(&grain_params);
-        if (needs_grain && !grain_fmt) {
-            PL_ERR(rr, "AV1 grain required but no renderable format available.. "
-                  "disabling!");
-            rr->disable_grain = true;
-            needs_grain = false;
-        }
-
-        if (needs_grain) {
-            struct pl_shader *gsh = pl_dispatch_begin_ex(rr->dp, false);
-            const struct pl_tex *new_tex;
-            bool ok = pl_shader_sample_direct(gsh, &(struct pl_sample_src) {
-                .tex = plane->texture,
-                .scale = plane_scale,
-            });
-
-            if (ok)
-                ok = pl_shader_av1_grain(gsh, &rr->grain_state, &grain_params);
-
-            if (ok) {
-                struct img grain_img = {
-                    .sh = gsh,
-                    .w = plane->texture->params.w,
-                    .h = plane->texture->params.h,
-                };
-
-                new_tex = finalize_img(rr, &grain_img, grain_fmt, &rr->grain_fbos[i]);
-                ok = !!new_tex;
-                gsh = NULL;
-            }
-
-            if (ok) {
-                plane->texture = new_tex;
-                plane_scale = 1.0;
-            } else {
-                PL_ERR(rr, "Failed applying AV1 grain.. disabling!");
-                rr->disable_grain = true;
-                pl_dispatch_abort(rr->dp, &gsh);
-            }
-        }
+        struct plane_state *st = &planes[i];
+        const struct pl_plane *plane = &st->plane;
 
         struct pl_sample_src src = {
             .tex        = plane->texture,
             .components = plane->components,
-            .scale      = plane_scale,
+            .scale      = pl_color_repr_normalize(&st->repr),
             .new_w      = target_w,
             .new_h      = target_h,
-            .rect       = {
-                rc.x0 / rrx - sx / rx,
-                rc.y0 / rry - sy / ry,
-                rc.x1 / rrx - sx / rx,
-                rc.y1 / rry - sy / ry,
-            },
+            .rect       = st->rc,
         };
+
+        // Round this rect up to adhere to the distortion introduced by us
+        // rendering a slightly larger section than `rc`
+        pl_transform2x2_apply_rc(&rc_tf, &src.rect);
 
         struct pl_shader *psh = pl_dispatch_begin_ex(rr->dp, true);
         if (deband_src(rr, psh, &src, &rr->deband_fbos[i], image, params) != DEBAND_SCALED)
@@ -842,28 +984,28 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             GLSL("color[%d] = tmp[%d];\n", plane->component_mapping[c],
                  src.tex->params.format->sample_order[c]);
 
-            has_alpha |= plane->component_mapping[c] == PLANE_A;
+            has_alpha |= plane->component_mapping[c] == PL_CHANNEL_A;
         }
 
         // we don't need it anymore
         pl_dispatch_abort(rr->dp, &psh);
     }
 
-    float basex = image->src_rect.x0 - rc.x0 - refplane->shift_x,
-          basey = image->src_rect.y0 - rc.y0 - refplane->shift_y;
+    float basex = ref->rc.x0 - rc.x0,
+          basey = ref->rc.y0 - rc.y0;
 
     pass->cur_img = (struct img) {
         .sh     = sh,
         .w      = target_w,
         .h      = target_h,
-        .repr   = repr,
+        .repr   = ref->repr,
         .color  = image->color,
         .comps  = has_alpha ? 4 : 3,
         .rect   = {
             basex,
             basey,
-            basex + pl_rect_w(image->src_rect),
-            basey + pl_rect_h(image->src_rect),
+            basex + pl_rect_w(ref->rc),
+            basey + pl_rect_h(ref->rc),
         },
     };
 
@@ -1074,17 +1216,6 @@ fallback:
 
 static void fix_rects(struct pl_image *image, struct pl_render_target *target)
 {
-    pl_assert(image->width && image->height);
-
-    // Initialize the rects to the full size if missing
-    if ((!image->src_rect.x0 && !image->src_rect.x1) ||
-        (!image->src_rect.y0 && !image->src_rect.y1))
-    {
-        image->src_rect = (struct pl_rect2df) {
-            0, 0, image->width, image->height,
-        };
-    }
-
     if ((!target->dst_rect.x0 && !target->dst_rect.x1) ||
         (!target->dst_rect.y0 && !target->dst_rect.y1))
     {
@@ -1125,6 +1256,9 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     if (!pass_read_image(rr, &pass, &image, params))
         goto error;
 
+    // The rect of the image before scaling, as a reference
+    struct pl_rect2df rc_image = pass.cur_img.rect;
+
     if (!pass_scale_main(rr, &pass, &image, &target, params))
         goto error;
 
@@ -1134,14 +1268,14 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     // If we don't have FBOs available, simulate the on-image overlays at
     // this stage
     if (image.num_overlays > 0 && !FBOFMT) {
-        float rx = pl_rect_w(target.dst_rect) / pl_rect_w(image.src_rect),
-              ry = pl_rect_h(target.dst_rect) / pl_rect_h(image.src_rect);
+        float rx = pl_rect_w(target.dst_rect) / pl_rect_w(rc_image),
+              ry = pl_rect_h(target.dst_rect) / pl_rect_h(rc_image);
 
         struct pl_transform2x2 scale = {
             .mat = {{{ rx, 0.0 }, { 0.0, ry }}},
             .c = {
-                target.dst_rect.x0 - image.src_rect.x0 * rx,
-                target.dst_rect.y0 - image.src_rect.y0 * ry
+                target.dst_rect.x0 - rc_image.x0 * rx,
+                target.dst_rect.y0 - rc_image.y0 * ry
             },
         };
 

@@ -320,15 +320,6 @@ struct pl_image {
     // Optional ICC profile associated with this image.
     struct pl_icc_profile profile;
 
-    // The reference dimensions of this image. For typical content, this is the
-    // dimensions of the largest (non-subsampled) plane, e.g. luma. Note that
-    // for anamorphic content, this is the size of the texture itself, not the
-    // "nominal" size of the video. (Anamorphic pixel ratio conversions are
-    // done implicitly by differing the aspect ratio between `src_rect` and
-    // `dst_rect`)
-    int width;
-    int height;
-
     // The source rectangle which we want to render from, relative to the
     // reference dimensions. Pixels outside of this rectangle will ostensibly
     // be ignored, but note that they may still contribute to the output data
@@ -362,6 +353,9 @@ struct pl_image {
     // Associated AV1 grain params (see <libplacebo/shaders/av1.h>). This is
     // entirely optional, the default of {0} corresponds to no extra grain.
     struct pl_av1_grain_data av1_grain;
+
+    // Deprecated fields. These are no longer used and may safely be ignored.
+    int width, height;
 };
 
 // Represents the target of a rendering operation
