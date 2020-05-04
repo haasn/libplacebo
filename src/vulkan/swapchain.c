@@ -138,13 +138,8 @@ static bool vk_map_color_space(VkColorSpaceKHR space, struct pl_color_space *out
         return false;
 #endif
 
-    // Included to satisfy the switch coverage check
-    case VK_COLOR_SPACE_RANGE_SIZE_KHR:
-    case VK_COLOR_SPACE_MAX_ENUM_KHR:
-        break;
+    default: return false;
     }
-
-    return false;
 }
 
 static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,

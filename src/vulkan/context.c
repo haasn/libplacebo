@@ -685,7 +685,6 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
         [VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU]    = {"virtual",    3},
         [VK_PHYSICAL_DEVICE_TYPE_CPU]            = {"software",   2},
         [VK_PHYSICAL_DEVICE_TYPE_OTHER]          = {"other",      1},
-        [VK_PHYSICAL_DEVICE_TYPE_END_RANGE+1]    = {0},
     };
 
     int best = 0;
@@ -693,6 +692,9 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
         VkPhysicalDeviceProperties props = {0};
         GetPhysicalDeviceProperties(devices[i], &props);
         VkPhysicalDeviceType t = props.deviceType;
+        if (t > PL_ARRAY_SIZE(types))
+            continue;
+
         PL_INFO(vk, "    GPU %d: %s (%s)", i, props.deviceName, types[t].name);
 
         if (params->surface) {
