@@ -53,6 +53,21 @@ void pl_matrix3x3_apply(const struct pl_matrix3x3 *mat, float vec[3])
         vec[i] = mat->m[i][0] * x + mat->m[i][1] * y + mat->m[i][2] * z;
 }
 
+void pl_matrix3x3_apply_rc(const struct pl_matrix3x3 *mat, struct pl_rect3df *rc)
+{
+    float x0 = rc->x0, x1 = rc->x1,
+          y0 = rc->y0, y1 = rc->y1,
+          z0 = rc->z0, z1 = rc->z1;
+
+    rc->x0 = mat->m[0][0] * x0 + mat->m[0][1] * y0 + mat->m[0][2] * z0;
+    rc->y0 = mat->m[1][0] * x0 + mat->m[1][1] * y0 + mat->m[1][2] * z0;
+    rc->z0 = mat->m[2][0] * x0 + mat->m[2][1] * y0 + mat->m[2][2] * z0;
+
+    rc->x1 = mat->m[0][0] * x1 + mat->m[0][1] * y1 + mat->m[0][2] * z1;
+    rc->y1 = mat->m[1][0] * x1 + mat->m[1][1] * y1 + mat->m[1][2] * z1;
+    rc->z1 = mat->m[2][0] * x1 + mat->m[2][1] * y1 + mat->m[2][2] * z1;
+}
+
 void pl_matrix3x3_scale(struct pl_matrix3x3 *mat, float scale)
 {
     for (int i = 0; i < 3; i++) {
@@ -118,6 +133,18 @@ void pl_transform3x3_apply(const struct pl_transform3x3 *t, float vec[3])
         vec[i] += t->c[i];
 }
 
+void pl_transform3x3_apply_rc(const struct pl_transform3x3 *t, struct pl_rect3df *rc)
+{
+    pl_matrix3x3_apply_rc(&t->mat, rc);
+
+    rc->x0 += t->c[0];
+    rc->x1 += t->c[0];
+    rc->y0 += t->c[1];
+    rc->y1 += t->c[1];
+    rc->z0 += t->c[2];
+    rc->z1 += t->c[2];
+}
+
 void pl_transform3x3_scale(struct pl_transform3x3 *t, float scale)
 {
     pl_matrix3x3_scale(&t->mat, scale);
@@ -159,6 +186,18 @@ void pl_matrix2x2_apply(const struct pl_matrix2x2 *mat, float vec[2])
         vec[i] = mat->m[i][0] * x + mat->m[i][1] * y;
 }
 
+void pl_matrix2x2_apply_rc(const struct pl_matrix2x2 *mat, struct pl_rect2df *rc)
+{
+    float x0 = rc->x0, x1 = rc->x1,
+          y0 = rc->y0, y1 = rc->y1;
+
+    rc->x0 = mat->m[0][0] * x0 + mat->m[0][1] * y0;
+    rc->y0 = mat->m[1][0] * x0 + mat->m[1][1] * y0;
+
+    rc->x1 = mat->m[0][0] * x1 + mat->m[0][1] * y1;
+    rc->y1 = mat->m[1][0] * x1 + mat->m[1][1] * y1;
+}
+
 const struct pl_transform2x2 pl_transform2x2_identity = {
     .mat = {{
         { 1, 0 },
@@ -172,4 +211,14 @@ void pl_transform2x2_apply(const struct pl_transform2x2 *t, float vec[2])
 
     for (int i = 0; i < 2; i++)
         vec[i] += t->c[i];
+}
+
+void pl_transform2x2_apply_rc(const struct pl_transform2x2 *t, struct pl_rect2df *rc)
+{
+    pl_matrix2x2_apply_rc(&t->mat, rc);
+
+    rc->x0 += t->c[0];
+    rc->x1 += t->c[0];
+    rc->y0 += t->c[1];
+    rc->y1 += t->c[1];
 }

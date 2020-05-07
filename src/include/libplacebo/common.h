@@ -79,6 +79,9 @@ extern const struct pl_matrix3x3 pl_matrix3x3_identity;
 // Applies a matrix to a float vector in-place.
 void pl_matrix3x3_apply(const struct pl_matrix3x3 *mat, float vec[3]);
 
+// Applies a matrix to a pl_rect3df
+void pl_matrix3x3_apply_rc(const struct pl_matrix3x3 *mat, struct pl_rect3df *rc);
+
 // Scales a color matrix by a linear factor.
 void pl_matrix3x3_scale(struct pl_matrix3x3 *mat, float scale);
 
@@ -101,6 +104,9 @@ extern const struct pl_transform3x3 pl_transform3x3_identity;
 // Applies a transform to a float vector in-place.
 void pl_transform3x3_apply(const struct pl_transform3x3 *t, float vec[3]);
 
+// Applies a transform to a pl_rect3df
+void pl_transform3x3_apply_rc(const struct pl_transform3x3 *t, struct pl_rect3df *rc);
+
 // Scales the output of a transform by a linear factor. Since an affine
 // transformation is non-linear, this does not commute. If you want to scale
 // the *input* of a transform, use pl_matrix3x3_scale on `t.mat`.
@@ -118,6 +124,7 @@ struct pl_matrix2x2 {
 extern const struct pl_matrix2x2 pl_matrix2x2_identity;
 
 void pl_matrix2x2_apply(const struct pl_matrix2x2 *mat, float vec[2]);
+void pl_matrix2x2_apply_rc(const struct pl_matrix2x2 *mat, struct pl_rect2df *rc);
 
 struct pl_transform2x2 {
     struct pl_matrix2x2 mat;
@@ -127,5 +134,6 @@ struct pl_transform2x2 {
 extern const struct pl_transform2x2 pl_transform2x2_identity;
 
 void pl_transform2x2_apply(const struct pl_transform2x2 *t, float vec[2]);
+void pl_transform2x2_apply_rc(const struct pl_transform2x2 *t, struct pl_rect2df *rc);
 
 #endif // LIBPLACEBO_COMMON_H_
