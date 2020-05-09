@@ -57,11 +57,13 @@ struct pl_context *pl_context_create(int api_ver,
     if (api_ver != PL_API_VER) {
         fprintf(stderr,
                "*************************************************************\n"
-               "libplacebo: ABI mismatch detected!\n\n"
+               "libplacebo: ABI mismatch detected! (requested: %d, compiled: %d)\n"
+               "\n"
                "This is usually indicative of a linking mismatch, and will\n"
                "result in serious issues including stack corruption, random\n"
                "crashes and arbitrary code execution. Aborting as a safety\n"
-               "precaution. Fix your system!\n");
+               "precaution. Fix your system!\n",
+               api_ver, PL_API_VER);
         abort();
     }
 
