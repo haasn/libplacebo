@@ -58,6 +58,10 @@ bool pl_filter_function_eq(const struct pl_filter_function *a,
 // This is also sometimes called a Dirichlet window
 extern const struct pl_filter_function pl_filter_function_box;
 
+// Nearest neighbour sampling. Functionally equivalent to box filtering but
+// not resizable, to ensure pixels are always 'sharp'.
+extern const struct pl_filter_function pl_filter_function_nearest;
+
 // Triangle filter: Linear transitions from 1.0 at x=0 to 0.0 at x=radius.
 // This is also sometimes called a Bartlett window.
 extern const struct pl_filter_function pl_filter_function_triangle;
@@ -187,7 +191,8 @@ double pl_filter_sample(const struct pl_filter_config *c, double x);
 extern const struct pl_filter_config pl_filter_spline16;    // 2 taps
 extern const struct pl_filter_config pl_filter_spline36;    // 3 taps
 extern const struct pl_filter_config pl_filter_spline64;    // 4 taps
-extern const struct pl_filter_config pl_filter_box;         // AKA nearest
+extern const struct pl_filter_config pl_filter_nearest;
+extern const struct pl_filter_config pl_filter_box;
 extern const struct pl_filter_config pl_filter_triangle;    // AKA bilinear
 extern const struct pl_filter_config pl_filter_gaussian;
 // Sinc family (all configured to 3 taps):
@@ -236,6 +241,8 @@ struct pl_filter_params {
     // larger than the radius would otherwise require, in order to prevent
     // aliasing when downscaling. In practice, this should be set to the
     // inverse of the scaling ratio, i.e. src_size / dst_size.
+    //
+    // Ignored for non-resizeable filter configs.
     float filter_scale;
 
     // --- polar filers only (config.polar)

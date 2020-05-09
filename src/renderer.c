@@ -316,7 +316,7 @@ static struct sampler_info sample_src_info(struct pl_renderer *rr,
                 info.type = SAMPLER_BICUBIC;
             if (is_linear && info.config == &pl_filter_triangle)
                 info.type = SAMPLER_DIRECT;
-            if (!is_linear && info.config == &pl_filter_box)
+            if (!is_linear && info.config == &pl_filter_nearest)
                 info.type = SAMPLER_DIRECT;
         }
     }

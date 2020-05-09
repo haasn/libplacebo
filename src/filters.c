@@ -143,7 +143,7 @@ const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
     // Compute the required filter radius
     float radius = f->params.config.kernel->radius;
     f->radius = radius;
-    if (params->filter_scale > 1.0)
+    if (params->filter_scale > 1.0 && f->params.config.kernel->resizable)
         f->radius *= params->filter_scale;
 
     float *weights;
@@ -218,6 +218,11 @@ static double box(const struct pl_filter_function *f, double x)
 {
     return x < 0.5 ? 1.0 : 0.0;
 }
+
+const struct pl_filter_function pl_filter_function_nearest = {
+    .weight    = box,
+    .radius    = 1.0,
+};
 
 const struct pl_filter_function pl_filter_function_box = {
     .resizable = true,
@@ -486,6 +491,7 @@ const struct pl_filter_function pl_filter_function_spline64 = {
 const struct pl_named_filter_function pl_named_filter_functions[] = {
     {"box",             &pl_filter_function_box},
     {"dirichlet",       &pl_filter_function_box}, // alias
+    {"nearest",         &pl_filter_function_nearest},
     {"triangle",        &pl_filter_function_triangle},
     {"hann",            &pl_filter_function_hann},
     {"hanning",         &pl_filter_function_hann}, // alias
@@ -521,6 +527,10 @@ const struct pl_filter_config pl_filter_spline36 = {
 
 const struct pl_filter_config pl_filter_spline64 = {
     .kernel = &pl_filter_function_spline64,
+};
+
+const struct pl_filter_config pl_filter_nearest = {
+    .kernel = &pl_filter_function_nearest,
 };
 
 const struct pl_filter_config pl_filter_box = {
@@ -633,7 +643,7 @@ const struct pl_named_filter_config pl_named_filters[] = {
     {"spline36",            &pl_filter_spline36},
     {"spline64",            &pl_filter_spline64},
     {"box",                 &pl_filter_box},
-    {"nearest",             &pl_filter_box}, // alias
+    {"nearest",             &pl_filter_nearest},
     {"triangle",            &pl_filter_triangle},
     {"bilinear",            &pl_filter_triangle}, // alias
     {"gaussian",            &pl_filter_gaussian},
