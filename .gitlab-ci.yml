@@ -144,6 +144,7 @@ test-gpu-msan:
                                    -Dtests=true
                                    -Db_sanitize=memory
                                    -Db_lundef=false
+                                   -Dc_args='-DMSAN'
         - ninja -C build
         - cd build && time meson test -t 5 -v
 

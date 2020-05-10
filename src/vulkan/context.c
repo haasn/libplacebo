@@ -286,6 +286,11 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
     }
 
     pl_msg(ctx, lev, "vk %s", data->pMessage);
+
+    // MSAN really doesn't like reading from this stack-allocated memory
+    // allocated by the non-instrumented vulkan library, so just comment it out
+    // when building with MSAN as a cheap hack-around.
+#ifndef MSAN
     for (int i = 0; i < data->queueLabelCount; i++)
         pl_msg(ctx, lev, "    during %s", data->pQueueLabels[i].pLabelName);
     for (int i = 0; i < data->cmdBufLabelCount; i++)
@@ -295,6 +300,7 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
         pl_msg(ctx, lev, "    using %s: 0x%llx", vk_obj_str(obj->objectType),
                (unsigned long long) obj->objectHandle);
     }
+#endif
 
     // The return value of this function determines whether the call will
     // be explicitly aborted (to prevent GPU errors) or not. In this case,
