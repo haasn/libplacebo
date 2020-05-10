@@ -72,10 +72,10 @@ const char *vk_res_str(VkResult res)
     }
 }
 
-const char *vk_obj_str(VkDebugReportObjectTypeEXT obj)
+const char *vk_obj_str(VkObjectType obj)
 {
     switch (obj) {
-#define CASE(name, str) case VK_DEBUG_REPORT_OBJECT_TYPE_##name##_EXT: return #str
+#define CASE(name, str) case VK_OBJECT_TYPE_##name: return #str
     CASE(INSTANCE,                          VkInstance);
     CASE(PHYSICAL_DEVICE,                   VkPhysicalDevice);
     CASE(DEVICE,                            VkDevice);
@@ -114,7 +114,10 @@ const char *vk_obj_str(VkDebugReportObjectTypeEXT obj)
     CASE(DISPLAY_MODE_KHR,                  VkDisplayModeKHR);
 #endif
 #ifdef VK_EXT_debug_report
-    CASE(DEBUG_REPORT,                      VkDebugReportCallbackEXT);
+    CASE(DEBUG_REPORT_CALLBACK_EXT,         VkDebugReportCallbackEXT);
+#endif
+#ifdef VK_EXT_debug_utils
+    CASE(DEBUG_UTILS_MESSENGER_EXT,         VkDebugUtilsMessengerEXT);
 #endif
 #undef CASE
 

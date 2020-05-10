@@ -233,7 +233,8 @@ static const struct vk_fun vk_dev_funs[] = {
 
 // Private struct for pl_vk_inst
 struct priv {
-    VkDebugReportCallbackEXT debug_cb;
+    VkDebugReportCallbackEXT debug_report_cb;
+    VkDebugUtilsMessengerEXT debug_utils_cb;
 };
 
 void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
@@ -243,9 +244,14 @@ void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
         return;
 
     struct priv *p = TA_PRIV(inst);
-    if (p->debug_cb) {
+    if (p->debug_report_cb) {
         VK_LOAD_FUN(inst->instance, DestroyDebugReportCallbackEXT, inst->get_proc_addr);
-        DestroyDebugReportCallbackEXT(inst->instance, p->debug_cb, VK_ALLOC);
+        DestroyDebugReportCallbackEXT(inst->instance, p->debug_report_cb, VK_ALLOC);
+    }
+
+    if (p->debug_utils_cb) {
+        VK_LOAD_FUN(inst->instance, DestroyDebugUtilsMessengerEXT, inst->get_proc_addr);
+        DestroyDebugUtilsMessengerEXT(inst->instance, p->debug_utils_cb, VK_ALLOC);
     }
 
     VK_LOAD_FUN(inst->instance, DestroyInstance, inst->get_proc_addr);
@@ -253,37 +259,77 @@ void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
     TA_FREEP((void **) inst_ptr);
 }
 
-static VkBool32 VKAPI_PTR vk_dbg_callback(VkDebugReportFlagsEXT flags,
-                                          VkDebugReportObjectTypeEXT objType,
-                                          uint64_t obj, size_t loc,
-                                          int32_t msgCode, const char *layer,
-                                          const char *msg, void *priv)
+static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT sev,
+                                          VkDebugUtilsMessageTypeFlagsEXT msgType,
+                                          const VkDebugUtilsMessengerCallbackDataEXT *data,
+                                          void *priv)
 {
     struct pl_context *ctx = priv;
-    enum pl_log_level lev = PL_LOG_INFO;
 
     // We will ignore errors for a designated object, but we need to explicitly
     // handle the case where no object is designated, because errors can have no
     // object associated with them, and we don't want to suppress those errors.
-    if (ctx->suppress_errors_for_object != VK_NULL_HANDLE &&
-        ctx->suppress_errors_for_object == obj)
-        return false;
+    if (ctx->suppress_errors_for_object) {
+        for (int i = 0; i < data->objectCount; i++) {
+            if (data->pObjects[i].objectHandle == ctx->suppress_errors_for_object)
+                return false;
+        }
+    }
 
-    switch (flags) {
-    case VK_DEBUG_REPORT_ERROR_BIT_EXT:               lev = PL_LOG_ERR;   break;
-    case VK_DEBUG_REPORT_WARNING_BIT_EXT:             lev = PL_LOG_WARN;  break;
-    case VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT: lev = PL_LOG_WARN;  break;
-    case VK_DEBUG_REPORT_DEBUG_BIT_EXT:               lev = PL_LOG_DEBUG; break;
-    case VK_DEBUG_REPORT_INFORMATION_BIT_EXT:         lev = PL_LOG_TRACE; break;
-    };
+    enum pl_log_level lev;
+    switch (sev) {
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:     lev = PL_LOG_ERR;   break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:   lev = PL_LOG_WARN;  break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:      lev = PL_LOG_DEBUG; break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:   lev = PL_LOG_TRACE; break;
+    default:                                                lev = PL_LOG_INFO;  break;
+    }
 
-    pl_msg(ctx, lev, "vk [%s] %d: %s (obj 0x%llx (%s), loc 0x%zx)",
-           layer, (int) msgCode, msg, (unsigned long long) obj,
-           vk_obj_str(objType), loc);
+    pl_msg(ctx, lev, "vk %s", data->pMessage);
+    for (int i = 0; i < data->queueLabelCount; i++)
+        pl_msg(ctx, lev, "    during %s", data->pQueueLabels[i].pLabelName);
+    for (int i = 0; i < data->cmdBufLabelCount; i++)
+        pl_msg(ctx, lev, "    inside %s", data->pCmdBufLabels[i].pLabelName);
+    for (int i = 0; i < data->objectCount; i++) {
+        const VkDebugUtilsObjectNameInfoEXT *obj = &data->pObjects[i];
+        pl_msg(ctx, lev, "    using %s: 0x%llx", vk_obj_str(obj->objectType),
+               (unsigned long long) obj->objectHandle);
+    }
 
     // The return value of this function determines whether the call will
     // be explicitly aborted (to prevent GPU errors) or not. In this case,
     // we generally want this to be on for the errors.
+    return !!(sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT);
+}
+
+// Legacy version of the above callback for the simpler VK_EXT_debug_report
+static VkBool32 VKAPI_PTR vk_dbg_report_cb(VkDebugReportFlagsEXT flags,
+                                           VkDebugReportObjectTypeEXT objType,
+                                           uint64_t obj, size_t loc,
+                                           int32_t msgCode, const char *layer,
+                                           const char *msg, void *priv)
+{
+    struct pl_context *ctx = priv;
+
+    if (ctx->suppress_errors_for_object != VK_NULL_HANDLE &&
+        ctx->suppress_errors_for_object == obj)
+        return false;
+
+    enum pl_log_level lev;
+    switch (flags) {
+    case VK_DEBUG_REPORT_ERROR_BIT_EXT:                 lev = PL_LOG_ERR;   break;
+    case VK_DEBUG_REPORT_WARNING_BIT_EXT:               lev = PL_LOG_WARN;  break;
+    case VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT:   lev = PL_LOG_WARN;  break;
+    case VK_DEBUG_REPORT_DEBUG_BIT_EXT:                 lev = PL_LOG_DEBUG; break;
+    case VK_DEBUG_REPORT_INFORMATION_BIT_EXT:           lev = PL_LOG_TRACE; break;
+    default:                                            lev = PL_LOG_INFO;  break;
+    };
+
+    // Note: We can freely cast VkDebugReportObjectTypeEXT to VkObjectType
+    pl_msg(ctx, lev, "vk [%s] %d: %s (obj 0x%llx (%s), loc 0x%zx)",
+           layer, (int) msgCode, msg, (unsigned long long) obj,
+           vk_obj_str((VkObjectType) objType), loc);
+
     return !!(flags & VK_DEBUG_REPORT_ERROR_BIT_EXT);
 }
 
@@ -401,8 +447,6 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
                     continue;
 
                 pl_info(ctx, "Enabling debug meta layer: %s", debug_layers[i]);
-                // Enable support for debug callbacks, so we get useful messages
-                TARRAY_APPEND(tmp, exts, num_exts, VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
                 TARRAY_APPEND(tmp, layers, num_layers, debug_layers[i]);
                 goto debug_layers_done;
             }
@@ -530,6 +574,36 @@ next_user_ext: ;
 next_opt_user_ext: ;
     }
 
+    // If debugging is enabled, add the debug report extension so we get useful
+    // debugging callbacks, sorted by priority since debug_utils deprecates
+    // debug_report
+    static const char *debug_ext = NULL;
+    static const char *debug_exts[] = {
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
+    };
+
+    if (debug) {
+        for (int i = 0; i < PL_ARRAY_SIZE(debug_exts); i++) {
+            for (int n = 0; n < num_exts_avail; n++) {
+                if (strcmp(debug_exts[i], exts_avail[n].extensionName) != 0)
+                    continue;
+
+                pl_info(ctx, "Enabling debug report extension: %s", debug_exts[i]);
+                TARRAY_APPEND(tmp, exts, num_exts, debug_exts[i]);
+                debug_ext = debug_exts[i];
+                goto debug_exts_done;
+            }
+        }
+
+        // No extension found
+        pl_warn(ctx, "API debug layers enabled but no debug report extension "
+                "found... ignoring. Debug messages may be spilling to "
+                "stdout/stderr!");
+    }
+
+debug_exts_done: ;
+
     info.ppEnabledExtensionNames = exts;
     info.enabledExtensionCount = num_exts;
     info.ppEnabledLayerNames = layers;
@@ -552,9 +626,36 @@ next_opt_user_ext: ;
         goto error;
     }
 
-    VkDebugReportCallbackEXT debug_cb = VK_NULL_HANDLE;
-    if (debug) {
-        // Set up a debug callback to catch validation messages
+    struct pl_vk_inst *pl_vk = talloc_zero_priv(NULL, struct pl_vk_inst, struct priv);
+    struct priv *p = TA_PRIV(pl_vk);
+    *pl_vk = (struct pl_vk_inst) {
+        .instance = inst,
+        .api_version = api_ver,
+        .get_proc_addr = get_addr,
+        .extensions = talloc_steal(pl_vk, exts),
+        .num_extensions = num_exts,
+        .layers = talloc_steal(pl_vk, layers),
+        .num_layers = num_layers,
+    };
+
+    // Set up a debug callback to catch validation messages
+    if (debug_ext && strcmp(debug_ext, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0) {
+        VkDebugUtilsMessengerCreateInfoEXT dinfo = {
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+            .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+            .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                           VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                           VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+            .pfnUserCallback = vk_dbg_utils_cb,
+            .pUserData = ctx,
+        };
+
+        VK_LOAD_FUN(inst, CreateDebugUtilsMessengerEXT, get_addr);
+        CreateDebugUtilsMessengerEXT(inst, &dinfo, VK_ALLOC, &p->debug_utils_cb);
+    } else if (debug_ext && strcmp(debug_ext, VK_EXT_DEBUG_REPORT_EXTENSION_NAME) == 0) {
         VkDebugReportCallbackCreateInfoEXT dinfo = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
             .flags = VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
@@ -562,33 +663,14 @@ next_opt_user_ext: ;
                      VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
                      VK_DEBUG_REPORT_ERROR_BIT_EXT |
                      VK_DEBUG_REPORT_DEBUG_BIT_EXT,
-            .pfnCallback = vk_dbg_callback,
+            .pfnCallback = vk_dbg_report_cb,
             .pUserData = ctx,
         };
 
-        // Since this is not part of the core spec, we need to load it. This
-        // can't fail because we've already successfully created an instance
-        // with this extension enabled.
         VK_LOAD_FUN(inst, CreateDebugReportCallbackEXT, get_addr)
-        CreateDebugReportCallbackEXT(inst, &dinfo, VK_ALLOC, &debug_cb);
+        CreateDebugReportCallbackEXT(inst, &dinfo, VK_ALLOC, &p->debug_report_cb);
     }
 
-    struct pl_vk_inst *pl_vk = talloc_priv(NULL, struct pl_vk_inst, struct priv);
-    *pl_vk = (struct pl_vk_inst) {
-        .instance = inst,
-        .api_version = api_ver,
-        .get_proc_addr = get_addr,
-        .extensions = exts,
-        .num_extensions = num_exts,
-        .layers = layers,
-        .num_layers = num_layers,
-    };
-
-    struct priv *p = TA_PRIV(pl_vk);
-    p->debug_cb = debug_cb;
-
-    pl_vk->extensions = talloc_steal(pl_vk, pl_vk->extensions);
-    pl_vk->layers = talloc_steal(pl_vk, pl_vk->layers);
     talloc_free(tmp);
     return pl_vk;
 

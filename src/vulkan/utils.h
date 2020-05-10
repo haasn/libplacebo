@@ -21,7 +21,7 @@
 
 // Return a human-readable name for various vulkan enums
 const char *vk_res_str(VkResult res);
-const char *vk_obj_str(VkDebugReportObjectTypeEXT obj);
+const char *vk_obj_str(VkObjectType obj);
 
 // Enum translation boilerplate
 VkExternalMemoryHandleTypeFlagBitsKHR vk_mem_handle_type(enum pl_handle_type);
