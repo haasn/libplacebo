@@ -106,7 +106,7 @@ static void compute_row(struct pl_filter *f, double offset, float *out)
     pl_assert(f->row_size > 0);
     double sum = 0;
     for (int i = 0; i < f->row_size; i++) {
-        double x = offset - (i - f->row_size / 2.0 + 1);
+        double x = offset - (i - f->radius + 1);
         // Readjust the value range to account for a stretched kernel.
         x *= f->params.config.kernel->radius / f->radius;
         double weight = pl_filter_sample(&f->params.config, x);
