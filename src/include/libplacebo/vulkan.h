@@ -174,6 +174,16 @@ struct pl_vulkan_params {
     // list of devices and their names are logged at level PL_LOG_INFO.
     const char *device_name;
 
+    // When choosing the device, only choose a device with this exact UUID.
+    // This overrides `allow_software` and `device_name`. No effect if `device`
+    // is set.
+    //
+    // Note: This relies on instance-level support for at least one of the
+    // VK_KHR_external_*_capabilities extensions (or vulkan 1.1). If this field
+    // is set when the instance does not support it, an error will be
+    // generated.
+    uint8_t device_uuid[16];
+
     // When choosing the device, controls whether or not to also allow software
     // GPUs. No effect if `device` or `device_name` are set.
     bool allow_software;
@@ -238,12 +248,16 @@ void pl_vulkan_destroy(const struct pl_vulkan **vk);
 
 struct pl_vulkan_device_params {
     // The instance to use. Required!
+    //
+    // NOTE: The VkInstance provided by the user *MUST* be created with the
+    // `VK_KHR_get_physical_device_properties2` extension enabled!
     VkInstance instance;
 
     // Mirrored from `pl_vulkan_params`. All of these fields are optional.
     PFN_vkGetInstanceProcAddr get_proc_addr;
     VkSurfaceKHR surface;
     const char *device_name;
+    uint8_t device_uuid[16];
     bool allow_software;
 };
 

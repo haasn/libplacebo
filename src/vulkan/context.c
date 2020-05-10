@@ -671,7 +671,14 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
         return NULL;
 
     VK_LOAD_FUN(inst, EnumeratePhysicalDevices, get_addr);
-    VK_LOAD_FUN(inst, GetPhysicalDeviceProperties, get_addr);
+    VK_LOAD_FUN(inst, GetPhysicalDeviceProperties2KHR, get_addr);
+
+    if (!GetPhysicalDeviceProperties2KHR) {
+        PL_FATAL(vk, "Provided VkInstance does not support "
+                 VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
+                 ", cannot continue!");
+        return VK_NULL_HANDLE;
+    }
 
     VkPhysicalDevice *devices = NULL;
     uint32_t num = 0;
@@ -687,15 +694,33 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
         [VK_PHYSICAL_DEVICE_TYPE_OTHER]          = {"other",      1},
     };
 
-    int best = 0;
-    for (int i = 0; i < num; i++) {
-        VkPhysicalDeviceProperties props = {0};
-        GetPhysicalDeviceProperties(devices[i], &props);
-        VkPhysicalDeviceType t = props.deviceType;
-        if (t > PL_ARRAY_SIZE(types))
-            continue;
+    static const uint8_t nil[VK_UUID_SIZE] = {0};
+    bool uuid_set = memcmp(params->device_uuid, nil, VK_UUID_SIZE) != 0;
 
-        PL_INFO(vk, "    GPU %d: %s (%s)", i, props.deviceName, types[t].name);
+    int best = -1;
+    for (int i = 0; i < num; i++) {
+        VkPhysicalDeviceIDPropertiesKHR id_props = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR,
+        };
+
+        VkPhysicalDeviceProperties2 prop = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR,
+            .pNext = &id_props,
+        };
+
+        GetPhysicalDeviceProperties2KHR(devices[i], &prop);
+        VkPhysicalDeviceType t = prop.properties.deviceType;
+        bool has_uuid = memcmp(id_props.deviceUUID, nil, VK_UUID_SIZE) != 0;
+        if (uuid_set && !has_uuid) {
+            PL_FATAL(vk, "params.device_uuid set but provided instanced does "
+                     "not support the extensions required to query device UUIDs!");
+            goto error;
+        }
+
+        const char *dtype = t < PL_ARRAY_SIZE(types) ? types[t].name : "unknown?";
+        PL_INFO(vk, "    GPU %d: %s (%s)", i, prop.properties.deviceName, dtype);
+        if (has_uuid)
+            PL_INFO(vk, "           uuid: %s", PRINT_UUID(id_props.deviceUUID));
 
         if (params->surface) {
             if (!supports_surf(ctx, inst, get_addr, devices[i], params->surface)) {
@@ -704,10 +729,18 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
             }
         }
 
-        if (params->device_name && params->device_name[0] != '\0') {
-            if (strcmp(params->device_name, props.deviceName) == 0) {
+        if (uuid_set) {
+            if (memcmp(id_props.deviceUUID, params->device_uuid, VK_UUID_SIZE) == 0) {
                 dev = devices[i];
-                best = 10; // high number...
+                continue;
+            } else {
+                PL_DEBUG(vk, "     -> excluding due to UUID mismatch");
+                continue;
+            }
+        } else if (params->device_name && params->device_name[0] != '\0') {
+            if (strcmp(params->device_name, prop.properties.deviceName) == 0) {
+                dev = devices[i];
+                continue;
             } else {
                 PL_DEBUG(vk, "      -> excluding due to name mismatch");
                 continue;
@@ -719,9 +752,10 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
             continue;
         }
 
-        if (types[t].priority > best) {
+        int priority = t < PL_ARRAY_SIZE(types) ? types[t].priority : 0;
+        if (priority > best) {
             dev = devices[i];
-            best = types[t].priority;
+            best = priority;
         }
     }
 
@@ -1023,32 +1057,43 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
         PL_DEBUG(vk, "Using specified VkPhysicalDevice");
         vk->physd = params->device;
     } else {
-        vk->physd = pl_vulkan_choose_device(ctx, &(struct pl_vulkan_device_params) {
+        struct pl_vulkan_device_params dparams = {
             .instance       = vk->inst,
             .surface        = params->surface,
             .device_name    = params->device_name,
             .allow_software = params->allow_software,
-        });
+        };
+        memcpy(dparams.device_uuid, params->device_uuid, VK_UUID_SIZE);
 
+        vk->physd = pl_vulkan_choose_device(ctx, &dparams);
         if (!vk->physd) {
             PL_FATAL(vk, "Found no suitable device, giving up.");
             goto error;
         }
     }
 
-    VkPhysicalDeviceProperties prop = {0};
-    vk->GetPhysicalDeviceProperties(vk->physd, &prop);
-    vk->limits = prop.limits;
+    VkPhysicalDeviceIDPropertiesKHR id_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR,
+    };
+
+    VkPhysicalDeviceProperties2KHR prop = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR,
+        .pNext = &id_props,
+    };
+
+    vk->GetPhysicalDeviceProperties2KHR(vk->physd, &prop);
+    vk->limits = prop.properties.limits;
 
     PL_INFO(vk, "Vulkan device properties:");
-    PL_INFO(vk, "    Device Name: %s", prop.deviceName);
-    PL_INFO(vk, "    Device ID: %x:%x", (unsigned) prop.vendorID,
-            (unsigned) prop.deviceID);
-    PL_INFO(vk, "    Driver version: %d", (int) prop.driverVersion);
-    PL_INFO(vk, "    API version: %d.%d.%d", PRINTF_VER(prop.apiVersion));
+    PL_INFO(vk, "    Device Name: %s", prop.properties.deviceName);
+    PL_INFO(vk, "    Device ID: %x:%x", (unsigned) prop.properties.vendorID,
+            (unsigned) prop.properties.deviceID);
+    PL_INFO(vk, "    Device UUID: %s", PRINT_UUID(id_props.deviceUUID));
+    PL_INFO(vk, "    Driver version: %d", (int) prop.properties.driverVersion);
+    PL_INFO(vk, "    API version: %d.%d.%d", PRINTF_VER(prop.properties.apiVersion));
 
     // Needed by device_init
-    vk->api_ver = prop.apiVersion;
+    vk->api_ver = prop.properties.apiVersion;
     if (params->max_api_version) {
         vk->api_ver = PL_MIN(vk->api_ver, params->max_api_version);
         PL_INFO(vk, "Restricting API version to %d.%d.%d... new version %d.%d.%d",

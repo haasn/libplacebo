@@ -83,17 +83,7 @@ void pl_gpu_print_info(const struct pl_gpu *gpu, enum pl_log_level lev)
     if (pl_gpu_supports_interop(gpu)) {
         PL_MSG(gpu, lev, "    External API interop:");
 
-        // Pretty-print the device UUID
-        static const char *hexdigits = "0123456789ABCDEF";
-        char buf[3 * sizeof(gpu->uuid)];
-        for (int i = 0; i < sizeof(gpu->uuid); i++) {
-            uint8_t x = gpu->uuid[i];
-            buf[3 * i + 0] = hexdigits[x >> 4];
-            buf[3 * i + 1] = hexdigits[x & 0xF];
-            buf[3 * i + 2] = i == sizeof(gpu->uuid) - 1 ? '\0' : ':';
-        }
-
-        PL_MSG(gpu, lev, "      UUID: %s", buf);
+        PL_MSG(gpu, lev, "      UUID: %s", PRINT_UUID(gpu->uuid));
         PL_MSG(gpu, lev, "      PCI: %04x:%02x:%02x:%x",
                gpu->pci.domain, gpu->pci.bus, gpu->pci.device, gpu->pci.function);
         PL_MSG(gpu, lev, "      buf export caps: 0x%x",
@@ -1532,4 +1522,17 @@ bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
 {
     const struct pl_gpu_fns *impl = TA_PRIV(gpu);
     return impl->tex_export(gpu, tex, sync);
+}
+
+const char *print_uuid(char buf[3 * UUID_SIZE], const uint8_t uuid[UUID_SIZE])
+{
+    static const char *hexdigits = "0123456789ABCDEF";
+    for (int i = 0; i < UUID_SIZE; i++) {
+        uint8_t x = uuid[i];
+        buf[3 * i + 0] = hexdigits[x >> 4];
+        buf[3 * i + 1] = hexdigits[x & 0xF];
+        buf[3 * i + 2] = i == UUID_SIZE - 1 ? '\0' : ':';
+    }
+
+    return buf;
 }

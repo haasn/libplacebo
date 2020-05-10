@@ -131,3 +131,9 @@ bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
 // copied, but cleared explicitly.
 struct pl_pass_params pl_pass_params_copy(void *tactx,
                                           const struct pl_pass_params *params);
+
+
+// Utility function for pretty-printing UUIDs
+#define UUID_SIZE 16
+#define PRINT_UUID(uuid) (print_uuid((char[3 * UUID_SIZE]){0}, (uuid)))
+const char *print_uuid(char buf[3 * UUID_SIZE], const uint8_t uuid[UUID_SIZE]);
