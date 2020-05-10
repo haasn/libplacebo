@@ -723,11 +723,11 @@ static bool supports_surf(struct pl_context *ctx, VkInstance inst,
 
     VK_LOAD_FUN(inst, GetPhysicalDeviceQueueFamilyProperties, get_addr);
     VK_LOAD_FUN(inst, GetPhysicalDeviceSurfaceSupportKHR, get_addr);
-    uint32_t qfnum;
+    uint32_t qfnum = 0;
     GetPhysicalDeviceQueueFamilyProperties(physd, &qfnum, NULL);
 
     for (int i = 0; i < qfnum; i++) {
-        VkBool32 sup;
+        VkBool32 sup = false;
         VK(GetPhysicalDeviceSurfaceSupportKHR(physd, i, surf, &sup));
         if (sup)
             return true;
@@ -933,7 +933,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     // If needed, ensure we can actually present to the surface using this queue
     if (params->surface) {
-        VkBool32 sup;
+        VkBool32 sup = false;
         VK(vk->GetPhysicalDeviceSurfaceSupportKHR(vk->physd, idx_gfx,
                                                   params->surface, &sup));
         if (!sup) {

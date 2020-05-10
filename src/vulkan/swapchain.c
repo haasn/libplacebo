@@ -160,7 +160,7 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
     }
 
     VK(vk->GetPhysicalDeviceSurfaceFormatsKHR(vk->physd, surf, &num, NULL));
-    formats = talloc_array(NULL, VkSurfaceFormatKHR, num);
+    formats = talloc_zero_array(NULL, VkSurfaceFormatKHR, num);
     VK(vk->GetPhysicalDeviceSurfaceFormatsKHR(vk->physd, surf, &num, formats));
 
     PL_DEBUG(gpu, "Available surface formats:");
@@ -289,10 +289,10 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
 
     // Make sure the swapchain present mode is supported
     VkPresentModeKHR *modes = NULL;
-    int num_modes;
+    int num_modes = 0;
     VK(vk->GetPhysicalDeviceSurfacePresentModesKHR(vk->physd, p->surf,
                                                    &num_modes, NULL));
-    modes = talloc_array(NULL, VkPresentModeKHR, num_modes);
+    modes = talloc_zero_array(NULL, VkPresentModeKHR, num_modes);
     VK(vk->GetPhysicalDeviceSurfacePresentModesKHR(vk->physd, p->surf,
                                                    &num_modes, modes));
 
@@ -346,7 +346,7 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     struct vk_ctx *vk = p->vk;
 
     // Query the supported capabilities and update this struct as needed
-    VkSurfaceCapabilitiesKHR caps;
+    VkSurfaceCapabilitiesKHR caps = {0};
     VK(vk->GetPhysicalDeviceSurfaceCapabilitiesKHR(vk->physd, p->surf, &caps));
 
     // Check for hidden/invisible window
@@ -442,7 +442,7 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     // possible. That said, we still need to intersect the swapchain supported
     // usage flags with the format supported usage flags
     info->imageUsage = caps.supportedUsageFlags;
-    VkFormatProperties fmtprop;
+    VkFormatProperties fmtprop = {0};
     vk->GetPhysicalDeviceFormatProperties(vk->physd, info->imageFormat, &fmtprop);
 
 #define CHECK(usage, feature) \
@@ -519,12 +519,12 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
 
     // Get the new swapchain images
     VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, NULL));
-    vkimages = talloc_array(NULL, VkImage, num_images);
+    vkimages = talloc_zero_array(NULL, VkImage, num_images);
     VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, vkimages));
 
     // If needed, allocate some more semaphores
     while (num_images > p->num_sems) {
-        VkSemaphore sem_in, sem_out;
+        VkSemaphore sem_in = NULL, sem_out = NULL;
         static const VkSemaphoreCreateInfo seminfo = {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         };
