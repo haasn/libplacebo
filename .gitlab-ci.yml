@@ -6,7 +6,7 @@ build-ubuntu:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200415100119
     stage: build
     tags:
-        - debian
+        - docker
         - amd64
     script:
         - meson build --buildtype release
@@ -21,7 +21,7 @@ build-ubuntu-static:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200415100119
     stage: build
     tags:
-        - debian
+        - docker
         - amd64
     script:
         - meson build --buildtype release
@@ -37,7 +37,8 @@ build-win32:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200415100119
     stage: build
     tags:
-        - win32
+        - docker
+        - amd64
     script:
         - meson build --buildtype release
                       --werror
@@ -51,7 +52,8 @@ build-win64:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200415100119
     stage: build
     tags:
-        - win64
+        - docker
+        - amd64
     script:
         - meson build --buildtype release
                       --werror
@@ -65,8 +67,8 @@ build-aarch64:
     image: registry.videolan.org/libplacebo-ubuntu-eoan-aarch64:20200108100921
     stage: build
     tags:
+        - docker
         - aarch64
-        - debian
     script:
         - meson build --buildtype release --werror -Dtests=true
         - ninja -C build
@@ -88,7 +90,7 @@ test-ubuntu-scan:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200415100119
     stage: test
     tags:
-        - debian
+        - docker
         - amd64
     script:
         - env CC=clang meson build --buildtype debugoptimized
