@@ -897,14 +897,14 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
               sy = st->plane.shift_y;
 
         st->rc = (struct pl_rect2df) {
-            .x0 = image->src_rect.x0 / rrx - sx / rx,
-            .y0 = image->src_rect.y0 / rry - sy / ry,
-            .x1 = image->src_rect.x1 / rrx - sx / rx,
-            .y1 = image->src_rect.y1 / rry - sy / ry,
+            .x0 = src_rect.x0 / rrx - sx / rx,
+            .y0 = src_rect.y0 / rry - sy / ry,
+            .x1 = src_rect.x1 / rrx - sx / rx,
+            .y1 = src_rect.y1 / rry - sy / ry,
         };
 
         if (st == ref) {
-            // Make sure st->rc == image->src_rect
+            // Make sure st->rc == src_rect
             pl_assert(rrx == 1 && rry == 1 && sx == 0 && sy == 0);
         }
 
