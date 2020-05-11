@@ -1520,8 +1520,13 @@ void pl_sync_destroy(const struct pl_gpu *gpu,
 bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
                    const struct pl_sync *sync)
 {
+    require(tex->params.import_handle || tex->params.export_handle);
+
     const struct pl_gpu_fns *impl = TA_PRIV(gpu);
     return impl->tex_export(gpu, tex, sync);
+
+error:
+    return false;
 }
 
 const char *print_uuid(char buf[3 * UUID_SIZE], const uint8_t uuid[UUID_SIZE])

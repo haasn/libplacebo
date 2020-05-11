@@ -38,6 +38,12 @@ static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
 
         REQUIRE(sync);
         REQUIRE(tex);
+
+        // Note: For testing purposes, we have to fool pl_tex_export into
+        // thinking this texture is actually exportable. Just hack it in
+        // horribly.
+        ((struct pl_tex_params *) &tex->params)->export_handle = PL_HANDLE_DMA_BUF;
+
         REQUIRE(pl_tex_export(gpu, tex, sync));
 
         // Re-use our internal helpers to signal this VkSemaphore
