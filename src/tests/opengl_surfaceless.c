@@ -46,6 +46,8 @@ int main()
     struct pl_glsl_desc last_glsl = {0};
     struct pl_gpu_limits last_limits = {0};
 
+    struct pl_context *ctx = pl_test_context();
+
     for (int i = 0; i < PL_ARRAY_SIZE(egl_vers); i++) {
 
         const int cfg_attribs[] = {
@@ -95,7 +97,6 @@ int main()
         if (!eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, egl))
             continue;
 
-        struct pl_context *ctx = pl_test_context();
         struct pl_opengl_params params = pl_opengl_default_params;
         params.max_glsl_version = egl_vers[i].glsl_ver;
         params.debug = true;
@@ -121,12 +122,14 @@ int main()
         gpu_tests(gpu);
 
         pl_opengl_destroy(&gl);
-        pl_context_destroy(&ctx);
-
         eglDestroyContext(dpy, egl);
+
+        // Reduce log spam after first successful test
+        pl_test_set_verbosity(ctx, PL_LOG_INFO);
     }
 
     eglTerminate(dpy);
+    pl_context_destroy(&ctx);
 
     if (!last_glsl.version)
         return SKIP;

@@ -233,6 +233,9 @@ int main()
         vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
         pl_vulkan_destroy(&vk);
+
+        // Reduce log spam after first tested device
+        pl_test_set_verbosity(ctx, PL_LOG_INFO);
     }
 
     vkDestroySurfaceKHR(inst->instance, surf, NULL);

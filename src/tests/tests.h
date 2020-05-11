@@ -31,7 +31,16 @@ static inline struct pl_context *pl_test_context()
 
     return pl_context_create(PL_API_VER, &(struct pl_context_params) {
         .log_cb    = isatty(fileno(stdout)) ? pl_log_color : pl_log_simple,
-        .log_level = PL_LOG_ALL,
+        .log_level = PL_LOG_DEBUG,
+    });
+}
+
+static inline void pl_test_set_verbosity(struct pl_context *ctx,
+                                         enum pl_log_level level)
+{
+    pl_context_update(ctx, &(struct pl_context_params) {
+        .log_cb    = isatty(fileno(stdout)) ? pl_log_color : pl_log_simple,
+        .log_level = level,
     });
 }
 

@@ -283,8 +283,6 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         for (int y = 0; y < FBO_H; y++) {                                   \
             for (int x = 0; x < FBO_W; x++) {                               \
                 float *color = &data[(y * FBO_W + x) * 4];                  \
-                printf("color[%d][%d] = %f %f %f %f\n",                     \
-                       y, x, color[0], color[1], color[2], color[3]);       \
                 REQUIRE(feq(color[0], (x + 0.5) / FBO_W, eps));             \
                 REQUIRE(feq(color[1], (y + 0.5) / FBO_H, eps));             \
                 REQUIRE(feq(color[2], 0.0, eps));                           \
