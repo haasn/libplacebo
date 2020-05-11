@@ -234,6 +234,23 @@ int main()
 #endif
         pl_vulkan_destroy(&vk);
 
+        // Re-run the same export/import tests with async queues disabled
+        params.async_compute = false;
+        params.async_transfer = false;
+        vk = pl_vulkan_create(ctx, &params);
+        REQUIRE(vk); // it succeeded the first time
+
+#ifdef VK_HAVE_UNIX
+        vulkan_interop_tests(vk, PL_HANDLE_FD);
+        vulkan_interop_tests(vk, PL_HANDLE_DMA_BUF);
+        vulkan_test_export_import(vk, PL_HANDLE_DMA_BUF);
+#endif
+#ifdef VK_HAVE_WIN32
+        vulkan_interop_tests(vk, PL_HANDLE_WIN32);
+        vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
+#endif
+        pl_vulkan_destroy(&vk);
+
         // Reduce log spam after first tested device
         pl_test_set_verbosity(ctx, PL_LOG_INFO);
     }
