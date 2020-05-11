@@ -369,6 +369,16 @@ bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
                     VkImageLayout layout, VkAccessFlags access,
                     VkSemaphore sem_out);
 
+// This function is similar to `pl_vulkan_hold`, except that rather than
+// forcibly transitioning to a given layout, the user is instead informed about
+// the current layout and access and is in charge of transitioning it to their
+// own layout/access before using it. May be more convenient for some users.
+//
+// Returns whether successful.
+bool pl_vulkan_hold_raw(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                        VkImageLayout *layout, VkAccessFlags *access,
+                        VkSemaphore sem_out);
+
 // "Release" a shared image, meaning it is no longer held. `layout` and
 // `access` describe the current state of the image at the point in time when
 // the user is releasing it. Performing any operation on the VkImage underlying

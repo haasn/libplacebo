@@ -1236,6 +1236,27 @@ bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
     return tex_vk->held;
 }
 
+bool pl_vulkan_hold_raw(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                        VkImageLayout *layout, VkAccessFlags *access,
+                        VkSemaphore sem_out)
+{
+    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    bool user_may_invalidate = tex_vk->may_invalidate;
+
+    if (!pl_vulkan_hold(gpu, tex, tex_vk->current_layout, tex_vk->current_access, sem_out))
+        return false;
+
+    if (user_may_invalidate) {
+        *layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        *access = 0;
+    } else {
+        *layout = tex_vk->current_layout;
+        *access = tex_vk->current_access;
+    }
+
+    return true;
+}
+
 void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
                        VkImageLayout layout, VkAccessFlags access,
                        VkSemaphore sem_in)
