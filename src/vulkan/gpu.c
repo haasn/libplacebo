@@ -563,13 +563,16 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         vk_cmd_dep(cmd, tex_vk->ext_deps[i], stage);
     tex_vk->num_ext_deps = 0;
 
+    // CONCURRENT images require transitioning to/from IGNORED, EXCLUSIVE
+    // images require transitioning to/from the concrete QF index
+    uint32_t qf = vk->num_pools > 1 ? VK_QUEUE_FAMILY_IGNORED : cmd->pool->qf;
+
     VkImageMemoryBarrier imgBarrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .oldLayout = tex_vk->current_layout,
         .newLayout = newLayout,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR
-                                      : VK_QUEUE_FAMILY_IGNORED,
+        .srcQueueFamilyIndex = qf,
+        .dstQueueFamilyIndex = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
         .srcAccessMask = tex_vk->current_access,
         .dstAccessMask = newAccess,
         .image = tex_vk->img,
@@ -581,8 +584,10 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     };
 
     if (tex_vk->ext_sync) {
-        if (tex_vk->current_layout != VK_IMAGE_LAYOUT_UNDEFINED)
+        if (tex_vk->current_layout != VK_IMAGE_LAYOUT_UNDEFINED) {
             imgBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL_KHR;
+            pl_assert(!export); // can't re-export exported images
+        }
         vk_cmd_callback(cmd, (vk_cb) vk_sync_deref, gpu, tex_vk->ext_sync);
         tex_vk->ext_sync = NULL;
     }
@@ -1292,18 +1297,23 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     struct vk_ctx *vk = p->vk;
     struct pl_buf_vk *buf_vk = TA_PRIV(buf);
 
+    // CONCURRENT buffers require transitioning to/from IGNORED, EXCLUSIVE
+    // buffers require transitioning to/from the concrete QF index
+    uint32_t qf = vk->num_pools > 1 ? VK_QUEUE_FAMILY_IGNORED : cmd->pool->qf;
+
     VkBufferMemoryBarrier buffBarrier = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-        .srcQueueFamilyIndex = buf_vk->exported ? VK_QUEUE_FAMILY_EXTERNAL_KHR
-                                                : VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR
-                                      : VK_QUEUE_FAMILY_IGNORED,
+        .srcQueueFamilyIndex = buf_vk->exported ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
+        .dstQueueFamilyIndex = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
         .srcAccessMask = buf_vk->current_access,
         .dstAccessMask = newAccess,
         .buffer = buf_vk->slice.buf,
         .offset = buf_vk->slice.mem.offset + offset,
         .size = size,
     };
+
+    // Can't re-export exported buffers
+    pl_assert(!export || !buf_vk->exported);
 
     VkEvent event = VK_NULL_HANDLE;
     enum vk_wait_type type = vk_cmd_wait(vk, cmd, &buf_vk->sig, stage, &event);
