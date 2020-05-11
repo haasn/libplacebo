@@ -312,8 +312,12 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
 
     // The return value of this function determines whether the call will
     // be explicitly aborted (to prevent GPU errors) or not. In this case,
-    // we generally want this to be on for the errors.
-    return !!(sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT);
+    // we generally want this to be on for the validation errors, but nothing
+    // else (e.g. performance warnings)
+    bool is_error = (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) &&
+                    (msgType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT);
+
+    return !is_error;
 }
 
 // Legacy version of the above callback for the simpler VK_EXT_debug_report
