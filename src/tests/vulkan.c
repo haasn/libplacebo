@@ -12,7 +12,7 @@ static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
         const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
             .type = PL_BUF_TEX_TRANSFER,
             .size = 1024,
-            .handle_type = handle_type,
+            .export_handle = handle_type,
         });
 
         REQUIRE(buf);
@@ -70,14 +70,16 @@ static void vulkan_test_export_import(const struct pl_vulkan *pl_vk,
 {
     const struct pl_gpu *gpu = pl_vk->gpu;
 
+    // Test texture roundtrip
+
     if (!(gpu->export_caps.tex & handle_type) ||
         !(gpu->import_caps.tex & handle_type))
-        return;
+        goto skip_tex;
 
     const struct pl_fmt *fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0,
                                            PL_FMT_CAP_BLITTABLE);
     if (!fmt)
-        return;
+        goto skip_tex;
 
     const struct pl_tex *export = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w = 32,
@@ -99,6 +101,33 @@ static void vulkan_test_export_import(const struct pl_vulkan *pl_vk,
 
     pl_tex_destroy(gpu, &import);
     pl_tex_destroy(gpu, &export);
+
+skip_tex: ;
+
+    // Test buffer roundtrip
+
+    if (!(gpu->export_caps.buf & handle_type) ||
+        !(gpu->import_caps.buf & handle_type))
+        return;
+
+    const struct pl_buf *exp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        .type = PL_BUF_TEX_TRANSFER,
+        .size = 32,
+        .export_handle = handle_type,
+    });
+    REQUIRE(exp_buf);
+    REQUIRE(exp_buf->shared_mem.handle.fd > -1);
+
+    const struct pl_buf *imp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        .type = PL_BUF_TEX_TRANSFER,
+        .size = 32,
+        .import_handle = handle_type,
+        .shared_mem = exp_buf->shared_mem,
+    });
+    REQUIRE(imp_buf);
+
+    pl_buf_destroy(gpu, &imp_buf);
+    pl_buf_destroy(gpu, &exp_buf);
 }
 
 static void vulkan_swapchain_tests(const struct pl_vulkan *vk, VkSurfaceKHR surf)

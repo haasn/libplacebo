@@ -512,10 +512,22 @@ struct pl_buf_params {
     // PL_FMT_CAP_TEXEL_* for the texel buffer type in use.
     const struct pl_fmt *format;
 
+    // At most one of `export_handle` and `import_handle` can be set for a
+    // buffer.
+
     // Setting this indicates that the memory backing this buffer should be
     // shared with external APIs, If so, this must be exactly *one* of
     // `pl_gpu.export_caps.buf`.
-    enum pl_handle_type handle_type;
+    enum pl_handle_type export_handle;
+
+    // Setting this indicates that the memory backing this buffer will be
+    // imported from an external API. If so, this must be exactly *one* of
+    // `pl_gpu.import_caps.buf`.
+    enum pl_handle_type import_handle;
+
+    // If the shared memory is being imported, the import handle must be
+    // specified here. Otherwise, this is ignored.
+    struct pl_shared_mem shared_mem;
 
     // If non-NULL, the buffer will be created with these contents. Otherwise,
     // the initial data is undefined. Using this does *not* require setting

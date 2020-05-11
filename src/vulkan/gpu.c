@@ -1336,6 +1336,7 @@ void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
 // For pl_buf.priv
 struct pl_buf_vk {
     struct vk_bufslice slice;
+    VkBuffer import_buf; // for imported buffers
     int refcount; // 1 = object allocated but not in use, > 1 = in use
     int writes; // number of queued write commands
     enum queue_type update_queue;
@@ -1363,6 +1364,7 @@ static void vk_buf_deref(const struct pl_gpu *gpu, const struct pl_buf *buf)
     if (--buf_vk->refcount == 0) {
         vk_signal_destroy(vk, &buf_vk->sig);
         vk->DestroyBufferView(vk->dev, buf_vk->view, VK_ALLOC);
+        vk->DestroyBuffer(vk->dev, buf_vk->import_buf, VK_ALLOC);
         vk_free_memslice(p->alloc, buf_vk->slice.mem);
         talloc_free((void *) buf);
     }
@@ -1821,14 +1823,40 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         size = PL_ALIGN(size, vk->limits.nonCoherentAtomSize);
     }
 
-    if (!vk_malloc_buffer(p->alloc, bufFlags, memFlags, size, align,
-                          params->handle_type, &buf_vk->slice))
-        goto error;
+    if (params->import_handle) {
+        if (!vk_malloc_import(p->alloc, params->import_handle,
+                              &params->shared_mem, &buf_vk->slice.mem))
+            goto error;
+
+        uint32_t qfs[3] = {0};
+        for (int i = 0; i < vk->num_pools; i++)
+            qfs[i] = vk->pools[i]->qf;
+
+        VkBufferCreateInfo binfo = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size = params->shared_mem.size,
+            .usage = bufFlags,
+            .sharingMode = vk->num_pools > 1 ? VK_SHARING_MODE_CONCURRENT
+                                             : VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = vk->num_pools,
+            .pQueueFamilyIndices = qfs,
+        };
+
+        VK(vk->CreateBuffer(vk->dev, &binfo, VK_ALLOC, &buf_vk->import_buf));
+        VK_NAME(BUFFER, buf_vk->import_buf, "imported");
+        buf_vk->slice.buf = buf_vk->import_buf;
+
+        VK(vk->BindBufferMemory(vk->dev, buf_vk->import_buf, buf_vk->slice.mem.vkmem, 0));
+    } else {
+        if (!vk_malloc_buffer(p->alloc, bufFlags, memFlags, size, align,
+                              params->export_handle, &buf_vk->slice))
+            goto error;
+    }
 
     if (params->host_mapped)
         buf->data = buf_vk->slice.mem.data;
 
-    if (params->handle_type) {
+    if (params->export_handle) {
         buf->shared_mem = buf_vk->slice.mem.shared_mem;
         buf_vk->exported = true;
     }

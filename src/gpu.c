@@ -694,9 +694,14 @@ error:
 const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
                                    const struct pl_buf_params *params)
 {
-    if (params->handle_type) {
-        require(params->handle_type & gpu->export_caps.buf);
-        require(PL_ISPOT(params->handle_type));
+    require(!params->import_handle || !params->export_handle);
+    if (params->export_handle) {
+        require(params->export_handle & gpu->export_caps.buf);
+        require(PL_ISPOT(params->export_handle));
+    }
+    if (params->import_handle) {
+        require(params->import_handle & gpu->import_caps.buf);
+        require(PL_ISPOT(params->import_handle));
     }
 
     switch (params->type) {
@@ -825,7 +830,7 @@ error:
 
 bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
 {
-    require(buf->params.handle_type);
+    require(buf->params.export_handle || buf->params.import_handle);
 
     const struct pl_gpu_fns *impl = TA_PRIV(gpu);
     return impl->buf_export(gpu, buf);
