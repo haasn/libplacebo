@@ -75,6 +75,7 @@ static struct vk_cmd *vk_cmd_create(struct vk_ctx *vk, struct vk_cmdpool *pool)
     };
 
     VK(vk->CreateFence(vk->dev, &finfo, VK_ALLOC, &cmd->fence));
+    VK_NAME(FENCE, cmd->fence, "cmd");
 
     return cmd;
 
@@ -145,8 +146,10 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
     };
 
     // We can skip creating the semaphores if there's only one queue
-    if (vk->num_pools > 1 || vk->pools[0]->num_queues > 1)
+    if (vk->num_pools > 1 || vk->pools[0]->num_queues > 1) {
         VK(vk->CreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sig->semaphore));
+        VK_NAME(SEMAPHORE, sig->semaphore, "sig");
+    }
 
     static const VkEventCreateInfo einfo = {
         .sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO,
@@ -162,6 +165,7 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
             PL_INFO(vk, "VkEvent creation failed.. disabling events");
         } else {
             VK_ASSERT(res, "Creating VkEvent");
+            VK_NAME(EVENT, sig->event, "sig");
         }
     }
 

@@ -51,3 +51,15 @@ extern const enum pl_handle_type vk_sync_handle_list[];
         VkResult res ## __LINE__ = (cmd);                 \
         VK_ASSERT(res ## __LINE__, #cmd);                 \
     } while (0)
+
+#define VK_NAME(type, obj, name)                                                \
+    do {                                                                        \
+        if (vk->SetDebugUtilsObjectNameEXT) {                                   \
+            vk->SetDebugUtilsObjectNameEXT(vk->dev, &(VkDebugUtilsObjectNameInfoEXT) { \
+                .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,    \
+                .objectType = VK_OBJECT_TYPE_##type,                            \
+                .objectHandle = (uint64_t) (obj),                               \
+                .pObjectName = (name),                                          \
+            });                                                                 \
+        }                                                                       \
+    } while (0)

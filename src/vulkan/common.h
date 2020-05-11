@@ -118,6 +118,7 @@ struct vk_ctx {
     VK_FUN(BeginCommandBuffer);
     VK_FUN(BindBufferMemory);
     VK_FUN(BindImageMemory);
+    VK_FUN(CmdBeginDebugUtilsLabelEXT);
     VK_FUN(CmdBeginRenderPass);
     VK_FUN(CmdBindDescriptorSets);
     VK_FUN(CmdBindPipeline);
@@ -130,6 +131,7 @@ struct vk_ctx {
     VK_FUN(CmdCopyImageToBuffer);
     VK_FUN(CmdDispatch);
     VK_FUN(CmdDraw);
+    VK_FUN(CmdEndDebugUtilsLabelEXT);
     VK_FUN(CmdEndRenderPass);
     VK_FUN(CmdPipelineBarrier);
     VK_FUN(CmdPushConstants);
@@ -198,6 +200,7 @@ struct vk_ctx {
     VK_FUN(QueueSubmit);
     VK_FUN(ResetEvent);
     VK_FUN(ResetFences);
+    VK_FUN(SetDebugUtilsObjectNameEXT);
     VK_FUN(SetHdrMetadataEXT);
     VK_FUN(UpdateDescriptorSets);
     VK_FUN(WaitForFences);

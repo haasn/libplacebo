@@ -143,6 +143,9 @@ static const struct vk_ext vk_device_extensions[] = {
 };
 
 // List of mandatory device-level functions
+//
+// Note: Also includes VK_EXT_debug_utils functions, even though they aren't
+// mandatory, simply because we load that extension in a special way.
 static const struct vk_fun vk_dev_funs[] = {
     VK_DEV_FUN(AcquireNextImageKHR),
     VK_DEV_FUN(AllocateCommandBuffers),
@@ -151,6 +154,7 @@ static const struct vk_fun vk_dev_funs[] = {
     VK_DEV_FUN(BeginCommandBuffer),
     VK_DEV_FUN(BindBufferMemory),
     VK_DEV_FUN(BindImageMemory),
+    VK_DEV_FUN(CmdBeginDebugUtilsLabelEXT),
     VK_DEV_FUN(CmdBeginRenderPass),
     VK_DEV_FUN(CmdBindDescriptorSets),
     VK_DEV_FUN(CmdBindPipeline),
@@ -163,6 +167,7 @@ static const struct vk_fun vk_dev_funs[] = {
     VK_DEV_FUN(CmdCopyImageToBuffer),
     VK_DEV_FUN(CmdDispatch),
     VK_DEV_FUN(CmdDraw),
+    VK_DEV_FUN(CmdEndDebugUtilsLabelEXT),
     VK_DEV_FUN(CmdEndRenderPass),
     VK_DEV_FUN(CmdPipelineBarrier),
     VK_DEV_FUN(CmdPushConstants),
@@ -227,6 +232,7 @@ static const struct vk_fun vk_dev_funs[] = {
     VK_DEV_FUN(QueueSubmit),
     VK_DEV_FUN(ResetEvent),
     VK_DEV_FUN(ResetFences),
+    VK_DEV_FUN(SetDebugUtilsObjectNameEXT),
     VK_DEV_FUN(UpdateDescriptorSets),
     VK_DEV_FUN(WaitForFences),
 };
@@ -297,7 +303,9 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
         pl_msg(ctx, lev, "    inside %s", data->pCmdBufLabels[i].pLabelName);
     for (int i = 0; i < data->objectCount; i++) {
         const VkDebugUtilsObjectNameInfoEXT *obj = &data->pObjects[i];
-        pl_msg(ctx, lev, "    using %s: 0x%llx", vk_obj_str(obj->objectType),
+        pl_msg(ctx, lev, "    using %s: %s (0x%llx)",
+               vk_obj_str(obj->objectType),
+               obj->pObjectName ? obj->pObjectName : "anon",
                (unsigned long long) obj->objectHandle);
     }
 #endif
@@ -1085,12 +1093,22 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         TARRAY_APPEND(vk->ta, vk->pools, vk->num_pools, pool);
 
         // Update the pool_* pointers based on the corresponding index
-        if (qf == idx_gfx)
-            vk->pool_graphics = pool;
-        if (qf == idx_comp)
-            vk->pool_compute = pool;
-        if (qf == idx_tf)
+        const char *qf_name = NULL;
+        if (qf == idx_tf) {
             vk->pool_transfer = pool;
+            qf_name = "transfer";
+        }
+        if (qf == idx_comp) {
+            vk->pool_compute = pool;
+            qf_name = "compute";
+        }
+        if (qf == idx_gfx) {
+            vk->pool_graphics = pool;
+            qf_name = "graphics";
+        }
+
+        for (int n = 0; n < pool->num_queues; n++)
+            VK_NAME(QUEUE, pool->queues[n], qf_name);
     }
 
     talloc_free(tmp);

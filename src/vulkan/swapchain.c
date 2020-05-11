@@ -522,6 +522,9 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
     vkimages = talloc_zero_array(NULL, VkImage, num_images);
     VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, vkimages));
 
+    for (int i = 0; i < num_images; i++)
+        VK_NAME(IMAGE, vkimages[i], "swapchain");
+
     // If needed, allocate some more semaphores
     while (num_images > p->num_sems) {
         VkSemaphore sem_in = NULL, sem_out = NULL;
@@ -530,6 +533,9 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
         };
         VK(vk->CreateSemaphore(vk->dev, &seminfo, VK_ALLOC, &sem_in));
         VK(vk->CreateSemaphore(vk->dev, &seminfo, VK_ALLOC, &sem_out));
+
+        VK_NAME(SEMAPHORE, sem_in, "swapchain in");
+        VK_NAME(SEMAPHORE, sem_out, "swapchain out");
 
         int idx = p->num_sems++;
         TARRAY_GROW(sw, p->sems_in, idx);

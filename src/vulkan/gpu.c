@@ -96,6 +96,28 @@ static struct vk_cmd *vk_require_cmd(const struct pl_gpu *gpu,
     return p->cmd;
 }
 
+static inline bool supports_marks(struct vk_cmd *cmd) {
+    // Spec says debug markers are only available on graphics/compute queues
+    VkQueueFlags flags = cmd->pool->props.queueFlags;
+    return flags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
+}
+
+#define CMD_MARK_BEGIN(cmd)                                                     \
+    do {                                                                        \
+        if (vk->CmdBeginDebugUtilsLabelEXT && supports_marks(cmd)) {            \
+            vk->CmdBeginDebugUtilsLabelEXT(cmd->buf, &(VkDebugUtilsLabelEXT) {  \
+                .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,               \
+                .pLabelName = __func__,                                         \
+            });                                                                 \
+        }                                                                       \
+    } while (0)
+
+#define CMD_MARK_END(cmd)                                           \
+    do {                                                            \
+        if (vk->CmdEndDebugUtilsLabelEXT && supports_marks(cmd))    \
+            vk->CmdEndDebugUtilsLabelEXT(cmd->buf);                 \
+    } while (0)
+
 #define MAKE_LAZY_DESTRUCTOR(fun, argtype)                                  \
     static void fun##_lazy(const struct pl_gpu *gpu, const argtype *arg) {  \
         struct pl_vk *p = TA_PRIV(gpu);                                     \
@@ -653,7 +675,8 @@ static const VkFilter filters[] = {
 };
 
 // Initializes non-VkImage values like the image view, samplers, etc.
-static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
+static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                          const char *name)
 {
     struct pl_vk *p = TA_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
@@ -661,6 +684,7 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
     const struct pl_tex_params *params = &tex->params;
     struct pl_tex_vk *tex_vk = TA_PRIV(tex);
     pl_assert(tex_vk->img);
+    VK_NAME(IMAGE, tex_vk->img, name);
 
     tex_vk->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
     tex_vk->current_access = 0;
@@ -700,6 +724,7 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
         };
 
         VK(vk->CreateImageView(vk->dev, &vinfo, VK_ALLOC, &tex_vk->view));
+        VK_NAME(IMAGE_VIEW, tex_vk->view, name);
     }
 
     if (params->sampleable) {
@@ -720,6 +745,7 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
         };
 
         VK(vk->CreateSampler(vk->dev, &sinfo, VK_ALLOC, &tex_vk->sampler));
+        VK_NAME(SAMPLER, tex_vk->sampler, name);
     }
 
     if (params->renderable) {
@@ -754,6 +780,7 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex)
 
         VK(vk->CreateFramebuffer(vk->dev, &finfo, VK_ALLOC,
                                  &tex_vk->framebuffer));
+        VK_NAME(FRAMEBUFFER, tex_vk->framebuffer, name);
     }
 
     ret = true;
@@ -954,7 +981,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     if (params->import_handle)
         vk->ctx->suppress_errors_for_object = VK_NULL_HANDLE;
 
-    if (!vk_init_image(gpu, tex))
+    if (!vk_init_image(gpu, tex, params->import_handle ? "imported" : "created"))
         goto error;
 
     if (params->export_handle) {
@@ -1006,6 +1033,8 @@ static void vk_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
     if (!cmd)
         return;
 
+    CMD_MARK_BEGIN(cmd);
+
     tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -1025,6 +1054,8 @@ static void vk_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
                            &clearColor, 1, &range);
 
     tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+    CMD_MARK_END(cmd);
 }
 
 static void vk_tex_blit(const struct pl_gpu *gpu,
@@ -1039,6 +1070,8 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
     struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
     if (!cmd)
         return;
+
+    CMD_MARK_BEGIN(cmd);
 
     tex_barrier(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_READ_BIT,
@@ -1092,6 +1125,8 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
 
     tex_signal(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT);
     tex_signal(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+    CMD_MARK_END(cmd);
 }
 
 const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
@@ -1139,7 +1174,7 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
     tex_vk->img_fmt = imageFormat;
     tex_vk->usage_flags = imageUsage;
 
-    if (!vk_init_image(gpu, tex))
+    if (!vk_init_image(gpu, tex, "wrapped"))
         goto error;
 
     return tex;
@@ -1182,13 +1217,17 @@ bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
         return false;
     }
 
+    CMD_MARK_BEGIN(cmd);
+
     tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                 access, layout, false);
 
     vk_cmd_sig(cmd, sem_out);
+
+    CMD_MARK_END(cmd);
+
     vk_submit(gpu);
     tex_vk->held = vk_flush_commands(vk);
-
     return tex_vk->held;
 }
 
@@ -1426,6 +1465,8 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
             return;
         }
 
+        CMD_MARK_BEGIN(cmd);
+
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT, offset, size, false);
 
@@ -1458,6 +1499,8 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
 
         pl_assert(!buf->params.host_readable); // no flush needed due to this
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+        CMD_MARK_END(cmd);
     }
 }
 
@@ -1486,10 +1529,14 @@ static bool vk_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
         return false;
     }
 
+    CMD_MARK_BEGIN(cmd);
+
     // For the queue family ownership transfer, we can ignore all pipeline
     // stages since the synchronization via fences/semaphores is required
     buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
                 0, buf->params.size, true);
+
+    CMD_MARK_END(cmd);
 
     vk_submit(gpu);
     return vk_flush_commands(vk);
@@ -1623,6 +1670,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         };
 
         VK(vk->CreateBufferView(vk->dev, &vinfo, VK_ALLOC, &buf_vk->view));
+        VK_NAME(BUFFER_VIEW, buf_vk->view, "texel");
     }
 
     if (params->initial_data)
@@ -1750,6 +1798,8 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         if (!cmd)
             goto error;
 
+        CMD_MARK_BEGIN(cmd);
+
         struct pl_buf_vk *tbuf_vk = TA_PRIV(tbuf);
         VkBufferCopy region = {
             .srcOffset = buf_vk->slice.mem.offset + params->buf_offset,
@@ -1767,6 +1817,8 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
 
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_signal(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+        CMD_MARK_END(cmd);
 
         struct pl_tex_transfer_params fixed = *params;
         fixed.buf = tbuf;
@@ -1794,6 +1846,8 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         if (!cmd)
             goto error;
 
+        CMD_MARK_BEGIN(cmd);
+
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_READ_BIT, params->buf_offset, size,
                     false);
@@ -1804,6 +1858,8 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
                                  tex_vk->current_layout, 1, &region);
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+        CMD_MARK_END(cmd);
     }
 
     return true;
@@ -1861,6 +1917,8 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         if (!cmd)
             goto error;
 
+        CMD_MARK_BEGIN(cmd);
+
         struct pl_buf_vk *tbuf_vk = TA_PRIV(tbuf);
         VkBufferCopy region = {
             .srcOffset = tbuf_vk->slice.mem.offset,
@@ -1878,6 +1936,8 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         buf_signal(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_flush(gpu, cmd, buf, params->buf_offset, size);
+
+        CMD_MARK_END(cmd);
 
     } else {
 
@@ -1898,6 +1958,8 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         if (!cmd)
             goto error;
 
+        CMD_MARK_BEGIN(cmd);
+
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size,
                     false);
@@ -1909,6 +1971,8 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_flush(gpu, cmd, buf, params->buf_offset, size);
+
+        CMD_MARK_END(cmd);
     }
 
     return true;
@@ -2222,10 +2286,12 @@ no_descriptors: ;
         sinfo.pCode = (uint32_t *) vert.start;
         sinfo.codeSize = vert.len;
         VK(vk->CreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &vert_shader));
+        VK_NAME(SHADER_MODULE, vert_shader, "vertex");
 
         sinfo.pCode = (uint32_t *) frag.start;
         sinfo.codeSize = frag.len;
         VK(vk->CreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &frag_shader));
+        VK_NAME(SHADER_MODULE, frag_shader, "fragment");
 
         VkVertexInputAttributeDescription *attrs = talloc_array(tmp,
                 VkVertexInputAttributeDescription, params->num_vertex_attribs);
@@ -2380,6 +2446,7 @@ no_descriptors: ;
         sinfo.pCode = (uint32_t *)comp.start;
         sinfo.codeSize = comp.len;
         VK(vk->CreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &comp_shader));
+        VK_NAME(SHADER_MODULE, comp_shader, "compute");
 
         VkComputePipelineCreateInfo cinfo = {
             .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
@@ -2650,6 +2717,8 @@ static void vk_pass_run(const struct pl_gpu *gpu,
     if (!cmd)
         goto error;
 
+    CMD_MARK_BEGIN(cmd);
+
     // Find a descriptor set to use
     VkDescriptorSet ds = VK_NULL_HANDLE;
     if (!pass_vk->use_pushd) {
@@ -2762,6 +2831,8 @@ static void vk_pass_run(const struct pl_gpu *gpu,
     for (int i = 0; i < pass->params.num_descriptors; i++)
         vk_release_descriptor(gpu, cmd, pass, params->desc_bindings[i], i);
 
+    CMD_MARK_END(cmd);
+
     // flush the work so far into its own command buffer, for better
     // intra-frame granularity
     pl_assert(cmd == p->cmd); // make sure this is still the case
@@ -2858,6 +2929,8 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
 
     VK(vk->CreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sync_vk->wait));
     VK(vk->CreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sync_vk->signal));
+    VK_NAME(SEMAPHORE, sync_vk->wait, "sync wait");
+    VK_NAME(SEMAPHORE, sync_vk->signal, "sync signal");
 
 #ifdef VK_HAVE_UNIX
     if (handle_type == PL_HANDLE_FD) {
@@ -2922,10 +2995,15 @@ static bool vk_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
     if (!cmd)
         goto error;
 
+    CMD_MARK_BEGIN(cmd);
+
     tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                 0, VK_IMAGE_LAYOUT_GENERAL, true);
 
     vk_cmd_sig(cmd, sync_vk->wait);
+
+    CMD_MARK_END(cmd);
+
     vk_submit(gpu);
     if (!vk_flush_commands(vk))
         goto error;
