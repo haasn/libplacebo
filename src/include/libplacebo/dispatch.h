@@ -39,8 +39,19 @@ struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp);
 // shader execution will be rendered to `target`. Returns whether or not the
 // dispatch was successful. This operation will take over ownership of the
 // pl_shader passed to it, and return it back to the internal pool.
+//
 // If `rc` is NULL, renders to the entire texture.
 // If set, `blend_params` enables and controls blending for this pass.
+//
+// Note: `target` must have params compatible with the shader, i.e.
+// `target->params.renderable` for fragment shaders and
+// `target->params.storable` for compute shaders. Additionally, for fragment
+// shaders only, use of `blend_params` requires the target be created with a
+// `pl_fmt` that includes `PL_FMT_CAP_BLENDABLE`.
+//
+// Note: Even when not using compute shaders, users are advised to always set
+// `target->params.storable` if permitted by the `pl_fmt`, for efficiency
+// reasons.
 bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **sh,
                         const struct pl_tex *target, const struct pl_rect2d *rc,
                         const struct pl_blend_params *blend_params);
