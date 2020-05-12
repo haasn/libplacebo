@@ -343,8 +343,8 @@ bool pl_vulkan_swapchain_suboptimal(const struct pl_swapchain *sw);
 //
 // This function may fail, for example if the VkFormat specified does not
 // map to any corresponding `pl_fmt`.
-const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
-                                    VkImage image, int w, int h, int d,
+const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu, VkImage image,
+                                    int width, int height, int depth,
                                     VkFormat format, VkImageUsageFlags usage);
 
 // Analogous to `pl_vulkan_wrap`, this function takes any `pl_tex` (including
