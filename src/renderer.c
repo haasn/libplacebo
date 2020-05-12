@@ -818,7 +818,7 @@ static bool plane_av1_grain(struct pl_renderer *rr, int plane_idx,
 
 // This scales and merges all of the source images, and initializes the cur_img.
 static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
-                            const struct pl_image *image,
+                            struct pl_image *image,
                             const struct pl_render_params *params)
 {
     struct pl_shader *sh = pl_dispatch_begin_ex(rr->dp, true);
@@ -870,15 +870,15 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     // Original ref texture, even after preprocessing
     const struct pl_tex *ref_tex = ref->plane.texture;
 
-    struct pl_rect2df src_rect = image->src_rect;
-    if (!pl_rect_w(src_rect)) {
-        src_rect.x0 = 0;
-        src_rect.x1 = ref_tex->params.w;
+    // At this point in time we can finally infer src_rect to ensure it's valid
+    if (!pl_rect_w(image->src_rect)) {
+        image->src_rect.x0 = 0;
+        image->src_rect.x1 = ref_tex->params.w;
     }
 
-    if (!pl_rect_h(src_rect)) {
-        src_rect.y0 = 0;
-        src_rect.y1 = ref_tex->params.h;
+    if (!pl_rect_h(image->src_rect)) {
+        image->src_rect.y0 = 0;
+        image->src_rect.y1 = ref_tex->params.h;
     }
 
     // Do a second pass to compute the rc of each plane
@@ -897,10 +897,10 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
               sy = st->plane.shift_y;
 
         st->rc = (struct pl_rect2df) {
-            .x0 = src_rect.x0 / rrx - sx / rx,
-            .y0 = src_rect.y0 / rry - sy / ry,
-            .x1 = src_rect.x1 / rrx - sx / rx,
-            .y1 = src_rect.y1 / rry - sy / ry,
+            .x0 = image->src_rect.x0 / rrx - sx / rx,
+            .y0 = image->src_rect.y0 / rry - sy / ry,
+            .x1 = image->src_rect.x1 / rrx - sx / rx,
+            .y1 = image->src_rect.y1 / rry - sy / ry,
         };
 
         if (st == ref) {
@@ -1090,6 +1090,7 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         .w      = src.new_w,
         .h      = src.new_h,
         .repr   = img->repr,
+        .rect   = { 0, 0, src.new_w, src.new_h },
         .color  = img->color,
         .comps  = img->comps,
     };
@@ -1256,9 +1257,6 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     if (!pass_read_image(rr, &pass, &image, params))
         goto error;
 
-    // The rect of the image before scaling, as a reference
-    struct pl_rect2df rc_image = pass.cur_img.rect;
-
     if (!pass_scale_main(rr, &pass, &image, &target, params))
         goto error;
 
@@ -1268,14 +1266,14 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     // If we don't have FBOs available, simulate the on-image overlays at
     // this stage
     if (image.num_overlays > 0 && !FBOFMT) {
-        float rx = pl_rect_w(target.dst_rect) / pl_rect_w(rc_image),
-              ry = pl_rect_h(target.dst_rect) / pl_rect_h(rc_image);
+        float rx = pl_rect_w(target.dst_rect) / pl_rect_w(image.src_rect),
+              ry = pl_rect_h(target.dst_rect) / pl_rect_h(image.src_rect);
 
         struct pl_transform2x2 scale = {
             .mat = {{{ rx, 0.0 }, { 0.0, ry }}},
             .c = {
-                target.dst_rect.x0 - rc_image.x0 * rx,
-                target.dst_rect.y0 - rc_image.y0 * ry
+                target.dst_rect.x0 - image.src_rect.x0 * rx,
+                target.dst_rect.y0 - image.src_rect.y0 * ry
             },
         };
 
