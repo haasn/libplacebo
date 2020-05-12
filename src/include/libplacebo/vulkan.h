@@ -318,6 +318,36 @@ bool pl_vulkan_swapchain_suboptimal(const struct pl_swapchain *sw);
 
 // VkImage interop API
 
+struct pl_vulkan_wrap_params {
+    // The image itself. It *must* be usable concurrently by all of the queue
+    // family indices listed in `pl_vulkan->queues`. Note that this requires
+    // the use of VK_SHARING_MODE_CONCURRENT if `pl_vulkan->num_queues` is
+    // greater than 1. If this is difficult to achieve for the user, then
+    // `async_transfer` / `async_compute` should be turned off, which
+    // guarantees the use of only one queue family.
+    VkImage image;
+
+    // The image's dimensions (unused dimensions must be 0)
+    int width;
+    int height;
+    int depth;
+
+    // The image's format. libplacebo will try to map this to an equivalent
+    // pl_fmt. If no compatible pl_fmt is found, wrapping will fail.
+    VkFormat format;
+
+    // The usage flags the image was created with. libplacebo will set the
+    // pl_tex capabilities to include whatever it can, as determined by the set
+    // of enabled usage flags.
+    VkImageUsageFlags usage;
+
+    // The desired sampling / address modes of the resulting `pl_tex`. Note
+    // that PL_TEX_SAMPLE_LINEAR requires that `format` be a linearly
+    // sampleable texture format.
+    enum pl_tex_sample_mode sample_mode;
+    enum pl_tex_address_mode address_mode;
+};
+
 // Wraps an external VkImage into a pl_tex abstraction. By default, the image
 // is considered "held" by the user and will not be touched or used by
 // libplacebo until released (see `pl_vulkan_release`). Releasing an image
@@ -334,18 +364,9 @@ bool pl_vulkan_swapchain_suboptimal(const struct pl_swapchain *sw);
 // to wrap an image belonging to a different VkDevice than the one in use by
 // `gpu`.
 //
-// The VkImage must be usable concurrently by all of the queue family indices
-// listed in `pl_vulkan->queues`. Note that this requires the use of
-// VK_SHARING_MODE_CONCURRENT if `pl_vulkan->num_queues` is greater than 1. If
-// this is difficult to achieve for the user, then `async_transfer` /
-// `async_compute` should be turned off, which guarantees the use of only one
-// queue family.
-//
-// This function may fail, for example if the VkFormat specified does not
-// map to any corresponding `pl_fmt`.
-const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu, VkImage image,
-                                    int width, int height, int depth,
-                                    VkFormat format, VkImageUsageFlags usage);
+// This function may fail, in which case it returns NULL.
+const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
+                                    const struct pl_vulkan_wrap_params *params);
 
 // Analogous to `pl_vulkan_wrap`, this function takes any `pl_tex` (including
 // one created by libplacebo) and unwraps it to expose the underlying VkImage

@@ -552,8 +552,13 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
     TARRAY_GROW(sw, p->images, num_images);
     for (int i = 0; i < num_images; i++) {
         const VkExtent2D *ext = &sinfo.imageExtent;
-        p->images[i] = pl_vulkan_wrap(gpu, vkimages[i], ext->width, ext->height,
-                                      0, sinfo.imageFormat, sinfo.imageUsage);
+        p->images[i] = pl_vulkan_wrap(gpu, &(struct pl_vulkan_wrap_params) {
+            .image = vkimages[i],
+            .width = ext->width,
+            .height = ext->height,
+            .format = sinfo.imageFormat,
+            .usage = sinfo.imageUsage,
+        });
         if (!p->images[i])
             goto error;
     }

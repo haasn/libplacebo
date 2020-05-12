@@ -1135,16 +1135,14 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
 }
 
 const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
-                                    VkImage image, int w, int h, int d,
-                                    VkFormat imageFormat,
-                                    VkImageUsageFlags imageUsage)
+                                    const struct pl_vulkan_wrap_params *params)
 {
     struct pl_tex *tex = NULL;
 
     const struct pl_fmt *format = NULL;
     for (int i = 0; i < gpu->num_formats; i++) {
         const struct vk_format **fmt = TA_PRIV(gpu->formats[i]);
-        if ((*fmt)->tfmt == imageFormat) {
+        if ((*fmt)->tfmt == params->format) {
             format = gpu->formats[i];
             break;
         }
@@ -1152,32 +1150,42 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
 
     if (!format) {
         PL_ERR(gpu, "Could not find pl_fmt suitable for wrapped image "
-               "with VkFormat 0x%x\n", (unsigned) imageFormat);
+               "with VkFormat 0x%x", (unsigned) params->format);
+        goto error;
+    }
+
+    if (params->sample_mode == PL_TEX_SAMPLE_LINEAR &&
+        !(format->caps & PL_FMT_CAP_LINEAR))
+    {
+        PL_ERR(gpu, "Image format '%s' is not compatible with "
+               "PL_TEX_SAMPLE_LINEAR", format->name);
         goto error;
     }
 
     tex = talloc_zero_priv(NULL, struct pl_tex, struct pl_tex_vk);
     tex->params = (struct pl_tex_params) {
         .format = format,
-        .w = w,
-        .h = h,
-        .d = d,
-        .sampleable  = !!(imageUsage & VK_IMAGE_USAGE_SAMPLED_BIT),
-        .renderable  = !!(imageUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
-        .storable    = !!(imageUsage & VK_IMAGE_USAGE_STORAGE_BIT),
-        .blit_src    = !!(imageUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
-        .blit_dst    = !!(imageUsage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
-        .host_writable = !!(imageUsage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
-        .host_readable = !!(imageUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
+        .w = params->width,
+        .h = params->height,
+        .d = params->depth,
+        .sampleable  = !!(params->usage & VK_IMAGE_USAGE_SAMPLED_BIT),
+        .renderable  = !!(params->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
+        .storable    = !!(params->usage & VK_IMAGE_USAGE_STORAGE_BIT),
+        .blit_src    = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
+        .blit_dst    = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
+        .host_writable = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
+        .host_readable = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
+        .address_mode = params->address_mode,
+        .sample_mode = params->sample_mode,
     };
 
     struct pl_tex_vk *tex_vk = TA_PRIV(tex);
     tex_vk->type = VK_IMAGE_TYPE_2D;
     tex_vk->external_img = true;
     tex_vk->held = true;
-    tex_vk->img = image;
-    tex_vk->img_fmt = imageFormat;
-    tex_vk->usage_flags = imageUsage;
+    tex_vk->img = params->image;
+    tex_vk->img_fmt = params->format;
+    tex_vk->usage_flags = params->usage;
 
     if (!vk_init_image(gpu, tex, "wrapped"))
         goto error;
