@@ -686,14 +686,10 @@ static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
     if (!vk_flush_commands(vk))
         return false;
 
-    vk_rotate_queues(p->vk);
-
-    // Older nvidia drivers can spontaneously combust when submitting to the
-    // same queue as we're rendering from, in a multi-queue scenario. Safest
-    // option is to flush the commands first and then submit to the next queue.
-    // We can drop this hack in the future, I suppose.
     struct vk_cmdpool *pool = vk->pool_graphics;
     VkQueue queue = pool->queues[pool->idx_queues];
+
+    vk_rotate_queues(p->vk);
 
     VkPresentInfoKHR pinfo = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
