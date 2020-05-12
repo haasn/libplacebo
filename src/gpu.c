@@ -1395,7 +1395,7 @@ bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
 
     GLSL("imageStore(%s, %s(pos), color);\n", img, coord_types[dims]);
     int groups[3] = { groups_x, pl_rect_h(params->rc), pl_rect_d(params->rc) };
-    return pl_dispatch_compute(dp, &sh, groups);
+    return pl_dispatch_compute(dp, &sh, groups, 0, 0);
 
 error:
     return false;
@@ -1458,7 +1458,7 @@ bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     GLSL("}\n");
 
     int groups[3] = { groups_x, pl_rect_h(params->rc), pl_rect_d(params->rc) };
-    return pl_dispatch_compute(dp, &sh, groups);
+    return pl_dispatch_compute(dp, &sh, groups, 0, 0);
 
 error:
     return false;

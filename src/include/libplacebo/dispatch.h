@@ -59,11 +59,16 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **sh,
 // A variant of `pl_dispatch_finish`, this one only dispatches a compute shader
 // that has no output.
 //
+// Note: As an additonal feature, this function supports simulating vertex
+// attributes (in the style of `pl_dispatch_finish`). The use of this
+// functionality requires the user specify the effective rendering width/height.
+// Leaving these as 0 disables this feature.
+//
 // Note: There is currently no way to actually construct such a shader with the
 // currently available public APIs. (However, it's still used internally, and
 // may be needed in the future)
 bool pl_dispatch_compute(struct pl_dispatch *dp, struct pl_shader **sh,
-                         int dispatch_size[3]);
+                         int dispatch_size[3], int width, int height);
 
 // Cancel an active shader without submitting anything. Useful, for example,
 // if the shader was instead merged into a different shader.

@@ -725,15 +725,11 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
     };
 }
 
-static void translate_compute_shader(struct pl_dispatch *dp,
-                                     struct pl_shader *sh,
-                                     const struct pl_tex *target,
-                                     const struct pl_rect2d *rc,
-                                     const struct pl_blend_params *blend)
+static void compute_vertex_attribs(struct pl_dispatch *dp, struct pl_shader *sh,
+                                   int width, int height, ident_t *out_scale)
 {
     // Simulate vertex attributes using global definitions
-    int width = abs(pl_rect_w(*rc)), height = abs(pl_rect_h(*rc));
-    ident_t out_scale = sh_var(sh, (struct pl_shader_var) {
+    *out_scale = sh_var(sh, (struct pl_shader_var) {
         .var     = pl_var_vec2("out_scale"),
         .data    = &(float[2]){ 1.0 / width, 1.0 / height },
         .dynamic = true,
@@ -742,7 +738,7 @@ static void translate_compute_shader(struct pl_dispatch *dp,
     GLSLP("#define frag_pos(id) (vec2(id) + vec2(0.5)) \n"
           "#define frag_map(id) (%s * frag_pos(id))    \n"
           "#define gl_FragCoord vec4(frag_pos(gl_GlobalInvocationID), 0.0, 1.0) \n",
-          out_scale);
+          *out_scale);
 
     for (int n = 0; n < sh->res.num_vertex_attribs; n++) {
         const struct pl_shader_va *sva = &sh->res.vertex_attribs[n];
@@ -763,6 +759,17 @@ static void translate_compute_shader(struct pl_dispatch *dp,
              points[0], points[1], points[2], points[3],
              sva->attr.name, sva->attr.name);
     }
+}
+
+static void translate_compute_shader(struct pl_dispatch *dp,
+                                     struct pl_shader *sh,
+                                     const struct pl_tex *target,
+                                     const struct pl_rect2d *rc,
+                                     const struct pl_blend_params *blend)
+{
+    int width = abs(pl_rect_w(*rc)), height = abs(pl_rect_h(*rc));
+    ident_t out_scale;
+    compute_vertex_attribs(dp, sh, width, height, &out_scale);
 
     // Simulate a framebuffer using storage images
     pl_assert(target->params.storable);
@@ -952,7 +959,7 @@ error:
 }
 
 bool pl_dispatch_compute(struct pl_dispatch *dp, struct pl_shader **psh,
-                         int dispatch_size[3])
+                         int dispatch_size[3], int width, int height)
 {
     struct pl_shader *sh = *psh;
     const struct pl_shader_res *res = &sh->res;
@@ -980,9 +987,14 @@ bool pl_dispatch_compute(struct pl_dispatch *dp, struct pl_shader **psh,
     }
 
     if (sh->res.num_vertex_attribs) {
-        PL_ERR(dp, "Trying to dispatch a targetless compute shader that uses "
-               "vertex attributes!");
-        goto error;
+        if (!width || !height) {
+            PL_ERR(dp, "Trying to dispatch a targetless compute shader that "
+                   "uses vertex attributes, this requires specifying the size "
+                   "of the effective rendering area!");
+            goto error;
+        }
+
+        compute_vertex_attribs(dp, sh, width, height, &(ident_t){0});
     }
 
     struct pass *pass = find_pass(dp, sh, NULL, NULL, NULL, false);
