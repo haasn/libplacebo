@@ -349,11 +349,8 @@ struct pl_vulkan_wrap_params {
 };
 
 // Wraps an external VkImage into a pl_tex abstraction. By default, the image
-// is considered "held" by the user and will not be touched or used by
-// libplacebo until released (see `pl_vulkan_release`). Releasing an image
-// makes libplacebo take ownership of the image until the user calls
-// `pl_vulkan_hold` on it again. During this time, the user should not use
-// the VkImage in any way.
+// is considered "held" by the user and must be released before calling any
+// pl_tex_* API calls on it (see `pl_vulkan_release`).
 //
 // This wrapper can be destroyed by simply calling `pl_tex_destroy` on it,
 // which will not destroy the underlying VkImage. If a pl_tex wrapper is
@@ -369,10 +366,10 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
                                     const struct pl_vulkan_wrap_params *params);
 
 // Analogous to `pl_vulkan_wrap`, this function takes any `pl_tex` (including
-// one created by libplacebo) and unwraps it to expose the underlying VkImage
-// to the user. Unlike `pl_vulkan_wrap`, this `pl_tex` is *not* considered held
-// by default - the user must explicitly `pl_vulkan_hold` before accessing the
-// VkImage for the first time.
+// ones created by `pl_tex_create`) and unwraps it to expose the underlying
+// VkImage to the user. Unlike `pl_vulkan_wrap`, this `pl_tex` is *not*
+// considered held after calling this function - the user must explicitly
+// `pl_vulkan_hold` before accessing the VkImage.
 //
 // `out_format` and `out_flags` will be updated to hold the VkImage's
 // format and usage flags. (Optional)
