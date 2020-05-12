@@ -667,9 +667,13 @@ static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
     VkSemaphore sem_out = p->sems_out[p->idx_sems++];
     p->idx_sems %= p->num_sems;
 
-    pl_vulkan_hold(gpu, p->images[p->last_imgidx],
-                   VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                   VK_ACCESS_MEMORY_READ_BIT, sem_out);
+    bool held = pl_vulkan_hold(gpu, p->images[p->last_imgidx],
+                               VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                               VK_ACCESS_MEMORY_READ_BIT, sem_out);
+    if (!held) {
+        PL_ERR(gpu, "Failed holding swapchain image for presentation");
+        return false;
+    }
 
     struct vk_cmd *cmd = pl_vk_steal_cmd(gpu);
     if (!cmd)
