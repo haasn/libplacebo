@@ -1748,14 +1748,15 @@ static enum queue_type vk_img_copy_queue(const struct pl_gpu *gpu,
                                          const struct VkBufferImageCopy *region,
                                          const struct pl_tex *tex)
 {
-    const struct pl_tex_vk *tex_vk = TA_PRIV(tex);
-    enum queue_type queue = tex_vk->transfer_queue;
-    if (queue != TRANSFER)
-        return queue;
-
     struct pl_vk *p = TA_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    VkExtent3D alignment = vk->transfer_alignment;
+
+    const struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    enum queue_type queue = tex_vk->transfer_queue;
+    if (queue != TRANSFER || !vk->pool_transfer)
+        return queue;
+
+    VkExtent3D alignment = vk->pool_transfer->props.minImageTransferGranularity;
 
     enum queue_type fallback = GRAPHICS;
     if (gpu->caps & PL_GPU_CAP_PARALLEL_COMPUTE)

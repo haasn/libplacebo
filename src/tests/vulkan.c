@@ -228,6 +228,23 @@ int main()
         gpu_tests(vk->gpu);
         vulkan_swapchain_tests(vk, surf);
 
+        // Test importing this context via the vulkan interop API
+        struct pl_vulkan_import_params iparams = {
+            .instance = vk->instance,
+            .phys_device = vk->phys_device,
+            .device = vk->device,
+
+            .extensions = vk->extensions,
+            .num_extensions = vk->num_extensions,
+            .features = vk->features,
+            .queue_graphics = vk->queue_graphics,
+            .queue_compute = vk->queue_compute,
+            .queue_transfer = vk->queue_transfer,
+        };
+        const struct pl_vulkan *vk2 = pl_vulkan_import(ctx, &iparams);
+        REQUIRE(vk2);
+        pl_vulkan_destroy(&vk2);
+
         // Run these tests last because they disable some validation layers
 #ifdef VK_HAVE_UNIX
         vulkan_interop_tests(vk, PL_HANDLE_FD);
@@ -238,6 +255,7 @@ int main()
         vulkan_interop_tests(vk, PL_HANDLE_WIN32);
         vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
+
         pl_vulkan_destroy(&vk);
 
         // Re-run the same export/import tests with async queues disabled
@@ -255,6 +273,7 @@ int main()
         vulkan_interop_tests(vk, PL_HANDLE_WIN32);
         vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
+
         pl_vulkan_destroy(&vk);
 
         // Reduce log spam after first tested device

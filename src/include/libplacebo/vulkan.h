@@ -103,6 +103,11 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
 
 void pl_vk_inst_destroy(const struct pl_vk_inst **inst);
 
+struct pl_vulkan_queue {
+    uint32_t index; // Queue family index
+    uint32_t count; // Queue family count
+};
+
 // Structure representing the actual vulkan device and associated GPU instance
 struct pl_vulkan {
     const struct pl_gpu *gpu;
@@ -124,16 +129,25 @@ struct pl_vulkan {
     const char **extensions;
     int num_extensions;
 
-    // The list of enabled queue families and their queue counts. This may
-    // include secondary queue families providing compute or transfer
-    // capabilities.
+    // The device features that were enabled at device creation time.
+    const VkPhysicalDeviceFeatures *features;
+
+    // The explicit queue families we are using to provide a given capability,
+    // or {0} if no appropriate dedicated queue family exists for this
+    // operation type.
+    //
+    // It's guaranteed that `queue_graphics` is always set, but the existence
+    // of the other two is optional, and libplacebo will only set them if
+    // they are different from the graphics queue. Note that queue_compute
+    // and queue_transfer may refer to the same queue family index.
+    struct pl_vulkan_queue queue_graphics; // provides VK_QUEUE_GRAPHICS_BIT
+    struct pl_vulkan_queue queue_compute;  // provides VK_QUEUE_COMPUTE_BIT
+    struct pl_vulkan_queue queue_transfer; // provides VK_QUEUE_TRANSFER_BIT
+
+    // For convenience, these are the same enabled queue families and their
+    // queue counts in list form. This list does not contain duplicates.
     const struct pl_vulkan_queue *queues;
     int num_queues;
-};
-
-struct pl_vulkan_queue {
-    int index; // Queue family index
-    int count; // Queue family count
 };
 
 struct pl_vulkan_params {
@@ -220,12 +234,14 @@ struct pl_vulkan_params {
     const char **opt_extensions;
     int num_opt_extensions;
 
+    // --- Misc/debugging options
+
     // Restrict specific features to e.g. work around driver bugs, or simply
     // for testing purposes
     pl_gpu_caps blacklist_caps; // capabilities to be excluded
     int max_glsl_version;       // limit the maximum GLSL version
     bool disable_events;        // disables usage of VkEvent completely
-    uint32_t max_api_version;   // limit that maximum vulkan API version
+    uint32_t max_api_version;   // limit the maximum vulkan API version
 };
 
 // Default/recommended parameters. Should generally be safe and efficient.
@@ -316,7 +332,69 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *vk
 // who have `params->allow_suboptimal` enabled.
 bool pl_vulkan_swapchain_suboptimal(const struct pl_swapchain *sw);
 
-// VkImage interop API
+// Vulkan interop API, for sharing a single VkDevice (and associated vulkan
+// resources) directly with the API user. The use of this API is a bit sketchy
+// and requires careful communication of Vulkan API state.
+
+struct pl_vulkan_import_params {
+    // The vulkan instance. Required.
+    //
+    // NOTE: The VkInstance provided by the user *MUST* be created with the
+    // `VK_KHR_get_physical_device_properties2` extension enabled!
+    VkInstance instance;
+
+    // Pointer to `vkGetInstanceProcAddr`. If this is NULL, libplacebo will
+    // use the directly linked version (if available).
+    PFN_vkGetInstanceProcAddr get_proc_addr;
+
+    // The physical device selected by the user. Required.
+    VkPhysicalDevice phys_device;
+
+    // The logical device created by the user. Required.
+    VkDevice device;
+
+    // --- Logical device parameters
+
+    // List of all device-level extensions that were enabled. (Instance-level
+    // extensions need not be re-specified here, since it's guaranteed that any
+    // instance-level extensions that device-level extensions depend on were
+    // enabled at the instance level)
+    const char **extensions;
+    int num_extensions;
+
+    // Enabled queue families. At least `queue_graphics` is required.
+    //
+    // It's okay for multiple queue families to be specified with the same
+    // index, e.g. in the event that a dedicated compute queue also happens to
+    // be the dedicated transfer queue.
+    //
+    // It's also okay to leave the queue struct as {0} in the event that no
+    // dedicated queue exists for a given operation type. libplacebo will
+    // automatically fall back to using e.g. the graphics queue instead.
+    struct pl_vulkan_queue queue_graphics; // must support VK_QUEUE_GRAPHICS_BIT
+    struct pl_vulkan_queue queue_compute;  // must support VK_QUEUE_COMPUTE_BIT
+    struct pl_vulkan_queue queue_transfer; // must support VK_QUEUE_TRANSFER_BIT
+
+    // Enabled VkPhysicalDeviceFeatures. May be left as NULL, in which case
+    // libplacebo will assume no extra device features were enabled.
+    const VkPhysicalDeviceFeatures *features;
+
+    // --- Misc/debugging options
+
+    // Restrict specific features to e.g. work around driver bugs, or simply
+    // for testing purposes. See `pl_vulkan_params` for a description of these.
+    pl_gpu_caps blacklist_caps;
+    int max_glsl_version;
+    bool disable_events;
+    uint32_t max_api_version;
+};
+
+// Import an existing VkDevice instead of creating a new one, and wrap it into
+// a `pl_vulkan` abstraction. It's safe to `pl_vulkan_destroy` this, which will
+// destroy application state related to libplacebo but leave the underlying
+// VkDevice intact.
+const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
+                                         const struct pl_vulkan_import_params *params);
 
 struct pl_vulkan_wrap_params {
     // The image itself. It *must* be usable concurrently by all of the queue
@@ -364,6 +442,14 @@ struct pl_vulkan_wrap_params {
 // This function may fail, in which case it returns NULL.
 const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
                                     const struct pl_vulkan_wrap_params *params);
+
+// For purely informative reasons, this contains a list of extensions and
+// device features that libplacebo *can* make use of. These are all strictly
+// optional, but provide a hint to the API user as to what might be worth
+// enabling at device creation time.
+extern const char * const pl_vulkan_recommended_extensions[];
+extern const int pl_vulkan_num_recommended_extensions;
+extern const VkPhysicalDeviceFeatures pl_vulkan_recommended_features;
 
 // Analogous to `pl_vulkan_wrap`, this function takes any `pl_tex` (including
 // ones created by `pl_tex_create`) and unwraps it to expose the underlying

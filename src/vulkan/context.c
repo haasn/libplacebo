@@ -142,6 +142,34 @@ static const struct vk_ext vk_device_extensions[] = {
     },
 };
 
+// Make sure to keep this in sync with the above!
+const char * const pl_vulkan_recommended_extensions[] = {
+    VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
+    VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+    VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+    VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
+    VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
+    VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
+#ifdef VK_HAVE_WIN32
+    VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
+    VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
+#endif
+    VK_EXT_PCI_BUS_INFO_EXTENSION_NAME,
+    VK_EXT_HDR_METADATA_EXTENSION_NAME,
+};
+
+const int pl_vulkan_num_recommended_extensions =
+    PL_ARRAY_SIZE(pl_vulkan_recommended_extensions);
+
+const VkPhysicalDeviceFeatures pl_vulkan_recommended_features = {
+    .shaderImageGatherExtended = true,
+
+    // Needed for GPU-assisted validation, but not harmful to enable always.
+    .fragmentStoresAndAtomics = true,
+    .vertexPipelineStoresAndAtomics = true,
+    .shaderInt64 = true,
+};
+
 // List of mandatory device-level functions
 //
 // Note: Also includes VK_EXT_debug_utils functions, even though they aren't
@@ -725,7 +753,9 @@ void pl_vulkan_destroy(const struct pl_vulkan **pl_vk)
             vk_cmdpool_destroy(vk, vk->pools[i]);
         for (int i = 0; i < vk->num_signals; i++)
             vk_signal_destroy(vk, &vk->signals[i]);
-        vk->DestroyDevice(vk->dev, VK_ALLOC);
+
+        if (!vk->imported)
+            vk->DestroyDevice(vk->dev, VK_ALLOC);
     }
 
     pl_vk_inst_destroy(&vk->internal_instance);
@@ -975,10 +1005,6 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     if (idx_comp >= 0 && idx_comp != idx_gfx)
         PL_INFO(vk, "Using async compute (QF %d)", idx_comp);
 
-    // Cache the transfer queue alignment requirements
-    if (idx_tf >= 0)
-        vk->transfer_alignment = qfs[idx_tf].minImageTransferGranularity;
-
     // Now that we know which QFs we want, we can create the logical device
     VkDeviceQueueCreateInfo *qinfos = NULL;
     int num_qinfos = 0;
@@ -1041,17 +1067,14 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         }
     }
 
-    // Enable all features that we might need (whitelisted)
+    // Enable all features that we might need, by iterating through the entire
+    // VkPhysicalDeviceFeatures struct as a VkBool32 array and checking each
+    // supported feature against the whitelist of features we want
     vk->GetPhysicalDeviceFeatures(vk->physd, &vk->features);
-#define FEATURE(name) .name = vk->features.name
-    vk->features = (VkPhysicalDeviceFeatures) {
-        FEATURE(shaderImageGatherExtended),
-        // Needed for GPU-assisted validation
-        FEATURE(fragmentStoresAndAtomics),
-        FEATURE(vertexPipelineStoresAndAtomics),
-        FEATURE(shaderInt64),
-    };
-#undef FEATURE
+    for (int i = 0; i < sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32); i++) {
+        VkBool32 wanted = ((VkBool32 *) &pl_vulkan_recommended_features)[i];
+        ((VkBool32 *) &vk->features)[i] &= wanted;
+    }
 
     VkDeviceCreateInfo dinfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -1087,7 +1110,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         };
     }
 
-    // Create the command pools and memory allocator
+    // Create the command pools
     for (int i = 0; i < num_qinfos; i++) {
         int qf = qinfos[i].queueFamilyIndex;
         struct vk_cmdpool *pool = vk_cmdpool_create(vk, qinfos[i], qfs[qf]);
@@ -1241,6 +1264,7 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     pl_vk->api_version = vk->api_ver;
     pl_vk->extensions = vk->exts;
     pl_vk->num_extensions = vk->num_exts;
+    pl_vk->features = &vk->features;
     pl_vk->num_queues = vk->num_pools;
     pl_vk->queues = talloc_array(pl_vk, struct pl_vulkan_queue, vk->num_pools);
     for (int i = 0; i < vk->num_pools; i++) {
@@ -1249,6 +1273,13 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
             .index = vk->pools[i]->qf,
             .count = vk->pools[i]->num_queues,
         };
+
+        if (vk->pools[i] == vk->pool_graphics)
+            pl_vk->queue_graphics = queues[i];
+        if (vk->pools[i] == vk->pool_compute && vk->pool_compute != vk->pool_graphics)
+            pl_vk->queue_compute = queues[i];
+        if (vk->pools[i] == vk->pool_compute)
+            pl_vk->queue_compute = queues[i];
     }
 
     return pl_vk;
@@ -1256,6 +1287,202 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
 error:
     PL_FATAL(vk, "Failed initializing vulkan device");
     pl_vulkan_destroy((const struct pl_vulkan **) &pl_vk);
-    vk->failed = true;
+    return NULL;
+}
+
+const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
+                                         const struct pl_vulkan_import_params *params)
+{
+    void *tmp = talloc_new(NULL);
+
+    struct pl_vulkan *pl_vk = talloc_zero_priv(NULL, struct pl_vulkan, struct vk_ctx);
+    struct vk_ctx *vk = TA_PRIV(pl_vk);
+    *vk = (struct vk_ctx) {
+        .ta = pl_vk,
+        .ctx = ctx,
+        .imported = true,
+        .inst = params->instance,
+        .physd = params->phys_device,
+        .dev = params->device,
+        .GetInstanceProcAddr = get_proc_addr_fallback(ctx, params->get_proc_addr),
+    };
+
+    if (!vk->GetInstanceProcAddr)
+        goto error;
+
+    for (int i = 0; i < PL_ARRAY_SIZE(vk_inst_funs); i++) {
+        const struct vk_fun *fun = &vk_inst_funs[i];
+        PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
+        pl_assert(!fun->device_level);
+        *pfn = vk->GetInstanceProcAddr(vk->inst, fun->name);
+    }
+
+    VkPhysicalDeviceIDPropertiesKHR id_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR,
+    };
+
+    VkPhysicalDeviceProperties2KHR prop = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR,
+        .pNext = &id_props,
+    };
+
+    vk->GetPhysicalDeviceProperties2KHR(vk->physd, &prop);
+    vk->limits = prop.properties.limits;
+
+    PL_INFO(vk, "Imported vulkan device properties:");
+    PL_INFO(vk, "    Device Name: %s", prop.properties.deviceName);
+    PL_INFO(vk, "    Device ID: %x:%x", (unsigned) prop.properties.vendorID,
+            (unsigned) prop.properties.deviceID);
+    PL_INFO(vk, "    Device UUID: %s", PRINT_UUID(id_props.deviceUUID));
+    PL_INFO(vk, "    Driver version: %d", (int) prop.properties.driverVersion);
+    PL_INFO(vk, "    API version: %d.%d.%d", PRINTF_VER(prop.properties.apiVersion));
+
+    vk->api_ver = prop.properties.apiVersion;
+    if (params->max_api_version) {
+        vk->api_ver = PL_MIN(vk->api_ver, params->max_api_version);
+        PL_INFO(vk, "Restricting API version to %d.%d.%d... new version %d.%d.%d",
+                PRINTF_VER(params->max_api_version), PRINTF_VER(vk->api_ver));
+    }
+
+    if (params->features)
+        vk->features = *params->features;
+
+    // Load all mandatory device-level functions
+    for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++) {
+        const struct vk_fun *fun = &vk_dev_funs[i];
+        PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
+        pl_assert(fun->device_level);
+        *pfn = vk->GetDeviceProcAddr(vk->dev, fun->name);
+    }
+
+    // Load all of the optional functions from the extensions enabled
+    for (int i = 0; i < PL_ARRAY_SIZE(vk_device_extensions); i++) {
+        const struct vk_ext *ext = &vk_device_extensions[i];
+        for (int n = 0; n < params->num_extensions; n++) {
+            if (strcmp(ext->name, params->extensions[n]) == 0 ||
+                (ext->core_ver && ext->core_ver >= vk->api_ver))
+            {
+                // Extension is available, directly load it
+                for (const struct vk_fun *f = ext->funs; f->name; f++) {
+                    PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) f->offset);
+                    if (f->device_level) {
+                        *pfn = vk->GetDeviceProcAddr(vk->dev, f->name);
+                    } else {
+                        *pfn = vk->GetInstanceProcAddr(vk->inst, f->name);
+                    };
+                }
+                break;
+            }
+        }
+    }
+
+    int qfnum = 0;
+    vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, NULL);
+    VkQueueFamilyProperties *qfs = talloc_zero_array(tmp, VkQueueFamilyProperties, qfnum);
+    vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, qfs);
+
+    // Create the command pools for each unique qf that exists
+    struct {
+        const struct pl_vulkan_queue *info;
+        struct vk_cmdpool **pool;
+    } qinfos[] = {
+        {
+            .info = &params->queue_graphics,
+            .pool = &vk->pool_graphics,
+        }, {
+            .info = &params->queue_compute,
+            .pool = &vk->pool_compute,
+        }, {
+            .info = &params->queue_transfer,
+            .pool = &vk->pool_transfer,
+        }
+    };
+
+    for (int i = 0; i < PL_ARRAY_SIZE(qinfos); i++) {
+        int qf = qinfos[i].info->index;
+        struct vk_cmdpool **pool = qinfos[i].pool;
+        if (!qinfos[i].info->count)
+            continue;
+
+        // See if we already created a pool for this queue family
+        for (int j = 0; j < i; j++) {
+            if (qinfos[j].info->count && qinfos[j].info->index == qf) {
+                *pool = *qinfos[j].pool;
+                goto next_qf;
+            }
+        }
+
+        struct VkDeviceQueueCreateInfo qinfo = {
+            .queueFamilyIndex = qf,
+            .queueCount = qinfos[i].info->count,
+        };
+
+        *pool = vk_cmdpool_create(vk, qinfo, qfs[qf]);
+        if (!*pool)
+            goto error;
+        TARRAY_APPEND(vk->ta, vk->pools, vk->num_pools, *pool);
+
+next_qf: ;
+    }
+
+    if (!vk->pool_compute && (vk->pool_graphics->props.queueFlags & VK_QUEUE_COMPUTE_BIT))
+        vk->pool_compute = vk->pool_graphics;
+
+    if (params->blacklist_caps & PL_GPU_CAP_COMPUTE)
+        vk->pool_compute = NULL;
+
+    pl_vk->gpu = pl_gpu_create_vk(vk);
+    if (!pl_vk->gpu)
+        goto error;
+
+    // Blacklist / restrict features
+    if (params->blacklist_caps) {
+        pl_gpu_caps *caps = (pl_gpu_caps*) &pl_vk->gpu->caps;
+        *caps &= ~(params->blacklist_caps);
+        PL_INFO(vk, "Restricting capabilities 0x%x... new caps are 0x%x",
+                (unsigned int) params->blacklist_caps, (unsigned int) *caps);
+    }
+
+    if (params->max_glsl_version) {
+        struct pl_glsl_desc *desc = (struct pl_glsl_desc *) &pl_vk->gpu->glsl;
+        desc->version = PL_MIN(desc->version, params->max_glsl_version);
+        PL_INFO(vk, "Restricting GLSL version to %d... new version is %d",
+                params->max_glsl_version, desc->version);
+    }
+
+    vk->disable_events = params->disable_events;
+
+    // Expose the resulting vulkan objects
+    pl_vk->instance = vk->inst;
+    pl_vk->phys_device = vk->physd;
+    pl_vk->device = vk->dev;
+    pl_vk->api_version = vk->api_ver;
+    pl_vk->extensions = vk->exts;
+    pl_vk->num_extensions = vk->num_exts;
+    pl_vk->features = &vk->features;
+    pl_vk->num_queues = vk->num_pools;
+    pl_vk->queues = talloc_array(pl_vk, struct pl_vulkan_queue, vk->num_pools);
+    for (int i = 0; i < vk->num_pools; i++) {
+        struct pl_vulkan_queue *queues = (struct pl_vulkan_queue *) pl_vk->queues;
+        queues[i] = (struct pl_vulkan_queue) {
+            .index = vk->pools[i]->qf,
+            .count = vk->pools[i]->num_queues,
+        };
+
+        if (vk->pools[i] == vk->pool_graphics)
+            pl_vk->queue_graphics = queues[i];
+        if (vk->pools[i] == vk->pool_compute && vk->pool_compute != vk->pool_graphics)
+            pl_vk->queue_compute = queues[i];
+        if (vk->pools[i] == vk->pool_compute)
+            pl_vk->queue_compute = queues[i];
+    }
+
+    talloc_free(tmp);
+    return pl_vk;
+
+error:
+    PL_FATAL(vk, "Failed importing vulkan device");
+    talloc_free(tmp);
+    pl_vulkan_destroy((const struct pl_vulkan **) &pl_vk);
     return NULL;
 }
