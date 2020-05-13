@@ -438,7 +438,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
             gpu->caps |= PL_GPU_CAP_PARALLEL_COMPUTE;
     }
 
-    if (!vk->features.shaderImageGatherExtended) {
+    if (!vk->features.features.shaderImageGatherExtended) {
         gpu->limits.min_gather_offset = 0;
         gpu->limits.max_gather_offset = 0;
     }

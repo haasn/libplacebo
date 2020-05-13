@@ -58,7 +58,7 @@ static const struct vk_fun vk_inst_funs[] = {
     VK_INST_FUN(CreateDevice),
     VK_INST_FUN(EnumerateDeviceExtensionProperties),
     VK_INST_FUN(GetDeviceProcAddr),
-    VK_INST_FUN(GetPhysicalDeviceFeatures),
+    VK_INST_FUN(GetPhysicalDeviceFeatures2KHR),
     VK_INST_FUN(GetPhysicalDeviceFormatProperties),
     VK_INST_FUN(GetPhysicalDeviceImageFormatProperties2KHR),
     VK_INST_FUN(GetPhysicalDeviceMemoryProperties),
@@ -161,13 +161,16 @@ const char * const pl_vulkan_recommended_extensions[] = {
 const int pl_vulkan_num_recommended_extensions =
     PL_ARRAY_SIZE(pl_vulkan_recommended_extensions);
 
-const VkPhysicalDeviceFeatures pl_vulkan_recommended_features = {
-    .shaderImageGatherExtended = true,
+const VkPhysicalDeviceFeatures2KHR pl_vulkan_recommended_features = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
+    .features = {
+        .shaderImageGatherExtended = true,
 
-    // Needed for GPU-assisted validation, but not harmful to enable always.
-    .fragmentStoresAndAtomics = true,
-    .vertexPipelineStoresAndAtomics = true,
-    .shaderInt64 = true,
+        // Needed for GPU-assisted validation, but not harmful to enable
+        .fragmentStoresAndAtomics = true,
+        .vertexPipelineStoresAndAtomics = true,
+        .shaderInt64 = true,
+    }
 };
 
 // List of mandatory device-level functions
@@ -1070,22 +1073,26 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     // Enable all features that we might need, by iterating through the entire
     // VkPhysicalDeviceFeatures struct as a VkBool32 array and checking each
     // supported feature against the whitelist of features we want
-    vk->GetPhysicalDeviceFeatures(vk->physd, &vk->features);
+    vk->GetPhysicalDeviceFeatures2KHR(vk->physd, &vk->features);
     for (int i = 0; i < sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32); i++) {
-        VkBool32 wanted = ((VkBool32 *) &pl_vulkan_recommended_features)[i];
+        VkBool32 wanted = ((VkBool32 *) &pl_vulkan_recommended_features.features)[i];
         if (params->features)
-            wanted |= ((VkBool32 *) params->features)[i];
+            wanted |= ((VkBool32 *) &params->features->features)[i];
 
         ((VkBool32 *) &vk->features)[i] &= wanted;
     }
 
+    // Temporarily link the pNext chain of the extra user features into this
+    if (params->features)
+        vk->features.pNext = params->features->pNext;
+
     VkDeviceCreateInfo dinfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext = &vk->features,
         .pQueueCreateInfos = qinfos,
         .queueCreateInfoCount = num_qinfos,
         .ppEnabledExtensionNames = *exts,
         .enabledExtensionCount = *num_exts,
-        .pEnabledFeatures = &vk->features,
     };
 
     PL_INFO(vk, "Creating vulkan device%s", *num_exts ? " with extensions:" : "");
@@ -1093,6 +1100,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         PL_INFO(vk, "    %s", (*exts)[i]);
 
     VK(vk->CreateDevice(vk->physd, &dinfo, VK_ALLOC, &vk->dev));
+    vk->features.pNext = NULL;
 
     // Load all mandatory device-level functions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++) {
@@ -1156,11 +1164,15 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     params = PL_DEF(params, &pl_vulkan_default_params);
     struct pl_vulkan *pl_vk = talloc_zero_priv(NULL, struct pl_vulkan, struct vk_ctx);
     struct vk_ctx *vk = TA_PRIV(pl_vk);
-    vk->ta = pl_vk;
-    vk->ctx = ctx;
-    vk->inst = params->instance;
+    *vk = (struct vk_ctx) {
+        .ta = pl_vk,
+        .ctx = ctx,
+        .inst = params->instance,
+        .GetInstanceProcAddr = get_proc_addr_fallback(ctx, params->get_proc_addr),
+        .features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
+    };
 
-    if (!(vk->GetInstanceProcAddr = get_proc_addr_fallback(ctx, params->get_proc_addr)))
+    if (!vk->GetInstanceProcAddr)
         goto error;
 
     if (!vk->inst) {
@@ -1308,6 +1320,7 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
         .physd = params->phys_device,
         .dev = params->device,
         .GetInstanceProcAddr = get_proc_addr_fallback(ctx, params->get_proc_addr),
+        .features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
     };
 
     if (!vk->GetInstanceProcAddr)
@@ -1347,8 +1360,11 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
                 PRINTF_VER(params->max_api_version), PRINTF_VER(vk->api_ver));
     }
 
-    if (params->features)
-        vk->features = *params->features;
+    if (params->features) {
+        // Explicitly drop the pNext chain of this, since we don't currently
+        // "officially" know about any extra features provided by extensions
+        vk->features.features = params->features->features;
+    }
 
     // Load all mandatory device-level functions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++) {

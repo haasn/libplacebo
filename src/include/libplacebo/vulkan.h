@@ -130,7 +130,10 @@ struct pl_vulkan {
     int num_extensions;
 
     // The device features that were enabled at device creation time.
-    const VkPhysicalDeviceFeatures *features;
+    //
+    // Note: The pNext chain of this only includes features known to
+    // libplacebo, which as the time of writing only includes the base set.
+    const VkPhysicalDeviceFeatures2KHR *features;
 
     // The explicit queue families we are using to provide a given capability,
     // or {0} if no appropriate dedicated queue family exists for this
@@ -236,8 +239,9 @@ struct pl_vulkan_params {
 
     // Optional extra features to enable at device creation time. These are
     // opportunistically enabled if supported by the physical device, but
-    // otherwise kept disabled.
-    const VkPhysicalDeviceFeatures *features;
+    // otherwise kept disabled. Users may include extra extension-specific
+    // features in the pNext chain.
+    const VkPhysicalDeviceFeatures2KHR *features;
 
     // --- Misc/debugging options
 
@@ -382,7 +386,7 @@ struct pl_vulkan_import_params {
 
     // Enabled VkPhysicalDeviceFeatures. May be left as NULL, in which case
     // libplacebo will assume no extra device features were enabled.
-    const VkPhysicalDeviceFeatures *features;
+    const VkPhysicalDeviceFeatures2KHR *features;
 
     // --- Misc/debugging options
 
@@ -452,9 +456,13 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
 // device features that libplacebo *can* make use of. These are all strictly
 // optional, but provide a hint to the API user as to what might be worth
 // enabling at device creation time.
+//
+// Note: Currently, libplacebo does not include any extra extension-specific
+// device features in the `pNext` chain of pl_vulkan_recommended_features, but
+// this may change in the future.
 extern const char * const pl_vulkan_recommended_extensions[];
 extern const int pl_vulkan_num_recommended_extensions;
-extern const VkPhysicalDeviceFeatures pl_vulkan_recommended_features;
+extern const VkPhysicalDeviceFeatures2KHR pl_vulkan_recommended_features;
 
 // Analogous to `pl_vulkan_wrap`, this function takes any `pl_tex` (including
 // ones created by `pl_tex_create`) and unwraps it to expose the underlying

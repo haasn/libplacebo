@@ -54,7 +54,7 @@ struct vk_ctx {
     VkInstance inst;
     VkPhysicalDevice physd;
     VkPhysicalDeviceLimits limits;
-    VkPhysicalDeviceFeatures features;
+    VkPhysicalDeviceFeatures2KHR features;
     uint32_t api_ver; // device API version
     VkDevice dev;
     bool imported; // device was not created by us
@@ -98,7 +98,7 @@ struct vk_ctx {
     VK_FUN(GetInstanceProcAddr);
     VK_FUN(GetPhysicalDeviceExternalBufferPropertiesKHR);
     VK_FUN(GetPhysicalDeviceExternalSemaphorePropertiesKHR);
-    VK_FUN(GetPhysicalDeviceFeatures);
+    VK_FUN(GetPhysicalDeviceFeatures2KHR);
     VK_FUN(GetPhysicalDeviceFormatProperties);
     VK_FUN(GetPhysicalDeviceImageFormatProperties2KHR);
     VK_FUN(GetPhysicalDeviceMemoryProperties);
