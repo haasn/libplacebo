@@ -1073,6 +1073,9 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     vk->GetPhysicalDeviceFeatures(vk->physd, &vk->features);
     for (int i = 0; i < sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32); i++) {
         VkBool32 wanted = ((VkBool32 *) &pl_vulkan_recommended_features)[i];
+        if (params->features)
+            wanted |= ((VkBool32 *) params->features)[i];
+
         ((VkBool32 *) &vk->features)[i] &= wanted;
     }
 

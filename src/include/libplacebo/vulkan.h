@@ -234,6 +234,11 @@ struct pl_vulkan_params {
     const char **opt_extensions;
     int num_opt_extensions;
 
+    // Optional extra features to enable at device creation time. These are
+    // opportunistically enabled if supported by the physical device, but
+    // otherwise kept disabled.
+    const VkPhysicalDeviceFeatures *features;
+
     // --- Misc/debugging options
 
     // Restrict specific features to e.g. work around driver bugs, or simply
