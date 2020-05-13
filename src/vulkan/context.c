@@ -1079,7 +1079,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         if (params->features)
             wanted |= ((VkBool32 *) &params->features->features)[i];
 
-        ((VkBool32 *) &vk->features)[i] &= wanted;
+        ((VkBool32 *) &vk->features.features)[i] &= wanted;
     }
 
     // Temporarily link the pNext chain of the extra user features into this
