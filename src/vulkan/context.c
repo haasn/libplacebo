@@ -1046,7 +1046,6 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 #define FEATURE(name) .name = vk->features.name
     vk->features = (VkPhysicalDeviceFeatures) {
         FEATURE(shaderImageGatherExtended),
-        FEATURE(shaderStorageImageExtendedFormats),
         // Needed for GPU-assisted validation
         FEATURE(fragmentStoresAndAtomics),
         FEATURE(vertexPipelineStoresAndAtomics),
