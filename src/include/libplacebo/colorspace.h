@@ -452,7 +452,9 @@ struct pl_icc_profile {
     // If a profile is set, this signature must uniquely identify it. It could
     // be, for example, a checksum of the profile contents. Alternatively, it
     // could be the pointer to the ICC profile itself, as long as the user
-    // makes sure that this memory is used in an immutable way.
+    // makes sure that this memory is used in an immutable way. For a third
+    // possible interpretation, consider simply incrementing this uint64_t
+    // every time you suspect the profile has changed.
     uint64_t signature;
 };
 
