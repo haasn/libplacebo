@@ -39,7 +39,7 @@ enum pl_shader_buf {
 struct pl_shader {
     struct pl_context *ctx;
     struct pl_shader_res res; // for accumulating some of the fields
-    struct xta_ref *tmp;
+    struct xta_ref *tmp; // only used for var/va/desc names and var/va data
     bool failed;
     bool mutable;
     int output_w;
