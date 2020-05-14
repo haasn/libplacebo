@@ -30,7 +30,7 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
     *sh = (struct pl_shader) {
         .ctx = ctx,
         .mutable = true,
-        .tmp = talloc_ref_new(ctx),
+        .tmp = talloc_ref_new(sh),
     };
 
     if (params)
@@ -53,10 +53,11 @@ void pl_shader_reset(struct pl_shader *sh, const struct pl_shader_params *params
 {
     struct pl_shader new = {
         .ctx = sh->ctx,
-        .tmp = talloc_ref_new(sh->ctx),
+        .tmp = talloc_ref_new(sh),
         .mutable = true,
 
-        // Preserve array allocations
+        // Preserve array allocations, these are all parented to the actual
+        // pl_shader allocation, which we preserve.
         .variables      = sh->variables,
         .descriptors    = sh->descriptors,
         .vertex_attribs = sh->vertex_attribs,
