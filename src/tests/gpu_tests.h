@@ -370,7 +370,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         TEST_FBO_PATTERN(1e-6, "deband iter %d", i);
     }
 
-#if PL_HAVE_LCMS
+#ifdef PL_HAVE_LCMS
     // Test the use of 3DLUTs if available
     sh = pl_dispatch_begin(dp);
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });

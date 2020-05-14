@@ -194,18 +194,22 @@ foreach c : components
   deps = c['deps']
 
   pretty = name.underscorify().to_upper()
-  defs += '#define PL_HAVE_@0@ @1@\n'.format(pretty, deps.found() ? 1 : 0)
 
   if deps.found()
+    defs += '#define PL_HAVE_@0@ 1\n'.format(pretty)
     comps.set(name, 1)
     build_deps += deps
     sources += c.get('srcs', [])
     tests += c.get('test', [])
+  else
+    defs += '#undef PL_HAVE_@0@\n'.format(pretty)
   endif
 endforeach
 
 if comps.has('vulkan') and get_option('vulkan-link')
   defs += '#define PL_HAVE_VK_PROC_ADDR 1'
+else
+  defs += '#undef PL_HAVE_VK_PROC_ADDR'
 endif
 
 # check to see if libplacebo built this way is sane

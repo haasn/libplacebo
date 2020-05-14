@@ -51,11 +51,11 @@
 #include "include/libplacebo/swapchain.h"
 #include "include/libplacebo/utils/upload.h"
 
-#if PL_HAVE_VULKAN
+#ifdef PL_HAVE_VULKAN
 #include "include/libplacebo/vulkan.h"
 #endif
 
-#if PL_HAVE_OPENGL
+#ifdef PL_HAVE_OPENGL
 #include "include/libplacebo/opengl.h"
 #endif
 

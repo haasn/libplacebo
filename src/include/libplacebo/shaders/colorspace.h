@@ -381,7 +381,7 @@ struct pl_3dlut_result {
     struct pl_color_space dst_color;
 };
 
-#if PL_HAVE_LCMS
+#ifdef PL_HAVE_LCMS
 
 // Updates/generates a 3DLUT. Returns success. If true, `out` will be updated
 // to a struct describing the color space chosen for the input and output of

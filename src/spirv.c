@@ -21,10 +21,10 @@ extern const struct spirv_compiler_fns pl_spirv_shaderc;
 extern const struct spirv_compiler_fns pl_spirv_glslang;
 
 static const struct spirv_compiler_fns *compilers[] = {
-#if PL_HAVE_SHADERC
+#ifdef PL_HAVE_SHADERC
     &pl_spirv_shaderc,
 #endif
-#if PL_HAVE_GLSLANG
+#ifdef PL_HAVE_GLSLANG
     &pl_spirv_glslang,
 #endif
 };

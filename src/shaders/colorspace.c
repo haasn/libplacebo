@@ -1201,7 +1201,7 @@ const struct pl_dither_params pl_dither_default_params = {
     .temporal   = false, // commonly flickers on LCDs
 };
 
-#if PL_HAVE_LCMS
+#ifdef PL_HAVE_LCMS
 
 #include "lcms.h"
 

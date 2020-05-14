@@ -1434,7 +1434,7 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
     if (rr->disable_3dlut)
         use_3dlut = false;
 
-#if PL_HAVE_LCMS
+#ifdef PL_HAVE_LCMS
 
     if (use_3dlut) {
         struct pl_3dlut_profile src = {
