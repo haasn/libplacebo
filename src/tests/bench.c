@@ -354,5 +354,7 @@ int main()
     benchmark(vk->gpu, "av1_grain", bench_av1_grain);
     benchmark(vk->gpu, "av1_grain_lap", bench_av1_grain_lap);
 
+    pl_vulkan_destroy(&vk);
+    pl_context_destroy(&ctx);
     return 0;
 }
