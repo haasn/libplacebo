@@ -121,7 +121,7 @@ struct pl_render_params {
 
     // List of custom user shaders / hooks.
     // See <libplacebo/shaders/custom.h> for more information.
-    const struct pl_hook **hooks;
+    const struct pl_hook * const *hooks;
     int num_hooks;
 
     // --- Performance / quality trade-off options:

@@ -39,12 +39,12 @@ struct pl_vk_inst {
 
     // The instance extensions that were successfully enabled, including
     // extensions enabled by libplacebo internally. May contain duplicates.
-    const char **extensions;
+    const char * const *extensions;
     int num_extensions;
 
     // The instance layers that were successfully enabled, including
     // layers enabled by libplacebo internally. May contain duplicates.
-    const char **layers;
+    const char * const *layers;
     int num_layers;
 };
 
@@ -69,12 +69,12 @@ struct pl_vk_inst_params {
     // Enables extra instance extensions. Instance creation will fail if these
     // extensions are not all supported. The user may use this to enable e.g.
     // windowing system integration.
-    const char **extensions;
+    const char * const *extensions;
     int num_extensions;
 
     // Enables extra optional instance extensions. These are opportunistically
     // enabled if supported by the device, but otherwise skipped.
-    const char **opt_extensions;
+    const char * const *opt_extensions;
     int num_opt_extensions;
 
     // Enables extra layers. Instance creation will fail if these layers are
@@ -83,12 +83,12 @@ struct pl_vk_inst_params {
     // NOTE: Layers needed for required/optional extensions are automatically
     // enabled. The user does not specifically need to enable layers related
     // to extension support.
-    const char **layers;
+    const char * const *layers;
     int num_layers;
 
     // Enables extra optional layers. These are opportunistically enabled if
     // supported by the platform, but otherwise skipped.
-    const char **opt_layers;
+    const char * const *opt_layers;
     int num_opt_layers;
 };
 
@@ -126,7 +126,7 @@ struct pl_vulkan {
 
     // The device extensions that were successfully enabled, including
     // extensions enabled by libplacebo internally. May contain duplicates.
-    const char **extensions;
+    const char * const *extensions;
     int num_extensions;
 
     // The device features that were enabled at device creation time.
@@ -229,12 +229,12 @@ struct pl_vulkan_params {
     // Enables extra device extensions. Device creation will fail if these
     // extensions are not all supported. The user may use this to enable e.g.
     // interop extensions.
-    const char **extensions;
+    const char * const *extensions;
     int num_extensions;
 
     // Enables extra optional device extensions. These are opportunistically
     // enabled if supported by the device, but otherwise skipped.
-    const char **opt_extensions;
+    const char * const *opt_extensions;
     int num_opt_extensions;
 
     // Optional extra features to enable at device creation time. These are
@@ -368,7 +368,7 @@ struct pl_vulkan_import_params {
     // extensions need not be re-specified here, since it's guaranteed that any
     // instance-level extensions that device-level extensions depend on were
     // enabled at the instance level)
-    const char **extensions;
+    const char * const *extensions;
     int num_extensions;
 
     // Enabled queue families. At least `queue_graphics` is required.
