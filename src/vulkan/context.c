@@ -388,7 +388,7 @@ static PFN_vkGetInstanceProcAddr get_proc_addr_fallback(struct pl_context *ctx,
     if (get_proc_addr)
         return get_proc_addr;
 
-#ifdef VK_HAVE_PROC_ADDR
+#ifdef PL_HAVE_VK_PROC_ADDR
     return vkGetInstanceProcAddr;
 #else
     pl_fatal(ctx, "No `vkGetInstanceProcAddr` function provided, and "

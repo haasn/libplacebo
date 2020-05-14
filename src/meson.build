@@ -205,7 +205,7 @@ foreach c : components
 endforeach
 
 if comps.has('vulkan') and get_option('vulkan-link')
-  defs += '#define VK_HAVE_PROC_ADDR 1'
+  defs += '#define PL_HAVE_VK_PROC_ADDR 1'
 endif
 
 # check to see if libplacebo built this way is sane
