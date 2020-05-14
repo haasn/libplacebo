@@ -541,25 +541,25 @@ static void get_grain_for_channel(struct pl_shader *sh, enum pl_channel c,
         const char *weights[] = { "vec2(27.0, 17.0)", "vec2(23.0, 22.0)" };
 
         // X-direction overlapping
-        GLSL("if (block_id.x > 0 && local_id.x < %d) { \n"
-             "vec2 w = %s / 32.0;                      \n"
-             "if (local_id.x == 1) w.xy = w.yx;        \n",
+        GLSL("if (block_id.x > 0u && local_id.x < %du) {    \n"
+             "vec2 w = %s / 32.0;                           \n"
+             "if (local_id.x == 1u) w.xy = w.yx;            \n",
              2 >> sub_x, weights[sub_x]);
         sample(sh, OFFSET_L, c, params);
-        GLSL("grain = dot(vec2(val, grain), w);        \n"
-             "}                                        \n");
+        GLSL("grain = dot(vec2(val, grain), w);             \n"
+             "}                                             \n");
 
         // Y-direction overlapping
-        GLSL("if (block_id.y > 0 && local_id.y < %d) { \n"
-             "vec2 w = %s / 32.0;                      \n"
-             "if (local_id.y == 1) w.xy = w.yx;        \n",
+        GLSL("if (block_id.y > 0u && local_id.y < %du) {    \n"
+             "vec2 w = %s / 32.0;                           \n"
+             "if (local_id.y == 1u) w.xy = w.yx;            \n",
              2 >> sub_y, weights[sub_y]);
 
         // We need to special-case the top left pixels since these need to
         // pre-blend the top-left offset block before blending vertically
-        GLSL("    if (block_id.x > 0 && local_id.x < %d) {  \n"
+        GLSL("    if (block_id.x > 0u && local_id.x < %du) {\n"
              "        vec2 w2 = %s / 32.0;                  \n"
-             "        if (local_id.x == 1) w2.xy = w2.yx;   \n",
+             "        if (local_id.x == 1u) w2.xy = w2.yx;  \n",
              2 >> sub_x, weights[sub_x]);
                       sample(sh, OFFSET_TL, c, params);
         GLSL("        float tmp = val;                      \n");
