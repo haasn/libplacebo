@@ -582,7 +582,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         int va_loc = 0;
         for (int i = 0; i < res->num_vertex_attribs; i++) {
             struct pl_vertex_attrib *va = &params.vertex_attribs[i];
-            *va = res->vertex_attribs[i].attr;
+            *va = sh->vertex_attribs[i].attr;
 
             // Mangle the name to make sure it doesn't conflict with the
             // fragment shader input
@@ -613,12 +613,12 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     // want inside PCs, and then a second time to opportunistically place the rest.
     pass->vars = talloc_zero_array(pass, struct pass_var, res->num_variables);
     for (int i = 0; i < res->num_variables; i++) {
-        if (!add_pass_var(dp, tmp, pass, &params, &res->variables[i], &pass->vars[i], false))
+        if (!add_pass_var(dp, tmp, pass, &params, &sh->variables[i], &pass->vars[i], false))
             goto error;
     }
 
     for (int i = 0; i < res->num_variables; i++) {
-        if (!add_pass_var(dp, tmp, pass, &params, &res->variables[i], &pass->vars[i], true))
+        if (!add_pass_var(dp, tmp, pass, &params, &sh->variables[i], &pass->vars[i], true))
             goto error;
     }
 
@@ -650,7 +650,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     rparams->desc_bindings = talloc_zero_array(pass, struct pl_desc_binding, num);
     for (int i = 0; i < num; i++) {
         struct pl_desc *desc = &params.descriptors[i];
-        *desc = res->descriptors[i].desc;
+        *desc = sh->descriptors[i].desc;
         desc->binding = binding[pl_desc_namespace(dp->gpu, desc->type)]++;
     }
 
@@ -741,7 +741,7 @@ static void compute_vertex_attribs(struct pl_dispatch *dp, struct pl_shader *sh,
           *out_scale);
 
     for (int n = 0; n < sh->res.num_vertex_attribs; n++) {
-        const struct pl_shader_va *sva = &sh->res.vertex_attribs[n];
+        const struct pl_shader_va *sva = &sh->vertex_attribs[n];
 
         ident_t points[4];
         for (int i = 0; i < PL_ARRAY_SIZE(points); i++) {
@@ -904,19 +904,19 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
 
     // Update the descriptor bindings
     for (int i = 0; i < sh->res.num_descriptors; i++)
-        rparams->desc_bindings[i].object = sh->res.descriptors[i].object;
+        rparams->desc_bindings[i].object = sh->descriptors[i].object;
 
     // Update all of the variables (if needed)
     rparams->num_var_updates = 0;
     for (int i = 0; i < res->num_variables; i++)
-        update_pass_var(dp, pass, &res->variables[i], &pass->vars[i]);
+        update_pass_var(dp, pass, &sh->variables[i], &pass->vars[i]);
 
     // Update the vertex data
     if (rparams->vertex_data) {
         uintptr_t vert_base = (uintptr_t) rparams->vertex_data;
         size_t stride = rparams->pass->params.vertex_stride;
         for (int i = 0; i < res->num_vertex_attribs; i++) {
-            struct pl_shader_va *sva = &res->vertex_attribs[i];
+            const struct pl_shader_va *sva = &sh->vertex_attribs[i];
             struct pl_vertex_attrib *va = &rparams->pass->params.vertex_attribs[i];
 
             size_t size = sva->attr.fmt->texel_size;
@@ -1007,12 +1007,12 @@ bool pl_dispatch_compute(struct pl_dispatch *dp, struct pl_shader **psh,
 
     // Update the descriptor bindings
     for (int i = 0; i < sh->res.num_descriptors; i++)
-        rparams->desc_bindings[i].object = sh->res.descriptors[i].object;
+        rparams->desc_bindings[i].object = sh->descriptors[i].object;
 
     // Update all of the variables (if needed)
     rparams->num_var_updates = 0;
     for (int i = 0; i < res->num_variables; i++)
-        update_pass_var(dp, pass, &res->variables[i], &pass->vars[i]);
+        update_pass_var(dp, pass, &sh->variables[i], &pass->vars[i]);
 
     // Update the dispatch size
     for (int i = 0; i < 3; i++)

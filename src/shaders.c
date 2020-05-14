@@ -57,11 +57,9 @@ void pl_shader_reset(struct pl_shader *sh, const struct pl_shader_params *params
         .mutable = true,
 
         // Preserve array allocations
-        .res = {
-            .variables      = sh->res.variables,
-            .descriptors    = sh->res.descriptors,
-            .vertex_attribs = sh->res.vertex_attribs,
-        },
+        .variables      = sh->variables,
+        .descriptors    = sh->descriptors,
+        .vertex_attribs = sh->vertex_attribs,
     };
 
     if (params)
@@ -178,7 +176,7 @@ ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
 {
     sv.var.name = sh_fresh(sh, sv.var.name);
     sv.data = talloc_memdup(sh->tmp, sv.data, pl_var_host_layout(0, &sv.var).size);
-    TARRAY_APPEND(sh, sh->res.variables, sh->res.num_variables, sv);
+    TARRAY_APPEND(sh, sh->variables, sh->res.num_variables, sv);
     return (ident_t) sv.var.name;
 }
 
@@ -192,15 +190,15 @@ ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
     case PL_DESC_BUF_TEXEL_UNIFORM:
     case PL_DESC_BUF_TEXEL_STORAGE:
         for (int i = 0; i < sh->res.num_descriptors; i++) {
-            if (sh->res.descriptors[i].object == sd.object)
-                return (ident_t) sh->res.descriptors[i].desc.name;
+            if (sh->descriptors[i].object == sd.object)
+                return (ident_t) sh->descriptors[i].desc.name;
         }
 
     default: break;
     }
 
     sd.desc.name = sh_fresh(sh, sd.desc.name);
-    TARRAY_APPEND(sh, sh->res.descriptors, sh->res.num_descriptors, sd);
+    TARRAY_APPEND(sh, sh->descriptors, sh->res.num_descriptors, sd);
     return (ident_t) sd.desc.name;
 }
 
@@ -235,7 +233,7 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
         .data = { &data[0], &data[2], &data[4], &data[6] },
     };
 
-    TARRAY_APPEND(sh, sh->res.vertex_attribs, sh->res.num_vertex_attribs, va);
+    TARRAY_APPEND(sh, sh->vertex_attribs, sh->res.num_vertex_attribs, va);
     return (ident_t) va.attr.name;
 }
 
@@ -410,8 +408,7 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
 
     // Copy over all of the descriptors etc.
     talloc_ref_attach(sh->tmp, sub->tmp);
-#define COPY(f) TARRAY_CONCAT(sh, sh->res.f, sh->res.num_##f, \
-                              sub->res.f, sub->res.num_##f)
+#define COPY(f) TARRAY_CONCAT(sh, sh->f, sh->res.num_##f, sub->f, sub->res.num_##f)
     COPY(variables);
     COPY(descriptors);
     COPY(vertex_attribs);
@@ -464,6 +461,11 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
     // Concatenate the header onto the prelude to form the final output
     struct bstr *glsl = &sh->buffers[SH_BUF_PRELUDE];
     bstr_xappend(sh, glsl, sh->buffers[SH_BUF_HEADER]);
+
+    // Set the vas/vars/descs
+    sh->res.vertex_attribs = sh->vertex_attribs;
+    sh->res.variables = sh->variables;
+    sh->res.descriptors = sh->descriptors;
 
     // Update the result pointer and return
     sh->res.glsl = glsl->start;

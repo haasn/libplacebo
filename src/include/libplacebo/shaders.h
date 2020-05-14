@@ -145,15 +145,15 @@ struct pl_shader_res {
     size_t compute_shmem;
 
     // A set of input vertex attributes needed by this shader fragment.
-    struct pl_shader_va *vertex_attribs;
+    const struct pl_shader_va *vertex_attribs;
     int num_vertex_attribs;
 
     // A set of input variables needed by this shader fragment.
-    struct pl_shader_var *variables;
+    const struct pl_shader_var *variables;
     int num_variables;
 
     // A list of input descriptors needed by this shader fragment,
-    struct pl_shader_desc *descriptors;
+    const struct pl_shader_desc *descriptors;
     int num_descriptors;
 };
 

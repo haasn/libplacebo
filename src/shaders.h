@@ -38,7 +38,7 @@ enum pl_shader_buf {
 
 struct pl_shader {
     struct pl_context *ctx;
-    struct pl_shader_res res; // for accumulating vertex_attribs etc.
+    struct pl_shader_res res; // for accumulating some of the fields
     struct xta_ref *tmp;
     bool failed;
     bool mutable;
@@ -48,6 +48,11 @@ struct pl_shader {
     bool is_compute;
     bool flexible_work_groups;
     int fresh;
+
+    // mutable versions of the fields from pl_shader_res
+    struct pl_shader_va *vertex_attribs;
+    struct pl_shader_var *variables;
+    struct pl_shader_desc *descriptors;
 };
 
 // Helper functions for convenience
