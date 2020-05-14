@@ -269,6 +269,10 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
 // Note that all resources allocated from this vulkan object (e.g. via the
 // `vk->ra` or using `pl_vulkan_create_swapchain`) *must* be explicitly
 // destroyed by the user before calling this.
+//
+// Also note that this function will block until all in-flight GPU commands are
+// finished processing. You can avoid this by manually calling `pl_gpu_finish`
+// before `pl_vulkan_destroy`.
 void pl_vulkan_destroy(const struct pl_vulkan **vk);
 
 struct pl_vulkan_device_params {
