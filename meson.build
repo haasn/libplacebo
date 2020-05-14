@@ -14,6 +14,8 @@ majorver = version_split[0]
 apiver = version_split[1]
 fixver = version_split[2]
 
+proj_name = meson.project_name()
+
 # update `version_pretty` with `git describe` information if available
 git = find_program('git', required: false)
 if git.found()

@@ -115,6 +115,25 @@ endif
 
 
 # Source files
+headers = [
+  'colorspace.h',
+  'common.h',
+  'context.h',
+  'dispatch.h',
+  'dither.h',
+  'dummy.h',
+  'filters.h',
+  'gpu.h',
+  'renderer.h',
+  'shaders/av1.h',
+  'shaders/colorspace.h',
+  'shaders/custom.h',
+  'shaders/sampling.h',
+  'shaders.h',
+  'swapchain.h',
+  'utils/upload.h',
+]
+
 sources = [
   'colorspace.c',
   'common.c',
@@ -172,6 +191,7 @@ components = [
               'vulkan/swapchain.c',
               'vulkan/utils.c',
             ],
+    'headers': 'vulkan.h',
     'test': 'vulkan.c'
   }, {
     'name': 'opengl',
@@ -182,6 +202,7 @@ components = [
               'opengl/swapchain.c',
               'opengl/utils.c',
             ],
+    'headers': 'opengl.h',
     'test': 'opengl_surfaceless.c',
   }
 ]
@@ -200,6 +221,7 @@ foreach c : components
     comps.set(name, 1)
     build_deps += deps
     sources += c.get('srcs', [])
+    headers += c.get('headers', [])
     tests += c.get('test', [])
   else
     defs += '#undef PL_HAVE_@0@\n'.format(pretty)
@@ -232,7 +254,7 @@ conf_public.set('extra_defs', defs)
 configure_file(
   input: 'config.h.in',
   output: 'config.h',
-  install_dir: join_paths(get_option('includedir'), 'libplacebo'),
+  install_dir: join_paths(get_option('includedir'), proj_name),
   configuration: conf_public,
 )
 
@@ -264,11 +286,13 @@ lib = library('placebo', sources,
 
 
 # Install process
-install_subdir('include/libplacebo', install_dir: get_option('includedir'))
+foreach h : headers
+  install_headers('include' / proj_name / h, subdir: proj_name)
+endforeach
 
 pkg = import('pkgconfig')
 pkg.generate(
-  name: meson.project_name(),
+  name: proj_name,
   description: 'Reusable library for GPU-accelerated video/image rendering',
   libraries: lib,
   version: version,

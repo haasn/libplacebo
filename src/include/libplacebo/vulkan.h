@@ -18,11 +18,6 @@
 #ifndef LIBPLACEBO_VULKAN_H_
 #define LIBPLACEBO_VULKAN_H_
 
-#include <libplacebo/config.h>
-#ifndef PL_HAVE_VULKAN
-#error Included <libplacebo/vulkan.h> but libplacebo built without vulkan!
-#endif
-
 #include <vulkan/vulkan.h>
 #include <libplacebo/gpu.h>
 #include <libplacebo/swapchain.h>
