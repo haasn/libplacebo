@@ -38,8 +38,8 @@
 // Controls the maximum slab size, to reduce the effect of unbounded slab
 // growth exhausting memory. If the application needs a single allocation
 // that's bigger than this value, it will be allocated directly from the
-// device. (Default: 512 MB)
-#define PLVK_HEAP_MAXIMUM_SLAB_SIZE (1 << 29)
+// device. (Default: 256 MB)
+#define PLVK_HEAP_MAXIMUM_SLAB_SIZE (1 << 28)
 
 // Controls the minimum free region size, to reduce thrashing the free space
 // map with lots of small buffers during uninit. (Default: 1 KB)
