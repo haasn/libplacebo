@@ -159,9 +159,11 @@ bool xta_ref_attach(void *t, struct xta_ref *ref);
 #define TARRAY_CONCAT(ctx, p, idxvar, op, oidxvar)  \
     do {                                            \
         TARRAY_GROW(ctx, p, (idxvar) + (oidxvar));  \
-        memmove((p) + (idxvar), (op),               \
-                (oidxvar) * sizeof((op)[0]));       \
-        (idxvar) += (oidxvar);                      \
+        if ((oidxvar)) {                            \
+            memmove((p) + (idxvar), (op),           \
+                    (oidxvar) * sizeof((op)[0]));   \
+            (idxvar) += (oidxvar);                  \
+        }                                           \
     } while (0)
 
 // Doesn't actually free any memory, or do any other talloc calls.
