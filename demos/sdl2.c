@@ -152,7 +152,7 @@ static void init_vulkan()
     iparams.num_extensions = num;
     assert(iparams.extensions);
 
-    bool ok = SDL_Vulkan_GetInstanceExtensions(window, &num, iparams.extensions);
+    bool ok = SDL_Vulkan_GetInstanceExtensions(window, &num,(const char **) iparams.extensions);
     assert(ok);
 
     if (num > 0) {
@@ -167,7 +167,7 @@ static void init_vulkan()
         exit(2);
     }
 
-    free(iparams.extensions);
+    free((const char **) iparams.extensions);
     if (!SDL_Vulkan_CreateSurface(window, vk_inst->instance, &surf)) {
         fprintf(stderr, "Failed creating vulkan surface: %s\n", SDL_GetError());
         exit(1);
