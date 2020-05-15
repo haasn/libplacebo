@@ -276,10 +276,6 @@ static void render_frame(const struct pl_swapchain_frame *frame)
     // This seems to be the case for SDL2_image
     image.repr.alpha = PL_ALPHA_INDEPENDENT;
 
-    // Use a slightly heavier upscaler
-    struct pl_render_params render_params = pl_render_default_params;
-    render_params.upscaler = &pl_filter_ewa_lanczos;
-
     struct pl_render_target target;
     pl_render_target_from_swapchain(&target, frame);
     target.profile = (struct pl_icc_profile) {
@@ -301,7 +297,8 @@ static void render_frame(const struct pl_swapchain_frame *frame)
         target.num_overlays = 1;
     }
 
-    if (!pl_render_image(renderer, &image, &target, &render_params)) {
+    // Use the heaviest preset purely for demonstration/testing purposes
+    if (!pl_render_image(renderer, &image, &target, &pl_render_high_quality_params)) {
         fprintf(stderr, "Failed rendering frame!\n");
         uninit();
         exit(2);

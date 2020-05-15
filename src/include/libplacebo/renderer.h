@@ -203,9 +203,21 @@ struct pl_render_params {
 };
 
 // This contains the default/recommended options for reasonable image quality,
-// while also not being too terribly slow. All of the *_params structs
-// are defaulted to the corresponding *_default_params.
+// while also not being too terribly slow. All of the *_params structs are
+// defaulted to the corresponding *_default_params, except for deband_params,
+// which is disabled by default.
+//
+// This should be fine on most integrated GPUs, but if it's too slow, consider
+// setting the params to {0} instead, or alternatively setting
+// `pl_render_params.disable_fbos` to true.
 extern const struct pl_render_params pl_render_default_params;
+
+// This contains a higher quality preset for better image quality at the cost
+// of quite a bit of performance. In addition to the settings implied by
+// `pl_render_default_params`, it sets the upscaler to `pl_filter_ewa_lanczos`,
+// and enables debanding. This should only really be used with a discrete GPU
+// and where maximum image quality is desired.
+extern const struct pl_render_params pl_render_high_quality_params;
 
 #define PL_MAX_PLANES 4
 
