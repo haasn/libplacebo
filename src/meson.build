@@ -287,7 +287,15 @@ lib = library('placebo', sources,
 
 # Install process
 foreach h : headers
-  install_headers('include' / proj_name / h, subdir: proj_name)
+  parts = h.split('/')
+  path = proj_name
+  foreach p : parts
+    if p != parts[-1]
+      path = path / p
+    endif
+  endforeach
+
+  install_headers('include' / proj_name / h, subdir: path)
 endforeach
 
 pkg = import('pkgconfig')
