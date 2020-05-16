@@ -54,11 +54,17 @@ typedef void (*bench_fn)(struct pl_shader *sh, struct pl_shader_obj **state,
 
 static void run_bench(const struct pl_gpu *gpu, struct pl_dispatch *dp,
                       struct pl_shader_obj **state, const struct pl_tex *src,
-                      const struct pl_tex *fbo, bench_fn bench)
+                      const struct pl_tex *fbo, struct pl_timer *timer,
+                      bench_fn bench)
 {
     struct pl_shader *sh = pl_dispatch_begin(dp);
     bench(sh, state, src);
-    pl_dispatch_finish(dp, &sh, fbo, NULL, NULL);
+
+    pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+        .shader = &sh,
+        .target = fbo,
+        .timer = timer,
+    });
 }
 
 static void benchmark(const struct pl_gpu *gpu, const char *name, bench_fn bench)
@@ -86,7 +92,7 @@ static void benchmark(const struct pl_gpu *gpu, const char *name, bench_fn bench
     }
 
     // Run the benchmark and flush+block once to force shader compilation etc.
-    run_bench(gpu, dp, &state, src, fbos[0], bench);
+    run_bench(gpu, dp, &state, src, fbos[0], NULL, bench);
     pl_gpu_finish(gpu);
 
     // Perform the actual benchmark
@@ -94,25 +100,44 @@ static void benchmark(const struct pl_gpu *gpu, const char *name, bench_fn bench
     unsigned long frames = 0;
     int index = 0;
 
+    struct pl_timer *timer = pl_timer_create(gpu);
+    uint64_t gputime_total = 0;
+    unsigned long gputime_count = 0;
+    uint64_t gputime;
+
     gettimeofday(&start, NULL);
     do {
         frames++;
-        run_bench(gpu, dp, &state, src, fbos[index++], bench);
+        run_bench(gpu, dp, &state, src, fbos[index++], timer, bench);
         index %= NUM_FBOS;
-        if (index == 0)
+        if (index == 0) {
             pl_gpu_flush(gpu);
-        gettimeofday(&stop, NULL);
+            gettimeofday(&stop, NULL);
+        }
+        while ((gputime = pl_timer_query(gpu, timer))) {
+            gputime_total += gputime;
+            gputime_count++;
+        }
     } while (stop.tv_sec - start.tv_sec < BENCH_DUR);
 
     // Force the GPU to finish execution and re-measure the final stop time
     pl_gpu_finish(gpu);
+
     gettimeofday(&stop, NULL);
+    while ((gputime = pl_timer_query(gpu, timer))) {
+        gputime_total += gputime;
+        gputime_count++;
+    }
 
     float secs = (float) (stop.tv_sec - start.tv_sec) +
                  1e-6 * (stop.tv_usec - start.tv_usec);
-    printf("'%s':\t%4lu frames in %1.6f seconds => %2.6f ms/frame (%5.2f FPS)\n",
+    printf("'%s':\t%4lu frames in %1.6f seconds => %2.6f ms/frame (%5.2f FPS)",
           name, frames, secs, 1000 * secs / frames, frames / secs);
+    if (gputime_count)
+        printf(", gpu time: %2.6f ms", 1e-6 * (gputime_total / gputime_count));
+    printf("\n");
 
+    pl_timer_destroy(gpu, &timer);
     pl_shader_obj_destroy(&state);
     pl_dispatch_destroy(&dp);
     pl_tex_destroy(gpu, &src);

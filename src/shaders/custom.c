@@ -989,6 +989,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         // Load and run the user shader itself
         pl_shader_append_bstr(sh, SH_BUF_HEADER, hook->pass_body);
 
+        bool ok;
         if (hook->is_compute) {
             GLSLP("#define out_image %s \n", sh_desc(sh, (struct pl_shader_desc) {
                 .desc = {
@@ -1001,22 +1002,28 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
             sh->res.output = PL_SHADER_SIG_NONE;
 
-            int dispatch_size[3] = {
-                // Round up as many blocks as are needed to cover the image
-                (out_size[0] + hook->block_w - 1) / hook->block_w,
-                (out_size[1] + hook->block_h - 1) / hook->block_h,
-                1,
-            };
-
             GLSL("hook(); \n");
-            if (!pl_dispatch_compute(params->dispatch, &sh, dispatch_size,
-                                     out_size[0], out_size[1]))
-                goto error;
+            ok = pl_dispatch_compute(params->dispatch, &(struct pl_dispatch_compute_params) {
+                .shader = &sh,
+                .dispatch_size = {
+                    // Round up as many blocks as are needed to cover the image
+                    (out_size[0] + hook->block_w - 1) / hook->block_w,
+                    (out_size[1] + hook->block_h - 1) / hook->block_h,
+                    1,
+                },
+                .width  = out_size[0],
+                .height = out_size[1],
+            });
         } else {
             GLSL("vec4 color = hook(); \n");
-            if (!pl_dispatch_finish(params->dispatch, &sh, fbo, NULL, NULL))
-                goto error;
+            ok = pl_dispatch_finish(params->dispatch, &(struct pl_dispatch_params) {
+                .shader = &sh,
+                .target = fbo,
+            });
         }
+
+        if (!ok)
+            goto error;
 
         // Update the rendering rect based on the given transform / offset
         float sx = out_size[0] / pl_rect_w(params->rect),

@@ -264,7 +264,12 @@ static const struct pl_tex *finalize_img(struct pl_renderer *rr,
         return NULL;
     }
 
-    if (!pl_dispatch_finish(rr->dp, &img->sh, *tex, NULL, NULL)) {
+    ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
+        .shader = &img->sh,
+        .target = *tex,
+    });
+
+    if (!ok) {
         PL_ERR(rr, "Failed dispatching intermediate pass!");
         return NULL;
     }
@@ -534,7 +539,14 @@ static void draw_overlays(struct pl_renderer *rr, const struct pl_tex *fbo,
         if (rr->disable_blending)
             blend = NULL;
 
-        if (!pl_dispatch_finish(rr->dp, &sh, fbo, &rect, blend)) {
+        bool ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
+            .shader = &sh,
+            .target = fbo,
+            .rect   = rect,
+            .blend_params = blend,
+        });
+
+        if (!ok) {
             PL_ERR(rr, "Failed rendering overlay texture!");
             rr->disable_overlay = true;
             return;
@@ -1538,8 +1550,11 @@ fallback:
     }
 
     pl_assert(fbo->params.renderable);
-    return pl_dispatch_finish(rr->dp, &pass->cur_img.sh, fbo,
-                              &target->dst_rect, NULL);
+    return pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
+        .shader = &pass->cur_img.sh,
+        .target = fbo,
+        .rect   = target->dst_rect,
+    });
 }
 
 static void fix_rects(struct pl_image *image, struct pl_render_target *target)

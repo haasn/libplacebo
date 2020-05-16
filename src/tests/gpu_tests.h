@@ -334,7 +334,10 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
         pl_shader_delinearize(sh, trc);
         pl_shader_linearize(sh, trc);
-        REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
+        REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+            .shader = &sh,
+            .target = fbo,
+        }));
 
         float epsilon = pl_color_transfer_is_hdr(trc) ? 1e-4 : 1e-6;
         TEST_FBO_PATTERN(epsilon, "transfer function %d", (int) trc);
@@ -345,7 +348,10 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
         pl_shader_encode_color(sh, &(struct pl_color_repr) { .sys = sys });
         pl_shader_decode_color(sh, &(struct pl_color_repr) { .sys = sys }, NULL);
-        REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
+        REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+            .shader = &sh,
+            .target = fbo,
+        }));
 
         float epsilon;
         switch (sys) {
@@ -387,7 +393,10 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
                 .grain          = 0.0,
         });
 
-        REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
+        REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+            .shader = &sh,
+            .target = fbo,
+        }));
         TEST_FBO_PATTERN(1e-6, "deband iter %d", i);
     }
 
@@ -403,7 +412,10 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
 
     if (pl_3dlut_update(sh, &src_color, &dst_color, &lut3d, &out, NULL)) {
         pl_3dlut_apply(sh, &lut3d);
-        REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
+        REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+            .shader = &sh,
+            .target = fbo,
+        }));
     }
 
     pl_dispatch_abort(dp, &sh);
@@ -429,7 +441,10 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         sh = pl_dispatch_begin(dp);
         pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
         pl_shader_av1_grain(sh, &grain, &grain_params);
-        REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
+        REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+            .shader = &sh,
+            .target = fbo,
+        }));
     }
     pl_shader_obj_destroy(&grain);
 
@@ -502,7 +517,10 @@ static void pl_scaler_tests(const struct pl_gpu *gpu)
             .no_compute = !fbo->params.storable,
         }
     ));
-    REQUIRE(pl_dispatch_finish(dp, &sh, fbo, NULL, NULL));
+    REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+        .shader = &sh,
+        .target = fbo,
+    }));
 
     if (fbo->params.host_readable) {
         fbo_data = malloc(fbo->params.w * fbo->params.h * sizeof(float));

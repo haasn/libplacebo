@@ -35,40 +35,71 @@ void pl_dispatch_destroy(struct pl_dispatch **dp);
 // For more information, see the header documentation in `shaders/*.h`.
 struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp);
 
-// Dispatch a generated shader (via the pl_shader mechanism). The results of
-// shader execution will be rendered to `target`. Returns whether or not the
-// dispatch was successful. This operation will take over ownership of the
-// pl_shader passed to it, and return it back to the internal pool.
-//
-// If `rc` is NULL, renders to the entire texture.
-// If set, `blend_params` enables and controls blending for this pass.
-//
-// Note: `target` must have params compatible with the shader, i.e.
-// `target->params.renderable` for fragment shaders and
-// `target->params.storable` for compute shaders. Additionally, for fragment
-// shaders only, use of `blend_params` requires the target be created with a
-// `pl_fmt` that includes `PL_FMT_CAP_BLENDABLE`.
-//
-// Note: Even when not using compute shaders, users are advised to always set
-// `target->params.storable` if permitted by the `pl_fmt`, for efficiency
-// reasons.
-bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **sh,
-                        const struct pl_tex *target, const struct pl_rect2d *rc,
-                        const struct pl_blend_params *blend_params);
+struct pl_dispatch_params {
+    // The shader to execute. The pl_dispatch will take over ownership
+    // of this shader, and return it back to the internal pool.
+    //
+    // This shader must have a compatible signature, i.e. inputs
+    // `PL_SHADER_SIG_NONE` and outputs `PL_SHADER_SIG_COLOR`.
+    struct pl_shader **shader;
+
+    // The texture to render to. This must have params compatible with the
+    // shader, i.e. `target->params.renderable` for fragment shaders and
+    // `target->params.storable` for compute shaders.
+    //
+    // Note: Even when not using compute shaders, users are advised to always
+    // set `target->params.storable` if permitted by the `pl_fmt`, since this
+    // allows the use of compute shaders instead of full-screen quads, which is
+    // faster on some platforms.
+    const struct pl_tex *target;
+
+    // The target rect to render to. Optional, if left as {0}, then the
+    // entire texture will be rendered to.
+    struct pl_rect2d rect;
+
+    // If set, enables and controls the blending for this pass. Optional. When
+    // using this with fragment shaders, `target->params.fmt->caps` must
+    // include `PL_FMT_CAP_BLENDABLE`.
+    const struct pl_blend_params *blend_params;
+
+    // If set, records the execution time of this dispatch into the given
+    // timer object. Optional.
+    struct pl_timer *timer;
+};
+
+// Dispatch a generated shader (via the pl_shader mechanism). Returns whether
+// or not the dispatch was successful.
+bool pl_dispatch_finish(struct pl_dispatch *dp, const struct pl_dispatch_params *params);
+
+struct pl_dispatch_compute_params {
+    // The shader to execute. This must be a compute shader with both the
+    // input and output signature set to PL_SHADER_SIG_NONE.
+    //
+    // Note: There is currently no way to actually construct such a shader with
+    // the currently available public APIs. (However, it's still used
+    // internally, and may be needed in the future)
+    struct pl_shader **shader;
+
+    // The number of work groups to dispatch in each dimension. Must be
+    // nonzero for all three dimensions.
+    int dispatch_size[3];
+
+    // If set, simulate vertex attributes (similar to `pl_dispatch_finish`)
+    // according to the given dimensions. The first two components of the
+    // thread's global ID will be interpreted as the X and Y locations.
+    //
+    // Optional, ignored if either component is left as 0.
+    int width, height;
+
+    // If set, records the execution time of this dispatch into the given
+    // timer object. Optional.
+    struct pl_timer *timer;
+};
 
 // A variant of `pl_dispatch_finish`, this one only dispatches a compute shader
 // that has no output.
-//
-// Note: As an additonal feature, this function supports simulating vertex
-// attributes (in the style of `pl_dispatch_finish`). The use of this
-// functionality requires the user specify the effective rendering width/height.
-// Leaving these as 0 disables this feature.
-//
-// Note: There is currently no way to actually construct such a shader with the
-// currently available public APIs. (However, it's still used internally, and
-// may be needed in the future)
-bool pl_dispatch_compute(struct pl_dispatch *dp, struct pl_shader **sh,
-                         int dispatch_size[3], int width, int height);
+bool pl_dispatch_compute(struct pl_dispatch *dp,
+                         const struct pl_dispatch_compute_params *params);
 
 // Cancel an active shader without submitting anything. Useful, for example,
 // if the shader was instead merged into a different shader.

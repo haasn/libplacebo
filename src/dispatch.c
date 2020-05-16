@@ -763,25 +763,24 @@ static void compute_vertex_attribs(struct pl_dispatch *dp, struct pl_shader *sh,
 
 static void translate_compute_shader(struct pl_dispatch *dp,
                                      struct pl_shader *sh,
-                                     const struct pl_tex *target,
                                      const struct pl_rect2d *rc,
-                                     const struct pl_blend_params *blend)
+                                     const struct pl_dispatch_params *params)
 {
     int width = abs(pl_rect_w(*rc)), height = abs(pl_rect_h(*rc));
     ident_t out_scale;
     compute_vertex_attribs(dp, sh, width, height, &out_scale);
 
     // Simulate a framebuffer using storage images
-    pl_assert(target->params.storable);
+    pl_assert(params->target->params.storable);
     pl_assert(sh->res.output == PL_SHADER_SIG_COLOR);
     ident_t fbo = sh_desc(sh, (struct pl_shader_desc) {
         .desc = {
             .name    = "out_image",
             .type    = PL_DESC_STORAGE_IMG,
-            .access  = blend ? PL_DESC_ACCESS_READWRITE
-                             : PL_DESC_ACCESS_WRITEONLY,
+            .access  = params->blend_params ? PL_DESC_ACCESS_READWRITE
+                                            : PL_DESC_ACCESS_WRITEONLY,
         },
-        .object = target,
+        .object = params->target,
     });
 
     ident_t base = sh_var(sh, (struct pl_shader_var) {
@@ -801,7 +800,7 @@ static void translate_compute_shader(struct pl_dispatch *dp,
     GLSL("ivec2 pos = %s + dir * ivec2(gl_GlobalInvocationID);\n", base);
     GLSL("vec2 fpos = %s * vec2(gl_GlobalInvocationID);\n", out_scale);
     GLSL("if (max(fpos.x, fpos.y) < 1.0) {\n");
-    if (blend) {
+    if (params->blend_params) {
         GLSL("vec4 orig = imageLoad(%s, pos);\n", fbo);
 
         static const char *modes[] = {
@@ -813,19 +812,19 @@ static void translate_compute_shader(struct pl_dispatch *dp,
 
         GLSL("color = vec4(color.rgb * vec3(%s), color.a * %s) \n"
              "      + vec4(orig.rgb  * vec3(%s), orig.a  * %s);\n",
-             modes[blend->src_rgb], modes[blend->src_alpha],
-             modes[blend->dst_rgb], modes[blend->dst_alpha]);
+             modes[params->blend_params->src_rgb],
+             modes[params->blend_params->src_alpha],
+             modes[params->blend_params->dst_rgb],
+             modes[params->blend_params->dst_alpha]);
     }
     GLSL("imageStore(%s, pos, color);\n", fbo);
     GLSL("}\n");
     sh->res.output = PL_SHADER_SIG_NONE;
 }
 
-bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
-                        const struct pl_tex *target, const struct pl_rect2d *rc,
-                        const struct pl_blend_params *blend)
+bool pl_dispatch_finish(struct pl_dispatch *dp, const struct pl_dispatch_params *params)
 {
-    struct pl_shader *sh = *psh;
+    struct pl_shader *sh = *params->shader;
     const struct pl_shader_res *res = &sh->res;
     bool ret = false;
 
@@ -844,7 +843,7 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
         goto error;
     }
 
-    const struct pl_tex_params *tpars = &target->params;
+    const struct pl_tex_params *tpars = &params->target->params;
     if (pl_tex_params_dimension(*tpars) != 2 || !tpars->renderable) {
         PL_ERR(dp, "Trying to dispatch a shader using an invalid target "
                "texture. The target must be a renderable 2D texture.");
@@ -857,10 +856,17 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
         goto error;
     }
 
-    struct pl_rect2d full = {0, 0, tpars->w, tpars->h};
-    rc = PL_DEF(rc, &full);
+    struct pl_rect2d rc = params->rect;
+    if (!pl_rect_w(rc)) {
+        rc.x0 = 0;
+        rc.x1 = tpars->w;
+    }
+    if (!pl_rect_h(rc)) {
+        rc.y0 = 0;
+        rc.y1 = tpars->h;
+    }
 
-    int w, h, tw = abs(pl_rect_w(*rc)), th = abs(pl_rect_h(*rc));
+    int w, h, tw = abs(pl_rect_w(rc)), th = abs(pl_rect_h(rc));
     if (pl_shader_output_size(sh, &w, &h) && (w != tw || h != th))
     {
         PL_ERR(dp, "Trying to dispatch a shader with explicit output size "
@@ -873,28 +879,30 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
 
     if (pl_shader_is_compute(sh)) {
         // Translate the compute shader to simulate vertices etc.
-        translate_compute_shader(dp, sh, target, rc, blend);
+        translate_compute_shader(dp, sh, &rc, params);
     } else {
         // Add the vertex information encoding the position
         vert_pos = sh_attr_vec2(sh, "position", &(const struct pl_rect2df) {
-            .x0 = 2.0 * rc->x0 / tpars->w - 1.0,
-            .y0 = 2.0 * rc->y0 / tpars->h - 1.0,
-            .x1 = 2.0 * rc->x1 / tpars->w - 1.0,
-            .y1 = 2.0 * rc->y1 / tpars->h - 1.0,
+            .x0 = 2.0 * rc.x0 / tpars->w - 1.0,
+            .y0 = 2.0 * rc.y0 / tpars->h - 1.0,
+            .x1 = 2.0 * rc.x1 / tpars->w - 1.0,
+            .y1 = 2.0 * rc.y1 / tpars->h - 1.0,
         });
     }
 
     // We need to set pl_pass_params.load_target when either blending is
     // enabled or we're drawing to some scissored sub-rect of the texture
-    struct pl_rect2d rc_norm = *rc;
+    struct pl_rect2d full = { 0, 0, tpars->w, tpars->h };
+    struct pl_rect2d rc_norm = rc;
     pl_rect2d_normalize(&rc_norm);
     rc_norm.x0 = PL_MAX(rc_norm.x0, 0);
     rc_norm.y0 = PL_MAX(rc_norm.y0, 0);
     rc_norm.x1 = PL_MIN(rc_norm.x1, tpars->w);
     rc_norm.y1 = PL_MIN(rc_norm.y1, tpars->h);
-    bool load = blend || !pl_rect2d_eq(rc_norm, full);
+    bool load = params->blend_params || !pl_rect2d_eq(rc_norm, full);
 
-    struct pass *pass = find_pass(dp, sh, target, vert_pos, blend, load);
+    struct pass *pass = find_pass(dp, sh, params->target, vert_pos,
+                                  params->blend_params, load);
 
     // Silently return on failed passes
     if (pass->failed)
@@ -929,8 +937,8 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
     // For compute shaders: also update the dispatch dimensions
     if (pl_shader_is_compute(sh)) {
         // Round up to make sure we don-t leave off a part of the target
-        int width = abs(pl_rect_w(*rc)),
-            height = abs(pl_rect_h(*rc)),
+        int width = abs(pl_rect_w(rc)),
+            height = abs(pl_rect_h(rc)),
             block_w = sh->res.compute_group_size[0],
             block_h = sh->res.compute_group_size[1],
             num_x   = (width  + block_w - 1) / block_w,
@@ -945,7 +953,8 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, struct pl_shader **psh,
     }
 
     // Dispatch the actual shader
-    rparams->target = target;
+    rparams->target = params->target;
+    rparams->timer = params->timer;
     pl_pass_run(dp->gpu, &pass->run_params);
     ret = true;
 
@@ -954,14 +963,14 @@ error:
     for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
         dp->tmp[i].len = 0;
 
-    pl_dispatch_abort(dp, psh);
+    pl_dispatch_abort(dp, params->shader);
     return ret;
 }
 
-bool pl_dispatch_compute(struct pl_dispatch *dp, struct pl_shader **psh,
-                         int dispatch_size[3], int width, int height)
+bool pl_dispatch_compute(struct pl_dispatch *dp,
+                         const struct pl_dispatch_compute_params *params)
 {
-    struct pl_shader *sh = *psh;
+    struct pl_shader *sh = *params->shader;
     const struct pl_shader_res *res = &sh->res;
     bool ret = false;
 
@@ -987,14 +996,15 @@ bool pl_dispatch_compute(struct pl_dispatch *dp, struct pl_shader **psh,
     }
 
     if (sh->res.num_vertex_attribs) {
-        if (!width || !height) {
+        if (!params->width || !params->height) {
             PL_ERR(dp, "Trying to dispatch a targetless compute shader that "
                    "uses vertex attributes, this requires specifying the size "
                    "of the effective rendering area!");
             goto error;
         }
 
-        compute_vertex_attribs(dp, sh, width, height, &(ident_t){0});
+        compute_vertex_attribs(dp, sh, params->width, params->height,
+                               &(ident_t){0});
     }
 
     struct pass *pass = find_pass(dp, sh, NULL, NULL, NULL, false);
@@ -1015,10 +1025,13 @@ bool pl_dispatch_compute(struct pl_dispatch *dp, struct pl_shader **psh,
         update_pass_var(dp, pass, &sh->variables[i], &pass->vars[i]);
 
     // Update the dispatch size
-    for (int i = 0; i < 3; i++)
-        rparams->compute_groups[i] = dispatch_size[i];
+    for (int i = 0; i < 3; i++) {
+        pl_assert(params->dispatch_size[i] > 0);
+        rparams->compute_groups[i] = params->dispatch_size[i];
+    }
 
     // Dispatch the actual shader
+    rparams->timer = params->timer;
     pl_pass_run(dp->gpu, &pass->run_params);
     ret = true;
 
@@ -1027,7 +1040,7 @@ error:
     for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
         dp->tmp[i].len = 0;
 
-    pl_dispatch_abort(dp, psh);
+    pl_dispatch_abort(dp, params->shader);
     return ret;
 }
 
