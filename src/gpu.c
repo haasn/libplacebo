@@ -1529,6 +1529,34 @@ error:
     return false;
 }
 
+struct pl_timer *pl_timer_create(const struct pl_gpu *gpu)
+{
+    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    if (!impl->timer_create)
+        return NULL;
+
+    return impl->timer_create(gpu);
+}
+
+void pl_timer_destroy(const struct pl_gpu *gpu, struct pl_timer **timer)
+{
+    if (!*timer)
+        return;
+
+    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    impl->timer_destroy(gpu, *timer);
+    *timer = NULL;
+}
+
+uint64_t pl_timer_query(const struct pl_gpu *gpu, struct pl_timer *timer)
+{
+    if (!timer)
+        return 0;
+
+    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    return impl->timer_query(gpu, timer);
+}
+
 const char *print_uuid(char buf[3 * UUID_SIZE], const uint8_t uuid[UUID_SIZE])
 {
     static const char *hexdigits = "0123456789ABCDEF";

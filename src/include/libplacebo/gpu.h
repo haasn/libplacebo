@@ -405,6 +405,13 @@ struct pl_tex_transfer_params {
     unsigned int stride_w; // the number of texels per horizontal row (x axis)
     unsigned int stride_h; // the number of texels per vertical column (y axis)
 
+    // An optional timer to report the approximate duration of the texture
+    // transfer to. Note that this is only an approximation, since the actual
+    // texture transfer may happen entirely in the background (in particular,
+    // for implementations with asynchronous transfer capabilities). It's also
+    // not guaranteed that all GPUs support this.
+    struct pl_timer *timer;
+
     // For the data source/target of a transfer operation, there are two valid
     // options:
     //
@@ -958,6 +965,11 @@ struct pl_pass_run_params {
     // fully defined for every invocation if params.push_constants_size > 0.
     void *push_constants;
 
+    // An optional timer to report the approximate runtime of this shader pass
+    // invocation to. Note that this is only an approximation, since shaders
+    // may overlap their execution times and contend for GPU time.
+    struct pl_timer *timer;
+
     // --- pass->params.type==PL_PASS_RASTER only
 
     // Target must be a 2D texture, target->params.renderable must be true, and
@@ -1036,6 +1048,41 @@ void pl_sync_destroy(const struct pl_gpu *gpu,
 bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
                    const struct pl_sync *sync);
 
+// A generic 'timer query' object. These can be used to measure an
+// approximation of the GPU execution time of a given operation. Due to the
+// highly asynchronous nature of GPUs, the actual results of any individual
+// timer query may be delayed by quite a bit. As such, users should avoid
+// trying to pair any particular GPU command with any particular timer query
+// result, and only reuse `pl_timer` objects with identical operations. The
+// results of timer queries are guaranteed to be in-order, but individual
+// queries may be dropped, and some operations might not record timer results
+// at all. (For example, if the underlying hardware does not support timer
+// queries for a given operation type)
+struct pl_timer;
+
+// Creates a new timer object. This may return NULL, for example if the
+// implementation does not support timers, but since passing NULL to
+// `pl_timer_destroy` and `pl_timer_query` is safe, users generally need not
+// concern themselves with handling this.
+struct pl_timer *pl_timer_create(const struct pl_gpu *gpu);
+
+void pl_timer_destroy(const struct pl_gpu *gpu, struct pl_timer **);
+
+// Queries any results that have been measured since the last execution of
+// `pl_timer_query`. There may be more than one result, in which case the user
+// should simply call the function again to get the subsequent values. This
+// function returns a value of 0 in the event that there are no more
+// unprocessed results.
+//
+// The results are reported in nanoseconds, but the actual precision of the
+// timestamp queries may be significantly lower.
+//
+// Note: Results do not queue up indefinitely. Generally, the implementation
+// will only keep track of a small, fixed number of results internally. Make
+// sure to include this function as part of your main rendering loop to process
+// all of its results, or older results will be overwritten by newer ones.
+uint64_t pl_timer_query(const struct pl_gpu *gpu, struct pl_timer *);
+
 // This is semantically a no-op, but it provides a hint that you want to flush
 // any partially queued up commands and begin execution. There is normally no
 // need to call this, because queued commands will always be implicitly flushed
@@ -1062,11 +1109,13 @@ void pl_gpu_flush(const struct pl_gpu *gpu);
 //
 // After this operation is called, it's guaranteed that all pending buffer
 // operations are complete - i.e. `pl_buf_poll` is guaranteed to return false.
-// Also, if you only care about buffer operations, you can accomplish this more
-// easily by using `pl_buf_poll` with the timeout set to `UINT64_MAX`. But
-// if you have many buffers it may be more convenient to call this function
-// instead. The difference is that this function will also affect e.g.
-// renders to a `pl_swapchain`.
+// It's also guaranteed that any outstanding timer query results are available.
+//
+// Note: If you only care about buffer operations, you can accomplish this more
+// easily by using `pl_buf_poll` with the timeout set to `UINT64_MAX`. But if
+// you have many buffers it may be more convenient to call this function
+// instead. The difference is that this function will also affect e.g. renders
+// to a `pl_swapchain`.
 void pl_gpu_finish(const struct pl_gpu *gpu);
 
 #endif // LIBPLACEBO_GPU_H_

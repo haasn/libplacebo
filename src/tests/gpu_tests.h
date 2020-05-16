@@ -81,9 +81,14 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
     for (size_t i = 0; i < bytes; i++)
         src[i] = (RANDOM * 256);
 
+    struct pl_timer *ul, *dl;
+    ul = pl_timer_create(gpu);
+    dl = pl_timer_create(gpu);
+
     REQUIRE(pl_tex_upload(gpu, &(struct pl_tex_transfer_params){
         .tex = tex[0],
         .ptr = src,
+        .timer = ul,
     }));
 
     // Test blitting, if possible for this format
@@ -106,6 +111,7 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
     REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params){
         .tex = dst_tex,
         .ptr = dst,
+        .timer = dl,
     }));
 
     if (fmt->emulated && fmt->type == PL_FMT_FLOAT) {
@@ -115,6 +121,14 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
     } else {
         REQUIRE(memcmp(src, dst, bytes) == 0);
     }
+
+    // Report timer results
+    pl_gpu_finish(gpu);
+    printf("upload time: %"PRIu64", download time: %"PRIu64"\n",
+           pl_timer_query(gpu, ul), pl_timer_query(gpu, dl));
+
+    pl_timer_destroy(gpu, &ul);
+    pl_timer_destroy(gpu, &dl);
 }
 
 static void pl_texture_tests(const struct pl_gpu *gpu)
@@ -260,14 +274,21 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     REQUIRE(pass);
     REQUIRE(pass->params.cached_program_len);
 
+    struct pl_timer *timer = pl_timer_create(gpu);
     pl_pass_run(gpu, &(struct pl_pass_run_params) {
         .pass           = pass,
         .target         = fbo,
         .vertex_data    = vertices,
         .vertex_count   = sizeof(vertices) / sizeof(struct vertex),
+        .timer          = timer,
     });
 
     pl_pass_destroy(gpu, &pass);
+
+    // Wait until this pass is complete and report the timer result
+    pl_gpu_finish(gpu);
+    printf("timer query result: %"PRIu64"\n", pl_timer_query(gpu, timer));
+    pl_timer_destroy(gpu, &timer);
 
     static float data[FBO_H * FBO_W * 4] = {0};
 
