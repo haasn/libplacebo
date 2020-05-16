@@ -500,6 +500,12 @@ static VkResult vk_create_render_pass(struct vk_ctx *vk, const struct pl_fmt *fm
     return vk->CreateRenderPass(vk->dev, &rinfo, VK_ALLOC, out);
 }
 
+static void vk_cmd_timer_begin(const struct pl_gpu *gpu, struct vk_cmd *cmd,
+                               struct pl_timer *timer);
+
+static void vk_cmd_timer_end(const struct pl_gpu *gpu, struct vk_cmd *cmd,
+                             struct pl_timer *timer);
+
 // For pl_tex.priv
 struct pl_tex_vk {
     bool held;
@@ -1839,6 +1845,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
             goto error;
 
         CMD_MARK_BEGIN(cmd);
+        vk_cmd_timer_begin(gpu, cmd, params->timer);
 
         struct pl_buf_vk *tbuf_vk = TA_PRIV(tbuf);
         VkBufferCopy region = {
@@ -1858,6 +1865,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_signal(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
+        vk_cmd_timer_end(gpu, cmd, params->timer);
         CMD_MARK_END(cmd);
 
         struct pl_tex_transfer_params fixed = *params;
@@ -1887,6 +1895,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
             goto error;
 
         CMD_MARK_BEGIN(cmd);
+        vk_cmd_timer_begin(gpu, cmd, params->timer);
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_READ_BIT, params->buf_offset, size,
@@ -1899,6 +1908,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
+        vk_cmd_timer_end(gpu, cmd, params->timer);
         CMD_MARK_END(cmd);
     }
 
@@ -1958,6 +1968,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
             goto error;
 
         CMD_MARK_BEGIN(cmd);
+        vk_cmd_timer_begin(gpu, cmd, params->timer);
 
         struct pl_buf_vk *tbuf_vk = TA_PRIV(tbuf);
         VkBufferCopy region = {
@@ -1977,6 +1988,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_flush(gpu, cmd, buf, params->buf_offset, size);
 
+        vk_cmd_timer_end(gpu, cmd, params->timer);
         CMD_MARK_END(cmd);
 
     } else {
@@ -1999,6 +2011,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
             goto error;
 
         CMD_MARK_BEGIN(cmd);
+        vk_cmd_timer_begin(gpu, cmd, params->timer);
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size,
@@ -2012,6 +2025,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_flush(gpu, cmd, buf, params->buf_offset, size);
 
+        vk_cmd_timer_end(gpu, cmd, params->timer);
         CMD_MARK_END(cmd);
     }
 
@@ -2758,6 +2772,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         goto error;
 
     CMD_MARK_BEGIN(cmd);
+    vk_cmd_timer_begin(gpu, cmd, params->timer);
 
     // Find a descriptor set to use
     VkDescriptorSet ds = VK_NULL_HANDLE;
@@ -2871,6 +2886,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
     for (int i = 0; i < pass->params.num_descriptors; i++)
         vk_release_descriptor(gpu, cmd, pass, params->desc_bindings[i], i);
 
+    vk_cmd_timer_end(gpu, cmd, params->timer);
     CMD_MARK_END(cmd);
 
     // flush the work so far into its own command buffer, for better
@@ -3059,6 +3075,135 @@ error:
     return false;
 }
 
+// Gives us enough queries for 8 results
+#define VK_QUERY_POOL_SIZE 16
+
+struct pl_timer {
+    int refcount;
+    bool recording; // true between vk_cmd_timer_begin() and vk_cmd_timer_end()
+    VkQueryPool qpool; // even=start, odd=stop
+    int index_write; // next index to write to
+    int index_read; // next index to read from
+};
+
+static void vk_timer_destroy(const struct pl_gpu *gpu, struct pl_timer *timer)
+{
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+
+    vk->DestroyQueryPool(vk->dev, timer->qpool, VK_ALLOC);
+    talloc_free(timer);
+}
+
+static void vk_timer_deref(const struct pl_gpu *gpu, struct pl_timer *timer)
+{
+    if (--timer->refcount == 0)
+        vk_timer_destroy(gpu, timer);
+}
+
+static struct pl_timer *vk_timer_create(const struct pl_gpu *gpu)
+{
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+
+    struct pl_timer *timer = talloc_ptrtype(NULL, timer);
+    *timer = (struct pl_timer) {
+        .refcount = 1,
+    };
+
+    struct VkQueryPoolCreateInfo qinfo = {
+        .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+        .queryType = VK_QUERY_TYPE_TIMESTAMP,
+        .queryCount = VK_QUERY_POOL_SIZE,
+    };
+
+    VK(vk->CreateQueryPool(vk->dev, &qinfo, VK_ALLOC, &timer->qpool));
+    return timer;
+
+error:
+    vk_timer_destroy(gpu, timer);
+    return NULL;
+}
+
+static uint64_t vk_timer_query(const struct pl_gpu *gpu, struct pl_timer *timer)
+{
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+
+    if (timer->index_read == timer->index_write)
+        return 0; // no more unprocessed results
+
+    VkResult res;
+    uint64_t ts[2];
+    res = vk->GetQueryPoolResults(vk->dev, timer->qpool, timer->index_read, 2,
+                                  sizeof(ts), &ts[0], sizeof(uint64_t),
+                                  VK_QUERY_RESULT_64_BIT);
+
+    switch (res) {
+    case VK_SUCCESS:
+        timer->index_read = (timer->index_read + 2) % VK_QUERY_POOL_SIZE;
+        return (ts[1] - ts[0]) * vk->limits.timestampPeriod;
+    case VK_NOT_READY:
+        return 0;
+    default:
+        VK_ASSERT(res, "Retrieving query pool results");
+    }
+
+error:
+    return 0;
+}
+
+static void vk_cmd_timer_begin(const struct pl_gpu *gpu, struct vk_cmd *cmd,
+                               struct pl_timer *timer)
+{
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+
+    if (!timer)
+        return;
+
+    pl_assert(!timer->recording);
+    timer->recording = true;
+
+    if (!cmd->pool->props.timestampValidBits) {
+        PL_TRACE(gpu, "QF %d does not support timestamp queries", cmd->pool->qf);
+        return;
+    }
+
+    vk->CmdResetQueryPool(cmd->buf, timer->qpool, timer->index_write, 2);
+    vk->CmdWriteTimestamp(cmd->buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                          timer->qpool, timer->index_write);
+}
+
+static void vk_cmd_timer_end(const struct pl_gpu *gpu, struct vk_cmd *cmd,
+                             struct pl_timer *timer)
+{
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+
+    if (!timer)
+        return;
+
+    pl_assert(timer->recording);
+    timer->recording = false;
+
+    if (!cmd->pool->props.timestampValidBits)
+        return;
+
+    vk->CmdWriteTimestamp(cmd->buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                          timer->qpool, timer->index_write + 1);
+
+    timer->index_write = (timer->index_write + 2) % VK_QUERY_POOL_SIZE;
+    if (timer->index_write == timer->index_read) {
+        // forcibly drop the least recent result to make space
+        timer->index_read = (timer->index_read + 2) % VK_QUERY_POOL_SIZE;
+    }
+
+    timer->refcount++;
+    vk_cmd_callback(cmd, (vk_cb) vk_timer_deref, gpu, timer);
+}
+
+
 static void vk_gpu_flush(const struct pl_gpu *gpu)
 {
     struct pl_vk *p = TA_PRIV(gpu);
@@ -3106,6 +3251,9 @@ static const struct pl_gpu_fns pl_fns_vk = {
     .sync_create            = vk_sync_create,
     .sync_destroy           = vk_sync_deref,
     .tex_export             = vk_tex_export,
+    .timer_create           = vk_timer_create,
+    .timer_destroy          = vk_timer_deref,
+    .timer_query            = vk_timer_query,
     .gpu_flush              = vk_gpu_flush,
     .gpu_finish             = vk_gpu_finish,
 };

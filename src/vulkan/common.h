@@ -136,11 +136,13 @@ struct vk_ctx {
     VK_FUN(CmdPipelineBarrier);
     VK_FUN(CmdPushConstants);
     VK_FUN(CmdPushDescriptorSetKHR);
+    VK_FUN(CmdResetQueryPool);
     VK_FUN(CmdSetEvent);
     VK_FUN(CmdSetScissor);
     VK_FUN(CmdSetViewport);
     VK_FUN(CmdUpdateBuffer);
     VK_FUN(CmdWaitEvents);
+    VK_FUN(CmdWriteTimestamp);
     VK_FUN(CreateBuffer);
     VK_FUN(CreateBufferView);
     VK_FUN(CreateCommandPool);
@@ -156,6 +158,7 @@ struct vk_ctx {
     VK_FUN(CreateImageView);
     VK_FUN(CreatePipelineCache);
     VK_FUN(CreatePipelineLayout);
+    VK_FUN(CreateQueryPool);
     VK_FUN(CreateRenderPass);
     VK_FUN(CreateSampler);
     VK_FUN(CreateSemaphore);
@@ -177,6 +180,7 @@ struct vk_ctx {
     VK_FUN(DestroyPipeline);
     VK_FUN(DestroyPipelineCache);
     VK_FUN(DestroyPipelineLayout);
+    VK_FUN(DestroyQueryPool);
     VK_FUN(DestroyRenderPass);
     VK_FUN(DestroySampler);
     VK_FUN(DestroySemaphore);
@@ -192,6 +196,7 @@ struct vk_ctx {
     VK_FUN(GetMemoryFdKHR);
     VK_FUN(GetMemoryFdPropertiesKHR);
     VK_FUN(GetPipelineCacheData);
+    VK_FUN(GetQueryPoolResults);
     VK_FUN(GetSemaphoreFdKHR);
     VK_FUN(GetSwapchainImagesKHR);
     VK_FUN(InvalidateMappedMemoryRanges);
