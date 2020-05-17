@@ -95,11 +95,7 @@ bool pl_needs_av1_grain(const struct pl_av1_grain_params *params);
 // undistorted plane (before applying grain), and must be passed as the texture
 // `luma_tex`.
 //
-// So for example, for planar YCbCr content, grain must be added to the chroma
-// channels first, then followed by the luma channels. (For packed content like
-// rgb24 where all channels are part of the same pass, this is unnecessary)
-//
-// Note: all of this applies even if params->repr.sys == PL_COLOR_SYSTEM_RGB (!)
+// Note: This applies even if params->repr.sys == PL_COLOR_SYSTEM_RGB (!)
 bool pl_shader_av1_grain(struct pl_shader *sh,
                          struct pl_shader_obj **grain_state,
                          const struct pl_av1_grain_params *params);
