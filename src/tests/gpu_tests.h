@@ -373,6 +373,21 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         TEST_FBO_PATTERN(epsilon, "color system %d", (int) sys);
     }
 
+    for (enum pl_color_light light = 0; light < PL_COLOR_LIGHT_COUNT; light++) {
+        sh = pl_dispatch_begin(dp);
+        struct pl_color_space src_space = { .light = light };
+        struct pl_color_space dst_space = { 0 };
+        pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+        pl_shader_color_map(sh, NULL, src_space, dst_space, NULL, false);
+        pl_shader_color_map(sh, NULL, dst_space, src_space, NULL, false);
+        REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+            .shader = &sh,
+            .target = fbo,
+        }));
+
+        TEST_FBO_PATTERN(1e-6, "light %d", (int) light);
+    }
+
     // Repeat this a few times to test the caching
     for (int i = 0; i < 10; i++) {
         sh = pl_dispatch_begin(dp);

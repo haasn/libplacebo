@@ -44,7 +44,7 @@ void pl_shader_encode_color(struct pl_shader *sh,
 
 // Linearize (expand) `vec4 color`, given a specified color_transfer. In
 // essence, this loosely corresponds to the ITU-R EOTF, calculated on an
-// idealized (reference) monitor with a white point of PL_COLOR_REF_WHITE and
+// idealized (reference) monitor with a white point of PL_COLOR_SDR_WHITE and
 // infinite contrast.
 //
 // Note: Unlike the ITU-R EOTF, it never includes the OOTF - even for systems

@@ -14,7 +14,7 @@ int main()
     }
 
     float pq_peak = pl_color_transfer_nominal_peak(PL_COLOR_TRC_PQ);
-    REQUIRE(feq(PL_COLOR_REF_WHITE * pq_peak, 10000, 1e-7));
+    REQUIRE(feq(PL_COLOR_SDR_WHITE * pq_peak, 10000, 1e-7));
 
     struct pl_color_repr tv_repr = {
         .sys       = PL_COLOR_SYSTEM_BT_709,

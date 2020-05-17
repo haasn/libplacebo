@@ -319,16 +319,18 @@ void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc)
              "             / (vec3(%f) - vec3(%f) * color.rgb); \n"
              "color.rgb = pow(color.rgb, vec3(1.0/%f));         \n"
              // PQ's output range is 0-10000, but we need it to be relative to
-             // to PL_COLOR_REF_WHITE instead, so rescale
-             "color.rgb *= vec3(%f);\n",
-             PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1, 10000 / PL_COLOR_REF_WHITE);
+             // to PL_COLOR_SDR_WHITE instead, so rescale
+             "color.rgb *= vec3(%f);                            \n",
+             PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1, 10000.0 / PL_COLOR_SDR_WHITE);
         break;
     case PL_COLOR_TRC_HLG:
         GLSL("color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,         \n"
              "                exp((color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
              "                    + vec3(%f),                            \n"
-             "                %s(lessThan(vec3(0.5), color.rgb)));       \n",
-             HLG_C, HLG_A, HLG_B, sh_bvec(sh, 3));
+             "                %s(lessThan(vec3(0.5), color.rgb)));       \n"
+             // Rescale from 0-12 to be relative to PL_COLOR_SDR_WHITE_HLG
+             "color.rgb *= vec3(1.0/%f);                                 \n",
+             HLG_C, HLG_A, HLG_B, sh_bvec(sh, 3), PL_COLOR_SDR_WHITE_HLG);
         break;
     case PL_COLOR_TRC_V_LOG:
         GLSL("color.rgb = mix((color.rgb - vec3(0.125)) * vec3(1.0/5.6), \n"
@@ -399,13 +401,14 @@ void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
              "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)      \n"
              "             / (vec3(1.0) + vec3(%f) * color.rgb); \n"
              "color.rgb = pow(color.rgb, vec3(%f));              \n",
-             10000 / PL_COLOR_REF_WHITE, PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
+             10000 / PL_COLOR_SDR_WHITE, PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
         break;
     case PL_COLOR_TRC_HLG:
-        GLSL("color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                     \n"
+        GLSL("color.rgb *= vec3(%f);                                           \n"
+             "color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                     \n"
              "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f), \n"
              "                %s(lessThan(vec3(1.0), color.rgb)));             \n",
-             HLG_A, HLG_B, HLG_C, sh_bvec(sh, 3));
+             PL_COLOR_SDR_WHITE_HLG, HLG_A, HLG_B, HLG_C, sh_bvec(sh, 3));
         break;
     case PL_COLOR_TRC_V_LOG:
         GLSL("color.rgb = mix(vec3(5.6) * color.rgb + vec3(0.125),       \n"
@@ -504,10 +507,11 @@ static void pl_shader_ootf(struct pl_shader *sh, struct pl_color_space csp)
     {
     case PL_COLOR_LIGHT_SCENE_HLG: {
         // HLG OOTF from BT.2100, tuned to the indicated peak
-        float gamma = 1.2 + 0.42 * log10(csp.sig_peak * PL_COLOR_REF_WHITE / 1000.0);
+        float peak = csp.sig_peak * PL_COLOR_SDR_WHITE;
+        float gamma = 1.2 + 0.42 * log10(peak / 1000.0);
         gamma = PL_MAX(gamma, 1.0);
         GLSL("color.rgb *= vec3(%f * pow(dot(%s, color.rgb), %f));\n",
-             csp.sig_peak / pow(12, gamma),
+             csp.sig_peak / pow(12.0 / PL_COLOR_SDR_WHITE_HLG, gamma),
              sh_luma_coeffs(sh, csp.primaries),
              gamma - 1.0);
         break;
@@ -542,12 +546,13 @@ static void pl_shader_inverse_ootf(struct pl_shader *sh, struct pl_color_space c
     switch (csp.light)
     {
     case PL_COLOR_LIGHT_SCENE_HLG: {
-        float gamma = 1.2 + 0.42 * log10(csp.sig_peak * PL_COLOR_REF_WHITE / 1000.0);
+        float peak = csp.sig_peak * PL_COLOR_SDR_WHITE;
+        float gamma = 1.2 + 0.42 * log10(peak / 1000.0);
         gamma = PL_MAX(gamma, 1.0);
         GLSL("color.rgb *= vec3(1.0/%f);                                \n"
              "color.rgb /= vec3(max(1e-6, pow(dot(%s, color.rgb),       \n"
              "                                %f)));                    \n",
-             csp.sig_peak / pow(12, gamma),
+             csp.sig_peak / pow(12.0 / PL_COLOR_SDR_WHITE_HLG, gamma),
              sh_luma_coeffs(sh, csp.primaries),
              (gamma - 1.0) / gamma);
         break;
