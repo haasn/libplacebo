@@ -85,6 +85,7 @@ bool pl_needs_av1_grain(const struct pl_av1_grain_params *params);
 // that index, or PL_CHANNEL_NONE for unused channels. Returns if successful.
 //
 // Returns false on any error, or if AV1 grain generation is not supported.
+// (Requires GLSL version 130 or newer)
 //
 // For example, if this is the pass for the subsampled Cb and Cr planes, which
 // are currently available in color.xy, then `params->channels` would be:
