@@ -1302,11 +1302,11 @@ void pl_3dlut_apply(struct pl_shader *sh, struct pl_shader_obj **lut3d)
     obj->updated = false;
 }
 
+#endif // PL_HAVE_LCMS
+
 const struct pl_3dlut_params pl_3dlut_default_params = {
     .intent = PL_INTENT_RELATIVE_COLORIMETRIC,
     .size_r = 64,
     .size_g = 64,
     .size_b = 64,
 };
-
-#endif // PL_HAVE_LCMS
