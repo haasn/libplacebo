@@ -1147,6 +1147,12 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         image->src_rect.y1 = ref_tex->params.h;
     }
 
+    // Guess the source primaries based on resolution
+    if (!image->color.primaries) {
+        image->color.primaries = pl_color_primaries_guess(ref_tex->params.w,
+                                                          ref_tex->params.h);
+    }
+
     pass->ref_rect = image->src_rect;
 
     // Do a second pass to compute the rc of each plane
@@ -1583,6 +1589,11 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     fix_rects(image, target);
     pl_color_space_infer(&image->color);
     pl_color_space_infer(&target->color);
+
+    // As a special case, don't infer the image primaries just yet, since
+    // that's done in a resolution-dependent way in pass_read_image
+    if (!pimage->color.primaries)
+        image->color.primaries = PL_COLOR_PRIM_UNKNOWN;
 
     // TODO: output caching
     pl_dispatch_reset_frame(rr->dp);
