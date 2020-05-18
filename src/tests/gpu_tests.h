@@ -442,9 +442,10 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     for (int i = 0; i < 2; i++) {
         struct pl_av1_grain_params grain_params = {
             .data = av1_grain_data,
-            .luma_tex = src,
-            .channels = { 0, 1, 2 },
-            .repr = {
+            .tex = src,
+            .components = 3,
+            .component_mapping = { 0, 1, 2 },
+            .repr = &(struct pl_color_repr) {
                 .sys = PL_COLOR_SYSTEM_BT_709,
                 .levels = PL_COLOR_LEVELS_TV,
                 .bits = { .color_depth = 10, .sample_depth = 10 },
@@ -454,7 +455,6 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         grain_params.data.overlap = !!i;
 
         sh = pl_dispatch_begin(dp);
-        pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
         pl_shader_av1_grain(sh, &grain, &grain_params);
         REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
             .shader = &sh,

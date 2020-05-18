@@ -306,12 +306,12 @@ static void bench_av1_grain(struct pl_shader *sh, struct pl_shader_obj **state,
 {
     struct pl_av1_grain_params params = {
         .data = av1_grain_data,
-        .luma_tex = src,
-        .channels = {0, 1, 2},
+        .tex = src,
+        .components = 3,
+        .component_mapping = {0, 1, 2},
     };
 
     params.data.grain_seed = rand();
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
     pl_shader_av1_grain(sh, state, &params);
 }
 
@@ -320,13 +320,13 @@ static void bench_av1_grain_lap(struct pl_shader *sh, struct pl_shader_obj **sta
 {
     struct pl_av1_grain_params params = {
         .data = av1_grain_data,
-        .luma_tex = src,
-        .channels = {0, 1, 2},
+        .tex = src,
+        .components = 3,
+        .component_mapping = {0, 1, 2},
     };
 
     params.data.overlap = true;
     params.data.grain_seed = rand();
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
     pl_shader_av1_grain(sh, state, &params);
 }
 

@@ -64,7 +64,7 @@ struct pl_renderer {
     struct pl_shader_obj *peak_detect_state;
     struct pl_shader_obj *dither_state;
     struct pl_shader_obj *lut3d_state;
-    struct pl_shader_obj *grain_state;
+    struct pl_shader_obj *grain_state[4];
     const struct pl_tex *main_scale_fbo;
     const struct pl_tex *deband_fbos[4];
     const struct pl_tex *grain_fbos[4];
@@ -174,7 +174,8 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
     pl_shader_obj_destroy(&rr->peak_detect_state);
     pl_shader_obj_destroy(&rr->dither_state);
     pl_shader_obj_destroy(&rr->lut3d_state);
-    pl_shader_obj_destroy(&rr->grain_state);
+    for (int i = 0; i < PL_ARRAY_SIZE(rr->grain_state); i++)
+        pl_shader_obj_destroy(&rr->grain_state[i]);
 
     // Free all samplers
     for (int i = 0; i < PL_ARRAY_SIZE(rr->samplers); i++)
@@ -990,7 +991,6 @@ static enum plane_type detect_plane_type(const struct plane_state *st)
 // Returns true if grain was applied
 static bool plane_av1_grain(struct pl_renderer *rr, int plane_idx,
                             struct plane_state *st,
-                            int subx, int suby,
                             const struct pl_tex *ref_tex,
                             const struct pl_image *image,
                             const struct pl_render_params *params)
@@ -999,30 +999,22 @@ static bool plane_av1_grain(struct pl_renderer *rr, int plane_idx,
         return false;
 
     struct pl_plane *plane = &st->plane;
+    struct pl_color_repr repr = st->repr;
     struct pl_av1_grain_params grain_params = {
         .data = image->av1_grain,
+        .tex = plane->texture,
         .luma_tex = ref_tex,
-        .repr = st->repr,
-        .channels = {PL_CHANNEL_NONE, PL_CHANNEL_NONE, PL_CHANNEL_NONE},
-        .sub_x = subx,
-        .sub_y = suby,
+        .repr = &repr,
+        .components = plane->components,
     };
 
-    for (int c = 0; c < plane->components; c++) {
-        int idx = plane->texture->params.format->sample_order[c];
-        if (idx < 0 || idx >= PL_ARRAY_SIZE(grain_params.channels))
-            continue;
-        grain_params.channels[idx] = plane->component_mapping[c];
-    }
+    for (int c = 0; c < plane->components; c++)
+        grain_params.component_mapping[c] = plane->component_mapping[c];
 
     if (!pl_needs_av1_grain(&grain_params))
         return false;
 
-    const struct pl_fmt *grain_fmt = plane->texture->params.format;
-    if (!(grain_fmt->caps & PL_FMT_CAP_RENDERABLE))
-        grain_fmt = FBOFMT;
-
-    if (!grain_fmt) {
+    if (!FBOFMT) {
         PL_ERR(rr, "AV1 grain required but no renderable format available.. "
               "disabling!");
         rr->disable_grain = true;
@@ -1032,13 +1024,7 @@ static bool plane_av1_grain(struct pl_renderer *rr, int plane_idx,
     struct pl_shader *sh = pl_dispatch_begin_ex(rr->dp, false);
     const struct pl_tex *new_tex;
 
-    bool ok = pl_shader_sample_direct(sh, &(struct pl_sample_src) {
-        .tex = plane->texture,
-        .scale = pl_color_repr_normalize(&grain_params.repr),
-    });
-
-    if (ok)
-        ok = pl_shader_av1_grain(sh, &rr->grain_state, &grain_params);
+    bool ok = pl_shader_av1_grain(sh, &rr->grain_state[plane_idx], &grain_params);
 
     if (ok) {
         struct img grain_img = {
@@ -1047,7 +1033,7 @@ static bool plane_av1_grain(struct pl_renderer *rr, int plane_idx,
             .h = plane->texture->params.h,
         };
 
-        new_tex = finalize_img(rr, &grain_img, grain_fmt,
+        new_tex = finalize_img(rr, &grain_img, FBOFMT,
                                &rr->grain_fbos[plane_idx]);
         ok = !!new_tex;
         sh = NULL;
@@ -1055,7 +1041,7 @@ static bool plane_av1_grain(struct pl_renderer *rr, int plane_idx,
 
     if (ok) {
         plane->texture = new_tex;
-        st->repr = grain_params.repr;
+        st->repr = repr;
         return true;
     } else {
         PL_ERR(rr, "Failed applying AV1 grain.. disabling!");
@@ -1198,8 +1184,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         // intent of the spec (which is to apply synthesis effectively during
         // decoding)
 
-        int subx = ilogbf(rrx), suby = ilogbf(rry);
-        if (plane_av1_grain(rr, i, st, subx, suby, ref_tex, image, params)) {
+        if (plane_av1_grain(rr, i, st, ref_tex, image, params)) {
             PL_TRACE(rr, "After AV1 grain:");
             log_plane_info(rr, st);
         }

@@ -64,15 +64,23 @@ struct pl_av1_grain_data {
 // Struct containing extra options for the `pl_shader_av1_grain` call.
 struct pl_av1_grain_params {
     struct pl_av1_grain_data data;  // av1 grain metadata itself
-    const struct pl_tex *luma_tex;  // reference texture (always required!)
-    struct pl_color_repr repr;      // underlying color system
-    enum pl_channel channels[3];    // map from vec4 index to channel type
-    int sub_x, sub_y;               // subsampling shifts for the chroma planes
+    const struct pl_tex *tex;       // texture to sample from
+    const struct pl_tex *luma_tex;  // "luma" texture (see notes)
+    struct pl_color_repr *repr;     // underlying color representation (see notes)
+    int components;
+    int component_mapping[4];       // same as `struct pl_plane`
 
-    // Some notes apply to `repr`:
-    //  - repr.bits affects the rounding for grain generation
-    //  - repr.levels affects whether or not we clip to full range or not
-    //  - repr.sys affects whether channels 1 and 2 are treated like chroma
+    // Notes for `repr`:
+    //  - repr->bits affects the rounding for grain generation
+    //  - repr->levels affects whether or not we clip to full range or not
+    //  - repr->sys affects the interpretation of channels
+    //  - *repr gets normalized by this shader, which is why it's a pointer
+    //
+    // Notes for `luma_tex`:
+    //  - `luma_tex` must be specified if the `tex` does not itself contain the
+    //     "luma-like" component. For XYZ systems, the Y channel is the luma
+    //     component. For RGB systems, the G channel is.
+    //  - `luma_tex` must have the luma information in the first component (0)
 };
 
 // Test if AV1 film grain needs to be applied. This is a helper function
@@ -80,23 +88,12 @@ struct pl_av1_grain_params {
 // to be called, based on the given grain metadata.
 bool pl_needs_av1_grain(const struct pl_av1_grain_params *params);
 
-// Apply AV1 film grain to the channels given in `params->channels`, which maps
-// from the component index of the `vec4 color` to the channel contained in
-// that index, or PL_CHANNEL_NONE for unused channels. Returns if successful.
+// Sample from a texture while applying AV1 grain at the same time.
+// `grain_state` should be unique for every plane, as it only contains the
+// state relevant for this particular plane configuration.
 //
 // Returns false on any error, or if AV1 grain generation is not supported.
 // (Requires GLSL version 130 or newer)
-//
-// For example, if this is the pass for the subsampled Cb and Cr planes, which
-// are currently available in color.xy, then `params->channels` would be:
-// {PL_CHANNEL_CB, PL_CHANNEL_CR, PL_CHANNEL_NONE} = {1, 2, -1}
-//
-// When applying grain to the channels 1 and 2 channels, access to information
-// from channel 0 is needed. It's important to take this information from the
-// undistorted plane (before applying grain), and must be passed as the texture
-// `luma_tex`.
-//
-// Note: This applies even if params->repr.sys == PL_COLOR_SYSTEM_RGB (!)
 bool pl_shader_av1_grain(struct pl_shader *sh,
                          struct pl_shader_obj **grain_state,
                          const struct pl_av1_grain_params *params);
