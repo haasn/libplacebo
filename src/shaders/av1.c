@@ -729,6 +729,11 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     if (offsets_x * offsets_y != obj->num_offsets ||
         chroma_lut_size != obj->chroma_lut_size)
     {
+        PL_TRACE(sh, "Regenerating av1 grain buffer due to offsets mismatch "
+                 "(%d != %d) or LUT size mismatch (%d != %d)",
+                 offsets_x * offsets_y, obj->num_offsets,
+                 chroma_lut_size, obj->chroma_lut_size);
+
         // (Re-)generate the SSBO layout
         if (obj->tmp) {
             talloc_free_children(obj->tmp);
