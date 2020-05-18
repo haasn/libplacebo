@@ -425,6 +425,7 @@ static void dispatch_sampler(struct pl_renderer *rr, struct pl_shader *sh,
 
         struct pl_sample_src src2 = *src;
         src2.tex = finalize_img(rr, &img, FBOFMT, sep_fbo);
+        src2.scale = 1.0;
         ok = src2.tex && pl_shader_sample_ortho(sh, PL_SEP_HORIZ, &src2, &fparams);
     }
 
