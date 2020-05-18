@@ -1030,12 +1030,11 @@ static bool plane_av1_grain(struct pl_renderer *rr, int plane_idx,
     }
 
     struct pl_shader *sh = pl_dispatch_begin_ex(rr->dp, false);
-    struct pl_color_repr repr = st->repr;
     const struct pl_tex *new_tex;
 
     bool ok = pl_shader_sample_direct(sh, &(struct pl_sample_src) {
         .tex = plane->texture,
-        .scale = pl_color_repr_normalize(&repr),
+        .scale = pl_color_repr_normalize(&grain_params.repr),
     });
 
     if (ok)
@@ -1056,7 +1055,7 @@ static bool plane_av1_grain(struct pl_renderer *rr, int plane_idx,
 
     if (ok) {
         plane->texture = new_tex;
-        st->repr = repr;
+        st->repr = grain_params.repr;
         return true;
     } else {
         PL_ERR(rr, "Failed applying AV1 grain.. disabling!");
