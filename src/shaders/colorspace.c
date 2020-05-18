@@ -1121,7 +1121,7 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
 
         lut_size = 1 << PL_DEF(params->lut_size, 6);
         lut = sh_lut(sh, &obj->lut, SH_LUT_AUTO, lut_size, lut_size, 0, 1,
-                     changed, obj, fill_dither_matrix);
+                     changed, false, obj, fill_dither_matrix);
         if (!lut)
             goto fallback;
     }
@@ -1274,7 +1274,7 @@ bool pl_3dlut_update(struct pl_shader *sh,
     obj->src = *src;
     obj->dst = *dst;
     obj->lut = sh_lut(sh, &obj->lut_obj, SH_LUT_LINEAR, s_r, s_g, s_b, 4,
-                      changed, obj, fill_3dlut);
+                      changed, false, obj, fill_3dlut);
     if (!obj->lut || !obj->ok)
         return false;
 

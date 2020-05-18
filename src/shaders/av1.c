@@ -863,7 +863,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
         if (priv.num > 0) {
             scaling[i] = sh_lut(sh, &obj->scaling[i], SH_LUT_LINEAR,
                                 SCALING_LUT_SIZE, 0, 0, 1, scaling_changed,
-                                &priv, generate_scaling);
+                                true, &priv, generate_scaling);
 
             if (!scaling[i]) {
                 SH_FAIL(sh, "Failed generating/uploading scaling LUTs!");

@@ -194,9 +194,12 @@ enum sh_lut_method {
 // The `fill` function will be called with a zero-initialized buffer whenever
 // the data needs to be computed, which happens whenever the size is changed,
 // the shader object is invalidated, or `update` is set to true.
+//
+// If `dynamic` is set to true, shader objects will be preserved and updated
+// in-place rather than being treated as read-only.
 ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
                enum sh_lut_method method, int width, int height, int depth,
-               int components, bool update, void *priv,
+               int components, bool update, bool dynamic, void *priv,
                void (*fill)(void *priv, float *data, int w, int h, int d));
 
 // Returns a GLSL-version appropriate "bvec"-like type. For GLSL 130+, this

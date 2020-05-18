@@ -367,7 +367,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     }
 
     ident_t lut = sh_lut(sh, &obj->lut, SH_LUT_LINEAR, lut_entries, 0, 0, 1,
-                         update, obj, fill_polar_lut);
+                         update, false, obj, fill_polar_lut);
     if (!lut) {
         SH_FAIL(sh, "Failed initializing polar LUT!");
         return false;
@@ -597,7 +597,7 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
     int N = obj->filter->row_size; // number of samples to convolve
     int width = obj->filter->row_stride / 4; // width of the LUT texture
     ident_t lut = sh_lut(sh, &obj->lut, SH_LUT_LINEAR, width, lut_entries, 0, 4,
-                         update, obj, fill_ortho_lut);
+                         update, false, obj, fill_ortho_lut);
     if (!lut) {
         SH_FAIL(sh, "Failed initializing separated LUT!");
         return false;

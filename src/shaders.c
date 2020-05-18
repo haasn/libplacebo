@@ -655,7 +655,7 @@ static void sh_lut_uninit(const struct pl_gpu *gpu, void *ptr)
 
 ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
                enum sh_lut_method method, int width, int height, int depth,
-               int comps, bool update, void *priv,
+               int comps, bool update, bool dynamic, void *priv,
                void (*fill)(void *priv, float *data, int w, int h, int d))
 {
     const struct pl_gpu *gpu = SH_GPU(sh);
@@ -739,8 +739,6 @@ next_dim: ; // `continue` out of the inner loop
     }
 
     if (update) {
-        sh_lut_uninit(gpu, lut);
-
         tmp = talloc_zero_size(NULL, size * comps * sizeof(float));
         fill(priv, tmp, width, height, depth);
 
@@ -767,8 +765,7 @@ next_dim: ; // `continue` out of the inner loop
                 goto error;
             }
 
-            pl_assert(!lut->weights.tex);
-            lut->weights.tex = pl_tex_create(gpu, &(struct pl_tex_params) {
+            struct pl_tex_params params = {
                 .w              = width,
                 .h              = PL_DEF(height, texdim >= 2 ? 1 : 0),
                 .d              = PL_DEF(depth,  texdim >= 3 ? 1 : 0),
@@ -776,10 +773,26 @@ next_dim: ; // `continue` out of the inner loop
                 .sampleable     = true,
                 .sample_mode    = mode,
                 .address_mode   = PL_TEX_ADDRESS_CLAMP,
-                .initial_data   = tmp,
-            });
+                .host_writable  = dynamic,
+                .initial_data   = dynamic ? NULL : tmp,
+            };
 
-            if (!lut->weights.tex) {
+            bool ok;
+            if (dynamic) {
+                ok = pl_tex_recreate(gpu, &lut->weights.tex, &params);
+                if (ok) {
+                    ok = pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
+                        .tex = lut->weights.tex,
+                        .ptr = tmp,
+                    });
+                }
+            } else {
+                pl_tex_destroy(gpu, &lut->weights.tex);
+                lut->weights.tex = pl_tex_create(gpu, &params);
+                ok = lut->weights.tex;
+            }
+
+            if (!ok) {
                 SH_FAIL(sh, "Failed creating LUT texture!");
                 goto error;
             }
@@ -787,13 +800,13 @@ next_dim: ; // `continue` out of the inner loop
         }
 
         case SH_LUT_UNIFORM:
-            pl_assert(!lut->weights.data);
+            talloc_free(lut->weights.data);
             lut->weights.data = tmp; // re-use `tmp`
             tmp = NULL;
             break;
 
         case SH_LUT_LITERAL: {
-            pl_assert(!lut->weights.str.len);
+            lut->weights.str.len = 0;
             for (int i = 0; i < size * comps; i += comps) {
                 if (i > 0)
                     bstr_xappend_asprintf_c(lut, &lut->weights.str, ",");
