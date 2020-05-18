@@ -515,11 +515,11 @@ static void sample(struct pl_shader *sh, enum offset off, enum pl_channel c,
     int sub_x = luma ? 0 : params->sub_x;
     int sub_y = luma ? 0 : params->sub_y;
 
-    GLSL("offset = %du * uvec2((data >> %d) & 0xFu,   \n"
-         "                     (data >> %d) & 0xFu);  \n"
-         "pos = offset + local_id.xy + uvec2(%d, %d); \n"
-         "val = grain_%s[ pos.y * %du + pos.x ];      \n",
-         luma ? 2 : 1, off + 4, off,
+    GLSL("offset = uvec2(%du, %du) * uvec2((data >> %d) & 0xFu, \n"
+         "                                 (data >> %d) & 0xFu);\n"
+         "pos = offset + local_id.xy + uvec2(%d, %d);           \n"
+         "val = grain_%s[ pos.y * %du + pos.x ];                \n",
+         sub_x ? 1 : 2, sub_y ? 1 : 2, off + 4, off,
          (BLOCK_SIZE >> sub_x) * delta[off].dx,
          (BLOCK_SIZE >> sub_y) * delta[off].dy,
          channel_names[c], GRAIN_WIDTH_LUT >> sub_x);
@@ -922,7 +922,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
                 .object = params->luma_tex,
             });
 
-            GLSL("pos = local_id * uvec2(%d, %d0);               \n"
+            GLSL("pos = global_id * uvec2(%du, %du);             \n"
                  "averageLuma = texelFetch(%s, ivec2(pos), 0).r; \n",
                  1 << params->sub_x, 1 << params->sub_y,
                  luma);
@@ -965,11 +965,10 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
         } else {
             GLSL("val = averageLuma; \n");
             if (!data->chroma_scaling_from_luma) {
-                GLSL("val = dot(vec2(val, color[%d]), vec2(%d.0, %d.0)); \n",
-                     i, data->uv_mult[c - 1], data->uv_mult[c - 1]);
+                GLSL("val = dot(vec2(val, color[%d]), vec2(%f, %f)); \n",
+                     i, data->uv_mult_luma[c - 1] / 64.0, data->uv_mult[c - 1] / 64.0);
                 int offset = data->uv_offset[c - 1] << (bits - 8);
-                GLSL("val = val * 1.0/64.0 + %f; \n",
-                     offset / scale.texture_scale);
+                GLSL("val += %f; \n", offset * scale.grain_scale);
             }
             GLSL("color[%d] += %s(val * %f) * grain;    \n"
                  "color[%d] = clamp(color[%d], %f, %f); \n",
