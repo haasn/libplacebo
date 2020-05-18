@@ -228,6 +228,9 @@ static inline bool pl_color_transfer_is_hdr(enum pl_color_transfer trc)
 // reference display.
 #define PL_COLOR_SDR_WHITE_HLG 3.17955
 
+// Compatibility alias for older versions of libplacebo
+#define PL_COLOR_REF_WHITE PL_COLOR_SDR_WHITE
+
 // The semantic interpretation of the decoded image, how is it mastered?
 enum pl_color_light {
     PL_COLOR_LIGHT_UNKNOWN = 0,
