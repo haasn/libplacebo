@@ -70,7 +70,7 @@ void bstr_xappend_vasprintf_c(void *tactx, bstr *s, const char *fmt,
             assert(c[1] == '*');
             assert(c[2] == 's');
             struct bstr str;
-            str.len = va_arg(ap, size_t);
+            str.len = va_arg(ap, int);
             str.start = va_arg(ap, char *);
             bstr_xappend(tactx, s, str);
             c += 2; // skip '*s'
