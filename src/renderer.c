@@ -285,7 +285,7 @@ struct pass_state {
     // Represents the "current" image which we're in the process of rendering.
     // This is initially set by pass_read_image, and all of the subsequent
     // rendering steps will mutate this in-place.
-    struct img cur_img;
+    struct img img;
 
     // Represents the "reference rect". Canonically, this is functionallity
     // equivalent to `pl_image.src_rect`, but both guaranteed to be valid, and
@@ -586,11 +586,12 @@ static const struct pl_tex *get_hook_tex(void *priv, int width, int height)
     return rr->hook_fbos[idx];
 }
 
-// if `ptex` is unspecified, uses `cur_img.sh` instead
+// if `ptex` is unspecified, uses `img->sh` instead
 //
 // Returns if any hook was applied (even if there were errors)
 static bool pass_hook(struct pl_renderer *rr, struct pass_state *pass,
-                      enum pl_hook_stage stage, const struct pl_tex **ptex,
+                      struct img *img, enum pl_hook_stage stage,
+                      const struct pl_tex **ptex,
                       const struct pl_render_params *params)
 {
     if (!rr->fbofmt || rr->disable_hooks)
@@ -598,8 +599,7 @@ static bool pass_hook(struct pl_renderer *rr, struct pass_state *pass,
 
     bool ret = false;
     const struct pl_tex *cur_tex = ptex ? *ptex : NULL;
-    struct img *cur_img = &pass->cur_img;
-    pl_assert(!!cur_tex ^ !!cur_img->sh);
+    pl_assert(!!cur_tex ^ !!img->sh);
 
     for (int n = 0; n < params->num_hooks; n++) {
         const struct pl_hook *hook = params->hooks[n];
@@ -613,10 +613,10 @@ static bool pass_hook(struct pl_renderer *rr, struct pass_state *pass,
             .get_tex = get_hook_tex,
             .priv = pass,
             .stage = stage,
-            .rect = cur_img->rect,
-            .repr = pass->cur_img.repr,
-            .color = pass->cur_img.color,
-            .components = pass->cur_img.comps,
+            .rect = img->rect,
+            .repr = img->repr,
+            .color = img->color,
+            .components = img->comps,
             .src_rect = pass->ref_rect,
             .dst_rect = pass->target.dst_rect,
         };
@@ -631,7 +631,7 @@ static bool pass_hook(struct pl_renderer *rr, struct pass_state *pass,
                 if (idx == rr->num_hook_fbos)
                     TARRAY_APPEND(rr, rr->hook_fbos, rr->num_hook_fbos, NULL);
 
-                cur_tex = finalize_img(rr, cur_img, rr->fbofmt, &rr->hook_fbos[idx]);
+                cur_tex = finalize_img(rr, img, rr->fbofmt, &rr->hook_fbos[idx]);
                 if (!cur_tex) {
                     PL_ERR(rr, "Failed dispatching shader prior to hook!");
                     goto error;
@@ -644,15 +644,15 @@ static bool pass_hook(struct pl_renderer *rr, struct pass_state *pass,
 
         case PL_HOOK_SIG_COLOR:
             if (cur_tex) {
-                pl_assert(!cur_img->sh);
-                cur_img->sh = pl_dispatch_begin(rr->dp);
-                pl_shader_sample_direct(cur_img->sh, &(struct pl_sample_src) {
+                pl_assert(!img->sh);
+                img->sh = pl_dispatch_begin(rr->dp);
+                pl_shader_sample_direct(img->sh, &(struct pl_sample_src) {
                     .tex = cur_tex,
                 });
                 cur_tex = NULL;
             }
 
-            hparams.sh = cur_img->sh;
+            hparams.sh = img->sh;
             break;
 
         default: abort();
@@ -671,9 +671,9 @@ static bool pass_hook(struct pl_renderer *rr, struct pass_state *pass,
 
         case PL_HOOK_SIG_TEX:
             if (!resizable) {
-                if (res.tex->params.w != cur_img->w ||
-                    res.tex->params.h != cur_img->h ||
-                    !pl_rect2d_eq(res.rect, cur_img->rect))
+                if (res.tex->params.w != img->w ||
+                    res.tex->params.h != img->h ||
+                    !pl_rect2d_eq(res.rect, img->rect))
                 {
                     PL_ERR(rr, "User hook tried resizing non-resizable stage!");
                     goto error;
@@ -681,7 +681,7 @@ static bool pass_hook(struct pl_renderer *rr, struct pass_state *pass,
             }
 
             cur_tex = res.tex;
-            *cur_img = (struct img) {
+            *img = (struct img) {
                 .repr = res.repr,
                 .color = res.color,
                 .comps = res.components,
@@ -693,9 +693,9 @@ static bool pass_hook(struct pl_renderer *rr, struct pass_state *pass,
 
         case PL_HOOK_SIG_COLOR:
             if (!resizable) {
-                if (res.sh->output_w != cur_img->w ||
-                    res.sh->output_h != cur_img->h ||
-                    !pl_rect2d_eq(res.rect, cur_img->rect))
+                if (res.sh->output_w != img->w ||
+                    res.sh->output_h != img->h ||
+                    !pl_rect2d_eq(res.rect, img->rect))
                 {
                     PL_ERR(rr, "User hook tried resizing non-resizable stage!");
                     goto error;
@@ -703,7 +703,7 @@ static bool pass_hook(struct pl_renderer *rr, struct pass_state *pass,
             }
 
             cur_tex = NULL;
-            *cur_img = (struct img) {
+            *img = (struct img) {
                 .sh = res.sh,
                 .repr = res.repr,
                 .color = res.color,
@@ -727,25 +727,25 @@ static bool pass_hook(struct pl_renderer *rr, struct pass_state *pass,
             if (idx == rr->num_hook_fbos)
                 TARRAY_APPEND(rr, rr->hook_fbos, rr->num_hook_fbos, NULL);
 
-            cur_tex = finalize_img(rr, cur_img, rr->fbofmt, &rr->hook_fbos[idx]);
+            cur_tex = finalize_img(rr, img, rr->fbofmt, &rr->hook_fbos[idx]);
             if (!cur_tex) {
                 PL_ERR(rr, "Failed dispatching shader prior to hook!");
                 goto error;
             }
         }
 
-        pl_assert(!cur_img->sh);
+        pl_assert(!img->sh);
         *ptex = cur_tex;
     } else {
         if (cur_tex) {
-            pl_assert(!cur_img->sh);
-            cur_img->sh = pl_dispatch_begin(rr->dp);
-            pl_shader_sample_direct(cur_img->sh, &(struct pl_sample_src) {
+            pl_assert(!img->sh);
+            img->sh = pl_dispatch_begin(rr->dp);
+            pl_shader_sample_direct(img->sh, &(struct pl_sample_src) {
                 .tex = cur_tex,
             });
         }
 
-        pl_assert(cur_img->sh);
+        pl_assert(img->sh);
     }
 
     return ret;
@@ -755,9 +755,9 @@ error:
 
     // Make sure the state remains as valid as possible, even if the resulting
     // shaders might end up nonsensical, to prevent segfaults
-    if (!ptex && !cur_img->sh)
-        cur_img->sh = pl_dispatch_begin(rr->dp);
-    pl_assert((ptex && *ptex) || cur_img->sh);
+    if (!ptex && !img->sh)
+        img->sh = pl_dispatch_begin(rr->dp);
+    pl_assert((ptex && *ptex) || img->sh);
     return ret;
 }
 
@@ -855,7 +855,7 @@ static void hdr_update_peak(struct pl_renderer *rr, struct pl_shader *sh,
                             const struct pass_state *pass,
                             const struct pl_render_params *params)
 {
-    if (!params->peak_detect_params || !pl_color_space_is_hdr(pass->cur_img.color))
+    if (!params->peak_detect_params || !pl_color_space_is_hdr(pass->img.color))
         goto cleanup;
 
     if (rr->disable_compute || rr->disable_peak_detect)
@@ -869,7 +869,7 @@ static void hdr_update_peak(struct pl_renderer *rr, struct pl_shader *sh,
         goto cleanup;
     }
 
-    bool ok = pl_shader_detect_peak(sh, pass->cur_img.color,
+    bool ok = pl_shader_detect_peak(sh, pass->img.color,
                                     &rr->peak_detect_state,
                                     params->peak_detect_params);
     if (!ok) {
@@ -906,8 +906,7 @@ static const char *plane_type_names[] = {
 struct plane_state {
     enum plane_type type;
     struct pl_plane plane;
-    struct pl_color_repr repr;
-    struct pl_rect2df rc;
+    struct img img; // for per-plane shaders
 };
 
 static void log_plane_info(struct pl_renderer *rr, const struct plane_state *st)
@@ -944,19 +943,19 @@ static void log_plane_info(struct pl_renderer *rr, const struct plane_state *st)
     }
 
     PL_TRACE(rr, "    Rect: {%f %f} -> {%f %f}",
-             st->rc.x0, st->rc.y0, st->rc.x1, st->rc.y1);
+             st->img.rect.x0, st->img.rect.y0, st->img.rect.x1, st->img.rect.y1);
 
     PL_TRACE(rr, "    Bits: %d (used) / %d (sampled), shift %d",
-             st->repr.bits.color_depth,
-             st->repr.bits.sample_depth,
-             st->repr.bits.bit_shift);
+             st->img.repr.bits.color_depth,
+             st->img.repr.bits.sample_depth,
+             st->img.repr.bits.bit_shift);
 }
 
 static enum plane_type detect_plane_type(const struct plane_state *st)
 {
     const struct pl_plane *plane = &st->plane;
 
-    if (pl_color_system_is_ycbcr_like(st->repr.sys)) {
+    if (pl_color_system_is_ycbcr_like(st->img.repr.sys)) {
         int t = -1;
         for (int c = 0; c < plane->components; c++) {
             switch (plane->component_mapping[c]) {
@@ -980,7 +979,7 @@ static enum plane_type detect_plane_type(const struct plane_state *st)
     if (plane->components == 1 && plane->component_mapping[0] == PL_CHANNEL_A)
         return PLANE_ALPHA;
 
-    switch (st->repr.sys) {
+    switch (st->img.repr.sys) {
     case PL_COLOR_SYSTEM_UNKNOWN: // fall through to RGB
     case PL_COLOR_SYSTEM_RGB: return PLANE_RGB;
     case PL_COLOR_SYSTEM_XYZ: return PLANE_XYZ;
@@ -999,7 +998,7 @@ static bool plane_av1_grain(struct pl_renderer *rr, int plane_idx,
         return false;
 
     struct pl_plane *plane = &st->plane;
-    struct pl_color_repr repr = st->repr;
+    struct pl_color_repr repr = st->img.repr;
     struct pl_av1_grain_params grain_params = {
         .data = image->av1_grain,
         .tex = plane->texture,
@@ -1041,7 +1040,7 @@ static bool plane_av1_grain(struct pl_renderer *rr, int plane_idx,
 
     if (ok) {
         plane->texture = new_tex;
-        st->repr = repr;
+        st->img.repr = repr;
         return true;
     } else {
         PL_ERR(rr, "Failed applying AV1 grain.. disabling!");
@@ -1056,15 +1055,6 @@ static bool plane_user_hooks(struct pl_renderer *rr, struct pass_state *pass,
                              struct plane_state *st, const struct pl_image *image,
                              const struct pl_render_params *params)
 {
-    pass->cur_img = (struct img) {
-        .w = st->plane.texture->params.w,
-        .h = st->plane.texture->params.h,
-        .rect = st->rc,
-        .repr = st->repr,
-        .color = image->color,
-        .comps = st->plane.components,
-    };
-
     static const enum pl_hook_stage plane_stages[] = {
         [PLANE_ALPHA]   = PL_HOOK_ALPHA_INPUT,
         [PLANE_CHROMA]  = PL_HOOK_CHROMA_INPUT,
@@ -1073,16 +1063,11 @@ static bool plane_user_hooks(struct pl_renderer *rr, struct pass_state *pass,
         [PLANE_XYZ]     = PL_HOOK_XYZ_INPUT,
     };
 
-    if (pass_hook(rr, pass, plane_stages[st->type], &st->plane.texture, params)) {
-        st->rc = pass->cur_img.rect;
-        st->repr = pass->cur_img.repr;
-        return true;
-    }
-
-    return false;
+    return pass_hook(rr, pass, &st->img, plane_stages[st->type],
+                     &st->plane.texture, params);
 }
 
-// This scales and merges all of the source images, and initializes the cur_img.
+// This scales and merges all of the source images, and initializes pass->img.
 static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_render_params *params)
 {
@@ -1113,7 +1098,13 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         struct plane_state *st = &planes[i];
         *st = (struct plane_state) {
             .plane = image->planes[i],
-            .repr = image->repr,
+            .img = {
+                .w = image->planes[i].texture->params.w,
+                .h = image->planes[i].texture->params.h,
+                .repr = image->repr,
+                .color = image->color,
+                .comps = image->planes[i].components,
+            },
         };
 
         st->type = detect_plane_type(st);
@@ -1170,7 +1161,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         float sx = st->plane.shift_x,
               sy = st->plane.shift_y;
 
-        st->rc = (struct pl_rect2df) {
+        st->img.rect = (struct pl_rect2df) {
             .x0 = image->src_rect.x0 / rrx - sx / rx,
             .y0 = image->src_rect.y0 / rry - sy / ry,
             .x1 = image->src_rect.x1 / rrx - sx / rx,
@@ -1203,17 +1194,17 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
 
     // Round the ref rc up to the nearest integer size
     struct pl_rect2d rc = {
-        floorf(ref->rc.x0), floorf(ref->rc.y0),
-        ceilf(ref->rc.x1), ceilf(ref->rc.y1),
+        floorf(ref->img.rect.x0), floorf(ref->img.rect.y0),
+        ceilf(ref->img.rect.x1), ceilf(ref->img.rect.y1),
     };
 
     // This encapsulates the shift contained by 'rc'
     struct pl_transform2x2 rc_tf = {
         .mat = {{
-            { pl_rect_w(rc) / pl_rect_w(ref->rc), 0 },
-            { 0, pl_rect_h(rc) / pl_rect_h(ref->rc) },
+            { pl_rect_w(rc) / pl_rect_w(ref->img.rect), 0 },
+            { 0, pl_rect_h(rc) / pl_rect_h(ref->img.rect) },
         }},
-        .c = { rc.x0 - ref->rc.x0, rc.y0 - ref->rc.y0 },
+        .c = { rc.x0 - ref->img.rect.x0, rc.y0 - ref->img.rect.y0 },
     };
 
     int target_w = pl_rect_w(rc),
@@ -1228,10 +1219,10 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         struct pl_sample_src src = {
             .tex        = plane->texture,
             .components = plane->components,
-            .scale      = pl_color_repr_normalize(&st->repr),
+            .scale      = pl_color_repr_normalize(&st->img.repr),
             .new_w      = target_w,
             .new_h      = target_h,
-            .rect       = st->rc,
+            .rect       = st->img.rect,
         };
 
         // Round this rect up to adhere to the distortion introduced by us
@@ -1271,32 +1262,32 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
 
     GLSL("}\n");
 
-    float basex = ref->rc.x0 - rc.x0,
-          basey = ref->rc.y0 - rc.y0;
+    float basex = ref->img.rect.x0 - rc.x0,
+          basey = ref->img.rect.y0 - rc.y0;
 
-    pass->cur_img = (struct img) {
+    pass->img = (struct img) {
         .sh     = sh,
         .w      = target_w,
         .h      = target_h,
-        .repr   = ref->repr,
+        .repr   = ref->img.repr,
         .color  = image->color,
         .comps  = has_alpha ? 4 : 3,
         .rect   = {
             basex,
             basey,
-            basex + pl_rect_w(ref->rc),
-            basey + pl_rect_h(ref->rc),
+            basex + pl_rect_w(ref->img.rect),
+            basey + pl_rect_h(ref->img.rect),
         },
     };
 
     // Update the reference rect to our adjusted image coordinates
-    pass->ref_rect = pass->cur_img.rect;
+    pass->ref_rect = pass->img.rect;
 
-    pass_hook(rr, pass, PL_HOOK_NATIVE, NULL, params);
+    pass_hook(rr, pass, &pass->img, PL_HOOK_NATIVE, NULL, params);
 
     // Convert the image colorspace
-    pl_shader_decode_color(sh, &pass->cur_img.repr, params->color_adjustment);
-    pass_hook(rr, pass, PL_HOOK_RGB, NULL, params);
+    pl_shader_decode_color(sh, &pass->img.repr, params->color_adjustment);
+    pass_hook(rr, pass, &pass->img, PL_HOOK_RGB, NULL, params);
 
     // HDR peak detection, do this as early as possible
     hdr_update_peak(rr, sh, pass, params);
@@ -1314,7 +1305,7 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     const struct pl_image *image = &pass->image;
     const struct pl_render_target *target = &pass->target;
 
-    struct img *img = &pass->cur_img;
+    struct img *img = &pass->img;
     struct pl_sample_src src = {
         .tex        = &(struct pl_tex) { .params = img_params(rr, img, FBOFMT) },
         .components = img->comps,
@@ -1371,15 +1362,15 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     if (use_linear) {
         pl_shader_linearize(img->sh, img->color.transfer);
         img->color.transfer = PL_COLOR_TRC_LINEAR;
-        pass_hook(rr, pass, PL_HOOK_LINEAR, NULL, params);
+        pass_hook(rr, pass, &pass->img, PL_HOOK_LINEAR, NULL, params);
     }
 
     if (use_sigmoid) {
         pl_shader_sigmoidize(img->sh, params->sigmoid_params);
-        pass_hook(rr, pass, PL_HOOK_SIGMOID, NULL, params);
+        pass_hook(rr, pass, &pass->img, PL_HOOK_SIGMOID, NULL, params);
     }
 
-    pass_hook(rr, pass, PL_HOOK_PRE_OVERLAY, NULL, params);
+    pass_hook(rr, pass, &pass->img, PL_HOOK_PRE_OVERLAY, NULL, params);
 
     src.tex = finalize_img(rr, img, FBOFMT, &rr->main_scale_fbo);
     if (!src.tex)
@@ -1404,11 +1395,11 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     draw_overlays(rr, src.tex, image->overlays, image->num_overlays,
                   img->color, use_sigmoid, &tf, params);
 
-    pass_hook(rr, pass, PL_HOOK_PRE_KERNEL, &src.tex, params);
+    pass_hook(rr, pass, &pass->img, PL_HOOK_PRE_KERNEL, &src.tex, params);
 
     struct pl_shader *sh = pl_dispatch_begin_ex(rr->dp, true);
     dispatch_sampler(rr, sh, &rr->samplers[SCALER_MAIN], params, &src);
-    pass->cur_img = (struct img) {
+    pass->img = (struct img) {
         .sh     = sh,
         .w      = src.new_w,
         .h      = src.new_h,
@@ -1418,12 +1409,12 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         .comps  = img->comps,
     };
 
-    pass_hook(rr, pass, PL_HOOK_POST_KERNEL, NULL, params);
+    pass_hook(rr, pass, &pass->img, PL_HOOK_POST_KERNEL, NULL, params);
 
     if (use_sigmoid)
         pl_shader_unsigmoidize(sh, params->sigmoid_params);
 
-    pass_hook(rr, pass, PL_HOOK_SCALED, NULL, params);
+    pass_hook(rr, pass, &pass->img, PL_HOOK_SCALED, NULL, params);
     return true;
 }
 
@@ -1433,14 +1424,14 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
     const struct pl_image *image = &pass->image;
     const struct pl_render_target *target = &pass->target;
     const struct pl_tex *fbo = target->fbo;
-    struct pl_shader *sh = pass->cur_img.sh;
+    struct pl_shader *sh = pass->img.sh;
 
     // Color management
     bool prelinearized = false;
     struct pl_color_space ref = image->color;
-    assert(ref.primaries == pass->cur_img.color.primaries);
-    assert(ref.light == pass->cur_img.color.light);
-    if (pass->cur_img.color.transfer == PL_COLOR_TRC_LINEAR)
+    assert(ref.primaries == pass->img.color.primaries);
+    assert(ref.light == pass->img.color.light);
+    if (pass->img.color.transfer == PL_COLOR_TRC_LINEAR)
         prelinearized = true;
 
     bool use_3dlut = image->profile.data || target->profile.data ||
@@ -1505,20 +1496,20 @@ fallback:
 
     bool is_comp = pl_shader_is_compute(sh);
     if (is_comp && !fbo->params.storable) {
-        bool ok = finalize_img(rr, &pass->cur_img, FBOFMT, &rr->output_fbo);
+        bool ok = finalize_img(rr, &pass->img, FBOFMT, &rr->output_fbo);
         if (!ok) {
             PL_ERR(rr, "Failed dispatching compute shader to intermediate FBO?");
             return false;
         }
 
-        sh = pass->cur_img.sh = pl_dispatch_begin(rr->dp);
+        sh = pass->img.sh = pl_dispatch_begin(rr->dp);
         pl_shader_sample_direct(sh, &(struct pl_sample_src) {
             .tex = rr->output_fbo,
         });
     }
 
     pl_shader_encode_color(sh, &target->repr);
-    pass_hook(rr, pass, PL_HOOK_OUTPUT, NULL, params);
+    pass_hook(rr, pass, &pass->img, PL_HOOK_OUTPUT, NULL, params);
     // FIXME: What if this ends up being a compute shader?? Should we do the
     // is_compute unredirection *after* encode_color, or will that fuck up
     // the bit depth?
@@ -1542,7 +1533,7 @@ fallback:
 
     pl_assert(fbo->params.renderable);
     return pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
-        .shader = &pass->cur_img.sh,
+        .shader = &pass->img.sh,
         .target = fbo,
         .rect   = target->dst_rect,
     });
@@ -1637,7 +1628,7 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     return true;
 
 error:
-    pl_dispatch_abort(rr->dp, &pass.cur_img.sh);
+    pl_dispatch_abort(rr->dp, &pass.img.sh);
     PL_ERR(rr, "Failed rendering image!");
     return false;
 }
