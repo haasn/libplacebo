@@ -345,14 +345,15 @@ void pl_shader_append_bstr(struct pl_shader *sh, enum pl_shader_buf buf,
     bstr_xappend(sh, &sh->buffers[buf], str);
 }
 
+static const char *insigs[] = {
+    [PL_SHADER_SIG_NONE]        = "",
+    [PL_SHADER_SIG_COLOR]       = "vec4 color",
+    [PL_SHADER_SIG_SAMPLER2D]   = "sampler2D src_tex, vec2 tex_coord",
+};
+
 static const char *outsigs[] = {
     [PL_SHADER_SIG_NONE]  = "void",
     [PL_SHADER_SIG_COLOR] = "vec4",
-};
-
-static const char *insigs[] = {
-    [PL_SHADER_SIG_NONE]  = "",
-    [PL_SHADER_SIG_COLOR] = "vec4 color",
 };
 
 static const char *retvals[] = {
@@ -874,7 +875,8 @@ next_dim: ; // `continue` out of the inner loop
             pos_macros[i] = sh_lut_pos(sh, sizes[i]);
 
         GLSLH("#define %s(pos) (%s(%s, %s(\\\n",
-              name, sh_tex_fn(sh, lut->weights.tex), tex, types[texdim - 1]);
+              name, sh_tex_fn(sh, lut->weights.tex->params),
+              tex, types[texdim - 1]);
 
         for (int i = 0; i < texdim; i++) {
             char sep = i == 0 ? ' ' : ',';
@@ -952,16 +954,4 @@ const char *sh_bvec(const struct pl_shader *sh, int dims)
 
     pl_assert(dims > 0 && dims < PL_ARRAY_SIZE(bvecs));
     return sh_glsl(sh).version >= 130 ? bvecs[dims] : vecs[dims];
-}
-
-const char *sh_tex_fn(const struct pl_shader *sh, const struct pl_tex *tex)
-{
-    static const char *suffixed[] = {
-        [1] = "texture1D",
-        [2] = "texture2D",
-        [3] = "texture3D",
-    };
-
-    int dims = pl_tex_params_dimension(tex->params);
-    return sh_glsl(sh).version >= 130 ? "texture" : suffixed[dims];
 }

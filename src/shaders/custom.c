@@ -778,7 +778,7 @@ static bool bind_pass_tex(struct pl_shader *sh, struct bstr name,
 
     // Sampling function boilerplate
     GLSLH("#define %.*s_tex(pos) (%f * vec4(%s(%s, pos))) \n",
-          BSTR_P(name), scale, sh_tex_fn(sh, ptex->tex), id);
+          BSTR_P(name), scale, sh_tex_fn(sh, ptex->tex->params), id);
     GLSLH("#define %.*s_texOff(off) (%.*s_tex(%s + %s * vec2(off))) \n",
           BSTR_P(name), BSTR_P(name), pos, pt);
 
@@ -936,7 +936,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                     GLSLH("#define %.*s %s \n", BSTR_P(texname), id);
                     GLSLH("#define %.*s_tex(pos) (%s(%s, pos)) \n",
                           BSTR_P(texname),
-                          sh_tex_fn(sh, p->lut_textures[j].tex), id);
+                          sh_tex_fn(sh, p->lut_textures[j].tex->params), id);
                     goto next_bind;
                 }
             }

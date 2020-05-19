@@ -25,20 +25,38 @@ const struct pl_deband_params pl_deband_default_params = {
     .grain      = 6.0,
 };
 
+static inline struct pl_tex_params src_params(const struct pl_sample_src *src)
+{
+    return src->tex ? src->tex->params : src->sampler_params;
+}
+
 // Helper function to compute the src/dst sizes and upscaling ratios
 static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
                       ident_t *src_tex, ident_t *pos, ident_t *size, ident_t *pt,
                       float *ratio_x, float *ratio_y, int *components,
                       float *scale, bool resizeable, const char **fn)
 {
-    pl_assert(pl_tex_params_dimension(src->tex->params) == 2);
-    float src_w = pl_rect_w(src->rect);
-    float src_h = pl_rect_h(src->rect);
-    src_w = PL_DEF(src_w, src->tex->params.w);
-    src_h = PL_DEF(src_h, src->tex->params.h);
+    pl_assert(pl_tex_params_dimension(src_params(src)) == 2);
+
+    enum pl_shader_sig sig;
+    float src_w, src_h;
+    if (src->tex) {
+        sig = PL_SHADER_SIG_NONE;
+        src_w = pl_rect_w(src->rect);
+        src_h = pl_rect_h(src->rect);
+    } else {
+        sig = PL_SHADER_SIG_SAMPLER2D;
+        src_w = src->sampled_w;
+        src_h = src->sampled_h;
+    }
+
+    src_w = PL_DEF(src_w, src_params(src).w);
+    src_h = PL_DEF(src_h, src_params(src).h);
+    pl_assert(src_w && src_h);
 
     int out_w = PL_DEF(src->new_w, roundf(fabs(src_w)));
     int out_h = PL_DEF(src->new_h, roundf(fabs(src_h)));
+    pl_assert(out_w && out_h);
 
     if (ratio_x)
         *ratio_x = out_w / fabs(src_w);
@@ -48,33 +66,60 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
         *scale = PL_DEF(src->scale, 1.0);
 
     if (components) {
-        const struct pl_fmt *fmt = src->tex->params.format;
-        *components = PL_DEF(src->components, fmt->num_components);
+        int tex_comps = src_params(src).format->num_components;
+        *components = PL_DEF(src->components, tex_comps);
     }
 
     if (resizeable)
         out_w = out_h = 0;
-    if (!sh_require(sh, PL_SHADER_SIG_NONE, out_w, out_h))
+    if (!sh_require(sh, sig, out_w, out_h))
         return false;
 
-    struct pl_rect2df rect = {
-        .x0 = src->rect.x0,
-        .y0 = src->rect.y0,
-        .x1 = src->rect.x0 + src_w,
-        .y1 = src->rect.y0 + src_h,
-    };
+    if (src->tex) {
+        struct pl_rect2df rect = {
+            .x0 = src->rect.x0,
+            .y0 = src->rect.y0,
+            .x1 = src->rect.x0 + src_w,
+            .y1 = src->rect.y0 + src_h,
+        };
 
-    if (fn)
-        *fn = sh_tex_fn(sh, src->tex);
+        if (fn)
+            *fn = sh_tex_fn(sh, src->tex->params);
 
-    *src_tex = sh_bind(sh, src->tex, "src_tex", &rect, pos, size, pt);
+        *src_tex = sh_bind(sh, src->tex, "src_tex", &rect, pos, size, pt);
+    } else {
+        int tex_w = src->sampler_params.w,
+            tex_h = src->sampler_params.h;
+        pl_assert(tex_w && tex_h);
+
+        if (size) {
+            *size = sh_var(sh, (struct pl_shader_var) {
+                .var = pl_var_vec2("tex_size"),
+                .data = &(float[2]) { tex_w, tex_h },
+            });
+        }
+
+        if (pt) {
+            *pt = sh_var(sh, (struct pl_shader_var) {
+                .var = pl_var_vec2("tex_pt"),
+                .data = &(float[2]) { 1.0 / tex_w, 1.0 / tex_h },
+            });
+        }
+
+        if (fn)
+            *fn = sh_tex_fn(sh, src->sampler_params);
+
+        *src_tex = "src_tex";
+        *pos = "tex_coord";
+    }
+
     return true;
 }
 
 void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
                       const struct pl_deband_params *params)
 {
-    if (src->tex->params.sample_mode != PL_TEX_SAMPLE_LINEAR) {
+    if (src_params(src).sample_mode != PL_TEX_SAMPLE_LINEAR) {
         SH_FAIL(sh, "Debanding requires sample_mode = PL_TEX_SAMPLE_LINEAR!");
         return;
     }
@@ -174,7 +219,7 @@ static void bicubic_calcweights(struct pl_shader *sh, const char *t, const char 
 
 bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *src)
 {
-    if (src->tex->params.sample_mode != PL_TEX_SAMPLE_LINEAR) {
+    if (src_params(src).sample_mode != PL_TEX_SAMPLE_LINEAR) {
         SH_FAIL(sh, "Trying to use fast bicubic sampling from a texture without "
                 "PL_TEX_SAMPLE_LINEAR");
         return false;
@@ -313,16 +358,28 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     }
 
     const struct pl_gpu *gpu = SH_GPU(sh);
-    const struct pl_tex *tex = src->tex;
-    pl_assert(gpu && tex);
+    pl_assert(gpu);
 
     bool has_compute = gpu->caps & PL_GPU_CAP_COMPUTE && !params->no_compute;
+    if (!src->tex && has_compute) {
+        // FIXME: Could maybe solve this by communicating the wbase from
+        // invocation 0 to the rest of the workgroup using shmem, which would
+        // also allow us to avoid the use of the hacky %s_map below.
+        PL_WARN(sh, "Combining pl_shader_sample_polar with the sampler2D "
+                "interface prevents the use of compute shaders, which is a "
+                "potentially massive performance hit. If you're sure you want "
+                "this, set `params.no_compute` to suppress this warning.");
+        has_compute = false;
+    }
+
     bool flipped = src->rect.x0 > src->rect.x1 || src->rect.y0 > src->rect.y1;
     if (flipped && has_compute) {
+        // FIXME: I'm sure this case could actually be supported with some
+        // extra math in the positional calculations, should implement it
         PL_WARN(sh, "Trying to use a flipped src.rect with polar sampling! "
                 "This prevents the use of compute shaders, which is a "
                 "potentially massive performance hit. If you're really sure you "
-                "want this, set params.no_compute to suppress this warning.");
+                "want this, set `params.no_compute` to suppress this warning.");
         has_compute = false;
     }
 
@@ -514,18 +571,17 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
     }
 
     const struct pl_gpu *gpu = SH_GPU(sh);
-    const struct pl_tex *tex = src->tex;
-    pl_assert(gpu && tex);
+    pl_assert(gpu);
 
     struct pl_sample_src srcfix = *src;
     switch (pass) {
     case PL_SEP_VERT:
         srcfix.rect.x0 = 0;
-        srcfix.rect.x1 = srcfix.new_w = tex->params.w;
+        srcfix.rect.x1 = srcfix.new_w = src_params(src).w;
         break;
     case PL_SEP_HORIZ:
         srcfix.rect.y0 = 0;
-        srcfix.rect.y1 = srcfix.new_h = tex->params.h;
+        srcfix.rect.y1 = srcfix.new_h = src_params(src).h;
         break;
     case PL_SEP_PASSES:
     default:

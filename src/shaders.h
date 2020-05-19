@@ -209,4 +209,15 @@ const char *sh_bvec(const struct pl_shader *sh, int dims);
 
 // Returns the appropriate `texture`-equivalent function for the shader and
 // given texture.
-const char *sh_tex_fn(const struct pl_shader *sh, const struct pl_tex *tex);
+static inline const char *sh_tex_fn(const struct pl_shader *sh,
+                                    const struct pl_tex_params params)
+{
+    static const char *suffixed[] = {
+        [1] = "texture1D",
+        [2] = "texture2D",
+        [3] = "texture3D",
+    };
+
+    int dims = pl_tex_params_dimension(params);
+    return sh_glsl(sh).version >= 130 ? "texture" : suffixed[dims];
+}

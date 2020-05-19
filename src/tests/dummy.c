@@ -48,6 +48,16 @@ int main()
             printf("lut[%d] = %f\n", i, data[i]);
     }
 
+    // Try out generation of the sampler2D interface
+    src.sampler_params = dummy->params;
+    src.tex = NULL;
+
+    pl_shader_reset(sh, &(struct pl_shader_params) { .gpu = gpu });
+    REQUIRE(pl_shader_sample_polar(sh, &src, &filter_params));
+    REQUIRE((res = pl_shader_finalize(sh)));
+    REQUIRE(res->input == PL_SHADER_SIG_SAMPLER2D);
+    printf("generated sampler2D shader:\n\n%s\n", res->glsl);
+
     pl_shader_free(&sh);
     pl_shader_obj_destroy(&lut);
     pl_tex_destroy(gpu, &dummy);

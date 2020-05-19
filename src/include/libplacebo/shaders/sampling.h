@@ -29,11 +29,26 @@
 
 // Common parameters for sampling operations
 struct pl_sample_src {
+    // There are two mutually exclusive ways of providing the source to sample
+    // from:
+    //
+    // 1. Provide the texture and sampled region directly. This generates
+    // a shader with input signature `PL_SHADER_SIG_NONE`, which binds the
+    // texture as a descriptor (and the coordinates as a vertex attribute)
     const struct pl_tex *tex; // texture to sample
     struct pl_rect2df rect;   // sub-rect to sample from (optional)
-    int components;           // number of components to sample (optional)
-    int new_w, new_h;         // dimensions of the resulting output (optional)
-    float scale;              // factor to multiply into sampled signal (optional)
+
+    // 2. Have the shader take it as an argument. Doing this requires
+    // specifying the missing metadata of the texture backing the sampler, so
+    // that the shader generation can generate the correct code. In particular,
+    // the important fields include the texture dimensions and the sample mode.
+    struct pl_tex_params sampler_params;
+    float sampled_w, sampled_h; // dimensions of the sampled region (optional)
+
+    // Common metadata for both sampler input types:
+    int components;   // number of components to sample (optional)
+    int new_w, new_h; // dimensions of the resulting output (optional)
+    float scale;      // factor to multiply into sampled signal (optional)
 };
 
 struct pl_deband_params {
