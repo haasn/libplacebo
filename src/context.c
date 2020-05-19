@@ -116,6 +116,8 @@ void pl_log_simple(void *stream, enum pl_log_level level, const char *msg)
 
     FILE *h = default_stream(stream, level);
     fprintf(h, "%5s: %s\n", prefix[level], msg);
+    if (level <= PL_LOG_WARN)
+        fflush(h);
 }
 
 void pl_log_color(void *stream, enum pl_log_level level, const char *msg)
@@ -131,6 +133,8 @@ void pl_log_color(void *stream, enum pl_log_level level, const char *msg)
 
     FILE *h = default_stream(stream, level);
     fprintf(h, "\033[%sm%s\033[0m\n", color[level], msg);
+    if (level <= PL_LOG_WARN)
+        fflush(h);
 }
 
 void pl_msg(struct pl_context *ctx, enum pl_log_level lev, const char *fmt, ...)
