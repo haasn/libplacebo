@@ -280,24 +280,29 @@ bool xta_vasprintf_append_buffer(char **str, const char *fmt, va_list ap)
     return xta_vasprintf_append_at(str, size, fmt, ap);
 }
 
+static inline void oom_abort()
+{
+    fprintf(stderr, "out of memory\n");
+    abort();
+}
 
 void *xta_oom_p(void *p)
 {
     if (!p)
-        abort();
+        oom_abort();
     return p;
 }
 
 void xta_oom_b(bool b)
 {
     if (!b)
-        abort();
+        oom_abort();
 }
 
 char *xta_oom_s(char *s)
 {
     if (!s)
-        abort();
+        oom_abort();
     return s;
 }
 
