@@ -309,6 +309,7 @@ static void bench_av1_grain(struct pl_shader *sh, struct pl_shader_obj **state,
         .tex = src,
         .components = 3,
         .component_mapping = {0, 1, 2},
+        .repr = &(struct pl_color_repr) {0},
     };
 
     params.data.grain_seed = rand();
@@ -323,6 +324,7 @@ static void bench_av1_grain_lap(struct pl_shader *sh, struct pl_shader_obj **sta
         .tex = src,
         .components = 3,
         .component_mapping = {0, 1, 2},
+        .repr = &(struct pl_color_repr) {0},
     };
 
     params.data.overlap = true;
