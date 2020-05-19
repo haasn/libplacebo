@@ -59,6 +59,7 @@ static inline bool pl_hook_stage_resizable(enum pl_hook_stage stage) {
     case PL_HOOK_CHROMA_INPUT:
     case PL_HOOK_ALPHA_INPUT:
     case PL_HOOK_XYZ_INPUT:
+    case PL_HOOK_NATIVE:
     case PL_HOOK_RGB:
         return true;
     default:
