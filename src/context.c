@@ -75,7 +75,7 @@ struct pl_context *pl_context_create(int api_ver,
 
     struct pl_context *ctx = talloc_zero(NULL, struct pl_context);
     ctx->params = *PL_DEF(params, &pl_context_default_params);
-    pl_info(ctx, "Initialized libplacebo %s", PL_VERSION);
+    pl_info(ctx, "Initialized libplacebo %s (API v%d)", PL_VERSION, PL_API_VER);
     return ctx;
 }
 
