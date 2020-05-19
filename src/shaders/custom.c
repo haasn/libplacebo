@@ -1090,6 +1090,18 @@ static bool register_hook(void *priv, struct custom_shader_hook hook)
         if (bstr_equals0(hook.bind_tex[i], "HOOKED"))
             p->save_stages |= pass.exec_stages;
     }
+    for (int i = 0; i < PL_ARRAY_SIZE(hook.width); i++) {
+        if (hook.width[i].tag == SZEXP_VAR_W || hook.width[i].tag == SZEXP_VAR_H)
+            p->save_stages |= mp_stage_to_pl(hook.width[i].val.varname);
+    }
+    for (int i = 0; i < PL_ARRAY_SIZE(hook.height); i++) {
+        if (hook.height[i].tag == SZEXP_VAR_W || hook.height[i].tag == SZEXP_VAR_H)
+            p->save_stages |= mp_stage_to_pl(hook.height[i].val.varname);
+    }
+    for (int i = 0; i < PL_ARRAY_SIZE(hook.cond); i++) {
+        if (hook.cond[i].tag == SZEXP_VAR_W || hook.cond[i].tag == SZEXP_VAR_H)
+            p->save_stages |= mp_stage_to_pl(hook.cond[i].val.varname);
+    }
 
     PL_INFO(p, "Registering hook pass: %.*s", BSTR_P(hook.pass_desc));
     TARRAY_APPEND(p->tactx, p->hook_passes, p->num_hook_passes, pass);
