@@ -614,9 +614,12 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     }
 
     int sub_x = 0, sub_y = 0;
+    int tex_w = params->tex->params.w,
+        tex_h = params->tex->params.h;
+
     if (params->luma_tex) {
-        sub_x = params->luma_tex->params.w > params->tex->params.w;
-        sub_y = params->luma_tex->params.h > params->tex->params.h;
+        sub_x = params->luma_tex->params.w > tex_w;
+        sub_y = params->luma_tex->params.h > tex_h;
     }
 
     const struct pl_av1_grain_data *data = &params->data;
@@ -640,7 +643,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
                 "but output is likely incorrect.");
     }
 
-    if (!sh_require(sh, PL_SHADER_SIG_NONE, 0, 0))
+    if (!sh_require(sh, PL_SHADER_SIG_NONE, tex_w, tex_h))
         return false;
 
     const struct pl_gpu *gpu = SH_GPU(sh);
@@ -669,8 +672,8 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     if (!obj)
         return false;
 
-    int offsets_x = PL_ALIGN2(params->tex->params.w << sub_x, 128) / 32;
-    int offsets_y = PL_ALIGN2(params->tex->params.h << sub_y, 128) / 32;
+    int offsets_x = PL_ALIGN2(tex_w << sub_x, 128) / 32;
+    int offsets_y = PL_ALIGN2(tex_h << sub_y, 128) / 32;
     int lut_size = (GRAIN_WIDTH_LUT >> sub_x) * (GRAIN_HEIGHT_LUT >> sub_y);
 
     // Note: In theory we could check only the parameters related to luma or
