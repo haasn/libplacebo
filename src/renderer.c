@@ -621,6 +621,9 @@ static bool pass_hook(struct pl_renderer *rr, struct pass_state *pass,
             .dst_rect = pass->target.dst_rect,
         };
 
+        // TODO: Add some sort of `test` API function to the hooks that allows
+        // us to skip having to touch the `img` state at all for no-ops
+
         switch (hook->input) {
         case PL_HOOK_SIG_NONE:
             break;

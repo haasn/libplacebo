@@ -93,7 +93,8 @@ struct pl_hook_params {
 
     // For `PL_HOOK_SIG_COLOR`, this contains the existing shader object with
     // the color already pre-sampled into `vec4 color`. The user may modify
-    // this as much as they want, as long as they don't run it.
+    // this as much as they want, as long as they don't dispatch/finalize/reset
+    // it.
     //
     // Note that this shader might have specific output size requirements,
     // depending on the exact shader stage hooked by the user, and may already
