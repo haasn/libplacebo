@@ -228,6 +228,8 @@ struct img {
 };
 
 struct pass_state {
+    void *tmp;
+
     // Pointer back to the renderer itself, for callbacks
     struct pl_renderer *rr;
 
@@ -246,30 +248,60 @@ struct pass_state {
     struct pl_image image;
     struct pl_render_target target;
 
-    // Index into `rr->fbos`
-    int fbo_index;
+    // Metadata for `rr->fbos`
+    bool *fbos_used;
 };
 
-// Returns the texture parameters an `img` would have if finalized
-static inline struct pl_tex_params img_params(struct pl_renderer *rr,
-                                              struct img *img,
-                                              const struct pl_fmt *fmt)
+static const struct pl_tex *get_fbo(struct pass_state *pass, int w, int h)
 {
-    if (img->tex)
-        return img->tex->params;
+    struct pl_renderer *rr = pass->rr;
+    if (!rr->fbofmt)
+        return NULL;
 
-    return (struct pl_tex_params) {
-            .w = img->w,
-            .h = img->h,
-            .format = fmt,
-            .sampleable = true,
-            .renderable = true,
-            // Just enable what we can
-            .storable   = !!(fmt->caps & PL_FMT_CAP_STORABLE),
-            .sample_mode = (fmt->caps & PL_FMT_CAP_LINEAR)
-                                ? PL_TEX_SAMPLE_LINEAR
-                                : PL_TEX_SAMPLE_NEAREST,
+    struct pl_tex_params params = {
+        .w = w,
+        .h = h,
+        .format = rr->fbofmt,
+        .sampleable = true,
+        .renderable = true,
+        // Just enable what we can
+        .storable   = !!(rr->fbofmt->caps & PL_FMT_CAP_STORABLE),
+        .sample_mode = (rr->fbofmt->caps & PL_FMT_CAP_LINEAR)
+                            ? PL_TEX_SAMPLE_LINEAR
+                            : PL_TEX_SAMPLE_NEAREST,
     };
+
+    int best_idx = -1;
+    int best_diff = 0;
+
+    // Find the best-fitting texture out of rr->fbos
+    for (int i = 0; i < rr->num_fbos; i++) {
+        if (pass->fbos_used[i])
+            continue;
+
+        // Orthogonal distance
+        int diff = abs(rr->fbos[i]->params.w - w) +
+                   abs(rr->fbos[i]->params.h - h);
+
+        if (best_idx < 0 || diff < best_diff) {
+            best_idx = i;
+            best_diff = diff;
+        }
+    }
+
+    // No texture found at all, add a new one
+    if (best_idx < 0) {
+        best_idx = rr->num_fbos;
+        TARRAY_APPEND(rr, rr->fbos, rr->num_fbos, NULL);
+        TARRAY_GROW(pass->tmp, pass->fbos_used, best_idx);
+        pass->fbos_used[best_idx] = false;
+    }
+
+    if (!pl_tex_recreate(rr->gpu, &rr->fbos[best_idx], &params))
+        return NULL;
+
+    pass->fbos_used[best_idx] = true;
+    return rr->fbos[best_idx];
 }
 
 // Forcibly convert an img to `tex`, dispatching where necessary
@@ -281,13 +313,8 @@ static const struct pl_tex *img_tex(struct pass_state *pass, struct img *img)
     }
 
     struct pl_renderer *rr = pass->rr;
-    if (pass->fbo_index == rr->num_fbos)
-        TARRAY_APPEND(rr, rr->fbos, rr->num_fbos, NULL);
-
-    const struct pl_tex **ptex = &rr->fbos[pass->fbo_index++];
-    struct pl_tex_params tex_params = img_params(rr, img, rr->fbofmt);
-    bool ok = pl_tex_recreate(rr->gpu, ptex, &tex_params);
-    if (!ok) {
+    const struct pl_tex *tex = get_fbo(pass, img->w, img->h);
+    if (!tex) {
         PL_ERR(rr, "Failed creating FBO texture! Disabling advanced rendering..");
         rr->fbofmt = NULL;
         pl_dispatch_abort(rr->dp, &img->sh);
@@ -295,9 +322,9 @@ static const struct pl_tex *img_tex(struct pass_state *pass, struct img *img)
     }
 
     pl_assert(img->sh);
-    ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
+    bool ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
         .shader = &img->sh,
-        .target = *ptex,
+        .target = tex,
     });
 
     if (!ok) {
@@ -305,7 +332,7 @@ static const struct pl_tex *img_tex(struct pass_state *pass, struct img *img)
         return NULL;
     }
 
-    img->tex = *ptex;
+    img->tex = tex;
     return img->tex;
 }
 
@@ -366,15 +393,23 @@ static struct sampler_info sample_src_info(struct pl_renderer *rr,
         return info;
     }
 
-    bool is_linear = src->tex->params.sample_mode == PL_TEX_SAMPLE_LINEAR;
     if (!FBOFMT || rr->disable_sampling || !info.config) {
         info.type = SAMPLER_DIRECT;
     } else {
         info.type = SAMPLER_COMPLEX;
 
         // Try using faster replacements for GPU built-in scalers
+        enum pl_tex_sample_mode sample_mode;
+        if (src->tex) {
+            sample_mode = src->tex->params.sample_mode;
+        } else {
+            sample_mode = rr->fbofmt->caps & PL_FMT_CAP_LINEAR;
+        }
+
+        bool is_linear = sample_mode == PL_TEX_SAMPLE_LINEAR;
         bool can_fast = info.config == params->upscaler ||
                         params->skip_anti_aliasing;
+
         if (can_fast && !params->disable_builtin_scalers) {
             if (is_linear && info.config == &pl_filter_bicubic)
                 info.type = SAMPLER_BICUBIC;
@@ -587,31 +622,8 @@ static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
 static const struct pl_tex *get_hook_tex(void *priv, int width, int height)
 {
     struct pass_state *pass = priv;
-    struct pl_renderer *rr = pass->rr;
 
-    int idx = pass->fbo_index;
-    if (idx == rr->num_fbos)
-        TARRAY_APPEND(rr, rr->fbos, rr->num_fbos, NULL);
-
-    pl_assert(rr->fbofmt);
-    bool ok = pl_tex_recreate(rr->gpu, &rr->fbos[idx], &(struct pl_tex_params) {
-        .w = width,
-        .h = height,
-        .format = rr->fbofmt,
-        .sampleable = true,
-        .renderable = true,
-        // Just enable what we can
-        .storable   = !!(rr->fbofmt->caps & PL_FMT_CAP_STORABLE),
-        .sample_mode = (rr->fbofmt->caps & PL_FMT_CAP_LINEAR)
-                            ? PL_TEX_SAMPLE_LINEAR
-                            : PL_TEX_SAMPLE_NEAREST,
-    });
-
-    if (!ok)
-        return NULL;
-
-    pass->fbo_index++;
-    return rr->fbos[idx];
+    return get_fbo(pass, width, height);
 }
 
 // Returns if any hook was applied (even if there were errors)
@@ -1293,7 +1305,6 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
 
     struct img *img = &pass->img;
     struct pl_sample_src src = {
-        .tex        = &(struct pl_tex) { .params = img_params(rr, img, FBOFMT) },
         .components = img->comps,
         .new_w      = abs(pl_rect_w(target->dst_rect)),
         .new_h      = abs(pl_rect_h(target->dst_rect)),
@@ -1558,10 +1569,13 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     params = PL_DEF(params, &pl_render_default_params);
 
     struct pass_state pass = {
+        .tmp = talloc_new(NULL),
         .rr = rr,
         .image = *pimage,
         .target = *ptarget,
     };
+
+    pass.fbos_used = talloc_zero_array(pass.tmp, bool, rr->num_fbos);
 
     struct pl_image *image = &pass.image;
     struct pl_render_target *target = &pass.target;
@@ -1614,10 +1628,12 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     draw_overlays(&pass, target->fbo, target->overlays, target->num_overlays,
                   target->color, false, NULL, params);
 
+    talloc_free(pass.tmp);
     return true;
 
 error:
     pl_dispatch_abort(rr->dp, &pass.img.sh);
+    talloc_free(pass.tmp);
     PL_ERR(rr, "Failed rendering image!");
     return false;
 }
