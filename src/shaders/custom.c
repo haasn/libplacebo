@@ -1090,18 +1090,27 @@ static bool register_hook(void *priv, struct custom_shader_hook hook)
         if (bstr_equals0(hook.bind_tex[i], "HOOKED"))
             p->save_stages |= pass.exec_stages;
     }
+
+    // As an extra precaution, this avoids errors when trying to run
+    // conditions against planes that were never hooked. As a sole exception,
+    // OUTPUT is special because it's hard-coded to return the dst_rect even
+    // before it was hooked. (This is an apparently undocumented mpv quirk,
+    // but shaders rely on it in practice)
+    enum pl_hook_stage rpn_stages = 0;
     for (int i = 0; i < PL_ARRAY_SIZE(hook.width); i++) {
         if (hook.width[i].tag == SZEXP_VAR_W || hook.width[i].tag == SZEXP_VAR_H)
-            p->save_stages |= mp_stage_to_pl(hook.width[i].val.varname);
+            rpn_stages |= mp_stage_to_pl(hook.width[i].val.varname);
     }
     for (int i = 0; i < PL_ARRAY_SIZE(hook.height); i++) {
         if (hook.height[i].tag == SZEXP_VAR_W || hook.height[i].tag == SZEXP_VAR_H)
-            p->save_stages |= mp_stage_to_pl(hook.height[i].val.varname);
+            rpn_stages |= mp_stage_to_pl(hook.height[i].val.varname);
     }
     for (int i = 0; i < PL_ARRAY_SIZE(hook.cond); i++) {
         if (hook.cond[i].tag == SZEXP_VAR_W || hook.cond[i].tag == SZEXP_VAR_H)
-            p->save_stages |= mp_stage_to_pl(hook.cond[i].val.varname);
+            rpn_stages |= mp_stage_to_pl(hook.cond[i].val.varname);
     }
+
+    p->save_stages |= rpn_stages & ~PL_HOOK_OUTPUT;
 
     PL_INFO(p, "Registering hook pass: %.*s", BSTR_P(hook.pass_desc));
     TARRAY_APPEND(p->tactx, p->hook_passes, p->num_hook_passes, pass);
