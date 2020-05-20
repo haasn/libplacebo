@@ -3162,17 +3162,22 @@ static void vk_cmd_timer_begin(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     if (!timer)
         return;
 
-    pl_assert(!timer->recording);
-    timer->recording = true;
-
     if (!cmd->pool->props.timestampValidBits) {
         PL_TRACE(gpu, "QF %d does not support timestamp queries", cmd->pool->qf);
+        return;
+    }
+
+    VkQueueFlags reset_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+    if (!(cmd->pool->props.queueFlags & reset_flags)) {
+        PL_TRACE(gpu, "QF %d does not support query pool resets", cmd->pool->qf);
         return;
     }
 
     vk->CmdResetQueryPool(cmd->buf, timer->qpool, timer->index_write, 2);
     vk->CmdWriteTimestamp(cmd->buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                           timer->qpool, timer->index_write);
+
+    timer->recording = true;
 }
 
 static void vk_cmd_timer_end(const struct pl_gpu *gpu, struct vk_cmd *cmd,
@@ -3181,13 +3186,7 @@ static void vk_cmd_timer_end(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     struct pl_vk *p = TA_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    if (!timer)
-        return;
-
-    pl_assert(timer->recording);
-    timer->recording = false;
-
-    if (!cmd->pool->props.timestampValidBits)
+    if (!timer || !timer->recording)
         return;
 
     vk->CmdWriteTimestamp(cmd->buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
