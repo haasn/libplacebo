@@ -1206,15 +1206,31 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
 
         ident_t sub = sh_subpass(sh, psh);
         if (!sub) {
-            PL_ERR(sh, "Failed dispatching subpass for plane.. disabling "
-                   "scalers");
-            rr->disable_sampling = true;
-            pl_dispatch_abort(rr->dp, &psh);
-            pl_dispatch_abort(rr->dp, &sh);
+            // Can't merge shaders, so instead force FBO indirection here
+            struct img inter_img = {
+                .sh = psh,
+                .w = st->img.w,
+                .h = st->img.h,
+            };
 
-            // FIXME: instead of erroring here, instead render out to a cache
-            // FBO and sample from that instead
-            return false;
+            const struct pl_tex *inter_tex = img_tex(pass, &inter_img);
+            if (!inter_tex) {
+                PL_ERR(rr, "Failed dispatching subpass for plane.. disabling "
+                       "all plane shaders");
+                rr->disable_sampling = true;
+                rr->disable_debanding = true;
+                rr->disable_grain = true;
+                pl_dispatch_abort(rr->dp, &sh);
+                return false;
+            }
+
+            psh = pl_dispatch_begin_ex(rr->dp, true);
+            pl_shader_sample_direct(psh, &(struct pl_sample_src) {
+                .tex = inter_tex,
+            });
+
+            sub = sh_subpass(sh, psh);
+            pl_assert(sub);
         }
 
         GLSL("tmp = %s();\n", sub);

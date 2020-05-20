@@ -365,7 +365,7 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
     pl_assert(sh->mutable);
 
     if (SH_PARAMS(sh).id == SH_PARAMS(sub).id) {
-        SH_FAIL(sh, "Failed merging shaders: conflicting identifiers!");
+        PL_TRACE(sh, "Can't merge shaders: conflicting identifiers!");
         return NULL;
     }
 
@@ -376,8 +376,8 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
     if ((sub->output_w && res_w != sub->output_w) ||
         (sub->output_h && res_h != sub->output_h))
     {
-        SH_FAIL(sh, "Failed merging shaders: incompatible sizes: %dx%d and %dx%d",
-                sh->output_w, sh->output_h, sub->output_w, sub->output_h);
+        PL_TRACE(sh, "Can't merge shaders: incompatible sizes: %dx%d and %dx%d",
+                 sh->output_w, sh->output_h, sub->output_w, sub->output_h);
         return NULL;
     }
 
@@ -387,8 +387,8 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
         bool flex = sub->flexible_work_groups;
 
         if (!sh_try_compute(sh, subw, subh, flex, sub->res.compute_shmem)) {
-            SH_FAIL(sh, "Failed merging shaders: incompatible block sizes or "
-                    "exceeded shared memory resource capabilities");
+            PL_TRACE(sh, "Can't merge shaders: incompatible block sizes or "
+                     "exceeded shared memory resource capabilities");
             return NULL;
         }
     }
