@@ -1,6 +1,7 @@
 # Depedencies
 cc = meson.get_compiler('c')
 cxx = meson.get_compiler('cpp')
+prog_python = import('python').find_installation('python3')
 
 build_deps = [
   cc.find_library('m', required: false),
@@ -228,13 +229,23 @@ foreach c : components
   endif
 endforeach
 
-if comps.has('vulkan') and get_option('vulkan-link')
-  defs += '#define PL_HAVE_VK_PROC_ADDR 1'
-else
-  defs += '#undef PL_HAVE_VK_PROC_ADDR'
+# Extra checks/steps required for vulkan in particular
+if comps.has('vulkan')
+  registry_xml = get_option('vulkan-registry')
+  sources += custom_target('vulkan boilerplate',
+    input: 'vulkan/utils_gen.py',
+    output: 'utils_gen.c',
+    command: [prog_python, '@INPUT@', registry_xml, '@OUTPUT@']
+  )
+
+  if get_option('vulkan-link')
+    defs += '#define PL_HAVE_VK_PROC_ADDR 1'
+  else
+    defs += '#undef PL_HAVE_VK_PROC_ADDR'
+  endif
 endif
 
-# check to see if libplacebo built this way is sane
+# Check to see if libplacebo built this way is sane
 if not (comps.has('vulkan') or comps.has('opengl'))
   warning('Building without any graphics API. libplacebo built this way still ' +
           'has some limited use (e.g. generating GLSL shaders), but most of ' +

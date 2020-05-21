@@ -64,7 +64,7 @@ build-win64:
         - cd build && meson test -t 5 -v
 
 build-aarch64:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan-aarch64:20200108100921
+    image: registry.videolan.org/libplacebo-ubuntu-eoan-aarch64:20200525090115
     stage: build
     tags:
         - docker

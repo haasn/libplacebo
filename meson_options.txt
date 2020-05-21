@@ -5,6 +5,10 @@ option('vulkan', type: 'feature', value: 'auto',
 option('vulkan-link', type: 'boolean', value: true,
        description: 'Link directly againt vkGetInstanceProcAddr from libvulkan.so')
 
+option('vulkan-registry', type: 'string',
+       value: '/usr/share/vulkan/registry/vk.xml',
+       description: 'Path to vulkan XML registry (for code generation)')
+
 option('opengl', type: 'feature', value: 'auto',
        description: 'OpenGL-based renderer')
 
