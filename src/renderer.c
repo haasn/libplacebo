@@ -1070,6 +1070,11 @@ static bool plane_user_hooks(struct pl_renderer *rr, struct pass_state *pass,
                      &st->plane.texture, params);
 }
 
+static inline float round0(float x)
+{
+    return x > 0.0 ? floorf(x) : ceilf(x);
+}
+
 // This scales and merges all of the source images, and initializes pass->img.
 static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_render_params *params)
@@ -1195,42 +1200,38 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         }
     }
 
-    // Round the ref rc up to the nearest integer size
-    struct pl_rect2d rc = {
-        floorf(ref->img.rect.x0), floorf(ref->img.rect.y0),
-        ceilf(ref->img.rect.x1), ceilf(ref->img.rect.y1),
-    };
-
-    // This encapsulates the shift contained by 'rc'
-    struct pl_transform2x2 rc_tf = {
-        .mat = {{
-            { pl_rect_w(rc) / pl_rect_w(ref->img.rect), 0 },
-            { 0, pl_rect_h(rc) / pl_rect_h(ref->img.rect) },
-        }},
-        .c = { rc.x0 - ref->img.rect.x0, rc.y0 - ref->img.rect.y0 },
-    };
-
-    int target_w = pl_rect_w(rc),
-        target_h = pl_rect_h(rc);
-    pl_assert(target_w > 0 && target_h > 0);
+    // For quality reasons, explicitly drop subpixel offsets from the ref rect
+    // and re-add them as part of `pass->img.rect`, always rounding towards 0
+    float off_x = ref->img.rect.x0 - round0(ref->img.rect.x0),
+          off_y = ref->img.rect.y0 - round0(ref->img.rect.y0);
 
     bool has_alpha = false;
     for (int i = 0; i < image->num_planes; i++) {
         struct plane_state *st = &planes[i];
         const struct pl_plane *plane = &st->plane;
 
+        float scale_x = pl_rect_w(st->img.rect) / pl_rect_w(ref->img.rect),
+              scale_y = pl_rect_h(st->img.rect) / pl_rect_h(ref->img.rect);
+
         struct pl_sample_src src = {
             .tex        = plane->texture,
             .components = plane->components,
             .scale      = pl_color_repr_normalize(&st->img.repr),
-            .new_w      = target_w,
-            .new_h      = target_h,
-            .rect       = st->img.rect,
+            .new_w      = ref->img.w,
+            .new_h      = ref->img.h,
+            .rect = {
+                st->img.rect.x0 - scale_x * off_x,
+                st->img.rect.y0 - scale_y * off_y,
+                st->img.rect.x1 - scale_x * off_x,
+                st->img.rect.y1 - scale_y * off_y,
+            },
         };
 
-        // Round this rect up to adhere to the distortion introduced by us
-        // rendering a slightly larger section than `rc`
-        pl_transform2x2_apply_rc(&rc_tf, &src.rect);
+        PL_TRACE(rr, "Aligning plane %d: {%f %f %f %f} -> {%f %f %f %f}",
+                i, st->img.rect.x0, st->img.rect.y0,
+                st->img.rect.x1, st->img.rect.y1,
+                src.rect.x0, src.rect.y0,
+                src.rect.x1, src.rect.y1);
 
         struct pl_shader *psh = pl_dispatch_begin_ex(rr->dp, true);
         if (deband_src(rr, psh, &src, &rr->deband_fbos[i], image, params) != DEBAND_SCALED)
@@ -1265,21 +1266,18 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
 
     GLSL("}\n");
 
-    float basex = ref->img.rect.x0 - rc.x0,
-          basey = ref->img.rect.y0 - rc.y0;
-
     pass->img = (struct img) {
         .sh     = sh,
-        .w      = target_w,
-        .h      = target_h,
+        .w      = ref->img.w,
+        .h      = ref->img.h,
         .repr   = ref->img.repr,
         .color  = image->color,
         .comps  = has_alpha ? 4 : 3,
         .rect   = {
-            basex,
-            basey,
-            basex + pl_rect_w(ref->img.rect),
-            basey + pl_rect_h(ref->img.rect),
+            off_x,
+            off_y,
+            off_x + pl_rect_w(ref->img.rect),
+            off_y + pl_rect_h(ref->img.rect),
         },
     };
 
