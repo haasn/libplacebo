@@ -854,9 +854,12 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             goto error;
         }
 
+        int out_w = roundf(out_size[0]),
+            out_h = roundf(out_size[1]);
+
         // Generate a new texture to store the render result
         const struct pl_tex *fbo;
-        fbo = params->get_tex(params->priv, out_size[0], out_size[1]);
+        fbo = params->get_tex(params->priv, out_w, out_h);
         if (!fbo) {
             PL_ERR(p, "Failed dispatching hook: `get_tex` callback failed?");
             goto error;
@@ -864,7 +867,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         // Generate a new shader object
         sh = pl_dispatch_begin(params->dispatch);
-        if (!sh_require(sh, PL_SHADER_SIG_NONE, out_size[0], out_size[1]))
+        if (!sh_require(sh, PL_SHADER_SIG_NONE, out_w, out_h))
             goto error;
 
         if (hook->is_compute) {
@@ -1007,12 +1010,12 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 .shader = &sh,
                 .dispatch_size = {
                     // Round up as many blocks as are needed to cover the image
-                    (out_size[0] + hook->block_w - 1) / hook->block_w,
-                    (out_size[1] + hook->block_h - 1) / hook->block_h,
+                    (out_w + hook->block_w - 1) / hook->block_w,
+                    (out_h + hook->block_h - 1) / hook->block_h,
                     1,
                 },
-                .width  = out_size[0],
-                .height = out_size[1],
+                .width  = out_w,
+                .height = out_h,
             });
         } else {
             GLSL("vec4 color = hook(); \n");
@@ -1026,16 +1029,16 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             goto error;
 
         // Update the rendering rect based on the given transform / offset
-        float sx = out_size[0] / pl_rect_w(params->rect),
-              sy = out_size[1] / pl_rect_h(params->rect),
+        float sx = out_w / pl_rect_w(params->rect),
+              sy = out_h / pl_rect_h(params->rect),
               x0 = sx * params->rect.x0 + hook->offset[0],
               y0 = sy * params->rect.y0 + hook->offset[1];
 
         struct pl_rect2df new_rect = {
             x0,
             y0,
-            x0 + out_size[0],
-            y0 + out_size[1],
+            x0 + out_w,
+            y0 + out_h,
         };
 
         // Save the result of this shader invocation
