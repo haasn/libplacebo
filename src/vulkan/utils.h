@@ -23,6 +23,9 @@
 const char *vk_res_str(VkResult res);
 const char *vk_obj_str(VkObjectType obj);
 
+// Return the size of an arbitrary vulkan struct. Returns 0 for unknown structs
+size_t vk_struct_size(VkStructureType stype);
+
 // Enum translation boilerplate
 VkExternalMemoryHandleTypeFlagBitsKHR vk_mem_handle_type(enum pl_handle_type);
 VkExternalSemaphoreHandleTypeFlagBitsKHR vk_sync_handle_type(enum pl_handle_type);
@@ -35,6 +38,18 @@ bool vk_external_mem_check(const VkExternalMemoryPropertiesKHR *props,
 // Static lists of external handle types we should try probing for
 extern const enum pl_handle_type vk_mem_handle_list[];
 extern const enum pl_handle_type vk_sync_handle_list[];
+
+// Find a structure in a pNext chain, or NULL
+const void *vk_find_struct(const void *chain, VkStructureType stype);
+
+// Link a structure into a pNext chain
+void vk_link_struct(void *chain, void *in);
+
+// Make a copy of a structure, not including the pNext chain
+void *vk_struct_memdup(void *tactx, const void *in);
+
+// Make a deep copy of an entire pNext chain
+void *vk_chain_memdup(void *tactx, const void *in);
 
 // Convenience macros to simplify a lot of common boilerplate
 #define VK_ASSERT(res, str)                               \

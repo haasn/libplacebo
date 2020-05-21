@@ -1087,21 +1087,50 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         }
     }
 
-    // Enable all features that we might need, by iterating through the entire
-    // VkPhysicalDeviceFeatures struct as a VkBool32 array and checking each
-    // supported feature against the whitelist of features we want
-    vk->GetPhysicalDeviceFeatures2KHR(vk->physd, &vk->features);
-    for (int i = 0; i < sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32); i++) {
-        VkBool32 wanted = ((VkBool32 *) &pl_vulkan_recommended_features.features)[i];
-        if (params->features)
-            wanted |= ((VkBool32 *) &params->features->features)[i];
+    // Query all supported device features by constructing a pNext chain
+    // starting with the features we care about and ending with whatever
+    // features were requested by the user
+    vk->features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR;
+    for (const VkBaseInStructure *in = pl_vulkan_recommended_features.pNext;
+            in; in = in->pNext)
+        vk_link_struct(&vk->features, vk_struct_memdup(vk->ta, in));
 
-        ((VkBool32 *) &vk->features.features)[i] &= wanted;
+    for (const VkBaseInStructure *in = (const VkBaseInStructure *) params->features;
+            in; in = in->pNext)
+    {
+        if (vk_find_struct(&vk->features, in->sType))
+            continue; // skip structs already present
+
+        void *copy = vk_struct_memdup(vk->ta, in);
+        if (!copy) {
+            PL_ERR(vk, "Unknown struct type %"PRIu64"?", (uint64_t) in->sType);
+            continue;
+        }
+
+        vk_link_struct(&vk->features, copy);
     }
 
-    // Temporarily link the pNext chain of the extra user features into this
-    if (params->features)
-        vk->features.pNext = params->features->pNext;
+    vk->GetPhysicalDeviceFeatures2KHR(vk->physd, &vk->features);
+
+    // Go through the features chain a second time and mask every option
+    // that wasn't whitelisted by either libplacebo or the user
+    for (VkBaseOutStructure *chain = (VkBaseOutStructure *) &vk->features;
+            chain; chain = chain->pNext)
+    {
+        const VkBaseInStructure *in_a, *in_b;
+        in_a = vk_find_struct(&pl_vulkan_recommended_features, chain->sType);
+        in_b = vk_find_struct(params->features, chain->sType);
+        in_a = PL_DEF(in_a, in_b);
+        in_b = PL_DEF(in_b, in_a);
+        pl_assert(in_a && in_b);
+
+        VkBool32 *req = (VkBool32 *) &chain[1];
+        const VkBool32 *wl_a = (const VkBool32 *) &in_a[1];
+        const VkBool32 *wl_b = (const VkBool32 *) &in_b[1];
+        size_t size = vk_struct_size(chain->sType) - sizeof(chain[0]);
+        for (int i = 0; i < size / sizeof(VkBool32); i++)
+            req[i] &= wl_a[i] || wl_b[i];
+    }
 
     VkDeviceCreateInfo dinfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -1117,7 +1146,6 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         PL_INFO(vk, "    %s", (*exts)[i]);
 
     VK(vk->CreateDevice(vk->physd, &dinfo, VK_ALLOC, &vk->dev));
-    vk->features.pNext = NULL;
 
     // Load all mandatory device-level functions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++) {
@@ -1186,7 +1214,6 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
         .ctx = ctx,
         .inst = params->instance,
         .GetInstanceProcAddr = get_proc_addr_fallback(ctx, params->get_proc_addr),
-        .features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
     };
 
     if (!vk->GetInstanceProcAddr)
@@ -1337,7 +1364,6 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
         .physd = params->phys_device,
         .dev = params->device,
         .GetInstanceProcAddr = get_proc_addr_fallback(ctx, params->get_proc_addr),
-        .features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
     };
 
     if (!vk->GetInstanceProcAddr)
@@ -1377,11 +1403,10 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
                 PRINTF_VER(params->max_api_version), PRINTF_VER(vk->api_ver));
     }
 
-    if (params->features) {
-        // Explicitly drop the pNext chain of this, since we don't currently
-        // "officially" know about any extra features provided by extensions
-        vk->features.features = params->features->features;
-    }
+    VkPhysicalDeviceFeatures2KHR *features;
+    features = vk_chain_memdup(vk->ta, params->features);
+    if (features)
+        vk->features = *features;
 
     // Load all mandatory device-level functions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++) {

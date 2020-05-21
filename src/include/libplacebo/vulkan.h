@@ -125,9 +125,6 @@ struct pl_vulkan {
     int num_extensions;
 
     // The device features that were enabled at device creation time.
-    //
-    // Note: The pNext chain of this only includes features known to
-    // libplacebo, which as the time of writing only includes the base set.
     const VkPhysicalDeviceFeatures2KHR *features;
 
     // The explicit queue families we are using to provide a given capability,
@@ -235,7 +232,9 @@ struct pl_vulkan_params {
     // Optional extra features to enable at device creation time. These are
     // opportunistically enabled if supported by the physical device, but
     // otherwise kept disabled. Users may include extra extension-specific
-    // features in the pNext chain.
+    // features in the pNext chain, however these *must* all be
+    // extension-specific structs, i.e. the use of "meta-structs" like
+    // VkPhysicalDeviceVulkan11Features is not allowed.
     const VkPhysicalDeviceFeatures2KHR *features;
 
     // --- Misc/debugging options
@@ -456,9 +455,9 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
 // optional, but provide a hint to the API user as to what might be worth
 // enabling at device creation time.
 //
-// Note: Currently, libplacebo does not include any extra extension-specific
-// device features in the `pNext` chain of pl_vulkan_recommended_features, but
-// this may change in the future.
+// Note: This also includes physical device features provided by extensions.
+// They are all provided using extension-specific features structs, rather
+// than the more general purpose VkPhysicalDeviceVulkan11Features etc.
 extern const char * const pl_vulkan_recommended_extensions[];
 extern const int pl_vulkan_num_recommended_extensions;
 extern const VkPhysicalDeviceFeatures2KHR pl_vulkan_recommended_features;

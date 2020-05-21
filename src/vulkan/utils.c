@@ -103,3 +103,54 @@ const enum pl_handle_type vk_sync_handle_list[] = {
 #endif
         0
 };
+
+const void *vk_find_struct(const void *chain, VkStructureType stype)
+{
+    const VkBaseInStructure *in = chain;
+    while (in) {
+        if (in->sType == stype)
+            return in;
+
+        in = in->pNext;
+    }
+
+    return NULL;
+}
+
+void vk_link_struct(void *chain, void *in)
+{
+    if (!in)
+        return;
+
+    VkBaseOutStructure *out = chain;
+    while (out->pNext)
+        out = out->pNext;
+
+    out->pNext = in;
+}
+
+void *vk_struct_memdup(void *tactx, const void *pin)
+{
+    if (!pin)
+        return NULL;
+
+    const VkBaseInStructure *in = pin;
+    size_t size = vk_struct_size(in->sType);
+    if (!size)
+        return NULL;
+
+    VkBaseOutStructure *out = talloc_memdup(tactx, in, size);
+    out->pNext = NULL;
+    return out;
+}
+
+void *vk_chain_memdup(void *tactx, const void *pin)
+{
+    const VkBaseInStructure *in = pin;
+    VkBaseOutStructure *out = vk_struct_memdup(tactx, in);
+    if (!out)
+        return NULL;
+
+    out->pNext = vk_chain_memdup(tactx, in->pNext);
+    return out;
+}

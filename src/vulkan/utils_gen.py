@@ -43,6 +43,17 @@ const char *vk_obj_str(VkObjectType obj)
     default: return "unknown object";
     }
 }
+
+size_t vk_struct_size(VkStructureType stype)
+{
+    switch (stype) {
+%for struct in vkstructs:
+    case ${struct.stype}: return sizeof(${struct.name});
+%endfor
+
+    default: return 0;
+    }
+}
 """)
 
 class Obj(object):
@@ -59,6 +70,22 @@ def get_vkobjects(registry):
             yield Obj(enum = e.attrib['name'],
                       name = e.attrib['comment'])
 
+def get_vkstructs(registry):
+    for e in registry.findall('types/type[@category="struct"]'):
+        # Strings for platform-specific crap we want to blacklist as they will
+        # most likely cause build failures
+        blacklist_strs = [
+            'ANDROID', 'Surface', 'Win32', 'D3D12', 'GGP'
+        ]
+
+        if any([ str in e.attrib['name'] for str in blacklist_strs ]):
+            continue
+
+        stype = e.find('member/name[.="sType"]/..')
+        if stype and 'values' in stype.attrib:
+            yield Obj(stype = stype.attrib['values'],
+                      name = e.attrib['name'])
+
 if __name__ == '__main__':
     assert len(sys.argv) == 3
     xmlfile = sys.argv[1]
@@ -69,4 +96,5 @@ if __name__ == '__main__':
         f.write(TEMPLATE.render(
             vkresults = get_vkresults(registry),
             vkobjects = get_vkobjects(registry),
+            vkstructs = get_vkstructs(registry),
         ))
