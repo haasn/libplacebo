@@ -1070,11 +1070,6 @@ static bool plane_user_hooks(struct pl_renderer *rr, struct pass_state *pass,
                      &st->plane.texture, params);
 }
 
-static inline float round0(float x)
-{
-    return x > 0.0 ? floorf(x) : ceilf(x);
-}
-
 // This scales and merges all of the source images, and initializes pass->img.
 static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_render_params *params)
@@ -1202,8 +1197,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
 
     // For quality reasons, explicitly drop subpixel offsets from the ref rect
     // and re-add them as part of `pass->img.rect`, always rounding towards 0
-    float off_x = ref->img.rect.x0 - round0(ref->img.rect.x0),
-          off_y = ref->img.rect.y0 - round0(ref->img.rect.y0);
+    float off_x = ref->img.rect.x0 - truncf(ref->img.rect.x0),
+          off_y = ref->img.rect.y0 - truncf(ref->img.rect.y0);
 
     bool has_alpha = false;
     for (int i = 0; i < image->num_planes; i++) {
