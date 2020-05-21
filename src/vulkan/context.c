@@ -47,6 +47,7 @@ struct vk_ext {
 
 // Table of optional vulkan instance extensions
 static const char *vk_instance_extensions[] = {
+    VK_KHR_SURFACE_EXTENSION_NAME,
     VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME,
     VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
     VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
@@ -65,6 +66,12 @@ static const struct vk_fun vk_inst_funs[] = {
     VK_INST_FUN(GetPhysicalDeviceProperties),
     VK_INST_FUN(GetPhysicalDeviceProperties2KHR),
     VK_INST_FUN(GetPhysicalDeviceQueueFamilyProperties),
+
+    // These are not actually mandatory, but they're universal enough that we
+    // just load them unconditionally (in lieu of not having proper support for
+    // loading arbitrary instance extensions). Their use is generally guarded
+    // behind various VkSurfaceKHR values already being provided by the API
+    // user (implying this extension is loaded).
     VK_INST_FUN(GetPhysicalDeviceSurfaceCapabilitiesKHR),
     VK_INST_FUN(GetPhysicalDeviceSurfaceFormatsKHR),
     VK_INST_FUN(GetPhysicalDeviceSurfacePresentModesKHR),
