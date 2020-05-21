@@ -105,12 +105,14 @@ static bool shaderc_compile(struct spirv_compiler *spirv, void *tactx,
 
     enum pl_log_level lev = errs ? PL_LOG_ERR : warn ? PL_LOG_INFO : PL_LOG_DEBUG;
 
+    int s = shaderc_result_get_compilation_status(res);
+    bool success = s == shaderc_compilation_status_success;
+    if (!success)
+        lev = PL_LOG_ERR;
+
     const char *msg = shaderc_result_get_error_message(res);
     if (msg[0])
         PL_MSG(spirv, lev, "shaderc output:\n%s", msg);
-
-    int s = shaderc_result_get_compilation_status(res);
-    bool success = s == shaderc_compilation_status_success;
 
     static const char *results[] = {
         [shaderc_compilation_status_success]            = "success",
