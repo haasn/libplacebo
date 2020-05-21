@@ -1340,13 +1340,13 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         }
     }
 
-    if (info.type == SAMPLER_DIRECT && !need_fbo) {
-        PL_TRACE(rr, "Skipping main scaler (free sampling)");
+    if (info.dir == SAMPLER_NOOP && !need_fbo) {
+        PL_TRACE(rr, "Skipping main scaler (would be no-op)");
         return true;
     }
 
-    if (info.dir == SAMPLER_NOOP && !need_fbo) {
-        PL_TRACE(rr, "Skipping main scaler (would be no-op)");
+    if (info.type == SAMPLER_DIRECT && !need_fbo) {
+        PL_TRACE(rr, "Skipping main scaler (free sampling)");
         return true;
     }
 
