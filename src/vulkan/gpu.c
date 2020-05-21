@@ -3198,6 +3198,7 @@ static void vk_cmd_timer_end(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         timer->index_read = (timer->index_read + 2) % VK_QUERY_POOL_SIZE;
     }
 
+    timer->recording = false;
     timer->refcount++;
     vk_cmd_callback(cmd, (vk_cb) vk_timer_deref, gpu, timer);
 }
