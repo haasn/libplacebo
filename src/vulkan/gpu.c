@@ -40,9 +40,10 @@ struct pl_vk {
     struct vk_malloc *alloc;
     struct spirv_compiler *spirv;
 
-    // Some additional cached device limits
+    // Some additional cached device limits and features checks
     uint32_t max_push_descriptors;
     size_t min_texel_alignment;
+    bool host_query_reset;
 
     // This is a pl_dispatch used (on ourselves!) for the purposes of
     // dispatching compute shaders for performing various emulation tasks
@@ -119,7 +120,7 @@ static inline bool supports_marks(struct vk_cmd *cmd) {
     } while (0)
 
 #define MAKE_LAZY_DESTRUCTOR(fun, argtype)                                  \
-    static void fun##_lazy(const struct pl_gpu *gpu, const argtype *arg) {  \
+    static void fun##_lazy(const struct pl_gpu *gpu, argtype *arg) {        \
         struct pl_vk *p = TA_PRIV(gpu);                                     \
         struct vk_ctx *vk = p->vk;                                          \
         if (p->cmd) {                                                       \
@@ -419,6 +420,15 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         p->max_push_descriptors = pushd.maxPushDescriptors;
     }
 
+    if (vk->ResetQueryPoolEXT) {
+        const VkPhysicalDeviceHostQueryResetFeaturesEXT *host_query_reset;
+        host_query_reset = vk_find_struct(&vk->features,
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT);
+
+        if (host_query_reset)
+            p->host_query_reset = host_query_reset->hostQueryReset;
+    }
+
     // We ostensibly support this, although it can still fail on buffer
     // creation (for certain combinations of buffers)
     gpu->caps |= PL_GPU_CAP_MAPPED_BUFFERS;
@@ -678,7 +688,7 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
     talloc_free(tex);
 }
 
-MAKE_LAZY_DESTRUCTOR(vk_tex_destroy, struct pl_tex)
+MAKE_LAZY_DESTRUCTOR(vk_tex_destroy, const struct pl_tex)
 
 static const VkFilter filters[] = {
     [PL_TEX_SAMPLE_NEAREST] = VK_FILTER_NEAREST,
@@ -1487,7 +1497,7 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 }
 
 #define vk_buf_destroy vk_buf_deref
-MAKE_LAZY_DESTRUCTOR(vk_buf_destroy, struct pl_buf)
+MAKE_LAZY_DESTRUCTOR(vk_buf_destroy, const struct pl_buf)
 
 static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                          size_t offset, const void *data, size_t size)
@@ -2084,7 +2094,7 @@ static void vk_pass_destroy(const struct pl_gpu *gpu, struct pl_pass *pass)
     talloc_free(pass);
 }
 
-MAKE_LAZY_DESTRUCTOR(vk_pass_destroy, struct pl_pass)
+MAKE_LAZY_DESTRUCTOR(vk_pass_destroy, const struct pl_pass)
 
 static const VkDescriptorType dsType[] = {
     [PL_DESC_SAMPLED_TEX] = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -3079,27 +3089,29 @@ error:
 #define VK_QUERY_POOL_SIZE 16
 
 struct pl_timer {
-    int refcount;
     bool recording; // true between vk_cmd_timer_begin() and vk_cmd_timer_end()
     VkQueryPool qpool; // even=start, odd=stop
     int index_write; // next index to write to
     int index_read; // next index to read from
+    uint64_t pending; // bitmask of queries that are still running
 };
+
+static inline uint64_t timer_bit(int index)
+{
+    return 1llu << (index / 2);
+}
 
 static void vk_timer_destroy(const struct pl_gpu *gpu, struct pl_timer *timer)
 {
     struct pl_vk *p = TA_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
+    pl_assert(!timer->pending);
     vk->DestroyQueryPool(vk->dev, timer->qpool, VK_ALLOC);
     talloc_free(timer);
 }
 
-static void vk_timer_deref(const struct pl_gpu *gpu, struct pl_timer *timer)
-{
-    if (--timer->refcount == 0)
-        vk_timer_destroy(gpu, timer);
-}
+MAKE_LAZY_DESTRUCTOR(vk_timer_destroy, struct pl_timer)
 
 static struct pl_timer *vk_timer_create(const struct pl_gpu *gpu)
 {
@@ -3107,9 +3119,7 @@ static struct pl_timer *vk_timer_create(const struct pl_gpu *gpu)
     struct vk_ctx *vk = p->vk;
 
     struct pl_timer *timer = talloc_ptrtype(NULL, timer);
-    *timer = (struct pl_timer) {
-        .refcount = 1,
-    };
+    *timer = (struct pl_timer) {0};
 
     struct VkQueryPoolCreateInfo qinfo = {
         .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
@@ -3167,17 +3177,34 @@ static void vk_cmd_timer_begin(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         return;
     }
 
+    vk_poll_commands(vk, 0);
+    if (timer->pending & timer_bit(timer->index_write))
+        return; // next query is still running, skip this timer
+
     VkQueueFlags reset_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-    if (!(cmd->pool->props.queueFlags & reset_flags)) {
-        PL_TRACE(gpu, "QF %d does not support query pool resets", cmd->pool->qf);
+    if (cmd->pool->props.queueFlags & reset_flags) {
+        // Use direct command buffer resets
+        vk->CmdResetQueryPool(cmd->buf, timer->qpool, timer->index_write, 2);
+    } else if (p->host_query_reset) {
+        // Use host query resets
+        vk->ResetQueryPoolEXT(vk->dev, timer->qpool, timer->index_write, 2);
+    } else {
+        PL_TRACE(gpu, "QF %d supports no mechanism for resetting queries",
+                 cmd->pool->qf);
         return;
     }
 
-    vk->CmdResetQueryPool(cmd->buf, timer->qpool, timer->index_write, 2);
     vk->CmdWriteTimestamp(cmd->buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                           timer->qpool, timer->index_write);
 
     timer->recording = true;
+}
+
+static void vk_timer_cb(void *ptimer, void *pindex)
+{
+    struct pl_timer *timer = ptimer;
+    int index = (uintptr_t) pindex;
+    timer->pending &= ~timer_bit(index);
 }
 
 static void vk_cmd_timer_end(const struct pl_gpu *gpu, struct vk_cmd *cmd,
@@ -3192,17 +3219,17 @@ static void vk_cmd_timer_end(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     vk->CmdWriteTimestamp(cmd->buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                           timer->qpool, timer->index_write + 1);
 
+    timer->recording = false;
+    timer->pending |= timer_bit(timer->index_write);
+    vk_cmd_callback(cmd, (vk_cb) vk_timer_cb, timer,
+                    (void *) (uintptr_t) timer->index_write);
+
     timer->index_write = (timer->index_write + 2) % VK_QUERY_POOL_SIZE;
     if (timer->index_write == timer->index_read) {
         // forcibly drop the least recent result to make space
         timer->index_read = (timer->index_read + 2) % VK_QUERY_POOL_SIZE;
     }
-
-    timer->recording = false;
-    timer->refcount++;
-    vk_cmd_callback(cmd, (vk_cb) vk_timer_deref, gpu, timer);
 }
-
 
 static void vk_gpu_flush(const struct pl_gpu *gpu)
 {
@@ -3252,7 +3279,7 @@ static const struct pl_gpu_fns pl_fns_vk = {
     .sync_destroy           = vk_sync_deref,
     .tex_export             = vk_tex_export,
     .timer_create           = vk_timer_create,
-    .timer_destroy          = vk_timer_deref,
+    .timer_destroy          = vk_timer_destroy_lazy,
     .timer_query            = vk_timer_query,
     .gpu_flush              = vk_gpu_flush,
     .gpu_finish             = vk_gpu_finish,

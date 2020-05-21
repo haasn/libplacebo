@@ -24,6 +24,7 @@ const struct pl_vk_inst_params pl_vk_inst_default_params = {0};
 
 struct vk_fun {
     const char *name;
+    const char *alias;
     size_t offset;
     bool device_level;
 };
@@ -41,6 +42,13 @@ struct vk_ext {
 
 #define VK_DEV_FUN(N)                       \
     { .name = "vk" #N,                      \
+      .offset = offsetof(struct vk_ctx, N), \
+      .device_level = true,                 \
+    }
+
+#define VK_DEV_FUN_ALIAS(N, ALIAS)          \
+    { .name = "vk" #N,                      \
+      .alias = #ALIAS,                      \
       .offset = offsetof(struct vk_ctx, N), \
       .device_level = true,                 \
     }
@@ -156,6 +164,13 @@ static const struct vk_ext vk_device_extensions[] = {
             VK_DEV_FUN(SetHdrMetadataEXT),
             {0},
         },
+    }, {
+        .name = VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
+        .core_ver = VK_API_VERSION_1_2,
+        .funs = (struct vk_fun[]) {
+            VK_DEV_FUN_ALIAS(ResetQueryPoolEXT, vkResetQueryPool),
+            {0},
+        },
     },
 };
 
@@ -173,13 +188,21 @@ const char * const pl_vulkan_recommended_extensions[] = {
 #endif
     VK_EXT_PCI_BUS_INFO_EXTENSION_NAME,
     VK_EXT_HDR_METADATA_EXTENSION_NAME,
+    VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
 };
 
 const int pl_vulkan_num_recommended_extensions =
     PL_ARRAY_SIZE(pl_vulkan_recommended_extensions);
 
+// pNext chain of features we want enabled
+static const VkPhysicalDeviceHostQueryResetFeaturesEXT host_query_reset = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT,
+    .hostQueryReset = true,
+};
+
 const VkPhysicalDeviceFeatures2KHR pl_vulkan_recommended_features = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
+    .pNext = (void *) &host_query_reset,
     .features = {
         .shaderImageGatherExtended = true,
 
@@ -1161,6 +1184,8 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
         if (fun->device_level) {
             *pfn = vk->GetDeviceProcAddr(vk->dev, fun->name);
+            if (fun->alias && !*pfn)
+                *pfn = vk->GetDeviceProcAddr(vk->dev, fun->alias);
         } else {
             *pfn = vk->GetInstanceProcAddr(vk->inst, fun->name);
         };

@@ -46,6 +46,11 @@
 #define PL_VK_MAX_QUEUED_CMDS 1024
 #define PL_VK_MAX_PENDING_CMDS 1024
 
+// Shitty compatibility alias for very old vulkan.h versions
+#ifndef VK_API_VERSION_1_2
+#define VK_API_VERSION_1_2 VK_MAKE_VERSION(1, 2, 0)
+#endif
+
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
     void *ta; // allocations bound to the lifetime of this vk_ctx
@@ -205,6 +210,7 @@ struct vk_ctx {
     VK_FUN(QueueSubmit);
     VK_FUN(ResetEvent);
     VK_FUN(ResetFences);
+    VK_FUN(ResetQueryPoolEXT);
     VK_FUN(SetDebugUtilsObjectNameEXT);
     VK_FUN(SetHdrMetadataEXT);
     VK_FUN(UpdateDescriptorSets);
