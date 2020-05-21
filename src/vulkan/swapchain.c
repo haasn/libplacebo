@@ -249,6 +249,11 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
     struct vk_ctx *vk = TA_PRIV(plvk);
     const struct pl_gpu *gpu = plvk->gpu;
 
+    if (!vk->CreateSwapchainKHR) {
+        PL_ERR(gpu, VK_KHR_SWAPCHAIN_EXTENSION_NAME " not enabled!");
+        return NULL;
+    }
+
     VkSurfaceFormatKHR sfmt = params->surface_format;
     struct pl_color_space csp;
     if (!pick_surf_format(gpu, vk, params->surface, &sfmt, &csp))

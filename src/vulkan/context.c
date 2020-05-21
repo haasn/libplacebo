@@ -75,6 +75,16 @@ static const struct vk_fun vk_inst_funs[] = {
 // functions exported by dependent instance-level extensions
 static const struct vk_ext vk_device_extensions[] = {
     {
+        .name = VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        .funs = (struct vk_fun[]) {
+            VK_DEV_FUN(AcquireNextImageKHR),
+            VK_DEV_FUN(CreateSwapchainKHR),
+            VK_DEV_FUN(DestroySwapchainKHR),
+            VK_DEV_FUN(GetSwapchainImagesKHR),
+            VK_DEV_FUN(QueuePresentKHR),
+            {0},
+        },
+    }, {
         .name = VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
             VK_DEV_FUN(CmdPushDescriptorSetKHR),
@@ -178,7 +188,6 @@ const VkPhysicalDeviceFeatures2KHR pl_vulkan_recommended_features = {
 // Note: Also includes VK_EXT_debug_utils functions, even though they aren't
 // mandatory, simply because we load that extension in a special way.
 static const struct vk_fun vk_dev_funs[] = {
-    VK_DEV_FUN(AcquireNextImageKHR),
     VK_DEV_FUN(AllocateCommandBuffers),
     VK_DEV_FUN(AllocateDescriptorSets),
     VK_DEV_FUN(AllocateMemory),
@@ -229,7 +238,6 @@ static const struct vk_fun vk_dev_funs[] = {
     VK_DEV_FUN(CreateSampler),
     VK_DEV_FUN(CreateSemaphore),
     VK_DEV_FUN(CreateShaderModule),
-    VK_DEV_FUN(CreateSwapchainKHR),
     VK_DEV_FUN(DestroyBuffer),
     VK_DEV_FUN(DestroyBufferView),
     VK_DEV_FUN(DestroyCommandPool),
@@ -251,7 +259,6 @@ static const struct vk_fun vk_dev_funs[] = {
     VK_DEV_FUN(DestroySampler),
     VK_DEV_FUN(DestroySemaphore),
     VK_DEV_FUN(DestroyShaderModule),
-    VK_DEV_FUN(DestroySwapchainKHR),
     VK_DEV_FUN(EndCommandBuffer),
     VK_DEV_FUN(FlushMappedMemoryRanges),
     VK_DEV_FUN(FreeCommandBuffers),
@@ -261,10 +268,8 @@ static const struct vk_fun vk_dev_funs[] = {
     VK_DEV_FUN(GetImageMemoryRequirements),
     VK_DEV_FUN(GetPipelineCacheData),
     VK_DEV_FUN(GetQueryPoolResults),
-    VK_DEV_FUN(GetSwapchainImagesKHR),
     VK_DEV_FUN(InvalidateMappedMemoryRanges),
     VK_DEV_FUN(MapMemory),
-    VK_DEV_FUN(QueuePresentKHR),
     VK_DEV_FUN(QueueSubmit),
     VK_DEV_FUN(ResetEvent),
     VK_DEV_FUN(ResetFences),
