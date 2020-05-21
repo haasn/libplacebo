@@ -3,7 +3,7 @@ stages:
     - test
 
 build-ubuntu:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200415100119
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
     stage: build
     tags:
         - docker
@@ -18,7 +18,7 @@ build-ubuntu:
         - cd build && meson test -t 5 -v
 
 build-ubuntu-static:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200415100119
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
     stage: build
     tags:
         - docker
@@ -34,7 +34,7 @@ build-ubuntu-static:
         - cd build && meson test -t 5 -v
 
 build-win32:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200415100119
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
     stage: build
     tags:
         - docker
@@ -49,7 +49,7 @@ build-win32:
         - cd build && meson test -t 5 -v
 
 build-win64:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200415100119
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
     stage: build
     tags:
         - docker
@@ -87,7 +87,7 @@ build-macos:
         - cd build && meson test -t 5 -v
 
 test-ubuntu-scan:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200415100119
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
     stage: test
     tags:
         - docker
@@ -102,7 +102,7 @@ test-ubuntu-scan:
         - ninja -C build scan-build
 
 test-gpu:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
     stage: test
     tags:
         - gpu
@@ -110,8 +110,8 @@ test-gpu:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
-                      -Dshaderc=enabled
-                      -Dglslang=enabled
+                      -Dc_args='-DCI_BLACKLIST_COMPUTE'
+                      -Dshaderc=disabled
                       -Db_coverage=true
         - ninja -C build
         - vulkaninfo
@@ -121,19 +121,23 @@ test-gpu:
           grep -Eo '[0-9.]+' | awk '{ print "coverage:", $1 * 100 } '
 
 test-gpu-asan:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
     stage: test
     tags:
         - gpu
     variables:
         ASAN_OPTIONS: 'detect_leaks=0'
     script:
-        - meson build --buildtype debugoptimized -Dtests=true -Db_sanitize=address
+        - meson build --buildtype debugoptimized
+                      -Dtests=true
+                      -Dc_args='-DCI_BLACKLIST_COMPUTE'
+                      -Dshaderc=disabled
+                      -Db_sanitize=address
         - ninja -C build
         - cd build && time meson test -t 5 -v
 
 test-gpu-msan:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
     stage: test
     tags:
         - gpu
@@ -142,14 +146,15 @@ test-gpu-msan:
     script:
         - env CC=clang meson build --buildtype debugoptimized
                                    -Dtests=true
+                                   -Dc_args='-DCI_BLACKLIST_COMPUTE -DMSAN'
+                                   -Dglslang=disabled
                                    -Db_sanitize=memory
                                    -Db_lundef=false
-                                   -Dc_args='-DMSAN'
         - ninja -C build
         - cd build && time meson test -t 5 -v
 
 test-gpu-ubsan:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20190922173609
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
     stage: test
     tags:
         - gpu
@@ -158,6 +163,8 @@ test-gpu-ubsan:
     script:
         - env CC=clang meson build --buildtype debugoptimized
                                    -Dtests=true
+                                   -Dc_args='-DCI_BLACKLIST_COMPUTE -fPIE'
+                                   -Dshaderc=disabled
                                    -Db_sanitize=undefined
                                    -Db_lundef=false
         - ninja -C build

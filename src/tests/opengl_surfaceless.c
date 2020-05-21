@@ -101,6 +101,10 @@ int main()
         params.max_glsl_version = egl_vers[i].glsl_ver;
         params.debug = true;
 
+#ifdef CI_BLACKLIST_COMPUTE
+        params.blacklist_caps = PL_GPU_CAP_COMPUTE;
+#endif
+
         const struct pl_opengl *gl = pl_opengl_create(ctx, &params);
         REQUIRE(gl);
 
