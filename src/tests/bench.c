@@ -146,18 +146,6 @@ static void benchmark(const struct pl_gpu *gpu, const char *name, bench_fn bench
 }
 
 // List of benchmarks
-static void bench_bt2020c(struct pl_shader *sh, struct pl_shader_obj **state,
-                          const struct pl_tex *src)
-{
-    struct pl_color_repr repr = {
-        .sys    = PL_COLOR_SYSTEM_BT_2020_C,
-        .levels = PL_COLOR_LEVELS_TV,
-    };
-
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
-    pl_shader_decode_color(sh, &repr, NULL);
-}
-
 static void bench_deband(struct pl_shader *sh, struct pl_shader_obj **state,
                          const struct pl_tex *src)
 {
@@ -208,17 +196,6 @@ static void bench_dither_white(struct pl_shader *sh, struct pl_shader_obj **stat
     pl_shader_dither(sh, 8, state, &params);
 }
 
-static void bench_dither_ordered_lut(struct pl_shader *sh,
-                                     struct pl_shader_obj **state,
-                                     const struct pl_tex *src)
-{
-    struct pl_dither_params params = pl_dither_default_params;
-    params.method = PL_DITHER_ORDERED_LUT;
-
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
-    pl_shader_dither(sh, 8, state, &params);
-}
-
 static void bench_dither_ordered_fix(struct pl_shader *sh,
                                      struct pl_shader_obj **state,
                                      const struct pl_tex *src)
@@ -255,50 +232,11 @@ static void bench_polar_nocompute(struct pl_shader *sh,
 }
 
 
-static void bench_hdr_hable(struct pl_shader *sh, struct pl_shader_obj **state,
-                            const struct pl_tex *src)
-{
-    struct pl_color_map_params params = {
-        .tone_mapping_algo = PL_TONE_MAPPING_HABLE,
-    };
-
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
-    pl_shader_color_map(sh, &params, pl_color_space_hdr10, pl_color_space_monitor,
-                        NULL, false);
-}
-
-static void bench_hdr_mobius(struct pl_shader *sh, struct pl_shader_obj **state,
-                             const struct pl_tex *src)
-{
-    struct pl_color_map_params params = {
-        .tone_mapping_algo = PL_TONE_MAPPING_MOBIUS,
-    };
-
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
-    pl_shader_color_map(sh, &params, pl_color_space_hdr10, pl_color_space_monitor,
-                        NULL, false);
-}
-
 static void bench_hdr_peak(struct pl_shader *sh, struct pl_shader_obj **state,
                             const struct pl_tex *src)
 {
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
     pl_shader_detect_peak(sh, pl_color_space_hdr10, state, NULL);
-}
-
-static void bench_hdr_desat(struct pl_shader *sh, struct pl_shader_obj **state,
-                            const struct pl_tex *src)
-{
-    struct pl_color_map_params params = {
-        .tone_mapping_algo = PL_TONE_MAPPING_CLIP,
-        .desaturation_strength = 0.75,
-        .desaturation_exponent = 1.5,
-        .desaturation_base = 0.18,
-    };
-
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
-    pl_shader_color_map(sh, &params, pl_color_space_hdr10, pl_color_space_monitor,
-                        NULL, false);
 }
 
 static void bench_av1_grain(struct pl_shader *sh, struct pl_shader_obj **state,
@@ -366,18 +304,13 @@ int main()
     // Dithering algorithms
     benchmark(vk->gpu, "dither_blue", bench_dither_blue);
     benchmark(vk->gpu, "dither_white", bench_dither_white);
-    benchmark(vk->gpu, "dither_ordered_lut", bench_dither_ordered_lut);
     benchmark(vk->gpu, "dither_ordered_fixed", bench_dither_ordered_fix);
 
-    // HDR tone mapping
-    benchmark(vk->gpu, "hdr_hable", bench_hdr_hable);
-    benchmark(vk->gpu, "hdr_mobius", bench_hdr_mobius);
-    benchmark(vk->gpu, "hdr_desaturate", bench_hdr_desat);
+    // HDR peak detection
     if (vk->gpu->caps & PL_GPU_CAP_COMPUTE)
         benchmark(vk->gpu, "hdr_peakdetect", bench_hdr_peak);
 
     // Misc stuff
-    benchmark(vk->gpu, "bt2020c", bench_bt2020c);
     benchmark(vk->gpu, "av1_grain", bench_av1_grain);
     benchmark(vk->gpu, "av1_grain_lap", bench_av1_grain_lap);
 
