@@ -388,15 +388,10 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     int offset  = bound - 1; // padding top/left
     int padding = offset + bound; // total padding
 
-    // For performance we want to load at least as many pixels horizontally as
-    // there are threads in a warp, as well as enough to take advantage of
-    // shmem parallelism. However, on the other hand, to hide latency we want
-    // to avoid making the kernel too large. A good size overall is 256
-    // threads, which allows at least 8 to run in parallel assuming good VGPR
-    // distribution. A good trade-off for the horizontal row size is 32, which
-    // is the warp size on nvidia. Going up to 64 (AMD's wavefront size)
-    // is not worth it even on AMD hardware.
-    const int bw = 32, bh = 256 / bw;
+    // Determined experimentally on modern AMD and Nvidia hardware. 32 is a
+    // good tradeoff for the horizontal work group size. Apart from that,
+    // just use as many threads as possible.
+    const int bw = 32, bh = gpu->limits.max_group_threads / bw;
 
     // We need to sample everything from base_min to base_max, so make sure
     // we have enough room in shmem
