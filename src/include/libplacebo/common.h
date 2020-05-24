@@ -62,6 +62,9 @@ struct pl_rect3df {
 void pl_rect2d_normalize(struct pl_rect2d *rc);
 void pl_rect3d_normalize(struct pl_rect3d *rc);
 
+void pl_rect2df_normalize(struct pl_rect2df *rc);
+void pl_rect3df_normalize(struct pl_rect3df *rc);
+
 // Return the rounded form of a rect.
 struct pl_rect2d pl_rect2df_round(const struct pl_rect2df *rc);
 struct pl_rect3d pl_rect3df_round(const struct pl_rect3df *rc);
@@ -171,18 +174,5 @@ void pl_rect2df_offset(struct pl_rect2df *rc, float offset_x, float offset_y);
 
 // Scale a rect uniformly in both dimensions.
 #define pl_rect2df_zoom(rc, zoom) pl_rect2df_stretch((rc), (zoom), (zoom))
-
-// Variants of the functions above that operate directly on rounded rects.
-// Note: Applying multiple of these operations compounds rounding error in each
-// step. Consider doing the calculations on pl_rect2df and rounding at the end.
-float pl_rect2d_aspect(const struct pl_rect2d *rc);
-void pl_rect2d_aspect_set(struct pl_rect2d *rc, float aspect, float panscan);
-#define pl_rect2d_aspect_copy(rc, src, panscan) \
-    pl_rect2d_aspect_set((rc), pl_rect2df_aspect(src), (panscan))
-void pl_rect2d_aspect_fit(struct pl_rect2d *rc, const struct pl_rect2df *src,
-                          float panscan);
-void pl_rect2d_stretch(struct pl_rect2d *rc, float stretch_x, float stretch_y);
-void pl_rect2d_offset(struct pl_rect2d *rc, int offset_x, int offset_y);
-#define pl_rect2d_zoom(rc, zoom) pl_rect2d_stretch((rc), (zoom), (zoom))
 
 #endif // LIBPLACEBO_COMMON_H_

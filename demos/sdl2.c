@@ -284,7 +284,7 @@ static void render_frame(const struct pl_swapchain_frame *frame)
         .len = icc_profile.size,
     };
 
-    pl_rect2d_aspect_copy(&target.dst_rect, &image.src_rect, 0.0);
+    pl_rect2df_aspect_copy(&target.dst_rect, &image.src_rect, 0.0);
 
     const struct pl_tex *osd = osd_plane.texture;
     struct pl_overlay target_ol;

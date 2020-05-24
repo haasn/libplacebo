@@ -41,6 +41,28 @@ void pl_rect3d_normalize(struct pl_rect3d *rc)
     };
 }
 
+void pl_rect2df_normalize(struct pl_rect2df *rc)
+{
+    *rc = (struct pl_rect2df) {
+        .x0 = PL_MIN(rc->x0, rc->x1),
+        .x1 = PL_MAX(rc->x0, rc->x1),
+        .y0 = PL_MIN(rc->y0, rc->y1),
+        .y1 = PL_MAX(rc->y0, rc->y1),
+    };
+}
+
+void pl_rect3df_normalize(struct pl_rect3df *rc)
+{
+    *rc = (struct pl_rect3df) {
+        .x0 = PL_MIN(rc->x0, rc->x1),
+        .x1 = PL_MAX(rc->x0, rc->x1),
+        .y0 = PL_MIN(rc->y0, rc->y1),
+        .y1 = PL_MAX(rc->y0, rc->y1),
+        .z0 = PL_MIN(rc->z0, rc->z1),
+        .z1 = PL_MAX(rc->z0, rc->z1),
+    };
+}
+
 struct pl_rect2d pl_rect2df_round(const struct pl_rect2df *rc)
 {
     return (struct pl_rect2d) {
@@ -310,47 +332,6 @@ void pl_rect2df_stretch(struct pl_rect2df *rc, float stretch_x, float stretch_y)
 }
 
 void pl_rect2df_offset(struct pl_rect2df *rc, float offset_x, float offset_y)
-{
-    if (rc->x1 < rc->x0)
-        offset_x = -offset_x;
-    if (rc->y1 < rc->y0)
-        offset_y = -offset_y;
-
-    rc->x0 += offset_x;
-    rc->x1 += offset_x;
-    rc->y0 += offset_y;
-    rc->y1 += offset_y;
-}
-
-float pl_rect2d_aspect(const struct pl_rect2d *rc)
-{
-    float w = abs(pl_rect_w(*rc)), h = abs(pl_rect_h(*rc));
-    return h ? (w / h) : 0.0;
-}
-
-void pl_rect2d_aspect_set(struct pl_rect2d *rc, float aspect, float panscan)
-{
-    struct pl_rect2df frc = { rc->x0, rc->y0, rc->x1, rc->y1 };
-    pl_rect2df_aspect_set(&frc, aspect, panscan);
-    *rc = pl_rect2df_round(&frc);
-}
-
-void pl_rect2d_aspect_fit(struct pl_rect2d *rc, const struct pl_rect2df *src,
-                          float panscan)
-{
-    struct pl_rect2df frc = { rc->x0, rc->y0, rc->x1, rc->y1 };
-    pl_rect2df_aspect_fit(&frc, src, panscan);
-    *rc = pl_rect2df_round(&frc);
-}
-
-void pl_rect2d_stretch(struct pl_rect2d *rc, float stretch_x, float stretch_y)
-{
-    struct pl_rect2df frc = { rc->x0, rc->y0, rc->x1, rc->y1 };
-    pl_rect2df_stretch(&frc, stretch_x, stretch_y);
-    *rc = pl_rect2df_round(&frc);
-}
-
-void pl_rect2d_offset(struct pl_rect2d *rc, int offset_x, int offset_y)
 {
     if (rc->x1 < rc->x0)
         offset_x = -offset_x;

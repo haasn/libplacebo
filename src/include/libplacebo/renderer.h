@@ -387,7 +387,12 @@ struct pl_render_target {
     // larger or smaller than the src_rect, or if the aspect ratio is
     // different, scaling will occur. `dst_rect` may be flipped, and may be
     // partially or wholly outside the bounds of the fbo. (Optional)
-    struct pl_rect2d dst_rect;
+    //
+    // Note: Because the GPU can only render to a whole number of pixels, the
+    // actual rendered area is rounded to the nearest pixel. The only reason
+    // this is `pl_rect2df` and not `pl_rect2d` is to make it easier to
+    // directly use `pl_rect2df_aspect_*` functions on it.
+    struct pl_rect2df dst_rect;
 
     // The color representation and space of the output. If this does not match
     // the color space of the source, libplacebo will convert the colors

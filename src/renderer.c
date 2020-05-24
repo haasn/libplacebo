@@ -243,6 +243,9 @@ struct pass_state {
     // also updates as the refplane evolves (e.g. due to user hook prescalers)
     struct pl_rect2df ref_rect;
 
+    // Integer version of `target.dst_rect`. Semantically identical.
+    struct pl_rect2d dst_rect;
+
     // Cached copies of the `image` / `target` for this rendering pass,
     // corrected to make sure all rects etc. are properly defaulted/inferred.
     struct pl_image image;
@@ -654,7 +657,7 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
             .color = img->color,
             .components = img->comps,
             .src_rect = pass->ref_rect,
-            .dst_rect = pass->target.dst_rect,
+            .dst_rect = pass->dst_rect,
         };
 
         // TODO: Add some sort of `test` API function to the hooks that allows
@@ -1050,6 +1053,8 @@ static bool plane_user_hooks(struct pass_state *pass, struct plane_state *st,
     return pass_hook(pass, &st->img, plane_stages[st->type], params);
 }
 
+static void fix_rects(struct pass_state *pass, const struct pl_tex *ref_tex);
+
 // This scales and merges all of the source images, and initializes pass->img.
 static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_render_params *params)
@@ -1082,8 +1087,6 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         *st = (struct plane_state) {
             .plane = image->planes[i],
             .img = {
-                .w = image->planes[i].texture->params.w,
-                .h = image->planes[i].texture->params.h,
                 .tex = image->planes[i].texture,
                 .repr = image->repr,
                 .color = image->color,
@@ -1111,16 +1114,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     // Original ref texture, even after preprocessing
     const struct pl_tex *ref_tex = ref->plane.texture;
 
-    // At this point in time we can finally infer src_rect to ensure it's valid
-    if (!pl_rect_w(image->src_rect)) {
-        image->src_rect.x0 = 0;
-        image->src_rect.x1 = ref_tex->params.w;
-    }
-
-    if (!pl_rect_h(image->src_rect)) {
-        image->src_rect.y0 = 0;
-        image->src_rect.y1 = ref_tex->params.h;
-    }
+    // At this point in time we can finally infer/fix the image/target rects
+    fix_rects(pass, ref_tex);
 
     // Guess the source primaries based on resolution
     if (!image->color.primaries) {
@@ -1151,6 +1146,9 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             .x1 = image->src_rect.x1 / rrx - sx / rx,
             .y1 = image->src_rect.y1 / rry - sy / ry,
         };
+
+        st->img.w = roundf(pl_rect_w(st->img.rect));
+        st->img.h = roundf(pl_rect_h(st->img.rect));
 
         if (st == ref) {
             // Make sure st->rc == src_rect
@@ -1300,17 +1298,15 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         return true;
     }
 
-    const struct pl_image *image = &pass->image;
-    const struct pl_render_target *target = &pass->target;
-
     struct img *img = &pass->img;
     struct pl_sample_src src = {
         .components = img->comps,
-        .new_w      = abs(pl_rect_w(target->dst_rect)),
-        .new_h      = abs(pl_rect_h(target->dst_rect)),
+        .new_w      = abs(pl_rect_w(pass->dst_rect)),
+        .new_h      = abs(pl_rect_h(pass->dst_rect)),
         .rect       = img->rect,
     };
 
+    const struct pl_image *image = &pass->image;
     bool need_fbo = image->num_overlays > 0;
     need_fbo |= rr->peak_detect_state && !params->allow_delayed_peak_detect;
 
@@ -1532,34 +1528,66 @@ fallback:
     bool ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
         .shader = &sh,
         .target = fbo,
-        .rect   = target->dst_rect,
+        .rect   = pass->dst_rect,
     });
 
     *img = (struct img) {0};
     return ok;
 }
 
-static void fix_rects(struct pl_image *image, struct pl_render_target *target)
+static void fix_rects(struct pass_state *pass, const struct pl_tex *ref_tex)
 {
-    if ((!target->dst_rect.x0 && !target->dst_rect.x1) ||
-        (!target->dst_rect.y0 && !target->dst_rect.y1))
-    {
-        target->dst_rect = (struct pl_rect2d) {
-            0, 0, target->fbo->params.w, target->fbo->params.h,
-        };
+    struct pl_rect2df *src = &pass->image.src_rect,
+                      *dst = &pass->target.dst_rect;
+
+    if ((!src->x0 && !src->x1) || (!src->y0 && !src->y1)) {
+        src->x1 = ref_tex->params.w;
+        src->y1 = ref_tex->params.h;
+    };
+
+    if ((!dst->x0 && !dst->x1) || (!dst->y0 && !dst->y1)) {
+        dst->x1 = pass->target.fbo->params.w;
+        dst->y1 = pass->target.fbo->params.h;
     }
 
-    // We always want to prefer flipping in the dst_rect over flipping in
-    // the src_rect. They're functionally equivalent either way.
-    if (image->src_rect.x0 > image->src_rect.x1) {
-        PL_SWAP(image->src_rect.x0, image->src_rect.x1);
-        PL_SWAP(target->dst_rect.x0, target->dst_rect.x1);
-    }
+    // Keep track of whether the end-to-end rendering is flipped
+    bool flipped_x = (src->x0 > src->x1) != (dst->x0 > dst->x1),
+         flipped_y = (src->y0 > src->y1) != (dst->y0 > dst->y1);
 
-    if (image->src_rect.y0 > image->src_rect.y1) {
-        PL_SWAP(image->src_rect.y0, image->src_rect.y1);
-        PL_SWAP(target->dst_rect.y0, target->dst_rect.y1);
-    }
+    // Normalize both rects to make the math easier
+    pl_rect2df_normalize(src);
+    pl_rect2df_normalize(dst);
+
+    // Round the output rect and clip it to the framebuffer dimensions
+    float rx0 = roundf(PL_MAX(dst->x0, 0.0)),
+          ry0 = roundf(PL_MAX(dst->y0, 0.0)),
+          rx1 = roundf(PL_MIN(dst->x1, pass->target.fbo->params.w)),
+          ry1 = roundf(PL_MIN(dst->y1, pass->target.fbo->params.h));
+
+    // Adjust the src rect corresponding to the rounded crop
+    float scale = pl_rect_w(*src) / pl_rect_w(*dst),
+          base_x = src->x0,
+          base_y = src->y0;
+
+    src->x0 = base_x + (rx0 - dst->x0) * scale;
+    src->x1 = base_x + (rx1 - dst->x0) * scale;
+    src->y0 = base_y + (ry0 - dst->y0) * scale;
+    src->y1 = base_y + (ry1 - dst->y0) * scale;
+
+    // Update dst_rect to the rounded values and re-apply flip if needed. We
+    // always do this in the `dst_rect` rather than the `src_rect` because this
+    // allows e.g. polar sampling compute shaders to work.
+    *dst = (struct pl_rect2df) {
+        .x0 = flipped_x ? rx1 : rx0,
+        .y0 = flipped_y ? ry1 : ry0,
+        .x1 = flipped_x ? rx0 : rx1,
+        .y1 = flipped_y ? ry0 : ry1,
+    };
+
+    // Integer copy of the above, for convenience
+    pass->dst_rect = (struct pl_rect2d) {
+        dst->x0, dst->y0, dst->x1, dst->y1,
+    };
 }
 
 bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
@@ -1580,9 +1608,10 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
     struct pl_image *image = &pass.image;
     struct pl_render_target *target = &pass.target;
 
-    fix_rects(image, target);
     pl_color_space_infer(&image->color);
     pl_color_space_infer(&target->color);
+
+    // Note: the rects are fixed as part of `pass_read_image`
 
     // As a special case, don't infer the image primaries just yet, since
     // that's done in a resolution-dependent way in pass_read_image
@@ -1655,10 +1684,10 @@ void pl_render_target_from_swapchain(struct pl_render_target *out_target,
 
 bool pl_render_target_partial(const struct pl_render_target *target)
 {
-    int x0 = PL_MIN(target->dst_rect.x0, target->dst_rect.x1),
-        y0 = PL_MIN(target->dst_rect.y0, target->dst_rect.y1),
-        x1 = PL_MAX(target->dst_rect.x0, target->dst_rect.x1),
-        y1 = PL_MAX(target->dst_rect.y0, target->dst_rect.y1),
+    int x0 = roundf(PL_MIN(target->dst_rect.x0, target->dst_rect.x1)),
+        y0 = roundf(PL_MIN(target->dst_rect.y0, target->dst_rect.y1)),
+        x1 = roundf(PL_MAX(target->dst_rect.x0, target->dst_rect.x1)),
+        y1 = roundf(PL_MAX(target->dst_rect.y0, target->dst_rect.y1)),
         fbo_w = target->fbo->params.w,
         fbo_h = target->fbo->params.h;
 
