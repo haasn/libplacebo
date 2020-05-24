@@ -410,6 +410,11 @@ struct pl_render_target {
 void pl_render_target_from_swapchain(struct pl_render_target *out_target,
                                      const struct pl_swapchain_frame *frame);
 
+// Helper function to determine if the `target` covers the entire FBO or not.
+// If this returns true, users may want to `pl_tex_clear` the `target.fbo`
+// before calling `pl_render_image`.
+bool pl_render_target_partial(const struct pl_render_target *target);
+
 // Render a single image to a target using the given parameters. This is
 // fully dynamic, i.e. the params can change at any time. libplacebo will
 // internally detect and flush whatever caches are invalidated as a result of

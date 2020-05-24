@@ -1652,3 +1652,20 @@ void pl_render_target_from_swapchain(struct pl_render_target *out_target,
     if (frame->flipped)
         PL_SWAP(out_target->dst_rect.y0, out_target->dst_rect.y1);
 }
+
+bool pl_render_target_partial(const struct pl_render_target *target)
+{
+    int x0 = PL_MIN(target->dst_rect.x0, target->dst_rect.x1),
+        y0 = PL_MIN(target->dst_rect.y0, target->dst_rect.y1),
+        x1 = PL_MAX(target->dst_rect.x0, target->dst_rect.x1),
+        y1 = PL_MAX(target->dst_rect.y0, target->dst_rect.y1),
+        fbo_w = target->fbo->params.w,
+        fbo_h = target->fbo->params.h;
+
+    if (!x0 && !x1)
+        x1 = fbo_w;
+    if (!y0 && !y1)
+        y1 = fbo_h;
+
+    return x0 > 0 || y0 > 0 || x1 < fbo_w || y1 < fbo_h;
+}

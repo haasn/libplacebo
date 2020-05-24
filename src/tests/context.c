@@ -50,8 +50,46 @@ int main()
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
             printf("%f %f\n", tr.mat.m[i][j], tr2.mat.m[i][j]);
-            REQUIRE(fabs(tr.mat.m[i][j] - tr2.mat.m[i][j]) < 1e-4);
+            REQUIRE(feq(tr.mat.m[i][j], tr2.mat.m[i][j], 1e-4));
         }
-        REQUIRE(fabs(tr.c[i] - tr2.c[i]) < 1e-4);
+        REQUIRE(feq(tr.c[i], tr2.c[i], 1e-4));
     }
+
+    // Test aspect ratio code
+    const struct pl_rect2df rc1080p = {0, 0, 1920, 1080};
+    const struct pl_rect2df rc43 = {0, 0, 1024, 768};
+    struct pl_rect2df rc;
+
+    REQUIRE(feq(pl_rect2df_aspect(&rc1080p), 16.0/9.0, 1e-8));
+    REQUIRE(feq(pl_rect2df_aspect(&rc43), 4.0/3.0, 1e-8));
+
+#define pl_rect2df_midx(rc) (((rc).x0 + (rc).x1) / 2.0)
+#define pl_rect2df_midy(rc) (((rc).y0 + (rc).y1) / 2.0)
+
+    for (float aspect = 0.2; aspect < 3.0; aspect += 0.4) {
+        for (float scan = 0.0; scan <= 1.0; scan += 0.5) {
+            rc = rc1080p;
+            pl_rect2df_aspect_set(&rc, aspect, scan);
+            printf("aspect %.2f, panscan %.1f: {%f %f} -> {%f %f}\n",
+                   aspect, scan, rc.x0, rc.y0, rc.x1, rc.y1);
+            REQUIRE(feq(pl_rect2df_aspect(&rc), aspect, 1e-6));
+            REQUIRE(feq(pl_rect2df_midx(rc), pl_rect2df_midx(rc1080p), 1e-6));
+            REQUIRE(feq(pl_rect2df_midy(rc), pl_rect2df_midy(rc1080p), 1e-6));
+        }
+    }
+
+    rc = rc1080p;
+    pl_rect2df_aspect_fit(&rc, &rc43, 0.0);
+    REQUIRE(feq(pl_rect2df_aspect(&rc), pl_rect2df_aspect(&rc43), 1e-6));
+    REQUIRE(feq(pl_rect2df_midx(rc), pl_rect2df_midx(rc1080p), 1e-6));
+    REQUIRE(feq(pl_rect2df_midy(rc), pl_rect2df_midy(rc1080p), 1e-6));
+    REQUIRE(feq(pl_rect_w(rc), pl_rect_w(rc43), 1e-6));
+    REQUIRE(feq(pl_rect_h(rc), pl_rect_h(rc43), 1e-6));
+
+    rc = rc43;
+    pl_rect2df_aspect_fit(&rc, &rc1080p, 0.0);
+    REQUIRE(feq(pl_rect2df_aspect(&rc), pl_rect2df_aspect(&rc1080p), 1e-6));
+    REQUIRE(feq(pl_rect2df_midx(rc), pl_rect2df_midx(rc43), 1e-6));
+    REQUIRE(feq(pl_rect2df_midy(rc), pl_rect2df_midy(rc43), 1e-6));
+    REQUIRE(feq(pl_rect_w(rc), pl_rect_w(rc43), 1e-6));
 }

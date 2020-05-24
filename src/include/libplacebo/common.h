@@ -62,6 +62,10 @@ struct pl_rect3df {
 void pl_rect2d_normalize(struct pl_rect2d *rc);
 void pl_rect3d_normalize(struct pl_rect3d *rc);
 
+// Return the rounded form of a rect.
+struct pl_rect2d pl_rect2df_round(const struct pl_rect2df *rc);
+struct pl_rect3d pl_rect3df_round(const struct pl_rect3df *rc);
+
 // Represents a row-major matrix, i.e. the following matrix
 //     [ a11 a12 a13 ]
 //     [ a21 a22 a23 ]
@@ -135,5 +139,50 @@ extern const struct pl_transform2x2 pl_transform2x2_identity;
 
 void pl_transform2x2_apply(const struct pl_transform2x2 *t, float vec[2]);
 void pl_transform2x2_apply_rc(const struct pl_transform2x2 *t, struct pl_rect2df *rc);
+
+// Helper functions for dealing with aspect ratios and stretched/scaled rects.
+
+// Return the (absolute) aspect ratio (width/height) of a given pl_rect2df.
+// This will always be a positive number, even if `rc` is flipped.
+float pl_rect2df_aspect(const struct pl_rect2df *rc);
+
+// Set the aspect of a `rc` to a given aspect ratio with an extra 'panscan'
+// factor choosing the balance between shrinking and growing the `rc` to meet
+// this aspect ratio. If `panscan` is 0.0, this function will only ever shrink
+// the rc . If `panscan` is 1.0, this function will only ever grow the `rc`.
+void pl_rect2df_aspect_set(struct pl_rect2df *rc, float aspect, float panscan);
+
+// Set one rect's aspect to that of another
+#define pl_rect2df_aspect_copy(rc, src, panscan) \
+    pl_rect2df_aspect_set((rc), pl_rect2df_aspect(src), (panscan))
+
+// 'Fit' one rect inside another. `rc` will be set to the same size and aspect
+// ratio as `src`, but with the size limited to fit inside the original `rc`.
+// Like `pl_rect2df_aspect_set`, `panscan` controls the pan&scan factor.
+void pl_rect2df_aspect_fit(struct pl_rect2df *rc, const struct pl_rect2df *src,
+                           float panscan);
+
+// Scale rect in each direction while keeping it centered.
+void pl_rect2df_stretch(struct pl_rect2df *rc, float stretch_x, float stretch_y);
+
+// Offset rect by an arbitrary offset factor. If the corresponding dimension
+// of a rect is flipped, so too is the applied offset.
+void pl_rect2df_offset(struct pl_rect2df *rc, float offset_x, float offset_y);
+
+// Scale a rect uniformly in both dimensions.
+#define pl_rect2df_zoom(rc, zoom) pl_rect2df_stretch((rc), (zoom), (zoom))
+
+// Variants of the functions above that operate directly on rounded rects.
+// Note: Applying multiple of these operations compounds rounding error in each
+// step. Consider doing the calculations on pl_rect2df and rounding at the end.
+float pl_rect2d_aspect(const struct pl_rect2d *rc);
+void pl_rect2d_aspect_set(struct pl_rect2d *rc, float aspect, float panscan);
+#define pl_rect2d_aspect_copy(rc, src, panscan) \
+    pl_rect2d_aspect_set((rc), pl_rect2df_aspect(src), (panscan))
+void pl_rect2d_aspect_fit(struct pl_rect2d *rc, const struct pl_rect2df *src,
+                          float panscan);
+void pl_rect2d_stretch(struct pl_rect2d *rc, float stretch_x, float stretch_y);
+void pl_rect2d_offset(struct pl_rect2d *rc, int offset_x, int offset_y);
+#define pl_rect2d_zoom(rc, zoom) pl_rect2d_stretch((rc), (zoom), (zoom))
 
 #endif // LIBPLACEBO_COMMON_H_

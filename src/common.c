@@ -15,6 +15,8 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <math.h>
+
 #include "common.h"
 
 void pl_rect2d_normalize(struct pl_rect2d *rc)
@@ -36,6 +38,28 @@ void pl_rect3d_normalize(struct pl_rect3d *rc)
         .y1 = PL_MAX(rc->y0, rc->y1),
         .z0 = PL_MIN(rc->z0, rc->z1),
         .z1 = PL_MAX(rc->z0, rc->z1),
+    };
+}
+
+struct pl_rect2d pl_rect2df_round(const struct pl_rect2df *rc)
+{
+    return (struct pl_rect2d) {
+        .x0 = roundf(rc->x0),
+        .x1 = roundf(rc->x1),
+        .y0 = roundf(rc->y0),
+        .y1 = roundf(rc->y1),
+    };
+}
+
+struct pl_rect3d pl_rect3df_round(const struct pl_rect3df *rc)
+{
+    return (struct pl_rect3d) {
+        .x0 = roundf(rc->x0),
+        .x1 = roundf(rc->x1),
+        .y0 = roundf(rc->y0),
+        .y1 = roundf(rc->y1),
+        .z0 = roundf(rc->z0),
+        .z1 = roundf(rc->z1),
     };
 }
 
@@ -221,4 +245,120 @@ void pl_transform2x2_apply_rc(const struct pl_transform2x2 *t, struct pl_rect2df
     rc->x1 += t->c[0];
     rc->y0 += t->c[1];
     rc->y1 += t->c[1];
+}
+
+float pl_rect2df_aspect(const struct pl_rect2df *rc)
+{
+    float w = fabs(pl_rect_w(*rc)), h = fabs(pl_rect_h(*rc));
+    return h ? (w / h) : 0.0;
+}
+
+void pl_rect2df_aspect_set(struct pl_rect2df *rc, float aspect, float panscan)
+{
+    pl_assert(aspect >= 0);
+    float orig_aspect = pl_rect2df_aspect(rc);
+    if (!aspect || !orig_aspect)
+        return;
+
+    float scale_x, scale_y;
+    if (aspect > orig_aspect) {
+        // New aspect is wider than the original, so we need to either grow in
+        // scale_x (panscan=1) or shrink in scale_y (panscan=0)
+        scale_x = powf(aspect / orig_aspect, panscan);
+        scale_y = powf(aspect / orig_aspect, panscan - 1.0);
+    } else if (aspect < orig_aspect) {
+        // New aspect is taller, so either grow in scale_y (panscan=1) or
+        // shrink in scale_x (panscan=0)
+        scale_x = powf(orig_aspect / aspect, panscan - 1.0);
+        scale_y = powf(orig_aspect / aspect, panscan);
+    } else {
+        return; // No change in aspect
+    }
+
+    pl_rect2df_stretch(rc, scale_x, scale_y);
+}
+
+void pl_rect2df_aspect_fit(struct pl_rect2df *rc, const struct pl_rect2df *src,
+                           float panscan)
+{
+    float orig_w = fabs(pl_rect_w(*rc)),
+          orig_h = fabs(pl_rect_h(*rc));
+    if (!orig_w || !orig_h)
+        return;
+
+    // If either one of these is larger than 1, then we need to shrink to fit,
+    // otherwise we can just directly stretch the rect.
+    float scale_x = fabs(pl_rect_w(*src)) / orig_w,
+          scale_y = fabs(pl_rect_h(*src)) / orig_h;
+
+    if (scale_x > 1.0 || scale_y > 1.0) {
+        pl_rect2df_aspect_copy(rc, src, panscan);
+    } else {
+        pl_rect2df_stretch(rc, scale_x, scale_y);
+    }
+}
+
+void pl_rect2df_stretch(struct pl_rect2df *rc, float stretch_x, float stretch_y)
+{
+    float midx = (rc->x0 + rc->x1) / 2.0,
+          midy = (rc->y0 + rc->y1) / 2.0;
+
+    rc->x0 = rc->x0 * stretch_x + midx * (1.0 - stretch_x);
+    rc->x1 = rc->x1 * stretch_x + midx * (1.0 - stretch_x);
+    rc->y0 = rc->y0 * stretch_y + midy * (1.0 - stretch_y);
+    rc->y1 = rc->y1 * stretch_y + midy * (1.0 - stretch_y);
+}
+
+void pl_rect2df_offset(struct pl_rect2df *rc, float offset_x, float offset_y)
+{
+    if (rc->x1 < rc->x0)
+        offset_x = -offset_x;
+    if (rc->y1 < rc->y0)
+        offset_y = -offset_y;
+
+    rc->x0 += offset_x;
+    rc->x1 += offset_x;
+    rc->y0 += offset_y;
+    rc->y1 += offset_y;
+}
+
+float pl_rect2d_aspect(const struct pl_rect2d *rc)
+{
+    float w = abs(pl_rect_w(*rc)), h = abs(pl_rect_h(*rc));
+    return h ? (w / h) : 0.0;
+}
+
+void pl_rect2d_aspect_set(struct pl_rect2d *rc, float aspect, float panscan)
+{
+    struct pl_rect2df frc = { rc->x0, rc->y0, rc->x1, rc->y1 };
+    pl_rect2df_aspect_set(&frc, aspect, panscan);
+    *rc = pl_rect2df_round(&frc);
+}
+
+void pl_rect2d_aspect_fit(struct pl_rect2d *rc, const struct pl_rect2df *src,
+                          float panscan)
+{
+    struct pl_rect2df frc = { rc->x0, rc->y0, rc->x1, rc->y1 };
+    pl_rect2df_aspect_fit(&frc, src, panscan);
+    *rc = pl_rect2df_round(&frc);
+}
+
+void pl_rect2d_stretch(struct pl_rect2d *rc, float stretch_x, float stretch_y)
+{
+    struct pl_rect2df frc = { rc->x0, rc->y0, rc->x1, rc->y1 };
+    pl_rect2df_stretch(&frc, stretch_x, stretch_y);
+    *rc = pl_rect2df_round(&frc);
+}
+
+void pl_rect2d_offset(struct pl_rect2d *rc, int offset_x, int offset_y)
+{
+    if (rc->x1 < rc->x0)
+        offset_x = -offset_x;
+    if (rc->y1 < rc->y0)
+        offset_y = -offset_y;
+
+    rc->x0 += offset_x;
+    rc->x1 += offset_x;
+    rc->y0 += offset_y;
+    rc->y1 += offset_y;
 }

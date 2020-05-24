@@ -115,10 +115,12 @@ static void init_sdl() {
         exit(1);
     }
 
+    uint32_t window_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE |
+                            SDL_WINDOW_VULKAN;
+
     window = SDL_CreateWindow("libplacebo demo",
                               SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                              WINDOW_WIDTH, WINDOW_HEIGHT,
-                              SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+                              WINDOW_WIDTH, WINDOW_HEIGHT, window_flags);
 
     if (!window) {
         fprintf(stderr, "Failed creating window: %s\n", SDL_GetError());
@@ -269,8 +271,7 @@ static void render_frame(const struct pl_swapchain_frame *frame)
         .planes     = { img_plane },
         .repr       = pl_color_repr_unknown,
         .color      = pl_color_space_unknown,
-        .width      = img->params.w,
-        .height     = img->params.h,
+        .src_rect   = {0, 0, img->params.w, img->params.h},
     };
 
     // This seems to be the case for SDL2_image
@@ -282,6 +283,8 @@ static void render_frame(const struct pl_swapchain_frame *frame)
         .data = icc_profile.data,
         .len = icc_profile.size,
     };
+
+    pl_rect2d_aspect_copy(&target.dst_rect, &image.src_rect, 0.0);
 
     const struct pl_tex *osd = osd_plane.texture;
     struct pl_overlay target_ol;
@@ -296,6 +299,9 @@ static void render_frame(const struct pl_swapchain_frame *frame)
         target.overlays = &target_ol;
         target.num_overlays = 1;
     }
+
+    if (pl_render_target_partial(&target))
+        pl_tex_clear(vk->gpu, target.fbo, (float[4]) {0} );
 
     // Use the heaviest preset purely for demonstration/testing purposes
     if (!pl_render_image(renderer, &image, &target, &pl_render_high_quality_params)) {
