@@ -1219,8 +1219,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             // Can't merge shaders, so instead force FBO indirection here
             struct img inter_img = {
                 .sh = psh,
-                .w = st->img.w,
-                .h = st->img.h,
+                .w = ref->img.w,
+                .h = ref->img.h,
             };
 
             const struct pl_tex *inter_tex = img_tex(pass, &inter_img);
