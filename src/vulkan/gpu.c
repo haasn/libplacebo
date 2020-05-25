@@ -3143,8 +3143,12 @@ static uint64_t vk_timer_query(const struct pl_gpu *gpu, struct pl_timer *timer)
     if (timer->index_read == timer->index_write)
         return 0; // no more unprocessed results
 
+    vk_poll_commands(vk, 0);
+    if (timer->pending & timer_bit(timer->index_read))
+        return 0; // still waiting for results
+
     VkResult res;
-    uint64_t ts[2];
+    uint64_t ts[2] = {0};
     res = vk->GetQueryPoolResults(vk->dev, timer->qpool, timer->index_read, 2,
                                   sizeof(ts), &ts[0], sizeof(uint64_t),
                                   VK_QUERY_RESULT_64_BIT);
