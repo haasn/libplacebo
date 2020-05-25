@@ -322,7 +322,10 @@ bool do_plane(struct priv *p, const struct pl_tex *dst, const struct pl_tex *src
     struct pl_shader *sh = pl_dispatch_begin(p->dp);
     pl_shader_deband(sh, &(struct pl_sample_src){ .tex = src }, NULL);
     pl_shader_dither(sh, new_depth, &p->dither_state, NULL);
-    return pl_dispatch_finish(p->dp, &sh, dst, NULL, NULL);
+    return pl_dispatch_finish(p->dp, &(struct pl_dispatch_params) {
+        .shader = &sh,
+        .target = dst,
+    });
 }
 
 // API #1 implementation:
