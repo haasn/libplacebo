@@ -1022,19 +1022,23 @@ static bool plane_av1_grain(struct pass_state *pass, int plane_idx,
     if (!grain_params.tex)
         return false;
 
-    struct pl_shader *sh = pl_dispatch_begin_ex(rr->dp, true);
-    if (!pl_shader_av1_grain(sh, &rr->grain_state[plane_idx], &grain_params)) {
-        pl_dispatch_abort(rr->dp, &sh);
+    img->sh = pl_dispatch_begin_ex(rr->dp, true);
+    if (!pl_shader_av1_grain(img->sh, &rr->grain_state[plane_idx], &grain_params)) {
+        pl_dispatch_abort(rr->dp, &img->sh);
         rr->disable_grain = true;
         return false;
     }
 
+    img->tex = NULL;
     if (!img_tex(pass, img)) {
         PL_ERR(rr, "Failed applying AV1 grain.. disabling!");
+        pl_dispatch_abort(rr->dp, &img->sh);
+        img->tex = grain_params.tex;
         rr->disable_grain = true;
         return false;
     }
 
+    img->repr = repr;
     return true;
 }
 
