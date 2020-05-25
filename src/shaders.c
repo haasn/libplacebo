@@ -370,11 +370,13 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
         return NULL;
     }
 
-    int sub_w = PL_DEF(sub->output_w, sh->output_w),
-        sub_h = PL_DEF(sub->output_h, sh->output_h);
-
     // Check for shader compatibility
-    if (sh->output_w != sub_w || sh->output_h != sub_h) {
+    int res_w = PL_DEF(sh->output_w, sub->output_w),
+        res_h = PL_DEF(sh->output_h, sub->output_h);
+
+    if ((sub->output_w && res_w != sub->output_w) ||
+        (sub->output_h && res_h != sub->output_h))
+    {
         PL_TRACE(sh, "Can't merge shaders: incompatible sizes: %dx%d and %dx%d",
                  sh->output_w, sh->output_h, sub->output_w, sub->output_h);
         return NULL;
@@ -391,6 +393,9 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
             return NULL;
         }
     }
+
+    sh->output_w = res_w;
+    sh->output_h = res_h;
 
     // Append the prelude and header
     bstr_xappend(sh, &sh->buffers[SH_BUF_PRELUDE], sub->buffers[SH_BUF_PRELUDE]);
