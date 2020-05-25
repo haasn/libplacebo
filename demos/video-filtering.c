@@ -5,39 +5,23 @@
  *
  * For sake of a simple example, let's assume this is a debanding filter.
  * For those of you too lazy to compile/run this file but still want to see
- * results, these are from my machine (RX 560 with mesa/amdvlk git 2018-09-27):
+ * results, these are from my machine (RX 5700 XT + 1950X, as of 2020-05-25):
  *
  * RADV:
- *   api1: 10000 frames in 22.279652 s => 2.227965 ms/frame (448.84 fps)
- *   api2: 10000 frames in 14.220453 s => 1.422045 ms/frame (703.21 fps)
+ *   api1: 10000 frames in 15.946306 s => 1.594631 ms/frame (627.10 fps)
+ *   api2: 10000 frames in 5.398234 s => 0.539823 ms/frame (1852.46 fps)
  *
  * AMDVLK:
- *   api1: 10000 frames in 17.956402 s => 1.795640 ms/frame (556.90 fps)
- *   api2: 10000 frames in 6.790107 s => 0.679011 ms/frame (1472.73 fps)
+ *   api1: 10000 frames in 14.766658 s => 1.476666 ms/frame (677.20 fps)
+ *   api2: 10000 frames in 4.644831 s => 0.464483 ms/frame (2152.93 fps)
  *
- * You can see that AMDVLK is much better at doing texture streaming than
+ * You can see that AMDVLK is still better at doing texture streaming than
  * RADV - this is because as of writing RADV still does not support
  * asynchronous texture queues / DMA engine transfers. If we disable the
  * `async_transfer` option with AMDVLK we get this:
  *
- *   api1: 10000 frames in 21.202768 s => 2.120277 ms/frame (471.64 fps)
- *   api2: 10000 frames in 19.426628 s => 1.942663 ms/frame (514.76 fps)
- *
- * Some contributed results from NVIDIA systems (driver 410.66):
- *
- * GTX 1050 Ti:
- *   api1: 10000 frames in 28.592386 s => 2.859239 ms/frame (349.74 fps)
- *   api2: 10000 frames in 14.765165 s => 1.476516 ms/frame (677.27 fps)
- *
- * GTX 1080 Ti:
- *   api1: 10000 frames in 10.271872 s => 1.027187 ms/frame (973.53 fps)
- *   api2: 10000 frames in 7.741683 s => 0.774168 ms/frame (1291.71 fps)
- *
- * Even though the GTX 1080 Ti is vastly more powerful than the RX 560, the
- * cheap AMD card still outperforms it because of its much better asynchronous
- * compute processing / work scheduling - but only for the efficient "API2"
- * style processing. In single threaded workloads (api1) the more powerful
- * GPU easily outperforms the cheaper one.
+ *   api1: 10000 frames in 15.539355 s => 1.553936 ms/frame (643.53 fps)
+ *   api2: 10000 frames in 6.277536 s => 0.627754 ms/frame (1592.98 fps)
  *
  * Compiling:
  *
@@ -225,7 +209,7 @@ void *init(void) {
 
     p->vk = pl_vulkan_create(p->ctx, &(struct pl_vulkan_params) {
         // Note: This is for API #2. In API #1 you could just pass params=NULL
-        // and it wouldn't really matter. (In fact, it would even be faster)
+        // and it wouldn't really matter much.
         .async_transfer = true,
         .async_compute = true,
         .queue_count = PARALLELISM,
