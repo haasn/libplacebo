@@ -7,21 +7,27 @@
  * For those of you too lazy to compile/run this file but still want to see
  * results, these are from my machine (RX 5700 XT + 1950X, as of 2020-05-25):
  *
- * RADV:
- *   api1: 10000 frames in 15.946306 s => 1.594631 ms/frame (627.10 fps)
- *   api2: 10000 frames in 5.398234 s => 0.539823 ms/frame (1852.46 fps)
+ * RADV+ACO:
+ *   api1: 10000 frames in 16.328440 s => 1.632844 ms/frame (612.43 fps)
+ *         render: 0.113524 ms, upload: 0.127551 ms, download: 0.146097 ms
+ *   api2: 10000 frames in 5.335634 s => 0.533563 ms/frame (1874.19 fps)
+ *         render: 0.064378 ms, upload: 0.000000 ms, download: 0.189719 ms
  *
  * AMDVLK:
- *   api1: 10000 frames in 14.766658 s => 1.476666 ms/frame (677.20 fps)
- *   api2: 10000 frames in 4.644831 s => 0.464483 ms/frame (2152.93 fps)
+ *   api1: 10000 frames in 14.921859 s => 1.492186 ms/frame (670.16 fps)
+ *         render: 0.110603 ms, upload: 0.114412 ms, download: 0.115375 ms
+ *   api2: 10000 frames in 4.667386 s => 0.466739 ms/frame (2142.53 fps)
+ *         render: 0.030781 ms, upload: 0.000000 ms, download: 0.075237 ms
  *
  * You can see that AMDVLK is still better at doing texture streaming than
  * RADV - this is because as of writing RADV still does not support
  * asynchronous texture queues / DMA engine transfers. If we disable the
  * `async_transfer` option with AMDVLK we get this:
  *
- *   api1: 10000 frames in 15.539355 s => 1.553936 ms/frame (643.53 fps)
- *   api2: 10000 frames in 6.277536 s => 0.627754 ms/frame (1592.98 fps)
+ *   api1: 10000 frames in 16.087723 s => 1.608772 ms/frame (621.59 fps)
+ *         render: 0.111154 ms, upload: 0.122476 ms, download: 0.133162 ms
+ *   api2: 10000 frames in 6.344959 s => 0.634496 ms/frame (1576.05 fps)
+ *         render: 0.031307 ms, upload: 0.000000 ms, download: 0.083520 ms
  *
  * Compiling:
  *
@@ -186,6 +192,17 @@ struct priv {
     struct pl_dispatch *dp;
     struct pl_shader_obj *dither_state;
 
+    // Timer objects
+    struct pl_timer *render_timer;
+    struct pl_timer *upload_timer;
+    struct pl_timer *download_timer;
+    uint64_t render_sum;
+    uint64_t upload_sum;
+    uint64_t download_sum;
+    int render_count;
+    int upload_count;
+    int download_count;
+
     // API #1: A simple pair of input and output textures
     const struct pl_tex *tex_in[MAX_PLANES];
     const struct pl_tex *tex_out[MAX_PLANES];
@@ -201,7 +218,11 @@ void *init(void) {
     if (!p)
         return NULL;
 
-    p->ctx = pl_context_create(PL_API_VER, NULL);
+    p->ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
+        .log_cb = pl_log_simple,
+        .log_level = PL_LOG_WARN,
+    });
+
     if (!p->ctx) {
         fprintf(stderr, "Failed initializing libplacebo\n");
         goto error;
@@ -228,6 +249,10 @@ void *init(void) {
         fprintf(stderr, "Failed creating shader dispatch object\n");
         goto error;
     }
+
+    p->render_timer = pl_timer_create(p->gpu);
+    p->upload_timer = pl_timer_create(p->gpu);
+    p->download_timer = pl_timer_create(p->gpu);
 
     return p;
 
@@ -256,6 +281,10 @@ void uninit(void *priv)
         if (p->entries[i].held_image)
             image_unlock(p->entries[i].held_image);
     }
+
+    pl_timer_destroy(p->gpu, &p->render_timer);
+    pl_timer_destroy(p->gpu, &p->upload_timer);
+    pl_timer_destroy(p->gpu, &p->download_timer);
 
     pl_shader_obj_destroy(&p->dither_state);
     pl_dispatch_destroy(&p->dp);
@@ -309,7 +338,28 @@ bool do_plane(struct priv *p, const struct pl_tex *dst, const struct pl_tex *src
     return pl_dispatch_finish(p->dp, &(struct pl_dispatch_params) {
         .shader = &sh,
         .target = dst,
+        .timer  = p->render_timer,
     });
+}
+
+void check_timers(struct priv *p)
+{
+    uint64_t ret;
+
+    while ((ret = pl_timer_query(p->gpu, p->render_timer))) {
+        p->render_sum += ret;
+        p->render_count++;
+    }
+
+    while ((ret = pl_timer_query(p->gpu, p->upload_timer))) {
+        p->upload_sum += ret;
+        p->upload_count++;
+    }
+
+    while ((ret = pl_timer_query(p->gpu, p->download_timer))) {
+        p->download_sum += ret;
+        p->download_count++;
+    }
 }
 
 // API #1 implementation:
@@ -371,6 +421,7 @@ bool api1_filter(void *priv, struct image *dst, struct image *src)
             .tex = p->tex_in[i],
             .stride_w = data[i].row_stride / data[i].pixel_stride,
             .ptr = src->planes[i].data,
+            .timer = p->upload_timer,
         });
 
         if (!ok) {
@@ -393,6 +444,7 @@ bool api1_filter(void *priv, struct image *dst, struct image *src)
             .tex = p->tex_out[i],
             .stride_w = dst->planes[i].stride / data[i].pixel_stride,
             .ptr = dst->planes[i].data,
+            .timer = p->download_timer,
         });
 
         if (!ok) {
@@ -401,6 +453,7 @@ bool api1_filter(void *priv, struct image *dst, struct image *src)
         }
     }
 
+    check_timers(p);
     return true;
 }
 
@@ -437,6 +490,7 @@ static enum api2_status submit_work(struct priv *p, struct entry *e,
         if (!fmt)
             return API2_ERR_FMT;
 
+        // FIXME: can we plumb a `pl_timer` in here somehow?
         if (!pl_upload_plane(p->gpu, NULL, &e->tex_in[i], &data[i]))
             return API2_ERR_UNKNOWN;
 
@@ -492,6 +546,7 @@ static enum api2_status submit_work(struct priv *p, struct entry *e,
             .stride_w = stride[i] / data[i].pixel_stride,
             .buf = e->buf,
             .buf_offset = offset[i],
+            .timer = p->download_timer,
         });
         if (!ok)
             return API2_ERR_UNKNOWN;
@@ -645,7 +700,7 @@ static const struct image example_image = {
 // API #1: Nice and simple (but slow)
 void api1_example(void)
 {
-    void *vf = init();
+    struct priv *vf = init();
     if (!vf)
         return;
 
@@ -690,6 +745,13 @@ void api1_example(void)
     printf("api1: %4u frames in %1.6f s => %2.6f ms/frame (%5.2f fps)\n",
            frames, secs, 1000 * secs / frames, frames / secs);
 
+    if (vf->render_count) {
+        printf("      render: %f ms, upload: %f ms, download: %f ms\n",
+               1e-6 * vf->render_sum / vf->render_count,
+               vf->upload_count ? (1e-6 * vf->upload_sum / vf->upload_count) : 0.0,
+               vf->download_count ? (1e-6 * vf->download_sum / vf->download_count) : 0.0);
+    }
+
 done:
     free(srcbuf);
     free(dstbuf);
@@ -708,7 +770,7 @@ static unsigned api2_frames_out = 0;
 
 void api2_example(void)
 {
-    void *vf = init();
+    struct priv *vf = init();
     if (!vf)
         return;
 
@@ -745,6 +807,7 @@ void api2_example(void)
 
         // Sleep a short time (100us) to prevent busy waiting the CPU
         nanosleep(&(struct timespec) { .tv_nsec = 100000 }, NULL);
+        check_timers(vf);
     }
 
     gettimeofday(&stop, NULL);
@@ -754,6 +817,13 @@ void api2_example(void)
     printf("api2: %4u frames in %1.6f s => %2.6f ms/frame (%5.2f fps)\n",
            api2_frames_out, secs, 1000 * secs / api2_frames_out,
            api2_frames_out / secs);
+
+    if (vf->render_count) {
+        printf("      render: %f ms, upload: %f ms, download: %f ms\n",
+               1e-6 * vf->render_sum / vf->render_count,
+               vf->upload_count ? (1e-6 * vf->upload_sum / vf->upload_count) : 0.0,
+               vf->download_count ? (1e-6 * vf->download_sum / vf->download_count) : 0.0);
+    }
 
     for (int i = 0; i < POOLSIZE; i++) {
         if (images[i].associated_buf) {
