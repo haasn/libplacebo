@@ -854,6 +854,9 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, const struct pl_dispatch_params 
         PL_ERR(dp, "Trying to dispatch using a compute shader with a "
                "non-storable target texture.");
         goto error;
+    } else if (tpars->storable && (dp->gpu->caps & PL_GPU_CAP_PARALLEL_COMPUTE)) {
+        if (sh_try_compute(sh, 16, 16, true, 0))
+            PL_TRACE(dp, "Upgrading fragment shader to compute shader.");
     }
 
     struct pl_rect2d rc = params->rect;
