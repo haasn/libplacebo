@@ -197,12 +197,18 @@ on distro packages.
 
 In principle, libplacebo has no mandatory dependencies - only optional ones.
 However, to get a useful version of libplacebo. you most likely want to build
-with support for either `opengl` or `vulkan`.
+with support for either `opengl` or `vulkan`. libplacebo built without these
+can still be used (e.g. to generate GLSL shaders such as the ones used in
+VLC), but the usefulness is severely impacted since most components will be
+missing, impaired or otherwise not functional.
 
-libplacebo built without these can still be used (e.g. to generate GLSL
-shaders such as the ones used in VLC), but the usefulness is severely
-impacted since most components will be missing, impaired or otherwise not
-functional.
+A full list of optional dependencies each feature requires:
+
+- **glslang**: `glslang` + its related libraries (e.g. `libSPIRV.so`)
+- **lcms**: `liblcms2`
+- **opengl**: `libepoxy`
+- **shaderc**: `libshaderc`
+- **vulkan**: `libvulkan`, `python3-mako`
 
 ### Configuring
 
