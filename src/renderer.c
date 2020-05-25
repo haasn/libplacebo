@@ -1310,7 +1310,11 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     const struct pl_image *image = &pass->image;
     bool need_fbo = image->num_overlays > 0;
     need_fbo |= rr->peak_detect_state && !params->allow_delayed_peak_detect;
-    need_fbo |= src.new_w != img->w || src.new_h != img->h;
+
+    // Force FBO indirection if this shader is non-resizable
+    int out_w, out_h;
+    if (img->sh && pl_shader_output_size(img->sh, &out_w, &out_h))
+        need_fbo |= out_w != src.new_w || out_h != src.new_h;
 
     struct sampler_info info = sample_src_info(rr, &src, params);
     bool use_sigmoid = info.dir == SAMPLER_UP && params->sigmoid_params;
@@ -1333,6 +1337,7 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     }
 
     if (info.dir == SAMPLER_NOOP && !need_fbo) {
+        pl_assert(src.new_w == img->w && src.new_h == img->h);
         PL_TRACE(rr, "Skipping main scaler (would be no-op)");
         return true;
     }
