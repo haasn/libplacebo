@@ -1079,6 +1079,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         *st = (struct plane_state) {
             .plane = image->planes[i],
             .img = {
+                .w = image->planes[i].texture->params.w,
+                .h = image->planes[i].texture->params.h,
                 .tex = image->planes[i].texture,
                 .repr = image->repr,
                 .color = image->color,
@@ -1139,9 +1141,6 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             .y1 = image->src_rect.y1 / rry - sy / ry,
         };
 
-        st->img.w = roundf(pl_rect_w(st->img.rect));
-        st->img.h = roundf(pl_rect_h(st->img.rect));
-
         if (st == ref) {
             // Make sure st->rc == src_rect
             pl_assert(rrx == 1 && rry == 1 && sx == 0 && sy == 0);
@@ -1164,6 +1163,10 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             PL_TRACE(rr, "After user hooks:");
             log_plane_info(rr, st);
         }
+
+        // Update the conceptual width/height after applying plane shaders
+        st->img.w = roundf(pl_rect_w(st->img.rect));
+        st->img.h = roundf(pl_rect_h(st->img.rect));
     }
 
     struct pl_shader *sh = pl_dispatch_begin_ex(rr->dp, true);
