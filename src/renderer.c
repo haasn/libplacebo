@@ -332,6 +332,7 @@ static const struct pl_tex *img_tex(struct pass_state *pass, struct img *img)
 
     if (!ok) {
         PL_ERR(rr, "Failed dispatching intermediate pass!");
+        img->sh = pl_dispatch_begin(rr->dp);
         return NULL;
     }
 
