@@ -31,6 +31,40 @@ int main()
     REQUIRE(rc3.y1 >= rc3.y0);
     REQUIRE(rc3.z1 >= rc3.z0);
 
+    struct pl_rect2df rc2f = {
+        RANDOM, RANDOM,
+        RANDOM, RANDOM,
+    };
+
+    struct pl_rect3df rc3f = {
+        RANDOM, RANDOM, RANDOM,
+        RANDOM, RANDOM, RANDOM,
+    };
+
+    pl_rect2df_normalize(&rc2f);
+    REQUIRE(rc2.x1 >= rc2.x0);
+    REQUIRE(rc2.y1 >= rc2.y0);
+
+    pl_rect3df_normalize(&rc3f);
+    REQUIRE(rc3.x1 >= rc3.x0);
+    REQUIRE(rc3.y1 >= rc3.y0);
+    REQUIRE(rc3.z1 >= rc3.z0);
+
+    struct pl_rect2d rc2r = pl_rect2df_round(&rc2f);
+    struct pl_rect3d rc3r = pl_rect3df_round(&rc3f);
+
+    REQUIRE(fabs(rc2r.x0 - rc2f.x0) <= 0.5);
+    REQUIRE(fabs(rc2r.x1 - rc2f.x1) <= 0.5);
+    REQUIRE(fabs(rc2r.y0 - rc2f.y0) <= 0.5);
+    REQUIRE(fabs(rc2r.y1 - rc2f.y1) <= 0.5);
+
+    REQUIRE(fabs(rc3r.x0 - rc3f.x0) <= 0.5);
+    REQUIRE(fabs(rc3r.x1 - rc3f.x1) <= 0.5);
+    REQUIRE(fabs(rc3r.y0 - rc3f.y0) <= 0.5);
+    REQUIRE(fabs(rc3r.y1 - rc3f.y1) <= 0.5);
+    REQUIRE(fabs(rc3r.z0 - rc3f.z0) <= 0.5);
+    REQUIRE(fabs(rc3r.z1 - rc3f.z1) <= 0.5);
+
     struct pl_transform3x3 tr = {
         .mat = {{
             { RANDOM, RANDOM, RANDOM },
@@ -92,4 +126,11 @@ int main()
     REQUIRE(feq(pl_rect2df_midx(rc), pl_rect2df_midx(rc43), 1e-6));
     REQUIRE(feq(pl_rect2df_midy(rc), pl_rect2df_midy(rc43), 1e-6));
     REQUIRE(feq(pl_rect_w(rc), pl_rect_w(rc43), 1e-6));
+
+    rc = (struct pl_rect2df) { 1920, 1080, 0, 0 };
+    pl_rect2df_offset(&rc, 50, 100);
+    REQUIRE(feq(rc.x0, 1870, 1e-6));
+    REQUIRE(feq(rc.x1, -50, 1e-6));
+    REQUIRE(feq(rc.y0, 980, 1e-6));
+    REQUIRE(feq(rc.y1, -100, 1e-6));
 }
