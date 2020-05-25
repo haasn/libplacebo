@@ -1060,19 +1060,6 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_render_params *params)
 {
     struct pl_image *image = &pass->image;
-    struct pl_shader *sh = pl_dispatch_begin_ex(rr->dp, true);
-    sh_require(sh, PL_SHADER_SIG_NONE, 0, 0);
-
-    // Initialize the color to black
-    const char *neutral = "0.0, 0.0, 0.0";
-    if (pl_color_system_is_ycbcr_like(image->repr.sys))
-        neutral = "0.0, 0.5, 0.5";
-
-    GLSL("vec4 color = vec4(%s, 1.0);            \n"
-         "// pass_read_image                     \n"
-         "{                                      \n"
-         "vec4 tmp;                              \n",
-         neutral);
 
     // First of all, we have to pick a "reference" plane for alignment.
     // This should ideally be the plane that most closely matches the target
@@ -1173,6 +1160,20 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             log_plane_info(rr, st);
         }
     }
+
+    struct pl_shader *sh = pl_dispatch_begin_ex(rr->dp, true);
+    sh_require(sh, PL_SHADER_SIG_NONE, 0, 0);
+
+    // Initialize the color to black
+    const char *neutral = "0.0, 0.0, 0.0";
+    if (pl_color_system_is_ycbcr_like(image->repr.sys))
+        neutral = "0.0, 0.5, 0.5";
+
+    GLSL("vec4 color = vec4(%s, 1.0);            \n"
+         "// pass_read_image                     \n"
+         "{                                      \n"
+         "vec4 tmp;                              \n",
+         neutral);
 
     // For quality reasons, explicitly drop subpixel offsets from the ref rect
     // and re-add them as part of `pass->img.rect`, always rounding towards 0
