@@ -372,7 +372,7 @@ void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y)
     *x = *y = 0;
 
     // This is the majority of subsampled chroma content out there
-    loc = PL_DEF(loc, PL_CHROMA_TOP_LEFT);
+    loc = PL_DEF(loc, PL_CHROMA_LEFT);
 
     switch (loc) {
     case PL_CHROMA_LEFT:

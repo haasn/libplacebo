@@ -343,7 +343,7 @@ enum pl_chroma_location {
 // Fills *x and *y with the offset in luma pixels corresponding to a given
 // chroma location.
 //
-// Note: PL_CHROMA_UNKNOWN defaults to PL_CHROMA_TOP_LEFT
+// Note: PL_CHROMA_UNKNOWN defaults to PL_CHROMA_LEFT
 void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y);
 
 // Represents a single CIE xy coordinate (e.g. CIE Yxy with Y = 1.0)
