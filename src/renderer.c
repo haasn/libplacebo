@@ -1681,6 +1681,48 @@ error:
     return false;
 }
 
+void pl_image_set_chroma_location(struct pl_image *image,
+                                  enum pl_chroma_location chroma_loc)
+{
+    // Re-use our internal helpers for this
+    struct plane_state planes[4];
+    struct plane_state *ref = NULL;
+
+    pl_assert(image->num_planes < PL_ARRAY_SIZE(planes));
+    for (int i = 0; i < image->num_planes; i++) {
+        struct plane_state *st = &planes[i];
+        *st = (struct plane_state) {
+            .plane = image->planes[i],
+            .img = { .repr = image->repr, },
+        };
+
+        st->type = detect_plane_type(st);
+        pl_assert(st->type >= 0);
+        switch (st->type) {
+        case PLANE_RGB:
+        case PLANE_LUMA:
+        case PLANE_XYZ:
+            ref = st;
+            break;
+        default: break;
+        }
+    }
+
+    if (!ref)
+        return; // no planes
+
+    int ref_w = ref->plane.texture->params.w,
+        ref_h = ref->plane.texture->params.h;
+
+    for (int i = 0; i < image->num_planes; i++) {
+        struct pl_plane *plane = &image->planes[i];
+        const struct pl_tex *tex = plane->texture;
+        bool subsampled = tex->params.w < ref_w || tex->params.h < ref_h;
+        if (subsampled)
+            pl_chroma_location_offset(chroma_loc, &plane->shift_x, &plane->shift_y);
+    }
+}
+
 void pl_render_target_from_swapchain(struct pl_render_target *out_target,
                                      const struct pl_swapchain_frame *frame)
 {

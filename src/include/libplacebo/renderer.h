@@ -376,6 +376,12 @@ struct pl_image {
     int width, height;
 };
 
+// Helper function to infer the chroma location offset for each plane in an
+// image. This is equivalent to calling `pl_chroma_location_offset` on all
+// subsampled planes' shift_x/shift_y variables.
+void pl_image_set_chroma_location(struct pl_image *image,
+                                  enum pl_chroma_location chroma_loc);
+
 // Represents the target of a rendering operation
 struct pl_render_target {
     // The framebuffer (or texture) we want to render to. Must have `renderable`
