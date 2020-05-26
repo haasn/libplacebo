@@ -752,8 +752,11 @@ static double prng_step(uint64_t s[4])
 static bool bind_pass_tex(struct pl_shader *sh, struct bstr name,
                           const struct pass_tex *ptex)
 {
+    // Note: We bind the whole texture, rather than params->rect, because
+    // user shaders in general are not designed to handle cropped input
+    // textures.
     ident_t id, pos, size, pt;
-    id = sh_bind(sh, ptex->tex, "hook_tex", &ptex->rect, &pos, &size, &pt);
+    id = sh_bind(sh, ptex->tex, "hook_tex", NULL, &pos, &size, &pt);
     if (!id)
         return false;
 
@@ -1028,17 +1031,16 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         if (!ok)
             goto error;
 
-        // Update the rendering rect based on the given transform / offset
-        float sx = out_w / pl_rect_w(params->rect),
-              sy = out_h / pl_rect_h(params->rect),
+        float sx = (float) out_w / params->tex->params.w,
+              sy = (float) out_h / params->tex->params.h,
               x0 = sx * params->rect.x0 + hook->offset[0],
               y0 = sy * params->rect.y0 + hook->offset[1];
 
         struct pl_rect2df new_rect = {
             x0,
             y0,
-            x0 + out_w,
-            y0 + out_h,
+            x0 + sx * pl_rect_w(params->rect),
+            y0 + sy * pl_rect_h(params->rect),
         };
 
         // Save the result of this shader invocation
