@@ -62,6 +62,7 @@ struct custom_shader_hook {
     // Shader body itself + metadata
     struct bstr pass_body;
     float offset[2];
+    bool offset_align;
     int comps;
 
     // Special expressions governing the output size and execution conditions
@@ -284,13 +285,18 @@ static bool parse_hook(struct pl_context *ctx, struct bstr *body,
         }
 
         if (bstr_eatstart0(&line, "OFFSET")) {
-            float ox, oy;
-            if (bstr_sscanf(line, "%f %f", &ox, &oy) != 2) {
-                pl_err(ctx, "Error while parsing OFFSET!");
-                return false;
+            line = bstr_strip(line);
+            if (bstr_equals0(line, "ALIGN")) {
+                out->offset_align = true;
+            } else {
+                float ox, oy;
+                if (bstr_sscanf(line, "%f %f", &ox, &oy) != 2) {
+                    pl_err(ctx, "Error while parsing OFFSET!");
+                    return false;
+                }
+                out->offset[0] = ox;
+                out->offset[1] = oy;
             }
-            out->offset[0] = ox;
-            out->offset[1] = oy;
             continue;
         }
 
@@ -750,13 +756,11 @@ static double prng_step(uint64_t s[4])
 }
 
 static bool bind_pass_tex(struct pl_shader *sh, struct bstr name,
-                          const struct pass_tex *ptex)
+                          const struct pass_tex *ptex,
+                          const struct pl_rect2df *rect)
 {
-    // Note: We bind the whole texture, rather than params->rect, because
-    // user shaders in general are not designed to handle cropped input
-    // textures.
     ident_t id, pos, size, pt;
-    id = sh_bind(sh, ptex->tex, "hook_tex", NULL, &pos, &size, &pt);
+    id = sh_bind(sh, ptex->tex, "hook_tex", rect, &pos, &size, &pt);
     if (!id)
         return false;
 
@@ -946,7 +950,25 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
             for (int j = 0; j < p->num_pass_textures; j++) {
                 if (bstr_equals(texname, p->pass_textures[j].name)) {
-                    if (!bind_pass_tex(sh, texname, &p->pass_textures[j]))
+                    // Note: We bind the whole texture, rather than
+                    // params->rect, because user shaders in general are not
+                    // designed to handle cropped input textures.
+                    const struct pass_tex *ptex = &p->pass_textures[j];
+                    struct pl_rect2df rect = {
+                        0, 0, ptex->tex->params.w, ptex->tex->params.h,
+                    };
+
+                    if (hook->offset_align && bstr_equals(texname, stage)) {
+                        float sx = pl_rect_w(params->rect) / pl_rect_w(params->src_rect),
+                              sy = pl_rect_h(params->rect) / pl_rect_h(params->src_rect),
+                              ox = params->rect.x0 - sx * params->src_rect.x0,
+                              oy = params->rect.y0 - sy * params->src_rect.y0;
+
+                        PL_TRACE(p, "Aligning plane with ref: %f %f", ox, oy);
+                        pl_rect2df_offset(&rect, ox, oy);
+                    }
+
+                    if (!bind_pass_tex(sh, texname, &p->pass_textures[j], &rect))
                         goto error;
                     goto next_bind;
                 }
@@ -1042,6 +1064,15 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             x0 + sx * pl_rect_w(params->rect),
             y0 + sy * pl_rect_h(params->rect),
         };
+
+        if (hook->offset_align) {
+            float rx = pl_rect_w(new_rect) / pl_rect_w(params->src_rect),
+                  ry = pl_rect_h(new_rect) / pl_rect_h(params->src_rect),
+                  ox = rx * params->src_rect.x0 - sx * params->rect.x0,
+                  oy = ry * params->src_rect.y0 - sy * params->rect.y0;
+
+            pl_rect2df_offset(&new_rect, ox, oy);
+        }
 
         // Save the result of this shader invocation
         struct pass_tex ptex = {
