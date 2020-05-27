@@ -206,9 +206,14 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
                 break; // accept
             continue;
 
-        // Accept 10/16 bit formats universally
+        // Only accept 10 bit formats for non-linear curves
         case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
         case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+            if (space->transfer != PL_COLOR_TRC_LINEAR)
+                break; // accept
+            continue;
+
+        // Accept 16-bit formats for everything
         case VK_FORMAT_R16G16B16_UNORM:
         case VK_FORMAT_R16G16B16A16_UNORM:
              break; // accept
