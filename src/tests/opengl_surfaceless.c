@@ -3,6 +3,45 @@
 #include <epoxy/gl.h>
 #include <epoxy/egl.h>
 
+static void opengl_interop_tests(const struct pl_gpu *gpu)
+{
+    const struct pl_fmt *fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0,
+                                           PL_FMT_CAP_RENDERABLE |
+                                           PL_FMT_CAP_LINEAR);
+    if (!fmt)
+        return;
+
+    const struct pl_tex *export = pl_tex_create(gpu, &(struct pl_tex_params) {
+        .w = 32,
+        .h = 32,
+        .format = fmt,
+        .sampleable = true,
+        .renderable = true,
+        .blit_dst = fmt->caps & PL_FMT_CAP_BLITTABLE,
+        .sample_mode = PL_TEX_SAMPLE_LINEAR,
+        .address_mode = PL_TEX_ADDRESS_REPEAT,
+    });
+
+    REQUIRE(export);
+
+    struct pl_opengl_wrap_params wrap = {
+        .width = export->params.w,
+        .height = export->params.h,
+        .depth = export->params.d,
+    };
+
+    wrap.texture = pl_opengl_unwrap(gpu, export, &wrap.target, &wrap.iformat, NULL);
+    REQUIRE(wrap.texture);
+
+    const struct pl_tex *import = pl_opengl_wrap(gpu, &wrap);
+    REQUIRE(import);
+    REQUIRE(import->params.renderable);
+    REQUIRE(import->params.blit_dst == export->params.blit_dst);
+
+    pl_tex_destroy(gpu, &import);
+    pl_tex_destroy(gpu, &export);
+}
+
 int main()
 {
     // Create the OpenGL context
@@ -124,6 +163,7 @@ int main()
         last_limits = gpu->limits;
 
         gpu_tests(gpu);
+        opengl_interop_tests(gpu);
 
         pl_opengl_destroy(&gl);
         eglDestroyContext(dpy, egl);

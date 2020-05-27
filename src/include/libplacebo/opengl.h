@@ -102,4 +102,59 @@ const struct pl_swapchain *pl_opengl_create_swapchain(const struct pl_opengl *gl
 void pl_opengl_swapchain_update_fb(const struct pl_swapchain *sw,
                                    const struct pl_opengl_framebuffer *fb);
 
+struct pl_opengl_wrap_params {
+    // The GLuint texture object itself.
+    unsigned int texture;
+
+    // The image's dimensions (unused dimensions must be 0)
+    int width;
+    int height;
+    int depth;
+
+    // The GLenum for the texture target to use, e.g. GL_TEXTURE_2D. Optional.
+    // If this is left as 0, the target is inferred from the number of
+    // dimensions. Users may want to set this to something specific like
+    // GL_TEXTURE_EXTERNAL_OES depending on the nature of the texture.
+    unsigned int target;
+
+    // The texture's GLint sized internal format (e.g. GL_RGBA16F)
+    int iformat;
+
+    // The GLint texture min/mag filter. libplacebo does not distinguish
+    // between magnification/minification, so both must be the same. Optional,
+    // defaults to GL_LINEAR.
+    int filter;
+
+    // The GLint texture address mode. libplacebo does not distinguish by
+    // dimension, so all must be the same. Optional, defaults to GL_REPEAT.
+    int address_mode;
+};
+
+// Wraps an external OpenGL object into a `pl_tex` abstraction. Due to the
+// internally synchronized nature of OpenGL, no explicit synchronization
+// is needed between libplacebo `pl_tex_` operations, and host accesses to
+// the texture. Wrapping the same OpenGL texture multiple times is permitted.
+// Note that this function transfers no ownership.
+//
+// This wrapper can be destroyed by simply calling `pl_tex_destroy` on it,
+// which will not destroy the underlying OpenGL texture.
+//
+// This function may fail, in which case it returns NULL.
+const struct pl_tex *pl_opengl_wrap(const struct pl_gpu *gpu,
+                                    const struct pl_opengl_wrap_params *params);
+
+// Analogous to `pl_opengl_wrap`, this function takes any `pl_tex` (including
+// ones created by `pl_tex_create`) and unwraps it to expose the underlying
+// OpenGL texture to the user. Note that this function transfers no ownership,
+// i.e. the texture object and framebuffer shall not be destroyed by the user.
+//
+// Returns the OpenGL texture. `out_target` and `out_iformat` will be updated
+// to hold the target type and internal format, respectively. (Optional)
+//
+// For renderable/blittable textures, `out_fbo` will be updated to the ID of
+// the framebuffer attached to this texture, or 0 if there is none. (Optional)
+unsigned int pl_opengl_unwrap(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                              unsigned int *out_target, int *out_iformat,
+                              unsigned int *out_fbo);
+
 #endif // LIBPLACEBO_OPENGL_H_
