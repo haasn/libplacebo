@@ -371,9 +371,8 @@ void pl_shader_append_bstr(struct pl_shader *sh, enum pl_shader_buf buf,
 }
 
 static const char *insigs[] = {
-    [PL_SHADER_SIG_NONE]        = "",
-    [PL_SHADER_SIG_COLOR]       = "vec4 color",
-    [PL_SHADER_SIG_SAMPLER2D]   = "sampler2D src_tex, vec2 tex_coord",
+    [PL_SHADER_SIG_NONE]  = "",
+    [PL_SHADER_SIG_COLOR] = "vec4 color",
 };
 
 static const char *outsigs[] = {
@@ -384,6 +383,13 @@ static const char *outsigs[] = {
 static const char *retvals[] = {
     [PL_SHADER_SIG_NONE]  = "",
     [PL_SHADER_SIG_COLOR] = "return color;",
+};
+
+// libplacebo currently only allows 2D samplers for shader signatures
+static const char *samplers2D[] = {
+    [PL_SAMPLER_NORMAL]     = "sampler2D",
+    [PL_SAMPLER_RECT]       = "sampler2DRect",
+    [PL_SAMPLER_EXTERNAL]   = "samplerExternalOES",
 };
 
 ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
@@ -428,7 +434,14 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
 
     // Append the body as a new header function
     ident_t name = sh_fresh(sh, "sub");
-    GLSLH("%s %s(%s) {\n", outsigs[sub->res.output], name, insigs[sub->res.input]);
+    if (sub->res.input == PL_SHADER_SIG_SAMPLER) {
+        pl_assert(sub->sampler_prefix);
+        GLSLH("%s %s(%c%s src_tex, vec2 tex_coord) {\n",
+              outsigs[sub->res.output], name,
+              sub->sampler_prefix, samplers2D[sub->sampler_type]);
+    } else {
+        GLSLH("%s %s(%s) {\n", outsigs[sub->res.output], name, insigs[sub->res.input]);
+    }
     bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_BODY]);
     GLSLH("%s\n}\n\n", retvals[sub->res.output]);
 
@@ -450,7 +463,14 @@ static ident_t sh_split(struct pl_shader *sh)
 
     // Concatenate the body onto the head as a new function
     ident_t name = sh_fresh(sh, "main");
-    GLSLH("%s %s(%s) {\n", outsigs[sh->res.output], name, insigs[sh->res.input]);
+    if (sh->res.input == PL_SHADER_SIG_SAMPLER) {
+        pl_assert(sh->sampler_prefix);
+        GLSLH("%s %s(%c%s src_tex, vec2 tex_coord) {\n",
+              outsigs[sh->res.output], name,
+              sh->sampler_prefix, samplers2D[sh->sampler_type]);
+    } else {
+        GLSLH("%s %s(%s) {\n", outsigs[sh->res.output], name, insigs[sh->res.input]);
+    }
 
     if (sh->buffers[SH_BUF_BODY].len) {
         bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_BODY]);

@@ -47,6 +47,8 @@ struct pl_shader {
     struct bstr buffers[SH_BUF_COUNT];
     bool is_compute;
     bool flexible_work_groups;
+    enum pl_sampler_type sampler_type;
+    char sampler_prefix;
     int fresh;
 
     // mutable versions of the fields from pl_shader_res

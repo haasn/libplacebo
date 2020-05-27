@@ -40,10 +40,12 @@ struct pl_sample_src {
 
     // 2. Have the shader take it as an argument. Doing this requires
     // specifying the missing metadata of the texture backing the sampler, so
-    // that the shader generation can generate the correct code. In particular,
-    // the important fields include the texture dimensions and the sample mode.
-    struct pl_tex_params sampler_params;
-    float sampled_w, sampled_h; // dimensions of the sampled region (optional)
+    // that the shader generation can generate the correct code.
+    int tex_w, tex_h;             // dimensions of the actual texture
+    enum pl_fmt_type format;      // format of the sampler being accepted
+    enum pl_sampler_type sampler; // type of the sampler being accepted
+    enum pl_tex_sample_mode mode; // sample mode of the sampler being accepted
+    float sampled_w, sampled_h;   // dimensions of the sampled region (optional)
 
     // Common metadata for both sampler input types:
     int components;   // number of components to sample (optional)

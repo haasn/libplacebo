@@ -49,13 +49,17 @@ int main()
     }
 
     // Try out generation of the sampler2D interface
-    src.sampler_params = dummy->params;
     src.tex = NULL;
+    src.tex_w = 100;
+    src.tex_h = 100;
+    src.format = PL_FMT_UNORM;
+    src.sampler = PL_SAMPLER_NORMAL;
+    src.mode = PL_TEX_SAMPLE_LINEAR;
 
     pl_shader_reset(sh, &(struct pl_shader_params) { .gpu = gpu });
     REQUIRE(pl_shader_sample_polar(sh, &src, &filter_params));
     REQUIRE((res = pl_shader_finalize(sh)));
-    REQUIRE(res->input == PL_SHADER_SIG_SAMPLER2D);
+    REQUIRE(res->input == PL_SHADER_SIG_SAMPLER);
     printf("generated sampler2D shader:\n\n%s\n", res->glsl);
 
     pl_shader_free(&sh);

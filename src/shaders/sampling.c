@@ -27,7 +27,14 @@ const struct pl_deband_params pl_deband_default_params = {
 
 static inline struct pl_tex_params src_params(const struct pl_sample_src *src)
 {
-    return src->tex ? src->tex->params : src->sampler_params;
+    if (src->tex)
+        return src->tex->params;
+
+    return (struct pl_tex_params) {
+        .w = src->tex_w,
+        .h = src->tex_h,
+        .sample_mode = src->mode,
+    };
 }
 
 // Helper function to compute the src/dst sizes and upscaling ratios
@@ -36,16 +43,16 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
                       float *ratio_x, float *ratio_y, int *components,
                       float *scale, bool resizeable, const char **fn)
 {
-    pl_assert(pl_tex_params_dimension(src_params(src)) == 2);
-
     enum pl_shader_sig sig;
     float src_w, src_h;
     if (src->tex) {
+        pl_assert(pl_tex_params_dimension(src->tex->params) == 2);
         sig = PL_SHADER_SIG_NONE;
         src_w = pl_rect_w(src->rect);
         src_h = pl_rect_h(src->rect);
     } else {
-        sig = PL_SHADER_SIG_SAMPLER2D;
+        pl_assert(src->tex_w && src->tex_h);
+        sig = PL_SHADER_SIG_SAMPLER;
         src_w = src->sampled_w;
         src_h = src->sampled_h;
     }
@@ -66,7 +73,9 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
         *scale = PL_DEF(src->scale, 1.0);
 
     if (components) {
-        int tex_comps = src_params(src).format->num_components;
+        int tex_comps = 4;
+        if (src->tex)
+            tex_comps = src->tex->params.format->num_components;
         *components = PL_DEF(src->components, tex_comps);
     }
 
@@ -88,26 +97,38 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
 
         *src_tex = sh_bind(sh, src->tex, "src_tex", &rect, pos, size, pt);
     } else {
-        int tex_w = src->sampler_params.w,
-            tex_h = src->sampler_params.h;
-        pl_assert(tex_w && tex_h);
-
         if (size) {
             *size = sh_var(sh, (struct pl_shader_var) {
                 .var = pl_var_vec2("tex_size"),
-                .data = &(float[2]) { tex_w, tex_h },
+                .data = &(float[2]) { src->tex_w, src->tex_h },
             });
         }
 
         if (pt) {
+            float sx = 1.0 / src->tex_w, sy = 1.0 / src->tex_h;
+            if (src->sampler == PL_SAMPLER_RECT)
+                sx = sy = 1.0;
+
             *pt = sh_var(sh, (struct pl_shader_var) {
                 .var = pl_var_vec2("tex_pt"),
-                .data = &(float[2]) { 1.0 / tex_w, 1.0 / tex_h },
+                .data = &(float[2]) { sx, sy },
             });
         }
 
         if (fn)
-            *fn = sh_tex_fn(sh, src->sampler_params);
+            *fn = sh_tex_fn(sh, (struct pl_tex_params) { .w = 1, .d = 1 }); // 2D
+
+        sh->sampler_type = src->sampler;
+
+        pl_assert(src->format);
+        switch (src->format) {
+        case PL_FMT_FLOAT:
+        case PL_FMT_UNORM:
+        case PL_FMT_SNORM: sh->sampler_prefix = ' '; break;
+        case PL_FMT_UINT: sh->sampler_prefix = 'u'; break;
+        case PL_FMT_SINT: sh->sampler_prefix = 's'; break;
+        default: abort();
+        }
 
         *src_tex = "src_tex";
         *pos = "tex_coord";

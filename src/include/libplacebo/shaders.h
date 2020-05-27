@@ -120,7 +120,8 @@ enum pl_shader_sig {
     PL_SHADER_SIG_COLOR,    // vec4 color (normalized so that 1.0 is the ref white)
 
     // The following are only valid as input signatures:
-    PL_SHADER_SIG_SAMPLER2D, // (sampler2D src_tex, vec2 tex_coord) pair
+    PL_SHADER_SIG_SAMPLER, // (gsampler* src_tex, vecN tex_coord) pair,
+                           // specifics depend on how the shader was generated
 };
 
 // Represents a finalized shader fragment. This is not a complete shader, but a
