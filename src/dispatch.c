@@ -269,14 +269,24 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         ADD(pre, "#extension GL_ARB_compute_shader : enable\n");
 
     // Enable all extensions needed for different types of input
-    bool has_ssbo = false, has_ubo = false, has_img = false, has_texel = false;
+    bool has_ssbo = false, has_ubo = false, has_img = false, has_texel = false,
+         has_ext = false;
     for (int i = 0; i < res->num_descriptors; i++) {
-        switch (params->descriptors[i].type) {
+        switch (res->descriptors[i].desc.type) {
         case PL_DESC_STORAGE_IMG: has_img = true; break;
         case PL_DESC_BUF_UNIFORM: has_ubo = true; break;
         case PL_DESC_BUF_STORAGE: has_ssbo = true; break;
         case PL_DESC_BUF_TEXEL_UNIFORM: // fall through
         case PL_DESC_BUF_TEXEL_STORAGE: has_texel = true; break;
+        case PL_DESC_SAMPLED_TEX: {
+            const struct pl_tex *tex = res->descriptors[i].object;
+            switch (tex->sampler_type) {
+            case PL_SAMPLER_NORMAL: break;
+            case PL_SAMPLER_RECT: break;
+            case PL_SAMPLER_EXTERNAL: has_ext = true; break;
+            }
+            break;
+        }
         default: break;
         }
     }
@@ -289,6 +299,8 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         ADD(pre, "#extension GL_ARB_shader_storage_buffer_object : enable\n");
     if (has_texel)
         ADD(pre, "#extension GL_ARB_texture_buffer_object : enable\n");
+    if (has_ext)
+        ADD(pre, "#extension GL_OES_EGL_image_external : enable\n");
 
     if (gpu->glsl.gles) {
         ADD(pre, "precision mediump float;\n");
@@ -392,20 +404,41 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
 
         switch (desc->type) {
         case PL_DESC_SAMPLED_TEX: {
-            static const char *types[] = {
-                [1] = "sampler1D",
-                [2] = "sampler2D",
-                [3] = "sampler3D",
+            static const char *types[][4] = {
+                [PL_SAMPLER_NORMAL][1]  = "sampler1D",
+                [PL_SAMPLER_NORMAL][2]  = "sampler2D",
+                [PL_SAMPLER_NORMAL][3]  = "sampler3D",
+                [PL_SAMPLER_RECT][2]    = "sampler2DRect",
+                [PL_SAMPLER_EXTERNAL][2] = "samplerExternalOES",
             };
+
+            const struct pl_tex *tex = sd->object;
+            int dims = pl_tex_params_dimension(tex->params);
+            const char *type = types[tex->sampler_type][dims];
+            pl_assert(type);
+
+            static const char prefixes[PL_FMT_TYPE_COUNT] = {
+                [PL_FMT_FLOAT]  = ' ',
+                [PL_FMT_UNORM]  = ' ',
+                [PL_FMT_SNORM]  = ' ',
+                [PL_FMT_UINT]   = 'u',
+                [PL_FMT_SINT]   = 'i',
+            };
+
+            char prefix = prefixes[tex->params.format->type];
+            pl_assert(prefix);
+
+            const char *prec = "";
+            if (prefix != ' ' && gpu->glsl.gles)
+                prec = "highp ";
 
             // Vulkan requires explicit bindings; GL always sets the
             // bindings manually to avoid relying on the user doing so
             if (gpu->glsl.vulkan)
                 ADD(glsl, "layout(binding=%d) ", desc->binding);
 
-            const struct pl_tex *tex = sd->object;
-            int dims = pl_tex_params_dimension(tex->params);
-            ADD(glsl, "uniform %s %s;\n", types[dims], desc->name);
+            pl_assert(type && prefix);
+            ADD(glsl, "uniform %s%c%s %s;\n", prec, prefix, type, desc->name);
             break;
         }
 
