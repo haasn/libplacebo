@@ -275,6 +275,15 @@ ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
         .object = tex,
     });
 
+    float sx, sy;
+    if (tex->sampler_type == PL_SAMPLER_RECT) {
+        sx = 1.0;
+        sy = 1.0;
+    } else {
+        sx = 1.0 / tex->params.w;
+        sy = 1.0 / tex->params.h;
+    }
+
     if (out_pos) {
         struct pl_rect2df full = {
             .x1 = tex->params.w,
@@ -283,8 +292,8 @@ ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
 
         rect = PL_DEF(rect, &full);
         *out_pos = sh_attr_vec2(sh, "tex_coord", &(struct pl_rect2df) {
-            .x0 = rect->x0 / tex->params.w, .y0 = rect->y0 / tex->params.h,
-            .x1 = rect->x1 / tex->params.w, .y1 = rect->y1 / tex->params.h,
+            .x0 = sx * rect->x0, .y0 = sy * rect->y0,
+            .x1 = sx * rect->x1, .y1 = sy * rect->y1,
         });
     }
 
@@ -298,7 +307,7 @@ ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
     if (out_pt) {
         *out_pt = sh_var(sh, (struct pl_shader_var) {
             .var  = pl_var_vec2("tex_pt"),
-            .data = &(float[2]) {1.0 / tex->params.w, 1.0 / tex->params.h},
+            .data = &(float[2]) {sx, sy},
         });
     }
 
