@@ -8,7 +8,7 @@ int main()
     pl_texture_tests(gpu);
 
     // Attempt creating a shader and accessing the resulting LUT
-    const struct pl_tex *dummy = pl_tex_dummy_create(gpu, &(struct pl_tex_params) {
+    const struct pl_tex *dummy = pl_tex_dummy_create(gpu, &(struct pl_tex_dummy_params) {
         .w = 100,
         .h = 100,
         .format = pl_find_named_fmt(gpu, "rgba8"),

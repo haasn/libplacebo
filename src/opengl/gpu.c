@@ -326,6 +326,7 @@ static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
     struct pl_tex *tex = talloc_zero_priv(NULL, struct pl_tex, struct pl_tex_gl);
     tex->params = *params;
     tex->params.initial_data = NULL;
+    tex->sampler_type = PL_SAMPLER_NORMAL;
 
     struct pl_tex_gl *tex_gl = TA_PRIV(tex);
 

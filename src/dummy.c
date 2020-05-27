@@ -242,14 +242,14 @@ static const struct pl_tex *dumb_tex_create(const struct pl_gpu *gpu,
 }
 
 const struct pl_tex *pl_tex_dummy_create(const struct pl_gpu *gpu,
-                                         const struct pl_tex_params *params)
+                                         const struct pl_tex_dummy_params *params)
 {
     // Only do minimal sanity checking, since this is just a dummy texture
     pl_assert(params->format && params->w >= 0 && params->h >= 0 && params->d >= 0);
 
     struct pl_tex *tex = talloc_zero_priv(NULL, struct pl_tex, struct tex_priv);
+    tex->sampler_type = params->sampler_type;
     tex->params = (struct pl_tex_params) {
-        // Whitelist options
         .w = params->w,
         .h = params->h,
         .d = params->d,

@@ -67,15 +67,26 @@ void pl_gpu_dummy_destroy(const struct pl_gpu **gpu);
 uint8_t *pl_buf_dummy_data(const struct pl_buf *buf);
 uint8_t *pl_tex_dummy_data(const struct pl_tex *tex);
 
+// Skeleton of `pl_tex_params` containing only the fields relevant to
+// `pl_tex_dummy_create`, plus the extra `sampler_type` field.
+struct pl_tex_dummy_params {
+    int w, h, d;
+    const struct pl_fmt *format;
+
+    enum pl_tex_sample_mode sample_mode;
+    enum pl_tex_address_mode address_mode;
+    enum pl_sampler_type sampler_type;
+
+    void *user_data;
+};
+
 // Allows creating a "placeholder" dummy texture. This is basically a texture
 // that isn't even backed by anything. All `pl_tex_*` operations (other than
 // `pl_tex_destroy`) performed on it will simply fail.
 //
-// While this accepts the same `pl_tex_params` struct as `pl_tex_create` for
-// convenience, most fields are ignored. In particular, all of the permissions
-// will be set to `false`, except `sampleable`, which is set to `true`. (So you
-// can use it as an input to shader sampling functions)
+// All of the permissions will be set to `false`, except `sampleable`, which is
+// set to `true`. (So you can use it as an input to shader sampling functions)
 const struct pl_tex *pl_tex_dummy_create(const struct pl_gpu *gpu,
-                                         const struct pl_tex_params *params);
+                                         const struct pl_tex_dummy_params *params);
 
 #endif // LIBPLACEBO_DUMMY_H_

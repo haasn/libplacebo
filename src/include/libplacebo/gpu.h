@@ -315,6 +315,12 @@ static inline int pl_tex_params_dimension(const struct pl_tex_params params)
     return params.d ? 3 : params.h ? 2 : 1;
 }
 
+enum pl_sampler_type {
+    PL_SAMPLER_NORMAL,      // gsampler2D, gsampler3D etc.
+    PL_SAMPLER_RECT,        // gsampler2DRect
+    PL_SAMPLER_EXTERNAL,    // gsamplerExternalOES
+};
+
 // Conflates the following typical GPU API concepts:
 // - texture itself
 // - sampler state
@@ -336,6 +342,10 @@ struct pl_tex {
     // While this texture is not in an "exported" state, the contents of the
     // memory are undefined. (See: `pl_tex_export`)
     struct pl_shared_mem shared_mem;
+
+    // If `params.sampleable` is true, this indicates the correct sampler type
+    // to use when sampling from this texture.
+    enum pl_sampler_type sampler_type;
 };
 
 // Create a texture (with undefined contents). Returns NULL on failure. This is
