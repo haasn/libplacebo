@@ -751,9 +751,18 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
     return true;
 }
 
+static inline float pq_delinearize(float x)
+{
+    x *= PL_COLOR_SDR_WHITE / 10000.0;
+    x = powf(x, PQ_M1);
+    x = (PQ_C1 + PQ_C2 * x) / (1.0 + PQ_C3 * x);
+    x = pow(x, PQ_M2);
+    return x;
+}
+
 const struct pl_color_map_params pl_color_map_default_params = {
     .intent                 = PL_INTENT_RELATIVE_COLORIMETRIC,
-    .tone_mapping_algo      = PL_TONE_MAPPING_HABLE,
+    .tone_mapping_algo      = PL_TONE_MAPPING_BT_2390,
     .desaturation_strength  = 0.75,
     .desaturation_exponent  = 1.50,
     .desaturation_base      = 0.18,
@@ -791,11 +800,13 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
         }
     }
 
-    // Rescale the input in order to bring it into a representation where
-    // 1.0 represents the dst_peak. This is because all of the tone mapping
-    // algorithms are defined in such a way that they map to the range [0.0, 1.0].
+    // Rescale the input in order to bring it into a representation where 1.0
+    // represents the dst_peak. This is because (almost) all of the tone
+    // mapping algorithms are defined in such a way that they map to the range
+    // [0.0, 1.0].
+    bool need_norm = params->tone_mapping_algo != PL_TONE_MAPPING_BT_2390;
     float dst_range = dst.sig_peak * dst.sig_scale;
-    if (dst_range > 1.0) {
+    if (dst_range > 1.0 && need_norm) {
         GLSL("color.rgb *= 1.0 / %f; \n"
              "sig_peak *= 1.0 / %f;  \n",
              dst_range, dst_range);
@@ -873,6 +884,41 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
         GLSL("sig *= %f / sig_peak;\n", PL_DEF(param, 1.0));
         break;
 
+    case PL_TONE_MAPPING_BT_2390:
+        // We first need to encode both sig and sig_peak into PQ space
+        GLSL("vec4 sig_pq = vec4(sig.rgb, sig_peak);                            \n"
+             "sig_pq *= vec4(1.0/%f);                                           \n"
+             "sig_pq = pow(sig_pq, vec4(%f));                                   \n"
+             "sig_pq = (vec4(%f) + vec4(%f) * sig_pq)                           \n"
+             "          / (vec4(1.0) + vec4(%f) * sig_pq);                      \n"
+             "sig_pq = pow(sig_pq, vec4(%f));                                   \n",
+             10000 / PL_COLOR_SDR_WHITE, PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
+        // Encode both the signal and the target brightness to be relative to
+        // the source peak brightness, and figure out the target peak in this space
+        GLSL("float scale = 1.0 / sig_pq.a;                                     \n"
+             "sig_pq.rgb *= vec3(scale);                                        \n"
+             "float maxLum = %f * scale;                                        \n",
+             pq_delinearize(dst_range));
+        // Apply piece-wise hermite spline
+        GLSL("float ks = 1.5 * maxLum - 0.5;                                    \n"
+             "vec3 tb = (sig_pq.rgb - vec3(ks)) / vec3(1.0 - ks);               \n"
+             "vec3 tb2 = tb * tb;                                               \n"
+             "vec3 tb3 = tb2 * tb;                                              \n"
+             "vec3 pb = (2.0 * tb3 - 3.0 * tb2 + vec3(1.0)) * vec3(ks) +        \n"
+             "          (tb3 - 2.0 * tb2 + tb) * vec3(1.0 - ks) +               \n"
+             "          (-2.0 * tb3 + 3.0 * tb2) * vec3(maxLum);                \n"
+             "sig = mix(pb, sig_pq.rgb, %s(lessThan(sig_pq.rgb, vec3(ks))));    \n",
+             sh_bvec(sh, 3));
+        // Convert back from PQ space to linear light
+        GLSL("sig *= vec3(sig_pq.a);                                            \n"
+             "sig = pow(sig, vec3(1.0/%f));                                     \n"
+             "sig = max(sig - vec3(%f), 0.0) /                                  \n"
+             "          (vec3(%f) - vec3(%f) * sig);                            \n"
+             "sig = pow(sig, vec3(1.0/%f));                                     \n"
+             "sig *= vec3(%f);                                                  \n",
+             PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1, 10000.0 / PL_COLOR_SDR_WHITE);
+        break;
+
     default:
         abort();
     }
@@ -895,7 +941,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
     }
 
     // Undo the normalization by `dst_peak`
-    if (dst_range > 1.0)
+    if (dst_range > 1.0 && need_norm)
         GLSL("color.rgb *= %f; \n", dst_range);
 }
 

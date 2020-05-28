@@ -194,6 +194,10 @@ enum pl_tone_mapping_algorithm {
     // as an aditional scaling coefficient to make the image (linearly)
     // brighter or darker. Defaults to 1.0.
     PL_TONE_MAPPING_LINEAR,
+
+    // EETF from the ITU-R Report BT.2390, a hermite spline roll-off with
+    // linear segment. Not configurable.
+    PL_TONE_MAPPING_BT_2390,
 };
 
 struct pl_color_map_params {
@@ -204,7 +208,7 @@ struct pl_color_map_params {
     // Algorithm and configuration used for tone-mapping. For non-tunable
     // algorithms, the `param` is ignored. If the tone mapping parameter is
     // left as 0.0, the tone-mapping curve's preferred default parameter will
-    // be used. The default algorithm is PL_TONE_MAPPING_HABLE.
+    // be used. The default algorithm is PL_TONE_MAPPING_BT_2390.
     enum pl_tone_mapping_algorithm tone_mapping_algo;
     float tone_mapping_param;
 

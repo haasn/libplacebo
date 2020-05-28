@@ -733,7 +733,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     // Test HDR stuff
     image.color.sig_scale = 10.0;
     target.color.sig_scale = 2.0;
-    TEST_PARAMS(color_map, tone_mapping_algo, PL_TONE_MAPPING_LINEAR);
+    TEST_PARAMS(color_map, tone_mapping_algo, PL_TONE_MAPPING_BT_2390);
     TEST_PARAMS(color_map, desaturation_strength, 1);
     image.color.sig_scale = target.color.sig_scale = 0.0;
 
