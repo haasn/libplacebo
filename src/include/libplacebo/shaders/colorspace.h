@@ -105,6 +105,12 @@ struct pl_peak_detect_params {
     // entirely, set either one to a negative value.
     float scene_threshold_low;
     float scene_threshold_high;
+
+    // In order to avoid clipping on fade-ins or other sudden brightness
+    // increases, we always over-estimate the peak brightness (in percent)
+    // by this amount, as a percentage of the actual measured peak. If left
+    // as 0.0, this logic is disabled. The default value is 0.05.
+    float overshoot_margin;
 };
 
 extern const struct pl_peak_detect_params pl_peak_detect_default_params;

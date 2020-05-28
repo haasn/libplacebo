@@ -581,12 +581,14 @@ const struct pl_peak_detect_params pl_peak_detect_default_params = {
     .smoothing_period       = 100.0,
     .scene_threshold_low    = 5.5,
     .scene_threshold_high   = 10.0,
+    .overshoot_margin       = 0.05,
 };
 
 struct sh_peak_obj {
     const struct pl_gpu *gpu;
     const struct pl_buf *buf;
     struct pl_shader_desc desc;
+    float margin;
 };
 
 static void sh_peak_uninit(const struct pl_gpu *gpu, void *ptr)
@@ -630,6 +632,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
 
     const struct pl_gpu *gpu = SH_GPU(sh);
     obj->gpu = gpu;
+    obj->margin = params->overshoot_margin;
 
     if (!obj->buf) {
         obj->desc = (struct pl_shader_desc) {
@@ -797,6 +800,14 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
             sh_desc(sh, obj->desc);
             GLSL("sig_avg  = average.x; \n"
                  "sig_peak = average.y; \n");
+
+            // Apply a tiny bit of extra margin of error for overshoot to the
+            // smoothed peak values, clamped to the maximum reasonable range.
+            if (obj->margin > 0.0) {
+                GLSL("sig_peak = min(sig_peak * %f, %f); \n",
+                     1.0 + obj->margin,
+                     10000 / PL_COLOR_SDR_WHITE);
+            }
         }
     }
 
