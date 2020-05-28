@@ -529,13 +529,17 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     uint64_t sig = pl_shader_signature(sh);
 
     for (int i = 0; i < dp->num_passes; i++) {
-        const struct pass *p = dp->passes[i];
+        struct pass *p = dp->passes[i];
         if (p->signature != sig)
             continue;
 
+        // Failed shader, no additional checks needed
+        if (!p->pass)
+            return p;
+
         if (pl_shader_is_compute(sh)) {
             // no special requirements besides the signature
-            return dp->passes[i];
+            return p;
         } else {
             pl_assert(target);
             const struct pl_fmt *tfmt;
@@ -544,7 +548,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
             raster_ok &= blend_equal(p->pass->params.blend_params, blend);
             raster_ok &= load == p->pass->params.load_target;
             if (raster_ok)
-                return dp->passes[i];
+                return p;
         }
     }
 
@@ -552,7 +556,6 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
 
     struct pass *pass = talloc_zero(dp, struct pass);
     pass->signature = sig;
-    pass->failed = true; // will be set to false on success
     pass->ubo_desc = (struct pl_shader_desc) {
         .desc = {
             .name = "UBO",
@@ -672,8 +675,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         goto error;
     }
 
-    pass->failed = false;
-
+    // fall through
 error:
     pass->ubo_desc = (struct pl_shader_desc) {0}; // contains temporary pointers
     talloc_free(tmp);
@@ -908,7 +910,7 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, const struct pl_dispatch_params 
                                   params->blend_params, load);
 
     // Silently return on failed passes
-    if (pass->failed)
+    if (!pass->pass)
         goto error;
 
     struct pl_pass_run_params *rparams = &pass->run_params;
