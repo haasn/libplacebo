@@ -117,7 +117,7 @@ if __name__ == '__main__':
     xmlfile = sys.argv[1]
     outfile = sys.argv[2]
 
-    if not xmlfile or xmfile == '':
+    if not xmlfile or xmlfile == '':
         xmlfile = find_registry_xml()
 
     registry = ET.parse(xmlfile)
