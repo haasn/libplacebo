@@ -210,6 +210,14 @@ A full list of optional dependencies each feature requires:
 - **shaderc**: `libshaderc`
 - **vulkan**: `libvulkan`, `python3-mako`
 
+#### Vulkan support
+
+Because the vulkan backend requires on code generation at compile time,
+`python3-mako` is a hard dependency of the build system. In addition to this,
+the path to the Vulkan registry (`vk.xml`) must be locatable, ideally by
+explicitly providing it via the `-Dvulkan-registry=/path/to/vk.xml` option,
+unless it can be found in one of the built-in hard-coded locations.
+
 ### Configuring
 
 To get a list of configuration options supported by libplacebo, after running
