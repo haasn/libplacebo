@@ -18,7 +18,13 @@
 import os.path
 import sys
 import xml.etree.ElementTree as ET
-from mako.template import Template
+
+try:
+    from mako.template import Template
+except ModuleNotFoundError:
+    print('Module \'mako\' not found, please install \'python3-mako\' or '
+          'an equivalent package on your system!', file=sys.stderr)
+    sys.exit(1)
 
 TEMPLATE = Template("""
 #define VK_ENABLE_BETA_EXTENSIONS
