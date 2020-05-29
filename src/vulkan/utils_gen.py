@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#
 # This file is part of libplacebo.
 #
 # libplacebo is free software; you can redistribute it and/or
@@ -14,6 +15,7 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
 
+import os.path
 import sys
 import xml.etree.ElementTree as ET
 from mako.template import Template
@@ -86,10 +88,31 @@ def get_vkstructs(registry):
             yield Obj(stype = stype.attrib['values'],
                       name = e.attrib['name'])
 
+def find_registry_xml():
+    registry_paths = [
+        '/usr/share/vulkan/registry/vk.xml',
+        '%VULKAN_SDK%/share/vulkan/registry/vk.xml',
+        '$MINGW_PREFIX/share/vulkan/registry/vk.xml',
+    ]
+
+    for p in registry_paths:
+        path = os.path.expandvars(p)
+        if os.path.isfile(path):
+            print('Found vk.xml: {0}'.format(path))
+            return path
+
+    print('Could not find the vulkan registry (vk.xml), please specify its '
+          'location manually using the -Dvulkan-registry=/path/to/vk.xml '
+          'option!', file=sys.stderr)
+    sys.exit(1)
+
 if __name__ == '__main__':
     assert len(sys.argv) == 3
     xmlfile = sys.argv[1]
     outfile = sys.argv[2]
+
+    if not xmlfile or xmfile == '':
+        xmlfile = find_registry_xml()
 
     registry = ET.parse(xmlfile)
     with open(outfile, 'w') as f:
