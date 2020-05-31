@@ -89,7 +89,12 @@ def get_vkstructs(registry):
         if any([ str in e.attrib['name'] for str in blacklist_strs ]):
             continue
 
-        stype = e.find('member/name[.="sType"]/..')
+        stype = None
+        for m in e.findall('member'):
+            if m.find('name').text == 'sType':
+                stype = m
+                break
+
         if stype and 'values' in stype.attrib:
             yield Obj(stype = stype.attrib['values'],
                       name = e.attrib['name'])
