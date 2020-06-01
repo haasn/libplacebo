@@ -1,12 +1,7 @@
 # Depedencies
 cc = meson.get_compiler('c')
 cxx = meson.get_compiler('cpp')
-pylib = import('python')
-prog_python = pylib.find_installation('python3')
-if not prog_python.found()
-  # fallback for some weird systems which don't have a python3 or python symlink
-  prog_python = pylib.find_installation()
-endif
+prog_python = import('python').find_installation()
 
 build_deps = [
   cc.find_library('m', required: false),
