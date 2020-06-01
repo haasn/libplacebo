@@ -297,8 +297,12 @@ struct pl_vulkan_swapchain_params {
 
     // The image format and colorspace we should be using. Optional, if left
     // as {0}, libplacebo will pick the best surface format based on what the
-    // GPU/surface seems to support.
+    // GPU/surface seems to support. (Prioritizing the highest bit depth)
     VkSurfaceFormatKHR surface_format;
+
+    // When choosing the surface format, prefer HDR formats over SDR formats,
+    // if any is available. Setting a specific `surface_format` overrides this.
+    bool prefer_hdr;
 
     // The preferred presentation mode. See the vulkan documentation for more
     // information about these. If the device/surface combination does not

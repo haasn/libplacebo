@@ -143,9 +143,11 @@ static bool vk_map_color_space(VkColorSpaceKHR space, struct pl_color_space *out
 }
 
 static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
-                             VkSurfaceKHR surf, VkSurfaceFormatKHR *out_format,
+                             VkSurfaceKHR surf, bool prefer_hdr,
+                             VkSurfaceFormatKHR *out_format,
                              struct pl_color_space *space)
 {
+    int best_score = 0;
     VkSurfaceFormatKHR *formats = NULL;
     int num = 0;
 
@@ -234,18 +236,34 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
             if ((plfmt->caps & render_caps) != render_caps)
                 continue;
 
-            // format valid, use it
-            *out_format = formats[i];
-            talloc_free(formats);
-            return true;
+            // format valid, use it if it has a higher score
+            int score = 0;
+            for (int c = 0; c < 3; c++)
+                score += plfmt->component_depth[c];
+            if (pl_color_transfer_is_hdr(space->transfer) == prefer_hdr)
+                score += 10000;
+
+            switch (plfmt->type) {
+            case PL_FMT_UNORM: score += 3000; break;
+            case PL_FMT_SNORM: score += 2000; break;
+            case PL_FMT_FLOAT: score += 1000; break;
+            default: break;
+            };
+
+            if (score > best_score) {
+                *out_format = formats[i];
+                best_score = score;
+                break;
+            }
         }
     }
 
     // fall through
 error:
-    PL_FATAL(vk, "Failed picking any valid, renderable surface format!");
+    if (!best_score)
+        PL_FATAL(vk, "Failed picking any valid, renderable surface format!");
     talloc_free(formats);
-    return false;
+    return best_score > 0;
 }
 
 const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *plvk,
@@ -261,7 +279,7 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
 
     VkSurfaceFormatKHR sfmt = params->surface_format;
     struct pl_color_space csp;
-    if (!pick_surf_format(gpu, vk, params->surface, &sfmt, &csp))
+    if (!pick_surf_format(gpu, vk, params->surface, params->prefer_hdr, &sfmt, &csp))
         return NULL;
 
     PL_DEBUG(gpu, "Picked surface format 0x%x, space 0x%x",
