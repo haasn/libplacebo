@@ -42,6 +42,54 @@ static void opengl_interop_tests(const struct pl_gpu *gpu)
     pl_tex_destroy(gpu, &export);
 }
 
+#define PBUFFER_WIDTH 640
+#define PBUFFER_HEIGHT 480
+
+struct swapchain_priv {
+    EGLDisplay display;
+    EGLSurface surface;
+};
+
+static void swap_buffers(void *priv)
+{
+    struct swapchain_priv *p = priv;
+    eglSwapBuffers(p->display, p->surface);
+}
+
+static void opengl_swapchain_tests(const struct pl_opengl *gl,
+                                   EGLDisplay display, EGLSurface surface)
+{
+    if (surface == EGL_NO_SURFACE)
+        return;
+
+    const struct pl_gpu *gpu = gl->gpu;
+    const struct pl_swapchain *sw;
+    sw = pl_opengl_create_swapchain(gl, &(struct pl_opengl_swapchain_params) {
+        .swap_buffers = swap_buffers,
+        .priv = &(struct swapchain_priv) { display, surface },
+    });
+    REQUIRE(sw);
+
+    int w = PBUFFER_WIDTH, h = PBUFFER_HEIGHT;
+    REQUIRE(pl_swapchain_resize(sw, &w, &h));
+
+    for (int i = 0; i < 10; i++) {
+        struct pl_swapchain_frame frame;
+        REQUIRE(pl_swapchain_start_frame(sw, &frame));
+        if (frame.fbo->params.blit_dst)
+            pl_tex_clear(gpu, frame.fbo, (float[4]){0});
+
+        // TODO: test this with an actual pl_renderer instance
+        struct pl_render_target target;
+        pl_render_target_from_swapchain(&target, &frame);
+
+        REQUIRE(pl_swapchain_submit_frame(sw));
+        pl_swapchain_swap_buffers(sw);
+    }
+
+    pl_swapchain_destroy(&sw);
+}
+
 int main()
 {
     // Create the OpenGL context
@@ -99,15 +147,15 @@ int main()
         EGLint num_configs = 0;
         bool ok = eglChooseConfig(dpy, cfg_attribs, &config, 1, &num_configs);
         if (!ok || !num_configs)
-            continue;
+            goto error;
 
         if (!eglBindAPI(egl_vers[i].api))
-            continue;
+            goto error;
 
         EGLContext egl;
         if (egl_vers[i].api == EGL_OPENGL_ES_API) {
             // OpenGL ES
-            const int egl_attribs[] = {
+            const EGLint egl_attribs[] = {
                 EGL_CONTEXT_CLIENT_VERSION, egl_vers[i].major,
                 (egl_ver >= 15) ? EGL_CONTEXT_OPENGL_DEBUG : EGL_NONE, EGL_TRUE,
                 EGL_NONE
@@ -131,10 +179,18 @@ int main()
         }
 
         if (!egl)
-            continue;
+            goto error;
 
-        if (!eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, egl))
-            continue;
+        const EGLint pbuffer_attribs[] = {
+            EGL_WIDTH, PBUFFER_WIDTH,
+            EGL_HEIGHT, PBUFFER_HEIGHT,
+            EGL_NONE
+        };
+
+        EGLSurface surf = eglCreatePbufferSurface(dpy, config, pbuffer_attribs);
+
+        if (!eglMakeCurrent(dpy, surf, surf, egl))
+            goto error;
 
         struct pl_opengl_params params = pl_opengl_default_params;
         params.max_glsl_version = egl_vers[i].glsl_ver;
@@ -164,12 +220,20 @@ int main()
 
         gpu_tests(gpu);
         opengl_interop_tests(gpu);
+        opengl_swapchain_tests(gl, dpy, surf);
 
         pl_opengl_destroy(&gl);
+        eglDestroySurface(dpy, surf);
         eglDestroyContext(dpy, egl);
 
         // Reduce log spam after first successful test
         pl_test_set_verbosity(ctx, PL_LOG_INFO);
+        continue;
+
+error: ;
+        EGLint error = eglGetError();
+        if (error != EGL_SUCCESS)
+            fprintf(stderr, "EGL error: 0x%x\n", error);
     }
 
     eglTerminate(dpy);
