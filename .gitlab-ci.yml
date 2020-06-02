@@ -121,9 +121,13 @@ test-gpu:
         - ninja coverage-xml
         - grep -Eo 'line-rate="[^"]+"' meson-logs/coverage.xml | head -n 1 |
           grep -Eo '[0-9.]+' | awk '{ print "coverage:", $1 * 100 } '
+    coverage: '/^coverage: (\d+.\d+)$/'
     artifacts:
+        expose_as: 'Coverage HTML report'
         paths:
-            - coverage
+            - coverage/
+        reports:
+            cobertura: build/meson-logs/coverage.xml
 
 test-gpu-asan:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
