@@ -116,9 +116,14 @@ test-gpu:
         - ninja -C build
         - vulkaninfo
         - cd build && meson test -t 5 -v
+        - ninja coverage-html
+        - mv meson-logs/coveragereport ../coverage
         - ninja coverage-xml
         - grep -Eo 'line-rate="[^"]+"' meson-logs/coverage.xml | head -n 1 |
           grep -Eo '[0-9.]+' | awk '{ print "coverage:", $1 * 100 } '
+    artifacts:
+        paths:
+            - coverage
 
 test-gpu-asan:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
