@@ -480,6 +480,8 @@ static bool gl_fb_query(const struct pl_gpu *gpu, int fbo, struct pl_fmt *fmt)
     struct pl_gl *p = TA_PRIV(gpu);
     if (!test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20))
         return true;
+    if (!fbo && p->gles_ver && p->gles_ver < 30)
+        return true; // can't query default framebuffer on GLES 2.0
 
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
