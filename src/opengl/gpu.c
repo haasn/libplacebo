@@ -479,9 +479,9 @@ static bool gl_fb_query(const struct pl_gpu *gpu, int fbo, struct pl_fmt *fmt)
 {
     struct pl_gl *p = TA_PRIV(gpu);
     if (!test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20))
-        return true;
+        goto fallback;
     if (!fbo && p->gles_ver && p->gles_ver < 30)
-        return true; // can't query default framebuffer on GLES 2.0
+        goto fallback; // can't query default framebuffer on GLES 2.0
 
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
@@ -517,7 +517,17 @@ static bool gl_fb_query(const struct pl_gpu *gpu, int fbo, struct pl_fmt *fmt)
         bits += fmt->component_depth[i];
     fmt->internal_size = (bits + 7) / 8;
 
-    return gl_check_err(gpu, "gl_fb_query");
+    if (!gl_check_err(gpu, "gl_fb_query"))
+        goto fallback; // this happens on some outdated drivers
+
+    return true;
+
+fallback:
+    // default to rgba8
+    for (int i = 0; i < 4; i++)
+        fmt->component_depth[i] = 8;
+    fmt->internal_size = 4;
+    return true;
 }
 
 static const struct gl_format fbo_dummy_format = {
