@@ -1579,14 +1579,15 @@ static void fix_rects(struct pass_state *pass, const struct pl_tex *ref_tex)
           ry1 = roundf(PL_MIN(dst->y1, pass->target.fbo->params.h));
 
     // Adjust the src rect corresponding to the rounded crop
-    float scale = pl_rect_w(*src) / pl_rect_w(*dst),
+    float scale_x = pl_rect_w(*src) / pl_rect_w(*dst),
+          scale_y = pl_rect_h(*src) / pl_rect_h(*dst),
           base_x = src->x0,
           base_y = src->y0;
 
-    src->x0 = base_x + (rx0 - dst->x0) * scale;
-    src->x1 = base_x + (rx1 - dst->x0) * scale;
-    src->y0 = base_y + (ry0 - dst->y0) * scale;
-    src->y1 = base_y + (ry1 - dst->y0) * scale;
+    src->x0 = base_x + (rx0 - dst->x0) * scale_x;
+    src->x1 = base_x + (rx1 - dst->x0) * scale_x;
+    src->y0 = base_y + (ry0 - dst->y0) * scale_y;
+    src->y1 = base_y + (ry1 - dst->y0) * scale_y;
 
     // Update dst_rect to the rounded values and re-apply flip if needed. We
     // always do this in the `dst_rect` rather than the `src_rect` because this
