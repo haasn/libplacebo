@@ -45,14 +45,14 @@ enum {
     C_RGI   = GL_RG_INTEGER,
     C_RGBI  = GL_RGB_INTEGER,
     C_RGBAI = GL_RGBA_INTEGER,
-
-    // Capability aliases
-    F_S     = PL_FMT_CAP_SAMPLEABLE,
-    F_VF    = PL_FMT_CAP_VERTEX,
-    F_CR    = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE,
-    F_TF    = PL_FMT_CAP_LINEAR,
-    F_CFS   = F_CR | F_TF | F_S, // typical combination
 };
+
+// Capability aliases
+#define F_S     PL_FMT_CAP_SAMPLEABLE
+#define F_VF    PL_FMT_CAP_VERTEX
+#define F_CR    (PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE)
+#define F_TF    PL_FMT_CAP_LINEAR
+#define F_CFS   (F_CR | F_TF | F_S)
 
 const struct gl_format gl_formats[] = {
     // Copyright note: This list and the feature flags are largely copied 1:1
