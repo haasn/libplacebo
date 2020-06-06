@@ -3087,7 +3087,7 @@ error:
 }
 
 // Gives us enough queries for 8 results
-#define VK_QUERY_POOL_SIZE 16
+#define QUERY_POOL_SIZE 16
 
 struct pl_timer {
     bool recording; // true between vk_cmd_timer_begin() and vk_cmd_timer_end()
@@ -3125,7 +3125,7 @@ static struct pl_timer *vk_timer_create(const struct pl_gpu *gpu)
     struct VkQueryPoolCreateInfo qinfo = {
         .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
         .queryType = VK_QUERY_TYPE_TIMESTAMP,
-        .queryCount = VK_QUERY_POOL_SIZE,
+        .queryCount = QUERY_POOL_SIZE,
     };
 
     VK(vk->CreateQueryPool(vk->dev, &qinfo, VK_ALLOC, &timer->qpool));
@@ -3156,7 +3156,7 @@ static uint64_t vk_timer_query(const struct pl_gpu *gpu, struct pl_timer *timer)
 
     switch (res) {
     case VK_SUCCESS:
-        timer->index_read = (timer->index_read + 2) % VK_QUERY_POOL_SIZE;
+        timer->index_read = (timer->index_read + 2) % QUERY_POOL_SIZE;
         return (ts[1] - ts[0]) * vk->limits.timestampPeriod;
     case VK_NOT_READY:
         return 0;
@@ -3229,10 +3229,10 @@ static void vk_cmd_timer_end(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     vk_cmd_callback(cmd, (vk_cb) vk_timer_cb, timer,
                     (void *) (uintptr_t) timer->index_write);
 
-    timer->index_write = (timer->index_write + 2) % VK_QUERY_POOL_SIZE;
+    timer->index_write = (timer->index_write + 2) % QUERY_POOL_SIZE;
     if (timer->index_write == timer->index_read) {
         // forcibly drop the least recent result to make space
-        timer->index_read = (timer->index_read + 2) % VK_QUERY_POOL_SIZE;
+        timer->index_read = (timer->index_read + 2) % QUERY_POOL_SIZE;
     }
 }
 
