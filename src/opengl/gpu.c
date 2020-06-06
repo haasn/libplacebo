@@ -31,6 +31,7 @@ struct pl_gl {
     bool has_stride;
     bool has_invalidate;
     bool has_vao;
+    bool has_queries;
 };
 
 static bool test_ext(const struct pl_gpu *gpu, const char *ext,
@@ -267,6 +268,7 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
     p->has_stride = test_ext(gpu, "GL_EXT_unpack_subimage", 11, 30);
     p->has_vao = test_ext(gpu, "GL_ARB_vertex_array_object", 30, 0);
     p->has_invalidate = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
+    p->has_queries = test_ext(gpu, "GL_ARB_timer_query", 33, 0);
 
     // We simply don't know, so make up some values
     gpu->limits.align_tex_xfer_offset = 32;
@@ -1012,6 +1014,9 @@ static int get_alignment(int stride)
     return 1;
 }
 
+static void gl_timer_begin(struct pl_timer *timer);
+static void gl_timer_end(struct pl_timer *timer);
+
 static bool gl_tex_upload(const struct pl_gpu *gpu,
                           const struct pl_tex_transfer_params *params)
 {
@@ -1050,6 +1055,8 @@ static bool gl_tex_upload(const struct pl_gpu *gpu,
     }
 
     glBindTexture(tex_gl->target, tex_gl->texture);
+    gl_timer_begin(params->timer);
+
     switch (dims) {
     case 1:
         glTexSubImage1D(tex_gl->target, 0, params->rc.x0, pl_rect_w(params->rc),
@@ -1073,6 +1080,7 @@ static bool gl_tex_upload(const struct pl_gpu *gpu,
         break;
     }
 
+    gl_timer_end(params->timer);
     glBindTexture(tex_gl->target, 0);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     if (p->has_stride) {
@@ -1122,6 +1130,8 @@ static bool gl_tex_download(const struct pl_gpu *gpu,
                    params->stride_w == tex->params.w &&
                    params->stride_h == PL_DEF(tex->params.h, 1);
 
+    gl_timer_begin(params->timer);
+
     if (tex_gl->fbo || tex_gl->wrapped_fb) {
         // We can use a more efficient path when we have an FBO available
         if (dims > 1) {
@@ -1159,6 +1169,8 @@ static bool gl_tex_download(const struct pl_gpu *gpu,
         PL_ERR(gpu, "Partial downloads of 3D textures not implemented!");
         ok = false;
     }
+
+    gl_timer_end(params->timer);
 
     if (buf) {
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -1683,7 +1695,9 @@ static void gl_pass_run(const struct pl_gpu *gpu,
             [PL_PRIM_TRIANGLE_FAN]      = GL_TRIANGLE_FAN,
         };
 
+        gl_timer_begin(params->timer);
         glDrawArrays(map_prim[pass->params.vertex_type], 0, params->vertex_count);
+        gl_timer_end(params->timer);
         gl_check_err(gpu, "gl_pass_run: drawing");
 
         if (pass_gl->vao) {
@@ -1701,9 +1715,11 @@ static void gl_pass_run(const struct pl_gpu *gpu,
     }
 
     case PL_PASS_COMPUTE:
+        gl_timer_begin(params->timer);
         glDispatchCompute(params->compute_groups[0],
                           params->compute_groups[1],
                           params->compute_groups[2]);
+        gl_timer_end(params->timer);
         break;
 
     default: abort();
@@ -1715,6 +1731,71 @@ static void gl_pass_run(const struct pl_gpu *gpu,
 
     glUseProgram(0);
     gl_check_err(gpu, "gl_pass_run");
+}
+
+#define QUERY_OBJECT_NUM 8
+
+struct pl_timer {
+    GLuint query[QUERY_OBJECT_NUM];
+    int index_write; // next index to write to
+    int index_read; // next index to read from
+};
+
+static struct pl_timer *gl_timer_create(const struct pl_gpu *gpu)
+{
+    struct pl_gl *p = TA_PRIV(gpu);
+    if (!p->has_queries)
+        return NULL;
+
+    struct pl_timer *timer = talloc_zero(NULL, struct pl_timer);
+    glGenQueries(QUERY_OBJECT_NUM, timer->query);
+    return timer;
+}
+
+static void gl_timer_destroy(const struct pl_gpu *gpu, struct pl_timer *timer)
+{
+    glDeleteQueries(QUERY_OBJECT_NUM, timer->query);
+    talloc_free(timer);
+}
+
+static uint64_t gl_timer_query(const struct pl_gpu *gpu, struct pl_timer *timer)
+{
+    if (timer->index_read == timer->index_write)
+        return 0; // no more unprocessed results
+
+    GLuint query = timer->query[timer->index_read];
+    int avail = 0;
+    glGetQueryObjectiv(query, GL_QUERY_RESULT_AVAILABLE, &avail);
+    if (!avail)
+        return 0;
+
+    uint64_t res = 0;
+    glGetQueryObjectui64v(query, GL_QUERY_RESULT, &res);
+
+    timer->index_read = (timer->index_read + 1) % QUERY_OBJECT_NUM;
+    return res;
+}
+
+static void gl_timer_begin(struct pl_timer *timer)
+{
+    if (!timer)
+        return;
+
+    glBeginQuery(GL_TIME_ELAPSED, timer->query[timer->index_write]);
+}
+
+static void gl_timer_end(struct pl_timer *timer)
+{
+    if (!timer)
+        return;
+
+    glEndQuery(GL_TIME_ELAPSED);
+
+    timer->index_write = (timer->index_write + 1) % QUERY_OBJECT_NUM;
+    if (timer->index_write == timer->index_read) {
+        // forcibly drop the least recent result to make space
+        timer->index_read = (timer->index_read + 1) % QUERY_OBJECT_NUM;
+    }
 }
 
 static void gl_gpu_flush(const struct pl_gpu *gpu)
@@ -1747,6 +1828,9 @@ static const struct pl_gpu_fns pl_fns_gl = {
     .pass_create            = gl_pass_create,
     .pass_destroy           = gl_pass_destroy,
     .pass_run               = gl_pass_run,
+    .timer_create           = gl_timer_create,
+    .timer_destroy          = gl_timer_destroy,
+    .timer_query            = gl_timer_query,
     .gpu_flush              = gl_gpu_flush,
     .gpu_finish             = gl_gpu_finish,
 };
