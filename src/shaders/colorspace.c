@@ -672,6 +672,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
 
     // Attach the SSBO and perform the peak detection logic
     obj->desc.desc.access = PL_DESC_ACCESS_READWRITE;
+    obj->desc.memory = PL_MEMORY_COHERENT;
     sh_desc(sh, obj->desc);
     GLSL("// pl_shader_detect_peak \n"
          "{                        \n"
@@ -797,6 +798,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
                      struct sh_peak_obj, sh_peak_uninit);
         if (obj && obj->buf) {
             obj->desc.desc.access = PL_DESC_ACCESS_READONLY;
+            obj->desc.memory = 0;
             sh_desc(sh, obj->desc);
             GLSL("sig_avg  = average.x; \n"
                  "sig_peak = average.y; \n");

@@ -182,6 +182,15 @@ struct pl_buffer_var {
     struct pl_var_layout layout;
 };
 
+typedef uint16_t pl_memory_qualifiers;
+enum {
+    PL_MEMORY_COHERENT  = 1 << 0, // supports synchronization across shader invocations
+    PL_MEMORY_VOLATILE  = 1 << 1, // all writes are synchronized automatically
+
+    // Note: All descriptors are also implicitly assumed to have the 'restrict'
+    // memory qualifier. There is currently no way to override this behavior.
+};
+
 struct pl_shader_desc {
     struct pl_desc desc; // descriptor type, excluding `binding`
     const void *object;  // the object being bound (as for pl_desc_binding)
@@ -190,6 +199,11 @@ struct pl_shader_desc {
     // variables contained by a buffer. Ignored for the other descriptor types
     struct pl_buffer_var *buffer_vars;
     int num_buffer_vars;
+
+    // For storage images and buffers, this specifies additional memory
+    // qualifiers on the descriptor. It's highly recommended to always use
+    // at least PL_MEMORY_RESTRICT. Ignored for other descriptor types.
+    pl_memory_qualifiers memory;
 };
 
 // Finalize a pl_shader. It is no longer mutable at this point, and any further

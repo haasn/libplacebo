@@ -462,7 +462,10 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             } else if (gpu->glsl.version >= 130) {
                 ADD(glsl, "layout(%s) ", format);
             }
-            ADD(glsl, "%s uniform %s %s;\n", access, types[dims], desc->name);
+            ADD(glsl, "%s%s%s restrict uniform %s %s;\n", access,
+                (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
+                (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",
+                types[dims], desc->name);
             break;
         }
 
@@ -482,7 +485,10 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             } else if (gpu->glsl.version >= 140) {
                 ADD(glsl, "layout(std430) ");
             }
-            ADD(glsl, "%s buffer %s ", pl_desc_access_glsl_name(desc->access),
+            ADD(glsl, "%s%s%s restrict buffer %s ",
+                pl_desc_access_glsl_name(desc->access),
+                (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
+                (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",
                 desc->name);
             add_buffer_vars(dp, glsl, sd->buffer_vars, sd->num_buffer_vars, tmp);
             break;
@@ -502,7 +508,10 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             } else {
                 ADD(glsl, "layout(%s) ", format);
             }
-            ADD(glsl, "%s uniform imageBuffer %s;\n", access, desc->name);
+            ADD(glsl, "%s%s%s restrict uniform imageBuffer %s;\n", access,
+                (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
+                (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",
+                desc->name);
             break;
         }
         default: abort();
