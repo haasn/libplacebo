@@ -462,7 +462,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             } else if (gpu->glsl.version >= 130) {
                 ADD(glsl, "layout(%s) ", format);
             }
-            ADD(glsl, "%s uniform %s %s;\n", access, types[dims], desc->name);
+            ADD(glsl, "%s restrict uniform %s %s;\n", access, types[dims], desc->name);
             break;
         }
 
@@ -482,8 +482,10 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             } else if (gpu->glsl.version >= 140) {
                 ADD(glsl, "layout(std430) ");
             }
-            ADD(glsl, "%s buffer %s ", pl_desc_access_glsl_name(desc->access),
-                desc->name);
+            // XXX: back-ported bugfix, hard-code all storage buffers as
+            // coherent to avoid breaking API
+            ADD(glsl, "%s coherent restrict buffer %s ",
+                pl_desc_access_glsl_name(desc->access), desc->name);
             add_buffer_vars(dp, glsl, sd->buffer_vars, sd->num_buffer_vars, tmp);
             break;
 
@@ -502,7 +504,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             } else {
                 ADD(glsl, "layout(%s) ", format);
             }
-            ADD(glsl, "%s uniform imageBuffer %s;\n", access, desc->name);
+            ADD(glsl, "%s restrict uniform imageBuffer %s;\n", access, desc->name);
             break;
         }
         default: abort();
