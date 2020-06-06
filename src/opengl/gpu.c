@@ -246,12 +246,8 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
         l->max_xfer_size = SIZE_MAX; // no limit imposed by GL
     if (test_ext(gpu, "GL_ARB_uniform_buffer_object", 31, 0))
         get(GL_MAX_UNIFORM_BLOCK_SIZE, &l->max_ubo_size);
-    if (test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0) &&
-        test_ext(gpu, "GL_ARB_shader_image_load_store", 42, 0))
-    {
-        // storage image support is needed for glMemoryBarrier!
+    if (test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0))
         get(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &l->max_ssbo_size);
-    }
 
     if (test_ext(gpu, "GL_ARB_texture_gather", 0, 0)) { // FIXME: when is this core?
         get(GL_MIN_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &l->min_gather_offset);
@@ -301,6 +297,7 @@ struct pl_tex_gl {
     GLint filter;
     GLuint fbo; // or 0
     bool wrapped_fb;
+    GLbitfield barrier;
 
     // GL format fields
     GLenum format;
@@ -320,6 +317,23 @@ static void gl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
     gl_check_err(gpu, "gl_tex_destroy");
 }
 
+static GLbitfield tex_barrier(const struct pl_tex *tex)
+{
+    GLbitfield barrier = 0;
+    const struct pl_tex_params *params = &tex->params;
+
+    if (params->sampleable)
+        barrier |= GL_TEXTURE_FETCH_BARRIER_BIT;
+    if (params->renderable || params->blit_src || params->blit_dst)
+        barrier |= GL_FRAMEBUFFER_BARRIER_BIT;
+    if (params->storable)
+        barrier |= GL_SHADER_IMAGE_ACCESS_BARRIER_BIT;
+    if (params->host_writable || params->host_readable)
+        barrier |= GL_TEXTURE_UPDATE_BARRIER_BIT;
+
+    return barrier;
+}
+
 static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
                                           const struct pl_tex_params *params)
 {
@@ -337,6 +351,7 @@ static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
     tex_gl->format = fmt->fmt;
     tex_gl->iformat = fmt->ifmt;
     tex_gl->type = fmt->type;
+    tex_gl->barrier = tex_barrier(tex);
 
     static const GLint targets[] = {
         [1] = GL_TEXTURE_1D,
@@ -574,6 +589,7 @@ const struct pl_tex *pl_opengl_wrap_fb(const struct pl_gpu *gpu, GLuint fbo,
         .iformat = 0,
         .type = 0,
         .wrapped_fb = true,
+        .barrier = tex_barrier(tex),
     };
 
     return tex;
@@ -684,6 +700,7 @@ const struct pl_tex *pl_opengl_wrap(const struct pl_gpu *gpu,
         .iformat = glfmt->ifmt,
         .format = glfmt->fmt,
         .type = glfmt->type,
+        .barrier = tex_barrier(tex),
     };
 
     int dims = pl_tex_params_dimension(tex->params);
@@ -828,6 +845,7 @@ struct pl_buf_gl {
     GLenum target;
     GLuint buffer;
     GLsync fence;
+    GLbitfield barrier;
 };
 
 static void gl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf *buf)
@@ -916,6 +934,14 @@ static const struct pl_buf *gl_buf_create(const struct pl_gpu *gpu,
     glBindBuffer(buf_gl->target, 0);
     if (!gl_check_err(gpu, "gl_buf_create"))
         goto error;
+
+    if (params->type == PL_BUF_STORAGE) {
+        buf_gl->barrier = GL_SHADER_STORAGE_BARRIER_BIT;
+        if (params->host_writable || params->host_readable)
+            buf_gl->barrier |= GL_BUFFER_UPDATE_BARRIER_BIT;
+        if (params->host_mapped)
+            buf_gl->barrier |= GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT;
+    }
 
     return buf;
 
@@ -1540,8 +1566,6 @@ static void update_desc(const struct pl_pass *pass, int index,
         const struct pl_buf *buf = db->object;
         struct pl_buf_gl *buf_gl = TA_PRIV(buf);
         glBindBufferBase(buf_gl->target, desc->binding, buf_gl->buffer);
-        // SSBOs are not implicitly coherent in OpenGL
-        glMemoryBarrier(buf_gl->target);
         break;
     }
     case PL_DESC_BUF_TEXEL_UNIFORM:
@@ -1564,15 +1588,22 @@ static void unbind_desc(const struct pl_pass *pass, int index,
         glBindTexture(tex_gl->target, 0);
         break;
     }
-    case PL_DESC_STORAGE_IMG:
+    case PL_DESC_STORAGE_IMG: {
+        const struct pl_tex *tex = db->object;
+        struct pl_tex_gl *tex_gl = TA_PRIV(tex);
         glBindImageTexture(desc->binding, 0, 0, GL_FALSE, 0,
                            GL_WRITE_ONLY, GL_R32F);
+        if (desc->access != PL_DESC_ACCESS_READONLY)
+            glMemoryBarrier(tex_gl->barrier);
         break;
+    }
     case PL_DESC_BUF_UNIFORM:
     case PL_DESC_BUF_STORAGE: {
         const struct pl_buf *buf = db->object;
         struct pl_buf_gl *buf_gl = TA_PRIV(buf);
         glBindBufferBase(buf_gl->target, desc->binding, 0);
+        if (desc->type == PL_DESC_BUF_STORAGE && desc->access != PL_DESC_ACCESS_READONLY)
+            glMemoryBarrier(buf_gl->barrier);
         break;
     }
     case PL_DESC_BUF_TEXEL_UNIFORM:
@@ -1673,8 +1704,6 @@ static void gl_pass_run(const struct pl_gpu *gpu,
         glDispatchCompute(params->compute_groups[0],
                           params->compute_groups[1],
                           params->compute_groups[2]);
-
-        glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
         break;
 
     default: abort();
