@@ -235,7 +235,7 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
     // Query all device limits
     struct pl_gpu_limits *l = &gpu->limits;
     get(GL_MAX_TEXTURE_SIZE, &l->max_tex_2d_dim);
-    if (test_ext(gpu, NULL, 21, 30)) // FIXME: is there an ext for this?
+    if (test_ext(gpu, "GL_EXT_texture3D", 21, 30))
         get(GL_MAX_3D_TEXTURE_SIZE, &l->max_tex_3d_dim);
 
     // There's no equivalent limit for 1D textures for whatever reason, so
@@ -243,14 +243,14 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
     if (p->gl_ver >= 21)
         l->max_tex_1d_dim = l->max_tex_2d_dim;
 
-    if (test_ext(gpu, "GL_ARB_pixel_buffer_object", 0, 0)) // FIXME: when is this core?
+    if (test_ext(gpu, "GL_ARB_pixel_buffer_object", 31, 0))
         l->max_xfer_size = SIZE_MAX; // no limit imposed by GL
     if (test_ext(gpu, "GL_ARB_uniform_buffer_object", 31, 0))
         get(GL_MAX_UNIFORM_BLOCK_SIZE, &l->max_ubo_size);
     if (test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0))
         get(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &l->max_ssbo_size);
 
-    if (test_ext(gpu, "GL_ARB_texture_gather", 0, 0)) { // FIXME: when is this core?
+    if (test_ext(gpu, "GL_ARB_texture_gather", 40, 0)) {
         get(GL_MIN_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &l->min_gather_offset);
         get(GL_MAX_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &l->max_gather_offset);
     }
