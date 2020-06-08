@@ -1605,11 +1605,73 @@ static void fix_rects(struct pass_state *pass, const struct pl_tex *ref_tex)
     };
 }
 
+#define require(expr)                                                           \
+  do {                                                                          \
+      if (!(expr)) {                                                            \
+          PL_ERR(rr, "Validation failed: %s (%s:%d)",                           \
+                  #expr, __FILE__, __LINE__);                                   \
+          return false;                                                         \
+      }                                                                         \
+  } while (0)
+
+#define validate_plane(plane)                                                   \
+  do {                                                                          \
+      require((plane).texture);                                                 \
+      require((plane).components > 0 && (plane).components <= 4);               \
+      for (int c = 0; c < (plane).components; c++) {                            \
+          require((plane).component_mapping[c] >= PL_CHANNEL_NONE &&            \
+                  (plane).component_mapping[c] <= PL_CHANNEL_A);                \
+      }                                                                         \
+  } while (0)
+
+// Perform some basic validity checks on incoming structs to help catch invalid
+// API usage. This is not an exhaustive check. In particular, enums are not
+// bounds checked. This is because most functions accepting enums already
+// abort() in the default case, and because it's not the intent of this check
+// to catch all instances of memory corruption - just common logic bugs.
+static bool validate_structs(struct pl_renderer *rr,
+                             const struct pl_image *image,
+                             const struct pl_render_target *target)
+{
+    // Rendering an image with no planes technically works, but is pointless
+    require(image->num_planes > 0 && image->num_planes < PL_MAX_PLANES);
+    for (int i = 0; i < image->num_planes; i++)
+        validate_plane(image->planes[i]);
+
+    float src_w = pl_rect_w(image->src_rect),
+          src_h = pl_rect_h(image->src_rect);
+    require(!src_w == !src_h);
+
+    require(image->num_overlays >= 0);
+    for (int i = 0; i < image->num_overlays; i++) {
+        const struct pl_overlay *overlay = &image->overlays[i];
+        validate_plane(overlay->plane);
+        require(pl_rect_w(overlay->rect) && pl_rect_h(overlay->rect));
+    }
+
+    require(target->fbo);
+    require(target->fbo->params.renderable);
+
+    float dst_w = pl_rect_w(target->dst_rect),
+          dst_h = pl_rect_h(target->dst_rect);
+    require(!dst_w == !dst_h);
+
+    for (int i = 0; i < target->num_overlays; i++) {
+        const struct pl_overlay *overlay = &target->overlays[i];
+        validate_plane(overlay->plane);
+        require(pl_rect_w(overlay->rect) && pl_rect_h(overlay->rect));
+    }
+
+    return true;
+}
+
 bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
                      const struct pl_render_target *ptarget,
                      const struct pl_render_params *params)
 {
     params = PL_DEF(params, &pl_render_default_params);
+    if (!validate_structs(rr, pimage, ptarget))
+        return false;
 
     struct pass_state pass = {
         .tmp = talloc_new(NULL),
