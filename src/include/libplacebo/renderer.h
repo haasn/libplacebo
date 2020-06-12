@@ -36,15 +36,6 @@ struct pl_renderer *pl_renderer_create(struct pl_context *ctx,
                                        const struct pl_gpu *gpu);
 void pl_renderer_destroy(struct pl_renderer **rr);
 
-// Flushes the internal redraw cache of this renderer. This is normally not
-// needed, even if the image parameters, colorspace or target configuration
-// change, since libplacebo will internally detect such circumstances and
-// invalidate stale caches. Doing this explicitly *may* be useful to ensure
-// that memory resources associated with old objects are freed; or in case
-// the user wants to switch to a new file with a different interpretation of
-// `pl_image.signature`.
-void pl_renderer_flush_cache(struct pl_renderer *rr);
-
 // Represents the options used for rendering. These affect the quality of
 // the result.
 struct pl_render_params {
@@ -156,24 +147,6 @@ struct pl_render_params {
     // --- Performance tuning / debugging options
     // These may affect performance or may make debugging problems easier,
     // but shouldn't have any effect on the quality.
-
-    // Disables the use of a redraw cache. Normally, when rendering the same
-    // frame multiple times (as identified via pl_image.signature), libplacebo
-    // will try to skip redraws by using a cache of results. However, in some
-    // circumstances, such as when the user knows that there will be no or
-    // infrequent redraws, or when the user can't come up with meaningful
-    // `signature` values, this field will allow disabling the use of a cache.
-    //
-    // It's worth pointing out that the user can toggle this field on and off
-    // at any point in time, even on subsequent frames. The meaning of the
-    // field simply means that libplacebo will act as if the cache didn't
-    // exist; it will not be read from, written to, or updated.
-    //
-    // It's also worth pointing out that this option being `false` does not
-    // guarantee the use of a redraw cache. It will be implicitly disabled, for
-    // example, if the hardware does not support the required features
-    // (typically the presence of blittable texture formats).
-    bool skip_redraw_caching;
 
     // Disables linearization / sigmoidization before scaling. This might be
     // useful when tracking down unexpected image artifacts or excessing
@@ -307,25 +280,6 @@ struct pl_overlay {
 
 // High-level description of a source image to render
 struct pl_image {
-    // A generic signature uniquely identifying this image. The contents don't
-    // matter, as long as they're unique for "identical" frames. This signature
-    // is used to cache intermediate results, thus speeding up redraws.
-    // In practice, the user might set this to e.g. an incrementing counter.
-    //
-    // If the user can't ensure the uniqueness of this signature for whatever
-    // reason, they must set `pl_render_params.skip_redraw_caching`, in which
-    // case the contents of this field are ignored.
-    //
-    // NOTE: Re-using the same `signature` also requires that the contents of
-    // the planes (plane[i].texture) as well as any overlays has not changed
-    // since the previous usage. In other words, touching the texture in any
-    // way using the pl_tex_* APIs and then trying to re-use them for the same
-    // signature, or trying to re-use the same signature with different
-    // textures, is undefined behavior. (It's the *contents* that matter here,
-    // the actual texture object can be a different one, as long as the
-    // contents and parameters are the same)
-    uint64_t signature;
-
     // Each frame is split up into some number of planes, each of which may
     // carry several components and be of any size / offset.
     int num_planes;
@@ -374,6 +328,7 @@ struct pl_image {
 
     // Deprecated fields. These are no longer used and may safely be ignored.
     int width, height;
+    uint64_t signature;
 };
 
 // Helper function to infer the chroma location offset for each plane in an
@@ -438,8 +393,16 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *image,
                      const struct pl_render_target *target,
                      const struct pl_render_params *params);
 
-/* TODO
+// Flushes the internal state of this renderer. This is normally not needed,
+// even if the image parameters, colorspace or target configuration change,
+// since libplacebo will internally detect such circumstances and recreate
+// outdated resources automatically. Doing this explicitly *may* be useful to
+// purge some state related to things like HDR peak detection or frame mixing,
+// so calling it is a good idea if the content source is expected to change
+// dramatically (e.g. when switching to a different file).
+void pl_renderer_flush_cache(struct pl_renderer *rr);
 
+/* TODO
 // Represents a mixture of input images, distributed temporally.
 //
 // NOTE: Images must be sorted by timestamp, i.e. `distances` must be
