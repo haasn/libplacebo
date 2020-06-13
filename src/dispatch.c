@@ -589,17 +589,18 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
 
     void *tmp = talloc_new(NULL); // for resources attached to `params`
 
-    struct pass *pass = talloc_zero(dp, struct pass);
-    pass->signature = sig;
-    pass->ubo_desc = (struct pl_shader_desc) {
-        .desc = {
-            .name = "UBO",
-            .type = PL_DESC_BUF_UNIFORM,
+    struct pass *pass = talloc_ptrtype(dp, pass);
+    *pass = (struct pass) {
+        .signature = sig,
+        .ubo_desc = {
+            .desc = {
+                .name = "UBO",
+                .type = PL_DESC_BUF_UNIFORM,
+            },
         },
     };
 
     struct pl_shader_res *res = &sh->res;
-
     struct pl_pass_run_params *rparams = &pass->run_params;
     struct pl_pass_params params = {
         .type = pl_shader_is_compute(sh) ? PL_PASS_COMPUTE : PL_PASS_RASTER,
