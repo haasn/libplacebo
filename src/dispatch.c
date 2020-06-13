@@ -65,7 +65,6 @@ struct pass_var {
 struct pass {
     uint64_t signature; // as returned by pl_shader_signature
     const struct pl_pass *pass;
-    bool failed;
 
     // contains cached data and update metadata, same order as pl_shader
     struct pass_var *vars;
@@ -1051,7 +1050,7 @@ bool pl_dispatch_compute(struct pl_dispatch *dp,
     struct pass *pass = find_pass(dp, sh, NULL, NULL, NULL, false);
 
     // Silently return on failed passes
-    if (pass->failed)
+    if (!pass->pass)
         goto error;
 
     struct pl_pass_run_params *rparams = &pass->run_params;
