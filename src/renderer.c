@@ -177,6 +177,16 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
     TA_FREEP(p_rr);
 }
 
+size_t pl_renderer_save(struct pl_renderer *rr, uint8_t *out_cache)
+{
+    return pl_dispatch_save(rr->dp, out_cache);
+}
+
+void pl_renderer_load(struct pl_renderer *rr, const uint8_t *cache)
+{
+    pl_dispatch_load(rr->dp, cache);
+}
+
 void pl_renderer_flush_cache(struct pl_renderer *rr)
 {
     pl_shader_obj_destroy(&rr->peak_detect_state);

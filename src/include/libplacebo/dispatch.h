@@ -105,4 +105,18 @@ bool pl_dispatch_compute(struct pl_dispatch *dp,
 // if the shader was instead merged into a different shader.
 void pl_dispatch_abort(struct pl_dispatch *dp, struct pl_shader **sh);
 
+// Serialize the internal state of a `pl_dispatch` into an abstract cache
+// object that can be e.g. saved to disk and loaded again later. This function
+// will not truncate, so the buffer provided by the user must be large enough
+// to contain the entire output. Returns the number of bytes written to
+// `out_cache`, or the number of bytes that *would* have been written to
+// `out_cache` if it's NULL.
+size_t pl_dispatch_save(struct pl_dispatch *dp, uint8_t *out_cache);
+
+// Load the result of a previous `pl_dispatch_save` call. This function will
+// never fail. It doesn't forget about any existing shaders, but merely
+// initializes an internal state cache needed to more efficiently compile
+// shaders that are not yet present in the `pl_dispatch`.
+void pl_dispatch_load(struct pl_dispatch *dp, const uint8_t *cache);
+
 #endif // LIBPLACEBO_DISPATCH_H

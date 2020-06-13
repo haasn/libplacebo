@@ -39,9 +39,13 @@ struct pl_dispatch {
     struct pl_shader **shaders;
     int num_shaders;
 
-    // cache of compiled passes
+    // list of compiled passes
     struct pass **passes;
     int num_passes;
+
+    // list of not-yet-compiled passes
+    struct cached_pass *cached_passes;
+    int num_cached_passes;
 
     // temporary buffers to help avoid re_allocations during pass creation
     struct bstr tmp[TMP_COUNT];
@@ -77,6 +81,12 @@ struct pass {
     // for the push constants, descriptor bindings (including the binding for
     // the UBO pre-filled), vertex array and variable updates
     struct pl_pass_run_params run_params;
+};
+
+struct cached_pass {
+    uint64_t signature;
+    const uint8_t *cached_program;
+    size_t cached_program_len;
 };
 
 static void pass_destroy(struct pl_dispatch *dp, struct pass *pass)
@@ -614,6 +624,19 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         .blend_params = blend, // set this for all pass types (for caching)
     };
 
+    // Find and attach the cached program, if any
+    for (int i = 0; i < dp->num_cached_passes; i++) {
+        if (dp->cached_passes[i].signature == sig) {
+            PL_DEBUG(dp, "Re-using cached program with signature 0x%llx",
+                     (unsigned long long) sig);
+
+            params.cached_program = dp->cached_passes[i].cached_program;
+            params.cached_program_len = dp->cached_passes[i].cached_program_len;
+            TARRAY_REMOVE_AT(dp->cached_passes, dp->num_cached_passes, i);
+            break;
+        }
+    }
+
     if (params.type == PL_PASS_RASTER) {
         assert(target);
         params.target_dummy = *target;
@@ -1100,4 +1123,131 @@ void pl_dispatch_abort(struct pl_dispatch *dp, struct pl_shader **psh)
     // Re-add the shader to the internal pool of shaders
     TARRAY_APPEND(dp, dp->shaders, dp->num_shaders, sh);
     *psh = NULL;
+}
+
+// Stuff related to caching
+static const char cache_magic[] = {'P', 'L', 'D', 'P'};
+static const uint32_t cache_version = 1;
+
+static void write_buf(uint8_t *buf, size_t *pos, const void *src, size_t size)
+{
+    assert(size);
+    if (buf)
+        memcpy(&buf[*pos], src, size);
+    *pos += size;
+}
+
+#define WRITE(type, var) write_buf(out, &size, &(type){ var }, sizeof(type))
+#define LOAD(var)                           \
+  do {                                      \
+      memcpy(&(var), cache, sizeof(var));   \
+      cache += sizeof(var);                 \
+  } while (0)
+
+size_t pl_dispatch_save(struct pl_dispatch *dp, uint8_t *out)
+{
+    size_t size = 0;
+
+    write_buf(out, &size, cache_magic, sizeof(cache_magic));
+    WRITE(uint32_t, cache_version);
+    WRITE(uint32_t, dp->num_passes + dp->num_cached_passes);
+
+    // Save the cached programs for all compiled passes
+    for (int i = 0; i < dp->num_passes; i++) {
+        const struct pass *pass = dp->passes[i];
+        if (!pass->pass)
+            continue;
+
+        const struct pl_pass_params *params = &pass->pass->params;
+        if (!params->cached_program_len)
+            continue;
+
+        if (out) {
+            PL_DEBUG(dp, "Saving %zu bytes of cached program with signature 0x%llx",
+                     params->cached_program_len, (unsigned long long) pass->signature);
+        }
+
+        WRITE(uint64_t, pass->signature);
+        WRITE(uint64_t, params->cached_program_len);
+        write_buf(out, &size, params->cached_program, params->cached_program_len);
+    }
+
+    // Re-save the cached programs for all previously loaded (but not yet
+    // comppiled) passes. This is simply to make `pl_dispatch_load` followed
+    // by `pl_dispatch_save` return the same cache as was previously loaded.
+    for (int i = 0; i < dp->num_cached_passes; i++) {
+        const struct cached_pass *pass = &dp->cached_passes[i];
+        if (out) {
+            PL_DEBUG(dp, "Saving %zu bytes of cached program with signature 0x%llx",
+                     pass->cached_program_len, (unsigned long long) pass->signature);
+        }
+
+        WRITE(uint64_t, pass->signature);
+        WRITE(uint64_t, pass->cached_program_len);
+        write_buf(out, &size, pass->cached_program, pass->cached_program_len);
+    }
+
+    return size;
+}
+
+void pl_dispatch_load(struct pl_dispatch *dp, const uint8_t *cache)
+{
+    char magic[4];
+    LOAD(magic);
+    if (memcmp(magic, cache_magic, sizeof(magic)) != 0) {
+        PL_ERR(dp, "Failed loading dispatch cache: invalid magic bytes");
+        return;
+    }
+
+    uint32_t version;
+    LOAD(version);
+    if (version != cache_version) {
+        PL_WARN(dp, "Failed loading dispatch cache: wrong version");
+        return;
+    }
+
+    uint32_t num;
+    LOAD(num);
+
+    for (int i = 0; i < num; i++) {
+        uint64_t sig, size;
+        LOAD(sig);
+        LOAD(size);
+        if (!size)
+            continue;
+
+        // Skip passes that are already compiled
+        for (int n = 0; n < dp->num_passes; n++) {
+            if (dp->passes[n]->signature == sig) {
+                PL_DEBUG(dp, "Skipping already compiled pass with signature %llx",
+                         (unsigned long long) sig);
+                cache += size;
+                continue;
+            }
+        }
+
+        // Find a cached_pass entry with this signature, if any
+        struct cached_pass *pass = NULL;
+        for (int n = 0; n < dp->num_cached_passes; n++) {
+            if (dp->cached_passes[n].signature == sig) {
+                pass = &dp->cached_passes[n];
+                break;
+            }
+        }
+
+        if (!pass) {
+            // None found, add a new entry
+            TARRAY_GROW(dp, dp->cached_passes, dp->num_cached_passes);
+            pass = &dp->cached_passes[dp->num_cached_passes++];
+            *pass = (struct cached_pass) { .signature = sig };
+        }
+
+        PL_DEBUG(dp, "Loading %zu bytes of cached program with signature 0x%llx",
+                 (size_t) size, (unsigned long long) sig);
+
+        talloc_free((void *) pass->cached_program);
+        pass->cached_program = talloc_memdup(dp, cache, size);
+        pass->cached_program_len = size;
+        cache += size;
+    }
 }

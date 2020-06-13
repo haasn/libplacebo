@@ -36,6 +36,15 @@ struct pl_renderer *pl_renderer_create(struct pl_context *ctx,
                                        const struct pl_gpu *gpu);
 void pl_renderer_destroy(struct pl_renderer **rr);
 
+// Saves the internal shader cache of this renderer into an abstract cache
+// object that can be saved to disk and later re-loaded to speed up
+// recompilation of shaders. See `pl_dispatch_save` for more information.
+size_t pl_renderer_save(struct pl_renderer *rr, uint8_t *out_cache);
+
+// Load the result of a previous `pl_renderer_save` call. See
+// `pl_dispatch_load` for more information.
+void pl_renderer_load(struct pl_renderer *rr, const uint8_t *cache);
+
 // Represents the options used for rendering. These affect the quality of
 // the result.
 struct pl_render_params {

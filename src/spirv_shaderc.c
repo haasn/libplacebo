@@ -60,7 +60,7 @@ static struct spirv_compiler *shaderc_create(struct pl_context *ctx,
             shaderc_target_env_vulkan,
             api_version);
 
-    int ver, rev;
+    int ver = 0, rev = 0;
     shaderc_get_spv_version(&ver, &rev);
     spirv->compiler_version = ver * 100 + rev;
     spirv->glsl = (struct pl_glsl_desc) {
