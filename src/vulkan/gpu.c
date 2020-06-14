@@ -518,6 +518,7 @@ static void vk_cmd_timer_end(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
 // For pl_tex.priv
 struct pl_tex_vk {
+    int refcount; // 1 = object allocated but not in use, > 1 = in use
     bool held;
     bool external_img;
     bool may_invalidate;
@@ -562,6 +563,43 @@ void pl_tex_vk_external_dep(const struct pl_gpu *gpu, const struct pl_tex *tex,
 }
 
 static void vk_sync_deref(const struct pl_gpu *gpu, const struct pl_sync *sync);
+
+static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
+{
+    if (!tex)
+        return;
+
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+
+    pl_buf_pool_uninit(gpu, &tex_vk->tmp_write);
+    pl_buf_pool_uninit(gpu, &tex_vk->tmp_read);
+    pl_buf_pool_uninit(gpu, &tex_vk->pbo_write);
+    pl_buf_pool_uninit(gpu, &tex_vk->pbo_read);
+    vk_sync_deref(gpu, tex_vk->ext_sync);
+    vk_signal_destroy(vk, &tex_vk->sig);
+    vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, VK_ALLOC);
+    vk->DestroySampler(vk->dev, tex_vk->sampler, VK_ALLOC);
+    vk->DestroyImageView(vk->dev, tex_vk->view, VK_ALLOC);
+    if (!tex_vk->external_img) {
+        vk->DestroyImage(vk->dev, tex_vk->img, VK_ALLOC);
+        vk_free_memslice(p->alloc, tex_vk->mem);
+    }
+
+    talloc_free(tex);
+}
+
+static void vk_tex_deref(const struct pl_gpu *gpu, const struct pl_tex *tex)
+{
+    if (!tex)
+        return;
+
+    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    if (--tex_vk->refcount == 0)
+        vk_tex_destroy(gpu, (struct pl_tex *) tex);
+}
+
 
 // Small helper to ease image barrier creation. if `discard` is set, the contents
 // of the image will be undefined after the barrier
@@ -648,6 +686,9 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
     tex_vk->current_layout = newLayout;
     tex_vk->current_access = newAccess;
+    tex_vk->refcount++;
+    vk_cmd_callback(cmd, (vk_cb) vk_tex_deref, gpu, tex);
+    vk_cmd_obj(cmd, tex);
 }
 
 static void tex_signal(const struct pl_gpu *gpu, struct vk_cmd *cmd,
@@ -661,34 +702,6 @@ static void tex_signal(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     tex_vk->sig = vk_cmd_signal(vk, cmd, stage);
     tex_vk->sig_stage = stage;
 }
-
-static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
-{
-    if (!tex)
-        return;
-
-    struct pl_vk *p = TA_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
-
-    pl_buf_pool_uninit(gpu, &tex_vk->tmp_write);
-    pl_buf_pool_uninit(gpu, &tex_vk->tmp_read);
-    pl_buf_pool_uninit(gpu, &tex_vk->pbo_write);
-    pl_buf_pool_uninit(gpu, &tex_vk->pbo_read);
-    vk_sync_deref(gpu, tex_vk->ext_sync);
-    vk_signal_destroy(vk, &tex_vk->sig);
-    vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, VK_ALLOC);
-    vk->DestroySampler(vk->dev, tex_vk->sampler, VK_ALLOC);
-    vk->DestroyImageView(vk->dev, tex_vk->view, VK_ALLOC);
-    if (!tex_vk->external_img) {
-        vk->DestroyImage(vk->dev, tex_vk->img, VK_ALLOC);
-        vk_free_memslice(p->alloc, tex_vk->mem);
-    }
-
-    talloc_free(tex);
-}
-
-MAKE_LAZY_DESTRUCTOR(vk_tex_destroy, const struct pl_tex)
 
 static const VkFilter filters[] = {
     [PL_TEX_SAMPLE_NEAREST] = VK_FILTER_NEAREST,
@@ -707,6 +720,7 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex,
     pl_assert(tex_vk->img);
     VK_NAME(IMAGE, tex_vk->img, name);
 
+    tex_vk->refcount = 1;
     tex_vk->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
     tex_vk->current_access = 0;
     tex_vk->transfer_queue = GRAPHICS;
@@ -3261,7 +3275,7 @@ struct vk_cmd *pl_vk_steal_cmd(const struct pl_gpu *gpu)
 static const struct pl_gpu_fns pl_fns_vk = {
     .destroy                = vk_destroy_gpu,
     .tex_create             = vk_tex_create,
-    .tex_destroy            = vk_tex_destroy_lazy,
+    .tex_destroy            = vk_tex_deref,
     .tex_invalidate         = vk_tex_invalidate,
     .tex_clear              = vk_tex_clear,
     .tex_blit               = vk_tex_blit,
