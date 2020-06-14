@@ -171,8 +171,6 @@ void pl_gpu_verify_formats(struct pl_gpu *gpu)
         pl_assert(!fmt->opaque || !(fmt->caps & PL_FMT_CAP_HOST_READABLE));
         if (fmt->internal_size != fmt->texel_size && !fmt->opaque)
             pl_assert(fmt->emulated);
-        if (fmt->caps & (PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE))
-            pl_assert(fmt->glsl_format);
 
         // Assert uniqueness of name
         for (int o = n + 1; o < gpu->num_formats; o++)

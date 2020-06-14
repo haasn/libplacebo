@@ -205,6 +205,8 @@ const VkPhysicalDeviceFeatures2KHR pl_vulkan_recommended_features = {
     .pNext = (void *) &host_query_reset,
     .features = {
         .shaderImageGatherExtended = true,
+        .shaderStorageImageReadWithoutFormat = true,
+        .shaderStorageImageWriteWithoutFormat = true,
 
         // Needed for GPU-assisted validation, but not harmful to enable
         .fragmentStoresAndAtomics = true,

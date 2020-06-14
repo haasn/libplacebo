@@ -279,14 +279,24 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
 
     // Enable all extensions needed for different types of input
     bool has_ssbo = false, has_ubo = false, has_img = false, has_texel = false,
-         has_ext = false;
+         has_ext = false, has_nofmt = false;
     for (int i = 0; i < res->num_descriptors; i++) {
         switch (res->descriptors[i].desc.type) {
-        case PL_DESC_STORAGE_IMG: has_img = true; break;
         case PL_DESC_BUF_UNIFORM: has_ubo = true; break;
         case PL_DESC_BUF_STORAGE: has_ssbo = true; break;
-        case PL_DESC_BUF_TEXEL_UNIFORM: // fall through
-        case PL_DESC_BUF_TEXEL_STORAGE: has_texel = true; break;
+        case PL_DESC_BUF_TEXEL_UNIFORM: has_texel = true; break;
+        case PL_DESC_BUF_TEXEL_STORAGE: {
+            const struct pl_buf *buf = res->descriptors[i].object;
+            has_nofmt |= !buf->params.format->glsl_format;
+            has_texel = true;
+            break;
+        }
+        case PL_DESC_STORAGE_IMG: {
+            const struct pl_tex *tex = res->descriptors[i].object;
+            has_nofmt |= !tex->params.format->glsl_format;
+            has_img = true;
+            break;
+        }
         case PL_DESC_SAMPLED_TEX: {
             const struct pl_tex *tex = res->descriptors[i].object;
             switch (tex->sampler_type) {
@@ -310,6 +320,8 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         ADD(pre, "#extension GL_ARB_texture_buffer_object : enable\n");
     if (has_ext)
         ADD(pre, "#extension GL_OES_EGL_image_external : enable\n");
+    if (has_nofmt)
+        ADD(pre, "#extension GL_EXT_shader_image_load_formatted : enable\n");
 
     if (gpu->glsl.gles) {
         ADD(pre, "precision mediump float;\n");
@@ -464,13 +476,16 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             const char *format = tex->params.format->glsl_format;
             const char *access = pl_desc_access_glsl_name(desc->access);
             int dims = pl_tex_params_dimension(tex->params);
-            pl_assert(format);
-
             if (gpu->glsl.vulkan) {
-                ADD(glsl, "layout(binding=%d, %s) ", desc->binding, format);
-            } else if (gpu->glsl.version >= 130) {
+                if (format) {
+                    ADD(glsl, "layout(binding=%d, %s) ", desc->binding, format);
+                } else {
+                    ADD(glsl, "layout(binding=%d) ", desc->binding);
+                }
+            } else if (gpu->glsl.version >= 130 && format) {
                 ADD(glsl, "layout(%s) ", format);
             }
+
             ADD(glsl, "%s%s%s restrict uniform %s %s;\n", access,
                 (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
                 (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",
@@ -513,10 +528,15 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             const char *format = buf->params.format->glsl_format;
             const char *access = pl_desc_access_glsl_name(desc->access);
             if (gpu->glsl.vulkan) {
-                ADD(glsl, "layout(binding=%d, %s) ", desc->binding, format);
-            } else {
+                if (format) {
+                    ADD(glsl, "layout(binding=%d, %s) ", desc->binding, format);
+                } else {
+                    ADD(glsl, "layout(binding=%d) ", desc->binding);
+                }
+            } else if (format) {
                 ADD(glsl, "layout(%s) ", format);
             }
+
             ADD(glsl, "%s%s%s restrict uniform imageBuffer %s;\n", access,
                 (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
                 (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",

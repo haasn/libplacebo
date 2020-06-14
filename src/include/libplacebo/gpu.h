@@ -222,7 +222,9 @@ struct pl_fmt {
 
     // If usable as a storage image or texel storage buffer
     // (PL_FMT_CAP_STORABLE / PL_FMT_CAP_TEXEL_STORAGE), this gives the GLSL
-    // texel format corresponding to the format. (e.g. rgba16ui)
+    // texel format corresponding to the format (e.g. rgba16ui), if any. This
+    // field may be NULL, in which case the format modifier may be left
+    // unspecified.
     const char *glsl_format;
 };
 

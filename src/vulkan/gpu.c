@@ -249,9 +249,14 @@ static void vk_setup_formats(struct pl_gpu *gpu)
             int real_comps = PL_DEF(vk_fmt->icomps, fmt->num_components);
             fmt->glsl_format = pl_fmt_glsl_format(fmt, real_comps);
             if (!fmt->glsl_format) {
-                PL_INFO(gpu, "Storable format '%s' has no matching GLSL format "
-                        "qualifier, ignoring", fmt->name);
-                fmt->caps &= ~storable;
+                if (!vk->features.features.shaderStorageImageReadWithoutFormat ||
+                    !vk->features.features.shaderStorageImageWriteWithoutFormat)
+                {
+                    PL_WARN(gpu, "Storable format '%s' has no matching GLSL "
+                            "format qualifier but read/write without format "
+                            "is not supported.. disabling", fmt->name);
+                    fmt->caps &= ~storable;
+                }
             }
         }
 
