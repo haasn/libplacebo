@@ -1188,9 +1188,9 @@ static int gl_desc_namespace(const struct pl_gpu *gpu, enum pl_desc_type type)
     return (int) type;
 }
 
-#define GL_CACHE_MAGIC {'P','L','G','L'}
-#define GL_CACHE_VERSION 1
-static const char gl_cache_magic[4] = GL_CACHE_MAGIC;
+#define CACHE_MAGIC {'P','L','G','L'}
+#define CACHE_VERSION 1
+static const char gl_cache_magic[4] = CACHE_MAGIC;
 
 struct gl_cache_header {
     char magic[sizeof(gl_cache_magic)];
@@ -1217,7 +1217,7 @@ static GLuint load_cached_program(const struct pl_gpu *gpu,
 
     if (strncmp(header->magic, gl_cache_magic, sizeof(gl_cache_magic)) != 0)
         return 0;
-    if (header->cache_version != GL_CACHE_VERSION)
+    if (header->cache_version != CACHE_VERSION)
         return 0;
 
     GLuint prog = glCreateProgram();
@@ -1406,8 +1406,8 @@ static const struct pl_pass *gl_pass_create(const struct pl_gpu *gpu,
             uint8_t *buffer = talloc_size(NULL, size);
             GLsizei actual_size = 0;
             struct gl_cache_header header = {
-                .magic = GL_CACHE_MAGIC,
-                .cache_version = GL_CACHE_VERSION,
+                .magic = CACHE_MAGIC,
+                .cache_version = CACHE_VERSION,
             };
 
             glGetProgramBinary(pass_gl->program, size, &actual_size,

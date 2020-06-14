@@ -2106,9 +2106,9 @@ static const VkDescriptorType dsType[] = {
     [PL_DESC_BUF_TEXEL_STORAGE] = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
 };
 
-#define VK_CACHE_MAGIC {'R','A','V','K'}
-#define VK_CACHE_VERSION 2
-static const char vk_cache_magic[4] = VK_CACHE_MAGIC;
+#define CACHE_MAGIC {'R','A','V','K'}
+#define CACHE_VERSION 2
+static const char vk_cache_magic[4] = CACHE_MAGIC;
 
 struct vk_cache_header {
     char magic[sizeof(vk_cache_magic)];
@@ -2141,7 +2141,7 @@ static bool vk_use_cached_program(const struct pl_pass_params *params,
 
     if (strncmp(header->magic, vk_cache_magic, sizeof(vk_cache_magic)) != 0)
         return false;
-    if (header->cache_version != VK_CACHE_VERSION)
+    if (header->cache_version != CACHE_VERSION)
         return false;
     if (strncmp(header->compiler, spirv->name, sizeof(header->compiler)) != 0)
         return false;
@@ -2538,8 +2538,8 @@ no_descriptors: ;
     VK(vk->GetPipelineCacheData(vk->dev, pipeCache, &cache.len, cache.start));
 
     struct vk_cache_header header = {
-        .magic = VK_CACHE_MAGIC,
-        .cache_version = VK_CACHE_VERSION,
+        .magic = CACHE_MAGIC,
+        .cache_version = CACHE_VERSION,
         .compiler_version = p->spirv->compiler_version,
         .vert_spirv_len = vert.len,
         .frag_spirv_len = frag.len,
