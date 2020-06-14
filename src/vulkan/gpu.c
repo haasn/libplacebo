@@ -1316,7 +1316,7 @@ struct pl_buf_vk {
 
 #define PL_VK_BUF_VERTEX PL_BUF_PRIVATE
 
-static void vk_buf_deref(const struct pl_gpu *gpu, struct pl_buf *buf)
+static void vk_buf_deref(const struct pl_gpu *gpu, const struct pl_buf *buf)
 {
     if (!buf)
         return;
@@ -1329,7 +1329,7 @@ static void vk_buf_deref(const struct pl_gpu *gpu, struct pl_buf *buf)
         vk_signal_destroy(vk, &buf_vk->sig);
         vk->DestroyBufferView(vk->dev, buf_vk->view, VK_ALLOC);
         vk_free_memslice(p->alloc, buf_vk->slice.mem);
-        talloc_free(buf);
+        talloc_free((void *) buf);
     }
 }
 
@@ -1496,9 +1496,6 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     if (buf_vk->slice.mem.data && !buf_vk->slice.mem.coherent)
         vk_cmd_callback(cmd, (vk_cb) invalidate_memslice, vk, &buf_vk->slice.mem);
 }
-
-#define vk_buf_destroy vk_buf_deref
-MAKE_LAZY_DESTRUCTOR(vk_buf_destroy, const struct pl_buf)
 
 static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                          size_t offset, const void *data, size_t size)
@@ -1735,7 +1732,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     return buf;
 
 error:
-    vk_buf_destroy(gpu, buf);
+    vk_buf_deref(gpu, buf);
     return NULL;
 }
 
@@ -3271,7 +3268,7 @@ static const struct pl_gpu_fns pl_fns_vk = {
     .tex_upload             = vk_tex_upload,
     .tex_download           = vk_tex_download,
     .buf_create             = vk_buf_create,
-    .buf_destroy            = vk_buf_destroy_lazy,
+    .buf_destroy            = vk_buf_deref,
     .buf_write              = vk_buf_write,
     .buf_read               = vk_buf_read,
     .buf_export             = vk_buf_export,
