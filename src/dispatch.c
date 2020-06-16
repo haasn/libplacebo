@@ -568,7 +568,6 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         ADD(glsl, "%s = %s();\n", out_color, res->name);
         break;
     case PL_PASS_COMPUTE:
-        pl_assert(res->output == PL_SHADER_SIG_NONE);
         ADD(glsl, "%s();\n", res->name);
         break;
     default: abort();
@@ -1074,7 +1073,7 @@ bool pl_dispatch_compute(struct pl_dispatch *dp,
         goto error;
     }
 
-    if (res->input != PL_SHADER_SIG_NONE || res->output != PL_SHADER_SIG_NONE) {
+    if (res->input != PL_SHADER_SIG_NONE) {
         PL_ERR(dp, "Trying to dispatch shader with incompatible signature!");
         goto error;
     }
@@ -1115,9 +1114,22 @@ bool pl_dispatch_compute(struct pl_dispatch *dp,
         update_pass_var(dp, pass, &sh->variables[i], &pass->vars[i]);
 
     // Update the dispatch size
+    int groups = 1;
     for (int i = 0; i < 3; i++) {
-        pl_assert(params->dispatch_size[i] > 0);
+        groups *= params->dispatch_size[i];
         rparams->compute_groups[i] = params->dispatch_size[i];
+    }
+
+    if (!groups) {
+        pl_assert(params->width && params->height);
+        int block_w = sh->res.compute_group_size[0],
+            block_h = sh->res.compute_group_size[1],
+            num_x   = (params->width  + block_w - 1) / block_w,
+            num_y   = (params->height + block_h - 1) / block_h;
+
+        rparams->compute_groups[0] = num_x;
+        rparams->compute_groups[1] = num_y;
+        rparams->compute_groups[2] = 1;
     }
 
     // Dispatch the actual shader

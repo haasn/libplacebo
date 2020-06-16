@@ -72,16 +72,13 @@ struct pl_dispatch_params {
 bool pl_dispatch_finish(struct pl_dispatch *dp, const struct pl_dispatch_params *params);
 
 struct pl_dispatch_compute_params {
-    // The shader to execute. This must be a compute shader with both the
-    // input and output signature set to PL_SHADER_SIG_NONE.
-    //
-    // Note: There is currently no way to actually construct such a shader with
-    // the currently available public APIs. (However, it's still used
-    // internally, and may be needed in the future)
+    // The shader to execute. This must be a compute shader with the input
+    // set to PL_SHADER_SIG_NONE. The output, if it has any, is ignored.
     struct pl_shader **shader;
 
-    // The number of work groups to dispatch in each dimension. Must be
-    // nonzero for all three dimensions.
+    // The number of work groups to dispatch in each dimension. If this is left
+    // as [0} and `width/height` are both set, the number of work groups will
+    // be inferred from the shader's `compute_group_sizes`.
     int dispatch_size[3];
 
     // If set, simulate vertex attributes (similar to `pl_dispatch_finish`)
@@ -97,7 +94,9 @@ struct pl_dispatch_compute_params {
 };
 
 // A variant of `pl_dispatch_finish`, this one only dispatches a compute shader
-// that has no output.
+// while ignoring its output (if it has one). It's only useful for shaders
+// which have otherwise observable side effects (such as updating state
+// objects).
 bool pl_dispatch_compute(struct pl_dispatch *dp,
                          const struct pl_dispatch_compute_params *params);
 
