@@ -799,7 +799,6 @@ bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
 {
     require(buf->params.host_readable);
     require(buf_offset + size <= buf->params.size);
-    require(buf_offset == PL_ALIGN2(buf_offset, 4));
 
     const struct pl_gpu_fns *impl = TA_PRIV(gpu);
     return impl->buf_read(gpu, buf, buf_offset, dest, size);

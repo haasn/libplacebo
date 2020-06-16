@@ -576,9 +576,8 @@ void pl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf **buf);
 void pl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                   size_t buf_offset, const void *data, size_t size);
 
-// Read back the contents of a buffer, starting at a given offset (must be a
-// multiple of 4) and up to a given size, storing the data into *dest.
-// Returns whether successful.
+// Read back the contents of a buffer, starting at a given offset, storing the
+// data into *dest. Returns whether successful.
 //
 // Note: This operation will never block, so reading from a buffer that is
 // currently being written to results in the read memory regions containing
