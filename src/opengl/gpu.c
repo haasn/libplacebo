@@ -952,35 +952,6 @@ error:
     return NULL;
 }
 
-static void gl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
-                         size_t offset, const void *data, size_t size)
-{
-    if (buf->data) {
-        memcpy(buf->data + offset, data, size);
-    } else {
-        struct pl_buf_gl *buf_gl = TA_PRIV(buf);
-        glBindBuffer(buf_gl->target, buf_gl->buffer);
-        glBufferSubData(buf_gl->target, offset, size, data);
-        glBindBuffer(buf_gl->target, 0);
-        gl_check_err(gpu, "gl_buf_write");
-    }
-}
-
-static bool gl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
-                        size_t offset, void *dest, size_t size)
-{
-    if (buf->data) {
-        memcpy(dest, buf->data + offset, size);
-        return true;
-    } else {
-        struct pl_buf_gl *buf_gl = TA_PRIV(buf);
-        glBindBuffer(buf_gl->target, buf_gl->buffer);
-        glGetBufferSubData(buf_gl->target, offset, size, dest);
-        glBindBuffer(buf_gl->target, 0);
-        return gl_check_err(gpu, "gl_buf_read");
-    }
-}
-
 static bool gl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
                         uint64_t timeout)
 {
@@ -1001,6 +972,26 @@ static bool gl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
     }
 
     return !!buf_gl->fence;
+}
+
+static void gl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
+                         size_t offset, const void *data, size_t size)
+{
+    struct pl_buf_gl *buf_gl = TA_PRIV(buf);
+    glBindBuffer(buf_gl->target, buf_gl->buffer);
+    glBufferSubData(buf_gl->target, offset, size, data);
+    glBindBuffer(buf_gl->target, 0);
+    gl_check_err(gpu, "gl_buf_write");
+}
+
+static bool gl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
+                        size_t offset, void *dest, size_t size)
+{
+    struct pl_buf_gl *buf_gl = TA_PRIV(buf);
+    glBindBuffer(buf_gl->target, buf_gl->buffer);
+    glGetBufferSubData(buf_gl->target, offset, size, dest);
+    glBindBuffer(buf_gl->target, 0);
+    return gl_check_err(gpu, "gl_buf_read");
 }
 
 static int get_alignment(int stride)

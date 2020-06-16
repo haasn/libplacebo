@@ -560,7 +560,7 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
 // change as a result of doing so.
 //
 // Note: If the `user_data` alone changes, this does not trigger a buffer
-// recreation. In theory, this can be used to detect when the texture ended
+// recreation. In theory, this can be used to detect when the buffer ended
 // up being recreated.
 bool pl_buf_recreate(const struct pl_gpu *gpu, const struct pl_buf **buf,
                      const struct pl_buf_params *params);
@@ -570,18 +570,16 @@ void pl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf **buf);
 // Update the contents of a buffer, starting at a given offset (must be a
 // multiple of 4) and up to a given size, with the contents of *data.
 //
-// Note: This operation may write directly to the buffer, i.e. it is not
-// synchronized. Writing to an in-use buffer is undefined behavior. Use
-// `pl_buff_poll` to ensure write consistency.
+// This function will block until the buffer is no longer in use. Use
+// `pl_buf_poll` to perform non-blocking queries of buffer availability.
 void pl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                   size_t buf_offset, const void *data, size_t size);
 
 // Read back the contents of a buffer, starting at a given offset, storing the
 // data into *dest. Returns whether successful.
 //
-// Note: This operation will never block, so reading from a buffer that is
-// currently being written to results in the read memory regions containing
-// undefined values. Use `pl_buf_poll` to ensure read consistency.
+// This function will block until the buffer is no longer in use. Use
+// `pl_buf_poll` to perform non-blocking queries of buffer availability.
 bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                  size_t buf_offset, void *dest, size_t size);
 
@@ -593,14 +591,14 @@ bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
 // operation that touches the buffer (e.g. pl_tex_upload, but also pl_buf_write
 // and pl_buf_read) will implicitly import the buffer back to libplacebo. Users
 // must ensure that all pending operations made by the external API are fully
-// completed before using it in libplacebo again. (Otherwise, the bahviour
+// completed before using it in libplacebo again. (Otherwise, the behaviour
 // is undefined)
 //
 // Please note that this function returning does not mean the memory is
 // immediately available as such. In general, it will mark a buffer as "in use"
-// in the same way a read or write would, and it is the user's responsibility
-// to wait until `pl_buf_poll` returns false before accessing the memory from
-// the external API.
+// in the same way any other buffer operation would, and it is the user's
+// responsibility to wait until `pl_buf_poll` returns false before accessing
+// the memory from the external API.
 //
 // In terms of the access performed by this operation, it is not considered a
 // "read" or "write" and therefore does not technically conflict with reads or
@@ -619,16 +617,16 @@ bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
 //
 // i.e. perform an external API operation, then use and immediately export the
 // buffer in libplacebo, and finally wait until `pl_buf_poll` is false before
-// re-using it. (Or get a new, fresh buffer in the meantime)
+// re-using it in the external API. (Or get a new buffer in the meantime)
 bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf);
 
 // Returns whether or not a buffer is currently "in use". This can either be
 // because of a pending read operation, a pending write operation or a pending
-// buffer export operation. Any access to the buffer by the user is forbidden
-// while a buffer is "in use". This includes using `pl_buf_read` or
-// `pl_buf_write` or accessing mapped memory directly. The only exception to
-// this rule is multiple reads, for example reading from a buffer with
-// `pl_tex_upload` while simultaneously reading from it using mapped memory.
+// buffer export operation. Any access to the buffer by external APIs or via
+// the host pointer (for host-mapped buffers) is forbidden while a buffer is
+// "in use". The only exception to this rule is multiple reads, for example
+// reading from a buffer with `pl_tex_upload` while simultaneously reading from
+// it using mapped memory.
 //
 // The `timeout`, specified in nanoseconds, indicates how long to block for
 // before returning. If set to 0, this function will never block, and only
@@ -642,14 +640,10 @@ bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf);
 // while (pl_buf_poll(gpu, buf, UINT64_MAX))
 //      ; // do nothing
 //
-// Note: Performing multiple libplacebo-internal operations at the same time is
-// always valid, for example it's perfectly valid to submit a `pl_tex_upload`
-// immediately followed by a `pl_tex_download` to the same buffer. However,
-// when this is the case, it's undefined as to when exactly the upload is
-// happening versus when exactly the download is happening. So in this example,
-// any access to the buffer by the host would be forbidden, including reads,
-// until the user has verified that `pl_buf_poll` returned false. It's also
-// always valid to call `pl_buf_destroy`, even on in-use buffers.
+// Note: libplacebo operations on buffers are always internally synchronized,
+// so this is only needed for host-mapped or externally exported buffers.
+// However, it may be used to do non-blocking queries before calling blocking
+// functions such as `pl_buf_read`.
 bool pl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
                  uint64_t timeout);
 

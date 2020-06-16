@@ -1322,6 +1322,7 @@ void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
 struct pl_buf_vk {
     struct vk_bufslice slice;
     int refcount; // 1 = object allocated but not in use, > 1 = in use
+    int writes; // number of queued write commands
     enum queue_type update_queue;
     VkBufferView view; // for texel buffers
     // "current" metadata, can change during course of execution
@@ -1352,11 +1353,26 @@ static void vk_buf_deref(const struct pl_gpu *gpu, const struct pl_buf *buf)
     }
 }
 
+static void vk_buf_finish_write(const struct pl_gpu *gpu, const struct pl_buf *buf)
+{
+    if (!buf)
+        return;
+
+    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    buf_vk->writes--;
+}
+
+enum buffer_op {
+    BUF_READ    = (1 << 0),
+    BUF_WRITE   = (1 << 1),
+    BUF_EXPORT  = (1 << 2),
+};
+
 // offset: relative to pl_buf
 static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                         const struct pl_buf *buf, VkPipelineStageFlags stage,
                         VkAccessFlags newAccess, size_t offset, size_t size,
-                        bool export)
+                        enum buffer_op op)
 {
     struct pl_vk *p = TA_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
@@ -1369,7 +1385,7 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     VkBufferMemoryBarrier buffBarrier = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
         .srcQueueFamilyIndex = buf_vk->exported ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
-        .dstQueueFamilyIndex = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
+        .dstQueueFamilyIndex = (op & BUF_EXPORT) ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
         .srcAccessMask = buf_vk->current_access,
         .dstAccessMask = newAccess,
         .buffer = buf_vk->slice.buf,
@@ -1378,7 +1394,7 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     };
 
     // Can't re-export exported buffers
-    pl_assert(!export || !buf_vk->exported);
+    pl_assert(!(op & BUF_EXPORT) || !buf_vk->exported);
 
     VkEvent event = VK_NULL_HANDLE;
     enum vk_wait_type type = vk_cmd_wait(vk, cmd, &buf_vk->sig, stage, &event);
@@ -1445,8 +1461,13 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         }
     }
 
+    if (op & BUF_WRITE) {
+        buf_vk->writes++;
+        vk_cmd_callback(cmd, (vk_cb) vk_buf_finish_write, gpu, buf);
+    }
+
     buf_vk->current_access = newAccess;
-    buf_vk->exported = export;
+    buf_vk->exported = (op & BUF_EXPORT);
     buf_vk->refcount++;
     vk_cmd_callback(cmd, (vk_cb) vk_buf_deref, gpu, buf);
     vk_cmd_obj(cmd, buf);
@@ -1516,6 +1537,28 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         vk_cmd_callback(cmd, (vk_cb) invalidate_memslice, vk, &buf_vk->slice.mem);
 }
 
+static bool vk_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
+                        uint64_t timeout)
+{
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+
+    // Opportunistically check if we can re-use this buffer without flush
+    vk_poll_commands(vk, 0);
+    if (buf_vk->refcount == 1)
+        return false;
+
+    // Otherwise, we're force to submit all queued commands so that the
+    // user is guaranteed to see progress eventually, even if they call
+    // this in a tight loop
+    vk_submit(gpu);
+    vk_flush_obj(vk, buf);
+    vk_poll_commands(vk, timeout);
+
+    return buf_vk->refcount > 1;
+}
+
 static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                          size_t offset, const void *data, size_t size)
 {
@@ -1526,7 +1569,10 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
     // For host-mapped buffers, we can just directly memcpy the buffer contents.
     // Otherwise, we can update the buffer from the GPU using a command buffer.
     if (buf_vk->slice.mem.data) {
-        pl_assert(buf_vk->refcount == 1);
+        // ensure no queued operations
+        while (vk_buf_poll(gpu, buf, UINT64_MAX))
+            ; // do nothing
+
         uintptr_t addr = (uintptr_t) buf_vk->slice.mem.data + offset;
         memcpy((void *) addr, data, size);
         buf_vk->needs_flush = true;
@@ -1540,7 +1586,7 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
         CMD_MARK_BEGIN(cmd);
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_WRITE_BIT, offset, size, false);
+                    VK_ACCESS_TRANSFER_WRITE_BIT, offset, size, BUF_WRITE);
 
         // Vulkan requires `size` to be a multiple of 4, so we need to make
         // sure to handle the end separately if the original data is not
@@ -1582,6 +1628,10 @@ static bool vk_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
     struct pl_buf_vk *buf_vk = TA_PRIV(buf);
     pl_assert(buf_vk->slice.mem.data);
 
+    // ensure no more queued writes
+    while (buf_vk->writes)
+        vk_buf_poll(gpu, buf, UINT64_MAX);
+
     uintptr_t addr = (uintptr_t) buf_vk->slice.mem.data + (size_t) offset;
     memcpy(dest, (void *) addr, size);
     return true;
@@ -1606,7 +1656,7 @@ static bool vk_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
     // For the queue family ownership transfer, we can ignore all pipeline
     // stages since the synchronization via fences/semaphores is required
     buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
-                0, buf->params.size, true);
+                0, buf->params.size, BUF_EXPORT);
 
     CMD_MARK_END(cmd);
 
@@ -1755,28 +1805,6 @@ error:
     return NULL;
 }
 
-static bool vk_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
-                        uint64_t timeout)
-{
-    struct pl_vk *p = TA_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
-
-    // Opportunistically check if we can re-use this buffer without flush
-    vk_poll_commands(vk, 0);
-    if (buf_vk->refcount == 1)
-        return false;
-
-    // Otherwise, we're force to submit all queued commands so that the
-    // user is guaranteed to see progress eventually, even if they call
-    // this in a tight loop
-    vk_submit(gpu);
-    vk_flush_obj(vk, buf);
-    vk_poll_commands(vk, timeout);
-
-    return buf_vk->refcount > 1;
-}
-
 static enum queue_type vk_img_copy_queue(const struct pl_gpu *gpu,
                                          const struct VkBufferImageCopy *region,
                                          const struct pl_tex *tex)
@@ -1883,9 +1911,9 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_READ_BIT, params->buf_offset, size,
-                    false);
+                    BUF_READ);
         buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_WRITE_BIT, 0, size, false);
+                    VK_ACCESS_TRANSFER_WRITE_BIT, 0, size, BUF_WRITE);
         vk->CmdCopyBuffer(cmd->buf, buf_vk->slice.buf, tbuf_vk->slice.buf,
                           1, &region);
 
@@ -1926,7 +1954,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_READ_BIT, params->buf_offset, size,
-                    false);
+                    BUF_READ);
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, false);
@@ -2005,10 +2033,10 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         };
 
         buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_ACCESS_TRANSFER_READ_BIT, 0, size, false);
+                    VK_ACCESS_TRANSFER_READ_BIT, 0, size, BUF_READ);
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size,
-                    false);
+                    BUF_WRITE);
         vk->CmdCopyBuffer(cmd->buf, tbuf_vk->slice.buf, buf_vk->slice.buf,
                           1, &region);
         buf_signal(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -2042,7 +2070,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size,
-                    false);
+                    BUF_WRITE);
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_READ_BIT,
                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, false);
@@ -2619,11 +2647,19 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     };
 
     VkAccessFlags access = 0;
+    enum buffer_op buf_op = 0;
     switch (desc->access) {
-    case PL_DESC_ACCESS_READONLY:  access = VK_ACCESS_SHADER_READ_BIT; break;
-    case PL_DESC_ACCESS_WRITEONLY: access = VK_ACCESS_SHADER_WRITE_BIT; break;
+    case PL_DESC_ACCESS_READONLY:
+        access = VK_ACCESS_SHADER_READ_BIT;
+        buf_op = BUF_READ;
+        break;
+    case PL_DESC_ACCESS_WRITEONLY:
+        access = VK_ACCESS_SHADER_WRITE_BIT;
+        buf_op = BUF_WRITE;
+        break;
     case PL_DESC_ACCESS_READWRITE:
         access = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        buf_op = BUF_READ | BUF_WRITE;
         break;
     default: abort();
     }
@@ -2669,7 +2705,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         struct pl_buf_vk *buf_vk = TA_PRIV(buf);
 
         buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
-                    access, 0, buf->params.size, false);
+                    access, 0, buf->params.size, buf_op);
 
         VkDescriptorBufferInfo *binfo = &pass_vk->dsbinfo[idx];
         *binfo = (VkDescriptorBufferInfo) {
@@ -2687,7 +2723,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         struct pl_buf_vk *buf_vk = TA_PRIV(buf);
 
         buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
-                    access, 0, buf->params.size, false);
+                    access, 0, buf->params.size, buf_op);
 
         wds->pTexelBufferView = &buf_vk->view;
         break;
@@ -2860,7 +2896,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
 
         buf_barrier(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
                     VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT, 0, vert->params.size,
-                    false);
+                    BUF_READ);
 
         vk->CmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->slice.buf,
                                  &vert_vk->slice.mem.offset);
