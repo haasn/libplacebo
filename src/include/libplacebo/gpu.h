@@ -583,6 +583,13 @@ void pl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
 bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                  size_t buf_offset, void *dest, size_t size);
 
+// Copy `size` bytes from one buffer to another, reading from and writing to
+// the respective offsets.
+void pl_buf_copy(const struct pl_gpu *gpu,
+                 const struct pl_buf *dst, size_t dst_offset,
+                 const struct pl_buf *src, size_t src_offset,
+                 size_t size);
+
 // Initiates a buffer export operation, allowing a buffer to be accessed by an
 // external API. This is only valid for buffers with `params.handle_type`.
 // Calling this twice in a row is a harmless no-op. Returns whether successful.

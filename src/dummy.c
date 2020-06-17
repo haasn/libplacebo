@@ -152,7 +152,7 @@ void pl_gpu_dummy_destroy(const struct pl_gpu **gpu)
 }
 
 struct buf_priv {
-    void *data;
+    uint8_t *data;
 };
 
 static const struct pl_buf *dumb_buf_create(const struct pl_gpu *gpu,
@@ -195,17 +195,25 @@ static void dumb_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                            size_t buf_offset, const void *data, size_t size)
 {
     struct buf_priv *p = TA_PRIV(buf);
-    uint8_t *dst = p->data;
-    memcpy(&dst[buf_offset], data, size);
+    memcpy(p->data + buf_offset, data, size);
 }
 
 static bool dumb_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                           size_t buf_offset, void *dest, size_t size)
 {
     struct buf_priv *p = TA_PRIV(buf);
-    const uint8_t *src = p->data;
-    memcpy(dest, &src[buf_offset], size);
+    memcpy(dest, p->data + buf_offset, size);
     return true;
+}
+
+static void dumb_buf_copy(const struct pl_gpu *gpu,
+                          const struct pl_buf *dst, size_t dst_offset,
+                          const struct pl_buf *src, size_t src_offset,
+                          size_t size)
+{
+    struct buf_priv *dstp = TA_PRIV(dst);
+    struct buf_priv *srcp = TA_PRIV(src);
+    memcpy(dstp->data + dst_offset, srcp->data + src_offset, size);
 }
 
 struct tex_priv {
@@ -360,6 +368,7 @@ static const struct pl_gpu_fns pl_fns_dummy = {
     .buf_destroy = dumb_buf_destroy,
     .buf_write = dumb_buf_write,
     .buf_read = dumb_buf_read,
+    .buf_copy = dumb_buf_copy,
     .tex_create = dumb_tex_create,
     .tex_destroy = dumb_tex_destroy,
     .tex_upload = dumb_tex_upload,

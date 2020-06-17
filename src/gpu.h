@@ -44,6 +44,7 @@ struct pl_gpu_fns {
     GPU_PFN(buf_create);
     GPU_PFN(buf_write);
     GPU_PFN(buf_read);
+    GPU_PFN(buf_copy);
     GPU_PFN(buf_export); // optional if !gpu->export_caps.buf
     GPU_PFN(buf_poll); // optional: if NULL buffers are always free to use
     GPU_PFN(desc_namespace);

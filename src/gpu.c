@@ -807,6 +807,21 @@ error:
     return false;
 }
 
+void pl_buf_copy(const struct pl_gpu *gpu,
+                 const struct pl_buf *dst, size_t dst_offset,
+                 const struct pl_buf *src, size_t src_offset,
+                 size_t size)
+{
+    require(src_offset + size <= src->params.size);
+    require(dst_offset + size <= dst->params.size);
+
+    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    impl->buf_copy(gpu, dst, dst_offset, src, src_offset, size);
+
+error:
+    return;
+}
+
 bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
 {
     require(buf->params.handle_type);

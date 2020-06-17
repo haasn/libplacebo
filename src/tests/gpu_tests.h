@@ -13,7 +13,7 @@ static void pl_buffer_tests(const struct pl_gpu *gpu)
     for (int i = 0; i < buf_size; i++)
         test_src[i] = (RANDOM * 256);
 
-    const struct pl_buf *buf = NULL;
+    const struct pl_buf *buf = NULL, *tbuf = NULL;
     if (buf_size > gpu->limits.max_xfer_size)
         return;
 
@@ -44,6 +44,27 @@ static void pl_buffer_tests(const struct pl_gpu *gpu)
     REQUIRE(pl_buf_read(gpu, buf, 0, test_dst, buf_size));
     REQUIRE(memcmp(test_src, test_dst, buf_size) == 0);
     pl_buf_destroy(gpu, &buf);
+
+    printf("test buffer-buffer copy and readback\n");
+    memset(test_dst, 0, buf_size);
+    buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        .type = PL_BUF_TEX_TRANSFER,
+        .size = buf_size,
+        .initial_data = test_src,
+    });
+
+    tbuf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        .type = PL_BUF_TEX_TRANSFER,
+        .size = buf_size,
+        .host_readable = true,
+    });
+
+    REQUIRE(buf && tbuf);
+    pl_buf_copy(gpu, tbuf, 0, buf, 0, buf_size);
+    REQUIRE(pl_buf_read(gpu, tbuf, 0, test_dst, buf_size));
+    REQUIRE(memcmp(test_src, test_dst, buf_size) == 0);
+    pl_buf_destroy(gpu, &buf);
+    pl_buf_destroy(gpu, &tbuf);
 
     if (gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS) {
         printf("test host mapped buffer readback\n");

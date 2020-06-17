@@ -994,6 +994,20 @@ static bool gl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
     return gl_check_err(gpu, "gl_buf_read");
 }
 
+static void gl_buf_copy(const struct pl_gpu *gpu,
+                        const struct pl_buf *dst, size_t dst_offset,
+                        const struct pl_buf *src, size_t src_offset,
+                        size_t size)
+{
+    struct pl_buf_gl *src_gl = TA_PRIV(src);
+    struct pl_buf_gl *dst_gl = TA_PRIV(dst);
+    glBindBuffer(GL_COPY_READ_BUFFER, src_gl->buffer);
+    glBindBuffer(GL_COPY_WRITE_BUFFER, dst_gl->buffer);
+    glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER,
+                        src_offset, dst_offset, size);
+    gl_check_err(gpu, "gl_buf_copy");
+}
+
 static int get_alignment(int stride)
 {
     if (stride % 8 == 0)
@@ -1814,6 +1828,7 @@ static const struct pl_gpu_fns pl_fns_gl = {
     .buf_destroy            = gl_buf_destroy,
     .buf_write              = gl_buf_write,
     .buf_read               = gl_buf_read,
+    .buf_copy               = gl_buf_copy,
     .buf_poll               = gl_buf_poll,
     .desc_namespace         = gl_desc_namespace,
     .pass_create            = gl_pass_create,

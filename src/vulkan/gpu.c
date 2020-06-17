@@ -1637,6 +1637,45 @@ static bool vk_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
     return true;
 }
 
+static void vk_buf_copy(const struct pl_gpu *gpu,
+                        const struct pl_buf *dst, size_t dst_offset,
+                        const struct pl_buf *src, size_t src_offset,
+                        size_t size)
+{
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+    struct pl_buf_vk *dst_vk = TA_PRIV(dst);
+    struct pl_buf_vk *src_vk = TA_PRIV(src);
+
+    struct vk_cmd *cmd = vk_require_cmd(gpu, dst_vk->update_queue);
+    if (!cmd) {
+        PL_ERR(gpu, "Failed copying buffer!");
+        return;
+    }
+
+    CMD_MARK_BEGIN(cmd);
+
+    buf_barrier(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_ACCESS_TRANSFER_WRITE_BIT, dst_offset, size, BUF_WRITE);
+    buf_barrier(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_ACCESS_TRANSFER_READ_BIT, src_offset, size, BUF_READ);
+
+    VkBufferCopy region = {
+        .srcOffset = src_vk->slice.mem.offset + src_offset,
+        .dstOffset = dst_vk->slice.mem.offset + dst_offset,
+        .size = size,
+    };
+
+    vkCmdCopyBuffer(cmd->buf, src_vk->slice.buf, dst_vk->slice.buf,
+                    1, &region);
+
+    buf_signal(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    buf_signal(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    buf_flush(gpu, cmd, dst, dst_offset, size);
+
+    CMD_MARK_END(cmd);
+}
+
 static bool vk_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
 {
     struct pl_vk *p = TA_PRIV(gpu);
@@ -1678,7 +1717,10 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     buf_vk->current_access = 0;
     buf_vk->refcount = 1;
 
-    VkBufferUsageFlags bufFlags = 0;
+    // These are always set, because vk_buf_copy can always be used
+    VkBufferUsageFlags bufFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                                  VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
     VkMemoryPropertyFlags memFlags = 0;
     VkDeviceSize align = 4; // alignment 4 is needed for buf_update
     VkDeviceSize size = PL_ALIGN2(params->size, 4); // for vk_buf_write
@@ -1688,8 +1730,6 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     bool is_texel = false;
     switch (params->type) {
     case PL_BUF_TEX_TRANSFER:
-        bufFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
-                    VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         align = pl_lcm(align, p->min_texel_alignment);
         // Use TRANSFER-style updates for large enough buffers for efficiency
         if (params->size > 1024*1024) // 1 MB
@@ -1708,7 +1748,6 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         break;
     case PL_BUF_TEXEL_UNIFORM: // for emulated upload
         bufFlags |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
-        bufFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         mem_type = PL_BUF_MEM_DEVICE;
         align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
         align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
@@ -1716,7 +1755,6 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         break;
     case PL_BUF_TEXEL_STORAGE: // for emulated download
         bufFlags |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
-        bufFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         mem_type = PL_BUF_MEM_DEVICE;
         align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
         align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
@@ -1732,7 +1770,6 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
 
     bool host_mapped = params->host_mapped;
     if (params->host_writable || params->initial_data) {
-        bufFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
 
         // Large buffers should be written using mapped memory for performance,
@@ -3326,6 +3363,7 @@ static const struct pl_gpu_fns pl_fns_vk = {
     .buf_destroy            = vk_buf_deref,
     .buf_write              = vk_buf_write,
     .buf_read               = vk_buf_read,
+    .buf_copy               = vk_buf_copy,
     .buf_export             = vk_buf_export,
     .buf_poll               = vk_buf_poll,
     .desc_namespace         = vk_desc_namespace,
