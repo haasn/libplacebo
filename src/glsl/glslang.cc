@@ -211,7 +211,7 @@ const TBuiltInResource DefaultTBuiltInResource = {
     /* .maxTaskWorkGroupSizeZ_NV = */ 1,
     /* .maxMeshViewCountNV = */ 4,
 #endif
-#if GLSLANG_PATCH_LEVEL >= 3743
+#if GLSLANG_PATCH_LEVEL >= 3763
     /* .maxDualSourceDrawBuffersEXT = */ 1,
 #endif
 
