@@ -460,6 +460,43 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         TEST_FBO_PATTERN(1e-6, "deband iter %d", i);
     }
 
+    // Test peak detection and readback if possible
+    sh = pl_dispatch_begin(dp);
+    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+
+    struct pl_shader_obj *peak_state = NULL;
+    if (pl_shader_detect_peak(sh, pl_color_space_monitor, &peak_state, NULL)) {
+        REQUIRE(pl_dispatch_compute(dp, &(struct pl_dispatch_compute_params) {
+            .shader = &sh,
+            .width = fbo->params.w,
+            .height = fbo->params.h,
+        }));
+
+        float peak, avg;
+        REQUIRE(pl_get_detected_peak(peak_state, &peak, &avg));
+        printf("detected peak: %f, average: %f\n", peak, avg);
+
+        float real_peak = 0, real_avg = 0;
+        for (int y = 0; y < FBO_H; y++) {
+            for (int x = 0; x < FBO_W; x++) {
+                float *color = &data[(y * FBO_W + x) * 4];
+                float smax = powf(PL_MAX(color[0], color[1]), 2.2);
+                float slog = logf(PL_MAX(smax, 0.001));
+                real_peak = PL_MAX(smax, real_peak);
+                real_avg += slog;
+            }
+        }
+
+        real_peak *= 1.0 + pl_peak_detect_default_params.overshoot_margin;
+        real_avg = expf(real_avg / (FBO_W * FBO_H));
+        printf("real peak: %f, real average: %f\n", real_peak, real_avg);
+        REQUIRE(feq(peak, real_peak, 1e-4));
+        REQUIRE(feq(avg, real_avg, 1e-3));
+    }
+
+    pl_dispatch_abort(dp, &sh);
+    pl_shader_obj_destroy(&peak_state);
+
 #ifdef PL_HAVE_LCMS
     // Test the use of 3DLUTs if available
     sh = pl_dispatch_begin(dp);

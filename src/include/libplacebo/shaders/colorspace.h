@@ -143,7 +143,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
 // function is *not* needed when the user only wants to use `pl_shader_color_map`,
 // since that can ingest the peak detection state object directly. It only
 // serves as a utility/debugging function.
-bool pl_get_detected_peak(const struct pl_shader_obj **state,
+bool pl_get_detected_peak(const struct pl_shader_obj *state,
                           float *out_peak, float *out_avg);
 
 // A collection of various tone mapping algorithms supported by libplacebo.

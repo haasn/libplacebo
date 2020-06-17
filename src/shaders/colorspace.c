@@ -585,8 +585,8 @@ const struct pl_peak_detect_params pl_peak_detect_default_params = {
 };
 
 struct sh_peak_obj {
-    const struct pl_gpu *gpu;
     const struct pl_buf *buf;
+    const struct pl_buf *buf_read;
     struct pl_shader_desc desc;
     float margin;
 };
@@ -594,7 +594,8 @@ struct sh_peak_obj {
 static void sh_peak_uninit(const struct pl_gpu *gpu, void *ptr)
 {
     struct sh_peak_obj *obj = ptr;
-    pl_buf_destroy(obj->gpu, &obj->buf);
+    pl_buf_destroy(gpu, &obj->buf);
+    pl_buf_destroy(gpu, &obj->buf_read);
     *obj = (struct sh_peak_obj) {0};
 }
 
@@ -631,7 +632,6 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
         return false;
 
     const struct pl_gpu *gpu = SH_GPU(sh);
-    obj->gpu = gpu;
     obj->margin = params->overshoot_margin;
 
     if (!obj->buf) {
@@ -642,6 +642,8 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
             },
         };
 
+        // Note: Don't change this order, `vec2 average` being the first
+        // element is hard-coded in `pl_get_detected_peak`
         bool ok = true;
         ok &= sh_buf_desc_append(obj, gpu, &obj->desc, NULL, pl_var_vec2("average"));
         ok &= sh_buf_desc_append(obj, gpu, &obj->desc, NULL, pl_var_int("frame_sum"));
@@ -655,14 +657,14 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
 
         // Create the SSBO
         size_t size = sh_buf_desc_size(&obj->desc);
-        void *data = talloc_zero_size(NULL, size);
+        static const uint8_t zero[32] = {0};
+        pl_assert(sizeof(zero) >= size);
         obj->buf = pl_buf_create(gpu, &(struct pl_buf_params) {
             .type = PL_BUF_STORAGE,
             .size = size,
-            .initial_data = data,
+            .initial_data = zero,
         });
         obj->desc.object = obj->buf;
-        talloc_free(data);
     }
 
     if (!obj->buf) {
@@ -751,6 +753,47 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
           "        memoryBarrierBuffer();    \n"
           "    }                             \n"
           "}                                 \n");
+
+    return true;
+}
+
+bool pl_get_detected_peak(const struct pl_shader_obj *state,
+                          float *out_peak, float *out_avg)
+{
+    if (!state || state->type != PL_SHADER_OBJ_PEAK_DETECT)
+        return false;
+
+    struct sh_peak_obj *obj = state->priv;
+    const struct pl_gpu *gpu = state->gpu;
+
+    float average[2];
+    pl_assert(obj->buf->params.size >= sizeof(average));
+
+    bool ok = pl_buf_recreate(gpu, &obj->buf_read, &(struct pl_buf_params) {
+        .type = PL_BUF_TEX_TRANSFER,
+        .size = sizeof(average),
+        .host_readable = true,
+        .memory_type = PL_BUF_MEM_HOST,
+    });
+
+    if (!ok) {
+        PL_ERR(gpu, "Failed creating peak detect readback buffer");
+        return false;
+    }
+
+    pl_buf_copy(gpu, obj->buf_read, 0, obj->buf, 0, sizeof(average));
+    if (!pl_buf_read(gpu, obj->buf_read, 0, average, sizeof(average))) {
+        PL_ERR(gpu, "Failed reading from peak detect state buffer");
+        return false;
+    }
+
+    *out_avg = average[0];
+    *out_peak = average[1];
+
+    if (obj->margin > 0.0) {
+        *out_peak *= 1.0 + obj->margin;
+        *out_peak = PL_MIN(*out_peak, 10000 / PL_COLOR_SDR_WHITE);
+    }
 
     return true;
 }
