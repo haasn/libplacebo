@@ -1101,8 +1101,7 @@ void pl_shader_color_map(struct pl_shader *sh,
                      "}                                                     \n"
                      "float cmax = max(max(color.r, color.g), color.b);     \n"
                      "if (cmax > 1.0)                                       \n"
-                     "    color.rgb /= cmax;                                \n"
-                     ,
+                     "    color.rgb /= cmax;                                \n",
                      sh_luma_coeffs(sh, dst.primaries));
 
             } else {
