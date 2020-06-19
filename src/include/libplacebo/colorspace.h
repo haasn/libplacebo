@@ -385,6 +385,11 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *s
                                                 const struct pl_raw_primaries *dst,
                                                 enum pl_rendering_intent intent);
 
+// Returns true if 'b' is entirely contained in 'a'. Useful for figuring out if
+// colorimetric clipping will occur or not.
+bool pl_primaries_superset(const struct pl_raw_primaries *a,
+                           const struct pl_raw_primaries *b);
+
 // Cone types involved in human vision
 enum pl_cone {
     PL_CONE_L = 1 << 0,

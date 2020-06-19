@@ -250,6 +250,13 @@ struct pl_color_map_params {
     // all out-of-gamut colors (by inverting them), if they would have been
     // clipped as a result of gamut or tone mapping.
     bool gamut_warning;
+
+    // If true, enables colorimetric clipping. This will colorimetrically clip
+    // out-of-gamut colors by desaturating them until they hit the boundary of
+    // the permissible color volume, rather than by hard-clipping. This mode of
+    // clipping preserves luminance between the source and the destination, at
+    // the cost of introducing some color distortion in the opposite direction.
+    bool gamut_clipping;
 };
 
 extern const struct pl_color_map_params pl_color_map_default_params;

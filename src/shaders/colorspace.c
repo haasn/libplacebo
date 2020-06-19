@@ -813,6 +813,7 @@ const struct pl_color_map_params pl_color_map_default_params = {
     .desaturation_strength  = 0.75,
     .desaturation_exponent  = 1.50,
     .desaturation_base      = 0.18,
+    .gamut_clipping         = true,
 };
 
 static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
@@ -1061,7 +1062,7 @@ void pl_shader_color_map(struct pl_shader *sh,
                        src.sig_avg != dst.sig_avg ||
                        src.sig_scale != dst.sig_scale ||
                        src.light != dst.light;
-
+    bool need_gamut_warn = false;
     bool is_linear = prelinearized;
     if (need_linear && !is_linear) {
         pl_shader_linearize(sh, src.transfer);
@@ -1072,8 +1073,10 @@ void pl_shader_color_map(struct pl_shader *sh,
         pl_shader_ootf(sh, src);
 
     // Tone map to rescale the signal average/peak if needed
-    if (src.sig_peak * src.sig_scale > dst.sig_peak * dst.sig_scale + 1e-6)
+    if (src.sig_peak * src.sig_scale > dst.sig_peak * dst.sig_scale + 1e-6) {
         pl_shader_tone_map(sh, src, dst, peak_detect_state, params);
+        need_gamut_warn = true;
+    }
 
     // Adapt to the right colorspace (primaries) if necessary
     if (src.primaries != dst.primaries) {
@@ -1082,14 +1085,34 @@ void pl_shader_color_map(struct pl_shader *sh,
         csp_dst = pl_raw_primaries_get(dst.primaries);
         struct pl_matrix3x3 cms_mat;
         cms_mat = pl_get_color_mapping_matrix(csp_src, csp_dst, params->intent);
+
         GLSL("color.rgb = %s * color.rgb;\n", sh_var(sh, (struct pl_shader_var) {
             .var = pl_var_mat3("cms_matrix"),
             .data = PL_TRANSPOSE_3X3(cms_mat.m),
         }));
+
+        if (!pl_primaries_superset(csp_dst, csp_src)) {
+            if (params->gamut_clipping) {
+                GLSL("float cmin = min(min(color.r, color.g), color.b);     \n"
+                     "if (cmin < 0.0) {                                     \n"
+                     "    float luma = dot(%s, color.rgb);                  \n"
+                     "    float coeff = cmin / (cmin - luma);               \n"
+                     "    color.rgb = mix(color.rgb, vec3(luma), coeff);    \n"
+                     "}                                                     \n"
+                     "float cmax = max(max(color.r, color.g), color.b);     \n"
+                     "if (cmax > 1.0)                                       \n"
+                     "    color.rgb /= cmax;                                \n"
+                     ,
+                     sh_luma_coeffs(sh, dst.primaries));
+
+            } else {
+                need_gamut_warn = true;
+            }
+        }
     }
 
     // Warn for remaining out-of-gamut colors if enabled
-    if (params->gamut_warning) {
+    if (params->gamut_warning && need_gamut_warn) {
         GLSL("if (any(greaterThan(color.rgb, vec3(%f + 0.005))) ||\n"
              "    any(lessThan(color.rgb, vec3(-0.005))))\n"
              "    color.rgb = vec3(%f) - color.rgb; // invert\n",

@@ -782,6 +782,36 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *s
     return xyz2rgb_d;
 }
 
+// Test the sign of 'p' relative to the line 'ab' (barycentric coordinates)
+static float test_point_line(const struct pl_cie_xy p,
+                             const struct pl_cie_xy a,
+                             const struct pl_cie_xy b)
+{
+    return (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y);
+}
+
+// Test if a point is entirely inside a gamut
+static float test_point_gamut(struct pl_cie_xy point,
+                              const struct pl_raw_primaries *prim)
+{
+    float d1 = test_point_line(point, prim->red, prim->green),
+          d2 = test_point_line(point, prim->green, prim->blue),
+          d3 = test_point_line(point, prim->blue, prim->red);
+
+    bool has_neg = d1 < 0 || d2 < 0 || d3 < 0,
+         has_pos = d1 > 0 || d2 > 0 || d3 > 0;
+
+    return !(has_neg && has_pos);
+}
+
+bool pl_primaries_superset(const struct pl_raw_primaries *a,
+                           const struct pl_raw_primaries *b)
+{
+    return test_point_gamut(b->red, a) &&
+           test_point_gamut(b->green, a) &&
+           test_point_gamut(b->blue, a);
+}
+
 /* Fill in the Y, U, V vectors of a yuv-to-rgb conversion matrix
  * based on the given luma weights of the R, G and B components (lr, lg, lb).
  * lr+lg+lb is assumed to equal 1.
