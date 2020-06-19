@@ -820,7 +820,8 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
                                struct pl_shader_obj **peak_detect_state,
                                const struct pl_color_map_params *params)
 {
-    GLSL("// pl_shader_tone_map \n");
+    GLSL("// pl_shader_tone_map \n"
+         "{                     \n");
 
     // To prevent discoloration due to out-of-bounds clipping, we need to make
     // sure to reduce the value range as far as necessary to keep the entire
@@ -999,6 +1000,8 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
     // Undo the normalization by `dst_peak`
     if (dst_range > 1.0 && need_norm)
         GLSL("color.rgb *= %f; \n", dst_range);
+
+    GLSL("} \n");
 }
 
 void pl_shader_color_map(struct pl_shader *sh,
