@@ -181,7 +181,9 @@ bool pl_lcms_compute_lut(struct pl_context *ctx, enum pl_rendering_intent intent
         goto error;
 
 
-    uint32_t flags = cmsFLAGS_HIGHRESPRECALC | cmsFLAGS_BLACKPOINTCOMPENSATION;
+    uint32_t flags = cmsFLAGS_HIGHRESPRECALC | cmsFLAGS_BLACKPOINTCOMPENSATION |
+                     cmsFLAGS_NOCACHE;
+
     trafo = cmsCreateTransformTHR(cms, srcp, TYPE_RGB_16, dstp, TYPE_RGBA_FLT,
                                   intent, flags);
     if (!trafo)
