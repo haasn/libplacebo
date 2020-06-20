@@ -1000,7 +1000,7 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, const struct pl_dispatch_params 
     struct pl_pass_run_params *rparams = &pass->run_params;
 
     // Update the descriptor bindings
-    for (int i = 0; i < sh->res.num_descriptors; i++)
+    for (int i = 0; i < res->num_descriptors; i++)
         rparams->desc_bindings[i].object = sh->descriptors[i].object;
 
     // Update all of the variables (if needed)
@@ -1028,8 +1028,8 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, const struct pl_dispatch_params 
         // Round up to make sure we don-t leave off a part of the target
         int width = abs(pl_rect_w(rc)),
             height = abs(pl_rect_h(rc)),
-            block_w = sh->res.compute_group_size[0],
-            block_h = sh->res.compute_group_size[1],
+            block_w = res->compute_group_size[0],
+            block_h = res->compute_group_size[1],
             num_x   = (width  + block_w - 1) / block_w,
             num_y   = (height + block_h - 1) / block_h;
 
