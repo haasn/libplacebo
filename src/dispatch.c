@@ -794,13 +794,25 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
     }
     case PASS_VAR_UBO: {
         pl_assert(pass->ubo);
-        uintptr_t src = (uintptr_t) sv->data;
-        uintptr_t end = src + (ptrdiff_t) host_layout.size;
-        size_t dst = pv->layout.offset;
-        while (src < end) {
-            pl_buf_write(dp->gpu, pass->ubo, dst, (void *) src, host_layout.stride);
-            src += host_layout.stride;
-            dst += pv->layout.stride;
+        const size_t offset = pv->layout.offset;
+        if (host_layout.stride == pv->layout.stride) {
+            pl_assert(host_layout.size == pv->layout.size);
+            pl_buf_write(dp->gpu, pass->ubo, offset, sv->data, host_layout.size);
+        } else {
+            // Coalesce strided UBO write into a single pl_buf_write to avoid
+            // unnecessary synchronization overhead by assembling the correctly
+            // strided upload in RAM
+            TARRAY_GROW(dp, dp->tmp[0].start, pv->layout.size);
+            uint8_t * const tmp = dp->tmp[0].start;
+            const uint8_t *src = sv->data;
+            const uint8_t *end = src + host_layout.size;
+            uint8_t *dst = tmp;
+            while (src < end) {
+                memcpy(dst, src, host_layout.stride);
+                src += host_layout.stride;
+                dst += pv->layout.stride;
+            }
+            pl_buf_write(dp->gpu, pass->ubo, offset, tmp, pv->layout.size);
         }
         break;
     }
