@@ -263,12 +263,6 @@ enum offset {
     OFFSET_N  = 0,
 };
 
-static const char *channel_names[] = {
-    [PL_CHANNEL_Y]  = "y",
-    [PL_CHANNEL_CB] = "cb",
-    [PL_CHANNEL_CR] = "cr",
-};
-
 // Helper function to compute some common constants
 struct grain_scale {
     int grain_center;
@@ -431,24 +425,27 @@ static void generate_grain_uv(float *out, int16_t buf[GRAIN_HEIGHT][GRAIN_WIDTH]
     }
 }
 
-static void generate_offsets(uint32_t *buf, int offsets_x, int offsets_y,
-                             const struct pl_av1_grain_data *data)
+static void generate_offsets(void *pbuf, const struct sh_lut_params *params)
 {
-    for (int y = 0; y < offsets_y; y++) {
+    const struct pl_av1_grain_data *data = params->priv;
+    unsigned int *buf = pbuf;
+    assert(sizeof(unsigned int) >= sizeof(uint32_t));
+
+    for (int y = 0; y < params->height; y++) {
         uint16_t state = data->grain_seed;
         state ^= ((y * 37 + 178) & 0xFF) << 8;
         state ^= ((y * 173 + 105) & 0xFF);
 
-        for (int x = 0; x < offsets_x; x++) {
-            uint32_t *offsets = &buf[y * offsets_x + x];
+        for (int x = 0; x < params->width; x++) {
+            unsigned int *offsets = &buf[y * params->width + x];
 
             uint8_t val = get_random_number(8, &state);
             uint8_t val_l = x ? (offsets - 1)[0] : 0;
-            uint8_t val_t = y ? (offsets - offsets_x)[0] : 0;
-            uint8_t val_tl = x && y ? (offsets - offsets_x - 1)[0] : 0;
+            uint8_t val_t = y ? (offsets - params->width)[0] : 0;
+            uint8_t val_tl = x && y ? (offsets - params->width - 1)[0] : 0;
 
-            // Encode four offsets into a single 32-bit integer for
-            // the convenience of the GPU. That way only one SSBO read is
+            // Encode four offsets into a single 32-bit integer for the
+            // convenience of the GPU. That way only one LUT fetch is
             // required for the entire block.
             *offsets = ((uint32_t) val_tl << OFFSET_TL)
                      | ((uint32_t) val_t  << OFFSET_T)
@@ -493,38 +490,32 @@ static void generate_scaling(void *pdata, const struct sh_lut_params *params)
         data[i] = ctx->points[ctx->num - 1][1] / range;
 }
 
-static void sample(struct pl_shader *sh, enum offset off, enum pl_channel c,
+static void sample(struct pl_shader *sh, enum offset off, ident_t lut, int idx,
                    int sub_x, int sub_y)
 {
-    static const struct { int dx, dy; } delta[] = {
-        [OFFSET_TL] = {1, 1},
-        [OFFSET_T]  = {0, 1},
-        [OFFSET_L]  = {1, 0},
-        [OFFSET_N]  = {0, 0},
+    int dx = (off & OFFSET_L) ? 1 : 0,
+        dy = (off & OFFSET_T) ? 1 : 0;
+
+    static const char *index_strs[] = {
+        [0] = ".x",
+        [1] = ".y",
     };
 
     GLSL("offset = uvec2(%du, %du) * uvec2((data >> %d) & 0xFu, \n"
          "                                 (data >> %d) & 0xFu);\n"
          "pos = offset + local_id.xy + uvec2(%d, %d);           \n"
-         "val = grain_%s[ pos.y * %du + pos.x ];                \n",
+         "val = %s(pos)%s;                                      \n",
          sub_x ? 1 : 2, sub_y ? 1 : 2, off + 4, off,
-         (BLOCK_SIZE >> sub_x) * delta[off].dx,
-         (BLOCK_SIZE >> sub_y) * delta[off].dy,
-         channel_names[c], GRAIN_WIDTH_LUT >> sub_x);
+         (BLOCK_SIZE >> sub_x) * dx,
+         (BLOCK_SIZE >> sub_y) * dy,
+         lut, idx >= 0 ? index_strs[idx] : "");
 }
 
 struct sh_grain_obj {
-    // SSBO state and layout
-    struct pl_buf_pool ssbos;
-    struct pl_shader_desc desc;
-    struct pl_var_layout layout_y;
-    struct pl_var_layout layout_cb;
-    struct pl_var_layout layout_cr;
-    struct pl_var_layout layout_off;
-    void *tmp; // to hold `desc`'s contents
-
-    // LUT objects for the scaling luts
-    struct pl_shader_obj *scaling[3];
+    // LUT objects for the offsets, grain and scaling luts
+    struct pl_shader_obj *lut_offsets;
+    struct pl_shader_obj *lut_grain[2];
+    struct pl_shader_obj *lut_scaling[3];
 
     // Previous parameters used to check reusability
     bool fg_has_y, fg_has_u, fg_has_v;
@@ -536,7 +527,7 @@ struct sh_grain_obj {
 
     // Space to store the temporary arrays, reused
     uint32_t *offsets;
-    float grain[GRAIN_HEIGHT_LUT][GRAIN_WIDTH_LUT];
+    float grain[2][GRAIN_HEIGHT_LUT][GRAIN_WIDTH_LUT];
     int16_t grain_tmp_y[GRAIN_HEIGHT][GRAIN_WIDTH];
     int16_t grain_tmp_uv[GRAIN_HEIGHT][GRAIN_WIDTH];
 };
@@ -544,9 +535,11 @@ struct sh_grain_obj {
 static void sh_grain_uninit(const struct pl_gpu *gpu, void *ptr)
 {
     struct sh_grain_obj *obj = ptr;
-    pl_buf_pool_uninit(gpu, &obj->ssbos);
-    for (int i = 0; i < 3; i++)
-        pl_shader_obj_destroy(&obj->scaling[i]);
+    pl_shader_obj_destroy(&obj->lut_offsets);
+    for (int i = 0; i < PL_ARRAY_SIZE(obj->lut_grain); i++)
+        pl_shader_obj_destroy(&obj->lut_grain[i]);
+    for (int i = 0; i < PL_ARRAY_SIZE(obj->lut_scaling); i++)
+        pl_shader_obj_destroy(&obj->lut_scaling[i]);
     *obj = (struct sh_grain_obj) {0};
 }
 
@@ -602,6 +595,13 @@ bool pl_needs_av1_grain(const struct pl_av1_grain_params *params)
     }
 
     return false;
+}
+
+static void fill_grain_lut(void *data, const struct sh_lut_params *params)
+{
+    struct sh_grain_obj *obj = params->priv;
+    size_t entries = params->width * params->height * params->comps;
+    memcpy(data, obj->grain, entries * sizeof(float));
 }
 
 bool pl_shader_av1_grain(struct pl_shader *sh,
@@ -675,131 +675,17 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
 
     int offsets_x = PL_ALIGN2(tex_w << sub_x, 128) / 32;
     int offsets_y = PL_ALIGN2(tex_h << sub_y, 128) / 32;
-    int lut_size = (GRAIN_WIDTH_LUT >> sub_x) * (GRAIN_HEIGHT_LUT >> sub_y);
 
     // Note: In theory we could check only the parameters related to luma or
     // only related to chroma and skip updating for changes to irrelevant
     // parts, but this is probably not worth it since the grain_seed is
     // expected to change per frame anyway.
     bool needs_update = memcmp(data, &obj->data, sizeof(*data)) != 0 ||
-                        !pl_color_repr_equal(params->repr, &obj->repr) ||
-                        offsets_x != obj->offsets_x ||
-                        offsets_y != obj->offsets_y ||
-                        sub_x != obj->sub_x ||
-                        sub_y != obj->sub_y;
-
-    if (offsets_x * offsets_y != obj->offsets_x * obj->offsets_y ||
-        lut_size != obj->lut_size ||
-        fg_has_y != obj->fg_has_y ||
-        fg_has_u != obj->fg_has_u ||
-        fg_has_v != obj->fg_has_v)
-    {
-        // (Re-)generate the SSBO layout
-        PL_DEBUG(sh, "Recreating av1 grain buffer due to layout mismatch");
-        if (obj->tmp) {
-            talloc_free_children(obj->tmp);
-        } else {
-            obj->tmp = talloc_new(obj);
-        }
-
-        obj->desc = (struct pl_shader_desc) {
-            .desc = {
-                .name   = "AV1GrainBuf",
-                .type   = PL_DESC_BUF_STORAGE,
-                .access = PL_DESC_ACCESS_READONLY,
-            },
-        };
-
-        bool ok = true;
-
-        if (fg_has_y) {
-            struct pl_var grain_y = pl_var_float("grain_y");
-            grain_y.dim_a = lut_size;
-            ok &= sh_buf_desc_append(obj->tmp, gpu, &obj->desc,
-                                     &obj->layout_y, grain_y);
-        }
-
-        if (fg_has_u) {
-            struct pl_var grain_cb = pl_var_float("grain_cb");
-            grain_cb.dim_a = lut_size;
-            ok &= sh_buf_desc_append(obj->tmp, gpu, &obj->desc,
-                                     &obj->layout_cb, grain_cb);
-        }
-
-        if (fg_has_v) {
-            struct pl_var grain_cr = pl_var_float("grain_cr");
-            grain_cr.dim_a = lut_size;
-            ok &= sh_buf_desc_append(obj->tmp, gpu, &obj->desc,
-                                     &obj->layout_cr, grain_cr);
-        }
-
-        struct pl_var offsets = pl_var_uint("offsets");
-        offsets.dim_a = offsets_x * offsets_y;
-        ok &= sh_buf_desc_append(obj->tmp, gpu, &obj->desc,
-                                 &obj->layout_off, offsets);
-
-        if (!ok) {
-            PL_ERR(sh, "Failed generating SSBO buffer placement: Either GPU "
-                   "limits exceeded or width/height nonsensical?");
-            return false;
-        }
-
-        TARRAY_GROW(obj, obj->offsets, offsets_x * offsets_y);
-        needs_update = true;
-    }
-
-    const struct pl_buf *ssbo;
-    if (obj->desc.object && !needs_update) {
-        ssbo = obj->desc.object;
-    } else {
-        needs_update = true;
-
-        // Get the next free SSBO buffer, regenerate if necessary
-        struct pl_buf_params ssbo_params = {
-            .type = PL_BUF_STORAGE,
-            .size = sh_buf_desc_size(&obj->desc),
-            .host_writable = true,
-        };
-
-        ssbo = pl_buf_pool_get(gpu, &obj->ssbos, &ssbo_params);
-        if (!ssbo) {
-            SH_FAIL(sh, "Failed creating/getting SSBO buffer for AV1 grain!");
-            return false;
-        }
-
-        obj->desc.object = ssbo;
-    }
+                        !pl_color_repr_equal(params->repr, &obj->repr);
 
     if (needs_update) {
-        // This is needed even for chroma
-        generate_grain_y(obj->grain, obj->grain_tmp_y, params);
-
-        if (fg_has_y) {
-            pl_assert(obj->layout_y.stride == sizeof(float));
-            pl_buf_write(gpu, ssbo, obj->layout_y.offset, obj->grain,
-                         sizeof(obj->grain));
-        }
-
-        if (fg_has_u) {
-            generate_grain_uv(&obj->grain[0][0], obj->grain_tmp_uv,
-                              obj->grain_tmp_y, PL_CHANNEL_CB, sub_x, sub_y, params);
-            pl_assert(obj->layout_cb.stride == sizeof(float));
-            pl_buf_write(gpu, ssbo, obj->layout_cb.offset, obj->grain,
-                         sizeof(float) * lut_size);
-        }
-
-        if (fg_has_v) {
-            generate_grain_uv(&obj->grain[0][0], obj->grain_tmp_uv,
-                              obj->grain_tmp_y, PL_CHANNEL_CR, sub_x, sub_y, params);
-            pl_assert(obj->layout_cr.stride == sizeof(float));
-            pl_buf_write(gpu, ssbo, obj->layout_cr.offset, obj->grain,
-                         sizeof(float) * lut_size);
-        }
-
-        generate_offsets(obj->offsets, offsets_x, offsets_y, data);
-        pl_assert(obj->layout_off.stride == sizeof(uint32_t));
-        pl_buf_write(gpu, ssbo, obj->layout_off.offset, obj->offsets,
-                     (offsets_x * offsets_y) * obj->layout_off.stride);
+        // This is needed even for chroma, so statically generate it
+        generate_grain_y(obj->grain[0], obj->grain_tmp_y, params);
 
         obj->data = *data;
         obj->sub_x = sub_x;
@@ -809,9 +695,82 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
         obj->fg_has_y = fg_has_y;
         obj->fg_has_u = fg_has_u;
         obj->fg_has_v = fg_has_v;
-        obj->lut_size = lut_size;
         obj->repr = *params->repr;
+    };
+
+    ident_t lut[3];
+    int idx[3] = {-1};
+
+    if (fg_has_y) {
+        lut[0] = sh_lut(sh, &(struct sh_lut_params) {
+            .object = &obj->lut_grain[0],
+            .method = SH_LUT_TEXTURE,
+            .type = PL_VAR_FLOAT,
+            .width = GRAIN_WIDTH_LUT,
+            .height = GRAIN_HEIGHT_LUT,
+            .comps = 1,
+            .update = needs_update,
+            .dynamic = true,
+            .fill = fill_grain_lut,
+            .priv = obj,
+        });
+
+        if (!lut[0]) {
+            SH_FAIL(sh, "Failed generating/uploading luma grain LUT!");
+            return false;
+        }
     }
+
+    // Try merging the chroma LUTs into a single texture
+    int chroma_comps = 0;
+    if (fg_has_u) {
+        generate_grain_uv(&obj->grain[chroma_comps][0][0], obj->grain_tmp_uv,
+                          obj->grain_tmp_y, PL_CHANNEL_CB, sub_x, sub_y,
+                          params);
+        idx[1] = chroma_comps++;
+    }
+    if (fg_has_v) {
+        generate_grain_uv(&obj->grain[chroma_comps][0][0], obj->grain_tmp_uv,
+                          obj->grain_tmp_y, PL_CHANNEL_CR, sub_x, sub_y,
+                          params);
+        idx[2] = chroma_comps++;
+    }
+
+    if (chroma_comps > 0) {
+        lut[1] = lut[2] = sh_lut(sh, &(struct sh_lut_params) {
+            .object = &obj->lut_grain[1],
+            .method = SH_LUT_TEXTURE,
+            .type = PL_VAR_FLOAT,
+            .width = GRAIN_WIDTH_LUT >> sub_x,
+            .height = GRAIN_HEIGHT_LUT >> sub_y,
+            .comps = chroma_comps,
+            .update = needs_update,
+            .dynamic = true,
+            .fill = fill_grain_lut,
+            .priv = obj,
+        });
+
+        if (!lut[1]) {
+            SH_FAIL(sh, "Failed generating/uploading chroma grain LUT!");
+            return false;
+        }
+
+        if (chroma_comps == 1)
+            idx[1] = idx[2] = -1;
+    }
+
+    ident_t offsets = sh_lut(sh, &(struct sh_lut_params) {
+        .object = &obj->lut_offsets,
+        .method = SH_LUT_AUTO,
+        .type = PL_VAR_UINT,
+        .width = offsets_x,
+        .height = offsets_y,
+        .comps = 1,
+        .update = needs_update,
+        .dynamic = true,
+        .fill = generate_offsets,
+        .priv = (void *) data,
+    });
 
     // For the scaling LUTs, we assume they'll be relatively constant
     // throughout the video so doing some extra work to avoid reinitializing
@@ -863,7 +822,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
 
         if (priv.num > 0) {
             scaling[i] = sh_lut(sh, &(struct sh_lut_params) {
-                .object = &obj->scaling[i],
+                .object = &obj->lut_scaling[i],
                 .method = SH_LUT_LINEAR,
                 .type = PL_VAR_FLOAT,
                 .width = SCALING_LUT_SIZE,
@@ -873,6 +832,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
                 .fill = generate_scaling,
                 .priv = &priv,
             });
+
             if (!scaling[i]) {
                 SH_FAIL(sh, "Failed generating/uploading scaling LUTs!");
                 return false;
@@ -880,11 +840,8 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
         }
     }
 
-    // Attach the SSBO and initialize the output variable
-    sh_desc(sh, obj->desc);
-    GLSL("vec4 color; \n");
-
-    GLSL("// pl_shader_av1_grain \n"
+    GLSL("vec4 color;            \n"
+         "// pl_shader_av1_grain \n"
          "{                      \n"
          "uvec2 offset;          \n"
          "uvec2 pos;             \n"
@@ -934,7 +891,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
          scale.texture_scale, tex);
 
     // Load the data vector which holds the offsets
-    GLSL("uint data = offsets[block_id.y * %du + block_id.x]; \n", offsets_x);
+    GLSL("uint data = uint(%s(block_id)); \n", offsets);
 
     // If we need access to the external luma plane, load it now
     if (tex_is_cb || tex_is_cr) {
@@ -971,7 +928,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
         if (!scaling[c])
             continue;
 
-        sample(sh, OFFSET_N, c, sub_x, sub_y);
+        sample(sh, OFFSET_N, lut[c], idx[c], sub_x, sub_y);
         GLSL("grain = val; \n");
 
         if (data->overlap) {
@@ -982,7 +939,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
                  "vec2 w = %s / 32.0;                           \n"
                  "if (local_id.x == 1u) w.xy = w.yx;            \n",
                  2 >> sub_x, weights[sub_x]);
-            sample(sh, OFFSET_L, c, sub_x, sub_y);
+            sample(sh, OFFSET_L, lut[c], idx[c], sub_x, sub_y);
             GLSL("grain = dot(vec2(val, grain), w);             \n"
                  "}                                             \n");
 
@@ -998,12 +955,12 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
                  "        vec2 w2 = %s / 32.0;                  \n"
                  "        if (local_id.x == 1u) w2.xy = w2.yx;  \n",
                  2 >> sub_x, weights[sub_x]);
-                          sample(sh, OFFSET_TL, c, sub_x, sub_y);
+                          sample(sh, OFFSET_TL, lut[c], idx[c], sub_x, sub_y);
             GLSL("        float tmp = val;                      \n");
-                          sample(sh, OFFSET_T, c, sub_x, sub_y);
+                          sample(sh, OFFSET_T, lut[c], idx[c], sub_x, sub_y);
             GLSL("        val = dot(vec2(tmp, val), w2);        \n"
                  "    } else {                                  \n");
-                          sample(sh, OFFSET_T, c, sub_x, sub_y);
+                          sample(sh, OFFSET_T, lut[c], idx[c], sub_x, sub_y);
             GLSL("    }                                         \n"
                  "grain = dot(vec2(val, grain), w);             \n"
                  "}                                             \n");
