@@ -572,6 +572,11 @@ void pl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf **buf);
 //
 // This function will block until the buffer is no longer in use. Use
 // `pl_buf_poll` to perform non-blocking queries of buffer availability.
+//
+// Note: This function can incur synchronization overhead, so it shouldn't be
+// used in tight loops. If you do need to loop (e.g. to perform a strided
+// write), consider using host-mapped buffers, or fixing the memory in RAM,
+// before calling this function.
 void pl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                   size_t buf_offset, const void *data, size_t size);
 
