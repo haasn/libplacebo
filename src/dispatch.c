@@ -302,12 +302,18 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         ADD(pre, "#extension GL_OES_EGL_image_external : enable\n");
 
     if (gpu->glsl.gles) {
-        ADD(pre, "precision mediump float;\n");
-        ADD(pre, "precision mediump sampler2D;\n");
+        ADD(pre, "#ifdef GL_FRAGMENT_PRECISION_HIGH \n"
+                 "#define PREC highp                \n"
+                 "#else                             \n"
+                 "#define PREC mediump              \n"
+                 "#endif                            \n"
+                 "precision PREC float;             \n"
+                 "precision PREC sampler2D;         \n");
+
         if (gpu->limits.max_tex_1d_dim)
-            ADD(pre, "precision mediump sampler1D;\n");
+            ADD(pre, "precision PREC sampler1D;\n");
         if (gpu->limits.max_tex_3d_dim && gpu->glsl.version > 100)
-            ADD(pre, "precision mediump sampler3D;\n");
+            ADD(pre, "precision PREC sampler3D;\n");
     }
 
     char *vert_in  = gpu->glsl.version >= 130 ? "in" : "attribute";
