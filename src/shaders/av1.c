@@ -665,7 +665,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
 
     int bw = BLOCK_SIZE >> sub_x;
     int bh = BLOCK_SIZE >> sub_y;
-    bool is_compute = sh_try_compute(sh, bw, bh, false, 0);
+    bool is_compute = sh_try_compute(sh, bw, bh, false, sizeof(uint32_t));
 
     struct sh_grain_obj *obj;
     obj = SH_OBJ(sh, grain_state, PL_SHADER_OBJ_AV1_GRAIN,
@@ -891,7 +891,17 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
          scale.texture_scale, tex);
 
     // Load the data vector which holds the offsets
-    GLSL("uint data = uint(%s(block_id)); \n", offsets);
+    if (is_compute) {
+        GLSLH("shared uint data; \n");
+        GLSL("if (gl_LocalInvocationIndex == 0u) {  \n"
+             "    data = uint(%s(block_id));        \n"
+             "    memoryBarrierShared();            \n"
+             "}                                     \n"
+             "barrier();                            \n",
+             offsets);
+    } else {
+        GLSL("uint data = uint(%s(block_id)); \n", offsets);
+    }
 
     // If we need access to the external luma plane, load it now
     if (tex_is_cb || tex_is_cr) {
