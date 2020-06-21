@@ -859,6 +859,19 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
              bw, bh, bw, bh);
     }
 
+    // Load the data vector which holds the offsets
+    if (is_compute) {
+        GLSLH("shared uint data; \n");
+        GLSL("if (gl_LocalInvocationIndex == 0u) {  \n"
+             "    data = uint(%s(block_id));        \n"
+             "    memoryBarrierShared();            \n"
+             "}                                     \n"
+             "barrier();                            \n",
+             offsets);
+    } else {
+        GLSL("uint data = uint(%s(block_id)); \n", offsets);
+    }
+
     struct grain_scale scale = get_grain_scale(params);
     pl_color_repr_normalize(params->repr);
     int bits = PL_DEF(params->repr->bits.color_depth, 8);
@@ -889,19 +902,6 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
 
     GLSL("color = vec4(%f) * texelFetch(%s, ivec2(global_id), 0); \n",
          scale.texture_scale, tex);
-
-    // Load the data vector which holds the offsets
-    if (is_compute) {
-        GLSLH("shared uint data; \n");
-        GLSL("if (gl_LocalInvocationIndex == 0u) {  \n"
-             "    data = uint(%s(block_id));        \n"
-             "    memoryBarrierShared();            \n"
-             "}                                     \n"
-             "barrier();                            \n",
-             offsets);
-    } else {
-        GLSL("uint data = uint(%s(block_id)); \n", offsets);
-    }
 
     // If we need access to the external luma plane, load it now
     if (tex_is_cb || tex_is_cr) {
