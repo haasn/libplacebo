@@ -1165,19 +1165,20 @@ static void sh_dither_uninit(const struct pl_gpu *gpu, void *ptr)
     *obj = (struct sh_dither_obj) {0};
 }
 
-static void fill_dither_matrix(void *priv, float *data, int w, int h, int d)
+static void fill_dither_matrix(float *data, const struct sh_lut_params *params)
 {
-    pl_assert(w > 0 && h > 0 && d == 0);
+    pl_assert(params->width > 0 && params->height > 0 && params->comps == 1);
 
-    const struct sh_dither_obj *obj = priv;
+    const struct sh_dither_obj *obj = params->priv;
     switch (obj->method) {
     case PL_DITHER_ORDERED_LUT:
-        pl_assert(w == h);
-        pl_generate_bayer_matrix(data, w);
+        pl_assert(params->width == params->height);
+        pl_generate_bayer_matrix(data, params->width);
         break;
 
     case PL_DITHER_BLUE_NOISE:
-        pl_generate_blue_noise(data, w);
+        pl_assert(params->width == params->height);
+        pl_generate_blue_noise(data, params->width);
         break;
 
     default: abort();
@@ -1247,8 +1248,15 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
         obj->method = method;
 
         lut_size = 1 << PL_DEF(params->lut_size, 6);
-        lut = sh_lut(sh, &obj->lut, SH_LUT_AUTO, lut_size, lut_size, 0, 1,
-                     changed, false, obj, fill_dither_matrix);
+        lut = sh_lut(sh, &(struct sh_lut_params) {
+            .object = &obj->lut,
+            .width = lut_size,
+            .height = lut_size,
+            .comps = 1,
+            .update = changed,
+            .fill = fill_dither_matrix,
+            .priv = obj,
+        });
         if (!lut)
             goto fallback;
     }
@@ -1355,14 +1363,15 @@ static void sh_3dlut_uninit(const struct pl_gpu *gpu, void *ptr)
     *obj = (struct sh_3dlut_obj) {0};
 }
 
-static void fill_3dlut(void *priv, float *data, int s_r, int s_g, int s_b)
+static void fill_3dlut(float *data, const struct sh_lut_params *params)
 {
-    struct sh_3dlut_obj *obj = priv;
+    struct sh_3dlut_obj *obj = params->priv;
     struct pl_context *ctx = obj->ctx;
 
-    obj->ok = pl_lcms_compute_lut(ctx, obj->intent, obj->src, obj->dst,
-                                  data, s_r, s_g, s_b, &obj->result);
-
+    pl_assert(params->comps == 4);
+    obj->ok = pl_lcms_compute_lut(ctx, obj->intent, obj->src, obj->dst, data,
+                                  params->width, params->height, params->depth,
+                                  &obj->result);
     if (!obj->ok)
         pl_err(ctx, "Failed computing 3DLUT!");
 }
@@ -1400,8 +1409,17 @@ bool pl_3dlut_update(struct pl_shader *sh,
     obj->intent = params->intent;
     obj->src = *src;
     obj->dst = *dst;
-    obj->lut = sh_lut(sh, &obj->lut_obj, SH_LUT_LINEAR, s_r, s_g, s_b, 4,
-                      changed, false, obj, fill_3dlut);
+    obj->lut = sh_lut(sh, &(struct sh_lut_params) {
+        .object = &obj->lut_obj,
+        .method = SH_LUT_LINEAR,
+        .width = s_r,
+        .height = s_g,
+        .depth = s_b,
+        .comps = 4,
+        .update = changed,
+        .fill = fill_3dlut,
+        .priv = obj,
+    });
     if (!obj->lut || !obj->ok)
         return false;
 

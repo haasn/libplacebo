@@ -458,15 +458,15 @@ static void generate_offsets(uint32_t *buf, int offsets_x, int offsets_y,
     }
 }
 
-static void generate_scaling(void *priv, float *data, int w, int h, int d)
+static void generate_scaling(float *data, const struct sh_lut_params *params)
 {
-    assert(w == SCALING_LUT_SIZE);
+    assert(params->width == SCALING_LUT_SIZE);
 
     struct {
         int num;
         uint8_t (*points)[2];
         const struct pl_av1_grain_data *data;
-    } *ctx = priv;
+    } *ctx = params->priv;
 
     float range = 1 << ctx->data->scaling_shift;
 
@@ -488,7 +488,7 @@ static void generate_scaling(void *priv, float *data, int w, int h, int d)
     }
 
     // Fill up the remaining entries with the final value
-    for (int i = ctx->points[ctx->num - 1][0]; i < w; i++)
+    for (int i = ctx->points[ctx->num - 1][0]; i < SCALING_LUT_SIZE; i++)
         data[i] = ctx->points[ctx->num - 1][1] / range;
 }
 
@@ -861,10 +861,16 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
         }
 
         if (priv.num > 0) {
-            scaling[i] = sh_lut(sh, &obj->scaling[i], SH_LUT_LINEAR,
-                                SCALING_LUT_SIZE, 0, 0, 1, scaling_changed,
-                                true, &priv, generate_scaling);
-
+            scaling[i] = sh_lut(sh, &(struct sh_lut_params) {
+                .object = &obj->scaling[i],
+                .method = SH_LUT_LINEAR,
+                .width = SCALING_LUT_SIZE,
+                .comps = 1,
+                .update = scaling_changed,
+                .dynamic = true,
+                .fill = generate_scaling,
+                .priv = &priv,
+            });
             if (!scaling[i]) {
                 SH_FAIL(sh, "Failed generating/uploading scaling LUTs!");
                 return false;

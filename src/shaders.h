@@ -182,27 +182,38 @@ enum sh_lut_method {
     SH_LUT_LINEAR,   // upload as linearly-sampleable texture
 };
 
-// Makes a table of float vecs values available as a shader variable, using an
-// a given method (falling back if needed). The resulting identifier can be
-// sampled directly as %s(pos), where pos is a vector with the right number of
+struct sh_lut_params {
+    struct pl_shader_obj **object;
+    enum sh_lut_method method;
+
+    // LUT dimensions
+    int width;
+    int height;
+    int depth;
+    int comps;
+
+    // If true, the LUT will always be regenerated, even if the dimensions have
+    // not changed.
+    bool update;
+
+    // If set to true, shader objects will be preserved and updated in-place
+    // rather than being treated as read-only.
+    bool dynamic;
+
+    // Will be called with a zero-initialized buffer whenever the data needs to
+    // be computed, which happens whenever the size is changed, the shader
+    // object is invalidated, or `update` is set to true.
+    void (*fill)(float *data, const struct sh_lut_params *params);
+    void *priv;
+};
+
+// Makes a table of values available as a shader variable, using an a given
+// method (falling back if needed). The resulting identifier can be sampled
+// directly as %s(pos), where pos is a vector with the right number of
 // dimensions. `pos` must be an integer vector within the bounds of the array,
 // unless the method is `SH_LUT_LINEAR`, in which case it's a float vector that
 // gets interpolated and clamped as needed. Returns NULL on error.
-//
-// This function also acts as `sh_require_obj`, and uses the `buf`, `tex`
-// and `text` fields of the resulting `obj`. (The other fields may be used by
-// the caller)
-//
-// The `fill` function will be called with a zero-initialized buffer whenever
-// the data needs to be computed, which happens whenever the size is changed,
-// the shader object is invalidated, or `update` is set to true.
-//
-// If `dynamic` is set to true, shader objects will be preserved and updated
-// in-place rather than being treated as read-only.
-ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
-               enum sh_lut_method method, int width, int height, int depth,
-               int components, bool update, bool dynamic, void *priv,
-               void (*fill)(void *priv, float *data, int w, int h, int d));
+ident_t sh_lut(struct pl_shader *sh, const struct sh_lut_params *params);
 
 // Returns a GLSL-version appropriate "bvec"-like type. For GLSL 130+, this
 // returns bvecN. For GLSL 120, this returns vecN instead. The intended use of

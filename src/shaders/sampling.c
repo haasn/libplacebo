@@ -359,13 +359,13 @@ static void sh_sampler_uninit(const struct pl_gpu *gpu, void *ptr)
     *obj = (struct sh_sampler_obj) {0};
 }
 
-static void fill_polar_lut(void *priv, float *data, int w, int h, int d)
+static void fill_polar_lut(float *data, const struct sh_lut_params *params)
 {
-    const struct sh_sampler_obj *obj = priv;
+    const struct sh_sampler_obj *obj = params->priv;
     const struct pl_filter *filt = obj->filter;
 
-    pl_assert(w == filt->params.lut_entries);
-    memcpy(data, filt->weights, w * sizeof(float));
+    pl_assert(params->width == filt->params.lut_entries && params->comps == 1);
+    memcpy(data, filt->weights, params->width * sizeof(float));
 }
 
 bool pl_shader_sample_polar(struct pl_shader *sh,
@@ -444,8 +444,15 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
         }
     }
 
-    ident_t lut = sh_lut(sh, &obj->lut, SH_LUT_LINEAR, lut_entries, 0, 0, 1,
-                         update, false, obj, fill_polar_lut);
+    ident_t lut = sh_lut(sh, &(struct sh_lut_params) {
+        .object = &obj->lut,
+        .method = SH_LUT_LINEAR,
+        .width = lut_entries,
+        .comps = 1,
+        .update = update,
+        .fill = fill_polar_lut,
+        .priv = obj,
+    });
     if (!lut) {
         SH_FAIL(sh, "Failed initializing polar LUT!");
         return false;
@@ -572,13 +579,14 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     return true;
 }
 
-static void fill_ortho_lut(void *priv, float *data, int w, int h, int d)
+static void fill_ortho_lut(float *data, const struct sh_lut_params *params)
 {
-    const struct sh_sampler_obj *obj = priv;
+    const struct sh_sampler_obj *obj = params->priv;
     const struct pl_filter *filt = obj->filter;
+    size_t entries = filt->params.lut_entries * filt->row_stride;
 
-    pl_assert(w * h * 4 == filt->params.lut_entries * filt->row_stride);
-    memcpy(data, filt->weights, w * h * 4 * sizeof(float));
+    pl_assert(params->width * params->height * params->comps == entries);
+    memcpy(data, filt->weights, entries * sizeof(float));
 }
 
 bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
@@ -668,8 +676,16 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
 
     int N = obj->filter->row_size; // number of samples to convolve
     int width = obj->filter->row_stride / 4; // width of the LUT texture
-    ident_t lut = sh_lut(sh, &obj->lut, SH_LUT_LINEAR, width, lut_entries, 0, 4,
-                         update, false, obj, fill_ortho_lut);
+    ident_t lut = sh_lut(sh, &(struct sh_lut_params) {
+        .object = &obj->lut,
+        .method = SH_LUT_LINEAR,
+        .width = width,
+        .height = lut_entries,
+        .comps = 4,
+        .update = update,
+        .fill = fill_ortho_lut,
+        .priv = obj,
+    });
     if (!lut) {
         SH_FAIL(sh, "Failed initializing separated LUT!");
         return false;

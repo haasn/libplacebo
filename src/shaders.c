@@ -699,19 +699,17 @@ static void sh_lut_uninit(const struct pl_gpu *gpu, void *ptr)
 // Maximum number of floats to embed as a literal array (when using SH_LUT_AUTO)
 #define SH_LUT_MAX_LITERAL 256
 
-ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
-               enum sh_lut_method method, int width, int height, int depth,
-               int comps, bool update, bool dynamic, void *priv,
-               void (*fill)(void *priv, float *data, int w, int h, int d))
+ident_t sh_lut(struct pl_shader *sh, const struct sh_lut_params *params)
 {
     const struct pl_gpu *gpu = SH_GPU(sh);
     float *tmp = NULL;
     ident_t ret = NULL;
 
-    pl_assert(width > 0 && height >= 0 && depth >= 0);
-    int sizes[] = { width, height, depth };
-    int size = width * PL_DEF(height, 1) * PL_DEF(depth, 1);
-    int dims = depth ? 3 : height ? 2 : 1;
+    pl_assert(params->width > 0 && params->height >= 0 && params->depth >= 0);
+    pl_assert(params->comps > 0);
+    int sizes[] = { params->width, params->height, params->depth };
+    int size = params->width * PL_DEF(params->height, 1) * PL_DEF(params->depth, 1);
+    int dims = params->depth ? 3 : params->height ? 2 : 1;
 
     int texdim = 0;
     uint32_t max_tex_dim[] = {
@@ -737,7 +735,7 @@ ident_t sh_lut(struct pl_shader *sh, struct pl_shader_obj **obj,
 next_dim: ; // `continue` out of the inner loop
     }
 
-    struct sh_lut_obj *lut = SH_OBJ(sh, obj, PL_SHADER_OBJ_LUT,
+    struct sh_lut_obj *lut = SH_OBJ(sh, params->object, PL_SHADER_OBJ_LUT,
                                     struct sh_lut_obj, sh_lut_uninit);
 
     if (!lut) {
@@ -745,6 +743,7 @@ next_dim: ; // `continue` out of the inner loop
         goto error;
     }
 
+    enum sh_lut_method method = params->method;
     if (!gpu && method == SH_LUT_LINEAR) {
         SH_FAIL(sh, "Linear LUTs require the use of a GPU!");
         goto error;
@@ -777,16 +776,18 @@ next_dim: ; // `continue` out of the inner loop
     }
 
     // Forcibly reinitialize the existing LUT if needed
-    if (method != lut->method || width != lut->width || height != lut->height
-        || depth != lut->depth || comps != lut->comps)
+    bool update = params->update;
+    if (method != lut->method || params->width != lut->width ||
+        params->height != lut->height || params->depth != lut->depth ||
+        params->comps != lut->comps)
     {
         PL_DEBUG(sh, "LUT method or size changed, reinitializing..");
         update = true;
     }
 
     if (update) {
-        tmp = talloc_zero_size(NULL, size * comps * sizeof(float));
-        fill(priv, tmp, width, height, depth);
+        tmp = talloc_zero_size(NULL, size * params->comps * sizeof(float));
+        params->fill(tmp, params);
 
         switch (method) {
         case SH_LUT_TEXTURE:
@@ -805,27 +806,27 @@ next_dim: ; // `continue` out of the inner loop
             }
 
             const struct pl_fmt *fmt;
-            fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, comps, 16, 32, caps);
+            fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, params->comps, 16, 32, caps);
             if (!fmt) {
                 SH_FAIL(sh, "Found no compatible texture format for LUT!");
                 goto error;
             }
 
-            struct pl_tex_params params = {
-                .w              = width,
-                .h              = PL_DEF(height, texdim >= 2 ? 1 : 0),
-                .d              = PL_DEF(depth,  texdim >= 3 ? 1 : 0),
+            struct pl_tex_params tex_params = {
+                .w              = params->width,
+                .h              = PL_DEF(params->height, texdim >= 2 ? 1 : 0),
+                .d              = PL_DEF(params->depth,  texdim >= 3 ? 1 : 0),
                 .format         = fmt,
                 .sampleable     = true,
                 .sample_mode    = mode,
                 .address_mode   = PL_TEX_ADDRESS_CLAMP,
-                .host_writable  = dynamic,
-                .initial_data   = dynamic ? NULL : tmp,
+                .host_writable  = params->dynamic,
+                .initial_data   = params->dynamic ? NULL : tmp,
             };
 
             bool ok;
-            if (dynamic) {
-                ok = pl_tex_recreate(gpu, &lut->weights.tex, &params);
+            if (params->dynamic) {
+                ok = pl_tex_recreate(gpu, &lut->weights.tex, &tex_params);
                 if (ok) {
                     ok = pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
                         .tex = lut->weights.tex,
@@ -834,7 +835,7 @@ next_dim: ; // `continue` out of the inner loop
                 }
             } else {
                 pl_tex_destroy(gpu, &lut->weights.tex);
-                lut->weights.tex = pl_tex_create(gpu, &params);
+                lut->weights.tex = pl_tex_create(gpu, &tex_params);
                 ok = lut->weights.tex;
             }
 
@@ -853,17 +854,19 @@ next_dim: ; // `continue` out of the inner loop
 
         case SH_LUT_LITERAL: {
             lut->weights.str.len = 0;
-            for (int i = 0; i < size * comps; i += comps) {
+            for (int i = 0; i < size * params->comps; i += params->comps) {
                 if (i > 0)
                     bstr_xappend_asprintf_c(lut, &lut->weights.str, ",");
-                if (comps > 1)
-                    bstr_xappend_asprintf_c(lut, &lut->weights.str, "vec%d(", comps);
-                for (int c = 0; c < comps; c++) {
+                if (params->comps > 1) {
+                    bstr_xappend_asprintf_c(lut, &lut->weights.str, "vec%d(",
+                                            params->comps);
+                }
+                for (int c = 0; c < params->comps; c++) {
                     bstr_xappend_asprintf_c(lut, &lut->weights.str, "%s%f",
                                             c > 0 ? "," : "",
                                             tmp[i+c]);
                 }
-                if (comps > 1)
+                if (params->comps > 1)
                     bstr_xappend_asprintf_c(lut, &lut->weights.str, ")");
             }
             break;
@@ -873,10 +876,10 @@ next_dim: ; // `continue` out of the inner loop
         }
 
         lut->method = method;
-        lut->width = width;
-        lut->height = height;
-        lut->depth = depth;
-        lut->comps = comps;
+        lut->width = params->width;
+        lut->height = params->height;
+        lut->depth = params->depth;
+        lut->comps = params->comps;
     }
 
     // Done updating, generate the GLSL
@@ -905,7 +908,7 @@ next_dim: ; // `continue` out of the inner loop
         for (int i = dims; i < texdim; i++)
             GLSLH(", 0");
 
-        GLSLH("), 0).%s)\n", swizzles[comps - 1]);
+        GLSLH("), 0).%s)\n", swizzles[params->comps - 1]);
         ret = name;
         break;
     }
@@ -941,7 +944,7 @@ next_dim: ; // `continue` out of the inner loop
                 GLSLH("   %c%f\\\n", sep, 0.5);
             }
         }
-        GLSLH("  )).%s)\n", swizzles[comps - 1]);
+        GLSLH("  )).%s)\n", swizzles[params->comps - 1]);
         ret = name;
         break;
     }
@@ -951,7 +954,7 @@ next_dim: ; // `continue` out of the inner loop
             .var = {
                 .name = "weights",
                 .type = PL_VAR_FLOAT,
-                .dim_v = comps,
+                .dim_v = params->comps,
                 .dim_m = 1,
                 .dim_a = size,
             },
@@ -961,7 +964,8 @@ next_dim: ; // `continue` out of the inner loop
 
     case SH_LUT_LITERAL:
         arr_name = sh_fresh(sh, "weights");
-        GLSLH("const %s %s[%d] = float[](\n  ", types[comps - 1], arr_name, size);
+        GLSLH("const %s %s[%d] = float[](\n  ",
+              types[params->comps - 1], arr_name, size);
         bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], lut->weights.str);
         GLSLH(");\n");
         break;
@@ -971,7 +975,7 @@ next_dim: ; // `continue` out of the inner loop
 
     if (arr_name) {
         GLSLH("#define %s(pos) (%s[int((pos).x)\\\n", name, arr_name);
-        int shift = width;
+        int shift = params->width;
         for (int i = 1; i < dims; i++) {
             GLSLH("    + %d * int((pos)[%d])\\\n", shift, i);
             shift *= sizes[i];
