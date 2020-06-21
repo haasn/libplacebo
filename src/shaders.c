@@ -834,6 +834,7 @@ next_dim: ; // `continue` out of the inner loop
                     });
                 }
             } else {
+                // Can't use pl_tex_recreate because of `initial_data`
                 pl_tex_destroy(gpu, &lut->weights.tex);
                 lut->weights.tex = pl_tex_create(gpu, &tex_params);
                 ok = lut->weights.tex;
