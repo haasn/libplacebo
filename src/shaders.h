@@ -178,13 +178,18 @@ enum sh_lut_method {
     SH_LUT_UNIFORM,  // uniform array
     SH_LUT_LITERAL,  // constant / literal array in shader source (fallback)
 
-    // this is never picked by SH_DATA_AUTO
+    // this is never picked by SH_LUT_AUTO
     SH_LUT_LINEAR,   // upload as linearly-sampleable texture
 };
 
 struct sh_lut_params {
     struct pl_shader_obj **object;
+
+    // Method and type of the LUT we intend to generate.
+    //
+    // Note: For SH_LUT_LINEAR, type must be PL_VAR_FLOAT!
     enum sh_lut_method method;
+    enum pl_var_type type;
 
     // LUT dimensions
     int width;
@@ -203,7 +208,9 @@ struct sh_lut_params {
     // Will be called with a zero-initialized buffer whenever the data needs to
     // be computed, which happens whenever the size is changed, the shader
     // object is invalidated, or `update` is set to true.
-    void (*fill)(float *data, const struct sh_lut_params *params);
+    //
+    // Note: Interpretation of `data` is according to `pl_var_type`.
+    void (*fill)(void *data, const struct sh_lut_params *params);
     void *priv;
 };
 

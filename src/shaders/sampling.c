@@ -359,7 +359,7 @@ static void sh_sampler_uninit(const struct pl_gpu *gpu, void *ptr)
     *obj = (struct sh_sampler_obj) {0};
 }
 
-static void fill_polar_lut(float *data, const struct sh_lut_params *params)
+static void fill_polar_lut(void *data, const struct sh_lut_params *params)
 {
     const struct sh_sampler_obj *obj = params->priv;
     const struct pl_filter *filt = obj->filter;
@@ -447,6 +447,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     ident_t lut = sh_lut(sh, &(struct sh_lut_params) {
         .object = &obj->lut,
         .method = SH_LUT_LINEAR,
+        .type = PL_VAR_FLOAT,
         .width = lut_entries,
         .comps = 1,
         .update = update,
@@ -579,7 +580,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     return true;
 }
 
-static void fill_ortho_lut(float *data, const struct sh_lut_params *params)
+static void fill_ortho_lut(void *data, const struct sh_lut_params *params)
 {
     const struct sh_sampler_obj *obj = params->priv;
     const struct pl_filter *filt = obj->filter;
@@ -679,6 +680,7 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
     ident_t lut = sh_lut(sh, &(struct sh_lut_params) {
         .object = &obj->lut,
         .method = SH_LUT_LINEAR,
+        .type = PL_VAR_FLOAT,
         .width = width,
         .height = lut_entries,
         .comps = 4,

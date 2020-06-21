@@ -458,9 +458,10 @@ static void generate_offsets(uint32_t *buf, int offsets_x, int offsets_y,
     }
 }
 
-static void generate_scaling(float *data, const struct sh_lut_params *params)
+static void generate_scaling(void *pdata, const struct sh_lut_params *params)
 {
-    assert(params->width == SCALING_LUT_SIZE);
+    assert(params->width == SCALING_LUT_SIZE && params->comps == 1);
+    float *data = pdata;
 
     struct {
         int num;
@@ -864,6 +865,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
             scaling[i] = sh_lut(sh, &(struct sh_lut_params) {
                 .object = &obj->scaling[i],
                 .method = SH_LUT_LINEAR,
+                .type = PL_VAR_FLOAT,
                 .width = SCALING_LUT_SIZE,
                 .comps = 1,
                 .update = scaling_changed,

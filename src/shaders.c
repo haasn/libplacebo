@@ -668,11 +668,12 @@ static ident_t sh_lut_pos(struct pl_shader *sh, int lut_size)
 
 struct sh_lut_obj {
     enum sh_lut_method method;
+    enum pl_var_type type;
     int width, height, depth, comps;
     union {
         const struct pl_tex *tex;
         struct bstr str;
-        float *data;
+        void *data;
     } weights;
 };
 
@@ -702,11 +703,12 @@ static void sh_lut_uninit(const struct pl_gpu *gpu, void *ptr)
 ident_t sh_lut(struct pl_shader *sh, const struct sh_lut_params *params)
 {
     const struct pl_gpu *gpu = SH_GPU(sh);
-    float *tmp = NULL;
+    void *tmp = NULL;
     ident_t ret = NULL;
 
     pl_assert(params->width > 0 && params->height >= 0 && params->depth >= 0);
     pl_assert(params->comps > 0);
+    pl_assert(params->type);
     int sizes[] = { params->width, params->height, params->depth };
     int size = params->width * PL_DEF(params->height, 1) * PL_DEF(params->depth, 1);
     int dims = params->depth ? 3 : params->height ? 2 : 1;
@@ -735,6 +737,24 @@ ident_t sh_lut(struct pl_shader *sh, const struct sh_lut_params *params)
 next_dim: ; // `continue` out of the inner loop
     }
 
+    static const enum pl_fmt_type fmt_type[PL_VAR_TYPE_COUNT] = {
+        [PL_VAR_SINT]   = PL_FMT_SINT,
+        [PL_VAR_UINT]   = PL_FMT_UINT,
+        [PL_VAR_FLOAT]  = PL_FMT_FLOAT,
+    };
+
+    enum pl_fmt_caps texcaps = PL_FMT_CAP_SAMPLEABLE;
+    if (params->method == SH_LUT_LINEAR)
+        texcaps |= PL_FMT_CAP_LINEAR;
+
+    const struct pl_fmt *texfmt = NULL;
+    if (texdim) {
+        texfmt = pl_find_fmt(gpu, fmt_type[params->type], params->comps,
+                             params->type == PL_VAR_FLOAT ? 16 : 32,
+                             pl_var_type_size(params->type) * 8,
+                             texcaps);
+    }
+
     struct sh_lut_obj *lut = SH_OBJ(sh, params->object, PL_SHADER_OBJ_LUT,
                                     struct sh_lut_obj, sh_lut_uninit);
 
@@ -744,9 +764,12 @@ next_dim: ; // `continue` out of the inner loop
     }
 
     enum sh_lut_method method = params->method;
-    if (!gpu && method == SH_LUT_LINEAR) {
-        SH_FAIL(sh, "Linear LUTs require the use of a GPU!");
-        goto error;
+    if (method == SH_LUT_LINEAR) {
+        pl_assert(params->type == PL_VAR_FLOAT);
+        if (!gpu) {
+            SH_FAIL(sh, "Linear LUTs require the use of a GPU!");
+            goto error;
+        }
     }
 
     if (!gpu) {
@@ -758,7 +781,7 @@ next_dim: ; // `continue` out of the inner loop
     if (!method && size <= SH_LUT_MAX_LITERAL && !params->dynamic)
         method = SH_LUT_LITERAL;
 
-    if (!method && texdim)
+    if (!method && texdim && texfmt)
         method = SH_LUT_TEXTURE;
 
     if (!method && gpu && gpu->caps & PL_GPU_CAP_INPUT_VARIABLES)
@@ -777,16 +800,17 @@ next_dim: ; // `continue` out of the inner loop
 
     // Forcibly reinitialize the existing LUT if needed
     bool update = params->update;
-    if (method != lut->method || params->width != lut->width ||
-        params->height != lut->height || params->depth != lut->depth ||
-        params->comps != lut->comps)
+    if (method != lut->method || params->type != lut->type ||
+        params->width != lut->width || params->height != lut->height ||
+        params->depth != lut->depth || params->comps != lut->comps)
     {
         PL_DEBUG(sh, "LUT method or size changed, reinitializing..");
         update = true;
     }
 
     if (update) {
-        tmp = talloc_zero_size(NULL, size * params->comps * sizeof(float));
+        size_t buf_size = size * params->comps * pl_var_type_size(params->type);
+        tmp = talloc_zero_size(NULL, buf_size);
         params->fill(tmp, params);
 
         switch (method) {
@@ -797,17 +821,7 @@ next_dim: ; // `continue` out of the inner loop
                 goto error;
             }
 
-            enum pl_fmt_caps caps = PL_FMT_CAP_SAMPLEABLE;
-            enum pl_tex_sample_mode mode = PL_TEX_SAMPLE_NEAREST;
-
-            if (method == SH_LUT_LINEAR) {
-                caps |= PL_FMT_CAP_LINEAR;
-                mode = PL_TEX_SAMPLE_LINEAR;
-            }
-
-            const struct pl_fmt *fmt;
-            fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, params->comps, 16, 32, caps);
-            if (!fmt) {
+            if (!texfmt) {
                 SH_FAIL(sh, "Found no compatible texture format for LUT!");
                 goto error;
             }
@@ -816,9 +830,11 @@ next_dim: ; // `continue` out of the inner loop
                 .w              = params->width,
                 .h              = PL_DEF(params->height, texdim >= 2 ? 1 : 0),
                 .d              = PL_DEF(params->depth,  texdim >= 3 ? 1 : 0),
-                .format         = fmt,
+                .format         = texfmt,
                 .sampleable     = true,
-                .sample_mode    = mode,
+                .sample_mode    = method == SH_LUT_LINEAR
+                                    ? PL_TEX_SAMPLE_LINEAR
+                                    : PL_TEX_SAMPLE_NEAREST,
                 .address_mode   = PL_TEX_ADDRESS_CLAMP,
                 .host_writable  = params->dynamic,
                 .initial_data   = params->dynamic ? NULL : tmp,
@@ -855,17 +871,38 @@ next_dim: ; // `continue` out of the inner loop
 
         case SH_LUT_LITERAL: {
             lut->weights.str.len = 0;
+            static const char prefix[PL_VAR_TYPE_COUNT] = {
+                [PL_VAR_SINT]   = 'i',
+                [PL_VAR_UINT]   = 'u',
+                [PL_VAR_FLOAT]  = ' ',
+            };
+
             for (int i = 0; i < size * params->comps; i += params->comps) {
                 if (i > 0)
                     bstr_xappend_asprintf_c(lut, &lut->weights.str, ",");
                 if (params->comps > 1) {
-                    bstr_xappend_asprintf_c(lut, &lut->weights.str, "vec%d(",
-                                            params->comps);
+                    bstr_xappend_asprintf_c(lut, &lut->weights.str, "%cvec%d(",
+                                            prefix[params->type], params->comps);
                 }
                 for (int c = 0; c < params->comps; c++) {
-                    bstr_xappend_asprintf_c(lut, &lut->weights.str, "%s%f",
-                                            c > 0 ? "," : "",
-                                            tmp[i+c]);
+                    switch (params->type) {
+                    case PL_VAR_FLOAT:
+                        bstr_xappend_asprintf_c(lut, &lut->weights.str, "%s%f",
+                                                c > 0 ? "," : "",
+                                                ((float *) tmp)[i+c]);
+                        break;
+                    case PL_VAR_UINT:
+                        bstr_xappend_asprintf_c(lut, &lut->weights.str, "%s%u",
+                                                c > 0 ? "," : "",
+                                                ((unsigned int *) tmp)[i+c]);
+                        break;
+                    case PL_VAR_SINT:
+                        bstr_xappend_asprintf_c(lut, &lut->weights.str, "%s%d",
+                                                c > 0 ? "," : "",
+                                                ((int *) tmp)[i+c]);
+                        break;
+                    default: abort();
+                    }
                 }
                 if (params->comps > 1)
                     bstr_xappend_asprintf_c(lut, &lut->weights.str, ")");
@@ -877,6 +914,7 @@ next_dim: ; // `continue` out of the inner loop
         }
 
         lut->method = method;
+        lut->type = params->type;
         lut->width = params->width;
         lut->height = params->height;
         lut->depth = params->depth;
@@ -890,6 +928,11 @@ next_dim: ; // `continue` out of the inner loop
     static const char * const types[] = {"float", "vec2", "vec3", "vec4"};
     static const char * const itypes[] = {"uint", "ivec2", "ivec3", "ivec4"};
     static const char * const swizzles[] = {"x", "xy", "xyz", "xyzw"};
+    static const char * const dtypes[PL_VAR_TYPE_COUNT] = {
+        [PL_VAR_SINT] = "int",
+        [PL_VAR_UINT] = "uint",
+        [PL_VAR_FLOAT] = "float",
+    };
 
     switch (method) {
     case SH_LUT_TEXTURE: {
@@ -954,7 +997,7 @@ next_dim: ; // `continue` out of the inner loop
         arr_name = sh_var(sh, (struct pl_shader_var) {
             .var = {
                 .name = "weights",
-                .type = PL_VAR_FLOAT,
+                .type = params->type,
                 .dim_v = params->comps,
                 .dim_m = 1,
                 .dim_a = size,
@@ -965,8 +1008,8 @@ next_dim: ; // `continue` out of the inner loop
 
     case SH_LUT_LITERAL:
         arr_name = sh_fresh(sh, "weights");
-        GLSLH("const %s %s[%d] = float[](\n  ",
-              types[params->comps - 1], arr_name, size);
+        GLSLH("const %s %s[%d] = %s[](\n  ",
+              types[params->comps - 1], arr_name, size, dtypes[params->type]);
         bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], lut->weights.str);
         GLSLH(");\n");
         break;

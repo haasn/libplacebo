@@ -1165,7 +1165,7 @@ static void sh_dither_uninit(const struct pl_gpu *gpu, void *ptr)
     *obj = (struct sh_dither_obj) {0};
 }
 
-static void fill_dither_matrix(float *data, const struct sh_lut_params *params)
+static void fill_dither_matrix(void *data, const struct sh_lut_params *params)
 {
     pl_assert(params->width > 0 && params->height > 0 && params->comps == 1);
 
@@ -1250,6 +1250,7 @@ void pl_shader_dither(struct pl_shader *sh, int new_depth,
         lut_size = 1 << PL_DEF(params->lut_size, 6);
         lut = sh_lut(sh, &(struct sh_lut_params) {
             .object = &obj->lut,
+            .type = PL_VAR_FLOAT,
             .width = lut_size,
             .height = lut_size,
             .comps = 1,
@@ -1363,7 +1364,7 @@ static void sh_3dlut_uninit(const struct pl_gpu *gpu, void *ptr)
     *obj = (struct sh_3dlut_obj) {0};
 }
 
-static void fill_3dlut(float *data, const struct sh_lut_params *params)
+static void fill_3dlut(void *data, const struct sh_lut_params *params)
 {
     struct sh_3dlut_obj *obj = params->priv;
     struct pl_context *ctx = obj->ctx;
@@ -1412,6 +1413,7 @@ bool pl_3dlut_update(struct pl_shader *sh,
     obj->lut = sh_lut(sh, &(struct sh_lut_params) {
         .object = &obj->lut_obj,
         .method = SH_LUT_LINEAR,
+        .type = PL_VAR_FLOAT,
         .width = s_r,
         .height = s_g,
         .depth = s_b,
