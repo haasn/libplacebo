@@ -755,7 +755,7 @@ next_dim: ; // `continue` out of the inner loop
     }
 
     // Pick the best method
-    if (!method && size <= SH_LUT_MAX_LITERAL)
+    if (!method && size <= SH_LUT_MAX_LITERAL && !params->dynamic)
         method = SH_LUT_LITERAL;
 
     if (!method && texdim)
