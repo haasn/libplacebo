@@ -48,6 +48,17 @@ enum {
     PL_GPU_CAP_INPUT_VARIABLES  = 1 << 2, // supports shader input variables
     PL_GPU_CAP_MAPPED_BUFFERS   = 1 << 3, // supports host-mapped buffers
     PL_GPU_CAP_BLITTABLE_1D_3D  = 1 << 4, // supports blittable 1D/3D textures
+    PL_GPU_CAP_SUBGROUPS        = 1 << 5, // supports subgroups
+
+    // Note on subgroup support: PL_GPU_CAP_SUBGROUPS implies subgroup support
+    // for both fragment and compute shaders, but not necessarily any other
+    // stages. In terms of the supported feature set, currently at least the
+    // following capabilities are required:
+    // - basic
+    // - voting
+    // - arithmetic
+    // - ballot
+    // - shuffle
 };
 
 // Some `pl_gpu` operations allow sharing GPU resources with external APIs -
@@ -105,6 +116,7 @@ struct pl_gpu_limits {
     uint64_t max_buffer_texels; // maximum texels in a PL_BUF_TEXEL_*
     int16_t min_gather_offset;  // minimum `textureGatherOffset` offset
     int16_t max_gather_offset;  // maximum `textureGatherOffset` offset
+    uint32_t subgroup_size;     // number of threads in a subgroup
 
     // Compute shader limits. Always available (non-zero) if PL_GPU_CAP_COMPUTE set
     size_t max_shmem_size;      // maximum compute shader shared memory size

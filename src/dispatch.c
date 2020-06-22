@@ -277,6 +277,16 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
     if (params->type == PL_PASS_COMPUTE)
         ADD(pre, "#extension GL_ARB_compute_shader : enable\n");
 
+    // Enable this unconditionally if the GPU supports it, since we have no way
+    // of knowing whether subgroups are being used or not
+    if (gpu->caps & PL_GPU_CAP_SUBGROUPS) {
+        ADD(pre, "#extension GL_KHR_shader_subgroup_basic : enable \n"
+                 "#extension GL_KHR_shader_subgroup_vote : enable \n"
+                 "#extension GL_KHR_shader_subgroup_arithmetic : enable \n"
+                 "#extension GL_KHR_shader_subgroup_ballot : enable \n"
+                 "#extension GL_KHR_shader_subgroup_shuffle : enable \n");
+    }
+
     // Enable all extensions needed for different types of input
     bool has_ssbo = false, has_ubo = false, has_img = false, has_texel = false,
          has_ext = false, has_nofmt = false;

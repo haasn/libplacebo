@@ -64,6 +64,7 @@ void pl_gpu_print_info(const struct pl_gpu *gpu, enum pl_log_level lev)
     LOG(PRIu64, max_buffer_texels);
     LOG(PRId16, min_gather_offset);
     LOG(PRId16, max_gather_offset);
+    LOG(PRIu32, subgroup_size);
 
     if (gpu->caps & PL_GPU_CAP_COMPUTE) {
         LOG("zu", max_shmem_size);

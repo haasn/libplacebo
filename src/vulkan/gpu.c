@@ -386,22 +386,33 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     gpu->export_caps.sync = vk_sync_handle_caps(vk);
     gpu->import_caps.sync = 0; // Not supported yet
 
+    VkPhysicalDevicePCIBusInfoPropertiesEXT pci_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT,
+    };
+
+    VkPhysicalDeviceIDPropertiesKHR id_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR,
+        .pNext = &pci_props,
+    };
+
+    VkPhysicalDevicePushDescriptorPropertiesKHR pushd_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR,
+        .pNext = &id_props,
+    };
+
+    VkPhysicalDeviceSubgroupProperties group_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES,
+        .pNext = &pushd_props,
+    };
+
+    VkPhysicalDeviceProperties2KHR props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR,
+        .pNext = &group_props,
+    };
+
+    vk->GetPhysicalDeviceProperties2KHR(vk->physd, &props);
+
     if (pl_gpu_supports_interop(gpu)) {
-        VkPhysicalDevicePCIBusInfoPropertiesEXT pci_props = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT,
-        };
-
-        VkPhysicalDeviceIDPropertiesKHR id_props = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR,
-            .pNext = &pci_props,
-        };
-
-        VkPhysicalDeviceProperties2KHR props = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR,
-            .pNext = &id_props,
-        };
-
-        vk->GetPhysicalDeviceProperties2KHR(vk->physd, &props);
         assert(sizeof(gpu->uuid) == VK_UUID_SIZE);
         memcpy(gpu->uuid, id_props.deviceUUID, sizeof(gpu->uuid));
 
@@ -411,19 +422,8 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         gpu->pci.function = pci_props.pciFunction;
     }
 
-    if (vk->CmdPushDescriptorSetKHR) {
-        VkPhysicalDevicePushDescriptorPropertiesKHR pushd = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR,
-        };
-
-        VkPhysicalDeviceProperties2KHR props = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR,
-            .pNext = &pushd,
-        };
-
-        vk->GetPhysicalDeviceProperties2KHR(vk->physd, &props);
-        p->max_push_descriptors = pushd.maxPushDescriptors;
-    }
+    if (vk->CmdPushDescriptorSetKHR)
+        p->max_push_descriptors = pushd_props.maxPushDescriptors;
 
     if (vk->ResetQueryPoolEXT) {
         const VkPhysicalDeviceHostQueryResetFeaturesEXT *host_query_reset;
@@ -432,6 +432,21 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
 
         if (host_query_reset)
             p->host_query_reset = host_query_reset->hostQueryReset;
+    }
+
+    VkShaderStageFlags req_stages = VK_SHADER_STAGE_FRAGMENT_BIT |
+                                    VK_SHADER_STAGE_COMPUTE_BIT;
+    VkSubgroupFeatureFlags req_flags = VK_SUBGROUP_FEATURE_BASIC_BIT |
+                                       VK_SUBGROUP_FEATURE_VOTE_BIT |
+                                       VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
+                                       VK_SUBGROUP_FEATURE_BALLOT_BIT |
+                                       VK_SUBGROUP_FEATURE_SHUFFLE_BIT;
+
+    if ((group_props.supportedStages & req_stages) == req_stages &&
+        (group_props.supportedOperations & req_flags) == req_flags)
+    {
+        gpu->limits.subgroup_size = group_props.subgroupSize;
+        gpu->caps |= PL_GPU_CAP_SUBGROUPS;
     }
 
     // We ostensibly support this, although it can still fail on buffer
