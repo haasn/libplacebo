@@ -697,23 +697,39 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
     // Chosen to avoid overflowing on an 8K buffer
     const float log_min = 1e-3, log_scale = 400.0, sig_scale = 10000.0;
 
-    // Have each thread update the work group sum with the local value
     GLSL("float sig_max = max(max(color.r, color.g), color.b);  \n"
          "float sig_log = log(max(sig_max, %f));                \n"
-         "atomicAdd(%s, int(sig_log * %f));                     \n"
-         "atomicMax(%s, int(sig_max * %f));                     \n"
-         "memoryBarrierShared();                                \n"
-         "barrier();                                            \n"
-         "color = color_orig;                                   \n"
-         "}                                                     \n",
-         log_min,
-         wg_sum, log_scale,
-         wg_max, sig_scale);
+         "int isig_max = int(sig_max * %f);                     \n"
+         "int isig_log = int(sig_log * %f);                     \n",
+         log_min, sig_scale, log_scale);
+
+    // Update the work group's shared atomics
+    if (gpu->caps & PL_GPU_CAP_SUBGROUPS && false) {
+        GLSL("int group_max = subgroupMax(isig_max);    \n"
+             "int group_sum = subgroupAdd(isig_log);    \n"
+             "if (subgroupElect()) {                    \n"
+             "    atomicMax(%s, group_max);             \n"
+             "    atomicAdd(%s, group_sum);             \n"
+             "    memoryBarrierShared();                \n"
+             "}                                         \n"
+             "barrier();                                \n",
+             wg_max, wg_sum);
+    } else {
+        GLSL("atomicMax(%s, isig_max);  \n"
+             "atomicAdd(%s, isig_log);  \n"
+             "memoryBarrierShared();    \n"
+             "barrier();                \n",
+             wg_max, wg_sum);
+    }
+
+    GLSL("color = color_orig;   \n"
+         "}                     \n");
 
     // Have one thread per work group update the global atomics. Do this
     // at the end of the shader to avoid clobbering `average`, in case the
     // state object will be used by the same pass.
-    GLSLF("if (gl_LocalInvocationIndex == 0u) {                                 \n"
+    GLSLF("// pl_shader_detect_peak                                             \n"
+          "if (gl_LocalInvocationIndex == 0u) {                                 \n"
           "    int wg_avg = %s / int(gl_WorkGroupSize.x * gl_WorkGroupSize.y);  \n"
           "    atomicAdd(frame_sum, wg_avg);                                    \n"
           "    atomicMax(frame_max, %s);                                        \n"
