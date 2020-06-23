@@ -444,21 +444,6 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
         }
     }
 
-    ident_t lut = sh_lut(sh, &(struct sh_lut_params) {
-        .object = &obj->lut,
-        .type = PL_VAR_FLOAT,
-        .width = lut_entries,
-        .comps = 1,
-        .linear = true,
-        .update = update,
-        .fill = fill_polar_lut,
-        .priv = obj,
-    });
-    if (!lut) {
-        SH_FAIL(sh, "Failed initializing polar LUT!");
-        return false;
-    }
-
     GLSL("// pl_shader_sample_polar                     \n"
          "vec4 color = vec4(0.0);                       \n"
          "{                                             \n"
@@ -486,7 +471,30 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
 
     ident_t in = NULL;
     int shmem_req = iw * ih * comps * sizeof(float);
-    if (has_compute && sh_try_compute(sh, bw, bh, false, shmem_req)) {
+    bool is_compute = has_compute && sh_try_compute(sh, bw, bh, false, shmem_req);
+
+    // For compute shaders, which read the input texels primarily from shmem,
+    // using a texture-based LUT is better. For the fragment shader fallback
+    // code, which is primarily texture bound, the extra cost of LUT
+    // interpolation is worth the reduction in texel fetches.
+    ident_t lut = sh_lut(sh, &(struct sh_lut_params) {
+        .object = &obj->lut,
+        .method = is_compute ? SH_LUT_TEXTURE : SH_LUT_AUTO,
+        .type = PL_VAR_FLOAT,
+        .width = lut_entries,
+        .comps = 1,
+        .linear = true,
+        .update = update,
+        .fill = fill_polar_lut,
+        .priv = obj,
+    });
+
+    if (!lut) {
+        SH_FAIL(sh, "Failed initializing polar LUT!");
+        return false;
+    }
+
+    if (is_compute) {
         // Compute shader kernel
         GLSL("vec2 wpos = %s_map(gl_WorkGroupID * gl_WorkGroupSize);        \n"
              "vec2 wbase = wpos - pt * fract(wpos * size - vec2(0.5));      \n"

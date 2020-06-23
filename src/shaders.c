@@ -777,9 +777,6 @@ next_dim: ; // `continue` out of the inner loop
     }
 
     // Pick the best method
-    if (!method && params->linear && texdim && texfmt)
-        method = SH_LUT_TEXTURE; // prefer textures for linear interpolation
-
     if (!method && size <= SH_LUT_MAX_LITERAL && !params->dynamic)
         method = SH_LUT_LITERAL; // use literals for small constant LUTs
 
