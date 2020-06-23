@@ -2474,14 +2474,10 @@ no_descriptors: ;
         // Figure out which case we should try and optimize for based on some
         // dumb heuristics. Extremely naive, but good enough for most cases.
         struct pl_tex_params texparams = params->target_dummy.params;
-        if (texparams.storable)
-            pass_vk->finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-        if (texparams.blit_src || texparams.host_readable)
-            pass_vk->finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        if (texparams.blit_dst || texparams.host_writable)
-            pass_vk->finalLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         if (texparams.sampleable)
             pass_vk->finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        if (texparams.blit_src || texparams.host_readable)
+            pass_vk->finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
         // Assume we're ping-ponging between a render pass and some other
         // operation. This is the most likely scenario, or rather, the only one
