@@ -670,29 +670,19 @@ struct sh_lut_obj {
     enum sh_lut_method method;
     enum pl_var_type type;
     int width, height, depth, comps;
-    union {
-        const struct pl_tex *tex;
-        struct bstr str;
-        void *data;
-    } weights;
+
+    // weights, depending on the method
+    const struct pl_tex *tex;
+    struct bstr str;
+    void *data;
 };
 
 static void sh_lut_uninit(const struct pl_gpu *gpu, void *ptr)
 {
     struct sh_lut_obj *lut = ptr;
-    switch (lut->method) {
-    case SH_LUT_TEXTURE:
-    case SH_LUT_LINEAR:
-        pl_tex_destroy(gpu, &lut->weights.tex);
-        break;
-    case SH_LUT_UNIFORM:
-        talloc_free(lut->weights.data);
-        break;
-    case SH_LUT_LITERAL:
-        talloc_free(lut->weights.str.start);
-        break;
-    default: break;
-    }
+    pl_tex_destroy(gpu, &lut->tex);
+    talloc_free(lut->str.start);
+    talloc_free(lut->data);
 
     *lut = (struct sh_lut_obj) {0};
 }
@@ -842,18 +832,18 @@ next_dim: ; // `continue` out of the inner loop
 
             bool ok;
             if (params->dynamic) {
-                ok = pl_tex_recreate(gpu, &lut->weights.tex, &tex_params);
+                ok = pl_tex_recreate(gpu, &lut->tex, &tex_params);
                 if (ok) {
                     ok = pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
-                        .tex = lut->weights.tex,
+                        .tex = lut->tex,
                         .ptr = tmp,
                     });
                 }
             } else {
                 // Can't use pl_tex_recreate because of `initial_data`
-                pl_tex_destroy(gpu, &lut->weights.tex);
-                lut->weights.tex = pl_tex_create(gpu, &tex_params);
-                ok = lut->weights.tex;
+                pl_tex_destroy(gpu, &lut->tex);
+                lut->tex = pl_tex_create(gpu, &tex_params);
+                ok = lut->tex;
             }
 
             if (!ok) {
@@ -864,13 +854,13 @@ next_dim: ; // `continue` out of the inner loop
         }
 
         case SH_LUT_UNIFORM:
-            talloc_free(lut->weights.data);
-            lut->weights.data = tmp; // re-use `tmp`
+            talloc_free(lut->data);
+            lut->data = tmp; // re-use `tmp`
             tmp = NULL;
             break;
 
         case SH_LUT_LITERAL: {
-            lut->weights.str.len = 0;
+            lut->str.len = 0;
             static const char prefix[PL_VAR_TYPE_COUNT] = {
                 [PL_VAR_SINT]   = 'i',
                 [PL_VAR_UINT]   = 'u',
@@ -879,25 +869,25 @@ next_dim: ; // `continue` out of the inner loop
 
             for (int i = 0; i < size * params->comps; i += params->comps) {
                 if (i > 0)
-                    bstr_xappend_asprintf_c(lut, &lut->weights.str, ",");
+                    bstr_xappend_asprintf_c(lut, &lut->str, ",");
                 if (params->comps > 1) {
-                    bstr_xappend_asprintf_c(lut, &lut->weights.str, "%cvec%d(",
+                    bstr_xappend_asprintf_c(lut, &lut->str, "%cvec%d(",
                                             prefix[params->type], params->comps);
                 }
                 for (int c = 0; c < params->comps; c++) {
                     switch (params->type) {
                     case PL_VAR_FLOAT:
-                        bstr_xappend_asprintf_c(lut, &lut->weights.str, "%s%f",
+                        bstr_xappend_asprintf_c(lut, &lut->str, "%s%f",
                                                 c > 0 ? "," : "",
                                                 ((float *) tmp)[i+c]);
                         break;
                     case PL_VAR_UINT:
-                        bstr_xappend_asprintf_c(lut, &lut->weights.str, "%s%u",
+                        bstr_xappend_asprintf_c(lut, &lut->str, "%s%u",
                                                 c > 0 ? "," : "",
                                                 ((unsigned int *) tmp)[i+c]);
                         break;
                     case PL_VAR_SINT:
-                        bstr_xappend_asprintf_c(lut, &lut->weights.str, "%s%d",
+                        bstr_xappend_asprintf_c(lut, &lut->str, "%s%d",
                                                 c > 0 ? "," : "",
                                                 ((int *) tmp)[i+c]);
                         break;
@@ -905,7 +895,7 @@ next_dim: ; // `continue` out of the inner loop
                     }
                 }
                 if (params->comps > 1)
-                    bstr_xappend_asprintf_c(lut, &lut->weights.str, ")");
+                    bstr_xappend_asprintf_c(lut, &lut->str, ")");
             }
             break;
         }
@@ -942,7 +932,7 @@ next_dim: ; // `continue` out of the inner loop
                 .name = "weights",
                 .type = PL_DESC_SAMPLED_TEX,
             },
-            .object = lut->weights.tex,
+            .object = lut->tex,
         });
 
         GLSLH("#define %s(pos) (texelFetch(%s, %s(pos",
@@ -964,7 +954,7 @@ next_dim: ; // `continue` out of the inner loop
                 .name = "weights",
                 .type = PL_DESC_SAMPLED_TEX,
             },
-            .object = lut->weights.tex,
+            .object = lut->tex,
         });
 
         ident_t pos_macros[PL_ARRAY_SIZE(sizes)] = {0};
@@ -972,7 +962,7 @@ next_dim: ; // `continue` out of the inner loop
             pos_macros[i] = sh_lut_pos(sh, sizes[i]);
 
         GLSLH("#define %s(pos) (%s(%s, %s(\\\n",
-              name, sh_tex_fn(sh, lut->weights.tex->params),
+              name, sh_tex_fn(sh, lut->tex->params),
               tex, types[texdim - 1]);
 
         for (int i = 0; i < texdim; i++) {
@@ -1002,7 +992,7 @@ next_dim: ; // `continue` out of the inner loop
                 .dim_m = 1,
                 .dim_a = size,
             },
-            .data = lut->weights.data,
+            .data = lut->data,
         });
         break;
 
@@ -1010,7 +1000,7 @@ next_dim: ; // `continue` out of the inner loop
         arr_name = sh_fresh(sh, "weights");
         GLSLH("const %s %s[%d] = %s[](\n  ",
               types[params->comps - 1], arr_name, size, dtypes[params->type]);
-        bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], lut->weights.str);
+        bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], lut->str);
         GLSLH(");\n");
         break;
 
