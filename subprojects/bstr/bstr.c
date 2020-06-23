@@ -267,6 +267,7 @@ int bstr_sscanf(struct bstr str, const char *format, ...)
     talloc_free(ptr);
     return ret;
 }
+
 static void resize_append(void *talloc_ctx, bstr *s, size_t append_min)
 {
     size_t size = talloc_get_size(s->start);
