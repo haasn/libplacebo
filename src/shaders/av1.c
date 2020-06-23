@@ -822,10 +822,10 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
         if (has_c[i] && priv.num > 0) {
             scaling[i] = sh_lut(sh, &(struct sh_lut_params) {
                 .object = &obj->lut_scaling[i],
-                .method = SH_LUT_LINEAR,
                 .type = PL_VAR_FLOAT,
                 .width = SCALING_LUT_SIZE,
                 .comps = 1,
+                .linear = true,
                 .update = scaling_changed,
                 .dynamic = true,
                 .fill = generate_scaling,

@@ -673,6 +673,7 @@ static ident_t sh_lut_pos(struct pl_shader *sh, int lut_size)
 struct sh_lut_obj {
     enum sh_lut_method method;
     enum pl_var_type type;
+    bool linear;
     int width, height, depth, comps;
 
     // weights, depending on the method
@@ -703,6 +704,8 @@ ident_t sh_lut(struct pl_shader *sh, const struct sh_lut_params *params)
     pl_assert(params->width > 0 && params->height >= 0 && params->depth >= 0);
     pl_assert(params->comps > 0);
     pl_assert(params->type);
+    pl_assert(!params->linear || params->type == PL_VAR_FLOAT);
+
     int sizes[] = { params->width, params->height, params->depth };
     int size = params->width * PL_DEF(params->height, 1) * PL_DEF(params->depth, 1);
     int dims = params->depth ? 3 : params->height ? 2 : 1;
@@ -738,7 +741,7 @@ next_dim: ; // `continue` out of the inner loop
     };
 
     enum pl_fmt_caps texcaps = PL_FMT_CAP_SAMPLEABLE;
-    if (params->method == SH_LUT_LINEAR)
+    if (params->linear)
         texcaps |= PL_FMT_CAP_LINEAR;
 
     const struct pl_fmt *texfmt = NULL;
@@ -758,32 +761,33 @@ next_dim: ; // `continue` out of the inner loop
     }
 
     enum sh_lut_method method = params->method;
-    if (method == SH_LUT_LINEAR) {
-        pl_assert(params->type == PL_VAR_FLOAT);
-        if (!gpu) {
-            SH_FAIL(sh, "Linear LUTs require the use of a GPU!");
-            goto error;
-        }
-    }
-
     if (!gpu) {
         PL_TRACE(sh, "No GPU available, falling back to literal LUT embedding");
         method = SH_LUT_LITERAL;
     }
 
-    // Pick the best method
-    if (!method && size <= SH_LUT_MAX_LITERAL && !params->dynamic)
-        method = SH_LUT_LITERAL;
+    // The linear sampling code currently only supports 1D linear interpolation
+    if (params->linear && dims > 1) {
+        if (texfmt) {
+            method = SH_LUT_TEXTURE;
+        } else {
+            SH_FAIL(sh, "Can't emulate linear LUTs for 2D/3D LUTs");
+            goto error;
+        }
+    }
 
-    if (!method && texdim && texfmt)
-        method = SH_LUT_TEXTURE;
+    // Pick the best method
+    if (!method && params->linear && texdim && texfmt)
+        method = SH_LUT_TEXTURE; // prefer textures for linear interpolation
+
+    if (!method && size <= SH_LUT_MAX_LITERAL && !params->dynamic)
+        method = SH_LUT_LITERAL; // use literals for small constant LUTs
+
+    if (!method && texfmt)
+        method = SH_LUT_TEXTURE; // use textures if a texfmt exists
 
     if (!method && gpu && gpu->caps & PL_GPU_CAP_INPUT_VARIABLES)
-        method = SH_LUT_UNIFORM;
-
-    // texelFetch requires GLSL >= 130, so fall back to the LINEAR code
-    if (method == SH_LUT_TEXTURE && gpu->glsl.version < 130)
-        method = SH_LUT_LINEAR;
+        method = SH_LUT_UNIFORM; // use uniforms if gpu supports them natively
 
     // No other method found
     if (!method) {
@@ -795,8 +799,9 @@ next_dim: ; // `continue` out of the inner loop
     // Forcibly reinitialize the existing LUT if needed
     bool update = params->update;
     if (method != lut->method || params->type != lut->type ||
-        params->width != lut->width || params->height != lut->height ||
-        params->depth != lut->depth || params->comps != lut->comps)
+        params->linear != lut->linear || params->width != lut->width ||
+        params->height != lut->height || params->depth != lut->depth ||
+        params->comps != lut->comps)
     {
         PL_DEBUG(sh, "LUT method or size changed, reinitializing..");
         update = true;
@@ -808,8 +813,7 @@ next_dim: ; // `continue` out of the inner loop
         params->fill(tmp, params);
 
         switch (method) {
-        case SH_LUT_TEXTURE:
-        case SH_LUT_LINEAR: {
+        case SH_LUT_TEXTURE: {
             if (!texdim) {
                 SH_FAIL(sh, "Texture LUT exceeds texture dimensions!");
                 goto error;
@@ -826,7 +830,7 @@ next_dim: ; // `continue` out of the inner loop
                 .d              = PL_DEF(params->depth,  texdim >= 3 ? 1 : 0),
                 .format         = texfmt,
                 .sampleable     = true,
-                .sample_mode    = method == SH_LUT_LINEAR
+                .sample_mode    = params->linear
                                     ? PL_TEX_SAMPLE_LINEAR
                                     : PL_TEX_SAMPLE_NEAREST,
                 .address_mode   = PL_TEX_ADDRESS_CLAMP,
@@ -909,6 +913,7 @@ next_dim: ; // `continue` out of the inner loop
 
         lut->method = method;
         lut->type = params->type;
+        lut->linear = params->linear;
         lut->width = params->width;
         lut->height = params->height;
         lut->depth = params->depth;
@@ -919,8 +924,8 @@ next_dim: ; // `continue` out of the inner loop
     ident_t name = sh_fresh(sh, "lut");
     ident_t arr_name = NULL;
 
-    static const char * const types[] = {"float", "vec2", "vec3", "vec4"};
-    static const char * const itypes[] = {"uint", "ivec2", "ivec3", "ivec4"};
+    static const char * const ftypes[] = {"float", "vec2", "vec3", "vec4"};
+    static const char * const itypes[] = {"int", "ivec2", "ivec3", "ivec4"};
     static const char * const swizzles[] = {"x", "xy", "xyz", "xyzw"};
     static const char * const dtypes[PL_VAR_TYPE_COUNT] = {
         [PL_VAR_SINT] = "int",
@@ -939,51 +944,41 @@ next_dim: ; // `continue` out of the inner loop
             .object = lut->tex,
         });
 
-        GLSLH("#define %s(pos) (texelFetch(%s, %s(pos",
-              name, tex, itypes[texdim - 1]);
+        // texelFetch requires GLSL >= 130, so fall back to the linear code
+        if (params->linear || gpu->glsl.version < 130) {
+            ident_t pos_macros[PL_ARRAY_SIZE(sizes)] = {0};
+            for (int i = 0; i < dims; i++)
+                pos_macros[i] = sh_lut_pos(sh, sizes[i]);
 
-        // Fill up extra components of the index
-        for (int i = dims; i < texdim; i++)
-            GLSLH(", 0");
+            GLSLH("#define %s(pos) (%s(%s, %s(\\\n",
+                  name, sh_tex_fn(sh, lut->tex->params),
+                  tex, ftypes[texdim - 1]);
 
-        GLSLH("), 0).%s)\n", swizzles[params->comps - 1]);
-        ret = name;
-        break;
-    }
-
-    case SH_LUT_LINEAR: {
-        assert(texdim);
-        ident_t tex = sh_desc(sh, (struct pl_shader_desc) {
-            .desc = {
-                .name = "weights",
-                .type = PL_DESC_SAMPLED_TEX,
-            },
-            .object = lut->tex,
-        });
-
-        ident_t pos_macros[PL_ARRAY_SIZE(sizes)] = {0};
-        for (int i = 0; i < dims; i++)
-            pos_macros[i] = sh_lut_pos(sh, sizes[i]);
-
-        GLSLH("#define %s(pos) (%s(%s, %s(\\\n",
-              name, sh_tex_fn(sh, lut->tex->params),
-              tex, types[texdim - 1]);
-
-        for (int i = 0; i < texdim; i++) {
-            char sep = i == 0 ? ' ' : ',';
-            if (pos_macros[i]) {
-                if (dims > 1) {
-                    GLSLH("   %c%s(%s(pos).%c)\\\n", sep, pos_macros[i],
-                          types[dims - 1], "xyzw"[i]);
+            for (int i = 0; i < texdim; i++) {
+                char sep = i == 0 ? ' ' : ',';
+                if (pos_macros[i]) {
+                    if (dims > 1) {
+                        GLSLH("   %c%s(%s(pos).%c)\\\n", sep, pos_macros[i],
+                              ftypes[dims - 1], "xyzw"[i]);
+                    } else {
+                        GLSLH("   %c%s(float(pos))\\\n", sep, pos_macros[i]);
+                    }
                 } else {
-                    GLSLH("   %c%s(float(pos))\\\n", sep, pos_macros[i]);
+                    GLSLH("   %c%f\\\n", sep, 0.5);
                 }
-            } else {
-                GLSLH("   %c%f\\\n", sep, 0.5);
             }
+            GLSLH("  )).%s)\n", swizzles[params->comps - 1]);
+        } else {
+            GLSLH("#define %s(pos) (texelFetch(%s, %s(pos",
+                  name, tex, itypes[texdim - 1]);
+
+            // Fill up extra components of the index
+            for (int i = dims; i < texdim; i++)
+                GLSLH(", 0");
+
+            GLSLH("), 0).%s)\n", swizzles[params->comps - 1]);
         }
-        GLSLH("  )).%s)\n", swizzles[params->comps - 1]);
-        ret = name;
+
         break;
     }
 
@@ -1003,7 +998,7 @@ next_dim: ; // `continue` out of the inner loop
     case SH_LUT_LITERAL:
         arr_name = sh_fresh(sh, "weights");
         GLSLH("const %s %s[%d] = %s[](\n  ",
-              types[params->comps - 1], arr_name, size, dtypes[params->type]);
+              ftypes[params->comps - 1], arr_name, size, dtypes[params->type]);
         bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], lut->str);
         GLSLH(");\n");
         break;
@@ -1020,9 +1015,26 @@ next_dim: ; // `continue` out of the inner loop
             shift *= sizes[i];
         }
         GLSLH("  ])\n");
-        ret = name;
+
+        if (params->linear) {
+            pl_assert(dims == 1);
+            ident_t arr_lut = name;
+            name = sh_fresh(sh, "lut_lin");
+            GLSLH("%s %s(float fpos) {                              \n"
+                  "    fpos = clamp(fpos, 0.0, 1.0) * %d.0;         \n"
+                  "    float fbase = floor(fpos);                   \n"
+                  "    float fceil = ceil(fpos);                    \n"
+                  "    float fcoord = fpos - fbase;                 \n"
+                  "    return mix(%s(fbase), %s(fceil), fcoord);    \n"
+                  "}                                                \n",
+                  ftypes[params->comps - 1], name,
+                  size - 1,
+                  arr_lut, arr_lut);
+        }
     }
 
+    pl_assert(name);
+    ret = name;
     // fall through
 error:
     talloc_free(tmp);

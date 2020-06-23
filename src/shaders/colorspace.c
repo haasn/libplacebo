@@ -1415,12 +1415,12 @@ bool pl_3dlut_update(struct pl_shader *sh,
     obj->dst = *dst;
     obj->lut = sh_lut(sh, &(struct sh_lut_params) {
         .object = &obj->lut_obj,
-        .method = SH_LUT_LINEAR,
         .type = PL_VAR_FLOAT,
         .width = s_r,
         .height = s_g,
         .depth = s_b,
         .comps = 4,
+        .linear = true,
         .update = changed,
         .fill = fill_3dlut,
         .priv = obj,
