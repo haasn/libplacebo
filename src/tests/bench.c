@@ -85,7 +85,6 @@ static void benchmark(const struct pl_gpu *gpu, const char *name, bench_fn bench
             .w              = TEX_SIZE,
             .h              = TEX_SIZE,
             .renderable     = true,
-            .host_readable  = true,
             .storable       = !!(fmt->caps & PL_FMT_CAP_STORABLE),
         });
         REQUIRE(fbos[i]);
