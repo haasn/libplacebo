@@ -761,37 +761,31 @@ next_dim: ; // `continue` out of the inner loop
     }
 
     enum sh_lut_method method = params->method;
-    if (!gpu) {
-        PL_TRACE(sh, "No GPU available, falling back to literal LUT embedding");
-        method = SH_LUT_LITERAL;
-    }
 
     // The linear sampling code currently only supports 1D linear interpolation
     if (params->linear && dims > 1) {
         if (texfmt) {
             method = SH_LUT_TEXTURE;
         } else {
-            SH_FAIL(sh, "Can't emulate linear LUTs for 2D/3D LUTs");
+            SH_FAIL(sh, "Can't emulate linear LUTs for 2D/3D LUTs and no "
+                    "texture support available!");
             goto error;
         }
     }
 
+    // Older GLSL forbids literal array constructors
+    bool can_literal = sh_glsl(sh).version > 110;
+
     // Pick the best method
-    if (!method && size <= SH_LUT_MAX_LITERAL && !params->dynamic)
+    if (!method && size <= SH_LUT_MAX_LITERAL && !params->dynamic && can_literal)
         method = SH_LUT_LITERAL; // use literals for small constant LUTs
 
     if (!method && texfmt)
         method = SH_LUT_TEXTURE; // use textures if a texfmt exists
 
-    if (!method && gpu && gpu->caps & PL_GPU_CAP_INPUT_VARIABLES)
-        method = SH_LUT_UNIFORM; // use uniforms if gpu supports them natively
-
-    // No other method found
-    if (!method) {
-        PL_TRACE(sh, "No other LUT method works, falling back to literal "
-                 "embedding.. this is most likely a slow path!");
-        method = SH_LUT_LITERAL;
-    }
+    // Use an input variable as a last fallback
+    if (!method)
+        method = SH_LUT_UNIFORM;
 
     // Forcibly reinitialize the existing LUT if needed
     bool update = params->update;
