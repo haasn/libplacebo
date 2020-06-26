@@ -29,7 +29,8 @@ struct pl_gl {
     int gl_ver;
     int gles_ver;
     bool has_stride;
-    bool has_invalidate;
+    bool has_invalidate_fb;
+    bool has_invalidate_tex;
     bool has_vao;
     bool has_queries;
 };
@@ -267,7 +268,8 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
     // Cached some existing capability checks
     p->has_stride = test_ext(gpu, "GL_EXT_unpack_subimage", 11, 30);
     p->has_vao = test_ext(gpu, "GL_ARB_vertex_array_object", 30, 0);
-    p->has_invalidate = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
+    p->has_invalidate_fb = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
+    p->has_invalidate_tex = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 0);
     p->has_queries = test_ext(gpu, "GL_ARB_timer_query", 33, 0);
 
     // We simply don't know, so make up some values
@@ -794,15 +796,20 @@ static void gl_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex
     struct pl_gl *p = TA_PRIV(gpu);
     struct pl_tex_gl *tex_gl = TA_PRIV(tex);
 
-    if (!p->has_invalidate)
+    if (!p->has_invalidate_fb)
         return;
 
     if (tex_gl->wrapped_fb) {
         glBindFramebuffer(GL_FRAMEBUFFER, tex_gl->fbo);
         glInvalidateFramebuffer(GL_FRAMEBUFFER, 1, (GLenum[]){GL_COLOR});
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    } else {
+    } else if (p->has_invalidate_tex) {
         glInvalidateTexImage(tex_gl->texture, 0);
+    } else {
+        glBindFramebuffer(GL_FRAMEBUFFER, tex_gl->fbo);
+        glInvalidateFramebuffer(GL_FRAMEBUFFER,
+                                1, (GLenum[]){GL_COLOR_ATTACHMENT0});
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     gl_check_err(gpu, "gl_tex_invalidate");
@@ -1647,7 +1654,7 @@ static void gl_pass_run(const struct pl_gpu *gpu,
     case PL_PASS_RASTER: {
         struct pl_tex_gl *target_gl = TA_PRIV(params->target);
         glBindFramebuffer(GL_FRAMEBUFFER, target_gl->fbo);
-        if (!pass->params.load_target && p->has_invalidate) {
+        if (!pass->params.load_target && p->has_invalidate_fb) {
             GLenum fb = target_gl->fbo ? GL_COLOR_ATTACHMENT0 : GL_COLOR;
             glInvalidateFramebuffer(GL_FRAMEBUFFER, 1, &fb);
         }
