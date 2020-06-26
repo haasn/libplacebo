@@ -32,7 +32,8 @@ struct pl_gl {
     int gl_ver;
     int gles_ver;
     bool has_stride;
-    bool has_invalidate;
+    bool has_invalidate_fb;
+    bool has_invalidate_tex;
     bool has_vao;
     bool has_queries;
 };
