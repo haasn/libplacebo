@@ -76,6 +76,20 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
     PL_INFO(p, "    GL_VENDOR:   %s", glGetString(GL_VENDOR));
     PL_INFO(p, "    GL_RENDERER: %s", glGetString(GL_RENDERER));
 
+    if (pl_msg_test(ctx, PL_LOG_DEBUG)) {
+        if (ver >= 30) {
+            int num_exts = 0;
+            glGetIntegerv(GL_NUM_EXTENSIONS, &num_exts);
+            PL_DEBUG(p, "    GL_EXTENSIONS:");
+            for (int i = 0; i < num_exts; i++) {
+                const char *ext = glGetStringi(GL_EXTENSIONS, i);
+                PL_DEBUG(p, "        %s", ext);
+            }
+        } else {
+            PL_DEBUG(p, "    GL_EXTENSIONS: %s", glGetString(GL_EXTENSIONS));
+        }
+    }
+
     if (params->debug) {
         if (epoxy_has_gl_extension("GL_ARB_debug_output")) {
             glDebugMessageCallback(debug_cb, ctx);
