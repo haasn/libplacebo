@@ -19,5 +19,20 @@
 
 #include "../common.h"
 #include "../context.h"
+#include "../gpu.h"
 
 #include <epoxy/gl.h>
+
+// For gpu.priv
+struct pl_gl {
+    struct pl_gpu_fns impl;
+    bool failed;
+
+    // Cached capabilities
+    int gl_ver;
+    int gles_ver;
+    bool has_stride;
+    bool has_invalidate;
+    bool has_vao;
+    bool has_queries;
+};

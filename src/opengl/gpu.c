@@ -16,23 +16,11 @@
  */
 
 #include "gpu.h"
+#include "common.h"
 #include "formats.h"
 #include "utils.h"
 
 static const struct pl_gpu_fns pl_fns_gl;
-
-// For gpu.priv
-struct pl_gl {
-    struct pl_gpu_fns impl;
-
-    // Cached capabilities
-    int gl_ver;
-    int gles_ver;
-    bool has_stride;
-    bool has_invalidate;
-    bool has_vao;
-    bool has_queries;
-};
 
 static bool test_ext(const struct pl_gpu *gpu, const char *ext,
                      int gl_ver, int gles_ver)
@@ -1815,6 +1803,12 @@ static void gl_gpu_finish(const struct pl_gpu *gpu)
     gl_check_err(gpu, "gl_gpu_finish");
 }
 
+static bool gl_gpu_is_failed(const struct pl_gpu *gpu)
+{
+    struct pl_gl *gl = TA_PRIV(gpu);
+    return gl->failed;
+}
+
 static const struct pl_gpu_fns pl_fns_gl = {
     .destroy                = gl_destroy_gpu,
     .tex_create             = gl_tex_create,
@@ -1839,4 +1833,5 @@ static const struct pl_gpu_fns pl_fns_gl = {
     .timer_query            = gl_timer_query,
     .gpu_flush              = gl_gpu_flush,
     .gpu_finish             = gl_gpu_finish,
+    .gpu_is_failed          = gl_gpu_is_failed,
 };

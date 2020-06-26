@@ -1229,6 +1229,15 @@ void pl_gpu_finish(const struct pl_gpu *gpu)
     impl->gpu_finish(gpu);
 }
 
+bool pl_gpu_is_failed(const struct pl_gpu *gpu)
+{
+    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    if (!impl->gpu_is_failed)
+        return false;
+
+    return impl->gpu_is_failed(gpu);
+}
+
 // GPU-internal helpers
 
 void pl_buf_pool_uninit(const struct pl_gpu *gpu, struct pl_buf_pool *pool)

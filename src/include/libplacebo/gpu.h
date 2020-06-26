@@ -1147,4 +1147,12 @@ void pl_gpu_flush(const struct pl_gpu *gpu);
 // to a `pl_swapchain`.
 void pl_gpu_finish(const struct pl_gpu *gpu);
 
+// Returns true if the GPU is considered to be in a "failed" state, which
+// during normal operation is typically the result of things like the device
+// being lost (due to e.g. power management).
+//
+// If this returns true, users *should* destroy and recreate the `pl_gpu`,
+// including all associated resources, via the appropriate mechanism.
+bool pl_gpu_is_failed(const struct pl_gpu *gpu);
+
 #endif // LIBPLACEBO_GPU_H_

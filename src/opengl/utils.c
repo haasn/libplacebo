@@ -15,6 +15,7 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "common.h"
 #include "utils.h"
 
 const char *gl_err_str(GLenum err)
@@ -37,6 +38,7 @@ const char *gl_err_str(GLenum err)
 
 bool gl_check_err(const struct pl_gpu *gpu, const char *fun)
 {
+    struct pl_gl *gl = TA_PRIV(gpu);
     bool ret = true;
 
     while (true) {
@@ -45,5 +47,6 @@ bool gl_check_err(const struct pl_gpu *gpu, const char *fun)
             return ret;
         PL_ERR(gpu, "%s: OpenGL error: %s", fun, gl_err_str(error));
         ret = false;
+        gl->failed = true;
     }
 }

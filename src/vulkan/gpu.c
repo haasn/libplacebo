@@ -3353,6 +3353,13 @@ static void vk_gpu_finish(const struct pl_gpu *gpu)
     vk_wait_idle(vk);
 }
 
+static bool vk_gpu_is_failed(const struct pl_gpu *gpu)
+{
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+    return vk->failed;
+}
+
 struct vk_cmd *pl_vk_steal_cmd(const struct pl_gpu *gpu)
 {
     struct pl_vk *p = TA_PRIV(gpu);
@@ -3389,4 +3396,5 @@ static const struct pl_gpu_fns pl_fns_vk = {
     .timer_query            = vk_timer_query,
     .gpu_flush              = vk_gpu_flush,
     .gpu_finish             = vk_gpu_finish,
+    .gpu_is_failed          = vk_gpu_is_failed,
 };

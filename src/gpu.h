@@ -56,6 +56,7 @@ struct pl_gpu_fns {
     GPU_PFN(timer_query); // optional
     GPU_PFN(gpu_flush); // optional
     GPU_PFN(gpu_finish);
+    GPU_PFN(gpu_is_failed); // optional
 };
 #undef GPU_PFN
 
