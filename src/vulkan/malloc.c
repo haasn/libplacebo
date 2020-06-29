@@ -627,11 +627,18 @@ bool vk_malloc_buffer(struct vk_malloc *ma, VkBufferUsageFlags bufFlags,
     return true;
 }
 
-bool vk_malloc_import(struct vk_malloc *ma, enum pl_handle_type handle_type,
+bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
+                      enum pl_handle_type handle_type,
                       const struct pl_shared_mem *shared_mem,
                       struct vk_memslice *out)
 {
     struct vk_ctx *vk = ma->vk;
+
+    if (reqs.size > shared_mem->size) {
+        PL_ERR(vk, "Imported object requires memory larger than the provided "
+               "size!");
+        return false;
+    }
 
 #ifndef VK_HAVE_UNIX
 
@@ -662,7 +669,7 @@ bool vk_malloc_import(struct vk_malloc *ma, enum pl_handle_type handle_type,
 
     // We pick the first compatible memory type because we have no other basis
     // for choosing if there is more than one available.
-    int first_mem_type = ffs(fdprops.memoryTypeBits);
+    int first_mem_type = ffs(fdprops.memoryTypeBits & reqs.memoryTypeBits);
     if (!first_mem_type) {
        PL_ERR(vk, "No compatible memory types offered for imported memory");
        return false;

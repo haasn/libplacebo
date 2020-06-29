@@ -1017,7 +1017,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
 
     struct vk_memslice *mem = &tex_vk->mem;
     if (params->import_handle) {
-        if (!vk_malloc_import(p->alloc, params->import_handle,
+        if (!vk_malloc_import(p->alloc, reqs, params->import_handle,
                               &params->shared_mem, mem))
         {
             goto error;
@@ -1824,10 +1824,6 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     }
 
     if (params->import_handle) {
-        if (!vk_malloc_import(p->alloc, params->import_handle,
-                              &params->shared_mem, &buf_vk->slice.mem))
-            goto error;
-
         uint32_t qfs[3] = {0};
         for (int i = 0; i < vk->num_pools; i++)
             qfs[i] = vk->pools[i]->qf;
@@ -1844,9 +1840,16 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
 
         VK(vk->CreateBuffer(vk->dev, &binfo, VK_ALLOC, &buf_vk->import_buf));
         VK_NAME(BUFFER, buf_vk->import_buf, "imported");
-        buf_vk->slice.buf = buf_vk->import_buf;
 
-        VK(vk->BindBufferMemory(vk->dev, buf_vk->import_buf, buf_vk->slice.mem.vkmem, 0));
+        VkMemoryRequirements reqs = {0};
+        vk->GetBufferMemoryRequirements(vk->dev, buf_vk->import_buf, &reqs);
+        if (!vk_malloc_import(p->alloc, reqs, params->import_handle,
+                              &params->shared_mem, &buf_vk->slice.mem))
+            goto error;
+
+        buf_vk->slice.buf = buf_vk->import_buf;
+        VK(vk->BindBufferMemory(vk->dev, buf_vk->import_buf,
+                                buf_vk->slice.mem.vkmem, 0));
     } else {
         if (!vk_malloc_buffer(p->alloc, bufFlags, memFlags, size, align,
                               params->export_handle, &buf_vk->slice))
