@@ -130,6 +130,41 @@ skip_tex: ;
     pl_buf_destroy(gpu, &exp_buf);
 }
 
+static void vulkan_test_host_ptr(const struct pl_vulkan *pl_vk)
+{
+    const struct pl_gpu *gpu = pl_vk->gpu;
+    if (!(gpu->import_caps.buf & PL_HANDLE_HOST_PTR))
+        return;
+
+    REQUIRE(gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS);
+
+    const size_t size = 2 << 20;
+    const size_t offset = 2 << 10;
+    const size_t slice = 2 << 16;
+
+    uint8_t *data = aligned_alloc(0x1000, size);
+    for (int i = 0; i < size; i++)
+        data[i] = (uint8_t) i;
+
+    const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        .type = PL_BUF_TEX_TRANSFER,
+        .size = slice,
+        .import_handle = PL_HANDLE_HOST_PTR,
+        .shared_mem = {
+            .handle.ptr = data,
+            .size = size,
+            .offset = offset,
+        },
+        .host_mapped = true,
+    });
+
+    REQUIRE(buf);
+    REQUIRE(memcmp(data + offset, buf->data, slice) == 0);
+
+    pl_buf_destroy(gpu, &buf);
+    free(data);
+}
+
 static void vulkan_swapchain_tests(const struct pl_vulkan *vk, VkSurfaceKHR surf)
 {
     if (!surf)
@@ -280,6 +315,7 @@ int main()
         vulkan_interop_tests(vk, PL_HANDLE_WIN32);
         vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
+        vulkan_test_host_ptr(vk);
 
         pl_vulkan_destroy(&vk);
 

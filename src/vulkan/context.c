@@ -133,6 +133,12 @@ static const struct vk_ext vk_device_extensions[] = {
         },
 #endif
     }, {
+        .name = VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME,
+        .funs = (struct vk_fun[]) {
+            VK_DEV_FUN(GetMemoryHostPointerPropertiesEXT),
+            {0},
+        },
+    }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
         .core_ver = VK_API_VERSION_1_1,
         .funs = (struct vk_fun[]) {
@@ -179,6 +185,7 @@ const char * const pl_vulkan_recommended_extensions[] = {
     VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
     VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
     VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+    VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME,
     VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
     VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
     VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,

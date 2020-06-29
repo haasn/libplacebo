@@ -200,6 +200,7 @@ struct vk_ctx {
     VK_FUN(GetImageMemoryRequirements);
     VK_FUN(GetMemoryFdKHR);
     VK_FUN(GetMemoryFdPropertiesKHR);
+    VK_FUN(GetMemoryHostPointerPropertiesEXT);
     VK_FUN(GetPipelineCacheData);
     VK_FUN(GetQueryPoolResults);
     VK_FUN(GetSemaphoreFdKHR);

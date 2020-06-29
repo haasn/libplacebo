@@ -97,6 +97,7 @@ struct vk_heap {
 struct vk_malloc {
     struct vk_ctx *vk;
     VkPhysicalDeviceMemoryProperties props;
+    VkDeviceSize host_ptr_align;
     struct vk_heap *heaps;
     int num_heaps;
 };
@@ -126,6 +127,9 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
             break;
         case PL_HANDLE_WIN32_KMT:
             // PL_HANDLE_WIN32_KMT is just an identifier. It doesn't get closed.
+            break;
+        case PL_HANDLE_HOST_PTR:
+            // Implicitly unmapped
             break;
         }
 
@@ -185,6 +189,7 @@ static bool buf_external_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
         .sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES_KHR,
     };
 
+    pl_assert(info.handleType);
     vk->GetPhysicalDeviceExternalBufferPropertiesKHR(vk->physd, &info, &props);
     return vk_external_mem_check(&props.externalMemoryProperties, handle_type,
                                  import);
@@ -213,6 +218,9 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma, struct vk_heap *heap,
     case PL_HANDLE_WIN32:
     case PL_HANDLE_WIN32_KMT:
         slab->handle.handle = NULL;
+        break;
+    case PL_HANDLE_HOST_PTR:
+        slab->handle.ptr = NULL;
         break;
     }
 
@@ -388,8 +396,20 @@ static void heap_uninit(struct vk_ctx *vk, struct vk_heap *heap)
 struct vk_malloc *vk_malloc_create(struct vk_ctx *vk)
 {
     struct vk_malloc *ma = talloc_zero(NULL, struct vk_malloc);
-    vk->GetPhysicalDeviceMemoryProperties(vk->physd, &ma->props);
     ma->vk = vk;
+
+    VkPhysicalDeviceExternalMemoryHostPropertiesEXT host_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT,
+    };
+
+    VkPhysicalDeviceProperties2 dprops = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        .pNext = &host_props,
+    };
+
+    vk->GetPhysicalDeviceProperties2KHR(vk->physd, &dprops);
+    vk->GetPhysicalDeviceMemoryProperties(vk->physd, &ma->props);
+    ma->host_ptr_align = host_props.minImportedHostPointerAlignment;
 
     PL_INFO(vk, "Memory heaps supported by device:");
     for (int i = 0; i < ma->props.memoryHeapCount; i++) {
@@ -588,7 +608,7 @@ static bool slice_heap(struct vk_malloc *ma, struct vk_heap *heap, size_t size,
     };
 
     if (slab->data) {
-        out->data = (void *) ((uintptr_t) slab->data + offset);
+        out->data = (uint8_t *) slab->data + offset;
         out->coherent = slab->coherent;
     }
 
@@ -633,6 +653,9 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
                       struct vk_memslice *out)
 {
     struct vk_ctx *vk = ma->vk;
+    VkExternalMemoryHandleTypeFlagBitsKHR vk_handle_type;
+    vk_handle_type = vk_mem_handle_type(handle_type);
+
     struct vk_slab *slab = NULL;
 
     if (reqs.size > shared_mem->size) {
@@ -641,66 +664,108 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
         return false;
     }
 
-#ifndef VK_HAVE_UNIX
+    VkImportMemoryFdInfoKHR fdinfo = {
+        .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
+        .handleType = vk_handle_type,
+        .fd = -1,
+    };
 
-    PL_ERR(vk, "Importing external memory is only supported on POSIX platforms.");
-    return false;
+    VkImportMemoryHostPointerInfoEXT ptrinfo = {
+        .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT,
+        .handleType = vk_handle_type,
+    };
 
-#else
+    VkMemoryAllocateInfo ainfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = shared_mem->size,
+    };
 
-    int fd = -1;
-    if (handle_type != PL_HANDLE_DMA_BUF) {
-        PL_ERR(vk, "Importing external memory is only supported for PL_HANDLE_DMA_BUF.");
+    switch (handle_type) {
+#ifdef VK_HAVE_UNIX
+    case PL_HANDLE_DMA_BUF: {
+        if (!vk->GetMemoryFdPropertiesKHR) {
+            PL_ERR(vk, "Importing PL_HANDLE_DMA_BUF requires %s.",
+                   VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+            return false;
+        }
+
+        VkMemoryFdPropertiesKHR fdprops = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
+        };
+
+        VK(vk->GetMemoryFdPropertiesKHR(vk->dev,
+                                        vk_handle_type,
+                                        shared_mem->handle.fd,
+                                        &fdprops));
+
+        // We dup() the fd to make it safe to import the same original fd
+        // multiple times.
+        fdinfo.fd = dup(shared_mem->handle.fd);
+        if (fdinfo.fd == -1) {
+            PL_ERR(vk, "Failed to dup() fd (%d) when importing memory: %s",
+                   fdinfo.fd, strerror(errno));
+            return false;
+        }
+
+        reqs.memoryTypeBits &= fdprops.memoryTypeBits;
+        ainfo.pNext = &fdinfo;
+        break;
+    }
+#else // !VK_HAVE_UNIX
+    case PL_HANDLE_DMA_BUF:
+        PL_ERR(vk, "PL_HANDLE_DMA_BUF requires building with UNIX support!");
         return false;
-    } else if (!vk->GetMemoryFdPropertiesKHR) {
-        PL_ERR(vk, "Importing external memory requires %s.",
-               VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
+#endif
+
+    case PL_HANDLE_HOST_PTR: {
+        if (!vk->GetMemoryHostPointerPropertiesEXT) {
+            PL_ERR(vk, "Importing PL_HANDLE_HOST_PTR requires %s.",
+                   VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
+            return false;
+        }
+
+        uintptr_t iptr = (uintptr_t) shared_mem->handle.ptr;
+        if (PL_ALIGN2(iptr, ma->host_ptr_align) != iptr) {
+            PL_ERR(vk, "Imported host pointer %p does not adhere to the "
+                   "alignment requirements required to import pointers: %zu",
+                   shared_mem->handle.ptr, (size_t) ma->host_ptr_align);
+            return false;
+        }
+
+        VkMemoryHostPointerPropertiesEXT ptrprops = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT,
+        };
+
+        VK(vk->GetMemoryHostPointerPropertiesEXT(vk->dev, vk_handle_type,
+                                                 shared_mem->handle.ptr,
+                                                 &ptrprops));
+
+        ptrinfo.pHostPointer = shared_mem->handle.ptr;
+        reqs.memoryTypeBits &= ptrprops.memoryTypeBits;
+        ainfo.pNext = &ptrinfo;
+        break;
+    }
+
+    case PL_HANDLE_FD:
+    case PL_HANDLE_WIN32:
+    case PL_HANDLE_WIN32_KMT:
+        PL_ERR(vk, "vk_malloc_import: unsupported handle type %d", handle_type);
+        return false;
+    }
+
+    pl_assert(ainfo.pNext);
+
+    // We pick the first compatible memory type because we have no other basis
+    // for choosing if there is more than one available.
+    int first_mem_type = ffs(reqs.memoryTypeBits);
+    if (!first_mem_type) {
+        PL_ERR(vk, "No compatible memory types offered for imported memory");
         return false;
     }
 
     VkDeviceMemory vkmem = NULL;
-    VkMemoryFdPropertiesKHR fdprops = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
-    };
-
-    VK(vk->GetMemoryFdPropertiesKHR(vk->dev,
-                                    vk_mem_handle_type(handle_type),
-                                    shared_mem->handle.fd,
-                                    &fdprops));
-
-    // We pick the first compatible memory type because we have no other basis
-    // for choosing if there is more than one available.
-    int first_mem_type = ffs(fdprops.memoryTypeBits & reqs.memoryTypeBits);
-    if (!first_mem_type) {
-       PL_ERR(vk, "No compatible memory types offered for imported memory");
-       return false;
-    }
-
-    // We dup() the fd to make it safe to import the same original fd
-    // multiple times.
-    fd = dup(shared_mem->handle.fd);
-    if (fd == -1) {
-        PL_ERR(vk, "Failed to dup() fd (%d) when importing memory: %s",
-               fd, strerror(errno));
-        return false;
-    }
-
-    const VkImportMemoryFdInfoKHR iinfo = {
-        .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
-        .pNext = NULL,
-        .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-        .fd = fd,
-    };
-
-    const VkMemoryAllocateInfo ainfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .pNext = &iinfo,
-        .allocationSize = shared_mem->size,
-        .memoryTypeIndex = first_mem_type - 1,
-    };
-
+    ainfo.memoryTypeIndex = first_mem_type - 1;
     VK(vk->AllocateMemory(vk->dev, &ainfo, VK_ALLOC, &vkmem));
-    // fd ownership is transferred at this point.
 
     slab = talloc_ptrtype(NULL, slab);
     *slab = (struct vk_slab) {
@@ -709,9 +774,6 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
         .imported = true,
         .size = shared_mem->size,
         .used = shared_mem->size,
-        .handle = {
-            .fd = fd,
-        },
         .handle_type = handle_type,
     };
 
@@ -723,6 +785,24 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
         .priv = slab,
     };
 
+    switch (handle_type) {
+    case PL_HANDLE_DMA_BUF:
+    case PL_HANDLE_FD:
+        PL_DEBUG(vk, "Imported %zu of memory from fd: %d",
+                 (size_t) slab->size, shared_mem->handle.fd);
+        // fd ownership is transferred at this point.
+        slab->handle.fd = fdinfo.fd;
+        fdinfo.fd = -1;
+        break;
+    case PL_HANDLE_HOST_PTR:
+        PL_DEBUG(vk, "Imported %zu of memory from ptr: %p",
+                 (size_t) slab->size, shared_mem->handle.ptr);
+        break;
+    case PL_HANDLE_WIN32:
+    case PL_HANDLE_WIN32_KMT:
+        break;
+    }
+
     VkMemoryPropertyFlags flags = ma->props.memoryTypes[ainfo.memoryTypeIndex].propertyFlags;
     if (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
         VK(vk->MapMemory(vk->dev, slab->mem, 0, VK_WHOLE_SIZE, 0, &slab->data));
@@ -731,16 +811,11 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
         out->coherent = slab->coherent;
     }
 
-    PL_DEBUG(vk, "Importing %zu of memory from fd: %d",
-             (size_t) slab->size, fd);
-
     return true;
 
 error:
-    if (fd > -1)
-        close(fd);
+    if (fdinfo.fd > -1)
+        close(fdinfo.fd);
     talloc_free(slab);
     return false;
-
-#endif // VK_HAVE_UNIX
 }

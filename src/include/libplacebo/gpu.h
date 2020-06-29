@@ -71,6 +71,7 @@ enum pl_handle_type {
     PL_HANDLE_WIN32     = (1 << 1), // `HANDLE` for win32 API
     PL_HANDLE_WIN32_KMT = (1 << 2), // `HANDLE` for pre-Windows-8 win32 API
     PL_HANDLE_DMA_BUF   = (1 << 3), // 'int fd' for a dma_buf fd
+    PL_HANDLE_HOST_PTR  = (1 << 4), // `void *` for a host-allocated pointer
 };
 
 struct pl_gpu_handle_caps {
@@ -89,6 +90,7 @@ struct pl_gpu_handle_caps {
 union pl_handle {
     int fd;         // PL_HANDLE_FD / PL_HANDLE_DMA_BUF
     void *handle;   // PL_HANDLE_WIN32 / PL_HANDLE_WIN32_KMT
+    void *ptr;      // PL_HANDLE_HOST_PTR
 };
 
 // Structure encapsulating memory that is shared between libplacebo and the
@@ -578,7 +580,7 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
 //
 // Note: Due to its unpredictability, it's not allowed to use this with
 // `params->initial_data` being set. Similarly, it's not allowed on a buffer
-// with `params->handle_type`. since this may invalidate the corresponding
+// with `params->export_handle`. since this may invalidate the corresponding
 // external API's handle. Conversely, it *is* allowed on a buffer with
 // `params->host_mapped`, and the corresponding `buf->data` pointer *may*
 // change as a result of doing so.

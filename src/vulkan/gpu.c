@@ -282,6 +282,9 @@ static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
             .handleType = vk_sync_handle_type(type),
         };
 
+        if (!info.handleType)
+            continue;
+
         VkExternalSemaphorePropertiesKHR props = {
             .sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES_KHR,
         };
@@ -313,6 +316,9 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR,
             .handleType = vk_mem_handle_type(handle_type),
         };
+
+        if (!ext_pinfo.handleType)
+            continue;
 
         VkPhysicalDeviceImageFormatInfo2KHR pinfo = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR,
@@ -1417,7 +1423,9 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     enum vk_wait_type type = vk_cmd_wait(vk, cmd, &buf_vk->sig, stage, &event);
     VkPipelineStageFlags src_stages = 0;
 
-    if (buf_vk->needs_flush || buf->params.host_mapped) {
+    if (buf_vk->needs_flush || buf->params.host_mapped ||
+        buf->params.import_handle == PL_HANDLE_HOST_PTR)
+    {
         if (!buf_vk->exported) {
             buffBarrier.srcAccessMask |= VK_ACCESS_HOST_WRITE_BIT;
             src_stages |= VK_PIPELINE_STAGE_HOST_BIT;
@@ -1527,7 +1535,7 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     // the buffer, or if we intend to overwrite it using mapped memory
     bool can_read = buf->params.host_readable;
     bool can_write = buf_vk->slice.mem.data && buf->params.host_writable;
-    if (buf->params.host_mapped)
+    if (buf->params.host_mapped || buf->params.import_handle == PL_HANDLE_HOST_PTR)
         can_read = can_write = true;
 
     if (!can_read && !can_write)
@@ -3123,6 +3131,7 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
         sync->signal_handle.handle = NULL;
         break;
     case PL_HANDLE_DMA_BUF:
+    case PL_HANDLE_HOST_PTR:
         abort();
     }
 
