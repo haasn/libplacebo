@@ -198,19 +198,25 @@ ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
 
 ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
 {
-    // Skip re-attaching the same buffer desc twice
-    // FIXME: define aliases if the variable names differ
     switch (sd.desc.type) {
     case PL_DESC_BUF_UNIFORM:
     case PL_DESC_BUF_STORAGE:
     case PL_DESC_BUF_TEXEL_UNIFORM:
     case PL_DESC_BUF_TEXEL_STORAGE:
+        // Skip re-attaching the same buffer desc twice
+        // FIXME: define aliases if the variable names differ
         for (int i = 0; i < sh->res.num_descriptors; i++) {
             if (sh->descriptors[i].object == sd.object)
                 return (ident_t) sh->descriptors[i].desc.name;
         }
 
-    default: break;
+        size_t bsize = sizeof(sd.buffer_vars[0]) * sd.num_buffer_vars;
+        sd.buffer_vars = talloc_memdup(sh->tmp, sd.buffer_vars, bsize);
+        break;
+
+    default:
+        pl_assert(!sd.num_buffer_vars);
+        break;
     }
 
     sd.desc.name = sh_fresh(sh, sd.desc.name);
