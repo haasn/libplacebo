@@ -358,8 +358,7 @@ size_t sh_buf_desc_size(const struct pl_shader_desc *buf_desc)
     return last->layout.offset + last->layout.size;
 }
 
-void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
-                      const char *fmt, ...)
+void sh_append(struct pl_shader *sh, enum pl_shader_buf buf, const char *fmt, ...)
 {
     pl_assert(buf >= 0 && buf < SH_BUF_COUNT);
 
@@ -369,8 +368,7 @@ void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
     va_end(ap);
 }
 
-void pl_shader_append_bstr(struct pl_shader *sh, enum pl_shader_buf buf,
-                           struct bstr str)
+void sh_append_bstr(struct pl_shader *sh, enum pl_shader_buf buf, struct bstr str)
 {
     pl_assert(buf >= 0 && buf < SH_BUF_COUNT);
     bstr_xappend(sh, &sh->buffers[buf], str);

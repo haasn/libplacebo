@@ -119,17 +119,15 @@ size_t sh_buf_desc_size(const struct pl_shader_desc *buf_desc);
 
 
 // Underlying function for appending text to a shader
-void pl_shader_append(struct pl_shader *sh, enum pl_shader_buf buf,
-                      const char *fmt, ...)
+void sh_append(struct pl_shader *sh, enum pl_shader_buf buf, const char *fmt, ...)
     PRINTF_ATTRIBUTE(3, 4);
 
-void pl_shader_append_bstr(struct pl_shader *sh, enum pl_shader_buf buf,
-                           struct bstr str);
+void sh_append_bstr(struct pl_shader *sh, enum pl_shader_buf buf, struct bstr str);
 
-#define GLSLP(...) pl_shader_append(sh, SH_BUF_PRELUDE, __VA_ARGS__)
-#define GLSLH(...) pl_shader_append(sh, SH_BUF_HEADER, __VA_ARGS__)
-#define GLSL(...)  pl_shader_append(sh, SH_BUF_BODY, __VA_ARGS__)
-#define GLSLF(...) pl_shader_append(sh, SH_BUF_FOOTER, __VA_ARGS__)
+#define GLSLP(...) sh_append(sh, SH_BUF_PRELUDE, __VA_ARGS__)
+#define GLSLH(...) sh_append(sh, SH_BUF_HEADER, __VA_ARGS__)
+#define GLSL(...)  sh_append(sh, SH_BUF_BODY, __VA_ARGS__)
+#define GLSLF(...) sh_append(sh, SH_BUF_FOOTER, __VA_ARGS__)
 
 // Requires that the share is mutable, has an output signature compatible
 // with the given input signature, as well as an output size compatible with

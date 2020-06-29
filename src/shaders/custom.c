@@ -1084,7 +1084,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         }));
 
         // Load and run the user shader itself
-        pl_shader_append_bstr(sh, SH_BUF_HEADER, hook->pass_body);
+        sh_append_bstr(sh, SH_BUF_HEADER, hook->pass_body);
 
         bool ok;
         if (hook->is_compute) {
