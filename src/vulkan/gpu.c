@@ -1847,6 +1847,12 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
                               &params->shared_mem, &buf_vk->slice.mem))
             goto error;
 
+        if (params->host_mapped && !buf_vk->slice.mem.data) {
+            PL_ERR(gpu, "Failed creating host-mapped buffer from host-invisible "
+                   "imported memory!");
+            goto error;
+        }
+
         buf_vk->slice.buf = buf_vk->import_buf;
         VK(vk->BindBufferMemory(vk->dev, buf_vk->import_buf,
                                 buf_vk->slice.mem.vkmem, 0));

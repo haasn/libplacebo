@@ -633,6 +633,7 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
                       struct vk_memslice *out)
 {
     struct vk_ctx *vk = ma->vk;
+    struct vk_slab *slab = NULL;
 
     if (reqs.size > shared_mem->size) {
         PL_ERR(vk, "Imported object requires memory larger than the provided "
@@ -701,7 +702,7 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
     VK(vk->AllocateMemory(vk->dev, &ainfo, VK_ALLOC, &vkmem));
     // fd ownership is transferred at this point.
 
-    struct vk_slab *slab = talloc_ptrtype(NULL, slab);
+    slab = talloc_ptrtype(NULL, slab);
     *slab = (struct vk_slab) {
         .mem = vkmem,
         .dedicated = true,
@@ -713,6 +714,14 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
         },
         .handle_type = handle_type,
     };
+
+    int heapIndex = ma->props.memoryTypes[ainfo.memoryTypeIndex].heapIndex;
+    const VkMemoryHeap *heap = &ma->props.memoryHeaps[heapIndex];
+    if (heap->flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+        VK(vk->MapMemory(vk->dev, slab->mem, 0, VK_WHOLE_SIZE, 0, &slab->data));
+        slab->coherent = heap->flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    }
+
     *out = (struct vk_memslice) {
         .vkmem = vkmem,
         .size = shared_mem->size,
@@ -729,6 +738,7 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
 error:
     if (fd > -1)
         close(fd);
+    talloc_free(slab);
     return false;
 
 #endif // VK_HAVE_UNIX
