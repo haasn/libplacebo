@@ -545,6 +545,35 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     }
     pl_shader_obj_destroy(&grain);
 
+    // Test custom shaders
+    struct pl_custom_shader custom = {
+        .header =
+            "vec3 invert(vec3 color)            \n"
+            "{                                  \n"
+            "    return vec3(1.0) - color;      \n"
+            "}                                  \n",
+
+        .body =
+            "color = vec4(gl_FragCoord.xy, 0.0, 1.0);   \n"
+            "color.rgb = invert(color.rgb) + offset;    \n",
+
+        .input = PL_SHADER_SIG_NONE,
+        .output = PL_SHADER_SIG_COLOR,
+
+        .num_variables = 1,
+        .variables = &(struct pl_shader_var) {
+            .var = pl_var_float("offset"),
+            .data = &(float) { 0.1 },
+        },
+    };
+
+    sh = pl_dispatch_begin(dp);
+    REQUIRE(pl_shader_custom(sh, &custom));
+    REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+        .shader = &sh,
+        .target = fbo,
+    }));
+
     pl_dispatch_destroy(&dp);
     pl_tex_destroy(gpu, &src);
     pl_tex_destroy(gpu, &fbo);

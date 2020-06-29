@@ -18,10 +18,69 @@
 #ifndef LIBPLACEBO_SHADERS_CUSTOM_H_
 #define LIBPLACEBO_SHADERS_CUSTOM_H_
 
-// Framework for enabling custom user shader hooks, as well as compatibility
-// functions for parsing shaders in mpv format.
+// Functions for writing custom shaders and hooking them into the `pl_renderer`
+// pipeline, as well as compatibility functions for parsing shaders in mpv
+// format.
 
 #include <libplacebo/shaders.h>
+
+// Parameters describing custom shader text to be embedded into a `pl_shader`
+// object. All of the strings are optional and can be left as NULL, but without
+// a `body` in particular, the shader will do nothing useful on its own.
+struct pl_custom_shader {
+    // The prelude contains text such as extra #defines, #extension pragmas,
+    // or other parts of the shader that must be placed at the very
+    // beginning (before input layout declarations etc.)
+    //
+    // Note: #extension pragmas do not need to be emitted to enable support for
+    // resource types already attached to the shader (e.g. SSBOs), compute
+    // shaders, or GPU capabilities known to libplacebo (e.g. subgroups).
+    const char *prelude;
+
+    // The header contains text such as helper function definitions, extra
+    // uniforms, shared memory variables or buffer descriptions.
+    const char *header;
+
+    // The "primary" GLSL code. This will be effectively appended to the "main"
+    // function. It lives in an environment given by the `input` signature, and
+    // is expected to return results in a way given by the `output` signature.
+    //
+    // Note: For ease of development it can be useful to have the main logic
+    // live inside a helper function defined as part of `header`, and specify
+    // the `body` as a single line that simply calls the helper function.
+    const char *body;
+    enum pl_shader_sig input;
+    enum pl_shader_sig output;
+
+    // Extra descriptors, variables and vertex attributes to attach to the
+    // resulting `pl_shader_res`.
+    const struct pl_shader_desc *descriptors;
+    int num_descriptors;
+    const struct pl_shader_var *variables;
+    int num_variables;
+    const struct pl_shader_va *vertex_attribs;
+    int num_vertex_attribs;
+
+    // If true, this shader must be a compute shader. The desired workgroup
+    // size and shared memory usage can be optionally specified, or 0 if no
+    // specific work group size or shared memory size restrictions apply.
+    //
+    // See also: `pl_shader_res.compute_group_size`
+    bool compute;
+    size_t compute_shmem;
+    int compute_group_size[2];
+
+    // Fixes the output size requirements of the shader to exact dimensions.
+    // Optional, if left as 0, means the shader can be dispatched at any size.
+    int output_w;
+    int output_h;
+};
+
+// Append custom shader code, including extra descriptors and variables, to an
+// existing `pl_shader` object. Returns whether successful. This function may
+// fail in the event that e.g. the custom shader requires compute shaders on
+// an unsupported GPU, or exceeds the GPU's shared memory capabilities.
+bool pl_shader_custom(struct pl_shader *sh, const struct pl_custom_shader *params);
 
 // Which "rendering stages" are available for user shader hooking purposes.
 // Except where otherwise noted, all stages are "non-resizable", i.e. the

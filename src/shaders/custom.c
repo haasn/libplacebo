@@ -19,6 +19,75 @@
 #include "gpu.h"
 #include "shaders.h"
 
+bool pl_shader_custom(struct pl_shader *sh, const struct pl_custom_shader *params)
+{
+    if (params->compute) {
+        int bw = PL_DEF(params->compute_group_size[0], 16);
+        int bh = PL_DEF(params->compute_group_size[1], 16);
+        bool flex = !params->compute_group_size[0] ||
+                    !params->compute_group_size[1];
+        if (!sh_try_compute(sh, bw, bh, flex, params->compute_shmem))
+            return false;
+    }
+
+    if (!sh_require(sh, params->input, params->output_w, params->output_h))
+        return false;
+
+    sh->res.output = params->output;
+
+    // Attach the variables, descriptors etc. directly instead of going via
+    // `sh_var` / `sh_desc` etc. to avoid generating fresh names
+    for (int i = 0; i < params->num_variables; i++) {
+        struct pl_shader_var sv = params->variables[i];
+        sv.data = talloc_memdup(sh->tmp, sv.data, pl_var_host_layout(0, &sv.var).size);
+        TARRAY_APPEND(sh, sh->variables, sh->res.num_variables, sv);
+    }
+
+    for (int i = 0; i < params->num_descriptors; i++) {
+        struct pl_shader_desc sd = params->descriptors[i];
+        size_t bsize = sizeof(sd.buffer_vars[0]) * sd.num_buffer_vars;
+        if (bsize)
+            sd.buffer_vars = talloc_memdup(sh->tmp, sd.buffer_vars, bsize);
+        TARRAY_APPEND(sh, sh->descriptors, sh->res.num_descriptors, sd);
+    }
+
+    for (int i = 0; i < params->num_vertex_attribs; i++) {
+        struct pl_shader_va sva = params->vertex_attribs[i];
+        size_t vsize = sva.attr.fmt->texel_size;
+        for (int n = 0; n < PL_ARRAY_SIZE(sva.data); n++)
+            sva.data[n] = talloc_memdup(sh->tmp, sva.data[n], vsize);
+        TARRAY_APPEND(sh, sh->vertex_attribs, sh->res.num_vertex_attribs, sva);
+    }
+
+    if (params->prelude)
+        GLSLP("// pl_shader_custom prelude: \n%s\n", params->prelude);
+    if (params->header)
+        GLSLH("// pl_shader_custom header: \n%s\n", params->header);
+
+    if (params->body) {
+        const char *output_decl = "";
+        if (params->output != params->input) {
+            switch (params->output) {
+            case PL_SHADER_SIG_NONE: break;
+            case PL_SHADER_SIG_COLOR:
+                output_decl = "vec4 color = vec4(0.0);";
+                break;
+
+            default: abort();
+            }
+        }
+
+        GLSL("// pl_shader_custom \n"
+             "%s                  \n"
+             "{                   \n"
+             "%s                  \n"
+             "}                   \n",
+             output_decl, params->body);
+    }
+
+    return true;
+}
+
 // Hard-coded size limits, mainly for convenience (to avoid dynamic memory)
 #define SHADER_MAX_HOOKS 16
 #define SHADER_MAX_BINDS 16
