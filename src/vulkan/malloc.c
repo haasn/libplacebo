@@ -715,13 +715,6 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
         .handle_type = handle_type,
     };
 
-    int heapIndex = ma->props.memoryTypes[ainfo.memoryTypeIndex].heapIndex;
-    const VkMemoryHeap *heap = &ma->props.memoryHeaps[heapIndex];
-    if (heap->flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-        VK(vk->MapMemory(vk->dev, slab->mem, 0, VK_WHOLE_SIZE, 0, &slab->data));
-        slab->coherent = heap->flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    }
-
     *out = (struct vk_memslice) {
         .vkmem = vkmem,
         .size = shared_mem->size,
@@ -729,6 +722,14 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
         .shared_mem = *shared_mem,
         .priv = slab,
     };
+
+    VkMemoryPropertyFlags flags = ma->props.memoryTypes[ainfo.memoryTypeIndex].propertyFlags;
+    if (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+        VK(vk->MapMemory(vk->dev, slab->mem, 0, VK_WHOLE_SIZE, 0, &slab->data));
+        slab->coherent = flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        out->data = (uint8_t *) slab->data + out->offset;
+        out->coherent = slab->coherent;
+    }
 
     PL_DEBUG(vk, "Importing %zu of memory from fd: %d",
              (size_t) slab->size, fd);
