@@ -463,10 +463,6 @@ struct pl_tex_transfer_params {
     // highyly recommended to always use a texture transfer buffer for texture
     // downloads if possible, which allows the transfer to happen
     // asynchronously.
-
-    // When performing a texture transfer using a buffer, the buffer may be
-    // marked as "in use" and should not used for a different type of operation
-    // until pl_buf_poll returns false.
 };
 
 // Upload data to a texture. Returns whether successful.
