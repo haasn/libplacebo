@@ -43,16 +43,99 @@ void pl_gpu_destroy(const struct pl_gpu *gpu)
     impl->destroy(gpu);
 }
 
-void pl_gpu_print_info(const struct pl_gpu *gpu, enum pl_log_level lev)
+static void print_formats(const struct pl_gpu *gpu)
 {
-    PL_MSG(gpu, lev, "GPU information:");
-    PL_MSG(gpu, lev, "    GLSL version: %d%s", gpu->glsl.version,
+    if (!pl_msg_test(gpu->ctx, PL_LOG_DEBUG))
+        return;
+
+    PL_DEBUG(gpu,  "GPU texture formats:");
+    PL_DEBUG(gpu,  "    %-10s %-6s %-6s %-4s %-4s %-13s %-13s %-10s %-10s",
+            "NAME", "TYPE", "CAPS", "SIZE", "COMP", "DEPTH", "HOST_BITS",
+            "GLSL_TYPE", "GLSL_FMT");
+    for (int n = 0; n < gpu->num_formats; n++) {
+        const struct pl_fmt *fmt = gpu->formats[n];
+
+        static const char *types[] = {
+            [PL_FMT_UNKNOWN] = "UNKNOWN",
+            [PL_FMT_UNORM]   = "UNORM",
+            [PL_FMT_SNORM]   = "SNORM",
+            [PL_FMT_UINT]    = "UINT",
+            [PL_FMT_SINT]    = "SINT",
+            [PL_FMT_FLOAT]   = "FLOAT",
+        };
+
+        static const char idx_map[4] = {'R', 'G', 'B', 'A'};
+        char indices[4] = {' ', ' ', ' ', ' '};
+        if (!fmt->opaque) {
+            for (int i = 0; i < fmt->num_components; i++)
+                indices[i] = idx_map[fmt->sample_order[i]];
+        }
+
+#define IDX4(f) (f)[0], (f)[1], (f)[2], (f)[3]
+
+        PL_DEBUG(gpu, "    %-10s %-6s 0x%-4x %-4zu %c%c%c%c "
+                 "{%-2d %-2d %-2d %-2d} {%-2d %-2d %-2d %-2d} %-10s %-10s",
+                 fmt->name, types[fmt->type], (unsigned int) fmt->caps,
+                 fmt->texel_size, IDX4(indices), IDX4(fmt->component_depth),
+                 IDX4(fmt->host_bits), PL_DEF(fmt->glsl_type, ""),
+                 PL_DEF(fmt->glsl_format, ""));
+
+#undef IDX4
+    }
+}
+
+bool pl_fmt_is_ordered(const struct pl_fmt *fmt)
+{
+    bool ret = !fmt->opaque;
+    for (int i = 0; i < fmt->num_components; i++)
+        ret &= fmt->sample_order[i] == i;
+    return ret;
+}
+
+static void gpu_verify(const struct pl_gpu *gpu)
+{
+    pl_assert(gpu->limits.max_tex_2d_dim);
+
+    for (int n = 0; n < gpu->num_formats; n++) {
+        const struct pl_fmt *fmt = gpu->formats[n];
+        pl_assert(fmt->name);
+        pl_assert(fmt->type);
+        pl_assert(fmt->num_components);
+        pl_assert(fmt->internal_size);
+        pl_assert(fmt->opaque ? !fmt->texel_size : fmt->texel_size);
+        for (int i = 0; i < fmt->num_components; i++) {
+            pl_assert(fmt->component_depth[i]);
+            pl_assert(fmt->opaque ? !fmt->host_bits[i] : fmt->host_bits[i]);
+        }
+
+        enum pl_fmt_caps texel_caps = PL_FMT_CAP_VERTEX |
+                                      PL_FMT_CAP_TEXEL_UNIFORM |
+                                      PL_FMT_CAP_TEXEL_STORAGE;
+
+        if (fmt->caps & texel_caps) {
+            pl_assert(fmt->glsl_type);
+            pl_assert(!fmt->opaque);
+        }
+        pl_assert(!fmt->opaque || !(fmt->caps & PL_FMT_CAP_HOST_READABLE));
+        if (fmt->internal_size != fmt->texel_size && !fmt->opaque)
+            pl_assert(fmt->emulated);
+
+        // Assert uniqueness of name
+        for (int o = n + 1; o < gpu->num_formats; o++)
+            pl_assert(strcmp(fmt->name, gpu->formats[o]->name) != 0);
+    }
+}
+
+void pl_gpu_print_info(const struct pl_gpu *gpu)
+{
+    PL_INFO(gpu, "GPU information:");
+    PL_INFO(gpu, "    GLSL version: %d%s", gpu->glsl.version,
            gpu->glsl.vulkan ? " (vulkan)" : gpu->glsl.gles ? " es" : "");
-    PL_MSG(gpu, lev, "    Capabilities: 0x%x", (unsigned int) gpu->caps);
-    PL_MSG(gpu, lev, "    Limits:");
+    PL_INFO(gpu, "    Capabilities: 0x%x", (unsigned int) gpu->caps);
+    PL_INFO(gpu, "    Limits:");
 
 #define LOG(fmt, field) \
-    PL_MSG(gpu, lev, "      %-26s %" fmt, #field ":", gpu->limits.field)
+    PL_INFO(gpu, "      %-26s %" fmt, #field ":", gpu->limits.field)
 
     LOG(PRIu32, max_tex_1d_dim);
     LOG(PRIu32, max_tex_2d_dim);
@@ -82,24 +165,27 @@ void pl_gpu_print_info(const struct pl_gpu *gpu, enum pl_log_level lev)
 #undef LOG
 
     if (pl_gpu_supports_interop(gpu)) {
-        PL_MSG(gpu, lev, "    External API interop:");
+        PL_INFO(gpu, "    External API interop:");
 
-        PL_MSG(gpu, lev, "      UUID: %s", PRINT_UUID(gpu->uuid));
-        PL_MSG(gpu, lev, "      PCI: %04x:%02x:%02x:%x",
-               gpu->pci.domain, gpu->pci.bus, gpu->pci.device, gpu->pci.function);
-        PL_MSG(gpu, lev, "      buf export caps: 0x%x",
-               (unsigned int) gpu->export_caps.buf);
-        PL_MSG(gpu, lev, "      buf import caps: 0x%x",
-               (unsigned int) gpu->import_caps.buf);
-        PL_MSG(gpu, lev, "      tex export caps: 0x%x",
-               (unsigned int) gpu->export_caps.tex);
-        PL_MSG(gpu, lev, "      tex import caps: 0x%x",
-               (unsigned int) gpu->import_caps.tex);
-        PL_MSG(gpu, lev, "      sync export caps: 0x%x",
-               (unsigned int) gpu->export_caps.sync);
-        PL_MSG(gpu, lev, "      sync import caps: 0x%x",
-               (unsigned int) gpu->import_caps.sync);
+        PL_INFO(gpu, "      UUID: %s", PRINT_UUID(gpu->uuid));
+        PL_INFO(gpu, "      PCI: %04x:%02x:%02x:%x",
+                gpu->pci.domain, gpu->pci.bus, gpu->pci.device, gpu->pci.function);
+        PL_INFO(gpu, "      buf export caps: 0x%x",
+                (unsigned int) gpu->export_caps.buf);
+        PL_INFO(gpu, "      buf import caps: 0x%x",
+                (unsigned int) gpu->import_caps.buf);
+        PL_INFO(gpu, "      tex export caps: 0x%x",
+                (unsigned int) gpu->export_caps.tex);
+        PL_INFO(gpu, "      tex import caps: 0x%x",
+                (unsigned int) gpu->import_caps.tex);
+        PL_INFO(gpu, "      sync export caps: 0x%x",
+                (unsigned int) gpu->export_caps.sync);
+        PL_INFO(gpu, "      sync import caps: 0x%x",
+                (unsigned int) gpu->import_caps.sync);
     }
+
+    print_formats(gpu);
+    gpu_verify(gpu);
 }
 
 static int cmp_fmt(const void *pa, const void *pb)
@@ -147,90 +233,9 @@ static int cmp_fmt(const void *pa, const void *pb)
     return strcmp(a->name, b->name);
 }
 
-void pl_gpu_verify_formats(struct pl_gpu *gpu)
-{
-    for (int n = 0; n < gpu->num_formats; n++) {
-        const struct pl_fmt *fmt = gpu->formats[n];
-        pl_assert(fmt->name);
-        pl_assert(fmt->type);
-        pl_assert(fmt->num_components);
-        pl_assert(fmt->internal_size);
-        pl_assert(fmt->opaque ? !fmt->texel_size : fmt->texel_size);
-        for (int i = 0; i < fmt->num_components; i++) {
-            pl_assert(fmt->component_depth[i]);
-            pl_assert(fmt->opaque ? !fmt->host_bits[i] : fmt->host_bits[i]);
-        }
-
-        enum pl_fmt_caps texel_caps = PL_FMT_CAP_VERTEX |
-                                      PL_FMT_CAP_TEXEL_UNIFORM |
-                                      PL_FMT_CAP_TEXEL_STORAGE;
-
-        if (fmt->caps & texel_caps) {
-            pl_assert(fmt->glsl_type);
-            pl_assert(!fmt->opaque);
-        }
-        pl_assert(!fmt->opaque || !(fmt->caps & PL_FMT_CAP_HOST_READABLE));
-        if (fmt->internal_size != fmt->texel_size && !fmt->opaque)
-            pl_assert(fmt->emulated);
-
-        // Assert uniqueness of name
-        for (int o = n + 1; o < gpu->num_formats; o++)
-            pl_assert(strcmp(fmt->name, gpu->formats[o]->name) != 0);
-    }
-}
-
 void pl_gpu_sort_formats(struct pl_gpu *gpu)
 {
     qsort(gpu->formats, gpu->num_formats, sizeof(struct pl_fmt *), cmp_fmt);
-}
-
-void pl_gpu_print_formats(const struct pl_gpu *gpu, enum pl_log_level lev)
-{
-    if (!pl_msg_test(gpu->ctx, lev))
-        return;
-
-    PL_MSG(gpu, lev, "GPU texture formats:");
-    PL_MSG(gpu, lev, "    %-10s %-6s %-6s %-4s %-4s %-13s %-13s %-10s %-10s",
-           "NAME", "TYPE", "CAPS", "SIZE", "COMP", "DEPTH", "HOST_BITS",
-           "GLSL_TYPE", "GLSL_FMT");
-    for (int n = 0; n < gpu->num_formats; n++) {
-        const struct pl_fmt *fmt = gpu->formats[n];
-
-        static const char *types[] = {
-            [PL_FMT_UNKNOWN] = "UNKNOWN",
-            [PL_FMT_UNORM]   = "UNORM",
-            [PL_FMT_SNORM]   = "SNORM",
-            [PL_FMT_UINT]    = "UINT",
-            [PL_FMT_SINT]    = "SINT",
-            [PL_FMT_FLOAT]   = "FLOAT",
-        };
-
-        static const char idx_map[4] = {'R', 'G', 'B', 'A'};
-        char indices[4] = {' ', ' ', ' ', ' '};
-        if (!fmt->opaque) {
-            for (int i = 0; i < fmt->num_components; i++)
-                indices[i] = idx_map[fmt->sample_order[i]];
-        }
-
-#define IDX4(f) (f)[0], (f)[1], (f)[2], (f)[3]
-
-        PL_MSG(gpu, lev, "    %-10s %-6s 0x%-4x %-4zu %c%c%c%c "
-               "{%-2d %-2d %-2d %-2d} {%-2d %-2d %-2d %-2d} %-10s %-10s",
-               fmt->name, types[fmt->type], (unsigned int) fmt->caps,
-               fmt->texel_size, IDX4(indices), IDX4(fmt->component_depth),
-               IDX4(fmt->host_bits), PL_DEF(fmt->glsl_type, ""),
-               PL_DEF(fmt->glsl_format, ""));
-
-#undef IDX4
-    }
-}
-
-bool pl_fmt_is_ordered(const struct pl_fmt *fmt)
-{
-    bool ret = !fmt->opaque;
-    for (int i = 0; i < fmt->num_components; i++)
-        ret &= fmt->sample_order[i] == i;
-    return ret;
 }
 
 struct glsl_fmt {

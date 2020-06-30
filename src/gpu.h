@@ -78,19 +78,13 @@ static inline bool pl_gpu_supports_interop(const struct pl_gpu *gpu)
 
 // GPU-internal helpers: these should not be used outside of GPU implementations
 
-// Log some metadata about the created GPU
-void pl_gpu_print_info(const struct pl_gpu *gpu, enum pl_log_level lev);
+// Log some metadata about the created GPU, and perform verification
+void pl_gpu_print_info(const struct pl_gpu *gpu);
 
 // Sort the pl_fmt list into an optimal order. This tries to prefer formats
 // supporting more capabilities, while also trying to maintain a sane order in
 // terms of bit depth / component index.
 void pl_gpu_sort_formats(struct pl_gpu *gpu);
-
-// Perform some basic validity checks on all pl_fmts
-void pl_gpu_verify_formats(struct pl_gpu *gpu);
-
-// Pretty-print the format list
-void pl_gpu_print_formats(const struct pl_gpu *gpu, enum pl_log_level lev);
 
 // Look up the right GLSL image format qualifier from a partially filled-in
 // pl_fmt, or NULL if the format does not have a legal matching GLSL name.

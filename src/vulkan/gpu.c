@@ -264,7 +264,6 @@ static void vk_setup_formats(struct pl_gpu *gpu)
     }
 
     pl_gpu_sort_formats(gpu);
-    pl_gpu_verify_formats(gpu);
 }
 
 static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
@@ -491,8 +490,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
 
     // Create the dispatch last, after any setup of `gpu` is done
     p->dp = pl_dispatch_create(vk->ctx, gpu);
-    pl_gpu_print_info(gpu, PL_LOG_INFO);
-    pl_gpu_print_formats(gpu, PL_LOG_DEBUG);
+    pl_gpu_print_info(gpu);
     return gpu;
 
 error:

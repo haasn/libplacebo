@@ -176,7 +176,6 @@ next_gl_fmt: ;
     }
 
     pl_gpu_sort_formats(gpu);
-    pl_gpu_verify_formats(gpu);
     return gl_check_err(gpu, "gl_setup_formats");
 }
 
@@ -271,8 +270,7 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
     if (!gl_setup_formats(gpu))
         goto error;
 
-    pl_gpu_print_info(gpu, PL_LOG_INFO);
-    pl_gpu_print_formats(gpu, PL_LOG_DEBUG);
+    pl_gpu_print_info(gpu);
     return gpu;
 
 error:
