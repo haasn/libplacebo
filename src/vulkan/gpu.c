@@ -1747,9 +1747,13 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     VkMemoryPropertyFlags memFlags = 0;
     VkDeviceSize size = PL_ALIGN2(params->size, 4); // for vk_buf_write
 
-    // Optimal buffer offset alignment
-    VkDeviceSize align = p->min_texel_alignment; // for tex_upload/download
-    align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
+    // Optimal/mandatory buffer offset alignment
+    VkDeviceSize align_opt = vk->limits.optimalBufferCopyOffsetAlignment;
+    VkDeviceSize align = 1;
+
+    // Try and align all buffers to the minimum texel alignment, to make sure
+    // tex_upload/tex_download always gets aligned buffer copies if possible
+    align_opt = pl_lcm(align_opt, p->min_texel_alignment);
 
     enum pl_buf_mem_type mem_type = params->memory_type;
     bool is_texel = false;
@@ -1819,6 +1823,14 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         memFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
     if (params->import_handle) {
+        size_t offset = params->shared_mem.offset;
+        if (PL_ALIGN(offset, align) != offset) {
+            PL_ERR(gpu, "Imported memory offset %zu violates minimum alignment "
+                   "requirement of enabled usage flags (%zu)!",
+                   offset, align);
+            goto error;
+        }
+
         uint32_t qfs[3] = {0};
         for (int i = 0; i < vk->num_pools; i++)
             qfs[i] = vk->pools[i]->qf;
@@ -1852,6 +1864,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         VK(vk->BindBufferMemory(vk->dev, buf_vk->import_buf,
                                 buf_vk->slice.mem.vkmem, 0));
     } else {
+        align = pl_lcm(align, align_opt);
         if (!vk_malloc_buffer(p->alloc, bufFlags, memFlags, size, align,
                               params->export_handle, &buf_vk->slice))
             goto error;
