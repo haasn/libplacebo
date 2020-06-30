@@ -10,7 +10,6 @@ static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
 
     if (gpu->export_caps.buf & handle_type) {
         const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
-            .type = PL_BUF_TEX_TRANSFER,
             .size = 1024,
             .export_handle = handle_type,
         });
@@ -111,7 +110,6 @@ skip_tex: ;
         return;
 
     const struct pl_buf *exp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
-        .type = PL_BUF_TEX_TRANSFER,
         .size = 32,
         .export_handle = handle_type,
     });
@@ -119,7 +117,6 @@ skip_tex: ;
     REQUIRE(exp_buf->shared_mem.handle.fd > -1);
 
     const struct pl_buf *imp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
-        .type = PL_BUF_TEX_TRANSFER,
         .size = 32,
         .import_handle = handle_type,
         .shared_mem = exp_buf->shared_mem,

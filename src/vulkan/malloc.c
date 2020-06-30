@@ -589,6 +589,14 @@ static bool slice_heap(struct vk_malloc *ma, struct vk_heap *heap, size_t size,
     struct vk_slab *slab;
     int index;
     alignment = pl_lcm(alignment, vk->limits.bufferImageGranularity);
+
+    bool noncoherent = (heap->flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
+                      !(heap->flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    if (noncoherent) {
+        size = PL_ALIGN(size, vk->limits.nonCoherentAtomSize);
+        alignment = pl_lcm(alignment, vk->limits.nonCoherentAtomSize);
+    }
+
     if (!heap_get_region(ma, heap, size, alignment, &slab, &index))
         return false;
 

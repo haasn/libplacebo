@@ -660,8 +660,8 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
         static const uint8_t zero[32] = {0};
         pl_assert(sizeof(zero) >= size);
         obj->buf = pl_buf_create(gpu, &(struct pl_buf_params) {
-            .type = PL_BUF_STORAGE,
             .size = size,
+            .storable = true,
             .initial_data = zero,
         });
         obj->desc.object = obj->buf;
@@ -786,10 +786,8 @@ bool pl_get_detected_peak(const struct pl_shader_obj *state,
     pl_assert(obj->buf->params.size >= sizeof(average));
 
     bool ok = pl_buf_recreate(gpu, &obj->buf_read, &(struct pl_buf_params) {
-        .type = PL_BUF_TEX_TRANSFER,
         .size = sizeof(average),
         .host_readable = true,
-        .memory_type = PL_BUF_MEM_HOST,
     });
 
     if (!ok) {

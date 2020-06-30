@@ -533,7 +533,6 @@ static enum api2_status submit_work(struct priv *p, struct entry *e,
 
     // Dispatch the asynchronous download into a mapped buffer
     bool ok = pl_buf_recreate(p->gpu, &e->buf, &(struct pl_buf_params) {
-        .type = PL_BUF_TEX_TRANSFER,
         .size = total_size,
         .host_mapped = true,
     });
@@ -624,7 +623,6 @@ bool api2_alloc(void *priv, size_t size, struct api2_buf *out)
     struct priv *p = priv;
 
     const struct pl_buf *buf = pl_buf_create(p->gpu, &(struct pl_buf_params) {
-        .type = PL_BUF_TEX_TRANSFER,
         .size = size,
         .host_mapped = true,
     });

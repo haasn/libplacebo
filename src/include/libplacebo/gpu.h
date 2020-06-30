@@ -112,10 +112,10 @@ struct pl_gpu_limits {
     uint32_t max_tex_2d_dim;    // maximum width/height for a 2D texture (required)
     uint32_t max_tex_3d_dim;    // maximum width/height/depth for a 3D texture
     size_t max_pushc_size;      // maximum `push_constants_size`
-    size_t max_xfer_size;       // maximum size of a PL_BUF_TEX_TRANSFER
-    size_t max_ubo_size;        // maximum size of a PL_BUF_UNIFORM
-    size_t max_ssbo_size;       // maximum size of a PL_BUF_STORAGE
-    uint64_t max_buffer_texels; // maximum texels in a PL_BUF_TEXEL_*
+    size_t max_buf_size;        // maximum size of any buffer
+    size_t max_ubo_size;        // maximum size of a `uniform` buffer
+    size_t max_ssbo_size;       // maximum size of a `storable` buffer
+    uint64_t max_buffer_texels; // maximum number of texels in a texel buffer
     int16_t min_gather_offset;  // minimum `textureGatherOffset` offset
     int16_t max_gather_offset;  // maximum `textureGatherOffset` offset
     uint32_t subgroup_size;     // number of threads in a subgroup
@@ -133,6 +133,9 @@ struct pl_gpu_limits {
     uint32_t align_tex_xfer_stride; // optimal `pl_tex_transfer_params.stride_w/h`
     size_t align_tex_xfer_offset;   // optimal `pl_tex_transfer_params.buf_offset`
 };
+
+// Backwards compatibility alias
+#define max_xfer_size max_buf_size
 
 // Structure grouping PCI bus address fields for GPU devices
 struct pl_gpu_pci_address {
@@ -442,7 +445,7 @@ struct pl_tex_transfer_params {
     // options:
     //
     // 1. Transferring to/from a buffer:
-    const struct pl_buf *buf; // buffer to use (type must be PL_BUF_TEX_TRANSFER)
+    const struct pl_buf *buf; // buffer to use
     size_t buf_offset;        // offset of data within buffer, must be a
                               // multiple of `tex->params.format->texel_size`
                               // and should ideally be a multiple of 4
@@ -475,43 +478,55 @@ bool pl_tex_upload(const struct pl_gpu *gpu,
 bool pl_tex_download(const struct pl_gpu *gpu,
                      const struct pl_tex_transfer_params *params);
 
-// Buffer usage type. This restricts what types of operations may be performed
-// on a buffer.
+// (Deprecated) Buffer usage type. This defines what types of operations may be
+// performed on a buffer. They are defined merely for backwards compatibility,
+// and correspond to merely enabling the respective usage flags.
 enum pl_buf_type {
-    PL_BUF_INVALID = 0,
-    PL_BUF_TEX_TRANSFER,  // texture transfer buffer (for pl_tex_upload/download)
-    PL_BUF_UNIFORM,       // UBO, for PL_DESC_BUF_UNIFORM
-    PL_BUF_STORAGE,       // SSBO, for PL_DESC_BUF_STORAGE
-    PL_BUF_TEXEL_UNIFORM, // texel buffer, for PL_DESC_BUF_TEXEL_UNIFORM
-    PL_BUF_TEXEL_STORAGE, // texel buffer, for PL_DESC_BUF_TEXEL_STORAGE
-    PL_BUF_PRIVATE,       // GPU-private usage (interpretation arbitrary)
-    PL_BUF_TYPE_COUNT,
+    PL_BUF_TEX_TRANSFER,  // no extra usage flags
+    PL_BUF_UNIFORM,       // enables `uniform`
+    PL_BUF_STORAGE,       // enables `storable`
+    PL_BUF_TEXEL_UNIFORM, // equivalent to PL_BUF_UNIFORM (when `format` is set)
+    PL_BUF_TEXEL_STORAGE, // equivalent to PL_BUF_STORAGE (when `format` is set)
 };
 
 enum pl_buf_mem_type {
     PL_BUF_MEM_AUTO = 0, // use whatever seems most appropriate
     PL_BUF_MEM_HOST,     // try allocating from host memory (RAM)
     PL_BUF_MEM_DEVICE,   // try allocating from device memory (VRAM)
+
+    // Note: This distinction only matters for discrete GPUs
 };
 
 // Structure describing a buffer.
 struct pl_buf_params {
-    enum pl_buf_type type;
-    size_t size;        // size in bytes
+    size_t size;        // size in bytes (must be <= `pl_gpu_limits.max_buf_size`)
     bool host_writable; // contents may be updated via pl_buf_write()
     bool host_readable; // contents may be read back via pl_buf_read()
     bool host_mapped;   // create a persistent, RW mapping (pl_buf.data)
                         // (requires PL_GPU_CAP_MAPPED_BUFFERS)
 
+    // May be used as PL_DESC_BUF_UNIFORM or PL_DESC_BUF_TEXEL_UNIFORM.
+    // Requires `size <= pl_gpu_limits.max_ubo_size`
+    bool uniform;
+
+    // May be used as PL_DESC_BUF_STORAGE or PL_DESC_BUF_TEXEL_STORAGE.
+    // Requires `size <= pl_gpu_limits.max_ssbo_size`
+    bool storable;
+
+    // May be used as the source of vertex data for `pl_pass_run`.
+    bool drawable;
+
     // Provide a hint for the memory type you want to use when allocating
-    // this buffer's memory. Currently, this field is ignored for all buffer
-    // types except `PL_BUF_TEX_TRANSFER`, since uniform/storage buffers only
-    // make sense when allocated from device memory.
+    // this buffer's memory.
+    //
+    // Note: Restrictions may apply depending on the usage flags. In
+    // particular, allocating buffers with `uniform` or `storable` enabled from
+    // non-device memory will almost surely fail.
     enum pl_buf_mem_type memory_type;
 
-    // For texel buffers (PL_BUF_TEXEL_*), this gives the interpretation of the
-    // buffer's contents. `format->caps` must include the corresponding
-    // PL_FMT_CAP_TEXEL_* for the texel buffer type in use.
+    // Setting this to a format with the `PL_FMT_CAP_TEXEL_*` capability allows
+    // this buffer to be used as a `PL_DESC_BUF_TEXEL_*`, when `uniform` and
+    // `storage` are respectively also enabled.
     const struct pl_fmt *format;
 
     // At most one of `export_handle` and `import_handle` can be set for a
@@ -538,6 +553,11 @@ struct pl_buf_params {
 
     // Arbitrary user data. libplacebo does not use this at all.
     void *user_data;
+
+    // Deprecated. Setting a type now effectively just enables some of the
+    // buffer usage flags. See `pl_buf_type`. This field will be removed
+    // in the future.
+    enum pl_buf_type type;
 };
 
 // A generic buffer, which can be used for multiple purposes (texture transfer,
@@ -786,7 +806,7 @@ struct pl_var_layout {
 struct pl_var_layout pl_var_host_layout(size_t offset, const struct pl_var *var);
 
 // Returns the GLSL std140 layout of an input variable given a current buffer
-// offset, as required for a buffer of type PL_BUF_UNIFORM.
+// offset, as required for a buffer descriptor of type PL_DESC_BUF_UNIFORM
 //
 // The normal way to use this function is when calculating the size and offset
 // requirements of a uniform buffer in an incremental fashion, to calculate the
@@ -794,8 +814,8 @@ struct pl_var_layout pl_var_host_layout(size_t offset, const struct pl_var *var)
 struct pl_var_layout pl_std140_layout(size_t offset, const struct pl_var *var);
 
 // Returns the GLSL std430 layout of an input variable given a current buffer
-// offset, as required for a buffer of type PL_BUF_STORAGE, and for push
-// constants.
+// offset, as required for a buffer descriptor of type PL_DESC_BUF_STORAGE, and
+// for push constants.
 struct pl_var_layout pl_std430_layout(size_t offset, const struct pl_var *var);
 
 // Convenience definitions / friendly names for these
@@ -821,17 +841,17 @@ struct pl_vertex_attrib {
 enum pl_desc_type {
     PL_DESC_INVALID = 0,
     PL_DESC_SAMPLED_TEX,    // C: pl_tex*    GLSL: combined texture sampler
-                            // (pl_tex->params.sampleable must be set)
+                            // (`pl_tex->params.sampleable` must be set)
     PL_DESC_STORAGE_IMG,    // C: pl_tex*    GLSL: storage image
-                            // (pl_tex->params.storable must be set)
+                            // (`pl_tex->params.storable` must be set)
     PL_DESC_BUF_UNIFORM,    // C: pl_buf*    GLSL: uniform buffer
-                            // (pl_buf->params.type must be PL_BUF_UNIFORM)
+                            // (`pl_buf->params.uniform` must be set)
     PL_DESC_BUF_STORAGE,    // C: pl_buf*    GLSL: storage buffer
-                            // (pl_buf->params.type must be PL_BUF_STORAGE)
+                            // (`pl_buf->params.storable` must be set)
     PL_DESC_BUF_TEXEL_UNIFORM,// C: pl_buf*  GLSL: uniform samplerBuffer
-                              // (pl_buf->params.type must be PL_BUF_TEXEL_UNIFORM)
+                              // (`pl_buf->params.uniform` and `format` must be set)
     PL_DESC_BUF_TEXEL_STORAGE,// C: pl_buf*  GLSL: uniform imageBuffer
-                              // (pl_buf->params.type must be PL_BUF_TEXEL_STORAGE)
+                              // (`pl_buf->params.uniform` and `format` must be set)
     PL_DESC_TYPE_COUNT
 };
 

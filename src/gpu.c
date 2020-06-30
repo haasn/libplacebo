@@ -141,7 +141,7 @@ void pl_gpu_print_info(const struct pl_gpu *gpu)
     LOG(PRIu32, max_tex_2d_dim);
     LOG(PRIu32, max_tex_3d_dim);
     LOG("zu", max_pushc_size);
-    LOG("zu", max_xfer_size);
+    LOG("zu", max_buf_size);
     LOG("zu", max_ubo_size);
     LOG("zu", max_ssbo_size);
     LOG(PRIu64, max_buffer_texels);
@@ -696,56 +696,56 @@ error:
     return false;
 }
 
-const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
-                                   const struct pl_buf_params *params)
+static struct pl_buf_params pl_buf_params_infer(struct pl_buf_params params)
 {
-    require(!params->import_handle || !params->export_handle);
-    if (params->export_handle) {
-        require(params->export_handle & gpu->export_caps.buf);
-        require(PL_ISPOT(params->export_handle));
-    }
-    if (params->import_handle) {
-        require(params->import_handle & gpu->import_caps.buf);
-        require(PL_ISPOT(params->import_handle));
-    }
-
-    switch (params->type) {
-    case PL_BUF_TEX_TRANSFER:
-        require(gpu->limits.max_xfer_size);
-        require(params->size <= gpu->limits.max_xfer_size);
-        break;
+    switch (params.type) {
     case PL_BUF_UNIFORM:
-        require(gpu->limits.max_ubo_size);
-        require(params->size <= gpu->limits.max_ubo_size);
+    case PL_BUF_TEXEL_UNIFORM:
+        params.uniform = true;
         break;
     case PL_BUF_STORAGE:
-        require(gpu->limits.max_ssbo_size);
-        require(params->size <= gpu->limits.max_ssbo_size);
+    case PL_BUF_TEXEL_STORAGE:
+        params.storable = true;
         break;
-    case PL_BUF_TEXEL_UNIFORM: {
-        require(params->format);
-        require(params->format->caps & PL_FMT_CAP_TEXEL_UNIFORM);
-        size_t limit = gpu->limits.max_buffer_texels * params->format->texel_size;
-        require(params->size <= limit);
+    case PL_BUF_TEX_TRANSFER:
         break;
-    }
-    case PL_BUF_TEXEL_STORAGE: {
-        require(params->format);
-        require(params->format->caps & PL_FMT_CAP_TEXEL_STORAGE);
-        size_t limit = gpu->limits.max_buffer_texels * params->format->texel_size;
-        require(params->size <= limit);
-        break;
-    }
-    case PL_BUF_PRIVATE: break;
-    default: abort();
     }
 
-    require(!params->host_mapped || (gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS));
+    return params;
+}
+
+const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
+                                   const struct pl_buf_params *pparams)
+{
+    struct pl_buf_params params = pl_buf_params_infer(*pparams);
+
+    require(!params.import_handle || !params.export_handle);
+    if (params.export_handle) {
+        require(params.export_handle & gpu->export_caps.buf);
+        require(PL_ISPOT(params.export_handle));
+    }
+    if (params.import_handle) {
+        require(params.import_handle & gpu->import_caps.buf);
+        require(PL_ISPOT(params.import_handle));
+    }
+
+    require(params.size > 0 && params.size <= gpu->limits.max_buf_size);
+    require(!params.uniform || params.size <= gpu->limits.max_ubo_size);
+    require(!params.storable || params.size <= gpu->limits.max_ssbo_size);
+
+    if (params.format) {
+        const struct pl_fmt *fmt = params.format;
+        require(params.size <= gpu->limits.max_buffer_texels * fmt->texel_size);
+        require(!params.uniform || (fmt->caps & PL_FMT_CAP_TEXEL_UNIFORM));
+        require(!params.storable || (fmt->caps & PL_FMT_CAP_TEXEL_STORAGE));
+    }
+
+    require(!params.host_mapped || (gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS));
 
     const struct pl_gpu_fns *impl = TA_PRIV(gpu);
-    const struct pl_buf *buf = impl->buf_create(gpu, params);
+    const struct pl_buf *buf = impl->buf_create(gpu, &params);
     if (buf)
-        require(buf->data || !params->host_mapped);
+        require(!params.host_mapped || buf->data);
 
     return buf;
 
@@ -755,28 +755,34 @@ error:
 
 static bool pl_buf_params_superset(struct pl_buf_params a, struct pl_buf_params b)
 {
-    return a.type            == b.type &&
+    return a.size            >= b.size &&
+           a.memory_type     == b.memory_type &&
            a.format          == b.format &&
-           a.size            >= b.size &&
-           (a.host_mapped    || !b.host_mapped) &&
            (a.host_writable  || !b.host_writable) &&
-           (a.host_readable  || !b.host_readable);
+           (a.host_readable  || !b.host_readable) &&
+           (a.host_mapped    || !b.host_mapped) &&
+           (a.uniform        || !b.uniform) &&
+           (a.storable       || !b.storable) &&
+           (a.drawable       || !b.drawable);
 }
 
 bool pl_buf_recreate(const struct pl_gpu *gpu, const struct pl_buf **buf,
-                     const struct pl_buf_params *params)
+                     const struct pl_buf_params *pparams)
 {
-    if (params->initial_data) {
+
+    struct pl_buf_params params = pl_buf_params_infer(*pparams);
+
+    if (params.initial_data) {
         PL_ERR(gpu, "pl_buf_recreate may not be used with `initial_data`!");
         return false;
     }
 
-    if (*buf && pl_buf_params_superset((*buf)->params, *params))
+    if (*buf && pl_buf_params_superset((*buf)->params, params))
         return true;
 
-    PL_INFO(gpu, "(Re)creating %zu buffer", params->size);
+    PL_INFO(gpu, "(Re)creating %zu buffer", params.size);
     pl_buf_destroy(gpu, buf);
-    *buf = pl_buf_create(gpu, params);
+    *buf = pl_buf_create(gpu, &params);
 
     return !!*buf;
 }
@@ -1126,22 +1132,22 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         }
         case PL_DESC_BUF_UNIFORM: {
             const struct pl_buf *buf = db.object;
-            require(buf->params.type == PL_BUF_UNIFORM);
+            require(buf->params.uniform);
             break;
         }
         case PL_DESC_BUF_STORAGE: {
             const struct pl_buf *buf = db.object;
-            require(buf->params.type == PL_BUF_STORAGE);
+            require(buf->params.storable);
             break;
         }
         case PL_DESC_BUF_TEXEL_UNIFORM: {
             const struct pl_buf *buf = db.object;
-            require(buf->params.type == PL_BUF_TEXEL_UNIFORM);
+            require(buf->params.uniform && buf->params.format);
             break;
         }
         case PL_DESC_BUF_TEXEL_STORAGE: {
             const struct pl_buf *buf = db.object;
-            require(buf->params.type == PL_BUF_TEXEL_STORAGE);
+            require(buf->params.storable && buf->params.format);
             break;
         }
         default: abort();
@@ -1266,8 +1272,7 @@ static bool pl_buf_pool_grow(const struct pl_gpu *gpu, struct pl_buf_pool *pool)
         return false;
 
     TARRAY_INSERT_AT(NULL, pool->buffers, pool->num_buffers, pool->index, buf);
-    PL_DEBUG(gpu, "Resized buffer pool of type %u to size %d",
-             pool->current_params.type, pool->num_buffers);
+    PL_DEBUG(gpu, "Resized buffer pool to size %d", pool->num_buffers);
     return true;
 }
 
@@ -1319,7 +1324,6 @@ bool pl_tex_upload_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
         return pl_tex_upload(gpu, params);
 
     struct pl_buf_params bufparams = {
-        .type = PL_BUF_TEX_TRANSFER,
         .size = pl_tex_transfer_size(params),
         .host_writable = true,
     };
@@ -1344,7 +1348,6 @@ bool pl_tex_download_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
         return pl_tex_download(gpu, params);
 
     struct pl_buf_params bufparams = {
-        .type = PL_BUF_TEX_TRANSFER,
         .size = pl_tex_transfer_size(params),
         .host_readable = true,
     };
@@ -1373,7 +1376,6 @@ bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     const struct pl_tex *tex = params->tex;
     const struct pl_fmt *fmt = tex->params.format;
     require(params->buf);
-    require(params->buf->params.type == PL_BUF_TEXEL_UNIFORM);
 
     struct pl_shader *sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, threads, 1, true, 0)) {
@@ -1444,7 +1446,6 @@ bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     const struct pl_tex *tex = params->tex;
     const struct pl_fmt *fmt = tex->params.format;
     require(params->buf);
-    require(params->buf->params.type == PL_BUF_TEXEL_STORAGE);
 
     struct pl_shader *sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, threads, 1, true, 0)) {

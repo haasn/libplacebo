@@ -731,8 +731,8 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     size_t ubo_size = sh_buf_desc_size(&pass->ubo_desc);
     if (ubo_size) {
         pass->ubo = pl_buf_create(dp->gpu, &(struct pl_buf_params) {
-            .type = PL_BUF_UNIFORM,
             .size = ubo_size,
+            .uniform = true,
             .host_writable = true,
         });
 

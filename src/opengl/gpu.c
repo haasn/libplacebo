@@ -231,7 +231,7 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
         l->max_tex_1d_dim = l->max_tex_2d_dim;
 
     if (test_ext(gpu, "GL_ARB_pixel_buffer_object", 31, 0))
-        l->max_xfer_size = SIZE_MAX; // no limit imposed by GL
+        l->max_buf_size = SIZE_MAX; // no restriction imposed by GL
     if (test_ext(gpu, "GL_ARB_uniform_buffer_object", 31, 0))
         get(GL_MAX_UNIFORM_BLOCK_SIZE, &l->max_ubo_size);
     if (test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0))
@@ -836,7 +836,6 @@ static void gl_tex_blit(const struct pl_gpu *gpu,
 
 // For pl_buf.priv
 struct pl_buf_gl {
-    GLenum target;
     GLuint buffer;
     GLsync fence;
     GLbitfield barrier;
@@ -849,9 +848,9 @@ static void gl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf *buf)
         glDeleteSync(buf_gl->fence);
 
     if (buf->data) {
-        glBindBuffer(buf_gl->target, buf_gl->buffer);
-        glUnmapBuffer(buf_gl->target);
-        glBindBuffer(buf_gl->target, 0);
+        glBindBuffer(GL_COPY_WRITE_BUFFER, buf_gl->buffer);
+        glUnmapBuffer(GL_COPY_WRITE_BUFFER);
+        glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
     }
 
     glDeleteBuffers(1, &buf_gl->buffer);
@@ -866,20 +865,12 @@ static const struct pl_buf *gl_buf_create(const struct pl_gpu *gpu,
     buf->params = *params;
     buf->params.initial_data = NULL;
 
+    // Just use this since the generic GL_BUFFER doesn't work
+    const GLenum target = GL_COPY_WRITE_BUFFER;
+
     struct pl_buf_gl *buf_gl = TA_PRIV(buf);
     glGenBuffers(1, &buf_gl->buffer);
-
-    static const GLenum targets[PL_BUF_TYPE_COUNT] = {
-        [PL_BUF_TEX_TRANSFER]   = GL_PIXEL_UNPACK_BUFFER,
-        [PL_BUF_UNIFORM]        = GL_UNIFORM_BUFFER,
-        [PL_BUF_STORAGE]        = GL_SHADER_STORAGE_BUFFER,
-        // TODO: texel buffers
-    };
-
-    pl_assert(params->type < PL_BUF_PRIVATE);
-    buf_gl->target = targets[params->type];
-
-    glBindBuffer(buf_gl->target, buf_gl->buffer);
+    glBindBuffer(target, buf_gl->buffer);
 
     if (test_ext(gpu, "GL_ARB_buffer_storage", 44, 0)) {
         GLbitfield mapflags = 0, storflags = 0;
@@ -892,14 +883,14 @@ static const struct pl_buf *gl_buf_create(const struct pl_gpu *gpu,
         if (params->memory_type == PL_BUF_MEM_HOST)
             storflags |= GL_CLIENT_STORAGE_BIT; // hopefully this works
 
-        glBufferStorage(buf_gl->target, params->size, params->initial_data,
+        glBufferStorage(target, params->size, params->initial_data,
                         storflags | mapflags);
 
         if (params->host_mapped) {
-            buf->data = glMapBufferRange(buf_gl->target, 0, params->size,
+            buf->data = glMapBufferRange(target, 0, params->size,
                                          mapflags);
             if (!buf->data) {
-                glBindBuffer(buf_gl->target, 0);
+                glBindBuffer(target, 0);
                 if (!gl_check_err(gpu, "gl_buf_create: map"))
                     PL_ERR(gpu, "Failed mapping buffer: unknown reason");
                 goto error;
@@ -907,34 +898,32 @@ static const struct pl_buf *gl_buf_create(const struct pl_gpu *gpu,
         }
     } else {
         // Make a random guess based on arbitrary criteria we can't know
-        static const GLenum hints[PL_BUF_TYPE_COUNT] = {
-            [PL_BUF_TEX_TRANSFER] = GL_STREAM_DRAW,
-            [PL_BUF_UNIFORM]      = GL_STATIC_DRAW,
-            [PL_BUF_STORAGE]      = GL_DYNAMIC_COPY,
-            // TODO: texel buffers
-        };
-
-        GLenum hint = hints[params->type];
-        if (params->type == PL_BUF_TEX_TRANSFER &&
-            params->memory_type == PL_BUF_MEM_DEVICE)
-        {
-            // This might be a texture download buffer?
+        GLenum hint = GL_STREAM_DRAW;
+        if (params->initial_data && !params->host_writable && !params->host_mapped)
+            hint = GL_STATIC_DRAW;
+        if (params->host_readable && !params->host_writable && !params->host_mapped)
             hint = GL_STREAM_READ;
-        }
+        if (params->storable)
+            hint = GL_DYNAMIC_COPY;
 
-        glBufferData(buf_gl->target, params->size, params->initial_data, hint);
+        glBufferData(target, params->size, params->initial_data, hint);
     }
 
-    glBindBuffer(buf_gl->target, 0);
+    glBindBuffer(target, 0);
     if (!gl_check_err(gpu, "gl_buf_create"))
         goto error;
 
-    if (params->type == PL_BUF_STORAGE) {
-        buf_gl->barrier = GL_SHADER_STORAGE_BARRIER_BIT;
-        if (params->host_writable || params->host_readable)
-            buf_gl->barrier |= GL_BUFFER_UPDATE_BARRIER_BIT;
+    if (params->storable) {
+        buf_gl->barrier = GL_BUFFER_UPDATE_BARRIER_BIT | // for buf_copy etc.
+                          GL_PIXEL_BUFFER_BARRIER_BIT | // for tex_upload
+                          GL_SHADER_STORAGE_BARRIER_BIT;
+
         if (params->host_mapped)
             buf_gl->barrier |= GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT;
+        if (params->uniform)
+            buf_gl->barrier |= GL_UNIFORM_BARRIER_BIT;
+        if (params->drawable)
+            buf_gl->barrier |= GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT;
     }
 
     return buf;
@@ -970,9 +959,9 @@ static void gl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                          size_t offset, const void *data, size_t size)
 {
     struct pl_buf_gl *buf_gl = TA_PRIV(buf);
-    glBindBuffer(buf_gl->target, buf_gl->buffer);
-    glBufferSubData(buf_gl->target, offset, size, data);
-    glBindBuffer(buf_gl->target, 0);
+    glBindBuffer(GL_COPY_WRITE_BUFFER, buf_gl->buffer);
+    glBufferSubData(GL_COPY_WRITE_BUFFER, offset, size, data);
+    glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
     gl_check_err(gpu, "gl_buf_write");
 }
 
@@ -980,9 +969,9 @@ static bool gl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                         size_t offset, void *dest, size_t size)
 {
     struct pl_buf_gl *buf_gl = TA_PRIV(buf);
-    glBindBuffer(buf_gl->target, buf_gl->buffer);
-    glGetBufferSubData(buf_gl->target, offset, size, dest);
-    glBindBuffer(buf_gl->target, 0);
+    glBindBuffer(GL_COPY_READ_BUFFER, buf_gl->buffer);
+    glGetBufferSubData(GL_COPY_READ_BUFFER, offset, size, dest);
+    glBindBuffer(GL_COPY_READ_BUFFER, 0);
     return gl_check_err(gpu, "gl_buf_read");
 }
 
@@ -1568,13 +1557,13 @@ static void update_desc(const struct pl_pass *pass, int index,
     case PL_DESC_BUF_UNIFORM: {
         const struct pl_buf *buf = db->object;
         struct pl_buf_gl *buf_gl = TA_PRIV(buf);
-        glBindBufferBase(buf_gl->target, desc->binding, buf_gl->buffer);
+        glBindBufferBase(GL_UNIFORM_BUFFER, desc->binding, buf_gl->buffer);
         break;
     }
     case PL_DESC_BUF_STORAGE: {
         const struct pl_buf *buf = db->object;
         struct pl_buf_gl *buf_gl = TA_PRIV(buf);
-        glBindBufferBase(buf_gl->target, desc->binding, buf_gl->buffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, desc->binding, buf_gl->buffer);
         break;
     }
     case PL_DESC_BUF_TEXEL_UNIFORM:
@@ -1607,11 +1596,13 @@ static void unbind_desc(const struct pl_pass *pass, int index,
         break;
     }
     case PL_DESC_BUF_UNIFORM:
+        glBindBufferBase(GL_UNIFORM_BUFFER, desc->binding, 0);
+        break;
     case PL_DESC_BUF_STORAGE: {
         const struct pl_buf *buf = db->object;
         struct pl_buf_gl *buf_gl = TA_PRIV(buf);
-        glBindBufferBase(buf_gl->target, desc->binding, 0);
-        if (desc->type == PL_DESC_BUF_STORAGE && desc->access != PL_DESC_ACCESS_READONLY)
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, desc->binding, 0);
+        if (desc->access != PL_DESC_ACCESS_READONLY)
             glMemoryBarrier(buf_gl->barrier);
         break;
     }

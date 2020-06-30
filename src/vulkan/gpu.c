@@ -374,7 +374,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         .max_tex_2d_dim    = vk->limits.maxImageDimension2D,
         .max_tex_3d_dim    = vk->limits.maxImageDimension3D,
         .max_pushc_size    = vk->limits.maxPushConstantsSize,
-        .max_xfer_size     = SIZE_MAX, // no limit imposed by vulkan
+        .max_buf_size      = SIZE_MAX, // no limit imposed by vulkan
         .max_ubo_size      = vk->limits.maxUniformBufferRange,
         .max_ssbo_size     = vk->limits.maxStorageBufferRange,
         .max_buffer_texels = vk->limits.maxTexelBufferElements,
@@ -1354,8 +1354,6 @@ struct pl_buf_vk {
     VkPipelineStageFlags sig_stage;
 };
 
-#define PL_VK_BUF_VERTEX PL_BUF_PRIVATE
-
 static void vk_buf_deref(const struct pl_gpu *gpu, const struct pl_buf *buf)
 {
     if (!buf)
@@ -1745,63 +1743,57 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
                                   VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
     VkMemoryPropertyFlags memFlags = 0;
-    VkDeviceSize align = 4; // alignment 4 is needed for buf_update
     VkDeviceSize size = PL_ALIGN2(params->size, 4); // for vk_buf_write
 
-    enum pl_buf_mem_type mem_type = params->memory_type;
+    // Optimal buffer offset alignment
+    VkDeviceSize align = p->min_texel_alignment; // for tex_upload/download
+    align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
 
+    enum pl_buf_mem_type mem_type = params->memory_type;
     bool is_texel = false;
-    switch (params->type) {
-    case PL_BUF_TEX_TRANSFER:
-        align = pl_lcm(align, p->min_texel_alignment);
-        // Use TRANSFER-style updates for large enough buffers for efficiency
-        if (params->size > 1024*1024) // 1 MB
-            buf_vk->update_queue = TRANSFER;
-        break;
-    case PL_BUF_UNIFORM:
+
+    if (params->uniform) {
         bufFlags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        mem_type = PL_BUF_MEM_DEVICE;
         align = pl_lcm(align, vk->limits.minUniformBufferOffsetAlignment);
-        break;
-    case PL_BUF_STORAGE:
-        bufFlags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         mem_type = PL_BUF_MEM_DEVICE;
+        if (params->format) {
+            bufFlags |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+            align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
+            is_texel = true;
+        }
+    }
+
+    if (params->storable) {
+        bufFlags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         align = pl_lcm(align, vk->limits.minStorageBufferOffsetAlignment);
         buf_vk->update_queue = vk->pool_compute ? COMPUTE : GRAPHICS;
-        break;
-    case PL_BUF_TEXEL_UNIFORM: // for emulated upload
-        bufFlags |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
         mem_type = PL_BUF_MEM_DEVICE;
-        align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
-        align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
-        is_texel = true;
-        break;
-    case PL_BUF_TEXEL_STORAGE: // for emulated download
-        bufFlags |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
-        mem_type = PL_BUF_MEM_DEVICE;
-        align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
-        align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
-        buf_vk->update_queue = vk->pool_compute ? COMPUTE : GRAPHICS;
-        is_texel = true;
-        break;
-    case PL_VK_BUF_VERTEX:
+        if (params->format) {
+            bufFlags |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
+            align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
+            is_texel = true;
+        }
+    }
+
+    if (params->drawable) {
         bufFlags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
         mem_type = PL_BUF_MEM_DEVICE;
-        break;
-    default: abort();
     }
 
     bool host_mapped = params->host_mapped;
     if (params->host_writable || params->initial_data) {
-        align = pl_lcm(align, vk->limits.optimalBufferCopyOffsetAlignment);
-
-        // Large buffers should be written using mapped memory for performance,
-        // unless this is not possible due to buffer memory type restrictions
+        // Large buffers (64 kB) should be written using mapped memory for
+        // performance, unless this is not possible due to buffer memory type
+        // restrictions
         if (params->size > 64 * 1024 && mem_type != PL_BUF_MEM_DEVICE)
             host_mapped = true;
+        // Use the transfer queue for updates on very large buffers (1 MB)
+        if (params->size > 1024*1024)
+            buf_vk->update_queue = TRANSFER;
     }
 
     if (params->host_mapped || params->host_readable) {
+        // Require cached memory for buffers which may be frequently read
         memFlags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         host_mapped = true;
     }
@@ -1821,13 +1813,8 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     default: break;
     }
 
-    if (host_mapped) {
-        // Include any alignment restraints required for possibly
-        // noncoherent, mapped memory
+    if (host_mapped)
         memFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-        align = pl_lcm(align, vk->limits.nonCoherentAtomSize);
-        size = PL_ALIGN(size, vk->limits.nonCoherentAtomSize);
-    }
 
     if (params->import_handle) {
         uint32_t qfs[3] = {0};
@@ -1883,7 +1870,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
             .buffer = buf_vk->slice.buf,
             .format = PL_DEF((*vk_fmt)->bfmt, (*vk_fmt)->tfmt),
             .offset = buf_vk->slice.mem.offset,
-            .range = params->size,
+            .range = buf_vk->slice.mem.size,
         };
 
         VK(vk->CreateBufferView(vk->dev, &vinfo, VK_ALLOC, &buf_vk->view));
@@ -1976,7 +1963,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         // Copy the source data buffer into an intermediate buffer
         const struct pl_buf *tbuf;
         tbuf = pl_buf_pool_get(gpu, &tex_vk->tmp_write, &(struct pl_buf_params) {
-            .type = emulated ? PL_BUF_TEXEL_UNIFORM : PL_BUF_TEX_TRANSFER,
+            .uniform = emulated,
             .size = size,
             .memory_type = PL_BUF_MEM_DEVICE,
             .format = tex_vk->texel_fmt,
@@ -2093,7 +2080,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         // Download into an intermediate buffer first
         const struct pl_buf *tbuf;
         tbuf = pl_buf_pool_get(gpu, &tex_vk->tmp_read, &(struct pl_buf_params) {
-            .type = emulated ? PL_BUF_TEXEL_STORAGE : PL_BUF_TEX_TRANSFER,
+            .storable = emulated,
             .size = size,
             .memory_type = PL_BUF_MEM_DEVICE,
             .format = tex_vk->texel_fmt,
@@ -2886,9 +2873,9 @@ static void vk_pass_run(const struct pl_gpu *gpu,
             // Fetch new vertex buffer and update it
             size_t vert_size = params->vertex_count * pass->params.vertex_stride;
             vert = pl_buf_pool_get(gpu, &pass_vk->vbo, &(struct pl_buf_params) {
-                .type = PL_VK_BUF_VERTEX,
                 .size = vert_size,
                 .host_writable = true,
+                .drawable = true,
             });
 
             if (!vert) {
