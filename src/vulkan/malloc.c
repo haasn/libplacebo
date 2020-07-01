@@ -773,7 +773,7 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
 
     // We pick the first compatible memory type because we have no other basis
     // for choosing if there is more than one available.
-    int first_mem_type = ffs(reqs.memoryTypeBits);
+    int first_mem_type = __builtin_ffsll(reqs.memoryTypeBits);
     if (!first_mem_type) {
         PL_ERR(vk, "No compatible memory types offered for imported memory");
         return false;
@@ -830,8 +830,10 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
     return true;
 
 error:
+#ifdef VK_HAVE_UNIX
     if (fdinfo.fd > -1)
         close(fdinfo.fd);
+#endif
     talloc_free(slab);
     return false;
 }
