@@ -483,6 +483,8 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     // Compute the correct minimum texture alignment
     p->min_texel_alignment = 1;
     for (int i = 0; i < gpu->num_formats; i++) {
+        if (gpu->formats[i]->emulated)
+            continue;
         size_t texel_size = gpu->formats[i]->texel_size;
         p->min_texel_alignment = pl_lcm(p->min_texel_alignment, texel_size);
     }
@@ -1949,14 +1951,14 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
     if (!params->buf)
         return pl_tex_upload_pbo(gpu, &tex_vk->pbo_write, params);
 
-    pl_assert(params->buf);
     const struct pl_buf *buf = params->buf;
     struct pl_buf_vk *buf_vk = TA_PRIV(buf);
     struct pl_rect3d rc = params->rc;
     size_t size = pl_tex_transfer_size(params);
 
+    size_t buf_offset = buf_vk->slice.mem.offset + params->buf_offset;
     bool emulated = tex->params.format->emulated;
-    bool unaligned = params->buf_offset % 4 != 0;
+    bool unaligned = buf_offset % tex->params.format->texel_size;
 
     if (emulated || unaligned) {
 
@@ -1986,7 +1988,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
 
         struct pl_buf_vk *tbuf_vk = TA_PRIV(tbuf);
         VkBufferCopy region = {
-            .srcOffset = buf_vk->slice.mem.offset + params->buf_offset,
+            .srcOffset = buf_offset,
             .dstOffset = tbuf_vk->slice.mem.offset,
             .size = size,
         };
@@ -2015,7 +2017,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
     } else {
 
         VkBufferImageCopy region = {
-            .bufferOffset = buf_vk->slice.mem.offset + params->buf_offset,
+            .bufferOffset = buf_offset,
             .bufferRowLength = params->stride_w,
             .bufferImageHeight = params->stride_h,
             .imageOffset = { rc.x0, rc.y0, rc.z0 },
@@ -2066,14 +2068,14 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
     if (!params->buf)
         return pl_tex_download_pbo(gpu, &tex_vk->pbo_read, params);
 
-    pl_assert(params->buf);
     const struct pl_buf *buf = params->buf;
     struct pl_buf_vk *buf_vk = TA_PRIV(buf);
     struct pl_rect3d rc = params->rc;
     size_t size = pl_tex_transfer_size(params);
 
+    size_t buf_offset = buf_vk->slice.mem.offset + params->buf_offset;
     bool emulated = tex->params.format->emulated;
-    bool unaligned = params->buf_offset % 4 != 0;
+    bool unaligned = buf_offset % tex->params.format->texel_size;
 
     if (emulated || unaligned) {
 
@@ -2110,7 +2112,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         struct pl_buf_vk *tbuf_vk = TA_PRIV(tbuf);
         VkBufferCopy region = {
             .srcOffset = tbuf_vk->slice.mem.offset,
-            .dstOffset = buf_vk->slice.mem.offset + params->buf_offset,
+            .dstOffset = buf_offset,
             .size = size,
         };
 
@@ -2131,7 +2133,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
     } else {
 
         VkBufferImageCopy region = {
-            .bufferOffset = buf_vk->slice.mem.offset + params->buf_offset,
+            .bufferOffset = buf_offset,
             .bufferRowLength = params->stride_w,
             .bufferImageHeight = params->stride_h,
             .imageOffset = { rc.x0, rc.y0, rc.z0 },

@@ -446,9 +446,8 @@ struct pl_tex_transfer_params {
     //
     // 1. Transferring to/from a buffer:
     const struct pl_buf *buf; // buffer to use
-    size_t buf_offset;        // offset of data within buffer, must be a
+    size_t buf_offset;        // offset of data within buffer, should be a
                               // multiple of `tex->params.format->texel_size`
-                              // and should ideally be a multiple of 4
     // 2. Transferring to/from host memory directly:
     void *ptr;                // address of data
     // The contents of the memory region / buffer must exactly match the
