@@ -68,18 +68,25 @@ class Obj(object):
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
 
+def findall_enum(registry, name):
+    for e in registry.iterfind('enums[@name="{0}"]/enum'.format(name)):
+        yield e
+    for e in registry.iterfind('.//enum[@extends="{0}"]'.format(name)):
+        if not 'alias' in e.attrib:
+            yield e
+
 def get_vkresults(registry):
-    for e in registry.findall('enums[@name="VkResult"]/enum'):
+    for e in findall_enum(registry, 'VkResult'):
         yield e.attrib['name']
 
 def get_vkobjects(registry):
-    for e in registry.findall('enums[@name="VkObjectType"]/enum'):
+    for e in findall_enum(registry, 'VkObjectType'):
         if 'comment' in e.attrib:
             yield Obj(enum = e.attrib['name'],
                       name = e.attrib['comment'])
 
 def get_vkstructs(registry):
-    for e in registry.findall('types/type[@category="struct"]'):
+    for e in registry.iterfind('types/type[@category="struct"]'):
         # Strings for platform-specific crap we want to blacklist as they will
         # most likely cause build failures
         blacklist_strs = [
@@ -90,7 +97,7 @@ def get_vkstructs(registry):
             continue
 
         stype = None
-        for m in e.findall('member'):
+        for m in e.iterfind('member'):
             if m.find('name').text == 'sType':
                 stype = m
                 break
