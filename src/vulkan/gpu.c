@@ -1836,8 +1836,14 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         for (int i = 0; i < vk->num_pools; i++)
             qfs[i] = vk->pools[i]->qf;
 
+        VkExternalMemoryBufferCreateInfoKHR ext_buf_info = {
+            .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR,
+            .handleTypes = vk_mem_handle_type(params->import_handle),
+        };
+
         VkBufferCreateInfo binfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = &ext_buf_info,
             .size = params->shared_mem.size,
             .usage = bufFlags,
             .sharingMode = vk->num_pools > 1 ? VK_SHARING_MODE_CONCURRENT
