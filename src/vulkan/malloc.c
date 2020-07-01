@@ -667,8 +667,9 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
     struct vk_slab *slab = NULL;
 
     if (reqs.size > shared_mem->size) {
-        PL_ERR(vk, "Imported object requires memory larger than the provided "
-               "size!");
+        PL_ERR(vk, "Imported object requires %zu bytes, larger than the "
+               "provided size %zu!",
+               reqs.size, shared_mem->size);
         return false;
     }
 
@@ -732,11 +733,18 @@ bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
             return false;
         }
 
-        uintptr_t iptr = (uintptr_t) shared_mem->handle.ptr;
-        if (PL_ALIGN2(iptr, ma->host_ptr_align) != iptr) {
+        if ((uintptr_t) shared_mem->handle.ptr % ma->host_ptr_align) {
             PL_ERR(vk, "Imported host pointer %p does not adhere to the "
-                   "alignment requirements required to import pointers: %zu",
+                   "alignment required to import pointers: %zu",
                    shared_mem->handle.ptr, (size_t) ma->host_ptr_align);
+            return false;
+        }
+
+        if (shared_mem->size % ma->host_ptr_align) {
+            PL_ERR(vk, "Imported host pointer %p of size %zu does not adhere "
+                   "to the size alignment required to import pointers: %zu",
+                   shared_mem->handle.ptr, shared_mem->size,
+                   (size_t) ma->host_ptr_align);
             return false;
         }
 
