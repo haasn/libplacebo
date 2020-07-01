@@ -1163,7 +1163,6 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
 
     switch (pass->params.type) {
     case PL_PASS_RASTER: {
-        require(params->vertex_data);
         switch (pass->params.vertex_type) {
         case PL_PRIM_TRIANGLE_LIST:
             require(params->vertex_count % 3 == 0);
@@ -1172,6 +1171,14 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         case PL_PRIM_TRIANGLE_FAN:
             require(params->vertex_count >= 3);
             break;
+        }
+
+        require(!params->vertex_data ^ !params->vertex_buf);
+        if (params->vertex_buf) {
+            const struct pl_buf *vertex_buf = params->vertex_buf;
+            require(vertex_buf->params.drawable);
+            size_t vert_size = params->vertex_count * pass->params.vertex_stride;
+            require(params->buf_offset + vert_size <= vertex_buf->params.size);
         }
 
         const struct pl_tex *tex = params->target;
@@ -1503,6 +1510,48 @@ bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
 
 error:
     return false;
+}
+
+void pl_pass_run_vbo(const struct pl_gpu *gpu, struct pl_buf_pool *vbo,
+                     const struct pl_pass_run_params *params)
+{
+    if (params->vertex_buf)
+        return pl_pass_run(gpu, params);
+
+    size_t vert_size = params->vertex_count * params->pass->params.vertex_stride;
+    const struct pl_buf *vert = pl_buf_pool_get(gpu, vbo, &(struct pl_buf_params) {
+        .size = vert_size,
+        .host_writable = true,
+        .drawable = true,
+    });
+
+    if (!vert) {
+        PL_ERR(gpu, "Failed allocating vertex buffer!");
+        return;
+    }
+
+    bool need_update = true;
+    uint8_t **cache = (uint8_t **) &vert->params.user_data;
+    if (*cache && talloc_get_size(*cache) >= vert_size) {
+        if (memcmp(*cache, params->vertex_data, vert_size) == 0)
+            need_update = false;
+    }
+
+    if (need_update) {
+        pl_buf_write(gpu, vert, 0, params->vertex_data, vert_size);
+
+        // Update the cached information, for small vertex buffers
+        if (vert_size <= 128 * 1024) { // 128 KiB
+            if (vert_size > talloc_get_size(*cache))
+                *cache = talloc_realloc_size((void *) vert, *cache, vert_size);
+            memcpy(*cache, params->vertex_data, vert_size);
+        }
+    }
+
+    struct pl_pass_run_params newparams = *params;
+    newparams.vertex_buf = vert;
+    newparams.vertex_data = NULL;
+    pl_pass_run(gpu, &newparams);
 }
 
 struct pl_pass_params pl_pass_params_copy(void *tactx,

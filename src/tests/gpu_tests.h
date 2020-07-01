@@ -294,10 +294,30 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     pl_pass_run(gpu, &(struct pl_pass_run_params) {
         .pass           = pass,
         .target         = fbo,
-        .vertex_data    = vertices,
         .vertex_count   = sizeof(vertices) / sizeof(struct vertex),
+        .vertex_data    = vertices,
         .timer          = timer,
     });
+
+    if (sizeof(vertices) > gpu->limits.max_vbo_size) {
+        // Test the use of an explicit vertex buffer
+        const struct pl_buf *vert = pl_buf_create(gpu, &(struct pl_buf_params) {
+            .size = sizeof(vertices),
+            .initial_data = vertices,
+            .drawable = true,
+        });
+
+        REQUIRE(vert);
+        pl_pass_run(gpu, &(struct pl_pass_run_params) {
+            .pass           = pass,
+            .target         = fbo,
+            .vertex_count   = sizeof(vertices) / sizeof(struct vertex),
+            .vertex_buf     = vert,
+            .buf_offset     = 0,
+        });
+
+        pl_buf_destroy(gpu, &vert);
+    }
 
     pl_pass_destroy(gpu, &pass);
 

@@ -126,6 +126,9 @@ bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
 bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
                            const struct pl_tex_transfer_params *params);
 
+void pl_pass_run_vbo(const struct pl_gpu *gpu, struct pl_buf_pool *vbo,
+                     const struct pl_pass_run_params *params);
+
 // Make a deep-copy of the pass params. Note: cached_program etc. are not
 // copied, but cleared explicitly.
 struct pl_pass_params pl_pass_params_copy(void *tactx,

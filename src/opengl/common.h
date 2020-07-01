@@ -28,6 +28,9 @@ struct pl_gl {
     struct pl_gpu_fns impl;
     bool failed;
 
+    // Incrementing counters to keep track of object uniqueness
+    int buf_id;
+
     // Cached capabilities
     int gl_ver;
     int gles_ver;

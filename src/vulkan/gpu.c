@@ -377,6 +377,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         .max_buf_size      = SIZE_MAX, // no limit imposed by vulkan
         .max_ubo_size      = vk->limits.maxUniformBufferRange,
         .max_ssbo_size     = vk->limits.maxStorageBufferRange,
+        .max_vbo_size      = SIZE_MAX,
         .max_buffer_texels = vk->limits.maxTexelBufferElements,
         .min_gather_offset = vk->limits.minTexelGatherOffset,
         .max_gather_offset = vk->limits.maxTexelGatherOffset,
@@ -2210,9 +2211,6 @@ struct pl_pass_vk {
     uint16_t dmask;
     // Vertex buffers (vertices)
     struct pl_buf_pool vbo;
-    const struct pl_buf *cached_vert;
-    void *cached_data;
-    size_t cached_size;
 
     // For updating
     VkWriteDescriptorSet *dswrite;
@@ -2865,54 +2863,8 @@ static void vk_pass_run(const struct pl_gpu *gpu,
     const struct pl_pass *pass = params->pass;
     struct pl_pass_vk *pass_vk = TA_PRIV(pass);
 
-    static const enum queue_type types[] = {
-        [PL_PASS_RASTER]  = GRAPHICS,
-        [PL_PASS_COMPUTE] = COMPUTE,
-    };
-
-    // Update the vertex buffer before dispatching the pass, do this
-    // before vk_require_cmd since it can trigger its own commands
-    const struct pl_buf *vert = NULL;
-    struct pl_buf_vk *vert_vk = NULL;
-    if (pass->params.type == PL_PASS_RASTER) {
-        size_t size = params->vertex_count * pass->params.vertex_stride;
-        if (pass_vk->cached_vert && pass_vk->cached_size == size &&
-            memcmp(params->vertex_data, pass_vk->cached_data, size) == 0)
-        {
-            // Re-use cached vertex buffer
-            vert = pass_vk->cached_vert;
-        } else {
-            // Invalidate existing cache
-            pass_vk->cached_vert = NULL;
-
-            // Fetch new vertex buffer and update it
-            size_t vert_size = params->vertex_count * pass->params.vertex_stride;
-            vert = pl_buf_pool_get(gpu, &pass_vk->vbo, &(struct pl_buf_params) {
-                .size = vert_size,
-                .host_writable = true,
-                .drawable = true,
-            });
-
-            if (!vert) {
-                PL_ERR(gpu, "Failed allocating vertex buffer!");
-                goto error;
-            }
-
-            vk_buf_write(gpu, vert, 0, params->vertex_data, vert_size);
-
-            // Update the cached information, for small vertex buffers
-            if (size <= 128*1024) { // 128 KiB
-                pass_vk->cached_vert = vert;
-                pass_vk->cached_size = size;
-                pass_vk->cached_data =
-                    talloc_realloc_size((void *) pass, pass_vk->cached_data, size);
-                memmove(pass_vk->cached_data, params->vertex_data, size);
-            }
-        }
-
-        pl_assert(vert);
-        vert_vk = TA_PRIV(vert);
-    }
+    if (params->vertex_data)
+        return pl_pass_run_vbo(gpu, &pass_vk->vbo, params);
 
     if (!pass_vk->use_pushd) {
         // Wait for a free descriptor set
@@ -2922,6 +2874,11 @@ static void vk_pass_run(const struct pl_gpu *gpu,
             vk_poll_commands(vk, 10000000); // 10 ms
         }
     }
+
+    static const enum queue_type types[] = {
+        [PL_PASS_RASTER]  = GRAPHICS,
+        [PL_PASS_COMPUTE] = COMPUTE,
+    };
 
     struct vk_cmd *cmd = vk_require_cmd(gpu, types[pass->params.type]);
     if (!cmd)
@@ -2986,6 +2943,8 @@ static void vk_pass_run(const struct pl_gpu *gpu,
     case PL_PASS_RASTER: {
         const struct pl_tex *tex = params->target;
         struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+        const struct pl_buf *vert = params->vertex_buf;
+        struct pl_buf_vk *vert_vk = TA_PRIV(vert);
 
         buf_barrier(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
                     VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT, 0, vert->params.size,

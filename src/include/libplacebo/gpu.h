@@ -115,6 +115,7 @@ struct pl_gpu_limits {
     size_t max_buf_size;        // maximum size of any buffer
     size_t max_ubo_size;        // maximum size of a `uniform` buffer
     size_t max_ssbo_size;       // maximum size of a `storable` buffer
+    size_t max_vbo_size;        // maximum size of a `drawable` buffer
     uint64_t max_buffer_texels; // maximum number of texels in a texel buffer
     int16_t min_gather_offset;  // minimum `textureGatherOffset` offset
     int16_t max_gather_offset;  // maximum `textureGatherOffset` offset
@@ -1042,8 +1043,16 @@ struct pl_pass_run_params {
     struct pl_rect2d viewport; // screen space viewport (must be normalized)
     struct pl_rect2d scissors; // target render scissors (must be normalized)
 
-    void *vertex_data;  // raw pointer to vertex data
-    int vertex_count;   // number of vertices to render
+    // Number of vertices to render
+    int vertex_count;
+
+    // Vertex data may be provided in one of two forms:
+    //
+    // 1. Drawing from host memory directly
+    void *vertex_data;
+    // 2. Drawing from a vertex buffer (requires `vertex_buf->params.drawable`)
+    const struct pl_buf *vertex_buf;
+    size_t buf_offset;
 
     // --- pass->params.type==PL_PASS_COMPUTE only
 

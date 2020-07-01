@@ -251,6 +251,9 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
         }
     }
 
+    // No additional restriction, so just enable if buffers are
+    l->max_vbo_size = l->max_buf_size;
+
     // Cached some existing capability checks
     p->has_stride = test_ext(gpu, "GL_EXT_unpack_subimage", 11, 30);
     p->has_vao = test_ext(gpu, "GL_ARB_vertex_array_object", 30, 0);
@@ -836,6 +839,7 @@ static void gl_tex_blit(const struct pl_gpu *gpu,
 
 // For pl_buf.priv
 struct pl_buf_gl {
+    uint64_t id; // unique per buffer
     GLuint buffer;
     GLsync fence;
     GLbitfield barrier;
@@ -865,10 +869,12 @@ static const struct pl_buf *gl_buf_create(const struct pl_gpu *gpu,
     buf->params = *params;
     buf->params.initial_data = NULL;
 
+    struct pl_gl *p = TA_PRIV(gpu);
+    struct pl_buf_gl *buf_gl = TA_PRIV(buf);
+    buf_gl->id = ++p->buf_id;
+
     // Just use this since the generic GL_BUFFER doesn't work
     const GLenum target = GL_COPY_WRITE_BUFFER;
-
-    struct pl_buf_gl *buf_gl = TA_PRIV(buf);
     glGenBuffers(1, &buf_gl->buffer);
     glBindBuffer(target, buf_gl->buffer);
 
@@ -1328,7 +1334,8 @@ error:
 struct pl_pass_gl {
     GLuint program;
     GLuint vao;     // the VAO object
-    GLuint buffer;  // GL_ARRAY_BUFFER for vao
+    uint64_t vao_id;// buf_gl.id of VAO
+    GLuint buffer;  // VBO for raw vertex pointers
     GLint *var_locs;
 };
 
@@ -1344,7 +1351,7 @@ static void gl_pass_destroy(const struct pl_gpu *gpu, const struct pl_pass *pass
     talloc_free((void *) pass);
 }
 
-static void gl_enable_vao_attribs(const struct pl_pass *pass)
+static void gl_update_va(const struct pl_pass *pass)
 {
     for (int i = 0; i < pass->params.num_vertex_attribs; i++) {
         const struct pl_vertex_attrib *va = &pass->params.vertex_attribs[i];
@@ -1440,13 +1447,13 @@ static const struct pl_pass *gl_pass_create(const struct pl_gpu *gpu,
 
     glUseProgram(0);
 
-    // Initialize VAO / vertex buffer
+    // Initialize the VAO and single vertex buffer
     glGenBuffers(1, &pass_gl->buffer);
     if (p->has_vao) {
-        glBindBuffer(GL_ARRAY_BUFFER, pass_gl->buffer);
         glGenVertexArrays(1, &pass_gl->vao);
+        glBindBuffer(GL_ARRAY_BUFFER, pass_gl->buffer);
         glBindVertexArray(pass_gl->vao);
-        gl_enable_vao_attribs(pass);
+        gl_update_va(pass);
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
@@ -1664,15 +1671,26 @@ static void gl_pass_run(const struct pl_gpu *gpu,
         }
         gl_check_err(gpu, "gl_pass_run: enabling blend");
 
-        // Update vertex buffer and bind VAO
-        size_t vertex_size = params->vertex_count * pass->params.vertex_stride;
-        glBindBuffer(GL_ARRAY_BUFFER, pass_gl->buffer);
-        glBufferData(GL_ARRAY_BUFFER, vertex_size, params->vertex_data, GL_STREAM_DRAW);
+        // Update VBO and VAO
+        const struct pl_buf *vert = params->vertex_buf;
+        struct pl_buf_gl *vert_gl = vert ? TA_PRIV(vert) : NULL;
+        glBindBuffer(GL_ARRAY_BUFFER, vert ? vert_gl->buffer : pass_gl->buffer);
 
-        if (pass_gl->vao) {
+        if (!vert) {
+            // Update the buffer directly. In theory we could also do a memcmp
+            // cache here to avoid unnecessary updates.
+            size_t vert_size = params->vertex_count * pass->params.vertex_stride;
+            glBufferData(GL_ARRAY_BUFFER, vert_size, params->vertex_data, GL_STREAM_DRAW);
+        }
+
+        if (pass_gl->vao)
             glBindVertexArray(pass_gl->vao);
-        } else {
-            gl_enable_vao_attribs(pass);
+
+        uint64_t vert_id = vert ? vert_gl->id : 0;
+        if (!pass_gl->vao || pass_gl->vao_id != vert_id) {
+            // We only need to update the VAO when the buffer ID changes
+            gl_update_va(pass);
+            pass_gl->vao_id = vert_id;
         }
 
         gl_check_err(gpu, "gl_pass_run: update/bind vertex buffer");
