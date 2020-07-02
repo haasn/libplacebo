@@ -1800,9 +1800,13 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     }
 
     if (params->host_mapped || params->host_readable) {
-        // Require cached memory for buffers which may be frequently read
-        memFlags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         host_mapped = true;
+
+        if (size > 256) {
+            // Require cached memory for large buffers which may be read from,
+            // because uncached reads are extremely slow
+            memFlags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+        }
     }
 
     if (params->host_writable || params->host_readable) {
@@ -1815,6 +1819,9 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         break;
     case PL_BUF_MEM_HOST:
+        // This isn't a true guarantee, but actually trying to restrict the
+        // device-local bit locks out all memory heaps on iGPUs. Requiring
+        // the memory be host-mapped is the easiest compromise.
         host_mapped = true;
         break;
     default: break;
