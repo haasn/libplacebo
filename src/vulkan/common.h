@@ -198,6 +198,7 @@ struct vk_ctx {
     VK_FUN(GetBufferMemoryRequirements);
     VK_FUN(GetDeviceQueue);
     VK_FUN(GetImageMemoryRequirements);
+    VK_FUN(GetImageMemoryRequirements2KHR);
     VK_FUN(GetMemoryFdKHR);
     VK_FUN(GetMemoryFdPropertiesKHR);
     VK_FUN(GetMemoryHostPointerPropertiesEXT);

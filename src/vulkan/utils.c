@@ -78,10 +78,6 @@ bool vk_external_mem_check(const VkExternalMemoryPropertiesKHR *props,
             return false;
     }
 
-    // We can't handle VkMemoryDedicatedAllocateInfo currently. (Maybe soon?)
-    if (flags & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT_KHR)
-        return false;
-
     return true;
 }
 

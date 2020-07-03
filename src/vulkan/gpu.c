@@ -1025,8 +1025,30 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         .shared_mem = params->shared_mem,
     };
 
+    if (vk->GetImageMemoryRequirements2KHR) {
+        VkMemoryDedicatedRequirementsKHR ded_reqs = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS_KHR,
+        };
+
+        VkMemoryRequirements2KHR reqs2 = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR,
+            .pNext = &ded_reqs,
+        };
+
+        VkImageMemoryRequirementsInfo2KHR req_info2 = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2_KHR,
+            .image = tex_vk->img,
+        };
+
+        vk->GetImageMemoryRequirements2KHR(vk->dev, &req_info2, &reqs2);
+        mparams.reqs = reqs2.memoryRequirements;
+        if (ded_reqs.prefersDedicatedAllocation)
+            mparams.ded_image = tex_vk->img;
+    } else {
+        vk->GetImageMemoryRequirements(vk->dev, tex_vk->img, &mparams.reqs);
+    }
+
     struct vk_memslice *mem = &tex_vk->mem;
-    vk->GetImageMemoryRequirements(vk->dev, tex_vk->img, &mparams.reqs);
     if (!vk_malloc_slice(p->alloc, mem, &mparams))
         goto error;
 

@@ -309,9 +309,19 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
 
     VkMemoryAllocateInfo minfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .pNext = params->export_handle ? &ext_info : NULL,
         .allocationSize = slab->size,
     };
+
+    if (params->export_handle)
+        vk_link_struct(&minfo, &ext_info);
+
+    VkMemoryDedicatedAllocateInfoKHR dinfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR,
+        .image = params->ded_image,
+    };
+
+    if (params->ded_image)
+        vk_link_struct(&minfo, &dinfo);
 
     if (!find_best_memtype(ma, type_mask, params, &minfo.memoryTypeIndex))
         goto error;
@@ -378,6 +388,7 @@ static void insert_region(struct vk_slab *slab, struct vk_region region)
     if (region.start == region.end)
         return;
 
+    pl_assert(!slab->dedicated);
     bool big_enough = region_len(region) >= PLVK_HEAP_MINIMUM_REGION_SIZE;
 
     // Find the index of the first region that comes after this
@@ -545,6 +556,7 @@ static struct vk_heap *find_heap(struct vk_malloc *ma,
                                  const struct vk_malloc_params *params)
 {
     pl_assert(!params->import_handle);
+    pl_assert(!params->ded_image);
 
     struct vk_malloc_params fixed = *params;
     fixed.reqs.alignment = 0;
@@ -577,20 +589,6 @@ static bool heap_get_region(struct vk_malloc *ma, struct vk_heap *heap,
                             struct vk_slab **out_slab, int *out_index)
 {
     struct vk_slab *slab = NULL;
-    struct vk_malloc_params params = heap->params;
-
-    // If the allocation is very big, serve it directly instead of bothering
-    // with the heap
-    if (size > PLVK_HEAP_MAXIMUM_SLAB_SIZE) {
-        params.reqs.size = size;
-        params.reqs.alignment = align;
-        slab = slab_alloc(ma, &params);
-        if (slab)
-            slab->dedicated = true;
-        *out_slab = slab;
-        *out_index = 0;
-        return !!slab;
-    }
 
     for (int i = 0; i < heap->num_slabs; i++) {
         slab = heap->slabs[i];
@@ -622,10 +620,12 @@ static bool heap_get_region(struct vk_malloc *ma, struct vk_heap *heap,
     slab_size = PL_MIN(PLVK_HEAP_MAXIMUM_SLAB_SIZE, slab_size);
     pl_assert(slab_size >= size);
 
+    struct vk_malloc_params params = heap->params;
     params.reqs.size = slab_size;
     slab = slab_alloc(ma, &params);
     if (!slab)
         return false;
+    pl_assert(!slab->dedicated);
     TARRAY_APPEND(NULL, heap->slabs, heap->num_slabs, slab);
 
     // Return the only region there is in a newly allocated slab
@@ -645,6 +645,11 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     struct vk_slab *slab = NULL;
     const struct pl_shared_mem *shmem = &params->shared_mem;
 
+    VkMemoryDedicatedAllocateInfoKHR dinfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR,
+        .image = params->ded_image,
+    };
+
     VkImportMemoryFdInfoKHR fdinfo = {
         .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
         .handleType = vk_handle_type,
@@ -660,6 +665,9 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = shmem->size,
     };
+
+    if (params->ded_image)
+        vk_link_struct(&ainfo, &dinfo);
 
     VkBuffer buffer = VK_NULL_HANDLE;
     VkMemoryRequirements reqs = params->reqs;
@@ -699,6 +707,17 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         goto error;
     }
 
+    if (params->ded_image && shmem->offset != 0) {
+        PL_ERR(vk, "Dedicated image import conflicts with nonzero offset!");
+        goto error;
+    }
+
+    if (PL_ALIGN(shmem->offset, reqs.alignment) != shmem->offset) {
+        PL_ERR(vk, "Imported object offset %zu conflicts with alignment %zu!",
+               shmem->offset, (size_t) reqs.alignment);
+        goto error;
+    }
+
     switch (params->import_handle) {
 #ifdef VK_HAVE_UNIX
     case PL_HANDLE_DMA_BUF: {
@@ -727,7 +746,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         }
 
         reqs.memoryTypeBits &= fdprops.memoryTypeBits;
-        ainfo.pNext = &fdinfo;
+        vk_link_struct(&ainfo, &fdinfo);
         break;
     }
 #else // !VK_HAVE_UNIX
@@ -768,7 +787,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
 
         ptrinfo.pHostPointer = shmem->handle.ptr;
         reqs.memoryTypeBits &= ptrprops.memoryTypeBits;
-        ainfo.pNext = &ptrinfo;
+        vk_link_struct(&ainfo, &ptrinfo);
         break;
     }
 
@@ -813,15 +832,17 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     switch (params->import_handle) {
     case PL_HANDLE_DMA_BUF:
     case PL_HANDLE_FD:
-        PL_DEBUG(vk, "Imported %zu of memory from fd: %d",
-                 (size_t) slab->size, shmem->handle.fd);
+        PL_DEBUG(vk, "Imported %zu of memory from fd: %d%s",
+                 (size_t) slab->size, shmem->handle.fd,
+                 params->ded_image ? " (dedicated)" : "");
         // fd ownership is transferred at this point.
         slab->handle.fd = fdinfo.fd;
         fdinfo.fd = -1;
         break;
     case PL_HANDLE_HOST_PTR:
-        PL_DEBUG(vk, "Imported %zu of memory from ptr: %p",
-                 (size_t) slab->size, shmem->handle.ptr);
+        PL_DEBUG(vk, "Imported %zu of memory from ptr: %p%s",
+                 (size_t) slab->size, shmem->handle.ptr,
+                 params->ded_image ? " (dedicated" : "");
         break;
     case PL_HANDLE_WIN32:
     case PL_HANDLE_WIN32_KMT:
@@ -854,32 +875,48 @@ error:
 bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
                      const struct vk_malloc_params *params)
 {
+    struct vk_ctx *vk = ma->vk;
     pl_assert(!params->import_handle || !params->export_handle);
     if (params->import_handle)
         return vk_malloc_import(ma, out, params);
-
-    struct vk_ctx *vk = ma->vk;
-    struct vk_heap *heap = find_heap(ma, params);
-    struct vk_slab *slab;
 
     size_t size = params->reqs.size;
     size_t align = params->reqs.alignment;
     align = pl_lcm(align, vk->limits.bufferImageGranularity);
 
-    int index_region;
-    if (!heap_get_region(ma, heap, size, align, &slab, &index_region))
-        return false;
+    struct vk_slab *slab;
+    VkDeviceSize offset;
+    if (params->ded_image || size >= PLVK_HEAP_MAXIMUM_SLAB_SIZE) {
+        slab = slab_alloc(ma, params);
+        if (!slab)
+            return false;
+        slab->dedicated = true;
+        offset = 0;
+    } else {
+        struct vk_heap *heap = find_heap(ma, params);
 
-    bool noncoherent = (slab->flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
-                      !(slab->flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    if (noncoherent) {
-        size = PL_ALIGN(size, vk->limits.nonCoherentAtomSize);
-        align = pl_lcm(align, vk->limits.nonCoherentAtomSize);
+        int index_region;
+        if (!heap_get_region(ma, heap, size, align, &slab, &index_region))
+            return false;
+
+        bool noncoherent = (slab->flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
+                          !(slab->flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        if (noncoherent) {
+            size = PL_ALIGN(size, vk->limits.nonCoherentAtomSize);
+            align = pl_lcm(align, vk->limits.nonCoherentAtomSize);
+        }
+
+        struct vk_region region = slab->regions[index_region];
+        TARRAY_REMOVE_AT(slab->regions, slab->num_regions, index_region);
+        offset = PL_ALIGN(region.start, align);
+        size_t out_end = offset + size;
+        insert_region(slab, (struct vk_region) { region.start, offset });
+        insert_region(slab, (struct vk_region) { out_end, region.end });
+
+        PL_DEBUG(vk, "Sub-allocating slice %zu + %zu from slab with size %zu",
+                 (size_t) offset,  size, (size_t) slab->size);
     }
 
-    struct vk_region region = slab->regions[index_region];
-    TARRAY_REMOVE_AT(slab->regions, slab->num_regions, index_region);
-    VkDeviceSize offset = PL_ALIGN(region.start, align);
     *out = (struct vk_memslice) {
         .vkmem = slab->mem,
         .offset = offset,
@@ -894,13 +931,6 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
             .size = slab->size,
         },
     };
-
-    PL_DEBUG(vk, "Sub-allocating slice %zu + %zu from slab with size %zu",
-             (size_t) out->offset, (size_t) out->size, (size_t) slab->size);
-
-    size_t out_end = out->offset + out->size;
-    insert_region(slab, (struct vk_region) { region.start, out->offset });
-    insert_region(slab, (struct vk_region) { out_end, region.end });
 
     slab->used += size;
     return true;

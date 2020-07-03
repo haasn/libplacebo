@@ -106,6 +106,14 @@ static const struct vk_ext vk_device_extensions[] = {
             {0},
         },
     }, {
+        .name = VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+        .core_ver = VK_API_VERSION_1_1,
+        .funs = (struct vk_fun[]) {
+            VK_DEV_FUN_ALIAS(GetImageMemoryRequirements2KHR,
+                             vkGetImageMemoryRequirements2),
+            {0},
+        },
+    }, {
         .name = VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
         .core_ver = VK_API_VERSION_1_1,
         .funs = (struct vk_fun[]) {
