@@ -782,7 +782,7 @@ bool pl_get_detected_peak(const struct pl_shader_obj *state,
     struct sh_peak_obj *obj = state->priv;
     const struct pl_gpu *gpu = state->gpu;
 
-    float average[2];
+    float average[2] = {0};
     pl_assert(obj->buf->params.size >= sizeof(average));
 
     bool ok = pl_buf_recreate(gpu, &obj->buf_read, &(struct pl_buf_params) {
