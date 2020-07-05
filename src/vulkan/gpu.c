@@ -611,7 +611,7 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
     vk->DestroyImageView(vk->dev, tex_vk->view, VK_ALLOC);
     if (!tex_vk->external_img) {
         vk->DestroyImage(vk->dev, tex_vk->img, VK_ALLOC);
-        vk_free_memslice(p->alloc, tex_vk->mem);
+        vk_malloc_free(p->alloc, &tex_vk->mem);
     }
 
     talloc_free(tex);
@@ -1018,28 +1018,28 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     VK(vk->CreateImage(vk->dev, &iinfo, VK_ALLOC, &tex_vk->img));
     tex_vk->usage_flags = iinfo.usage;
 
-    VkMemoryPropertyFlags memFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    VkMemoryRequirements reqs = {0};
-    vk->GetImageMemoryRequirements(vk->dev, tex_vk->img, &reqs);
+    struct vk_malloc_params mparams = {
+        .optimal = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        .export_handle = params->export_handle,
+        .import_handle = params->import_handle,
+        .shared_mem = params->shared_mem,
+    };
 
     struct vk_memslice *mem = &tex_vk->mem;
+    vk->GetImageMemoryRequirements(vk->dev, tex_vk->img, &mparams.reqs);
+    if (!vk_malloc_slice(p->alloc, mem, &mparams))
+        goto error;
+
     if (params->import_handle) {
-        if (!vk_malloc_import(p->alloc, reqs, params->import_handle,
-                              &params->shared_mem, mem))
-        {
-            goto error;
-        }
         // Currently, we know that attempting to bind imported memory may generate
         // validation errors because there's no way to communicate the memory
         // layout; the validation layer will rely on the expected Vulkan layout
         // for the image. As long as the driver can handle the image, we'll be ok
         // so we don't want these validation errors to fire and create false
         // positives.
-        vk->ctx->suppress_errors_for_object = (uint64_t)tex_vk->img;
-    } else {
-        if (!vk_malloc_generic(p->alloc, reqs, memFlags, params->export_handle, mem))
-            goto error;
+        vk->ctx->suppress_errors_for_object = (uint64_t) tex_vk->img;
     }
+
     VK(vk->BindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
     if (params->import_handle)
         vk->ctx->suppress_errors_for_object = VK_NULL_HANDLE;
@@ -1342,8 +1342,7 @@ void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
 
 // For pl_buf.priv
 struct pl_buf_vk {
-    struct vk_bufslice slice;
-    VkBuffer import_buf; // for imported buffers
+    struct vk_memslice mem;
     int refcount; // 1 = object allocated but not in use, > 1 = in use
     int writes; // number of queued write commands
     enum queue_type update_queue;
@@ -1369,8 +1368,7 @@ static void vk_buf_deref(const struct pl_gpu *gpu, const struct pl_buf *buf)
     if (--buf_vk->refcount == 0) {
         vk_signal_destroy(vk, &buf_vk->sig);
         vk->DestroyBufferView(vk->dev, buf_vk->view, VK_ALLOC);
-        vk->DestroyBuffer(vk->dev, buf_vk->import_buf, VK_ALLOC);
-        vk_free_memslice(p->alloc, buf_vk->slice.mem);
+        vk_malloc_free(p->alloc, &buf_vk->mem);
         talloc_free((void *) buf);
     }
 }
@@ -1410,8 +1408,8 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         .dstQueueFamilyIndex = (op & BUF_EXPORT) ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
         .srcAccessMask = buf_vk->current_access,
         .dstAccessMask = newAccess,
-        .buffer = buf_vk->slice.buf,
-        .offset = buf_vk->slice.mem.offset + offset,
+        .buffer = buf_vk->mem.buf,
+        .offset = buf_vk->mem.offset + offset,
         .size = size,
     };
 
@@ -1430,7 +1428,7 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
             src_stages |= VK_PIPELINE_STAGE_HOST_BIT;
         }
 
-        if (buf_vk->slice.mem.data && !buf_vk->slice.mem.coherent) {
+        if (buf_vk->mem.data && !buf_vk->mem.coherent) {
             if (buf_vk->exported) {
                 // TODO: figure out and clean up the semantics?
                 PL_WARN(vk, "Mixing host-mapped or user-writable buffers with "
@@ -1441,9 +1439,9 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
             VK(vk->FlushMappedMemoryRanges(vk->dev, 1, &(struct VkMappedMemoryRange) {
                 .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-                .memory = buf_vk->slice.mem.vkmem,
-                .offset = buf_vk->slice.mem.offset,
-                .size = buf_vk->slice.mem.size,
+                .memory = buf_vk->mem.vkmem,
+                .offset = buf_vk->mem.offset,
+                .size = buf_vk->mem.size,
             }));
 
             // Just ignore errors, not much we can do about them other than
@@ -1533,7 +1531,7 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     // We need to perform a flush if the host is capable of reading back from
     // the buffer, or if we intend to overwrite it using mapped memory
     bool can_read = buf->params.host_readable;
-    bool can_write = buf_vk->slice.mem.data && buf->params.host_writable;
+    bool can_write = buf_vk->mem.data && buf->params.host_writable;
     if (buf->params.host_mapped || buf->params.import_handle == PL_HANDLE_HOST_PTR)
         can_read = can_write = true;
 
@@ -1547,8 +1545,8 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         .srcAccessMask = buf_vk->current_access,
         .dstAccessMask = (can_read ? VK_ACCESS_HOST_READ_BIT : 0)
                        | (can_write ? VK_ACCESS_HOST_WRITE_BIT : 0),
-        .buffer = buf_vk->slice.buf,
-        .offset = buf_vk->slice.mem.offset + offset,
+        .buffer = buf_vk->mem.buf,
+        .offset = buf_vk->mem.offset + offset,
         .size = size,
     };
 
@@ -1557,8 +1555,8 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                            0, NULL, 1, &buffBarrier, 0, NULL);
 
     // Invalidate the mapped memory as soon as this barrier completes
-    if (buf_vk->slice.mem.data && !buf_vk->slice.mem.coherent)
-        vk_cmd_callback(cmd, (vk_cb) invalidate_memslice, vk, &buf_vk->slice.mem);
+    if (buf_vk->mem.data && !buf_vk->mem.coherent)
+        vk_cmd_callback(cmd, (vk_cb) invalidate_memslice, vk, &buf_vk->mem);
 }
 
 static bool vk_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
@@ -1592,12 +1590,12 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
 
     // For host-mapped buffers, we can just directly memcpy the buffer contents.
     // Otherwise, we can update the buffer from the GPU using a command buffer.
-    if (buf_vk->slice.mem.data) {
+    if (buf_vk->mem.data) {
         // ensure no queued operations
         while (vk_buf_poll(gpu, buf, UINT64_MAX))
             ; // do nothing
 
-        uintptr_t addr = (uintptr_t) buf_vk->slice.mem.data + offset;
+        uintptr_t addr = (uintptr_t) buf_vk->mem.data + offset;
         memcpy((void *) addr, data, size);
         buf_vk->needs_flush = true;
     } else {
@@ -1617,7 +1615,7 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
         const size_t max_transfer = 64 * 1024;
         size_t size_rem = size % 4;
         size_t size_base = size - size_rem;
-        VkDeviceSize buf_offset = buf_vk->slice.mem.offset + offset;
+        VkDeviceSize buf_offset = buf_vk->mem.offset + offset;
 
         if (size_base > max_transfer) {
             PL_TRACE(gpu, "Using multiple vkCmdUpdateBuffer calls to upload "
@@ -1626,7 +1624,7 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
         }
 
         for (size_t xfer = 0; xfer < size_base; xfer += max_transfer) {
-            vk->CmdUpdateBuffer(cmd->buf, buf_vk->slice.buf,
+            vk->CmdUpdateBuffer(cmd->buf, buf_vk->mem.buf,
                                 buf_offset + xfer,
                                 PL_MIN(size_base, max_transfer),
                                 (void *) ((uint8_t *) data + xfer));
@@ -1635,7 +1633,7 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
         if (size_rem) {
             uint8_t tail[4] = {0};
             memcpy(tail, data, size_rem);
-            vk->CmdUpdateBuffer(cmd->buf, buf_vk->slice.buf, buf_offset + size_base,
+            vk->CmdUpdateBuffer(cmd->buf, buf_vk->mem.buf, buf_offset + size_base,
                                 sizeof(tail), tail);
         }
 
@@ -1650,13 +1648,13 @@ static bool vk_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                         size_t offset, void *dest, size_t size)
 {
     struct pl_buf_vk *buf_vk = TA_PRIV(buf);
-    pl_assert(buf_vk->slice.mem.data);
+    pl_assert(buf_vk->mem.data);
 
     // ensure no more queued writes
     while (buf_vk->writes)
         vk_buf_poll(gpu, buf, UINT64_MAX);
 
-    uintptr_t addr = (uintptr_t) buf_vk->slice.mem.data + (size_t) offset;
+    uintptr_t addr = (uintptr_t) buf_vk->mem.data + (size_t) offset;
     memcpy(dest, (void *) addr, size);
     return true;
 }
@@ -1685,12 +1683,12 @@ static void vk_buf_copy(const struct pl_gpu *gpu,
                 VK_ACCESS_TRANSFER_READ_BIT, src_offset, size, BUF_READ);
 
     VkBufferCopy region = {
-        .srcOffset = src_vk->slice.mem.offset + src_offset,
-        .dstOffset = dst_vk->slice.mem.offset + dst_offset,
+        .srcOffset = src_vk->mem.offset + src_offset,
+        .dstOffset = dst_vk->mem.offset + dst_offset,
         .size = size,
     };
 
-    vkCmdCopyBuffer(cmd->buf, src_vk->slice.buf, dst_vk->slice.buf,
+    vkCmdCopyBuffer(cmd->buf, src_vk->mem.buf, dst_vk->mem.buf,
                     1, &region);
 
     buf_signal(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -1741,49 +1739,56 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     buf_vk->current_access = 0;
     buf_vk->refcount = 1;
 
-    // These are always set, because vk_buf_copy can always be used
-    VkBufferUsageFlags bufFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
-                                  VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    struct vk_malloc_params mparams = {
+        .reqs = {
+            .size = PL_ALIGN2(params->size, 4), // for vk_buf_write
+            .memoryTypeBits = UINT32_MAX,
+            .alignment = 1,
+        },
+        // these are always set, because `vk_buf_copy` can always be used
+        .buf_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                     VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        .export_handle = params->export_handle,
+        .import_handle = params->import_handle,
+        .shared_mem = params->shared_mem,
+    };
 
-    VkMemoryPropertyFlags memFlags = 0;
-    VkDeviceSize size = PL_ALIGN2(params->size, 4); // for vk_buf_write
-
-    // Optimal/mandatory buffer offset alignment
-    VkDeviceSize align_opt = vk->limits.optimalBufferCopyOffsetAlignment;
-    VkDeviceSize align = 1;
+    // Mandatory/optimal buffer offset alignment
+    VkDeviceSize *align = &mparams.reqs.alignment;
+    VkDeviceSize extra_align = vk->limits.optimalBufferCopyOffsetAlignment;
 
     // Try and align all buffers to the minimum texel alignment, to make sure
     // tex_upload/tex_download always gets aligned buffer copies if possible
-    align_opt = pl_lcm(align_opt, p->min_texel_alignment);
+    extra_align = pl_lcm(extra_align, p->min_texel_alignment);
 
     enum pl_buf_mem_type mem_type = params->memory_type;
     bool is_texel = false;
 
     if (params->uniform) {
-        bufFlags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        align = pl_lcm(align, vk->limits.minUniformBufferOffsetAlignment);
+        mparams.buf_usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        *align = pl_lcm(*align, vk->limits.minUniformBufferOffsetAlignment);
         mem_type = PL_BUF_MEM_DEVICE;
         if (params->format) {
-            bufFlags |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
-            align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
+            mparams.buf_usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+            *align = pl_lcm(*align, vk->limits.minTexelBufferOffsetAlignment);
             is_texel = true;
         }
     }
 
     if (params->storable) {
-        bufFlags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        align = pl_lcm(align, vk->limits.minStorageBufferOffsetAlignment);
+        mparams.buf_usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        *align = pl_lcm(*align, vk->limits.minStorageBufferOffsetAlignment);
         buf_vk->update_queue = vk->pool_compute ? COMPUTE : GRAPHICS;
         mem_type = PL_BUF_MEM_DEVICE;
         if (params->format) {
-            bufFlags |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
-            align = pl_lcm(align, vk->limits.minTexelBufferOffsetAlignment);
+            mparams.buf_usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
+            *align = pl_lcm(*align, vk->limits.minTexelBufferOffsetAlignment);
             is_texel = true;
         }
     }
 
     if (params->drawable) {
-        bufFlags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        mparams.buf_usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
         mem_type = PL_BUF_MEM_DEVICE;
     }
 
@@ -1802,10 +1807,10 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     if (params->host_mapped || params->host_readable) {
         host_mapped = true;
 
-        if (size > 256) {
+        if (params->size > 256) {
             // Require cached memory for large buffers which may be read from,
             // because uncached reads are extremely slow
-            memFlags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            mparams.required |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         }
     }
 
@@ -1816,7 +1821,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
 
     switch (mem_type) {
     case PL_BUF_MEM_DEVICE:
-        memFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        mparams.required |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         break;
     case PL_BUF_MEM_HOST:
         // This isn't a true guarantee, but actually trying to restrict the
@@ -1828,67 +1833,28 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     }
 
     if (host_mapped)
-        memFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        mparams.required |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
     if (params->import_handle) {
         size_t offset = params->shared_mem.offset;
-        if (PL_ALIGN(offset, align) != offset) {
+        if (PL_ALIGN(offset, *align) != offset) {
             PL_ERR(gpu, "Imported memory offset %zu violates minimum alignment "
                    "requirement of enabled usage flags (%zu)!",
-                   offset, align);
+                   offset, (size_t) *align);
             goto error;
         }
-
-        uint32_t qfs[3] = {0};
-        for (int i = 0; i < vk->num_pools; i++)
-            qfs[i] = vk->pools[i]->qf;
-
-        VkExternalMemoryBufferCreateInfoKHR ext_buf_info = {
-            .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR,
-            .handleTypes = vk_mem_handle_type(params->import_handle),
-        };
-
-        VkBufferCreateInfo binfo = {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .pNext = &ext_buf_info,
-            .size = params->shared_mem.size,
-            .usage = bufFlags,
-            .sharingMode = vk->num_pools > 1 ? VK_SHARING_MODE_CONCURRENT
-                                             : VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = vk->num_pools,
-            .pQueueFamilyIndices = qfs,
-        };
-
-        VK(vk->CreateBuffer(vk->dev, &binfo, VK_ALLOC, &buf_vk->import_buf));
-        VK_NAME(BUFFER, buf_vk->import_buf, "imported");
-
-        VkMemoryRequirements reqs = {0};
-        vk->GetBufferMemoryRequirements(vk->dev, buf_vk->import_buf, &reqs);
-        if (!vk_malloc_import(p->alloc, reqs, params->import_handle,
-                              &params->shared_mem, &buf_vk->slice.mem))
-            goto error;
-
-        if (params->host_mapped && !buf_vk->slice.mem.data) {
-            PL_ERR(gpu, "Failed creating host-mapped buffer from host-invisible "
-                   "imported memory!");
-            goto error;
-        }
-
-        buf_vk->slice.buf = buf_vk->import_buf;
-        VK(vk->BindBufferMemory(vk->dev, buf_vk->import_buf,
-                                buf_vk->slice.mem.vkmem, 0));
     } else {
-        align = pl_lcm(align, align_opt);
-        if (!vk_malloc_buffer(p->alloc, bufFlags, memFlags, size, align,
-                              params->export_handle, &buf_vk->slice))
-            goto error;
+        *align = pl_lcm(*align, extra_align);
     }
 
+    if (!vk_malloc_slice(p->alloc, &buf_vk->mem, &mparams))
+        goto error;
+
     if (params->host_mapped)
-        buf->data = buf_vk->slice.mem.data;
+        buf->data = buf_vk->mem.data;
 
     if (params->export_handle) {
-        buf->shared_mem = buf_vk->slice.mem.shared_mem;
+        buf->shared_mem = buf_vk->mem.shared_mem;
         buf_vk->exported = true;
     }
 
@@ -1896,10 +1862,10 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         const struct vk_format **vk_fmt = TA_PRIV(params->format);
         VkBufferViewCreateInfo vinfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
-            .buffer = buf_vk->slice.buf,
+            .buffer = buf_vk->mem.buf,
             .format = PL_DEF((*vk_fmt)->bfmt, (*vk_fmt)->tfmt),
-            .offset = buf_vk->slice.mem.offset,
-            .range = buf_vk->slice.mem.size,
+            .offset = buf_vk->mem.offset,
+            .range = buf_vk->mem.size,
         };
 
         VK(vk->CreateBufferView(vk->dev, &vinfo, VK_ALLOC, &buf_vk->view));
@@ -1983,7 +1949,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
     struct pl_rect3d rc = params->rc;
     size_t size = pl_tex_transfer_size(params);
 
-    size_t buf_offset = buf_vk->slice.mem.offset + params->buf_offset;
+    size_t buf_offset = buf_vk->mem.offset + params->buf_offset;
     bool emulated = tex->params.format->emulated;
     bool unaligned = buf_offset % tex->params.format->texel_size;
 
@@ -2016,7 +1982,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         struct pl_buf_vk *tbuf_vk = TA_PRIV(tbuf);
         VkBufferCopy region = {
             .srcOffset = buf_offset,
-            .dstOffset = tbuf_vk->slice.mem.offset,
+            .dstOffset = tbuf_vk->mem.offset,
             .size = size,
         };
 
@@ -2025,7 +1991,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
                     BUF_READ);
         buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT, 0, size, BUF_WRITE);
-        vk->CmdCopyBuffer(cmd->buf, buf_vk->slice.buf, tbuf_vk->slice.buf,
+        vk->CmdCopyBuffer(cmd->buf, buf_vk->mem.buf, tbuf_vk->mem.buf,
                           1, &region);
 
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -2069,7 +2035,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, false);
-        vk->CmdCopyBufferToImage(cmd->buf, buf_vk->slice.buf, tex_vk->img,
+        vk->CmdCopyBufferToImage(cmd->buf, buf_vk->mem.buf, tex_vk->img,
                                  tex_vk->current_layout, 1, &region);
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -2100,7 +2066,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
     struct pl_rect3d rc = params->rc;
     size_t size = pl_tex_transfer_size(params);
 
-    size_t buf_offset = buf_vk->slice.mem.offset + params->buf_offset;
+    size_t buf_offset = buf_vk->mem.offset + params->buf_offset;
     bool emulated = tex->params.format->emulated;
     bool unaligned = buf_offset % tex->params.format->texel_size;
 
@@ -2138,7 +2104,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
 
         struct pl_buf_vk *tbuf_vk = TA_PRIV(tbuf);
         VkBufferCopy region = {
-            .srcOffset = tbuf_vk->slice.mem.offset,
+            .srcOffset = tbuf_vk->mem.offset,
             .dstOffset = buf_offset,
             .size = size,
         };
@@ -2148,7 +2114,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size,
                     BUF_WRITE);
-        vk->CmdCopyBuffer(cmd->buf, tbuf_vk->slice.buf, buf_vk->slice.buf,
+        vk->CmdCopyBuffer(cmd->buf, tbuf_vk->mem.buf, buf_vk->mem.buf,
                           1, &region);
         buf_signal(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -2186,7 +2152,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
                     VK_ACCESS_TRANSFER_READ_BIT,
                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, false);
         vk->CmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->current_layout,
-                                 buf_vk->slice.buf, 1, &region);
+                                 buf_vk->mem.buf, 1, &region);
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_flush(gpu, cmd, buf, params->buf_offset, size);
@@ -2813,8 +2779,8 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
         VkDescriptorBufferInfo *binfo = &pass_vk->dsbinfo[idx];
         *binfo = (VkDescriptorBufferInfo) {
-            .buffer = buf_vk->slice.buf,
-            .offset = buf_vk->slice.mem.offset,
+            .buffer = buf_vk->mem.buf,
+            .offset = buf_vk->mem.offset,
             .range = buf->params.size,
         };
 
@@ -2963,8 +2929,8 @@ static void vk_pass_run(const struct pl_gpu *gpu,
                     VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT, 0, vert->params.size,
                     BUF_READ);
 
-        vk->CmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->slice.buf,
-                                 &vert_vk->slice.mem.offset);
+        vk->CmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->mem.buf,
+                                 &vert_vk->mem.offset);
 
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                     VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,

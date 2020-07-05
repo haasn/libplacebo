@@ -36,35 +36,22 @@ struct vk_memslice {
     void *priv;
     // depending on the type/flags:
     struct pl_shared_mem shared_mem;
-    void *data;             // pointer to slice (for persistently mapped slices)
-    bool coherent;          // whether `data` is coherent
+    VkBuffer buf;   // associated buffer (when `buf_usage` is nonzero)
+    void *data;     // pointer to slice (for persistently mapped slices)
+    bool coherent;  // whether `data` is coherent
 };
 
-void vk_free_memslice(struct vk_malloc *ma, struct vk_memslice slice);
-bool vk_malloc_generic(struct vk_malloc *ma, VkMemoryRequirements reqs,
-                       VkMemoryPropertyFlags flags,
-                       enum pl_handle_type handle_type,
-                       struct vk_memslice *out);
-
-// Represents a single "slice" of a larger buffer
-struct vk_bufslice {
-    struct vk_memslice mem; // must be freed by the user when done
-    VkBuffer buf;           // the buffer this memory was sliced from
+struct vk_malloc_params {
+    VkMemoryRequirements reqs;
+    VkMemoryPropertyFlags required;
+    VkMemoryPropertyFlags optimal;
+    VkBufferUsageFlags buf_usage;
+    enum pl_handle_type export_handle;
+    enum pl_handle_type import_handle;
+    struct pl_shared_mem shared_mem; // for `import_handle`
 };
 
-// Allocate a buffer slice. This is more efficient than vk_malloc_generic for
-// when the user needs lots of buffers, since it doesn't require
-// creating/destroying lots of (little) VkBuffers. `alignment` must be a power
-// of two.
-bool vk_malloc_buffer(struct vk_malloc *ma, VkBufferUsageFlags bufFlags,
-                      VkMemoryPropertyFlags memFlags, VkDeviceSize size,
-                      VkDeviceSize alignment, enum pl_handle_type handle_type,
-                      struct vk_bufslice *out);
+bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
+                     const struct vk_malloc_params *params);
 
-// Import and track external memory. This can be called repeatedly for the
-// same external memory allocation and it will be imported again and tracked
-// separately each time. This is explicitly allowed by the Vulkan spec.
-bool vk_malloc_import(struct vk_malloc *ma, VkMemoryRequirements reqs,
-                      enum pl_handle_type handle_type,
-                      const struct pl_shared_mem *shared_mem,
-                      struct vk_memslice *out);
+void vk_malloc_free(struct vk_malloc *ma, struct vk_memslice *slice);
