@@ -15,7 +15,7 @@ build-ubuntu:
                       -Dshaderc=enabled
                       -Dglslang=enabled
         - ninja -C build
-        - cd build && meson test -t 5 -v
+        - cd build && meson test -t 5 -v --num-processes=1
 
 build-ubuntu-static:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
@@ -31,7 +31,7 @@ build-ubuntu-static:
                       -Dshaderc=enabled
                       -Dglslang=enabled
         - ninja -C build
-        - cd build && meson test -t 5 -v
+        - cd build && meson test -t 5 -v --num-processes=1
 
 build-win32:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
@@ -46,7 +46,7 @@ build-win32:
                       --libdir lib
                       --cross-file /opt/crossfiles/i686-w64-mingw32.meson
         - ninja -C build
-        - cd build && meson test -t 5 -v
+        - cd build && meson test -t 5 -v --num-processes=1
 
 build-win64:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
@@ -61,7 +61,7 @@ build-win64:
                       --libdir lib
                       --cross-file /opt/crossfiles/x86_64-w64-mingw32.meson
         - ninja -C build
-        - cd build && meson test -t 5 -v
+        - cd build && meson test -t 5 -v --num-processes=1
 
 build-aarch64:
     image: registry.videolan.org/libplacebo-ubuntu-eoan-aarch64:20200525090115
@@ -72,7 +72,7 @@ build-aarch64:
     script:
         - meson build --buildtype release --werror -Dtests=true
         - ninja -C build
-        - cd build && meson test -t 5 -v
+        - cd build && meson test -t 5 -v --num-processes=1
 
 build-macos:
     stage: build
@@ -84,7 +84,7 @@ build-macos:
                       -Dtests=true
                       --werror
         - ninja -C build
-        - cd build && meson test -t 5 -v
+        - cd build && meson test -t 5 -v --num-processes=1
 
 test-ubuntu-scan:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
@@ -115,7 +115,7 @@ test-gpu:
                       -Db_coverage=true
         - ninja -C build
         - vulkaninfo
-        - cd build && meson test -t 5 -v
+        - cd build && meson test -t 5 -v --num-processes=1
         - ninja coverage-html
         - mv meson-logs/coveragereport ../coverage
         - ninja coverage-xml
@@ -143,7 +143,7 @@ test-gpu-asan:
                       -Dshaderc=disabled
                       -Db_sanitize=address
         - ninja -C build
-        - cd build && time meson test -t 5 -v
+        - cd build && time meson test -t 5 -v --num-processes=1
 
 test-gpu-msan:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
@@ -160,7 +160,7 @@ test-gpu-msan:
                                    -Db_sanitize=memory
                                    -Db_lundef=false
         - ninja -C build
-        - cd build && time meson test -t 5 -v
+        - cd build && time meson test -t 5 -v --num-processes=1
 
 test-gpu-ubsan:
     image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
@@ -177,4 +177,4 @@ test-gpu-ubsan:
                                    -Db_sanitize=undefined
                                    -Db_lundef=false
         - ninja -C build
-        - cd build && time meson test -t 5 -v
+        - cd build && time meson test -t 5 -v --num-processes=1
