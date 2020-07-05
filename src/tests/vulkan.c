@@ -331,6 +331,7 @@ int main()
         vulkan_interop_tests(vk, PL_HANDLE_WIN32);
         vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
+        vulkan_test_host_ptr(vk);
 
         pl_vulkan_destroy(&vk);
 

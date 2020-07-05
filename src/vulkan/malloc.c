@@ -843,6 +843,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         PL_DEBUG(vk, "Imported %zu of memory from ptr: %p%s",
                  (size_t) slab->size, shmem->handle.ptr,
                  params->ded_image ? " (dedicated" : "");
+        slab->handle.ptr = ptrinfo.pHostPointer;
         break;
     case PL_HANDLE_WIN32:
     case PL_HANDLE_WIN32_KMT:
