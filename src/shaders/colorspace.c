@@ -586,7 +586,6 @@ const struct pl_peak_detect_params pl_peak_detect_default_params = {
 
 struct sh_peak_obj {
     const struct pl_buf *buf;
-    const struct pl_buf *buf_read;
     struct pl_shader_desc desc;
     float margin;
 };
@@ -595,7 +594,6 @@ static void sh_peak_uninit(const struct pl_gpu *gpu, void *ptr)
 {
     struct sh_peak_obj *obj = ptr;
     pl_buf_destroy(gpu, &obj->buf);
-    pl_buf_destroy(gpu, &obj->buf_read);
     *obj = (struct sh_peak_obj) {0};
 }
 
@@ -663,6 +661,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
             .size = size,
             .storable = true,
             .initial_data = zero,
+            .host_readable = true,
         });
         obj->desc.object = obj->buf;
     }
@@ -785,18 +784,7 @@ bool pl_get_detected_peak(const struct pl_shader_obj *state,
     float average[2] = {0};
     pl_assert(obj->buf->params.size >= sizeof(average));
 
-    bool ok = pl_buf_recreate(gpu, &obj->buf_read, &(struct pl_buf_params) {
-        .size = sizeof(average),
-        .host_readable = true,
-    });
-
-    if (!ok) {
-        PL_ERR(gpu, "Failed creating peak detect readback buffer");
-        return false;
-    }
-
-    pl_buf_copy(gpu, obj->buf_read, 0, obj->buf, 0, sizeof(average));
-    if (!pl_buf_read(gpu, obj->buf_read, 0, average, sizeof(average))) {
+    if (!pl_buf_read(gpu, obj->buf, 0, average, sizeof(average))) {
         PL_ERR(gpu, "Failed reading from peak detect state buffer");
         return false;
     }
