@@ -518,12 +518,11 @@ struct sh_grain_obj {
     struct pl_shader_obj *lut_scaling[3];
 
     // Previous parameters used to check reusability
-    bool fg_has_y, fg_has_u, fg_has_v;
-    int offsets_x, offsets_y;
-    int sub_x, sub_y;
-    int lut_size;
     struct pl_av1_grain_data data;
     struct pl_color_repr repr;
+    bool fg_has_y;
+    bool fg_has_u;
+    bool fg_has_v;
 
     // Space to store the temporary arrays, reused
     uint32_t *offsets;
@@ -600,25 +599,16 @@ bool pl_needs_av1_grain(const struct pl_av1_grain_params *params)
 static inline bool av1_grain_data_eq(const struct pl_av1_grain_data *a,
                                      const struct pl_av1_grain_data *b)
 {
-    // Could skip some checks for fields that will end up unused, but I decided
-    // it's not worth the effort to re-implement the full logic here
+    // Only check the fields that are relevant for grain LUT generation
 
     return a->grain_seed == b->grain_seed &&
-           a->num_points_y == b->num_points_y &&
            a->chroma_scaling_from_luma == b->chroma_scaling_from_luma &&
            a->scaling_shift == b->scaling_shift &&
            a->ar_coeff_lag == b->ar_coeff_lag &&
            a->ar_coeff_shift == b->ar_coeff_shift &&
            a->grain_scale_shift == b->grain_scale_shift &&
-           a->overlap == b->overlap &&
-           !memcmp(a->points_y, b->points_y, sizeof(a->points_y)) &&
-           !memcmp(a->num_points_uv, b->num_points_uv, sizeof(a->num_points_uv)) &&
-           !memcmp(a->points_uv, b->points_uv, sizeof(a->points_uv)) &&
            !memcmp(a->ar_coeffs_y, b->ar_coeffs_y, sizeof(a->ar_coeffs_y)) &&
-           !memcmp(a->ar_coeffs_uv, b->ar_coeffs_uv, sizeof(a->ar_coeffs_uv)) &&
-           !memcmp(a->uv_mult, b->uv_mult, sizeof(a->uv_mult)) &&
-           !memcmp(a->uv_mult_luma, b->uv_mult_luma, sizeof(a->uv_mult_luma)) &&
-           !memcmp(a->uv_offset, b->uv_offset, sizeof(a->uv_offset));
+           !memcmp(a->ar_coeffs_uv, b->ar_coeffs_uv, sizeof(a->ar_coeffs_uv));
 }
 
 static void fill_grain_lut(void *data, const struct sh_lut_params *params)
@@ -697,30 +687,20 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     if (!obj)
         return false;
 
-    int offsets_x = PL_ALIGN2(tex_w << sub_x, 128) / 32;
-    int offsets_y = PL_ALIGN2(tex_h << sub_y, 128) / 32;
-
     // Note: In theory we could check only the parameters related to luma or
     // only related to chroma and skip updating for changes to irrelevant
     // parts, but this is probably not worth it since the grain_seed is
     // expected to change per frame anyway.
     bool needs_update = !av1_grain_data_eq(data, &obj->data) ||
-                        !pl_color_repr_equal(params->repr, &obj->repr);
+                        !pl_color_repr_equal(params->repr, &obj->repr) ||
+                        fg_has_y != obj->fg_has_y ||
+                        fg_has_u != obj->fg_has_u ||
+                        fg_has_v != obj->fg_has_v;
 
     if (needs_update) {
         // This is needed even for chroma, so statically generate it
         generate_grain_y(obj->grain[0], obj->grain_tmp_y, params);
-
-        obj->data = *data;
-        obj->sub_x = sub_x;
-        obj->sub_y = sub_y;
-        obj->offsets_x = offsets_x;
-        obj->offsets_y = offsets_y;
-        obj->fg_has_y = fg_has_y;
-        obj->fg_has_u = fg_has_u;
-        obj->fg_has_v = fg_has_v;
-        obj->repr = *params->repr;
-    };
+    }
 
     ident_t lut[3];
     int idx[3] = {-1};
@@ -787,8 +767,8 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
         .object = &obj->lut_offsets,
         .method = SH_LUT_AUTO,
         .type = PL_VAR_UINT,
-        .width = offsets_x,
-        .height = offsets_y,
+        .width = PL_ALIGN2(tex_w << sub_x, 128) / 32,
+        .height = PL_ALIGN2(tex_h << sub_y, 128) / 32,
         .comps = 1,
         .update = needs_update,
         .dynamic = true,
@@ -838,13 +818,8 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
         }
 
         // Skip scaling for unneeded channels
-        switch (i) {
-        case 0: priv.num = fg_has_y ? priv.num : 0; break;
-        case 1: priv.num = fg_has_u ? priv.num : 0; break;
-        case 2: priv.num = fg_has_v ? priv.num : 0; break;
-        }
-
-        if (priv.num > 0) {
+        bool has_c[3] = { fg_has_y, fg_has_u, fg_has_v };
+        if (has_c[i] && priv.num > 0) {
             scaling[i] = sh_lut(sh, &(struct sh_lut_params) {
                 .object = &obj->lut_scaling[i],
                 .method = SH_LUT_LINEAR,
@@ -863,6 +838,13 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
             }
         }
     }
+
+    // Done updating LUTs
+    obj->data = *data;
+    obj->repr = *params->repr;
+    obj->fg_has_y = fg_has_y;
+    obj->fg_has_u = fg_has_u;
+    obj->fg_has_v = fg_has_v;
 
     GLSL("vec4 color;            \n"
          "// pl_shader_av1_grain \n"
