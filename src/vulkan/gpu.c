@@ -1814,24 +1814,20 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         mem_type = PL_BUF_MEM_DEVICE;
     }
 
-    bool host_mapped = params->host_mapped;
     if (params->host_writable || params->initial_data) {
-        // Large buffers (64 kB) should be written using mapped memory for
-        // performance, unless this is not possible due to buffer memory type
-        // restrictions
-        if (params->size > 64 * 1024 && mem_type != PL_BUF_MEM_DEVICE)
-            host_mapped = true;
+        // Buffers should be written using mapped memory if possible
+        mparams.optimal = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
         // Use the transfer queue for updates on very large buffers (1 MB)
         if (params->size > 1024*1024)
             buf_vk->update_queue = TRANSFER;
     }
 
     if (params->host_mapped || params->host_readable) {
-        host_mapped = true;
+        mparams.required |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
-        if (params->size > 256) {
-            // Require cached memory for large buffers which may be read from,
-            // because uncached reads are extremely slow
+        if (params->size > 1024) {
+            // Require cached memory for large buffers (1 kB) which may be read
+            // from, because uncached reads are extremely slow
             mparams.required |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         }
     }
@@ -1842,20 +1838,23 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     }
 
     switch (mem_type) {
+    case PL_BUF_MEM_AUTO:
+        // We generally prefer VRAM since it's faster than RAM, but any number
+        // of other requirements could potentially exclude it, so just mark it
+        // as optimal by default.
+        mparams.optimal |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        break;
     case PL_BUF_MEM_DEVICE:
+        // Force device local memory.
         mparams.required |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         break;
     case PL_BUF_MEM_HOST:
         // This isn't a true guarantee, but actually trying to restrict the
         // device-local bit locks out all memory heaps on iGPUs. Requiring
         // the memory be host-mapped is the easiest compromise.
-        host_mapped = true;
-        break;
-    default: break;
-    }
-
-    if (host_mapped)
         mparams.required |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        break;
+    }
 
     if (params->import_handle) {
         size_t offset = params->shared_mem.offset;
