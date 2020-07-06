@@ -603,6 +603,30 @@ bool pl_needs_av1_grain(const struct pl_av1_grain_params *params)
     return false;
 }
 
+static inline bool av1_grain_data_eq(const struct pl_av1_grain_data *a,
+                                     const struct pl_av1_grain_data *b)
+{
+    // Could skip some checks for fields that will end up unused, but I decided
+    // it's not worth the effort to re-implement the full logic here
+
+    return a->grain_seed == b->grain_seed &&
+           a->num_points_y == b->num_points_y &&
+           a->chroma_scaling_from_luma == b->chroma_scaling_from_luma &&
+           a->scaling_shift == b->scaling_shift &&
+           a->ar_coeff_lag == b->ar_coeff_lag &&
+           a->ar_coeff_shift == b->ar_coeff_shift &&
+           a->grain_scale_shift == b->grain_scale_shift &&
+           a->overlap == b->overlap &&
+           !memcmp(a->points_y, b->points_y, sizeof(a->points_y)) &&
+           !memcmp(a->num_points_uv, b->num_points_uv, sizeof(a->num_points_uv)) &&
+           !memcmp(a->points_uv, b->points_uv, sizeof(a->points_uv)) &&
+           !memcmp(a->ar_coeffs_y, b->ar_coeffs_y, sizeof(a->ar_coeffs_y)) &&
+           !memcmp(a->ar_coeffs_uv, b->ar_coeffs_uv, sizeof(a->ar_coeffs_uv)) &&
+           !memcmp(a->uv_mult, b->uv_mult, sizeof(a->uv_mult)) &&
+           !memcmp(a->uv_mult_luma, b->uv_mult_luma, sizeof(a->uv_mult_luma)) &&
+           !memcmp(a->uv_offset, b->uv_offset, sizeof(a->uv_offset));
+}
+
 bool pl_shader_av1_grain(struct pl_shader *sh,
                          struct pl_shader_obj **grain_state,
                          const struct pl_av1_grain_params *params)
@@ -680,7 +704,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     // only related to chroma and skip updating for changes to irrelevant
     // parts, but this is probably not worth it since the grain_seed is
     // expected to change per frame anyway.
-    bool needs_update = memcmp(data, &obj->data, sizeof(*data)) != 0 ||
+    bool needs_update = !av1_grain_data_eq(data, &obj->data) ||
                         !pl_color_repr_equal(params->repr, &obj->repr) ||
                         offsets_x != obj->offsets_x ||
                         offsets_y != obj->offsets_y ||
