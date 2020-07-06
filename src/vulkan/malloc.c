@@ -856,6 +856,14 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         slab->coherent = flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         out->data = (uint8_t *) slab->data + out->offset;
         out->coherent = slab->coherent;
+        if (!slab->coherent) {
+            // Mapping does not implicitly invalidate mapped memory
+            VK(vk->InvalidateMappedMemoryRanges(vk->dev, 1, &(VkMappedMemoryRange) {
+                .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                .memory = slab->mem,
+                .size = VK_WHOLE_SIZE,
+            }));
+        }
     }
 
     if (buffer)
