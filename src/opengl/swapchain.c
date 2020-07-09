@@ -90,7 +90,11 @@ static bool gl_sw_resize(const struct pl_swapchain *sw, int *width, int *height)
 
     if (w && h) {
         pl_tex_destroy(sw->gpu, &p->fb);
-        p->fb = pl_opengl_wrap_fb(sw->gpu, p->params.framebuffer.id, w, h);
+        p->fb = pl_opengl_wrap(sw->gpu, &(struct pl_opengl_wrap_params) {
+            .framebuffer = p->params.framebuffer.id,
+            .width = w,
+            .height = h,
+        });
         if (!p->fb) {
             PL_ERR(sw, "Failed wrapping OpenGL framebuffer!");
             return false;

@@ -103,13 +103,28 @@ void pl_opengl_swapchain_update_fb(const struct pl_swapchain *sw,
                                    const struct pl_opengl_framebuffer *fb);
 
 struct pl_opengl_wrap_params {
-    // The GLuint texture object itself.
+    // The GLuint texture object itself. Optional. If no texture is provided,
+    // then only the opaque framebuffer `fbo` will be wrapped, leaving the
+    // resulting `pl_tex` object with some operations (such as sampling) being
+    // unsupported.
     unsigned int texture;
+
+    // The GLuint associated framebuffer. Optional. If this is not specified,
+    // then libplacebo will attempt creating a framebuffer from the provided
+    // texture object (if possible).
+    //
+    // Note: As a special case, if neither a texture nor an FBO are provided,
+    // this is equivalent to wrapping the OpenGL default framebuffer (id 0).
+    unsigned int framebuffer;
 
     // The image's dimensions (unused dimensions must be 0)
     int width;
     int height;
     int depth;
+
+    // Texture-specific fields:
+    //
+    // Note: These are only relevant if `texture` is provided.
 
     // The GLenum for the texture target to use, e.g. GL_TEXTURE_2D. Optional.
     // If this is left as 0, the target is inferred from the number of
@@ -117,7 +132,7 @@ struct pl_opengl_wrap_params {
     // GL_TEXTURE_EXTERNAL_OES depending on the nature of the texture.
     unsigned int target;
 
-    // The texture's GLint sized internal format (e.g. GL_RGBA16F)
+    // The texture's GLint sized internal format (e.g. GL_RGBA16F). Required.
     int iformat;
 
     // The GLint texture min/mag filter. libplacebo does not distinguish
@@ -137,7 +152,7 @@ struct pl_opengl_wrap_params {
 // Note that this function transfers no ownership.
 //
 // This wrapper can be destroyed by simply calling `pl_tex_destroy` on it,
-// which will not destroy the underlying OpenGL texture.
+// which will *not* destroy the user-provided OpenGL texture or framebuffer.
 //
 // This function may fail, in which case it returns NULL.
 const struct pl_tex *pl_opengl_wrap(const struct pl_gpu *gpu,

@@ -285,7 +285,7 @@ error:
 struct pl_tex_gl {
     GLenum target;
     GLuint texture;
-    bool wrapped;
+    bool wrapped_tex;
     GLint filter;
     GLuint fbo; // or 0
     bool wrapped_fb;
@@ -302,7 +302,7 @@ static void gl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
     struct pl_tex_gl *tex_gl = TA_PRIV(tex);
     if (tex_gl->fbo && !tex_gl->wrapped_fb)
         glDeleteFramebuffers(1, &tex_gl->fbo);
-    if (!tex_gl->wrapped)
+    if (!tex_gl->wrapped_tex)
         glDeleteTextures(1, &tex_gl->texture);
 
     talloc_free((void *) tex);
@@ -482,113 +482,102 @@ error:
     return NULL;
 }
 
-static bool gl_fb_query(const struct pl_gpu *gpu, int fbo, struct pl_fmt *fmt)
+static bool gl_fb_query(const struct pl_gpu *gpu, int fbo,
+                        struct pl_fmt *fmt, struct gl_format *glfmt)
 {
     struct pl_gl *p = TA_PRIV(gpu);
-    if (!test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20))
-        goto fallback;
-    if (!fbo && p->gles_ver && p->gles_ver < 30)
-        goto fallback; // can't query default framebuffer on GLES 2.0
-
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
-
-    GLenum obj = p->gles_ver ? GL_BACK : GL_BACK_LEFT;
-    if (fbo != 0)
-        obj = GL_COLOR_ATTACHMENT0;
-
-    GLint type = 0;
-    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
-            GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE, &type);
-    switch (type) {
-    case GL_FLOAT:                  fmt->type = PL_FMT_FLOAT; break;
-    case GL_INT:                    fmt->type = PL_FMT_SINT; break;
-    case GL_UNSIGNED_INT:           fmt->type = PL_FMT_UINT; break;
-    case GL_SIGNED_NORMALIZED:      fmt->type = PL_FMT_SNORM; break;
-    case GL_UNSIGNED_NORMALIZED:    fmt->type = PL_FMT_UNORM; break;
-    default:                        fmt->type = PL_FMT_UNKNOWN; break;
-    }
-
-    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
-            GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE, &fmt->component_depth[0]);
-    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
-            GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE, &fmt->component_depth[1]);
-    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
-            GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE, &fmt->component_depth[2]);
-    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
-            GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE, &fmt->component_depth[3]);
-
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-
-    int bits = 0;
-    for (int i = 0; i < 4; i++)
-        bits += fmt->component_depth[i];
-    fmt->internal_size = (bits + 7) / 8;
-
-    if (!gl_check_err(gpu, "gl_fb_query"))
-        goto fallback; // this happens on some outdated drivers
-
-    return true;
-
-fallback:
-    // default to rgba8
-    for (int i = 0; i < 4; i++)
-        fmt->component_depth[i] = 8;
-    fmt->internal_size = 4;
-    return true;
-}
-
-static const struct gl_format fbo_dummy_format = {
-    .fmt = GL_RGBA,
-    .caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE,
-};
-
-const struct pl_tex *pl_opengl_wrap_fb(const struct pl_gpu *gpu, GLuint fbo,
-                                       int w, int h)
-{
-    struct pl_tex *tex = talloc_priv(NULL, struct pl_tex, struct pl_tex_gl);
-    struct pl_tex_gl *tex_gl = TA_PRIV(tex);
-
-    struct pl_fmt *fmt = talloc_priv(tex, struct pl_fmt, const struct gl_format *);
-    const struct gl_format **glfmtp = TA_PRIV(fmt);
-    *glfmtp = &fbo_dummy_format;
-
     *fmt = (struct pl_fmt) {
         .name = "fbo",
         .type = PL_FMT_UNKNOWN,
-        .caps = PL_FMT_CAP_RENDERABLE,
+        .caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE,
         .num_components = 4,
-        .opaque = true,
+        .component_depth = {8, 8, 8, 8}, // default to rgba8
+        .sample_order = {0, 1, 2, 3},
     };
 
-    if (!gl_fb_query(gpu, fbo, fmt)) {
-        PL_ERR(gpu, "Failed querying framebuffer specifics!");
-        goto error;
+    *glfmt = (struct gl_format) {
+        .fmt = GL_RGBA,
+    };
+
+    bool can_query = !test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20);
+    if (!fbo && p->gles_ver && p->gles_ver < 30)
+        can_query = false; // can't query default framebuffer on GLES 2.0
+
+    if (can_query) {
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+
+        GLenum obj = p->gles_ver ? GL_BACK : GL_BACK_LEFT;
+        if (fbo != 0)
+            obj = GL_COLOR_ATTACHMENT0;
+
+        GLint type = 0;
+        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
+                GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE, &type);
+        switch (type) {
+        case GL_FLOAT:                  fmt->type = PL_FMT_FLOAT; break;
+        case GL_INT:                    fmt->type = PL_FMT_SINT; break;
+        case GL_UNSIGNED_INT:           fmt->type = PL_FMT_UINT; break;
+        case GL_SIGNED_NORMALIZED:      fmt->type = PL_FMT_SNORM; break;
+        case GL_UNSIGNED_NORMALIZED:    fmt->type = PL_FMT_UNORM; break;
+        default:                        fmt->type = PL_FMT_UNKNOWN; break;
+        }
+
+        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
+                GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE, &fmt->component_depth[0]);
+        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
+                GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE, &fmt->component_depth[1]);
+        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
+                GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE, &fmt->component_depth[2]);
+        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
+                GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE, &fmt->component_depth[3]);
+
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        gl_check_err(gpu, "gl_fb_query");
     }
 
-    *tex = (struct pl_tex) {
-        .params = {
-            .w = w,
-            .h = h,
-            .format = fmt,
-            .renderable = true,
-            .blit_dst = true,
-        },
-    };
+    int gpu_bits = 0;
+    for (int i = 0; i < 4; i++)
+        gpu_bits += fmt->component_depth[i];
+    fmt->internal_size = (gpu_bits + 7) / 8;
 
-    *tex_gl = (struct pl_tex_gl) {
-        .fbo = fbo,
-        .format = GL_RGBA,
-        .iformat = 0,
-        .type = 0,
-        .wrapped_fb = true,
-        .barrier = tex_barrier(tex),
-    };
+    size_t host_size;
+    switch (fmt->type) {
+    case PL_FMT_UNKNOWN:
+        fmt->opaque = true;
+        return true;
+    case PL_FMT_FLOAT:
+        glfmt->type = GL_FLOAT;
+        host_size = sizeof(float);
+        break;
+    case PL_FMT_UNORM:
+    case PL_FMT_UINT:
+        if (gpu_bits > 32) {
+            glfmt->type = GL_UNSIGNED_SHORT;
+            host_size = sizeof(uint16_t);
+        } else {
+            glfmt->type = GL_UNSIGNED_BYTE;
+            host_size = sizeof(uint8_t);
+        }
+        break;
+    case PL_FMT_SNORM:
+    case PL_FMT_SINT:
+        if (gpu_bits > 32) {
+            glfmt->type = GL_SHORT;
+            host_size = sizeof(int16_t);
+        } else {
+            glfmt->type = GL_BYTE;
+            host_size = sizeof(int8_t);
+        }
+        break;
+    default: abort();
+    }
 
-    return tex;
+    fmt->texel_size = fmt->num_components * host_size;
+    for (int i = 0; i < fmt->num_components; i++)
+        fmt->host_bits[i] = 8 * host_size;
+    fmt->caps |= PL_FMT_CAP_HOST_READABLE;
 
-error:
-    talloc_free(tex);
-    return NULL;
+    return true;
 }
 
 const struct pl_tex *pl_opengl_wrap(const struct pl_gpu *gpu,
@@ -596,103 +585,60 @@ const struct pl_tex *pl_opengl_wrap(const struct pl_gpu *gpu,
 {
     struct pl_gl *p = TA_PRIV(gpu);
 
-    const struct pl_fmt *fmt = NULL;
-    const struct gl_format *glfmt = NULL;
-    for (int i = 0; i < gpu->num_formats; i++) {
-        const struct gl_format **glfmtp = TA_PRIV(gpu->formats[i]);
-        if ((*glfmtp)->ifmt == params->iformat) {
-            fmt = gpu->formats[i];
-            glfmt = *glfmtp;
-            break;
-        }
-    }
-
-    if (!fmt) {
-        PL_ERR(gpu, "Failed mapping iformat %d to any equivalent `pl_fmt`",
-               params->iformat);
-        return NULL;
-    }
-
-    enum pl_sampler_type sampler_type;
-    switch (params->target) {
-    case GL_TEXTURE_1D:
-        if (params->width || params->depth) {
-            PL_ERR(gpu, "Invalid texture dimensions for GL_TEXTURE_1D");
-            return NULL;
-        }
-        // fall through
-    case GL_TEXTURE_2D:
-        if (params->depth) {
-            PL_ERR(gpu, "Invalid texture dimensions for GL_TEXTURE_2D");
-            return NULL;
-        }
-        // fall through
-    case 0:
-    case GL_TEXTURE_3D:
-        sampler_type = PL_SAMPLER_NORMAL;
-        break;
-
-    case GL_TEXTURE_RECTANGLE: sampler_type = PL_SAMPLER_RECT; break;
-    case GL_TEXTURE_EXTERNAL_OES: sampler_type = PL_SAMPLER_EXTERNAL; break;
-
-    default:
-        PL_ERR(gpu, "Failed mapping texture target %u to any equivalent "
-               "`pl_sampler_type`", params->target);
-        return NULL;
-    }
-
-    enum pl_tex_sample_mode sample_mode;
-    switch (params->filter) {
-    case 0: // fall through
-    case GL_LINEAR: sample_mode = PL_TEX_SAMPLE_LINEAR; break;
-    case GL_NEAREST: sample_mode = PL_TEX_SAMPLE_NEAREST; break;
-
-    default:
-        PL_ERR(gpu, "Failed mapping texture filter %d to `pl_tex_sample_mode`",
-               params->filter);
-        return NULL;
-    }
-
-    enum pl_tex_address_mode address_mode;
-    switch (params->address_mode) {
-    case 0: // fall through
-    case GL_REPEAT: address_mode = PL_TEX_ADDRESS_REPEAT; break;
-    case GL_CLAMP_TO_EDGE: address_mode = PL_TEX_ADDRESS_CLAMP; break;
-    case GL_MIRRORED_REPEAT: address_mode = PL_TEX_ADDRESS_MIRROR; break;
-
-    default:
-        PL_ERR(gpu, "Failed mapping address mode %d to `pl_tex_address_mode`",
-               params->address_mode);
-        return NULL;
-    }
-
     struct pl_tex *tex = talloc_priv(NULL, struct pl_tex, struct pl_tex_gl);
     struct pl_tex_gl *tex_gl = TA_PRIV(tex);
-
     *tex = (struct pl_tex) {
-        .sampler_type = sampler_type,
         .params = {
             .w = params->width,
             .h = params->height,
             .d = params->depth,
-            .format = fmt,
-            .sampleable = true,
-            .storable = fmt->caps & PL_FMT_CAP_STORABLE,
-            .host_writable = true,
-            .sample_mode = sample_mode,
-            .address_mode = address_mode,
         },
     };
+
+    const struct pl_fmt *fmt = NULL;
+    const struct gl_format *glfmt = NULL;
+
+    if (params->texture) {
+        // Wrapping texture: Require matching iformat
+        pl_assert(params->iformat);
+        for (int i = 0; i < gpu->num_formats; i++) {
+            const struct gl_format **glfmtp = TA_PRIV(gpu->formats[i]);
+            if ((*glfmtp)->ifmt == params->iformat) {
+                fmt = gpu->formats[i];
+                glfmt = *glfmtp;
+                break;
+            }
+        }
+
+        if (!fmt) {
+            PL_ERR(gpu, "Failed mapping iformat %d to any equivalent `pl_fmt`",
+                   params->iformat);
+            goto error;
+        }
+    } else {
+        // Wrapping framebuffer: Allocate/infer new, generic FBO format
+        fmt = talloc_priv(tex, struct pl_fmt, const struct gl_format *);
+        glfmt = talloc_zero(tex, struct gl_format);
+        const struct gl_format **glfmtp = TA_PRIV(fmt);
+        *glfmtp = glfmt;
+
+        if (!gl_fb_query(gpu, params->framebuffer, (struct pl_fmt *) fmt,
+                         (struct gl_format *) glfmt))
+        {
+            PL_ERR(gpu, "Failed querying framebuffer specifics!");
+            goto error;
+        }
+    }
 
     *tex_gl = (struct pl_tex_gl) {
         .target = params->target,
         .texture = params->texture,
-        .wrapped = true,
-        .filter = PL_DEF(params->filter, GL_LINEAR),
+        .fbo = params->framebuffer,
+        .wrapped_tex = !!params->texture,
+        .wrapped_fb = params->framebuffer || !params->texture,
         .iformat = glfmt->ifmt,
         .format = glfmt->fmt,
         .type = glfmt->type,
-        .barrier = tex_barrier(tex),
     };
 
     int dims = pl_tex_params_dimension(tex->params);
@@ -704,11 +650,76 @@ const struct pl_tex *pl_opengl_wrap(const struct pl_gpu *gpu,
         }
     }
 
-    bool can_fbo = (fmt->caps & PL_FMT_CAP_RENDERABLE) &&
-                   sampler_type != PL_SAMPLER_EXTERNAL &&
+    // Map texture-specific sampling metadata
+    if (params->texture) {
+        switch (params->target) {
+        case GL_TEXTURE_1D:
+            if (params->width || params->depth) {
+                PL_ERR(gpu, "Invalid texture dimensions for GL_TEXTURE_1D");
+                goto error;
+            }
+            // fall through
+        case GL_TEXTURE_2D:
+            if (params->depth) {
+                PL_ERR(gpu, "Invalid texture dimensions for GL_TEXTURE_2D");
+                goto error;
+            }
+            // fall through
+        case 0:
+        case GL_TEXTURE_3D:
+            tex->sampler_type = PL_SAMPLER_NORMAL;
+            break;
+
+        case GL_TEXTURE_RECTANGLE: tex->sampler_type = PL_SAMPLER_RECT; break;
+        case GL_TEXTURE_EXTERNAL_OES: tex->sampler_type = PL_SAMPLER_EXTERNAL; break;
+
+        default:
+            PL_ERR(gpu, "Failed mapping texture target %u to any equivalent "
+                   "`pl_sampler_type`", params->target);
+            goto error;
+        }
+
+        switch (params->filter) {
+        case 0: // fall through
+        case GL_LINEAR: tex->params.sample_mode = PL_TEX_SAMPLE_LINEAR; break;
+        case GL_NEAREST: tex->params.sample_mode = PL_TEX_SAMPLE_NEAREST; break;
+
+        default:
+            PL_ERR(gpu, "Failed mapping texture filter %d to `pl_tex_sample_mode`",
+                   params->filter);
+            goto error;
+        }
+
+        if (!(fmt->caps & PL_FMT_CAP_LINEAR)) {
+            if (params->filter == GL_LINEAR) {
+                PL_ERR(gpu, "Trying to use GL_LINEAR on non-linearly-sampleable "
+                       "iformat %d?", tex_gl->iformat);
+                goto error;
+            } else {
+                tex->params.sample_mode = PL_TEX_SAMPLE_NEAREST;
+            }
+        }
+
+        switch (params->address_mode) {
+        case 0: // fall through
+        case GL_REPEAT: tex->params.address_mode = PL_TEX_ADDRESS_REPEAT; break;
+        case GL_CLAMP_TO_EDGE: tex->params.address_mode = PL_TEX_ADDRESS_CLAMP; break;
+        case GL_MIRRORED_REPEAT: tex->params.address_mode = PL_TEX_ADDRESS_MIRROR; break;
+
+        default:
+            PL_ERR(gpu, "Failed mapping address mode %d to `pl_tex_address_mode`",
+                   params->address_mode);
+            goto error;
+        }
+    }
+
+    // Create optional extra fbo if needed/possible
+    bool can_fbo = tex_gl->texture &&
+                   (fmt->caps & PL_FMT_CAP_RENDERABLE) &&
+                   tex->sampler_type != PL_SAMPLER_EXTERNAL &&
                    dims < 3;
 
-    if (can_fbo) {
+    if (can_fbo && !tex_gl->fbo) {
         glGenFramebuffers(1, &tex_gl->fbo);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
         switch (dims) {
@@ -720,7 +731,6 @@ const struct pl_tex *pl_opengl_wrap(const struct pl_gpu *gpu,
             glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                    tex_gl->target, tex_gl->texture, 0);
             break;
-        case 3: abort();
         }
 
         GLenum err = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
@@ -728,12 +738,6 @@ const struct pl_tex *pl_opengl_wrap(const struct pl_gpu *gpu,
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
             PL_ERR(gpu, "Failed creating framebuffer: error code %d", err);
             goto error;
-        }
-
-        tex->params.renderable = true;
-        if (dims == 2 && (fmt->caps & PL_FMT_CAP_BLITTABLE)) {
-            tex->params.blit_src = true;
-            tex->params.blit_dst = true;
         }
 
         if (p->gles_ver) {
@@ -751,6 +755,24 @@ const struct pl_tex *pl_opengl_wrap(const struct pl_gpu *gpu,
             goto error;
     }
 
+    // Complete the process of inferring the texture capabilities
+    tex->params.format = fmt;
+    if (tex_gl->texture) {
+        tex->params.sampleable = fmt->caps & PL_FMT_CAP_SAMPLEABLE;
+        tex->params.storable = fmt->caps & PL_FMT_CAP_STORABLE;
+        tex->params.host_writable = !fmt->opaque;
+        tex->params.host_readable |= fmt->caps & PL_FMT_CAP_HOST_READABLE;
+    }
+    if (tex_gl->fbo || tex_gl->wrapped_fb) {
+        tex->params.renderable = fmt->caps & PL_FMT_CAP_RENDERABLE;
+        tex->params.host_readable |= fmt->caps & PL_FMT_CAP_HOST_READABLE;
+        if (dims == 2 && (fmt->caps & PL_FMT_CAP_BLITTABLE)) {
+            tex->params.blit_src = true;
+            tex->params.blit_dst = true;
+        }
+    }
+
+    tex_gl->barrier = tex_barrier(tex);
     return tex;
 
 error:
