@@ -151,7 +151,7 @@ static bool gl_setup_formats(struct pl_gpu *gpu)
         if (!has_fbos)
             fmt->caps &= ~(PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE);
 
-        // Reading from FBOs on GLES requires FBO support for this fmt
+        // Reading from textures on GLES requires FBO support for this fmt
         if (p->gl_ver || (fmt->caps & PL_FMT_CAP_RENDERABLE))
             fmt->caps |= PL_FMT_CAP_HOST_READABLE;
 
