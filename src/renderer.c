@@ -522,8 +522,8 @@ fallback:
 
 static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
                           const struct pl_overlay *overlays, int num,
-                          struct pl_color_space color, bool use_sigmoid,
-                          struct pl_transform2x2 *scale,
+                          struct pl_color_space color, struct pl_color_repr repr,
+                          bool use_sigmoid, struct pl_transform2x2 *scale,
                           const struct pl_render_params *params)
 {
     struct pl_renderer *rr = pass->rr;
@@ -599,13 +599,15 @@ static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
         default: abort();
         }
 
-        struct pl_color_repr repr = ol->repr;
-        pl_shader_decode_color(sh, &repr, NULL);
+        struct pl_color_repr ol_repr = ol->repr;
+        pl_shader_decode_color(sh, &ol_repr, NULL);
         pl_shader_color_map(sh, params->color_map_params, ol->color, color,
                             NULL, false);
 
         if (use_sigmoid)
             pl_shader_sigmoidize(sh, params->sigmoid_params);
+
+        pl_shader_encode_color(sh, &repr);
 
         static const struct pl_blend_params blend_params = {
             .src_rgb = PL_BLEND_SRC_ALPHA,
@@ -1411,7 +1413,7 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     }
 
     draw_overlays(pass, img->tex, image->overlays, image->num_overlays,
-                  img->color, use_sigmoid, &tf, params);
+                  img->color, img->repr, use_sigmoid, &tf, params);
 
     pass_hook(pass, img, PL_HOOK_PRE_KERNEL, params);
 
@@ -1737,12 +1739,12 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
         };
 
         draw_overlays(&pass, target->fbo, image->overlays, image->num_overlays,
-                      target->color, false, &scale, params);
+                      target->color, target->repr, false, &scale, params);
     }
 
     // Draw the final output overlays
     draw_overlays(&pass, target->fbo, target->overlays, target->num_overlays,
-                  target->color, false, NULL, params);
+                  target->color, target->repr, false, NULL, params);
 
     talloc_free(pass.tmp);
     return true;
