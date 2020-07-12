@@ -265,10 +265,8 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
 
     uint32_t type_mask = 0;
     if (params->buf_usage) {
-        // FIXME: Since we can't keep track of queue family ownership properly,
-        // and we don't know in advance what types of queue families this buffer
-        // will belong to, we're forced to share all of our buffers between all
-        // command pools.
+        // Queue family sharing modes don't matter for buffers, so we just
+        // set them as concurrent and stop worrying about it.
         uint32_t qfs[3] = {0};
         for (int i = 0; i < vk->num_pools; i++)
             qfs[i] = vk->pools[i]->qf;
@@ -673,7 +671,6 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     VkMemoryRequirements reqs = params->reqs;
 
     if (params->buf_usage) {
-        // FIXME: Avoid use of CONCURRENT sharing
         uint32_t qfs[3] = {0};
         for (int i = 0; i < vk->num_pools; i++)
             qfs[i] = vk->pools[i]->qf;
