@@ -271,12 +271,14 @@ const struct pl_fmt *pl_find_named_fmt(const struct pl_gpu *gpu, const char *nam
 enum pl_tex_sample_mode {
     PL_TEX_SAMPLE_NEAREST,  // nearest neighour sampling
     PL_TEX_SAMPLE_LINEAR,   // linear filtering
+    PL_TEX_SAMPLE_MODE_COUNT,
 };
 
 enum pl_tex_address_mode {
     PL_TEX_ADDRESS_CLAMP,  // clamp the nearest edge texel
     PL_TEX_ADDRESS_REPEAT, // repeat (tile) the texture
     PL_TEX_ADDRESS_MIRROR, // repeat (mirror) the texture
+    PL_TEX_ADDRESS_MODE_COUNT,
 };
 
 // Structure describing a texture.
@@ -339,6 +341,7 @@ enum pl_sampler_type {
     PL_SAMPLER_NORMAL,      // gsampler2D, gsampler3D etc.
     PL_SAMPLER_RECT,        // gsampler2DRect
     PL_SAMPLER_EXTERNAL,    // gsamplerExternalOES
+    PL_SAMPLER_TYPE_COUNT,
 };
 
 // Conflates the following typical GPU API concepts:
@@ -483,12 +486,14 @@ enum pl_buf_type {
     PL_BUF_STORAGE,       // enables `storable`
     PL_BUF_TEXEL_UNIFORM, // equivalent to PL_BUF_UNIFORM (when `format` is set)
     PL_BUF_TEXEL_STORAGE, // equivalent to PL_BUF_STORAGE (when `format` is set)
+    PL_BUF_TYPE_COUNT,
 };
 
 enum pl_buf_mem_type {
     PL_BUF_MEM_AUTO = 0, // use whatever seems most appropriate
     PL_BUF_MEM_HOST,     // try allocating from host memory (RAM)
     PL_BUF_MEM_DEVICE,   // try allocating from device memory (VRAM)
+    PL_BUF_MEM_TYPE_COUNT,
 
     // Note: This distinction only matters for discrete GPUs
 };
@@ -862,6 +867,7 @@ enum pl_desc_access {
     PL_DESC_ACCESS_READWRITE,
     PL_DESC_ACCESS_READONLY,
     PL_DESC_ACCESS_WRITEONLY,
+    PL_DESC_ACCESS_COUNT,
 };
 
 // Returns the GLSL syntax for a given access mode (e.g. "readonly").
@@ -889,6 +895,7 @@ enum pl_blend_mode {
     PL_BLEND_ONE,
     PL_BLEND_SRC_ALPHA,
     PL_BLEND_ONE_MINUS_SRC_ALPHA,
+    PL_BLEND_MODE_COUNT,
 };
 
 struct pl_blend_params {
@@ -902,6 +909,7 @@ enum pl_prim_type {
     PL_PRIM_TRIANGLE_LIST,
     PL_PRIM_TRIANGLE_STRIP,
     PL_PRIM_TRIANGLE_FAN,
+    PL_PRIM_TYPE_COUNT,
 };
 
 enum pl_pass_type {

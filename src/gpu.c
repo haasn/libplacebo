@@ -708,6 +708,7 @@ static struct pl_buf_params pl_buf_params_infer(struct pl_buf_params params)
         break;
     case PL_BUF_TEX_TRANSFER:
         break;
+    default: abort();
     }
 
     return params;
@@ -1172,6 +1173,7 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         case PL_PRIM_TRIANGLE_FAN:
             require(params->vertex_count >= 3);
             break;
+        default: abort();
         }
 
         require(!params->vertex_data ^ !params->vertex_buf);

@@ -132,6 +132,7 @@ enum pl_hook_sig {
     PL_HOOK_SIG_NONE,   // No data is passed, no data is received/returned
     PL_HOOK_SIG_COLOR,  // `vec4 color` already pre-sampled in a `pl_shader`
     PL_HOOK_SIG_TEX,    // `pl_tex` containing the image data
+    PL_HOOK_SIG_COUNT,
 };
 
 struct pl_hook_params {

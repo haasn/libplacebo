@@ -259,6 +259,7 @@ struct pl_plane {
 enum pl_overlay_mode {
     PL_OVERLAY_NORMAL = 0, // treat the texture as a normal, full-color texture
     PL_OVERLAY_MONOCHROME, // treat the texture as a single-component alpha map
+    PL_OVERLAY_MODE_COUNT,
 };
 
 // A struct representing an image overlay (e.g. for subtitles or on-screen

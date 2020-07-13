@@ -1854,6 +1854,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         // the memory be host-mapped is the easiest compromise.
         mparams.required |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
         break;
+    default: abort();
     }
 
     if (params->import_handle) {

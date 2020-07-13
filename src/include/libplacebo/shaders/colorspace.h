@@ -204,6 +204,8 @@ enum pl_tone_mapping_algorithm {
     // EETF from the ITU-R Report BT.2390, a hermite spline roll-off with
     // linear segment. Not configurable.
     PL_TONE_MAPPING_BT_2390,
+
+    PL_TONE_MAPPING_ALGORITHM_COUNT,
 };
 
 struct pl_color_map_params {
@@ -314,6 +316,8 @@ enum pl_dither_method {
     // noise spectrum. Used as a fallback when the above methods are not
     // available.
     PL_DITHER_WHITE_NOISE,
+
+    PL_DITHER_METHOD_COUNT,
 };
 
 struct pl_dither_params {

@@ -313,6 +313,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             case PL_SAMPLER_NORMAL: break;
             case PL_SAMPLER_RECT: break;
             case PL_SAMPLER_EXTERNAL: has_ext = true; break;
+            default: abort();
             }
             break;
         }
