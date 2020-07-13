@@ -210,7 +210,7 @@ void pl_shader_encode_color(struct pl_shader *sh,
     // Since this is a relatively rare operation, bypass it as much as possible
     bool skip = true;
     skip &= PL_DEF(repr->sys, PL_COLOR_SYSTEM_RGB) == PL_COLOR_SYSTEM_RGB;
-    skip &= PL_DEF(repr->levels, PL_COLOR_LEVELS_PC) == PL_COLOR_LEVELS_PC;
+    skip &= PL_DEF(repr->levels, PL_COLOR_LEVELS_FULL) == PL_COLOR_LEVELS_FULL;
     skip &= PL_DEF(repr->bits.sample_depth, 8) == PL_DEF(repr->bits.color_depth, 8);
     skip &= !repr->bits.bit_shift;
 

@@ -544,7 +544,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
             .component_mapping = { 0, 1, 2 },
             .repr = &(struct pl_color_repr) {
                 .sys = PL_COLOR_SYSTEM_BT_709,
-                .levels = PL_COLOR_LEVELS_TV,
+                .levels = PL_COLOR_LEVELS_LIMITED,
                 .bits = { .color_depth = 10, .sample_depth = 10 },
             },
         };
@@ -796,7 +796,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         .planes         = { img5x5 },
         .repr = {
             .sys        = PL_COLOR_SYSTEM_BT_709,
-            .levels     = PL_COLOR_LEVELS_PC,
+            .levels     = PL_COLOR_LEVELS_FULL,
         },
         .color          = pl_color_space_bt709,
         .src_rect       = {-1.0, 0.0, width - 1.0, height},
@@ -807,7 +807,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         .dst_rect       = {2, 2, fbo->params.w - 2, fbo->params.h - 2},
         .repr = {
             .sys        = PL_COLOR_SYSTEM_RGB,
-            .levels     = PL_COLOR_LEVELS_PC,
+            .levels     = PL_COLOR_LEVELS_FULL,
         },
         .color          = pl_color_space_srgb,
     };

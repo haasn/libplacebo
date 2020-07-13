@@ -86,27 +86,27 @@ const struct pl_color_repr pl_color_repr_unknown = {0};
 
 const struct pl_color_repr pl_color_repr_rgb = {
     .sys    = PL_COLOR_SYSTEM_RGB,
-    .levels = PL_COLOR_LEVELS_PC,
+    .levels = PL_COLOR_LEVELS_FULL,
 };
 
 const struct pl_color_repr pl_color_repr_sdtv = {
     .sys    = PL_COLOR_SYSTEM_BT_601,
-    .levels = PL_COLOR_LEVELS_TV,
+    .levels = PL_COLOR_LEVELS_LIMITED,
 };
 
 const struct pl_color_repr pl_color_repr_hdtv = {
     .sys    = PL_COLOR_SYSTEM_BT_709,
-    .levels = PL_COLOR_LEVELS_TV,
+    .levels = PL_COLOR_LEVELS_LIMITED,
 };
 
 const struct pl_color_repr pl_color_repr_uhdtv = {
     .sys    = PL_COLOR_SYSTEM_BT_2020_NC,
-    .levels = PL_COLOR_LEVELS_TV,
+    .levels = PL_COLOR_LEVELS_LIMITED,
 };
 
 const struct pl_color_repr pl_color_repr_jpeg = {
     .sys    = PL_COLOR_SYSTEM_BT_601,
-    .levels = PL_COLOR_LEVELS_PC,
+    .levels = PL_COLOR_LEVELS_FULL,
 };
 
 bool pl_color_repr_equal(const struct pl_color_repr *c1,
@@ -145,8 +145,8 @@ enum pl_color_levels pl_color_levels_guess(const struct pl_color_repr *repr)
         return repr->levels;
 
     return pl_color_system_is_ycbcr_like(repr->sys)
-                ? PL_COLOR_LEVELS_TV
-                : PL_COLOR_LEVELS_PC;
+                ? PL_COLOR_LEVELS_LIMITED
+                : PL_COLOR_LEVELS_FULL;
 }
 
 float pl_color_repr_normalize(struct pl_color_repr *repr)
@@ -162,7 +162,7 @@ float pl_color_repr_normalize(struct pl_color_repr *repr)
     int tex_bits = PL_DEF(bits->sample_depth, 8);
     int col_bits = PL_DEF(bits->color_depth,  8);
 
-    if (pl_color_levels_guess(repr) == PL_COLOR_LEVELS_TV) {
+    if (pl_color_levels_guess(repr) == PL_COLOR_LEVELS_LIMITED) {
         // Limit range is always shifted directly
         scale *= (float) (1LL << tex_bits) / (1LL << col_bits);
     } else {
@@ -917,14 +917,14 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     double scale = (1LL << bit_depth) / ((1LL << bit_depth) - 1.0);
 
     switch (pl_color_levels_guess(repr)) {
-    case PL_COLOR_LEVELS_TV: {
+    case PL_COLOR_LEVELS_LIMITED: {
         ymax = 235 / 256. * scale;
         ymin =  16 / 256. * scale;
         cmax = 240 / 256. * scale;
         cmid = 128 / 256. * scale;
         break;
     }
-    case PL_COLOR_LEVELS_PC:
+    case PL_COLOR_LEVELS_FULL:
         // Note: For full-range YUV, there are multiple, subtly inconsistent
         // standards. So just pick the sanest implementation, which is to
         // assume MAX_INT == 1.0.
@@ -969,7 +969,7 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
 
     // Update the metadata to reflect the change.
     repr->sys    = PL_COLOR_SYSTEM_RGB;
-    repr->levels = PL_COLOR_LEVELS_PC;
+    repr->levels = PL_COLOR_LEVELS_FULL;
 
     return out;
 }

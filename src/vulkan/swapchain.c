@@ -311,7 +311,7 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
     p->color_space = csp;
     p->color_repr = (struct pl_color_repr) {
         .sys    = PL_COLOR_SYSTEM_RGB,
-        .levels = PL_COLOR_LEVELS_PC,
+        .levels = PL_COLOR_LEVELS_FULL,
         .alpha  = PL_ALPHA_UNKNOWN, // will be updated by vk_sw_recreate
     };
 

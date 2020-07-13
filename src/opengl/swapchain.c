@@ -152,7 +152,7 @@ static bool gl_sw_start_frame(const struct pl_swapchain *sw,
         .flipped = !p->params.framebuffer.flipped,
         .color_repr = {
             .sys = PL_COLOR_SYSTEM_RGB,
-            .levels = PL_COLOR_LEVELS_PC,
+            .levels = PL_COLOR_LEVELS_FULL,
             .alpha = PL_ALPHA_UNKNOWN,
             .bits = {
                 // Just use the red channel in the absence of anything more

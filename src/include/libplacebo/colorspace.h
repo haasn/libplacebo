@@ -74,9 +74,13 @@ enum pl_channel {
 // The numerical range of the representation (where applicable).
 enum pl_color_levels {
     PL_COLOR_LEVELS_UNKNOWN = 0,
-    PL_COLOR_LEVELS_TV,         // TV range, e.g. 16-235
-    PL_COLOR_LEVELS_PC,         // PC range, e.g. 0-255
+    PL_COLOR_LEVELS_LIMITED,    // Limited/TV range, e.g. 16-235
+    PL_COLOR_LEVELS_FULL,       // Full/PC range, e.g. 0-255
     PL_COLOR_LEVELS_COUNT,
+
+    // Compatibility aliases
+    PL_COLOR_LEVELS_TV = PL_COLOR_LEVELS_LIMITED,
+    PL_COLOR_LEVELS_PC = PL_COLOR_LEVELS_FULL,
 };
 
 // The alpha representation mode.

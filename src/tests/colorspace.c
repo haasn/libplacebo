@@ -18,12 +18,12 @@ int main()
 
     struct pl_color_repr tv_repr = {
         .sys       = PL_COLOR_SYSTEM_BT_709,
-        .levels    = PL_COLOR_LEVELS_TV,
+        .levels    = PL_COLOR_LEVELS_LIMITED,
     };
 
     struct pl_color_repr pc_repr = {
         .sys       = PL_COLOR_SYSTEM_RGB,
-        .levels    = PL_COLOR_LEVELS_PC,
+        .levels    = PL_COLOR_LEVELS_FULL,
     };
 
     // Ensure this is a no-op for bits == bits
@@ -122,7 +122,7 @@ int main()
 
         printf("testing color system %u\n", (unsigned) sys);
         struct pl_color_repr repr = {
-            .levels = PL_COLOR_LEVELS_TV,
+            .levels = PL_COLOR_LEVELS_LIMITED,
             .sys = sys,
         };
 
