@@ -20,6 +20,12 @@
 #include "common.h"
 #include "context.h"
 
+// To avoid having to include drm_fourcc.h
+#ifndef DRM_FORMAT_MOD_LINEAR
+#define DRM_FORMAT_MOD_LINEAR   UINT64_C(0x0)
+#define DRM_FORMAT_MOD_INVALID  ((UINT64_C(1) << 56) - 1)
+#endif
+
 // This struct must be the first member of the gpu's priv struct. The `pl_gpu`
 // helpers will cast the priv struct to this struct!
 

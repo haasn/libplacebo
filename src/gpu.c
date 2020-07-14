@@ -721,12 +721,15 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
 
     require(!params.import_handle || !params.export_handle);
     if (params.export_handle) {
-        require(params.export_handle & gpu->export_caps.buf);
         require(PL_ISPOT(params.export_handle));
+        require(params.export_handle & gpu->export_caps.buf);
     }
     if (params.import_handle) {
-        require(params.import_handle & gpu->import_caps.buf);
         require(PL_ISPOT(params.import_handle));
+        require(params.import_handle & gpu->import_caps.buf);
+        const struct pl_shared_mem *shmem = &params.shared_mem;
+        require(shmem->offset + params.size <= shmem->size);
+        require(params.import_handle != PL_HANDLE_DMA_BUF || !shmem->drm_format_mod);
     }
 
     require(params.size > 0 && params.size <= gpu->limits.max_buf_size);

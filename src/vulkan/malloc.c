@@ -704,11 +704,6 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         goto error;
     }
 
-    if (params->ded_image && shmem->offset != 0) {
-        PL_ERR(vk, "Dedicated image import conflicts with nonzero offset!");
-        goto error;
-    }
-
     if (PL_ALIGN(shmem->offset, reqs.alignment) != shmem->offset) {
         PL_ERR(vk, "Imported object offset %zu conflicts with alignment %zu!",
                shmem->offset, (size_t) reqs.alignment);

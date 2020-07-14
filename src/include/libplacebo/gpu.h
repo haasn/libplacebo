@@ -103,6 +103,12 @@ struct pl_shared_mem {
     union pl_handle handle;
     size_t size;   // the total size of the memory referenced by this handle
     size_t offset; // the offset of the object within the referenced memory
+
+    // For PL_HANDLE_DMA_BUF, this specifies the DRM format modifier that
+    // describes this resource. Note that when importing `pl_buf`, this must
+    // be DRM_FORMAT_MOD_LINEAR. For importing `pl_tex`, it can be any
+    // format modifier supported by the implementation.
+    uint64_t drm_format_mod;
 };
 
 // Structure defining the physical limits of this GPU instance. If a limit is
@@ -364,6 +370,10 @@ struct pl_tex {
     //
     // While this texture is not in an "exported" state, the contents of the
     // memory are undefined. (See: `pl_tex_export`)
+    //
+    // Note: Due to vulkan driver limitations, `shared_mem.drm_format_mod` will
+    // currently always be set to DRM_FORMAT_MOD_INVALID. No guarantee can be
+    // made about the cross-driver compatibility of textures exported this way.
     struct pl_shared_mem shared_mem;
 
     // If `params.sampleable` is true, this indicates the correct sampler type

@@ -925,6 +925,19 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
 
+    VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
+    if (params->import_handle == PL_HANDLE_DMA_BUF) {
+        if (params->shared_mem.drm_format_mod == DRM_FORMAT_MOD_LINEAR) {
+            tiling = VK_IMAGE_TILING_LINEAR;
+        } else {
+            // FIXME: This is not really correct but it's the best we can hope
+            // to do in the absence of proper DRM format modifier support. May
+            // result in corruption. Update once VK_EXT_image_drm_format_modifier
+            // is implemented.
+            tiling = VK_IMAGE_TILING_OPTIMAL;
+        }
+    }
+
     // FIXME: Since we can't keep track of queue family ownership properly,
     // and we don't know in advance what types of queue families this image
     // will belong to, we're forced to share all of our images between all
@@ -951,7 +964,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         .mipLevels = 1,
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
-        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .tiling = tiling,
         .usage = usage,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .sharingMode = vk->num_pools > 1 ? VK_SHARING_MODE_CONCURRENT
@@ -1071,6 +1084,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
 
     if (params->export_handle) {
         tex->shared_mem = tex_vk->mem.shared_mem;
+        tex->shared_mem.drm_format_mod = DRM_FORMAT_MOD_INVALID;
         // Texture is not initially exported;
         // pl_vulkan_hold must be used to export it.
     }
@@ -1877,6 +1891,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
 
     if (params->export_handle) {
         buf->shared_mem = buf_vk->mem.shared_mem;
+        buf->shared_mem.drm_format_mod = DRM_FORMAT_MOD_LINEAR;
         buf_vk->exported = true;
     }
 
