@@ -175,11 +175,10 @@ bool pl_lcms_compute_lut(struct pl_context *ctx, enum pl_rendering_intent intent
         goto error;
 
     cmsSetLogErrorHandlerTHR(cms, error_callback);
-    dstp = get_profile(ctx, cms, dst, NULL, &out->src_color);
-    srcp = get_profile(ctx, cms, src, dstp, &out->dst_color);
+    dstp = get_profile(ctx, cms, dst, NULL, &out->dst_color);
+    srcp = get_profile(ctx, cms, src, dstp, &out->src_color);
     if (!srcp || !dstp)
         goto error;
-
 
     uint32_t flags = cmsFLAGS_HIGHRESPRECALC | cmsFLAGS_BLACKPOINTCOMPENSATION |
                      cmsFLAGS_NOCACHE;
