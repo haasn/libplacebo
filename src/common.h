@@ -24,7 +24,6 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-#include "config.h"
 #include "config_internal.h"
 #include "pl_assert.h"
 
@@ -35,6 +34,7 @@
 // as being externally visible. (Otherwise, all symbols are hidden by default)
 #pragma GCC visibility push(default)
 
+#include "config.h"
 #include "include/libplacebo/colorspace.h"
 #include "include/libplacebo/common.h"
 #include "include/libplacebo/context.h"
