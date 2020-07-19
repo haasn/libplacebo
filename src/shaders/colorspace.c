@@ -823,9 +823,11 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
              dst_range, dst_range);
     }
 
-    // Rename `color.rgb` to something shorter for conciseness
-    GLSL("vec3 sig = color.rgb; \n"
-         "vec3 sig_orig = sig;  \n");
+    // Rename `color.rgb` to something shorter for conciseness, and also
+    // apply clipping to prevent the tone mapping functions from exploding
+    // for input values exceeding sig_peak
+    GLSL("vec3 sig = min(color.rgb, sig_peak); \n"
+         "vec3 sig_orig = color.rgb;           \n");
 
     // Scale the signal to compensate for differences in the average brightness
     GLSL("float slope = min(%f, %f / sig_avg); \n"
@@ -836,7 +838,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
     float param = params->tone_mapping_param;
     switch (params->tone_mapping_algo) {
     case PL_TONE_MAPPING_CLIP:
-        GLSL("sig *= %f;\n", PL_DEF(param, 1.0));
+        GLSL("sig *= min(%f, 1.0) ;\n", PL_DEF(param, 1.0));
         break;
 
     case PL_TONE_MAPPING_MOBIUS:
@@ -892,7 +894,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
         break;
 
     case PL_TONE_MAPPING_LINEAR:
-        GLSL("sig *= %f / sig_peak;\n", PL_DEF(param, 1.0));
+        GLSL("sig *= min(%f / sig_peak, 1.0);\n", PL_DEF(param, 1.0));
         break;
 
     case PL_TONE_MAPPING_BT_2390:
@@ -934,8 +936,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
         abort();
     }
 
-    GLSL("sig = min(sig, 1.01);                                         \n"
-         "vec3 sig_lin = sig_orig * (sig[sig_idx] / sig_orig[sig_idx]); \n");
+    GLSL("vec3 sig_lin = sig_orig * (sig[sig_idx] / sig_orig[sig_idx]); \n");
 
     // Mix between the per-channel tone mapped `sig` and the linear tone
     // mapped `sig_lin` based on the desaturation strength
