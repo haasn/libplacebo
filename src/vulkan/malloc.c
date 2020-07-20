@@ -641,7 +641,45 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     vk_handle_type = vk_mem_handle_type(params->import_handle);
 
     struct vk_slab *slab = NULL;
-    const struct pl_shared_mem *shmem = &params->shared_mem;
+    struct pl_shared_mem shmem = params->shared_mem;
+
+    if (params->import_handle == PL_HANDLE_HOST_PTR) {
+        if (!vk->GetMemoryHostPointerPropertiesEXT) {
+            PL_ERR(vk, "Importing PL_HANDLE_HOST_PTR requires %s.",
+                   VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
+            return false;
+        }
+
+        // Enlarge the shmem to the nearest page boundary
+        uintptr_t page_mask = ~(ma->host_ptr_align - 1);
+        uintptr_t ptr_base = (uintptr_t) shmem.handle.ptr & page_mask;
+        size_t ptr_offset = (uintptr_t) shmem.handle.ptr - ptr_base;
+        size_t buf_offset = ptr_offset + shmem.offset;
+        size_t ptr_size = PL_ALIGN(ptr_offset + shmem.size, ma->host_ptr_align);
+
+        // This is technically redundant with the check further down below,
+        // but since this is a possibly confusing case, elaborate on the
+        // error message with more information.
+        if (buf_offset % params->reqs.alignment) {
+            PL_ERR(vk, "Imported host pointer %p of offset %zu from page base "
+                   "%p (= buffer offset %zu) conflicts with offset alignment "
+                   "requirements %zu!",
+                   shmem.handle.ptr, ptr_offset, (void *) ptr_base,
+                   buf_offset, (size_t) params->reqs.alignment);
+            return false;
+        }
+
+        if (ptr_base != (uintptr_t) shmem.handle.ptr || ptr_size > shmem.size) {
+            PL_DEBUG(vk, "Rounding imported host pointer %p + %zu -> %zu to "
+                    "nearest page boundaries: %p + %zu -> %zu",
+                     shmem.handle.ptr, shmem.offset, shmem.size,
+                     (void *) ptr_base, buf_offset, ptr_size);
+        }
+
+        shmem.handle.ptr = (void *) ptr_base;
+        shmem.offset = buf_offset;
+        shmem.size = ptr_size;
+    }
 
     VkMemoryDedicatedAllocateInfoKHR dinfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR,
@@ -661,7 +699,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
 
     VkMemoryAllocateInfo ainfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = shmem->size,
+        .allocationSize = shmem.size,
     };
 
     if (params->ded_image)
@@ -683,7 +721,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         VkBufferCreateInfo binfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
             .pNext = &ext_buf_info,
-            .size = shmem->size,
+            .size = shmem.size,
             .usage = params->buf_usage,
             .sharingMode = vk->num_pools > 1 ? VK_SHARING_MODE_CONCURRENT
                                              : VK_SHARING_MODE_EXCLUSIVE,
@@ -697,16 +735,16 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         vk->GetBufferMemoryRequirements(vk->dev, buffer, &reqs);
     }
 
-    if (reqs.size > shmem->size) {
+    if (reqs.size > shmem.size) {
         PL_ERR(vk, "Imported object requires %zu bytes, larger than the "
                "provided size %zu!",
-               reqs.size, shmem->size);
+               reqs.size, shmem.size);
         goto error;
     }
 
-    if (PL_ALIGN(shmem->offset, reqs.alignment) != shmem->offset) {
+    if (shmem.offset % reqs.alignment || shmem.offset % params->reqs.alignment) {
         PL_ERR(vk, "Imported object offset %zu conflicts with alignment %zu!",
-               shmem->offset, (size_t) reqs.alignment);
+               shmem.offset, pl_lcm(reqs.alignment, params->reqs.alignment));
         goto error;
     }
 
@@ -725,12 +763,12 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
 
         VK(vk->GetMemoryFdPropertiesKHR(vk->dev,
                                         vk_handle_type,
-                                        shmem->handle.fd,
+                                        shmem.handle.fd,
                                         &fdprops));
 
         // We dup() the fd to make it safe to import the same original fd
         // multiple times.
-        fdinfo.fd = dup(shmem->handle.fd);
+        fdinfo.fd = dup(shmem.handle.fd);
         if (fdinfo.fd == -1) {
             PL_ERR(vk, "Failed to dup() fd (%d) when importing memory: %s",
                    fdinfo.fd, strerror(errno));
@@ -748,36 +786,15 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
 #endif
 
     case PL_HANDLE_HOST_PTR: {
-        if (!vk->GetMemoryHostPointerPropertiesEXT) {
-            PL_ERR(vk, "Importing PL_HANDLE_HOST_PTR requires %s.",
-                   VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
-            return false;
-        }
-
-        if ((uintptr_t) shmem->handle.ptr % ma->host_ptr_align) {
-            PL_ERR(vk, "Imported host pointer %p does not adhere to the "
-                   "alignment required to import pointers: %zu",
-                   shmem->handle.ptr, (size_t) ma->host_ptr_align);
-            return false;
-        }
-
-        if (shmem->size % ma->host_ptr_align) {
-            PL_ERR(vk, "Imported host pointer %p of size %zu does not adhere "
-                   "to the size alignment required to import pointers: %zu",
-                   shmem->handle.ptr, shmem->size,
-                   (size_t) ma->host_ptr_align);
-            return false;
-        }
-
         VkMemoryHostPointerPropertiesEXT ptrprops = {
             .sType = VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT,
         };
 
         VK(vk->GetMemoryHostPointerPropertiesEXT(vk->dev, vk_handle_type,
-                                                 shmem->handle.ptr,
+                                                 shmem.handle.ptr,
                                                  &ptrprops));
 
-        ptrinfo.pHostPointer = shmem->handle.ptr;
+        ptrinfo.pHostPointer = (void *) shmem.handle.ptr;
         reqs.memoryTypeBits &= ptrprops.memoryTypeBits;
         vk_link_struct(&ainfo, &ptrinfo);
         break;
@@ -807,17 +824,17 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         .dedicated = true,
         .imported = true,
         .buffer = buffer,
-        .size = shmem->size,
-        .used = shmem->size,
+        .size = shmem.size,
+        .used = shmem.size,
         .handle_type = params->import_handle,
     };
 
     *out = (struct vk_memslice) {
         .vkmem = vkmem,
         .buf = buffer,
-        .size = shmem->size,
-        .offset = shmem->offset,
-        .shared_mem = *shmem,
+        .size = shmem.size - shmem.offset,
+        .offset = shmem.offset,
+        .shared_mem = shmem,
         .priv = slab,
     };
 
@@ -825,7 +842,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     case PL_HANDLE_DMA_BUF:
     case PL_HANDLE_FD:
         PL_DEBUG(vk, "Imported %zu of memory from fd: %d%s",
-                 (size_t) slab->size, shmem->handle.fd,
+                 (size_t) slab->size, shmem.handle.fd,
                  params->ded_image ? " (dedicated)" : "");
         // fd ownership is transferred at this point.
         slab->handle.fd = fdinfo.fd;
@@ -833,7 +850,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         break;
     case PL_HANDLE_HOST_PTR:
         PL_DEBUG(vk, "Imported %zu of memory from ptr: %p%s",
-                 (size_t) slab->size, shmem->handle.ptr,
+                 (size_t) slab->size, shmem.handle.ptr,
                  params->ded_image ? " (dedicated" : "");
         slab->handle.ptr = ptrinfo.pHostPointer;
         break;
