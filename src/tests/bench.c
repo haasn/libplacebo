@@ -49,25 +49,34 @@ static const struct pl_tex *create_test_img(const struct pl_gpu *gpu)
     return tex;
 }
 
-typedef void (*bench_fn)(struct pl_shader *sh, struct pl_shader_obj **state,
-                         const struct pl_tex *src);
+struct bench {
+    void (*run_sh)(struct pl_shader *sh, struct pl_shader_obj **state,
+                   const struct pl_tex *src);
+
+    void (*run_tex)(const struct pl_gpu *gpu, const struct pl_tex *tex);
+};
 
 static void run_bench(const struct pl_gpu *gpu, struct pl_dispatch *dp,
                       struct pl_shader_obj **state, const struct pl_tex *src,
                       const struct pl_tex *fbo, struct pl_timer *timer,
-                      bench_fn bench)
+                      const struct bench *bench)
 {
-    struct pl_shader *sh = pl_dispatch_begin(dp);
-    bench(sh, state, src);
+    if (bench->run_sh) {
+        struct pl_shader *sh = pl_dispatch_begin(dp);
+        bench->run_sh(sh, state, src);
 
-    pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
-        .shader = &sh,
-        .target = fbo,
-        .timer = timer,
-    });
+        pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+            .shader = &sh,
+            .target = fbo,
+            .timer = timer,
+        });
+    } else {
+        bench->run_tex(gpu, fbo);
+    }
 }
 
-static void benchmark(const struct pl_gpu *gpu, const char *name, bench_fn bench)
+static void benchmark(const struct pl_gpu *gpu, const char *name,
+                      const struct bench *bench)
 {
     struct pl_dispatch *dp = pl_dispatch_create(gpu->ctx, gpu);
     struct pl_shader_obj *state = NULL;
@@ -75,7 +84,8 @@ static void benchmark(const struct pl_gpu *gpu, const char *name, bench_fn bench
 
     // Create the FBOs
     const struct pl_fmt *fmt;
-    fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 0, PL_FMT_CAP_RENDERABLE);
+    fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32,
+                      PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE);
     REQUIRE(fmt);
 
     const struct pl_tex *fbos[NUM_FBOS] = {0};
@@ -85,9 +95,14 @@ static void benchmark(const struct pl_gpu *gpu, const char *name, bench_fn bench
             .w              = TEX_SIZE,
             .h              = TEX_SIZE,
             .renderable     = true,
+            .blit_dst       = true,
+            .host_writable  = true,
+            .host_readable  = true,
             .storable       = !!(fmt->caps & PL_FMT_CAP_STORABLE),
         });
         REQUIRE(fbos[i]);
+
+        pl_tex_clear(gpu, fbos[i], (float[4]){ 0.0 });
     }
 
     // Run the benchmark and flush+block once to force shader compilation etc.
@@ -269,6 +284,24 @@ static void bench_av1_grain_lap(struct pl_shader *sh, struct pl_shader_obj **sta
     pl_shader_av1_grain(sh, state, &params);
 }
 
+static float data[TEX_SIZE * TEX_SIZE * 4 + 8192];
+
+static void bench_download(const struct pl_gpu *gpu, const struct pl_tex *tex)
+{
+    pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
+        .tex = tex,
+        .ptr = (uint8_t *) PL_ALIGN((uintptr_t) data, 4096),
+    });
+}
+
+static void bench_upload(const struct pl_gpu *gpu, const struct pl_tex *tex)
+{
+    pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
+        .tex = tex,
+        .ptr = (uint8_t *) PL_ALIGN((uintptr_t) data, 4096),
+    });
+}
+
 int main()
 {
     setbuf(stdout, NULL);
@@ -289,29 +322,34 @@ int main()
     if (!vk)
         return SKIP;
 
+#define BENCH_SH(fn) &(struct bench) { .run_sh = fn }
+#define BENCH_TEX(fn) &(struct bench) { .run_tex = fn }
+
     printf("= Running benchmarks =\n");
-    benchmark(vk->gpu, "bilinear", bench_bilinear);
-    benchmark(vk->gpu, "bicubic", bench_bicubic);
-    benchmark(vk->gpu, "deband", bench_deband);
-    benchmark(vk->gpu, "deband_heavy", bench_deband_heavy);
+    benchmark(vk->gpu, "tex_download ptr", BENCH_TEX(bench_download));
+    benchmark(vk->gpu, "tex_upload ptr", BENCH_TEX(bench_upload));
+    benchmark(vk->gpu, "bilinear", BENCH_SH(bench_bilinear));
+    benchmark(vk->gpu, "bicubic", BENCH_SH(bench_bicubic));
+    benchmark(vk->gpu, "deband", BENCH_SH(bench_deband));
+    benchmark(vk->gpu, "deband_heavy", BENCH_SH(bench_deband_heavy));
 
     // Polar sampling
-    benchmark(vk->gpu, "polar", bench_polar);
+    benchmark(vk->gpu, "polar", BENCH_SH(bench_polar));
     if (vk->gpu->caps & PL_GPU_CAP_COMPUTE)
-        benchmark(vk->gpu, "polar_nocompute", bench_polar_nocompute);
+        benchmark(vk->gpu, "polar_nocompute", BENCH_SH(bench_polar_nocompute));
 
     // Dithering algorithms
-    benchmark(vk->gpu, "dither_blue", bench_dither_blue);
-    benchmark(vk->gpu, "dither_white", bench_dither_white);
-    benchmark(vk->gpu, "dither_ordered_fixed", bench_dither_ordered_fix);
+    benchmark(vk->gpu, "dither_blue", BENCH_SH(bench_dither_blue));
+    benchmark(vk->gpu, "dither_white", BENCH_SH(bench_dither_white));
+    benchmark(vk->gpu, "dither_ordered_fixed", BENCH_SH(bench_dither_ordered_fix));
 
     // HDR peak detection
     if (vk->gpu->caps & PL_GPU_CAP_COMPUTE)
-        benchmark(vk->gpu, "hdr_peakdetect", bench_hdr_peak);
+        benchmark(vk->gpu, "hdr_peakdetect", BENCH_SH(bench_hdr_peak));
 
     // Misc stuff
-    benchmark(vk->gpu, "av1_grain", bench_av1_grain);
-    benchmark(vk->gpu, "av1_grain_lap", bench_av1_grain_lap);
+    benchmark(vk->gpu, "av1_grain", BENCH_SH(bench_av1_grain));
+    benchmark(vk->gpu, "av1_grain_lap", BENCH_SH(bench_av1_grain_lap));
 
     pl_vulkan_destroy(&vk);
     pl_context_destroy(&ctx);
