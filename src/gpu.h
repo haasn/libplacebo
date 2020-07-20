@@ -123,7 +123,7 @@ const struct pl_buf *pl_buf_pool_get(const struct pl_gpu *gpu,
 // ensure that params->buf is always set.
 bool pl_tex_upload_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
                        const struct pl_tex_transfer_params *params);
-bool pl_tex_download_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
+bool pl_tex_download_pbo(const struct pl_gpu *gpu,
                          const struct pl_tex_transfer_params *params);
 
 // This requires that params.buf has been set and is of type PL_BUF_TEXEL_*

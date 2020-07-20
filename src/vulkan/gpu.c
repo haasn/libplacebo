@@ -568,7 +568,6 @@ struct pl_tex_vk {
     VkFramebuffer framebuffer;
     // for transfers
     struct pl_buf_pool pbo_write;
-    struct pl_buf_pool pbo_read;
     // for vk_tex_upload/download fallback code
     const struct pl_fmt *texel_fmt;
     struct pl_buf_pool tmp_write;
@@ -608,7 +607,6 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
     pl_buf_pool_uninit(gpu, &tex_vk->tmp_write);
     pl_buf_pool_uninit(gpu, &tex_vk->tmp_read);
     pl_buf_pool_uninit(gpu, &tex_vk->pbo_write);
-    pl_buf_pool_uninit(gpu, &tex_vk->pbo_read);
     vk_sync_deref(gpu, tex_vk->ext_sync);
     vk_signal_destroy(vk, &tex_vk->sig);
     vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, VK_ALLOC);
@@ -1994,6 +1992,8 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
     size_t buf_offset = buf_vk->mem.offset + params->buf_offset;
     bool emulated = tex->params.format->emulated;
     bool unaligned = buf_offset % tex->params.format->texel_size;
+    if (unaligned)
+        PL_TRACE(gpu, "vk_tex_upload: unaligned transfer (slow path)");
 
     if (emulated || unaligned) {
 
@@ -2101,7 +2101,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
     struct pl_tex_vk *tex_vk = TA_PRIV(tex);
 
     if (!params->buf)
-        return pl_tex_download_pbo(gpu, &tex_vk->pbo_read, params);
+        return pl_tex_download_pbo(gpu, params);
 
     const struct pl_buf *buf = params->buf;
     struct pl_buf_vk *buf_vk = TA_PRIV(buf);
@@ -2111,6 +2111,8 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
     size_t buf_offset = buf_vk->mem.offset + params->buf_offset;
     bool emulated = tex->params.format->emulated;
     bool unaligned = buf_offset % tex->params.format->texel_size;
+    if (unaligned)
+        PL_TRACE(gpu, "vk_tex_download: unaligned transfer (slow path)");
 
     if (emulated || unaligned) {
 

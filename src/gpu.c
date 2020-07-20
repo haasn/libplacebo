@@ -1352,7 +1352,7 @@ bool pl_tex_upload_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
     return pl_tex_upload(gpu, &newparams);
 }
 
-bool pl_tex_download_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
+bool pl_tex_download_pbo(const struct pl_gpu *gpu,
                          const struct pl_tex_transfer_params *params)
 {
     if (params->buf)
@@ -1360,24 +1360,61 @@ bool pl_tex_download_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
 
     struct pl_buf_params bufparams = {
         .size = pl_tex_transfer_size(params),
-        .host_readable = true,
     };
 
-    const struct pl_buf *buf = pl_buf_pool_get(gpu, pbo, &bufparams);
+    const struct pl_buf *buf = NULL;
+
+    // If we can import host pointers directly, we can avoid an extra memcpy
+    // (sometimes). In the cases where it isn't avoidable, the extra memcpy
+    // will happen inside VRAM, which is typically faster anyway.
+    bool can_import = gpu->import_caps.buf & PL_HANDLE_HOST_PTR;
+    if (can_import && bufparams.size > 32*1024) { // 32 KiB
+        bufparams.import_handle = PL_HANDLE_HOST_PTR;
+        bufparams.shared_mem = (struct pl_shared_mem) {
+            .handle.ptr = params->ptr,
+            .size = bufparams.size,
+            .offset = 0,
+        };
+
+        // Suppress errors for this test because it may fail, in which case we
+        // want to silently fall back.
+        pl_log_level_cap(gpu->ctx, PL_LOG_DEBUG);
+        buf = pl_buf_create(gpu, &bufparams);
+        pl_log_level_cap(gpu->ctx, PL_LOG_NONE);
+    }
+
+    if (!buf) {
+        // Fallback when host pointer import is not supported
+        bufparams.import_handle = 0;
+        bufparams.host_readable = true;
+        buf = pl_buf_create(gpu, &bufparams);
+    }
+
     if (!buf)
         return false;
 
     struct pl_tex_transfer_params newparams = *params;
-    newparams.buf = buf;
     newparams.ptr = NULL;
-
-    if (!pl_tex_download(gpu, &newparams))
+    newparams.buf = buf;
+    if (!pl_tex_download(gpu, &newparams)) {
+        pl_buf_destroy(gpu, &buf);
         return false;
+    }
 
-    if (pl_buf_poll(gpu, buf, 0))
+    while (pl_buf_poll(gpu, buf, 10000000)) // 10 ms
         PL_TRACE(gpu, "pl_tex_download without buffer: blocking (slow path)");
 
-    return pl_buf_read(gpu, buf, 0, params->ptr, bufparams.size);
+    bool ok;
+    if (bufparams.import_handle) {
+        // Buffer download completion already means the host pointer contains
+        // the valid data, no more need to copy
+        ok = true;
+    } else {
+        ok = pl_buf_read(gpu, buf, 0, params->ptr, bufparams.size);
+    }
+
+    pl_buf_destroy(gpu, &buf);
+    return ok;
 }
 
 bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
