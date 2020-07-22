@@ -270,7 +270,11 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
     if (!gl_check_err(gpu, "pl_gpu_create_gl"))
         goto error;
 
-    if (!gl_setup_formats(gpu))
+    // Filter out error messages during format probing
+    pl_log_level_cap(gpu->ctx, PL_LOG_INFO);
+    bool formats_ok = gl_setup_formats(gpu);
+    pl_log_level_cap(gpu->ctx, PL_LOG_NONE);
+    if (!formats_ok)
         goto error;
 
     pl_gpu_print_info(gpu);

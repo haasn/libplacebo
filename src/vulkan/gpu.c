@@ -160,6 +160,9 @@ static void vk_setup_formats(struct pl_gpu *gpu)
         if (vk_fmt->fmt.emulated && !has_emu)
             continue;
 
+        // Suppress some errors/warnings spit out by the format probing code
+        pl_log_level_cap(vk->ctx, PL_LOG_INFO);
+
         VkFormatProperties prop = {0};
         vk->GetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->tfmt, &prop);
 
@@ -183,6 +186,8 @@ static void vk_setup_formats(struct pl_gpu *gpu)
                 bufflags = 0;
             }
         }
+
+        pl_log_level_cap(vk->ctx, PL_LOG_NONE);
 
         struct pl_fmt *fmt = talloc_ptrtype_priv(gpu, fmt, vk_fmt);
         const struct vk_format **fmtp = TA_PRIV(fmt);

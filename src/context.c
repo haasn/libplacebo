@@ -116,6 +116,13 @@ void pl_context_update(struct pl_context *ctx,
     pthread_mutex_unlock(&ctx->lock);
 }
 
+void pl_log_level_cap(struct pl_context *ctx, enum pl_log_level cap)
+{
+    pthread_mutex_lock(&ctx->lock);
+    ctx->log_level_cap = cap;
+    pthread_mutex_unlock(&ctx->lock);
+}
+
 static FILE *default_stream(void *stream, enum pl_log_level level)
 {
     return PL_DEF(stream, level <= PL_LOG_WARN ? stderr : stdout);
@@ -177,6 +184,11 @@ void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
     // Re-test the log message level with held lock to avoid false positives,
     // which would be a considerably bigger deal than false negatives
     pthread_mutex_lock(&ctx->lock);
+
+    // Apply this cap before re-testing the log level, to avoid giving users
+    // messages that should have been dropped by the log level.
+    lev = PL_MAX(lev, ctx->log_level_cap);
+
     if (!pl_msg_test(ctx, lev))
         goto done;
 

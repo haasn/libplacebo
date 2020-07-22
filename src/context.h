@@ -24,6 +24,7 @@
 struct pl_context {
     struct pl_context_params params;
     struct bstr logbuffer;
+    enum pl_log_level log_level_cap;
     pthread_mutex_t lock;
     // Provide a place for implementations to track suppression of errors
     // FIXME: This is a hack. Get rid of it ASAP. It's also not thread-safe.
@@ -65,3 +66,9 @@ void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
 
 // Log something with line numbers included
 void pl_msg_source(struct pl_context *ctx, enum pl_log_level lev, const char *src);
+
+// Temporarily cap the log level to a certain verbosity. This is intended for
+// things like probing formats, attempting to create buffers that may fail, and
+// other types of operations in which we want to suppress errors. Call with
+// PL_LOG_NONE to disable this cap.
+void pl_log_level_cap(struct pl_context *ctx, enum pl_log_level cap);
