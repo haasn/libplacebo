@@ -754,7 +754,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         if (!vk->GetMemoryFdPropertiesKHR) {
             PL_ERR(vk, "Importing PL_HANDLE_DMA_BUF requires %s.",
                    VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
-            return false;
+            goto error;
         }
 
         VkMemoryFdPropertiesKHR fdprops = {
@@ -772,7 +772,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         if (fdinfo.fd == -1) {
             PL_ERR(vk, "Failed to dup() fd (%d) when importing memory: %s",
                    fdinfo.fd, strerror(errno));
-            return false;
+            goto error;
         }
 
         reqs.memoryTypeBits &= fdprops.memoryTypeBits;
@@ -782,7 +782,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
 #else // !VK_HAVE_UNIX
     case PL_HANDLE_DMA_BUF:
         PL_ERR(vk, "PL_HANDLE_DMA_BUF requires building with UNIX support!");
-        return false;
+        goto error;
 #endif
 
     case PL_HANDLE_HOST_PTR: {
@@ -805,14 +805,14 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     case PL_HANDLE_WIN32_KMT:
         PL_ERR(vk, "vk_malloc_import: unsupported handle type %d",
                params->import_handle);
-        return false;
+        goto error;
     }
 
     pl_assert(ainfo.pNext);
 
     if (!find_best_memtype(ma, reqs.memoryTypeBits, params, &ainfo.memoryTypeIndex)) {
         PL_ERR(vk, "No compatible memory types offered for imported memory!");
-        return false;
+        goto error;
     }
 
     VkDeviceMemory vkmem = NULL;
@@ -887,6 +887,7 @@ error:
         close(fdinfo.fd);
 #endif
     talloc_free(slab);
+    *out = (struct vk_memslice) {0};
     return false;
 }
 
