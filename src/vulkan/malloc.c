@@ -172,7 +172,6 @@ static bool find_best_memtype(struct vk_malloc *ma, uint32_t type_mask,
     // That being said, we still want to prioritize memory types that have
     // better optional flags.
 
-    type_mask = PL_DEF(type_mask, UINT32_MAX);
     type_mask &= params->reqs.memoryTypeBits;
     for (int i = 0; i < ma->props.memoryTypeCount; i++) {
         const VkMemoryType *mtype = &ma->props.memoryTypes[i];
@@ -201,8 +200,7 @@ static bool find_best_memtype(struct vk_malloc *ma, uint32_t type_mask,
     if (best < 0) {
         PL_ERR(vk, "Found no memory type matching property flags 0x%x and type "
                "bits 0x%x!",
-               (unsigned) params->required,
-               (unsigned) params->reqs.memoryTypeBits);
+               (unsigned) params->required, (unsigned) type_mask);
         return false;
     }
 
@@ -263,7 +261,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
         .handleTypes = vk_mem_handle_type(slab->handle_type),
     };
 
-    uint32_t type_mask = 0;
+    uint32_t type_mask = UINT32_MAX;
     if (params->buf_usage) {
         // Queue family sharing modes don't matter for buffers, so we just
         // set them as concurrent and stop worrying about it.
