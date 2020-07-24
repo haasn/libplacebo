@@ -126,6 +126,7 @@ const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
 
                 fmt->glsl_type = pl_var_glsl_type_name(pl_var_from_fmt(fmt, ""));
                 fmt->glsl_format = pl_fmt_glsl_format(fmt, comps);
+                fmt->fourcc = pl_fmt_fourcc(fmt);
                 if (!fmt->glsl_format)
                     fmt->caps &= ~(PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE);
                 TARRAY_APPEND(gpu, gpu->formats, gpu->num_formats, fmt);

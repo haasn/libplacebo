@@ -22,11 +22,20 @@
 #include "../gpu.h"
 
 #include <epoxy/gl.h>
+#include <epoxy/egl.h>
+
+#ifdef __unix__
+#define GL_HAVE_UNIX 1
+#endif
 
 // For gpu.priv
 struct pl_gl {
     struct pl_gpu_fns impl;
     bool failed;
+
+    // For import/export
+    EGLDisplay egl_dpy;
+    EGLContext egl_ctx;
 
     // Incrementing counters to keep track of object uniqueness
     int buf_id;
@@ -39,4 +48,5 @@ struct pl_gl {
     bool has_invalidate_tex;
     bool has_vao;
     bool has_queries;
+    bool has_modifiers;
 };

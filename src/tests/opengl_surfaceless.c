@@ -90,6 +90,46 @@ static void opengl_swapchain_tests(const struct pl_opengl *gl,
     pl_swapchain_destroy(&sw);
 }
 
+static void opengl_test_export_import(const struct pl_opengl *gl,
+                                      enum pl_handle_type handle_type)
+{
+    const struct pl_gpu *gpu = gl->gpu;
+
+    if (!(gpu->export_caps.tex & handle_type) ||
+        !(gpu->import_caps.tex & handle_type)) {
+        fprintf(stderr, "%s unsupported caps!\n", __func__);
+        return;
+    }
+
+    const struct pl_fmt *fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0,
+                                           PL_FMT_CAP_BLITTABLE);
+    if (!fmt) {
+        fprintf(stderr, "%s unsupported format\n", __func__);
+        return;
+    }
+
+    const struct pl_tex *export = pl_tex_create(gpu, &(struct pl_tex_params) {
+        .w = 32,
+        .h = 32,
+        .format = fmt,
+        .export_handle = handle_type,
+    });
+    REQUIRE(export);
+    REQUIRE(export->shared_mem.handle.fd > -1);
+
+    const struct pl_tex *import = pl_tex_create(gpu, &(struct pl_tex_params) {
+        .w = 32,
+        .h = 32,
+        .format = fmt,
+        .import_handle = handle_type,
+        .shared_mem = export->shared_mem,
+    });
+    REQUIRE(import);
+
+    pl_tex_destroy(gpu, &import);
+    pl_tex_destroy(gpu, &export);
+}
+
 int main()
 {
     // Create the OpenGL context
@@ -195,6 +235,9 @@ int main()
         struct pl_opengl_params params = pl_opengl_default_params;
         params.max_glsl_version = egl_vers[i].glsl_ver;
         params.debug = true;
+        params.egl_display = dpy;
+        params.egl_context = egl;
+
 #ifdef CI_BLACKLIST_COMPUTE
         params.blacklist_caps = PL_GPU_CAP_COMPUTE;
 #endif
@@ -223,6 +266,7 @@ int main()
         gpu_tests(gpu);
         opengl_interop_tests(gpu);
         opengl_swapchain_tests(gl, dpy, surf);
+        opengl_test_export_import(gl, PL_HANDLE_DMA_BUF);
 
         // Reduce log spam after first successful test
         pl_test_set_verbosity(ctx, PL_LOG_INFO);

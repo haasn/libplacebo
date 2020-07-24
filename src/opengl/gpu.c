@@ -20,6 +20,11 @@
 #include "formats.h"
 #include "utils.h"
 
+#ifdef GL_HAVE_UNIX
+#include <unistd.h>
+#include <errno.h>
+#endif
+
 static const struct pl_gpu_fns pl_fns_gl;
 
 static bool test_ext(const struct pl_gpu *gpu, const char *ext,
@@ -142,6 +147,7 @@ static bool gl_setup_formats(struct pl_gpu *gpu)
 
         fmt->glsl_type = pl_var_glsl_type_name(pl_var_from_fmt(fmt, ""));
         fmt->glsl_format = pl_fmt_glsl_format(fmt, fmt->num_components);
+        fmt->fourcc = pl_fmt_fourcc(fmt);
         pl_assert(fmt->glsl_type);
 
         // Add format capabilities based on the flags
@@ -179,7 +185,27 @@ next_gl_fmt: ;
     return gl_check_err(gpu, "gl_setup_formats");
 }
 
-const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
+static pl_handle_caps tex_handle_caps(const struct pl_gpu *gpu, bool import)
+{
+    pl_handle_caps caps = 0;
+    struct pl_gl *p = TA_PRIV(gpu);
+
+    if (!p->egl_dpy)
+        return 0;
+
+    if (import) {
+        if (epoxy_has_egl_extension(p->egl_dpy, "EXT_image_dma_buf_import"))
+            caps |= PL_HANDLE_DMA_BUF;
+    } else if (!import && p->egl_ctx) {
+        if (epoxy_has_egl_extension(p->egl_dpy, "EGL_MESA_image_dma_buf_export"))
+            caps |= PL_HANDLE_DMA_BUF;
+    }
+
+    return caps;
+}
+
+const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
+                                      EGLDisplay egl_dpy, EGLContext egl_ctx)
 {
     struct pl_gpu *gpu = talloc_zero_priv(NULL, struct pl_gpu, struct pl_gl);
     gpu->ctx = ctx;
@@ -218,6 +244,12 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
             gpu->glsl.version = 110;
         }
     }
+
+    // Query import/export support
+    p->egl_dpy = egl_dpy;
+    p->egl_ctx = egl_ctx;
+    gpu->export_caps.tex = tex_handle_caps(gpu, false);
+    gpu->import_caps.tex = tex_handle_caps(gpu, true);
 
     // Query all device limits
     struct pl_gpu_limits *l = &gpu->limits;
@@ -260,6 +292,10 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx)
     p->has_invalidate_fb = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
     p->has_invalidate_tex = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 0);
     p->has_queries = test_ext(gpu, "GL_ARB_timer_query", 33, 0);
+    if (p->egl_dpy) {
+        p->has_modifiers = epoxy_has_egl_extension(p->egl_dpy,
+                                        "EXT_image_dma_buf_import_modifiers");
+    }
 
     // We simply don't know, so make up some values
     gpu->limits.align_tex_xfer_offset = 32;
@@ -299,15 +335,28 @@ struct pl_tex_gl {
     GLenum format;
     GLint iformat;
     GLenum type;
+
+    // For imported/exported textures
+    EGLImageKHR image;
+    int fd;
 };
 
 static void gl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
 {
+    struct pl_gl *p = TA_PRIV(gpu);
     struct pl_tex_gl *tex_gl = TA_PRIV(tex);
+
     if (tex_gl->fbo && !tex_gl->wrapped_fb)
         glDeleteFramebuffers(1, &tex_gl->fbo);
+    if (tex_gl->image)
+        eglDestroyImageKHR(p->egl_dpy, tex_gl->image);
     if (!tex_gl->wrapped_tex)
         glDeleteTextures(1, &tex_gl->texture);
+
+#ifdef GL_HAVE_UNIX
+    if (tex_gl->fd != -1)
+        close(tex_gl->fd);
+#endif
 
     talloc_free((void *) tex);
     gl_check_err(gpu, "gl_tex_destroy");
@@ -330,6 +379,205 @@ static GLbitfield tex_barrier(const struct pl_tex *tex)
     return barrier;
 }
 
+#define ADD_ATTRIB(name, value)                                     \
+    do {                                                            \
+        assert(num_attribs + 3 < PL_ARRAY_SIZE(attribs));           \
+        attribs[num_attribs++] = (name);                            \
+        attribs[num_attribs++] = (value);                           \
+    } while (0)
+
+#define ADD_DMABUF_PLANE_ATTRIBS(plane, fd, offset, stride)         \
+    do {                                                            \
+        ADD_ATTRIB(EGL_DMA_BUF_PLANE ## plane ## _FD_EXT,           \
+                    fd);                                            \
+        ADD_ATTRIB(EGL_DMA_BUF_PLANE ## plane ## _OFFSET_EXT,       \
+                    offset);                                        \
+        ADD_ATTRIB(EGL_DMA_BUF_PLANE ## plane ## _PITCH_EXT,        \
+                    stride);                                        \
+    } while (0)
+
+#define ADD_DMABUF_PLANE_MODIFIERS(plane, mod)                      \
+    do {                                                            \
+        ADD_ATTRIB(EGL_DMA_BUF_PLANE ## plane ## _MODIFIER_LO_EXT,  \
+                    (uint32_t) ((mod) & 0xFFFFu));                  \
+        ADD_ATTRIB(EGL_DMA_BUF_PLANE ## plane ## _MODIFIER_HI_EXT,  \
+                    (uint32_t) (((mod) >> 32u) & 0xFFFFu));         \
+    } while (0)
+
+#define DRM_MOD_INVALID ((1ULL << 56) - 1)
+
+static bool gl_tex_import(const struct pl_gpu *gpu,
+                          enum pl_handle_type handle_type,
+                          const struct pl_shared_mem *shared_mem,
+                          struct pl_tex *tex)
+{
+    struct pl_gl *p = TA_PRIV(gpu);
+    struct pl_tex_gl *tex_gl = TA_PRIV(tex);
+    const struct pl_tex_params *params = &tex->params;
+
+    int attribs[20] = {};
+    int num_attribs = 0;
+    ADD_ATTRIB(EGL_WIDTH,  params->w);
+    ADD_ATTRIB(EGL_HEIGHT, params->h);
+
+    switch (handle_type) {
+
+#ifdef GL_HAVE_UNIX
+    case PL_HANDLE_DMA_BUF:
+        if (shared_mem->handle.fd == -1) {
+            PL_ERR(gpu, "%s: invalid fd", __func__);
+            goto error;
+        }
+
+        tex_gl->fd = dup(shared_mem->handle.fd);
+        if (tex_gl->fd == -1) {
+            PL_ERR(gpu, "%s: cannot duplicate fd for importing", __func__);
+            goto error;
+        }
+
+        if (shared_mem->drm_format_mod != DRM_MOD_INVALID) {
+            if (!p->has_modifiers) {
+                PL_ERR(gpu, "%s: DRM modifiers requested but unsupported", __func__);
+                goto error;
+            }
+
+            ADD_DMABUF_PLANE_MODIFIERS(0, shared_mem->drm_format_mod);
+        }
+
+        ADD_ATTRIB(EGL_LINUX_DRM_FOURCC_EXT, params->format->fourcc);
+        ADD_DMABUF_PLANE_ATTRIBS(0, tex_gl->fd, shared_mem->offset, params->w);
+        attribs[num_attribs] = EGL_NONE;
+
+        // EGL_LINUX_DMA_BUF_EXT requires EGL_NO_CONTEXT
+        tex_gl->image = eglCreateImageKHR(p->egl_dpy,
+                                          EGL_NO_CONTEXT,
+                                          EGL_LINUX_DMA_BUF_EXT,
+                                          (EGLClientBuffer) NULL,
+                                          attribs);
+
+        break;
+#endif // GL_HAVE_UNIX
+
+    default: abort();
+    }
+
+    if (!egl_check_err(gpu, "eglCreateImageKHR") || !tex_gl->image)
+        goto error;
+
+    // tex_gl->image should be already bound
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, tex_gl->image);
+    if (!egl_check_err(gpu, "EGLImageTargetTexture2DOES"))
+        goto error;
+
+    return true;
+
+error:
+    PL_ERR(gpu, "Failed importing GL texture!");
+    return false;
+}
+
+static EGLenum egl_from_gl_target(const struct pl_gpu *gpu, int target)
+{
+    switch(target) {
+    case GL_TEXTURE_2D: return EGL_GL_TEXTURE_2D;
+    case GL_TEXTURE_3D: return EGL_GL_TEXTURE_3D;
+    default:
+        PL_ERR(gpu, "%s: unsupported texture target 0x%x", __func__, target);
+        return 0;
+    }
+}
+
+static bool gl_tex_export(const struct pl_gpu *gpu,
+                          enum pl_handle_type handle_type,
+                          bool preserved, struct pl_tex *tex)
+{
+    struct pl_tex_gl *tex_gl = TA_PRIV(tex);
+    struct pl_gl *p = TA_PRIV(gpu);
+    struct pl_shared_mem *shared_mem = &tex->shared_mem;
+    bool ok;
+
+    EGLenum egltarget = egl_from_gl_target(gpu, tex_gl->target);
+    if (!egltarget)
+        goto error;
+
+    int attribs[] = {
+        EGL_IMAGE_PRESERVED, preserved,
+        EGL_NONE,
+    };
+
+    // We assume that tex_gl->texture is already bound
+    tex_gl->image = eglCreateImageKHR(p->egl_dpy,
+                                      p->egl_ctx,
+                                      egltarget,
+                                      (EGLClientBuffer) (uintptr_t) tex_gl->texture,
+                                      attribs);
+    if (!egl_check_err(gpu, "eglCreateImageKHR") || !tex_gl->image)
+        goto error;
+
+    switch (handle_type) {
+
+#ifdef GL_HAVE_UNIX
+    case PL_HANDLE_DMA_BUF: {
+        int fourcc = 0;
+        int num_planes = 0;
+        EGLuint64KHR modifiers = 0;
+        ok = eglExportDMABUFImageQueryMESA(p->egl_dpy,
+                                           tex_gl->image,
+                                           &fourcc,
+                                           &num_planes,
+                                           &modifiers);
+        if (!egl_check_err(gpu, "eglExportDMABUFImageQueryMESA") || !ok)
+            goto error;
+
+        if (fourcc != tex->params.format->fourcc) {
+            PL_ERR(gpu, "Exported DRM format 0x%xu does not match fourcc of "
+                   "specified pl_fmt 0x%xu? Please open a bug.",
+                   (uint32_t) fourcc, tex->params.format->fourcc);
+            goto error;
+        }
+
+        if (num_planes != 1) {
+            PL_ERR(gpu, "Unsupported number of planes: %d", num_planes);
+            goto error;
+        }
+
+        int offset = 0;
+        ok = eglExportDMABUFImageMESA(p->egl_dpy,
+                                      tex_gl->image,
+                                      &tex_gl->fd,
+                                      NULL, // strides
+                                      &offset);
+        if (!egl_check_err(gpu, "eglExportDMABUFImageMesa") || !ok)
+            goto error;
+
+        off_t fdsize = lseek(tex_gl->fd, 0, SEEK_END);
+        off_t err = fdsize > 0 && lseek(tex_gl->fd, 0, SEEK_SET);
+        if (fdsize <= 0 || err < 0) {
+            PL_ERR(gpu, "Failed querying FD size: %s", strerror(errno));
+            goto error;
+        }
+
+        *shared_mem = (struct pl_shared_mem) {
+            .handle.fd = tex_gl->fd,
+            .size = fdsize,
+            .offset = offset,
+            .drm_format_mod = modifiers,
+        };
+        break;
+    }
+#endif // GL_HAVE_UNIX
+
+    default: abort();
+    }
+
+    return true;
+
+error:
+    PL_ERR(gpu, "Failed exporting GL texture!");
+    return false;
+}
+
+
 static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
                                           const struct pl_tex_params *params)
 {
@@ -348,6 +596,7 @@ static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
     tex_gl->iformat = fmt->ifmt;
     tex_gl->type = fmt->type;
     tex_gl->barrier = tex_barrier(tex);
+    tex_gl->fd = -1;
 
     static const GLint targets[] = {
         [1] = GL_TEXTURE_1D,
@@ -388,23 +637,36 @@ static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
         break;
     }
 
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    switch (dims) {
-    case 1:
-        glTexImage1D(tex_gl->target, 0, tex_gl->iformat, params->w, 0,
-                     tex_gl->format, tex_gl->type, params->initial_data);
-        break;
-    case 2:
-        glTexImage2D(tex_gl->target, 0, tex_gl->iformat, params->w, params->h,
-                     0, tex_gl->format, tex_gl->type, params->initial_data);
-        break;
-    case 3:
-        glTexImage3D(tex_gl->target, 0, tex_gl->iformat, params->w, params->h,
-                     params->d, 0, tex_gl->format, tex_gl->type,
-                     params->initial_data);
-        break;
+    if (params->import_handle) {
+        if (!gl_tex_import(gpu, params->import_handle, &params->shared_mem, tex))
+            goto error;
+    } else {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+        switch (dims) {
+        case 1:
+            glTexImage1D(tex_gl->target, 0, tex_gl->iformat, params->w, 0,
+                         tex_gl->format, tex_gl->type, params->initial_data);
+            break;
+        case 2:
+            glTexImage2D(tex_gl->target, 0, tex_gl->iformat, params->w, params->h,
+                         0, tex_gl->format, tex_gl->type, params->initial_data);
+            break;
+        case 3:
+            glTexImage3D(tex_gl->target, 0, tex_gl->iformat, params->w, params->h,
+                         params->d, 0, tex_gl->format, tex_gl->type,
+                         params->initial_data);
+            break;
+        }
+
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     }
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+
+    if (params->export_handle) {
+        if (!gl_tex_export(gpu, params->export_handle, params->initial_data, tex))
+            goto error;
+    }
+
     glBindTexture(tex_gl->target, 0);
 
     if (!gl_check_err(gpu, "gl_tex_create: texture"))

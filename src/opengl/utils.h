@@ -21,9 +21,11 @@
 
 // Return a human-readable name for various OpenGL errors
 const char *gl_err_str(GLenum err);
+const char *egl_err_str(EGLenum err);
 
 // Check for errors and log them + return false if detected
 bool gl_check_err(const struct pl_gpu *gpu, const char *fun);
+bool egl_check_err(const struct pl_gpu *gpu, const char *fun);
 
 // Returns true if the context is a suspected software rasterizer
 bool gl_is_software(void);

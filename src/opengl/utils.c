@@ -36,6 +36,30 @@ const char *gl_err_str(GLenum err)
     }
 }
 
+const char *egl_err_str(EGLenum err)
+{
+    switch (err) {
+#define CASE(name) case name: return #name
+    CASE(EGL_SUCCESS);
+    CASE(EGL_NOT_INITIALIZED);
+    CASE(EGL_BAD_ACCESS);
+    CASE(EGL_BAD_ALLOC);
+    CASE(EGL_BAD_ATTRIBUTE);
+    CASE(EGL_BAD_CONFIG);
+    CASE(EGL_BAD_CONTEXT);
+    CASE(EGL_BAD_CURRENT_SURFACE);
+    CASE(EGL_BAD_DISPLAY);
+    CASE(EGL_BAD_MATCH);
+    CASE(EGL_BAD_NATIVE_PIXMAP);
+    CASE(EGL_BAD_NATIVE_WINDOW);
+    CASE(EGL_BAD_PARAMETER);
+    CASE(EGL_BAD_SURFACE);
+#undef CASE
+
+    default: return "unknown error";
+    }
+}
+
 bool gl_check_err(const struct pl_gpu *gpu, const char *fun)
 {
     struct pl_gl *gl = TA_PRIV(gpu);
@@ -46,6 +70,21 @@ bool gl_check_err(const struct pl_gpu *gpu, const char *fun)
         if (error == GL_NO_ERROR)
             return ret;
         PL_ERR(gpu, "%s: OpenGL error: %s", fun, gl_err_str(error));
+        ret = false;
+        gl->failed = true;
+    }
+}
+
+bool egl_check_err(const struct pl_gpu *gpu, const char *fun)
+{
+    struct pl_gl *gl = TA_PRIV(gpu);
+    bool ret = true;
+
+    while (true) {
+        GLenum error = eglGetError();
+        if (error == EGL_SUCCESS)
+            return ret;
+        PL_ERR(gpu, "%s: EGL error: %s", fun, egl_err_str(error));
         ret = false;
         gl->failed = true;
     }

@@ -243,6 +243,7 @@ struct glsl_fmt {
     int num_components;
     int depth[4];
     const char *glsl_format;
+    uint32_t drm_fourcc;
 };
 
 // List taken from the GLSL specification. (Yes, GLSL supports only exactly
@@ -329,6 +330,73 @@ next_fmt: ; // equivalent to `continue`
     return NULL;
 }
 
+#define FOURCC(str) ((uint32_t)(str[0]) | ((uint32_t)(str[1]) << 8) | \
+                    ((uint32_t)(str[2]) << 16) | ((uint32_t)(str[3]) << 24))
+
+struct pl_fmt_fourcc {
+    const char *name;
+    uint32_t fourcc;
+};
+
+static const struct pl_fmt_fourcc pl_fmt_fourccs[] = {
+    // 8 bpp red
+    {"r8",          FOURCC("R8  ")},
+    // 16 bpp red
+    {"r16",         FOURCC("R16 ")},
+    // 16 bpp rg
+    {"rg8",         FOURCC("RG88")},
+    {"gr8",         FOURCC("GR88")},
+    // 32 bpp rg
+    {"rg16",        FOURCC("RG32")},
+    {"gr16",        FOURCC("GR32")},
+    // 8 bpp rgb: N/A
+    // 16 bpp rgb
+    {"argb4",       FOURCC("AR12")},
+    {"abgr4",       FOURCC("AB12")},
+    {"rgba4",       FOURCC("RA12")},
+    {"bgra4",       FOURCC("BA12")},
+
+    {"a1rgb5",      FOURCC("AR15")},
+    {"a1bgr5",      FOURCC("AB15")},
+    {"rgb5a1",      FOURCC("RA15")},
+    {"bgr5a1",      FOURCC("BA15")},
+
+    {"rgb565",      FOURCC("RG16")},
+    {"bgr565",      FOURCC("BG16")},
+    // 24 bpp rgb
+    {"rgb8",        FOURCC("RG24")},
+    {"bgr8",        FOURCC("BG24")},
+    // 32 bpp rgb
+    {"argb8",       FOURCC("AR24")},
+    {"abgr8",       FOURCC("AB24")},
+    {"rgba8",       FOURCC("RA24")},
+    {"bgra8",       FOURCC("BA24")},
+
+    {"a2rgb10",     FOURCC("AR30")},
+    {"a2bgr10",     FOURCC("AB30")},
+    {"rgb10a2",     FOURCC("RA30")},
+    {"bgr10a2",     FOURCC("BA30")},
+    // 64bpp rgb
+    {"argb16hf",    FOURCC("AR4H")},
+    {"abgr16hf",    FOURCC("AB4H")},
+
+    // no planar formats yet (tm)
+};
+
+uint32_t pl_fmt_fourcc(const struct pl_fmt *fmt)
+{
+    if (fmt->opaque)
+        return 0;
+
+    for (int n = 0; n < PL_ARRAY_SIZE(pl_fmt_fourccs); n++) {
+        const struct pl_fmt_fourcc *fourcc = &pl_fmt_fourccs[n];
+        if (strcmp(fmt->name, fourcc->name) == 0)
+            return fourcc->fourcc;
+    }
+
+    return 0; // no matching format
+}
+
 const struct pl_fmt *pl_find_fmt(const struct pl_gpu *gpu, enum pl_fmt_type type,
                                  int num_components, int min_depth,
                                  int host_bits, enum pl_fmt_caps caps)
@@ -395,10 +463,26 @@ const struct pl_fmt *pl_find_named_fmt(const struct pl_gpu *gpu, const char *nam
     return NULL;
 }
 
+const struct pl_fmt *pl_find_fourcc(const struct pl_gpu *gpu, uint32_t fourcc)
+{
+    if (!fourcc)
+        return NULL;
+
+    for (int i = 0; i < gpu->num_formats; i++) {
+        const struct pl_fmt *fmt = gpu->formats[i];
+        if (fourcc == fmt->fourcc)
+            return fmt;
+    }
+
+    // ran out of formats
+    return NULL;
+}
+
 const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
                                    const struct pl_tex_params *params)
 {
     require(!params->import_handle || !params->export_handle);
+    require(!params->import_handle || !params->initial_data);
     if (params->export_handle) {
         require(params->export_handle & gpu->export_caps.tex);
         require(PL_ISPOT(params->export_handle));

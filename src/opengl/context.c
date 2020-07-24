@@ -107,7 +107,7 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
         }
     }
 
-    pl_gl->gpu = pl_gpu_create_gl(ctx);
+    pl_gl->gpu = pl_gpu_create_gl(ctx, params->egl_display, params->egl_context);
     if (!pl_gl->gpu)
         goto error;
 

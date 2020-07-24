@@ -39,6 +39,10 @@ struct pl_opengl_params {
     // for testing purposes
     pl_gpu_caps blacklist_caps; // capabilities to be excluded
     int max_glsl_version;       // limit the maximum GLSL version
+
+    // Optional. Required when importing/exporting dmabufs as textures.
+    void *egl_display;
+    void *egl_context;
 };
 
 // Default/recommended parameters

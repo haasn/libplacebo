@@ -98,6 +98,10 @@ void pl_gpu_sort_formats(struct pl_gpu *gpu);
 // `components` may differ from fmt->num_components (for emulated formats)
 const char *pl_fmt_glsl_format(const struct pl_fmt *fmt, int components);
 
+// Look up the right fourcc from a partially filled-in pl_fmt, or 0 if the
+// format does not have a legal matching fourcc format.
+uint32_t pl_fmt_fourcc(const struct pl_fmt *fmt);
+
 // Compute the total size (in bytes) of a texture transfer operation
 size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par);
 

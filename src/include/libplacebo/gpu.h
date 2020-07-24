@@ -250,6 +250,12 @@ struct pl_fmt {
     // field may be NULL, in which case the format modifier may be left
     // unspecified.
     const char *glsl_format;
+
+    // If non-opaque, this gives the fourcc associated with the host
+    // representation. In particular, this is intended for use with
+    // PL_HANDLE_DMA_BUF, where this field will match the DRM format from
+    // <drm_fourcc.h>. May be 0, for formats without matching DRM fourcc.
+    uint32_t fourcc;
 };
 
 // Returns whether or not a pl_fmt's components are ordered sequentially
@@ -273,6 +279,9 @@ const struct pl_fmt *pl_find_vertex_fmt(const struct pl_gpu *gpu,
 
 // Find a format based on its name.
 const struct pl_fmt *pl_find_named_fmt(const struct pl_gpu *gpu, const char *name);
+
+// Find a format based on its fourcc.
+const struct pl_fmt *pl_find_fourcc(const struct pl_gpu *gpu, uint32_t fourcc);
 
 enum pl_tex_sample_mode {
     PL_TEX_SAMPLE_NEAREST,  // nearest neighour sampling
@@ -322,7 +331,7 @@ struct pl_tex_params {
 
     // Setting this indicates that the memory backing this texture will be
     // imported from an external API. If so, this must be exactly *one* of
-    // `pl_gpu.import_caps.tex`.
+    // `pl_gpu.import_caps.tex`. Mutually exclusive with `initial_data`.
     enum pl_handle_type import_handle;
 
     // If the shared memory is being imported, the import handle must be
@@ -331,7 +340,7 @@ struct pl_tex_params {
 
     // If non-NULL, the texture will be created with these contents (tightly
     // packed). Using this does *not* require setting host_writable. Otherwise,
-    // the initial data is undefined.
+    // the initial data is undefined. Mutually exclusive with `import_handle`.
     const void *initial_data;
 
     // Arbitrary user data. libplacebo does not use this at all.

@@ -201,6 +201,9 @@ static void vk_setup_formats(struct pl_gpu *gpu)
             fmt->host_bits[i] = 0;
         }
 
+        // We can set this universally
+        fmt->fourcc = pl_fmt_fourcc(fmt);
+
         struct { VkFormatFeatureFlags flags; enum pl_fmt_caps caps; } bufbits[] = {
             {VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT,        PL_FMT_CAP_VERTEX},
             {VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT, PL_FMT_CAP_TEXEL_UNIFORM},
