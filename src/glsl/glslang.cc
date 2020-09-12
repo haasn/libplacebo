@@ -34,12 +34,12 @@ using namespace glslang;
 static pthread_mutex_t pl_glslang_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int pl_glslang_refcount;
 
-int pl_glslang_version()
+int pl_glslang_version(void)
 {
     return GLSLANG_PATCH_LEVEL;
 }
 
-bool pl_glslang_init()
+bool pl_glslang_init(void)
 {
     bool ret = true;
 
@@ -51,7 +51,7 @@ bool pl_glslang_init()
     return ret;
 }
 
-void pl_glslang_uninit()
+void pl_glslang_uninit(void)
 {
     pthread_mutex_lock(&pl_glslang_mutex);
     if (--pl_glslang_refcount == 0)
