@@ -24,9 +24,9 @@
 extern "C" {
 #endif
 
-int pl_glslang_version();
-bool pl_glslang_init();
-void pl_glslang_uninit();
+int pl_glslang_version(void);
+bool pl_glslang_init(void);
+void pl_glslang_uninit(void);
 
 struct pl_glslang_res {
     // Compilation status
