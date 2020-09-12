@@ -50,3 +50,16 @@ bool gl_check_err(const struct pl_gpu *gpu, const char *fun)
         gl->failed = true;
     }
 }
+
+bool gl_is_software(void)
+{
+    const char *renderer = glGetString(GL_RENDERER);
+    const char *vendor = glGetString(GL_VENDOR);
+    return !(renderer && vendor) ||
+           strcmp(renderer, "Software Rasterizer") == 0 ||
+           strstr(renderer, "llvmpipe") ||
+           strstr(renderer, "softpipe") ||
+           strcmp(vendor, "Microsoft Corporation") == 0 ||
+           strcmp(renderer, "Mesa X11") == 0 ||
+           strcmp(renderer, "Apple Software Renderer") == 0;
+}

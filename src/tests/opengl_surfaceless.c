@@ -195,23 +195,25 @@ int main()
         struct pl_opengl_params params = pl_opengl_default_params;
         params.max_glsl_version = egl_vers[i].glsl_ver;
         params.debug = true;
-
 #ifdef CI_BLACKLIST_COMPUTE
         params.blacklist_caps = PL_GPU_CAP_COMPUTE;
 #endif
+#ifdef CI_ALLOW_SW
+        params.allow_software = true;
+#endif
 
         const struct pl_opengl *gl = pl_opengl_create(ctx, &params);
-        REQUIRE(gl);
-
-        const struct pl_gpu *gpu = gl->gpu;
+        if (!gl)
+            goto next;
 
         // Skip repeat tests
+        const struct pl_gpu *gpu = gl->gpu;
         if (last_caps == gpu->caps &&
             memcmp(&last_glsl, &gpu->glsl, sizeof(last_glsl)) == 0 &&
             memcmp(&last_limits, &gpu->limits, sizeof(last_limits)) == 0)
         {
             printf("Skipping tests due to duplicate capabilities/version\n");
-            continue;
+            goto next;
         }
 
         last_caps = gpu->caps;
@@ -222,12 +224,13 @@ int main()
         opengl_interop_tests(gpu);
         opengl_swapchain_tests(gl, dpy, surf);
 
+        // Reduce log spam after first successful test
+        pl_test_set_verbosity(ctx, PL_LOG_INFO);
+
+next:
         pl_opengl_destroy(&gl);
         eglDestroySurface(dpy, surf);
         eglDestroyContext(dpy, egl);
-
-        // Reduce log spam after first successful test
-        pl_test_set_verbosity(ctx, PL_LOG_INFO);
         continue;
 
 error: ;

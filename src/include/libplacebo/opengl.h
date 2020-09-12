@@ -30,6 +30,11 @@ struct pl_opengl_params {
     // debugging enabled.
     bool debug;
 
+    // Allow the use of (suspected) software rasterizers and renderers. These
+    // can be useful for debugging purposes, but normally, their use is
+    // undesirable when GPU-accelerated processing is expected.
+    bool allow_software;
+
     // Restrict specific features to e.g. work around driver bugs, or simply
     // for testing purposes
     pl_gpu_caps blacklist_caps; // capabilities to be excluded

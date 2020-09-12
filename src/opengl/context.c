@@ -16,6 +16,7 @@
  */
 
 #include "common.h"
+#include "utils.h"
 #include "gpu.h"
 
 const struct pl_opengl_params pl_opengl_default_params = {0};
@@ -88,6 +89,12 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
         } else {
             PL_DEBUG(p, "    GL_EXTENSIONS: %s", glGetString(GL_EXTENSIONS));
         }
+    }
+
+    if (!params->allow_software && gl_is_software()) {
+        PL_FATAL(p, "OpenGL context is suspected to be a software rasterizer, "
+                 "but `allow_software` is false.");
+        goto error;
     }
 
     if (params->debug) {

@@ -12,6 +12,7 @@ build-ubuntu:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
+                      -Dc_args='-DCI_ALLOW_SW'
                       -Dshaderc=enabled
                       -Dglslang=enabled
         - ninja -C build
@@ -28,6 +29,7 @@ build-ubuntu-static:
                       --default-library static
                       --werror
                       -Dtests=true
+                      -Dc_args='-DCI_ALLOW_SW'
                       -Dshaderc=enabled
                       -Dglslang=enabled
         - ninja -C build
@@ -43,6 +45,7 @@ build-win32:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
+                      -Dc_args='-DCI_ALLOW_SW'
                       --libdir lib
                       --cross-file /opt/crossfiles/i686-w64-mingw32.meson
         - ninja -C build
@@ -58,6 +61,7 @@ build-win64:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
+                      -Dc_args='-DCI_ALLOW_SW'
                       --libdir lib
                       --cross-file /opt/crossfiles/x86_64-w64-mingw32.meson
         - ninja -C build
