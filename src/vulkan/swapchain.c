@@ -154,8 +154,8 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
         if (vk_map_color_space(out_format->colorSpace, space)) {
             return true;
         } else {
-            PL_ERR(gpu, "User-supplied surface format unsupported: 0x%x",
-                   (unsigned int) out_format->format);
+            PL_ERR(gpu, "User-supplied surface format unsupported: %s",
+                   vk_fmt_name(out_format->format));
         }
     }
 
@@ -165,8 +165,9 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
 
     PL_DEBUG(gpu, "Available surface formats:");
     for (int i = 0; i < num; i++) {
-        PL_DEBUG(gpu, "    %d: format: 0x%x, space: 0x%x", i,
-                 formats[i].format, formats[i].colorSpace);
+        PL_DEBUG(gpu, "    %d: format: %s, space: %s", i,
+                 vk_fmt_name(formats[i].format),
+                 vk_csp_name(formats[i].colorSpace));
     }
 
     for (int i = 0; i < num; i++) {
@@ -264,8 +265,8 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
     if (!pick_surf_format(gpu, vk, params->surface, &sfmt, &csp))
         return NULL;
 
-    PL_DEBUG(gpu, "Picked surface format 0x%x, space 0x%x",
-             sfmt.format, sfmt.colorSpace);
+    PL_DEBUG(gpu, "Picked surface format %s, space %s",
+             vk_fmt_name(sfmt.format), vk_csp_name(sfmt.colorSpace));
 
     struct pl_swapchain *sw = talloc_zero_priv(NULL, struct pl_swapchain, struct priv);
     sw->impl = &vulkan_swapchain;
@@ -379,8 +380,8 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
         if (caps.supportedCompositeAlpha & alphaModes[i].vk_mode) {
             info->compositeAlpha = alphaModes[i].vk_mode;
             p->color_repr.alpha = alphaModes[i].pl_mode;
-            PL_DEBUG(vk, "Requested alpha compositing mode: 0x%x",
-                     info->compositeAlpha);
+            PL_DEBUG(vk, "Requested alpha compositing mode: %s",
+                     vk_alpha_mode(info->compositeAlpha));
             break;
         }
     }
@@ -402,7 +403,8 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     for (int i = 0; i < PL_ARRAY_SIZE(rotModes); i++) {
         if (caps.supportedTransforms & rotModes[i]) {
             info->preTransform = rotModes[i];
-            PL_DEBUG(vk, "Requested surface transform: 0x%x", info->preTransform);
+            PL_DEBUG(vk, "Requested surface transform: %s",
+                     vk_surface_transform(info->preTransform));
             break;
         }
     }
