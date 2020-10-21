@@ -83,9 +83,20 @@ else
 endif
 
 if glslang_found
-  glslang_ver = cxx.get_define('GLSLANG_PATCH_LEVEL',
-      prefix: '#include <glslang/Include/revision.h>'
-  ).to_int()
+  glslang_header_old = 'glslang/Include/revision.h'
+  glslang_header_new = 'glslang/build_info.h'
+
+  if cc.has_header(glslang_header_new)
+    glslang_ver = cxx.get_define('GLSLANG_VERSION_PATCH',
+        prefix: '#include <' + glslang_header_new + '>'
+    ).to_int()
+  elif cc.has_header(glslang_header_old)
+    glslang_ver = cxx.get_define('GLSLANG_PATCH_LEVEL',
+        prefix: '#include <' + glslang_header_old+ '>'
+    ).to_int()
+  else
+    error('No glslang version header found?')
+  endif
 
   if glslang_ver >= glslang_min_ver
     # glslang must be linked against pthreads on platforms where pthreads is
@@ -107,6 +118,8 @@ if glslang_found
     foreach i : extra_glslang_inc
       add_project_arguments('-I' + i, language: 'cpp')
     endforeach
+
+    conf_internal.set('GLSLANG_VERSION_PATCH', glslang_ver)
 
   else
     error('glslang revision @0@ too old! Must be at least @1@'
