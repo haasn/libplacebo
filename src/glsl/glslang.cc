@@ -15,6 +15,8 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "config_internal.h"
+
 #include <assert.h>
 #include <pthread.h>
 
@@ -23,7 +25,6 @@ extern "C" {
 }
 
 #include <glslang/Include/ResourceLimits.h>
-#include <glslang/Include/revision.h>
 #include <glslang/Public/ShaderLang.h>
 #include <SPIRV/GlslangToSpv.h>
 
@@ -36,7 +37,7 @@ static int pl_glslang_refcount;
 
 int pl_glslang_version(void)
 {
-    return GLSLANG_PATCH_LEVEL;
+    return GLSLANG_VERSION_PATCH;
 }
 
 bool pl_glslang_init(void)
@@ -78,7 +79,7 @@ struct pl_glslang_res *pl_glslang_compile(const char *glsl, uint32_t api_ver,
     if (api_ver >= EShTargetVulkan_1_1)
         spirv_version = EShTargetSpv_1_3;
 
-#if GLSLANG_PATCH_LEVEL >= 3667
+#if GLSLANG_VERSION_PATCH >= 3667
     if (api_ver >= EShTargetVulkan_1_2)
         spirv_version = EShTargetSpv_1_5;
 #endif
@@ -200,7 +201,7 @@ const TBuiltInResource DefaultTBuiltInResource = {
     /* .MaxCullDistances = */ 8,
     /* .MaxCombinedClipAndCullDistances = */ 8,
     /* .MaxSamples = */ 4,
-#if GLSLANG_PATCH_LEVEL >= 2892
+#if GLSLANG_VERSION_PATCH >= 2892
     /* .maxMeshOutputVerticesNV = */ 256,
     /* .maxMeshOutputPrimitivesNV = */ 512,
     /* .maxMeshWorkGroupSizeX_NV = */ 32,
@@ -211,7 +212,7 @@ const TBuiltInResource DefaultTBuiltInResource = {
     /* .maxTaskWorkGroupSizeZ_NV = */ 1,
     /* .maxMeshViewCountNV = */ 4,
 #endif
-#if GLSLANG_PATCH_LEVEL >= 3763
+#if GLSLANG_VERSION_PATCH >= 3763
     /* .maxDualSourceDrawBuffersEXT = */ 1,
 #endif
 
