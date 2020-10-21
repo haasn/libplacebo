@@ -21,7 +21,11 @@
 
 // Return a human-readable name for various vulkan enums
 const char *vk_res_str(VkResult res);
-const char *vk_obj_str(VkObjectType obj);
+const char *vk_fmt_name(VkFormat fmt);
+const char *vk_csp_name(VkColorSpaceKHR csp);
+const char *vk_obj_type(VkObjectType obj);
+const char *vk_alpha_mode(VkCompositeAlphaFlagsKHR alpha);
+const char *vk_surface_transform(VkSurfaceTransformFlagsKHR transform);
 
 // Return the size of an arbitrary vulkan struct. Returns 0 for unknown structs
 size_t vk_struct_size(VkStructureType stype);

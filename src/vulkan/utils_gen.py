@@ -41,7 +41,52 @@ const char *vk_res_str(VkResult res)
     }
 }
 
-const char *vk_obj_str(VkObjectType obj)
+const char *vk_fmt_name(VkFormat fmt)
+{
+    switch (fmt) {
+%for fmt in vkformats:
+    case ${fmt}: return "${fmt}";
+%endfor
+
+    default: return "unknown format";
+    }
+}
+
+const char *vk_csp_name(VkColorSpaceKHR csp)
+{
+    switch (csp) {
+%for csp in vkspaces:
+    case ${csp}: return "${csp}";
+%endfor
+
+    default: return "unknown color space";
+    }
+}
+
+const char *vk_alpha_mode(VkCompositeAlphaFlagsKHR alpha)
+{
+    switch (alpha) {
+%for mode in vkalphas:
+    case ${mode}: return "${mode}";
+%endfor
+
+    default: return "unknown alpha mode";
+    }
+}
+
+const char *vk_surface_transform(VkSurfaceTransformFlagsKHR tf)
+{
+    switch (tf) {
+%for tf in vktransforms:
+    case ${tf}: return "${tf}";
+%endfor
+
+    default: return "unknown surface transform";
+    }
+}
+
+
+const char *vk_obj_type(VkObjectType obj)
 {
     switch (obj) {
 %for obj in vkobjects:
@@ -70,13 +115,16 @@ class Obj(object):
 
 def findall_enum(registry, name):
     for e in registry.iterfind('enums[@name="{0}"]/enum'.format(name)):
-        yield e
-    for e in registry.iterfind('.//enum[@extends="{0}"]'.format(name)):
         if not 'alias' in e.attrib:
             yield e
+    for e in registry.iterfind('.//enum[@extends="{0}"]'.format(name)):
+        # ext 289 is a non-existing extension that defines some names for
+        # proprietary downstream consumers, causes problems unless excluded
+        if not 'alias' in e.attrib and e.attrib.get('extnumber', '0') != '289':
+            yield e
 
-def get_vkresults(registry):
-    for e in findall_enum(registry, 'VkResult'):
+def get_vkenum(registry, enum):
+    for e in findall_enum(registry, enum):
         yield e.attrib['name']
 
 def get_vkobjects(registry):
@@ -135,7 +183,11 @@ if __name__ == '__main__':
     registry = ET.parse(xmlfile)
     with open(outfile, 'w') as f:
         f.write(TEMPLATE.render(
-            vkresults = get_vkresults(registry),
+            vkresults = get_vkenum(registry, 'VkResult'),
+            vkformats = get_vkenum(registry, 'VkFormat'),
+            vkspaces  = get_vkenum(registry, 'VkColorSpaceKHR'),
+            vkalphas  = get_vkenum(registry, 'VkCompositeAlphaFlagBitsKHR'),
+            vktransforms = get_vkenum(registry, 'VkSurfaceTransformFlagBitsKHR'),
             vkobjects = get_vkobjects(registry),
             vkstructs = get_vkstructs(registry),
         ))

@@ -1247,7 +1247,7 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
 
     if (!format) {
         PL_ERR(gpu, "Could not find pl_fmt suitable for wrapped image "
-               "with VkFormat 0x%x", (unsigned) params->format);
+               "with format %s", vk_fmt_name(params->format));
         goto error;
     }
 

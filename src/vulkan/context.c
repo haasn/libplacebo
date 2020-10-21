@@ -392,7 +392,7 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
     for (int i = 0; i < data->objectCount; i++) {
         const VkDebugUtilsObjectNameInfoEXT *obj = &data->pObjects[i];
         pl_msg(ctx, lev, "    using %s: %s (0x%llx)",
-               vk_obj_str(obj->objectType),
+               vk_obj_type(obj->objectType),
                obj->pObjectName ? obj->pObjectName : "anon",
                (unsigned long long) obj->objectHandle);
     }
@@ -434,7 +434,7 @@ static VkBool32 VKAPI_PTR vk_dbg_report_cb(VkDebugReportFlagsEXT flags,
     // Note: We can freely cast VkDebugReportObjectTypeEXT to VkObjectType
     pl_msg(ctx, lev, "vk [%s] %d: %s (obj 0x%llx (%s), loc 0x%zx)",
            layer, (int) msgCode, msg, (unsigned long long) obj,
-           vk_obj_str((VkObjectType) objType), loc);
+           vk_obj_type((VkObjectType) objType), loc);
 
     return !!(flags & VK_DEBUG_REPORT_ERROR_BIT_EXT);
 }
