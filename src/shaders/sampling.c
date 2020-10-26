@@ -382,6 +382,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     pl_assert(gpu);
 
     bool has_compute = gpu->caps & PL_GPU_CAP_COMPUTE && !params->no_compute;
+    has_compute &= sh_glsl(sh).version >= 130; // needed for round()
     if (!src->tex && has_compute) {
         // FIXME: Could maybe solve this by communicating the wbase from
         // invocation 0 to the rest of the workgroup using shmem, which would
