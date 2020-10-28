@@ -30,6 +30,11 @@ extern "C" {
 
 #include "glslang.h"
 
+#define GLSLANG_VERSION_CHECK(major, minor, patch) \
+    (((major) < GLSLANG_VERSION_MAJOR) || ((major) == GLSLANG_VERSION_MAJOR && \
+    (((minor) < GLSLANG_VERSION_MINOR) || ((minor) == GLSLANG_VERSION_MINOR && \
+     ((patch) <= GLSLANG_VERSION_PATCH)))))
+
 using namespace glslang;
 
 static pthread_mutex_t pl_glslang_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -37,7 +42,9 @@ static int pl_glslang_refcount;
 
 int pl_glslang_version(void)
 {
-    return GLSLANG_VERSION_PATCH;
+    return (GLSLANG_VERSION_MAJOR & 0xFF) << 24 |
+           (GLSLANG_VERSION_MINOR & 0xFF) << 16 |
+           (GLSLANG_VERSION_PATCH & 0xFFFF);
 }
 
 bool pl_glslang_init(void)
@@ -79,7 +86,7 @@ struct pl_glslang_res *pl_glslang_compile(const char *glsl, uint32_t api_ver,
     if (api_ver >= EShTargetVulkan_1_1)
         spirv_version = EShTargetSpv_1_3;
 
-#if GLSLANG_VERSION_PATCH >= 3667
+#if GLSLANG_VERSION_CHECK(0, 0, 3667)
     if (api_ver >= EShTargetVulkan_1_2)
         spirv_version = EShTargetSpv_1_5;
 #endif
@@ -201,7 +208,7 @@ const TBuiltInResource DefaultTBuiltInResource = {
     /* .MaxCullDistances = */ 8,
     /* .MaxCombinedClipAndCullDistances = */ 8,
     /* .MaxSamples = */ 4,
-#if GLSLANG_VERSION_PATCH >= 2892
+#if GLSLANG_VERSION_CHECK(0, 0, 2892)
     /* .maxMeshOutputVerticesNV = */ 256,
     /* .maxMeshOutputPrimitivesNV = */ 512,
     /* .maxMeshWorkGroupSizeX_NV = */ 32,
@@ -212,7 +219,7 @@ const TBuiltInResource DefaultTBuiltInResource = {
     /* .maxTaskWorkGroupSizeZ_NV = */ 1,
     /* .maxMeshViewCountNV = */ 4,
 #endif
-#if GLSLANG_VERSION_PATCH >= 3763
+#if GLSLANG_VERSION_CHECK(0, 0, 3763)
     /* .maxDualSourceDrawBuffersEXT = */ 1,
 #endif
 
