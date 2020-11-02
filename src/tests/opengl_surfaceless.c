@@ -1,5 +1,12 @@
 #include "gpu_tests.h"
 
+#ifndef EPOXY_HAS_EGL
+int main()
+{
+    return SKIP;
+}
+#else // EPOXY_HAS_EGL
+
 #include <epoxy/gl.h>
 #include <epoxy/egl.h>
 
@@ -289,3 +296,5 @@ error: ;
     if (!last_glsl.version)
         return SKIP;
 }
+
+#endif // EPOXY_HAS_EGL

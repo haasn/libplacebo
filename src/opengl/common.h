@@ -22,7 +22,10 @@
 #include "../gpu.h"
 
 #include <epoxy/gl.h>
+
+#ifdef EPOXY_HAS_EGL
 #include <epoxy/egl.h>
+#endif
 
 #ifdef __unix__
 #define GL_HAVE_UNIX 1
