@@ -21,7 +21,7 @@
 #include "common.h"
 
 const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
-                                      EGLDisplay egl_dpy, EGLContext egl_ctx);
+                                      const struct pl_opengl_params *params);
 
 const struct pl_tex *pl_opengl_wrap_fb(const struct pl_gpu *gpu, GLuint fbo,
                                        int w, int h);

@@ -36,9 +36,11 @@ struct pl_gl {
     struct pl_gpu_fns impl;
     bool failed;
 
+#ifdef EPOXY_HAS_EGL
     // For import/export
     EGLDisplay egl_dpy;
     EGLContext egl_ctx;
+#endif
 
     // Incrementing counters to keep track of object uniqueness
     int buf_id;

@@ -185,6 +185,8 @@ next_gl_fmt: ;
     return gl_check_err(gpu, "gl_setup_formats");
 }
 
+#ifdef EPOXY_HAS_EGL
+
 static pl_handle_caps tex_handle_caps(const struct pl_gpu *gpu, bool import)
 {
     pl_handle_caps caps = 0;
@@ -204,8 +206,10 @@ static pl_handle_caps tex_handle_caps(const struct pl_gpu *gpu, bool import)
     return caps;
 }
 
+#endif // EPOXY_HAS_EGL
+
 const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
-                                      EGLDisplay egl_dpy, EGLContext egl_ctx)
+                                      const struct pl_opengl_params *params)
 {
     struct pl_gpu *gpu = talloc_zero_priv(NULL, struct pl_gpu, struct pl_gl);
     gpu->ctx = ctx;
@@ -246,10 +250,17 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
     }
 
     // Query import/export support
-    p->egl_dpy = egl_dpy;
-    p->egl_ctx = egl_ctx;
+#ifdef EPOXY_HAS_EGL
+    p->egl_dpy = params->egl_display;
+    p->egl_ctx = params->egl_context;
     gpu->export_caps.tex = tex_handle_caps(gpu, false);
     gpu->import_caps.tex = tex_handle_caps(gpu, true);
+
+    if (p->egl_dpy) {
+        p->has_modifiers = epoxy_has_egl_extension(p->egl_dpy,
+                                        "EXT_image_dma_buf_import_modifiers");
+    }
+#endif
 
     // Query all device limits
     struct pl_gpu_limits *l = &gpu->limits;
@@ -292,10 +303,6 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
     p->has_invalidate_fb = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
     p->has_invalidate_tex = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 0);
     p->has_queries = test_ext(gpu, "GL_ARB_timer_query", 33, 0);
-    if (p->egl_dpy) {
-        p->has_modifiers = epoxy_has_egl_extension(p->egl_dpy,
-                                        "EXT_image_dma_buf_import_modifiers");
-    }
 
     // We simply don't know, so make up some values
     gpu->limits.align_tex_xfer_offset = 32;
@@ -337,7 +344,9 @@ struct pl_tex_gl {
     GLenum type;
 
     // For imported/exported textures
+#ifdef EPOXY_HAS_EGL
     EGLImageKHR image;
+#endif
     int fd;
 };
 
@@ -348,8 +357,10 @@ static void gl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
 
     if (tex_gl->fbo && !tex_gl->wrapped_fb)
         glDeleteFramebuffers(1, &tex_gl->fbo);
+#ifdef EPOXY_HAS_EGL
     if (tex_gl->image)
         eglDestroyImageKHR(p->egl_dpy, tex_gl->image);
+#endif
     if (!tex_gl->wrapped_tex)
         glDeleteTextures(1, &tex_gl->texture);
 
@@ -378,6 +389,8 @@ static GLbitfield tex_barrier(const struct pl_tex *tex)
 
     return barrier;
 }
+
+#ifdef EPOXY_HAS_EGL
 
 #define ADD_ATTRIB(name, value)                                     \
     do {                                                            \
@@ -577,6 +590,24 @@ error:
     return false;
 }
 
+#else // !EPOXY_HAS_EGL
+
+static bool gl_tex_import(const struct pl_gpu *gpu,
+                          enum pl_handle_type handle_type,
+                          const struct pl_shared_mem *shared_mem,
+                          struct pl_tex *tex)
+{
+    abort(); // no implementations
+}
+
+static bool gl_tex_export(const struct pl_gpu *gpu,
+                          enum pl_handle_type handle_type,
+                          bool preserved, struct pl_tex *tex)
+{
+    abort(); // no implementations
+}
+
+#endif // EPOXY_HAS_EGL
 
 static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
                                           const struct pl_tex_params *params)

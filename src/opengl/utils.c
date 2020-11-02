@@ -36,6 +36,36 @@ const char *gl_err_str(GLenum err)
     }
 }
 
+bool gl_check_err(const struct pl_gpu *gpu, const char *fun)
+{
+    struct pl_gl *gl = TA_PRIV(gpu);
+    bool ret = true;
+
+    while (true) {
+        GLenum error = glGetError();
+        if (error == GL_NO_ERROR)
+            return ret;
+        PL_ERR(gpu, "%s: OpenGL error: %s", fun, gl_err_str(error));
+        ret = false;
+        gl->failed = true;
+    }
+}
+
+bool gl_is_software(void)
+{
+    const char *renderer = glGetString(GL_RENDERER);
+    const char *vendor = glGetString(GL_VENDOR);
+    return !(renderer && vendor) ||
+           strcmp(renderer, "Software Rasterizer") == 0 ||
+           strstr(renderer, "llvmpipe") ||
+           strstr(renderer, "softpipe") ||
+           strcmp(vendor, "Microsoft Corporation") == 0 ||
+           strcmp(renderer, "Mesa X11") == 0 ||
+           strcmp(renderer, "Apple Software Renderer") == 0;
+}
+
+#ifdef EPOXY_HAS_EGL
+
 const char *egl_err_str(EGLenum err)
 {
     switch (err) {
@@ -60,21 +90,6 @@ const char *egl_err_str(EGLenum err)
     }
 }
 
-bool gl_check_err(const struct pl_gpu *gpu, const char *fun)
-{
-    struct pl_gl *gl = TA_PRIV(gpu);
-    bool ret = true;
-
-    while (true) {
-        GLenum error = glGetError();
-        if (error == GL_NO_ERROR)
-            return ret;
-        PL_ERR(gpu, "%s: OpenGL error: %s", fun, gl_err_str(error));
-        ret = false;
-        gl->failed = true;
-    }
-}
-
 bool egl_check_err(const struct pl_gpu *gpu, const char *fun)
 {
     struct pl_gl *gl = TA_PRIV(gpu);
@@ -90,15 +105,4 @@ bool egl_check_err(const struct pl_gpu *gpu, const char *fun)
     }
 }
 
-bool gl_is_software(void)
-{
-    const char *renderer = glGetString(GL_RENDERER);
-    const char *vendor = glGetString(GL_VENDOR);
-    return !(renderer && vendor) ||
-           strcmp(renderer, "Software Rasterizer") == 0 ||
-           strstr(renderer, "llvmpipe") ||
-           strstr(renderer, "softpipe") ||
-           strcmp(vendor, "Microsoft Corporation") == 0 ||
-           strcmp(renderer, "Mesa X11") == 0 ||
-           strcmp(renderer, "Apple Software Renderer") == 0;
-}
+#endif // EPOXY_HAS_EGL
