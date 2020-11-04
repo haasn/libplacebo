@@ -749,21 +749,41 @@ struct pl_var {
     int dim_a;              // array dimension
 };
 
-// Returns a GLSL type name (e.g. vec4) for a given pl_var, or NULL if the
-// variable is not legal. Not that the array dimension is ignored, since the
-// array dimension is usually part of the variable name and not the type name.
-const char *pl_var_glsl_type_name(struct pl_var var);
-
-// Helper functions for constructing the most common pl_vars.
-struct pl_var pl_var_int(const char *name);
-struct pl_var pl_var_uint(const char *name);
+// Helper functions for constructing the most common pl_vars, with names
+// corresponding to their corresponding GLSL built-in types.
 struct pl_var pl_var_float(const char *name);
 struct pl_var pl_var_vec2(const char *name);
 struct pl_var pl_var_vec3(const char *name);
 struct pl_var pl_var_vec4(const char *name);
 struct pl_var pl_var_mat2(const char *name);
+struct pl_var pl_var_mat2x3(const char *name);
+struct pl_var pl_var_mat2x4(const char *name);
 struct pl_var pl_var_mat3(const char *name);
+struct pl_var pl_var_mat3x4(const char *name);
+struct pl_var pl_var_mat4x2(const char *name);
+struct pl_var pl_var_mat4x3(const char *name);
 struct pl_var pl_var_mat4(const char *name);
+struct pl_var pl_var_int(const char *name);
+struct pl_var pl_var_ivec2(const char *name);
+struct pl_var pl_var_ivec3(const char *name);
+struct pl_var pl_var_ivec4(const char *name);
+struct pl_var pl_var_uint(const char *name);
+struct pl_var pl_var_uvec2(const char *name);
+struct pl_var pl_var_uvec3(const char *name);
+struct pl_var pl_var_uvec4(const char *name);
+
+struct pl_named_var {
+    const char *glsl_name;
+    struct pl_var var;
+};
+
+// The same list as above, tagged by name and terminated with a {0} entry.
+extern const struct pl_named_var pl_var_glsl_types[];
+
+// Efficient helper function for performing a lookup in the above array.
+// Returns NULL if the variable is not legal. Note that the array dimension is
+// ignored, since it's usually part of the variable name and not the type name.
+const char *pl_var_glsl_type_name(struct pl_var var);
 
 // Converts a pl_fmt to an "equivalent" pl_var. Equivalent in this sense means
 // that the pl_var's type will be the same as the vertex's sampled type (e.g.

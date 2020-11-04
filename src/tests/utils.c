@@ -85,4 +85,11 @@ int main()
     REQUIRE(layout.offset == 6 * sizeof(float));
     REQUIRE(layout.stride == 2 * sizeof(float));
     REQUIRE(layout.size == 20 * 2 * 2 * sizeof(float));
+
+    for (const struct pl_named_var *nvar = pl_var_glsl_types; nvar->glsl_name; nvar++) {
+        struct pl_var var = nvar->var;
+        REQUIRE(nvar->glsl_name == pl_var_glsl_type_name(var));
+        var.dim_a = 100;
+        REQUIRE(nvar->glsl_name == pl_var_glsl_type_name(var));
+    }
 }

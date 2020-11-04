@@ -953,6 +953,69 @@ size_t pl_var_type_size(enum pl_var_type type)
     }
 }
 
+#define PL_VAR(TYPE, NAME, M, V)                        \
+    struct pl_var pl_var_##NAME(const char *name) {     \
+        return (struct pl_var) {                        \
+            .name  = name,                              \
+            .type  = PL_VAR_##TYPE,                     \
+            .dim_m = M,                                 \
+            .dim_v = V,                                 \
+            .dim_a = 1,                                 \
+        };                                              \
+    }
+
+PL_VAR(FLOAT, float,    1, 1)
+PL_VAR(FLOAT, vec2,     1, 2)
+PL_VAR(FLOAT, vec3,     1, 3)
+PL_VAR(FLOAT, vec4,     1, 4)
+PL_VAR(FLOAT, mat2,     2, 2)
+PL_VAR(FLOAT, mat2x3,   2, 3)
+PL_VAR(FLOAT, mat2x4,   2, 4)
+PL_VAR(FLOAT, mat3,     3, 3)
+PL_VAR(FLOAT, mat3x4,   3, 4)
+PL_VAR(FLOAT, mat4x2,   4, 2)
+PL_VAR(FLOAT, mat4x3,   4, 3)
+PL_VAR(FLOAT, mat4,     4, 4)
+PL_VAR(SINT,  int,      1, 1)
+PL_VAR(SINT,  ivec2,    1, 2)
+PL_VAR(SINT,  ivec3,    1, 3)
+PL_VAR(SINT,  ivec4,    1, 4)
+PL_VAR(UINT,  uint,     1, 1)
+PL_VAR(UINT,  uvec2,    1, 2)
+PL_VAR(UINT,  uvec3,    1, 3)
+PL_VAR(UINT,  uvec4,    1, 4)
+
+#undef PL_VAR
+
+const struct pl_named_var pl_var_glsl_types[] = {
+    // float vectors
+    { "float",  { .type = PL_VAR_FLOAT, .dim_m = 1, .dim_v = 1, }},
+    { "vec2",   { .type = PL_VAR_FLOAT, .dim_m = 1, .dim_v = 2, }},
+    { "vec3",   { .type = PL_VAR_FLOAT, .dim_m = 1, .dim_v = 3, }},
+    { "vec4",   { .type = PL_VAR_FLOAT, .dim_m = 1, .dim_v = 4, }},
+    // float matrices
+    { "mat2",   { .type = PL_VAR_FLOAT, .dim_m = 2, .dim_v = 2, }},
+    { "mat2x3", { .type = PL_VAR_FLOAT, .dim_m = 2, .dim_v = 3, }},
+    { "mat2x4", { .type = PL_VAR_FLOAT, .dim_m = 2, .dim_v = 4, }},
+    { "mat3",   { .type = PL_VAR_FLOAT, .dim_m = 3, .dim_v = 3, }},
+    { "mat3x4", { .type = PL_VAR_FLOAT, .dim_m = 3, .dim_v = 4, }},
+    { "mat4x2", { .type = PL_VAR_FLOAT, .dim_m = 4, .dim_v = 2, }},
+    { "mat4x3", { .type = PL_VAR_FLOAT, .dim_m = 4, .dim_v = 3, }},
+    { "mat4",   { .type = PL_VAR_FLOAT, .dim_m = 4, .dim_v = 4, }},
+    // integer vectors
+    { "int",    { .type = PL_VAR_SINT,  .dim_m = 1, .dim_v = 1, }},
+    { "ivec2",  { .type = PL_VAR_SINT,  .dim_m = 1, .dim_v = 2, }},
+    { "ivec3",  { .type = PL_VAR_SINT,  .dim_m = 1, .dim_v = 3, }},
+    { "ivec4",  { .type = PL_VAR_SINT,  .dim_m = 1, .dim_v = 4, }},
+    // unsigned integer vectors
+    { "uint",   { .type = PL_VAR_UINT,  .dim_m = 1, .dim_v = 1, }},
+    { "uvec2",  { .type = PL_VAR_UINT,  .dim_m = 1, .dim_v = 2, }},
+    { "uvec3",  { .type = PL_VAR_UINT,  .dim_m = 1, .dim_v = 3, }},
+    { "uvec4",  { .type = PL_VAR_UINT,  .dim_m = 1, .dim_v = 4, }},
+
+    {0},
+};
+
 #define MAX_DIM 4
 
 const char *pl_var_glsl_type_name(struct pl_var var)
@@ -990,29 +1053,6 @@ const char *pl_var_glsl_type_name(struct pl_var var)
 
     return types[var.type][var.dim_m][var.dim_v];
 }
-
-#define PL_VAR(TYPE, NAME, M, V)                        \
-    struct pl_var pl_var_##NAME(const char *name) {     \
-        return (struct pl_var) {                        \
-            .name  = name,                              \
-            .type  = PL_VAR_##TYPE,                     \
-            .dim_m = M,                                 \
-            .dim_v = V,                                 \
-            .dim_a = 1,                                 \
-        };                                              \
-    }
-
-PL_VAR(SINT,  int,   1, 1)
-PL_VAR(UINT,  uint,  1, 1)
-PL_VAR(FLOAT, float, 1, 1)
-PL_VAR(FLOAT, vec2,  1, 2)
-PL_VAR(FLOAT, vec3,  1, 3)
-PL_VAR(FLOAT, vec4,  1, 4)
-PL_VAR(FLOAT, mat2,  2, 2)
-PL_VAR(FLOAT, mat3,  3, 3)
-PL_VAR(FLOAT, mat4,  4, 4)
-
-#undef PL_VAR
 
 struct pl_var pl_var_from_fmt(const struct pl_fmt *fmt, const char *name)
 {
