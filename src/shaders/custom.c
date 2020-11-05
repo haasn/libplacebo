@@ -623,6 +623,132 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
     return true;
 }
 
+static bool parse_buf(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
+                      struct pl_shader_desc *out)
+{
+    *out = (struct pl_shader_desc) {
+        .desc = {
+            .name = "USER_BUF",
+            .type = PL_DESC_BUF_UNIFORM,
+        },
+    };
+
+    // Temporary, to allow deferring variable placement until all headers
+    // have been processed (in order to e.g. determine buffer type)
+    void *tmp = talloc_new(tactx); // will be freed automatically on failure
+    struct pl_var *vars = NULL;
+    int num_vars = 0;
+
+    while (true) {
+        struct bstr rest;
+        struct bstr line = bstr_strip(bstr_getline(*body, &rest));
+
+        if (!bstr_eatstart0(&line, "//!"))
+            break;
+
+        *body = rest;
+
+        if (bstr_eatstart0(&line, "BUFFER")) {
+            out->desc.name = bstrdup0(tactx, bstr_strip(line));
+            continue;
+        }
+
+        if (bstr_eatstart0(&line, "STORAGE")) {
+            out->desc.type = PL_DESC_BUF_STORAGE;
+            out->desc.access = PL_DESC_ACCESS_READWRITE;
+            out->memory = PL_MEMORY_COHERENT;
+            continue;
+        }
+
+        if (bstr_eatstart0(&line, "VAR")) {
+            struct bstr type_name = bstr_split(bstr_strip(line), " ", &line);
+            struct pl_var var = {0};
+            for (const struct pl_named_var *nv = pl_var_glsl_types; nv->glsl_name; nv++) {
+                if (bstr_equals0(type_name, nv->glsl_name)) {
+                    var = nv->var;
+                    break;
+                }
+            }
+
+            if (!var.type) {
+                // No type found
+                PL_ERR(gpu, "Unrecognized GLSL type '%.*s'!", BSTR_P(type_name));
+                return false;
+            }
+
+            struct bstr var_name = bstr_split(line, "[", &line);
+            if (line.len > 0) {
+                // Parse array dimension
+                if (bstr_sscanf(line, "[%d]", &var.dim_a) != 1) {
+                    PL_ERR(gpu, "Failed parsing array dimension from %.*s!",
+                           BSTR_P(line));
+                    return false;
+                }
+
+                if (var.dim_a < 1) {
+                    PL_ERR(gpu, "Invalid array dimension %d!", var.dim_a);
+                    return false;
+                }
+            }
+
+            var.name = bstrdup0(tactx, bstr_strip(var_name));
+            TARRAY_APPEND(tmp, vars, num_vars, var);
+            continue;
+        }
+
+        PL_ERR(gpu, "Unrecognized command '%.*s'!", BSTR_P(line));
+        return false;
+    }
+
+    // Try placing all of the buffer variables
+    for (int i = 0; i < num_vars; i++) {
+        if (!sh_buf_desc_append(tactx, gpu, out, NULL, vars[i])) {
+            PL_ERR(gpu, "Custom buffer exceeds GPU limitations!");
+            return false;
+        }
+    }
+
+    // Decode the rest of the section (up to the next //! marker) as raw hex
+    // data for the buffer
+    struct bstr hexdata;
+    if (bstr_split_tok(*body, "//!", &hexdata, body)) {
+        // Make sure the magic line is part of the rest
+        body->start -= 3;
+        body->len += 3;
+    }
+
+    struct bstr data;
+    if (!bstr_decode_hex(tmp, bstr_strip(hexdata), &data)) {
+        PL_ERR(gpu, "Error while parsing BUFFER body: must be a valid "
+                    "hexadecimal sequence, on a single line!");
+        return false;
+    }
+
+    size_t buf_size = sh_buf_desc_size(out);
+    if (data.len == 0 && out->desc.type == PL_DESC_BUF_STORAGE) {
+        // In this case, it's okay that the buffer has no initial data
+    } else if (data.len != buf_size) {
+        PL_ERR(gpu, "Shader BUFFER size mismatch: got %zu bytes, expected %zu!",
+               data.len, buf_size);
+        return false;
+    }
+
+    out->object = pl_buf_create(gpu, &(struct pl_buf_params) {
+        .size = buf_size,
+        .uniform = out->desc.type == PL_DESC_BUF_UNIFORM,
+        .storable = out->desc.type == PL_DESC_BUF_STORAGE,
+        .initial_data = data.start,
+    });
+
+    if (!out->object) {
+        PL_ERR(gpu, "Failed creating custom buffer!");
+        return false;
+    }
+
+    talloc_free(tmp);
+    return true;
+}
+
 static enum pl_hook_stage mp_stage_to_pl(struct bstr stage)
 {
     if (bstr_equals0(stage, "RGB"))
@@ -1203,6 +1329,16 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
             continue;
         }
 
+        if (bstr_startswith0(shader, "//!BUFFER")) {
+            struct pl_shader_desc sd;
+            if (!parse_buf(gpu, hook, &shader, &sd))
+                goto error;
+
+            PL_INFO(gpu, "Registering named buffer '%s'", sd.desc.name);
+            TARRAY_APPEND(hook, p->descriptors, p->num_descs, sd);
+            continue;
+        }
+
         struct custom_shader_hook h;
         if (!parse_hook(gpu->ctx, &shader, &h))
             goto error;
@@ -1267,6 +1403,15 @@ void pl_mpv_user_shader_destroy(const struct pl_hook **hookp)
     struct hook_priv *p = TA_PRIV(hook);
     for (int i = 0; i < p->num_descs; i++) {
         switch (p->descriptors[i].desc.type) {
+            case PL_DESC_BUF_UNIFORM:
+            case PL_DESC_BUF_STORAGE:
+            case PL_DESC_BUF_TEXEL_UNIFORM:
+            case PL_DESC_BUF_TEXEL_STORAGE: {
+                const struct pl_buf *buf = p->descriptors[i].object;
+                pl_buf_destroy(p->gpu, &buf);
+                break;
+            }
+
             case PL_DESC_SAMPLED_TEX:
             case PL_DESC_STORAGE_IMG: {
                 const struct pl_tex *tex = p->descriptors[i].object;

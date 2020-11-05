@@ -736,6 +736,34 @@ static const char *user_shader_tests[] = {
     "//!BORDER REPEAT                                                       \n"
     "0000803f000000000000000000000000000000000000803f000000000000000000000000000000000000803f00000000000000000000803f0000803f000000000000803f000000000000803f000000000000803f0000803f00000000000000009a99993e9a99993e9a99993e000000009a99193f9a99193f9a99193f000000000000803f0000803f0000803f00000000 \n",
 
+    // Test use of storage/buffer resources
+    "//!HOOK MAIN                                                           \n"
+    "//!DESC attach some storage objects                                    \n"
+    "//!BIND tex_storage                                                    \n"
+    "//!BIND buf_uniform                                                    \n"
+    "//!BIND buf_storage                                                    \n"
+    "//!COMPONENTS 4                                                        \n"
+    "                                                                       \n"
+    "vec4 hook()                                                            \n"
+    "{                                                                      \n"
+    "    return vec4(foo, bar, bat);                                        \n"
+    "}                                                                      \n"
+    "                                                                       \n"
+    "//!TEXTURE tex_storage                                                 \n"
+    "//!SIZE 100 100                                                        \n"
+    "//!FORMAT r32f                                                         \n"
+    "//!STORAGE                                                             \n"
+    "                                                                       \n"
+    "//!BUFFER buf_uniform                                                  \n"
+    "//!VAR float foo                                                       \n"
+    "//!VAR float bar                                                       \n"
+    "0000000000000000                                                       \n"
+    "                                                                       \n"
+    "//!BUFFER buf_storage                                                  \n"
+    "//!VAR vec2 bat                                                        \n"
+    "//!VAR int big[32];                                                    \n"
+    "//!STORAGE                                                             \n"
+
 };
 
 static void pl_render_tests(const struct pl_gpu *gpu)
@@ -888,7 +916,14 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         const struct pl_hook *hook;
         hook = pl_mpv_user_shader_parse(gpu, user_shader_tests[i],
                                         strlen(user_shader_tests[i]));
-        REQUIRE(hook);
+
+        if (gpu->caps & PL_GPU_CAP_COMPUTE) {
+            REQUIRE(hook);
+        } else {
+            // Not all shaders compile without compute shader support
+            if (!hook)
+                continue;
+        }
 
         params.hooks = &hook;
         params.num_hooks = 1;
