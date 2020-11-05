@@ -145,11 +145,6 @@ struct custom_shader_hook {
     int threads_w, threads_h;   // How many threads form a WG
 };
 
-struct custom_shader_tex {
-    struct bstr name;
-    const struct pl_tex *tex;
-};
-
 static bool parse_rpn_szexpr(struct bstr line, struct szexp out[MAX_SZEXP_SIZE])
 {
     int pos = 0;
@@ -439,11 +434,14 @@ static bool parse_hook(struct pl_context *ctx, struct bstr *body,
     return true;
 }
 
-static bool parse_tex(const struct pl_gpu *gpu, struct bstr *body,
-                      struct custom_shader_tex *out)
+static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
+                      struct pl_shader_desc *out)
 {
-    *out = (struct custom_shader_tex) {
-        .name = bstr0("USER_TEX"),
+    *out = (struct pl_shader_desc) {
+        .desc = {
+            .name = "USER_TEX",
+            .type = PL_DESC_SAMPLED_TEX,
+        },
     };
 
     struct pl_tex_params params = {
@@ -461,7 +459,7 @@ static bool parse_tex(const struct pl_gpu *gpu, struct bstr *body,
         *body = rest;
 
         if (bstr_eatstart0(&line, "TEXTURE")) {
-            out->name = bstr_strip(line);
+            out->desc.name = bstrdup0(tactx, bstr_strip(line));
             continue;
         }
 
@@ -603,48 +601,12 @@ static bool parse_tex(const struct pl_gpu *gpu, struct bstr *body,
     }
 
     params.initial_data = tex.start;
-    out->tex = pl_tex_create(gpu, &params);
+    out->object = pl_tex_create(gpu, &params);
     talloc_free(tex.start);
 
-    if (!out->tex) {
+    if (!out->object) {
         PL_ERR(gpu, "Failed uploading custom texture!");
         return false;
-    }
-
-    return true;
-}
-
-// Parse the next shader block from `body`. The callbacks are invoked on every
-// valid shader block parsed.
-static bool parse_user_shader(const struct pl_gpu *gpu, struct bstr shader, void *priv,
-                              bool (*dohook)(void *p, struct custom_shader_hook hook),
-                              bool (*dotex)(void *p, struct custom_shader_tex tex))
-{
-    if (!shader.len)
-        return false;
-
-    // Skip all garbage (e.g. comments) before the first header
-    int pos = bstr_find(shader, bstr0("//!"));
-    if (pos < 0) {
-        PL_ERR(gpu, "Shader appears to contain no headers?");
-        return false;
-    }
-    shader = bstr_cut(shader, pos);
-
-    // Loop over the file
-    while (shader.len > 0)
-    {
-        // Peek at the first header to dispatch the right type
-        if (bstr_startswith0(shader, "//!TEXTURE")) {
-            struct custom_shader_tex t;
-            if (!parse_tex(gpu, &shader, &t) || !dotex(priv, t))
-                return false;
-            continue;
-        }
-
-        struct custom_shader_hook h;
-        if (!parse_hook(gpu->ctx, &shader, &h) || !dohook(priv, h))
-            return false;
     }
 
     return true;
@@ -744,9 +706,9 @@ struct hook_priv {
     struct hook_pass *hook_passes;
     int num_hook_passes;
 
-    // Fixed (for shader-local textures)
-    struct custom_shader_tex *lut_textures;
-    int num_lut_textures;
+    // Fixed (for shader-local resources)
+    struct pl_shader_desc *descriptors;
+    int num_descs;
 
     // Dynamic per pass
     enum pl_hook_stage save_stages;
@@ -998,21 +960,18 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 texname = bstr0("MAINPRESUB");
             }
 
-            for (int j = 0; j < p->num_lut_textures; j++) {
-                if (bstr_equals(texname, p->lut_textures[j].name)) {
+            for (int j = 0; j < p->num_descs; j++) {
+                if (bstr_equals0(texname, p->descriptors[j].desc.name)) {
                     // Directly bind this, no need to bother with all the
                     // `bind_pass_tex` boilerplate
-                    ident_t id = sh_desc(sh, (struct pl_shader_desc) {
-                        .desc = {
-                            .name = "hook_lut",
-                            .type = PL_DESC_SAMPLED_TEX,
-                        },
-                        .object = p->lut_textures[j].tex,
-                    });
+                    ident_t id = sh_desc(sh, p->descriptors[j]);
                     GLSLH("#define %.*s %s \n", BSTR_P(texname), id);
-                    GLSLH("#define %.*s_tex(pos) (%s(%s, pos)) \n",
-                          BSTR_P(texname),
-                          sh_tex_fn(sh, p->lut_textures[j].tex->params), id);
+
+                    if (p->descriptors[j].desc.type == PL_DESC_SAMPLED_TEX) {
+                        const struct pl_tex *tex = p->descriptors[j].object;
+                        GLSLH("#define %.*s_tex(pos) (%s(%s, pos)) \n",
+                              BSTR_P(texname), sh_tex_fn(sh, tex->params), id);
+                    }
                     goto next_bind;
                 }
             }
@@ -1180,61 +1139,13 @@ error:
     return (struct pl_hook_res) { .failed = true };
 }
 
-static bool register_hook(void *priv, struct custom_shader_hook hook)
-{
-    struct hook_priv *p = priv;
-    struct hook_pass pass = {
-        .exec_stages = 0,
-        .hook = hook,
-    };
-
-    for (int i = 0; i < PL_ARRAY_SIZE(hook.hook_tex); i++)
-        pass.exec_stages |= mp_stage_to_pl(hook.hook_tex[i]);
-    for (int i = 0; i < PL_ARRAY_SIZE(hook.bind_tex); i++) {
-        p->save_stages |= mp_stage_to_pl(hook.bind_tex[i]);
-        if (bstr_equals0(hook.bind_tex[i], "HOOKED"))
-            p->save_stages |= pass.exec_stages;
-    }
-
-    // As an extra precaution, this avoids errors when trying to run
-    // conditions against planes that were never hooked. As a sole exception,
-    // OUTPUT is special because it's hard-coded to return the dst_rect even
-    // before it was hooked. (This is an apparently undocumented mpv quirk,
-    // but shaders rely on it in practice)
-    enum pl_hook_stage rpn_stages = 0;
-    for (int i = 0; i < PL_ARRAY_SIZE(hook.width); i++) {
-        if (hook.width[i].tag == SZEXP_VAR_W || hook.width[i].tag == SZEXP_VAR_H)
-            rpn_stages |= mp_stage_to_pl(hook.width[i].val.varname);
-    }
-    for (int i = 0; i < PL_ARRAY_SIZE(hook.height); i++) {
-        if (hook.height[i].tag == SZEXP_VAR_W || hook.height[i].tag == SZEXP_VAR_H)
-            rpn_stages |= mp_stage_to_pl(hook.height[i].val.varname);
-    }
-    for (int i = 0; i < PL_ARRAY_SIZE(hook.cond); i++) {
-        if (hook.cond[i].tag == SZEXP_VAR_W || hook.cond[i].tag == SZEXP_VAR_H)
-            rpn_stages |= mp_stage_to_pl(hook.cond[i].val.varname);
-    }
-
-    p->save_stages |= rpn_stages & ~PL_HOOK_OUTPUT;
-
-    PL_INFO(p, "Registering hook pass: %.*s", BSTR_P(hook.pass_desc));
-    TARRAY_APPEND(p->tactx, p->hook_passes, p->num_hook_passes, pass);
-    return true;
-}
-
-static bool register_tex(void *priv, struct custom_shader_tex tex)
-{
-    struct hook_priv *p = priv;
-
-    PL_INFO(p, "Registering named texture '%.*s'", BSTR_P(tex.name));
-    TARRAY_APPEND(p->tactx, p->lut_textures, p->num_lut_textures, tex);
-    return true;
-}
-
 const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
                                                const char *shader_text,
                                                size_t shader_len)
 {
+    if (!shader_len)
+        return NULL;
+
     struct pl_hook *hook = talloc_priv(NULL, struct pl_hook, struct hook_priv);
     struct hook_priv *p = TA_PRIV(hook);
 
@@ -1256,10 +1167,72 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
         },
     };
 
-    struct bstr text = { (char *) shader_text, shader_len };
-    text = bstrdup(hook, text);
-    if (!parse_user_shader(gpu, text, p, register_hook, register_tex))
+    struct bstr shader = { (char *) shader_text, shader_len };
+    shader = bstrdup(hook, shader);
+
+    // Skip all garbage (e.g. comments) before the first header
+    int pos = bstr_find(shader, bstr0("//!"));
+    if (pos < 0) {
+        PL_ERR(gpu, "Shader appears to contain no headers?");
         goto error;
+    }
+    shader = bstr_cut(shader, pos);
+
+    // Loop over the file
+    while (shader.len > 0)
+    {
+        // Peek at the first header to dispatch the right type
+        if (bstr_startswith0(shader, "//!TEXTURE")) {
+            struct pl_shader_desc sd;
+            if (!parse_tex(gpu, hook, &shader, &sd))
+                goto error;
+
+            PL_INFO(gpu, "Registering named texture '%s'", sd.desc.name);
+            TARRAY_APPEND(hook, p->descriptors, p->num_descs, sd);
+            continue;
+        }
+
+        struct custom_shader_hook h;
+        if (!parse_hook(gpu->ctx, &shader, &h))
+            goto error;
+
+        struct hook_pass pass = {
+            .exec_stages = 0,
+            .hook = h,
+        };
+
+        for (int i = 0; i < PL_ARRAY_SIZE(h.hook_tex); i++)
+            pass.exec_stages |= mp_stage_to_pl(h.hook_tex[i]);
+        for (int i = 0; i < PL_ARRAY_SIZE(h.bind_tex); i++) {
+            p->save_stages |= mp_stage_to_pl(h.bind_tex[i]);
+            if (bstr_equals0(h.bind_tex[i], "HOOKED"))
+                p->save_stages |= pass.exec_stages;
+        }
+
+        // As an extra precaution, this avoids errors when trying to run
+        // conditions against planes that were never hooked. As a sole
+        // exception, OUTPUT is special because it's hard-coded to return the
+        // dst_rect even before it was hooked. (This is an apparently
+        // undocumented mpv quirk, but shaders rely on it in practice)
+        enum pl_hook_stage rpn_stages = 0;
+        for (int i = 0; i < PL_ARRAY_SIZE(h.width); i++) {
+            if (h.width[i].tag == SZEXP_VAR_W || h.width[i].tag == SZEXP_VAR_H)
+                rpn_stages |= mp_stage_to_pl(h.width[i].val.varname);
+        }
+        for (int i = 0; i < PL_ARRAY_SIZE(h.height); i++) {
+            if (h.height[i].tag == SZEXP_VAR_W || h.height[i].tag == SZEXP_VAR_H)
+                rpn_stages |= mp_stage_to_pl(h.height[i].val.varname);
+        }
+        for (int i = 0; i < PL_ARRAY_SIZE(h.cond); i++) {
+            if (h.cond[i].tag == SZEXP_VAR_W || h.cond[i].tag == SZEXP_VAR_H)
+                rpn_stages |= mp_stage_to_pl(h.cond[i].val.varname);
+        }
+
+        p->save_stages |= rpn_stages & ~PL_HOOK_OUTPUT;
+
+        PL_INFO(gpu, "Registering hook pass: %.*s", BSTR_P(h.pass_desc));
+        TARRAY_APPEND(hook, p->hook_passes, p->num_hook_passes, pass);
+    }
 
     // We need to hook on both the exec and save stages, so that we can keep
     // track of any textures we might need
@@ -1281,8 +1254,17 @@ void pl_mpv_user_shader_destroy(const struct pl_hook **hookp)
         return;
 
     struct hook_priv *p = TA_PRIV(hook);
-    for (int i = 0; i < p->num_lut_textures; i++)
-        pl_tex_destroy(p->gpu, &p->lut_textures[i].tex);
+    for (int i = 0; i < p->num_descs; i++) {
+        switch (p->descriptors[i].desc.type) {
+            case PL_DESC_SAMPLED_TEX: {
+                const struct pl_tex *tex = p->descriptors[i].object;
+                pl_tex_destroy(p->gpu, &tex);
+                break;
+            }
+
+            default: abort();
+        }
+    }
 
     talloc_free((void *) hook);
 }
