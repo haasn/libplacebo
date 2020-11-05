@@ -560,6 +560,14 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
             continue;
         }
 
+        if (bstr_eatstart0(&line, "STORAGE")) {
+            params.storable = true;
+            out->desc.type = PL_DESC_STORAGE_IMG;
+            out->desc.access = PL_DESC_ACCESS_READWRITE;
+            out->memory = PL_MEMORY_COHERENT;
+            continue;
+        }
+
         PL_ERR(gpu, "Unrecognized command '%.*s'!", BSTR_P(line));
         return false;
     }
@@ -593,7 +601,10 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
 
     int texels = params.w * PL_DEF(params.h, 1) * PL_DEF(params.d, 1);
     size_t expected_len = texels * params.format->texel_size;
-    if (tex.len != expected_len) {
+    if (tex.len == 0 && params.storable) {
+        // In this case, it's okay that the texture has no initial data
+        TA_FREEP(&tex.start);
+    } else if (tex.len != expected_len) {
         PL_ERR(gpu, "Shader TEXTURE size mismatch: got %zu bytes, expected %zu!",
                tex.len, expected_len);
         talloc_free(tex.start);
@@ -605,7 +616,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
     talloc_free(tex.start);
 
     if (!out->object) {
-        PL_ERR(gpu, "Failed uploading custom texture!");
+        PL_ERR(gpu, "Failed creating custom texture!");
         return false;
     }
 
@@ -1256,7 +1267,8 @@ void pl_mpv_user_shader_destroy(const struct pl_hook **hookp)
     struct hook_priv *p = TA_PRIV(hook);
     for (int i = 0; i < p->num_descs; i++) {
         switch (p->descriptors[i].desc.type) {
-            case PL_DESC_SAMPLED_TEX: {
+            case PL_DESC_SAMPLED_TEX:
+            case PL_DESC_STORAGE_IMG: {
                 const struct pl_tex *tex = p->descriptors[i].object;
                 pl_tex_destroy(p->gpu, &tex);
                 break;
