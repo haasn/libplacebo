@@ -330,8 +330,8 @@ next_fmt: ; // equivalent to `continue`
     return NULL;
 }
 
-#define FOURCC(str) ((uint32_t)(str[0]) | ((uint32_t)(str[1]) << 8) | \
-                    ((uint32_t)(str[2]) << 16) | ((uint32_t)(str[3]) << 24))
+#define FOURCC(a,b,c,d) ((uint32_t)(a)        | ((uint32_t)(b) << 8) | \
+                        ((uint32_t)(c) << 16) | ((uint32_t)(d) << 24))
 
 struct pl_fmt_fourcc {
     const char *name;
@@ -340,45 +340,45 @@ struct pl_fmt_fourcc {
 
 static const struct pl_fmt_fourcc pl_fmt_fourccs[] = {
     // 8 bpp red
-    {"r8",          FOURCC("R8  ")},
+    {"r8",          FOURCC('R','8',' ',' ')},
     // 16 bpp red
-    {"r16",         FOURCC("R16 ")},
+    {"r16",         FOURCC('R','1','6',' ')},
     // 16 bpp rg
-    {"rg8",         FOURCC("RG88")},
-    {"gr8",         FOURCC("GR88")},
+    {"rg8",         FOURCC('R','G','8','8')},
+    {"gr8",         FOURCC('G','R','8','8')},
     // 32 bpp rg
-    {"rg16",        FOURCC("RG32")},
-    {"gr16",        FOURCC("GR32")},
+    {"rg16",        FOURCC('R','G','3','2')},
+    {"gr16",        FOURCC('G','R','3','2')},
     // 8 bpp rgb: N/A
     // 16 bpp rgb
-    {"argb4",       FOURCC("AR12")},
-    {"abgr4",       FOURCC("AB12")},
-    {"rgba4",       FOURCC("RA12")},
-    {"bgra4",       FOURCC("BA12")},
+    {"argb4",       FOURCC('A','R','1','2')},
+    {"abgr4",       FOURCC('A','B','1','2')},
+    {"rgba4",       FOURCC('R','A','1','2')},
+    {"bgra4",       FOURCC('B','A','1','2')},
 
-    {"a1rgb5",      FOURCC("AR15")},
-    {"a1bgr5",      FOURCC("AB15")},
-    {"rgb5a1",      FOURCC("RA15")},
-    {"bgr5a1",      FOURCC("BA15")},
+    {"a1rgb5",      FOURCC('A','R','1','5')},
+    {"a1bgr5",      FOURCC('A','B','1','5')},
+    {"rgb5a1",      FOURCC('R','A','1','5')},
+    {"bgr5a1",      FOURCC('B','A','1','5')},
 
-    {"rgb565",      FOURCC("RG16")},
-    {"bgr565",      FOURCC("BG16")},
+    {"rgb565",      FOURCC('R','G','1','6')},
+    {"bgr565",      FOURCC('B','G','1','6')},
     // 24 bpp rgb
-    {"rgb8",        FOURCC("RG24")},
-    {"bgr8",        FOURCC("BG24")},
+    {"rgb8",        FOURCC('R','G','2','4')},
+    {"bgr8",        FOURCC('B','G','2','4')},
     // 32 bpp rgb
-    {"argb8",       FOURCC("AR24")},
-    {"abgr8",       FOURCC("AB24")},
-    {"rgba8",       FOURCC("RA24")},
-    {"bgra8",       FOURCC("BA24")},
+    {"argb8",       FOURCC('A','R','2','4')},
+    {"abgr8",       FOURCC('A','B','2','4')},
+    {"rgba8",       FOURCC('R','A','2','4')},
+    {"bgra8",       FOURCC('B','A','2','4')},
 
-    {"a2rgb10",     FOURCC("AR30")},
-    {"a2bgr10",     FOURCC("AB30")},
-    {"rgb10a2",     FOURCC("RA30")},
-    {"bgr10a2",     FOURCC("BA30")},
+    {"a2rgb10",     FOURCC('A','R','3','0')},
+    {"a2bgr10",     FOURCC('A','B','3','0')},
+    {"rgb10a2",     FOURCC('R','A','3','0')},
+    {"bgr10a2",     FOURCC('B','A','3','0')},
     // 64bpp rgb
-    {"argb16hf",    FOURCC("AR4H")},
-    {"abgr16hf",    FOURCC("AB4H")},
+    {"argb16hf",    FOURCC('A','R','4','H')},
+    {"abgr16hf",    FOURCC('A','B','4','H')},
 
     // no planar formats yet (tm)
 };
