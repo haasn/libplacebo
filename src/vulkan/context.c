@@ -1401,6 +1401,13 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
         *pfn = vk->GetInstanceProcAddr(vk->inst, fun->name);
     }
 
+    if (!vk->GetPhysicalDeviceProperties2KHR) {
+        PL_FATAL(vk, "Provided VkInstance does not support "
+                 VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
+                 ", cannot continue!");
+        goto error;
+    }
+
     VkPhysicalDeviceIDPropertiesKHR id_props = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR,
     };
