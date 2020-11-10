@@ -240,6 +240,7 @@ components = [
 ]
 
 defs = ''
+pc_vars = []
 comps = configuration_data()
 
 foreach c : components
@@ -250,6 +251,7 @@ foreach c : components
 
   if deps.found()
     defs += '#define PL_HAVE_@0@ 1\n'.format(pretty)
+    pc_vars += 'pl_has_@0@=1'.format(pretty.to_lower())
     comps.set(name, 1)
     build_deps += deps
     sources += c.get('srcs', [])
@@ -257,6 +259,7 @@ foreach c : components
     tests += c.get('test', [])
   else
     defs += '#undef PL_HAVE_@0@\n'.format(pretty)
+    pc_vars += 'pl_has_@0@=0'.format(pretty.to_lower())
   endif
 endforeach
 
@@ -271,8 +274,10 @@ if comps.has('vulkan')
 
   if get_option('vulkan-link')
     defs += '#define PL_HAVE_VK_PROC_ADDR 1'
+    pc_vars += 'pl_has_vk_proc_addr=1'
   else
     defs += '#undef PL_HAVE_VK_PROC_ADDR'
+    pc_vars += 'pl_has_vk_proc_addr=0'
   endif
 endif
 
@@ -346,6 +351,7 @@ pkg.generate(
   description: 'Reusable library for GPU-accelerated video/image rendering',
   libraries: lib,
   version: version,
+  variables: pc_vars,
 )
 
 
