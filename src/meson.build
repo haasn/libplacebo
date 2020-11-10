@@ -71,8 +71,10 @@ else
   ]
 
   glslang_opt_deps = [
-    cxx.find_library('SPIRV-Tools',     required: false),
-    cxx.find_library('SPIRV-Tools-opt', required: false),
+    cxx.find_library('GenericCodeGen',     required: false),
+    cxx.find_library('MachineIndependent', required: false),
+    cxx.find_library('SPIRV-Tools',        required: false),
+    cxx.find_library('SPIRV-Tools-opt',    required: false),
   ]
 
   glslang_found = true
