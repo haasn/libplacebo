@@ -24,7 +24,6 @@ const struct pl_vk_inst_params pl_vk_inst_default_params = {0};
 
 struct vk_fun {
     const char *name;
-    const char *alias;
     size_t offset;
     bool device_level;
 };
@@ -42,13 +41,6 @@ struct vk_ext {
 
 #define VK_DEV_FUN(N)                       \
     { .name = "vk" #N,                      \
-      .offset = offsetof(struct vk_ctx, N), \
-      .device_level = true,                 \
-    }
-
-#define VK_DEV_FUN_ALIAS(N, ALIAS)          \
-    { .name = "vk" #N,                      \
-      .alias = #ALIAS,                      \
       .offset = offsetof(struct vk_ctx, N), \
       .device_level = true,                 \
     }
@@ -168,7 +160,7 @@ static const struct vk_ext vk_device_extensions[] = {
         .name = VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
         .core_ver = VK_API_VERSION_1_2,
         .funs = (struct vk_fun[]) {
-            VK_DEV_FUN_ALIAS(ResetQueryPoolEXT, vkResetQueryPool),
+            VK_DEV_FUN(ResetQueryPoolEXT),
             {0},
         },
     },
@@ -307,6 +299,40 @@ static const struct vk_fun vk_dev_funs[] = {
     VK_DEV_FUN(UpdateDescriptorSets),
     VK_DEV_FUN(WaitForFences),
 };
+
+static void load_vk_fun(struct vk_ctx *vk, const struct vk_fun *fun)
+{
+    PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
+
+    if (fun->device_level) {
+        *pfn = vk->GetDeviceProcAddr(vk->dev, fun->name);
+    } else {
+        *pfn = vk->GetInstanceProcAddr(vk->inst, fun->name);
+    };
+
+    if (!*pfn) {
+        // Some functions get their extension suffix stripped when promoted
+        // to core. As a very simple work-around to this, try loading the
+        // function a second time with the reserved suffixes stripped.
+        static const char *ext_suffixes[] = { "KHR", "EXT" };
+        struct bstr fun_name = bstr0(fun->name);
+        char buf[64];
+
+        for (int i = 0; i < PL_ARRAY_SIZE(ext_suffixes); i++) {
+            if (!bstr_eatend(&fun_name, bstr0(ext_suffixes[i])))
+                continue;
+
+            pl_assert(sizeof(buf) > fun_name.len);
+            snprintf(buf, sizeof(buf), "%.*s", BSTR_P(fun_name));
+            if (fun->device_level) {
+                *pfn = vk->GetDeviceProcAddr(vk->dev, buf);
+            } else {
+                *pfn = vk->GetInstanceProcAddr(vk->inst, buf);
+            }
+            return;
+        }
+    }
+}
 
 // Private struct for pl_vk_inst
 struct priv {
@@ -1171,25 +1197,12 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     VK(vk->CreateDevice(vk->physd, &dinfo, VK_ALLOC, &vk->dev));
 
     // Load all mandatory device-level functions
-    for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++) {
-        const struct vk_fun *fun = &vk_dev_funs[i];
-        PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
-        pl_assert(fun->device_level);
-        *pfn = vk->GetDeviceProcAddr(vk->dev, fun->name);
-    }
+    for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++)
+        load_vk_fun(vk, &vk_dev_funs[i]);
 
     // Load all of the optional functions from the extensions we enabled
-    for (int i = 0; i < num_ext_funs; i++) {
-        const struct vk_fun *fun = ext_funs[i];
-        PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
-        if (fun->device_level) {
-            *pfn = vk->GetDeviceProcAddr(vk->dev, fun->name);
-            if (fun->alias && !*pfn)
-                *pfn = vk->GetDeviceProcAddr(vk->dev, fun->alias);
-        } else {
-            *pfn = vk->GetInstanceProcAddr(vk->inst, fun->name);
-        };
-    }
+    for (int i = 0; i < num_ext_funs; i++)
+        load_vk_fun(vk, ext_funs[i]);
 
     // Create the command pools
     for (int i = 0; i < num_qinfos; i++) {
@@ -1261,12 +1274,8 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
 
     // Directly load all mandatory instance-level function pointers, since
     // these will be required for all further device creation logic
-    for (int i = 0; i < PL_ARRAY_SIZE(vk_inst_funs); i++) {
-        const struct vk_fun *fun = &vk_inst_funs[i];
-        PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
-        pl_assert(!fun->device_level);
-        *pfn = vk->GetInstanceProcAddr(vk->inst, fun->name);
-    }
+    for (int i = 0; i < PL_ARRAY_SIZE(vk_inst_funs); i++)
+        load_vk_fun(vk, &vk_inst_funs[i]);
 
     // Choose the physical device
     if (params->device) {
@@ -1394,12 +1403,8 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
     if (!vk->GetInstanceProcAddr)
         goto error;
 
-    for (int i = 0; i < PL_ARRAY_SIZE(vk_inst_funs); i++) {
-        const struct vk_fun *fun = &vk_inst_funs[i];
-        PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
-        pl_assert(!fun->device_level);
-        *pfn = vk->GetInstanceProcAddr(vk->inst, fun->name);
-    }
+    for (int i = 0; i < PL_ARRAY_SIZE(vk_inst_funs); i++)
+        load_vk_fun(vk, &vk_inst_funs[i]);
 
     if (!vk->GetPhysicalDeviceProperties2KHR) {
         PL_FATAL(vk, "Provided VkInstance does not support "
@@ -1441,12 +1446,8 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
         vk->features = *features;
 
     // Load all mandatory device-level functions
-    for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++) {
-        const struct vk_fun *fun = &vk_dev_funs[i];
-        PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) fun->offset);
-        pl_assert(fun->device_level);
-        *pfn = vk->GetDeviceProcAddr(vk->dev, fun->name);
-    }
+    for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++)
+        load_vk_fun(vk, &vk_dev_funs[i]);
 
     // Load all of the optional functions from the extensions enabled
     for (int i = 0; i < PL_ARRAY_SIZE(vk_device_extensions); i++) {
@@ -1456,14 +1457,8 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
                 (ext->core_ver && ext->core_ver >= vk->api_ver))
             {
                 // Extension is available, directly load it
-                for (const struct vk_fun *f = ext->funs; f->name; f++) {
-                    PFN_vkVoidFunction *pfn = (void *) ((uintptr_t) vk + (ptrdiff_t) f->offset);
-                    if (f->device_level) {
-                        *pfn = vk->GetDeviceProcAddr(vk->dev, f->name);
-                    } else {
-                        *pfn = vk->GetInstanceProcAddr(vk->inst, f->name);
-                    };
-                }
+                for (const struct vk_fun *f = ext->funs; f->name; f++)
+                    load_vk_fun(vk, f);
                 break;
             }
         }
