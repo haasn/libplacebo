@@ -1807,15 +1807,27 @@ void pl_image_set_chroma_location(struct pl_image *image,
     if (!ref)
         return; // no planes
 
-    int ref_w = ref->plane.texture->params.w,
-        ref_h = ref->plane.texture->params.h;
+    if (ref->plane.texture) {
+        // Texture dimensions are already known, so apply the chroma location
+        // only to subsampled planes
+        int ref_w = ref->plane.texture->params.w,
+            ref_h = ref->plane.texture->params.h;
 
-    for (int i = 0; i < image->num_planes; i++) {
-        struct pl_plane *plane = &image->planes[i];
-        const struct pl_tex *tex = plane->texture;
-        bool subsampled = tex->params.w < ref_w || tex->params.h < ref_h;
-        if (subsampled)
-            pl_chroma_location_offset(chroma_loc, &plane->shift_x, &plane->shift_y);
+        for (int i = 0; i < image->num_planes; i++) {
+            struct pl_plane *plane = &image->planes[i];
+            const struct pl_tex *tex = plane->texture;
+            bool subsampled = tex->params.w < ref_w || tex->params.h < ref_h;
+            if (subsampled)
+                pl_chroma_location_offset(chroma_loc, &plane->shift_x, &plane->shift_y);
+        }
+    } else {
+        // Texture dimensions are not yet known, so apply the chroma location
+        // to all chroma planes, regardless of subsampling
+        for (int i = 0; i < image->num_planes; i++) {
+            struct pl_plane *plane = &image->planes[i];
+            if (planes[i].type == PLANE_CHROMA)
+                pl_chroma_location_offset(chroma_loc, &plane->shift_x, &plane->shift_y);
+        }
     }
 }
 

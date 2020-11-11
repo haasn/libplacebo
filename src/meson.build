@@ -171,6 +171,8 @@ headers = [
   'shaders/sampling.h',
   'shaders.h',
   'swapchain.h',
+  'utils/libav.h',
+  'utils/libav_internal.h',
   'utils/upload.h',
 ]
 
@@ -375,6 +377,12 @@ foreach s : subprojects
 endforeach
 
 if get_option('tests')
+  libav = dependency('libavutil', version: '>=56.34.100', required: false)
+  if libav.found()
+    tdep += libav
+    tests += 'libav.c'
+  endif
+
   foreach t : tests
     e = executable('test.' + t, 'tests/' + t,
         objects: lib.extract_all_objects(recursive: false),
@@ -387,6 +395,12 @@ if get_option('tests')
 
   # Ensure all headers compile
   foreach h : headers
+
+    # This is a special case because of its single-header nature
+    if h.contains('libav')
+      continue
+    endif
+
     t = configure_file(
         input: 'tests/include_tmpl.c',
         output: 'include_@0@.c'.format(h.underscorify()),

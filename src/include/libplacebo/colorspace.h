@@ -487,4 +487,9 @@ struct pl_icc_profile {
 bool pl_icc_profile_equal(const struct pl_icc_profile *p1,
                           const struct pl_icc_profile *p2);
 
+// Sets `signature` to a hash of `profile->data`, if non-NULL. Provided as a
+// convenience function for the sake of users ingesting arbitrary ICC profiles
+// from sources where they can't reliably detect profile changes.
+void pl_icc_profile_compute_signature(struct pl_icc_profile *profile);
+
 #endif // LIBPLACEBO_COLORSPACE_H_

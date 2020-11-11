@@ -1003,10 +1003,17 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
 bool pl_icc_profile_equal(const struct pl_icc_profile *p1,
                           const struct pl_icc_profile *p2)
 {
-    // Test for presence of a pointer first
-    if (!!p1->data != !!p2->data)
+    if (p1->len != p2->len)
         return false;
 
-    // Otherwise, test for equality of signature+len (if a profile is present)
-    return !p1->data || (p1->signature == p2->signature && p1->len == p2->len);
+    // Ignore signatures on length-0 profiles, as a special case
+    return !p1->len || p1->signature == p2->signature;
+}
+
+void pl_icc_profile_compute_signature(struct pl_icc_profile *profile)
+{
+    // In theory, we could get this value from the profile header itself if
+    // lcms is available, but I'm not sure if it's even worth the trouble. Just
+    // hard-code this to a siphash64(), which is decently fast anyway.
+    profile->signature = siphash64(profile->data, profile->len);
 }
