@@ -79,6 +79,80 @@ void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4])
     }
 }
 
+bool pl_plane_data_align(struct pl_plane_data *data,
+                         struct pl_bit_encoding *out_bits)
+{
+    struct pl_plane_data aligned = *data;
+    struct pl_bit_encoding bits = {0};
+
+    int offset = 0;
+
+#define SET_TEST(var, value)                \
+    do {                                    \
+        if (offset == 0) {                  \
+            (var) = (value);                \
+        } else if ((var) != (value)) {      \
+            goto misaligned;                \
+        }                                   \
+    } while (0)
+
+    for (int i = 0; i < MAX_COMPS; i++) {
+        if (!aligned.component_size[i])
+            break;
+
+        // Can't meaningfully align alpha channel, so just skip it. This is a
+        // limitation of the fact that `pl_bit_encoding` only applies to the
+        // main color channels, and changing this would be very nontrivial.
+        if (aligned.component_map[i] == PL_CHANNEL_A)
+            continue;
+
+        // Color depth is the original component size, before alignment
+        SET_TEST(bits.color_depth, aligned.component_size[i]);
+
+        // Try consuming padding of the current component to align down. This
+        // corresponds to an extra bit shift to the left.
+        int comp_start = offset + aligned.component_pad[i];
+        int left_delta = comp_start - PL_ALIGN2(comp_start - 7, 8);
+        left_delta = PL_MIN(left_delta, aligned.component_pad[i]);
+        aligned.component_pad[i] -= left_delta;
+        aligned.component_size[i] += left_delta;
+        SET_TEST(bits.bit_shift, left_delta);
+
+        // Try consuming padding of the next component to align up. This
+        // corresponds to simply ignoring some extra 0s on the end.
+        int comp_end = comp_start + aligned.component_size[i] - left_delta;
+        int right_delta = PL_ALIGN2(comp_end, 8) - comp_end;
+        if (i+1 == MAX_COMPS || !aligned.component_size[i+1]) {
+            // This is the last component, so we can be greedy
+            aligned.component_size[i] += right_delta;
+        } else {
+            right_delta = PL_MIN(right_delta, aligned.component_pad[i+1]);
+            aligned.component_pad[i+1] -= right_delta;
+            aligned.component_size[i] += right_delta;
+        }
+
+        // Sample depth is the new total component size, including padding
+        SET_TEST(bits.sample_depth, aligned.component_size[i]);
+
+        offset += aligned.component_pad[i] + aligned.component_size[i];
+    }
+
+    // Easy sanity check, to make sure that we don't exceed the known stride
+    if (aligned.pixel_stride && offset > aligned.pixel_stride * 8)
+        goto misaligned;
+
+    *data = aligned;
+    if (out_bits)
+        *out_bits = bits;
+    return true;
+
+misaligned:
+    // Can't properly align anything, so just do a no-op
+    if (out_bits)
+        *out_bits = (struct pl_bit_encoding) {0};
+    return false;
+}
+
 const struct pl_fmt *pl_plane_find_fmt(const struct pl_gpu *gpu, int out_map[4],
                                        const struct pl_plane_data *data)
 {

@@ -91,6 +91,18 @@ struct pl_plane_data {
 // RGBA). Each element of `mask` must have a contiguous range of set bits.
 void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4]);
 
+// Helper function to take a `pl_plane_data` struct and try and improve its
+// alignment to make it more likely to correspond to a real `pl_fmt`. It does
+// this by attempting to round each component up to the nearest byte boundary.
+// This relies on the assumption (true in practice) that superfluous bits of
+// byte-misaligned formats are explicitly set to 0.
+//
+// The resulting shift must be consistent across all components, in which case
+// it's returned in `out_bits`. If no alignment was possible, `out_bits` is set
+// to {0}, and this function returns false.
+bool pl_plane_data_align(struct pl_plane_data *data,
+                         struct pl_bit_encoding *out_bits);
+
 // Helper function to find a suitable `pl_fmt` based on a pl_plane_data's
 // requirements. This is called internally by `pl_upload_plane`, but it's
 // exposed to users both as a convenience and so they may pre-emptively check
