@@ -227,6 +227,12 @@ struct pl_fmt {
     // the way it's interpreted by the texture. The host representation is
     // always tightly packed (no padding bits in between each component).
     //
+    // This representation assumes little endian ordering, i.e. components
+    // being ordered from LSB to MSB in memory. Note that for oddly packed
+    // formats like rgb10a2 or rgb565, this is inconsistent with the naming.
+    // (That is to say, rgb565 has sample order {2, 1, 0} under this convention
+    // - because rgb565 treats the R channel as the *most* significant bits)
+    //
     // If `opaque` is true, then there's no meaningful correspondence between
     // the two, and all of the remaining fields in this section are unset.
     //

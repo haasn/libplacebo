@@ -148,34 +148,39 @@ const struct vk_format vk_formats[] = {
     // "Swapped" component order formats
     {VK_FORMAT_B8G8R8_UNORM,             FMT("bgr8",     3,  3, UNORM, BITS(8,  8,  8),     IDX(2, 1, 0))},
     {VK_FORMAT_B8G8R8A8_UNORM,           FMT("bgra8",    4,  4, UNORM, BITS(8,  8,  8,  8), IDX(2, 1, 0, 3))},
-    {VK_FORMAT_B4G4R4A4_UNORM_PACK16,    FMT("bgra4",    4,  2, UNORM, BITS(4,  4,  4,  4), IDX(2, 1, 0, 3))},
-    {VK_FORMAT_B5G6R5_UNORM_PACK16,      FMT("bgr565",   3,  2, UNORM, BITS(5,  6,  5),     IDX(2, 1, 0))},
-    {VK_FORMAT_B5G5R5A1_UNORM_PACK16,    FMT("bgr5a1",   4,  2, UNORM, BITS(5,  5,  5,  1), IDX(2, 1, 0, 3))},
-    {VK_FORMAT_A1R5G5B5_UNORM_PACK16,    FMT("a1rgb5",   4,  2, UNORM, BITS(1,  5,  5,  5), IDX(3, 0, 1, 2))},
-    {VK_FORMAT_A2R10G10B10_UNORM_PACK32, FMT("a2rgb10",  4,  4, UNORM, BITS(2, 10, 10, 10), IDX(3, 0, 1, 2))},
-    {VK_FORMAT_A2B10G10R10_UNORM_PACK32, FMT("a2bgr10",  4,  4, UNORM, BITS(2, 10, 10, 10), IDX(3, 2, 1, 0))},
-    {VK_FORMAT_A8B8G8R8_UNORM_PACK32,    FMT("abgr8",    4,  4, UNORM, BITS(8,  8,  8,  8), IDX(3, 2, 1, 0))},
-    {VK_FORMAT_A2R10G10B10_SNORM_PACK32, FMT("a2rgb10s", 4,  4, SNORM, BITS(2, 10, 10, 10), IDX(3, 0, 1, 2))},
-    {VK_FORMAT_A2B10G10R10_SNORM_PACK32, FMT("a2bgr10s", 4,  4, SNORM, BITS(2, 10, 10, 10), IDX(3, 2, 1, 0))},
-    {VK_FORMAT_A8B8G8R8_SNORM_PACK32,    FMT("abgr8s",   4,  4, SNORM, BITS(8,  8,  8,  8), IDX(3, 2, 1, 0))},
 
     {VK_FORMAT_B8G8R8_UINT,              FMT("bgr8u",    3,  3, UINT,  BITS(8,  8,  8),     IDX(2, 1, 0))},
     {VK_FORMAT_B8G8R8A8_UINT,            FMT("bgra8u",   4,  4, UINT,  BITS(8,  8,  8,  8), IDX(2, 1, 0, 3))},
-    {VK_FORMAT_A2R10G10B10_UINT_PACK32,  FMT("a2rgb10u", 4,  4, UINT,  BITS(2, 10, 10, 10), IDX(3, 0, 1, 2))},
-    {VK_FORMAT_A2B10G10R10_UINT_PACK32,  FMT("a2bgr10u", 4,  4, UINT,  BITS(2, 10, 10, 10), IDX(3, 2, 1, 0))},
-    {VK_FORMAT_A8B8G8R8_UINT_PACK32,     FMT("abgr8u",   4,  4, UINT,  BITS(8,  8,  8,  8), IDX(3, 2, 1, 0))},
 
     {VK_FORMAT_B8G8R8_SINT,              FMT("bgr8i",    3,  3, SINT,  BITS(8,  8,  8),     IDX(2, 1, 0))},
     {VK_FORMAT_B8G8R8A8_SINT,            FMT("bgra8i",   4,  4, SINT,  BITS(8,  8,  8,  8), IDX(2, 1, 0, 3))},
-    {VK_FORMAT_A2R10G10B10_SINT_PACK32,  FMT("a2rgb10i", 4,  4, SINT,  BITS(2, 10, 10, 10), IDX(3, 0, 1, 2))},
-    {VK_FORMAT_A2B10G10R10_SINT_PACK32,  FMT("a2bgr10i", 4,  4, SINT,  BITS(2, 10, 10, 10), IDX(3, 2, 1, 0))},
-    {VK_FORMAT_A8B8G8R8_SINT_PACK32,     FMT("abgr8i",   4,  4, SINT,  BITS(8,  8,  8,  8), IDX(3, 2, 1, 0))},
 
-    // Special, packed integer formats (low bit depth)
-    {VK_FORMAT_R4G4_UNORM_PACK8,      REGFMT("rg4",      2,  4, UNORM)},
-    {VK_FORMAT_R4G4B4A4_UNORM_PACK16, REGFMT("rgba4",    4,  4, UNORM)},
-    {VK_FORMAT_R5G6B5_UNORM_PACK16,   FMT("rgb565",      3,  2, UNORM, BITS(5,  6,  5),     IDX(0, 1, 2))},
-    {VK_FORMAT_R5G5B5A1_UNORM_PACK16, FMT("rgb5a1",      4,  2, UNORM, BITS(5,  5,  5,  1), IDX(0, 1, 2, 3))},
+    // "Packed" integer formats
+    //
+    // Note: These have the component order reversed from what the vulkan name
+    // implies, because we order our IDX from LSB to MSB (consistent with the
+    // usual ordering from lowest byte to highest byte, on little endian
+    // platforms), but Vulkan names them from MSB to LSB.
+    {VK_FORMAT_R4G4_UNORM_PACK8,         FMT("gr4",      2,  1, UNORM, BITS(4,  4),         IDX(1, 0))},
+    {VK_FORMAT_B4G4R4A4_UNORM_PACK16,    FMT("argb4",    4,  2, UNORM, BITS(4,  4,  4,  4), IDX(3, 0, 1, 2))},
+    {VK_FORMAT_R4G4B4A4_UNORM_PACK16,    FMT("abgr4",    4,  2, UNORM, BITS(4,  4,  4,  4), IDX(3, 2, 1, 0))},
+
+    {VK_FORMAT_R5G6B5_UNORM_PACK16,      FMT("bgr565",   3,  2, UNORM, BITS(5,  6,  5),     IDX(2, 1, 0))},
+    {VK_FORMAT_B5G6R5_UNORM_PACK16,      FMT("rgb565",   3,  2, UNORM, BITS(5,  6,  5),     IDX(0, 1, 2))},
+
+    {VK_FORMAT_R5G5B5A1_UNORM_PACK16,    FMT("a1bgr5",   4,  2, UNORM, BITS(1,  5,  5,  5), IDX(3, 2, 1, 0))},
+    {VK_FORMAT_B5G5R5A1_UNORM_PACK16,    FMT("a1rgb5",   4,  2, UNORM, BITS(1,  5,  5,  5), IDX(3, 0, 1, 2))},
+    {VK_FORMAT_A1R5G5B5_UNORM_PACK16,    FMT("bgr5a1",   4,  2, UNORM, BITS(5,  5,  5,  1), IDX(2, 1, 0, 3))},
+
+    {VK_FORMAT_A2B10G10R10_UNORM_PACK32, FMT("rgb10a2",  4,  4, UNORM, BITS(10, 10, 10, 2), IDX(0, 1, 2, 3))},
+    {VK_FORMAT_A2R10G10B10_UNORM_PACK32, FMT("bgr10a2",  4,  4, UNORM, BITS(10, 10, 10, 2), IDX(2, 1, 0, 3))},
+    {VK_FORMAT_A2B10G10R10_SNORM_PACK32, FMT("rgb10a2s", 4,  4, SNORM, BITS(10, 10, 10, 2), IDX(0, 1, 2, 3))},
+    {VK_FORMAT_A2R10G10B10_SNORM_PACK32, FMT("bgr10a2s", 4,  4, SNORM, BITS(10, 10, 10, 2), IDX(2, 1, 0, 3))},
+    {VK_FORMAT_A2B10G10R10_UINT_PACK32,  FMT("rgb10a2u", 4,  4, UINT,  BITS(10, 10, 10, 2), IDX(0, 1, 2, 3))},
+    {VK_FORMAT_A2R10G10B10_UINT_PACK32,  FMT("bgr10a2u", 4,  4, UINT,  BITS(10, 10, 10, 2), IDX(2, 1, 0, 3))},
+    {VK_FORMAT_A2B10G10R10_SINT_PACK32,  FMT("rgb10a2i", 4,  4, SINT,  BITS(10, 10, 10, 2), IDX(0, 1, 2, 3))},
+    {VK_FORMAT_A2R10G10B10_SINT_PACK32,  FMT("bgr10a2i", 4,  4, SINT,  BITS(10, 10, 10, 2), IDX(2, 1, 0, 3))},
+
     {0}
 };
 
