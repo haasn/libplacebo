@@ -935,4 +935,6 @@ static void gpu_tests(const struct pl_gpu *gpu)
     pl_shader_tests(gpu);
     pl_scaler_tests(gpu);
     pl_render_tests(gpu);
+
+    REQUIRE(!pl_gpu_is_failed(gpu));
 }
