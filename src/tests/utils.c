@@ -5,27 +5,54 @@ int main()
 {
     struct pl_plane_data data = {0};
 
-    pl_plane_data_from_mask(&data, (uint64_t[4]){ 0xFF, 0xFF00, 0xFF0000 });
-    for (int i = 0; i < 3; i++) {
-        REQUIRE(data.component_size[i] == 8);
-        REQUIRE(data.component_pad[i] == 0);
-        REQUIRE(data.component_map[i] == i);
-    }
+#define TEST(ref, ...)                                                  \
+    do {                                                                \
+        pl_plane_data_from_mask(&data, (uint64_t[4]){ __VA_ARGS__ });   \
+        REQUIRE(memcmp(&data, &ref, sizeof(ref)) == 0);                 \
+    } while (0)
 
-    pl_plane_data_from_mask(&data, (uint64_t[4]){ 0xFFFF0000, 0xFFFF });
-    for (int i = 0; i < 2; i++) {
-        REQUIRE(data.component_size[i] == 16);
-        REQUIRE(data.component_pad[i] == 0);
-        REQUIRE(data.component_map[i] == 1 - i);
-    }
+    static const struct pl_plane_data rgb8 = {
+        .component_size = {8, 8, 8},
+        .component_map  = {0, 1, 2},
+    };
 
-    pl_plane_data_from_mask(&data, (uint64_t[4]){ 0x03FF, 0x03FF0000 });
-    REQUIRE(data.component_pad[0] == 0);
-    REQUIRE(data.component_pad[1] == 6);
-    for (int i = 0; i < 2; i++) {
-        REQUIRE(data.component_size[i] == 10);
-        REQUIRE(data.component_map[i] == i);
-    }
+    TEST(rgb8, 0xFF, 0xFF00, 0xFF0000);
+
+    static const struct pl_plane_data bgra8 = {
+        .component_size = {8, 8, 8, 8},
+        .component_map  = {2, 1, 0, 3},
+    };
+
+    TEST(bgra8, 0xFF0000, 0xFF00, 0xFF, 0xFF000000);
+
+    static const struct pl_plane_data gr16 = {
+        .component_size = {16, 16},
+        .component_map  = {1, 0},
+    };
+
+    TEST(gr16, 0xFFFF0000, 0xFFFF);
+
+    static const struct pl_plane_data r10x6g10 = {
+        .component_size = {10, 10},
+        .component_map  = {1, 0}, // LSB -> MSB ordering
+        .component_pad  = {0, 6},
+    };
+
+    TEST(r10x6g10, 0x03FF0000, 0x03FF);
+
+    static const struct pl_plane_data rgb565 = {
+        .component_size = {5, 6, 5},
+        .component_map  = {2, 1, 0}, // LSB -> MSB ordering
+    };
+
+    TEST(rgb565, 0xF800, 0x07E0, 0x001F);
+
+    static const struct pl_plane_data rgba16 = {
+        .component_size = {16, 16, 16, 16},
+        .component_map  = {0, 1, 2, 3},
+    };
+
+    TEST(rgba16, 0xFFFFllu, 0xFFFF0000llu, 0xFFFF00000000llu, 0xFFFF000000000000llu);
 
     // Test GLSL structure packing
     struct pl_var vec1 = pl_var_float(""),

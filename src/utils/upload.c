@@ -21,6 +21,8 @@
 #include "common.h"
 #include "gpu.h"
 
+#define MAX_COMPS 4
+
 struct comp {
     int order; // e.g. 0, 1, 2, 3 for RGBA
     int size;  // size in bits
@@ -44,27 +46,36 @@ static int compare_comp(const void *pa, const void *pb)
 
 void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4])
 {
-    struct comp comps[4] = { {0}, {1}, {2}, {3} };
+    struct comp comps[MAX_COMPS] = { {0}, {1}, {2}, {3} };
 
     for (int i = 0; i < PL_ARRAY_SIZE(comps); i++) {
-        comps[i].size = __builtin_popcount(mask[i]);
+        comps[i].size = __builtin_popcountll(mask[i]);
         comps[i].shift = PL_MAX(0, __builtin_ffsll(mask[i]) - 1);
+
+        // Sanity checking
+        uint64_t mask_reconstructed = (1LLU << comps[i].size) - 1;
+        mask_reconstructed <<= comps[i].shift;
+        pl_assert(mask_reconstructed == mask[i]);
     }
 
     // Sort the components by shift
-    qsort(comps, PL_ARRAY_SIZE(comps), sizeof(struct comp), compare_comp);
+    qsort(comps, MAX_COMPS, sizeof(struct comp), compare_comp);
 
     // Generate the resulting component size/pad/map
     int offset = 0;
-    for (int i = 0; i < PL_ARRAY_SIZE(comps); i++)  {
-        if (!comps[i].size)
-            return;
-
-        assert(comps[i].shift >= offset);
-        data->component_size[i] = comps[i].size;
-        data->component_pad[i] = comps[i].shift - offset;
-        data->component_map[i] = comps[i].order;
-        offset += data->component_size[i] + data->component_pad[i];
+    for (int i = 0; i < MAX_COMPS; i++)  {
+        if (comps[i].size) {
+            assert(comps[i].shift >= offset);
+            data->component_size[i] = comps[i].size;
+            data->component_pad[i] = comps[i].shift - offset;
+            data->component_map[i] = comps[i].order;
+            offset += data->component_size[i] + data->component_pad[i];
+        } else {
+            // Clear the superfluous entries for sanity
+            data->component_size[i] = 0;
+            data->component_pad[i] = 0;
+            data->component_map[i] = 0;
+        }
     }
 }
 

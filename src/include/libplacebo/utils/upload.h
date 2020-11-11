@@ -88,8 +88,7 @@ struct pl_plane_data {
 
 // Fills in the `component_size`, `component_pad` and `component_map` fields
 // based on the supplied mask for each component (in semantic order, i.e.
-// RGBA). If `mask` does not have a contiguous range of set bits, then the
-// result is undefined and probably not useful.
+// RGBA). Each element of `mask` must have a contiguous range of set bits.
 void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4]);
 
 // Helper function to find a suitable `pl_fmt` based on a pl_plane_data's
