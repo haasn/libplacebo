@@ -184,6 +184,7 @@ bool pl_color_primaries_is_wide_gamut(enum pl_color_primaries prim)
     case PL_COLOR_PRIM_BT_601_625:
     case PL_COLOR_PRIM_BT_709:
     case PL_COLOR_PRIM_BT_470M:
+    case PL_COLOR_PRIM_EBU_3213:
         return false;
     case PL_COLOR_PRIM_BT_2020:
     case PL_COLOR_PRIM_APPLE:
@@ -194,6 +195,7 @@ bool pl_color_primaries_is_wide_gamut(enum pl_color_primaries prim)
     case PL_COLOR_PRIM_DISPLAY_P3:
     case PL_COLOR_PRIM_V_GAMUT:
     case PL_COLOR_PRIM_S_GAMUT:
+    case PL_COLOR_PRIM_FILM_C:
         return true;
     case PL_COLOR_PRIM_COUNT: break;
     }
@@ -503,6 +505,19 @@ const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim
             .red   = {0.730, 0.280},
             .green = {0.140, 0.855},
             .blue  = {0.100, -0.05},
+            .white = CIE_D65,
+        },
+    // From FFmpeg source code
+        [PL_COLOR_PRIM_FILM_C] = {
+            .red   = {0.681, 0.319},
+            .green = {0.243, 0.692},
+            .blue  = {0.145, 0.049},
+            .white = CIE_C,
+        },
+        [PL_COLOR_PRIM_EBU_3213] = {
+            .red   = {0.630, 0.340},
+            .green = {0.295, 0.605},
+            .blue  = {0.155, 0.077},
             .white = CIE_D65,
         },
     };

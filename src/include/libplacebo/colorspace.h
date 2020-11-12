@@ -166,6 +166,7 @@ enum pl_color_primaries {
     PL_COLOR_PRIM_BT_601_625,   // ITU-R Rec. BT.601 (625-line = PAL, SECAM)
     PL_COLOR_PRIM_BT_709,       // ITU-R Rec. BT.709 (HD), also sRGB
     PL_COLOR_PRIM_BT_470M,      // ITU-R Rec. BT.470 M
+    PL_COLOR_PRIM_EBU_3213,     // EBU Tech. 3213-E / JEDEC P22 phosphors
     // Wide gamut:
     PL_COLOR_PRIM_BT_2020,      // ITU-R Rec. BT.2020 (UltraHD)
     PL_COLOR_PRIM_APPLE,        // Apple RGB
@@ -176,6 +177,7 @@ enum pl_color_primaries {
     PL_COLOR_PRIM_DISPLAY_P3,   // DCI-P3 (Digital Cinema) with D65 white point
     PL_COLOR_PRIM_V_GAMUT,      // Panasonic V-Gamut (VARICAM)
     PL_COLOR_PRIM_S_GAMUT,      // Sony S-Gamut
+    PL_COLOR_PRIM_FILM_C,       // Traditional film primaries with Illuminant C
     PL_COLOR_PRIM_COUNT
 };
 
