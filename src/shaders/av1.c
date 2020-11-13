@@ -272,23 +272,30 @@ struct grain_scale {
     float grain_scale;
 };
 
+static inline int bit_depth(const struct pl_color_repr *repr)
+{
+    int depth = PL_DEF(repr->bits.color_depth,
+                PL_DEF(repr->bits.sample_depth, 8));
+    pl_assert(depth >= 8);
+    return depth;
+}
+
 static struct grain_scale get_grain_scale(const struct pl_av1_grain_params *params)
 {
-    int bit_depth = PL_DEF(params->repr->bits.color_depth, 8);
-    pl_assert(bit_depth >= 8);
+    int bits = bit_depth(params->repr);
     struct grain_scale ret = {
-        .grain_center = 128 << (bit_depth - 8),
+        .grain_center = 128 << (bits - 8),
     };
 
     ret.grain_min = -ret.grain_center;
-    ret.grain_max = (256 << (bit_depth - 8)) - 1 - ret.grain_center;
+    ret.grain_max = (256 << (bits - 8)) - 1 - ret.grain_center;
 
     struct pl_color_repr repr = *params->repr;
     ret.texture_scale = pl_color_repr_normalize(&repr);
 
     // Since our color samples are normalized to the range [0, 1], we need to
     // scale down grain values from the scale [0, 2^b - 1] to this range.
-    ret.grain_scale = 1.0 / ((1 << bit_depth) - 1);
+    ret.grain_scale = 1.0 / ((1 << bits) - 1);
 
     return ret;
 }
@@ -301,8 +308,8 @@ static void generate_grain_y(float out[GRAIN_HEIGHT_LUT][GRAIN_WIDTH_LUT],
     const struct pl_av1_grain_data *data = &params->data;
     struct grain_scale scale = get_grain_scale(params);
     uint16_t seed = data->grain_seed;
-    int bit_depth = PL_DEF(params->repr->bits.color_depth, 8);
-    int shift = 12 - bit_depth + data->grain_scale_shift;
+    int bits = bit_depth(params->repr);
+    int shift = 12 - bits + data->grain_scale_shift;
     pl_assert(shift >= 0);
 
     for (int y = 0; y < GRAIN_HEIGHT; y++) {
@@ -348,8 +355,8 @@ static void generate_grain_uv(float *out, int16_t buf[GRAIN_HEIGHT][GRAIN_WIDTH]
 {
     const struct pl_av1_grain_data *data = &params->data;
     struct grain_scale scale = get_grain_scale(params);
-    int bit_depth = PL_DEF(params->repr->bits.color_depth, 8);
-    int shift = 12 - bit_depth + data->grain_scale_shift;
+    int bits = bit_depth(params->repr);
+    int shift = 12 - bits + data->grain_scale_shift;
     pl_assert(shift >= 0);
 
     uint16_t seed = data->grain_seed;
