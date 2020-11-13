@@ -1538,12 +1538,7 @@ fallback:
     // of the `target->repr` and apply it separately after dithering.
 
     if (params->dither_params) {
-        // Just assume the first component's depth is canonical. This works
-        // in practice, since for cases like rgb565 we want to use the lower
-        // depth anyway. Plus, every format has at least one component.
-        int fmt_depth = fbo->params.format->component_depth[0];
-        int depth = PL_DEF(target->repr.bits.sample_depth, fmt_depth);
-
+        int depth = target->repr.bits.sample_depth;
         // Ignore dithering for >16-bit FBOs, since it's pretty pointless
         if (depth <= 16 || params->force_dither) {
             pl_shader_dither(img_sh(pass, img), depth, &rr->dither_state,
@@ -1679,6 +1674,29 @@ static bool validate_structs(struct pl_renderer *rr,
     return true;
 }
 
+static void fix_bits(struct pl_bit_encoding *bits, const struct pl_tex *tex)
+{
+    // For UNORM formats, we can infer the sampled bit depth from the texture
+    // itself. This is ignored for other format types, because the logic
+    // doesn't really work out for them anyways, and it's best not to do
+    // anything too crazy unless the user provides explicit details.
+    if (!bits->sample_depth && tex->params.format->type == PL_FMT_UNORM) {
+        // Just assume the first component's depth is canonical. This works in
+        // practice, since for cases like rgb565 we want to use the lower depth
+        // anyway. Plus, every format has at least one component.
+        bits->sample_depth = tex->params.format->component_depth[0];
+
+        // If we don't know the color depth, assume it spans the full range of
+        // the texture. Otherwise, clamp it to the texture depth.
+        bits->color_depth = PL_DEF(bits->color_depth, bits->sample_depth);
+        bits->color_depth = PL_MIN(bits->color_depth, bits->sample_depth);
+
+        // If the texture depth is higher than the known color depth, assume
+        // the colors were left-shifted.
+        bits->bit_shift += bits->sample_depth - bits->color_depth;
+    }
+}
+
 bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
                      const struct pl_render_target *ptarget,
                      const struct pl_render_params *params)
@@ -1701,6 +1719,9 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
 
     pl_color_space_infer(&image->color);
     pl_color_space_infer(&target->color);
+
+    fix_bits(&image->repr.bits, image->planes[0].texture);
+    fix_bits(&target->repr.bits, target->fbo);
 
     // Note: the rects are fixed as part of `pass_read_image`
 
