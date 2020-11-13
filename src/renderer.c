@@ -580,8 +580,7 @@ static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
         for (int c = 0; c < src.components; c++) {
             if (plane->component_mapping[c] < 0)
                 continue;
-            GLSL("osd_color[%d] = color[%d];\n", plane->component_mapping[c],
-                 tex->params.format->sample_order[c]);
+            GLSL("osd_color[%d] = color[%d];\n", plane->component_mapping[c], c);
         }
 
         switch (ol->mode) {
@@ -1268,8 +1267,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         for (int c = 0; c < src.components; c++) {
             if (plane->component_mapping[c] < 0)
                 continue;
-            GLSL("color[%d] = tmp[%d];\n", plane->component_mapping[c],
-                 src.tex->params.format->sample_order[c]);
+            GLSL("color[%d] = tmp[%d];\n", plane->component_mapping[c], c);
 
             has_alpha |= plane->component_mapping[c] == PL_CHANNEL_A;
         }
