@@ -1456,8 +1456,10 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
     if (pass->img.color.transfer == PL_COLOR_TRC_LINEAR)
         prelinearized = true;
 
-    bool use_3dlut = image->profile.data || target->profile.data ||
-                     params->force_3dlut;
+    bool need_icc = (image->profile.data || target->profile.data) &&
+                    !pl_icc_profile_equal(&image->profile, &target->profile);
+
+    bool use_3dlut = need_icc || params->force_3dlut;
     if (rr->disable_3dlut)
         use_3dlut = false;
 
