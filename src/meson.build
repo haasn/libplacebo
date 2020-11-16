@@ -384,6 +384,22 @@ if get_option('tests')
 
     test(t, e)
   endforeach
+
+  # Ensure all headers compile
+  foreach h : headers
+    t = configure_file(
+        input: 'tests/include_tmpl.c',
+        output: 'include_@0@.c'.format(h.underscorify()),
+        configuration: {
+          'header': h
+        },
+    )
+
+    executable('test.include.' + h.underscorify(), t,
+        dependencies: tdep,
+        c_args: [ '-Wno-unused-function' ],
+    )
+  endforeach
 endif
 
 if get_option('bench')
