@@ -7,6 +7,7 @@ int main()
 }
 #else // EPOXY_HAS_EGL
 
+#include "opengl/utils.h"
 #include <epoxy/gl.h>
 #include <epoxy/egl.h>
 
@@ -289,7 +290,7 @@ next:
 error: ;
         EGLint error = eglGetError();
         if (error != EGL_SUCCESS)
-            fprintf(stderr, "EGL error: 0x%x\n", error);
+            fprintf(stderr, "EGL error: %s\n", egl_err_str(error));
     }
 
     eglTerminate(dpy);
