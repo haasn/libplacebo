@@ -120,7 +120,13 @@ def findall_enum(registry, name):
     for e in registry.iterfind('.//enum[@extends="{0}"]'.format(name)):
         # ext 289 is a non-existing extension that defines some names for
         # proprietary downstream consumers, causes problems unless excluded
-        if not 'alias' in e.attrib and e.attrib.get('extnumber', '0') != '289':
+        if e.attrib.get('extnumber', '0') == '289':
+            continue
+        # some other extensions contain reserved identifiers that generally
+        # translate to compile failures
+        if 'RESERVED' in e.attrib['name']:
+            continue
+        if not 'alias' in e.attrib:
             yield e
 
 def get_vkenum(registry, enum):
