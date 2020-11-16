@@ -881,7 +881,7 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         m = (struct pl_matrix3x3) {{
             {1.0,  lm_t,  lm_p},
             {1.0, -lm_t, -lm_p},
-            {1.0, 1.02127108, -605274491},
+            {1.0, 1.02127108, -0.605274491},
         }};
         break;
     }
