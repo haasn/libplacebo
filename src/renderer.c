@@ -1538,7 +1538,7 @@ fallback:
     if (params->dither_params) {
         int depth = target->repr.bits.sample_depth;
         // Ignore dithering for >16-bit FBOs, since it's pretty pointless
-        if (depth <= 16 || params->force_dither) {
+        if ((depth > 0 && depth <= 16) || params->force_dither) {
             pl_shader_dither(img_sh(pass, img), depth, &rr->dither_state,
                              params->dither_params);
         }
