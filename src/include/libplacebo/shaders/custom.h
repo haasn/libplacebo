@@ -23,6 +23,7 @@
 // format.
 
 #include <libplacebo/shaders.h>
+#include <libplacebo/colorspace.h>
 
 // Parameters describing custom shader text to be embedded into a `pl_shader`
 // object. All of the strings are optional and can be left as NULL, but without
