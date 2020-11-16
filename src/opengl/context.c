@@ -24,6 +24,7 @@ const struct pl_opengl_params pl_opengl_default_params = {0};
 struct priv {
     struct pl_context *ctx;
     bool is_debug;
+    bool is_debug_egl;
 };
 
 static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
@@ -43,6 +44,30 @@ static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
     pl_msg(ctx, level, "GL: %s", message);
 }
 
+#ifdef EPOXY_HAS_EGL
+
+static void debug_cb_egl(EGLenum error, const char *command,
+                         EGLint messageType, EGLLabelKHR threadLabel,
+                         EGLLabelKHR objectLabel, const char *message)
+{
+    struct pl_context *ctx = threadLabel;
+    if (!ctx)
+        return;
+
+    enum pl_log_level level = PL_LOG_ERR;
+    switch (messageType) {
+    case EGL_DEBUG_MSG_CRITICAL_KHR:    level = PL_LOG_FATAL; break;
+    case EGL_DEBUG_MSG_ERROR_KHR:       level = PL_LOG_ERR; break;
+    case EGL_DEBUG_MSG_WARN_KHR:        level = PL_LOG_WARN; break;
+    case EGL_DEBUG_MSG_INFO_KHR:        level = PL_LOG_DEBUG; break;
+    }
+
+    pl_msg(ctx, level, "EGL: %s: %s %s", command, egl_err_str(error),
+           message);
+}
+
+#endif // EPOXY_HAS_EGL
+
 void pl_opengl_destroy(const struct pl_opengl **ptr)
 {
     const struct pl_opengl *pl_gl = *ptr;
@@ -52,6 +77,11 @@ void pl_opengl_destroy(const struct pl_opengl **ptr)
     struct priv *p = TA_PRIV(pl_gl);
     if (p->is_debug)
         glDebugMessageCallback(NULL, NULL);
+
+#ifdef EPOXY_HAS_EGL
+    if (p->is_debug_egl)
+        eglDebugMessageControlKHR(NULL, NULL);
+#endif
 
     pl_gpu_destroy(pl_gl->gpu);
     TA_FREEP((void **) ptr);
@@ -105,6 +135,24 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
             PL_WARN(p, "OpenGL debugging requested but GL_ARB_debug_output "
                     "unavailable.. ignoring!");
         }
+
+#ifdef EPOXY_HAS_EGL
+        if (params->egl_display && epoxy_has_egl_extension(params->egl_display, "EGL_KHR_debug")) {
+            static const EGLAttrib attribs[] = {
+                // Enable everything under the sun, because the `pl_ctx` log
+                // level may change at runtime.
+                EGL_DEBUG_MSG_CRITICAL_KHR, EGL_TRUE,
+                EGL_DEBUG_MSG_ERROR_KHR,    EGL_TRUE,
+                EGL_DEBUG_MSG_WARN_KHR,     EGL_TRUE,
+                EGL_DEBUG_MSG_INFO_KHR,     EGL_TRUE,
+                EGL_NONE,
+            };
+
+            eglDebugMessageControlKHR(debug_cb_egl, attribs);
+            eglLabelObjectKHR(NULL, EGL_OBJECT_THREAD_KHR, NULL, ctx);
+            p->is_debug_egl = true;
+        }
+#endif // EPOXY_HAS_EGL
     }
 
     pl_gl->gpu = pl_gpu_create_gl(ctx, params);
