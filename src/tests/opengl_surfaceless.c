@@ -276,7 +276,10 @@ int main()
         gpu_tests(gpu);
         opengl_interop_tests(gpu);
         opengl_swapchain_tests(gl, dpy, surf);
+
+#ifndef CI_BLACKLIST_DMABUF
         opengl_test_export_import(gl, PL_HANDLE_DMA_BUF);
+#endif
 
         // Reduce log spam after first successful test
         pl_test_set_verbosity(ctx, PL_LOG_INFO);

@@ -114,7 +114,7 @@ test-gpu:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
-                      -Dc_args='-DCI_BLACKLIST_COMPUTE'
+                      -Dc_args='-DCI_BLACKLIST_COMPUTE -DCI_BLACKLIST_DMABUF'
                       -Dshaderc=disabled
                       -Db_coverage=true
         - ninja -C build
@@ -143,7 +143,7 @@ test-gpu-asan:
     script:
         - meson build --buildtype debugoptimized
                       -Dtests=true
-                      -Dc_args='-DCI_BLACKLIST_COMPUTE'
+                      -Dc_args='-DCI_BLACKLIST_COMPUTE -DCI_BLACKLIST_DMABUF'
                       -Dshaderc=disabled
                       -Db_sanitize=address
         - ninja -C build
@@ -159,7 +159,7 @@ test-gpu-msan:
     script:
         - env CC=clang meson build --buildtype debugoptimized
                                    -Dtests=true
-                                   -Dc_args='-DCI_BLACKLIST_COMPUTE -DMSAN'
+                                   -Dc_args='-DCI_BLACKLIST_COMPUTE -DCI_BLACKLIST_DMABUF -DMSAN'
                                    -Dglslang=disabled
                                    -Db_sanitize=memory
                                    -Db_lundef=false
@@ -176,7 +176,7 @@ test-gpu-ubsan:
     script:
         - env CC=clang meson build --buildtype debugoptimized
                                    -Dtests=true
-                                   -Dc_args='-DCI_BLACKLIST_COMPUTE -fPIE'
+                                   -Dc_args='-DCI_BLACKLIST_COMPUTE -DCI_BLACKLIST_DMABUF -fPIE'
                                    -Dshaderc=disabled
                                    -Db_sanitize=undefined
                                    -Db_lundef=false
