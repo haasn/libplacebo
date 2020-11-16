@@ -69,6 +69,7 @@ static void opengl_swapchain_tests(const struct pl_opengl *gl,
     if (surface == EGL_NO_SURFACE)
         return;
 
+    printf("testing opengl swapchain\n");
     const struct pl_gpu *gpu = gl->gpu;
     const struct pl_swapchain *sw;
     sw = pl_opengl_create_swapchain(gl, &(struct pl_opengl_swapchain_params) {
@@ -101,6 +102,7 @@ static void opengl_test_export_import(const struct pl_opengl *gl,
                                       enum pl_handle_type handle_type)
 {
     const struct pl_gpu *gpu = gl->gpu;
+    printf("testing opengl import/export\n");
 
     if (!(gpu->export_caps.tex & handle_type) ||
         !(gpu->import_caps.tex & handle_type)) {

@@ -7,6 +7,7 @@ static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
                                  enum pl_handle_type handle_type)
 {
     const struct pl_gpu *gpu = pl_vk->gpu;
+    printf("testing vulkan interop for handle type 0x%x\n", handle_type);
 
     if (gpu->export_caps.buf & handle_type) {
         const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
@@ -80,6 +81,8 @@ static void vulkan_test_export_import(const struct pl_vulkan *pl_vk,
     if (!fmt)
         goto skip_tex;
 
+    printf("testing vulkan import/export texture\n");
+
     const struct pl_tex *export = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w = 32,
         .h = 32,
@@ -109,6 +112,8 @@ skip_tex: ;
         !(gpu->import_caps.buf & handle_type))
         return;
 
+    printf("testing vulkan import/export buffer\n");
+
     const struct pl_buf *exp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
         .size = 32,
         .export_handle = handle_type,
@@ -133,6 +138,7 @@ static void vulkan_test_host_ptr(const struct pl_vulkan *pl_vk)
     if (!(gpu->import_caps.buf & PL_HANDLE_HOST_PTR))
         return;
 
+    printf("testing vulkan host ptr\n");
     REQUIRE(gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS);
 
     const size_t size = 2 << 20;
@@ -167,6 +173,7 @@ static void vulkan_swapchain_tests(const struct pl_vulkan *vk, VkSurfaceKHR surf
     if (!surf)
         return;
 
+    printf("testing vulkan swapchain\n");
     const struct pl_gpu *gpu = vk->gpu;
     const struct pl_swapchain *sw;
     sw = pl_vulkan_create_swapchain(vk, &(struct pl_vulkan_swapchain_params) {
