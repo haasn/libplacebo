@@ -609,6 +609,26 @@ static bool gl_tex_export(const struct pl_gpu *gpu,
 
 #endif // EPOXY_HAS_EGL
 
+static const char *fb_err_str(GLenum err)
+{
+    switch (err) {
+#define CASE(name) case name: return #name
+    CASE(GL_FRAMEBUFFER_COMPLETE);
+    CASE(GL_FRAMEBUFFER_UNDEFINED);
+    CASE(GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT);
+    CASE(GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT);
+    CASE(GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS);
+    CASE(GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER);
+    CASE(GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER);
+    CASE(GL_FRAMEBUFFER_UNSUPPORTED);
+    CASE(GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE);
+    CASE(GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS);
+#undef CASE
+
+    default: return "unknown error";
+    }
+}
+
 static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
                                           const struct pl_tex_params *params)
 {
@@ -746,7 +766,7 @@ static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
         GLenum err = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
         if (err != GL_FRAMEBUFFER_COMPLETE) {
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-            PL_ERR(gpu, "Failed creating framebuffer: error code %d", err);
+            PL_ERR(gpu, "Failed creating framebuffer: %s", fb_err_str(err));
             goto error;
         }
 
