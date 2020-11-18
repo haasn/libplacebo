@@ -1279,6 +1279,23 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
         .sample_mode = params->sample_mode,
     };
 
+    // Mask out capabilities not permitted by the `pl_fmt`
+#define MASK(field, cap)                                                        \
+    do {                                                                        \
+        if (tex->params.field && !(format->caps & cap)) {                       \
+            PL_WARN(gpu, "Masking `" #field "` from wrapped texture because "   \
+                    "the corresponding format '%s' does not support " #cap,     \
+                    format->name);                                              \
+            tex->params.field = false;                                          \
+        }                                                                       \
+    } while (0)
+
+    MASK(sampleable, PL_FMT_CAP_SAMPLEABLE);
+    MASK(storable,   PL_FMT_CAP_STORABLE);
+    MASK(blit_src,   PL_FMT_CAP_BLITTABLE);
+    MASK(blit_dst,   PL_FMT_CAP_BLITTABLE);
+#undef MASK
+
     struct pl_tex_vk *tex_vk = TA_PRIV(tex);
     tex_vk->type = VK_IMAGE_TYPE_2D;
     tex_vk->external_img = true;
