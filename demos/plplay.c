@@ -12,20 +12,23 @@
  *
  * - This is a very shitty proof-of-concept. All it does is render a single
  *   video stream as fast as possible. It ignores timing completely, and
- *   handles several failure paths by just exiting the entire frame (when it
+ *   handles several failure paths by just exiting the entire program (when it
  *   could, instead, try re-creating the context). It should also be split up
  *   into separate files and given a meson.build, but for now it'll suffice.
  *
  * License: CC0 / Public Domain
  */
 
-#if !defined(USE_GL) == !defined(USE_VK)
+#if defined(USE_GL) == defined(USE_VK)
 #error Specify exactly one of -DUSE_GL or -DUSE_VK when compiling!
 #endif
 
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include <libplacebo/renderer.h>
+#include <libplacebo/utils/libav.h>
 
 #include <libavutil/pixdesc.h>
 #include <libavformat/avformat.h>
@@ -36,9 +39,6 @@
 #endif
 
 #include <GLFW/glfw3.h>
-#include <libplacebo/renderer.h>
-#include <libplacebo/utils/libav.h>
-
 #ifdef USE_VK
 #include <libplacebo/vulkan.h>
 #endif
@@ -46,9 +46,6 @@
 #ifdef USE_GL
 #include <libplacebo/opengl.h>
 #endif
-
-#define WINDOW_WIDTH 640
-#define WINDOW_HEIGHT 480
 
 struct plplay {
     bool should_exit;
