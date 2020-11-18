@@ -487,7 +487,7 @@ static void dispatch_sampler(struct pass_state *pass, struct pl_shader *sh,
     if (info.config->polar) {
         ok = pl_shader_sample_polar(sh, src, &fparams);
     } else {
-        struct pl_shader *tsh = pl_dispatch_begin_ex(rr->dp, true);
+        struct pl_shader *tsh = pl_dispatch_begin(rr->dp);
         ok = pl_shader_sample_ortho(tsh, PL_SEP_VERT, src, &fparams);
         if (!ok) {
             pl_dispatch_abort(rr->dp, &tsh);
