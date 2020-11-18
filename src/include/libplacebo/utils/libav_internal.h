@@ -236,9 +236,9 @@ static inline int pl_plane_data_num_comps(const struct pl_plane_data *data)
     return 4;
 }
 
-static int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
-                                     struct pl_bit_encoding *out_bits,
-                                     enum AVPixelFormat pix_fmt)
+static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
+                                            struct pl_bit_encoding *out_bits,
+                                            enum AVPixelFormat pix_fmt)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pix_fmt);
     assert(desc);
@@ -287,7 +287,7 @@ static int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
             masks[c] <<= comp->shift;
             masks[c] <<= comp->offset * 8;
 
-            if (data->pixel_stride && data->pixel_stride != comp->step) {
+            if (data->pixel_stride && (int) data->pixel_stride != comp->step) {
                 // Pixel format contains components with different pixel stride
                 // (e.g. packed YUYV), this is currently not supported
                 return 0;
@@ -339,7 +339,8 @@ misaligned:
     return planes;
 }
 
-static bool pl_test_pixfmt(const struct pl_gpu *gpu, enum AVPixelFormat pixfmt)
+static inline bool pl_test_pixfmt(const struct pl_gpu *gpu,
+                                  enum AVPixelFormat pixfmt)
 {
     struct pl_bit_encoding bits;
     struct pl_plane_data data[4];
@@ -355,7 +356,7 @@ static bool pl_test_pixfmt(const struct pl_gpu *gpu, enum AVPixelFormat pixfmt)
     return true;
 }
 
-static void pl_avframe_set_color(AVFrame *frame, struct pl_color_space space)
+static inline void pl_avframe_set_color(AVFrame *frame, struct pl_color_space space)
 {
     frame->color_primaries = pl_primaries_to_av(space.primaries);
     frame->color_trc = pl_transfer_to_av(space.transfer);
@@ -384,7 +385,7 @@ static void pl_avframe_set_color(AVFrame *frame, struct pl_color_space space)
     // No way to map space.sig_scale, so just ignore it
 }
 
-static void pl_avframe_set_repr(AVFrame *frame, struct pl_color_repr repr)
+static inline void pl_avframe_set_repr(AVFrame *frame, struct pl_color_repr repr)
 {
     frame->colorspace = pl_system_to_av(repr.sys);
     frame->color_range = pl_levels_to_av(repr.levels);
@@ -392,7 +393,7 @@ static void pl_avframe_set_repr(AVFrame *frame, struct pl_color_repr repr)
     // No real way to map repr.bits, the image format already has to match
 }
 
-static void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile profile)
+static inline void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile profile)
 {
     av_frame_remove_side_data(frame, AV_FRAME_DATA_ICC_PROFILE);
 
@@ -404,10 +405,10 @@ static void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile profile
     memcpy(sd->data, profile.data, profile.len);
 }
 
-static void pl_color_from_avframe(struct pl_color_space *csp,
-                                  struct pl_color_repr *repr,
-                                  struct pl_icc_profile *icc,
-                                  const AVFrame *frame)
+static inline void pl_color_from_avframe(struct pl_color_space *csp,
+                                         struct pl_color_repr *repr,
+                                         struct pl_icc_profile *icc,
+                                         const AVFrame *frame)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     assert(desc);
@@ -488,8 +489,8 @@ static void pl_color_from_avframe(struct pl_color_space *csp,
     }
 }
 
-static void pl_image_from_avframe(struct pl_image *image,
-                                  const AVFrame *frame)
+static inline void pl_image_from_avframe(struct pl_image *image,
+                                         const AVFrame *frame)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     int planes = av_pix_fmt_count_planes(frame->format);
@@ -543,8 +544,8 @@ static void pl_image_from_avframe(struct pl_image *image,
     }
 }
 
-static void pl_target_from_avframe(struct pl_render_target *target,
-                                   const AVFrame *frame)
+static inline void pl_target_from_avframe(struct pl_render_target *target,
+                                          const AVFrame *frame)
 {
     *target = (struct pl_render_target) {
         .dst_rect = {
@@ -558,10 +559,10 @@ static void pl_target_from_avframe(struct pl_render_target *target,
     pl_color_from_avframe(&target->color, &target->repr, &target->profile, frame);
 }
 
-static bool pl_upload_avframe(const struct pl_gpu *gpu,
-                              struct pl_image *image,
-                              const struct pl_tex *tex[4],
-                              const AVFrame *frame)
+static inline bool pl_upload_avframe(const struct pl_gpu *gpu,
+                                     struct pl_image *image,
+                                     const struct pl_tex *tex[4],
+                                     const AVFrame *frame)
 {
     pl_image_from_avframe(image, frame);
 
