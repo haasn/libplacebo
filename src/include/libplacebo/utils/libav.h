@@ -54,7 +54,7 @@ static bool pl_test_pixfmt(const struct pl_gpu *gpu, enum AVPixelFormat pixfmt);
 
 // Very high level helper function to take an `AVFrame` and upload it to the
 // GPU. Similar in spirit to `pl_upload_plane`, and the same notes apply. `tex`
-// must be an array of 4 pointers of type (const struct pl_tex **), each either
+// must be an array of 4 pointers of type (const struct pl_tex *), each either
 // pointing to a valid texture, or NULL. Returns whether successful.
 //
 // Note that this function will currently fail on HW accelerated AVFrame
@@ -62,7 +62,7 @@ static bool pl_test_pixfmt(const struct pl_gpu *gpu, enum AVPixelFormat pixfmt);
 // e.g. <libplacebo/vulkan.h>, depending on the HWAccel type.
 static bool pl_upload_avframe(const struct pl_gpu *gpu,
                               struct pl_image *out_image,
-                              const struct pl_tex **tex[4],
+                              const struct pl_tex *tex[4],
                               const AVFrame *frame);
 
 

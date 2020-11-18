@@ -560,7 +560,7 @@ static void pl_target_from_avframe(struct pl_render_target *target,
 
 static bool pl_upload_avframe(const struct pl_gpu *gpu,
                               struct pl_image *image,
-                              const struct pl_tex **tex[4],
+                              const struct pl_tex *tex[4],
                               const AVFrame *frame)
 {
     pl_image_from_avframe(image, frame);
@@ -580,7 +580,7 @@ static bool pl_upload_avframe(const struct pl_gpu *gpu,
         data[p].height = frame->height >> (is_chroma ? desc->log2_chroma_h : 0);
         data[p].row_stride = frame->linesize[p];
         data[p].pixels = frame->data[p];
-        if (!pl_upload_plane(gpu, &image->planes[p], tex[p], &data[p]))
+        if (!pl_upload_plane(gpu, &image->planes[p], &tex[p], &data[p]))
             return false;
     }
 
