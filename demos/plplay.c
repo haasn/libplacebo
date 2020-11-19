@@ -139,26 +139,23 @@ static bool open_file(struct plplay *p, const char *filename)
         return false;
     }
 
-    // Find first video stream
-    for (int i = 0; i < p->format->nb_streams; i++) {
-        const AVStream *stream = p->format->streams[i];
-        const AVCodecParameters *par = stream->codecpar;
-        if (par->codec_type != AVMEDIA_TYPE_VIDEO)
-            continue;
+    // Find "best" video stream
+    int stream_idx =
+        av_find_best_stream(p->format, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
 
-        printf("Found video track (stream %d)\n", i);
-        printf("Resolution: %d x %d\n", par->width, par->height);
-        printf("FPS: %f\n", av_q2d(stream->avg_frame_rate));
-        printf("Bitrate: %"PRIi64" kbps\n", par->bit_rate / 1000);
-        p->stream = stream;
-        break;
-    }
-
-    if (!p->stream) {
+    if (stream_idx < 0) {
         fprintf(stderr, "plplay: File contains no video streams?");
         return false;
     }
 
+    const AVStream *stream = p->format->streams[stream_idx];
+    const AVCodecParameters *par = stream->codecpar;
+    printf("Found video track (stream %d)\n", stream_idx);
+    printf("Resolution: %d x %d\n", par->width, par->height);
+    printf("FPS: %f\n", av_q2d(stream->avg_frame_rate));
+    printf("Bitrate: %"PRIi64" kbps\n", par->bit_rate / 1000);
+
+    p->stream = stream;
     return true;
 }
 
