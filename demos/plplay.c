@@ -482,6 +482,9 @@ int main(int argc, char **argv)
 
     const AVCodecParameters *par = p->stream->codecpar;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(par->format);
+    if (!desc)
+        goto error;
+
     bool has_alpha = desc->flags & AV_PIX_FMT_FLAG_ALPHA;
     if (!create_window(p, par->width, par->height, has_alpha))
         goto error;
