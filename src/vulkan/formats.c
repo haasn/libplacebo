@@ -38,7 +38,7 @@
         BITS(bits, bits, bits, bits),           \
         IDX(0, 1, 2, 3))
 
-#define EMUFMT(_name, in, en, ib, eb, ftype)       \
+#define EMUFMT(_name, in, en, ib, eb, ftype)    \
     (struct pl_fmt) {                           \
         .name = _name,                          \
         .type = PL_FMT_##ftype,                 \
