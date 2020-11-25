@@ -1448,7 +1448,7 @@ void pl_3dlut_apply(struct pl_shader *sh, struct pl_shader_obj **lut3d)
     }
 
     GLSL("// pl_shader_3dlut\n");
-    GLSL("color.rgba = %s(color.rgb);\n", obj->lut);
+    GLSL("color.rgb = %s(color.rgb).rgb;\n", obj->lut);
 
     obj->updated = false;
 }
