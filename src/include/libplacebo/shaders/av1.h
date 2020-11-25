@@ -69,6 +69,7 @@ struct pl_av1_grain_params {
     struct pl_color_repr *repr;     // underlying color representation (see notes)
     int components;
     int component_mapping[4];       // same as `struct pl_plane`
+    int luma_comp;                  // index of luma in `luma_tex`
 
     // Notes for `repr`:
     //  - repr->bits affects the rounding for grain generation
@@ -80,7 +81,6 @@ struct pl_av1_grain_params {
     //  - `luma_tex` must be specified if the `tex` does not itself contain the
     //     "luma-like" component. For XYZ systems, the Y channel is the luma
     //     component. For RGB systems, the G channel is.
-    //  - `luma_tex` must have the luma information in the first component (0)
 };
 
 // Test if AV1 film grain needs to be applied. This is a helper function

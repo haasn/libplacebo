@@ -999,7 +999,7 @@ static enum plane_type detect_plane_type(const struct plane_state *st)
 // Returns true if grain was applied
 static bool plane_av1_grain(struct pass_state *pass, int plane_idx,
                             struct plane_state *st,
-                            const struct pl_tex *ref_tex,
+                            const struct plane_state *ref,
                             const struct pl_image *image,
                             const struct pl_render_params *params)
 {
@@ -1012,13 +1012,18 @@ static bool plane_av1_grain(struct pass_state *pass, int plane_idx,
     struct pl_color_repr repr = st->img.repr;
     struct pl_av1_grain_params grain_params = {
         .data = image->av1_grain,
-        .luma_tex = ref_tex,
+        .luma_tex = ref->plane.texture,
         .repr = &repr,
         .components = plane->components,
     };
 
     for (int c = 0; c < plane->components; c++)
         grain_params.component_mapping[c] = plane->component_mapping[c];
+
+    for (int c = 0; c < ref->plane.components; c++) {
+        if (ref->plane.component_mapping[c] == PL_CHANNEL_Y)
+            grain_params.luma_comp = c;
+    }
 
     if (!pl_needs_av1_grain(&grain_params))
         return false;
@@ -1165,7 +1170,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         // intent of the spec (which is to apply synthesis effectively during
         // decoding)
 
-        if (plane_av1_grain(pass, i, st, ref_tex, image, params)) {
+        if (plane_av1_grain(pass, i, st, ref, image, params)) {
             PL_TRACE(rr, "After AV1 grain:");
             log_plane_info(rr, st);
         }

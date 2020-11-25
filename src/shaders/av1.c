@@ -939,8 +939,9 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
             });
 
             GLSL("pos = global_id * uvec2(%du, %du);                    \n"
-                 "averageLuma = %f * texelFetch(%s, ivec2(pos), 0).r;   \n",
-                 1 << sub_x, 1 << sub_y, scale.texture_scale, luma);
+                 "averageLuma = %f * texelFetch(%s, ivec2(pos), 0)[%d]; \n",
+                 1 << sub_x, 1 << sub_y, scale.texture_scale, luma,
+                 params->luma_comp);
         }
     }
 
