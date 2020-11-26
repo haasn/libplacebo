@@ -655,6 +655,21 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         size_t buf_offset = ptr_offset + shmem.offset;
         size_t ptr_size = PL_ALIGN(ptr_offset + shmem.size, ma->host_ptr_align);
 
+        if (ptr_base != (uintptr_t) shmem.handle.ptr || ptr_size > shmem.size) {
+            if (vk->disable_overmapping) {
+                PL_ERR(vk, "Imported host pointer %p + %zu -> %zu conflicts "
+                       "with minimum alignment requirements %zu!",
+                       shmem.handle.ptr, shmem.offset, shmem.size,
+                       (size_t) params->reqs.alignment);
+                return false;
+            }
+
+            PL_DEBUG(vk, "Rounding imported host pointer %p + %zu -> %zu to "
+                    "nearest page boundaries: %p + %zu -> %zu",
+                     shmem.handle.ptr, shmem.offset, shmem.size,
+                     (void *) ptr_base, buf_offset, ptr_size);
+        }
+
         // This is technically redundant with the check further down below,
         // but since this is a possibly confusing case, elaborate on the
         // error message with more information.
@@ -665,13 +680,6 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
                    shmem.handle.ptr, ptr_offset, (void *) ptr_base,
                    buf_offset, (size_t) params->reqs.alignment);
             return false;
-        }
-
-        if (ptr_base != (uintptr_t) shmem.handle.ptr || ptr_size > shmem.size) {
-            PL_DEBUG(vk, "Rounding imported host pointer %p + %zu -> %zu to "
-                    "nearest page boundaries: %p + %zu -> %zu",
-                     shmem.handle.ptr, shmem.offset, shmem.size,
-                     (void *) ptr_base, buf_offset, ptr_size);
         }
 
         shmem.handle.ptr = (void *) ptr_base;

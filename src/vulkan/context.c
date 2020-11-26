@@ -1366,6 +1366,7 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     }
 
     vk->disable_events = params->disable_events;
+    vk->disable_overmapping = params->disable_overmapping;
 
     // Expose the resulting vulkan objects
     pl_vk->instance = vk->inst;
@@ -1556,6 +1557,7 @@ next_qf: ;
     }
 
     vk->disable_events = params->disable_events;
+    vk->disable_overmapping = params->disable_overmapping;
 
     // Expose the resulting vulkan objects
     pl_vk->instance = vk->inst;

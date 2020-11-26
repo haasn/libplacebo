@@ -95,6 +95,7 @@ struct vk_ctx {
     struct vk_signal **signals;
     int num_signals;
     bool disable_events;
+    bool disable_overmapping;
 
     // Instance-level function pointers
     VK_FUN(CreateDevice);
