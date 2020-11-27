@@ -206,8 +206,9 @@ extern const struct pl_render_params pl_render_high_quality_params;
 // High level description of a single slice of an image. This basically
 // represents a single 2D plane, with any number of components
 struct pl_plane {
-    // The texture underlying this plane. The texture must be 2D, and
-    // `texture->params.sampleable` must be true.
+    // The texture underlying this plane. The texture must be 2D, and must
+    // have specific parameters set depending on what the plane is being used
+    // for (see `pl_image.planes` and `pl_render_target.planes`).
     const struct pl_tex *texture;
 
     // Describes the number and interpretation of the components in this plane.
@@ -269,6 +270,9 @@ struct pl_overlay {
     // necessary, multiple planes can be combined by treating them as separate
     // overlays with different base colors.
     //
+    // All planes must have `params.sampleable` set, and it's recommended to
+    // also have the sample mode set to `PL_TEX_SAMPLE_LINEAR`.
+    //
     // Note: shift_x/y are simply treated as a uniform sampling offset.
     struct pl_plane plane;
     // The (absolute) coordinates at which to render this overlay texture. May
@@ -292,6 +296,9 @@ struct pl_overlay {
 struct pl_image {
     // Each frame is split up into some number of planes, each of which may
     // carry several components and be of any size / offset.
+    //
+    // All planes must have `params.sampleable` set, and it's recommended to
+    // also have the sample mode set to `PL_TEX_SAMPLE_LINEAR`.
     int num_planes;
     struct pl_plane planes[PL_MAX_PLANES];
 
@@ -349,10 +356,14 @@ void pl_image_set_chroma_location(struct pl_image *image,
 
 // Represents the target of a rendering operation
 struct pl_render_target {
-    // The framebuffer (or texture) we want to render to. Must have `renderable`
-    // set. The other capabilities are optional, but in particular `storable`
-    // and `blittable` can help boost performance if available.
-    const struct pl_tex *fbo;
+    // The output of rendering can be split up into several planes as well.
+    // This is especially useful for outputting e.g. subsampled YCbCr content.
+    //
+    // All of these plane textures must have `renderable` set. The other
+    // capabilites are optional, but in particular, `storable` and `blittable`
+    // can help boost performance if available.
+    int num_planes;
+    struct pl_plane planes[PL_MAX_PLANES];
 
     // The destination rectangle which we want to render into. If this is
     // larger or smaller than the src_rect, or if the aspect ratio is
@@ -380,11 +391,21 @@ struct pl_render_target {
     // `pl_image.overlays`
     const struct pl_overlay *overlays;
     int num_overlays;
+
+    // Deprecated. Kept around for backwards compatibility for libplacebo
+    // versions before the introduction of `planes`. If `num_planes` is 0, then
+    // this `fbo` is used, and assumed to be a single plane containing the
+    // components RGBA in that order.
+    const struct pl_tex *fbo;
 };
 
 // Fills in a pl_render_target based on a swapchain frame's FBO and metadata.
 void pl_render_target_from_swapchain(struct pl_render_target *out_target,
                                      const struct pl_swapchain_frame *frame);
+
+// Helper function to set chroma location, similar to the one above.
+void pl_render_target_set_chroma_location(struct pl_render_target *target,
+                                          enum pl_chroma_location chroma_loc);
 
 // Helper function to determine if the `target` covers the entire FBO or not.
 // If this returns true, users may want to `pl_tex_clear` the `target.fbo`

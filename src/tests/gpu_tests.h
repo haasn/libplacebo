@@ -831,7 +831,12 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     };
 
     struct pl_render_target target = {
-        .fbo            = fbo,
+        .num_planes     = 1,
+        .planes         = {{
+            .texture            = fbo,
+            .components         = 3,
+            .component_mapping  = {0, 1, 2},
+        }},
         .dst_rect       = {2, 2, fbo->params.w - 2, fbo->params.h - 2},
         .repr = {
             .sys        = PL_COLOR_SYSTEM_RGB,
@@ -963,6 +968,126 @@ error:
     pl_tex_destroy(gpu, &fbo);
 }
 
+static void pl_ycbcr_tests(const struct pl_gpu *gpu)
+{
+    struct pl_renderer *rr = pl_renderer_create(gpu->ctx, gpu);
+    if (!rr)
+        return;
+
+    struct pl_plane_data data[3];
+    for (int i = 0; i < 3; i++) {
+        const int sub = i > 0 ? 1 : 0;
+        const int width = (323 + sub) >> sub;
+        const int height = (255 + sub) >> sub;
+
+        data[i] = (struct pl_plane_data) {
+            .type = PL_FMT_UNORM,
+            .width = width,
+            .height = height,
+            .component_size = {16},
+            .component_map = {i},
+            .pixel_stride = sizeof(uint16_t),
+            .row_stride = PL_ALIGN2(width * sizeof(uint16_t),
+                                    gpu->limits.align_tex_xfer_stride),
+        };
+    }
+
+    const struct pl_fmt *fmt = pl_plane_find_fmt(gpu, NULL, &data[0]);
+    if (!fmt || !(fmt->caps & (PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_HOST_READABLE)))
+        return;
+
+    const struct pl_tex *src_tex[3] = {0};
+    const struct pl_tex *dst_tex[3] = {0};
+    struct pl_image img = {
+        .num_planes = 3,
+        .repr = pl_color_repr_hdtv,
+        .color = pl_color_space_bt709,
+    };
+
+    struct pl_render_target target = {
+        .num_planes = 3,
+        .repr = pl_color_repr_hdtv,
+        .color = pl_color_space_bt709,
+    };
+
+    uint8_t *src_buffer[3] = {0};
+    uint8_t *dst_buffer = NULL;
+    for (int i = 0; i < 3; i++) {
+        // Generate some arbitrary data for the buffer
+        src_buffer[i] = malloc(data[i].height * data[i].row_stride);
+        if (!src_buffer[i])
+            goto error;
+
+        data[i].pixels = src_buffer[i];
+        for (int y = 0; y < data[i].height; y++) {
+            for (int x = 0; x < data[i].width; x++) {
+                size_t off = y * data[i].row_stride + x * data[i].pixel_stride;
+                uint16_t *pixel = (uint16_t *) &src_buffer[i][off];
+                int gx = 200 + 100 * i, gy = 300 + 150 * i;
+                *pixel = (gx * x) ^ (gy * y); // whatever
+            }
+        }
+
+        REQUIRE(pl_upload_plane(gpu, &img.planes[i], &src_tex[i], &data[i]));
+    }
+
+    // This co-sites chroma pixels with pixels in the RGB image, meaning we
+    // get an exact round-trip when sampling both ways. This makes it useful
+    // as a test case, even though it's not common in the real world.
+    pl_image_set_chroma_location(&img, PL_CHROMA_TOP_LEFT);
+
+    for (int i = 0; i < 3; i++) {
+        dst_tex[i] = pl_tex_create(gpu, &(struct pl_tex_params) {
+            .format = fmt,
+            .w = data[i].width,
+            .h = data[i].height,
+            .renderable = true,
+            .host_readable = true,
+            .storable = fmt->caps & PL_FMT_CAP_STORABLE,
+            .blit_dst = fmt->caps & PL_FMT_CAP_BLITTABLE,
+        });
+
+        if (!dst_tex[i])
+            goto error;
+
+        target.planes[i] = img.planes[i];
+        target.planes[i].texture = dst_tex[i];
+    }
+
+    REQUIRE(pl_render_image(rr, &img, &target, &(struct pl_render_params) {0}));
+
+    dst_buffer = calloc(data[0].height, data[0].row_stride);
+    if (!dst_buffer)
+        goto error;
+
+    for (int i = 0; i < 3; i++) {
+        REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
+            .tex = dst_tex[i],
+            .ptr = dst_buffer,
+            .stride_w = data[i].row_stride / data[i].pixel_stride,
+        }));
+
+        for (int y = 0; y < data[i].height; y++) {
+            for (int x = 0; x < data[i].width; x++) {
+                size_t off = y * data[i].row_stride + x * data[i].pixel_stride;
+                uint16_t *src_pixel = (uint16_t *) &src_buffer[i][off];
+                uint16_t *dst_pixel = (uint16_t *) &dst_buffer[off];
+                int diff = abs((int) *src_pixel - (int) *dst_pixel);
+                REQUIRE(diff <= 50); // a little under 0.1%
+            }
+        }
+    }
+
+error:
+    pl_renderer_destroy(&rr);
+    free(dst_buffer);
+    for (int i = 0; i < 3; i++) {
+        free(src_buffer[i]);
+        pl_tex_destroy(gpu, &src_tex[i]);
+        pl_tex_destroy(gpu, &dst_tex[i]);
+    }
+}
+
 static void gpu_tests(const struct pl_gpu *gpu)
 {
     pl_buffer_tests(gpu);
@@ -970,6 +1095,7 @@ static void gpu_tests(const struct pl_gpu *gpu)
     pl_shader_tests(gpu);
     pl_scaler_tests(gpu);
     pl_render_tests(gpu);
+    pl_ycbcr_tests(gpu);
 
     REQUIRE(!pl_gpu_is_failed(gpu));
 }

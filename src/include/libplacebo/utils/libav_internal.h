@@ -586,7 +586,22 @@ static inline void pl_image_from_avframe(struct pl_image *image,
 static inline void pl_target_from_avframe(struct pl_render_target *target,
                                           const AVFrame *frame)
 {
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
+    int planes = av_pix_fmt_count_planes(frame->format);
+    assert(desc);
+
+    if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) {
+        const AVHWFramesContext *hwfc = (AVHWFramesContext *) frame->hw_frames_ctx->data;
+        desc = av_pix_fmt_desc_get(hwfc->sw_format);
+        planes = av_pix_fmt_count_planes(hwfc->sw_format);
+    }
+
+    // This should never fail, and there's nothing really useful we can do in
+    // this failure case anyway, since this is a `void` function.
+    assert(planes <= 4);
+
     *target = (struct pl_render_target) {
+        .num_planes = planes,
         .dst_rect = {
             .x0 = frame->crop_left,
             .y0 = frame->crop_top,
@@ -596,6 +611,29 @@ static inline void pl_target_from_avframe(struct pl_render_target *target,
     };
 
     pl_color_from_avframe(&target->color, &target->repr, &target->profile, frame);
+
+    for (int p = 0; p < target->num_planes; p++) {
+        struct pl_plane *plane = &target->planes[p];
+
+        // Fill in the component mapping array
+        for (int c = 0; c < desc->nb_components; c++) {
+            if (desc->comp[c].plane != p)
+                continue;
+
+            plane->component_mapping[plane->components++] = c;
+        }
+
+        // Clear up the superfluous components
+        for (int c = plane->components; c < 4; c++)
+            plane->component_mapping[c] = PL_CHANNEL_NONE;
+    }
+
+    // Only set the chroma location for definitely subsampled images, makes no
+    // sense otherwise
+    if (desc->log2_chroma_w || desc->log2_chroma_h) {
+        enum pl_chroma_location loc = pl_chroma_from_av(frame->chroma_location);
+        pl_render_target_set_chroma_location(target, loc);
+    }
 }
 
 static inline bool pl_upload_avframe(const struct pl_gpu *gpu,
