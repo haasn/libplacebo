@@ -25,6 +25,11 @@
 #include <libavutil/mastering_display_metadata.h>
 #include <libavutil/pixdesc.h>
 
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(56, 61, 100)
+#define HAVE_LAV_FILM_GRAIN
+#include <libavutil/film_grain_params.h>
+#endif
+
 static inline enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
 {
     switch (spc) {
@@ -518,7 +523,41 @@ static inline void pl_image_from_avframe(struct pl_image *image,
 
     pl_color_from_avframe(&image->color, &image->repr, &image->profile, frame);
 
-    // TODO: extract AV1 film grain data once possible
+#ifdef HAVE_LAV_FILM_GRAIN
+    const AVFrameSideData *sd;
+    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS))) {
+        const AVFilmGrainParams *fgp = (AVFilmGrainParams *) sd->data;
+        switch (fgp->type) {
+        case AV_FILM_GRAIN_PARAMS_NONE:
+            break;
+        case AV_FILM_GRAIN_PARAMS_AV1: {
+            const AVFilmGrainAOMParams *aom = &fgp->codec.aom;
+            struct pl_av1_grain_data *av1 = &image->av1_grain;
+            *av1 = (struct pl_av1_grain_data) {
+                .grain_seed = fgp->seed,
+                .num_points_y = aom->num_y_points,
+                .chroma_scaling_from_luma = aom->chroma_scaling_from_luma,
+                .num_points_uv = { aom->num_uv_points[0], aom->num_uv_points[1] },
+                .scaling_shift = aom->scaling_shift,
+                .ar_coeff_lag = aom->ar_coeff_lag,
+                .ar_coeff_shift = aom->ar_coeff_shift,
+                .grain_scale_shift = aom->grain_scale_shift,
+                .uv_mult = { aom->uv_mult[0], aom->uv_mult[1] },
+                .uv_mult_luma = { aom->uv_mult_luma[0], aom->uv_mult_luma[1] },
+                .uv_offset = { aom->uv_offset[0], aom->uv_offset[1] },
+                .overlap = aom->overlap_flag,
+            };
+
+            assert(sizeof(av1->ar_coeffs_uv) == sizeof(aom->ar_coeffs_uv));
+            memcpy(av1->points_y, aom->y_points, sizeof(av1->points_y));
+            memcpy(av1->points_uv, aom->uv_points, sizeof(av1->points_uv));
+            memcpy(av1->ar_coeffs_y, aom->ar_coeffs_y, sizeof(av1->ar_coeffs_y));
+            memcpy(av1->ar_coeffs_uv, aom->ar_coeffs_uv, sizeof(av1->ar_coeffs_uv));
+            break;
+        }
+        }
+    }
+#endif // HAVE_LAV_AV1_GRAIN
 
     for (int p = 0; p < image->num_planes; p++) {
         struct pl_plane *plane = &image->planes[p];
