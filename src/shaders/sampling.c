@@ -40,7 +40,7 @@ static inline struct pl_tex_params src_params(const struct pl_sample_src *src)
 // Helper function to compute the src/dst sizes and upscaling ratios
 static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
                       ident_t *src_tex, ident_t *pos, ident_t *size, ident_t *pt,
-                      float *ratio_x, float *ratio_y, int *components,
+                      float *ratio_x, float *ratio_y, uint8_t *comp_mask,
                       float *scale, bool resizeable, const char **fn)
 {
     enum pl_shader_sig sig;
@@ -72,11 +72,20 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
     if (scale)
         *scale = PL_DEF(src->scale, 1.0);
 
-    if (components) {
-        int tex_comps = 4;
-        if (src->tex)
-            tex_comps = src->tex->params.format->num_components;
-        *components = PL_DEF(src->components, tex_comps);
+    if (comp_mask) {
+        uint8_t tex_mask = 0x0Fu;
+        if (src->tex) {
+            // Mask containing only the number of components in the texture
+            tex_mask = (1 << src->tex->params.format->num_components) - 1;
+        }
+
+        uint8_t src_mask = src->component_mask;
+        if (!src_mask)
+            src_mask = (1 << PL_DEF(src->components, 4)) - 1;
+
+        // Only actually sample components that are both requested and
+        // available in the texture being sampled
+        *comp_mask = tex_mask & src_mask;
     }
 
     if (resizeable)
@@ -309,7 +318,7 @@ static bool filter_compat(const struct pl_filter *filter, float inv_scale,
 // `in` is the given identifier, and `idx` must be defined by the caller
 static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
                          const char *fn, ident_t tex, ident_t lut, int x, int y,
-                         int comps, ident_t in)
+                         uint8_t comp_mask, ident_t in)
 {
     // Since we can't know the subpixel position in advance, assume a
     // worst case scenario
@@ -332,8 +341,11 @@ static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
          lut, filter->radius);
 
     if (in) {
-        for (int n = 0; n < comps; n++)
-            GLSL("color[%d] += w * %s%d[idx];\n", n, in, n);
+        for (uint8_t comps = comp_mask; comps;) {
+            uint8_t c = __builtin_ctz(comps);
+            GLSL("color[%d] += w * %s%d[idx];\n", c, in, c);
+            comps &= ~(1 << c);
+        }
     } else {
         GLSL("in0 = %s(%s, base + pt * vec2(%d.0, %d.0)); \n"
              "color += vec4(w) * in0;                     \n",
@@ -405,11 +417,11 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
         has_compute = false;
     }
 
-    int comps;
+    uint8_t comp_mask;
     float rx, ry, scale;
     ident_t src_tex, pos, size, pt;
     const char *fn;
-    if (!setup_src(sh, src, &src_tex, &pos, &size, &pt, &rx, &ry, &comps, &scale, false, &fn))
+    if (!setup_src(sh, src, &src_tex, &pos, &size, &pt, &rx, &ry, &comp_mask, &scale, false, &fn))
         return false;
 
     struct sh_sampler_obj *obj;
@@ -471,7 +483,8 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
         ih = (int) ceil(bh / ry) + padding + 1;
 
     ident_t in = NULL;
-    int shmem_req = iw * ih * comps * sizeof(float);
+    int num_comps = __builtin_popcount(comp_mask);
+    int shmem_req = iw * ih * num_comps * sizeof(float);
     bool is_compute = has_compute && sh_try_compute(sh, bw, bh, false, shmem_req);
 
     // For compute shaders, which read the input texels primarily from shmem,
@@ -509,9 +522,11 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
              ih, bh, iw, bw, fn, src_tex, offset, offset);
 
         in = sh_fresh(sh, "in");
-        for (int c = 0; c < comps; c++) {
+        for (uint8_t comps = comp_mask; comps;) {
+            uint8_t c = __builtin_ctz(comps);
             GLSLH("shared float %s%d[%d];   \n", in, c, ih * iw);
             GLSL("%s%d[%d * y + x] = c[%d]; \n", in, c, iw, c);
+            comps &= ~(1 << c);
         }
 
         GLSL("}}                    \n"
@@ -523,13 +538,16 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
             for (int x = 1 - bound; x <= bound; x++) {
                 GLSL("idx = %d * rel.y + rel.x + %d;\n",
                      iw, iw * (y + offset) + x + offset);
-                polar_sample(sh, obj->filter, fn, src_tex, lut, x, y, comps, in);
+                polar_sample(sh, obj->filter, fn, src_tex, lut, x, y, comp_mask, in);
             }
         }
     } else {
         // Fragment shader sampling
-        for (int n = 0; n < comps; n++)
-            GLSL("vec4 in%d;\n", n);
+        for (uint8_t comps = comp_mask; comps;) {
+            uint8_t c = __builtin_ctz(comps);
+            GLSL("vec4 in%d;\n", c);
+            comps &= ~(1 << c);
+        }
 
         // Iterate over the LUT space in groups of 4 texels at a time, and
         // decide for each texel group whether to use gathering or direct
@@ -554,16 +572,18 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
                     for (int yy = y; yy <= bound && yy <= y + 1; yy++) {
                         for (int xx = x; xx <= bound && xx <= x + 1; xx++) {
                             polar_sample(sh, obj->filter, fn, src_tex, lut,
-                                         xx, yy, comps, NULL);
+                                         xx, yy, comp_mask, NULL);
                         }
                     }
                     continue; // next group of 4
                 }
 
                 // Gather the four surrounding texels simultaneously
-                for (int n = 0; n < comps; n++) {
+                for (uint8_t comps = comp_mask; comps;) {
+                    uint8_t c = __builtin_ctz(comps);
                     GLSL("in%d = textureGatherOffset(%s, base, "
-                         "ivec2(%d, %d), %d);\n", n, src_tex, x, y, n);
+                         "ivec2(%d, %d), %d);\n", c, src_tex, x, y, c);
+                    comps &= ~(1 << c);
                 }
 
                 // Mix in all of the points with their weights
@@ -577,7 +597,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
 
                     GLSL("idx = %d;\n", p);
                     polar_sample(sh, obj->filter, fn, src_tex, lut,
-                                 x+xo[p], y+yo[p], comps, "in");
+                                 x+xo[p], y+yo[p], comp_mask, "in");
                 }
             }
         }
@@ -627,12 +647,11 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
         abort();
     }
 
-    int comps;
     float ratio[2], scale;
     ident_t src_tex, pos, size, pt;
     const char *fn;
     if (!setup_src(sh, &srcfix, &src_tex, &pos, &size, &pt, &ratio[1], &ratio[0],
-                   &comps, &scale, false, &fn))
+                   NULL, &scale, false, &fn))
     {
         return false;
     }

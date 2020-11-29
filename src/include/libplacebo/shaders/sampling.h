@@ -49,8 +49,12 @@ struct pl_sample_src {
 
     // Common metadata for both sampler input types:
     int components;   // number of components to sample (optional)
+    uint8_t component_mask; // bitmask of components to sample (optional)
     int new_w, new_h; // dimensions of the resulting output (optional)
     float scale;      // factor to multiply into sampled signal (optional)
+
+    // Note: `component_mask` and `components` are mutually exclusive, the
+    // former is preferred if both are specified.
 };
 
 struct pl_deband_params {
