@@ -446,7 +446,7 @@ static struct sampler_info sample_src_info(struct pl_renderer *rr,
 }
 
 static void dispatch_sampler(struct pass_state *pass, struct pl_shader *sh,
-                             struct sampler *sampler,
+                             struct sampler *sampler, bool no_compute,
                              const struct pl_render_params *params,
                              const struct pl_sample_src *src)
 {
@@ -486,7 +486,7 @@ static void dispatch_sampler(struct pass_state *pass, struct pl_shader *sh,
         .lut_entries = params->lut_entries,
         .cutoff      = params->polar_cutoff,
         .antiring    = params->antiringing_strength,
-        .no_compute  = rr->disable_compute,
+        .no_compute  = rr->disable_compute || no_compute,
         .no_widening = params->skip_anti_aliasing,
         .lut         = lut,
     };
@@ -598,7 +598,7 @@ static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
             sampler = NULL;
 
         struct pl_shader *sh = pl_dispatch_begin(rr->dp);
-        dispatch_sampler(pass, sh, sampler, params, &src);
+        dispatch_sampler(pass, sh, sampler, !fbo->params.storable, params, &src);
 
         GLSL("vec4 osd_color;\n");
         for (int c = 0; c < src.components; c++) {
@@ -1178,7 +1178,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
 
         struct pl_shader *psh = pl_dispatch_begin_ex(rr->dp, true);
         if (deband_src(pass, psh, &src, image, params) != DEBAND_SCALED)
-            dispatch_sampler(pass, psh, &rr->samplers_src[i], params, &src);
+            dispatch_sampler(pass, psh, &rr->samplers_src[i], false, params, &src);
 
         ident_t sub = sh_subpass(sh, psh);
         if (!sub) {
@@ -1366,7 +1366,7 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
 
     src.tex = img_tex(pass, img);
     struct pl_shader *sh = pl_dispatch_begin_ex(rr->dp, true);
-    dispatch_sampler(pass, sh, &rr->sampler_main, params, &src);
+    dispatch_sampler(pass, sh, &rr->sampler_main, false, params, &src);
     *img = (struct img) {
         .sh     = sh,
         .w      = src.new_w,
@@ -1540,7 +1540,8 @@ fallback:
             }
 
             sh = pl_dispatch_begin(rr->dp);
-            dispatch_sampler(pass, sh, &rr->samplers_dst[p], params, &src);
+            dispatch_sampler(pass, sh, &rr->samplers_dst[p],
+                             !plane->texture->params.storable, params, &src);
 
             GLSL("vec4 orig_color = color; \n");
 
