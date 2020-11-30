@@ -583,7 +583,7 @@ struct pl_buf_params {
     // Deprecated. Setting a type now effectively just enables some of the
     // buffer usage flags. See `pl_buf_type`. This field will be removed
     // in the future.
-    enum pl_buf_type type;
+    enum pl_buf_type type PL_DEPRECATED;
 };
 
 // A generic buffer, which can be used for multiple purposes (texture transfer,

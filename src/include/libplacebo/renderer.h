@@ -18,6 +18,7 @@
 #ifndef LIBPLACEBO_RENDERER_H_
 #define LIBPLACEBO_RENDERER_H_
 
+#include <libplacebo/config.h>
 #include <libplacebo/colorspace.h>
 #include <libplacebo/filters.h>
 #include <libplacebo/gpu.h>
@@ -350,11 +351,12 @@ struct pl_frame {
 
     // Deprecated fields provided merely for backwards compatibility. The
     // use of these should be discontinued as soon as possible.
-    int width, height; // ignored
-    uint64_t signature; // ignored
-    const struct pl_tex *fbo; // fallback for `target.planes`
-    struct pl_rect2df src_rect; // fallback for `image.crop`
-    struct pl_rect2df dst_rect; // fallback for `target.crop`
+    int width PL_DEPRECATED; // ignored
+    int height PL_DEPRECATED;
+    uint64_t signature PL_DEPRECATED; // ignored
+    const struct pl_tex *fbo PL_DEPRECATED; // fallback for `target.planes`
+    struct pl_rect2df src_rect PL_DEPRECATED; // fallback for `image.crop`
+    struct pl_rect2df dst_rect PL_DEPRECATED; // fallback for `target.crop`
 };
 
 // Helper function to infer the chroma location offset for each plane in a
@@ -384,10 +386,30 @@ void pl_frame_clear(const struct pl_gpu *gpu, const struct pl_frame *frame,
 // Deprecated aliases, provided for backwards compatibility
 #define pl_image pl_frame
 #define pl_render_target pl_frame
-#define pl_image_set_chroma_location pl_frame_set_chroma_location
-#define pl_render_target_set_chroma_location pl_frame_set_chroma_location
-#define pl_render_target_from_swapchain pl_frame_from_swapchain
-#define pl_render_target_partial pl_frame_is_cropped
+
+static PL_DEPRECATED inline void pl_image_set_chroma_location(
+        struct pl_frame *frame, enum pl_chroma_location chroma_loc)
+{
+    return pl_frame_set_chroma_location(frame, chroma_loc);
+}
+
+static PL_DEPRECATED inline void pl_render_target_set_chroma_location(
+        struct pl_frame *frame, enum pl_chroma_location chroma_loc)
+{
+    return pl_frame_set_chroma_location(frame, chroma_loc);
+}
+
+static PL_DEPRECATED inline void pl_render_target_from_swapchain(
+        struct pl_frame *out_frame, const struct pl_swapchain_frame *frame)
+{
+    return pl_frame_from_swapchain(out_frame, frame);
+}
+
+static PL_DEPRECATED inline bool pl_render_target_partial(
+        const struct pl_frame *frame)
+{
+    return pl_frame_is_cropped(frame);
+}
 
 // Render a single image to a target using the given parameters. This is
 // fully dynamic, i.e. the params can change at any time. libplacebo will

@@ -35,6 +35,9 @@
 #pragma GCC visibility push(default)
 
 #include "config.h"
+#undef PL_DEPRECATED
+#define PL_DEPRECATED
+
 #include "include/libplacebo/colorspace.h"
 #include "include/libplacebo/common.h"
 #include "include/libplacebo/context.h"

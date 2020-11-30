@@ -39,4 +39,7 @@ const char *pl_version(void);
 // in their compiled libplacebo versions.
 @extra_defs@
 
+// Extra compiler-specific stuff
+#define PL_DEPRECATED __attribute__((deprecated))
+
 #endif // LIBPLACEBO_CONTEXT_H_
