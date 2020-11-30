@@ -84,6 +84,13 @@ void bstr_xappend_vasprintf_c(void *tactx, bstr *s, const char *fmt,
             len = ccStrPrintUint32(buf, va_arg(ap, unsigned int));
             bstr_xappend(tactx, s, (struct bstr) { buf, len });
             continue;
+        case 'l':
+            assert(c[1] == 'l');
+            assert(c[2] == 'u');
+            len = ccStrPrintUint64(buf, va_arg(ap, long long unsigned));
+            bstr_xappend(tactx, s, (struct bstr) { buf, len });
+            c += 2;
+            continue;
         case 'z':
             assert(c[1] == 'u');
             len = ccStrPrintUint64(buf, va_arg(ap, size_t));

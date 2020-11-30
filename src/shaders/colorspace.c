@@ -1334,10 +1334,10 @@ done: ;
     }
 
     uint64_t scale = (1LLU << new_depth) - 1;
-    GLSL("color = vec4(%f) * color + vec4(bias); \n"
-         "color = floor(color) * vec4(%f);       \n"
-         "}                                      \n",
-         (float) scale, 1.0 / scale);
+    GLSL("color = vec4(%llu.0) * color + vec4(bias); \n"
+         "color = floor(color) * vec4(1.0 / %llu.0); \n"
+         "}                                          \n",
+         (long long unsigned) scale, (long long unsigned) scale);
 }
 
 const struct pl_dither_params pl_dither_default_params = {
