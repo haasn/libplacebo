@@ -354,17 +354,16 @@ static bool render_frame(struct plplay *p, AVFrame *in_frame)
 
     bool ret = true;
 
-    struct pl_image image;
-    struct pl_render_target target;
+    struct pl_frame image, target;
     struct pl_render_params params = pl_render_default_params;
 
     if (pl_upload_avframe(p->gpu, &image, p->plane_tex, in_frame)) {
 
-        pl_render_target_from_swapchain(&target, &out_frame);
-        pl_rect2df_aspect_copy(&target.dst_rect, &image.src_rect, 0.0);
+        pl_frame_from_swapchain(&target, &out_frame);
+        pl_rect2df_aspect_copy(&target.crop, &image.crop, 0.0);
 
-        if (pl_render_target_partial(&target))
-            pl_tex_clear(p->gpu, out_frame.fbo, (float[4]){ 0.0, 0.0, 0.0, 1.0 });
+        if (pl_frame_is_cropped(&target))
+            pl_frame_clear(p->gpu, &target, (float[3]) {0});
 
         if (!pl_render_image(p->renderer, &image, &target, &params)) {
             fprintf(stderr, "libplacebo: Failed rendering... GPU lost?\n");

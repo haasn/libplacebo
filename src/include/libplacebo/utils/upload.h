@@ -49,7 +49,7 @@ struct pl_plane_data {
     size_t buf_offset;          // offset of data within buffer, must be a
                                 // multiple of `pixel_stride` as well as of 4
 
-    // Note: When using this together with `pl_image`, there is some amount of
+    // Note: When using this together with `pl_frame`, there is some amount of
     // overlap between `component_pad` and `pl_color_repr.bits`. Some key
     // differences between the two:
     //

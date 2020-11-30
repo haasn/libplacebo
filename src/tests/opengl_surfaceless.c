@@ -89,8 +89,8 @@ static void opengl_swapchain_tests(const struct pl_opengl *gl,
             pl_tex_clear(gpu, frame.fbo, (float[4]){0});
 
         // TODO: test this with an actual pl_renderer instance
-        struct pl_render_target target;
-        pl_render_target_from_swapchain(&target, &frame);
+        struct pl_frame target;
+        pl_frame_from_swapchain(&target, &frame);
 
         REQUIRE(pl_swapchain_submit_frame(sw));
         pl_swapchain_swap_buffers(sw);

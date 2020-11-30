@@ -252,17 +252,17 @@ struct pass_state {
     struct img img;
 
     // Represents the "reference rect". Canonically, this is functionallity
-    // equivalent to `pl_image.src_rect`, but both guaranteed to be valid, and
-    // also updates as the refplane evolves (e.g. due to user hook prescalers)
+    // equivalent to `image.crop`, but both guaranteed to be valid, and also
+    // updates as the refplane evolves (e.g. due to user hook prescalers)
     struct pl_rect2df ref_rect;
 
-    // Integer version of `target.dst_rect`. Semantically identical.
+    // Integer version of `target.crop`. Semantically identical.
     struct pl_rect2d dst_rect;
 
     // Cached copies of the `image` / `target` for this rendering pass,
     // corrected to make sure all rects etc. are properly defaulted/inferred.
-    struct pl_image image;
-    struct pl_render_target target;
+    struct pl_frame image;
+    struct pl_frame target;
 
     // Some extra plane metadata, inferred from `planes`
     enum plane_type src_type[4];
@@ -803,7 +803,7 @@ enum {
 
 static int deband_src(struct pass_state *pass, struct pl_shader *psh,
                       struct pl_sample_src *psrc,
-                      const struct pl_image *image,
+                      const struct pl_frame *image,
                       const struct pl_render_params *params)
 {
     struct pl_renderer *rr = pass->rr;
@@ -980,7 +980,7 @@ static void log_plane_info(struct pl_renderer *rr, const struct plane_state *st)
 static bool plane_av1_grain(struct pass_state *pass, int plane_idx,
                             struct plane_state *st,
                             const struct plane_state *ref,
-                            const struct pl_image *image,
+                            const struct pl_frame *image,
                             const struct pl_render_params *params)
 {
     struct pl_renderer *rr = pass->rr;
@@ -1058,7 +1058,7 @@ static bool plane_user_hooks(struct pass_state *pass, struct plane_state *st,
 static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
                             const struct pl_render_params *params)
 {
-    struct pl_image *image = &pass->image;
+    struct pl_frame *image = &pass->image;
 
     struct plane_state planes[4];
     struct plane_state *ref = &planes[pass->src_ref];
@@ -1097,10 +1097,10 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
               sy = st->plane.shift_y;
 
         st->img.rect = (struct pl_rect2df) {
-            .x0 = (image->src_rect.x0 - sx) / rrx,
-            .y0 = (image->src_rect.y0 - sy) / rry,
-            .x1 = (image->src_rect.x1 - sx) / rrx,
-            .y1 = (image->src_rect.y1 - sy) / rry,
+            .x0 = (image->crop.x0 - sx) / rrx,
+            .y0 = (image->crop.y0 - sy) / rry,
+            .x1 = (image->crop.x1 - sx) / rrx,
+            .y1 = (image->crop.y1 - sy) / rry,
         };
 
         PL_TRACE(rr, "Plane %d:", i);
@@ -1271,7 +1271,7 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
         .rect       = img->rect,
     };
 
-    const struct pl_image *image = &pass->image;
+    const struct pl_frame *image = &pass->image;
     bool need_fbo = image->num_overlays > 0;
     need_fbo |= rr->peak_detect_state && !params->allow_delayed_peak_detect;
 
@@ -1345,15 +1345,15 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
     // Draw overlay on top of the intermediate image if needed, accounting
     // for possible stretching needed due to mismatch between the ref and src
     struct pl_transform2x2 tf = pl_transform2x2_identity;
-    if (!pl_rect2d_eq(img->rect, image->src_rect)) {
-        float rx = pl_rect_w(img->rect) / pl_rect_w(image->src_rect),
-              ry = pl_rect_w(img->rect) / pl_rect_w(image->src_rect);
+    if (!pl_rect2d_eq(img->rect, image->crop)) {
+        float rx = pl_rect_w(img->rect) / pl_rect_w(image->crop),
+              ry = pl_rect_w(img->rect) / pl_rect_w(image->crop);
 
         tf = (struct pl_transform2x2) {
             .mat = {{{ rx, 0.0 }, { 0.0, ry }}},
             .c = {
-                img->rect.x0 - image->src_rect.x0 * rx,
-                img->rect.y0 - image->src_rect.y0 * ry
+                img->rect.x0 - image->crop.x0 * rx,
+                img->rect.y0 - image->crop.y0 * ry
             },
         };
     }
@@ -1389,8 +1389,8 @@ static bool pass_scale_main(struct pl_renderer *rr, struct pass_state *pass,
 static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
                                const struct pl_render_params *params)
 {
-    const struct pl_image *image = &pass->image;
-    const struct pl_render_target *target = &pass->target;
+    const struct pl_frame *image = &pass->image;
+    const struct pl_frame *target = &pass->target;
     struct img *img = &pass->img;
     struct pl_shader *sh = img_sh(pass, img);
 
@@ -1590,22 +1590,22 @@ fallback:
             return false;
 
         // Render any overlays, including overlays that need to be rendered
-        // from the `pl_image` itself, but which couldn't be rendered as
+        // from the `image` itself, but which couldn't be rendered as
         // part of the intermediate scaling pass due to missing FBOs.
         if (image->num_overlays > 0 && !FBOFMT) {
             // The original image dimensions need to be scaled by the effective
             // end-to-end scaling ratio to compensate for the mismatch in
             // pixel coordinates between the image and target.
-            float scale_x = pl_rect_w(dst_rectf) / pl_rect_w(image->src_rect),
-                  scale_y = pl_rect_h(dst_rectf) / pl_rect_h(image->src_rect);
+            float scale_x = pl_rect_w(dst_rectf) / pl_rect_w(image->crop),
+                  scale_y = pl_rect_h(dst_rectf) / pl_rect_h(image->crop);
 
             struct pl_transform2x2 iscale = {
                 .mat = {{{ scale_x, 0.0 }, { 0.0, scale_y }}},
                 .c = {
                     // If the image was rendered with an offset relative to the
                     // target crop, we also need to shift the overlays.
-                    dst_rectf.x0 - image->src_rect.x0 * scale_x,
-                    dst_rectf.y0 - image->src_rect.y0 * scale_y,
+                    dst_rectf.x0 - image->crop.x0 * scale_x,
+                    dst_rectf.y0 - image->crop.y0 * scale_y,
                 },
             };
 
@@ -1655,39 +1655,30 @@ fallback:
 // abort() in the default case, and because it's not the intent of this check
 // to catch all instances of memory corruption - just common logic bugs.
 static bool validate_structs(struct pl_renderer *rr,
-                             const struct pl_image *image,
-                             const struct pl_render_target *target)
+                             const struct pl_frame *image,
+                             const struct pl_frame *target)
 {
-    // Rendering an image with no planes technically works, but is pointless
+    // Rendering to/from a frame with no planes is technically allowed, but so
+    // pointless that it's more likely to be a user error worth catching.
     require(image->num_planes > 0 && image->num_planes < PL_MAX_PLANES);
+    require(target->num_planes > 0 && target->num_planes < PL_MAX_PLANES);
     for (int i = 0; i < image->num_planes; i++)
         validate_plane(image->planes[i], sampleable);
+    for (int i = 0; i < target->num_planes; i++)
+        validate_plane(target->planes[i], renderable);
 
-    float src_w = pl_rect_w(image->src_rect),
-          src_h = pl_rect_h(image->src_rect);
+    float src_w = pl_rect_w(image->crop), src_h = pl_rect_h(image->crop);
+    float dst_w = pl_rect_w(target->crop), dst_h = pl_rect_h(target->crop);
     require(!src_w == !src_h);
+    require(!dst_w == !dst_h);
 
     require(image->num_overlays >= 0);
+    require(target->num_overlays >= 0);
     for (int i = 0; i < image->num_overlays; i++) {
         const struct pl_overlay *overlay = &image->overlays[i];
         validate_plane(overlay->plane, sampleable);
         require(pl_rect_w(overlay->rect) && pl_rect_h(overlay->rect));
     }
-
-    require(target->num_planes >= 0 && target->num_planes < PL_MAX_PLANES);
-    if (target->num_planes > 0) {
-        require(!target->fbo);
-        for (int i = 0; i < target->num_planes; i++)
-            validate_plane(target->planes[i], renderable);
-    } else {
-        require(target->fbo);
-        require(target->fbo->params.renderable);
-    }
-
-    float dst_w = pl_rect_w(target->dst_rect),
-          dst_h = pl_rect_h(target->dst_rect);
-    require(!dst_w == !dst_h);
-
     for (int i = 0; i < target->num_overlays; i++) {
         const struct pl_overlay *overlay = &target->overlays[i];
         validate_plane(overlay->plane, sampleable);
@@ -1732,10 +1723,17 @@ static inline enum plane_type detect_plane_type(const struct pl_plane *plane,
     }
 }
 
+static inline void default_rect(struct pl_rect2df *rc,
+                                const struct pl_rect2df *backup)
+{
+    if (!rc->x0 && !rc->y0 && !rc->x1 && !rc->y1)
+        *rc = *backup;
+}
+
 static void fix_refs_and_rects(struct pass_state *pass)
 {
-    struct pl_image *image = &pass->image;
-    struct pl_render_target *target = &pass->target;
+    struct pl_frame *image = &pass->image;
+    struct pl_frame *target = &pass->target;
 
     // Find the ref planes
     for (int i = 0; i < image->num_planes; i++) {
@@ -1763,7 +1761,7 @@ static void fix_refs_and_rects(struct pass_state *pass)
     }
 
     // Fix the rendering rects
-    struct pl_rect2df *src = &image->src_rect, *dst = &target->dst_rect;
+    struct pl_rect2df *src = &image->crop, *dst = &target->crop;
     const struct pl_tex *src_ref = pass->image.planes[pass->src_ref].texture;
     const struct pl_tex *dst_ref = pass->target.planes[pass->dst_ref].texture;
 
@@ -1803,8 +1801,8 @@ static void fix_refs_and_rects(struct pass_state *pass)
     src->y1 = base_y + (ry1 - dst->y0) * scale_y;
 
     // Update dst_rect to the rounded values and re-apply flip if needed. We
-    // always do this in the `dst_rect` rather than the `src_rect` because this
-    // allows e.g. polar sampling compute shaders to work.
+    // always do this in the `dst` rather than the `src`` because this allows
+    // e.g. polar sampling compute shaders to work.
     *dst = (struct pl_rect2df) {
         .x0 = flipped_x ? rx1 : rx0,
         .y0 = flipped_y ? ry1 : ry0,
@@ -1819,21 +1817,37 @@ static void fix_refs_and_rects(struct pass_state *pass)
     };
 }
 
-static void fix_colorspace(struct pl_color_space *csp,
-                           struct pl_color_repr *repr,
-                           const struct pl_tex *tex)
+static const struct pl_tex *frame_ref(const struct pl_frame *frame)
 {
-    // If the primaries are not known, guess them based on the resolution
-    if (!csp->primaries)
-        csp->primaries = pl_color_primaries_guess(tex->params.w, tex->params.h);
+    pl_assert(frame->num_planes);
+    for (int i = 0; i < frame->num_planes; i++) {
+        switch (detect_plane_type(&frame->planes[i], &frame->repr)) {
+        case PLANE_RGB:
+        case PLANE_LUMA:
+        case PLANE_XYZ:
+            return frame->planes[i].texture;
+        default: continue;
+        }
+    }
 
-    pl_color_space_infer(csp);
+    return frame->planes[0].texture;
+}
+
+static void fix_color_space(struct pl_frame *frame)
+{
+    const struct pl_tex *tex = frame_ref(frame);
+
+    // If the primaries are not known, guess them based on the resolution
+    if (!frame->color.primaries)
+        frame->color.primaries = pl_color_primaries_guess(tex->params.w, tex->params.h);
+
+    pl_color_space_infer(&frame->color);
 
     // For UNORM formats, we can infer the sampled bit depth from the texture
     // itself. This is ignored for other format types, because the logic
     // doesn't really work out for them anyways, and it's best not to do
     // anything too crazy unless the user provides explicit details.
-    struct pl_bit_encoding *bits = &repr->bits;
+    struct pl_bit_encoding *bits = &frame->repr.bits;
     if (!bits->sample_depth && tex->params.format->type == PL_FMT_UNORM) {
         // Just assume the first component's depth is canonical. This works in
         // practice, since for cases like rgb565 we want to use the lower depth
@@ -1851,48 +1865,45 @@ static void fix_colorspace(struct pl_color_space *csp,
     }
 }
 
-bool pl_render_image(struct pl_renderer *rr, const struct pl_image *pimage,
-                     const struct pl_render_target *ptarget,
+bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *pimage,
+                     const struct pl_frame *ptarget,
                      const struct pl_render_params *params)
 {
     params = PL_DEF(params, &pl_render_default_params);
-    if (!validate_structs(rr, pimage, ptarget))
-        return false;
 
     struct pass_state pass = {
-        .tmp = talloc_new(NULL),
         .rr = rr,
         .image = *pimage,
         .target = *ptarget,
     };
 
-    pass.fbos_used = talloc_zero_array(pass.tmp, bool, rr->num_fbos);
-
-    struct pl_image *image = &pass.image;
-    struct pl_render_target *target = &pass.target;
-
-    if (!target->num_planes) {
-        // Backwards compatibility with the deprecated `target->fbo` field.
+    // Backwards compatibility hacks
+    struct pl_frame *image = &pass.image;
+    struct pl_frame *target = &pass.target;
+    default_rect(&image->crop, &image->src_rect);
+    default_rect(&target->crop, &target->src_rect);
+    if (!target->num_planes && target->fbo) {
         target->num_planes = 1;
         target->planes[0] = (struct pl_plane) {
             .texture = target->fbo,
-            .components = 4,
+            .components = target->fbo->params.format->num_components,
             .component_mapping = {0, 1, 2, 3},
         };
-        target->fbo = NULL;
     }
 
-    fix_refs_and_rects(&pass);
+    if (!validate_structs(rr, image, target))
+        return false;
 
-    const struct pl_tex *src_ref = image->planes[pass.src_ref].texture;
-    fix_colorspace(&image->color, &image->repr, src_ref);
+    fix_refs_and_rects(&pass);
+    fix_color_space(image);
 
     // Infer the target color space info based on the image's
     target->color.primaries = PL_DEF(target->color.primaries, image->color.primaries);
     target->color.transfer = PL_DEF(target->color.transfer, image->color.transfer);
+    fix_color_space(target);
 
-    const struct pl_tex *dst_ref = target->planes[pass.dst_ref].texture;
-    fix_colorspace(&target->color, &target->repr, dst_ref);
+    pass.tmp = talloc_new(NULL),
+    pass.fbos_used = talloc_zero_array(pass.tmp, bool, rr->num_fbos);
 
     // TODO: output caching
     pl_dispatch_reset_frame(rr->dp);
@@ -1921,33 +1932,18 @@ error:
     return false;
 }
 
-void pl_image_set_chroma_location(struct pl_image *image,
+void pl_frame_set_chroma_location(struct pl_frame *frame,
                                   enum pl_chroma_location chroma_loc)
 {
-    // Find the ref plane
-    enum plane_type types[4];
-    const struct pl_tex *ref = image->planes[0].texture;
-
-    pl_assert(image->num_planes <= PL_ARRAY_SIZE(types));
-    for (int i = 0; i < image->num_planes; i++) {
-        types[i] = detect_plane_type(&image->planes[i], &image->repr);
-        switch (types[i]) {
-        case PLANE_RGB:
-        case PLANE_LUMA:
-        case PLANE_XYZ:
-            ref = image->planes[i].texture;
-            break;
-        default: continue;
-        }
-    }
+    const struct pl_tex *ref = frame_ref(frame);
 
     if (ref) {
         // Texture dimensions are already known, so apply the chroma location
         // only to subsampled planes
         int ref_w = ref->params.w, ref_h = ref->params.h;
 
-        for (int i = 0; i < image->num_planes; i++) {
-            struct pl_plane *plane = &image->planes[i];
+        for (int i = 0; i < frame->num_planes; i++) {
+            struct pl_plane *plane = &frame->planes[i];
             const struct pl_tex *tex = plane->texture;
             bool subsampled = tex->params.w < ref_w || tex->params.h < ref_h;
             if (subsampled)
@@ -1956,95 +1952,70 @@ void pl_image_set_chroma_location(struct pl_image *image,
     } else {
         // Texture dimensions are not yet known, so apply the chroma location
         // to all chroma planes, regardless of subsampling
-        for (int i = 0; i < image->num_planes; i++) {
-            struct pl_plane *plane = &image->planes[i];
-            if (types[i] == PLANE_CHROMA)
+        for (int i = 0; i < frame->num_planes; i++) {
+            struct pl_plane *plane = &frame->planes[i];
+            if (detect_plane_type(plane, &frame->repr) == PLANE_CHROMA)
                 pl_chroma_location_offset(chroma_loc, &plane->shift_x, &plane->shift_y);
         }
     }
 }
 
-void pl_render_target_from_swapchain(struct pl_render_target *out_target,
-                                     const struct pl_swapchain_frame *frame)
+void pl_frame_from_swapchain(struct pl_frame *out_frame,
+                             const struct pl_swapchain_frame *frame)
 {
     const struct pl_tex *fbo = frame->fbo;
-    *out_target = (struct pl_render_target) {
+    *out_frame = (struct pl_frame) {
         .num_planes = 1,
         .planes = {{
             .texture = fbo,
             .components = fbo->params.format->num_components,
             .component_mapping = {0, 1, 2, 3},
         }},
-        .dst_rect = { 0, 0, fbo->params.w, fbo->params.h },
+        .crop = { 0, 0, fbo->params.w, fbo->params.h },
         .repr = frame->color_repr,
         .color = frame->color_space,
     };
 
     if (frame->flipped)
-        PL_SWAP(out_target->dst_rect.y0, out_target->dst_rect.y1);
+        PL_SWAP(out_frame->crop.y0, out_frame->crop.y1);
 }
 
-static const struct pl_tex *target_ref(const struct pl_render_target *target)
+bool pl_frame_is_cropped(const struct pl_frame *frame)
 {
-    if (!target->num_planes)
-        return target->fbo;
+    int x0 = roundf(PL_MIN(frame->crop.x0, frame->crop.x1)),
+        y0 = roundf(PL_MIN(frame->crop.y0, frame->crop.y1)),
+        x1 = roundf(PL_MAX(frame->crop.x0, frame->crop.x1)),
+        y1 = roundf(PL_MAX(frame->crop.y0, frame->crop.y1));
 
-    for (int i = 0; i < target->num_planes; i++) {
-        switch (detect_plane_type(&target->planes[i], &target->repr)) {
-        case PLANE_RGB:
-        case PLANE_LUMA:
-        case PLANE_XYZ:
-            return target->planes[i].texture;
-        default: continue;
-        }
-    }
-
-    return target->planes[0].texture;
-}
-
-void pl_render_target_set_chroma_location(struct pl_render_target *target,
-                                          enum pl_chroma_location chroma_loc)
-{
-    const struct pl_tex *ref = target_ref(target);
-
-    if (ref) {
-        // Texture dimensions are already known, so apply the chroma location
-        // only to subsampled planes
-        int ref_w = ref->params.w, ref_h = ref->params.h;
-
-        for (int i = 0; i < target->num_planes; i++) {
-            struct pl_plane *plane = &target->planes[i];
-            const struct pl_tex *tex = plane->texture;
-            bool subsampled = tex->params.w < ref_w || tex->params.h < ref_h;
-            if (subsampled)
-                pl_chroma_location_offset(chroma_loc, &plane->shift_x, &plane->shift_y);
-        }
-    } else {
-        // Texture dimensions are not yet known, so apply the chroma location
-        // to all chroma planes, regardless of subsampling
-        for (int i = 0; i < target->num_planes; i++) {
-            struct pl_plane *plane = &target->planes[i];
-            if (detect_plane_type(plane, &target->repr) == PLANE_CHROMA)
-                pl_chroma_location_offset(chroma_loc, &plane->shift_x, &plane->shift_y);
-        }
-    }
-}
-
-bool pl_render_target_partial(const struct pl_render_target *target)
-{
-    int x0 = roundf(PL_MIN(target->dst_rect.x0, target->dst_rect.x1)),
-        y0 = roundf(PL_MIN(target->dst_rect.y0, target->dst_rect.y1)),
-        x1 = roundf(PL_MAX(target->dst_rect.x0, target->dst_rect.x1)),
-        y1 = roundf(PL_MAX(target->dst_rect.y0, target->dst_rect.y1));
-
-    const struct pl_tex *ref = target_ref(target);
-    int fbo_w = ref->params.w,
-        fbo_h = ref->params.h;
+    const struct pl_tex *ref = frame_ref(frame);
+    pl_assert(ref);
 
     if (!x0 && !x1)
-        x1 = fbo_w;
+        x1 = ref->params.w;
     if (!y0 && !y1)
-        y1 = fbo_h;
+        y1 = ref->params.h;
 
-    return x0 > 0 || y0 > 0 || x1 < fbo_w || y1 < fbo_h;
+    return x0 > 0 || y0 > 0 || x1 < ref->params.w || y1 < ref->params.h;
+}
+
+void pl_frame_clear(const struct pl_gpu *gpu, const struct pl_frame *frame,
+                    const float rgb[3])
+{
+    struct pl_color_repr repr = frame->repr;
+    struct pl_transform3x3 tr = pl_color_repr_decode(&repr, NULL);
+    pl_transform3x3_invert(&tr);
+
+    float encoded[3] = { rgb[0], rgb[1], rgb[2] };
+    pl_transform3x3_apply(&tr, encoded);
+
+    for (int p = 0; p < frame->num_planes; p++) {
+        const struct pl_plane *plane =  &frame->planes[p];
+        float clear[4] = { 0.0, 0.0, 0.0, 1.0 };
+        for (int c = 0; c < plane->components; c++) {
+            if (plane->component_mapping[c] >= 0)
+                clear[c] = encoded[plane->component_mapping[c]];
+        }
+
+        pl_tex_clear(gpu, plane->texture, clear);
+    }
 }

@@ -410,91 +410,7 @@ static inline void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile 
     memcpy(sd->data, profile.data, profile.len);
 }
 
-static inline void pl_color_from_avframe(struct pl_color_space *csp,
-                                         struct pl_color_repr *repr,
-                                         struct pl_icc_profile *icc,
-                                         const AVFrame *frame)
-{
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
-    assert(desc);
-
-    if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) {
-        const AVHWFramesContext *hwfc = (AVHWFramesContext *) frame->hw_frames_ctx->data;
-        desc = av_pix_fmt_desc_get(hwfc->sw_format);
-    }
-
-    *csp = (struct pl_color_space) {
-        .primaries = pl_primaries_from_av(frame->color_primaries),
-        .transfer = pl_transfer_from_av(frame->color_trc),
-        .light = PL_COLOR_LIGHT_UNKNOWN,
-    };
-
-    *repr = (struct pl_color_repr) {
-        .sys = pl_system_from_av(frame->colorspace),
-        .levels = pl_levels_from_av(frame->color_range),
-        .alpha = (desc->flags & AV_PIX_FMT_FLAG_ALPHA)
-                    ? PL_ALPHA_INDEPENDENT
-                    : PL_ALPHA_UNKNOWN,
-        // For sake of simplicity, just use the first component's depth as the
-        // authoritative color depth for the whole image. Usually, this will be
-        // overwritten by more specific information when using e.g.
-        // `pl_upload_avframe`, but for the sake of e.g. users only wishing to
-        // map hwaccel frames, this is a good default.
-        .bits.color_depth = desc->comp[0].depth,
-    };
-
-    if (frame->colorspace == AVCOL_SPC_ICTCP &&
-        frame->color_trc == AVCOL_TRC_ARIB_STD_B67)
-    {
-        // libav* makes no distinction between PQ and HLG ICtCp, so we need
-        // to manually fix it in the case that we have HLG ICtCp data.
-        repr->sys = PL_COLOR_SYSTEM_BT_2100_HLG;
-
-    } else if (strncmp(desc->name, "xyz", 3) == 0) {
-
-        // libav* handles this as a special case, but doesn't provide an
-        // explicit flag for it either, so we have to resort to this ugly
-        // hack...
-        repr->sys = PL_COLOR_SYSTEM_XYZ;
-
-    } else if (desc->flags & AV_PIX_FMT_FLAG_RGB) {
-
-        repr->sys = PL_COLOR_SYSTEM_RGB;
-
-    } else if (!repr->sys) {
-
-        // libav* likes leaving this as UNKNOWN for YCbCr frames, which
-        // confuses libplacebo since we infer UNKNOWN as RGB. To get around
-        // this, explicitly infer a suitable colorspace for non-RGB formats.
-        repr->sys = pl_color_system_guess_ycbcr(frame->width, frame->height);
-    }
-
-    const AVFrameSideData *sd;
-    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_ICC_PROFILE))) {
-        *icc = (struct pl_icc_profile) {
-            .data = sd->data,
-            .len = sd->size,
-        };
-
-        // Needed to ensure profile uniqueness
-        pl_icc_profile_compute_signature(icc);
-    }
-
-    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL))) {
-        const AVContentLightMetadata *clm = (AVContentLightMetadata *) sd->data;
-        csp->sig_peak = clm->MaxCLL / PL_COLOR_SDR_WHITE;
-        csp->sig_avg = clm->MaxFALL / PL_COLOR_SDR_WHITE;
-    }
-
-    // This overrides the CLL values above, if both are present
-    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA))) {
-        const AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *) sd->data;
-        if (mdm->has_luminance)
-            csp->sig_peak = av_q2d(mdm->max_luminance) / PL_COLOR_SDR_WHITE;
-    }
-}
-
-static inline void pl_image_from_avframe(struct pl_image *image,
+static inline void pl_frame_from_avframe(struct pl_frame *out,
                                          const AVFrame *frame)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
@@ -511,20 +427,85 @@ static inline void pl_image_from_avframe(struct pl_image *image,
     // this failure case anyway, since this is a `void` function.
     assert(planes <= 4);
 
-    *image = (struct pl_image) {
+    *out = (struct pl_frame) {
         .num_planes = planes,
-        .src_rect = {
+        .crop = {
             .x0 = frame->crop_left,
             .y0 = frame->crop_top,
             .x1 = frame->width - frame->crop_right,
             .y1 = frame->height - frame->crop_bottom,
         },
+        .color = {
+            .primaries = pl_primaries_from_av(frame->color_primaries),
+            .transfer = pl_transfer_from_av(frame->color_trc),
+            .light = PL_COLOR_LIGHT_UNKNOWN,
+        },
+        .repr = {
+            .sys = pl_system_from_av(frame->colorspace),
+            .levels = pl_levels_from_av(frame->color_range),
+            .alpha = (desc->flags & AV_PIX_FMT_FLAG_ALPHA)
+                        ? PL_ALPHA_INDEPENDENT
+                        : PL_ALPHA_UNKNOWN,
+            // For sake of simplicity, just use the first component's depth as
+            // the authoritative color depth for the whole image. Usually, this
+            // will be overwritten by more specific information when using e.g.
+            // `pl_upload_avframe`, but for the sake of e.g. users only wishing
+            // to map hwaccel frames, this is a good default.
+            .bits.color_depth = desc->comp[0].depth,
+        },
     };
 
-    pl_color_from_avframe(&image->color, &image->repr, &image->profile, frame);
+    if (frame->colorspace == AVCOL_SPC_ICTCP &&
+        frame->color_trc == AVCOL_TRC_ARIB_STD_B67)
+    {
+        // libav* makes no distinction between PQ and HLG ICtCp, so we need
+        // to manually fix it in the case that we have HLG ICtCp data.
+        out->repr.sys = PL_COLOR_SYSTEM_BT_2100_HLG;
+
+    } else if (strncmp(desc->name, "xyz", 3) == 0) {
+
+        // libav* handles this as a special case, but doesn't provide an
+        // explicit flag for it either, so we have to resort to this ugly
+        // hack...
+        out->repr.sys= PL_COLOR_SYSTEM_XYZ;
+
+    } else if (desc->flags & AV_PIX_FMT_FLAG_RGB) {
+
+        out->repr.sys = PL_COLOR_SYSTEM_RGB;
+
+    } else if (!out->repr.sys) {
+
+        // libav* likes leaving this as UNKNOWN for YCbCr frames, which
+        // confuses libplacebo since we infer UNKNOWN as RGB. To get around
+        // this, explicitly infer a suitable colorspace for non-RGB formats.
+        out->repr.sys = pl_color_system_guess_ycbcr(frame->width, frame->height);
+    }
+
+    const AVFrameSideData *sd;
+    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_ICC_PROFILE))) {
+        out->profile = (struct pl_icc_profile) {
+            .data = sd->data,
+            .len = sd->size,
+        };
+
+        // Needed to ensure profile uniqueness
+        pl_icc_profile_compute_signature(&out->profile);
+    }
+
+    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL))) {
+        const AVContentLightMetadata *clm = (AVContentLightMetadata *) sd->data;
+        out->color.sig_peak = clm->MaxCLL / PL_COLOR_SDR_WHITE;
+        out->color.sig_avg = clm->MaxFALL / PL_COLOR_SDR_WHITE;
+    }
+
+    // This overrides the CLL values above, if both are present
+    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA))) {
+        const AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *) sd->data;
+        if (mdm->has_luminance)
+            out->color.sig_peak = av_q2d(mdm->max_luminance) / PL_COLOR_SDR_WHITE;
+    }
 
 #ifdef HAVE_LAV_FILM_GRAIN
-    const AVFrameSideData *sd;
     if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS))) {
         const AVFilmGrainParams *fgp = (AVFilmGrainParams *) sd->data;
         switch (fgp->type) {
@@ -532,7 +513,7 @@ static inline void pl_image_from_avframe(struct pl_image *image,
             break;
         case AV_FILM_GRAIN_PARAMS_AV1: {
             const AVFilmGrainAOMParams *aom = &fgp->codec.aom;
-            struct pl_av1_grain_data *av1 = &image->av1_grain;
+            struct pl_av1_grain_data *av1 = &out->av1_grain;
             *av1 = (struct pl_av1_grain_data) {
                 .grain_seed = fgp->seed,
                 .num_points_y = aom->num_y_points,
@@ -559,8 +540,8 @@ static inline void pl_image_from_avframe(struct pl_image *image,
     }
 #endif // HAVE_LAV_AV1_GRAIN
 
-    for (int p = 0; p < image->num_planes; p++) {
-        struct pl_plane *plane = &image->planes[p];
+    for (int p = 0; p < out->num_planes; p++) {
+        struct pl_plane *plane = &out->planes[p];
 
         // Fill in the component mapping array
         for (int c = 0; c < desc->nb_components; c++) {
@@ -579,75 +560,22 @@ static inline void pl_image_from_avframe(struct pl_image *image,
     // sense otherwise
     if (desc->log2_chroma_w || desc->log2_chroma_h) {
         enum pl_chroma_location loc = pl_chroma_from_av(frame->chroma_location);
-        pl_image_set_chroma_location(image, loc);
-    }
-}
-
-static inline void pl_target_from_avframe(struct pl_render_target *target,
-                                          const AVFrame *frame)
-{
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
-    int planes = av_pix_fmt_count_planes(frame->format);
-    assert(desc);
-
-    if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) {
-        const AVHWFramesContext *hwfc = (AVHWFramesContext *) frame->hw_frames_ctx->data;
-        desc = av_pix_fmt_desc_get(hwfc->sw_format);
-        planes = av_pix_fmt_count_planes(hwfc->sw_format);
-    }
-
-    // This should never fail, and there's nothing really useful we can do in
-    // this failure case anyway, since this is a `void` function.
-    assert(planes <= 4);
-
-    *target = (struct pl_render_target) {
-        .num_planes = planes,
-        .dst_rect = {
-            .x0 = frame->crop_left,
-            .y0 = frame->crop_top,
-            .x1 = frame->width - frame->crop_right,
-            .y1 = frame->height - frame->crop_bottom,
-        },
-    };
-
-    pl_color_from_avframe(&target->color, &target->repr, &target->profile, frame);
-
-    for (int p = 0; p < target->num_planes; p++) {
-        struct pl_plane *plane = &target->planes[p];
-
-        // Fill in the component mapping array
-        for (int c = 0; c < desc->nb_components; c++) {
-            if (desc->comp[c].plane != p)
-                continue;
-
-            plane->component_mapping[plane->components++] = c;
-        }
-
-        // Clear up the superfluous components
-        for (int c = plane->components; c < 4; c++)
-            plane->component_mapping[c] = PL_CHANNEL_NONE;
-    }
-
-    // Only set the chroma location for definitely subsampled images, makes no
-    // sense otherwise
-    if (desc->log2_chroma_w || desc->log2_chroma_h) {
-        enum pl_chroma_location loc = pl_chroma_from_av(frame->chroma_location);
-        pl_render_target_set_chroma_location(target, loc);
+        pl_frame_set_chroma_location(out, loc);
     }
 }
 
 static inline bool pl_upload_avframe(const struct pl_gpu *gpu,
-                                     struct pl_image *image,
+                                     struct pl_frame *out,
                                      const struct pl_tex *tex[4],
                                      const AVFrame *frame)
 {
-    pl_image_from_avframe(image, frame);
+    pl_frame_from_avframe(out, frame);
 
     // TODO: support HW-accelerated formats (e.g. wrapping vulkan frames,
     // importing DRM buffers, and so on)
 
     struct pl_plane_data data[4] = {0};
-    int planes = pl_plane_data_from_pixfmt(data, &image->repr.bits, frame->format);
+    int planes = pl_plane_data_from_pixfmt(data, &out->repr.bits, frame->format);
     if (!planes)
         return false;
 
@@ -658,7 +586,7 @@ static inline bool pl_upload_avframe(const struct pl_gpu *gpu,
         data[p].height = frame->height >> (is_chroma ? desc->log2_chroma_h : 0);
         data[p].row_stride = frame->linesize[p];
         data[p].pixels = frame->data[p];
-        if (!pl_upload_plane(gpu, &image->planes[p], &tex[p], &data[p]))
+        if (!pl_upload_plane(gpu, &out->planes[p], &tex[p], &data[p]))
             return false;
     }
 

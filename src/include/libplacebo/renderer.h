@@ -208,7 +208,7 @@ extern const struct pl_render_params pl_render_high_quality_params;
 struct pl_plane {
     // The texture underlying this plane. The texture must be 2D, and must
     // have specific parameters set depending on what the plane is being used
-    // for (see `pl_image.planes` and `pl_render_target.planes`).
+    // for (see `pl_render_image`).
     const struct pl_tex *texture;
 
     // Describes the number and interpretation of the components in this plane.
@@ -270,11 +270,12 @@ struct pl_overlay {
     // necessary, multiple planes can be combined by treating them as separate
     // overlays with different base colors.
     //
-    // All planes must have `params.sampleable` set, and it's recommended to
-    // also have the sample mode set to `PL_TEX_SAMPLE_LINEAR`.
+    // Must have `params.sampleable` set, and it's recommended to also have the
+    // sample mode set to `PL_TEX_SAMPLE_LINEAR`.
     //
     // Note: shift_x/y are simply treated as a uniform sampling offset.
     struct pl_plane plane;
+
     // The (absolute) coordinates at which to render this overlay texture. May
     // be flipped, and partially or wholly outside the image. If the size does
     // not exactly match the texture, it will be scaled/stretched to fit.
@@ -292,39 +293,40 @@ struct pl_overlay {
     struct pl_color_space color;
 };
 
-// High-level description of a source image to render
-struct pl_image {
+// High-level description of a complete frame, including metadata and planes
+struct pl_frame {
     // Each frame is split up into some number of planes, each of which may
     // carry several components and be of any size / offset.
-    //
-    // All planes must have `params.sampleable` set, and it's recommended to
-    // also have the sample mode set to `PL_TEX_SAMPLE_LINEAR`.
     int num_planes;
     struct pl_plane planes[PL_MAX_PLANES];
 
-    // Color representation / encoding / semantics associated with this image.
+    // Color representation / encoding / semantics of this frame.
     struct pl_color_repr repr;
     struct pl_color_space color;
 
-    // Optional ICC profile associated with this image.
+    // Optional ICC profile associated with this frame.
     struct pl_icc_profile profile;
 
-    // The source rectangle which we want to render from, relative to the
-    // reference dimensions. Pixels outside of this rectangle will ostensibly
-    // be ignored, but note that they may still contribute to the output data
-    // due to the effects of texture filtering. `src_rect` may be flipped, and
-    // may be partially or wholly outside the bounds of the texture. (Optional)
-    struct pl_rect2df src_rect;
+    // The logical crop / rectangle containing the valid information, relative
+    // to the reference plane's dimensions (e.g. luma). Pixels outside of this
+    // rectangle will ostensibly be ignored, but note that this is not a hard
+    // guarantee. In particular, scaler filters may end up sampling outside of
+    // this crop. This rect may be flipped, and may be partially or wholly
+    // outside the bounds of the underlying textures. (Optional)
+    //
+    // Note that `pl_render_image` will map the input crop directly to the
+    // output crop, stretching and scaling as needed. If you wish to preserve
+    // the aspect ratio, use a dedicated function like pl_rect2df_aspect_copy.
+    struct pl_rect2df crop;
 
-    // A list of additional overlays to render directly on top of this image.
-    // These overlays will be treated as though they were part of the image,
-    // which means they will be affected by the main scaler as well as by
-    // frame mixing algorithms. See also `pl_target.overlays`
+    // A list of additional overlays to render directly on top of this frame.
+    // These overlays will be treated as though they were part of the frame
+    // data, and can be used for things like subtitles or on-screen displays.
     const struct pl_overlay *overlays;
     int num_overlays;
 
     // Note on subsampling and plane correspondence: All planes belonging to
-    // the same image will only be streched by an integer multiple (or inverse
+    // the same frame will only be streched by an integer multiple (or inverse
     // thereof) in order to match the reference dimensions of this image. For
     // example, suppose you have an 8x4 image. A valid plane scaling would be
     // 4x2 -> 8x4 or 4x4 -> 4x4, but not 6x4 -> 8x4. So if a 6x4 plane is
@@ -341,87 +343,76 @@ struct pl_image {
 
     // Associated AV1 grain params (see <libplacebo/shaders/av1.h>). This is
     // entirely optional, the default of {0} corresponds to no extra grain.
+    //
+    // Note: This is ignored for the `target` of `pl_render_image`, since
+    // un-applying grain makes little sense.
     struct pl_av1_grain_data av1_grain;
 
-    // Deprecated fields. These are no longer used and may safely be ignored.
-    int width, height;
-    uint64_t signature;
+    // Deprecated fields provided merely for backwards compatibility. The
+    // use of these should be discontinued as soon as possible.
+    int width, height; // ignored
+    uint64_t signature; // ignored
+    const struct pl_tex *fbo; // fallback for `target.planes`
+    struct pl_rect2df src_rect; // fallback for `image.crop`
+    struct pl_rect2df dst_rect; // fallback for `target.crop`
 };
 
-// Helper function to infer the chroma location offset for each plane in an
-// image. This is equivalent to calling `pl_chroma_location_offset` on all
+// Helper function to infer the chroma location offset for each plane in a
+// frame. This is equivalent to calling `pl_chroma_location_offset` on all
 // subsampled planes' shift_x/shift_y variables.
-void pl_image_set_chroma_location(struct pl_image *image,
+void pl_frame_set_chroma_location(struct pl_frame *frame,
                                   enum pl_chroma_location chroma_loc);
 
-// Represents the target of a rendering operation
-struct pl_render_target {
-    // The output of rendering can be split up into several planes as well.
-    // This is especially useful for outputting e.g. subsampled YCbCr content.
-    //
-    // All of these plane textures must have `renderable` set. The other
-    // capabilites are optional, but in particular, `storable` and `blittable`
-    // can help boost performance if available.
-    int num_planes;
-    struct pl_plane planes[PL_MAX_PLANES];
+// Fills in a `pl_frame` based on a swapchain frame's FBO and metadata.
+void pl_frame_from_swapchain(struct pl_frame *out_frame,
+                             const struct pl_swapchain_frame *frame);
 
-    // The destination rectangle which we want to render into. If this is
-    // larger or smaller than the src_rect, or if the aspect ratio is
-    // different, scaling will occur. `dst_rect` may be flipped, and may be
-    // partially or wholly outside the bounds of the fbo. (Optional)
-    //
-    // Note: Because the GPU can only render to a whole number of pixels, the
-    // actual rendered area is rounded to the nearest pixel. The only reason
-    // this is `pl_rect2df` and not `pl_rect2d` is to make it easier to
-    // directly use `pl_rect2df_aspect_*` functions on it.
-    struct pl_rect2df dst_rect;
+// Helper function to determine if a frame is logically cropped or not. In
+// particular, this is useful in determining whether or not an output frame
+// needs to be cleared before rendering or not.
+bool pl_frame_is_cropped(const struct pl_frame *frame);
 
-    // The color representation and space of the output. If this does not match
-    // the color space of the source, libplacebo will convert the colors
-    // automatically.
-    struct pl_color_repr repr;
-    struct pl_color_space color;
+// Helper function to reset a frame to a given RGB color. If the frame's
+// color representation is something other than RGB, the clear color will
+// be adjusted accordingly.
+//
+// Note: For sake of simplicity, this function only works with opaque clears,
+// i.e. A=1. If you need to clear to transparent colors, use `pl_tex_clear`.
+void pl_frame_clear(const struct pl_gpu *gpu, const struct pl_frame *frame,
+                    const float clear_color[3]);
 
-    // Optional ICC profile associated with this render target.
-    struct pl_icc_profile profile;
-
-    // A list of additional overlays to render directly onto the output. These
-    // overlays will be rendered after the image itself has been fully scaled
-    // and output, and will not be affected by e.g. frame mixing. See also
-    // `pl_image.overlays`
-    const struct pl_overlay *overlays;
-    int num_overlays;
-
-    // Deprecated. Kept around for backwards compatibility for libplacebo
-    // versions before the introduction of `planes`. If `num_planes` is 0, then
-    // this `fbo` is used, and assumed to be a single plane containing the
-    // components RGBA in that order.
-    const struct pl_tex *fbo;
-};
-
-// Fills in a pl_render_target based on a swapchain frame's FBO and metadata.
-void pl_render_target_from_swapchain(struct pl_render_target *out_target,
-                                     const struct pl_swapchain_frame *frame);
-
-// Helper function to set chroma location, similar to the one above.
-void pl_render_target_set_chroma_location(struct pl_render_target *target,
-                                          enum pl_chroma_location chroma_loc);
-
-// Helper function to determine if the `target` covers the entire FBO or not.
-// If this returns true, users may want to `pl_tex_clear` the `target.fbo`
-// before calling `pl_render_image`.
-bool pl_render_target_partial(const struct pl_render_target *target);
+// Deprecated aliases, provided for backwards compatibility
+#define pl_image pl_frame
+#define pl_render_target pl_frame
+#define pl_image_set_chroma_location pl_frame_set_chroma_location
+#define pl_render_target_set_chroma_location pl_frame_set_chroma_location
+#define pl_render_target_from_swapchain pl_frame_from_swapchain
+#define pl_render_target_partial pl_frame_is_cropped
 
 // Render a single image to a target using the given parameters. This is
 // fully dynamic, i.e. the params can change at any time. libplacebo will
 // internally detect and flush whatever caches are invalidated as a result of
 // changing colorspace, size etc.
 //
+// Required plane capabilities:
+// - Planes in `image` must be `sampleable`
+// - Planes in `target` must be `renderable`
+//
+// Recommended plane capabilities: (Optional, but good for performance)
+// - Planes in `image` should have `sample_mode` PL_TEX_SAMPLE_LINEAR
+// - Planes in `target` should be `storable`
+// - Planes in `target` should have `blit_dst`
+//
 // Note on lifetime: Once this call returns, the passed structures may be
 // freely overwritten or discarded by the caller, even the referenced
 // `pl_tex` objects may be freely reused.
-bool pl_render_image(struct pl_renderer *rr, const struct pl_image *image,
-                     const struct pl_render_target *target,
+//
+// Note on overlays: `image.overlays` will be rendered directly onto the image,
+// which means they get affected by things like scaling and frame mixing.
+// `target.overlays` will also be rendered, but directly onto the target. They
+// don't even need to be inside `target.crop`.
+bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *image,
+                     const struct pl_frame *target,
                      const struct pl_render_params *params);
 
 // Flushes the internal state of this renderer. This is normally not needed,
@@ -432,80 +423,5 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_image *image,
 // so calling it is a good idea if the content source is expected to change
 // dramatically (e.g. when switching to a different file).
 void pl_renderer_flush_cache(struct pl_renderer *rr);
-
-/* TODO
-// Represents a mixture of input images, distributed temporally.
-//
-// NOTE: Images must be sorted by timestamp, i.e. `distances` must be
-// monotonically increasing.
-struct pl_image_mix {
-    // The number of images in this mixture. The number of images should be
-    // sufficient to meet the needs of the configured frame mixer. See the
-    // section below for more information.
-    int num_images;
-
-    // A list of the images themselves. The images can have different
-    // colorspaces, configurations of planes, or even sizes. Note: when using
-    // frame mixing, it's absolutely critical that all of the images have
-    // a unique value of `pl_image.signature`.
-    const struct pl_image *images;
-
-    // A list of relative distance vectors for each image, respectively.
-    // Basically, the "current" instant is always assigned a position of 0.0;
-    // and this distances array will give the relative offset (either negative
-    // or positive) of the images in the mixture. The values are expected to be
-    // normalized such that a separation of 1.0 corresponds to roughly one
-    // nominal source frame duration. So a constant framerate video file will
-    // always have distances like e.g. {-2.3, -1.3, -0.3, 0.7, 1.7, 2.7}, using
-    // an example radius of 3.
-    //
-    // The interpretation of timestamps is that frames are momentary samples
-    // centered on this timestamp. In other words, in the example above, the
-    // frame with timestamp 0.7 should (theoretically) be visible in the
-    // interval [0.2, 1.2] on a zero-order-hold (nearest neighbour) display.
-    //
-    // In cases where the framerate is variable (e.g. VFR video), the choice of
-    // what to scale to use can be difficult to answer. A typical choice would
-    // be either to use the canonical (container-tagged) framerate, or the
-    // highest momentary framerate, as a reference. If all else fails, you
-    // could also use the display's framerate.
-    const float *distances;
-
-    // The duration for which the resulting image will be held, using the same
-    // scale as the `distance`. This duration is centered around the instant
-    // 0.0. Basically, the image being rendered is assumed to be displayed from
-    // the time -vsync_duration/2 up to the time vsync_duration/2. If the
-    // display has a variable frame-rate (e.g. Adaptive Sync), then you're
-    // better off not using this function and instead just painting the frames
-    // directly using `pl_render_image` as they come in.
-    float vsync_duration;
-
-    // Explanation of the frame mixing radius: The algorithm chosen in
-    // `pl_render_params.frame_mixing` has a canonical radius equal to
-    // `pl_filter_config.kernel->radius`. This means that the frame mixing
-    // algorithm will (only) need to consult all of the frames that have a
-    // distance within the interval [-radius, radius]. As such, the user should
-    // include all such frames in `images`, but may prune or omit frames that
-    // lie outside it.
-    //
-    // The built-in frame mixing (`pl_render_params.frame_mixing == NULL`) has
-    // a canonical radius equal to `vsync_duration/2`.
-};
-
-// Render a mixture of images to the target using the given parameters. This
-// functions much like a generalization of `pl_render_image`, for when the API
-// user has more control over the frame queue / vsync timings and can present a
-// complete picture of the current instant's neighbourhood. This allows
-// libplacebo to use frame blending in order to eliminate judder artifacts
-// typically associated with source/display frame rate mismatch.
-//
-// In particular, pl_render_image can be semantically viewed as a special case
-// of pl_render_image_mix, where num_images = 1, that frame's distance is 0.0,
-// and the vsync_duration is 0.0. (But using `pl_render_image` instead of
-// `pl_render_image_mix` in such an example can still be more efficient)
-bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_image_mix *mix,
-                         const struct pl_render_target *target,
-                         const struct pl_render_params *params);
-*/
 
 #endif // LIBPLACEBO_RENDERER_H_

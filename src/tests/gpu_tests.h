@@ -818,8 +818,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
 
     pl_tex_clear(gpu, fbo, (float[4]){0});
 
-    struct pl_image image = {
-        .signature      = 0,
+    struct pl_frame image = {
         .num_planes     = 1,
         .planes         = { img5x5 },
         .repr = {
@@ -827,17 +826,17 @@ static void pl_render_tests(const struct pl_gpu *gpu)
             .levels     = PL_COLOR_LEVELS_FULL,
         },
         .color          = pl_color_space_bt709,
-        .src_rect       = {-1.0, 0.0, width - 1.0, height},
+        .crop           = {-1.0, 0.0, width - 1.0, height},
     };
 
-    struct pl_render_target target = {
+    struct pl_frame target = {
         .num_planes     = 1,
         .planes         = {{
             .texture            = fbo,
             .components         = 3,
             .component_mapping  = {0, 1, 2},
         }},
-        .dst_rect       = {2, 2, fbo->params.w - 2, fbo->params.h - 2},
+        .crop           = {2, 2, fbo->params.w - 2, fbo->params.h - 2},
         .repr = {
             .sys        = PL_COLOR_SYSTEM_RGB,
             .levels     = PL_COLOR_LEVELS_FULL,
@@ -998,13 +997,13 @@ static void pl_ycbcr_tests(const struct pl_gpu *gpu)
 
     const struct pl_tex *src_tex[3] = {0};
     const struct pl_tex *dst_tex[3] = {0};
-    struct pl_image img = {
+    struct pl_frame img = {
         .num_planes = 3,
         .repr = pl_color_repr_hdtv,
         .color = pl_color_space_bt709,
     };
 
-    struct pl_render_target target = {
+    struct pl_frame target = {
         .num_planes = 3,
         .repr = pl_color_repr_hdtv,
         .color = pl_color_space_bt709,
@@ -1034,7 +1033,7 @@ static void pl_ycbcr_tests(const struct pl_gpu *gpu)
     // This co-sites chroma pixels with pixels in the RGB image, meaning we
     // get an exact round-trip when sampling both ways. This makes it useful
     // as a test case, even though it's not common in the real world.
-    pl_image_set_chroma_location(&img, PL_CHROMA_TOP_LEFT);
+    pl_frame_set_chroma_location(&img, PL_CHROMA_TOP_LEFT);
 
     for (int i = 0; i < 3; i++) {
         dst_tex[i] = pl_tex_create(gpu, &(struct pl_tex_params) {

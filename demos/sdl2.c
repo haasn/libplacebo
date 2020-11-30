@@ -266,25 +266,25 @@ static void init_rendering(const char *img, const char *osd, const char *icc)
 static void render_frame(const struct pl_swapchain_frame *frame)
 {
     const struct pl_tex *img = img_plane.texture;
-    struct pl_image image = {
+    struct pl_frame image = {
         .num_planes = 1,
         .planes     = { img_plane },
         .repr       = pl_color_repr_unknown,
         .color      = pl_color_space_unknown,
-        .src_rect   = {0, 0, img->params.w, img->params.h},
+        .crop       = {0, 0, img->params.w, img->params.h},
     };
 
     // This seems to be the case for SDL2_image
     image.repr.alpha = PL_ALPHA_INDEPENDENT;
 
-    struct pl_render_target target;
-    pl_render_target_from_swapchain(&target, frame);
+    struct pl_frame target;
+    pl_frame_from_swapchain(&target, frame);
     target.profile = (struct pl_icc_profile) {
         .data = icc_profile.data,
         .len = icc_profile.size,
     };
 
-    pl_rect2df_aspect_copy(&target.dst_rect, &image.src_rect, 0.0);
+    pl_rect2df_aspect_copy(&target.crop, &image.crop, 0.0);
 
     const struct pl_tex *osd = osd_plane.texture;
     struct pl_overlay target_ol;
@@ -300,8 +300,8 @@ static void render_frame(const struct pl_swapchain_frame *frame)
         target.num_overlays = 1;
     }
 
-    if (pl_render_target_partial(&target))
-        pl_tex_clear(vk->gpu, target.fbo, (float[4]) {0} );
+    if (pl_frame_is_cropped(&target))
+        pl_frame_clear(vk->gpu, &target, (float[3]) {0} );
 
     // Use the heaviest preset purely for demonstration/testing purposes
     if (!pl_render_image(renderer, &image, &target, &pl_render_high_quality_params)) {

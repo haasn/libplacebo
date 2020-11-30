@@ -282,18 +282,13 @@ int main()
 
     TEST(AV_PIX_FMT_RGB565, rgb565);
 
-    // Test pl_image <- AVFrame bridge
-    struct pl_image image;
-    struct pl_render_target target;
+    // Test pl_frame <- AVFrame bridge
+    struct pl_frame image;
     AVFrame *frame = av_frame_alloc();
     frame->format = AV_PIX_FMT_RGBA;
-    pl_image_from_avframe(&image, frame);
-    pl_target_from_avframe(&target, frame);
+    pl_frame_from_avframe(&image, frame);
     REQUIRE(image.num_planes == 1);
     REQUIRE(image.repr.sys == PL_COLOR_SYSTEM_RGB);
-    REQUIRE(pl_color_space_equal(&image.color, &target.color));
-    REQUIRE(pl_color_repr_equal(&image.repr, &target.repr));
-    REQUIRE(pl_icc_profile_equal(&image.profile, &target.profile));
 
     // Test inverse mapping
     struct pl_color_space csp = image.color;
@@ -301,7 +296,7 @@ int main()
     pl_avframe_set_color(frame, csp);
     pl_avframe_set_repr(frame, image.repr);
     pl_avframe_set_profile(frame, image.profile);
-    pl_image_from_avframe(&image, frame);
+    pl_frame_from_avframe(&image, frame);
     pl_color_space_infer(&image.color);
     REQUIRE(pl_color_space_equal(&csp, &image.color));
 

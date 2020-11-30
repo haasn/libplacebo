@@ -22,30 +22,21 @@
 #include <libplacebo/utils/upload.h>
 #include <libavutil/frame.h>
 
-// Fill in the details of a `pl_image` from an AVFrame. This function will
-// explicitly clear `out_image`, setting all extra fields to 0. After this
+// Fill in the details of a `pl_frame` from an AVFrame. This function will
+// explicitly clear `out_frame`, setting all extra fields to 0. After this
 // function returns, the only missing data is information related to the plane
 // texture itself (`planes[N].texture`), as well as any overlays (e.g.
 // subtitles).
 //
 // Note: If the AVFrame contains an embedded ICC profile, the resulting
 // `out_image->profile` will reference this pointer, meaning that in general,
-// the `pl_image` is only guaranteed to be valid as long as the AVFrame is not
+// the `pl_frame` is only guaranteed to be valid as long as the AVFrame is not
 // freed.
-static void pl_image_from_avframe(struct pl_image *out_image,
-                                  const AVFrame *frame);
+static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *frame);
 
-// Fill in the details of a `pl_render_target` from an AVFrame. This function
-// will explicitly clear `out_target`, setting all extra fields to 0. After
-// this function returns, the only missing data is information related to the
-// texture itself (`fbo`), as well as any overlays (e.g. OSD).
-//
-// Note: If the AVFrame contains an embedded ICC profile, the resulting
-// `out_target->profile` will reference this pointer, meaning that in general,
-// the `pl_target` is only guaranteed to be valid as long as the AVFrame is not
-// freed.
-static void pl_target_from_avframe(struct pl_render_target *out_target,
-                                   const AVFrame *frame);
+// Deprecated aliases for backwards compatibility
+#define pl_image_from_avframe pl_frame_from_avframe
+#define pl_target_from_avframe pl_frame_from_avframe
 
 // Helper function to test if a pixfmt would be supported by the GPU.
 // Essentially, this can be used to check if `pl_upload_avframe` would work for
@@ -61,7 +52,7 @@ static bool pl_test_pixfmt(const struct pl_gpu *gpu, enum AVPixelFormat pixfmt);
 // formats. For those, users must still use the specific interop functions from
 // e.g. <libplacebo/vulkan.h>, depending on the HWAccel type.
 static bool pl_upload_avframe(const struct pl_gpu *gpu,
-                              struct pl_image *out_image,
+                              struct pl_frame *out_frame,
                               const struct pl_tex *tex[4],
                               const AVFrame *frame);
 
@@ -100,7 +91,7 @@ static int pl_plane_data_from_pixfmt(struct pl_plane_data data[4],
 // libplacebo and libavutil, respectively.
 //
 // Because of this, it's generally recommended to avoid these and instead use
-// helpers like `pl_image_from_avframe`, which contain extra logic to patch
+// helpers like `pl_frame_from_avframe`, which contain extra logic to patch
 // through all of the special cases.
 static enum pl_color_system pl_system_from_av(enum AVColorSpace spc);
 static enum AVColorSpace pl_system_to_av(enum pl_color_system sys);

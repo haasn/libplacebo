@@ -186,9 +186,9 @@ struct pl_hook_params {
     int components;
 
     // The (cropped) source and destination rectangles of the overall
-    // rendering. These are functionallty equivalent to `pl_image.src_rect` and
-    // `pl_target.dst_rect`, respectively, but `src_rect` in particular may
-    // change as a result of previous hooks being executed. (e.g. prescalers)
+    // rendering. These are functionallty equivalent to `image.crop` and
+    // `target.crop`, respectively, but `src_rect` in particular may change as
+    // a result of previous hooks being executed. (e.g. prescalers)
     struct pl_rect2df src_rect;
     struct pl_rect2d dst_rect;
 };
