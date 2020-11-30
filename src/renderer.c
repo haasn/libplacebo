@@ -1138,8 +1138,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     // Do a second pass to compute the rc of each plane
     for (int i = 0; i < image->num_planes; i++) {
         struct plane_state *st = &planes[i];
-        float rx = ref_tex->params.w / st->plane.texture->params.w,
-              ry = ref_tex->params.h / st->plane.texture->params.h;
+        float rx = (float) ref_tex->params.w / st->plane.texture->params.w,
+              ry = (float) ref_tex->params.h / st->plane.texture->params.h;
 
         // Only accept integer scaling ratios. This accounts for the fact that
         // fractionally subsampled planes get rounded up to the nearest integer
@@ -1151,16 +1151,11 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
               sy = st->plane.shift_y;
 
         st->img.rect = (struct pl_rect2df) {
-            .x0 = image->src_rect.x0 / rrx - sx / rx,
-            .y0 = image->src_rect.y0 / rry - sy / ry,
-            .x1 = image->src_rect.x1 / rrx - sx / rx,
-            .y1 = image->src_rect.y1 / rry - sy / ry,
+            .x0 = (image->src_rect.x0 - sx) / rrx,
+            .y0 = (image->src_rect.y0 - sy) / rry,
+            .x1 = (image->src_rect.x1 - sx) / rrx,
+            .y1 = (image->src_rect.y1 - sy) / rry,
         };
-
-        if (st == ref) {
-            // Make sure st->rc == src_rect
-            pl_assert(rrx == 1 && rry == 1 && sx == 0 && sy == 0);
-        }
 
         PL_TRACE(rr, "Plane %d:", i);
         log_plane_info(rr, st);
