@@ -56,7 +56,6 @@ static bool pl_upload_avframe(const struct pl_gpu *gpu,
                               const struct pl_tex *tex[4],
                               const AVFrame *frame);
 
-
 // Helper functions to update the colorimetry data in an AVFrame based on
 // the values specified in the given color space / color repr / profile.
 //

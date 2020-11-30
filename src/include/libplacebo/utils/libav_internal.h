@@ -446,6 +446,7 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
             .alpha = (desc->flags & AV_PIX_FMT_FLAG_ALPHA)
                         ? PL_ALPHA_INDEPENDENT
                         : PL_ALPHA_UNKNOWN,
+
             // For sake of simplicity, just use the first component's depth as
             // the authoritative color depth for the whole image. Usually, this
             // will be overwritten by more specific information when using e.g.
@@ -472,6 +473,7 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
     } else if (desc->flags & AV_PIX_FMT_FLAG_RGB) {
 
         out->repr.sys = PL_COLOR_SYSTEM_RGB;
+        out->repr.levels = PL_COLOR_LEVELS_FULL; // libav* ignores levels for RGB
 
     } else if (!out->repr.sys) {
 
@@ -504,6 +506,10 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
         if (mdm->has_luminance)
             out->color.sig_peak = av_q2d(mdm->max_luminance) / PL_COLOR_SDR_WHITE;
     }
+
+    // Make sure this value is more or less legal
+    if (out->color.sig_peak < 1.0 || out->color.sig_peak > 50.0)
+        out->color.sig_peak = 0.0;
 
 #ifdef HAVE_LAV_FILM_GRAIN
     if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS))) {
