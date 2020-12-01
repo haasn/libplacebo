@@ -959,7 +959,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
         // Encode both the signal and the target brightness to be relative to
         // the source peak brightness, and figure out the target peak in this space
         GLSL("float scale = 1.0 / sig_pq.a;                                     \n"
-             "sig_pq.rgb *= vec3(scale);                                        \n"
+             "sig_pq.rgb = min(vec3(scale) * sig_pq.rgb, vec3(1.0));            \n"
              "float maxLum = %f * scale;                                        \n",
              pq_delinearize(dst_range));
         // Apply piece-wise hermite spline
