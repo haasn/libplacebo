@@ -377,7 +377,7 @@ foreach s : subprojects
 endforeach
 
 if get_option('tests')
-  libav = dependency('libavutil', version: '>=56.34.100', required: false)
+  libav = dependency('libavutil', version: '>=55.74.100', required: false)
   if libav.found()
     tdep += libav
     tests += 'libav.c'

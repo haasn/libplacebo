@@ -117,7 +117,7 @@ static inline enum pl_color_primaries pl_primaries_from_av(enum AVColorPrimaries
     case AVCOL_PRI_SMPTE428:        return PL_COLOR_PRIM_CIE_1931;
     case AVCOL_PRI_SMPTE431:        return PL_COLOR_PRIM_DCI_P3;
     case AVCOL_PRI_SMPTE432:        return PL_COLOR_PRIM_DISPLAY_P3;
-    case AVCOL_PRI_EBU3213:         return PL_COLOR_PRIM_EBU_3213;
+    case AVCOL_PRI_JEDEC_P22:       return PL_COLOR_PRIM_EBU_3213;
     case AVCOL_PRI_NB:              return PL_COLOR_PRIM_COUNT;
     }
 
@@ -132,7 +132,7 @@ static inline enum AVColorPrimaries pl_primaries_to_av(enum pl_color_primaries p
     case PL_COLOR_PRIM_BT_601_625:  return AVCOL_PRI_BT470BG;
     case PL_COLOR_PRIM_BT_709:      return AVCOL_PRI_BT709;
     case PL_COLOR_PRIM_BT_470M:     return AVCOL_PRI_BT470M;
-    case PL_COLOR_PRIM_EBU_3213:    return AVCOL_PRI_EBU3213;
+    case PL_COLOR_PRIM_EBU_3213:    return AVCOL_PRI_JEDEC_P22;
     case PL_COLOR_PRIM_BT_2020:     return AVCOL_PRI_BT2020;
     case PL_COLOR_PRIM_APPLE:       return AVCOL_PRI_UNSPECIFIED; // missing
     case PL_COLOR_PRIM_ADOBE:       return AVCOL_PRI_UNSPECIFIED; // missing
