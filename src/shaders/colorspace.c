@@ -951,7 +951,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
         // We first need to encode both sig and sig_peak into PQ space
         GLSL("vec4 sig_pq = vec4(sig.rgb, sig_peak);                            \n"
              "sig_pq *= vec4(1.0/%f);                                           \n"
-             "sig_pq = pow(sig_pq, vec4(%f));                                   \n"
+             "sig_pq = pow(max(sig_pq, 0.0), vec4(%f));                         \n"
              "sig_pq = (vec4(%f) + vec4(%f) * sig_pq)                           \n"
              "          / (vec4(1.0) + vec4(%f) * sig_pq);                      \n"
              "sig_pq = pow(sig_pq, vec4(%f));                                   \n",
@@ -959,7 +959,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
         // Encode both the signal and the target brightness to be relative to
         // the source peak brightness, and figure out the target peak in this space
         GLSL("float scale = 1.0 / sig_pq.a;                                     \n"
-             "sig_pq.rgb = min(vec3(scale) * sig_pq.rgb, vec3(1.0));            \n"
+             "sig_pq.rgb = min(vec3(scale) * sig_pq.rgb, 1.0);                  \n"
              "float maxLum = %f * scale;                                        \n",
              pq_delinearize(dst_range));
         // Apply piece-wise hermite spline
@@ -974,7 +974,7 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
              sh_bvec(sh, 3));
         // Convert back from PQ space to linear light
         GLSL("sig *= vec3(sig_pq.a);                                            \n"
-             "sig = pow(sig, vec3(1.0/%f));                                     \n"
+             "sig = pow(max(sig, 0.0), vec3(1.0/%f));                           \n"
              "sig = max(sig - vec3(%f), 0.0) /                                  \n"
              "          (vec3(%f) - vec3(%f) * sig);                            \n"
              "sig = pow(sig, vec3(1.0/%f));                                     \n"
