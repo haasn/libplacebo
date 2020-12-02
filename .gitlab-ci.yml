@@ -3,7 +3,7 @@ stages:
     - test
 
 build-ubuntu:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20201201174619
     stage: build
     tags:
         - docker
@@ -19,7 +19,7 @@ build-ubuntu:
         - cd build && meson test -t 5 -v --num-processes=1
 
 build-ubuntu-static:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20201201174619
     stage: build
     tags:
         - docker
@@ -36,7 +36,7 @@ build-ubuntu-static:
         - cd build && meson test -t 5 -v --num-processes=1
 
 build-win32:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20201201174619
     stage: build
     tags:
         - docker
@@ -52,7 +52,7 @@ build-win32:
         - cd build && meson test -t 5 -v --num-processes=1
 
 build-win64:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20201201174619
     stage: build
     tags:
         - docker
@@ -91,7 +91,7 @@ build-macos:
         - cd build && meson test -t 5 -v --num-processes=1
 
 test-ubuntu-scan:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20201201174619
     stage: test
     tags:
         - docker
@@ -106,7 +106,7 @@ test-ubuntu-scan:
         - ninja -C build scan-build
 
 test-gpu:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20201201174619
     stage: test
     tags:
         - gpu
@@ -134,7 +134,7 @@ test-gpu:
             cobertura: build/meson-logs/coverage.xml
 
 test-gpu-asan:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20201201174619
     stage: test
     tags:
         - gpu
@@ -150,7 +150,7 @@ test-gpu-asan:
         - cd build && time meson test -t 5 -v --num-processes=1
 
 test-gpu-msan:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20201201174619
     stage: test
     tags:
         - gpu
@@ -167,7 +167,7 @@ test-gpu-msan:
         - cd build && time meson test -t 5 -v --num-processes=1
 
 test-gpu-ubsan:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan:20200521131745
+    image: registry.videolan.org/libplacebo-ubuntu-eoan:20201201174619
     stage: test
     tags:
         - gpu
