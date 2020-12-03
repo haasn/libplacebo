@@ -228,8 +228,8 @@ static bool buf_external_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
 
     pl_assert(info.handleType);
     vk->GetPhysicalDeviceExternalBufferPropertiesKHR(vk->physd, &info, &props);
-    return vk_external_mem_check(&props.externalMemoryProperties, handle_type,
-                                 import);
+    return vk_external_mem_check(vk, &props.externalMemoryProperties,
+                                 handle_type, import);
 }
 
 static struct vk_slab *slab_alloc(struct vk_malloc *ma,

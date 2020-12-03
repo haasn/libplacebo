@@ -289,9 +289,6 @@ static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
             .handleType = vk_sync_handle_type(type),
         };
 
-        if (!info.handleType)
-            continue;
-
         VkExternalSemaphorePropertiesKHR props = {
             .sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES_KHR,
         };
@@ -324,9 +321,6 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
             .handleType = vk_mem_handle_type(handle_type),
         };
 
-        if (!ext_pinfo.handleType)
-            continue;
-
         VkPhysicalDeviceImageFormatInfo2KHR pinfo = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR,
             .pNext = &ext_pinfo,
@@ -347,10 +341,15 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
 
         VkResult res;
         res = vk->GetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
-        if (res != VK_SUCCESS)
+        if (res != VK_SUCCESS) {
+            PL_DEBUG(vk, "Tex caps for %s (0x%x) unsupported: %s",
+                     vk_handle_name(ext_pinfo.handleType),
+                     (unsigned int) handle_type,
+                     vk_res_str(res));
             continue;
+        }
 
-        if (vk_external_mem_check(&ext_props.externalMemoryProperties,
+        if (vk_external_mem_check(vk, &ext_props.externalMemoryProperties,
                                   handle_type, import))
         {
             caps |= handle_type;
@@ -1024,7 +1023,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
 
     // Ensure the handle type is supported
     if (handle_type) {
-        bool ok = vk_external_mem_check(&ext_props.externalMemoryProperties,
+        bool ok = vk_external_mem_check(vk, &ext_props.externalMemoryProperties,
                                         handle_type, params->import_handle);
         if (!ok) {
             PL_ERR(gpu, "Requested handle type is not compatible with the "

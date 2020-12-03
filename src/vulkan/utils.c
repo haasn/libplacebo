@@ -60,22 +60,36 @@ vk_sync_handle_type(enum pl_handle_type handle_type)
     abort();
 }
 
-bool vk_external_mem_check(const VkExternalMemoryPropertiesKHR *props,
+bool vk_external_mem_check(struct vk_ctx *vk,
+                           const VkExternalMemoryPropertiesKHR *props,
                            enum pl_handle_type handle_type,
                            bool import)
 {
     VkExternalMemoryFeatureFlagsKHR flags = props->externalMemoryFeatures;
+    VkExternalMemoryHandleTypeFlagBitsKHR vk_handle = vk_mem_handle_type(handle_type);
 
     // No support for this handle type;
-    if (!(props->compatibleHandleTypes & vk_mem_handle_type(handle_type)))
+    if (!(props->compatibleHandleTypes & vk_handle)) {
+        PL_DEBUG(vk, "Compatible handle types 0x%x does not include requested "
+                 "handle type %s (0x%x)",
+                 (unsigned int) props->compatibleHandleTypes,
+                 vk_handle_name(vk_handle),
+                 (unsigned int) handle_type);
         return false;
+    }
 
     if (import) {
-        if (!(flags & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR))
+        if (!(flags & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR)) {
+            PL_DEBUG(vk, "Handle type %s (0x%x) is not importable",
+                     vk_handle_name(vk_handle), (unsigned int) handle_type);
             return false;
+        }
     } else {
-        if (!(flags & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR))
+        if (!(flags & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR)) {
+            PL_DEBUG(vk, "Handle type %s (0x%x) is not exportable",
+                     vk_handle_name(vk_handle), (unsigned int) handle_type);
             return false;
+        }
     }
 
     return true;

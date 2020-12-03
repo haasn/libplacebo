@@ -23,6 +23,7 @@
 const char *vk_res_str(VkResult res);
 const char *vk_fmt_name(VkFormat fmt);
 const char *vk_csp_name(VkColorSpaceKHR csp);
+const char *vk_handle_name(VkExternalMemoryHandleTypeFlagBitsKHR handle);
 const char *vk_obj_type(VkObjectType obj);
 const char *vk_alpha_mode(VkCompositeAlphaFlagsKHR alpha);
 const char *vk_surface_transform(VkSurfaceTransformFlagsKHR transform);
@@ -35,7 +36,8 @@ VkExternalMemoryHandleTypeFlagBitsKHR vk_mem_handle_type(enum pl_handle_type);
 VkExternalSemaphoreHandleTypeFlagBitsKHR vk_sync_handle_type(enum pl_handle_type);
 
 // Check for compatibility of a VkExternalMemoryProperties
-bool vk_external_mem_check(const VkExternalMemoryPropertiesKHR *props,
+bool vk_external_mem_check(struct vk_ctx *vk,
+                           const VkExternalMemoryPropertiesKHR *props,
                            enum pl_handle_type handle_type,
                            bool check_import);
 

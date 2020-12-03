@@ -63,6 +63,17 @@ const char *vk_csp_name(VkColorSpaceKHR csp)
     }
 }
 
+const char *vk_handle_name(VkExternalMemoryHandleTypeFlagBitsKHR handle)
+{
+    switch (handle) {
+%for handle in vkhandles:
+    case ${handle}: return "${handle}";
+%endfor
+
+    default: return "unknown handle type";
+    }
+}
+
 const char *vk_alpha_mode(VkCompositeAlphaFlagsKHR alpha)
 {
     switch (alpha) {
@@ -192,6 +203,7 @@ if __name__ == '__main__':
             vkresults = get_vkenum(registry, 'VkResult'),
             vkformats = get_vkenum(registry, 'VkFormat'),
             vkspaces  = get_vkenum(registry, 'VkColorSpaceKHR'),
+            vkhandles = get_vkenum(registry, 'VkExternalMemoryHandleTypeFlagBits'),
             vkalphas  = get_vkenum(registry, 'VkCompositeAlphaFlagBitsKHR'),
             vktransforms = get_vkenum(registry, 'VkSurfaceTransformFlagBitsKHR'),
             vkobjects = get_vkobjects(registry),
