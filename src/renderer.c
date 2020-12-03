@@ -1660,8 +1660,8 @@ static bool validate_structs(struct pl_renderer *rr,
 {
     // Rendering to/from a frame with no planes is technically allowed, but so
     // pointless that it's more likely to be a user error worth catching.
-    require(image->num_planes > 0 && image->num_planes < PL_MAX_PLANES);
-    require(target->num_planes > 0 && target->num_planes < PL_MAX_PLANES);
+    require(image->num_planes > 0 && image->num_planes <= PL_MAX_PLANES);
+    require(target->num_planes > 0 && target->num_planes <= PL_MAX_PLANES);
     for (int i = 0; i < image->num_planes; i++)
         validate_plane(image->planes[i], sampleable);
     for (int i = 0; i < target->num_planes; i++)
