@@ -429,8 +429,7 @@ static struct sampler_info sample_src_info(struct pl_renderer *rr,
         }
 
         bool is_linear = sample_mode == PL_TEX_SAMPLE_LINEAR;
-        bool can_fast = info.config == params->upscaler ||
-                        params->skip_anti_aliasing;
+        bool can_fast = info.dir == SAMPLER_UP || params->skip_anti_aliasing;
 
         if (can_fast && !params->disable_builtin_scalers) {
             if (is_linear && info.config == &pl_filter_bicubic)
