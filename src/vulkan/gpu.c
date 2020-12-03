@@ -54,6 +54,9 @@ struct pl_vk {
     // The "currently recording" command. This will be queued and replaced by
     // a new command every time we need to "switch" between queue families.
     struct vk_cmd *cmd;
+
+    // Array of VkSamplers for every combination of sample/address modes
+    VkSampler samplers[PL_TEX_SAMPLE_MODE_COUNT][PL_TEX_ADDRESS_MODE_COUNT];
 };
 
 static void vk_submit(const struct pl_gpu *gpu)
@@ -138,6 +141,11 @@ static void vk_destroy_gpu(const struct pl_gpu *gpu)
     pl_dispatch_destroy(&p->dp);
     vk_submit(gpu);
     vk_wait_idle(vk);
+
+    for (enum pl_tex_sample_mode s = 0; s < PL_TEX_SAMPLE_MODE_COUNT; s++) {
+        for (enum pl_tex_address_mode a = 0; a < PL_TEX_ADDRESS_MODE_COUNT; a++)
+            vk->DestroySampler(vk->dev, p->samplers[s][a], VK_ALLOC);
+    }
 
     vk_malloc_destroy(&p->alloc);
     spirv_compiler_destroy(&p->spirv);
@@ -359,6 +367,11 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
     return caps;
 }
 
+static const VkFilter filters[] = {
+    [PL_TEX_SAMPLE_NEAREST] = VK_FILTER_NEAREST,
+    [PL_TEX_SAMPLE_LINEAR]  = VK_FILTER_LINEAR,
+};
+
 const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
 {
     pl_assert(vk->dev);
@@ -498,6 +511,29 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     }
     PL_DEBUG(gpu, "Minimum texel alignment: %zu", p->min_texel_alignment);
 
+    // Initialize the samplers
+    for (enum pl_tex_sample_mode s = 0; s < PL_TEX_SAMPLE_MODE_COUNT; s++) {
+        for (enum pl_tex_address_mode a = 0; a < PL_TEX_ADDRESS_MODE_COUNT; a++) {
+            static const VkSamplerAddressMode modes[PL_TEX_ADDRESS_MODE_COUNT] = {
+                [PL_TEX_ADDRESS_CLAMP]  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                [PL_TEX_ADDRESS_REPEAT] = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                [PL_TEX_ADDRESS_MIRROR] = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+            };
+
+            VkSamplerCreateInfo sinfo = {
+                .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                .magFilter = filters[s],
+                .minFilter = filters[s],
+                .addressModeU = modes[a],
+                .addressModeV = modes[a],
+                .addressModeW = modes[a],
+                .maxAnisotropy = 1.0,
+            };
+
+            VK(vk->CreateSampler(vk->dev, &sinfo, VK_ALLOC, &p->samplers[s][a]));
+        }
+    }
+
     // Create the dispatch last, after any setup of `gpu` is done
     p->dp = pl_dispatch_create(vk->ctx, gpu);
     pl_gpu_print_info(gpu);
@@ -565,7 +601,6 @@ struct pl_tex_vk {
     VkImageUsageFlags usage_flags;
     // for sampling
     VkImageView view;
-    VkSampler sampler;
     // for rendering
     VkFramebuffer framebuffer;
     // for transfers
@@ -612,7 +647,6 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
     vk_sync_deref(gpu, tex_vk->ext_sync);
     vk_signal_destroy(vk, &tex_vk->sig);
     vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, VK_ALLOC);
-    vk->DestroySampler(vk->dev, tex_vk->sampler, VK_ALLOC);
     vk->DestroyImageView(vk->dev, tex_vk->view, VK_ALLOC);
     if (!tex_vk->external_img) {
         vk->DestroyImage(vk->dev, tex_vk->img, VK_ALLOC);
@@ -735,12 +769,7 @@ static void tex_signal(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     tex_vk->sig_stage = stage;
 }
 
-static const VkFilter filters[] = {
-    [PL_TEX_SAMPLE_NEAREST] = VK_FILTER_NEAREST,
-    [PL_TEX_SAMPLE_LINEAR]  = VK_FILTER_LINEAR,
-};
-
-// Initializes non-VkImage values like the image view, samplers, etc.
+// Initializes non-VkImage values like the image view, framebuffers, etc.
 static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex,
                           const char *name)
 {
@@ -792,27 +821,6 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex,
 
         VK(vk->CreateImageView(vk->dev, &vinfo, VK_ALLOC, &tex_vk->view));
         VK_NAME(IMAGE_VIEW, tex_vk->view, name);
-    }
-
-    if (params->sampleable) {
-        static const VkSamplerAddressMode modes[] = {
-            [PL_TEX_ADDRESS_CLAMP]  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            [PL_TEX_ADDRESS_REPEAT] = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-            [PL_TEX_ADDRESS_MIRROR] = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
-        };
-
-        VkSamplerCreateInfo sinfo = {
-            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-            .magFilter = filters[params->sample_mode],
-            .minFilter = filters[params->sample_mode],
-            .addressModeU = modes[params->address_mode],
-            .addressModeV = modes[params->address_mode],
-            .addressModeW = modes[params->address_mode],
-            .maxAnisotropy = 1.0,
-        };
-
-        VK(vk->CreateSampler(vk->dev, &sinfo, VK_ALLOC, &tex_vk->sampler));
-        VK_NAME(SAMPLER, tex_vk->sampler, name);
     }
 
     if (params->renderable) {
@@ -2789,6 +2797,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                                  struct pl_desc_binding db,
                                  VkDescriptorSet ds, int idx)
 {
+    struct pl_vk *p = TA_PRIV(gpu);
     struct pl_pass_vk *pass_vk = TA_PRIV(pass);
     struct pl_desc *desc = &pass->params.descriptors[idx];
 
@@ -2830,7 +2839,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
         VkDescriptorImageInfo *iinfo = &pass_vk->dsiinfo[idx];
         *iinfo = (VkDescriptorImageInfo) {
-            .sampler = tex_vk->sampler,
+            .sampler = p->samplers[tex->params.sample_mode][tex->params.address_mode],
             .imageView = tex_vk->view,
             .imageLayout = tex_vk->current_layout,
         };
