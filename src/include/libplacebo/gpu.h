@@ -502,6 +502,34 @@ bool pl_tex_upload(const struct pl_gpu *gpu,
 bool pl_tex_download(const struct pl_gpu *gpu,
                      const struct pl_tex_transfer_params *params);
 
+// Returns whether or not a texture is currently "in use". This can either be
+// because of a pending read operation, a pending write operation or a pending
+// texture export operation. Note that this function's usefulness is extremely
+// limited under ordinary circumstances. In practically all cases, textures do
+// not need to be directly synchronized by the user, except when interfacing
+// with external libraries. This function should NOT, however, be used as a
+// crutch to avoid having to implement semaphore-based synchronization. See
+// `pl_sync` for a better replacement for external API interop.
+//
+// A good example of a use case in which this function is required is when
+// interoperating with external memory management that needs to know when an
+// imported texture is safe to free / reclaim internally, in which case
+// semaphores are insufficient because memory management is a host operation.
+//
+// The `timeout`, specified in nanoseconds, indicates how long to block for
+// before returning. If set to 0, this function will never block, and only
+// returns the current status of the texture. The actual precision of the
+// timeout may be significantly longer than one nanosecond, and has no upper
+// bound. This function does not provide hard latency guarantees. This function
+// may also return at any time, even if the texture is still in use. If the
+// user wishes to block until the texture is definitely no longer in use, the
+// recommended usage is:
+//
+// while (pl_tex_poll(gpu, buf, UINT64_MAX))
+//      ; // do nothing
+bool pl_tex_poll(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                 uint64_t timeout);
+
 // (Deprecated) Buffer usage type. This defines what types of operations may be
 // performed on a buffer. They are defined merely for backwards compatibility,
 // and correspond to merely enabling the respective usage flags.

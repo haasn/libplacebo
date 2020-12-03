@@ -59,6 +59,7 @@ static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
         // Do something with the image again to "import" it
         pl_tex_clear(gpu, tex, (float[4]){0});
         pl_gpu_finish(gpu);
+        REQUIRE(!pl_tex_poll(gpu, tex, 0));
 
         pl_sync_destroy(gpu, &sync);
         pl_tex_destroy(gpu, &tex);

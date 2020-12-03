@@ -779,6 +779,12 @@ error:
     return false;
 }
 
+bool pl_tex_poll(const struct pl_gpu *gpu, const struct pl_tex *tex, uint64_t t)
+{
+    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    return impl->tex_poll ? impl->tex_poll(gpu, tex, t) : false;
+}
+
 static struct pl_buf_params pl_buf_params_infer(struct pl_buf_params params)
 {
     switch (params.type) {

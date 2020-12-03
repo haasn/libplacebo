@@ -1233,6 +1233,28 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
     CMD_MARK_END(cmd);
 }
 
+static bool vk_tex_poll(const struct pl_gpu *gpu, const struct pl_tex *tex,
+                        uint64_t timeout)
+{
+    struct pl_vk *p = TA_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+
+    // Opportunistically check if we can re-use this texture without flush
+    vk_poll_commands(vk, 0);
+    if (tex_vk->refcount == 1)
+        return false;
+
+    // Otherwise, we're force to submit all queued commands so that the
+    // user is guaranteed to see progress eventually, even if they call
+    // this in a tight loop
+    vk_submit(gpu);
+    vk_flush_obj(vk, tex);
+    vk_poll_commands(vk, timeout);
+
+    return tex_vk->refcount > 1;
+}
+
 const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
                                     const struct pl_vulkan_wrap_params *params)
 {
@@ -3424,6 +3446,7 @@ static const struct pl_gpu_fns pl_fns_vk = {
     .tex_blit               = vk_tex_blit,
     .tex_upload             = vk_tex_upload,
     .tex_download           = vk_tex_download,
+    .tex_poll               = vk_tex_poll,
     .buf_create             = vk_buf_create,
     .buf_destroy            = vk_buf_deref,
     .buf_write              = vk_buf_write,
