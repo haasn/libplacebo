@@ -263,6 +263,13 @@ static ident_t sh_var_from_va(struct pl_shader *sh, const char *name,
     });
 }
 
+static inline struct pl_desc_binding sd_binding(const struct pl_shader_desc sd)
+{
+    struct pl_desc_binding binding = sd.binding;
+    binding.object = PL_DEF(binding.object, sd.object);
+    return binding;
+}
+
 static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
                              struct pl_pass_params *params,
                              struct pl_shader *sh, ident_t vert_pos,
@@ -296,19 +303,19 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         case PL_DESC_BUF_STORAGE: has_ssbo = true; break;
         case PL_DESC_BUF_TEXEL_UNIFORM: has_texel = true; break;
         case PL_DESC_BUF_TEXEL_STORAGE: {
-            const struct pl_buf *buf = res->descriptors[i].object;
+            const struct pl_buf *buf = sd_binding(res->descriptors[i]).object;
             has_nofmt |= !buf->params.format->glsl_format;
             has_texel = true;
             break;
         }
         case PL_DESC_STORAGE_IMG: {
-            const struct pl_tex *tex = res->descriptors[i].object;
+            const struct pl_tex *tex = sd_binding(res->descriptors[i]).object;
             has_nofmt |= !tex->params.format->glsl_format;
             has_img = true;
             break;
         }
         case PL_DESC_SAMPLED_TEX: {
-            const struct pl_tex *tex = res->descriptors[i].object;
+            const struct pl_tex *tex = sd_binding(res->descriptors[i]).object;
             switch (tex->sampler_type) {
             case PL_SAMPLER_NORMAL: break;
             case PL_SAMPLER_RECT: break;
@@ -451,7 +458,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
                 [PL_SAMPLER_EXTERNAL][2] = "samplerExternalOES",
             };
 
-            const struct pl_tex *tex = sd->object;
+            const struct pl_tex *tex = sd_binding(*sd).object;
             int dims = pl_tex_params_dimension(tex->params);
             const char *type = types[tex->sampler_type][dims];
             pl_assert(type);
@@ -490,7 +497,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
 
             // For better compatibility, we have to explicitly label the
             // type of data we will be reading/writing to this image.
-            const struct pl_tex *tex = sd->object;
+            const struct pl_tex *tex = sd_binding(*sd).object;
             const char *format = tex->params.format->glsl_format;
             const char *access = pl_desc_access_glsl_name(desc->access);
             int dims = pl_tex_params_dimension(tex->params);
@@ -542,7 +549,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             break;
 
         case PL_DESC_BUF_TEXEL_STORAGE: {
-            const struct pl_buf *buf = sd->object;
+            const struct pl_buf *buf = sd_binding(*sd).object;
             const char *format = buf->params.format->glsl_format;
             const char *access = pl_desc_access_glsl_name(desc->access);
             if (gpu->glsl.vulkan) {
@@ -743,7 +750,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         }
 
         ubo_index = res->num_descriptors;
-        pass->ubo_desc.object = pass->ubo;
+        pass->ubo_desc.binding.object = pass->ubo;
         sh_desc(sh, pass->ubo_desc);
     }
 
@@ -890,13 +897,13 @@ static void translate_compute_shader(struct pl_dispatch *dp,
     pl_assert(params->target->params.storable);
     pl_assert(sh->res.output == PL_SHADER_SIG_COLOR);
     ident_t fbo = sh_desc(sh, (struct pl_shader_desc) {
+        .binding.object = params->target,
         .desc = {
             .name    = "out_image",
             .type    = PL_DESC_STORAGE_IMG,
             .access  = params->blend_params ? PL_DESC_ACCESS_READWRITE
                                             : PL_DESC_ACCESS_WRITEONLY,
         },
-        .object = params->target,
     });
 
     ident_t base = sh_var(sh, (struct pl_shader_var) {
@@ -1031,7 +1038,7 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, const struct pl_dispatch_params 
 
     // Update the descriptor bindings
     for (int i = 0; i < res->num_descriptors; i++)
-        rparams->desc_bindings[i].object = sh->descriptors[i].object;
+        rparams->desc_bindings[i] = sd_binding(sh->descriptors[i]);
 
     // Update all of the variables (if needed)
     rparams->num_var_updates = 0;
@@ -1136,7 +1143,7 @@ bool pl_dispatch_compute(struct pl_dispatch *dp,
 
     // Update the descriptor bindings
     for (int i = 0; i < sh->res.num_descriptors; i++)
-        rparams->desc_bindings[i].object = sh->descriptors[i].object;
+        rparams->desc_bindings[i] = sd_binding(sh->descriptors[i]);
 
     // Update all of the variables (if needed)
     rparams->num_var_updates = 0;

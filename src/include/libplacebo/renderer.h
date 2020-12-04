@@ -212,6 +212,10 @@ struct pl_plane {
     // for (see `pl_render_image`).
     const struct pl_tex *texture;
 
+    // The preferred behaviour when sampling outside of this texture. Optional,
+    // since the default (PL_TEX_ADDRESS_CLAMP) is very reasonable.
+    enum pl_tex_address_mode address_mode;
+
     // Describes the number and interpretation of the components in this plane.
     // This defines the mapping from component index to the canonical component
     // order (RGBA, YCbCrA or XYZA). It's worth pointing out that this is

@@ -72,12 +72,12 @@ uint8_t *pl_tex_dummy_data(const struct pl_tex *tex);
 struct pl_tex_dummy_params {
     int w, h, d;
     const struct pl_fmt *format;
-
-    enum pl_tex_sample_mode sample_mode;
-    enum pl_tex_address_mode address_mode;
     enum pl_sampler_type sampler_type;
-
     void *user_data;
+
+    // Deprecated fields. Ignored. Will be deleted in the future.
+    enum pl_tex_sample_mode sample_mode PL_DEPRECATED;
+    enum pl_tex_address_mode address_mode PL_DEPRECATED;
 };
 
 // Allows creating a "placeholder" dummy texture. This is basically a texture

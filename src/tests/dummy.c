@@ -12,8 +12,6 @@ int main()
         .w = 100,
         .h = 100,
         .format = pl_find_named_fmt(gpu, "rgba8"),
-        .sample_mode = PL_TEX_SAMPLE_LINEAR,
-        .address_mode = PL_TEX_ADDRESS_CLAMP,
     });
 
     struct pl_sample_src src = {
@@ -39,7 +37,7 @@ int main()
         if (sd->desc.type != PL_DESC_SAMPLED_TEX)
             continue;
 
-        const struct pl_tex *tex = sd->object;
+        const struct pl_tex *tex = sd->binding.object;
         const float *data = (float *) pl_tex_dummy_data(tex);
         if (!data)
             continue; // means this was the `dummy` texture

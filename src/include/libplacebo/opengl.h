@@ -144,14 +144,9 @@ struct pl_opengl_wrap_params {
     // The texture's GLint sized internal format (e.g. GL_RGBA16F). Required.
     int iformat;
 
-    // The GLint texture min/mag filter. libplacebo does not distinguish
-    // between magnification/minification, so both must be the same. Optional,
-    // defaults to GL_LINEAR.
-    int filter;
-
-    // The GLint texture address mode. libplacebo does not distinguish by
-    // dimension, so all must be the same. Optional, defaults to GL_REPEAT.
-    int address_mode;
+    // Deprecated fields. These are now ignored completely.
+    int filter PL_DEPRECATED;
+    int address_mode PL_DEPRECATED;
 };
 
 // Wraps an external OpenGL object into a `pl_tex` abstraction. Due to the

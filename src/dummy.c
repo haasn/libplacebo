@@ -262,8 +262,6 @@ const struct pl_tex *pl_tex_dummy_create(const struct pl_gpu *gpu,
         .d = params->d,
         .format = params->format,
         .sampleable = true,
-        .sample_mode = params->sample_mode,
-        .address_mode = params->address_mode,
         .user_data = params->user_data,
     };
 

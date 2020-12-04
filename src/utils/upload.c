@@ -234,10 +234,6 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
         .sampleable = true,
         .host_writable = true,
         .blit_src = !!(fmt->caps & PL_FMT_CAP_BLITTABLE),
-        .address_mode = PL_TEX_ADDRESS_CLAMP,
-        .sample_mode = (fmt->caps & PL_FMT_CAP_LINEAR)
-                            ? PL_TEX_SAMPLE_LINEAR
-                            : PL_TEX_SAMPLE_NEAREST,
     });
 
     if (!ok) {

@@ -102,6 +102,8 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
 // Note that for e.g. compute shaders, the vec2 out_pos might be a macro that
 // expands to an expensive computation, and should be cached by the user.
 ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
+                enum pl_tex_address_mode address_mode,
+                enum pl_tex_sample_mode sample_mode,
                 const char *name, const struct pl_rect2df *rect,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt);
 

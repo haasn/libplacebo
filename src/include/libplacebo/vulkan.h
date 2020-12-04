@@ -432,11 +432,9 @@ struct pl_vulkan_wrap_params {
     // of enabled usage flags.
     VkImageUsageFlags usage;
 
-    // The desired sampling / address modes of the resulting `pl_tex`. Note
-    // that PL_TEX_SAMPLE_LINEAR requires that `format` be a linearly
-    // sampleable texture format.
-    enum pl_tex_sample_mode sample_mode;
-    enum pl_tex_address_mode address_mode;
+    // Deprecated fields. These are now ignored entirely.
+    enum pl_tex_sample_mode sample_mode PL_DEPRECATED;
+    enum pl_tex_address_mode address_mode PL_DEPRECATED;
 };
 
 // Wraps an external VkImage into a pl_tex abstraction. By default, the image

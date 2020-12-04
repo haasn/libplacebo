@@ -367,7 +367,7 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
     return caps;
 }
 
-static const VkFilter filters[] = {
+static const VkFilter filters[PL_TEX_SAMPLE_MODE_COUNT] = {
     [PL_TEX_SAMPLE_NEAREST] = VK_FILTER_NEAREST,
     [PL_TEX_SAMPLE_LINEAR]  = VK_FILTER_LINEAR,
 };
@@ -1171,13 +1171,12 @@ static void vk_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
 }
 
 static void vk_tex_blit(const struct pl_gpu *gpu,
-                        const struct pl_tex *dst, const struct pl_tex *src,
-                        struct pl_rect3d dst_rc, struct pl_rect3d src_rc)
+                        const struct pl_tex_blit_params *params)
 {
     struct pl_vk *p = TA_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_tex_vk *src_vk = TA_PRIV(src);
-    struct pl_tex_vk *dst_vk = TA_PRIV(dst);
+    struct pl_tex_vk *src_vk = TA_PRIV(params->src);
+    struct pl_tex_vk *dst_vk = TA_PRIV(params->dst);
 
     struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
     if (!cmd)
@@ -1185,12 +1184,12 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
 
     CMD_MARK_BEGIN(cmd);
 
-    tex_barrier(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT,
+    tex_barrier(gpu, cmd, params->src, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_READ_BIT,
                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 false);
 
-    tex_barrier(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
+    tex_barrier(gpu, cmd, params->dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 false);
@@ -1202,6 +1201,7 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
 
     // When the blit operation doesn't require scaling, we can use the more
     // efficient vkCmdCopyImage instead of vkCmdBlitImage
+    struct pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
     if (pl_rect3d_eq(src_rc, dst_rc)) {
         pl_rect3d_normalize(&src_rc);
         pl_rect3d_normalize(&dst_rc);
@@ -1232,11 +1232,11 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
 
         vk->CmdBlitImage(cmd->buf, src_vk->img, src_vk->current_layout,
                          dst_vk->img, dst_vk->current_layout, 1, &region,
-                         filters[src->params.sample_mode]);
+                         filters[params->sample_mode]);
     }
 
-    tex_signal(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT);
-    tex_signal(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    tex_signal(gpu, cmd, params->src, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    tex_signal(gpu, cmd, params->dst, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
     CMD_MARK_END(cmd);
 }
@@ -1283,14 +1283,6 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
         goto error;
     }
 
-    if (params->sample_mode == PL_TEX_SAMPLE_LINEAR &&
-        !(format->caps & PL_FMT_CAP_LINEAR))
-    {
-        PL_ERR(gpu, "Image format '%s' is not compatible with "
-               "PL_TEX_SAMPLE_LINEAR", format->name);
-        goto error;
-    }
-
     tex = talloc_zero_priv(NULL, struct pl_tex, struct pl_tex_vk);
     tex->params = (struct pl_tex_params) {
         .format = format,
@@ -1304,8 +1296,6 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
         .blit_dst    = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
         .host_writable = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
         .host_readable = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
-        .address_mode = params->address_mode,
-        .sample_mode = params->sample_mode,
     };
 
     // Mask out capabilities not permitted by the `pl_fmt`
@@ -2839,7 +2829,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
         VkDescriptorImageInfo *iinfo = &pass_vk->dsiinfo[idx];
         *iinfo = (VkDescriptorImageInfo) {
-            .sampler = p->samplers[tex->params.sample_mode][tex->params.address_mode],
+            .sampler = p->samplers[db.sample_mode][db.address_mode],
             .imageView = tex_vk->view,
             .imageLayout = tex_vk->current_layout,
         };

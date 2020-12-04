@@ -33,28 +33,66 @@ static inline struct pl_tex_params src_params(const struct pl_sample_src *src)
     return (struct pl_tex_params) {
         .w = src->tex_w,
         .h = src->tex_h,
-        .sample_mode = src->mode,
     };
 }
+
+enum filter {
+    NEAREST = PL_TEX_SAMPLE_NEAREST,
+    LINEAR  = PL_TEX_SAMPLE_LINEAR,
+    BEST,
+    FASTEST,
+};
 
 // Helper function to compute the src/dst sizes and upscaling ratios
 static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
                       ident_t *src_tex, ident_t *pos, ident_t *size, ident_t *pt,
                       float *ratio_x, float *ratio_y, uint8_t *comp_mask,
-                      float *scale, bool resizeable, const char **fn)
+                      float *scale, bool resizeable, const char **fn,
+                      enum filter filter)
 {
     enum pl_shader_sig sig;
     float src_w, src_h;
+    enum pl_tex_sample_mode sample_mode;
     if (src->tex) {
+        const struct pl_fmt *fmt = src->tex->params.format;
+        bool can_linear = fmt->caps & PL_FMT_CAP_LINEAR;
         pl_assert(pl_tex_params_dimension(src->tex->params) == 2);
         sig = PL_SHADER_SIG_NONE;
         src_w = pl_rect_w(src->rect);
         src_h = pl_rect_h(src->rect);
+        switch (filter) {
+        case FASTEST:
+        case NEAREST:
+            sample_mode = PL_TEX_SAMPLE_NEAREST;
+            break;
+        case LINEAR:
+            if (!can_linear) {
+                SH_FAIL(sh, "Trying to use a shader that requires linear "
+                        "sampling with a texture whose format (%s) does not "
+                        "support PL_FMT_CAP_LINEAR", fmt->name);
+                return false;
+            }
+            sample_mode = PL_TEX_SAMPLE_LINEAR;
+            break;
+        case BEST:
+            sample_mode = can_linear ? PL_TEX_SAMPLE_LINEAR : PL_TEX_SAMPLE_NEAREST;
+            break;
+        }
     } else {
         pl_assert(src->tex_w && src->tex_h);
         sig = PL_SHADER_SIG_SAMPLER;
         src_w = src->sampled_w;
         src_h = src->sampled_h;
+        if (filter == BEST || filter == FASTEST) {
+            sample_mode = src->mode;
+        } else {
+            sample_mode = (enum pl_tex_sample_mode) filter;
+            if (sample_mode != src->mode) {
+                SH_FAIL(sh, "Trying to use a shader that requires a different "
+                        "filter mode than the external sampler.");
+                return false;
+            }
+        }
     }
 
     src_w = PL_DEF(src_w, src_params(src).w);
@@ -104,7 +142,8 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
         if (fn)
             *fn = sh_tex_fn(sh, src->tex->params);
 
-        *src_tex = sh_bind(sh, src->tex, "src_tex", &rect, pos, size, pt);
+        *src_tex = sh_bind(sh, src->tex, src->address_mode, sample_mode,
+                           "src_tex", &rect, pos, size, pt);
     } else {
         if (size) {
             *size = sh_var(sh, (struct pl_shader_var) {
@@ -149,15 +188,11 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
 void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
                       const struct pl_deband_params *params)
 {
-    if (src_params(src).sample_mode != PL_TEX_SAMPLE_LINEAR) {
-        SH_FAIL(sh, "Debanding requires sample_mode = PL_TEX_SAMPLE_LINEAR!");
-        return;
-    }
-
     float scale;
     ident_t tex, pos, pt;
     const char *fn;
-    if (!setup_src(sh, src, &tex, &pos, NULL, &pt, NULL, NULL, NULL, &scale, true, &fn))
+    if (!setup_src(sh, src, &tex, &pos, NULL, &pt, NULL, NULL, NULL, &scale,
+                   true, &fn, LINEAR))
         return;
 
     GLSL("vec4 color;\n");
@@ -220,10 +255,41 @@ bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *s
     float scale;
     ident_t tex, pos;
     const char *fn;
-    if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, NULL, &scale, true, &fn))
+    if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, NULL, &scale,
+                   true, &fn, BEST))
         return false;
 
     GLSL("// pl_shader_sample_direct          \n"
+         "vec4 color = vec4(%f) * %s(%s, %s); \n",
+         scale, fn, tex, pos);
+    return true;
+}
+
+bool pl_shader_sample_nearest(struct pl_shader *sh, const struct pl_sample_src *src)
+{
+    float scale;
+    ident_t tex, pos;
+    const char *fn;
+    if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, NULL, &scale,
+                   true, &fn, NEAREST))
+        return false;
+
+    GLSL("// pl_shader_sample_nearest         \n"
+         "vec4 color = vec4(%f) * %s(%s, %s); \n",
+         scale, fn, tex, pos);
+    return true;
+}
+
+bool pl_shader_sample_bilinear(struct pl_shader *sh, const struct pl_sample_src *src)
+{
+    float scale;
+    ident_t tex, pos;
+    const char *fn;
+    if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, NULL, &scale,
+                   true, &fn, LINEAR))
+        return false;
+
+    GLSL("// pl_shader_sample_bilinear        \n"
          "vec4 color = vec4(%f) * %s(%s, %s); \n",
          scale, fn, tex, pos);
     return true;
@@ -249,16 +315,11 @@ static void bicubic_calcweights(struct pl_shader *sh, const char *t, const char 
 
 bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *src)
 {
-    if (src_params(src).sample_mode != PL_TEX_SAMPLE_LINEAR) {
-        SH_FAIL(sh, "Trying to use fast bicubic sampling from a texture without "
-                "PL_TEX_SAMPLE_LINEAR");
-        return false;
-    }
-
     ident_t tex, pos, size, pt;
     float rx, ry, scale;
     const char *fn;
-    if (!setup_src(sh, src, &tex, &pos, &size, &pt, &rx, &ry, NULL, &scale, true, &fn))
+    if (!setup_src(sh, src, &tex, &pos, &size, &pt, &rx, &ry, NULL, &scale,
+                   true, &fn, LINEAR))
         return false;
 
     if (rx < 1 || ry < 1) {
@@ -421,7 +482,8 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
     float rx, ry, scale;
     ident_t src_tex, pos, size, pt;
     const char *fn;
-    if (!setup_src(sh, src, &src_tex, &pos, &size, &pt, &rx, &ry, &comp_mask, &scale, false, &fn))
+    if (!setup_src(sh, src, &src_tex, &pos, &size, &pt, &rx, &ry, &comp_mask,
+                   &scale, false, &fn, FASTEST))
         return false;
 
     struct sh_sampler_obj *obj;
@@ -651,10 +713,8 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
     ident_t src_tex, pos, size, pt;
     const char *fn;
     if (!setup_src(sh, &srcfix, &src_tex, &pos, &size, &pt, &ratio[1], &ratio[0],
-                   NULL, &scale, false, &fn))
-    {
+                   NULL, &scale, false, &fn, FASTEST))
         return false;
-    }
 
     // We can store a separate sampler object per dimension, so dispatch the
     // right one. This is needed for two reasons:

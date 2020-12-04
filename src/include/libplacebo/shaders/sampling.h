@@ -37,6 +37,7 @@ struct pl_sample_src {
     // texture as a descriptor (and the coordinates as a vertex attribute)
     const struct pl_tex *tex; // texture to sample
     struct pl_rect2df rect;   // sub-rect to sample from (optional)
+    enum pl_tex_address_mode address_mode; // preferred texture address mode
 
     // 2. Have the shader take it as an argument. Doing this requires
     // specifying the missing metadata of the texture backing the sampler, so
@@ -88,28 +89,34 @@ extern const struct pl_deband_params pl_deband_default_params;
 
 // Debands a given texture and returns the sampled color in `vec4 color`. If
 // `params` is left as NULL, it defaults to &pl_deband_default_params. Note
-// that `tex->params.sample_mode` must be PL_TEX_SAMPLE_LINEAR. When the given
-// `pl_sample_src` implies scaling, this effectively performs bilinear sampling.
+// that `tex->params.format` must have PL_FMT_CAP_LINEAR. When the given
+// `pl_sample_src` implies scaling, this effectively performs bilinear
+// sampling.
 //
 // Note: This can also be used as a pure grain function, by setting the number
 // of iterations to 0.
 void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
                       const struct pl_deband_params *params);
 
-// Performs direct / native texture sampling. This uses whatever built-in GPU
-// sampling is built into the GPU and specified using src->params.sample_mode.
+// Performs direct / native texture sampling, using whatever texture filter is
+// available (linear for linearly sampleable sources, nearest otherwise).
 //
 // Note: This is generally very low quality and should be avoided if possible,
-// for both upscaling and downscaling. The only exception to this rule of thumb
-// is exact 2x downscaling with PL_TEX_SAMPLE_LINEAR, as well as integer
-// upscaling with PL_TEX_SAMPLE_NEAREST.
+// for both upscaling and downscaling.
 bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *src);
+
+// Performs hardware-accelerated nearest neighbour sampling. This is similar to
+// `pl_shader_sample_direct`, but forces nearest neighbour interpolation.
+bool pl_shader_sample_nearest(struct pl_shader *sh, const struct pl_sample_src *src);
+
+// Performs hardware-accelerated bilinear sampling. This is similar to
+// `pl_shader_sample_direct`, but forces bilinear interpolation.
+bool pl_shader_sample_bilinear(struct pl_shader *sh, const struct pl_sample_src *src);
 
 // Performs hardware-accelerated / efficient bicubic sampling. This is more
 // efficient than using the generalized sampling routines and
-// pl_filter_function_bicubic. Requires the source texture to be set up with
-// sample_mode PL_TEX_SAMPLE_LINEAR. Only works well when upscaling - avoid
-// for downscaling.
+// pl_filter_function_bicubic. Only works well when upscaling - avoid for
+// downscaling.
 bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *src);
 
 struct pl_sample_filter_params {

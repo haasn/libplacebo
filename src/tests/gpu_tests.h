@@ -110,17 +110,11 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
     // Test blitting, if possible for this format
     const struct pl_tex *dst_tex = tex[0];
     if (tex[0]->params.blit_src && tex[1]->params.blit_dst) {
-        struct pl_rect3d rc = {
-            .x0 = 0,
-            .y0 = 0,
-            .z0 = 0,
-            .x1 = tex[0]->params.w,
-            .y1 = tex[0]->params.h,
-            .z1 = tex[0]->params.d,
-        };
-
         pl_tex_clear(gpu, tex[1], (float[4]){0.0}); // for testing
-        pl_tex_blit(gpu, tex[1], tex[0], rc, rc);
+        pl_tex_blit(gpu, &(struct pl_tex_blit_params) {
+            .src = tex[0],
+            .dst = tex[1],
+        });
         dst_tex = tex[1];
     }
 
@@ -360,14 +354,13 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         .w              = FBO_W,
         .h              = FBO_H,
         .sampleable     = true,
-        .sample_mode    = PL_TEX_SAMPLE_LINEAR,
         .initial_data   = data,
     });
 
     // Test encoding/decoding of all gamma functions, color spaces, etc.
     for (enum pl_color_transfer trc = 0; trc < PL_COLOR_TRC_COUNT; trc++) {
         sh = pl_dispatch_begin(dp);
-        pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+        pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
         pl_shader_delinearize(sh, trc);
         pl_shader_linearize(sh, trc);
         REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
@@ -381,7 +374,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
 
     for (enum pl_color_system sys = 0; sys < PL_COLOR_SYSTEM_COUNT; sys++) {
         sh = pl_dispatch_begin(dp);
-        pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+        pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
         pl_shader_encode_color(sh, &(struct pl_color_repr) { .sys = sys });
         pl_shader_decode_color(sh, &(struct pl_color_repr) { .sys = sys }, NULL);
         REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
@@ -413,7 +406,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         sh = pl_dispatch_begin(dp);
         struct pl_color_space src_space = { .light = light };
         struct pl_color_space dst_space = { 0 };
-        pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+        pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
         pl_shader_color_map(sh, NULL, src_space, dst_space, NULL, false);
         pl_shader_color_map(sh, NULL, dst_space, src_space, NULL, false);
         REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
@@ -477,7 +470,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
 
     // Test peak detection and readback if possible
     sh = pl_dispatch_begin(dp);
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+    pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
 
     struct pl_shader_obj *peak_state = NULL;
     if (pl_shader_detect_peak(sh, pl_color_space_monitor, &peak_state, NULL)) {
@@ -515,7 +508,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
 #ifdef PL_HAVE_LCMS
     // Test the use of 3DLUTs if available
     sh = pl_dispatch_begin(dp);
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+    pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
 
     struct pl_shader_obj *lut3d = NULL;
     struct pl_3dlut_profile src_color = { .color = pl_color_space_bt709 };
@@ -620,8 +613,6 @@ static void pl_scaler_tests(const struct pl_gpu *gpu)
         .h              = 5,
         .format         = src_fmt,
         .sampleable     = true,
-        .sample_mode    = PL_TEX_SAMPLE_LINEAR,
-        .address_mode   = PL_TEX_ADDRESS_CLAMP,
         .initial_data   = &data_5x5[0][0],
     });
 

@@ -285,11 +285,7 @@ static const struct pl_tex *get_fbo(struct pass_state *pass, int w, int h)
         .format = rr->fbofmt,
         .sampleable = true,
         .renderable = true,
-        // Just enable what we can
-        .storable   = !!(rr->fbofmt->caps & PL_FMT_CAP_STORABLE),
-        .sample_mode = (rr->fbofmt->caps & PL_FMT_CAP_LINEAR)
-                            ? PL_TEX_SAMPLE_LINEAR
-                            : PL_TEX_SAMPLE_NEAREST,
+        .storable   = rr->fbofmt->caps & PL_FMT_CAP_STORABLE,
     };
 
     int best_idx = -1;
@@ -377,7 +373,8 @@ static struct pl_shader *img_sh(struct pass_state *pass, struct img *img)
 }
 
 enum sampler_type {
-    SAMPLER_DIRECT, // texture()'s built in sampling
+    SAMPLER_DIRECT,  // pick based on texture caps
+    SAMPLER_NEAREST, // direct sampling, force nearest
     SAMPLER_BICUBIC, // fast bicubic scaling
     SAMPLER_COMPLEX, // complex custom filters
 };
@@ -410,7 +407,7 @@ static struct sampler_info sample_src_info(struct pl_renderer *rr,
         info.config = params->upscaler;
     } else {
         info.dir = SAMPLER_NOOP;
-        info.type = SAMPLER_DIRECT;
+        info.type = SAMPLER_NEAREST;
         info.config = NULL;
         return info;
     }
@@ -421,23 +418,17 @@ static struct sampler_info sample_src_info(struct pl_renderer *rr,
         info.type = SAMPLER_COMPLEX;
 
         // Try using faster replacements for GPU built-in scalers
-        enum pl_tex_sample_mode sample_mode;
-        if (src->tex) {
-            sample_mode = src->tex->params.sample_mode;
-        } else {
-            sample_mode = rr->fbofmt->caps & PL_FMT_CAP_LINEAR;
-        }
-
-        bool is_linear = sample_mode == PL_TEX_SAMPLE_LINEAR;
+        const struct pl_fmt *texfmt = src->tex ? src->tex->params.format : rr->fbofmt;
+        bool can_linear = texfmt->caps & PL_FMT_CAP_LINEAR;
         bool can_fast = info.dir == SAMPLER_UP || params->skip_anti_aliasing;
 
         if (can_fast && !params->disable_builtin_scalers) {
-            if (is_linear && info.config == &pl_filter_bicubic)
+            if (can_linear && info.config == &pl_filter_bicubic)
                 info.type = SAMPLER_BICUBIC;
-            if (is_linear && info.config == &pl_filter_triangle)
+            if (can_linear && info.config == &pl_filter_triangle)
                 info.type = SAMPLER_DIRECT;
-            if (!is_linear && info.config == &pl_filter_box)
-                info.type = SAMPLER_DIRECT;
+            if (info.config == &pl_filter_box)
+                info.type = can_linear ? SAMPLER_NEAREST : SAMPLER_DIRECT;
         }
     }
 
@@ -472,6 +463,9 @@ static void dispatch_sampler(struct pass_state *pass, struct pl_shader *sh,
     switch (info.type) {
     case SAMPLER_DIRECT:
         goto fallback;
+    case SAMPLER_NEAREST:
+        pl_shader_sample_nearest(sh, src);
+        return;
     case SAMPLER_BICUBIC:
         pl_shader_sample_bicubic(sh, src);
         return;
@@ -523,7 +517,7 @@ done:
     return;
 
 fallback:
-    // If all else fails, fall back to bilinear/nearest
+    // If all else fails, fall back to auto sampling
     pl_shader_sample_direct(sh, src);
 }
 
@@ -809,7 +803,7 @@ static int deband_src(struct pass_state *pass, struct pl_shader *psh,
     if (rr->disable_debanding || !params->deband_params)
         return DEBAND_NOOP;
 
-    if (psrc->tex->params.sample_mode != PL_TEX_SAMPLE_LINEAR) {
+    if (!(psrc->tex->params.format->caps & PL_FMT_CAP_LINEAR)) {
         PL_WARN(rr, "Debanding requires uploaded textures to be linearly "
                 "sampleable (params.sample_mode = PL_TEX_SAMPLE_LINEAR)! "
                 "Disabling debanding..");
@@ -1155,6 +1149,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         struct pl_sample_src src = {
             .tex        = img_tex(pass, &st->img),
             .components = plane->components,
+            .address_mode = plane->address_mode,
             .scale      = pl_color_repr_normalize(&st->img.repr),
             .new_w      = ref->img.w,
             .new_h      = ref->img.h,

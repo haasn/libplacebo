@@ -192,8 +192,8 @@ enum {
 };
 
 struct pl_shader_desc {
-    struct pl_desc desc; // descriptor type, excluding `binding`
-    const void *object;  // the object being bound (as for pl_desc_binding)
+    struct pl_desc desc; // descriptor type, excluding `int binding`
+    struct pl_desc_binding binding; // contents of the descriptor binding
 
     // For PL_DESC_BUF_UNIFORM/STORAGE, this specifies the layout of the
     // variables contained by a buffer. Ignored for the other descriptor types
@@ -204,6 +204,9 @@ struct pl_shader_desc {
     // qualifiers on the descriptor. It's highly recommended to always use
     // at least PL_MEMORY_RESTRICT. Ignored for other descriptor types.
     pl_memory_qualifiers memory;
+
+    // Deprecated. Moved to `binding.object`. Still used as a fallback.
+    const void *object PL_DEPRECATED;
 };
 
 // Finalize a pl_shader. It is no longer mutable at this point, and any further

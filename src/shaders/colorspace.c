@@ -664,7 +664,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
             .initial_data = zero,
             .host_readable = true,
         });
-        obj->desc.object = obj->buf;
+        obj->desc.binding.object = obj->buf;
     }
 
     if (!obj->buf) {

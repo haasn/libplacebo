@@ -389,7 +389,6 @@ bool api1_reconfig(void *priv, const struct image *proxy)
             .format = fmt,
             .sampleable = true,
             .host_writable = true,
-            .sample_mode = PL_TEX_SAMPLE_LINEAR,
         });
 
         ok &= pl_tex_recreate(p->gpu, &p->tex_out[i], &(struct pl_tex_params) {

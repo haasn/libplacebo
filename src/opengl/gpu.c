@@ -333,7 +333,6 @@ struct pl_tex_gl {
     GLenum target;
     GLuint texture;
     bool wrapped_tex;
-    GLint filter;
     GLuint fbo; // or 0
     bool wrapped_fb;
     GLbitfield barrier;
@@ -655,38 +654,12 @@ static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
         [3] = GL_TEXTURE_3D,
     };
 
-    static const GLint filters[] = {
-        [PL_TEX_SAMPLE_NEAREST] = GL_NEAREST,
-        [PL_TEX_SAMPLE_LINEAR]  = GL_LINEAR,
-    };
-
-    static const GLint wraps[] = {
-        [PL_TEX_ADDRESS_CLAMP]  = GL_CLAMP_TO_EDGE,
-        [PL_TEX_ADDRESS_REPEAT] = GL_REPEAT,
-        [PL_TEX_ADDRESS_MIRROR] = GL_MIRRORED_REPEAT,
-    };
-
     int dims = pl_tex_params_dimension(*params);
     pl_assert(dims >= 1 && dims <= 3);
     tex_gl->target = targets[dims];
-    tex_gl->filter = filters[params->sample_mode];
-    GLint wrap = wraps[params->address_mode];
 
     glGenTextures(1, &tex_gl->texture);
     glBindTexture(tex_gl->target, tex_gl->texture);
-    glTexParameteri(tex_gl->target, GL_TEXTURE_MIN_FILTER, tex_gl->filter);
-    glTexParameteri(tex_gl->target, GL_TEXTURE_MAG_FILTER, tex_gl->filter);
-
-    switch (dims) {
-    case 3: glTexParameteri(tex_gl->target, GL_TEXTURE_WRAP_R, wrap);
-        // fall through
-    case 2:
-        glTexParameteri(tex_gl->target, GL_TEXTURE_WRAP_T, wrap);
-        // fall through
-    case 1:
-        glTexParameteri(tex_gl->target, GL_TEXTURE_WRAP_S, wrap);
-        break;
-    }
 
     if (params->import_handle) {
         if (!gl_tex_import(gpu, params->import_handle, &params->shared_mem, tex))
@@ -995,39 +968,6 @@ const struct pl_tex *pl_opengl_wrap(const struct pl_gpu *gpu,
                    "`pl_sampler_type`", params->target);
             goto error;
         }
-
-        switch (params->filter) {
-        case 0: // fall through
-        case GL_LINEAR: tex->params.sample_mode = PL_TEX_SAMPLE_LINEAR; break;
-        case GL_NEAREST: tex->params.sample_mode = PL_TEX_SAMPLE_NEAREST; break;
-
-        default:
-            PL_ERR(gpu, "Failed mapping texture filter %d to `pl_tex_sample_mode`",
-                   params->filter);
-            goto error;
-        }
-
-        if (!(fmt->caps & PL_FMT_CAP_LINEAR)) {
-            if (params->filter == GL_LINEAR) {
-                PL_ERR(gpu, "Trying to use GL_LINEAR on non-linearly-sampleable "
-                       "iformat %d?", tex_gl->iformat);
-                goto error;
-            } else {
-                tex->params.sample_mode = PL_TEX_SAMPLE_NEAREST;
-            }
-        }
-
-        switch (params->address_mode) {
-        case 0: // fall through
-        case GL_REPEAT: tex->params.address_mode = PL_TEX_ADDRESS_REPEAT; break;
-        case GL_CLAMP_TO_EDGE: tex->params.address_mode = PL_TEX_ADDRESS_CLAMP; break;
-        case GL_MIRRORED_REPEAT: tex->params.address_mode = PL_TEX_ADDRESS_MIRROR; break;
-
-        default:
-            PL_ERR(gpu, "Failed mapping address mode %d to `pl_tex_address_mode`",
-                   params->address_mode);
-            goto error;
-        }
     }
 
     // Create optional extra fbo if needed/possible
@@ -1155,21 +1095,26 @@ static void gl_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
     gl_check_err(gpu, "gl_tex_clear");
 }
 
+static const GLint filters[PL_TEX_SAMPLE_MODE_COUNT] = {
+    [PL_TEX_SAMPLE_NEAREST] = GL_NEAREST,
+    [PL_TEX_SAMPLE_LINEAR]  = GL_LINEAR,
+};
+
 static void gl_tex_blit(const struct pl_gpu *gpu,
-                        const struct pl_tex *dst, const struct pl_tex *src,
-                        struct pl_rect3d dst_rc, struct pl_rect3d src_rc)
+                        const struct pl_tex_blit_params *params)
 {
-    struct pl_tex_gl *src_gl = TA_PRIV(src);
-    struct pl_tex_gl *dst_gl = TA_PRIV(dst);
+    struct pl_tex_gl *src_gl = TA_PRIV(params->src);
+    struct pl_tex_gl *dst_gl = TA_PRIV(params->dst);
 
     pl_assert(src_gl->fbo || src_gl->wrapped_fb);
     pl_assert(dst_gl->fbo || dst_gl->wrapped_fb);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, src_gl->fbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst_gl->fbo);
 
+    struct pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
     glBlitFramebuffer(src_rc.x0, src_rc.y0, src_rc.x1, src_rc.y1,
                       dst_rc.x0, dst_rc.y0, dst_rc.x1, dst_rc.y1,
-                      GL_COLOR_BUFFER_BIT, src_gl->filter);
+                      GL_COLOR_BUFFER_BIT, filters[params->sample_mode]);
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
@@ -1885,12 +1830,33 @@ static void update_desc(const struct pl_pass *pass, int index,
         [PL_DESC_ACCESS_WRITEONLY] = GL_WRITE_ONLY,
     };
 
+    static const GLint wraps[PL_TEX_ADDRESS_MODE_COUNT] = {
+        [PL_TEX_ADDRESS_CLAMP]  = GL_CLAMP_TO_EDGE,
+        [PL_TEX_ADDRESS_REPEAT] = GL_REPEAT,
+        [PL_TEX_ADDRESS_MIRROR] = GL_MIRRORED_REPEAT,
+    };
+
     switch (desc->type) {
     case PL_DESC_SAMPLED_TEX: {
         const struct pl_tex *tex = db->object;
         struct pl_tex_gl *tex_gl = TA_PRIV(tex);
         glActiveTexture(GL_TEXTURE0 + desc->binding);
         glBindTexture(tex_gl->target, tex_gl->texture);
+
+        GLint filter = filters[db->sample_mode];
+        GLint wrap = wraps[db->address_mode];
+        glTexParameteri(tex_gl->target, GL_TEXTURE_MIN_FILTER, filter);
+        glTexParameteri(tex_gl->target, GL_TEXTURE_MAG_FILTER, filter);
+        switch (pl_tex_params_dimension(tex->params)) {
+        case 3: glTexParameteri(tex_gl->target, GL_TEXTURE_WRAP_R, wrap);
+            // fall through
+        case 2:
+            glTexParameteri(tex_gl->target, GL_TEXTURE_WRAP_T, wrap);
+            // fall through
+        case 1:
+            glTexParameteri(tex_gl->target, GL_TEXTURE_WRAP_S, wrap);
+            break;
+        }
         break;
     }
     case PL_DESC_STORAGE_IMG: {

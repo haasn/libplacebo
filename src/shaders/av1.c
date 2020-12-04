@@ -906,11 +906,11 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
 
     // Load the color value of the tex itself
     ident_t tex = sh_desc(sh, (struct pl_shader_desc) {
+        .binding.object = params->tex,
         .desc = (struct pl_desc) {
             .name = "tex",
             .type = PL_DESC_SAMPLED_TEX,
         },
-        .object = params->tex,
     });
 
     GLSL("color = vec4(%f) * texelFetch(%s, ivec2(global_id), 0); \n",
@@ -931,11 +931,11 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
             // Luma channel not present in image, attach it separately
             pl_assert(params->luma_tex);
             ident_t luma = sh_desc(sh, (struct pl_shader_desc) {
+                .binding.object = params->luma_tex,
                 .desc = (struct pl_desc) {
                     .name = "luma",
                     .type = PL_DESC_SAMPLED_TEX,
                 },
-                .object = params->luma_tex,
             });
 
             GLSL("pos = global_id * uvec2(%du, %du);                    \n"

@@ -40,7 +40,6 @@ static const struct pl_tex *create_test_img(const struct pl_gpu *gpu)
         .w              = TEX_SIZE,
         .h              = TEX_SIZE,
         .sampleable     = true,
-        .sample_mode    = PL_TEX_SAMPLE_LINEAR,
         .initial_data   = data,
     });
 
@@ -181,7 +180,7 @@ static void bench_deband_heavy(struct pl_shader *sh, struct pl_shader_obj **stat
 static void bench_bilinear(struct pl_shader *sh, struct pl_shader_obj **state,
                           const struct pl_tex *src)
 {
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+    pl_shader_sample_bilinear(sh, &(struct pl_sample_src) { .tex = src });
 }
 
 static void bench_bicubic(struct pl_shader *sh, struct pl_shader_obj **state,

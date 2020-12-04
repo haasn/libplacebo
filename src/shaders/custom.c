@@ -535,9 +535,9 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
         if (bstr_eatstart0(&line, "FILTER")) {
             line = bstr_strip(line);
             if (bstr_equals0(line, "LINEAR")) {
-                params.sample_mode = PL_TEX_SAMPLE_LINEAR;
+                out->binding.sample_mode = PL_TEX_SAMPLE_LINEAR;
             } else if (bstr_equals0(line, "NEAREST")) {
-                params.sample_mode = PL_TEX_SAMPLE_NEAREST;
+                out->binding.sample_mode = PL_TEX_SAMPLE_NEAREST;
             } else {
                 PL_ERR(gpu, "Unrecognized FILTER: '%.*s'!", BSTR_P(line));
                 return false;
@@ -548,11 +548,11 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
         if (bstr_eatstart0(&line, "BORDER")) {
             line = bstr_strip(line);
             if (bstr_equals0(line, "CLAMP")) {
-                params.address_mode = PL_TEX_ADDRESS_CLAMP;
+                out->binding.address_mode = PL_TEX_ADDRESS_CLAMP;
             } else if (bstr_equals0(line, "REPEAT")) {
-                params.address_mode = PL_TEX_ADDRESS_REPEAT;
+                out->binding.address_mode = PL_TEX_ADDRESS_REPEAT;
             } else if (bstr_equals0(line, "MIRROR")) {
-                params.address_mode = PL_TEX_ADDRESS_MIRROR;
+                out->binding.address_mode = PL_TEX_ADDRESS_MIRROR;
             } else {
                 PL_ERR(gpu, "Unrecognized BORDER: '%.*s'!", BSTR_P(line));
                 return false;
@@ -578,7 +578,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
     }
 
     int caps = params.format->caps;
-    if (params.sample_mode == PL_TEX_SAMPLE_LINEAR && !(caps & PL_FMT_CAP_LINEAR)) {
+    if (out->binding.sample_mode == PL_TEX_SAMPLE_LINEAR && !(caps & PL_FMT_CAP_LINEAR)) {
         PL_ERR(gpu, "The specified texture format cannot be linear filtered!");
         return false;
     }
@@ -612,10 +612,10 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
     }
 
     params.initial_data = tex.start;
-    out->object = pl_tex_create(gpu, &params);
+    out->binding.object = pl_tex_create(gpu, &params);
     talloc_free(tex.start);
 
-    if (!out->object) {
+    if (!out->binding.object) {
         PL_ERR(gpu, "Failed creating custom texture!");
         return false;
     }
@@ -733,14 +733,14 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
         return false;
     }
 
-    out->object = pl_buf_create(gpu, &(struct pl_buf_params) {
+    out->binding.object = pl_buf_create(gpu, &(struct pl_buf_params) {
         .size = buf_size,
         .uniform = out->desc.type == PL_DESC_BUF_UNIFORM,
         .storable = out->desc.type == PL_DESC_BUF_STORAGE,
         .initial_data = data.start,
     });
 
-    if (!out->object) {
+    if (!out->binding.object) {
         PL_ERR(gpu, "Failed creating custom buffer!");
         return false;
     }
@@ -928,7 +928,10 @@ static bool bind_pass_tex(struct pl_shader *sh, struct bstr name,
                           const struct pl_rect2df *rect)
 {
     ident_t id, pos, size, pt;
-    id = sh_bind(sh, ptex->tex, "hook_tex", rect, &pos, &size, &pt);
+
+    // Compatibility with mpv texture binding semantics
+    id = sh_bind(sh, ptex->tex, PL_TEX_ADDRESS_CLAMP, PL_TEX_SAMPLE_LINEAR,
+                 "hook_tex", rect, &pos, &size, &pt);
     if (!id)
         return false;
 
@@ -1105,7 +1108,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                     GLSLH("#define %.*s %s \n", BSTR_P(texname), id);
 
                     if (p->descriptors[j].desc.type == PL_DESC_SAMPLED_TEX) {
-                        const struct pl_tex *tex = p->descriptors[j].object;
+                        const struct pl_tex *tex = p->descriptors[j].binding.object;
                         GLSLH("#define %.*s_tex(pos) (%s(%s, pos)) \n",
                               BSTR_P(texname), sh_tex_fn(sh, tex->params), id);
                     }
@@ -1185,12 +1188,12 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         bool ok;
         if (hook->is_compute) {
             GLSLP("#define out_image %s \n", sh_desc(sh, (struct pl_shader_desc) {
+                .binding.object = fbo,
                 .desc = {
                     .name = "out_image",
                     .type = PL_DESC_STORAGE_IMG,
                     .access = PL_DESC_ACCESS_WRITEONLY,
                 },
-                .object = fbo,
             }));
 
             sh->res.output = PL_SHADER_SIG_NONE;
@@ -1407,14 +1410,14 @@ void pl_mpv_user_shader_destroy(const struct pl_hook **hookp)
             case PL_DESC_BUF_STORAGE:
             case PL_DESC_BUF_TEXEL_UNIFORM:
             case PL_DESC_BUF_TEXEL_STORAGE: {
-                const struct pl_buf *buf = p->descriptors[i].object;
+                const struct pl_buf *buf = p->descriptors[i].binding.object;
                 pl_buf_destroy(p->gpu, &buf);
                 break;
             }
 
             case PL_DESC_SAMPLED_TEX:
             case PL_DESC_STORAGE_IMG: {
-                const struct pl_tex *tex = p->descriptors[i].object;
+                const struct pl_tex *tex = p->descriptors[i].binding.object;
                 pl_tex_destroy(p->gpu, &tex);
                 break;
             }

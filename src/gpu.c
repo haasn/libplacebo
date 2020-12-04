@@ -527,7 +527,6 @@ const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
     require(!params->storable   || fmt->caps & PL_FMT_CAP_STORABLE);
     require(!params->blit_src   || fmt->caps & PL_FMT_CAP_BLITTABLE);
     require(!params->blit_dst   || fmt->caps & PL_FMT_CAP_BLITTABLE);
-    require(params->sample_mode != PL_TEX_SAMPLE_LINEAR || fmt->caps & PL_FMT_CAP_LINEAR);
 
     const struct pl_gpu_fns *impl = TA_PRIV(gpu);
     return impl->tex_create(gpu, params);
@@ -540,8 +539,6 @@ static bool pl_tex_params_superset(struct pl_tex_params a, struct pl_tex_params 
 {
     return a.w == b.w && a.h == b.h && a.d == b.d &&
            a.format          == b.format &&
-           a.sample_mode     == b.sample_mode &&
-           a.address_mode    == b.address_mode &&
            (a.sampleable     || !b.sampleable) &&
            (a.renderable     || !b.renderable) &&
            (a.storable       || !b.storable) &&
@@ -615,10 +612,21 @@ static void strip_coords(const struct pl_tex *tex, struct pl_rect3d *rc)
     }
 }
 
-void pl_tex_blit(const struct pl_gpu *gpu,
-                 const struct pl_tex *dst, const struct pl_tex *src,
-                 struct pl_rect3d dst_rc, struct pl_rect3d src_rc)
+static void infer_rc(const struct pl_tex *tex, struct pl_rect3d *rc)
 {
+    if (!rc->x0 && !rc->x1)
+        rc->x1 = tex->params.w;
+    if (!rc->y0 && !rc->y1)
+        rc->y1 = tex->params.h;
+    if (!rc->z0 && !rc->z1)
+        rc->z1 = tex->params.d;
+}
+
+void pl_tex_blit(const struct pl_gpu *gpu,
+                 const struct pl_tex_blit_params *params)
+{
+    const struct pl_tex *src = params->src, *dst = params->dst;
+    require(src && dst);
     const struct pl_fmt *src_fmt = src->params.format;
     const struct pl_fmt *dst_fmt = dst->params.format;
     require(src_fmt->internal_size == dst_fmt->internal_size);
@@ -626,43 +634,46 @@ void pl_tex_blit(const struct pl_gpu *gpu,
     require((src_fmt->type == PL_FMT_SINT) == (dst_fmt->type == PL_FMT_SINT));
     require(src->params.blit_src);
     require(dst->params.blit_dst);
-    require(src_rc.x0 >= 0 && src_rc.x0 < src->params.w);
-    require(src_rc.x1 > 0 && src_rc.x1 <= src->params.w);
-    require(dst_rc.x0 >= 0 && dst_rc.x0 < dst->params.w);
-    require(dst_rc.x1 > 0 && dst_rc.x1 <= dst->params.w);
+    require(params->sample_mode != PL_TEX_SAMPLE_LINEAR || (src_fmt->caps & PL_FMT_CAP_LINEAR));
+
+    struct pl_tex_blit_params fixed = *params;
+    infer_rc(src, &fixed.src_rc);
+    infer_rc(dst, &fixed.dst_rc);
+
+    require(fixed.src_rc.x0 >= 0 && fixed.src_rc.x0 < src->params.w);
+    require(fixed.src_rc.x1 > 0 && fixed.src_rc.x1 <= src->params.w);
+    require(fixed.dst_rc.x0 >= 0 && fixed.dst_rc.x0 < dst->params.w);
+    require(fixed.dst_rc.x1 > 0 && fixed.dst_rc.x1 <= dst->params.w);
 
     if (src->params.h) {
-        require(dst->params.h);
-        require(src_rc.y0 >= 0 && src_rc.y0 < src->params.h);
-        require(src_rc.y1 > 0 && src_rc.y1 <= src->params.h);
-    }
-    if (dst->params.h) {
-        require(dst_rc.y0 >= 0 && dst_rc.y0 < dst->params.h);
-        require(dst_rc.y1 > 0 && dst_rc.y1 <= dst->params.h);
-    }
-    if (src->params.d) {
-        require(dst->params.d);
-        require(src_rc.z0 >= 0 && src_rc.z0 < src->params.d);
-        require(src_rc.z1 > 0 && src_rc.z1 <= src->params.d);
-    }
-    if (dst->params.d) {
-        require(dst_rc.z0 >= 0 && dst_rc.z0 < dst->params.d);
-        require(dst_rc.z1 > 0 && dst_rc.z1 <= dst->params.d);
+        require(params->dst->params.h);
+        require(fixed.src_rc.y0 >= 0 && fixed.src_rc.y0 < src->params.h);
+        require(fixed.src_rc.y1 > 0 && fixed.src_rc.y1 <= src->params.h);
+        require(fixed.dst_rc.y0 >= 0 && fixed.dst_rc.y0 < dst->params.h);
+        require(fixed.dst_rc.y1 > 0 && fixed.dst_rc.y1 <= dst->params.h);
     }
 
-    strip_coords(src, &src_rc);
-    strip_coords(dst, &dst_rc);
+    if (src->params.d) {
+        require(params->dst->params.d);
+        require(fixed.src_rc.z0 >= 0 && fixed.src_rc.z0 < src->params.d);
+        require(fixed.src_rc.z1 > 0 && fixed.src_rc.z1 <= src->params.d);
+        require(fixed.dst_rc.z0 >= 0 && fixed.dst_rc.z0 < dst->params.d);
+        require(fixed.dst_rc.z1 > 0 && fixed.dst_rc.z1 <= dst->params.d);
+    }
+
+    strip_coords(src, &fixed.src_rc);
+    strip_coords(dst, &fixed.dst_rc);
 
     struct pl_rect3d full = {0, 0, 0, dst->params.w, dst->params.h, dst->params.d};
     strip_coords(dst, &full);
 
-    struct pl_rect3d rcnorm = dst_rc;
+    struct pl_rect3d rcnorm = fixed.dst_rc;
     pl_rect3d_normalize(&rcnorm);
     if (pl_rect3d_eq(rcnorm, full))
         pl_tex_invalidate(gpu, dst);
 
     const struct pl_gpu_fns *impl = TA_PRIV(gpu);
-    impl->tex_blit(gpu, dst, src, dst_rc, src_rc);
+    impl->tex_blit(gpu, &fixed);
 
 error:
     return;
@@ -687,13 +698,7 @@ static bool fix_tex_transfer(const struct pl_gpu *gpu,
     struct pl_rect3d rc = params->rc;
 
     // Infer the default values
-    if (!rc.x0 && !rc.x1)
-        rc.x1 = tex->params.w;
-    if (!rc.y0 && !rc.y1)
-        rc.y1 = tex->params.h;
-    if (!rc.z0 && !rc.z1)
-        rc.z1 = tex->params.d;
-
+    infer_rc(tex, &rc);
     if (!params->stride_w)
         params->stride_w = pl_rect_w(rc);
     if (!params->stride_h)
@@ -1255,7 +1260,9 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         switch (desc.type) {
         case PL_DESC_SAMPLED_TEX: {
             const struct pl_tex *tex = db.object;
+            const struct pl_fmt *fmt = tex->params.format;
             require(tex->params.sampleable);
+            require(db.sample_mode != PL_TEX_SAMPLE_LINEAR || (fmt->caps & PL_FMT_CAP_LINEAR));
             break;
         }
         case PL_DESC_STORAGE_IMG: {
@@ -1563,20 +1570,20 @@ bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     }
 
     ident_t buf = sh_desc(sh, (struct pl_shader_desc) {
+        .binding.object = params->buf,
         .desc = {
             .name = "data",
             .type = PL_DESC_BUF_TEXEL_UNIFORM,
         },
-        .object = params->buf,
     });
 
     ident_t img = sh_desc(sh, (struct pl_shader_desc) {
+        .binding.object = params->tex,
         .desc = {
             .name = "image",
             .type = PL_DESC_STORAGE_IMG,
             .access = PL_DESC_ACCESS_WRITEONLY,
         },
-        .object = params->tex,
     });
 
     GLSL("vec4 color = vec4(0.0);                                       \n"
@@ -1633,20 +1640,20 @@ bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     }
 
     ident_t buf = sh_desc(sh, (struct pl_shader_desc) {
+        .binding.object = params->buf,
         .desc = {
             .name = "data",
             .type = PL_DESC_BUF_TEXEL_STORAGE,
         },
-        .object = params->buf,
     });
 
     ident_t img = sh_desc(sh, (struct pl_shader_desc) {
+        .binding.object = params->tex,
         .desc = {
             .name = "image",
             .type = PL_DESC_STORAGE_IMG,
             .access = PL_DESC_ACCESS_READONLY,
         },
-        .object = params->tex,
     });
 
     int dims = pl_tex_params_dimension(tex->params);

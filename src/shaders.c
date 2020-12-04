@@ -206,7 +206,7 @@ ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
         // Skip re-attaching the same buffer desc twice
         // FIXME: define aliases if the variable names differ
         for (int i = 0; i < sh->res.num_descriptors; i++) {
-            if (sh->descriptors[i].object == sd.object)
+            if (sh->descriptors[i].binding.object == sd.binding.object)
                 return (ident_t) sh->descriptors[i].desc.name;
         }
 
@@ -260,6 +260,8 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
 }
 
 ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
+                enum pl_tex_address_mode address_mode,
+                enum pl_tex_sample_mode sample_mode,
                 const char *name, const struct pl_rect2df *rect,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt)
 {
@@ -278,7 +280,11 @@ ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
             .name = name,
             .type = PL_DESC_SAMPLED_TEX,
         },
-        .object = tex,
+        .binding = {
+            .object = tex,
+            .address_mode = address_mode,
+            .sample_mode = sample_mode,
+        },
     });
 
     float sx, sy;
@@ -821,10 +827,6 @@ next_dim: ; // `continue` out of the inner loop
                 .d              = PL_DEF(params->depth,  texdim >= 3 ? 1 : 0),
                 .format         = texfmt,
                 .sampleable     = true,
-                .sample_mode    = params->linear
-                                    ? PL_TEX_SAMPLE_LINEAR
-                                    : PL_TEX_SAMPLE_NEAREST,
-                .address_mode   = PL_TEX_ADDRESS_CLAMP,
                 .host_writable  = params->dynamic,
                 .initial_data   = params->dynamic ? NULL : tmp,
             };
@@ -932,7 +934,11 @@ next_dim: ; // `continue` out of the inner loop
                 .name = "weights",
                 .type = PL_DESC_SAMPLED_TEX,
             },
-            .object = lut->tex,
+            .binding = {
+                .object = lut->tex,
+                .sample_mode = params->linear ? PL_TEX_SAMPLE_LINEAR
+                                              : PL_TEX_SAMPLE_NEAREST,
+            }
         });
 
         // texelFetch requires GLSL >= 130, so fall back to the linear code

@@ -26,8 +26,6 @@ static void opengl_interop_tests(const struct pl_gpu *gpu)
         .sampleable = true,
         .renderable = true,
         .blit_dst = fmt->caps & PL_FMT_CAP_BLITTABLE,
-        .sample_mode = PL_TEX_SAMPLE_LINEAR,
-        .address_mode = PL_TEX_ADDRESS_REPEAT,
     });
 
     REQUIRE(export);
