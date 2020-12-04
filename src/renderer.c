@@ -1572,6 +1572,7 @@ fallback:
         bool ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
             .shader = &sh,
             .target = plane->texture,
+            .blend_params = params->blend_params,
             .rect = {
                 .x0 = flipped_x ? rx1 : rx0,
                 .y0 = flipped_y ? ry1 : ry0,

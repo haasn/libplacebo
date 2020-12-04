@@ -120,6 +120,11 @@ struct pl_render_params {
     // If NULL, this feature is disabled.
     const struct pl_cone_params *cone_params;
 
+    // Configures output blending. When rendering to the final target, the
+    // framebuffer contents will be blended using this blend mode. Requires
+    // that the target format has PL_FMT_CAP_BLENDABLE. NULL disables blending.
+    const struct pl_blend_params *blend_params;
+
     // List of custom user shaders / hooks.
     // See <libplacebo/shaders/custom.h> for more information.
     const struct pl_hook * const *hooks;
