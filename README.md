@@ -34,8 +34,8 @@ on both quality and performance. These include features such as the following:
   syntax](https://mpv.io/manual/master/#options-glsl-shaders). This can be
   used to arbitrarily extend the range of custom shaders to include popular
   user shaders like RAVU, FSRCNNX, or Anime4K. See the [mpv wiki on user
-  scripts](https://github.com/mpv-player/mpv/wiki/User-Scripts) for more
-  information.
+  scripts](https://github.com/mpv-player/mpv/wiki/User-Scripts#user-shaders)
+  for more information.
 
 Every attempt was made to provide these features at a **high level of
 abstraction**, taking away all the messy details of GPU programming, color
