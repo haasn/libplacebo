@@ -7,18 +7,63 @@
 [![PayPal](https://img.shields.io/badge/donate-PayPal-blue.svg?logo=paypal)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=SFJUTMPSZEAHC)
 [![Patreon](https://img.shields.io/badge/pledge-Patreon-red.svg?logo=patreon)](https://www.patreon.com/haasn)
 
-**libplacebo** is essentially the core rendering algorithms and ideas of
-[mpv](https://mpv.io) turned into a library. This grew out of an interest to
-accomplish the following goals:
+**libplacebo** is, in a nutshell, the core rendering algorithms and ideas of
+[mpv](https://mpv.io) rewritten as an independent library. As of today,
+libplacebo contains a large assortment of video processing shaders, focusing
+on both quality and performance. These include features such as the following:
+
+- High-quality, optimized **upscaling and downscaling** including support for
+  polar filters ("Jinc"), anti-aliasing, anti-ringing and gamma correct
+  scaling.
+- **Color management** and format conversions for a wide variety of HDR or
+  wide gamut color spaces. This includes support for ICC profiles, ITU-R
+  BT.1886 emulation, colorimetrically accurate clipping, scene-referred OOTFs
+  (such as HLG), constant luminance formats including ICtCp and a variety of
+  film industry formats ranging from XYZ to Sony's S-Log or Panasonic's
+  V-Gamut.
+- Tunable **debanding** shader. This is based on flash3kyuu, expanded to
+  provide high quality by combining multiple debanding passes.
+- Dynamic **HDR tone mapping**, including shaders for real-time peak and
+  scene-change detection, chroma-preserving (luma-only) tone mapping,
+  highlight desaturation, dynamic exposure control and a variety of
+  industry-standard EETFs including BT.2390.
+- High performance AV1 **film grain synthesis**, allowing media players to
+  offload this part of AV1 decoding from the CPU to the GPU.
+- A **pluggable, extensible custom shader syntax**, equivalent to an improved
+  version of [mpv's `.hook`
+  syntax](https://mpv.io/manual/master/#options-glsl-shaders). This can be
+  used to arbitrarily extend the range of custom shaders to include popular
+  user shaders like RAVU, FSRCNNX, or Anime4K. See the [mpv wiki on user
+  scripts](https://github.com/mpv-player/mpv/wiki/User-Scripts) for more
+  information.
+
+Every attempt was made to provide these features at a **high level of
+abstraction**, taking away all the messy details of GPU programming, color
+spaces, obscure subsampling modes, image metadata manipulation, and so on.
+Expert-level functionality is packed into easy-to-use functions like
+`pl_frame_from_avframe` and `pl_render_image`.
+
+libplacebo currently supports both Vulkan (including MoltenVK) and OpenGL, and
+contains backwards compatibility code for very old versions of GLSL down to
+GLES 2.0 and OpenGL 1.3.
+
+### History
+
+This project grew out of an interest to accomplish the following goals:
 
 - Clean up mpv's internal [RA](#tier-1-rendering-abstraction) API and make it
-  reusable for other projects.
+  reusable for other projects, as a general high-level backend-agnostic
+  graphics API wrapper.
 - Provide a standard library of useful GPU-accelerated image processing
-  primitives based on GLSL, so projects like VLC or Firefox can use them
-  without incurring a heavy dependency on `libmpv`.
+  primitives based on GLSL, so projects like media players or browsers can use
+  them without incurring a heavy dependency on `libmpv`.
 - Rewrite core parts of mpv's GPU-accelerated video renderer on top of
-  redesigned abstractions. (Basically, I wanted to eliminate stateful APIs like
-  `shader_cache.c` and totally redesign `gpu/video.c`)
+  redesigned abstractions, in order to modernize it and allow supporting more
+  features.
+
+It has since been adopted by [VLC](https://www.videolan.org/vlc/) as their
+optional Vulkan-based video output path, and is provided as a Vulkan-based
+video filter in the FFmpeg project.
 
 ## API Overview
 
@@ -94,6 +139,9 @@ routines which libplacebo exports:
   a film grain synthesis shader.
 - `shaders/colorspace.h`: Shader routines for decoding and transforming
   colors, tone mapping, dithering, and so forth.
+- `shaders/custom.h`: Allows directly ingesting custom GLSL logic into the
+  `pl_shader` abstraction, either as bare GLSL or in [mpv .hook
+  format](https://mpv.io/manual/master/#options-glsl-shaders).
 - `shaders/sampling.h`: Shader routines for various algorithms that sample
   from images, such as debanding and scaling.
 
@@ -121,6 +169,9 @@ identifiers (so they can be freely merged together).
   supported by the GPU. (Note: Eventually, this function will also support
   on-CPU conversions to a different format where necessary, but for now, it
   will just fail)
+- `utils/libav.h`: A set of high-level helpers for interoperation between
+  libplacebo and FFmpeg's libav* abstractions. This is implemented as a single
+  header library, to avoid libplacebo depending on libavutil directly.
 
 This is the "primary" interface to libplacebo, and the one most users will be
 interested in. It takes care of internal details such as degrading to simpler
@@ -130,12 +181,13 @@ best overall image quality, and so forth.
 
 ## Authors
 
-libplacebo was founded by Niklas Haas ([@haasn](https://github.com/haasn)),
-but it would not be possible without the contributions of others. Special note
-also goes out ([@wm4](https://github.com/wm4)), the developer of mpv, whose
-ideas helped shape the foundation of the shader dispatch system. This library
-also includes various excerpts from mpv. For a full list of past contributors
-to mpv, see the [mpv authorship
+libplacebo was founded and primarily developed by Niklas Haas
+([@haasn](https://github.com/haasn)), but it would not be possible without the
+contributions of others. Special note also goes out
+([@wm4](https://github.com/wm4)), the developer of mpv, whose ideas helped
+shape the foundation of the shader dispatch system. This library also includes
+various excerpts from mpv, in particular the filter kernel code. For a full
+list of past contributors to mpv, see the [mpv authorship
 page](https://github.com/mpv-player/mpv/graphs/contributors)
 
 [![contributor list](https://opencollective.com/libplacebo/contributors.svg?width=890&button=false)](https://github.com/haasn/libplacebo/graphs/contributors)
@@ -285,6 +337,3 @@ Overview](#api-overview) as well as the [public header
 files](src/include/libplacebo). You can find additional examples of how to use
 the various components in the [demo programs](demos) as well as in the [unit
 tests](src/tests).
-
-I will create more and expanded tutorials/examples once libplacebo is a bit
-more feature-complete.
