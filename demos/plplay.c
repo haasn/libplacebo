@@ -211,7 +211,7 @@ static bool create_window(struct plplay *p, int width, int height, bool alpha)
 }
 
 #ifdef USE_VK
-static bool int_renderer(struct plplay *p)
+static bool init_renderer(struct plplay *p)
 {
     assert(p->win);
     VkResult err;
@@ -265,7 +265,7 @@ static bool int_renderer(struct plplay *p)
 #endif // USE_VK
 
 #ifdef USE_GL
-static bool int_renderer(struct plplay *p)
+static bool init_renderer(struct plplay *p)
 {
     assert(p->win);
 
@@ -485,7 +485,7 @@ int main(int argc, char **argv)
     if (!create_window(p, par->width, par->height, has_alpha))
         goto error;
 
-    if (!int_renderer(p))
+    if (!init_renderer(p))
         goto error;
 
     // TODO: Use direct rendering buffers
