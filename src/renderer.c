@@ -1876,7 +1876,7 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *pimage,
     struct pl_frame *image = &pass.image;
     struct pl_frame *target = &pass.target;
     default_rect(&image->crop, &image->src_rect);
-    default_rect(&target->crop, &target->src_rect);
+    default_rect(&target->crop, &target->dst_rect);
     if (!target->num_planes && target->fbo) {
         target->num_planes = 1;
         target->planes[0] = (struct pl_plane) {
