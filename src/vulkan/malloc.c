@@ -149,7 +149,7 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
             break;
         }
 
-        PL_INFO(vk, "Freeing slab of size %zu", (size_t) slab->size);
+        PL_DEBUG(vk, "Freeing slab of size %zu", (size_t) slab->size);
     }
 
     vk->DestroyBuffer(vk->dev, slab->buffer, VK_ALLOC);
@@ -323,9 +323,9 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
         goto error;
 
     const VkMemoryType *mtype = &ma->props.memoryTypes[minfo.memoryTypeIndex];
-    PL_INFO(vk, "Allocating %zu memory of type 0x%x (id %d) in heap %d",
-            (size_t) slab->size, (unsigned) mtype->propertyFlags,
-            (int) minfo.memoryTypeIndex, (int) mtype->heapIndex);
+    PL_DEBUG(vk, "Allocating %zu memory of type 0x%x (id %d) in heap %d",
+             (size_t) slab->size, (unsigned) mtype->propertyFlags,
+             (int) minfo.memoryTypeIndex, (int) mtype->heapIndex);
 
     VK(vk->AllocateMemory(vk->dev, &minfo, VK_ALLOC, &slab->mem));
 
@@ -521,7 +521,7 @@ void vk_malloc_free(struct vk_malloc *ma, struct vk_memslice *slice)
         // free it here
         slab_free(vk, slab);
     } else {
-        PL_DEBUG(vk, "Freeing slice %zu + %zu from slab with size %zu",
+        PL_TRACE(vk, "Freeing slice %zu + %zu from slab with size %zu",
                  (size_t) slice->offset, (size_t) slice->size,
                  (size_t) slab->size);
 
@@ -938,7 +938,7 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
         insert_region(slab, (struct vk_region) { region.start, offset });
         insert_region(slab, (struct vk_region) { out_end, region.end });
 
-        PL_DEBUG(vk, "Sub-allocating slice %zu + %zu from slab with size %zu",
+        PL_TRACE(vk, "Sub-allocating slice %zu + %zu from slab with size %zu",
                  (size_t) offset,  size, (size_t) slab->size);
     }
 
