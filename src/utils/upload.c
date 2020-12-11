@@ -256,5 +256,7 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
         .ptr        = (void *) data->pixels,
         .buf        = data->buf,
         .buf_offset = data->buf_offset,
+        .callback   = data->callback,
+        .priv       = data->priv,
     });
 }

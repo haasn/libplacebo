@@ -19,6 +19,10 @@
 
 #include "common.h"
 
+// Iterate through callbacks attached to the `pl_gl` and execute all of the
+// ones that have completed.
+void gl_poll_callbacks(const struct pl_gpu *gpu);
+
 // Return a human-readable name for various OpenGL errors
 const char *gl_err_str(GLenum err);
 

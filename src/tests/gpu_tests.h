@@ -77,6 +77,12 @@ static void pl_buffer_tests(const struct pl_gpu *gpu)
     }
 }
 
+static void test_cb(void *priv)
+{
+    bool *flag = priv;
+    *flag = true;
+}
+
 static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex[2],
                               uint8_t *src, uint8_t *dst)
 {
@@ -101,10 +107,14 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
     ul = pl_timer_create(gpu);
     dl = pl_timer_create(gpu);
 
+    bool ran_ul = false, ran_dl = false;
+
     REQUIRE(pl_tex_upload(gpu, &(struct pl_tex_transfer_params){
         .tex = tex[0],
         .ptr = src,
         .timer = ul,
+        .callback = (gpu->caps & PL_GPU_CAP_CALLBACKS) ? test_cb : NULL,
+        .priv = &ran_ul,
     }));
 
     // Test blitting, if possible for this format
@@ -122,7 +132,13 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
         .tex = dst_tex,
         .ptr = dst,
         .timer = dl,
+        .callback = (gpu->caps & PL_GPU_CAP_CALLBACKS) ? test_cb : NULL,
+        .priv = &ran_dl,
     }));
+
+    pl_gpu_finish(gpu);
+    if (gpu->caps & PL_GPU_CAP_CALLBACKS)
+        REQUIRE(ran_ul && ran_dl);
 
     if (fmt->emulated && fmt->type == PL_FMT_FLOAT) {
         // TODO: can't memcmp here because bits might be lost due to the
@@ -133,7 +149,6 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
     }
 
     // Report timer results
-    pl_gpu_finish(gpu);
     printf("upload time: %"PRIu64", download time: %"PRIu64"\n",
            pl_timer_query(gpu, ul), pl_timer_query(gpu, dl));
 

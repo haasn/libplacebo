@@ -460,6 +460,9 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
             p->host_query_reset = host_query_reset->hostQueryReset;
     }
 
+    // Determine GPU capabilities
+    gpu->caps |= PL_GPU_CAP_CALLBACKS;
+
     VkShaderStageFlags req_stages = VK_SHADER_STAGE_FRAGMENT_BIT |
                                     VK_SHADER_STAGE_COMPUTE_BIT;
     VkSubgroupFeatureFlags req_flags = VK_SUBGROUP_FEATURE_BASIC_BIT |
@@ -2005,6 +2008,12 @@ static enum queue_type vk_img_copy_queue(const struct pl_gpu *gpu,
     }
 }
 
+static void tex_xfer_cb(void *ctx, void *arg)
+{
+    void (*fun)(void *priv) = ctx;
+    fun(arg);
+}
+
 static bool vk_tex_upload(const struct pl_gpu *gpu,
                           const struct pl_tex_transfer_params *params)
 {
@@ -2070,6 +2079,9 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_signal(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
+        if (params->callback)
+            vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
+
         vk_cmd_timer_end(gpu, cmd, params->timer);
         CMD_MARK_END(cmd);
 
@@ -2115,6 +2127,9 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
                                  tex_vk->current_layout, 1, &region);
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+        if (params->callback)
+            vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
 
         vk_cmd_timer_end(gpu, cmd, params->timer);
         CMD_MARK_END(cmd);
@@ -2201,6 +2216,10 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_flush(gpu, cmd, buf, params->buf_offset, size);
 
+        if (params->callback)
+            vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
+
+
         vk_cmd_timer_end(gpu, cmd, params->timer);
         CMD_MARK_END(cmd);
 
@@ -2239,6 +2258,10 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
         buf_flush(gpu, cmd, buf, params->buf_offset, size);
+
+        if (params->callback)
+            vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
+
 
         vk_cmd_timer_end(gpu, cmd, params->timer);
         CMD_MARK_END(cmd);

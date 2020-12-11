@@ -742,6 +742,7 @@ static bool fix_tex_transfer(const struct pl_gpu *gpu,
         require(params->buf_offset + size <= buf->params.size);
     }
 
+    require(!params->callback || (gpu->caps & PL_GPU_CAP_CALLBACKS));
     return true;
 
 error:

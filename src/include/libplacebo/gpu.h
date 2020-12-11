@@ -49,6 +49,7 @@ enum {
     PL_GPU_CAP_MAPPED_BUFFERS   = 1 << 3, // supports host-mapped buffers
     PL_GPU_CAP_BLITTABLE_1D_3D  = 1 << 4, // supports blittable 1D/3D textures
     PL_GPU_CAP_SUBGROUPS        = 1 << 5, // supports subgroups
+    PL_GPU_CAP_CALLBACKS        = 1 << 6, // supports asynchronous callbacks
 
     // Note on subgroup support: PL_GPU_CAP_SUBGROUPS implies subgroup support
     // for both fragment and compute shaders, but not necessarily any other
@@ -483,6 +484,21 @@ struct pl_tex_transfer_params {
     // not guaranteed that all GPUs support this.
     struct pl_timer *timer;
 
+    // An optional callback to fire after the operation completes. If this is
+    // specified, then the operation is performed asynchronously. Note that
+    // transfers to/from buffers are always asynchronous, even without, this
+    // field, so it's more useful for `ptr` transfers. (Though it can still be
+    // helpful to avoid having to manually poll buffers all the time)
+    //
+    // When this is *not* specified, uploads from `ptr` are still asynchronous
+    // but require a host memcpy, while downloads from `ptr` are blocking. As
+    // such, it's recommended to always try using asynchronous texture
+    // transfers wherever possible.
+    //
+    // Note: Requires PL_GPU_CAP_CALLBACKS
+    void (*callback)(void *priv);
+    void *priv; // arbitrary user data
+
     // For the data source/target of a transfer operation, there are two valid
     // options:
     //
@@ -492,19 +508,9 @@ struct pl_tex_transfer_params {
                               // multiple of `tex->params.format->texel_size`
     // 2. Transferring to/from host memory directly:
     void *ptr;                // address of data
-    // The contents of the memory region / buffer must exactly match the
+
+    // Note: The contents of the memory region / buffer must exactly match the
     // texture format; i.e. there is no explicit conversion between formats.
-
-    // For data uploads, which are typically "fire and forget" operations,
-    // which method used does not matter much; although uploading from a host
-    // mapped buffer requires fewer memory copy operations and is therefore
-    // advised when uploading large amounts of data frequently.
-
-    // For data downloads, downloading directly to host memory is a blocking
-    // operation and should therefore be avoided as much as possible. It's
-    // highyly recommended to always use a texture transfer buffer for texture
-    // downloads if possible, which allows the transfer to happen
-    // asynchronously.
 };
 
 // Upload data to a texture. Returns whether successful.

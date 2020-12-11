@@ -41,6 +41,12 @@ static bool test_ext(const struct pl_gpu *gpu, const char *ext,
 
 static void gl_destroy_gpu(const struct pl_gpu *gpu)
 {
+    struct pl_gl *p = TA_PRIV(gpu);
+
+    pl_gpu_finish(gpu);
+    while (p->num_cbs > 0)
+        gl_poll_callbacks(gpu);
+
     talloc_free((void *) gpu);
 }
 
@@ -227,6 +233,8 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
         gpu->caps |= PL_GPU_CAP_COMPUTE;
     if (test_ext(gpu, "GL_ARB_buffer_storage", 44, 0))
         gpu->caps |= PL_GPU_CAP_MAPPED_BUFFERS;
+    if (test_ext(gpu, "GL_ARB_sync", 32, 30))
+        gpu->caps |= PL_GPU_CAP_CALLBACKS;
 
     // If possible, query the GLSL version from the implementation
     const char *glslver = glGetString(GL_SHADING_LANGUAGE_VERSION);
@@ -642,11 +650,13 @@ static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
 
     const struct gl_format **fmtp = TA_PRIV(params->format);
     const struct gl_format *fmt = *fmtp;
-    tex_gl->format = fmt->fmt;
-    tex_gl->iformat = fmt->ifmt;
-    tex_gl->type = fmt->type;
-    tex_gl->barrier = tex_barrier(tex);
-    tex_gl->fd = -1;
+    *tex_gl = (struct pl_tex_gl) {
+        .format = fmt->fmt,
+        .iformat = fmt->ifmt,
+        .type = fmt->type,
+        .barrier = tex_barrier(tex),
+        .fd = -1,
+    };
 
     static const GLint targets[] = {
         [1] = GL_TEXTURE_1D,
@@ -1242,6 +1252,7 @@ static bool gl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
         }
     }
 
+    gl_poll_callbacks(gpu);
     return !!buf_gl->fence;
 }
 
@@ -1375,6 +1386,14 @@ static bool gl_tex_upload(const struct pl_gpu *gpu,
         }
     }
 
+    if (params->callback) {
+        TARRAY_APPEND(gpu, p->callbacks, p->num_cbs, (struct gl_cb) {
+            .sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0),
+            .callback = params->callback,
+            .priv = params->priv,
+        });
+    }
+
     return gl_check_err(gpu, "gl_tex_upload");
 }
 
@@ -1454,6 +1473,14 @@ static bool gl_tex_download(const struct pl_gpu *gpu,
             glDeleteSync(buf_gl->fence);
             buf_gl->fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
         }
+    }
+
+    if (params->callback) {
+        TARRAY_APPEND(gpu, p->callbacks, p->num_cbs, (struct gl_cb) {
+            .sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0),
+            .callback = params->callback,
+            .priv = params->priv,
+        });
     }
 
     return gl_check_err(gpu, "gl_tex_download") && ok;

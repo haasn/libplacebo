@@ -31,6 +31,12 @@
 #define GL_HAVE_UNIX 1
 #endif
 
+struct gl_cb {
+    void (*callback)(void *priv);
+    void *priv;
+    GLsync sync;
+};
+
 // For gpu.priv
 struct pl_gl {
     struct pl_gpu_fns impl;
@@ -41,6 +47,10 @@ struct pl_gl {
     EGLDisplay egl_dpy;
     EGLContext egl_ctx;
 #endif
+
+    // Sync objects and associated callbacks
+    struct gl_cb *callbacks;
+    int num_cbs;
 
     // Incrementing counters to keep track of object uniqueness
     int buf_id;

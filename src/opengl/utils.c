@@ -36,6 +36,34 @@ const char *gl_err_str(GLenum err)
     }
 }
 
+void gl_poll_callbacks(const struct pl_gpu *gpu)
+{
+    struct pl_gl *gl = TA_PRIV(gpu);
+    while (gl->num_cbs) {
+        struct gl_cb *cb = &gl->callbacks[0];
+        GLenum res = glClientWaitSync(cb->sync, 0, 0);
+        switch (res) {
+        case GL_ALREADY_SIGNALED:
+        case GL_CONDITION_SATISFIED:
+            cb->callback(cb->priv);
+            TARRAY_REMOVE_AT(gl->callbacks, gl->num_cbs, 0);
+            continue;
+
+        case GL_WAIT_FAILED:
+            glDeleteSync(cb->sync);
+            gl->failed = true;
+            TARRAY_REMOVE_AT(gl->callbacks, gl->num_cbs, 0);
+            gl_check_err(gpu, "gl_poll_callbacks"); // NOTE: will recurse!
+            return;
+
+        case GL_TIMEOUT_EXPIRED:
+            return;
+
+        default: abort();
+        }
+    }
+}
+
 bool gl_check_err(const struct pl_gpu *gpu, const char *fun)
 {
     struct pl_gl *gl = TA_PRIV(gpu);
@@ -44,11 +72,14 @@ bool gl_check_err(const struct pl_gpu *gpu, const char *fun)
     while (true) {
         GLenum error = glGetError();
         if (error == GL_NO_ERROR)
-            return ret;
+            break;
         PL_ERR(gpu, "%s: OpenGL error: %s", fun, gl_err_str(error));
         ret = false;
         gl->failed = true;
     }
+
+    gl_poll_callbacks(gpu);
+    return ret;
 }
 
 bool gl_is_software(void)
