@@ -570,6 +570,12 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
     }
 }
 
+static void pl_avbuffer_free(void *priv)
+{
+    AVBufferRef *buf = priv;
+    av_buffer_unref(&buf);
+}
+
 static inline bool pl_upload_avframe(const struct pl_gpu *gpu,
                                      struct pl_frame *out,
                                      const struct pl_tex *tex[4],
@@ -592,6 +598,14 @@ static inline bool pl_upload_avframe(const struct pl_gpu *gpu,
         data[p].height = frame->height >> (is_chroma ? desc->log2_chroma_h : 0);
         data[p].row_stride = frame->linesize[p];
         data[p].pixels = frame->data[p];
+
+        // Try using an asynchronous upload if possible, by taking a new ref to
+        // the plane data
+        if (frame->buf[p]) {
+            data[p].callback = pl_avbuffer_free;
+            data[p].priv = av_buffer_ref(frame->buf[p]);
+        }
+
         if (!pl_upload_plane(gpu, &out->planes[p], &tex[p], &data[p]))
             return false;
     }

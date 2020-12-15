@@ -51,6 +51,10 @@ static bool pl_test_pixfmt(const struct pl_gpu *gpu, enum AVPixelFormat pixfmt);
 // Note that this function will currently fail on HW accelerated AVFrame
 // formats. For those, users must still use the specific interop functions from
 // e.g. <libplacebo/vulkan.h>, depending on the HWAccel type.
+//
+// Note also that this function performs asynchronous uploads wherever
+// possible. This means that it may return *before* the source pixels are done
+// being read from. The frame's data buffers are ref'd and freed automatically.
 static bool pl_upload_avframe(const struct pl_gpu *gpu,
                               struct pl_frame *out_frame,
                               const struct pl_tex *tex[4],
