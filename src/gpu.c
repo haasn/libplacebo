@@ -1411,15 +1411,42 @@ bool pl_tex_upload_pbo(const struct pl_gpu *gpu,
     if (params->buf)
         return pl_tex_upload(gpu, params);
 
-    const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+    const struct pl_buf *buf = NULL;
+    struct pl_buf_params bufparams = {
         .size = pl_tex_transfer_size(params),
-        .host_writable = true,
-    });
+    };
+
+    // If we can import host pointers directly, and the function is being used
+    // asynchronously, then we can use host pointer import to skip a memcpy. In
+    // the synchronous case, we still force a host memcpy to avoid stalling the
+    // host until the GPU memcpy completes.
+    bool can_import = gpu->import_caps.buf & PL_HANDLE_HOST_PTR;
+    if (can_import && params->callback && bufparams.size > 32*1024) { // 32 KiB
+        bufparams.import_handle = PL_HANDLE_HOST_PTR;
+        bufparams.shared_mem = (struct pl_shared_mem) {
+            .handle.ptr = params->ptr,
+            .size = bufparams.size,
+            .offset = 0,
+        };
+
+        // Suppress errors for this test because it may fail, in which case we
+        // want to silently fall back.
+        pl_log_level_cap(gpu->ctx, PL_LOG_DEBUG);
+        buf = pl_buf_create(gpu, &bufparams);
+        pl_log_level_cap(gpu->ctx, PL_LOG_NONE);
+    }
+
+    if (!buf) {
+        bufparams.import_handle = 0;
+        bufparams.host_writable = true;
+        buf = pl_buf_create(gpu, &bufparams);
+    }
 
     if (!buf)
         return false;
 
-    pl_buf_write(gpu, buf, 0, params->ptr, buf->params.size);
+    if (!bufparams.import_handle)
+        pl_buf_write(gpu, buf, 0, params->ptr, buf->params.size);
 
     struct pl_tex_transfer_params newparams = *params;
     newparams.buf = buf;
@@ -1430,17 +1457,35 @@ bool pl_tex_upload_pbo(const struct pl_gpu *gpu,
     return ok;
 }
 
+struct pbo_cb_ctx {
+    const struct pl_gpu *gpu;
+    const struct pl_buf *buf;
+    void *ptr;
+    void (*callback)(void *priv);
+    void *priv;
+};
+
+static void pbo_download_cb(void *priv)
+{
+    struct pbo_cb_ctx *p = priv;
+    pl_buf_read(p->gpu, p->buf, 0, p->ptr, p->buf->params.size);
+    pl_buf_destroy(p->gpu, &p->buf);
+
+    // Run the original callback
+    p->callback(p->priv);
+    talloc_free(priv);
+};
+
 bool pl_tex_download_pbo(const struct pl_gpu *gpu,
                          const struct pl_tex_transfer_params *params)
 {
     if (params->buf)
         return pl_tex_download(gpu, params);
 
+    const struct pl_buf *buf = NULL;
     struct pl_buf_params bufparams = {
         .size = pl_tex_transfer_size(params),
     };
-
-    const struct pl_buf *buf = NULL;
 
     // If we can import host pointers directly, we can avoid an extra memcpy
     // (sometimes). In the cases where it isn't avoidable, the extra memcpy
@@ -1474,24 +1519,45 @@ bool pl_tex_download_pbo(const struct pl_gpu *gpu,
     struct pl_tex_transfer_params newparams = *params;
     newparams.ptr = NULL;
     newparams.buf = buf;
+
+    // If the transfer is asynchronous, propagate our host read asynchronously
+    if (params->callback && !bufparams.import_handle) {
+        newparams.callback = pbo_download_cb;
+        newparams.priv = talloc_struct(NULL, struct pbo_cb_ctx, {
+            .gpu = gpu,
+            .buf = buf,
+            .ptr = params->ptr,
+            .callback = params->callback,
+            .priv = params->priv,
+        });
+    }
+
     if (!pl_tex_download(gpu, &newparams)) {
         pl_buf_destroy(gpu, &buf);
         return false;
     }
 
-    while (pl_buf_poll(gpu, buf, 10000000)) // 10 ms
-        PL_TRACE(gpu, "pl_tex_download without buffer: blocking (slow path)");
+    if (!params->callback) {
+        while (pl_buf_poll(gpu, buf, 10000000)) // 10 ms
+            PL_TRACE(gpu, "pl_tex_download: synchronous/blocking (slow path)");
+    }
 
     bool ok;
     if (bufparams.import_handle) {
         // Buffer download completion already means the host pointer contains
-        // the valid data, no more need to copy
+        // the valid data, no more need to copy. (Note: this applies even for
+        // asynchronous downloads)
         ok = true;
-    } else {
+        pl_buf_destroy(gpu, &buf);
+    } else if (!params->callback) {
+        // Synchronous read back to the host pointer
         ok = pl_buf_read(gpu, buf, 0, params->ptr, bufparams.size);
+        pl_buf_destroy(gpu, &buf);
+    } else {
+        // Nothing left to do here, the rest will be done by pbo_download_cb
+        ok = true;
     }
 
-    pl_buf_destroy(gpu, &buf);
     return ok;
 }
 

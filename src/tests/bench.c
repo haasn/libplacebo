@@ -301,6 +301,26 @@ static void bench_upload(const struct pl_gpu *gpu, const struct pl_tex *tex)
     });
 }
 
+static void dummy_cb(void *arg) {}
+
+static void bench_download_async(const struct pl_gpu *gpu, const struct pl_tex *tex)
+{
+    pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
+        .tex = tex,
+        .ptr = (uint8_t *) PL_ALIGN((uintptr_t) data, 4096),
+        .callback = dummy_cb,
+    });
+}
+
+static void bench_upload_async(const struct pl_gpu *gpu, const struct pl_tex *tex)
+{
+    pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
+        .tex = tex,
+        .ptr = (uint8_t *) PL_ALIGN((uintptr_t) data, 4096),
+        .callback = dummy_cb,
+    });
+}
+
 int main()
 {
     setbuf(stdout, NULL);
@@ -326,7 +346,9 @@ int main()
 
     printf("= Running benchmarks =\n");
     benchmark(vk->gpu, "tex_download ptr", BENCH_TEX(bench_download));
+    benchmark(vk->gpu, "tex_download ptr async", BENCH_TEX(bench_download_async));
     benchmark(vk->gpu, "tex_upload ptr", BENCH_TEX(bench_upload));
+    benchmark(vk->gpu, "tex_upload ptr async", BENCH_TEX(bench_upload_async));
     benchmark(vk->gpu, "bilinear", BENCH_SH(bench_bilinear));
     benchmark(vk->gpu, "bicubic", BENCH_SH(bench_bicubic));
     benchmark(vk->gpu, "deband", BENCH_SH(bench_deband));
