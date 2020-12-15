@@ -603,12 +603,8 @@ struct pl_tex_vk {
     VkImageView view;
     // for rendering
     VkFramebuffer framebuffer;
-    // for transfers
-    struct pl_buf_pool pbo_write;
     // for vk_tex_upload/download fallback code
     const struct pl_fmt *texel_fmt;
-    struct pl_buf_pool tmp_write;
-    struct pl_buf_pool tmp_read;
     // "current" metadata, can change during the course of execution
     VkImageLayout current_layout;
     VkAccessFlags current_access;
@@ -641,9 +637,6 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
     struct vk_ctx *vk = p->vk;
     struct pl_tex_vk *tex_vk = TA_PRIV(tex);
 
-    pl_buf_pool_uninit(gpu, &tex_vk->tmp_write);
-    pl_buf_pool_uninit(gpu, &tex_vk->tmp_read);
-    pl_buf_pool_uninit(gpu, &tex_vk->pbo_write);
     vk_sync_deref(gpu, tex_vk->ext_sync);
     vk_signal_destroy(vk, &tex_vk->sig);
     vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, VK_ALLOC);
@@ -2021,7 +2014,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
     struct pl_tex_vk *tex_vk = TA_PRIV(tex);
 
     if (!params->buf)
-        return pl_tex_upload_pbo(gpu, &tex_vk->pbo_write, params);
+        return pl_tex_upload_pbo(gpu, params);
 
     const struct pl_buf *buf = params->buf;
     struct pl_buf_vk *buf_vk = TA_PRIV(buf);
@@ -2037,8 +2030,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
     if (emulated || unaligned) {
 
         // Copy the source data buffer into an intermediate buffer
-        const struct pl_buf *tbuf;
-        tbuf = pl_buf_pool_get(gpu, &tex_vk->tmp_write, &(struct pl_buf_params) {
+        const struct pl_buf *tbuf = pl_buf_create(gpu, &(struct pl_buf_params) {
             .uniform = emulated,
             .size = size,
             .memory_type = PL_BUF_MEM_DEVICE,
@@ -2085,8 +2077,11 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         fixed.buf = tbuf;
         fixed.buf_offset = 0;
 
-        return emulated ? pl_tex_upload_texel(gpu, p->dp, &fixed)
-                        : pl_tex_upload(gpu, &fixed);
+        bool ok = emulated ? pl_tex_upload_texel(gpu, p->dp, &fixed)
+                           : pl_tex_upload(gpu, &fixed);
+
+        pl_buf_destroy(gpu, &tbuf);
+        return ok;
 
     } else {
 
@@ -2156,8 +2151,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
     if (emulated || unaligned) {
 
         // Download into an intermediate buffer first
-        const struct pl_buf *tbuf;
-        tbuf = pl_buf_pool_get(gpu, &tex_vk->tmp_read, &(struct pl_buf_params) {
+        const struct pl_buf *tbuf = pl_buf_create(gpu, &(struct pl_buf_params) {
             .storable = emulated,
             .size = size,
             .memory_type = PL_BUF_MEM_DEVICE,
@@ -2175,12 +2169,16 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
 
         bool ok = emulated ? pl_tex_download_texel(gpu, p->dp, &fixed)
                            : pl_tex_download(gpu, &fixed);
-        if (!ok)
+        if (!ok) {
+            pl_buf_destroy(gpu, &tbuf);
             goto error;
+        }
 
         struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
-        if (!cmd)
+        if (!cmd) {
+            pl_buf_destroy(gpu, &tbuf);
             goto error;
+        }
 
         CMD_MARK_BEGIN(cmd);
         vk_cmd_timer_begin(gpu, cmd, params->timer);
@@ -2205,6 +2203,8 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
 
         vk_cmd_timer_end(gpu, cmd, params->timer);
         CMD_MARK_END(cmd);
+
+        pl_buf_destroy(gpu, &tbuf);
 
     } else {
 
@@ -2271,8 +2271,6 @@ struct pl_pass_vk {
     // allocate a fixed number and use a bitmask of all available sets.
     VkDescriptorSet dss[16];
     uint16_t dmask;
-    // Vertex buffers (vertices)
-    struct pl_buf_pool vbo;
 
     // For updating
     VkWriteDescriptorSet *dswrite;
@@ -2286,7 +2284,6 @@ static void vk_pass_destroy(const struct pl_gpu *gpu, struct pl_pass *pass)
     struct vk_ctx *vk = p->vk;
     struct pl_pass_vk *pass_vk = TA_PRIV(pass);
 
-    pl_buf_pool_uninit(gpu, &pass_vk->vbo);
     vk->DestroyPipeline(vk->dev, pass_vk->pipe, VK_ALLOC);
     vk->DestroyRenderPass(vk->dev, pass_vk->renderPass, VK_ALLOC);
     vk->DestroyPipelineLayout(vk->dev, pass_vk->pipeLayout, VK_ALLOC);
@@ -2927,7 +2924,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
     struct pl_pass_vk *pass_vk = TA_PRIV(pass);
 
     if (params->vertex_data)
-        return pl_pass_run_vbo(gpu, &pass_vk->vbo, params);
+        return pl_pass_run_vbo(gpu, params);
 
     if (!pass_vk->use_pushd) {
         // Wait for a free descriptor set

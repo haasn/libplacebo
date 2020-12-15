@@ -106,27 +106,9 @@ uint32_t pl_fmt_fourcc(const struct pl_fmt *fmt);
 // Compute the total size (in bytes) of a texture transfer operation
 size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par);
 
-// A hard-coded upper limit on a pl_buf_pool's size, to prevent OOM loops
-#define PL_BUF_POOL_MAX_BUFFERS 8
-
-// A pool of buffers, which can grow as needed
-struct pl_buf_pool {
-    struct pl_buf_params current_params;
-    const struct pl_buf **buffers;
-    int num_buffers;
-    int index;
-};
-
-void pl_buf_pool_uninit(const struct pl_gpu *gpu, struct pl_buf_pool *pool);
-
-// Note: params->initial_data is *not* supported
-const struct pl_buf *pl_buf_pool_get(const struct pl_gpu *gpu,
-                                     struct pl_buf_pool *pool,
-                                     const struct pl_buf_params *params);
-
 // Helper that wraps pl_tex_upload/download using texture upload buffers to
 // ensure that params->buf is always set.
-bool pl_tex_upload_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
+bool pl_tex_upload_pbo(const struct pl_gpu *gpu,
                        const struct pl_tex_transfer_params *params);
 bool pl_tex_download_pbo(const struct pl_gpu *gpu,
                          const struct pl_tex_transfer_params *params);
@@ -137,7 +119,7 @@ bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
 bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
                            const struct pl_tex_transfer_params *params);
 
-void pl_pass_run_vbo(const struct pl_gpu *gpu, struct pl_buf_pool *vbo,
+void pl_pass_run_vbo(const struct pl_gpu *gpu,
                      const struct pl_pass_run_params *params);
 
 // Make a deep-copy of the pass params. Note: cached_program etc. are not

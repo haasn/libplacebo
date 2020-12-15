@@ -1404,89 +1404,29 @@ bool pl_gpu_is_failed(const struct pl_gpu *gpu)
 
 // GPU-internal helpers
 
-void pl_buf_pool_uninit(const struct pl_gpu *gpu, struct pl_buf_pool *pool)
-{
-    for (int i = 0; i < pool->num_buffers; i++)
-        pl_buf_destroy(gpu, &pool->buffers[i]);
-
-    talloc_free(pool->buffers);
-    *pool = (struct pl_buf_pool) {0};
-}
-
-static bool pl_buf_pool_grow(const struct pl_gpu *gpu, struct pl_buf_pool *pool)
-{
-    const struct pl_buf *buf = pl_buf_create(gpu, &pool->current_params);
-    if (!buf)
-        return false;
-
-    TARRAY_INSERT_AT(NULL, pool->buffers, pool->num_buffers, pool->index, buf);
-    PL_DEBUG(gpu, "Resized buffer pool to size %d", pool->num_buffers);
-    return true;
-}
-
-const struct pl_buf *pl_buf_pool_get(const struct pl_gpu *gpu,
-                                     struct pl_buf_pool *pool,
-                                     const struct pl_buf_params *params)
-{
-    require(!params->initial_data);
-
-    if (!pl_buf_params_superset(pool->current_params, *params)) {
-        pl_buf_pool_uninit(gpu, pool);
-        pool->current_params = *params;
-    }
-
-    // Make sure we have at least one buffer available
-    if (!pool->buffers && !pl_buf_pool_grow(gpu, pool))
-        return NULL;
-
-    bool usable = !pl_buf_poll(gpu, pool->buffers[pool->index], 0);
-    if (usable)
-        goto done;
-
-    if (pool->num_buffers < PL_BUF_POOL_MAX_BUFFERS) {
-        if (pl_buf_pool_grow(gpu, pool))
-            goto done;
-
-        // Failed growing the buffer pool, so just error out early
-        return NULL;
-    }
-
-    // Can't resize any further, so just loop until the buffer is usable
-    while (pl_buf_poll(gpu, pool->buffers[pool->index], 1000000000)) // 1s
-        PL_TRACE(gpu, "Blocked on buffer pool availability! (slow path)");
-
-done: ;
-    const struct pl_buf *buf = pool->buffers[pool->index++];
-    pool->index %= pool->num_buffers;
-
-    return buf;
-
-error:
-    return NULL;
-}
-
-bool pl_tex_upload_pbo(const struct pl_gpu *gpu, struct pl_buf_pool *pbo,
+bool pl_tex_upload_pbo(const struct pl_gpu *gpu,
                        const struct pl_tex_transfer_params *params)
 {
     if (params->buf)
         return pl_tex_upload(gpu, params);
 
-    struct pl_buf_params bufparams = {
+    const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
         .size = pl_tex_transfer_size(params),
         .host_writable = true,
-    };
+    });
 
-    const struct pl_buf *buf = pl_buf_pool_get(gpu, pbo, &bufparams);
     if (!buf)
         return false;
 
-    pl_buf_write(gpu, buf, 0, params->ptr, bufparams.size);
+    pl_buf_write(gpu, buf, 0, params->ptr, buf->params.size);
 
     struct pl_tex_transfer_params newparams = *params;
     newparams.buf = buf;
     newparams.ptr = NULL;
 
-    return pl_tex_upload(gpu, &newparams);
+    bool ok = pl_tex_upload(gpu, &newparams);
+    pl_buf_destroy(gpu, &buf);
+    return ok;
 }
 
 bool pl_tex_download_pbo(const struct pl_gpu *gpu,
@@ -1692,17 +1632,18 @@ error:
     return false;
 }
 
-void pl_pass_run_vbo(const struct pl_gpu *gpu, struct pl_buf_pool *vbo,
+void pl_pass_run_vbo(const struct pl_gpu *gpu,
                      const struct pl_pass_run_params *params)
 {
     if (params->vertex_buf)
         return pl_pass_run(gpu, params);
 
     size_t vert_size = params->vertex_count * params->pass->params.vertex_stride;
-    const struct pl_buf *vert = pl_buf_pool_get(gpu, vbo, &(struct pl_buf_params) {
+    const struct pl_buf *vert = pl_buf_create(gpu, &(struct pl_buf_params) {
         .size = vert_size,
-        .host_writable = true,
         .drawable = true,
+        .initial_data = params->vertex_data,
+        .memory_type = PL_BUF_MEM_DEVICE,
     });
 
     if (!vert) {
@@ -1710,28 +1651,11 @@ void pl_pass_run_vbo(const struct pl_gpu *gpu, struct pl_buf_pool *vbo,
         return;
     }
 
-    bool need_update = true;
-    uint8_t **cache = (uint8_t **) &vert->params.user_data;
-    if (*cache && talloc_get_size(*cache) >= vert_size) {
-        if (memcmp(*cache, params->vertex_data, vert_size) == 0)
-            need_update = false;
-    }
-
-    if (need_update) {
-        pl_buf_write(gpu, vert, 0, params->vertex_data, vert_size);
-
-        // Update the cached information, for small vertex buffers
-        if (vert_size <= 128 * 1024) { // 128 KiB
-            if (vert_size > talloc_get_size(*cache))
-                *cache = talloc_realloc_size((void *) vert, *cache, vert_size);
-            memcpy(*cache, params->vertex_data, vert_size);
-        }
-    }
-
     struct pl_pass_run_params newparams = *params;
     newparams.vertex_buf = vert;
     newparams.vertex_data = NULL;
     pl_pass_run(gpu, &newparams);
+    pl_buf_destroy(gpu, &vert);
 }
 
 struct pl_pass_params pl_pass_params_copy(void *tactx,
