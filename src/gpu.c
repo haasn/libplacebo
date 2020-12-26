@@ -491,6 +491,12 @@ const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
         require(params->import_handle & gpu->import_caps.tex);
         require(PL_ISPOT(params->import_handle));
         require(params->shared_mem.size > 0);
+        if (params->import_handle == PL_HANDLE_DMA_BUF) {
+            if (params->shared_mem.stride_w)
+                require(params->w && params->shared_mem.stride_w >= params->w);
+            if (params->shared_mem.stride_h)
+                require(params->h && params->shared_mem.stride_h >= params->h);
+        }
     }
 
     switch (pl_tex_params_dimension(*params)) {

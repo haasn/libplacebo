@@ -945,6 +945,14 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
             // is implemented.
             tiling = VK_IMAGE_TILING_OPTIMAL;
         }
+
+        if (params->shared_mem.stride_w > params->w ||
+            params->shared_mem.stride_h > params->h)
+        {
+            // FIXME: Implement proper DRM format modifier support
+            PL_WARN(gpu, "Strided DMA buffer imports are not yet supported by "
+                    "the vulkan backend! Expect bugs...");
+        }
     }
 
     // FIXME: Since we can't keep track of queue family ownership properly,
@@ -1094,6 +1102,8 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     if (params->export_handle) {
         tex->shared_mem = tex_vk->mem.shared_mem;
         tex->shared_mem.drm_format_mod = DRM_FORMAT_MOD_INVALID;
+        tex->shared_mem.stride_w = params->w;
+        tex->shared_mem.stride_h = params->h;
         // Texture is not initially exported;
         // pl_vulkan_hold must be used to export it.
     }

@@ -409,19 +409,19 @@ static GLbitfield tex_barrier(const struct pl_tex *tex)
 #define ADD_DMABUF_PLANE_ATTRIBS(plane, fd, offset, stride)         \
     do {                                                            \
         ADD_ATTRIB(EGL_DMA_BUF_PLANE ## plane ## _FD_EXT,           \
-                    fd);                                            \
+                   fd);                                             \
         ADD_ATTRIB(EGL_DMA_BUF_PLANE ## plane ## _OFFSET_EXT,       \
-                    offset);                                        \
+                   offset);                                         \
         ADD_ATTRIB(EGL_DMA_BUF_PLANE ## plane ## _PITCH_EXT,        \
-                    stride);                                        \
+                   stride);                                         \
     } while (0)
 
 #define ADD_DMABUF_PLANE_MODIFIERS(plane, mod)                      \
     do {                                                            \
         ADD_ATTRIB(EGL_DMA_BUF_PLANE ## plane ## _MODIFIER_LO_EXT,  \
-                    (uint32_t) ((mod) & 0xFFFFu));                  \
+                   (uint32_t) ((mod) & 0xFFFFu));                   \
         ADD_ATTRIB(EGL_DMA_BUF_PLANE ## plane ## _MODIFIER_HI_EXT,  \
-                    (uint32_t) (((mod) >> 32u) & 0xFFFFu));         \
+                   (uint32_t) (((mod) >> 32u) & 0xFFFFu));          \
     } while (0)
 
 #define DRM_MOD_INVALID ((1ULL << 56) - 1)
@@ -465,7 +465,8 @@ static bool gl_tex_import(const struct pl_gpu *gpu,
         }
 
         ADD_ATTRIB(EGL_LINUX_DRM_FOURCC_EXT, params->format->fourcc);
-        ADD_DMABUF_PLANE_ATTRIBS(0, tex_gl->fd, shared_mem->offset, params->w);
+        ADD_DMABUF_PLANE_ATTRIBS(0, tex_gl->fd, shared_mem->offset,
+                                 PL_DEF(shared_mem->stride_w, params->w));
         attribs[num_attribs] = EGL_NONE;
 
         // EGL_LINUX_DMA_BUF_EXT requires EGL_NO_CONTEXT
@@ -561,11 +562,11 @@ static bool gl_tex_export(const struct pl_gpu *gpu,
             goto error;
         }
 
-        int offset = 0;
+        int offset = 0, stride = 0;
         ok = eglExportDMABUFImageMESA(p->egl_dpy,
                                       tex_gl->image,
                                       &tex_gl->fd,
-                                      NULL, // strides
+                                      &stride,
                                       &offset);
         if (!egl_check_err(gpu, "eglExportDMABUFImageMesa") || !ok)
             goto error;
@@ -582,6 +583,7 @@ static bool gl_tex_export(const struct pl_gpu *gpu,
             .size = fdsize,
             .offset = offset,
             .drm_format_mod = modifiers,
+            .stride_w = stride,
         };
         break;
     }

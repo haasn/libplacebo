@@ -110,6 +110,12 @@ struct pl_shared_mem {
     // be DRM_FORMAT_MOD_LINEAR. For importing `pl_tex`, it can be any
     // format modifier supported by the implementation.
     uint64_t drm_format_mod;
+
+    // When importing a `pl_tex` of type PL_HANDLE_DMA_BUF, this can be used to
+    // set the image stride (AKA pitch) in memory. If left as 0, defaults to
+    // the image width/height.
+    size_t stride_w;
+    size_t stride_h;
 };
 
 // Structure defining the physical limits of this GPU instance. If a limit is
