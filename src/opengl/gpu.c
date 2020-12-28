@@ -791,7 +791,7 @@ static bool gl_fb_query(const struct pl_gpu *gpu, int fbo,
     *fmt = (struct pl_fmt) {
         .name = "fbo",
         .type = PL_FMT_UNKNOWN,
-        .caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE,
+        .caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE | PL_FMT_CAP_BLENDABLE,
         .num_components = 4,
         .component_depth = {8, 8, 8, 8}, // default to rgba8
         .sample_order = {0, 1, 2, 3},
