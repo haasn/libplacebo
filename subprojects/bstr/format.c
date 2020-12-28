@@ -98,7 +98,7 @@ void bstr_xappend_vasprintf_c(void *tactx, bstr *s, const char *fmt,
             c++;
             continue;
         case 'f':
-            len = ccStrPrintDouble(buf, sizeof(buf), 6, va_arg(ap, double));
+            len = ccStrPrintDouble(buf, sizeof(buf), 20, va_arg(ap, double));
             bstr_xappend(tactx, s, (struct bstr) { buf, len });
             continue;
         default:
