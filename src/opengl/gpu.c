@@ -1700,6 +1700,13 @@ static const struct pl_pass *gl_pass_create(const struct pl_gpu *gpu,
 
             talloc_free(buffer);
         }
+
+        if (!gl_check_err(gpu, "gl_pass_create: get program binary")) {
+            PL_WARN(gpu, "Failed generating program binary.. ignoring");
+            talloc_free(pass->params.cached_program);
+            pass->params.cached_program = NULL;
+            pass->params.cached_program_len = 0;
+        }
     }
 
     glUseProgram(pass_gl->program);
@@ -1741,6 +1748,9 @@ static const struct pl_pass *gl_pass_create(const struct pl_gpu *gpu,
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
+
+    if (!gl_check_err(gpu, "gl_pass_create"))
+        goto error;
 
     return pass;
 
