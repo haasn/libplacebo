@@ -1703,7 +1703,7 @@ static const struct pl_pass *gl_pass_create(const struct pl_gpu *gpu,
 
         if (!gl_check_err(gpu, "gl_pass_create: get program binary")) {
             PL_WARN(gpu, "Failed generating program binary.. ignoring");
-            talloc_free(pass->params.cached_program);
+            talloc_free((void *) pass->params.cached_program);
             pass->params.cached_program = NULL;
             pass->params.cached_program_len = 0;
         }
