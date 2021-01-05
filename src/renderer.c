@@ -21,6 +21,14 @@
 #include "shaders.h"
 #include "dispatch.h"
 
+struct cached_frame {
+    uint64_t signature;
+    struct pl_color_space color;
+    struct pl_icc_profile profile;
+    const struct pl_tex *tex;
+    bool evict; // for garbage collection
+};
+
 struct sampler {
     struct pl_shader_obj *upscaler_state;
     struct pl_shader_obj *downscaler_state;
@@ -48,6 +56,7 @@ struct pl_renderer {
     bool disable_peak_detect;   // disable peak detection shader
     bool disable_grain;         // disable AV1 grain code
     bool disable_hooks;         // disable user hooks / custom shaders
+    bool disable_mixing;        // disable frame mixing
 
     // Shader resource objects and intermediate textures (FBOs)
     struct pl_shader_obj *peak_detect_state;
@@ -61,6 +70,10 @@ struct pl_renderer {
     struct sampler samplers_dst[4];
     struct sampler *samplers_osd;
     int num_samplers_osd;
+
+    // Frame cache (for frame mixing / interpolation)
+    struct cached_frame *frames;
+    int num_frames;
 };
 
 static void find_fbo_format(struct pl_renderer *rr)
@@ -150,6 +163,8 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
     // Free all intermediate FBOs
     for (int i = 0; i < rr->num_fbos; i++)
         pl_tex_destroy(rr->gpu, &rr->fbos[i]);
+    for (int i = 0; i < rr->num_frames; i++)
+        pl_tex_destroy(rr->gpu, &rr->frames[i].tex);
 
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
@@ -183,6 +198,10 @@ void pl_renderer_load(struct pl_renderer *rr, const uint8_t *cache)
 
 void pl_renderer_flush_cache(struct pl_renderer *rr)
 {
+    for (int i = 0; i < rr->num_frames; i++)
+        pl_tex_destroy(rr->gpu, &rr->frames[i].tex);
+    rr->num_frames = 0;
+
     pl_shader_obj_destroy(&rr->peak_detect_state);
 }
 
@@ -1725,7 +1744,7 @@ static inline void default_rect(struct pl_rect2df *rc,
         *rc = *backup;
 }
 
-static void fix_refs_and_rects(struct pass_state *pass)
+static void fix_refs_and_rects(struct pass_state *pass, bool adjust_rects)
 {
     struct pl_frame *image = &pass->image;
     struct pl_frame *target = &pass->target;
@@ -1770,40 +1789,42 @@ static void fix_refs_and_rects(struct pass_state *pass)
         dst->y1 = dst_ref->params.h;
     }
 
-    // Keep track of whether the end-to-end rendering is flipped
-    bool flipped_x = (src->x0 > src->x1) != (dst->x0 > dst->x1),
-         flipped_y = (src->y0 > src->y1) != (dst->y0 > dst->y1);
+    if (adjust_rects) {
+        // Keep track of whether the end-to-end rendering is flipped
+        bool flipped_x = (src->x0 > src->x1) != (dst->x0 > dst->x1),
+             flipped_y = (src->y0 > src->y1) != (dst->y0 > dst->y1);
 
-    // Normalize both rects to make the math easier
-    pl_rect2df_normalize(src);
-    pl_rect2df_normalize(dst);
+        // Normalize both rects to make the math easier
+        pl_rect2df_normalize(src);
+        pl_rect2df_normalize(dst);
 
-    // Round the output rect and clip it to the framebuffer dimensions
-    float rx0 = roundf(PL_MAX(dst->x0, 0.0)),
-          ry0 = roundf(PL_MAX(dst->y0, 0.0)),
-          rx1 = roundf(PL_MIN(dst->x1, dst_ref->params.w)),
-          ry1 = roundf(PL_MIN(dst->y1, dst_ref->params.h));
+        // Round the output rect and clip it to the framebuffer dimensions
+        float rx0 = roundf(PL_MAX(dst->x0, 0.0)),
+              ry0 = roundf(PL_MAX(dst->y0, 0.0)),
+              rx1 = roundf(PL_MIN(dst->x1, dst_ref->params.w)),
+              ry1 = roundf(PL_MIN(dst->y1, dst_ref->params.h));
 
-    // Adjust the src rect corresponding to the rounded crop
-    float scale_x = pl_rect_w(*src) / pl_rect_w(*dst),
-          scale_y = pl_rect_h(*src) / pl_rect_h(*dst),
-          base_x = src->x0,
-          base_y = src->y0;
+        // Adjust the src rect corresponding to the rounded crop
+        float scale_x = pl_rect_w(*src) / pl_rect_w(*dst),
+              scale_y = pl_rect_h(*src) / pl_rect_h(*dst),
+              base_x = src->x0,
+              base_y = src->y0;
 
-    src->x0 = base_x + (rx0 - dst->x0) * scale_x;
-    src->x1 = base_x + (rx1 - dst->x0) * scale_x;
-    src->y0 = base_y + (ry0 - dst->y0) * scale_y;
-    src->y1 = base_y + (ry1 - dst->y0) * scale_y;
+        src->x0 = base_x + (rx0 - dst->x0) * scale_x;
+        src->x1 = base_x + (rx1 - dst->x0) * scale_x;
+        src->y0 = base_y + (ry0 - dst->y0) * scale_y;
+        src->y1 = base_y + (ry1 - dst->y0) * scale_y;
 
-    // Update dst_rect to the rounded values and re-apply flip if needed. We
-    // always do this in the `dst` rather than the `src`` because this allows
-    // e.g. polar sampling compute shaders to work.
-    *dst = (struct pl_rect2df) {
-        .x0 = flipped_x ? rx1 : rx0,
-        .y0 = flipped_y ? ry1 : ry0,
-        .x1 = flipped_x ? rx0 : rx1,
-        .y1 = flipped_y ? ry0 : ry1,
-    };
+        // Update dst_rect to the rounded values and re-apply flip if needed. We
+        // always do this in the `dst` rather than the `src`` because this allows
+        // e.g. polar sampling compute shaders to work.
+        *dst = (struct pl_rect2df) {
+            .x0 = flipped_x ? rx1 : rx0,
+            .y0 = flipped_y ? ry1 : ry0,
+            .x1 = flipped_x ? rx0 : rx1,
+            .y1 = flipped_y ? ry0 : ry1,
+        };
+    }
 
     // Copies of the above, for convenience
     pass->ref_rect = *src;
@@ -1860,6 +1881,36 @@ static void fix_color_space(struct pl_frame *frame)
     }
 }
 
+static bool pass_infer_state(struct pass_state *pass, bool adjust_rects)
+{
+    // Backwards compatibility hacks
+    struct pl_frame *image = &pass->image;
+    struct pl_frame *target = &pass->target;
+    default_rect(&image->crop, &image->src_rect);
+    default_rect(&target->crop, &target->dst_rect);
+
+    if (!target->num_planes && target->fbo) {
+        target->num_planes = 1;
+        target->planes[0] = (struct pl_plane) {
+            .texture = target->fbo,
+            .components = target->fbo->params.format->num_components,
+            .component_mapping = {0, 1, 2, 3},
+        };
+    }
+
+    if (!validate_structs(pass->rr, image, target))
+        return false;
+
+    fix_refs_and_rects(pass, adjust_rects);
+    fix_color_space(image);
+
+    // Infer the target color space info based on the image's
+    target->color.primaries = PL_DEF(target->color.primaries, image->color.primaries);
+    target->color.transfer = PL_DEF(target->color.transfer, image->color.transfer);
+    fix_color_space(target);
+    return true;
+}
+
 bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *pimage,
                      const struct pl_frame *ptarget,
                      const struct pl_render_params *params)
@@ -1872,30 +1923,8 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *pimage,
         .target = *ptarget,
     };
 
-    // Backwards compatibility hacks
-    struct pl_frame *image = &pass.image;
-    struct pl_frame *target = &pass.target;
-    default_rect(&image->crop, &image->src_rect);
-    default_rect(&target->crop, &target->dst_rect);
-    if (!target->num_planes && target->fbo) {
-        target->num_planes = 1;
-        target->planes[0] = (struct pl_plane) {
-            .texture = target->fbo,
-            .components = target->fbo->params.format->num_components,
-            .component_mapping = {0, 1, 2, 3},
-        };
-    }
-
-    if (!validate_structs(rr, image, target))
+    if (!pass_infer_state(&pass, true))
         return false;
-
-    fix_refs_and_rects(&pass);
-    fix_color_space(image);
-
-    // Infer the target color space info based on the image's
-    target->color.primaries = PL_DEF(target->color.primaries, image->color.primaries);
-    target->color.transfer = PL_DEF(target->color.transfer, image->color.transfer);
-    fix_color_space(target);
 
     pass.tmp = talloc_new(NULL),
     pass.fbos_used = talloc_zero_array(pass.tmp, bool, rr->num_fbos);
@@ -1925,6 +1954,290 @@ error:
     talloc_free(pass.tmp);
     PL_ERR(rr, "Failed rendering image!");
     return false;
+}
+
+#define MAX_MIX_FRAMES 16
+
+bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *images,
+                         const struct pl_frame *ptarget,
+                         const struct pl_render_params *params)
+{
+    params = PL_DEF(params, &pl_render_default_params);
+
+    require(images->num_frames >= 1);
+    for (int i = 0; i < images->num_frames - 1; i++)
+        require(images->timestamps[i] <= images->timestamps[i+1]);
+
+    struct pass_state pass = {
+        .rr = rr,
+        .image = images->frames[0],
+        .target = *ptarget,
+    };
+
+    // As the canonical reference, find the nearest frame that would be
+    // currently visible on an idealized zero-order-hold display.
+    for (int i = 1; i < images->num_frames; i++) {
+        if (images->timestamps[i] <= 0.0)
+            pass.image = images->frames[i];
+    }
+
+    if (rr->disable_mixing || !FBOFMT)
+        goto fallback;
+
+    if (!pass_infer_state(&pass, false))
+        return false;
+
+    // Round the output rect and clip it to the framebuffer dimensions. This
+    // will determine the size of the intermediate crop that we actually care
+    // about rendering. Note that we necessarily drop sub-pixel offsets in the
+    // target, because these may change from frame to frame - compensating for
+    // them in the src_rect will result in misalignment.
+    struct pl_frame *target = &pass.target;
+    const struct pl_tex *dst_ref = target->planes[pass.dst_ref].texture;
+    target->crop = (struct pl_rect2df) {
+        .x0 = roundf(PL_MAX(target->crop.x0, 0.0)),
+        .y0 = roundf(PL_MAX(target->crop.y0, 0.0)),
+        .x1 = roundf(PL_MIN(target->crop.x1, dst_ref->params.w)),
+        .y1 = roundf(PL_MIN(target->crop.y1, dst_ref->params.h)),
+    };
+
+    int out_w = fabs(pl_rect_w(target->crop)),
+        out_h = fabs(pl_rect_h(target->crop));
+    out_w = PL_DEF(out_w, dst_ref->params.w);
+    out_h = PL_DEF(out_h, dst_ref->params.h);
+
+    // The color space to mix the frames in. We arbitrarily choose to use the
+    // "current" frame's color space, but converted to RGB.
+    //
+    // TODO: Maybe mix in linear light instead of the native colorspace?
+    const struct pl_color_space mix_color = pass.image.color;
+    static const struct pl_color_repr mix_repr = {
+        .sys = PL_COLOR_SYSTEM_RGB,
+        .levels = PL_COLOR_LEVELS_PC,
+        .alpha = PL_ALPHA_PREMULTIPLIED,
+    };
+
+    int fidx = 0;
+    struct cached_frame frames[MAX_MIX_FRAMES];
+    float weights[MAX_MIX_FRAMES];
+    float wsum = 0.0;
+
+    // Garbage collect the cache by evicting all frames from the cache that are
+    // not determined to still be required
+    for (int i = 0; i < rr->num_frames; i++)
+        rr->frames[i].evict = true;
+
+    // Traverse the input frames and determine/prepare the ones we need
+    for (int i = 0; i < images->num_frames; i++) {
+        uint64_t sig = images->signatures[i];
+        float pts = images->timestamps[i];
+        PL_TRACE(rr, "Considering image with signature 0x%llx, pts %f",
+                 (unsigned long long) sig, pts);
+
+        float weight;
+        if (params->frame_mixer) {
+
+            float radius = params->frame_mixer->kernel->radius;
+            if (fabs(pts) >= radius) {
+                PL_TRACE(rr, "  -> Skipping: outside filter radius (%f)", radius);
+                continue;
+            }
+
+            // Weight is directly sampled from the filter
+            weight = pl_filter_sample(params->frame_mixer, pts);
+            PL_TRACE(rr, "  -> Filter offset %f = weight %f", pts, weight);
+
+        } else {
+
+            // Compute the visible interval [pts, end] of this frame
+            float end = i+1 < images->num_frames ? images->timestamps[i+1] : INFINITY;
+            if (pts > images->vsync_duration || end < 0.0) {
+                PL_TRACE(rr, "  -> Skipping: no intersection with vsync");
+                continue;
+            } else {
+                pts = PL_MAX(pts, 0.0);
+                end = PL_MIN(end, images->vsync_duration);
+                pl_assert(end >= pts);
+            }
+
+            // Weight is the fraction of vsync interval that frame is visible
+            weight = (end - pts) / images->vsync_duration;
+            PL_TRACE(rr, "  -> Frame [%f, %f] intersects [%f, %f] = weight %f",
+                     pts, end, 0.0, images->vsync_duration, weight);
+
+        }
+
+        struct cached_frame *f = NULL;
+        for (int j = 0; j < rr->num_frames; j++) {
+            if (rr->frames[j].signature == sig) {
+                f = &rr->frames[j];
+                f->evict = false;
+                break;
+            }
+        }
+
+        // Skip frames with negligible contributions. Do this after the loop
+        // above to make sure these frames don't get evicted just yet.
+        const float cutoff = 1e-3;
+        if (fabs(weight) <= cutoff) {
+            PL_TRACE(rr, "   -> Skipping: weight (%f) below threshold (%f)",
+                     weight, cutoff);
+            continue;
+        }
+
+        if (!f) {
+            // Signature does not exist in the cache at all yet,
+            // so grow the cache by this entry.
+            TARRAY_GROW(rr, rr->frames, rr->num_frames);
+            f = &rr->frames[rr->num_frames++];
+            *f = (struct cached_frame) {
+                .signature = sig,
+                .color = images->frames[i].color,
+                .profile = images->frames[i].profile,
+            };
+        }
+
+        // Check to see if we can blindly reuse this cache entry. This is the
+        // case either if the size is compatible, or if the user doesn't care.
+        bool can_reuse = !!f->tex;
+        if (f->tex && !params->preserve_mixing_cache) {
+            can_reuse = f->tex->params.w == out_w &&
+                        f->tex->params.h == out_h;
+        }
+
+        if (!can_reuse) {
+            // If we can't reuse the entry, we need to render to this
+            // texture first
+            PL_TRACE(rr, "  -> Cached texture missing or invalid.. (re)creating");
+            bool ok = pl_tex_recreate(rr->gpu, &f->tex, &(struct pl_tex_params) {
+                .w = out_w,
+                .h = out_h,
+                .format = rr->fbofmt,
+                .sampleable = true,
+                .renderable = true,
+                .storable = rr->fbofmt->caps & PL_FMT_CAP_STORABLE,
+            });
+
+            if (!ok) {
+                PL_ERR(rr, "Could not create intermediate texture for "
+                       "frame mixing.. disabling!");
+                rr->disable_mixing = true;
+                goto fallback;
+            }
+
+            // In the intermediate frame cache, we store all images as RGB, but
+            // in their native colorspaces. Preserving the original colorspace
+            // avoids precision loss due to unnecessary color space roundtrips.
+            // We also explicitly clear the ICC profile, see below for why.
+            struct pl_frame image = images->frames[i];
+            image.profile = (struct pl_icc_profile) {0};
+
+            struct pl_frame inter_target = {
+                .num_planes = 1,
+                .planes[0] = {
+                    .texture = f->tex,
+                    .components = rr->fbofmt->num_components,
+                    .component_mapping = {0, 1, 2, 3},
+                },
+                .color = f->color,
+                .repr = mix_repr,
+            };
+
+            if (!pl_render_image(rr, &image, &inter_target, params)) {
+                PL_ERR(rr, "Could not render image for frame mixing.. disabling!");
+                rr->disable_mixing = true;
+                goto fallback;
+            }
+        }
+
+        pl_assert(fidx < MAX_MIX_FRAMES);
+        frames[fidx] = *f;
+        weights[fidx] = weight;
+        wsum += weight;
+        fidx++;
+    }
+
+    // Evict the frames we *don't* need
+    for (int i = 0; i < rr->num_frames; ) {
+        if (rr->frames[i].evict) {
+            PL_TRACE(rr, "Evicting frame with signature %llx from cache",
+                     (unsigned long long) rr->frames[i].signature);
+            pl_tex_destroy(rr->gpu, &rr->frames[i].tex);
+            TARRAY_REMOVE_AT(rr->frames, rr->num_frames, i);
+            continue;
+        } else {
+            i++;
+        }
+    }
+
+    // Sample and mix the output color
+    struct pl_shader *sh = pl_dispatch_begin(rr->dp);
+    sh->res.output = PL_SHADER_SIG_COLOR;
+    sh->output_w = out_w;
+    sh->output_h = out_h;
+
+    GLSL("vec4 color;                   \n"
+         "// pl_render_image_mix        \n"
+         "{                             \n"
+         "vec4 mix_color = vec4(0.0);   \n");
+
+    for (int i = 0; i < fidx; i++) {
+        const struct pl_tex_params *tpars = &frames[i].tex->params;
+
+        // Use linear sampling if desired and possible
+        enum pl_tex_sample_mode sample_mode = PL_TEX_SAMPLE_NEAREST;
+        if ((tpars->w != out_w || tpars->h != out_h) &&
+            (tpars->format->caps & PL_FMT_CAP_LINEAR))
+        {
+            sample_mode = PL_TEX_SAMPLE_LINEAR;
+        }
+
+        ident_t pos, tex = sh_bind(sh, frames[i].tex, PL_TEX_ADDRESS_CLAMP,
+                                   sample_mode, "frame", NULL, &pos, NULL, NULL);
+
+        GLSL("color = %s(%s, %s); \n", sh_tex_fn(sh, *tpars), tex, pos);
+
+        // Note: This ignores differences in ICC profile, which we decide to
+        // just simply not care about. Doing that properly would require
+        // converting between different image profiles, and the headache of
+        // finagling that state is just not worth it because this is an
+        // exceptionally unlikely hypothetical.
+        pl_shader_color_map(sh, NULL, frames[i].color, mix_color, NULL, false);
+
+        ident_t weight = sh_var(sh, (struct pl_shader_var) {
+            .var = pl_var_float("weight"),
+            .data = &(float){ weights[i] / wsum },
+            .dynamic = true,
+        });
+
+        GLSL("mix_color += %s * color; \n", weight);
+    }
+
+    GLSL("color = mix_color; \n"
+         "}                  \n");
+
+    // Dispatch this to the destination
+    pass.tmp = talloc_new(NULL),
+    pass.fbos_used = talloc_zero_array(pass.tmp, bool, rr->num_fbos);
+    pass.img = (struct img) {
+        .sh = sh,
+        .w = out_w,
+        .h = out_h,
+        .comps = 4,
+        .color = mix_color,
+        .repr = mix_repr,
+    };
+
+    if (!pass_output_target(rr, &pass, params)) {
+        talloc_free(pass.tmp);
+        goto fallback;
+    }
+
+    talloc_free(pass.tmp);
+    return true;
+
+fallback:
+    return pl_render_image(rr, &pass.image, ptarget, params);
 }
 
 void pl_frame_set_chroma_location(struct pl_frame *frame,

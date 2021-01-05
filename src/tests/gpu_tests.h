@@ -966,6 +966,46 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     target.num_overlays = 0;
 
+    // Attempt frame mixing
+#define NUM_MIX_FRAMES 10
+    struct pl_frame frames[NUM_MIX_FRAMES];
+    uint64_t signatures[NUM_MIX_FRAMES];
+    float timestamps[NUM_MIX_FRAMES];
+
+    struct pl_frame_mix mix = {
+        .num_frames = NUM_MIX_FRAMES,
+        .frames = frames,
+        .signatures = signatures,
+        .timestamps = timestamps,
+        .vsync_duration = 24.0 / 60.0,
+    };
+
+    for (int i = 0; i < mix.num_frames; i++) {
+        frames[i] = (struct pl_frame) {
+            .num_planes = 1,
+            .planes[0]  = img5x5,
+            .color = pl_color_space_bt709,
+            .repr = {
+                .sys    = PL_COLOR_SYSTEM_BT_709,
+                .levels = PL_COLOR_LEVELS_PC,
+            },
+        };
+
+        signatures[i] = i;
+        timestamps[i] = i;
+    }
+
+    int num_vsyncs = mix.num_frames / mix.vsync_duration;
+    for (int v = 0; v < num_vsyncs; v++) {
+        REQUIRE(pl_render_image_mix(rr, &mix, &target, &(struct pl_render_params) {
+            .frame_mixer = &pl_filter_mitchell_clamp,
+        }));
+
+        // Simulate advancing vsync
+        for (int i = 0; i < mix.num_frames; i++)
+            timestamps[i] -= mix.vsync_duration;
+    }
+
 error:
     free(fbo_data);
     pl_renderer_destroy(&rr);

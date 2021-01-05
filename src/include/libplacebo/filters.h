@@ -203,6 +203,7 @@ extern const struct pl_filter_config pl_filter_haasnsoft;   // blurred ewa_hann
 extern const struct pl_filter_config pl_filter_bicubic;
 extern const struct pl_filter_config pl_filter_catmull_rom;
 extern const struct pl_filter_config pl_filter_mitchell;
+extern const struct pl_filter_config pl_filter_mitchell_clamp; // clamp = 1.0
 extern const struct pl_filter_config pl_filter_robidoux;
 extern const struct pl_filter_config pl_filter_robidouxsharp;
 extern const struct pl_filter_config pl_filter_ewa_robidoux;

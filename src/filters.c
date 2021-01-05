@@ -609,6 +609,11 @@ const struct pl_filter_config pl_filter_mitchell = {
     .kernel = &pl_filter_function_mitchell,
 };
 
+const struct pl_filter_config pl_filter_mitchell_clamp = {
+    .kernel = &pl_filter_function_mitchell,
+    .clamp = 1.0,
+};
+
 const struct pl_filter_config pl_filter_robidoux = {
     .kernel = &pl_filter_function_robidoux,
 };

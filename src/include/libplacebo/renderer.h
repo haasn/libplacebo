@@ -159,6 +159,15 @@ struct pl_render_params {
     // params->peak_detect_params is set and the source is HDR).
     bool allow_delayed_peak_detect;
 
+    // Normally, when the size of the `pl_render_target` used with
+    // `pl_render_image_mix` changes, the internal cache of mixed frames must
+    // be discarded in order to re-render all required frames at the new output
+    // size. Setting this option to `true` will skip the cache invalidation and
+    // instead re-use the existing frames (with bilinear scaling to the new
+    // size), which comes at a quality loss shortly after a resize, but should
+    // make it much more smooth.
+    bool preserve_mixing_cache;
+
     // --- Performance tuning / debugging options
     // These may affect performance or may make debugging problems easier,
     // but shouldn't have any effect on the quality.
@@ -454,5 +463,81 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *image,
 // so calling it is a good idea if the content source is expected to change
 // dramatically (e.g. when switching to a different file).
 void pl_renderer_flush_cache(struct pl_renderer *rr);
+
+// Represents a mixture of input frames, distributed temporally.
+//
+// NOTE: Frames must be sorted by timestamp, i.e. `timestamps` must be
+// monotonically increasing.
+struct pl_frame_mix {
+    // The number of frames in this mixture. The number of frames should be
+    // sufficient to meet the needs of the configured frame mixer. See the
+    // section below for more information.
+    //
+    // At least one frame is always required, i.e. `num_frames > 0`.
+    int num_frames;
+
+    // A list of the frames themselves. The frames can have different
+    // colorspaces, configurations of planes, or even sizes.
+    const struct pl_frame *frames;
+
+    // A list of unique signatures, one for each frame. These are used to
+    // identify frames across calls to this function, so it's crucial that they
+    // be both unique per-frame but also stable across invocations of
+    // `pl_render_frame_mix`.
+    const uint64_t *signatures;
+
+    // A list of relative timestamps for each frame. These are relative to the
+    // time of the vsync being drawn, i.e. this function will render the frame
+    // that will be made visible at timestamp 0.0. The values are expected to
+    // be normalized such that a separation of 1.0 corresponds to roughly one
+    // nominal source frame duration. So a constant framerate video file will
+    // always have timestamps like e.g. {-2.3, -1.3, -0.3, 0.7, 1.7, 2.7},
+    // using an example radius of 3.
+    //
+    // In cases where the framerate is variable (e.g. VFR video), the choice of
+    // what to scale to use can be difficult to answer. A typical choice would
+    // be either to use the canonical (container-tagged) framerate, or the
+    // highest momentary framerate, as a reference. If all else fails, you
+    // could also use the display's framerate.
+    //
+    // Note: This function assumes zero-order-hold semantics, i.e. the frame at
+    // timestamp 0.7 is intended to remain visible until timestamp 1.7, when
+    // the next frame replaces it.
+    const float *timestamps;
+
+    // The duration for which the vsync being drawn will be held, using the
+    // same scale as `timestamps`. If the display has an unknown or variable
+    // frame-rate (e.g. Adaptive Sync), then you're probably better off not
+    // using this function and instead just painting the frames directly using
+    // `pl_render_frame` at the correct PTS.
+    //
+    // As an example, if `vsync_duration` is 0.4, then it's assumed that the
+    // vsync being painted is visible for the period [0.0, 0.4].
+    float vsync_duration;
+
+    // Explanation of the frame mixing radius: The algorithm chosen in
+    // `pl_render_params.frame_mixing` has a canonical radius equal to
+    // `pl_filter_config.kernel->radius`. This means that the frame mixing
+    // algorithm will (only) need to consult all of the frames that have a
+    // distance within the interval [-radius, radius]. As such, the user should
+    // include all such frames in `frames`, but may prune or omit frames that
+    // lie outside it.
+    //
+    // The built-in frame mixing (`pl_render_params.frame_mixer == NULL`) has
+    // no concept of radius, it just always needs access to the "current" and
+    // "next" frames.
+};
+
+// Render a mixture of images to the target using the given parameters. This
+// functions much like a generalization of `pl_render_image`, for when the API
+// user has more control over the frame queue / vsync loop, and can provide a
+// few frames from the past and future + timestamp information.
+//
+// This allows libplacebo to perform rudimentary frame mixing / interpolation,
+// in order to eliminate judder artifacts typically associated with
+// source/display frame rate mismatch.
+bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *images,
+                         const struct pl_frame *target,
+                         const struct pl_render_params *params);
 
 #endif // LIBPLACEBO_RENDERER_H_
