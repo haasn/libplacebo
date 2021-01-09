@@ -737,7 +737,7 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
         .size = buf_size,
         .uniform = out->desc.type == PL_DESC_BUF_UNIFORM,
         .storable = out->desc.type == PL_DESC_BUF_STORAGE,
-        .initial_data = data.start,
+        .initial_data = data.len ? data.start : NULL,
     });
 
     if (!out->binding.object) {
