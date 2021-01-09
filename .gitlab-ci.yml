@@ -178,7 +178,7 @@ test-gpu-ubsan:
         - env CC=clang meson build --buildtype debugoptimized
                                    -Dtests=true
                                    -Dc_args='-DCI_BLACKLIST_COMPUTE -DCI_BLACKLIST_DMABUF -fPIE'
-                                   -Dshaderc=disabled
+                                   -Dglslang=disabled
                                    -Db_sanitize=undefined
                                    -Db_lundef=false
         - ninja -C build
