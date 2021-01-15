@@ -332,15 +332,15 @@ static void load_vk_fun(struct vk_ctx *vk, const struct vk_fun *fun)
         // to core. As a very simple work-around to this, try loading the
         // function a second time with the reserved suffixes stripped.
         static const char *ext_suffixes[] = { "KHR", "EXT" };
-        struct bstr fun_name = bstr0(fun->name);
+        pl_str fun_name = pl_str0(fun->name);
         char buf[64];
 
         for (int i = 0; i < PL_ARRAY_SIZE(ext_suffixes); i++) {
-            if (!bstr_eatend(&fun_name, bstr0(ext_suffixes[i])))
+            if (!pl_str_eatend0(&fun_name, ext_suffixes[i]))
                 continue;
 
             pl_assert(sizeof(buf) > fun_name.len);
-            snprintf(buf, sizeof(buf), "%.*s", BSTR_P(fun_name));
+            snprintf(buf, sizeof(buf), "%.*s", PL_STR_FMT(fun_name));
             if (fun->device_level) {
                 *pfn = vk->GetDeviceProcAddr(vk->dev, buf);
             } else {

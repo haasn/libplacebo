@@ -11,7 +11,6 @@ test_deps = []
 
 subprojects = [
   subproject('xtalloc'),
-  subproject('bstr'),
 ]
 
 vulkan = dependency('vulkan', version: '>=1.0.42', required: get_option('vulkan'))
@@ -184,8 +183,11 @@ sources = [
   'dispatch.c',
   'dummy.c',
   'filters.c',
+  'format.c',
   'gpu.c',
+  'pl_string.c',
   'renderer.c',
+  'siphash.c',
   'shaders.c',
   'shaders/av1.c',
   'shaders/colorspace.c',
@@ -202,6 +204,7 @@ tests = [
   'dither.c',
   'dummy.c',
   'filters.c',
+  'string.c',
   'utils.c',
 ]
 

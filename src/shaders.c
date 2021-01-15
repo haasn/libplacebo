@@ -67,7 +67,7 @@ void pl_shader_reset(struct pl_shader *sh, const struct pl_shader_params *params
 
     // Preserve buffer allocations
     for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
-        new.buffers[i] = (struct bstr) { .start = sh->buffers[i].start };
+        new.buffers[i] = (pl_str) { .buf = sh->buffers[i].buf };
 
     talloc_ref_deref(&sh->tmp);
     *sh = new;
@@ -175,7 +175,7 @@ uint64_t pl_shader_signature(const struct pl_shader *sh)
 {
     uint64_t res = 0;
     for (int i = 0; i < PL_ARRAY_SIZE(sh->buffers); i++)
-        res ^= bstr_hash64(sh->buffers[i]);
+        res ^= pl_str_hash(sh->buffers[i]);
 
     // FIXME: also hash in the configuration of the descriptors/variables
 
@@ -370,14 +370,14 @@ void sh_append(struct pl_shader *sh, enum pl_shader_buf buf, const char *fmt, ..
 
     va_list ap;
     va_start(ap, fmt);
-    bstr_xappend_vasprintf_c(sh, &sh->buffers[buf], fmt, ap);
+    pl_str_xappend_vasprintf_c(sh, &sh->buffers[buf], fmt, ap);
     va_end(ap);
 }
 
-void sh_append_bstr(struct pl_shader *sh, enum pl_shader_buf buf, struct bstr str)
+void sh_append_str(struct pl_shader *sh, enum pl_shader_buf buf, pl_str str)
 {
     pl_assert(buf >= 0 && buf < SH_BUF_COUNT);
-    bstr_xappend(sh, &sh->buffers[buf], str);
+    pl_str_xappend(sh, &sh->buffers[buf], str);
 }
 
 static const char *insigs[] = {
@@ -439,8 +439,8 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
     sh->output_h = res_h;
 
     // Append the prelude and header
-    bstr_xappend(sh, &sh->buffers[SH_BUF_PRELUDE], sub->buffers[SH_BUF_PRELUDE]);
-    bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER],  sub->buffers[SH_BUF_HEADER]);
+    pl_str_xappend(sh, &sh->buffers[SH_BUF_PRELUDE], sub->buffers[SH_BUF_PRELUDE]);
+    pl_str_xappend(sh, &sh->buffers[SH_BUF_HEADER],  sub->buffers[SH_BUF_HEADER]);
 
     // Append the body as a new header function
     ident_t name = sh_fresh(sh, "sub");
@@ -452,7 +452,7 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
     } else {
         GLSLH("%s %s(%s) {\n", outsigs[sub->res.output], name, insigs[sub->res.input]);
     }
-    bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_BODY]);
+    pl_str_xappend(sh, &sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_BODY]);
     GLSLH("%s\n}\n\n", retvals[sub->res.output]);
 
     // Copy over all of the descriptors etc.
@@ -483,15 +483,15 @@ static ident_t sh_split(struct pl_shader *sh)
     }
 
     if (sh->buffers[SH_BUF_BODY].len) {
-        bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_BODY]);
+        pl_str_xappend(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_BODY]);
         sh->buffers[SH_BUF_BODY].len = 0;
-        sh->buffers[SH_BUF_BODY].start[0] = '\0'; // for sanity / efficiency
+        sh->buffers[SH_BUF_BODY].buf[0] = '\0'; // for sanity / efficiency
     }
 
     if (sh->buffers[SH_BUF_FOOTER].len) {
-        bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_FOOTER]);
+        pl_str_xappend(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_FOOTER]);
         sh->buffers[SH_BUF_FOOTER].len = 0;
-        sh->buffers[SH_BUF_FOOTER].start[0] = '\0';
+        sh->buffers[SH_BUF_FOOTER].buf[0] = '\0';
     }
 
     GLSLH("%s\n}\n\n", retvals[sh->res.output]);
@@ -515,8 +515,8 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
     GLSLP("\n");
 
     // Concatenate the header onto the prelude to form the final output
-    struct bstr *glsl = &sh->buffers[SH_BUF_PRELUDE];
-    bstr_xappend(sh, glsl, sh->buffers[SH_BUF_HEADER]);
+    pl_str *glsl = &sh->buffers[SH_BUF_PRELUDE];
+    pl_str_xappend(sh, glsl, sh->buffers[SH_BUF_HEADER]);
 
     // Set the vas/vars/descs
     sh->res.vertex_attribs = sh->vertex_attribs;
@@ -524,7 +524,7 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
     sh->res.descriptors = sh->descriptors;
 
     // Update the result pointer and return
-    sh->res.glsl = glsl->start;
+    sh->res.glsl = glsl->buf;
     sh->mutable = false;
     return &sh->res;
 }
@@ -684,7 +684,7 @@ struct sh_lut_obj {
 
     // weights, depending on the method
     const struct pl_tex *tex;
-    struct bstr str;
+    pl_str str;
     void *data;
 };
 
@@ -692,7 +692,7 @@ static void sh_lut_uninit(const struct pl_gpu *gpu, void *ptr)
 {
     struct sh_lut_obj *lut = ptr;
     pl_tex_destroy(gpu, &lut->tex);
-    talloc_free(lut->str.start);
+    talloc_free(lut->str.buf);
     talloc_free(lut->data);
 
     *lut = (struct sh_lut_obj) {0};
@@ -870,25 +870,25 @@ next_dim: ; // `continue` out of the inner loop
 
             for (int i = 0; i < size * params->comps; i += params->comps) {
                 if (i > 0)
-                    bstr_xappend_asprintf_c(lut, &lut->str, ",");
+                    pl_str_xappend_asprintf_c(lut, &lut->str, ",");
                 if (params->comps > 1) {
-                    bstr_xappend_asprintf_c(lut, &lut->str, "%cvec%d(",
+                    pl_str_xappend_asprintf_c(lut, &lut->str, "%cvec%d(",
                                             prefix[params->type], params->comps);
                 }
                 for (int c = 0; c < params->comps; c++) {
                     switch (params->type) {
                     case PL_VAR_FLOAT:
-                        bstr_xappend_asprintf_c(lut, &lut->str, "%s%f",
+                        pl_str_xappend_asprintf_c(lut, &lut->str, "%s%f",
                                                 c > 0 ? "," : "",
                                                 ((float *) tmp)[i+c]);
                         break;
                     case PL_VAR_UINT:
-                        bstr_xappend_asprintf_c(lut, &lut->str, "%s%u",
+                        pl_str_xappend_asprintf_c(lut, &lut->str, "%s%u",
                                                 c > 0 ? "," : "",
                                                 ((unsigned int *) tmp)[i+c]);
                         break;
                     case PL_VAR_SINT:
-                        bstr_xappend_asprintf_c(lut, &lut->str, "%s%d",
+                        pl_str_xappend_asprintf_c(lut, &lut->str, "%s%d",
                                                 c > 0 ? "," : "",
                                                 ((int *) tmp)[i+c]);
                         break;
@@ -896,7 +896,7 @@ next_dim: ; // `continue` out of the inner loop
                     }
                 }
                 if (params->comps > 1)
-                    bstr_xappend_asprintf_c(lut, &lut->str, ")");
+                    pl_str_xappend_asprintf_c(lut, &lut->str, ")");
             }
             break;
         }
@@ -996,7 +996,7 @@ next_dim: ; // `continue` out of the inner loop
         arr_name = sh_fresh(sh, "weights");
         GLSLH("const %s %s[%d] = %s[](\n  ",
               ftypes[params->comps - 1], arr_name, size, dtypes[params->type]);
-        bstr_xappend(sh, &sh->buffers[SH_BUF_HEADER], lut->str);
+        pl_str_xappend(sh, &sh->buffers[SH_BUF_HEADER], lut->str);
         GLSLH(");\n");
         break;
 

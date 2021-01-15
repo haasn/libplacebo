@@ -48,7 +48,7 @@ struct pl_dispatch {
     int num_cached_passes;
 
     // temporary buffers to help avoid re_allocations during pass creation
-    struct bstr tmp[TMP_COUNT];
+    pl_str tmp[TMP_COUNT];
 };
 
 enum pass_var_type {
@@ -211,10 +211,10 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
     return false;
 }
 
-#define ADD(x, ...) bstr_xappend_asprintf_c(dp, (x), __VA_ARGS__)
-#define ADD_BSTR(x, s) bstr_xappend(dp, (x), (s))
+#define ADD(x, ...) pl_str_xappend_asprintf_c(dp, (x), __VA_ARGS__)
+#define ADD_STR(x, s) pl_str_xappend(dp, (x), (s))
 
-static void add_var(struct pl_dispatch *dp, struct bstr *body,
+static void add_var(struct pl_dispatch *dp, pl_str *body,
                     const struct pl_var *var)
 {
     ADD(body, "%s %s", pl_var_glsl_type_name(*var), var->name);
@@ -232,7 +232,7 @@ static int cmp_buffer_var(const void *pa, const void *pb)
     return PL_CMP((*a)->layout.offset, (*b)->layout.offset);
 }
 
-static void add_buffer_vars(struct pl_dispatch *dp, struct bstr *body,
+static void add_buffer_vars(struct pl_dispatch *dp, pl_str *body,
                             const struct pl_buffer_var *vars, int num,
                             void *tmp)
 {
@@ -278,7 +278,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
     const struct pl_gpu *gpu = dp->gpu;
     const struct pl_shader_res *res = pl_shader_finalize(sh);
 
-    struct bstr *pre = &dp->tmp[TMP_PRELUDE];
+    pl_str *pre = &dp->tmp[TMP_PRELUDE];
     ADD(pre, "#version %d%s\n", gpu->glsl.version,
         (gpu->glsl.gles && gpu->glsl.version > 100) ? " es" : "");
     if (params->type == PL_PASS_COMPUTE)
@@ -361,18 +361,18 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
     char *vert_out = gpu->glsl.version >= 130 ? "out" : "varying";
     char *frag_in  = gpu->glsl.version >= 130 ? "in" : "varying";
 
-    struct bstr *glsl = &dp->tmp[TMP_MAIN];
-    ADD_BSTR(glsl, *pre);
+    pl_str *glsl = &dp->tmp[TMP_MAIN];
+    ADD_STR(glsl, *pre);
 
     const char *out_color = "gl_FragColor";
     switch(params->type) {
     case PL_PASS_RASTER: {
         pl_assert(vert_pos);
-        struct bstr *vert_head = &dp->tmp[TMP_VERT_HEAD];
-        struct bstr *vert_body = &dp->tmp[TMP_VERT_BODY];
+        pl_str *vert_head = &dp->tmp[TMP_VERT_HEAD];
+        pl_str *vert_body = &dp->tmp[TMP_VERT_BODY];
 
         // Set up a trivial vertex shader
-        ADD_BSTR(vert_head, *pre);
+        ADD_STR(vert_head, *pre);
         ADD(vert_body, "void main() {\n");
         for (int i = 0; i < res->num_vertex_attribs; i++) {
             const struct pl_vertex_attrib *va = &params->vertex_attribs[i];
@@ -402,8 +402,8 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         }
 
         ADD(vert_body, "}");
-        ADD_BSTR(vert_head, *vert_body);
-        params->vertex_shader = vert_head->start;
+        ADD_STR(vert_head, *vert_body);
+        params->vertex_shader = vert_head->buf;
 
         // GLSL 130+ doesn't use the magic gl_FragColor
         if (gpu->glsl.version >= 130) {
@@ -599,11 +599,11 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
     }
 
     ADD(glsl, "}");
-    params->glsl_shader = glsl->start;
+    params->glsl_shader = glsl->buf;
 }
 
 #undef ADD
-#undef ADD_BSTR
+#undef ADD_STR
 
 static bool blend_equal(const struct pl_blend_params *a,
                         const struct pl_blend_params *b)
@@ -827,8 +827,8 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
             // Coalesce strided UBO write into a single pl_buf_write to avoid
             // unnecessary synchronization overhead by assembling the correctly
             // strided upload in RAM
-            TARRAY_GROW(dp, dp->tmp[0].start, pv->layout.size);
-            uint8_t * const tmp = dp->tmp[0].start;
+            TARRAY_GROW(dp, dp->tmp[0].buf, pv->layout.size);
+            uint8_t * const tmp = dp->tmp[0].buf;
             const uint8_t *src = sv->data;
             const uint8_t *end = src + host_layout.size;
             uint8_t *dst = tmp;

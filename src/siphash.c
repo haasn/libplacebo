@@ -16,7 +16,7 @@
    <http://creativecommons.org/publicdomain/zero/1.0/>.
  */
 
-#include "siphash.h"
+#include "common.h"
 
 /* default: SipHash-2-4 */
 #define cROUNDS 2
@@ -48,9 +48,9 @@
         v2 = ROTL(v2, 32);                                                     \
     } while (0)
 
-uint64_t siphash64(const uint8_t *in, const size_t inlen)
+uint64_t pl_str_hash(pl_str str)
 {
-    if (!inlen)
+    if (!str.len)
         return 0x8533321381b8254bULL;
 
     uint64_t v0 = 0x736f6d6570736575ULL;
@@ -61,16 +61,16 @@ uint64_t siphash64(const uint8_t *in, const size_t inlen)
     uint64_t k1 = 0x68f7f03510e5285cULL;
     uint64_t m;
     int i;
-    const uint8_t *end = in + inlen - (inlen % sizeof(uint64_t));
-    const int left = inlen & 7;
-    uint64_t b = ((uint64_t)inlen) << 56;
+    const uint8_t *end = str.buf + str.len - (str.len % sizeof(uint64_t));
+    const int left = str.len & 7;
+    uint64_t b = ((uint64_t) str.len) << 56;
     v3 ^= k1;
     v2 ^= k0;
     v1 ^= k1;
     v0 ^= k0;
 
-    for (; in != end; in += 8) {
-        m = U8TO64_LE(in);
+    for (; str.buf != end; str.buf += 8) {
+        m = U8TO64_LE(str.buf);
         v3 ^= m;
 
         for (i = 0; i < cROUNDS; ++i)
@@ -80,13 +80,13 @@ uint64_t siphash64(const uint8_t *in, const size_t inlen)
     }
 
     switch (left) {
-    case 7: b |= ((uint64_t)in[6]) << 48; // fall through
-    case 6: b |= ((uint64_t)in[5]) << 40; // fall through
-    case 5: b |= ((uint64_t)in[4]) << 32; // fall through
-    case 4: b |= ((uint64_t)in[3]) << 24; // fall through
-    case 3: b |= ((uint64_t)in[2]) << 16; // fall through
-    case 2: b |= ((uint64_t)in[1]) << 8;  // fall through
-    case 1: b |= ((uint64_t)in[0]); break;
+    case 7: b |= ((uint64_t) str.buf[6]) << 48; // fall through
+    case 6: b |= ((uint64_t) str.buf[5]) << 40; // fall through
+    case 5: b |= ((uint64_t) str.buf[4]) << 32; // fall through
+    case 4: b |= ((uint64_t) str.buf[3]) << 24; // fall through
+    case 3: b |= ((uint64_t) str.buf[2]) << 16; // fall through
+    case 2: b |= ((uint64_t) str.buf[1]) << 8;  // fall through
+    case 1: b |= ((uint64_t) str.buf[0]); break;
     case 0: break;
     }
 

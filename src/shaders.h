@@ -44,7 +44,7 @@ struct pl_shader {
     bool mutable;
     int output_w;
     int output_h;
-    struct bstr buffers[SH_BUF_COUNT];
+    pl_str buffers[SH_BUF_COUNT];
     bool is_compute;
     bool flexible_work_groups;
     enum pl_sampler_type sampler_type;
@@ -122,9 +122,9 @@ size_t sh_buf_desc_size(const struct pl_shader_desc *buf_desc);
 
 // Underlying function for appending text to a shader
 void sh_append(struct pl_shader *sh, enum pl_shader_buf buf, const char *fmt, ...)
-    PRINTF_ATTRIBUTE(3, 4);
+    PL_PRINTF(3, 4);
 
-void sh_append_bstr(struct pl_shader *sh, enum pl_shader_buf buf, struct bstr str);
+void sh_append_str(struct pl_shader *sh, enum pl_shader_buf buf, pl_str str);
 
 #define GLSLP(...) sh_append(sh, SH_BUF_PRELUDE, __VA_ARGS__)
 #define GLSLH(...) sh_append(sh, SH_BUF_HEADER, __VA_ARGS__)

@@ -52,7 +52,7 @@ static struct spirv_compiler *glslang_create(struct pl_context *ctx,
 
 static bool glslang_compile(struct spirv_compiler *spirv, void *tactx,
                             enum glsl_shader_stage type, const char *glsl,
-                            struct bstr *out_spirv)
+                            pl_str *out_spirv)
 {
     struct priv *p = TA_PRIV(spirv);
 
@@ -69,7 +69,7 @@ static bool glslang_compile(struct spirv_compiler *spirv, void *tactx,
         return false;
     }
 
-    out_spirv->start = talloc_steal(tactx, res->data);
+    out_spirv->buf = talloc_steal(tactx, res->data);
     out_spirv->len = res->size;
     talloc_free(res);
     return true;

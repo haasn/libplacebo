@@ -18,17 +18,25 @@
 #pragma once
 
 #define __STDC_FORMAT_MACROS
-#include <stddef.h>
-#include <stdlib.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <inttypes.h>
+
+#if defined(__MINGW32__)
+#define PL_PRINTF(fmt, va) __attribute__ ((format(gnu_printf, fmt, va)))
+#elif defined(__GNUC__)
+#define PL_PRINTF(fmt, va) __attribute__ ((format(printf, fmt, va)))
+#else
+#define PL_PRINTF(fmt, va)
+#endif
 
 #include "config_internal.h"
 #include "pl_assert.h"
+#include "pl_string.h"
 
 #include <xtalloc.h>
-#include <bstr.h>
 
 // Include all of the symbols that should be public in a way that marks them
 // as being externally visible. (Otherwise, all symbols are hidden by default)

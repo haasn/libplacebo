@@ -116,20 +116,20 @@ struct szexp {
     enum szexp_tag tag;
     union {
         float cval;
-        struct bstr varname;
+        pl_str varname;
         enum szexp_op op;
     } val;
 };
 
 struct custom_shader_hook {
     // Variable/literal names of textures
-    struct bstr pass_desc;
-    struct bstr hook_tex[SHADER_MAX_HOOKS];
-    struct bstr bind_tex[SHADER_MAX_BINDS];
-    struct bstr save_tex;
+    pl_str pass_desc;
+    pl_str hook_tex[SHADER_MAX_HOOKS];
+    pl_str bind_tex[SHADER_MAX_BINDS];
+    pl_str save_tex;
 
     // Shader body itself + metadata
-    struct bstr pass_body;
+    pl_str pass_body;
     float offset[2];
     bool offset_align;
     int comps;
@@ -145,12 +145,12 @@ struct custom_shader_hook {
     int threads_w, threads_h;   // How many threads form a WG
 };
 
-static bool parse_rpn_szexpr(struct bstr line, struct szexp out[MAX_SZEXP_SIZE])
+static bool parse_rpn_szexpr(pl_str line, struct szexp out[MAX_SZEXP_SIZE])
 {
     int pos = 0;
 
     while (line.len > 0) {
-        struct bstr word = bstr_strip(bstr_splitchar(line, &line, ' '));
+        pl_str word = pl_str_split_char(line, ' ', &line);
         if (word.len == 0)
             continue;
 
@@ -159,19 +159,19 @@ static bool parse_rpn_szexpr(struct bstr line, struct szexp out[MAX_SZEXP_SIZE])
 
         struct szexp *exp = &out[pos++];
 
-        if (bstr_eatend0(&word, ".w") || bstr_eatend0(&word, ".width")) {
+        if (pl_str_eatend0(&word, ".w") || pl_str_eatend0(&word, ".width")) {
             exp->tag = SZEXP_VAR_W;
             exp->val.varname = word;
             continue;
         }
 
-        if (bstr_eatend0(&word, ".h") || bstr_eatend0(&word, ".height")) {
+        if (pl_str_eatend0(&word, ".h") || pl_str_eatend0(&word, ".height")) {
             exp->tag = SZEXP_VAR_H;
             exp->val.varname = word;
             continue;
         }
 
-        switch (word.start[0]) {
+        switch (word.buf[0]) {
         case '+': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_ADD; continue;
         case '-': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_SUB; continue;
         case '*': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_MUL; continue;
@@ -181,9 +181,9 @@ static bool parse_rpn_szexpr(struct bstr line, struct szexp out[MAX_SZEXP_SIZE])
         case '<': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_LT;  continue;
         }
 
-        if (word.start[0] >= '0' && word.start[0] <= '9') {
+        if (word.buf[0] >= '0' && word.buf[0] <= '9') {
             exp->tag = SZEXP_CONST;
-            if (bstr_sscanf(word, "%f", &exp->val.cval) != 1)
+            if (pl_str_sscanf(word, "%f", &exp->val.cval) != 1)
                 return false;
             continue;
         }
@@ -198,7 +198,7 @@ static bool parse_rpn_szexpr(struct bstr line, struct szexp out[MAX_SZEXP_SIZE])
 // Evaluate a `szexp`, given a lookup function for named textures
 // Returns whether successful. 'result' is left untouched on failure
 static bool pl_eval_szexpr(struct pl_context *ctx, void *priv,
-                           bool (*lookup)(void *priv, struct bstr var, float size[2]),
+                           bool (*lookup)(void *priv, pl_str var, float size[2]),
                            const struct szexp expr[MAX_SZEXP_SIZE],
                            float *result)
 {
@@ -259,12 +259,12 @@ static bool pl_eval_szexpr(struct pl_context *ctx, void *priv,
 
         case SZEXP_VAR_W:
         case SZEXP_VAR_H: {
-            struct bstr name = expr[i].val.varname;
+            pl_str name = expr[i].val.varname;
             float size[2];
 
             if (!lookup(priv, name, size)) {
                 pl_warn(ctx, "Variable '%.*s' not found in RPN expression!",
-                        BSTR_P(name));
+                        PL_STR_FMT(name));
                 return false;
             }
 
@@ -285,13 +285,25 @@ done:
     return true;
 }
 
-static bool parse_hook(struct pl_context *ctx, struct bstr *body,
+static inline pl_str split_magic(pl_str *body)
+{
+    pl_str ret = pl_str_split_str0(*body, "//!", body);
+    if (body->len) {
+        // Make sure the separator is included in the remainder
+        body->buf -= 3;
+        body->len += 3;
+    }
+
+    return ret;
+}
+
+static bool parse_hook(struct pl_context *ctx, pl_str *body,
                        struct custom_shader_hook *out)
 {
     *out = (struct custom_shader_hook){
-        .pass_desc = bstr0("(unknown)"),
-        .width = {{ SZEXP_VAR_W, { .varname = bstr0("HOOKED") }}},
-        .height = {{ SZEXP_VAR_H, { .varname = bstr0("HOOKED") }}},
+        .pass_desc = pl_str0("(unknown)"),
+        .width = {{ SZEXP_VAR_W, { .varname = pl_str0("HOOKED") }}},
+        .height = {{ SZEXP_VAR_H, { .varname = pl_str0("HOOKED") }}},
         .cond = {{ SZEXP_CONST, { .cval = 1.0 }}},
     };
 
@@ -300,61 +312,61 @@ static bool parse_hook(struct pl_context *ctx, struct bstr *body,
 
     // Parse all headers
     while (true) {
-        struct bstr rest;
-        struct bstr line = bstr_strip(bstr_getline(*body, &rest));
+        pl_str rest;
+        pl_str line = pl_str_strip(pl_str_getline(*body, &rest));
 
         // Check for the presence of the magic line beginning
-        if (!bstr_eatstart0(&line, "//!"))
+        if (!pl_str_eatstart0(&line, "//!"))
             break;
 
         *body = rest;
 
         // Parse the supported commands
-        if (bstr_eatstart0(&line, "HOOK")) {
+        if (pl_str_eatstart0(&line, "HOOK")) {
             if (hook_idx == SHADER_MAX_HOOKS) {
                 pl_err(ctx, "Passes may only hook up to %d textures!",
                        SHADER_MAX_HOOKS);
                 return false;
             }
-            out->hook_tex[hook_idx++] = bstr_strip(line);
+            out->hook_tex[hook_idx++] = pl_str_strip(line);
             continue;
         }
 
-        if (bstr_eatstart0(&line, "BIND")) {
+        if (pl_str_eatstart0(&line, "BIND")) {
             if (bind_idx == SHADER_MAX_BINDS) {
                 pl_err(ctx, "Passes may only bind up to %d textures!",
                        SHADER_MAX_BINDS);
                 return false;
             }
-            out->bind_tex[bind_idx++] = bstr_strip(line);
+            out->bind_tex[bind_idx++] = pl_str_strip(line);
             continue;
         }
 
-        if (bstr_eatstart0(&line, "SAVE")) {
-            struct bstr save_tex = bstr_strip(line);
-            if (bstr_equals0(save_tex, "HOOKED")) {
+        if (pl_str_eatstart0(&line, "SAVE")) {
+            pl_str save_tex = pl_str_strip(line);
+            if (pl_str_equals0(save_tex, "HOOKED")) {
                 // This is a special name that means "overwrite existing"
                 // texture, which we just signal by not having any `save_tex`
                 // name set.
-                out->save_tex = (struct bstr) {0};
+                out->save_tex = (pl_str) {0};
             } else {
                 out->save_tex = save_tex;
             };
             continue;
         }
 
-        if (bstr_eatstart0(&line, "DESC")) {
-            out->pass_desc = bstr_strip(line);
+        if (pl_str_eatstart0(&line, "DESC")) {
+            out->pass_desc = pl_str_strip(line);
             continue;
         }
 
-        if (bstr_eatstart0(&line, "OFFSET")) {
-            line = bstr_strip(line);
-            if (bstr_equals0(line, "ALIGN")) {
+        if (pl_str_eatstart0(&line, "OFFSET")) {
+            line = pl_str_strip(line);
+            if (pl_str_equals0(line, "ALIGN")) {
                 out->offset_align = true;
             } else {
                 float ox, oy;
-                if (bstr_sscanf(line, "%f %f", &ox, &oy) != 2) {
+                if (pl_str_sscanf(line, "%f %f", &ox, &oy) != 2) {
                     pl_err(ctx, "Error while parsing OFFSET!");
                     return false;
                 }
@@ -364,7 +376,7 @@ static bool parse_hook(struct pl_context *ctx, struct bstr *body,
             continue;
         }
 
-        if (bstr_eatstart0(&line, "WIDTH")) {
+        if (pl_str_eatstart0(&line, "WIDTH")) {
             if (!parse_rpn_szexpr(line, out->width)) {
                 pl_err(ctx, "Error while parsing WIDTH!");
                 return false;
@@ -372,7 +384,7 @@ static bool parse_hook(struct pl_context *ctx, struct bstr *body,
             continue;
         }
 
-        if (bstr_eatstart0(&line, "HEIGHT")) {
+        if (pl_str_eatstart0(&line, "HEIGHT")) {
             if (!parse_rpn_szexpr(line, out->height)) {
                 pl_err(ctx, "Error while parsing HEIGHT!");
                 return false;
@@ -380,7 +392,7 @@ static bool parse_hook(struct pl_context *ctx, struct bstr *body,
             continue;
         }
 
-        if (bstr_eatstart0(&line, "WHEN")) {
+        if (pl_str_eatstart0(&line, "WHEN")) {
             if (!parse_rpn_szexpr(line, out->cond)) {
                 pl_err(ctx, "Error while parsing WHEN!");
                 return false;
@@ -388,18 +400,18 @@ static bool parse_hook(struct pl_context *ctx, struct bstr *body,
             continue;
         }
 
-        if (bstr_eatstart0(&line, "COMPONENTS")) {
-            if (bstr_sscanf(line, "%d", &out->comps) != 1) {
+        if (pl_str_eatstart0(&line, "COMPONENTS")) {
+            if (pl_str_sscanf(line, "%d", &out->comps) != 1) {
                 pl_err(ctx, "Error while parsing COMPONENTS!");
                 return false;
             }
             continue;
         }
 
-        if (bstr_eatstart0(&line, "COMPUTE")) {
-            int num = bstr_sscanf(line, "%d %d %d %d",
-                                  &out->block_w, &out->block_h,
-                                  &out->threads_w, &out->threads_h);
+        if (pl_str_eatstart0(&line, "COMPUTE")) {
+            int num = pl_str_sscanf(line, "%d %d %d %d",
+                                    &out->block_w, &out->block_h,
+                                    &out->threads_w, &out->threads_h);
 
             if (num == 2 || num == 4) {
                 out->is_compute = true;
@@ -415,17 +427,13 @@ static bool parse_hook(struct pl_context *ctx, struct bstr *body,
         }
 
         // Unknown command type
-        pl_err(ctx, "Unrecognized command '%.*s'!", BSTR_P(line));
+        pl_err(ctx, "Unrecognized command '%.*s'!", PL_STR_FMT(line));
         return false;
     }
 
     // The rest of the file up until the next magic line beginning (if any)
     // shall be the shader body
-    if (bstr_split_tok(*body, "//!", &out->pass_body, body)) {
-        // Make sure the magic line is part of the rest
-        body->start -= 3;
-        body->len += 3;
-    }
+    out->pass_body = split_magic(body);
 
     // Sanity checking
     if (hook_idx == 0)
@@ -434,7 +442,7 @@ static bool parse_hook(struct pl_context *ctx, struct bstr *body,
     return true;
 }
 
-static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
+static bool parse_tex(const struct pl_gpu *gpu, void *tactx, pl_str *body,
                       struct pl_shader_desc *out)
 {
     *out = (struct pl_shader_desc) {
@@ -450,21 +458,21 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
     };
 
     while (true) {
-        struct bstr rest;
-        struct bstr line = bstr_strip(bstr_getline(*body, &rest));
+        pl_str rest;
+        pl_str line = pl_str_strip(pl_str_getline(*body, &rest));
 
-        if (!bstr_eatstart0(&line, "//!"))
+        if (!pl_str_eatstart0(&line, "//!"))
             break;
 
         *body = rest;
 
-        if (bstr_eatstart0(&line, "TEXTURE")) {
-            out->desc.name = bstrdup0(tactx, bstr_strip(line));
+        if (pl_str_eatstart0(&line, "TEXTURE")) {
+            out->desc.name = pl_strdup0(tactx, pl_str_strip(line));
             continue;
         }
 
-        if (bstr_eatstart0(&line, "SIZE")) {
-            int dims = bstr_sscanf(line, "%d %d %d", &params.w, &params.h, &params.d);
+        if (pl_str_eatstart0(&line, "SIZE")) {
+            int dims = pl_str_sscanf(line, "%d %d %d", &params.w, &params.h, &params.d);
             int lim = dims == 1 ? gpu->limits.max_tex_1d_dim
                     : dims == 2 ? gpu->limits.max_tex_2d_dim
                     : dims == 3 ? gpu->limits.max_tex_3d_dim
@@ -507,12 +515,12 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
             continue;
         }
 
-        if (bstr_eatstart0(&line, "FORMAT ")) {
-            line = bstr_strip(line);
+        if (pl_str_eatstart0(&line, "FORMAT ")) {
+            line = pl_str_strip(line);
             params.format = NULL;
             for (int n = 0; n < gpu->num_formats; n++) {
                 const struct pl_fmt *fmt = gpu->formats[n];
-                if (bstr_equals0(line, fmt->name)) {
+                if (pl_str_equals0(line, fmt->name)) {
                     params.format = fmt;
                     break;
                 }
@@ -520,47 +528,47 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
 
             if (!params.format || params.format->opaque) {
                 PL_ERR(gpu, "Unrecognized/unavailable FORMAT name: '%.*s'!",
-                       BSTR_P(line));
+                       PL_STR_FMT(line));
                 return false;
             }
 
             if (!(params.format->caps & PL_FMT_CAP_SAMPLEABLE)) {
                 PL_ERR(gpu, "Chosen FORMAT '%.*s' is not sampleable!",
-                       BSTR_P(line));
+                       PL_STR_FMT(line));
                 return false;
             }
             continue;
         }
 
-        if (bstr_eatstart0(&line, "FILTER")) {
-            line = bstr_strip(line);
-            if (bstr_equals0(line, "LINEAR")) {
+        if (pl_str_eatstart0(&line, "FILTER")) {
+            line = pl_str_strip(line);
+            if (pl_str_equals0(line, "LINEAR")) {
                 out->binding.sample_mode = PL_TEX_SAMPLE_LINEAR;
-            } else if (bstr_equals0(line, "NEAREST")) {
+            } else if (pl_str_equals0(line, "NEAREST")) {
                 out->binding.sample_mode = PL_TEX_SAMPLE_NEAREST;
             } else {
-                PL_ERR(gpu, "Unrecognized FILTER: '%.*s'!", BSTR_P(line));
+                PL_ERR(gpu, "Unrecognized FILTER: '%.*s'!", PL_STR_FMT(line));
                 return false;
             }
             continue;
         }
 
-        if (bstr_eatstart0(&line, "BORDER")) {
-            line = bstr_strip(line);
-            if (bstr_equals0(line, "CLAMP")) {
+        if (pl_str_eatstart0(&line, "BORDER")) {
+            line = pl_str_strip(line);
+            if (pl_str_equals0(line, "CLAMP")) {
                 out->binding.address_mode = PL_TEX_ADDRESS_CLAMP;
-            } else if (bstr_equals0(line, "REPEAT")) {
+            } else if (pl_str_equals0(line, "REPEAT")) {
                 out->binding.address_mode = PL_TEX_ADDRESS_REPEAT;
-            } else if (bstr_equals0(line, "MIRROR")) {
+            } else if (pl_str_equals0(line, "MIRROR")) {
                 out->binding.address_mode = PL_TEX_ADDRESS_MIRROR;
             } else {
-                PL_ERR(gpu, "Unrecognized BORDER: '%.*s'!", BSTR_P(line));
+                PL_ERR(gpu, "Unrecognized BORDER: '%.*s'!", PL_STR_FMT(line));
                 return false;
             }
             continue;
         }
 
-        if (bstr_eatstart0(&line, "STORAGE")) {
+        if (pl_str_eatstart0(&line, "STORAGE")) {
             params.storable = true;
             out->desc.type = PL_DESC_STORAGE_IMG;
             out->desc.access = PL_DESC_ACCESS_READWRITE;
@@ -568,7 +576,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
             continue;
         }
 
-        PL_ERR(gpu, "Unrecognized command '%.*s'!", BSTR_P(line));
+        PL_ERR(gpu, "Unrecognized command '%.*s'!", PL_STR_FMT(line));
         return false;
     }
 
@@ -585,15 +593,8 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
 
     // Decode the rest of the section (up to the next //! marker) as raw hex
     // data for the texture
-    struct bstr hexdata;
-    if (bstr_split_tok(*body, "//!", &hexdata, body)) {
-        // Make sure the magic line is part of the rest
-        body->start -= 3;
-        body->len += 3;
-    }
-
-    struct bstr tex;
-    if (!bstr_decode_hex(NULL, bstr_strip(hexdata), &tex)) {
+    pl_str tex, hexdata = split_magic(body);
+    if (!pl_str_decode_hex(NULL, pl_str_strip(hexdata), &tex)) {
         PL_ERR(gpu, "Error while parsing TEXTURE body: must be a valid "
                     "hexadecimal sequence, on a single line!");
         return false;
@@ -603,17 +604,17 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
     size_t expected_len = texels * params.format->texel_size;
     if (tex.len == 0 && params.storable) {
         // In this case, it's okay that the texture has no initial data
-        TA_FREEP(&tex.start);
+        TA_FREEP(&tex.buf);
     } else if (tex.len != expected_len) {
         PL_ERR(gpu, "Shader TEXTURE size mismatch: got %zu bytes, expected %zu!",
                tex.len, expected_len);
-        talloc_free(tex.start);
+        talloc_free(tex.buf);
         return false;
     }
 
-    params.initial_data = tex.start;
+    params.initial_data = tex.buf;
     out->binding.object = pl_tex_create(gpu, &params);
-    talloc_free(tex.start);
+    talloc_free(tex.buf);
 
     if (!out->binding.object) {
         PL_ERR(gpu, "Failed creating custom texture!");
@@ -623,7 +624,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
     return true;
 }
 
-static bool parse_buf(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
+static bool parse_buf(const struct pl_gpu *gpu, void *tactx, pl_str *body,
                       struct pl_shader_desc *out)
 {
     *out = (struct pl_shader_desc) {
@@ -640,31 +641,31 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
     int num_vars = 0;
 
     while (true) {
-        struct bstr rest;
-        struct bstr line = bstr_strip(bstr_getline(*body, &rest));
+        pl_str rest;
+        pl_str line = pl_str_strip(pl_str_getline(*body, &rest));
 
-        if (!bstr_eatstart0(&line, "//!"))
+        if (!pl_str_eatstart0(&line, "//!"))
             break;
 
         *body = rest;
 
-        if (bstr_eatstart0(&line, "BUFFER")) {
-            out->desc.name = bstrdup0(tactx, bstr_strip(line));
+        if (pl_str_eatstart0(&line, "BUFFER")) {
+            out->desc.name = pl_strdup0(tactx, pl_str_strip(line));
             continue;
         }
 
-        if (bstr_eatstart0(&line, "STORAGE")) {
+        if (pl_str_eatstart0(&line, "STORAGE")) {
             out->desc.type = PL_DESC_BUF_STORAGE;
             out->desc.access = PL_DESC_ACCESS_READWRITE;
             out->memory = PL_MEMORY_COHERENT;
             continue;
         }
 
-        if (bstr_eatstart0(&line, "VAR")) {
-            struct bstr type_name = bstr_split(bstr_strip(line), " ", &line);
+        if (pl_str_eatstart0(&line, "VAR")) {
+            pl_str type_name = pl_str_split_char(pl_str_strip(line), ' ', &line);
             struct pl_var var = {0};
             for (const struct pl_named_var *nv = pl_var_glsl_types; nv->glsl_name; nv++) {
-                if (bstr_equals0(type_name, nv->glsl_name)) {
+                if (pl_str_equals0(type_name, nv->glsl_name)) {
                     var = nv->var;
                     break;
                 }
@@ -672,16 +673,16 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
 
             if (!var.type) {
                 // No type found
-                PL_ERR(gpu, "Unrecognized GLSL type '%.*s'!", BSTR_P(type_name));
+                PL_ERR(gpu, "Unrecognized GLSL type '%.*s'!", PL_STR_FMT(type_name));
                 return false;
             }
 
-            struct bstr var_name = bstr_split(line, "[", &line);
+            pl_str var_name = pl_str_split_char(line, '[', &line);
             if (line.len > 0) {
                 // Parse array dimension
-                if (bstr_sscanf(line, "[%d]", &var.dim_a) != 1) {
+                if (pl_str_sscanf(line, "%d]", &var.dim_a) != 1) {
                     PL_ERR(gpu, "Failed parsing array dimension from %.*s!",
-                           BSTR_P(line));
+                           PL_STR_FMT(line));
                     return false;
                 }
 
@@ -691,12 +692,12 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
                 }
             }
 
-            var.name = bstrdup0(tactx, bstr_strip(var_name));
+            var.name = pl_strdup0(tactx, pl_str_strip(var_name));
             TARRAY_APPEND(tmp, vars, num_vars, var);
             continue;
         }
 
-        PL_ERR(gpu, "Unrecognized command '%.*s'!", BSTR_P(line));
+        PL_ERR(gpu, "Unrecognized command '%.*s'!", PL_STR_FMT(line));
         return false;
     }
 
@@ -710,15 +711,8 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
 
     // Decode the rest of the section (up to the next //! marker) as raw hex
     // data for the buffer
-    struct bstr hexdata;
-    if (bstr_split_tok(*body, "//!", &hexdata, body)) {
-        // Make sure the magic line is part of the rest
-        body->start -= 3;
-        body->len += 3;
-    }
-
-    struct bstr data;
-    if (!bstr_decode_hex(tmp, bstr_strip(hexdata), &data)) {
+    pl_str data, hexdata = split_magic(body);
+    if (!pl_str_decode_hex(tmp, pl_str_strip(hexdata), &data)) {
         PL_ERR(gpu, "Error while parsing BUFFER body: must be a valid "
                     "hexadecimal sequence, on a single line!");
         return false;
@@ -737,7 +731,7 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
         .size = buf_size,
         .uniform = out->desc.type == PL_DESC_BUF_UNIFORM,
         .storable = out->desc.type == PL_DESC_BUF_STORAGE,
-        .initial_data = data.len ? data.start : NULL,
+        .initial_data = data.len ? data.buf : NULL,
     });
 
     if (!out->binding.object) {
@@ -749,73 +743,73 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, struct bstr *body,
     return true;
 }
 
-static enum pl_hook_stage mp_stage_to_pl(struct bstr stage)
+static enum pl_hook_stage mp_stage_to_pl(pl_str stage)
 {
-    if (bstr_equals0(stage, "RGB"))
+    if (pl_str_equals0(stage, "RGB"))
         return PL_HOOK_RGB_INPUT;
-    if (bstr_equals0(stage, "LUMA"))
+    if (pl_str_equals0(stage, "LUMA"))
         return PL_HOOK_LUMA_INPUT;
-    if (bstr_equals0(stage, "CHROMA"))
+    if (pl_str_equals0(stage, "CHROMA"))
         return PL_HOOK_CHROMA_INPUT;
-    if (bstr_equals0(stage, "ALPHA"))
+    if (pl_str_equals0(stage, "ALPHA"))
         return PL_HOOK_ALPHA_INPUT;
-    if (bstr_equals0(stage, "XYZ"))
+    if (pl_str_equals0(stage, "XYZ"))
         return PL_HOOK_XYZ_INPUT;
 
-    if (bstr_equals0(stage, "CHROMA_SCALED"))
+    if (pl_str_equals0(stage, "CHROMA_SCALED"))
         return PL_HOOK_CHROMA_SCALED;
-    if (bstr_equals0(stage, "ALPHA_SCALED"))
+    if (pl_str_equals0(stage, "ALPHA_SCALED"))
         return PL_HOOK_ALPHA_SCALED;
 
-    if (bstr_equals0(stage, "NATIVE"))
+    if (pl_str_equals0(stage, "NATIVE"))
         return PL_HOOK_NATIVE;
-    if (bstr_equals0(stage, "MAINPRESUB"))
+    if (pl_str_equals0(stage, "MAINPRESUB"))
         return PL_HOOK_RGB;
-    if (bstr_equals0(stage, "MAIN"))
+    if (pl_str_equals0(stage, "MAIN"))
         return PL_HOOK_RGB; // Note: conflicts with above!
 
-    if (bstr_equals0(stage, "LINEAR"))
+    if (pl_str_equals0(stage, "LINEAR"))
         return PL_HOOK_LINEAR;
-    if (bstr_equals0(stage, "SIGMOID"))
+    if (pl_str_equals0(stage, "SIGMOID"))
         return PL_HOOK_SIGMOID;
-    if (bstr_equals0(stage, "PREKERNEL"))
+    if (pl_str_equals0(stage, "PREKERNEL"))
         return PL_HOOK_PRE_KERNEL;
-    if (bstr_equals0(stage, "POSTKERNEL"))
+    if (pl_str_equals0(stage, "POSTKERNEL"))
         return PL_HOOK_POST_KERNEL;
 
-    if (bstr_equals0(stage, "SCALED"))
+    if (pl_str_equals0(stage, "SCALED"))
         return PL_HOOK_SCALED;
-    if (bstr_equals0(stage, "OUTPUT"))
+    if (pl_str_equals0(stage, "OUTPUT"))
         return PL_HOOK_OUTPUT;
 
     return 0;
 }
 
-static struct bstr pl_stage_to_mp(enum pl_hook_stage stage)
+static pl_str pl_stage_to_mp(enum pl_hook_stage stage)
 {
     switch (stage) {
-    case PL_HOOK_RGB_INPUT:     return bstr0("RGB");
-    case PL_HOOK_LUMA_INPUT:    return bstr0("LUMA");
-    case PL_HOOK_CHROMA_INPUT:  return bstr0("CHROMA");
-    case PL_HOOK_ALPHA_INPUT:   return bstr0("ALPHA");
-    case PL_HOOK_XYZ_INPUT:     return bstr0("XYZ");
+    case PL_HOOK_RGB_INPUT:     return pl_str0("RGB");
+    case PL_HOOK_LUMA_INPUT:    return pl_str0("LUMA");
+    case PL_HOOK_CHROMA_INPUT:  return pl_str0("CHROMA");
+    case PL_HOOK_ALPHA_INPUT:   return pl_str0("ALPHA");
+    case PL_HOOK_XYZ_INPUT:     return pl_str0("XYZ");
 
-    case PL_HOOK_CHROMA_SCALED: return bstr0("CHROMA_SCALED");
-    case PL_HOOK_ALPHA_SCALED:  return bstr0("ALPHA_SCALED");
+    case PL_HOOK_CHROMA_SCALED: return pl_str0("CHROMA_SCALED");
+    case PL_HOOK_ALPHA_SCALED:  return pl_str0("ALPHA_SCALED");
 
-    case PL_HOOK_NATIVE:        return bstr0("NATIVE");
-    case PL_HOOK_RGB:           return bstr0("MAINPRESUB");
+    case PL_HOOK_NATIVE:        return pl_str0("NATIVE");
+    case PL_HOOK_RGB:           return pl_str0("MAINPRESUB");
 
-    case PL_HOOK_LINEAR:        return bstr0("LINEAR");
-    case PL_HOOK_SIGMOID:       return bstr0("SIGMOID");
-    case PL_HOOK_PRE_OVERLAY:   return bstr0("PREOVERLAY"); // Note: doesn't exist!
-    case PL_HOOK_PRE_KERNEL:    return bstr0("PREKERNEL");
-    case PL_HOOK_POST_KERNEL:   return bstr0("POSTKERNEL");
+    case PL_HOOK_LINEAR:        return pl_str0("LINEAR");
+    case PL_HOOK_SIGMOID:       return pl_str0("SIGMOID");
+    case PL_HOOK_PRE_OVERLAY:   return pl_str0("PREOVERLAY"); // Note: doesn't exist!
+    case PL_HOOK_PRE_KERNEL:    return pl_str0("PREKERNEL");
+    case PL_HOOK_POST_KERNEL:   return pl_str0("POSTKERNEL");
 
-    case PL_HOOK_SCALED:        return bstr0("SCALED");
-    case PL_HOOK_OUTPUT:        return bstr0("OUTPUT");
+    case PL_HOOK_SCALED:        return pl_str0("SCALED");
+    case PL_HOOK_OUTPUT:        return pl_str0("OUTPUT");
 
-    default:                    return bstr0("UNKNOWN");
+    default:                    return pl_str0("UNKNOWN");
     };
 }
 
@@ -825,7 +819,7 @@ struct hook_pass {
 };
 
 struct pass_tex {
-    struct bstr name;
+    pl_str name;
     const struct pl_tex *tex;
 
     // Metadata
@@ -868,36 +862,36 @@ struct szexp_ctx {
     const struct pl_hook_params *params;
 };
 
-static bool lookup_tex(void *priv, struct bstr var, float size[2])
+static bool lookup_tex(void *priv, pl_str var, float size[2])
 {
     struct szexp_ctx *ctx = priv;
     struct hook_priv *p = ctx->priv;
     const struct pl_hook_params *params = ctx->params;
 
-    if (bstr_equals0(var, "HOOKED")) {
+    if (pl_str_equals0(var, "HOOKED")) {
         pl_assert(params->tex);
         size[0] = params->tex->params.w;
         size[1] = params->tex->params.h;
         return true;
     }
 
-    if (bstr_equals0(var, "NATIVE_CROPPED")) {
+    if (pl_str_equals0(var, "NATIVE_CROPPED")) {
         size[0] = pl_rect_w(params->src_rect);
         size[1] = pl_rect_h(params->src_rect);
         return true;
     }
 
-    if (bstr_equals0(var, "OUTPUT")) {
+    if (pl_str_equals0(var, "OUTPUT")) {
         size[0] = pl_rect_w(params->dst_rect);
         size[1] = pl_rect_h(params->dst_rect);
         return true;
     }
 
-    if (bstr_equals0(var, "MAIN"))
-        var = bstr0("MAINPRESUB");
+    if (pl_str_equals0(var, "MAIN"))
+        var = pl_str0("MAINPRESUB");
 
     for (int i = 0; i < p->num_pass_textures; i++) {
-        if (bstr_equals(var, p->pass_textures[i].name)) {
+        if (pl_str_equals(var, p->pass_textures[i].name)) {
             const struct pl_tex *tex = p->pass_textures[i].tex;
             size[0] = tex->params.w;
             size[1] = tex->params.h;
@@ -923,7 +917,7 @@ static double prng_step(uint64_t s[4])
     return (result >> 11) * 0x1.0p-53;
 }
 
-static bool bind_pass_tex(struct pl_shader *sh, struct bstr name,
+static bool bind_pass_tex(struct pl_shader *sh, pl_str name,
                           const struct pass_tex *ptex,
                           const struct pl_rect2df *rect)
 {
@@ -935,30 +929,31 @@ static bool bind_pass_tex(struct pl_shader *sh, struct bstr name,
     if (!id)
         return false;
 
-    GLSLH("#define %.*s_raw %s \n", BSTR_P(name), id);
-    GLSLH("#define %.*s_pos %s \n", BSTR_P(name), pos);
-    GLSLH("#define %.*s_map %s_map \n", BSTR_P(name), pos);
-    GLSLH("#define %.*s_size %s \n", BSTR_P(name), size);
-    GLSLH("#define %.*s_pt %s \n", BSTR_P(name), pt);
+    GLSLH("#define %.*s_raw %s \n", PL_STR_FMT(name), id);
+    GLSLH("#define %.*s_pos %s \n", PL_STR_FMT(name), pos);
+    GLSLH("#define %.*s_map %s_map \n", PL_STR_FMT(name), pos);
+    GLSLH("#define %.*s_size %s \n", PL_STR_FMT(name), size);
+    GLSLH("#define %.*s_pt %s \n", PL_STR_FMT(name), pt);
 
     float off[2] = { ptex->rect.x0, ptex->rect.y0 };
-    GLSLH("#define %.*s_off %s \n", BSTR_P(name), sh_var(sh, (struct pl_shader_var) {
-        .var = pl_var_vec2("offset"),
-        .data = off,
+    GLSLH("#define %.*s_off %s \n", PL_STR_FMT(name),
+          sh_var(sh, (struct pl_shader_var) {
+              .var = pl_var_vec2("offset"),
+              .data = off,
     }));
 
     struct pl_color_repr repr = ptex->repr;
     float scale = pl_color_repr_normalize(&repr);
-    GLSLH("#define %.*s_mul %f \n", BSTR_P(name), scale);
+    GLSLH("#define %.*s_mul %f \n", PL_STR_FMT(name), scale);
 
     // Compatibility with mpv
-    GLSLH("#define %.*s_rot mat2(1.0, 0.0, 0.0, 1.0) \n", BSTR_P(name));
+    GLSLH("#define %.*s_rot mat2(1.0, 0.0, 0.0, 1.0) \n", PL_STR_FMT(name));
 
     // Sampling function boilerplate
     GLSLH("#define %.*s_tex(pos) (%f * vec4(%s(%s, pos))) \n",
-          BSTR_P(name), scale, sh_tex_fn(sh, ptex->tex->params), id);
+          PL_STR_FMT(name), scale, sh_tex_fn(sh, ptex->tex->params), id);
     GLSLH("#define %.*s_texOff(off) (%.*s_tex(%s + %s * vec2(off))) \n",
-          BSTR_P(name), BSTR_P(name), pos, pt);
+          PL_STR_FMT(name), PL_STR_FMT(name), pos, pt);
 
     return true;
 }
@@ -967,7 +962,7 @@ static void save_pass_tex(struct hook_priv *p, struct pass_tex ptex)
 {
 
     for (int i = 0; i < p->num_pass_textures; i++) {
-        if (!bstr_equals(p->pass_textures[i].name, ptex.name))
+        if (!pl_str_equals(p->pass_textures[i].name, ptex.name))
             continue;
 
         p->pass_textures[i] = ptex;
@@ -981,7 +976,7 @@ static void save_pass_tex(struct hook_priv *p, struct pass_tex ptex)
 static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *params)
 {
     struct hook_priv *p = priv;
-    struct bstr stage = pl_stage_to_mp(params->stage);
+    pl_str stage = pl_stage_to_mp(params->stage);
     struct pl_hook_res res = {0};
 
     // Save the input texture if needed
@@ -996,7 +991,8 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             .comps = params->components,
         };
 
-        PL_TRACE(p, "Saving input texture '%.*s' for binding", BSTR_P(ptex.name));
+        PL_TRACE(p, "Saving input texture '%.*s' for binding",
+                 PL_STR_FMT(ptex.name));
         save_pass_tex(p, ptex);
     }
 
@@ -1013,7 +1009,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         const struct custom_shader_hook *hook = &pass->hook;
         PL_TRACE(p, "Executing hook pass %d on stage '%.*s': %.*s",
-                 n, BSTR_P(stage), BSTR_P(hook->pass_desc));
+                 n, PL_STR_FMT(stage), PL_STR_FMT(hook->pass_desc));
 
         // Test for execution condition
         float run = 0;
@@ -1059,24 +1055,24 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         // Bind all necessary input textures
         for (int i = 0; i < PL_ARRAY_SIZE(hook->bind_tex); i++) {
-            struct bstr texname = hook->bind_tex[i];
-            if (!texname.start)
+            pl_str texname = hook->bind_tex[i];
+            if (!texname.len)
                 break;
 
             // Convenience alias, to allow writing shaders that are oblivious
             // of the exact stage they hooked. This simply translates to
             // whatever stage actually fired the hook.
-            if (bstr_equals0(texname, "HOOKED")) {
-                GLSLH("#define HOOKED_raw %.*s_raw \n", BSTR_P(stage));
-                GLSLH("#define HOOKED_pos %.*s_pos \n", BSTR_P(stage));
-                GLSLH("#define HOOKED_size %.*s_size \n", BSTR_P(stage));
-                GLSLH("#define HOOKED_rot %.*s_rot \n", BSTR_P(stage));
-                GLSLH("#define HOOKED_off %.*s_off \n", BSTR_P(stage));
-                GLSLH("#define HOOKED_pt %.*s_pt \n", BSTR_P(stage));
-                GLSLH("#define HOOKED_map %.*s_map \n", BSTR_P(stage));
-                GLSLH("#define HOOKED_mul %.*s_mul \n", BSTR_P(stage));
-                GLSLH("#define HOOKED_tex %.*s_tex \n", BSTR_P(stage));
-                GLSLH("#define HOOKED_texOff %.*s_texOff \n", BSTR_P(stage));
+            if (pl_str_equals0(texname, "HOOKED")) {
+                GLSLH("#define HOOKED_raw %.*s_raw \n", PL_STR_FMT(stage));
+                GLSLH("#define HOOKED_pos %.*s_pos \n", PL_STR_FMT(stage));
+                GLSLH("#define HOOKED_size %.*s_size \n", PL_STR_FMT(stage));
+                GLSLH("#define HOOKED_rot %.*s_rot \n", PL_STR_FMT(stage));
+                GLSLH("#define HOOKED_off %.*s_off \n", PL_STR_FMT(stage));
+                GLSLH("#define HOOKED_pt %.*s_pt \n", PL_STR_FMT(stage));
+                GLSLH("#define HOOKED_map %.*s_map \n", PL_STR_FMT(stage));
+                GLSLH("#define HOOKED_mul %.*s_mul \n", PL_STR_FMT(stage));
+                GLSLH("#define HOOKED_tex %.*s_tex \n", PL_STR_FMT(stage));
+                GLSLH("#define HOOKED_texOff %.*s_texOff \n", PL_STR_FMT(stage));
 
                 // Continue with binding this, under the new name
                 texname = stage;
@@ -1085,7 +1081,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             // Compatibility alias, because MAIN and MAINPRESUB mean the same
             // thing to libplacebo, but user shaders are still written as
             // though they can be different concepts.
-            if (bstr_equals0(texname, "MAIN")) {
+            if (pl_str_equals0(texname, "MAIN")) {
                 GLSLH("#define MAIN_raw MAINPRESUB_raw \n");
                 GLSLH("#define MAIN_pos MAINPRESUB_pos \n");
                 GLSLH("#define MAIN_size MAINPRESUB_size \n");
@@ -1097,27 +1093,27 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 GLSLH("#define MAIN_tex MAINPRESUB_tex \n");
                 GLSLH("#define MAIN_texOff MAINPRESUB_texOff \n");
 
-                texname = bstr0("MAINPRESUB");
+                texname = pl_str0("MAINPRESUB");
             }
 
             for (int j = 0; j < p->num_descs; j++) {
-                if (bstr_equals0(texname, p->descriptors[j].desc.name)) {
+                if (pl_str_equals0(texname, p->descriptors[j].desc.name)) {
                     // Directly bind this, no need to bother with all the
                     // `bind_pass_tex` boilerplate
                     ident_t id = sh_desc(sh, p->descriptors[j]);
-                    GLSLH("#define %.*s %s \n", BSTR_P(texname), id);
+                    GLSLH("#define %.*s %s \n", PL_STR_FMT(texname), id);
 
                     if (p->descriptors[j].desc.type == PL_DESC_SAMPLED_TEX) {
                         const struct pl_tex *tex = p->descriptors[j].binding.object;
                         GLSLH("#define %.*s_tex(pos) (%s(%s, pos)) \n",
-                              BSTR_P(texname), sh_tex_fn(sh, tex->params), id);
+                              PL_STR_FMT(texname), sh_tex_fn(sh, tex->params), id);
                     }
                     goto next_bind;
                 }
             }
 
             for (int j = 0; j < p->num_pass_textures; j++) {
-                if (bstr_equals(texname, p->pass_textures[j].name)) {
+                if (pl_str_equals(texname, p->pass_textures[j].name)) {
                     // Note: We bind the whole texture, rather than
                     // params->rect, because user shaders in general are not
                     // designed to handle cropped input textures.
@@ -1126,7 +1122,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                         0, 0, ptex->tex->params.w, ptex->tex->params.h,
                     };
 
-                    if (hook->offset_align && bstr_equals(texname, stage)) {
+                    if (hook->offset_align && pl_str_equals(texname, stage)) {
                         float sx = pl_rect_w(params->rect) / pl_rect_w(params->src_rect),
                               sy = pl_rect_h(params->rect) / pl_rect_h(params->src_rect),
                               ox = params->rect.x0 - sx * params->src_rect.x0,
@@ -1143,7 +1139,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             }
 
             // If none of the above matched, this is a bogus/unknown texture name
-            PL_ERR(p, "Tried binding unknown texture '%.*s'!", BSTR_P(texname));
+            PL_ERR(p, "Tried binding unknown texture '%.*s'!", PL_STR_FMT(texname));
             goto error;
 
     next_bind: ; // outer 'continue'
@@ -1183,7 +1179,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         }));
 
         // Load and run the user shader itself
-        sh_append_bstr(sh, SH_BUF_HEADER, hook->pass_body);
+        sh_append_str(sh, SH_BUF_HEADER, hook->pass_body);
 
         bool ok;
         if (hook->is_compute) {
@@ -1244,7 +1240,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         // Save the result of this shader invocation
         struct pass_tex ptex = {
-            .name = hook->save_tex.start ? hook->save_tex : stage,
+            .name = hook->save_tex.len ? hook->save_tex : stage,
             .tex = fbo,
             .repr = params->repr,
             .color = params->color,
@@ -1256,12 +1252,12 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         pl_color_repr_normalize(&ptex.repr);
 
         PL_TRACE(p, "Saving output texture '%.*s' from hook execution on '%.*s'",
-                 BSTR_P(ptex.name), BSTR_P(stage));
+                 PL_STR_FMT(ptex.name), PL_STR_FMT(stage));
 
         save_pass_tex(p, ptex);
 
         // Update the result object, unless we saved to a different name
-        if (!hook->save_tex.start) {
+        if (!hook->save_tex.len) {
             res = (struct pl_hook_res) {
                 .output = PL_HOOK_SIG_TEX,
                 .tex = fbo,
@@ -1307,22 +1303,22 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
         },
     };
 
-    struct bstr shader = { (char *) shader_text, shader_len };
-    shader = bstrdup(hook, shader);
+    pl_str shader = { (char *) shader_text, shader_len };
+    shader = pl_strdup(hook, shader);
 
     // Skip all garbage (e.g. comments) before the first header
-    int pos = bstr_find(shader, bstr0("//!"));
+    int pos = pl_str_find(shader, pl_str0("//!"));
     if (pos < 0) {
         PL_ERR(gpu, "Shader appears to contain no headers?");
         goto error;
     }
-    shader = bstr_cut(shader, pos);
+    shader = pl_str_drop(shader, pos);
 
     // Loop over the file
     while (shader.len > 0)
     {
         // Peek at the first header to dispatch the right type
-        if (bstr_startswith0(shader, "//!TEXTURE")) {
+        if (pl_str_startswith0(shader, "//!TEXTURE")) {
             struct pl_shader_desc sd;
             if (!parse_tex(gpu, hook, &shader, &sd))
                 goto error;
@@ -1332,7 +1328,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
             continue;
         }
 
-        if (bstr_startswith0(shader, "//!BUFFER")) {
+        if (pl_str_startswith0(shader, "//!BUFFER")) {
             struct pl_shader_desc sd;
             if (!parse_buf(gpu, hook, &shader, &sd))
                 goto error;
@@ -1355,7 +1351,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
             pass.exec_stages |= mp_stage_to_pl(h.hook_tex[i]);
         for (int i = 0; i < PL_ARRAY_SIZE(h.bind_tex); i++) {
             p->save_stages |= mp_stage_to_pl(h.bind_tex[i]);
-            if (bstr_equals0(h.bind_tex[i], "HOOKED"))
+            if (pl_str_equals0(h.bind_tex[i], "HOOKED"))
                 p->save_stages |= pass.exec_stages;
         }
 
@@ -1380,7 +1376,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
 
         p->save_stages |= rpn_stages & ~PL_HOOK_OUTPUT;
 
-        PL_INFO(gpu, "Registering hook pass: %.*s", BSTR_P(h.pass_desc));
+        PL_INFO(gpu, "Registering hook pass: %.*s", PL_STR_FMT(h.pass_desc));
         TARRAY_APPEND(hook, p->hook_passes, p->num_hook_passes, pass);
     }
 

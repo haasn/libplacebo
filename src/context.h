@@ -23,7 +23,7 @@
 
 struct pl_context {
     struct pl_context_params params;
-    struct bstr logbuffer;
+    pl_str logbuffer;
     enum pl_log_level log_level_cap;
     pthread_mutex_t lock;
     // Provide a place for implementations to track suppression of errors
@@ -43,7 +43,8 @@ static inline bool pl_msg_test(struct pl_context *ctx, enum pl_log_level lev)
 }
 
 void pl_msg(struct pl_context *ctx, enum pl_log_level lev, const char *fmt, ...)
-    PRINTF_ATTRIBUTE(3, 4);
+    PL_PRINTF(3, 4);
+
 void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
                va_list va);
 

@@ -95,7 +95,7 @@ static shaderc_compilation_result_t compile(struct priv *p,
 
 static bool shaderc_compile(struct spirv_compiler *spirv, void *tactx,
                             enum glsl_shader_stage type, const char *glsl,
-                            struct bstr *out_spirv)
+                            pl_str *out_spirv)
 {
     struct priv *p = TA_PRIV(spirv);
 
@@ -131,7 +131,7 @@ static bool shaderc_compile(struct spirv_compiler *spirv, void *tactx,
         void *bytes = (void *) shaderc_result_get_bytes(res);
         pl_assert(bytes);
         out_spirv->len = shaderc_result_get_length(res);
-        out_spirv->start = talloc_memdup(tactx, bytes, out_spirv->len);
+        out_spirv->buf = talloc_memdup(tactx, bytes, out_spirv->len);
     }
 
     // Also print SPIR-V disassembly for debugging purposes. Unfortunately

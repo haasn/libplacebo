@@ -193,8 +193,8 @@ void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
         goto done;
 
     ctx->logbuffer.len = 0;
-    bstr_xappend_vasprintf(ctx, &ctx->logbuffer, fmt, va);
-    ctx->params.log_cb(ctx->params.log_priv, lev, ctx->logbuffer.start);
+    pl_str_xappend_vasprintf(ctx, &ctx->logbuffer, fmt, va);
+    ctx->params.log_cb(ctx->params.log_priv, lev, ctx->logbuffer.buf);
 
 done:
     pthread_mutex_unlock(&ctx->lock);

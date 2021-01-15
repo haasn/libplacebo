@@ -1509,16 +1509,16 @@ static GLuint load_cached_program(const struct pl_gpu *gpu,
     if (!test_ext(gpu, "GL_ARB_get_program_binary", 41, 30))
         return 0;
 
-    struct bstr cache = {
-        .start = (void *) params->cached_program,
+    pl_str cache = {
+        .buf = (void *) params->cached_program,
         .len = params->cached_program_len,
     };
 
     if (cache.len < sizeof(struct gl_cache_header))
         return false;
 
-    struct gl_cache_header *header = (struct gl_cache_header *) cache.start;
-    cache = bstr_cut(cache, sizeof(*header));
+    struct gl_cache_header *header = (struct gl_cache_header *) cache.buf;
+    cache = pl_str_drop(cache, sizeof(*header));
 
     if (strncmp(header->magic, gl_cache_magic, sizeof(gl_cache_magic)) != 0)
         return 0;
@@ -1529,7 +1529,7 @@ static GLuint load_cached_program(const struct pl_gpu *gpu,
     if (!gl_check_err(gpu, "load_cached_program: glCreateProgram"))
         return 0;
 
-    glProgramBinary(prog, header->format, cache.start, cache.len);
+    glProgramBinary(prog, header->format, cache.buf, cache.len);
     glGetError(); // discard potential useless error
 
     GLint status = 0;
@@ -1719,11 +1719,10 @@ static const struct pl_pass *gl_pass_create(const struct pl_gpu *gpu,
             glGetProgramBinary(pass_gl->program, size, &actual_size,
                                &header.format, buffer);
             if (actual_size > 0) {
-                struct bstr cache = {0};
-                bstr_xappend(pass, &cache, (struct bstr) { (char *) &header,
-                                                           sizeof(header) });
-                bstr_xappend(pass, &cache, (struct bstr) { buffer, actual_size });
-                pass->params.cached_program = cache.start;
+                pl_str cache = {0};
+                pl_str_xappend(pass, &cache, (pl_str) { (void *) &header, sizeof(header) });
+                pl_str_xappend(pass, &cache, (pl_str) { buffer, actual_size });
+                pass->params.cached_program = cache.buf;
                 pass->params.cached_program_len = cache.len;
             }
 

@@ -44,7 +44,7 @@ struct spirv_compiler_fns {
     // Compile GLSL to SPIR-V, under GL_KHR_vulkan_glsl semantics.
     bool (*compile_glsl)(struct spirv_compiler *spirv, void *tactx,
                          enum glsl_shader_stage type, const char *glsl,
-                         struct bstr *out_spirv);
+                         pl_str *out_spirv);
 
     // Only needs to initialize the implementation-specific fields
     struct spirv_compiler *(*create)(struct pl_context *ctx, uint32_t api_ver);
