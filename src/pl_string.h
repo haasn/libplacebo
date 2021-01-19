@@ -127,7 +127,9 @@ static inline bool pl_str_equals(pl_str str1, pl_str str2)
 {
     if (str1.len != str2.len)
         return false;
-    return str1.buf == str2.buf || memcmp(str1.buf, str2.buf, str1.len) == 0;
+    if (str1.buf == str2.buf || !str1.len)
+        return true;
+    return memcmp(str1.buf, str2.buf, str1.len) == 0;
 }
 
 static inline bool pl_str_startswith(pl_str str, pl_str prefix)
