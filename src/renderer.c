@@ -63,17 +63,14 @@ struct pl_renderer {
     struct pl_shader_obj *dither_state;
     struct pl_shader_obj *lut3d_state;
     struct pl_shader_obj *grain_state[4];
-    const struct pl_tex **fbos;
-    int num_fbos;
+    PL_ARRAY(const struct pl_tex *) fbos;
     struct sampler sampler_main;
     struct sampler samplers_src[4];
     struct sampler samplers_dst[4];
-    struct sampler *samplers_osd;
-    int num_samplers_osd;
+    PL_ARRAY(struct sampler) samplers_osd;
 
     // Frame cache (for frame mixing / interpolation)
-    struct cached_frame *frames;
-    int num_frames;
+    PL_ARRAY(struct cached_frame) frames;
 };
 
 static void find_fbo_format(struct pl_renderer *rr)
@@ -134,7 +131,7 @@ static void find_fbo_format(struct pl_renderer *rr)
 struct pl_renderer *pl_renderer_create(struct pl_context *ctx,
                                        const struct pl_gpu *gpu)
 {
-    struct pl_renderer *rr = talloc_ptrtype(NULL, rr);
+    struct pl_renderer *rr = pl_alloc_ptr(NULL, rr);
     *rr = (struct pl_renderer) {
         .gpu  = gpu,
         .ctx = ctx,
@@ -161,10 +158,10 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
         return;
 
     // Free all intermediate FBOs
-    for (int i = 0; i < rr->num_fbos; i++)
-        pl_tex_destroy(rr->gpu, &rr->fbos[i]);
-    for (int i = 0; i < rr->num_frames; i++)
-        pl_tex_destroy(rr->gpu, &rr->frames[i].tex);
+    for (int i = 0; i < rr->fbos.num; i++)
+        pl_tex_destroy(rr->gpu, &rr->fbos.elem[i]);
+    for (int i = 0; i < rr->frames.num; i++)
+        pl_tex_destroy(rr->gpu, &rr->frames.elem[i].tex);
 
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
@@ -179,11 +176,11 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
         sampler_destroy(rr, &rr->samplers_src[i]);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->samplers_dst); i++)
         sampler_destroy(rr, &rr->samplers_dst[i]);
-    for (int i = 0; i < rr->num_samplers_osd; i++)
-        sampler_destroy(rr, &rr->samplers_osd[i]);
+    for (int i = 0; i < rr->samplers_osd.num; i++)
+        sampler_destroy(rr, &rr->samplers_osd.elem[i]);
 
     pl_dispatch_destroy(&rr->dp);
-    TA_FREEP(p_rr);
+    pl_free_ptr(p_rr);
 }
 
 size_t pl_renderer_save(struct pl_renderer *rr, uint8_t *out_cache)
@@ -198,9 +195,9 @@ void pl_renderer_load(struct pl_renderer *rr, const uint8_t *cache)
 
 void pl_renderer_flush_cache(struct pl_renderer *rr)
 {
-    for (int i = 0; i < rr->num_frames; i++)
-        pl_tex_destroy(rr->gpu, &rr->frames[i].tex);
-    rr->num_frames = 0;
+    for (int i = 0; i < rr->frames.num; i++)
+        pl_tex_destroy(rr->gpu, &rr->frames.elem[i].tex);
+    rr->frames.num = 0;
 
     pl_shader_obj_destroy(&rr->peak_detect_state);
 }
@@ -311,13 +308,13 @@ static const struct pl_tex *get_fbo(struct pass_state *pass, int w, int h)
     int best_diff = 0;
 
     // Find the best-fitting texture out of rr->fbos
-    for (int i = 0; i < rr->num_fbos; i++) {
+    for (int i = 0; i < rr->fbos.num; i++) {
         if (pass->fbos_used[i])
             continue;
 
         // Orthogonal distance
-        int diff = abs(rr->fbos[i]->params.w - w) +
-                   abs(rr->fbos[i]->params.h - h);
+        int diff = abs(rr->fbos.elem[i]->params.w - w) +
+                   abs(rr->fbos.elem[i]->params.h - h);
 
         if (best_idx < 0 || diff < best_diff) {
             best_idx = i;
@@ -327,17 +324,17 @@ static const struct pl_tex *get_fbo(struct pass_state *pass, int w, int h)
 
     // No texture found at all, add a new one
     if (best_idx < 0) {
-        best_idx = rr->num_fbos;
-        TARRAY_APPEND(rr, rr->fbos, rr->num_fbos, NULL);
-        TARRAY_GROW(pass->tmp, pass->fbos_used, best_idx);
+        best_idx = rr->fbos.num;
+        PL_ARRAY_APPEND(rr, rr->fbos, NULL);
+        pl_grow(pass->tmp, &pass->fbos_used, rr->fbos.num * sizeof(bool));
         pass->fbos_used[best_idx] = false;
     }
 
-    if (!pl_tex_recreate(rr->gpu, &rr->fbos[best_idx], &params))
+    if (!pl_tex_recreate(rr->gpu, &rr->fbos.elem[best_idx], &params))
         return NULL;
 
     pass->fbos_used[best_idx] = true;
-    return rr->fbos[best_idx];
+    return rr->fbos.elem[best_idx];
 }
 
 // Forcibly convert an img to `tex`, dispatching where necessary
@@ -573,10 +570,8 @@ static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
         rr->disable_blending = true;
     }
 
-    while (num > rr->num_samplers_osd) {
-        TARRAY_APPEND(rr, rr->samplers_osd, rr->num_samplers_osd,
-                      (struct sampler) {0});
-    }
+    while (num > rr->samplers_osd.num)
+        PL_ARRAY_APPEND(rr, rr->samplers_osd, (struct sampler) {0});
 
     for (int n = 0; n < num; n++) {
         const struct pl_overlay *ol = &overlays[n];
@@ -605,7 +600,7 @@ static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
             },
         };
 
-        struct sampler *sampler = &rr->samplers_osd[n];
+        struct sampler *sampler = &rr->samplers_osd.elem[n];
         if (params->disable_overlay_sampling)
             sampler = NULL;
 
@@ -1926,8 +1921,8 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *pimage,
     if (!pass_infer_state(&pass, true))
         return false;
 
-    pass.tmp = talloc_new(NULL),
-    pass.fbos_used = talloc_zero_array(pass.tmp, bool, rr->num_fbos);
+    pass.tmp = pl_tmp(NULL),
+    pass.fbos_used = pl_calloc(pass.tmp, rr->fbos.num, sizeof(bool));
 
     // TODO: output caching
     pl_dispatch_reset_frame(rr->dp);
@@ -1946,12 +1941,12 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *pimage,
     if (!pass_output_target(rr, &pass, params))
         goto error;
 
-    talloc_free(pass.tmp);
+    pl_free(pass.tmp);
     return true;
 
 error:
     pl_dispatch_abort(rr->dp, &pass.img.sh);
-    talloc_free(pass.tmp);
+    pl_free(pass.tmp);
     PL_ERR(rr, "Failed rendering image!");
     return false;
 }
@@ -2024,8 +2019,8 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
 
     // Garbage collect the cache by evicting all frames from the cache that are
     // not determined to still be required
-    for (int i = 0; i < rr->num_frames; i++)
-        rr->frames[i].evict = true;
+    for (int i = 0; i < rr->frames.num; i++)
+        rr->frames.elem[i].evict = true;
 
     // Traverse the input frames and determine/prepare the ones we need
     for (int i = 0; i < images->num_frames; i++) {
@@ -2068,9 +2063,9 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
         }
 
         struct cached_frame *f = NULL;
-        for (int j = 0; j < rr->num_frames; j++) {
-            if (rr->frames[j].signature == sig) {
-                f = &rr->frames[j];
+        for (int j = 0; j < rr->frames.num; j++) {
+            if (rr->frames.elem[j].signature == sig) {
+                f = &rr->frames.elem[j];
                 f->evict = false;
                 break;
             }
@@ -2088,8 +2083,8 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
         if (!f) {
             // Signature does not exist in the cache at all yet,
             // so grow the cache by this entry.
-            TARRAY_GROW(rr, rr->frames, rr->num_frames);
-            f = &rr->frames[rr->num_frames++];
+            PL_ARRAY_GROW(rr, rr->frames);
+            f = &rr->frames.elem[rr->frames.num++];
             *f = (struct cached_frame) {
                 .signature = sig,
                 .color = images->frames[i].color,
@@ -2158,12 +2153,12 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
     }
 
     // Evict the frames we *don't* need
-    for (int i = 0; i < rr->num_frames; ) {
-        if (rr->frames[i].evict) {
+    for (int i = 0; i < rr->frames.num; ) {
+        if (rr->frames.elem[i].evict) {
             PL_TRACE(rr, "Evicting frame with signature %llx from cache",
-                     (unsigned long long) rr->frames[i].signature);
-            pl_tex_destroy(rr->gpu, &rr->frames[i].tex);
-            TARRAY_REMOVE_AT(rr->frames, rr->num_frames, i);
+                     (unsigned long long) rr->frames.elem[i].signature);
+            pl_tex_destroy(rr->gpu, &rr->frames.elem[i].tex);
+            PL_ARRAY_REMOVE_AT(rr->frames, i);
             continue;
         } else {
             i++;
@@ -2217,8 +2212,8 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
          "}                  \n");
 
     // Dispatch this to the destination
-    pass.tmp = talloc_new(NULL),
-    pass.fbos_used = talloc_zero_array(pass.tmp, bool, rr->num_fbos);
+    pass.tmp = pl_tmp(NULL),
+    pass.fbos_used = pl_calloc(pass.tmp, rr->fbos.num, sizeof(bool));
     pass.img = (struct img) {
         .sh = sh,
         .w = out_w,
@@ -2229,11 +2224,11 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
     };
 
     if (!pass_output_target(rr, &pass, params)) {
-        talloc_free(pass.tmp);
+        pl_free(pass.tmp);
         goto fallback;
     }
 
-    talloc_free(pass.tmp);
+    pl_free(pass.tmp);
     return true;
 
 fallback:

@@ -74,7 +74,7 @@ void pl_opengl_destroy(const struct pl_opengl **ptr)
     if (!pl_gl)
         return;
 
-    struct priv *p = TA_PRIV(pl_gl);
+    struct priv *p = PL_PRIV(pl_gl);
     if (p->is_debug)
         glDebugMessageCallback(NULL, NULL);
 
@@ -84,15 +84,15 @@ void pl_opengl_destroy(const struct pl_opengl **ptr)
 #endif
 
     pl_gpu_destroy(pl_gl->gpu);
-    TA_FREEP((void **) ptr);
+    pl_free_ptr((void **) ptr);
 }
 
 const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
                                          const struct pl_opengl_params *params)
 {
     params = PL_DEF(params, &pl_opengl_default_params);
-    struct pl_opengl *pl_gl = talloc_zero_priv(NULL, struct pl_opengl, struct priv);
-    struct priv *p = TA_PRIV(pl_gl);
+    struct pl_opengl *pl_gl = pl_zalloc_priv(NULL, struct pl_opengl, struct priv);
+    struct priv *p = PL_PRIV(pl_gl);
     p->ctx = ctx;
 
     int ver = epoxy_gl_version();

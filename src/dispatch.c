@@ -35,17 +35,9 @@ struct pl_dispatch {
     uint8_t current_ident;
     uint8_t current_index;
 
-    // pool of pl_shaders, in order to avoid frequent re-allocations
-    struct pl_shader **shaders;
-    int num_shaders;
-
-    // list of compiled passes
-    struct pass **passes;
-    int num_passes;
-
-    // list of not-yet-compiled passes
-    struct cached_pass *cached_passes;
-    int num_cached_passes;
+    PL_ARRAY(struct pl_shader *) shaders;       // to avoid re-allocations
+    PL_ARRAY(struct pass *) passes;             // compiled passes
+    PL_ARRAY(struct cached_pass) cached_passes; // not-yet-compiled passes
 
     // temporary buffers to help avoid re_allocations during pass creation
     pl_str tmp[TMP_COUNT];
@@ -96,14 +88,14 @@ static void pass_destroy(struct pl_dispatch *dp, struct pass *pass)
 
     pl_buf_destroy(dp->gpu, &pass->ubo);
     pl_pass_destroy(dp->gpu, &pass->pass);
-    talloc_free(pass);
+    pl_free(pass);
 }
 
 struct pl_dispatch *pl_dispatch_create(struct pl_context *ctx,
                                        const struct pl_gpu *gpu)
 {
     pl_assert(ctx);
-    struct pl_dispatch *dp = talloc_zero(ctx, struct pl_dispatch);
+    struct pl_dispatch *dp = pl_zalloc_ptr(ctx, dp);
     dp->ctx = ctx;
     dp->gpu = gpu;
 
@@ -116,12 +108,12 @@ void pl_dispatch_destroy(struct pl_dispatch **ptr)
     if (!dp)
         return;
 
-    for (int i = 0; i < dp->num_passes; i++)
-        pass_destroy(dp, dp->passes[i]);
-    for (int i = 0; i < dp->num_shaders; i++)
-        pl_shader_free(&dp->shaders[i]);
+    for (int i = 0; i < dp->passes.num; i++)
+        pass_destroy(dp, dp->passes.elem[i]);
+    for (int i = 0; i < dp->shaders.num; i++)
+        pl_shader_free(&dp->shaders.elem[i]);
 
-    talloc_free(dp);
+    pl_free(dp);
     *ptr = NULL;
 }
 
@@ -134,7 +126,7 @@ struct pl_shader *pl_dispatch_begin_ex(struct pl_dispatch *dp, bool unique)
     };
 
     struct pl_shader *sh;
-    if (TARRAY_POP(dp->shaders, dp->num_shaders, &sh)) {
+    if (PL_ARRAY_POP(dp->shaders, &sh)) {
         pl_shader_reset(sh, &params);
         return sh;
     }
@@ -199,7 +191,7 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
         pv->type = PASS_VAR_GLOBAL;
         pv->index = params->num_variables;
         pv->layout = pl_var_host_layout(0, &sv->var);
-        TARRAY_APPEND(tmp, params->variables, params->num_variables, sv->var);
+        PL_ARRAY_APPEND_RAW(tmp, params->variables, params->num_variables, sv->var);
         return true;
     }
 
@@ -211,8 +203,8 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
     return false;
 }
 
-#define ADD(x, ...) pl_str_xappend_asprintf_c(dp, (x), __VA_ARGS__)
-#define ADD_STR(x, s) pl_str_xappend(dp, (x), (s))
+#define ADD(x, ...) pl_str_append_asprintf_c(dp, (x), __VA_ARGS__)
+#define ADD_STR(x, s) pl_str_append(dp, (x), (s))
 
 static void add_var(struct pl_dispatch *dp, pl_str *body,
                     const struct pl_var *var)
@@ -237,8 +229,7 @@ static void add_buffer_vars(struct pl_dispatch *dp, pl_str *body,
                             void *tmp)
 {
     // Sort buffer vars
-    const struct pl_buffer_var **sorted_vars = NULL;
-    TARRAY_RESIZE(tmp, sorted_vars, num);
+    const struct pl_buffer_var **sorted_vars = pl_calloc_ptr(tmp, num, sorted_vars);
     for (int i = 0; i < num; i++)
         sorted_vars[i] = &vars[i];
     qsort(sorted_vars, num, sizeof(sorted_vars[0]), cmp_buffer_var);
@@ -265,6 +256,7 @@ static ident_t sh_var_from_va(struct pl_shader *sh, const char *name,
 
 static inline struct pl_desc_binding sd_binding(const struct pl_shader_desc sd)
 {
+    // For backwards compatbility with the deprecated field sd.object
     struct pl_desc_binding binding = sd.binding;
     binding.object = PL_DEF(binding.object, sd.object);
     return binding;
@@ -297,8 +289,8 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
     // Enable all extensions needed for different types of input
     bool has_ssbo = false, has_ubo = false, has_img = false, has_texel = false,
          has_ext = false, has_nofmt = false;
-    for (int i = 0; i < res->num_descriptors; i++) {
-        switch (res->descriptors[i].desc.type) {
+    for (int i = 0; i < sh->descs.num; i++) {
+        switch (sh->descs.elem[i].desc.type) {
         case PL_DESC_BUF_UNIFORM: has_ubo = true; break;
         case PL_DESC_BUF_STORAGE: has_ssbo = true; break;
         case PL_DESC_BUF_TEXEL_UNIFORM: has_texel = true; break;
@@ -374,9 +366,9 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         // Set up a trivial vertex shader
         ADD_STR(vert_head, *pre);
         ADD(vert_body, "void main() {\n");
-        for (int i = 0; i < res->num_vertex_attribs; i++) {
+        for (int i = 0; i < sh->vas.num; i++) {
             const struct pl_vertex_attrib *va = &params->vertex_attribs[i];
-            const struct pl_shader_va *sva = &res->vertex_attribs[i];
+            const struct pl_shader_va *sva = &sh->vas.elem[i];
             const char *type = va->fmt->glsl_type;
 
             // Use the pl_shader_va for the name in the fragment shader since
@@ -426,21 +418,19 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         // We re-use add_buffer_vars to make sure variables are sorted, this
         // is important because the push constants can be out-of-order in
         // `pass->vars`
-        struct pl_buffer_var *pc_bvars = NULL;
-        int num_bvars = 0;
-
+        PL_ARRAY(struct pl_buffer_var) pc_bvars = {0};
         for (int i = 0; i < res->num_variables; i++) {
             if (pass->vars[i].type != PASS_VAR_PUSHC)
                 continue;
 
-            TARRAY_APPEND(tmp, pc_bvars, num_bvars, (struct pl_buffer_var) {
+            PL_ARRAY_APPEND(tmp, pc_bvars, (struct pl_buffer_var) {
                 .var = res->variables[i].var,
                 .layout = pass->vars[i].layout,
             });
         }
 
         ADD(glsl, "layout(std430, push_constant) uniform PushC ");
-        add_buffer_vars(dp, glsl, pc_bvars, num_bvars, tmp);
+        add_buffer_vars(dp, glsl, pc_bvars.elem, pc_bvars.num, tmp);
     }
 
     // Add all of the required descriptors
@@ -623,8 +613,8 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
 {
     uint64_t sig = pl_shader_signature(sh);
 
-    for (int i = 0; i < dp->num_passes; i++) {
-        struct pass *p = dp->passes[i];
+    for (int i = 0; i < dp->passes.num; i++) {
+        struct pass *p = dp->passes.elem[i];
         if (p->signature != sig)
             continue;
 
@@ -647,9 +637,9 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         }
     }
 
-    void *tmp = talloc_new(NULL); // for resources attached to `params`
+    void *tmp = pl_tmp(NULL); // for resources attached to `params`
 
-    struct pass *pass = talloc_ptrtype(dp, pass);
+    struct pass *pass = pl_alloc_ptr(dp, pass);
     *pass = (struct pass) {
         .signature = sig,
         .ubo_desc = {
@@ -660,23 +650,22 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         },
     };
 
-    struct pl_shader_res *res = &sh->res;
     struct pl_pass_run_params *rparams = &pass->run_params;
     struct pl_pass_params params = {
         .type = pl_shader_is_compute(sh) ? PL_PASS_COMPUTE : PL_PASS_RASTER,
-        .num_descriptors = res->num_descriptors,
+        .num_descriptors = sh->descs.num,
         .blend_params = blend, // set this for all pass types (for caching)
     };
 
     // Find and attach the cached program, if any
-    for (int i = 0; i < dp->num_cached_passes; i++) {
-        if (dp->cached_passes[i].signature == sig) {
+    for (int i = 0; i < dp->cached_passes.num; i++) {
+        if (dp->cached_passes.elem[i].signature == sig) {
             PL_DEBUG(dp, "Re-using cached program with signature 0x%llx",
                      (unsigned long long) sig);
 
-            params.cached_program = dp->cached_passes[i].cached_program;
-            params.cached_program_len = dp->cached_passes[i].cached_program_len;
-            TARRAY_REMOVE_AT(dp->cached_passes, dp->num_cached_passes, i);
+            params.cached_program = dp->cached_passes.elem[i].cached_program;
+            params.cached_program_len = dp->cached_passes.elem[i].cached_program_len;
+            PL_ARRAY_REMOVE_AT(dp->cached_passes, i);
             break;
         }
     }
@@ -687,18 +676,17 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         params.load_target = load;
 
         // Fill in the vertex attributes array
-        params.num_vertex_attribs = res->num_vertex_attribs;
-        params.vertex_attribs = talloc_zero_array(tmp, struct pl_vertex_attrib,
-                                                  res->num_vertex_attribs);
+        params.num_vertex_attribs = sh->vas.num;
+        params.vertex_attribs = pl_calloc_ptr(tmp, sh->vas.num, params.vertex_attribs);
 
         int va_loc = 0;
-        for (int i = 0; i < res->num_vertex_attribs; i++) {
+        for (int i = 0; i < sh->vas.num; i++) {
             struct pl_vertex_attrib *va = &params.vertex_attribs[i];
-            *va = sh->vertex_attribs[i].attr;
+            *va = sh->vas.elem[i].attr;
 
             // Mangle the name to make sure it doesn't conflict with the
             // fragment shader input
-            va->name = talloc_asprintf(tmp, "vert%s", va->name);
+            va->name = pl_asprintf(tmp, "vert%s", va->name);
 
             // Place the vertex attribute
             va->offset = params.vertex_stride;
@@ -715,7 +703,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
         params.vertex_type = PL_PRIM_TRIANGLE_STRIP;
         rparams->vertex_count = 4; // single quad
         size_t vert_size = rparams->vertex_count * params.vertex_stride;
-        rparams->vertex_data = talloc_zero_size(pass, vert_size);
+        rparams->vertex_data = pl_zalloc(pass, vert_size);
     }
 
     // Place all the variables; these will dynamically end up in different
@@ -723,14 +711,13 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     //
     // We go through the list twice, once to place stuff that we definitely
     // want inside PCs, and then a second time to opportunistically place the rest.
-    pass->vars = talloc_zero_array(pass, struct pass_var, res->num_variables);
-    for (int i = 0; i < res->num_variables; i++) {
-        if (!add_pass_var(dp, tmp, pass, &params, &sh->variables[i], &pass->vars[i], false))
+    pass->vars = pl_calloc_ptr(pass, sh->vars.num, pass->vars);
+    for (int i = 0; i < sh->vars.num; i++) {
+        if (!add_pass_var(dp, tmp, pass, &params, &sh->vars.elem[i], &pass->vars[i], false))
             goto error;
     }
-
-    for (int i = 0; i < res->num_variables; i++) {
-        if (!add_pass_var(dp, tmp, pass, &params, &sh->variables[i], &pass->vars[i], true))
+    for (int i = 0; i < sh->vars.num; i++) {
+        if (!add_pass_var(dp, tmp, pass, &params, &sh->vars.elem[i], &pass->vars[i], true))
             goto error;
     }
 
@@ -749,20 +736,20 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
             goto error;
         }
 
-        ubo_index = res->num_descriptors;
+        ubo_index = sh->descs.num;
         pass->ubo_desc.binding.object = pass->ubo;
         sh_desc(sh, pass->ubo_desc);
     }
 
     // Place and fill in the descriptors
-    int num = res->num_descriptors;
+    int num = sh->descs.num;
     int binding[PL_DESC_TYPE_COUNT] = {0};
     params.num_descriptors = num;
-    params.descriptors = talloc_zero_array(tmp, struct pl_desc, num);
-    rparams->desc_bindings = talloc_zero_array(pass, struct pl_desc_binding, num);
+    params.descriptors = pl_calloc_ptr(tmp, num, params.descriptors);
+    rparams->desc_bindings = pl_calloc_ptr(pass, num, rparams->desc_bindings);
     for (int i = 0; i < num; i++) {
         struct pl_desc *desc = &params.descriptors[i];
-        *desc = sh->descriptors[i].desc;
+        *desc = sh->descs.elem[i].desc;
         desc->binding = binding[pl_desc_namespace(dp->gpu, desc->type)]++;
     }
 
@@ -774,7 +761,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
 
     // Create the push constants region
     params.push_constants_size = PL_ALIGN2(params.push_constants_size, 4);
-    rparams->push_constants = talloc_zero_size(pass, params.push_constants_size);
+    rparams->push_constants = pl_zalloc(pass, params.push_constants_size);
 
     // Finally, finalize the shaders and create the pass itself
     generate_shaders(dp, pass, &params, sh, vert_pos, tmp);
@@ -787,8 +774,8 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     // fall through
 error:
     pass->ubo_desc = (struct pl_shader_desc) {0}; // contains temporary pointers
-    talloc_free(tmp);
-    TARRAY_APPEND(dp, dp->passes, dp->num_passes, pass);
+    pl_free(tmp);
+    PL_ARRAY_APPEND(dp, dp->passes, pass);
     return pass;
 }
 
@@ -802,7 +789,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
     if (pv->cached_data && !memcmp(sv->data, pv->cached_data, host_layout.size))
         return;
     if (!pv->cached_data)
-        pv->cached_data = talloc_size(pass, host_layout.size);
+        pv->cached_data = pl_alloc(pass, host_layout.size);
     memcpy(pv->cached_data, sv->data, host_layout.size);
 
     struct pl_pass_run_params *rparams = &pass->run_params;
@@ -814,7 +801,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
             .index = pv->index,
             .data  = sv->data,
         };
-        TARRAY_APPEND(pass, rparams->var_updates, rparams->num_var_updates, vu);
+        PL_ARRAY_APPEND_RAW(pass, rparams->var_updates, rparams->num_var_updates, vu);
         break;
     }
     case PASS_VAR_UBO: {
@@ -827,7 +814,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
             // Coalesce strided UBO write into a single pl_buf_write to avoid
             // unnecessary synchronization overhead by assembling the correctly
             // strided upload in RAM
-            TARRAY_GROW(dp, dp->tmp[0].buf, pv->layout.size);
+            pl_grow(dp, &dp->tmp[0].buf, pv->layout.size);
             uint8_t * const tmp = dp->tmp[0].buf;
             const uint8_t *src = sv->data;
             const uint8_t *end = src + host_layout.size;
@@ -863,8 +850,8 @@ static void compute_vertex_attribs(struct pl_dispatch *dp, struct pl_shader *sh,
           "#define gl_FragCoord vec4(frag_pos(gl_GlobalInvocationID), 0.0, 1.0) \n",
           *out_scale);
 
-    for (int n = 0; n < sh->res.num_vertex_attribs; n++) {
-        const struct pl_shader_va *sva = &sh->vertex_attribs[n];
+    for (int n = 0; n < sh->vas.num; n++) {
+        const struct pl_shader_va *sva = &sh->vas.elem[n];
 
         ident_t points[4];
         for (int i = 0; i < PL_ARRAY_SIZE(points); i++) {
@@ -1037,20 +1024,20 @@ bool pl_dispatch_finish(struct pl_dispatch *dp, const struct pl_dispatch_params 
     struct pl_pass_run_params *rparams = &pass->run_params;
 
     // Update the descriptor bindings
-    for (int i = 0; i < res->num_descriptors; i++)
-        rparams->desc_bindings[i] = sd_binding(sh->descriptors[i]);
+    for (int i = 0; i < sh->descs.num; i++)
+        rparams->desc_bindings[i] = sd_binding(sh->descs.elem[i]);
 
     // Update all of the variables (if needed)
     rparams->num_var_updates = 0;
-    for (int i = 0; i < res->num_variables; i++)
-        update_pass_var(dp, pass, &sh->variables[i], &pass->vars[i]);
+    for (int i = 0; i < sh->vars.num; i++)
+        update_pass_var(dp, pass, &sh->vars.elem[i], &pass->vars[i]);
 
     // Update the vertex data
     if (rparams->vertex_data) {
         uintptr_t vert_base = (uintptr_t) rparams->vertex_data;
         size_t stride = rparams->pass->params.vertex_stride;
-        for (int i = 0; i < res->num_vertex_attribs; i++) {
-            const struct pl_shader_va *sva = &sh->vertex_attribs[i];
+        for (int i = 0; i < sh->vas.num; i++) {
+            const struct pl_shader_va *sva = &sh->vas.elem[i];
             struct pl_vertex_attrib *va = &rparams->pass->params.vertex_attribs[i];
 
             size_t size = sva->attr.fmt->texel_size;
@@ -1121,7 +1108,7 @@ bool pl_dispatch_compute(struct pl_dispatch *dp,
         goto error;
     }
 
-    if (sh->res.num_vertex_attribs) {
+    if (sh->vas.num) {
         if (!params->width || !params->height) {
             PL_ERR(dp, "Trying to dispatch a targetless compute shader that "
                    "uses vertex attributes, this requires specifying the size "
@@ -1142,13 +1129,13 @@ bool pl_dispatch_compute(struct pl_dispatch *dp,
     struct pl_pass_run_params *rparams = &pass->run_params;
 
     // Update the descriptor bindings
-    for (int i = 0; i < sh->res.num_descriptors; i++)
-        rparams->desc_bindings[i] = sd_binding(sh->descriptors[i]);
+    for (int i = 0; i < sh->descs.num; i++)
+        rparams->desc_bindings[i] = sd_binding(sh->descs.elem[i]);
 
     // Update all of the variables (if needed)
     rparams->num_var_updates = 0;
-    for (int i = 0; i < res->num_variables; i++)
-        update_pass_var(dp, pass, &sh->variables[i], &pass->vars[i]);
+    for (int i = 0; i < sh->vars.num; i++)
+        update_pass_var(dp, pass, &sh->vars.elem[i], &pass->vars[i]);
 
     // Update the dispatch size
     int groups = 1;
@@ -1159,8 +1146,8 @@ bool pl_dispatch_compute(struct pl_dispatch *dp,
 
     if (!groups) {
         pl_assert(params->width && params->height);
-        int block_w = sh->res.compute_group_size[0],
-            block_h = sh->res.compute_group_size[1],
+        int block_w = res->compute_group_size[0],
+            block_h = res->compute_group_size[1],
             num_x   = (params->width  + block_w - 1) / block_w,
             num_y   = (params->height + block_h - 1) / block_h;
 
@@ -1190,7 +1177,7 @@ void pl_dispatch_abort(struct pl_dispatch *dp, struct pl_shader **psh)
         return;
 
     // Re-add the shader to the internal pool of shaders
-    TARRAY_APPEND(dp, dp->shaders, dp->num_shaders, sh);
+    PL_ARRAY_APPEND(dp, dp->shaders, sh);
     *psh = NULL;
 }
 
@@ -1219,11 +1206,11 @@ size_t pl_dispatch_save(struct pl_dispatch *dp, uint8_t *out)
 
     write_buf(out, &size, cache_magic, sizeof(cache_magic));
     WRITE(uint32_t, cache_version);
-    WRITE(uint32_t, dp->num_passes + dp->num_cached_passes);
+    WRITE(uint32_t, dp->passes.num + dp->cached_passes.num);
 
     // Save the cached programs for all compiled passes
-    for (int i = 0; i < dp->num_passes; i++) {
-        const struct pass *pass = dp->passes[i];
+    for (int i = 0; i < dp->passes.num; i++) {
+        const struct pass *pass = dp->passes.elem[i];
         if (!pass->pass)
             continue;
 
@@ -1244,8 +1231,8 @@ size_t pl_dispatch_save(struct pl_dispatch *dp, uint8_t *out)
     // Re-save the cached programs for all previously loaded (but not yet
     // comppiled) passes. This is simply to make `pl_dispatch_load` followed
     // by `pl_dispatch_save` return the same cache as was previously loaded.
-    for (int i = 0; i < dp->num_cached_passes; i++) {
-        const struct cached_pass *pass = &dp->cached_passes[i];
+    for (int i = 0; i < dp->cached_passes.num; i++) {
+        const struct cached_pass *pass = &dp->cached_passes.elem[i];
         if (out) {
             PL_DEBUG(dp, "Saving %zu bytes of cached program with signature 0x%llx",
                      pass->cached_program_len, (unsigned long long) pass->signature);
@@ -1286,8 +1273,8 @@ void pl_dispatch_load(struct pl_dispatch *dp, const uint8_t *cache)
             continue;
 
         // Skip passes that are already compiled
-        for (int n = 0; n < dp->num_passes; n++) {
-            if (dp->passes[n]->signature == sig) {
+        for (int n = 0; n < dp->passes.num; n++) {
+            if (dp->passes.elem[n]->signature == sig) {
                 PL_DEBUG(dp, "Skipping already compiled pass with signature %llx",
                          (unsigned long long) sig);
                 cache += size;
@@ -1297,25 +1284,25 @@ void pl_dispatch_load(struct pl_dispatch *dp, const uint8_t *cache)
 
         // Find a cached_pass entry with this signature, if any
         struct cached_pass *pass = NULL;
-        for (int n = 0; n < dp->num_cached_passes; n++) {
-            if (dp->cached_passes[n].signature == sig) {
-                pass = &dp->cached_passes[n];
+        for (int n = 0; n < dp->cached_passes.num; n++) {
+            if (dp->cached_passes.elem[n].signature == sig) {
+                pass = &dp->cached_passes.elem[n];
                 break;
             }
         }
 
         if (!pass) {
             // None found, add a new entry
-            TARRAY_GROW(dp, dp->cached_passes, dp->num_cached_passes);
-            pass = &dp->cached_passes[dp->num_cached_passes++];
+            PL_ARRAY_GROW(dp, dp->cached_passes);
+            pass = &dp->cached_passes.elem[dp->cached_passes.num++];
             *pass = (struct cached_pass) { .signature = sig };
         }
 
         PL_DEBUG(dp, "Loading %zu bytes of cached program with signature 0x%llx",
                  (size_t) size, (unsigned long long) sig);
 
-        talloc_free((void *) pass->cached_program);
-        pass->cached_program = talloc_memdup(dp, cache, size);
+        pl_free((void *) pass->cached_program);
+        pass->cached_program = pl_memdup(dp, cache, size);
         pass->cached_program_len = size;
         cache += size;
     }

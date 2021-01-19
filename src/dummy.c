@@ -60,13 +60,13 @@ const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
 {
     params = PL_DEF(params, &pl_gpu_dummy_default_params);
 
-    struct pl_gpu *gpu = talloc_zero_priv(NULL, struct pl_gpu, struct priv);
+    struct pl_gpu *gpu = pl_zalloc_priv(NULL, struct pl_gpu, struct priv);
     gpu->ctx = ctx;
     gpu->caps = params->caps;
     gpu->glsl = params->glsl;
     gpu->limits = params->limits;
 
-    struct priv *p = TA_PRIV(gpu);
+    struct priv *p = PL_PRIV(gpu);
     p->impl = pl_fns_dummy;
     p->params = *params;
 
@@ -76,6 +76,7 @@ const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
 
     // Set up the dummy formats, add one for each possible format type that we
     // can represent on the host
+    PL_ARRAY(const struct pl_fmt *) formats = {0};
     for (enum pl_fmt_type type = 1; type < PL_FMT_TYPE_COUNT; type++) {
         for (int comps = 1; comps <= 4; comps++) {
             for (int depth = 8; depth < 128; depth *= 2) {
@@ -97,10 +98,10 @@ const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
                     [PL_FMT_FLOAT] = "f",
                 };
 
-                struct pl_fmt *fmt = talloc_ptrtype(gpu, fmt);
+                struct pl_fmt *fmt = pl_alloc_ptr(gpu, fmt);
                 *fmt = (struct pl_fmt) {
-                    .name = talloc_asprintf(fmt, "%s%d%s", cnames[comps], depth,
-                                            tnames[type]),
+                    .name = pl_asprintf(fmt, "%s%d%s", cnames[comps], depth,
+                                        tnames[type]),
                     .type = type,
                     .num_components = comps,
                     .opaque = false,
@@ -129,11 +130,13 @@ const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
                 fmt->fourcc = pl_fmt_fourcc(fmt);
                 if (!fmt->glsl_format)
                     fmt->caps &= ~(PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE);
-                TARRAY_APPEND(gpu, gpu->formats, gpu->num_formats, fmt);
+                PL_ARRAY_APPEND(gpu, formats, fmt);
             }
         }
     }
 
+    gpu->formats = formats.elem;
+    gpu->num_formats = formats.num;
     pl_gpu_sort_formats(gpu);
     pl_gpu_print_info(gpu);
     return gpu;
@@ -141,7 +144,7 @@ const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
 
 static void dumb_destroy(const struct pl_gpu *gpu)
 {
-    talloc_free((void *) gpu);
+    pl_free((void *) gpu);
 }
 
 void pl_gpu_dummy_destroy(const struct pl_gpu **gpu)
@@ -157,15 +160,15 @@ struct buf_priv {
 static const struct pl_buf *dumb_buf_create(const struct pl_gpu *gpu,
                                             const struct pl_buf_params *params)
 {
-    struct pl_buf *buf = talloc_zero_priv(NULL, struct pl_buf, struct buf_priv);
+    struct pl_buf *buf = pl_zalloc_priv(NULL, struct pl_buf, struct buf_priv);
     buf->params = *params;
     buf->params.initial_data = NULL;
 
-    struct buf_priv *p = TA_PRIV(buf);
+    struct buf_priv *p = PL_PRIV(buf);
     p->data = malloc(params->size);
     if (!p->data) {
         PL_ERR(gpu, "Failed allocating memory for dummy buffer!");
-        talloc_free(buf);
+        pl_free(buf);
         return NULL;
     }
 
@@ -179,28 +182,28 @@ static const struct pl_buf *dumb_buf_create(const struct pl_gpu *gpu,
 
 static void dumb_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf *buf)
 {
-    struct buf_priv *p = TA_PRIV(buf);
+    struct buf_priv *p = PL_PRIV(buf);
     free(p->data);
-    talloc_free((void *) buf);
+    pl_free((void *) buf);
 }
 
 uint8_t *pl_buf_dummy_data(const struct pl_buf *buf)
 {
-    struct buf_priv *p = TA_PRIV(buf);
+    struct buf_priv *p = PL_PRIV(buf);
     return p->data;
 }
 
 static void dumb_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                            size_t buf_offset, const void *data, size_t size)
 {
-    struct buf_priv *p = TA_PRIV(buf);
+    struct buf_priv *p = PL_PRIV(buf);
     memcpy(p->data + buf_offset, data, size);
 }
 
 static bool dumb_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                           size_t buf_offset, void *dest, size_t size)
 {
-    struct buf_priv *p = TA_PRIV(buf);
+    struct buf_priv *p = PL_PRIV(buf);
     memcpy(dest, p->data + buf_offset, size);
     return true;
 }
@@ -210,8 +213,8 @@ static void dumb_buf_copy(const struct pl_gpu *gpu,
                           const struct pl_buf *src, size_t src_offset,
                           size_t size)
 {
-    struct buf_priv *dstp = TA_PRIV(dst);
-    struct buf_priv *srcp = TA_PRIV(src);
+    struct buf_priv *dstp = PL_PRIV(dst);
+    struct buf_priv *srcp = PL_PRIV(src);
     memcpy(dstp->data + dst_offset, srcp->data + src_offset, size);
 }
 
@@ -230,15 +233,15 @@ static size_t tex_size(const struct pl_gpu *gpu, const struct pl_tex *tex)
 static const struct pl_tex *dumb_tex_create(const struct pl_gpu *gpu,
                                             const struct pl_tex_params *params)
 {
-    struct pl_tex *tex = talloc_zero_priv(NULL, struct pl_tex, void *);
+    struct pl_tex *tex = pl_zalloc_priv(NULL, struct pl_tex, void *);
     tex->params = *params;
     tex->params.initial_data = NULL;
 
-    struct tex_priv *p = TA_PRIV(tex);
+    struct tex_priv *p = PL_PRIV(tex);
     p->data = malloc(tex_size(gpu, tex));
     if (!p->data) {
         PL_ERR(gpu, "Failed allocating memory for dummy texture!");
-        talloc_free(tex);
+        pl_free(tex);
         return NULL;
     }
 
@@ -254,7 +257,7 @@ const struct pl_tex *pl_tex_dummy_create(const struct pl_gpu *gpu,
     // Only do minimal sanity checking, since this is just a dummy texture
     pl_assert(params->format && params->w >= 0 && params->h >= 0 && params->d >= 0);
 
-    struct pl_tex *tex = talloc_zero_priv(NULL, struct pl_tex, struct tex_priv);
+    struct pl_tex *tex = pl_zalloc_priv(NULL, struct pl_tex, struct tex_priv);
     tex->sampler_type = params->sampler_type;
     tex->params = (struct pl_tex_params) {
         .w = params->w,
@@ -270,15 +273,15 @@ const struct pl_tex *pl_tex_dummy_create(const struct pl_gpu *gpu,
 
 static void dumb_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
 {
-    struct tex_priv *p = TA_PRIV(tex);
+    struct tex_priv *p = PL_PRIV(tex);
     if (p->data)
         free(p->data);
-    talloc_free((void *) tex);
+    pl_free((void *) tex);
 }
 
 uint8_t *pl_tex_dummy_data(const struct pl_tex *tex)
 {
-    struct tex_priv *p = TA_PRIV(tex);
+    struct tex_priv *p = PL_PRIV(tex);
     return p->data;
 }
 
@@ -286,13 +289,13 @@ static bool dumb_tex_upload(const struct pl_gpu *gpu,
                             const struct pl_tex_transfer_params *params)
 {
     const struct pl_tex *tex = params->tex;
-    struct tex_priv *p = TA_PRIV(tex);
+    struct tex_priv *p = PL_PRIV(tex);
     pl_assert(p->data);
 
     const uint8_t *src = params->ptr;
     uint8_t *dst = p->data;
     if (params->buf) {
-        struct buf_priv *bufp = TA_PRIV(params->buf);
+        struct buf_priv *bufp = PL_PRIV(params->buf);
         src = (uint8_t *) bufp->data + params->buf_offset;
     }
 
@@ -316,13 +319,13 @@ static bool dumb_tex_download(const struct pl_gpu *gpu,
                               const struct pl_tex_transfer_params *params)
 {
     const struct pl_tex *tex = params->tex;
-    struct tex_priv *p = TA_PRIV(tex);
+    struct tex_priv *p = PL_PRIV(tex);
     pl_assert(p->data);
 
     const uint8_t *src = p->data;
     uint8_t *dst = params->ptr;
     if (params->buf) {
-        struct buf_priv *bufp = TA_PRIV(params->buf);
+        struct buf_priv *bufp = PL_PRIV(params->buf);
         dst = (uint8_t *) bufp->data + params->buf_offset;
     }
 

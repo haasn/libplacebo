@@ -34,9 +34,8 @@
 
 #include "config_internal.h"
 #include "pl_assert.h"
+#include "pl_alloc.h"
 #include "pl_string.h"
-
-#include <xtalloc.h>
 
 // Include all of the symbols that should be public in a way that marks them
 // as being externally visible. (Otherwise, all symbols are hidden by default)

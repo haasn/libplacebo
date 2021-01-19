@@ -47,7 +47,7 @@ static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
         REQUIRE(pl_tex_export(gpu, tex, sync));
 
         // Re-use our internal helpers to signal this VkSemaphore
-        struct vk_ctx *vk = TA_PRIV(pl_vk);
+        struct vk_ctx *vk = PL_PRIV(pl_vk);
         struct vk_cmd *cmd = vk_cmd_begin(vk, vk->pool_graphics);
         VkSemaphore signal;
         REQUIRE(cmd);

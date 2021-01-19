@@ -26,12 +26,14 @@ struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
                                   const struct pl_shader_params *params)
 {
     pl_assert(ctx);
-    struct pl_shader *sh = talloc_ptrtype(ctx, sh);
+    struct pl_shader *sh = pl_alloc_ptr(ctx, sh);
     *sh = (struct pl_shader) {
         .ctx = ctx,
         .mutable = true,
-        .tmp = talloc_ref_new(ctx),
     };
+
+    // Ensure there's always at least one `tmp` object
+    PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_new(ctx));
 
     if (params)
         sh->res.params = *params;
@@ -45,21 +47,26 @@ void pl_shader_free(struct pl_shader **psh)
     if (!sh)
         return;
 
-    talloc_ref_deref(&sh->tmp);
-    TA_FREEP(psh);
+    for (int i = 0; i < sh->tmp.num; i++)
+        pl_ref_deref(&sh->tmp.elem[i]);
+
+    pl_free_ptr(psh);
 }
 
 void pl_shader_reset(struct pl_shader *sh, const struct pl_shader_params *params)
 {
+    for (int i = 0; i < sh->tmp.num; i++)
+        pl_ref_deref(&sh->tmp.elem[i]);
+
     struct pl_shader new = {
         .ctx = sh->ctx,
-        .tmp = talloc_ref_new(sh->ctx),
         .mutable = true,
 
         // Preserve array allocations
-        .variables      = sh->variables,
-        .descriptors    = sh->descriptors,
-        .vertex_attribs = sh->vertex_attribs,
+        .tmp.elem   = sh->tmp.elem,
+        .vars.elem  = sh->vars.elem,
+        .descs.elem = sh->descs.elem,
+        .vas.elem   = sh->vas.elem,
     };
 
     if (params)
@@ -69,8 +76,8 @@ void pl_shader_reset(struct pl_shader *sh, const struct pl_shader_params *params
     for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
         new.buffers[i] = (pl_str) { .buf = sh->buffers[i].buf };
 
-    talloc_ref_deref(&sh->tmp);
     *sh = new;
+    PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_new(sh->ctx));
 }
 
 bool pl_shader_is_failed(const struct pl_shader *sh)
@@ -184,15 +191,15 @@ uint64_t pl_shader_signature(const struct pl_shader *sh)
 
 ident_t sh_fresh(struct pl_shader *sh, const char *name)
 {
-    return talloc_asprintf(sh->tmp, "_%s_%d_%u", PL_DEF(name, "var"),
-                           sh->fresh++, SH_PARAMS(sh).id);
+    return pl_asprintf(SH_TMP(sh), "_%s_%d_%u", PL_DEF(name, "var"),
+                       sh->fresh++, SH_PARAMS(sh).id);
 }
 
 ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
 {
     sv.var.name = sh_fresh(sh, sv.var.name);
-    sv.data = talloc_memdup(sh->tmp, sv.data, pl_var_host_layout(0, &sv.var).size);
-    TARRAY_APPEND(sh, sh->variables, sh->res.num_variables, sv);
+    sv.data = pl_memdup(SH_TMP(sh), sv.data, pl_var_host_layout(0, &sv.var).size);
+    PL_ARRAY_APPEND(sh, sh->vars, sv);
     return (ident_t) sv.var.name;
 }
 
@@ -205,13 +212,13 @@ ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
     case PL_DESC_BUF_TEXEL_STORAGE:
         // Skip re-attaching the same buffer desc twice
         // FIXME: define aliases if the variable names differ
-        for (int i = 0; i < sh->res.num_descriptors; i++) {
-            if (sh->descriptors[i].binding.object == sd.binding.object)
-                return (ident_t) sh->descriptors[i].desc.name;
+        for (int i = 0; i < sh->descs.num; i++) {
+            if (sh->descs.elem[i].binding.object == sd.binding.object)
+                return (ident_t) sh->descs.elem[i].desc.name;
         }
 
         size_t bsize = sizeof(sd.buffer_vars[0]) * sd.num_buffer_vars;
-        sd.buffer_vars = talloc_memdup(sh->tmp, sd.buffer_vars, bsize);
+        sd.buffer_vars = pl_memdup(SH_TMP(sh), sd.buffer_vars, bsize);
         break;
 
     default:
@@ -220,7 +227,7 @@ ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
     }
 
     sd.desc.name = sh_fresh(sh, sd.desc.name);
-    TARRAY_APPEND(sh, sh->descriptors, sh->res.num_descriptors, sd);
+    PL_ARRAY_APPEND(sh, sh->descs, sd);
     return (ident_t) sd.desc.name;
 }
 
@@ -246,7 +253,7 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
         { rc->x1, rc->y1 },
     };
 
-    float *data = talloc_memdup(sh->tmp, &vals[0][0], sizeof(vals));
+    float *data = pl_memdup(SH_TMP(sh), &vals[0][0], sizeof(vals));
     struct pl_shader_va va = {
         .attr = {
             .name     = sh_fresh(sh, name),
@@ -255,7 +262,7 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
         .data = { &data[0], &data[2], &data[4], &data[6] },
     };
 
-    TARRAY_APPEND(sh, sh->vertex_attribs, sh->res.num_vertex_attribs, va);
+    PL_ARRAY_APPEND(sh, sh->vas, va);
     return (ident_t) va.attr.name;
 }
 
@@ -326,7 +333,7 @@ ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
     return itex;
 }
 
-bool sh_buf_desc_append(void *tactx, const struct pl_gpu *gpu,
+bool sh_buf_desc_append(void *alloc, const struct pl_gpu *gpu,
                         struct pl_shader_desc *buf_desc,
                         struct pl_var_layout *out_layout,
                         const struct pl_var new_var)
@@ -350,7 +357,7 @@ bool sh_buf_desc_append(void *tactx, const struct pl_gpu *gpu,
 
     if (out_layout)
         *out_layout = bv.layout;
-    TARRAY_APPEND(tactx, buf_desc->buffer_vars, buf_desc->num_buffer_vars, bv);
+    PL_ARRAY_APPEND_RAW(alloc, buf_desc->buffer_vars, buf_desc->num_buffer_vars, bv);
     return true;
 }
 
@@ -370,14 +377,14 @@ void sh_append(struct pl_shader *sh, enum pl_shader_buf buf, const char *fmt, ..
 
     va_list ap;
     va_start(ap, fmt);
-    pl_str_xappend_vasprintf_c(sh, &sh->buffers[buf], fmt, ap);
+    pl_str_append_vasprintf_c(sh, &sh->buffers[buf], fmt, ap);
     va_end(ap);
 }
 
 void sh_append_str(struct pl_shader *sh, enum pl_shader_buf buf, pl_str str)
 {
     pl_assert(buf >= 0 && buf < SH_BUF_COUNT);
-    pl_str_xappend(sh, &sh->buffers[buf], str);
+    pl_str_append(sh, &sh->buffers[buf], str);
 }
 
 static const char *insigs[] = {
@@ -439,8 +446,8 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
     sh->output_h = res_h;
 
     // Append the prelude and header
-    pl_str_xappend(sh, &sh->buffers[SH_BUF_PRELUDE], sub->buffers[SH_BUF_PRELUDE]);
-    pl_str_xappend(sh, &sh->buffers[SH_BUF_HEADER],  sub->buffers[SH_BUF_HEADER]);
+    pl_str_append(sh, &sh->buffers[SH_BUF_PRELUDE], sub->buffers[SH_BUF_PRELUDE]);
+    pl_str_append(sh, &sh->buffers[SH_BUF_HEADER],  sub->buffers[SH_BUF_HEADER]);
 
     // Append the body as a new header function
     ident_t name = sh_fresh(sh, "sub");
@@ -452,16 +459,15 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
     } else {
         GLSLH("%s %s(%s) {\n", outsigs[sub->res.output], name, insigs[sub->res.input]);
     }
-    pl_str_xappend(sh, &sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_BODY]);
+    pl_str_append(sh, &sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_BODY]);
     GLSLH("%s\n}\n\n", retvals[sub->res.output]);
 
     // Copy over all of the descriptors etc.
-    talloc_ref_attach(sh->tmp, sub->tmp);
-#define COPY(f) TARRAY_CONCAT(sh, sh->f, sh->res.num_##f, sub->f, sub->res.num_##f)
-    COPY(variables);
-    COPY(descriptors);
-    COPY(vertex_attribs);
-#undef COPY
+    for (int i = 0; i < sub->tmp.num; i++)
+        PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_dup(sub->tmp.elem[i]));
+    PL_ARRAY_CONCAT(sh, sh->vars, sub->vars);
+    PL_ARRAY_CONCAT(sh, sh->descs, sub->descs);
+    PL_ARRAY_CONCAT(sh, sh->vas, sub->vas);
 
     return name;
 }
@@ -483,13 +489,13 @@ static ident_t sh_split(struct pl_shader *sh)
     }
 
     if (sh->buffers[SH_BUF_BODY].len) {
-        pl_str_xappend(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_BODY]);
+        pl_str_append(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_BODY]);
         sh->buffers[SH_BUF_BODY].len = 0;
         sh->buffers[SH_BUF_BODY].buf[0] = '\0'; // for sanity / efficiency
     }
 
     if (sh->buffers[SH_BUF_FOOTER].len) {
-        pl_str_xappend(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_FOOTER]);
+        pl_str_append(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_FOOTER]);
         sh->buffers[SH_BUF_FOOTER].len = 0;
         sh->buffers[SH_BUF_FOOTER].buf[0] = '\0';
     }
@@ -516,12 +522,15 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
 
     // Concatenate the header onto the prelude to form the final output
     pl_str *glsl = &sh->buffers[SH_BUF_PRELUDE];
-    pl_str_xappend(sh, glsl, sh->buffers[SH_BUF_HEADER]);
+    pl_str_append(sh, glsl, sh->buffers[SH_BUF_HEADER]);
 
     // Set the vas/vars/descs
-    sh->res.vertex_attribs = sh->vertex_attribs;
-    sh->res.variables = sh->variables;
-    sh->res.descriptors = sh->descriptors;
+    sh->res.vertex_attribs = sh->vas.elem;
+    sh->res.num_vertex_attribs = sh->vas.num;
+    sh->res.variables = sh->vars.elem;
+    sh->res.num_variables = sh->vars.num;
+    sh->res.descriptors = sh->descs.elem;
+    sh->res.num_descriptors = sh->descs.num;
 
     // Update the result pointer and return
     sh->res.glsl = glsl->buf;
@@ -584,7 +593,7 @@ void pl_shader_obj_destroy(struct pl_shader_obj **ptr)
         obj->uninit(obj->gpu, obj->priv);
 
     *ptr = NULL;
-    talloc_free(obj);
+    pl_free(obj);
 }
 
 void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
@@ -607,10 +616,10 @@ void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
     }
 
     if (!obj) {
-        obj = talloc_zero(NULL, struct pl_shader_obj);
+        obj = pl_zalloc_ptr(NULL, obj);
         obj->gpu = SH_GPU(sh);
         obj->type = type;
-        obj->priv = talloc_zero_size(obj, priv_size);
+        obj->priv = pl_zalloc(obj, priv_size);
         obj->uninit = uninit;
     }
 
@@ -692,8 +701,8 @@ static void sh_lut_uninit(const struct pl_gpu *gpu, void *ptr)
 {
     struct sh_lut_obj *lut = ptr;
     pl_tex_destroy(gpu, &lut->tex);
-    talloc_free(lut->str.buf);
-    talloc_free(lut->data);
+    pl_free(lut->str.buf);
+    pl_free(lut->data);
 
     *lut = (struct sh_lut_obj) {0};
 }
@@ -806,7 +815,7 @@ next_dim: ; // `continue` out of the inner loop
 
     if (update) {
         size_t buf_size = size * params->comps * pl_var_type_size(params->type);
-        tmp = talloc_zero_size(NULL, buf_size);
+        tmp = pl_zalloc(NULL, buf_size);
         params->fill(tmp, params);
 
         switch (method) {
@@ -855,7 +864,7 @@ next_dim: ; // `continue` out of the inner loop
         }
 
         case SH_LUT_UNIFORM:
-            talloc_free(lut->data);
+            pl_free(lut->data);
             lut->data = tmp; // re-use `tmp`
             tmp = NULL;
             break;
@@ -870,33 +879,33 @@ next_dim: ; // `continue` out of the inner loop
 
             for (int i = 0; i < size * params->comps; i += params->comps) {
                 if (i > 0)
-                    pl_str_xappend_asprintf_c(lut, &lut->str, ",");
+                    pl_str_append_asprintf_c(lut, &lut->str, ",");
                 if (params->comps > 1) {
-                    pl_str_xappend_asprintf_c(lut, &lut->str, "%cvec%d(",
-                                            prefix[params->type], params->comps);
+                    pl_str_append_asprintf_c(lut, &lut->str, "%cvec%d(",
+                                             prefix[params->type], params->comps);
                 }
                 for (int c = 0; c < params->comps; c++) {
                     switch (params->type) {
                     case PL_VAR_FLOAT:
-                        pl_str_xappend_asprintf_c(lut, &lut->str, "%s%f",
-                                                c > 0 ? "," : "",
-                                                ((float *) tmp)[i+c]);
+                        pl_str_append_asprintf_c(lut, &lut->str, "%s%f",
+                                                 c > 0 ? "," : "",
+                                                 ((float *) tmp)[i+c]);
                         break;
                     case PL_VAR_UINT:
-                        pl_str_xappend_asprintf_c(lut, &lut->str, "%s%u",
-                                                c > 0 ? "," : "",
-                                                ((unsigned int *) tmp)[i+c]);
+                        pl_str_append_asprintf_c(lut, &lut->str, "%s%u",
+                                                 c > 0 ? "," : "",
+                                                 ((unsigned int *) tmp)[i+c]);
                         break;
                     case PL_VAR_SINT:
-                        pl_str_xappend_asprintf_c(lut, &lut->str, "%s%d",
-                                                c > 0 ? "," : "",
-                                                ((int *) tmp)[i+c]);
+                        pl_str_append_asprintf_c(lut, &lut->str, "%s%d",
+                                                 c > 0 ? "," : "",
+                                                 ((int *) tmp)[i+c]);
                         break;
                     default: abort();
                     }
                 }
                 if (params->comps > 1)
-                    pl_str_xappend_asprintf_c(lut, &lut->str, ")");
+                    pl_str_append_asprintf_c(lut, &lut->str, ")");
             }
             break;
         }
@@ -996,7 +1005,7 @@ next_dim: ; // `continue` out of the inner loop
         arr_name = sh_fresh(sh, "weights");
         GLSLH("const %s %s[%d] = %s[](\n  ",
               ftypes[params->comps - 1], arr_name, size, dtypes[params->type]);
-        pl_str_xappend(sh, &sh->buffers[SH_BUF_HEADER], lut->str);
+        pl_str_append(sh, &sh->buffers[SH_BUF_HEADER], lut->str);
         GLSLH(");\n");
         break;
 
@@ -1034,7 +1043,7 @@ next_dim: ; // `continue` out of the inner loop
     ret = name;
     // fall through
 error:
-    talloc_free(tmp);
+    pl_free(tmp);
     return ret;
 }
 

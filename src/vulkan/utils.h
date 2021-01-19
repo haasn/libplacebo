@@ -52,10 +52,10 @@ const void *vk_find_struct(const void *chain, VkStructureType stype);
 void vk_link_struct(void *chain, void *in);
 
 // Make a copy of a structure, not including the pNext chain
-void *vk_struct_memdup(void *tactx, const void *in);
+void *vk_struct_memdup(void *alloc, const void *in);
 
 // Make a deep copy of an entire pNext chain
-void *vk_chain_memdup(void *tactx, const void *in);
+void *vk_chain_memdup(void *alloc, const void *in);
 
 // Convenience macros to simplify a lot of common boilerplate
 #define VK_ASSERT(res, str)                               \

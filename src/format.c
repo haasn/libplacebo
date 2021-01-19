@@ -28,20 +28,20 @@ int ccStrPrintDouble( char *str, int bufsize, int decimals, double value );
 #define CC_STR_PRINT_BUFSIZE_INT64 (21)
 #define CC_STR_PRINT_BUFSIZE_UINT64 (20)
 
-void pl_str_xappend_asprintf_c(void *tactx, pl_str *str, const char *fmt, ...)
+void pl_str_append_asprintf_c(void *alloc, pl_str *str, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    pl_str_xappend_vasprintf_c(tactx, str, fmt, ap);
+    pl_str_append_vasprintf_c(alloc, str, fmt, ap);
     va_end(ap);
 }
 
-void pl_str_xappend_vasprintf_c(void *tactx, pl_str *str, const char *fmt,
+void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
                                 va_list ap)
 {
     for (const char *c; (c = strchr(fmt, '%')) != NULL; fmt = c + 1) {
         // Append the preceding string literal
-        pl_str_xappend(tactx, str, (pl_str) { (char *) fmt, c - fmt });
+        pl_str_append(alloc, str, (pl_str) { (char *) fmt, c - fmt });
         c++; // skip '%'
 
         char buf[32];
@@ -50,15 +50,15 @@ void pl_str_xappend_vasprintf_c(void *tactx, pl_str *str, const char *fmt,
         // The format character follows the % sign
         switch (c[0]) {
         case '%':
-            pl_str_xappend(tactx, str, pl_str0("%"));
+            pl_str_append(alloc, str, pl_str0("%"));
             continue;
         case 'c':
             buf[0] = (char) va_arg(ap, int);
-            pl_str_xappend(tactx, str, (pl_str) { buf, 1 });
+            pl_str_append(alloc, str, (pl_str) { buf, 1 });
             continue;
         case 's': {
             const char *arg = va_arg(ap, const char *);
-            pl_str_xappend(tactx, str, pl_str0(arg));
+            pl_str_append(alloc, str, pl_str0(arg));
             continue;
         }
         case '.': { // only used for %.*s
@@ -67,34 +67,34 @@ void pl_str_xappend_vasprintf_c(void *tactx, pl_str *str, const char *fmt,
             pl_str arg;
             arg.len = va_arg(ap, int);
             arg.buf = va_arg(ap, char *);
-            pl_str_xappend(tactx, str, arg);
+            pl_str_append(alloc, str, arg);
             c += 2; // skip '*s'
             continue;
         }
         case 'd':
             len = ccStrPrintInt32(buf, va_arg(ap, int));
-            pl_str_xappend(tactx, str, (pl_str) { buf, len });
+            pl_str_append(alloc, str, (pl_str) { buf, len });
             continue;
         case 'u':
             len = ccStrPrintUint32(buf, va_arg(ap, unsigned int));
-            pl_str_xappend(tactx, str, (pl_str) { buf, len });
+            pl_str_append(alloc, str, (pl_str) { buf, len });
             continue;
         case 'l':
             assert(c[1] == 'l');
             assert(c[2] == 'u');
             len = ccStrPrintUint64(buf, va_arg(ap, long long unsigned));
-            pl_str_xappend(tactx, str, (pl_str) { buf, len });
+            pl_str_append(alloc, str, (pl_str) { buf, len });
             c += 2;
             continue;
         case 'z':
             assert(c[1] == 'u');
             len = ccStrPrintUint64(buf, va_arg(ap, size_t));
-            pl_str_xappend(tactx, str, (pl_str) { buf, len });
+            pl_str_append(alloc, str, (pl_str) { buf, len });
             c++;
             continue;
         case 'f':
             len = ccStrPrintDouble(buf, sizeof(buf), 20, va_arg(ap, double));
-            pl_str_xappend(tactx, str, (pl_str) { buf, len });
+            pl_str_append(alloc, str, (pl_str) { buf, len });
             continue;
         default:
             fprintf(stderr, "Invalid conversion character: '%c'!\n", c[0]);
@@ -103,7 +103,7 @@ void pl_str_xappend_vasprintf_c(void *tactx, pl_str *str, const char *fmt,
     }
 
     // Append the remaining string literal
-    pl_str_xappend(tactx, str, pl_str0(fmt));
+    pl_str_append(alloc, str, pl_str0(fmt));
 }
 
 /* *****************************************************************************

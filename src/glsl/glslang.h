@@ -45,7 +45,7 @@ enum pl_glslang_stage {
 };
 
 // Compile GLSL into a SPIRV stream, if possible. The resulting
-// pl_glslang_res can simply be freed with talloc_free() when done.
+// pl_glslang_res can simply be freed with pl_free() when done.
 struct pl_glslang_res *pl_glslang_compile(const char *glsl, uint32_t api_ver,
                                           enum pl_glslang_stage stage);
 

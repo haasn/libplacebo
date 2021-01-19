@@ -363,7 +363,7 @@ void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
     if (!inst)
         return;
 
-    struct priv *p = TA_PRIV(inst);
+    struct priv *p = PL_PRIV(inst);
     if (p->debug_report_cb) {
         VK_LOAD_FUN(inst->instance, DestroyDebugReportCallbackEXT, inst->get_proc_addr);
         DestroyDebugReportCallbackEXT(inst->instance, p->debug_report_cb, VK_ALLOC);
@@ -376,7 +376,7 @@ void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
 
     VK_LOAD_FUN(inst->instance, DestroyInstance, inst->get_proc_addr);
     DestroyInstance(inst->instance, VK_ALLOC);
-    TA_FREEP((void **) inst_ptr);
+    pl_free_ptr((void **) inst_ptr);
 }
 
 static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT sev,
@@ -488,12 +488,11 @@ static PFN_vkGetInstanceProcAddr get_proc_addr_fallback(struct pl_context *ctx,
 const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
                                            const struct pl_vk_inst_params *params)
 {
-    void *tmp = talloc_new(NULL);
+    void *tmp = pl_tmp(NULL);
     params = PL_DEF(params, &pl_vk_inst_default_params);
     VkInstance inst = NULL;
 
-    const char **exts = NULL;
-    int num_exts = 0;
+    PL_ARRAY(const char *) exts = {0};
 
     PFN_vkGetInstanceProcAddr get_addr;
     if (!(get_addr = get_proc_addr_fallback(ctx, params->get_proc_addr)))
@@ -551,7 +550,7 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     VK_LOAD_FUN(NULL, EnumerateInstanceLayerProperties, get_addr);
     uint32_t num_layers_avail = 0;
     EnumerateInstanceLayerProperties(&num_layers_avail, NULL);
-    VkLayerProperties *layers_avail = talloc_zero_array(tmp, VkLayerProperties, num_layers_avail);
+    VkLayerProperties *layers_avail = pl_calloc_ptr(tmp, num_layers_avail, layers_avail);
     EnumerateInstanceLayerProperties(&num_layers_avail, layers_avail);
 
     pl_debug(ctx, "Available layers:");
@@ -560,8 +559,7 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
                  PRINTF_VER(layers_avail[i].specVersion));
     }
 
-    const char **layers = NULL;
-    int num_layers = 0;
+    PL_ARRAY(const char *) layers = {0};
 
     // Sorted by priority
     static const char *debug_layers[] = {
@@ -579,7 +577,7 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
                     continue;
 
                 pl_info(ctx, "Enabling debug meta layer: %s", debug_layers[i]);
-                TARRAY_APPEND(tmp, layers, num_layers, debug_layers[i]);
+                PL_ARRAY_APPEND(tmp, layers, debug_layers[i]);
                 goto debug_layers_done;
             }
         }
@@ -592,13 +590,13 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
 debug_layers_done: ;
 
     for (int i = 0; i < params->num_layers; i++)
-        TARRAY_APPEND(tmp, layers, num_layers, params->layers[i]);
+        PL_ARRAY_APPEND(tmp, layers, params->layers[i]);
 
     for (int i = 0; i < params->num_opt_layers; i++) {
         const char *layer = params->opt_layers[i];
         for (int n = 0; n < num_layers_avail; n++) {
             if (strcmp(layer, layers_avail[n].layerName) == 0) {
-                TARRAY_APPEND(tmp, layers, num_layers, layer);
+                PL_ARRAY_APPEND(tmp, layers, layer);
                 break;
             }
         }
@@ -608,27 +606,28 @@ debug_layers_done: ;
     VK_LOAD_FUN(NULL, EnumerateInstanceExtensionProperties, get_addr);
     uint32_t num_exts_avail = 0;
     EnumerateInstanceExtensionProperties(NULL, &num_exts_avail, NULL);
-    VkExtensionProperties *exts_avail = talloc_zero_array(tmp, VkExtensionProperties, num_exts_avail);
+    VkExtensionProperties *exts_avail = pl_calloc_ptr(tmp, num_exts_avail, exts_avail);
     EnumerateInstanceExtensionProperties(NULL, &num_exts_avail, exts_avail);
 
     struct {
         VkExtensionProperties *exts;
         int num_exts;
-    } *layer_exts = talloc_zero_array(tmp, __typeof__(*layer_exts), num_layers_avail);
+    } *layer_exts = pl_calloc_ptr(tmp, num_layers_avail, layer_exts);
 
     // Enumerate extensions from layers
     for (int i = 0; i < num_layers_avail; i++) {
-        EnumerateInstanceExtensionProperties(layers_avail[i].layerName, &layer_exts[i].num_exts, NULL);
-        layer_exts[i].exts = talloc_zero_array(tmp, VkExtensionProperties, layer_exts[i].num_exts);
-        EnumerateInstanceExtensionProperties(layers_avail[i].layerName,
-                                             &layer_exts[i].num_exts,
-                                             layer_exts[i].exts);
+        VkExtensionProperties **lexts = &layer_exts[i].exts;
+        int *num = &layer_exts[i].num_exts;
+
+        EnumerateInstanceExtensionProperties(layers_avail[i].layerName, num, NULL);
+        *lexts = pl_calloc_ptr(tmp, *num, *lexts);
+        EnumerateInstanceExtensionProperties(layers_avail[i].layerName, num, *lexts);
 
         // Replace all extensions that are already available globally by {0}
-        for (int j = 0; j < layer_exts[i].num_exts; j++) {
+        for (int j = 0; j < *num; j++) {
             for (int k = 0; k < num_exts_avail; k++) {
-                if (strcmp(layer_exts[i].exts[j].extensionName, exts_avail[k].extensionName) == 0)
-                    layer_exts[i].exts[j] = (VkExtensionProperties) {0};
+                if (strcmp((*lexts)[j].extensionName, exts_avail[k].extensionName) == 0)
+                    (*lexts)[j] = (VkExtensionProperties) {0};
             }
         }
     }
@@ -648,14 +647,14 @@ debug_layers_done: ;
     }
 
     // Add mandatory extensions
-    TARRAY_APPEND(tmp, exts, num_exts, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    PL_ARRAY_APPEND(tmp, exts, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
     // Add optional extensions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_instance_extensions); i++) {
         const char *ext = vk_instance_extensions[i];
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext, exts_avail[n].extensionName) == 0) {
-                TARRAY_APPEND(tmp, exts, num_exts, ext);
+                PL_ARRAY_APPEND(tmp, exts, ext);
                 break;
             }
         }
@@ -664,7 +663,7 @@ debug_layers_done: ;
     // Add extra user extensions
     for (int i = 0; i < params->num_extensions; i++) {
         const char *ext = params->extensions[i];
-        TARRAY_APPEND(tmp, exts, num_exts, ext);
+        PL_ARRAY_APPEND(tmp, exts, ext);
 
         // Enable any additional layers that are required for this extension
         for (int n = 0; n < num_layers_avail; n++) {
@@ -672,7 +671,7 @@ debug_layers_done: ;
                 if (!layer_exts[n].exts[j].extensionName[0])
                     continue;
                 if (strcmp(ext, layer_exts[n].exts[j].extensionName) == 0) {
-                    TARRAY_APPEND(tmp, layers, num_layers, layers_avail[n].layerName);
+                    PL_ARRAY_APPEND(tmp, layers, layers_avail[n].layerName);
                     goto next_user_ext;
                 }
             }
@@ -686,7 +685,7 @@ next_user_ext: ;
         const char *ext = params->opt_extensions[i];
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext, exts_avail[n].extensionName) == 0) {
-                TARRAY_APPEND(tmp, exts, num_exts, ext);
+                PL_ARRAY_APPEND(tmp, exts, ext);
                 goto next_opt_user_ext;
             }
         }
@@ -696,8 +695,8 @@ next_user_ext: ;
                 if (!layer_exts[n].exts[j].extensionName[0])
                     continue;
                 if (strcmp(ext, layer_exts[n].exts[j].extensionName) == 0) {
-                    TARRAY_APPEND(tmp, exts, num_exts, ext);
-                    TARRAY_APPEND(tmp, layers, num_layers, layers_avail[n].layerName);
+                    PL_ARRAY_APPEND(tmp, exts, ext);
+                    PL_ARRAY_APPEND(tmp, layers, layers_avail[n].layerName);
                     goto next_opt_user_ext;
                 }
             }
@@ -722,7 +721,7 @@ next_opt_user_ext: ;
                     continue;
 
                 pl_info(ctx, "Enabling debug report extension: %s", debug_exts[i]);
-                TARRAY_APPEND(tmp, exts, num_exts, debug_exts[i]);
+                PL_ARRAY_APPEND(tmp, exts, debug_exts[i]);
                 debug_ext = debug_exts[i];
                 goto debug_exts_done;
             }
@@ -736,19 +735,19 @@ next_opt_user_ext: ;
 
 debug_exts_done: ;
 
-    info.ppEnabledExtensionNames = exts;
-    info.enabledExtensionCount = num_exts;
-    info.ppEnabledLayerNames = layers;
-    info.enabledLayerCount = num_layers;
+    info.ppEnabledExtensionNames = exts.elem;
+    info.enabledExtensionCount = exts.num;
+    info.ppEnabledLayerNames = layers.elem;
+    info.enabledLayerCount = layers.num;
 
-    pl_info(ctx, "Creating vulkan instance%s", num_exts ? " with extensions:" : "");
-    for (int i = 0; i < num_exts; i++)
-        pl_info(ctx, "    %s", exts[i]);
+    pl_info(ctx, "Creating vulkan instance%s", exts.num ? " with extensions:" : "");
+    for (int i = 0; i < exts.num; i++)
+        pl_info(ctx, "    %s", exts.elem[i]);
 
-    if (num_layers) {
+    if (layers.num) {
         pl_info(ctx, "  and layers:");
-        for (int i = 0; i < num_layers; i++)
-            pl_info(ctx, "    %s", layers[i]);
+        for (int i = 0; i < layers.num; i++)
+            pl_info(ctx, "    %s", layers.elem[i]);
     }
 
     VK_LOAD_FUN(NULL, CreateInstance, get_addr);
@@ -758,16 +757,16 @@ debug_exts_done: ;
         goto error;
     }
 
-    struct pl_vk_inst *pl_vk = talloc_zero_priv(NULL, struct pl_vk_inst, struct priv);
-    struct priv *p = TA_PRIV(pl_vk);
+    struct pl_vk_inst *pl_vk = pl_zalloc_priv(NULL, struct pl_vk_inst, struct priv);
+    struct priv *p = PL_PRIV(pl_vk);
     *pl_vk = (struct pl_vk_inst) {
         .instance = inst,
         .api_version = api_ver,
         .get_proc_addr = get_addr,
-        .extensions = talloc_steal(pl_vk, exts),
-        .num_extensions = num_exts,
-        .layers = talloc_steal(pl_vk, layers),
-        .num_layers = num_layers,
+        .extensions = pl_steal(pl_vk, exts.elem),
+        .num_extensions = exts.num,
+        .layers = pl_steal(pl_vk, layers.elem),
+        .num_layers = layers.num,
     };
 
     // Set up a debug callback to catch validation messages
@@ -803,7 +802,7 @@ debug_exts_done: ;
         CreateDebugReportCallbackEXT(inst, &dinfo, VK_ALLOC, &p->debug_report_cb);
     }
 
-    talloc_free(tmp);
+    pl_free(tmp);
     return pl_vk;
 
 error:
@@ -812,7 +811,7 @@ error:
         VK_LOAD_FUN(inst, DestroyInstance, get_addr);
         DestroyInstance(inst, VK_ALLOC);
     }
-    talloc_free(tmp);
+    pl_free(tmp);
     return NULL;
 }
 
@@ -829,23 +828,23 @@ void pl_vulkan_destroy(const struct pl_vulkan **pl_vk)
 
     pl_gpu_destroy((*pl_vk)->gpu);
 
-    struct vk_ctx *vk = TA_PRIV(*pl_vk);
+    struct vk_ctx *vk = PL_PRIV(*pl_vk);
     if (vk->dev) {
         PL_DEBUG(vk, "Flushing remaining commands...");
         vk_wait_idle(vk);
-        pl_assert(vk->num_cmds_queued == 0);
-        pl_assert(vk->num_cmds_pending == 0);
-        for (int i = 0; i < vk->num_pools; i++)
-            vk_cmdpool_destroy(vk, vk->pools[i]);
-        for (int i = 0; i < vk->num_signals; i++)
-            vk_signal_destroy(vk, &vk->signals[i]);
+        pl_assert(vk->cmds_queued.num == 0);
+        pl_assert(vk->cmds_pending.num == 0);
+        for (int i = 0; i < vk->pools.num; i++)
+            vk_cmdpool_destroy(vk, vk->pools.elem[i]);
+        for (int i = 0; i < vk->signals.num; i++)
+            vk_signal_destroy(vk, &vk->signals.elem[i]);
 
         if (!vk->imported)
             vk->DestroyDevice(vk->dev, VK_ALLOC);
     }
 
     pl_vk_inst_destroy(&vk->internal_instance);
-    TA_FREEP((void **) pl_vk);
+    pl_free_ptr((void **) pl_vk);
 }
 
 static bool supports_surf(struct pl_context *ctx, VkInstance inst,
@@ -899,7 +898,7 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
     VkPhysicalDevice *devices = NULL;
     uint32_t num = 0;
     VK(EnumeratePhysicalDevices(inst, &num, NULL));
-    devices = talloc_zero_array(NULL, VkPhysicalDevice, num);
+    devices = pl_calloc_ptr(NULL, num, devices);
     VK(EnumeratePhysicalDevices(inst, &num, devices));
 
     static const struct { const char *name; int priority; } types[] = {
@@ -976,7 +975,7 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
     }
 
 error:
-    talloc_free(devices);
+    pl_free(devices);
     return dev;
 }
 
@@ -1008,23 +1007,24 @@ static int find_qf(VkQueueFamilyProperties *qfs, int qfnum, VkQueueFlags flags)
     return idx;
 }
 
-static void add_qinfo(void *tactx, VkDeviceQueueCreateInfo **qinfos,
-                      int *num_qinfos, VkQueueFamilyProperties *qfs, int idx,
-                      int qcount)
+typedef PL_ARRAY(VkDeviceQueueCreateInfo) qinfo_arr_t;
+
+static void add_qinfo(void *alloc, qinfo_arr_t *qinfos,
+                      VkQueueFamilyProperties *qfs, int idx, int qcount)
 {
     if (idx < 0)
         return;
 
     // Check to see if we've already added this queue family
-    for (int i = 0; i < *num_qinfos; i++) {
-        if ((*qinfos)[i].queueFamilyIndex == idx)
+    for (int i = 0; i < qinfos->num; i++) {
+        if (qinfos->elem[i].queueFamilyIndex == idx)
             return;
     }
 
     if (!qcount)
         qcount = qfs[idx].queueCount;
 
-    float *priorities = talloc_zero_array(tactx, float, qcount);
+    float *priorities = pl_calloc_ptr(alloc, qcount, priorities);
     VkDeviceQueueCreateInfo qinfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .queueFamilyIndex = idx,
@@ -1032,18 +1032,18 @@ static void add_qinfo(void *tactx, VkDeviceQueueCreateInfo **qinfos,
         .pQueuePriorities = priorities,
     };
 
-    TARRAY_APPEND(tactx, *qinfos, *num_qinfos, qinfo);
+    PL_ARRAY_APPEND(alloc, *qinfos, qinfo);
 }
 
 static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params)
 {
     pl_assert(vk->physd);
-    void *tmp = talloc_new(NULL);
+    void *tmp = pl_tmp(NULL);
 
     // Enumerate the queue families and find suitable families for each task
     int qfnum = 0;
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, NULL);
-    VkQueueFamilyProperties *qfs = talloc_zero_array(tmp, VkQueueFamilyProperties, qfnum);
+    VkQueueFamilyProperties *qfs = pl_calloc_ptr(tmp, qfnum, qfs);
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, qfs);
 
     PL_INFO(vk, "Queue families supported by device:");
@@ -1092,16 +1092,15 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         PL_INFO(vk, "Using async compute (QF %d)", idx_comp);
 
     // Now that we know which QFs we want, we can create the logical device
-    VkDeviceQueueCreateInfo *qinfos = NULL;
-    int num_qinfos = 0;
-    add_qinfo(tmp, &qinfos, &num_qinfos, qfs, idx_gfx, params->queue_count);
-    add_qinfo(tmp, &qinfos, &num_qinfos, qfs, idx_comp, params->queue_count);
-    add_qinfo(tmp, &qinfos, &num_qinfos, qfs, idx_tf, params->queue_count);
+    qinfo_arr_t qinfos = {0};
+    add_qinfo(tmp, &qinfos, qfs, idx_gfx, params->queue_count);
+    add_qinfo(tmp, &qinfos, qfs, idx_comp, params->queue_count);
+    add_qinfo(tmp, &qinfos, qfs, idx_tf, params->queue_count);
 
     // Enumerate all supported extensions
     uint32_t num_exts_avail = 0;
     VK(vk->EnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, NULL));
-    VkExtensionProperties *exts_avail = talloc_zero_array(tmp, VkExtensionProperties, num_exts_avail);
+    VkExtensionProperties *exts_avail = pl_calloc_ptr(tmp, num_exts_avail, exts_avail);
     VK(vk->EnumerateDeviceExtensionProperties(vk->physd, NULL, &num_exts_avail, exts_avail));
 
     PL_DEBUG(vk, "Available device extensions:");
@@ -1109,14 +1108,11 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         PL_DEBUG(vk, "    %s", exts_avail[i].extensionName);
 
     // Add all extensions we need
-    const char ***exts = &vk->exts;
-    int *num_exts = &vk->num_exts;
     if (params->surface)
-        TARRAY_APPEND(vk->ta, *exts, *num_exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        PL_ARRAY_APPEND(vk->ta, vk->exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
     // Keep track of all optional function pointers associated with extensions
-    const struct vk_fun **ext_funs = NULL;
-    int num_ext_funs = 0;
+    PL_ARRAY(const struct vk_fun *) ext_funs = {0};
 
     // Add all optional device-level extensions extensions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_device_extensions); i++) {
@@ -1124,15 +1120,15 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         if (ext->core_ver && vk->api_ver >= ext->core_ver) {
             // Layer is already implicitly enabled by the API version
             for (const struct vk_fun *f = ext->funs; f->name; f++)
-                TARRAY_APPEND(tmp, ext_funs, num_ext_funs, f);
+                PL_ARRAY_APPEND(tmp, ext_funs,  f);
             continue;
         }
 
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext->name, exts_avail[n].extensionName) == 0) {
-                TARRAY_APPEND(vk->ta, *exts, *num_exts, ext->name);
+                PL_ARRAY_APPEND(vk->ta, vk->exts, ext->name);
                 for (const struct vk_fun *f = ext->funs; f->name; f++)
-                    TARRAY_APPEND(tmp, ext_funs, num_ext_funs, f);
+                    PL_ARRAY_APPEND(tmp, ext_funs, f);
                 break;
             }
         }
@@ -1140,14 +1136,14 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     // Add extra user extensions
     for (int i = 0; i < params->num_extensions; i++)
-        TARRAY_APPEND(vk->ta, *exts, *num_exts, params->extensions[i]);
+        PL_ARRAY_APPEND(vk->ta, vk->exts, params->extensions[i]);
 
     // Add optional extra user extensions
     for (int i = 0; i < params->num_opt_extensions; i++) {
         const char *ext = params->opt_extensions[i];
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext, exts_avail[n].extensionName) == 0) {
-                TARRAY_APPEND(vk->ta, *exts, *num_exts, ext);
+                PL_ARRAY_APPEND(vk->ta, vk->exts, ext);
                 break;
             }
         }
@@ -1201,15 +1197,15 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     VkDeviceCreateInfo dinfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &vk->features,
-        .pQueueCreateInfos = qinfos,
-        .queueCreateInfoCount = num_qinfos,
-        .ppEnabledExtensionNames = *exts,
-        .enabledExtensionCount = *num_exts,
+        .pQueueCreateInfos = qinfos.elem,
+        .queueCreateInfoCount = qinfos.num,
+        .ppEnabledExtensionNames = vk->exts.elem,
+        .enabledExtensionCount = vk->exts.num,
     };
 
-    PL_INFO(vk, "Creating vulkan device%s", *num_exts ? " with extensions:" : "");
-    for (int i = 0; i < *num_exts; i++)
-        PL_INFO(vk, "    %s", (*exts)[i]);
+    PL_INFO(vk, "Creating vulkan device%s", vk->exts.num ? " with extensions:" : "");
+    for (int i = 0; i < vk->exts.num; i++)
+        PL_INFO(vk, "    %s", vk->exts.elem[i]);
 
     VK(vk->CreateDevice(vk->physd, &dinfo, VK_ALLOC, &vk->dev));
 
@@ -1218,16 +1214,16 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         load_vk_fun(vk, &vk_dev_funs[i]);
 
     // Load all of the optional functions from the extensions we enabled
-    for (int i = 0; i < num_ext_funs; i++)
-        load_vk_fun(vk, ext_funs[i]);
+    for (int i = 0; i < ext_funs.num; i++)
+        load_vk_fun(vk, ext_funs.elem[i]);
 
     // Create the command pools
-    for (int i = 0; i < num_qinfos; i++) {
-        int qf = qinfos[i].queueFamilyIndex;
-        struct vk_cmdpool *pool = vk_cmdpool_create(vk, qinfos[i], qfs[qf]);
+    for (int i = 0; i < qinfos.num; i++) {
+        int qf = qinfos.elem[i].queueFamilyIndex;
+        struct vk_cmdpool *pool = vk_cmdpool_create(vk, qinfos.elem[i], qfs[qf]);
         if (!pool)
             goto error;
-        TARRAY_APPEND(vk->ta, vk->pools, vk->num_pools, pool);
+        PL_ARRAY_APPEND(vk->ta, vk->pools, pool);
 
         // Update the pool_* pointers based on the corresponding index
         const char *qf_name = NULL;
@@ -1248,12 +1244,12 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
             VK_NAME(QUEUE, pool->queues[n], qf_name);
     }
 
-    talloc_free(tmp);
+    pl_free(tmp);
     return true;
 
 error:
     PL_FATAL(vk, "Failed creating logical device!");
-    talloc_free(tmp);
+    pl_free(tmp);
     vk->failed = true;
     return false;
 }
@@ -1262,8 +1258,8 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
                                          const struct pl_vulkan_params *params)
 {
     params = PL_DEF(params, &pl_vulkan_default_params);
-    struct pl_vulkan *pl_vk = talloc_zero_priv(NULL, struct pl_vulkan, struct vk_ctx);
-    struct vk_ctx *vk = TA_PRIV(pl_vk);
+    struct pl_vulkan *pl_vk = pl_zalloc_priv(NULL, struct pl_vulkan, struct vk_ctx);
+    struct vk_ctx *vk = PL_PRIV(pl_vk);
     *vk = (struct vk_ctx) {
         .ta = pl_vk,
         .ctx = ctx,
@@ -1373,23 +1369,23 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     pl_vk->phys_device = vk->physd;
     pl_vk->device = vk->dev;
     pl_vk->api_version = vk->api_ver;
-    pl_vk->extensions = vk->exts;
-    pl_vk->num_extensions = vk->num_exts;
+    pl_vk->extensions = vk->exts.elem;
+    pl_vk->num_extensions = vk->exts.num;
     pl_vk->features = &vk->features;
-    pl_vk->num_queues = vk->num_pools;
-    pl_vk->queues = talloc_array(pl_vk, struct pl_vulkan_queue, vk->num_pools);
-    for (int i = 0; i < vk->num_pools; i++) {
+    pl_vk->num_queues = vk->pools.num;
+    pl_vk->queues = pl_calloc_ptr(pl_vk, vk->pools.num, pl_vk->queues);
+    for (int i = 0; i < vk->pools.num; i++) {
         struct pl_vulkan_queue *queues = (struct pl_vulkan_queue *) pl_vk->queues;
         queues[i] = (struct pl_vulkan_queue) {
-            .index = vk->pools[i]->qf,
-            .count = vk->pools[i]->num_queues,
+            .index = vk->pools.elem[i]->qf,
+            .count = vk->pools.elem[i]->num_queues,
         };
 
-        if (vk->pools[i] == vk->pool_graphics)
+        if (vk->pools.elem[i] == vk->pool_graphics)
             pl_vk->queue_graphics = queues[i];
-        if (vk->pools[i] == vk->pool_compute && vk->pool_compute != vk->pool_graphics)
+        if (vk->pools.elem[i] == vk->pool_compute && vk->pool_compute != vk->pool_graphics)
             pl_vk->queue_compute = queues[i];
-        if (vk->pools[i] == vk->pool_compute)
+        if (vk->pools.elem[i] == vk->pool_compute)
             pl_vk->queue_compute = queues[i];
     }
 
@@ -1404,10 +1400,10 @@ error:
 const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
                                          const struct pl_vulkan_import_params *params)
 {
-    void *tmp = talloc_new(NULL);
+    void *tmp = pl_tmp(NULL);
 
-    struct pl_vulkan *pl_vk = talloc_zero_priv(NULL, struct pl_vulkan, struct vk_ctx);
-    struct vk_ctx *vk = TA_PRIV(pl_vk);
+    struct pl_vulkan *pl_vk = pl_zalloc_priv(NULL, struct pl_vulkan, struct vk_ctx);
+    struct vk_ctx *vk = PL_PRIV(pl_vk);
     *vk = (struct vk_ctx) {
         .ta = pl_vk,
         .ctx = ctx,
@@ -1484,7 +1480,7 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
 
     int qfnum = 0;
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, NULL);
-    VkQueueFamilyProperties *qfs = talloc_zero_array(tmp, VkQueueFamilyProperties, qfnum);
+    VkQueueFamilyProperties *qfs = pl_calloc_ptr(tmp, qfnum, qfs);
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, qfs);
 
     // Create the command pools for each unique qf that exists
@@ -1526,7 +1522,7 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
         *pool = vk_cmdpool_create(vk, qinfo, qfs[qf]);
         if (!*pool)
             goto error;
-        TARRAY_APPEND(vk->ta, vk->pools, vk->num_pools, *pool);
+        PL_ARRAY_APPEND(vk->ta, vk->pools, *pool);
 
 next_qf: ;
     }
@@ -1564,32 +1560,33 @@ next_qf: ;
     pl_vk->phys_device = vk->physd;
     pl_vk->device = vk->dev;
     pl_vk->api_version = vk->api_ver;
-    pl_vk->extensions = vk->exts;
-    pl_vk->num_extensions = vk->num_exts;
+    pl_vk->extensions = vk->exts.elem;
+    pl_vk->num_extensions = vk->exts.num;
     pl_vk->features = &vk->features;
-    pl_vk->num_queues = vk->num_pools;
-    pl_vk->queues = talloc_array(pl_vk, struct pl_vulkan_queue, vk->num_pools);
-    for (int i = 0; i < vk->num_pools; i++) {
-        struct pl_vulkan_queue *queues = (struct pl_vulkan_queue *) pl_vk->queues;
+    pl_vk->num_queues = vk->pools.num;
+    pl_vk->queues = pl_calloc_ptr(pl_vk, vk->pools.num, pl_vk->queues);
+    struct pl_vulkan_queue *queues = (struct pl_vulkan_queue *) pl_vk->queues;
+
+    for (int i = 0; i < vk->pools.num; i++) {
         queues[i] = (struct pl_vulkan_queue) {
-            .index = vk->pools[i]->qf,
-            .count = vk->pools[i]->num_queues,
+            .index = vk->pools.elem[i]->qf,
+            .count = vk->pools.elem[i]->num_queues,
         };
 
-        if (vk->pools[i] == vk->pool_graphics)
+        if (vk->pools.elem[i] == vk->pool_graphics)
             pl_vk->queue_graphics = queues[i];
-        if (vk->pools[i] == vk->pool_compute && vk->pool_compute != vk->pool_graphics)
+        if (vk->pools.elem[i] == vk->pool_compute && vk->pool_compute != vk->pool_graphics)
             pl_vk->queue_compute = queues[i];
-        if (vk->pools[i] == vk->pool_compute)
+        if (vk->pools.elem[i] == vk->pool_compute)
             pl_vk->queue_compute = queues[i];
     }
 
-    talloc_free(tmp);
+    pl_free(tmp);
     return pl_vk;
 
 error:
     PL_FATAL(vk, "Failed importing vulkan device");
-    talloc_free(tmp);
+    pl_free(tmp);
     pl_vulkan_destroy((const struct pl_vulkan **) &pl_vk);
     return NULL;
 }

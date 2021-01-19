@@ -144,7 +144,7 @@ void vk_link_struct(void *chain, void *in)
     out->pNext = in;
 }
 
-void *vk_struct_memdup(void *tactx, const void *pin)
+void *vk_struct_memdup(void *alloc, const void *pin)
 {
     if (!pin)
         return NULL;
@@ -154,18 +154,18 @@ void *vk_struct_memdup(void *tactx, const void *pin)
     if (!size)
         return NULL;
 
-    VkBaseOutStructure *out = talloc_memdup(tactx, in, size);
+    VkBaseOutStructure *out = pl_memdup(alloc, in, size);
     out->pNext = NULL;
     return out;
 }
 
-void *vk_chain_memdup(void *tactx, const void *pin)
+void *vk_chain_memdup(void *alloc, const void *pin)
 {
     const VkBaseInStructure *in = pin;
-    VkBaseOutStructure *out = vk_struct_memdup(tactx, in);
+    VkBaseOutStructure *out = vk_struct_memdup(alloc, in);
     if (!out)
         return NULL;
 
-    out->pNext = vk_chain_memdup(tactx, in->pNext);
+    out->pNext = vk_chain_memdup(alloc, in->pNext);
     return out;
 }

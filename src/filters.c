@@ -120,10 +120,10 @@ static void compute_row(struct pl_filter *f, double offset, float *out)
     }
 }
 
-static struct pl_filter_function *dupfilter(void *tactx,
+static struct pl_filter_function *dupfilter(void *alloc,
                                             const struct pl_filter_function *f)
 {
-    return f ? talloc_memdup(tactx, (void *)f, sizeof(*f)) : NULL;
+    return f ? pl_memdup(alloc, (void *)f, sizeof(*f)) : NULL;
 }
 
 const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
@@ -135,7 +135,7 @@ const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
         return NULL;
     }
 
-    struct pl_filter *f = talloc_zero(ctx, struct pl_filter);
+    struct pl_filter *f = pl_zalloc_ptr(ctx, f);
     f->params = *params;
     f->params.config.kernel = dupfilter(f, params->config.kernel);
     f->params.config.window = dupfilter(f, params->config.window);
@@ -149,7 +149,7 @@ const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
     float *weights;
     if (params->config.polar) {
         // Compute a 1D array indexed by radius
-        weights = talloc_array(f, float, params->lut_entries);
+        weights = pl_alloc(f, params->lut_entries * sizeof(float));
         f->radius_cutoff = 0.0;
         for (int i = 0; i < params->lut_entries; i++) {
             double x = radius * i / (params->lut_entries - 1);
@@ -170,7 +170,7 @@ const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
         f->row_stride = PL_ALIGN(f->row_size, params->row_stride_align);
 
         // Compute a 2D array indexed by the subpixel position
-        weights = talloc_zero_array(f, float, params->lut_entries * f->row_stride);
+        weights = pl_calloc(f, params->lut_entries * f->row_stride, sizeof(float));
         for (int i = 0; i < params->lut_entries; i++) {
             compute_row(f, i / (double)(params->lut_entries - 1),
                         weights + f->row_stride * i);
@@ -183,7 +183,7 @@ const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
 
 void pl_filter_free(const struct pl_filter **filter)
 {
-    TA_FREEP((void **) filter);
+    pl_free_ptr((void **) filter);
 }
 
 const struct pl_named_filter_function *pl_find_named_filter_function(const char *name)

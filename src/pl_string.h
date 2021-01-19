@@ -22,7 +22,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-#include <xtalloc.h>
 
 typedef struct pl_str {
     uint8_t *buf;
@@ -43,36 +42,40 @@ static inline pl_str pl_str0(const char *str)
 // Macro version of pl_str0, for constants
 #define PL_STR0(str) ((pl_str) { (uint8_t *) (str), (str) ? strlen(str) : 0 })
 
-static inline pl_str pl_strdup(void *tactx, pl_str str)
+static inline pl_str pl_strdup(void *alloc, pl_str str)
 {
     return (pl_str) {
-        .buf = str.len ? talloc_memdup(tactx, str.buf, str.len) : NULL,
+        .buf = str.len ? pl_memdup(alloc, str.buf, str.len) : NULL,
         .len = str.len,
     };
 }
 
 // Always returns a valid string
-static inline char *pl_strdup0(void *tactx, pl_str str)
+static inline char *pl_strdup0(void *alloc, pl_str str)
 {
-    return talloc_strndup(tactx, str.len ? (char *) str.buf : "", str.len);
+    return pl_strndup0(alloc, str.len ? (char *) str.buf : "", str.len);
 }
 
-void pl_str_xappend(void *tactx, pl_str *str, pl_str append);
+void pl_str_append(void *alloc, pl_str *str, pl_str append);
 
 // Locale-sensitive string functions
-void pl_str_xappend_asprintf(void *tactx, pl_str *str, const char *fmt, ...)
+char *pl_asprintf(void *parent, const char *fmt, ...)
+    PL_PRINTF(2, 3);
+char *pl_vasprintf(void *parent, const char *fmt, va_list ap)
+    PL_PRINTF(2, 0);
+void pl_str_append_asprintf(void *alloc, pl_str *str, const char *fmt, ...)
     PL_PRINTF(3, 4);
-void pl_str_xappend_vasprintf(void *tactx, pl_str *str, const char *fmt, va_list va)
+void pl_str_append_vasprintf(void *alloc, pl_str *str, const char *fmt, va_list va)
     PL_PRINTF(3, 0);
 int pl_str_sscanf(pl_str str, const char *fmt, ...);
 
-// Locale-invariant versions of xappend_(v)asprintf
+// Locale-invariant versions of append_(v)asprintf
 //
 // NOTE: These only support a small handful of modifiers. Check `format.c`
 // for a list. Calling them on an invalid string will abort!
-void pl_str_xappend_asprintf_c(void *tactx, pl_str *str, const char *fmt, ...)
+void pl_str_append_asprintf_c(void *alloc, pl_str *str, const char *fmt, ...)
     PL_PRINTF(3, 4);
-void pl_str_xappend_vasprintf_c(void *tactx, pl_str *str, const char *fmt, va_list va)
+void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt, va_list va)
     PL_PRINTF(3, 0);
 
 // Variants of string.h functions
@@ -118,7 +121,7 @@ static inline pl_str pl_str_getline(pl_str str, pl_str *out_rest)
 
 // Decode a string containing hexadecimal data. All whitespace will be silently
 // ignored. When successful, this allocates a new array to store the output.
-bool pl_str_decode_hex(void *tactx, pl_str hex, pl_str *out);
+bool pl_str_decode_hex(void *alloc, pl_str hex, pl_str *out);
 
 // Return a 64-bit hash of a string's contents
 uint64_t pl_str_hash(pl_str str);

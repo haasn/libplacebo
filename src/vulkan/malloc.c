@@ -66,8 +66,7 @@ struct vk_slab {
     bool dedicated;       // slab is allocated specifically for one object
     bool imported;        // slab represents an imported memory allocation
     // free space map: a sorted list of memory regions that are available
-    struct vk_region *regions;
-    int num_regions;
+    PL_ARRAY(struct vk_region) regions;
     // optional, depends on the memory type:
     VkBuffer buffer;        // buffer spanning the entire slab
     void *data;             // mapped memory corresponding to `mem`
@@ -86,9 +85,8 @@ struct vk_slab {
 // Note: `vk_heap` addresses are not immutable, so we musn't expose any dangling
 // references to a `vk_heap` from e.g. `vk_memslice.priv = vk_slab`.
 struct vk_heap {
-    struct vk_malloc_params params; // allocation params (with some fields nulled)
-    struct vk_slab **slabs; // array of slabs sorted by size
-    int num_slabs;
+    struct vk_malloc_params params;   // allocation params (with some fields nulled)
+    PL_ARRAY(struct vk_slab *) slabs; // array of slabs sorted by size
 };
 
 // The overall state of the allocator, which keeps track of a vk_heap for each
@@ -97,8 +95,7 @@ struct vk_malloc {
     struct vk_ctx *vk;
     VkPhysicalDeviceMemoryProperties props;
     VkDeviceSize host_ptr_align;
-    struct vk_heap *heaps;
-    int num_heaps;
+    PL_ARRAY(struct vk_heap) heaps;
 };
 
 static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
@@ -156,7 +153,7 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
     // also implicitly unmaps the memory if needed
     vk->FreeMemory(vk->dev, slab->mem, VK_ALLOC);
 
-    talloc_free(slab);
+    pl_free(slab);
 }
 
 // type_mask: optional
@@ -236,7 +233,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
                                   const struct vk_malloc_params *params)
 {
     struct vk_ctx *vk = ma->vk;
-    struct vk_slab *slab = talloc_ptrtype(NULL, slab);
+    struct vk_slab *slab = pl_alloc_ptr(NULL, slab);
     *slab = (struct vk_slab) {
         .size = params->reqs.size,
         .handle_type = params->export_handle,
@@ -266,8 +263,8 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
         // Queue family sharing modes don't matter for buffers, so we just
         // set them as concurrent and stop worrying about it.
         uint32_t qfs[3] = {0};
-        for (int i = 0; i < vk->num_pools; i++)
-            qfs[i] = vk->pools[i]->qf;
+        for (int i = 0; i < vk->pools.num; i++)
+            qfs[i] = vk->pools.elem[i]->qf;
 
         VkExternalMemoryBufferCreateInfoKHR ext_buf_info = {
             .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR,
@@ -279,9 +276,9 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
             .pNext = slab->handle_type ? &ext_buf_info : NULL,
             .size  = slab->size,
             .usage = params->buf_usage,
-            .sharingMode = vk->num_pools > 1 ? VK_SHARING_MODE_CONCURRENT
+            .sharingMode = vk->pools.num > 1 ? VK_SHARING_MODE_CONCURRENT
                                              : VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = vk->num_pools,
+            .queueFamilyIndexCount = vk->pools.num,
             .pQueueFamilyIndices = qfs,
         };
 
@@ -367,7 +364,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
     }
 #endif
 
-    TARRAY_APPEND(slab, slab->regions, slab->num_regions, (struct vk_region) {
+    PL_ARRAY_APPEND(slab, slab->regions, (struct vk_region) {
         .start = 0,
         .end   = slab->size,
     });
@@ -388,8 +385,8 @@ static void insert_region(struct vk_slab *slab, struct vk_region region)
     bool big_enough = region_len(region) >= PLVK_HEAP_MINIMUM_REGION_SIZE;
 
     // Find the index of the first region that comes after this
-    for (int i = 0; i < slab->num_regions; i++) {
-        struct vk_region *r = &slab->regions[i];
+    for (int i = 0; i < slab->regions.num; i++) {
+        struct vk_region *r = &slab->regions.elem[i];
 
         // Check for a few special cases which can be coalesced
         if (r->end == region.start) {
@@ -398,10 +395,10 @@ static void insert_region(struct vk_slab *slab, struct vk_region region)
             // regions for as long as possible
             r->end = region.end;
 
-            struct vk_region *next = &slab->regions[i+1];
-            while (i+1 < slab->num_regions && r->end == next->start) {
+            struct vk_region *next = &slab->regions.elem[i+1];
+            while (i+1 < slab->regions.num && r->end == next->start) {
                 r->end = next->end;
-                TARRAY_REMOVE_AT(slab->regions, slab->num_regions, i+1);
+                PL_ARRAY_REMOVE_AT(slab->regions, i+1);
             }
             return;
         }
@@ -418,10 +415,8 @@ static void insert_region(struct vk_slab *slab, struct vk_region region)
         if (r->start > region.start) {
             // The new region comes somewhere before this region, so insert
             // it into this index in the array.
-            if (big_enough) {
-                TARRAY_INSERT_AT(slab, slab->regions, slab->num_regions,
-                                    i, region);
-            }
+            if (big_enough)
+                PL_ARRAY_INSERT_AT(slab, slab->regions, i, region);
             return;
         }
     }
@@ -429,21 +424,21 @@ static void insert_region(struct vk_slab *slab, struct vk_region region)
     // If we've reached the end of this loop, then all of the regions
     // come before the new region, and are disconnected - so append it
     if (big_enough)
-        TARRAY_APPEND(slab, slab->regions, slab->num_regions, region);
+        PL_ARRAY_APPEND(slab, slab->regions, region);
 }
 
 static void heap_uninit(struct vk_ctx *vk, struct vk_heap *heap)
 {
-    for (int i = 0; i < heap->num_slabs; i++)
-        slab_free(vk, heap->slabs[i]);
+    for (int i = 0; i < heap->slabs.num; i++)
+        slab_free(vk, heap->slabs.elem[i]);
 
-    talloc_free(heap->slabs);
-    *heap = (struct vk_heap){0};
+    pl_free(heap->slabs.elem);
+    *heap = (struct vk_heap) {0};
 }
 
 struct vk_malloc *vk_malloc_create(struct vk_ctx *vk)
 {
-    struct vk_malloc *ma = talloc_zero(NULL, struct vk_malloc);
+    struct vk_malloc *ma = pl_zalloc_ptr(NULL, ma);
     ma->vk = vk;
 
     VkPhysicalDeviceExternalMemoryHostPropertiesEXT host_props = {
@@ -482,10 +477,10 @@ void vk_malloc_destroy(struct vk_malloc **ma_ptr)
     if (!ma)
         return;
 
-    for (int i = 0; i < ma->num_heaps; i++)
-        heap_uninit(ma->vk, &ma->heaps[i]);
+    for (int i = 0; i < ma->heaps.num; i++)
+        heap_uninit(ma->vk, &ma->heaps.elem[i]);
 
-    TA_FREEP(ma_ptr);
+    pl_free_ptr(ma_ptr);
 }
 
 pl_handle_caps vk_malloc_handle_caps(struct vk_malloc *ma, bool import)
@@ -559,14 +554,14 @@ static struct vk_heap *find_heap(struct vk_malloc *ma,
     fixed.reqs.size = 0;
     fixed.shared_mem = (struct pl_shared_mem) {0};
 
-    for (int i = 0; i < ma->num_heaps; i++) {
-        if (heap_params_eq(&ma->heaps[i].params, &fixed))
-            return &ma->heaps[i];
+    for (int i = 0; i < ma->heaps.num; i++) {
+        if (heap_params_eq(&ma->heaps.elem[i].params, &fixed))
+            return &ma->heaps.elem[i];
     }
 
     // Not found => add it
-    TARRAY_GROW(ma, ma->heaps, ma->num_heaps + 1);
-    struct vk_heap *heap = &ma->heaps[ma->num_heaps++];
+    PL_ARRAY_GROW(ma, ma->heaps);
+    struct vk_heap *heap = &ma->heaps.elem[ma->heaps.num++];
     *heap = (struct vk_heap) {
         .params = fixed,
     };
@@ -586,18 +581,18 @@ static bool heap_get_region(struct vk_malloc *ma, struct vk_heap *heap,
 {
     struct vk_slab *slab = NULL;
 
-    for (int i = 0; i < heap->num_slabs; i++) {
-        slab = heap->slabs[i];
+    for (int i = 0; i < heap->slabs.num; i++) {
+        slab = heap->slabs.elem[i];
         if (slab->size < size)
             continue;
 
         // Attempt a best fit search
         int best = -1;
-        for (int n = 0; n < slab->num_regions; n++) {
-            struct vk_region r = slab->regions[n];
+        for (int n = 0; n < slab->regions.num; n++) {
+            struct vk_region r = slab->regions.elem[n];
             if (!region_fits(r, size, align))
                 continue;
-            if (best >= 0 && region_len(r) > region_len(slab->regions[best]))
+            if (best >= 0 && region_len(r) > region_len(slab->regions.elem[best]))
                 continue;
             best = n;
         }
@@ -622,10 +617,10 @@ static bool heap_get_region(struct vk_malloc *ma, struct vk_heap *heap,
     if (!slab)
         return false;
     pl_assert(!slab->dedicated);
-    TARRAY_APPEND(NULL, heap->slabs, heap->num_slabs, slab);
+    PL_ARRAY_APPEND(NULL, heap->slabs, slab);
 
     // Return the only region there is in a newly allocated slab
-    pl_assert(slab->num_regions == 1);
+    pl_assert(slab->regions.num == 1);
     *out_slab = slab;
     *out_index = 0;
     return true;
@@ -716,8 +711,8 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
 
     if (params->buf_usage) {
         uint32_t qfs[3] = {0};
-        for (int i = 0; i < vk->num_pools; i++)
-            qfs[i] = vk->pools[i]->qf;
+        for (int i = 0; i < vk->pools.num; i++)
+            qfs[i] = vk->pools.elem[i]->qf;
 
         VkExternalMemoryBufferCreateInfoKHR ext_buf_info = {
             .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR,
@@ -729,9 +724,9 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
             .pNext = &ext_buf_info,
             .size = shmem.size,
             .usage = params->buf_usage,
-            .sharingMode = vk->num_pools > 1 ? VK_SHARING_MODE_CONCURRENT
+            .sharingMode = vk->pools.num > 1 ? VK_SHARING_MODE_CONCURRENT
                                              : VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = vk->num_pools,
+            .queueFamilyIndexCount = vk->pools.num,
             .pQueueFamilyIndices = qfs,
         };
 
@@ -824,7 +819,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     VkDeviceMemory vkmem = NULL;
     VK(vk->AllocateMemory(vk->dev, &ainfo, VK_ALLOC, &vkmem));
 
-    slab = talloc_ptrtype(NULL, slab);
+    slab = pl_alloc_ptr(NULL, slab);
     *slab = (struct vk_slab) {
         .mem = vkmem,
         .dedicated = true,
@@ -892,7 +887,7 @@ error:
     if (fdinfo.fd > -1)
         close(fdinfo.fd);
 #endif
-    talloc_free(slab);
+    pl_free(slab);
     *out = (struct vk_memslice) {0};
     return false;
 }
@@ -931,8 +926,8 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
             align = pl_lcm(align, vk->limits.nonCoherentAtomSize);
         }
 
-        struct vk_region region = slab->regions[index_region];
-        TARRAY_REMOVE_AT(slab->regions, slab->num_regions, index_region);
+        struct vk_region region = slab->regions.elem[index_region];
+        PL_ARRAY_REMOVE_AT(slab->regions, index_region);
         offset = PL_ALIGN(region.start, align);
         size_t out_end = offset + size;
         insert_region(slab, (struct vk_region) { region.start, offset });

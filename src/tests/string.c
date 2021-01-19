@@ -15,7 +15,7 @@ static inline bool is_empty(pl_str str)
 
 int main()
 {
-    void *tmp = talloc_new(NULL);
+    void *tmp = pl_tmp(NULL);
 
     REQUIRE(is_null(pl_str0(NULL)));
     REQUIRE(is_null(pl_strdup(tmp, null)));
@@ -23,9 +23,9 @@ int main()
     REQUIRE(empty && !empty[0]);
 
     pl_str buf = {0};
-    pl_str_xappend(tmp, &buf, null);
+    pl_str_append(tmp, &buf, null);
     REQUIRE(is_null(buf));
-    pl_str_xappend_asprintf(tmp, &buf, "%.*s", PL_STR_FMT(test));
+    pl_str_append_asprintf(tmp, &buf, "%.*s", PL_STR_FMT(test));
     REQUIRE(pl_str_equals(buf, test));
 
     REQUIRE(pl_strchr(null, ' ') < 0);
@@ -74,6 +74,6 @@ int main()
     REQUIRE(pl_str_endswith(test, null));
     REQUIRE(pl_str_endswith(test, test));
 
-    talloc_free(tmp);
+    pl_free(tmp);
     return 0;
 }

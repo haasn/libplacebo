@@ -49,8 +49,7 @@ struct pl_gl {
 #endif
 
     // Sync objects and associated callbacks
-    struct gl_cb *callbacks;
-    int num_cbs;
+    PL_ARRAY(struct gl_cb) callbacks;
 
     // Incrementing counters to keep track of object uniqueness
     int buf_id;

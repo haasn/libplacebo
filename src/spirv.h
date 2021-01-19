@@ -42,7 +42,7 @@ struct spirv_compiler_fns {
     const char *name;
 
     // Compile GLSL to SPIR-V, under GL_KHR_vulkan_glsl semantics.
-    bool (*compile_glsl)(struct spirv_compiler *spirv, void *tactx,
+    bool (*compile_glsl)(struct spirv_compiler *spirv, void *alloc,
                          enum glsl_shader_stage type, const char *glsl,
                          pl_str *out_spirv);
 

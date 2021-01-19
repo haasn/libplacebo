@@ -39,7 +39,7 @@ void pl_gpu_destroy(const struct pl_gpu *gpu)
     if (!gpu)
         return;
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->destroy(gpu);
 }
 
@@ -534,7 +534,7 @@ const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
     require(!params->blit_src   || fmt->caps & PL_FMT_CAP_BLITTABLE);
     require(!params->blit_dst   || fmt->caps & PL_FMT_CAP_BLITTABLE);
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->tex_create(gpu, params);
 
 error:
@@ -579,7 +579,7 @@ void pl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex **tex)
     if (!*tex)
         return;
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->tex_destroy(gpu, *tex);
     *tex = NULL;
 }
@@ -589,7 +589,7 @@ void pl_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *dst,
 {
     require(dst->params.blit_dst);
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     if (impl->tex_invalidate)
         impl->tex_invalidate(gpu, dst);
     impl->tex_clear(gpu, dst, color);
@@ -600,7 +600,7 @@ error:
 
 void pl_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex)
 {
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     if (impl->tex_invalidate)
         impl->tex_invalidate(gpu, tex);
 }
@@ -678,7 +678,7 @@ void pl_tex_blit(const struct pl_gpu *gpu,
     if (pl_rect3d_eq(rcnorm, full))
         pl_tex_invalidate(gpu, dst);
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->tex_blit(gpu, &fixed);
 
 error:
@@ -766,7 +766,7 @@ bool pl_tex_upload(const struct pl_gpu *gpu,
     if (!fix_tex_transfer(gpu, &fixed))
         goto error;
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->tex_upload(gpu, &fixed);
 
 error:
@@ -784,7 +784,7 @@ bool pl_tex_download(const struct pl_gpu *gpu,
     if (!fix_tex_transfer(gpu, &fixed))
         goto error;
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->tex_download(gpu, &fixed);
 
 error:
@@ -793,7 +793,7 @@ error:
 
 bool pl_tex_poll(const struct pl_gpu *gpu, const struct pl_tex *tex, uint64_t t)
 {
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->tex_poll ? impl->tex_poll(gpu, tex, t) : false;
 }
 
@@ -847,7 +847,7 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
 
     require(!params.host_mapped || (gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS));
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     const struct pl_buf *buf = impl->buf_create(gpu, &params);
     if (buf)
         require(!params.host_mapped || buf->data);
@@ -897,7 +897,7 @@ void pl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf **buf)
     if (!*buf)
         return;
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->buf_destroy(gpu, *buf);
     *buf = NULL;
 }
@@ -909,7 +909,7 @@ void pl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
     require(buf_offset + size <= buf->params.size);
     require(buf_offset == PL_ALIGN2(buf_offset, 4));
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->buf_write(gpu, buf, buf_offset, data, size);
 
 error:
@@ -922,7 +922,7 @@ bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
     require(buf->params.host_readable);
     require(buf_offset + size <= buf->params.size);
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->buf_read(gpu, buf, buf_offset, dest, size);
 
 error:
@@ -937,7 +937,7 @@ void pl_buf_copy(const struct pl_gpu *gpu,
     require(src_offset + size <= src->params.size);
     require(dst_offset + size <= dst->params.size);
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->buf_copy(gpu, dst, dst_offset, src, src_offset, size);
 
 error:
@@ -948,7 +948,7 @@ bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
 {
     require(buf->params.export_handle || buf->params.import_handle);
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->buf_export(gpu, buf);
 
 error:
@@ -957,7 +957,7 @@ error:
 
 bool pl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf, uint64_t t)
 {
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->buf_poll ? impl->buf_poll(gpu, buf, t) : false;
 }
 
@@ -1172,7 +1172,7 @@ void memcpy_layout(void *dst_p, struct pl_var_layout dst_layout,
 
 int pl_desc_namespace(const struct pl_gpu *gpu, enum pl_desc_type type)
 {
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     int ret = impl->desc_namespace(gpu, type);
     pl_assert(ret >= 0 && ret < PL_DESC_TYPE_COUNT);
     return ret;
@@ -1238,7 +1238,7 @@ const struct pl_pass *pl_pass_create(const struct pl_gpu *gpu,
     require(params->push_constants_size <= gpu->limits.max_pushc_size);
     require(params->push_constants_size == PL_ALIGN2(params->push_constants_size, 4));
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->pass_create(gpu, params);
 
 error:
@@ -1250,7 +1250,7 @@ void pl_pass_destroy(const struct pl_gpu *gpu, const struct pl_pass **pass)
     if (!*pass)
         return;
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->pass_destroy(gpu, *pass);
     *pass = NULL;
 }
@@ -1380,7 +1380,7 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
     if (params->target && !pass->params.load_target)
         pl_tex_invalidate(gpu, params->target);
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->pass_run(gpu, &new);
 
 error:
@@ -1389,20 +1389,20 @@ error:
 
 void pl_gpu_flush(const struct pl_gpu *gpu)
 {
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     if (impl->gpu_flush)
         impl->gpu_flush(gpu);
 }
 
 void pl_gpu_finish(const struct pl_gpu *gpu)
 {
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->gpu_finish(gpu);
 }
 
 bool pl_gpu_is_failed(const struct pl_gpu *gpu)
 {
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     if (!impl->gpu_is_failed)
         return false;
 
@@ -1479,7 +1479,7 @@ static void pbo_download_cb(void *priv)
 
     // Run the original callback
     p->callback(p->priv);
-    talloc_free(priv);
+    pl_free(priv);
 };
 
 bool pl_tex_download_pbo(const struct pl_gpu *gpu,
@@ -1529,7 +1529,7 @@ bool pl_tex_download_pbo(const struct pl_gpu *gpu,
     // If the transfer is asynchronous, propagate our host read asynchronously
     if (params->callback && !bufparams.import_handle) {
         newparams.callback = pbo_download_cb;
-        newparams.priv = talloc_struct(NULL, struct pbo_cb_ctx, {
+        newparams.priv = pl_alloc_struct(NULL, struct pbo_cb_ctx, {
             .gpu = gpu,
             .buf = buf,
             .ptr = params->ptr,
@@ -1731,28 +1731,29 @@ void pl_pass_run_vbo(const struct pl_gpu *gpu,
     pl_buf_destroy(gpu, &vert);
 }
 
-struct pl_pass_params pl_pass_params_copy(void *tactx,
+struct pl_pass_params pl_pass_params_copy(void *alloc,
                                           const struct pl_pass_params *params)
 {
     struct pl_pass_params new = *params;
     new.cached_program = NULL;
     new.cached_program_len = 0;
 
-    new.glsl_shader = talloc_strdup(tactx, new.glsl_shader);
-    new.vertex_shader = talloc_strdup(tactx, new.vertex_shader);
+    new.glsl_shader = pl_str0dup0(alloc, new.glsl_shader);
+    new.vertex_shader = pl_str0dup0(alloc, new.vertex_shader);
     if (new.blend_params)
-        new.blend_params = talloc_ptrdup(tactx, new.blend_params);
+        new.blend_params = pl_memdup_ptr(alloc, new.blend_params);
 
-#define DUPSTRS(name, array, num)                                       \
+#define DUPNAMES(field)                                                 \
     do {                                                                \
-        (array) = TARRAY_DUP(tactx, array, num);                        \
-        for (int j = 0; j < num; j++)                                   \
-            (array)[j].name = talloc_strdup(tactx, (array)[j].name);    \
+        size_t _size = new.num_##field * sizeof(new.field[0]);          \
+        new.field = pl_memdup(alloc, new.field, _size);                 \
+        for (int j = 0; j < new.num_##field; j++)                       \
+            new.field[j].name = pl_str0dup0(alloc, new.field[j].name);  \
     } while (0)
 
-    DUPSTRS(name, new.variables,      new.num_variables);
-    DUPSTRS(name, new.descriptors,    new.num_descriptors);
-    DUPSTRS(name, new.vertex_attribs, new.num_vertex_attribs);
+    DUPNAMES(variables);
+    DUPNAMES(descriptors);
+    DUPNAMES(vertex_attribs);
 
 #undef DUPNAMES
 
@@ -1766,7 +1767,7 @@ const struct pl_sync *pl_sync_create(const struct pl_gpu *gpu,
     require(handle_type & gpu->export_caps.sync);
     require(PL_ISPOT(handle_type));
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->sync_create(gpu, handle_type);
 
 error:
@@ -1779,7 +1780,7 @@ void pl_sync_destroy(const struct pl_gpu *gpu,
     if (!*sync)
         return;
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->sync_destroy(gpu, *sync);
     *sync = NULL;
 }
@@ -1789,7 +1790,7 @@ bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
 {
     require(tex->params.import_handle || tex->params.export_handle);
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->tex_export(gpu, tex, sync);
 
 error:
@@ -1798,7 +1799,7 @@ error:
 
 struct pl_timer *pl_timer_create(const struct pl_gpu *gpu)
 {
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     if (!impl->timer_create)
         return NULL;
 
@@ -1810,7 +1811,7 @@ void pl_timer_destroy(const struct pl_gpu *gpu, struct pl_timer **timer)
     if (!*timer)
         return;
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->timer_destroy(gpu, *timer);
     *timer = NULL;
 }
@@ -1820,7 +1821,7 @@ uint64_t pl_timer_query(const struct pl_gpu *gpu, struct pl_timer *timer)
     if (!timer)
         return 0;
 
-    const struct pl_gpu_fns *impl = TA_PRIV(gpu);
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->timer_query(gpu, timer);
 }
 

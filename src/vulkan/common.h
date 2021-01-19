@@ -68,23 +68,20 @@ struct vk_ctx {
     bool failed;
 
     // Enabled extensions
-    const char **exts;
-    int num_exts;
+    PL_ARRAY(const char *) exts;
 
-    struct vk_cmdpool **pools;    // command pools (one per queue family)
-    int num_pools;
+    // Command pools (one per queue family)
+    PL_ARRAY(struct vk_cmdpool *) pools;
 
-    // Pointers into *pools
+    // Pointers into `pools`
     struct vk_cmdpool *pool_graphics; // required
     struct vk_cmdpool *pool_compute;  // optional
     struct vk_cmdpool *pool_transfer; // optional
 
     // Queued/pending commands. These are shared for the entire mpvk_ctx to
     // ensure submission and callbacks are FIFO
-    struct vk_cmd **cmds_queued;  // recorded but not yet submitted
-    struct vk_cmd **cmds_pending; // submitted but not completed
-    int num_cmds_queued;
-    int num_cmds_pending;
+    PL_ARRAY(struct vk_cmd *) cmds_queued;  // recorded but not yet submitted
+    PL_ARRAY(struct vk_cmd *) cmds_pending; // submitted but not completed
 
     // A dynamic reference to the most recently submitted command that has not
     // yet completed. Used to implement vk_dev_callback. Gets cleared when
@@ -92,8 +89,7 @@ struct vk_ctx {
     struct vk_cmd *last_cmd;
 
     // Common pool of signals, to avoid having to re-create these objects often
-    struct vk_signal **signals;
-    int num_signals;
+    PL_ARRAY(struct vk_signal *) signals;
     bool disable_events;
     bool disable_overmapping;
 

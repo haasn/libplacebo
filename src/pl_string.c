@@ -17,36 +17,35 @@
 
 #include "common.h"
 
-static void grow_str(void *tactx, pl_str *str, size_t len)
+static void grow_str(void *alloc, pl_str *str, size_t len)
 {
-    if (len > talloc_get_size(str->buf)) {
-        size_t new_size = xta_calc_prealloc_elems(len);
-        str->buf = talloc_realloc_size(tactx, str->buf, new_size);
-    }
+    // Like pl_grow, but with some extra headroom
+    if (len > pl_get_size(str->buf))
+        str->buf = pl_realloc(alloc, str->buf, len * 1.5);
 }
 
-void pl_str_xappend(void *tactx, pl_str *str, pl_str append)
+void pl_str_append(void *alloc, pl_str *str, pl_str append)
 {
     if (!append.len)
         return;
 
     // Also append an extra \0 for convenience, since a lot of the time
     // this function will be used to generate a string buffer
-    grow_str(tactx, str, str->len + append.len + 1);
+    grow_str(alloc, str, str->len + append.len + 1);
     memcpy(str->buf + str->len, append.buf, append.len);
     str->len += append.len;
     str->buf[str->len] = '\0';
 }
 
-void pl_str_xappend_asprintf(void *tactx, pl_str *str, const char *fmt, ...)
+void pl_str_append_asprintf(void *alloc, pl_str *str, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    pl_str_xappend_vasprintf(tactx, str, fmt, ap);
+    pl_str_append_vasprintf(alloc, str, fmt, ap);
     va_end(ap);
 }
 
-void pl_str_xappend_vasprintf(void *tactx, pl_str *str, const char *fmt, va_list ap)
+void pl_str_append_vasprintf(void *alloc, pl_str *str, const char *fmt, va_list ap)
 {
     // First, we need to determine the size that will be required for
     // printing the entire string. Do this by making a copy of the va_list
@@ -55,9 +54,11 @@ void pl_str_xappend_vasprintf(void *tactx, pl_str *str, const char *fmt, va_list
     va_copy(copy, ap);
     int size = vsnprintf(NULL, 0, fmt, copy);
     va_end(copy);
+    if (size < 0)
+        return;
 
     // Make room in `str` and format to there directly
-    grow_str(tactx, str, str->len + size + 1);
+    grow_str(alloc, str, str->len + size + 1);
     str->len += vsnprintf(str->buf + str->len, size + 1, fmt, ap);
 }
 
@@ -68,7 +69,7 @@ int pl_str_sscanf(pl_str str, const char *fmt, ...)
     va_start(va, fmt);
     int ret = vsscanf(tmp, fmt, va);
     va_end(va);
-    talloc_free(tmp);
+    pl_free(tmp);
     return ret;
 }
 
@@ -168,12 +169,12 @@ static int h_to_i(unsigned char c)
     return -1; // invalid char
 }
 
-bool pl_str_decode_hex(void *tactx, pl_str hex, pl_str *out)
+bool pl_str_decode_hex(void *alloc, pl_str hex, pl_str *out)
 {
     if (!out)
         return false;
 
-    char *buf = talloc_array(tactx, char, hex.len / 2);
+    char *buf = pl_alloc(alloc, hex.len / 2);
     int len = 0;
 
     while (hex.len >= 2) {
@@ -183,7 +184,7 @@ bool pl_str_decode_hex(void *tactx, pl_str hex, pl_str *out)
         hex.len -= 2;
 
         if (a < 0 || b < 0) {
-            talloc_free(buf);
+            pl_free(buf);
             return false;
         }
 

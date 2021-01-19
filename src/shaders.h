@@ -39,7 +39,7 @@ enum pl_shader_buf {
 struct pl_shader {
     struct pl_context *ctx;
     struct pl_shader_res res; // for accumulating some of the fields
-    struct xta_ref *tmp; // only used for var/va/desc names and var/va data
+    PL_ARRAY(struct pl_ref *) tmp; // only used for var/va/desc names and data
     bool failed;
     bool mutable;
     int output_w;
@@ -52,14 +52,15 @@ struct pl_shader {
     int fresh;
 
     // mutable versions of the fields from pl_shader_res
-    struct pl_shader_va *vertex_attribs;
-    struct pl_shader_var *variables;
-    struct pl_shader_desc *descriptors;
+    PL_ARRAY(struct pl_shader_va) vas;
+    PL_ARRAY(struct pl_shader_var) vars;
+    PL_ARRAY(struct pl_shader_desc) descs;
 };
 
 // Helper functions for convenience
 #define SH_PARAMS(sh) ((sh)->res.params)
 #define SH_GPU(sh) (SH_PARAMS(sh).gpu)
+#define SH_TMP(sh) ((sh)->tmp.elem[0])
 
 // Returns the GLSL description, defaulting to desktop 130.
 struct pl_glsl_desc sh_glsl(const struct pl_shader *sh);
@@ -112,7 +113,7 @@ ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
 // variable could be successfully added (which may fail if you try exceeding
 // the size limits of the buffer type). If successful, the layout is stored
 // in *out_layout (may be NULL).
-bool sh_buf_desc_append(void *tactx, const struct pl_gpu *gpu,
+bool sh_buf_desc_append(void *alloc, const struct pl_gpu *gpu,
                         struct pl_shader_desc *buf_desc,
                         struct pl_var_layout *out_layout,
                         const struct pl_var new_var);

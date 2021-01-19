@@ -44,22 +44,18 @@ struct vk_cmd {
     VkFence fence;           // the fence guards cmd buffer reuse
     // The semaphores represent dependencies that need to complete before
     // this command can be executed. These are *not* owned by the vk_cmd
-    VkSemaphore *deps;
-    VkPipelineStageFlags *depstages;
-    int num_deps;
+    PL_ARRAY(VkSemaphore) deps;
+    PL_ARRAY(VkPipelineStageFlags) depstages;
     // The signals represent semaphores that fire once the command finishes
     // executing. These are also not owned by the vk_cmd
-    VkSemaphore *sigs;
-    int num_sigs;
+    PL_ARRAY(VkSemaphore) sigs;
     // Since VkFences are useless, we have to manually track "callbacks"
     // to fire once the VkFence completes. These are used for multiple purposes,
     // ranging from garbage collection (resource deallocation) to fencing.
-    struct vk_callback *callbacks;
-    int num_callbacks;
+    PL_ARRAY(struct vk_callback) callbacks;
     // Abstract objects associated with this command. Can be used to
     // selectively flush.
-    const void **objs;
-    int num_objs;
+    PL_ARRAY(const void *) objs;
 };
 
 // Associate a callback with the completion of the current command. This
@@ -126,8 +122,7 @@ struct vk_cmdpool {
     int idx_queues;
     // Command buffers associated with this queue. These are available for
     // re-recording
-    struct vk_cmd **cmds;
-    int num_cmds;
+    PL_ARRAY(struct vk_cmd *) cmds;
 };
 
 // Set up a vk_cmdpool corresponding to a queue family.

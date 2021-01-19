@@ -32,24 +32,7 @@ const char *pl_version()
     return BUILD_VERSION;
 }
 
-static pthread_mutex_t pl_ctx_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int pl_ctx_refcount;
-
-static void global_init(void)
-{
-#ifndef NDEBUG
-    const char *enable_leak = getenv("LIBPLACEBO_LEAK_REPORT");
-    if (enable_leak && strcmp(enable_leak, "1") == 0)
-        talloc_enable_leak_report();
-#endif
-}
-
-static void global_uninit(void)
-{
-#ifndef NDEBUG
-    talloc_print_leak_report();
-#endif
-}
 
 struct pl_context *pl_context_create(int api_ver,
                                      const struct pl_context_params *params)
@@ -67,22 +50,16 @@ struct pl_context *pl_context_create(int api_ver,
         abort();
     }
 
-    // Do global initialization only when refcount is 0
-    pthread_mutex_lock(&pl_ctx_mutex);
-    if (pl_ctx_refcount++ == 0)
-        global_init();
-
-    struct pl_context *ctx = talloc_zero(NULL, struct pl_context);
+    struct pl_context *ctx = pl_zalloc_ptr(NULL, ctx);
     ctx->params = *PL_DEF(params, &pl_context_default_params);
     int err = pthread_mutex_init(&ctx->lock, NULL);
     if (err != 0) {
         fprintf(stderr, "Failed initializing pthread mutex: %s\n", strerror(err));
         pl_ctx_refcount--;
-        talloc_free(ctx);
+        pl_free(ctx);
         ctx = NULL;
     }
 
-    pthread_mutex_unlock(&pl_ctx_mutex);
     pl_info(ctx, "Initialized libplacebo %s (API v%d)", PL_VERSION, PL_API_VER);
 
     return ctx;
@@ -98,14 +75,8 @@ void pl_context_destroy(struct pl_context **pctx)
 
     pthread_mutex_lock(&ctx->lock);
     pthread_mutex_destroy(&ctx->lock);
-    talloc_free(ctx);
+    pl_free(ctx);
     *pctx = NULL;
-
-    // Do global uninitialization only when refcount reaches 0
-    pthread_mutex_lock(&pl_ctx_mutex);
-    if (--pl_ctx_refcount == 0)
-        global_uninit();
-    pthread_mutex_unlock(&pl_ctx_mutex);
 }
 
 void pl_context_update(struct pl_context *ctx,
@@ -193,7 +164,7 @@ void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
         goto done;
 
     ctx->logbuffer.len = 0;
-    pl_str_xappend_vasprintf(ctx, &ctx->logbuffer, fmt, va);
+    pl_str_append_vasprintf(ctx, &ctx->logbuffer, fmt, va);
     ctx->params.log_cb(ctx->params.log_priv, lev, ctx->logbuffer.buf);
 
 done:

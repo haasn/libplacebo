@@ -38,21 +38,21 @@ const char *gl_err_str(GLenum err)
 
 void gl_poll_callbacks(const struct pl_gpu *gpu)
 {
-    struct pl_gl *gl = TA_PRIV(gpu);
-    while (gl->num_cbs) {
-        struct gl_cb *cb = &gl->callbacks[0];
+    struct pl_gl *gl = PL_PRIV(gpu);
+    while (gl->callbacks.num) {
+        struct gl_cb *cb = &gl->callbacks.elem[0];
         GLenum res = glClientWaitSync(cb->sync, 0, 0);
         switch (res) {
         case GL_ALREADY_SIGNALED:
         case GL_CONDITION_SATISFIED:
             cb->callback(cb->priv);
-            TARRAY_REMOVE_AT(gl->callbacks, gl->num_cbs, 0);
+            PL_ARRAY_REMOVE_AT(gl->callbacks, 0);
             continue;
 
         case GL_WAIT_FAILED:
             glDeleteSync(cb->sync);
             gl->failed = true;
-            TARRAY_REMOVE_AT(gl->callbacks, gl->num_cbs, 0);
+            PL_ARRAY_REMOVE_AT(gl->callbacks, 0);
             gl_check_err(gpu, "gl_poll_callbacks"); // NOTE: will recurse!
             return;
 
@@ -66,7 +66,7 @@ void gl_poll_callbacks(const struct pl_gpu *gpu)
 
 bool gl_check_err(const struct pl_gpu *gpu, const char *fun)
 {
-    struct pl_gl *gl = TA_PRIV(gpu);
+    struct pl_gl *gl = PL_PRIV(gpu);
     bool ret = true;
 
     while (true) {
@@ -123,7 +123,7 @@ const char *egl_err_str(EGLenum err)
 
 bool egl_check_err(const struct pl_gpu *gpu, const char *fun)
 {
-    struct pl_gl *gl = TA_PRIV(gpu);
+    struct pl_gl *gl = PL_PRIV(gpu);
     bool ret = true;
 
     while (true) {

@@ -21,7 +21,7 @@
 #include <pthread.h>
 
 extern "C" {
-#include <xtalloc.h>
+#include "pl_alloc.h"
 }
 
 #include <glslang/Include/ResourceLimits.h>
@@ -72,7 +72,7 @@ extern const TBuiltInResource DefaultTBuiltInResource;
 struct pl_glslang_res *pl_glslang_compile(const char *glsl, uint32_t api_ver,
                                           enum pl_glslang_stage stage)
 {
-    struct pl_glslang_res *res = talloc_zero(NULL, struct pl_glslang_res);
+    struct pl_glslang_res *res = pl_zalloc_ptr(NULL, res);
 
     EShLanguage lang;
     switch (stage) {
@@ -97,7 +97,7 @@ struct pl_glslang_res *pl_glslang_compile(const char *glsl, uint32_t api_ver,
     shader->setEnvTarget(EShTargetSpv, spirv_version);
     shader->setStrings(&glsl, 1);
     if (!shader->parse(&DefaultTBuiltInResource, api_ver, true, EShMsgDefault)) {
-        res->error_msg = talloc_strdup(res, shader->getInfoLog());
+        res->error_msg = pl_str0dup0(res, shader->getInfoLog());
         delete shader;
         return res;
     }
@@ -105,7 +105,7 @@ struct pl_glslang_res *pl_glslang_compile(const char *glsl, uint32_t api_ver,
     TProgram *prog = new TProgram();
     prog->addShader(shader);
     if (!prog->link(EShMsgDefault)) {
-        res->error_msg = talloc_strdup(res, prog->getInfoLog());
+        res->error_msg = pl_str0dup0(res, prog->getInfoLog());
         delete shader;
         delete prog;
         return res;
@@ -116,7 +116,7 @@ struct pl_glslang_res *pl_glslang_compile(const char *glsl, uint32_t api_ver,
 
     res->success = true;
     res->size = spirv.size() * sizeof(unsigned int);
-    res->data = talloc_memdup(res, spirv.data(), res->size),
+    res->data = pl_memdup(res, spirv.data(), res->size),
     delete shader;
     delete prog;
     return res;

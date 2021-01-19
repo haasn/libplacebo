@@ -27,17 +27,17 @@ struct priv {
 
 static void shaderc_destroy(struct spirv_compiler *spirv)
 {
-    struct priv *p = TA_PRIV(spirv);
+    struct priv *p = PL_PRIV(spirv);
     shaderc_compile_options_release(p->opts);
     shaderc_compiler_release(p->compiler);
-    talloc_free(spirv);
+    pl_free(spirv);
 }
 
 static struct spirv_compiler *shaderc_create(struct pl_context *ctx,
                                              uint32_t api_version)
 {
-    struct spirv_compiler *spirv = talloc_ptrtype_priv(NULL, spirv, struct priv);
-    struct priv *p = TA_PRIV(spirv);
+    struct spirv_compiler *spirv = pl_alloc_ptr_priv(NULL, spirv, struct priv);
+    struct priv *p = PL_PRIV(spirv);
     *spirv = (struct spirv_compiler) {0};
 
     p->compiler = shaderc_compiler_initialize();
@@ -93,11 +93,11 @@ static shaderc_compilation_result_t compile(struct priv *p,
     }
 }
 
-static bool shaderc_compile(struct spirv_compiler *spirv, void *tactx,
+static bool shaderc_compile(struct spirv_compiler *spirv, void *alloc,
                             enum glsl_shader_stage type, const char *glsl,
                             pl_str *out_spirv)
 {
-    struct priv *p = TA_PRIV(spirv);
+    struct priv *p = PL_PRIV(spirv);
 
     shaderc_compilation_result_t res = compile(p, type, glsl, false);
     int errs = shaderc_result_get_num_errors(res),
@@ -131,7 +131,7 @@ static bool shaderc_compile(struct spirv_compiler *spirv, void *tactx,
         void *bytes = (void *) shaderc_result_get_bytes(res);
         pl_assert(bytes);
         out_spirv->len = shaderc_result_get_length(res);
-        out_spirv->buf = talloc_memdup(tactx, bytes, out_spirv->len);
+        out_spirv->buf = pl_memdup(alloc, bytes, out_spirv->len);
     }
 
     // Also print SPIR-V disassembly for debugging purposes. Unfortunately

@@ -124,7 +124,7 @@ void pl_pass_run_vbo(const struct pl_gpu *gpu,
 
 // Make a deep-copy of the pass params. Note: cached_program etc. are not
 // copied, but cleared explicitly.
-struct pl_pass_params pl_pass_params_copy(void *tactx,
+struct pl_pass_params pl_pass_params_copy(void *alloc,
                                           const struct pl_pass_params *params);
 
 

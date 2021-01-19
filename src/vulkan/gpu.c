@@ -61,7 +61,7 @@ struct pl_vk {
 
 static void vk_submit(const struct pl_gpu *gpu)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
     if (p->cmd)
@@ -72,7 +72,7 @@ static void vk_submit(const struct pl_gpu *gpu)
 static struct vk_cmd *vk_require_cmd(const struct pl_gpu *gpu,
                                      enum queue_type type)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
     struct vk_cmdpool *pool;
@@ -124,7 +124,7 @@ static inline bool supports_marks(struct vk_cmd *cmd) {
 
 #define MAKE_LAZY_DESTRUCTOR(fun, argtype)                                  \
     static void fun##_lazy(const struct pl_gpu *gpu, argtype *arg) {        \
-        struct pl_vk *p = TA_PRIV(gpu);                                     \
+        struct pl_vk *p = PL_PRIV(gpu);                                     \
         struct vk_ctx *vk = p->vk;                                          \
         if (p->cmd) {                                                       \
             vk_cmd_callback(p->cmd, (vk_cb) fun, gpu, (void *) arg);        \
@@ -135,7 +135,7 @@ static inline bool supports_marks(struct vk_cmd *cmd) {
 
 static void vk_destroy_gpu(const struct pl_gpu *gpu)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
     pl_dispatch_destroy(&p->dp);
@@ -150,13 +150,14 @@ static void vk_destroy_gpu(const struct pl_gpu *gpu)
     vk_malloc_destroy(&p->alloc);
     spirv_compiler_destroy(&p->spirv);
 
-    talloc_free((void *) gpu);
+    pl_free((void *) gpu);
 }
 
 static void vk_setup_formats(struct pl_gpu *gpu)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
+    PL_ARRAY(const struct pl_fmt *) formats = {0};
 
     // Texture format emulation requires at least support for texel buffers
     bool has_emu = (gpu->caps & PL_GPU_CAP_COMPUTE) && gpu->limits.max_buffer_texels;
@@ -197,8 +198,8 @@ static void vk_setup_formats(struct pl_gpu *gpu)
 
         pl_log_level_cap(vk->ctx, PL_LOG_NONE);
 
-        struct pl_fmt *fmt = talloc_ptrtype_priv(gpu, fmt, vk_fmt);
-        const struct vk_format **fmtp = TA_PRIV(fmt);
+        struct pl_fmt *fmt = pl_alloc_ptr_priv(gpu, fmt, vk_fmt);
+        const struct vk_format **fmtp = PL_PRIV(fmt);
         *fmt = vk_fmt->fmt;
         *fmtp = vk_fmt;
 
@@ -276,9 +277,11 @@ static void vk_setup_formats(struct pl_gpu *gpu)
             }
         }
 
-        TARRAY_APPEND(gpu, gpu->formats, gpu->num_formats, fmt);
+        PL_ARRAY_APPEND(gpu, formats, fmt);
     }
 
+    gpu->formats = formats.elem;
+    gpu->num_formats = formats.num;
     pl_gpu_sort_formats(gpu);
 }
 
@@ -376,10 +379,10 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
 {
     pl_assert(vk->dev);
 
-    struct pl_gpu *gpu = talloc_zero_priv(NULL, struct pl_gpu, struct pl_vk);
+    struct pl_gpu *gpu = pl_zalloc_priv(NULL, struct pl_gpu, struct pl_vk);
     gpu->ctx = vk->ctx;
 
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     p->impl = pl_fns_vk;
     p->vk = vk;
 
@@ -556,7 +559,7 @@ static VkResult vk_create_render_pass(struct vk_ctx *vk, const struct pl_fmt *fm
                                       VkImageLayout finalLayout,
                                       VkRenderPass *out)
 {
-    const struct vk_format **vk_fmt = TA_PRIV(fmt);
+    const struct vk_format **vk_fmt = PL_PRIV(fmt);
 
     VkRenderPassCreateInfo rinfo = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
@@ -614,8 +617,7 @@ struct pl_tex_vk {
     // the signal guards reuse, and can be NULL
     struct vk_signal *sig;
     VkPipelineStageFlags sig_stage;
-    VkSemaphore *ext_deps; // external semaphore, not owned by the pl_tex
-    int num_ext_deps;
+    PL_ARRAY(VkSemaphore) ext_deps; // external semaphore, not owned by the pl_tex
     const struct pl_sync *ext_sync; // indicates an exported image
 };
 
@@ -625,8 +627,8 @@ void pl_tex_vk_external_dep(const struct pl_gpu *gpu, const struct pl_tex *tex,
     if (!external_dep)
         return;
 
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
-    TARRAY_APPEND((void *) tex, tex_vk->ext_deps, tex_vk->num_ext_deps, external_dep);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
+    PL_ARRAY_APPEND((void *) tex, tex_vk->ext_deps, external_dep);
 }
 
 static void vk_sync_deref(const struct pl_gpu *gpu, const struct pl_sync *sync);
@@ -636,9 +638,9 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
     if (!tex)
         return;
 
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
     vk_sync_deref(gpu, tex_vk->ext_sync);
     vk_signal_destroy(vk, &tex_vk->sig);
@@ -649,7 +651,7 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
         vk_malloc_free(p->alloc, &tex_vk->mem);
     }
 
-    talloc_free(tex);
+    pl_free(tex);
 }
 
 static void vk_tex_deref(const struct pl_gpu *gpu, const struct pl_tex *tex)
@@ -657,7 +659,7 @@ static void vk_tex_deref(const struct pl_gpu *gpu, const struct pl_tex *tex)
     if (!tex)
         return;
 
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     if (--tex_vk->refcount == 0)
         vk_tex_destroy(gpu, (struct pl_tex *) tex);
 }
@@ -670,18 +672,18 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                         VkAccessFlags newAccess, VkImageLayout newLayout,
                         bool export)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     pl_assert(!tex_vk->held);
 
-    for (int i = 0; i < tex_vk->num_ext_deps; i++)
-        vk_cmd_dep(cmd, tex_vk->ext_deps[i], stage);
-    tex_vk->num_ext_deps = 0;
+    for (int i = 0; i < tex_vk->ext_deps.num; i++)
+        vk_cmd_dep(cmd, tex_vk->ext_deps.elem[i], stage);
+    tex_vk->ext_deps.num = 0;
 
     // CONCURRENT images require transitioning to/from IGNORED, EXCLUSIVE
     // images require transitioning to/from the concrete QF index
-    uint32_t qf = vk->num_pools > 1 ? VK_QUEUE_FAMILY_IGNORED : cmd->pool->qf;
+    uint32_t qf = vk->pools.num > 1 ? VK_QUEUE_FAMILY_IGNORED : cmd->pool->qf;
 
     VkImageMemoryBarrier imgBarrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -756,8 +758,8 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 static void tex_signal(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                        const struct pl_tex *tex, VkPipelineStageFlags stage)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_vk *p = PL_PRIV(gpu);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     struct vk_ctx *vk = p->vk;
     pl_assert(!tex_vk->sig);
 
@@ -769,11 +771,11 @@ static void tex_signal(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex,
                           const char *name)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
     const struct pl_tex_params *params = &tex->params;
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     pl_assert(tex_vk->img);
     VK_NAME(IMAGE, tex_vk->img, name);
 
@@ -864,19 +866,19 @@ error:
 static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
                                           const struct pl_tex_params *params)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
     enum pl_handle_type handle_type = params->export_handle |
                                       params->import_handle;
 
-    struct pl_tex *tex = talloc_zero_priv(NULL, struct pl_tex, struct pl_tex_vk);
+    struct pl_tex *tex = pl_zalloc_priv(NULL, struct pl_tex, struct pl_tex_vk);
     tex->params = *params;
     tex->params.initial_data = NULL;
     tex->sampler_type = PL_SAMPLER_NORMAL;
 
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
-    const struct vk_format **fmt = TA_PRIV(params->format);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
+    const struct vk_format **fmt = PL_PRIV(params->format);
     tex_vk->img_fmt = (*fmt)->tfmt;
 
     switch (pl_tex_params_dimension(*params)) {
@@ -960,8 +962,8 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     // will belong to, we're forced to share all of our images between all
     // command pools.
     uint32_t qfs[3] = {0};
-    for (int i = 0; i < vk->num_pools; i++)
-        qfs[i] = vk->pools[i]->qf;
+    for (int i = 0; i < vk->pools.num; i++)
+        qfs[i] = vk->pools.elem[i]->qf;
 
     VkExternalMemoryImageCreateInfoKHR ext_info = {
         .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_KHR,
@@ -984,9 +986,9 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         .tiling = tiling,
         .usage = usage,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .sharingMode = vk->num_pools > 1 ? VK_SHARING_MODE_CONCURRENT
+        .sharingMode = vk->pools.num > 1 ? VK_SHARING_MODE_CONCURRENT
                                          : VK_SHARING_MODE_EXCLUSIVE,
-        .queueFamilyIndexCount = vk->num_pools,
+        .queueFamilyIndexCount = vk->pools.num,
         .pQueueFamilyIndices = qfs,
     };
 
@@ -1136,16 +1138,16 @@ error:
 
 static void vk_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex)
 {
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     tex_vk->may_invalidate = true;
 }
 
 static void vk_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
                          const float color[4])
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
     struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
     if (!cmd)
@@ -1179,10 +1181,10 @@ static void vk_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
 static void vk_tex_blit(const struct pl_gpu *gpu,
                         const struct pl_tex_blit_params *params)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_tex_vk *src_vk = TA_PRIV(params->src);
-    struct pl_tex_vk *dst_vk = TA_PRIV(params->dst);
+    struct pl_tex_vk *src_vk = PL_PRIV(params->src);
+    struct pl_tex_vk *dst_vk = PL_PRIV(params->dst);
 
     struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
     if (!cmd)
@@ -1250,9 +1252,9 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
 static bool vk_tex_poll(const struct pl_gpu *gpu, const struct pl_tex *tex,
                         uint64_t timeout)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
     // Opportunistically check if we can re-use this texture without flush
     vk_poll_commands(vk, 0);
@@ -1276,7 +1278,7 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
 
     const struct pl_fmt *format = NULL;
     for (int i = 0; i < gpu->num_formats; i++) {
-        const struct vk_format **fmt = TA_PRIV(gpu->formats[i]);
+        const struct vk_format **fmt = PL_PRIV(gpu->formats[i]);
         if ((*fmt)->tfmt == params->format) {
             format = gpu->formats[i];
             break;
@@ -1289,7 +1291,7 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
         goto error;
     }
 
-    tex = talloc_zero_priv(NULL, struct pl_tex, struct pl_tex_vk);
+    tex = pl_zalloc_priv(NULL, struct pl_tex, struct pl_tex_vk);
     tex->params = (struct pl_tex_params) {
         .format = format,
         .w = params->width,
@@ -1321,7 +1323,7 @@ const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
     MASK(blit_dst,   PL_FMT_CAP_BLITTABLE);
 #undef MASK
 
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     tex_vk->type = VK_IMAGE_TYPE_2D;
     tex_vk->external_img = true;
     tex_vk->held = true;
@@ -1342,7 +1344,7 @@ error:
 VkImage pl_vulkan_unwrap(const struct pl_gpu *gpu, const struct pl_tex *tex,
                          VkFormat *out_format, VkImageUsageFlags *out_flags)
 {
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
     if (out_format)
         *out_format = tex_vk->img_fmt;
@@ -1356,9 +1358,9 @@ bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
                     VkImageLayout layout, VkAccessFlags access,
                     VkSemaphore sem_out)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     pl_assert(sem_out);
 
     if (tex_vk->held) {
@@ -1390,7 +1392,7 @@ bool pl_vulkan_hold_raw(const struct pl_gpu *gpu, const struct pl_tex *tex,
                         VkImageLayout *layout, VkAccessFlags *access,
                         VkSemaphore sem_out)
 {
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     bool user_may_invalidate = tex_vk->may_invalidate;
 
     if (!pl_vulkan_hold(gpu, tex, tex_vk->current_layout, tex_vk->current_access, sem_out))
@@ -1411,7 +1413,7 @@ void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
                        VkImageLayout layout, VkAccessFlags access,
                        VkSemaphore sem_in)
 {
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     if (!tex_vk->held) {
         PL_ERR(gpu, "Attempting to release an unheld image?");
         return;
@@ -1445,15 +1447,15 @@ static void vk_buf_deref(const struct pl_gpu *gpu, const struct pl_buf *buf)
     if (!buf)
         return;
 
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
     if (--buf_vk->refcount == 0) {
         vk_signal_destroy(vk, &buf_vk->sig);
         vk->DestroyBufferView(vk->dev, buf_vk->view, VK_ALLOC);
         vk_malloc_free(p->alloc, &buf_vk->mem);
-        talloc_free((void *) buf);
+        pl_free((void *) buf);
     }
 }
 
@@ -1462,7 +1464,7 @@ static void vk_buf_finish_write(const struct pl_gpu *gpu, const struct pl_buf *b
     if (!buf)
         return;
 
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     buf_vk->writes--;
 }
 
@@ -1478,13 +1480,13 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                         VkAccessFlags newAccess, size_t offset, size_t size,
                         enum buffer_op op)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
     // CONCURRENT buffers require transitioning to/from IGNORED, EXCLUSIVE
     // buffers require transitioning to/from the concrete QF index
-    uint32_t qf = vk->num_pools > 1 ? VK_QUEUE_FAMILY_IGNORED : cmd->pool->qf;
+    uint32_t qf = vk->pools.num > 1 ? VK_QUEUE_FAMILY_IGNORED : cmd->pool->qf;
 
     VkBufferMemoryBarrier buffBarrier = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
@@ -1582,8 +1584,8 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 static void buf_signal(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                        const struct pl_buf *buf, VkPipelineStageFlags stage)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    struct pl_vk *p = PL_PRIV(gpu);
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     pl_assert(!buf_vk->sig);
 
     buf_vk->sig = vk_cmd_signal(p->vk, cmd, stage);
@@ -1608,9 +1610,9 @@ error: ;
 static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                       const struct pl_buf *buf, size_t offset, size_t size)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
     // We need to perform a flush if the host is capable of reading back from
     // the buffer, or if we intend to overwrite it using mapped memory
@@ -1646,9 +1648,9 @@ static void buf_flush(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 static bool vk_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
                         uint64_t timeout)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
     // Opportunistically check if we can re-use this buffer without flush
     vk_poll_commands(vk, 0);
@@ -1668,9 +1670,9 @@ static bool vk_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
 static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                          size_t offset, const void *data, size_t size)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
     // For host-mapped buffers, we can just directly memcpy the buffer contents.
     // Otherwise, we can update the buffer from the GPU using a command buffer.
@@ -1731,7 +1733,7 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
 static bool vk_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                         size_t offset, void *dest, size_t size)
 {
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     pl_assert(buf_vk->mem.data);
 
     // ensure no more queued writes
@@ -1748,10 +1750,10 @@ static void vk_buf_copy(const struct pl_gpu *gpu,
                         const struct pl_buf *src, size_t src_offset,
                         size_t size)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_buf_vk *dst_vk = TA_PRIV(dst);
-    struct pl_buf_vk *src_vk = TA_PRIV(src);
+    struct pl_buf_vk *dst_vk = PL_PRIV(dst);
+    struct pl_buf_vk *src_vk = PL_PRIV(src);
 
     struct vk_cmd *cmd = vk_require_cmd(gpu, dst_vk->update_queue);
     if (!cmd) {
@@ -1784,9 +1786,9 @@ static void vk_buf_copy(const struct pl_gpu *gpu,
 
 static bool vk_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     if (buf_vk->exported)
         return true;
 
@@ -1812,14 +1814,14 @@ static bool vk_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
 static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
                                           const struct pl_buf_params *params)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    struct pl_buf *buf = talloc_zero_priv(NULL, struct pl_buf, struct pl_buf_vk);
+    struct pl_buf *buf = pl_zalloc_priv(NULL, struct pl_buf, struct pl_buf_vk);
     buf->params = *params;
     buf->params.initial_data = NULL;
 
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     buf_vk->current_access = 0;
     buf_vk->refcount = 1;
 
@@ -1944,7 +1946,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     }
 
     if (is_texel) {
-        const struct vk_format **vk_fmt = TA_PRIV(params->format);
+        const struct vk_format **vk_fmt = PL_PRIV(params->format);
         VkBufferViewCreateInfo vinfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
             .buffer = buf_vk->mem.buf,
@@ -1971,10 +1973,10 @@ static enum queue_type vk_img_copy_queue(const struct pl_gpu *gpu,
                                          const struct VkBufferImageCopy *region,
                                          const struct pl_tex *tex)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    const struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    const struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     enum queue_type queue = tex_vk->transfer_queue;
     if (queue != TRANSFER || !vk->pool_transfer)
         return queue;
@@ -2027,16 +2029,16 @@ static void tex_xfer_cb(void *ctx, void *arg)
 static bool vk_tex_upload(const struct pl_gpu *gpu,
                           const struct pl_tex_transfer_params *params)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     const struct pl_tex *tex = params->tex;
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
     if (!params->buf)
         return pl_tex_upload_pbo(gpu, params);
 
     const struct pl_buf *buf = params->buf;
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     struct pl_rect3d rc = params->rc;
     size_t size = pl_tex_transfer_size(params);
 
@@ -2071,7 +2073,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         CMD_MARK_BEGIN(cmd);
         vk_cmd_timer_begin(gpu, cmd, params->timer);
 
-        struct pl_buf_vk *tbuf_vk = TA_PRIV(tbuf);
+        struct pl_buf_vk *tbuf_vk = PL_PRIV(tbuf);
         VkBufferCopy region = {
             .srcOffset = buf_offset,
             .dstOffset = tbuf_vk->mem.offset,
@@ -2154,16 +2156,16 @@ error:
 static bool vk_tex_download(const struct pl_gpu *gpu,
                             const struct pl_tex_transfer_params *params)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     const struct pl_tex *tex = params->tex;
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
     if (!params->buf)
         return pl_tex_download_pbo(gpu, params);
 
     const struct pl_buf *buf = params->buf;
-    struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     struct pl_rect3d rc = params->rc;
     size_t size = pl_tex_transfer_size(params);
 
@@ -2208,7 +2210,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         CMD_MARK_BEGIN(cmd);
         vk_cmd_timer_begin(gpu, cmd, params->timer);
 
-        struct pl_buf_vk *tbuf_vk = TA_PRIV(tbuf);
+        struct pl_buf_vk *tbuf_vk = PL_PRIV(tbuf);
         VkBufferCopy region = {
             .srcOffset = tbuf_vk->mem.offset,
             .dstOffset = buf_offset,
@@ -2313,9 +2315,9 @@ struct pl_pass_vk {
 
 static void vk_pass_destroy(const struct pl_gpu *gpu, struct pl_pass *pass)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_pass_vk *pass_vk = TA_PRIV(pass);
+    struct pl_pass_vk *pass_vk = PL_PRIV(pass);
 
     vk->DestroyPipeline(vk->dev, pass_vk->pipe, VK_ALLOC);
     vk->DestroyRenderPass(vk->dev, pass_vk->renderPass, VK_ALLOC);
@@ -2323,7 +2325,7 @@ static void vk_pass_destroy(const struct pl_gpu *gpu, struct pl_pass *pass)
     vk->DestroyDescriptorPool(vk->dev, pass_vk->dsPool, VK_ALLOC);
     vk->DestroyDescriptorSetLayout(vk->dev, pass_vk->dsLayout, VK_ALLOC);
 
-    talloc_free(pass);
+    pl_free(pass);
 }
 
 MAKE_LAZY_DESTRUCTOR(vk_pass_destroy, const struct pl_pass)
@@ -2392,11 +2394,11 @@ static bool vk_use_cached_program(const struct pl_pass_params *params,
     return true;
 }
 
-static VkResult vk_compile_glsl(const struct pl_gpu *gpu, void *tactx,
+static VkResult vk_compile_glsl(const struct pl_gpu *gpu, void *alloc,
                                 enum glsl_shader_stage type, const char *glsl,
                                 pl_str *spirv)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
 
     static const char *shader_names[] = {
         [GLSL_SHADER_VERTEX]   = "vertex",
@@ -2407,7 +2409,7 @@ static VkResult vk_compile_glsl(const struct pl_gpu *gpu, void *tactx,
     PL_DEBUG(gpu, "%s shader source:", shader_names[type]);
     pl_msg_source(gpu->ctx, PL_LOG_DEBUG, glsl);
 
-    if (!p->spirv->impl->compile_glsl(p->spirv, tactx, type, glsl, spirv)) {
+    if (!p->spirv->impl->compile_glsl(p->spirv, alloc, type, glsl, spirv)) {
         pl_msg_source(gpu->ctx, PL_LOG_ERR, glsl);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
@@ -2423,18 +2425,18 @@ static const VkShaderStageFlags stageFlags[] = {
 static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
                                             const struct pl_pass_params *params)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     bool success = false;
 
-    struct pl_pass *pass = talloc_zero_priv(NULL, struct pl_pass, struct pl_pass_vk);
+    struct pl_pass *pass = pl_zalloc_priv(NULL, struct pl_pass, struct pl_pass_vk);
     pass->params = pl_pass_params_copy(pass, params);
 
-    struct pl_pass_vk *pass_vk = TA_PRIV(pass);
+    struct pl_pass_vk *pass_vk = PL_PRIV(pass);
     pass_vk->dmask = -1; // all descriptors available
 
     // temporary allocations
-    void *tmp = talloc_new(NULL);
+    void *tmp = pl_tmp(NULL);
 
     VkPipelineCache pipeCache = VK_NULL_HANDLE;
     VkShaderModule vert_shader = VK_NULL_HANDLE;
@@ -2445,15 +2447,14 @@ static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
     if (!num_desc)
         goto no_descriptors;
 
-    pass_vk->dswrite = talloc_array(pass, VkWriteDescriptorSet, num_desc);
-    pass_vk->dsiinfo = talloc_array(pass, VkDescriptorImageInfo, num_desc);
-    pass_vk->dsbinfo = talloc_array(pass, VkDescriptorBufferInfo, num_desc);
+    pass_vk->dswrite = pl_calloc(pass, num_desc, sizeof(VkWriteDescriptorSet));
+    pass_vk->dsiinfo = pl_calloc(pass, num_desc, sizeof(VkDescriptorImageInfo));
+    pass_vk->dsbinfo = pl_calloc(pass, num_desc, sizeof(VkDescriptorBufferInfo));
 
 #define NUM_DS (PL_ARRAY_SIZE(pass_vk->dss))
 
     static int dsSize[PL_DESC_TYPE_COUNT] = {0};
-    VkDescriptorSetLayoutBinding *bindings =
-        talloc_array(tmp, VkDescriptorSetLayoutBinding, num_desc);
+    VkDescriptorSetLayoutBinding *bindings = pl_calloc_ptr(tmp, num_desc, bindings);
 
     for (int i = 0; i < num_desc; i++) {
         struct pl_desc *desc = &params->descriptors[i];
@@ -2486,26 +2487,23 @@ static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
                                      &pass_vk->dsLayout));
 
     if (!pass_vk->use_pushd) {
-        VkDescriptorPoolSize *dsPoolSizes = NULL;
-        int poolSizeCount = 0;
+        PL_ARRAY(VkDescriptorPoolSize) dsPoolSizes = {0};
 
         for (enum pl_desc_type t = 0; t < PL_DESC_TYPE_COUNT; t++) {
             if (dsSize[t] > 0) {
-                VkDescriptorPoolSize dssize = {
+                PL_ARRAY_APPEND(tmp, dsPoolSizes, (VkDescriptorPoolSize) {
                     .type = dsType[t],
                     .descriptorCount = dsSize[t] * NUM_DS,
-                };
-
-                TARRAY_APPEND(tmp, dsPoolSizes, poolSizeCount, dssize);
+                });
             }
         }
 
-        if (poolSizeCount) {
+        if (dsPoolSizes.num) {
             VkDescriptorPoolCreateInfo pinfo = {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
                 .maxSets = NUM_DS,
-                .pPoolSizes = dsPoolSizes,
-                .poolSizeCount = poolSizeCount,
+                .pPoolSizes = dsPoolSizes.elem,
+                .poolSizeCount = dsPoolSizes.num,
             };
 
             VK(vk->CreateDescriptorPool(vk->dev, &pinfo, VK_ALLOC, &pass_vk->dsPool));
@@ -2589,12 +2587,12 @@ no_descriptors: ;
         VK(vk->CreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &frag_shader));
         VK_NAME(SHADER_MODULE, frag_shader, "fragment");
 
-        VkVertexInputAttributeDescription *attrs = talloc_array(tmp,
-                VkVertexInputAttributeDescription, params->num_vertex_attribs);
+        VkVertexInputAttributeDescription *attrs =
+            pl_calloc_ptr(tmp, params->num_vertex_attribs, attrs);
 
         for (int i = 0; i < params->num_vertex_attribs; i++) {
             struct pl_vertex_attrib *va = &params->vertex_attribs[i];
-            const struct vk_format **pfmt_vk = TA_PRIV(va->fmt);
+            const struct vk_format **pfmt_vk = PL_PRIV(va->fmt);
 
             attrs[i] = (VkVertexInputAttributeDescription) {
                 .binding  = 0,
@@ -2761,7 +2759,7 @@ no_descriptors: ;
     // Update params->cached_program
     pl_str cache = {0};
     VK(vk->GetPipelineCacheData(vk->dev, pipeCache, &cache.len, NULL));
-    cache.buf = talloc_size(tmp, cache.len);
+    cache.buf = pl_alloc(tmp, cache.len);
     VK(vk->GetPipelineCacheData(vk->dev, pipeCache, &cache.len, cache.buf));
 
     struct vk_cache_header header = {
@@ -2781,11 +2779,11 @@ no_descriptors: ;
         header.compiler[i] = p->spirv->name[i];
 
     pl_str prog = {0};
-    pl_str_xappend(pass, &prog, (pl_str){ (char *) &header, sizeof(header) });
-    pl_str_xappend(pass, &prog, vert);
-    pl_str_xappend(pass, &prog, frag);
-    pl_str_xappend(pass, &prog, comp);
-    pl_str_xappend(pass, &prog, cache);
+    pl_str_append(pass, &prog, (pl_str){ (char *) &header, sizeof(header) });
+    pl_str_append(pass, &prog, vert);
+    pl_str_append(pass, &prog, frag);
+    pl_str_append(pass, &prog, comp);
+    pl_str_append(pass, &prog, cache);
     pass->params.cached_program = prog.buf;
     pass->params.cached_program_len = prog.len;
 
@@ -2803,7 +2801,7 @@ error:
     vk->DestroyShaderModule(vk->dev, frag_shader, VK_ALLOC);
     vk->DestroyShaderModule(vk->dev, comp_shader, VK_ALLOC);
     vk->DestroyPipelineCache(vk->dev, pipeCache, VK_ALLOC);
-    talloc_free(tmp);
+    pl_free(tmp);
     return pass;
 }
 
@@ -2817,8 +2815,8 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                                  struct pl_desc_binding db,
                                  VkDescriptorSet ds, int idx)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
-    struct pl_pass_vk *pass_vk = TA_PRIV(pass);
+    struct pl_vk *p = PL_PRIV(gpu);
+    struct pl_pass_vk *pass_vk = PL_PRIV(pass);
     struct pl_desc *desc = &pass->params.descriptors[idx];
 
     VkWriteDescriptorSet *wds = &pass_vk->dswrite[idx];
@@ -2851,7 +2849,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     switch (desc->type) {
     case PL_DESC_SAMPLED_TEX: {
         const struct pl_tex *tex = db.object;
-        struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+        struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
         tex_barrier(gpu, cmd, tex, passStages[pass->params.type],
                     VK_ACCESS_SHADER_READ_BIT,
@@ -2869,7 +2867,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     }
     case PL_DESC_STORAGE_IMG: {
         const struct pl_tex *tex = db.object;
-        struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+        struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
         tex_barrier(gpu, cmd, tex, passStages[pass->params.type], access,
                     VK_IMAGE_LAYOUT_GENERAL, false);
@@ -2886,7 +2884,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     case PL_DESC_BUF_UNIFORM:
     case PL_DESC_BUF_STORAGE: {
         const struct pl_buf *buf = db.object;
-        struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+        struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
         buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
                     access, 0, buf->params.size, buf_op);
@@ -2904,7 +2902,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     case PL_DESC_BUF_TEXEL_UNIFORM:
     case PL_DESC_BUF_TEXEL_STORAGE: {
         const struct pl_buf *buf = db.object;
-        struct pl_buf_vk *buf_vk = TA_PRIV(buf);
+        struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
         buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
                     access, 0, buf->params.size, buf_op);
@@ -2951,10 +2949,10 @@ static void set_ds(struct pl_pass_vk *pass_vk, void *dsbit)
 static void vk_pass_run(const struct pl_gpu *gpu,
                         const struct pl_pass_run_params *params)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     const struct pl_pass *pass = params->pass;
-    struct pl_pass_vk *pass_vk = TA_PRIV(pass);
+    struct pl_pass_vk *pass_vk = PL_PRIV(pass);
 
     if (params->vertex_data)
         return pl_pass_run_vbo(gpu, params);
@@ -3035,9 +3033,9 @@ static void vk_pass_run(const struct pl_gpu *gpu,
     switch (pass->params.type) {
     case PL_PASS_RASTER: {
         const struct pl_tex *tex = params->target;
-        struct pl_tex_vk *tex_vk = TA_PRIV(tex);
+        struct pl_tex_vk *tex_vk = PL_PRIV(tex);
         const struct pl_buf *vert = params->vertex_buf;
-        struct pl_buf_vk *vert_vk = TA_PRIV(vert);
+        struct pl_buf_vk *vert_vk = PL_PRIV(vert);
 
         buf_barrier(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
                     VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT, 0, vert->params.size,
@@ -3117,9 +3115,9 @@ static void vk_sync_destroy(const struct pl_gpu *gpu, struct pl_sync *sync)
     if (!sync)
         return;
 
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_sync_vk *sync_vk = TA_PRIV(sync);
+    struct pl_sync_vk *sync_vk = PL_PRIV(sync);
 
 #ifdef VK_HAVE_UNIX
     if (sync->handle_type == PL_HANDLE_FD) {
@@ -3142,7 +3140,7 @@ static void vk_sync_destroy(const struct pl_gpu *gpu, struct pl_sync *sync)
     vk->DestroySemaphore(vk->dev, sync_vk->wait, VK_ALLOC);
     vk->DestroySemaphore(vk->dev, sync_vk->signal, VK_ALLOC);
 
-    talloc_free(sync);
+    pl_free(sync);
 }
 
 static void vk_sync_deref(const struct pl_gpu *gpu, const struct pl_sync *sync)
@@ -3150,7 +3148,7 @@ static void vk_sync_deref(const struct pl_gpu *gpu, const struct pl_sync *sync)
     if (!sync)
         return;
 
-    struct pl_sync_vk *sync_vk = TA_PRIV(sync);
+    struct pl_sync_vk *sync_vk = PL_PRIV(sync);
     if (--sync_vk->refcount == 0)
         vk_sync_destroy(gpu, (struct pl_sync *) sync);
 }
@@ -3158,13 +3156,13 @@ static void vk_sync_deref(const struct pl_gpu *gpu, const struct pl_sync *sync)
 static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
                                             enum pl_handle_type handle_type)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    struct pl_sync *sync = talloc_zero_priv(NULL, struct pl_sync, struct pl_sync_vk);
+    struct pl_sync *sync = pl_zalloc_priv(NULL, struct pl_sync, struct pl_sync_vk);
     sync->handle_type = handle_type;
 
-    struct pl_sync_vk *sync_vk = TA_PRIV(sync);
+    struct pl_sync_vk *sync_vk = PL_PRIV(sync);
     sync_vk->refcount = 1;
 
     VkExportSemaphoreCreateInfoKHR einfo = {
@@ -3241,7 +3239,7 @@ error:
 void pl_vk_sync_unwrap(const struct pl_sync *sync, VkSemaphore *out_wait,
                        VkSemaphore *out_signal)
 {
-    struct pl_sync_vk *sync_vk = TA_PRIV(sync);
+    struct pl_sync_vk *sync_vk = PL_PRIV(sync);
     if (out_wait)
         *out_wait = sync_vk->wait;
     if (out_signal)
@@ -3251,10 +3249,10 @@ void pl_vk_sync_unwrap(const struct pl_sync *sync, VkSemaphore *out_wait,
 static bool vk_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
                           const struct pl_sync *sync)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    struct pl_tex_vk *tex_vk = TA_PRIV(tex);
-    struct pl_sync_vk *sync_vk = TA_PRIV(sync);
+    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
+    struct pl_sync_vk *sync_vk = PL_PRIV(sync);
 
     struct vk_cmd *cmd = p->cmd ? p->cmd : vk_require_cmd(gpu, GRAPHICS);
     if (!cmd)
@@ -3302,22 +3300,22 @@ static inline uint64_t timer_bit(int index)
 
 static void vk_timer_destroy(const struct pl_gpu *gpu, struct pl_timer *timer)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
     pl_assert(!timer->pending);
     vk->DestroyQueryPool(vk->dev, timer->qpool, VK_ALLOC);
-    talloc_free(timer);
+    pl_free(timer);
 }
 
 MAKE_LAZY_DESTRUCTOR(vk_timer_destroy, struct pl_timer)
 
 static struct pl_timer *vk_timer_create(const struct pl_gpu *gpu)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    struct pl_timer *timer = talloc_ptrtype(NULL, timer);
+    struct pl_timer *timer = pl_alloc_ptr(NULL, timer);
     *timer = (struct pl_timer) {0};
 
     struct VkQueryPoolCreateInfo qinfo = {
@@ -3336,7 +3334,7 @@ error:
 
 static uint64_t vk_timer_query(const struct pl_gpu *gpu, struct pl_timer *timer)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
     if (timer->index_read == timer->index_write)
@@ -3369,7 +3367,7 @@ error:
 static void vk_cmd_timer_begin(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                                struct pl_timer *timer)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
     if (!timer)
@@ -3413,7 +3411,7 @@ static void vk_timer_cb(void *ptimer, void *pindex)
 static void vk_cmd_timer_end(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                              struct pl_timer *timer)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
     if (!timer || !timer->recording)
@@ -3436,7 +3434,7 @@ static void vk_cmd_timer_end(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
 static void vk_gpu_flush(const struct pl_gpu *gpu)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     vk_submit(gpu);
     vk_flush_commands(vk);
@@ -3445,7 +3443,7 @@ static void vk_gpu_flush(const struct pl_gpu *gpu)
 
 static void vk_gpu_finish(const struct pl_gpu *gpu)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     vk_submit(gpu);
     vk_wait_idle(vk);
@@ -3453,14 +3451,14 @@ static void vk_gpu_finish(const struct pl_gpu *gpu)
 
 static bool vk_gpu_is_failed(const struct pl_gpu *gpu)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     return vk->failed;
 }
 
 struct vk_cmd *pl_vk_steal_cmd(const struct pl_gpu *gpu)
 {
-    struct pl_vk *p = TA_PRIV(gpu);
+    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
     p->cmd = NULL;
     return cmd;

@@ -39,24 +39,24 @@ bool pl_shader_custom(struct pl_shader *sh, const struct pl_custom_shader *param
     // `sh_var` / `sh_desc` etc. to avoid generating fresh names
     for (int i = 0; i < params->num_variables; i++) {
         struct pl_shader_var sv = params->variables[i];
-        sv.data = talloc_memdup(sh->tmp, sv.data, pl_var_host_layout(0, &sv.var).size);
-        TARRAY_APPEND(sh, sh->variables, sh->res.num_variables, sv);
+        sv.data = pl_memdup(SH_TMP(sh), sv.data, pl_var_host_layout(0, &sv.var).size);
+        PL_ARRAY_APPEND(sh, sh->vars, sv);
     }
 
     for (int i = 0; i < params->num_descriptors; i++) {
         struct pl_shader_desc sd = params->descriptors[i];
         size_t bsize = sizeof(sd.buffer_vars[0]) * sd.num_buffer_vars;
         if (bsize)
-            sd.buffer_vars = talloc_memdup(sh->tmp, sd.buffer_vars, bsize);
-        TARRAY_APPEND(sh, sh->descriptors, sh->res.num_descriptors, sd);
+            sd.buffer_vars = pl_memdup(SH_TMP(sh), sd.buffer_vars, bsize);
+        PL_ARRAY_APPEND(sh, sh->descs, sd);
     }
 
     for (int i = 0; i < params->num_vertex_attribs; i++) {
         struct pl_shader_va sva = params->vertex_attribs[i];
         size_t vsize = sva.attr.fmt->texel_size;
         for (int n = 0; n < PL_ARRAY_SIZE(sva.data); n++)
-            sva.data[n] = talloc_memdup(sh->tmp, sva.data[n], vsize);
-        TARRAY_APPEND(sh, sh->vertex_attribs, sh->res.num_vertex_attribs, sva);
+            sva.data[n] = pl_memdup(SH_TMP(sh), sva.data[n], vsize);
+        PL_ARRAY_APPEND(sh, sh->vas, sva);
     }
 
     if (params->prelude)
@@ -442,7 +442,7 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
     return true;
 }
 
-static bool parse_tex(const struct pl_gpu *gpu, void *tactx, pl_str *body,
+static bool parse_tex(const struct pl_gpu *gpu, void *alloc, pl_str *body,
                       struct pl_shader_desc *out)
 {
     *out = (struct pl_shader_desc) {
@@ -467,7 +467,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, pl_str *body,
         *body = rest;
 
         if (pl_str_eatstart0(&line, "TEXTURE")) {
-            out->desc.name = pl_strdup0(tactx, pl_str_strip(line));
+            out->desc.name = pl_strdup0(alloc, pl_str_strip(line));
             continue;
         }
 
@@ -604,17 +604,17 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, pl_str *body,
     size_t expected_len = texels * params.format->texel_size;
     if (tex.len == 0 && params.storable) {
         // In this case, it's okay that the texture has no initial data
-        TA_FREEP(&tex.buf);
+        pl_free_ptr(&tex.buf);
     } else if (tex.len != expected_len) {
         PL_ERR(gpu, "Shader TEXTURE size mismatch: got %zu bytes, expected %zu!",
                tex.len, expected_len);
-        talloc_free(tex.buf);
+        pl_free(tex.buf);
         return false;
     }
 
     params.initial_data = tex.buf;
     out->binding.object = pl_tex_create(gpu, &params);
-    talloc_free(tex.buf);
+    pl_free(tex.buf);
 
     if (!out->binding.object) {
         PL_ERR(gpu, "Failed creating custom texture!");
@@ -624,7 +624,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *tactx, pl_str *body,
     return true;
 }
 
-static bool parse_buf(const struct pl_gpu *gpu, void *tactx, pl_str *body,
+static bool parse_buf(const struct pl_gpu *gpu, void *alloc, pl_str *body,
                       struct pl_shader_desc *out)
 {
     *out = (struct pl_shader_desc) {
@@ -636,9 +636,8 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, pl_str *body,
 
     // Temporary, to allow deferring variable placement until all headers
     // have been processed (in order to e.g. determine buffer type)
-    void *tmp = talloc_new(tactx); // will be freed automatically on failure
-    struct pl_var *vars = NULL;
-    int num_vars = 0;
+    void *tmp = pl_tmp(alloc); // will be freed automatically on failure
+    PL_ARRAY(struct pl_var) vars = {0};
 
     while (true) {
         pl_str rest;
@@ -650,7 +649,7 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, pl_str *body,
         *body = rest;
 
         if (pl_str_eatstart0(&line, "BUFFER")) {
-            out->desc.name = pl_strdup0(tactx, pl_str_strip(line));
+            out->desc.name = pl_strdup0(alloc, pl_str_strip(line));
             continue;
         }
 
@@ -692,8 +691,8 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, pl_str *body,
                 }
             }
 
-            var.name = pl_strdup0(tactx, pl_str_strip(var_name));
-            TARRAY_APPEND(tmp, vars, num_vars, var);
+            var.name = pl_strdup0(alloc, pl_str_strip(var_name));
+            PL_ARRAY_APPEND(tmp, vars, var);
             continue;
         }
 
@@ -702,8 +701,8 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, pl_str *body,
     }
 
     // Try placing all of the buffer variables
-    for (int i = 0; i < num_vars; i++) {
-        if (!sh_buf_desc_append(tactx, gpu, out, NULL, vars[i])) {
+    for (int i = 0; i < vars.num; i++) {
+        if (!sh_buf_desc_append(alloc, gpu, out, NULL, vars.elem[i])) {
             PL_ERR(gpu, "Custom buffer exceeds GPU limitations!");
             return false;
         }
@@ -739,7 +738,7 @@ static bool parse_buf(const struct pl_gpu *gpu, void *tactx, pl_str *body,
         return false;
     }
 
-    talloc_free(tmp);
+    pl_free(tmp);
     return true;
 }
 
@@ -832,19 +831,16 @@ struct pass_tex {
 struct hook_priv {
     struct pl_context *ctx;
     const struct pl_gpu *gpu;
-    void *tactx;
+    void *alloc;
 
-    struct hook_pass *hook_passes;
-    int num_hook_passes;
+    PL_ARRAY(struct hook_pass) hook_passes;
 
     // Fixed (for shader-local resources)
-    struct pl_shader_desc *descriptors;
-    int num_descs;
+    PL_ARRAY(struct pl_shader_desc) descriptors;
 
     // Dynamic per pass
     enum pl_hook_stage save_stages;
-    struct pass_tex *pass_textures;
-    int num_pass_textures;
+    PL_ARRAY(struct pass_tex) pass_textures;
 
     // State for PRNG/frame count
     int frame_count;
@@ -854,7 +850,7 @@ struct hook_priv {
 static void hook_reset(void *priv)
 {
     struct hook_priv *p = priv;
-    p->num_pass_textures = 0;
+    p->pass_textures.num = 0;
 }
 
 struct szexp_ctx {
@@ -890,9 +886,9 @@ static bool lookup_tex(void *priv, pl_str var, float size[2])
     if (pl_str_equals0(var, "MAIN"))
         var = pl_str0("MAINPRESUB");
 
-    for (int i = 0; i < p->num_pass_textures; i++) {
-        if (pl_str_equals(var, p->pass_textures[i].name)) {
-            const struct pl_tex *tex = p->pass_textures[i].tex;
+    for (int i = 0; i < p->pass_textures.num; i++) {
+        if (pl_str_equals(var, p->pass_textures.elem[i].name)) {
+            const struct pl_tex *tex = p->pass_textures.elem[i].tex;
             size[0] = tex->params.w;
             size[1] = tex->params.h;
             return true;
@@ -961,16 +957,16 @@ static bool bind_pass_tex(struct pl_shader *sh, pl_str name,
 static void save_pass_tex(struct hook_priv *p, struct pass_tex ptex)
 {
 
-    for (int i = 0; i < p->num_pass_textures; i++) {
-        if (!pl_str_equals(p->pass_textures[i].name, ptex.name))
+    for (int i = 0; i < p->pass_textures.num; i++) {
+        if (!pl_str_equals(p->pass_textures.elem[i].name, ptex.name))
             continue;
 
-        p->pass_textures[i] = ptex;
+        p->pass_textures.elem[i] = ptex;
         return;
     }
 
     // No texture with this name yet, append new one
-    TARRAY_APPEND(p->tactx, p->pass_textures, p->num_pass_textures, ptex);
+    PL_ARRAY_APPEND(p->alloc, p->pass_textures, ptex);
 }
 
 static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *params)
@@ -1002,8 +998,8 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         .params = params,
     };
 
-    for (int n = 0; n < p->num_hook_passes; n++) {
-        const struct hook_pass *pass = &p->hook_passes[n];
+    for (int n = 0; n < p->hook_passes.num; n++) {
+        const struct hook_pass *pass = &p->hook_passes.elem[n];
         if (!(pass->exec_stages & params->stage))
             continue;
 
@@ -1096,15 +1092,15 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 texname = pl_str0("MAINPRESUB");
             }
 
-            for (int j = 0; j < p->num_descs; j++) {
-                if (pl_str_equals0(texname, p->descriptors[j].desc.name)) {
+            for (int j = 0; j < p->descriptors.num; j++) {
+                if (pl_str_equals0(texname, p->descriptors.elem[j].desc.name)) {
                     // Directly bind this, no need to bother with all the
                     // `bind_pass_tex` boilerplate
-                    ident_t id = sh_desc(sh, p->descriptors[j]);
+                    ident_t id = sh_desc(sh, p->descriptors.elem[j]);
                     GLSLH("#define %.*s %s \n", PL_STR_FMT(texname), id);
 
-                    if (p->descriptors[j].desc.type == PL_DESC_SAMPLED_TEX) {
-                        const struct pl_tex *tex = p->descriptors[j].binding.object;
+                    if (p->descriptors.elem[j].desc.type == PL_DESC_SAMPLED_TEX) {
+                        const struct pl_tex *tex = p->descriptors.elem[j].binding.object;
                         GLSLH("#define %.*s_tex(pos) (%s(%s, pos)) \n",
                               PL_STR_FMT(texname), sh_tex_fn(sh, tex->params), id);
                     }
@@ -1112,12 +1108,12 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 }
             }
 
-            for (int j = 0; j < p->num_pass_textures; j++) {
-                if (pl_str_equals(texname, p->pass_textures[j].name)) {
+            for (int j = 0; j < p->pass_textures.num; j++) {
+                if (pl_str_equals(texname, p->pass_textures.elem[j].name)) {
                     // Note: We bind the whole texture, rather than
                     // params->rect, because user shaders in general are not
                     // designed to handle cropped input textures.
-                    const struct pass_tex *ptex = &p->pass_textures[j];
+                    const struct pass_tex *ptex = &p->pass_textures.elem[j];
                     struct pl_rect2df rect = {
                         0, 0, ptex->tex->params.w, ptex->tex->params.h,
                     };
@@ -1132,7 +1128,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                         pl_rect2df_offset(&rect, ox, oy);
                     }
 
-                    if (!bind_pass_tex(sh, texname, &p->pass_textures[j], &rect))
+                    if (!bind_pass_tex(sh, texname, &p->pass_textures.elem[j], &rect))
                         goto error;
                     goto next_bind;
                 }
@@ -1282,8 +1278,8 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
     if (!shader_len)
         return NULL;
 
-    struct pl_hook *hook = talloc_priv(NULL, struct pl_hook, struct hook_priv);
-    struct hook_priv *p = TA_PRIV(hook);
+    struct pl_hook *hook = pl_alloc_priv(NULL, struct pl_hook, struct hook_priv);
+    struct hook_priv *p = PL_PRIV(hook);
 
     *hook = (struct pl_hook) {
         .input = PL_HOOK_SIG_TEX,
@@ -1295,7 +1291,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
     *p = (struct hook_priv) {
         .ctx = gpu->ctx,
         .gpu = gpu,
-        .tactx = hook,
+        .alloc = hook,
         .prng_state = {
             // Determined by fair die roll
             0xb76d71f9443c228allu, 0x93a02092fc4807e8llu,
@@ -1324,7 +1320,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
                 goto error;
 
             PL_INFO(gpu, "Registering named texture '%s'", sd.desc.name);
-            TARRAY_APPEND(hook, p->descriptors, p->num_descs, sd);
+            PL_ARRAY_APPEND(hook, p->descriptors, sd);
             continue;
         }
 
@@ -1334,7 +1330,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
                 goto error;
 
             PL_INFO(gpu, "Registering named buffer '%s'", sd.desc.name);
-            TARRAY_APPEND(hook, p->descriptors, p->num_descs, sd);
+            PL_ARRAY_APPEND(hook, p->descriptors, sd);
             continue;
         }
 
@@ -1377,19 +1373,19 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
         p->save_stages |= rpn_stages & ~PL_HOOK_OUTPUT;
 
         PL_INFO(gpu, "Registering hook pass: %.*s", PL_STR_FMT(h.pass_desc));
-        TARRAY_APPEND(hook, p->hook_passes, p->num_hook_passes, pass);
+        PL_ARRAY_APPEND(hook, p->hook_passes, pass);
     }
 
     // We need to hook on both the exec and save stages, so that we can keep
     // track of any textures we might need
     hook->stages |= p->save_stages;
-    for (int i = 0; i < p->num_hook_passes; i++)
-        hook->stages |= p->hook_passes[i].exec_stages;
+    for (int i = 0; i < p->hook_passes.num; i++)
+        hook->stages |= p->hook_passes.elem[i].exec_stages;
 
     return hook;
 
 error:
-    talloc_free(hook);
+    pl_free(hook);
     return NULL;
 }
 
@@ -1399,21 +1395,21 @@ void pl_mpv_user_shader_destroy(const struct pl_hook **hookp)
     if (!hook)
         return;
 
-    struct hook_priv *p = TA_PRIV(hook);
-    for (int i = 0; i < p->num_descs; i++) {
-        switch (p->descriptors[i].desc.type) {
+    struct hook_priv *p = PL_PRIV(hook);
+    for (int i = 0; i < p->descriptors.num; i++) {
+        switch (p->descriptors.elem[i].desc.type) {
             case PL_DESC_BUF_UNIFORM:
             case PL_DESC_BUF_STORAGE:
             case PL_DESC_BUF_TEXEL_UNIFORM:
             case PL_DESC_BUF_TEXEL_STORAGE: {
-                const struct pl_buf *buf = p->descriptors[i].binding.object;
+                const struct pl_buf *buf = p->descriptors.elem[i].binding.object;
                 pl_buf_destroy(p->gpu, &buf);
                 break;
             }
 
             case PL_DESC_SAMPLED_TEX:
             case PL_DESC_STORAGE_IMG: {
-                const struct pl_tex *tex = p->descriptors[i].binding.object;
+                const struct pl_tex *tex = p->descriptors.elem[i].binding.object;
                 pl_tex_destroy(p->gpu, &tex);
                 break;
             }
@@ -1422,5 +1418,5 @@ void pl_mpv_user_shader_destroy(const struct pl_hook **hookp)
         }
     }
 
-    talloc_free((void *) hook);
+    pl_free((void *) hook);
 }

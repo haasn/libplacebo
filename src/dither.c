@@ -173,7 +173,7 @@ void pl_generate_blue_noise(float *data, int size)
     int shift = PL_LOG2(size);
 
     pl_assert((1 << shift) == size);
-    struct ctx *k = talloc_zero(NULL, struct ctx);
+    struct ctx *k = pl_zalloc_ptr(NULL, k);
     makegauss(k, shift);
     makeuniform(k);
     float invscale = k->size2;
@@ -181,5 +181,5 @@ void pl_generate_blue_noise(float *data, int size)
         for(index_t x = 0; x < k->size; x++)
             data[x + y * k->size] = k->unimat[XY(k, x, y)] / invscale;
     }
-    talloc_free(k);
+    pl_free(k);
 }

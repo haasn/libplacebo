@@ -25,7 +25,7 @@ struct priv {
 static void glslang_destroy(struct spirv_compiler *spirv)
 {
     pl_glslang_uninit();
-    talloc_free(spirv);
+    pl_free(spirv);
 }
 
 static struct spirv_compiler *glslang_create(struct pl_context *ctx,
@@ -37,24 +37,24 @@ static struct spirv_compiler *glslang_create(struct pl_context *ctx,
     }
 
     struct spirv_compiler *spirv;
-    spirv = talloc_zero_priv(NULL, struct spirv_compiler, struct priv);
+    spirv = pl_zalloc_priv(NULL, struct spirv_compiler, struct priv);
     spirv->compiler_version = pl_glslang_version();
     spirv->glsl = (struct pl_glsl_desc) {
         .version = 450,
         .vulkan  = true,
     };
 
-    struct priv *p = TA_PRIV(spirv);
+    struct priv *p = PL_PRIV(spirv);
     p->api_ver = api_version;
 
     return spirv;
 }
 
-static bool glslang_compile(struct spirv_compiler *spirv, void *tactx,
+static bool glslang_compile(struct spirv_compiler *spirv, void *alloc,
                             enum glsl_shader_stage type, const char *glsl,
                             pl_str *out_spirv)
 {
-    struct priv *p = TA_PRIV(spirv);
+    struct priv *p = PL_PRIV(spirv);
 
     static const enum pl_glslang_stage stages[] = {
         [GLSL_SHADER_VERTEX]   = PL_GLSLANG_VERTEX,
@@ -65,13 +65,13 @@ static bool glslang_compile(struct spirv_compiler *spirv, void *tactx,
     struct pl_glslang_res *res = pl_glslang_compile(glsl, p->api_ver, stages[type]);
     if (!res || !res->success) {
         PL_ERR(spirv, "glslang failed: %s", res ? res->error_msg : "(null)");
-        talloc_free(res);
+        pl_free(res);
         return false;
     }
 
-    out_spirv->buf = talloc_steal(tactx, res->data);
+    out_spirv->buf = pl_steal(alloc, res->data);
     out_spirv->len = res->size;
-    talloc_free(res);
+    pl_free(res);
     return true;
 }
 

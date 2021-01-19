@@ -9,10 +9,6 @@ build_deps = [
 
 test_deps = []
 
-subprojects = [
-  subproject('xtalloc'),
-]
-
 vulkan = dependency('vulkan', version: '>=1.0.42', required: get_option('vulkan'))
 opengl = dependency('epoxy', version: '>=1.4.0', required: get_option('opengl'))
 
@@ -185,6 +181,7 @@ sources = [
   'filters.c',
   'format.c',
   'gpu.c',
+  'pl_alloc.c',
   'pl_string.c',
   'renderer.c',
   'siphash.c',
@@ -329,18 +326,12 @@ inc = [
   include_directories('./include'),
   include_directories('./include/dummy'),
 ]
-obj = []
-foreach s : subprojects
-  inc += s.get_variable('inc')
-  obj += s.get_variable('lib').extract_all_objects(recursive: false)
-endforeach
 
 lib = library('placebo', sources,
   install: true,
   dependencies: build_deps,
   soversion: apiver,
   include_directories: inc,
-  objects: obj,
   link_args: link_args,
 )
 
@@ -374,10 +365,6 @@ tdep = [ declare_dependency(
     dependencies: build_deps + test_deps,
     include_directories: inc,
 ) ]
-
-foreach s : subprojects
-    tdep += s.get_variable('dep')
-endforeach
 
 if get_option('tests')
   libav = dependency('libavutil', version: '>=55.74.100', required: false)

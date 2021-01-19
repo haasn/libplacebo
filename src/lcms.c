@@ -189,7 +189,7 @@ bool pl_lcms_compute_lut(struct pl_context *ctx, enum pl_rendering_intent intent
         goto error;
 
     pl_assert(s_r > 1 && s_g > 1 && s_b > 1);
-    tmp = talloc_array(NULL, uint16_t, s_r * 3);
+    tmp = pl_alloc(NULL, s_r * 3 * sizeof(uint16_t));
 
     for (int b = 0; b < s_b; b++) {
         for (int g = 0; g < s_g; g++) {
@@ -219,6 +219,6 @@ error:
     if (cms)
         cmsDeleteContext(cms);
 
-    TA_FREEP(&tmp);
+    pl_free_ptr(&tmp);
     return ret;
 }

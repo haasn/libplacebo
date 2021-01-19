@@ -27,15 +27,16 @@ static VkResult vk_cmd_poll(struct vk_ctx *vk, struct vk_cmd *cmd,
 
 static void vk_cmd_reset(struct vk_ctx *vk, struct vk_cmd *cmd)
 {
-    for (int i = 0; i < cmd->num_callbacks; i++) {
-        struct vk_callback *cb = &cmd->callbacks[i];
+    for (int i = 0; i < cmd->callbacks.num; i++) {
+        struct vk_callback *cb = &cmd->callbacks.elem[i];
         cb->run(cb->priv, cb->arg);
     }
 
-    cmd->num_callbacks = 0;
-    cmd->num_deps = 0;
-    cmd->num_sigs = 0;
-    cmd->num_objs = 0;
+    cmd->callbacks.num = 0;
+    cmd->deps.num = 0;
+    cmd->depstages.num = 0;
+    cmd->sigs.num = 0;
+    cmd->objs.num = 0;
 
     // also make sure to reset vk->last_cmd in case this was the last command
     if (vk->last_cmd == cmd)
@@ -52,12 +53,12 @@ static void vk_cmd_destroy(struct vk_ctx *vk, struct vk_cmd *cmd)
     vk->DestroyFence(vk->dev, cmd->fence, VK_ALLOC);
     vk->FreeCommandBuffers(vk->dev, cmd->pool->pool, 1, &cmd->buf);
 
-    talloc_free(cmd);
+    pl_free(cmd);
 }
 
 static struct vk_cmd *vk_cmd_create(struct vk_ctx *vk, struct vk_cmdpool *pool)
 {
-    struct vk_cmd *cmd = talloc_zero(NULL, struct vk_cmd);
+    struct vk_cmd *cmd = pl_zalloc_ptr(NULL, cmd);
     cmd->pool = pool;
 
     VkCommandBufferAllocateInfo ainfo = {
@@ -99,7 +100,7 @@ void vk_dev_callback(struct vk_ctx *vk, vk_cb callback,
 void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback,
                      const void *priv, const void *arg)
 {
-    TARRAY_APPEND(cmd, cmd->callbacks, cmd->num_callbacks, (struct vk_callback) {
+    PL_ARRAY_APPEND(cmd, cmd->callbacks, (struct vk_callback) {
         .run  = callback,
         .priv = (void *) priv,
         .arg  = (void *) arg,
@@ -108,21 +109,19 @@ void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback,
 
 void vk_cmd_dep(struct vk_cmd *cmd, VkSemaphore dep, VkPipelineStageFlags stage)
 {
-    int idx = cmd->num_deps++;
-    TARRAY_GROW(cmd, cmd->deps, idx);
-    TARRAY_GROW(cmd, cmd->depstages, idx);
-    cmd->deps[idx] = dep;
-    cmd->depstages[idx] = stage;
+    pl_assert(cmd->deps.num == cmd->depstages.num);
+    PL_ARRAY_APPEND(cmd, cmd->deps, dep);
+    PL_ARRAY_APPEND(cmd, cmd->depstages, stage);
 }
 
 void vk_cmd_obj(struct vk_cmd *cmd, const void *obj)
 {
-    TARRAY_APPEND(cmd, cmd->objs, cmd->num_objs, obj);
+    PL_ARRAY_APPEND(cmd, cmd->objs, obj);
 }
 
 void vk_cmd_sig(struct vk_cmd *cmd, VkSemaphore sig)
 {
-    TARRAY_APPEND(cmd, cmd->sigs, cmd->num_sigs, sig);
+    PL_ARRAY_APPEND(cmd, cmd->sigs, sig);
 }
 
 struct vk_signal {
@@ -136,17 +135,17 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
                                 VkPipelineStageFlags stage)
 {
     struct vk_signal *sig = NULL;
-    if (TARRAY_POP(vk->signals, vk->num_signals, &sig))
+    if (PL_ARRAY_POP(vk->signals, &sig))
         goto done;
 
     // no available signal => initialize a new one
-    sig = talloc_zero(NULL, struct vk_signal);
+    sig = pl_zalloc_ptr(NULL, sig);
     static const VkSemaphoreCreateInfo sinfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     };
 
     // We can skip creating the semaphores if there's only one queue
-    if (vk->num_pools > 1 || vk->pools[0]->num_queues > 1) {
+    if (vk->pools.num > 1 || vk->pools.elem[0]->num_queues > 1) {
         VK(vk->CreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sig->semaphore));
         VK_NAME(SEMAPHORE, sig->semaphore, "sig");
     }
@@ -196,9 +195,9 @@ static bool unsignal_cmd(struct vk_cmd *cmd, VkSemaphore sem)
     if (!sem)
         return true;
 
-    for (int n = 0; n < cmd->num_sigs; n++) {
-        if (cmd->sigs[n] == sem) {
-            TARRAY_REMOVE_AT(cmd->sigs, cmd->num_sigs, n);
+    for (int n = 0; n < cmd->sigs.num; n++) {
+        if (cmd->sigs.elem[n] == sem) {
+            PL_ARRAY_REMOVE_AT(cmd->sigs, n);
             return true;
         }
     }
@@ -214,8 +213,8 @@ static bool unsignal(struct vk_ctx *vk, struct vk_cmd *cmd, VkSemaphore sem)
         return true;
 
     // Attempt to remove it from any queued commands
-    for (int i = 0; i < vk->num_cmds_queued; i++) {
-        if (unsignal_cmd(vk->cmds_queued[i], sem))
+    for (int i = 0; i < vk->cmds_queued.num; i++) {
+        if (unsignal_cmd(vk->cmds_queued.elem[i], sem))
             return true;
     }
 
@@ -230,7 +229,7 @@ static void release_signal(struct vk_ctx *vk, struct vk_signal *sig)
     if (sig->event)
         vk->ResetEvent(vk->dev, sig->event);
     sig->source = NULL;
-    TARRAY_APPEND(vk->ta, vk->signals, vk->num_signals, sig);
+    PL_ARRAY_APPEND(vk->ta, vk->signals, sig);
 }
 
 enum vk_wait_type vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
@@ -273,7 +272,7 @@ void vk_signal_destroy(struct vk_ctx *vk, struct vk_signal **sig)
 
     vk->DestroySemaphore(vk->dev, (*sig)->semaphore, VK_ALLOC);
     vk->DestroyEvent(vk->dev, (*sig)->event, VK_ALLOC);
-    talloc_free(*sig);
+    pl_free(*sig);
     *sig = NULL;
 }
 
@@ -281,11 +280,11 @@ struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk,
                                      VkDeviceQueueCreateInfo qinfo,
                                      VkQueueFamilyProperties props)
 {
-    struct vk_cmdpool *pool = talloc_ptrtype(NULL, pool);
+    struct vk_cmdpool *pool = pl_alloc_ptr(NULL, pool);
     *pool = (struct vk_cmdpool) {
         .props = props,
         .qf = qinfo.queueFamilyIndex,
-        .queues = talloc_zero_array(pool, VkQueue, qinfo.queueCount),
+        .queues = pl_calloc(pool, qinfo.queueCount, sizeof(VkQueue)),
         .num_queues = qinfo.queueCount,
     };
 
@@ -314,11 +313,11 @@ void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool)
     if (!pool)
         return;
 
-    for (int i = 0; i < pool->num_cmds; i++)
-        vk_cmd_destroy(vk, pool->cmds[i]);
+    for (int i = 0; i < pool->cmds.num; i++)
+        vk_cmd_destroy(vk, pool->cmds.elem[i]);
 
     vk->DestroyCommandPool(vk->dev, pool->pool, VK_ALLOC);
-    talloc_free(pool);
+    pl_free(pool);
 }
 
 struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool)
@@ -328,7 +327,7 @@ struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool)
     vk_poll_commands(vk, 0);
 
     struct vk_cmd *cmd = NULL;
-    if (TARRAY_POP(pool->cmds, pool->num_cmds, &cmd))
+    if (PL_ARRAY_POP(pool->cmds, &cmd))
         goto done;
 
     // No free command buffers => allocate another one
@@ -364,10 +363,10 @@ bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd **pcmd)
     VK(vk->EndCommandBuffer(cmd->buf));
 
     VK(vk->ResetFences(vk->dev, 1, &cmd->fence));
-    TARRAY_APPEND(vk->ta, vk->cmds_queued, vk->num_cmds_queued, cmd);
+    PL_ARRAY_APPEND(vk->ta, vk->cmds_queued, cmd);
     vk->last_cmd = cmd;
 
-    if (vk->num_cmds_queued >= PL_VK_MAX_QUEUED_CMDS) {
+    if (vk->cmds_queued.num >= PL_VK_MAX_QUEUED_CMDS) {
         PL_WARN(vk, "Exhausted the queued command limit.. forcing a flush now. "
                 "Consider using pl_gpu_flush after submitting a batch of work?");
         vk_flush_commands(vk);
@@ -377,7 +376,7 @@ bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd **pcmd)
 
 error:
     vk_cmd_reset(vk, cmd);
-    TARRAY_APPEND(pool, pool->cmds, pool->num_cmds, cmd);
+    PL_ARRAY_APPEND(pool, pool->cmds, cmd);
     vk->failed = true;
     return false;
 }
@@ -386,16 +385,16 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
 {
     bool ret = false;
 
-    while (vk->num_cmds_pending > 0) {
-        struct vk_cmd *cmd = vk->cmds_pending[0];
+    while (vk->cmds_pending.num > 0) {
+        struct vk_cmd *cmd = vk->cmds_pending.elem[0];
         struct vk_cmdpool *pool = cmd->pool;
         VkResult res = vk_cmd_poll(vk, cmd, timeout);
         if (res == VK_TIMEOUT)
             break;
         PL_TRACE(vk, "VkFence signalled: %p", (void *) cmd->fence);
         vk_cmd_reset(vk, cmd);
-        TARRAY_REMOVE_AT(vk->cmds_pending, vk->num_cmds_pending, 0);
-        TARRAY_APPEND(pool, pool->cmds, pool->num_cmds, cmd);
+        PL_ARRAY_REMOVE_AT(vk->cmds_pending, 0);
+        PL_ARRAY_APPEND(pool, pool->cmds, cmd);
         ret = true;
 
         // If we've successfully spent some time waiting for at least one
@@ -417,13 +416,13 @@ bool vk_flush_commands(struct vk_ctx *vk)
 bool vk_flush_obj(struct vk_ctx *vk, const void *obj)
 {
     // Count how many commands we want to flush
-    int num_to_flush = vk->num_cmds_queued;
+    int num_to_flush = vk->cmds_queued.num;
     if (obj) {
         num_to_flush = 0;
-        for (int i = 0; i < vk->num_cmds_queued; i++) {
-            struct vk_cmd *cmd = vk->cmds_queued[i];
-            for (int o = 0; o < cmd->num_objs; o++) {
-                if (cmd->objs[o] == obj) {
+        for (int i = 0; i < vk->cmds_queued.num; i++) {
+            struct vk_cmd *cmd = vk->cmds_queued.elem[i];
+            for (int o = 0; o < cmd->objs.num; o++) {
+                if (cmd->objs.elem[o] == obj) {
                     num_to_flush = i+1;
                     goto next_cmd;
                 }
@@ -437,59 +436,59 @@ next_cmd: ;
         return true;
 
     PL_TRACE(vk, "Flushing %d/%d queued commands",
-             num_to_flush, vk->num_cmds_queued);
+             num_to_flush, vk->cmds_queued.num);
 
     bool ret = true;
 
     for (int i = 0; i < num_to_flush; i++) {
-        struct vk_cmd *cmd = vk->cmds_queued[i];
+        struct vk_cmd *cmd = vk->cmds_queued.elem[i];
         struct vk_cmdpool *pool = cmd->pool;
 
         VkSubmitInfo sinfo = {
             .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
             .commandBufferCount = 1,
             .pCommandBuffers = &cmd->buf,
-            .waitSemaphoreCount = cmd->num_deps,
-            .pWaitSemaphores = cmd->deps,
-            .pWaitDstStageMask = cmd->depstages,
-            .signalSemaphoreCount = cmd->num_sigs,
-            .pSignalSemaphores = cmd->sigs,
+            .waitSemaphoreCount = cmd->deps.num,
+            .pWaitSemaphores = cmd->deps.elem,
+            .pWaitDstStageMask = cmd->depstages.elem,
+            .signalSemaphoreCount = cmd->sigs.num,
+            .pSignalSemaphores = cmd->sigs.elem,
         };
 
         if (pl_msg_test(vk->ctx, PL_LOG_TRACE)) {
             PL_TRACE(vk, "Submitting command on queue %p (QF %d):",
                      (void *)cmd->queue, pool->qf);
-            for (int n = 0; n < cmd->num_objs; n++)
-                PL_TRACE(vk, "    uses object %p", cmd->objs[n]);
-            for (int n = 0; n < cmd->num_deps; n++)
-                PL_TRACE(vk, "    waits on semaphore %p", (void *) cmd->deps[n]);
-            for (int n = 0; n < cmd->num_sigs; n++)
-                PL_TRACE(vk, "    signals semaphore %p", (void *) cmd->sigs[n]);
+            for (int n = 0; n < cmd->objs.num; n++)
+                PL_TRACE(vk, "    uses object %p", cmd->objs.elem[n]);
+            for (int n = 0; n < cmd->deps.num; n++)
+                PL_TRACE(vk, "    waits on semaphore %p", (void *) cmd->deps.elem[n]);
+            for (int n = 0; n < cmd->sigs.num; n++)
+                PL_TRACE(vk, "    signals semaphore %p", (void *) cmd->sigs.elem[n]);
             PL_TRACE(vk, "    signals fence %p", (void *) cmd->fence);
-            if (cmd->num_callbacks)
-                PL_TRACE(vk, "    signals %d callbacks", cmd->num_callbacks);
+            if (cmd->callbacks.num)
+                PL_TRACE(vk, "    signals %d callbacks", cmd->callbacks.num);
         }
 
         VK(vk->QueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));
-        TARRAY_APPEND(vk->ta, vk->cmds_pending, vk->num_cmds_pending, cmd);
+        PL_ARRAY_APPEND(vk->ta, vk->cmds_pending, cmd);
         continue;
 
 error:
         vk_cmd_reset(vk, cmd);
-        TARRAY_APPEND(pool, pool->cmds, pool->num_cmds, cmd);
+        PL_ARRAY_APPEND(pool, pool->cmds, cmd);
         vk->failed = true;
         ret = false;
     }
 
     // Move remaining commands back to index 0
-    vk->num_cmds_queued -= num_to_flush;
-    if (vk->num_cmds_queued) {
-        memmove(vk->cmds_queued, &vk->cmds_queued[num_to_flush],
-                vk->num_cmds_queued * sizeof(vk->cmds_queued[0]));
+    vk->cmds_queued.num -= num_to_flush;
+    if (vk->cmds_queued.num) {
+        memmove(vk->cmds_queued.elem, &vk->cmds_queued.elem[num_to_flush],
+                vk->cmds_queued.num * sizeof(vk->cmds_queued.elem[0]));
     }
 
     // Wait until we've processed some of the now pending commands
-    while (vk->num_cmds_pending > PL_VK_MAX_PENDING_CMDS)
+    while (vk->cmds_pending.num > PL_VK_MAX_PENDING_CMDS)
         vk_poll_commands(vk, UINT64_MAX);
 
     return ret;
@@ -498,8 +497,8 @@ error:
 void vk_rotate_queues(struct vk_ctx *vk)
 {
     // Rotate the queues to ensure good parallelism across frames
-    for (int i = 0; i < vk->num_pools; i++) {
-        struct vk_cmdpool *pool = vk->pools[i];
+    for (int i = 0; i < vk->pools.num; i++) {
+        struct vk_cmdpool *pool = vk->pools.elem[i];
         pool->idx_queues = (pool->idx_queues + 1) % pool->num_queues;
         PL_TRACE(vk, "QF %d: %d/%d", pool->qf, pool->idx_queues, pool->num_queues);
     }
