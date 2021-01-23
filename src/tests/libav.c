@@ -299,6 +299,7 @@ int main()
     pl_frame_from_avframe(&image, frame);
     pl_color_space_infer(&image.color);
     REQUIRE(pl_color_space_equal(&csp, &image.color));
+    av_frame_free(&frame);
 
     // Test enum functions
     for (enum pl_color_system sys = 0; sys < PL_COLOR_SYSTEM_COUNT; sys++) {
