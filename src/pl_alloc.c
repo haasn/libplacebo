@@ -208,6 +208,7 @@ void pl_free(void *ptr)
     pl_free_children(ptr);
     unlink_child(h->parent, h);
 
+    free(h->ext);
     free(h);
 }
 
