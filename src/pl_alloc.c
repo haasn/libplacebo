@@ -18,11 +18,6 @@
 #include <pthread.h>
 #include "common.h"
 
-union child {
-    size_t size;
-    struct header *child;
-};
-
 struct header {
 #ifndef NDEBUG
 #define MAGIC 0x20210119LU
