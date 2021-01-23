@@ -99,25 +99,34 @@ double pl_filter_sample(const struct pl_filter_config *c, double x)
     return k < 0 ? (1 - c->clamp) * k : k;
 }
 
-// Calculate a single filter row of a 1D filter, for a given phase value /
-// subpixel offset `offset`. Writes exactly f->row_size values to *out.
+// Compute a single row of weights for a given filter in one dimension, indexed
+// by the indicated subpixel offset. Writes `f->row_size` values to `out`.
 static void compute_row(struct pl_filter *f, double offset, float *out)
 {
-    pl_assert(f->row_size > 0);
-    double sum = 0;
+    double wsum = 0.0;
     for (int i = 0; i < f->row_size; i++) {
-        double x = offset - (i - f->row_size / 2 + 1);
-        // Readjust the value range to account for a stretched kernel.
+        // For the example of a filter with row size 4 and offset 0.3, we have:
+        //
+        // 0    1 *  2    3
+        //
+        // * indicates the sampled position. What we want to compute is the
+        // distance from each index to that sampled position.
+        pl_assert(f->row_size % 2 == 0);
+        const int base = f->row_size / 2 - 1; // index to the left of the center
+        const double center = base + offset; // offset of center relative to idx 0
+        double x = i - center;
+
+        // Stretch/squish the kernel by readjusting the value range
         x *= f->params.config.kernel->radius / f->radius;
-        double weight = pl_filter_sample(&f->params.config, x);
-        out[i] = weight;
-        sum += weight;
+        double w = pl_filter_sample(&f->params.config, x);
+        out[i] = w;
+        wsum += w;
     }
-    // Normalize to preserve energy
-    if (sum > 0.0) {
-        for (int i = 0; i < f->row_size; i++)
-            out[i] /= sum;
-    }
+
+    // Readjust weights to preserve energy
+    pl_assert(wsum > 0);
+    for (int i = 0; i < f->row_size; i++)
+        out[i] /= wsum;
 }
 
 static struct pl_filter_function *dupfilter(void *alloc,
