@@ -64,132 +64,113 @@ static void gl_destroy_gpu(const struct pl_gpu *gpu)
         *(field) = tmp;                     \
     } while (0)
 
+static void add_format(const struct pl_gpu *pgpu, const struct gl_format *gl_fmt)
+{
+    struct pl_gpu *gpu = (struct pl_gpu *) pgpu;
+    struct pl_gl *p = PL_PRIV(gpu);
+
+    struct pl_fmt *fmt = pl_alloc_ptr_priv(gpu, fmt, gl_fmt);
+    const struct gl_format **fmtp = PL_PRIV(fmt);
+    *fmt = gl_fmt->tmpl;
+    *fmtp = gl_fmt;
+
+    // Calculate the host size and number of components
+    switch (gl_fmt->fmt) {
+    case GL_RED:
+    case GL_RED_INTEGER:
+        fmt->num_components = 1;
+        break;
+    case GL_RG:
+    case GL_RG_INTEGER:
+        fmt->num_components = 2;
+        break;
+    case GL_RGB:
+    case GL_RGB_INTEGER:
+        fmt->num_components = 3;
+        break;
+    case GL_RGBA:
+    case GL_RGBA_INTEGER:
+        fmt->num_components = 4;
+        break;
+    default: abort();
+    }
+
+    int size;
+    switch (gl_fmt->type) {
+    case GL_BYTE:
+    case GL_UNSIGNED_BYTE:
+        size = 1;
+        break;
+    case GL_SHORT:
+    case GL_UNSIGNED_SHORT:
+        size = 2;
+        break;
+    case GL_INT:
+    case GL_UNSIGNED_INT:
+    case GL_FLOAT:
+        size = 4;
+        break;
+    default: abort();
+    }
+
+    // Host visible representation
+    fmt->texel_size = fmt->num_components * size;
+    for (int i = 0; i < fmt->num_components; i++)
+        fmt->host_bits[i] = size * 8;
+
+    // Compute internal size by summing up the depth
+    int ibits = 0;
+    for (int i = 0; i < fmt->num_components; i++)
+        ibits += fmt->component_depth[i];
+    fmt->internal_size = (ibits + 7) / 8;
+
+    // We're not the ones actually emulating these texture format - the
+    // driver is - but we might as well set the hint.
+    // NOTE: 3-component formats (e.g. rgb8) are probably also emulated,
+    // but we have no way of knowing this for sure, so let's just ignore it.
+    fmt->emulated = fmt->texel_size != fmt->internal_size;
+
+    // For sanity, clear the superfluous fields
+    for (int i = fmt->num_components; i < 4; i++) {
+        fmt->component_depth[i] = 0;
+        fmt->sample_order[i] = 0;
+        fmt->host_bits[i] = 0;
+    }
+
+    fmt->glsl_type = pl_var_glsl_type_name(pl_var_from_fmt(fmt, ""));
+    fmt->glsl_format = pl_fmt_glsl_format(fmt, fmt->num_components);
+    fmt->fourcc = pl_fmt_fourcc(fmt);
+    pl_assert(fmt->glsl_type);
+
+    // Mask renderable/blittable if no FBOs available
+    if (!p->has_fbos)
+        fmt->caps &= ~(PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE);
+
+    // Reading from textures on GLES requires FBO support for this fmt
+    if (p->gl_ver || (fmt->caps & PL_FMT_CAP_RENDERABLE))
+        fmt->caps |= PL_FMT_CAP_HOST_READABLE;
+
+    if ((gpu->caps & PL_GPU_CAP_COMPUTE) && fmt->glsl_format && p->has_storage)
+        fmt->caps |= PL_FMT_CAP_STORABLE;
+
+    // Only float-type formats are considered blendable in OpenGL
+    switch (fmt->type) {
+    case PL_FMT_FLOAT:
+    case PL_FMT_UNORM:
+    case PL_FMT_SNORM:
+        if (fmt->caps & PL_FMT_CAP_RENDERABLE)
+            fmt->caps |= PL_FMT_CAP_BLENDABLE;
+    default: break;
+    }
+
+    // TODO: Texel buffers
+
+    PL_ARRAY_APPEND_RAW(gpu, gpu->formats, gpu->num_formats, fmt);
+}
 
 static bool gl_setup_formats(struct pl_gpu *gpu)
 {
-    struct pl_gl *p = PL_PRIV(gpu);
-    int features = gl_format_feature_flags(gpu);
-    bool has_fbos = test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20);
-    bool has_storage = test_ext(gpu, "GL_ARB_shader_image_load_store", 42, 0);
-    PL_ARRAY(const struct pl_fmt *) formats = {0};
-
-    for (const struct gl_format *gl_fmt = gl_formats; gl_fmt->ifmt; gl_fmt++) {
-        if (gl_fmt->ver && !(gl_fmt->ver & features))
-            continue;
-
-        // Eliminate duplicate formats
-        for (int i = 0; i < formats.num; i++) {
-            const struct gl_format **fmtp = PL_PRIV(formats.elem[i]);
-            if ((*fmtp)->ifmt == gl_fmt->ifmt)
-                goto next_gl_fmt;
-        }
-
-        struct pl_fmt *fmt = pl_alloc_ptr_priv(gpu, fmt, gl_fmt);
-        const struct gl_format **fmtp = PL_PRIV(fmt);
-        *fmt = gl_fmt->tmpl;
-        *fmtp = gl_fmt;
-
-        // Calculate the host size and number of components
-        switch (gl_fmt->fmt) {
-        case GL_RED:
-        case GL_RED_INTEGER:
-            fmt->num_components = 1;
-            break;
-        case GL_RG:
-        case GL_RG_INTEGER:
-            fmt->num_components = 2;
-            break;
-        case GL_RGB:
-        case GL_RGB_INTEGER:
-            fmt->num_components = 3;
-            break;
-        case GL_RGBA:
-        case GL_RGBA_INTEGER:
-            fmt->num_components = 4;
-            break;
-        default: abort();
-        }
-
-        int size;
-        switch (gl_fmt->type) {
-        case GL_BYTE:
-        case GL_UNSIGNED_BYTE:
-            size = 1;
-            break;
-        case GL_SHORT:
-        case GL_UNSIGNED_SHORT:
-            size = 2;
-            break;
-        case GL_INT:
-        case GL_UNSIGNED_INT:
-        case GL_FLOAT:
-            size = 4;
-            break;
-        default: abort();
-        }
-
-        // Host visible representation
-        fmt->texel_size = fmt->num_components * size;
-        for (int i = 0; i < fmt->num_components; i++)
-            fmt->host_bits[i] = size * 8;
-
-        // Compute internal size by summing up the depth
-        int ibits = 0;
-        for (int i = 0; i < fmt->num_components; i++)
-            ibits += fmt->component_depth[i];
-        fmt->internal_size = (ibits + 7) / 8;
-
-        // We're not the ones actually emulating these texture format - the
-        // driver is - but we might as well set the hint.
-        // NOTE: 3-component formats (e.g. rgb8) are probably also emulated,
-        // but we have no way of knowing this for sure, so let's just ignore it.
-        fmt->emulated = fmt->texel_size != fmt->internal_size;
-
-        // For sanity, clear the superfluous fields
-        for (int i = fmt->num_components; i < 4; i++) {
-            fmt->component_depth[i] = 0;
-            fmt->sample_order[i] = 0;
-            fmt->host_bits[i] = 0;
-        }
-
-        fmt->glsl_type = pl_var_glsl_type_name(pl_var_from_fmt(fmt, ""));
-        fmt->glsl_format = pl_fmt_glsl_format(fmt, fmt->num_components);
-        fmt->fourcc = pl_fmt_fourcc(fmt);
-        pl_assert(fmt->glsl_type);
-
-        // Add format capabilities based on the flags
-        fmt->caps = gl_fmt->caps;
-
-        // Mask renderable/blittable if no FBOs available
-        if (!has_fbos)
-            fmt->caps &= ~(PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE);
-
-        // Reading from textures on GLES requires FBO support for this fmt
-        if (p->gl_ver || (fmt->caps & PL_FMT_CAP_RENDERABLE))
-            fmt->caps |= PL_FMT_CAP_HOST_READABLE;
-
-        if ((gpu->caps & PL_GPU_CAP_COMPUTE) && fmt->glsl_format && has_storage)
-            fmt->caps |= PL_FMT_CAP_STORABLE;
-
-        // Only float-type formats are considered blendable in OpenGL
-        switch (fmt->type) {
-        case PL_FMT_FLOAT:
-        case PL_FMT_UNORM:
-        case PL_FMT_SNORM:
-            if (fmt->caps & PL_FMT_CAP_RENDERABLE)
-                fmt->caps |= PL_FMT_CAP_BLENDABLE;
-        default: break;
-        }
-
-        // TODO: Texel buffers
-
-        PL_ARRAY_APPEND(gpu, formats, fmt);
-
-next_gl_fmt: ;
-    }
-
-    gpu->formats = formats.elem;
-    gpu->num_formats = formats.num;
+    pl_gl_enumerate_formats(gpu, add_format);
     pl_gpu_sort_formats(gpu);
     return gl_check_err(gpu, "gl_setup_formats");
 }
@@ -314,6 +295,8 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
     p->has_invalidate_fb = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
     p->has_invalidate_tex = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 0);
     p->has_queries = test_ext(gpu, "GL_ARB_timer_query", 33, 0);
+    p->has_fbos = test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20);
+    p->has_storage = test_ext(gpu, "GL_ARB_shader_image_load_store", 42, 0);
 
     // We simply don't know, so make up some values
     gpu->limits.align_tex_xfer_offset = 32;

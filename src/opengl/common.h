@@ -57,6 +57,8 @@ struct pl_gl {
     // Cached capabilities
     int gl_ver;
     int gles_ver;
+    bool has_fbos;
+    bool has_storage;
     bool has_stride;
     bool has_invalidate_fb;
     bool has_invalidate_tex;

@@ -18,175 +18,224 @@
 #include "formats.h"
 #include "common.h"
 
-#define FMT(_name, bits, ftype)                      \
+#define FMT(_name, bits, ftype, _caps)               \
     (struct pl_fmt) {                                \
         .name = _name,                               \
         .type = PL_FMT_##ftype,                      \
+        .caps = (enum pl_fmt_caps) (_caps),          \
         .sample_order = {0, 1, 2, 3},                \
         .component_depth = {bits, bits, bits, bits}, \
     }
 
+// Convenience to make the names simpler
 enum {
     // Type aliases
-    T_U8    = GL_UNSIGNED_BYTE,
-    T_U16   = GL_UNSIGNED_SHORT,
-    T_U32   = GL_UNSIGNED_INT,
-    T_I8    = GL_BYTE,
-    T_I16   = GL_SHORT,
-    T_I32   = GL_INT,
-    T_FLT   = GL_FLOAT,
+    U8    = GL_UNSIGNED_BYTE,
+    U16   = GL_UNSIGNED_SHORT,
+    U32   = GL_UNSIGNED_INT,
+    I8    = GL_BYTE,
+    I16   = GL_SHORT,
+    I32   = GL_INT,
+    FLT   = GL_FLOAT,
 
     // Component aliases
-    C_R     = GL_RED,
-    C_RG    = GL_RG,
-    C_RGB   = GL_RGB,
-    C_RGBA  = GL_RGBA,
-    C_RI    = GL_RED_INTEGER,
-    C_RGI   = GL_RG_INTEGER,
-    C_RGBI  = GL_RGB_INTEGER,
-    C_RGBAI = GL_RGBA_INTEGER,
+    R     = GL_RED,
+    RG    = GL_RG,
+    RGB   = GL_RGB,
+    RGBA  = GL_RGBA,
+    RI    = GL_RED_INTEGER,
+    RGI   = GL_RG_INTEGER,
+    RGBI  = GL_RGB_INTEGER,
+    RGBAI = GL_RGBA_INTEGER,
+
+    // Capability aliases
+    S     = PL_FMT_CAP_SAMPLEABLE,
+    L     = PL_FMT_CAP_LINEAR,
+    F     = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE, // FBO support
+    V     = PL_FMT_CAP_VERTEX,
 };
 
-// Capability aliases
-#define F_S     PL_FMT_CAP_SAMPLEABLE
-#define F_VF    PL_FMT_CAP_VERTEX
-#define F_CR    (PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE)
-#define F_TF    PL_FMT_CAP_LINEAR
-#define F_CFS   (F_CR | F_TF | F_S)
-
-const struct gl_format gl_formats[] = {
-    // Copyright note: This list and the feature flags are largely copied 1:1
-    // from mpv.
-    //
-    // Regular, byte-aligned integer formats. These are used for desktop GL 3+,
-    // and GLES 3+ with GL_EXT_texture_norm16.
-    {GL_R8,             C_R,     T_U8,  FMT("r8",       8, UNORM), F_VF | F_CFS, V_GL3 | V_GL2F | V_ES3},
-    {GL_RG8,            C_RG,    T_U8,  FMT("rg8",      8, UNORM), F_VF | F_CFS, V_GL3 | V_GL2F | V_ES3},
-    {GL_RGB8,           C_RGB,   T_U8,  FMT("rgb8",     8, UNORM), F_VF | F_CFS, V_GL3 | V_GL2F | V_ES3},
-    {GL_RGBA8,          C_RGBA,  T_U8,  FMT("rgba8",    8, UNORM), F_VF | F_CFS, V_GL3 | V_GL2F | V_ES3},
-    {GL_R16,            C_R,     T_U16, FMT("r16",     16, UNORM), F_VF | F_CFS, V_GL3 | V_GL2F | V_EXT16},
-    {GL_RG16,           C_RG,    T_U16, FMT("rg16",    16, UNORM), F_VF | F_CFS, V_GL3 | V_GL2F | V_EXT16},
-    {GL_RGB16,          C_RGB,   T_U16, FMT("rgb16",   16, UNORM), F_VF | F_CFS, V_GL3 | V_GL2F},
-    {GL_RGBA16,         C_RGBA,  T_U16, FMT("rgba16",  16, UNORM), F_VF | F_CFS, V_GL3 | V_GL2F | V_EXT16},
-
-    // Specifically not color-renderable.
-    {GL_RGB16,          C_RGB,   T_U16, FMT("rgb16",   16, UNORM), F_VF | F_TF | F_S, V_EXT16},
-
-    // GL2 legacy formats. Ignores possibly present FBO extensions (no CF flag set)
-    {GL_RGB8,           C_RGB,   T_U8,  FMT("rgb8",     8, UNORM), F_VF | F_TF | F_S, V_GL2},
-    {GL_RGBA8,          C_RGBA,  T_U8,  FMT("rgba8",    8, UNORM), F_VF | F_TF | F_S, V_GL2},
-    {GL_RGB16,          C_RGB,   T_U16, FMT("rgb16",   16, UNORM), F_VF | F_TF | F_S, V_GL2},
-    {GL_RGBA16,         C_RGBA,  T_U16, FMT("rgba16",  16, UNORM), F_VF | F_TF | F_S, V_GL2},
-
-    // ES2 legacy
-    {GL_RGB,            C_RGB,   T_U8,  FMT("rgb",      8, UNORM), F_TF | F_S, V_ES2},
-    {GL_RGBA,           C_RGBA,  T_U8,  FMT("rgba",     8, UNORM), F_TF | F_S, V_ES2},
-
-    // Non-normalized integer formats.
-    // Follows ES 3.0 as to which are color-renderable.
-    {GL_R8UI,           C_RI,    T_U8,  FMT("r8u",      8, UINT),  F_VF | F_S | F_CR, V_GL3 | V_ES3},
-    {GL_RG8UI,          C_RGI,   T_U8,  FMT("rg8u",     8, UINT),  F_VF | F_S | F_CR, V_GL3 | V_ES3},
-    {GL_RGB8UI,         C_RGBI,  T_U8,  FMT("rgb8u",    8, UINT),  F_VF | F_S,        V_GL3 | V_ES3},
-    {GL_RGBA8UI,        C_RGBAI, T_U8,  FMT("rgba8u",   8, UINT),  F_VF | F_S | F_CR, V_GL3 | V_ES3},
-    {GL_R16UI,          C_RI,    T_U16, FMT("r16u",    16, UINT),  F_VF | F_S | F_CR, V_GL3 | V_ES3},
-    {GL_RG16UI,         C_RGI,   T_U16, FMT("rg16u",   16, UINT),  F_VF | F_S | F_CR, V_GL3 | V_ES3},
-    {GL_RGB16UI,        C_RGBI,  T_U16, FMT("rgb16u",  16, UINT),  F_VF | F_S,        V_GL3 | V_ES3},
-    {GL_RGBA16UI,       C_RGBAI, T_U16, FMT("rgba16u", 16, UINT),  F_VF | F_S | F_CR, V_GL3 | V_ES3},
-
-    /* TODO
-    {GL_R32UI,          C_RI,    T_U32, FMT("r32u",    32, UINT)},
-    {GL_RG32UI,         C_RGI,   T_U32, FMT("rg32u",   32, UINT)},
-    {GL_RGB32UI,        C_RGBI,  T_U32, FMT("rgb32u",  32, UINT)},
-    {GL_RGBA32UI,       C_RGBAI, T_U32, FMT("rgba32u", 32, UINT)},
-    */
-
-    // On GL3+ or GL2.1 with GL_ARB_texture_float, floats work fully.
-    {GL_R16F,           C_R,     T_FLT, FMT("r16f",    16, FLOAT), F_CFS, V_GL3 | V_GL2F},
-    {GL_RG16F,          C_RG,    T_FLT, FMT("rg16f",   16, FLOAT), F_CFS, V_GL3 | V_GL2F},
-    {GL_RGB16F,         C_RGB,   T_FLT, FMT("rgb16f",  16, FLOAT), F_CFS, V_GL3 | V_GL2F},
-    {GL_RGBA16F,        C_RGBA,  T_FLT, FMT("rgba16f", 16, FLOAT), F_CFS, V_GL3 | V_GL2F},
-    {GL_R32F,           C_R,     T_FLT, FMT("r32f",    32, FLOAT), F_VF | F_CFS, V_GL3 | V_GL2F},
-    {GL_RG32F,          C_RG,    T_FLT, FMT("rg32f",   32, FLOAT), F_VF | F_CFS, V_GL3 | V_GL2F},
-    {GL_RGB32F,         C_RGB,   T_FLT, FMT("rgb32f",  32, FLOAT), F_VF | F_CFS, V_GL3 | V_GL2F},
-    {GL_RGBA32F,        C_RGBA,  T_FLT, FMT("rgba32f", 32, FLOAT), F_VF | F_CFS, V_GL3 | V_GL2F},
-
-    // Note: we simply don't support float anything on ES2, despite extensions.
-    // We also don't bother with non-filterable float formats, and we ignore
-    // 32 bit float formats that are not blendable when rendering to them.
-
-    // On ES3.2+, both 16 bit floats work fully (except 3-component formats).
-    // F_EXTF16 implies extensions that also enable 16 bit floats fully.
-    {GL_R16F,           C_R,     T_FLT, FMT("r16f",    16, FLOAT), F_CFS,      V_ES32 | V_EXTF16},
-    {GL_RG16F,          C_RG,    T_FLT, FMT("rg16f",   16, FLOAT), F_CFS,      V_ES32 | V_EXTF16},
-    {GL_RGB16F,         C_RGB,   T_FLT, FMT("rgb16f",  16, FLOAT), F_TF | F_S, V_ES32 | V_EXTF16},
-    {GL_RGBA16F,        C_RGBA,  T_FLT, FMT("rgba16f", 16, FLOAT), F_CFS,      V_ES32 | V_EXTF16},
-
-    // On ES3.0+, 16 bit floats are texture-filterable.
-    // Don't bother with 32 bit floats; they exist but are neither CR nor TF.
-    {GL_R16F,           C_R,     T_FLT, FMT("r16f",    16, FLOAT), F_TF | F_S, V_ES3},
-    {GL_RG16F,          C_RG,    T_FLT, FMT("rg16f",   16, FLOAT), F_TF | F_S, V_ES3},
-    {GL_RGB16F,         C_RGB,   T_FLT, FMT("rgb16f",  16, FLOAT), F_TF | F_S, V_ES3},
-    {GL_RGBA16F,        C_RGBA,  T_FLT, FMT("rgba16f", 16, FLOAT), F_TF | F_S, V_ES3},
-
-    // Fallback for vertex formats that should always exist
-    {GL_R32F,           C_R,     T_FLT, FMT("r32f",    32, FLOAT), F_VF},
-    {GL_RG32F,          C_RG,    T_FLT, FMT("rg32f",   32, FLOAT), F_VF},
-    {GL_RGB32F,         C_RGB,   T_FLT, FMT("rgb32f",  32, FLOAT), F_VF},
-    {GL_RGBA32F,        C_RGBA,  T_FLT, FMT("rgba32f", 32, FLOAT), F_VF},
-
-    /* TODO
-    {GL_R8_SNORM,       C_R,     T_I8,  FMT("r8s",      8, SNORM)},
-    {GL_RG8_SNORM,      C_RG,    T_I8,  FMT("rg8s",     8, SNORM)},
-    {GL_RGB8_SNORM,     C_RGB,   T_I8,  FMT("rgb8s",    8, SNORM)},
-    {GL_RGBA8_SNORM,    C_RGBA,  T_I8,  FMT("rgba8s",   8, SNORM)},
-    {GL_R16_SNORM,      C_R,     T_I16, FMT("r16s",    16, SNORM)},
-    {GL_RG16_SNORM,     C_RG,    T_I16, FMT("rg16s",   16, SNORM)},
-    {GL_RGB16_SNORM,    C_RGB,   T_I16, FMT("rgb16s",  16, SNORM)},
-    {GL_RGBA16_SNORM,   C_RGBA,  T_I16, FMT("rgba16s", 16, SNORM)},
-    */
-
-    /* TODO
-    {GL_R8I,            C_RI,    T_I8,  FMT("r8i",      8, SINT)},
-    {GL_RG8I,           C_RGI,   T_I8,  FMT("rg8i",     8, SINT)},
-    {GL_RGB8I,          C_RGBI,  T_I8,  FMT("rgb8i",    8, SINT)},
-    {GL_RGBA8I,         C_RGBAI, T_I8,  FMT("rgba8i",   8, SINT)},
-    {GL_R16I,           C_RI,    T_I16, FMT("r16i",    16, SINT)},
-    {GL_RG16I,          C_RGI,   T_I16, FMT("rg16i",   16, SINT)},
-    {GL_RGB16I,         C_RGBI,  T_I16, FMT("rgb16i",  16, SINT)},
-    {GL_RGBA16I,        C_RGBAI, T_I16, FMT("rgba16i", 16, SINT)},
-    {GL_R32I,           C_RI,    T_I32, FMT("r32i",    32, SINT)},
-    {GL_RG32I,          C_RGI,   T_I32, FMT("rg32i",   32, SINT)},
-    {GL_RGB32I,         C_RGBI,  T_I32, FMT("rgb32i",  32, SINT)},
-    {GL_RGBA32I,        C_RGBAI, T_I32, FMT("rgba32i", 32, SINT)},
-    */
-    {0},
+// Basic 8-bit formats
+const struct gl_format formats_norm8[] = {
+    {GL_R8,             R,     U8,  FMT("r8",       8, UNORM, S|L|F|V)},
+    {GL_RG8,            RG,    U8,  FMT("rg8",      8, UNORM, S|L|F|V)},
+    {GL_RGB8,           RGB,   U8,  FMT("rgb8",     8, UNORM, S|L|F|V)},
+    {GL_RGBA8,          RGBA,  U8,  FMT("rgba8",    8, UNORM, S|L|F|V)},
 };
 
-// Return an or-ed combination of all F_ flags that apply.
-int gl_format_feature_flags(const struct pl_gpu *gpu)
+// Basic 16-bit formats, excluding rgb16 (special cased below)
+const struct gl_format formats_norm16[] = {
+    {GL_R16,            R,     U16, FMT("r16",     16, UNORM, S|L|F|V)},
+    {GL_RG16,           RG,    U16, FMT("rg16",    16, UNORM, S|L|F|V)},
+    {GL_RGBA16,         RGBA,  U16, FMT("rgba16",  16, UNORM, S|L|F|V)},
+};
+
+// Renderable version of rgb16
+const struct gl_format formats_rgb16_fbo[] = {
+    {GL_RGB16,          RGB,   U16, FMT("rgb16",   16, UNORM, S|L|F|V)},
+};
+
+// Non-renderable version of rgb16
+const struct gl_format formats_rgb16_fallback[] = {
+    {GL_RGB16,          RGB,   U16, FMT("rgb16",   16, UNORM, S|L|V)},
+};
+
+// Floating point texture formats
+const struct gl_format formats_float[] = {
+    {GL_R16F,           R,     FLT, FMT("r16f",    16, FLOAT, S|L|F)},
+    {GL_RG16F,          RG,    FLT, FMT("rg16f",   16, FLOAT, S|L|F)},
+    {GL_RGB16F,         RGB,   FLT, FMT("rgb16f",  16, FLOAT, S|L|F)},
+    {GL_RGBA16F,        RGBA,  FLT, FMT("rgba16f", 16, FLOAT, S|L|F)},
+    {GL_R32F,           R,     FLT, FMT("r32f",    32, FLOAT, S|L|F|V)},
+    {GL_RG32F,          RG,    FLT, FMT("rg32f",   32, FLOAT, S|L|F|V)},
+    {GL_RGB32F,         RGB,   FLT, FMT("rgb32f",  32, FLOAT, S|L|F|V)},
+    {GL_RGBA32F,        RGBA,  FLT, FMT("rgba32f", 32, FLOAT, S|L|F|V)},
+};
+
+// Renderable 16-bit float formats (excluding rgb16f)
+const struct gl_format formats_float16_fbo[] = {
+    {GL_R16F,           R,     FLT, FMT("r16f",    16, FLOAT, S|L|F)},
+    {GL_RG16F,          RG,    FLT, FMT("rg16f",   16, FLOAT, S|L|F)},
+    {GL_RGB16F,         RGB,   FLT, FMT("rgb16f",  16, FLOAT, S|L)},
+    {GL_RGBA16F,        RGBA,  FLT, FMT("rgba16f", 16, FLOAT, S|L|F)},
+};
+
+// Non-renderable 16-bit float formats
+const struct gl_format formats_float16_fallback[] = {
+    {GL_R16F,           R,     FLT, FMT("r16f",    16, FLOAT, S|L)},
+    {GL_RG16F,          RG,    FLT, FMT("rg16f",   16, FLOAT, S|L)},
+    {GL_RGB16F,         RGB,   FLT, FMT("rgb16f",  16, FLOAT, S|L)},
+    {GL_RGBA16F,        RGBA,  FLT, FMT("rgba16f", 16, FLOAT, S|L)},
+};
+
+// (Unsigned) integer formats
+const struct gl_format formats_uint[] = {
+    {GL_R8UI,           RI,    U8,  FMT("r8u",      8, UINT, S|F|V)},
+    {GL_RG8UI,          RGI,   U8,  FMT("rg8u",     8, UINT, S|F|V)},
+    {GL_RGB8UI,         RGBI,  U8,  FMT("rgb8u",    8, UINT, S|V)},
+    {GL_RGBA8UI,        RGBAI, U8,  FMT("rgba8u",   8, UINT, S|F|V)},
+    {GL_R16UI,          RI,    U16, FMT("r16u",    16, UINT, S|F|V)},
+    {GL_RG16UI,         RGI,   U16, FMT("rg16u",   16, UINT, S|F|V)},
+    {GL_RGB16UI,        RGBI,  U16, FMT("rgb16u",  16, UINT, S|V)},
+    {GL_RGBA16UI,       RGBAI, U16, FMT("rgba16u", 16, UINT, S|F|V)},
+};
+
+/* TODO
+    {GL_R32UI,          RI,    U32, FMT("r32u",    32, UINT)},
+    {GL_RG32UI,         RGI,   U32, FMT("rg32u",   32, UINT)},
+    {GL_RGB32UI,        RGBI,  U32, FMT("rgb32u",  32, UINT)},
+    {GL_RGBA32UI,       RGBAI, U32, FMT("rgba32u", 32, UINT)},
+
+    {GL_R8_SNORM,       R,     I8,  FMT("r8s",      8, SNORM)},
+    {GL_RG8_SNORM,      RG,    I8,  FMT("rg8s",     8, SNORM)},
+    {GL_RGB8_SNORM,     RGB,   I8,  FMT("rgb8s",    8, SNORM)},
+    {GL_RGBA8_SNORM,    RGBA,  I8,  FMT("rgba8s",   8, SNORM)},
+    {GL_R16_SNORM,      R,     I16, FMT("r16s",    16, SNORM)},
+    {GL_RG16_SNORM,     RG,    I16, FMT("rg16s",   16, SNORM)},
+    {GL_RGB16_SNORM,    RGB,   I16, FMT("rgb16s",  16, SNORM)},
+    {GL_RGBA16_SNORM,   RGBA,  I16, FMT("rgba16s", 16, SNORM)},
+
+    {GL_R8I,            RI,    I8,  FMT("r8i",      8, SINT)},
+    {GL_RG8I,           RGI,   I8,  FMT("rg8i",     8, SINT)},
+    {GL_RGB8I,          RGBI,  I8,  FMT("rgb8i",    8, SINT)},
+    {GL_RGBA8I,         RGBAI, I8,  FMT("rgba8i",   8, SINT)},
+    {GL_R16I,           RI,    I16, FMT("r16i",    16, SINT)},
+    {GL_RG16I,          RGI,   I16, FMT("rg16i",   16, SINT)},
+    {GL_RGB16I,         RGBI,  I16, FMT("rgb16i",  16, SINT)},
+    {GL_RGBA16I,        RGBAI, I16, FMT("rgba16i", 16, SINT)},
+    {GL_R32I,           RI,    I32, FMT("r32i",    32, SINT)},
+    {GL_RG32I,          RGI,   I32, FMT("rg32i",   32, SINT)},
+    {GL_RGB32I,         RGBI,  I32, FMT("rgb32i",  32, SINT)},
+    {GL_RGBA32I,        RGBAI, I32, FMT("rgba32i", 32, SINT)},
+*/
+
+// GL2 legacy formats
+const struct gl_format formats_legacy_gl2[] = {
+    {GL_RGB8,           RGB,   U8,  FMT("rgb8",     8, UNORM, S|L|V)},
+    {GL_RGBA8,          RGBA,  U8,  FMT("rgba8",    8, UNORM, S|L|V)},
+    {GL_RGB16,          RGB,   U16, FMT("rgb16",   16, UNORM, S|L|V)},
+    {GL_RGBA16,         RGBA,  U16, FMT("rgba16",  16, UNORM, S|L|V)},
+};
+
+// GLES2 legacy formats
+const struct gl_format formats_legacy_gles2[] = {
+    {GL_RGB,            RGB,   U8,  FMT("rgb",      8, UNORM, S|L)},
+    {GL_RGBA,           RGBA,  U8,  FMT("rgba",     8, UNORM, S|L)},
+};
+
+// Fallback for vertex-only formats, as a last resort
+const struct gl_format formats_basic_vertex[] = {
+    {GL_R32F,           R,     FLT, FMT("r32f",    32, FLOAT, V)},
+    {GL_RG32F,          RG,    FLT, FMT("rg32f",   32, FLOAT, V)},
+    {GL_RGB32F,         RGB,   FLT, FMT("rgb32f",  32, FLOAT, V)},
+    {GL_RGBA32F,        RGBA,  FLT, FMT("rgba32f", 32, FLOAT, V)},
+};
+
+#define DO_FORMATS(formats)                                 \
+    do {                                                    \
+        for (int i = 0; i < PL_ARRAY_SIZE(formats); i++)    \
+            do_format(gpu, &formats[i]);                    \
+    } while (0)
+
+void pl_gl_enumerate_formats(const struct pl_gpu *gpu, gl_format_cb do_format)
 {
-    int gl_ver =  epoxy_is_desktop_gl() ? epoxy_gl_version() : 0;
-    int es_ver = !epoxy_is_desktop_gl() ? epoxy_gl_version() : 0;
+    struct pl_gl *p = PL_PRIV(gpu);
 
-    int flags = (gl_ver == 21 ? V_GL2 : 0)
-              | (gl_ver >= 30 ? V_GL3 : 0)
-              | (es_ver == 20 ? V_ES2 : 0)
-              | (es_ver >= 30 ? V_ES3 : 0)
-              | (es_ver >= 32 ? V_ES32 : 0);
-
-    if (epoxy_has_gl_extension("GL_EXT_texture_norm16"))
-        flags |= V_EXT16;
-
-    if (es_ver >= 30 && epoxy_has_gl_extension("GL_EXT_color_buffer_half_float"))
-        flags |= V_EXTF16;
-
-    if (gl_ver == 21 &&
-        epoxy_has_gl_extension("GL_ARB_texture_float") &&
-        epoxy_has_gl_extension("GL_ARB_texture_rg") &&
-        epoxy_has_gl_extension("GL_ARB_framebuffer_object"))
-    {
-        flags |= V_GL2F;
+    if (p->gl_ver >= 30) {
+        // Desktop GL3+ has everything
+        DO_FORMATS(formats_norm8);
+        DO_FORMATS(formats_norm16);
+        DO_FORMATS(formats_rgb16_fbo);
+        DO_FORMATS(formats_float);
+        DO_FORMATS(formats_uint);
+        return;
     }
 
-    return flags;
+    if (p->gl_ver >= 21) {
+        // If we have a reasonable set of extensions, we can enable most
+        // things. Otherwise, pick simple fallback formats
+        if (epoxy_has_gl_extension("GL_ARB_texture_float") &&
+            epoxy_has_gl_extension("GL_ARB_texture_rg") &&
+            epoxy_has_gl_extension("GL_ARB_framebuffer_object"))
+        {
+            DO_FORMATS(formats_norm8);
+            DO_FORMATS(formats_norm16);
+            DO_FORMATS(formats_rgb16_fbo);
+            DO_FORMATS(formats_float);
+        } else {
+            // Fallback for GL2
+            DO_FORMATS(formats_legacy_gl2);
+            DO_FORMATS(formats_basic_vertex);
+        }
+        return;
+    }
+
+    if (p->gles_ver >= 30) {
+        // GLES 3.0 has some basic formats, with framebuffers for float16
+        // depending on GL_EXT_color_buffer_half_float support
+        DO_FORMATS(formats_norm8);
+        DO_FORMATS(formats_uint);
+        DO_FORMATS(formats_basic_vertex);
+        if (p->gles_ver >= 32 || epoxy_has_gl_extension("GL_EXT_color_buffer_half_float")) {
+            DO_FORMATS(formats_float16_fbo);
+        } else {
+            DO_FORMATS(formats_float16_fallback);
+        }
+        return;
+    }
+
+    if (p->gles_ver >= 20) {
+        // GLES 2.0 only has some legacy fallback formats, with support for
+        // float16 depending on GL_EXT_texture_norm16 being present
+        DO_FORMATS(formats_legacy_gles2);
+        DO_FORMATS(formats_basic_vertex);
+        if (epoxy_has_gl_extension("GL_EXT_texture_norm16")) {
+            DO_FORMATS(formats_norm16);
+            DO_FORMATS(formats_rgb16_fallback);
+        }
+        return;
+    }
+
+    // Last resort fallback. Probably not very useful
+    DO_FORMATS(formats_basic_vertex);
 }

@@ -19,28 +19,14 @@
 
 #include "common.h"
 
-enum gl_ver_flags {
-    // Version flags. If at least 1 flag matches, the format entry is considered
-    // supported on the current GL context.
-    V_GL2       = 1 << 0, // GL2.1-only
-    V_GL3       = 1 << 1, // GL3.0 or later
-    V_ES2       = 1 << 2, // ES2-only
-    V_ES3       = 1 << 3, // ES3.0 or later
-    V_ES32      = 1 << 4, // ES3.2 or later
-    V_EXT16     = 1 << 5, // ES with GL_EXT_texture_norm16
-    V_EXTF16    = 1 << 6, // GL_EXT_color_buffer_half_float
-    V_GL2F      = 1 << 7, // GL2.1-only with texture_rg + texture_float + FBOs
-};
-
 struct gl_format {
     GLint ifmt;         // sized internal format (e.g. GL_RGBA16F)
     GLenum fmt;         // base internal format (e.g. GL_RGBA)
     GLenum type;        // host-visible type (e.g. GL_FLOAT)
     struct pl_fmt tmpl; // pl_fmt template
-    enum pl_fmt_caps caps;  // PL_FMT_CAP_* enabled
-    enum gl_ver_flags ver;  // V_* flags
 };
 
-extern const struct gl_format gl_formats[];
+typedef void (gl_format_cb)(const struct pl_gpu *gpu, const struct gl_format *glfmt);
 
-int gl_format_feature_flags(const struct pl_gpu *gpu);
+// Enumerates all formats supported by the GL version, using the given callback
+void pl_gl_enumerate_formats(const struct pl_gpu *gpu, gl_format_cb do_format);
