@@ -39,7 +39,7 @@ static inline enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
     case AVCOL_SPC_RESERVED:            return PL_COLOR_SYSTEM_UNKNOWN;
     case AVCOL_SPC_FCC:                 return PL_COLOR_SYSTEM_UNKNOWN; // missing
     case AVCOL_SPC_BT470BG:             return PL_COLOR_SYSTEM_BT_601;
-    case AVCOL_SPC_SMPTE170M:           return PL_COLOR_SYSTEM_SMPTE_240M;
+    case AVCOL_SPC_SMPTE170M:           return PL_COLOR_SYSTEM_BT_601;
     case AVCOL_SPC_SMPTE240M:           return PL_COLOR_SYSTEM_SMPTE_240M;
     case AVCOL_SPC_YCGCO:               return PL_COLOR_SYSTEM_YCGCO;
     case AVCOL_SPC_BT2020_NCL:          return PL_COLOR_SYSTEM_BT_2020_NC;
@@ -61,7 +61,7 @@ static inline enum AVColorSpace pl_system_to_av(enum pl_color_system sys)
 {
     switch (sys) {
     case PL_COLOR_SYSTEM_UNKNOWN:       return AVCOL_SPC_UNSPECIFIED;
-    case PL_COLOR_SYSTEM_BT_601:        return AVCOL_SPC_BT470BG;
+    case PL_COLOR_SYSTEM_BT_601:        return AVCOL_SPC_SMPTE170M;
     case PL_COLOR_SYSTEM_BT_709:        return AVCOL_SPC_BT709;
     case PL_COLOR_SYSTEM_SMPTE_240M:    return AVCOL_SPC_SMPTE240M;
     case PL_COLOR_SYSTEM_BT_2020_NC:    return AVCOL_SPC_BT2020_NCL;
