@@ -169,9 +169,10 @@ identifiers (so they can be freely merged together).
   supported by the GPU. (Note: Eventually, this function will also support
   on-CPU conversions to a different format where necessary, but for now, it
   will just fail)
-- `utils/libav.h`: A set of high-level helpers for interoperation between
-  libplacebo and FFmpeg's libav* abstractions. This is implemented as a single
-  header library, to avoid libplacebo depending on libavutil directly.
+- `utils/dav1d.h`: High level helper for translating between Dav1dPicture
+  and libplacebo's `pl_frame`. (Single header library)
+- `utils/libav.h`: High-level helpers for interoperation between
+  libplacebo and FFmpeg's libav* abstractions. (Single header library)
 
 This is the "primary" interface to libplacebo, and the one most users will be
 interested in. It takes care of internal details such as degrading to simpler

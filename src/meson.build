@@ -166,6 +166,8 @@ headers = [
   'shaders/sampling.h',
   'shaders.h',
   'swapchain.h',
+  'utils/dav1d.h',
+  'utils/dav1d_internal.h',
   'utils/libav.h',
   'utils/libav_internal.h',
   'utils/upload.h',
@@ -367,6 +369,12 @@ tdep = [ declare_dependency(
 ) ]
 
 if get_option('tests')
+  dav1d = dependency('dav1d', required: false)
+  if dav1d.found()
+    tdep += dav1d
+    tests += 'dav1d.c'
+  endif
+
   libav = dependency('libavutil', version: '>=55.74.100', required: false)
   if libav.found()
     tdep += libav
@@ -386,8 +394,8 @@ if get_option('tests')
   # Ensure all headers compile
   foreach h : headers
 
-    # This is a special case because of its single-header nature
-    if h.contains('libav')
+    # These are special cased because of their single-header nature
+    if h.contains('dav1d') or h.contains('libav')
       continue
     endif
 
