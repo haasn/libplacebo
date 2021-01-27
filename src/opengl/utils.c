@@ -40,19 +40,19 @@ void gl_poll_callbacks(const struct pl_gpu *gpu)
 {
     struct pl_gl *gl = PL_PRIV(gpu);
     while (gl->callbacks.num) {
-        struct gl_cb *cb = &gl->callbacks.elem[0];
-        GLenum res = glClientWaitSync(cb->sync, 0, 0);
+        struct gl_cb cb = gl->callbacks.elem[0];
+        GLenum res = glClientWaitSync(cb.sync, 0, 0);
         switch (res) {
         case GL_ALREADY_SIGNALED:
         case GL_CONDITION_SATISFIED:
-            cb->callback(cb->priv);
             PL_ARRAY_REMOVE_AT(gl->callbacks, 0);
+            cb.callback(cb.priv);
             continue;
 
         case GL_WAIT_FAILED:
-            glDeleteSync(cb->sync);
-            gl->failed = true;
             PL_ARRAY_REMOVE_AT(gl->callbacks, 0);
+            glDeleteSync(cb.sync);
+            gl->failed = true;
             gl_check_err(gpu, "gl_poll_callbacks"); // NOTE: will recurse!
             return;
 
