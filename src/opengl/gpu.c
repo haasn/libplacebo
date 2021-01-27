@@ -1363,6 +1363,16 @@ static bool gl_tex_upload(const struct pl_gpu *gpu,
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     struct pl_buf_gl *buf_gl = buf ? PL_PRIV(buf) : NULL;
 
+    // If the user requests asynchronous uploads, it's more efficient to do
+    // them via a PBO - this allows us to skip blocking the caller, especially
+    // when the host pointer can be imported directly.
+    if (params->callback && !buf) {
+        size_t buf_size = pl_tex_transfer_size(params);
+        const size_t min_size = 32*1024; // 32 KiB
+        if (buf_size >= min_size && buf_size <= gpu->limits.max_buf_size)
+            return pl_tex_upload_pbo(gpu, params);
+    }
+
     const void *src = params->ptr;
     if (buf) {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, buf_gl->buffer);
@@ -1456,6 +1466,13 @@ static bool gl_tex_download(const struct pl_gpu *gpu,
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     struct pl_buf_gl *buf_gl = buf ? PL_PRIV(buf) : NULL;
     bool ok = true;
+
+    if (params->callback && !buf) {
+        size_t buf_size = pl_tex_transfer_size(params);
+        const size_t min_size = 32*1024; // 32 KiB
+        if (buf_size >= min_size && buf_size <= gpu->limits.max_buf_size)
+            return pl_tex_download_pbo(gpu, params);
+    }
 
     void *dst = params->ptr;
     if (buf) {
