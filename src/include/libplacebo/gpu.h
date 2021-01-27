@@ -146,6 +146,11 @@ struct pl_gpu_limits {
     // of two.
     uint32_t align_tex_xfer_stride; // optimal `pl_tex_transfer_params.stride_w/h`
     size_t align_tex_xfer_offset;   // optimal `pl_tex_transfer_params.buf_offset`
+
+    // Required alignment for PL_HANDLE_HOST_PTR imports. This is provided
+    // merely as a hint to the user. If the host pointer being imported is
+    // misaligned, libplacebo will internally round (over-map) the region.
+    size_t align_host_ptr;
 };
 
 // Backwards compatibility alias

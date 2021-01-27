@@ -271,11 +271,12 @@ int main()
         last_glsl = gpu->glsl;
         last_limits = gpu->limits;
 
-        gpu_tests(gpu);
+        gpu_shader_tests(gpu);
         opengl_interop_tests(gpu);
         opengl_swapchain_tests(gl, dpy, surf);
 
 #ifndef CI_BLACKLIST_DMABUF
+        gpu_interop_tests(gpu);
         opengl_test_export_import(gl, PL_HANDLE_DMA_BUF);
 #endif
 

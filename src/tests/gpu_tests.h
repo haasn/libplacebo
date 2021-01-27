@@ -1133,7 +1133,111 @@ error:
     }
 }
 
-static void gpu_tests(const struct pl_gpu *gpu)
+static void pl_test_export_import(const struct pl_gpu *gpu,
+                                  enum pl_handle_type handle_type)
+{
+    // Test texture roundtrip
+
+    if (!(gpu->export_caps.tex & handle_type) ||
+        !(gpu->import_caps.tex & handle_type))
+        goto skip_tex;
+
+    const struct pl_fmt *fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0,
+                                           PL_FMT_CAP_BLITTABLE);
+    if (!fmt)
+        goto skip_tex;
+
+    printf("testing texture import/export\n");
+
+    const struct pl_tex *export = pl_tex_create(gpu, &(struct pl_tex_params) {
+        .w = 32,
+        .h = 32,
+        .format = fmt,
+        .export_handle = handle_type,
+    });
+    REQUIRE(export);
+    REQUIRE(export->shared_mem.handle.fd > -1);
+
+    const struct pl_tex *import = pl_tex_create(gpu, &(struct pl_tex_params) {
+        .w = 32,
+        .h = 32,
+        .format = fmt,
+        .import_handle = handle_type,
+        .shared_mem = export->shared_mem,
+    });
+    REQUIRE(import);
+
+    pl_tex_destroy(gpu, &import);
+    pl_tex_destroy(gpu, &export);
+
+skip_tex: ;
+
+    // Test buffer roundtrip
+
+    if (!(gpu->export_caps.buf & handle_type) ||
+        !(gpu->import_caps.buf & handle_type))
+        return;
+
+    printf("testing buffer import/export\n");
+
+    const struct pl_buf *exp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        .size = 32,
+        .export_handle = handle_type,
+    });
+    REQUIRE(exp_buf);
+    REQUIRE(exp_buf->shared_mem.handle.fd > -1);
+
+    const struct pl_buf *imp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        .size = 32,
+        .import_handle = handle_type,
+        .shared_mem = exp_buf->shared_mem,
+    });
+    REQUIRE(imp_buf);
+
+    pl_buf_destroy(gpu, &imp_buf);
+    pl_buf_destroy(gpu, &exp_buf);
+}
+
+static void pl_test_host_ptr(const struct pl_gpu *gpu)
+{
+    if (!(gpu->import_caps.buf & PL_HANDLE_HOST_PTR))
+        return;
+
+#ifdef __unix__
+
+    printf("testing host ptr\n");
+    REQUIRE(gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS);
+
+    const size_t size = 2 << 20;
+    const size_t offset = 2 << 10;
+    const size_t slice = 2 << 16;
+
+    uint8_t *data = aligned_alloc(0x1000, size);
+    for (int i = 0; i < size; i++)
+        data[i] = (uint8_t) i;
+
+    const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        .type = PL_BUF_TEX_TRANSFER,
+        .size = slice,
+        .import_handle = PL_HANDLE_HOST_PTR,
+        .shared_mem = {
+            .handle.ptr = data,
+            .size = size,
+            .offset = offset,
+        },
+        .host_mapped = true,
+    });
+
+    REQUIRE(buf);
+    REQUIRE(memcmp(data + offset, buf->data, slice) == 0);
+
+    pl_buf_destroy(gpu, &buf);
+    free(data);
+
+#endif // unix
+}
+
+static void gpu_shader_tests(const struct pl_gpu *gpu)
 {
     pl_buffer_tests(gpu);
     pl_texture_tests(gpu);
@@ -1141,6 +1245,14 @@ static void gpu_tests(const struct pl_gpu *gpu)
     pl_scaler_tests(gpu);
     pl_render_tests(gpu);
     pl_ycbcr_tests(gpu);
+
+    REQUIRE(!pl_gpu_is_failed(gpu));
+}
+
+static void gpu_interop_tests(const struct pl_gpu *gpu)
+{
+    pl_test_export_import(gpu, PL_HANDLE_DMA_BUF);
+    pl_test_host_ptr(gpu);
 
     REQUIRE(!pl_gpu_is_failed(gpu));
 }

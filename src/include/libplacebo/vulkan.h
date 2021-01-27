@@ -245,7 +245,6 @@ struct pl_vulkan_params {
     int max_glsl_version;       // limit the maximum GLSL version
     bool disable_events;        // disables usage of VkEvent completely
     uint32_t max_api_version;   // limit the maximum vulkan API version
-    bool disable_overmapping;   // disables page-rounding when importing pointers
 };
 
 // Default/recommended parameters. Should generally be safe and efficient.
@@ -399,7 +398,6 @@ struct pl_vulkan_import_params {
     int max_glsl_version;
     bool disable_events;
     uint32_t max_api_version;
-    bool disable_overmapping;
 };
 
 // Import an existing VkDevice instead of creating a new one, and wrap it into

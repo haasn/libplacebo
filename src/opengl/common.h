@@ -31,6 +31,10 @@
 #define GL_HAVE_UNIX 1
 #endif
 
+#ifdef _WIN32
+#define GL_HAVE_WIN32 1
+#endif
+
 struct gl_cb {
     void (*callback)(void *priv);
     void *priv;

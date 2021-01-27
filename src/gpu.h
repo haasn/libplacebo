@@ -127,7 +127,6 @@ void pl_pass_run_vbo(const struct pl_gpu *gpu,
 struct pl_pass_params pl_pass_params_copy(void *alloc,
                                           const struct pl_pass_params *params);
 
-
 // Utility function for pretty-printing UUIDs
 #define UUID_SIZE 16
 #define PRINT_UUID(uuid) (print_uuid((char[3 * UUID_SIZE]){0}, (uuid)))

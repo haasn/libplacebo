@@ -66,109 +66,6 @@ static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
     }
 }
 
-static void vulkan_test_export_import(const struct pl_vulkan *pl_vk,
-                                      enum pl_handle_type handle_type)
-{
-    const struct pl_gpu *gpu = pl_vk->gpu;
-
-    // Test texture roundtrip
-
-    if (!(gpu->export_caps.tex & handle_type) ||
-        !(gpu->import_caps.tex & handle_type))
-        goto skip_tex;
-
-    const struct pl_fmt *fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0,
-                                           PL_FMT_CAP_BLITTABLE);
-    if (!fmt)
-        goto skip_tex;
-
-    printf("testing vulkan import/export texture\n");
-
-    const struct pl_tex *export = pl_tex_create(gpu, &(struct pl_tex_params) {
-        .w = 32,
-        .h = 32,
-        .format = fmt,
-        .export_handle = handle_type,
-    });
-    REQUIRE(export);
-    REQUIRE(export->shared_mem.handle.fd > -1);
-
-    const struct pl_tex *import = pl_tex_create(gpu, &(struct pl_tex_params) {
-        .w = 32,
-        .h = 32,
-        .format = fmt,
-        .import_handle = handle_type,
-        .shared_mem = export->shared_mem,
-    });
-    REQUIRE(import);
-
-    pl_tex_destroy(gpu, &import);
-    pl_tex_destroy(gpu, &export);
-
-skip_tex: ;
-
-    // Test buffer roundtrip
-
-    if (!(gpu->export_caps.buf & handle_type) ||
-        !(gpu->import_caps.buf & handle_type))
-        return;
-
-    printf("testing vulkan import/export buffer\n");
-
-    const struct pl_buf *exp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
-        .size = 32,
-        .export_handle = handle_type,
-    });
-    REQUIRE(exp_buf);
-    REQUIRE(exp_buf->shared_mem.handle.fd > -1);
-
-    const struct pl_buf *imp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
-        .size = 32,
-        .import_handle = handle_type,
-        .shared_mem = exp_buf->shared_mem,
-    });
-    REQUIRE(imp_buf);
-
-    pl_buf_destroy(gpu, &imp_buf);
-    pl_buf_destroy(gpu, &exp_buf);
-}
-
-static void vulkan_test_host_ptr(const struct pl_vulkan *pl_vk)
-{
-    const struct pl_gpu *gpu = pl_vk->gpu;
-    if (!(gpu->import_caps.buf & PL_HANDLE_HOST_PTR))
-        return;
-
-    printf("testing vulkan host ptr\n");
-    REQUIRE(gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS);
-
-    const size_t size = 2 << 20;
-    const size_t offset = 2 << 10;
-    const size_t slice = 2 << 16;
-
-    uint8_t *data = aligned_alloc(0x1000, size);
-    for (int i = 0; i < size; i++)
-        data[i] = (uint8_t) i;
-
-    const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
-        .type = PL_BUF_TEX_TRANSFER,
-        .size = slice,
-        .import_handle = PL_HANDLE_HOST_PTR,
-        .shared_mem = {
-            .handle.ptr = data,
-            .size = size,
-            .offset = offset,
-        },
-        .host_mapped = true,
-    });
-
-    REQUIRE(buf);
-    REQUIRE(memcmp(data + offset, buf->data, slice) == 0);
-
-    pl_buf_destroy(gpu, &buf);
-    free(data);
-}
-
 static void vulkan_swapchain_tests(const struct pl_vulkan *vk, VkSurfaceKHR surf)
 {
     if (!surf)
@@ -290,7 +187,7 @@ int main()
         if (!vk)
             continue;
 
-        gpu_tests(vk->gpu);
+        gpu_shader_tests(vk->gpu);
         vulkan_swapchain_tests(vk, surf);
 
         // Test importing this context via the vulkan interop API
@@ -314,14 +211,12 @@ int main()
 #ifdef VK_HAVE_UNIX
         vulkan_interop_tests(vk, PL_HANDLE_FD);
         vulkan_interop_tests(vk, PL_HANDLE_DMA_BUF);
-        vulkan_test_export_import(vk, PL_HANDLE_DMA_BUF);
 #endif
 #ifdef VK_HAVE_WIN32
         vulkan_interop_tests(vk, PL_HANDLE_WIN32);
         vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
-        vulkan_test_host_ptr(vk);
-
+        gpu_interop_tests(vk->gpu);
         pl_vulkan_destroy(&vk);
 
         // Re-run the same export/import tests with async queues disabled
@@ -333,14 +228,12 @@ int main()
 #ifdef VK_HAVE_UNIX
         vulkan_interop_tests(vk, PL_HANDLE_FD);
         vulkan_interop_tests(vk, PL_HANDLE_DMA_BUF);
-        vulkan_test_export_import(vk, PL_HANDLE_DMA_BUF);
 #endif
 #ifdef VK_HAVE_WIN32
         vulkan_interop_tests(vk, PL_HANDLE_WIN32);
         vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
-        vulkan_test_host_ptr(vk);
-
+        gpu_interop_tests(vk->gpu);
         pl_vulkan_destroy(&vk);
 
         // Reduce log spam after first tested device

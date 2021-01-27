@@ -25,6 +25,11 @@
 #include <errno.h>
 #endif
 
+#ifdef GL_HAVE_WIN32
+#include <windows.h>
+#include <sysinfoapi.h>
+#endif
+
 static const struct pl_gpu_fns pl_fns_gl;
 
 static bool test_ext(const struct pl_gpu *gpu, const char *ext,
@@ -198,6 +203,22 @@ static pl_handle_caps tex_handle_caps(const struct pl_gpu *gpu, bool import)
 
 #endif // EPOXY_HAS_EGL
 
+static inline size_t get_page_size()
+{
+
+#ifdef GL_HAVE_UNIX
+    return sysconf(_SC_PAGESIZE);
+#endif
+
+#ifdef GL_HAVE_WIN32
+    SYSTEM_INFO sysInfo;
+    GetSystemInfo(&sysInfo);
+    return sysInfo.dwAllocationGranularity;
+#endif
+
+    pl_assert(!"Unsupported platform!");
+}
+
 const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
                                       const struct pl_opengl_params *params)
 {
@@ -253,6 +274,11 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
                                         "EXT_image_dma_buf_import_modifiers");
     }
 #endif
+
+    if (epoxy_has_gl_extension("GL_AMD_pinned_memory")) {
+        gpu->import_caps.buf |= PL_HANDLE_HOST_PTR;
+        gpu->limits.align_host_ptr = get_page_size();
+    }
 
     // Query all device limits
     struct pl_gpu_limits *l = &gpu->limits;
@@ -1123,8 +1149,10 @@ static void gl_tex_blit(const struct pl_gpu *gpu,
 struct pl_buf_gl {
     uint64_t id; // unique per buffer
     GLuint buffer;
+    size_t offset;
     GLsync fence;
     GLbitfield barrier;
+    bool mapped;
 };
 
 static void gl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf *buf)
@@ -1133,7 +1161,7 @@ static void gl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf *buf)
     if (buf_gl->fence)
         glDeleteSync(buf_gl->fence);
 
-    if (buf->data) {
+    if (buf_gl->mapped) {
         glBindBuffer(GL_COPY_WRITE_BUFFER, buf_gl->buffer);
         glUnmapBuffer(GL_COPY_WRITE_BUFFER);
         glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
@@ -1156,11 +1184,36 @@ static const struct pl_buf *gl_buf_create(const struct pl_gpu *gpu,
     buf_gl->id = ++p->buf_id;
 
     // Just use this since the generic GL_BUFFER doesn't work
-    const GLenum target = GL_COPY_WRITE_BUFFER;
+    GLenum target = GL_COPY_WRITE_BUFFER;
+    const void *data = params->initial_data;
+    size_t total_size = params->size;
+    bool import = false;
+
+    if (params->import_handle == PL_HANDLE_HOST_PTR) {
+        const struct pl_shared_mem *shmem = &params->shared_mem;
+        target = GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD;
+
+        data = shmem->handle.ptr;
+        buf_gl->offset = shmem->offset;
+        total_size = shmem->size;
+        import = true;
+
+        if (params->host_mapped)
+            buf->data = (uint8_t *) data + buf_gl->offset;
+
+        if (buf_gl->offset > 0 && params->drawable) {
+            PL_ERR(gpu, "Cannot combine non-aligned host pointer imports with "
+                   "drawable (vertex) buffers! This is a design limitation, "
+                   "open an issue if you absolutely need this.");
+            goto error;
+        }
+    }
+
     glGenBuffers(1, &buf_gl->buffer);
     glBindBuffer(target, buf_gl->buffer);
 
-    if (test_ext(gpu, "GL_ARB_buffer_storage", 44, 0)) {
+    if (test_ext(gpu, "GL_ARB_buffer_storage", 44, 0) && !import) {
+
         GLbitfield mapflags = 0, storflags = 0;
         if (params->host_writable)
             storflags |= GL_DYNAMIC_STORAGE_BIT;
@@ -1171,11 +1224,11 @@ static const struct pl_buf *gl_buf_create(const struct pl_gpu *gpu,
         if (params->memory_type == PL_BUF_MEM_HOST)
             storflags |= GL_CLIENT_STORAGE_BIT; // hopefully this works
 
-        glBufferStorage(target, params->size, params->initial_data,
-                        storflags | mapflags);
+        glBufferStorage(target, total_size, data, storflags | mapflags);
 
         if (params->host_mapped) {
-            buf->data = glMapBufferRange(target, 0, params->size,
+            buf_gl->mapped = true;
+            buf->data = glMapBufferRange(target, buf_gl->offset, params->size,
                                          mapflags);
             if (!buf->data) {
                 glBindBuffer(target, 0);
@@ -1184,7 +1237,9 @@ static const struct pl_buf *gl_buf_create(const struct pl_gpu *gpu,
                 goto error;
             }
         }
+
     } else {
+
         // Make a random guess based on arbitrary criteria we can't know
         GLenum hint = GL_STREAM_DRAW;
         if (params->initial_data && !params->host_writable && !params->host_mapped)
@@ -1194,7 +1249,13 @@ static const struct pl_buf *gl_buf_create(const struct pl_gpu *gpu,
         if (params->storable)
             hint = GL_DYNAMIC_COPY;
 
-        glBufferData(target, params->size, params->initial_data, hint);
+        glBufferData(target, total_size, data, hint);
+
+        if (import && glGetError() == GL_INVALID_OPERATION) {
+            PL_ERR(gpu, "Failed importing host pointer!");
+            goto error;
+        }
+
     }
 
     glBindBuffer(target, 0);
@@ -1249,7 +1310,7 @@ static void gl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
 {
     struct pl_buf_gl *buf_gl = PL_PRIV(buf);
     glBindBuffer(GL_COPY_WRITE_BUFFER, buf_gl->buffer);
-    glBufferSubData(GL_COPY_WRITE_BUFFER, offset, size, data);
+    glBufferSubData(GL_COPY_WRITE_BUFFER, buf_gl->offset + offset, size, data);
     glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
     gl_check_err(gpu, "gl_buf_write");
 }
@@ -1259,7 +1320,7 @@ static bool gl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
 {
     struct pl_buf_gl *buf_gl = PL_PRIV(buf);
     glBindBuffer(GL_COPY_READ_BUFFER, buf_gl->buffer);
-    glGetBufferSubData(GL_COPY_READ_BUFFER, offset, size, dest);
+    glGetBufferSubData(GL_COPY_READ_BUFFER, buf_gl->offset + offset, size, dest);
     glBindBuffer(GL_COPY_READ_BUFFER, 0);
     return gl_check_err(gpu, "gl_buf_read");
 }
@@ -1274,7 +1335,8 @@ static void gl_buf_copy(const struct pl_gpu *gpu,
     glBindBuffer(GL_COPY_READ_BUFFER, src_gl->buffer);
     glBindBuffer(GL_COPY_WRITE_BUFFER, dst_gl->buffer);
     glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER,
-                        src_offset, dst_offset, size);
+                        src_gl->offset + src_offset,
+                        dst_gl->offset + dst_offset, size);
     gl_check_err(gpu, "gl_buf_copy");
 }
 
@@ -1304,7 +1366,7 @@ static bool gl_tex_upload(const struct pl_gpu *gpu,
     const void *src = params->ptr;
     if (buf) {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, buf_gl->buffer);
-        src = (void *) params->buf_offset;
+        src = (void *) (buf_gl->offset + params->buf_offset);
     }
 
     int dims = pl_tex_params_dimension(tex->params);
@@ -1398,7 +1460,7 @@ static bool gl_tex_download(const struct pl_gpu *gpu,
     void *dst = params->ptr;
     if (buf) {
         glBindBuffer(GL_PIXEL_PACK_BUFFER, buf_gl->buffer);
-        dst = (void *) params->buf_offset;
+        dst = (void *) (buf_gl->offset + params->buf_offset);
     }
 
     struct pl_rect3d full = {
@@ -1893,13 +1955,15 @@ static void update_desc(const struct pl_pass *pass, int index,
     case PL_DESC_BUF_UNIFORM: {
         const struct pl_buf *buf = db->object;
         struct pl_buf_gl *buf_gl = PL_PRIV(buf);
-        glBindBufferBase(GL_UNIFORM_BUFFER, desc->binding, buf_gl->buffer);
+        glBindBufferRange(GL_UNIFORM_BUFFER, desc->binding, buf_gl->buffer,
+                          buf_gl->offset, buf->params.size);
         break;
     }
     case PL_DESC_BUF_STORAGE: {
         const struct pl_buf *buf = db->object;
         struct pl_buf_gl *buf_gl = PL_PRIV(buf);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, desc->binding, buf_gl->buffer);
+        glBindBufferRange(GL_SHADER_STORAGE_BUFFER, desc->binding, buf_gl->buffer,
+                          buf_gl->offset, buf->params.size);
         break;
     }
     case PL_DESC_BUF_TEXEL_UNIFORM:

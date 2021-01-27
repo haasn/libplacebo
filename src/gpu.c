@@ -829,9 +829,30 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
     if (params.import_handle) {
         require(PL_ISPOT(params.import_handle));
         require(params.import_handle & gpu->import_caps.buf);
-        const struct pl_shared_mem *shmem = &params.shared_mem;
+        struct pl_shared_mem *shmem = &params.shared_mem;
         require(shmem->offset + params.size <= shmem->size);
         require(params.import_handle != PL_HANDLE_DMA_BUF || !shmem->drm_format_mod);
+
+        // Fix misalignment on host pointer imports
+        if (params.import_handle == PL_HANDLE_HOST_PTR) {
+            uintptr_t page_mask = ~(gpu->limits.align_host_ptr - 1);
+            uintptr_t ptr_base = (uintptr_t) shmem->handle.ptr & page_mask;
+            size_t ptr_offset = (uintptr_t) shmem->handle.ptr - ptr_base;
+            size_t buf_offset = ptr_offset + shmem->offset;
+            size_t ptr_size = PL_ALIGN2(ptr_offset + shmem->size,
+                                        gpu->limits.align_host_ptr);
+
+            if (ptr_base != (uintptr_t) shmem->handle.ptr || ptr_size > shmem->size) {
+                PL_DEBUG(gpu, "Rounding imported host pointer %p + %zu -> %zu to "
+                        "nearest page boundaries: %p + %zu -> %zu",
+                         shmem->handle.ptr, shmem->offset, shmem->size,
+                         (void *) ptr_base, buf_offset, ptr_size);
+            }
+
+            shmem->handle.ptr = (void *) ptr_base;
+            shmem->offset = buf_offset;
+            shmem->size = ptr_size;
+        }
     }
 
     require(params.size > 0 && params.size <= gpu->limits.max_buf_size);

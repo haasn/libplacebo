@@ -434,12 +434,18 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
         .pNext = &pushd_props,
     };
 
-    VkPhysicalDeviceProperties2KHR props = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR,
+    VkPhysicalDeviceExternalMemoryHostPropertiesEXT host_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT,
         .pNext = &group_props,
     };
 
+    VkPhysicalDeviceProperties2KHR props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR,
+        .pNext = &host_props,
+    };
+
     vk->GetPhysicalDeviceProperties2KHR(vk->physd, &props);
+    gpu->limits.align_host_ptr = host_props.minImportedHostPointerAlignment;
 
     if (pl_gpu_supports_interop(gpu)) {
         assert(sizeof(gpu->uuid) == VK_UUID_SIZE);
