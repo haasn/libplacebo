@@ -214,12 +214,11 @@ Support this project by becoming a sponsor. Your logo will show up here with a l
 
 ### License
 
-Since the code derives from several LGPLv2.1+-licensed parts of mpv, there's
-little choice but to license libplacebo the same way. It's worth pointing out
-that, except for some minor exceptions (e.g. filters.c and colorspace.c), most
-of the code is either original work or can be attributed to only a small
-number of developers, so a relicensing to a more permissive license might be
-possible in principle.
+libplacebo is currently available under the terms of the LGPLv2.1 (or later)
+license. However, it's possible to release it under a more permissive license
+(e.g. BSD2) if a use case emerges.
+
+Please open an issue if you have a use case for a BSD2-licensed libplacebo.
 
 ## Installing
 

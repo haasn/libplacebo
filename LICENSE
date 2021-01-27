@@ -1,24 +1,3 @@
-libplacebo's code base is heavily derived from mpv, which is a fork of mplayer2,
-which is a fork of MPlayer. Currently, this includes files inside the following
-directories:
-
-  subprojects/bstr/*
-  subprojects/xtalloc/*
-
-All of the affected MPlayer/mplayer2/mpv code has been successfully relicensed
-to LGPLv2.1+; which means that libplacebo as a whole is licensed under the GNU
-Lesser General Public License version 2.1 or later. All new contributions must
-be published under the same license.
-
-Note to contributors: This project will remain LGPLv2.1+, so any new code that
-is ported from mpv (or other sources) must be LGPLv2.1+ compatible, i.e.
-porting GPL, LGPLv2 (without the "or later") or LGPLv3+ code is not allowed
-and must be rewritten instead.
-
-Appended is a complete copy of the LGPLv2.1 license text.
-
--------------------------------------------------------------------------------
-
                   GNU LESSER GENERAL PUBLIC LICENSE
                        Version 2.1, February 1999
 
