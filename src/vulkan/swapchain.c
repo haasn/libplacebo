@@ -147,7 +147,7 @@ static bool vk_map_color_space(VkColorSpaceKHR space, struct pl_color_space *out
 static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
                              VkSurfaceKHR surf, bool prefer_hdr,
                              VkSurfaceFormatKHR *out_format,
-                             struct pl_color_space *space)
+                             struct pl_color_space *out_space)
 {
     int best_score = 0;
     VkSurfaceFormatKHR *formats = NULL;
@@ -155,7 +155,7 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
 
     // Specific format requested by user
     if (out_format->format) {
-        if (vk_map_color_space(out_format->colorSpace, space)) {
+        if (vk_map_color_space(out_format->colorSpace, out_space)) {
             return true;
         } else {
             PL_ERR(gpu, "User-supplied surface format unsupported: %s",
@@ -186,7 +186,8 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
         }
 
         // Color space / format whitelist
-        if (!vk_map_color_space(formats[i].colorSpace, space))
+        struct pl_color_space space;
+        if (!vk_map_color_space(formats[i].colorSpace, &space))
             continue;
 
         switch (formats[i].format) {
@@ -197,7 +198,7 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
         case VK_FORMAT_R32G32B32A32_SFLOAT:
         case VK_FORMAT_R64G64B64_SFLOAT:
         case VK_FORMAT_R64G64B64A64_SFLOAT:
-            if (space->transfer == PL_COLOR_TRC_LINEAR)
+            if (space.transfer == PL_COLOR_TRC_LINEAR)
                 break; // accept
             continue;
 
@@ -207,14 +208,14 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
         case VK_FORMAT_R8G8B8A8_UNORM:
         case VK_FORMAT_B8G8R8A8_UNORM:
         case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
-            if (!pl_color_transfer_is_hdr(space->transfer))
+            if (!pl_color_transfer_is_hdr(space.transfer))
                 break; // accept
             continue;
 
         // Only accept 10 bit formats for non-linear curves
         case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
         case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-            if (space->transfer != PL_COLOR_TRC_LINEAR)
+            if (space.transfer != PL_COLOR_TRC_LINEAR)
                 break; // accept
             continue;
 
@@ -243,7 +244,7 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
             int score = 0;
             for (int c = 0; c < 3; c++)
                 score += plfmt->component_depth[c];
-            if (pl_color_transfer_is_hdr(space->transfer) == prefer_hdr)
+            if (pl_color_transfer_is_hdr(space.transfer) == prefer_hdr)
                 score += 10000;
 
             switch (plfmt->type) {
@@ -255,6 +256,7 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
 
             if (score > best_score) {
                 *out_format = formats[i];
+                *out_space = space;
                 best_score = score;
                 break;
             }
