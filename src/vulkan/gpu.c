@@ -2056,9 +2056,24 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
 
     if (emulated || unaligned) {
 
+        bool ubo;
+        if (emulated) {
+            if (size <= gpu->limits.max_ubo_size) {
+                ubo = true;
+            } else if (size <= gpu->limits.max_ssbo_size) {
+                ubo = false;
+            } else {
+                // TODO: Implement strided upload path if really necessary
+                PL_ERR(gpu, "Texel buffer size requirements exceed GPU "
+                       "capabilities, failed uploading!");
+                goto error;
+            }
+        }
+
         // Copy the source data buffer into an intermediate buffer
         const struct pl_buf *tbuf = pl_buf_create(gpu, &(struct pl_buf_params) {
-            .uniform = emulated,
+            .uniform = emulated && ubo,
+            .storable = emulated && !ubo,
             .size = size,
             .memory_type = PL_BUF_MEM_DEVICE,
             .format = tex_vk->texel_fmt,

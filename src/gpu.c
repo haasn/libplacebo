@@ -1603,11 +1603,12 @@ bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
         return false;
     }
 
+    bool ubo = params->buf->params.uniform;
     ident_t buf = sh_desc(sh, (struct pl_shader_desc) {
         .binding.object = params->buf,
         .desc = {
             .name = "data",
-            .type = PL_DESC_BUF_TEXEL_UNIFORM,
+            .type = ubo ? PL_DESC_BUF_TEXEL_UNIFORM : PL_DESC_BUF_TEXEL_STORAGE,
         },
     });
 
@@ -1626,8 +1627,10 @@ bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
          params->rc.x0, params->rc.y0, params->rc.z0,
          params->stride_h, params->stride_w, fmt->num_components);
 
-    for (int i = 0; i < fmt->num_components; i++)
-        GLSL("color[%d] = texelFetch(%s, base + %d).r; \n", i, buf, i);
+    for (int i = 0; i < fmt->num_components; i++) {
+        GLSL("color[%d] = %s(%s, base + %d).r; \n",
+             i, ubo ? "texelFetch" : "imageLoad", buf, i);
+    }
 
     // If the transfer width is a natural multiple of the thread size, we
     // can skip the bounds check. Otherwise, make sure we aren't blitting out
