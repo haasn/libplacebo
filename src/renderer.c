@@ -240,6 +240,9 @@ struct img {
     // Effective texture size, always set
     int w, h;
 
+    // Recommended format (falls back to FBOFMT otherwise), only for shaders
+    const struct pl_fmt *fmt;
+
     // Exactly *one* of these two is set:
     struct pl_shader *sh;
     const struct pl_tex *tex;
@@ -255,6 +258,7 @@ struct img {
 
 // Plane 'type', ordered by incrementing priority
 enum plane_type {
+    PLANE_INVALID = 0,
     PLANE_ALPHA,
     PLANE_CHROMA,
     PLANE_LUMA,
@@ -295,19 +299,21 @@ struct pass_state {
     bool *fbos_used;
 };
 
-static const struct pl_tex *get_fbo(struct pass_state *pass, int w, int h)
+static const struct pl_tex *get_fbo(struct pass_state *pass, int w, int h,
+                                    const struct pl_fmt *fmt)
 {
     struct pl_renderer *rr = pass->rr;
-    if (!rr->fbofmt)
+    fmt = PL_DEF(fmt, rr->fbofmt);
+    if (!fmt)
         return NULL;
 
     struct pl_tex_params params = {
         .w = w,
         .h = h,
-        .format = rr->fbofmt,
+        .format = fmt,
         .sampleable = true,
         .renderable = true,
-        .storable   = rr->fbofmt->caps & PL_FMT_CAP_STORABLE,
+        .storable   = fmt->caps & PL_FMT_CAP_STORABLE,
     };
 
     int best_idx = -1;
@@ -318,9 +324,10 @@ static const struct pl_tex *get_fbo(struct pass_state *pass, int w, int h)
         if (pass->fbos_used[i])
             continue;
 
-        // Orthogonal distance
+        // Orthogonal distance, with penalty for format mismatches
         int diff = abs(rr->fbos.elem[i]->params.w - w) +
-                   abs(rr->fbos.elem[i]->params.h - h);
+                   abs(rr->fbos.elem[i]->params.h - h) +
+                   ((rr->fbos.elem[i]->params.format != fmt) ? 1000 : 0);
 
         if (best_idx < 0 || diff < best_diff) {
             best_idx = i;
@@ -352,7 +359,9 @@ static const struct pl_tex *img_tex(struct pass_state *pass, struct img *img)
     }
 
     struct pl_renderer *rr = pass->rr;
-    const struct pl_tex *tex = get_fbo(pass, img->w, img->h);
+    const struct pl_tex *tex = get_fbo(pass, img->w, img->h, img->fmt);
+    img->fmt = NULL;
+
     if (!tex) {
         PL_ERR(rr, "Failed creating FBO texture! Disabling advanced rendering..");
         rr->fbofmt = NULL;
@@ -696,7 +705,7 @@ static const struct pl_tex *get_hook_tex(void *priv, int width, int height)
 {
     struct pass_state *pass = priv;
 
-    return get_fbo(pass, width, height);
+    return get_fbo(pass, width, height, NULL);
 }
 
 // Returns if any hook was applied (even if there were errors)
@@ -835,10 +844,10 @@ enum {
 };
 
 static int deband_src(struct pass_state *pass, struct pl_shader *psh,
-                      struct pl_sample_src *psrc,
-                      const struct pl_frame *image,
-                      const struct pl_render_params *params)
+                      const struct pl_render_params *params,
+                      struct pl_sample_src *psrc)
 {
+    const struct pl_frame *image = &pass->image;
     struct pl_renderer *rr = pass->rr;
     if (rr->disable_debanding || !params->deband_params)
         return DEBAND_NOOP;
@@ -968,6 +977,7 @@ struct plane_state {
 };
 
 static const char *plane_type_names[] = {
+    [PLANE_INVALID] = "invalid",
     [PLANE_ALPHA]   = "alpha",
     [PLANE_CHROMA]  = "chroma",
     [PLANE_LUMA]    = "luma",
@@ -1080,20 +1090,13 @@ static bool plane_av1_grain(struct pass_state *pass, int plane_idx,
     return true;
 }
 
-// Returns true if any user hooks were executed
-static bool plane_user_hooks(struct pass_state *pass, struct plane_state *st,
-                             const struct pl_render_params *params)
-{
-    static const enum pl_hook_stage plane_stages[] = {
-        [PLANE_ALPHA]   = PL_HOOK_ALPHA_INPUT,
-        [PLANE_CHROMA]  = PL_HOOK_CHROMA_INPUT,
-        [PLANE_LUMA]    = PL_HOOK_LUMA_INPUT,
-        [PLANE_RGB]     = PL_HOOK_RGB_INPUT,
-        [PLANE_XYZ]     = PL_HOOK_XYZ_INPUT,
-    };
-
-    return pass_hook(pass, &st->img, plane_stages[st->type], params);
-}
+static const enum pl_hook_stage plane_hook_stages[] = {
+    [PLANE_ALPHA]   = PL_HOOK_ALPHA_INPUT,
+    [PLANE_CHROMA]  = PL_HOOK_CHROMA_INPUT,
+    [PLANE_LUMA]    = PL_HOOK_LUMA_INPUT,
+    [PLANE_RGB]     = PL_HOOK_RGB_INPUT,
+    [PLANE_XYZ]     = PL_HOOK_XYZ_INPUT,
+};
 
 static enum pl_lut_type guess_frame_lut_type(const struct pl_frame *frame,
                                              bool reversed)
@@ -1116,6 +1119,79 @@ static enum pl_lut_type guess_frame_lut_type(const struct pl_frame *frame,
 
     // Unknown, just fall back to the default
     return PL_LUT_NATIVE;
+}
+
+static const struct pl_fmt *merge_fmt(struct pl_renderer *rr,
+                                      const struct img *a, const struct img *b)
+{
+    const struct pl_fmt *fmta = a->tex ? a->tex->params.format : a->fmt;
+    const struct pl_fmt *fmtb = b->tex->params.format;
+    pl_assert(fmta && fmtb);
+    if (fmta->type != fmtb->type)
+        return NULL;
+
+    int num_comps = PL_MIN(4, a->comps + b->comps);
+    int min_depth = PL_MAX(a->repr.bits.sample_depth, b->repr.bits.sample_depth);
+
+    // Only return formats that support all relevant caps of both formats
+    const enum pl_fmt_caps mask = PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_LINEAR;
+    enum pl_fmt_caps req_caps = (fmta->caps & mask) | (fmtb->caps & mask);
+
+    return pl_find_fmt(rr->gpu, fmta->type, num_comps, min_depth, 0, req_caps);
+}
+
+// Applies a series of rough heuristics to figure out whether we expect any
+// performance gains from plane merging. This is basically a series of checks
+// for operations that we *know* benefit from merged planes
+static bool want_merge(struct pass_state *pass,
+                       const struct plane_state *st,
+                       const struct plane_state *ref,
+                       const struct pl_render_params *params)
+{
+    const struct pl_renderer *rr = pass->rr;
+    if (!rr->fbofmt)
+        return false;
+
+    // Debanding
+    if (!rr->disable_debanding && params->deband_params)
+        return true;
+
+    // Other plane hooks, which are generally nontrivial
+    enum pl_hook_stage stage = plane_hook_stages[st->type];
+    for (int i = 0; i < params->num_hooks; i++) {
+        if (params->hooks[i]->stages & stage)
+            return true;
+    }
+
+    // Non-trivial scaling
+    struct pl_sample_src src = {
+        .new_w = ref->img.w,
+        .new_h = ref->img.h,
+        .rect = {
+            .x1 = st->img.w,
+            .y1 = st->img.h,
+        },
+    };
+
+    struct sampler_info info = sample_src_info(pass->rr, &src, params);
+    if (info.type == SAMPLER_COMPLEX)
+        return true;
+
+    // AV1 grain synthesis, can be merged for compatible channels, saving on
+    // redundant sampling of the grain/offset textures
+    struct pl_av1_grain_params grain_params = {
+        .data = pass->image.av1_grain,
+        .repr = (struct pl_color_repr *) &st->img.repr,
+        .components = st->plane.components,
+    };
+
+    for (int c = 0; c < st->plane.components; c++)
+        grain_params.component_mapping[c] = st->plane.component_mapping[c];
+
+    if (!rr->disable_grain && pl_needs_av1_grain(&grain_params))
+        return true;
+
+    return false;
 }
 
 // This scales and merges all of the source images, and initializes pass->img.
@@ -1145,9 +1221,73 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     // Original ref texture, even after preprocessing
     const struct pl_tex *ref_tex = ref->plane.texture;
 
+    // Merge all compatible planes into 'combined' shaders
+    for (int i = 0; i < image->num_planes; i++) {
+        struct plane_state *sti = &planes[i];
+        if (!sti->type)
+            continue;
+        if (!want_merge(pass, sti, ref, params))
+            continue;
+
+        for (int j = i+1; j < image->num_planes; j++) {
+            struct plane_state *stj = &planes[j];
+            bool merge = sti->type == stj->type &&
+                         sti->img.w == stj->img.w &&
+                         sti->img.h == stj->img.h &&
+                         sti->plane.shift_x == stj->plane.shift_x &&
+                         sti->plane.shift_y == stj->plane.shift_y;
+            if (!merge)
+                continue;
+
+            const struct pl_fmt *fmt = merge_fmt(rr, &sti->img, &stj->img);
+            if (!fmt)
+                continue;
+
+            PL_TRACE(rr, "Merging plane %d into plane %d", j, i);
+            struct pl_shader *sh = sti->img.sh;
+            if (!sh) {
+                sh = sti->img.sh = pl_dispatch_begin_ex(pass->rr->dp, true);
+                GLSL("vec4 tmp; \n");
+                pl_shader_sample_direct(sh, &(struct pl_sample_src) {
+                    .tex = sti->img.tex,
+                });
+                sti->img.tex = NULL;
+            }
+
+            struct pl_shader *psh = pl_dispatch_begin_ex(pass->rr->dp, true);
+            pl_shader_sample_direct(psh, &(struct pl_sample_src) {
+                .tex = stj->img.tex,
+            });
+
+            ident_t sub = sh_subpass(sh, psh);
+            if (!sub) {
+                pl_dispatch_abort(rr->dp, &psh);
+                break; // skip merging
+            }
+
+            GLSL("tmp = %s(); \n", sub);
+            for (int jc = 0; jc < stj->img.comps; jc++) {
+                int map = stj->plane.component_mapping[jc];
+                if (!map)
+                    continue;
+                int ic = sti->img.comps++;
+                pl_assert(ic < 4);
+                GLSL("color[%d] = tmp[%d]; \n", ic, jc);
+                sti->plane.components = sti->img.comps;
+                sti->plane.component_mapping[ic] = map;
+            }
+
+            sti->img.fmt = fmt;
+            *stj = (struct plane_state) {0};
+        }
+    }
+
     // Compute the sampling rc of each plane
     for (int i = 0; i < image->num_planes; i++) {
         struct plane_state *st = &planes[i];
+        if (!st->type)
+            continue;
+
         float rx = (float) ref_tex->params.w / st->plane.texture->params.w,
               ry = (float) ref_tex->params.h / st->plane.texture->params.h;
 
@@ -1180,7 +1320,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             log_plane_info(rr, st);
         }
 
-        if (plane_user_hooks(pass, st, params)) {
+        if (pass_hook(pass, &st->img, plane_hook_stages[st->type], params)) {
             PL_TRACE(rr, "After user hooks:");
             log_plane_info(rr, st);
         }
@@ -1213,6 +1353,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
     for (int i = 0; i < image->num_planes; i++) {
         struct plane_state *st = &planes[i];
         const struct pl_plane *plane = &st->plane;
+        if (!st->type)
+            continue;
 
         float scale_x = pl_rect_w(st->img.rect) / pl_rect_w(ref->img.rect),
               scale_y = pl_rect_h(st->img.rect) / pl_rect_h(ref->img.rect);
@@ -1232,9 +1374,6 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             },
         };
 
-        if (!src.tex)
-            src.tex = plane->texture; // Sanity fallback
-
         PL_TRACE(rr, "Aligning plane %d: {%f %f %f %f} -> {%f %f %f %f}",
                 i, st->img.rect.x0, st->img.rect.y0,
                 st->img.rect.x1, st->img.rect.y1,
@@ -1242,7 +1381,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
                 src.rect.x1, src.rect.y1);
 
         struct pl_shader *psh = pl_dispatch_begin_ex(rr->dp, true);
-        if (deband_src(pass, psh, &src, image, params) != DEBAND_SCALED)
+        if (deband_src(pass, psh, params, &src) != DEBAND_SCALED)
             dispatch_sampler(pass, psh, &rr->samplers_src[i], false, params, &src);
 
         ident_t sub = sh_subpass(sh, psh);
@@ -1836,7 +1975,7 @@ static inline enum plane_type detect_plane_type(const struct pl_plane *plane,
                                                 const struct pl_color_repr *repr)
 {
     if (pl_color_system_is_ycbcr_like(repr->sys)) {
-        int t = -1;
+        int t = PLANE_INVALID;
         for (int c = 0; c < plane->components; c++) {
             switch (plane->component_mapping[c]) {
             case PL_CHANNEL_Y: t = PL_MAX(t, PLANE_LUMA); continue;
@@ -1851,7 +1990,7 @@ static inline enum plane_type detect_plane_type(const struct pl_plane *plane,
             }
         }
 
-        pl_assert(t >= 0);
+        pl_assert(t);
         return t;
     }
 
