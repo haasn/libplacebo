@@ -352,13 +352,15 @@ static void pl_dav1dpicture_unref(void *priv)
     }
 }
 
-static bool pl_upload_dav1dpicture_internal(const struct pl_gpu *gpu,
-                                            struct pl_frame *out,
-                                            const struct pl_tex *tex[3],
-                                            Dav1dPicture *pic,
-                                            bool unref)
+static inline bool pl_upload_dav1dpicture(const struct pl_gpu *gpu,
+                                          struct pl_frame *out,
+                                          const struct pl_tex *tex[3],
+                                          const struct pl_dav1d_upload_params *params)
 {
+    Dav1dPicture *pic = params->picture;
     pl_frame_from_dav1dpicture(out, pic);
+    if (!params->film_grain)
+        out->av1_grain = (struct pl_av1_grain_data) {0};
 
     const int bytes = (pic->p.bpc + 7) / 8; // rounded up
     int sub_x = 0, sub_y = 0;
@@ -406,14 +408,14 @@ static bool pl_upload_dav1dpicture_internal(const struct pl_gpu *gpu,
     };
 
     const struct pl_buf *buf = NULL;
-    struct pl_dav1dalloc *alloc = pic->allocator_data;
+    struct pl_dav1dalloc *alloc = params->gpu_allocated ? pic->allocator_data : NULL;
     struct pl_dav1dref *ref = NULL;
 
     if (alloc && alloc->magic[0] == PL_MAGIC0 && alloc->magic[1] == PL_MAGIC1) {
         // Re-use pre-allocated buffers directly
         assert(alloc->gpu == gpu);
         buf = alloc->buf;
-    } else if (unref) {
+    } else if (params->asynchronous) {
         ref = malloc(sizeof(*ref));
         if (!ref)
             return false;
@@ -439,32 +441,10 @@ static bool pl_upload_dav1dpicture_internal(const struct pl_gpu *gpu,
         }
     }
 
-    if (unref) {
-        if (ref) {
-            *pic = (Dav1dPicture) {0};
-        } else {
-            dav1d_picture_unref(pic);
-        }
-    }
+    if (ref)
+        *pic = (Dav1dPicture) {0};
 
     return true;
-}
-
-static inline bool pl_upload_dav1dpicture(const struct pl_gpu *gpu,
-                                          struct pl_frame *out_frame,
-                                          const struct pl_tex *tex[3],
-                                          const Dav1dPicture *picture)
-{
-    return pl_upload_dav1dpicture_internal(gpu, out_frame, tex,
-                                           (Dav1dPicture *) picture, false);
-}
-
-static inline bool pl_upload_and_unref_dav1dpicture(const struct pl_gpu *gpu,
-                                                    struct pl_frame *out_frame,
-                                                    const struct pl_tex *tex[3],
-                                                    Dav1dPicture *picture)
-{
-    return pl_upload_dav1dpicture_internal(gpu, out_frame, tex, picture, true);
 }
 
 static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, const struct pl_gpu *gpu)

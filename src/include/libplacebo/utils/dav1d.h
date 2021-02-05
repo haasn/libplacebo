@@ -26,30 +26,48 @@
 // explicitly clear `out_frame`, setting all extra fields to 0. After this
 // function returns, the only missing data is information related to the plane
 // texture itself (`planes[N].texture`).
+//
+// Note: This will include all possible metadata, including HDR metadata and
+// AV1 film grain data. Users should explicitly clear this out if undesired.
 static void pl_frame_from_dav1dpicture(struct pl_frame *out_frame,
                                        const Dav1dPicture *picture);
+
+struct pl_dav1d_upload_params {
+    // The picture to upload. Not modified unless `asynchronous` is true.
+    Dav1dPicture *picture;
+
+    // If true, film grain present in `picture` will be exported to the
+    // `pl_frame` as well. This should be set to false unless the user has
+    // disabled `Dav1dSettings.apply_grain`.
+    bool film_grain;
+
+    // If true, libplacebo will probe for the allocation metadata set by
+    // `pl_allocate_dav1dpicture`, and directly import the attached buffers
+    // (saving a memcpy in some cases). Has no effect if the Dav1dPicture was
+    // not allocated using `pl_allocate_dav1dpicture`.
+    //
+    // Note: When this is the case, `asynchronous` has no further effect -
+    // uploads from attached buffers are already asynchronous.
+    bool gpu_allocated;
+
+    // If true, `picture` will be asynchronously uploaded and unref'd
+    // internally by libplacebo, and the struct passed by the user cleared to
+    // {0}. This is needed to avoid `memcpy` in some cases, so setting it to
+    // true is highly recommended wherever possible.
+    //
+    // Note: If `pl_upload_dav1dpicture` returns false, `picture` does not get
+    // unref'd.
+    bool asynchronous;
+};
 
 // Very high level helper function to take a `Dav1dPicture` and upload it to
 // the GPU. Similar in spirit to `pl_upload_plane`, and the same notes apply.
 // `tex` must be an array of 3 pointers of type (const struct pl_tex *), each
 // either pointing to a valid texture, or NULL. Returns whether successful.
-//
-// Note: This is less efficient than `pl_upload_and_unref_dav1dpicture`!
 static bool pl_upload_dav1dpicture(const struct pl_gpu *gpu,
                                    struct pl_frame *out_frame,
                                    const struct pl_tex *tex[3],
-                                   const Dav1dPicture *picture);
-
-// Variant of `pl_upload_dav1dpicture` that also unrefs the picture after
-// uploading. This is needed to take advantage of internal asynchronous
-// operations. `picture` will be cleared to {0}, and the internally referenced
-// buffers unref'd at some arbitrary time in the future.
-//
-// Note: If this fails (returns false), the Dav1dPicture does not get unref'd.
-static bool pl_upload_and_unref_dav1dpicture(const struct pl_gpu *gpu,
-                                             struct pl_frame *out_frame,
-                                             const struct pl_tex *tex[3],
-                                             Dav1dPicture *picture);
+                                   const struct pl_dav1d_upload_params *params);
 
 // Allocate a Dav1dPicture from persistently mapped buffers. This can be more
 // efficient than regular Dav1dPictures, especially when using the synchronous
