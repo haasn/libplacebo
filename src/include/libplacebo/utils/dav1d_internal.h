@@ -203,6 +203,9 @@ static inline float pl_fixed24_8(uint32_t n)
     return (float) n / (1 << 8);
 }
 
+// Align to a power of 2
+#define PL_ALIGN2(x, align) (((x) + (align) - 1) & ~((align) - 1))
+
 static inline void pl_frame_from_dav1dpicture(struct pl_frame *out,
                                               const Dav1dPicture *picture)
 {
@@ -246,7 +249,10 @@ static inline void pl_frame_from_dav1dpicture(struct pl_frame *out,
         .repr = {
             .sys = pl_system_from_dav1d(seq_hdr->mtrx),
             .levels = pl_levels_from_dav1d(seq_hdr->color_range),
-            .bits.color_depth = picture->p.bpc,
+            .bits = {
+                .sample_depth = PL_ALIGN2(picture->p.bpc, 8),
+                .color_depth = picture->p.bpc,
+            },
         },
     };
 
@@ -460,9 +466,6 @@ static inline bool pl_upload_and_unref_dav1dpicture(const struct pl_gpu *gpu,
 {
     return pl_upload_dav1dpicture_internal(gpu, out_frame, tex, picture, true);
 }
-
-// Align to a power of 2
-#define PL_ALIGN2(x, align) (((x) + (align) - 1) & ~((align) - 1))
 
 static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, const struct pl_gpu *gpu)
 {
