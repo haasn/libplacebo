@@ -112,9 +112,9 @@ struct pl_render_params {
     // as NULL disables dithering.
     const struct pl_dither_params *dither_params;
 
-    // Configures the settings used to generate a 3DLUT, if required. If NULL,
-    // defaults to `&pl_3dlut_default_params`.
-    const struct pl_3dlut_params *lut3d_params;
+    // Configures the settings used to handle ICC profiles, if required. If
+    // NULL, defaults to `&pl_icc_default_params`.
+    const struct pl_icc_params *icc_params;
 
     // Configures the settings used to simulate color blindness, if desired.
     // If NULL, this feature is disabled.
@@ -183,10 +183,10 @@ struct pl_render_params {
     // general-purpose ones.
     bool disable_builtin_scalers;
 
-    // Forces the use of a 3DLUT, even in cases where the use of one is
+    // Forces the use of an ICC 3DLUT, even in cases where the use of one is
     // unnecessary. This is slower, but may improve the quality of the gamut
     // reduction step, if one is performed.
-    bool force_3dlut;
+    bool force_icc_lut;
 
     // Forces the use of dithering, even when rendering to 16-bit FBOs. This is
     // generally pretty pointless because most 16-bit FBOs have high enough
@@ -197,6 +197,10 @@ struct pl_render_params {
     // Completely overrides the use of FBOs, as if there were no renderable
     // texture format available. This disables most features.
     bool disable_fbos;
+
+    // --- Deprecated aliases
+    const struct pl_icc_params *lut3d_params PL_DEPRECATED; // fallback for `icc_params`
+    bool force_3dlut PL_DEPRECATED; // fallback for `force_icc_lut`
 };
 
 // This contains the default/recommended options for reasonable image quality,

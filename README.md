@@ -142,6 +142,7 @@ routines which libplacebo exports:
 - `shaders/custom.h`: Allows directly ingesting custom GLSL logic into the
   `pl_shader` abstraction, either as bare GLSL or in [mpv .hook
   format](https://mpv.io/manual/master/#options-glsl-shaders).
+- `shaders/icc.h`: Shader for ICC profile based color management.
 - `shaders/sampling.h`: Shader routines for various algorithms that sample
   from images, such as debanding and scaling.
 

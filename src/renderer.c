@@ -52,7 +52,7 @@ struct pl_renderer {
     bool disable_linear_sdr;    // disable linear scaling for SDR signals
     bool disable_blending;      // disable blending for the target/fbofmt
     bool disable_overlay;       // disable rendering overlays
-    bool disable_3dlut;         // disable usage of a 3DLUT
+    bool disable_icc;           // disable usage of ICC profiles
     bool disable_peak_detect;   // disable peak detection shader
     bool disable_grain;         // disable AV1 grain code
     bool disable_hooks;         // disable user hooks / custom shaders
@@ -61,7 +61,7 @@ struct pl_renderer {
     // Shader resource objects and intermediate textures (FBOs)
     struct pl_shader_obj *peak_detect_state;
     struct pl_shader_obj *dither_state;
-    struct pl_shader_obj *lut3d_state;
+    struct pl_shader_obj *icc_state;
     struct pl_shader_obj *grain_state[4];
     PL_ARRAY(const struct pl_tex *) fbos;
     struct sampler sampler_main;
@@ -166,7 +166,7 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
     pl_shader_obj_destroy(&rr->dither_state);
-    pl_shader_obj_destroy(&rr->lut3d_state);
+    pl_shader_obj_destroy(&rr->icc_state);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->grain_state); i++)
         pl_shader_obj_destroy(&rr->grain_state[i]);
 
@@ -1418,38 +1418,38 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
     bool need_icc = (image->profile.data || target->profile.data) &&
                     !pl_icc_profile_equal(&image->profile, &target->profile);
 
-    bool use_3dlut = need_icc || params->force_3dlut;
-    if (rr->disable_3dlut)
-        use_3dlut = false;
+    bool use_icc = need_icc || params->force_icc_lut || params->force_3dlut;
+    if (rr->disable_icc)
+        use_icc = false;
 
 #ifdef PL_HAVE_LCMS
 
-    if (use_3dlut) {
-        struct pl_3dlut_profile src = {
+    if (use_icc) {
+        struct pl_icc_color_space src = {
             .color = ref_csp,
             .profile = image->profile,
         };
 
-        struct pl_3dlut_profile dst = {
+        struct pl_icc_color_space dst = {
             .color = target->color,
             .profile = target->profile,
         };
 
-        struct pl_3dlut_result res;
-        bool ok = pl_3dlut_update(sh, &src, &dst, &rr->lut3d_state, &res,
-                                  params->lut3d_params);
+        struct pl_icc_result res;
+        bool ok = pl_icc_update(sh, &src, &dst, &rr->icc_state, &res,
+                                PL_DEF(params->icc_params, params->lut3d_params));
         if (!ok) {
-            rr->disable_3dlut = true;
-            use_3dlut = false;
+            rr->disable_icc = true;
+            use_icc = false;
             goto fallback;
         }
 
-        // current -> 3DLUT in
+        // current -> ICC in
         pl_shader_color_map(sh, params->color_map_params, ref_csp, res.src_color,
                             &rr->peak_detect_state, prelinearized);
-        // 3DLUT in -> 3DLUT out
-        pl_3dlut_apply(sh, &rr->lut3d_state);
-        // 3DLUT out -> target
+        // ICC in -> ICC out
+        pl_icc_apply(sh, &rr->icc_state);
+        // ICC out -> target
         pl_shader_color_map(sh, params->color_map_params, res.dst_color,
                             target->color, NULL, false);
     }
@@ -1458,16 +1458,16 @@ fallback:
 
 #else // !PL_HAVE_LCMS
 
-    if (use_3dlut) {
+    if (use_icc) {
         PL_WARN(rr, "An ICC profile was set, but libplacebo is built without "
                 "support for LittleCMS! Disabling..");
-        rr->disable_3dlut = true;
-        use_3dlut = false;
+        rr->disable_icc = true;
+        use_icc = false;
     }
 
 #endif
 
-    if (!use_3dlut) {
+    if (!use_icc) {
         // current -> target
         pl_shader_color_map(sh, params->color_map_params, ref_csp, target->color,
                             &rr->peak_detect_state, prelinearized);

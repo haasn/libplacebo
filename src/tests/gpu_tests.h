@@ -521,17 +521,17 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     pl_shader_obj_destroy(&peak_state);
 
 #ifdef PL_HAVE_LCMS
-    // Test the use of 3DLUTs if available
+    // Test the use of ICC profiles if available
     sh = pl_dispatch_begin(dp);
     pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
 
-    struct pl_shader_obj *lut3d = NULL;
-    struct pl_3dlut_profile src_color = { .color = pl_color_space_bt709 };
-    struct pl_3dlut_profile dst_color = { .color = pl_color_space_srgb };
-    struct pl_3dlut_result out;
+    struct pl_shader_obj *icc = NULL;
+    struct pl_icc_color_space src_color = { .color = pl_color_space_bt709 };
+    struct pl_icc_color_space dst_color = { .color = pl_color_space_srgb };
+    struct pl_icc_result out;
 
-    if (pl_3dlut_update(sh, &src_color, &dst_color, &lut3d, &out, NULL)) {
-        pl_3dlut_apply(sh, &lut3d);
+    if (pl_icc_update(sh, &src_color, &dst_color, &icc, &out, NULL)) {
+        pl_icc_apply(sh, &icc);
         REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
             .shader = &sh,
             .target = fbo,
@@ -539,7 +539,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     }
 
     pl_dispatch_abort(dp, &sh);
-    pl_shader_obj_destroy(&lut3d);
+    pl_shader_obj_destroy(&icc);
 #endif
 
     // Test AV1 grain synthesis
@@ -912,7 +912,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     params = pl_render_default_params;
 
-    params.force_3dlut = true;
+    params.force_icc_lut = true;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     params = pl_render_default_params;
 

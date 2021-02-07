@@ -62,6 +62,10 @@
 #include "include/libplacebo/swapchain.h"
 #include "include/libplacebo/utils/upload.h"
 
+#ifdef PL_HAVE_LCMS
+#include "include/libplacebo/shaders/icc.h"
+#endif
+
 #ifdef PL_HAVE_VULKAN
 #include "include/libplacebo/vulkan.h"
 #endif

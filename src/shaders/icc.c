@@ -18,19 +18,18 @@
 #include <lcms2.h>
 #include <math.h>
 
-#include "context.h"
-#include "lcms.h"
+#include "shaders.h"
 
 static cmsHPROFILE get_profile(struct pl_context *ctx, cmsContext cms,
-                               struct pl_3dlut_profile prof, cmsHPROFILE dstp,
+                               struct pl_icc_color_space iccsp, cmsHPROFILE dstp,
                                struct pl_color_space *csp)
 {
-    *csp = prof.color;
+    *csp = iccsp.color;
 
-    if (prof.profile.data) {
+    if (iccsp.profile.data) {
         pl_info(ctx, "Opening ICC profile..");
-        cmsHPROFILE ret = cmsOpenProfileFromMemTHR(cms, prof.profile.data,
-                                                   prof.profile.len);
+        cmsHPROFILE ret = cmsOpenProfileFromMemTHR(cms, iccsp.profile.data,
+                                                   iccsp.profile.len);
         if (ret)
             return ret;
         pl_err(ctx, "Failed opening ICC profile, falling back to color struct");
@@ -160,23 +159,38 @@ static void error_callback(cmsContext cms, cmsUInt32Number code,
     pl_err(ctx, "lcms2: [%d] %s", (int) code, msg);
 }
 
-bool pl_lcms_compute_lut(struct pl_context *ctx, enum pl_rendering_intent intent,
-                         struct pl_3dlut_profile src, struct pl_3dlut_profile dst,
-                         float *out_data, int s_r, int s_g, int s_b,
-                         struct pl_3dlut_result *out)
+struct sh_icc_obj {
+    struct pl_context *ctx;
+    enum pl_rendering_intent intent;
+    struct pl_icc_color_space src, dst;
+    struct pl_icc_result result;
+    struct pl_shader_obj *lut_obj;
+    bool updated; // to detect misuse of the API
+    bool ok;
+    ident_t lut;
+};
+
+static void fill_icc(void *datap, const struct sh_lut_params *params)
 {
-    bool ret = false;
+    struct sh_icc_obj *obj = params->priv;
+    struct pl_context *ctx = obj->ctx;
+    pl_assert(params->comps == 4);
+    float *data = datap;
+
     cmsHPROFILE srcp = NULL, dstp = NULL;
     cmsHTRANSFORM trafo = NULL;
     uint16_t *tmp = NULL;
+    obj->ok = false;
 
     cmsContext cms = cmsCreateContext(NULL, ctx);
-    if (!cms)
+    if (!cms) {
+        pl_err(ctx, "Failed creating LittleCMS context!");
         goto error;
+    }
 
     cmsSetLogErrorHandlerTHR(cms, error_callback);
-    dstp = get_profile(ctx, cms, dst, NULL, &out->dst_color);
-    srcp = get_profile(ctx, cms, src, dstp, &out->src_color);
+    dstp = get_profile(ctx, cms, obj->dst, NULL, &obj->result.dst_color);
+    srcp = get_profile(ctx, cms, obj->src, dstp, &obj->result.src_color);
     if (!srcp || !dstp)
         goto error;
 
@@ -184,10 +198,13 @@ bool pl_lcms_compute_lut(struct pl_context *ctx, enum pl_rendering_intent intent
                      cmsFLAGS_NOCACHE;
 
     trafo = cmsCreateTransformTHR(cms, srcp, TYPE_RGB_16, dstp, TYPE_RGBA_FLT,
-                                  intent, flags);
-    if (!trafo)
+                                  obj->intent, flags);
+    if (!trafo) {
+        pl_err(ctx, "Failed creating CMS transform!");
         goto error;
+    }
 
+    int s_r = params->width, s_g = params->height, s_b = params->depth;
     pl_assert(s_r > 1 && s_g > 1 && s_b > 1);
     tmp = pl_alloc(NULL, s_r * 3 * sizeof(uint16_t));
 
@@ -202,11 +219,11 @@ bool pl_lcms_compute_lut(struct pl_context *ctx, enum pl_rendering_intent intent
 
             // Transform this line into the right output position
             size_t offset = (b * s_g + g) * s_r * 4;
-            cmsDoTransform(trafo, tmp, out_data + offset, s_r);
+            cmsDoTransform(trafo, tmp, data + offset, s_r);
         }
     }
 
-    ret = true;
+    obj->ok = true;
     // fall through
 
 error:
@@ -220,5 +237,92 @@ error:
         cmsDeleteContext(cms);
 
     pl_free_ptr(&tmp);
-    return ret;
 }
+
+static void sh_icc_uninit(const struct pl_gpu *gpu, void *ptr)
+{
+    struct sh_icc_obj *obj = ptr;
+    pl_shader_obj_destroy(&obj->lut_obj);
+    *obj = (struct sh_icc_obj) {0};
+}
+
+static bool icc_csp_eq(const struct pl_icc_color_space *a,
+                       const struct pl_icc_color_space *b)
+{
+    return pl_icc_profile_equal(&a->profile, &b->profile) &&
+           pl_color_space_equal(&a->color, &b->color);
+}
+
+bool pl_icc_update(struct pl_shader *sh,
+                   const struct pl_icc_color_space *src,
+                   const struct pl_icc_color_space *dst,
+                   struct pl_shader_obj **icc,
+                   struct pl_icc_result *out,
+                   const struct pl_icc_params *params)
+{
+    params = PL_DEF(params, &pl_icc_default_params);
+    size_t s_r = PL_DEF(params->size_r, 64),
+           s_g = PL_DEF(params->size_g, 64),
+           s_b = PL_DEF(params->size_b, 64);
+
+    struct sh_icc_obj *obj;
+    obj = SH_OBJ(sh, icc, PL_SHADER_OBJ_ICC,
+                 struct sh_icc_obj, sh_icc_uninit);
+    if (!obj)
+        return false;
+
+    bool changed = !icc_csp_eq(&obj->src, src) ||
+                   !icc_csp_eq(&obj->dst, dst) ||
+                   obj->intent != params->intent;
+
+    // Update the object, since we need this information from `fill_icc`
+    obj->ctx = sh->ctx;
+    obj->intent = params->intent;
+    obj->src = *src;
+    obj->dst = *dst;
+    obj->lut = sh_lut(sh, &(struct sh_lut_params) {
+        .object = &obj->lut_obj,
+        .type = PL_VAR_FLOAT,
+        .width = s_r,
+        .height = s_g,
+        .depth = s_b,
+        .comps = 4,
+        .linear = true,
+        .update = changed,
+        .fill = fill_icc,
+        .priv = obj,
+    });
+    if (!obj->lut || !obj->ok)
+        return false;
+
+    obj->updated = true;
+    *out = obj->result;
+    return true;
+}
+
+void pl_icc_apply(struct pl_shader *sh, struct pl_shader_obj **icc)
+{
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
+    struct sh_icc_obj *obj;
+    obj = SH_OBJ(sh, icc, PL_SHADER_OBJ_ICC,
+                 struct sh_icc_obj, sh_icc_uninit);
+    if (!obj || !obj->lut || !obj->updated || !obj->ok) {
+        SH_FAIL(sh, "pl_icc_apply called without prior pl_icc_update?");
+        return;
+    }
+
+    GLSL("// pl_icc_apply \n"
+         "color.rgb = %s(color.rgb).rgb; \n",
+         obj->lut);
+
+    obj->updated = false;
+}
+
+const struct pl_icc_params pl_icc_default_params = {
+    .intent = PL_INTENT_RELATIVE_COLORIMETRIC,
+    .size_r = 64,
+    .size_g = 64,
+    .size_b = 64,
+};

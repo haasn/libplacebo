@@ -213,7 +213,8 @@ components = [
   {
     'name': 'lcms',
     'deps':  dependency('lcms2', version: '>=2.6', required: get_option('lcms')),
-    'srcs': 'lcms.c',
+    'srcs': 'shaders/icc.c',
+    'headers': 'shaders/icc.h',
   }, {
     'name': 'glslang',
     'deps': glslang_combined,
