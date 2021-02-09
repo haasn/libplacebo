@@ -144,7 +144,7 @@ bool pl_color_repr_equal(const struct pl_color_repr *c1,
 
 // Replaces unknown values in the first struct by those of the second struct.
 void pl_color_repr_merge(struct pl_color_repr *orig,
-                         const struct pl_color_repr *new);
+                         const struct pl_color_repr *update);
 
 // This function normalizes the color representation such that
 // color_depth=sample_depth and bit_shift=0; and returns the scaling factor
@@ -297,7 +297,7 @@ bool pl_color_space_is_hdr(struct pl_color_space csp);
 
 // Replaces unknown values in the first struct by those of the second struct.
 void pl_color_space_merge(struct pl_color_space *orig,
-                          const struct pl_color_space *new);
+                          const struct pl_color_space *update);
 
 // Returns whether two colorspaces are exactly identical.
 bool pl_color_space_equal(const struct pl_color_space *c1,
