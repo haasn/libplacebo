@@ -690,6 +690,7 @@ struct sh_lut_obj {
     enum pl_var_type type;
     bool linear;
     int width, height, depth, comps;
+    uint64_t signature;
 
     // weights, depending on the method
     const struct pl_tex *tex;
@@ -803,13 +804,13 @@ next_dim: ; // `continue` out of the inner loop
         method = SH_LUT_UNIFORM;
 
     // Forcibly reinitialize the existing LUT if needed
-    bool update = params->update;
+    bool update = params->update || lut->signature != params->signature;
     if (method != lut->method || params->type != lut->type ||
         params->linear != lut->linear || params->width != lut->width ||
         params->height != lut->height || params->depth != lut->depth ||
         params->comps != lut->comps)
     {
-        PL_DEBUG(sh, "LUT method or size changed, reinitializing..");
+        PL_DEBUG(sh, "LUT cache invalidated, regenerating..");
         update = true;
     }
 

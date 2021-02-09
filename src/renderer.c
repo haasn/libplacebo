@@ -63,6 +63,7 @@ struct pl_renderer {
     struct pl_shader_obj *dither_state;
     struct pl_shader_obj *icc_state;
     struct pl_shader_obj *grain_state[4];
+    struct pl_shader_obj *lut_state[3];
     PL_ARRAY(const struct pl_tex *) fbos;
     struct sampler sampler_main;
     struct sampler samplers_src[4];
@@ -71,6 +72,13 @@ struct pl_renderer {
 
     // Frame cache (for frame mixing / interpolation)
     PL_ARRAY(struct cached_frame) frames;
+};
+
+enum {
+    // Index into `lut_state`
+    LUT_IMAGE,
+    LUT_TARGET,
+    LUT_PARAMS,
 };
 
 static void find_fbo_format(struct pl_renderer *rr)
@@ -167,6 +175,8 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
     pl_shader_obj_destroy(&rr->peak_detect_state);
     pl_shader_obj_destroy(&rr->dither_state);
     pl_shader_obj_destroy(&rr->icc_state);
+    for (int i = 0; i < PL_ARRAY_SIZE(rr->lut_state); i++)
+        pl_shader_obj_destroy(&rr->lut_state[i]);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->grain_state); i++)
         pl_shader_obj_destroy(&rr->grain_state[i]);
 
@@ -907,6 +917,9 @@ static void hdr_update_peak(struct pass_state *pass,
     if (src_peak <= dst_peak + 1e-6)
         goto cleanup; // no adaptation needed
 
+    if (params->lut && params->lut_type == PL_LUT_CONVERSION)
+        goto cleanup; // LUT handles tone mapping
+
     if (!FBOFMT && !params->allow_delayed_peak_detect) {
         PL_WARN(rr, "Disabling peak detection because "
                 "`allow_delayed_peak_detect` is false, but lack of FBOs "
@@ -1064,6 +1077,29 @@ static bool plane_user_hooks(struct pass_state *pass, struct plane_state *st,
     };
 
     return pass_hook(pass, &st->img, plane_stages[st->type], params);
+}
+
+static enum pl_lut_type guess_frame_lut_type(const struct pl_frame *frame,
+                                             bool reversed)
+{
+    if (!frame->lut)
+        return PL_LUT_UNKNOWN;
+    if (frame->lut_type)
+        return frame->lut_type;
+
+    enum pl_color_system sys_in = frame->lut->repr_in.sys;
+    enum pl_color_system sys_out = frame->lut->repr_out.sys;
+    if (reversed)
+        PL_SWAP(sys_in, sys_out);
+
+    if (sys_in == PL_COLOR_SYSTEM_RGB && sys_out == sys_in)
+        return PL_LUT_NORMALIZED;
+
+    if (sys_in == frame->repr.sys && sys_out == PL_COLOR_SYSTEM_RGB)
+        return PL_LUT_CONVERSION;
+
+    // Unknown, just fall back to the default
+    return PL_LUT_NATIVE;
 }
 
 // This scales and merges all of the source images, and initializes pass->img.
@@ -1257,11 +1293,31 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
 
     pass_hook(pass, &pass->img, PL_HOOK_NATIVE,  params);
 
-    // Convert the image colorspace
-    pl_shader_decode_color(img_sh(pass, &pass->img), &pass->img.repr,
-                           params->color_adjustment);
+    // Apply LUT logic and colorspace conversion
+    enum pl_lut_type lut_type = guess_frame_lut_type(image, false);
+    sh = img_sh(pass, &pass->img);
+    bool needs_conversion = true;
+
+    if (lut_type == PL_LUT_NATIVE || lut_type == PL_LUT_CONVERSION) {
+        // Fix bit depth normalization before applying LUT
+        float scale = pl_color_repr_normalize(&pass->img.repr);
+        GLSL("color *= vec4(%f); \n", scale);
+        pl_shader_custom_lut(sh, image->lut, &rr->lut_state[LUT_IMAGE]);
+
+        if (lut_type == PL_LUT_CONVERSION) {
+            pass->img.repr.sys = PL_COLOR_SYSTEM_RGB;
+            pass->img.repr.levels = PL_COLOR_LEVELS_FULL;
+            needs_conversion = false;
+        }
+    }
+
+    if (needs_conversion)
+        pl_shader_decode_color(sh, &pass->img.repr, params->color_adjustment);
+    if (lut_type == PL_LUT_NORMALIZED)
+        pl_shader_custom_lut(sh, image->lut, &rr->lut_state[LUT_IMAGE]);
 
     pass_hook(pass, &pass->img, PL_HOOK_RGB, params);
+    sh = NULL;
 
     // HDR peak detection, do this as early as possible
     hdr_update_peak(pass, params);
@@ -1409,6 +1465,7 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
 
     // Color management
     bool prelinearized = false;
+    bool need_conversion = true;
     struct pl_color_space ref_csp = image->color;
     assert(ref_csp.primaries == img->color.primaries);
     assert(ref_csp.light == img->color.light);
@@ -1421,6 +1478,55 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
     bool use_icc = need_icc || params->force_icc_lut || params->force_3dlut;
     if (rr->disable_icc)
         use_icc = false;
+
+    if (params->lut) {
+        struct pl_color_space lut_in = params->lut->color_in;
+        struct pl_color_space lut_out = params->lut->color_out;
+        switch (params->lut_type) {
+        case PL_LUT_UNKNOWN:
+        case PL_LUT_NATIVE:
+            pl_color_space_merge(&lut_in, &ref_csp);
+            pl_color_space_merge(&lut_out, &ref_csp);
+            break;
+        case PL_LUT_CONVERSION:
+            pl_color_space_merge(&lut_in, &ref_csp);
+            pl_color_space_merge(&lut_out, &target->color);
+            // Conversion LUT the highest priority
+            use_icc = false;
+            need_conversion = false;
+            break;
+        case PL_LUT_NORMALIZED:
+            if (!prelinearized) {
+                // PL_LUT_NORMALIZED wants linear input data
+                pl_shader_linearize(sh, img->color.transfer);
+                img->color.transfer = PL_COLOR_TRC_LINEAR;
+                prelinearized = true;
+            }
+            pl_color_space_merge(&lut_in, &img->color);
+            pl_color_space_merge(&lut_out, &img->color);
+            break;
+        }
+
+        pl_shader_color_map(sh, params->color_map_params, ref_csp, lut_in,
+                            NULL, prelinearized);
+
+        if (params->lut_type == PL_LUT_NORMALIZED) {
+            GLSLF("color.rgb *= vec3(1.0/%f); \n",
+                  pl_color_transfer_nominal_peak(lut_in.transfer));
+        }
+
+        pl_shader_custom_lut(sh, params->lut, &rr->lut_state[LUT_PARAMS]);
+
+        if (params->lut_type == PL_LUT_NORMALIZED) {
+            GLSLF("color.rgb *= vec3(%f); \n",
+                  pl_color_transfer_nominal_peak(lut_out.transfer));
+        }
+
+        if (params->lut_type != PL_LUT_CONVERSION) {
+            pl_shader_color_map(sh, params->color_map_params, lut_out, img->color,
+                                NULL, false);
+        }
+    }
 
 #ifdef PL_HAVE_LCMS
 
@@ -1452,6 +1558,8 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
         // ICC out -> target
         pl_shader_color_map(sh, params->color_map_params, res.dst_color,
                             target->color, NULL, false);
+
+        need_conversion = false;
     }
 
 fallback:
@@ -1467,7 +1575,7 @@ fallback:
 
 #endif
 
-    if (!use_icc) {
+    if (need_conversion) {
         // current -> target
         pl_shader_color_map(sh, params->color_map_params, ref_csp, target->color,
                             &rr->peak_detect_state, prelinearized);
@@ -1477,11 +1585,18 @@ fallback:
     if (params->cone_params)
         pl_shader_cone_distort(sh, target->color, params->cone_params);
 
+    enum pl_lut_type lut_type = guess_frame_lut_type(target, true);
+    if (lut_type == PL_LUT_NORMALIZED || lut_type == PL_LUT_CONVERSION)
+        pl_shader_custom_lut(sh, target->lut, &rr->lut_state[LUT_TARGET]);
+
     // Apply the color scale separately, after encoding is done, to make sure
     // that the intermediate FBO (if any) has the correct precision.
     struct pl_color_repr repr = target->repr;
     float scale = pl_color_repr_normalize(&repr);
-    pl_shader_encode_color(sh, &repr);
+    if (lut_type != PL_LUT_CONVERSION)
+        pl_shader_encode_color(sh, &repr);
+    if (lut_type == PL_LUT_NATIVE)
+        pl_shader_custom_lut(sh, target->lut, &rr->lut_state[LUT_TARGET]);
     pass_hook(pass, img, PL_HOOK_OUTPUT, params);
     sh = NULL;
 

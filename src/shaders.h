@@ -187,7 +187,7 @@ struct sh_lut_params {
     enum sh_lut_method method;
     enum pl_var_type type;
 
-    // LUT dimensions
+    // LUT dimensions. Unused dimensions may be left as 0.
     int width;
     int height;
     int depth;
@@ -200,6 +200,10 @@ struct sh_lut_params {
     // If true, the LUT will always be regenerated, even if the dimensions have
     // not changed.
     bool update;
+
+    // Alternate way of triggering shader invalidations. If the signature
+    // does not match the LUT's signature, it will be regenerated.
+    uint64_t signature;
 
     // If set to true, shader objects will be preserved and updated in-place
     // rather than being treated as read-only.

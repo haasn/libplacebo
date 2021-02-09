@@ -46,6 +46,24 @@ size_t pl_renderer_save(struct pl_renderer *rr, uint8_t *out_cache);
 // `pl_dispatch_load` for more information.
 void pl_renderer_load(struct pl_renderer *rr, const uint8_t *cache);
 
+enum pl_lut_type {
+    PL_LUT_UNKNOWN = 0,
+    PL_LUT_NATIVE,      // applied to raw image contents (after fixing bit depth)
+    PL_LUT_NORMALIZED,  // applied to normalized RGB values
+    PL_LUT_CONVERSION,  // LUT fully replaces color conversion
+
+    // Note: When using a PL_LUT_CONVERSION to replace the YUV->RGB conversion,
+    // `pl_render_params.color_adjustment` is no longer applied. Similarly,
+    // when using a PL_LUT_CONVERSION to replace the image->target color space
+    // conversion, `pl_render_params.color_map_params` are ignored.
+    //
+    // Note: For LUTs attached to the output frame, PL_LUT_CONVERSION should
+    // instead perform the inverse (RGB->native) conversion.
+    //
+    // Note: PL_LUT_UNKNOWN tries inferring the meaning of the LUT from the
+    // LUT's tagged metadata, and otherwise falls back to PL_LUT_NATIVE.
+};
+
 // Represents the options used for rendering. These affect the quality of
 // the result.
 struct pl_render_params {
@@ -129,6 +147,20 @@ struct pl_render_params {
     // See <libplacebo/shaders/custom.h> for more information.
     const struct pl_hook * const *hooks;
     int num_hooks;
+
+    // Color mapping LUT. If present, this will be applied as part of the
+    // image being rendered, in normalized RGB space.
+    //
+    // Note: In this context, PL_LUT_NATIVE means "gamma light" and
+    // PL_LUT_NORMALIZED means "linear light". For HDR signals, normalized LUTs
+    // are scaled so 1.0 corresponds to the `pl_color_transfer_nominal_peak`.
+    //
+    // Note: A PL_LUT_CONVERSION fully replaces the color adaptation from
+    // `image` to `target`, including any tone-mapping (if necessary). It has
+    // the same representation as PL_LUT_NATIVE, so in this case the input
+    // and output are (respectively) non-linear light RGB.
+    const struct pl_custom_lut *lut;
+    enum pl_lut_type lut_type;
 
     // --- Performance / quality trade-off options:
     // These should generally be left off where quality is desired, as they can
@@ -329,6 +361,10 @@ struct pl_frame {
 
     // Optional ICC profile associated with this frame.
     struct pl_icc_profile profile;
+
+    // Optional LUT associated with this frame.
+    const struct pl_custom_lut *lut;
+    enum pl_lut_type lut_type;
 
     // The logical crop / rectangle containing the valid information, relative
     // to the reference plane's dimensions (e.g. luma). Pixels outside of this

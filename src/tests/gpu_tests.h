@@ -772,6 +772,27 @@ static const char *user_shader_tests[] = {
 
 };
 
+static const char *test_luts[] = {
+
+    "TITLE \"1D identity\"  \n"
+    "LUT_1D_SIZE 2          \n"
+    "0.0 0.0 0.0            \n"
+    "1.0 1.0 1.0            \n",
+
+    "TITLE \"3D identity\"  \n"
+    "LUT_3D_SIZE 2          \n"
+    "0.0 0.0 0.0            \n"
+    "1.0 0.0 0.0            \n"
+    "0.0 1.0 0.0            \n"
+    "1.0 1.0 0.0            \n"
+    "0.0 0.0 1.0            \n"
+    "1.0 0.0 1.0            \n"
+    "0.0 1.0 1.0            \n"
+    "1.0 1.0 1.0            \n"
+
+};
+
+
 static void pl_render_tests(const struct pl_gpu *gpu)
 {
     const struct pl_fmt *fbo_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32,
@@ -942,6 +963,26 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         pl_mpv_user_shader_destroy(&hook);
     }
     params = pl_render_default_params;
+
+    // Test custom LUTs
+    for (int i = 0; i < PL_ARRAY_SIZE(test_luts); i++) {
+        printf("testing custom lut %d\n", i);
+        struct pl_custom_lut *lut;
+        lut = pl_lut_parse_cube(gpu->ctx, test_luts[i], strlen(test_luts[i]));
+        REQUIRE(lut);
+
+        // Test all three at the same time to reduce the number of tests
+        image.lut = target.lut = params.lut = lut;
+
+        for (enum pl_lut_type t = PL_LUT_UNKNOWN; t <= PL_LUT_CONVERSION; t++) {
+            printf("testing LUT method %d\n", t);
+            image.lut_type = target.lut_type = params.lut_type = t;
+            REQUIRE(pl_render_image(rr, &image, &target, &params));
+        }
+
+        image.lut = target.lut = params.lut = NULL;
+        pl_lut_free(&lut);
+    }
 
     // Test overlays
     image.num_overlays = 1;
