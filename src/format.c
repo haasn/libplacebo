@@ -15,18 +15,17 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <math.h>
+
 #include "common.h"
 
-int ccStrPrintInt32( char *str, int32_t n );
-int ccStrPrintUint32( char *str, uint32_t n );
-int ccStrPrintInt64( char *str, int64_t n );
-int ccStrPrintUint64( char *str, uint64_t n );
-int ccStrPrintDouble( char *str, int bufsize, int decimals, double value );
-
-#define CC_STR_PRINT_BUFSIZE_INT32 (12)
-#define CC_STR_PRINT_BUFSIZE_UINT32 (11)
-#define CC_STR_PRINT_BUFSIZE_INT64 (21)
-#define CC_STR_PRINT_BUFSIZE_UINT64 (20)
+static int ccStrPrintInt32( char *str, int32_t n );
+static int ccStrPrintUint32( char *str, uint32_t n );
+static int ccStrPrintInt64( char *str, int64_t n );
+static int ccStrPrintUint64( char *str, uint64_t n );
+static int ccStrPrintDouble( char *str, int bufsize, int decimals, double value );
+static int ccSeqParseInt64( char *seq, int seqlength, int64_t *retint );
+static int ccSeqParseDouble( char *seq, int seqlength, double *retdouble );
 
 void pl_str_append_asprintf_c(void *alloc, pl_str *str, const char *fmt, ...)
 {
@@ -37,7 +36,7 @@ void pl_str_append_asprintf_c(void *alloc, pl_str *str, const char *fmt, ...)
 }
 
 void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
-                                va_list ap)
+                               va_list ap)
 {
     for (const char *c; (c = strchr(fmt, '%')) != NULL; fmt = c + 1) {
         // Append the preceding string literal
@@ -81,8 +80,15 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
             continue;
         case 'l':
             assert(c[1] == 'l');
-            assert(c[2] == 'u');
-            len = ccStrPrintUint64(buf, va_arg(ap, long long unsigned));
+            switch (c[2]) {
+            case 'u':
+                len = ccStrPrintUint64(buf, va_arg(ap, unsigned long long));
+                break;
+            case 'd':
+                len = ccStrPrintInt64(buf, va_arg(ap, long long));
+                break;
+            default: abort();
+            }
             pl_str_append(alloc, str, (pl_str) { buf, len });
             c += 2;
             continue;
@@ -106,6 +112,16 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
     pl_str_append(alloc, str, pl_str0(fmt));
 }
 
+bool pl_str_parse_double(pl_str str, double *out)
+{
+    return ccSeqParseDouble(str.buf, str.len, out);
+}
+
+bool pl_str_parse_int64(pl_str str, int64_t *out)
+{
+    return ccSeqParseInt64(str.buf, str.len, out);
+}
+
 /* *****************************************************************************
  *
  * Copyright (c) 2007-2016 Alexis Naveros.
@@ -113,6 +129,8 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
  * Changes include:
  *  - Removed a CC_MIN macro dependency by equivalent logic
  *  - Removed CC_ALWAYSINLINE
+ *  - Fixed (!seq) check to (!seqlength)
+ *  - Added support for scientific notation (e.g. 1.0e10) in ccSeqParseDouble
  *
  * Permission is granted to anyone to use this software for any purpose,
  * including commercial applications, and to alter it and redistribute it
@@ -248,7 +266,7 @@ static inline int ccStrPrintLength64( uint64_t n )
     return size;
 }
 
-int ccStrPrintInt32( char *str, int32_t n )
+static int ccStrPrintInt32( char *str, int32_t n )
 {
     int sign, size, retsize, pos;
     uint32_t val32;
@@ -292,7 +310,7 @@ int ccStrPrintInt32( char *str, int32_t n )
     return retsize;
 }
 
-int ccStrPrintUint32( char *str, uint32_t n )
+static int ccStrPrintUint32( char *str, uint32_t n )
 {
     int size, retsize, pos;
     uint32_t val32;
@@ -329,7 +347,7 @@ int ccStrPrintUint32( char *str, uint32_t n )
     return retsize;
 }
 
-int ccStrPrintInt64( char *str, int64_t n )
+static int ccStrPrintInt64( char *str, int64_t n )
 {
     int sign, size, retsize, pos;
     uint64_t val64;
@@ -373,7 +391,7 @@ int ccStrPrintInt64( char *str, int64_t n )
     return retsize;
 }
 
-int ccStrPrintUint64( char *str, uint64_t n )
+static int ccStrPrintUint64( char *str, uint64_t n )
 {
     int size, retsize, pos;
     uint64_t val64;
@@ -411,12 +429,16 @@ int ccStrPrintUint64( char *str, uint64_t n )
     return retsize;
 }
 
+#define CC_STR_PRINT_BUFSIZE_INT32 (12)
+#define CC_STR_PRINT_BUFSIZE_UINT32 (11)
+#define CC_STR_PRINT_BUFSIZE_INT64 (21)
+#define CC_STR_PRINT_BUFSIZE_UINT64 (20)
 #define CC_STR_PRINT_DOUBLE_MAX_DECIMAL (24)
 
 static const double ccStrPrintBiasTable[CC_STR_PRINT_DOUBLE_MAX_DECIMAL+1] =
 { 0.5, 0.05, 0.005, 0.0005, 0.00005, 0.000005, 0.0000005, 0.00000005, 0.000000005, 0.0000000005, 0.00000000005, 0.000000000005, 0.0000000000005, 0.00000000000005, 0.000000000000005, 0.0000000000000005, 0.00000000000000005, 0.000000000000000005, 0.0000000000000000005, 0.00000000000000000005, 0.000000000000000000005, 0.0000000000000000000005, 0.00000000000000000000005, 0.000000000000000000000005, 0.0000000000000000000000005 };
 
-int ccStrPrintDouble( char *str, int bufsize, int decimals, double value )
+static int ccStrPrintDouble( char *str, int bufsize, int decimals, double value )
 {
     int size, offset, index;
     int32_t frac, accumsub;
@@ -502,4 +524,112 @@ error:
         str[3] = 0;
     }
     return 0;
+}
+
+#define CC_CHAR_IS_DELIMITER(c) ((c)<=' ')
+
+int ccSeqParseInt64( char *seq, int seqlength, int64_t *retint )
+{
+  int i, negflag;
+  char c;
+  int64_t workint;
+
+  *retint = 0;
+  if( !( seqlength ) )
+    return 0;
+  negflag = 0;
+  i = 0;
+  if( *seq == '-' )
+  {
+    negflag = 1;
+    i = 1;
+  }
+
+  workint = 0;
+  for( ; i < seqlength ; i++ )
+  {
+    c = seq[i];
+    if( ( c >= '0' ) && ( c <= '9' ) )
+    {
+      if( workint >= (int64_t)0xcccccccccccccccLL )
+        return 0;
+      workint = ( workint * 10 ) + ( c - '0' );
+    }
+    else if( CC_CHAR_IS_DELIMITER( c ) )
+      break;
+    else
+      return 0;
+  }
+
+  if( negflag )
+    workint = -workint;
+  *retint = workint;
+  return 1;
+}
+
+int ccSeqParseDouble( char *seq, int seqlength, double *retdouble )
+{
+  int i, negflag;
+  char c;
+  double accum;
+  double decfactor;
+  int64_t exponent;
+
+  *retdouble = 0.0;
+  i = 0;
+  if( !( seqlength ) )
+    return 0;
+  negflag = ( seq[i] == '-' );
+  i += negflag;
+
+  accum = 0.0;
+  for( ; i < seqlength ; i++ )
+  {
+    c = seq[i];
+    if( ( c >= '0' ) && ( c <= '9' ) )
+      accum = ( accum * 10.0 ) + (double)( c - '0' );
+    else if( CC_CHAR_IS_DELIMITER( c ) )
+      goto done;
+    else if( c == 'e' || c == 'E' )
+      goto sci;
+    else if( c == '.' )
+      break;
+    else
+      return 0;
+  }
+
+  i++;
+  decfactor = 0.1;
+  for( ; i < seqlength ; i++ )
+  {
+    c = seq[i];
+    if( ( c >= '0' ) && ( c <= '9' ) )
+    {
+      accum += (double)( c - '0' ) * decfactor;
+      decfactor *= 0.1;
+    }
+    else if( CC_CHAR_IS_DELIMITER( c ) )
+      goto done;
+    else if( c == 'e' || c == 'E' )
+      goto sci;
+    else
+      return 0;
+  }
+
+done:
+  if( negflag )
+    accum = -accum;
+  *retdouble = (double)accum;
+  return 1;
+
+sci:
+  i++;
+  if( !ccSeqParseInt64( seq + i, seqlength - i, &exponent ) )
+    return 0;
+#ifdef __unix__
+  accum *= exp10( exponent );
+#else
+  accum *= pow( 10.0, exponent );
+#endif
+  goto done;
 }

@@ -2,6 +2,7 @@
 
 static const pl_str null = {0};
 static const pl_str test = PL_STR0("test");
+static const pl_str empty = PL_STR0("");
 
 static inline bool is_null(pl_str str)
 {
@@ -19,8 +20,9 @@ int main()
 
     REQUIRE(is_null(pl_str0(NULL)));
     REQUIRE(is_null(pl_strdup(tmp, null)));
-    char *empty = pl_strdup0(tmp, null);
-    REQUIRE(empty && !empty[0]);
+    char *empty0 = pl_strdup0(tmp, null);
+    REQUIRE(empty0 && !empty0[0]);
+    REQUIRE(pl_str_equals0(empty, empty0));
 
     pl_str buf = {0};
     pl_str_append(tmp, &buf, null);
@@ -67,12 +69,30 @@ int main()
     REQUIRE(!pl_str_decode_hex(tmp, pl_str0("invalid"), &out));
 
     REQUIRE(pl_str_equals(null, null));
+    REQUIRE(pl_str_equals(null, empty));
     REQUIRE(pl_str_startswith(null, null));
     REQUIRE(pl_str_startswith(test, null));
     REQUIRE(pl_str_startswith(test, test));
     REQUIRE(pl_str_endswith(null, null));
     REQUIRE(pl_str_endswith(test, null));
     REQUIRE(pl_str_endswith(test, test));
+
+    float f;
+    int i;
+    REQUIRE(pl_str_parse_float(pl_str0("1.3984"), &f) && f == 1.3984f);
+    REQUIRE(pl_str_parse_float(pl_str0("-8.9100083"), &f) && f == -8.9100083f);
+    REQUIRE(pl_str_parse_float(pl_str0("-0"), &f) && f == 0.0f);
+    REQUIRE(pl_str_parse_float(pl_str0("-3.14e20"), &f) && f == -3.14e20f);
+    REQUIRE(pl_str_parse_float(pl_str0("0.5e-5"), &f) && f == 0.5e-5f);
+    REQUIRE(pl_str_parse_int(pl_str0("64239"), &i) && i == 64239);
+    REQUIRE(pl_str_parse_int(pl_str0("-102"), &i) && i == -102);
+    REQUIRE(pl_str_parse_int(pl_str0("-0"), &i) && i == 0);
+    REQUIRE(!pl_str_parse_float(null, &f));
+    REQUIRE(!pl_str_parse_float(test, &f));
+    REQUIRE(!pl_str_parse_float(empty, &f));
+    REQUIRE(!pl_str_parse_int(null, &i));
+    REQUIRE(!pl_str_parse_int(test, &i));
+    REQUIRE(!pl_str_parse_int(empty, &i));
 
     pl_free(tmp);
     return 0;
