@@ -320,7 +320,7 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
 {
     pl_handle_caps caps = 0;
 
-    if (!vk->GetPhysicalDeviceExternalBufferPropertiesKHR)
+    if (!vk->GetPhysicalDeviceImageFormatProperties2KHR)
         return caps;
 
     for (int i = 0; vk_mem_handle_list[i]; i++) {
@@ -337,7 +337,7 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
             .pNext = &ext_pinfo,
             .format = VK_FORMAT_R8_UNORM,
             .type = VK_IMAGE_TYPE_2D,
-            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .tiling = VK_IMAGE_TILING_LINEAR,
             .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         };
 
