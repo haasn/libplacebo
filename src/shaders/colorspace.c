@@ -658,12 +658,25 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
         size_t size = sh_buf_desc_size(&obj->desc);
         static const uint8_t zero[32] = {0};
         pl_assert(sizeof(zero) >= size);
-        obj->buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        struct pl_buf_params buf_params = {
             .size = size,
+            .host_readable = true,
+            .memory_type = PL_BUF_MEM_DEVICE,
             .storable = true,
             .initial_data = zero,
-            .host_readable = true,
-        });
+        };
+
+        // Attempt creating host-readable SSBO first, suppress errors
+        pl_log_level_cap(gpu->ctx, PL_LOG_DEBUG);
+        obj->buf = pl_buf_create(gpu, &buf_params);
+        pl_log_level_cap(gpu->ctx, PL_LOG_NONE);
+
+        if (!obj->buf) {
+            // Fall back to non-host-readable SSBO
+            buf_params.host_readable = false;
+            obj->buf = pl_buf_create(gpu, &buf_params);
+        }
+
         obj->desc.binding.object = obj->buf;
     }
 
@@ -781,13 +794,40 @@ bool pl_get_detected_peak(const struct pl_shader_obj *state,
 
     struct sh_peak_obj *obj = state->priv;
     const struct pl_gpu *gpu = state->gpu;
+    const struct pl_buf *buf = obj->buf;
 
     float average[2] = {0};
     pl_assert(obj->buf->params.size >= sizeof(average));
 
-    if (!pl_buf_read(gpu, obj->buf, 0, average, sizeof(average))) {
-        PL_ERR(gpu, "Failed reading from peak detect state buffer");
-        return false;
+    if (buf->params.host_readable) {
+
+        // We can read directly from the SSBO
+        if (!pl_buf_read(gpu, buf, 0, average, sizeof(average))) {
+            PL_ERR(gpu, "Failed reading from peak detect state buffer");
+            return false;
+        }
+
+    } else {
+
+        // We can't read directly from the SSBO, go via an intermediary
+        const struct pl_buf *tmp = pl_buf_create(gpu, &(struct pl_buf_params) {
+            .size = sizeof(average),
+            .host_readable = true,
+        });
+
+        if (!tmp) {
+            PL_ERR(gpu, "Failed creating buffer for SSBO read-back");
+            return false;
+        }
+
+        pl_buf_copy(gpu, tmp, 0, buf, 0, sizeof(average));
+        if (!pl_buf_read(gpu, tmp, 0, average, sizeof(average))) {
+            PL_ERR(gpu, "Failed reading from SSBO read-back buffer");
+            pl_buf_destroy(gpu, &tmp);
+            return false;
+        }
+        pl_buf_destroy(gpu, &tmp);
+
     }
 
     *out_avg = average[0];
