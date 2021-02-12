@@ -147,6 +147,37 @@ static void add_format(const struct pl_gpu *pgpu, const struct gl_format *gl_fmt
     fmt->fourcc = pl_fmt_fourcc(fmt);
     pl_assert(fmt->glsl_type);
 
+#if GL_HAVE_UNIX
+    if (p->has_modifiers) {
+        int num_mods = 0;
+        bool ok = eglQueryDmaBufModifiersEXT(p->egl_dpy, fmt->fourcc,
+                                             0, NULL, NULL, &num_mods);
+        if (ok && num_mods) {
+            uint64_t *mods = pl_calloc(fmt, num_mods, sizeof(uint64_t));
+            ok = eglQueryDmaBufModifiersEXT(p->egl_dpy, fmt->fourcc,
+                                            num_mods, mods, NULL, &num_mods);
+            if (ok) {
+                fmt->modifiers = mods;
+                fmt->num_modifiers = num_mods;
+            }
+        }
+
+        eglGetError(); // ignore probing errors
+    }
+
+    if (!fmt->num_modifiers) {
+        // Hacky fallback for older drivers that don't support properly
+        // querying modifiers
+        static const uint64_t static_mods[] = {
+            DRM_FORMAT_MOD_INVALID,
+            DRM_FORMAT_MOD_LINEAR,
+        };
+
+        fmt->num_modifiers = PL_ARRAY_SIZE(static_mods);
+        fmt->modifiers = static_mods;
+    }
+#endif
+
     // Mask renderable/blittable if no FBOs available
     if (!p->has_fbos)
         fmt->caps &= ~(PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE);
@@ -436,8 +467,6 @@ static GLbitfield tex_barrier(const struct pl_tex *tex)
                    (uint32_t) (((mod) >> 32u) & 0xFFFFu));          \
     } while (0)
 
-#define DRM_MOD_INVALID ((1ULL << 56) - 1)
-
 static bool gl_tex_import(const struct pl_gpu *gpu,
                           enum pl_handle_type handle_type,
                           const struct pl_shared_mem *shared_mem,
@@ -467,14 +496,8 @@ static bool gl_tex_import(const struct pl_gpu *gpu,
             goto error;
         }
 
-        if (shared_mem->drm_format_mod != DRM_MOD_INVALID) {
-            if (!p->has_modifiers) {
-                PL_ERR(gpu, "%s: DRM modifiers requested but unsupported", __func__);
-                goto error;
-            }
-
+        if (shared_mem->drm_format_mod != DRM_FORMAT_MOD_INVALID)
             ADD_DMABUF_PLANE_MODIFIERS(0, shared_mem->drm_format_mod);
-        }
 
         ADD_ATTRIB(EGL_LINUX_DRM_FOURCC_EXT, params->format->fourcc);
         ADD_DMABUF_PLANE_ATTRIBS(0, tex_gl->fd, shared_mem->offset,
@@ -553,12 +576,12 @@ static bool gl_tex_export(const struct pl_gpu *gpu,
     case PL_HANDLE_DMA_BUF: {
         int fourcc = 0;
         int num_planes = 0;
-        EGLuint64KHR modifiers = 0;
+        EGLuint64KHR modifier = 0;
         ok = eglExportDMABUFImageQueryMESA(p->egl_dpy,
                                            tex_gl->image,
                                            &fourcc,
                                            &num_planes,
-                                           &modifiers);
+                                           &modifier);
         if (!egl_check_err(gpu, "eglExportDMABUFImageQueryMESA") || !ok)
             goto error;
 
@@ -594,7 +617,7 @@ static bool gl_tex_export(const struct pl_gpu *gpu,
             .handle.fd = tex_gl->fd,
             .size = fdsize,
             .offset = offset,
-            .drm_format_mod = modifiers,
+            .drm_format_mod = modifier,
             .stride_w = stride,
         };
         break;
