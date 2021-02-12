@@ -274,6 +274,11 @@ struct pl_fmt {
     // PL_HANDLE_DMA_BUF, where this field will match the DRM format from
     // <drm_fourcc.h>. May be 0, for formats without matching DRM fourcc.
     uint32_t fourcc;
+
+    // If `fourcc` is set, this contains the list of supported drm format
+    // modifiers for this format.
+    const uint64_t *modifiers;
+    int num_modifiers;
 };
 
 // Returns whether or not a pl_fmt's components are ordered sequentially

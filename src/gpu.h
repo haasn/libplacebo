@@ -131,3 +131,16 @@ struct pl_pass_params pl_pass_params_copy(void *alloc,
 #define UUID_SIZE 16
 #define PRINT_UUID(uuid) (print_uuid((char[3 * UUID_SIZE]){0}, (uuid)))
 const char *print_uuid(char buf[3 * UUID_SIZE], const uint8_t uuid[UUID_SIZE]);
+
+// Helper to pretty-print fourcc codes
+#define PRINT_FOURCC(fcc)       \
+    (!(fcc) ? "" : (char[5]) {  \
+        (fcc) & 0xFF,           \
+        ((fcc) >> 8) & 0xFF,    \
+        ((fcc) >> 16) & 0xFF,   \
+        ((fcc) >> 24) & 0xFF    \
+    })
+
+#define DRM_MOD_SIZE 26
+#define PRINT_DRM_MOD(mod) (print_drm_mod((char[DRM_MOD_SIZE]){0}, (mod)))
+const char *print_drm_mod(char buf[DRM_MOD_SIZE], uint64_t mod);

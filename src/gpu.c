@@ -49,9 +49,9 @@ static void print_formats(const struct pl_gpu *gpu)
         return;
 
     PL_DEBUG(gpu,  "GPU texture formats:");
-    PL_DEBUG(gpu,  "    %-10s %-6s %-6s %-4s %-4s %-13s %-13s %-10s %-10s",
+    PL_DEBUG(gpu,  "    %-10s %-6s %-6s %-4s %-4s %-13s %-13s %-10s %-10s %-6s",
             "NAME", "TYPE", "CAPS", "SIZE", "COMP", "DEPTH", "HOST_BITS",
-            "GLSL_TYPE", "GLSL_FMT");
+            "GLSL_TYPE", "GLSL_FMT", "FOURCC");
     for (int n = 0; n < gpu->num_formats; n++) {
         const struct pl_fmt *fmt = gpu->formats[n];
 
@@ -74,13 +74,18 @@ static void print_formats(const struct pl_gpu *gpu)
 #define IDX4(f) (f)[0], (f)[1], (f)[2], (f)[3]
 
         PL_DEBUG(gpu, "    %-10s %-6s 0x%-4x %-4zu %c%c%c%c "
-                 "{%-2d %-2d %-2d %-2d} {%-2d %-2d %-2d %-2d} %-10s %-10s",
+                 "{%-2d %-2d %-2d %-2d} {%-2d %-2d %-2d %-2d} %-10s %-10s %-6s",
                  fmt->name, types[fmt->type], (unsigned int) fmt->caps,
                  fmt->texel_size, IDX4(indices), IDX4(fmt->component_depth),
                  IDX4(fmt->host_bits), PL_DEF(fmt->glsl_type, ""),
-                 PL_DEF(fmt->glsl_format, ""));
+                 PL_DEF(fmt->glsl_format, ""), PRINT_FOURCC(fmt->fourcc));
 
 #undef IDX4
+
+        for (int i = 0; i < fmt->num_modifiers; i++) {
+            PL_TRACE(gpu, "        modifiers[%d]: %s",
+                     i, PRINT_DRM_MOD(fmt->modifiers[i]));
+        }
     }
 }
 
@@ -478,6 +483,23 @@ const struct pl_fmt *pl_find_fourcc(const struct pl_gpu *gpu, uint32_t fourcc)
     return NULL;
 }
 
+static inline bool check_mod(const struct pl_gpu *gpu, const struct pl_fmt *fmt,
+                             uint64_t mod)
+{
+    for (int i = 0; i < fmt->num_modifiers; i++) {
+        if (fmt->modifiers[i] == mod)
+            return true;
+    }
+
+
+    PL_ERR(gpu, "DRM modifier %s not available for format %s. Available modifiers:",
+           PRINT_DRM_MOD(mod), fmt->name);
+    for (int i = 0; i < fmt->num_modifiers; i++)
+        PL_ERR(gpu, "    %s", PRINT_DRM_MOD(fmt->modifiers[i]));
+
+    return false;
+}
+
 const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
                                    const struct pl_tex_params *params)
 {
@@ -492,6 +514,8 @@ const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
         require(PL_ISPOT(params->import_handle));
         require(params->shared_mem.size > 0);
         if (params->import_handle == PL_HANDLE_DMA_BUF) {
+            if (!check_mod(gpu, params->format, params->shared_mem.drm_format_mod))
+                goto error;
             if (params->shared_mem.stride_w)
                 require(params->w && params->shared_mem.stride_w >= params->w);
             if (params->shared_mem.stride_h)
@@ -1857,6 +1881,35 @@ const char *print_uuid(char buf[3 * UUID_SIZE], const uint8_t uuid[UUID_SIZE])
         buf[3 * i + 0] = hexdigits[x >> 4];
         buf[3 * i + 1] = hexdigits[x & 0xF];
         buf[3 * i + 2] = i == UUID_SIZE - 1 ? '\0' : ':';
+    }
+
+    return buf;
+}
+
+const char *print_drm_mod(char buf[DRM_MOD_SIZE], uint64_t mod)
+{
+    switch (mod) {
+    case DRM_FORMAT_MOD_LINEAR: return "LINEAR";
+    case DRM_FORMAT_MOD_INVALID: return "INVALID";
+    }
+
+    uint8_t vendor = mod >> 56;
+    uint64_t val = mod & ((1ULL << 56) - 1);
+
+    const char *name = NULL;
+    switch (vendor) {
+    case 0x00: name = "NONE"; break;
+    case 0x01: name = "INTEL"; break;
+    case 0x02: name = "AMD"; break;
+    case 0x03: name = "NVIDIA"; break;
+    case 0x04: name = "SAMSUNG"; break;
+    case 0x08: name = "ARM"; break;
+    }
+
+    if (name) {
+        snprintf(buf, DRM_MOD_SIZE, "%s 0x%"PRIx64, name, val);
+    } else {
+        snprintf(buf, DRM_MOD_SIZE, "0x%02x 0x%"PRIx64, vendor, val);
     }
 
     return buf;

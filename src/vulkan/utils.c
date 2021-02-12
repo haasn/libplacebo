@@ -68,16 +68,6 @@ bool vk_external_mem_check(struct vk_ctx *vk,
     VkExternalMemoryFeatureFlagsKHR flags = props->externalMemoryFeatures;
     VkExternalMemoryHandleTypeFlagBitsKHR vk_handle = vk_mem_handle_type(handle_type);
 
-    // No support for this handle type;
-    if (!(props->compatibleHandleTypes & vk_handle)) {
-        PL_DEBUG(vk, "Compatible handle types 0x%x does not include requested "
-                 "handle type %s (0x%x)",
-                 (unsigned int) props->compatibleHandleTypes,
-                 vk_handle_name(vk_handle),
-                 (unsigned int) handle_type);
-        return false;
-    }
-
     if (import) {
         if (!(flags & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR)) {
             PL_DEBUG(vk, "Handle type %s (0x%x) is not importable",

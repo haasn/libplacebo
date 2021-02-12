@@ -57,6 +57,9 @@ struct pl_vk {
 
     // Array of VkSamplers for every combination of sample/address modes
     VkSampler samplers[PL_TEX_SAMPLE_MODE_COUNT][PL_TEX_ADDRESS_MODE_COUNT];
+
+    // To avoid spamming warnings
+    bool warned_modless;
 };
 
 static void vk_submit(const struct pl_gpu *gpu)
@@ -172,25 +175,38 @@ static void vk_setup_formats(struct pl_gpu *gpu)
         // Suppress some errors/warnings spit out by the format probing code
         pl_log_level_cap(vk->ctx, PL_LOG_INFO);
 
-        VkFormatProperties prop = {0};
-        vk->GetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->tfmt, &prop);
+        bool has_drm_mods = vk->GetImageDrmFormatModifierPropertiesEXT;
+        VkDrmFormatModifierPropertiesEXT modifiers[16] = {0};
+        VkDrmFormatModifierPropertiesListEXT drm_props = {
+            .sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT,
+            .drmFormatModifierCount = PL_ARRAY_SIZE(modifiers),
+            .pDrmFormatModifierProperties = modifiers,
+        };
+
+        VkFormatProperties2KHR prop2 = {
+            .sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2,
+            .pNext = has_drm_mods ? &drm_props : NULL,
+        };
+
+        vk->GetPhysicalDeviceFormatProperties2KHR(vk->physd, vk_fmt->tfmt, &prop2);
 
         // If wholly unsupported, try falling back to the emulation formats
         // for texture operations
-        while (has_emu && !prop.optimalTilingFeatures && vk_fmt->emufmt) {
+        VkFormatProperties *prop = &prop2.formatProperties;
+        while (has_emu && !prop->optimalTilingFeatures && vk_fmt->emufmt) {
             vk_fmt = vk_fmt->emufmt;
-            vk->GetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->tfmt, &prop);
+            vk->GetPhysicalDeviceFormatProperties2KHR(vk->physd, vk_fmt->tfmt, &prop2);
         }
 
-        VkFormatFeatureFlags texflags = prop.optimalTilingFeatures;
-        VkFormatFeatureFlags bufflags = prop.bufferFeatures;
+        VkFormatFeatureFlags texflags = prop->optimalTilingFeatures;
+        VkFormatFeatureFlags bufflags = prop->bufferFeatures;
         if (vk_fmt->fmt.emulated) {
             // Emulated formats might have a different buffer representation
             // than their texture representation. If they don't, assume their
             // buffer representation is nonsensical (e.g. r16f)
             if (vk_fmt->bfmt) {
-                vk->GetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->bfmt, &prop);
-                bufflags = prop.bufferFeatures;
+                vk->GetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->bfmt, prop);
+                bufflags = prop->bufferFeatures;
             } else {
                 bufflags = 0;
             }
@@ -212,6 +228,63 @@ static void vk_setup_formats(struct pl_gpu *gpu)
 
         // We can set this universally
         fmt->fourcc = pl_fmt_fourcc(fmt);
+
+        if (has_drm_mods) {
+
+            if (drm_props.drmFormatModifierCount == PL_ARRAY_SIZE(modifiers)) {
+                PL_WARN(gpu, "DRM modifier list for format %s possibly truncated",
+                        fmt->name);
+            }
+
+            // Query the list of supported DRM modifiers from the driver
+            PL_ARRAY(uint64_t) modlist = {0};
+            for (int i = 0; i < drm_props.drmFormatModifierCount; i++) {
+                if (modifiers[i].drmFormatModifierPlaneCount > 1) {
+                    PL_DEBUG(gpu, "Ignoring format modifier %s of "
+                             "format %s because its plane count %d > 1",
+                             PRINT_DRM_MOD(modifiers[i].drmFormatModifier),
+                             fmt->name, modifiers[i].drmFormatModifierPlaneCount);
+                    continue;
+                }
+
+                // Only warn about texture format features relevant to us
+                const VkFormatFeatureFlags flag_mask =
+                    VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
+                    VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+                    VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                    VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT |
+                    VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                    VK_FORMAT_FEATURE_BLIT_SRC_BIT |
+                    VK_FORMAT_FEATURE_BLIT_DST_BIT;
+
+
+                VkFormatFeatureFlags flags = modifiers[i].drmFormatModifierTilingFeatures;
+                if ((flags & flag_mask) != (texflags & flag_mask)) {
+                    PL_INFO(gpu, "DRM format modifier %s of format %s "
+                            "supports fewer caps (0x%"PRIx32") than optimal tiling "
+                            "(0x%"PRIx32"), may result in limited capability!",
+                            PRINT_DRM_MOD(modifiers[i].drmFormatModifier),
+                            fmt->name, flags, texflags);
+                }
+
+                PL_ARRAY_APPEND(fmt, modlist, modifiers[i].drmFormatModifier);
+            }
+
+            fmt->num_modifiers = modlist.num;
+            fmt->modifiers = modlist.elem;
+
+        } else if (gpu->export_caps.tex & PL_HANDLE_DMA_BUF) {
+
+            // Hard-code a list of static mods that we're likely to support
+            static const uint64_t static_mods[2] = {
+                DRM_FORMAT_MOD_INVALID,
+                DRM_FORMAT_MOD_LINEAR,
+            };
+
+            fmt->num_modifiers = PL_ARRAY_SIZE(static_mods);
+            fmt->modifiers = static_mods;
+
+        }
 
         struct { VkFormatFeatureFlags flags; enum pl_fmt_caps caps; } bufbits[] = {
             {VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT,        PL_FMT_CAP_VERTEX},
@@ -323,10 +396,17 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
     if (!vk->GetPhysicalDeviceImageFormatProperties2KHR)
         return caps;
 
+    bool has_drm_mods = vk->GetImageDrmFormatModifierPropertiesEXT;
     for (int i = 0; vk_mem_handle_list[i]; i++) {
         enum pl_handle_type handle_type = vk_mem_handle_list[i];
 
         // Query whether creation of a "basic" dummy texture would work
+        VkPhysicalDeviceImageDrmFormatModifierInfoEXT drm_pinfo = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT,
+            .drmFormatModifier = DRM_FORMAT_MOD_LINEAR,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        };
+
         VkPhysicalDeviceExternalImageFormatInfoKHR ext_pinfo = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR,
             .handleType = vk_mem_handle_type(handle_type),
@@ -337,9 +417,14 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
             .pNext = &ext_pinfo,
             .format = VK_FORMAT_R8_UNORM,
             .type = VK_IMAGE_TYPE_2D,
-            .tiling = VK_IMAGE_TILING_LINEAR,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
             .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         };
+
+        if (handle_type == PL_HANDLE_DMA_BUF && has_drm_mods) {
+            vk_link_struct(&pinfo, &drm_pinfo);
+            pinfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+        }
 
         VkExternalImageFormatPropertiesKHR ext_props = {
             .sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES_KHR,
@@ -352,6 +437,11 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
 
         VkResult res;
         res = vk->GetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
+        if (res != VK_SUCCESS && handle_type == PL_HANDLE_DMA_BUF && !has_drm_mods) {
+            // Try again with VK_IMAGE_TILING_LINEAR, as a dumb hack
+            pinfo.tiling = VK_IMAGE_TILING_LINEAR;
+            res = vk->GetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
+        }
         if (res != VK_SUCCESS) {
             PL_DEBUG(vk, "Tex caps for %s (0x%x) unsupported: %s",
                      vk_handle_name(ext_pinfo.handleType),
@@ -884,8 +974,8 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     tex->sampler_type = PL_SAMPLER_NORMAL;
 
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
-    const struct vk_format **fmt = PL_PRIV(params->format);
-    tex_vk->img_fmt = (*fmt)->tfmt;
+    const struct vk_format **vk_fmt = PL_PRIV(params->format);
+    tex_vk->img_fmt = (*vk_fmt)->tfmt;
 
     switch (pl_tex_params_dimension(*params)) {
     case 1: tex_vk->type = VK_IMAGE_TYPE_1D; break;
@@ -942,27 +1032,6 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
 
-    VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
-    if (params->import_handle == PL_HANDLE_DMA_BUF) {
-        if (params->shared_mem.drm_format_mod == DRM_FORMAT_MOD_LINEAR) {
-            tiling = VK_IMAGE_TILING_LINEAR;
-        } else {
-            // FIXME: This is not really correct but it's the best we can hope
-            // to do in the absence of proper DRM format modifier support. May
-            // result in corruption. Update once VK_EXT_image_drm_format_modifier
-            // is implemented.
-            tiling = VK_IMAGE_TILING_OPTIMAL;
-        }
-
-        if (params->shared_mem.stride_w > params->w ||
-            params->shared_mem.stride_h > params->h)
-        {
-            // FIXME: Implement proper DRM format modifier support
-            PL_WARN(gpu, "Strided DMA buffer imports are not yet supported by "
-                    "the vulkan backend! Expect bugs...");
-        }
-    }
-
     // FIXME: Since we can't keep track of queue family ownership properly,
     // and we don't know in advance what types of queue families this image
     // will belong to, we're forced to share all of our images between all
@@ -970,6 +1039,22 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     uint32_t qfs[3] = {0};
     for (int i = 0; i < vk->pools.num; i++)
         qfs[i] = vk->pools.elem[i]->qf;
+
+    VkImageDrmFormatModifierExplicitCreateInfoEXT drm_explicit = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT,
+        .drmFormatModifier = params->shared_mem.drm_format_mod,
+        .drmFormatModifierPlaneCount = 1,
+        .pPlaneLayouts = &(VkSubresourceLayout) {
+            .rowPitch = PL_DEF(params->shared_mem.stride_w, params->w),
+            .depthPitch = params->d ? PL_DEF(params->shared_mem.stride_h, params->h) : 0,
+        },
+    };
+
+    VkImageDrmFormatModifierListCreateInfoEXT drm_list = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT,
+        .drmFormatModifierCount = params->format->num_modifiers,
+        .pDrmFormatModifiers = params->format->modifiers,
+    };
 
     VkExternalMemoryImageCreateInfoKHR ext_info = {
         .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_KHR,
@@ -989,7 +1074,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         .mipLevels = 1,
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
-        .tiling = tiling,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = usage,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .sharingMode = vk->pools.num > 1 ? VK_SHARING_MODE_CONCURRENT
@@ -998,9 +1083,50 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         .pQueueFamilyIndices = qfs,
     };
 
+    bool has_drm_mods = vk->GetImageDrmFormatModifierPropertiesEXT;
+    if (handle_type == PL_HANDLE_DMA_BUF && !has_drm_mods && !p->warned_modless) {
+        PL_WARN(gpu, "Using legacy hacks for DMA buffers without modifiers. "
+                "May result in corruption!");
+        p->warned_modless = true;
+    }
+
+    if (params->import_handle == PL_HANDLE_DMA_BUF) {
+        if (has_drm_mods) {
+
+            // We have VK_EXT_image_drm_format_modifier, so we can use
+            // format modifiers properly
+            vk_link_struct(&iinfo, &drm_explicit);
+            iinfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+
+        } else {
+
+            // Legacy fallback for older drivers. Based on hacks and guesswork.
+            switch (drm_explicit.drmFormatModifier) {
+            case DRM_FORMAT_MOD_LINEAR:
+                iinfo.tiling = VK_IMAGE_TILING_LINEAR;
+                break;
+            }
+
+        }
+    }
+
+    if (params->export_handle == PL_HANDLE_DMA_BUF && has_drm_mods) {
+        vk_link_struct(&iinfo, &drm_list);
+        iinfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+    }
+
     // Double-check physical image format limits and fail if invalid
+    VkPhysicalDeviceImageDrmFormatModifierInfoEXT drm_pinfo = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT,
+        .drmFormatModifier = drm_explicit.drmFormatModifier,
+        .sharingMode = iinfo.sharingMode,
+        .queueFamilyIndexCount = iinfo.queueFamilyIndexCount,
+        .pQueueFamilyIndices = iinfo.pQueueFamilyIndices,
+    };
+
     VkPhysicalDeviceExternalImageFormatInfoKHR ext_pinfo = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR,
+        .pNext = handle_type == PL_HANDLE_DMA_BUF ? &drm_pinfo : NULL,
         .handleType = ext_info.handleTypes,
     };
 
@@ -1090,7 +1216,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     if (!vk_malloc_slice(p->alloc, mem, &mparams))
         goto error;
 
-    if (params->import_handle) {
+    if (params->import_handle && !has_drm_mods) {
         // Currently, we know that attempting to bind imported memory may generate
         // validation errors because there's no way to communicate the memory
         // layout; the validation layer will rely on the expected Vulkan layout
@@ -1101,19 +1227,49 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     }
 
     VK(vk->BindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
-    if (params->import_handle)
+    if (params->import_handle && !has_drm_mods)
         vk->ctx->suppress_errors_for_object = VK_NULL_HANDLE;
 
     if (!vk_init_image(gpu, tex, params->import_handle ? "imported" : "created"))
         goto error;
 
-    if (params->export_handle) {
+    if (params->export_handle)
         tex->shared_mem = tex_vk->mem.shared_mem;
-        tex->shared_mem.drm_format_mod = DRM_FORMAT_MOD_INVALID;
-        tex->shared_mem.stride_w = params->w;
-        tex->shared_mem.stride_h = params->h;
-        // Texture is not initially exported;
-        // pl_vulkan_hold must be used to export it.
+
+    if (params->export_handle == PL_HANDLE_DMA_BUF) {
+        if (vk->GetImageDrmFormatModifierPropertiesEXT) {
+
+            // Query the DRM format modifier and plane layout from the driver
+            VkImageDrmFormatModifierPropertiesEXT mod_props = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT,
+            };
+
+            VK(vk->GetImageDrmFormatModifierPropertiesEXT(vk->dev, tex_vk->img, &mod_props));
+            tex->shared_mem.drm_format_mod = mod_props.drmFormatModifier;
+
+            VkSubresourceLayout layout;
+            VkImageSubresource plane = {
+                .aspectMask = VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT,
+            };
+
+            vk->GetImageSubresourceLayout(vk->dev, tex_vk->img, &plane, &layout);
+            if (layout.offset != 0) {
+                PL_ERR(gpu, "Exported DRM plane 0 has nonzero offset %zu, "
+                       "this should never happen! Erroring for safety...",
+                       layout.offset);
+                goto error;
+            }
+            tex->shared_mem.stride_w = layout.rowPitch;
+            tex->shared_mem.stride_h = layout.depthPitch;
+
+        } else {
+
+            // Fallback for no modifiers, just do something stupid.
+            tex->shared_mem.drm_format_mod = DRM_FORMAT_MOD_INVALID;
+            tex->shared_mem.stride_w = params->w;
+            tex->shared_mem.stride_h = params->h;
+
+        }
     }
 
     if (params->initial_data) {

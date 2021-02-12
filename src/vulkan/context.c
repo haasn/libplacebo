@@ -61,6 +61,7 @@ static const struct vk_fun vk_inst_funs[] = {
     VK_INST_FUN(GetDeviceProcAddr),
     VK_INST_FUN(GetPhysicalDeviceFeatures2KHR),
     VK_INST_FUN(GetPhysicalDeviceFormatProperties),
+    VK_INST_FUN(GetPhysicalDeviceFormatProperties2KHR),
     VK_INST_FUN(GetPhysicalDeviceImageFormatProperties2KHR),
     VK_INST_FUN(GetPhysicalDeviceMemoryProperties),
     VK_INST_FUN(GetPhysicalDeviceProperties),
@@ -89,20 +90,20 @@ static const struct vk_ext vk_device_extensions[] = {
             VK_DEV_FUN(DestroySwapchainKHR),
             VK_DEV_FUN(GetSwapchainImagesKHR),
             VK_DEV_FUN(QueuePresentKHR),
-            {0},
+            {0}
         },
     }, {
         .name = VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
             VK_DEV_FUN(CmdPushDescriptorSetKHR),
-            {0},
+            {0}
         },
     }, {
         .name = VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
         .core_ver = VK_API_VERSION_1_1,
         .funs = (struct vk_fun[]) {
             VK_DEV_FUN(GetImageMemoryRequirements2KHR),
-            {0},
+            {0}
         },
     }, {
         .name = VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
@@ -115,47 +116,47 @@ static const struct vk_ext vk_device_extensions[] = {
         .name = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
             VK_DEV_FUN(GetMemoryFdKHR),
-            {0},
+            {0}
         },
     }, {
         .name = VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
             VK_DEV_FUN(GetMemoryFdPropertiesKHR),
-            {0},
+            {0}
         },
 #ifdef VK_HAVE_WIN32
     }, {
         .name = VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
             VK_DEV_FUN(GetMemoryWin32HandleKHR),
-            {0},
+            {0}
         },
 #endif
     }, {
         .name = VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
             VK_DEV_FUN(GetMemoryHostPointerPropertiesEXT),
-            {0},
+            {0}
         },
     }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
         .core_ver = VK_API_VERSION_1_1,
         .funs = (struct vk_fun[]) {
             VK_INST_FUN(GetPhysicalDeviceExternalSemaphorePropertiesKHR),
-            {0},
+            {0}
         },
     }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
             VK_DEV_FUN(GetSemaphoreFdKHR),
-            {0},
+            {0}
         },
 #ifdef VK_HAVE_WIN32
     }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
             VK_DEV_FUN(GetSemaphoreWin32HandleKHR),
-            {0},
+            {0}
         },
 #endif
     }, {
@@ -167,14 +168,38 @@ static const struct vk_ext vk_device_extensions[] = {
         .name = VK_EXT_HDR_METADATA_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
             VK_DEV_FUN(SetHdrMetadataEXT),
-            {0},
+            {0}
         },
     }, {
         .name = VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
         .core_ver = VK_API_VERSION_1_2,
         .funs = (struct vk_fun[]) {
             VK_DEV_FUN(ResetQueryPoolEXT),
-            {0},
+            {0}
+        },
+    }, {
+        .name = VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,
+        .core_ver = VK_API_VERSION_1_1,
+        .funs = (struct vk_fun[]) {
+            {0}
+        },
+    }, {
+        .name = VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
+        .core_ver = VK_API_VERSION_1_2,
+        .funs = (struct vk_fun[]) {
+            {0}
+        },
+    }, {
+        .name = VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME,
+        .core_ver = VK_API_VERSION_1_1,
+        .funs = (struct vk_fun[]) {
+            {0}
+        },
+    }, {
+        .name = VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
+        .funs = (struct vk_fun[]) {
+            VK_DEV_FUN(GetImageDrmFormatModifierPropertiesEXT),
+            {0}
         },
     },
 };
@@ -196,6 +221,10 @@ const char * const pl_vulkan_recommended_extensions[] = {
     VK_EXT_PCI_BUS_INFO_EXTENSION_NAME,
     VK_EXT_HDR_METADATA_EXTENSION_NAME,
     VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
+    VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,
+    VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
+    VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME,
+    VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
 };
 
 const int pl_vulkan_num_recommended_extensions =
@@ -305,6 +334,7 @@ static const struct vk_fun vk_dev_funs[] = {
     VK_DEV_FUN(GetBufferMemoryRequirements),
     VK_DEV_FUN(GetDeviceQueue),
     VK_DEV_FUN(GetImageMemoryRequirements),
+    VK_DEV_FUN(GetImageSubresourceLayout),
     VK_DEV_FUN(GetPipelineCacheData),
     VK_DEV_FUN(GetQueryPoolResults),
     VK_DEV_FUN(InvalidateMappedMemoryRanges),

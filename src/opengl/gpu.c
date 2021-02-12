@@ -563,9 +563,9 @@ static bool gl_tex_export(const struct pl_gpu *gpu,
             goto error;
 
         if (fourcc != tex->params.format->fourcc) {
-            PL_ERR(gpu, "Exported DRM format 0x%xu does not match fourcc of "
-                   "specified pl_fmt 0x%xu? Please open a bug.",
-                   (uint32_t) fourcc, tex->params.format->fourcc);
+            PL_ERR(gpu, "Exported DRM format %s does not match fourcc of "
+                   "specified pl_fmt %s? Please open a bug.",
+                   PRINT_FOURCC(fourcc), PRINT_FOURCC(tex->params.format->fourcc));
             goto error;
         }
 

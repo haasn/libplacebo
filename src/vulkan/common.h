@@ -101,6 +101,7 @@ struct vk_ctx {
     VK_FUN(GetPhysicalDeviceExternalSemaphorePropertiesKHR);
     VK_FUN(GetPhysicalDeviceFeatures2KHR);
     VK_FUN(GetPhysicalDeviceFormatProperties);
+    VK_FUN(GetPhysicalDeviceFormatProperties2KHR);
     VK_FUN(GetPhysicalDeviceImageFormatProperties2KHR);
     VK_FUN(GetPhysicalDeviceMemoryProperties);
     VK_FUN(GetPhysicalDeviceProperties);
@@ -193,8 +194,10 @@ struct vk_ctx {
     VK_FUN(FreeMemory);
     VK_FUN(GetBufferMemoryRequirements);
     VK_FUN(GetDeviceQueue);
+    VK_FUN(GetImageDrmFormatModifierPropertiesEXT);
     VK_FUN(GetImageMemoryRequirements);
     VK_FUN(GetImageMemoryRequirements2KHR);
+    VK_FUN(GetImageSubresourceLayout);
     VK_FUN(GetMemoryFdKHR);
     VK_FUN(GetMemoryFdPropertiesKHR);
     VK_FUN(GetMemoryHostPointerPropertiesEXT);
