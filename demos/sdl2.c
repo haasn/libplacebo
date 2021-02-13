@@ -23,12 +23,18 @@
 #include <vulkan/vulkan.h>
 
 #include <libplacebo/renderer.h>
+#include <libplacebo/shaders/lut.h>
 #include <libplacebo/utils/upload.h>
 #include <libplacebo/vulkan.h>
 
+// static configuration
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
 
+static const char *icc_profile = ""; // path to ICC profile
+static const char *lut_file = ""; // path to .cube lut
+
+// program state
 SDL_Window *window;
 VkSurfaceKHR surf;
 struct pl_context *ctx;
@@ -43,7 +49,8 @@ const struct pl_tex *osd_tex;
 struct pl_plane img_plane;
 struct pl_plane osd_plane;
 struct pl_renderer *renderer;
-struct file icc_profile;
+struct pl_custom_lut *lut;
+struct file icc_file;
 
 struct file
 {
@@ -53,6 +60,11 @@ struct file
 
 static bool open_file(const char *path, struct file *out)
 {
+    if (!path || !path[0]) {
+        *out = (struct file) {0};
+        return true;
+    }
+
     FILE *fp = NULL;
     bool success = false;
 
@@ -103,7 +115,8 @@ static void uninit()
     vkDestroySurfaceKHR(vk_inst->instance, surf, NULL);
     pl_vk_inst_destroy(&vk_inst);
     pl_context_destroy(&ctx);
-    close_file(&icc_profile);
+    close_file(&icc_file);
+    pl_lut_free(&lut);
 
     SDL_DestroyWindow(window);
     SDL_Quit();
@@ -246,7 +259,7 @@ static bool upload_plane(const char *filename, const struct pl_tex **tex,
     return ok;
 }
 
-static void init_rendering(const char *img, const char *osd, const char *icc)
+static void init_rendering(const char *img, const char *osd)
 {
     if (!upload_plane(img, &img_tex, &img_plane)) {
         fprintf(stderr, "Failed uploading image plane!\n");
@@ -256,8 +269,15 @@ static void init_rendering(const char *img, const char *osd, const char *icc)
     if (!upload_plane(osd, &osd_tex, &osd_plane))
         fprintf(stderr, "Failed uploading OSD plane.. continuing anyway\n");
 
-    if (!open_file(icc, &icc_profile))
+    if (!open_file(icc_profile, &icc_file))
         fprintf(stderr, "Failed opening ICC profile.. continuing anyway\n");
+
+    struct file lutf;
+    if (open_file(lut_file, &lutf) && lutf.size) {
+        if (!(lut = pl_lut_parse_cube(ctx, lutf.data, lutf.size)))
+            fprintf(stderr, "Failed parsing LUT.. continuing anyway\n");
+        close_file(&lutf);
+    }
 
     // Create a renderer instance
     renderer = pl_renderer_create(ctx, vk->gpu);
@@ -280,8 +300,8 @@ static void render_frame(const struct pl_swapchain_frame *frame)
     struct pl_frame target;
     pl_frame_from_swapchain(&target, frame);
     target.profile = (struct pl_icc_profile) {
-        .data = icc_profile.data,
-        .len = icc_profile.size,
+        .data = icc_file.data,
+        .len = icc_file.size,
     };
 
     pl_rect2df_aspect_copy(&target.crop, &image.crop, 0.0);
@@ -304,7 +324,10 @@ static void render_frame(const struct pl_swapchain_frame *frame)
         pl_frame_clear(vk->gpu, &target, (float[3]) {0} );
 
     // Use the heaviest preset purely for demonstration/testing purposes
-    if (!pl_render_image(renderer, &image, &target, &pl_render_high_quality_params)) {
+    struct pl_render_params params = pl_render_high_quality_params;
+    params.lut = lut;
+
+    if (!pl_render_image(renderer, &image, &target, &params)) {
         fprintf(stderr, "Failed rendering frame!\n");
         uninit();
         exit(2);
@@ -313,8 +336,8 @@ static void render_frame(const struct pl_swapchain_frame *frame)
 
 int main(int argc, char **argv)
 {
-    if (argc < 2 || argc > 4) {
-        fprintf(stderr, "Usage: ./sdl2 <image> [<overlay>] [<icc profile>]\n");
+    if (argc < 2 || argc > 3) {
+        fprintf(stderr, "Usage: ./sdl2 <image> [<overlay>]\n");
         return 255;
     }
 
@@ -324,7 +347,7 @@ int main(int argc, char **argv)
     init_sdl();
     init_placebo();
     init_vulkan();
-    init_rendering(argv[1], argc > 2 ? argv[2] : NULL, argc > 3 ? argv[3] : NULL);
+    init_rendering(argv[1], argc > 2 ? argv[2] : NULL);
 
     // Resize the window to match the content
     const struct pl_tex *img = img_plane.texture;
