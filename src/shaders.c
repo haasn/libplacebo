@@ -926,13 +926,11 @@ next_dim: ; // `continue` out of the inner loop
     ident_t name = sh_fresh(sh, "lut");
     ident_t arr_name = NULL;
 
-    static const char * const ftypes[] = {"float", "vec2", "vec3", "vec4"};
-    static const char * const itypes[] = {"int", "ivec2", "ivec3", "ivec4"};
     static const char * const swizzles[] = {"x", "xy", "xyz", "xyzw"};
-    static const char * const dtypes[PL_VAR_TYPE_COUNT] = {
-        [PL_VAR_SINT] = "int",
-        [PL_VAR_UINT] = "uint",
-        [PL_VAR_FLOAT] = "float",
+    static const char * const vartypes[PL_VAR_TYPE_COUNT][4] = {
+        [PL_VAR_SINT] = { "int", "ivec2", "ivec3", "ivec4" },
+        [PL_VAR_UINT] = { "uint", "uvec2", "uvec3", "uvec4" },
+        [PL_VAR_FLOAT] = { "float", "vec2", "vec3", "vec4" },
     };
 
     switch (method) {
@@ -958,14 +956,14 @@ next_dim: ; // `continue` out of the inner loop
 
             GLSLH("#define %s(pos) (%s(%s, %s(\\\n",
                   name, sh_tex_fn(sh, lut->tex->params),
-                  tex, ftypes[texdim - 1]);
+                  tex, vartypes[PL_VAR_FLOAT][texdim - 1]);
 
             for (int i = 0; i < texdim; i++) {
                 char sep = i == 0 ? ' ' : ',';
                 if (pos_macros[i]) {
                     if (dims > 1) {
                         GLSLH("   %c%s(%s(pos).%c)\\\n", sep, pos_macros[i],
-                              ftypes[dims - 1], "xyzw"[i]);
+                              vartypes[PL_VAR_FLOAT][dims - 1], "xyzw"[i]);
                     } else {
                         GLSLH("   %c%s(float(pos))\\\n", sep, pos_macros[i]);
                     }
@@ -976,7 +974,7 @@ next_dim: ; // `continue` out of the inner loop
             GLSLH("  )).%s)\n", swizzles[params->comps - 1]);
         } else {
             GLSLH("#define %s(pos) (texelFetch(%s, %s(pos",
-                  name, tex, itypes[texdim - 1]);
+                  name, tex, vartypes[PL_VAR_SINT][texdim - 1]);
 
             // Fill up extra components of the index
             for (int i = dims; i < texdim; i++)
@@ -1004,7 +1002,8 @@ next_dim: ; // `continue` out of the inner loop
     case SH_LUT_LITERAL:
         arr_name = sh_fresh(sh, "weights");
         GLSLH("const %s %s[%d] = %s[](\n  ",
-              ftypes[params->comps - 1], arr_name, size, dtypes[params->type]);
+              vartypes[params->type][params->comps - 1], arr_name, size,
+              vartypes[params->type][params->comps - 1]);
         pl_str_append(sh, &sh->buffers[SH_BUF_HEADER], lut->str);
         GLSLH(");\n");
         break;
@@ -1024,6 +1023,7 @@ next_dim: ; // `continue` out of the inner loop
 
         if (params->linear) {
             pl_assert(dims == 1);
+            pl_assert(params->type == PL_VAR_FLOAT);
             ident_t arr_lut = name;
             name = sh_fresh(sh, "lut_lin");
             GLSLH("%s %s(float fpos) {                              \n"
@@ -1033,7 +1033,7 @@ next_dim: ; // `continue` out of the inner loop
                   "    float fcoord = fpos - fbase;                 \n"
                   "    return mix(%s(fbase), %s(fceil), fcoord);    \n"
                   "}                                                \n",
-                  ftypes[params->comps - 1], name,
+                  vartypes[PL_VAR_FLOAT][params->comps - 1], name,
                   size - 1,
                   arr_lut, arr_lut);
         }
