@@ -149,13 +149,16 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
                              VkSurfaceFormatKHR *out_format,
                              struct pl_color_space *out_space)
 {
-    int best_score = 0;
+    int best_score = 0, best_id;
     VkSurfaceFormatKHR *formats = NULL;
     int num = 0;
 
     // Specific format requested by user
     if (out_format->format) {
         if (vk_map_color_space(out_format->colorSpace, out_space)) {
+            PL_INFO(gpu, "Using user-supplied surface configuration: %s + %s",
+                    vk_fmt_name(out_format->format),
+                    vk_csp_name(out_format->colorSpace));
             return true;
         } else {
             PL_ERR(gpu, "User-supplied surface format unsupported: %s",
@@ -167,11 +170,11 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
     formats = pl_calloc_ptr(NULL, num, formats);
     VK(vk->GetPhysicalDeviceSurfaceFormatsKHR(vk->physd, surf, &num, formats));
 
-    PL_DEBUG(gpu, "Available surface formats:");
+    PL_INFO(gpu, "Available surface configurations:");
     for (int i = 0; i < num; i++) {
-        PL_DEBUG(gpu, "    %d: format: %s, space: %s", i,
-                 vk_fmt_name(formats[i].format),
-                 vk_csp_name(formats[i].colorSpace));
+        PL_INFO(gpu, "    %d: %-40s %s", i,
+                vk_fmt_name(formats[i].format),
+                vk_csp_name(formats[i].colorSpace));
     }
 
     for (int i = 0; i < num; i++) {
@@ -258,10 +261,14 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
                 *out_format = formats[i];
                 *out_space = space;
                 best_score = score;
+                best_id = i;
                 break;
             }
         }
     }
+
+    if (best_score)
+        PL_INFO(gpu, "Picked surface configuration %d", best_id);
 
     // fall through
 error:
@@ -286,9 +293,6 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
     struct pl_color_space csp;
     if (!pick_surf_format(gpu, vk, params->surface, params->prefer_hdr, &sfmt, &csp))
         return NULL;
-
-    PL_DEBUG(gpu, "Picked surface format %s, space %s",
-             vk_fmt_name(sfmt.format), vk_csp_name(sfmt.colorSpace));
 
     struct pl_swapchain *sw = pl_zalloc_priv(NULL, struct pl_swapchain, struct priv);
     sw->impl = &vulkan_swapchain;
