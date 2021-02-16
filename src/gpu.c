@@ -840,6 +840,8 @@ static struct pl_buf_params pl_buf_params_infer(struct pl_buf_params params)
     return params;
 }
 
+static bool warned_rounding = false;
+
 const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
                                    const struct pl_buf_params *pparams)
 {
@@ -867,10 +869,17 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
                                         gpu->limits.align_host_ptr);
 
             if (ptr_base != (uintptr_t) shmem->handle.ptr || ptr_size > shmem->size) {
-                PL_DEBUG(gpu, "Rounding imported host pointer %p + %zu -> %zu to "
-                        "nearest page boundaries: %p + %zu -> %zu",
-                         shmem->handle.ptr, shmem->offset, shmem->size,
-                         (void *) ptr_base, buf_offset, ptr_size);
+                if (!warned_rounding) {
+                    warned_rounding = true;
+                    PL_WARN(gpu, "Imported host pointer is not page-aligned. "
+                            "This should normally be fine on most platforms, "
+                            "but may cause issues in some rare circumstances.");
+                }
+
+                PL_TRACE(gpu, "Rounding imported host pointer %p + %zu -> %zu to "
+                         "nearest page boundaries: %p + %zu -> %zu",
+                          shmem->handle.ptr, shmem->offset, shmem->size,
+                          (void *) ptr_base, buf_offset, ptr_size);
             }
 
             shmem->handle.ptr = (void *) ptr_base;

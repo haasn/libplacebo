@@ -107,18 +107,18 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
         switch (slab->handle_type) {
         case PL_HANDLE_FD:
         case PL_HANDLE_DMA_BUF:
-            PL_DEBUG(vk, "Unimporting slab of size %zu from fd: %d",
+            PL_TRACE(vk, "Unimporting slab of size %zu from fd: %d",
                      (size_t) slab->size, slab->handle.fd);
             break;
         case PL_HANDLE_WIN32:
         case PL_HANDLE_WIN32_KMT:
 #ifdef VK_HAVE_WIN32
-            PL_DEBUG(vk, "Unimporting slab of size %zu from handle: %p",
+            PL_TRACE(vk, "Unimporting slab of size %zu from handle: %p",
                      (size_t) slab->size, (void *) slab->handle.handle);
 #endif
             break;
         case PL_HANDLE_HOST_PTR:
-            PL_DEBUG(vk, "Unimporting slab of size %zu from ptr: %p",
+            PL_TRACE(vk, "Unimporting slab of size %zu from ptr: %p",
                      (size_t) slab->size, (void *) slab->handle.ptr);
             break;
         }
@@ -444,15 +444,15 @@ struct vk_malloc *vk_malloc_create(struct vk_ctx *vk)
     PL_INFO(vk, "Memory heaps supported by device:");
     for (int i = 0; i < ma->props.memoryHeapCount; i++) {
         VkMemoryHeap heap = ma->props.memoryHeaps[i];
-        PL_INFO(vk, "    heap %d: flags 0x%x size %zu",
+        PL_INFO(vk, "    %d: flags 0x%x size %zu",
                 i, (unsigned) heap.flags, (size_t) heap.size);
     }
 
-    PL_INFO(vk, "Memory types supported by device:");
+    PL_DEBUG(vk, "Memory types supported by device:");
     for (int i = 0; i < ma->props.memoryTypeCount; i++) {
         VkMemoryType type = ma->props.memoryTypes[i];
-        PL_INFO(vk, "    type %d: flags 0x%x heap %d",
-                i, (unsigned) type.propertyFlags, (int) type.heapIndex);
+        PL_DEBUG(vk, "    %d: flags 0x%x heap %d",
+                 i, (unsigned) type.propertyFlags, (int) type.heapIndex);
     }
 
     return ma;
@@ -783,7 +783,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     switch (params->import_handle) {
     case PL_HANDLE_DMA_BUF:
     case PL_HANDLE_FD:
-        PL_DEBUG(vk, "Imported %zu of memory from fd: %d%s",
+        PL_TRACE(vk, "Imported %zu of memory from fd: %d%s",
                  (size_t) slab->size, shmem->handle.fd,
                  params->ded_image ? " (dedicated)" : "");
         // fd ownership is transferred at this point.
@@ -791,7 +791,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         fdinfo.fd = -1;
         break;
     case PL_HANDLE_HOST_PTR:
-        PL_DEBUG(vk, "Imported %zu of memory from ptr: %p%s",
+        PL_TRACE(vk, "Imported %zu of memory from ptr: %p%s",
                  (size_t) slab->size, shmem->handle.ptr,
                  params->ded_image ? " (dedicated" : "");
         slab->handle.ptr = ptrinfo.pHostPointer;

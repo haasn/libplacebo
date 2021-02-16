@@ -1076,11 +1076,11 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     VkQueueFamilyProperties *qfs = pl_calloc_ptr(tmp, qfnum, qfs);
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, qfs);
 
-    PL_INFO(vk, "Queue families supported by device:");
+    PL_DEBUG(vk, "Queue families supported by device:");
 
     for (int i = 0; i < qfnum; i++) {
-        PL_INFO(vk, "    QF %d: flags 0x%x num %d", i,
-                (unsigned) qfs[i].queueFlags, (int) qfs[i].queueCount);
+        PL_DEBUG(vk, "    %d: flags 0x%x num %d", i,
+                 (unsigned) qfs[i].queueFlags, (int) qfs[i].queueCount);
     }
 
     int idx_gfx = -1, idx_comp = -1, idx_tf = -1;
@@ -1093,7 +1093,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     // Vulkan requires at least one GRAPHICS queue, so if this fails something
     // is horribly wrong.
     pl_assert(idx_gfx >= 0);
-    PL_INFO(vk, "Using graphics queue (QF %d)", idx_gfx);
+    PL_DEBUG(vk, "Using graphics queue %d", idx_gfx);
 
     // If needed, ensure we can actually present to the surface using this queue
     if (params->surface) {
@@ -1117,9 +1117,9 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     }
 
     if (idx_tf >= 0 && idx_tf != idx_gfx)
-        PL_INFO(vk, "Using async transfer (QF %d)", idx_tf);
+        PL_INFO(vk, "Using async transfer (queue %d)", idx_tf);
     if (idx_comp >= 0 && idx_comp != idx_gfx)
-        PL_INFO(vk, "Using async compute (QF %d)", idx_comp);
+        PL_INFO(vk, "Using async compute (queue %d)", idx_comp);
 
     // Now that we know which QFs we want, we can create the logical device
     qinfo_arr_t qinfos = {0};
