@@ -159,6 +159,13 @@ static bool open_file(struct plplay *p, const char *filename)
     return true;
 }
 
+static inline bool is_file_hdr(struct plplay *p)
+{
+    assert(p->stream);
+    enum AVColorTransferCharacteristic trc = p->stream->codecpar->color_trc;
+    return pl_color_transfer_is_hdr(pl_transfer_from_av(trc));
+}
+
 static void resize_cb(GLFWwindow *win, int w, int h)
 {
     struct plplay *p = glfwGetWindowUserPointer(win);
@@ -251,6 +258,7 @@ static bool init_renderer(struct plplay *p)
     p->swapchain = pl_vulkan_create_swapchain(p->vk, &(struct pl_vulkan_swapchain_params) {
         .surface = p->surf,
         .present_mode = VK_PRESENT_MODE_FIFO_KHR,
+        .prefer_hdr = is_file_hdr(p),
     });
 
     if (!p->swapchain) {
