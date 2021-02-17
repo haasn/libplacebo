@@ -147,7 +147,7 @@ static void add_format(const struct pl_gpu *pgpu, const struct gl_format *gl_fmt
     fmt->fourcc = pl_fmt_fourcc(fmt);
     pl_assert(fmt->glsl_type);
 
-#if GL_HAVE_UNIX
+#ifdef GL_HAVE_UNIX
     if (p->has_modifiers) {
         int num_mods = 0;
         bool ok = eglQueryDmaBufModifiersEXT(p->egl_dpy, fmt->fourcc,
@@ -402,14 +402,15 @@ struct pl_tex_gl {
 
 static void gl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
 {
-    struct pl_gl *p = PL_PRIV(gpu);
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
 
     if (tex_gl->fbo && !tex_gl->wrapped_fb)
         glDeleteFramebuffers(1, &tex_gl->fbo);
 #ifdef EPOXY_HAS_EGL
-    if (tex_gl->image)
+    if (tex_gl->image) {
+        struct pl_gl *p = PL_PRIV(gpu);
         eglDestroyImageKHR(p->egl_dpy, tex_gl->image);
+    }
 #endif
     if (!tex_gl->wrapped_tex)
         glDeleteTextures(1, &tex_gl->texture);
