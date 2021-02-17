@@ -469,7 +469,11 @@ int main(int argc, char **argv)
 
     p->ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
         .log_cb    = pl_log_color,
+#ifdef NDEBUG
         .log_level = PL_LOG_INFO,
+#else
+        .log_level = PL_LOG_DEBUG,
+#endif
     });
     assert(p->ctx);
 
