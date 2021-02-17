@@ -680,7 +680,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     if (reqs.size > shmem->size) {
         PL_ERR(vk, "Imported object requires %zu bytes, larger than the "
                "provided size %zu!",
-               reqs.size, shmem->size);
+               (size_t) reqs.size, shmem->size);
         goto error;
     }
 

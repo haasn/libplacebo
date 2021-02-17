@@ -1256,7 +1256,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
             if (layout.offset != 0) {
                 PL_ERR(gpu, "Exported DRM plane 0 has nonzero offset %zu, "
                        "this should never happen! Erroring for safety...",
-                       layout.offset);
+                       (size_t) layout.offset);
                 goto error;
             }
             tex->shared_mem.stride_w = layout.rowPitch;
