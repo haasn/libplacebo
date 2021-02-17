@@ -1139,7 +1139,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     // Add all extensions we need
     if (params->surface)
-        PL_ARRAY_APPEND(vk->ta, vk->exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        PL_ARRAY_APPEND(vk->alloc, vk->exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
     // Keep track of all optional function pointers associated with extensions
     PL_ARRAY(const struct vk_fun *) ext_funs = {0};
@@ -1156,7 +1156,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext->name, exts_avail[n].extensionName) == 0) {
-                PL_ARRAY_APPEND(vk->ta, vk->exts, ext->name);
+                PL_ARRAY_APPEND(vk->alloc, vk->exts, ext->name);
                 for (const struct vk_fun *f = ext->funs; f->name; f++)
                     PL_ARRAY_APPEND(tmp, ext_funs, f);
                 break;
@@ -1166,14 +1166,14 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     // Add extra user extensions
     for (int i = 0; i < params->num_extensions; i++)
-        PL_ARRAY_APPEND(vk->ta, vk->exts, params->extensions[i]);
+        PL_ARRAY_APPEND(vk->alloc, vk->exts, params->extensions[i]);
 
     // Add optional extra user extensions
     for (int i = 0; i < params->num_opt_extensions; i++) {
         const char *ext = params->opt_extensions[i];
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext, exts_avail[n].extensionName) == 0) {
-                PL_ARRAY_APPEND(vk->ta, vk->exts, ext);
+                PL_ARRAY_APPEND(vk->alloc, vk->exts, ext);
                 break;
             }
         }
@@ -1185,7 +1185,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     vk->features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR;
     for (const VkBaseInStructure *in = pl_vulkan_recommended_features.pNext;
             in; in = in->pNext)
-        vk_link_struct(&vk->features, vk_struct_memdup(vk->ta, in));
+        vk_link_struct(&vk->features, vk_struct_memdup(vk->alloc, in));
 
     for (const VkBaseInStructure *in = (const VkBaseInStructure *) params->features;
             in; in = in->pNext)
@@ -1193,7 +1193,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         if (vk_find_struct(&vk->features, in->sType))
             continue; // skip structs already present
 
-        void *copy = vk_struct_memdup(vk->ta, in);
+        void *copy = vk_struct_memdup(vk->alloc, in);
         if (!copy) {
             PL_ERR(vk, "Unknown struct type %"PRIu64"?", (uint64_t) in->sType);
             continue;
@@ -1253,7 +1253,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         struct vk_cmdpool *pool = vk_cmdpool_create(vk, qinfos.elem[i], qfs[qf]);
         if (!pool)
             goto error;
-        PL_ARRAY_APPEND(vk->ta, vk->pools, pool);
+        PL_ARRAY_APPEND(vk->alloc, vk->pools, pool);
 
         // Update the pool_* pointers based on the corresponding index
         const char *qf_name = NULL;
@@ -1291,7 +1291,7 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     struct pl_vulkan *pl_vk = pl_zalloc_priv(NULL, struct pl_vulkan, struct vk_ctx);
     struct vk_ctx *vk = PL_PRIV(pl_vk);
     *vk = (struct vk_ctx) {
-        .ta = pl_vk,
+        .alloc = pl_vk,
         .ctx = ctx,
         .inst = params->instance,
         .GetInstanceProcAddr = get_proc_addr_fallback(ctx, params->get_proc_addr),
@@ -1434,7 +1434,7 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
     struct pl_vulkan *pl_vk = pl_zalloc_priv(NULL, struct pl_vulkan, struct vk_ctx);
     struct vk_ctx *vk = PL_PRIV(pl_vk);
     *vk = (struct vk_ctx) {
-        .ta = pl_vk,
+        .alloc = pl_vk,
         .ctx = ctx,
         .imported = true,
         .inst = params->instance,
@@ -1484,7 +1484,7 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
     }
 
     VkPhysicalDeviceFeatures2KHR *features;
-    features = vk_chain_memdup(vk->ta, params->features);
+    features = vk_chain_memdup(vk->alloc, params->features);
     if (features)
         vk->features = *features;
 
@@ -1551,7 +1551,7 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
         *pool = vk_cmdpool_create(vk, qinfo, qfs[qf]);
         if (!*pool)
             goto error;
-        PL_ARRAY_APPEND(vk->ta, vk->pools, *pool);
+        PL_ARRAY_APPEND(vk->alloc, vk->pools, *pool);
 
 next_qf: ;
     }

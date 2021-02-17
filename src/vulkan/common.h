@@ -53,7 +53,7 @@
 
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
-    void *ta; // allocations bound to the lifetime of this vk_ctx
+    void *alloc; // allocations bound to the lifetime of this vk_ctx
     const struct pl_vk_inst *internal_instance;
     struct pl_context *ctx;
     VkInstance inst;

@@ -229,7 +229,7 @@ static void release_signal(struct vk_ctx *vk, struct vk_signal *sig)
     if (sig->event)
         vk->ResetEvent(vk->dev, sig->event);
     sig->source = NULL;
-    PL_ARRAY_APPEND(vk->ta, vk->signals, sig);
+    PL_ARRAY_APPEND(vk->alloc, vk->signals, sig);
 }
 
 enum vk_wait_type vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
@@ -363,7 +363,7 @@ bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd **pcmd)
     VK(vk->EndCommandBuffer(cmd->buf));
 
     VK(vk->ResetFences(vk->dev, 1, &cmd->fence));
-    PL_ARRAY_APPEND(vk->ta, vk->cmds_queued, cmd);
+    PL_ARRAY_APPEND(vk->alloc, vk->cmds_queued, cmd);
     vk->last_cmd = cmd;
 
     if (vk->cmds_queued.num >= PL_VK_MAX_QUEUED_CMDS) {
@@ -470,7 +470,7 @@ next_cmd: ;
         }
 
         VK(vk->QueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));
-        PL_ARRAY_APPEND(vk->ta, vk->cmds_pending, cmd);
+        PL_ARRAY_APPEND(vk->alloc, vk->cmds_pending, cmd);
         continue;
 
 error:
