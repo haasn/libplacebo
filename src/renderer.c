@@ -1546,7 +1546,6 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
                                 PL_DEF(params->icc_params, params->lut3d_params));
         if (!ok) {
             rr->disable_icc = true;
-            use_icc = false;
             goto fallback;
         }
 
