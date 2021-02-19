@@ -902,6 +902,11 @@ static void hdr_update_peak(struct pass_state *pass,
     if (rr->disable_compute || rr->disable_peak_detect)
         goto cleanup;
 
+    float src_peak = pass->img.color.sig_peak * pass->img.color.sig_scale;
+    float dst_peak = pass->target.color.sig_peak * pass->target.color.sig_scale;
+    if (src_peak <= dst_peak + 1e-6)
+        goto cleanup; // no adaptation needed
+
     if (!FBOFMT && !params->allow_delayed_peak_detect) {
         PL_WARN(rr, "Disabling peak detection because "
                 "`allow_delayed_peak_detect` is false, but lack of FBOs "
