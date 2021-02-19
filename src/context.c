@@ -73,7 +73,6 @@ void pl_context_destroy(struct pl_context **pctx)
     if (!ctx)
         return;
 
-    pthread_mutex_lock(&ctx->lock);
     pthread_mutex_destroy(&ctx->lock);
     pl_free(ctx);
     *pctx = NULL;
