@@ -183,7 +183,7 @@ static bool parse_rpn_szexpr(pl_str line, struct szexp out[MAX_SZEXP_SIZE])
 
         if (word.buf[0] >= '0' && word.buf[0] <= '9') {
             exp->tag = SZEXP_CONST;
-            if (pl_str_sscanf(word, "%f", &exp->val.cval) != 1)
+            if (!pl_str_parse_float(word, &exp->val.cval))
                 return false;
             continue;
         }
@@ -365,13 +365,13 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
             if (pl_str_equals0(line, "ALIGN")) {
                 out->offset_align = true;
             } else {
-                float ox, oy;
-                if (pl_str_sscanf(line, "%f %f", &ox, &oy) != 2) {
+                if (!pl_str_parse_float(pl_str_split_char(line, ' ', &line), &out->offset[0]) ||
+                    !pl_str_parse_float(pl_str_split_char(line, ' ', &line), &out->offset[1]) ||
+                    line.len)
+                {
                     pl_err(ctx, "Error while parsing OFFSET!");
                     return false;
                 }
-                out->offset[0] = ox;
-                out->offset[1] = oy;
             }
             continue;
         }
@@ -401,25 +401,27 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
         }
 
         if (pl_str_eatstart0(&line, "COMPONENTS")) {
-            if (pl_str_sscanf(line, "%d", &out->comps) != 1) {
-                pl_err(ctx, "Error while parsing COMPONENTS!");
+            if (!pl_str_parse_int(pl_str_strip(line), &out->comps)) {
+                pl_err(ctx, "Error parsing COMPONENTS: '%.*s'", PL_STR_FMT(line));
                 return false;
             }
             continue;
         }
 
         if (pl_str_eatstart0(&line, "COMPUTE")) {
-            int num = pl_str_sscanf(line, "%d %d %d %d",
-                                    &out->block_w, &out->block_h,
-                                    &out->threads_w, &out->threads_h);
+            bool ok = pl_str_parse_int(pl_str_split_char(line, ' ', &line), &out->block_w) &&
+                      pl_str_parse_int(pl_str_split_char(line, ' ', &line), &out->block_h);
 
-            if (num == 2 || num == 4) {
-                out->is_compute = true;
-                if (num == 2) {
-                    out->threads_w = out->block_w;
-                    out->threads_h = out->block_h;
-                }
+            if (ok && line.len) {
+                ok = pl_str_parse_int(pl_str_split_char(line, ' ', &line), &out->threads_w) &&
+                     pl_str_parse_int(pl_str_split_char(line, ' ', &line), &out->threads_h) &&
+                     !line.len;
             } else {
+                out->threads_w = out->block_w;
+                out->threads_h = out->block_h;
+            }
+
+            if (!ok) {
                 pl_err(log, "Error while parsing COMPUTE!");
                 return false;
             }
@@ -472,7 +474,16 @@ static bool parse_tex(const struct pl_gpu *gpu, void *alloc, pl_str *body,
         }
 
         if (pl_str_eatstart0(&line, "SIZE")) {
-            int dims = pl_str_sscanf(line, "%d %d %d", &params.w, &params.h, &params.d);
+            line = pl_str_strip(line);
+            int dims = 0;
+            int dim[4]; // extra space to catch invalid extra entries
+            while (line.len && dims < PL_ARRAY_SIZE(dim)) {
+                if (!pl_str_parse_int(pl_str_split_char(line, ' ', &line), &dim[dims++])) {
+                    PL_ERR(gpu, "Error while parsing SIZE!");
+                    return false;
+                }
+            }
+
             int lim = dims == 1 ? gpu->limits.max_tex_1d_dim
                     : dims == 2 ? gpu->limits.max_tex_2d_dim
                     : dims == 3 ? gpu->limits.max_tex_3d_dim
@@ -481,6 +492,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *alloc, pl_str *body,
             // Sanity check against GPU size limits
             switch (dims) {
             case 3:
+                params.d = dim[2];
                 if (params.d < 1 || params.d > lim) {
                     PL_ERR(gpu, "SIZE %d exceeds GPU's texture size limits (%d)!",
                            params.d, lim);
@@ -488,6 +500,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *alloc, pl_str *body,
                 }
                 // fall through
             case 2:
+                params.h = dim[1];
                 if (params.h < 1 || params.h > lim) {
                     PL_ERR(gpu, "SIZE %d exceeds GPU's texture size limits (%d)!",
                            params.h, lim);
@@ -495,6 +508,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *alloc, pl_str *body,
                 }
                 // fall through
             case 1:
+                params.w = dim[0];
                 if (params.w < 1 || params.w > lim) {
                     PL_ERR(gpu, "SIZE %d exceeds GPU's texture size limits (%d)!",
                            params.w, lim);
@@ -503,7 +517,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *alloc, pl_str *body,
                 break;
 
             default:
-                PL_ERR(gpu, "Error while parsing SIZE!");
+                PL_ERR(gpu, "Invalid number of texture dimensions!");
                 return false;
             };
 
@@ -679,8 +693,8 @@ static bool parse_buf(const struct pl_gpu *gpu, void *alloc, pl_str *body,
             pl_str var_name = pl_str_split_char(line, '[', &line);
             if (line.len > 0) {
                 // Parse array dimension
-                if (pl_str_sscanf(line, "%d]", &var.dim_a) != 1) {
-                    PL_ERR(gpu, "Failed parsing array dimension from %.*s!",
+                if (!pl_str_parse_int(pl_str_split_char(line, ']', NULL), &var.dim_a)) {
+                    PL_ERR(gpu, "Failed parsing array dimension from [%.*s!",
                            PL_STR_FMT(line));
                     return false;
                 }
