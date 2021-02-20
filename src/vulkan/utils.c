@@ -87,11 +87,11 @@ bool vk_external_mem_check(struct vk_ctx *vk,
 
 const enum pl_handle_type vk_mem_handle_list[] = {
         PL_HANDLE_HOST_PTR,
-#ifdef VK_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
         PL_HANDLE_FD,
         PL_HANDLE_DMA_BUF,
 #endif
-#ifdef VK_HAVE_WIN32
+#ifdef PL_HAVE_WIN32
         PL_HANDLE_WIN32,
         PL_HANDLE_WIN32_KMT,
 #endif
@@ -99,10 +99,10 @@ const enum pl_handle_type vk_mem_handle_list[] = {
 };
 
 const enum pl_handle_type vk_sync_handle_list[] = {
-#ifdef VK_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
         PL_HANDLE_FD,
 #endif
-#ifdef VK_HAVE_WIN32
+#ifdef PL_HAVE_WIN32
         PL_HANDLE_WIN32,
         PL_HANDLE_WIN32_KMT,
 #endif

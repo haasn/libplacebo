@@ -20,12 +20,12 @@
 #include "formats.h"
 #include "utils.h"
 
-#ifdef GL_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
 #include <unistd.h>
 #include <errno.h>
 #endif
 
-#ifdef GL_HAVE_WIN32
+#ifdef PL_HAVE_WIN32
 #include <windows.h>
 #include <sysinfoapi.h>
 #endif
@@ -147,7 +147,7 @@ static void add_format(const struct pl_gpu *pgpu, const struct gl_format *gl_fmt
     fmt->fourcc = pl_fmt_fourcc(fmt);
     pl_assert(fmt->glsl_type);
 
-#ifdef GL_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
     if (p->has_modifiers) {
         int num_mods = 0;
         bool ok = eglQueryDmaBufModifiersEXT(p->egl_dpy, fmt->fourcc,
@@ -237,11 +237,11 @@ static pl_handle_caps tex_handle_caps(const struct pl_gpu *gpu, bool import)
 static inline size_t get_page_size()
 {
 
-#ifdef GL_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
     return sysconf(_SC_PAGESIZE);
 #endif
 
-#ifdef GL_HAVE_WIN32
+#ifdef PL_HAVE_WIN32
     SYSTEM_INFO sysInfo;
     GetSystemInfo(&sysInfo);
     return sysInfo.dwAllocationGranularity;
@@ -415,7 +415,7 @@ static void gl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
     if (!tex_gl->wrapped_tex)
         glDeleteTextures(1, &tex_gl->texture);
 
-#ifdef GL_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
     if (tex_gl->fd != -1)
         close(tex_gl->fd);
 #endif
@@ -484,7 +484,7 @@ static bool gl_tex_import(const struct pl_gpu *gpu,
 
     switch (handle_type) {
 
-#ifdef GL_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
     case PL_HANDLE_DMA_BUF:
         if (shared_mem->handle.fd == -1) {
             PL_ERR(gpu, "%s: invalid fd", __func__);
@@ -513,7 +513,7 @@ static bool gl_tex_import(const struct pl_gpu *gpu,
                                           attribs);
 
         break;
-#endif // GL_HAVE_UNIX
+#endif // PL_HAVE_UNIX
 
     default: abort();
     }
@@ -573,7 +573,7 @@ static bool gl_tex_export(const struct pl_gpu *gpu,
 
     switch (handle_type) {
 
-#ifdef GL_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
     case PL_HANDLE_DMA_BUF: {
         int fourcc = 0;
         int num_planes = 0;
@@ -623,7 +623,7 @@ static bool gl_tex_export(const struct pl_gpu *gpu,
         };
         break;
     }
-#endif // GL_HAVE_UNIX
+#endif // PL_HAVE_UNIX
 
     default: abort();
     }

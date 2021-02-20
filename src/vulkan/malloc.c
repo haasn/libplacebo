@@ -19,7 +19,7 @@
 #include "command.h"
 #include "utils.h"
 
-#ifdef VK_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
 #include <errno.h>
 #include <strings.h>
 #include <unistd.h>
@@ -28,22 +28,22 @@
 // Controls the multiplication factor for new slab allocations. The new slab
 // will always be allocated such that the size of the slab is this factor times
 // the previous slab. Higher values make it grow faster.
-#define PLVK_HEAP_SLAB_GROWTH_RATE 4
+#define PL_VK_HEAP_SLAB_GROWTH_RATE 4
 
 // Controls the minimum slab size, to reduce the frequency at which very small
 // slabs would need to get allocated when allocating the first few buffers.
 // (Default: 1 MB)
-#define PLVK_HEAP_MINIMUM_SLAB_SIZE (1 << 20)
+#define PL_VK_HEAP_MINIMUM_SLAB_SIZE (1 << 20)
 
 // Controls the maximum slab size, to reduce the effect of unbounded slab
 // growth exhausting memory. If the application needs a single allocation
 // that's bigger than this value, it will be allocated directly from the
 // device. (Default: 256 MB)
-#define PLVK_HEAP_MAXIMUM_SLAB_SIZE (1 << 28)
+#define PL_VK_HEAP_MAXIMUM_SLAB_SIZE (1 << 28)
 
 // Controls the minimum free region size, to reduce thrashing the free space
 // map with lots of small buffers during uninit. (Default: 1 KB)
-#define PLVK_HEAP_MINIMUM_REGION_SIZE (1 << 10)
+#define PL_VK_HEAP_MINIMUM_REGION_SIZE (1 << 10)
 
 // Represents a region of available memory
 struct vk_region {
@@ -112,7 +112,7 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
             break;
         case PL_HANDLE_WIN32:
         case PL_HANDLE_WIN32_KMT:
-#ifdef VK_HAVE_WIN32
+#ifdef PL_HAVE_WIN32
             PL_TRACE(vk, "Unimporting slab of size %zu from handle: %p",
                      (size_t) slab->size, (void *) slab->handle.handle);
 #endif
@@ -126,13 +126,13 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
         switch (slab->handle_type) {
         case PL_HANDLE_FD:
         case PL_HANDLE_DMA_BUF:
-#ifdef VK_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
             if (slab->handle.fd > -1)
                 close(slab->handle.fd);
 #endif
             break;
         case PL_HANDLE_WIN32:
-#ifdef VK_HAVE_WIN32
+#ifdef PL_HAVE_WIN32
             if (slab->handle.handle != NULL)
                 CloseHandle(slab->handle.handle);
 #endif
@@ -148,9 +148,9 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
         PL_DEBUG(vk, "Freeing slab of size %zu", (size_t) slab->size);
     }
 
-    vk->DestroyBuffer(vk->dev, slab->buffer, VK_ALLOC);
+    vk->DestroyBuffer(vk->dev, slab->buffer, PL_VK_ALLOC);
     // also implicitly unmaps the memory if needed
-    vk->FreeMemory(vk->dev, slab->mem, VK_ALLOC);
+    vk->FreeMemory(vk->dev, slab->mem, PL_VK_ALLOC);
 
     pl_free(slab);
 }
@@ -287,8 +287,8 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
             goto error;
         }
 
-        VK(vk->CreateBuffer(vk->dev, &binfo, VK_ALLOC, &slab->buffer));
-        VK_NAME(BUFFER, slab->buffer, "slab");
+        VK(vk->CreateBuffer(vk->dev, &binfo, PL_VK_ALLOC, &slab->buffer));
+        PL_VK_NAME(BUFFER, slab->buffer, "slab");
 
         VkMemoryRequirements reqs = {0};
         vk->GetBufferMemoryRequirements(vk->dev, slab->buffer, &reqs);
@@ -323,7 +323,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
              (size_t) slab->size, (unsigned) mtype->propertyFlags,
              (int) minfo.memoryTypeIndex, (int) mtype->heapIndex);
 
-    VK(vk->AllocateMemory(vk->dev, &minfo, VK_ALLOC, &slab->mem));
+    VK(vk->AllocateMemory(vk->dev, &minfo, PL_VK_ALLOC, &slab->mem));
 
     slab->flags = ma->props.memoryTypes[minfo.memoryTypeIndex].propertyFlags;
     if (slab->flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
@@ -334,7 +334,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
     if (slab->buffer)
         VK(vk->BindBufferMemory(vk->dev, slab->buffer, slab->mem, 0));
 
-#ifdef VK_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
     if (slab->handle_type == PL_HANDLE_FD ||
         slab->handle_type == PL_HANDLE_DMA_BUF)
     {
@@ -348,7 +348,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
     }
 #endif
 
-#ifdef VK_HAVE_WIN32
+#ifdef PL_HAVE_WIN32
     if (slab->handle_type == PL_HANDLE_WIN32 ||
         slab->handle_type == PL_HANDLE_WIN32_KMT)
     {
@@ -381,7 +381,7 @@ static void insert_region(struct vk_slab *slab, struct vk_region region)
         return;
 
     pl_assert(!slab->dedicated);
-    bool big_enough = region_len(region) >= PLVK_HEAP_MINIMUM_REGION_SIZE;
+    bool big_enough = region_len(region) >= PL_VK_HEAP_MINIMUM_REGION_SIZE;
 
     // Find the index of the first region that comes after this
     for (int i = 0; i < slab->regions.num; i++) {
@@ -593,9 +593,9 @@ static bool heap_get_region(struct vk_malloc *ma, struct vk_heap *heap,
 
     // Otherwise, allocate a new vk_slab and append it to the list.
     size_t cur_size = PL_MAX(size, slab ? slab->size : 0);
-    size_t slab_size = PLVK_HEAP_SLAB_GROWTH_RATE * cur_size;
-    slab_size = PL_MAX(PLVK_HEAP_MINIMUM_SLAB_SIZE, slab_size);
-    slab_size = PL_MIN(PLVK_HEAP_MAXIMUM_SLAB_SIZE, slab_size);
+    size_t slab_size = PL_VK_HEAP_SLAB_GROWTH_RATE * cur_size;
+    slab_size = PL_MAX(PL_VK_HEAP_MINIMUM_SLAB_SIZE, slab_size);
+    slab_size = PL_MIN(PL_VK_HEAP_MAXIMUM_SLAB_SIZE, slab_size);
     pl_assert(slab_size >= size);
 
     struct vk_malloc_params params = heap->params;
@@ -671,8 +671,8 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
             .pQueueFamilyIndices = qfs,
         };
 
-        VK(vk->CreateBuffer(vk->dev, &binfo, VK_ALLOC, &buffer));
-        VK_NAME(BUFFER, buffer, "imported");
+        VK(vk->CreateBuffer(vk->dev, &binfo, PL_VK_ALLOC, &buffer));
+        PL_VK_NAME(BUFFER, buffer, "imported");
 
         vk->GetBufferMemoryRequirements(vk->dev, buffer, &reqs);
     }
@@ -691,7 +691,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     }
 
     switch (params->import_handle) {
-#ifdef VK_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
     case PL_HANDLE_DMA_BUF: {
         if (!vk->GetMemoryFdPropertiesKHR) {
             PL_ERR(vk, "Importing PL_HANDLE_DMA_BUF requires %s.",
@@ -721,7 +721,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         vk_link_struct(&ainfo, &fdinfo);
         break;
     }
-#else // !VK_HAVE_UNIX
+#else // !PL_HAVE_UNIX
     case PL_HANDLE_DMA_BUF:
         PL_ERR(vk, "PL_HANDLE_DMA_BUF requires building with UNIX support!");
         goto error;
@@ -758,7 +758,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     }
 
     VkDeviceMemory vkmem = NULL;
-    VK(vk->AllocateMemory(vk->dev, &ainfo, VK_ALLOC, &vkmem));
+    VK(vk->AllocateMemory(vk->dev, &ainfo, PL_VK_ALLOC, &vkmem));
 
     slab = pl_alloc_ptr(NULL, slab);
     *slab = (struct vk_slab) {
@@ -823,8 +823,8 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     return true;
 
 error:
-    vk->DestroyBuffer(vk->dev, buffer, VK_ALLOC);
-#ifdef VK_HAVE_UNIX
+    vk->DestroyBuffer(vk->dev, buffer, PL_VK_ALLOC);
+#ifdef PL_HAVE_UNIX
     if (fdinfo.fd > -1)
         close(fdinfo.fd);
 #endif
@@ -847,7 +847,7 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
 
     struct vk_slab *slab;
     VkDeviceSize offset;
-    if (params->ded_image || size >= PLVK_HEAP_MAXIMUM_SLAB_SIZE) {
+    if (params->ded_image || size >= PL_VK_HEAP_MAXIMUM_SLAB_SIZE) {
         slab = slab_alloc(ma, params);
         if (!slab)
             return false;

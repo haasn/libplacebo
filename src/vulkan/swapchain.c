@@ -361,11 +361,11 @@ static void vk_sw_destroy(const struct pl_swapchain *sw)
     for (int i = 0; i < p->images.num; i++)
         pl_tex_destroy(gpu, &p->images.elem[i]);
     for (int i = 0; i < p->sems.num; i++) {
-        vk->DestroySemaphore(vk->dev, p->sems.elem[i].in, VK_ALLOC);
-        vk->DestroySemaphore(vk->dev, p->sems.elem[i].out, VK_ALLOC);
+        vk->DestroySemaphore(vk->dev, p->sems.elem[i].in, PL_VK_ALLOC);
+        vk->DestroySemaphore(vk->dev, p->sems.elem[i].out, PL_VK_ALLOC);
     }
 
-    vk->DestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
+    vk->DestroySwapchainKHR(vk->dev, p->swapchain, PL_VK_ALLOC);
     pl_free((void *) sw);
 }
 
@@ -506,7 +506,7 @@ error:
 static void destroy_swapchain(struct vk_ctx *vk, struct priv *p)
 {
     assert(p->old_swapchain);
-    vk->DestroySwapchainKHR(vk->dev, p->old_swapchain, VK_ALLOC);
+    vk->DestroySwapchainKHR(vk->dev, p->old_swapchain, PL_VK_ALLOC);
     p->old_swapchain = VK_NULL_HANDLE;
 }
 
@@ -537,7 +537,7 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
             sinfo.imageExtent.width,
             sinfo.imageExtent.height);
 
-    VK(vk->CreateSwapchainKHR(vk->dev, &sinfo, VK_ALLOC, &p->swapchain));
+    VK(vk->CreateSwapchainKHR(vk->dev, &sinfo, PL_VK_ALLOC, &p->swapchain));
 
     p->suboptimal = false;
     p->cur_width = sinfo.imageExtent.width;
@@ -556,7 +556,7 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
     VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, vkimages));
 
     for (int i = 0; i < num_images; i++)
-        VK_NAME(IMAGE, vkimages[i], "swapchain");
+        PL_VK_NAME(IMAGE, vkimages[i], "swapchain");
 
     // If needed, allocate some more semaphores
     while (num_images > p->sems.num) {
@@ -564,10 +564,10 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
         static const VkSemaphoreCreateInfo seminfo = {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         };
-        VK(vk->CreateSemaphore(vk->dev, &seminfo, VK_ALLOC, &sem_in));
-        VK(vk->CreateSemaphore(vk->dev, &seminfo, VK_ALLOC, &sem_out));
-        VK_NAME(SEMAPHORE, sem_in, "swapchain in");
-        VK_NAME(SEMAPHORE, sem_out, "swapchain out");
+        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &sem_in));
+        VK(vk->CreateSemaphore(vk->dev, &seminfo, PL_VK_ALLOC, &sem_out));
+        PL_VK_NAME(SEMAPHORE, sem_in, "swapchain in");
+        PL_VK_NAME(SEMAPHORE, sem_out, "swapchain out");
 
         PL_ARRAY_APPEND(sw, p->sems, (struct sem_pair) {
             .in = sem_in,
@@ -618,7 +618,7 @@ error:
     PL_ERR(vk, "Failed (re)creating swapchain!");
     pl_free(vkimages);
     if (p->swapchain != sinfo.oldSwapchain) {
-        vk->DestroySwapchainKHR(vk->dev, p->swapchain, VK_ALLOC);
+        vk->DestroySwapchainKHR(vk->dev, p->swapchain, PL_VK_ALLOC);
         p->swapchain = VK_NULL_HANDLE;
         p->cur_width = p->cur_height = 0;
         p->suboptimal = false;

@@ -50,7 +50,7 @@ static void vk_cmd_destroy(struct vk_ctx *vk, struct vk_cmd *cmd)
 
     vk_cmd_poll(vk, cmd, UINT64_MAX);
     vk_cmd_reset(vk, cmd);
-    vk->DestroyFence(vk->dev, cmd->fence, VK_ALLOC);
+    vk->DestroyFence(vk->dev, cmd->fence, PL_VK_ALLOC);
     vk->FreeCommandBuffers(vk->dev, cmd->pool->pool, 1, &cmd->buf);
 
     pl_free(cmd);
@@ -75,8 +75,8 @@ static struct vk_cmd *vk_cmd_create(struct vk_ctx *vk, struct vk_cmdpool *pool)
         .flags = VK_FENCE_CREATE_SIGNALED_BIT,
     };
 
-    VK(vk->CreateFence(vk->dev, &finfo, VK_ALLOC, &cmd->fence));
-    VK_NAME(FENCE, cmd->fence, "cmd");
+    VK(vk->CreateFence(vk->dev, &finfo, PL_VK_ALLOC, &cmd->fence));
+    PL_VK_NAME(FENCE, cmd->fence, "cmd");
 
     return cmd;
 
@@ -146,8 +146,8 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
 
     // We can skip creating the semaphores if there's only one queue
     if (vk->pools.num > 1 || vk->pools.elem[0]->num_queues > 1) {
-        VK(vk->CreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sig->semaphore));
-        VK_NAME(SEMAPHORE, sig->semaphore, "sig");
+        VK(vk->CreateSemaphore(vk->dev, &sinfo, PL_VK_ALLOC, &sig->semaphore));
+        PL_VK_NAME(SEMAPHORE, sig->semaphore, "sig");
     }
 
     static const VkEventCreateInfo einfo = {
@@ -155,7 +155,7 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
     };
 
     if (!vk->disable_events) {
-        VkResult res = vk->CreateEvent(vk->dev, &einfo, VK_ALLOC, &sig->event);
+        VkResult res = vk->CreateEvent(vk->dev, &einfo, PL_VK_ALLOC, &sig->event);
         if (res == VK_ERROR_FEATURE_NOT_PRESENT) {
             // Some vulkan implementations don't support VkEvents since they are
             // not part of the vulkan portable subset. So fail gracefully here.
@@ -163,8 +163,8 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
             vk->disable_events = true;
             PL_INFO(vk, "VkEvent creation failed.. disabling events");
         } else {
-            VK_ASSERT(res, "Creating VkEvent");
-            VK_NAME(EVENT, sig->event, "sig");
+            PL_VK_ASSERT(res, "Creating VkEvent");
+            PL_VK_NAME(EVENT, sig->event, "sig");
         }
     }
 
@@ -270,8 +270,8 @@ void vk_signal_destroy(struct vk_ctx *vk, struct vk_signal **sig)
     if (!*sig)
         return;
 
-    vk->DestroySemaphore(vk->dev, (*sig)->semaphore, VK_ALLOC);
-    vk->DestroyEvent(vk->dev, (*sig)->event, VK_ALLOC);
+    vk->DestroySemaphore(vk->dev, (*sig)->semaphore, PL_VK_ALLOC);
+    vk->DestroyEvent(vk->dev, (*sig)->event, PL_VK_ALLOC);
     pl_free(*sig);
     *sig = NULL;
 }
@@ -298,7 +298,7 @@ struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk,
         .queueFamilyIndex = pool->qf,
     };
 
-    VK(vk->CreateCommandPool(vk->dev, &cinfo, VK_ALLOC, &pool->pool));
+    VK(vk->CreateCommandPool(vk->dev, &cinfo, PL_VK_ALLOC, &pool->pool));
 
     return pool;
 
@@ -316,7 +316,7 @@ void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool)
     for (int i = 0; i < pool->cmds.num; i++)
         vk_cmd_destroy(vk, pool->cmds.elem[i]);
 
-    vk->DestroyCommandPool(vk->dev, pool->pool, VK_ALLOC);
+    vk->DestroyCommandPool(vk->dev, pool->pool, PL_VK_ALLOC);
     pl_free(pool);
 }
 

@@ -21,7 +21,7 @@
 #include "malloc.h"
 #include "spirv.h"
 
-#ifdef VK_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
 #include <unistd.h>
 #endif
 
@@ -147,7 +147,7 @@ static void vk_destroy_gpu(const struct pl_gpu *gpu)
 
     for (enum pl_tex_sample_mode s = 0; s < PL_TEX_SAMPLE_MODE_COUNT; s++) {
         for (enum pl_tex_address_mode a = 0; a < PL_TEX_ADDRESS_MODE_COUNT; a++)
-            vk->DestroySampler(vk->dev, p->samplers[s][a], VK_ALLOC);
+            vk->DestroySampler(vk->dev, p->samplers[s][a], PL_VK_ALLOC);
     }
 
     vk_malloc_destroy(&p->alloc);
@@ -632,7 +632,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
                 .maxAnisotropy = 1.0,
             };
 
-            VK(vk->CreateSampler(vk->dev, &sinfo, VK_ALLOC, &p->samplers[s][a]));
+            VK(vk->CreateSampler(vk->dev, &sinfo, PL_VK_ALLOC, &p->samplers[s][a]));
         }
     }
 
@@ -679,7 +679,7 @@ static VkResult vk_create_render_pass(struct vk_ctx *vk, const struct pl_fmt *fm
         },
     };
 
-    return vk->CreateRenderPass(vk->dev, &rinfo, VK_ALLOC, out);
+    return vk->CreateRenderPass(vk->dev, &rinfo, PL_VK_ALLOC, out);
 }
 
 static void vk_cmd_timer_begin(const struct pl_gpu *gpu, struct vk_cmd *cmd,
@@ -740,10 +740,10 @@ static void vk_tex_destroy(const struct pl_gpu *gpu, struct pl_tex *tex)
 
     vk_sync_deref(gpu, tex_vk->ext_sync);
     vk_signal_destroy(vk, &tex_vk->sig);
-    vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, VK_ALLOC);
-    vk->DestroyImageView(vk->dev, tex_vk->view, VK_ALLOC);
+    vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, PL_VK_ALLOC);
+    vk->DestroyImageView(vk->dev, tex_vk->view, PL_VK_ALLOC);
     if (!tex_vk->external_img) {
-        vk->DestroyImage(vk->dev, tex_vk->img, VK_ALLOC);
+        vk->DestroyImage(vk->dev, tex_vk->img, PL_VK_ALLOC);
         vk_malloc_free(p->alloc, &tex_vk->mem);
     }
 
@@ -873,7 +873,7 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex,
     const struct pl_tex_params *params = &tex->params;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     pl_assert(tex_vk->img);
-    VK_NAME(IMAGE, tex_vk->img, name);
+    PL_VK_NAME(IMAGE, tex_vk->img, name);
 
     tex_vk->refcount = 1;
     tex_vk->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -913,8 +913,8 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex,
             },
         };
 
-        VK(vk->CreateImageView(vk->dev, &vinfo, VK_ALLOC, &tex_vk->view));
-        VK_NAME(IMAGE_VIEW, tex_vk->view, name);
+        VK(vk->CreateImageView(vk->dev, &vinfo, PL_VK_ALLOC, &tex_vk->view));
+        PL_VK_NAME(IMAGE_VIEW, tex_vk->view, name);
     }
 
     if (params->renderable) {
@@ -947,15 +947,15 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex,
             goto error;
         }
 
-        VK(vk->CreateFramebuffer(vk->dev, &finfo, VK_ALLOC,
+        VK(vk->CreateFramebuffer(vk->dev, &finfo, PL_VK_ALLOC,
                                  &tex_vk->framebuffer));
-        VK_NAME(FRAMEBUFFER, tex_vk->framebuffer, name);
+        PL_VK_NAME(FRAMEBUFFER, tex_vk->framebuffer, name);
     }
 
     ret = true;
 
 error:
-    vk->DestroyRenderPass(vk->dev, dummyPass, VK_ALLOC);
+    vk->DestroyRenderPass(vk->dev, dummyPass, PL_VK_ALLOC);
     return ret;
 }
 
@@ -1154,7 +1154,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     if (res == VK_ERROR_FORMAT_NOT_SUPPORTED) {
         goto error;
     } else {
-        VK_ASSERT(res, "Querying image format properties");
+        PL_VK_ASSERT(res, "Querying image format properties");
     }
 
     VkExtent3D max = props.imageFormatProperties.maxExtent;
@@ -1179,7 +1179,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
         }
     }
 
-    VK(vk->CreateImage(vk->dev, &iinfo, VK_ALLOC, &tex_vk->img));
+    VK(vk->CreateImage(vk->dev, &iinfo, PL_VK_ALLOC, &tex_vk->img));
     tex_vk->usage_flags = iinfo.usage;
 
     struct vk_malloc_params mparams = {
@@ -1615,7 +1615,7 @@ static void vk_buf_deref(const struct pl_gpu *gpu, const struct pl_buf *buf)
 
     if (--buf_vk->refcount == 0) {
         vk_signal_destroy(vk, &buf_vk->sig);
-        vk->DestroyBufferView(vk->dev, buf_vk->view, VK_ALLOC);
+        vk->DestroyBufferView(vk->dev, buf_vk->view, PL_VK_ALLOC);
         vk_malloc_free(p->alloc, &buf_vk->mem);
         pl_free((void *) buf);
     }
@@ -2117,8 +2117,8 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
             .range = buf_vk->mem.size,
         };
 
-        VK(vk->CreateBufferView(vk->dev, &vinfo, VK_ALLOC, &buf_vk->view));
-        VK_NAME(BUFFER_VIEW, buf_vk->view, "texel");
+        VK(vk->CreateBufferView(vk->dev, &vinfo, PL_VK_ALLOC, &buf_vk->view));
+        PL_VK_NAME(BUFFER_VIEW, buf_vk->view, "texel");
     }
 
     if (params->initial_data)
@@ -2496,11 +2496,11 @@ static void vk_pass_destroy(const struct pl_gpu *gpu, struct pl_pass *pass)
     struct vk_ctx *vk = p->vk;
     struct pl_pass_vk *pass_vk = PL_PRIV(pass);
 
-    vk->DestroyPipeline(vk->dev, pass_vk->pipe, VK_ALLOC);
-    vk->DestroyRenderPass(vk->dev, pass_vk->renderPass, VK_ALLOC);
-    vk->DestroyPipelineLayout(vk->dev, pass_vk->pipeLayout, VK_ALLOC);
-    vk->DestroyDescriptorPool(vk->dev, pass_vk->dsPool, VK_ALLOC);
-    vk->DestroyDescriptorSetLayout(vk->dev, pass_vk->dsLayout, VK_ALLOC);
+    vk->DestroyPipeline(vk->dev, pass_vk->pipe, PL_VK_ALLOC);
+    vk->DestroyRenderPass(vk->dev, pass_vk->renderPass, PL_VK_ALLOC);
+    vk->DestroyPipelineLayout(vk->dev, pass_vk->pipeLayout, PL_VK_ALLOC);
+    vk->DestroyDescriptorPool(vk->dev, pass_vk->dsPool, PL_VK_ALLOC);
+    vk->DestroyDescriptorSetLayout(vk->dev, pass_vk->dsLayout, PL_VK_ALLOC);
 
     pl_free(pass);
 }
@@ -2660,7 +2660,7 @@ static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
                 num_desc, p->max_push_descriptors);
     }
 
-    VK(vk->CreateDescriptorSetLayout(vk->dev, &dinfo, VK_ALLOC,
+    VK(vk->CreateDescriptorSetLayout(vk->dev, &dinfo, PL_VK_ALLOC,
                                      &pass_vk->dsLayout));
 
     if (!pass_vk->use_pushd) {
@@ -2683,7 +2683,7 @@ static const struct pl_pass *vk_pass_create(const struct pl_gpu *gpu,
                 .poolSizeCount = dsPoolSizes.num,
             };
 
-            VK(vk->CreateDescriptorPool(vk->dev, &pinfo, VK_ALLOC, &pass_vk->dsPool));
+            VK(vk->CreateDescriptorPool(vk->dev, &pinfo, PL_VK_ALLOC, &pass_vk->dsPool));
 
             VkDescriptorSetLayout layouts[NUM_DS];
             for (int i = 0; i < NUM_DS; i++)
@@ -2714,7 +2714,7 @@ no_descriptors: ;
         },
     };
 
-    VK(vk->CreatePipelineLayout(vk->dev, &linfo, VK_ALLOC,
+    VK(vk->CreatePipelineLayout(vk->dev, &linfo, PL_VK_ALLOC,
                                 &pass_vk->pipeLayout));
 
     pl_str vert = {0}, frag = {0}, comp = {0}, pipecache = {0};
@@ -2746,7 +2746,7 @@ no_descriptors: ;
         .initialDataSize = pipecache.len,
     };
 
-    VK(vk->CreatePipelineCache(vk->dev, &pcinfo, VK_ALLOC, &pipeCache));
+    VK(vk->CreatePipelineCache(vk->dev, &pcinfo, PL_VK_ALLOC, &pipeCache));
 
     VkShaderModuleCreateInfo sinfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -2756,13 +2756,13 @@ no_descriptors: ;
     case PL_PASS_RASTER: {
         sinfo.pCode = (uint32_t *) vert.buf;
         sinfo.codeSize = vert.len;
-        VK(vk->CreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &vert_shader));
-        VK_NAME(SHADER_MODULE, vert_shader, "vertex");
+        VK(vk->CreateShaderModule(vk->dev, &sinfo, PL_VK_ALLOC, &vert_shader));
+        PL_VK_NAME(SHADER_MODULE, vert_shader, "vertex");
 
         sinfo.pCode = (uint32_t *) frag.buf;
         sinfo.codeSize = frag.len;
-        VK(vk->CreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &frag_shader));
-        VK_NAME(SHADER_MODULE, frag_shader, "fragment");
+        VK(vk->CreateShaderModule(vk->dev, &sinfo, PL_VK_ALLOC, &frag_shader));
+        PL_VK_NAME(SHADER_MODULE, frag_shader, "fragment");
 
         VkVertexInputAttributeDescription *attrs =
             pl_calloc_ptr(tmp, params->num_vertex_attribs, attrs);
@@ -2906,14 +2906,14 @@ no_descriptors: ;
         };
 
         VK(vk->CreateGraphicsPipelines(vk->dev, pipeCache, 1, &cinfo,
-                                       VK_ALLOC, &pass_vk->pipe));
+                                       PL_VK_ALLOC, &pass_vk->pipe));
         break;
     }
     case PL_PASS_COMPUTE: {
         sinfo.pCode = (uint32_t *) comp.buf;
         sinfo.codeSize = comp.len;
-        VK(vk->CreateShaderModule(vk->dev, &sinfo, VK_ALLOC, &comp_shader));
-        VK_NAME(SHADER_MODULE, comp_shader, "compute");
+        VK(vk->CreateShaderModule(vk->dev, &sinfo, PL_VK_ALLOC, &comp_shader));
+        PL_VK_NAME(SHADER_MODULE, comp_shader, "compute");
 
         VkComputePipelineCreateInfo cinfo = {
             .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
@@ -2927,7 +2927,7 @@ no_descriptors: ;
         };
 
         VK(vk->CreateComputePipelines(vk->dev, pipeCache, 1, &cinfo,
-                                      VK_ALLOC, &pass_vk->pipe));
+                                      PL_VK_ALLOC, &pass_vk->pipe));
         break;
     }
     default: abort();
@@ -2974,10 +2974,10 @@ error:
 
 #undef NUM_DS
 
-    vk->DestroyShaderModule(vk->dev, vert_shader, VK_ALLOC);
-    vk->DestroyShaderModule(vk->dev, frag_shader, VK_ALLOC);
-    vk->DestroyShaderModule(vk->dev, comp_shader, VK_ALLOC);
-    vk->DestroyPipelineCache(vk->dev, pipeCache, VK_ALLOC);
+    vk->DestroyShaderModule(vk->dev, vert_shader, PL_VK_ALLOC);
+    vk->DestroyShaderModule(vk->dev, frag_shader, PL_VK_ALLOC);
+    vk->DestroyShaderModule(vk->dev, comp_shader, PL_VK_ALLOC);
+    vk->DestroyPipelineCache(vk->dev, pipeCache, PL_VK_ALLOC);
     pl_free(tmp);
     return pass;
 }
@@ -3296,7 +3296,7 @@ static void vk_sync_destroy(const struct pl_gpu *gpu, struct pl_sync *sync)
     struct vk_ctx *vk = p->vk;
     struct pl_sync_vk *sync_vk = PL_PRIV(sync);
 
-#ifdef VK_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
     if (sync->handle_type == PL_HANDLE_FD) {
         if (sync->wait_handle.fd > -1)
             close(sync->wait_handle.fd);
@@ -3304,7 +3304,7 @@ static void vk_sync_destroy(const struct pl_gpu *gpu, struct pl_sync *sync)
             close(sync->signal_handle.fd);
     }
 #endif
-#ifdef VK_HAVE_WIN32
+#ifdef PL_HAVE_WIN32
     if (sync->handle_type == PL_HANDLE_WIN32) {
         if (sync->wait_handle.handle != NULL)
             CloseHandle(sync->wait_handle.handle);
@@ -3314,8 +3314,8 @@ static void vk_sync_destroy(const struct pl_gpu *gpu, struct pl_sync *sync)
     // PL_HANDLE_WIN32_KMT is just an identifier. It doesn't get closed.
 #endif
 
-    vk->DestroySemaphore(vk->dev, sync_vk->wait, VK_ALLOC);
-    vk->DestroySemaphore(vk->dev, sync_vk->signal, VK_ALLOC);
+    vk->DestroySemaphore(vk->dev, sync_vk->wait, PL_VK_ALLOC);
+    vk->DestroySemaphore(vk->dev, sync_vk->signal, PL_VK_ALLOC);
 
     pl_free(sync);
 }
@@ -3367,12 +3367,12 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
         .pNext = &einfo,
     };
 
-    VK(vk->CreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sync_vk->wait));
-    VK(vk->CreateSemaphore(vk->dev, &sinfo, VK_ALLOC, &sync_vk->signal));
-    VK_NAME(SEMAPHORE, sync_vk->wait, "sync wait");
-    VK_NAME(SEMAPHORE, sync_vk->signal, "sync signal");
+    VK(vk->CreateSemaphore(vk->dev, &sinfo, PL_VK_ALLOC, &sync_vk->wait));
+    VK(vk->CreateSemaphore(vk->dev, &sinfo, PL_VK_ALLOC, &sync_vk->signal));
+    PL_VK_NAME(SEMAPHORE, sync_vk->wait, "sync wait");
+    PL_VK_NAME(SEMAPHORE, sync_vk->signal, "sync signal");
 
-#ifdef VK_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
     if (handle_type == PL_HANDLE_FD) {
         VkSemaphoreGetFdInfoKHR finfo = {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR,
@@ -3387,7 +3387,7 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
     }
 #endif
 
-#ifdef VK_HAVE_WIN32
+#ifdef PL_HAVE_WIN32
     if (handle_type == PL_HANDLE_WIN32 ||
         handle_type == PL_HANDLE_WIN32_KMT)
     {
@@ -3481,7 +3481,7 @@ static void vk_timer_destroy(const struct pl_gpu *gpu, struct pl_timer *timer)
     struct vk_ctx *vk = p->vk;
 
     pl_assert(!timer->pending);
-    vk->DestroyQueryPool(vk->dev, timer->qpool, VK_ALLOC);
+    vk->DestroyQueryPool(vk->dev, timer->qpool, PL_VK_ALLOC);
     pl_free(timer);
 }
 
@@ -3501,7 +3501,7 @@ static struct pl_timer *vk_timer_create(const struct pl_gpu *gpu)
         .queryCount = QUERY_POOL_SIZE,
     };
 
-    VK(vk->CreateQueryPool(vk->dev, &qinfo, VK_ALLOC, &timer->qpool));
+    VK(vk->CreateQueryPool(vk->dev, &qinfo, PL_VK_ALLOC, &timer->qpool));
     return timer;
 
 error:
@@ -3534,7 +3534,7 @@ static uint64_t vk_timer_query(const struct pl_gpu *gpu, struct pl_timer *timer)
     case VK_NOT_READY:
         return 0;
     default:
-        VK_ASSERT(res, "Retrieving query pool results");
+        PL_VK_ASSERT(res, "Retrieving query pool results");
     }
 
 error:

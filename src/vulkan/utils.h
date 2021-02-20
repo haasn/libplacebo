@@ -58,7 +58,7 @@ void *vk_struct_memdup(void *alloc, const void *in);
 void *vk_chain_memdup(void *alloc, const void *in);
 
 // Convenience macros to simplify a lot of common boilerplate
-#define VK_ASSERT(res, str)                               \
+#define PL_VK_ASSERT(res, str)                            \
     do {                                                  \
         if (res != VK_SUCCESS) {                          \
             PL_ERR(vk, str ": %s", vk_res_str(res));      \
@@ -70,10 +70,10 @@ void *vk_chain_memdup(void *alloc, const void *in);
     do {                                                  \
         PL_TRACE(vk, #cmd);                               \
         VkResult res ## __LINE__ = (cmd);                 \
-        VK_ASSERT(res ## __LINE__, #cmd);                 \
+        PL_VK_ASSERT(res ## __LINE__, #cmd);              \
     } while (0)
 
-#define VK_NAME(type, obj, name)                                                \
+#define PL_VK_NAME(type, obj, name)                                             \
     do {                                                                        \
         if (vk->SetDebugUtilsObjectNameEXT) {                                   \
             vk->SetDebugUtilsObjectNameEXT(vk->dev, &(VkDebugUtilsObjectNameInfoEXT) { \

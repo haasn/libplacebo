@@ -124,8 +124,8 @@ int main()
     if (!inst)
         return SKIP;
 
-    VK_LOAD_FUN(inst->instance, EnumeratePhysicalDevices, vkGetInstanceProcAddr);
-    VK_LOAD_FUN(inst->instance, GetPhysicalDeviceProperties, vkGetInstanceProcAddr);
+    PL_VK_LOAD_FUN(inst->instance, EnumeratePhysicalDevices, vkGetInstanceProcAddr);
+    PL_VK_LOAD_FUN(inst->instance, GetPhysicalDeviceProperties, vkGetInstanceProcAddr);
 
     uint32_t num = 0;
     EnumeratePhysicalDevices(inst->instance, &num, NULL);
@@ -140,7 +140,7 @@ int main()
     VkSurfaceKHR surf = NULL;
 
 #ifdef VK_EXT_headless_surface
-    VK_LOAD_FUN(inst->instance, CreateHeadlessSurfaceEXT, vkGetInstanceProcAddr);
+    PL_VK_LOAD_FUN(inst->instance, CreateHeadlessSurfaceEXT, vkGetInstanceProcAddr);
     if (CreateHeadlessSurfaceEXT) {
         VkHeadlessSurfaceCreateInfoEXT info = {
             .sType = VK_STRUCTURE_TYPE_HEADLESS_SURFACE_CREATE_INFO_EXT,
@@ -208,11 +208,11 @@ int main()
         pl_vulkan_destroy(&vk2);
 
         // Run these tests last because they disable some validation layers
-#ifdef VK_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
         vulkan_interop_tests(vk, PL_HANDLE_FD);
         vulkan_interop_tests(vk, PL_HANDLE_DMA_BUF);
 #endif
-#ifdef VK_HAVE_WIN32
+#ifdef PL_HAVE_WIN32
         vulkan_interop_tests(vk, PL_HANDLE_WIN32);
         vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
@@ -225,11 +225,11 @@ int main()
         vk = pl_vulkan_create(ctx, &params);
         REQUIRE(vk); // it succeeded the first time
 
-#ifdef VK_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
         vulkan_interop_tests(vk, PL_HANDLE_FD);
         vulkan_interop_tests(vk, PL_HANDLE_DMA_BUF);
 #endif
-#ifdef VK_HAVE_WIN32
+#ifdef PL_HAVE_WIN32
         vulkan_interop_tests(vk, PL_HANDLE_WIN32);
         vulkan_interop_tests(vk, PL_HANDLE_WIN32_KMT);
 #endif
