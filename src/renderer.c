@@ -32,8 +32,6 @@ struct cached_frame {
 struct sampler {
     struct pl_shader_obj *upscaler_state;
     struct pl_shader_obj *downscaler_state;
-    const struct pl_tex *sep_fbo_up;
-    const struct pl_tex *sep_fbo_down;
 };
 
 struct pl_renderer {
@@ -155,8 +153,6 @@ static void sampler_destroy(struct pl_renderer *rr, struct sampler *sampler)
 {
     pl_shader_obj_destroy(&sampler->upscaler_state);
     pl_shader_obj_destroy(&sampler->downscaler_state);
-    pl_tex_destroy(rr->gpu, &sampler->sep_fbo_up);
-    pl_tex_destroy(rr->gpu, &sampler->sep_fbo_down);
 }
 
 void pl_renderer_destroy(struct pl_renderer **p_rr)
@@ -415,26 +411,40 @@ struct sampler_info {
     const struct pl_filter_config *config; // if applicable
     enum sampler_type type;
     enum sampler_dir dir;
+    enum sampler_dir dir_sep[2];
 };
 
 static struct sampler_info sample_src_info(struct pl_renderer *rr,
                                            const struct pl_sample_src *src,
                                            const struct pl_render_params *params)
 {
-    struct sampler_info info;
+    struct sampler_info info = {0};
 
     float rx = src->new_w / fabs(pl_rect_w(src->rect));
+    if (rx < 1.0 - 1e-6) {
+        info.dir_sep[0] = SAMPLER_DOWN;
+    } else if (rx > 1.0 + 1e-6) {
+        info.dir_sep[0] = SAMPLER_UP;
+    }
+
     float ry = src->new_h / fabs(pl_rect_h(src->rect));
-    if (rx < 1.0 - 1e-6 || ry < 1.0 - 1e-6) {
-        info.dir = SAMPLER_DOWN;
+    if (ry < 1.0 - 1e-6) {
+        info.dir_sep[1] = SAMPLER_DOWN;
+    } else if (ry > 1.0 + 1e-6) {
+        info.dir_sep[1] = SAMPLER_UP;
+    }
+
+    // We use PL_MAX so downscaling overrides upscaling when choosing scalers
+    info.dir = PL_MAX(info.dir_sep[0], info.dir_sep[1]);
+    switch (info.dir) {
+    case SAMPLER_DOWN:
         info.config = params->downscaler;
-    } else if (rx > 1.0 + 1e-6 || ry > 1.0 + 1e-6) {
-        info.dir = SAMPLER_UP;
+        break;
+    case SAMPLER_UP:
         info.config = params->upscaler;
-    } else {
-        info.dir = SAMPLER_NOOP;
+        break;
+    case SAMPLER_NOOP:
         info.type = SAMPLER_NEAREST;
-        info.config = NULL;
         return info;
     }
 
@@ -472,17 +482,14 @@ static void dispatch_sampler(struct pass_state *pass, struct pl_shader *sh,
     struct pl_renderer *rr = pass->rr;
     struct sampler_info info = sample_src_info(rr, src, params);
     struct pl_shader_obj **lut = NULL;
-    const struct pl_tex **sep_fbo = NULL;
     switch (info.dir) {
     case SAMPLER_NOOP:
         goto fallback;
     case SAMPLER_DOWN:
         lut = &sampler->downscaler_state;
-        sep_fbo = &sampler->sep_fbo_down;
         break;
     case SAMPLER_UP:
         lut = &sampler->upscaler_state;
-        sep_fbo = &sampler->sep_fbo_up;
         break;
     }
 
@@ -499,7 +506,7 @@ static void dispatch_sampler(struct pass_state *pass, struct pl_shader *sh,
         break; // continue below
     }
 
-    pl_assert(lut && sep_fbo);
+    pl_assert(lut);
     struct pl_sample_filter_params fparams = {
         .filter      = *info.config,
         .lut_entries = params->lut_entries,
@@ -512,8 +519,10 @@ static void dispatch_sampler(struct pass_state *pass, struct pl_shader *sh,
 
     bool ok;
     if (info.config->polar) {
+        // Polar samplers are always a single function call
         ok = pl_shader_sample_polar(sh, src, &fparams);
-    } else {
+    } else if (info.dir_sep[0] && info.dir_sep[1]) {
+        // Scaling is needed in both directions
         struct pl_shader *tsh = pl_dispatch_begin(rr->dp);
         ok = pl_shader_sample_ortho(tsh, PL_SEP_VERT, src, &fparams);
         if (!ok) {
@@ -531,6 +540,13 @@ static void dispatch_sampler(struct pass_state *pass, struct pl_shader *sh,
         src2.tex = img_tex(pass, &img);
         src2.scale = 1.0;
         ok = src2.tex && pl_shader_sample_ortho(sh, PL_SEP_HORIZ, &src2, &fparams);
+    } else if (info.dir_sep[0]) {
+        // Scaling is needed only in the horizontal direction
+        ok = pl_shader_sample_ortho(sh, PL_SEP_HORIZ, src, &fparams);
+    } else {
+        // Scaling is needed only in the vertical direction
+        pl_assert(info.dir_sep[1]);
+        ok = pl_shader_sample_ortho(sh, PL_SEP_VERT, src, &fparams);
     }
 
 done:
