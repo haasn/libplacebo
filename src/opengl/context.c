@@ -119,6 +119,13 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
         } else {
             PL_DEBUG(p, "    GL_EXTENSIONS: %s", glGetString(GL_EXTENSIONS));
         }
+
+#ifdef EPOXY_HAS_EGL
+        if (params->egl_display) {
+            PL_DEBUG(p, "    EGL_EXTENSIONS: %s",
+                     eglQueryString(params->egl_display, EGL_EXTENSIONS));
+        }
+#endif
     }
 
     if (!params->allow_software && gl_is_software()) {
