@@ -1345,9 +1345,12 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
          neutral);
 
     // For quality reasons, explicitly drop subpixel offsets from the ref rect
-    // and re-add them as part of `pass->img.rect`, always rounding towards 0
+    // and re-add them as part of `pass->img.rect`, always rounding towards 0.
+    // Additionally, drop anamorphic subpixel mismatches.
     float off_x = ref->img.rect.x0 - truncf(ref->img.rect.x0),
-          off_y = ref->img.rect.y0 - truncf(ref->img.rect.y0);
+          off_y = ref->img.rect.y0 - truncf(ref->img.rect.y0),
+          stretch_x = roundf(pl_rect_w(ref->img.rect)) / pl_rect_w(ref->img.rect),
+          stretch_y = roundf(pl_rect_h(ref->img.rect)) / pl_rect_h(ref->img.rect);
 
     bool has_alpha = false;
     for (int i = 0; i < image->num_planes; i++) {
@@ -1357,7 +1360,9 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             continue;
 
         float scale_x = pl_rect_w(st->img.rect) / pl_rect_w(ref->img.rect),
-              scale_y = pl_rect_h(st->img.rect) / pl_rect_h(ref->img.rect);
+              scale_y = pl_rect_h(st->img.rect) / pl_rect_h(ref->img.rect),
+              base_x = st->img.rect.x0 - scale_x * off_x,
+              base_y = st->img.rect.y0 - scale_y * off_y;
 
         struct pl_sample_src src = {
             .tex        = img_tex(pass, &st->img),
@@ -1367,18 +1372,18 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             .new_w      = ref->img.w,
             .new_h      = ref->img.h,
             .rect = {
-                st->img.rect.x0 - scale_x * off_x,
-                st->img.rect.y0 - scale_y * off_y,
-                st->img.rect.x1 - scale_x * off_x,
-                st->img.rect.y1 - scale_y * off_y,
+                base_x,
+                base_y,
+                base_x + stretch_x * pl_rect_w(st->img.rect),
+                base_y + stretch_y * pl_rect_h(st->img.rect),
             },
         };
 
         PL_TRACE(rr, "Aligning plane %d: {%f %f %f %f} -> {%f %f %f %f}",
-                i, st->img.rect.x0, st->img.rect.y0,
-                st->img.rect.x1, st->img.rect.y1,
-                src.rect.x0, src.rect.y0,
-                src.rect.x1, src.rect.y1);
+                 i, st->img.rect.x0, st->img.rect.y0,
+                 st->img.rect.x1, st->img.rect.y1,
+                 src.rect.x0, src.rect.y0,
+                 src.rect.x1, src.rect.y1);
 
         struct pl_shader *psh = pl_dispatch_begin_ex(rr->dp, true);
         if (deband_src(pass, psh, params, &src) != DEBAND_SCALED)
@@ -1438,8 +1443,8 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
         .rect   = {
             off_x,
             off_y,
-            off_x + pl_rect_w(ref->img.rect),
-            off_y + pl_rect_h(ref->img.rect),
+            off_x + pl_rect_w(ref->img.rect) / stretch_x,
+            off_y + pl_rect_h(ref->img.rect) / stretch_y,
         },
     };
 
