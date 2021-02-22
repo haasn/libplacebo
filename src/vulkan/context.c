@@ -416,6 +416,11 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
 {
     struct pl_context *ctx = priv;
 
+    // MSAN really doesn't like reading from the stack-allocated memory
+    // allocated by the non-instrumented vulkan library, so just comment it out
+    // when building with MSAN as a cheap hack-around.
+#ifndef MSAN
+
     // We will ignore errors for a designated object, but we need to explicitly
     // handle the case where no object is designated, because errors can have no
     // object associated with them, and we don't want to suppress those errors.
@@ -431,6 +436,8 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
     if (data->messageIdNumber == 0x7cd0911d)
         return false;
 
+#endif
+
     enum pl_log_level lev;
     switch (sev) {
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:     lev = PL_LOG_ERR;   break;
@@ -442,9 +449,6 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
 
     pl_msg(ctx, lev, "vk %s", data->pMessage);
 
-    // MSAN really doesn't like reading from this stack-allocated memory
-    // allocated by the non-instrumented vulkan library, so just comment it out
-    // when building with MSAN as a cheap hack-around.
 #ifndef MSAN
     for (int i = 0; i < data->queueLabelCount; i++)
         pl_msg(ctx, lev, "    during %s", data->pQueueLabels[i].pLabelName);
