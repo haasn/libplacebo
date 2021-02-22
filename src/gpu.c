@@ -591,7 +591,9 @@ bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
         return true;
     }
 
-    PL_INFO(gpu, "(Re)creating %dx%dx%d texture", params->w, params->h, params->d);
+    PL_INFO(gpu, "(Re)creating %dx%dx%d texture with format %s",
+            params->w, params->h, params->d, params->format->name);
+
     pl_tex_destroy(gpu, tex);
     *tex = pl_tex_create(gpu, params);
 
