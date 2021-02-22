@@ -131,9 +131,15 @@ static void add_format(const struct pl_gpu *pgpu, const struct gl_format *gl_fmt
 
     // We're not the ones actually emulating these texture format - the
     // driver is - but we might as well set the hint.
-    // NOTE: 3-component formats (e.g. rgb8) are probably also emulated,
-    // but we have no way of knowing this for sure, so let's just ignore it.
     fmt->emulated = fmt->texel_size != fmt->internal_size;
+
+    // 3-component formats are almost surely also emulated
+    if (fmt->num_components == 3)
+        fmt->emulated = true;
+
+    // Older OpenGL most likely emulates 32-bit float formats as well
+    if (p->gl_ver < 30 && fmt->component_depth[0] >= 32)
+        fmt->emulated = true;
 
     // For sanity, clear the superfluous fields
     for (int i = fmt->num_components; i < 4; i++) {
