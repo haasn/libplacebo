@@ -44,10 +44,10 @@ static inline void pl_test_set_verbosity(struct pl_context *ctx,
     });
 }
 
-static inline void require(bool b, const char *msg)
+static inline void require(bool b, const char *msg, const char *file, int line)
 {
     if (!b) {
-        fprintf(stderr, "FAILED: %s", msg);
+        fprintf(stderr, "FAILED: '%s' at %s:%d", msg, file, line);
         exit(1);
     }
 }
@@ -57,7 +57,7 @@ static inline bool feq(float a, float b, float epsilon)
     return fabs(a - b) < epsilon * fmax(1.0, fabs(a));
 }
 
-#define REQUIRE(cond) require((cond), #cond)
+#define REQUIRE(cond) require((cond), #cond, __FILE__, __LINE__)
 #define RANDOM (rand() / (float) RAND_MAX)
 #define SKIP 77
 
