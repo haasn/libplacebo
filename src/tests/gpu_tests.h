@@ -1054,6 +1054,11 @@ error:
     pl_tex_destroy(gpu, &fbo);
 }
 
+static struct pl_hook_res noop_hook(void *priv, const struct pl_hook_params *params)
+{
+    return (struct pl_hook_res) {0};
+}
+
 static void pl_ycbcr_tests(const struct pl_gpu *gpu)
 {
     struct pl_renderer *rr = pl_renderer_create(gpu->ctx, gpu);
@@ -1140,7 +1145,14 @@ static void pl_ycbcr_tests(const struct pl_gpu *gpu)
         target.planes[i].texture = dst_tex[i];
     }
 
-    REQUIRE(pl_render_image(rr, &img, &target, &(struct pl_render_params) {0}));
+    REQUIRE(pl_render_image(rr, &img, &target, &(struct pl_render_params) {
+        .num_hooks = 1,
+        .hooks = &(const struct pl_hook *){&(struct pl_hook) {
+            // Forces chroma merging, to test the chroma merging code
+            .stages = PL_HOOK_CHROMA_INPUT,
+            .hook = noop_hook,
+        }},
+    }));
 
     dst_buffer = calloc(data[0].height, data[0].row_stride);
     if (!dst_buffer)
