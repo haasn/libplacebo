@@ -61,7 +61,8 @@ void *vk_chain_memdup(void *alloc, const void *in);
 #define PL_VK_ASSERT(res, str)                            \
     do {                                                  \
         if (res != VK_SUCCESS) {                          \
-            PL_ERR(vk, str ": %s", vk_res_str(res));      \
+            PL_ERR(vk, str ": %s (%s:%d)",                \
+                   vk_res_str(res), __FILE__, __LINE__);  \
             goto error;                                   \
         }                                                 \
     } while (0)
