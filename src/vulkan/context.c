@@ -426,6 +426,11 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
         }
     }
 
+    // Ignore VUID-VkSwapchainCreateInfoKHR-imageExtent-01274
+    // cf. https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/1340
+    if (data->messageIdNumber == 0x7cd0911d)
+        return false;
+
     enum pl_log_level lev;
     switch (sev) {
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:     lev = PL_LOG_ERR;   break;
