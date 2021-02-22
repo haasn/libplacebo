@@ -404,13 +404,17 @@ static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
     if (in) {
         for (uint8_t comps = comp_mask; comps;) {
             uint8_t c = __builtin_ctz(comps);
-            GLSL("color[%d] += w * %s%d[idx];\n", c, in, c);
+            GLSL("color[%d] += w * %s%d[idx]; \n", c, in, c);
             comps &= ~(1 << c);
         }
     } else {
-        GLSL("in0 = %s(%s, base + pt * vec2(%d.0, %d.0)); \n"
-             "color += vec4(w) * in0;                     \n",
+        GLSL("c = %s(%s, base + pt * vec2(%d.0, %d.0)); \n",
              fn, tex, x, y);
+        for (uint8_t comps = comp_mask; comps;) {
+            uint8_t c = __builtin_ctz(comps);
+            GLSL("color[%d] += w * c[%d]; \n", c, c);
+            comps &= ~(1 << c);
+        }
     }
 
     if (maybe_skippable)
@@ -709,11 +713,13 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
         abort();
     }
 
-    float ratio[2], scale;
+    uint8_t comp_mask;
+    float ratio[PL_SEP_PASSES], scale;
     ident_t src_tex, pos, size, pt;
     const char *fn;
-    if (!setup_src(sh, &srcfix, &src_tex, &pos, &size, &pt, &ratio[1], &ratio[0],
-                   NULL, &scale, false, &fn, FASTEST))
+    if (!setup_src(sh, &srcfix, &src_tex, &pos, &size, &pt,
+                   &ratio[PL_SEP_HORIZ], &ratio[PL_SEP_VERT],
+                   &comp_mask, &scale, false, &fn, FASTEST))
         return false;
 
     // We can store a separate sampler object per dimension, so dispatch the
@@ -819,13 +825,19 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
         GLSL("weight = ws[%d];\n", n % 4);
 
         // Load the input texel and add it to the running sum
-        GLSL("c = %s(%s, base + pt * vec2(%d.0)); \n"
-             "color += vec4(weight) * c;          \n",
+        GLSL("c = %s(%s, base + pt * vec2(%d.0)); \n",
              fn, src_tex, n);
 
-        if (use_ar && (n == N / 2 - 1 || n == N / 2)) {
-            GLSL("lo = min(lo, c); \n"
-                 "hi = max(hi, c); \n");
+        for (uint8_t comps = comp_mask; comps;) {
+            uint8_t c = __builtin_ctz(comps);
+            GLSL("color[%d] += weight * c[%d]; \n", c, c);
+            comps &= ~(1 << c);
+
+            if (use_ar && (n == N / 2 - 1 || n == N / 2)) {
+                GLSL("lo[%d] = min(lo[%d], c[%d]); \n"
+                     "hi[%d] = max(hi[%d], c[%d]); \n",
+                     c, c, c, c, c, c);
+            }
         }
     }
 
