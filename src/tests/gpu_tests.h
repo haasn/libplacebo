@@ -1,16 +1,15 @@
 #include "tests.h"
 #include "shaders.h"
 
-static uint8_t test_src[16*16*16 * 4 * sizeof(double)] = {0};
-static uint8_t test_dst[16*16*16 * 4 * sizeof(double)] = {0};
-
 static void pl_buffer_tests(const struct pl_gpu *gpu)
 {
     const size_t buf_size = 1024;
-    assert(buf_size <= sizeof(test_src));
     if (buf_size > gpu->limits.max_buf_size)
         return;
 
+    uint8_t *test_src = malloc(buf_size * 2);
+    uint8_t *test_dst = test_src + buf_size;
+    assert(test_src && test_dst);
     memset(test_dst, 0, buf_size);
     for (int i = 0; i < buf_size; i++)
         test_src[i] = (RANDOM * 256);
@@ -75,6 +74,8 @@ static void pl_buffer_tests(const struct pl_gpu *gpu)
         REQUIRE(memcmp(test_src, buf->data, buf_size) == 0);
         pl_buf_destroy(gpu, &buf);
     }
+
+    free(test_src);
 }
 
 static void test_cb(void *priv)
@@ -158,6 +159,10 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
 
 static void pl_texture_tests(const struct pl_gpu *gpu)
 {
+    const size_t max_size = 16*16*16 * 4 *sizeof(double);
+    uint8_t *test_src = malloc(max_size * 2);
+    uint8_t *test_dst = test_src + max_size;
+
     for (int f = 0; f < gpu->num_formats; f++) {
         const struct pl_fmt *fmt = gpu->formats[f];
         if (fmt->opaque || !(fmt->caps & PL_FMT_CAP_HOST_READABLE))
@@ -213,6 +218,8 @@ static void pl_texture_tests(const struct pl_gpu *gpu)
                 pl_tex_destroy(gpu, &tex[i]);
         }
     }
+
+    free(test_src);
 }
 
 static void pl_shader_tests(const struct pl_gpu *gpu)
