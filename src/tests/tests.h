@@ -23,6 +23,25 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <math.h>
+#include <time.h>
+
+static void pl_log_timestamp(void *stream, enum pl_log_level level, const char *msg)
+{
+    static char letter[] = {
+        [PL_LOG_FATAL] = 'f',
+        [PL_LOG_ERR]   = 'e',
+        [PL_LOG_WARN]  = 'w',
+        [PL_LOG_INFO]  = 'i',
+        [PL_LOG_DEBUG] = 'd',
+        [PL_LOG_TRACE] = 't',
+    };
+
+    float secs = (float) clock() / CLOCKS_PER_SEC;
+    FILE *h = level <= PL_LOG_WARN ? stderr : stdout;
+    fprintf(h, "[%2.3f][%c] %s\n", secs, letter[level], msg);
+    if (level <= PL_LOG_WARN)
+        fflush(h);
+}
 
 static inline struct pl_context *pl_test_context()
 {
@@ -30,7 +49,7 @@ static inline struct pl_context *pl_test_context()
     setbuf(stderr, NULL);
 
     return pl_context_create(PL_API_VER, &(struct pl_context_params) {
-        .log_cb    = isatty(fileno(stdout)) ? pl_log_color : pl_log_simple,
+        .log_cb    = isatty(fileno(stdout)) ? pl_log_color : pl_log_timestamp,
         .log_level = PL_LOG_DEBUG,
     });
 }
@@ -39,7 +58,7 @@ static inline void pl_test_set_verbosity(struct pl_context *ctx,
                                          enum pl_log_level level)
 {
     pl_context_update(ctx, &(struct pl_context_params) {
-        .log_cb    = isatty(fileno(stdout)) ? pl_log_color : pl_log_simple,
+        .log_cb    = isatty(fileno(stdout)) ? pl_log_color : pl_log_timestamp,
         .log_level = level,
     });
 }
