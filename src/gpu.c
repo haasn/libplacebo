@@ -1656,6 +1656,16 @@ bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
         },
     });
 
+    // If the transfer width is a natural multiple of the thread size, we
+    // can skip the bounds check. Otherwise, make sure we aren't blitting out
+    // of the range since this would read out of bounds.
+    int groups_x = (pl_rect_w(params->rc) + threads - 1) / threads;
+    if (groups_x * threads != pl_rect_w(params->rc)) {
+        GLSL("if (gl_GlobalInvocationID.x >= %d) \n"
+             "    return;                        \n",
+             pl_rect_w(params->rc));
+    }
+
     GLSL("vec4 color = vec4(0.0);                                       \n"
          "ivec3 pos = ivec3(gl_GlobalInvocationID) + ivec3(%d, %d, %d); \n"
          "int base = ((pos.z * %d + pos.y) * %d + pos.x) * %d;          \n",
@@ -1666,14 +1676,6 @@ bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
         GLSL("color[%d] = %s(%s, base + %d).r; \n",
              i, ubo ? "texelFetch" : "imageLoad", buf, i);
     }
-
-    // If the transfer width is a natural multiple of the thread size, we
-    // can skip the bounds check. Otherwise, make sure we aren't blitting out
-    // of the range since this would violate semantics
-    int groups_x = (pl_rect_w(params->rc) + threads - 1) / threads;
-    bool is_crop = params->rc.x1 != params->tex->params.w;
-    if (is_crop && groups_x * threads != pl_rect_w(params->rc))
-        GLSL("if (gl_GlobalInvocationID.x < %d)\n", pl_rect_w(params->rc));
 
     int dims = pl_tex_params_dimension(tex->params);
     static const char *coord_types[] = {
@@ -1728,6 +1730,13 @@ bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
         },
     });
 
+    int groups_x = (pl_rect_w(params->rc) + threads - 1) / threads;
+    if (groups_x * threads != pl_rect_w(params->rc)) {
+        GLSL("if (gl_GlobalInvocationID.x >= %d) \n"
+             "    return;                        \n",
+             pl_rect_w(params->rc));
+    }
+
     int dims = pl_tex_params_dimension(tex->params);
     static const char *coord_types[] = {
         [1] = "int",
@@ -1742,14 +1751,8 @@ bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
          params->stride_h, params->stride_w, fmt->num_components,
          img, coord_types[dims]);
 
-    int groups_x = (pl_rect_w(params->rc) + threads - 1) / threads;
-    if (groups_x * threads != pl_rect_w(params->rc))
-        GLSL("if (gl_GlobalInvocationID.x < %d)\n", pl_rect_w(params->rc));
-
-    GLSL("{\n");
     for (int i = 0; i < fmt->num_components; i++)
         GLSL("imageStore(%s, base + %d, vec4(color[%d])); \n", buf, i, i);
-    GLSL("}\n");
 
     return pl_dispatch_compute(dp, &(struct pl_dispatch_compute_params) {
         .shader = &sh,
