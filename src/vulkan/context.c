@@ -431,10 +431,19 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
         }
     }
 
-    // Ignore VUID-VkSwapchainCreateInfoKHR-imageExtent-01274
-    // cf. https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/1340
-    if (data->messageIdNumber == 0x7cd0911d)
+    // Ignore errors for messages that we consider false positives
+    switch (data->messageIdNumber) {
+    case 0x7cd0911d: // VUID-VkSwapchainCreateInfoKHR-imageExtent-01274
+    case 0x8928392f: // UNASSIGNED-BestPractices-NonSuccess-Result
+    case 0xdc18ad6b: // UNASSIGNED-BestPractices-vkAllocateMemory-small-allocation
+    case 0xb3d4346b: // UNASSIGNED-BestPractices-vkBindMemory-small-dedicated-allocation
         return false;
+
+    case 0x5f379b89: // UNASSIGNED-BestPractices-Error-Result
+        if (strstr(data->pMessage, "VK_ERROR_FORMAT_NOT_SUPPORTED"))
+            return false;
+        break;
+    }
 
 #endif
 
