@@ -2596,7 +2596,8 @@ static VkResult vk_compile_glsl(const struct pl_gpu *gpu, void *alloc,
 }
 
 static const VkShaderStageFlags stageFlags[] = {
-    [PL_PASS_RASTER]  = VK_SHADER_STAGE_FRAGMENT_BIT,
+    [PL_PASS_RASTER]  = VK_SHADER_STAGE_FRAGMENT_BIT |
+                        VK_SHADER_STAGE_VERTEX_BIT,
     [PL_PASS_COMPUTE] = VK_SHADER_STAGE_COMPUTE_BIT,
 };
 
@@ -2984,7 +2985,8 @@ error:
 }
 
 static const VkPipelineStageFlags passStages[] = {
-    [PL_PASS_RASTER]  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+    [PL_PASS_RASTER]  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
     [PL_PASS_COMPUTE] = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 };
 
