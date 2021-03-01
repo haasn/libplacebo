@@ -1,5 +1,6 @@
 /demos/sdl2
 /demos/colors
+/demos/nuklear
 /demos/plplay
 /demos/video-filtering
 /build*
