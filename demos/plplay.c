@@ -1,11 +1,11 @@
 /* Compiling:
  *
- *   gcc plplay.c -o ./plplay -O2 -DUSE_VK \
+ *   gcc plplay.c glfw.c -o ./plplay -O2 -DUSE_VK \
  *       $(pkg-config --cflags --libs glfw3 vulkan libplacebo libavcodec libavformat libavutil)
  *
  *  or:
  *
- *   gcc plplay.c -o ./plplay -O2 -DUSE_GL \
+ *   gcc plplay.c glfw.c -o ./plplay -O2 -DUSE_GL \
  *       $(pkg-config --cflags --libs glfw3 libplacebo libavcodec libavformat libavutil)
  *
  * Notes:
@@ -19,10 +19,6 @@
  * License: CC0 / Public Domain
  */
 
-#if defined(USE_GL) == defined(USE_VK)
-#error Specify exactly one of -DUSE_GL or -DUSE_VK when compiling!
-#endif
-
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,41 +30,15 @@
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 
-#ifdef USE_VK
-#define GLFW_INCLUDE_VULKAN
-#endif
-
-#include <GLFW/glfw3.h>
-#ifdef USE_VK
-#include <libplacebo/vulkan.h>
-#endif
-
-#ifdef USE_GL
-#include <libplacebo/opengl.h>
-#endif
+#include "glfw.h"
 
 struct plplay {
-    bool should_exit;
+    struct winstate win;
 
     // libplacebo
     struct pl_context *ctx;
-    const struct pl_gpu *gpu; // points to either vk->gpu or gl->gpu
-    const struct pl_swapchain *swapchain;
     const struct pl_tex *plane_tex[4];
     struct pl_renderer *renderer;
-
-#ifdef USE_VK
-    VkSurfaceKHR surf;
-    const struct pl_vulkan *vk;
-    const struct pl_vk_inst *vk_inst;
-#endif
-
-#ifdef USE_GL
-    const struct pl_opengl *gl;
-#endif
-
-    // GLFW
-    GLFWwindow *win;
 
     // libav*
     AVFormatContext *format;
@@ -78,49 +48,20 @@ struct plplay {
 
 static void uninit(struct plplay *p)
 {
-    if (p->gpu) {
+    const struct pl_gpu *gpu = p->win.gpu;
+    if (gpu) {
         for (int i = 0; i < 4; i++)
-            pl_tex_destroy(p->gpu, &p->plane_tex[i]);
+            pl_tex_destroy(gpu, &p->plane_tex[i]);
     }
 
     pl_renderer_destroy(&p->renderer);
-    pl_swapchain_destroy(&p->swapchain);
-
-#ifdef USE_VK
-    pl_vulkan_destroy(&p->vk);
-    if (p->surf)
-        vkDestroySurfaceKHR(p->vk_inst->instance, p->surf, NULL);
-    pl_vk_inst_destroy(&p->vk_inst);
-#endif
-
-#ifdef USE_GL
-    pl_opengl_destroy(&p->gl);
-#endif
+    glfw_uninit(&p->win);
 
     avcodec_free_context(&p->codec);
     avformat_free_context(p->format);
 
     pl_context_destroy(&p->ctx);
-    glfwTerminate();
-
     *p = (struct plplay) {0};
-}
-
-static bool init_glfw(void)
-{
-    if (!glfwInit()) {
-        fprintf(stderr, "GLFW: Failed initializing?\n");
-        return false;
-    }
-
-#ifdef USE_VK
-    if (!glfwVulkanSupported()) {
-        fprintf(stderr, "GLFW: No vulkan support! Perhaps recompile with -DUSE_GL\n");
-        return false;
-    }
-#endif
-
-    return true;
 }
 
 static bool open_file(struct plplay *p, const char *filename)
@@ -166,156 +107,8 @@ static inline bool is_file_hdr(struct plplay *p)
     return pl_color_transfer_is_hdr(pl_transfer_from_av(trc));
 }
 
-static void resize_cb(GLFWwindow *win, int w, int h)
-{
-    struct plplay *p = glfwGetWindowUserPointer(win);
-    if (!pl_swapchain_resize(p->swapchain, &w, &h)) {
-        fprintf(stderr, "libplacebo: Failed resizing swapchain? Exiting...\n");
-        p->should_exit = true;
-    }
-}
-
-static void exit_cb(GLFWwindow *win)
-{
-    struct plplay *p = glfwGetWindowUserPointer(win);
-    p->should_exit = true;
-}
-
-static bool create_window(struct plplay *p, int width, int height, bool alpha)
-{
-    printf("Creating %dx%d window%s...\n", width, height,
-           alpha ? " (with alpha)" : "");
-
-#ifdef USE_VK
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-#endif
-
-#ifdef USE_GL
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
-
-    /* Request OpenGL 3.2 (or higher) core profile */
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#endif
-
-    if (alpha)
-        glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
-
-    p->win = glfwCreateWindow(width, height, "plplay", NULL, NULL);
-    if (!p->win) {
-        fprintf(stderr, "GLFW: Failed creating window\n");
-        return false;
-    }
-
-    // Set up GLFW event callbacks
-    glfwSetWindowUserPointer(p->win, p);
-    glfwSetFramebufferSizeCallback(p->win, resize_cb);
-    glfwSetWindowCloseCallback(p->win, exit_cb);
-
-    return true;
-}
-
-#ifdef USE_VK
-static bool init_renderer(struct plplay *p)
-{
-    assert(p->win);
-    VkResult err;
-
-    struct pl_vk_inst_params iparams = pl_vk_inst_default_params;
-#ifndef NDEBUG
-    iparams.debug = true;
-#endif
-
-    // Load all extensions required for WSI
-    uint32_t num;
-    iparams.extensions = glfwGetRequiredInstanceExtensions(&num);
-    iparams.num_extensions = num;
-
-    p->vk_inst = pl_vk_inst_create(p->ctx, &iparams);
-    if (!p->vk_inst) {
-        fprintf(stderr, "libplacebo: Failed creating vulkan instance\n");
-        return false;
-    }
-
-    err = glfwCreateWindowSurface(p->vk_inst->instance, p->win, NULL, &p->surf);
-    if (err != VK_SUCCESS) {
-        fprintf(stderr, "GLFW: Failed creating vulkan surface\n");
-        return false;
-    }
-
-    struct pl_vulkan_params params = pl_vulkan_default_params;
-    params.instance = p->vk_inst->instance;
-    params.surface = p->surf;
-    params.allow_software = true;
-    p->vk = pl_vulkan_create(p->ctx, &params);
-    if (!p->vk) {
-        fprintf(stderr, "libplacebo: Failed creating vulkan device\n");
-        return false;
-    }
-
-    p->swapchain = pl_vulkan_create_swapchain(p->vk, &(struct pl_vulkan_swapchain_params) {
-        .surface = p->surf,
-        .present_mode = VK_PRESENT_MODE_FIFO_KHR,
-        .prefer_hdr = is_file_hdr(p),
-    });
-
-    if (!p->swapchain) {
-        fprintf(stderr, "libplacebo: Failed creating vulkan swapchain\n");
-        return false;
-    }
-
-    p->gpu = p->vk->gpu;
-    p->renderer = pl_renderer_create(p->ctx, p->gpu);
-    return true;
-}
-#endif // USE_VK
-
-#ifdef USE_GL
-static bool init_renderer(struct plplay *p)
-{
-    assert(p->win);
-
-    struct pl_opengl_params params = pl_opengl_default_params;
-#ifndef NDEBUG
-    params.debug = true;
-#endif
-
-    glfwMakeContextCurrent(p->win);
-
-    p->gl = pl_opengl_create(p->ctx, &params);
-    if (!p->gl) {
-        fprintf(stderr, "libplacebo: Failed creating opengl device\n");
-        return false;
-    }
-
-    p->swapchain = pl_opengl_create_swapchain(p->gl, &(struct pl_opengl_swapchain_params) {
-        .swap_buffers = (void (*)(void *)) glfwSwapBuffers,
-        .priv = p->win,
-    });
-
-    if (!p->swapchain) {
-        fprintf(stderr, "libplacebo: Failed creating opengl swapchain\n");
-        return false;
-    }
-
-    int w, h;
-    glfwGetFramebufferSize(p->win, &w, &h);
-    if (!pl_swapchain_resize(p->swapchain, &w, &h)) {
-        fprintf(stderr, "libplacebo: Failed initializing swapchain\n");
-        return false;
-    }
-
-    p->gpu = p->gl->gpu;
-    p->renderer = pl_renderer_create(p->ctx, p->gpu);
-    return true;
-}
-#endif // USE_GL
-
 static bool init_codec(struct plplay *p)
 {
-    assert(p->gpu);
     assert(p->stream);
 
     const AVCodec *codec = avcodec_find_decoder(p->stream->codecpar->codec_id);
@@ -347,17 +140,18 @@ static bool init_codec(struct plplay *p)
 
 static bool render_frame(struct plplay *p, AVFrame *in_frame)
 {
+    const struct pl_gpu *gpu = p->win.gpu;
     struct pl_swapchain_frame out_frame;
     int retry = 3;
 
-    while (!pl_swapchain_start_frame(p->swapchain, &out_frame)) {
+    while (!pl_swapchain_start_frame(p->win.swapchain, &out_frame)) {
         if (retry-- == 0) {
             fprintf(stderr, "libplacebo: Swapchain appears stuck.. dropping frame\n");
             return true;
         }
 
-        // Window possibly hidden/minimized/invisible?
-        glfwWaitEventsTimeout(5e-3);
+        // Window possibly hidden/minimized/invisible? Block for window events
+        glfwWaitEvents();
     }
 
     bool ret = true;
@@ -365,33 +159,33 @@ static bool render_frame(struct plplay *p, AVFrame *in_frame)
     struct pl_frame image, target;
     struct pl_render_params params = pl_render_default_params;
 
-    if (pl_upload_avframe(p->gpu, &image, p->plane_tex, in_frame)) {
+    if (pl_upload_avframe(gpu, &image, p->plane_tex, in_frame)) {
 
         pl_frame_from_swapchain(&target, &out_frame);
         pl_rect2df_aspect_copy(&target.crop, &image.crop, 0.0);
 
         if (pl_frame_is_cropped(&target))
-            pl_frame_clear(p->gpu, &target, (float[3]) {0});
+            pl_frame_clear(gpu, &target, (float[3]) {0});
 
         if (!pl_render_image(p->renderer, &image, &target, &params)) {
             fprintf(stderr, "libplacebo: Failed rendering... GPU lost?\n");
-            pl_tex_clear(p->gpu, out_frame.fbo, (float[4]){ 1.0, 0.0, 0.0, 1.0 });
+            pl_tex_clear(gpu, out_frame.fbo, (float[4]){ 1.0, 0.0, 0.0, 1.0 });
             ret = false;
         }
 
     } else {
 
         fprintf(stderr, "libplacebo: Failed uploading AVFrame... dropping\n");
-        pl_tex_clear(p->gpu, out_frame.fbo, (float[4]){ 0.0, 0.0, 0.0, 1.0 });
+        pl_tex_clear(gpu, out_frame.fbo, (float[4]){ 0.0, 0.0, 0.0, 1.0 });
 
     }
 
-    if (!pl_swapchain_submit_frame(p->swapchain)) {
+    if (!pl_swapchain_submit_frame(p->win.swapchain)) {
         fprintf(stderr, "libplacebo: Failed submitting frame, swapchain lost?\n");
         return false;
     }
 
-    pl_swapchain_swap_buffers(p->swapchain);
+    pl_swapchain_swap_buffers(p->win.swapchain);
     return ret;
 }
 
@@ -444,11 +238,10 @@ static bool render_loop(struct plplay *p)
 
         if (!decode_packet(p, packet, frame))
             break;
-
         av_packet_unref(packet);
 
         glfwPollEvents();
-        if (p->should_exit)
+        if (p->win.window_lost)
             break;
     }
 
@@ -468,9 +261,6 @@ int main(int argc, char **argv)
         fprintf(stderr, "Usage: ./%s <filename>\n", argv[0]);
         return -1;
     }
-
-    if (!init_glfw())
-        return 2;
 
     struct plplay state = {0};
     struct plplay *p = &state;
@@ -493,17 +283,20 @@ int main(int argc, char **argv)
     if (!desc)
         goto error;
 
-    bool has_alpha = desc->flags & AV_PIX_FMT_FLAG_ALPHA;
-    if (!create_window(p, par->width, par->height, has_alpha))
-        goto error;
+    enum winflags flags = 0;
+    if (desc->flags & AV_PIX_FMT_FLAG_ALPHA)
+        flags |= WIN_ALPHA;
+    if (is_file_hdr(p))
+        flags |= WIN_HDR;
 
-    if (!init_renderer(p))
+    if (!glfw_init(p->ctx, &p->win, par->width, par->height, flags))
         goto error;
 
     // TODO: Use direct rendering buffers
     if (!init_codec(p))
         goto error;
 
+    p->renderer = pl_renderer_create(p->ctx, p->win.gpu);
     if (!render_loop(p))
         goto error;
 
