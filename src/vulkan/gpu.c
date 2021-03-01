@@ -2036,7 +2036,8 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
     }
 
     if (params->drawable) {
-        mparams.buf_usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        mparams.buf_usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                             VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
         mem_type = PL_BUF_MEM_DEVICE;
     }
 
@@ -3131,7 +3132,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
     const struct pl_pass *pass = params->pass;
     struct pl_pass_vk *pass_vk = PL_PRIV(pass);
 
-    if (params->vertex_data)
+    if (params->vertex_data || params->index_data)
         return pl_pass_run_vbo(gpu, params);
 
     if (!pass_vk->use_pushd) {
@@ -3213,13 +3214,32 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         struct pl_tex_vk *tex_vk = PL_PRIV(tex);
         const struct pl_buf *vert = params->vertex_buf;
         struct pl_buf_vk *vert_vk = PL_PRIV(vert);
+        const struct pl_buf *index = params->index_buf;
+        struct pl_buf_vk *index_vk = index ? PL_PRIV(index) : NULL;
+
+        // In the edge case that vert = index buffer, we need to synchronize
+        // for both flags simultaneously
+        VkAccessFlags vbo_flags = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+        if (index == vert)
+            vbo_flags |= VK_ACCESS_INDEX_READ_BIT;
 
         buf_barrier(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
-                    VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT, 0, vert->params.size,
-                    BUF_READ);
+                    vbo_flags, 0, vert->params.size, BUF_READ);
 
         vk->CmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->mem.buf,
-                                 &vert_vk->mem.offset);
+                                 &(size_t){vert_vk->mem.offset + params->buf_offset});
+
+        if (index) {
+            if (index != vert) {
+                buf_barrier(gpu, cmd, index, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+                            VK_ACCESS_INDEX_READ_BIT, 0, index->params.size,
+                            BUF_READ);
+            }
+
+            vk->CmdBindIndexBuffer(cmd->buf, index_vk->mem.buf,
+                                   index_vk->mem.offset + params->index_offset,
+                                   VK_INDEX_TYPE_UINT16);
+        }
 
         tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                     VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -3248,10 +3268,18 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         };
 
         vk->CmdBeginRenderPass(cmd->buf, &binfo, VK_SUBPASS_CONTENTS_INLINE);
-        vk->CmdDraw(cmd->buf, params->vertex_count, 1, 0, 0);
+
+        if (index) {
+            vk->CmdDrawIndexed(cmd->buf, params->vertex_count, 1, 0, 0, 0);
+        } else {
+            vk->CmdDraw(cmd->buf, params->vertex_count, 1, 0, 0);
+        }
+
         vk->CmdEndRenderPass(cmd->buf);
 
         buf_signal(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
+        if (index && index != vert)
+            buf_signal(gpu, cmd, index, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
 
         // The renderPass implicitly transitions the texture to this layout
         tex_vk->current_layout = pass_vk->finalLayout;

@@ -1169,10 +1169,22 @@ struct pl_pass_run_params {
     // Vertex data may be provided in one of two forms:
     //
     // 1. Drawing from host memory directly
-    void *vertex_data;
+    const void *vertex_data;
     // 2. Drawing from a vertex buffer (requires `vertex_buf->params.drawable`)
     const struct pl_buf *vertex_buf;
     size_t buf_offset;
+
+    // (Optional) Index data may be provided in the form of `uint16_t` index
+    // offsets. These will be used for instanced rendering. Similar to
+    // vertex data, this can be provided in two forms:
+    // 1. From host memory
+    const uint16_t *index_data;
+    // 2. From an index buffer (requires `index_buf->params.drawable`)
+    const struct pl_buf *index_buf;
+    size_t index_offset;
+    // Note: Drawing from an index buffer requires vertex data to also be
+    // present in buffer form, i.e. it's forbidden to mix `index_buf` with
+    // `vertex_data` (though vice versa is allowed).
 
     // --- pass->params.type==PL_PASS_COMPUTE only
 

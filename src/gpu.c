@@ -1382,8 +1382,20 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         if (params->vertex_buf) {
             const struct pl_buf *vertex_buf = params->vertex_buf;
             require(vertex_buf->params.drawable);
-            size_t vert_size = params->vertex_count * pass->params.vertex_stride;
-            require(params->buf_offset + vert_size <= vertex_buf->params.size);
+            if (!params->index_data && !params->index_buf) {
+                // Cannot bounds check indexed draws
+                size_t vert_size = params->vertex_count * pass->params.vertex_stride;
+                require(params->buf_offset + vert_size <= vertex_buf->params.size);
+            }
+        }
+
+        require(!params->index_data || !params->index_buf);
+        if (params->index_buf) {
+            const struct pl_buf *index_buf = params->index_buf;
+            require(!params->vertex_data);
+            require(index_buf->params.drawable);
+            size_t index_size = params->vertex_count * sizeof(*params->index_data);
+            require(params->index_offset + index_size <= index_buf->params.size);
         }
 
         const struct pl_tex *target = params->target;
@@ -1769,27 +1781,57 @@ error:
 void pl_pass_run_vbo(const struct pl_gpu *gpu,
                      const struct pl_pass_run_params *params)
 {
-    if (params->vertex_buf)
+    if (!params->vertex_data && !params->index_data)
         return pl_pass_run(gpu, params);
 
-    size_t vert_size = params->vertex_count * params->pass->params.vertex_stride;
-    const struct pl_buf *vert = pl_buf_create(gpu, &(struct pl_buf_params) {
-        .size = vert_size,
-        .drawable = true,
-        .initial_data = params->vertex_data,
-        .memory_type = PL_BUF_MEM_DEVICE,
-    });
+    struct pl_pass_run_params newparams = *params;
+    const struct pl_buf *vert = NULL, *index = NULL;
 
-    if (!vert) {
-        PL_ERR(gpu, "Failed allocating vertex buffer!");
-        return;
+    if (params->vertex_data) {
+        int num_vertices = 0;
+        if (params->index_data) {
+            // Indexed draw, so we need to store all indexed vertices
+            for (int i = 0; i < params->vertex_count; i++)
+                num_vertices = PL_MAX(num_vertices, params->index_data[i]);
+            num_vertices += 1;
+        } else {
+            num_vertices = params->vertex_count;
+        }
+
+        vert = pl_buf_create(gpu, &(struct pl_buf_params) {
+            .size = num_vertices * params->pass->params.vertex_stride,
+            .initial_data = params->vertex_data,
+            .drawable = true,
+        });
+
+        if (!vert) {
+            PL_ERR(gpu, "Failed allocating vertex buffer!");
+            return;
+        }
+
+        newparams.vertex_buf = vert;
+        newparams.vertex_data = NULL;
     }
 
-    struct pl_pass_run_params newparams = *params;
-    newparams.vertex_buf = vert;
-    newparams.vertex_data = NULL;
+    if (params->index_data) {
+        index = pl_buf_create(gpu, &(struct pl_buf_params) {
+            .size = params->vertex_count * sizeof(*params->index_data),
+            .initial_data = params->index_data,
+            .drawable = true,
+        });
+
+        if (!index) {
+            PL_ERR(gpu, "Failed allocating index buffer!");
+            return;
+        }
+
+        newparams.index_buf = index;
+        newparams.index_data = NULL;
+    }
+
     pl_pass_run(gpu, &newparams);
     pl_buf_destroy(gpu, &vert);
+    pl_buf_destroy(gpu, &index);
 }
 
 struct pl_pass_params pl_pass_params_copy(void *alloc,

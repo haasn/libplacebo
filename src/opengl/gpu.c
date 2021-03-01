@@ -1763,9 +1763,10 @@ error:
 // For pl_pass.priv
 struct pl_pass_gl {
     GLuint program;
-    GLuint vao;     // the VAO object
-    uint64_t vao_id;// buf_gl.id of VAO
-    GLuint buffer;  // VBO for raw vertex pointers
+    GLuint vao;         // the VAO object
+    uint64_t vao_id;    // buf_gl.id of VAO
+    size_t vao_offset;  // VBO offset of VAO
+    GLuint buffer;      // VBO for raw vertex pointers
     GLint *var_locs;
 };
 
@@ -1781,7 +1782,7 @@ static void gl_pass_destroy(const struct pl_gpu *gpu, const struct pl_pass *pass
     pl_free((void *) pass);
 }
 
-static void gl_update_va(const struct pl_pass *pass)
+static void gl_update_va(const struct pl_pass *pass, size_t vbo_offset)
 {
     for (int i = 0; i < pass->params.num_vertex_attribs; i++) {
         const struct pl_vertex_attrib *va = &pass->params.vertex_attribs[i];
@@ -1798,7 +1799,8 @@ static void gl_update_va(const struct pl_pass *pass)
 
         glEnableVertexAttribArray(i);
         glVertexAttribPointer(i, va->fmt->num_components, glfmt->type, norm,
-                              pass->params.vertex_stride, (void *) va->offset);
+                              pass->params.vertex_stride,
+                              (void *) (va->offset + vbo_offset));
     }
 }
 
@@ -1889,7 +1891,7 @@ static const struct pl_pass *gl_pass_create(const struct pl_gpu *gpu,
         glGenVertexArrays(1, &pass_gl->vao);
         glBindBuffer(GL_ARRAY_BUFFER, pass_gl->buffer);
         glBindVertexArray(pass_gl->vao);
-        gl_update_va(pass);
+        gl_update_va(pass, 0);
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
@@ -2141,7 +2143,16 @@ static void gl_pass_run(const struct pl_gpu *gpu,
         if (!vert) {
             // Update the buffer directly. In theory we could also do a memcmp
             // cache here to avoid unnecessary updates.
-            size_t vert_size = params->vertex_count * pass->params.vertex_stride;
+            int num_vertices = 0;
+            if (params->index_data) {
+                // Indexed draw, so we need to store all indexed vertices
+                for (int i = 0; i < params->vertex_count; i++)
+                    num_vertices = PL_MAX(num_vertices, params->index_data[i]);
+                num_vertices += 1;
+            } else {
+                num_vertices = params->vertex_count;
+            }
+            size_t vert_size = num_vertices * pass->params.vertex_stride;
             glBufferData(GL_ARRAY_BUFFER, vert_size, params->vertex_data, GL_STREAM_DRAW);
         }
 
@@ -2149,10 +2160,14 @@ static void gl_pass_run(const struct pl_gpu *gpu,
             glBindVertexArray(pass_gl->vao);
 
         uint64_t vert_id = vert ? vert_gl->id : 0;
-        if (!pass_gl->vao || pass_gl->vao_id != vert_id) {
-            // We only need to update the VAO when the buffer ID changes
-            gl_update_va(pass);
+        size_t vert_offset = vert ? params->buf_offset : 0;
+        if (!pass_gl->vao || pass_gl->vao_id != vert_id ||
+             pass_gl->vao_offset != vert_offset)
+        {
+            // We need to update the VAO when the buffer ID or offset changes
+            gl_update_va(pass, vert_offset);
             pass_gl->vao_id = vert_id;
+            pass_gl->vao_offset = vert_offset;
         }
 
         gl_check_err(gpu, "gl_pass_run: update/bind vertex buffer");
@@ -2162,9 +2177,31 @@ static void gl_pass_run(const struct pl_gpu *gpu,
             [PL_PRIM_TRIANGLE_STRIP]    = GL_TRIANGLE_STRIP,
             [PL_PRIM_TRIANGLE_FAN]      = GL_TRIANGLE_FAN,
         };
+        GLenum mode = map_prim[pass->params.vertex_type];
 
         gl_timer_begin(params->timer);
-        glDrawArrays(map_prim[pass->params.vertex_type], 0, params->vertex_count);
+
+        if (params->index_data) {
+
+            // GL allows taking indices directly from a pointer
+            glDrawElements(mode, params->vertex_count, GL_UNSIGNED_SHORT,
+                           params->index_data);
+
+        } else if (params->index_buf) {
+
+            // The pointer argument becomes the index buffer offset
+            struct pl_buf_gl *index_gl = PL_PRIV(params->index_buf);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_gl->buffer);
+            glDrawElements(mode, params->vertex_count, GL_UNSIGNED_SHORT,
+                           (void *) params->index_offset);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+        } else {
+
+            // Note: the VBO offset is handled in the VAO
+            glDrawArrays(mode, 0, params->vertex_count);
+        }
+
         gl_timer_end(params->timer);
         gl_check_err(gpu, "gl_pass_run: drawing");
 

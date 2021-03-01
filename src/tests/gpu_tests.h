@@ -274,7 +274,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     vert_fmt = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 3);
     REQUIRE(vert_fmt);
 
-    struct vertex { float pos[2]; float color[3]; } vertices[] = {
+    static const struct vertex { float pos[2]; float color[3]; } vertices[] = {
         {{-1.0, -1.0}, {0, 0, 0}},
         {{ 1.0, -1.0}, {1, 0, 0}},
         {{-1.0,  1.0}, {0, 1, 0}},
@@ -310,32 +310,10 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     pl_pass_run(gpu, &(struct pl_pass_run_params) {
         .pass           = pass,
         .target         = fbo,
-        .vertex_count   = sizeof(vertices) / sizeof(struct vertex),
+        .vertex_count   = PL_ARRAY_SIZE(vertices),
         .vertex_data    = vertices,
         .timer          = timer,
     });
-
-    if (sizeof(vertices) > gpu->limits.max_vbo_size) {
-        // Test the use of an explicit vertex buffer
-        const struct pl_buf *vert = pl_buf_create(gpu, &(struct pl_buf_params) {
-            .size = sizeof(vertices),
-            .initial_data = vertices,
-            .drawable = true,
-        });
-
-        REQUIRE(vert);
-        pl_pass_run(gpu, &(struct pl_pass_run_params) {
-            .pass           = pass,
-            .target         = fbo,
-            .vertex_count   = sizeof(vertices) / sizeof(struct vertex),
-            .vertex_buf     = vert,
-            .buf_offset     = 0,
-        });
-
-        pl_buf_destroy(gpu, &vert);
-    }
-
-    pl_pass_destroy(gpu, &pass);
 
     // Wait until this pass is complete and report the timer result
     pl_gpu_finish(gpu);
@@ -365,6 +343,40 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     } while (0)
 
     TEST_FBO_PATTERN(1e-6, "%s", "initial rendering");
+
+    if (sizeof(vertices) <= gpu->limits.max_vbo_size) {
+        // Test the use of an explicit vertex buffer
+        const struct pl_buf *vert = pl_buf_create(gpu, &(struct pl_buf_params) {
+            .size = sizeof(vertices),
+            .initial_data = vertices,
+            .drawable = true,
+        });
+
+        REQUIRE(vert);
+        pl_pass_run(gpu, &(struct pl_pass_run_params) {
+            .pass           = pass,
+            .target         = fbo,
+            .vertex_count   = sizeof(vertices) / sizeof(struct vertex),
+            .vertex_buf     = vert,
+            .buf_offset     = 0,
+        });
+
+        pl_buf_destroy(gpu, &vert);
+        TEST_FBO_PATTERN(1e-6, "%s", "using vertex buffer");
+    }
+
+    // Test the use of index buffers
+    static const uint16_t indices[] = { 3, 2, 1, 0 };
+    pl_pass_run(gpu, &(struct pl_pass_run_params) {
+        .pass           = pass,
+        .target         = fbo,
+        .vertex_count   = PL_ARRAY_SIZE(indices),
+        .vertex_data    = vertices,
+        .index_data     = indices,
+    });
+
+    pl_pass_destroy(gpu, &pass);
+    TEST_FBO_PATTERN(1e-6, "%s", "using indexed rendering");
 
     // Test the use of pl_dispatch
     struct pl_dispatch *dp = pl_dispatch_create(gpu->ctx, gpu);
