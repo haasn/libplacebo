@@ -1,10 +1,12 @@
 stages:
-    - build
+    - compile
     - test
+    - test
+    - sanitize
 
-build-ubuntu:
+linux:
     image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
-    stage: build
+    stage: compile
     tags:
         - docker
         - amd64
@@ -12,15 +14,13 @@ build-ubuntu:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
-                      -Dc_args='-DCI_ALLOW_SW'
                       -Dshaderc=enabled
                       -Dglslang=enabled
         - ninja -C build
-        - cd build && meson test -t 5 -v --num-processes=1
 
-build-ubuntu-static:
+static:
     image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
-    stage: build
+    stage: compile
     tags:
         - docker
         - amd64
@@ -28,16 +28,13 @@ build-ubuntu-static:
         - meson build --buildtype release
                       --default-library static
                       --werror
-                      -Dtests=true
-                      -Dc_args='-DCI_ALLOW_SW'
                       -Dshaderc=enabled
                       -Dglslang=enabled
         - ninja -C build
-        - cd build && meson test -t 5 -v --num-processes=1
 
-build-win32:
+win32:
     image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
-    stage: build
+    stage: compile
     tags:
         - docker
         - amd64
@@ -51,9 +48,9 @@ build-win32:
         - ninja -C build
         - cd build && meson test -t 5 -v --num-processes=1
 
-build-win64:
+win64:
     image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
-    stage: build
+    stage: compile
     tags:
         - docker
         - amd64
@@ -67,9 +64,9 @@ build-win64:
         - ninja -C build
         - cd build && meson test -t 5 -v --num-processes=1
 
-build-aarch64:
+aarch64:
     image: registry.videolan.org/libplacebo-ubuntu-eoan-aarch64:20200525090115
-    stage: build
+    stage: compile
     tags:
         - docker
         - aarch64
@@ -78,8 +75,8 @@ build-aarch64:
         - ninja -C build
         - cd build && meson test -t 5 -v --num-processes=1
 
-build-macos:
-    stage: build
+macos:
+    stage: compile
     tags:
         - amd64
         - catalina
@@ -91,9 +88,9 @@ build-macos:
         - ninja -C build
         - cd build && meson test -t 5 -v --num-processes=1
 
-test-ubuntu-scan:
+scan:
     image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
-    stage: test
+    stage: compile
     tags:
         - docker
         - amd64
@@ -106,7 +103,23 @@ test-ubuntu-scan:
                                    -Dglslang=enabled
         - ninja -C build scan-build
 
-test-gpu:
+llvmpipe:
+    image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
+    stage: test
+    tags:
+        - docker
+        - amd64
+    script:
+        - meson build --buildtype release
+                      --werror
+                      -Dtests=true
+                      -Dc_args='-DCI_ALLOW_SW'
+                      -Dshaderc=enabled
+                      -Dglslang=enabled
+        - ninja -C build
+        - cd build && meson test -t 5 -v --num-processes=1
+
+gpu:
     image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
     stage: test
     tags:
@@ -134,9 +147,9 @@ test-gpu:
         reports:
             cobertura: build/meson-logs/coverage.xml
 
-test-gpu-asan:
+asan:
     image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
-    stage: test
+    stage: sanitize
     tags:
         - gpu
     variables:
@@ -150,9 +163,9 @@ test-gpu-asan:
         - ninja -C build
         - cd build && time meson test -t 5 -v --num-processes=1
 
-test-gpu-msan:
+msan:
     image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
-    stage: test
+    stage: sanitize
     tags:
         - gpu
     variables:
@@ -167,9 +180,9 @@ test-gpu-msan:
         - ninja -C build
         - cd build && time meson test -t 5 -v --num-processes=1
 
-test-gpu-ubsan:
+ubsan:
     image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
-    stage: test
+    stage: sanitize
     tags:
         - gpu
     variables:
