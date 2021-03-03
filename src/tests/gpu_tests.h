@@ -380,7 +380,36 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
 
     // Test the use of pl_dispatch
     struct pl_dispatch *dp = pl_dispatch_create(gpu->ctx, gpu);
-    struct pl_shader *sh;
+    struct pl_shader *sh = pl_dispatch_begin(dp);
+    REQUIRE(pl_shader_custom(sh, &(struct pl_custom_shader) {
+        .body       = "color = vec4(col, 1.0);",
+        .input      = PL_SHADER_SIG_NONE,
+        .output     = PL_SHADER_SIG_COLOR,
+    }));
+
+    REQUIRE(pl_dispatch_vertex(dp, &(struct pl_dispatch_vertex_params) {
+        .shader         = &sh,
+        .target         = fbo,
+        .vertex_stride  = sizeof(struct vertex),
+        .vertex_position_idx = 0,
+        .num_vertex_attribs = 2,
+        .vertex_attribs = (struct pl_vertex_attrib[]) {{
+            .name   = "pos",
+            .fmt    = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 2),
+            .offset = offsetof(struct vertex, pos),
+        }, {
+            .name   = "col",
+            .fmt    = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 3),
+            .offset = offsetof(struct vertex, color),
+        }},
+
+        .vertex_type    = PL_PRIM_TRIANGLE_STRIP,
+        .vertex_coords  = PL_COORDS_NORMALIZED,
+        .vertex_count   = PL_ARRAY_SIZE(vertices),
+        .vertex_data    = vertices,
+    }));
+
+    TEST_FBO_PATTERN(1e-6, "%s", "using custom vertices");
 
     const struct pl_tex *src;
     src = pl_tex_create(gpu, &(struct pl_tex_params) {

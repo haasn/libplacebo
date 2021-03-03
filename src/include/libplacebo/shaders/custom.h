@@ -46,6 +46,9 @@ struct pl_custom_shader {
     // function. It lives in an environment given by the `input` signature, and
     // is expected to return results in a way given by the `output` signature.
     //
+    // Note: In the case of PL_SHADER_SIG_COLOR, the output `vec4 color` is
+    // allocated by `pl_shader_custom`, the user merely needs to assign to it.
+    //
     // Note: For ease of development it can be useful to have the main logic
     // live inside a helper function defined as part of `header`, and specify
     // the `body` as a single line that simply calls the helper function.

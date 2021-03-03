@@ -686,22 +686,11 @@ static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
         pl_shader_encode_color(sh, &repr);
         swizzle_color(sh, comps, comp_map);
 
-        static const struct pl_blend_params blend_params = {
-            .src_rgb = PL_BLEND_SRC_ALPHA,
-            .dst_rgb = PL_BLEND_ONE_MINUS_SRC_ALPHA,
-            .src_alpha = PL_BLEND_ONE,
-            .dst_alpha = PL_BLEND_ONE_MINUS_SRC_ALPHA,
-        };
-
-        const struct pl_blend_params *blend = &blend_params;
-        if (rr->disable_blending)
-            blend = NULL;
-
         bool ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
             .shader = &sh,
             .target = fbo,
             .rect   = rect,
-            .blend_params = blend,
+            .blend_params = rr->disable_blending ? NULL : &pl_alpha_overlay,
         });
 
         if (!ok) {
