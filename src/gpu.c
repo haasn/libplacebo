@@ -1359,7 +1359,6 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
 
     for (int i = 0; i < params->num_var_updates; i++) {
         struct pl_var_update vu = params->var_updates[i];
-        require(gpu->caps & PL_GPU_CAP_INPUT_VARIABLES);
         require(vu.index >= 0 && vu.index < pass->params.num_variables);
         require(vu.data);
     }
