@@ -1387,31 +1387,31 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
             require(params->buf_offset + vert_size <= vertex_buf->params.size);
         }
 
-        const struct pl_tex *tex = params->target;
-        require(tex);
-        require(pl_tex_params_dimension(tex->params) == 2);
-        require(tex->params.format == pass->params.target_dummy.params.format);
-        require(tex->params.renderable);
+        const struct pl_tex *target = params->target;
+        require(target);
+        require(pl_tex_params_dimension(target->params) == 2);
+        require(target->params.format == pass->params.target_dummy.params.format);
+        require(target->params.renderable);
         struct pl_rect2d *vp = &new.viewport;
         struct pl_rect2d *sc = &new.scissors;
 
         // Sanitize viewport/scissors
         if (!vp->x0 && !vp->x1)
-            vp->x1 = tex->params.w;
+            vp->x1 = target->params.w;
         if (!vp->y0 && !vp->y1)
-            vp->y1 = tex->params.h;
+            vp->y1 = target->params.h;
 
         if (!sc->x0 && !sc->x1)
-            sc->x1 = tex->params.w;
+            sc->x1 = target->params.w;
         if (!sc->y0 && !sc->y1)
-            sc->y1 = tex->params.h;
+            sc->y1 = target->params.h;
 
         // Constrain the scissors to the target dimension (to sanitize the
         // underlying graphics API calls)
-        sc->x0 = PL_MAX(0, PL_MIN(tex->params.w, sc->x0));
-        sc->y0 = PL_MAX(0, PL_MIN(tex->params.h, sc->y0));
-        sc->x1 = PL_MAX(0, PL_MIN(tex->params.w, sc->x1));
-        sc->y1 = PL_MAX(0, PL_MIN(tex->params.h, sc->y1));
+        sc->x0 = PL_MAX(0, PL_MIN(target->params.w, sc->x0));
+        sc->y0 = PL_MAX(0, PL_MIN(target->params.h, sc->y0));
+        sc->x1 = PL_MAX(0, PL_MIN(target->params.w, sc->x1));
+        sc->y1 = PL_MAX(0, PL_MIN(target->params.h, sc->y1));
 
         // Scissors wholly outside target -> silently drop pass (also needed
         // to ensure we don't cause UB by specifying invalid scissors)
