@@ -18,7 +18,8 @@
 #ifndef LIBPLACEBO_OPENGL_H_
 #define LIBPLACEBO_OPENGL_H_
 
-#include "gpu.h"
+#include <libplacebo/gpu.h>
+#include <libplacebo/swapchain.h>
 
 struct pl_opengl {
     const struct pl_gpu *gpu;
