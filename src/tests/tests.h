@@ -66,7 +66,7 @@ static inline void pl_test_set_verbosity(struct pl_context *ctx,
 static inline void require(bool b, const char *msg, const char *file, int line)
 {
     if (!b) {
-        fprintf(stderr, "FAILED: '%s' at %s:%d", msg, file, line);
+        fprintf(stderr, "=== FAILED: '%s' at %s:%d\n\n", msg, file, line);
         exit(1);
     }
 }
