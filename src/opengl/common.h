@@ -33,6 +33,11 @@ struct gl_cb {
     GLsync sync;
 };
 
+struct fbo_format {
+    const struct pl_fmt *fmt;
+    const struct gl_format *glfmt;
+};
+
 // For gpu.priv
 struct pl_gl {
     struct pl_gpu_fns impl;
@@ -43,6 +48,9 @@ struct pl_gl {
     EGLDisplay egl_dpy;
     EGLContext egl_ctx;
 #endif
+
+    // Dynamic array of FBO formats, to ensure format uniqueness
+    PL_ARRAY(struct fbo_format) fbo_formats;
 
     // Sync objects and associated callbacks
     PL_ARRAY(struct gl_cb) callbacks;
