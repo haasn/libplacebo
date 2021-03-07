@@ -173,9 +173,10 @@ def get_vkstructs(registry):
 
 def find_registry_xml():
     registry_paths = [
-        '/usr/share/vulkan/registry/vk.xml',
         '%VULKAN_SDK%/share/vulkan/registry/vk.xml',
+        '$VULKAN_SDK/share/vulkan/registry/vk.xml',
         '$MINGW_PREFIX/share/vulkan/registry/vk.xml',
+        '/usr/share/vulkan/registry/vk.xml',
     ]
 
     for p in registry_paths:
