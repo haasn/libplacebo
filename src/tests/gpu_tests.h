@@ -843,11 +843,8 @@ static const char *test_luts[] = {
 
 static void pl_render_tests(const struct pl_gpu *gpu)
 {
-    const struct pl_fmt *fbo_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32,
-                                               PL_FMT_CAP_RENDERABLE |
-                                               PL_FMT_CAP_BLITTABLE);
-    if (!fbo_fmt)
-        return;
+    const struct pl_tex *img5x5_tex = NULL, *fbo = NULL;
+    struct pl_renderer *rr = NULL;
 
     float *fbo_data = NULL;
     static float data_5x5[5][5] = {
@@ -859,10 +856,8 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     };
 
     const int width = 5, height = 5;
-
     struct pl_plane img5x5 = {0};
-    const struct pl_tex *img5x5_tex = NULL;
-    bool ok = pl_upload_plane(gpu, &img5x5, &img5x5_tex, &(struct pl_plane_data) {
+    struct pl_plane_data img5x5_data = {
         .type = PL_FMT_FLOAT,
         .width = width,
         .height = height,
@@ -870,27 +865,15 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         .component_map  = { 0 },
         .pixel_stride = sizeof(float),
         .pixels = &data_5x5,
-    });
+    };
 
-    if (!ok) {
-        pl_tex_destroy(gpu, &img5x5.texture);
+    if (!pl_recreate_plane(gpu, NULL, &fbo, &img5x5_data))
         return;
-    }
 
-    const struct pl_tex *fbo = pl_tex_create(gpu, &(struct pl_tex_params) {
-        .w              = 40,
-        .h              = 40,
-        .format         = fbo_fmt,
-        .renderable     = true,
-        .blit_dst       = true,
-        .storable       = !!(fbo_fmt->caps & PL_FMT_CAP_STORABLE),
-        .host_readable  = true,
-    });
-
-    struct pl_renderer *rr = pl_renderer_create(gpu->ctx, gpu);
-    if (!fbo || !rr)
+    if (!pl_upload_plane(gpu, &img5x5, &img5x5_tex, &img5x5_data))
         goto error;
 
+    rr = pl_renderer_create(gpu->ctx, gpu);
     pl_tex_clear(gpu, fbo, (float[4]){0});
 
     struct pl_frame image = {

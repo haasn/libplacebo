@@ -43,6 +43,16 @@ static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *fra
 // a given AVPixelFormat, without actually uploading or allocating anything.
 static bool pl_test_pixfmt(const struct pl_gpu *gpu, enum AVPixelFormat pixfmt);
 
+// Like `pl_frame_from_avframe`, but the texture pointers are also initialized
+// to ensure they have the correct size and format to match the AVframe.
+// Similar in spirit to `pl_recreate_plane`, and the same notes apply. `tex`
+// must be an array of 4 pointers of type (const struct pl_tex *), each either
+// pointing to a valid texture, or NULL. Returns whether successful.
+static bool pl_frame_recreate_from_avframe(const struct pl_gpu *gpu,
+                                           struct pl_frame *out_frame,
+                                           const struct pl_tex *tex[4],
+                                           const AVFrame *frame);
+
 // Very high level helper function to take an `AVFrame` and upload it to the
 // GPU. Similar in spirit to `pl_upload_plane`, and the same notes apply. `tex`
 // must be an array of 4 pointers of type (const struct pl_tex *), each either
@@ -59,6 +69,16 @@ static bool pl_upload_avframe(const struct pl_gpu *gpu,
                               struct pl_frame *out_frame,
                               const struct pl_tex *tex[4],
                               const AVFrame *frame);
+
+// Download the texture contents of a `pl_frame` back to a corresponding
+// AVFrame. Blocks until completion.
+//
+// Note: This function performs minimal verification, so incorrect usage will
+// likely result in broken frames. Use `pl_frame_recreate_from_avframe` to
+// ensure matching formats.
+static bool pl_download_avframe(const struct pl_gpu *gpu,
+                                const struct pl_frame *frame,
+                                AVFrame *out_frame);
 
 // Helper functions to update the colorimetry data in an AVFrame based on
 // the values specified in the given color space / color repr / profile.

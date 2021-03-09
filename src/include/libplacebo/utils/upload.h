@@ -129,4 +129,14 @@ const struct pl_fmt *pl_plane_find_fmt(const struct pl_gpu *gpu, int out_map[4],
 bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
                      const struct pl_tex **tex, const struct pl_plane_data *data);
 
+// Like `pl_upload_plane`, but only creates an uninitialized texture object
+// rather than actually performing an upload. This can be useful to, for
+// example, prepare textures to be used as the target of rendering.
+//
+// The resulting texture is guaranteed to be `renderable`, and it will also try
+// to maximize compatibility with the other `pl_renderer` reequirements
+// (blittable, storable, etc.).
+bool pl_recreate_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
+                       const struct pl_tex **tex, const struct pl_plane_data *data);
+
 #endif // LIBPLACEBO_UPLOAD_H_

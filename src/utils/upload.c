@@ -233,7 +233,7 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
         .format = fmt,
         .sampleable = true,
         .host_writable = true,
-        .blit_src = !!(fmt->caps & PL_FMT_CAP_BLITTABLE),
+        .blit_src = fmt->caps & PL_FMT_CAP_BLITTABLE,
     });
 
     if (!ok) {
@@ -260,4 +260,42 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
         .callback   = data->callback,
         .priv       = data->priv,
     });
+}
+
+bool pl_recreate_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
+                       const struct pl_tex **tex, const struct pl_plane_data *data)
+{
+    int out_map[4];
+    const struct pl_fmt *fmt = pl_plane_find_fmt(gpu, out_map, data);
+    if (!fmt) {
+        PL_ERR(gpu, "Failed picking any compatible texture format for a plane!");
+        return false;
+    }
+
+    bool ok = pl_tex_recreate(gpu, tex, &(struct pl_tex_params) {
+        .w = data->width,
+        .h = data->height,
+        .format = fmt,
+        .renderable = true,
+        .host_readable = true,
+        .blit_dst = fmt->caps & PL_FMT_CAP_BLITTABLE,
+        .storable = fmt->caps & PL_FMT_CAP_STORABLE,
+    });
+
+    if (!ok) {
+        PL_ERR(gpu, "Failed initializing plane texture!");
+        return false;
+    }
+
+    if (out_plane) {
+        out_plane->texture = *tex;
+        out_plane->components = 0;
+        for (int i = 0; i < PL_ARRAY_SIZE(out_map); i++) {
+            out_plane->component_mapping[i] = out_map[i];
+            if (out_map[i] >= 0)
+                out_plane->components = i+1;
+        }
+    }
+
+    return true;
 }

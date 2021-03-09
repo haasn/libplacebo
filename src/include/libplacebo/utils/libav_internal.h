@@ -576,6 +576,31 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
     }
 }
 
+static inline bool pl_frame_recreate_from_avframe(const struct pl_gpu *gpu,
+                                                  struct pl_frame *out,
+                                                  const struct pl_tex *tex[4],
+                                                  const AVFrame *frame)
+{
+    pl_frame_from_avframe(out, frame);
+
+    struct pl_plane_data data[4] = {0};
+    int planes = pl_plane_data_from_pixfmt(data, &out->repr.bits, frame->format);
+    if (!planes)
+        return false;
+
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
+    for (int p = 0; p < planes; p++) {
+        bool is_chroma = p == 1 || p == 2; // matches lavu logic
+        data[p].width = frame->width >> (is_chroma ? desc->log2_chroma_w : 0);
+        data[p].height = frame->height >> (is_chroma ? desc->log2_chroma_h : 0);
+
+        if (!pl_recreate_plane(gpu, &out->planes[p], &tex[p], &data[p]))
+            return false;
+    }
+
+    return true;
+}
+
 static void pl_avbuffer_free(void *priv)
 {
     AVBufferRef *buf = priv;
@@ -614,6 +639,43 @@ static inline bool pl_upload_avframe(const struct pl_gpu *gpu,
 
         if (!pl_upload_plane(gpu, &out->planes[p], &tex[p], &data[p]))
             return false;
+    }
+
+    return true;
+}
+
+static void pl_done_cb(void *priv)
+{
+    bool *status = priv;
+    *status = true;
+}
+
+static inline bool pl_download_avframe(const struct pl_gpu *gpu,
+                                       const struct pl_frame *frame,
+                                       AVFrame *out_frame)
+{
+    bool done[4] = {0};
+    if (frame->num_planes != av_pix_fmt_count_planes(out_frame->format))
+        return false;
+
+    for (int p = 0; p < frame->num_planes; p++) {
+        size_t texel_size = frame->planes[p].texture->params.format->texel_size;
+        bool ok = pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
+            .tex = frame->planes[p].texture,
+            .stride_w = out_frame->linesize[p] / texel_size,
+            .ptr = out_frame->data[p],
+            // Use synchronous transfer for the last plane
+            .callback = (p+1) < frame->num_planes ? pl_done_cb : NULL,
+            .priv = &done[p],
+        });
+
+        if (!ok)
+            return false;
+    }
+
+    for (int p = 0; p < frame->num_planes - 1; p++) {
+        while (!done[p])
+            pl_tex_poll(gpu, frame->planes[p].texture, UINT64_MAX);
     }
 
     return true;
