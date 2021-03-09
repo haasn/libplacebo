@@ -42,7 +42,6 @@ win32:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
-                      -Dc_args='-DCI_ALLOW_SW'
                       --libdir lib
                       --cross-file /opt/crossfiles/i686-w64-mingw32.meson
         - ninja -C build
@@ -58,7 +57,6 @@ win64:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
-                      -Dc_args='-DCI_ALLOW_SW'
                       --libdir lib
                       --cross-file /opt/crossfiles/x86_64-w64-mingw32.meson
         - ninja -C build
