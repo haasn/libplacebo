@@ -469,9 +469,9 @@ static GLbitfield tex_barrier(const struct pl_tex *tex)
 #define ADD_DMABUF_PLANE_MODIFIERS(plane, mod)                      \
     do {                                                            \
         ADD_ATTRIB(EGL_DMA_BUF_PLANE ## plane ## _MODIFIER_LO_EXT,  \
-                   (uint32_t) ((mod) & 0xFFFFu));                   \
+                   (uint32_t) ((mod) & 0xFFFFFFFFlu));              \
         ADD_ATTRIB(EGL_DMA_BUF_PLANE ## plane ## _MODIFIER_HI_EXT,  \
-                   (uint32_t) (((mod) >> 32u) & 0xFFFFu));          \
+                   (uint32_t) (((mod) >> 32u) & 0xFFFFFFFFlu));     \
     } while (0)
 
 static bool gl_tex_import(const struct pl_gpu *gpu,
