@@ -245,10 +245,6 @@ int main()
         params.debug = true;
         params.egl_display = dpy;
         params.egl_context = egl;
-
-#ifdef CI_BLACKLIST_COMPUTE
-        params.blacklist_caps = PL_GPU_CAP_COMPUTE;
-#endif
 #ifdef CI_ALLOW_SW
         params.allow_software = true;
 #endif
@@ -272,13 +268,10 @@ int main()
         last_limits = gpu->limits;
 
         gpu_shader_tests(gpu);
+        gpu_interop_tests(gpu);
         opengl_interop_tests(gpu);
         opengl_swapchain_tests(gl, dpy, surf);
-
-#ifndef CI_BLACKLIST_DMABUF
-        gpu_interop_tests(gpu);
         opengl_test_export_import(gl, PL_HANDLE_DMA_BUF);
-#endif
 
         // Reduce log spam after first successful test
         pl_test_set_verbosity(ctx, PL_LOG_INFO);
