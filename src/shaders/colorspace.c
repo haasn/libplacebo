@@ -747,11 +747,13 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
           "    atomicAdd(frame_sum, wg_avg);                                    \n"
           "    atomicMax(frame_max, %s);                                        \n"
           "    memoryBarrierBuffer();                                           \n"
-          "    barrier();                                                       \n",
+          "}                                                                    \n"
+          "barrier();                                                           \n",
           wg_sum, wg_max);
 
     // Finally, to update the global state per dispatch, we increment a counter
-    GLSLF("    uint num_wg = gl_NumWorkGroups.x * gl_NumWorkGroups.y;           \n"
+    GLSLF("if (gl_LocalInvocationIndex == 0u) {                                 \n"
+          "    uint num_wg = gl_NumWorkGroups.x * gl_NumWorkGroups.y;           \n"
           "    if (atomicAdd(counter, 1u) == num_wg - 1u) {                     \n"
           "        vec2 cur = vec2(float(frame_sum) / float(num_wg), frame_max);\n"
           "        cur *= vec2(1.0 / %f, 1.0 / %f);                             \n"
