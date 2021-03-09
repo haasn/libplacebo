@@ -242,7 +242,8 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
     }
 
     if (out_plane) {
-        *out_plane = (struct pl_plane) { .texture = *tex };
+        out_plane->texture = *tex;
+        out_plane->components = 0;
         for (int i = 0; i < PL_ARRAY_SIZE(out_map); i++) {
             out_plane->component_mapping[i] = out_map[i];
             if (out_map[i] >= 0)

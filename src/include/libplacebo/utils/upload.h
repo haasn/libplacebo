@@ -123,6 +123,9 @@ const struct pl_fmt *pl_plane_find_fmt(const struct pl_gpu *gpu, int out_map[4],
 // The resulting texture is guaranteed to be `sampleable`, and it will also try
 // and maximize compatibility with the other `pl_renderer` requirements
 // (blittable, linear filterable, etc.).
+//
+// Note: `out_plane->shift_x/y` are left uninitialized, and should be set
+// explicitly by the user.
 bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
                      const struct pl_tex **tex, const struct pl_plane_data *data);
 
