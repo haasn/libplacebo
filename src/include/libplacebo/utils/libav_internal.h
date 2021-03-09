@@ -246,6 +246,10 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
                                             enum AVPixelFormat pix_fmt)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pix_fmt);
+    int planes = av_pix_fmt_count_planes(pix_fmt);
+    struct pl_plane_data aligned_data[4];
+    struct pl_bit_encoding bits;
+    bool first;
     assert(desc);
 
     if (desc->flags & AV_PIX_FMT_FLAG_BE) {
@@ -275,18 +279,17 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
         return 0;
     }
 
-    int planes = av_pix_fmt_count_planes(pix_fmt);
     if (planes > 4)
         return 0; // This shouldn't ever happen
 
     // Fill in the details for each plane
     for (int p = 0; p < planes; p++) {
         struct pl_plane_data *data = &out_data[p];
+        uint64_t masks[4] = {0};
         data->type = (desc->flags & AV_PIX_FMT_FLAG_FLOAT)
                         ? PL_FMT_FLOAT
                         : PL_FMT_UNORM;
 
-        uint64_t masks[4] = {0};
         data->pixel_stride = 0;
 
         for (int c = 0; c < desc->nb_components; c++) {
@@ -313,21 +316,18 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
         return planes;
 
     // Attempt aligning all of the planes for optimum compatibility
-    struct pl_plane_data data[4];
-    struct pl_bit_encoding bits;
-    bool first = true;
-
+    first = true;
     for (int p = 0; p < planes; p++) {
-        data[p] = out_data[p];
+        aligned_data[p] = out_data[p];
 
         // Planes with only an alpha component should be ignored
-        bool is_alpha = pl_plane_data_num_comps(&data[p]) == 1 &&
-                        data[p].component_map[0] == PL_CHANNEL_A;
-
-        if (is_alpha)
+        if (pl_plane_data_num_comps(&aligned_data[p]) == 1 &&
+            aligned_data[p].component_map[0] == PL_CHANNEL_A)
+        {
             continue;
+        }
 
-        if (!pl_plane_data_align(&data[p], &bits))
+        if (!pl_plane_data_align(&aligned_data[p], &bits))
             goto misaligned;
 
         if (first) {
@@ -341,7 +341,7 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
 
     // Overwrite the planes by their aligned versions
     for (int p = 0; p < planes; p++)
-        out_data[p] = data[p];
+        out_data[p] = aligned_data[p];
 
     return planes;
 
@@ -369,11 +369,12 @@ static inline bool pl_test_pixfmt(const struct pl_gpu *gpu,
 
 static inline void pl_avframe_set_color(AVFrame *frame, struct pl_color_space space)
 {
+    const AVFrameSideData *sd;
+
     frame->color_primaries = pl_primaries_to_av(space.primaries);
     frame->color_trc = pl_transfer_to_av(space.transfer);
     // No way to map space.light, so just ignore it
 
-    const AVFrameSideData *sd;
     if (space.sig_peak > 1 && space.sig_peak < pl_color_transfer_nominal_peak(space.transfer)) {
         sd = av_frame_get_side_data(frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL);
         if (!sd) {
@@ -406,12 +407,12 @@ static inline void pl_avframe_set_repr(AVFrame *frame, struct pl_color_repr repr
 
 static inline void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile profile)
 {
+    const AVFrameSideData *sd;
     av_frame_remove_side_data(frame, AV_FRAME_DATA_ICC_PROFILE);
 
     if (!profile.len)
         return;
 
-    const AVFrameSideData *sd;
     sd = av_frame_new_side_data(frame, AV_FRAME_DATA_ICC_PROFILE, profile.len);
     memcpy(sd->data, profile.data, profile.len);
 }
@@ -421,6 +422,7 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     int planes = av_pix_fmt_count_planes(frame->format);
+    const AVFrameSideData *sd;
     assert(desc);
 
     if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) {
@@ -489,7 +491,6 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
         out->repr.sys = pl_color_system_guess_ycbcr(frame->width, frame->height);
     }
 
-    const AVFrameSideData *sd;
     if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_ICC_PROFILE))) {
         out->profile = (struct pl_icc_profile) {
             .data = sd->data,
@@ -581,14 +582,15 @@ static inline bool pl_frame_recreate_from_avframe(const struct pl_gpu *gpu,
                                                   const struct pl_tex *tex[4],
                                                   const AVFrame *frame)
 {
-    pl_frame_from_avframe(out, frame);
-
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     struct pl_plane_data data[4] = {0};
-    int planes = pl_plane_data_from_pixfmt(data, &out->repr.bits, frame->format);
+    int planes;
+
+    pl_frame_from_avframe(out, frame);
+    planes = pl_plane_data_from_pixfmt(data, &out->repr.bits, frame->format);
     if (!planes)
         return false;
 
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     for (int p = 0; p < planes; p++) {
         bool is_chroma = p == 1 || p == 2; // matches lavu logic
         data[p].width = frame->width >> (is_chroma ? desc->log2_chroma_w : 0);
@@ -612,17 +614,19 @@ static inline bool pl_upload_avframe(const struct pl_gpu *gpu,
                                      const struct pl_tex *tex[4],
                                      const AVFrame *frame)
 {
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
+    struct pl_plane_data data[4] = {0};
+    int planes;
+
     pl_frame_from_avframe(out, frame);
 
     // TODO: support HW-accelerated formats (e.g. wrapping vulkan frames,
     // importing DRM buffers, and so on)
 
-    struct pl_plane_data data[4] = {0};
-    int planes = pl_plane_data_from_pixfmt(data, &out->repr.bits, frame->format);
+    planes = pl_plane_data_from_pixfmt(data, &out->repr.bits, frame->format);
     if (!planes)
         return false;
 
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     for (int p = 0; p < planes; p++) {
         bool is_chroma = p == 1 || p == 2; // matches lavu logic
         data[p].width = frame->width >> (is_chroma ? desc->log2_chroma_w : 0);
