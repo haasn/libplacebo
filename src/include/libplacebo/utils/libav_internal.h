@@ -264,6 +264,12 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
         return 0;
     }
 
+    if (desc->flags & AV_PIX_FMT_FLAG_BAYER) {
+        // Bayer format don't have valid `desc->offset` values, so we can't
+        // use `pl_plane_data_from_mask` on them.
+        return 0;
+    }
+
     if (desc->nb_components == 0 || desc->nb_components > 4) {
         // Bogus components, possibly fake/virtual/hwaccel format?
         return 0;
