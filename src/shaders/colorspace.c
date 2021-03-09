@@ -723,14 +723,12 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
              "if (subgroupElect()) {                    \n"
              "    atomicMax(%s, group_max);             \n"
              "    atomicAdd(%s, group_sum);             \n"
-             "    memoryBarrierShared();                \n"
              "}                                         \n"
              "barrier();                                \n",
              wg_max, wg_sum);
     } else {
         GLSL("atomicMax(%s, isig_max);  \n"
              "atomicAdd(%s, isig_log);  \n"
-             "memoryBarrierShared();    \n"
              "barrier();                \n",
              wg_max, wg_sum);
     }

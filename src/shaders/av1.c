@@ -875,11 +875,9 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     // Load the data vector which holds the offsets
     if (is_compute) {
         GLSLH("shared uint data; \n");
-        GLSL("if (gl_LocalInvocationIndex == 0u) {  \n"
-             "    data = uint(%s(block_id));        \n"
-             "    memoryBarrierShared();            \n"
-             "}                                     \n"
-             "barrier();                            \n",
+        GLSL("if (gl_LocalInvocationIndex == 0u) \n"
+             "    data = uint(%s(block_id));     \n"
+             "barrier();                         \n",
              offsets);
     } else {
         GLSL("uint data = uint(%s(block_id)); \n", offsets);

@@ -595,9 +595,8 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
             comps &= ~(1 << c);
         }
 
-        GLSL("}}                    \n"
-             "groupMemoryBarrier(); \n"
-             "barrier();            \n");
+        GLSL("}}                     \n"
+             "barrier();             \n");
 
         // Dispatch the actual samples
         for (int y = 1 - bound; y <= bound; y++) {
