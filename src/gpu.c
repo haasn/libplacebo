@@ -483,21 +483,30 @@ const struct pl_fmt *pl_find_fourcc(const struct pl_gpu *gpu, uint32_t fourcc)
     return NULL;
 }
 
-static inline bool check_mod(const struct pl_gpu *gpu, const struct pl_fmt *fmt,
+static bool warned_mods = false;
+
+static inline void check_mod(const struct pl_gpu *gpu, const struct pl_fmt *fmt,
                              uint64_t mod)
 {
+    if (warned_mods)
+        return;
+
     for (int i = 0; i < fmt->num_modifiers; i++) {
         if (fmt->modifiers[i] == mod)
-            return true;
+            return;
     }
 
+    // This is not a hard error because modifier support is fickle at best,
+    // in both libplacebo and other APIs. So just be somewhat annoying in this
+    // case.
 
-    PL_ERR(gpu, "DRM modifier %s not available for format %s. Available modifiers:",
-           PRINT_DRM_MOD(mod), fmt->name);
+    PL_WARN(gpu, "DRM modifier %s not available for format %s. Ignoring, "
+            "but expect possible corruption. Available modifiers:",
+            PRINT_DRM_MOD(mod), fmt->name);
     for (int i = 0; i < fmt->num_modifiers; i++)
-        PL_ERR(gpu, "    %s", PRINT_DRM_MOD(fmt->modifiers[i]));
+        PL_WARN(gpu, "    %s", PRINT_DRM_MOD(fmt->modifiers[i]));
 
-    return false;
+    warned_mods = true;
 }
 
 const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
@@ -514,8 +523,7 @@ const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
         require(PL_ISPOT(params->import_handle));
         require(params->shared_mem.size > 0);
         if (params->import_handle == PL_HANDLE_DMA_BUF) {
-            if (!check_mod(gpu, params->format, params->shared_mem.drm_format_mod))
-                goto error;
+            check_mod(gpu, params->format, params->shared_mem.drm_format_mod);
             if (params->shared_mem.stride_w)
                 require(params->w && params->shared_mem.stride_w >= params->w);
             if (params->shared_mem.stride_h)
