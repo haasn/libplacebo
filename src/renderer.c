@@ -1261,10 +1261,9 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             });
 
             ident_t sub = sh_subpass(sh, psh);
-            if (!sub) {
-                pl_dispatch_abort(rr->dp, &psh);
+            pl_dispatch_abort(rr->dp, &psh);
+            if (!sub)
                 break; // skip merging
-            }
 
             GLSL("tmp = %s(); \n", sub);
             for (int jc = 0; jc < stj->img.comps; jc++) {
