@@ -3228,8 +3228,8 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         buf_barrier(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
                     vbo_flags, 0, vert->params.size, BUF_READ);
 
-        vk->CmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->mem.buf,
-                                 &(size_t){vert_vk->mem.offset + params->buf_offset});
+        VkDeviceSize offset = vert_vk->mem.offset + params->buf_offset;
+        vk->CmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->mem.buf, &offset);
 
         if (index) {
             if (index != vert) {
