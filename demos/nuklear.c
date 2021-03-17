@@ -1,19 +1,11 @@
-/* Compiling:
- *
- *   gcc nuklear.c glfw.c -o ./nuklear -O2 -DUSE_VK \
- *       $(pkg-config --cflags --libs glfw3 vulkan libplacebo)
- *
- *  or:
- *
- *   gcc nuklear.c glfw.c -o ./nuklear -O2 -DUSE_GL \
- *       $(pkg-config --cflags --libs glfw3 libplacebo)
+/* Trivial nuklear demo, very unfinished. Currently just lets you set the
+ * background color of the program and nothing else.
  *
  * License: CC0 / Public Domain
  */
 
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include "common.h"
+#include "window.h"
 
 #include <libplacebo/dispatch.h>
 #include <libplacebo/shaders/custom.h>
@@ -28,14 +20,9 @@
 #define NK_BUTTON_TRIGGER_ON_RELEASE
 #include <nuklear.h>
 
-#include "glfw.h"
-
-#define WINDOW_WIDTH 640
-#define WINDOW_HEIGHT 480
-
 static struct pl_context *ctx;
 static struct pl_dispatch *dp;
-static struct winstate win;
+static struct window *win;
 
 // UI state
 static struct nk_context nk;
@@ -76,7 +63,7 @@ static struct nk_convert_config convert_cfg = {
 
 static bool ui_init()
 {
-    const struct pl_gpu *gpu = win.gpu;
+    const struct pl_gpu *gpu = win->gpu;
     dp = pl_dispatch_create(ctx, gpu);
 
     // Initialize font
@@ -115,15 +102,16 @@ static bool ui_init()
 
 static bool render(const struct pl_swapchain_frame *frame)
 {
-    const struct pl_gpu *gpu = win.gpu;
+    const struct pl_gpu *gpu = win->gpu;
 
     // update input
+    int x, y;
+    window_get_cursor(win, &x, &y);
     nk_input_begin(&nk);
-    double x, y;
-    glfwGetCursorPos(win.win, &x, &y);
-    nk_input_motion(&nk, (int) x, (int) y);
-    nk_input_button(&nk, NK_BUTTON_LEFT, (int) x, (int) y,
-                    glfwGetMouseButton(win.win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+    nk_input_motion(&nk, x, y);
+    nk_input_button(&nk, NK_BUTTON_LEFT, x, y, window_get_button(win, BTN_LEFT));
+    nk_input_button(&nk, NK_BUTTON_RIGHT, x, y, window_get_button(win, BTN_RIGHT));
+    nk_input_button(&nk, NK_BUTTON_MIDDLE, x, y, window_get_button(win, BTN_MIDDLE));
     nk_input_end(&nk);
 
     // update UI
@@ -221,55 +209,44 @@ static void ui_uninit()
     nk_buffer_free(&idx);
     nk_free(&nk);
     nk_font_atlas_clear(&atlas);
-    pl_tex_destroy(win.gpu, &font_tex);
+    pl_tex_destroy(win->gpu, &font_tex);
     pl_dispatch_destroy(&dp);
 }
 
 static void uninit(int ret)
 {
     ui_uninit();
-    glfw_uninit(&win);
+    window_destroy(&win);
     pl_context_destroy(&ctx);
     exit(ret);
 }
 
 int main(int argc, char **argv)
 {
-    ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
-        .log_cb    = pl_log_color,
-#ifdef NDEBUG
-        .log_level = PL_LOG_INFO,
-#else
-        .log_level = PL_LOG_DEBUG,
-#endif
-    });
-    assert(ctx);
-
-    if (!glfw_init(ctx, &win, WINDOW_WIDTH, WINDOW_HEIGHT, 0))
+    ctx = demo_context();
+    win = window_create(ctx, "nuklear demo", 640, 480, 0);
+    if (!win || !ui_init())
         uninit(1);
 
-    if (!ui_init())
-        uninit(1);
-
-    while (!win.window_lost) {
+    while (!win->window_lost) {
         struct pl_swapchain_frame frame;
-        bool ok = pl_swapchain_start_frame(win.swapchain, &frame);
+        bool ok = pl_swapchain_start_frame(win->swapchain, &frame);
         if (!ok) {
-            glfwWaitEvents();
+            window_poll(win, true);
             continue;
         }
 
         if (!render(&frame))
             uninit(1);
 
-        ok = pl_swapchain_submit_frame(win.swapchain);
+        ok = pl_swapchain_submit_frame(win->swapchain);
         if (!ok) {
             fprintf(stderr, "libplacebo: failed submitting frame!\n");
             uninit(3);
         }
 
-        pl_swapchain_swap_buffers(win.swapchain);
-        glfwPollEvents();
+        pl_swapchain_swap_buffers(win->swapchain);
+        window_poll(win, false);
     }
 
     uninit(0);

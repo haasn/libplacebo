@@ -29,10 +29,6 @@
  *   api2: 10000 frames in 6.344959 s => 0.634496 ms/frame (1576.05 fps)
  *         render: 0.031307 ms, upload: 0.000000 ms, download: 0.083520 ms
  *
- * Compiling:
- *
- *   gcc -O2 video-filtering.c -lplacebo -o video-filtering
- *
  * License: CC0 / Public Domain
  */
 
@@ -43,6 +39,8 @@
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
+
+#include "common.h"
 
 #include <libplacebo/dispatch.h>
 #include <libplacebo/shaders/sampling.h>
@@ -222,11 +220,7 @@ void *init(void) {
         .log_cb = pl_log_simple,
         .log_level = PL_LOG_WARN,
     });
-
-    if (!p->ctx) {
-        fprintf(stderr, "Failed initializing libplacebo\n");
-        goto error;
-    }
+    assert(p->ctx);
 
     p->vk = pl_vulkan_create(p->ctx, &(struct pl_vulkan_params) {
         // Note: This is for API #2. In API #1 you could just pass params=NULL
@@ -295,8 +289,8 @@ void uninit(void *priv)
 }
 
 // Helper function to set up the `pl_plane_data` struct from the image params
-void setup_plane_data(const struct image *img,
-                      struct pl_plane_data out[MAX_PLANES])
+static void setup_plane_data(const struct image *img,
+                             struct pl_plane_data out[MAX_PLANES])
 {
     for (int i = 0; i < img->num_planes; i++) {
         const struct plane *plane = &img->planes[i];
@@ -315,7 +309,7 @@ void setup_plane_data(const struct image *img,
             const struct pl_buf *buf = img->associated_buf->priv;
             out[i].pixels = NULL;
             out[i].buf = buf;
-            out[i].buf_offset = (size_t) (plane->data - (ptrdiff_t) buf->data);
+            out[i].buf_offset = (uintptr_t) plane->data - (uintptr_t) buf->data;
         }
 
         for (int c = 0; c < plane->fmt.num_comps; c++) {
@@ -326,7 +320,7 @@ void setup_plane_data(const struct image *img,
     }
 }
 
-bool do_plane(struct priv *p, const struct pl_tex *dst, const struct pl_tex *src)
+static bool do_plane(struct priv *p, const struct pl_tex *dst, const struct pl_tex *src)
 {
     int new_depth = dst->params.format->component_depth[0];
 
@@ -342,7 +336,7 @@ bool do_plane(struct priv *p, const struct pl_tex *dst, const struct pl_tex *src
     });
 }
 
-void check_timers(struct priv *p)
+static void check_timers(struct priv *p)
 {
     uint64_t ret;
 
@@ -695,7 +689,7 @@ static const struct image example_image = {
 };
 
 // API #1: Nice and simple (but slow)
-void api1_example(void)
+static void api1_example(void)
 {
     struct priv *vf = init();
     if (!vf)
@@ -765,7 +759,7 @@ static int refcount[POOLSIZE] = {0};
 static unsigned api2_frames_in = 0;
 static unsigned api2_frames_out = 0;
 
-void api2_example(void)
+static void api2_example(void)
 {
     struct priv *vf = init();
     if (!vf)
@@ -784,8 +778,8 @@ void api2_example(void)
             data = malloc(BUFSIZE);
         }
         // Fill with some "data" (like in API #1)
-        for (size_t i = 0; i < BUFSIZE; i++)
-            data[i] = i;
+        for (size_t n = 0; n < BUFSIZE; n++)
+            data[i] = n;
         images[i].planes[0].data = data + OFFSET0;
         images[i].planes[1].data = data + OFFSET1;
     }

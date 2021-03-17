@@ -1,39 +1,23 @@
-/* Compiling:
- *
- *   gcc plplay.c glfw.c -o ./plplay -O2 -DUSE_VK \
- *       $(pkg-config --cflags --libs glfw3 vulkan libplacebo libavcodec libavformat libavutil)
- *
- *  or:
- *
- *   gcc plplay.c glfw.c -o ./plplay -O2 -DUSE_GL \
- *       $(pkg-config --cflags --libs glfw3 libplacebo libavcodec libavformat libavutil)
- *
- * Notes:
- *
- * - This is a very shitty proof-of-concept. All it does is render a single
- *   video stream as fast as possible. It ignores timing completely, and
- *   handles several failure paths by just exiting the entire program (when it
- *   could, instead, try re-creating the context). It should also be split up
- *   into separate files and given a meson.build, but for now it'll suffice.
+/* Very shitty proof-of-concept video player based on ffmpeg. All it does is
+ * render a single video stream as fast as possible. It ignores timing
+ * completely, and handles several failure paths by just exiting the entire
+ * program (when it could, instead, try re-creating the context).
  *
  * License: CC0 / Public Domain
  */
-
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <libplacebo/renderer.h>
-#include <libplacebo/utils/libav.h>
 
 #include <libavutil/pixdesc.h>
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 
-#include "glfw.h"
+#include "common.h"
+#include "window.h"
+
+#include <libplacebo/renderer.h>
+#include <libplacebo/utils/libav.h>
 
 struct plplay {
-    struct winstate win;
+    struct window *win;
 
     // libplacebo
     struct pl_context *ctx;
@@ -48,14 +32,14 @@ struct plplay {
 
 static void uninit(struct plplay *p)
 {
-    const struct pl_gpu *gpu = p->win.gpu;
+    const struct pl_gpu *gpu = p->win->gpu;
     if (gpu) {
         for (int i = 0; i < 4; i++)
             pl_tex_destroy(gpu, &p->plane_tex[i]);
     }
 
     pl_renderer_destroy(&p->renderer);
-    glfw_uninit(&p->win);
+    window_destroy(&p->win);
 
     avcodec_free_context(&p->codec);
     avformat_free_context(p->format);
@@ -140,18 +124,18 @@ static bool init_codec(struct plplay *p)
 
 static bool render_frame(struct plplay *p, AVFrame *in_frame)
 {
-    const struct pl_gpu *gpu = p->win.gpu;
+    const struct pl_gpu *gpu = p->win->gpu;
     struct pl_swapchain_frame out_frame;
     int retry = 3;
 
-    while (!pl_swapchain_start_frame(p->win.swapchain, &out_frame)) {
+    while (!pl_swapchain_start_frame(p->win->swapchain, &out_frame)) {
         if (retry-- == 0) {
             fprintf(stderr, "libplacebo: Swapchain appears stuck.. dropping frame\n");
             return true;
         }
 
         // Window possibly hidden/minimized/invisible? Block for window events
-        glfwWaitEvents();
+        window_poll(p->win, true);
     }
 
     bool ret = true;
@@ -180,12 +164,12 @@ static bool render_frame(struct plplay *p, AVFrame *in_frame)
 
     }
 
-    if (!pl_swapchain_submit_frame(p->win.swapchain)) {
+    if (!pl_swapchain_submit_frame(p->win->swapchain)) {
         fprintf(stderr, "libplacebo: Failed submitting frame, swapchain lost?\n");
         return false;
     }
 
-    pl_swapchain_swap_buffers(p->win.swapchain);
+    pl_swapchain_swap_buffers(p->win->swapchain);
     return ret;
 }
 
@@ -240,8 +224,8 @@ static bool render_loop(struct plplay *p)
             break;
         av_packet_unref(packet);
 
-        glfwPollEvents();
-        if (p->win.window_lost)
+        window_poll(p->win, false);
+        if (p->win->window_lost)
             break;
     }
 
@@ -265,16 +249,6 @@ int main(int argc, char **argv)
     struct plplay state = {0};
     struct plplay *p = &state;
 
-    p->ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
-        .log_cb    = pl_log_color,
-#ifdef NDEBUG
-        .log_level = PL_LOG_INFO,
-#else
-        .log_level = PL_LOG_DEBUG,
-#endif
-    });
-    assert(p->ctx);
-
     if (!open_file(p, filename))
         goto error;
 
@@ -289,14 +263,16 @@ int main(int argc, char **argv)
     if (is_file_hdr(p))
         flags |= WIN_HDR;
 
-    if (!glfw_init(p->ctx, &p->win, par->width, par->height, flags))
+    p->ctx = demo_context();
+    p->win = window_create(p->ctx, "plplay", par->width, par->height, flags);
+    if (!p->win)
         goto error;
 
     // TODO: Use direct rendering buffers
     if (!init_codec(p))
         goto error;
 
-    p->renderer = pl_renderer_create(p->ctx, p->win.gpu);
+    p->renderer = pl_renderer_create(p->ctx, p->win->gpu);
     if (!render_loop(p))
         goto error;
 

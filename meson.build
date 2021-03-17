@@ -74,3 +74,7 @@ add_global_arguments(build_opts + cpp_opts, language: 'cpp')
 add_global_link_arguments(link_args, language: 'c')
 
 subdir('src')
+
+if get_option('demos')
+  subdir('demos')
+endif

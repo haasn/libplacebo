@@ -1,0 +1,3 @@
+[submodule "demos/3rdparty/nuklear"]
+	path = demos/3rdparty/nuklear
+	url = https://github.com/Immediate-Mode-UI/Nuklear.git

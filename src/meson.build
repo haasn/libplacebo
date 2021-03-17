@@ -1,12 +1,8 @@
 # Depedencies
-cc = meson.get_compiler('c')
-cxx = meson.get_compiler('cpp')
 prog_python = import('python').find_installation()
+libm = cc.find_library('m', required: false)
 
-build_deps = [
-  cc.find_library('m', required: false),
-]
-
+build_deps = [ libm ]
 test_deps = []
 
 vulkan = dependency('vulkan', version: '>=1.0.42', required: get_option('vulkan'))
@@ -341,6 +337,10 @@ lib = library('placebo', sources,
   link_args: link_args,
 )
 
+libplacebo = declare_dependency(
+  link_with: lib,
+  include_directories: inc,
+)
 
 # Install process
 foreach h : headers

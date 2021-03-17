@@ -1,35 +1,21 @@
-/* Compiling:
- *
- *   gcc colors.c glfw.c -o ./colors -O2 -lm -DUSE_VK \
- *       $(pkg-config --cflags --libs glfw3 vulkan libplacebo)
- *
- *  or:
- *
- *   gcc colors.c glfw.c -o ./colors -O2 -lm -DUSE_GL \
- *       $(pkg-config --cflags --libs glfw3 libplacebo)
+/* Simplistic demo that just makes the window colorful, including alpha
+ * transparency if supported by the windowing system.
  *
  * License: CC0 / Public Domain
  */
 
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <time.h>
 #include <math.h>
 
-#include <libplacebo/renderer.h>
+#include "common.h"
+#include "window.h"
 
-#include "glfw.h"
-
-#define WINDOW_WIDTH 640
-#define WINDOW_HEIGHT 480
-
-struct pl_context *ctx;
-static struct winstate win;
+static struct pl_context *ctx;
+static struct window *win;
 
 static void uninit(int ret)
 {
-    glfw_uninit(&win);
+    window_destroy(&win);
     pl_context_destroy(&ctx);
     exit(ret);
 }
@@ -51,40 +37,36 @@ static void evolve_rgba(float rgba[4], int *pos)
 
 int main(int argc, char **argv)
 {
-    ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
-        .log_cb    = pl_log_color,
-        .log_level = PL_LOG_DEBUG,
-    });
-    assert(ctx);
-
-    if (!glfw_init(ctx, &win, WINDOW_WIDTH, WINDOW_HEIGHT, WIN_ALPHA))
+    ctx = demo_context();
+    win = window_create(ctx, "colors demo", 640, 480, WIN_ALPHA);
+    if (!win)
         uninit(1);
 
     float rgba[4] = {0.0, 0.0, 0.0, 1.0};
     int rainbow_pos = 0;
 
-    while (!win.window_lost) {
+    while (!win->window_lost) {
         struct pl_swapchain_frame frame;
-        bool ok = pl_swapchain_start_frame(win.swapchain, &frame);
+        bool ok = pl_swapchain_start_frame(win->swapchain, &frame);
         if (!ok) {
             // Something unexpected happened, perhaps the window is not
             // visible? Wait for events and try again.
-            glfwWaitEvents();
+            window_poll(win, true);
             continue;
         }
 
         assert(frame.fbo->params.blit_dst);
         evolve_rgba(rgba, &rainbow_pos);
-        pl_tex_clear(win.gpu, frame.fbo, rgba);
+        pl_tex_clear(win->gpu, frame.fbo, rgba);
 
-        ok = pl_swapchain_submit_frame(win.swapchain);
+        ok = pl_swapchain_submit_frame(win->swapchain);
         if (!ok) {
             fprintf(stderr, "libplacebo: failed submitting frame!\n");
             uninit(3);
         }
 
-        pl_swapchain_swap_buffers(win.swapchain);
-        glfwPollEvents();
+        pl_swapchain_swap_buffers(win->swapchain);
+        window_poll(win, false);
     }
 
     uninit(0);

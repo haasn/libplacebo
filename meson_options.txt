@@ -21,6 +21,9 @@ option('lcms', type: 'feature', value: 'auto',
        description: 'LittleCMS 2 support')
 
 # Miscellaneous
+option('demos', type: 'boolean', value: true,
+       description: 'Enable building demo programs')
+
 option('tests', type: 'boolean', value: false,
        description: 'Enable building the test cases')
 
