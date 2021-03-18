@@ -18,6 +18,7 @@ nuklear_found = cc.has_header('nuklear.h', include_directories: nuklear_inc)
 nuklear = declare_dependency(
   include_directories: nuklear_inc,
   compile_args: '-Wno-missing-prototypes',
+  dependencies: libm,
 )
 
 apis = {}
@@ -67,6 +68,12 @@ if apis.keys().length() == 0
           'and graphical APIs was found. Demo programs require either GLFW or ' +
           'SDL and either Vulkan or OpenGL.')
   subdir_done()
+endif
+
+if not nuklear_found
+  warning('Nuklear was not found in `demos/3rdparty`. Please run ' +
+          '`git submodule update --init` followed by `meson --wipe`. ' +
+          'Disabling nuklear based demos.')
 endif
 
 # Compile demos for each combination
