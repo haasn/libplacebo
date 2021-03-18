@@ -16,8 +16,9 @@ endforeach
 nuklear_inc = include_directories('./3rdparty/nuklear')
 nuklear_found = cc.has_header('nuklear.h', include_directories: nuklear_inc)
 nuklear = declare_dependency(
+  sources: 'ui.c',
   include_directories: nuklear_inc,
-  compile_args: '-Wno-missing-prototypes',
+  compile_args: ['-Wno-missing-prototypes', '-DHAVE_UI'],
   dependencies: libm,
 )
 

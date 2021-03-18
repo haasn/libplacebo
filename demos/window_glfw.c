@@ -228,7 +228,7 @@ void window_poll(struct window *window, bool block)
     }
 }
 
-void window_get_cursor(struct window *window, int *x, int *y)
+void window_get_cursor(const struct window *window, int *x, int *y)
 {
     struct priv *p = (struct priv *) window;
     double dx, dy;
@@ -237,7 +237,7 @@ void window_get_cursor(struct window *window, int *x, int *y)
     *y = dy;
 }
 
-bool window_get_button(struct window *window, enum button btn)
+bool window_get_button(const struct window *window, enum button btn)
 {
     static const int button_map[] = {
         [BTN_LEFT] = GLFW_MOUSE_BUTTON_LEFT,

@@ -29,5 +29,5 @@ enum button {
     BTN_MIDDLE,
 };
 
-void window_get_cursor(struct window *window, int *x, int *y);
-bool window_get_button(struct window *window, enum button);
+void window_get_cursor(const struct window *window, int *x, int *y);
+bool window_get_button(const struct window *window, enum button);

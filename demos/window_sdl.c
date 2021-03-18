@@ -223,12 +223,12 @@ void window_poll(struct window *window, bool block)
     } while (ret);
 }
 
-void window_get_cursor(struct window *window, int *x, int *y)
+void window_get_cursor(const struct window *window, int *x, int *y)
 {
     SDL_GetMouseState(x, y);
 }
 
-bool window_get_button(struct window *window, enum button btn)
+bool window_get_button(const struct window *window, enum button btn)
 {
     static const uint32_t button_mask[] = {
         [BTN_LEFT] = SDL_BUTTON_LMASK,
