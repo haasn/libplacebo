@@ -24,12 +24,10 @@ nuklear = declare_dependency(
 
 apis = {}
 
-# Enable all supported combinations of API and windowing system, preferring
-# GLFW and falling back to SDL if the former is not supported
+# Enable all supported combinations of API and windowing system
 if glfw.found()
-
   if vulkan.found()
-    apis += {'vk': declare_dependency(
+    apis += {'glfw-vk': declare_dependency(
       sources: 'window_glfw.c',
       compile_args: '-DUSE_VK',
       dependencies: [libplacebo, vulkan, glfw],
@@ -37,17 +35,17 @@ if glfw.found()
   endif
 
   if opengl.found()
-    apis += {'gl': declare_dependency(
+    apis += {'glfw-gl': declare_dependency(
       sources: 'window_glfw.c',
       compile_args: '-DUSE_GL',
       dependencies: [libplacebo, glfw],
     )}
   endif
+endif
 
-elif sdl.found()
-
+if sdl.found()
   if vulkan.found()
-    apis += {'vk': declare_dependency(
+    apis += {'sdl-vk': declare_dependency(
       sources: 'window_sdl.c',
       compile_args: '-DUSE_VK',
       dependencies: [libplacebo, vulkan, sdl],
@@ -55,13 +53,12 @@ elif sdl.found()
   endif
 
   if opengl.found()
-    apis += {'gl': declare_dependency(
+    apis += {'sdl-gl': declare_dependency(
       sources: 'window_sdl.c',
       compile_args: '-DUSE_GL',
       dependencies: [libplacebo, sdl],
     )}
   endif
-
 endif
 
 if apis.keys().length() == 0

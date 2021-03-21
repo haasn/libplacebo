@@ -73,12 +73,9 @@ struct window *window_create(struct pl_context *ctx, const char *title,
     }
 
     const char **exts = malloc(num * sizeof(const char *));
+    SDL_Vulkan_GetInstanceExtensions(p->win, &num, exts);
     iparams.extensions = exts;
     iparams.num_extensions = num;
-    assert(exts);
-
-    bool ok = SDL_Vulkan_GetInstanceExtensions(p->win, &num, exts);
-    assert(ok);
 
     p->vk_inst = pl_vk_inst_create(ctx, &iparams);
     free(exts);
