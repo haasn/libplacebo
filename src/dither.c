@@ -108,12 +108,15 @@ static void makegauss(struct ctx *k, unsigned int sizeb)
                 k->gauss[XY(k, gauss_size - 1 - gy, gauss_size - 1 - gx)] = v;
         }
     }
+
+#ifndef NDEBUG
     uint64_t total = 0;
     for (index_t c = 0; c < k->size2; c++) {
         uint64_t oldtotal = total;
         total += k->gauss[c];
         assert(total >= oldtotal);
     }
+#endif
 }
 
 static void setbit(struct ctx *k, index_t c)
