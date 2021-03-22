@@ -1,6 +1,7 @@
 glfw = dependency('glfw3', required: false)
 sdl = dependency('sdl2', required: false)
 sdl_image = dependency('SDL2_image', required: false)
+pthread = dependency('threads', required: false)
 
 ffmpeg_deps = [
   dependency('libavcodec', required: false),
@@ -89,7 +90,7 @@ foreach api, dep : apis
 
   if ffmpeg_found
     executable('plplay-' + api, 'plplay.c',
-      dependencies: [ dep ] + ffmpeg_deps,
+      dependencies: [ dep, pthread ] + ffmpeg_deps,
     )
   endif
 

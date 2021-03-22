@@ -1,10 +1,16 @@
-/* Very shitty proof-of-concept video player based on ffmpeg. All it does is
- * render a single video stream as fast as possible. It ignores timing
- * completely, and handles several failure paths by just exiting the entire
- * program (when it could, instead, try re-creating the context).
+/* Very basic video player based on ffmpeg. All it does is render a single
+ * video stream to completion, and then exits. It exits on most errors, rather
+ * than gracefully trying to recreate the context.
+ *
+ * The timing code is also rather naive, due to the current lack of
+ * presentation feedback. That being said, an effort is made to time the video
+ * stream to the system clock, using frame mixing for mismatches.
  *
  * License: CC0 / Public Domain
  */
+
+#include <pthread.h>
+#include <time.h>
 
 #include <libavutil/pixdesc.h>
 #include <libavformat/avformat.h>
@@ -15,6 +21,7 @@
 
 #include <libplacebo/renderer.h>
 #include <libplacebo/utils/libav.h>
+#include <libplacebo/utils/frame_queue.h>
 
 struct plplay {
     struct window *win;
@@ -23,11 +30,23 @@ struct plplay {
     struct pl_context *ctx;
     const struct pl_tex *plane_tex[4];
     struct pl_renderer *renderer;
+    struct pl_queue *queue;
 
     // libav*
     AVFormatContext *format;
     AVCodecContext *codec;
     const AVStream *stream; // points to first video stream of `format`
+
+    // decoder thread
+    pthread_t thread;
+    pthread_mutex_t lock;
+    pthread_cond_t wakeup;
+    AVFrame *frame;
+    bool failed;
+    bool eof;
+
+    // settings
+    struct pl_render_params params;
 };
 
 static void uninit(struct plplay *p)
@@ -38,9 +57,12 @@ static void uninit(struct plplay *p)
             pl_tex_destroy(gpu, &p->plane_tex[i]);
     }
 
+    pl_queue_destroy(&p->queue);
     pl_renderer_destroy(&p->renderer);
     window_destroy(&p->win);
 
+    if (p->thread)
+        pthread_cancel(p->thread);
     avcodec_free_context(&p->codec);
     avformat_free_context(p->format);
 
@@ -122,118 +144,236 @@ static bool init_codec(struct plplay *p)
     return true;
 }
 
-static bool render_frame(struct plplay *p, AVFrame *in_frame)
+static inline bool decode_frame(struct plplay *p, AVFrame *frame)
 {
-    const struct pl_gpu *gpu = p->win->gpu;
-    struct pl_swapchain_frame out_frame;
-    int retry = 3;
-
-    while (!pl_swapchain_start_frame(p->win->swapchain, &out_frame)) {
-        if (retry-- == 0) {
-            fprintf(stderr, "libplacebo: Swapchain appears stuck.. dropping frame\n");
-            return true;
-        }
-
-        // Window possibly hidden/minimized/invisible? Block for window events
-        window_poll(p->win, true);
-    }
-
-    bool ret = true;
-
-    struct pl_frame image, target;
-    struct pl_render_params params = pl_render_default_params;
-
-    if (pl_upload_avframe(gpu, &image, p->plane_tex, in_frame)) {
-
-        pl_frame_from_swapchain(&target, &out_frame);
-        pl_rect2df_aspect_copy(&target.crop, &image.crop, 0.0);
-
-        if (pl_frame_is_cropped(&target))
-            pl_frame_clear(gpu, &target, (float[3]) {0});
-
-        if (!pl_render_image(p->renderer, &image, &target, &params)) {
-            fprintf(stderr, "libplacebo: Failed rendering... GPU lost?\n");
-            pl_tex_clear(gpu, out_frame.fbo, (float[4]){ 1.0, 0.0, 0.0, 1.0 });
-            ret = false;
-        }
-
-    } else {
-
-        fprintf(stderr, "libplacebo: Failed uploading AVFrame... dropping\n");
-        pl_tex_clear(gpu, out_frame.fbo, (float[4]){ 0.0, 0.0, 0.0, 1.0 });
-
-    }
-
-    if (!pl_swapchain_submit_frame(p->win->swapchain)) {
-        fprintf(stderr, "libplacebo: Failed submitting frame, swapchain lost?\n");
+    int ret = avcodec_receive_frame(p->codec, frame);
+    if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+        return false;
+    } else if (ret < 0) {
+        fprintf(stderr, "libavcodec: Failed decoding frame: %s\n",
+                av_err2str(ret));
+        p->failed = true;
         return false;
     }
 
-    pl_swapchain_swap_buffers(p->win->swapchain);
-    return ret;
+    return true;
 }
 
-static bool decode_packet(struct plplay *p, AVPacket *packet, AVFrame *frame)
+static inline void send_frame(struct plplay *p, AVFrame *frame)
 {
+    pthread_mutex_lock(&p->lock);
+    while (p->frame) {
+        if (p->failed) {
+            // Discard frame
+            pthread_mutex_unlock(&p->lock);
+            av_frame_free(&frame);
+            return;
+        }
+
+        pthread_cond_wait(&p->wakeup, &p->lock);
+    }
+    p->frame = frame;
+    pthread_cond_broadcast(&p->wakeup);
+    pthread_mutex_unlock(&p->lock);
+}
+
+static void *decode_loop(void *arg)
+{
+    struct plplay *p = arg;
+    AVPacket *packet = av_packet_alloc();
+    AVFrame *frame = av_frame_alloc();
+    if (!packet || !frame) {
+        p->failed = true;
+        goto done;
+    }
+
     int ret;
+    bool eof = false;
 
-    if ((ret = avcodec_send_packet(p->codec, packet)) < 0) {
-        fprintf(stderr, "libavcodec: Failed sending packet to decoder: %s\n",
-                av_err2str(ret));
-        return false;
-    }
+    while (!eof) {
+        ret = av_read_frame(p->format, packet);
+        if (!ret) {
+            if (packet->stream_index != p->stream->index) {
+                // Ignore unrelated packets
+                av_packet_unref(packet);
+                continue;
+            }
 
-    while (true) {
-        ret = avcodec_receive_frame(p->codec, frame);
-        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-            return true;
-        } else if (ret < 0) {
-            fprintf(stderr, "libavcodec: Failed receiving frame: %s\n",
+            ret = avcodec_send_packet(p->codec, packet);
+        } else if (ret == AVERROR_EOF) {
+            // Send empty input to flush decoder
+            ret = avcodec_send_packet(p->codec, NULL);
+            eof = true;
+        } else {
+            fprintf(stderr, "libavformat: Failed reading packet: %s\n",
                     av_err2str(ret));
-            return false;
+            p->failed = true;
+            goto done;
         }
 
-        // TODO: Put this onto a separate thread and wait until the
-        // corresponding correct PTS!
-        if (!render_frame(p, frame)) {
-            fprintf(stderr, "libplacebo: Failed rendering! Aborting...\n");
-            return false;
+        if (ret < 0) {
+            fprintf(stderr, "libavcodec: Failed sending packet to decoder: %s\n",
+                    av_err2str(ret));
+            p->failed = true;
+            goto done;
         }
+
+        // Decode all frames from this packet
+        while (decode_frame(p, frame)) {
+            send_frame(p, frame);
+            frame = av_frame_alloc();
+        }
+
+        if (!eof)
+            av_packet_unref(packet);
     }
+
+    p->eof = true;
+
+done:
+    pthread_cond_broadcast(&p->wakeup);
+    av_frame_free(&frame);
+    av_packet_free(&packet);
+    return NULL;
+}
+
+static bool upload_frame(const struct pl_gpu *gpu, const struct pl_tex **tex,
+                         const struct pl_source_frame *src,
+                         struct pl_frame *out_frame)
+{
+    AVFrame *frame = src->frame_data;
+    bool ok = pl_upload_avframe(gpu, out_frame, tex, frame);
+    av_frame_free(&frame);
+    return ok;
+}
+
+static void discard_frame(const struct pl_source_frame *src)
+{
+    AVFrame *frame = src->frame_data;
+    av_frame_free(&frame);
+}
+
+static enum pl_queue_status get_frame(struct pl_source_frame *out_frame,
+                                      const struct pl_queue_params *params)
+{
+    struct plplay *p = params->priv;
+    if (p->failed)
+        return QUEUE_ERR;
+
+    pthread_mutex_lock(&p->lock);
+    while (!p->frame) {
+        if (p->eof) {
+            pthread_mutex_unlock(&p->lock);
+            return QUEUE_EOF;
+        }
+
+        pthread_cond_wait(&p->wakeup, &p->lock);
+    }
+
+    *out_frame = (struct pl_source_frame) {
+        .pts = p->frame->pts * av_q2d(p->stream->time_base),
+        .map = upload_frame,
+        .discard = discard_frame,
+        .frame_data = p->frame,
+    };
+    p->frame = NULL;
+    pthread_cond_broadcast(&p->wakeup);
+    pthread_mutex_unlock(&p->lock);
+    return QUEUE_OK;
+}
+
+static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *frame,
+                         const struct pl_frame_mix *mix)
+{
+    const struct pl_gpu *gpu = p->win->gpu;
+    struct pl_frame target;
+    pl_frame_from_swapchain(&target, frame);
+
+    assert(mix->num_frames);
+    pl_rect2df_aspect_copy(&target.crop, &mix->frames[0]->crop, 0.0);
+    if (pl_frame_is_cropped(&target))
+        pl_frame_clear(gpu, &target, (float[3]) {0});
+
+    return pl_render_image_mix(p->renderer, mix, &target, &p->params);
 }
 
 static bool render_loop(struct plplay *p)
 {
-    int ret = true;
+    struct pl_queue_params qparams = {
+        .radius = pl_frame_mix_radius(&p->params),
+        .frame_duration = av_q2d(av_inv_q(p->stream->avg_frame_rate)),
+        .get_frame = get_frame,
+        .priv = p,
+    };
 
-    AVPacket *packet = av_packet_alloc();
-    AVFrame *frame = av_frame_alloc();
-    if (!packet || !frame) {
-        ret = false;
+    // Initialize the frame queue, blocking indefinitely until done
+    struct pl_frame_mix mix;
+    switch (pl_queue_update(p->queue, &mix, &qparams)) {
+    case QUEUE_OK:  break;
+    case QUEUE_EOF: return true;
+    case QUEUE_ERR: goto error;
+    default: abort();
+    }
+
+    struct pl_swapchain_frame frame;
+    if (!pl_swapchain_start_frame(p->win->swapchain, &frame))
+        goto error;
+    if (!render_frame(p, &frame, &mix))
+        goto error;
+    if (!pl_swapchain_submit_frame(p->win->swapchain))
+        goto error;
+
+    // Wait until rendering is complete. Do this before measuring the time
+    // start, to ensure we don't count initialization overhead as part of the
+    // first vsync.
+    pl_gpu_finish(p->win->gpu);
+
+    struct timespec ts_base, ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts_base) < 0) {
+        fprintf(stderr, "%s\n", strerror(errno));
         goto error;
     }
 
-    while (av_read_frame(p->format, packet) >= 0) {
-        if (packet->stream_index != p->stream->index) {
-            // Ignore all unrelated packets
-            av_packet_unref(packet);
+    pl_swapchain_swap_buffers(p->win->swapchain);
+    window_poll(p->win, false);
+
+    while (!p->win->window_lost) {
+        if (!pl_swapchain_start_frame(p->win->swapchain, &frame)) {
+            // Window stuck/invisible? Block for events and try again.
+            window_poll(p->win, true);
             continue;
         }
 
-        if (!decode_packet(p, packet, frame))
-            break;
-        av_packet_unref(packet);
+        if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
+            goto error;
 
-        window_poll(p->win, false);
-        if (p->win->window_lost)
+        qparams.pts = (ts.tv_sec - ts_base.tv_sec) +
+                      (ts.tv_nsec - ts_base.tv_nsec) * 1e-9;
+
+        switch (pl_queue_update(p->queue, &mix, &qparams)) {
+        case QUEUE_ERR: goto error;
+        case QUEUE_EOF: return true;
+        case QUEUE_OK:
+            if (!render_frame(p, &frame, &mix))
+                goto error;
             break;
+        default: abort();
+        }
+
+        if (!pl_swapchain_submit_frame(p->win->swapchain)) {
+            fprintf(stderr, "libplacebo: failed presenting frame!\n");
+            goto error;
+        }
+
+        pl_swapchain_swap_buffers(p->win->swapchain);
+        window_poll(p->win, false);
     }
 
-    // fall through
+    return !p->failed;
+
 error:
-    av_frame_free(&frame);
-    av_packet_free(&packet);
-    return ret >= 0;
+    p->failed = true;
+    return false;
 }
 
 int main(int argc, char **argv)
@@ -246,9 +386,13 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    struct plplay state = {0};
-    struct plplay *p = &state;
+    struct plplay state = {
+        .lock = PTHREAD_MUTEX_INITIALIZER,
+        .wakeup = PTHREAD_COND_INITIALIZER,
+        .params = pl_render_default_params,
+    };
 
+    struct plplay *p = &state;
     if (!open_file(p, filename))
         goto error;
 
@@ -272,7 +416,14 @@ int main(int argc, char **argv)
     if (!init_codec(p))
         goto error;
 
+    int ret = pthread_create(&p->thread, NULL, decode_loop, p);
+    if (ret != 0) {
+        fprintf(stderr, "Failed creating decode thread: %s\n", strerror(errno));
+        goto error;
+    }
+
     p->renderer = pl_renderer_create(p->ctx, p->win->gpu);
+    p->queue = pl_queue_create(p->win->gpu);
     if (!render_loop(p))
         goto error;
 
