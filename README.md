@@ -164,6 +164,11 @@ identifiers (so they can be freely merged together).
 - `renderer.h`: A high-level renderer which combines the shader primitives
   and dispatch mechanism into a fully-fledged rendering pipeline that takes
   raw texture data and transforms it into the desired output image.
+- `utils/frame_queue.h`: A high-level frame queuing abstraction. This API
+  can be used to interface with a decoder (or other source of frames), and
+  takes care of translating timestamped frames into a virtual stream of
+  presentation events suitable for use with `renderer.h`, including any extra
+  context required for frame interpolation (`pl_frame_mix`).
 - `utils/upload.h`: A high-level helper for uploading generic data in some
   user-described format to a plane texture suitable for use with `renderer.h`.
   These helpers essentially take care of picking/mapping a good image format

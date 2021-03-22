@@ -1041,12 +1041,13 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     // Attempt frame mixing
 #define NUM_MIX_FRAMES 10
     struct pl_frame frames[NUM_MIX_FRAMES];
+    const struct pl_frame *pframes[NUM_MIX_FRAMES];
     uint64_t signatures[NUM_MIX_FRAMES];
     float timestamps[NUM_MIX_FRAMES];
 
     struct pl_frame_mix mix = {
         .num_frames = NUM_MIX_FRAMES,
-        .frames = frames,
+        .frames = pframes,
         .signatures = signatures,
         .timestamps = timestamps,
         .vsync_duration = 24.0 / 60.0,
@@ -1063,6 +1064,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
             },
         };
 
+        pframes[i] = &frames[i];
         signatures[i] = i;
         timestamps[i] = i;
     }

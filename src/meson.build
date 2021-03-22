@@ -165,6 +165,7 @@ headers = [
   'swapchain.h',
   'utils/dav1d.h',
   'utils/dav1d_internal.h',
+  'utils/frame_queue.h',
   'utils/libav.h',
   'utils/libav_internal.h',
   'utils/upload.h',
@@ -192,6 +193,7 @@ sources = [
   'shaders/sampling.c',
   'spirv.c',
   'swapchain.c',
+  'utils/frame_queue.c',
   'utils/upload.c',
 ]
 

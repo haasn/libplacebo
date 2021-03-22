@@ -69,6 +69,7 @@
 #include "include/libplacebo/shaders/lut.h"
 #include "include/libplacebo/shaders/sampling.h"
 #include "include/libplacebo/swapchain.h"
+#include "include/libplacebo/utils/frame_queue.h"
 #include "include/libplacebo/utils/upload.h"
 
 #ifdef PL_HAVE_LCMS

@@ -145,13 +145,17 @@ void pl_ref_deref(struct pl_ref **ref);
         }                                                                       \
     } while (0)
 
-#define PL_ARRAY_REMOVE_AT(arr, idx)                                            \
+#define PL_ARRAY_REMOVE_RANGE(arr, idx, count)                                  \
     do {                                                                        \
         size_t _idx = (idx);                                                    \
-        assert(_idx < (arr).num);                                               \
-        memmove(&(arr).elem[_idx], &(arr).elem[_idx + 1],                       \
-                (--(arr).num - _idx) * sizeof((arr).elem[0]));                  \
+        size_t _count = (count);                                                \
+        assert(_idx + _count <= (arr).num);                                     \
+        memmove(&(arr).elem[_idx], &(arr).elem[_idx + _count],                  \
+                ((arr).num - _idx - _count) * sizeof((arr).elem[0]));           \
+        (arr).num -= _count;                                                    \
     } while (0)
+
+#define PL_ARRAY_REMOVE_AT(arr, idx) PL_ARRAY_REMOVE_RANGE(arr, idx, 1)
 
 #define PL_ARRAY_INSERT_AT(parent, arr, idx, ...)                               \
     do {                                                                        \

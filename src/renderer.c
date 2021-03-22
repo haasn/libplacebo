@@ -70,6 +70,7 @@ struct pl_renderer {
 
     // Frame cache (for frame mixing / interpolation)
     PL_ARRAY(struct cached_frame) frames;
+    PL_ARRAY(const struct pl_tex *) frame_fbos;
 };
 
 enum {
@@ -174,6 +175,8 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
         pl_tex_destroy(rr->gpu, &rr->fbos.elem[i]);
     for (int i = 0; i < rr->frames.num; i++)
         pl_tex_destroy(rr->gpu, &rr->frames.elem[i].tex);
+    for (int i = 0; i < rr->frame_fbos.num; i++)
+        pl_tex_destroy(rr->gpu, &rr->frame_fbos.elem[i]);
 
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->peak_detect_state);
@@ -219,7 +222,7 @@ void pl_renderer_flush_cache(struct pl_renderer *rr)
 const struct pl_render_params pl_render_default_params = {
     .upscaler           = &pl_filter_spline36,
     .downscaler         = &pl_filter_mitchell,
-    .frame_mixer        = NULL,
+    .frame_mixer        = &pl_oversample_frame_mixer,
 
     .sigmoid_params     = &pl_sigmoid_default_params,
     .peak_detect_params = &pl_peak_detect_default_params,
@@ -230,7 +233,7 @@ const struct pl_render_params pl_render_default_params = {
 const struct pl_render_params pl_render_high_quality_params = {
     .upscaler           = &pl_filter_ewa_lanczos,
     .downscaler         = &pl_filter_mitchell,
-    .frame_mixer        = NULL,
+    .frame_mixer        = &pl_oversample_frame_mixer,
 
     .deband_params      = &pl_deband_default_params,
     .sigmoid_params     = &pl_sigmoid_default_params,
@@ -238,6 +241,8 @@ const struct pl_render_params pl_render_high_quality_params = {
     .color_map_params   = &pl_color_map_default_params,
     .dither_params      = &pl_dither_default_params,
 };
+
+const struct pl_filter_config pl_oversample_frame_mixer = {0};
 
 #define FBOFMT(n) (params->disable_fbos ? NULL : rr->fbofmt[n])
 
@@ -2245,7 +2250,7 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
 
     struct pass_state pass = {
         .rr = rr,
-        .image = images->frames[0],
+        .image = *images->frames[0],
         .target = *ptarget,
     };
 
@@ -2253,33 +2258,17 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
     // currently visible on an idealized zero-order-hold display.
     for (int i = 1; i < images->num_frames; i++) {
         if (images->timestamps[i] <= 0.0)
-            pass.image = images->frames[i];
+            pass.image = *images->frames[i];
     }
 
-    if (rr->disable_mixing || !FBOFMT(4))
+    if (!params->frame_mixer || rr->disable_mixing || !FBOFMT(4))
         goto fallback;
 
     if (!pass_infer_state(&pass, false))
         return false;
 
-    // Round the output rect and clip it to the framebuffer dimensions. This
-    // will determine the size of the intermediate crop that we actually care
-    // about rendering. Note that we necessarily drop sub-pixel offsets in the
-    // target, because these may change from frame to frame - compensating for
-    // them in the src_rect will result in misalignment.
-    struct pl_frame *target = &pass.target;
-    const struct pl_tex *dst_ref = target->planes[pass.dst_ref].texture;
-    target->crop = (struct pl_rect2df) {
-        .x0 = roundf(PL_MAX(target->crop.x0, 0.0)),
-        .y0 = roundf(PL_MAX(target->crop.y0, 0.0)),
-        .x1 = roundf(PL_MIN(target->crop.x1, dst_ref->params.w)),
-        .y1 = roundf(PL_MIN(target->crop.y1, dst_ref->params.h)),
-    };
-
-    int out_w = fabs(pl_rect_w(target->crop)),
-        out_h = fabs(pl_rect_h(target->crop));
-    out_w = PL_DEF(out_w, dst_ref->params.w);
-    out_h = PL_DEF(out_h, dst_ref->params.h);
+    int out_w = abs(pl_rect_w(pass.dst_rect)),
+        out_h = abs(pl_rect_h(pass.dst_rect));
 
     // The color space to mix the frames in. We arbitrarily choose to use the
     // "current" frame's color space, but converted to RGB.
@@ -2310,7 +2299,7 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
                  (unsigned long long) sig, pts);
 
         float weight;
-        if (params->frame_mixer) {
+        if (params->frame_mixer->kernel) {
 
             float radius = params->frame_mixer->kernel->radius;
             if (fabs(pts) >= radius) {
@@ -2367,8 +2356,8 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
             f = &rr->frames.elem[rr->frames.num++];
             *f = (struct cached_frame) {
                 .signature = sig,
-                .color = images->frames[i].color,
-                .profile = images->frames[i].profile,
+                .color = images->frames[i]->color,
+                .profile = images->frames[i]->profile,
             };
         }
 
@@ -2384,6 +2373,10 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
             // If we can't reuse the entry, we need to render to this
             // texture first
             PL_TRACE(rr, "  -> Cached texture missing or invalid.. (re)creating");
+            if (!f->tex) {
+                if (PL_ARRAY_POP(rr->frame_fbos, &f->tex))
+                    pl_tex_invalidate(rr->gpu, f->tex);
+            }
             bool ok = pl_tex_recreate(rr->gpu, &f->tex, &(struct pl_tex_params) {
                 .w = out_w,
                 .h = out_h,
@@ -2404,7 +2397,7 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
             // in their native colorspaces. Preserving the original colorspace
             // avoids precision loss due to unnecessary color space roundtrips.
             // We also explicitly clear the ICC profile, see below for why.
-            struct pl_frame image = images->frames[i];
+            struct pl_frame image = *images->frames[i];
             image.profile = (struct pl_icc_profile) {0};
 
             struct pl_frame inter_target = {
@@ -2437,7 +2430,7 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
         if (rr->frames.elem[i].evict) {
             PL_TRACE(rr, "Evicting frame with signature %llx from cache",
                      (unsigned long long) rr->frames.elem[i].signature);
-            pl_tex_destroy(rr->gpu, &rr->frames.elem[i].tex);
+            PL_ARRAY_APPEND(rr, rr->frame_fbos, rr->frames.elem[i].tex);
             PL_ARRAY_REMOVE_AT(rr->frames, i);
             continue;
         } else {

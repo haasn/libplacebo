@@ -91,13 +91,15 @@ struct pl_render_params {
     // Configures the algorithm used for frame mixing (when using
     // `pl_render_image_mix`). Ignored otherwise. As a special requirement,
     // this must be a filter config with `polar` set to false, since it's only
-    // used for 1D mixing and thus only 1D filters are compatible. If left as
-    // NULL, then libplacebo will use a built-in, inexpensive frame mixing
-    // algorithm.
+    // used for 1D mixing and thus only 1D filters are compatible.
     //
-    // It's worth pointing out that this built-in frame mixing can often be
-    // better than any of the available filter configurations. So it's not a
-    // bad idea to leave this as NULL. In fact, that's the recommended default.
+    // As a special case, if `frame_mixer->kernel` is NULL, then libplacebo
+    // will use a built-in, inexpensive and relatively unobtrusive oversampling
+    // frame mixing algorithm. (See `pl_oversample_frame_mixer`)
+    //
+    // If set to NULL, frame mixing is disabled, in which case
+    // `pl_render_image_mix` behaves as `pl_render_image`, also completely
+    // bypassing the mixing cache.
     const struct pl_filter_config *frame_mixer;
 
     // Configures the settings used to deband source textures. Leaving this as
@@ -251,6 +253,10 @@ extern const struct pl_render_params pl_render_default_params;
 // and enables debanding. This should only really be used with a discrete GPU
 // and where maximum image quality is desired.
 extern const struct pl_render_params pl_render_high_quality_params;
+
+// Special filter config for the built-in oversampling frame mixing algorithm.
+// This is equivalent to (struct pl_filter_config) {0}.
+extern const struct pl_filter_config pl_oversample_frame_mixer;
 
 #define PL_MAX_PLANES 4
 
@@ -518,7 +524,10 @@ struct pl_frame_mix {
 
     // A list of the frames themselves. The frames can have different
     // colorspaces, configurations of planes, or even sizes.
-    const struct pl_frame *frames;
+    //
+    // Note: This is a list of pointers, to avoid users having to copy
+    // around `pl_frame` structs when re-organizing this array.
+    const struct pl_frame **frames;
 
     // A list of unique signatures, one for each frame. These are used to
     // identify frames across calls to this function, so it's crucial that they
@@ -556,7 +565,7 @@ struct pl_frame_mix {
     float vsync_duration;
 
     // Explanation of the frame mixing radius: The algorithm chosen in
-    // `pl_render_params.frame_mixing` has a canonical radius equal to
+    // `pl_render_params.frame_mixer` has a canonical radius equal to
     // `pl_filter_config.kernel->radius`. This means that the frame mixing
     // algorithm will (only) need to consult all of the frames that have a
     // distance within the interval [-radius, radius]. As such, the user should
@@ -567,6 +576,14 @@ struct pl_frame_mix {
     // no concept of radius, it just always needs access to the "current" and
     // "next" frames.
 };
+
+// Helper function to calculate the frame mixing radius.
+static inline float pl_frame_mix_radius(const struct pl_render_params *params)
+{
+    return (params->frame_mixer && params->frame_mixer->kernel)
+        ? params->frame_mixer->kernel->radius
+        : 0.0;
+}
 
 // Render a mixture of images to the target using the given parameters. This
 // functions much like a generalization of `pl_render_image`, for when the API
