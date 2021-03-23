@@ -76,7 +76,7 @@ struct pl_render_params {
     // since the built-in GPU sampling algorithms can't anti-alias.
     //
     // Note: If set to the same address as the built-in `pl_filter_bicubic`,
-    // `pl_filter_box` etc.; libplacebo will also use the more efficient
+    // `pl_filter_nearest` etc.; libplacebo will also use the more efficient
     // direct sampling algorithm where possible without quality loss.
     const struct pl_filter_config *upscaler;
     const struct pl_filter_config *downscaler;

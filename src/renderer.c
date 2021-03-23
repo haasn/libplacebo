@@ -480,9 +480,9 @@ static struct sampler_info sample_src_info(struct pl_renderer *rr,
         if (can_fast && !params->disable_builtin_scalers) {
             if (can_linear && info.config == &pl_filter_bicubic)
                 info.type = SAMPLER_BICUBIC;
-            if (can_linear && info.config == &pl_filter_triangle)
+            if (can_linear && info.config == &pl_filter_bilinear)
                 info.type = SAMPLER_DIRECT;
-            if (info.config == &pl_filter_box)
+            if (info.config == &pl_filter_nearest)
                 info.type = can_linear ? SAMPLER_NEAREST : SAMPLER_DIRECT;
         }
     }

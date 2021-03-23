@@ -187,8 +187,8 @@ double pl_filter_sample(const struct pl_filter_config *c, double x);
 extern const struct pl_filter_config pl_filter_spline16;    // 2 taps
 extern const struct pl_filter_config pl_filter_spline36;    // 3 taps
 extern const struct pl_filter_config pl_filter_spline64;    // 4 taps
-extern const struct pl_filter_config pl_filter_box;         // AKA nearest
-extern const struct pl_filter_config pl_filter_triangle;    // AKA bilinear
+extern const struct pl_filter_config pl_filter_nearest;     // AKA box
+extern const struct pl_filter_config pl_filter_bilinear;    // AKA triangle
 extern const struct pl_filter_config pl_filter_gaussian;
 // Sinc family (all configured to 3 taps):
 extern const struct pl_filter_config pl_filter_sinc;        // unwindowed,
@@ -208,6 +208,10 @@ extern const struct pl_filter_config pl_filter_robidoux;
 extern const struct pl_filter_config pl_filter_robidouxsharp;
 extern const struct pl_filter_config pl_filter_ewa_robidoux;
 extern const struct pl_filter_config pl_filter_ewa_robidouxsharp;
+
+// Backwards compatibility
+#define pl_filter_box       pl_filter_nearest
+#define pl_filter_triangle  pl_filter_bilinear
 
 struct pl_named_filter_config {
     const char *name;

@@ -532,11 +532,11 @@ const struct pl_filter_config pl_filter_spline64 = {
     .kernel = &pl_filter_function_spline64,
 };
 
-const struct pl_filter_config pl_filter_box = {
+const struct pl_filter_config pl_filter_nearest = {
     .kernel = &pl_filter_function_box,
 };
 
-const struct pl_filter_config pl_filter_triangle = {
+const struct pl_filter_config pl_filter_bilinear = {
     .kernel = &pl_filter_function_triangle,
 };
 
@@ -646,10 +646,10 @@ const struct pl_named_filter_config pl_named_filters[] = {
     {"spline16",            &pl_filter_spline16},
     {"spline36",            &pl_filter_spline36},
     {"spline64",            &pl_filter_spline64},
-    {"box",                 &pl_filter_box},
-    {"nearest",             &pl_filter_box}, // alias
-    {"triangle",            &pl_filter_triangle},
-    {"bilinear",            &pl_filter_triangle}, // alias
+    {"nearest",             &pl_filter_nearest},
+    {"box",                 &pl_filter_nearest}, // alias
+    {"bilinear",            &pl_filter_bilinear},
+    {"triangle",            &pl_filter_bilinear}, // alias
     {"gaussian",            &pl_filter_gaussian},
     {"sinc",                &pl_filter_sinc},
     {"lanczos",             &pl_filter_lanczos},
