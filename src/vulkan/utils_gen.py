@@ -155,7 +155,7 @@ def get_vkstructs(registry):
         # Strings for platform-specific crap we want to blacklist as they will
         # most likely cause build failures
         blacklist_strs = [
-            'ANDROID', 'Surface', 'Win32', 'D3D12', 'GGP'
+            'ANDROID', 'Surface', 'Win32', 'D3D12', 'GGP', 'FUCHSIA',
         ]
 
         if any([ str in e.attrib['name'] for str in blacklist_strs ]):
