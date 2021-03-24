@@ -143,8 +143,16 @@ static inline pl_str pl_str_getline(pl_str str, pl_str *out_rest)
 // ignored. When successful, this allocates a new array to store the output.
 bool pl_str_decode_hex(void *alloc, pl_str hex, pl_str *out);
 
-// Return a 64-bit hash of a string's contents
-uint64_t pl_str_hash(pl_str str);
+// Compute a fast 64-bit hash
+uint64_t pl_mem_hash(const void *mem, size_t size);
+static inline void pl_hash_merge(uint64_t *accum, uint64_t hash) {
+    *accum ^= hash + 0x9e3779b9 + (*accum << 6) + (*accum >> 2);
+}
+
+static inline uint64_t pl_str_hash(pl_str str)
+{
+    return pl_mem_hash(str.buf, str.len);
+}
 
 static inline bool pl_str_equals(pl_str str1, pl_str str2)
 {

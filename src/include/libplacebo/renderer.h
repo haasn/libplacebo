@@ -194,12 +194,12 @@ struct pl_render_params {
     bool allow_delayed_peak_detect;
 
     // Normally, when the size of the `pl_render_target` used with
-    // `pl_render_image_mix` changes, the internal cache of mixed frames must
-    // be discarded in order to re-render all required frames at the new output
-    // size. Setting this option to `true` will skip the cache invalidation and
-    // instead re-use the existing frames (with bilinear scaling to the new
-    // size), which comes at a quality loss shortly after a resize, but should
-    // make it much more smooth.
+    // `pl_render_image_mix` changes, or the render parameters are updated, the
+    // internal cache of mixed frames must be discarded in order to re-render
+    // all required frames. Setting this option to `true` will skip the cache
+    // invalidation and instead re-use the existing frames (with bilinear
+    // scaling to the new size if necessary), which comes at a quality loss
+    // shortly after a resize, but should make it much more smooth.
     bool preserve_mixing_cache;
 
     // --- Performance tuning / debugging options

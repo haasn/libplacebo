@@ -23,6 +23,7 @@
 
 struct cached_frame {
     uint64_t signature;
+    uint64_t params_hash; // for detecting `pl_render_params` changes
     struct pl_color_space color;
     struct pl_icc_profile profile;
     const struct pl_tex *tex;
@@ -2236,6 +2237,64 @@ error:
     return false;
 }
 
+static uint64_t render_params_hash(const struct pl_render_params *params_orig)
+{
+    struct pl_render_params params = *params_orig;
+    uint64_t hash = 0;
+
+#define HASH_PTR(ptr)                                                           \
+    do {                                                                        \
+        if (ptr) {                                                              \
+            pl_hash_merge(&hash, pl_mem_hash(ptr, sizeof(*ptr)));               \
+            ptr = NULL;                                                         \
+        }                                                                       \
+    } while (0)
+
+#define HASH_FILTER(scaler)                                                     \
+    do {                                                                        \
+        if (scaler) {                                                           \
+            struct pl_filter_config filter = *scaler;                           \
+            HASH_PTR(filter.kernel);                                            \
+            HASH_PTR(filter.window);                                            \
+            pl_hash_merge(&hash, pl_mem_hash(&filter, sizeof(filter)));         \
+            scaler = NULL;                                                      \
+        }                                                                       \
+    } while (0)
+
+    HASH_FILTER(params.upscaler);
+    HASH_FILTER(params.downscaler);
+    HASH_FILTER(params.frame_mixer);
+
+    HASH_PTR(params.deband_params);
+    HASH_PTR(params.sigmoid_params);
+    HASH_PTR(params.color_adjustment);
+    HASH_PTR(params.peak_detect_params);
+    HASH_PTR(params.color_map_params);
+    HASH_PTR(params.dither_params);
+    HASH_PTR(params.cone_params);
+    HASH_PTR(params.blend_params);
+    HASH_PTR(params.hooks);
+
+#ifdef PL_HAVE_LCMS
+    HASH_PTR(params.icc_params);
+    HASH_PTR(params.lut3d_params);
+#endif
+
+    // Hash all hooks
+    for (int i = 0; i < params.num_hooks; i++)
+        pl_hash_merge(&hash, pl_mem_hash(&params.hooks[i], sizeof(params.hooks[i])));
+    params.hooks = NULL;
+
+    // Hash the LUT by only looking at the signature
+    if (params.lut) {
+        pl_hash_merge(&hash, params.lut->signature);
+        params.lut = NULL;
+    }
+
+    pl_hash_merge(&hash, pl_mem_hash(&params, sizeof(params)));
+    return hash;
+}
+
 #define MAX_MIX_FRAMES 16
 
 bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *images,
@@ -2243,6 +2302,7 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
                          const struct pl_render_params *params)
 {
     params = PL_DEF(params, &pl_render_default_params);
+    uint64_t params_hash = render_params_hash(params);
 
     require(images->num_frames >= 1);
     for (int i = 0; i < images->num_frames - 1; i++)
@@ -2362,11 +2422,12 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
         }
 
         // Check to see if we can blindly reuse this cache entry. This is the
-        // case either if the size is compatible, or if the user doesn't care.
-        bool can_reuse = !!f->tex;
-        if (f->tex && !params->preserve_mixing_cache) {
+        // case if either the params are compatible, or the user doesn't care
+        bool can_reuse = f->tex;
+        if (can_reuse && !params->preserve_mixing_cache) {
             can_reuse = f->tex->params.w == out_w &&
-                        f->tex->params.h == out_h;
+                        f->tex->params.h == out_h &&
+                        f->params_hash == params_hash;
         }
 
         if (!can_reuse) {
@@ -2416,6 +2477,8 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
                 rr->disable_mixing = true;
                 goto fallback;
             }
+
+            f->params_hash = params_hash;
         }
 
         pl_assert(fidx < MAX_MIX_FRAMES);

@@ -48,9 +48,9 @@
         v2 = ROTL(v2, 32);                                                     \
     } while (0)
 
-uint64_t pl_str_hash(pl_str str)
+uint64_t pl_mem_hash(const void *mem, size_t size)
 {
-    if (!str.len)
+    if (!size)
         return 0x8533321381b8254bULL;
 
     uint64_t v0 = 0x736f6d6570736575ULL;
@@ -61,16 +61,17 @@ uint64_t pl_str_hash(pl_str str)
     uint64_t k1 = 0x68f7f03510e5285cULL;
     uint64_t m;
     int i;
-    const uint8_t *end = str.buf + str.len - (str.len % sizeof(uint64_t));
-    const int left = str.len & 7;
-    uint64_t b = ((uint64_t) str.len) << 56;
+    const uint8_t *buf = mem;
+    const uint8_t *end = buf + size - (size % sizeof(uint64_t));
+    const int left = size & 7;
+    uint64_t b = ((uint64_t) size) << 56;
     v3 ^= k1;
     v2 ^= k0;
     v1 ^= k1;
     v0 ^= k0;
 
-    for (; str.buf != end; str.buf += 8) {
-        m = U8TO64_LE(str.buf);
+    for (; buf != end; buf += 8) {
+        m = U8TO64_LE(buf);
         v3 ^= m;
 
         for (i = 0; i < cROUNDS; ++i)
@@ -80,13 +81,13 @@ uint64_t pl_str_hash(pl_str str)
     }
 
     switch (left) {
-    case 7: b |= ((uint64_t) str.buf[6]) << 48; // fall through
-    case 6: b |= ((uint64_t) str.buf[5]) << 40; // fall through
-    case 5: b |= ((uint64_t) str.buf[4]) << 32; // fall through
-    case 4: b |= ((uint64_t) str.buf[3]) << 24; // fall through
-    case 3: b |= ((uint64_t) str.buf[2]) << 16; // fall through
-    case 2: b |= ((uint64_t) str.buf[1]) << 8;  // fall through
-    case 1: b |= ((uint64_t) str.buf[0]); break;
+    case 7: b |= ((uint64_t) buf[6]) << 48; // fall through
+    case 6: b |= ((uint64_t) buf[5]) << 40; // fall through
+    case 5: b |= ((uint64_t) buf[4]) << 32; // fall through
+    case 4: b |= ((uint64_t) buf[3]) << 24; // fall through
+    case 3: b |= ((uint64_t) buf[2]) << 16; // fall through
+    case 2: b |= ((uint64_t) buf[1]) << 8;  // fall through
+    case 1: b |= ((uint64_t) buf[0]); break;
     case 0: break;
     }
 
