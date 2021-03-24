@@ -840,6 +840,24 @@ static const char *test_luts[] = {
 
 };
 
+static bool frame_passthrough(const struct pl_gpu *gpu, const struct pl_tex **tex,
+                              const struct pl_source_frame *src, struct pl_frame *out_frame)
+{
+    const struct pl_frame *frame = src->frame_data;
+    *out_frame = *frame;
+    return true;
+}
+
+static enum pl_queue_status get_frame_ptr(struct pl_source_frame *out_frame,
+                                          const struct pl_queue_params *qparams)
+{
+    const struct pl_source_frame **pframe = qparams->priv;
+    if (!(*pframe)->frame_data)
+        return QUEUE_EOF;
+
+    *out_frame = *(*pframe)++;
+    return QUEUE_OK;
+}
 
 static void pl_render_tests(const struct pl_gpu *gpu)
 {
@@ -1038,47 +1056,76 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     target.num_overlays = 0;
 
-    // Attempt frame mixing
-#define NUM_MIX_FRAMES 10
-    struct pl_frame frames[NUM_MIX_FRAMES];
-    const struct pl_frame *pframes[NUM_MIX_FRAMES];
-    uint64_t signatures[NUM_MIX_FRAMES];
-    float timestamps[NUM_MIX_FRAMES];
-
-    struct pl_frame_mix mix = {
-        .num_frames = NUM_MIX_FRAMES,
-        .frames = pframes,
-        .signatures = signatures,
-        .timestamps = timestamps,
-        .vsync_duration = 24.0 / 60.0,
+    // Attempt frame mixing, using the mixer queue helper
+    printf("testing frame mixing \n");
+    struct pl_render_params mix_params = {
+        .frame_mixer = &pl_filter_mitchell_clamp,
     };
 
-    for (int i = 0; i < mix.num_frames; i++) {
-        frames[i] = (struct pl_frame) {
-            .num_planes = 1,
-            .planes[0]  = img5x5,
-            .color = pl_color_space_bt709,
-            .repr = {
-                .sys    = PL_COLOR_SYSTEM_BT_709,
-                .levels = PL_COLOR_LEVELS_PC,
-            },
-        };
+    struct pl_queue_params qparams = {
+        .radius = pl_frame_mix_radius(&mix_params),
+        .vsync_duration = 1.0 / 60.0,
+        .frame_duration = 1.0 / 24.0,
+    };
 
-        pframes[i] = &frames[i];
-        signatures[i] = i;
-        timestamps[i] = i;
+#define NUM_MIX_FRAMES 20
+    struct pl_source_frame srcframes[NUM_MIX_FRAMES+1];
+    srcframes[NUM_MIX_FRAMES] = (struct pl_source_frame) {0};
+    for (int i = 0; i < NUM_MIX_FRAMES; i++) {
+        srcframes[i] = (struct pl_source_frame) {
+            .pts = i * qparams.frame_duration,
+            .map = frame_passthrough,
+            .frame_data = &image,
+        };
     }
 
-    int num_vsyncs = mix.num_frames / mix.vsync_duration;
-    for (int v = 0; v < num_vsyncs; v++) {
-        REQUIRE(pl_render_image_mix(rr, &mix, &target, &(struct pl_render_params) {
-            .frame_mixer = &pl_filter_mitchell_clamp,
-        }));
+    struct pl_queue *queue = pl_queue_create(gpu);
+    enum pl_queue_status ret;
+
+    // Test pre-pushing all frames, with delayed EOF
+    for (int i = 0; i < NUM_MIX_FRAMES; i++)
+        pl_queue_push(queue, &srcframes[i]);
+
+    struct pl_frame_mix mix;
+    while ((ret = pl_queue_update(queue, &mix, &qparams)) != QUEUE_EOF) {
+        if (ret == QUEUE_MORE) {
+            REQUIRE(qparams.pts > 0.0);
+            pl_queue_push(queue, NULL); // push delayed EOF
+            continue;
+        }
+
+        REQUIRE(ret == QUEUE_OK);
+        REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
 
         // Simulate advancing vsync
-        for (int i = 0; i < mix.num_frames; i++)
-            timestamps[i] -= mix.vsync_duration;
+        qparams.pts += qparams.vsync_duration;
     }
+
+    // Test dynamically pulling all frames, with oversample mixer
+    const struct pl_source_frame *frame_ptr = &srcframes[0];
+    mix_params.frame_mixer = &pl_oversample_frame_mixer;
+
+    qparams = (struct pl_queue_params) {
+        .radius = pl_frame_mix_radius(&mix_params),
+        .vsync_duration = qparams.vsync_duration,
+        .frame_duration = qparams.frame_duration,
+        .get_frame = get_frame_ptr,
+        .priv = &frame_ptr,
+    };
+
+    pl_queue_reset(queue);
+    while ((ret = pl_queue_update(queue, &mix, &qparams)) != QUEUE_EOF) {
+        REQUIRE(ret == QUEUE_OK);
+        REQUIRE(mix.num_frames <= 2);
+        REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
+        qparams.pts += qparams.vsync_duration;
+    }
+
+    // Test large PTS jump
+    pl_queue_reset(queue);
+    REQUIRE(pl_queue_update(queue, &mix, &qparams) == QUEUE_EOF);
+
+    pl_queue_destroy(&queue);
 
 error:
     free(fbo_data);
