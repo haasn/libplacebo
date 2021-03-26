@@ -47,6 +47,14 @@ libplacebo currently supports both Vulkan (including MoltenVK) and OpenGL, and
 contains backwards compatibility code for very old versions of GLSL down to
 GLES 2.0 and OpenGL 1.3.
 
+### Examples
+
+This screenshot from the included [plplay demo program](./demos/plplay.c)
+highlights just some of the features supported by the libplacebo rendering
+code, all of which are adjustable dynamically during video playback.
+
+[<img src="./demos/plplay-screenshot.png" width="200" alt="plplay settings" />](./demos/plplay-screenshot.png)
+
 ### History
 
 This project grew out of an interest to accomplish the following goals:
