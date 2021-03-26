@@ -247,7 +247,7 @@ struct pl_color_map_params {
     float max_boost;
 
     // If true, enables the gamut warning feature. This will visibly highlight
-    // all out-of-gamut colors (by inverting them), if they would have been
+    // all out-of-gamut colors (by coloring them pink), if they would have been
     // clipped as a result of gamut or tone mapping.
     bool gamut_warning;
 

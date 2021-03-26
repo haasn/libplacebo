@@ -1158,8 +1158,8 @@ void pl_shader_color_map(struct pl_shader *sh,
     if (params->gamut_warning && need_gamut_warn) {
         GLSL("if (any(greaterThan(color.rgb, vec3(%f + 0.005))) ||\n"
              "    any(lessThan(color.rgb, vec3(-0.005))))\n"
-             "    color.rgb = vec3(%f) - color.rgb; // invert\n",
-             dst.sig_peak * dst.sig_scale, src.sig_peak * src.sig_scale);
+             "    color.rgb = vec3(1.0, 0.0, 1.0); // magenta\n",
+             dst.sig_peak * dst.sig_scale);
     }
 
     if (need_linear)
