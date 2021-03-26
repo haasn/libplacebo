@@ -371,7 +371,7 @@ static enum pl_queue_status oversample(struct pl_queue *p, struct pl_frame_mix *
         return ret;
 
     // Can't oversample with only a single frame, fall back to ZOH semantics
-    if (p->queue.num < 2)
+    if (p->queue.num < 2 || p->queue.elem[0].src.pts > params->pts)
         return nearest(p, mix, params);
 
     struct entry *entries[2] = { &p->queue.elem[0], &p->queue.elem[1] };
