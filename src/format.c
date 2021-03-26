@@ -496,6 +496,7 @@ static int ccStrPrintDouble( char *str, int bufsize, int decimals, double value 
     for( index = 0 ; index < decimals ; index++ )
     {
         frac = (int32_t)( value * muldec ) - accumsub;
+        frac = PL_MIN(PL_MAX(frac, 0), 9); // FIXME: why is this needed?
         str[index] = '0' + (char)frac;
         accumsub += frac;
         accumsub = ( accumsub << 3 ) + ( accumsub << 1 );
