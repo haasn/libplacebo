@@ -37,6 +37,8 @@ struct priv {
 #ifdef USE_GL
     const struct pl_opengl *gl;
 #endif
+
+    float scroll_dx, scroll_dy;
 };
 
 static void err_cb(int code, const char *desc)
@@ -57,6 +59,13 @@ static void resize_cb(GLFWwindow *win, int width, int height)
         fprintf(stderr, "libplacebo: Failed resizing swapchain? Exiting...\n");
         p->w.window_lost = true;
     }
+}
+
+static void scroll_cb(GLFWwindow *win, double dx, double dy)
+{
+    struct priv *p = glfwGetWindowUserPointer(win);
+    p->scroll_dx += dx;
+    p->scroll_dy += dy;
 }
 
 struct window *window_create(struct pl_context *ctx, const char *title,
@@ -109,6 +118,7 @@ struct window *window_create(struct pl_context *ctx, const char *title,
     glfwSetWindowUserPointer(p->win, p);
     glfwSetFramebufferSizeCallback(p->win, resize_cb);
     glfwSetWindowCloseCallback(p->win, close_cb);
+    glfwSetScrollCallback(p->win, scroll_cb);
 
 #ifdef USE_VK
     VkResult err;
@@ -247,4 +257,12 @@ bool window_get_button(const struct window *window, enum button btn)
 
     struct priv *p = (struct priv *) window;
     return glfwGetMouseButton(p->win, button_map[btn]) == GLFW_PRESS;
+}
+
+void window_get_scroll(const struct window *window, float *dx, float *dy)
+{
+    struct priv *p = (struct priv *) window;
+    *dx = p->scroll_dx;
+    *dy = p->scroll_dy;
+    p->scroll_dx = p->scroll_dy = 0.0;
 }

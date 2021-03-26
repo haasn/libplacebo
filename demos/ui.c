@@ -70,7 +70,7 @@ struct ui *ui_create(const struct pl_gpu *gpu)
     // Initialize font atlas using built-in font
     nk_font_atlas_init_default(&ui->atlas);
     nk_font_atlas_begin(&ui->atlas);
-    struct nk_font *font = nk_font_atlas_add_default(&ui->atlas, 25, NULL);
+    struct nk_font *font = nk_font_atlas_add_default(&ui->atlas, 20, NULL);
     struct pl_tex_params tparams = {
         .format = pl_find_named_fmt(gpu, "r8"),
         .sampleable = true,
@@ -129,6 +129,9 @@ void ui_update_input(struct ui *ui, const struct window *win)
     nk_input_button(&ui->nk, NK_BUTTON_LEFT, x, y, window_get_button(win, BTN_LEFT));
     nk_input_button(&ui->nk, NK_BUTTON_RIGHT, x, y, window_get_button(win, BTN_RIGHT));
     nk_input_button(&ui->nk, NK_BUTTON_MIDDLE, x, y, window_get_button(win, BTN_MIDDLE));
+    struct nk_vec2 scroll;
+    window_get_scroll(win, &scroll.x, &scroll.y);
+    nk_input_scroll(&ui->nk, scroll);
     nk_input_end(&ui->nk);
 }
 

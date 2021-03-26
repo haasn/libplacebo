@@ -89,9 +89,11 @@ foreach api, dep : apis
   endif
 
   if ffmpeg_found
-    executable('plplay-' + api, 'plplay.c',
-      dependencies: [ dep, pthread ] + ffmpeg_deps,
-    )
+    plplay_deps = [ dep, pthread] + ffmpeg_deps
+    if nuklear_found
+      plplay_deps += nuklear
+    endif
+    executable('plplay-' + api, 'plplay.c', dependencies: plplay_deps)
   endif
 
   if nuklear_found

@@ -19,12 +19,21 @@
 #include "common.h"
 #include "window.h"
 
+#ifdef HAVE_UI
+#include "ui.h"
+#else
+struct ui;
+static void ui_destroy(struct ui **ui) {}
+static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { return true; };
+#endif
+
 #include <libplacebo/renderer.h>
 #include <libplacebo/utils/libav.h>
 #include <libplacebo/utils/frame_queue.h>
 
 struct plplay {
     struct window *win;
+    struct ui *ui;
 
     // libplacebo
     struct pl_context *ctx;
@@ -45,8 +54,17 @@ struct plplay {
     bool failed;
     bool eof;
 
-    // settings
+    // settings / ui state
+    const struct pl_named_filter_config *upscaler, *downscaler, *frame_mixer;
     struct pl_render_params params;
+    struct pl_deband_params deband_params;
+    struct pl_sigmoid_params sigmoid_params;
+    struct pl_color_adjustment color_adjustment;
+    struct pl_peak_detect_params peak_detect_params;
+    struct pl_color_map_params color_map_params;
+    struct pl_dither_params dither_params;
+    struct pl_cone_params cone_params;
+    int force_depth;
 };
 
 static void uninit(struct plplay *p)
@@ -59,6 +77,7 @@ static void uninit(struct plplay *p)
 
     pl_queue_destroy(&p->queue);
     pl_renderer_destroy(&p->renderer);
+    ui_destroy(&p->ui);
     window_destroy(&p->win);
 
     if (p->thread)
@@ -282,19 +301,40 @@ static enum pl_queue_status get_frame(struct pl_source_frame *out_frame,
     return QUEUE_OK;
 }
 
+static const struct pl_named_filter_config frame_mixers[] = {
+    { .name = "none",               .filter = NULL },
+    { .name = "oversample",         .filter = &pl_oversample_frame_mixer, },
+    { .name = "mitchell (clamped)", .filter = &pl_filter_mitchell_clamp, },
+    {0}
+};
+
+static void update_settings(struct plplay *p);
+
 static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *frame,
                          const struct pl_frame_mix *mix)
 {
     const struct pl_gpu *gpu = p->win->gpu;
     struct pl_frame target;
     pl_frame_from_swapchain(&target, frame);
+    update_settings(p);
 
     assert(mix->num_frames);
     pl_rect2df_aspect_copy(&target.crop, &mix->frames[0]->crop, 0.0);
     if (pl_frame_is_cropped(&target))
         pl_frame_clear(gpu, &target, (float[3]) {0});
 
-    return pl_render_image_mix(p->renderer, mix, &target, &p->params);
+    if (p->force_depth) {
+        target.repr.bits.color_depth = p->force_depth;
+        target.repr.bits.sample_depth = p->force_depth;
+    }
+
+    if (!pl_render_image_mix(p->renderer, mix, &target, &p->params))
+        return false;
+
+    if (!ui_draw(p->ui, frame))
+        return false;
+
+    return true;
 }
 
 static bool render_loop(struct plplay *p)
@@ -390,7 +430,26 @@ int main(int argc, char **argv)
         .lock = PTHREAD_MUTEX_INITIALIZER,
         .wakeup = PTHREAD_COND_INITIALIZER,
         .params = pl_render_default_params,
+        .deband_params = pl_deband_default_params,
+        .sigmoid_params = pl_sigmoid_default_params,
+        .color_adjustment = pl_color_adjustment_neutral,
+        .peak_detect_params = pl_peak_detect_default_params,
+        .color_map_params = pl_color_map_default_params,
+        .dither_params = pl_dither_default_params,
+        .cone_params = pl_vision_normal,
     };
+
+    // Redirect all of the pointers in `params.default` to instead point to the
+    // structs inside `struct plplay`, so we can adjust them using the UI
+#define DEFAULT_PARAMS(field) \
+        state.params.field = state.params.field ? &state.field : NULL
+    DEFAULT_PARAMS(deband_params);
+    DEFAULT_PARAMS(sigmoid_params);
+    DEFAULT_PARAMS(peak_detect_params);
+    DEFAULT_PARAMS(dither_params);
+    DEFAULT_PARAMS(cone_params);
+    state.params.color_adjustment = &state.color_adjustment;
+    state.params.color_map_params = &state.color_map_params;
 
     struct plplay *p = &state;
     if (!open_file(p, filename))
@@ -411,6 +470,28 @@ int main(int argc, char **argv)
     p->win = window_create(p->ctx, "plplay", par->width, par->height, flags);
     if (!p->win)
         goto error;
+
+#ifdef HAVE_UI
+    p->ui = ui_create(p->win->gpu);
+    if (!p->ui)
+        goto error;
+
+    // Find the right named filter entries for the defaults
+    const struct pl_named_filter_config *f;
+    for (f = pl_named_filters; f->name; f++) {
+        if (p->params.upscaler == f->filter)
+            p->upscaler = f;
+        if (p->params.downscaler == f->filter)
+            p->downscaler = f;
+    }
+
+    for (f = frame_mixers; f->name; f++) {
+        if (p->params.frame_mixer == f->filter)
+            p->frame_mixer = f;
+    }
+
+    assert(p->upscaler && p->downscaler && p->frame_mixer);
+#endif
 
     // TODO: Use direct rendering buffers
     if (!init_codec(p))
@@ -435,3 +516,303 @@ error:
     uninit(p);
     return 1;
 }
+
+#ifdef HAVE_UI
+
+static void update_settings(struct plplay *p)
+{
+    struct nk_context *nk = ui_get_context(p->ui);
+    enum nk_panel_flags win_flags = NK_WINDOW_BORDER | NK_WINDOW_MOVABLE |
+                                    NK_WINDOW_SCALABLE | NK_WINDOW_MINIMIZABLE |
+                                    NK_WINDOW_TITLE;
+
+    ui_update_input(p->ui, p->win);
+
+    const struct pl_named_filter_config *f;
+    struct pl_render_params *par = &p->params;
+
+    if (nk_begin(nk, "Settings", nk_rect(100, 100, 600, 600), win_flags)) {
+
+        nk_layout_row_dynamic(nk, 24, 2);
+        nk_label(nk, "Upscaler:", NK_TEXT_LEFT);
+        if (nk_combo_begin_label(nk, p->upscaler->name, nk_vec2(nk_widget_width(nk), 500))) {
+            nk_layout_row_dynamic(nk, 16, 1);
+            for (f = pl_named_filters; f->name; f++) {
+                if (nk_combo_item_label(nk, f->name, NK_TEXT_LEFT))
+                    p->upscaler = f;
+            }
+            par->upscaler = p->upscaler->filter;
+            nk_combo_end(nk);
+        }
+
+        nk_label(nk, "Downscaler:", NK_TEXT_LEFT);
+        if (nk_combo_begin_label(nk, p->downscaler->name, nk_vec2(nk_widget_width(nk), 300))) {
+            nk_layout_row_dynamic(nk, 16, 1);
+            for (f = pl_named_filters; f->name; f++) {
+                if (nk_combo_item_label(nk, f->name, NK_TEXT_LEFT))
+                    p->downscaler = f;
+            }
+            par->downscaler = p->downscaler->filter;
+            nk_combo_end(nk);
+        }
+
+        if (par->lut_entries) {
+            nk_labelf(nk, NK_TEXT_LEFT, "LUT precision: (%d)", par->lut_entries);
+        } else {
+            nk_label(nk, "LUT precision: (default)", NK_TEXT_LEFT);
+        }
+
+        nk_slider_int(nk, 0, &par->lut_entries, 256, 4);
+
+        nk_label(nk, "Antiringing:", NK_TEXT_LEFT);
+        nk_slider_float(nk, 0.0, &par->antiringing_strength, 1.0, 0.01f);
+
+        nk_label(nk, "Frame mixer:", NK_TEXT_LEFT);
+        if (nk_combo_begin_label(nk, p->frame_mixer->name, nk_vec2(nk_widget_width(nk), 100))) {
+            nk_layout_row_dynamic(nk, 16, 1);
+            for (f = frame_mixers; f->name; f++) {
+                if (nk_combo_item_label(nk, f->name, NK_TEXT_LEFT))
+                    p->frame_mixer = f;
+            }
+            par->frame_mixer = p->frame_mixer->filter;
+            nk_combo_end(nk);
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Debanding", NK_MINIMIZED)) {
+            struct pl_deband_params *dpar = &p->deband_params;
+            nk_layout_row_dynamic(nk, 24, 2);
+            par->deband_params = nk_check_label(nk, "Enable", par->deband_params) ? dpar : NULL;
+            if (nk_button_label(nk, "Reset settings"))
+                *dpar = pl_deband_default_params;
+            nk_labelf(nk, NK_TEXT_LEFT, "Iterations: (%d)", dpar->iterations);
+            nk_slider_int(nk, 0, &dpar->iterations, 8, 1);
+            nk_labelf(nk, NK_TEXT_LEFT, "Threshold: (%.1f)", dpar->threshold);
+            nk_slider_float(nk, 0.0, &dpar->threshold, 32.0, 0.1);
+            nk_labelf(nk, NK_TEXT_LEFT, "Radius: (%.1f)", dpar->radius);
+            nk_slider_float(nk, 0.0, &dpar->radius, 32.0, 0.1);
+            nk_labelf(nk, NK_TEXT_LEFT, "Grain: (%.1f)", dpar->grain);
+            nk_slider_float(nk, 0.0, &dpar->grain, 32.0, 0.1);
+            nk_tree_pop(nk);
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Sigmoidization", NK_MINIMIZED)) {
+            struct pl_sigmoid_params *spar = &p->sigmoid_params;
+            nk_layout_row_dynamic(nk, 24, 2);
+            par->sigmoid_params = nk_check_label(nk, "Enable", par->sigmoid_params) ? spar : NULL;
+            if (nk_button_label(nk, "Reset settings"))
+                *spar = pl_sigmoid_default_params;
+            nk_labelf(nk, NK_TEXT_LEFT, "Center: (%.2f)", spar->center);
+            nk_slider_float(nk, 0.0, &spar->center, 1.0, 0.01);
+            nk_labelf(nk, NK_TEXT_LEFT, "Slope: (%.1f)", spar->slope);
+            nk_slider_float(nk, 0.0, &spar->slope, 20.0, 0.1);
+            nk_tree_pop(nk);
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Color adjustment", NK_MINIMIZED)) {
+            struct pl_color_adjustment *adj = &p->color_adjustment;
+            nk_layout_row_dynamic(nk, 24, 2);
+            par->color_adjustment = nk_check_label(nk, "Enable", par->color_adjustment) ? adj : NULL;
+            if (nk_button_label(nk, "Reset settings"))
+                *adj = pl_color_adjustment_neutral;
+            nk_label(nk, "Brightness:", NK_TEXT_LEFT);
+            nk_slider_float(nk, -1.0, &adj->brightness, 1.0, 0.01);
+            nk_label(nk, "Contrast:", NK_TEXT_LEFT);
+            nk_slider_float(nk, 0.0, &adj->contrast, 2.0, 0.01);
+            nk_label(nk, "Saturation:", NK_TEXT_LEFT);
+            nk_slider_float(nk, 0.0, &adj->saturation, 2.0, 0.01);
+            nk_label(nk, "Hue:", NK_TEXT_LEFT);
+            nk_slider_float(nk, -M_PI, &adj->hue, M_PI, 0.01);
+            nk_label(nk, "Gamma:", NK_TEXT_LEFT);
+            nk_slider_float(nk, 0.0, &adj->gamma, 2.0, 0.01);
+            nk_tree_pop(nk);
+        }
+
+        if (is_file_hdr(p)) {
+            if (nk_tree_push(nk, NK_TREE_NODE, "HDR peak detection", NK_MINIMIZED)) {
+                struct pl_peak_detect_params *ppar = &p->peak_detect_params;
+                nk_layout_row_dynamic(nk, 24, 2);
+                par->peak_detect_params = nk_check_label(nk, "Enable", par->peak_detect_params) ? ppar : NULL;
+                if (nk_button_label(nk, "Reset settings"))
+                    *ppar = pl_peak_detect_default_params;
+                nk_labelf(nk, NK_TEXT_LEFT, "Smoothing period: (%d)", (int) ppar->smoothing_period);
+                nk_slider_float(nk, 1.0, &ppar->smoothing_period, 1000.0, 1.0);
+                nk_labelf(nk, NK_TEXT_LEFT, "Threshold low: (%.2f)", ppar->scene_threshold_low);
+                nk_slider_float(nk, 0.0, &ppar->scene_threshold_low, 20.0, 0.01);
+                nk_labelf(nk, NK_TEXT_LEFT, "Threshold high: (%.2f)", ppar->scene_threshold_high);
+                nk_slider_float(nk, 0.0, &ppar->scene_threshold_high, 20.0, 0.01);
+                nk_labelf(nk, NK_TEXT_LEFT, "Overshoot margin: (%.2f%%)", ppar->overshoot_margin);
+                nk_slider_float(nk, 0.0, &ppar->overshoot_margin, 1.0, 0.01);
+                nk_tree_pop(nk);
+            }
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Gamut adaptation / tone mapping", NK_MINIMIZED)) {
+            struct pl_color_map_params *cpar = &p->color_map_params;
+            nk_layout_row_dynamic(nk, 24, 2);
+            par->color_map_params = nk_check_label(nk, "Enable", par->color_map_params) ? cpar : NULL;
+            if (nk_button_label(nk, "Reset settings"))
+                *cpar = pl_color_map_default_params;
+
+            static const char *rendering_intents[4] = {
+                [PL_INTENT_PERCEPTUAL]              = "Perceptual",
+                [PL_INTENT_RELATIVE_COLORIMETRIC]   = "Relative colorimetric",
+                [PL_INTENT_SATURATION]              = "Saturation",
+                [PL_INTENT_ABSOLUTE_COLORIMETRIC]   = "Absolute colorimetric",
+            };
+
+            nk_labelf(nk, NK_TEXT_LEFT, "Rendering intent:");
+            cpar->intent = nk_combo(nk, rendering_intents, 4, cpar->intent,
+                                    16, nk_vec2(nk_widget_width(nk), 100));
+
+            static const char *tone_mapping_algos[PL_TONE_MAPPING_ALGORITHM_COUNT] = {
+                [PL_TONE_MAPPING_CLIP]              = "Clip",
+                [PL_TONE_MAPPING_MOBIUS]            = "Mobius",
+                [PL_TONE_MAPPING_REINHARD]          = "Reinhard",
+                [PL_TONE_MAPPING_HABLE]             = "Hable",
+                [PL_TONE_MAPPING_GAMMA]             = "Gamma",
+                [PL_TONE_MAPPING_LINEAR]            = "Linear",
+                [PL_TONE_MAPPING_BT_2390]           = "BT.2390",
+            };
+
+            nk_labelf(nk, NK_TEXT_LEFT, "Tone mapping algorithm:");
+            enum pl_tone_mapping_algorithm new_algo;
+            new_algo = nk_combo(nk, tone_mapping_algos, PL_TONE_MAPPING_ALGORITHM_COUNT,
+                                cpar->tone_mapping_algo, 16, nk_vec2(nk_widget_width(nk), 300));
+
+            float param_min, param_max, param_def = 0.0;
+            switch (new_algo) {
+            case PL_TONE_MAPPING_MOBIUS:
+            case PL_TONE_MAPPING_REINHARD:
+                param_min = 0.01;
+                param_max = 0.99;
+                param_def = 0.5;
+                break;
+            case PL_TONE_MAPPING_GAMMA:
+                param_min = 0.5;
+                param_max = 4.0;
+                param_def = 1.8;
+                break;
+            case PL_TONE_MAPPING_LINEAR:
+                param_min = 0.1;
+                param_max = 10.0;
+                param_def = 1.0;
+                break;
+            default: break;
+            }
+
+            // Explicitly reset the tone mapping parameter when changing this
+            // function, since the interpretation depends on the algorithm
+            if (new_algo != cpar->tone_mapping_algo)
+                cpar->tone_mapping_param = param_def;
+            cpar->tone_mapping_algo = new_algo;
+
+            if (param_def) {
+                nk_labelf(nk, NK_TEXT_LEFT, "Algorithm parameter: %.2f", cpar->tone_mapping_param);
+                nk_slider_float(nk, param_min, &cpar->tone_mapping_param, param_max, param_max / 100.0);
+            }
+
+            nk_labelf(nk, NK_TEXT_LEFT, "Desaturation strength:");
+            nk_slider_float(nk, 0.0, &cpar->desaturation_strength, 1.0, 0.01);
+            nk_labelf(nk, NK_TEXT_LEFT, "Exponent: (%.2f)", cpar->desaturation_exponent);
+            nk_slider_float(nk, 0.0, &cpar->desaturation_exponent, 4.0, 0.01);
+            nk_labelf(nk, NK_TEXT_LEFT, "Base: (%.2f)", cpar->desaturation_base);
+            nk_slider_float(nk, 0.0, &cpar->desaturation_base, 1.0, 0.01);
+            nk_labelf(nk, NK_TEXT_LEFT, "Maximum boost: (%.2f)", cpar->max_boost);
+            nk_slider_float(nk, 1.0, &cpar->max_boost, 4.0, 0.01);
+            nk_layout_row_dynamic(nk, 24, 1);
+            nk_checkbox_label(nk, "Enable gamut warning", &cpar->gamut_warning);
+            nk_checkbox_label(nk, "Enable colorimetric clipping", &cpar->gamut_clipping);
+
+            nk_tree_pop(nk);
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Dithering", NK_MINIMIZED)) {
+            struct pl_dither_params *dpar = &p->dither_params;
+            nk_layout_row_dynamic(nk, 24, 2);
+            par->dither_params = nk_check_label(nk, "Enable", par->dither_params) ? dpar : NULL;
+            if (nk_button_label(nk, "Reset settings"))
+                *dpar = pl_dither_default_params;
+
+            static const char *dither_methods[PL_DITHER_METHOD_COUNT] = {
+                [PL_DITHER_BLUE_NOISE]      = "Blue noise",
+                [PL_DITHER_ORDERED_LUT]     = "Ordered (LUT)",
+                [PL_DITHER_ORDERED_FIXED]   = "Ordered (fixed size)",
+                [PL_DITHER_WHITE_NOISE]     = "White noise",
+            };
+
+            nk_labelf(nk, NK_TEXT_LEFT, "Dither algorithm:");
+            dpar->method = nk_combo(nk, dither_methods, PL_DITHER_METHOD_COUNT, dpar->method,
+                                    16, nk_vec2(nk_widget_width(nk), 100));
+
+            switch (dpar->method) {
+            case PL_DITHER_BLUE_NOISE:
+            case PL_DITHER_ORDERED_LUT:
+                nk_labelf(nk, NK_TEXT_LEFT, "LUT size (%d):", 1 << dpar->lut_size);
+                nk_slider_int(nk, 1, &dpar->lut_size, 8, 1);
+                break;
+            default: break;
+            }
+
+            nk_layout_row_dynamic(nk, 24, 1);
+            nk_checkbox_label(nk, "Enable temporal dithering", &dpar->temporal);
+            nk_layout_row_dynamic(nk, 24, 2);
+            nk_labelf(nk, NK_TEXT_LEFT, "Simulate bit depth: (%d)", p->force_depth);
+            nk_slider_int(nk, 0, &p->force_depth, 16, 1);
+            nk_tree_pop(nk);
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Color blindness adaptation", NK_MINIMIZED)) {
+            struct pl_cone_params *cpar = &p->cone_params;
+            nk_layout_row_dynamic(nk, 24, 2);
+            par->cone_params = nk_check_label(nk, "Enable", par->cone_params) ? cpar : NULL;
+            if (nk_button_label(nk, "Reset settings"))
+                *cpar = pl_vision_normal;
+            nk_layout_row_dynamic(nk, 24, 1);
+            int cones = cpar->cones;
+            nk_checkbox_flags_label(nk, "Red cone (L)", &cones, PL_CONE_L);
+            nk_checkbox_flags_label(nk, "Green cone (M)", &cones, PL_CONE_M);
+            nk_checkbox_flags_label(nk, "Blue cone (S)", &cones, PL_CONE_S);
+            cpar->cones = cones;
+            nk_layout_row_dynamic(nk, 24, 2);
+            nk_labelf(nk, NK_TEXT_LEFT, "Strength:");
+            nk_slider_float(nk, 0.0, &cpar->strength, 2.0, 0.01);
+            nk_tree_pop(nk);
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Performance / quality trade-off", NK_MINIMIZED)) {
+            nk_layout_row_dynamic(nk, 24, 1);
+            nk_checkbox_label(nk, "Disable anti-aliasing", &par->skip_anti_aliasing);
+            nk_layout_row_dynamic(nk, 24, 2);
+            nk_labelf(nk, NK_TEXT_LEFT, "Polar cut-off value: (%.2f)", par->polar_cutoff);
+            nk_slider_float(nk, 0.0, &par->polar_cutoff, 1.0, 0.01f);
+            nk_layout_row_dynamic(nk, 24, 1);
+            nk_checkbox_label(nk, "Disable overlay sampling", &par->disable_overlay_sampling);
+            nk_checkbox_label(nk, "Allow delayed peak-detect", &par->allow_delayed_peak_detect);
+            nk_checkbox_label(nk, "Preserve mixing cache", &par->preserve_mixing_cache);
+            nk_tree_pop(nk);
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Performance tuning / debugging", NK_MINIMIZED)) {
+            nk_layout_row_dynamic(nk, 24, 1);
+            nk_checkbox_label(nk, "Disable linear scaling", &par->disable_linear_scaling);
+            nk_checkbox_label(nk, "Disable built-in scalers", &par->disable_builtin_scalers);
+            nk_checkbox_label(nk, "Force-enable 3DLUT", &par->force_icc_lut);
+            nk_checkbox_label(nk, "Force-enable dither", &par->force_dither);
+            nk_checkbox_label(nk, "Disable FBOs / advanced rendering", &par->disable_fbos);
+
+            nk_layout_row_dynamic(nk, 24, 2);
+            if (nk_button_label(nk, "Flush renderer cache"))
+                pl_renderer_flush_cache(p->renderer);
+            if (nk_button_label(nk, "Recreate renderer")) {
+                pl_renderer_destroy(&p->renderer);
+                p->renderer = pl_renderer_create(p->ctx, p->win->gpu);
+            }
+            nk_tree_pop(nk);
+        }
+    }
+    nk_end(nk);
+}
+
+#else
+static void update_settings(struct plplay *p) { }
+#endif

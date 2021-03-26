@@ -40,6 +40,8 @@ struct priv {
     SDL_GLContext gl_ctx;
     const struct pl_opengl *gl;
 #endif
+
+    int scroll_dx, scroll_dy;
 };
 
 struct window *window_create(struct pl_context *ctx, const char *title,
@@ -201,6 +203,10 @@ static inline void handle_event(struct priv *p, SDL_Event *event)
             }
         }
         return;
+
+    case SDL_MOUSEWHEEL:
+        p->scroll_dx += event->wheel.x;
+        p->scroll_dy += event->wheel.y;
     }
 }
 
@@ -234,4 +240,12 @@ bool window_get_button(const struct window *window, enum button btn)
     };
 
     return SDL_GetMouseState(NULL, NULL) & button_mask[btn];
+}
+
+void window_get_scroll(const struct window *window, float *dx, float *dy)
+{
+    struct priv *p = (struct priv *) window;
+    *dx = p->scroll_dx;
+    *dy = p->scroll_dy;
+    p->scroll_dx = p->scroll_dy = 0;
 }
