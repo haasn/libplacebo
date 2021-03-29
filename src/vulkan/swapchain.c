@@ -469,8 +469,8 @@ static bool update_swapchain_info(struct priv *p, VkSwapchainCreateInfoKHR *info
     }
 
     // Clamp the extent based on the supported limits
-    w = PL_MIN(PL_MAX(w, caps.minImageExtent.width), caps.maxImageExtent.width);
-    h = PL_MIN(PL_MAX(h, caps.minImageExtent.height), caps.maxImageExtent.height);
+    w = PL_CLAMP(w, caps.minImageExtent.width,  caps.maxImageExtent.width);
+    h = PL_CLAMP(h, caps.minImageExtent.height, caps.maxImageExtent.height);
     info->imageExtent = (VkExtent2D) { w, h };
 
     // We just request whatever makes sense, and let the pl_vk decide what

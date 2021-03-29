@@ -1434,10 +1434,10 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
 
         // Constrain the scissors to the target dimension (to sanitize the
         // underlying graphics API calls)
-        sc->x0 = PL_MAX(0, PL_MIN(target->params.w, sc->x0));
-        sc->y0 = PL_MAX(0, PL_MIN(target->params.h, sc->y0));
-        sc->x1 = PL_MAX(0, PL_MIN(target->params.w, sc->x1));
-        sc->y1 = PL_MAX(0, PL_MIN(target->params.h, sc->y1));
+        sc->x0 = PL_CLAMP(sc->x0, 0, target->params.w);
+        sc->y0 = PL_CLAMP(sc->y0, 0, target->params.h);
+        sc->x1 = PL_CLAMP(sc->x1, 0, target->params.w);
+        sc->y1 = PL_CLAMP(sc->y1, 0, target->params.h);
 
         // Scissors wholly outside target -> silently drop pass (also needed
         // to ensure we don't cause UB by specifying invalid scissors)

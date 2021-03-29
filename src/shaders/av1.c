@@ -335,7 +335,7 @@ static void generate_grain_y(float out[GRAIN_HEIGHT_LUT][GRAIN_WIDTH_LUT],
             }
 
             int16_t grain = buf[y][x] + round2(sum, data->ar_coeff_shift);
-            grain = PL_MAX(scale.grain_min, PL_MIN(scale.grain_max, grain));
+            grain = PL_CLAMP(grain, scale.grain_min, scale.grain_max);
             buf[y][x] = grain;
         }
     }
@@ -414,7 +414,7 @@ static void generate_grain_uv(float *out, int16_t buf[GRAIN_HEIGHT][GRAIN_WIDTH]
             }
 
             int16_t grain = buf[y][x] + round2(sum, data->ar_coeff_shift);
-            grain = PL_MAX(scale.grain_min, PL_MIN(scale.grain_max, grain));
+            grain = PL_CLAMP(grain, scale.grain_min, scale.grain_max);
             buf[y][x] = grain;
         }
     }
