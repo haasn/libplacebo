@@ -99,6 +99,10 @@ void pl_matrix3x3_invert(struct pl_matrix3x3 *mat);
 // A := A * B
 void pl_matrix3x3_mul(struct pl_matrix3x3 *a, const struct pl_matrix3x3 *b);
 
+// Flipped version of `pl_matrix3x3_mul`.
+// B := A * B
+void pl_matrix3x3_rmul(const struct pl_matrix3x3 *a, struct pl_matrix3x3 *b);
+
 // Represents an affine transformation, which is basically a 3x3 matrix
 // together with a column vector to add onto the output.
 struct pl_transform3x3 {

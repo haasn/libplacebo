@@ -163,6 +163,13 @@ void pl_matrix3x3_mul(struct pl_matrix3x3 *a, const struct pl_matrix3x3 *b)
     }
 }
 
+void pl_matrix3x3_rmul(const struct pl_matrix3x3 *a, struct pl_matrix3x3 *b)
+{
+    struct pl_matrix3x3 m = *a;
+    pl_matrix3x3_mul(&m, b);
+    *b = m;
+}
+
 const struct pl_transform3x3 pl_transform3x3_identity = {
     .mat = {{
         { 1, 0, 0 },

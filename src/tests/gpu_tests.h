@@ -978,6 +978,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         .contrast = 0.9,
         .saturation = 1.5,
         .gamma = 0.8,
+        .temperature = 0.3,
     };
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     params = pl_render_default_params;

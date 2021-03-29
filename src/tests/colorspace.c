@@ -304,4 +304,10 @@ int main()
 
     // These models should round-trip green
     TEST_CONE(pl_vision_normal, green);
+
+    // Color adaptation tests
+    struct pl_cie_xy d65 = pl_white_from_temp(6504);
+    struct pl_cie_xy d55 = pl_white_from_temp(5503);
+    REQUIRE(feq(d65.x, 0.31271, 1e-3) && feq(d65.y, 0.32902, 1e-3));
+    REQUIRE(feq(d55.x, 0.33242, 1e-3) && feq(d55.y, 0.34743, 1e-3));
 }

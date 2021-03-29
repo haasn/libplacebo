@@ -331,6 +331,8 @@ struct pl_color_adjustment {
     float hue;
     // Gamma adjustment. 1.0 = neutral, 0.0 = solid black
     float gamma;
+    // Color temperature shift. 0.0 = 6500 K, -1.0 = 3000 K, 1.0 = 10000 K
+    float temperature;
 };
 
 // A struct pre-filled with all-neutral values.
@@ -370,6 +372,12 @@ static inline float pl_cie_Z(struct pl_cie_xy xy) {
     return (1 - xy.x - xy.y) / xy.y;
 }
 
+// Computes the CIE xy chromaticity coordinates of a CIE D-series illuminant
+// with the given correlated color temperature.
+//
+// `temperature` must be betwen 2500 K and 25000 K, inclusive.
+struct pl_cie_xy pl_white_from_temp(float temperature);
+
 // Represents the raw physical primaries corresponding to a color space.
 struct pl_raw_primaries {
     struct pl_cie_xy red, green, blue, white;
@@ -393,6 +401,10 @@ struct pl_matrix3x3 pl_get_xyz2rgb_matrix(const struct pl_raw_primaries *prim);
 struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *src,
                                                 const struct pl_raw_primaries *dst,
                                                 enum pl_rendering_intent intent);
+
+// Return a chromatic adaptation matrix, which converts from one white point to
+// another, using the Bradford matrix. This is an RGB->RGB transformation.
+struct pl_matrix3x3 pl_get_adaptation_matrix(struct pl_cie_xy src, struct pl_cie_xy dst);
 
 // Returns true if 'b' is entirely contained in 'a'. Useful for figuring out if
 // colorimetric clipping will occur or not.

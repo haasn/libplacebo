@@ -2,7 +2,7 @@ project('libplacebo', ['c', 'cpp'],
   license: 'LGPL2.1+',
   default_options: ['c_std=c99', 'cpp_std=c++11', 'warning_level=2'],
   meson_version: '>=0.51',
-  version: '3.118.0',
+  version: '3.119.0',
 )
 
 # Version number

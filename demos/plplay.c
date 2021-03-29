@@ -617,6 +617,8 @@ static void update_settings(struct plplay *p)
             nk_slider_float(nk, -M_PI, &adj->hue, M_PI, 0.01);
             nk_label(nk, "Gamma:", NK_TEXT_LEFT);
             nk_slider_float(nk, 0.0, &adj->gamma, 2.0, 0.01);
+            nk_label(nk, "Temperature:", NK_TEXT_LEFT);
+            nk_slider_float(nk, -1.0, &adj->temperature, 1.0, 0.01);
             nk_tree_pop(nk);
         }
 

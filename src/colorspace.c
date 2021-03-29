@@ -364,11 +364,12 @@ void pl_color_space_infer(struct pl_color_space *space)
 }
 
 const struct pl_color_adjustment pl_color_adjustment_neutral = {
-    .brightness = 0.0,
-    .contrast   = 1.0,
-    .saturation = 1.0,
-    .hue        = 0.0,
-    .gamma      = 1.0,
+    .brightness     = 0.0,
+    .contrast       = 1.0,
+    .saturation     = 1.0,
+    .hue            = 0.0,
+    .gamma          = 1.0,
+    .temperature    = 0.0,
 };
 
 void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y)
@@ -402,6 +403,23 @@ void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y)
         break;
     default: break;
     }
+}
+
+struct pl_cie_xy pl_white_from_temp(float temp)
+{
+    temp = PL_CLAMP(temp, 2500, 25000);
+
+    double ti = 1000.0 / temp, ti2 = ti * ti, ti3 = ti2 * ti, x;
+    if (temp <= 7000) {
+        x = -4.6070 * ti3 + 2.9678 * ti2 + 0.09911 * ti + 0.244063;
+    } else {
+        x = -2.0064 * ti3 + 1.9018 * ti2 + 0.24748 * ti + 0.237040;
+    }
+
+    return (struct pl_cie_xy) {
+        .x = x,
+        .y = -3 * (x*x) + 2.87 * x - 0.275,
+    };
 }
 
 const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim)
@@ -626,6 +644,21 @@ static void apply_chromatic_adaptation(struct pl_cie_xy src,
     pl_matrix3x3_invert(&ma_inv);
     pl_matrix3x3_mul(mat, &ma_inv);
     pl_matrix3x3_mul(mat, &tmp);
+}
+
+struct pl_matrix3x3 pl_get_adaptation_matrix(struct pl_cie_xy src, struct pl_cie_xy dst)
+{
+    // Use BT.709 primaries (with chosen white point) as an XYZ reference
+    struct pl_raw_primaries csp = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_709);
+    csp.white = src;
+
+    struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(&csp);
+    struct pl_matrix3x3 xyz2rgb = rgb2xyz;
+    pl_matrix3x3_invert(&xyz2rgb);
+
+    apply_chromatic_adaptation(src, dst, &xyz2rgb);
+    pl_matrix3x3_mul(&xyz2rgb, &rgb2xyz);
+    return xyz2rgb;
 }
 
 const struct pl_cone_params pl_vision_normal        = {PL_CONE_NONE, 1.0};
@@ -920,8 +953,6 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     default: abort();
     }
 
-    struct pl_transform3x3 out = { .mat = m };
-
     // Apply hue and saturation in the correct way depending on the colorspace.
     if (pl_color_system_is_ycbcr_like(repr->sys)) {
         // Hue is equivalent to rotating input [U, V] subvector around the origin.
@@ -929,13 +960,22 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         float huecos = params->saturation * cos(params->hue);
         float huesin = params->saturation * sin(params->hue);
         for (int i = 0; i < 3; i++) {
-            float u = out.mat.m[i][1], v = out.mat.m[i][2];
-            out.mat.m[i][1] = huecos * u - huesin * v;
-            out.mat.m[i][2] = huesin * u + huecos * v;
+            float u = m.m[i][1], v = m.m[i][2];
+            m.m[i][1] = huecos * u - huesin * v;
+            m.m[i][2] = huesin * u + huecos * v;
         }
     }
     // FIXME: apply saturation for RGB
 
+    // Apply color temperature adaptation, relative to BT.709 primaries
+    if (params->temperature) {
+        struct pl_cie_xy src = pl_white_from_temp(6500);
+        struct pl_cie_xy dst = pl_white_from_temp(6500 + 3500 * params->temperature);
+        struct pl_matrix3x3 adapt = pl_get_adaptation_matrix(src, dst);
+        pl_matrix3x3_rmul(&adapt, &m);
+    }
+
+    struct pl_transform3x3 out = { .mat = m };
     int bit_depth = PL_DEF(repr->bits.sample_depth,
                     PL_DEF(repr->bits.color_depth, 8));
 
