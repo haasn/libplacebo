@@ -245,6 +245,15 @@ const struct pl_render_params pl_render_high_quality_params = {
 
 const struct pl_filter_config pl_oversample_frame_mixer = {0};
 
+const struct pl_filter_preset pl_frame_mixers[] = {
+    { "none",           NULL,                       "No frame mixing" },
+    { "oversample",     &pl_oversample_frame_mixer, "Oversample (AKA SmoothMotion)" },
+    { "mitchell_clamp", &pl_filter_mitchell_clamp,  "Cubic spline (clamped)" },
+    {0}
+};
+
+const int pl_num_frame_mixers = PL_ARRAY_SIZE(pl_frame_mixers) - 1;
+
 #define FBOFMT(n) (params->disable_fbos ? NULL : rr->fbofmt[n])
 
 // Represents a "in-flight" image, which is either a shader that's in the

@@ -258,6 +258,10 @@ extern const struct pl_render_params pl_render_high_quality_params;
 // This is equivalent to (struct pl_filter_config) {0}.
 extern const struct pl_filter_config pl_oversample_frame_mixer;
 
+// A list of recommended frame mixer presets, terminated by {0}
+extern const struct pl_filter_preset pl_frame_mixers[];
+extern const int pl_num_frame_mixers; // excluding trailing {0}
+
 #define PL_MAX_PLANES 4
 
 // High level description of a single slice of an image. This basically

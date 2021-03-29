@@ -195,27 +195,27 @@ void pl_filter_free(const struct pl_filter **filter)
     pl_free_ptr((void **) filter);
 }
 
-const struct pl_named_filter_function *pl_find_named_filter_function(const char *name)
+const struct pl_filter_function_preset *pl_find_filter_function_preset(const char *name)
 {
     if (!name)
         return NULL;
 
-    for (int i = 0; pl_named_filter_functions[i].function; i++) {
-        if (strcmp(pl_named_filter_functions[i].name, name) == 0)
-            return &pl_named_filter_functions[i];
+    for (int i = 0; pl_filter_function_presets[i].name; i++) {
+        if (strcmp(pl_filter_function_presets[i].name, name) == 0)
+            return &pl_filter_function_presets[i];
     }
 
     return NULL;
 }
 
-const struct pl_named_filter_config *pl_find_named_filter(const char *name)
+const struct pl_filter_preset *pl_find_filter_preset(const char *name)
 {
     if (!name)
         return NULL;
 
-    for (int i = 0; pl_named_filters[i].filter; i++) {
-        if (strcmp(pl_named_filters[i].name, name) == 0)
-            return &pl_named_filters[i];
+    for (int i = 0; pl_filter_presets[i].name; i++) {
+        if (strcmp(pl_filter_presets[i].name, name) == 0)
+            return &pl_filter_presets[i];
     }
 
     return NULL;
@@ -492,7 +492,8 @@ const struct pl_filter_function pl_filter_function_spline64 = {
 };
 
 // Named filter functions
-const struct pl_named_filter_function pl_named_filter_functions[] = {
+const struct pl_filter_function_preset pl_filter_function_presets[] = {
+    {"none",            NULL},
     {"box",             &pl_filter_function_box},
     {"dirichlet",       &pl_filter_function_box}, // alias
     {"triangle",        &pl_filter_function_triangle},
@@ -518,6 +519,8 @@ const struct pl_named_filter_function pl_named_filter_functions[] = {
     {"spline64",        &pl_filter_function_spline64},
     {0},
 };
+
+const int pl_num_filter_function_presets = PL_ARRAY_SIZE(pl_filter_function_presets) - 1;
 
 // Built-in filter function presets
 const struct pl_filter_config pl_filter_spline16 = {
@@ -595,16 +598,6 @@ const struct pl_filter_config pl_filter_ewa_hann = {
     .polar = true,
 };
 
-const struct pl_filter_config pl_filter_haasnsoft = {
-    .kernel = &jinc3,
-    .window = &pl_filter_function_hann,
-    // The blur is tuned to equal out orthogonal and diagonal contributions
-    // on a regular grid. This has the effect of almost completely killing
-    // aliasing.
-    .blur = 1.11,
-    .polar = true,
-};
-
 // Spline family
 const struct pl_filter_config pl_filter_bicubic = {
     .kernel = &pl_filter_function_bicubic,
@@ -642,30 +635,37 @@ const struct pl_filter_config pl_filter_ewa_robidouxsharp = {
 };
 
 // Named filter configs
-const struct pl_named_filter_config pl_named_filters[] = {
-    {"spline16",            &pl_filter_spline16},
-    {"spline36",            &pl_filter_spline36},
-    {"spline64",            &pl_filter_spline64},
-    {"nearest",             &pl_filter_nearest},
+const struct pl_filter_preset pl_filter_presets[] = {
+    // Highest priority / recommended filters
+    {"none",                NULL,                   "Built-in sampling"},
+    {"bilinear",            &pl_filter_bilinear,    "Bilinear"},
+    {"nearest",             &pl_filter_nearest,     "Nearest neighbour"},
+    {"bicubic",             &pl_filter_bicubic,     "Bicubic"},
+    {"lanczos",             &pl_filter_lanczos,     "Lanczos"},
+    {"ewa_lanczos",         &pl_filter_ewa_lanczos, "Jinc (EWA Lanczos)"},
+    {"gaussian",            &pl_filter_gaussian,    "Gaussian"},
+    {"spline16",            &pl_filter_spline16,    "Spline (2 taps)"},
+    {"spline36",            &pl_filter_spline36,    "Spline (3 taps)"},
+    {"spline64",            &pl_filter_spline64,    "Spline (4 taps)"},
+    {"mitchell",            &pl_filter_mitchell,    "Mitchell-Netravali"},
+
+    // Remaining filters
+    {"sinc",                &pl_filter_sinc,        "Sinc (unwindowed)"},
+    {"ginseng",             &pl_filter_ginseng,     "Ginseng (Jinc-Sinc)"},
+    {"ewa_jinc",            &pl_filter_ewa_jinc,    "EWA Jinc (unwindowed)"},
+    {"ewa_ginseng",         &pl_filter_ewa_ginseng, "EWA Ginseng"},
+    {"ewa_hann",            &pl_filter_ewa_hann,    "EWA Hann"},
+    {"catmull_rom",         &pl_filter_catmull_rom, "Catmull-Rom"},
+    {"robidoux",            &pl_filter_robidoux,            "Robidoux"},
+    {"robidouxsharp",       &pl_filter_robidouxsharp,       "RobidouxSharp"},
+    {"ewa_robidoux",        &pl_filter_ewa_robidoux,        "EWA Robidoux"},
+    {"ewa_robidouxsharp",   &pl_filter_ewa_robidouxsharp,   "EWA RobidouxSharp"},
+
+    // Aliases
     {"box",                 &pl_filter_nearest}, // alias
-    {"bilinear",            &pl_filter_bilinear},
     {"triangle",            &pl_filter_bilinear}, // alias
-    {"gaussian",            &pl_filter_gaussian},
-    {"sinc",                &pl_filter_sinc},
-    {"lanczos",             &pl_filter_lanczos},
-    {"ginseng",             &pl_filter_ginseng},
-    {"ewa_jinc",            &pl_filter_ewa_jinc},
-    {"ewa_lanczos",         &pl_filter_ewa_lanczos},
-    {"ewa_ginseng",         &pl_filter_ewa_ginseng},
-    {"ewa_hann",            &pl_filter_ewa_hann},
     {"ewa_hanning",         &pl_filter_ewa_hann}, // alias
-    {"haasnsoft",           &pl_filter_haasnsoft},
-    {"bicubic",             &pl_filter_bicubic},
-    {"catmull_rom",         &pl_filter_catmull_rom},
-    {"mitchell",            &pl_filter_mitchell},
-    {"robidoux",            &pl_filter_robidoux},
-    {"robidouxsharp",       &pl_filter_robidouxsharp},
-    {"ewa_robidoux",        &pl_filter_ewa_robidoux},
-    {"ewa_robidouxsharp",   &pl_filter_ewa_robidouxsharp},
     {0},
 };
+
+const int pl_num_filter_presets = PL_ARRAY_SIZE(pl_filter_presets) - 1;

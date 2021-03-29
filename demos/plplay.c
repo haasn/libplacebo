@@ -54,7 +54,7 @@ struct plplay {
     bool eof;
 
     // settings / ui state
-    const struct pl_named_filter_config *upscaler, *downscaler, *frame_mixer;
+    const struct pl_filter_preset *upscaler, *downscaler, *frame_mixer;
     struct pl_render_params params;
     struct pl_deband_params deband_params;
     struct pl_sigmoid_params sigmoid_params;
@@ -294,13 +294,6 @@ static enum pl_queue_status get_frame(struct pl_source_frame *out_frame,
     return QUEUE_OK;
 }
 
-static const struct pl_named_filter_config frame_mixers[] = {
-    { .name = "none",               .filter = NULL },
-    { .name = "oversample",         .filter = &pl_oversample_frame_mixer, },
-    { .name = "mitchell (clamped)", .filter = &pl_filter_mitchell_clamp, },
-    {0}
-};
-
 static void update_settings(struct plplay *p);
 
 static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *frame,
@@ -470,15 +463,15 @@ int main(int argc, char **argv)
         goto error;
 
     // Find the right named filter entries for the defaults
-    const struct pl_named_filter_config *f;
-    for (f = pl_named_filters; f->name; f++) {
+    const struct pl_filter_preset *f;
+    for (f = pl_filter_presets; f->name; f++) {
         if (p->params.upscaler == f->filter)
             p->upscaler = f;
         if (p->params.downscaler == f->filter)
             p->downscaler = f;
     }
 
-    for (f = frame_mixers; f->name; f++) {
+    for (f = pl_frame_mixers; f->name; f++) {
         if (p->params.frame_mixer == f->filter)
             p->frame_mixer = f;
     }
@@ -521,17 +514,19 @@ static void update_settings(struct plplay *p)
 
     ui_update_input(p->ui, p->win);
 
-    const struct pl_named_filter_config *f;
+    const struct pl_filter_preset *f;
     struct pl_render_params *par = &p->params;
 
     if (nk_begin(nk, "Settings", nk_rect(100, 100, 600, 600), win_flags)) {
 
-        nk_layout_row_dynamic(nk, 24, 2);
+        nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[2]){ 0.3, 0.7 });
         nk_label(nk, "Upscaler:", NK_TEXT_LEFT);
-        if (nk_combo_begin_label(nk, p->upscaler->name, nk_vec2(nk_widget_width(nk), 500))) {
+        if (nk_combo_begin_label(nk, p->upscaler->description, nk_vec2(nk_widget_width(nk), 500))) {
             nk_layout_row_dynamic(nk, 16, 1);
-            for (f = pl_named_filters; f->name; f++) {
-                if (nk_combo_item_label(nk, f->name, NK_TEXT_LEFT))
+            for (f = pl_filter_presets; f->name; f++) {
+                if (!f->description)
+                    continue;
+                if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT))
                     p->upscaler = f;
             }
             par->upscaler = p->upscaler->filter;
@@ -539,16 +534,19 @@ static void update_settings(struct plplay *p)
         }
 
         nk_label(nk, "Downscaler:", NK_TEXT_LEFT);
-        if (nk_combo_begin_label(nk, p->downscaler->name, nk_vec2(nk_widget_width(nk), 300))) {
+        if (nk_combo_begin_label(nk, p->downscaler->description, nk_vec2(nk_widget_width(nk), 500))) {
             nk_layout_row_dynamic(nk, 16, 1);
-            for (f = pl_named_filters; f->name; f++) {
-                if (nk_combo_item_label(nk, f->name, NK_TEXT_LEFT))
+            for (f = pl_filter_presets; f->name; f++) {
+                if (!f->description)
+                    continue;
+                if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT))
                     p->downscaler = f;
             }
             par->downscaler = p->downscaler->filter;
             nk_combo_end(nk);
         }
 
+        nk_layout_row_dynamic(nk, 24, 2);
         if (par->lut_entries) {
             nk_labelf(nk, NK_TEXT_LEFT, "LUT precision: (%d)", par->lut_entries);
         } else {
@@ -560,11 +558,14 @@ static void update_settings(struct plplay *p)
         nk_label(nk, "Antiringing:", NK_TEXT_LEFT);
         nk_slider_float(nk, 0.0, &par->antiringing_strength, 1.0, 0.01f);
 
+        nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[2]){ 0.3, 0.7 });
         nk_label(nk, "Frame mixer:", NK_TEXT_LEFT);
-        if (nk_combo_begin_label(nk, p->frame_mixer->name, nk_vec2(nk_widget_width(nk), 100))) {
+        if (nk_combo_begin_label(nk, p->frame_mixer->description, nk_vec2(nk_widget_width(nk), 300))) {
             nk_layout_row_dynamic(nk, 16, 1);
-            for (f = frame_mixers; f->name; f++) {
-                if (nk_combo_item_label(nk, f->name, NK_TEXT_LEFT))
+            for (f = pl_frame_mixers; f->name; f++) {
+                if (!f->description)
+                    continue;
+                if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT))
                     p->frame_mixer = f;
             }
             par->frame_mixer = p->frame_mixer->filter;

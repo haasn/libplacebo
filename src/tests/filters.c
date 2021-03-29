@@ -3,9 +3,10 @@
 int main()
 {
     struct pl_context *ctx = pl_test_context();
-    for (const struct pl_named_filter_config *conf = pl_named_filters;
-         conf->filter; conf++)
-    {
+    for (const struct pl_filter_preset *conf = pl_filter_presets; conf->name; conf++) {
+        if (!conf->filter)
+            continue;
+
         struct pl_filter_params params = {
             .config      = *conf->filter,
             .lut_entries = 128,

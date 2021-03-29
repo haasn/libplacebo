@@ -130,18 +130,22 @@ extern const struct pl_filter_function pl_filter_function_spline16;
 extern const struct pl_filter_function pl_filter_function_spline36;
 extern const struct pl_filter_function pl_filter_function_spline64;
 
-struct pl_named_filter_function {
+struct pl_filter_function_preset {
     const char *name;
     const struct pl_filter_function *function;
 };
 
-// As a convenience, this contains a list of all supported filter function,
-// terminated by a single {0} entry.
-extern const struct pl_named_filter_function pl_named_filter_functions[];
+// A list of built-in filter function presets, terminated by {0}
+extern const struct pl_filter_function_preset pl_filter_function_presets[];
+extern const int pl_num_filter_function_presets; // excluding trailing {0}
 
-// Returns a filter function with a given name, or NULL on failure. Safe to
-// call on name = NULL.
-const struct pl_named_filter_function *pl_find_named_filter_function(const char *name);
+// Find the filter function preset with the given name, or NULL on failure.
+const struct pl_filter_function_preset *pl_find_filter_function_preset(const char *name);
+
+// Backwards compatibility
+#define pl_named_filter_function        pl_filter_function_preset
+#define pl_named_filter_functions       pl_filter_function_presets
+#define pl_find_named_filter_function   pl_find_filter_function_preset
 
 // Represents a particular configuration/combination of filter functions to
 // form a filter.
@@ -198,7 +202,6 @@ extern const struct pl_filter_config pl_filter_ewa_jinc;    // unwindowed
 extern const struct pl_filter_config pl_filter_ewa_lanczos; // jinc-jinc
 extern const struct pl_filter_config pl_filter_ewa_ginseng; // jinc-sinc
 extern const struct pl_filter_config pl_filter_ewa_hann;    // jinc-hann
-extern const struct pl_filter_config pl_filter_haasnsoft;   // blurred ewa_hann
 // Spline family
 extern const struct pl_filter_config pl_filter_bicubic;
 extern const struct pl_filter_config pl_filter_catmull_rom;
@@ -213,18 +216,25 @@ extern const struct pl_filter_config pl_filter_ewa_robidouxsharp;
 #define pl_filter_box       pl_filter_nearest
 #define pl_filter_triangle  pl_filter_bilinear
 
-struct pl_named_filter_config {
+struct pl_filter_preset {
     const char *name;
     const struct pl_filter_config *filter;
+
+    // Longer / friendly name, or NULL for aliases
+    const char *description;
 };
 
-// As a convenience, this contains a list of built-in filter configurations,
-// terminated by a single {0} entry.
-extern const struct pl_named_filter_config pl_named_filters[];
+// A list of built-in filter presets, terminated by {0}
+extern const struct pl_filter_preset pl_filter_presets[];
+extern const int pl_num_filter_presets; // excluding trailing {0}
 
-// Returns a filter config with a given name, or NULL on failure. Safe to call
-// on name = NULL.
-const struct pl_named_filter_config *pl_find_named_filter(const char *name);
+// Find the filter preset with the given name, or NULL on failure.
+const struct pl_filter_preset *pl_find_filter_preset(const char *name);
+
+// Backwards compatibility
+#define pl_named_filter_config  pl_filter_preset
+#define pl_named_filters        pl_filter_presets
+#define pl_find_named_filter    pl_find_filter_preset
 
 // Parameters for filter generation.
 struct pl_filter_params {
