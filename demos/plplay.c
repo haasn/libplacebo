@@ -37,7 +37,6 @@ struct plplay {
 
     // libplacebo
     struct pl_context *ctx;
-    const struct pl_tex *plane_tex[4];
     struct pl_renderer *renderer;
     struct pl_queue *queue;
 
@@ -69,12 +68,6 @@ struct plplay {
 
 static void uninit(struct plplay *p)
 {
-    const struct pl_gpu *gpu = p->win->gpu;
-    if (gpu) {
-        for (int i = 0; i < 4; i++)
-            pl_tex_destroy(gpu, &p->plane_tex[i]);
-    }
-
     pl_queue_destroy(&p->queue);
     pl_renderer_destroy(&p->renderer);
     ui_destroy(&p->ui);
@@ -93,7 +86,7 @@ static bool open_file(struct plplay *p, const char *filename)
 {
     printf("Opening file: '%s'\n", filename);
     if (avformat_open_input(&p->format, filename, NULL, NULL) != 0) {
-        fprintf(stderr, "libavformat: Failed opening file!");
+        fprintf(stderr, "libavformat: Failed opening file!\n");
         return false;
     }
 
@@ -101,7 +94,7 @@ static bool open_file(struct plplay *p, const char *filename)
     printf("Duration: %.3f s\n", p->format->duration / 1e6);
 
     if (avformat_find_stream_info(p->format,  NULL) < 0) {
-        fprintf(stderr, "libavformat: Failed finding stream info!");
+        fprintf(stderr, "libavformat: Failed finding stream info!\n");
         return false;
     }
 
@@ -110,7 +103,7 @@ static bool open_file(struct plplay *p, const char *filename)
         av_find_best_stream(p->format, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
 
     if (stream_idx < 0) {
-        fprintf(stderr, "plplay: File contains no video streams?");
+        fprintf(stderr, "plplay: File contains no video streams?\n");
         return false;
     }
 
