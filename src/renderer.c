@@ -1642,18 +1642,17 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
     // Color management
     bool prelinearized = false;
     bool need_conversion = true;
-    struct pl_color_space ref_csp = image->color;
-    assert(ref_csp.primaries == img->color.primaries);
-    assert(ref_csp.light == img->color.light);
+    assert(image->color.primaries == img->color.primaries);
+    assert(image->color.light == img->color.light);
     if (img->color.transfer == PL_COLOR_TRC_LINEAR)
         prelinearized = true;
 
     bool need_icc = (image->profile.data || target->profile.data) &&
                     !pl_icc_profile_equal(&image->profile, &target->profile);
 
-    bool use_icc = need_icc || params->force_icc_lut || params->force_3dlut;
-    if (rr->disable_icc)
-        use_icc = false;
+    if (params->force_icc_lut || params->force_3dlut)
+        need_icc |= !pl_color_space_equal(&image->color, &target->color);
+    need_icc &= !rr->disable_icc;
 
     if (params->lut) {
         struct pl_color_space lut_in = params->lut->color_in;
@@ -1661,14 +1660,14 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
         switch (params->lut_type) {
         case PL_LUT_UNKNOWN:
         case PL_LUT_NATIVE:
-            pl_color_space_merge(&lut_in, &ref_csp);
-            pl_color_space_merge(&lut_out, &ref_csp);
+            pl_color_space_merge(&lut_in, &image->color);
+            pl_color_space_merge(&lut_out, &image->color);
             break;
         case PL_LUT_CONVERSION:
-            pl_color_space_merge(&lut_in, &ref_csp);
+            pl_color_space_merge(&lut_in, &image->color);
             pl_color_space_merge(&lut_out, &target->color);
             // Conversion LUT the highest priority
-            use_icc = false;
+            need_icc = false;
             need_conversion = false;
             break;
         case PL_LUT_NORMALIZED:
@@ -1683,7 +1682,7 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
             break;
         }
 
-        pl_shader_color_map(sh, params->color_map_params, ref_csp, lut_in,
+        pl_shader_color_map(sh, params->color_map_params, image->color, lut_in,
                             NULL, prelinearized);
 
         if (params->lut_type == PL_LUT_NORMALIZED) {
@@ -1706,9 +1705,9 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
 
 #ifdef PL_HAVE_LCMS
 
-    if (use_icc) {
+    if (need_icc) {
         struct pl_icc_color_space src = {
-            .color = ref_csp,
+            .color = image->color,
             .profile = image->profile,
         };
 
@@ -1726,8 +1725,8 @@ static bool pass_output_target(struct pl_renderer *rr, struct pass_state *pass,
         }
 
         // current -> ICC in
-        pl_shader_color_map(sh, params->color_map_params, ref_csp, res.src_color,
-                            &rr->peak_detect_state, prelinearized);
+        pl_shader_color_map(sh, params->color_map_params, image->color,
+                            res.src_color, &rr->peak_detect_state, prelinearized);
         // ICC in -> ICC out
         pl_icc_apply(sh, &rr->icc_state);
         // ICC out -> target
@@ -1741,19 +1740,18 @@ fallback:
 
 #else // !PL_HAVE_LCMS
 
-    if (use_icc) {
+    if (need_icc) {
         PL_WARN(rr, "An ICC profile was set, but libplacebo is built without "
                 "support for LittleCMS! Disabling..");
         rr->disable_icc = true;
-        use_icc = false;
     }
 
 #endif
 
     if (need_conversion) {
         // current -> target
-        pl_shader_color_map(sh, params->color_map_params, ref_csp, target->color,
-                            &rr->peak_detect_state, prelinearized);
+        pl_shader_color_map(sh, params->color_map_params, image->color,
+                            target->color, &rr->peak_detect_state, prelinearized);
     }
 
     // Apply color blindness simulation if requested
