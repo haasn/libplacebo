@@ -2280,7 +2280,6 @@ static uint64_t render_params_hash(const struct pl_render_params *params_orig)
     HASH_PTR(params.dither_params);
     HASH_PTR(params.cone_params);
     HASH_PTR(params.blend_params);
-    HASH_PTR(params.hooks);
 
 #ifdef PL_HAVE_LCMS
     HASH_PTR(params.icc_params);
