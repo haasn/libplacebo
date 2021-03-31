@@ -409,9 +409,11 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
         }
 
         if (pl_str_eatstart0(&line, "COMPUTE")) {
+            line = pl_str_strip(line);
             bool ok = pl_str_parse_int(pl_str_split_char(line, ' ', &line), &out->block_w) &&
                       pl_str_parse_int(pl_str_split_char(line, ' ', &line), &out->block_h);
 
+            line = pl_str_strip(line);
             if (ok && line.len) {
                 ok = pl_str_parse_int(pl_str_split_char(line, ' ', &line), &out->threads_w) &&
                      pl_str_parse_int(pl_str_split_char(line, ' ', &line), &out->threads_h) &&
@@ -425,6 +427,8 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
                 pl_err(log, "Error while parsing COMPUTE!");
                 return false;
             }
+
+            out->is_compute = true;
             continue;
         }
 
