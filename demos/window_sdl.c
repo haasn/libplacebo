@@ -42,6 +42,10 @@ struct priv {
 #endif
 
     int scroll_dx, scroll_dy;
+    char **files;
+    size_t files_num;
+    size_t files_size;
+    bool file_seen;
 };
 
 struct window *window_create(struct pl_context *ctx, const char *title,
@@ -178,6 +182,10 @@ void window_destroy(struct window **window)
     SDL_GL_DeleteContext(p->gl_ctx);
 #endif
 
+    for (int i = 0; i < p->files_num; i++)
+        SDL_free(p->files[i]);
+    free(p->files);
+
     SDL_DestroyWindow(p->win);
     SDL_Quit();
     free(p);
@@ -207,6 +215,20 @@ static inline void handle_event(struct priv *p, SDL_Event *event)
     case SDL_MOUSEWHEEL:
         p->scroll_dx += event->wheel.x;
         p->scroll_dy += event->wheel.y;
+        return;
+
+    case SDL_DROPFILE:
+        if (p->files_num == p->files_size) {
+            size_t new_size = p->files_size ? p->files_size * 2 : 16;
+            char **new_files = reallocarray(p->files, new_size, sizeof(char *));
+            if (!new_files)
+                return;
+            p->files = new_files;
+            p->files_size = new_size;
+        }
+
+        p->files[p->files_num++] = event->drop.file;
+        return;
     }
 }
 
@@ -248,4 +270,21 @@ void window_get_scroll(const struct window *window, float *dx, float *dy)
     *dx = p->scroll_dx;
     *dy = p->scroll_dy;
     p->scroll_dx = p->scroll_dy = 0;
+}
+
+char *window_get_file(const struct window *window)
+{
+    struct priv *p = (struct priv *) window;
+    if (p->file_seen) {
+        assert(p->files_num);
+        SDL_free(p->files[0]);
+        memmove(&p->files[0], &p->files[1], --p->files_num * sizeof(char *));
+        p->file_seen = false;
+    }
+
+    if (!p->files_num)
+        return NULL;
+
+    p->file_seen = true;
+    return p->files[0];
 }

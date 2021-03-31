@@ -32,3 +32,4 @@ enum button {
 void window_get_cursor(const struct window *window, int *x, int *y);
 void window_get_scroll(const struct window *window, float *dx, float *dy);
 bool window_get_button(const struct window *window, enum button);
+char *window_get_file(const struct window *window);

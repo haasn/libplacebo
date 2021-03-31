@@ -4,6 +4,8 @@
 #error Specify exactly one of -DUSE_GL or -DUSE_VK when compiling!
 #endif
 
+#include <string.h>
+
 #include "common.h"
 #include "window.h"
 
@@ -39,6 +41,10 @@ struct priv {
 #endif
 
     float scroll_dx, scroll_dy;
+    char **files;
+    size_t files_num;
+    size_t files_size;
+    bool file_seen;
 };
 
 static void err_cb(int code, const char *desc)
@@ -66,6 +72,28 @@ static void scroll_cb(GLFWwindow *win, double dx, double dy)
     struct priv *p = glfwGetWindowUserPointer(win);
     p->scroll_dx += dx;
     p->scroll_dy += dy;
+}
+
+static void drop_cb(GLFWwindow *win, int num, const char *files[])
+{
+    struct priv *p = glfwGetWindowUserPointer(win);
+
+    for (int i = 0; i < num; i++) {
+        if (p->files_num == p->files_size) {
+            size_t new_size = p->files_size ? p->files_size * 2 : 16;
+            char **new_files = reallocarray(p->files, new_size, sizeof(char *));
+            if (!new_files)
+                return;
+            p->files = new_files;
+            p->files_size = new_size;
+        }
+
+        char *file = strdup(files[i]);
+        if (!file)
+            return;
+
+        p->files[p->files_num++] = file;
+    }
 }
 
 struct window *window_create(struct pl_context *ctx, const char *title,
@@ -119,6 +147,7 @@ struct window *window_create(struct pl_context *ctx, const char *title,
     glfwSetFramebufferSizeCallback(p->win, resize_cb);
     glfwSetWindowCloseCallback(p->win, close_cb);
     glfwSetScrollCallback(p->win, scroll_cb);
+    glfwSetDropCallback(p->win, drop_cb);
 
 #ifdef USE_VK
     VkResult err;
@@ -224,6 +253,10 @@ void window_destroy(struct window **window)
     pl_opengl_destroy(&p->gl);
 #endif
 
+    for (int i = 0; i < p->files_num; i++)
+        free(p->files[i]);
+    free(p->files);
+
     glfwTerminate();
     free(p);
     *window = NULL;
@@ -265,4 +298,21 @@ void window_get_scroll(const struct window *window, float *dx, float *dy)
     *dx = p->scroll_dx;
     *dy = p->scroll_dy;
     p->scroll_dx = p->scroll_dy = 0.0;
+}
+
+char *window_get_file(const struct window *window)
+{
+    struct priv *p = (struct priv *) window;
+    if (p->file_seen) {
+        assert(p->files_num);
+        free(p->files[0]);
+        memmove(&p->files[0], &p->files[1], --p->files_num * sizeof(char *));
+        p->file_seen = false;
+    }
+
+    if (!p->files_num)
+        return NULL;
+
+    p->file_seen = true;
+    return p->files[0];
 }
