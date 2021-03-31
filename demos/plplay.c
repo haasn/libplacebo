@@ -12,6 +12,7 @@
 #include <pthread.h>
 #include <time.h>
 
+#include <libavutil/file.h>
 #include <libavutil/pixdesc.h>
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
@@ -28,6 +29,7 @@ static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { ret
 #endif
 
 #include <libplacebo/renderer.h>
+#include <libplacebo/shaders/lut.h>
 #include <libplacebo/utils/libav.h>
 #include <libplacebo/utils/frame_queue.h>
 
@@ -513,13 +515,14 @@ static void update_settings(struct plplay *p)
                                     NK_WINDOW_TITLE;
 
     ui_update_input(p->ui, p->win);
+    const char *dropped_file = window_get_file(p->win);
 
     const struct pl_filter_preset *f;
     struct pl_render_params *par = &p->params;
 
     if (nk_begin(nk, "Settings", nk_rect(100, 100, 600, 600), win_flags)) {
 
-        nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[2]){ 0.3, 0.7 });
+        nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
         nk_label(nk, "Upscaler:", NK_TEXT_LEFT);
         if (nk_combo_begin_label(nk, p->upscaler->description, nk_vec2(nk_widget_width(nk), 500))) {
             nk_layout_row_dynamic(nk, 16, 1);
@@ -558,7 +561,7 @@ static void update_settings(struct plplay *p)
         nk_label(nk, "Antiringing:", NK_TEXT_LEFT);
         nk_slider_float(nk, 0.0, &par->antiringing_strength, 1.0, 0.01f);
 
-        nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[2]){ 0.3, 0.7 });
+        nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
         nk_label(nk, "Frame mixer:", NK_TEXT_LEFT);
         if (nk_combo_begin_label(nk, p->frame_mixer->description, nk_vec2(nk_widget_width(nk), 300))) {
             nk_layout_row_dynamic(nk, 16, 1);
@@ -620,6 +623,44 @@ static void update_settings(struct plplay *p)
             nk_slider_float(nk, 0.0, &adj->gamma, 2.0, 0.01);
             nk_label(nk, "Temperature:", NK_TEXT_LEFT);
             nk_slider_float(nk, -1.0, &adj->temperature, 1.0, 0.01);
+            nk_tree_pop(nk);
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Custom color LUT", NK_MINIMIZED)) {
+
+            nk_layout_row_dynamic(nk, 50, 1);
+            if (ui_widget_hover(nk, "Drop .cube file here...") && dropped_file) {
+                uint8_t *buf;
+                size_t size;
+                int ret = av_file_map(dropped_file, &buf, &size, 0, NULL);
+                if (ret < 0) {
+                    fprintf(stderr, "Failed opening '%s': %s\n", dropped_file,
+                            av_err2str(ret));
+                } else {
+                    pl_lut_free((struct pl_custom_lut **) &par->lut);
+                    par->lut = pl_lut_parse_cube(p->ctx, buf, size);
+                    av_file_unmap(buf, size);
+                }
+            }
+
+            static const char *lut_types[] = {
+                [PL_LUT_UNKNOWN]    = "Auto (unknown)",
+                [PL_LUT_NATIVE]     = "Raw RGB (native)",
+                [PL_LUT_NORMALIZED] = "Linear RGB (normalized)",
+                [PL_LUT_CONVERSION] = "Gamut conversion (native)",
+            };
+
+            nk_layout_row(nk, NK_DYNAMIC, 24, 3, (float[]){ 0.2, 0.3, 0.5 });
+            if (nk_button_label(nk, "Clear")) {
+                pl_lut_free((struct pl_custom_lut **) &par->lut);
+                par->lut_type = PL_LUT_UNKNOWN;
+            }
+
+            nk_labelf(nk, NK_TEXT_CENTERED, "LUT type:");
+            par->lut_type = nk_combo(nk, lut_types, 4, par->lut_type,
+                                     16, nk_vec2(nk_widget_width(nk), 100));
+
+
             nk_tree_pop(nk);
         }
 
