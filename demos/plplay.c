@@ -66,14 +66,28 @@ struct plplay {
     struct pl_dither_params dither_params;
     struct pl_cone_params cone_params;
     int force_depth;
+
+    // custom shaders
+    const struct pl_hook **shader_hooks;
+    char **shader_paths;
+    size_t shader_num;
+    size_t shader_size;
 };
 
 static void uninit(struct plplay *p)
 {
+    for (int i = 0; i < p->shader_num; i++) {
+        pl_mpv_user_shader_destroy(&p->shader_hooks[i]);
+        free(p->shader_paths[i]);
+    }
+
     pl_queue_destroy(&p->queue);
     pl_renderer_destroy(&p->renderer);
     ui_destroy(&p->ui);
     window_destroy(&p->win);
+
+    free(p->shader_hooks);
+    free(p->shader_paths);
 
     if (p->thread)
         pthread_cancel(p->thread);
@@ -507,6 +521,46 @@ error:
 
 #ifdef HAVE_UI
 
+static void add_hook(struct plplay *p, const struct pl_hook *hook, const char *path)
+{
+    if (!hook)
+        return;
+
+    if (p->shader_num == p->shader_size) {
+        // Grow array if needed
+        size_t new_size = p->shader_size ? p->shader_size * 2 : 16;
+        void *new_hooks = reallocarray(p->shader_hooks, new_size, sizeof(void *));
+        if (!new_hooks)
+            goto error;
+        p->shader_hooks = new_hooks;
+        char **new_paths = reallocarray(p->shader_paths, new_size, sizeof(char *));
+        if (!new_paths)
+            goto error;
+        p->shader_paths = new_paths;
+        p->shader_size = new_size;
+    }
+
+    // strip leading path
+    while (true) {
+        const char *fname = strchr(path, '/');
+        if (!fname)
+            break;
+        path = fname + 1;
+    }
+
+    char *path_copy = strdup(path);
+    if (!path_copy)
+        goto error;
+
+    p->shader_hooks[p->shader_num] = hook;
+    p->shader_paths[p->shader_num] = path_copy;
+    p->shader_num++;
+    return;
+
+error:
+    pl_mpv_user_shader_destroy(&hook);
+}
+
 static void update_settings(struct plplay *p)
 {
     struct nk_context *nk = ui_get_context(p->ui);
@@ -623,6 +677,68 @@ static void update_settings(struct plplay *p)
             nk_slider_float(nk, 0.0, &adj->gamma, 2.0, 0.01);
             nk_label(nk, "Temperature:", NK_TEXT_LEFT);
             nk_slider_float(nk, -1.0, &adj->temperature, 1.0, 0.01);
+            nk_tree_pop(nk);
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Custom shaders", NK_MINIMIZED)) {
+
+            nk_layout_row_dynamic(nk, 50, 1);
+            if (ui_widget_hover(nk, "Drop .hook/.glsl files here...") && dropped_file) {
+                uint8_t *buf;
+                size_t size;
+                int ret = av_file_map(dropped_file, &buf, &size, 0, NULL);
+                if (ret < 0) {
+                    fprintf(stderr, "Failed opening '%s': %s\n", dropped_file,
+                            av_err2str(ret));
+                } else {
+                    const struct pl_hook *hook;
+                    hook = pl_mpv_user_shader_parse(p->win->gpu, buf, size);
+                    av_file_unmap(buf, size);
+                    add_hook(p, hook, dropped_file);
+                }
+            }
+
+            const float px = 24.0;
+            nk_layout_row_template_begin(nk, px);
+            nk_layout_row_template_push_static(nk, px);
+            nk_layout_row_template_push_static(nk, px);
+            nk_layout_row_template_push_static(nk, px);
+            nk_layout_row_template_push_dynamic(nk);
+            nk_layout_row_template_end(nk);
+            for (int i = 0; i < p->shader_num; i++) {
+                if (nk_button_symbol(nk, NK_SYMBOL_TRIANGLE_UP) && i > 0) {
+                    const struct pl_hook *prev_hook = p->shader_hooks[i - 1];
+                    char *prev_path = p->shader_paths[i - 1];
+                    p->shader_hooks[i - 1] = p->shader_hooks[i];
+                    p->shader_paths[i - 1] = p->shader_paths[i];
+                    p->shader_hooks[i] = prev_hook;
+                    p->shader_paths[i] = prev_path;
+                }
+
+                if (nk_button_symbol(nk, NK_SYMBOL_TRIANGLE_DOWN) && i < p->shader_num - 1) {
+                    const struct pl_hook *next_hook = p->shader_hooks[i + 1];
+                    char *next_path = p->shader_paths[i + 1];
+                    p->shader_hooks[i + 1] = p->shader_hooks[i];
+                    p->shader_paths[i + 1] = p->shader_paths[i];
+                    p->shader_hooks[i] = next_hook;
+                    p->shader_paths[i] = next_path;
+                }
+
+                if (nk_button_symbol(nk, NK_SYMBOL_X)) {
+                    pl_mpv_user_shader_destroy(&p->shader_hooks[i]);
+                    free(p->shader_paths[i]);
+                    p->shader_num--;
+                    memmove(&p->shader_hooks[i], &p->shader_hooks[i+1],
+                            (p->shader_num - i) * sizeof(void *));
+                    memmove(&p->shader_paths[i], &p->shader_paths[i+1],
+                            (p->shader_num - i) * sizeof(char *));
+                }
+
+                nk_label(nk, p->shader_paths[i], NK_TEXT_LEFT);
+            }
+
+            par->hooks = p->shader_hooks;
+            par->num_hooks = p->shader_num;
             nk_tree_pop(nk);
         }
 
