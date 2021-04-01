@@ -220,7 +220,7 @@ static inline void handle_event(struct priv *p, SDL_Event *event)
     case SDL_DROPFILE:
         if (p->files_num == p->files_size) {
             size_t new_size = p->files_size ? p->files_size * 2 : 16;
-            char **new_files = reallocarray(p->files, new_size, sizeof(char *));
+            char **new_files = realloc(p->files, new_size * sizeof(char *));
             if (!new_files)
                 return;
             p->files = new_files;

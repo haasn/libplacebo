@@ -529,11 +529,11 @@ static void add_hook(struct plplay *p, const struct pl_hook *hook, const char *p
     if (p->shader_num == p->shader_size) {
         // Grow array if needed
         size_t new_size = p->shader_size ? p->shader_size * 2 : 16;
-        void *new_hooks = reallocarray(p->shader_hooks, new_size, sizeof(void *));
+        void *new_hooks = realloc(p->shader_hooks, new_size * sizeof(void *));
         if (!new_hooks)
             goto error;
         p->shader_hooks = new_hooks;
-        char **new_paths = reallocarray(p->shader_paths, new_size, sizeof(char *));
+        char **new_paths = realloc(p->shader_paths, new_size * sizeof(char *));
         if (!new_paths)
             goto error;
         p->shader_paths = new_paths;

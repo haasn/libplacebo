@@ -81,7 +81,7 @@ static void drop_cb(GLFWwindow *win, int num, const char *files[])
     for (int i = 0; i < num; i++) {
         if (p->files_num == p->files_size) {
             size_t new_size = p->files_size ? p->files_size * 2 : 16;
-            char **new_files = reallocarray(p->files, new_size, sizeof(char *));
+            char **new_files = realloc(p->files, new_size * sizeof(char *));
             if (!new_files)
                 return;
             p->files = new_files;
