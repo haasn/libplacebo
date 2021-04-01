@@ -892,6 +892,21 @@ static struct pl_matrix3x3 luma_coeffs(float lr, float lg, float lb)
     }};
 }
 
+// Applies hue and saturation controls to a YCbCr->RGB matrix
+static inline void apply_hue_sat(struct pl_matrix3x3 *m,
+                                 const struct pl_color_adjustment *params)
+{
+    // Hue is equivalent to rotating input [U, V] subvector around the origin.
+    // Saturation scales [U, V].
+    float huecos = params->saturation * cos(params->hue);
+    float huesin = params->saturation * sin(params->hue);
+    for (int i = 0; i < 3; i++) {
+        float u = m->m[i][1], v = m->m[i][2];
+        m->m[i][1] = huecos * u - huesin * v;
+        m->m[i][2] = huesin * u + huecos * v;
+    }
+}
+
 struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
                                     const struct pl_color_adjustment *params)
 {
@@ -955,17 +970,17 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
 
     // Apply hue and saturation in the correct way depending on the colorspace.
     if (pl_color_system_is_ycbcr_like(repr->sys)) {
-        // Hue is equivalent to rotating input [U, V] subvector around the origin.
-        // Saturation scales [U, V].
-        float huecos = params->saturation * cos(params->hue);
-        float huesin = params->saturation * sin(params->hue);
-        for (int i = 0; i < 3; i++) {
-            float u = m.m[i][1], v = m.m[i][2];
-            m.m[i][1] = huecos * u - huesin * v;
-            m.m[i][2] = huesin * u + huecos * v;
-        }
+        apply_hue_sat(&m, params);
+    } else if (params->saturation != 1.0 || params->hue != 0.0) {
+        // Arbitrarily simulate hue shifts using the BT.709 YCbCr model
+        struct pl_matrix3x3 yuv2rgb = luma_coeffs(0.2126, 0.7152, 0.0722);
+        struct pl_matrix3x3 rgb2yuv = yuv2rgb;
+        pl_matrix3x3_invert(&rgb2yuv);
+        apply_hue_sat(&yuv2rgb, params);
+        // M := RGB<-YUV * YUV<-RGB * M
+        pl_matrix3x3_rmul(&rgb2yuv, &m);
+        pl_matrix3x3_rmul(&yuv2rgb, &m);
     }
-    // FIXME: apply saturation for RGB
 
     // Apply color temperature adaptation, relative to BT.709 primaries
     if (params->temperature) {
