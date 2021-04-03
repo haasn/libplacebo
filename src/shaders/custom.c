@@ -488,10 +488,10 @@ static bool parse_tex(const struct pl_gpu *gpu, void *alloc, pl_str *body,
                 }
             }
 
-            int lim = dims == 1 ? gpu->limits.max_tex_1d_dim
-                    : dims == 2 ? gpu->limits.max_tex_2d_dim
-                    : dims == 3 ? gpu->limits.max_tex_3d_dim
-                    : 0;
+            uint32_t lim = dims == 1 ? gpu->limits.max_tex_1d_dim
+                         : dims == 2 ? gpu->limits.max_tex_2d_dim
+                         : dims == 3 ? gpu->limits.max_tex_3d_dim
+                         : 0;
 
             // Sanity check against GPU size limits
             switch (dims) {
