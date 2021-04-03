@@ -80,7 +80,7 @@ const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
     for (enum pl_fmt_type type = 1; type < PL_FMT_TYPE_COUNT; type++) {
         for (int comps = 1; comps <= 4; comps++) {
             for (int depth = 8; depth < 128; depth *= 2) {
-                if (type == PL_FMT_FLOAT && depth < sizeof(float) * 8)
+                if (type == PL_FMT_FLOAT && depth < 16)
                     continue;
 
                 static const char *cnames[] = {
@@ -98,10 +98,13 @@ const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
                     [PL_FMT_FLOAT] = "f",
                 };
 
+                const char *tname = tnames[type];
+                if (type == PL_FMT_FLOAT && depth == 16)
+                    tname = "hf";
+
                 struct pl_fmt *fmt = pl_alloc_ptr(gpu, fmt);
                 *fmt = (struct pl_fmt) {
-                    .name = pl_asprintf(fmt, "%s%d%s", cnames[comps], depth,
-                                        tnames[type]),
+                    .name = pl_asprintf(fmt, "%s%d%s", cnames[comps], depth, tname),
                     .type = type,
                     .num_components = comps,
                     .opaque = false,
