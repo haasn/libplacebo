@@ -104,14 +104,28 @@ size_t pl_strcspn(pl_str str, const char *reject)
     return str.len;
 }
 
+static inline bool pl_isspace(char c)
+{
+    switch (c) {
+    case ' ':
+    case '\n':
+    case '\r':
+    case '\t':
+    case '\v':
+    case '\f':
+        return true;
+    default:
+        return false;
+    }
+}
+
 pl_str pl_str_strip(pl_str str)
 {
-    static const char *whitespace = " \n\r\t\v\f";
-    while (str.len && strchr(whitespace, str.buf[0])) {
+    while (str.len && pl_isspace(str.buf[0])) {
         str.buf++;
         str.len--;
     }
-    while (str.len && strchr(whitespace, str.buf[str.len - 1]))
+    while (str.len && pl_isspace(str.buf[str.len - 1]))
         str.len--;
     return str;
 }
@@ -157,16 +171,33 @@ pl_str pl_str_split_str(pl_str str, pl_str sep, pl_str *out_rest)
     }
 }
 
-static int h_to_i(unsigned char c)
+static bool get_hexdigit(pl_str *str, int *digit)
 {
-    if (c >= '0' && c <= '9')
-        return c - '0';
-    if (c >= 'a' && c <= 'f')
-        return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F')
-        return c - 'A' + 10;
+    while (str->len && pl_isspace(str->buf[0])) {
+        str->buf++;
+        str->len--;
+    }
 
-    return -1; // invalid char
+    if (!str->len) {
+        *digit = -1; // EOF
+        return true;
+    }
+
+    char c = str->buf[0];
+    str->buf++;
+    str->len--;
+
+    if (c >= '0' && c <= '9') {
+        *digit = c - '0';
+    } else if (c >= 'a' && c <= 'f') {
+        *digit = c - 'a' + 10;
+    } else if (c >= 'A' && c <= 'F') {
+        *digit = c - 'A' + 10;
+    } else {
+        return false; // invalid char
+    }
+
+    return true;
 }
 
 bool pl_str_decode_hex(void *alloc, pl_str hex, pl_str *out)
@@ -177,20 +208,22 @@ bool pl_str_decode_hex(void *alloc, pl_str hex, pl_str *out)
     char *buf = pl_alloc(alloc, hex.len / 2);
     int len = 0;
 
-    while (hex.len >= 2) {
-        int a = h_to_i(hex.buf[0]);
-        int b = h_to_i(hex.buf[1]);
-        hex.buf += 2;
-        hex.len -= 2;
-
-        if (a < 0 || b < 0) {
-            pl_free(buf);
-            return false;
-        }
+    while (hex.len) {
+        int a, b;
+        if (!get_hexdigit(&hex, &a) || !get_hexdigit(&hex, &b))
+            goto error; // invalid char
+        if (a < 0) // EOF
+            break;
+        if (b < 0) // only one digit
+            goto error;
 
         buf[len++] = (a << 4) | b;
     }
 
     *out = (pl_str) { buf, len };
     return true;
+
+error:
+    pl_free(buf);
+    return false;
 }

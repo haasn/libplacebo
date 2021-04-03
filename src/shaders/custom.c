@@ -614,7 +614,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *alloc, pl_str *body,
     pl_str tex, hexdata = split_magic(body);
     if (!pl_str_decode_hex(NULL, pl_str_strip(hexdata), &tex)) {
         PL_ERR(gpu, "Error while parsing TEXTURE body: must be a valid "
-                    "hexadecimal sequence, on a single line!");
+                    "hexadecimal sequence!");
         return false;
     }
 
@@ -731,7 +731,7 @@ static bool parse_buf(const struct pl_gpu *gpu, void *alloc, pl_str *body,
     pl_str data, hexdata = split_magic(body);
     if (!pl_str_decode_hex(tmp, pl_str_strip(hexdata), &data)) {
         PL_ERR(gpu, "Error while parsing BUFFER body: must be a valid "
-                    "hexadecimal sequence, on a single line!");
+                    "hexadecimal sequence!");
         return false;
     }
 
