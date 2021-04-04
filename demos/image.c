@@ -28,13 +28,14 @@ static struct pl_plane img_plane;
 static struct pl_plane osd_plane;
 static struct pl_renderer *renderer;
 static struct pl_custom_lut *lut;
-static struct file icc_file;
 
 struct file
 {
     void *data;
     size_t size;
 };
+
+static struct file icc_file;
 
 static bool open_file(const char *path, struct file *out)
 {
