@@ -1,5 +1,6 @@
 /build*
 /tags
 /TAGS
+/demos/3rdparty
 *.exe
 *.o
