@@ -208,6 +208,11 @@ tests = [
   'utils.c',
 ]
 
+fuzzers = [
+  'user_shaders.c',
+  'lut.c',
+]
+
 
 # Optional dependencies / components
 components = [
@@ -427,4 +432,12 @@ if get_option('bench')
 
   bench = executable('bench', 'tests/bench.c', dependencies: tdep)
   test('benchmark', bench, is_parallel: false, timeout: 600)
+endif
+
+if get_option('fuzz')
+  foreach f : fuzzers
+    executable('fuzz.' + f, 'tests/fuzz/' + f,
+        dependencies: tdep,
+    )
+  endforeach
 endif

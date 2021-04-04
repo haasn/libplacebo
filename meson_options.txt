@@ -29,3 +29,6 @@ option('tests', type: 'boolean', value: false,
 
 option('bench', type: 'boolean', value: false,
        description: 'Enable building benchmarks (`meson test benchmark`)')
+
+option('fuzz', type: 'boolean', value: false,
+       description: 'Enable building fuzzer binaries (`CC=afl-cc`)')
