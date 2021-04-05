@@ -46,7 +46,7 @@ bool pl_color_system_is_ycbcr_like(enum pl_color_system sys);
 
 // Returns true for color systems that are linear transformations of the RGB
 // equivalent, i.e. are simple matrix multiplications. For color systems with
-// this property, pl_get_decoding_matrix is sufficient for conversion to RGB.
+// this property, `pl_color_repr_decode` is sufficient for conversion to RGB.
 bool pl_color_system_is_linear(enum pl_color_system sys);
 
 // Guesses the best YCbCr-like colorspace based on a image given resolution.
