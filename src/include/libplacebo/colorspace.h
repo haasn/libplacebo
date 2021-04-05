@@ -456,15 +456,12 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
                                        const struct pl_raw_primaries *prim);
 
 // Returns a color decoding matrix for a given combination of source color
-// representation and adjustment parameters. This mutates the color_repr to
-// reflect the change. If `params` is left as NULL, it defaults to
-// &pl_color_adjustment_neutral.
+// representation and adjustment parameters. This mutates `repr` to reflect the
+// change. If `params` is NULL, it defaults to &pl_color_adjustment_neutral.
 //
-// This function always performs a conversion to RGB; conversions from
-// arbitrary color representations to other arbitrary other color
-// representations are currently not supported. Not all color systems support
-// all of the color adjustment parameters. (In particular, hue/sat adjustments
-// are currently only supported for YCbCr-like color systems)
+// This function always performs a conversion to RGB. To convert to other
+// colorspaces (e.g. between YUV systems), obtain a second YUV->RGB matrix
+// and invert it using `pl_transform3x3_invert`.
 //
 // Note: For BT.2020 constant-luminance, this outputs chroma information in the
 // range [-0.5, 0.5]. Since the CL system conversion is non-linear, further
