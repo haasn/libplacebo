@@ -1238,11 +1238,13 @@ static void pl_ycbcr_tests(const struct pl_gpu *gpu)
         }},
     }));
 
-    dst_buffer = calloc(data[0].height, data[0].row_stride);
+    size_t buf_size = data[0].height * data[0].row_stride;
+    dst_buffer = malloc(buf_size);
     if (!dst_buffer)
         goto error;
 
     for (int i = 0; i < 3; i++) {
+        memset(dst_buffer, 0xAA, buf_size);
         REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
             .tex = dst_tex[i],
             .ptr = dst_buffer,
