@@ -79,11 +79,11 @@ int main()
 
     float f;
     int i;
-    REQUIRE(pl_str_parse_float(pl_str0("1.3984"), &f) && f == 1.3984f);
-    REQUIRE(pl_str_parse_float(pl_str0("-8.9100083"), &f) && f == -8.9100083f);
-    REQUIRE(pl_str_parse_float(pl_str0("-0"), &f) && f == 0.0f);
-    REQUIRE(pl_str_parse_float(pl_str0("-3.14e20"), &f) && f == -3.14e20f);
-    REQUIRE(pl_str_parse_float(pl_str0("0.5e-5"), &f) && f == 0.5e-5f);
+    REQUIRE(pl_str_parse_float(pl_str0("1.3984"), &f) && feq(f, 1.3984f, 1e-8));
+    REQUIRE(pl_str_parse_float(pl_str0("-8.9100083"), &f) && feq(f, -8.9100083f, 1e-8));
+    REQUIRE(pl_str_parse_float(pl_str0("-0"), &f) && feq(f, 0.0f, 1e-8));
+    REQUIRE(pl_str_parse_float(pl_str0("-3.14e20"), &f) && feq(f, -3.14e20f, 1e-8));
+    REQUIRE(pl_str_parse_float(pl_str0("0.5e-5"), &f) && feq(f, 0.5e-5f, 1e-8));
     REQUIRE(pl_str_parse_int(pl_str0("64239"), &i) && i == 64239);
     REQUIRE(pl_str_parse_int(pl_str0("-102"), &i) && i == -102);
     REQUIRE(pl_str_parse_int(pl_str0("-0"), &i) && i == 0);
