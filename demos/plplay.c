@@ -265,20 +265,24 @@ done:
     return NULL;
 }
 
-static bool upload_frame(const struct pl_gpu *gpu, const struct pl_tex **tex,
-                         const struct pl_source_frame *src,
-                         struct pl_frame *out_frame)
+static bool map_frame(const struct pl_gpu *gpu, const struct pl_tex **tex,
+                      const struct pl_source_frame *src,
+                      struct pl_frame *out_frame)
 {
-    AVFrame *frame = src->frame_data;
-    bool ok = pl_upload_avframe(gpu, out_frame, tex, frame);
-    av_frame_free(&frame);
-    return ok;
+    // Note: Don't free the AVFrame yet because `out_frame` can reference its side data
+    return pl_upload_avframe(gpu, out_frame, tex, src->frame_data);
+}
+
+static void unmap_frame(const struct pl_gpu *gpu, struct pl_frame *frame,
+                        const struct pl_source_frame *src)
+{
+    av_frame_free((AVFrame **) &src->frame_data);
 }
 
 static void discard_frame(const struct pl_source_frame *src)
 {
-    AVFrame *frame = src->frame_data;
-    av_frame_free(&frame);
+    av_frame_free((AVFrame **) &src->frame_data);
+    printf("Dropped frame with PTS %.3f\n", src->pts);
 }
 
 static enum pl_queue_status get_frame(struct pl_source_frame *out_frame,
@@ -300,7 +304,8 @@ static enum pl_queue_status get_frame(struct pl_source_frame *out_frame,
 
     *out_frame = (struct pl_source_frame) {
         .pts = p->frame->pts * av_q2d(p->stream->time_base),
-        .map = upload_frame,
+        .map = map_frame,
+        .unmap = unmap_frame,
         .discard = discard_frame,
         .frame_data = p->frame,
     };
