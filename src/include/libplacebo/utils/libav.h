@@ -58,13 +58,17 @@ static bool pl_frame_recreate_from_avframe(const struct pl_gpu *gpu,
 // must be an array of 4 pointers of type (const struct pl_tex *), each either
 // pointing to a valid texture, or NULL. Returns whether successful.
 //
-// Note that this function will currently fail on HW accelerated AVFrame
-// formats. For those, users must still use the specific interop functions from
-// e.g. <libplacebo/vulkan.h>, depending on the HWAccel type.
+// Note: This function will currently fail on HW accelerated AVFrame formats.
+// For those, users must still use the specific interop functions from e.g.
+// <libplacebo/vulkan.h>, depending on the HWAccel type.
 //
-// Note also that this function performs asynchronous uploads wherever
-// possible. This means that it may return *before* the source pixels are done
-// being read from. The frame's data buffers are ref'd and freed automatically.
+// Note: This function performs asynchronous uploads wherever possible. This
+// means that it may return *before* the source pixels are done being read
+// from. The frame's data buffers are ref'd and freed automatically.
+//
+// Note: As with `pl_frame_from_avframe`, the resulting `pl_frame` may
+// reference data embedded in the AVFrame. As such, its lifetime is only
+// valid as long as the AVFrame is valid.
 static bool pl_upload_avframe(const struct pl_gpu *gpu,
                               struct pl_frame *out_frame,
                               const struct pl_tex *tex[4],
