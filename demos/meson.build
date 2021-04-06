@@ -16,74 +16,91 @@ endforeach
 
 nuklear_inc = include_directories('./3rdparty/nuklear')
 nuklear_found = cc.has_header('nuklear.h', include_directories: nuklear_inc)
-nuklear = declare_dependency(
-  sources: 'ui.c',
-  include_directories: nuklear_inc,
-  compile_args: ['-Wno-missing-prototypes', '-DHAVE_UI'],
-  dependencies: libm,
+if nuklear_found
+  nuklear_lib = static_library('nuklear',
+    include_directories: nuklear_inc,
+    c_args: ['-O2', '-Wno-missing-prototypes'],
+    dependencies: [ libplacebo, libm ],
+    sources: 'ui.c',
+  )
+
+  nuklear = declare_dependency(
+    include_directories: nuklear_inc,
+    link_with: nuklear_lib,
+  )
+else
+  warning('Nuklear was not found in `demos/3rdparty`. Please run ' +
+          '`git submodule update --init` followed by `meson --wipe`.')
+endif
+
+conf_demos = configuration_data()
+conf_demos.set('HAVE_NUKLEAR', nuklear_found)
+conf_demos.set('HAVE_GLFW', glfw.found())
+conf_demos.set('HAVE_SDL', sdl.found())
+
+configure_file(
+  output: 'config_demos.h',
+  configuration: conf_demos,
 )
 
-apis = {}
+apis = []
 
 # Enable all supported combinations of API and windowing system
 if glfw.found()
   if vulkan.found()
-    apis += {'glfw-vk': declare_dependency(
-      sources: 'window_glfw.c',
-      compile_args: '-DUSE_VK',
+    apis += static_library('glfw-vk',
       dependencies: [libplacebo, vulkan, glfw],
-    )}
+      sources: 'window_glfw.c',
+      c_args: '-DUSE_VK',
+    )
   endif
 
   if opengl.found()
-    apis += {'glfw-gl': declare_dependency(
-      sources: 'window_glfw.c',
-      compile_args: '-DUSE_GL',
+    apis += static_library('glfw-gl',
       dependencies: [libplacebo, glfw],
-    )}
+      sources: 'window_glfw.c',
+      c_args: '-DUSE_GL',
+    )
   endif
 endif
 
 if sdl.found()
   if vulkan.found()
-    apis += {'sdl-vk': declare_dependency(
-      sources: 'window_sdl.c',
-      compile_args: '-DUSE_VK',
+    apis += static_library('sdl-vk',
       dependencies: [libplacebo, vulkan, sdl],
-    )}
+      sources: 'window_sdl.c',
+      c_args: '-DUSE_VK',
+    )
   endif
 
   if opengl.found()
-    apis += {'sdl-gl': declare_dependency(
-      sources: 'window_sdl.c',
-      compile_args: '-DUSE_GL',
+    apis += static_library('sdl-gl',
       dependencies: [libplacebo, sdl],
-    )}
+      sources: 'window_sdl.c',
+      c_args: '-DUSE_GL',
+    )
   endif
 endif
 
-if apis.keys().length() == 0
+if apis.length() == 0
   warning('Demos enabled but no supported combination of windowing system ' +
           'and graphical APIs was found. Demo programs require either GLFW or ' +
-          'SDL and either Vulkan or OpenGL.')
-  subdir_done()
-endif
+          'SDL and either Vulkan or OpenGL to function.')
+else
 
-if not nuklear_found
-  warning('Nuklear was not found in `demos/3rdparty`. Please run ' +
-          '`git submodule update --init` followed by `meson --wipe`. ' +
-          'Disabling nuklear based demos.')
-endif
+  dep = declare_dependency(
+    dependencies: libplacebo,
+    sources: 'window.c',
+    link_with: apis,
+  )
 
-# Compile demos for each combination
-foreach api, dep : apis
-
-  executable('colors-' + api, 'colors.c',
+  # Graphical demo programs
+  executable('colors', 'colors.c',
     dependencies: [ dep, libm ],
   )
 
   if sdl_image.found()
-    executable('image-' + api, 'image.c',
+    executable('sdlimage', 'sdlimage.c',
       dependencies: [ dep, sdl_image ],
     )
   endif
@@ -93,15 +110,16 @@ foreach api, dep : apis
     if nuklear_found
       plplay_deps += nuklear
     endif
-    executable('plplay-' + api, 'plplay.c', dependencies: plplay_deps)
+    executable('plplay', 'plplay.c', dependencies: plplay_deps)
   endif
 
   if nuklear_found
-    executable('nuklear-' + api, 'nuklear.c',
+    executable('nuklear', 'nuklear.c',
       dependencies: [ dep, nuklear ],
     )
   endif
-endforeach
+
+endif
 
 # Headless video filtering demo
 if vulkan.found()

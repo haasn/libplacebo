@@ -10,3 +10,5 @@
 
 #include <libplacebo/context.h>
 #include <libplacebo/renderer.h>
+
+#include "config_demos.h"

@@ -20,7 +20,7 @@
 #include "common.h"
 #include "window.h"
 
-#ifdef HAVE_UI
+#ifdef HAVE_NUKLEAR
 #include "ui.h"
 #else
 struct ui;
@@ -482,7 +482,7 @@ int main(int argc, char **argv)
     if (!p->win)
         goto error;
 
-#ifdef HAVE_UI
+#ifdef HAVE_NUKLEAR
     p->ui = ui_create(p->win->gpu);
     if (!p->ui)
         goto error;
@@ -528,7 +528,7 @@ error:
     return 1;
 }
 
-#ifdef HAVE_UI
+#ifdef HAVE_NUKLEAR
 
 static void add_hook(struct plplay *p, const struct pl_hook *hook, const char *path)
 {

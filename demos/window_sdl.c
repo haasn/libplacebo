@@ -13,11 +13,15 @@
 #include <libplacebo/vulkan.h>
 #include <SDL2/SDL_vulkan.h>
 #define WINFLAG_API SDL_WINDOW_VULKAN
+#define IMPL win_impl_sdl_vk
+#define IMPL_NAME "SDL2 (vulkan)"
 #endif
 
 #ifdef USE_GL
 #include <libplacebo/opengl.h>
 #define WINFLAG_API SDL_WINDOW_OPENGL
+#define IMPL win_impl_sdl_gl
+#define IMPL_NAME "SDL2 (opengl)"
 #endif
 
 #ifdef NDEBUG
@@ -25,6 +29,8 @@
 #else
 #define DEBUG true
 #endif
+
+const struct window_impl IMPL;
 
 struct priv {
     struct window w;
@@ -48,13 +54,14 @@ struct priv {
     bool file_seen;
 };
 
-struct window *window_create(struct pl_context *ctx, const char *title,
-                             int width, int height, enum winflags flags)
+static struct window *sdl_create(struct pl_context *ctx, const char *title,
+                                 int width, int height, enum winflags flags)
 {
     struct priv *p = calloc(1, sizeof(struct priv));
     if (!p)
         return NULL;
 
+    p->w.impl = &IMPL;
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         fprintf(stderr, "SDL2: Failed initializing: %s\n", SDL_GetError());
         goto error;
@@ -162,7 +169,7 @@ error:
     return NULL;
 }
 
-void window_destroy(struct window **window)
+static void sdl_destroy(struct window **window)
 {
     struct priv *p = (struct priv *) *window;
     if (!p)
@@ -232,7 +239,7 @@ static inline void handle_event(struct priv *p, SDL_Event *event)
     }
 }
 
-void window_poll(struct window *window, bool block)
+static void sdl_poll(struct window *window, bool block)
 {
     struct priv *p = (struct priv *) window;
     SDL_Event event;
@@ -248,12 +255,12 @@ void window_poll(struct window *window, bool block)
     } while (ret);
 }
 
-void window_get_cursor(const struct window *window, int *x, int *y)
+static void sdl_get_cursor(const struct window *window, int *x, int *y)
 {
     SDL_GetMouseState(x, y);
 }
 
-bool window_get_button(const struct window *window, enum button btn)
+static bool sdl_get_button(const struct window *window, enum button btn)
 {
     static const uint32_t button_mask[] = {
         [BTN_LEFT] = SDL_BUTTON_LMASK,
@@ -264,7 +271,7 @@ bool window_get_button(const struct window *window, enum button btn)
     return SDL_GetMouseState(NULL, NULL) & button_mask[btn];
 }
 
-void window_get_scroll(const struct window *window, float *dx, float *dy)
+static void sdl_get_scroll(const struct window *window, float *dx, float *dy)
 {
     struct priv *p = (struct priv *) window;
     *dx = p->scroll_dx;
@@ -272,7 +279,7 @@ void window_get_scroll(const struct window *window, float *dx, float *dy)
     p->scroll_dx = p->scroll_dy = 0;
 }
 
-char *window_get_file(const struct window *window)
+static char *sdl_get_file(const struct window *window)
 {
     struct priv *p = (struct priv *) window;
     if (p->file_seen) {
@@ -288,3 +295,14 @@ char *window_get_file(const struct window *window)
     p->file_seen = true;
     return p->files[0];
 }
+
+const struct window_impl IMPL = {
+    .name = IMPL_NAME,
+    .create = sdl_create,
+    .destroy = sdl_destroy,
+    .poll = sdl_poll,
+    .get_cursor = sdl_get_cursor,
+    .get_button = sdl_get_button,
+    .get_scroll = sdl_get_scroll,
+    .get_file = sdl_get_file,
+};

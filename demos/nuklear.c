@@ -1,5 +1,5 @@
-/* Trivial UI demo, very unfinished. Currently just lets you change the
- * background color of the window and nothing else.
+/* Trivial UI demo, very basic. Currently just lets you change the background
+ * color of the window and nothing else. See `plplay.c` for a more complete UI.
  *
  * License: CC0 / Public Domain
  */

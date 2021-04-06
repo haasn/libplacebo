@@ -12,10 +12,14 @@
 #ifdef USE_VK
 #include <libplacebo/vulkan.h>
 #define GLFW_INCLUDE_VULKAN
+#define IMPL win_impl_glfw_vk
+#define IMPL_NAME "GLFW (vulkan)"
 #endif
 
 #ifdef USE_GL
 #include <libplacebo/opengl.h>
+#define IMPL win_impl_glfw_gl
+#define IMPL_NAME "GLFW (opengl)"
 #endif
 
 #include <GLFW/glfw3.h>
@@ -25,6 +29,8 @@
 #else
 #define DEBUG true
 #endif
+
+const struct window_impl IMPL;
 
 struct priv {
     struct window w;
@@ -96,13 +102,14 @@ static void drop_cb(GLFWwindow *win, int num, const char *files[])
     }
 }
 
-struct window *window_create(struct pl_context *ctx, const char *title,
-                            int width, int height, enum winflags flags)
+static struct window *glfw_create(struct pl_context *ctx, const char *title,
+                                  int width, int height, enum winflags flags)
 {
     struct priv *p = calloc(1, sizeof(struct priv));
     if (!p)
         return NULL;
 
+    p->w.impl = &IMPL;
     if (!glfwInit()) {
         fprintf(stderr, "GLFW: Failed initializing?\n");
         goto error;
@@ -234,7 +241,7 @@ error:
     return NULL;
 }
 
-void window_destroy(struct window **window)
+static void glfw_destroy(struct window **window)
 {
     struct priv *p = (struct priv *) *window;
     if (!p)
@@ -262,7 +269,7 @@ void window_destroy(struct window **window)
     *window = NULL;
 }
 
-void window_poll(struct window *window, bool block)
+static void glfw_poll(struct window *window, bool block)
 {
     if (block) {
         glfwWaitEvents();
@@ -271,7 +278,7 @@ void window_poll(struct window *window, bool block)
     }
 }
 
-void window_get_cursor(const struct window *window, int *x, int *y)
+static void glfw_get_cursor(const struct window *window, int *x, int *y)
 {
     struct priv *p = (struct priv *) window;
     double dx, dy;
@@ -280,7 +287,7 @@ void window_get_cursor(const struct window *window, int *x, int *y)
     *y = dy;
 }
 
-bool window_get_button(const struct window *window, enum button btn)
+static bool glfw_get_button(const struct window *window, enum button btn)
 {
     static const int button_map[] = {
         [BTN_LEFT] = GLFW_MOUSE_BUTTON_LEFT,
@@ -292,7 +299,7 @@ bool window_get_button(const struct window *window, enum button btn)
     return glfwGetMouseButton(p->win, button_map[btn]) == GLFW_PRESS;
 }
 
-void window_get_scroll(const struct window *window, float *dx, float *dy)
+static void glfw_get_scroll(const struct window *window, float *dx, float *dy)
 {
     struct priv *p = (struct priv *) window;
     *dx = p->scroll_dx;
@@ -300,7 +307,7 @@ void window_get_scroll(const struct window *window, float *dx, float *dy)
     p->scroll_dx = p->scroll_dy = 0.0;
 }
 
-char *window_get_file(const struct window *window)
+static char *glfw_get_file(const struct window *window)
 {
     struct priv *p = (struct priv *) window;
     if (p->file_seen) {
@@ -316,3 +323,14 @@ char *window_get_file(const struct window *window)
     p->file_seen = true;
     return p->files[0];
 }
+
+const struct window_impl IMPL = {
+    .name = IMPL_NAME,
+    .create = glfw_create,
+    .destroy = glfw_destroy,
+    .poll = glfw_poll,
+    .get_cursor = glfw_get_cursor,
+    .get_button = glfw_get_button,
+    .get_scroll = glfw_get_scroll,
+    .get_file = glfw_get_file,
+};
