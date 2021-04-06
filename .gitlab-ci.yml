@@ -157,7 +157,7 @@ asan:
     script:
         - meson build --buildtype debugoptimized
                       -Dtests=true
-                      -Ddemos=true
+                      -Ddemos=false
                       -Dshaderc=disabled
                       -Db_sanitize=address
         - ninja -C build
@@ -173,7 +173,7 @@ msan:
     script:
         - env CC=clang meson build --buildtype debugoptimized
                                    -Dtests=true
-                                   -Ddemos=true
+                                   -Ddemos=false
                                    -Dc_args='-DMSAN'
                                    -Dglslang=disabled
                                    -Db_sanitize=memory
@@ -191,7 +191,7 @@ ubsan:
     script:
         - env CC=clang meson build --buildtype debugoptimized
                                    -Dtests=true
-                                   -Ddemos=true
+                                   -Ddemos=false
                                    -Dc_args='-fPIE'
                                    -Dglslang=disabled
                                    -Db_sanitize=undefined
