@@ -110,7 +110,10 @@ else
     if nuklear_found
       plplay_deps += nuklear
     endif
-    executable('plplay', 'plplay.c', dependencies: plplay_deps)
+    executable('plplay', 'plplay.c',
+      dependencies: plplay_deps,
+      install: true,
+    )
   endif
 
   if nuklear_found

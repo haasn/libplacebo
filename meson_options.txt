@@ -22,7 +22,7 @@ option('lcms', type: 'feature', value: 'auto',
 
 # Miscellaneous
 option('demos', type: 'boolean', value: true,
-       description: 'Enable building demo programs')
+       description: 'Enable building (and installing) the demo programs')
 
 option('tests', type: 'boolean', value: false,
        description: 'Enable building the test cases')
