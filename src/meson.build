@@ -209,8 +209,9 @@ tests = [
 ]
 
 fuzzers = [
-  'user_shaders.c',
   'lut.c',
+  'shaders.c',
+  'user_shaders.c',
 ]
 
 
@@ -437,6 +438,7 @@ endif
 if get_option('fuzz')
   foreach f : fuzzers
     executable('fuzz.' + f, 'tests/fuzz/' + f,
+        objects: lib.extract_all_objects(recursive: false),
         dependencies: tdep,
     )
   endforeach
