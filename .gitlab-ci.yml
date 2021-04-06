@@ -96,6 +96,7 @@ scan:
         - env CC=clang meson build --buildtype debugoptimized
                                    --werror
                                    -Dtests=true
+                                   -Ddemos=true
                                    -Dbench=true
                                    -Dshaderc=enabled
                                    -Dglslang=enabled
@@ -111,6 +112,7 @@ llvmpipe:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
+                      -Ddemos=false
                       -Dc_args='-DCI_ALLOW_SW'
                       -Dshaderc=enabled
                       -Dglslang=enabled
@@ -126,6 +128,7 @@ gpu:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
+                      -Ddemos=false
                       -Dshaderc=disabled
                       -Db_coverage=true
         - ninja -C build
@@ -154,6 +157,7 @@ asan:
     script:
         - meson build --buildtype debugoptimized
                       -Dtests=true
+                      -Ddemos=true
                       -Dshaderc=disabled
                       -Db_sanitize=address
         - ninja -C build
@@ -169,6 +173,7 @@ msan:
     script:
         - env CC=clang meson build --buildtype debugoptimized
                                    -Dtests=true
+                                   -Ddemos=true
                                    -Dc_args='-DMSAN'
                                    -Dglslang=disabled
                                    -Db_sanitize=memory
@@ -186,6 +191,7 @@ ubsan:
     script:
         - env CC=clang meson build --buildtype debugoptimized
                                    -Dtests=true
+                                   -Ddemos=true
                                    -Dc_args='-fPIE'
                                    -Dglslang=disabled
                                    -Db_sanitize=undefined
