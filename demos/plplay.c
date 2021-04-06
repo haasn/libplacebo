@@ -468,7 +468,11 @@ int main(int argc, char **argv)
     if (is_file_hdr(p))
         flags |= WIN_HDR;
 
-    p->ctx = demo_context();
+    p->ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
+        .log_cb = pl_log_color,
+        .log_level = PL_LOG_INFO,
+    });
+
     p->win = window_create(p->ctx, "plplay", par->width, par->height, flags);
     if (!p->win)
         goto error;

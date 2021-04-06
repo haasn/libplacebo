@@ -187,7 +187,11 @@ int main(int argc, char **argv)
 
     const char *file = argv[1];
     const char *overlay = argc > 2 ? argv[2] : NULL;
-    ctx = demo_context();
+    ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
+        .log_cb = pl_log_color,
+        .log_level = PL_LOG_INFO,
+    });
+
 
     // Load image, do this first so we can use it for the window size
     SDL_Surface *img = IMG_Load(file);

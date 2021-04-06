@@ -37,7 +37,11 @@ static void evolve_rgba(float rgba[4], int *pos)
 
 int main(int argc, char **argv)
 {
-    ctx = demo_context();
+    ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
+        .log_cb = pl_log_color,
+        .log_level = PL_LOG_DEBUG,
+    });
+
     win = window_create(ctx, "colors demo", 640, 480, WIN_ALPHA);
     if (!win)
         uninit(1);

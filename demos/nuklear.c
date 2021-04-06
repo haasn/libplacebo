@@ -50,7 +50,11 @@ static void uninit(int ret)
 
 int main(int argc, char **argv)
 {
-    ctx = demo_context();
+    ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
+        .log_cb = pl_log_color,
+        .log_level = PL_LOG_DEBUG,
+    });
+
     win = window_create(ctx, "nuklear demo", 640, 480, 0);
     ui = win ? ui_create(win->gpu) : NULL;
     if (!win || !ui)
