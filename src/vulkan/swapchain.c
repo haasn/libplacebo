@@ -28,6 +28,7 @@ struct sem_pair {
 };
 
 struct priv {
+    pthread_mutex_t lock;
     struct vk_ctx *vk;
     VkSurfaceKHR surf;
 
@@ -300,6 +301,7 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
     sw->gpu = gpu;
 
     struct priv *p = PL_PRIV(sw);
+    pl_mutex_init(&p->lock);
     p->params = *params;
     p->vk = vk;
     p->surf = params->surface;
@@ -366,6 +368,7 @@ static void vk_sw_destroy(const struct pl_swapchain *sw)
     }
 
     vk->DestroySwapchainKHR(vk->dev, p->swapchain, PL_VK_ALLOC);
+    pthread_mutex_destroy(&p->lock);
     pl_free((void *) sw);
 }
 
@@ -631,13 +634,18 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
 {
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
-    if (!p->swapchain && !vk_sw_recreate(sw, 0, 0))
+    pthread_mutex_lock(&p->lock);
+    if (!p->swapchain && !vk_sw_recreate(sw, 0, 0)) {
+        pthread_mutex_unlock(&p->lock);
         return false;
+    }
 
     if (p->suboptimal && !p->params.allow_suboptimal) {
         PL_TRACE(vk, "Swapchain is suboptimal, recreating...");
-        if (!vk_sw_recreate(sw, 0, 0))
+        if (!vk_sw_recreate(sw, 0, 0)) {
+            pthread_mutex_unlock(&p->lock);
             return false;
+        }
     }
 
     VkSemaphore sem_in = p->sems.elem[p->idx_sems].in;
@@ -645,8 +653,10 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
 
     for (int attempts = 0; attempts < 2; attempts++) {
         uint32_t imgidx = 0;
+        pthread_mutex_unlock(&p->lock); // don't hold mutex while blocking
         VkResult res = vk->AcquireNextImageKHR(vk->dev, p->swapchain, UINT64_MAX,
                                                sem_in, VK_NULL_HANDLE, &imgidx);
+        pthread_mutex_lock(&p->lock);
 
         switch (res) {
         case VK_SUBOPTIMAL_KHR:
@@ -662,23 +672,28 @@ static bool vk_sw_start_frame(const struct pl_swapchain *sw,
                 .color_repr = p->color_repr,
                 .color_space = p->color_space,
             };
+            pthread_mutex_unlock(&p->lock);
             return true;
 
         case VK_ERROR_OUT_OF_DATE_KHR: {
             // In these cases try recreating the swapchain
-            if (!vk_sw_recreate(sw, 0, 0))
+            if (!vk_sw_recreate(sw, 0, 0)) {
+                pthread_mutex_unlock(&p->lock);
                 return false;
+            }
             continue;
         }
 
         default:
             PL_ERR(vk, "Failed acquiring swapchain image: %s", vk_res_str(res));
+            pthread_mutex_unlock(&p->lock);
             return false;
         }
     }
 
     // If we've exhausted the number of attempts to recreate the swapchain,
     // just give up silently and let the user retry some time later.
+    pthread_mutex_unlock(&p->lock);
     return false;
 }
 
@@ -692,8 +707,11 @@ static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
     const struct pl_gpu *gpu = sw->gpu;
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
-    if (!p->swapchain)
+    pthread_mutex_lock(&p->lock);
+    if (!p->swapchain) {
+        pthread_mutex_unlock(&p->lock);
         return false;
+    }
 
     VkSemaphore sem_out = p->sems.elem[p->idx_sems++].out;
     p->idx_sems %= p->sems.num;
@@ -703,19 +721,24 @@ static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
                                VK_ACCESS_MEMORY_READ_BIT, sem_out);
     if (!held) {
         PL_ERR(gpu, "Failed holding swapchain image for presentation");
+        pthread_mutex_unlock(&p->lock);
         return false;
     }
 
     struct vk_cmd *cmd = pl_vk_steal_cmd(gpu);
-    if (!cmd)
+    if (!cmd) {
+        pthread_mutex_unlock(&p->lock);
         return false;
+    }
 
     p->frames_in_flight++;
     vk_cmd_callback(cmd, (vk_cb) present_cb, p, NULL);
 
     vk_cmd_queue(vk, &cmd);
-    if (!vk_flush_commands(vk))
+    if (!vk_flush_commands(vk)) {
+        pthread_mutex_unlock(&p->lock);
         return false;
+    }
 
     struct vk_cmdpool *pool = vk->pool_graphics;
     VkQueue queue = pool->queues[pool->idx_queues];
@@ -733,6 +756,8 @@ static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
 
     PL_TRACE(vk, "vkQueuePresentKHR waits on %p", (void *) sem_out);
     VkResult res = vk->QueuePresentKHR(queue, &pinfo);
+    pthread_mutex_unlock(&p->lock);
+
     switch (res) {
     case VK_SUBOPTIMAL_KHR:
         p->suboptimal = true;
@@ -756,14 +781,21 @@ static void vk_sw_swap_buffers(const struct pl_swapchain *sw)
 {
     struct priv *p = PL_PRIV(sw);
 
-    while (p->frames_in_flight >= p->swapchain_depth)
+    pthread_mutex_lock(&p->lock);
+    while (p->frames_in_flight >= p->swapchain_depth) {
+        pthread_mutex_unlock(&p->lock); // don't hold mutex while blocking
         vk_poll_commands(p->vk, UINT64_MAX);
+        pthread_mutex_lock(&p->lock);
+    }
+    pthread_mutex_unlock(&p->lock);
 }
 
 static bool vk_sw_resize(const struct pl_swapchain *sw, int *width, int *height)
 {
     struct priv *p = PL_PRIV(sw);
     bool ok = true;
+
+    pthread_mutex_lock(&p->lock);
 
     bool width_changed = *width && *width != p->cur_width,
          height_changed = *height && *height != p->cur_height;
@@ -773,6 +805,8 @@ static bool vk_sw_resize(const struct pl_swapchain *sw, int *width, int *height)
 
     *width = p->cur_width;
     *height = p->cur_height;
+
+    pthread_mutex_unlock(&p->lock);
     return ok;
 }
 
@@ -784,14 +818,21 @@ static bool vk_sw_hdr_metadata(const struct pl_swapchain *sw,
     if (!vk->SetHdrMetadataEXT)
         return false;
 
-    if (!pl_color_transfer_is_hdr(p->color_space.transfer))
+    pthread_mutex_lock(&p->lock);
+    if (!pl_color_transfer_is_hdr(p->color_space.transfer)) {
+        pthread_mutex_unlock(&p->lock);
         return false;
+    }
 
-    if (!p->swapchain && !vk_sw_recreate(sw, 0, 0))
+    if (!p->swapchain && !vk_sw_recreate(sw, 0, 0)) {
+        pthread_mutex_unlock(&p->lock);
         return false;
+    }
 
-    if (!metadata)
+    if (!metadata) {
+        pthread_mutex_unlock(&p->lock);
         return true;
+    }
 
     // Remember the metadata so we can re-apply it after swapchain recreation
     p->hdr_metadata = *metadata;
@@ -808,6 +849,7 @@ static bool vk_sw_hdr_metadata(const struct pl_swapchain *sw,
         .maxFrameAverageLightLevel = metadata->max_fall,
     });
 
+    pthread_mutex_unlock(&p->lock);
     return true;
 }
 
