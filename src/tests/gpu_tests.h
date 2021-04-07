@@ -1086,9 +1086,11 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     struct pl_queue *queue = pl_queue_create(gpu);
     enum pl_queue_status ret;
 
-    // Test pre-pushing all frames, with delayed EOF
-    for (int i = 0; i < NUM_MIX_FRAMES; i++)
-        pl_queue_push(queue, &srcframes[i]);
+    // Test pre-pushing all frames, with delayed EOF.
+    for (int i = 0; i < NUM_MIX_FRAMES; i++) {
+        if (!pl_queue_push_block(queue, 1, &srcframes[i])) // mini-sleep
+            pl_queue_push(queue, &srcframes[i]); // push it anyway, for testing
+    }
 
     struct pl_frame_mix mix;
     while ((ret = pl_queue_update(queue, &mix, &qparams)) != QUEUE_EOF) {

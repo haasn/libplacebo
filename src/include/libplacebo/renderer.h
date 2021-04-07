@@ -418,6 +418,9 @@ struct pl_frame {
     // un-applying grain makes little sense.
     struct pl_av1_grain_data av1_grain;
 
+    // Ignored by libplacebo. May be useful for users.
+    void *user_data;
+
     // Deprecated fields provided merely for backwards compatibility. The
     // use of these should be discontinued as soon as possible.
     int width PL_DEPRECATED; // ignored
