@@ -19,6 +19,7 @@
 
 #include "../common.h"
 #include "../context.h"
+#include <pthread.h>
 
 #ifdef PL_HAVE_WIN32
 #include <windows.h>
@@ -48,6 +49,7 @@
 
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
+    pthread_mutex_t lock;
     void *alloc; // allocations bound to the lifetime of this vk_ctx
     const struct pl_vk_inst *internal_instance;
     struct pl_context *ctx;

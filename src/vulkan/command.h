@@ -37,6 +37,8 @@ void vk_dev_callback(struct vk_ctx *vk, vk_cb callback,
 
 // Helper wrapper around command buffers that also track dependencies,
 // callbacks and synchronization primitives
+//
+// Thread-safety: Unsafe
 struct vk_cmd {
     struct vk_cmdpool *pool; // pool it was allocated from
     VkQueue queue;           // the submission queue (for recording/pending)
@@ -84,6 +86,8 @@ enum vk_wait_type {
 // Signal abstraction: represents an abstract synchronization mechanism.
 // Internally, this may either resolve as a semaphore or an event depending
 // on whether the appropriate conditions are met.
+//
+// Thread-safety: Unsafe
 struct vk_signal;
 
 // Generates a signal after the execution of all previous commands matching the

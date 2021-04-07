@@ -255,7 +255,7 @@ extern const struct pl_vulkan_params pl_vulkan_default_params;
 // currently no way to share a vulkan device with the caller. If `params` is
 // left as NULL, it defaults to &pl_vulkan_default_params.
 //
-// Thread-safety: Unsafe
+// Thread-safety: Safe
 const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
                                          const struct pl_vulkan_params *params);
 
