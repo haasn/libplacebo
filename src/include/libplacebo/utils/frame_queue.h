@@ -20,13 +20,16 @@
 #ifndef LIBPLACEBO_FRAME_QUEUE_H
 #define LIBPLACEBO_FRAME_QUEUE_H
 
-// This file contains an abstraction layer for automatically turning a
-// conceptual stream of (frame, pts) pairs, as emitted by a decoder or filter
-// graph, into a `pl_frame_mix` suitable for `pl_render_image_mix`.
+// An abstraction layer for automatically turning a conceptual stream of
+// (frame, pts) pairs, as emitted by a decoder or filter graph, into a
+// `pl_frame_mix` suitable for `pl_render_image_mix`.
 //
 // This API ensures that minimal work is performed (e.g. only mapping frames
 // that are actually required), while also satisfying the requirements
 // of any configured frame mixer.
+//
+// Thread-safety: Unsafe
+struct pl_queue;
 
 enum pl_queue_status {
     QUEUE_OK,       // success

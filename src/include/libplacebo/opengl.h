@@ -21,6 +21,11 @@
 #include <libplacebo/gpu.h>
 #include <libplacebo/swapchain.h>
 
+// Note on thread safety: The thread safety of `pl_opengl` and any associated
+// GPU objects follows the same thread safety rules as the underlying OpenGL
+// context. In other words, they must only be called from the thread the OpenGL
+// context is current on.
+
 struct pl_opengl {
     const struct pl_gpu *gpu;
 };

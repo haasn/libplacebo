@@ -287,21 +287,16 @@ char *pl_strndup0(void *parent, const char *str, size_t size)
 }
 
 struct pl_ref {
-    pthread_mutex_t lock;
-    int refcount;
+    pl_rc_t rc;
 };
 
 struct pl_ref *pl_ref_new(void *parent)
 {
-    struct pl_ref *ref = pl_alloc_ptr(parent, ref);
+    struct pl_ref *ref = pl_zalloc_ptr(parent, ref);
     if (!ref)
         return oom();
 
-    *ref = (struct pl_ref) {
-        .lock = PTHREAD_MUTEX_INITIALIZER,
-        .refcount = 1,
-    };
-
+    pl_rc_init(&ref->rc);
     return ref;
 }
 
@@ -310,9 +305,7 @@ struct pl_ref *pl_ref_dup(struct pl_ref *ref)
     if (!ref)
         return NULL;
 
-    pthread_mutex_lock(&ref->lock);
-    ref->refcount++;
-    pthread_mutex_unlock(&ref->lock);
+    pl_rc_ref(&ref->rc);
     return ref;
 }
 
@@ -322,16 +315,10 @@ void pl_ref_deref(struct pl_ref **refp)
     if (!ref)
         return;
 
-    pthread_mutex_lock(&ref->lock);
-    if (--ref->refcount > 0) {
-        pthread_mutex_unlock(&ref->lock);
-        return;
+    if (pl_rc_deref(&ref->rc)) {
+        pl_free(ref);
+        *refp = NULL;
     }
-
-    pthread_mutex_unlock(&ref->lock);
-    pthread_mutex_destroy(&ref->lock);
-    pl_free(ref);
-    *refp = NULL;
 }
 
 char *pl_asprintf(void *parent, const char *fmt, ...)

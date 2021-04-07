@@ -21,6 +21,7 @@
 #include <libplacebo/shaders.h>
 #include <libplacebo/gpu.h>
 
+// Thread-safety: Unsafe
 struct pl_dispatch;
 
 // Creates a new shader dispatch object. This object provides a translation

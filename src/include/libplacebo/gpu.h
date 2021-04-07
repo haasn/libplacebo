@@ -166,6 +166,8 @@ struct pl_gpu_pci_address {
 
 // Abstract device context which wraps an underlying graphics context and can
 // be used to dispatch rendering commands.
+//
+// Thread-safety: Unsafe
 struct pl_gpu {
     struct pl_context *ctx;  // the `pl_context` this GPU was initialized from
 
@@ -394,6 +396,8 @@ enum pl_sampler_type {
 // external/real framebuffer, a framebuffer object + texture pair, a mapped
 // texture (via pl_hwdec), or other sorts of things that can be sampled from
 // and/or rendered to.
+//
+// Thread-safety: Unsafe
 struct pl_tex {
     struct pl_tex_params params;
 
@@ -658,6 +662,8 @@ struct pl_buf_params {
 // bottom line is that users do not need to worry about the efficiency of using
 // many small pl_buf objects. Having many small pl_bufs, even lots of few-byte
 // vertex buffers, is designed to be completely fine.
+//
+// Thread-safety: Unsafe
 struct pl_buf {
     struct pl_buf_params params;
     uint8_t *data; // for persistently mapped buffers, points to the first byte
@@ -1100,6 +1106,8 @@ struct pl_pass_params {
 // - descriptor sets, uniforms, other bindings
 // - all synchronization necessary
 // - the current values of all inputs
+//
+// Thread-safety: Unsafe
 struct pl_pass {
     struct pl_pass_params params;
 };
@@ -1202,6 +1210,8 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
 // is not required when solely using libplacebo API functions, as all required
 // synchronisation is done internally. This comes in the form of a pair of
 // semaphores - one to synchronize access in each direction.
+//
+// Thread-safety: Unsafe
 struct pl_sync {
     enum pl_handle_type handle_type;
 
@@ -1259,6 +1269,8 @@ bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
 // queries may be dropped, and some operations might not record timer results
 // at all. (For example, if the underlying hardware does not support timer
 // queries for a given operation type)
+//
+// Thread-safety: Unsafe
 struct pl_timer;
 
 // Creates a new timer object. This may return NULL, for example if the

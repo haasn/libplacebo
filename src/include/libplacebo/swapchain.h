@@ -26,7 +26,8 @@
 // exposed by a graphics API (and accompanying GPU instance), allowing users to
 // directly present frames to the screen (or window, typically). This is a
 // sister API to gpu.h and follows the same convention w.r.t undefined behavior.
-
+//
+// Thread-safety: Unsafe
 struct pl_swapchain {
     struct pl_context *ctx;   // the pl_context this swapchain was allocated from
     struct pl_sw_fns *impl;   // the underlying implementation

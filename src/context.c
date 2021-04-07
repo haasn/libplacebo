@@ -32,8 +32,6 @@ const char *pl_version()
     return BUILD_VERSION;
 }
 
-static int pl_ctx_refcount;
-
 struct pl_context *pl_context_create(int api_ver,
                                      const struct pl_context_params *params)
 {
@@ -55,7 +53,6 @@ struct pl_context *pl_context_create(int api_ver,
     int err = pthread_mutex_init(&ctx->lock, NULL);
     if (err != 0) {
         fprintf(stderr, "Failed initializing pthread mutex: %s\n", strerror(err));
-        pl_ctx_refcount--;
         pl_free(ctx);
         ctx = NULL;
     }

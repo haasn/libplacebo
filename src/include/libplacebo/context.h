@@ -20,12 +20,11 @@
 
 #include <libplacebo/config.h>
 
-// Meta-object to serve as a global entrypoint for the purposes of resource
-// allocation, logging, etc.. Note on thread safety: the pl_context and
-// everything allocated from it are *not* thread-safe except where otherwise
-// noted. That is, multiple pl_context objects are safe to use from multiple
-// threads, but a single pl_context and all of its derived resources and
-// contexts must be used from a single thread at all times.
+// Meta-object to serve as a global entrypoint for the purposes of logging, as
+// well as a runtime ABI check to detect mismatches between these headers and
+// the linked version of the library.
+//
+// Thread-safety: Safe
 struct pl_context;
 
 // The log level associated with a given log message.

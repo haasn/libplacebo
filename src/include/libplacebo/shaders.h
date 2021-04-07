@@ -26,6 +26,7 @@
 
 #include <libplacebo/gpu.h>
 
+// Thread-safety: Unsafe
 struct pl_shader;
 
 struct pl_shader_params {
