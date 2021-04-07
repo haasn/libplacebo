@@ -977,7 +977,7 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
         VkPhysicalDeviceType t = prop.properties.deviceType;
         bool has_uuid = memcmp(id_props.deviceUUID, nil, VK_UUID_SIZE) != 0;
         if (uuid_set && !has_uuid) {
-            PL_FATAL(vk, "params.device_uuid set but provided instanced does "
+            PL_FATAL(vk, "params.device_uuid set but provided instance does "
                      "not support the extensions required to query device UUIDs!");
             goto error;
         }
