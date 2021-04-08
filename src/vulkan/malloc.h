@@ -25,7 +25,7 @@ struct vk_malloc *vk_malloc_create(struct vk_ctx *vk);
 void vk_malloc_destroy(struct vk_malloc **ma);
 
 // Get the supported handle types for this malloc instance
-pl_handle_caps vk_malloc_handle_caps(struct vk_malloc *ma, bool import);
+pl_handle_caps vk_malloc_handle_caps(const struct vk_malloc *ma, bool import);
 
 // Represents a single "slice" of generic (non-buffer) memory, plus some
 // metadata for accounting. This struct is essentially read-only.
