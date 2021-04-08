@@ -74,10 +74,12 @@ static bool pl_upload_dav1dpicture(const struct pl_gpu *gpu,
 // `pl_upload_dav1dpicture`, or on platforms that don't support importing
 // PL_HANDLE_HOST_PTR as buffers. Returns 0 or a negative DAV1D_ERR value.
 //
-// Note: These are *not* thread-safe, and should not be used directly as a
-// Dav1dPicAllocator unless wrapped by a thread-safe layer.
-static int pl_allocate_dav1dpicture(Dav1dPicture *picture, const struct pl_gpu *gpu);
-static void pl_release_dav1dpicture(Dav1dPicture *picture, const struct pl_gpu *gpu);
+// Note: These may only be used directly as a Dav1dPicAllocator if the `gpu`
+// passed as the value of `cookie` supports PL_GPU_CAP_THREAD_SAFE. Otherwise,
+// the user must manually synchronize this to ensure it runs on the correct
+// thread.
+static int pl_allocate_dav1dpicture(Dav1dPicture *picture, void *gpu);
+static void pl_release_dav1dpicture(Dav1dPicture *picture, void *gpu);
 
 // Mapping functions for the various Dav1dColor* enums. Note that these are not
 // quite 1:1, and even for values that exist in both, the semantics sometimes

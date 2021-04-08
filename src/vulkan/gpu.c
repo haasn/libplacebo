@@ -31,6 +31,7 @@ enum queue_type {
     GRAPHICS,
     COMPUTE,
     TRANSFER,
+    ANY,
 };
 
 // For gpu.priv
@@ -53,6 +54,7 @@ struct pl_vk {
 
     // The "currently recording" command. This will be queued and replaced by
     // a new command every time we need to "switch" between queue families.
+    pthread_mutex_t recording;
     struct vk_cmd *cmd;
 
     // Array of VkSamplers for every combination of sample/address modes
@@ -62,24 +64,21 @@ struct pl_vk {
     bool warned_modless;
 };
 
-static void vk_submit(const struct pl_gpu *gpu)
-{
-    struct pl_vk *p = PL_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
-
-    if (p->cmd)
-        vk_cmd_queue(vk, &p->cmd);
+static inline bool supports_marks(struct vk_cmd *cmd) {
+    // Spec says debug markers are only available on graphics/compute queues
+    VkQueueFlags flags = cmd->pool->props.queueFlags;
+    return flags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 }
 
-// Returns a command buffer, or NULL on error
-static struct vk_cmd *vk_require_cmd(const struct pl_gpu *gpu,
-                                     enum queue_type type)
+static inline struct vk_cmd *_begin_cmd(struct pl_vk *p, enum queue_type type,
+                                        const char *label)
 {
-    struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
+    pthread_mutex_lock(&p->recording);
 
     struct vk_cmdpool *pool;
     switch (type) {
+    case ANY:      pool = p->cmd ? p->cmd->pool : vk->pool_graphics; break;
     case GRAPHICS: pool = vk->pool_graphics; break;
     case COMPUTE:  pool = vk->pool_compute;  break;
 
@@ -91,39 +90,50 @@ static struct vk_cmd *vk_require_cmd(const struct pl_gpu *gpu,
         if (!pool)
             pool = vk->pool_graphics;
         break;
+
     default: abort();
     }
 
-    pl_assert(pool);
-    if (p->cmd && p->cmd->pool == pool)
-        return p->cmd;
+    if (!p->cmd || p->cmd->pool != pool) {
+        vk_cmd_queue(vk, &p->cmd);
+        p->cmd = vk_cmd_begin(vk, pool);
+    }
 
-    vk_submit(gpu);
-    p->cmd = vk_cmd_begin(vk, pool);
+    if (vk->CmdBeginDebugUtilsLabelEXT && supports_marks(p->cmd)) {
+        vk->CmdBeginDebugUtilsLabelEXT(p->cmd->buf, &(VkDebugUtilsLabelEXT) {
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+            .pLabelName = label,
+        });
+    }
+
     return p->cmd;
 }
 
-static inline bool supports_marks(struct vk_cmd *cmd) {
-    // Spec says debug markers are only available on graphics/compute queues
-    VkQueueFlags flags = cmd->pool->props.queueFlags;
-    return flags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
+static inline void _end_cmd(struct pl_vk *p, struct vk_cmd **pcmd, bool submit)
+{
+    struct vk_ctx *vk = p->vk;
+    struct vk_cmd *cmd = *pcmd;
+    pl_assert(p->cmd == cmd);
+
+    if (vk->CmdEndDebugUtilsLabelEXT && supports_marks(cmd))
+        vk->CmdEndDebugUtilsLabelEXT(cmd->buf);
+
+    if (submit)
+        vk_cmd_queue(vk, &p->cmd);
+
+    pthread_mutex_unlock(&p->recording);
 }
 
-#define CMD_MARK_BEGIN(cmd)                                                     \
-    do {                                                                        \
-        if (vk->CmdBeginDebugUtilsLabelEXT && supports_marks(cmd)) {            \
-            vk->CmdBeginDebugUtilsLabelEXT(cmd->buf, &(VkDebugUtilsLabelEXT) {  \
-                .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,               \
-                .pLabelName = __func__,                                         \
-            });                                                                 \
-        }                                                                       \
-    } while (0)
+#define begin_cmd(p, type) _begin_cmd(p, type, __func__)
+#define finish_cmd(p, cmd) _end_cmd(p, cmd, false)
+#define submit_cmd(p, cmd) _end_cmd(p, cmd, true)
 
-#define CMD_MARK_END(cmd)                                           \
-    do {                                                            \
-        if (vk->CmdEndDebugUtilsLabelEXT && supports_marks(cmd))    \
-            vk->CmdEndDebugUtilsLabelEXT(cmd->buf);                 \
-    } while (0)
+static void flush(struct pl_vk *p)
+{
+    pthread_mutex_lock(&p->recording);
+    vk_cmd_queue(p->vk, &p->cmd);
+    pthread_mutex_unlock(&p->recording);
+}
 
 #define MAKE_LAZY_DESTRUCTOR(fun, argtype)                                  \
     static void fun##_lazy(const struct pl_gpu *gpu, argtype *arg) {        \
@@ -142,7 +152,7 @@ static void vk_destroy_gpu(const struct pl_gpu *gpu)
     struct vk_ctx *vk = p->vk;
 
     pl_dispatch_destroy(&p->dp);
-    vk_submit(gpu);
+    vk_cmd_queue(vk, &p->cmd);
     vk_wait_idle(vk);
 
     for (enum pl_tex_sample_mode s = 0; s < PL_TEX_SAMPLE_MODE_COUNT; s++) {
@@ -153,6 +163,7 @@ static void vk_destroy_gpu(const struct pl_gpu *gpu)
     vk_malloc_destroy(&p->alloc);
     spirv_compiler_destroy(&p->spirv);
 
+    pthread_mutex_destroy(&p->recording);
     pl_free((void *) gpu);
 }
 
@@ -473,6 +484,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     gpu->ctx = vk->ctx;
 
     struct pl_vk *p = PL_PRIV(gpu);
+    pl_mutex_init(&p->recording);
     p->impl = pl_fns_vk;
     p->vk = vk;
 
@@ -560,7 +572,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     }
 
     // Determine GPU capabilities
-    gpu->caps |= PL_GPU_CAP_CALLBACKS;
+    gpu->caps |= PL_GPU_CAP_CALLBACKS | PL_GPU_CAP_THREAD_SAFE;
 
     VkShaderStageFlags req_stages = VK_SHADER_STAGE_FRAGMENT_BIT |
                                     VK_SHADER_STAGE_COMPUTE_BIT;
@@ -690,7 +702,7 @@ static void vk_cmd_timer_end(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
 // For pl_tex.priv
 struct pl_tex_vk {
-    int refcount; // 1 = object allocated but not in use, > 1 = in use
+    pl_rc_t rc;
     bool held;
     bool external_img;
     bool may_invalidate;
@@ -756,7 +768,7 @@ static void vk_tex_deref(const struct pl_gpu *gpu, const struct pl_tex *tex)
         return;
 
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
-    if (--tex_vk->refcount == 0)
+    if (pl_rc_deref(&tex_vk->rc))
         vk_tex_destroy(gpu, (struct pl_tex *) tex);
 }
 
@@ -771,6 +783,7 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
+    pl_rc_ref(&tex_vk->rc);
     pl_assert(!tex_vk->held);
 
     for (int i = 0; i < tex_vk->ext_deps.num; i++)
@@ -846,7 +859,6 @@ static void tex_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
     tex_vk->current_layout = newLayout;
     tex_vk->current_access = newAccess;
-    tex_vk->refcount++;
     vk_cmd_callback(cmd, (vk_cb) vk_tex_deref, gpu, tex);
     vk_cmd_obj(cmd, tex);
 }
@@ -875,7 +887,7 @@ static bool vk_init_image(const struct pl_gpu *gpu, const struct pl_tex *tex,
     pl_assert(tex_vk->img);
     PL_VK_NAME(IMAGE, tex_vk->img, name);
 
-    tex_vk->refcount = 1;
+    pl_rc_init(&tex_vk->rc);
     tex_vk->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
     tex_vk->current_access = 0;
     tex_vk->transfer_queue = GRAPHICS;
@@ -1311,11 +1323,9 @@ static void vk_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
     struct vk_ctx *vk = p->vk;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
-    struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
+    struct vk_cmd *cmd = begin_cmd(p, GRAPHICS);
     if (!cmd)
         return;
-
-    CMD_MARK_BEGIN(cmd);
 
     tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -1336,8 +1346,7 @@ static void vk_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
                            &clearColor, 1, &range);
 
     tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-    CMD_MARK_END(cmd);
+    finish_cmd(p, &cmd);
 }
 
 static void vk_tex_blit(const struct pl_gpu *gpu,
@@ -1348,11 +1357,9 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
     struct pl_tex_vk *src_vk = PL_PRIV(params->src);
     struct pl_tex_vk *dst_vk = PL_PRIV(params->dst);
 
-    struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
+    struct vk_cmd *cmd = begin_cmd(p, GRAPHICS);
     if (!cmd)
         return;
-
-    CMD_MARK_BEGIN(cmd);
 
     tex_barrier(gpu, cmd, params->src, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_READ_BIT,
@@ -1407,8 +1414,7 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
 
     tex_signal(gpu, cmd, params->src, VK_PIPELINE_STAGE_TRANSFER_BIT);
     tex_signal(gpu, cmd, params->dst, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-    CMD_MARK_END(cmd);
+    finish_cmd(p, &cmd);
 }
 
 static bool vk_tex_poll(const struct pl_gpu *gpu, const struct pl_tex *tex,
@@ -1420,17 +1426,17 @@ static bool vk_tex_poll(const struct pl_gpu *gpu, const struct pl_tex *tex,
 
     // Opportunistically check if we can re-use this texture without flush
     vk_poll_commands(vk, 0);
-    if (tex_vk->refcount == 1)
+    if (pl_rc_count(&tex_vk->rc) == 1)
         return false;
 
     // Otherwise, we're force to submit all queued commands so that the
     // user is guaranteed to see progress eventually, even if they call
     // this in a tight loop
-    vk_submit(gpu);
+    flush(p);
     vk_flush_obj(vk, tex);
     vk_poll_commands(vk, timeout);
 
-    return tex_vk->refcount > 1;
+    return pl_rc_count(&tex_vk->rc) > 1;
 }
 
 const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
@@ -1530,22 +1536,18 @@ bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
         return false;
     }
 
-    struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
+    struct vk_cmd *cmd = begin_cmd(p, GRAPHICS);
     if (!cmd) {
         PL_ERR(gpu, "Failed holding external image!");
         return false;
     }
 
-    CMD_MARK_BEGIN(cmd);
-
     tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                 access, layout, false);
 
     vk_cmd_sig(cmd, sem_out);
+    submit_cmd(p, &cmd);
 
-    CMD_MARK_END(cmd);
-
-    vk_submit(gpu);
     tex_vk->held = vk_flush_commands(vk);
     return tex_vk->held;
 }
@@ -1591,7 +1593,7 @@ void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
 // For pl_buf.priv
 struct pl_buf_vk {
     struct vk_memslice mem;
-    int refcount; // 1 = object allocated but not in use, > 1 = in use
+    pl_rc_t rc;
     int writes; // number of queued write commands
     enum queue_type update_queue;
     VkBufferView view; // for texel buffers
@@ -1613,7 +1615,7 @@ static void vk_buf_deref(const struct pl_gpu *gpu, const struct pl_buf *buf)
     struct vk_ctx *vk = p->vk;
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
-    if (--buf_vk->refcount == 0) {
+    if (pl_rc_deref(&buf_vk->rc)) {
         vk_signal_destroy(vk, &buf_vk->sig);
         vk->DestroyBufferView(vk->dev, buf_vk->view, PL_VK_ALLOC);
         vk_malloc_free(p->alloc, &buf_vk->mem);
@@ -1645,6 +1647,7 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
+    pl_rc_ref(&buf_vk->rc);
 
     // CONCURRENT buffers require transitioning to/from IGNORED, EXCLUSIVE
     // buffers require transitioning to/from the concrete QF index
@@ -1738,7 +1741,6 @@ static void buf_barrier(const struct pl_gpu *gpu, struct vk_cmd *cmd,
 
     buf_vk->current_access = newAccess;
     buf_vk->exported = (op & BUF_EXPORT);
-    buf_vk->refcount++;
     vk_cmd_callback(cmd, (vk_cb) vk_buf_deref, gpu, buf);
     vk_cmd_obj(cmd, buf);
 }
@@ -1816,17 +1818,17 @@ static bool vk_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
 
     // Opportunistically check if we can re-use this buffer without flush
     vk_poll_commands(vk, 0);
-    if (buf_vk->refcount == 1)
+    if (pl_rc_count(&buf_vk->rc) == 1)
         return false;
 
     // Otherwise, we're force to submit all queued commands so that the
     // user is guaranteed to see progress eventually, even if they call
     // this in a tight loop
-    vk_submit(gpu);
+    flush(p);
     vk_flush_obj(vk, buf);
     vk_poll_commands(vk, timeout);
 
-    return buf_vk->refcount > 1;
+    return pl_rc_count(&buf_vk->rc) > 1;
 }
 
 static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
@@ -1847,13 +1849,11 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
         memcpy((void *) addr, data, size);
         buf_vk->needs_flush = true;
     } else {
-        struct vk_cmd *cmd = vk_require_cmd(gpu, buf_vk->update_queue);
+        struct vk_cmd *cmd = begin_cmd(p, buf_vk->update_queue);
         if (!cmd) {
             PL_ERR(gpu, "Failed updating buffer!");
             return;
         }
-
-        CMD_MARK_BEGIN(cmd);
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                     VK_ACCESS_TRANSFER_WRITE_BIT, offset, size, BUF_WRITE);
@@ -1887,8 +1887,7 @@ static void vk_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
 
         pl_assert(!buf->params.host_readable); // no flush needed due to this
         buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-        CMD_MARK_END(cmd);
+        finish_cmd(p, &cmd);
     }
 }
 
@@ -1913,17 +1912,14 @@ static void vk_buf_copy(const struct pl_gpu *gpu,
                         size_t size)
 {
     struct pl_vk *p = PL_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
     struct pl_buf_vk *dst_vk = PL_PRIV(dst);
     struct pl_buf_vk *src_vk = PL_PRIV(src);
 
-    struct vk_cmd *cmd = vk_require_cmd(gpu, dst_vk->update_queue);
+    struct vk_cmd *cmd = begin_cmd(p, dst_vk->update_queue);
     if (!cmd) {
         PL_ERR(gpu, "Failed copying buffer!");
         return;
     }
-
-    CMD_MARK_BEGIN(cmd);
 
     buf_barrier(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_ACCESS_TRANSFER_WRITE_BIT, dst_offset, size, BUF_WRITE);
@@ -1942,8 +1938,7 @@ static void vk_buf_copy(const struct pl_gpu *gpu,
     buf_signal(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT);
     buf_signal(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT);
     buf_flush(gpu, cmd, dst, dst_offset, size);
-
-    CMD_MARK_END(cmd);
+    finish_cmd(p, &cmd);
 }
 
 static bool vk_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
@@ -1954,22 +1949,19 @@ static bool vk_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
     if (buf_vk->exported)
         return true;
 
-    struct vk_cmd *cmd = PL_DEF(p->cmd, vk_require_cmd(gpu, GRAPHICS));
+    struct vk_cmd *cmd = begin_cmd(p, ANY);
     if (!cmd) {
         PL_ERR(gpu, "Failed exporting buffer!");
         return false;
     }
-
-    CMD_MARK_BEGIN(cmd);
 
     // For the queue family ownership transfer, we can ignore all pipeline
     // stages since the synchronization via fences/semaphores is required
     buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
                 0, buf->params.size, BUF_EXPORT);
 
-    CMD_MARK_END(cmd);
 
-    vk_submit(gpu);
+    submit_cmd(p, &cmd);
     return vk_flush_commands(vk);
 }
 
@@ -1985,7 +1977,7 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
 
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     buf_vk->current_access = 0;
-    buf_vk->refcount = 1;
+    pl_rc_init(&buf_vk->rc);
 
     struct vk_malloc_params mparams = {
         .reqs = {
@@ -2241,14 +2233,10 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
             goto error;
         }
 
-        // Note: Make sure to run vk_require_cmd *after* pl_buf_pool_get, since
-        // the former could imply polling which could imply submitting the
-        // command we just required!
-        struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
+        struct vk_cmd *cmd = begin_cmd(p, tex_vk->transfer_queue);
         if (!cmd)
             goto error;
 
-        CMD_MARK_BEGIN(cmd);
         vk_cmd_timer_begin(gpu, cmd, params->timer);
 
         struct pl_buf_vk *tbuf_vk = PL_PRIV(tbuf);
@@ -2273,7 +2261,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
             vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
 
         vk_cmd_timer_end(gpu, cmd, params->timer);
-        CMD_MARK_END(cmd);
+        finish_cmd(p, &cmd);
 
         struct pl_tex_transfer_params fixed = *params;
         fixed.buf = tbuf;
@@ -2300,11 +2288,10 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
         };
 
         enum queue_type queue = vk_img_copy_queue(gpu, &region, tex);
-        struct vk_cmd *cmd = vk_require_cmd(gpu, queue);
+        struct vk_cmd *cmd = begin_cmd(p, queue);
         if (!cmd)
             goto error;
 
-        CMD_MARK_BEGIN(cmd);
         vk_cmd_timer_begin(gpu, cmd, params->timer);
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -2322,7 +2309,7 @@ static bool vk_tex_upload(const struct pl_gpu *gpu,
             vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
 
         vk_cmd_timer_end(gpu, cmd, params->timer);
-        CMD_MARK_END(cmd);
+        finish_cmd(p, &cmd);
     }
 
     return true;
@@ -2379,13 +2366,12 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
             goto error;
         }
 
-        struct vk_cmd *cmd = vk_require_cmd(gpu, tex_vk->transfer_queue);
+        struct vk_cmd *cmd = begin_cmd(p, tex_vk->transfer_queue);
         if (!cmd) {
             pl_buf_destroy(gpu, &tbuf);
             goto error;
         }
 
-        CMD_MARK_BEGIN(cmd);
         vk_cmd_timer_begin(gpu, cmd, params->timer);
 
         struct pl_buf_vk *tbuf_vk = PL_PRIV(tbuf);
@@ -2411,7 +2397,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
 
 
         vk_cmd_timer_end(gpu, cmd, params->timer);
-        CMD_MARK_END(cmd);
+        finish_cmd(p, &cmd);
 
         pl_buf_destroy(gpu, &tbuf);
 
@@ -2430,11 +2416,11 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
         };
 
         enum queue_type queue = vk_img_copy_queue(gpu, &region, tex);
-        struct vk_cmd *cmd = vk_require_cmd(gpu, queue);
+
+        struct vk_cmd *cmd = begin_cmd(p, queue);
         if (!cmd)
             goto error;
 
-        CMD_MARK_BEGIN(cmd);
         vk_cmd_timer_begin(gpu, cmd, params->timer);
 
         buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -2454,7 +2440,7 @@ static bool vk_tex_download(const struct pl_gpu *gpu,
 
 
         vk_cmd_timer_end(gpu, cmd, params->timer);
-        CMD_MARK_END(cmd);
+        finish_cmd(p, &cmd);
     }
 
     return true;
@@ -3151,11 +3137,10 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         [PL_PASS_COMPUTE] = COMPUTE,
     };
 
-    struct vk_cmd *cmd = vk_require_cmd(gpu, types[pass->params.type]);
+    struct vk_cmd *cmd = begin_cmd(p, types[pass->params.type]);
     if (!cmd)
         goto error;
 
-    CMD_MARK_BEGIN(cmd);
     vk_cmd_timer_begin(gpu, cmd, params->timer);
 
     // Find a descriptor set to use
@@ -3299,20 +3284,16 @@ static void vk_pass_run(const struct pl_gpu *gpu,
     for (int i = 0; i < pass->params.num_descriptors; i++)
         vk_release_descriptor(gpu, cmd, pass, params->desc_bindings[i], i);
 
+    // submit this command buffer for better intra-frame granularity
     vk_cmd_timer_end(gpu, cmd, params->timer);
-    CMD_MARK_END(cmd);
-
-    // flush the work so far into its own command buffer, for better
-    // intra-frame granularity
-    pl_assert(cmd == p->cmd); // make sure this is still the case
-    vk_submit(gpu);
+    submit_cmd(p, &cmd);
 
 error:
     return;
 }
 
 struct pl_sync_vk {
-    int refcount;
+    pl_rc_t rc;
     VkSemaphore wait;
     VkSemaphore signal;
 };
@@ -3356,7 +3337,7 @@ static void vk_sync_deref(const struct pl_gpu *gpu, const struct pl_sync *sync)
         return;
 
     struct pl_sync_vk *sync_vk = PL_PRIV(sync);
-    if (--sync_vk->refcount == 0)
+    if (pl_rc_deref(&sync_vk->rc))
         vk_sync_destroy(gpu, (struct pl_sync *) sync);
 }
 
@@ -3370,7 +3351,7 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
     sync->handle_type = handle_type;
 
     struct pl_sync_vk *sync_vk = PL_PRIV(sync);
-    sync_vk->refcount = 1;
+    pl_rc_init(&sync_vk->rc);
 
     VkExportSemaphoreCreateInfoKHR einfo = {
         .sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO_KHR,
@@ -3461,26 +3442,22 @@ static bool vk_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     struct pl_sync_vk *sync_vk = PL_PRIV(sync);
 
-    struct vk_cmd *cmd = p->cmd ? p->cmd : vk_require_cmd(gpu, GRAPHICS);
+    struct vk_cmd *cmd = begin_cmd(p, ANY);
     if (!cmd)
         goto error;
-
-    CMD_MARK_BEGIN(cmd);
 
     tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                 0, VK_IMAGE_LAYOUT_GENERAL, true);
 
     vk_cmd_sig(cmd, sync_vk->wait);
+    submit_cmd(p, &cmd);
 
-    CMD_MARK_END(cmd);
-
-    vk_submit(gpu);
     if (!vk_flush_commands(vk))
         goto error;
 
     // Remember the other dependency and hold on to the sync object
     pl_tex_vk_external_dep(gpu, tex, sync_vk->signal);
-    sync_vk->refcount++;
+    pl_rc_ref(&sync_vk->rc);
     tex_vk->ext_sync = sync;
     return true;
 
@@ -3643,7 +3620,7 @@ static void vk_gpu_flush(const struct pl_gpu *gpu)
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    vk_submit(gpu);
+    flush(p);
     vk_flush_commands(vk);
     vk_rotate_queues(vk);
 }
@@ -3652,7 +3629,7 @@ static void vk_gpu_finish(const struct pl_gpu *gpu)
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    vk_submit(gpu);
+    flush(p);
     vk_wait_idle(vk);
 }
 
@@ -3666,8 +3643,19 @@ static bool vk_gpu_is_failed(const struct pl_gpu *gpu)
 struct vk_cmd *pl_vk_steal_cmd(const struct pl_gpu *gpu)
 {
     struct pl_vk *p = PL_PRIV(gpu);
-    struct vk_cmd *cmd = vk_require_cmd(gpu, GRAPHICS);
+    struct vk_ctx *vk = p->vk;
+
+    pthread_mutex_lock(&p->recording);
+    struct vk_cmd *cmd = p->cmd;
     p->cmd = NULL;
+    pthread_mutex_unlock(&p->recording);
+
+    struct vk_cmdpool *pool = vk->pool_graphics;
+    if (!cmd || cmd->pool != pool) {
+        vk_cmd_queue(vk, &cmd);
+        cmd = vk_cmd_begin(vk, pool);
+    }
+
     return cmd;
 }
 

@@ -50,6 +50,7 @@ enum {
     PL_GPU_CAP_BLITTABLE_1D_3D  = 1 << 4, // supports blittable 1D/3D textures
     PL_GPU_CAP_SUBGROUPS        = 1 << 5, // supports subgroups
     PL_GPU_CAP_CALLBACKS        = 1 << 6, // supports asynchronous callbacks
+    PL_GPU_CAP_THREAD_SAFE      = 1 << 7, // `pl_gpu` is thread safe
 
     // Note on subgroup support: PL_GPU_CAP_SUBGROUPS implies subgroup support
     // for both fragment and compute shaders, but not necessarily any other
@@ -167,7 +168,7 @@ struct pl_gpu_pci_address {
 // Abstract device context which wraps an underlying graphics context and can
 // be used to dispatch rendering commands.
 //
-// Thread-safety: Unsafe
+// Thread-safety: Depends on `PL_GPU_CAP_THREAD_SAFE`
 struct pl_gpu {
     struct pl_context *ctx;  // the `pl_context` this GPU was initialized from
 
@@ -566,6 +567,10 @@ bool pl_tex_download(const struct pl_gpu *gpu,
 //
 // while (pl_tex_poll(gpu, buf, UINT64_MAX))
 //      ; // do nothing
+//
+// Note: If `PL_GPU_CAP_THREAD_SAFE` is set, this function is implicitly
+// synchronized, meaning it can safely be called on a `pl_tex` that is in use
+// by another thread.
 bool pl_tex_poll(const struct pl_gpu *gpu, const struct pl_tex *tex,
                  uint64_t timeout);
 
@@ -797,6 +802,10 @@ bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf);
 // so this is only needed for host-mapped or externally exported buffers.
 // However, it may be used to do non-blocking queries before calling blocking
 // functions such as `pl_buf_read`.
+//
+// Note: If `PL_GPU_CAP_THREAD_SAFE` is set, this function is implicitly
+// synchronized, meaning it can safely be called on a `pl_buf` that is in use
+// by another thread.
 bool pl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
                  uint64_t timeout);
 

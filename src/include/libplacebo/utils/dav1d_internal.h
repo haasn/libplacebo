@@ -447,8 +447,9 @@ static inline bool pl_upload_dav1dpicture(const struct pl_gpu *gpu,
     return true;
 }
 
-static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, const struct pl_gpu *gpu)
+static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, void *cookie)
 {
+    const struct pl_gpu *gpu = cookie;
     if (!gpu->limits.max_buf_size)
         return DAV1D_ERR(ENOTSUP);
 
@@ -514,8 +515,9 @@ static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, const struct pl_gpu 
     return 0;
 }
 
-static inline void pl_release_dav1dpicture(Dav1dPicture *p, const struct pl_gpu *gpu)
+static inline void pl_release_dav1dpicture(Dav1dPicture *p, void *cookie)
 {
+    const struct pl_gpu *gpu = cookie;
     struct pl_dav1dalloc *alloc = p->allocator_data;
     if (!alloc)
         return;

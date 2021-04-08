@@ -368,8 +368,11 @@ error:
 bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd **pcmd)
 {
     struct vk_cmd *cmd = *pcmd;
-    struct vk_cmdpool *pool = cmd->pool;
+    if (!cmd)
+        return true;
+
     *pcmd = NULL;
+    struct vk_cmdpool *pool = cmd->pool;
 
     VK(vk->EndCommandBuffer(cmd->buf));
     VK(vk->ResetFences(vk->dev, 1, &cmd->fence));
