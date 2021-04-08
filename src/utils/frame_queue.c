@@ -219,8 +219,8 @@ static void report_estimates(struct pl_queue *p)
 {
     if (p->fps.total >= MIN_SAMPLES && p->vps.total >= MIN_SAMPLES) {
         if (p->reported_fps && p->reported_vps) {
-            // Only re-eport the estimates if they've changed considerably from
-            // the previously reported values
+            // Only re-report the estimates if they've changed considerably
+            // from the previously reported values
             static const float report_delta = 0.3;
             float delta_fps = delta(p->reported_fps, p->fps.estimate);
             float delta_vps = delta(p->reported_vps, p->vps.estimate);
@@ -508,12 +508,18 @@ static bool prefill(struct pl_queue *p, const struct pl_queue_params *params)
     return true;
 }
 
+static inline void default_estimate(struct pool *pool, float val)
+{
+    if (!pool->estimate && isnormal(val) && val > 0.0)
+        pool->estimate = val;
+}
+
 enum pl_queue_status pl_queue_update(struct pl_queue *p,
                                      struct pl_frame_mix *out_mix,
                                      const struct pl_queue_params *params)
 {
-    p->fps.estimate = PL_DEF(p->fps.estimate, params->frame_duration);
-    p->vps.estimate = PL_DEF(p->vps.estimate, params->vsync_duration);
+    default_estimate(&p->fps, params->frame_duration);
+    default_estimate(&p->vps, params->vsync_duration);
 
     float delta = params->pts - p->prev_pts;
     if (delta < 0.0) {
