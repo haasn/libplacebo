@@ -936,7 +936,8 @@ static void update_settings(struct plplay *p)
                             (p->shader_num - i) * sizeof(char *));
                 }
 
-                nk_label(nk, p->shader_paths[i], NK_TEXT_LEFT);
+                if (i < p->shader_num)
+                    nk_label(nk, p->shader_paths[i], NK_TEXT_LEFT);
             }
 
             par->hooks = p->shader_hooks;
