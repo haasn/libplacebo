@@ -7,6 +7,7 @@ test_deps = []
 
 vulkan = dependency('vulkan', version: '>=1.0.42', required: get_option('vulkan'))
 opengl = dependency('epoxy', version: '>=1.4.0', required: get_option('opengl'))
+shaderc = dependency('shaderc', version: '>=2018.0', required: get_option('shaderc'))
 
 # configuration data
 conf_public = configuration_data()
@@ -21,27 +22,6 @@ if opengl.found()
   if has_egl.to_int() == 1
     conf_internal.set10('EPOXY_HAS_EGL', true)
   endif
-endif
-
-# work-arounds for shaderc braindeath
-shaderc_names = [
-    'shaderc_shared',
-    'shaderc_combined',
-]
-
-shaderc = disabler()
-foreach n : shaderc_names
-  if not shaderc.found()
-    shaderc = cc.find_library(n, required: get_option('shaderc'))
-  endif
-endforeach
-
-if shaderc.found()
-  conf_internal.set('SHADERC_HAS_PERF', cc.has_header_symbol(
-    'shaderc/shaderc.h',
-    'shaderc_optimization_level_performance',
-    dependencies: shaderc,
-  ))
 endif
 
 # work-arounds for glslang braindeath
