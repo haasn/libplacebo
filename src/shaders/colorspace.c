@@ -45,17 +45,19 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
     enum pl_color_system orig_sys = repr->sys;
     struct pl_transform3x3 tr = pl_color_repr_decode(repr, params);
 
-    ident_t cmat = sh_var(sh, (struct pl_shader_var) {
-        .var  = pl_var_mat3("cmat"),
-        .data = PL_TRANSPOSE_3X3(tr.mat.m),
-    });
+    if (memcmp(&tr, &pl_transform3x3_identity, sizeof(tr))) {
+        ident_t cmat = sh_var(sh, (struct pl_shader_var) {
+            .var  = pl_var_mat3("cmat"),
+            .data = PL_TRANSPOSE_3X3(tr.mat.m),
+        });
 
-    ident_t cmat_c = sh_var(sh, (struct pl_shader_var) {
-        .var  = pl_var_vec3("cmat_c"),
-        .data = tr.c,
-    });
+        ident_t cmat_c = sh_var(sh, (struct pl_shader_var) {
+            .var  = pl_var_vec3("cmat_c"),
+            .data = tr.c,
+        });
 
-    GLSL("color.rgb = %s * color.rgb + %s;\n", cmat, cmat_c);
+        GLSL("color.rgb = %s * color.rgb + %s;\n", cmat, cmat_c);
+    }
 
     switch (orig_sys) {
     case PL_COLOR_SYSTEM_BT_2020_C:
