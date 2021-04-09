@@ -250,7 +250,8 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
     struct pl_plane_data aligned_data[4];
     struct pl_bit_encoding bits;
     bool first;
-    assert(desc);
+    if (!desc || planes < 0) // e.g. AV_PIX_FMT_NONE
+        return 0;
 
     if (desc->flags & AV_PIX_FMT_FLAG_BE) {
         // Big endian formats are almost definitely not supported in any
