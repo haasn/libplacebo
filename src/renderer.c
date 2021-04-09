@@ -1299,6 +1299,12 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
             sti->img.fmt = fmt;
             *stj = (struct plane_state) {0};
         }
+
+        if (!img_tex(pass, &sti->img)) {
+            PL_ERR(rr, "Failed dispatching plane merging shader, disabling FBOs!");
+            memset(rr->fbofmt, 0, sizeof(rr->fbofmt));
+            return false;
+        }
     }
 
     // Compute the sampling rc of each plane
@@ -1384,7 +1390,7 @@ static bool pass_read_image(struct pl_renderer *rr, struct pass_state *pass,
               base_y = st->img.rect.y0 - scale_y * off_y;
 
         struct pl_sample_src src = {
-            .tex        = img_tex(pass, &st->img),
+            .tex        = st->img.tex,
             .components = plane->components,
             .address_mode = plane->address_mode,
             .scale      = pl_color_repr_normalize(&st->img.repr),
