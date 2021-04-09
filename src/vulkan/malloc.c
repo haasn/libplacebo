@@ -33,17 +33,17 @@
 // Controls the minimum slab size, to reduce the frequency at which very small
 // slabs would need to get allocated when allocating the first few buffers.
 // (Default: 1 MB)
-#define PL_VK_HEAP_MINIMUM_SLAB_SIZE (1 << 20)
+#define PL_VK_HEAP_MINIMUM_SLAB_SIZE (1LLU << 20)
 
 // Controls the maximum slab size, to reduce the effect of unbounded slab
 // growth exhausting memory. If the application needs a single allocation
 // that's bigger than this value, it will be allocated directly from the
 // device. (Default: 256 MB)
-#define PL_VK_HEAP_MAXIMUM_SLAB_SIZE (1 << 28)
+#define PL_VK_HEAP_MAXIMUM_SLAB_SIZE (1LLU << 28)
 
 // Controls the minimum free region size, to reduce thrashing the free space
 // map with lots of small buffers during uninit. (Default: 1 KB)
-#define PL_VK_HEAP_MINIMUM_REGION_SIZE (1 << 10)
+#define PL_VK_HEAP_MINIMUM_REGION_SIZE (1LLU << 10)
 
 // Represents a region of available memory
 struct vk_region {
@@ -193,7 +193,7 @@ static bool find_best_memtype(const struct vk_malloc *ma, uint32_t type_mask,
             continue;
 
         // The memory type must be supported by the type mask (bitfield)
-        if (!(type_mask & (1 << i)))
+        if (!(type_mask & (1LU << i)))
             continue;
 
         // Calculate the score as the number of optimal property flags matched
