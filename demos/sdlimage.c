@@ -214,7 +214,7 @@ int main(int argc, char **argv)
     SDL_FreeSurface(img);
 
     if (overlay) {
-        SDL_Surface *osd = IMG_Load(file);
+        SDL_Surface *osd = IMG_Load(overlay);
         if (!upload_plane(osd, &osd_tex, &osd_plane))
             fprintf(stderr, "Failed uploading OSD plane.. continuing anyway\n");
         SDL_FreeSurface(osd);
