@@ -298,7 +298,7 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
             if (comp->plane != p)
                 continue;
 
-            masks[c] = (1 << comp->depth) - 1; // e.g. 0xFF for depth=8
+            masks[c] = (1LLU << comp->depth) - 1; // e.g. 0xFF for depth=8
             masks[c] <<= comp->shift;
             masks[c] <<= comp->offset * 8;
 
@@ -559,10 +559,8 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
 
         // Fill in the component mapping array
         for (int c = 0; c < desc->nb_components; c++) {
-            if (desc->comp[c].plane != p)
-                continue;
-
-            plane->component_mapping[plane->components++] = c;
+            if (desc->comp[c].plane == p)
+                plane->component_mapping[plane->components++] = c;
         }
 
         // Clear the superfluous components
