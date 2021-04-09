@@ -183,11 +183,6 @@ struct pl_render_params {
     // `pl_sample_filter_params` for more information.
     float polar_cutoff;
 
-    // Skips dispatching the high-quality scalers for overlay textures, and
-    // always falls back to built-in GPU samplers. Note: The scalers are
-    // already disabled if the overlay texture does not need to be scaled.
-    bool disable_overlay_sampling;
-
     // Allows the peak detection result to be delayed by up to a single frame,
     // which can sometimes (not always) allow skipping some otherwise redundant
     // sampling work. Only relevant when peak detection is active (i.e.
@@ -236,6 +231,9 @@ struct pl_render_params {
     // --- Deprecated aliases
     const struct pl_icc_params *lut3d_params PL_DEPRECATED; // fallback for `icc_params`
     bool force_3dlut PL_DEPRECATED; // fallback for `force_icc_lut`
+
+    // --- Deprecated/removed fields
+    bool disable_overlay_sampling PL_DEPRECATED; // no longer used
 };
 
 // This contains the default/recommended options for reasonable image quality,
@@ -329,34 +327,41 @@ enum pl_overlay_mode {
     PL_OVERLAY_MODE_COUNT,
 };
 
+struct pl_overlay_part {
+    struct pl_rect2df src; // source coordinate with respect to `tex`
+    struct pl_rect2d dst;  // target coordinates with respect to the frame
+
+    // If `mode` is PL_OVERLAY_MONOCHROME, then this specifies the color of
+    // this overlay part. The color is multiplied into the sampled texture's
+    // first channel.
+    float color[4];
+};
+
 // A struct representing an image overlay (e.g. for subtitles or on-screen
 // status messages, controls, ...)
 struct pl_overlay {
-    // The plane to overlay. Multi-plane overlays are not supported. If
-    // necessary, multiple planes can be combined by treating them as separate
-    // overlays with different base colors.
-    //
-    // Must have `params.sampleable` set, and it's recommended to also have the
-    // sample mode set to `PL_TEX_SAMPLE_LINEAR`.
-    //
-    // Note: shift_x/y are simply treated as a uniform sampling offset.
-    struct pl_plane plane;
-
-    // The (absolute) coordinates at which to render this overlay texture. May
-    // be flipped, and partially or wholly outside the image. If the size does
-    // not exactly match the texture, it will be scaled/stretched to fit.
-    struct pl_rect2d rect;
+    // The texture containing the backing data for overlay parts. Must have
+    // `params.sampleable` set.
+    const struct pl_tex *tex;
 
     // This controls the coloring mode of this overlay.
     enum pl_overlay_mode mode;
-    // If `mode` is PL_OVERLAY_MONOCHROME, then the texture is treated as an
-    // alpha map and multiplied by this base color. Ignored for the other modes.
-    float base_color[3];
 
     // This controls the colorspace information for this overlay. The contents
     // of the texture / the value of `color` are interpreted according to this.
     struct pl_color_repr repr;
     struct pl_color_space color;
+
+    // The number of parts for this overlay.
+    const struct pl_overlay_part *parts;
+    int num_parts;
+
+    // (Deprecated) These fields exist for backwards compatibility. They must
+    // not be used as the same times as `tex`. They are interpreted as an
+    // overlay with a single part.
+    struct pl_plane plane PL_DEPRECATED;
+    struct pl_rect2d rect PL_DEPRECATED; // analog to `pl_overlay_part.dst`
+    float base_color[3] PL_DEPRECATED; // analog to `pl_overlay_part.color`
 };
 
 // High-level description of a complete frame, including metadata and planes

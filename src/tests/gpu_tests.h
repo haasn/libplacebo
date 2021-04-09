@@ -1040,9 +1040,16 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     // Test overlays
     image.num_overlays = 1;
     image.overlays = &(struct pl_overlay) {
-        .plane = img5x5,
-        .rect = {0, 0, 2, 2},
+        .tex = img5x5.texture,
         .mode = PL_OVERLAY_NORMAL,
+        .num_parts = 2,
+        .parts = (struct pl_overlay_part[]) {{
+            .src = {0, 0, 2, 2},
+            .dst = {30, 100, 40, 200},
+        }, {
+            .src = {2, 2, 5, 5},
+            .dst = {1000, -1, 3, 5},
+        }},
     };
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     params.disable_fbos = true;
@@ -1052,10 +1059,14 @@ static void pl_render_tests(const struct pl_gpu *gpu)
 
     target.num_overlays = 1;
     target.overlays = &(struct pl_overlay) {
-        .plane = img5x5,
-        .rect = {5, 5, 15, 15},
+        .tex = img5x5.texture,
         .mode = PL_OVERLAY_MONOCHROME,
-        .base_color = {1.0, 0.5, 0.0},
+        .num_parts = 1,
+        .parts = &(struct pl_overlay_part) {
+            .src = {5, 5, 15, 15},
+            .dst = {5, 5, 15, 15},
+            .color = {1.0, 0.5, 0.0},
+        },
     };
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     target.num_overlays = 0;

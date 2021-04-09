@@ -913,7 +913,6 @@ static void update_settings(struct plplay *p)
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Debug", NK_MINIMIZED)) {
             nk_layout_row_dynamic(nk, 24, 1);
-            nk_checkbox_label(nk, "Disable overlay sampling", &par->disable_overlay_sampling);
             nk_checkbox_label(nk, "Allow delayed peak-detect", &par->allow_delayed_peak_detect);
             nk_checkbox_label(nk, "Preserve mixing cache", &par->preserve_mixing_cache);
             nk_checkbox_label(nk, "Disable linear scaling", &par->disable_linear_scaling);

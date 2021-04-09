@@ -154,18 +154,27 @@ static bool render_frame(const struct pl_swapchain_frame *frame)
 
     pl_rect2df_aspect_copy(&target.crop, &image.crop, 0.0);
 
-    const struct pl_tex *osd = osd_plane.texture;
-    struct pl_overlay target_ol;
-    if (osd) {
-        target_ol = (struct pl_overlay) {
-            .plane      = osd_plane,
-            .rect       = { 0, 0, osd->params.w, osd->params.h },
+    struct pl_overlay osd;
+    struct pl_overlay_part osd_part;
+    if (osd_tex) {
+        osd_part = (struct pl_overlay_part) {
+            .src = { 0, 0, osd_tex->params.w, osd_tex->params.h },
+            .dst = { 0, 0, osd_tex->params.w, osd_tex->params.h },
+        };
+        osd = (struct pl_overlay) {
+            .tex        = osd_tex,
             .mode       = PL_OVERLAY_NORMAL,
             .repr       = image.repr,
             .color      = image.color,
+            .parts      = &osd_part,
+            .num_parts  = 1,
         };
-        target.overlays = &target_ol;
+        target.overlays = &osd;
         target.num_overlays = 1;
+        if (frame->flipped) {
+            osd_part.dst.y0 = frame->fbo->params.h - osd_part.dst.y0;
+            osd_part.dst.y1 = frame->fbo->params.h - osd_part.dst.y1;
+        }
     }
 
     if (pl_frame_is_cropped(&target))

@@ -35,6 +35,12 @@ struct sampler {
     struct pl_shader_obj *downscaler_state;
 };
 
+struct osd_vertex {
+    float pos[2];
+    float coord[2];
+    float color[4];
+};
+
 struct pl_renderer {
     const struct pl_gpu *gpu;
     struct pl_context *ctx;
@@ -67,7 +73,11 @@ struct pl_renderer {
     struct sampler sampler_main;
     struct sampler samplers_src[4];
     struct sampler samplers_dst[4];
-    PL_ARRAY(struct sampler) samplers_osd;
+
+    // Temporary storage for vertex/index data
+    PL_ARRAY(struct osd_vertex) osd_vertices;
+    PL_ARRAY(uint16_t) osd_indices;
+    struct pl_vertex_attrib osd_attribs[3];
 
     // Frame cache (for frame mixing / interpolation)
     PL_ARRAY(struct cached_frame) frames;
@@ -152,6 +162,21 @@ struct pl_renderer *pl_renderer_create(struct pl_context *ctx,
         .gpu  = gpu,
         .ctx = ctx,
         .dp  = pl_dispatch_create(ctx, gpu),
+        .osd_attribs = {
+            {
+                .name = "pos",
+                .offset = offsetof(struct osd_vertex, pos),
+                .fmt = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 2),
+            }, {
+                .name = "coord",
+                .offset = offsetof(struct osd_vertex, coord),
+                .fmt = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 2),
+            }, {
+                .name = "osd_color",
+                .offset = offsetof(struct osd_vertex, color),
+                .fmt = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 4),
+            }
+        },
     };
 
     assert(rr->dp);
@@ -194,8 +219,6 @@ void pl_renderer_destroy(struct pl_renderer **p_rr)
         sampler_destroy(rr, &rr->samplers_src[i]);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->samplers_dst); i++)
         sampler_destroy(rr, &rr->samplers_dst[i]);
-    for (int i = 0; i < rr->samplers_osd.num; i++)
-        sampler_destroy(rr, &rr->samplers_osd.elem[i]);
 
     pl_dispatch_destroy(&rr->dp);
     pl_free_ptr(p_rr);
@@ -635,68 +658,103 @@ static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
         rr->disable_blending = true;
     }
 
-    while (num > rr->samplers_osd.num)
-        PL_ARRAY_APPEND(rr, rr->samplers_osd, (struct sampler) {0});
-
     for (int n = 0; n < num; n++) {
-        const struct pl_overlay *ol = &overlays[n];
-        const struct pl_plane *plane = &ol->plane;
-        const struct pl_tex *tex = plane->texture;
-
-        struct pl_rect2d rect = ol->rect;
-        if (scale) {
-            float v0[2] = { rect.x0, rect.y0 };
-            float v1[2] = { rect.x1, rect.y1 };
-            pl_transform2x2_apply(scale, v0);
-            pl_transform2x2_apply(scale, v1);
-            rect = (struct pl_rect2d) { v0[0], v0[1], v1[0], v1[1] };
+        struct pl_overlay ol = overlays[n];
+        struct pl_overlay_part fallback;
+        if (!ol.tex) {
+            // Backwards compatibility
+            ol.tex = ol.plane.texture;
+            ol.parts = &fallback;
+            ol.num_parts = 1;
+            fallback = (struct pl_overlay_part) {
+                .src = {
+                    .x0 = -ol.plane.shift_x,
+                    .y0 = -ol.plane.shift_y,
+                    .x1 = ol.tex->params.w - ol.plane.shift_x,
+                    .y1 = ol.tex->params.h - ol.plane.shift_y,
+                },
+                .dst = ol.rect,
+                .color = {
+                    ol.base_color[0],
+                    ol.base_color[1],
+                    ol.base_color[2],
+                    1.0,
+                },
+            };
         }
 
-        struct pl_sample_src src = {
-            .tex        = tex,
-            .components = ol->mode == PL_OVERLAY_MONOCHROME ? 1 : plane->components,
-            .new_w      = abs(pl_rect_w(rect)),
-            .new_h      = abs(pl_rect_h(rect)),
-            .rect = {
-                -plane->shift_x,
-                -plane->shift_y,
-                tex->params.w - plane->shift_x,
-                tex->params.h - plane->shift_y,
-            },
-        };
+        if (!ol.num_parts)
+            continue;
 
-        struct sampler *sampler = &rr->samplers_osd.elem[n];
-        if (params->disable_overlay_sampling)
-            sampler = NULL;
+        // Construct vertex/index buffers
+        rr->osd_vertices.num = 0;
+        rr->osd_indices.num = 0;
+        for (int i = 0; i < ol.num_parts; i++) {
+            const struct pl_overlay_part *part = &ol.parts[i];
 
+#define EMIT_VERT(x, y)                                                         \
+            do {                                                                \
+                float pos[2] = { part->dst.x, part->dst.y };                    \
+                if (scale)                                                      \
+                    pl_transform2x2_apply(scale, pos);                          \
+                PL_ARRAY_APPEND(rr, rr->osd_vertices, (struct osd_vertex) {     \
+                    .pos = {                                                    \
+                        2.0 * (pos[0] / fbo->params.w) - 1.0,                   \
+                        2.0 * (pos[1] / fbo->params.h) - 1.0,                   \
+                    },                                                          \
+                    .coord = {                                                  \
+                        part->src.x / ol.tex->params.w,                         \
+                        part->src.y / ol.tex->params.h,                         \
+                    },                                                          \
+                    .color = {                                                  \
+                        part->color[0], part->color[1],                         \
+                        part->color[2], part->color[3],                         \
+                    },                                                          \
+                });                                                             \
+            } while (0)
+
+            int idx_base = rr->osd_vertices.num;
+            EMIT_VERT(x0, y0); // idx 0: top left
+            EMIT_VERT(x1, y0); // idx 1: top right
+            EMIT_VERT(x0, y1); // idx 2: bottom left
+            EMIT_VERT(x1, y1); // idx 3: bottom right
+            PL_ARRAY_APPEND(rr, rr->osd_indices, idx_base + 0);
+            PL_ARRAY_APPEND(rr, rr->osd_indices, idx_base + 1);
+            PL_ARRAY_APPEND(rr, rr->osd_indices, idx_base + 2);
+            PL_ARRAY_APPEND(rr, rr->osd_indices, idx_base + 2);
+            PL_ARRAY_APPEND(rr, rr->osd_indices, idx_base + 1);
+            PL_ARRAY_APPEND(rr, rr->osd_indices, idx_base + 3);
+        }
+
+        // Draw parts
         struct pl_shader *sh = pl_dispatch_begin(rr->dp);
-        dispatch_sampler(pass, sh, sampler, !fbo->params.storable, params, &src);
+        ident_t tex = sh_desc(sh, (struct pl_shader_desc) {
+            .desc = {
+                .name = "osd_tex",
+                .type = PL_DESC_SAMPLED_TEX,
+            },
+            .binding = {
+                .object = ol.tex,
+                .sample_mode = (ol.tex->params.format->caps & PL_FMT_CAP_LINEAR)
+                    ? PL_TEX_SAMPLE_LINEAR
+                    : PL_TEX_SAMPLE_NEAREST,
+            },
+        });
 
-        GLSL("vec4 osd_color;\n");
-        for (int c = 0; c < src.components; c++) {
-            if (plane->component_mapping[c] < 0)
-                continue;
-            GLSL("osd_color[%d] = color[%d];\n", plane->component_mapping[c], c);
-        }
-
-        switch (ol->mode) {
+        GLSL("// overlay \n");
+        switch (ol.mode) {
         case PL_OVERLAY_NORMAL:
-            GLSL("color = osd_color;\n");
+            GLSL("vec4 color = texture(%s, coord); \n", tex);
             break;
         case PL_OVERLAY_MONOCHROME:
-            GLSL("color.a = osd_color[0];\n");
-            GLSL("color.rgb = %s;\n", sh_var(sh, (struct pl_shader_var) {
-                .var  = pl_var_vec3("base_color"),
-                .data = &ol->base_color,
-                .dynamic = true,
-            }));
+            GLSL("vec4 color = texture(%s, coord).r * osd_color; \n", tex);
             break;
         default: abort();
-        }
+        };
 
-        struct pl_color_repr ol_repr = ol->repr;
-        pl_shader_decode_color(sh, &ol_repr, NULL);
-        pl_shader_color_map(sh, params->color_map_params, ol->color, color,
+        sh->res.output = PL_SHADER_SIG_COLOR;
+        pl_shader_decode_color(sh, &ol.repr, NULL);
+        pl_shader_color_map(sh, params->color_map_params, ol.color, color,
                             NULL, false);
 
         if (use_sigmoid)
@@ -705,15 +763,23 @@ static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
         pl_shader_encode_color(sh, &repr);
         swizzle_color(sh, comps, comp_map);
 
-        bool ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
+        bool ok = pl_dispatch_vertex(rr->dp, &(struct pl_dispatch_vertex_params) {
             .shader = &sh,
             .target = fbo,
-            .rect   = rect,
             .blend_params = rr->disable_blending ? NULL : &pl_alpha_overlay,
+            .vertex_stride = sizeof(struct osd_vertex),
+            .num_vertex_attribs = ol.mode == PL_OVERLAY_NORMAL ? 2 : 3,
+            .vertex_attribs = rr->osd_attribs,
+            .vertex_position_idx = 0,
+            .vertex_coords = PL_COORDS_NORMALIZED,
+            .vertex_type = PL_PRIM_TRIANGLE_LIST,
+            .vertex_count = rr->osd_indices.num,
+            .vertex_data = rr->osd_vertices.elem,
+            .index_data = rr->osd_indices.elem,
         });
 
         if (!ok) {
-            PL_ERR(rr, "Failed rendering overlay texture!");
+            PL_ERR(rr, "Failed rendering overlays!");
             rr->disable_overlay = true;
             return;
         }
@@ -1961,6 +2027,23 @@ fallback:
       }                                                                         \
   } while (0)
 
+#define validate_overlay(overlay)                                               \
+  do {                                                                          \
+      require(!(overlay).tex ^ !(overlay).plane.texture);                       \
+      if ((overlay).tex) {                                                      \
+          require((overlay).tex->params.sampleable);                            \
+          require((overlay).num_parts >= 0);                                    \
+          for (int n = 0; n < (overlay).num_parts; n++) {                       \
+              const struct pl_overlay_part *p = &(overlay).parts[n];            \
+              require(pl_rect_w(p->dst) && pl_rect_h(p->dst));                  \
+          }                                                                     \
+      } else {                                                                  \
+          require((overlay).num_parts == 0);                                    \
+          require((overlay).plane.texture->params.sampleable);                  \
+          require(pl_rect_w((overlay).rect) && pl_rect_h((overlay).rect));      \
+      }                                                                         \
+  } while (0)
+
 // Perform some basic validity checks on incoming structs to help catch invalid
 // API usage. This is not an exhaustive check. In particular, enums are not
 // bounds checked. This is because most functions accepting enums already
@@ -1986,16 +2069,10 @@ static bool validate_structs(struct pl_renderer *rr,
 
     require(image->num_overlays >= 0);
     require(target->num_overlays >= 0);
-    for (int i = 0; i < image->num_overlays; i++) {
-        const struct pl_overlay *overlay = &image->overlays[i];
-        validate_plane(overlay->plane, sampleable);
-        require(pl_rect_w(overlay->rect) && pl_rect_h(overlay->rect));
-    }
-    for (int i = 0; i < target->num_overlays; i++) {
-        const struct pl_overlay *overlay = &target->overlays[i];
-        validate_plane(overlay->plane, sampleable);
-        require(pl_rect_w(overlay->rect) && pl_rect_h(overlay->rect));
-    }
+    for (int i = 0; i < image->num_overlays; i++)
+        validate_overlay(image->overlays[i]);
+    for (int i = 0; i < target->num_overlays; i++)
+        validate_overlay(target->overlays[i]);
 
     return true;
 }
