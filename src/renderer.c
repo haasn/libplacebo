@@ -625,7 +625,8 @@ fallback:
     pl_shader_sample_direct(sh, src);
 }
 
-static void swizzle_color(struct pl_shader *sh, int comps, const int comp_map[4])
+static void swizzle_color(struct pl_shader *sh, int comps, const int comp_map[4],
+                          bool force_alpha)
 {
     ident_t orig = sh_fresh(sh, "orig_color");
     GLSL("vec4 %s = color;   \n"
@@ -638,6 +639,9 @@ static void swizzle_color(struct pl_shader *sh, int comps, const int comp_map[4]
         if (comp_map[c] >= 0)
             GLSL("color[%d] = %s[%d]; \n", c, orig, comp_map[c]);
     }
+
+    if (force_alpha)
+        GLSL("color.a = %s.a; \n", orig);
 }
 
 static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
@@ -747,7 +751,7 @@ static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
             GLSL("vec4 color = texture(%s, coord); \n", tex);
             break;
         case PL_OVERLAY_MONOCHROME:
-            GLSL("vec4 color = texture(%s, coord).r * osd_color; \n", tex);
+            GLSL("vec4 color = osd_color; \n");
             break;
         default: abort();
         };
@@ -760,13 +764,25 @@ static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
         if (use_sigmoid)
             pl_shader_sigmoidize(sh, params->sigmoid_params);
 
+        repr.alpha = PL_ALPHA_PREMULTIPLIED;
         pl_shader_encode_color(sh, &repr);
-        swizzle_color(sh, comps, comp_map);
+        if (ol.mode == PL_OVERLAY_MONOCHROME)
+            GLSL("color.rgba *= texture(%s, coord).r; \n", tex);
+
+        swizzle_color(sh, comps, comp_map, true);
+
+        struct pl_blend_params blend_params = {
+            .src_rgb = PL_BLEND_ONE,
+            .src_alpha = PL_BLEND_SRC_ALPHA,
+            // FIXME: What if the target is not premultiplied?
+            .dst_rgb = PL_BLEND_ONE_MINUS_SRC_ALPHA,
+            .dst_alpha = PL_BLEND_ONE_MINUS_SRC_ALPHA,
+        };
 
         bool ok = pl_dispatch_vertex(rr->dp, &(struct pl_dispatch_vertex_params) {
             .shader = &sh,
             .target = fbo,
-            .blend_params = rr->disable_blending ? NULL : &pl_alpha_overlay,
+            .blend_params = rr->disable_blending ? NULL : &blend_params,
             .vertex_stride = sizeof(struct osd_vertex),
             .num_vertex_attribs = ol.mode == PL_OVERLAY_NORMAL ? 2 : 3,
             .vertex_attribs = rr->osd_attribs,
@@ -1942,7 +1958,7 @@ fallback:
         }
 
         GLSL("color *= vec4(1.0 / %f); \n", scale);
-        swizzle_color(sh, plane->components, plane->component_mapping);
+        swizzle_color(sh, plane->components, plane->component_mapping, false);
 
         if (params->dither_params) {
             // Ignore dithering for > 16-bit FBOs by default, since it makes
