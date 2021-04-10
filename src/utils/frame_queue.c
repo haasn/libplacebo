@@ -336,21 +336,21 @@ static enum pl_queue_status get_frame(struct pl_queue *p,
                                       const struct pl_queue_params *params)
 {
     if (p->eof)
-        return QUEUE_EOF;
+        return PL_QUEUE_EOF;
 
     if (!params->get_frame) {
         if (!params->timeout)
-            return QUEUE_MORE;
+            return PL_QUEUE_MORE;
 
         p->want_frame = true;
         pthread_cond_signal(&p->wakeup);
 
         while (p->want_frame) {
             if (pl_cond_timedwait(&p->wakeup, &p->lock_weak, params->timeout) == ETIMEDOUT)
-                return QUEUE_MORE;
+                return PL_QUEUE_MORE;
         }
 
-        return p->eof ? QUEUE_EOF : QUEUE_OK;
+        return p->eof ? PL_QUEUE_EOF : PL_QUEUE_OK;
     }
 
     // Don't hold the weak mutex while calling into `get_frame`, to allow
@@ -360,10 +360,10 @@ static enum pl_queue_status get_frame(struct pl_queue *p,
     struct pl_source_frame src;
     enum pl_queue_status ret;
     switch ((ret = params->get_frame(&src, params))) {
-    case QUEUE_OK:
+    case PL_QUEUE_OK:
         pl_queue_push(p, &src);
         break;
-    case QUEUE_EOF:
+    case PL_QUEUE_EOF:
         pl_queue_push(p, NULL);
         break;
     default: break;
@@ -388,7 +388,7 @@ static bool map_frame(struct pl_queue *p, struct entry *entry)
 // Advance the queue as needed to make sure idx 0 is the last frame before
 // `pts`, and idx 1 is the first frame after `pts` (unless this is the last).
 //
-// Returns QUEUE_OK only if idx 0 is still legal under ZOH semantics.
+// Returns PL_QUEUE_OK only if idx 0 is still legal under ZOH semantics.
 static enum pl_queue_status advance(struct pl_queue *p, float pts,
                                     const struct pl_queue_params *params)
 {
@@ -406,14 +406,14 @@ static enum pl_queue_status advance(struct pl_queue *p, float pts,
     while (p->queue.num < 2) {
         enum pl_queue_status ret;
         switch ((ret = get_frame(p, params))) {
-        case QUEUE_ERR:
-        case QUEUE_MORE:
+        case PL_QUEUE_ERR:
+        case PL_QUEUE_MORE:
             return ret;
-        case QUEUE_EOF:
+        case PL_QUEUE_EOF:
             if (!p->queue.num)
                 return ret;
             goto done;
-        case QUEUE_OK:
+        case PL_QUEUE_OK:
             if (p->queue.num > 1 && p->queue.elem[1].src.pts <= pts) {
                 cull_entry(p, &p->queue.elem[0]);
                 PL_ARRAY_REMOVE_AT(p->queue, 0);
@@ -434,25 +434,20 @@ done:
         if (p->queue.elem[0].src.pts + p->fps.estimate < pts) {
             cull_entry(p, &p->queue.elem[0]);
             p->queue.num = 0;
-            return QUEUE_EOF;
+            return PL_QUEUE_EOF;
         }
     }
 
     pl_assert(p->queue.num);
-    return QUEUE_OK;
+    return PL_QUEUE_OK;
 }
 
-// Present a single frame as appropriate for `pts`
-static enum pl_queue_status nearest(struct pl_queue *p, struct pl_frame_mix *mix,
-                                    const struct pl_queue_params *params)
+static inline enum pl_queue_status zoh(struct pl_queue *p, struct pl_frame_mix *mix,
+                                       const struct pl_queue_params *params)
 {
-    enum pl_queue_status ret;
-    if ((ret = advance(p, params->pts, params)))
-        return ret;
-
     struct entry *entry = &p->queue.elem[0];
     if (!map_frame(p, entry))
-        return QUEUE_ERR;
+        return PL_QUEUE_ERR;
 
     // Return a mix containing only this single frame
     p->tmp_sig.num = p->tmp_ts.num = p->tmp_frame.num = 0;
@@ -471,7 +466,27 @@ static enum pl_queue_status nearest(struct pl_queue *p, struct pl_frame_mix *mix
              entry->src.pts, params->pts);
 
     report_estimates(p);
-    return QUEUE_OK;
+    return PL_QUEUE_OK;
+}
+
+// Present a single frame as appropriate for `pts`
+static enum pl_queue_status nearest(struct pl_queue *p, struct pl_frame_mix *mix,
+                                    const struct pl_queue_params *params)
+{
+    enum pl_queue_status ret;
+    switch ((ret = advance(p, params->pts, params))) {
+    case PL_QUEUE_ERR:
+    case PL_QUEUE_EOF:
+        return ret;
+    case PL_QUEUE_OK:
+        break;
+    case PL_QUEUE_MORE:
+        if (!p->queue.num)
+            return ret;
+        break;
+    }
+
+    return zoh(p, mix, params);
 }
 
 // Special case of `interpolate` for radius = 0, in which case we need exactly
@@ -480,12 +495,21 @@ static enum pl_queue_status oversample(struct pl_queue *p, struct pl_frame_mix *
                                        const struct pl_queue_params *params)
 {
     enum pl_queue_status ret;
-    if ((ret = advance(p, params->pts, params)))
+    switch ((ret = advance(p, params->pts, params))) {
+    case PL_QUEUE_ERR:
+    case PL_QUEUE_EOF:
         return ret;
+    case PL_QUEUE_OK:
+        break;
+    case PL_QUEUE_MORE:
+        if (!p->queue.num)
+            return ret;
+        break;
+    }
 
     // Can't oversample with only a single frame, fall back to ZOH semantics
     if (p->queue.num < 2 || p->queue.elem[0].src.pts > params->pts)
-        return nearest(p, mix, params);
+        return zoh(p, mix, params);
 
     struct entry *entries[2] = { &p->queue.elem[0], &p->queue.elem[1] };
     pl_assert(entries[0]->src.pts <= params->pts);
@@ -495,7 +519,7 @@ static enum pl_queue_status oversample(struct pl_queue *p, struct pl_frame_mix *
     p->tmp_sig.num = p->tmp_ts.num = p->tmp_frame.num = 0;
     for (int i = 0; i < 2; i++) {
         if (!map_frame(p, entries[i]))
-            return QUEUE_ERR;
+            return PL_QUEUE_ERR;
 
         float ts = (entries[i]->src.pts - params->pts) / p->fps.estimate;
         PL_ARRAY_APPEND(p, p->tmp_sig, entries[i]->signature);
@@ -516,7 +540,7 @@ static enum pl_queue_status oversample(struct pl_queue *p, struct pl_frame_mix *
         PL_TRACE(p, "    id %"PRIu64" ts %f", mix->signatures[i], mix->timestamps[i]);
 
     report_estimates(p);
-    return QUEUE_OK;
+    return PL_QUEUE_OK;
 }
 
 // Present a mixture of frames, relative to the vsync ratio
@@ -545,12 +569,12 @@ static enum pl_queue_status interpolate(struct pl_queue *p,
     pl_assert(p->queue.num);
     while (p->queue.elem[p->queue.num - 1].src.pts < max_pts) {
         switch ((ret = get_frame(p, params))) {
-        case QUEUE_ERR:
-        case QUEUE_MORE:
+        case PL_QUEUE_ERR:
+        case PL_QUEUE_MORE:
             return ret;
-        case QUEUE_EOF:
+        case PL_QUEUE_EOF:
             goto done;
-        case QUEUE_OK:
+        case PL_QUEUE_OK:
             continue;
         }
     }
@@ -566,7 +590,7 @@ done: ;
         if (entry->src.pts > max_pts)
             break;
         if (!map_frame(p, entry))
-            return QUEUE_ERR;
+            return PL_QUEUE_ERR;
 
         float ts = (entry->src.pts - params->pts) / p->fps.estimate;
         PL_ARRAY_APPEND(p, p->tmp_sig, entry->signature);
@@ -589,7 +613,7 @@ done: ;
         PL_TRACE(p, "    id %"PRIu64" ts %f", mix->signatures[i], mix->timestamps[i]);
 
     report_estimates(p);
-    return QUEUE_OK;
+    return PL_QUEUE_OK;
 }
 
 static bool prefill(struct pl_queue *p, const struct pl_queue_params *params)
@@ -599,12 +623,12 @@ static bool prefill(struct pl_queue *p, const struct pl_queue_params *params)
 
     while (p->queue.num < min_frames) {
         switch (get_frame(p, params)) {
-        case QUEUE_ERR:
+        case PL_QUEUE_ERR:
             return false;
-        case QUEUE_EOF:
-        case QUEUE_MORE:
+        case PL_QUEUE_EOF:
+        case PL_QUEUE_MORE:
             return true;
-        case QUEUE_OK:
+        case PL_QUEUE_OK:
             continue;
         }
     }
@@ -645,7 +669,7 @@ enum pl_queue_status pl_queue_update(struct pl_queue *p,
                "queue on discontinuous PTS jumps.", params->pts, p->prev_pts);
         pthread_mutex_unlock(&p->lock_weak);
         pthread_mutex_unlock(&p->lock_strong);
-        return QUEUE_ERR;
+        return PL_QUEUE_ERR;
 
     } else if (delta > 1.0) {
 
@@ -668,7 +692,7 @@ enum pl_queue_status pl_queue_update(struct pl_queue *p,
         if (!prefill(p, params)) {
             pthread_mutex_unlock(&p->lock_weak);
             pthread_mutex_unlock(&p->lock_strong);
-            return QUEUE_ERR;
+            return PL_QUEUE_ERR;
         }
     }
 

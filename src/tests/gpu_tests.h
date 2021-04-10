@@ -856,10 +856,10 @@ static enum pl_queue_status get_frame_ptr(struct pl_source_frame *out_frame,
 {
     const struct pl_source_frame **pframe = qparams->priv;
     if (!(*pframe)->frame_data)
-        return QUEUE_EOF;
+        return PL_QUEUE_EOF;
 
     *out_frame = *(*pframe)++;
-    return QUEUE_OK;
+    return PL_QUEUE_OK;
 }
 
 static void pl_render_tests(const struct pl_gpu *gpu)
@@ -1104,14 +1104,14 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     }
 
     struct pl_frame_mix mix;
-    while ((ret = pl_queue_update(queue, &mix, &qparams)) != QUEUE_EOF) {
-        if (ret == QUEUE_MORE) {
+    while ((ret = pl_queue_update(queue, &mix, &qparams)) != PL_QUEUE_EOF) {
+        if (ret == PL_QUEUE_MORE) {
             REQUIRE(qparams.pts > 0.0);
             pl_queue_push(queue, NULL); // push delayed EOF
             continue;
         }
 
-        REQUIRE(ret == QUEUE_OK);
+        REQUIRE(ret == PL_QUEUE_OK);
         REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
 
         // Simulate advancing vsync
@@ -1131,8 +1131,8 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     };
 
     pl_queue_reset(queue);
-    while ((ret = pl_queue_update(queue, &mix, &qparams)) != QUEUE_EOF) {
-        REQUIRE(ret == QUEUE_OK);
+    while ((ret = pl_queue_update(queue, &mix, &qparams)) != PL_QUEUE_EOF) {
+        REQUIRE(ret == PL_QUEUE_OK);
         REQUIRE(mix.num_frames <= 2);
         REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
         qparams.pts += qparams.vsync_duration;
@@ -1140,7 +1140,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
 
     // Test large PTS jump
     pl_queue_reset(queue);
-    REQUIRE(pl_queue_update(queue, &mix, &qparams) == QUEUE_EOF);
+    REQUIRE(pl_queue_update(queue, &mix, &qparams) == PL_QUEUE_EOF);
 
     pl_queue_destroy(&queue);
 

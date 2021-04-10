@@ -311,9 +311,9 @@ static bool render_loop(struct plplay *p)
     // Initialize the frame queue, blocking indefinitely until done
     struct pl_frame_mix mix;
     switch (pl_queue_update(p->queue, &mix, &qparams)) {
-    case QUEUE_OK:  break;
-    case QUEUE_EOF: return true;
-    case QUEUE_ERR: goto error;
+    case PL_QUEUE_OK:  break;
+    case PL_QUEUE_EOF: return true;
+    case PL_QUEUE_ERR: goto error;
     default: abort();
     }
 
@@ -363,14 +363,14 @@ retry:
         qparams.pts = pts;
 
         switch (pl_queue_update(p->queue, &mix, &qparams)) {
-        case QUEUE_ERR: goto error;
-        case QUEUE_EOF: return true;
-        case QUEUE_OK:
+        case PL_QUEUE_ERR: goto error;
+        case PL_QUEUE_EOF: return true;
+        case PL_QUEUE_OK:
             if (!render_frame(p, &frame, &mix))
                 goto error;
             stuck = false;
             break;
-        case QUEUE_MORE:
+        case PL_QUEUE_MORE:
             stuck = true;
             goto retry;
         }

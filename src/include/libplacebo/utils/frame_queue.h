@@ -32,10 +32,16 @@
 struct pl_queue;
 
 enum pl_queue_status {
-    QUEUE_OK,       // success
-    QUEUE_EOF,      // no more frames are available
-    QUEUE_MORE,     // more frames needed, but not (yet) available
-    QUEUE_ERR = -1, // some unknown error occurred while retrieving frames
+    PL_QUEUE_OK,       // success
+    PL_QUEUE_EOF,      // no more frames are available
+    PL_QUEUE_MORE,     // more frames needed, but not (yet) available
+    PL_QUEUE_ERR = -1, // some unknown error occurred while retrieving frames
+
+// (Deprecated) Aliases for backwards compatibility
+    QUEUE_OK   PL_DEPRECATED = PL_QUEUE_OK,
+    QUEUE_EOF  PL_DEPRECATED = PL_QUEUE_EOF,
+    QUEUE_MORE PL_DEPRECATED = PL_QUEUE_MORE,
+    QUEUE_ERR  PL_DEPRECATED = PL_QUEUE_ERR,
 };
 
 struct pl_source_frame {
@@ -158,9 +164,10 @@ struct pl_queue_params {
 // must either have been pushed in advance, or will be requested using the
 // provided `get_frame` callback.
 //
-// This function may fail with QUEUE_MORE, in which case the user must
-// ensure more frames are available and then re-run this function with
-// the same parameters.
+// This function may return with QUEUE_MORE, in which case the user must ensure
+// more frames are available and then re-run this function with the same
+// parameters. In this case, `out_mix` is still written to, but it may be
+// incomplete (or even contain no frames at all).
 //
 // The resulting mix of frames in `out_mix` will represent the neighbourhood of
 // the target timestamp, and can be passed to `pl_render_image_mix` as-is.
