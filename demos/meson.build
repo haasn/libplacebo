@@ -127,7 +127,7 @@ endif
 # Headless video filtering demo
 if vulkan.found()
   executable('video-filtering', 'video-filtering.c',
-    dependencies: libplacebo,
+    dependencies: [ libplacebo, vulkan ],
     c_args: '-O2',
   )
 endif
