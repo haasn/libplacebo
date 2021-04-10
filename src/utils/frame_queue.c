@@ -257,7 +257,7 @@ static void queue_push(struct pl_queue *p, const struct pl_source_frame *src)
             update_estimate(&p->fps, delta);
         }
     } else if (src->pts != 0) {
-        PL_WARN(p, "First frame received with non-zero PTS %f", src->pts);
+        PL_DEBUG(p, "First frame received with non-zero PTS %f", src->pts);
     }
 
     struct cache_entry cache = {0};
