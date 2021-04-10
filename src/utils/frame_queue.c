@@ -194,6 +194,24 @@ void pl_queue_push(struct pl_queue *p, const struct pl_source_frame *src)
 
     PL_TRACE(p, "Received new frame with PTS %f", src->pts);
 
+    if (p->queue.num) {
+        float prev_pts = p->queue.elem[p->queue.num - 1].src.pts;
+        float delta = src->pts - prev_pts;
+        if (delta < 0.0) {
+            PL_WARN(p, "Backwards source PTS jump %f -> %f, discarding frame...",
+                    prev_pts, src->pts);
+            if (src->discard)
+                src->discard(src);
+            return;
+        } else if (p->fps.estimate && delta > 10.0 * p->fps.estimate) {
+            PL_WARN(p, "Discontinuous source PTS jump %f -> %f", prev_pts, src->pts);
+        } else {
+            update_estimate(&p->fps, delta);
+        }
+    } else if (src->pts != 0) {
+        PL_WARN(p, "First frame received with non-zero PTS %f", src->pts);
+    }
+
     struct cache_entry cache = {0};
     PL_ARRAY_POP(p->cache, &cache);
     PL_ARRAY_APPEND(p, p->queue, (struct entry) {
@@ -201,20 +219,6 @@ void pl_queue_push(struct pl_queue *p, const struct pl_source_frame *src)
         .cache = cache,
         .src = *src,
     });
-
-    if (p->queue.num > 1) {
-        float prev_pts = p->queue.elem[p->queue.num - 2].src.pts;
-        float delta = src->pts - prev_pts;
-        if ((p->fps.estimate && delta > 10.0 * p->fps.estimate) || delta < 0.0) {
-            // Ignore very large discontinuities or backwards jumps in PTS
-            PL_WARN(p, "Discontinuous source PTS jump %f -> %f, ignoring...",
-                    prev_pts, src->pts);
-        } else {
-            update_estimate(&p->fps, delta);
-        }
-    } else if (src->pts != 0) {
-        PL_WARN(p, "First frame received with non-zero PTS %f", src->pts);
-    }
 }
 
 static void report_estimates(struct pl_queue *p)
