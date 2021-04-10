@@ -663,13 +663,19 @@ enum pl_queue_status pl_queue_update(struct pl_queue *p,
     float delta = params->pts - p->prev_pts;
     if (delta < 0.0) {
 
-        PL_ERR(p, "Requested PTS %f is lower than the previously rendered "
-               "PTS %f. This is not supported, PTS must be monotonically "
-               "increasing! Please use `pl_queue_reset` to reset the frame "
-               "queue on discontinuous PTS jumps.", params->pts, p->prev_pts);
-        pthread_mutex_unlock(&p->lock_weak);
-        pthread_mutex_unlock(&p->lock_strong);
-        return PL_QUEUE_ERR;
+        // This is a backwards PTS jump. This is something we can handle
+        // semi-gracefully, but only if we haven't culled past the current
+        // frame yet.
+        if (p->queue.num && p->queue.elem[0].src.pts > params->pts) {
+            PL_ERR(p, "Requested PTS %f is lower than the oldest frame "
+                   "PTS %f. This is not supported, PTS must be monotonically "
+                   "increasing! Please use `pl_queue_reset` to reset the frame "
+                   "queue on discontinuous PTS jumps.",
+                   params->pts, p->queue.elem[0].src.pts);
+            pthread_mutex_unlock(&p->lock_weak);
+            pthread_mutex_unlock(&p->lock_strong);
+            return PL_QUEUE_ERR;
+        }
 
     } else if (delta > 1.0) {
 
