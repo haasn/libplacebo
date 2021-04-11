@@ -2302,11 +2302,70 @@ static bool pass_infer_state(struct pass_state *pass, bool adjust_rects)
     return true;
 }
 
+static bool draw_empty_overlays(struct pl_renderer *rr,
+                                const struct pl_frame *ptarget,
+                                const struct pl_render_params *params)
+{
+    if (!ptarget->num_overlays)
+        return true;
+
+    struct pass_state pass = {
+        .rr = rr,
+        .target = *ptarget,
+    };
+
+    struct pl_frame *target = &pass.target;
+    require(target->num_planes > 0 && target->num_planes <= PL_MAX_PLANES);
+    for (int i = 0; i < target->num_planes; i++)
+        validate_plane(target->planes[i], renderable);
+    require(target->num_overlays >= 0);
+    for (int i = 0; i < target->num_overlays; i++)
+        validate_overlay(target->overlays[i]);
+    fix_color_space(target);
+
+    // Find target ref plane
+    const struct pl_plane *ref = &target->planes[0];
+    for (int i = 0; i < target->num_planes; i++) {
+        switch (detect_plane_type(&target->planes[i], &target->repr)) {
+        case PLANE_RGB:
+        case PLANE_LUMA:
+        case PLANE_XYZ:
+            ref = &target->planes[i];
+            break;
+        default: break;
+        }
+    }
+
+    pl_dispatch_reset_frame(rr->dp);
+
+    for (int p = 0; p < target->num_planes; p++) {
+        const struct pl_plane *plane = &target->planes[p];
+        // Math replicated from `pass_output_target`
+        float rx = (float) plane->texture->params.w / ref->texture->params.w,
+              ry = (float) plane->texture->params.h / ref->texture->params.h;
+        float rrx = rx >= 1 ? roundf(rx) : 1.0 / roundf(1.0 / rx),
+              rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry);
+
+        struct pl_transform2x2 tscale = {
+            .mat = {{{ rrx, 0.0 }, { 0.0, rry }}},
+        };
+
+        draw_overlays(&pass, plane->texture, plane->components,
+                      plane->component_mapping, target->overlays,
+                      target->num_overlays, target->color, target->repr,
+                      false, &tscale, params);
+    }
+
+    return true;
+}
+
 bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *pimage,
                      const struct pl_frame *ptarget,
                      const struct pl_render_params *params)
 {
     params = PL_DEF(params, &pl_render_default_params);
+    if (!pimage)
+        return draw_empty_overlays(rr, ptarget, params);
 
     struct pass_state pass = {
         .rr = rr,
@@ -2320,7 +2379,6 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *pimage,
     pass.tmp = pl_tmp(NULL),
     pass.fbos_used = pl_calloc(pass.tmp, rr->fbos.num, sizeof(bool));
 
-    // TODO: output caching
     pl_dispatch_reset_frame(rr->dp);
 
     for (int i = 0; i < params->num_hooks; i++) {
@@ -2410,6 +2468,9 @@ bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *imag
                          const struct pl_frame *ptarget,
                          const struct pl_render_params *params)
 {
+    if (!images->num_frames)
+        return pl_render_image(rr, NULL, ptarget, params);
+
     params = PL_DEF(params, &pl_render_default_params);
     uint64_t params_hash = render_params_hash(params);
 

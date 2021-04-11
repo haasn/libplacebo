@@ -510,6 +510,9 @@ static PL_DEPRECATED inline bool pl_render_target_partial(
 // which means they get affected by things like scaling and frame mixing.
 // `target.overlays` will also be rendered, but directly onto the target. They
 // don't even need to be inside `target.crop`.
+//
+// Note: `image` may be NULL, in which case `target.overlays` will still be
+// rendered, but nothing else.
 bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *image,
                      const struct pl_frame *target,
                      const struct pl_render_params *params);
@@ -532,7 +535,8 @@ struct pl_frame_mix {
     // sufficient to meet the needs of the configured frame mixer. See the
     // section below for more information.
     //
-    // At least one frame is always required, i.e. `num_frames > 0`.
+    // If the number of frames is 0, this call will be equivalent to
+    // `pl_render_image` with `image == NULL`.
     int num_frames;
 
     // A list of the frames themselves. The frames can have different

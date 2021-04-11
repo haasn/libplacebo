@@ -1069,6 +1069,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         },
     };
     REQUIRE(pl_render_image(rr, &image, &target, &params));
+    REQUIRE(pl_render_image(rr, NULL, &target, &params));
     target.num_overlays = 0;
 
     // Attempt frame mixing, using the mixer queue helper

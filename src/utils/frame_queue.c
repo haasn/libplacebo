@@ -485,8 +485,10 @@ static enum pl_queue_status nearest(struct pl_queue *p, struct pl_frame_mix *mix
     case PL_QUEUE_OK:
         break;
     case PL_QUEUE_MORE:
-        if (!p->queue.num)
+        if (!p->queue.num) {
+            *mix = (struct pl_frame_mix) {0};
             return ret;
+        }
         break;
     }
 
@@ -506,8 +508,10 @@ static enum pl_queue_status oversample(struct pl_queue *p, struct pl_frame_mix *
     case PL_QUEUE_OK:
         break;
     case PL_QUEUE_MORE:
-        if (!p->queue.num)
+        if (!p->queue.num) {
+            *mix = (struct pl_frame_mix) {0};
             return ret;
+        }
         break;
     }
 
