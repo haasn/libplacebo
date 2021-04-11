@@ -2011,6 +2011,7 @@ fallback:
 
         struct pl_transform2x2 tscale = {
             .mat = {{{ rrx, 0.0 }, { 0.0, rry }}},
+            .c = { -sx, -sy },
         };
 
         draw_overlays(pass, plane->texture, plane->components,
@@ -2345,9 +2346,11 @@ static bool draw_empty_overlays(struct pl_renderer *rr,
               ry = (float) plane->texture->params.h / ref->texture->params.h;
         float rrx = rx >= 1 ? roundf(rx) : 1.0 / roundf(1.0 / rx),
               rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry);
+        float sx = plane->shift_x, sy = plane->shift_y;
 
         struct pl_transform2x2 tscale = {
             .mat = {{{ rrx, 0.0 }, { 0.0, rry }}},
+            .c = { -sx, -sy },
         };
 
         draw_overlays(&pass, plane->texture, plane->components,
