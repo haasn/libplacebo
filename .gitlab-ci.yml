@@ -5,7 +5,7 @@ stages:
     - sanitize
 
 linux:
-    image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
+    image: registry.videolan.org/libplacebo-ubuntu-focal:20210412100944
     stage: compile
     tags:
         - docker
@@ -19,7 +19,7 @@ linux:
         - ninja -C build
 
 static:
-    image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
+    image: registry.videolan.org/libplacebo-ubuntu-focal:20210412100944
     stage: compile
     tags:
         - docker
@@ -33,7 +33,7 @@ static:
         - ninja -C build
 
 win32:
-    image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
+    image: registry.videolan.org/libplacebo-ubuntu-focal:20210412100944
     stage: compile
     tags:
         - docker
@@ -48,7 +48,7 @@ win32:
         - cd build && meson test -t 5 -v --num-processes=1
 
 win64:
-    image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
+    image: registry.videolan.org/libplacebo-ubuntu-focal:20210412100944
     stage: compile
     tags:
         - docker
@@ -87,7 +87,7 @@ macos:
         - cd build && meson test -t 5 -v --num-processes=1
 
 scan:
-    image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
+    image: registry.videolan.org/libplacebo-ubuntu-focal:20210412100944
     stage: compile
     tags:
         - docker
@@ -103,7 +103,7 @@ scan:
         - ninja -C build scan-build
 
 llvmpipe:
-    image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
+    image: registry.videolan.org/libplacebo-ubuntu-focal:20210412100944
     stage: test
     tags:
         - docker
@@ -120,7 +120,7 @@ llvmpipe:
         - cd build && meson test -t 5 -v --num-processes=1
 
 gpu:
-    image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
+    image: registry.videolan.org/libplacebo-ubuntu-focal:20210412100944
     stage: test
     tags:
         - gpu
@@ -148,7 +148,7 @@ gpu:
             cobertura: build/meson-logs/coverage.xml
 
 asan:
-    image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
+    image: registry.videolan.org/libplacebo-ubuntu-focal:20210412100944
     stage: sanitize
     tags:
         - gpu
@@ -164,7 +164,7 @@ asan:
         - cd build && time meson test -t 5 -v --num-processes=1
 
 msan:
-    image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
+    image: registry.videolan.org/libplacebo-ubuntu-focal:20210412100944
     stage: sanitize
     tags:
         - gpu
@@ -182,7 +182,7 @@ msan:
         - cd build && time meson test -t 5 -v --num-processes=1
 
 ubsan:
-    image: registry.videolan.org/libplacebo-ubuntu-focal:20210108182514
+    image: registry.videolan.org/libplacebo-ubuntu-focal:20210412100944
     stage: sanitize
     tags:
         - gpu

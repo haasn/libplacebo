@@ -21,6 +21,7 @@
 #include <libplacebo/gpu.h>
 #include <libplacebo/utils/upload.h>
 #include <libavutil/frame.h>
+#include <libavcodec/avcodec.h>
 
 // Fill in the details of a `pl_frame` from an AVFrame. This function will
 // explicitly clear `out_frame`, setting all extra fields to 0. After this
@@ -111,6 +112,15 @@ static void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile profile
 static int pl_plane_data_from_pixfmt(struct pl_plane_data data[4],
                                      struct pl_bit_encoding *bits,
                                      enum AVPixelFormat pix_fmt);
+
+// Callback for AVCodecContext.get_buffer2 that allocates memory from
+// persistently mapped buffers. This can be more efficient than regular
+// system memory, especially on platforms that don't support importing
+// PL_HANDLE_HOST_PTR as buffers.
+//
+// Note: `avctx->opaque` must be a pointer that *points* to the GPU instance.
+// That is, it should have type `const struct pl_gpu **`.
+static int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags);
 
 // Mapping functions for the various libavutil enums. Note that these are not
 // quite 1:1, and even for values that exist in both, the semantics sometimes

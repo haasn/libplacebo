@@ -74,21 +74,23 @@ static void uninit(struct plplay *p)
         pthread_join(p->decoder_thread, NULL);
     }
 
+    pl_queue_destroy(&p->queue);
+    pl_renderer_destroy(&p->renderer);
+
     for (int i = 0; i < p->shader_num; i++) {
         pl_mpv_user_shader_destroy(&p->shader_hooks[i]);
         free(p->shader_paths[i]);
     }
 
-    pl_queue_destroy(&p->queue);
-    pl_renderer_destroy(&p->renderer);
-    ui_destroy(&p->ui);
-    window_destroy(&p->win);
-
     free(p->shader_hooks);
     free(p->shader_paths);
 
+    // Free this before destroying the window to release associated GPU buffers
     avcodec_free_context(&p->codec);
     avformat_free_context(p->format);
+
+    ui_destroy(&p->ui);
+    window_destroy(&p->win);
 
     pl_context_destroy(&p->ctx);
     *p = (struct plplay) {0};
@@ -159,6 +161,8 @@ static bool init_codec(struct plplay *p)
     }
 
     p->codec->thread_count = av_cpu_count();
+    p->codec->get_buffer2 = pl_get_buffer2;
+    p->codec->opaque = &p->win->gpu;
 
     if (avcodec_open2(p->codec, codec, NULL) < 0) {
         fprintf(stderr, "libavcodec: Failed opening codec\n");
@@ -197,7 +201,9 @@ static void *decode_loop(void *arg)
     struct plplay *p = arg;
     AVPacket *packet = av_packet_alloc();
     AVFrame *frame = av_frame_alloc();
-    if (!packet || !frame)
+    pthread_cleanup_push((void (*)(void *)) av_packet_free, &packet);
+    pthread_cleanup_push((void (*)(void *)) av_frame_free, &frame);
+    if (!frame || !packet)
         goto done;
 
     double start_pts;
@@ -262,8 +268,8 @@ static void *decode_loop(void *arg)
 
 done:
     pl_queue_push(p->queue, NULL); // Signal EOF to flush queue
-    av_frame_free(&frame);
-    av_packet_free(&packet);
+    pthread_cleanup_pop(1);
+    pthread_cleanup_pop(1);
     return NULL;
 }
 
@@ -467,7 +473,6 @@ int main(int argc, char **argv)
     assert(p->upscaler && p->downscaler && p->frame_mixer);
 #endif
 
-    // TODO: Use direct rendering buffers
     if (!init_codec(p))
         goto error;
 
