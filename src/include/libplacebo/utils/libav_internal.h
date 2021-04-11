@@ -602,10 +602,10 @@ static inline bool pl_frame_recreate_from_avframe(const struct pl_gpu *gpu,
     return true;
 }
 
-static void pl_avbuffer_free(void *priv)
+static void pl_avframe_free(void *priv)
 {
-    AVBufferRef *buf = priv;
-    av_buffer_unref(&buf);
+    AVFrame *frame = priv;
+    av_frame_free(&frame);
 }
 
 static inline bool pl_upload_avframe(const struct pl_gpu *gpu,
@@ -633,15 +633,16 @@ static inline bool pl_upload_avframe(const struct pl_gpu *gpu,
         data[p].row_stride = frame->linesize[p];
         data[p].pixels = frame->data[p];
 
-        // Try using an asynchronous upload if possible, by taking a new ref to
-        // the plane data
-        if (frame->buf[p]) {
-            data[p].callback = pl_avbuffer_free;
-            data[p].priv = av_buffer_ref(frame->buf[p]);
+        if (gpu->caps & PL_GPU_CAP_CALLBACKS) {
+            // Use asynchronous upload if possible
+            data[p].callback = pl_avframe_free;
+            data[p].priv = av_frame_clone(frame);
         }
 
-        if (!pl_upload_plane(gpu, &out->planes[p], &tex[p], &data[p]))
+        if (!pl_upload_plane(gpu, &out->planes[p], &tex[p], &data[p])) {
+            pl_avframe_free(data[p].priv);
             return false;
+        }
     }
 
     return true;
