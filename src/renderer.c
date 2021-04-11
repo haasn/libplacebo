@@ -1869,6 +1869,9 @@ fallback:
     bool flipped_x = pass->dst_rect.x1 < pass->dst_rect.x0,
          flipped_y = pass->dst_rect.y1 < pass->dst_rect.y0;
 
+    if (!params->skip_target_clearing && pl_frame_is_cropped(target))
+        pl_frame_clear(rr->gpu, target, params->background_color);
+
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];
         float rx = (float) plane->texture->params.w / ref->texture->params.w,
@@ -2338,6 +2341,9 @@ static bool draw_empty_overlays(struct pl_renderer *rr,
     }
 
     pl_dispatch_reset_frame(rr->dp);
+
+    if (!params->skip_target_clearing)
+        pl_frame_clear(rr->gpu, target, params->background_color);
 
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];

@@ -165,6 +165,12 @@ struct pl_render_params {
     const struct pl_custom_lut *lut;
     enum pl_lut_type lut_type;
 
+    // If the image being rendered does not span the entire size of the target,
+    // it will be cleared explicitly using this background color (RGB). To
+    // disable this logic, set `skip_target_clearing`.
+    float background_color[3];
+    bool skip_target_clearing;
+
     // --- Performance / quality trade-off options:
     // These should generally be left off where quality is desired, as they can
     // degrade the result quite noticeably; but may be useful for older or

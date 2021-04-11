@@ -272,7 +272,6 @@ static void update_settings(struct plplay *p);
 static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *frame,
                          const struct pl_frame_mix *mix)
 {
-    const struct pl_gpu *gpu = p->win->gpu;
     struct pl_frame target;
     pl_frame_from_swapchain(&target, frame);
     update_settings(p);
@@ -283,8 +282,6 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
     if (avframe->sample_aspect_ratio.num)
         dar *= av_q2d(avframe->sample_aspect_ratio);
     pl_rect2df_aspect_set(&target.crop, dar, 0.0);
-    if (pl_frame_is_cropped(&target))
-        pl_frame_clear(gpu, &target, (float[3]) {0});
 
     if (p->force_depth) {
         target.repr.bits.color_depth = p->force_depth;
@@ -550,6 +547,25 @@ static void update_settings(struct plplay *p)
     struct pl_render_params *par = &p->params;
 
     if (nk_begin(nk, "Settings", nk_rect(100, 100, 600, 600), win_flags)) {
+
+        struct nk_colorf bg = {
+            par->background_color[0],
+            par->background_color[1],
+            par->background_color[2],
+            1.0,
+        };
+
+        nk_layout_row_dynamic(nk, 24, 2);
+        nk_label(nk, "Background color:", NK_TEXT_LEFT);
+        if (nk_combo_begin_color(nk, nk_rgb_cf(bg), nk_vec2(nk_widget_width(nk), 300))) {
+            nk_layout_row_dynamic(nk, 200, 1);
+            nk_color_pick(nk, &bg, NK_RGB);
+            nk_combo_end(nk);
+
+            par->background_color[0] = bg.r;
+            par->background_color[1] = bg.g;
+            par->background_color[2] = bg.b;
+        }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Image scaling", NK_MAXIMIZED)) {
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });

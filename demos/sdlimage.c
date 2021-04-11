@@ -177,9 +177,6 @@ static bool render_frame(const struct pl_swapchain_frame *frame)
         }
     }
 
-    if (pl_frame_is_cropped(&target))
-        pl_frame_clear(win->gpu, &target, (float[3]) {0} );
-
     // Use the heaviest preset purely for demonstration/testing purposes
     struct pl_render_params params = pl_render_high_quality_params;
     params.lut = lut;
