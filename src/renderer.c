@@ -1929,6 +1929,7 @@ fallback:
 
         struct pl_transform2x2 tscale = {
             .mat = {{{ rrx, 0.0 }, { 0.0, rry }}},
+            .c = { -sx, -sy },
         };
 
         draw_overlays(pass, plane->texture, plane->components,
