@@ -415,7 +415,7 @@ static inline bool pl_upload_dav1dpicture(const struct pl_gpu *gpu,
         // Re-use pre-allocated buffers directly
         assert(alloc->gpu == gpu);
         buf = alloc->buf;
-    } else if (params->asynchronous) {
+    } else if (params->asynchronous && (gpu->caps & PL_GPU_CAP_CALLBACKS)) {
         ref = malloc(sizeof(*ref));
         if (!ref)
             return false;
@@ -441,8 +441,13 @@ static inline bool pl_upload_dav1dpicture(const struct pl_gpu *gpu,
         }
     }
 
-    if (ref)
-        *pic = (Dav1dPicture) {0};
+    if (params->asynchronous) {
+        if (ref) {
+            *pic = (Dav1dPicture) {0};
+        } else {
+            dav1d_picture_unref(pic);
+        }
+    }
 
     return true;
 }
