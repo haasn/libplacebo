@@ -2310,6 +2310,9 @@ static bool draw_empty_overlays(struct pl_renderer *rr,
                                 const struct pl_frame *ptarget,
                                 const struct pl_render_params *params)
 {
+    if (!params->skip_target_clearing)
+        pl_frame_clear(rr->gpu, ptarget, params->background_color);
+
     if (!ptarget->num_overlays)
         return true;
 
@@ -2341,9 +2344,6 @@ static bool draw_empty_overlays(struct pl_renderer *rr,
     }
 
     pl_dispatch_reset_frame(rr->dp);
-
-    if (!params->skip_target_clearing)
-        pl_frame_clear(rr->gpu, target, params->background_color);
 
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];
