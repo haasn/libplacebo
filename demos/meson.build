@@ -116,12 +116,6 @@ else
     )
   endif
 
-  if nuklear_found
-    executable('nuklear', 'nuklear.c',
-      dependencies: [ dep, nuklear ],
-    )
-  endif
-
 endif
 
 # Headless video filtering demo
