@@ -21,6 +21,11 @@
 #include "dispatch.h"
 #include "gpu.h"
 
+// Maximum number of passes to keep around at once. If full, passes older than
+// MIN_AGE are evicted to make room. (Failing that, the cache size doubles)
+#define MAX_PASSES 100
+#define MIN_AGE 10
+
 enum {
     TMP_PRELUDE,   // GLSL version, global definitions, etc.
     TMP_MAIN,      // main GLSL shader body
@@ -34,6 +39,7 @@ struct pl_dispatch {
     const struct pl_gpu *gpu;
     uint8_t current_ident;
     uint8_t current_index;
+    int max_passes;
 
     PL_ARRAY(struct pl_shader *) shaders;       // to avoid re-allocations
     PL_ARRAY(struct pass *) passes;             // compiled passes
@@ -61,6 +67,7 @@ struct pass_var {
 struct pass {
     uint64_t signature; // as returned by pl_shader_signature
     const struct pl_pass *pass;
+    int last_index;
 
     // contains cached data and update metadata, same order as pl_shader
     struct pass_var *vars;
@@ -98,6 +105,7 @@ struct pl_dispatch *pl_dispatch_create(struct pl_context *ctx,
     struct pl_dispatch *dp = pl_zalloc_ptr(ctx, dp);
     dp->ctx = ctx;
     dp->gpu = gpu;
+    dp->max_passes = MAX_PASSES;
 
     return dp;
 }
@@ -611,6 +619,40 @@ static bool blend_equal(const struct pl_blend_params *a,
            a->src_alpha == b->src_alpha && a->dst_alpha == b->dst_alpha;
 }
 
+#define pass_age(pass) (dp->current_index - (pass)->last_index)
+
+static int cmp_pass_age(const void *ptra, const void *ptrb)
+{
+    const struct pass *a = *(const struct pass **) ptra;
+    const struct pass *b = *(const struct pass **) ptrb;
+    return b->last_index - a->last_index;
+}
+
+static void garbage_collect_passes(struct pl_dispatch *dp)
+{
+    if (dp->passes.num <= dp->max_passes)
+        return;
+
+    // Garbage collect oldest passes, starting at the middle
+    qsort(dp->passes.elem, dp->passes.num, sizeof(struct pass *), cmp_pass_age);
+    int idx = dp->passes.num / 2;
+    while (idx < dp->passes.num && pass_age(dp->passes.elem[idx]) < MIN_AGE)
+        idx++;
+
+    for (int i = idx; i < dp->passes.num; i++)
+        pass_destroy(dp, dp->passes.elem[i]);
+
+    int num_evicted = dp->passes.num - idx;
+    dp->passes.num = idx;
+
+    if (num_evicted) {
+        PL_DEBUG(dp, "Evicted %d passes from dispatch cache, consider "
+                 "using more dynamic shaders", num_evicted);
+    } else {
+        dp->max_passes *= 2;
+    }
+}
+
 static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
                               const struct pl_tex *target, ident_t vert_pos,
                               const struct pl_blend_params *blend, bool load,
@@ -625,11 +667,14 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
             continue;
 
         // Failed shader, no additional checks needed
-        if (!p->pass)
+        if (!p->pass) {
+            p->last_index = dp->current_index;
             return p;
+        }
 
         if (pl_shader_is_compute(sh)) {
             // no special requirements besides the signature
+            p->last_index = dp->current_index;
             return p;
         } else {
             pl_assert(target);
@@ -642,8 +687,10 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
                 raster_ok &= p->pass->params.vertex_type == vparams->vertex_type;
                 raster_ok &= p->pass->params.vertex_stride == vparams->vertex_stride;
             }
-            if (raster_ok)
+            if (raster_ok) {
+                p->last_index = dp->current_index;
                 return p;
+            }
         }
     }
 
@@ -652,6 +699,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
     struct pass *pass = pl_alloc_ptr(dp, pass);
     *pass = (struct pass) {
         .signature = sig,
+        .last_index = dp->current_index,
         .ubo_desc = {
             .desc = {
                 .name = "UBO",
@@ -790,6 +838,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
 error:
     pass->ubo_desc = (struct pl_shader_desc) {0}; // contains temporary pointers
     pl_free(tmp);
+    garbage_collect_passes(dp);
     PL_ARRAY_APPEND(dp, dp->passes, pass);
     return pass;
 }
