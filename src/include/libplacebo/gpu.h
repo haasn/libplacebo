@@ -517,6 +517,10 @@ struct pl_tex_transfer_params {
     // transfers wherever possible.
     //
     // Note: Requires PL_GPU_CAP_CALLBACKS
+    //
+    // Note: Callbacks are implicitly synchronized, meaning that callbacks are
+    // guaranteed to never execute concurrently with other callbacks. However,
+    // they may execute from any thread that the `pl_gpu` is used on.
     void (*callback)(void *priv);
     void *priv; // arbitrary user data
 
