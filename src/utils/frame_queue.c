@@ -370,7 +370,9 @@ static enum pl_queue_status get_frame(struct pl_queue *p,
     case PL_QUEUE_EOF:
         pl_queue_push(p, NULL);
         break;
-    default: break;
+    case PL_QUEUE_MORE:
+    case PL_QUEUE_ERR:
+        break;
     }
 
     pthread_mutex_lock(&p->lock_weak);

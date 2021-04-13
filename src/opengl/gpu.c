@@ -97,7 +97,8 @@ static void add_format(const struct pl_gpu *pgpu, const struct gl_format *gl_fmt
     case GL_RGBA_INTEGER:
         fmt->num_components = 4;
         break;
-    default: abort();
+    default:
+        pl_unreachable();
     }
 
     int size;
@@ -115,7 +116,8 @@ static void add_format(const struct pl_gpu *pgpu, const struct gl_format *gl_fmt
     case GL_FLOAT:
         size = 4;
         break;
-    default: abort();
+    default:
+        pl_unreachable();
     }
 
     // Host visible representation
@@ -197,12 +199,18 @@ static void add_format(const struct pl_gpu *pgpu, const struct gl_format *gl_fmt
 
     // Only float-type formats are considered blendable in OpenGL
     switch (fmt->type) {
+    case PL_FMT_UNKNOWN:
+    case PL_FMT_UINT:
+    case PL_FMT_SINT:
+        break;
     case PL_FMT_FLOAT:
     case PL_FMT_UNORM:
     case PL_FMT_SNORM:
         if (fmt->caps & PL_FMT_CAP_RENDERABLE)
             fmt->caps |= PL_FMT_CAP_BLENDABLE;
-    default: break;
+        break;
+    case PL_FMT_TYPE_COUNT:
+        pl_unreachable();
     }
 
     // TODO: Texel buffers
@@ -521,7 +529,12 @@ static bool gl_tex_import(const struct pl_gpu *gpu,
         break;
 #endif // PL_HAVE_UNIX
 
-    default: abort();
+    case PL_HANDLE_WIN32:
+    case PL_HANDLE_WIN32_KMT:
+    case PL_HANDLE_HOST_PTR:
+    case PL_HANDLE_FD:
+        pl_unreachable();
+
     }
 
     if (!egl_check_err(gpu, "eglCreateImageKHR") || !tex_gl->image)
@@ -631,7 +644,12 @@ static bool gl_tex_export(const struct pl_gpu *gpu,
     }
 #endif // PL_HAVE_UNIX
 
-    default: abort();
+    case PL_HANDLE_WIN32:
+    case PL_HANDLE_WIN32_KMT:
+    case PL_HANDLE_HOST_PTR:
+    case PL_HANDLE_FD:
+        pl_unreachable();
+
     }
 
     return true;
@@ -787,7 +805,7 @@ static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
             glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                    GL_TEXTURE_2D, tex_gl->texture, 0);
             break;
-        case 3: abort();
+        case 3: pl_unreachable();
         }
 
         GLenum err = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
@@ -884,7 +902,7 @@ static bool gl_fb_query(const struct pl_gpu *gpu, int fbo,
         gpu_bits += fmt->component_depth[i];
     fmt->internal_size = (gpu_bits + 7) / 8;
 
-    size_t host_size;
+    size_t host_size = 0;
     switch (fmt->type) {
     case PL_FMT_UNKNOWN:
         fmt->opaque = true;
@@ -913,7 +931,8 @@ static bool gl_fb_query(const struct pl_gpu *gpu, int fbo,
             host_size = sizeof(int8_t);
         }
         break;
-    default: abort();
+    case PL_FMT_TYPE_COUNT:
+        pl_unreachable();
     }
 
     fmt->texel_size = fmt->num_components * host_size;
@@ -1689,7 +1708,7 @@ static bool gl_attach_shader(const struct pl_gpu *gpu, GLuint program, GLenum ty
         case GL_VERTEX_SHADER:   shader_name = "vertex"; break;
         case GL_FRAGMENT_SHADER: shader_name = "fragment"; break;
         case GL_COMPUTE_SHADER:  shader_name = "compute"; break;
-        default: abort();
+        default: pl_unreachable();
         };
 
         PL_MSG(gpu, level, "%s shader source:", shader_name);
@@ -1729,7 +1748,9 @@ static GLuint gl_compile_program(const struct pl_gpu *gpu,
         for (int i = 0; i < params->num_vertex_attribs; i++)
             glBindAttribLocation(prog, i, params->vertex_attribs[i].name);
         break;
-    default: abort();
+    case PL_PASS_INVALID:
+    case PL_PASS_TYPE_COUNT:
+        pl_unreachable();
     }
 
     if (!ok || !gl_check_err(gpu, "gl_compile_program: attach shader"))
@@ -1794,7 +1815,15 @@ static void gl_update_va(const struct pl_pass *pass, size_t vbo_offset)
         case PL_FMT_UNORM:
         case PL_FMT_SNORM:
             norm = true;
-        default: break;
+            break;
+
+        case PL_FMT_UNKNOWN:
+        case PL_FMT_FLOAT:
+        case PL_FMT_UINT:
+        case PL_FMT_SINT:
+            break;
+        case PL_FMT_TYPE_COUNT:
+            pl_unreachable();
         }
 
         glEnableVertexAttribArray(i);
@@ -1923,9 +1952,9 @@ static void update_var(const struct pl_pass *pass,
         case 2: glUniform2iv(loc, var->dim_a, i); break;
         case 3: glUniform3iv(loc, var->dim_a, i); break;
         case 4: glUniform4iv(loc, var->dim_a, i); break;
-        default: abort();
+        default: pl_unreachable();
         }
-        break;
+        return;
     }
     case PL_VAR_UINT: {
         const unsigned int *u = vu->data;
@@ -1935,9 +1964,9 @@ static void update_var(const struct pl_pass *pass,
         case 2: glUniform2uiv(loc, var->dim_a, u); break;
         case 3: glUniform3uiv(loc, var->dim_a, u); break;
         case 4: glUniform4uiv(loc, var->dim_a, u); break;
-        default: abort();
+        default: pl_unreachable();
         }
-        break;
+        return;
     }
     case PL_VAR_FLOAT: {
         const float *f = vu->data;
@@ -1947,7 +1976,7 @@ static void update_var(const struct pl_pass *pass,
             case 2: glUniform2fv(loc, var->dim_a, f); break;
             case 3: glUniform3fv(loc, var->dim_a, f); break;
             case 4: glUniform4fv(loc, var->dim_a, f); break;
-            default: abort();
+            default: pl_unreachable();
             }
         } else if (var->dim_m == 2 && var->dim_v == 2) {
             glUniformMatrix2fv(loc, var->dim_a, GL_FALSE, f);
@@ -1968,12 +1997,17 @@ static void update_var(const struct pl_pass *pass,
         } else if (var->dim_m == 4 && var->dim_v == 3) {
             glUniformMatrix4x3fv(loc, var->dim_a, GL_FALSE, f);
         } else {
-            abort(); // unreachable
+            pl_unreachable();
         }
+        return;
+    }
+
+    case PL_VAR_INVALID:
+    case PL_VAR_TYPE_COUNT:
         break;
     }
-    default: abort();
-    }
+
+    pl_unreachable();
 }
 
 static void update_desc(const struct pl_pass *pass, int index,
@@ -2014,34 +2048,39 @@ static void update_desc(const struct pl_pass *pass, int index,
             glTexParameteri(tex_gl->target, GL_TEXTURE_WRAP_S, wrap);
             break;
         }
-        break;
+        return;
     }
     case PL_DESC_STORAGE_IMG: {
         const struct pl_tex *tex = db->object;
         struct pl_tex_gl *tex_gl = PL_PRIV(tex);
         glBindImageTexture(desc->binding, tex_gl->texture, 0, GL_FALSE, 0,
                            access[desc->access], tex_gl->iformat);
-        break;
+        return;
     }
     case PL_DESC_BUF_UNIFORM: {
         const struct pl_buf *buf = db->object;
         struct pl_buf_gl *buf_gl = PL_PRIV(buf);
         glBindBufferRange(GL_UNIFORM_BUFFER, desc->binding, buf_gl->buffer,
                           buf_gl->offset, buf->params.size);
-        break;
+        return;
     }
     case PL_DESC_BUF_STORAGE: {
         const struct pl_buf *buf = db->object;
         struct pl_buf_gl *buf_gl = PL_PRIV(buf);
         glBindBufferRange(GL_SHADER_STORAGE_BUFFER, desc->binding, buf_gl->buffer,
                           buf_gl->offset, buf->params.size);
-        break;
+        return;
     }
     case PL_DESC_BUF_TEXEL_UNIFORM:
     case PL_DESC_BUF_TEXEL_STORAGE:
-        abort(); // TODO
-    default: abort();
+        assert(!"unimplemented"); // TODO
+
+    case PL_DESC_INVALID:
+    case PL_DESC_TYPE_COUNT:
+        break;
     }
+
+    pl_unreachable();
 }
 
 static void unbind_desc(const struct pl_pass *pass, int index,
@@ -2055,7 +2094,7 @@ static void unbind_desc(const struct pl_pass *pass, int index,
         struct pl_tex_gl *tex_gl = PL_PRIV(tex);
         glActiveTexture(GL_TEXTURE0 + desc->binding);
         glBindTexture(tex_gl->target, 0);
-        break;
+        return;
     }
     case PL_DESC_STORAGE_IMG: {
         const struct pl_tex *tex = db->object;
@@ -2064,24 +2103,28 @@ static void unbind_desc(const struct pl_pass *pass, int index,
                            GL_WRITE_ONLY, GL_R32F);
         if (desc->access != PL_DESC_ACCESS_READONLY)
             glMemoryBarrier(tex_gl->barrier);
-        break;
+        return;
     }
     case PL_DESC_BUF_UNIFORM:
         glBindBufferBase(GL_UNIFORM_BUFFER, desc->binding, 0);
-        break;
+        return;
     case PL_DESC_BUF_STORAGE: {
         const struct pl_buf *buf = db->object;
         struct pl_buf_gl *buf_gl = PL_PRIV(buf);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, desc->binding, 0);
         if (desc->access != PL_DESC_ACCESS_READONLY)
             glMemoryBarrier(buf_gl->barrier);
-        break;
+        return;
     }
     case PL_DESC_BUF_TEXEL_UNIFORM:
     case PL_DESC_BUF_TEXEL_STORAGE:
-        abort(); // TODO
-    default: abort();
+        assert(!"unimplemented"); // TODO
+    case PL_DESC_INVALID:
+    case PL_DESC_TYPE_COUNT:
+        break;
     }
+
+    pl_unreachable();
 }
 
 static void gl_pass_run(const struct pl_gpu *gpu,
@@ -2227,7 +2270,9 @@ static void gl_pass_run(const struct pl_gpu *gpu,
         gl_timer_end(params->timer);
         break;
 
-    default: abort();
+    case PL_PASS_INVALID:
+    case PL_PASS_TYPE_COUNT:
+        pl_unreachable();
     }
 
     for (int i = 0; i < pass->params.num_descriptors; i++)

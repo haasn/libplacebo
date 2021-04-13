@@ -252,10 +252,13 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
                 score += 10000;
 
             switch (plfmt->type) {
+            case PL_FMT_UNKNOWN: break;
+            case PL_FMT_UINT: break;
+            case PL_FMT_SINT: break;
             case PL_FMT_UNORM: score += 3000; break;
             case PL_FMT_SNORM: score += 2000; break;
             case PL_FMT_FLOAT: score += 1000; break;
-            default: break;
+            case PL_FMT_TYPE_COUNT: pl_unreachable();
             };
 
             if (score > best_score) {

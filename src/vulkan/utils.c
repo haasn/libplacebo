@@ -36,7 +36,7 @@ vk_mem_handle_type(enum pl_handle_type handle_type)
         return VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
     }
 
-    abort();
+    pl_unreachable();
 }
 
 VkExternalSemaphoreHandleTypeFlagBitsKHR
@@ -57,7 +57,7 @@ vk_sync_handle_type(enum pl_handle_type handle_type)
         return 0;
     }
 
-    abort();
+    pl_unreachable();
 }
 
 bool vk_external_mem_check(struct vk_ctx *vk,

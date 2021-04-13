@@ -753,7 +753,8 @@ static void draw_overlays(struct pass_state *pass, const struct pl_tex *fbo,
         case PL_OVERLAY_MONOCHROME:
             GLSL("vec4 color = osd_color; \n");
             break;
-        default: abort();
+        case PL_OVERLAY_MODE_COUNT:
+            pl_unreachable();
         };
 
         sh->res.output = PL_SHADER_SIG_COLOR;
@@ -860,7 +861,8 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
             hparams.sh = img_sh(pass, img);
             break;
 
-        default: abort();
+        case PL_HOOK_SIG_COUNT:
+            pl_unreachable();
         }
 
         struct pl_hook_res res = hook->hook(hook->priv, &hparams);
@@ -918,7 +920,8 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
             };
             break;
 
-        default: abort();
+        case PL_HOOK_SIG_COUNT:
+            pl_unreachable();
         }
 
         // a hook was performed successfully
@@ -2128,8 +2131,21 @@ static inline enum plane_type detect_plane_type(const struct pl_plane *plane,
     case PL_COLOR_SYSTEM_UNKNOWN: // fall through to RGB
     case PL_COLOR_SYSTEM_RGB: return PLANE_RGB;
     case PL_COLOR_SYSTEM_XYZ: return PLANE_XYZ;
-    default: abort();
+
+    // For the switch completeness check
+    case PL_COLOR_SYSTEM_BT_601:
+    case PL_COLOR_SYSTEM_BT_709:
+    case PL_COLOR_SYSTEM_SMPTE_240M:
+    case PL_COLOR_SYSTEM_BT_2020_NC:
+    case PL_COLOR_SYSTEM_BT_2020_C:
+    case PL_COLOR_SYSTEM_BT_2100_PQ:
+    case PL_COLOR_SYSTEM_BT_2100_HLG:
+    case PL_COLOR_SYSTEM_YCGCO:
+    case PL_COLOR_SYSTEM_COUNT:
+        break;
     }
+
+    pl_unreachable();
 }
 
 static inline void default_rect(struct pl_rect2df *rc,
@@ -2153,7 +2169,11 @@ static void fix_refs_and_rects(struct pass_state *pass, bool adjust_rects)
         case PLANE_XYZ:
             pass->src_ref = i;
             break;
-        default: break;
+        case PLANE_CHROMA:
+        case PLANE_ALPHA:
+            break;
+        case PLANE_INVALID:
+            pl_unreachable();
         }
     }
 
@@ -2165,7 +2185,11 @@ static void fix_refs_and_rects(struct pass_state *pass, bool adjust_rects)
         case PLANE_XYZ:
             pass->dst_ref = i;
             break;
-        default: break;
+        case PLANE_CHROMA:
+        case PLANE_ALPHA:
+            break;
+        case PLANE_INVALID:
+            pl_unreachable();
         }
     }
 
@@ -2237,7 +2261,11 @@ static const struct pl_tex *frame_ref(const struct pl_frame *frame)
         case PLANE_LUMA:
         case PLANE_XYZ:
             return frame->planes[i].texture;
-        default: continue;
+        case PLANE_CHROMA:
+        case PLANE_ALPHA:
+            continue;
+        case PLANE_INVALID:
+            pl_unreachable();
         }
     }
 
@@ -2330,26 +2358,14 @@ static bool draw_empty_overlays(struct pl_renderer *rr,
         validate_overlay(target->overlays[i]);
     fix_color_space(target);
 
-    // Find target ref plane
-    const struct pl_plane *ref = &target->planes[0];
-    for (int i = 0; i < target->num_planes; i++) {
-        switch (detect_plane_type(&target->planes[i], &target->repr)) {
-        case PLANE_RGB:
-        case PLANE_LUMA:
-        case PLANE_XYZ:
-            ref = &target->planes[i];
-            break;
-        default: break;
-        }
-    }
-
     pl_dispatch_reset_frame(rr->dp);
 
+    const struct pl_tex *ref = frame_ref(target);
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];
         // Math replicated from `pass_output_target`
-        float rx = (float) plane->texture->params.w / ref->texture->params.w,
-              ry = (float) plane->texture->params.h / ref->texture->params.h;
+        float rx = (float) plane->texture->params.w / ref->params.w,
+              ry = (float) plane->texture->params.h / ref->params.h;
         float rrx = rx >= 1 ? roundf(rx) : 1.0 / roundf(1.0 / rx),
               rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry);
         float sx = plane->shift_x, sy = plane->shift_y;

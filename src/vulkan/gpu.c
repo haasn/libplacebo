@@ -91,7 +91,8 @@ static inline struct vk_cmd *_begin_cmd(struct pl_vk *p, enum queue_type type,
             pool = vk->pool_graphics;
         break;
 
-    default: abort();
+    default:
+        pl_unreachable();
     }
 
     if (!p->cmd || p->cmd->pool != pool) {
@@ -993,7 +994,6 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     case 1: tex_vk->type = VK_IMAGE_TYPE_1D; break;
     case 2: tex_vk->type = VK_IMAGE_TYPE_2D; break;
     case 3: tex_vk->type = VK_IMAGE_TYPE_3D; break;
-    default: abort();
     }
 
     if (params->format->emulated) {
@@ -2073,7 +2073,8 @@ static const struct pl_buf *vk_buf_create(const struct pl_gpu *gpu,
         // the memory be host-mapped is the easiest compromise.
         mparams.required |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
         break;
-    default: abort();
+    case PL_BUF_MEM_TYPE_COUNT:
+        pl_unreachable();
     }
 
     if (params->import_handle) {
@@ -2724,7 +2725,9 @@ no_descriptors: ;
             frag.len = 0;
             vert.len = 0;
             break;
-        default: abort();
+        case PL_PASS_INVALID:
+        case PL_PASS_TYPE_COUNT:
+            pl_unreachable();
         }
     }
 
@@ -2918,7 +2921,9 @@ no_descriptors: ;
                                       PL_VK_ALLOC, &pass_vk->pipe));
         break;
     }
-    default: abort();
+    case PL_PASS_INVALID:
+    case PL_PASS_TYPE_COUNT:
+        pl_unreachable();
     }
 
     // Update params->cached_program
@@ -3009,7 +3014,8 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         access = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
         buf_op = BUF_READ | BUF_WRITE;
         break;
-    default: abort();
+    case PL_DESC_ACCESS_COUNT:
+        pl_unreachable();
     }
 
     switch (desc->type) {
@@ -3029,7 +3035,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         };
 
         wds->pImageInfo = iinfo;
-        break;
+        return;
     }
     case PL_DESC_STORAGE_IMG: {
         const struct pl_tex *tex = db.object;
@@ -3045,7 +3051,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         };
 
         wds->pImageInfo = iinfo;
-        break;
+        return;
     }
     case PL_DESC_BUF_UNIFORM:
     case PL_DESC_BUF_STORAGE: {
@@ -3063,7 +3069,7 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         };
 
         wds->pBufferInfo = binfo;
-        break;
+        return;
     }
     case PL_DESC_BUF_TEXEL_UNIFORM:
     case PL_DESC_BUF_TEXEL_STORAGE: {
@@ -3074,10 +3080,14 @@ static void vk_update_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
                     access, 0, buf->params.size, buf_op);
 
         wds->pTexelBufferView = &buf_vk->view;
+        return;
+    }
+    case PL_DESC_INVALID:
+    case PL_DESC_TYPE_COUNT:
         break;
     }
-    default: abort();
-    }
+
+    pl_unreachable();
 }
 
 static void vk_release_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
@@ -3095,16 +3105,20 @@ static void vk_release_descriptor(const struct pl_gpu *gpu, struct vk_cmd *cmd,
         buf_signal(gpu, cmd, buf, passStages[pass->params.type]);
         if (desc->access != PL_DESC_ACCESS_READONLY)
             buf_flush(gpu, cmd, buf, 0, buf->params.size);
-        break;
+        return;
     }
     case PL_DESC_SAMPLED_TEX:
     case PL_DESC_STORAGE_IMG: {
         const struct pl_tex *tex = db.object;
         tex_signal(gpu, cmd, tex, passStages[pass->params.type]);
+        return;
+    }
+    case PL_DESC_INVALID:
+    case PL_DESC_TYPE_COUNT:
         break;
     }
-    default: break;
-    }
+
+    pl_unreachable();
 }
 
 static void set_ds(struct pl_pass_vk *pass_vk, void *dsbit)
@@ -3203,6 +3217,7 @@ static void vk_pass_run(const struct pl_gpu *gpu,
         struct pl_buf_vk *vert_vk = PL_PRIV(vert);
         const struct pl_buf *index = params->index_buf;
         struct pl_buf_vk *index_vk = index ? PL_PRIV(index) : NULL;
+        pl_assert(vert);
 
         // In the edge case that vert = index buffer, we need to synchronize
         // for both flags simultaneously
@@ -3278,7 +3293,9 @@ static void vk_pass_run(const struct pl_gpu *gpu,
                         params->compute_groups[1],
                         params->compute_groups[2]);
         break;
-    default: abort();
+    case PL_PASS_INVALID:
+    case PL_PASS_TYPE_COUNT:
+        pl_unreachable();
     };
 
     for (int i = 0; i < pass->params.num_descriptors; i++)
@@ -3370,7 +3387,7 @@ static const struct pl_sync *vk_sync_create(const struct pl_gpu *gpu,
         break;
     case PL_HANDLE_DMA_BUF:
     case PL_HANDLE_HOST_PTR:
-        abort();
+        pl_unreachable();
     }
 
     const VkSemaphoreCreateInfo sinfo = {

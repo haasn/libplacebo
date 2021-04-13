@@ -18,6 +18,8 @@
 #ifndef LIBPLACEBO_SHADERS_CUSTOM_H_
 #define LIBPLACEBO_SHADERS_CUSTOM_H_
 
+#include <stdlib.h>
+
 // Functions for writing custom shaders and hooking them into the `pl_renderer`
 // pipeline, as well as compatibility functions for parsing shaders in mpv
 // format.
@@ -125,9 +127,20 @@ static inline bool pl_hook_stage_resizable(enum pl_hook_stage stage) {
     case PL_HOOK_NATIVE:
     case PL_HOOK_RGB:
         return true;
-    default:
+
+    case PL_HOOK_CHROMA_SCALED:
+    case PL_HOOK_ALPHA_SCALED:
+    case PL_HOOK_LINEAR:
+    case PL_HOOK_SIGMOID:
+    case PL_HOOK_PRE_OVERLAY:
+    case PL_HOOK_PRE_KERNEL:
+    case PL_HOOK_POST_KERNEL:
+    case PL_HOOK_SCALED:
+    case PL_HOOK_OUTPUT:
         return false;
     }
+
+    abort();
 }
 
 // The different forms of communicating image data between the renderer and

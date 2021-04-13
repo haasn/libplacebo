@@ -175,7 +175,9 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
         case PL_FMT_SNORM: sh->sampler_prefix = ' '; break;
         case PL_FMT_UINT: sh->sampler_prefix = 'u'; break;
         case PL_FMT_SINT: sh->sampler_prefix = 's'; break;
-        default: abort();
+        case PL_FMT_UNKNOWN:
+        case PL_FMT_TYPE_COUNT:
+            pl_unreachable();
         }
 
         *src_tex = "src_tex";
@@ -707,9 +709,6 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
         srcfix.rect.y0 = 0;
         srcfix.rect.y1 = srcfix.new_h = src_params(src).h;
         break;
-    case PL_SEP_PASSES:
-    default:
-        abort();
     }
 
     uint8_t comp_mask;

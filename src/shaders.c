@@ -221,9 +221,14 @@ ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
         sd.buffer_vars = pl_memdup(SH_TMP(sh), sd.buffer_vars, bsize);
         break;
 
-    default:
+    case PL_DESC_SAMPLED_TEX:
+    case PL_DESC_STORAGE_IMG:
         pl_assert(!sd.num_buffer_vars);
         break;
+
+    case PL_DESC_INVALID:
+    case PL_DESC_TYPE_COUNT:
+        pl_unreachable();
     }
 
     sd.desc.name = sh_fresh(sh, sd.desc.name);
@@ -352,7 +357,13 @@ bool sh_buf_desc_append(void *alloc, const struct pl_gpu *gpu,
         if (bv.layout.offset + bv.layout.size > gpu->limits.max_ssbo_size)
             return false;
         break;
-    default: abort();
+    case PL_DESC_INVALID:
+    case PL_DESC_SAMPLED_TEX:
+    case PL_DESC_STORAGE_IMG:
+    case PL_DESC_BUF_TEXEL_UNIFORM:
+    case PL_DESC_BUF_TEXEL_STORAGE:
+    case PL_DESC_TYPE_COUNT:
+        pl_unreachable();
     }
 
     if (out_layout)
@@ -902,7 +913,9 @@ next_dim: ; // `continue` out of the inner loop
                                                  c > 0 ? "," : "",
                                                  ((int *) tmp)[i+c]);
                         break;
-                    default: abort();
+                    case PL_VAR_INVALID:
+                    case PL_VAR_TYPE_COUNT:
+                        pl_unreachable();
                     }
                 }
                 if (params->comps > 1)
@@ -911,7 +924,8 @@ next_dim: ; // `continue` out of the inner loop
             break;
         }
 
-        case SH_LUT_AUTO: abort();
+        case SH_LUT_AUTO:
+            pl_unreachable();
         }
 
         lut->method = method;
@@ -1009,7 +1023,8 @@ next_dim: ; // `continue` out of the inner loop
         GLSLH(");\n");
         break;
 
-    default: abort();
+    case SH_LUT_AUTO:
+        pl_unreachable();
     }
 
     if (arr_name) {

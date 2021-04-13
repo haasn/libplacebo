@@ -578,9 +578,21 @@ static inline enum pl_channel channel_map(int i, const struct pl_av1_grain_param
     case PL_COLOR_SYSTEM_XYZ:
         return map_xyz[comp];
 
-    default:
+    case PL_COLOR_SYSTEM_BT_601:
+    case PL_COLOR_SYSTEM_BT_709:
+    case PL_COLOR_SYSTEM_SMPTE_240M:
+    case PL_COLOR_SYSTEM_BT_2020_NC:
+    case PL_COLOR_SYSTEM_BT_2020_C:
+    case PL_COLOR_SYSTEM_BT_2100_PQ:
+    case PL_COLOR_SYSTEM_BT_2100_HLG:
+    case PL_COLOR_SYSTEM_YCGCO:
         return comp;
+
+    case PL_COLOR_SYSTEM_COUNT:
+        break;
     }
+
+    pl_unreachable();
 }
 
 bool pl_needs_av1_grain(const struct pl_av1_grain_params *params)

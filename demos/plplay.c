@@ -206,7 +206,7 @@ static void *decode_loop(void *arg)
     if (!frame || !packet)
         goto done;
 
-    double start_pts;
+    double start_pts = 0.0;
     bool first_frame = true;
 
     while (true) {

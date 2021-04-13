@@ -73,7 +73,8 @@ bool pl_shader_custom(struct pl_shader *sh, const struct pl_custom_shader *param
                 output_decl = "vec4 color = vec4(0.0);";
                 break;
 
-            default: abort();
+            case PL_SHADER_SIG_SAMPLER:
+                pl_unreachable();
             }
         }
 
@@ -225,7 +226,7 @@ static bool pl_eval_szexpr(struct pl_context *ctx, void *priv,
 
             switch (expr[i].val.op) {
             case SZEXP_OP_NOT: stack[idx-1] = !stack[idx-1]; break;
-            default: abort();
+            default: pl_unreachable();
             }
             continue;
 
@@ -246,7 +247,7 @@ static bool pl_eval_szexpr(struct pl_context *ctx, void *priv,
             case SZEXP_OP_DIV: res = op1 / op2; break;
             case SZEXP_OP_GT:  res = op1 > op2; break;
             case SZEXP_OP_LT:  res = op1 < op2; break;
-            default: abort();
+            case SZEXP_OP_NOT: pl_unreachable();
             }
 
             if (!isfinite(res)) {
@@ -825,9 +826,9 @@ static pl_str pl_stage_to_mp(enum pl_hook_stage stage)
 
     case PL_HOOK_SCALED:        return pl_str0("SCALED");
     case PL_HOOK_OUTPUT:        return pl_str0("OUTPUT");
-
-    default:                    return pl_str0("UNKNOWN");
     };
+
+    pl_unreachable();
 }
 
 struct hook_pass {
@@ -1430,9 +1431,11 @@ void pl_mpv_user_shader_destroy(const struct pl_hook **hookp)
                 const struct pl_tex *tex = p->descriptors.elem[i].binding.object;
                 pl_tex_destroy(p->gpu, &tex);
                 break;
-            }
 
-            default: abort();
+            case PL_DESC_INVALID:
+            case PL_DESC_TYPE_COUNT:
+                pl_unreachable();
+            }
         }
     }
 

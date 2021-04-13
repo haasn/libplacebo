@@ -844,7 +844,8 @@ static struct pl_buf_params pl_buf_params_infer(struct pl_buf_params params)
         break;
     case PL_BUF_TEX_TRANSFER:
         break;
-    default: abort();
+    case PL_BUF_TYPE_COUNT:
+        pl_unreachable();
     }
 
     return params;
@@ -1031,8 +1032,11 @@ size_t pl_var_type_size(enum pl_var_type type)
     case PL_VAR_SINT:  return sizeof(int);
     case PL_VAR_UINT:  return sizeof(unsigned int);
     case PL_VAR_FLOAT: return sizeof(float);
-    default: abort();
+    case PL_VAR_INVALID: // fall through
+    case PL_VAR_TYPE_COUNT: break;
     }
+
+    pl_unreachable();
 }
 
 #define PL_VAR(TYPE, NAME, M, V)                        \
@@ -1248,8 +1252,10 @@ const char *pl_desc_access_glsl_name(enum pl_desc_access mode)
     case PL_DESC_ACCESS_READWRITE: return "";
     case PL_DESC_ACCESS_READONLY:  return "readonly";
     case PL_DESC_ACCESS_WRITEONLY: return "writeonly";
-    default: abort();
+    case PL_DESC_ACCESS_COUNT: break;
     }
+
+    pl_unreachable();
 }
 
 const struct pl_blend_params pl_alpha_overlay = {
@@ -1283,7 +1289,9 @@ const struct pl_pass *pl_pass_create(const struct pl_gpu *gpu,
     case PL_PASS_COMPUTE:
         require(gpu->caps & PL_GPU_CAP_COMPUTE);
         break;
-    default: abort();
+    case PL_PASS_INVALID:
+    case PL_PASS_TYPE_COUNT:
+        pl_unreachable();
     }
 
     for (int i = 0; i < params->num_variables; i++) {
@@ -1368,7 +1376,9 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
             require(buf->params.storable && buf->params.format);
             break;
         }
-        default: abort();
+        case PL_DESC_INVALID:
+        case PL_DESC_TYPE_COUNT:
+            pl_unreachable();
         }
     }
 
@@ -1390,7 +1400,8 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         case PL_PRIM_TRIANGLE_FAN:
             require(params->vertex_count >= 3);
             break;
-        default: abort();
+        case PL_PRIM_TYPE_COUNT:
+            pl_unreachable();
         }
 
         require(!params->vertex_data ^ !params->vertex_buf);
@@ -1456,7 +1467,9 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
             require(params->compute_groups[i] <= gpu->limits.max_dispatch[i]);
         }
         break;
-    default: abort();
+    case PL_PASS_INVALID:
+    case PL_PASS_TYPE_COUNT:
+        pl_unreachable();
     }
 
     if (params->target && !pass->params.load_target)

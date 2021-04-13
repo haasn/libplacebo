@@ -38,7 +38,7 @@ bool pl_color_system_is_ycbcr_like(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_COUNT: break;
     };
 
-    abort();
+    pl_unreachable();
 }
 
 bool pl_color_system_is_linear(enum pl_color_system sys)
@@ -60,7 +60,7 @@ bool pl_color_system_is_linear(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_COUNT: break;
     };
 
-    abort();
+    pl_unreachable();
 }
 
 enum pl_color_system pl_color_system_guess_ycbcr(int width, int height)
@@ -200,7 +200,7 @@ bool pl_color_primaries_is_wide_gamut(enum pl_color_primaries prim)
     case PL_COLOR_PRIM_COUNT: break;
     }
 
-    abort();
+    pl_unreachable();
 }
 
 enum pl_color_primaries pl_color_primaries_guess(int width, int height)
@@ -242,7 +242,7 @@ float pl_color_transfer_nominal_peak(enum pl_color_transfer trc)
     case PL_COLOR_TRC_COUNT: break;
     }
 
-    abort();
+    pl_unreachable();
 }
 
 bool pl_color_light_is_scene_referred(enum pl_color_light light)
@@ -258,7 +258,7 @@ bool pl_color_light_is_scene_referred(enum pl_color_light light)
     case PL_COLOR_LIGHT_COUNT: break;
     }
 
-    abort();
+    pl_unreachable();
 }
 
 const struct pl_color_space pl_color_space_unknown = {0};
@@ -793,7 +793,8 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
         break;
     }
 
-    default: abort();
+    default:
+        pl_unreachable();
     }
 
     // out := RGB<-LMS * distort * LMS<-RGB
@@ -965,7 +966,8 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         m = pl_get_xyz2rgb_matrix(pl_raw_primaries_get(PL_COLOR_PRIM_BT_709));
         break;
     }
-    default: abort();
+    case PL_COLOR_SYSTEM_COUNT:
+        pl_unreachable();
     }
 
     // Apply hue and saturation in the correct way depending on the colorspace.
@@ -1014,7 +1016,8 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         cmax = 1.0;
         cmid = 128 / 256. * scale; // *not* exactly 0.5
         break;
-    default: abort();
+    default:
+        pl_unreachable();
     }
 
     double ymul = 1.0 / (ymax - ymin);

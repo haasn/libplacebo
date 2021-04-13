@@ -132,7 +132,7 @@ static cmsHPROFILE get_profile(struct pl_context *ctx, cmsContext cms,
     }
 
     case PL_COLOR_TRC_COUNT:
-    default: abort();
+        pl_unreachable();
     }
 
     if (!tonecurve[0])

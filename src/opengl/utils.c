@@ -59,7 +59,8 @@ void gl_poll_callbacks(const struct pl_gpu *gpu)
         case GL_TIMEOUT_EXPIRED:
             return;
 
-        default: abort();
+        default:
+            pl_unreachable();
         }
     }
 }

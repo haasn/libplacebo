@@ -329,11 +329,14 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             case PL_SAMPLER_NORMAL: break;
             case PL_SAMPLER_RECT: break;
             case PL_SAMPLER_EXTERNAL: has_ext = true; break;
-            default: abort();
+            case PL_SAMPLER_TYPE_COUNT: pl_unreachable();
             }
             break;
         }
-        default: break;
+
+        case PL_DESC_INVALID:
+        case PL_DESC_TYPE_COUNT:
+            pl_unreachable();
         }
     }
 
@@ -511,7 +514,10 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
                 desc->name);
             break;
         }
-        default: abort();
+
+        case PL_DESC_INVALID:
+        case PL_DESC_TYPE_COUNT:
+            pl_unreachable();
         }
     }
 
@@ -591,7 +597,9 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         ADD(glsl, "layout (local_size_x = %d, local_size_y = %d) in;\n",
             res->compute_group_size[0], res->compute_group_size[1]);
         break;
-    default: abort();
+    case PL_PASS_INVALID:
+    case PL_PASS_TYPE_COUNT:
+        pl_unreachable();
     }
 
     // Set up the main shader body
@@ -607,7 +615,9 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
     case PL_PASS_COMPUTE:
         ADD(glsl, "%s();\n", res->name);
         break;
-    default: abort();
+    case PL_PASS_INVALID:
+    case PL_PASS_TYPE_COUNT:
+        pl_unreachable();
     }
 
     ADD(glsl, "}");
@@ -869,7 +879,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
     struct pl_pass_run_params *rparams = &pass->run_params;
     switch (pv->type) {
     case PASS_VAR_NONE:
-        abort();
+        pl_unreachable();
     case PASS_VAR_GLOBAL: {
         struct pl_var_update vu = {
             .index = pv->index,

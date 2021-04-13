@@ -123,12 +123,18 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
         break;
     }
 
+    case PL_COLOR_SYSTEM_UNKNOWN:
+    case PL_COLOR_SYSTEM_RGB:
     case PL_COLOR_SYSTEM_XYZ:
+    case PL_COLOR_SYSTEM_BT_601:
+    case PL_COLOR_SYSTEM_BT_709:
+    case PL_COLOR_SYSTEM_SMPTE_240M:
+    case PL_COLOR_SYSTEM_BT_2020_NC:
+    case PL_COLOR_SYSTEM_YCGCO:
         break; // no special post-processing needed
 
-    default:
-        assert(pl_color_system_is_linear(orig_sys));
-        break;
+    case PL_COLOR_SYSTEM_COUNT:
+        pl_unreachable();
     }
 
     if (repr->alpha == PL_ALPHA_INDEPENDENT) {
@@ -201,12 +207,18 @@ void pl_shader_encode_color(struct pl_shader *sh,
         break;
     }
 
+    case PL_COLOR_SYSTEM_UNKNOWN:
+    case PL_COLOR_SYSTEM_RGB:
     case PL_COLOR_SYSTEM_XYZ:
+    case PL_COLOR_SYSTEM_BT_601:
+    case PL_COLOR_SYSTEM_BT_709:
+    case PL_COLOR_SYSTEM_SMPTE_240M:
+    case PL_COLOR_SYSTEM_BT_2020_NC:
+    case PL_COLOR_SYSTEM_YCGCO:
         break; // no special pre-processing needed
 
-    default:
-        assert(pl_color_system_is_linear(repr->sys));
-        break;
+    case PL_COLOR_SYSTEM_COUNT:
+        pl_unreachable();
     }
 
     // Since this is a relatively rare operation, bypass it as much as possible
@@ -296,26 +308,26 @@ void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc)
              "                    vec3(2.4)),                            \n"
              "                %s(lessThan(vec3(0.04045), color.rgb)));   \n",
              sh_bvec(sh, 3));
-        break;
+        return;
     case PL_COLOR_TRC_BT_1886:
         GLSL("color.rgb = pow(color.rgb, vec3(2.4));\n");
-        break;
+        return;
     case PL_COLOR_TRC_GAMMA18:
         GLSL("color.rgb = pow(color.rgb, vec3(1.8));\n");
-        break;
+        return;
     case PL_COLOR_TRC_UNKNOWN:
     case PL_COLOR_TRC_GAMMA22:
         GLSL("color.rgb = pow(color.rgb, vec3(2.2));\n");
-        break;
+        return;
     case PL_COLOR_TRC_GAMMA28:
         GLSL("color.rgb = pow(color.rgb, vec3(2.8));\n");
-        break;
+        return;
     case PL_COLOR_TRC_PRO_PHOTO:
         GLSL("color.rgb = mix(color.rgb * vec3(1.0/16.0),              \n"
              "                pow(color.rgb, vec3(1.8)),               \n"
              "                %s(lessThan(vec3(0.03125), color.rgb))); \n",
              sh_bvec(sh, 3));
-        break;
+        return;
     case PL_COLOR_TRC_PQ:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/%f));         \n"
              "color.rgb = max(color.rgb - vec3(%f), 0.0)        \n"
@@ -325,7 +337,7 @@ void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc)
              // to PL_COLOR_SDR_WHITE instead, so rescale
              "color.rgb *= vec3(%f);                            \n",
              PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1, 10000.0 / PL_COLOR_SDR_WHITE);
-        break;
+        return;
     case PL_COLOR_TRC_HLG:
         GLSL("color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,         \n"
              "                exp((color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
@@ -334,19 +346,19 @@ void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc)
              // Rescale from 0-12 to be relative to PL_COLOR_SDR_WHITE_HLG
              "color.rgb *= vec3(1.0/%f);                                 \n",
              HLG_C, HLG_A, HLG_B, sh_bvec(sh, 3), PL_COLOR_SDR_WHITE_HLG);
-        break;
+        return;
     case PL_COLOR_TRC_V_LOG:
         GLSL("color.rgb = mix((color.rgb - vec3(0.125)) * vec3(1.0/5.6), \n"
              "    pow(vec3(10.0), (color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
              "              - vec3(%f),                                  \n"
              "    %s(lessThanEqual(vec3(0.181), color.rgb)));            \n",
              VLOG_D, VLOG_C, VLOG_B, sh_bvec(sh, 3));
-        break;
+        return;
     case PL_COLOR_TRC_S_LOG1:
         GLSL("color.rgb = pow(vec3(10.0), (color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
              "            - vec3(%f);                                            \n",
              SLOG_C, SLOG_A, SLOG_B);
-        break;
+        return;
     case PL_COLOR_TRC_S_LOG2:
         GLSL("color.rgb = mix((color.rgb - vec3(%f)) * vec3(1.0/%f),      \n"
              "    (pow(vec3(10.0), (color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
@@ -354,10 +366,13 @@ void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc)
              "    %s(lessThanEqual(vec3(%f), color.rgb)));                \n",
              SLOG_Q, SLOG_P, SLOG_C, SLOG_A, SLOG_B, SLOG_K2, sh_bvec(sh, 3),
              SLOG_Q);
+        return;
+    case PL_COLOR_TRC_LINEAR:
+    case PL_COLOR_TRC_COUNT:
         break;
-    default:
-        abort();
     }
+
+    pl_unreachable();
 }
 
 void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
@@ -378,26 +393,26 @@ void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
              "                    - vec3(0.055),                              \n"
              "                %s(lessThanEqual(vec3(0.0031308), color.rgb))); \n",
              sh_bvec(sh, 3));
-        break;
+        return;
     case PL_COLOR_TRC_BT_1886:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.4));\n");
-        break;
+        return;
     case PL_COLOR_TRC_GAMMA18:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/1.8));\n");
-        break;
+        return;
     case PL_COLOR_TRC_UNKNOWN:
     case PL_COLOR_TRC_GAMMA22:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.2));\n");
-        break;
+        return;
     case PL_COLOR_TRC_GAMMA28:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.8));\n");
-        break;
+        return;
     case PL_COLOR_TRC_PRO_PHOTO:
         GLSL("color.rgb = mix(color.rgb * vec3(16.0),                        \n"
              "                pow(color.rgb, vec3(1.0/1.8)),                 \n"
              "                %s(lessThanEqual(vec3(0.001953), color.rgb))); \n",
              sh_bvec(sh, 3));
-        break;
+        return;
     case PL_COLOR_TRC_PQ:
         GLSL("color.rgb *= vec3(1.0/%f);                         \n"
              "color.rgb = pow(color.rgb, vec3(%f));              \n"
@@ -405,25 +420,25 @@ void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
              "             / (vec3(1.0) + vec3(%f) * color.rgb); \n"
              "color.rgb = pow(color.rgb, vec3(%f));              \n",
              10000 / PL_COLOR_SDR_WHITE, PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
-        break;
+        return;
     case PL_COLOR_TRC_HLG:
         GLSL("color.rgb *= vec3(%f);                                           \n"
              "color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                     \n"
              "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f), \n"
              "                %s(lessThan(vec3(1.0), color.rgb)));             \n",
              PL_COLOR_SDR_WHITE_HLG, HLG_A, HLG_B, HLG_C, sh_bvec(sh, 3));
-        break;
+        return;
     case PL_COLOR_TRC_V_LOG:
         GLSL("color.rgb = mix(vec3(5.6) * color.rgb + vec3(0.125),       \n"
              "                vec3(%f) * log(color.rgb + vec3(%f))       \n"
              "                    + vec3(%f),                            \n"
              "                %s(lessThanEqual(vec3(0.01), color.rgb))); \n",
              VLOG_C / M_LN10, VLOG_B, VLOG_D, sh_bvec(sh, 3));
-        break;
+        return;
     case PL_COLOR_TRC_S_LOG1:
         GLSL("color.rgb = vec3(%f) * log(color.rgb + vec3(%f)) + vec3(%f);\n",
              SLOG_A / M_LN10, SLOG_B, SLOG_C);
-        break;
+        return;
     case PL_COLOR_TRC_S_LOG2:
         GLSL("color.rgb = mix(vec3(%f) * color.rgb + vec3(%f),                \n"
              "                vec3(%f) * log(vec3(%f) * color.rgb + vec3(%f)) \n"
@@ -431,10 +446,13 @@ void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
              "                %s(lessThanEqual(vec3(0.0), color.rgb)));       \n",
              SLOG_P, SLOG_Q, SLOG_A / M_LN10, SLOG_K2, SLOG_B, SLOG_C,
              sh_bvec(sh, 3));
+        return;
+    case PL_COLOR_TRC_LINEAR:
+    case PL_COLOR_TRC_COUNT:
         break;
-    default:
-        abort();
     }
+
+    pl_unreachable();
 }
 
 const struct pl_sigmoid_params pl_sigmoid_default_params = {
@@ -517,7 +535,7 @@ static void pl_shader_ootf(struct pl_shader *sh, struct pl_color_space csp)
              csp.sig_peak / pow(12.0 / PL_COLOR_SDR_WHITE_HLG, gamma),
              sh_luma_coeffs(sh, csp.primaries),
              gamma - 1.0);
-        break;
+        return;
     }
     case PL_COLOR_LIGHT_SCENE_709_1886:
         // This OOTF is defined by encoding the result as 709 and then decoding
@@ -529,19 +547,23 @@ static void pl_shader_ootf(struct pl_shader *sh, struct pl_color_space csp)
              "                %s(lessThan(vec3(0.0181), color.rgb)));   \n"
              "color.rgb = pow(color.rgb, vec3(2.4));                    \n",
              sh_bvec(sh, 3));
-        break;
+        return;
     case PL_COLOR_LIGHT_SCENE_1_2:
         GLSL("color.rgb = pow(color.rgb, vec3(1.2));\n");
+        return;
+    case PL_COLOR_LIGHT_UNKNOWN:
+    case PL_COLOR_LIGHT_DISPLAY:
+    case PL_COLOR_LIGHT_COUNT:
         break;
-    default:
-        abort();
     }
+
+    pl_unreachable();
 }
 
 static void pl_shader_inverse_ootf(struct pl_shader *sh, struct pl_color_space csp)
 {
     if (!csp.light || csp.light == PL_COLOR_LIGHT_DISPLAY)
-        goto skip;
+        goto done;
 
     GLSL("// pl_shader_inverse_ootf        \n"
          "color.rgb = max(color.rgb, 0.0); \n");
@@ -558,7 +580,7 @@ static void pl_shader_inverse_ootf(struct pl_shader *sh, struct pl_color_space c
              csp.sig_peak / pow(12.0 / PL_COLOR_SDR_WHITE_HLG, gamma),
              sh_luma_coeffs(sh, csp.primaries),
              (gamma - 1.0) / gamma);
-        break;
+        goto done;
     }
     case PL_COLOR_LIGHT_SCENE_709_1886:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.4));                         \n"
@@ -567,15 +589,19 @@ static void pl_shader_inverse_ootf(struct pl_shader *sh, struct pl_color_space c
              "                    vec3(1/0.45)),                                 \n"
              "                %s(lessThan(vec3(0.08145), color.rgb)));           \n",
              sh_bvec(sh, 3));
-        break;
+        goto done;
     case PL_COLOR_LIGHT_SCENE_1_2:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/1.2));\n");
+        goto done;
+    case PL_COLOR_LIGHT_UNKNOWN:
+    case PL_COLOR_LIGHT_DISPLAY:
+    case PL_COLOR_LIGHT_COUNT:
         break;
-    default:
-        abort();
     }
 
-skip:
+    pl_unreachable();
+
+done:
     if (csp.sig_scale != 1.0)
         GLSL("color.rgb *= vec3(1.0 / %f); \n", csp.sig_scale);
 }
@@ -1024,8 +1050,8 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
              PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1, 10000.0 / PL_COLOR_SDR_WHITE);
         break;
 
-    default:
-        abort();
+    case PL_TONE_MAPPING_ALGORITHM_COUNT:
+        pl_unreachable();
     }
 
     GLSL("vec3 sig_lin = sig_orig * (sig[sig_idx] / sig_orig[sig_idx]); \n");
@@ -1220,15 +1246,20 @@ static void fill_dither_matrix(void *data, const struct sh_lut_params *params)
     case PL_DITHER_ORDERED_LUT:
         pl_assert(params->width == params->height);
         pl_generate_bayer_matrix(data, params->width);
-        break;
+        return;
 
     case PL_DITHER_BLUE_NOISE:
         pl_assert(params->width == params->height);
         pl_generate_blue_noise(data, params->width);
-        break;
+        return;
 
-    default: abort();
+    case PL_DITHER_ORDERED_FIXED:
+    case PL_DITHER_WHITE_NOISE:
+    case PL_DITHER_METHOD_COUNT:
+        return;
     }
+
+    pl_unreachable();
 }
 
 static bool dither_method_is_lut(enum pl_dither_method method)
@@ -1240,8 +1271,11 @@ static bool dither_method_is_lut(enum pl_dither_method method)
     case PL_DITHER_ORDERED_FIXED:
     case PL_DITHER_WHITE_NOISE:
         return false;
-    default: abort();
+    case PL_DITHER_METHOD_COUNT:
+        break;
     }
+
+    pl_unreachable();
 }
 
 void pl_shader_dither(struct pl_shader *sh, int new_depth,
@@ -1369,10 +1403,14 @@ done: ;
              "bias = float(b) * 1.0/256.0;             \n");
         break;
 
-    default: // LUT-based methods
+    case PL_DITHER_BLUE_NOISE:
+    case PL_DITHER_ORDERED_LUT:
         pl_assert(lut);
         GLSL("bias = %s(ivec2(pos * %d.0));\n", lut, lut_size);
         break;
+
+    case PL_DITHER_METHOD_COUNT:
+        pl_unreachable();
     }
 
     uint64_t scale = (1LLU << new_depth) - 1;
