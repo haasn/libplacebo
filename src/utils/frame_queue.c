@@ -413,17 +413,19 @@ static enum pl_queue_status advance(struct pl_queue *p, float pts,
         enum pl_queue_status ret;
         switch ((ret = get_frame(p, params))) {
         case PL_QUEUE_ERR:
-        case PL_QUEUE_MORE:
             return ret;
         case PL_QUEUE_EOF:
             if (!p->queue.num)
                 return ret;
             goto done;
+        case PL_QUEUE_MORE:
         case PL_QUEUE_OK:
             if (p->queue.num > 1 && p->queue.elem[1].src.pts <= pts) {
                 cull_entry(p, &p->queue.elem[0]);
                 PL_ARRAY_REMOVE_AT(p->queue, 0);
             }
+            if (ret == PL_QUEUE_MORE)
+                return ret;
             continue;
         }
     }
