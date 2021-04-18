@@ -49,8 +49,8 @@ static void print_formats(const struct pl_gpu *gpu)
         return;
 
     PL_DEBUG(gpu,  "GPU texture formats:");
-    PL_DEBUG(gpu,  "    %-10s %-6s %-6s %-4s %-4s %-13s %-13s %-10s %-10s %-6s",
-            "NAME", "TYPE", "CAPS", "SIZE", "COMP", "DEPTH", "HOST_BITS",
+    PL_DEBUG(gpu,  "    %-10s %-6s %-4s %-4s %-10s %-13s %-13s %-10s %-10s %-6s",
+            "NAME", "TYPE", "SIZE", "COMP", "CAPS", "DEPTH", "HOST_BITS",
             "GLSL_TYPE", "GLSL_FMT", "FOURCC");
     for (int n = 0; n < gpu->num_formats; n++) {
         const struct pl_fmt *fmt = gpu->formats[n];
@@ -72,14 +72,26 @@ static void print_formats(const struct pl_gpu *gpu)
         }
 
 #define IDX4(f) (f)[0], (f)[1], (f)[2], (f)[3]
+#define CAP(letter, cap) (fmt->caps & (cap) ? (letter) : '-')
 
-        PL_DEBUG(gpu, "    %-10s %-6s 0x%-4x %-4zu %c%c%c%c "
+        PL_DEBUG(gpu, "    %-10s %-6s %-4zu %c%c%c%c %c%c%c%c%c%c%c%c%c%c "
                  "{%-2d %-2d %-2d %-2d} {%-2d %-2d %-2d %-2d} %-10s %-10s %-6s",
-                 fmt->name, types[fmt->type], (unsigned int) fmt->caps,
-                 fmt->texel_size, IDX4(indices), IDX4(fmt->component_depth),
-                 IDX4(fmt->host_bits), PL_DEF(fmt->glsl_type, ""),
-                 PL_DEF(fmt->glsl_format, ""), PRINT_FOURCC(fmt->fourcc));
+                 fmt->name, types[fmt->type], fmt->texel_size, IDX4(indices),
+                 CAP('S', PL_FMT_CAP_SAMPLEABLE),
+                 CAP('s', PL_FMT_CAP_STORABLE),
+                 CAP('L', PL_FMT_CAP_LINEAR),
+                 CAP('R', PL_FMT_CAP_RENDERABLE),
+                 CAP('b', PL_FMT_CAP_BLENDABLE),
+                 CAP('B', PL_FMT_CAP_BLITTABLE),
+                 CAP('V', PL_FMT_CAP_VERTEX),
+                 CAP('u', PL_FMT_CAP_TEXEL_UNIFORM),
+                 CAP('t', PL_FMT_CAP_TEXEL_STORAGE),
+                 CAP('H', PL_FMT_CAP_HOST_READABLE),
+                 IDX4(fmt->component_depth), IDX4(fmt->host_bits),
+                 PL_DEF(fmt->glsl_type, ""), PL_DEF(fmt->glsl_format, ""),
+                 PRINT_FOURCC(fmt->fourcc));
 
+#undef CAP
 #undef IDX4
 
         for (int i = 0; i < fmt->num_modifiers; i++) {
