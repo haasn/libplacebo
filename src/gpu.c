@@ -148,7 +148,20 @@ void pl_gpu_print_info(const struct pl_gpu *gpu)
     PL_INFO(gpu, "GPU information:");
     PL_INFO(gpu, "    GLSL version: %d%s", gpu->glsl.version,
            gpu->glsl.vulkan ? " (vulkan)" : gpu->glsl.gles ? " es" : "");
-    PL_INFO(gpu, "    Capabilities: 0x%x", (unsigned int) gpu->caps);
+
+#define CAP(letter, cap) ((gpu->caps & cap) ? (letter) : '-')
+    PL_INFO(gpu, "    Capabilities: %c%c%c%c%c%c%c%c (0x%x)",
+            CAP('C', PL_GPU_CAP_COMPUTE),
+            CAP('P', PL_GPU_CAP_PARALLEL_COMPUTE),
+            CAP('V', PL_GPU_CAP_INPUT_VARIABLES),
+            CAP('M', PL_GPU_CAP_MAPPED_BUFFERS),
+            CAP('B', PL_GPU_CAP_BLITTABLE_1D_3D),
+            CAP('G', PL_GPU_CAP_SUBGROUPS),
+            CAP('c', PL_GPU_CAP_CALLBACKS),
+            CAP('T', PL_GPU_CAP_THREAD_SAFE),
+            (unsigned int) gpu->caps);
+#undef CAP
+
     PL_INFO(gpu, "    Limits:");
 
 #define LOG(fmt, field) \
