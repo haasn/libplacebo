@@ -41,6 +41,7 @@ struct fbo_format {
 // For gpu.priv
 struct pl_gl {
     struct pl_gpu_fns impl;
+    const struct pl_opengl *gl;
     bool failed;
 
 #ifdef EPOXY_HAS_EGL
@@ -70,3 +71,7 @@ struct pl_gl {
     bool has_queries;
     bool has_modifiers;
 };
+
+// For locking/unlocking
+bool gl_make_current(const struct pl_opengl *gl);
+void gl_release_current(const struct pl_opengl *gl);

@@ -49,6 +49,18 @@ struct pl_opengl_params {
     // Optional. Required when importing/exporting dmabufs as textures.
     void *egl_display;
     void *egl_context;
+
+    // Optional callbacks to bind/release the OpenGL context on the current
+    // thread. If these are specified, then the resulting `pl_gpu` will have
+    // `PL_GPU_CAP_THREAD_SAFE`, and may therefore be used from any thread
+    // without first needing to bind the OpenGL context.
+    //
+    // If the user is re-using the same OpenGL context in non-libplacebo code,
+    // then these callbacks should include whatever synchronization is
+    // necessary to prevent simultaneous use between libplacebo and the user.
+    bool (*make_current)(void *priv);
+    void (*release_current)(void *priv);
+    void *priv;
 };
 
 // Default/recommended parameters

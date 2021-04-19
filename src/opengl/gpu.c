@@ -44,6 +44,23 @@ static bool test_ext(const struct pl_gpu *gpu, const char *ext,
     return ext ? epoxy_has_gl_extension(ext) : false;
 }
 
+static inline bool make_current(const struct pl_gpu *gpu)
+{
+    struct pl_gl *p = PL_PRIV(gpu);
+    if (!gl_make_current(p->gl)) {
+        p->failed = true;
+        return false;
+    }
+
+    return true;
+}
+
+static inline void release_current(const struct pl_gpu *gpu)
+{
+    struct pl_gl *p = PL_PRIV(gpu);
+    gl_release_current(p->gl);
+}
+
 static void gl_destroy_gpu(const struct pl_gpu *gpu)
 {
     struct pl_gl *p = PL_PRIV(gpu);
@@ -265,6 +282,7 @@ static inline size_t get_page_size()
 }
 
 const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
+                                      const struct pl_opengl *gl,
                                       const struct pl_opengl_params *params)
 {
     struct pl_gpu *gpu = pl_zalloc_priv(NULL, struct pl_gpu, struct pl_gl);
@@ -273,6 +291,8 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
 
     struct pl_gl *p = PL_PRIV(gpu);
     p->impl = pl_fns_gl;
+    p->gl = gl;
+
     int ver = epoxy_gl_version();
     p->gl_ver = gpu->glsl.gles ? 0 : ver;
     p->gles_ver = gpu->glsl.gles ? ver : 0;
@@ -285,6 +305,8 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
         gpu->caps |= PL_GPU_CAP_MAPPED_BUFFERS;
     if (test_ext(gpu, "GL_ARB_sync", 32, 30))
         gpu->caps |= PL_GPU_CAP_CALLBACKS;
+    if (params->make_current)
+        gpu->caps |= PL_GPU_CAP_THREAD_SAFE;
 
     // If possible, query the GLSL version from the implementation
     const char *glslver = glGetString(GL_SHADING_LANGUAGE_VERSION);
@@ -416,8 +438,12 @@ struct pl_tex_gl {
 
 static void gl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
 {
-    struct pl_tex_gl *tex_gl = PL_PRIV(tex);
+    if (!make_current(gpu)) {
+        PL_ERR(gpu, "Failed uninitializing texture, leaking resources!");
+        return;
+    }
 
+    struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     if (tex_gl->fbo && !tex_gl->wrapped_fb)
         glDeleteFramebuffers(1, &tex_gl->fbo);
 #ifdef EPOXY_HAS_EGL
@@ -434,8 +460,9 @@ static void gl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
         close(tex_gl->fd);
 #endif
 
-    pl_free((void *) tex);
     gl_check_err(gpu, "gl_tex_destroy");
+    release_current(gpu);
+    pl_free((void *) tex);
 }
 
 static GLbitfield tex_barrier(const struct pl_tex *tex)
@@ -487,6 +514,9 @@ static bool gl_tex_import(const struct pl_gpu *gpu,
                           const struct pl_shared_mem *shared_mem,
                           struct pl_tex *tex)
 {
+    if (!make_current(gpu))
+        return false;
+
     struct pl_gl *p = PL_PRIV(gpu);
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     const struct pl_tex_params *params = &tex->params;
@@ -545,10 +575,12 @@ static bool gl_tex_import(const struct pl_gpu *gpu,
     if (!egl_check_err(gpu, "EGLImageTargetTexture2DOES"))
         goto error;
 
+    release_current(gpu);
     return true;
 
 error:
     PL_ERR(gpu, "Failed importing GL texture!");
+    release_current(gpu);
     return false;
 }
 
@@ -701,8 +733,10 @@ static const char *fb_err_str(GLenum err)
 static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
                                           const struct pl_tex_params *params)
 {
-    struct pl_gl *p = PL_PRIV(gpu);
+    if (!make_current(gpu))
+        return NULL;
 
+    struct pl_gl *p = PL_PRIV(gpu);
     struct pl_tex *tex = pl_zalloc_priv(NULL, struct pl_tex, struct pl_tex_gl);
     tex->params = *params;
     tex->params.initial_data = NULL;
@@ -837,10 +871,12 @@ static const struct pl_tex *gl_tex_create(const struct pl_gpu *gpu,
             goto error;
     }
 
+    release_current(gpu);
     return tex;
 
 error:
     gl_tex_destroy(gpu, tex);
+    release_current(gpu);
     return NULL;
 }
 
@@ -946,8 +982,10 @@ static bool gl_fb_query(const struct pl_gpu *gpu, int fbo,
 const struct pl_tex *pl_opengl_wrap(const struct pl_gpu *gpu,
                                     const struct pl_opengl_wrap_params *params)
 {
-    struct pl_gl *p = PL_PRIV(gpu);
+    if (!make_current(gpu))
+        return NULL;
 
+    struct pl_gl *p = PL_PRIV(gpu);
     struct pl_tex *tex = pl_alloc_priv(NULL, struct pl_tex, struct pl_tex_gl);
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     *tex = (struct pl_tex) {
@@ -1125,10 +1163,12 @@ const struct pl_tex *pl_opengl_wrap(const struct pl_gpu *gpu,
     }
 
     tex_gl->barrier = tex_barrier(tex);
+    release_current(gpu);
     return tex;
 
 error:
     gl_tex_destroy(gpu, tex);
+    release_current(gpu);
     return NULL;
 }
 
@@ -1157,8 +1197,7 @@ static void gl_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex
 {
     struct pl_gl *p = PL_PRIV(gpu);
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
-
-    if (!p->has_invalidate_fb)
+    if (!p->has_invalidate_fb || !make_current(gpu))
         return;
 
     if (tex_gl->wrapped_fb) {
@@ -1175,11 +1214,15 @@ static void gl_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex
     }
 
     gl_check_err(gpu, "gl_tex_invalidate");
+    release_current(gpu);
 }
 
 static void gl_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
                          const float color[4])
 {
+    if (!make_current(gpu))
+        return;
+
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     pl_assert(tex_gl->fbo || tex_gl->wrapped_fb);
 
@@ -1188,6 +1231,7 @@ static void gl_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *tex,
     glClear(GL_COLOR_BUFFER_BIT);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     gl_check_err(gpu, "gl_tex_clear");
+    release_current(gpu);
 }
 
 static const GLint filters[PL_TEX_SAMPLE_MODE_COUNT] = {
@@ -1198,6 +1242,9 @@ static const GLint filters[PL_TEX_SAMPLE_MODE_COUNT] = {
 static void gl_tex_blit(const struct pl_gpu *gpu,
                         const struct pl_tex_blit_params *params)
 {
+    if (!make_current(gpu))
+        return;
+
     struct pl_tex_gl *src_gl = PL_PRIV(params->src);
     struct pl_tex_gl *dst_gl = PL_PRIV(params->dst);
 
@@ -1214,6 +1261,7 @@ static void gl_tex_blit(const struct pl_gpu *gpu,
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     gl_check_err(gpu, "gl_tex_blit");
+    release_current(gpu);
 }
 
 // For pl_buf.priv
@@ -1228,6 +1276,11 @@ struct pl_buf_gl {
 
 static void gl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf *buf)
 {
+    if (!make_current(gpu)) {
+        PL_ERR(gpu, "Failed uninitializing buffer, leaking resources!");
+        return;
+    }
+
     struct pl_buf_gl *buf_gl = PL_PRIV(buf);
     if (buf_gl->fence)
         glDeleteSync(buf_gl->fence);
@@ -1239,13 +1292,17 @@ static void gl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf *buf)
     }
 
     glDeleteBuffers(1, &buf_gl->buffer);
-    pl_free((void *) buf);
     gl_check_err(gpu, "gl_buf_destroy");
+    release_current(gpu);
+    pl_free((void *) buf);
 }
 
 static const struct pl_buf *gl_buf_create(const struct pl_gpu *gpu,
                                           const struct pl_buf_params *params)
 {
+    if (!make_current(gpu))
+        return NULL;
+
     struct pl_buf *buf = pl_zalloc_priv(NULL, struct pl_buf, struct pl_buf_gl);
     buf->params = *params;
     buf->params.initial_data = NULL;
@@ -1346,10 +1403,12 @@ static const struct pl_buf *gl_buf_create(const struct pl_gpu *gpu,
             buf_gl->barrier |= GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT;
     }
 
+    release_current(gpu);
     return buf;
 
 error:
     gl_buf_destroy(gpu, buf);
+    release_current(gpu);
     return NULL;
 }
 
@@ -1360,6 +1419,9 @@ static bool gl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
     // the implementation will create more buffers under the hood if needed.
     if (!buf->data)
         return false;
+
+    if (!make_current(gpu))
+        return true; // conservative guess
 
     struct pl_buf_gl *buf_gl = PL_PRIV(buf);
     if (buf_gl->fence) {
@@ -1373,27 +1435,37 @@ static bool gl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
     }
 
     gl_poll_callbacks(gpu);
+    release_current(gpu);
     return !!buf_gl->fence;
 }
 
 static void gl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
                          size_t offset, const void *data, size_t size)
 {
+    if (!make_current(gpu))
+        return;
+
     struct pl_buf_gl *buf_gl = PL_PRIV(buf);
     glBindBuffer(GL_COPY_WRITE_BUFFER, buf_gl->buffer);
     glBufferSubData(GL_COPY_WRITE_BUFFER, buf_gl->offset + offset, size, data);
     glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
     gl_check_err(gpu, "gl_buf_write");
+    release_current(gpu);
 }
 
 static bool gl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
                         size_t offset, void *dest, size_t size)
 {
+    if (!make_current(gpu))
+        return false;
+
     struct pl_buf_gl *buf_gl = PL_PRIV(buf);
     glBindBuffer(GL_COPY_READ_BUFFER, buf_gl->buffer);
     glGetBufferSubData(GL_COPY_READ_BUFFER, buf_gl->offset + offset, size, dest);
     glBindBuffer(GL_COPY_READ_BUFFER, 0);
-    return gl_check_err(gpu, "gl_buf_read");
+    bool ok = gl_check_err(gpu, "gl_buf_read");
+    release_current(gpu);
+    return ok;
 }
 
 static void gl_buf_copy(const struct pl_gpu *gpu,
@@ -1401,6 +1473,9 @@ static void gl_buf_copy(const struct pl_gpu *gpu,
                         const struct pl_buf *src, size_t src_offset,
                         size_t size)
 {
+    if (!make_current(gpu))
+        return;
+
     struct pl_buf_gl *src_gl = PL_PRIV(src);
     struct pl_buf_gl *dst_gl = PL_PRIV(dst);
     glBindBuffer(GL_COPY_READ_BUFFER, src_gl->buffer);
@@ -1409,6 +1484,7 @@ static void gl_buf_copy(const struct pl_gpu *gpu,
                         src_gl->offset + src_offset,
                         dst_gl->offset + dst_offset, size);
     gl_check_err(gpu, "gl_buf_copy");
+    release_current(gpu);
 }
 
 static int get_alignment(int stride)
@@ -1443,6 +1519,9 @@ static bool gl_tex_upload(const struct pl_gpu *gpu,
         if (buf_size >= min_size && buf_size <= gpu->limits.max_buf_size)
             return pl_tex_upload_pbo(gpu, params);
     }
+
+    if (!make_current(gpu))
+        return false;
 
     const void *src = params->ptr;
     if (buf) {
@@ -1525,7 +1604,9 @@ static bool gl_tex_upload(const struct pl_gpu *gpu,
         });
     }
 
-    return gl_check_err(gpu, "gl_tex_upload");
+    bool ok = gl_check_err(gpu, "gl_tex_upload");
+    release_current(gpu);
+    return ok;
 }
 
 static bool gl_tex_download(const struct pl_gpu *gpu,
@@ -1544,6 +1625,9 @@ static bool gl_tex_download(const struct pl_gpu *gpu,
         if (buf_size >= min_size && buf_size <= gpu->limits.max_buf_size)
             return pl_tex_download_pbo(gpu, params);
     }
+
+    if (!make_current(gpu))
+        return false;
 
     void *dst = params->ptr;
     if (buf) {
@@ -1621,7 +1705,9 @@ static bool gl_tex_download(const struct pl_gpu *gpu,
         });
     }
 
-    return gl_check_err(gpu, "gl_tex_download") && ok;
+    ok &= gl_check_err(gpu, "gl_tex_download");
+    release_current(gpu);
+    return ok;
 }
 
 static int gl_desc_namespace(const struct pl_gpu *gpu, enum pl_desc_type type)
@@ -1793,13 +1879,19 @@ struct pl_pass_gl {
 
 static void gl_pass_destroy(const struct pl_gpu *gpu, const struct pl_pass *pass)
 {
-    struct pl_pass_gl *pass_gl = PL_PRIV(pass);
+    if (!make_current(gpu)) {
+        PL_ERR(gpu, "Failed uninitializing pass, leaking resources!");
+        return;
+    }
 
+    struct pl_pass_gl *pass_gl = PL_PRIV(pass);
     if (pass_gl->vao)
         glDeleteVertexArrays(1, &pass_gl->vao);
     glDeleteBuffers(1, &pass_gl->buffer);
     glDeleteProgram(pass_gl->program);
 
+    gl_check_err(gpu, "gl_pass_destroy");
+    release_current(gpu);
     pl_free((void *) pass);
 }
 
@@ -1836,6 +1928,9 @@ static void gl_update_va(const struct pl_pass *pass, size_t vbo_offset)
 static const struct pl_pass *gl_pass_create(const struct pl_gpu *gpu,
                                             const struct pl_pass_params *params)
 {
+    if (!make_current(gpu))
+        return NULL;
+
     struct pl_gl *p = PL_PRIV(gpu);
     struct pl_pass *pass = pl_zalloc_priv(NULL, struct pl_pass, struct pl_pass_gl);
     struct pl_pass_gl *pass_gl = PL_PRIV(pass);
@@ -1928,11 +2023,13 @@ static const struct pl_pass *gl_pass_create(const struct pl_gpu *gpu,
     if (!gl_check_err(gpu, "gl_pass_create"))
         goto error;
 
+    release_current(gpu);
     return pass;
 
 error:
     PL_ERR(gpu, "Failed creating pass");
     gl_pass_destroy(gpu, pass);
+    release_current(gpu);
     return NULL;
 }
 
@@ -2130,6 +2227,9 @@ static void unbind_desc(const struct pl_pass *pass, int index,
 static void gl_pass_run(const struct pl_gpu *gpu,
                         const struct pl_pass_run_params *params)
 {
+    if (!make_current(gpu))
+        return;
+
     const struct pl_pass *pass = params->pass;
     struct pl_pass_gl *pass_gl = PL_PRIV(pass);
     struct pl_gl *p = PL_PRIV(gpu);
@@ -2142,8 +2242,10 @@ static void gl_pass_run(const struct pl_gpu *gpu,
         update_desc(pass, i, &params->desc_bindings[i]);
     glActiveTexture(GL_TEXTURE0);
 
-    if (!gl_check_err(gpu, "gl_pass_run: updating uniforms"))
+    if (!gl_check_err(gpu, "gl_pass_run: updating uniforms")) {
+        release_current(gpu);
         return;
+    }
 
     switch (pass->params.type) {
     case PL_PASS_RASTER: {
@@ -2281,6 +2383,7 @@ static void gl_pass_run(const struct pl_gpu *gpu,
 
     glUseProgram(0);
     gl_check_err(gpu, "gl_pass_run");
+    release_current(gpu);
 }
 
 #define QUERY_OBJECT_NUM 8
@@ -2294,17 +2397,25 @@ struct pl_timer {
 static struct pl_timer *gl_timer_create(const struct pl_gpu *gpu)
 {
     struct pl_gl *p = PL_PRIV(gpu);
-    if (!p->has_queries)
+    if (!p->has_queries || !make_current(gpu))
         return NULL;
 
     struct pl_timer *timer = pl_zalloc_ptr(NULL, timer);
     glGenQueries(QUERY_OBJECT_NUM, timer->query);
+    release_current(gpu);
     return timer;
 }
 
 static void gl_timer_destroy(const struct pl_gpu *gpu, struct pl_timer *timer)
 {
+    if (!make_current(gpu)) {
+        PL_ERR(gpu, "Failed uninitializing timer, leaking resources!");
+        return;
+    }
+
     glDeleteQueries(QUERY_OBJECT_NUM, timer->query);
+    gl_check_err(gpu, "gl_timer_destroy");
+    release_current(gpu);
     pl_free(timer);
 }
 
@@ -2313,16 +2424,22 @@ static uint64_t gl_timer_query(const struct pl_gpu *gpu, struct pl_timer *timer)
     if (timer->index_read == timer->index_write)
         return 0; // no more unprocessed results
 
+    if (!make_current(gpu))
+        return 0;
+
+    uint64_t res = 0;
     GLuint query = timer->query[timer->index_read];
     int avail = 0;
     glGetQueryObjectiv(query, GL_QUERY_RESULT_AVAILABLE, &avail);
     if (!avail)
-        return 0;
-
-    uint64_t res = 0;
+        goto done;
     glGetQueryObjectui64v(query, GL_QUERY_RESULT, &res);
 
     timer->index_read = (timer->index_read + 1) % QUERY_OBJECT_NUM;
+    // fall through
+
+done:
+    release_current(gpu);
     return res;
 }
 
@@ -2350,14 +2467,22 @@ static void gl_timer_end(struct pl_timer *timer)
 
 static void gl_gpu_flush(const struct pl_gpu *gpu)
 {
+    if (!make_current(gpu))
+        return;
+
     glFlush();
     gl_check_err(gpu, "gl_gpu_flush");
+    release_current(gpu);
 }
 
 static void gl_gpu_finish(const struct pl_gpu *gpu)
 {
+    if (!make_current(gpu))
+        return;
+
     glFinish();
     gl_check_err(gpu, "gl_gpu_finish");
+    release_current(gpu);
 }
 
 static bool gl_gpu_is_failed(const struct pl_gpu *gpu)

@@ -22,9 +22,14 @@
 const struct pl_opengl_params pl_opengl_default_params = {0};
 
 struct priv {
+    struct pl_opengl_params params;
     struct pl_context *ctx;
     bool is_debug;
     bool is_debug_egl;
+
+    // For context locking
+    pthread_mutex_t lock;
+    int count;
 };
 
 static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
@@ -75,6 +80,11 @@ void pl_opengl_destroy(const struct pl_opengl **ptr)
         return;
 
     struct priv *p = PL_PRIV(pl_gl);
+    if (!gl_make_current(pl_gl)) {
+        PL_WARN(p, "Failed uninitializing OpenGL context, leaking resources!");
+        return;
+    }
+
     if (p->is_debug)
         glDebugMessageCallback(NULL, NULL);
 
@@ -84,6 +94,8 @@ void pl_opengl_destroy(const struct pl_opengl **ptr)
 #endif
 
     pl_gpu_destroy(pl_gl->gpu);
+    gl_release_current(pl_gl);
+    pthread_mutex_destroy(&p->lock);
     pl_free_ptr((void **) ptr);
 }
 
@@ -93,7 +105,14 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
     params = PL_DEF(params, &pl_opengl_default_params);
     struct pl_opengl *pl_gl = pl_zalloc_priv(NULL, struct pl_opengl, struct priv);
     struct priv *p = PL_PRIV(pl_gl);
+    p->params = *params;
     p->ctx = ctx;
+
+    pl_mutex_init_type(&p->lock, PTHREAD_MUTEX_RECURSIVE);
+    if (!gl_make_current(pl_gl)) {
+        pl_free(pl_gl);
+        return NULL;
+    }
 
     int ver = epoxy_gl_version();
     if (!ver) {
@@ -162,7 +181,7 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
 #endif // EPOXY_HAS_EGL
     }
 
-    pl_gl->gpu = pl_gpu_create_gl(ctx, params);
+    pl_gl->gpu = pl_gpu_create_gl(ctx, pl_gl, params);
     if (!pl_gl->gpu)
         goto error;
 
@@ -181,10 +200,37 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
                 params->max_glsl_version, desc->version);
     }
 
+    gl_release_current(pl_gl);
     return pl_gl;
 
 error:
     PL_FATAL(p, "Failed initializing opengl context!");
+    gl_release_current(pl_gl);
     pl_opengl_destroy((const struct pl_opengl **) &pl_gl);
     return NULL;
+}
+
+bool gl_make_current(const struct pl_opengl *gl)
+{
+    struct priv *p = PL_PRIV(gl);
+    pthread_mutex_lock(&p->lock);
+    if (!p->count && p->params.make_current) {
+        if (!p->params.make_current(p->params.priv)) {
+            PL_ERR(p, "Failed making OpenGL context current on calling thread!");
+            pthread_mutex_unlock(&p->lock);
+            return false;
+        }
+    }
+
+    p->count++;
+    return true;
+}
+
+void gl_release_current(const struct pl_opengl *gl)
+{
+    struct priv *p = PL_PRIV(gl);
+    p->count--;
+    if (!p->count && p->params.release_current)
+        p->params.release_current(p->params.priv);
+    pthread_mutex_unlock(&p->lock);
 }
