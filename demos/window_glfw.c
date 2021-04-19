@@ -102,6 +102,20 @@ static void drop_cb(GLFWwindow *win, int num, const char *files[])
     }
 }
 
+#ifdef USE_GL
+static bool make_current(void *priv)
+{
+    GLFWwindow *win = priv;
+    glfwMakeContextCurrent(win);
+    return true;
+}
+
+static void release_current(void *priv)
+{
+    glfwMakeContextCurrent(NULL);
+}
+#endif
+
 static struct window *glfw_create(struct pl_context *ctx, const char *title,
                                   int width, int height, enum winflags flags)
 {
@@ -207,8 +221,9 @@ static struct window *glfw_create(struct pl_context *ctx, const char *title,
     struct pl_opengl_params params = pl_opengl_default_params;
     params.allow_software = true;
     params.debug = DEBUG;
-
-    glfwMakeContextCurrent(p->win);
+    params.make_current = make_current;
+    params.release_current = release_current;
+    params.priv = p->win;
 
     p->gl = pl_opengl_create(ctx, &params);
     if (!p->gl) {

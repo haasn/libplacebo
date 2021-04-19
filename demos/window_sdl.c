@@ -54,6 +54,20 @@ struct priv {
     bool file_seen;
 };
 
+#ifdef USE_GL
+static bool make_current(void *priv)
+{
+    struct priv *p = priv;
+    return SDL_GL_MakeCurrent(p->win, p->gl_ctx) == 0;
+}
+
+static void release_current(void *priv)
+{
+    struct priv *p = priv;
+    SDL_GL_MakeCurrent(p->win, NULL);
+}
+#endif
+
 static struct window *sdl_create(struct pl_context *ctx, const char *title,
                                  int width, int height, enum winflags flags)
 {
@@ -133,11 +147,13 @@ static struct window *sdl_create(struct pl_context *ctx, const char *title,
         goto error;
     }
 
-    SDL_GL_MakeCurrent(p->win, p->gl_ctx);
-
     struct pl_opengl_params params = pl_opengl_default_params;
     params.allow_software = true;
     params.debug = DEBUG;
+    params.make_current = make_current;
+    params.release_current = release_current;
+    params.priv = p;
+
     p->gl = pl_opengl_create(ctx, &params);
     if (!p->gl) {
         fprintf(stderr, "libplacebo: Failed creating opengl device\n");
