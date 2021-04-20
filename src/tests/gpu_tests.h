@@ -304,7 +304,11 @@ static void pl_shader_tests(pl_gpu gpu)
         }},
     });
     REQUIRE(pass);
-    REQUIRE(pass->params.cached_program_len);
+    if (pass->params.cached_program || pass->params.cached_program_len) {
+        // Ensure both are set if either one is set
+        REQUIRE(pass->params.cached_program);
+        REQUIRE(pass->params.cached_program_len);
+    }
 
     pl_timer timer = pl_timer_create(gpu);
     pl_pass_run(gpu, &(struct pl_pass_run_params) {

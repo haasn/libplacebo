@@ -1459,7 +1459,12 @@ size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
 
     write_buf(out, &size, cache_magic, sizeof(cache_magic));
     WRITE(uint32_t, cache_version);
-    WRITE(uint32_t, dp->passes.num + dp->cached_passes.num);
+
+    // Remember this position so we can go back and write the actual number of
+    // cached programs
+    uint32_t num_passes = 0;
+    void *out_num = out ? &out[size] : NULL;
+    size += sizeof(num_passes);
 
     // Save the cached programs for all compiled passes
     for (int i = 0; i < dp->passes.num; i++) {
@@ -1476,25 +1481,33 @@ size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
                      params->cached_program_len, (unsigned long long) pass->signature);
         }
 
+        num_passes++;
         WRITE(uint64_t, pass->signature);
         WRITE(uint64_t, params->cached_program_len);
         write_buf(out, &size, params->cached_program, params->cached_program_len);
     }
 
     // Re-save the cached programs for all previously loaded (but not yet
-    // comppiled) passes. This is simply to make `pl_dispatch_load` followed
+    // compiled) passes. This is simply to make `pl_dispatch_load` followed
     // by `pl_dispatch_save` return the same cache as was previously loaded.
     for (int i = 0; i < dp->cached_passes.num; i++) {
         const struct cached_pass *pass = &dp->cached_passes.elem[i];
+        if (!pass->cached_program_len)
+            continue;
+
         if (out) {
             PL_DEBUG(dp, "Saving %zu bytes of cached program with signature 0x%llx",
                      pass->cached_program_len, (unsigned long long) pass->signature);
         }
 
+        num_passes++;
         WRITE(uint64_t, pass->signature);
         WRITE(uint64_t, pass->cached_program_len);
         write_buf(out, &size, pass->cached_program, pass->cached_program_len);
     }
+
+    if (out)
+        memcpy(out_num, &num_passes, sizeof(num_passes));
 
     pthread_mutex_unlock(&dp->lock);
     return size;
