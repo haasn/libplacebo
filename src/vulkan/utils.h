@@ -70,8 +70,8 @@ void *vk_chain_memdup(void *alloc, const void *in);
 #define VK(cmd)                                           \
     do {                                                  \
         PL_TRACE(vk, #cmd);                               \
-        VkResult res ## __LINE__ = (cmd);                 \
-        PL_VK_ASSERT(res ## __LINE__, #cmd);              \
+        VkResult _res = (cmd);                            \
+        PL_VK_ASSERT(_res, #cmd);                         \
     } while (0)
 
 #define PL_VK_NAME(type, obj, name)                                             \
