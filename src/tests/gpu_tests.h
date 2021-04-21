@@ -1,7 +1,7 @@
 #include "tests.h"
 #include "shaders.h"
 
-static void pl_buffer_tests(const struct pl_gpu *gpu)
+static void pl_buffer_tests(pl_gpu gpu)
 {
     const size_t buf_size = 1024;
     if (buf_size > gpu->limits.max_buf_size)
@@ -14,7 +14,7 @@ static void pl_buffer_tests(const struct pl_gpu *gpu)
     for (int i = 0; i < buf_size; i++)
         test_src[i] = (RANDOM * 256);
 
-    const struct pl_buf *buf = NULL, *tbuf = NULL;
+    pl_buf buf = NULL, tbuf = NULL;
 
     printf("test buffer static creation and readback\n");
     buf = pl_buf_create(gpu, &(struct pl_buf_params) {
@@ -84,7 +84,7 @@ static void test_cb(void *priv)
     *flag = true;
 }
 
-static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex[2],
+static void pl_test_roundtrip(pl_gpu gpu, pl_tex tex[2],
                               uint8_t *src, uint8_t *dst)
 {
     if (!tex[0] || !tex[1]) {
@@ -96,7 +96,7 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
     texels *= tex[0]->params.h ? tex[0]->params.h : 1;
     texels *= tex[0]->params.d ? tex[0]->params.d : 1;
 
-    const struct pl_fmt *fmt = tex[0]->params.format;
+    pl_fmt fmt = tex[0]->params.format;
     size_t bytes = texels * fmt->texel_size;
     memset(src, 0, bytes);
     memset(dst, 0, bytes);
@@ -104,7 +104,7 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
     for (size_t i = 0; i < bytes; i++)
         src[i] = (RANDOM * 256);
 
-    struct pl_timer *ul, *dl;
+    pl_timer ul, dl;
     ul = pl_timer_create(gpu);
     dl = pl_timer_create(gpu);
 
@@ -119,7 +119,7 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
     }));
 
     // Test blitting, if possible for this format
-    const struct pl_tex *dst_tex = tex[0];
+    pl_tex dst_tex = tex[0];
     if (tex[0]->params.blit_src && tex[1]->params.blit_dst) {
         pl_tex_clear(gpu, tex[1], (float[4]){0.0}); // for testing
         pl_tex_blit(gpu, &(struct pl_tex_blit_params) {
@@ -157,14 +157,14 @@ static void pl_test_roundtrip(const struct pl_gpu *gpu, const struct pl_tex *tex
     pl_timer_destroy(gpu, &dl);
 }
 
-static void pl_texture_tests(const struct pl_gpu *gpu)
+static void pl_texture_tests(pl_gpu gpu)
 {
     const size_t max_size = 16*16*16 * 4 *sizeof(double);
     uint8_t *test_src = malloc(max_size * 2);
     uint8_t *test_dst = test_src + max_size;
 
     for (int f = 0; f < gpu->num_formats; f++) {
-        const struct pl_fmt *fmt = gpu->formats[f];
+        pl_fmt fmt = gpu->formats[f];
         if (fmt->opaque || !(fmt->caps & PL_FMT_CAP_HOST_READABLE))
             continue;
 
@@ -179,7 +179,7 @@ static void pl_texture_tests(const struct pl_gpu *gpu)
             .host_readable = true,
         };
 
-        const struct pl_tex *tex[2];
+        pl_tex tex[2];
 
         if (gpu->limits.max_tex_1d_dim >= 16) {
             printf("... 1D\n");
@@ -222,7 +222,7 @@ static void pl_texture_tests(const struct pl_gpu *gpu)
     free(test_src);
 }
 
-static void pl_shader_tests(const struct pl_gpu *gpu)
+static void pl_shader_tests(pl_gpu gpu)
 {
     if (gpu->glsl.version < 410)
         return;
@@ -245,7 +245,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         "    out_color = vec4(frag_color, 1.0);     \n"
         "}";
 
-    const struct pl_fmt *fbo_fmt;
+    pl_fmt fbo_fmt;
     enum pl_fmt_caps caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE |
                             PL_FMT_CAP_LINEAR;
 
@@ -256,7 +256,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
 #define FBO_W 16
 #define FBO_H 16
 
-    const struct pl_tex *fbo;
+    pl_tex fbo;
     fbo = pl_tex_create(gpu, &(struct pl_tex_params) {
         .format         = fbo_fmt,
         .w              = FBO_W,
@@ -270,7 +270,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
 
     pl_tex_clear(gpu, fbo, (float[4]){0});
 
-    const struct pl_fmt *vert_fmt;
+    pl_fmt vert_fmt;
     vert_fmt = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 3);
     REQUIRE(vert_fmt);
 
@@ -281,7 +281,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
         {{ 1.0,  1.0}, {1, 1, 0}},
     };
 
-    const struct pl_pass *pass;
+    pl_pass pass;
     pass = pl_pass_create(gpu, &(struct pl_pass_params) {
         .type           = PL_PASS_RASTER,
         .target_dummy   = *fbo,
@@ -306,7 +306,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     REQUIRE(pass);
     REQUIRE(pass->params.cached_program_len);
 
-    struct pl_timer *timer = pl_timer_create(gpu);
+    pl_timer timer = pl_timer_create(gpu);
     pl_pass_run(gpu, &(struct pl_pass_run_params) {
         .pass           = pass,
         .target         = fbo,
@@ -346,7 +346,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
 
     if (sizeof(vertices) <= gpu->limits.max_vbo_size) {
         // Test the use of an explicit vertex buffer
-        const struct pl_buf *vert = pl_buf_create(gpu, &(struct pl_buf_params) {
+        pl_buf vert = pl_buf_create(gpu, &(struct pl_buf_params) {
             .size = sizeof(vertices),
             .initial_data = vertices,
             .drawable = true,
@@ -379,8 +379,8 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     TEST_FBO_PATTERN(1e-6, "%s", "using indexed rendering");
 
     // Test the use of pl_dispatch
-    struct pl_dispatch *dp = pl_dispatch_create(gpu->log, gpu);
-    struct pl_shader *sh = pl_dispatch_begin(dp);
+    pl_dispatch dp = pl_dispatch_create(gpu->log, gpu);
+    pl_shader sh = pl_dispatch_begin(dp);
     REQUIRE(pl_shader_custom(sh, &(struct pl_custom_shader) {
         .body       = "color = vec4(col, 1.0);",
         .input      = PL_SHADER_SIG_NONE,
@@ -411,7 +411,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
 
     TEST_FBO_PATTERN(1e-6, "%s", "using custom vertices");
 
-    const struct pl_tex *src;
+    pl_tex src;
     src = pl_tex_create(gpu, &(struct pl_tex_params) {
         .format         = fbo_fmt,
         .w              = FBO_W,
@@ -535,7 +535,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     sh = pl_dispatch_begin(dp);
     pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
 
-    struct pl_shader_obj *peak_state = NULL;
+    pl_shader_obj peak_state = NULL;
     if (pl_shader_detect_peak(sh, pl_color_space_monitor, &peak_state, NULL)) {
         REQUIRE(pl_dispatch_compute(dp, &(struct pl_dispatch_compute_params) {
             .shader = &sh,
@@ -573,7 +573,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     sh = pl_dispatch_begin(dp);
     pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
 
-    struct pl_shader_obj *icc = NULL;
+    pl_shader_obj icc = NULL;
     struct pl_icc_color_space src_color = { .color = pl_color_space_bt709 };
     struct pl_icc_color_space dst_color = { .color = pl_color_space_srgb };
     struct pl_icc_result out;
@@ -591,7 +591,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
 #endif
 
     // Test AV1 grain synthesis
-    struct pl_shader_obj *grain = NULL;
+    pl_shader_obj grain = NULL;
     for (int i = 0; i < 2; i++) {
         struct pl_av1_grain_params grain_params = {
             .data = av1_grain_data,
@@ -650,18 +650,15 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     pl_tex_destroy(gpu, &fbo);
 }
 
-static void pl_scaler_tests(const struct pl_gpu *gpu)
+static void pl_scaler_tests(pl_gpu gpu)
 {
-    const struct pl_fmt *src_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 32,
-                                               PL_FMT_CAP_LINEAR);
-
-    const struct pl_fmt *fbo_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 32,
-                                               PL_FMT_CAP_RENDERABLE);
+    pl_fmt src_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 32, PL_FMT_CAP_LINEAR);
+    pl_fmt fbo_fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 1, 16, 32, PL_FMT_CAP_RENDERABLE);
     if (!src_fmt || !fbo_fmt)
         return;
 
     float *fbo_data = NULL;
-    struct pl_shader_obj *lut = NULL;
+    pl_shader_obj lut = NULL;
 
     static float data_5x5[5][5] = {
         { 0, 0, 0, 0, 0 },
@@ -671,7 +668,7 @@ static void pl_scaler_tests(const struct pl_gpu *gpu)
         { 0, 0, 0, 0, 0 },
     };
 
-    const struct pl_tex *dot5x5 = pl_tex_create(gpu, &(struct pl_tex_params) {
+    pl_tex dot5x5 = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w              = 5,
         .h              = 5,
         .format         = src_fmt,
@@ -688,18 +685,18 @@ static void pl_scaler_tests(const struct pl_gpu *gpu)
         .host_readable  = true,
     };
 
-    const struct pl_tex *fbo = pl_tex_create(gpu, &fbo_params);
+    pl_tex fbo = pl_tex_create(gpu, &fbo_params);
     if (!fbo) {
         printf("Failed creating readable FBO... falling back to non-readable\n");
         fbo_params.host_readable = false;
         fbo = pl_tex_create(gpu, &fbo_params);
     }
 
-    struct pl_dispatch *dp = pl_dispatch_create(gpu->log, gpu);
+    pl_dispatch dp = pl_dispatch_create(gpu->log, gpu);
     if (!dot5x5 || !fbo || !dp)
         goto error;
 
-    struct pl_shader *sh = pl_dispatch_begin(dp);
+    pl_shader sh = pl_dispatch_begin(dp);
     REQUIRE(pl_shader_sample_polar(sh,
         &(struct pl_sample_src) {
             .tex        = dot5x5,
@@ -843,7 +840,7 @@ static const char *test_luts[] = {
 
 };
 
-static bool frame_passthrough(const struct pl_gpu *gpu, const struct pl_tex **tex,
+static bool frame_passthrough(pl_gpu gpu, pl_tex *tex,
                               const struct pl_source_frame *src, struct pl_frame *out_frame)
 {
     const struct pl_frame *frame = src->frame_data;
@@ -862,10 +859,10 @@ static enum pl_queue_status get_frame_ptr(struct pl_source_frame *out_frame,
     return PL_QUEUE_OK;
 }
 
-static void pl_render_tests(const struct pl_gpu *gpu)
+static void pl_render_tests(pl_gpu gpu)
 {
-    const struct pl_tex *img5x5_tex = NULL, *fbo = NULL;
-    struct pl_renderer *rr = NULL;
+    pl_tex img5x5_tex = NULL, fbo = NULL;
+    pl_renderer rr = NULL;
 
     float *fbo_data = NULL;
     static float data_5x5[5][5] = {
@@ -1095,7 +1092,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
         };
     }
 
-    struct pl_queue *queue = pl_queue_create(gpu);
+    pl_queue queue = pl_queue_create(gpu);
     enum pl_queue_status ret;
 
     // Test pre-pushing all frames, with delayed EOF.
@@ -1157,9 +1154,9 @@ static struct pl_hook_res noop_hook(void *priv, const struct pl_hook_params *par
     return (struct pl_hook_res) {0};
 }
 
-static void pl_ycbcr_tests(const struct pl_gpu *gpu)
+static void pl_ycbcr_tests(pl_gpu gpu)
 {
-    struct pl_renderer *rr = pl_renderer_create(gpu->log, gpu);
+    pl_renderer rr = pl_renderer_create(gpu->log, gpu);
     if (!rr)
         return;
 
@@ -1181,12 +1178,12 @@ static void pl_ycbcr_tests(const struct pl_gpu *gpu)
         };
     }
 
-    const struct pl_fmt *fmt = pl_plane_find_fmt(gpu, NULL, &data[0]);
+    pl_fmt fmt = pl_plane_find_fmt(gpu, NULL, &data[0]);
     if (!fmt || !(fmt->caps & (PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_HOST_READABLE)))
         return;
 
-    const struct pl_tex *src_tex[3] = {0};
-    const struct pl_tex *dst_tex[3] = {0};
+    pl_tex src_tex[3] = {0};
+    pl_tex dst_tex[3] = {0};
     struct pl_frame img = {
         .num_planes = 3,
         .repr = pl_color_repr_hdtv,
@@ -1286,7 +1283,7 @@ error:
     }
 }
 
-static void pl_test_export_import(const struct pl_gpu *gpu,
+static void pl_test_export_import(pl_gpu gpu,
                                   enum pl_handle_type handle_type)
 {
     // Test texture roundtrip
@@ -1295,14 +1292,13 @@ static void pl_test_export_import(const struct pl_gpu *gpu,
         !(gpu->import_caps.tex & handle_type))
         goto skip_tex;
 
-    const struct pl_fmt *fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0,
-                                           PL_FMT_CAP_BLITTABLE);
+    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0, PL_FMT_CAP_BLITTABLE);
     if (!fmt)
         goto skip_tex;
 
     printf("testing texture import/export\n");
 
-    const struct pl_tex *export = pl_tex_create(gpu, &(struct pl_tex_params) {
+    pl_tex export = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w = 32,
         .h = 32,
         .format = fmt,
@@ -1311,7 +1307,7 @@ static void pl_test_export_import(const struct pl_gpu *gpu,
     REQUIRE(export);
     REQUIRE(export->shared_mem.handle.fd > -1);
 
-    const struct pl_tex *import = pl_tex_create(gpu, &(struct pl_tex_params) {
+    pl_tex import = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w = 32,
         .h = 32,
         .format = fmt,
@@ -1333,14 +1329,14 @@ skip_tex: ;
 
     printf("testing buffer import/export\n");
 
-    const struct pl_buf *exp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+    pl_buf exp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
         .size = 32,
         .export_handle = handle_type,
     });
     REQUIRE(exp_buf);
     REQUIRE(exp_buf->shared_mem.handle.fd > -1);
 
-    const struct pl_buf *imp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+    pl_buf imp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
         .size = 32,
         .import_handle = handle_type,
         .shared_mem = exp_buf->shared_mem,
@@ -1351,7 +1347,7 @@ skip_tex: ;
     pl_buf_destroy(gpu, &exp_buf);
 }
 
-static void pl_test_host_ptr(const struct pl_gpu *gpu)
+static void pl_test_host_ptr(pl_gpu gpu)
 {
     if (!(gpu->import_caps.buf & PL_HANDLE_HOST_PTR))
         return;
@@ -1369,7 +1365,7 @@ static void pl_test_host_ptr(const struct pl_gpu *gpu)
     for (int i = 0; i < size; i++)
         data[i] = (uint8_t) i;
 
-    const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+    pl_buf buf = pl_buf_create(gpu, &(struct pl_buf_params) {
         .type = PL_BUF_TEX_TRANSFER,
         .size = slice,
         .import_handle = PL_HANDLE_HOST_PTR,
@@ -1390,7 +1386,7 @@ static void pl_test_host_ptr(const struct pl_gpu *gpu)
 #endif // unix
 }
 
-static void gpu_shader_tests(const struct pl_gpu *gpu)
+static void gpu_shader_tests(pl_gpu gpu)
 {
     pl_buffer_tests(gpu);
     pl_texture_tests(gpu);
@@ -1402,7 +1398,7 @@ static void gpu_shader_tests(const struct pl_gpu *gpu)
     REQUIRE(!pl_gpu_is_failed(gpu));
 }
 
-static void gpu_interop_tests(const struct pl_gpu *gpu)
+static void gpu_interop_tests(pl_gpu gpu)
 {
     pl_test_export_import(gpu, PL_HANDLE_DMA_BUF);
     pl_test_host_ptr(gpu);

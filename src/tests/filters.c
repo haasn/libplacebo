@@ -13,7 +13,7 @@ int main()
         };
 
         printf("Testing filter '%s'\n", conf->name);
-        const struct pl_filter *flt = pl_filter_generate(log, &params);
+        pl_filter flt = pl_filter_generate(log, &params);
         REQUIRE(flt);
 
         if (params.config.polar) {

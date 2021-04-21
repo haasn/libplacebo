@@ -13,18 +13,18 @@ struct ui_vertex {
 #define NUM_VERTEX_ATTRIBS 3
 
 struct ui {
-    const struct pl_gpu *gpu;
-    struct pl_dispatch *dp;
+    pl_gpu gpu;
+    pl_dispatch dp;
     struct nk_context nk;
     struct nk_font_atlas atlas;
     struct nk_buffer cmds, verts, idx;
-    const struct pl_tex *font_tex;
+    pl_tex font_tex;
     struct pl_vertex_attrib attribs_pl[NUM_VERTEX_ATTRIBS];
     struct nk_draw_vertex_layout_element attribs_nk[NUM_VERTEX_ATTRIBS+1];
     struct nk_convert_config convert_cfg;
 };
 
-struct ui *ui_create(const struct pl_gpu *gpu)
+struct ui *ui_create(pl_gpu gpu)
 {
     struct ui *ui = malloc(sizeof(struct ui));
     if (!ui)
@@ -154,7 +154,7 @@ bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame)
         if (!cmd->elem_count)
             continue;
 
-        struct pl_shader *sh = pl_dispatch_begin(ui->dp);
+        pl_shader sh = pl_dispatch_begin(ui->dp);
         pl_shader_custom(sh, &(struct pl_custom_shader) {
             .body = "color = texture(ui_tex, coord).r * vcolor;",
             .output = PL_SHADER_SIG_COLOR,

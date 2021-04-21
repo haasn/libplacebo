@@ -34,14 +34,14 @@ struct gl_cb {
 };
 
 struct fbo_format {
-    const struct pl_fmt *fmt;
+    pl_fmt fmt;
     const struct gl_format *glfmt;
 };
 
 // For gpu.priv
 struct pl_gl {
     struct pl_gpu_fns impl;
-    const struct pl_opengl *gl;
+    pl_opengl gl;
     bool failed;
 
 #ifdef EPOXY_HAS_EGL
@@ -73,5 +73,5 @@ struct pl_gl {
 };
 
 // For locking/unlocking
-bool gl_make_current(const struct pl_opengl *gl);
-void gl_release_current(const struct pl_opengl *gl);
+bool gl_make_current(pl_opengl gl);
+void gl_release_current(pl_opengl gl);

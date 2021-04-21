@@ -22,7 +22,7 @@
 #define SW_PFN(name) __typeof__(pl_swapchain_##name) *name
 struct pl_sw_fns {
     // This destructor follows the same rules as `pl_gpu_fns`
-    void (*destroy)(const struct pl_swapchain *sw);
+    void (*destroy)(pl_swapchain sw);
 
     SW_PFN(latency); // optional
     SW_PFN(resize); // optional

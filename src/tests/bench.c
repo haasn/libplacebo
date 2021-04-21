@@ -6,10 +6,9 @@
 #define NUM_FBOS 16
 #define BENCH_DUR 3
 
-static const struct pl_tex *create_test_img(const struct pl_gpu *gpu)
+static pl_tex create_test_img(pl_gpu gpu)
 {
-    const struct pl_fmt *fmt;
-    fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32, PL_FMT_CAP_LINEAR);
+    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32, PL_FMT_CAP_LINEAR);
     REQUIRE(fmt);
 
     int cube_stride = TEX_SIZE / CUBE_SIZE;
@@ -35,7 +34,7 @@ static const struct pl_tex *create_test_img(const struct pl_gpu *gpu)
         }
     }
 
-    const struct pl_tex *tex = pl_tex_create(gpu, &(struct pl_tex_params) {
+    pl_tex tex = pl_tex_create(gpu, &(struct pl_tex_params) {
         .format         = fmt,
         .w              = TEX_SIZE,
         .h              = TEX_SIZE,
@@ -49,19 +48,19 @@ static const struct pl_tex *create_test_img(const struct pl_gpu *gpu)
 }
 
 struct bench {
-    void (*run_sh)(struct pl_shader *sh, struct pl_shader_obj **state,
-                   const struct pl_tex *src);
+    void (*run_sh)(pl_shader sh, pl_shader_obj *state,
+                   pl_tex src);
 
-    void (*run_tex)(const struct pl_gpu *gpu, const struct pl_tex *tex);
+    void (*run_tex)(pl_gpu gpu, pl_tex tex);
 };
 
-static void run_bench(const struct pl_gpu *gpu, struct pl_dispatch *dp,
-                      struct pl_shader_obj **state, const struct pl_tex *src,
-                      const struct pl_tex *fbo, struct pl_timer *timer,
+static void run_bench(pl_gpu gpu, pl_dispatch dp,
+                      pl_shader_obj *state, pl_tex src,
+                      pl_tex fbo, pl_timer timer,
                       const struct bench *bench)
 {
     if (bench->run_sh) {
-        struct pl_shader *sh = pl_dispatch_begin(dp);
+        pl_shader sh = pl_dispatch_begin(dp);
         bench->run_sh(sh, state, src);
 
         pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
@@ -74,20 +73,19 @@ static void run_bench(const struct pl_gpu *gpu, struct pl_dispatch *dp,
     }
 }
 
-static void benchmark(const struct pl_gpu *gpu, const char *name,
+static void benchmark(pl_gpu gpu, const char *name,
                       const struct bench *bench)
 {
-    struct pl_dispatch *dp = pl_dispatch_create(gpu->log, gpu);
-    struct pl_shader_obj *state = NULL;
-    const struct pl_tex *src = create_test_img(gpu);
+    pl_dispatch dp = pl_dispatch_create(gpu->log, gpu);
+    pl_shader_obj state = NULL;
+    pl_tex src = create_test_img(gpu);
 
     // Create the FBOs
-    const struct pl_fmt *fmt;
-    fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32,
-                      PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE);
+    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_FLOAT, 4, 16, 32,
+                             PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE);
     REQUIRE(fmt);
 
-    const struct pl_tex *fbos[NUM_FBOS] = {0};
+    pl_tex fbos[NUM_FBOS] = {0};
     for (int i = 0; i < NUM_FBOS; i++) {
         fbos[i] = pl_tex_create(gpu, &(struct pl_tex_params) {
             .format         = fmt,
@@ -113,7 +111,7 @@ static void benchmark(const struct pl_gpu *gpu, const char *name,
     unsigned long frames = 0;
     int index = 0;
 
-    struct pl_timer *timer = pl_timer_create(gpu);
+    pl_timer timer = pl_timer_create(gpu);
     uint64_t gputime_total = 0;
     unsigned long gputime_count = 0;
     uint64_t gputime;
@@ -159,14 +157,12 @@ static void benchmark(const struct pl_gpu *gpu, const char *name,
 }
 
 // List of benchmarks
-static void bench_deband(struct pl_shader *sh, struct pl_shader_obj **state,
-                         const struct pl_tex *src)
+static void bench_deband(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     pl_shader_deband(sh, &(struct pl_sample_src) { .tex = src }, NULL);
 }
 
-static void bench_deband_heavy(struct pl_shader *sh, struct pl_shader_obj **state,
-                               const struct pl_tex *src)
+static void bench_deband_heavy(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     pl_shader_deband(sh, &(struct pl_sample_src) { .tex = src },
         &(struct pl_deband_params) {
@@ -177,20 +173,17 @@ static void bench_deband_heavy(struct pl_shader *sh, struct pl_shader_obj **stat
     });
 }
 
-static void bench_bilinear(struct pl_shader *sh, struct pl_shader_obj **state,
-                          const struct pl_tex *src)
+static void bench_bilinear(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     pl_shader_sample_bilinear(sh, &(struct pl_sample_src) { .tex = src });
 }
 
-static void bench_bicubic(struct pl_shader *sh, struct pl_shader_obj **state,
-                          const struct pl_tex *src)
+static void bench_bicubic(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     pl_shader_sample_bicubic(sh, &(struct pl_sample_src) { .tex = src });
 }
 
-static void bench_dither_blue(struct pl_shader *sh, struct pl_shader_obj **state,
-                              const struct pl_tex *src)
+static void bench_dither_blue(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     struct pl_dither_params params = pl_dither_default_params;
     params.method = PL_DITHER_BLUE_NOISE;
@@ -199,8 +192,7 @@ static void bench_dither_blue(struct pl_shader *sh, struct pl_shader_obj **state
     pl_shader_dither(sh, 8, state, &params);
 }
 
-static void bench_dither_white(struct pl_shader *sh, struct pl_shader_obj **state,
-                               const struct pl_tex *src)
+static void bench_dither_white(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     struct pl_dither_params params = pl_dither_default_params;
     params.method = PL_DITHER_WHITE_NOISE;
@@ -209,9 +201,7 @@ static void bench_dither_white(struct pl_shader *sh, struct pl_shader_obj **stat
     pl_shader_dither(sh, 8, state, &params);
 }
 
-static void bench_dither_ordered_fix(struct pl_shader *sh,
-                                     struct pl_shader_obj **state,
-                                     const struct pl_tex *src)
+static void bench_dither_ordered_fix(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     struct pl_dither_params params = pl_dither_default_params;
     params.method = PL_DITHER_ORDERED_FIXED;
@@ -220,8 +210,7 @@ static void bench_dither_ordered_fix(struct pl_shader *sh,
     pl_shader_dither(sh, 8, state, &params);
 }
 
-static void bench_polar(struct pl_shader *sh, struct pl_shader_obj **state,
-                        const struct pl_tex *src)
+static void bench_polar(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     struct pl_sample_filter_params params = {
         .filter = pl_filter_ewa_lanczos,
@@ -231,9 +220,7 @@ static void bench_polar(struct pl_shader *sh, struct pl_shader_obj **state,
     pl_shader_sample_polar(sh, &(struct pl_sample_src) { .tex = src }, &params);
 }
 
-static void bench_polar_nocompute(struct pl_shader *sh,
-                                  struct pl_shader_obj **state,
-                                  const struct pl_tex *src)
+static void bench_polar_nocompute(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     struct pl_sample_filter_params params = {
         .filter = pl_filter_ewa_lanczos,
@@ -245,15 +232,13 @@ static void bench_polar_nocompute(struct pl_shader *sh,
 }
 
 
-static void bench_hdr_peak(struct pl_shader *sh, struct pl_shader_obj **state,
-                            const struct pl_tex *src)
+static void bench_hdr_peak(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
     pl_shader_detect_peak(sh, pl_color_space_hdr10, state, NULL);
 }
 
-static void bench_av1_grain(struct pl_shader *sh, struct pl_shader_obj **state,
-                            const struct pl_tex *src)
+static void bench_av1_grain(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     struct pl_av1_grain_params params = {
         .data = av1_grain_data,
@@ -267,8 +252,7 @@ static void bench_av1_grain(struct pl_shader *sh, struct pl_shader_obj **state,
     pl_shader_av1_grain(sh, state, &params);
 }
 
-static void bench_av1_grain_lap(struct pl_shader *sh, struct pl_shader_obj **state,
-                                const struct pl_tex *src)
+static void bench_av1_grain_lap(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     struct pl_av1_grain_params params = {
         .data = av1_grain_data,
@@ -285,7 +269,7 @@ static void bench_av1_grain_lap(struct pl_shader *sh, struct pl_shader_obj **sta
 
 static float data[TEX_SIZE * TEX_SIZE * 4 + 8192];
 
-static void bench_download(const struct pl_gpu *gpu, const struct pl_tex *tex)
+static void bench_download(pl_gpu gpu, pl_tex tex)
 {
     pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
         .tex = tex,
@@ -293,7 +277,7 @@ static void bench_download(const struct pl_gpu *gpu, const struct pl_tex *tex)
     });
 }
 
-static void bench_upload(const struct pl_gpu *gpu, const struct pl_tex *tex)
+static void bench_upload(pl_gpu gpu, pl_tex tex)
 {
     pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
         .tex = tex,
@@ -303,7 +287,7 @@ static void bench_upload(const struct pl_gpu *gpu, const struct pl_tex *tex)
 
 static void dummy_cb(void *arg) {}
 
-static void bench_download_async(const struct pl_gpu *gpu, const struct pl_tex *tex)
+static void bench_download_async(pl_gpu gpu, pl_tex tex)
 {
     pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
         .tex = tex,
@@ -312,7 +296,7 @@ static void bench_download_async(const struct pl_gpu *gpu, const struct pl_tex *
     });
 }
 
-static void bench_upload_async(const struct pl_gpu *gpu, const struct pl_tex *tex)
+static void bench_upload_async(pl_gpu gpu, pl_tex tex)
 {
     pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
         .tex = tex,
@@ -331,7 +315,7 @@ int main()
         .log_level  = PL_LOG_WARN,
     });
 
-    const struct pl_vulkan *vk = pl_vulkan_create(log, &(struct pl_vulkan_params) {
+    pl_vulkan vk = pl_vulkan_create(log, &(struct pl_vulkan_params) {
         .allow_software = true,
         .async_compute = true,
         .queue_count = NUM_FBOS,

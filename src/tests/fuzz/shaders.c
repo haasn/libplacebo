@@ -7,7 +7,7 @@ __AFL_FUZZ_INIT();
 
 int main()
 {
-    const struct pl_gpu *gpu = pl_gpu_dummy_create(NULL, NULL);
+    pl_gpu gpu = pl_gpu_dummy_create(NULL, NULL);
 
 #define WIDTH 64
 #define HEIGHT 64
@@ -38,15 +38,15 @@ int main()
     while (__AFL_LOOP(10000)) {
 
 #define STACK_SIZE 16
-        struct pl_shader *stack[STACK_SIZE] = {0};
+        pl_shader stack[STACK_SIZE] = {0};
         int idx = 0;
 
         stack[0] = pl_shader_alloc(NULL, &(struct pl_shader_params) {
             .gpu = gpu,
         });
 
-        struct pl_shader *sh = stack[idx];
-        struct pl_shader_obj *polar = NULL, *ortho = NULL, *peak = NULL, *dither = NULL;
+        pl_shader sh = stack[idx];
+        pl_shader_obj polar = NULL, ortho = NULL, peak = NULL, dither = NULL;
 
         size_t len = __AFL_FUZZ_TESTCASE_LEN;
         for (size_t pos = 0; pos < len; pos++) {

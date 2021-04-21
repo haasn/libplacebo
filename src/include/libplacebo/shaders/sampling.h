@@ -20,7 +20,7 @@
 
 // Sampling operations. These shaders perform some form of sampling operation
 // from a given pl_tex. In order to use these, the pl_shader *must* have been
-// created using the same `ra` as the originating `pl_tex`. Otherwise, this
+// created using the same `gpu` as the originating `pl_tex`. Otherwise, this
 // is undefined behavior. They require nothing (PL_SHADER_SIG_NONE) and return
 // a color (PL_SHADER_SIG_COLOR).
 
@@ -35,8 +35,8 @@ struct pl_sample_src {
     // 1. Provide the texture and sampled region directly. This generates
     // a shader with input signature `PL_SHADER_SIG_NONE`, which binds the
     // texture as a descriptor (and the coordinates as a vertex attribute)
-    const struct pl_tex *tex; // texture to sample
-    struct pl_rect2df rect;   // sub-rect to sample from (optional)
+    pl_tex tex;             // texture to sample
+    struct pl_rect2df rect; // sub-rect to sample from (optional)
     enum pl_tex_address_mode address_mode; // preferred texture address mode
 
     // 2. Have the shader take it as an argument. Doing this requires
@@ -95,7 +95,7 @@ extern const struct pl_deband_params pl_deband_default_params;
 //
 // Note: This can also be used as a pure grain function, by setting the number
 // of iterations to 0.
-void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
+void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
                       const struct pl_deband_params *params);
 
 // Performs direct / native texture sampling, using whatever texture filter is
@@ -103,21 +103,21 @@ void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
 //
 // Note: This is generally very low quality and should be avoided if possible,
 // for both upscaling and downscaling.
-bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *src);
+bool pl_shader_sample_direct(pl_shader sh, const struct pl_sample_src *src);
 
 // Performs hardware-accelerated nearest neighbour sampling. This is similar to
 // `pl_shader_sample_direct`, but forces nearest neighbour interpolation.
-bool pl_shader_sample_nearest(struct pl_shader *sh, const struct pl_sample_src *src);
+bool pl_shader_sample_nearest(pl_shader sh, const struct pl_sample_src *src);
 
 // Performs hardware-accelerated bilinear sampling. This is similar to
 // `pl_shader_sample_direct`, but forces bilinear interpolation.
-bool pl_shader_sample_bilinear(struct pl_shader *sh, const struct pl_sample_src *src);
+bool pl_shader_sample_bilinear(pl_shader sh, const struct pl_sample_src *src);
 
 // Performs hardware-accelerated / efficient bicubic sampling. This is more
 // efficient than using the generalized sampling routines and
 // pl_filter_function_bicubic. Only works well when upscaling - avoid for
 // downscaling.
-bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *src);
+bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src);
 
 struct pl_sample_filter_params {
     // The filter to use for sampling.
@@ -140,7 +140,7 @@ struct pl_sample_filter_params {
     // if necessary. To avoid thrashing the resource, users should avoid trying
     // to re-use the same LUT for different filter configurations or scaling
     // ratios. Must be set to a valid pointer, and the target NULL-initialized.
-    struct pl_shader_obj **lut;
+    pl_shader_obj *lut;
 };
 
 // Performs polar sampling. This internally chooses between an optimized compute
@@ -148,8 +148,7 @@ struct pl_sample_filter_params {
 // and GPU features. Returns whether or not it was successful.
 //
 // Note: `params->filter.polar` must be true to use this function.
-bool pl_shader_sample_polar(struct pl_shader *sh,
-                            const struct pl_sample_src *src,
+bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                             const struct pl_sample_filter_params *params);
 
 enum {
@@ -171,7 +170,7 @@ enum {
 // Note: Due to internal limitations, this may currently only be used on 2D
 // textures - even though the basic principle would work for 1D and 3D textures
 // as well.
-bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
+bool pl_shader_sample_ortho(pl_shader sh, int pass,
                             const struct pl_sample_src *src,
                             const struct pl_sample_filter_params *params);
 

@@ -128,8 +128,7 @@ static struct pl_bit_encoding pl_bit_encoding_merge(const struct pl_bit_encoding
     };
 }
 
-void pl_color_repr_merge(struct pl_color_repr *orig,
-                         const struct pl_color_repr *new)
+void pl_color_repr_merge(struct pl_color_repr *orig, const struct pl_color_repr *new)
 {
     *orig = (struct pl_color_repr) {
         .sys    = PL_DEF(orig->sys,    new->sys),

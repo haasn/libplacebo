@@ -164,7 +164,7 @@ struct sh_icc_obj {
     enum pl_rendering_intent intent;
     struct pl_icc_color_space src, dst;
     struct pl_icc_result result;
-    struct pl_shader_obj *lut_obj;
+    pl_shader_obj lut_obj;
     bool updated; // to detect misuse of the API
     bool ok;
     ident_t lut;
@@ -238,7 +238,7 @@ error:
     pl_free_ptr(&tmp);
 }
 
-static void sh_icc_uninit(const struct pl_gpu *gpu, void *ptr)
+static void sh_icc_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_icc_obj *obj = ptr;
     pl_shader_obj_destroy(&obj->lut_obj);
@@ -252,10 +252,10 @@ static bool icc_csp_eq(const struct pl_icc_color_space *a,
            pl_color_space_equal(&a->color, &b->color);
 }
 
-bool pl_icc_update(struct pl_shader *sh,
+bool pl_icc_update(pl_shader sh,
                    const struct pl_icc_color_space *src,
                    const struct pl_icc_color_space *dst,
-                   struct pl_shader_obj **icc,
+                   pl_shader_obj *icc,
                    struct pl_icc_result *out,
                    const struct pl_icc_params *params)
 {
@@ -299,7 +299,7 @@ bool pl_icc_update(struct pl_shader *sh,
     return true;
 }
 
-void pl_icc_apply(struct pl_shader *sh, struct pl_shader_obj **icc)
+void pl_icc_apply(pl_shader sh, pl_shader_obj *icc)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;

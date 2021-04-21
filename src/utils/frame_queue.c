@@ -22,7 +22,7 @@
 #include "log.h"
 
 struct cache_entry {
-    const struct pl_tex *tex[4];
+    pl_tex tex[4];
 };
 
 struct entry {
@@ -55,7 +55,7 @@ struct pool {
 };
 
 struct pl_queue {
-    const struct pl_gpu *gpu;
+    pl_gpu gpu;
     pl_log log;
 
     // For multi-threading, we use two locks. The `lock_weak` guards the queue
@@ -91,9 +91,9 @@ struct pl_queue {
     PL_ARRAY(struct cache_entry) cache;
 };
 
-struct pl_queue *pl_queue_create(const struct pl_gpu *gpu)
+pl_queue pl_queue_create(pl_gpu gpu)
 {
-    struct pl_queue *p = pl_alloc_ptr(NULL, p);
+    pl_queue p = pl_alloc_ptr(NULL, p);
     *p = (struct pl_queue) {
         .gpu = gpu,
         .log = gpu->log,
@@ -105,7 +105,7 @@ struct pl_queue *pl_queue_create(const struct pl_gpu *gpu)
     return p;
 }
 
-static inline void unmap_frame(struct pl_queue *p, struct entry *entry)
+static inline void unmap_frame(pl_queue p, struct entry *entry)
 {
     if (!entry->mapped && entry->src.discard) {
         PL_TRACE(p, "Discarding unused frame with PTS %f", entry->src.pts);
@@ -119,9 +119,9 @@ static inline void unmap_frame(struct pl_queue *p, struct entry *entry)
 }
 
 
-void pl_queue_destroy(struct pl_queue **queue)
+void pl_queue_destroy(pl_queue *queue)
 {
-    struct pl_queue *p = *queue;
+    pl_queue p = *queue;
     if (!p)
         return;
 
@@ -144,7 +144,7 @@ void pl_queue_destroy(struct pl_queue **queue)
     *queue = NULL;
 }
 
-static inline void cull_entry(struct pl_queue *p, struct entry *entry)
+static inline void cull_entry(pl_queue p, struct entry *entry)
 {
     unmap_frame(p, entry);
 
@@ -159,7 +159,7 @@ static inline void cull_entry(struct pl_queue *p, struct entry *entry)
     }
 }
 
-void pl_queue_reset(struct pl_queue *p)
+void pl_queue_reset(pl_queue p)
 {
     pthread_mutex_lock(&p->lock_strong);
     pthread_mutex_lock(&p->lock_weak);
@@ -219,7 +219,7 @@ static inline void update_estimate(struct pool *pool, float cur)
         pool->estimate = pool->sum / pool->num;
 }
 
-static void queue_push(struct pl_queue *p, const struct pl_source_frame *src)
+static void queue_push(pl_queue p, const struct pl_source_frame *src)
 {
     if (p->eof && !src)
         return; // ignore duplicate EOF
@@ -271,14 +271,14 @@ static void queue_push(struct pl_queue *p, const struct pl_source_frame *src)
     p->want_frame = false;
 }
 
-void pl_queue_push(struct pl_queue *p, const struct pl_source_frame *frame)
+void pl_queue_push(pl_queue p, const struct pl_source_frame *frame)
 {
     pthread_mutex_lock(&p->lock_weak);
     queue_push(p, frame);
     pthread_mutex_unlock(&p->lock_weak);
 }
 
-static bool queue_has_room(struct pl_queue *p)
+static bool queue_has_room(pl_queue p)
 {
     if (p->want_frame)
         return true;
@@ -294,7 +294,7 @@ static bool queue_has_room(struct pl_queue *p)
     return true;
 }
 
-bool pl_queue_push_block(struct pl_queue *p, uint64_t timeout,
+bool pl_queue_push_block(pl_queue p, uint64_t timeout,
                          const struct pl_source_frame *frame)
 {
     pthread_mutex_lock(&p->lock_weak);
@@ -315,7 +315,7 @@ skip_blocking:
     return true;
 }
 
-static void report_estimates(struct pl_queue *p)
+static void report_estimates(pl_queue p)
 {
     if (p->fps.total >= MIN_SAMPLES && p->vps.total >= MIN_SAMPLES) {
         if (p->reported_fps && p->reported_vps) {
@@ -336,8 +336,7 @@ static void report_estimates(struct pl_queue *p)
     }
 }
 
-static enum pl_queue_status get_frame(struct pl_queue *p,
-                                      const struct pl_queue_params *params)
+static enum pl_queue_status get_frame(pl_queue p, const struct pl_queue_params *params)
 {
     if (p->eof)
         return PL_QUEUE_EOF;
@@ -379,7 +378,7 @@ static enum pl_queue_status get_frame(struct pl_queue *p,
     return ret;
 }
 
-static bool map_frame(struct pl_queue *p, struct entry *entry)
+static bool map_frame(pl_queue p, struct entry *entry)
 {
     if (!entry->mapped) {
         PL_TRACE(p, "Mapping frame with PTS %f", entry->src.pts);
@@ -395,7 +394,7 @@ static bool map_frame(struct pl_queue *p, struct entry *entry)
 // `pts`, and idx 1 is the first frame after `pts` (unless this is the last).
 //
 // Returns PL_QUEUE_OK only if idx 0 is still legal under ZOH semantics.
-static enum pl_queue_status advance(struct pl_queue *p, float pts,
+static enum pl_queue_status advance(pl_queue p, float pts,
                                     const struct pl_queue_params *params)
 {
     // Cull all frames except the last frame before `pts`
@@ -450,7 +449,7 @@ done:
     return PL_QUEUE_OK;
 }
 
-static inline enum pl_queue_status zoh(struct pl_queue *p, struct pl_frame_mix *mix,
+static inline enum pl_queue_status zoh(pl_queue p, struct pl_frame_mix *mix,
                                        const struct pl_queue_params *params)
 {
     struct entry *entry = &p->queue.elem[0];
@@ -478,7 +477,7 @@ static inline enum pl_queue_status zoh(struct pl_queue *p, struct pl_frame_mix *
 }
 
 // Present a single frame as appropriate for `pts`
-static enum pl_queue_status nearest(struct pl_queue *p, struct pl_frame_mix *mix,
+static enum pl_queue_status nearest(pl_queue p, struct pl_frame_mix *mix,
                                     const struct pl_queue_params *params)
 {
     enum pl_queue_status ret;
@@ -501,7 +500,7 @@ static enum pl_queue_status nearest(struct pl_queue *p, struct pl_frame_mix *mix
 
 // Special case of `interpolate` for radius = 0, in which case we need exactly
 // the previous frame and the following frame
-static enum pl_queue_status oversample(struct pl_queue *p, struct pl_frame_mix *mix,
+static enum pl_queue_status oversample(pl_queue p, struct pl_frame_mix *mix,
                                        const struct pl_queue_params *params)
 {
     enum pl_queue_status ret;
@@ -556,8 +555,7 @@ static enum pl_queue_status oversample(struct pl_queue *p, struct pl_frame_mix *
 }
 
 // Present a mixture of frames, relative to the vsync ratio
-static enum pl_queue_status interpolate(struct pl_queue *p,
-                                        struct pl_frame_mix *mix,
+static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
                                         const struct pl_queue_params *params)
 {
     // No FPS estimate available, possibly source contains only a single file,
@@ -628,7 +626,7 @@ done: ;
     return PL_QUEUE_OK;
 }
 
-static bool prefill(struct pl_queue *p, const struct pl_queue_params *params)
+static bool prefill(pl_queue p, const struct pl_queue_params *params)
 {
     int min_frames = 2 * ceilf(params->radius);
     min_frames = PL_MAX(min_frames, PREFETCH_FRAMES);
@@ -663,8 +661,7 @@ static inline void default_estimate(struct pool *pool, float val)
         pool->estimate = val;
 }
 
-enum pl_queue_status pl_queue_update(struct pl_queue *p,
-                                     struct pl_frame_mix *out_mix,
+enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
                                      const struct pl_queue_params *params)
 {
     pthread_mutex_lock(&p->lock_strong);

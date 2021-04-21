@@ -22,9 +22,9 @@
 #include "log.h"
 #include "shaders.h"
 
-struct pl_shader *pl_shader_alloc(pl_log log, const struct pl_shader_params *params)
+pl_shader pl_shader_alloc(pl_log log, const struct pl_shader_params *params)
 {
-    struct pl_shader *sh = pl_alloc_ptr(NULL, sh);
+    pl_shader sh = pl_alloc_ptr(NULL, sh);
     *sh = (struct pl_shader) {
         .log = log,
         .mutable = true,
@@ -39,9 +39,9 @@ struct pl_shader *pl_shader_alloc(pl_log log, const struct pl_shader_params *par
     return sh;
 }
 
-void pl_shader_free(struct pl_shader **psh)
+void pl_shader_free(pl_shader *psh)
 {
-    struct pl_shader *sh = *psh;
+    pl_shader sh = *psh;
     if (!sh)
         return;
 
@@ -51,7 +51,7 @@ void pl_shader_free(struct pl_shader **psh)
     pl_free_ptr(psh);
 }
 
-void pl_shader_reset(struct pl_shader *sh, const struct pl_shader_params *params)
+void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
 {
     for (int i = 0; i < sh->tmp.num; i++)
         pl_ref_deref(&sh->tmp.elem[i]);
@@ -78,12 +78,12 @@ void pl_shader_reset(struct pl_shader *sh, const struct pl_shader_params *params
     PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_new(NULL));
 }
 
-bool pl_shader_is_failed(const struct pl_shader *sh)
+bool pl_shader_is_failed(const pl_shader sh)
 {
     return sh->failed;
 }
 
-struct pl_glsl_desc sh_glsl(const struct pl_shader *sh)
+struct pl_glsl_desc sh_glsl(const pl_shader sh)
 {
     if (SH_PARAMS(sh).glsl.version)
         return SH_PARAMS(sh).glsl;
@@ -94,13 +94,13 @@ struct pl_glsl_desc sh_glsl(const struct pl_shader *sh)
     return (struct pl_glsl_desc) { .version = 130 };
 }
 
-bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem)
+bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem)
 {
     pl_assert(bw && bh);
     int *sh_bw = &sh->res.compute_group_size[0];
     int *sh_bh = &sh->res.compute_group_size[1];
 
-    const struct pl_gpu *gpu = SH_GPU(sh);
+    pl_gpu gpu = SH_GPU(sh);
     if (!gpu || !(gpu->caps & PL_GPU_CAP_COMPUTE)) {
         PL_TRACE(sh, "Disabling compute shader due to missing PL_GPU_CAP_COMPUTE");
         return false;
@@ -161,12 +161,12 @@ bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem)
     return true;
 }
 
-bool pl_shader_is_compute(const struct pl_shader *sh)
+bool pl_shader_is_compute(const pl_shader sh)
 {
     return sh->is_compute;
 }
 
-bool pl_shader_output_size(const struct pl_shader *sh, int *w, int *h)
+bool pl_shader_output_size(const pl_shader sh, int *w, int *h)
 {
     if (!sh->output_w || !sh->output_h)
         return false;
@@ -176,7 +176,7 @@ bool pl_shader_output_size(const struct pl_shader *sh, int *w, int *h)
     return true;
 }
 
-uint64_t pl_shader_signature(const struct pl_shader *sh)
+uint64_t pl_shader_signature(const pl_shader sh)
 {
     uint64_t res = 0;
     for (int i = 0; i < PL_ARRAY_SIZE(sh->buffers); i++)
@@ -187,13 +187,13 @@ uint64_t pl_shader_signature(const struct pl_shader *sh)
     return res;
 }
 
-ident_t sh_fresh(struct pl_shader *sh, const char *name)
+ident_t sh_fresh(pl_shader sh, const char *name)
 {
     return pl_asprintf(SH_TMP(sh), "_%s_%d_%u", PL_DEF(name, "var"),
                        sh->fresh++, SH_PARAMS(sh).id);
 }
 
-ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
+ident_t sh_var(pl_shader sh, struct pl_shader_var sv)
 {
     sv.var.name = sh_fresh(sh, sv.var.name);
     sv.data = pl_memdup(SH_TMP(sh), sv.data, pl_var_host_layout(0, &sv.var).size);
@@ -201,7 +201,7 @@ ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv)
     return (ident_t) sv.var.name;
 }
 
-ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
+ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
 {
     switch (sd.desc.type) {
     case PL_DESC_BUF_UNIFORM:
@@ -234,16 +234,16 @@ ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd)
     return (ident_t) sd.desc.name;
 }
 
-ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
+ident_t sh_attr_vec2(pl_shader sh, const char *name,
                      const struct pl_rect2df *rc)
 {
-    const struct pl_gpu *gpu = SH_GPU(sh);
+    pl_gpu gpu = SH_GPU(sh);
     if (!gpu) {
         SH_FAIL(sh, "Failed adding vertex attr '%s': No GPU available!", name);
         return NULL;
     }
 
-    const struct pl_fmt *fmt = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 2);
+    pl_fmt fmt = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 2);
     if (!fmt) {
         SH_FAIL(sh, "Failed adding vertex attr '%s': no vertex fmt!", name);
         return NULL;
@@ -269,7 +269,7 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
     return (ident_t) va.attr.name;
 }
 
-ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
+ident_t sh_bind(pl_shader sh, pl_tex tex,
                 enum pl_tex_address_mode address_mode,
                 enum pl_tex_sample_mode sample_mode,
                 const char *name, const struct pl_rect2df *rect,
@@ -336,7 +336,7 @@ ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
     return itex;
 }
 
-bool sh_buf_desc_append(void *alloc, const struct pl_gpu *gpu,
+bool sh_buf_desc_append(void *alloc, pl_gpu gpu,
                         struct pl_shader_desc *buf_desc,
                         struct pl_var_layout *out_layout,
                         const struct pl_var new_var)
@@ -380,7 +380,7 @@ size_t sh_buf_desc_size(const struct pl_shader_desc *buf_desc)
     return last->layout.offset + last->layout.size;
 }
 
-void sh_append(struct pl_shader *sh, enum pl_shader_buf buf, const char *fmt, ...)
+void sh_append(pl_shader sh, enum pl_shader_buf buf, const char *fmt, ...)
 {
     pl_assert(buf >= 0 && buf < SH_BUF_COUNT);
 
@@ -390,7 +390,7 @@ void sh_append(struct pl_shader *sh, enum pl_shader_buf buf, const char *fmt, ..
     va_end(ap);
 }
 
-void sh_append_str(struct pl_shader *sh, enum pl_shader_buf buf, pl_str str)
+void sh_append_str(pl_shader sh, enum pl_shader_buf buf, pl_str str)
 {
     pl_assert(buf >= 0 && buf < SH_BUF_COUNT);
     pl_str_append(sh, &sh->buffers[buf], str);
@@ -418,7 +418,7 @@ static const char *samplers2D[] = {
     [PL_SAMPLER_EXTERNAL]   = "samplerExternalOES",
 };
 
-ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
+ident_t sh_subpass(pl_shader sh, const pl_shader sub)
 {
     pl_assert(sh->mutable);
 
@@ -482,7 +482,7 @@ ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub)
 }
 
 // Finish the current shader body and return its function name
-static ident_t sh_split(struct pl_shader *sh)
+static ident_t sh_split(pl_shader sh)
 {
     pl_assert(sh->mutable);
 
@@ -513,7 +513,7 @@ static ident_t sh_split(struct pl_shader *sh)
     return name;
 }
 
-const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
+const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
 {
     if (sh->failed)
         return NULL;
@@ -547,7 +547,7 @@ const struct pl_shader_res *pl_shader_finalize(struct pl_shader *sh)
     return &sh->res;
 }
 
-bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h)
+bool sh_require(pl_shader sh, enum pl_shader_sig insig, int w, int h)
 {
     if (sh->failed) {
         SH_FAIL(sh, "Attempting to modify a failed shader!");
@@ -592,9 +592,9 @@ bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h)
     return true;
 }
 
-void pl_shader_obj_destroy(struct pl_shader_obj **ptr)
+void pl_shader_obj_destroy(pl_shader_obj *ptr)
 {
-    struct pl_shader_obj *obj = *ptr;
+    pl_shader_obj obj = *ptr;
     if (!obj)
         return;
 
@@ -605,14 +605,14 @@ void pl_shader_obj_destroy(struct pl_shader_obj **ptr)
     pl_free(obj);
 }
 
-void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
+void *sh_require_obj(pl_shader sh, pl_shader_obj *ptr,
                      enum pl_shader_obj_type type, size_t priv_size,
-                     void (*uninit)(const struct pl_gpu *gpu, void *priv))
+                     void (*uninit)(pl_gpu gpu, void *priv))
 {
     if (!ptr)
         return NULL;
 
-    struct pl_shader_obj *obj = *ptr;
+    pl_shader_obj obj = *ptr;
     if (obj && obj->gpu != SH_GPU(sh)) {
         SH_FAIL(sh, "Passed pl_shader_obj belongs to different GPU!");
         return NULL;
@@ -636,7 +636,7 @@ void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
     return obj->priv;
 }
 
-ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *p_state)
+ident_t sh_prng(pl_shader sh, bool temporal, ident_t *p_state)
 {
     // Initialize the PRNG. This is friendly for wide usage and returns in
     // a very pleasant-looking distribution across frames even if the difference
@@ -686,7 +686,7 @@ ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *p_state)
 // Defines a LUT position helper macro. This translates from an absolute texel
 // scale (0.0 - 1.0) to the texture coordinate scale for the corresponding
 // sample in a texture of dimension `lut_size`.
-static ident_t sh_lut_pos(struct pl_shader *sh, int lut_size)
+static ident_t sh_lut_pos(pl_shader sh, int lut_size)
 {
     ident_t name = sh_fresh(sh, "LUT_POS");
     GLSLH("#define %s(x) mix(%f, %f, (x)) \n",
@@ -702,12 +702,12 @@ struct sh_lut_obj {
     uint64_t signature;
 
     // weights, depending on the method
-    const struct pl_tex *tex;
+    pl_tex tex;
     pl_str str;
     void *data;
 };
 
-static void sh_lut_uninit(const struct pl_gpu *gpu, void *ptr)
+static void sh_lut_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_lut_obj *lut = ptr;
     pl_tex_destroy(gpu, &lut->tex);
@@ -720,9 +720,9 @@ static void sh_lut_uninit(const struct pl_gpu *gpu, void *ptr)
 // Maximum number of floats to embed as a literal array (when using SH_LUT_AUTO)
 #define SH_LUT_MAX_LITERAL 256
 
-ident_t sh_lut(struct pl_shader *sh, const struct sh_lut_params *params)
+ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
 {
-    const struct pl_gpu *gpu = SH_GPU(sh);
+    pl_gpu gpu = SH_GPU(sh);
     void *tmp = NULL;
     ident_t ret = NULL;
 
@@ -769,7 +769,7 @@ next_dim: ; // `continue` out of the inner loop
     if (params->linear)
         texcaps |= PL_FMT_CAP_LINEAR;
 
-    const struct pl_fmt *texfmt = NULL;
+    pl_fmt texfmt = NULL;
     if (texdim) {
         texfmt = pl_find_fmt(gpu, fmt_type[params->type], params->comps,
                              params->type == PL_VAR_FLOAT ? 16 : 32,
@@ -1061,7 +1061,7 @@ error:
     return ret;
 }
 
-const char *sh_bvec(const struct pl_shader *sh, int dims)
+const char *sh_bvec(const pl_shader sh, int dims)
 {
     static const char *bvecs[] = {
         [1] = "bool",

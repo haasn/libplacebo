@@ -29,12 +29,12 @@
       }                                                         \
   } while (0)
 
-int pl_optimal_transfer_stride(const struct pl_gpu *gpu, int dimension)
+int pl_optimal_transfer_stride(pl_gpu gpu, int dimension)
 {
     return PL_ALIGN2(dimension, gpu->limits.align_tex_xfer_stride);
 }
 
-void pl_gpu_destroy(const struct pl_gpu *gpu)
+void pl_gpu_destroy(pl_gpu gpu)
 {
     if (!gpu)
         return;
@@ -43,7 +43,7 @@ void pl_gpu_destroy(const struct pl_gpu *gpu)
     impl->destroy(gpu);
 }
 
-static void print_formats(const struct pl_gpu *gpu)
+static void print_formats(pl_gpu gpu)
 {
     if (!pl_msg_test(gpu->log, PL_LOG_DEBUG))
         return;
@@ -53,7 +53,7 @@ static void print_formats(const struct pl_gpu *gpu)
             "NAME", "TYPE", "SIZE", "COMP", "CAPS", "DEPTH", "HOST_BITS",
             "GLSL_TYPE", "GLSL_FMT", "FOURCC");
     for (int n = 0; n < gpu->num_formats; n++) {
-        const struct pl_fmt *fmt = gpu->formats[n];
+        pl_fmt fmt = gpu->formats[n];
 
         static const char *types[] = {
             [PL_FMT_UNKNOWN] = "UNKNOWN",
@@ -101,7 +101,7 @@ static void print_formats(const struct pl_gpu *gpu)
     }
 }
 
-bool pl_fmt_is_ordered(const struct pl_fmt *fmt)
+bool pl_fmt_is_ordered(pl_fmt fmt)
 {
     bool ret = !fmt->opaque;
     for (int i = 0; i < fmt->num_components; i++)
@@ -109,13 +109,13 @@ bool pl_fmt_is_ordered(const struct pl_fmt *fmt)
     return ret;
 }
 
-static void gpu_verify(const struct pl_gpu *gpu)
+static void gpu_verify(pl_gpu gpu)
 {
     pl_assert(gpu->ctx == gpu->log);
     pl_assert(gpu->limits.max_tex_2d_dim);
 
     for (int n = 0; n < gpu->num_formats; n++) {
-        const struct pl_fmt *fmt = gpu->formats[n];
+        pl_fmt fmt = gpu->formats[n];
         pl_assert(fmt->name);
         pl_assert(fmt->type);
         pl_assert(fmt->num_components);
@@ -144,7 +144,7 @@ static void gpu_verify(const struct pl_gpu *gpu)
     }
 }
 
-void pl_gpu_print_info(const struct pl_gpu *gpu)
+void pl_gpu_print_info(pl_gpu gpu)
 {
     PL_INFO(gpu, "GPU information:");
     PL_INFO(gpu, "    GLSL version: %d%s", gpu->glsl.version,
@@ -221,8 +221,8 @@ void pl_gpu_print_info(const struct pl_gpu *gpu)
 
 static int cmp_fmt(const void *pa, const void *pb)
 {
-    const struct pl_fmt *a = *(const struct pl_fmt **)pa;
-    const struct pl_fmt *b = *(const struct pl_fmt **)pb;
+    pl_fmt a = *(pl_fmt *)pa;
+    pl_fmt b = *(pl_fmt *)pb;
 
     // Always prefer non-opaque formats
     if (a->opaque != b->opaque)
@@ -266,7 +266,7 @@ static int cmp_fmt(const void *pa, const void *pb)
 
 void pl_gpu_sort_formats(struct pl_gpu *gpu)
 {
-    qsort(gpu->formats, gpu->num_formats, sizeof(struct pl_fmt *), cmp_fmt);
+    qsort(gpu->formats, gpu->num_formats, sizeof(pl_fmt), cmp_fmt);
 }
 
 struct glsl_fmt {
@@ -325,7 +325,7 @@ static const struct glsl_fmt pl_glsl_fmts[] = {
     {PL_FMT_SINT,  4, {32, 32, 32, 32}, "rgba32i"},
 };
 
-const char *pl_fmt_glsl_format(const struct pl_fmt *fmt, int components)
+const char *pl_fmt_glsl_format(pl_fmt fmt, int components)
 {
     if (fmt->opaque)
         return NULL;
@@ -414,7 +414,7 @@ static const struct pl_fmt_fourcc pl_fmt_fourccs[] = {
     // no planar formats yet (tm)
 };
 
-uint32_t pl_fmt_fourcc(const struct pl_fmt *fmt)
+uint32_t pl_fmt_fourcc(pl_fmt fmt)
 {
     if (fmt->opaque)
         return 0;
@@ -428,12 +428,11 @@ uint32_t pl_fmt_fourcc(const struct pl_fmt *fmt)
     return 0; // no matching format
 }
 
-const struct pl_fmt *pl_find_fmt(const struct pl_gpu *gpu, enum pl_fmt_type type,
-                                 int num_components, int min_depth,
-                                 int host_bits, enum pl_fmt_caps caps)
+pl_fmt pl_find_fmt(pl_gpu gpu, enum pl_fmt_type type, int num_components,
+                    int min_depth, int host_bits, enum pl_fmt_caps caps)
 {
     for (int n = 0; n < gpu->num_formats; n++) {
-        const struct pl_fmt *fmt = gpu->formats[n];
+        pl_fmt fmt = gpu->formats[n];
         if (fmt->type != type || fmt->num_components != num_components)
             continue;
         if ((fmt->caps & caps) != caps)
@@ -465,8 +464,7 @@ next_fmt: ; // equivalent to `continue`
     return NULL;
 }
 
-const struct pl_fmt *pl_find_vertex_fmt(const struct pl_gpu *gpu,
-                                        enum pl_fmt_type type, int comps)
+pl_fmt pl_find_vertex_fmt(pl_gpu gpu, enum pl_fmt_type type, int comps)
 {
     static const size_t sizes[] = {
         [PL_FMT_FLOAT] = sizeof(float),
@@ -479,13 +477,13 @@ const struct pl_fmt *pl_find_vertex_fmt(const struct pl_gpu *gpu,
     return pl_find_fmt(gpu, type, comps, 0, 8 * sizes[type], PL_FMT_CAP_VERTEX);
 }
 
-const struct pl_fmt *pl_find_named_fmt(const struct pl_gpu *gpu, const char *name)
+pl_fmt pl_find_named_fmt(pl_gpu gpu, const char *name)
 {
     if (!name)
         return NULL;
 
     for (int i = 0; i < gpu->num_formats; i++) {
-        const struct pl_fmt *fmt = gpu->formats[i];
+        pl_fmt fmt = gpu->formats[i];
         if (strcmp(name, fmt->name) == 0)
             return fmt;
     }
@@ -494,13 +492,13 @@ const struct pl_fmt *pl_find_named_fmt(const struct pl_gpu *gpu, const char *nam
     return NULL;
 }
 
-const struct pl_fmt *pl_find_fourcc(const struct pl_gpu *gpu, uint32_t fourcc)
+pl_fmt pl_find_fourcc(pl_gpu gpu, uint32_t fourcc)
 {
     if (!fourcc)
         return NULL;
 
     for (int i = 0; i < gpu->num_formats; i++) {
-        const struct pl_fmt *fmt = gpu->formats[i];
+        pl_fmt fmt = gpu->formats[i];
         if (fourcc == fmt->fourcc)
             return fmt;
     }
@@ -511,8 +509,7 @@ const struct pl_fmt *pl_find_fourcc(const struct pl_gpu *gpu, uint32_t fourcc)
 
 static bool warned_mods = false;
 
-static inline void check_mod(const struct pl_gpu *gpu, const struct pl_fmt *fmt,
-                             uint64_t mod)
+static inline void check_mod(pl_gpu gpu, pl_fmt fmt, uint64_t mod)
 {
     if (warned_mods)
         return;
@@ -535,8 +532,7 @@ static inline void check_mod(const struct pl_gpu *gpu, const struct pl_fmt *fmt,
     warned_mods = true;
 }
 
-const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
-                                   const struct pl_tex_params *params)
+pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 {
     require(!params->import_handle || !params->export_handle);
     require(!params->import_handle || !params->initial_data);
@@ -581,7 +577,7 @@ const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
         break;
     }
 
-    const struct pl_fmt *fmt = params->format;
+    pl_fmt fmt = params->format;
     require(fmt);
     require(!params->host_readable || fmt->caps & PL_FMT_CAP_HOST_READABLE);
     require(!params->host_readable || !fmt->opaque);
@@ -599,6 +595,16 @@ error:
     return NULL;
 }
 
+void pl_tex_destroy(pl_gpu gpu, pl_tex *tex)
+{
+    if (!*tex)
+        return;
+
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
+    impl->tex_destroy(gpu, *tex);
+    *tex = NULL;
+}
+
 static bool pl_tex_params_superset(struct pl_tex_params a, struct pl_tex_params b)
 {
     return a.w == b.w && a.h == b.h && a.d == b.d &&
@@ -612,8 +618,7 @@ static bool pl_tex_params_superset(struct pl_tex_params a, struct pl_tex_params 
            (a.host_readable  || !b.host_readable);
 }
 
-bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
-                     const struct pl_tex_params *params)
+bool pl_tex_recreate(pl_gpu gpu, pl_tex *tex, const struct pl_tex_params *params)
 {
     if (params->initial_data) {
         PL_ERR(gpu, "pl_tex_recreate may not be used with `initial_data`!");
@@ -634,18 +639,7 @@ bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
     return !!*tex;
 }
 
-void pl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex **tex)
-{
-    if (!*tex)
-        return;
-
-    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
-    impl->tex_destroy(gpu, *tex);
-    *tex = NULL;
-}
-
-void pl_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *dst,
-                  const float color[4])
+void pl_tex_clear(pl_gpu gpu, pl_tex dst, const float color[4])
 {
     require(dst->params.blit_dst);
 
@@ -658,14 +652,14 @@ error:
     return;
 }
 
-void pl_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex)
+void pl_tex_invalidate(pl_gpu gpu, pl_tex tex)
 {
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     if (impl->tex_invalidate)
         impl->tex_invalidate(gpu, tex);
 }
 
-static void strip_coords(const struct pl_tex *tex, struct pl_rect3d *rc)
+static void strip_coords(pl_tex tex, struct pl_rect3d *rc)
 {
     if (!tex->params.d) {
         rc->z0 = 0;
@@ -678,7 +672,7 @@ static void strip_coords(const struct pl_tex *tex, struct pl_rect3d *rc)
     }
 }
 
-static void infer_rc(const struct pl_tex *tex, struct pl_rect3d *rc)
+static void infer_rc(pl_tex tex, struct pl_rect3d *rc)
 {
     if (!rc->x0 && !rc->x1)
         rc->x1 = tex->params.w;
@@ -688,13 +682,12 @@ static void infer_rc(const struct pl_tex *tex, struct pl_rect3d *rc)
         rc->z1 = tex->params.d;
 }
 
-void pl_tex_blit(const struct pl_gpu *gpu,
-                 const struct pl_tex_blit_params *params)
+void pl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
 {
-    const struct pl_tex *src = params->src, *dst = params->dst;
+    pl_tex src = params->src, dst = params->dst;
     require(src && dst);
-    const struct pl_fmt *src_fmt = src->params.format;
-    const struct pl_fmt *dst_fmt = dst->params.format;
+    pl_fmt src_fmt = src->params.format;
+    pl_fmt dst_fmt = dst->params.format;
     require(src_fmt->internal_size == dst_fmt->internal_size);
     require((src_fmt->type == PL_FMT_UINT) == (dst_fmt->type == PL_FMT_UINT));
     require((src_fmt->type == PL_FMT_SINT) == (dst_fmt->type == PL_FMT_SINT));
@@ -747,7 +740,7 @@ error:
 
 size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par)
 {
-    const struct pl_tex *tex = par->tex;
+    pl_tex tex = par->tex;
     int w = pl_rect_w(par->rc), h = pl_rect_h(par->rc), d = pl_rect_d(par->rc);
 
     // This generates the absolute bare minimum size of a buffer required to
@@ -757,10 +750,9 @@ size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par)
     return texels * tex->params.format->texel_size;
 }
 
-static bool fix_tex_transfer(const struct pl_gpu *gpu,
-                             struct pl_tex_transfer_params *params)
+static bool fix_tex_transfer(pl_gpu gpu, struct pl_tex_transfer_params *params)
 {
-    const struct pl_tex *tex = params->tex;
+    pl_tex tex = params->tex;
     struct pl_rect3d rc = params->rc;
 
     // Infer the default values
@@ -803,7 +795,7 @@ static bool fix_tex_transfer(const struct pl_gpu *gpu,
 
     require(!params->buf ^ !params->ptr); // exactly one
     if (params->buf) {
-        const struct pl_buf *buf = params->buf;
+        pl_buf buf = params->buf;
         size_t size = pl_tex_transfer_size(params);
         require(params->buf_offset + size <= buf->params.size);
     }
@@ -815,10 +807,9 @@ error:
     return false;
 }
 
-bool pl_tex_upload(const struct pl_gpu *gpu,
-                   const struct pl_tex_transfer_params *params)
+bool pl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
-    const struct pl_tex *tex = params->tex;
+    pl_tex tex = params->tex;
     require(tex);
     require(tex->params.host_writable);
 
@@ -833,10 +824,9 @@ error:
     return false;
 }
 
-bool pl_tex_download(const struct pl_gpu *gpu,
-                     const struct pl_tex_transfer_params *params)
+bool pl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
-    const struct pl_tex *tex = params->tex;
+    pl_tex tex = params->tex;
     require(tex);
     require(tex->params.host_readable);
 
@@ -851,7 +841,7 @@ error:
     return false;
 }
 
-bool pl_tex_poll(const struct pl_gpu *gpu, const struct pl_tex *tex, uint64_t t)
+bool pl_tex_poll(pl_gpu gpu, pl_tex tex, uint64_t t)
 {
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->tex_poll ? impl->tex_poll(gpu, tex, t) : false;
@@ -879,8 +869,7 @@ static struct pl_buf_params pl_buf_params_infer(struct pl_buf_params params)
 
 static bool warned_rounding = false;
 
-const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
-                                   const struct pl_buf_params *pparams)
+pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *pparams)
 {
     struct pl_buf_params params = pl_buf_params_infer(*pparams);
 
@@ -930,7 +919,7 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
     require(!params.storable || params.size <= gpu->limits.max_ssbo_size);
 
     if (params.format) {
-        const struct pl_fmt *fmt = params.format;
+        pl_fmt fmt = params.format;
         require(params.size <= gpu->limits.max_buffer_texels * fmt->texel_size);
         require(!params.uniform || (fmt->caps & PL_FMT_CAP_TEXEL_UNIFORM));
         require(!params.storable || (fmt->caps & PL_FMT_CAP_TEXEL_STORAGE));
@@ -939,7 +928,7 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
     require(!params.host_mapped || (gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS));
 
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
-    const struct pl_buf *buf = impl->buf_create(gpu, &params);
+    pl_buf buf = impl->buf_create(gpu, &params);
     if (buf)
         require(!params.host_mapped || buf->data);
 
@@ -947,6 +936,16 @@ const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
 
 error:
     return NULL;
+}
+
+void pl_buf_destroy(pl_gpu gpu, pl_buf *buf)
+{
+    if (!*buf)
+        return;
+
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
+    impl->buf_destroy(gpu, *buf);
+    *buf = NULL;
 }
 
 static bool pl_buf_params_superset(struct pl_buf_params a, struct pl_buf_params b)
@@ -962,8 +961,7 @@ static bool pl_buf_params_superset(struct pl_buf_params a, struct pl_buf_params 
            (a.drawable       || !b.drawable);
 }
 
-bool pl_buf_recreate(const struct pl_gpu *gpu, const struct pl_buf **buf,
-                     const struct pl_buf_params *pparams)
+bool pl_buf_recreate(pl_gpu gpu, pl_buf *buf, const struct pl_buf_params *pparams)
 {
 
     struct pl_buf_params params = pl_buf_params_infer(*pparams);
@@ -983,18 +981,8 @@ bool pl_buf_recreate(const struct pl_gpu *gpu, const struct pl_buf **buf,
     return !!*buf;
 }
 
-void pl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf **buf)
-{
-    if (!*buf)
-        return;
-
-    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
-    impl->buf_destroy(gpu, *buf);
-    *buf = NULL;
-}
-
-void pl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
-                  size_t buf_offset, const void *data, size_t size)
+void pl_buf_write(pl_gpu gpu, pl_buf buf, size_t buf_offset,
+                  const void *data, size_t size)
 {
     require(buf->params.host_writable);
     require(buf_offset + size <= buf->params.size);
@@ -1007,8 +995,8 @@ error:
     return;
 }
 
-bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
-                 size_t buf_offset, void *dest, size_t size)
+bool pl_buf_read(pl_gpu gpu, pl_buf buf, size_t buf_offset,
+                 void *dest, size_t size)
 {
     require(buf->params.host_readable);
     require(buf_offset + size <= buf->params.size);
@@ -1020,10 +1008,8 @@ error:
     return false;
 }
 
-void pl_buf_copy(const struct pl_gpu *gpu,
-                 const struct pl_buf *dst, size_t dst_offset,
-                 const struct pl_buf *src, size_t src_offset,
-                 size_t size)
+void pl_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
+                 pl_buf src, size_t src_offset, size_t size)
 {
     require(src_offset + size <= src->params.size);
     require(dst_offset + size <= dst->params.size);
@@ -1035,7 +1021,7 @@ error:
     return;
 }
 
-bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf)
+bool pl_buf_export(pl_gpu gpu, pl_buf buf)
 {
     require(buf->params.export_handle || buf->params.import_handle);
 
@@ -1046,7 +1032,7 @@ error:
     return false;
 }
 
-bool pl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf, uint64_t t)
+bool pl_buf_poll(pl_gpu gpu, pl_buf buf, uint64_t t)
 {
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->buf_poll ? impl->buf_poll(gpu, buf, t) : false;
@@ -1166,7 +1152,7 @@ const char *pl_var_glsl_type_name(struct pl_var var)
     return types[var.type][var.dim_m][var.dim_v];
 }
 
-struct pl_var pl_var_from_fmt(const struct pl_fmt *fmt, const char *name)
+struct pl_var pl_var_from_fmt(pl_fmt fmt, const char *name)
 {
     static const enum pl_var_type vartypes[] = {
         [PL_FMT_FLOAT] = PL_VAR_FLOAT,
@@ -1264,7 +1250,7 @@ void memcpy_layout(void *dst_p, struct pl_var_layout dst_layout,
     }
 }
 
-int pl_desc_namespace(const struct pl_gpu *gpu, enum pl_desc_type type)
+int pl_desc_namespace(pl_gpu gpu, enum pl_desc_type type)
 {
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     int ret = impl->desc_namespace(gpu, type);
@@ -1291,8 +1277,7 @@ const struct pl_blend_params pl_alpha_overlay = {
     .dst_alpha = PL_BLEND_ONE_MINUS_SRC_ALPHA,
 };
 
-const struct pl_pass *pl_pass_create(const struct pl_gpu *gpu,
-                                     const struct pl_pass_params *params)
+pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 {
     require(params->glsl_shader);
     switch(params->type) {
@@ -1306,7 +1291,7 @@ const struct pl_pass *pl_pass_create(const struct pl_gpu *gpu,
             require(va.offset + va.fmt->texel_size <= params->vertex_stride);
         }
 
-        const struct pl_fmt *target_fmt = params->target_dummy.params.format;
+        pl_fmt target_fmt = params->target_dummy.params.format;
         require(target_fmt);
         require(target_fmt->caps & PL_FMT_CAP_RENDERABLE);
         require(!params->blend_params || target_fmt->caps & PL_FMT_CAP_BLENDABLE);
@@ -1350,7 +1335,7 @@ error:
     return NULL;
 }
 
-void pl_pass_destroy(const struct pl_gpu *gpu, const struct pl_pass **pass)
+void pl_pass_destroy(pl_gpu gpu, pl_pass *pass)
 {
     if (!*pass)
         return;
@@ -1360,9 +1345,9 @@ void pl_pass_destroy(const struct pl_gpu *gpu, const struct pl_pass **pass)
     *pass = NULL;
 }
 
-void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *params)
+void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 {
-    const struct pl_pass *pass = params->pass;
+    pl_pass pass = params->pass;
     struct pl_pass_run_params new = *params;
 
     for (int i = 0; i < pass->params.num_descriptors; i++) {
@@ -1371,34 +1356,34 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
         require(db.object);
         switch (desc.type) {
         case PL_DESC_SAMPLED_TEX: {
-            const struct pl_tex *tex = db.object;
-            const struct pl_fmt *fmt = tex->params.format;
+            pl_tex tex = db.object;
+            pl_fmt fmt = tex->params.format;
             require(tex->params.sampleable);
             require(db.sample_mode != PL_TEX_SAMPLE_LINEAR || (fmt->caps & PL_FMT_CAP_LINEAR));
             break;
         }
         case PL_DESC_STORAGE_IMG: {
-            const struct pl_tex *tex = db.object;
+            pl_tex tex = db.object;
             require(tex->params.storable);
             break;
         }
         case PL_DESC_BUF_UNIFORM: {
-            const struct pl_buf *buf = db.object;
+            pl_buf buf = db.object;
             require(buf->params.uniform);
             break;
         }
         case PL_DESC_BUF_STORAGE: {
-            const struct pl_buf *buf = db.object;
+            pl_buf buf = db.object;
             require(buf->params.storable);
             break;
         }
         case PL_DESC_BUF_TEXEL_UNIFORM: {
-            const struct pl_buf *buf = db.object;
+            pl_buf buf = db.object;
             require(buf->params.uniform && buf->params.format);
             break;
         }
         case PL_DESC_BUF_TEXEL_STORAGE: {
-            const struct pl_buf *buf = db.object;
+            pl_buf buf = db.object;
             require(buf->params.storable && buf->params.format);
             break;
         }
@@ -1432,7 +1417,7 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
 
         require(!params->vertex_data ^ !params->vertex_buf);
         if (params->vertex_buf) {
-            const struct pl_buf *vertex_buf = params->vertex_buf;
+            pl_buf vertex_buf = params->vertex_buf;
             require(vertex_buf->params.drawable);
             if (!params->index_data && !params->index_buf) {
                 // Cannot bounds check indexed draws
@@ -1443,14 +1428,14 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
 
         require(!params->index_data || !params->index_buf);
         if (params->index_buf) {
-            const struct pl_buf *index_buf = params->index_buf;
+            pl_buf index_buf = params->index_buf;
             require(!params->vertex_data);
             require(index_buf->params.drawable);
             size_t index_size = params->vertex_count * sizeof(*params->index_data);
             require(params->index_offset + index_size <= index_buf->params.size);
         }
 
-        const struct pl_tex *target = params->target;
+        pl_tex target = params->target;
         require(target);
         require(pl_tex_params_dimension(target->params) == 2);
         require(target->params.format == pass->params.target_dummy.params.format);
@@ -1508,20 +1493,20 @@ error:
     return;
 }
 
-void pl_gpu_flush(const struct pl_gpu *gpu)
+void pl_gpu_flush(pl_gpu gpu)
 {
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     if (impl->gpu_flush)
         impl->gpu_flush(gpu);
 }
 
-void pl_gpu_finish(const struct pl_gpu *gpu)
+void pl_gpu_finish(pl_gpu gpu)
 {
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->gpu_finish(gpu);
 }
 
-bool pl_gpu_is_failed(const struct pl_gpu *gpu)
+bool pl_gpu_is_failed(pl_gpu gpu)
 {
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     if (!impl->gpu_is_failed)
@@ -1532,13 +1517,12 @@ bool pl_gpu_is_failed(const struct pl_gpu *gpu)
 
 // GPU-internal helpers
 
-bool pl_tex_upload_pbo(const struct pl_gpu *gpu,
-                       const struct pl_tex_transfer_params *params)
+bool pl_tex_upload_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
     if (params->buf)
         return pl_tex_upload(gpu, params);
 
-    const struct pl_buf *buf = NULL;
+    pl_buf buf = NULL;
     struct pl_buf_params bufparams = {
         .size = pl_tex_transfer_size(params),
     };
@@ -1585,8 +1569,8 @@ bool pl_tex_upload_pbo(const struct pl_gpu *gpu,
 }
 
 struct pbo_cb_ctx {
-    const struct pl_gpu *gpu;
-    const struct pl_buf *buf;
+    pl_gpu gpu;
+    pl_buf buf;
     void *ptr;
     void (*callback)(void *priv);
     void *priv;
@@ -1603,13 +1587,12 @@ static void pbo_download_cb(void *priv)
     pl_free(priv);
 };
 
-bool pl_tex_download_pbo(const struct pl_gpu *gpu,
-                         const struct pl_tex_transfer_params *params)
+bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
     if (params->buf)
         return pl_tex_download(gpu, params);
 
-    const struct pl_buf *buf = NULL;
+    pl_buf buf = NULL;
     struct pl_buf_params bufparams = {
         .size = pl_tex_transfer_size(params),
     };
@@ -1688,15 +1671,15 @@ bool pl_tex_download_pbo(const struct pl_gpu *gpu,
     return ok;
 }
 
-bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
+bool pl_tex_upload_texel(pl_gpu gpu, pl_dispatch dp,
                          const struct pl_tex_transfer_params *params)
 {
     const int threads = 256;
-    const struct pl_tex *tex = params->tex;
-    const struct pl_fmt *fmt = tex->params.format;
+    pl_tex tex = params->tex;
+    pl_fmt fmt = tex->params.format;
     require(params->buf);
 
-    struct pl_shader *sh = pl_dispatch_begin(dp);
+    pl_shader sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, threads, 1, true, 0)) {
         PL_ERR(gpu, "Failed emulating texture transfer!");
         pl_dispatch_abort(dp, &sh);
@@ -1763,15 +1746,15 @@ error:
     return false;
 }
 
-bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
+bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
                            const struct pl_tex_transfer_params *params)
 {
     const int threads = 256;
-    const struct pl_tex *tex = params->tex;
-    const struct pl_fmt *fmt = tex->params.format;
+    pl_tex tex = params->tex;
+    pl_fmt fmt = tex->params.format;
     require(params->buf);
 
-    struct pl_shader *sh = pl_dispatch_begin(dp);
+    pl_shader sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, threads, 1, true, 0)) {
         PL_ERR(gpu, "Failed emulating texture transfer!");
         pl_dispatch_abort(dp, &sh);
@@ -1832,14 +1815,13 @@ error:
     return false;
 }
 
-void pl_pass_run_vbo(const struct pl_gpu *gpu,
-                     const struct pl_pass_run_params *params)
+void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params)
 {
     if (!params->vertex_data && !params->index_data)
         return pl_pass_run(gpu, params);
 
     struct pl_pass_run_params newparams = *params;
-    const struct pl_buf *vert = NULL, *index = NULL;
+    pl_buf vert = NULL, index = NULL;
 
     if (params->vertex_data) {
         int num_vertices = 0;
@@ -1888,8 +1870,7 @@ void pl_pass_run_vbo(const struct pl_gpu *gpu,
     pl_buf_destroy(gpu, &index);
 }
 
-struct pl_pass_params pl_pass_params_copy(void *alloc,
-                                          const struct pl_pass_params *params)
+struct pl_pass_params pl_pass_params_copy(void *alloc, const struct pl_pass_params *params)
 {
     struct pl_pass_params new = *params;
     new.cached_program = NULL;
@@ -1917,8 +1898,7 @@ struct pl_pass_params pl_pass_params_copy(void *alloc,
     return new;
 }
 
-const struct pl_sync *pl_sync_create(const struct pl_gpu *gpu,
-                                     enum pl_handle_type handle_type)
+pl_sync pl_sync_create(pl_gpu gpu, enum pl_handle_type handle_type)
 {
     require(handle_type);
     require(handle_type & gpu->export_caps.sync);
@@ -1931,8 +1911,7 @@ error:
     return NULL;
 }
 
-void pl_sync_destroy(const struct pl_gpu *gpu,
-                     const struct pl_sync **sync)
+void pl_sync_destroy(pl_gpu gpu, pl_sync *sync)
 {
     if (!*sync)
         return;
@@ -1942,8 +1921,7 @@ void pl_sync_destroy(const struct pl_gpu *gpu,
     *sync = NULL;
 }
 
-bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                   const struct pl_sync *sync)
+bool pl_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync)
 {
     require(tex->params.import_handle || tex->params.export_handle);
 
@@ -1954,7 +1932,7 @@ error:
     return false;
 }
 
-struct pl_timer *pl_timer_create(const struct pl_gpu *gpu)
+pl_timer pl_timer_create(pl_gpu gpu)
 {
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     if (!impl->timer_create)
@@ -1963,7 +1941,7 @@ struct pl_timer *pl_timer_create(const struct pl_gpu *gpu)
     return impl->timer_create(gpu);
 }
 
-void pl_timer_destroy(const struct pl_gpu *gpu, struct pl_timer **timer)
+void pl_timer_destroy(pl_gpu gpu, pl_timer *timer)
 {
     if (!*timer)
         return;
@@ -1973,7 +1951,7 @@ void pl_timer_destroy(const struct pl_gpu *gpu, struct pl_timer **timer)
     *timer = NULL;
 }
 
-uint64_t pl_timer_query(const struct pl_gpu *gpu, struct pl_timer *timer)
+uint64_t pl_timer_query(pl_gpu gpu, pl_timer timer)
 {
     if (!timer)
         return 0;

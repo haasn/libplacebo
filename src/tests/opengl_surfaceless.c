@@ -11,15 +11,14 @@ int main()
 #include <epoxy/gl.h>
 #include <epoxy/egl.h>
 
-static void opengl_interop_tests(const struct pl_gpu *gpu)
+static void opengl_interop_tests(pl_gpu gpu)
 {
-    const struct pl_fmt *fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0,
-                                           PL_FMT_CAP_RENDERABLE |
-                                           PL_FMT_CAP_LINEAR);
+    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0,
+                             PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_LINEAR);
     if (!fmt)
         return;
 
-    const struct pl_tex *export = pl_tex_create(gpu, &(struct pl_tex_params) {
+    pl_tex export = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w = 32,
         .h = 32,
         .format = fmt,
@@ -39,7 +38,7 @@ static void opengl_interop_tests(const struct pl_gpu *gpu)
     wrap.texture = pl_opengl_unwrap(gpu, export, &wrap.target, &wrap.iformat, NULL);
     REQUIRE(wrap.texture);
 
-    const struct pl_tex *import = pl_opengl_wrap(gpu, &wrap);
+    pl_tex import = pl_opengl_wrap(gpu, &wrap);
     REQUIRE(import);
     REQUIRE(import->params.renderable);
     REQUIRE(import->params.blit_dst == export->params.blit_dst);
@@ -62,15 +61,15 @@ static void swap_buffers(void *priv)
     eglSwapBuffers(p->display, p->surface);
 }
 
-static void opengl_swapchain_tests(const struct pl_opengl *gl,
+static void opengl_swapchain_tests(pl_opengl gl,
                                    EGLDisplay display, EGLSurface surface)
 {
     if (surface == EGL_NO_SURFACE)
         return;
 
     printf("testing opengl swapchain\n");
-    const struct pl_gpu *gpu = gl->gpu;
-    const struct pl_swapchain *sw;
+    pl_gpu gpu = gl->gpu;
+    pl_swapchain sw;
     sw = pl_opengl_create_swapchain(gl, &(struct pl_opengl_swapchain_params) {
         .swap_buffers = swap_buffers,
         .priv = &(struct swapchain_priv) { display, surface },
@@ -97,10 +96,10 @@ static void opengl_swapchain_tests(const struct pl_opengl *gl,
     pl_swapchain_destroy(&sw);
 }
 
-static void opengl_test_export_import(const struct pl_opengl *gl,
+static void opengl_test_export_import(pl_opengl gl,
                                       enum pl_handle_type handle_type)
 {
-    const struct pl_gpu *gpu = gl->gpu;
+    pl_gpu gpu = gl->gpu;
     printf("testing opengl import/export\n");
 
     if (!(gpu->export_caps.tex & handle_type) ||
@@ -109,14 +108,13 @@ static void opengl_test_export_import(const struct pl_opengl *gl,
         return;
     }
 
-    const struct pl_fmt *fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0,
-                                           PL_FMT_CAP_BLITTABLE);
+    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0, PL_FMT_CAP_BLITTABLE);
     if (!fmt) {
         fprintf(stderr, "%s unsupported format\n", __func__);
         return;
     }
 
-    const struct pl_tex *export = pl_tex_create(gpu, &(struct pl_tex_params) {
+    pl_tex export = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w = 32,
         .h = 32,
         .format = fmt,
@@ -125,7 +123,7 @@ static void opengl_test_export_import(const struct pl_opengl *gl,
     REQUIRE(export);
     REQUIRE(export->shared_mem.handle.fd > -1);
 
-    const struct pl_tex *import = pl_tex_create(gpu, &(struct pl_tex_params) {
+    pl_tex import = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w = 32,
         .h = 32,
         .format = fmt,
@@ -249,12 +247,12 @@ int main()
         params.allow_software = true;
 #endif
 
-        const struct pl_opengl *gl = pl_opengl_create(log, &params);
+        pl_opengl gl = pl_opengl_create(log, &params);
         if (!gl)
             goto next;
 
         // Skip repeat tests
-        const struct pl_gpu *gpu = gl->gpu;
+        pl_gpu gpu = gl->gpu;
         if (last_caps == gpu->caps &&
             memcmp(&last_glsl, &gpu->glsl, sizeof(last_glsl)) == 0 &&
             memcmp(&last_limits, &gpu->limits, sizeof(last_limits)) == 0)

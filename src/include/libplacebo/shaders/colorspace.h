@@ -31,14 +31,13 @@
 //
 // Note: This function always returns PC-range RGB with pre-multiplied alpha.
 // It mutates the pl_color_repr to reflect the change.
-void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
+void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
                             const struct pl_color_adjustment *params);
 
 // Encodes a color from normalized, PC-range, pre-multiplied RGB into a given
 // representation. That is, this performs the inverse operation of
 // `pl_shader_decode_color` (sans color adjustments).
-void pl_shader_encode_color(struct pl_shader *sh,
-                            const struct pl_color_repr *repr);
+void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr);
 
 // Linearize (expand) `vec4 color`, given a specified color_transfer. In
 // essence, this loosely corresponds to the ITU-R EOTF, calculated on an
@@ -47,12 +46,12 @@ void pl_shader_encode_color(struct pl_shader *sh,
 //
 // Note: Unlike the ITU-R EOTF, it never includes the OOTF - even for systems
 // where the EOTF includes the OOTF (such as HLG).
-void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc);
+void pl_shader_linearize(pl_shader sh, enum pl_color_transfer trc);
 
 // Delinearize (compress), given a TRC as output. This loosely corresponds to
 // the inverse EOTF (not the OETF) in ITU-R terminology, again assuming a
 // reference monitor.
-void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc);
+void pl_shader_delinearize(pl_shader sh, enum pl_color_transfer trc);
 
 struct pl_sigmoid_params {
     // The center (bias) of the sigmoid curve. Must be between 0.0 and 1.0.
@@ -73,12 +72,10 @@ extern const struct pl_sigmoid_params pl_sigmoid_default_params;
 //
 // Warning: This function clamps the input to the interval [0,1]; and as such
 // it should *NOT* be used on already-decoded high-dynamic range content.
-void pl_shader_sigmoidize(struct pl_shader *sh,
-                          const struct pl_sigmoid_params *params);
+void pl_shader_sigmoidize(pl_shader sh, const struct pl_sigmoid_params *params);
 
 // This performs the inverse operation to `pl_shader_sigmoidize`.
-void pl_shader_unsigmoidize(struct pl_shader *sh,
-                            const struct pl_sigmoid_params *params);
+void pl_shader_unsigmoidize(pl_shader sh, const struct pl_sigmoid_params *params);
 
 struct pl_peak_detect_params {
     // Smoothing coefficient for the detected values. This controls the time
@@ -127,9 +124,8 @@ extern const struct pl_peak_detect_params pl_peak_detect_default_params;
 // The parameter `csp` holds the representation of the color values that are
 // the input to this function. (They must already be in decoded RGB form, i.e.
 // alternate color representations are not supported)
-bool pl_shader_detect_peak(struct pl_shader *sh,
-                           struct pl_color_space csp,
-                           struct pl_shader_obj **state,
+bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
+                           pl_shader_obj *state,
                            const struct pl_peak_detect_params *params);
 
 // After dispatching the above shader, this function *may* be used to read out
@@ -141,7 +137,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
 // function is *not* needed when the user only wants to use `pl_shader_color_map`,
 // since that can ingest the peak detection state object directly. It only
 // serves as a utility/debugging function.
-bool pl_get_detected_peak(const struct pl_shader_obj *state,
+bool pl_get_detected_peak(const pl_shader_obj state,
                           float *out_peak, float *out_avg);
 
 // A collection of various tone mapping algorithms supported by libplacebo.
@@ -277,16 +273,16 @@ extern const struct pl_color_map_params pl_color_map_default_params;
 // frame. If frame-level accuracy is desired, then users should call
 // `pl_shader_detect_peak` separately and dispatch the resulting shader
 // *before* dispatching this one.
-void pl_shader_color_map(struct pl_shader *sh,
+void pl_shader_color_map(pl_shader sh,
                          const struct pl_color_map_params *params,
                          struct pl_color_space src, struct pl_color_space dst,
-                         struct pl_shader_obj **peak_detect_state,
+                         pl_shader_obj *peak_detect_state,
                          bool prelinearized);
 
 // Applies a set of cone distortion parameters to `vec4 color` in a given color
 // space. This can be used to simulate color blindness. See `pl_cone_params`
 // for more information.
-void pl_shader_cone_distort(struct pl_shader *sh, struct pl_color_space csp,
+void pl_shader_cone_distort(pl_shader sh, struct pl_color_space csp,
                             const struct pl_cone_params *params);
 
 enum pl_dither_method {
@@ -352,8 +348,8 @@ extern const struct pl_dither_params pl_dither_default_params;
 // of the resulting image. When doing low bit depth dithering for aesthetic
 // purposes, it's recommended that the user explicitly (de)linearize the colors
 // before and after this algorithm.
-void pl_shader_dither(struct pl_shader *sh, int new_depth,
-                      struct pl_shader_obj **dither_state,
+void pl_shader_dither(pl_shader sh, int new_depth,
+                      pl_shader_obj *dither_state,
                       const struct pl_dither_params *params);
 
 #endif // LIBPLACEBO_SHADERS_COLORSPACE_H_

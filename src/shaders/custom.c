@@ -19,7 +19,7 @@
 #include "gpu.h"
 #include "shaders.h"
 
-bool pl_shader_custom(struct pl_shader *sh, const struct pl_custom_shader *params)
+bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
 {
     if (params->compute) {
         int bw = PL_DEF(params->compute_group_size[0], 16);
@@ -448,7 +448,7 @@ static bool parse_hook(pl_log log, pl_str *body, struct custom_shader_hook *out)
     return true;
 }
 
-static bool parse_tex(const struct pl_gpu *gpu, void *alloc, pl_str *body,
+static bool parse_tex(pl_gpu gpu, void *alloc, pl_str *body,
                       struct pl_shader_desc *out)
 {
     *out = (struct pl_shader_desc) {
@@ -537,7 +537,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *alloc, pl_str *body,
             line = pl_str_strip(line);
             params.format = NULL;
             for (int n = 0; n < gpu->num_formats; n++) {
-                const struct pl_fmt *fmt = gpu->formats[n];
+                pl_fmt fmt = gpu->formats[n];
                 if (pl_str_equals0(line, fmt->name)) {
                     params.format = fmt;
                     break;
@@ -642,7 +642,7 @@ static bool parse_tex(const struct pl_gpu *gpu, void *alloc, pl_str *body,
     return true;
 }
 
-static bool parse_buf(const struct pl_gpu *gpu, void *alloc, pl_str *body,
+static bool parse_buf(pl_gpu gpu, void *alloc, pl_str *body,
                       struct pl_shader_desc *out)
 {
     *out = (struct pl_shader_desc) {
@@ -837,7 +837,7 @@ struct hook_pass {
 
 struct pass_tex {
     pl_str name;
-    const struct pl_tex *tex;
+    pl_tex tex;
 
     // Metadata
     struct pl_rect2df rect;
@@ -848,7 +848,7 @@ struct pass_tex {
 
 struct hook_priv {
     pl_log log;
-    const struct pl_gpu *gpu;
+    pl_gpu gpu;
     void *alloc;
 
     PL_ARRAY(struct hook_pass) hook_passes;
@@ -906,7 +906,7 @@ static bool lookup_tex(void *priv, pl_str var, float size[2])
 
     for (int i = 0; i < p->pass_textures.num; i++) {
         if (pl_str_equals(var, p->pass_textures.elem[i].name)) {
-            const struct pl_tex *tex = p->pass_textures.elem[i].tex;
+            pl_tex tex = p->pass_textures.elem[i].tex;
             size[0] = tex->params.w;
             size[1] = tex->params.h;
             return true;
@@ -931,7 +931,7 @@ static double prng_step(uint64_t s[4])
     return (result >> 11) * 0x1.0p-53;
 }
 
-static bool bind_pass_tex(struct pl_shader *sh, pl_str name,
+static bool bind_pass_tex(pl_shader sh, pl_str name,
                           const struct pass_tex *ptex,
                           const struct pl_rect2df *rect)
 {
@@ -1010,7 +1010,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         save_pass_tex(p, ptex);
     }
 
-    struct pl_shader *sh = NULL;
+    pl_shader sh = NULL;
     struct szexp_ctx scope = {
         .priv = p,
         .params = params,
@@ -1046,7 +1046,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             out_h = roundf(out_size[1]);
 
         // Generate a new texture to store the render result
-        const struct pl_tex *fbo;
+        pl_tex fbo;
         fbo = params->get_tex(params->priv, out_w, out_h);
         if (!fbo) {
             PL_ERR(p, "Failed dispatching hook: `get_tex` callback failed?");
@@ -1118,7 +1118,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                     GLSLH("#define %.*s %s \n", PL_STR_FMT(texname), id);
 
                     if (p->descriptors.elem[j].desc.type == PL_DESC_SAMPLED_TEX) {
-                        const struct pl_tex *tex = p->descriptors.elem[j].binding.object;
+                        pl_tex tex = p->descriptors.elem[j].binding.object;
                         GLSLH("#define %.*s_tex(pos) (%s(%s, pos)) \n",
                               PL_STR_FMT(texname), sh_tex_fn(sh, tex->params), id);
                     }
@@ -1289,7 +1289,7 @@ error:
     return (struct pl_hook_res) { .failed = true };
 }
 
-const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
+const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
                                                const char *shader_text,
                                                size_t shader_len)
 {
@@ -1420,14 +1420,14 @@ void pl_mpv_user_shader_destroy(const struct pl_hook **hookp)
             case PL_DESC_BUF_STORAGE:
             case PL_DESC_BUF_TEXEL_UNIFORM:
             case PL_DESC_BUF_TEXEL_STORAGE: {
-                const struct pl_buf *buf = p->descriptors.elem[i].binding.object;
+                pl_buf buf = p->descriptors.elem[i].binding.object;
                 pl_buf_destroy(p->gpu, &buf);
                 break;
             }
 
             case PL_DESC_SAMPLED_TEX:
             case PL_DESC_STORAGE_IMG: {
-                const struct pl_tex *tex = p->descriptors.elem[i].binding.object;
+                pl_tex tex = p->descriptors.elem[i].binding.object;
                 pl_tex_destroy(p->gpu, &tex);
                 break;
 

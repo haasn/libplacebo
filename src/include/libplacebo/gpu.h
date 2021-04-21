@@ -165,11 +165,13 @@ struct pl_gpu_pci_address {
     uint32_t function;
 };
 
+typedef const struct pl_fmt *pl_fmt;
+
 // Abstract device context which wraps an underlying graphics context and can
 // be used to dispatch rendering commands.
 //
 // Thread-safety: Depends on `PL_GPU_CAP_THREAD_SAFE`
-struct pl_gpu {
+typedef const struct pl_gpu {
     pl_log log;
 
     pl_gpu_caps caps;            // PL_GPU_CAP_* bit field
@@ -186,7 +188,7 @@ struct pl_gpu {
 
     // Supported texture formats, in preference order. (If there are multiple
     // similar formats, the "better" ones come first)
-    const struct pl_fmt **formats;
+    pl_fmt *formats;
     int num_formats;
 
     // PCI Bus address of the underlying device, to help with interop.
@@ -195,11 +197,11 @@ struct pl_gpu {
 
     // (Deprecated) Backwards compatibility field. Equal to `log`.
     pl_log ctx PL_DEPRECATED;
-};
+} *pl_gpu;
 
 // Helper function to align the given dimension (e.g. width or height) to a
 // multiple of the optimal texture transfer stride.
-int pl_optimal_transfer_stride(const struct pl_gpu *gpu, int dimension);
+int pl_optimal_transfer_stride(pl_gpu gpu, int dimension);
 
 enum pl_fmt_type {
     PL_FMT_UNKNOWN = 0, // also used for inconsistent multi-component formats
@@ -289,28 +291,290 @@ struct pl_fmt {
 
 // Returns whether or not a pl_fmt's components are ordered sequentially
 // in memory in the order RGBA.
-bool pl_fmt_is_ordered(const struct pl_fmt *fmt);
+bool pl_fmt_is_ordered(pl_fmt fmt);
 
 // Helper function to find a format with a given number of components and
 // minimum effective precision per component. If `host_bits` is set, then the
 // format will always be non-opaque, unpadded, ordered and have exactly this
 // bit depth for each component. Finally, all `caps` must be supported.
-const struct pl_fmt *pl_find_fmt(const struct pl_gpu *gpu, enum pl_fmt_type type,
-                                 int num_components, int min_depth,
-                                 int host_bits, enum pl_fmt_caps caps);
+pl_fmt pl_find_fmt(pl_gpu gpu, enum pl_fmt_type type, int num_components,
+                    int min_depth, int host_bits, enum pl_fmt_caps caps);
 
 // Finds a vertex format for a given configuration. The resulting vertex will
 // have a component depth equivalent to to the sizeof() the equivalent host type.
 // (e.g. PL_FMT_FLOAT will always have sizeof(float))
-const struct pl_fmt *pl_find_vertex_fmt(const struct pl_gpu *gpu,
-                                        enum pl_fmt_type type,
-                                        int num_components);
+pl_fmt pl_find_vertex_fmt(pl_gpu gpu, enum pl_fmt_type type, int num_components);
 
 // Find a format based on its name.
-const struct pl_fmt *pl_find_named_fmt(const struct pl_gpu *gpu, const char *name);
+pl_fmt pl_find_named_fmt(pl_gpu gpu, const char *name);
 
 // Find a format based on its fourcc.
-const struct pl_fmt *pl_find_fourcc(const struct pl_gpu *gpu, uint32_t fourcc);
+pl_fmt pl_find_fourcc(pl_gpu gpu, uint32_t fourcc);
+
+// A generic 'timer query' object. These can be used to measure an
+// approximation of the GPU execution time of a given operation. Due to the
+// highly asynchronous nature of GPUs, the actual results of any individual
+// timer query may be delayed by quite a bit. As such, users should avoid
+// trying to pair any particular GPU command with any particular timer query
+// result, and only reuse `pl_timer` objects with identical operations. The
+// results of timer queries are guaranteed to be in-order, but individual
+// queries may be dropped, and some operations might not record timer results
+// at all. (For example, if the underlying hardware does not support timer
+// queries for a given operation type)
+//
+// Thread-safety: Unsafe
+typedef struct pl_timer *pl_timer;
+
+// Creates a new timer object. This may return NULL, for example if the
+// implementation does not support timers, but since passing NULL to
+// `pl_timer_destroy` and `pl_timer_query` is safe, users generally need not
+// concern themselves with handling this.
+pl_timer pl_timer_create(pl_gpu gpu);
+void pl_timer_destroy(pl_gpu gpu, pl_timer *);
+
+// Queries any results that have been measured since the last execution of
+// `pl_timer_query`. There may be more than one result, in which case the user
+// should simply call the function again to get the subsequent values. This
+// function returns a value of 0 in the event that there are no more
+// unprocessed results.
+//
+// The results are reported in nanoseconds, but the actual precision of the
+// timestamp queries may be significantly lower.
+//
+// Note: Results do not queue up indefinitely. Generally, the implementation
+// will only keep track of a small, fixed number of results internally. Make
+// sure to include this function as part of your main rendering loop to process
+// all of its results, or older results will be overwritten by newer ones.
+uint64_t pl_timer_query(pl_gpu gpu, pl_timer);
+
+// (Deprecated) Buffer usage type. This defines what types of operations may be
+// performed on a buffer. They are defined merely for backwards compatibility,
+// and correspond to merely enabling the respective usage flags.
+enum pl_buf_type {
+    PL_BUF_TEX_TRANSFER,  // no extra usage flags
+    PL_BUF_UNIFORM,       // enables `uniform`
+    PL_BUF_STORAGE,       // enables `storable`
+    PL_BUF_TEXEL_UNIFORM, // equivalent to PL_BUF_UNIFORM (when `format` is set)
+    PL_BUF_TEXEL_STORAGE, // equivalent to PL_BUF_STORAGE (when `format` is set)
+    PL_BUF_TYPE_COUNT,
+};
+
+enum pl_buf_mem_type {
+    PL_BUF_MEM_AUTO = 0, // use whatever seems most appropriate
+    PL_BUF_MEM_HOST,     // try allocating from host memory (RAM)
+    PL_BUF_MEM_DEVICE,   // try allocating from device memory (VRAM)
+    PL_BUF_MEM_TYPE_COUNT,
+
+    // Note: This distinction only matters for discrete GPUs
+};
+
+// Structure describing a buffer.
+struct pl_buf_params {
+    size_t size;        // size in bytes (must be <= `pl_gpu_limits.max_buf_size`)
+    bool host_writable; // contents may be updated via pl_buf_write()
+    bool host_readable; // contents may be read back via pl_buf_read()
+    bool host_mapped;   // create a persistent, RW mapping (pl_buf.data)
+                        // (requires PL_GPU_CAP_MAPPED_BUFFERS)
+
+    // May be used as PL_DESC_BUF_UNIFORM or PL_DESC_BUF_TEXEL_UNIFORM.
+    // Requires `size <= pl_gpu_limits.max_ubo_size`
+    bool uniform;
+
+    // May be used as PL_DESC_BUF_STORAGE or PL_DESC_BUF_TEXEL_STORAGE.
+    // Requires `size <= pl_gpu_limits.max_ssbo_size`
+    bool storable;
+
+    // May be used as the source of vertex data for `pl_pass_run`.
+    bool drawable;
+
+    // Provide a hint for the memory type you want to use when allocating
+    // this buffer's memory.
+    //
+    // Note: Restrictions may apply depending on the usage flags. In
+    // particular, allocating buffers with `uniform` or `storable` enabled from
+    // non-device memory will almost surely fail.
+    enum pl_buf_mem_type memory_type;
+
+    // Setting this to a format with the `PL_FMT_CAP_TEXEL_*` capability allows
+    // this buffer to be used as a `PL_DESC_BUF_TEXEL_*`, when `uniform` and
+    // `storage` are respectively also enabled.
+    pl_fmt format;
+
+    // At most one of `export_handle` and `import_handle` can be set for a
+    // buffer.
+
+    // Setting this indicates that the memory backing this buffer should be
+    // shared with external APIs, If so, this must be exactly *one* of
+    // `pl_gpu.export_caps.buf`.
+    enum pl_handle_type export_handle;
+
+    // Setting this indicates that the memory backing this buffer will be
+    // imported from an external API. If so, this must be exactly *one* of
+    // `pl_gpu.import_caps.buf`.
+    enum pl_handle_type import_handle;
+
+    // If the shared memory is being imported, the import handle must be
+    // specified here. Otherwise, this is ignored.
+    struct pl_shared_mem shared_mem;
+
+    // If non-NULL, the buffer will be created with these contents. Otherwise,
+    // the initial data is undefined. Using this does *not* require setting
+    // host_writable.
+    const void *initial_data;
+
+    // Arbitrary user data. libplacebo does not use this at all.
+    void *user_data;
+
+    // Deprecated. Setting a type now effectively just enables some of the
+    // buffer usage flags. See `pl_buf_type`. This field will be removed
+    // in the future.
+    enum pl_buf_type type PL_DEPRECATED;
+};
+
+// A generic buffer, which can be used for multiple purposes (texture transfer,
+// storage buffer, uniform buffer, etc.)
+//
+// Note on efficiency: A pl_buf does not necessarily represent a true "buffer"
+// object on the underlying graphics API. It may also refer to a sub-slice of
+// a larger buffer, depending on the implementation details of the GPU. The
+// bottom line is that users do not need to worry about the efficiency of using
+// many small pl_buf objects. Having many small pl_bufs, even lots of few-byte
+// vertex buffers, is designed to be completely fine.
+//
+// Thread-safety: Unsafe
+typedef const struct pl_buf {
+    struct pl_buf_params params;
+    uint8_t *data; // for persistently mapped buffers, points to the first byte
+
+    // If `params.handle_type` is set, this structure references the shared
+    // memory backing this buffer, via the requested handle type.
+    //
+    // While this buffer is not in an "exported" state, the contents of the
+    // memory are undefined. (See: `pl_buf_export`)
+    struct pl_shared_mem shared_mem;
+} *pl_buf;
+
+// Create a buffer. The type of buffer depends on the parameters. The buffer
+// parameters must adhere to the restrictions imposed by the pl_gpu_limits.
+// Returns NULL on failure.
+//
+// For buffers with shared memory, the buffer is considered to be in an
+// "exported" state by default, and may be used directly by the external API
+// after being created (until the first libplacebo operation on the buffer).
+pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *params);
+void pl_buf_destroy(pl_gpu gpu, pl_buf *buf);
+
+// This behaves like `pl_buf_create`, but if the buffer already exists and has
+// incompatible parameters, it will get destroyed first. A buffer is considered
+// "compatible" if it has the same buffer type and texel format, a size greater
+// than or equal to the requested size, and it has a superset of the features
+// the user requested. After this operation, the contents of the buffer are
+// undefined.
+//
+// Note: Due to its unpredictability, it's not allowed to use this with
+// `params->initial_data` being set. Similarly, it's not allowed on a buffer
+// with `params->export_handle`. since this may invalidate the corresponding
+// external API's handle. Conversely, it *is* allowed on a buffer with
+// `params->host_mapped`, and the corresponding `buf->data` pointer *may*
+// change as a result of doing so.
+//
+// Note: If the `user_data` alone changes, this does not trigger a buffer
+// recreation. In theory, this can be used to detect when the buffer ended
+// up being recreated.
+bool pl_buf_recreate(pl_gpu gpu, pl_buf *buf, const struct pl_buf_params *params);
+
+// Update the contents of a buffer, starting at a given offset (must be a
+// multiple of 4) and up to a given size, with the contents of *data.
+//
+// This function will block until the buffer is no longer in use. Use
+// `pl_buf_poll` to perform non-blocking queries of buffer availability.
+//
+// Note: This function can incur synchronization overhead, so it shouldn't be
+// used in tight loops. If you do need to loop (e.g. to perform a strided
+// write), consider using host-mapped buffers, or fixing the memory in RAM,
+// before calling this function.
+void pl_buf_write(pl_gpu gpu, pl_buf buf, size_t buf_offset,
+                  const void *data, size_t size);
+
+// Read back the contents of a buffer, starting at a given offset, storing the
+// data into *dest. Returns whether successful.
+//
+// This function will block until the buffer is no longer in use. Use
+// `pl_buf_poll` to perform non-blocking queries of buffer availability.
+bool pl_buf_read(pl_gpu gpu, pl_buf buf, size_t buf_offset,
+                 void *dest, size_t size);
+
+// Copy `size` bytes from one buffer to another, reading from and writing to
+// the respective offsets.
+void pl_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
+                 pl_buf src, size_t src_offset, size_t size);
+
+// Initiates a buffer export operation, allowing a buffer to be accessed by an
+// external API. This is only valid for buffers with `params.handle_type`.
+// Calling this twice in a row is a harmless no-op. Returns whether successful.
+//
+// There is no corresponding "buffer import" operation, the next libplacebo
+// operation that touches the buffer (e.g. pl_tex_upload, but also pl_buf_write
+// and pl_buf_read) will implicitly import the buffer back to libplacebo. Users
+// must ensure that all pending operations made by the external API are fully
+// completed before using it in libplacebo again. (Otherwise, the behaviour
+// is undefined)
+//
+// Please note that this function returning does not mean the memory is
+// immediately available as such. In general, it will mark a buffer as "in use"
+// in the same way any other buffer operation would, and it is the user's
+// responsibility to wait until `pl_buf_poll` returns false before accessing
+// the memory from the external API.
+//
+// In terms of the access performed by this operation, it is not considered a
+// "read" or "write" and therefore does not technically conflict with reads or
+// writes to the buffer performed by the host (via mapped memory - any use of
+// `pl_buf_read` or `pl_buf_write` would defeat the purpose of the export).
+// However, restrictions made by the external API may apply that prevent this.
+//
+// The recommended use pattern is something like this:
+//
+// while (loop) {
+//    pl_buf buf = get_free_buffer(); // or block on pl_buf_poll
+//    // write to the buffer using the external API
+//    pl_tex_upload(gpu, /* ... buf ... */); // implicitly imports
+//    pl_buf_export(gpu, buf);
+// }
+//
+// i.e. perform an external API operation, then use and immediately export the
+// buffer in libplacebo, and finally wait until `pl_buf_poll` is false before
+// re-using it in the external API. (Or get a new buffer in the meantime)
+bool pl_buf_export(pl_gpu gpu, pl_buf buf);
+
+// Returns whether or not a buffer is currently "in use". This can either be
+// because of a pending read operation, a pending write operation or a pending
+// buffer export operation. Any access to the buffer by external APIs or via
+// the host pointer (for host-mapped buffers) is forbidden while a buffer is
+// "in use". The only exception to this rule is multiple reads, for example
+// reading from a buffer with `pl_tex_upload` while simultaneously reading from
+// it using mapped memory.
+//
+// The `timeout`, specified in nanoseconds, indicates how long to block for
+// before returning. If set to 0, this function will never block, and only
+// returns the current status of the buffer. The actual precision of the
+// timeout may be significantly longer than one nanosecond, and has no upper
+// bound. This function does not provide hard latency guarantees. This function
+// may also return at any time, even if the buffer is still in use. If the user
+// wishes to block until the buffer is definitely no longer in use, the
+// recommended usage is:
+//
+// while (pl_buf_poll(gpu, buf, UINT64_MAX))
+//      ; // do nothing
+//
+// Note: libplacebo operations on buffers are always internally synchronized,
+// so this is only needed for host-mapped or externally exported buffers.
+// However, it may be used to do non-blocking queries before calling blocking
+// functions such as `pl_buf_read`.
+//
+// Note: If `PL_GPU_CAP_THREAD_SAFE` is set, this function is implicitly
+// synchronized, meaning it can safely be called on a `pl_buf` that is in use
+// by another thread.
+bool pl_buf_poll(pl_gpu gpu, pl_buf buf, uint64_t timeout);
 
 enum pl_tex_sample_mode {
     PL_TEX_SAMPLE_NEAREST,  // nearest neighour sampling
@@ -328,7 +592,7 @@ enum pl_tex_address_mode {
 // Structure describing a texture.
 struct pl_tex_params {
     int w, h, d;            // physical dimension; unused dimensions must be 0
-    const struct pl_fmt *format;
+    pl_fmt format;
 
     // The following bools describe what operations can be performed. The
     // corresponding pl_fmt capability must be set for every enabled
@@ -402,7 +666,7 @@ enum pl_sampler_type {
 // and/or rendered to.
 //
 // Thread-safety: Unsafe
-struct pl_tex {
+typedef const struct pl_tex {
     struct pl_tex_params params;
 
     // If `params.export_handle` is set, this structure references the shared
@@ -419,15 +683,13 @@ struct pl_tex {
     // If `params.sampleable` is true, this indicates the correct sampler type
     // to use when sampling from this texture.
     enum pl_sampler_type sampler_type;
-};
+} *pl_tex;
 
 // Create a texture (with undefined contents). Returns NULL on failure. This is
 // assumed to be an expensive/rare operation, and may need to perform memory
 // allocation or framebuffer creation.
-const struct pl_tex *pl_tex_create(const struct pl_gpu *gpu,
-                                   const struct pl_tex_params *params);
-
-void pl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex **tex);
+pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params);
+void pl_tex_destroy(pl_gpu gpu, pl_tex *tex);
 
 // This works like `pl_tex_create`, but if the texture already exists and has
 // incompatible texture parameters, it will get destroyed first. A texture is
@@ -441,29 +703,27 @@ void pl_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex **tex);
 // Note: If the `user_data` alone changes, this does not trigger a texture
 // recreation. In theory, this can be used to detect when the texture ended
 // up being recreated.
-bool pl_tex_recreate(const struct pl_gpu *gpu, const struct pl_tex **tex,
-                     const struct pl_tex_params *params);
+bool pl_tex_recreate(pl_gpu gpu, pl_tex *tex, const struct pl_tex_params *params);
 
 // Invalidates the contents of a texture. After this, the contents are fully
 // undefined.
-void pl_tex_invalidate(const struct pl_gpu *gpu, const struct pl_tex *tex);
+void pl_tex_invalidate(pl_gpu gpu, pl_tex tex);
 
 // Clear the dst texture with the given color (rgba). This is functionally
 // identical to a blit operation, which means `dst->params.blit_dst` must be
 // set.
-void pl_tex_clear(const struct pl_gpu *gpu, const struct pl_tex *dst,
-                  const float color[4]);
+void pl_tex_clear(pl_gpu gpu, pl_tex dst, const float color[4]);
 
 struct pl_tex_blit_params {
     // The texture to blit from. Must have `params.blit_src` enabled.
-    const struct pl_tex *src;
+    pl_tex src;
 
     // The texture to blit to. Must have `params.blit_dst` enabled, and a
     // format that is loosely compatible with `src`. This essentially means
     // that they must have the same `internal_size`. Additionally, UINT
     // textures can only be blitted to other UINT textures, and SINT textures
     // can only be blitted to other SINT textures.
-    const struct pl_tex *dst;
+    pl_tex dst;
 
     // The region of the source texture to blit. Must be within the texture
     // bounds of `src`. May be flipped. (Optional)
@@ -480,15 +740,14 @@ struct pl_tex_blit_params {
 };
 
 // Copy a sub-rectangle from one texture to another.
-void pl_tex_blit(const struct pl_gpu *gpu,
-                 const struct pl_tex_blit_params *params);
+void pl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params);
 
 // Structure describing a texture transfer operation.
 struct pl_tex_transfer_params {
     // Texture to transfer to/from. Depending on the type of the operation,
     // this must have params.host_writable (uploads) or params.host_readable
     // (downloads) set, respectively.
-    const struct pl_tex *tex;
+    pl_tex tex;
 
     // Note: Superfluous parameters are ignored, i.e. for a 1D texture, the y
     // and z fields of `rc`, as well as the corresponding strides, are ignored.
@@ -506,7 +765,7 @@ struct pl_tex_transfer_params {
     // texture transfer may happen entirely in the background (in particular,
     // for implementations with asynchronous transfer capabilities). It's also
     // not guaranteed that all GPUs support this.
-    struct pl_timer *timer;
+    pl_timer timer;
 
     // An optional callback to fire after the operation completes. If this is
     // specified, then the operation is performed asynchronously. Note that
@@ -531,23 +790,21 @@ struct pl_tex_transfer_params {
     // options:
     //
     // 1. Transferring to/from a buffer:
-    const struct pl_buf *buf; // buffer to use
-    size_t buf_offset;        // offset of data within buffer, should be a
-                              // multiple of `tex->params.format->texel_size`
+    pl_buf buf;         // buffer to use
+    size_t buf_offset;  // offset of data within buffer, should be a
+                        // multiple of `tex->params.format->texel_size`
     // 2. Transferring to/from host memory directly:
-    void *ptr;                // address of data
+    void *ptr;          // address of data
 
     // Note: The contents of the memory region / buffer must exactly match the
     // texture format; i.e. there is no explicit conversion between formats.
 };
 
 // Upload data to a texture. Returns whether successful.
-bool pl_tex_upload(const struct pl_gpu *gpu,
-                   const struct pl_tex_transfer_params *params);
+bool pl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params);
 
 // Download data from a texture. Returns whether successful.
-bool pl_tex_download(const struct pl_gpu *gpu,
-                     const struct pl_tex_transfer_params *params);
+bool pl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params);
 
 // Returns whether or not a texture is currently "in use". This can either be
 // because of a pending read operation, a pending write operation or a pending
@@ -578,243 +835,7 @@ bool pl_tex_download(const struct pl_gpu *gpu,
 // Note: If `PL_GPU_CAP_THREAD_SAFE` is set, this function is implicitly
 // synchronized, meaning it can safely be called on a `pl_tex` that is in use
 // by another thread.
-bool pl_tex_poll(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                 uint64_t timeout);
-
-// (Deprecated) Buffer usage type. This defines what types of operations may be
-// performed on a buffer. They are defined merely for backwards compatibility,
-// and correspond to merely enabling the respective usage flags.
-enum pl_buf_type {
-    PL_BUF_TEX_TRANSFER,  // no extra usage flags
-    PL_BUF_UNIFORM,       // enables `uniform`
-    PL_BUF_STORAGE,       // enables `storable`
-    PL_BUF_TEXEL_UNIFORM, // equivalent to PL_BUF_UNIFORM (when `format` is set)
-    PL_BUF_TEXEL_STORAGE, // equivalent to PL_BUF_STORAGE (when `format` is set)
-    PL_BUF_TYPE_COUNT,
-};
-
-enum pl_buf_mem_type {
-    PL_BUF_MEM_AUTO = 0, // use whatever seems most appropriate
-    PL_BUF_MEM_HOST,     // try allocating from host memory (RAM)
-    PL_BUF_MEM_DEVICE,   // try allocating from device memory (VRAM)
-    PL_BUF_MEM_TYPE_COUNT,
-
-    // Note: This distinction only matters for discrete GPUs
-};
-
-// Structure describing a buffer.
-struct pl_buf_params {
-    size_t size;        // size in bytes (must be <= `pl_gpu_limits.max_buf_size`)
-    bool host_writable; // contents may be updated via pl_buf_write()
-    bool host_readable; // contents may be read back via pl_buf_read()
-    bool host_mapped;   // create a persistent, RW mapping (pl_buf.data)
-                        // (requires PL_GPU_CAP_MAPPED_BUFFERS)
-
-    // May be used as PL_DESC_BUF_UNIFORM or PL_DESC_BUF_TEXEL_UNIFORM.
-    // Requires `size <= pl_gpu_limits.max_ubo_size`
-    bool uniform;
-
-    // May be used as PL_DESC_BUF_STORAGE or PL_DESC_BUF_TEXEL_STORAGE.
-    // Requires `size <= pl_gpu_limits.max_ssbo_size`
-    bool storable;
-
-    // May be used as the source of vertex data for `pl_pass_run`.
-    bool drawable;
-
-    // Provide a hint for the memory type you want to use when allocating
-    // this buffer's memory.
-    //
-    // Note: Restrictions may apply depending on the usage flags. In
-    // particular, allocating buffers with `uniform` or `storable` enabled from
-    // non-device memory will almost surely fail.
-    enum pl_buf_mem_type memory_type;
-
-    // Setting this to a format with the `PL_FMT_CAP_TEXEL_*` capability allows
-    // this buffer to be used as a `PL_DESC_BUF_TEXEL_*`, when `uniform` and
-    // `storage` are respectively also enabled.
-    const struct pl_fmt *format;
-
-    // At most one of `export_handle` and `import_handle` can be set for a
-    // buffer.
-
-    // Setting this indicates that the memory backing this buffer should be
-    // shared with external APIs, If so, this must be exactly *one* of
-    // `pl_gpu.export_caps.buf`.
-    enum pl_handle_type export_handle;
-
-    // Setting this indicates that the memory backing this buffer will be
-    // imported from an external API. If so, this must be exactly *one* of
-    // `pl_gpu.import_caps.buf`.
-    enum pl_handle_type import_handle;
-
-    // If the shared memory is being imported, the import handle must be
-    // specified here. Otherwise, this is ignored.
-    struct pl_shared_mem shared_mem;
-
-    // If non-NULL, the buffer will be created with these contents. Otherwise,
-    // the initial data is undefined. Using this does *not* require setting
-    // host_writable.
-    const void *initial_data;
-
-    // Arbitrary user data. libplacebo does not use this at all.
-    void *user_data;
-
-    // Deprecated. Setting a type now effectively just enables some of the
-    // buffer usage flags. See `pl_buf_type`. This field will be removed
-    // in the future.
-    enum pl_buf_type type PL_DEPRECATED;
-};
-
-// A generic buffer, which can be used for multiple purposes (texture transfer,
-// storage buffer, uniform buffer, etc.)
-//
-// Note on efficiency: A pl_buf does not necessarily represent a true "buffer"
-// object on the underlying graphics API. It may also refer to a sub-slice of
-// a larger buffer, depending on the implementation details of the GPU. The
-// bottom line is that users do not need to worry about the efficiency of using
-// many small pl_buf objects. Having many small pl_bufs, even lots of few-byte
-// vertex buffers, is designed to be completely fine.
-//
-// Thread-safety: Unsafe
-struct pl_buf {
-    struct pl_buf_params params;
-    uint8_t *data; // for persistently mapped buffers, points to the first byte
-
-    // If `params.handle_type` is set, this structure references the shared
-    // memory backing this buffer, via the requested handle type.
-    //
-    // While this buffer is not in an "exported" state, the contents of the
-    // memory are undefined. (See: `pl_buf_export`)
-    struct pl_shared_mem shared_mem;
-};
-
-// Create a buffer. The type of buffer depends on the parameters. The buffer
-// parameters must adhere to the restrictions imposed by the pl_gpu_limits.
-// Returns NULL on failure.
-//
-// For buffers with shared memory, the buffer is considered to be in an
-// "exported" state by default, and may be used directly by the external API
-// after being created (until the first libplacebo operation on the buffer).
-const struct pl_buf *pl_buf_create(const struct pl_gpu *gpu,
-                                   const struct pl_buf_params *params);
-
-// This behaves like `pl_buf_create`, but if the buffer already exists and has
-// incompatible parameters, it will get destroyed first. A buffer is considered
-// "compatible" if it has the same buffer type and texel format, a size greater
-// than or equal to the requested size, and it has a superset of the features
-// the user requested. After this operation, the contents of the buffer are
-// undefined.
-//
-// Note: Due to its unpredictability, it's not allowed to use this with
-// `params->initial_data` being set. Similarly, it's not allowed on a buffer
-// with `params->export_handle`. since this may invalidate the corresponding
-// external API's handle. Conversely, it *is* allowed on a buffer with
-// `params->host_mapped`, and the corresponding `buf->data` pointer *may*
-// change as a result of doing so.
-//
-// Note: If the `user_data` alone changes, this does not trigger a buffer
-// recreation. In theory, this can be used to detect when the buffer ended
-// up being recreated.
-bool pl_buf_recreate(const struct pl_gpu *gpu, const struct pl_buf **buf,
-                     const struct pl_buf_params *params);
-
-void pl_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf **buf);
-
-// Update the contents of a buffer, starting at a given offset (must be a
-// multiple of 4) and up to a given size, with the contents of *data.
-//
-// This function will block until the buffer is no longer in use. Use
-// `pl_buf_poll` to perform non-blocking queries of buffer availability.
-//
-// Note: This function can incur synchronization overhead, so it shouldn't be
-// used in tight loops. If you do need to loop (e.g. to perform a strided
-// write), consider using host-mapped buffers, or fixing the memory in RAM,
-// before calling this function.
-void pl_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
-                  size_t buf_offset, const void *data, size_t size);
-
-// Read back the contents of a buffer, starting at a given offset, storing the
-// data into *dest. Returns whether successful.
-//
-// This function will block until the buffer is no longer in use. Use
-// `pl_buf_poll` to perform non-blocking queries of buffer availability.
-bool pl_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
-                 size_t buf_offset, void *dest, size_t size);
-
-// Copy `size` bytes from one buffer to another, reading from and writing to
-// the respective offsets.
-void pl_buf_copy(const struct pl_gpu *gpu,
-                 const struct pl_buf *dst, size_t dst_offset,
-                 const struct pl_buf *src, size_t src_offset,
-                 size_t size);
-
-// Initiates a buffer export operation, allowing a buffer to be accessed by an
-// external API. This is only valid for buffers with `params.handle_type`.
-// Calling this twice in a row is a harmless no-op. Returns whether successful.
-//
-// There is no corresponding "buffer import" operation, the next libplacebo
-// operation that touches the buffer (e.g. pl_tex_upload, but also pl_buf_write
-// and pl_buf_read) will implicitly import the buffer back to libplacebo. Users
-// must ensure that all pending operations made by the external API are fully
-// completed before using it in libplacebo again. (Otherwise, the behaviour
-// is undefined)
-//
-// Please note that this function returning does not mean the memory is
-// immediately available as such. In general, it will mark a buffer as "in use"
-// in the same way any other buffer operation would, and it is the user's
-// responsibility to wait until `pl_buf_poll` returns false before accessing
-// the memory from the external API.
-//
-// In terms of the access performed by this operation, it is not considered a
-// "read" or "write" and therefore does not technically conflict with reads or
-// writes to the buffer performed by the host (via mapped memory - any use of
-// `pl_buf_read` or `pl_buf_write` would defeat the purpose of the export).
-// However, restrictions made by the external API may apply that prevent this.
-//
-// The recommended use pattern is something like this:
-//
-// while (loop) {
-//    const struct pl_buf *buf = get_free_buffer(); // or block on pl_buf_poll
-//    // write to the buffer using the external API
-//    pl_tex_upload(gpu, /* ... buf ... */); // implicitly imports
-//    pl_buf_export(gpu, buf);
-// }
-//
-// i.e. perform an external API operation, then use and immediately export the
-// buffer in libplacebo, and finally wait until `pl_buf_poll` is false before
-// re-using it in the external API. (Or get a new buffer in the meantime)
-bool pl_buf_export(const struct pl_gpu *gpu, const struct pl_buf *buf);
-
-// Returns whether or not a buffer is currently "in use". This can either be
-// because of a pending read operation, a pending write operation or a pending
-// buffer export operation. Any access to the buffer by external APIs or via
-// the host pointer (for host-mapped buffers) is forbidden while a buffer is
-// "in use". The only exception to this rule is multiple reads, for example
-// reading from a buffer with `pl_tex_upload` while simultaneously reading from
-// it using mapped memory.
-//
-// The `timeout`, specified in nanoseconds, indicates how long to block for
-// before returning. If set to 0, this function will never block, and only
-// returns the current status of the buffer. The actual precision of the
-// timeout may be significantly longer than one nanosecond, and has no upper
-// bound. This function does not provide hard latency guarantees. This function
-// may also return at any time, even if the buffer is still in use. If the user
-// wishes to block until the buffer is definitely no longer in use, the
-// recommended usage is:
-//
-// while (pl_buf_poll(gpu, buf, UINT64_MAX))
-//      ; // do nothing
-//
-// Note: libplacebo operations on buffers are always internally synchronized,
-// so this is only needed for host-mapped or externally exported buffers.
-// However, it may be used to do non-blocking queries before calling blocking
-// functions such as `pl_buf_read`.
-//
-// Note: If `PL_GPU_CAP_THREAD_SAFE` is set, this function is implicitly
-// synchronized, meaning it can safely be called on a `pl_buf` that is in use
-// by another thread.
-bool pl_buf_poll(const struct pl_gpu *gpu, const struct pl_buf *buf,
-                 uint64_t timeout);
+bool pl_tex_poll(pl_gpu gpu, pl_tex tex, uint64_t timeout);
 
 // Data type of a shader input variable (e.g. uniform, or UBO member)
 enum pl_var_type {
@@ -879,7 +900,7 @@ const char *pl_var_glsl_type_name(struct pl_var var);
 // Converts a pl_fmt to an "equivalent" pl_var. Equivalent in this sense means
 // that the pl_var's type will be the same as the vertex's sampled type (e.g.
 // PL_FMT_UNORM gets turned into PL_VAR_FLOAT).
-struct pl_var pl_var_from_fmt(const struct pl_fmt *fmt, const char *name);
+struct pl_var pl_var_from_fmt(pl_fmt fmt, const char *name);
 
 // Describes the memory layout of a variable, relative to some starting location
 // (typically the offset within a uniform/storage/pushconstant buffer)
@@ -962,10 +983,10 @@ void memcpy_layout(void *dst, struct pl_var_layout dst_layout,
 
 // Represents a vertex attribute.
 struct pl_vertex_attrib {
-    const char *name;         // name as used in the shader
-    const struct pl_fmt *fmt; // data format (must have PL_FMT_CAP_VERTEX)
-    size_t offset;            // byte offset into the vertex struct
-    int location;             // vertex location (as used in the shader)
+    const char *name;   // name as used in the shader
+    pl_fmt fmt;         // data format (must have PL_FMT_CAP_VERTEX)
+    size_t offset;      // byte offset into the vertex struct
+    int location;       // vertex location (as used in the shader)
 };
 
 // Type of a shader input descriptor.
@@ -990,7 +1011,7 @@ enum pl_desc_type {
 // always be a value >= 0 and < PL_DESC_TYPE_COUNT. Implementations can use
 // this to figure out which descriptors may share the same value of `binding`.
 // Bindings must only be unique for all descriptors within the same namespace.
-int pl_desc_namespace(const struct pl_gpu *gpu, enum pl_desc_type type);
+int pl_desc_namespace(pl_gpu gpu, enum pl_desc_type type);
 
 // Access mode of a shader input descriptor.
 enum pl_desc_access {
@@ -1124,9 +1145,9 @@ struct pl_pass_params {
 // - the current values of all inputs
 //
 // Thread-safety: Unsafe
-struct pl_pass {
+typedef const struct pl_pass {
     struct pl_pass_params params;
-};
+} *pl_pass;
 
 // Compile a shader and create a render pass. This is a rare/expensive
 // operation and may take a significant amount of time, even if a cached
@@ -1134,10 +1155,8 @@ struct pl_pass {
 //
 // The resulting pl_pass->params.cached_program will be initialized by
 // this function to point to a new, valid cached program (if any).
-const struct pl_pass *pl_pass_create(const struct pl_gpu *gpu,
-                                     const struct pl_pass_params *params);
-
-void pl_pass_destroy(const struct pl_gpu *gpu, const struct pl_pass **pass);
+pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params);
+void pl_pass_destroy(pl_gpu gpu, pl_pass *pass);
 
 struct pl_desc_binding {
     const void *object; // pl_* object with type corresponding to pl_desc_type
@@ -1153,7 +1172,7 @@ struct pl_var_update {
 };
 
 struct pl_pass_run_params {
-    const struct pl_pass *pass;
+    pl_pass pass;
 
     // This list only contains descriptors/variables which have changed
     // since the previous invocation. All non-mentioned variables implicitly
@@ -1173,7 +1192,7 @@ struct pl_pass_run_params {
     // An optional timer to report the approximate runtime of this shader pass
     // invocation to. Note that this is only an approximation, since shaders
     // may overlap their execution times and contend for GPU time.
-    struct pl_timer *timer;
+    pl_timer timer;
 
     // --- pass->params.type==PL_PASS_RASTER only
 
@@ -1185,7 +1204,7 @@ struct pl_pass_run_params {
     // WARNING: Rendering to a *target that is being read from by the same
     // shader is undefined behavior. In general, trying to bind the same
     // resource multiple times to the same shader is undefined behavior.
-    const struct pl_tex *target;
+    pl_tex target;
     struct pl_rect2d viewport; // screen space viewport (must be normalized)
     struct pl_rect2d scissors; // target render scissors (must be normalized)
 
@@ -1197,7 +1216,7 @@ struct pl_pass_run_params {
     // 1. Drawing from host memory directly
     const void *vertex_data;
     // 2. Drawing from a vertex buffer (requires `vertex_buf->params.drawable`)
-    const struct pl_buf *vertex_buf;
+    pl_buf vertex_buf;
     size_t buf_offset;
 
     // (Optional) Index data may be provided in the form of `uint16_t` index
@@ -1206,7 +1225,7 @@ struct pl_pass_run_params {
     // 1. From host memory
     const uint16_t *index_data;
     // 2. From an index buffer (requires `index_buf->params.drawable`)
-    const struct pl_buf *index_buf;
+    pl_buf index_buf;
     size_t index_offset;
     // Note: Drawing from an index buffer requires vertex data to also be
     // present in buffer form, i.e. it's forbidden to mix `index_buf` with
@@ -1220,7 +1239,7 @@ struct pl_pass_run_params {
 };
 
 // Execute a render pass.
-void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *params);
+void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params);
 
 // A generic synchronization object intended for use with an external API. This
 // is not required when solely using libplacebo API functions, as all required
@@ -1228,7 +1247,7 @@ void pl_pass_run(const struct pl_gpu *gpu, const struct pl_pass_run_params *para
 // semaphores - one to synchronize access in each direction.
 //
 // Thread-safety: Unsafe
-struct pl_sync {
+typedef const struct pl_sync {
     enum pl_handle_type handle_type;
 
     // This handle is signalled by the `pl_gpu`, and waited on by the user. It
@@ -1238,14 +1257,13 @@ struct pl_sync {
     // This handle is signalled by the user, and waited on by the `pl_gpu`. It
     // must fire when the user has finished accessing the shared resource.
     union pl_handle signal_handle;
-};
+} *pl_sync;
 
 // Create a synchronization object. Returns NULL on failure.
 //
 // `handle_type` must be exactly *one* of `pl_gpu.export_caps.sync`, and
 // indicates which type of handle to generate for sharing this sync object.
-const struct pl_sync *pl_sync_create(const struct pl_gpu *gpu,
-                                     enum pl_handle_type handle_type);
+pl_sync pl_sync_create(pl_gpu gpu, enum pl_handle_type handle_type);
 
 // Destroy a `pl_sync`. Note that this invalidates the externally imported
 // semaphores. Users should therefore make sure that all operations that
@@ -1254,8 +1272,7 @@ const struct pl_sync *pl_sync_create(const struct pl_gpu *gpu,
 //
 // Despite this, it's safe to destroy a `pl_sync` if the only pending
 // operations that involve it are internal to libplacebo.
-void pl_sync_destroy(const struct pl_gpu *gpu,
-                     const struct pl_sync **sync);
+void pl_sync_destroy(pl_gpu gpu, pl_sync *sync);
 
 // Initiates a texture export operation, allowing a texture to be accessed by
 // an external API. Returns whether successful. After this operation
@@ -1272,45 +1289,7 @@ void pl_sync_destroy(const struct pl_gpu *gpu,
 // Note that despite this restriction, it is always valid to call
 // `pl_tex_destroy`, even if the texture is in an exported state, without
 // having to signal the corresponding sync object first.
-bool pl_tex_export(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                   const struct pl_sync *sync);
-
-// A generic 'timer query' object. These can be used to measure an
-// approximation of the GPU execution time of a given operation. Due to the
-// highly asynchronous nature of GPUs, the actual results of any individual
-// timer query may be delayed by quite a bit. As such, users should avoid
-// trying to pair any particular GPU command with any particular timer query
-// result, and only reuse `pl_timer` objects with identical operations. The
-// results of timer queries are guaranteed to be in-order, but individual
-// queries may be dropped, and some operations might not record timer results
-// at all. (For example, if the underlying hardware does not support timer
-// queries for a given operation type)
-//
-// Thread-safety: Unsafe
-struct pl_timer;
-
-// Creates a new timer object. This may return NULL, for example if the
-// implementation does not support timers, but since passing NULL to
-// `pl_timer_destroy` and `pl_timer_query` is safe, users generally need not
-// concern themselves with handling this.
-struct pl_timer *pl_timer_create(const struct pl_gpu *gpu);
-
-void pl_timer_destroy(const struct pl_gpu *gpu, struct pl_timer **);
-
-// Queries any results that have been measured since the last execution of
-// `pl_timer_query`. There may be more than one result, in which case the user
-// should simply call the function again to get the subsequent values. This
-// function returns a value of 0 in the event that there are no more
-// unprocessed results.
-//
-// The results are reported in nanoseconds, but the actual precision of the
-// timestamp queries may be significantly lower.
-//
-// Note: Results do not queue up indefinitely. Generally, the implementation
-// will only keep track of a small, fixed number of results internally. Make
-// sure to include this function as part of your main rendering loop to process
-// all of its results, or older results will be overwritten by newer ones.
-uint64_t pl_timer_query(const struct pl_gpu *gpu, struct pl_timer *);
+bool pl_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync);
 
 // This is semantically a no-op, but it provides a hint that you want to flush
 // any partially queued up commands and begin execution. There is normally no
@@ -1328,7 +1307,7 @@ uint64_t pl_timer_query(const struct pl_gpu *gpu, struct pl_timer *);
 //
 // It's worth noting that this function may block if you're over-feeding the
 // GPU without waiting for existing results to finish.
-void pl_gpu_flush(const struct pl_gpu *gpu);
+void pl_gpu_flush(pl_gpu gpu);
 
 // This is like `pl_gpu_flush` but also blocks until the GPU is fully idle
 // before returning. Using this in your rendering loop is seriously disadvised,
@@ -1345,7 +1324,7 @@ void pl_gpu_flush(const struct pl_gpu *gpu);
 // you have many buffers it may be more convenient to call this function
 // instead. The difference is that this function will also affect e.g. renders
 // to a `pl_swapchain`.
-void pl_gpu_finish(const struct pl_gpu *gpu);
+void pl_gpu_finish(pl_gpu gpu);
 
 // Returns true if the GPU is considered to be in a "failed" state, which
 // during normal operation is typically the result of things like the device
@@ -1353,6 +1332,6 @@ void pl_gpu_finish(const struct pl_gpu *gpu);
 //
 // If this returns true, users *should* destroy and recreate the `pl_gpu`,
 // including all associated resources, via the appropriate mechanism.
-bool pl_gpu_is_failed(const struct pl_gpu *gpu);
+bool pl_gpu_is_failed(pl_gpu gpu);
 
 #endif // LIBPLACEBO_GPU_H_

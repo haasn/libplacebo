@@ -6,7 +6,7 @@ __AFL_FUZZ_INIT();
 
 int main()
 {
-    const struct pl_gpu *gpu = pl_gpu_dummy_create(NULL, NULL);
+    pl_gpu gpu = pl_gpu_dummy_create(NULL, NULL);
     const struct pl_hook *hook;
 
 #ifdef __AFL_HAVE_MANUAL_CONTROL

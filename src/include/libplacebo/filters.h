@@ -276,7 +276,7 @@ struct pl_filter_params {
 // Represents an initialized instance of a particular filter, with a
 // precomputed LUT. The interpretation of the LUT depends on the type of the
 // filter (polar or separable).
-struct pl_filter {
+typedef const struct pl_filter {
     // Deep copy of the parameters, for convenience.
     struct pl_filter_params params;
 
@@ -319,15 +319,13 @@ struct pl_filter {
     // The separation (in *weights) between each row of the filter. Always
     // a multiple of params.row_stride_align.
     int row_stride;
-};
+} *pl_filter;
 
 // Generate (compute) a filter instance based on a given filter configuration.
 // The resulting pl_filter must be freed with `pl_filter_free` when no longer
 // needed. Returns NULL if filter generation fails due to invalid parameters
 // (i.e. missing a required parameter).
-const struct pl_filter *pl_filter_generate(pl_log log,
-                                       const struct pl_filter_params *params);
-
-void pl_filter_free(const struct pl_filter **filter);
+pl_filter pl_filter_generate(pl_log log, const struct pl_filter_params *params);
+void pl_filter_free(pl_filter *filter);
 
 #endif // LIBPLACEBO_FILTER_KERNELS_H_

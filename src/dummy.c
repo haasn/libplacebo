@@ -56,8 +56,7 @@ struct priv {
     struct pl_gpu_dummy_params params;
 };
 
-const struct pl_gpu *pl_gpu_dummy_create(pl_log log,
-                                         const struct pl_gpu_dummy_params *params)
+pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params)
 {
     params = PL_DEF(params, &pl_gpu_dummy_default_params);
 
@@ -78,7 +77,7 @@ const struct pl_gpu *pl_gpu_dummy_create(pl_log log,
 
     // Set up the dummy formats, add one for each possible format type that we
     // can represent on the host
-    PL_ARRAY(const struct pl_fmt *) formats = {0};
+    PL_ARRAY(pl_fmt) formats = {0};
     for (enum pl_fmt_type type = 1; type < PL_FMT_TYPE_COUNT; type++) {
         for (int comps = 1; comps <= 4; comps++) {
             for (int depth = 8; depth < 128; depth *= 2) {
@@ -147,12 +146,12 @@ const struct pl_gpu *pl_gpu_dummy_create(pl_log log,
     return gpu;
 }
 
-static void dumb_destroy(const struct pl_gpu *gpu)
+static void dumb_destroy(pl_gpu gpu)
 {
     pl_free((void *) gpu);
 }
 
-void pl_gpu_dummy_destroy(const struct pl_gpu **gpu)
+void pl_gpu_dummy_destroy(pl_gpu *gpu)
 {
     pl_gpu_destroy(*gpu);
     *gpu = NULL;
@@ -162,8 +161,7 @@ struct buf_priv {
     uint8_t *data;
 };
 
-static const struct pl_buf *dumb_buf_create(const struct pl_gpu *gpu,
-                                            const struct pl_buf_params *params)
+static pl_buf dumb_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
 {
     struct pl_buf *buf = pl_zalloc_priv(NULL, struct pl_buf, struct buf_priv);
     buf->params = *params;
@@ -185,38 +183,36 @@ static const struct pl_buf *dumb_buf_create(const struct pl_gpu *gpu,
     return buf;
 }
 
-static void dumb_buf_destroy(const struct pl_gpu *gpu, const struct pl_buf *buf)
+static void dumb_buf_destroy(pl_gpu gpu, pl_buf buf)
 {
     struct buf_priv *p = PL_PRIV(buf);
     free(p->data);
     pl_free((void *) buf);
 }
 
-uint8_t *pl_buf_dummy_data(const struct pl_buf *buf)
+uint8_t *pl_buf_dummy_data(pl_buf buf)
 {
     struct buf_priv *p = PL_PRIV(buf);
     return p->data;
 }
 
-static void dumb_buf_write(const struct pl_gpu *gpu, const struct pl_buf *buf,
-                           size_t buf_offset, const void *data, size_t size)
+static void dumb_buf_write(pl_gpu gpu, pl_buf buf, size_t buf_offset,
+                           const void *data, size_t size)
 {
     struct buf_priv *p = PL_PRIV(buf);
     memcpy(p->data + buf_offset, data, size);
 }
 
-static bool dumb_buf_read(const struct pl_gpu *gpu, const struct pl_buf *buf,
-                          size_t buf_offset, void *dest, size_t size)
+static bool dumb_buf_read(pl_gpu gpu, pl_buf buf, size_t buf_offset,
+                          void *dest, size_t size)
 {
     struct buf_priv *p = PL_PRIV(buf);
     memcpy(dest, p->data + buf_offset, size);
     return true;
 }
 
-static void dumb_buf_copy(const struct pl_gpu *gpu,
-                          const struct pl_buf *dst, size_t dst_offset,
-                          const struct pl_buf *src, size_t src_offset,
-                          size_t size)
+static void dumb_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
+                          pl_buf src, size_t src_offset, size_t size)
 {
     struct buf_priv *dstp = PL_PRIV(dst);
     struct buf_priv *srcp = PL_PRIV(src);
@@ -227,7 +223,7 @@ struct tex_priv {
     void *data;
 };
 
-static size_t tex_size(const struct pl_gpu *gpu, const struct pl_tex *tex)
+static size_t tex_size(pl_gpu gpu, pl_tex tex)
 {
     size_t size = tex->params.format->texel_size * tex->params.w;
     size *= PL_DEF(tex->params.h, 1);
@@ -235,8 +231,7 @@ static size_t tex_size(const struct pl_gpu *gpu, const struct pl_tex *tex)
     return size;
 }
 
-static const struct pl_tex *dumb_tex_create(const struct pl_gpu *gpu,
-                                            const struct pl_tex_params *params)
+static pl_tex dumb_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 {
     struct pl_tex *tex = pl_zalloc_priv(NULL, struct pl_tex, void *);
     tex->params = *params;
@@ -256,8 +251,7 @@ static const struct pl_tex *dumb_tex_create(const struct pl_gpu *gpu,
     return tex;
 }
 
-const struct pl_tex *pl_tex_dummy_create(const struct pl_gpu *gpu,
-                                         const struct pl_tex_dummy_params *params)
+pl_tex pl_tex_dummy_create(pl_gpu gpu, const struct pl_tex_dummy_params *params)
 {
     // Only do minimal sanity checking, since this is just a dummy texture
     pl_assert(params->format && params->w >= 0 && params->h >= 0 && params->d >= 0);
@@ -276,7 +270,7 @@ const struct pl_tex *pl_tex_dummy_create(const struct pl_gpu *gpu,
     return tex;
 }
 
-static void dumb_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
+static void dumb_tex_destroy(pl_gpu gpu, pl_tex tex)
 {
     struct tex_priv *p = PL_PRIV(tex);
     if (p->data)
@@ -284,16 +278,15 @@ static void dumb_tex_destroy(const struct pl_gpu *gpu, const struct pl_tex *tex)
     pl_free((void *) tex);
 }
 
-uint8_t *pl_tex_dummy_data(const struct pl_tex *tex)
+uint8_t *pl_tex_dummy_data(pl_tex tex)
 {
     struct tex_priv *p = PL_PRIV(tex);
     return p->data;
 }
 
-static bool dumb_tex_upload(const struct pl_gpu *gpu,
-                            const struct pl_tex_transfer_params *params)
+static bool dumb_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
-    const struct pl_tex *tex = params->tex;
+    pl_tex tex = params->tex;
     struct tex_priv *p = PL_PRIV(tex);
     pl_assert(p->data);
 
@@ -320,10 +313,9 @@ static bool dumb_tex_upload(const struct pl_gpu *gpu,
     return true;
 }
 
-static bool dumb_tex_download(const struct pl_gpu *gpu,
-                              const struct pl_tex_transfer_params *params)
+static bool dumb_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
-    const struct pl_tex *tex = params->tex;
+    pl_tex tex = params->tex;
     struct tex_priv *p = PL_PRIV(tex);
     pl_assert(p->data);
 
@@ -350,19 +342,18 @@ static bool dumb_tex_download(const struct pl_gpu *gpu,
     return true;
 }
 
-static int dumb_desc_namespace(const struct pl_gpu *gpu, enum pl_desc_type type)
+static int dumb_desc_namespace(pl_gpu gpu, enum pl_desc_type type)
 {
     return 0; // safest behavior: never alias bindings
 }
 
-static const struct pl_pass *dumb_pass_create(const struct pl_gpu *gpu,
-                                              const struct pl_pass_params *params)
+static pl_pass dumb_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 {
     PL_ERR(gpu, "Creating render passes is not supported for dummy GPUs");
     return NULL;
 }
 
-static void dumb_gpu_finish(const struct pl_gpu *gpu)
+static void dumb_gpu_finish(pl_gpu gpu)
 {
     // no-op
 }

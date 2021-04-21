@@ -23,12 +23,12 @@
 
 struct priv {
     struct pl_opengl_swapchain_params params;
-    const struct pl_opengl *gl;
+    pl_opengl gl;
     pthread_mutex_t lock;
     bool has_sync;
 
     // current parameters
-    const struct pl_tex *fb;
+    pl_tex fb;
     bool frame_started;
 
     // vsync fences
@@ -38,10 +38,10 @@ struct priv {
 
 static struct pl_sw_fns opengl_swapchain;
 
-const struct pl_swapchain *pl_opengl_create_swapchain(const struct pl_opengl *gl,
+pl_swapchain pl_opengl_create_swapchain(pl_opengl gl,
                               const struct pl_opengl_swapchain_params *params)
 {
-    const struct pl_gpu *gpu = gl->gpu;
+    pl_gpu gpu = gl->gpu;
 
     if (params->max_swapchain_depth < 0) {
         PL_ERR(gpu, "Tried specifying negative swapchain depth?");
@@ -67,9 +67,9 @@ const struct pl_swapchain *pl_opengl_create_swapchain(const struct pl_opengl *gl
     return sw;
 }
 
-static void gl_sw_destroy(const struct pl_swapchain *sw)
+static void gl_sw_destroy(pl_swapchain sw)
 {
-    const struct pl_gpu *gpu = sw->gpu;
+    pl_gpu gpu = sw->gpu;
     struct priv *p = PL_PRIV(sw);
 
     pl_gpu_flush(gpu);
@@ -78,13 +78,13 @@ static void gl_sw_destroy(const struct pl_swapchain *sw)
     pl_free((void *) sw);
 }
 
-static int gl_sw_latency(const struct pl_swapchain *sw)
+static int gl_sw_latency(pl_swapchain sw)
 {
     struct priv *p = PL_PRIV(sw);
     return p->params.max_swapchain_depth;
 }
 
-static bool gl_sw_resize(const struct pl_swapchain *sw, int *width, int *height)
+static bool gl_sw_resize(pl_swapchain sw, int *width, int *height)
 {
     struct priv *p = PL_PRIV(sw);
     const int w = *width, h = *height;
@@ -132,7 +132,7 @@ static bool gl_sw_resize(const struct pl_swapchain *sw, int *width, int *height)
     return true;
 }
 
-void pl_opengl_swapchain_update_fb(const struct pl_swapchain *sw,
+void pl_opengl_swapchain_update_fb(pl_swapchain sw,
                                    const struct pl_opengl_framebuffer *fb)
 {
     struct priv *p = PL_PRIV(sw);
@@ -151,7 +151,7 @@ void pl_opengl_swapchain_update_fb(const struct pl_swapchain *sw,
     pthread_mutex_unlock(&p->lock);
 }
 
-static bool gl_sw_start_frame(const struct pl_swapchain *sw,
+static bool gl_sw_start_frame(pl_swapchain sw,
                               struct pl_swapchain_frame *out_frame)
 {
     struct priv *p = PL_PRIV(sw);
@@ -205,7 +205,7 @@ error:
     return ok;
 }
 
-static bool gl_sw_submit_frame(const struct pl_swapchain *sw)
+static bool gl_sw_submit_frame(pl_swapchain sw)
 {
     struct priv *p = PL_PRIV(sw);
     pthread_mutex_lock(&p->lock);
@@ -235,7 +235,7 @@ static bool gl_sw_submit_frame(const struct pl_swapchain *sw)
     return ok;
 }
 
-static void gl_sw_swap_buffers(const struct pl_swapchain *sw)
+static void gl_sw_swap_buffers(pl_swapchain sw)
 {
     struct priv *p = PL_PRIV(sw);
     if (!p->params.swap_buffers) {

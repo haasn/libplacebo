@@ -177,7 +177,7 @@ const struct gl_format formats_basic_vertex[] = {
             do_format(gpu, &formats[i]);                    \
     } while (0)
 
-void pl_gl_enumerate_formats(const struct pl_gpu *gpu, gl_format_cb do_format)
+void pl_gl_enumerate_formats(pl_gpu gpu, gl_format_cb do_format)
 {
     struct pl_gl *p = PL_PRIV(gpu);
 

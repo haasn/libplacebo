@@ -79,8 +79,7 @@ void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4])
     }
 }
 
-bool pl_plane_data_align(struct pl_plane_data *data,
-                         struct pl_bit_encoding *out_bits)
+bool pl_plane_data_align(struct pl_plane_data *data, struct pl_bit_encoding *out_bits)
 {
     struct pl_plane_data aligned = *data;
     struct pl_bit_encoding bits = {0};
@@ -153,8 +152,7 @@ misaligned:
     return false;
 }
 
-const struct pl_fmt *pl_plane_find_fmt(const struct pl_gpu *gpu, int out_map[4],
-                                       const struct pl_plane_data *data)
+pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data *data)
 {
     int dummy[4] = {0};
     out_map = PL_DEF(out_map, dummy);
@@ -168,7 +166,7 @@ const struct pl_fmt *pl_plane_find_fmt(const struct pl_gpu *gpu, int out_map[4],
     }
 
     for (int n = 0; n < gpu->num_formats; n++) {
-        const struct pl_fmt *fmt = gpu->formats[n];
+        pl_fmt fmt = gpu->formats[n];
         if (fmt->opaque || fmt->num_components < num)
             continue;
         if (fmt->type != data->type || fmt->texel_size != data->pixel_stride)
@@ -201,8 +199,8 @@ next_fmt: ; // acts as `continue`
     return NULL;
 }
 
-bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
-                     const struct pl_tex **tex, const struct pl_plane_data *data)
+bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
+                     pl_tex *tex, const struct pl_plane_data *data)
 {
     pl_assert(!data->buf ^ !data->pixels); // exactly one
 
@@ -219,7 +217,7 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
     }
 
     int out_map[4];
-    const struct pl_fmt *fmt = pl_plane_find_fmt(gpu, out_map, data);
+    pl_fmt fmt = pl_plane_find_fmt(gpu, out_map, data);
     if (!fmt) {
         PL_ERR(gpu, "Failed picking any compatible texture format for a plane!");
         return false;
@@ -262,11 +260,11 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
     });
 }
 
-bool pl_recreate_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
-                       const struct pl_tex **tex, const struct pl_plane_data *data)
+bool pl_recreate_plane(pl_gpu gpu, struct pl_plane *out_plane,
+                       pl_tex *tex, const struct pl_plane_data *data)
 {
     int out_map[4];
-    const struct pl_fmt *fmt = pl_plane_find_fmt(gpu, out_map, data);
+    pl_fmt fmt = pl_plane_find_fmt(gpu, out_map, data);
     if (!fmt) {
         PL_ERR(gpu, "Failed picking any compatible texture format for a plane!");
         return false;

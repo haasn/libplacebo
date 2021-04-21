@@ -389,9 +389,9 @@ struct priv {
     VkDebugUtilsMessengerEXT debug_utils_cb;
 };
 
-void pl_vk_inst_destroy(const struct pl_vk_inst **inst_ptr)
+void pl_vk_inst_destroy(pl_vk_inst *inst_ptr)
 {
-    const struct pl_vk_inst *inst = *inst_ptr;
+    pl_vk_inst inst = *inst_ptr;
     if (!inst)
         return;
 
@@ -521,8 +521,7 @@ static PFN_vkGetInstanceProcAddr get_proc_addr_fallback(pl_log log,
     (int) VK_VERSION_MINOR(ver), \
     (int) VK_VERSION_PATCH(ver)
 
-const struct pl_vk_inst *pl_vk_inst_create(pl_log log,
-                                           const struct pl_vk_inst_params *params)
+pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
 {
     void *tmp = pl_tmp(NULL);
     params = PL_DEF(params, &pl_vk_inst_default_params);
@@ -857,7 +856,7 @@ const struct pl_vulkan_params pl_vulkan_default_params = {
     .queue_count    = 1, // enabling multiple queues often decreases perf
 };
 
-void pl_vulkan_destroy(const struct pl_vulkan **pl_vk)
+void pl_vulkan_destroy(pl_vulkan *pl_vk)
 {
     if (!*pl_vk)
         return;
@@ -908,7 +907,7 @@ error:
 }
 
 VkPhysicalDevice pl_vulkan_choose_device(pl_log log,
-                                         const struct pl_vulkan_device_params *params)
+                                const struct pl_vulkan_device_params *params)
 {
     // Hack for the VK macro's logging to work
     struct { pl_log log; } *vk = (void *) &log;
@@ -1291,8 +1290,7 @@ error:
     return false;
 }
 
-const struct pl_vulkan *pl_vulkan_create(pl_log log,
-                                         const struct pl_vulkan_params *params)
+pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
 {
     params = PL_DEF(params, &pl_vulkan_default_params);
     struct pl_vulkan *pl_vk = pl_zalloc_priv(NULL, struct pl_vulkan, struct vk_ctx);
@@ -1430,12 +1428,11 @@ const struct pl_vulkan *pl_vulkan_create(pl_log log,
 
 error:
     PL_FATAL(vk, "Failed initializing vulkan device");
-    pl_vulkan_destroy((const struct pl_vulkan **) &pl_vk);
+    pl_vulkan_destroy((pl_vulkan *) &pl_vk);
     return NULL;
 }
 
-const struct pl_vulkan *pl_vulkan_import(pl_log log,
-                                         const struct pl_vulkan_import_params *params)
+pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *params)
 {
     void *tmp = pl_tmp(NULL);
 
@@ -1624,6 +1621,6 @@ next_qf: ;
 error:
     PL_FATAL(vk, "Failed importing vulkan device");
     pl_free(tmp);
-    pl_vulkan_destroy((const struct pl_vulkan **) &pl_vk);
+    pl_vulkan_destroy((pl_vulkan *) &pl_vk);
     return NULL;
 }

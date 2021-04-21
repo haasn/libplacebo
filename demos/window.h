@@ -5,8 +5,8 @@
 
 struct window {
     const struct window_impl *impl;
-    const struct pl_swapchain *swapchain;
-    const struct pl_gpu *gpu;
+    pl_swapchain swapchain;
+    pl_gpu gpu;
     bool window_lost;
 };
 

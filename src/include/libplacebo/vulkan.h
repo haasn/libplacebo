@@ -23,7 +23,7 @@
 #include <libplacebo/swapchain.h>
 
 // Structure representing a VkInstance. Using this is not required.
-struct pl_vk_inst {
+typedef const struct pl_vk_inst {
     VkInstance instance;
 
     // The Vulkan API version supported by this VkInstance.
@@ -41,7 +41,7 @@ struct pl_vk_inst {
     // layers enabled by libplacebo internally. May contain duplicates.
     const char * const *layers;
     int num_layers;
-};
+} *pl_vk_inst;
 
 struct pl_vk_inst_params {
     // If set, enable the debugging and validation layers. These should
@@ -93,10 +93,8 @@ extern const struct pl_vk_inst_params pl_vk_inst_default_params;
 // these helpers and do it manually, but this function is provided as a
 // convenience. It also sets up a debug callback which forwards all vulkan
 // messages to the `pl_log` callback.
-const struct pl_vk_inst *pl_vk_inst_create(pl_log log,
-                                           const struct pl_vk_inst_params *params);
-
-void pl_vk_inst_destroy(const struct pl_vk_inst **inst);
+pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params);
+void pl_vk_inst_destroy(pl_vk_inst *inst);
 
 struct pl_vulkan_queue {
     uint32_t index; // Queue family index
@@ -104,8 +102,8 @@ struct pl_vulkan_queue {
 };
 
 // Structure representing the actual vulkan device and associated GPU instance
-struct pl_vulkan {
-    const struct pl_gpu *gpu;
+typedef const struct pl_vulkan {
+    pl_gpu gpu;
 
     // The vulkan objects in use. The user may use this for their own purposes,
     // but please note that the lifetime is tied to the lifetime of the
@@ -143,7 +141,7 @@ struct pl_vulkan {
     // queue counts in list form. This list does not contain duplicates.
     const struct pl_vulkan_queue *queues;
     int num_queues;
-};
+} *pl_vulkan;
 
 struct pl_vulkan_params {
     // The vulkan instance. Optional, if NULL then libplacebo will internally
@@ -256,8 +254,7 @@ extern const struct pl_vulkan_params pl_vulkan_default_params;
 // left as NULL, it defaults to &pl_vulkan_default_params.
 //
 // Thread-safety: Safe
-const struct pl_vulkan *pl_vulkan_create(pl_log log,
-                                         const struct pl_vulkan_params *params);
+pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params);
 
 // Destroys the vulkan device and all associated objects, except for the
 // VkInstance provided by the user.
@@ -269,7 +266,7 @@ const struct pl_vulkan *pl_vulkan_create(pl_log log,
 // Also note that this function will block until all in-flight GPU commands are
 // finished processing. You can avoid this by manually calling `pl_gpu_finish`
 // before `pl_vulkan_destroy`.
-void pl_vulkan_destroy(const struct pl_vulkan **vk);
+void pl_vulkan_destroy(pl_vulkan *vk);
 
 struct pl_vulkan_device_params {
     // The instance to use. Required!
@@ -290,7 +287,7 @@ struct pl_vulkan_device_params {
 // This uses the same logic as `pl_vulkan_create` uses internally. If no
 // matching device was found, this returns VK_NULL_HANDLE.
 VkPhysicalDevice pl_vulkan_choose_device(pl_log log,
-                                         const struct pl_vulkan_device_params *params);
+                              const struct pl_vulkan_device_params *params);
 
 struct pl_vulkan_swapchain_params {
     // The surface to use for rendering. Required, the user is in charge of
@@ -337,13 +334,13 @@ struct pl_vulkan_swapchain_params {
 // function requires that the vulkan device was created with the
 // VK_KHR_swapchain extension. The easiest way of accomplishing this is to set
 // the `pl_vulkan_params.surface` explicitly at creation time.
-const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *vk,
+pl_swapchain pl_vulkan_create_swapchain(pl_vulkan vk,
                               const struct pl_vulkan_swapchain_params *params);
 
 // This will return true if the vulkan swapchain is internally detected
 // as being suboptimal (VK_SUBOPTIMAL_KHR). This might be of use to clients
 // who have `params->allow_suboptimal` enabled.
-bool pl_vulkan_swapchain_suboptimal(const struct pl_swapchain *sw);
+bool pl_vulkan_swapchain_suboptimal(pl_swapchain sw);
 
 // Vulkan interop API, for sharing a single VkDevice (and associated vulkan
 // resources) directly with the API user. The use of this API is a bit sketchy
@@ -406,8 +403,7 @@ struct pl_vulkan_import_params {
 // a `pl_vulkan` abstraction. It's safe to `pl_vulkan_destroy` this, which will
 // destroy application state related to libplacebo but leave the underlying
 // VkDevice intact.
-const struct pl_vulkan *pl_vulkan_import(pl_log log,
-                                         const struct pl_vulkan_import_params *params);
+pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *params);
 
 struct pl_vulkan_wrap_params {
     // The image itself. It *must* be usable concurrently by all of the queue
@@ -451,8 +447,7 @@ struct pl_vulkan_wrap_params {
 // `gpu`.
 //
 // This function may fail, in which case it returns NULL.
-const struct pl_tex *pl_vulkan_wrap(const struct pl_gpu *gpu,
-                                    const struct pl_vulkan_wrap_params *params);
+pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params);
 
 // For purely informative reasons, this contains a list of extensions and
 // device features that libplacebo *can* make use of. These are all strictly
@@ -474,7 +469,7 @@ extern const VkPhysicalDeviceFeatures2KHR pl_vulkan_recommended_features;
 //
 // `out_format` and `out_flags` will be updated to hold the VkImage's
 // format and usage flags. (Optional)
-VkImage pl_vulkan_unwrap(const struct pl_gpu *gpu, const struct pl_tex *tex,
+VkImage pl_vulkan_unwrap(pl_gpu gpu, pl_tex tex,
                          VkFormat *out_format, VkImageUsageFlags *out_flags);
 
 // "Hold" a shared image. This will transition the image into the layout and
@@ -484,9 +479,8 @@ VkImage pl_vulkan_unwrap(const struct pl_gpu *gpu, const struct pl_tex *tex,
 // behavior.
 //
 // Returns whether successful.
-bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                    VkImageLayout layout, VkAccessFlags access,
-                    VkSemaphore sem_out);
+bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
+                    VkAccessFlags access, VkSemaphore sem_out);
 
 // This function is similar to `pl_vulkan_hold`, except that rather than
 // forcibly transitioning to a given layout, the user is instead informed about
@@ -494,9 +488,8 @@ bool pl_vulkan_hold(const struct pl_gpu *gpu, const struct pl_tex *tex,
 // own layout/access before using it. May be more convenient for some users.
 //
 // Returns whether successful.
-bool pl_vulkan_hold_raw(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                        VkImageLayout *layout, VkAccessFlags *access,
-                        VkSemaphore sem_out);
+bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *layout,
+                        VkAccessFlags *access, VkSemaphore sem_out);
 
 // "Release" a shared image, meaning it is no longer held. `layout` and
 // `access` describe the current state of the image at the point in time when
@@ -505,8 +498,7 @@ bool pl_vulkan_hold_raw(const struct pl_gpu *gpu, const struct pl_tex *tex,
 //
 // If `sem_in` is specified, it must fire before libplacebo will actually use
 // or modify the image. (Optional)
-void pl_vulkan_release(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                       VkImageLayout layout, VkAccessFlags access,
-                       VkSemaphore sem_in);
+void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
+                       VkAccessFlags access, VkSemaphore sem_in);
 
 #endif // LIBPLACEBO_VULKAN_H_

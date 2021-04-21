@@ -25,6 +25,7 @@
 // format.
 
 #include <libplacebo/shaders.h>
+#include <libplacebo/dispatch.h>
 #include <libplacebo/colorspace.h>
 
 // Parameters describing custom shader text to be embedded into a `pl_shader`
@@ -86,7 +87,7 @@ struct pl_custom_shader {
 // existing `pl_shader` object. Returns whether successful. This function may
 // fail in the event that e.g. the custom shader requires compute shaders on
 // an unsupported GPU, or exceeds the GPU's shared memory capabilities.
-bool pl_shader_custom(struct pl_shader *sh, const struct pl_custom_shader *params);
+bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params);
 
 // Which "rendering stages" are available for user shader hooking purposes.
 // Except where otherwise noted, all stages are "non-resizable", i.e. the
@@ -155,14 +156,14 @@ enum pl_hook_sig {
 struct pl_hook_params {
     // GPU objects associated with the `pl_renderer`, which the user may
     // use for their own purposes.
-    const struct pl_gpu *gpu;
-    struct pl_dispatch *dispatch;
+    pl_gpu gpu;
+    pl_dispatch dispatch;
 
     // Helper function to fetch a new temporary texture, using renderer-backed
     // storage. This is guaranteed to have sane image usage requirements and a
     // 16-bit or floating point format. The user does not need to free/destroy
     // this texture in any way. May return NULL.
-    const struct pl_tex *(*get_tex)(void *priv, int width, int height);
+    pl_tex (*get_tex)(void *priv, int width, int height);
     void *priv;
 
     // Which stage triggered the hook to run.
@@ -176,7 +177,7 @@ struct pl_hook_params {
     // Note that this shader might have specific output size requirements,
     // depending on the exact shader stage hooked by the user, and may already
     // be a compute shader.
-    struct pl_shader *sh;
+    pl_shader sh;
 
     // For `PL_HOOK_SIG_TEX`, this contains the texture that the user should
     // sample from.
@@ -184,7 +185,7 @@ struct pl_hook_params {
     // Note: This texture object is owned by the renderer, and users must not
     // modify its contents. It will not be touched for the duration of a frame,
     // but the contents are lost in between frames.
-    const struct pl_tex *tex;
+    pl_tex tex;
 
     // The effective current rectangle of the image we're rendering in this
     // shader, i.e. the effective rect of the content we're interested in,
@@ -222,13 +223,13 @@ struct pl_hook_res {
     // object containing the sampled color value (i.e. with an output signature
     // of `PL_SHADER_SIG_COLOR`), and *should* be allocated from the given
     // `pl_dispatch` object. Ignored otherwise.
-    struct pl_shader *sh;
+    pl_shader sh;
 
     // For `PL_HOOK_SIG_TEX`, this *must* contain the texture object containing
     // the result of rendering the hook. This *should* be a texture allocated
     // using the given `get_tex` callback, to ensure the format and texture
     // usage flags are compatible with what the renderer expects.
-    const struct pl_tex *tex;
+    pl_tex tex;
 
     // For shaders that return some sort of output, this contains the
     // new/altered versions of the existing "current texture" metadata.
@@ -242,6 +243,10 @@ struct pl_hook_res {
     struct pl_rect2df rect;
 };
 
+// Struct describing a hook.
+//
+// Note: Users may freely create their own instances of this struct, there is
+// nothing particularly special about `pl_mpv_user_shader_parse`.
 struct pl_hook {
     enum pl_hook_stage stages;  // Which stages to hook on
     enum pl_hook_sig input;     // Which input signature this hook expects
@@ -260,7 +265,7 @@ struct pl_hook {
 //
 // The resulting `pl_hook` objects should be destroyed with the corresponding
 // destructor when no longer needed.
-const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
+const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
                                                const char *shader_text,
                                                size_t shader_len);
 

@@ -28,19 +28,21 @@
 // sister API to gpu.h and follows the same convention w.r.t undefined behavior.
 //
 // Thread-safety: Safe
-struct pl_swapchain {
+typedef const struct pl_swapchain {
     pl_log log;
-    struct pl_sw_fns *impl;   // the underlying implementation
-    const struct pl_gpu *gpu; // the GPU instance this swapchain belongs to
+    pl_gpu gpu;
+
+    // The underlying implementation
+    struct pl_sw_fns *impl;
 
     // (Deprecated) Backwards compatibility field. Equal to `log`.
     pl_log ctx PL_DEPRECATED;
-};
+} *pl_swapchain;
 
 // Destroys this swapchain. May be used at any time, and may block until the
 // completion of all outstanding rendering commands. The swapchain and any
 // resources retrieved from it must not be used afterwards.
-void pl_swapchain_destroy(const struct pl_swapchain **sw);
+void pl_swapchain_destroy(pl_swapchain *sw);
 
 // Returns the approximate current swapchain latency in vsyncs, or 0 if
 // unknown. A latency of 1 means that `submit_frame` followed by `swap_buffers`
@@ -48,7 +50,7 @@ void pl_swapchain_destroy(const struct pl_swapchain **sw);
 // values are 2 or 3, which enable better pipelining by allowing the GPU to be
 // processing one or two frames at the same time as the user is preparing the
 // next for submission.
-int pl_swapchain_latency(const struct pl_swapchain *sw);
+int pl_swapchain_latency(pl_swapchain sw);
 
 // Update/query the swapchain size. This function performs both roles: it tries
 // setting the swapchain size to the values requested by the user, and returns
@@ -61,7 +63,7 @@ int pl_swapchain_latency(const struct pl_swapchain *sw);
 //
 // Returns false on significant errors (e.g. dead surface). This function can
 // effectively be used to probe if creating a swapchain works.
-bool pl_swapchain_resize(const struct pl_swapchain *sw, int *width, int *height);
+bool pl_swapchain_resize(pl_swapchain sw, int *width, int *height);
 
 // Represents raw HDR metadata as defined by SMPTE 2086 / CTA 861.3, which
 // is often attached to HDR sources and can be forwarded to HDR-capable
@@ -82,8 +84,7 @@ struct pl_hdr_metadata {
 // This can be called on `NULL` to effectively query for HDR support without
 // attempting to change anything. Such usage is a no-op. To "reset" metadata
 // after having set it, call this with a {0} struct.
-bool pl_swapchain_hdr_metadata(const struct pl_swapchain *sw,
-                               const struct pl_hdr_metadata *metadata);
+bool pl_swapchain_hdr_metadata(pl_swapchain sw, const struct pl_hdr_metadata *metadata);
 
 // The struct used to hold the results of `pl_swapchain_start_frame`
 struct pl_swapchain_frame {
@@ -91,7 +92,7 @@ struct pl_swapchain_frame {
     // It's guaranteed that `fbo->params.renderable` and `fbo->params.blit_dst`
     // will be true, but no other guarantees are made - not even that
     // `fbo->params.format` is a real format.
-    const struct pl_tex *fbo;
+    pl_tex fbo;
 
     // If true, the user should assume that this framebuffer will be flipped
     // as a result of presenting it on-screen. If false, nothing special needs
@@ -118,8 +119,7 @@ struct pl_swapchain_frame {
 // may also be non-blocking, so users shouldn't rely on this call alone in
 // order to meter rendering speed. (Specifics depend on the underlying graphics
 // API)
-bool pl_swapchain_start_frame(const struct pl_swapchain *sw,
-                              struct pl_swapchain_frame *out_frame);
+bool pl_swapchain_start_frame(pl_swapchain sw, struct pl_swapchain_frame *out_frame);
 
 // Submits the previously started frame. Non-blocking. This must be issued in
 // lockstep with pl_swapchain_start_frame - there is no way to start multiple
@@ -131,7 +131,7 @@ bool pl_swapchain_start_frame(const struct pl_swapchain *sw,
 // Returns whether successful. This should normally never fail, unless the
 // GPU/surface has been lost or some other critical error has occurred. The
 // "started" frame is consumed even in the event of failure.
-bool pl_swapchain_submit_frame(const struct pl_swapchain *sw);
+bool pl_swapchain_submit_frame(pl_swapchain sw);
 
 // Performs a "buffer swap", or some generalization of the concept. In layman's
 // terms, this blocks until the execution of the Nth previously submitted frame
@@ -166,6 +166,6 @@ bool pl_swapchain_submit_frame(const struct pl_swapchain *sw);
 // and should not be used as an authoritative source of vsync timing
 // information without sufficient smoothing/filtering (and if so, the time that
 // `start_frame` blocked for should also be included).
-void pl_swapchain_swap_buffers(const struct pl_swapchain *sw);
+void pl_swapchain_swap_buffers(pl_swapchain sw);
 
 #endif // LIBPLACEBO_SWAPCHAIN_H_

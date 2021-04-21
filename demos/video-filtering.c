@@ -171,29 +171,29 @@ void image_unlock(struct image *img);
 #define PARALLELISM 8
 
 struct entry {
-    const struct pl_buf *buf; // to stream the download
-    const struct pl_tex *tex_in[MAX_PLANES];
-    const struct pl_tex *tex_out[MAX_PLANES];
+    pl_buf buf; // to stream the download
+    pl_tex tex_in[MAX_PLANES];
+    pl_tex tex_out[MAX_PLANES];
     struct image image;
 
     // For entries that are associated with a held image, so we can unlock them
     // as soon as possible
     struct image *held_image;
-    const struct pl_buf *held_buf;
+    pl_buf held_buf;
 };
 
 // For both APIs:
 struct priv {
     pl_log log;
-    const struct pl_vulkan *vk;
-    const struct pl_gpu *gpu;
-    struct pl_dispatch *dp;
-    struct pl_shader_obj *dither_state;
+    pl_vulkan vk;
+    pl_gpu gpu;
+    pl_dispatch dp;
+    pl_shader_obj dither_state;
 
     // Timer objects
-    struct pl_timer *render_timer;
-    struct pl_timer *upload_timer;
-    struct pl_timer *download_timer;
+    pl_timer render_timer;
+    pl_timer upload_timer;
+    pl_timer download_timer;
     uint64_t render_sum;
     uint64_t upload_sum;
     uint64_t download_sum;
@@ -202,8 +202,8 @@ struct priv {
     int download_count;
 
     // API #1: A simple pair of input and output textures
-    const struct pl_tex *tex_in[MAX_PLANES];
-    const struct pl_tex *tex_out[MAX_PLANES];
+    pl_tex tex_in[MAX_PLANES];
+    pl_tex tex_out[MAX_PLANES];
 
     // API #2: A ring buffer of textures/buffers for streaming
     int idx_in;  // points the next free entry
@@ -305,7 +305,7 @@ static void setup_plane_data(const struct image *img,
 
         // For API 2 (direct rendering)
         if (img->associated_buf) {
-            const struct pl_buf *buf = img->associated_buf->priv;
+            pl_buf buf = img->associated_buf->priv;
             out[i].pixels = NULL;
             out[i].buf = buf;
             out[i].buf_offset = (uintptr_t) plane->data - (uintptr_t) buf->data;
@@ -319,13 +319,13 @@ static void setup_plane_data(const struct image *img,
     }
 }
 
-static bool do_plane(struct priv *p, const struct pl_tex *dst, const struct pl_tex *src)
+static bool do_plane(struct priv *p, pl_tex dst, pl_tex src)
 {
     int new_depth = dst->params.format->component_depth[0];
 
     // Do some debanding, and then also make sure to dither to the new depth
     // so that our debanded gradients are actually preserved well
-    struct pl_shader *sh = pl_dispatch_begin(p->dp);
+    pl_shader sh = pl_dispatch_begin(p->dp);
     pl_shader_deband(sh, &(struct pl_sample_src){ .tex = src }, NULL);
     pl_shader_dither(sh, new_depth, &p->dither_state, NULL);
     return pl_dispatch_finish(p->dp, &(struct pl_dispatch_params) {
@@ -369,7 +369,7 @@ bool api1_reconfig(void *priv, const struct image *proxy)
     setup_plane_data(proxy, data);
 
     for (int i = 0; i < proxy->num_planes; i++) {
-        const struct pl_fmt *fmt = pl_plane_find_fmt(p->gpu, NULL, &data[i]);
+        pl_fmt fmt = pl_plane_find_fmt(p->gpu, NULL, &data[i]);
         if (!fmt) {
             fprintf(stderr, "Failed configuring filter: no good texture format!\n");
             return false;
@@ -478,7 +478,7 @@ static enum api2_status submit_work(struct priv *p, struct entry *e,
     setup_plane_data(img, data);
 
     for (int i = 0; i < img->num_planes; i++) {
-        const struct pl_fmt *fmt = pl_plane_find_fmt(p->gpu, NULL, &data[i]);
+        pl_fmt fmt = pl_plane_find_fmt(p->gpu, NULL, &data[i]);
         if (!fmt)
             return API2_ERR_FMT;
 
@@ -614,7 +614,7 @@ bool api2_alloc(void *priv, size_t size, struct api2_buf *out)
 {
     struct priv *p = priv;
 
-    const struct pl_buf *buf = pl_buf_create(p->gpu, &(struct pl_buf_params) {
+    pl_buf buf = pl_buf_create(p->gpu, &(struct pl_buf_params) {
         .size = size,
         .host_mapped = true,
     });
@@ -633,7 +633,7 @@ bool api2_alloc(void *priv, size_t size, struct api2_buf *out)
 void api2_free(void *priv, const struct api2_buf *buf)
 {
     struct priv *p = priv;
-    const struct pl_buf *plbuf = buf->priv;
+    pl_buf plbuf = buf->priv;
     pl_buf_destroy(p->gpu, &plbuf);
 }
 

@@ -22,11 +22,11 @@ static pl_log logger;
 static struct window *win;
 
 // For rendering
-static const struct pl_tex *img_tex;
-static const struct pl_tex *osd_tex;
+static pl_tex img_tex;
+static pl_tex osd_tex;
 static struct pl_plane img_plane;
 static struct pl_plane osd_plane;
-static struct pl_renderer *renderer;
+static pl_renderer renderer;
 static struct pl_custom_lut *lut;
 
 struct file
@@ -97,7 +97,7 @@ static void uninit(int ret)
     exit(ret);
 }
 
-static bool upload_plane(const SDL_Surface *img, const struct pl_tex **tex,
+static bool upload_plane(const SDL_Surface *img, pl_tex *tex,
                          struct pl_plane *plane)
 {
     if (!img)
@@ -133,7 +133,7 @@ static bool upload_plane(const SDL_Surface *img, const struct pl_tex **tex,
 
 static bool render_frame(const struct pl_swapchain_frame *frame)
 {
-    const struct pl_tex *img = img_plane.texture;
+    pl_tex img = img_plane.texture;
     struct pl_frame image = {
         .num_planes = 1,
         .planes     = { img_plane },

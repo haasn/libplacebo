@@ -334,8 +334,8 @@ static inline void pl_frame_from_dav1dpicture(struct pl_frame *out,
 
 struct pl_dav1dalloc {
     uint32_t magic[2];
-    const struct pl_gpu *gpu;
-    const struct pl_buf *buf;
+    pl_gpu gpu;
+    pl_buf buf;
 };
 
 struct pl_dav1dref {
@@ -352,9 +352,9 @@ static void pl_dav1dpicture_unref(void *priv)
     }
 }
 
-static inline bool pl_upload_dav1dpicture(const struct pl_gpu *gpu,
+static inline bool pl_upload_dav1dpicture(pl_gpu gpu,
                                           struct pl_frame *out,
-                                          const struct pl_tex *tex[3],
+                                          pl_tex tex[3],
                                           const struct pl_dav1d_upload_params *params)
 {
     Dav1dPicture *pic = params->picture;
@@ -407,7 +407,7 @@ static inline bool pl_upload_dav1dpicture(const struct pl_gpu *gpu,
         },
     };
 
-    const struct pl_buf *buf = NULL;
+    pl_buf buf = NULL;
     struct pl_dav1dalloc *alloc = params->gpu_allocated ? pic->allocator_data : NULL;
     struct pl_dav1dref *ref = NULL;
 
@@ -454,7 +454,7 @@ static inline bool pl_upload_dav1dpicture(const struct pl_gpu *gpu,
 
 static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, void *cookie)
 {
-    const struct pl_gpu *gpu = cookie;
+    pl_gpu gpu = cookie;
     if (!gpu->limits.max_buf_size)
         return DAV1D_ERR(ENOTSUP);
 
@@ -486,7 +486,7 @@ static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, void *cookie)
     if (total_size > gpu->limits.max_buf_size)
         return DAV1D_ERR(ENOMEM);
 
-    const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+    pl_buf buf = pl_buf_create(gpu, &(struct pl_buf_params) {
         .size = total_size,
         .host_mapped = true,
         .memory_type = PL_BUF_MEM_HOST,
@@ -522,7 +522,7 @@ static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, void *cookie)
 
 static inline void pl_release_dav1dpicture(Dav1dPicture *p, void *cookie)
 {
-    const struct pl_gpu *gpu = cookie;
+    pl_gpu gpu = cookie;
     struct pl_dav1dalloc *alloc = p->allocator_data;
     if (!alloc)
         return;

@@ -51,7 +51,7 @@
 struct vk_ctx {
     pthread_mutex_t lock;
     void *alloc; // allocations bound to the lifetime of this vk_ctx
-    const struct pl_vk_inst *internal_instance;
+    pl_vk_inst internal_instance;
     pl_log log;
     VkInstance inst;
     VkPhysicalDevice physd;

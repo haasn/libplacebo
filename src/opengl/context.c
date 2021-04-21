@@ -71,9 +71,9 @@ static void debug_cb_egl(EGLenum error, const char *command,
 
 #endif // EPOXY_HAS_EGL
 
-void pl_opengl_destroy(const struct pl_opengl **ptr)
+void pl_opengl_destroy(pl_opengl *ptr)
 {
-    const struct pl_opengl *pl_gl = *ptr;
+    pl_opengl pl_gl = *ptr;
     if (!pl_gl)
         return;
 
@@ -97,8 +97,7 @@ void pl_opengl_destroy(const struct pl_opengl **ptr)
     pl_free_ptr((void **) ptr);
 }
 
-const struct pl_opengl *pl_opengl_create(pl_log log,
-                                         const struct pl_opengl_params *params)
+pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
 {
     params = PL_DEF(params, &pl_opengl_default_params);
     struct pl_opengl *pl_gl = pl_zalloc_priv(NULL, struct pl_opengl, struct priv);
@@ -204,11 +203,11 @@ const struct pl_opengl *pl_opengl_create(pl_log log,
 error:
     PL_FATAL(p, "Failed initializing opengl context!");
     gl_release_current(pl_gl);
-    pl_opengl_destroy((const struct pl_opengl **) &pl_gl);
+    pl_opengl_destroy((pl_opengl *) &pl_gl);
     return NULL;
 }
 
-bool gl_make_current(const struct pl_opengl *gl)
+bool gl_make_current(pl_opengl gl)
 {
     struct priv *p = PL_PRIV(gl);
     pthread_mutex_lock(&p->lock);
@@ -224,7 +223,7 @@ bool gl_make_current(const struct pl_opengl *gl)
     return true;
 }
 
-void gl_release_current(const struct pl_opengl *gl)
+void gl_release_current(pl_opengl gl)
 {
     struct priv *p = PL_PRIV(gl);
     p->count--;

@@ -37,12 +37,12 @@ enum {
 struct pl_dispatch {
     pthread_mutex_t lock;
     pl_log log;
-    const struct pl_gpu *gpu;
+    pl_gpu gpu;
     uint8_t current_ident;
     uint8_t current_index;
     int max_passes;
 
-    PL_ARRAY(struct pl_shader *) shaders;       // to avoid re-allocations
+    PL_ARRAY(pl_shader) shaders;                // to avoid re-allocations
     PL_ARRAY(struct pass *) passes;             // compiled passes
     PL_ARRAY(struct cached_pass) cached_passes; // not-yet-compiled passes
 
@@ -67,15 +67,15 @@ struct pass_var {
 
 struct pass {
     uint64_t signature; // as returned by pl_shader_signature
-    const struct pl_pass *pass;
+    pl_pass pass;
     int last_index;
 
     // contains cached data and update metadata, same order as pl_shader
     struct pass_var *vars;
 
     // for uniform buffer updates
-    const struct pl_buf *ubo;
     struct pl_shader_desc ubo_desc; // temporary
+    pl_buf ubo;
 
     // Cached pl_pass_run_params. This will also contain mutable allocations
     // for the push constants, descriptor bindings (including the binding for
@@ -89,7 +89,7 @@ struct cached_pass {
     size_t cached_program_len;
 };
 
-static void pass_destroy(struct pl_dispatch *dp, struct pass *pass)
+static void pass_destroy(pl_dispatch dp, struct pass *pass)
 {
     if (!pass)
         return;
@@ -99,7 +99,7 @@ static void pass_destroy(struct pl_dispatch *dp, struct pass *pass)
     pl_free(pass);
 }
 
-struct pl_dispatch *pl_dispatch_create(pl_log log, const struct pl_gpu *gpu)
+pl_dispatch pl_dispatch_create(pl_log log, pl_gpu gpu)
 {
     struct pl_dispatch *dp = pl_zalloc_ptr(NULL, dp);
     pl_mutex_init(&dp->lock);
@@ -110,9 +110,9 @@ struct pl_dispatch *pl_dispatch_create(pl_log log, const struct pl_gpu *gpu)
     return dp;
 }
 
-void pl_dispatch_destroy(struct pl_dispatch **ptr)
+void pl_dispatch_destroy(pl_dispatch *ptr)
 {
-    struct pl_dispatch *dp = *ptr;
+    pl_dispatch dp = *ptr;
     if (!dp)
         return;
 
@@ -126,7 +126,7 @@ void pl_dispatch_destroy(struct pl_dispatch **ptr)
     *ptr = NULL;
 }
 
-struct pl_shader *pl_dispatch_begin_ex(struct pl_dispatch *dp, bool unique)
+pl_shader pl_dispatch_begin_ex(pl_dispatch dp, bool unique)
 {
     pthread_mutex_lock(&dp->lock);
 
@@ -136,7 +136,7 @@ struct pl_shader *pl_dispatch_begin_ex(struct pl_dispatch *dp, bool unique)
         .index = dp->current_index,
     };
 
-    struct pl_shader *sh = NULL;
+    pl_shader sh = NULL;
     PL_ARRAY_POP(dp->shaders, &sh);
     pthread_mutex_unlock(&dp->lock);
 
@@ -148,7 +148,7 @@ struct pl_shader *pl_dispatch_begin_ex(struct pl_dispatch *dp, bool unique)
     return pl_shader_alloc(dp->log, &params);
 }
 
-void pl_dispatch_reset_frame(struct pl_dispatch *dp)
+void pl_dispatch_reset_frame(pl_dispatch dp)
 {
     pthread_mutex_lock(&dp->lock);
     dp->current_ident = 0;
@@ -156,17 +156,17 @@ void pl_dispatch_reset_frame(struct pl_dispatch *dp)
     pthread_mutex_unlock(&dp->lock);
 }
 
-struct pl_shader *pl_dispatch_begin(struct pl_dispatch *dp)
+pl_shader pl_dispatch_begin(pl_dispatch dp)
 {
     return pl_dispatch_begin_ex(dp, false);
 }
 
-static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
+static bool add_pass_var(pl_dispatch dp, void *tmp, struct pass *pass,
                          struct pl_pass_params *params,
                          const struct pl_shader_var *sv, struct pass_var *pv,
                          bool greedy)
 {
-    const struct pl_gpu *gpu = dp->gpu;
+    pl_gpu gpu = dp->gpu;
     if (pv->type)
         return true;
 
@@ -222,8 +222,7 @@ static bool add_pass_var(struct pl_dispatch *dp, void *tmp, struct pass *pass,
 #define ADD(x, ...) pl_str_append_asprintf_c(dp, (x), __VA_ARGS__)
 #define ADD_STR(x, s) pl_str_append(dp, (x), (s))
 
-static void add_var(struct pl_dispatch *dp, pl_str *body,
-                    const struct pl_var *var)
+static void add_var(pl_dispatch dp, pl_str *body, const struct pl_var *var)
 {
     ADD(body, "%s %s", pl_var_glsl_type_name(*var), var->name);
 
@@ -240,7 +239,7 @@ static int cmp_buffer_var(const void *pa, const void *pb)
     return PL_CMP((*a)->layout.offset, (*b)->layout.offset);
 }
 
-static void add_buffer_vars(struct pl_dispatch *dp, pl_str *body,
+static void add_buffer_vars(pl_dispatch dp, pl_str *body,
                             const struct pl_buffer_var *vars, int num,
                             void *tmp)
 {
@@ -260,7 +259,7 @@ static void add_buffer_vars(struct pl_dispatch *dp, pl_str *body,
     ADD(body, "};\n");
 }
 
-static ident_t sh_var_from_va(struct pl_shader *sh, const char *name,
+static ident_t sh_var_from_va(pl_shader sh, const char *name,
                               const struct pl_vertex_attrib *va,
                               const void *data)
 {
@@ -278,11 +277,11 @@ static inline struct pl_desc_binding sd_binding(const struct pl_shader_desc sd)
     return binding;
 }
 
-static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
-                             struct pl_pass_params *params, struct pl_shader *sh,
+static void generate_shaders(pl_dispatch dp, struct pass *pass,
+                             struct pl_pass_params *params, pl_shader sh,
                              ident_t vert_pos, ident_t out_proj, void *tmp)
 {
-    const struct pl_gpu *gpu = dp->gpu;
+    pl_gpu gpu = dp->gpu;
     const struct pl_shader_res *res = pl_shader_finalize(sh);
 
     pl_str *pre = &dp->tmp[TMP_PRELUDE];
@@ -310,19 +309,19 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
         case PL_DESC_BUF_STORAGE: has_ssbo = true; break;
         case PL_DESC_BUF_TEXEL_UNIFORM: has_texel = true; break;
         case PL_DESC_BUF_TEXEL_STORAGE: {
-            const struct pl_buf *buf = sd_binding(res->descriptors[i]).object;
+            pl_buf buf = sd_binding(res->descriptors[i]).object;
             has_nofmt |= !buf->params.format->glsl_format;
             has_texel = true;
             break;
         }
         case PL_DESC_STORAGE_IMG: {
-            const struct pl_tex *tex = sd_binding(res->descriptors[i]).object;
+            pl_tex tex = sd_binding(res->descriptors[i]).object;
             has_nofmt |= !tex->params.format->glsl_format;
             has_img = true;
             break;
         }
         case PL_DESC_SAMPLED_TEX: {
-            const struct pl_tex *tex = sd_binding(res->descriptors[i]).object;
+            pl_tex tex = sd_binding(res->descriptors[i]).object;
             switch (tex->sampler_type) {
             case PL_SAMPLER_NORMAL: break;
             case PL_SAMPLER_RECT: break;
@@ -402,7 +401,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
                 [PL_SAMPLER_EXTERNAL][2] = "samplerExternalOES",
             };
 
-            const struct pl_tex *tex = sd_binding(*sd).object;
+            pl_tex tex = sd_binding(*sd).object;
             int dims = pl_tex_params_dimension(tex->params);
             const char *type = types[tex->sampler_type][dims];
             pl_assert(type);
@@ -441,7 +440,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
 
             // For better compatibility, we have to explicitly label the
             // type of data we will be reading/writing to this image.
-            const struct pl_tex *tex = sd_binding(*sd).object;
+            pl_tex tex = sd_binding(*sd).object;
             const char *format = tex->params.format->glsl_format;
             const char *access = pl_desc_access_glsl_name(desc->access);
             int dims = pl_tex_params_dimension(tex->params);
@@ -493,7 +492,7 @@ static void generate_shaders(struct pl_dispatch *dp, struct pass *pass,
             break;
 
         case PL_DESC_BUF_TEXEL_STORAGE: {
-            const struct pl_buf *buf = sd_binding(*sd).object;
+            pl_buf buf = sd_binding(*sd).object;
             const char *format = buf->params.format->glsl_format;
             const char *access = pl_desc_access_glsl_name(desc->access);
             if (gpu->glsl.vulkan) {
@@ -646,7 +645,7 @@ static int cmp_pass_age(const void *ptra, const void *ptrb)
     return b->last_index - a->last_index;
 }
 
-static void garbage_collect_passes(struct pl_dispatch *dp)
+static void garbage_collect_passes(pl_dispatch dp)
 {
     if (dp->passes.num <= dp->max_passes)
         return;
@@ -671,8 +670,8 @@ static void garbage_collect_passes(struct pl_dispatch *dp)
     }
 }
 
-static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
-                              const struct pl_tex *target, ident_t vert_pos,
+static struct pass *find_pass(pl_dispatch dp, pl_shader sh,
+                              pl_tex target, ident_t vert_pos,
                               const struct pl_blend_params *blend, bool load,
                               const struct pl_dispatch_vertex_params *vparams,
                               ident_t out_proj)
@@ -696,8 +695,7 @@ static struct pass *find_pass(struct pl_dispatch *dp, struct pl_shader *sh,
             return p;
         } else {
             pl_assert(target);
-            const struct pl_fmt *tfmt;
-            tfmt = p->pass->params.target_dummy.params.format;
+            pl_fmt tfmt = p->pass->params.target_dummy.params.format;
             bool raster_ok = target->params.format == tfmt;
             raster_ok &= blend_equal(p->pass->params.blend_params, blend);
             raster_ok &= load == p->pass->params.load_target;
@@ -861,7 +859,7 @@ error:
     return pass;
 }
 
-static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
+static void update_pass_var(pl_dispatch dp, struct pass *pass,
                             const struct pl_shader_var *sv, struct pass_var *pv)
 {
     struct pl_var_layout host_layout = pl_var_host_layout(0, &sv->var);
@@ -917,7 +915,7 @@ static void update_pass_var(struct pl_dispatch *dp, struct pass *pass,
     };
 }
 
-static void compute_vertex_attribs(struct pl_dispatch *dp, struct pl_shader *sh,
+static void compute_vertex_attribs(pl_dispatch dp, pl_shader sh,
                                    int width, int height, ident_t *out_scale)
 {
     // Simulate vertex attributes using global definitions
@@ -953,8 +951,7 @@ static void compute_vertex_attribs(struct pl_dispatch *dp, struct pl_shader *sh,
     }
 }
 
-static void translate_compute_shader(struct pl_dispatch *dp,
-                                     struct pl_shader *sh,
+static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
                                      const struct pl_rect2d *rc,
                                      const struct pl_dispatch_params *params)
 {
@@ -1014,9 +1011,9 @@ static void translate_compute_shader(struct pl_dispatch *dp,
     sh->res.output = PL_SHADER_SIG_NONE;
 }
 
-bool pl_dispatch_finish(struct pl_dispatch *dp, const struct pl_dispatch_params *params)
+bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
 {
-    struct pl_shader *sh = *params->shader;
+    pl_shader sh = *params->shader;
     const struct pl_shader_res *res = &sh->res;
     bool ret = false;
     pthread_mutex_lock(&dp->lock);
@@ -1164,10 +1161,9 @@ error:
     return ret;
 }
 
-bool pl_dispatch_compute(struct pl_dispatch *dp,
-                         const struct pl_dispatch_compute_params *params)
+bool pl_dispatch_compute(pl_dispatch dp, const struct pl_dispatch_compute_params *params)
 {
-    struct pl_shader *sh = *params->shader;
+    pl_shader sh = *params->shader;
     const struct pl_shader_res *res = &sh->res;
     bool ret = false;
     pthread_mutex_lock(&dp->lock);
@@ -1256,10 +1252,9 @@ error:
     return ret;
 }
 
-bool pl_dispatch_vertex(struct pl_dispatch *dp,
-                        const struct pl_dispatch_vertex_params *params)
+bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *params)
 {
-    struct pl_shader *sh = *params->shader;
+    pl_shader sh = *params->shader;
     const struct pl_shader_res *res = &sh->res;
     bool ret = false;
     pthread_mutex_lock(&dp->lock);
@@ -1393,9 +1388,9 @@ error:
     return ret;
 }
 
-void pl_dispatch_abort(struct pl_dispatch *dp, struct pl_shader **psh)
+void pl_dispatch_abort(pl_dispatch dp, pl_shader *psh)
 {
-    struct pl_shader *sh = *psh;
+    pl_shader sh = *psh;
     if (!sh)
         return;
 
@@ -1425,7 +1420,7 @@ static void write_buf(uint8_t *buf, size_t *pos, const void *src, size_t size)
       cache += sizeof(var);                 \
   } while (0)
 
-size_t pl_dispatch_save(struct pl_dispatch *dp, uint8_t *out)
+size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
 {
     size_t size = 0;
     pthread_mutex_lock(&dp->lock);
@@ -1473,7 +1468,7 @@ size_t pl_dispatch_save(struct pl_dispatch *dp, uint8_t *out)
     return size;
 }
 
-void pl_dispatch_load(struct pl_dispatch *dp, const uint8_t *cache)
+void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache)
 {
     char magic[4];
     LOAD(magic);

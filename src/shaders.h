@@ -63,7 +63,7 @@ struct pl_shader {
 #define SH_TMP(sh) ((sh)->tmp.elem[0])
 
 // Returns the GLSL description, defaulting to desktop 130.
-struct pl_glsl_desc sh_glsl(const struct pl_shader *sh);
+struct pl_glsl_desc sh_glsl(const pl_shader sh);
 
 #define SH_FAIL(sh, ...) do {    \
         sh->failed = true;       \
@@ -71,28 +71,28 @@ struct pl_glsl_desc sh_glsl(const struct pl_shader *sh);
     } while (0)
 
 // Attempt enabling compute shaders for this pass, if possible
-bool sh_try_compute(struct pl_shader *sh, int bw, int bh, bool flex, size_t mem);
+bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem);
 
 // Attempt merging a secondary shader into the current shader. Returns NULL if
 // merging fails (e.g. incompatible signatures); otherwise returns an identifier
 // corresponding to the generated subpass function.
-ident_t sh_subpass(struct pl_shader *sh, const struct pl_shader *sub);
+ident_t sh_subpass(pl_shader sh, const pl_shader sub);
 
 // Helpers for adding new variables/descriptors/etc. with fresh, unique
 // identifier names. These will never conflcit with other identifiers, even
 // if the shaders are merged together.
-ident_t sh_fresh(struct pl_shader *sh, const char *name);
+ident_t sh_fresh(pl_shader sh, const char *name);
 
 // Add a new shader var and return its identifier
-ident_t sh_var(struct pl_shader *sh, struct pl_shader_var sv);
+ident_t sh_var(pl_shader sh, struct pl_shader_var sv);
 
 // Add a new shader desc and return its identifier. This function takes care of
 // setting the binding to a fresh bind point according to the namespace
 // requirements, so the caller may leave it blank.
-ident_t sh_desc(struct pl_shader *sh, struct pl_shader_desc sd);
+ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd);
 
 // Add a new vec2 vertex attribute from a pl_rect2df, or returns NULL on failure.
-ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
+ident_t sh_attr_vec2(pl_shader sh, const char *name,
                      const struct pl_rect2df *rc);
 
 // Bind a texture under a given transformation and make its attributes
@@ -102,7 +102,7 @@ ident_t sh_attr_vec2(struct pl_shader *sh, const char *name,
 //
 // Note that for e.g. compute shaders, the vec2 out_pos might be a macro that
 // expands to an expensive computation, and should be cached by the user.
-ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
+ident_t sh_bind(pl_shader sh, pl_tex tex,
                 enum pl_tex_address_mode address_mode,
                 enum pl_tex_sample_mode sample_mode,
                 const char *name, const struct pl_rect2df *rect,
@@ -113,7 +113,7 @@ ident_t sh_bind(struct pl_shader *sh, const struct pl_tex *tex,
 // variable could be successfully added (which may fail if you try exceeding
 // the size limits of the buffer type). If successful, the layout is stored
 // in *out_layout (may be NULL).
-bool sh_buf_desc_append(void *alloc, const struct pl_gpu *gpu,
+bool sh_buf_desc_append(void *alloc, pl_gpu gpu,
                         struct pl_shader_desc *buf_desc,
                         struct pl_var_layout *out_layout,
                         const struct pl_var new_var);
@@ -122,10 +122,10 @@ size_t sh_buf_desc_size(const struct pl_shader_desc *buf_desc);
 
 
 // Underlying function for appending text to a shader
-void sh_append(struct pl_shader *sh, enum pl_shader_buf buf, const char *fmt, ...)
+void sh_append(pl_shader sh, enum pl_shader_buf buf, const char *fmt, ...)
     PL_PRINTF(3, 4);
 
-void sh_append_str(struct pl_shader *sh, enum pl_shader_buf buf, pl_str str);
+void sh_append_str(pl_shader sh, enum pl_shader_buf buf, pl_str str);
 
 #define GLSLP(...) sh_append(sh, SH_BUF_PRELUDE, __VA_ARGS__)
 #define GLSLH(...) sh_append(sh, SH_BUF_HEADER, __VA_ARGS__)
@@ -135,7 +135,7 @@ void sh_append_str(struct pl_shader *sh, enum pl_shader_buf buf, pl_str str);
 // Requires that the share is mutable, has an output signature compatible
 // with the given input signature, as well as an output size compatible with
 // the given size requirements. Errors and returns false otherwise.
-bool sh_require(struct pl_shader *sh, enum pl_shader_sig insig, int w, int h);
+bool sh_require(pl_shader sh, enum pl_shader_sig insig, int w, int h);
 
 // Shader resources
 
@@ -151,15 +151,15 @@ enum pl_shader_obj_type {
 
 struct pl_shader_obj {
     enum pl_shader_obj_type type;
-    const struct pl_gpu *gpu;
-    void (*uninit)(const struct pl_gpu *gpu, void *priv);
+    pl_gpu gpu;
+    void (*uninit)(pl_gpu gpu, void *priv);
     void *priv;
 };
 
 // Returns (*ptr)->priv, or NULL on failure
-void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
+void *sh_require_obj(pl_shader sh, pl_shader_obj *ptr,
                      enum pl_shader_obj_type type, size_t priv_size,
-                     void (*uninit)(const struct pl_gpu *gpu, void *priv));
+                     void (*uninit)(pl_gpu gpu, void *priv));
 
 #define SH_OBJ(sh, ptr, type, t, uninit) \
     ((t*) sh_require_obj(sh, ptr, type, sizeof(t), uninit))
@@ -171,7 +171,7 @@ void *sh_require_obj(struct pl_shader *sh, struct pl_shader_obj **ptr,
 // with the name of `state` to the signature. (Optional)
 //
 // If `temporal` is set, the PRNG will vary across frames.
-ident_t sh_prng(struct pl_shader *sh, bool temporal, ident_t *state);
+ident_t sh_prng(pl_shader sh, bool temporal, ident_t *state);
 
 enum sh_lut_method {
     SH_LUT_AUTO = 0, // pick whatever makes the most sense
@@ -181,7 +181,7 @@ enum sh_lut_method {
 };
 
 struct sh_lut_params {
-    struct pl_shader_obj **object;
+    pl_shader_obj *object;
 
     // Method and type of the LUT we intend to generate.
     enum sh_lut_method method;
@@ -224,16 +224,16 @@ struct sh_lut_params {
 // dimensions. `pos` must be an integer vector within the bounds of the array,
 // unless the method is `SH_LUT_LINEAR`, in which case it's a float vector that
 // gets interpolated and clamped as needed. Returns NULL on error.
-ident_t sh_lut(struct pl_shader *sh, const struct sh_lut_params *params);
+ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params);
 
 // Returns a GLSL-version appropriate "bvec"-like type. For GLSL 130+, this
 // returns bvecN. For GLSL 120, this returns vecN instead. The intended use of
 // this function is with mix(), which only accepts bvec in GLSL 130+.
-const char *sh_bvec(const struct pl_shader *sh, int dims);
+const char *sh_bvec(const pl_shader sh, int dims);
 
 // Returns the appropriate `texture`-equivalent function for the shader and
 // given texture.
-static inline const char *sh_tex_fn(const struct pl_shader *sh,
+static inline const char *sh_tex_fn(const pl_shader sh,
                                     const struct pl_tex_params params)
 {
     static const char *suffixed[] = {

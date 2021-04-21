@@ -202,8 +202,8 @@ static void fill_lut(void *datap, const struct sh_lut_params *params)
     }
 }
 
-void pl_shader_custom_lut(struct pl_shader *sh, const struct pl_custom_lut *lut,
-                          struct pl_shader_obj **lut_state)
+void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
+                          pl_shader_obj *lut_state)
 {
     if (!lut)
         return;

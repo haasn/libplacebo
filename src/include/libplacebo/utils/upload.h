@@ -29,25 +29,25 @@
 
 // Description of the host representation of an image plane
 struct pl_plane_data {
-    enum pl_fmt_type type; // meaning of the data (must not be UINT or SINT)
-    int width, height;     // dimensions of the plane
-    int component_size[4]; // size in bits of each coordinate
-    int component_pad[4];  // ignored bits preceding each component
-    int component_map[4];  // semantic meaning of each component (pixel order)
-    size_t pixel_stride;   // offset in bytes between pixels (required)
-    size_t row_stride;     // offset in bytes between rows (optional)
+    enum pl_fmt_type type;  // meaning of the data (must not be UINT or SINT)
+    int width, height;      // dimensions of the plane
+    int component_size[4];  // size in bits of each coordinate
+    int component_pad[4];   // ignored bits preceding each component
+    int component_map[4];   // semantic meaning of each component (pixel order)
+    size_t pixel_stride;    // offset in bytes between pixels (required)
+    size_t row_stride;      // offset in bytes between rows (optional)
 
     // Similar to `pl_tex_transfer_params`, you can either upload from a raw
     // pointer address, or a buffer + offset. Again, the use of these two
     // mechanisms is mutually exclusive.
     //
     // 1. Uploading from host memory
-    const void *pixels;    // the actual data underlying this plane
+    const void *pixels;     // the actual data underlying this plane
 
     // 2. Uploading from a buffer
-    const struct pl_buf *buf;   // the buffer to use (type must be PL_BUF_TEX_TRANSFER)
-    size_t buf_offset;          // offset of data within buffer, must be a
-                                // multiple of `pixel_stride` as well as of 4
+    pl_buf buf;             // the buffer to use
+    size_t buf_offset;      // offset of data within buffer, must be a
+                            // multiple of `pixel_stride` as well as of 4
 
     // Similar to `pl_tex_transfer_params.callback`, this allows turning the
     // upload of a plane into an asynchronous upload. The same notes apply.
@@ -105,15 +105,13 @@ void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4]);
 // The resulting shift must be consistent across all components, in which case
 // it's returned in `out_bits`. If no alignment was possible, `out_bits` is set
 // to {0}, and this function returns false.
-bool pl_plane_data_align(struct pl_plane_data *data,
-                         struct pl_bit_encoding *out_bits);
+bool pl_plane_data_align(struct pl_plane_data *data, struct pl_bit_encoding *out_bits);
 
 // Helper function to find a suitable `pl_fmt` based on a pl_plane_data's
 // requirements. This is called internally by `pl_upload_plane`, but it's
 // exposed to users both as a convenience and so they may pre-emptively check
 // if a format would be supported without actually having to attempt the upload.
-const struct pl_fmt *pl_plane_find_fmt(const struct pl_gpu *gpu, int out_map[4],
-                                       const struct pl_plane_data *data);
+pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data *data);
 
 // Upload an image plane to a texture, and output the resulting `pl_plane`
 // struct to `out_plane` (optional). `tex` must be a valid pointer to a texture
@@ -126,8 +124,8 @@ const struct pl_fmt *pl_plane_find_fmt(const struct pl_gpu *gpu, int out_map[4],
 //
 // Note: `out_plane->shift_x/y` are left uninitialized, and should be set
 // explicitly by the user.
-bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
-                     const struct pl_tex **tex, const struct pl_plane_data *data);
+bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
+                     pl_tex *tex, const struct pl_plane_data *data);
 
 // Like `pl_upload_plane`, but only creates an uninitialized texture object
 // rather than actually performing an upload. This can be useful to, for
@@ -136,7 +134,7 @@ bool pl_upload_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
 // The resulting texture is guaranteed to be `renderable`, and it will also try
 // to maximize compatibility with the other `pl_renderer` reequirements
 // (blittable, storable, etc.).
-bool pl_recreate_plane(const struct pl_gpu *gpu, struct pl_plane *out_plane,
-                       const struct pl_tex **tex, const struct pl_plane_data *data);
+bool pl_recreate_plane(pl_gpu gpu, struct pl_plane *out_plane,
+                       pl_tex *tex, const struct pl_plane_data *data);
 
 #endif // LIBPLACEBO_UPLOAD_H_

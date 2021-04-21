@@ -19,9 +19,9 @@
 #include "log.h"
 #include "swapchain.h"
 
-void pl_swapchain_destroy(const struct pl_swapchain **ptr)
+void pl_swapchain_destroy(pl_swapchain *ptr)
 {
-    const struct pl_swapchain *sw = *ptr;
+    pl_swapchain sw = *ptr;
     if (!sw)
         return;
 
@@ -29,7 +29,7 @@ void pl_swapchain_destroy(const struct pl_swapchain **ptr)
     *ptr = NULL;
 }
 
-int pl_swapchain_latency(const struct pl_swapchain *sw)
+int pl_swapchain_latency(pl_swapchain sw)
 {
     if (!sw->impl->latency)
         return 0;
@@ -37,7 +37,7 @@ int pl_swapchain_latency(const struct pl_swapchain *sw)
     return sw->impl->latency(sw);
 }
 
-bool pl_swapchain_resize(const struct pl_swapchain *sw, int *width, int *height)
+bool pl_swapchain_resize(pl_swapchain sw, int *width, int *height)
 {
     int dummy[2] = {0};
     width = PL_DEF(width, &dummy[0]);
@@ -51,7 +51,7 @@ bool pl_swapchain_resize(const struct pl_swapchain *sw, int *width, int *height)
     return sw->impl->resize(sw, width, height);
 }
 
-bool pl_swapchain_hdr_metadata(const struct pl_swapchain *sw,
+bool pl_swapchain_hdr_metadata(pl_swapchain sw,
                                const struct pl_hdr_metadata *metadata)
 {
     if (!sw->impl->hdr_metadata)
@@ -60,19 +60,19 @@ bool pl_swapchain_hdr_metadata(const struct pl_swapchain *sw,
     return sw->impl->hdr_metadata(sw, metadata);
 }
 
-bool pl_swapchain_start_frame(const struct pl_swapchain *sw,
+bool pl_swapchain_start_frame(pl_swapchain sw,
                               struct pl_swapchain_frame *out_frame)
 {
     *out_frame = (struct pl_swapchain_frame) {0}; // sanity
     return sw->impl->start_frame(sw, out_frame);
 }
 
-bool pl_swapchain_submit_frame(const struct pl_swapchain *sw)
+bool pl_swapchain_submit_frame(pl_swapchain sw)
 {
     return sw->impl->submit_frame(sw);
 }
 
-void pl_swapchain_swap_buffers(const struct pl_swapchain *sw)
+void pl_swapchain_swap_buffers(pl_swapchain sw)
 {
     sw->impl->swap_buffers(sw);
 }

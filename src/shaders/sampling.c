@@ -44,7 +44,7 @@ enum filter {
 };
 
 // Helper function to compute the src/dst sizes and upscaling ratios
-static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
+static bool setup_src(pl_shader sh, const struct pl_sample_src *src,
                       ident_t *src_tex, ident_t *pos, ident_t *size, ident_t *pt,
                       float *ratio_x, float *ratio_y, uint8_t *comp_mask,
                       float *scale, bool resizeable, const char **fn,
@@ -54,7 +54,7 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
     float src_w, src_h;
     enum pl_tex_sample_mode sample_mode;
     if (src->tex) {
-        const struct pl_fmt *fmt = src->tex->params.format;
+        pl_fmt fmt = src->tex->params.format;
         bool can_linear = fmt->caps & PL_FMT_CAP_LINEAR;
         pl_assert(pl_tex_params_dimension(src->tex->params) == 2);
         sig = PL_SHADER_SIG_NONE;
@@ -187,7 +187,7 @@ static bool setup_src(struct pl_shader *sh, const struct pl_sample_src *src,
     return true;
 }
 
-void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
+void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
                       const struct pl_deband_params *params)
 {
     float scale;
@@ -252,7 +252,7 @@ void pl_shader_deband(struct pl_shader *sh, const struct pl_sample_src *src,
     GLSL("}\n");
 }
 
-bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *src)
+bool pl_shader_sample_direct(pl_shader sh, const struct pl_sample_src *src)
 {
     float scale;
     ident_t tex, pos;
@@ -267,7 +267,7 @@ bool pl_shader_sample_direct(struct pl_shader *sh, const struct pl_sample_src *s
     return true;
 }
 
-bool pl_shader_sample_nearest(struct pl_shader *sh, const struct pl_sample_src *src)
+bool pl_shader_sample_nearest(pl_shader sh, const struct pl_sample_src *src)
 {
     float scale;
     ident_t tex, pos;
@@ -282,7 +282,7 @@ bool pl_shader_sample_nearest(struct pl_shader *sh, const struct pl_sample_src *
     return true;
 }
 
-bool pl_shader_sample_bilinear(struct pl_shader *sh, const struct pl_sample_src *src)
+bool pl_shader_sample_bilinear(pl_shader sh, const struct pl_sample_src *src)
 {
     float scale;
     ident_t tex, pos;
@@ -297,7 +297,7 @@ bool pl_shader_sample_bilinear(struct pl_shader *sh, const struct pl_sample_src 
     return true;
 }
 
-static void bicubic_calcweights(struct pl_shader *sh, const char *t, const char *s)
+static void bicubic_calcweights(pl_shader sh, const char *t, const char *s)
 {
     // Explanation of how bicubic scaling with only 4 texel fetches is done:
     //   http://www.mate.tue.nl/mate/pdfs/10318.pdf
@@ -315,7 +315,7 @@ static void bicubic_calcweights(struct pl_shader *sh, const char *t, const char 
          t, s, s);
 }
 
-bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *src)
+bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
 {
     ident_t tex, pos, size, pt;
     float rx, ry, scale;
@@ -359,7 +359,7 @@ bool pl_shader_sample_bicubic(struct pl_shader *sh, const struct pl_sample_src *
     return true;
 }
 
-static bool filter_compat(const struct pl_filter *filter, float inv_scale,
+static bool filter_compat(pl_filter filter, float inv_scale,
                           int lut_entries, float cutoff,
                           const struct pl_filter_config *params)
 {
@@ -379,8 +379,8 @@ static bool filter_compat(const struct pl_filter *filter, float inv_scale,
 // If `in` is NULL, samples directly
 // If `in` is set, takes the pixel from inX[idx] where X is the component,
 // `in` is the given identifier, and `idx` must be defined by the caller
-static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
-                         const char *fn, ident_t tex, ident_t lut, int x, int y,
+static void polar_sample(pl_shader sh, pl_filter filter, const char *fn,
+                         ident_t tex, ident_t lut, int x, int y,
                          uint8_t comp_mask, ident_t in)
 {
     // Since we can't know the subpixel position in advance, assume a
@@ -424,12 +424,12 @@ static void polar_sample(struct pl_shader *sh, const struct pl_filter *filter,
 }
 
 struct sh_sampler_obj {
-    const struct pl_filter *filter;
-    struct pl_shader_obj *lut;
-    struct pl_shader_obj *pass2; // for pl_shader_sample_ortho
+    pl_filter filter;
+    pl_shader_obj lut;
+    pl_shader_obj pass2; // for pl_shader_sample_ortho
 };
 
-static void sh_sampler_uninit(const struct pl_gpu *gpu, void *ptr)
+static void sh_sampler_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_sampler_obj *obj = ptr;
     pl_shader_obj_destroy(&obj->lut);
@@ -441,14 +441,13 @@ static void sh_sampler_uninit(const struct pl_gpu *gpu, void *ptr)
 static void fill_polar_lut(void *data, const struct sh_lut_params *params)
 {
     const struct sh_sampler_obj *obj = params->priv;
-    const struct pl_filter *filt = obj->filter;
+    pl_filter filt = obj->filter;
 
     pl_assert(params->width == filt->params.lut_entries && params->comps == 1);
     memcpy(data, filt->weights, params->width * sizeof(float));
 }
 
-bool pl_shader_sample_polar(struct pl_shader *sh,
-                            const struct pl_sample_src *src,
+bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                             const struct pl_sample_filter_params *params)
 {
     pl_assert(params);
@@ -457,7 +456,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
         return false;
     }
 
-    const struct pl_gpu *gpu = SH_GPU(sh);
+    pl_gpu gpu = SH_GPU(sh);
     pl_assert(gpu);
 
     bool has_compute = gpu->caps & PL_GPU_CAP_COMPUTE && !params->no_compute;
@@ -679,14 +678,14 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
 static void fill_ortho_lut(void *data, const struct sh_lut_params *params)
 {
     const struct sh_sampler_obj *obj = params->priv;
-    const struct pl_filter *filt = obj->filter;
+    pl_filter filt = obj->filter;
     size_t entries = filt->params.lut_entries * filt->row_stride;
 
     pl_assert(params->width * params->height * params->comps == entries);
     memcpy(data, filt->weights, entries * sizeof(float));
 }
 
-bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
+bool pl_shader_sample_ortho(pl_shader sh, int pass,
                             const struct pl_sample_src *src,
                             const struct pl_sample_filter_params *params)
 {
@@ -696,7 +695,7 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
         return false;
     }
 
-    const struct pl_gpu *gpu = SH_GPU(sh);
+    pl_gpu gpu = SH_GPU(sh);
     pl_assert(gpu);
 
     struct pl_sample_src srcfix = *src;

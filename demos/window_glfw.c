@@ -38,12 +38,12 @@ struct priv {
 
 #ifdef USE_VK
     VkSurfaceKHR surf;
-    const struct pl_vulkan *vk;
-    const struct pl_vk_inst *vk_inst;
+    pl_vulkan vk;
+    pl_vk_inst vk_inst;
 #endif
 
 #ifdef USE_GL
-    const struct pl_opengl *gl;
+    pl_opengl gl;
 #endif
 
     float scroll_dx, scroll_dy;

@@ -23,7 +23,7 @@
 // ones that have completed.
 //
 // Thread-safety: Unsafe
-void gl_poll_callbacks(const struct pl_gpu *gpu);
+void gl_poll_callbacks(pl_gpu gpu);
 
 // Return a human-readable name for various OpenGL errors
 //
@@ -33,7 +33,7 @@ const char *gl_err_str(GLenum err);
 // Check for errors and log them + return false if detected
 //
 // Thread-safety: Unsafe
-bool gl_check_err(const struct pl_gpu *gpu, const char *fun);
+bool gl_check_err(pl_gpu gpu, const char *fun);
 
 // Returns true if the context is a suspected software rasterizer
 //
@@ -45,5 +45,5 @@ bool gl_is_software(void);
 const char *egl_err_str(EGLenum err);
 
 // Thread-safety: Unsafe
-bool egl_check_err(const struct pl_gpu *gpu, const char *fun);
+bool egl_check_err(pl_gpu gpu, const char *fun);
 #endif

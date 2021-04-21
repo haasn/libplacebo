@@ -15,7 +15,7 @@
 
 struct ui;
 
-struct ui *ui_create(const struct pl_gpu *gpu);
+struct ui *ui_create(pl_gpu gpu);
 void ui_destroy(struct ui **ui);
 
 // Update/Logic/Draw cycle

@@ -135,7 +135,7 @@ static struct pl_filter_function *dupfilter(void *alloc,
     return f ? pl_memdup(alloc, (void *)f, sizeof(*f)) : NULL;
 }
 
-const struct pl_filter *pl_filter_generate(pl_log log, const struct pl_filter_params *params)
+pl_filter pl_filter_generate(pl_log log, const struct pl_filter_params *params)
 {
     pl_assert(params);
     if (params->lut_entries <= 0 || !params->config.kernel) {
@@ -189,7 +189,7 @@ const struct pl_filter *pl_filter_generate(pl_log log, const struct pl_filter_pa
     return f;
 }
 
-void pl_filter_free(const struct pl_filter **filter)
+void pl_filter_free(pl_filter *filter)
 {
     pl_free_ptr((void **) filter);
 }

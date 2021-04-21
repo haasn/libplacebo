@@ -26,7 +26,7 @@ struct gl_format {
     struct pl_fmt tmpl; // pl_fmt template
 };
 
-typedef void (gl_format_cb)(const struct pl_gpu *gpu, const struct gl_format *glfmt);
+typedef void (gl_format_cb)(pl_gpu gpu, const struct gl_format *glfmt);
 
 // Enumerates all formats supported by the GL version, using the given callback
-void pl_gl_enumerate_formats(const struct pl_gpu *gpu, gl_format_cb do_format);
+void pl_gl_enumerate_formats(pl_gpu gpu, gl_format_cb do_format);

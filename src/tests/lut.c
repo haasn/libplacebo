@@ -59,9 +59,9 @@ static const char *luts[] = {
 int main()
 {
     pl_log log = pl_test_logger();
-    const struct pl_gpu *gpu = pl_gpu_dummy_create(log, NULL);
-    struct pl_shader *sh = pl_shader_alloc(log, NULL);
-    struct pl_shader_obj *obj = NULL;
+    pl_gpu gpu = pl_gpu_dummy_create(log, NULL);
+    pl_shader sh = pl_shader_alloc(log, NULL);
+    pl_shader_obj obj = NULL;
 
     for (int i = 0; i < PL_ARRAY_SIZE(luts); i++) {
         struct pl_custom_lut *lut;

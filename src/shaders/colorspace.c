@@ -18,7 +18,7 @@
 #include <math.h>
 #include "shaders.h"
 
-void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
+void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
                             const struct pl_color_adjustment *params)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
@@ -156,8 +156,7 @@ void pl_shader_decode_color(struct pl_shader *sh, struct pl_color_repr *repr,
     GLSL("}\n");
 }
 
-void pl_shader_encode_color(struct pl_shader *sh,
-                            const struct pl_color_repr *repr)
+void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
@@ -285,7 +284,7 @@ static const float SLOG_A = 0.432699,
                    SLOG_Q = 0.030001,
                    SLOG_K2 = 155.0 / 219.0;
 
-void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc)
+void pl_shader_linearize(pl_shader sh, enum pl_color_transfer trc)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
@@ -375,7 +374,7 @@ void pl_shader_linearize(struct pl_shader *sh, enum pl_color_transfer trc)
     pl_unreachable();
 }
 
-void pl_shader_delinearize(struct pl_shader *sh, enum pl_color_transfer trc)
+void pl_shader_delinearize(pl_shader sh, enum pl_color_transfer trc)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
@@ -460,8 +459,7 @@ const struct pl_sigmoid_params pl_sigmoid_default_params = {
     .slope  = 6.50,
 };
 
-void pl_shader_sigmoidize(struct pl_shader *sh,
-                          const struct pl_sigmoid_params *params)
+void pl_shader_sigmoidize(pl_shader sh, const struct pl_sigmoid_params *params)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
@@ -482,8 +480,7 @@ void pl_shader_sigmoidize(struct pl_shader *sh,
          center, scale, offset, 1.0 / slope);
 }
 
-void pl_shader_unsigmoidize(struct pl_shader *sh,
-                            const struct pl_sigmoid_params *params)
+void pl_shader_unsigmoidize(pl_shader sh, const struct pl_sigmoid_params *params)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
@@ -502,7 +499,7 @@ void pl_shader_unsigmoidize(struct pl_shader *sh,
          1.0 / scale, slope, center, offset / scale);
 }
 
-static ident_t sh_luma_coeffs(struct pl_shader *sh, enum pl_color_primaries prim)
+static ident_t sh_luma_coeffs(pl_shader sh, enum pl_color_primaries prim)
 {
     struct pl_matrix3x3 rgb2xyz;
     rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(prim));
@@ -513,7 +510,7 @@ static ident_t sh_luma_coeffs(struct pl_shader *sh, enum pl_color_primaries prim
 }
 
 // Applies the OOTF / inverse OOTF - including the sig_scale adaptation
-static void pl_shader_ootf(struct pl_shader *sh, struct pl_color_space csp)
+static void pl_shader_ootf(pl_shader sh, struct pl_color_space csp)
 {
     if (csp.sig_scale != 1.0)
         GLSL("color.rgb *= vec3(%f); \n", csp.sig_scale);
@@ -560,7 +557,7 @@ static void pl_shader_ootf(struct pl_shader *sh, struct pl_color_space csp)
     pl_unreachable();
 }
 
-static void pl_shader_inverse_ootf(struct pl_shader *sh, struct pl_color_space csp)
+static void pl_shader_inverse_ootf(pl_shader sh, struct pl_color_space csp)
 {
     if (!csp.light || csp.light == PL_COLOR_LIGHT_DISPLAY)
         goto done;
@@ -614,12 +611,12 @@ const struct pl_peak_detect_params pl_peak_detect_default_params = {
 };
 
 struct sh_peak_obj {
-    const struct pl_buf *buf;
+    pl_buf buf;
     struct pl_shader_desc desc;
     float margin;
 };
 
-static void sh_peak_uninit(const struct pl_gpu *gpu, void *ptr)
+static void sh_peak_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_peak_obj *obj = ptr;
     pl_buf_destroy(gpu, &obj->buf);
@@ -632,9 +629,8 @@ static inline float iir_coeff(float rate)
     return sqrt(a*a + 2*a) - a;
 }
 
-bool pl_shader_detect_peak(struct pl_shader *sh,
-                           struct pl_color_space csp,
-                           struct pl_shader_obj **state,
+bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
+                           pl_shader_obj *state,
                            const struct pl_peak_detect_params *params)
 {
     params = PL_DEF(params, &pl_peak_detect_default_params);
@@ -658,7 +654,7 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
     if (!obj)
         return false;
 
-    const struct pl_gpu *gpu = SH_GPU(sh);
+    pl_gpu gpu = SH_GPU(sh);
     obj->margin = params->overshoot_margin;
 
     if (!obj->buf) {
@@ -814,15 +810,15 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
     return true;
 }
 
-bool pl_get_detected_peak(const struct pl_shader_obj *state,
+bool pl_get_detected_peak(const pl_shader_obj state,
                           float *out_peak, float *out_avg)
 {
     if (!state || state->type != PL_SHADER_OBJ_PEAK_DETECT)
         return false;
 
     struct sh_peak_obj *obj = state->priv;
-    const struct pl_gpu *gpu = state->gpu;
-    const struct pl_buf *buf = obj->buf;
+    pl_gpu gpu = state->gpu;
+    pl_buf buf = obj->buf;
 
     float average[2] = {0};
     pl_assert(obj->buf->params.size >= sizeof(average));
@@ -838,7 +834,7 @@ bool pl_get_detected_peak(const struct pl_shader_obj *state,
     } else {
 
         // We can't read directly from the SSBO, go via an intermediary
-        const struct pl_buf *tmp = pl_buf_create(gpu, &(struct pl_buf_params) {
+        pl_buf tmp = pl_buf_create(gpu, &(struct pl_buf_params) {
             .size = sizeof(average),
             .host_readable = true,
         });
@@ -887,9 +883,9 @@ const struct pl_color_map_params pl_color_map_default_params = {
     .gamut_clipping         = true,
 };
 
-static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
+static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
                                struct pl_color_space dst,
-                               struct pl_shader_obj **peak_detect_state,
+                               pl_shader_obj *peak_detect_state,
                                const struct pl_color_map_params *params)
 {
     GLSL("// pl_shader_tone_map \n"
@@ -1077,10 +1073,9 @@ static void pl_shader_tone_map(struct pl_shader *sh, struct pl_color_space src,
     GLSL("} \n");
 }
 
-void pl_shader_color_map(struct pl_shader *sh,
-                         const struct pl_color_map_params *params,
+void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
                          struct pl_color_space src, struct pl_color_space dst,
-                         struct pl_shader_obj **peak_detect_state,
+                         pl_shader_obj *peak_detect_state,
                          bool prelinearized)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
@@ -1199,7 +1194,7 @@ void pl_shader_color_map(struct pl_shader *sh,
     GLSL("}\n");
 }
 
-void pl_shader_cone_distort(struct pl_shader *sh, struct pl_color_space csp,
+void pl_shader_cone_distort(pl_shader sh, struct pl_color_space csp,
                             const struct pl_cone_params *params)
 {
     if (!params || !params->cones)
@@ -1227,10 +1222,10 @@ void pl_shader_cone_distort(struct pl_shader *sh, struct pl_color_space csp,
 
 struct sh_dither_obj {
     enum pl_dither_method method;
-    struct pl_shader_obj *lut;
+    pl_shader_obj lut;
 };
 
-static void sh_dither_uninit(const struct pl_gpu *gpu, void *ptr)
+static void sh_dither_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_dither_obj *obj = ptr;
     pl_shader_obj_destroy(&obj->lut);
@@ -1278,8 +1273,8 @@ static bool dither_method_is_lut(enum pl_dither_method method)
     pl_unreachable();
 }
 
-void pl_shader_dither(struct pl_shader *sh, int new_depth,
-                      struct pl_shader_obj **dither_state,
+void pl_shader_dither(pl_shader sh, int new_depth,
+                      pl_shader_obj *dither_state,
                       const struct pl_dither_params *params)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))

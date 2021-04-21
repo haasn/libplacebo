@@ -24,8 +24,8 @@ int main()
 
     // Generate an example of a dither shader
     pl_log log = pl_test_logger();
-    struct pl_shader *sh = pl_shader_alloc(log, NULL);
-    struct pl_shader_obj *obj = NULL;
+    pl_shader sh = pl_shader_alloc(log, NULL);
+    pl_shader_obj obj = NULL;
 
     pl_shader_dither(sh, 8, &obj, NULL);
     const struct pl_shader_res *res = pl_shader_finalize(sh);

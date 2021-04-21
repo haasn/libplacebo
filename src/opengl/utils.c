@@ -36,7 +36,7 @@ const char *gl_err_str(GLenum err)
     }
 }
 
-void gl_poll_callbacks(const struct pl_gpu *gpu)
+void gl_poll_callbacks(pl_gpu gpu)
 {
     struct pl_gl *gl = PL_PRIV(gpu);
     while (gl->callbacks.num) {
@@ -65,7 +65,7 @@ void gl_poll_callbacks(const struct pl_gpu *gpu)
     }
 }
 
-bool gl_check_err(const struct pl_gpu *gpu, const char *fun)
+bool gl_check_err(pl_gpu gpu, const char *fun)
 {
     struct pl_gl *gl = PL_PRIV(gpu);
     bool ret = true;
@@ -122,7 +122,7 @@ const char *egl_err_str(EGLenum err)
     }
 }
 
-bool egl_check_err(const struct pl_gpu *gpu, const char *fun)
+bool egl_check_err(pl_gpu gpu, const char *fun)
 {
     struct pl_gl *gl = PL_PRIV(gpu);
     bool ret = true;

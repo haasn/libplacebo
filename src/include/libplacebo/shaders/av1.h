@@ -64,8 +64,8 @@ struct pl_av1_grain_data {
 // Struct containing extra options for the `pl_shader_av1_grain` call.
 struct pl_av1_grain_params {
     struct pl_av1_grain_data data;  // av1 grain metadata itself
-    const struct pl_tex *tex;       // texture to sample from
-    const struct pl_tex *luma_tex;  // "luma" texture (see notes)
+    pl_tex tex;                     // texture to sample from
+    pl_tex luma_tex;                // "luma" texture (see notes)
     struct pl_color_repr *repr;     // underlying color representation (see notes)
     int components;
     int component_mapping[4];       // same as `struct pl_plane`
@@ -94,8 +94,7 @@ bool pl_needs_av1_grain(const struct pl_av1_grain_params *params);
 //
 // Returns false on any error, or if AV1 grain generation is not supported.
 // (Requires GLSL version 130 or newer)
-bool pl_shader_av1_grain(struct pl_shader *sh,
-                         struct pl_shader_obj **grain_state,
+bool pl_shader_av1_grain(pl_shader sh, pl_shader_obj *grain_state,
                          const struct pl_av1_grain_params *params);
 
 #endif // LIBPLACEBO_SHADERS_AV1_H_

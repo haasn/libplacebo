@@ -23,6 +23,10 @@
 #include <libplacebo/colorspace.h>
 #include <libplacebo/shaders.h>
 
+// Struct defining custom LUTs
+//
+// Note: Users may freely create their own instances of this struct, there is
+// nothing particularly special about `pl_lut_parse_cube`.
 struct pl_custom_lut {
     // Some unique signature identifying this LUT, needed to detect state
     // changes (for cache invalidation). This could be anything that uniquely
@@ -64,7 +68,7 @@ void pl_lut_free(struct pl_custom_lut **lut);
 //
 // Note: `lut` does not have to be allocated by `pl_lut_parse_*`. It can be a
 // struct filled out by the user.
-void pl_shader_custom_lut(struct pl_shader *sh, const struct pl_custom_lut *lut,
-                          struct pl_shader_obj **lut_state);
+void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
+                          pl_shader_obj *lut_state);
 
 #endif // LIBPLACEBO_SHADERS_LUT_H_

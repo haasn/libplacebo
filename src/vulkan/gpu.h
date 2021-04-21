@@ -22,18 +22,17 @@
 #include "common.h"
 #include "utils.h"
 
-const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk);
+pl_gpu pl_gpu_create_vk(struct vk_ctx *vk);
 
 // Associates an external semaphore (dependency) with a pl_tex, such that this
 // pl_tex will not be used by the pl_vk until the external semaphore fires.
-void pl_tex_vk_external_dep(const struct pl_gpu *gpu, const struct pl_tex *tex,
-                            VkSemaphore external_dep);
+void pl_tex_vk_external_dep(pl_gpu gpu, pl_tex tex, VkSemaphore external_dep);
 
 // This function takes the current graphics command and steals it from the
 // GPU, so the caller can do custom vk_cmd_ calls on it. The caller should
 // submit it as well.
-struct vk_cmd *pl_vk_steal_cmd(const struct pl_gpu *gpu);
+struct vk_cmd *pl_vk_steal_cmd(pl_gpu gpu);
 
 // Unwraps a `pl_sync` into its constituent VkSemaphore pair.
-void pl_vk_sync_unwrap(const struct pl_sync *sync, VkSemaphore *out_wait,
+void pl_vk_sync_unwrap(pl_sync sync, VkSemaphore *out_wait,
                        VkSemaphore *out_signal);

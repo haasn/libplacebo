@@ -3,14 +3,14 @@
 #include "vulkan/gpu.h"
 #include <vulkan/vulkan.h>
 
-static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
+static void vulkan_interop_tests(pl_vulkan pl_vk,
                                  enum pl_handle_type handle_type)
 {
-    const struct pl_gpu *gpu = pl_vk->gpu;
+    pl_gpu gpu = pl_vk->gpu;
     printf("testing vulkan interop for handle type 0x%x\n", handle_type);
 
     if (gpu->export_caps.buf & handle_type) {
-        const struct pl_buf *buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        pl_buf buf = pl_buf_create(gpu, &(struct pl_buf_params) {
             .size = 1024,
             .export_handle = handle_type,
         });
@@ -22,14 +22,13 @@ static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
         pl_buf_destroy(gpu, &buf);
     }
 
-    const struct pl_fmt *fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0,
-                                           PL_FMT_CAP_BLITTABLE);
+    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0, PL_FMT_CAP_BLITTABLE);
     if (!fmt)
         return;
 
     if (gpu->export_caps.sync & handle_type) {
-        const struct pl_sync *sync = pl_sync_create(gpu, handle_type);
-        const struct pl_tex *tex = pl_tex_create(gpu, &(struct pl_tex_params) {
+        pl_sync sync = pl_sync_create(gpu, handle_type);
+        pl_tex tex = pl_tex_create(gpu, &(struct pl_tex_params) {
             .w = 32,
             .h = 32,
             .format = fmt,
@@ -66,14 +65,14 @@ static void vulkan_interop_tests(const struct pl_vulkan *pl_vk,
     }
 }
 
-static void vulkan_swapchain_tests(const struct pl_vulkan *vk, VkSurfaceKHR surf)
+static void vulkan_swapchain_tests(pl_vulkan vk, VkSurfaceKHR surf)
 {
     if (!surf)
         return;
 
     printf("testing vulkan swapchain\n");
-    const struct pl_gpu *gpu = vk->gpu;
-    const struct pl_swapchain *sw;
+    pl_gpu gpu = vk->gpu;
+    pl_swapchain sw;
     sw = pl_vulkan_create_swapchain(vk, &(struct pl_vulkan_swapchain_params) {
         .surface = surf,
     });
@@ -110,8 +109,7 @@ static void vulkan_swapchain_tests(const struct pl_vulkan *vk, VkSurfaceKHR surf
 int main()
 {
     pl_log log = pl_test_logger();
-    const struct pl_vk_inst *inst;
-    inst = pl_vk_inst_create(log, &(struct pl_vk_inst_params) {
+    pl_vk_inst inst = pl_vk_inst_create(log, &(struct pl_vk_inst_params) {
         .debug = true,
         .debug_extra = true,
         .opt_extensions = (const char *[]){
@@ -179,7 +177,7 @@ int main()
         params.queue_count = 8; // test inter-queue stuff
         params.surface = surf;
 
-        const struct pl_vulkan *vk = pl_vulkan_create(log, &params);
+        pl_vulkan vk = pl_vulkan_create(log, &params);
         if (!vk)
             continue;
 
@@ -199,7 +197,7 @@ int main()
             .queue_compute = vk->queue_compute,
             .queue_transfer = vk->queue_transfer,
         };
-        const struct pl_vulkan *vk2 = pl_vulkan_import(log, &iparams);
+        pl_vulkan vk2 = pl_vulkan_import(log, &iparams);
         REQUIRE(vk2);
         pl_vulkan_destroy(&vk2);
 

@@ -352,7 +352,7 @@ misaligned:
     return planes;
 }
 
-static inline bool pl_test_pixfmt(const struct pl_gpu *gpu,
+static inline bool pl_test_pixfmt(pl_gpu gpu,
                                   enum AVPixelFormat pixfmt)
 {
     struct pl_bit_encoding bits;
@@ -577,9 +577,9 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
     }
 }
 
-static inline bool pl_frame_recreate_from_avframe(const struct pl_gpu *gpu,
+static inline bool pl_frame_recreate_from_avframe(pl_gpu gpu,
                                                   struct pl_frame *out,
-                                                  const struct pl_tex *tex[4],
+                                                  pl_tex tex[4],
                                                   const AVFrame *frame)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
@@ -614,13 +614,13 @@ static void pl_avframe_free(void *priv)
 
 struct pl_avalloc {
     uint32_t magic[2];
-    const struct pl_gpu *gpu;
-    const struct pl_buf *buf;
+    pl_gpu gpu;
+    pl_buf buf;
 };
 
-static inline bool pl_upload_avframe(const struct pl_gpu *gpu,
+static inline bool pl_upload_avframe(pl_gpu gpu,
                                      struct pl_frame *out,
-                                     const struct pl_tex *tex[4],
+                                     pl_tex tex[4],
                                      const AVFrame *frame)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
@@ -638,7 +638,7 @@ static inline bool pl_upload_avframe(const struct pl_gpu *gpu,
 
     // Probe for frames allocated by our get_buffer2
     struct pl_avalloc *alloc = frame->buf[0] ? av_buffer_get_opaque(frame->buf[0]) : NULL;
-    const struct pl_buf *buf = NULL;
+    pl_buf buf = NULL;
     if (alloc && alloc->magic[0] == PL_MAGIC0 && alloc->magic[1] == PL_MAGIC1) {
         assert(alloc->gpu == gpu);
         buf = alloc->buf;
@@ -676,7 +676,7 @@ static void pl_done_cb(void *priv)
     *status = true;
 }
 
-static inline bool pl_download_avframe(const struct pl_gpu *gpu,
+static inline bool pl_download_avframe(pl_gpu gpu,
                                        const struct pl_frame *frame,
                                        AVFrame *out_frame)
 {
@@ -731,9 +731,9 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
     size_t total_size = 0;
     int ret;
 
-    const struct pl_gpu **pgpu = avctx->opaque;
-    const struct pl_gpu *gpu = pgpu ? *pgpu : NULL;
-    const struct pl_buf *buf;
+    pl_gpu *pgpu = avctx->opaque;
+    pl_gpu gpu = pgpu ? *pgpu : NULL;
+    pl_buf buf;
     struct pl_plane_data data[4];
     struct pl_avalloc *alloc = malloc(sizeof(struct pl_avalloc));
     int planes = pl_plane_data_from_pixfmt(data, NULL, pic->format);

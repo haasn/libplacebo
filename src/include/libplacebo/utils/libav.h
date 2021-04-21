@@ -42,21 +42,19 @@ static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *fra
 // Helper function to test if a pixfmt would be supported by the GPU.
 // Essentially, this can be used to check if `pl_upload_avframe` would work for
 // a given AVPixelFormat, without actually uploading or allocating anything.
-static bool pl_test_pixfmt(const struct pl_gpu *gpu, enum AVPixelFormat pixfmt);
+static bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt);
 
 // Like `pl_frame_from_avframe`, but the texture pointers are also initialized
 // to ensure they have the correct size and format to match the AVframe.
 // Similar in spirit to `pl_recreate_plane`, and the same notes apply. `tex`
-// must be an array of 4 pointers of type (const struct pl_tex *), each either
+// must be an array of 4 pointers of type `pl_tex`, each either
 // pointing to a valid texture, or NULL. Returns whether successful.
-static bool pl_frame_recreate_from_avframe(const struct pl_gpu *gpu,
-                                           struct pl_frame *out_frame,
-                                           const struct pl_tex *tex[4],
-                                           const AVFrame *frame);
+static bool pl_frame_recreate_from_avframe(pl_gpu gpu, struct pl_frame *out_frame,
+                                           pl_tex tex[4], const AVFrame *frame);
 
 // Very high level helper function to take an `AVFrame` and upload it to the
 // GPU. Similar in spirit to `pl_upload_plane`, and the same notes apply. `tex`
-// must be an array of 4 pointers of type (const struct pl_tex *), each either
+// must be an array of 4 pointers of type `pl_tex`, each either
 // pointing to a valid texture, or NULL. Returns whether successful.
 //
 // Note: This function will currently fail on HW accelerated AVFrame formats.
@@ -70,10 +68,8 @@ static bool pl_frame_recreate_from_avframe(const struct pl_gpu *gpu,
 // Note: As with `pl_frame_from_avframe`, the resulting `pl_frame` may
 // reference data embedded in the AVFrame. As such, its lifetime is only
 // valid as long as the AVFrame is valid.
-static bool pl_upload_avframe(const struct pl_gpu *gpu,
-                              struct pl_frame *out_frame,
-                              const struct pl_tex *tex[4],
-                              const AVFrame *frame);
+static bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
+                              pl_tex tex[4], const AVFrame *frame);
 
 // Download the texture contents of a `pl_frame` back to a corresponding
 // AVFrame. Blocks until completion.
@@ -81,7 +77,7 @@ static bool pl_upload_avframe(const struct pl_gpu *gpu,
 // Note: This function performs minimal verification, so incorrect usage will
 // likely result in broken frames. Use `pl_frame_recreate_from_avframe` to
 // ensure matching formats.
-static bool pl_download_avframe(const struct pl_gpu *gpu,
+static bool pl_download_avframe(pl_gpu gpu,
                                 const struct pl_frame *frame,
                                 AVFrame *out_frame);
 
@@ -119,7 +115,7 @@ static int pl_plane_data_from_pixfmt(struct pl_plane_data data[4],
 // PL_HANDLE_HOST_PTR as buffers.
 //
 // Note: `avctx->opaque` must be a pointer that *points* to the GPU instance.
-// That is, it should have type `const struct pl_gpu **`.
+// That is, it should have type `pl_gpu *`.
 static int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags);
 
 // Mapping functions for the various libavutil enums. Note that these are not

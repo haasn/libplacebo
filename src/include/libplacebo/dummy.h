@@ -54,24 +54,22 @@ extern const struct pl_gpu_dummy_params pl_gpu_dummy_default_params;
 // capability activated, respectively.
 //
 // If `params` is left as NULL, it defaults to `&pl_gpu_dummy_params`.
-const struct pl_gpu *pl_gpu_dummy_create(pl_log log,
-                                         const struct pl_gpu_dummy_params *params);
-
-void pl_gpu_dummy_destroy(const struct pl_gpu **gpu);
+pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params);
+void pl_gpu_dummy_destroy(pl_gpu *gpu);
 
 // Back-doors into the `pl_tex` and `pl_buf` representations. These allow you
 // to access the raw data backing this object. Textures are always laid out in
 // a tightly packed manner.
 //
 // For "placeholder" dummy textures, this always returns NULL.
-uint8_t *pl_buf_dummy_data(const struct pl_buf *buf);
-uint8_t *pl_tex_dummy_data(const struct pl_tex *tex);
+uint8_t *pl_buf_dummy_data(pl_buf buf);
+uint8_t *pl_tex_dummy_data(pl_tex tex);
 
 // Skeleton of `pl_tex_params` containing only the fields relevant to
 // `pl_tex_dummy_create`, plus the extra `sampler_type` field.
 struct pl_tex_dummy_params {
     int w, h, d;
-    const struct pl_fmt *format;
+    pl_fmt format;
     enum pl_sampler_type sampler_type;
     void *user_data;
 
@@ -86,7 +84,6 @@ struct pl_tex_dummy_params {
 //
 // All of the permissions will be set to `false`, except `sampleable`, which is
 // set to `true`. (So you can use it as an input to shader sampling functions)
-const struct pl_tex *pl_tex_dummy_create(const struct pl_gpu *gpu,
-                                         const struct pl_tex_dummy_params *params);
+pl_tex pl_tex_dummy_create(pl_gpu gpu, const struct pl_tex_dummy_params *params);
 
 #endif // LIBPLACEBO_DUMMY_H_

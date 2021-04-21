@@ -78,10 +78,10 @@ struct pl_icc_result {
 // same `pl_shader` object, The only reason it's separate from `pl_icc_apply`
 // is to give users a chance to adapt the input colors to the color space
 // chosen by the ICC profile before applying it.
-bool pl_icc_update(struct pl_shader *sh,
+bool pl_icc_update(pl_shader sh,
                    const struct pl_icc_color_space *src,
                    const struct pl_icc_color_space *dst,
-                   struct pl_shader_obj **icc,
+                   pl_shader_obj *icc,
                    struct pl_icc_result *out,
                    const struct pl_icc_params *params);
 
@@ -90,7 +90,7 @@ bool pl_icc_update(struct pl_shader *sh,
 // correctly map the colors into the specified `src_color` space. This should
 // be called only on the `pl_shader_obj` previously updated by `pl_icc_update`,
 // and only when that function returned true.
-void pl_icc_apply(struct pl_shader *sh, struct pl_shader_obj **icc);
+void pl_icc_apply(pl_shader sh, pl_shader_obj *icc);
 
 // Backwards compatibility aliases
 #define pl_3dlut_params pl_icc_params
@@ -98,18 +98,17 @@ void pl_icc_apply(struct pl_shader *sh, struct pl_shader_obj **icc);
 #define pl_3dlut_profile pl_icc_color_space
 #define pl_3dlut_result pl_icc_result
 
-static PL_DEPRECATED inline bool pl_3dlut_update(struct pl_shader *sh,
+static PL_DEPRECATED inline bool pl_3dlut_update(pl_shader sh,
                                                  const struct pl_icc_color_space *src,
                                                  const struct pl_icc_color_space *dst,
-                                                 struct pl_shader_obj **lut3d,
+                                                 pl_shader_obj *lut3d,
                                                  struct pl_icc_result *out,
                                                  const struct pl_icc_params *params)
 {
     return pl_icc_update(sh, src, dst, lut3d, out, params);
 }
 
-static PL_DEPRECATED inline void pl_3dlut_apply(struct pl_shader *sh,
-                                                struct pl_shader_obj **lut3d)
+static PL_DEPRECATED inline void pl_3dlut_apply(pl_shader sh, pl_shader_obj *lut3d)
 {
     return pl_icc_apply(sh, lut3d);
 }

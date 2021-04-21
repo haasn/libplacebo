@@ -46,10 +46,10 @@ struct priv {
     struct pl_hdr_metadata hdr_metadata;
 
     // state of the images:
-    PL_ARRAY(const struct pl_tex *) images; // pl_tex wrappers for the VkImages
-    PL_ARRAY(struct sem_pair) sems;         // pool of semaphores used to synchronize images
-    int idx_sems;                           // index of next free semaphore pair
-    int last_imgidx;                        // the image index last acquired (for submit)
+    PL_ARRAY(pl_tex) images;        // pl_tex wrappers for the VkImages
+    PL_ARRAY(struct sem_pair) sems; // pool of semaphores used to synchronize images
+    int idx_sems;                   // index of next free semaphore pair
+    int last_imgidx;                // the image index last acquired (for submit)
 };
 
 static struct pl_sw_fns vulkan_swapchain;
@@ -145,7 +145,7 @@ static bool vk_map_color_space(VkColorSpaceKHR space, struct pl_color_space *out
     }
 }
 
-static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
+static bool pick_surf_format(pl_gpu gpu, const struct vk_ctx *vk,
                              VkSurfaceKHR surf, bool prefer_hdr,
                              VkSurfaceFormatKHR *out_format,
                              struct pl_color_space *out_space)
@@ -233,7 +233,7 @@ static bool pick_surf_format(const struct pl_gpu *gpu, const struct vk_ctx *vk,
 
         // Make sure we can wrap this format to a meaningful, valid pl_fmt
         for (int n = 0; n < gpu->num_formats; n++) {
-            const struct pl_fmt *plfmt = gpu->formats[n];
+            pl_fmt plfmt = gpu->formats[n];
             const struct vk_format **pvkfmt = PL_PRIV(plfmt);
             if ((*pvkfmt)->tfmt != formats[i].format)
                 continue;
@@ -282,11 +282,11 @@ error:
     return best_score > 0;
 }
 
-const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *plvk,
+pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
                               const struct pl_vulkan_swapchain_params *params)
 {
     struct vk_ctx *vk = PL_PRIV(plvk);
-    const struct pl_gpu *gpu = plvk->gpu;
+    pl_gpu gpu = plvk->gpu;
 
     if (!vk->CreateSwapchainKHR) {
         PL_ERR(gpu, VK_KHR_SWAPCHAIN_EXTENSION_NAME " not enabled!");
@@ -356,9 +356,9 @@ error:
     return NULL;
 }
 
-static void vk_sw_destroy(const struct pl_swapchain *sw)
+static void vk_sw_destroy(pl_swapchain sw)
 {
-    const struct pl_gpu *gpu = sw->gpu;
+    pl_gpu gpu = sw->gpu;
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
 
@@ -376,7 +376,7 @@ static void vk_sw_destroy(const struct pl_swapchain *sw)
     pl_free((void *) sw);
 }
 
-static int vk_sw_latency(const struct pl_swapchain *sw)
+static int vk_sw_latency(pl_swapchain sw)
 {
     struct priv *p = PL_PRIV(sw);
     return p->swapchain_depth;
@@ -517,9 +517,9 @@ static void destroy_swapchain(struct vk_ctx *vk, struct priv *p)
     p->old_swapchain = VK_NULL_HANDLE;
 }
 
-static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
+static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
 {
-    const struct pl_gpu *gpu = sw->gpu;
+    pl_gpu gpu = sw->gpu;
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
 
@@ -589,7 +589,7 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
 
     for (int i = 0; i < num_images; i++) {
         const VkExtent2D *ext = &sinfo.imageExtent;
-        const struct pl_tex *tex = pl_vulkan_wrap(gpu, &(struct pl_vulkan_wrap_params) {
+        pl_tex tex = pl_vulkan_wrap(gpu, &(struct pl_vulkan_wrap_params) {
             .image = vkimages[i],
             .width = ext->width,
             .height = ext->height,
@@ -608,7 +608,7 @@ static bool vk_sw_recreate(const struct pl_swapchain *sw, int w, int h)
     // the actual color information (consider e.g. a2bgr10). Slight downside
     // in that it results in rounding r/b for e.g. rgb565, but we don't pick
     // surfaces with fewer than 8 bits anyway, so let's not care for now.
-    const struct pl_fmt *fmt = p->images.elem[0]->params.format;
+    pl_fmt fmt = p->images.elem[0]->params.format;
     for (int i = 0; i < fmt->num_components; i++)
         bits = PL_MAX(bits, fmt->component_depth[i]);
 
@@ -633,7 +633,7 @@ error:
     return false;
 }
 
-static bool vk_sw_start_frame(const struct pl_swapchain *sw,
+static bool vk_sw_start_frame(pl_swapchain sw,
                               struct pl_swapchain_frame *out_frame)
 {
     struct priv *p = PL_PRIV(sw);
@@ -706,9 +706,9 @@ static void present_cb(struct priv *p, void *arg)
     p->frames_in_flight--;
 }
 
-static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
+static bool vk_sw_submit_frame(pl_swapchain sw)
 {
-    const struct pl_gpu *gpu = sw->gpu;
+    pl_gpu gpu = sw->gpu;
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
     pthread_mutex_lock(&p->lock);
@@ -781,7 +781,7 @@ static bool vk_sw_submit_frame(const struct pl_swapchain *sw)
     }
 }
 
-static void vk_sw_swap_buffers(const struct pl_swapchain *sw)
+static void vk_sw_swap_buffers(pl_swapchain sw)
 {
     struct priv *p = PL_PRIV(sw);
 
@@ -794,7 +794,7 @@ static void vk_sw_swap_buffers(const struct pl_swapchain *sw)
     pthread_mutex_unlock(&p->lock);
 }
 
-static bool vk_sw_resize(const struct pl_swapchain *sw, int *width, int *height)
+static bool vk_sw_resize(pl_swapchain sw, int *width, int *height)
 {
     struct priv *p = PL_PRIV(sw);
     bool ok = true;
@@ -814,7 +814,7 @@ static bool vk_sw_resize(const struct pl_swapchain *sw, int *width, int *height)
     return ok;
 }
 
-static bool vk_sw_hdr_metadata(const struct pl_swapchain *sw,
+static bool vk_sw_hdr_metadata(pl_swapchain sw,
                                const struct pl_hdr_metadata *metadata)
 {
     struct priv *p = PL_PRIV(sw);
@@ -857,7 +857,7 @@ static bool vk_sw_hdr_metadata(const struct pl_swapchain *sw,
     return true;
 }
 
-bool pl_vulkan_swapchain_suboptimal(const struct pl_swapchain *sw)
+bool pl_vulkan_swapchain_suboptimal(pl_swapchain sw)
 {
     struct priv *p = PL_PRIV(sw);
     return p->suboptimal;

@@ -497,7 +497,7 @@ static void generate_scaling(void *pdata, const struct sh_lut_params *params)
         data[i] = ctx->points[ctx->num - 1][1] / range;
 }
 
-static void sample(struct pl_shader *sh, enum offset off, ident_t lut, int idx,
+static void sample(pl_shader sh, enum offset off, ident_t lut, int idx,
                    int sub_x, int sub_y)
 {
     int dx = (off & OFFSET_L) ? 1 : 0,
@@ -520,9 +520,9 @@ static void sample(struct pl_shader *sh, enum offset off, ident_t lut, int idx,
 
 struct sh_grain_obj {
     // LUT objects for the offsets, grain and scaling luts
-    struct pl_shader_obj *lut_offsets;
-    struct pl_shader_obj *lut_grain[2];
-    struct pl_shader_obj *lut_scaling[3];
+    pl_shader_obj lut_offsets;
+    pl_shader_obj lut_grain[2];
+    pl_shader_obj lut_scaling[3];
 
     // Previous parameters used to check reusability
     struct pl_av1_grain_data data;
@@ -538,7 +538,7 @@ struct sh_grain_obj {
     int16_t grain_tmp_uv[GRAIN_HEIGHT][GRAIN_WIDTH];
 };
 
-static void sh_grain_uninit(const struct pl_gpu *gpu, void *ptr)
+static void sh_grain_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_grain_obj *obj = ptr;
     pl_shader_obj_destroy(&obj->lut_offsets);
@@ -637,8 +637,8 @@ static void fill_grain_lut(void *data, const struct sh_lut_params *params)
     memcpy(data, obj->grain, entries * sizeof(float));
 }
 
-bool pl_shader_av1_grain(struct pl_shader *sh,
-                         struct pl_shader_obj **grain_state,
+bool pl_shader_av1_grain(pl_shader sh,
+                         pl_shader_obj *grain_state,
                          const struct pl_av1_grain_params *params)
 {
     if (!pl_needs_av1_grain(params)) {
@@ -680,7 +680,7 @@ bool pl_shader_av1_grain(struct pl_shader *sh,
     if (!sh_require(sh, PL_SHADER_SIG_NONE, tex_w, tex_h))
         return false;
 
-    const struct pl_gpu *gpu = SH_GPU(sh);
+    pl_gpu gpu = SH_GPU(sh);
     if (!gpu) {
         PL_ERR(sh, "pl_shader_av1_grain requires a non-NULL pl_gpu!");
         return false;

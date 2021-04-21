@@ -39,8 +39,8 @@ struct plplay {
 
     // libplacebo
     pl_log log;
-    struct pl_renderer *renderer;
-    struct pl_queue *queue;
+    pl_renderer renderer;
+    pl_queue queue;
 
     // libav*
     AVFormatContext *format;
@@ -172,7 +172,7 @@ static bool init_codec(struct plplay *p)
     return true;
 }
 
-static bool map_frame(const struct pl_gpu *gpu, const struct pl_tex **tex,
+static bool map_frame(pl_gpu gpu, pl_tex *tex,
                       const struct pl_source_frame *src,
                       struct pl_frame *out_frame)
 {
@@ -183,7 +183,7 @@ static bool map_frame(const struct pl_gpu *gpu, const struct pl_tex **tex,
     return true;
 }
 
-static void unmap_frame(const struct pl_gpu *gpu, struct pl_frame *frame,
+static void unmap_frame(pl_gpu gpu, struct pl_frame *frame,
                         const struct pl_source_frame *src)
 {
     av_frame_free((AVFrame **) &src->frame_data);

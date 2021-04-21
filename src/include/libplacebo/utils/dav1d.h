@@ -62,11 +62,10 @@ struct pl_dav1d_upload_params {
 
 // Very high level helper function to take a `Dav1dPicture` and upload it to
 // the GPU. Similar in spirit to `pl_upload_plane`, and the same notes apply.
-// `tex` must be an array of 3 pointers of type (const struct pl_tex *), each
+// `tex` must be an array of 3 pointers of type `pl_tex`, each
 // either pointing to a valid texture, or NULL. Returns whether successful.
-static bool pl_upload_dav1dpicture(const struct pl_gpu *gpu,
-                                   struct pl_frame *out_frame,
-                                   const struct pl_tex *tex[3],
+static bool pl_upload_dav1dpicture(pl_gpu gpu,
+                                   struct pl_frame *out_frame, pl_tex tex[3],
                                    const struct pl_dav1d_upload_params *params);
 
 // Allocate a Dav1dPicture from persistently mapped buffers. This can be more

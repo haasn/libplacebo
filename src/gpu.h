@@ -34,12 +34,12 @@ struct pl_gpu_fns {
     // Destructors: These also free the corresponding objects, but they
     // must not be called on NULL. (The NULL checks are done by the pl_*_destroy
     // wrappers)
-    void (*destroy)(const struct pl_gpu *gpu);
-    void (*tex_destroy)(const struct pl_gpu *, const struct pl_tex *);
-    void (*buf_destroy)(const struct pl_gpu *, const struct pl_buf *);
-    void (*pass_destroy)(const struct pl_gpu *, const struct pl_pass *);
-    void (*sync_destroy)(const struct pl_gpu *, const struct pl_sync *);
-    void (*timer_destroy)(const struct pl_gpu *, struct pl_timer *);
+    void (*destroy)(pl_gpu gpu);
+    void (*tex_destroy)(pl_gpu, pl_tex);
+    void (*buf_destroy)(pl_gpu, pl_buf);
+    void (*pass_destroy)(pl_gpu, pl_pass);
+    void (*sync_destroy)(pl_gpu, pl_sync);
+    void (*timer_destroy)(pl_gpu, pl_timer);
 
     GPU_PFN(tex_create);
     GPU_PFN(tex_invalidate); // optional
@@ -69,11 +69,11 @@ struct pl_gpu_fns {
 
 // All resources such as textures and buffers allocated from the GPU must be
 // destroyed before calling pl_destroy.
-void pl_gpu_destroy(const struct pl_gpu *gpu);
+void pl_gpu_destroy(pl_gpu gpu);
 
 // Returns true if the device supports interop. This is considered to be
 // the case if at least one of `gpu->export/import_caps` is nonzero.
-static inline bool pl_gpu_supports_interop(const struct pl_gpu *gpu)
+static inline bool pl_gpu_supports_interop(pl_gpu gpu)
 {
     return gpu->export_caps.tex ||
            gpu->import_caps.tex ||
@@ -86,7 +86,7 @@ static inline bool pl_gpu_supports_interop(const struct pl_gpu *gpu)
 // GPU-internal helpers: these should not be used outside of GPU implementations
 
 // Log some metadata about the created GPU, and perform verification
-void pl_gpu_print_info(const struct pl_gpu *gpu);
+void pl_gpu_print_info(pl_gpu gpu);
 
 // Sort the pl_fmt list into an optimal order. This tries to prefer formats
 // supporting more capabilities, while also trying to maintain a sane order in
@@ -97,35 +97,31 @@ void pl_gpu_sort_formats(struct pl_gpu *gpu);
 // pl_fmt, or NULL if the format does not have a legal matching GLSL name.
 //
 // `components` may differ from fmt->num_components (for emulated formats)
-const char *pl_fmt_glsl_format(const struct pl_fmt *fmt, int components);
+const char *pl_fmt_glsl_format(pl_fmt fmt, int components);
 
 // Look up the right fourcc from a partially filled-in pl_fmt, or 0 if the
 // format does not have a legal matching fourcc format.
-uint32_t pl_fmt_fourcc(const struct pl_fmt *fmt);
+uint32_t pl_fmt_fourcc(pl_fmt fmt);
 
 // Compute the total size (in bytes) of a texture transfer operation
 size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par);
 
 // Helper that wraps pl_tex_upload/download using texture upload buffers to
 // ensure that params->buf is always set.
-bool pl_tex_upload_pbo(const struct pl_gpu *gpu,
-                       const struct pl_tex_transfer_params *params);
-bool pl_tex_download_pbo(const struct pl_gpu *gpu,
-                         const struct pl_tex_transfer_params *params);
+bool pl_tex_upload_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params);
+bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params);
 
 // This requires that params.buf has been set and is of type PL_BUF_TEXEL_*
-bool pl_tex_upload_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
+bool pl_tex_upload_texel(pl_gpu gpu, pl_dispatch dp,
                          const struct pl_tex_transfer_params *params);
-bool pl_tex_download_texel(const struct pl_gpu *gpu, struct pl_dispatch *dp,
+bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
                            const struct pl_tex_transfer_params *params);
 
-void pl_pass_run_vbo(const struct pl_gpu *gpu,
-                     const struct pl_pass_run_params *params);
+void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params);
 
 // Make a deep-copy of the pass params. Note: cached_program etc. are not
 // copied, but cleared explicitly.
-struct pl_pass_params pl_pass_params_copy(void *alloc,
-                                          const struct pl_pass_params *params);
+struct pl_pass_params pl_pass_params_copy(void *alloc, const struct pl_pass_params *params);
 
 // Utility function for pretty-printing UUIDs
 #define UUID_SIZE 16

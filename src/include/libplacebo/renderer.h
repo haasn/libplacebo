@@ -29,22 +29,22 @@
 #include <libplacebo/swapchain.h>
 
 // Thread-safety: Unsafe
-struct pl_renderer;
+typedef struct pl_renderer *pl_renderer;
 
 // Creates a new renderer object, which is backed by a GPU context. This is a
 // high-level object that takes care of the rendering chain as a whole, from
 // the source textures to the finished frame.
-struct pl_renderer *pl_renderer_create(pl_log log, const struct pl_gpu *gpu);
-void pl_renderer_destroy(struct pl_renderer **rr);
+pl_renderer pl_renderer_create(pl_log log, pl_gpu gpu);
+void pl_renderer_destroy(pl_renderer *rr);
 
 // Saves the internal shader cache of this renderer into an abstract cache
 // object that can be saved to disk and later re-loaded to speed up
 // recompilation of shaders. See `pl_dispatch_save` for more information.
-size_t pl_renderer_save(struct pl_renderer *rr, uint8_t *out_cache);
+size_t pl_renderer_save(pl_renderer rr, uint8_t *out_cache);
 
 // Load the result of a previous `pl_renderer_save` call. See
 // `pl_dispatch_load` for more information.
-void pl_renderer_load(struct pl_renderer *rr, const uint8_t *cache);
+void pl_renderer_load(pl_renderer rr, const uint8_t *cache);
 
 enum pl_lut_type {
     PL_LUT_UNKNOWN = 0,
@@ -274,7 +274,7 @@ struct pl_plane {
     // The texture underlying this plane. The texture must be 2D, and must
     // have specific parameters set depending on what the plane is being used
     // for (see `pl_render_image`).
-    const struct pl_tex *texture;
+    pl_tex texture;
 
     // The preferred behaviour when sampling outside of this texture. Optional,
     // since the default (PL_TEX_ADDRESS_CLAMP) is very reasonable.
@@ -347,7 +347,7 @@ struct pl_overlay_part {
 struct pl_overlay {
     // The texture containing the backing data for overlay parts. Must have
     // `params.sampleable` set.
-    const struct pl_tex *tex;
+    pl_tex tex;
 
     // This controls the coloring mode of this overlay.
     enum pl_overlay_mode mode;
@@ -436,7 +436,7 @@ struct pl_frame {
     int width PL_DEPRECATED; // ignored
     int height PL_DEPRECATED;
     uint64_t signature PL_DEPRECATED; // ignored
-    const struct pl_tex *fbo PL_DEPRECATED; // fallback for `target.planes`
+    pl_tex fbo PL_DEPRECATED; // fallback for `target.planes`
     struct pl_rect2df src_rect PL_DEPRECATED; // fallback for `image.crop`
     struct pl_rect2df dst_rect PL_DEPRECATED; // fallback for `target.crop`
 };
@@ -462,7 +462,7 @@ bool pl_frame_is_cropped(const struct pl_frame *frame);
 //
 // Note: For sake of simplicity, this function only works with opaque clears,
 // i.e. A=1. If you need to clear to transparent colors, use `pl_tex_clear`.
-void pl_frame_clear(const struct pl_gpu *gpu, const struct pl_frame *frame,
+void pl_frame_clear(pl_gpu gpu, const struct pl_frame *frame,
                     const float clear_color[3]);
 
 // Deprecated aliases, provided for backwards compatibility
@@ -518,7 +518,7 @@ static PL_DEPRECATED inline bool pl_render_target_partial(
 //
 // Note: `image` may be NULL, in which case `target.overlays` will still be
 // rendered, but nothing else.
-bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *image,
+bool pl_render_image(pl_renderer rr, const struct pl_frame *image,
                      const struct pl_frame *target,
                      const struct pl_render_params *params);
 
@@ -529,7 +529,7 @@ bool pl_render_image(struct pl_renderer *rr, const struct pl_frame *image,
 // purge some state related to things like HDR peak detection or frame mixing,
 // so calling it is a good idea if the content source is expected to change
 // dramatically (e.g. when switching to a different file).
-void pl_renderer_flush_cache(struct pl_renderer *rr);
+void pl_renderer_flush_cache(pl_renderer rr);
 
 // Represents a mixture of input frames, distributed temporally.
 //
@@ -615,7 +615,7 @@ static inline float pl_frame_mix_radius(const struct pl_render_params *params)
 // This allows libplacebo to perform rudimentary frame mixing / interpolation,
 // in order to eliminate judder artifacts typically associated with
 // source/display frame rate mismatch.
-bool pl_render_image_mix(struct pl_renderer *rr, const struct pl_frame_mix *images,
+bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                          const struct pl_frame *target,
                          const struct pl_render_params *params);
 
