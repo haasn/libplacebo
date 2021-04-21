@@ -423,16 +423,6 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
     // when building with MSAN as a cheap hack-around.
 #ifndef MSAN
 
-    // We will ignore errors for a designated object, but we need to explicitly
-    // handle the case where no object is designated, because errors can have no
-    // object associated with them, and we don't want to suppress those errors.
-    if (ctx->suppress_errors_for_object) {
-        for (int i = 0; i < data->objectCount; i++) {
-            if (data->pObjects[i].objectHandle == ctx->suppress_errors_for_object)
-                return false;
-        }
-    }
-
     // Ignore errors for messages that we consider false positives
     switch (data->messageIdNumber) {
     case 0x7cd0911d: // VUID-VkSwapchainCreateInfoKHR-imageExtent-01274
@@ -492,10 +482,6 @@ static VkBool32 VKAPI_PTR vk_dbg_report_cb(VkDebugReportFlagsEXT flags,
                                            const char *msg, void *priv)
 {
     struct pl_context *ctx = priv;
-
-    if (ctx->suppress_errors_for_object != VK_NULL_HANDLE &&
-        ctx->suppress_errors_for_object == obj)
-        return false;
 
     enum pl_log_level lev;
     switch (flags) {

@@ -1228,20 +1228,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     if (!vk_malloc_slice(p->alloc, mem, &mparams))
         goto error;
 
-    if (params->import_handle && !has_drm_mods) {
-        // Currently, we know that attempting to bind imported memory may generate
-        // validation errors because there's no way to communicate the memory
-        // layout; the validation layer will rely on the expected Vulkan layout
-        // for the image. As long as the driver can handle the image, we'll be ok
-        // so we don't want these validation errors to fire and create false
-        // positives.
-        vk->ctx->suppress_errors_for_object = (uint64_t) tex_vk->img;
-    }
-
     VK(vk->BindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
-    if (params->import_handle && !has_drm_mods)
-        vk->ctx->suppress_errors_for_object = VK_NULL_HANDLE;
-
     if (!vk_init_image(gpu, tex, params->import_handle ? "imported" : "created"))
         goto error;
 
@@ -1304,8 +1291,6 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
     return tex;
 
 error:
-    if (params->import_handle)
-        vk->ctx->suppress_errors_for_object = VK_NULL_HANDLE;
     vk_tex_destroy(gpu, tex);
     return NULL;
 }

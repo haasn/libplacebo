@@ -26,9 +26,6 @@ struct pl_context {
     pl_str logbuffer;
     enum pl_log_level log_level_cap;
     pthread_mutex_t lock;
-    // Provide a place for implementations to track suppression of errors
-    // FIXME: This is a hack. Get rid of it ASAP. It's also not thread-safe.
-    uint64_t suppress_errors_for_object;
 };
 
 // Logging-related functions
