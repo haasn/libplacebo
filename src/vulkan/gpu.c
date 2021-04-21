@@ -1381,13 +1381,12 @@ static void vk_tex_blit(const struct pl_gpu *gpu,
     struct pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
     if (pl_rect3d_eq(src_rc, dst_rc)) {
         pl_rect3d_normalize(&src_rc);
-        pl_rect3d_normalize(&dst_rc);
 
         VkImageCopy region = {
             .srcSubresource = layers,
             .dstSubresource = layers,
             .srcOffset = {src_rc.x0, src_rc.y0, src_rc.z0},
-            .dstOffset = {dst_rc.x0, dst_rc.y0, dst_rc.z0},
+            .dstOffset = {src_rc.x0, src_rc.y0, src_rc.z0},
             .extent = {
                 pl_rect_w(src_rc),
                 pl_rect_h(src_rc),
