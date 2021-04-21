@@ -51,8 +51,7 @@ struct pl_custom_lut {
 };
 
 // Parse a 3DLUT in .cube format. Returns NULL if the file fails parsing.
-struct pl_custom_lut *pl_lut_parse_cube(struct pl_context *ctx,
-                                        const char *str, size_t str_len);
+struct pl_custom_lut *pl_lut_parse_cube(pl_log log, const char *str, size_t str_len);
 
 // Frees a LUT created by `pl_lut_parse_*`.
 void pl_lut_free(struct pl_custom_lut **lut);

@@ -16,7 +16,7 @@
  */
 
 #include "common.h"
-#include "context.h"
+#include "log.h"
 #include "swapchain.h"
 
 void pl_swapchain_destroy(const struct pl_swapchain **ptr)

@@ -2,8 +2,8 @@
 
 int main()
 {
-    struct pl_context *ctx = pl_test_context();
-    const struct pl_gpu *gpu = pl_gpu_dummy_create(ctx, NULL);
+    pl_log log = pl_test_logger();
+    const struct pl_gpu *gpu = pl_gpu_dummy_create(log, NULL);
     pl_buffer_tests(gpu);
     pl_texture_tests(gpu);
 
@@ -27,7 +27,7 @@ int main()
     };
 
     struct pl_shader *sh;
-    sh = pl_shader_alloc(ctx, &(struct pl_shader_params) { .gpu = gpu });
+    sh = pl_shader_alloc(log, &(struct pl_shader_params) { .gpu = gpu });
     REQUIRE(pl_shader_sample_polar(sh, &src, &filter_params));
     const struct pl_shader_res *res = pl_shader_finalize(sh);
     REQUIRE(res);
@@ -64,5 +64,5 @@ int main()
     pl_shader_obj_destroy(&lut);
     pl_tex_destroy(gpu, &dummy);
     pl_gpu_dummy_destroy(&gpu);
-    pl_context_destroy(&ctx);
+    pl_log_destroy(&log);
 }

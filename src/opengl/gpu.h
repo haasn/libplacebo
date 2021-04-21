@@ -21,6 +21,6 @@
 #include "common.h"
 
 // Thread safety: Unsafe, same as pl_gpu_destroy
-const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
+const struct pl_gpu *pl_gpu_create_gl(pl_log log,
                                       const struct pl_opengl *gl,
                                       const struct pl_opengl_params *params);

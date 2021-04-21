@@ -23,7 +23,7 @@ const struct pl_opengl_params pl_opengl_default_params = {0};
 
 struct priv {
     struct pl_opengl_params params;
-    struct pl_context *ctx;
+    pl_log log;
     bool is_debug;
     bool is_debug_egl;
 
@@ -36,7 +36,7 @@ static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
                                 GLenum severity, GLsizei length,
                                 const GLchar *message, const void *userParam)
 {
-    struct pl_context *ctx = (void *) userParam;
+    pl_log log = (void *) userParam;
     enum pl_log_level level = PL_LOG_ERR;
 
     switch (severity) {
@@ -46,7 +46,7 @@ static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
     case GL_DEBUG_SEVERITY_HIGH:        level = PL_LOG_ERR; break;
     }
 
-    pl_msg(ctx, level, "GL: %s", message);
+    pl_msg(log, level, "GL: %s", message);
 }
 
 #ifdef EPOXY_HAS_EGL
@@ -55,11 +55,9 @@ static void debug_cb_egl(EGLenum error, const char *command,
                          EGLint messageType, EGLLabelKHR threadLabel,
                          EGLLabelKHR objectLabel, const char *message)
 {
-    struct pl_context *ctx = threadLabel;
-    if (!ctx)
-        return;
-
+    pl_log log = threadLabel;
     enum pl_log_level level = PL_LOG_ERR;
+
     switch (messageType) {
     case EGL_DEBUG_MSG_CRITICAL_KHR:    level = PL_LOG_FATAL; break;
     case EGL_DEBUG_MSG_ERROR_KHR:       level = PL_LOG_ERR; break;
@@ -67,7 +65,7 @@ static void debug_cb_egl(EGLenum error, const char *command,
     case EGL_DEBUG_MSG_INFO_KHR:        level = PL_LOG_DEBUG; break;
     }
 
-    pl_msg(ctx, level, "EGL: %s: %s %s", command, egl_err_str(error),
+    pl_msg(log, level, "EGL: %s: %s %s", command, egl_err_str(error),
            message);
 }
 
@@ -99,14 +97,14 @@ void pl_opengl_destroy(const struct pl_opengl **ptr)
     pl_free_ptr((void **) ptr);
 }
 
-const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
+const struct pl_opengl *pl_opengl_create(pl_log log,
                                          const struct pl_opengl_params *params)
 {
     params = PL_DEF(params, &pl_opengl_default_params);
     struct pl_opengl *pl_gl = pl_zalloc_priv(NULL, struct pl_opengl, struct priv);
     struct priv *p = PL_PRIV(pl_gl);
     p->params = *params;
-    p->ctx = ctx;
+    p->log = log;
 
     pl_mutex_init_type(&p->lock, PTHREAD_MUTEX_RECURSIVE);
     if (!gl_make_current(pl_gl)) {
@@ -126,7 +124,7 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
     PL_INFO(p, "    GL_VENDOR:   %s", glGetString(GL_VENDOR));
     PL_INFO(p, "    GL_RENDERER: %s", glGetString(GL_RENDERER));
 
-    if (pl_msg_test(ctx, PL_LOG_DEBUG)) {
+    if (pl_msg_test(log, PL_LOG_DEBUG)) {
         if (ver >= 30) {
             int num_exts = 0;
             glGetIntegerv(GL_NUM_EXTENSIONS, &num_exts);
@@ -155,7 +153,7 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
 
     if (params->debug) {
         if (epoxy_has_gl_extension("GL_ARB_debug_output")) {
-            glDebugMessageCallback(debug_cb, ctx);
+            glDebugMessageCallback(debug_cb, log);
             p->is_debug = true;
         } else {
             PL_WARN(p, "OpenGL debugging requested but GL_ARB_debug_output "
@@ -175,13 +173,13 @@ const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
             };
 
             eglDebugMessageControlKHR(debug_cb_egl, attribs);
-            eglLabelObjectKHR(NULL, EGL_OBJECT_THREAD_KHR, NULL, ctx);
+            eglLabelObjectKHR(NULL, EGL_OBJECT_THREAD_KHR, NULL, (void *) log);
             p->is_debug_egl = true;
         }
 #endif // EPOXY_HAS_EGL
     }
 
-    pl_gl->gpu = pl_gpu_create_gl(ctx, pl_gl, params);
+    pl_gl->gpu = pl_gpu_create_gl(log, pl_gl, params);
     if (!pl_gl->gpu)
         goto error;
 

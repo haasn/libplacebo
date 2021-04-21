@@ -416,7 +416,7 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
                                           const VkDebugUtilsMessengerCallbackDataEXT *data,
                                           void *priv)
 {
-    struct pl_context *ctx = priv;
+    pl_log log = priv;
 
     // MSAN really doesn't like reading from the stack-allocated memory
     // allocated by the non-instrumented vulkan library, so just comment it out
@@ -448,16 +448,16 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
     default:                                                lev = PL_LOG_INFO;  break;
     }
 
-    pl_msg(ctx, lev, "vk %s", data->pMessage);
+    pl_msg(log, lev, "vk %s", data->pMessage);
 
 #ifndef MSAN
     for (int i = 0; i < data->queueLabelCount; i++)
-        pl_msg(ctx, lev, "    during %s", data->pQueueLabels[i].pLabelName);
+        pl_msg(log, lev, "    during %s", data->pQueueLabels[i].pLabelName);
     for (int i = 0; i < data->cmdBufLabelCount; i++)
-        pl_msg(ctx, lev, "    inside %s", data->pCmdBufLabels[i].pLabelName);
+        pl_msg(log, lev, "    inside %s", data->pCmdBufLabels[i].pLabelName);
     for (int i = 0; i < data->objectCount; i++) {
         const VkDebugUtilsObjectNameInfoEXT *obj = &data->pObjects[i];
-        pl_msg(ctx, lev, "    using %s: %s (0x%llx)",
+        pl_msg(log, lev, "    using %s: %s (0x%llx)",
                vk_obj_type(obj->objectType),
                obj->pObjectName ? obj->pObjectName : "anon",
                (unsigned long long) obj->objectHandle);
@@ -481,7 +481,7 @@ static VkBool32 VKAPI_PTR vk_dbg_report_cb(VkDebugReportFlagsEXT flags,
                                            int32_t msgCode, const char *layer,
                                            const char *msg, void *priv)
 {
-    struct pl_context *ctx = priv;
+    pl_log log = priv;
 
     enum pl_log_level lev;
     switch (flags) {
@@ -494,14 +494,14 @@ static VkBool32 VKAPI_PTR vk_dbg_report_cb(VkDebugReportFlagsEXT flags,
     };
 
     // Note: We can freely cast VkDebugReportObjectTypeEXT to VkObjectType
-    pl_msg(ctx, lev, "vk [%s] %d: %s (obj 0x%llx (%s), loc 0x%zx)",
+    pl_msg(log, lev, "vk [%s] %d: %s (obj 0x%llx (%s), loc 0x%zx)",
            layer, (int) msgCode, msg, (unsigned long long) obj,
            vk_obj_type((VkObjectType) objType), loc);
 
     return !!(flags & VK_DEBUG_REPORT_ERROR_BIT_EXT);
 }
 
-static PFN_vkGetInstanceProcAddr get_proc_addr_fallback(struct pl_context *ctx,
+static PFN_vkGetInstanceProcAddr get_proc_addr_fallback(pl_log log,
                                     PFN_vkGetInstanceProcAddr get_proc_addr)
 {
     if (get_proc_addr)
@@ -510,7 +510,7 @@ static PFN_vkGetInstanceProcAddr get_proc_addr_fallback(struct pl_context *ctx,
 #ifdef PL_HAVE_VK_PROC_ADDR
     return vkGetInstanceProcAddr;
 #else
-    pl_fatal(ctx, "No `vkGetInstanceProcAddr` function provided, and "
+    pl_fatal(log, "No `vkGetInstanceProcAddr` function provided, and "
              "libplacebo built without linking against this function!");
     return NULL;
 #endif
@@ -521,7 +521,7 @@ static PFN_vkGetInstanceProcAddr get_proc_addr_fallback(struct pl_context *ctx,
     (int) VK_VERSION_MINOR(ver), \
     (int) VK_VERSION_PATCH(ver)
 
-const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
+const struct pl_vk_inst *pl_vk_inst_create(pl_log log,
                                            const struct pl_vk_inst_params *params)
 {
     void *tmp = pl_tmp(NULL);
@@ -531,7 +531,7 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     PL_ARRAY(const char *) exts = {0};
 
     PFN_vkGetInstanceProcAddr get_addr;
-    if (!(get_addr = get_proc_addr_fallback(ctx, params->get_proc_addr)))
+    if (!(get_addr = get_proc_addr_fallback(log, params->get_proc_addr)))
         goto error;
 
     // Query instance version support
@@ -540,11 +540,11 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     if (EnumerateInstanceVersion && EnumerateInstanceVersion(&api_ver) != VK_SUCCESS)
         goto error;
 
-    pl_debug(ctx, "Available instance version: %d.%d.%d", PRINTF_VER(api_ver));
+    pl_debug(log, "Available instance version: %d.%d.%d", PRINTF_VER(api_ver));
 
     if (params->max_api_version) {
         api_ver = PL_MIN(api_ver, params->max_api_version);
-        pl_info(ctx, "Restricting API version to %d.%d.%d... new version %d.%d.%d",
+        pl_info(log, "Restricting API version to %d.%d.%d... new version %d.%d.%d",
                 PRINTF_VER(params->max_api_version), PRINTF_VER(api_ver));
     }
 
@@ -577,7 +577,7 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
         info.pNext = &vinfo;
 #else
     if (params->debug_extra) {
-        pl_warn(ctx, "Enabled extra debugging but vulkan headers too old to "
+        pl_warn(log, "Enabled extra debugging but vulkan headers too old to "
                 "support it, please update vulkan and recompile libplacebo!");
     }
 #endif
@@ -589,9 +589,9 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
     VkLayerProperties *layers_avail = pl_calloc_ptr(tmp, num_layers_avail, layers_avail);
     EnumerateInstanceLayerProperties(&num_layers_avail, layers_avail);
 
-    pl_debug(ctx, "Available layers:");
+    pl_debug(log, "Available layers:");
     for (int i = 0; i < num_layers_avail; i++) {
-        pl_debug(ctx, "    %s (v%d.%d.%d)", layers_avail[i].layerName,
+        pl_debug(log, "    %s (v%d.%d.%d)", layers_avail[i].layerName,
                  PRINTF_VER(layers_avail[i].specVersion));
     }
 
@@ -612,14 +612,14 @@ const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
                 if (strcmp(debug_layers[i], layers_avail[n].layerName) != 0)
                     continue;
 
-                pl_info(ctx, "Enabling debug meta layer: %s", debug_layers[i]);
+                pl_info(log, "Enabling debug meta layer: %s", debug_layers[i]);
                 PL_ARRAY_APPEND(tmp, layers, debug_layers[i]);
                 goto debug_layers_done;
             }
         }
 
         // No layer found..
-        pl_warn(ctx, "API debugging requested but no debug meta layers present... ignoring");
+        pl_warn(log, "API debugging requested but no debug meta layers present... ignoring");
         debug = false;
     }
 
@@ -668,15 +668,15 @@ debug_layers_done: ;
         }
     }
 
-    pl_debug(ctx, "Available instance extensions:");
+    pl_debug(log, "Available instance extensions:");
     for (int i = 0; i < num_exts_avail; i++)
-        pl_debug(ctx, "    %s", exts_avail[i].extensionName);
+        pl_debug(log, "    %s", exts_avail[i].extensionName);
     for (int i = 0; i < num_layers_avail; i++) {
         for (int j = 0; j < layer_exts[i].num_exts; j++) {
             if (!layer_exts[i].exts[j].extensionName[0])
                 continue;
 
-            pl_debug(ctx, "    %s (via %s)",
+            pl_debug(log, "    %s (via %s)",
                      layer_exts[i].exts[j].extensionName,
                      layers_avail[i].layerName);
         }
@@ -756,7 +756,7 @@ next_opt_user_ext: ;
                 if (strcmp(debug_exts[i], exts_avail[n].extensionName) != 0)
                     continue;
 
-                pl_info(ctx, "Enabling debug report extension: %s", debug_exts[i]);
+                pl_info(log, "Enabling debug report extension: %s", debug_exts[i]);
                 PL_ARRAY_APPEND(tmp, exts, debug_exts[i]);
                 debug_ext = debug_exts[i];
                 goto debug_exts_done;
@@ -764,7 +764,7 @@ next_opt_user_ext: ;
         }
 
         // No extension found
-        pl_warn(ctx, "API debug layers enabled but no debug report extension "
+        pl_warn(log, "API debug layers enabled but no debug report extension "
                 "found... ignoring. Debug messages may be spilling to "
                 "stdout/stderr!");
     }
@@ -776,20 +776,20 @@ debug_exts_done: ;
     info.ppEnabledLayerNames = layers.elem;
     info.enabledLayerCount = layers.num;
 
-    pl_info(ctx, "Creating vulkan instance%s", exts.num ? " with extensions:" : "");
+    pl_info(log, "Creating vulkan instance%s", exts.num ? " with extensions:" : "");
     for (int i = 0; i < exts.num; i++)
-        pl_info(ctx, "    %s", exts.elem[i]);
+        pl_info(log, "    %s", exts.elem[i]);
 
     if (layers.num) {
-        pl_info(ctx, "  and layers:");
+        pl_info(log, "  and layers:");
         for (int i = 0; i < layers.num; i++)
-            pl_info(ctx, "    %s", layers.elem[i]);
+            pl_info(log, "    %s", layers.elem[i]);
     }
 
     PL_VK_LOAD_FUN(NULL, CreateInstance, get_addr);
     VkResult res = CreateInstance(&info, PL_VK_ALLOC, &inst);
     if (res != VK_SUCCESS) {
-        pl_fatal(ctx, "Failed creating instance: %s", vk_res_str(res));
+        pl_fatal(log, "Failed creating instance: %s", vk_res_str(res));
         goto error;
     }
 
@@ -817,7 +817,7 @@ debug_exts_done: ;
                            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
             .pfnUserCallback = vk_dbg_utils_cb,
-            .pUserData = ctx,
+            .pUserData = (void *) log,
         };
 
         PL_VK_LOAD_FUN(inst, CreateDebugUtilsMessengerEXT, get_addr);
@@ -831,7 +831,7 @@ debug_exts_done: ;
                      VK_DEBUG_REPORT_ERROR_BIT_EXT |
                      VK_DEBUG_REPORT_DEBUG_BIT_EXT,
             .pfnCallback = vk_dbg_report_cb,
-            .pUserData = ctx,
+            .pUserData = (void *) log,
         };
 
         PL_VK_LOAD_FUN(inst, CreateDebugReportCallbackEXT, get_addr)
@@ -842,7 +842,7 @@ debug_exts_done: ;
     return pl_vk;
 
 error:
-    pl_fatal(ctx, "Failed initializing vulkan instance");
+    pl_fatal(log, "Failed initializing vulkan instance");
     if (inst) {
         PL_VK_LOAD_FUN(inst, DestroyInstance, get_addr);
         DestroyInstance(inst, PL_VK_ALLOC);
@@ -884,12 +884,12 @@ void pl_vulkan_destroy(const struct pl_vulkan **pl_vk)
     pl_free_ptr((void **) pl_vk);
 }
 
-static bool supports_surf(struct pl_context *ctx, VkInstance inst,
+static bool supports_surf(pl_log log, VkInstance inst,
                           PFN_vkGetInstanceProcAddr get_addr,
                           VkPhysicalDevice physd, VkSurfaceKHR surf)
 {
     // Hack for the VK macro's logging to work
-    struct { struct pl_context *ctx; } *vk = (void *) &ctx;
+    struct { pl_log log; } *vk = (void *) &log;
 
     PL_VK_LOAD_FUN(inst, GetPhysicalDeviceQueueFamilyProperties, get_addr);
     PL_VK_LOAD_FUN(inst, GetPhysicalDeviceSurfaceSupportKHR, get_addr);
@@ -907,11 +907,11 @@ error:
     return false;
 }
 
-VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
+VkPhysicalDevice pl_vulkan_choose_device(pl_log log,
                                          const struct pl_vulkan_device_params *params)
 {
     // Hack for the VK macro's logging to work
-    struct { struct pl_context *ctx; } *vk = (void *) &ctx;
+    struct { pl_log log; } *vk = (void *) &log;
     PL_INFO(vk, "Probing for vulkan devices:");
 
     pl_assert(params->instance);
@@ -919,7 +919,7 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
     VkPhysicalDevice dev = VK_NULL_HANDLE;
 
     PFN_vkGetInstanceProcAddr get_addr;
-    if (!(get_addr = get_proc_addr_fallback(ctx, params->get_proc_addr)))
+    if (!(get_addr = get_proc_addr_fallback(log, params->get_proc_addr)))
         return NULL;
 
     PL_VK_LOAD_FUN(inst, EnumeratePhysicalDevices, get_addr);
@@ -975,7 +975,7 @@ VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
             PL_INFO(vk, "           uuid: %s", PRINT_UUID(id_props.deviceUUID));
 
         if (params->surface) {
-            if (!supports_surf(ctx, inst, get_addr, devices[i], params->surface)) {
+            if (!supports_surf(log, inst, get_addr, devices[i], params->surface)) {
                 PL_DEBUG(vk, "      -> excluding due to lack of surface support");
                 continue;
             }
@@ -1291,7 +1291,7 @@ error:
     return false;
 }
 
-const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
+const struct pl_vulkan *pl_vulkan_create(pl_log log,
                                          const struct pl_vulkan_params *params)
 {
     params = PL_DEF(params, &pl_vulkan_default_params);
@@ -1299,9 +1299,9 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
     struct vk_ctx *vk = PL_PRIV(pl_vk);
     *vk = (struct vk_ctx) {
         .alloc = pl_vk,
-        .ctx = ctx,
+        .log = log,
         .inst = params->instance,
-        .GetInstanceProcAddr = get_proc_addr_fallback(ctx, params->get_proc_addr),
+        .GetInstanceProcAddr = get_proc_addr_fallback(log, params->get_proc_addr),
     };
 
     pl_mutex_init_type(&vk->lock, PTHREAD_MUTEX_RECURSIVE);
@@ -1317,7 +1317,7 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
         struct pl_vk_inst_params iparams;
         iparams = *PL_DEF(params->instance_params, &pl_vk_inst_default_params);
         iparams.get_proc_addr = params->get_proc_addr;
-        vk->internal_instance = pl_vk_inst_create(ctx, &iparams);
+        vk->internal_instance = pl_vk_inst_create(log, &iparams);
         if (!vk->internal_instance)
             goto error;
         vk->inst = vk->internal_instance->instance;
@@ -1341,7 +1341,7 @@ const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
         };
         memcpy(dparams.device_uuid, params->device_uuid, VK_UUID_SIZE);
 
-        vk->physd = pl_vulkan_choose_device(ctx, &dparams);
+        vk->physd = pl_vulkan_choose_device(log, &dparams);
         if (!vk->physd) {
             PL_FATAL(vk, "Found no suitable device, giving up.");
             goto error;
@@ -1434,7 +1434,7 @@ error:
     return NULL;
 }
 
-const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
+const struct pl_vulkan *pl_vulkan_import(pl_log log,
                                          const struct pl_vulkan_import_params *params)
 {
     void *tmp = pl_tmp(NULL);
@@ -1443,12 +1443,12 @@ const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
     struct vk_ctx *vk = PL_PRIV(pl_vk);
     *vk = (struct vk_ctx) {
         .alloc = pl_vk,
-        .ctx = ctx,
+        .log = log,
         .imported = true,
         .inst = params->instance,
         .physd = params->phys_device,
         .dev = params->device,
-        .GetInstanceProcAddr = get_proc_addr_fallback(ctx, params->get_proc_addr),
+        .GetInstanceProcAddr = get_proc_addr_fallback(log, params->get_proc_addr),
     };
 
     pl_mutex_init_type(&vk->lock, PTHREAD_MUTEX_RECURSIVE);

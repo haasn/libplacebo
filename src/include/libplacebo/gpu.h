@@ -170,7 +170,7 @@ struct pl_gpu_pci_address {
 //
 // Thread-safety: Depends on `PL_GPU_CAP_THREAD_SAFE`
 struct pl_gpu {
-    struct pl_context *ctx;  // the `pl_context` this GPU was initialized from
+    pl_log log;
 
     pl_gpu_caps caps;            // PL_GPU_CAP_* bit field
     struct pl_glsl_desc glsl;    // GLSL version supported by this GPU
@@ -192,6 +192,9 @@ struct pl_gpu {
     // PCI Bus address of the underlying device, to help with interop.
     // This will only be filled in if interop is supported.
     struct pl_gpu_pci_address pci;
+
+    // (Deprecated) Backwards compatibility field. Equal to `log`.
+    pl_log ctx PL_DEPRECATED;
 };
 
 // Helper function to align the given dimension (e.g. width or height) to a

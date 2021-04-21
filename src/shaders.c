@@ -19,21 +19,19 @@
 #include <math.h>
 
 #include "common.h"
-#include "context.h"
+#include "log.h"
 #include "shaders.h"
 
-struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
-                                  const struct pl_shader_params *params)
+struct pl_shader *pl_shader_alloc(pl_log log, const struct pl_shader_params *params)
 {
-    pl_assert(ctx);
-    struct pl_shader *sh = pl_alloc_ptr(ctx, sh);
+    struct pl_shader *sh = pl_alloc_ptr(NULL, sh);
     *sh = (struct pl_shader) {
-        .ctx = ctx,
+        .log = log,
         .mutable = true,
     };
 
     // Ensure there's always at least one `tmp` object
-    PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_new(ctx));
+    PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_new(NULL));
 
     if (params)
         sh->res.params = *params;
@@ -59,7 +57,7 @@ void pl_shader_reset(struct pl_shader *sh, const struct pl_shader_params *params
         pl_ref_deref(&sh->tmp.elem[i]);
 
     struct pl_shader new = {
-        .ctx = sh->ctx,
+        .log = sh->log,
         .mutable = true,
 
         // Preserve array allocations
@@ -77,7 +75,7 @@ void pl_shader_reset(struct pl_shader *sh, const struct pl_shader_params *params
         new.buffers[i] = (pl_str) { .buf = sh->buffers[i].buf };
 
     *sh = new;
-    PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_new(sh->ctx));
+    PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_new(NULL));
 }
 
 bool pl_shader_is_failed(const struct pl_shader *sh)

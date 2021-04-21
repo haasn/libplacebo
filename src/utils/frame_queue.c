@@ -19,7 +19,7 @@
 #include <math.h>
 
 #include "common.h"
-#include "context.h"
+#include "log.h"
 
 struct cache_entry {
     const struct pl_tex *tex[4];
@@ -56,7 +56,7 @@ struct pool {
 
 struct pl_queue {
     const struct pl_gpu *gpu;
-    struct pl_context *ctx;
+    pl_log log;
 
     // For multi-threading, we use two locks. The `lock_weak` guards the queue
     // state itself. The `lock_strong` has a bigger scope and should be held
@@ -96,7 +96,7 @@ struct pl_queue *pl_queue_create(const struct pl_gpu *gpu)
     struct pl_queue *p = pl_alloc_ptr(NULL, p);
     *p = (struct pl_queue) {
         .gpu = gpu,
-        .ctx = gpu->ctx,
+        .log = gpu->log,
     };
 
     pl_mutex_init(&p->lock_strong);
@@ -169,7 +169,7 @@ void pl_queue_reset(struct pl_queue *p)
 
     *p = (struct pl_queue) {
         .gpu = p->gpu,
-        .ctx = p->ctx,
+        .log = p->log,
 
         // Reuse pthread objects
         .lock_strong = p->lock_strong,

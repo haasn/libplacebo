@@ -18,7 +18,7 @@
 #pragma once
 
 #include "common.h"
-#include "context.h"
+#include "log.h"
 
 // To avoid having to include drm_fourcc.h
 #ifndef DRM_FORMAT_MOD_LINEAR

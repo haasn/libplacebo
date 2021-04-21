@@ -109,9 +109,9 @@ static void vulkan_swapchain_tests(const struct pl_vulkan *vk, VkSurfaceKHR surf
 
 int main()
 {
-    struct pl_context *ctx = pl_test_context();
+    pl_log log = pl_test_logger();
     const struct pl_vk_inst *inst;
-    inst = pl_vk_inst_create(ctx, &(struct pl_vk_inst_params) {
+    inst = pl_vk_inst_create(log, &(struct pl_vk_inst_params) {
         .debug = true,
         .debug_extra = true,
         .opt_extensions = (const char *[]){
@@ -153,7 +153,7 @@ int main()
 
     // Make sure choosing any device works
     VkPhysicalDevice dev;
-    dev = pl_vulkan_choose_device(ctx, &(struct pl_vulkan_device_params) {
+    dev = pl_vulkan_choose_device(log, &(struct pl_vulkan_device_params) {
         .instance = inst->instance,
         .allow_software = true,
         .surface = surf,
@@ -167,7 +167,7 @@ int main()
         printf("Testing device %d: %s\n", i, props.deviceName);
 
         // Make sure we can choose this device by name
-        dev = pl_vulkan_choose_device(ctx, &(struct pl_vulkan_device_params) {
+        dev = pl_vulkan_choose_device(log, &(struct pl_vulkan_device_params) {
             .instance = inst->instance,
             .device_name = props.deviceName,
         });
@@ -179,7 +179,7 @@ int main()
         params.queue_count = 8; // test inter-queue stuff
         params.surface = surf;
 
-        const struct pl_vulkan *vk = pl_vulkan_create(ctx, &params);
+        const struct pl_vulkan *vk = pl_vulkan_create(log, &params);
         if (!vk)
             continue;
 
@@ -199,7 +199,7 @@ int main()
             .queue_compute = vk->queue_compute,
             .queue_transfer = vk->queue_transfer,
         };
-        const struct pl_vulkan *vk2 = pl_vulkan_import(ctx, &iparams);
+        const struct pl_vulkan *vk2 = pl_vulkan_import(log, &iparams);
         REQUIRE(vk2);
         pl_vulkan_destroy(&vk2);
 
@@ -218,7 +218,7 @@ int main()
         // Re-run the same export/import tests with async queues disabled
         params.async_compute = false;
         params.async_transfer = false;
-        vk = pl_vulkan_create(ctx, &params);
+        vk = pl_vulkan_create(log, &params);
         REQUIRE(vk); // it succeeded the first time
 
 #ifdef PL_HAVE_UNIX
@@ -233,11 +233,11 @@ int main()
         pl_vulkan_destroy(&vk);
 
         // Reduce log spam after first tested device
-        pl_test_set_verbosity(ctx, PL_LOG_INFO);
+        pl_log_level_update(log, PL_LOG_INFO);
     }
 
     vkDestroySurfaceKHR(inst->instance, surf, NULL);
     pl_vk_inst_destroy(&inst);
-    pl_context_destroy(&ctx);
+    pl_log_destroy(&log);
     free(devices);
 }

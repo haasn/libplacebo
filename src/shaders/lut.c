@@ -30,8 +30,7 @@ void pl_lut_free(struct pl_custom_lut **lut)
     pl_free_ptr(lut);
 }
 
-struct pl_custom_lut *pl_lut_parse_cube(struct pl_context *ctx,
-                                        const char *cstr, size_t cstr_len)
+struct pl_custom_lut *pl_lut_parse_cube(pl_log log, const char *cstr, size_t cstr_len)
 {
     struct pl_custom_lut *lut = pl_zalloc_ptr(NULL, lut);
     pl_str str = (pl_str) { (uint8_t *) cstr, cstr_len };
@@ -48,7 +47,7 @@ struct pl_custom_lut *pl_lut_parse_cube(struct pl_context *ctx,
             continue; // skip empty line
 
         if (pl_str_eatstart0(&line, "TITLE")) {
-            pl_info(ctx, "Loading LUT: %.*s", PL_STR_FMT(pl_str_strip(line)));
+            pl_info(log, "Loading LUT: %.*s", PL_STR_FMT(pl_str_strip(line)));
             continue;
         }
 
@@ -56,11 +55,11 @@ struct pl_custom_lut *pl_lut_parse_cube(struct pl_context *ctx,
             line = pl_str_strip(line);
             int size;
             if (!pl_str_parse_int(line, &size)) {
-                pl_err(ctx, "Failed parsing dimension '%.*s'", PL_STR_FMT(line));
+                pl_err(log, "Failed parsing dimension '%.*s'", PL_STR_FMT(line));
                 goto error;
             }
             if (size <= 0 || size > 1024) {
-                pl_err(ctx, "Invalid 3DLUT size: %dx%d%x", size, size, size);
+                pl_err(log, "Invalid 3DLUT size: %dx%d%x", size, size, size);
                 goto error;
             }
 
@@ -73,11 +72,11 @@ struct pl_custom_lut *pl_lut_parse_cube(struct pl_context *ctx,
             line = pl_str_strip(line);
             int size;
             if (!pl_str_parse_int(line, &size)) {
-                pl_err(ctx, "Failed parsing dimension '%.*s'", PL_STR_FMT(line));
+                pl_err(log, "Failed parsing dimension '%.*s'", PL_STR_FMT(line));
                 goto error;
             }
             if (size <= 0 || size > 65536) {
-                pl_err(ctx, "Invalid 1DLUT size: %d", size);
+                pl_err(log, "Invalid 1DLUT size: %d", size);
                 goto error;
             }
 
@@ -93,7 +92,7 @@ struct pl_custom_lut *pl_lut_parse_cube(struct pl_context *ctx,
                 !pl_str_parse_float(pl_str_split_char(line, ' ', &line), &min[1]) ||
                 !pl_str_parse_float(line, &min[2]))
             {
-                pl_err(ctx, "Failed parsing domain: '%.*s'", PL_STR_FMT(line));
+                pl_err(log, "Failed parsing domain: '%.*s'", PL_STR_FMT(line));
                 goto error;
             }
             continue;
@@ -105,29 +104,29 @@ struct pl_custom_lut *pl_lut_parse_cube(struct pl_context *ctx,
                 !pl_str_parse_float(pl_str_split_char(line, ' ', &line), &max[1]) ||
                 !pl_str_parse_float(line, &max[2]))
             {
-                pl_err(ctx, "Failed parsing domain: '%.*s'", PL_STR_FMT(line));
+                pl_err(log, "Failed parsing domain: '%.*s'", PL_STR_FMT(line));
                 goto error;
             }
             continue;
         }
 
         if (pl_str_eatstart0(&line, "#")) {
-            pl_debug(ctx, "Unhandled .cube comment: %.*s",
+            pl_debug(log, "Unhandled .cube comment: %.*s",
                      PL_STR_FMT(pl_str_strip(line)));
             continue;
         }
 
-        pl_warn(ctx, "Unhandled .cube line: %.*s", PL_STR_FMT(pl_str_strip(line)));
+        pl_warn(log, "Unhandled .cube line: %.*s", PL_STR_FMT(pl_str_strip(line)));
     }
 
     if (!entries) {
-        pl_err(ctx, "Missing LUT size specification?");
+        pl_err(log, "Missing LUT size specification?");
         goto error;
     }
 
     for (int i = 0; i < 3; i++) {
         if (max[i] - min[i] < 1e-6) {
-            pl_err(ctx, "Invalid domain range: [%f, %f]", min[i], max[i]);
+            pl_err(log, "Invalid domain range: [%f, %f]", min[i], max[i]);
             goto error;
         }
     }
@@ -147,14 +146,14 @@ struct pl_custom_lut *pl_lut_parse_cube(struct pl_context *ctx,
             str.len -= len;
 
             if (!entry.len) {
-                pl_err(ctx, "Missing LUT entries? Expected %d, got %d",
+                pl_err(log, "Missing LUT entries? Expected %d, got %d",
                        entries * 3, n * 3 + c + 1);
                 goto error;
             }
 
             float num;
             if (!pl_str_parse_float(entry, &num)) {
-                pl_err(ctx, "Failed parsing float value '%.*s'", PL_STR_FMT(entry));
+                pl_err(log, "Failed parsing float value '%.*s'", PL_STR_FMT(entry));
                 goto error;
             }
 
@@ -170,7 +169,7 @@ struct pl_custom_lut *pl_lut_parse_cube(struct pl_context *ctx,
 
     str = pl_str_strip(str);
     if (str.len)
-        pl_warn(ctx, "Extra data after LUT?... ignoring");
+        pl_warn(log, "Extra data after LUT?... ignoring");
 
     return lut;
 

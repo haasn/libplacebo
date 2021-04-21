@@ -34,8 +34,7 @@ struct pl_renderer;
 // Creates a new renderer object, which is backed by a GPU context. This is a
 // high-level object that takes care of the rendering chain as a whole, from
 // the source textures to the finished frame.
-struct pl_renderer *pl_renderer_create(struct pl_context *ctx,
-                                       const struct pl_gpu *gpu);
+struct pl_renderer *pl_renderer_create(pl_log log, const struct pl_gpu *gpu);
 void pl_renderer_destroy(struct pl_renderer **rr);
 
 // Saves the internal shader cache of this renderer into an abstract cache

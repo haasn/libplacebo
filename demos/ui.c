@@ -32,7 +32,7 @@ struct ui *ui_create(const struct pl_gpu *gpu)
 
     *ui = (struct ui) {
         .gpu = gpu,
-        .dp = pl_dispatch_create(gpu->ctx, gpu),
+        .dp = pl_dispatch_create(gpu->log, gpu),
         .attribs_pl = {
             {
                 .name = "pos",

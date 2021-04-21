@@ -37,7 +37,7 @@
 #include <math.h>
 
 #include "common.h"
-#include "context.h"
+#include "log.h"
 
 bool pl_filter_function_eq(const struct pl_filter_function *a,
                            const struct pl_filter_function *b)
@@ -135,16 +135,15 @@ static struct pl_filter_function *dupfilter(void *alloc,
     return f ? pl_memdup(alloc, (void *)f, sizeof(*f)) : NULL;
 }
 
-const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
-                                       const struct pl_filter_params *params)
+const struct pl_filter *pl_filter_generate(pl_log log, const struct pl_filter_params *params)
 {
     pl_assert(params);
     if (params->lut_entries <= 0 || !params->config.kernel) {
-        pl_fatal(ctx, "Invalid params: missing lut_entries or config.kernel");
+        pl_fatal(log, "Invalid params: missing lut_entries or config.kernel");
         return NULL;
     }
 
-    struct pl_filter *f = pl_zalloc_ptr(ctx, f);
+    struct pl_filter *f = pl_zalloc_ptr(NULL, f);
     f->params = *params;
     f->params.config.kernel = dupfilter(f, params->config.kernel);
     f->params.config.window = dupfilter(f, params->config.window);
@@ -170,7 +169,7 @@ const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
         // Pick the most appropriate row size
         f->row_size = ceil(f->radius) * 2;
         if (params->max_row_size && f->row_size > params->max_row_size) {
-            pl_info(ctx, "Required filter size %d exceeds the maximum allowed "
+            pl_info(log, "Required filter size %d exceeds the maximum allowed "
                     "size of %d. This may result in adverse effects (aliasing, "
                     "or moiré artifacts).", f->row_size, params->max_row_size);
             f->row_size = params->max_row_size;

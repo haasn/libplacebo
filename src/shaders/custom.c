@@ -198,7 +198,7 @@ static bool parse_rpn_szexpr(pl_str line, struct szexp out[MAX_SZEXP_SIZE])
 
 // Evaluate a `szexp`, given a lookup function for named textures
 // Returns whether successful. 'result' is left untouched on failure
-static bool pl_eval_szexpr(struct pl_context *ctx, void *priv,
+static bool pl_eval_szexpr(pl_log log, void *priv,
                            bool (*lookup)(void *priv, pl_str var, float size[2]),
                            const struct szexp expr[MAX_SZEXP_SIZE],
                            float *result)
@@ -220,7 +220,7 @@ static bool pl_eval_szexpr(struct pl_context *ctx, void *priv,
 
         case SZEXP_OP1:
             if (idx < 1) {
-                pl_warn(ctx, "Stack underflow in RPN expression!");
+                pl_warn(log, "Stack underflow in RPN expression!");
                 return false;
             }
 
@@ -232,7 +232,7 @@ static bool pl_eval_szexpr(struct pl_context *ctx, void *priv,
 
         case SZEXP_OP2:
             if (idx < 2) {
-                pl_warn(ctx, "Stack underflow in RPN expression!");
+                pl_warn(log, "Stack underflow in RPN expression!");
                 return false;
             }
 
@@ -251,7 +251,7 @@ static bool pl_eval_szexpr(struct pl_context *ctx, void *priv,
             }
 
             if (!isfinite(res)) {
-                pl_warn(ctx, "Illegal operation in RPN expression!");
+                pl_warn(log, "Illegal operation in RPN expression!");
                 return false;
             }
 
@@ -264,7 +264,7 @@ static bool pl_eval_szexpr(struct pl_context *ctx, void *priv,
             float size[2];
 
             if (!lookup(priv, name, size)) {
-                pl_warn(ctx, "Variable '%.*s' not found in RPN expression!",
+                pl_warn(log, "Variable '%.*s' not found in RPN expression!",
                         PL_STR_FMT(name));
                 return false;
             }
@@ -278,7 +278,7 @@ static bool pl_eval_szexpr(struct pl_context *ctx, void *priv,
 done:
     // Return the single stack element
     if (idx != 1) {
-        pl_warn(ctx, "Malformed stack after RPN expression!");
+        pl_warn(log, "Malformed stack after RPN expression!");
         return false;
     }
 
@@ -298,8 +298,7 @@ static inline pl_str split_magic(pl_str *body)
     return ret;
 }
 
-static bool parse_hook(struct pl_context *ctx, pl_str *body,
-                       struct custom_shader_hook *out)
+static bool parse_hook(pl_log log, pl_str *body, struct custom_shader_hook *out)
 {
     *out = (struct custom_shader_hook){
         .pass_desc = pl_str0("(unknown)"),
@@ -325,7 +324,7 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
         // Parse the supported commands
         if (pl_str_eatstart0(&line, "HOOK")) {
             if (hook_idx == SHADER_MAX_HOOKS) {
-                pl_err(ctx, "Passes may only hook up to %d textures!",
+                pl_err(log, "Passes may only hook up to %d textures!",
                        SHADER_MAX_HOOKS);
                 return false;
             }
@@ -335,7 +334,7 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
 
         if (pl_str_eatstart0(&line, "BIND")) {
             if (bind_idx == SHADER_MAX_BINDS) {
-                pl_err(ctx, "Passes may only bind up to %d textures!",
+                pl_err(log, "Passes may only bind up to %d textures!",
                        SHADER_MAX_BINDS);
                 return false;
             }
@@ -370,7 +369,7 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
                     !pl_str_parse_float(pl_str_split_char(line, ' ', &line), &out->offset[1]) ||
                     line.len)
                 {
-                    pl_err(ctx, "Error while parsing OFFSET!");
+                    pl_err(log, "Error while parsing OFFSET!");
                     return false;
                 }
             }
@@ -379,7 +378,7 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
 
         if (pl_str_eatstart0(&line, "WIDTH")) {
             if (!parse_rpn_szexpr(line, out->width)) {
-                pl_err(ctx, "Error while parsing WIDTH!");
+                pl_err(log, "Error while parsing WIDTH!");
                 return false;
             }
             continue;
@@ -387,7 +386,7 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
 
         if (pl_str_eatstart0(&line, "HEIGHT")) {
             if (!parse_rpn_szexpr(line, out->height)) {
-                pl_err(ctx, "Error while parsing HEIGHT!");
+                pl_err(log, "Error while parsing HEIGHT!");
                 return false;
             }
             continue;
@@ -395,7 +394,7 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
 
         if (pl_str_eatstart0(&line, "WHEN")) {
             if (!parse_rpn_szexpr(line, out->cond)) {
-                pl_err(ctx, "Error while parsing WHEN!");
+                pl_err(log, "Error while parsing WHEN!");
                 return false;
             }
             continue;
@@ -403,7 +402,7 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
 
         if (pl_str_eatstart0(&line, "COMPONENTS")) {
             if (!pl_str_parse_int(pl_str_strip(line), &out->comps)) {
-                pl_err(ctx, "Error parsing COMPONENTS: '%.*s'", PL_STR_FMT(line));
+                pl_err(log, "Error parsing COMPONENTS: '%.*s'", PL_STR_FMT(line));
                 return false;
             }
             continue;
@@ -434,7 +433,7 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
         }
 
         // Unknown command type
-        pl_err(ctx, "Unrecognized command '%.*s'!", PL_STR_FMT(line));
+        pl_err(log, "Unrecognized command '%.*s'!", PL_STR_FMT(line));
         return false;
     }
 
@@ -444,7 +443,7 @@ static bool parse_hook(struct pl_context *ctx, pl_str *body,
 
     // Sanity checking
     if (hook_idx == 0)
-        pl_warn(ctx, "Pass has no hooked textures (will be ignored)!");
+        pl_warn(log, "Pass has no hooked textures (will be ignored)!");
 
     return true;
 }
@@ -848,7 +847,7 @@ struct pass_tex {
 };
 
 struct hook_priv {
-    struct pl_context *ctx;
+    pl_log log;
     const struct pl_gpu *gpu;
     void *alloc;
 
@@ -1028,7 +1027,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         // Test for execution condition
         float run = 0;
-        if (!pl_eval_szexpr(p->ctx, &scope, lookup_tex, hook->cond, &run))
+        if (!pl_eval_szexpr(p->log, &scope, lookup_tex, hook->cond, &run))
             goto error;
 
         if (!run) {
@@ -1037,8 +1036,8 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         }
 
         float out_size[2] = {0};
-        if (!pl_eval_szexpr(p->ctx, &scope, lookup_tex, hook->width,  &out_size[0]) ||
-            !pl_eval_szexpr(p->ctx, &scope, lookup_tex, hook->height, &out_size[1]))
+        if (!pl_eval_szexpr(p->log, &scope, lookup_tex, hook->width,  &out_size[0]) ||
+            !pl_eval_szexpr(p->log, &scope, lookup_tex, hook->height, &out_size[1]))
         {
             goto error;
         }
@@ -1308,7 +1307,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
     };
 
     *p = (struct hook_priv) {
-        .ctx = gpu->ctx,
+        .log = gpu->log,
         .gpu = gpu,
         .alloc = hook,
         .prng_state = {
@@ -1354,7 +1353,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(const struct pl_gpu *gpu,
         }
 
         struct custom_shader_hook h;
-        if (!parse_hook(gpu->ctx, &shader, &h))
+        if (!parse_hook(gpu->log, &shader, &h))
             goto error;
 
         struct hook_pass pass = {

@@ -379,7 +379,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
     TEST_FBO_PATTERN(1e-6, "%s", "using indexed rendering");
 
     // Test the use of pl_dispatch
-    struct pl_dispatch *dp = pl_dispatch_create(gpu->ctx, gpu);
+    struct pl_dispatch *dp = pl_dispatch_create(gpu->log, gpu);
     struct pl_shader *sh = pl_dispatch_begin(dp);
     REQUIRE(pl_shader_custom(sh, &(struct pl_custom_shader) {
         .body       = "color = vec4(col, 1.0);",
@@ -491,7 +491,7 @@ static void pl_shader_tests(const struct pl_gpu *gpu)
             REQUIRE(pl_dispatch_save(dp, cache) == size);
 
             pl_dispatch_destroy(&dp);
-            dp = pl_dispatch_create(gpu->ctx, gpu);
+            dp = pl_dispatch_create(gpu->log, gpu);
             pl_dispatch_load(dp, cache);
 
 #ifndef MSAN
@@ -695,7 +695,7 @@ static void pl_scaler_tests(const struct pl_gpu *gpu)
         fbo = pl_tex_create(gpu, &fbo_params);
     }
 
-    struct pl_dispatch *dp = pl_dispatch_create(gpu->ctx, gpu);
+    struct pl_dispatch *dp = pl_dispatch_create(gpu->log, gpu);
     if (!dot5x5 || !fbo || !dp)
         goto error;
 
@@ -894,7 +894,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     if (!pl_upload_plane(gpu, &img5x5, &img5x5_tex, &img5x5_data))
         goto error;
 
-    rr = pl_renderer_create(gpu->ctx, gpu);
+    rr = pl_renderer_create(gpu->log, gpu);
     pl_tex_clear(gpu, fbo, (float[4]){0});
 
     struct pl_frame image = {
@@ -1021,7 +1021,7 @@ static void pl_render_tests(const struct pl_gpu *gpu)
     for (int i = 0; i < PL_ARRAY_SIZE(test_luts); i++) {
         printf("testing custom lut %d\n", i);
         struct pl_custom_lut *lut;
-        lut = pl_lut_parse_cube(gpu->ctx, test_luts[i], strlen(test_luts[i]));
+        lut = pl_lut_parse_cube(gpu->log, test_luts[i], strlen(test_luts[i]));
         REQUIRE(lut);
 
         // Test all three at the same time to reduce the number of tests
@@ -1159,7 +1159,7 @@ static struct pl_hook_res noop_hook(void *priv, const struct pl_hook_params *par
 
 static void pl_ycbcr_tests(const struct pl_gpu *gpu)
 {
-    struct pl_renderer *rr = pl_renderer_create(gpu->ctx, gpu);
+    struct pl_renderer *rr = pl_renderer_create(gpu->log, gpu);
     if (!rr)
         return;
 

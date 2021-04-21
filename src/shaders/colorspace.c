@@ -695,9 +695,9 @@ bool pl_shader_detect_peak(struct pl_shader *sh,
         };
 
         // Attempt creating host-readable SSBO first, suppress errors
-        pl_log_level_cap(gpu->ctx, PL_LOG_DEBUG);
+        pl_log_level_cap(gpu->log, PL_LOG_DEBUG);
         obj->buf = pl_buf_create(gpu, &buf_params);
-        pl_log_level_cap(gpu->ctx, PL_LOG_NONE);
+        pl_log_level_cap(gpu->log, PL_LOG_NONE);
 
         if (!obj->buf) {
             // Fall back to non-host-readable SSBO

@@ -20,19 +20,19 @@
 
 #include "shaders.h"
 
-static cmsHPROFILE get_profile(struct pl_context *ctx, cmsContext cms,
+static cmsHPROFILE get_profile(pl_log log, cmsContext cms,
                                struct pl_icc_color_space iccsp, cmsHPROFILE dstp,
                                struct pl_color_space *csp)
 {
     *csp = iccsp.color;
 
     if (iccsp.profile.data) {
-        pl_info(ctx, "Opening ICC profile..");
+        pl_info(log, "Opening ICC profile..");
         cmsHPROFILE ret = cmsOpenProfileFromMemTHR(cms, iccsp.profile.data,
                                                    iccsp.profile.len);
         if (ret)
             return ret;
-        pl_err(ctx, "Failed opening ICC profile, falling back to color struct");
+        pl_err(log, "Failed opening ICC profile, falling back to color struct");
     }
 
     // The input profile for the transformation is dependent on the video
@@ -78,7 +78,7 @@ static cmsHPROFILE get_profile(struct pl_context *ctx, cmsContext cms,
 
     case PL_COLOR_TRC_BT_1886: {
         if (!dstp) {
-            pl_info(ctx, "No destination profile data available for accurate "
+            pl_info(log, "No destination profile data available for accurate "
                     "BT.1886 emulation, falling back to gamma 2.2");
             tonecurve[0] = cmsBuildGamma(cms, 2.2);
             csp->transfer = PL_COLOR_TRC_GAMMA22;
@@ -116,7 +116,7 @@ static cmsHPROFILE get_profile(struct pl_context *ctx, cmsContext cms,
         // Built-in contrast failsafe
         double contrast = 3.0 / (src_black[0] + src_black[1] + src_black[2]);
         if (contrast > 100000) {
-            pl_warn(ctx, "ICC profile detected contrast very high (>100000),"
+            pl_warn(log, "ICC profile detected contrast very high (>100000),"
                     " falling back to contrast 1000 for sanity");
             src_black[0] = src_black[1] = src_black[2] = 1.0 / 1000;
         }
@@ -155,12 +155,12 @@ static cmsHPROFILE get_profile(struct pl_context *ctx, cmsContext cms,
 static void error_callback(cmsContext cms, cmsUInt32Number code,
                            const char *msg)
 {
-    struct pl_context *ctx = cmsGetContextUserData(cms);
-    pl_err(ctx, "lcms2: [%d] %s", (int) code, msg);
+    pl_log log = cmsGetContextUserData(cms);
+    pl_err(log, "lcms2: [%d] %s", (int) code, msg);
 }
 
 struct sh_icc_obj {
-    struct pl_context *ctx;
+    pl_log log;
     enum pl_rendering_intent intent;
     struct pl_icc_color_space src, dst;
     struct pl_icc_result result;
@@ -173,7 +173,6 @@ struct sh_icc_obj {
 static void fill_icc(void *datap, const struct sh_lut_params *params)
 {
     struct sh_icc_obj *obj = params->priv;
-    struct pl_context *ctx = obj->ctx;
     pl_assert(params->comps == 4);
     float *data = datap;
 
@@ -182,15 +181,15 @@ static void fill_icc(void *datap, const struct sh_lut_params *params)
     uint16_t *tmp = NULL;
     obj->ok = false;
 
-    cmsContext cms = cmsCreateContext(NULL, ctx);
+    cmsContext cms = cmsCreateContext(NULL, (void *) obj->log);
     if (!cms) {
-        pl_err(ctx, "Failed creating LittleCMS context!");
+        PL_ERR(obj, "Failed creating LittleCMS context!");
         goto error;
     }
 
     cmsSetLogErrorHandlerTHR(cms, error_callback);
-    dstp = get_profile(ctx, cms, obj->dst, NULL, &obj->result.dst_color);
-    srcp = get_profile(ctx, cms, obj->src, dstp, &obj->result.src_color);
+    dstp = get_profile(obj->log, cms, obj->dst, NULL, &obj->result.dst_color);
+    srcp = get_profile(obj->log, cms, obj->src, dstp, &obj->result.src_color);
     if (!srcp || !dstp)
         goto error;
 
@@ -200,7 +199,7 @@ static void fill_icc(void *datap, const struct sh_lut_params *params)
     trafo = cmsCreateTransformTHR(cms, srcp, TYPE_RGB_16, dstp, TYPE_RGBA_FLT,
                                   obj->intent, flags);
     if (!trafo) {
-        pl_err(ctx, "Failed creating CMS transform!");
+        PL_ERR(obj, "Failed creating CMS transform!");
         goto error;
     }
 
@@ -276,7 +275,7 @@ bool pl_icc_update(struct pl_shader *sh,
                    obj->intent != params->intent;
 
     // Update the object, since we need this information from `fill_icc`
-    obj->ctx = sh->ctx;
+    obj->log = sh->log;
     obj->intent = params->intent;
     obj->src = *src;
     obj->dst = *dst;

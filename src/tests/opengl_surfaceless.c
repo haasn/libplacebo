@@ -181,7 +181,7 @@ int main()
     struct pl_glsl_desc last_glsl = {0};
     struct pl_gpu_limits last_limits = {0};
 
-    struct pl_context *ctx = pl_test_context();
+    pl_log log = pl_test_logger();
 
     for (int i = 0; i < PL_ARRAY_SIZE(egl_vers); i++) {
 
@@ -249,7 +249,7 @@ int main()
         params.allow_software = true;
 #endif
 
-        const struct pl_opengl *gl = pl_opengl_create(ctx, &params);
+        const struct pl_opengl *gl = pl_opengl_create(log, &params);
         if (!gl)
             goto next;
 
@@ -274,7 +274,7 @@ int main()
         opengl_test_export_import(gl, PL_HANDLE_DMA_BUF);
 
         // Reduce log spam after first successful test
-        pl_test_set_verbosity(ctx, PL_LOG_INFO);
+        pl_log_level_update(log, PL_LOG_INFO);
 
 next:
         pl_opengl_destroy(&gl);
@@ -289,7 +289,7 @@ error: ;
     }
 
     eglTerminate(dpy);
-    pl_context_destroy(&ctx);
+    pl_log_destroy(&log);
 
     if (!last_glsl.version)
         return SKIP;

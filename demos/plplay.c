@@ -38,7 +38,7 @@ struct plplay {
     struct ui *ui;
 
     // libplacebo
-    struct pl_context *ctx;
+    pl_log log;
     struct pl_renderer *renderer;
     struct pl_queue *queue;
 
@@ -92,7 +92,7 @@ static void uninit(struct plplay *p)
     ui_destroy(&p->ui);
     window_destroy(&p->win);
 
-    pl_context_destroy(&p->ctx);
+    pl_log_destroy(&p->log);
     *p = (struct plplay) {0};
 }
 
@@ -442,12 +442,12 @@ int main(int argc, char **argv)
     if (is_file_hdr(p))
         flags |= WIN_HDR;
 
-    p->ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
+    p->log = pl_log_create(PL_API_VER, &(struct pl_log_params) {
         .log_cb = pl_log_color,
         .log_level = PL_LOG_INFO,
     });
 
-    p->win = window_create(p->ctx, "plplay", par->width, par->height, flags);
+    p->win = window_create(p->log, "plplay", par->width, par->height, flags);
     if (!p->win)
         goto error;
 
@@ -483,7 +483,7 @@ int main(int argc, char **argv)
         goto error;
     }
 
-    p->renderer = pl_renderer_create(p->ctx, p->win->gpu);
+    p->renderer = pl_renderer_create(p->log, p->win->gpu);
     if (!render_loop(p))
         goto error;
 
@@ -795,7 +795,7 @@ static void update_settings(struct plplay *p)
                             av_err2str(ret));
                 } else {
                     pl_lut_free((struct pl_custom_lut **) &par->lut);
-                    par->lut = pl_lut_parse_cube(p->ctx, buf, size);
+                    par->lut = pl_lut_parse_cube(p->log, buf, size);
                     av_file_unmap(buf, size);
                 }
             }
@@ -947,7 +947,7 @@ static void update_settings(struct plplay *p)
                 pl_renderer_flush_cache(p->renderer);
             if (nk_button_label(nk, "Recreate renderer")) {
                 pl_renderer_destroy(&p->renderer);
-                p->renderer = pl_renderer_create(p->ctx, p->win->gpu);
+                p->renderer = pl_renderer_create(p->log, p->win->gpu);
             }
             nk_tree_pop(nk);
         }

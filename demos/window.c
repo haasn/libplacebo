@@ -29,12 +29,12 @@ static const struct window_impl *win_impls[] = {
     NULL
 };
 
-struct window *window_create(struct pl_context *ctx, const char *title,
+struct window *window_create(pl_log log, const char *title,
                              int width, int height, enum winflags flags)
 {
     for (const struct window_impl **impl = win_impls; *impl; impl++) {
         printf("Attempting to initialize API: %s\n", (*impl)->name);
-        struct window *win = (*impl)->create(ctx, title, width, height, flags);
+        struct window *win = (*impl)->create(log, title, width, height, flags);
         if (win)
             return win;
     }

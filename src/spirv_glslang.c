@@ -28,11 +28,10 @@ static void glslang_destroy(struct spirv_compiler *spirv)
     pl_free(spirv);
 }
 
-static struct spirv_compiler *glslang_create(struct pl_context *ctx,
-                                             uint32_t api_version)
+static struct spirv_compiler *glslang_create(pl_log log, uint32_t api_version)
 {
     if (!pl_glslang_init()) {
-        pl_fatal(ctx, "Failed initializing glslang SPIR-V compiler!");
+        pl_fatal(log, "Failed initializing glslang SPIR-V compiler!");
         return NULL;
     }
 

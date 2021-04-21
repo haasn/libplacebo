@@ -511,7 +511,7 @@ bool pl_shader_sample_polar(struct pl_shader *sh,
 
     if (update) {
         pl_filter_free(&obj->filter);
-        obj->filter = pl_filter_generate(sh->ctx, &(struct pl_filter_params) {
+        obj->filter = pl_filter_generate(sh->log, &(struct pl_filter_params) {
             .config         = params->filter,
             .lut_entries    = lut_entries,
             .filter_scale   = inv_scale,
@@ -752,7 +752,7 @@ bool pl_shader_sample_ortho(struct pl_shader *sh, int pass,
 
     if (update) {
         pl_filter_free(&obj->filter);
-        obj->filter = pl_filter_generate(sh->ctx, &(struct pl_filter_params) {
+        obj->filter = pl_filter_generate(sh->log, &(struct pl_filter_params) {
             .config             = params->filter,
             .lut_entries        = lut_entries,
             .filter_scale       = inv_scale,

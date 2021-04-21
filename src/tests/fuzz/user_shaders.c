@@ -6,8 +6,7 @@ __AFL_FUZZ_INIT();
 
 int main()
 {
-    struct pl_context *ctx = pl_context_create(PL_API_VER, NULL);
-    const struct pl_gpu *gpu = pl_gpu_dummy_create(ctx, NULL);
+    const struct pl_gpu *gpu = pl_gpu_dummy_create(NULL, NULL);
     const struct pl_hook *hook;
 
 #ifdef __AFL_HAVE_MANUAL_CONTROL
@@ -23,5 +22,4 @@ int main()
     }
 
     pl_gpu_dummy_destroy(&gpu);
-    pl_context_destroy(&ctx);
 }

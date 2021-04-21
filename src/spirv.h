@@ -18,7 +18,7 @@
 #pragma once
 
 #include "common.h"
-#include "context.h"
+#include "log.h"
 
 enum glsl_shader_stage {
     GLSL_SHADER_VERTEX,
@@ -30,8 +30,8 @@ enum glsl_shader_stage {
 
 struct spirv_compiler {
     char name[SPIRV_NAME_MAX_LEN]; // for cache invalidation
-    struct pl_context *ctx;
     const struct spirv_compiler_fns *impl;
+    pl_log log;
 
     // implementation-specific fields
     struct pl_glsl_desc glsl;      // supported GLSL capabilities
@@ -47,13 +47,13 @@ struct spirv_compiler_fns {
                          pl_str *out_spirv);
 
     // Only needs to initialize the implementation-specific fields
-    struct spirv_compiler *(*create)(struct pl_context *ctx, uint32_t api_ver);
+    struct spirv_compiler *(*create)(pl_log log, uint32_t api_ver);
     void (*destroy)(struct spirv_compiler *spirv);
 };
 
 // Initialize a SPIR-V compiler instance, or returns NULL on failure.
 // `api_version` is the Vulkan API version we're targetting.
-struct spirv_compiler *spirv_compiler_create(struct pl_context *ctx,
+struct spirv_compiler *spirv_compiler_create(pl_log log,
                                              uint32_t api_version);
 
 void spirv_compiler_destroy(struct spirv_compiler **spirv);

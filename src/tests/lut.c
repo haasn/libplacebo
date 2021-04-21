@@ -58,14 +58,14 @@ static const char *luts[] = {
 
 int main()
 {
-    struct pl_context *ctx = pl_test_context();
-    const struct pl_gpu *gpu = pl_gpu_dummy_create(ctx, NULL);
-    struct pl_shader *sh = pl_shader_alloc(ctx, NULL);
+    pl_log log = pl_test_logger();
+    const struct pl_gpu *gpu = pl_gpu_dummy_create(log, NULL);
+    struct pl_shader *sh = pl_shader_alloc(log, NULL);
     struct pl_shader_obj *obj = NULL;
 
     for (int i = 0; i < PL_ARRAY_SIZE(luts); i++) {
         struct pl_custom_lut *lut;
-        lut = pl_lut_parse_cube(ctx, luts[i], strlen(luts[i]));
+        lut = pl_lut_parse_cube(log, luts[i], strlen(luts[i]));
         REQUIRE(lut);
 
         pl_shader_reset(sh, &(struct pl_shader_params) { .gpu = gpu});
@@ -78,5 +78,5 @@ int main()
 
     pl_shader_obj_destroy(&obj);
     pl_shader_free(&sh);
-    pl_context_destroy(&ctx);
+    pl_log_destroy(&log);
 }

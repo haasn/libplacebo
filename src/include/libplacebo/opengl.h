@@ -76,8 +76,7 @@ extern const struct pl_opengl_params pl_opengl_default_params;
 //
 // Note that creating multiple `pl_opengl` instances from the same OpenGL
 // context is undefined behavior.
-const struct pl_opengl *pl_opengl_create(struct pl_context *ctx,
-                                         const struct pl_opengl_params *params);
+const struct pl_opengl *pl_opengl_create(pl_log log, const struct pl_opengl_params *params);
 
 // All resources allocated from the `pl_gpu` contained by this `pl_opengl` must
 // be explicitly destroyed by the user before calling `pl_opengl_destroy`.

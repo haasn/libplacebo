@@ -7,9 +7,9 @@ static int irand()
 
 int main()
 {
-    struct pl_context *ctx = pl_test_context();
-    pl_context_update(ctx, NULL);
-    pl_context_destroy(&ctx);
+    pl_log log = pl_test_logger();
+    pl_log_update(log, NULL);
+    pl_log_destroy(&log);
 
     // Test some misc helper functions
     struct pl_rect2d rc2 = {

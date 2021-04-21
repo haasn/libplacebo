@@ -57,7 +57,7 @@
 
 #include "include/libplacebo/colorspace.h"
 #include "include/libplacebo/common.h"
-#include "include/libplacebo/context.h"
+#include "include/libplacebo/log.h"
 #include "include/libplacebo/dispatch.h"
 #include "include/libplacebo/dither.h"
 #include "include/libplacebo/dummy.h"

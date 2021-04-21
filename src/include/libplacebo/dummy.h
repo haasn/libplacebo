@@ -54,7 +54,7 @@ extern const struct pl_gpu_dummy_params pl_gpu_dummy_default_params;
 // capability activated, respectively.
 //
 // If `params` is left as NULL, it defaults to `&pl_gpu_dummy_params`.
-const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
+const struct pl_gpu *pl_gpu_dummy_create(pl_log log,
                                          const struct pl_gpu_dummy_params *params);
 
 void pl_gpu_dummy_destroy(const struct pl_gpu **gpu);

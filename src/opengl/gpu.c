@@ -281,12 +281,13 @@ static inline size_t get_page_size()
     pl_assert(!"Unsupported platform!");
 }
 
-const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
+const struct pl_gpu *pl_gpu_create_gl(pl_log log,
                                       const struct pl_opengl *gl,
                                       const struct pl_opengl_params *params)
 {
     struct pl_gpu *gpu = pl_zalloc_priv(NULL, struct pl_gpu, struct pl_gl);
-    gpu->ctx = ctx;
+    gpu->log = log;
+    gpu->ctx = gpu->log;
     gpu->glsl.gles = !epoxy_is_desktop_gl();
 
     struct pl_gl *p = PL_PRIV(gpu);
@@ -401,9 +402,9 @@ const struct pl_gpu *pl_gpu_create_gl(struct pl_context *ctx,
         goto error;
 
     // Filter out error messages during format probing
-    pl_log_level_cap(gpu->ctx, PL_LOG_INFO);
+    pl_log_level_cap(gpu->log, PL_LOG_INFO);
     bool formats_ok = gl_setup_formats(gpu);
-    pl_log_level_cap(gpu->ctx, PL_LOG_NONE);
+    pl_log_level_cap(gpu->log, PL_LOG_NONE);
     if (!formats_ok)
         goto error;
 
@@ -1788,7 +1789,7 @@ static bool gl_attach_shader(const struct pl_gpu *gpu, GLuint program, GLenum ty
     glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_length);
 
     enum pl_log_level level = gl_log_level(status, log_length);
-    if (pl_msg_test(gpu->ctx, level)) {
+    if (pl_msg_test(gpu->log, level)) {
         static const char *shader_name;
         switch (type) {
         case GL_VERTEX_SHADER:   shader_name = "vertex"; break;
@@ -1798,7 +1799,7 @@ static bool gl_attach_shader(const struct pl_gpu *gpu, GLuint program, GLenum ty
         };
 
         PL_MSG(gpu, level, "%s shader source:", shader_name);
-        pl_msg_source(gpu->ctx, level, src);
+        pl_msg_source(gpu->log, level, src);
 
         GLchar *logstr = pl_zalloc(NULL, log_length + 1);
         glGetShaderInfoLog(shader, log_length, NULL, logstr);
@@ -1849,7 +1850,7 @@ static GLuint gl_compile_program(const struct pl_gpu *gpu,
     glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &log_length);
 
     enum pl_log_level level = gl_log_level(status, log_length);
-    if (pl_msg_test(gpu->ctx, level)) {
+    if (pl_msg_test(gpu->log, level)) {
         GLchar *logstr = pl_zalloc(NULL, log_length + 1);
         glGetProgramInfoLog(prog, log_length, NULL, logstr);
         PL_MSG(gpu, level, "shader link log (status=%d): %s", status, logstr);

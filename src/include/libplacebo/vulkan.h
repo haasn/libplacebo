@@ -92,8 +92,8 @@ extern const struct pl_vk_inst_params pl_vk_inst_default_params;
 // Helper function to simplify instance creation. The user could also bypass
 // these helpers and do it manually, but this function is provided as a
 // convenience. It also sets up a debug callback which forwards all vulkan
-// messages to the `pl_context` log callback.
-const struct pl_vk_inst *pl_vk_inst_create(struct pl_context *ctx,
+// messages to the `pl_log` callback.
+const struct pl_vk_inst *pl_vk_inst_create(pl_log log,
                                            const struct pl_vk_inst_params *params);
 
 void pl_vk_inst_destroy(const struct pl_vk_inst **inst);
@@ -256,7 +256,7 @@ extern const struct pl_vulkan_params pl_vulkan_default_params;
 // left as NULL, it defaults to &pl_vulkan_default_params.
 //
 // Thread-safety: Safe
-const struct pl_vulkan *pl_vulkan_create(struct pl_context *ctx,
+const struct pl_vulkan *pl_vulkan_create(pl_log log,
                                          const struct pl_vulkan_params *params);
 
 // Destroys the vulkan device and all associated objects, except for the
@@ -289,7 +289,7 @@ struct pl_vulkan_device_params {
 // Helper function to choose the best VkPhysicalDevice, given a VkInstance.
 // This uses the same logic as `pl_vulkan_create` uses internally. If no
 // matching device was found, this returns VK_NULL_HANDLE.
-VkPhysicalDevice pl_vulkan_choose_device(struct pl_context *ctx,
+VkPhysicalDevice pl_vulkan_choose_device(pl_log log,
                                          const struct pl_vulkan_device_params *params);
 
 struct pl_vulkan_swapchain_params {
@@ -406,7 +406,7 @@ struct pl_vulkan_import_params {
 // a `pl_vulkan` abstraction. It's safe to `pl_vulkan_destroy` this, which will
 // destroy application state related to libplacebo but leave the underlying
 // VkDevice intact.
-const struct pl_vulkan *pl_vulkan_import(struct pl_context *ctx,
+const struct pl_vulkan *pl_vulkan_import(pl_log log,
                                          const struct pl_vulkan_import_params *params);
 
 struct pl_vulkan_wrap_params {

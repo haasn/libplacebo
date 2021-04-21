@@ -184,7 +184,7 @@ struct entry {
 
 // For both APIs:
 struct priv {
-    struct pl_context *ctx;
+    pl_log log;
     const struct pl_vulkan *vk;
     const struct pl_gpu *gpu;
     struct pl_dispatch *dp;
@@ -216,13 +216,12 @@ void *init(void) {
     if (!p)
         return NULL;
 
-    p->ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
+    p->log = pl_log_create(PL_API_VER, &(struct pl_log_params) {
         .log_cb = pl_log_simple,
         .log_level = PL_LOG_WARN,
     });
-    assert(p->ctx);
 
-    p->vk = pl_vulkan_create(p->ctx, &(struct pl_vulkan_params) {
+    p->vk = pl_vulkan_create(p->log, &(struct pl_vulkan_params) {
         // Note: This is for API #2. In API #1 you could just pass params=NULL
         // and it wouldn't really matter much.
         .async_transfer = true,
@@ -238,7 +237,7 @@ void *init(void) {
     // Give this a shorter name for convenience
     p->gpu = p->vk->gpu;
 
-    p->dp = pl_dispatch_create(p->ctx, p->gpu);
+    p->dp = pl_dispatch_create(p->log, p->gpu);
     if (!p->dp) {
         fprintf(stderr, "Failed creating shader dispatch object\n");
         goto error;
@@ -283,7 +282,7 @@ void uninit(void *priv)
     pl_shader_obj_destroy(&p->dither_state);
     pl_dispatch_destroy(&p->dp);
     pl_vulkan_destroy(&p->vk);
-    pl_context_destroy(&p->ctx);
+    pl_log_destroy(&p->log);
 
     free(p);
 }

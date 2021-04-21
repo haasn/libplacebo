@@ -23,8 +23,8 @@ int main()
     }
 
     // Generate an example of a dither shader
-    struct pl_context *ctx = pl_test_context();
-    struct pl_shader *sh = pl_shader_alloc(ctx, NULL);
+    pl_log log = pl_test_logger();
+    struct pl_shader *sh = pl_shader_alloc(log, NULL);
     struct pl_shader_obj *obj = NULL;
 
     pl_shader_dither(sh, 8, &obj, NULL);
@@ -34,5 +34,5 @@ int main()
 
     pl_shader_obj_destroy(&obj);
     pl_shader_free(&sh);
-    pl_context_destroy(&ctx);
+    pl_log_destroy(&log);
 }

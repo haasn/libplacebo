@@ -77,7 +77,7 @@ static void run_bench(const struct pl_gpu *gpu, struct pl_dispatch *dp,
 static void benchmark(const struct pl_gpu *gpu, const char *name,
                       const struct bench *bench)
 {
-    struct pl_dispatch *dp = pl_dispatch_create(gpu->ctx, gpu);
+    struct pl_dispatch *dp = pl_dispatch_create(gpu->log, gpu);
     struct pl_shader_obj *state = NULL;
     const struct pl_tex *src = create_test_img(gpu);
 
@@ -326,13 +326,12 @@ int main()
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);
 
-    struct pl_context *ctx;
-    ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
+    pl_log log = pl_log_create(PL_API_VER, &(struct pl_log_params) {
         .log_cb     = isatty(fileno(stdout)) ? pl_log_color : pl_log_simple,
         .log_level  = PL_LOG_WARN,
     });
 
-    const struct pl_vulkan *vk = pl_vulkan_create(ctx, &(struct pl_vulkan_params) {
+    const struct pl_vulkan *vk = pl_vulkan_create(log, &(struct pl_vulkan_params) {
         .allow_software = true,
         .async_compute = true,
         .queue_count = NUM_FBOS,
@@ -373,6 +372,6 @@ int main()
     benchmark(vk->gpu, "av1_grain_lap", BENCH_SH(bench_av1_grain_lap));
 
     pl_vulkan_destroy(&vk);
-    pl_context_destroy(&ctx);
+    pl_log_destroy(&log);
     return 0;
 }

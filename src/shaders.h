@@ -20,7 +20,7 @@
 #include <stdio.h>
 
 #include "common.h"
-#include "context.h"
+#include "log.h"
 #include "gpu.h"
 
 // This represents an identifier (e.g. name of function, uniform etc.) for
@@ -37,7 +37,7 @@ enum pl_shader_buf {
 };
 
 struct pl_shader {
-    struct pl_context *ctx;
+    pl_log log;
     struct pl_shader_res res; // for accumulating some of the fields
     PL_ARRAY(struct pl_ref *) tmp; // only used for var/va/desc names and data
     bool failed;

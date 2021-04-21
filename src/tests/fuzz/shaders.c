@@ -7,8 +7,7 @@ __AFL_FUZZ_INIT();
 
 int main()
 {
-    struct pl_context *ctx = pl_context_create(PL_API_VER, NULL);
-    const struct pl_gpu *gpu = pl_gpu_dummy_create(ctx, NULL);
+    const struct pl_gpu *gpu = pl_gpu_dummy_create(NULL, NULL);
 
 #define WIDTH 64
 #define HEIGHT 64
@@ -42,7 +41,7 @@ int main()
         struct pl_shader *stack[STACK_SIZE] = {0};
         int idx = 0;
 
-        stack[0] = pl_shader_alloc(ctx, &(struct pl_shader_params) {
+        stack[0] = pl_shader_alloc(NULL, &(struct pl_shader_params) {
             .gpu = gpu,
         });
 
@@ -110,7 +109,7 @@ int main()
 
                 idx++;
                 if (!stack[idx]) {
-                    stack[idx] = pl_shader_alloc(ctx, &(struct pl_shader_params) {
+                    stack[idx] = pl_shader_alloc(NULL, &(struct pl_shader_params) {
                         .gpu = gpu,
                         .id = idx,
                     });
@@ -156,5 +155,4 @@ invalid:
 
     pl_tex_destroy(gpu, &src.tex);
     pl_gpu_dummy_destroy(&gpu);
-    pl_context_destroy(&ctx);
 }

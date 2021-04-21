@@ -18,7 +18,7 @@
 #pragma once
 
 #include "../common.h"
-#include "../context.h"
+#include "../log.h"
 #include "../gpu.h"
 
 #include <epoxy/gl.h>

@@ -29,9 +29,12 @@
 //
 // Thread-safety: Safe
 struct pl_swapchain {
-    struct pl_context *ctx;   // the pl_context this swapchain was allocated from
+    pl_log log;
     struct pl_sw_fns *impl;   // the underlying implementation
     const struct pl_gpu *gpu; // the GPU instance this swapchain belongs to
+
+    // (Deprecated) Backwards compatibility field. Equal to `log`.
+    pl_log ctx PL_DEPRECATED;
 };
 
 // Destroys this swapchain. May be used at any time, and may block until the

@@ -29,26 +29,25 @@ static const struct spirv_compiler_fns *compilers[] = {
 #endif
 };
 
-struct spirv_compiler *spirv_compiler_create(struct pl_context *ctx,
-                                             uint32_t api_version)
+struct spirv_compiler *spirv_compiler_create(pl_log log, uint32_t api_version)
 {
     // Strip the patch version
     api_version &= ~0xfff;
 
     for (int i = 0; i < PL_ARRAY_SIZE(compilers); i++) {
         const struct spirv_compiler_fns *impl = compilers[i];
-        pl_info(ctx, "Initializing SPIR-V compiler '%s'", impl->name);
-        struct spirv_compiler *spirv = impl->create(ctx, api_version);
+        pl_info(log, "Initializing SPIR-V compiler '%s'", impl->name);
+        struct spirv_compiler *spirv = impl->create(log, api_version);
         if (!spirv)
             continue;
 
-        spirv->ctx = ctx;
+        spirv->log = log;
         spirv->impl = impl;
         strncpy(spirv->name, impl->name, sizeof(spirv->name) - 1);
         return spirv;
     }
 
-    pl_fatal(ctx, "Failed initializing any SPIR-V compiler! Maybe libplacebo "
+    pl_fatal(log, "Failed initializing any SPIR-V compiler! Maybe libplacebo "
              "was built without support for either libshaderc or glslang?");
     return NULL;
 }

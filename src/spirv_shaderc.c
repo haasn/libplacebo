@@ -33,8 +33,7 @@ static void shaderc_destroy(struct spirv_compiler *spirv)
     pl_free(spirv);
 }
 
-static struct spirv_compiler *shaderc_create(struct pl_context *ctx,
-                                             uint32_t api_version)
+static struct spirv_compiler *shaderc_create(pl_log log, uint32_t api_version)
 {
     struct spirv_compiler *spirv = pl_alloc_ptr_priv(NULL, spirv, struct priv);
     struct priv *p = PL_PRIV(spirv);
@@ -131,7 +130,7 @@ static bool shaderc_compile(struct spirv_compiler *spirv, void *alloc,
     // Also print SPIR-V disassembly for debugging purposes. Unfortunately
     // there doesn't seem to be a way to get this except compiling the shader
     // a second time..
-    if (pl_msg_test(spirv->ctx, PL_LOG_TRACE)) {
+    if (pl_msg_test(spirv->log, PL_LOG_TRACE)) {
         shaderc_compilation_result_t dis = compile(p, type, glsl, true);
         PL_TRACE(spirv, "Generated SPIR-V:\n%.*s",
                  (int) shaderc_result_get_length(dis),

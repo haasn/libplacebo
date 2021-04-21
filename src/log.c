@@ -20,20 +20,15 @@
 #include <pthread.h>
 
 #include "common.h"
-#include "context.h"
+#include "log.h"
 
-int pl_fix_ver()
-{
-    return BUILD_FIX_VER;
-}
+struct priv {
+    pthread_mutex_t lock;
+    enum pl_log_level log_level_cap;
+    pl_str logbuffer;
+};
 
-const char *pl_version()
-{
-    return BUILD_VERSION;
-}
-
-struct pl_context *pl_context_create(int api_ver,
-                                     const struct pl_context_params *params)
+pl_log pl_log_create(int api_ver, const struct pl_log_params *params)
 {
     if (api_ver != PL_API_VER) {
         fprintf(stderr,
@@ -48,46 +43,73 @@ struct pl_context *pl_context_create(int api_ver,
         abort();
     }
 
-    struct pl_context *ctx = pl_zalloc_ptr(NULL, ctx);
-    ctx->params = *PL_DEF(params, &pl_context_default_params);
-    int err = pthread_mutex_init(&ctx->lock, NULL);
+    struct pl_log *log = pl_zalloc_priv(NULL, struct pl_log, struct priv);
+    struct priv *p = PL_PRIV(log);
+    log->params = *PL_DEF(params, &pl_log_default_params);
+    int err = pthread_mutex_init(&p->lock, NULL);
     if (err != 0) {
         fprintf(stderr, "Failed initializing pthread mutex: %s\n", strerror(err));
-        pl_free(ctx);
-        ctx = NULL;
+        pl_free(log);
+        return NULL;
     }
 
-    pl_info(ctx, "Initialized libplacebo %s (API v%d)", PL_VERSION, PL_API_VER);
-
-    return ctx;
+    pl_info(log, "Initialized libplacebo %s (API v%d)", PL_VERSION, PL_API_VER);
+    return log;
 }
 
-const struct pl_context_params pl_context_default_params = {0};
+const struct pl_log_params pl_log_default_params = {0};
 
-void pl_context_destroy(struct pl_context **pctx)
+void pl_log_destroy(pl_log *plog)
 {
-    struct pl_context *ctx = *pctx;
-    if (!ctx)
+    pl_log log = *plog;
+    if (!log)
         return;
 
-    pthread_mutex_destroy(&ctx->lock);
-    pl_free(ctx);
-    *pctx = NULL;
+    struct priv *p = PL_PRIV(log);
+    pthread_mutex_destroy(&p->lock);
+    pl_free((void *) log);
+    *plog = NULL;
 }
 
-void pl_context_update(struct pl_context *ctx,
-                       const struct pl_context_params *params)
+struct pl_log_params pl_log_update(pl_log ptr, const struct pl_log_params *params)
 {
-    pthread_mutex_lock(&ctx->lock);
-    ctx->params = *PL_DEF(params, &pl_context_default_params);
-    pthread_mutex_unlock(&ctx->lock);
+    struct pl_log *log = (struct pl_log *) ptr;
+    if (!log)
+        return pl_log_default_params;
+
+    struct priv *p = PL_PRIV(log);
+    pthread_mutex_lock(&p->lock);
+    struct pl_log_params prev_params = log->params;
+    log->params = *PL_DEF(params, &pl_log_default_params);
+    pthread_mutex_unlock(&p->lock);
+
+    return prev_params;
 }
 
-void pl_log_level_cap(struct pl_context *ctx, enum pl_log_level cap)
+enum pl_log_level pl_log_level_update(pl_log ptr, enum pl_log_level level)
 {
-    pthread_mutex_lock(&ctx->lock);
-    ctx->log_level_cap = cap;
-    pthread_mutex_unlock(&ctx->lock);
+    struct pl_log *log = (struct pl_log *) ptr;
+    if (!log)
+        return PL_LOG_NONE;
+
+    struct priv *p = PL_PRIV(log);
+    pthread_mutex_lock(&p->lock);
+    enum pl_log_level prev_level = log->params.log_level;
+    log->params.log_level = level;
+    pthread_mutex_unlock(&p->lock);
+
+    return prev_level;
+}
+
+void pl_log_level_cap(pl_log log, enum pl_log_level cap)
+{
+    if (!log)
+        return;
+
+    struct priv *p = PL_PRIV(log);
+    pthread_mutex_lock(&p->lock);
+    p->log_level_cap = cap;
+    pthread_mutex_unlock(&p->lock);
 }
 
 static FILE *default_stream(void *stream, enum pl_log_level level)
@@ -129,58 +151,58 @@ void pl_log_color(void *stream, enum pl_log_level level, const char *msg)
         fflush(h);
 }
 
-void pl_msg(struct pl_context *ctx, enum pl_log_level lev, const char *fmt, ...)
-{
-    va_list va;
-    va_start(va, fmt);
-    pl_msg_va(ctx, lev, fmt, va);
-    va_end(va);
-}
-
-void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
-               va_list va)
+static void pl_msg_va(pl_log log, enum pl_log_level lev,
+                      const char *fmt, va_list va)
 {
     // Test log message without taking the lock, to avoid thrashing the
     // lock for thousands of trace messages unless those are actually
     // enabled. This may be a false negative, in which case log messages may
     // be lost as a result. But this shouldn't be a big deal, since any
     // situation leading to lost log messages would itself be a race condition.
-    if (!pl_msg_test(ctx, lev))
+    if (!pl_msg_test(log, lev))
         return;
 
     // Re-test the log message level with held lock to avoid false positives,
     // which would be a considerably bigger deal than false negatives
-    pthread_mutex_lock(&ctx->lock);
+    struct priv *p = PL_PRIV(log);
+    pthread_mutex_lock(&p->lock);
 
     // Apply this cap before re-testing the log level, to avoid giving users
     // messages that should have been dropped by the log level.
-    lev = PL_MAX(lev, ctx->log_level_cap);
-
-    if (!pl_msg_test(ctx, lev))
+    lev = PL_MAX(lev, p->log_level_cap);
+    if (!pl_msg_test(log, lev))
         goto done;
 
-    ctx->logbuffer.len = 0;
-    pl_str_append_vasprintf(ctx, &ctx->logbuffer, fmt, va);
-    ctx->params.log_cb(ctx->params.log_priv, lev, ctx->logbuffer.buf);
+    p->logbuffer.len = 0;
+    pl_str_append_vasprintf((void *) log, &p->logbuffer, fmt, va);
+    log->params.log_cb(log->params.log_priv, lev, p->logbuffer.buf);
 
 done:
-    pthread_mutex_unlock(&ctx->lock);
+    pthread_mutex_unlock(&p->lock);
 }
 
-void pl_msg_source(struct pl_context *ctx, enum pl_log_level lev, const char *src)
+void pl_msg(pl_log log, enum pl_log_level lev, const char *fmt, ...)
 {
-    if (!pl_msg_test(ctx, lev) || !src)
+    va_list va;
+    va_start(va, fmt);
+    pl_msg_va(log, lev, fmt, va);
+    va_end(va);
+}
+
+void pl_msg_source(pl_log log, enum pl_log_level lev, const char *src)
+{
+    if (!pl_msg_test(log, lev) || !src)
         return;
 
     int line = 1;
     while (*src) {
         const char *end = strchr(src, '\n');
         if (!end) {
-            pl_msg(ctx, lev, "[%3d] %s", line, src);
+            pl_msg(log, lev, "[%3d] %s", line, src);
             break;
         }
 
-        pl_msg(ctx, lev, "[%3d] %.*s", line, (int)(end - src), src);
+        pl_msg(log, lev, "[%3d] %.*s", line, (int)(end - src), src);
         src = end + 1;
         line++;
     }

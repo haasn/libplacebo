@@ -19,6 +19,16 @@
 
 #include "common.h"
 
+int pl_fix_ver()
+{
+    return BUILD_FIX_VER;
+}
+
+const char *pl_version()
+{
+    return BUILD_VERSION;
+}
+
 void pl_rect2d_normalize(struct pl_rect2d *rc)
 {
     *rc = (struct pl_rect2d) {

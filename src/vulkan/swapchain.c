@@ -300,7 +300,8 @@ const struct pl_swapchain *pl_vulkan_create_swapchain(const struct pl_vulkan *pl
 
     struct pl_swapchain *sw = pl_zalloc_priv(NULL, struct pl_swapchain, struct priv);
     sw->impl = &vulkan_swapchain;
-    sw->ctx = vk->ctx;
+    sw->log = vk->log;
+    sw->ctx = sw->log;
     sw->gpu = gpu;
 
     struct priv *p = PL_PRIV(sw);

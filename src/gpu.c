@@ -16,7 +16,7 @@
  */
 
 #include "common.h"
-#include "context.h"
+#include "log.h"
 #include "shaders.h"
 #include "gpu.h"
 
@@ -45,7 +45,7 @@ void pl_gpu_destroy(const struct pl_gpu *gpu)
 
 static void print_formats(const struct pl_gpu *gpu)
 {
-    if (!pl_msg_test(gpu->ctx, PL_LOG_DEBUG))
+    if (!pl_msg_test(gpu->log, PL_LOG_DEBUG))
         return;
 
     PL_DEBUG(gpu,  "GPU texture formats:");
@@ -111,6 +111,7 @@ bool pl_fmt_is_ordered(const struct pl_fmt *fmt)
 
 static void gpu_verify(const struct pl_gpu *gpu)
 {
+    pl_assert(gpu->ctx == gpu->log);
     pl_assert(gpu->limits.max_tex_2d_dim);
 
     for (int n = 0; n < gpu->num_formats; n++) {
@@ -1557,9 +1558,9 @@ bool pl_tex_upload_pbo(const struct pl_gpu *gpu,
 
         // Suppress errors for this test because it may fail, in which case we
         // want to silently fall back.
-        pl_log_level_cap(gpu->ctx, PL_LOG_DEBUG);
+        pl_log_level_cap(gpu->log, PL_LOG_DEBUG);
         buf = pl_buf_create(gpu, &bufparams);
-        pl_log_level_cap(gpu->ctx, PL_LOG_NONE);
+        pl_log_level_cap(gpu->log, PL_LOG_NONE);
     }
 
     if (!buf) {
@@ -1627,9 +1628,9 @@ bool pl_tex_download_pbo(const struct pl_gpu *gpu,
 
         // Suppress errors for this test because it may fail, in which case we
         // want to silently fall back.
-        pl_log_level_cap(gpu->ctx, PL_LOG_DEBUG);
+        pl_log_level_cap(gpu->log, PL_LOG_DEBUG);
         buf = pl_buf_create(gpu, &bufparams);
-        pl_log_level_cap(gpu->ctx, PL_LOG_NONE);
+        pl_log_level_cap(gpu->log, PL_LOG_NONE);
     }
 
     if (!buf) {

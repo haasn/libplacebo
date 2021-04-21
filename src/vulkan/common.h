@@ -18,7 +18,7 @@
 #pragma once
 
 #include "../common.h"
-#include "../context.h"
+#include "../log.h"
 #include <pthread.h>
 
 #ifdef PL_HAVE_WIN32
@@ -52,7 +52,7 @@ struct vk_ctx {
     pthread_mutex_t lock;
     void *alloc; // allocations bound to the lifetime of this vk_ctx
     const struct pl_vk_inst *internal_instance;
-    struct pl_context *ctx;
+    pl_log log;
     VkInstance inst;
     VkPhysicalDevice physd;
     VkPhysicalDeviceLimits limits;

@@ -10,13 +10,13 @@
 #include "common.h"
 #include "window.h"
 
-static struct pl_context *ctx;
+static pl_log logger;
 static struct window *win;
 
 static void uninit(int ret)
 {
     window_destroy(&win);
-    pl_context_destroy(&ctx);
+    pl_log_destroy(&logger);
     exit(ret);
 }
 
@@ -37,12 +37,12 @@ static void evolve_rgba(float rgba[4], int *pos)
 
 int main(int argc, char **argv)
 {
-    ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
+    logger = pl_log_create(PL_API_VER, &(struct pl_log_params) {
         .log_cb = pl_log_color,
         .log_level = PL_LOG_DEBUG,
     });
 
-    win = window_create(ctx, "colors demo", 640, 480, WIN_ALPHA);
+    win = window_create(logger, "colors demo", 640, 480, WIN_ALPHA);
     if (!win)
         uninit(1);
 

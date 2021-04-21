@@ -15,7 +15,7 @@ enum winflags {
     WIN_HDR,
 };
 
-struct window *window_create(struct pl_context *ctx, const char *title,
+struct window *window_create(pl_log log, const char *title,
                              int width, int height, enum winflags flags);
 
 void window_destroy(struct window **win);

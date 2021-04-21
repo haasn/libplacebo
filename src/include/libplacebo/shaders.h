@@ -60,14 +60,9 @@ struct pl_shader_params {
 
 // Creates a new, blank, mutable pl_shader object.
 //
-// Note: The lifetime of this pl_shader is tied to `pl_context`. It's not
-// needed to `pl_shader_destroy` before `pl_context_destroy`, except where
-// users want to release associated memory allocations.
-//
 // Note: Rather than allocating and destroying many shaders, users are
 // encouraged to reuse them (using `pl_shader_reset`) for efficiency.
-struct pl_shader *pl_shader_alloc(struct pl_context *ctx,
-                                  const struct pl_shader_params *params);
+struct pl_shader *pl_shader_alloc(pl_log log, const struct pl_shader_params *params);
 
 
 // Frees a pl_shader and all resources associated with it.

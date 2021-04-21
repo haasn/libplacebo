@@ -19,7 +19,7 @@
 #define LIBPLACEBO_FILTER_KERNELS_H_
 
 #include <stdbool.h>
-#include <libplacebo/context.h>
+#include <libplacebo/log.h>
 
 #define PL_FILTER_MAX_PARAMS 2
 
@@ -325,9 +325,7 @@ struct pl_filter {
 // The resulting pl_filter must be freed with `pl_filter_free` when no longer
 // needed. Returns NULL if filter generation fails due to invalid parameters
 // (i.e. missing a required parameter).
-// The resulting pl_filter is implicitly destroyed when the pl_context is
-// destroyed.
-const struct pl_filter *pl_filter_generate(struct pl_context *ctx,
+const struct pl_filter *pl_filter_generate(pl_log log,
                                        const struct pl_filter_params *params);
 
 void pl_filter_free(const struct pl_filter **filter);

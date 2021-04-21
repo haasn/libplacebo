@@ -135,6 +135,7 @@ headers = [
   'dummy.h',
   'filters.h',
   'gpu.h',
+  'log.h',
   'renderer.h',
   'shaders/av1.h',
   'shaders/colorspace.h',
@@ -154,13 +155,13 @@ headers = [
 sources = [
   'colorspace.c',
   'common.c',
-  'context.c',
   'dither.c',
   'dispatch.c',
   'dummy.c',
   'filters.c',
   'format.c',
   'gpu.c',
+  'log.c',
   'pl_alloc.c',
   'pl_string.c',
   'renderer.c',
@@ -178,8 +179,8 @@ sources = [
 ]
 
 tests = [
-  'context.c',
   'colorspace.c',
+  'common.c',
   'dither.c',
   'dummy.c',
   'lut.c',

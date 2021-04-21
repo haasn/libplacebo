@@ -481,7 +481,7 @@ next_cmd: ;
             .pSignalSemaphores = cmd->sigs.elem,
         };
 
-        if (pl_msg_test(vk->ctx, PL_LOG_TRACE)) {
+        if (pl_msg_test(vk->log, PL_LOG_TRACE)) {
             PL_TRACE(vk, "Submitting command on queue %p (QF %d):",
                      (void *)cmd->queue, pool->qf);
             for (int n = 0; n < cmd->objs.num; n++)

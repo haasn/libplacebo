@@ -18,7 +18,7 @@ static const char *icc_profile = ""; // path to ICC profile
 static const char *lut_file = ""; // path to .cube lut
 
 // Program state
-static struct pl_context *ctx;
+static pl_log logger;
 static struct window *win;
 
 // For rendering
@@ -93,7 +93,7 @@ static void uninit(int ret)
     pl_lut_free(&lut);
 
     window_destroy(&win);
-    pl_context_destroy(&ctx);
+    pl_log_destroy(&logger);
     exit(ret);
 }
 
@@ -193,7 +193,7 @@ int main(int argc, char **argv)
 
     const char *file = argv[1];
     const char *overlay = argc > 2 ? argv[2] : NULL;
-    ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
+    logger = pl_log_create(PL_API_VER, &(struct pl_log_params) {
         .log_cb = pl_log_color,
         .log_level = PL_LOG_INFO,
     });
@@ -208,7 +208,7 @@ int main(int argc, char **argv)
 
     // Create window
     unsigned int start = SDL_GetTicks();
-    win = window_create(ctx, "SDL2_image demo", img->w, img->h, 0);
+    win = window_create(logger, "SDL2_image demo", img->w, img->h, 0);
     if (!win)
         uninit(1);
 
@@ -231,12 +231,12 @@ int main(int argc, char **argv)
 
     struct file lutf;
     if (open_file(lut_file, &lutf) && lutf.size) {
-        if (!(lut = pl_lut_parse_cube(ctx, lutf.data, lutf.size)))
+        if (!(lut = pl_lut_parse_cube(logger, lutf.data, lutf.size)))
             fprintf(stderr, "Failed parsing LUT.. continuing anyway\n");
         close_file(&lutf);
     }
 
-    renderer = pl_renderer_create(ctx, win->gpu);
+    renderer = pl_renderer_create(logger, win->gpu);
 
     unsigned int last = SDL_GetTicks(), frames = 0;
     printf("Took %u ms for initialization\n", last - start);

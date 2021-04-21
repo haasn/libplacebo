@@ -2,7 +2,7 @@
 
 int main()
 {
-    struct pl_context *ctx = pl_test_context();
+    pl_log log = pl_test_logger();
     for (const struct pl_filter_preset *conf = pl_filter_presets; conf->name; conf++) {
         if (!conf->filter)
             continue;
@@ -13,7 +13,7 @@ int main()
         };
 
         printf("Testing filter '%s'\n", conf->name);
-        const struct pl_filter *flt = pl_filter_generate(ctx, &params);
+        const struct pl_filter *flt = pl_filter_generate(log, &params);
         REQUIRE(flt);
 
         if (params.config.polar) {
@@ -36,5 +36,5 @@ int main()
 
         pl_filter_free(&flt);
     }
-    pl_context_destroy(&ctx);
+    pl_log_destroy(&log);
 }

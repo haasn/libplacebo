@@ -21,39 +21,28 @@
 #include <pthread.h>
 #include "common.h"
 
-struct pl_context {
-    struct pl_context_params params;
-    pl_str logbuffer;
-    enum pl_log_level log_level_cap;
-    pthread_mutex_t lock;
-};
-
-// Logging-related functions
+// Internal logging-related functions
 
 // Warning: Not entirely thread-safe. Exercise caution when using. May result
 // in either false positives or false negatives. Make sure to re-run this
-// function while `ctx->lock` is held, to ensure no race conditions on the
-// check.
-static inline bool pl_msg_test(struct pl_context *ctx, enum pl_log_level lev)
+// function while `lock` is held, to ensure no race conditions on the check.
+static inline bool pl_msg_test(pl_log log, enum pl_log_level lev)
 {
-    return ctx->params.log_cb && ctx->params.log_level >= lev;
+    return log && log->params.log_cb && log->params.log_level >= lev;
 }
 
-void pl_msg(struct pl_context *ctx, enum pl_log_level lev, const char *fmt, ...)
+void pl_msg(pl_log log, enum pl_log_level lev, const char *fmt, ...)
     PL_PRINTF(3, 4);
 
-void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
-               va_list va);
-
 // Convenience macros
-#define pl_fatal(log, ...)      pl_msg(ctx, PL_LOG_FATAL, __VA_ARGS__)
-#define pl_err(log, ...)        pl_msg(ctx, PL_LOG_ERR, __VA_ARGS__)
-#define pl_warn(log, ...)       pl_msg(ctx, PL_LOG_WARN, __VA_ARGS__)
-#define pl_info(log, ...)       pl_msg(ctx, PL_LOG_INFO, __VA_ARGS__)
-#define pl_debug(log, ...)      pl_msg(ctx, PL_LOG_DEBUG, __VA_ARGS__)
-#define pl_trace(log, ...)      pl_msg(ctx, PL_LOG_TRACE, __VA_ARGS__)
+#define pl_fatal(log, ...)      pl_msg(log, PL_LOG_FATAL, __VA_ARGS__)
+#define pl_err(log, ...)        pl_msg(log, PL_LOG_ERR, __VA_ARGS__)
+#define pl_warn(log, ...)       pl_msg(log, PL_LOG_WARN, __VA_ARGS__)
+#define pl_info(log, ...)       pl_msg(log, PL_LOG_INFO, __VA_ARGS__)
+#define pl_debug(log, ...)      pl_msg(log, PL_LOG_DEBUG, __VA_ARGS__)
+#define pl_trace(log, ...)      pl_msg(log, PL_LOG_TRACE, __VA_ARGS__)
 
-#define PL_MSG(obj, lev, ...)   pl_msg((obj)->ctx, lev, __VA_ARGS__)
+#define PL_MSG(obj, lev, ...)   pl_msg((obj)->log, lev, __VA_ARGS__)
 
 #define PL_FATAL(obj, ...)      PL_MSG(obj, PL_LOG_FATAL, __VA_ARGS__)
 #define PL_ERR(obj, ...)        PL_MSG(obj, PL_LOG_ERR, __VA_ARGS__)
@@ -63,10 +52,13 @@ void pl_msg_va(struct pl_context *ctx, enum pl_log_level lev, const char *fmt,
 #define PL_TRACE(obj, ...)      PL_MSG(obj, PL_LOG_TRACE, __VA_ARGS__)
 
 // Log something with line numbers included
-void pl_msg_source(struct pl_context *ctx, enum pl_log_level lev, const char *src);
+void pl_msg_source(pl_log log, enum pl_log_level lev, const char *src);
 
 // Temporarily cap the log level to a certain verbosity. This is intended for
 // things like probing formats, attempting to create buffers that may fail, and
 // other types of operations in which we want to suppress errors. Call with
 // PL_LOG_NONE to disable this cap.
-void pl_log_level_cap(struct pl_context *ctx, enum pl_log_level cap);
+//
+// Warning: This is generally not thread-safe, and only provided as a temporary
+// hack until a better solution can be thought of.
+void pl_log_level_cap(pl_log log, enum pl_log_level cap);

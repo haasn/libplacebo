@@ -56,13 +56,14 @@ struct priv {
     struct pl_gpu_dummy_params params;
 };
 
-const struct pl_gpu *pl_gpu_dummy_create(struct pl_context *ctx,
+const struct pl_gpu *pl_gpu_dummy_create(pl_log log,
                                          const struct pl_gpu_dummy_params *params)
 {
     params = PL_DEF(params, &pl_gpu_dummy_default_params);
 
     struct pl_gpu *gpu = pl_zalloc_priv(NULL, struct pl_gpu, struct priv);
-    gpu->ctx = ctx;
+    gpu->log = log;
+    gpu->ctx = gpu->log;
     gpu->caps = params->caps;
     gpu->glsl = params->glsl;
     gpu->limits = params->limits;

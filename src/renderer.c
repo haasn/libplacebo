@@ -43,8 +43,8 @@ struct osd_vertex {
 
 struct pl_renderer {
     const struct pl_gpu *gpu;
-    struct pl_context *ctx;
     struct pl_dispatch *dp;
+    pl_log log;
 
     // Texture format to use for intermediate textures
     const struct pl_fmt *fbofmt[5];
@@ -154,14 +154,14 @@ static void find_fbo_format(struct pl_renderer *rr)
     }
 }
 
-struct pl_renderer *pl_renderer_create(struct pl_context *ctx,
+struct pl_renderer *pl_renderer_create(pl_log log,
                                        const struct pl_gpu *gpu)
 {
     struct pl_renderer *rr = pl_alloc_ptr(NULL, rr);
     *rr = (struct pl_renderer) {
         .gpu  = gpu,
-        .ctx = ctx,
-        .dp  = pl_dispatch_create(ctx, gpu),
+        .log = log,
+        .dp  = pl_dispatch_create(log, gpu),
         .osd_attribs = {
             {
                 .name = "pos",

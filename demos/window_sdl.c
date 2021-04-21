@@ -68,7 +68,7 @@ static void release_current(void *priv)
 }
 #endif
 
-static struct window *sdl_create(struct pl_context *ctx, const char *title,
+static struct window *sdl_create(pl_log log, const char *title,
                                  int width, int height, enum winflags flags)
 {
     struct priv *p = calloc(1, sizeof(struct priv));
@@ -104,7 +104,7 @@ static struct window *sdl_create(struct pl_context *ctx, const char *title,
     iparams.extensions = exts;
     iparams.num_extensions = num;
 
-    p->vk_inst = pl_vk_inst_create(ctx, &iparams);
+    p->vk_inst = pl_vk_inst_create(log, &iparams);
     free(exts);
     if (!p->vk_inst) {
         fprintf(stderr, "libplacebo: Failed creating vulkan instance!\n");
@@ -120,7 +120,7 @@ static struct window *sdl_create(struct pl_context *ctx, const char *title,
     params.instance = p->vk_inst->instance;
     params.surface = p->surf;
     params.allow_software = true;
-    p->vk = pl_vulkan_create(ctx, &params);
+    p->vk = pl_vulkan_create(log, &params);
     if (!p->vk) {
         fprintf(stderr, "libplacebo: Failed creating vulkan device\n");
         goto error;
@@ -154,7 +154,7 @@ static struct window *sdl_create(struct pl_context *ctx, const char *title,
     params.release_current = release_current;
     params.priv = p;
 
-    p->gl = pl_opengl_create(ctx, &params);
+    p->gl = pl_opengl_create(log, &params);
     if (!p->gl) {
         fprintf(stderr, "libplacebo: Failed creating opengl device\n");
         goto error;

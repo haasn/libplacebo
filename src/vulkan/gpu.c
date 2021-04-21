@@ -185,7 +185,7 @@ static void vk_setup_formats(struct pl_gpu *gpu)
             continue;
 
         // Suppress some errors/warnings spit out by the format probing code
-        pl_log_level_cap(vk->ctx, PL_LOG_INFO);
+        pl_log_level_cap(vk->log, PL_LOG_INFO);
 
         bool has_drm_mods = vk->GetImageDrmFormatModifierPropertiesEXT;
         VkDrmFormatModifierPropertiesEXT modifiers[16] = {0};
@@ -224,7 +224,7 @@ static void vk_setup_formats(struct pl_gpu *gpu)
             }
         }
 
-        pl_log_level_cap(vk->ctx, PL_LOG_NONE);
+        pl_log_level_cap(vk->log, PL_LOG_NONE);
 
         struct pl_fmt *fmt = pl_alloc_ptr_priv(gpu, fmt, vk_fmt);
         const struct vk_format **fmtp = PL_PRIV(fmt);
@@ -482,14 +482,15 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     pl_assert(vk->dev);
 
     struct pl_gpu *gpu = pl_zalloc_priv(NULL, struct pl_gpu, struct pl_vk);
-    gpu->ctx = vk->ctx;
+    gpu->log = vk->log;
+    gpu->ctx = gpu->log;
 
     struct pl_vk *p = PL_PRIV(gpu);
     pl_mutex_init(&p->recording);
     p->impl = pl_fns_vk;
     p->vk = vk;
 
-    p->spirv = spirv_compiler_create(vk->ctx, vk->api_ver);
+    p->spirv = spirv_compiler_create(vk->log, vk->api_ver);
     p->alloc = vk_malloc_create(vk);
     if (!p->alloc || !p->spirv)
         goto error;
@@ -650,7 +651,7 @@ const struct pl_gpu *pl_gpu_create_vk(struct vk_ctx *vk)
     }
 
     // Create the dispatch last, after any setup of `gpu` is done
-    p->dp = pl_dispatch_create(vk->ctx, gpu);
+    p->dp = pl_dispatch_create(vk->log, gpu);
     pl_gpu_print_info(gpu);
     return gpu;
 
@@ -2556,10 +2557,10 @@ static VkResult vk_compile_glsl(const struct pl_gpu *gpu, void *alloc,
     };
 
     PL_DEBUG(gpu, "%s shader source:", shader_names[type]);
-    pl_msg_source(gpu->ctx, PL_LOG_DEBUG, glsl);
+    pl_msg_source(gpu->log, PL_LOG_DEBUG, glsl);
 
     if (!p->spirv->impl->compile_glsl(p->spirv, alloc, type, glsl, spirv)) {
-        pl_msg_source(gpu->ctx, PL_LOG_ERR, glsl);
+        pl_msg_source(gpu->log, PL_LOG_ERR, glsl);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 

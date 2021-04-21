@@ -8,7 +8,7 @@
 // Needed to include the generated in-tree config.h
 #include "../src/config.h"
 
-#include <libplacebo/context.h>
+#include <libplacebo/log.h>
 #include <libplacebo/renderer.h>
 
 #include "config_demos.h"

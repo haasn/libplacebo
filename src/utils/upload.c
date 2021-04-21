@@ -17,7 +17,7 @@
 
 #include <strings.h>
 
-#include "context.h"
+#include "log.h"
 #include "common.h"
 #include "gpu.h"
 

@@ -16,7 +16,7 @@
  */
 
 #include "common.h"
-#include "context.h"
+#include "log.h"
 #include "shaders.h"
 #include "dispatch.h"
 #include "gpu.h"
@@ -36,7 +36,7 @@ enum {
 
 struct pl_dispatch {
     pthread_mutex_t lock;
-    struct pl_context *ctx;
+    pl_log log;
     const struct pl_gpu *gpu;
     uint8_t current_ident;
     uint8_t current_index;
@@ -99,13 +99,11 @@ static void pass_destroy(struct pl_dispatch *dp, struct pass *pass)
     pl_free(pass);
 }
 
-struct pl_dispatch *pl_dispatch_create(struct pl_context *ctx,
-                                       const struct pl_gpu *gpu)
+struct pl_dispatch *pl_dispatch_create(pl_log log, const struct pl_gpu *gpu)
 {
-    pl_assert(ctx);
-    struct pl_dispatch *dp = pl_zalloc_ptr(ctx, dp);
+    struct pl_dispatch *dp = pl_zalloc_ptr(NULL, dp);
     pl_mutex_init(&dp->lock);
-    dp->ctx = ctx;
+    dp->log = log;
     dp->gpu = gpu;
     dp->max_passes = MAX_PASSES;
 
@@ -147,7 +145,7 @@ struct pl_shader *pl_dispatch_begin_ex(struct pl_dispatch *dp, bool unique)
         return sh;
     }
 
-    return pl_shader_alloc(dp->ctx, &params);
+    return pl_shader_alloc(dp->log, &params);
 }
 
 void pl_dispatch_reset_frame(struct pl_dispatch *dp)

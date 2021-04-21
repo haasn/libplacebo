@@ -28,8 +28,7 @@ struct pl_dispatch;
 // layer between generated shaders (pl_shader) and the ra context such that it
 // can be used to execute shaders. This dispatch object will also provide
 // shader caching (for efficient re-use).
-struct pl_dispatch *pl_dispatch_create(struct pl_context *ctx,
-                                       const struct pl_gpu *gpu);
+struct pl_dispatch *pl_dispatch_create(pl_log log, const struct pl_gpu *gpu);
 void pl_dispatch_destroy(struct pl_dispatch **dp);
 
 // Returns a blank pl_shader object, suitable for recording rendering commands.

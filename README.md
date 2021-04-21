@@ -86,7 +86,7 @@ that need strong control over the entire rendering pipeline; whereas the
 high-level tiers are more suitable for smaller or simpler projects that want
 libplacebo to take care of everything.
 
-### Tier 0 (context, raw math primitives)
+### Tier 0 (logging, raw math primitives)
 
 - `colorspace.h`: A collection of enums and structs for describing color
   spaces, as well as a collection of helper functions for computing various
@@ -94,8 +94,7 @@ libplacebo to take care of everything.
 - `common.h`: A collection of miscellaneous utility types and macros that are
   shared among multiple subsystems. Usually does not need to be included
   directly.
-- `context.h`: The main entry-point into the library. Controls memory
-  allocation, logging. and guards ABI/thread safety.
+- `log.h`: Logging subsystem.
 - `config.h`: Macros defining information about the way libplacebo was built,
   including the version strings and compiled-in features/dependencies. Usually
   does not need to be included directly. May be useful for feature tests.
@@ -323,27 +322,6 @@ $ meson test -C$DIR benchmark --verbose
 ```
 
 ## Using
-
-Building a trivial project using libplacebo is straightforward:
-
-```c
-// build with -lplacebo
-
-#include <libplacebo/context.h>
-
-void main()
-{
-    struct pl_context *ctx;
-    ctx = pl_context_create(PL_API_VER, &(struct pl_context_params) {
-        .log_cb    = pl_log_color,
-        .log_level = PL_LOG_INFO,
-    });
-
-    // do something..
-
-    pl_context_destroy(&ctx);
-}
-```
 
 For a full documentation of the API, refer to the above [API
 Overview](#api-overview) as well as the [public header

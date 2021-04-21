@@ -6,7 +6,6 @@ __AFL_FUZZ_INIT();
 
 int main()
 {
-    struct pl_context *ctx = pl_context_create(PL_API_VER, NULL);
     struct pl_custom_lut *lut;
 
 #ifdef __AFL_HAVE_MANUAL_CONTROL
@@ -17,9 +16,7 @@ int main()
 
     while (__AFL_LOOP(100000)) {
         size_t len = __AFL_FUZZ_TESTCASE_LEN;
-        lut = pl_lut_parse_cube(ctx, (char *) buf, len);
+        lut = pl_lut_parse_cube(NULL, (char *) buf, len);
         pl_lut_free(&lut);
     }
-
-    pl_context_destroy(&ctx);
 }
