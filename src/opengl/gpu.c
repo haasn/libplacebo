@@ -692,13 +692,13 @@ error:
 
 static bool gl_tex_import(pl_gpu gpu, enum pl_handle_type handle_type,
                           const struct pl_shared_mem *shared_mem,
-                          struct pl_tex tex)
+                          struct pl_tex *tex)
 {
     abort(); // no implementations
 }
 
 static bool gl_tex_export(pl_gpu gpu, enum pl_handle_type handle_type,
-                          bool preserved, struct pl_tex tex)
+                          bool preserved, struct pl_tex *tex)
 {
     abort(); // no implementations
 }
