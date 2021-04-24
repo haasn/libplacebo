@@ -416,9 +416,32 @@ static void pl_shader_tests(pl_gpu gpu)
         .format         = fbo_fmt,
         .w              = FBO_W,
         .h              = FBO_H,
+        .storable       = fbo->params.storable,
         .sampleable     = true,
         .initial_data   = data,
     });
+
+    if (fbo->params.storable) {
+        // Test 1x1 blit, to make sure the scaling code runs
+        REQUIRE(pl_tex_blit_compute(gpu, dp, &(struct pl_tex_blit_params) {
+            .src = src,
+            .dst = fbo,
+            .src_rc = {0, 0, 0, 1, 1, 1},
+            .dst_rc = {0, 0, 0, FBO_W, FBO_H, 1},
+            .sample_mode = PL_TEX_SAMPLE_NEAREST,
+        }));
+
+        // Test non-resizing blit, which uses the efficient imageLoad path
+        REQUIRE(pl_tex_blit_compute(gpu, dp, &(struct pl_tex_blit_params) {
+            .src = src,
+            .dst = fbo,
+            .src_rc = {0, 0, 0, FBO_W, FBO_H, 1},
+            .dst_rc = {0, 0, 0, FBO_W, FBO_H, 1},
+            .sample_mode = PL_TEX_SAMPLE_NEAREST,
+        }));
+
+        TEST_FBO_PATTERN(1e-6, "%s", "pl_tex_blit_compute");
+    }
 
     // Test encoding/decoding of all gamma functions, color spaces, etc.
     for (enum pl_color_transfer trc = 0; trc < PL_COLOR_TRC_COUNT; trc++) {

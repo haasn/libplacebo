@@ -15,6 +15,8 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <math.h>
+
 #include "common.h"
 #include "log.h"
 #include "shaders.h"
@@ -1683,7 +1685,7 @@ bool pl_tex_upload_texel(pl_gpu gpu, pl_dispatch dp,
     require(params->buf);
 
     pl_shader sh = pl_dispatch_begin(dp);
-    if (!sh_try_compute(sh, threads, 1, true, 0)) {
+    if (!sh_try_compute(sh, threads, 1, false, 0)) {
         PL_ERR(gpu, "Failed emulating texture transfer!");
         pl_dispatch_abort(dp, &sh);
         return false;
@@ -1758,7 +1760,7 @@ bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
     require(params->buf);
 
     pl_shader sh = pl_dispatch_begin(dp);
-    if (!sh_try_compute(sh, threads, 1, true, 0)) {
+    if (!sh_try_compute(sh, threads, 1, false, 0)) {
         PL_ERR(gpu, "Failed emulating texture transfer!");
         pl_dispatch_abort(dp, &sh);
         return false;
@@ -1816,6 +1818,169 @@ bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
 
 error:
     return false;
+}
+
+bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
+                         const struct pl_tex_blit_params *params)
+{
+    if (!params->src->params.storable || !params->dst->params.storable)
+        return false;
+
+    // Normalize `dst_rc`, moving all flipping to `src_rc` instead.
+    struct pl_rect3d src_rc = params->src_rc;
+    struct pl_rect3d dst_rc = params->dst_rc;
+    if (pl_rect_w(dst_rc) < 0) {
+        PL_SWAP(src_rc.x0, src_rc.x1);
+        PL_SWAP(dst_rc.x0, dst_rc.x1);
+    }
+    if (pl_rect_h(dst_rc) < 0) {
+        PL_SWAP(src_rc.y0, src_rc.y1);
+        PL_SWAP(dst_rc.y0, dst_rc.y1);
+    }
+    if (pl_rect_d(dst_rc) < 0) {
+        PL_SWAP(src_rc.z0, src_rc.z1);
+        PL_SWAP(dst_rc.z0, dst_rc.z1);
+    }
+
+    bool needs_scaling = false;
+    needs_scaling |= pl_rect_w(dst_rc) != abs(pl_rect_w(src_rc));
+    needs_scaling |= pl_rect_h(dst_rc) != abs(pl_rect_h(src_rc));
+    needs_scaling |= pl_rect_d(dst_rc) != abs(pl_rect_d(src_rc));
+
+    // Manual trilinear interpolation would be too slow to justify
+    bool needs_sampling = needs_scaling && params->sample_mode != PL_TEX_SAMPLE_NEAREST;
+    if (needs_sampling && !params->src->params.sampleable)
+        return false;
+
+    const int threads = 256;
+    int bw = PL_MIN(32, pl_rect_w(dst_rc));
+    int bh = PL_MIN(threads / bw, pl_rect_h(dst_rc));
+    pl_shader sh = pl_dispatch_begin(dp);
+    if (!sh_try_compute(sh, bw, bh, false, 0)) {
+        pl_dispatch_abort(dp, &sh);
+        return false;
+    }
+
+    // Avoid over-writing into `dst`
+    int groups_x = (pl_rect_w(dst_rc) + bw - 1) / bw;
+    if (groups_x * bw != pl_rect_w(dst_rc)) {
+        GLSL("if (gl_GlobalInvocationID.x >= %d) \n"
+             "    return;                        \n",
+             pl_rect_w(dst_rc));
+    }
+
+    int groups_y = (pl_rect_h(dst_rc) + bh - 1) / bh;
+    if (groups_y * bh != pl_rect_h(dst_rc)) {
+        GLSL("if (gl_GlobalInvocationID.y >= %d) \n"
+             "    return;                        \n",
+             pl_rect_h(dst_rc));
+    }
+
+    ident_t dst = sh_desc(sh, (struct pl_shader_desc) {
+        .binding.object = params->dst,
+        .desc = {
+            .name   = "dst",
+            .type   = PL_DESC_STORAGE_IMG,
+            .access = PL_DESC_ACCESS_WRITEONLY,
+        },
+    });
+
+    static const char *vecs[] = {
+        [1] = "float",
+        [2] = "vec2",
+        [3] = "vec3",
+        [4] = "vec4",
+    };
+
+    static const char *ivecs[] = {
+        [1] = "int",
+        [2] = "ivec2",
+        [3] = "ivec3",
+        [4] = "ivec4",
+    };
+
+    int src_dims = pl_tex_params_dimension(params->src->params);
+    int dst_dims = pl_tex_params_dimension(params->dst->params);
+    GLSL("const ivec3 pos = ivec3(gl_GlobalInvocationID);   \n"
+         "%s dst_pos = %s(pos + ivec3(%d, %d, %d)); \n",
+         ivecs[dst_dims], ivecs[dst_dims],
+         params->dst_rc.x0, params->dst_rc.y0, params->dst_rc.z0);
+
+    if (needs_sampling || (needs_scaling && params->src->params.sampleable)) {
+
+        ident_t src = sh_desc(sh, (struct pl_shader_desc) {
+            .desc = {
+                .name = "src",
+                .type = PL_DESC_SAMPLED_TEX,
+            },
+            .binding = {
+                .object = params->src,
+                .address_mode = PL_TEX_ADDRESS_CLAMP,
+                .sample_mode = params->sample_mode,
+            }
+        });
+
+        GLSL("vec3 fpos = (vec3(pos) + vec3(0.5)) / vec3(%d.0, %d.0, %d.0); \n"
+             "%s src_pos = %s(0.5);                                         \n"
+             "src_pos.x = mix(%f, %f, fpos.x);                              \n",
+             pl_rect_w(dst_rc), pl_rect_h(dst_rc), pl_rect_d(dst_rc),
+             vecs[src_dims], vecs[src_dims],
+             (float) src_rc.x0 / params->src->params.w,
+             (float) src_rc.x1 / params->src->params.w);
+
+        if (params->src->params.h) {
+            GLSL("src_pos.y = mix(%f, %f, fpos.y); \n",
+                 (float) src_rc.y0 / params->src->params.h,
+                 (float) src_rc.y1 / params->src->params.h);
+        }
+
+        if (params->src->params.d) {
+            GLSL("src_pos.z = mix(%f, %f, fpos.z); \n",
+                 (float) src_rc.z0 / params->src->params.d,
+                 (float) src_rc.z1 / params->src->params.d);
+        }
+
+        GLSL("imageStore(%s, dst_pos, %s(%s, src_pos)); \n",
+             dst, sh_tex_fn(sh, params->src->params), src);
+
+    } else {
+
+        ident_t src = sh_desc(sh, (struct pl_shader_desc) {
+            .binding.object = params->src,
+            .desc = {
+                .name   = "src",
+                .type   = PL_DESC_STORAGE_IMG,
+                .access = PL_DESC_ACCESS_READONLY,
+            },
+        });
+
+        if (needs_scaling) {
+            GLSL("ivec3 src_pos = ivec3(round(vec3(%f, %f, %f) * vec3(pos))); \n",
+                 fabs((float) pl_rect_w(src_rc) / pl_rect_w(dst_rc)),
+                 fabs((float) pl_rect_h(src_rc) / pl_rect_h(dst_rc)),
+                 fabs((float) pl_rect_d(src_rc) / pl_rect_d(dst_rc)));
+        } else {
+            GLSL("ivec3 src_pos = pos; \n");
+        }
+
+        GLSL("src_pos = ivec3(%d, %d, %d) * src_pos + ivec3(%d, %d, %d);    \n"
+             "imageStore(%s, dst_pos, imageLoad(%s, %s(src_pos)));          \n",
+             src_rc.x1 < src_rc.x0 ? -1 : 1,
+             src_rc.y1 < src_rc.y0 ? -1 : 1,
+             src_rc.z1 < src_rc.z0 ? -1 : 1,
+             src_rc.x0, src_rc.y0, src_rc.z0,
+             dst, src, ivecs[src_dims]);
+
+    }
+
+    return pl_dispatch_compute(dp, &(struct pl_dispatch_compute_params) {
+        .shader = &sh,
+        .dispatch_size = {
+            groups_x,
+            groups_y,
+            pl_rect_d(dst_rc),
+        },
+    });
 }
 
 void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params)

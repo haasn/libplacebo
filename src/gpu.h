@@ -117,6 +117,11 @@ bool pl_tex_upload_texel(pl_gpu gpu, pl_dispatch dp,
 bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
                            const struct pl_tex_transfer_params *params);
 
+// Both `src` and `dst must be storable. `src` must also be sampleable, if the
+// blit requires linear sampling. Returns false if these conditions are unmet.
+bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
+                         const struct pl_tex_blit_params *params);
+
 void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params);
 
 // Make a deep-copy of the pass params. Note: cached_program etc. are not
