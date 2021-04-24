@@ -2787,10 +2787,9 @@ no_descriptors: ;
             blendState.dstAlphaBlendFactor = blendFactors[blend->dst_alpha];
         }
 
-        static const VkPrimitiveTopology topologies[] = {
+        static const VkPrimitiveTopology topologies[PL_PRIM_TYPE_COUNT] = {
             [PL_PRIM_TRIANGLE_LIST]  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
             [PL_PRIM_TRIANGLE_STRIP] = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
-            [PL_PRIM_TRIANGLE_FAN]   = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
         };
 
         VkGraphicsPipelineCreateInfo cinfo = {

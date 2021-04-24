@@ -2294,10 +2294,9 @@ static void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 
         gl_check_err(gpu, "gl_pass_run: update/bind vertex buffer");
 
-        static const GLenum map_prim[] = {
+        static const GLenum map_prim[PL_PRIM_TYPE_COUNT] = {
             [PL_PRIM_TRIANGLE_LIST]     = GL_TRIANGLES,
             [PL_PRIM_TRIANGLE_STRIP]    = GL_TRIANGLE_STRIP,
-            [PL_PRIM_TRIANGLE_FAN]      = GL_TRIANGLE_FAN,
         };
         GLenum mode = map_prim[pass->params.vertex_type];
 

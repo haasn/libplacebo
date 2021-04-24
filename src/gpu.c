@@ -1408,7 +1408,6 @@ void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             require(params->vertex_count % 3 == 0);
             // fall through
         case PL_PRIM_TRIANGLE_STRIP:
-        case PL_PRIM_TRIANGLE_FAN:
             require(params->vertex_count >= 3);
             break;
         case PL_PRIM_TYPE_COUNT:

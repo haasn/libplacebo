@@ -1061,7 +1061,6 @@ extern const struct pl_blend_params pl_alpha_overlay; // typical alpha compositi
 enum pl_prim_type {
     PL_PRIM_TRIANGLE_LIST,
     PL_PRIM_TRIANGLE_STRIP,
-    PL_PRIM_TRIANGLE_FAN,
     PL_PRIM_TYPE_COUNT,
 };
 
