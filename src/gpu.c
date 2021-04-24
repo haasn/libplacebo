@@ -698,6 +698,8 @@ void pl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
     struct pl_tex_blit_params fixed = *params;
     infer_rc(src, &fixed.src_rc);
     infer_rc(dst, &fixed.dst_rc);
+    strip_coords(src, &fixed.src_rc);
+    strip_coords(dst, &fixed.dst_rc);
 
     require(fixed.src_rc.x0 >= 0 && fixed.src_rc.x0 < src->params.w);
     require(fixed.src_rc.x1 > 0 && fixed.src_rc.x1 <= src->params.w);
@@ -705,23 +707,24 @@ void pl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
     require(fixed.dst_rc.x1 > 0 && fixed.dst_rc.x1 <= dst->params.w);
 
     if (src->params.h) {
-        require(params->dst->params.h);
         require(fixed.src_rc.y0 >= 0 && fixed.src_rc.y0 < src->params.h);
         require(fixed.src_rc.y1 > 0 && fixed.src_rc.y1 <= src->params.h);
+    }
+
+    if (dst->params.h) {
         require(fixed.dst_rc.y0 >= 0 && fixed.dst_rc.y0 < dst->params.h);
         require(fixed.dst_rc.y1 > 0 && fixed.dst_rc.y1 <= dst->params.h);
     }
 
     if (src->params.d) {
-        require(params->dst->params.d);
         require(fixed.src_rc.z0 >= 0 && fixed.src_rc.z0 < src->params.d);
         require(fixed.src_rc.z1 > 0 && fixed.src_rc.z1 <= src->params.d);
+    }
+
+    if (dst->params.d) {
         require(fixed.dst_rc.z0 >= 0 && fixed.dst_rc.z0 < dst->params.d);
         require(fixed.dst_rc.z1 > 0 && fixed.dst_rc.z1 <= dst->params.d);
     }
-
-    strip_coords(src, &fixed.src_rc);
-    strip_coords(dst, &fixed.dst_rc);
 
     struct pl_rect3d full = {0, 0, 0, dst->params.w, dst->params.h, dst->params.d};
     strip_coords(dst, &full);
