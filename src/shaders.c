@@ -275,11 +275,6 @@ ident_t sh_bind(pl_shader sh, pl_tex tex,
                 const char *name, const struct pl_rect2df *rect,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt)
 {
-    if (!SH_GPU(sh)) {
-        SH_FAIL(sh, "Failed binding texture '%s': No GPU available!", name);
-        return NULL;
-    }
-
     if (pl_tex_params_dimension(tex->params) != 2 || !tex->params.sampleable) {
         SH_FAIL(sh, "Failed binding texture '%s': incompatible params!", name);
         return NULL;
