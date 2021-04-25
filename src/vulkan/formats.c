@@ -95,20 +95,12 @@ const struct vk_format vk_formats[] = {
     {VK_FORMAT_R32G32_SFLOAT,         REGFMT("rg32f",    2, 32, FLOAT)},
     {VK_FORMAT_R32G32B32_SFLOAT,      REGFMT("rgb32f",   3, 32, FLOAT)},
     {VK_FORMAT_R32G32B32A32_SFLOAT,   REGFMT("rgba32f",  4, 32, FLOAT)},
-    {VK_FORMAT_R64_SFLOAT,            REGFMT("r64df",    1, 64, FLOAT)},
-    {VK_FORMAT_R64G64_SFLOAT,         REGFMT("rg64df",   2, 64, FLOAT)},
-    {VK_FORMAT_R64G64B64_SFLOAT,      REGFMT("rgb64df",  3, 64, FLOAT)},
-    {VK_FORMAT_R64G64B64A64_SFLOAT,   REGFMT("rgba64df", 4, 64, FLOAT)},
 
     // Float formats (emulated upload/download)
     {VK_FORMAT_R16_SFLOAT,            EMUFMT("r16f",     1, 1, 16, 32, FLOAT)},
     {VK_FORMAT_R16G16_SFLOAT,         EMUFMT("rg16f",    2, 2, 16, 32, FLOAT)},
     {VK_FORMAT_R16G16B16_SFLOAT,      EMUFMT("rgb16f",   3, 3, 16, 32, FLOAT)},
     {VK_FORMAT_R16G16B16A16_SFLOAT,   EMUFMT("rgba16f",  4, 4, 16, 32, FLOAT)},
-    {VK_FORMAT_R64_SFLOAT,            EMUFMT("r64f",     1, 1, 64, 32, FLOAT)},
-    {VK_FORMAT_R64G64_SFLOAT,         EMUFMT("rg64f",    2, 2, 64, 32, FLOAT)},
-    {VK_FORMAT_R64G64B64_SFLOAT,      EMUFMT("rgb64f",   3, 3, 64, 32, FLOAT)},
-    {VK_FORMAT_R64G64B64A64_SFLOAT,   EMUFMT("rgba64f",  4, 4, 64, 32, FLOAT)},
 
     // Integer-sampled formats
     {VK_FORMAT_R8_UINT,               REGFMT("r8u",      1,  8, UINT)},
