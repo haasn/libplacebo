@@ -1676,7 +1676,7 @@ bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params
 bool pl_tex_upload_texel(pl_gpu gpu, pl_dispatch dp,
                          const struct pl_tex_transfer_params *params)
 {
-    const int threads = 256;
+    const int threads = PL_MIN(256, pl_rect_w(params->rc));
     pl_tex tex = params->tex;
     pl_fmt fmt = tex->params.format;
     require(params->buf);
@@ -1751,7 +1751,7 @@ error:
 bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
                            const struct pl_tex_transfer_params *params)
 {
-    const int threads = 256;
+    const int threads = PL_MIN(256, pl_rect_w(params->rc));
     pl_tex tex = params->tex;
     pl_fmt fmt = tex->params.format;
     require(params->buf);
