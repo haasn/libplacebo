@@ -168,6 +168,11 @@ static void vk_destroy_gpu(pl_gpu gpu)
     pl_free((void *) gpu);
 }
 
+struct pl_fmt_vk {
+    const struct vk_format *vk_fmt;
+    bool blit_emulated;
+};
+
 static void vk_setup_formats(struct pl_gpu *gpu)
 {
     struct pl_vk *p = PL_PRIV(gpu);
@@ -226,10 +231,12 @@ static void vk_setup_formats(struct pl_gpu *gpu)
 
         pl_log_level_cap(vk->log, PL_LOG_NONE);
 
-        struct pl_fmt *fmt = pl_alloc_ptr_priv(gpu, fmt, vk_fmt);
-        const struct vk_format **fmtp = PL_PRIV(fmt);
+        struct pl_fmt *fmt = pl_alloc_ptr_priv(gpu, fmt, struct pl_fmt_vk);
+        struct pl_fmt_vk *fmtp = PL_PRIV(fmt);
         *fmt = vk_fmt->fmt;
-        *fmtp = vk_fmt;
+        *fmtp = (struct pl_fmt_vk) {
+            .vk_fmt = vk_fmt
+        };
 
         // For sanity, clear the superfluous fields
         for (int i = fmt->num_components; i < 4; i++) {
@@ -329,6 +336,12 @@ static void vk_setup_formats(struct pl_gpu *gpu)
         for (int i = 0; i < PL_ARRAY_SIZE(bits); i++) {
             if ((texflags & bits[i].flags) == bits[i].flags)
                 fmt->caps |= bits[i].caps;
+        }
+
+        // For blit emulation via compute shaders
+        if (!(fmt->caps & PL_FMT_CAP_BLITTABLE) && (fmt->caps & PL_FMT_CAP_STORABLE)) {
+            fmt->caps |= PL_FMT_CAP_BLITTABLE;
+            fmtp->blit_emulated = true;
         }
 
         // This is technically supported for all textures, but the semantics
@@ -669,13 +682,13 @@ static VkResult vk_create_render_pass(struct vk_ctx *vk, pl_fmt fmt,
                                       VkImageLayout finalLayout,
                                       VkRenderPass *out)
 {
-    const struct vk_format **vk_fmt = PL_PRIV(fmt);
+    struct pl_fmt_vk *fmtp = PL_PRIV(fmt);
 
     VkRenderPassCreateInfo rinfo = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = 1,
         .pAttachments = &(VkAttachmentDescription) {
-            .format = (*vk_fmt)->tfmt,
+            .format = fmtp->vk_fmt->tfmt,
             .samples = VK_SAMPLE_COUNT_1_BIT,
             .loadOp = loadOp,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -900,9 +913,7 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, const char *name)
     bool ret = false;
     VkRenderPass dummyPass = VK_NULL_HANDLE;
 
-    if (params->sampleable || params->renderable || params->storable ||
-        params->format->emulated)
-    {
+    if (params->sampleable || params->renderable || params->storable) {
         static const VkImageViewType viewType[] = {
             [VK_IMAGE_TYPE_1D] = VK_IMAGE_VIEW_TYPE_1D,
             [VK_IMAGE_TYPE_2D] = VK_IMAGE_VIEW_TYPE_2D,
@@ -981,8 +992,8 @@ static pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     tex->sampler_type = PL_SAMPLER_NORMAL;
 
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
-    const struct vk_format **vk_fmt = PL_PRIV(params->format);
-    tex_vk->img_fmt = (*vk_fmt)->tfmt;
+    struct pl_fmt_vk *fmtp = PL_PRIV(params->format);
+    tex_vk->img_fmt = fmtp->vk_fmt->tfmt;
 
     switch (pl_tex_params_dimension(*params)) {
     case 1: tex_vk->type = VK_IMAGE_TYPE_1D; break;
@@ -1019,16 +1030,22 @@ static pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         tex->params.storable = true;
     }
 
+    if (fmtp->blit_emulated) {
+        // Enable what's required for sampling
+        tex->params.sampleable = params->format->caps & PL_FMT_CAP_SAMPLEABLE;
+        tex->params.storable = true;
+    }
+
     VkImageUsageFlags usage = 0;
-    if (params->sampleable)
+    if (tex->params.sampleable)
         usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-    if (params->renderable)
+    if (tex->params.renderable)
         usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    if (params->storable || params->format->emulated)
+    if (tex->params.storable)
         usage |= VK_IMAGE_USAGE_STORAGE_BIT;
-    if (params->host_readable || params->blit_src)
+    if (tex->params.host_readable || tex->params.blit_src)
         usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    if (params->host_writable || params->blit_dst || params->initial_data)
+    if (tex->params.host_writable || tex->params.blit_dst || params->initial_data)
         usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
     if (!usage) {
@@ -1333,6 +1350,17 @@ static void vk_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
     struct vk_ctx *vk = p->vk;
     struct pl_tex_vk *src_vk = PL_PRIV(params->src);
     struct pl_tex_vk *dst_vk = PL_PRIV(params->dst);
+    struct pl_fmt_vk *src_fmtp = PL_PRIV(params->src->params.format);
+    struct pl_fmt_vk *dst_fmtp = PL_PRIV(params->dst->params.format);
+    bool blit_emulated = src_fmtp->blit_emulated || dst_fmtp->blit_emulated;
+
+    struct pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
+    bool requires_scaling = !pl_rect3d_eq(src_rc, dst_rc);
+    if (requires_scaling && blit_emulated) {
+        if (!pl_tex_blit_compute(gpu, p->dp, params))
+            PL_ERR(gpu, "Failed emulating texture blit, incompatible textures?");
+        return;
+    }
 
     struct vk_cmd *cmd = begin_cmd(p, GRAPHICS);
     if (!cmd)
@@ -1355,8 +1383,7 @@ static void vk_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
 
     // When the blit operation doesn't require scaling, we can use the more
     // efficient vkCmdCopyImage instead of vkCmdBlitImage
-    struct pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
-    if (pl_rect3d_eq(src_rc, dst_rc)) {
+    if (!requires_scaling) {
         pl_rect3d_normalize(&src_rc);
 
         VkImageCopy region = {
@@ -1464,6 +1491,13 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
     MASK(blit_src,   PL_FMT_CAP_BLITTABLE);
     MASK(blit_dst,   PL_FMT_CAP_BLITTABLE);
 #undef MASK
+
+    // For simplicity, explicitly mask out blit emulation for wrapped textures
+    struct pl_fmt_vk *fmtp = PL_PRIV(format);
+    if (fmtp->blit_emulated) {
+        tex->params.blit_src = false;
+        tex->params.blit_dst = false;
+    }
 
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     tex_vk->type = VK_IMAGE_TYPE_2D;
@@ -2068,11 +2102,11 @@ static pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
     }
 
     if (is_texel) {
-        const struct vk_format **vk_fmt = PL_PRIV(params->format);
+        struct pl_fmt_vk *fmtp = PL_PRIV(params->format);
         VkBufferViewCreateInfo vinfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
             .buffer = buf_vk->mem.buf,
-            .format = PL_DEF((*vk_fmt)->bfmt, (*vk_fmt)->tfmt),
+            .format = PL_DEF(fmtp->vk_fmt->bfmt, fmtp->vk_fmt->tfmt),
             .offset = buf_vk->mem.offset,
             .range = buf_vk->mem.size,
         };
