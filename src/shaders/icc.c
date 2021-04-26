@@ -113,14 +113,6 @@ static cmsHPROFILE get_profile(pl_log log, cmsContext cms,
         cmsDoTransform(xyz2src, &bp_XYZ, src_black, 1);
         cmsDeleteTransform(xyz2src);
 
-        // Built-in contrast failsafe
-        double contrast = 3.0 / (src_black[0] + src_black[1] + src_black[2]);
-        if (contrast > 100000) {
-            pl_warn(log, "ICC profile detected contrast very high (>100000),"
-                    " falling back to contrast 1000 for sanity");
-            src_black[0] = src_black[1] = src_black[2] = 1.0 / 1000;
-        }
-
         // Build the parametric BT.1886 transfer curve, one per channel
         for (int i = 0; i < 3; i++) {
             const double gamma = 2.40;
