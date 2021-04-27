@@ -480,7 +480,6 @@ static void pl_shader_tests(pl_gpu gpu)
             // edge cases for some reason
             // TODO: figure out why!
             continue;
-            break;
 
         default: epsilon = 1e-6; break;
         }

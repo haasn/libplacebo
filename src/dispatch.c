@@ -75,6 +75,7 @@ struct pass {
 
     // for uniform buffer updates
     struct pl_shader_desc ubo_desc; // temporary
+    int ubo_index;
     pl_buf ubo;
 
     // Cached pl_pass_run_params. This will also contain mutable allocations
@@ -239,9 +240,8 @@ static int cmp_buffer_var(const void *pa, const void *pb)
     return PL_CMP((*a)->layout.offset, (*b)->layout.offset);
 }
 
-static void add_buffer_vars(pl_dispatch dp, pl_str *body,
-                            const struct pl_buffer_var *vars, int num,
-                            void *tmp)
+static void add_buffer_vars(pl_dispatch dp, void *tmp, pl_str *body,
+                            const struct pl_buffer_var *vars, int num)
 {
     // Sort buffer vars
     const struct pl_buffer_var **sorted_vars = pl_calloc_ptr(tmp, num, sorted_vars);
@@ -277,9 +277,9 @@ static inline struct pl_desc_binding sd_binding(const struct pl_shader_desc sd)
     return binding;
 }
 
-static void generate_shaders(pl_dispatch dp, struct pass *pass,
+static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
                              struct pl_pass_params *params, pl_shader sh,
-                             ident_t vert_pos, ident_t out_proj, void *tmp)
+                             ident_t vert_pos, ident_t out_proj)
 {
     pl_gpu gpu = dp->gpu;
     const struct pl_shader_res *res = pl_shader_finalize(sh);
@@ -383,7 +383,7 @@ static void generate_shaders(pl_dispatch dp, struct pass *pass,
         }
 
         ADD(pre, "layout(std430, push_constant) uniform PushC ");
-        add_buffer_vars(dp, pre, pc_bvars.elem, pc_bvars.num, tmp);
+        add_buffer_vars(dp, tmp, pre, pc_bvars.elem, pc_bvars.num);
     }
 
     // Add all of the required descriptors
@@ -468,7 +468,7 @@ static void generate_shaders(pl_dispatch dp, struct pass *pass,
                 ADD(pre, "layout(std140) ");
             }
             ADD(pre, "uniform %s ", desc->name);
-            add_buffer_vars(dp, pre, sd->buffer_vars, sd->num_buffer_vars, tmp);
+            add_buffer_vars(dp, tmp, pre, sd->buffer_vars, sd->num_buffer_vars);
             break;
 
         case PL_DESC_BUF_STORAGE:
@@ -482,7 +482,7 @@ static void generate_shaders(pl_dispatch dp, struct pass *pass,
                 (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
                 (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",
                 desc->name);
-            add_buffer_vars(dp, pre, sd->buffer_vars, sd->num_buffer_vars, tmp);
+            add_buffer_vars(dp, tmp, pre, sd->buffer_vars, sd->num_buffer_vars);
             break;
 
         case PL_DESC_BUF_TEXEL_UNIFORM:
@@ -580,6 +580,7 @@ static void generate_shaders(pl_dispatch dp, struct pass *pass,
         ADD(vert_body, "}");
         ADD_STR(vert_head, *vert_body);
         params->vertex_shader = vert_head->buf;
+        pl_hash_merge(&pass->signature, pl_str_hash(*vert_head));
 
         // GLSL 130+ doesn't use the magic gl_FragColor
         if (gpu->glsl.version >= 130) {
@@ -619,22 +620,11 @@ static void generate_shaders(pl_dispatch dp, struct pass *pass,
 
     ADD(glsl, "}");
     params->glsl_shader = glsl->buf;
+    pl_hash_merge(&pass->signature, pl_str_hash(*glsl));
 }
 
 #undef ADD
 #undef ADD_STR
-
-static bool blend_equal(const struct pl_blend_params *a,
-                        const struct pl_blend_params *b)
-{
-    if (!a && !b)
-        return true;
-    if (!a || !b)
-        return false;
-
-    return a->src_rgb == b->src_rgb && a->dst_rgb == b->dst_rgb &&
-           a->src_alpha == b->src_alpha && a->dst_alpha == b->dst_alpha;
-}
 
 #define pass_age(pass) (dp->current_index - (pass)->last_index)
 
@@ -670,51 +660,15 @@ static void garbage_collect_passes(pl_dispatch dp)
     }
 }
 
-static struct pass *find_pass(pl_dispatch dp, pl_shader sh,
-                              pl_tex target, ident_t vert_pos,
-                              const struct pl_blend_params *blend, bool load,
-                              const struct pl_dispatch_vertex_params *vparams,
-                              ident_t out_proj)
+static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
+                                  pl_tex target, ident_t vert_pos,
+                                  const struct pl_blend_params *blend, bool load,
+                                  const struct pl_dispatch_vertex_params *vparams,
+                                  ident_t out_proj)
 {
-    uint64_t sig = pl_shader_signature(sh);
-
-    for (int i = 0; i < dp->passes.num; i++) {
-        struct pass *p = dp->passes.elem[i];
-        if (p->signature != sig)
-            continue;
-
-        // Failed shader, no additional checks needed
-        if (!p->pass) {
-            p->last_index = dp->current_index;
-            return p;
-        }
-
-        if (pl_shader_is_compute(sh)) {
-            // no special requirements besides the signature
-            p->last_index = dp->current_index;
-            return p;
-        } else {
-            pl_assert(target);
-            pl_fmt tfmt = p->pass->params.target_dummy.params.format;
-            bool raster_ok = target->params.format == tfmt;
-            raster_ok &= blend_equal(p->pass->params.blend_params, blend);
-            raster_ok &= load == p->pass->params.load_target;
-            if (vparams) {
-                raster_ok &= p->pass->params.vertex_type == vparams->vertex_type;
-                raster_ok &= p->pass->params.vertex_stride == vparams->vertex_stride;
-            }
-            if (raster_ok) {
-                p->last_index = dp->current_index;
-                return p;
-            }
-        }
-    }
-
-    void *tmp = pl_tmp(NULL); // for resources attached to `params`
-
     struct pass *pass = pl_alloc_ptr(dp, pass);
     *pass = (struct pass) {
-        .signature = sig,
+        .signature = 0x0, // updated incrementally below
         .last_index = dp->current_index,
         .ubo_desc = {
             .desc = {
@@ -724,27 +678,16 @@ static struct pass *find_pass(pl_dispatch dp, pl_shader sh,
         },
     };
 
-    struct pl_pass_run_params *rparams = &pass->run_params;
+    // For identifiers tied to the lifetime of this shader
+    void *tmp = SH_TMP(sh);
+
     struct pl_pass_params params = {
         .type = pl_shader_is_compute(sh) ? PL_PASS_COMPUTE : PL_PASS_RASTER,
         .num_descriptors = sh->descs.num,
-        .blend_params = blend, // set this for all pass types (for caching)
         .vertex_type = vparams ? vparams->vertex_type : PL_PRIM_TRIANGLE_STRIP,
         .vertex_stride = vparams ? vparams->vertex_stride : 0,
+        .blend_params = blend,
     };
-
-    // Find and attach the cached program, if any
-    for (int i = 0; i < dp->cached_passes.num; i++) {
-        if (dp->cached_passes.elem[i].signature == sig) {
-            PL_DEBUG(dp, "Re-using cached program with signature 0x%llx",
-                     (unsigned long long) sig);
-
-            params.cached_program = dp->cached_passes.elem[i].cached_program;
-            params.cached_program_len = dp->cached_passes.elem[i].cached_program_len;
-            PL_ARRAY_REMOVE_AT(dp->cached_passes, i);
-            break;
-        }
-    }
 
     if (params.type == PL_PASS_RASTER) {
         assert(target);
@@ -777,12 +720,13 @@ static struct pass *find_pass(pl_dispatch dp, pl_shader sh,
             va_loc += (va->fmt->texel_size + va_loc_size - 1) / va_loc_size;
         }
 
-        if (!vparams) {
-            // Generate the vertex array placeholder
-            rparams->vertex_count = 4; // single quad
-            size_t vert_size = rparams->vertex_count * params.vertex_stride;
-            rparams->vertex_data = pl_zalloc(pass, vert_size);
-        }
+        // Hash in the raster state configuration
+        pl_hash_merge(&pass->signature, (uint64_t) params.vertex_type);
+        pl_hash_merge(&pass->signature, (uint64_t) params.vertex_stride);
+        pl_hash_merge(&pass->signature, (uint64_t) params.load_target);
+        pl_hash_merge(&pass->signature, pl_str0_hash(target->params.format->name));
+        if (blend)
+            pl_hash_merge(&pass->signature, pl_mem_hash(blend, sizeof(*blend)));
     }
 
     // Place all the variables; these will dynamically end up in different
@@ -800,10 +744,67 @@ static struct pass *find_pass(pl_dispatch dp, pl_shader sh,
             goto error;
     }
 
-    // Create and attach the UBO if necessary
-    int ubo_index = -1;
+    // Now that we know the variable placement, finalize pushc/UBO sizes
+    params.push_constants_size = PL_ALIGN2(params.push_constants_size, 4);
     size_t ubo_size = sh_buf_desc_size(&pass->ubo_desc);
     if (ubo_size) {
+        pass->ubo_index = sh->descs.num;
+        sh_desc(sh, pass->ubo_desc);
+    };
+
+    // Place and fill in the descriptors
+    const int num_descs = sh->descs.num;
+    int binding[PL_DESC_TYPE_COUNT] = {0};
+    params.num_descriptors = num_descs;
+    params.descriptors = pl_calloc_ptr(tmp, num_descs, params.descriptors);
+    for (int i = 0; i < num_descs; i++) {
+        struct pl_desc *desc = &params.descriptors[i];
+        *desc = sh->descs.elem[i].desc;
+        desc->binding = binding[pl_desc_namespace(dp->gpu, desc->type)]++;
+    }
+
+    // Finalize the shader and look it up in the pass cache
+    generate_shaders(dp, tmp, pass, &params, sh, vert_pos, out_proj);
+    for (int i = 0; i < dp->passes.num; i++) {
+        struct pass *p = dp->passes.elem[i];
+        if (p->signature != pass->signature)
+            continue;
+
+        // Found existing shader, re-use directly
+        if (p->ubo)
+            sh->descs.elem[p->ubo_index].binding.object = p->ubo;
+        p->last_index = dp->current_index;
+        pl_free(pass);
+        return p;
+    }
+
+    // Find and attach the cached program, if any
+    for (int i = 0; i < dp->cached_passes.num; i++) {
+        if (dp->cached_passes.elem[i].signature == pass->signature) {
+            PL_DEBUG(dp, "Re-using cached program with signature 0x%llx",
+                     (unsigned long long) pass->signature);
+
+            params.cached_program = dp->cached_passes.elem[i].cached_program;
+            params.cached_program_len = dp->cached_passes.elem[i].cached_program_len;
+            PL_ARRAY_REMOVE_AT(dp->cached_passes, i);
+            break;
+        }
+    }
+
+    pass->pass = pl_pass_create(dp->gpu, &params);
+    if (!pass->pass) {
+        PL_ERR(dp, "Failed creating render pass for dispatch");
+        // Add it anyway
+    }
+
+    struct pl_pass_run_params *rparams = &pass->run_params;
+    rparams->pass = pass->pass;
+    rparams->push_constants = pl_zalloc(pass, params.push_constants_size);
+    rparams->desc_bindings = pl_calloc_ptr(pass, params.num_descriptors,
+                                           rparams->desc_bindings);
+
+    if (ubo_size && pass->pass) {
+        // Create the UBO
         pass->ubo = pl_buf_create(dp->gpu, &(struct pl_buf_params) {
             .size = ubo_size,
             .uniform = true,
@@ -815,48 +816,23 @@ static struct pass *find_pass(pl_dispatch dp, pl_shader sh,
             goto error;
         }
 
-        ubo_index = sh->descs.num;
-        pass->ubo_desc.binding.object = pass->ubo;
-        sh_desc(sh, pass->ubo_desc);
+        sh->descs.elem[pass->ubo_index].binding.object = pass->ubo;
     }
 
-    // Place and fill in the descriptors
-    int num = sh->descs.num;
-    int binding[PL_DESC_TYPE_COUNT] = {0};
-    params.num_descriptors = num;
-    params.descriptors = pl_calloc_ptr(tmp, num, params.descriptors);
-    rparams->desc_bindings = pl_calloc_ptr(pass, num, rparams->desc_bindings);
-    for (int i = 0; i < num; i++) {
-        struct pl_desc *desc = &params.descriptors[i];
-        *desc = sh->descs.elem[i].desc;
-        desc->binding = binding[pl_desc_namespace(dp->gpu, desc->type)]++;
+    if (params.type == PL_PASS_RASTER && !vparams) {
+        // Generate the vertex array placeholder
+        rparams->vertex_count = 4; // single quad
+        size_t vert_size = rparams->vertex_count * params.vertex_stride;
+        rparams->vertex_data = pl_zalloc(pass, vert_size);
     }
 
-    // Pre-fill the desc_binding for the UBO
-    if (pass->ubo) {
-        pl_assert(ubo_index >= 0);
-        rparams->desc_bindings[ubo_index].object = pass->ubo;
-    }
-
-    // Create the push constants region
-    params.push_constants_size = PL_ALIGN2(params.push_constants_size, 4);
-    rparams->push_constants = pl_zalloc(pass, params.push_constants_size);
-
-    // Finally, finalize the shaders and create the pass itself
-    generate_shaders(dp, pass, &params, sh, vert_pos, out_proj, tmp);
-    pass->pass = rparams->pass = pl_pass_create(dp->gpu, &params);
-    if (!pass->pass) {
-        PL_ERR(dp, "Failed creating render pass for dispatch");
-        goto error;
-    }
-
-    // fall through
-error:
-    pass->ubo_desc = (struct pl_shader_desc) {0}; // contains temporary pointers
-    pl_free(tmp);
     garbage_collect_passes(dp);
     PL_ARRAY_APPEND(dp, dp->passes, pass);
     return pass;
+
+error:
+    pl_free(pass);
+    return NULL;
 }
 
 static void update_pass_var(pl_dispatch dp, struct pass *pass,
@@ -1094,8 +1070,8 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
     rc_norm.y1 = PL_MIN(rc_norm.y1, tpars->h);
     bool load = params->blend_params || !pl_rect2d_eq(rc_norm, full);
 
-    struct pass *pass = find_pass(dp, sh, params->target, vert_pos,
-                                  params->blend_params, load, NULL, NULL);
+    struct pass *pass = finalize_pass(dp, sh, params->target, vert_pos,
+                                      params->blend_params, load, NULL, NULL);
 
     // Silently return on failed passes
     if (!pass->pass)
@@ -1201,7 +1177,7 @@ bool pl_dispatch_compute(pl_dispatch dp, const struct pl_dispatch_compute_params
                                &(ident_t){0});
     }
 
-    struct pass *pass = find_pass(dp, sh, NULL, NULL, NULL, false, NULL, NULL);
+    struct pass *pass = finalize_pass(dp, sh, NULL, NULL, NULL, false, NULL, NULL);
 
     // Silently return on failed passes
     if (!pass->pass)
@@ -1339,8 +1315,8 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
     }
 
     ident_t vert_pos = params->vertex_attribs[pos_idx].name;
-    struct pass *pass = find_pass(dp, sh, params->target, vert_pos,
-                                  params->blend_params, true, params, out_proj);
+    struct pass *pass = finalize_pass(dp, sh, params->target, vert_pos,
+                                      params->blend_params, true, params, out_proj);
 
     // Silently return on failed passes
     if (!pass->pass)

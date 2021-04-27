@@ -154,6 +154,11 @@ static inline uint64_t pl_str_hash(pl_str str)
     return pl_mem_hash(str.buf, str.len);
 }
 
+static inline uint64_t pl_str0_hash(const char *str)
+{
+    return pl_mem_hash(str, str ? strlen(str) : 0);
+}
+
 static inline bool pl_str_equals(pl_str str1, pl_str str2)
 {
     if (str1.len != str2.len)
