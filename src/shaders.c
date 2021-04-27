@@ -176,17 +176,6 @@ bool pl_shader_output_size(const pl_shader sh, int *w, int *h)
     return true;
 }
 
-uint64_t pl_shader_signature(const pl_shader sh)
-{
-    uint64_t res = 0;
-    for (int i = 0; i < PL_ARRAY_SIZE(sh->buffers); i++)
-        res ^= pl_str_hash(sh->buffers[i]);
-
-    // FIXME: also hash in the configuration of the descriptors/variables
-
-    return res;
-}
-
 ident_t sh_fresh(pl_shader sh, const char *name)
 {
     return pl_asprintf(SH_TMP(sh), "_%s_%d_%u", PL_DEF(name, "var"),
