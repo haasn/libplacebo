@@ -112,6 +112,26 @@ bool pl_fmt_is_ordered(pl_fmt fmt)
     return ret;
 }
 
+bool pl_fmt_is_float(pl_fmt fmt)
+{
+    switch (fmt->type) {
+    case PL_FMT_UNKNOWN: // more likely than not
+    case PL_FMT_FLOAT:
+    case PL_FMT_UNORM:
+    case PL_FMT_SNORM:
+        return true;
+
+    case PL_FMT_UINT:
+    case PL_FMT_SINT:
+        return false;
+
+    case PL_FMT_TYPE_COUNT:
+        break;
+    }
+
+    pl_unreachable();
+}
+
 static void gpu_verify(pl_gpu gpu)
 {
     pl_assert(gpu->ctx == gpu->log);
@@ -642,17 +662,32 @@ bool pl_tex_recreate(pl_gpu gpu, pl_tex *tex, const struct pl_tex_params *params
     return !!*tex;
 }
 
-void pl_tex_clear(pl_gpu gpu, pl_tex dst, const float color[4])
+void pl_tex_clear_ex(pl_gpu gpu, pl_tex dst, const union pl_clear_color color)
 {
     require(dst->params.blit_dst);
 
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     if (impl->tex_invalidate)
         impl->tex_invalidate(gpu, dst);
-    impl->tex_clear(gpu, dst, color);
+    impl->tex_clear_ex(gpu, dst, color);
 
 error:
     return;
+}
+
+void pl_tex_clear(pl_gpu gpu, pl_tex dst, const float color[4])
+{
+    if (!pl_fmt_is_float(dst->params.format)) {
+        PL_ERR(gpu, "Cannot call `pl_tex_clear` on integer textures, please "
+               "use `pl_tex_clear_ex` instead.");
+        return;
+    }
+
+    const union pl_clear_color col = {
+        .f = { color[0], color[1], color[2], color[3] },
+    };
+
+    pl_tex_clear_ex(gpu, dst, col);
 }
 
 void pl_tex_invalidate(pl_gpu gpu, pl_tex tex)

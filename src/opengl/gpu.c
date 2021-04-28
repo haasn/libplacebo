@@ -1210,7 +1210,7 @@ static void gl_tex_invalidate(pl_gpu gpu, pl_tex tex)
     release_current(gpu);
 }
 
-static void gl_tex_clear(pl_gpu gpu, pl_tex tex, const float color[4])
+static void gl_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
 {
     if (!make_current(gpu))
         return;
@@ -1218,8 +1218,27 @@ static void gl_tex_clear(pl_gpu gpu, pl_tex tex, const float color[4])
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     pl_assert(tex_gl->fbo || tex_gl->wrapped_fb);
 
+    switch (tex->params.format->type) {
+    case PL_FMT_UNKNOWN:
+    case PL_FMT_FLOAT:
+    case PL_FMT_UNORM:
+    case PL_FMT_SNORM:
+        glClearColor(color.f[0], color.f[1], color.f[2], color.f[3]);
+        break;
+
+    case PL_FMT_UINT:
+        glClearColorIuiEXT(color.u[0], color.u[1], color.u[2], color.u[3]);
+        break;
+
+    case PL_FMT_SINT:
+        glClearColorIiEXT(color.i[0], color.i[1], color.i[2], color.i[3]);
+        break;
+
+    case PL_FMT_TYPE_COUNT:
+        pl_unreachable();
+    }
+
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
-    glClearColor(color[0], color[1], color[2], color[3]);
     glClear(GL_COLOR_BUFFER_BIT);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     gl_check_err(gpu, "gl_tex_clear");
@@ -2472,7 +2491,7 @@ static const struct pl_gpu_fns pl_fns_gl = {
     .tex_create             = gl_tex_create,
     .tex_destroy            = gl_tex_destroy,
     .tex_invalidate         = gl_tex_invalidate,
-    .tex_clear              = gl_tex_clear,
+    .tex_clear_ex           = gl_tex_clear_ex,
     .tex_blit               = gl_tex_blit,
     .tex_upload             = gl_tex_upload,
     .tex_download           = gl_tex_download,

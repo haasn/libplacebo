@@ -43,7 +43,7 @@ struct pl_gpu_fns {
 
     GPU_PFN(tex_create);
     GPU_PFN(tex_invalidate); // optional
-    GPU_PFN(tex_clear); // optional if no blittable formats
+    GPU_PFN(tex_clear_ex); // optional if no blittable formats
     GPU_PFN(tex_blit); // optional if no blittable formats
     GPU_PFN(tex_upload);
     GPU_PFN(tex_download);

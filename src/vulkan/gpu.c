@@ -1312,7 +1312,7 @@ static void vk_tex_invalidate(pl_gpu gpu, pl_tex tex)
     tex_vk->may_invalidate = true;
 }
 
-static void vk_tex_clear(pl_gpu gpu, pl_tex tex, const float color[4])
+static void vk_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
@@ -1327,9 +1327,8 @@ static void vk_tex_clear(pl_gpu gpu, pl_tex tex, const float color[4])
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 false);
 
-    VkClearColorValue clearColor = {0};
-    for (int c = 0; c < 4; c++)
-        clearColor.float32[c] = color[c];
+    assert(sizeof(VkClearColorValue) == sizeof(union pl_clear_color));
+    const VkClearColorValue *clearColor = (const VkClearColorValue *) &color;
 
     static const VkImageSubresourceRange range = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1338,7 +1337,7 @@ static void vk_tex_clear(pl_gpu gpu, pl_tex tex, const float color[4])
     };
 
     vk->CmdClearColorImage(cmd->buf, tex_vk->img, tex_vk->current_layout,
-                           &clearColor, 1, &range);
+                           clearColor, 1, &range);
 
     tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
     finish_cmd(p, &cmd);
@@ -3666,7 +3665,7 @@ static const struct pl_gpu_fns pl_fns_vk = {
     .tex_create             = vk_tex_create,
     .tex_destroy            = vk_tex_deref,
     .tex_invalidate         = vk_tex_invalidate,
-    .tex_clear              = vk_tex_clear,
+    .tex_clear_ex           = vk_tex_clear_ex,
     .tex_blit               = vk_tex_blit,
     .tex_upload             = vk_tex_upload,
     .tex_download           = vk_tex_download,

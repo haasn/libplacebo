@@ -293,6 +293,9 @@ struct pl_fmt {
 // in memory in the order RGBA.
 bool pl_fmt_is_ordered(pl_fmt fmt);
 
+// Returns whether or not a pl_fmt is sampled as a float (e.g. UNORM)
+bool pl_fmt_is_float(pl_fmt fmt);
+
 // Helper function to find a format with a given number of components and
 // minimum effective precision per component. If `host_bits` is set, then the
 // format will always be non-opaque, unpadded, ordered and have exactly this
@@ -709,9 +712,18 @@ bool pl_tex_recreate(pl_gpu gpu, pl_tex *tex, const struct pl_tex_params *params
 // undefined.
 void pl_tex_invalidate(pl_gpu gpu, pl_tex tex);
 
+union pl_clear_color {
+    float f[4];
+    int32_t i[4];
+    uint32_t u[4];
+};
+
 // Clear the dst texture with the given color (rgba). This is functionally
 // identical to a blit operation, which means `dst->params.blit_dst` must be
 // set.
+void pl_tex_clear_ex(pl_gpu gpu, pl_tex dst, const union pl_clear_color color);
+
+// Wrapper for `pl_tex_clear_ex` which only works for floating point textures.
 void pl_tex_clear(pl_gpu gpu, pl_tex dst, const float color[4]);
 
 struct pl_tex_blit_params {

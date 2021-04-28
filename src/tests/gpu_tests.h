@@ -121,7 +121,7 @@ static void pl_test_roundtrip(pl_gpu gpu, pl_tex tex[2],
     // Test blitting, if possible for this format
     pl_tex dst_tex = tex[0];
     if (tex[0]->params.blit_src && tex[1]->params.blit_dst) {
-        pl_tex_clear(gpu, tex[1], (float[4]){0.0}); // for testing
+        pl_tex_clear_ex(gpu, tex[1], (union pl_clear_color){0}); // for testing
         pl_tex_blit(gpu, &(struct pl_tex_blit_params) {
             .src = tex[0],
             .dst = tex[1],
@@ -268,7 +268,7 @@ static void pl_shader_tests(pl_gpu gpu)
     });
     REQUIRE(fbo);
 
-    pl_tex_clear(gpu, fbo, (float[4]){0});
+    pl_tex_clear_ex(gpu, fbo, (union pl_clear_color){0});
 
     pl_fmt vert_fmt;
     vert_fmt = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 3);
@@ -915,7 +915,7 @@ static void pl_render_tests(pl_gpu gpu)
         goto error;
 
     rr = pl_renderer_create(gpu->log, gpu);
-    pl_tex_clear(gpu, fbo, (float[4]){0});
+    pl_tex_clear_ex(gpu, fbo, (union pl_clear_color){0});
 
     struct pl_frame image = {
         .num_planes     = 1,
