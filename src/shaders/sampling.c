@@ -170,12 +170,12 @@ static bool setup_src(pl_shader sh, const struct pl_sample_src *src,
 
         pl_assert(src->format);
         switch (src->format) {
+        case PL_FMT_UNKNOWN:
         case PL_FMT_FLOAT:
         case PL_FMT_UNORM:
         case PL_FMT_SNORM: sh->sampler_prefix = ' '; break;
         case PL_FMT_UINT: sh->sampler_prefix = 'u'; break;
         case PL_FMT_SINT: sh->sampler_prefix = 's'; break;
-        case PL_FMT_UNKNOWN:
         case PL_FMT_TYPE_COUNT:
             pl_unreachable();
         }
