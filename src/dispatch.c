@@ -142,7 +142,7 @@ pl_shader pl_dispatch_begin_ex(pl_dispatch dp, bool unique)
     pthread_mutex_unlock(&dp->lock);
 
     if (sh) {
-        pl_shader_reset(sh, &params);
+        sh->res.params = params;
         return sh;
     }
 
@@ -1369,6 +1369,9 @@ void pl_dispatch_abort(pl_dispatch dp, pl_shader *psh)
     pl_shader sh = *psh;
     if (!sh)
         return;
+
+    // Reset this as early as possible to free temporary resources
+    pl_shader_reset(sh, NULL);
 
     // Re-add the shader to the internal pool of shaders
     pthread_mutex_lock(&dp->lock);
