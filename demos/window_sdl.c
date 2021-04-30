@@ -91,6 +91,7 @@ static struct window *sdl_create(pl_log log, const char *title,
 
 #ifdef USE_VK
     struct pl_vk_inst_params iparams = pl_vk_inst_default_params;
+    iparams.get_proc_addr = vkGetInstanceProcAddr;
     iparams.debug = DEBUG;
 
     unsigned int num = 0;
@@ -118,6 +119,7 @@ static struct window *sdl_create(pl_log log, const char *title,
 
     struct pl_vulkan_params params = pl_vulkan_default_params;
     params.instance = p->vk_inst->instance;
+    params.get_proc_addr = p->vk_inst->get_proc_addr;
     params.surface = p->surf;
     params.allow_software = true;
     p->vk = pl_vulkan_create(log, &params);

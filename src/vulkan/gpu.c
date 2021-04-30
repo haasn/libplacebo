@@ -1912,6 +1912,7 @@ static void vk_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
                         pl_buf src, size_t src_offset, size_t size)
 {
     struct pl_vk *p = PL_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
     struct pl_buf_vk *dst_vk = PL_PRIV(dst);
     struct pl_buf_vk *src_vk = PL_PRIV(src);
 
@@ -1932,8 +1933,8 @@ static void vk_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
         .size = size,
     };
 
-    vkCmdCopyBuffer(cmd->buf, src_vk->mem.buf, dst_vk->mem.buf,
-                    1, &region);
+    vk->CmdCopyBuffer(cmd->buf, src_vk->mem.buf, dst_vk->mem.buf,
+                      1, &region);
 
     buf_signal(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT);
     buf_signal(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT);

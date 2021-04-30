@@ -20,6 +20,12 @@
 #include "utils.h"
 #include "gpu.h"
 
+#ifdef PL_HAVE_VK_PROC_ADDR
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(
+    VkInstance                                  instance,
+    const char*                                 pName);
+#endif
+
 const struct pl_vk_inst_params pl_vk_inst_default_params = {0};
 
 struct vk_fun {
@@ -1333,6 +1339,7 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
     } else {
         struct pl_vulkan_device_params dparams = {
             .instance       = vk->inst,
+            .get_proc_addr  = params->get_proc_addr,
             .surface        = params->surface,
             .device_name    = params->device_name,
             .allow_software = params->allow_software,

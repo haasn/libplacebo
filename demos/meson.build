@@ -35,19 +35,13 @@ endif
 
 conf_demos = configuration_data()
 conf_demos.set('HAVE_NUKLEAR', nuklear_found)
-conf_demos.set('HAVE_GLFW', glfw.found())
-conf_demos.set('HAVE_SDL', sdl.found())
-
-configure_file(
-  output: 'config_demos.h',
-  configuration: conf_demos,
-)
 
 apis = []
 
 # Enable all supported combinations of API and windowing system
 if glfw.found()
   if vulkan.found()
+    conf_demos.set('HAVE_GLFW_VULKAN', true)
     apis += static_library('glfw-vk',
       dependencies: [libplacebo, vulkan, glfw],
       sources: 'window_glfw.c',
@@ -56,6 +50,7 @@ if glfw.found()
   endif
 
   if opengl.found()
+    conf_demos.set('HAVE_GLFW_OPENGL', true)
     apis += static_library('glfw-gl',
       dependencies: [libplacebo, glfw],
       sources: 'window_glfw.c',
@@ -66,6 +61,7 @@ endif
 
 if sdl.found()
   if vulkan.found()
+    conf_demos.set('HAVE_SDL_VULKAN', true)
     apis += static_library('sdl-vk',
       dependencies: [libplacebo, vulkan, sdl],
       sources: 'window_sdl.c',
@@ -74,6 +70,7 @@ if sdl.found()
   endif
 
   if opengl.found()
+    conf_demos.set('HAVE_SDL_OPENGL', true)
     apis += static_library('sdl-gl',
       dependencies: [libplacebo, sdl],
       sources: 'window_sdl.c',
@@ -87,6 +84,11 @@ if apis.length() == 0
           'and graphical APIs was found. Demo programs require either GLFW or ' +
           'SDL and either Vulkan or OpenGL to function.')
 else
+
+  configure_file(
+    output: 'config_demos.h',
+    configuration: conf_demos,
+  )
 
   dep = declare_dependency(
     dependencies: libplacebo,

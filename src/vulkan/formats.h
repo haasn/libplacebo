@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include "gpu.h"
 #include "common.h"
+#include "gpu.h"
 
 struct vk_format {
     VkFormat tfmt;     // internal vulkan format enum (textures)

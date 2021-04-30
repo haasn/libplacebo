@@ -17,6 +17,7 @@
 
 #pragma once
 
+#define VK_NO_PROTOTYPES
 #include "../common.h"
 #include "../log.h"
 #include <pthread.h>

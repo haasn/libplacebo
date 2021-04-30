@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include "../gpu.h"
-
 #include "common.h"
 #include "utils.h"
+
+#include "../gpu.h"
 
 pl_gpu pl_gpu_create_vk(struct vk_ctx *vk);
 

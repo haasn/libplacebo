@@ -24,6 +24,18 @@ if opengl.found()
   endif
 endif
 
+vulkan_headers = vulkan
+if vulkan.found() and not get_option('vulkan-link')
+  vulkan_headers = vulkan.partial_dependency(includes: true)
+endif
+
+if not vulkan_headers.found() and not get_option('vulkan').disabled()
+  # Probe for <vulkan/vulkan.h> as a fallback for the vulkan headers
+  if cc.check_header('vulkan/vulkan.h')
+    vulkan_headers = declare_dependency()
+  endif
+endif
+
 # work-arounds for glslang braindeath
 glslang_combined = disabler()
 glslang_min_ver = '>=0.0.2763'
@@ -215,7 +227,7 @@ components = [
     'srcs': 'spirv_shaderc.c',
   }, {
     'name': 'vulkan',
-    'deps': vulkan,
+    'deps': vulkan_headers,
     'srcs': [ 'vulkan/command.c',
               'vulkan/context.c',
               'vulkan/formats.c',
@@ -225,7 +237,6 @@ components = [
               'vulkan/utils.c',
             ],
     'headers': 'vulkan.h',
-    'test': 'vulkan.c'
   }, {
     'name': 'opengl',
     'deps': opengl,
@@ -273,7 +284,7 @@ if comps.has('vulkan')
     command: [prog_python, '@INPUT@', registry_xml, '@OUTPUT@']
   )
 
-  if get_option('vulkan-link')
+  if vulkan.found() and get_option('vulkan-link')
     defs += '#define PL_HAVE_VK_PROC_ADDR 1'
     pc_vars += 'pl_has_vk_proc_addr=1'
   else
@@ -374,6 +385,11 @@ if get_option('tests')
     tests += 'libav.c'
   endif
 
+  if vulkan.found()
+    tdep += vulkan
+    tests += 'vulkan.c'
+  endif
+
   foreach t : tests
     e = executable('test.' + t, 'tests/' + t,
         objects: lib.extract_all_objects(recursive: false),
@@ -408,7 +424,7 @@ if get_option('tests')
 endif
 
 if get_option('bench')
-  if not vulkan.found() or not get_option('vulkan-link')
+  if not vulkan.found()
     error('Compiling the benchmark suite requires vulkan support!')
   endif
 

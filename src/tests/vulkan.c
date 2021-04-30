@@ -112,6 +112,7 @@ int main()
     pl_vk_inst inst = pl_vk_inst_create(log, &(struct pl_vk_inst_params) {
         .debug = true,
         .debug_extra = true,
+        .get_proc_addr = vkGetInstanceProcAddr,
         .opt_extensions = (const char *[]){
             VK_KHR_SURFACE_EXTENSION_NAME,
             "VK_EXT_headless_surface", // in case it isn't defined
@@ -122,8 +123,8 @@ int main()
     if (!inst)
         return SKIP;
 
-    PL_VK_LOAD_FUN(inst->instance, EnumeratePhysicalDevices, vkGetInstanceProcAddr);
-    PL_VK_LOAD_FUN(inst->instance, GetPhysicalDeviceProperties, vkGetInstanceProcAddr);
+    PL_VK_LOAD_FUN(inst->instance, EnumeratePhysicalDevices, inst->get_proc_addr);
+    PL_VK_LOAD_FUN(inst->instance, GetPhysicalDeviceProperties, inst->get_proc_addr);
 
     uint32_t num = 0;
     EnumeratePhysicalDevices(inst->instance, &num, NULL);
@@ -138,7 +139,7 @@ int main()
     VkSurfaceKHR surf = NULL;
 
 #ifdef VK_EXT_headless_surface
-    PL_VK_LOAD_FUN(inst->instance, CreateHeadlessSurfaceEXT, vkGetInstanceProcAddr);
+    PL_VK_LOAD_FUN(inst->instance, CreateHeadlessSurfaceEXT, inst->get_proc_addr);
     if (CreateHeadlessSurfaceEXT) {
         VkHeadlessSurfaceCreateInfoEXT info = {
             .sType = VK_STRUCTURE_TYPE_HEADLESS_SURFACE_CREATE_INFO_EXT,
@@ -153,6 +154,7 @@ int main()
     VkPhysicalDevice dev;
     dev = pl_vulkan_choose_device(log, &(struct pl_vulkan_device_params) {
         .instance = inst->instance,
+        .get_proc_addr = inst->get_proc_addr,
         .allow_software = true,
         .surface = surf,
     });
@@ -167,12 +169,14 @@ int main()
         // Make sure we can choose this device by name
         dev = pl_vulkan_choose_device(log, &(struct pl_vulkan_device_params) {
             .instance = inst->instance,
+            .get_proc_addr = inst->get_proc_addr,
             .device_name = props.deviceName,
         });
         REQUIRE(dev == devices[i]);
 
         struct pl_vulkan_params params = pl_vulkan_default_params;
         params.instance = inst->instance;
+        params.get_proc_addr = inst->get_proc_addr;
         params.device = devices[i];
         params.queue_count = 8; // test inter-queue stuff
         params.surface = surf;
@@ -187,6 +191,7 @@ int main()
         // Test importing this context via the vulkan interop API
         struct pl_vulkan_import_params iparams = {
             .instance = vk->instance,
+            .get_proc_addr = inst->get_proc_addr,
             .phys_device = vk->phys_device,
             .device = vk->device,
 

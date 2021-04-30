@@ -9,23 +9,18 @@ extern const struct window_impl win_impl_sdl_vk;
 extern const struct window_impl win_impl_sdl_gl;
 
 static const struct window_impl *win_impls[] = {
-#ifdef HAVE_GLFW
-# ifdef PL_HAVE_VULKAN
+#ifdef HAVE_GLFW_VULKAN
     &win_impl_glfw_vk,
-# endif
-# ifdef PL_HAVE_OPENGL
+#endif
+#ifdef HAVE_GLFW_OPENGL
     &win_impl_glfw_gl,
-# endif
-#endif // HAVE_GLFW
-
-#ifdef HAVE_SDL
-# ifdef PL_HAVE_VULKAN
+#endif
+#ifdef HAVE_SDL_VULKAN
     &win_impl_sdl_vk,
-# endif
-# ifdef PL_HAVE_OPENGL
+#endif
+#ifdef HAVE_SDL_OPENGL
     &win_impl_sdl_gl,
-# endif
-#endif // HAVE_SDL
+#endif
     NULL
 };
 
