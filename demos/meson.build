@@ -79,16 +79,16 @@ if sdl.found()
   endif
 endif
 
+configure_file(
+  output: 'config_demos.h',
+  configuration: conf_demos,
+)
+
 if apis.length() == 0
   warning('Demos enabled but no supported combination of windowing system ' +
           'and graphical APIs was found. Demo programs require either GLFW or ' +
           'SDL and either Vulkan or OpenGL to function.')
 else
-
-  configure_file(
-    output: 'config_demos.h',
-    configuration: conf_demos,
-  )
 
   dep = declare_dependency(
     dependencies: libplacebo,
