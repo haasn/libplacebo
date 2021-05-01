@@ -90,7 +90,7 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
     struct pl_gpu *gpu = (struct pl_gpu *) pgpu;
     struct pl_gl *p = PL_PRIV(gpu);
 
-    struct pl_fmt *fmt = pl_alloc_ptr_priv(gpu, fmt, gl_fmt);
+    struct pl_fmt *fmt = pl_alloc_obj(gpu, fmt, gl_fmt);
     const struct gl_format **fmtp = PL_PRIV(fmt);
     *fmt = gl_fmt->tmpl;
     *fmtp = gl_fmt;
@@ -282,7 +282,7 @@ static inline size_t get_page_size()
 
 pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params *params)
 {
-    struct pl_gpu *gpu = pl_zalloc_priv(NULL, struct pl_gpu, struct pl_gl);
+    struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct pl_gl);
     gpu->log = log;
     gpu->ctx = gpu->log;
     gpu->glsl.gles = !epoxy_is_desktop_gl();
@@ -731,7 +731,7 @@ static pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         return NULL;
 
     struct pl_gl *p = PL_PRIV(gpu);
-    struct pl_tex *tex = pl_zalloc_priv(NULL, struct pl_tex, struct pl_tex_gl);
+    struct pl_tex *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_gl);
     tex->params = *params;
     tex->params.initial_data = NULL;
     tex->sampler_type = PL_SAMPLER_NORMAL;
@@ -979,7 +979,7 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
         return NULL;
 
     struct pl_gl *p = PL_PRIV(gpu);
-    struct pl_tex *tex = pl_alloc_priv(NULL, struct pl_tex, struct pl_tex_gl);
+    struct pl_tex *tex = pl_alloc_obj(NULL, tex, struct pl_tex_gl);
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     *tex = (struct pl_tex) {
         .params = {
@@ -1033,7 +1033,7 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
         }
 
         if (!fmt) {
-            fmt = pl_alloc_priv((void *) gpu, struct pl_fmt, const struct gl_format *);
+            fmt = pl_alloc_obj((void *) gpu, fmt, const struct gl_format *);
             memcpy((struct pl_fmt *) fmt, &new_fmt, sizeof(new_fmt));
             glfmt = pl_memdup((void *) gpu, &new_glfmt, sizeof(new_glfmt));
             const struct gl_format **glfmtp = PL_PRIV(fmt);
@@ -1312,7 +1312,7 @@ static pl_buf gl_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
     if (!make_current(gpu))
         return NULL;
 
-    struct pl_buf *buf = pl_zalloc_priv(NULL, struct pl_buf, struct pl_buf_gl);
+    struct pl_buf *buf = pl_zalloc_obj(NULL, buf, struct pl_buf_gl);
     buf->params = *params;
     buf->params.initial_data = NULL;
 
@@ -1932,7 +1932,7 @@ static pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
         return NULL;
 
     struct pl_gl *p = PL_PRIV(gpu);
-    struct pl_pass *pass = pl_zalloc_priv(NULL, struct pl_pass, struct pl_pass_gl);
+    struct pl_pass *pass = pl_zalloc_obj(NULL, pass, struct pl_pass_gl);
     struct pl_pass_gl *pass_gl = PL_PRIV(pass);
     pass->params = pl_pass_params_copy(pass, params);
 

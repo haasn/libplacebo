@@ -43,7 +43,7 @@ pl_log pl_log_create(int api_ver, const struct pl_log_params *params)
         abort();
     }
 
-    struct pl_log *log = pl_zalloc_priv(NULL, struct pl_log, struct priv);
+    struct pl_log *log = pl_zalloc_obj(NULL, log, struct priv);
     struct priv *p = PL_PRIV(log);
     log->params = *PL_DEF(params, &pl_log_default_params);
     int err = pthread_mutex_init(&p->lock, NULL);

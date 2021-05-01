@@ -798,7 +798,7 @@ debug_exts_done: ;
         goto error;
     }
 
-    struct pl_vk_inst *pl_vk = pl_zalloc_priv(NULL, struct pl_vk_inst, struct priv);
+    struct pl_vk_inst *pl_vk = pl_zalloc_obj(NULL, pl_vk, struct priv);
     struct priv *p = PL_PRIV(pl_vk);
     *pl_vk = (struct pl_vk_inst) {
         .instance = inst,
@@ -1299,7 +1299,7 @@ error:
 pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
 {
     params = PL_DEF(params, &pl_vulkan_default_params);
-    struct pl_vulkan *pl_vk = pl_zalloc_priv(NULL, struct pl_vulkan, struct vk_ctx);
+    struct pl_vulkan *pl_vk = pl_zalloc_obj(NULL, pl_vk, struct vk_ctx);
     struct vk_ctx *vk = PL_PRIV(pl_vk);
     *vk = (struct vk_ctx) {
         .alloc = pl_vk,
@@ -1443,7 +1443,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
 {
     void *tmp = pl_tmp(NULL);
 
-    struct pl_vulkan *pl_vk = pl_zalloc_priv(NULL, struct pl_vulkan, struct vk_ctx);
+    struct pl_vulkan *pl_vk = pl_zalloc_obj(NULL, pl_vk, struct vk_ctx);
     struct vk_ctx *vk = PL_PRIV(pl_vk);
     *vk = (struct vk_ctx) {
         .alloc = pl_vk,

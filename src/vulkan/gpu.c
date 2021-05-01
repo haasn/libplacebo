@@ -231,7 +231,7 @@ static void vk_setup_formats(struct pl_gpu *gpu)
 
         pl_log_level_cap(vk->log, PL_LOG_NONE);
 
-        struct pl_fmt *fmt = pl_alloc_ptr_priv(gpu, fmt, struct pl_fmt_vk);
+        struct pl_fmt *fmt = pl_alloc_obj(gpu, fmt, struct pl_fmt_vk);
         struct pl_fmt_vk *fmtp = PL_PRIV(fmt);
         *fmt = vk_fmt->fmt;
         *fmtp = (struct pl_fmt_vk) {
@@ -494,7 +494,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
 {
     pl_assert(vk->dev);
 
-    struct pl_gpu *gpu = pl_zalloc_priv(NULL, struct pl_gpu, struct pl_vk);
+    struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct pl_vk);
     gpu->log = vk->log;
     gpu->ctx = gpu->log;
 
@@ -986,7 +986,7 @@ static pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     enum pl_handle_type handle_type = params->export_handle |
                                       params->import_handle;
 
-    struct pl_tex *tex = pl_zalloc_priv(NULL, struct pl_tex, struct pl_tex_vk);
+    struct pl_tex *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_vk);
     tex->params = *params;
     tex->params.initial_data = NULL;
     tex->sampler_type = PL_SAMPLER_NORMAL;
@@ -1442,8 +1442,6 @@ static bool vk_tex_poll(pl_gpu gpu, pl_tex tex, uint64_t timeout)
 
 pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
 {
-    struct pl_tex *tex = NULL;
-
     pl_fmt format = NULL;
     for (int i = 0; i < gpu->num_formats; i++) {
         const struct vk_format **fmt = PL_PRIV(gpu->formats[i]);
@@ -1456,10 +1454,10 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
     if (!format) {
         PL_ERR(gpu, "Could not find pl_fmt suitable for wrapped image "
                "with format %s", vk_fmt_name(params->format));
-        goto error;
+        return NULL;
     }
 
-    tex = pl_zalloc_priv(NULL, struct pl_tex, struct pl_tex_vk);
+    struct pl_tex *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_vk);
     tex->params = (struct pl_tex_params) {
         .format = format,
         .w = params->width,
@@ -1971,7 +1969,7 @@ static pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    struct pl_buf *buf = pl_zalloc_priv(NULL, struct pl_buf, struct pl_buf_vk);
+    struct pl_buf *buf = pl_zalloc_obj(NULL, buf, struct pl_buf_vk);
     buf->params = *params;
     buf->params.initial_data = NULL;
 
@@ -2589,7 +2587,7 @@ static pl_pass vk_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     struct vk_ctx *vk = p->vk;
     bool success = false;
 
-    struct pl_pass *pass = pl_zalloc_priv(NULL, struct pl_pass, struct pl_pass_vk);
+    struct pl_pass *pass = pl_zalloc_obj(NULL, pass, struct pl_pass_vk);
     pass->params = pl_pass_params_copy(pass, params);
 
     struct pl_pass_vk *pass_vk = PL_PRIV(pass);
@@ -3353,7 +3351,7 @@ static pl_sync vk_sync_create(pl_gpu gpu, enum pl_handle_type handle_type)
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    struct pl_sync *sync = pl_zalloc_priv(NULL, struct pl_sync, struct pl_sync_vk);
+    struct pl_sync *sync = pl_zalloc_obj(NULL, sync, struct pl_sync_vk);
     sync->handle_type = handle_type;
 
     struct pl_sync_vk *sync_vk = PL_PRIV(sync);

@@ -35,7 +35,7 @@ static void shaderc_destroy(struct spirv_compiler *spirv)
 
 static struct spirv_compiler *shaderc_create(pl_log log, uint32_t api_version)
 {
-    struct spirv_compiler *spirv = pl_alloc_ptr_priv(NULL, spirv, struct priv);
+    struct spirv_compiler *spirv = pl_alloc_obj(NULL, spirv, struct priv);
     struct priv *p = PL_PRIV(spirv);
     *spirv = (struct spirv_compiler) {0};
 

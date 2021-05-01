@@ -298,7 +298,7 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     if (!pick_surf_format(gpu, vk, params->surface, params->prefer_hdr, &sfmt, &csp))
         return NULL;
 
-    struct pl_swapchain *sw = pl_zalloc_priv(NULL, struct pl_swapchain, struct priv);
+    struct pl_swapchain *sw = pl_zalloc_obj(NULL, sw, struct priv);
     sw->impl = &vulkan_swapchain;
     sw->log = vk->log;
     sw->ctx = sw->log;

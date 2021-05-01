@@ -100,7 +100,7 @@ void pl_opengl_destroy(pl_opengl *ptr)
 pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
 {
     params = PL_DEF(params, &pl_opengl_default_params);
-    struct pl_opengl *pl_gl = pl_zalloc_priv(NULL, struct pl_opengl, struct priv);
+    struct pl_opengl *pl_gl = pl_zalloc_obj(NULL, pl_gl, struct priv);
     struct priv *p = PL_PRIV(pl_gl);
     p->params = *params;
     p->log = log;

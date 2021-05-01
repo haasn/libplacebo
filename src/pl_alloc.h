@@ -88,14 +88,11 @@ char *pl_strndup0(void *parent, const char *str, size_t size);
 #define PL_PRIV(pub) \
     (void *) ((uintptr_t) (pub) + PL_ALIGN_MEM(sizeof(*(pub))))
 
-#define pl_alloc_priv(parent, pub, priv) \
-    (pub *) pl_alloc(parent, PL_ALIGN_MEM(sizeof(pub)) + sizeof(priv))
-
-#define pl_zalloc_priv(parent, pub, priv) \
-    (pub *) pl_zalloc(parent, PL_ALIGN_MEM(sizeof(pub)) + sizeof(priv))
-
-#define pl_alloc_ptr_priv(parent, ptr, priv) \
+#define pl_alloc_obj(parent, ptr, priv) \
     (__typeof__(ptr)) pl_alloc(parent, PL_ALIGN_MEM(sizeof(*(ptr))) + sizeof(priv))
+
+#define pl_zalloc_obj(parent, ptr, priv) \
+    (__typeof__(ptr)) pl_zalloc(parent, PL_ALIGN_MEM(sizeof(*(ptr))) + sizeof(priv))
 
 // Refcounting helper
 
