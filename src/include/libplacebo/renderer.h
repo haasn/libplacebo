@@ -225,6 +225,10 @@ struct pl_render_params {
     // reduction step, if one is performed.
     bool force_icc_lut;
 
+    // Ignore ICC profiles attached to either `image` or `target`.
+    // Note: A LUT may still be generated if `force_icc_lut` is also enabled.
+    bool ignore_icc_profiles;
+
     // Forces the use of dithering, even when rendering to 16-bit FBOs. This is
     // generally pretty pointless because most 16-bit FBOs have high enough
     // depth that rounding errors are below the human perception threshold,

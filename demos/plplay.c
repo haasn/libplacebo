@@ -941,6 +941,7 @@ static void update_settings(struct plplay *p)
             nk_checkbox_label(nk, "Force-enable 3DLUT", &par->force_icc_lut);
             nk_checkbox_label(nk, "Force-enable dither", &par->force_dither);
             nk_checkbox_label(nk, "Disable FBOs / advanced rendering", &par->disable_fbos);
+            nk_checkbox_label(nk, "Ignore ICC profiles", &par->ignore_icc_profiles);
 
             nk_layout_row_dynamic(nk, 24, 2);
             if (nk_button_label(nk, "Flush renderer cache"))

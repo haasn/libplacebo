@@ -1741,7 +1741,8 @@ static bool pass_output_target(pl_renderer rr, struct pass_state *pass,
     if (img->color.transfer == PL_COLOR_TRC_LINEAR)
         prelinearized = true;
 
-    bool need_icc = (image->profile.data || target->profile.data) &&
+    bool need_icc = !params->ignore_icc_profiles &&
+                    (image->profile.data || target->profile.data) &&
                     !pl_icc_profile_equal(&image->profile, &target->profile);
 
     if (params->force_icc_lut || params->force_3dlut)
@@ -1809,6 +1810,9 @@ static bool pass_output_target(pl_renderer rr, struct pass_state *pass,
             .color = target->color,
             .profile = target->profile,
         };
+
+        if (params->ignore_icc_profiles)
+            src.profile = dst.profile = (struct pl_icc_profile) {0};
 
         struct pl_icc_result res;
         bool ok = pl_icc_update(sh, &src, &dst, &rr->icc_state, &res,
