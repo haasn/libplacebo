@@ -4,7 +4,7 @@
  * License: CC0 / Public Domain
  */
 
-#include <SDL2/SDL_image.h>
+#include <SDL_image.h>
 
 #include "common.h"
 #include "window.h"
