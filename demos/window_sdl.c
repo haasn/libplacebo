@@ -7,11 +7,11 @@
 #include "common.h"
 #include "window.h"
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 #ifdef USE_VK
 #include <libplacebo/vulkan.h>
-#include <SDL2/SDL_vulkan.h>
+#include <SDL_vulkan.h>
 #define WINFLAG_API SDL_WINDOW_VULKAN
 #define IMPL win_impl_sdl_vk
 #define IMPL_NAME "SDL2 (vulkan)"
