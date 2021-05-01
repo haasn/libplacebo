@@ -165,13 +165,13 @@ struct pl_gpu_pci_address {
     uint32_t function;
 };
 
-typedef const struct pl_fmt *pl_fmt;
+typedef const PL_STRUCT(pl_fmt) *pl_fmt;
 
 // Abstract device context which wraps an underlying graphics context and can
 // be used to dispatch rendering commands.
 //
 // Thread-safety: Depends on `PL_GPU_CAP_THREAD_SAFE`
-typedef const struct pl_gpu {
+typedef const PL_STRUCT(pl_gpu) {
     pl_log log;
 
     pl_gpu_caps caps;            // PL_GPU_CAP_* bit field
@@ -234,7 +234,7 @@ enum pl_fmt_caps {
 };
 
 // Structure describing a texel/vertex format.
-struct pl_fmt {
+PL_STRUCT(pl_fmt) {
     const char *name;       // symbolic name for this format (e.g. rgba32f)
 
     enum pl_fmt_type type;  // the format's data type and interpretation
@@ -326,7 +326,7 @@ pl_fmt pl_find_fourcc(pl_gpu gpu, uint32_t fourcc);
 // queries for a given operation type)
 //
 // Thread-safety: Unsafe
-typedef struct pl_timer *pl_timer;
+typedef PL_STRUCT(pl_timer) *pl_timer;
 
 // Creates a new timer object. This may return NULL, for example if the
 // implementation does not support timers, but since passing NULL to
@@ -445,7 +445,7 @@ struct pl_buf_params {
 // vertex buffers, is designed to be completely fine.
 //
 // Thread-safety: Unsafe
-typedef const struct pl_buf {
+typedef const PL_STRUCT(pl_buf) {
     struct pl_buf_params params;
     uint8_t *data; // for persistently mapped buffers, points to the first byte
 
@@ -669,7 +669,7 @@ enum pl_sampler_type {
 // and/or rendered to.
 //
 // Thread-safety: Unsafe
-typedef const struct pl_tex {
+typedef const PL_STRUCT(pl_tex) {
     struct pl_tex_params params;
 
     // If `params.export_handle` is set, this structure references the shared
@@ -1134,7 +1134,7 @@ struct pl_pass_params {
     // is set. The format must support `PL_FMT_CAP_RENDERABLE`. If any other
     // fields are set, the GPU may be able to further optimize the render pass
     // for this particular type of texture.
-    struct pl_tex target_dummy;
+    PL_STRUCT(pl_tex) target_dummy;
 
     // Target blending mode. If this is NULL, blending is disabled. Otherwise,
     // the `target_dummy.params.format` must have PL_FMT_CAP_BLENDABLE.
@@ -1156,7 +1156,7 @@ struct pl_pass_params {
 // - the current values of all inputs
 //
 // Thread-safety: Unsafe
-typedef const struct pl_pass {
+typedef const PL_STRUCT(pl_pass) {
     struct pl_pass_params params;
 } *pl_pass;
 
@@ -1258,7 +1258,7 @@ void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params);
 // semaphores - one to synchronize access in each direction.
 //
 // Thread-safety: Unsafe
-typedef const struct pl_sync {
+typedef const PL_STRUCT(pl_sync) {
     enum pl_handle_type handle_type;
 
     // This handle is signalled by the `pl_gpu`, and waited on by the user. It

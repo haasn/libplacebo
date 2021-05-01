@@ -23,7 +23,7 @@
 #include <libplacebo/swapchain.h>
 
 // Structure representing a VkInstance. Using this is not required.
-typedef const struct pl_vk_inst {
+typedef const PL_STRUCT(pl_vk_inst) {
     VkInstance instance;
 
     // The Vulkan API version supported by this VkInstance.
@@ -102,7 +102,7 @@ struct pl_vulkan_queue {
 };
 
 // Structure representing the actual vulkan device and associated GPU instance
-typedef const struct pl_vulkan {
+typedef const PL_STRUCT(pl_vulkan) {
     pl_gpu gpu;
 
     // The vulkan objects in use. The user may use this for their own purposes,

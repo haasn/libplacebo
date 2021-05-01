@@ -29,7 +29,7 @@
 #include <libplacebo/swapchain.h>
 
 // Thread-safety: Unsafe
-typedef struct pl_renderer *pl_renderer;
+typedef PL_STRUCT(pl_renderer) *pl_renderer;
 
 // Creates a new renderer object, which is backed by a GPU context. This is a
 // high-level object that takes care of the rendering chain as a whole, from

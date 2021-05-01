@@ -19,6 +19,7 @@
 #define LIBPLACEBO_LOG_H_
 
 #include <libplacebo/config.h>
+#include <libplacebo/common.h>
 
 // The log level associated with a given log message.
 enum pl_log_level {
@@ -51,7 +52,7 @@ struct pl_log_params {
 //
 // Note: In any context in which `pl_log` is used, users may also pass NULL
 // to disable logging. In other words, NULL is a valid `pl_log`.
-typedef const struct pl_log {
+typedef const PL_STRUCT(pl_log) {
     struct pl_log_params params;
 } *pl_log;
 
@@ -102,19 +103,19 @@ void pl_log_color(void *stream, enum pl_log_level level, const char *msg);
 #define pl_context pl_log
 #define pl_context_params pl_log_params
 
-static inline PL_DEPRECATED struct pl_context *
+static inline PL_DEPRECATED PL_STRUCT(pl_context) *
 pl_context_create(int api_ver, const struct pl_context_params *params)
 {
-    return (struct pl_context *) pl_log_create(api_ver, params);
+    return (PL_STRUCT(pl_context) *) pl_log_create(api_ver, params);
 }
 
-static inline PL_DEPRECATED void pl_context_destroy(struct pl_context **pctx)
+static inline PL_DEPRECATED void pl_context_destroy(PL_STRUCT(pl_context) **pctx)
 {
     pl_log_destroy((pl_log *) pctx);
 }
 
 static inline PL_DEPRECATED void
-pl_context_update(struct pl_context *ctx, const struct pl_context_params *params)
+pl_context_update(PL_STRUCT(pl_context) *ctx, const struct pl_context_params *params)
 {
     pl_log_update((pl_log) ctx, params);
 }

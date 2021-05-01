@@ -22,7 +22,7 @@
 #include <libplacebo/gpu.h>
 
 // Thread-safety: Safe
-typedef struct pl_dispatch *pl_dispatch;
+typedef PL_STRUCT(pl_dispatch) *pl_dispatch;
 
 // Creates a new shader dispatch object. This object provides a translation
 // layer between generated shaders (pl_shader) and the ra context such that it

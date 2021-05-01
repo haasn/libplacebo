@@ -18,6 +18,13 @@
 #ifndef LIBPLACEBO_COMMON_H_
 #define LIBPLACEBO_COMMON_H_
 
+// C++ compatibility
+#ifdef __cplusplus
+# define PL_STRUCT(name) struct name##_t
+#else
+# define PL_STRUCT(name) struct name
+#endif
+
 #include <libplacebo/log.h>
 #include <stdbool.h>
 

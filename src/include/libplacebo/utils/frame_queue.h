@@ -15,10 +15,10 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <libplacebo/renderer.h>
-
 #ifndef LIBPLACEBO_FRAME_QUEUE_H
 #define LIBPLACEBO_FRAME_QUEUE_H
+
+#include <libplacebo/renderer.h>
 
 // An abstraction layer for automatically turning a conceptual stream of
 // (frame, pts) pairs, as emitted by a decoder or filter graph, into a
@@ -29,7 +29,7 @@
 // of any configured frame mixer.
 //
 // Thread-safety: Safe
-typedef struct pl_queue *pl_queue;
+typedef PL_STRUCT(pl_queue) *pl_queue;
 
 enum pl_queue_status {
     PL_QUEUE_OK,       // success

@@ -26,7 +26,7 @@
 // context. In other words, they must only be called from the thread the OpenGL
 // context is current on.
 
-typedef const struct pl_opengl {
+typedef const PL_STRUCT(pl_opengl) {
     pl_gpu gpu;
 } *pl_opengl;
 

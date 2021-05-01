@@ -27,7 +27,7 @@
 #include <libplacebo/gpu.h>
 
 // Thread-safety: Unsafe
-typedef struct pl_shader *pl_shader;
+typedef PL_STRUCT(pl_shader) *pl_shader;
 
 struct pl_shader_params {
     // The `id` represents an abstract identifier for the shader, to avoid
@@ -213,7 +213,7 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh);
 // after them and passing them to the right shader passes.
 //
 // Note: pl_shader_obj objects must be initialized to NULL by the caller.
-typedef struct pl_shader_obj *pl_shader_obj;
+typedef PL_STRUCT(pl_shader_obj) *pl_shader_obj;
 
 void pl_shader_obj_destroy(pl_shader_obj *obj);
 
