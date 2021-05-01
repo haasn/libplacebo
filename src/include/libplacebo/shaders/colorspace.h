@@ -24,6 +24,8 @@
 #include <libplacebo/colorspace.h>
 #include <libplacebo/shaders.h>
 
+PL_API_BEGIN
+
 // Decode the color into normalized RGB, given a specified color_repr. This
 // also takes care of additional pre- and post-conversions requires for the
 // "special" color systems (XYZ, BT.2020-C, etc.). If `params` is left as NULL,
@@ -351,5 +353,7 @@ extern const struct pl_dither_params pl_dither_default_params;
 void pl_shader_dither(pl_shader sh, int new_depth,
                       pl_shader_obj *dither_state,
                       const struct pl_dither_params *params);
+
+PL_API_END
 
 #endif // LIBPLACEBO_SHADERS_COLORSPACE_H_

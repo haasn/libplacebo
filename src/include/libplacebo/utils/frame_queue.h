@@ -20,6 +20,8 @@
 
 #include <libplacebo/renderer.h>
 
+PL_API_BEGIN
+
 // An abstraction layer for automatically turning a conceptual stream of
 // (frame, pts) pairs, as emitted by a decoder or filter graph, into a
 // `pl_frame_mix` suitable for `pl_render_image_mix`.
@@ -175,5 +177,7 @@ struct pl_queue_params {
 // `pl_queue_update` or `pl_queue_reset`.
 enum pl_queue_status pl_queue_update(pl_queue queue, struct pl_frame_mix *out_mix,
                                      const struct pl_queue_params *params);
+
+PL_API_END
 
 #endif // LIBPLACEBO_FRAME_QUEUE_H

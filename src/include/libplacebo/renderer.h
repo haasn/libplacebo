@@ -28,6 +28,8 @@
 #include <libplacebo/shaders/custom.h>
 #include <libplacebo/swapchain.h>
 
+PL_API_BEGIN
+
 // Thread-safety: Unsafe
 typedef PL_STRUCT(pl_renderer) *pl_renderer;
 
@@ -618,5 +620,7 @@ static inline float pl_frame_mix_radius(const struct pl_render_params *params)
 bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                          const struct pl_frame *target,
                          const struct pl_render_params *params);
+
+PL_API_END
 
 #endif // LIBPLACEBO_RENDERER_H_

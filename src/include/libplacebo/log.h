@@ -21,6 +21,8 @@
 #include <libplacebo/config.h>
 #include <libplacebo/common.h>
 
+PL_API_BEGIN
+
 // The log level associated with a given log message.
 enum pl_log_level {
     PL_LOG_NONE = 0,
@@ -119,5 +121,7 @@ pl_context_update(PL_STRUCT(pl_context) *ctx, const struct pl_context_params *pa
 {
     pl_log_update((pl_log) ctx, params);
 }
+
+PL_API_END
 
 #endif // LIBPLACEBO_LOG_H_

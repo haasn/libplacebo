@@ -28,6 +28,8 @@
 #include <libplacebo/dispatch.h>
 #include <libplacebo/colorspace.h>
 
+PL_API_BEGIN
+
 // Parameters describing custom shader text to be embedded into a `pl_shader`
 // object. All of the strings are optional and can be left as NULL, but without
 // a `body` in particular, the shader will do nothing useful on its own.
@@ -270,5 +272,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
                                                size_t shader_len);
 
 void pl_mpv_user_shader_destroy(const struct pl_hook **hook);
+
+PL_API_END
 
 #endif // LIBPLACEBO_SHADERS_CUSTOM_H_

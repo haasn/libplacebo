@@ -21,6 +21,8 @@
 #include <stdbool.h>
 #include <libplacebo/log.h>
 
+PL_API_BEGIN
+
 #define PL_FILTER_MAX_PARAMS 2
 
 // Represents a single filter function, i.e. kernel or windowing function.
@@ -327,5 +329,7 @@ typedef const PL_STRUCT(pl_filter) {
 // (i.e. missing a required parameter).
 pl_filter pl_filter_generate(pl_log log, const struct pl_filter_params *params);
 void pl_filter_free(pl_filter *filter);
+
+PL_API_END
 
 #endif // LIBPLACEBO_FILTER_KERNELS_H_

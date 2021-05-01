@@ -18,6 +18,10 @@
 #ifndef LIBPLACEBO_DITHER_H_
 #define LIBPLACEBO_DITHER_H_
 
+#include <libplacebo/common.h>
+
+PL_API_BEGIN
+
 // Generates a deterministic NxN bayer (ordered) dither matrix, storing the
 // result in `data`. `size` must be a power of two. The resulting matrix will
 // be roughly uniformly distributed within the range [0,1).
@@ -30,5 +34,7 @@ void pl_generate_bayer_matrix(float *data, int size);
 // Note: This function is very, *very* slow for large sizes. Generating a
 // dither matrix with size 256 can take several seconds on a modern processor.
 void pl_generate_blue_noise(float *data, int size);
+
+PL_API_END
 
 #endif // LIBPLACEBO_DITHER_H_

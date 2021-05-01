@@ -21,12 +21,18 @@
 // C++ compatibility
 #ifdef __cplusplus
 # define PL_STRUCT(name) struct name##_t
+# define PL_API_BEGIN extern "C" {
+# define PL_API_END }
 #else
 # define PL_STRUCT(name) struct name
+# define PL_API_BEGIN
+# define PL_API_END
 #endif
 
 #include <libplacebo/log.h>
 #include <stdbool.h>
+
+PL_API_BEGIN
 
 // Some common utility types. These are overloaded to support 2D, 3D and
 // integer/float variants.
@@ -185,5 +191,7 @@ void pl_rect2df_offset(struct pl_rect2df *rc, float offset_x, float offset_y);
 
 // Scale a rect uniformly in both dimensions.
 #define pl_rect2df_zoom(rc, zoom) pl_rect2df_stretch((rc), (zoom), (zoom))
+
+PL_API_END
 
 #endif // LIBPLACEBO_COMMON_H_

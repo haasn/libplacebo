@@ -22,6 +22,8 @@
 #include <libplacebo/gpu.h>
 #include <libplacebo/swapchain.h>
 
+PL_API_BEGIN
+
 // Structure representing a VkInstance. Using this is not required.
 typedef const PL_STRUCT(pl_vk_inst) {
     VkInstance instance;
@@ -500,5 +502,7 @@ bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *layout,
 // or modify the image. (Optional)
 void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
                        VkAccessFlags access, VkSemaphore sem_in);
+
+PL_API_END
 
 #endif // LIBPLACEBO_VULKAN_H_

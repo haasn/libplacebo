@@ -15,13 +15,15 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef LIBPLACEBO_UPLOAD_H_
+#define LIBPLACEBO_UPLOAD_H_
+
 #include <stdint.h>
 
 #include <libplacebo/gpu.h>
 #include <libplacebo/renderer.h>
 
-#ifndef LIBPLACEBO_UPLOAD_H_
-#define LIBPLACEBO_UPLOAD_H_
+PL_API_BEGIN
 
 // This file contains a utility function to assist in uploading data from host
 // memory to a texture. In particular, the texture will be suitable for use as
@@ -136,5 +138,7 @@ bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
 // (blittable, storable, etc.).
 bool pl_recreate_plane(pl_gpu gpu, struct pl_plane *out_plane,
                        pl_tex *tex, const struct pl_plane_data *data);
+
+PL_API_END
 
 #endif // LIBPLACEBO_UPLOAD_H_

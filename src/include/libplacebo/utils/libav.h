@@ -20,6 +20,9 @@
 
 #include <libplacebo/gpu.h>
 #include <libplacebo/utils/upload.h>
+
+PL_API_BEGIN
+
 #include <libavutil/frame.h>
 #include <libavcodec/avcodec.h>
 
@@ -140,5 +143,7 @@ static enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc);
 // Actual implementation, included as part of this header to avoid having
 // a compile-time dependency on libavutil.
 #include <libplacebo/utils/libav_internal.h>
+
+PL_API_END
 
 #endif // LIBPLACEBO_LIBAV_H_

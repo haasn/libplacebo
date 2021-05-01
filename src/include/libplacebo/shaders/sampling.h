@@ -27,6 +27,8 @@
 #include <libplacebo/filters.h>
 #include <libplacebo/shaders.h>
 
+PL_API_BEGIN
+
 // Common parameters for sampling operations
 struct pl_sample_src {
     // There are two mutually exclusive ways of providing the source to sample
@@ -173,5 +175,7 @@ enum {
 bool pl_shader_sample_ortho(pl_shader sh, int pass,
                             const struct pl_sample_src *src,
                             const struct pl_sample_filter_params *params);
+
+PL_API_END
 
 #endif // LIBPLACEBO_SHADERS_SAMPLING_H_

@@ -20,6 +20,8 @@
 
 #include <libplacebo/gpu.h>
 
+PL_API_BEGIN
+
 // The functions in this file allow creating and manipulating "dummy" contexts.
 // A dummy context isn't actually mapped by the GPU, all data exists purely on
 // the CPU. It also isn't capable of compiling or executing any shaders, any
@@ -85,5 +87,7 @@ struct pl_tex_dummy_params {
 // All of the permissions will be set to `false`, except `sampleable`, which is
 // set to `true`. (So you can use it as an input to shader sampling functions)
 pl_tex pl_tex_dummy_create(pl_gpu gpu, const struct pl_tex_dummy_params *params);
+
+PL_API_END
 
 #endif // LIBPLACEBO_DUMMY_H_

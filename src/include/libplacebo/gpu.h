@@ -24,6 +24,8 @@
 
 #include <libplacebo/common.h>
 
+PL_API_BEGIN
+
 // This file contains the definition of an API which is designed to abstract
 // away from platform-specific APIs like the various OpenGL variants, Direct3D
 // and Vulkan in a common way. It is a much more limited API than those APIs,
@@ -1344,5 +1346,7 @@ void pl_gpu_finish(pl_gpu gpu);
 // If this returns true, users *should* destroy and recreate the `pl_gpu`,
 // including all associated resources, via the appropriate mechanism.
 bool pl_gpu_is_failed(pl_gpu gpu);
+
+PL_API_END
 
 #endif // LIBPLACEBO_GPU_H_

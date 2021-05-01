@@ -24,6 +24,8 @@
 
 #include <libplacebo/common.h>
 
+PL_API_BEGIN
+
 // The underlying color representation (e.g. RGB, XYZ or YCbCr)
 enum pl_color_system {
     PL_COLOR_SYSTEM_UNKNOWN = 0,
@@ -500,5 +502,7 @@ bool pl_icc_profile_equal(const struct pl_icc_profile *p1,
 // convenience function for the sake of users ingesting arbitrary ICC profiles
 // from sources where they can't reliably detect profile changes.
 void pl_icc_profile_compute_signature(struct pl_icc_profile *profile);
+
+PL_API_END
 
 #endif // LIBPLACEBO_COLORSPACE_H_

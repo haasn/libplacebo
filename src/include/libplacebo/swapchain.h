@@ -22,6 +22,8 @@
 #include <libplacebo/colorspace.h>
 #include <libplacebo/gpu.h>
 
+PL_API_BEGIN
+
 // This abstraction represents a low-level interface to visible surfaces
 // exposed by a graphics API (and accompanying GPU instance), allowing users to
 // directly present frames to the screen (or window, typically). This is a
@@ -167,5 +169,7 @@ bool pl_swapchain_submit_frame(pl_swapchain sw);
 // information without sufficient smoothing/filtering (and if so, the time that
 // `start_frame` blocked for should also be included).
 void pl_swapchain_swap_buffers(pl_swapchain sw);
+
+PL_API_END
 
 #endif // LIBPLACEBO_SWAPCHAIN_H_

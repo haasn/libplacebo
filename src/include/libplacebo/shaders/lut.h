@@ -23,6 +23,8 @@
 #include <libplacebo/colorspace.h>
 #include <libplacebo/shaders.h>
 
+PL_API_BEGIN
+
 // Struct defining custom LUTs
 //
 // Note: Users may freely create their own instances of this struct, there is
@@ -70,5 +72,7 @@ void pl_lut_free(struct pl_custom_lut **lut);
 // struct filled out by the user.
 void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
                           pl_shader_obj *lut_state);
+
+PL_API_END
 
 #endif // LIBPLACEBO_SHADERS_LUT_H_

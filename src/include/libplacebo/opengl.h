@@ -21,6 +21,8 @@
 #include <libplacebo/gpu.h>
 #include <libplacebo/swapchain.h>
 
+PL_API_BEGIN
+
 // Note on thread safety: The thread safety of `pl_opengl` and any associated
 // GPU objects follows the same thread safety rules as the underlying OpenGL
 // context. In other words, they must only be called from the thread the OpenGL
@@ -190,5 +192,7 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params);
 // the framebuffer attached to this texture, or 0 if there is none. (Optional)
 unsigned int pl_opengl_unwrap(pl_gpu gpu, pl_tex tex, unsigned int *out_target,
                               int *out_iformat, unsigned int *out_fbo);
+
+PL_API_END
 
 #endif // LIBPLACEBO_OPENGL_H_

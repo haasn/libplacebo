@@ -26,6 +26,8 @@
 
 #include <libplacebo/gpu.h>
 
+PL_API_BEGIN
+
 // Thread-safety: Unsafe
 typedef PL_STRUCT(pl_shader) *pl_shader;
 
@@ -216,5 +218,7 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh);
 typedef PL_STRUCT(pl_shader_obj) *pl_shader_obj;
 
 void pl_shader_obj_destroy(pl_shader_obj *obj);
+
+PL_API_END
 
 #endif // LIBPLACEBO_SHADERS_H_

@@ -23,6 +23,8 @@
 #include <libplacebo/colorspace.h>
 #include <libplacebo/shaders.h>
 
+PL_API_BEGIN
+
 // ICC profiles
 
 struct pl_icc_params {
@@ -112,5 +114,7 @@ static PL_DEPRECATED inline void pl_3dlut_apply(pl_shader sh, pl_shader_obj *lut
 {
     return pl_icc_apply(sh, lut3d);
 }
+
+PL_API_END
 
 #endif // LIBPLACEBO_SHADERS_ICC_H_

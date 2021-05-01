@@ -21,6 +21,8 @@
 #include <libplacebo/shaders.h>
 #include <libplacebo/gpu.h>
 
+PL_API_BEGIN
+
 // Thread-safety: Safe
 typedef PL_STRUCT(pl_dispatch) *pl_dispatch;
 
@@ -177,5 +179,7 @@ size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out_cache);
 // initializes an internal state cache needed to more efficiently compile
 // shaders that are not yet present in the `pl_dispatch`.
 void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache);
+
+PL_API_END
 
 #endif // LIBPLACEBO_DISPATCH_H

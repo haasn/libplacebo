@@ -35,6 +35,8 @@
 #include <libplacebo/colorspace.h>
 #include <libplacebo/shaders.h>
 
+PL_API_BEGIN
+
 // AV1 film grain parameters. For the exact meaning of these, see the AV1
 // specification (section 6.8.20).
 //
@@ -96,5 +98,7 @@ bool pl_needs_av1_grain(const struct pl_av1_grain_params *params);
 // (Requires GLSL version 130 or newer)
 bool pl_shader_av1_grain(pl_shader sh, pl_shader_obj *grain_state,
                          const struct pl_av1_grain_params *params);
+
+PL_API_END
 
 #endif // LIBPLACEBO_SHADERS_AV1_H_

@@ -20,7 +20,9 @@
 
 #include <libplacebo/gpu.h>
 #include <libplacebo/utils/upload.h>
-#include <dav1d/picture.h>
+#include <dav1d/dav1d.h>
+
+PL_API_BEGIN
 
 // Fill in the details of a `pl_frame` from a Dav1dPicture. This function will
 // explicitly clear `out_frame`, setting all extra fields to 0. After this
@@ -98,5 +100,7 @@ static enum Dav1dChromaSamplePosition pl_chroma_to_dav1d(enum pl_chroma_location
 // Actual implementation, included as part of this header to avoid having
 // a compile-time dependency on libdav1d.
 #include <libplacebo/utils/dav1d_internal.h>
+
+PL_API_END
 
 #endif // LIBPLACEBO_DAV1D_H_
