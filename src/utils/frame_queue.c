@@ -42,6 +42,10 @@ struct entry {
 #define MAX_SAMPLES 32
 #define MIN_SAMPLES 8
 
+// Stickiness to prevent `interpolation_threshold` oscillation
+#define THRESHOLD_MAX_RATIO 0.3
+#define THRESHOLD_FRAMES 5
+
 // Maximum number of not-yet-mapped frames to allow queueing in advance
 #define PREFETCH_FRAMES 2
 
@@ -73,6 +77,7 @@ struct pl_queue {
     // Frame queue and state
     PL_ARRAY(struct entry) queue;
     uint64_t signature;
+    int threshold_frames;
     bool want_frame;
     bool eof;
 
@@ -562,6 +567,30 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
     // or this is the first frame to be rendered. Fall back to ZOH semantics.
     if (!p->fps.estimate)
         return nearest(p, mix, params);
+
+    // Silently disable interpolation if the ratio dips lower than the
+    // configured threshold
+    float ratio = fabs(p->fps.estimate / p->vps.estimate - 1.0);
+    if (ratio < params->interpolation_threshold) {
+        if (!p->threshold_frames) {
+            PL_INFO(p, "Detected fps ratio %.4f below threshold %.4f, "
+                    "disabling interpolation",
+                    ratio, params->interpolation_threshold);
+        }
+
+        p->threshold_frames = THRESHOLD_FRAMES + 1;
+        return nearest(p, mix, params);
+    } else if (ratio < THRESHOLD_MAX_RATIO && p->threshold_frames > 1) {
+        p->threshold_frames--;
+        return nearest(p, mix, params);
+    } else {
+        if (p->threshold_frames) {
+            PL_INFO(p, "Detected fps ratio %.4f exceeds threshold %.4f, "
+                    "re-enabling interpolation",
+                    ratio, params->interpolation_threshold);
+        }
+        p->threshold_frames = 0;
+    }
 
     // No radius information, special case in which we only need the previous
     // and next frames.

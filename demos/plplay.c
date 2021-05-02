@@ -308,6 +308,7 @@ static bool render_loop(struct plplay *p)
     struct pl_queue_params qparams = {
         .radius = pl_frame_mix_radius(&p->params),
         .frame_duration = av_q2d(av_inv_q(p->stream->avg_frame_rate)),
+        .interpolation_threshold = 0.01,
         .timeout = UINT64_MAX,
     };
 

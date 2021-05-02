@@ -140,6 +140,18 @@ struct pl_queue_params {
     // timestamps between source frames. (Optional)
     float frame_duration;
 
+    // If the difference between the (estimated) vsync duration and the
+    // (measured) frame duration is smaller than this threshold, silently
+    // disable interpolation and switch to ZOH semantics instead.
+    //
+    // For example, a value of 0.01 allows the FPS to differ by up to 1%
+    // without being interpolated. Note that this will result in a continuous
+    // phase drift unless also compensated for by the user, which will
+    // eventually resulted in a dropped or duplicated frame. (Though this can
+    // be preferable to seeing that same phase drift result in a temporally
+    // smeared image)
+    float interpolation_threshold;
+
     // Specifies how long `pl_queue_update` will wait for frames to become
     // available, in nanoseconds, before giving up and returning with
     // QUEUE_MORE.
