@@ -159,12 +159,20 @@ static void add_format(const struct pl_gpu *pgpu, const struct gl_format *gl_fmt
         bool ok = eglQueryDmaBufModifiersEXT(p->egl_dpy, fmt->fourcc,
                                              0, NULL, NULL, &num_mods);
         if (ok && num_mods) {
-            uint64_t *mods = pl_calloc(fmt, num_mods, sizeof(uint64_t));
-            ok = eglQueryDmaBufModifiersEXT(p->egl_dpy, fmt->fourcc,
-                                            num_mods, mods, NULL, &num_mods);
+            // On my system eglQueryDmaBufModifiersEXT seems to never return
+            // MOD_INVALID even though eglExportDMABUFImageQueryMESA happily
+            // returns such modifiers. Since we handle INVALID by not
+            // requiring modifiers at all, always add this value to the
+            // list of supported modifiers. May result in duplicates, but
+            // whatever.
+            uint64_t *mods = pl_calloc(fmt, num_mods + 1, sizeof(uint64_t));
+            mods[0] = DRM_FORMAT_MOD_INVALID;
+            ok = eglQueryDmaBufModifiersEXT(p->egl_dpy, fmt->fourcc, num_mods,
+                                            &mods[1], NULL, &num_mods);
+
             if (ok) {
                 fmt->modifiers = mods;
-                fmt->num_modifiers = num_mods;
+                fmt->num_modifiers = num_mods + 1;
             }
         }
 
