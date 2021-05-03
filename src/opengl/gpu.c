@@ -223,7 +223,7 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
         fmt->caps |= PL_FMT_CAP_HOST_READABLE;
 
     if (gpu->glsl.compute && fmt->glsl_format && p->has_storage)
-        fmt->caps |= PL_FMT_CAP_STORABLE;
+        fmt->caps |= PL_FMT_CAP_STORABLE | PL_FMT_CAP_READWRITE;
 
     // Only float-type formats are considered blendable in OpenGL
     switch (fmt->type) {

@@ -354,26 +354,28 @@ static void vk_setup_formats(struct pl_gpu *gpu)
             fmt->gatherable = true;
 
         // Disable implied capabilities where the dependencies are unavailable
+        enum pl_fmt_caps storable = PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE;
         if (!(fmt->caps & PL_FMT_CAP_SAMPLEABLE))
             fmt->caps &= ~PL_FMT_CAP_LINEAR;
         if (!gpu->glsl.compute)
-            fmt->caps &= ~(PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE);
+            fmt->caps &= ~storable;
 
-        enum pl_fmt_caps storable = PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE;
+        bool has_nofmt = vk->features.features.shaderStorageImageReadWithoutFormat &&
+                         vk->features.features.shaderStorageImageWriteWithoutFormat;
+
         if (fmt->caps & storable) {
             int real_comps = PL_DEF(vk_fmt->icomps, fmt->num_components);
             fmt->glsl_format = pl_fmt_glsl_format(fmt, real_comps);
-            if (!fmt->glsl_format) {
-                if (!vk->features.features.shaderStorageImageReadWithoutFormat ||
-                    !vk->features.features.shaderStorageImageWriteWithoutFormat)
-                {
-                    PL_WARN(gpu, "Storable format '%s' has no matching GLSL "
-                            "format qualifier but read/write without format "
-                            "is not supported.. disabling", fmt->name);
-                    fmt->caps &= ~storable;
-                }
+            if (!fmt->glsl_format && !has_nofmt) {
+                PL_WARN(gpu, "Storable format '%s' has no matching GLSL "
+                        "format qualifier but read/write without format "
+                        "is not supported.. disabling", fmt->name);
+                fmt->caps &= ~storable;
             }
         }
+
+        if (fmt->caps & storable)
+            fmt->caps |= PL_FMT_CAP_READWRITE;
 
         PL_ARRAY_APPEND(gpu, formats, fmt);
     }

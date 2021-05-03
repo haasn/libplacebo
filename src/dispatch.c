@@ -1070,11 +1070,15 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
     }
 
     const struct pl_gpu_limits *limits = &dp->gpu->limits;
-    if (pl_shader_is_compute(sh) && !tpars->storable) {
+    bool can_compute = tpars->storable;
+    if (can_compute && params->blend_params)
+        can_compute = tpars->format->caps & PL_FMT_CAP_READWRITE;
+
+    if (pl_shader_is_compute(sh) && !can_compute) {
         PL_ERR(dp, "Trying to dispatch using a compute shader with a "
-               "non-storable target texture.");
+               "non-storable or incompatible target texture.");
         goto error;
-    } else if (tpars->storable && limits->compute_queues > limits->fragment_queues) {
+    } else if (can_compute && limits->compute_queues > limits->fragment_queues) {
         if (sh_try_compute(sh, 16, 16, true, 0))
             PL_TRACE(dp, "Upgrading fragment shader to compute shader.");
     }

@@ -271,16 +271,17 @@ enum pl_fmt_type {
 };
 
 enum pl_fmt_caps {
-    PL_FMT_CAP_SAMPLEABLE   = 1 << 0, // may be sampled from (PL_DESC_SAMPLED_TEX)
-    PL_FMT_CAP_STORABLE     = 1 << 1, // may be used as storage image (PL_DESC_STORAGE_IMG)
-    PL_FMT_CAP_LINEAR       = 1 << 2, // may be linearly samplied from (PL_TEX_SAMPLE_LINEAR)
-    PL_FMT_CAP_RENDERABLE   = 1 << 3, // may be rendered to (pl_pass_params.target_fmt)
-    PL_FMT_CAP_BLENDABLE    = 1 << 4, // may be blended to (pl_pass_params.enable_blend)
-    PL_FMT_CAP_BLITTABLE    = 1 << 5, // may be blitted from/to (pl_tex_blit)
-    PL_FMT_CAP_VERTEX       = 1 << 6, // may be used as a vertex attribute
-    PL_FMT_CAP_TEXEL_UNIFORM = 1 << 7, // may be used as a texel uniform buffer
-    PL_FMT_CAP_TEXEL_STORAGE = 1 << 8, // may be used as a texel storage buffer
-    PL_FMT_CAP_HOST_READABLE = 1 << 9, // may be used with `host_readable` textures
+    PL_FMT_CAP_SAMPLEABLE    = 1 << 0,  // may be sampled from (PL_DESC_SAMPLED_TEX)
+    PL_FMT_CAP_STORABLE      = 1 << 1,  // may be used as storage image (PL_DESC_STORAGE_IMG)
+    PL_FMT_CAP_LINEAR        = 1 << 2,  // may be linearly samplied from (PL_TEX_SAMPLE_LINEAR)
+    PL_FMT_CAP_RENDERABLE    = 1 << 3,  // may be rendered to (pl_pass_params.target_fmt)
+    PL_FMT_CAP_BLENDABLE     = 1 << 4,  // may be blended to (pl_pass_params.enable_blend)
+    PL_FMT_CAP_BLITTABLE     = 1 << 5,  // may be blitted from/to (pl_tex_blit)
+    PL_FMT_CAP_VERTEX        = 1 << 6,  // may be used as a vertex attribute
+    PL_FMT_CAP_TEXEL_UNIFORM = 1 << 7,  // may be used as a texel uniform buffer
+    PL_FMT_CAP_TEXEL_STORAGE = 1 << 8,  // may be used as a texel storage buffer
+    PL_FMT_CAP_HOST_READABLE = 1 << 9,  // may be used with `host_readable` textures
+    PL_FMT_CAP_READWRITE     = 1 << 10, // may be used with PL_DESC_ACCESS_READWRITE
 
     // Notes:
     // - PL_FMT_CAP_LINEAR also implies PL_FMT_CAP_SAMPLEABLE

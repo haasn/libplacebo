@@ -126,8 +126,8 @@ static void print_formats(pl_gpu gpu)
     if (!pl_msg_test(gpu->log, PL_LOG_DEBUG))
         return;
 
-#define CAP_HEADER "%-11s"
-#define CAP_FIELDS "%c%c%c%c%c%c%c%c%c%c%c"
+#define CAP_HEADER "%-12s"
+#define CAP_FIELDS "%c%c%c%c%c%c%c%c%c%c%c%c"
 #define CAP_VALUES \
     FMT_BOOL('S', fmt->caps & PL_FMT_CAP_SAMPLEABLE),       \
     FMT_BOOL('s', fmt->caps & PL_FMT_CAP_STORABLE),         \
@@ -139,6 +139,7 @@ static void print_formats(pl_gpu gpu)
     FMT_BOOL('u', fmt->caps & PL_FMT_CAP_TEXEL_UNIFORM),    \
     FMT_BOOL('t', fmt->caps & PL_FMT_CAP_TEXEL_STORAGE),    \
     FMT_BOOL('H', fmt->caps & PL_FMT_CAP_HOST_READABLE),    \
+    FMT_BOOL('W', fmt->caps & PL_FMT_CAP_READWRITE),        \
     FMT_BOOL('G', fmt->gatherable)
 
     PL_DEBUG(gpu,  "GPU texture formats:");
@@ -1446,7 +1447,9 @@ void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         }
         case PL_DESC_STORAGE_IMG: {
             pl_tex tex = db.object;
+            pl_fmt fmt = tex->params.format;
             require(tex->params.storable);
+            require(desc.access != PL_DESC_ACCESS_READWRITE || (fmt->caps & PL_FMT_CAP_READWRITE));
             break;
         }
         case PL_DESC_BUF_UNIFORM: {
@@ -1466,7 +1469,9 @@ void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         }
         case PL_DESC_BUF_TEXEL_STORAGE: {
             pl_buf buf = db.object;
+            pl_fmt fmt = buf->params.format;
             require(buf->params.storable && buf->params.format);
+            require(desc.access != PL_DESC_ACCESS_READWRITE || (fmt->caps & PL_FMT_CAP_READWRITE));
             break;
         }
         case PL_DESC_INVALID:
