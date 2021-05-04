@@ -64,6 +64,9 @@ extern const struct pl_filter_function pl_filter_function_box;
 // This is also sometimes called a Bartlett window.
 extern const struct pl_filter_function pl_filter_function_triangle;
 
+// Cosine filter: Ordinary cosine function, single lobe.
+extern const struct pl_filter_function pl_filter_function_cosine;
+
 // Hann function: Cosine filter named after Julius von Hann. Also commonly
 // mislabeled as a "Hanning" function, due to its similary to the Hamming
 // function.
@@ -86,10 +89,17 @@ extern const struct pl_filter_function pl_filter_function_kaiser;
 //                zeros at the third and fourth sidelobes.
 extern const struct pl_filter_function pl_filter_function_blackman;
 
+// Bohman filter: 2nd order Cosine filter.
+extern const struct pl_filter_function pl_filter_function_bohman;
+
 // Gaussian function: Similar to the Gaussian distribution, this defines a
 // bell curve function.
 // Parameter [0]: Scale (t), increasing makes the result blurrier.
 extern const struct pl_filter_function pl_filter_function_gaussian;
+
+// Quadratic function: 2nd order approximation of the gaussian function. Also
+// sometimes called a "quadric" window.
+extern const struct pl_filter_function pl_filter_function_quadratic;
 
 // Sinc function: Widely used for both kernels and windows, sinc(x) = sin(x)/x.
 extern const struct pl_filter_function pl_filter_function_sinc;

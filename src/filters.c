@@ -244,6 +244,16 @@ const struct pl_filter_function pl_filter_function_triangle = {
     .radius    = 1.0,
 };
 
+static double cosine(const struct pl_filter_function *f, double x)
+{
+    return cos(x);
+}
+
+const struct pl_filter_function pl_filter_function_cosine = {
+    .weight = cosine,
+    .radius = M_PI / 2.0,
+};
+
 static double hann(const struct pl_filter_function *f, double x)
 {
     return 0.5 + 0.5 * cos(M_PI * x);
@@ -316,6 +326,17 @@ const struct pl_filter_function pl_filter_function_blackman = {
     .params  = {0.16},
 };
 
+static double bohman(const struct pl_filter_function *f, double x)
+{
+    double pix = M_PI * x;
+    return (1.0 - x) * cos(pix) + sin(pix) / M_PI;
+}
+
+const struct pl_filter_function pl_filter_function_bohman = {
+    .weight = bohman,
+    .radius = 1.0,
+};
+
 static double gaussian(const struct pl_filter_function *f, double x)
 {
     return exp(-2.0 * x * x / f->params[0]);
@@ -327,6 +348,20 @@ const struct pl_filter_function pl_filter_function_gaussian = {
     .weight    = gaussian,
     .radius    = 2.0,
     .params    = {1.0},
+};
+
+static double quadratic(const struct pl_filter_function *f, double x)
+{
+    if (x < 0.5) {
+        return 0.75 - x * x;
+    } else {
+        return 0.5 * (x - 1.5) * (x - 1.5);
+    }
+}
+
+const struct pl_filter_function pl_filter_function_quadratic = {
+    .weight = quadratic,
+    .radius = 1.5,
 };
 
 static double sinc(const struct pl_filter_function *f, double x)
@@ -496,13 +531,17 @@ const struct pl_filter_function_preset pl_filter_function_presets[] = {
     {"box",             &pl_filter_function_box},
     {"dirichlet",       &pl_filter_function_box}, // alias
     {"triangle",        &pl_filter_function_triangle},
+    {"cosine",          &pl_filter_function_cosine},
     {"hann",            &pl_filter_function_hann},
     {"hanning",         &pl_filter_function_hann}, // alias
     {"hamming",         &pl_filter_function_hamming},
     {"welch",           &pl_filter_function_welch},
     {"kaiser",          &pl_filter_function_kaiser},
     {"blackman",        &pl_filter_function_blackman},
+    {"bohman",          &pl_filter_function_bohman},
     {"gaussian",        &pl_filter_function_gaussian},
+    {"quadratic",       &pl_filter_function_quadratic},
+    {"quadric",         &pl_filter_function_quadratic}, // alias
     {"sinc",            &pl_filter_function_sinc},
     {"jinc",            &pl_filter_function_jinc},
     {"sphinx",          &pl_filter_function_sphinx},
