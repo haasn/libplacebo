@@ -302,7 +302,7 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
 
     // Enable all extensions needed for different types of input
     bool has_ssbo = false, has_ubo = false, has_img = false, has_texel = false,
-         has_ext = false, has_nofmt = false;
+         has_ext = false, has_nofmt = false, has_gather = false;
     for (int i = 0; i < sh->descs.num; i++) {
         switch (sh->descs.elem[i].desc.type) {
         case PL_DESC_BUF_UNIFORM: has_ubo = true; break;
@@ -322,6 +322,7 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
         }
         case PL_DESC_SAMPLED_TEX: {
             pl_tex tex = sd_binding(res->descriptors[i]).object;
+            has_gather |= tex->params.format->gatherable;
             switch (tex->sampler_type) {
             case PL_SAMPLER_NORMAL: break;
             case PL_SAMPLER_RECT: break;
@@ -349,6 +350,8 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
         ADD(pre, "#extension GL_OES_EGL_image_external : enable\n");
     if (has_nofmt)
         ADD(pre, "#extension GL_EXT_shader_image_load_formatted : enable\n");
+    if (has_gather)
+        ADD(pre, "#extension GL_ARB_texture_gather : enable\n");
 
     if (gpu->glsl.gles) {
         // Use 32-bit precision for floats if possible

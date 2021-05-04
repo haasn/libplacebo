@@ -349,6 +349,10 @@ static void vk_setup_formats(struct pl_gpu *gpu)
         if (!fmt->opaque)
             fmt->caps |= PL_FMT_CAP_HOST_READABLE;
 
+        // Vulkan requires a minimum GLSL version that supports textureGather()
+        if (fmt->caps & PL_FMT_CAP_SAMPLEABLE)
+            fmt->gatherable = true;
+
         // Disable implied capabilities where the dependencies are unavailable
         if (!(fmt->caps & PL_FMT_CAP_SAMPLEABLE))
             fmt->caps &= ~PL_FMT_CAP_LINEAR;

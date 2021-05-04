@@ -70,6 +70,7 @@ struct pl_gl {
     bool has_vao;
     bool has_queries;
     bool has_modifiers;
+    int gather_comps;
 };
 
 // For locking/unlocking

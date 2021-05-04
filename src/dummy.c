@@ -109,6 +109,7 @@ pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params)
                     .type = type,
                     .num_components = comps,
                     .opaque = false,
+                    .gatherable = true,
                     .internal_size = comps * depth / 8,
                     .texel_size = comps * depth / 8,
                     .caps = PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_LINEAR |

@@ -144,6 +144,7 @@ static void gpu_verify(pl_gpu gpu)
         pl_assert(fmt->num_components);
         pl_assert(fmt->internal_size);
         pl_assert(fmt->opaque ? !fmt->texel_size : fmt->texel_size);
+        pl_assert(!fmt->gatherable || (fmt->caps & PL_FMT_CAP_SAMPLEABLE));
         for (int i = 0; i < fmt->num_components; i++) {
             pl_assert(fmt->component_depth[i]);
             pl_assert(fmt->opaque ? !fmt->host_bits[i] : fmt->host_bits[i]);

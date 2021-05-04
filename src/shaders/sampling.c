@@ -623,15 +623,21 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                 // Using texture gathering is only more efficient than direct
                 // sampling in the case where we expect to be able to use all
                 // four gathered texels, without having to discard any. So
-                // only do it if we suspsect it will be a win rather than a
+                // only do it if we suspect it will be a win rather than a
                 // loss.
                 bool use_gather = sqrt(x*x + y*y) < obj->filter->radius_cutoff;
-
-                // Make sure all required features are supported
-                use_gather &= sh_glsl(sh).version >= 400;
-                use_gather &= gpu->limits.max_gather_offset != 0;
                 use_gather &= PL_MAX(x, y) <= gpu->limits.max_gather_offset;
                 use_gather &= PL_MIN(x, y) >= gpu->limits.min_gather_offset;
+                use_gather &= !src->tex || src->tex->params.format->gatherable;
+
+                // Gathering from components other than the R channel requires
+                // support for GLSL 400, which introduces the overload of
+                // textureGather* that allows specifying the component.
+                //
+                // This is also the minimum requirement if we don't know the
+                // texture format capabilities, for the sampler2D interface
+                if (comp_mask != 0x1 || !src->tex)
+                    use_gather &= sh_glsl(sh).version >= 400;
 
                 if (!use_gather) {
                     // Switch to direct sampling instead
@@ -647,8 +653,23 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                 // Gather the four surrounding texels simultaneously
                 for (uint8_t comps = comp_mask; comps;) {
                     uint8_t c = __builtin_ctz(comps);
-                    GLSL("in%d = textureGatherOffset(%s, base, "
-                         "ivec2(%d, %d), %d);\n", c, src_tex, x, y, c);
+                    if (x || y) {
+                        if (c) {
+                            GLSL("in%d = textureGatherOffset(%s, base, "
+                                 "ivec2(%d, %d), %d);\n",
+                                 c, src_tex, x, y, c);
+                        } else {
+                            GLSL("in0 = textureGatherOffset(%s, base, "
+                                 "ivec2(%d, %d));\n", src_tex, x, y);
+                        }
+                    } else {
+                        if (c) {
+                            GLSL("in%d = textureGather(%s, base, %d);\n",
+                                 c, src_tex, c);
+                        } else {
+                            GLSL("in0 = textureGather(%s, base);\n", src_tex);
+                        }
+                    }
                     comps &= ~(1 << c);
                 }
 

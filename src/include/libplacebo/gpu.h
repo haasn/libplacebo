@@ -268,6 +268,10 @@ PL_STRUCT(pl_fmt) {
     int sample_order[4];    // sampled index for each component, e.g.
                             // {2, 1, 0, 3} for BGRA textures
 
+    // For sampleable formats, this bool indicates whether or not the format
+    // is compatible with `textureGather()`
+    bool gatherable;
+
     // If usable as a vertex or texel buffer format, this gives the GLSL type
     // corresponding to the data. (e.g. vec4)
     const char *glsl_type;

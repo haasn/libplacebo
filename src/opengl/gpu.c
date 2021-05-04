@@ -210,6 +210,10 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
     }
 #endif
 
+    // Gathering requires checking the format type (and extension presence)
+    if (fmt->caps & PL_FMT_CAP_SAMPLEABLE)
+        fmt->gatherable = p->gather_comps >= fmt->num_components;
+
     // Mask renderable/blittable if no FBOs available
     if (!p->has_fbos)
         fmt->caps &= ~(PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE);
@@ -372,6 +376,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
         get(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &l->max_ssbo_size);
 
     if (test_ext(gpu, "GL_ARB_texture_gather", 40, 0)) {
+        get(GL_MAX_PROGRAM_TEXTURE_GATHER_COMPONENTS_ARB, &p->gather_comps);
         get(GL_MIN_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &l->min_gather_offset);
         get(GL_MAX_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &l->max_gather_offset);
     }
@@ -388,7 +393,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     // No additional restriction, so just enable if buffers are
     l->max_vbo_size = l->max_buf_size;
 
-    // Cached some existing capability checks
+    // Cache some existing capability checks
     p->has_stride = test_ext(gpu, "GL_EXT_unpack_subimage", 11, 30);
     p->has_vao = test_ext(gpu, "GL_ARB_vertex_array_object", 30, 0);
     p->has_invalidate_fb = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
