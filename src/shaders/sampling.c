@@ -615,17 +615,37 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
             comps &= ~(1 << c);
         }
 
-        // Iterate over the LUT space in groups of 4 texels at a time, and
-        // decide for each texel group whether to use gathering or direct
-        // sampling.
-        for (int y = 1 - bound; y <= bound; y += 2) {
-            for (int x = 1 - bound; x <= bound; x += 2) {
+        // For maximum efficiency, we want to use textureGather() if
+        // possible, rather than direct sampling. Since this is not
+        // always possible/sensible, we need to possibly intermix gathering
+        // with regular sampling. This requires keeping track of which
+        // pixels in the next row were already gathered by the previous
+        // row.
+        uint32_t gathered_cur = 0x0, gathered_next = 0x0;
+        const float radius2 = PL_SQUARE(obj->filter->radius_cutoff);
+        const int base = bound - 1;
+
+        if (base + bound >= 8 * sizeof(gathered_cur)) {
+            SH_FAIL(sh, "Polar radius %f exceeds implementation capacity!",
+                    obj->filter->radius_cutoff);
+            return false;
+        }
+
+        for (int y = 1 - bound; y <= bound; y++) {
+            for (int x = 1 - bound; x <= bound; x++) {
+                // Skip already gathered texels
+                uint32_t bit = 1llu << (base + x);
+                if (gathered_cur & bit)
+                    continue;
+
                 // Using texture gathering is only more efficient than direct
                 // sampling in the case where we expect to be able to use all
                 // four gathered texels, without having to discard any. So
                 // only do it if we suspect it will be a win rather than a
                 // loss.
-                bool use_gather = sqrt(x*x + y*y) < obj->filter->radius_cutoff;
+                int xx = x*x, xx1 = (x+1)*(x+1);
+                int yy = y*y, yy1 = (y+1)*(y+1);
+                bool use_gather = PL_MAX(xx, xx1) + PL_MAX(yy, yy1) < radius2;
                 use_gather &= PL_MAX(x, y) <= gpu->limits.max_gather_offset;
                 use_gather &= PL_MIN(x, y) >= gpu->limits.min_gather_offset;
                 use_gather &= !src->tex || src->tex->params.format->gatherable;
@@ -641,13 +661,9 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 
                 if (!use_gather) {
                     // Switch to direct sampling instead
-                    for (int yy = y; yy <= bound && yy <= y + 1; yy++) {
-                        for (int xx = x; xx <= bound && xx <= x + 1; xx++) {
-                            polar_sample(sh, obj->filter, fn, src_tex, lut,
-                                         xx, yy, comp_mask, NULL);
-                        }
-                    }
-                    continue; // next group of 4
+                    polar_sample(sh, obj->filter, fn, src_tex, lut, x, y,
+                                 comp_mask, NULL);
+                    continue;
                 }
 
                 // Gather the four surrounding texels simultaneously
@@ -686,7 +702,15 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                     polar_sample(sh, obj->filter, fn, src_tex, lut,
                                  x+xo[p], y+yo[p], comp_mask, "in");
                 }
+
+                // Mark the other next row's pixels as already gathered
+                gathered_next |= bit | (bit << 1);
+                x++; // skip adjacent pixel
             }
+
+            // Prepare for new row
+            gathered_cur = gathered_next;
+            gathered_next = 0;
         }
     }
 
