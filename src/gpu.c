@@ -45,13 +45,31 @@ void pl_gpu_destroy(pl_gpu gpu)
     impl->destroy(gpu);
 }
 
+#define FMT_BOOL(letter, cap) ((cap) ? (letter) : '-')
+#define FMT_IDX4(f) (f)[0], (f)[1], (f)[2], (f)[3]
+
 static void print_formats(pl_gpu gpu)
 {
     if (!pl_msg_test(gpu->log, PL_LOG_DEBUG))
         return;
 
+#define CAP_HEADER "%-11s"
+#define CAP_FIELDS "%c%c%c%c%c%c%c%c%c%c%c"
+#define CAP_VALUES \
+    FMT_BOOL('S', fmt->caps & PL_FMT_CAP_SAMPLEABLE),       \
+    FMT_BOOL('s', fmt->caps & PL_FMT_CAP_STORABLE),         \
+    FMT_BOOL('L', fmt->caps & PL_FMT_CAP_LINEAR),           \
+    FMT_BOOL('R', fmt->caps & PL_FMT_CAP_RENDERABLE),       \
+    FMT_BOOL('b', fmt->caps & PL_FMT_CAP_BLENDABLE),        \
+    FMT_BOOL('B', fmt->caps & PL_FMT_CAP_BLITTABLE),        \
+    FMT_BOOL('V', fmt->caps & PL_FMT_CAP_VERTEX),           \
+    FMT_BOOL('u', fmt->caps & PL_FMT_CAP_TEXEL_UNIFORM),    \
+    FMT_BOOL('t', fmt->caps & PL_FMT_CAP_TEXEL_STORAGE),    \
+    FMT_BOOL('H', fmt->caps & PL_FMT_CAP_HOST_READABLE),    \
+    FMT_BOOL('G', fmt->gatherable)
+
     PL_DEBUG(gpu,  "GPU texture formats:");
-    PL_DEBUG(gpu,  "    %-10s %-6s %-4s %-4s %-10s %-3s %-13s %-13s %-10s %-10s %-6s",
+    PL_DEBUG(gpu,  "    %-10s %-6s %-4s %-4s " CAP_HEADER " %-3s %-13s %-13s %-10s %-10s %-6s",
             "NAME", "TYPE", "SIZE", "COMP", "CAPS", "EMU", "DEPTH", "HOST_BITS",
             "GLSL_TYPE", "GLSL_FMT", "FOURCC");
     for (int n = 0; n < gpu->num_formats; n++) {
@@ -73,29 +91,18 @@ static void print_formats(pl_gpu gpu)
                 indices[i] = idx_map[fmt->sample_order[i]];
         }
 
-#define IDX4(f) (f)[0], (f)[1], (f)[2], (f)[3]
-#define CAP(letter, cap) (fmt->caps & (cap) ? (letter) : '-')
 
-        PL_DEBUG(gpu, "    %-10s %-6s %-4zu %c%c%c%c %c%c%c%c%c%c%c%c%c%c %-3s "
+        PL_DEBUG(gpu, "    %-10s %-6s %-4zu %c%c%c%c " CAP_FIELDS " %-3s "
                  "{%-2d %-2d %-2d %-2d} {%-2d %-2d %-2d %-2d} %-10s %-10s %-6s",
-                 fmt->name, types[fmt->type], fmt->texel_size, IDX4(indices),
-                 CAP('S', PL_FMT_CAP_SAMPLEABLE),
-                 CAP('s', PL_FMT_CAP_STORABLE),
-                 CAP('L', PL_FMT_CAP_LINEAR),
-                 CAP('R', PL_FMT_CAP_RENDERABLE),
-                 CAP('b', PL_FMT_CAP_BLENDABLE),
-                 CAP('B', PL_FMT_CAP_BLITTABLE),
-                 CAP('V', PL_FMT_CAP_VERTEX),
-                 CAP('u', PL_FMT_CAP_TEXEL_UNIFORM),
-                 CAP('t', PL_FMT_CAP_TEXEL_STORAGE),
-                 CAP('H', PL_FMT_CAP_HOST_READABLE),
-                 fmt->emulated ? "y" : "n",
-                 IDX4(fmt->component_depth), IDX4(fmt->host_bits),
+                 fmt->name, types[fmt->type], fmt->texel_size,
+                 FMT_IDX4(indices), CAP_VALUES, fmt->emulated ? "y" : "n",
+                 FMT_IDX4(fmt->component_depth), FMT_IDX4(fmt->host_bits),
                  PL_DEF(fmt->glsl_type, ""), PL_DEF(fmt->glsl_format, ""),
                  PRINT_FOURCC(fmt->fourcc));
 
-#undef CAP
-#undef IDX4
+#undef CAP_HEADER
+#undef CAP_FIELDS
+#undef CAP_VALUES
 
         for (int i = 0; i < fmt->num_modifiers; i++) {
             PL_TRACE(gpu, "        modifiers[%d]: %s",
@@ -174,18 +181,16 @@ void pl_gpu_print_info(pl_gpu gpu)
     PL_INFO(gpu, "    GLSL version: %d%s", gpu->glsl.version,
            gpu->glsl.vulkan ? " (vulkan)" : gpu->glsl.gles ? " es" : "");
 
-#define CAP(letter, cap) ((gpu->caps & cap) ? (letter) : '-')
     PL_INFO(gpu, "    Capabilities: %c%c%c%c%c%c%c%c (0x%x)",
-            CAP('C', PL_GPU_CAP_COMPUTE),
-            CAP('P', PL_GPU_CAP_PARALLEL_COMPUTE),
-            CAP('V', PL_GPU_CAP_INPUT_VARIABLES),
-            CAP('M', PL_GPU_CAP_MAPPED_BUFFERS),
-            CAP('B', PL_GPU_CAP_BLITTABLE_1D_3D),
-            CAP('G', PL_GPU_CAP_SUBGROUPS),
-            CAP('c', PL_GPU_CAP_CALLBACKS),
-            CAP('T', PL_GPU_CAP_THREAD_SAFE),
+            FMT_BOOL('C', gpu->caps & PL_GPU_CAP_COMPUTE),
+            FMT_BOOL('P', gpu->caps & PL_GPU_CAP_PARALLEL_COMPUTE),
+            FMT_BOOL('V', gpu->caps & PL_GPU_CAP_INPUT_VARIABLES),
+            FMT_BOOL('M', gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS),
+            FMT_BOOL('B', gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D),
+            FMT_BOOL('G', gpu->caps & PL_GPU_CAP_SUBGROUPS),
+            FMT_BOOL('c', gpu->caps & PL_GPU_CAP_CALLBACKS),
+            FMT_BOOL('T', gpu->caps & PL_GPU_CAP_THREAD_SAFE),
             (unsigned int) gpu->caps);
-#undef CAP
 
     PL_INFO(gpu, "    Limits:");
 
