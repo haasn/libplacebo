@@ -2523,6 +2523,10 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     if (!params->frame_mixer || rr->disable_mixing || !FBOFMT(4))
         goto fallback;
 
+    // Can't reasonably interpolate a single image, so just directly render it
+    if (images->num_frames == 1)
+        goto fallback;
+
     struct pass_state pass = {
         .rr = rr,
         .image = *refimg,

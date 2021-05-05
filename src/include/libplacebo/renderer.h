@@ -547,7 +547,8 @@ struct pl_frame_mix {
     // section below for more information.
     //
     // If the number of frames is 0, this call will be equivalent to
-    // `pl_render_image` with `image == NULL`.
+    // `pl_render_image` with `image == NULL`. If the number of frames is 1,
+    // this is equivalent to `pl_render_image` with that image.
     int num_frames;
 
     // A list of the frames themselves. The frames can have different
