@@ -454,10 +454,24 @@ done:
     return PL_QUEUE_OK;
 }
 
-static inline enum pl_queue_status zoh(pl_queue p, struct pl_frame_mix *mix,
-                                       const struct pl_queue_params *params)
+static inline enum pl_queue_status point(pl_queue p, struct pl_frame_mix *mix,
+                                         const struct pl_queue_params *params)
 {
+    // Find closest frame (nearest neighbour semantics)
+    pl_assert(p->queue.num);
     struct entry *entry = &p->queue.elem[0];
+    double best = fabs(entry->src.pts - params->pts);
+    for (int i = 1; i < p->queue.num; i++) {
+        double dist = fabs(p->queue.elem[i].src.pts - params->pts);
+        if (dist < best) {
+            entry = &p->queue.elem[i];
+            best = dist;
+            continue;
+        } else {
+            break;
+        }
+    }
+
     if (!map_frame(p, entry))
         return PL_QUEUE_ERR;
 
@@ -500,7 +514,7 @@ static enum pl_queue_status nearest(pl_queue p, struct pl_frame_mix *mix,
         break;
     }
 
-    return zoh(p, mix, params);
+    return point(p, mix, params);
 }
 
 // Special case of `interpolate` for radius = 0, in which case we need exactly
@@ -523,9 +537,9 @@ static enum pl_queue_status oversample(pl_queue p, struct pl_frame_mix *mix,
         break;
     }
 
-    // Can't oversample with only a single frame, fall back to ZOH semantics
+    // Can't oversample with only a single frame, fall back to point sampling
     if (p->queue.num < 2 || p->queue.elem[0].src.pts > params->pts) {
-        if (zoh(p, mix, params) != PL_QUEUE_OK)
+        if (point(p, mix, params) != PL_QUEUE_OK)
             return PL_QUEUE_ERR;
         return ret;
     }
@@ -567,7 +581,7 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
                                         const struct pl_queue_params *params)
 {
     // No FPS estimate available, possibly source contains only a single file,
-    // or this is the first frame to be rendered. Fall back to ZOH semantics.
+    // or this is the first frame to be rendered. Fall back to point sampling.
     if (!p->fps.estimate)
         return nearest(p, mix, params);
 
@@ -752,8 +766,7 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
         // We know the vsync duration, so construct an interpolation mix
         ret = interpolate(p, out_mix, params);
     } else {
-        // We don't know the vsync duration (yet), so just point-sample the
-        // nearest (zero-order-hold) frame
+        // We don't know the vsync duration (yet), so just point-sample
         ret = nearest(p, out_mix, params);
     }
 
