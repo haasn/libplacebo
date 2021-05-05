@@ -524,8 +524,11 @@ static enum pl_queue_status oversample(pl_queue p, struct pl_frame_mix *mix,
     }
 
     // Can't oversample with only a single frame, fall back to ZOH semantics
-    if (p->queue.num < 2 || p->queue.elem[0].src.pts > params->pts)
-        return zoh(p, mix, params);
+    if (p->queue.num < 2 || p->queue.elem[0].src.pts > params->pts) {
+        if (zoh(p, mix, params) != PL_QUEUE_OK)
+            return PL_QUEUE_ERR;
+        return ret;
+    }
 
     struct entry *entries[2] = { &p->queue.elem[0], &p->queue.elem[1] };
     pl_assert(entries[0]->src.pts <= params->pts);
@@ -556,7 +559,7 @@ static enum pl_queue_status oversample(pl_queue p, struct pl_frame_mix *mix,
         PL_TRACE(p, "    id %"PRIu64" ts %f", mix->signatures[i], mix->timestamps[i]);
 
     report_estimates(p);
-    return PL_QUEUE_OK;
+    return ret;
 }
 
 // Present a mixture of frames, relative to the vsync ratio
@@ -609,8 +612,8 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
     while (p->queue.elem[p->queue.num - 1].src.pts < max_pts) {
         switch ((ret = get_frame(p, params))) {
         case PL_QUEUE_ERR:
-        case PL_QUEUE_MORE:
             return ret;
+        case PL_QUEUE_MORE:
         case PL_QUEUE_EOF:
             goto done;
         case PL_QUEUE_OK:
@@ -652,7 +655,7 @@ done: ;
         PL_TRACE(p, "    id %"PRIu64" ts %f", mix->signatures[i], mix->timestamps[i]);
 
     report_estimates(p);
-    return PL_QUEUE_OK;
+    return ret;
 }
 
 static bool prefill(pl_queue p, const struct pl_queue_params *params)

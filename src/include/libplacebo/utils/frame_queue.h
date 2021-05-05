@@ -177,9 +177,9 @@ struct pl_queue_params {
 // must either have been pushed in advance, or will be requested using the
 // provided `get_frame` callback.
 //
-// This function may return with QUEUE_MORE, in which case the user must ensure
-// more frames are available and then re-run this function with the same
-// parameters. In this case, `out_mix` is still written to, but it may be
+// This function may return with PL_QUEUE_MORE, in which case the user may wish
+// to ensure more frames are available and then re-run this function with the
+// same parameters. In this case, `out_mix` is still written to, but it may be
 // incomplete (or even contain no frames at all).
 //
 // The resulting mix of frames in `out_mix` will represent the neighbourhood of
