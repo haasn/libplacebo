@@ -2506,21 +2506,28 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     for (int i = 0; i < images->num_frames - 1; i++)
         require(images->timestamps[i] <= images->timestamps[i+1]);
 
-    struct pass_state pass = {
-        .rr = rr,
-        .image = *images->frames[0],
-        .target = *ptarget,
-    };
-
-    // As the canonical reference, find the nearest frame that would be
-    // currently visible on an idealized zero-order-hold display.
+    // As the canonical reference, find the nearest neighbour frame
+    const struct pl_image *refimg = images->frames[0];
+    float best = fabs(images->timestamps[0]);
     for (int i = 1; i < images->num_frames; i++) {
-        if (images->timestamps[i] <= 0.0)
-            pass.image = *images->frames[i];
+        float dist = fabs(images->timestamps[i]);
+        if (dist < best) {
+            refimg = images->frames[i];
+            best = dist;
+            continue;
+        } else {
+            break;
+        }
     }
 
     if (!params->frame_mixer || rr->disable_mixing || !FBOFMT(4))
         goto fallback;
+
+    struct pass_state pass = {
+        .rr = rr,
+        .image = *refimg,
+        .target = *ptarget,
+    };
 
     if (!pass_infer_state(&pass, false))
         return false;
@@ -2766,7 +2773,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     return true;
 
 fallback:
-    return pl_render_image(rr, &pass.image, ptarget, params);
+    return pl_render_image(rr, refimg, ptarget, params);
 }
 
 void pl_frame_set_chroma_location(struct pl_frame *frame,
