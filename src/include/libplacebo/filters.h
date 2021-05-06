@@ -214,6 +214,7 @@ extern const struct pl_filter_config pl_filter_ewa_jinc;    // unwindowed
 extern const struct pl_filter_config pl_filter_ewa_lanczos; // jinc-jinc
 extern const struct pl_filter_config pl_filter_ewa_ginseng; // jinc-sinc
 extern const struct pl_filter_config pl_filter_ewa_hann;    // jinc-hann
+extern const struct pl_filter_config pl_filter_haasnsoft PL_DEPRECATED;
 // Spline family
 extern const struct pl_filter_config pl_filter_bicubic;
 extern const struct pl_filter_config pl_filter_catmull_rom;
