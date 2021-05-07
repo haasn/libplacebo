@@ -96,7 +96,7 @@ struct vk_ctx {
     PL_VK_FUN(GetDeviceProcAddr);
     PL_VK_FUN(GetInstanceProcAddr);
     PL_VK_FUN(GetPhysicalDeviceExternalBufferProperties);
-    PL_VK_FUN(GetPhysicalDeviceExternalSemaphorePropertiesKHR);
+    PL_VK_FUN(GetPhysicalDeviceExternalSemaphoreProperties);
     PL_VK_FUN(GetPhysicalDeviceFeatures2KHR);
     PL_VK_FUN(GetPhysicalDeviceFormatProperties);
     PL_VK_FUN(GetPhysicalDeviceFormatProperties2KHR);

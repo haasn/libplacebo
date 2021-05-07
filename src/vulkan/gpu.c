@@ -391,23 +391,20 @@ static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
 {
     pl_handle_caps caps = 0;
 
-    if (!vk->GetPhysicalDeviceExternalSemaphorePropertiesKHR)
-        return caps;
-
     for (int i = 0; vk_sync_handle_list[i]; i++) {
         enum pl_handle_type type = vk_sync_handle_list[i];
 
-        VkPhysicalDeviceExternalSemaphoreInfoKHR info = {
+        VkPhysicalDeviceExternalSemaphoreInfo info = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO_KHR,
             .handleType = vk_sync_handle_type(type),
         };
 
-        VkExternalSemaphorePropertiesKHR props = {
+        VkExternalSemaphoreProperties props = {
             .sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES_KHR,
         };
 
-        vk->GetPhysicalDeviceExternalSemaphorePropertiesKHR(vk->physd, &info, &props);
-        VkExternalSemaphoreFeatureFlagsKHR flags = props.externalSemaphoreFeatures;
+        vk->GetPhysicalDeviceExternalSemaphoreProperties(vk->physd, &info, &props);
+        VkExternalSemaphoreFeatureFlags flags = props.externalSemaphoreFeatures;
         if ((props.compatibleHandleTypes & info.handleType) &&
             (flags & VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT_KHR))
         {
