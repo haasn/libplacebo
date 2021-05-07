@@ -1127,9 +1127,11 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
 
     VkPhysicalDeviceExternalImageFormatInfoKHR ext_pinfo = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR,
-        .pNext = handle_type == PL_HANDLE_DMA_BUF ? &drm_pinfo : NULL,
         .handleType = ext_info.handleTypes,
     };
+
+    if (handle_type == PL_HANDLE_DMA_BUF && has_drm_mods)
+        vk_link_struct(&ext_pinfo, &drm_pinfo);
 
     VkPhysicalDeviceImageFormatInfo2KHR pinfo = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR,
@@ -1197,7 +1199,7 @@ static const struct pl_tex *vk_tex_create(const struct pl_gpu *gpu,
 
         VkMemoryRequirements2KHR reqs2 = {
             .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR,
-            .pNext = &ded_reqs,
+            .pNext = (vk->api_ver >= VK_API_VERSION_1_1) ? &ded_reqs : NULL,
         };
 
         VkImageMemoryRequirementsInfo2KHR req_info2 = {
