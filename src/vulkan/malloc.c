@@ -220,21 +220,18 @@ static bool buf_external_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
     if (!handle_type)
         return true;
 
-    if (!vk->GetPhysicalDeviceExternalBufferPropertiesKHR)
-        return false;
-
-    VkPhysicalDeviceExternalBufferInfoKHR info = {
+    VkPhysicalDeviceExternalBufferInfo info = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO_KHR,
         .usage = usage,
         .handleType = vk_mem_handle_type(handle_type),
     };
 
-    VkExternalBufferPropertiesKHR props = {
+    VkExternalBufferProperties props = {
         .sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES_KHR,
     };
 
     pl_assert(info.handleType);
-    vk->GetPhysicalDeviceExternalBufferPropertiesKHR(vk->physd, &info, &props);
+    vk->GetPhysicalDeviceExternalBufferProperties(vk->physd, &info, &props);
     return vk_external_mem_check(vk, &props.externalMemoryProperties,
                                  handle_type, import);
 }

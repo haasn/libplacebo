@@ -422,10 +422,6 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
 {
     pl_handle_caps caps = 0;
 
-    // This function checks for VK_KHR_external_memory_capabilities
-    if (!vk->GetPhysicalDeviceExternalBufferPropertiesKHR)
-        return caps;
-
     bool has_drm_mods = vk->GetImageDrmFormatModifierPropertiesEXT;
     for (int i = 0; vk_mem_handle_list[i]; i++) {
         enum pl_handle_type handle_type = vk_mem_handle_list[i];

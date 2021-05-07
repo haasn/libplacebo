@@ -65,6 +65,7 @@ static const struct vk_fun vk_inst_funs[] = {
     PL_VK_INST_FUN(CreateDevice),
     PL_VK_INST_FUN(EnumerateDeviceExtensionProperties),
     PL_VK_INST_FUN(GetDeviceProcAddr),
+    PL_VK_INST_FUN(GetPhysicalDeviceExternalBufferProperties),
     PL_VK_INST_FUN(GetPhysicalDeviceFeatures2KHR),
     PL_VK_INST_FUN(GetPhysicalDeviceFormatProperties),
     PL_VK_INST_FUN(GetPhysicalDeviceFormatProperties2KHR),
@@ -102,13 +103,6 @@ static const struct vk_ext vk_device_extensions[] = {
         .name = VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
             PL_VK_DEV_FUN(CmdPushDescriptorSetKHR),
-            {0}
-        },
-    }, {
-        .name = VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
-        .core_ver = VK_API_VERSION_1_1,
-        .funs = (struct vk_fun[]) {
-            PL_VK_INST_FUN(GetPhysicalDeviceExternalBufferPropertiesKHR),
             {0}
         },
     }, {
@@ -206,7 +200,6 @@ static const struct vk_ext vk_device_extensions[] = {
 // Make sure to keep this in sync with the above!
 const char * const pl_vulkan_recommended_extensions[] = {
     VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
-    VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
     VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
     VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME,
     VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
