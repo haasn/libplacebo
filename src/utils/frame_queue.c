@@ -435,14 +435,17 @@ static enum pl_queue_status advance(pl_queue p, float pts,
     }
 
 done:
-    if (p->eof && p->queue.num == 1 && p->fps.estimate) {
+    if (p->eof && p->queue.num == 1) {
+        if (p->queue.elem[0].src.pts == 0.0 || !p->fps.estimate) {
+            // If the last frame has PTS 0.0, or we have no FPS estimate, then
+            // this is probably a single-frame file, in which case we want to
+            // extend the ZOH to infinity, rather than returning. Not a perfect
+            // heuristic, but w/e
+            return PL_QUEUE_OK;
+        }
+
         // Last frame is held for an extra `p->fps.estimate` duration,
         // afterwards this function just returns EOF.
-        //
-        // Note that if `p->fps.estimate` is not available, then we're
-        // displaying a source that only has a single frame, in which case we
-        // most likely just want to repeat it forever. (Not a perfect
-        // heuristic, but w/e)
         if (p->queue.elem[0].src.pts + p->fps.estimate < pts) {
             cull_entry(p, &p->queue.elem[0]);
             p->queue.num = 0;
@@ -580,7 +583,7 @@ static enum pl_queue_status oversample(pl_queue p, struct pl_frame_mix *mix,
 static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
                                         const struct pl_queue_params *params)
 {
-    // No FPS estimate available, possibly source contains only a single file,
+    // No FPS estimate available, possibly source contains only a single frame,
     // or this is the first frame to be rendered. Fall back to point sampling.
     if (!p->fps.estimate)
         return nearest(p, mix, params);
