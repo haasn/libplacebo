@@ -165,20 +165,8 @@ static const struct vk_ext vk_device_extensions[] = {
             {0}
         },
     }, {
-        .name = VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,
-        .core_ver = VK_API_VERSION_1_1,
-        .funs = (struct vk_fun[]) {
-            {0}
-        },
-    }, {
         .name = VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
         .core_ver = VK_API_VERSION_1_2,
-        .funs = (struct vk_fun[]) {
-            {0}
-        },
-    }, {
-        .name = VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME,
-        .core_ver = VK_API_VERSION_1_1,
         .funs = (struct vk_fun[]) {
             {0}
         },
@@ -205,9 +193,7 @@ const char * const pl_vulkan_recommended_extensions[] = {
     VK_EXT_PCI_BUS_INFO_EXTENSION_NAME,
     VK_EXT_HDR_METADATA_EXTENSION_NAME,
     VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
-    VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,
     VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
-    VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME,
     VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
 };
 
