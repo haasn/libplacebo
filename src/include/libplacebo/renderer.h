@@ -96,10 +96,6 @@ struct pl_render_params {
     // this must be a filter config with `polar` set to false, since it's only
     // used for 1D mixing and thus only 1D filters are compatible.
     //
-    // As a special case, if `frame_mixer->kernel` is NULL, then libplacebo
-    // will use a built-in, inexpensive and relatively unobtrusive oversampling
-    // frame mixing algorithm. (See `pl_oversample_frame_mixer`)
-    //
     // If set to NULL, frame mixing is disabled, in which case
     // `pl_render_image_mix` behaves as `pl_render_image`, also completely
     // bypassing the mixing cache.
@@ -265,13 +261,24 @@ extern const struct pl_render_params pl_render_default_params;
 // and where maximum image quality is desired.
 extern const struct pl_render_params pl_render_high_quality_params;
 
-// Special filter config for the built-in oversampling frame mixing algorithm.
-// This is equivalent to (struct pl_filter_config) {0}.
-extern const struct pl_filter_config pl_oversample_frame_mixer;
+// Special filter config for the built-in oversampling algorithm. This is an
+// opaque filter with no meaningful representation. though it has one tunable
+// parameter controlling the threshold at which to switch back to ordinary
+// nearest neighbour sampling. (See `pl_shader_sample_oversample`)
+extern const struct pl_filter_config pl_filter_oversample;
+
+// Backwards compatibility
+#define pl_oversample_frame_mixer pl_filter_oversample
 
 // A list of recommended frame mixer presets, terminated by {0}
 extern const struct pl_filter_preset pl_frame_mixers[];
 extern const int pl_num_frame_mixers; // excluding trailing {0}
+
+// A list of recommended scaler presets, terminated by {0}. This is almost
+// equivalent to `pl_filter_presets` with the exception of including extra
+// built-in filters that don't map to the `pl_filter` architecture.
+extern const struct pl_filter_preset pl_scale_filters[];
+extern const int pl_num_scale_filters; // excluding trailing {0}
 
 #define PL_MAX_PLANES 4
 
@@ -610,9 +617,11 @@ struct pl_frame_mix {
 // Helper function to calculate the frame mixing radius.
 static inline float pl_frame_mix_radius(const struct pl_render_params *params)
 {
-    return (params->frame_mixer && params->frame_mixer->kernel)
-        ? params->frame_mixer->kernel->radius
-        : 0.0;
+    // For backwards compatibility, allow !frame_mixer->kernel
+    if (!params->frame_mixer || !params->frame_mixer->kernel)
+        return 0.0;
+
+    return params->frame_mixer->kernel->radius;
 }
 
 // Render a mixture of images to the target using the given parameters. This

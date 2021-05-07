@@ -18,6 +18,7 @@
 #include <math.h>
 
 #include "common.h"
+#include "filters.h"
 #include "shaders.h"
 #include "dispatch.h"
 
@@ -269,16 +270,39 @@ const struct pl_render_params pl_render_high_quality_params = {
     .dither_params      = &pl_dither_default_params,
 };
 
-const struct pl_filter_config pl_oversample_frame_mixer = {0};
+// This is only used as a sentinel, to use the GLSL implementation
+static double oversample(const struct pl_filter_function *k, double x)
+{
+    pl_unreachable();
+}
+
+static const struct pl_filter_function oversample_kernel = {
+    .weight = oversample,
+    .tunable = {true},
+    .params = {0.0},
+};
+
+const struct pl_filter_config pl_filter_oversample = {
+    .kernel = &oversample_kernel,
+};
 
 const struct pl_filter_preset pl_frame_mixers[] = {
     { "none",           NULL,                       "No frame mixing" },
-    { "oversample",     &pl_oversample_frame_mixer, "Oversample (AKA SmoothMotion)" },
+    { "oversample",     &pl_filter_oversample,      "Oversample (AKA SmoothMotion)" },
     { "mitchell_clamp", &pl_filter_mitchell_clamp,  "Cubic spline (clamped)" },
     {0}
 };
 
 const int pl_num_frame_mixers = PL_ARRAY_SIZE(pl_frame_mixers) - 1;
+
+const struct pl_filter_preset pl_scale_filters[] = {
+    {"none",                NULL,                   "Built-in sampling"},
+    {"oversample",          &pl_filter_oversample,  "Oversample (Aspect-preserving NN)"},
+    COMMON_FILTER_PRESETS,
+    {0}
+};
+
+const int pl_num_scale_filters = PL_ARRAY_SIZE(pl_scale_filters) - 1;
 
 #define FBOFMT(n) (params->disable_fbos ? NULL : rr->fbofmt[n])
 
@@ -458,6 +482,7 @@ enum sampler_type {
     SAMPLER_NEAREST, // direct sampling, force nearest
     SAMPLER_BICUBIC, // fast bicubic scaling
     SAMPLER_COMPLEX, // complex custom filters
+    SAMPLER_OVERSAMPLE,
 };
 
 enum sampler_dir {
@@ -510,6 +535,8 @@ static struct sampler_info sample_src_info(pl_renderer rr,
     int comps = PL_DEF(src->components, 4);
     if (!FBOFMT(comps) || rr->disable_sampling || !info.config) {
         info.type = SAMPLER_DIRECT;
+    } else if (info.config->kernel->weight == oversample) {
+        info.type = SAMPLER_OVERSAMPLE;
     } else {
         info.type = SAMPLER_COMPLEX;
 
@@ -558,6 +585,9 @@ static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
         goto fallback;
     case SAMPLER_NEAREST:
         pl_shader_sample_nearest(sh, src);
+        return;
+    case SAMPLER_OVERSAMPLE:
+        pl_shader_sample_oversample(sh, src, info.config->kernel->params[0]);
         return;
     case SAMPLER_BICUBIC:
         pl_shader_sample_bicubic(sh, src);
@@ -2568,19 +2598,11 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                  (unsigned long long) sig, pts);
 
         float weight;
-        if (params->frame_mixer->kernel) {
 
-            float radius = params->frame_mixer->kernel->radius;
-            if (fabs(pts) >= radius) {
-                PL_TRACE(rr, "  -> Skipping: outside filter radius (%f)", radius);
-                continue;
-            }
-
-            // Weight is directly sampled from the filter
-            weight = pl_filter_sample(params->frame_mixer, pts);
-            PL_TRACE(rr, "  -> Filter offset %f = weight %f", pts, weight);
-
-        } else {
+        // For backwards compatibility, treat !kernel as oversample
+        const struct pl_filter_function *kernel = params->frame_mixer->kernel;
+        kernel = PL_DEF(kernel, &oversample_kernel);
+        if (kernel->weight == oversample) {
 
             // Compute the visible interval [pts, end] of this frame
             float end = i+1 < images->num_frames ? images->timestamps[i+1] : INFINITY;
@@ -2597,6 +2619,23 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             weight = (end - pts) / images->vsync_duration;
             PL_TRACE(rr, "  -> Frame [%f, %f] intersects [%f, %f] = weight %f",
                      pts, end, 0.0, images->vsync_duration, weight);
+
+            if (weight < kernel->params[0]) {
+                PL_TRACE(rr, "     (culling due to threshold)");
+                weight = 0.0;
+            }
+
+        } else {
+
+            if (fabs(pts) >= kernel->radius) {
+                PL_TRACE(rr, "  -> Skipping: outside filter radius (%f)",
+                         kernel->radius);
+                continue;
+            }
+
+            // Weight is directly sampled from the filter
+            weight = pl_filter_sample(params->frame_mixer, pts);
+            PL_TRACE(rr, "  -> Filter offset %f = weight %f", pts, weight);
 
         }
 

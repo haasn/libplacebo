@@ -459,7 +459,7 @@ int main(int argc, char **argv)
 
     // Find the right named filter entries for the defaults
     const struct pl_filter_preset *f;
-    for (f = pl_filter_presets; f->name; f++) {
+    for (f = pl_scale_filters; f->name; f++) {
         if (p->params.upscaler == f->filter)
             p->upscaler = f;
         if (p->params.downscaler == f->filter)
@@ -578,7 +578,7 @@ static void update_settings(struct plplay *p)
             nk_label(nk, "Upscaler:", NK_TEXT_LEFT);
             if (nk_combo_begin_label(nk, p->upscaler->description, nk_vec2(nk_widget_width(nk), 500))) {
                 nk_layout_row_dynamic(nk, 16, 1);
-                for (f = pl_filter_presets; f->name; f++) {
+                for (f = pl_scale_filters; f->name; f++) {
                     if (!f->description)
                         continue;
                     if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT))
@@ -591,7 +591,7 @@ static void update_settings(struct plplay *p)
             nk_label(nk, "Downscaler:", NK_TEXT_LEFT);
             if (nk_combo_begin_label(nk, p->downscaler->description, nk_vec2(nk_widget_width(nk), 500))) {
                 nk_layout_row_dynamic(nk, 16, 1);
-                for (f = pl_filter_presets; f->name; f++) {
+                for (f = pl_scale_filters; f->name; f++) {
                     if (!f->description)
                         continue;
                     if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT))

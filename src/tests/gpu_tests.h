@@ -971,9 +971,9 @@ static void pl_render_tests(pl_gpu gpu)
 #define TEST_PARAMS(NAME, FIELD, LIMIT) \
     TEST(NAME##_params, pl_##NAME##_params, pl_##NAME##_default_params, FIELD, LIMIT)
 
-    for (int i = 0; i < pl_num_filter_presets; i++) {
+    for (int i = 0; i < pl_num_scale_filters; i++) {
         struct pl_render_params params = pl_render_default_params;
-        params.upscaler = pl_filter_presets[i].filter;
+        params.upscaler = pl_scale_filters[i].filter;
         REQUIRE(pl_render_image(rr, &image, &target, &params));
         pl_gpu_flush(gpu);
     }

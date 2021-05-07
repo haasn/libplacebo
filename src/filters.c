@@ -37,6 +37,7 @@
 #include <math.h>
 
 #include "common.h"
+#include "filters.h"
 #include "log.h"
 
 bool pl_filter_function_eq(const struct pl_filter_function *a,
@@ -684,36 +685,9 @@ const struct pl_filter_config pl_filter_ewa_robidouxsharp = {
 
 // Named filter configs
 const struct pl_filter_preset pl_filter_presets[] = {
-    // Highest priority / recommended filters
     {"none",                NULL,                   "Built-in sampling"},
-    {"bilinear",            &pl_filter_bilinear,    "Bilinear"},
-    {"nearest",             &pl_filter_nearest,     "Nearest neighbour"},
-    {"bicubic",             &pl_filter_bicubic,     "Bicubic"},
-    {"lanczos",             &pl_filter_lanczos,     "Lanczos"},
-    {"ewa_lanczos",         &pl_filter_ewa_lanczos, "Jinc (EWA Lanczos)"},
-    {"gaussian",            &pl_filter_gaussian,    "Gaussian"},
-    {"spline16",            &pl_filter_spline16,    "Spline (2 taps)"},
-    {"spline36",            &pl_filter_spline36,    "Spline (3 taps)"},
-    {"spline64",            &pl_filter_spline64,    "Spline (4 taps)"},
-    {"mitchell",            &pl_filter_mitchell,    "Mitchell-Netravali"},
-
-    // Remaining filters
-    {"sinc",                &pl_filter_sinc,        "Sinc (unwindowed)"},
-    {"ginseng",             &pl_filter_ginseng,     "Ginseng (Jinc-Sinc)"},
-    {"ewa_jinc",            &pl_filter_ewa_jinc,    "EWA Jinc (unwindowed)"},
-    {"ewa_ginseng",         &pl_filter_ewa_ginseng, "EWA Ginseng"},
-    {"ewa_hann",            &pl_filter_ewa_hann,    "EWA Hann"},
-    {"catmull_rom",         &pl_filter_catmull_rom, "Catmull-Rom"},
-    {"robidoux",            &pl_filter_robidoux,            "Robidoux"},
-    {"robidouxsharp",       &pl_filter_robidouxsharp,       "RobidouxSharp"},
-    {"ewa_robidoux",        &pl_filter_ewa_robidoux,        "EWA Robidoux"},
-    {"ewa_robidouxsharp",   &pl_filter_ewa_robidouxsharp,   "EWA RobidouxSharp"},
-
-    // Aliases
-    {"box",                 &pl_filter_nearest}, // alias
-    {"triangle",            &pl_filter_bilinear}, // alias
-    {"ewa_hanning",         &pl_filter_ewa_hann}, // alias
-    {0},
+    COMMON_FILTER_PRESETS,
+    {0}
 };
 
 const int pl_num_filter_presets = PL_ARRAY_SIZE(pl_filter_presets) - 1;
