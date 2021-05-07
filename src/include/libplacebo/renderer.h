@@ -24,6 +24,7 @@
 #include <libplacebo/gpu.h>
 #include <libplacebo/shaders/av1.h>
 #include <libplacebo/shaders/colorspace.h>
+#include <libplacebo/shaders/lut.h>
 #include <libplacebo/shaders/sampling.h>
 #include <libplacebo/shaders/custom.h>
 #include <libplacebo/swapchain.h>
