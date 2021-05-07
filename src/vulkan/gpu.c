@@ -566,7 +566,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         .pNext = &host_props,
     };
 
-    vk->GetPhysicalDeviceProperties2KHR(vk->physd, &props);
+    vk->GetPhysicalDeviceProperties2(vk->physd, &props);
     gpu->limits.align_host_ptr = host_props.minImportedHostPointerAlignment;
 
     if (pl_gpu_supports_interop(gpu)) {

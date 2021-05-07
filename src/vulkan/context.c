@@ -71,7 +71,7 @@ static const struct vk_fun vk_inst_funs[] = {
     PL_VK_INST_FUN(GetPhysicalDeviceImageFormatProperties2KHR),
     PL_VK_INST_FUN(GetPhysicalDeviceMemoryProperties),
     PL_VK_INST_FUN(GetPhysicalDeviceProperties),
-    PL_VK_INST_FUN(GetPhysicalDeviceProperties2KHR),
+    PL_VK_INST_FUN(GetPhysicalDeviceProperties2),
     PL_VK_INST_FUN(GetPhysicalDeviceQueueFamilyProperties),
 
     // These are not actually mandatory, but they're universal enough that we
@@ -242,7 +242,7 @@ static const VkPhysicalDeviceHostQueryResetFeaturesEXT host_query_reset = {
     .hostQueryReset = true,
 };
 
-const VkPhysicalDeviceFeatures2KHR pl_vulkan_recommended_features = {
+const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
     .pNext = (void *) &host_query_reset,
     .features = {
@@ -551,6 +551,13 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
         api_ver = PL_MIN(api_ver, params->max_api_version);
         pl_info(log, "Restricting API version to %d.%d.%d... new version %d.%d.%d",
                 PRINTF_VER(params->max_api_version), PRINTF_VER(api_ver));
+    }
+
+    if (api_ver < VK_API_VERSION_1_1) {
+        pl_fatal(log, "Instance API version %d.%d.%d is lower than the minimum "
+                 "required version of %d.%d.%d, cannot proceed!",
+                 PRINTF_VER(api_ver), PRINTF_VER(VK_API_VERSION_1_1));
+        goto error;
     }
 
     VkInstanceCreateInfo info = {
@@ -928,14 +935,8 @@ VkPhysicalDevice pl_vulkan_choose_device(pl_log log,
         return NULL;
 
     PL_VK_LOAD_FUN(inst, EnumeratePhysicalDevices, get_addr);
-    PL_VK_LOAD_FUN(inst, GetPhysicalDeviceProperties2KHR, get_addr);
-
-    if (!GetPhysicalDeviceProperties2KHR) {
-        PL_FATAL(vk, "Provided VkInstance does not support "
-                 VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-                 ", cannot continue!");
-        return VK_NULL_HANDLE;
-    }
+    PL_VK_LOAD_FUN(inst, GetPhysicalDeviceProperties2, get_addr);
+    pl_assert(GetPhysicalDeviceProperties2);
 
     VkPhysicalDevice *devices = NULL;
     uint32_t num = 0;
@@ -965,7 +966,7 @@ VkPhysicalDevice pl_vulkan_choose_device(pl_log log,
             .pNext = &id_props,
         };
 
-        GetPhysicalDeviceProperties2KHR(devices[i], &prop);
+        GetPhysicalDeviceProperties2(devices[i], &prop);
         VkPhysicalDeviceType t = prop.properties.deviceType;
         bool has_uuid = memcmp(id_props.deviceUUID, nil, VK_UUID_SIZE) != 0;
         if (uuid_set && !has_uuid) {
@@ -1006,6 +1007,11 @@ VkPhysicalDevice pl_vulkan_choose_device(pl_log log,
 
         if (!params->allow_software && t == VK_PHYSICAL_DEVICE_TYPE_CPU) {
             PL_DEBUG(vk, "      -> excluding due to params->allow_software");
+            continue;
+        }
+
+        if (prop.properties.apiVersion < VK_API_VERSION_1_1) {
+            PL_DEBUG(vk, "      -> excluding due to too low API version");
             continue;
         }
 
@@ -1362,7 +1368,7 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
         .pNext = &id_props,
     };
 
-    vk->GetPhysicalDeviceProperties2KHR(vk->physd, &prop);
+    vk->GetPhysicalDeviceProperties2(vk->physd, &prop);
     vk->limits = prop.properties.limits;
 
     PL_INFO(vk, "Vulkan device properties:");
@@ -1379,6 +1385,13 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
         vk->api_ver = PL_MIN(vk->api_ver, params->max_api_version);
         PL_INFO(vk, "Restricting API version to %d.%d.%d... new version %d.%d.%d",
                 PRINTF_VER(params->max_api_version), PRINTF_VER(vk->api_ver));
+    }
+
+    if (vk->api_ver < VK_API_VERSION_1_1) {
+        PL_FATAL(vk, "Device API version %d.%d.%d is lower than the minimum "
+                 "required version of %d.%d.%d, cannot proceed!",
+                 PRINTF_VER(vk->api_ver), PRINTF_VER(VK_API_VERSION_1_1));
+        goto error;
     }
 
     // Finally, initialize the logical device and the rest of the vk_ctx
@@ -1462,13 +1475,6 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
     for (int i = 0; i < PL_ARRAY_SIZE(vk_inst_funs); i++)
         load_vk_fun(vk, &vk_inst_funs[i]);
 
-    if (!vk->GetPhysicalDeviceProperties2KHR) {
-        PL_FATAL(vk, "Provided VkInstance does not support "
-                 VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-                 ", cannot continue!");
-        goto error;
-    }
-
     VkPhysicalDeviceIDPropertiesKHR id_props = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR,
     };
@@ -1478,7 +1484,8 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
         .pNext = &id_props,
     };
 
-    vk->GetPhysicalDeviceProperties2KHR(vk->physd, &prop);
+    pl_assert(vk->GetPhysicalDeviceProperties2);
+    vk->GetPhysicalDeviceProperties2(vk->physd, &prop);
     vk->limits = prop.properties.limits;
 
     PL_INFO(vk, "Imported vulkan device properties:");
@@ -1496,7 +1503,14 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
                 PRINTF_VER(params->max_api_version), PRINTF_VER(vk->api_ver));
     }
 
-    VkPhysicalDeviceFeatures2KHR *features;
+    if (vk->api_ver < VK_API_VERSION_1_1) {
+        PL_FATAL(vk, "Device API version %d.%d.%d is lower than the minimum "
+                 "required version of %d.%d.%d, cannot proceed!",
+                 PRINTF_VER(vk->api_ver), PRINTF_VER(VK_API_VERSION_1_1));
+        goto error;
+    }
+
+    VkPhysicalDeviceFeatures2 *features;
     features = vk_chain_memdup(vk->alloc, params->features);
     if (features)
         vk->features = *features;

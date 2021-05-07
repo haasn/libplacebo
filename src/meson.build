@@ -5,7 +5,7 @@ libm = cc.find_library('m', required: false)
 build_deps = [ libm ]
 test_deps = []
 
-vulkan = dependency('vulkan', version: '>=1.0.42', required: get_option('vulkan'))
+vulkan = dependency('vulkan', version: '>=1.1', required: get_option('vulkan'))
 opengl = dependency('epoxy', version: '>=1.4.0', required: get_option('opengl'))
 shaderc = dependency('shaderc', version: '>=2018.0', required: get_option('shaderc'))
 

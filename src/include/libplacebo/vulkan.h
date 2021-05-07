@@ -125,7 +125,7 @@ typedef const PL_STRUCT(pl_vulkan) {
     int num_extensions;
 
     // The device features that were enabled at device creation time.
-    const VkPhysicalDeviceFeatures2KHR *features;
+    const VkPhysicalDeviceFeatures2 *features;
 
     // The explicit queue families we are using to provide a given capability,
     // or {0} if no appropriate dedicated queue family exists for this
@@ -149,8 +149,8 @@ struct pl_vulkan_params {
     // The vulkan instance. Optional, if NULL then libplacebo will internally
     // create a VkInstance with the settings from `instance_params`.
     //
-    // NOTE: The VkInstance provided by the user *MUST* be created with the
-    // `VK_KHR_get_physical_device_properties2` extension enabled!
+    // Note: The VkInstance provided by the user *MUST* be created with a
+    // VkApplicationInfo.apiVersion of VK_API_VERSION_1_1 or higher.
     VkInstance instance;
 
     // Pointer to `vkGetInstanceProcAddr`. If this is NULL, libplacebo will
@@ -235,7 +235,7 @@ struct pl_vulkan_params {
     // features in the pNext chain, however these *must* all be
     // extension-specific structs, i.e. the use of "meta-structs" like
     // VkPhysicalDeviceVulkan11Features is not allowed.
-    const VkPhysicalDeviceFeatures2KHR *features;
+    const VkPhysicalDeviceFeatures2 *features;
 
     // --- Misc/debugging options
 
@@ -273,8 +273,8 @@ void pl_vulkan_destroy(pl_vulkan *vk);
 struct pl_vulkan_device_params {
     // The instance to use. Required!
     //
-    // NOTE: The VkInstance provided by the user *MUST* be created with the
-    // `VK_KHR_get_physical_device_properties2` extension enabled!
+    // Note: The VkInstance provided by the user *MUST* be created with a
+    // VkApplicationInfo.apiVersion of VK_API_VERSION_1_1 or higher.
     VkInstance instance;
 
     // Mirrored from `pl_vulkan_params`. All of these fields are optional.
@@ -351,8 +351,8 @@ bool pl_vulkan_swapchain_suboptimal(pl_swapchain sw);
 struct pl_vulkan_import_params {
     // The vulkan instance. Required.
     //
-    // NOTE: The VkInstance provided by the user *MUST* be created with the
-    // `VK_KHR_get_physical_device_properties2` extension enabled!
+    // Note: The VkInstance provided by the user *MUST* be created with a
+    // VkApplicationInfo.apiVersion of VK_API_VERSION_1_1 or higher.
     VkInstance instance;
 
     // Pointer to `vkGetInstanceProcAddr`. If this is NULL, libplacebo will
@@ -389,7 +389,7 @@ struct pl_vulkan_import_params {
 
     // Enabled VkPhysicalDeviceFeatures. May be left as NULL, in which case
     // libplacebo will assume no extra device features were enabled.
-    const VkPhysicalDeviceFeatures2KHR *features;
+    const VkPhysicalDeviceFeatures2 *features;
 
     // --- Misc/debugging options
 
@@ -461,7 +461,7 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params);
 // than the more general purpose VkPhysicalDeviceVulkan11Features etc.
 extern const char * const pl_vulkan_recommended_extensions[];
 extern const int pl_vulkan_num_recommended_extensions;
-extern const VkPhysicalDeviceFeatures2KHR pl_vulkan_recommended_features;
+extern const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features;
 
 // Analogous to `pl_vulkan_wrap`, this function takes any `pl_tex` (including
 // ones created by `pl_tex_create`) and unwraps it to expose the underlying
