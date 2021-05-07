@@ -356,6 +356,48 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
          "color = vec4(%f) * mix(aa, ab, parmx.b);  \n"
          "}                                         \n",
          fn, tex, fn, tex, fn, tex, fn, tex, scale);
+
+    return true;
+}
+
+bool pl_shader_sample_oversample(pl_shader sh, const struct pl_sample_src *src,
+                                 float threshold)
+{
+    ident_t tex, pos, size, pt;
+    float rx, ry, scale;
+    const char *fn;
+    if (!setup_src(sh, src, &tex, &pos, &size, &pt, &rx, &ry, NULL, &scale,
+                   true, &fn, LINEAR))
+        return false;
+
+    ident_t ratio = sh_var(sh, (struct pl_shader_var) {
+        .var = pl_var_vec2("ratio"),
+        .data = &(float[2]) { rx, ry },
+    });
+
+     // Round the position to the nearest pixel
+    GLSL("// pl_shader_sample_oversample                \n"
+         "vec4 color = vec4(0.0);                       \n"
+         "{                                             \n"
+         "vec2 pt = %s;                                 \n"
+         "vec2 pos = %s - vec2(0.5) * pt;               \n"
+         "vec2 fcoord = fract(pos * %s - vec2(0.5));    \n"
+         "vec2 coeff = fcoord * %s;                     \n",
+         pt, pos, size, ratio);
+
+    if (threshold > 0.0) {
+        threshold = PL_MIN(threshold, 1.0);
+        GLSL("coeff = (coeff - %f) * 1.0/%f; \n",
+             threshold, 1.0 - 2 * threshold);
+    }
+
+    // Compute the right output blend of colors
+    GLSL("coeff = clamp(coeff, 0.0, 1.0);               \n"
+         "pos += (coeff - fcoord) * pt;                 \n"
+         "color = vec4(%f) * %s(%s, pos);               \n"
+         "}                                             \n",
+         scale, fn, tex);
+
     return true;
 }
 

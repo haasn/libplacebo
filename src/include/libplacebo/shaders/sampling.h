@@ -121,6 +121,19 @@ bool pl_shader_sample_bilinear(pl_shader sh, const struct pl_sample_src *src);
 // downscaling.
 bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src);
 
+// A sampler that is similar to nearest neighbour sampling, but tries to
+// preserve pixel aspect ratios. This is mathematically equivalent to taking an
+// idealized image with square pixels, sampling it at an infinite resolution,
+// and then downscaling that to the desired resolution. (Hence it being called
+// "oversample"). Good for pixel art.
+//
+// The threshold provides a cutoff threshold below which the contribution of
+// pixels should be ignored, trading some amount of aspect ratio distortion for
+// a slightly crisper image. A value of `threshold == 0.5` makes this filter
+// equivalent to regular nearest neighbour sampling.
+bool pl_shader_sample_oversample(pl_shader sh, const struct pl_sample_src *src,
+                                 float threshold);
+
 struct pl_sample_filter_params {
     // The filter to use for sampling.
     struct pl_filter_config filter;
