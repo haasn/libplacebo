@@ -105,13 +105,6 @@ static const struct vk_ext vk_device_extensions[] = {
             {0}
         },
     }, {
-        .name = VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
-        .core_ver = VK_API_VERSION_1_1,
-        .funs = (struct vk_fun[]) {
-            PL_VK_DEV_FUN(GetImageMemoryRequirements2KHR),
-            {0}
-        },
-    }, {
         .name = VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
         .core_ver = VK_API_VERSION_1_1,
         .funs = (struct vk_fun[]) {
@@ -213,7 +206,6 @@ static const struct vk_ext vk_device_extensions[] = {
 // Make sure to keep this in sync with the above!
 const char * const pl_vulkan_recommended_extensions[] = {
     VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
-    VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
     VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
     VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
     VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME,
@@ -341,7 +333,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(FreeMemory),
     PL_VK_DEV_FUN(GetBufferMemoryRequirements),
     PL_VK_DEV_FUN(GetDeviceQueue),
-    PL_VK_DEV_FUN(GetImageMemoryRequirements),
+    PL_VK_DEV_FUN(GetImageMemoryRequirements2),
     PL_VK_DEV_FUN(GetImageSubresourceLayout),
     PL_VK_DEV_FUN(GetPipelineCacheData),
     PL_VK_DEV_FUN(GetQueryPoolResults),

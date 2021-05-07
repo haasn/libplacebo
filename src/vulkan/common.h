@@ -195,8 +195,7 @@ struct vk_ctx {
     PL_VK_FUN(GetBufferMemoryRequirements);
     PL_VK_FUN(GetDeviceQueue);
     PL_VK_FUN(GetImageDrmFormatModifierPropertiesEXT);
-    PL_VK_FUN(GetImageMemoryRequirements);
-    PL_VK_FUN(GetImageMemoryRequirements2KHR);
+    PL_VK_FUN(GetImageMemoryRequirements2);
     PL_VK_FUN(GetImageSubresourceLayout);
     PL_VK_FUN(GetMemoryFdKHR);
     PL_VK_FUN(GetMemoryFdPropertiesKHR);

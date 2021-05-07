@@ -1219,28 +1219,24 @@ static pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         .shared_mem = params->shared_mem,
     };
 
-    if (vk->GetImageMemoryRequirements2KHR) {
-        VkMemoryDedicatedRequirementsKHR ded_reqs = {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS_KHR,
-        };
+    VkMemoryDedicatedRequirements ded_reqs = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS_KHR,
+    };
 
-        VkMemoryRequirements2KHR reqs2 = {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR,
-            .pNext = (vk->api_ver >= VK_API_VERSION_1_1) ? &ded_reqs : NULL,
-        };
+    VkMemoryRequirements2 reqs = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR,
+        .pNext = &ded_reqs,
+    };
 
-        VkImageMemoryRequirementsInfo2KHR req_info2 = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2_KHR,
-            .image = tex_vk->img,
-        };
+    VkImageMemoryRequirementsInfo2 req_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2_KHR,
+        .image = tex_vk->img,
+    };
 
-        vk->GetImageMemoryRequirements2KHR(vk->dev, &req_info2, &reqs2);
-        mparams.reqs = reqs2.memoryRequirements;
-        if (ded_reqs.prefersDedicatedAllocation)
-            mparams.ded_image = tex_vk->img;
-    } else {
-        vk->GetImageMemoryRequirements(vk->dev, tex_vk->img, &mparams.reqs);
-    }
+    vk->GetImageMemoryRequirements2(vk->dev, &req_info, &reqs);
+    mparams.reqs = reqs.memoryRequirements;
+    if (ded_reqs.prefersDedicatedAllocation)
+        mparams.ded_image = tex_vk->img;
 
     struct vk_memslice *mem = &tex_vk->mem;
     if (!vk_malloc_slice(p->alloc, mem, &mparams))
