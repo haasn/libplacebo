@@ -168,8 +168,12 @@ float pl_rect2df_aspect(const struct pl_rect2df *rc);
 
 // Set the aspect of a `rc` to a given aspect ratio with an extra 'panscan'
 // factor choosing the balance between shrinking and growing the `rc` to meet
-// this aspect ratio. If `panscan` is 0.0, this function will only ever shrink
-// the rc . If `panscan` is 1.0, this function will only ever grow the `rc`.
+// this aspect ratio.
+//
+// Notes:
+// - If `panscan` is 0.0, this function will only ever shrink the `rc`.
+// - If `panscan` is 1.0, this function will only ever grow the `rc`.
+// - If `panscan` is 0.5, this function is area-preserving.
 void pl_rect2df_aspect_set(struct pl_rect2df *rc, float aspect, float panscan);
 
 // Set one rect's aspect to that of another
