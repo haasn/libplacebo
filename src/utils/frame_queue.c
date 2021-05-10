@@ -230,7 +230,7 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
         return; // ignore duplicate EOF
 
     if (p->eof && src) {
-        PL_ERR(p, "Received frame after EOF signaled... discarding frame!");
+        PL_INFO(p, "Received frame after EOF signaled... discarding frame!");
         if (src->discard)
             src->discard(src);
         return;
