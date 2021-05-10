@@ -37,10 +37,13 @@ static void pl_log_timestamp(void *stream, enum pl_log_level level, const char *
     };
 
     float secs = (float) clock() / CLOCKS_PER_SEC;
-    FILE *h = level <= PL_LOG_WARN ? stderr : stdout;
-    fprintf(h, "[%2.3f][%c] %s\n", secs, letter[level], msg);
-    if (level <= PL_LOG_WARN)
-        fflush(h);
+    printf("[%2.3f][%c] %s\n", secs, letter[level], msg);
+
+    if (level <= PL_LOG_WARN) {
+        // duplicate warnings/errors to stderr
+        fprintf(stderr, "[%2.3f][%c] %s\n", secs, letter[level], msg);
+        fflush(stderr);
+    }
 }
 
 static inline pl_log pl_test_logger()
