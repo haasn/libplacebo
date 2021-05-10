@@ -243,13 +243,13 @@ static struct window *glfw_create(pl_log log, const char *title,
         goto error;
     }
 
+    p->w.gpu = p->gl->gpu;
+#endif // USE_GL
+
     if (!pl_swapchain_resize(p->w.swapchain, &width, &height)) {
         fprintf(stderr, "libplacebo: Failed initializing swapchain\n");
         goto error;
     }
-
-    p->w.gpu = p->gl->gpu;
-#endif // USE_GL
 
     return &p->w;
 
