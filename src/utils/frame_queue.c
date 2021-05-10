@@ -306,7 +306,7 @@ bool pl_queue_push_block(pl_queue p, uint64_t timeout,
     if (!timeout || !frame || p->eof)
         goto skip_blocking;
 
-    while (!queue_has_room(p)) {
+    while (!queue_has_room(p) && !p->eof) {
         if (pl_cond_timedwait(&p->wakeup, &p->lock_weak, timeout) == ETIMEDOUT) {
             pthread_mutex_unlock(&p->lock_weak);
             return false;
