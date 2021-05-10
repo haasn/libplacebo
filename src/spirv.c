@@ -36,7 +36,8 @@ struct spirv_compiler *spirv_compiler_create(pl_log log, uint32_t api_version)
 
     for (int i = 0; i < PL_ARRAY_SIZE(compilers); i++) {
         const struct spirv_compiler_fns *impl = compilers[i];
-        pl_info(log, "Initializing SPIR-V compiler '%s'", impl->name);
+        pl_info(log, "Initializing SPIR-V compiler '%s' for target env %u.%u",
+                impl->name, api_version >> 22, (api_version >> 12) & 0x3ff);
         struct spirv_compiler *spirv = impl->create(log, api_version);
         if (!spirv)
             continue;

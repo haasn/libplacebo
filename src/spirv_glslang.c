@@ -46,6 +46,11 @@ static struct spirv_compiler *glslang_create(pl_log log, uint32_t api_version)
     struct priv *p = PL_PRIV(spirv);
     p->api_ver = api_version;
 
+    pl_info(log, "glslang version: %d.%d.%d",
+            GLSLANG_VERSION_MAJOR,
+            GLSLANG_VERSION_MINOR,
+            GLSLANG_VERSION_PATCH);
+
     return spirv;
 }
 
