@@ -47,6 +47,7 @@ struct plplay {
     AVCodecContext *codec;
     const AVStream *stream; // points to first video stream of `format`
     pthread_t decoder_thread;
+    bool exit_thread;
 
     // settings / ui state
     const struct pl_filter_preset *upscaler, *downscaler, *frame_mixer;
@@ -70,7 +71,8 @@ struct plplay {
 static void uninit(struct plplay *p)
 {
     if (p->decoder_thread) {
-        pthread_cancel(p->decoder_thread);
+        p->exit_thread = true;
+        pl_queue_push(p->queue, NULL); // Signal EOF to wake up thread
         pthread_join(p->decoder_thread, NULL);
     }
 
@@ -201,15 +203,13 @@ static void *decode_loop(void *arg)
     struct plplay *p = arg;
     AVPacket *packet = av_packet_alloc();
     AVFrame *frame = av_frame_alloc();
-    pthread_cleanup_push((void (*)(void *)) av_packet_free, &packet);
-    pthread_cleanup_push((void (*)(void *)) av_frame_free, &frame);
     if (!frame || !packet)
         goto done;
 
     double start_pts = 0.0;
     bool first_frame = true;
 
-    while (true) {
+    while (!p->exit_thread) {
         switch ((ret = av_read_frame(p->format, packet))) {
         case 0:
             if (packet->stream_index != p->stream->index) {
@@ -268,8 +268,8 @@ static void *decode_loop(void *arg)
 
 done:
     pl_queue_push(p->queue, NULL); // Signal EOF to flush queue
-    pthread_cleanup_pop(1);
-    pthread_cleanup_pop(1);
+    av_packet_free(&packet);
+    av_frame_free(&frame);
     return NULL;
 }
 
