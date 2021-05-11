@@ -1077,7 +1077,7 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
                                       params->blend_params, load, NULL, NULL);
 
     // Silently return on failed passes
-    if (!pass->pass)
+    if (!pass || !pass->pass)
         goto error;
 
     struct pl_pass_run_params *rparams = &pass->run_params;
@@ -1183,7 +1183,7 @@ bool pl_dispatch_compute(pl_dispatch dp, const struct pl_dispatch_compute_params
     struct pass *pass = finalize_pass(dp, sh, NULL, NULL, NULL, false, NULL, NULL);
 
     // Silently return on failed passes
-    if (!pass->pass)
+    if (!pass || !pass->pass)
         goto error;
 
     struct pl_pass_run_params *rparams = &pass->run_params;
@@ -1322,7 +1322,7 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
                                       params->blend_params, true, params, out_proj);
 
     // Silently return on failed passes
-    if (!pass->pass)
+    if (!pass || !pass->pass)
         goto error;
 
     struct pl_pass_run_params *rparams = &pass->run_params;
