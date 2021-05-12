@@ -4,8 +4,11 @@
  * License: CC0 / Public Domain
  */
 
-#include <time.h>
+#include <assert.h>
+#include <errno.h>
 #include <math.h>
+#include <string.h>
+#include <time.h>
 
 #include "common.h"
 #include "window.h"
@@ -20,21 +23,6 @@ static void uninit(int ret)
     exit(ret);
 }
 
-static void evolve_rgba(float rgba[4], int *pos)
-{
-    const int scale = 512;
-    const float circle = 2.0 * M_PI;
-    const float piece  = (float)(*pos % scale) / (scale - 1);
-
-    float alpha = (cosf(circle * (*pos) / scale * 0.5) + 1.0) / 2.0;
-    rgba[0] = alpha * (sinf(circle * piece + 0.0) + 1.0) / 2.0;
-    rgba[1] = alpha * (sinf(circle * piece + 2.0) + 1.0) / 2.0;
-    rgba[2] = alpha * (sinf(circle * piece + 4.0) + 1.0) / 2.0;
-    rgba[3] = alpha;
-
-    *pos += 1;
-}
-
 int main(int argc, char **argv)
 {
     logger = pl_log_create(PL_API_VER, &(struct pl_log_params) {
@@ -46,8 +34,11 @@ int main(int argc, char **argv)
     if (!win)
         uninit(1);
 
-    float rgba[4] = {0.0, 0.0, 0.0, 1.0};
-    int rainbow_pos = 0;
+    struct timespec ts_start, ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts_start) < 0) {
+        fprintf(stderr, "%s\n", strerror(errno));
+        uninit(1);
+    }
 
     while (!win->window_lost) {
         struct pl_swapchain_frame frame;
@@ -59,9 +50,23 @@ int main(int argc, char **argv)
             continue;
         }
 
+        if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
+            uninit(1);
+
+        const int period = 10; // in seconds
+        float secs = (ts.tv_sec - ts_start.tv_sec) % period +
+                     (ts.tv_nsec - ts_start.tv_nsec) * 1e-9;
+
+        float pos = 2 * M_PI * secs / period;
+        float alpha = (cosf(pos) + 1.0) / 2.0;
+
         assert(frame.fbo->params.blit_dst);
-        evolve_rgba(rgba, &rainbow_pos);
-        pl_tex_clear(win->gpu, frame.fbo, rgba);
+        pl_tex_clear(win->gpu, frame.fbo, (float[4]) {
+            alpha * (sinf(2 * pos + 0.0) + 1.0) / 2.0,
+            alpha * (sinf(2 * pos + 2.0) + 1.0) / 2.0,
+            alpha * (sinf(2 * pos + 4.0) + 1.0) / 2.0,
+            alpha,
+        });
 
         ok = pl_swapchain_submit_frame(win->swapchain);
         if (!ok) {
