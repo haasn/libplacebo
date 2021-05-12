@@ -1975,8 +1975,6 @@ fallback:
             dispatch_sampler(pass, sh, &rr->samplers_dst[p],
                              !plane->texture->params.storable, params, &src);
 
-            GLSL("vec4 orig_color = color; \n");
-
         } else {
 
             // Single plane, so we can directly re-use the img shader unless
