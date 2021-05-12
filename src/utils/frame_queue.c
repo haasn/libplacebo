@@ -341,6 +341,7 @@ static void report_estimates(pl_queue p)
     }
 }
 
+// note: may add more than one frame, since it releases the lock
 static enum pl_queue_status get_frame(pl_queue p, const struct pl_queue_params *params)
 {
     if (p->eof)
@@ -424,7 +425,7 @@ static enum pl_queue_status advance(pl_queue p, float pts,
             goto done;
         case PL_QUEUE_MORE:
         case PL_QUEUE_OK:
-            if (p->queue.num > 1 && p->queue.elem[1].src.pts <= pts) {
+            while (p->queue.num > 1 && p->queue.elem[1].src.pts <= pts) {
                 cull_entry(p, &p->queue.elem[0]);
                 PL_ARRAY_REMOVE_AT(p->queue, 0);
             }
