@@ -1755,6 +1755,14 @@ static bool pass_scale_main(pl_renderer rr, struct pass_state *pass,
     return true;
 }
 
+#define CLEAR_COL(params)                                                       \
+    (float[4]) {                                                                \
+        (params)->background_color[0],                                          \
+        (params)->background_color[1],                                          \
+        (params)->background_color[2],                                          \
+        1.0 - (params)->background_transparency,                                \
+    }
+
 static bool pass_output_target(pl_renderer rr, struct pass_state *pass,
                                const struct pl_render_params *params)
 {
@@ -1906,7 +1914,7 @@ fallback:
          flipped_y = pass->dst_rect.y1 < pass->dst_rect.y0;
 
     if (!params->skip_target_clearing && pl_frame_is_cropped(target))
-        pl_frame_clear(rr->gpu, target, params->background_color);
+        pl_frame_clear_rgba(rr->gpu, target, CLEAR_COL(params));
 
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];
@@ -2370,7 +2378,7 @@ static bool draw_empty_overlays(pl_renderer rr,
                                 const struct pl_render_params *params)
 {
     if (!params->skip_target_clearing)
-        pl_frame_clear(rr->gpu, ptarget, params->background_color);
+        pl_frame_clear_rgba(rr->gpu, ptarget, CLEAR_COL(params));
 
     if (!ptarget->num_overlays)
         return true;
@@ -2883,22 +2891,23 @@ bool pl_frame_is_cropped(const struct pl_frame *frame)
     return x0 > 0 || y0 > 0 || x1 < ref->params.w || y1 < ref->params.h;
 }
 
-void pl_frame_clear(pl_gpu gpu, const struct pl_frame *frame,
-                    const float rgb[3])
+void pl_frame_clear_rgba(pl_gpu gpu, const struct pl_frame *frame,
+                         const float rgba[4])
 {
     struct pl_color_repr repr = frame->repr;
     struct pl_transform3x3 tr = pl_color_repr_decode(&repr, NULL);
     pl_transform3x3_invert(&tr);
 
-    float encoded[3] = { rgb[0], rgb[1], rgb[2] };
+    float encoded[3] = { rgba[0], rgba[1], rgba[2] };
     pl_transform3x3_apply(&tr, encoded);
 
+    float mult = frame->repr.alpha == PL_ALPHA_INDEPENDENT ? 1.0 : rgba[3];
     for (int p = 0; p < frame->num_planes; p++) {
         const struct pl_plane *plane =  &frame->planes[p];
-        float clear[4] = { 0.0, 0.0, 0.0, 1.0 };
+        float clear[4] = { 0.0, 0.0, 0.0, rgba[3] };
         for (int c = 0; c < plane->components; c++) {
             if (plane->component_mapping[c] >= 0)
-                clear[c] = encoded[plane->component_mapping[c]];
+                clear[c] = mult * encoded[plane->component_mapping[c]];
         }
 
         pl_tex_clear(gpu, plane->texture, clear);

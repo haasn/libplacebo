@@ -167,6 +167,7 @@ struct pl_render_params {
     // it will be cleared explicitly using this background color (RGB). To
     // disable this logic, set `skip_target_clearing`.
     float background_color[3];
+    float background_transparency; // 0.0 for opaque, 1.0 for fully transparent
     bool skip_target_clearing;
 
     // --- Performance / quality trade-off options:
@@ -472,12 +473,18 @@ bool pl_frame_is_cropped(const struct pl_frame *frame);
 
 // Helper function to reset a frame to a given RGB color. If the frame's
 // color representation is something other than RGB, the clear color will
-// be adjusted accordingly.
-//
-// Note: For sake of simplicity, this function only works with opaque clears,
-// i.e. A=1. If you need to clear to transparent colors, use `pl_tex_clear`.
-void pl_frame_clear(pl_gpu gpu, const struct pl_frame *frame,
-                    const float clear_color[3]);
+// be adjusted accordingly. `clear_color` should be non-premultiplied.
+void pl_frame_clear_rgba(pl_gpu gpu, const struct pl_frame *frame,
+                         const float clear_color[4]);
+
+// Like `pl_frame_clear_rgba` but without an alpha channel.
+static inline void pl_frame_clear(pl_gpu gpu, const struct pl_frame *frame,
+                                  const float clear_color[3])
+{
+    pl_frame_clear_rgba(gpu, frame, (float[4]) {
+        clear_color[0], clear_color[1], clear_color[2], 1.0,
+    });
+}
 
 // Deprecated aliases, provided for backwards compatibility
 #define pl_image pl_frame
