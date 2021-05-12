@@ -330,7 +330,7 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
     }
 
     GLSL("// pl_shader_sample_bicubic                   \n"
-         "vec4 color = vec4(0.0);                       \n"
+         "vec4 color;                                   \n"
          "{                                             \n"
          "vec2 pos  = %s;                               \n"
          "vec2 pt   = %s;                               \n"
@@ -377,7 +377,7 @@ bool pl_shader_sample_oversample(pl_shader sh, const struct pl_sample_src *src,
 
      // Round the position to the nearest pixel
     GLSL("// pl_shader_sample_oversample                \n"
-         "vec4 color = vec4(0.0);                       \n"
+         "vec4 color;                                   \n"
          "{                                             \n"
          "vec2 pt = %s;                                 \n"
          "vec2 pos = %s - vec2(0.5) * pt;               \n"
@@ -756,9 +756,11 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         }
     }
 
-    GLSL("color = vec4(%f / wsum) * color; \n"
-         "}                                \n",
-         scale);
+    GLSL("color = vec4(%f / wsum) * color; \n", scale);
+    if (!(comp_mask & (1 << PL_CHANNEL_A)))
+        GLSL("color.a = 1.0; \n");
+
+    GLSL("}\n");
     return true;
 }
 
@@ -931,6 +933,9 @@ bool pl_shader_sample_ortho(pl_shader sh, int pass,
     }
 
     GLSL("color *= vec4(%f);\n", scale);
+    if (!(comp_mask & (1 << PL_CHANNEL_A)))
+        GLSL("color.a = 1.0; \n");
+
     GLSL("}\n");
     return true;
 }
