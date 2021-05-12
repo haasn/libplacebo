@@ -438,10 +438,12 @@ int main(int argc, char **argv)
         goto error;
 
     enum winflags flags = 0;
-    if (desc->flags & AV_PIX_FMT_FLAG_ALPHA)
-        flags |= WIN_ALPHA;
     if (is_file_hdr(p))
         flags |= WIN_HDR;
+    if (desc->flags & AV_PIX_FMT_FLAG_ALPHA) {
+        flags |= WIN_ALPHA;
+        state.params.background_transparency = 1.0;
+    }
 
     p->log = pl_log_create(PL_API_VER, &(struct pl_log_params) {
         .log_cb = pl_log_color,
@@ -558,19 +560,20 @@ static void update_settings(struct plplay *p)
             par->background_color[0],
             par->background_color[1],
             par->background_color[2],
-            1.0,
+            1.0 - par->background_transparency,
         };
 
         nk_layout_row_dynamic(nk, 24, 2);
         nk_label(nk, "Background color:", NK_TEXT_LEFT);
         if (nk_combo_begin_color(nk, nk_rgb_cf(bg), nk_vec2(nk_widget_width(nk), 300))) {
             nk_layout_row_dynamic(nk, 200, 1);
-            nk_color_pick(nk, &bg, NK_RGB);
+            nk_color_pick(nk, &bg, NK_RGBA);
             nk_combo_end(nk);
 
             par->background_color[0] = bg.r;
             par->background_color[1] = bg.g;
             par->background_color[2] = bg.b;
+            par->background_transparency = 1.0 - bg.a;
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Image scaling", NK_MAXIMIZED)) {
