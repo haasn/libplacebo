@@ -165,6 +165,9 @@ static bool init_codec(struct plplay *p)
     p->codec->thread_count = av_cpu_count();
     p->codec->get_buffer2 = pl_get_buffer2;
     p->codec->opaque = &p->win->gpu;
+#if LIBAVCODEC_VERSION_MAJOR < 60
+    p->codec->thread_safe_callbacks = 1;
+#endif
 
     if (avcodec_open2(p->codec, codec, NULL) < 0) {
         fprintf(stderr, "libavcodec: Failed opening codec\n");
