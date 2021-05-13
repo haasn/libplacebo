@@ -391,6 +391,8 @@ static bool map_frame(pl_queue p, struct entry *entry)
         entry->mapped = true;
         entry->ok = entry->src.map(p->gpu, entry->cache.tex,
                                    &entry->src, &entry->frame);
+        if (!entry->ok)
+            PL_ERR(p, "Failed mapping frame with PTS %f", entry->src.pts);
     }
 
     return entry->ok;

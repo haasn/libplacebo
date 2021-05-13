@@ -181,8 +181,10 @@ static bool map_frame(pl_gpu gpu, pl_tex *tex,
                       const struct pl_source_frame *src,
                       struct pl_frame *out_frame)
 {
-    if (!pl_upload_avframe(gpu, out_frame, tex, src->frame_data))
+    if (!pl_upload_avframe(gpu, out_frame, tex, src->frame_data)) {
+        fprintf(stderr, "Failed uploading AVFrame!\n");
         return false;
+    }
 
     out_frame->user_data = src->frame_data;
     return true;
