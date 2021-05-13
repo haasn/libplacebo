@@ -572,6 +572,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
          "vec2 pos = %s, size = %s, pt = %s;            \n"
          "vec2 fcoord = fract(pos * size - vec2(0.5));  \n"
          "vec2 base = pos - pt * fcoord;                \n"
+         "vec2 center = base + pt * vec2(0.5);          \n"
          "float w, d, wsum = 0.0;                       \n"
          "int idx;                                      \n"
          "vec4 c;                                       \n",
@@ -713,19 +714,19 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                     uint8_t c = __builtin_ctz(comps);
                     if (x || y) {
                         if (c) {
-                            GLSL("in%d = textureGatherOffset(%s, base, "
+                            GLSL("in%d = textureGatherOffset(%s, center, "
                                  "ivec2(%d, %d), %d);\n",
                                  c, src_tex, x, y, c);
                         } else {
-                            GLSL("in0 = textureGatherOffset(%s, base, "
+                            GLSL("in0 = textureGatherOffset(%s, center, "
                                  "ivec2(%d, %d));\n", src_tex, x, y);
                         }
                     } else {
                         if (c) {
-                            GLSL("in%d = textureGather(%s, base, %d);\n",
+                            GLSL("in%d = textureGather(%s, center, %d);\n",
                                  c, src_tex, c);
                         } else {
-                            GLSL("in0 = textureGather(%s, base);\n", src_tex);
+                            GLSL("in0 = textureGather(%s, center);\n", src_tex);
                         }
                     }
                     comps &= ~(1 << c);
