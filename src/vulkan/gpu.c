@@ -2563,11 +2563,13 @@ static VkResult vk_compile_glsl(pl_gpu gpu, void *alloc,
     PL_DEBUG(gpu, "%s shader source:", shader_names[type]);
     pl_msg_source(gpu->log, PL_LOG_DEBUG, glsl);
 
+    clock_t start = clock();
     if (!p->spirv->impl->compile_glsl(p->spirv, alloc, type, glsl, spirv)) {
         pl_msg_source(gpu->log, PL_LOG_ERR, glsl);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
+    pl_log_cpu_time(gpu->log, start, clock(), "translating SPIR-V");
     return VK_SUCCESS;
 }
 
@@ -2731,6 +2733,7 @@ no_descriptors: ;
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
     };
 
+    clock_t start = clock();
     switch (params->type) {
     case PL_PASS_RASTER: {
         sinfo.pCode = (uint32_t *) vert.buf;
@@ -2912,6 +2915,8 @@ no_descriptors: ;
     case PL_PASS_TYPE_COUNT:
         pl_unreachable();
     }
+
+    pl_log_cpu_time(gpu->log, start, clock(), "compiling shader");
 
     // Update params->cached_program
     pl_str cache = {0};

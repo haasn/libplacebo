@@ -18,7 +18,9 @@
 #pragma once
 
 #include <stdarg.h>
+#include <time.h>
 #include <pthread.h>
+
 #include "common.h"
 
 // Internal logging-related functions
@@ -62,3 +64,18 @@ void pl_msg_source(pl_log log, enum pl_log_level lev, const char *src);
 // Warning: This is generally not thread-safe, and only provided as a temporary
 // hack until a better solution can be thought of.
 void pl_log_level_cap(pl_log log, enum pl_log_level cap);
+
+// CPU execution time reporting helper
+static inline void pl_log_cpu_time(pl_log log, time_t start, time_t stop,
+                                   const char *operation)
+{
+    double ms = (stop - start) * 1e3 / CLOCKS_PER_SEC;
+    enum pl_log_level lev = PL_LOG_DEBUG;
+    if (ms > 10)
+        lev = PL_LOG_INFO;
+    if (ms > 1000)
+        lev = PL_LOG_WARN;
+
+    pl_msg(log, lev, "Spent %.3f ms %s%s", ms, operation,
+           ms > 100 ? " (slow!)" : "");
+}

@@ -1953,7 +1953,9 @@ static pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     if ((pass_gl->program = load_cached_program(gpu, params))) {
         PL_DEBUG(gpu, "Using cached GL program");
     } else {
+        clock_t start = clock();
         pass_gl->program = gl_compile_program(gpu, params);
+        pl_log_cpu_time(gpu->log, start, clock(), "compiling shader");
     }
 
     if (!pass_gl->program)
