@@ -186,7 +186,10 @@ static inline enum AVColorTransferCharacteristic pl_transfer_to_av(enum pl_color
     case PL_COLOR_TRC_SRGB:         return AVCOL_TRC_IEC61966_2_1;
     case PL_COLOR_TRC_LINEAR:       return AVCOL_TRC_LINEAR;
     case PL_COLOR_TRC_GAMMA18:      return AVCOL_TRC_UNSPECIFIED; // missing
+    case PL_COLOR_TRC_GAMMA20:      return AVCOL_TRC_UNSPECIFIED; // missing
     case PL_COLOR_TRC_GAMMA22:      return AVCOL_TRC_GAMMA22;
+    case PL_COLOR_TRC_GAMMA24:      return AVCOL_TRC_UNSPECIFIED; // missing
+    case PL_COLOR_TRC_GAMMA26:      return AVCOL_TRC_UNSPECIFIED; // missing
     case PL_COLOR_TRC_GAMMA28:      return AVCOL_TRC_GAMMA28;
     case PL_COLOR_TRC_PRO_PHOTO:    return AVCOL_TRC_UNSPECIFIED; // missing
     case PL_COLOR_TRC_PQ:           return AVCOL_TRC_SMPTE2084;

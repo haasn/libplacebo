@@ -229,7 +229,10 @@ float pl_color_transfer_nominal_peak(enum pl_color_transfer trc)
     case PL_COLOR_TRC_SRGB:
     case PL_COLOR_TRC_LINEAR:
     case PL_COLOR_TRC_GAMMA18:
+    case PL_COLOR_TRC_GAMMA20:
     case PL_COLOR_TRC_GAMMA22:
+    case PL_COLOR_TRC_GAMMA24:
+    case PL_COLOR_TRC_GAMMA26:
     case PL_COLOR_TRC_GAMMA28:
     case PL_COLOR_TRC_PRO_PHOTO:
         return 1.0;

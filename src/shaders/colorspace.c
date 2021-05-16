@@ -314,9 +314,18 @@ void pl_shader_linearize(pl_shader sh, enum pl_color_transfer trc)
     case PL_COLOR_TRC_GAMMA18:
         GLSL("color.rgb = pow(color.rgb, vec3(1.8));\n");
         return;
+    case PL_COLOR_TRC_GAMMA20:
+        GLSL("color.rgb = pow(color.rgb, vec3(2.0));\n");
+        return;
     case PL_COLOR_TRC_UNKNOWN:
     case PL_COLOR_TRC_GAMMA22:
         GLSL("color.rgb = pow(color.rgb, vec3(2.2));\n");
+        return;
+    case PL_COLOR_TRC_GAMMA24:
+        GLSL("color.rgb = pow(color.rgb, vec3(2.4));\n");
+        return;
+    case PL_COLOR_TRC_GAMMA26:
+        GLSL("color.rgb = pow(color.rgb, vec3(2.6));\n");
         return;
     case PL_COLOR_TRC_GAMMA28:
         GLSL("color.rgb = pow(color.rgb, vec3(2.8));\n");
@@ -399,9 +408,18 @@ void pl_shader_delinearize(pl_shader sh, enum pl_color_transfer trc)
     case PL_COLOR_TRC_GAMMA18:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/1.8));\n");
         return;
+    case PL_COLOR_TRC_GAMMA20:
+        GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.0));\n");
+        return;
     case PL_COLOR_TRC_UNKNOWN:
     case PL_COLOR_TRC_GAMMA22:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.2));\n");
+        return;
+    case PL_COLOR_TRC_GAMMA24:
+        GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.4));\n");
+        return;
+    case PL_COLOR_TRC_GAMMA26:
+        GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.6));\n");
         return;
     case PL_COLOR_TRC_GAMMA28:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.8));\n");

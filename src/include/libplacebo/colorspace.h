@@ -198,7 +198,10 @@ enum pl_color_transfer {
     PL_COLOR_TRC_SRGB,          // IEC 61966-2-4 sRGB (CRT emulation)
     PL_COLOR_TRC_LINEAR,        // Linear light content
     PL_COLOR_TRC_GAMMA18,       // Pure power gamma 1.8
+    PL_COLOR_TRC_GAMMA20,       // Pure power gamma 2.0
     PL_COLOR_TRC_GAMMA22,       // Pure power gamma 2.2
+    PL_COLOR_TRC_GAMMA24,       // Pure power gamma 2.4
+    PL_COLOR_TRC_GAMMA26,       // Pure power gamma 2.6
     PL_COLOR_TRC_GAMMA28,       // Pure power gamma 2.8
     PL_COLOR_TRC_PRO_PHOTO,     // ProPhoto RGB (ROMM)
     // High dynamic range:

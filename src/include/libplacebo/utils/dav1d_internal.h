@@ -157,7 +157,10 @@ static inline enum Dav1dTransferCharacteristics pl_transfer_to_dav1d(enum pl_col
     case PL_COLOR_TRC_SRGB:         return DAV1D_TRC_SRGB;
     case PL_COLOR_TRC_LINEAR:       return DAV1D_TRC_LINEAR;
     case PL_COLOR_TRC_GAMMA18:      return DAV1D_TRC_UNKNOWN; // missing
+    case PL_COLOR_TRC_GAMMA20:      return DAV1D_TRC_UNKNOWN; // missing
     case PL_COLOR_TRC_GAMMA22:      return DAV1D_TRC_BT470M;
+    case PL_COLOR_TRC_GAMMA24:      return DAV1D_TRC_UNKNOWN; // missing
+    case PL_COLOR_TRC_GAMMA26:      return DAV1D_TRC_UNKNOWN; // missing
     case PL_COLOR_TRC_GAMMA28:      return DAV1D_TRC_BT470BG;
     case PL_COLOR_TRC_PRO_PHOTO:    return DAV1D_TRC_UNKNOWN; // missing
     case PL_COLOR_TRC_PQ:           return DAV1D_TRC_SMPTE2084;
