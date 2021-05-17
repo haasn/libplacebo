@@ -10,6 +10,7 @@
 #include <SDL.h>
 
 #ifdef USE_VK
+#define VK_NO_PROTOTYPES
 #include <libplacebo/vulkan.h>
 #include <SDL_vulkan.h>
 #define WINFLAG_API SDL_WINDOW_VULKAN
@@ -91,7 +92,7 @@ static struct window *sdl_create(pl_log log, const char *title,
 
 #ifdef USE_VK
     struct pl_vk_inst_params iparams = pl_vk_inst_default_params;
-    iparams.get_proc_addr = vkGetInstanceProcAddr;
+    iparams.get_proc_addr = SDL_Vulkan_GetVkGetInstanceProcAddr();
     iparams.debug = DEBUG;
 
     unsigned int num = 0;
@@ -197,8 +198,11 @@ static void sdl_destroy(struct window **window)
 
 #ifdef USE_VK
     pl_vulkan_destroy(&p->vk);
-    if (p->surf)
+    if (p->surf) {
+        PFN_vkDestroySurfaceKHR vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)
+            p->vk_inst->get_proc_addr(p->vk_inst->instance, "vkDestroySurfaceKHR");
         vkDestroySurfaceKHR(p->vk_inst->instance, p->surf, NULL);
+    }
     pl_vk_inst_destroy(&p->vk_inst);
 #endif
 

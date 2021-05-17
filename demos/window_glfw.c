@@ -10,6 +10,7 @@
 #include "window.h"
 
 #ifdef USE_VK
+#define VK_NO_PROTOTYPES
 #include <libplacebo/vulkan.h>
 #define GLFW_INCLUDE_VULKAN
 #define IMPL win_impl_glfw_vk
@@ -174,7 +175,7 @@ static struct window *glfw_create(pl_log log, const char *title,
     VkResult err;
 
     struct pl_vk_inst_params iparams = pl_vk_inst_default_params;
-    iparams.get_proc_addr = vkGetInstanceProcAddr,
+    iparams.get_proc_addr = glfwGetInstanceProcAddress,
     iparams.debug = DEBUG;
 
     // Load all extensions required for WSI
@@ -268,8 +269,11 @@ static void glfw_destroy(struct window **window)
 
 #ifdef USE_VK
     pl_vulkan_destroy(&p->vk);
-    if (p->surf)
+    if (p->surf) {
+        PFN_vkDestroySurfaceKHR vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)
+            p->vk_inst->get_proc_addr(p->vk_inst->instance, "vkDestroySurfaceKHR");
         vkDestroySurfaceKHR(p->vk_inst->instance, p->surf, NULL);
+    }
     pl_vk_inst_destroy(&p->vk_inst);
 #endif
 
