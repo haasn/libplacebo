@@ -16,7 +16,7 @@ static void vulkan_interop_tests(pl_vulkan pl_vk,
         });
 
         REQUIRE(buf);
-        REQUIRE(buf->shared_mem.handle.fd > -1);
+        REQUIRE_HANDLE(buf->shared_mem, handle_type);
         REQUIRE(buf->shared_mem.size >= buf->params.size);
         REQUIRE(pl_buf_export(gpu, buf));
         pl_buf_destroy(gpu, &buf);

@@ -1327,7 +1327,7 @@ static void pl_test_export_import(pl_gpu gpu,
         .export_handle = handle_type,
     });
     REQUIRE(export);
-    REQUIRE(export->shared_mem.handle.fd > -1);
+    REQUIRE_HANDLE(export->shared_mem, handle_type);
 
     pl_tex import = pl_tex_create(gpu, &(struct pl_tex_params) {
         .w = 32,
@@ -1356,7 +1356,7 @@ skip_tex: ;
         .export_handle = handle_type,
     });
     REQUIRE(exp_buf);
-    REQUIRE(exp_buf->shared_mem.handle.fd > -1);
+    REQUIRE_HANDLE(exp_buf->shared_mem, handle_type);
 
     pl_buf imp_buf = pl_buf_create(gpu, &(struct pl_buf_params) {
         .size = 32,

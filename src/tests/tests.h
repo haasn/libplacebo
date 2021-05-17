@@ -74,6 +74,23 @@ static inline bool feq(float a, float b, float epsilon)
 #define RANDOM (rand() / (float) RAND_MAX)
 #define SKIP 77
 
+#define REQUIRE_HANDLE(shmem, type)                                             \
+    switch (type) {                                                             \
+    case PL_HANDLE_FD:                                                          \
+    case PL_HANDLE_DMA_BUF:                                                     \
+        REQUIRE(shmem.handle.fd > -1);                                          \
+        break;                                                                  \
+    case PL_HANDLE_WIN32:                                                       \
+    case PL_HANDLE_WIN32_KMT:                                                   \
+        REQUIRE(shmem.handle.handle);                                           \
+        /* INVALID_HANDLE_VALUE = (-1) */                                       \
+        REQUIRE(shmem.handle.handle != (void *)(intptr_t) (-1));                \
+        break;                                                                  \
+    case PL_HANDLE_HOST_PTR:                                                    \
+        REQUIRE(shmem.handle.ptr);                                              \
+        break;                                                                  \
+    }
+
 static const struct pl_av1_grain_data av1_grain_data = {
     .grain_seed = 48476,
 
