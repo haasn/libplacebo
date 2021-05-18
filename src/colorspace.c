@@ -303,6 +303,35 @@ bool pl_color_space_is_hdr(struct pl_color_space csp)
     return peak > 1.0;
 }
 
+bool pl_color_space_is_black_scaled(struct pl_color_space csp)
+{
+    switch (csp.transfer) {
+    case PL_COLOR_TRC_UNKNOWN:
+    case PL_COLOR_TRC_SRGB:
+    case PL_COLOR_TRC_LINEAR:
+    case PL_COLOR_TRC_GAMMA18:
+    case PL_COLOR_TRC_GAMMA20:
+    case PL_COLOR_TRC_GAMMA22:
+    case PL_COLOR_TRC_GAMMA24:
+    case PL_COLOR_TRC_GAMMA26:
+    case PL_COLOR_TRC_GAMMA28:
+    case PL_COLOR_TRC_PRO_PHOTO:
+    case PL_COLOR_TRC_HLG:
+        return true;
+
+    case PL_COLOR_TRC_BT_1886:
+    case PL_COLOR_TRC_PQ:
+    case PL_COLOR_TRC_V_LOG:
+    case PL_COLOR_TRC_S_LOG1:
+    case PL_COLOR_TRC_S_LOG2:
+        return false;
+
+    case PL_COLOR_TRC_COUNT: break;
+    }
+
+    pl_unreachable();
+}
+
 void pl_color_space_merge(struct pl_color_space *orig,
                           const struct pl_color_space *new)
 {
@@ -365,6 +394,24 @@ void pl_color_space_infer(struct pl_color_space *space)
     // without adequate metadata there's not much else we can assume
     if (!space->sig_avg)
         space->sig_avg = sdr_avg / space->sig_scale;
+
+    // First infer this to good values, and then strip it for color spaces for
+    // which it doesn't make any sense
+    if (!space->sig_floor) {
+        if (pl_color_transfer_is_hdr(space->transfer)) {
+            space->sig_floor = 0.0050 / PL_COLOR_SDR_WHITE; // Typical HDR black
+        } else {
+            space->sig_floor = space->sig_peak / 1000.0; // Typical SDR contrast
+        }
+    }
+
+    // Preserve metadata for PL_COLOR_TRC_LINEAR in particular because it's
+    // used heavily as an intermediate color space.
+    if (pl_color_space_is_black_scaled(*space) &&
+        space->transfer != PL_COLOR_TRC_LINEAR)
+    {
+        space->sig_floor = 0.0;
+    }
 }
 
 void pl_color_space_infer_ref(struct pl_color_space *space,

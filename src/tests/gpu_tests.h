@@ -447,8 +447,8 @@ static void pl_shader_tests(pl_gpu gpu)
     for (enum pl_color_transfer trc = 0; trc < PL_COLOR_TRC_COUNT; trc++) {
         sh = pl_dispatch_begin(dp);
         pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
-        pl_shader_delinearize(sh, trc);
-        pl_shader_linearize(sh, trc);
+        pl_shader_delinearize(sh, (struct pl_color_space) { .transfer = trc });
+        pl_shader_linearize(sh, (struct pl_color_space) { .transfer = trc });
         REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
             .shader = &sh,
             .target = fbo,

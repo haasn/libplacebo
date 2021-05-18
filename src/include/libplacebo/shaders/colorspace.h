@@ -41,19 +41,17 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
 // `pl_shader_decode_color` (sans color adjustments).
 void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr);
 
-// Linearize (expand) `vec4 color`, given a specified color_transfer. In
-// essence, this loosely corresponds to the ITU-R EOTF, calculated on an
-// idealized (reference) monitor with a white point of PL_COLOR_SDR_WHITE and
-// infinite contrast.
+// Linearize (expand) `vec4 color`, given a specified color space. In essence,
+// this corresponds to the ITU-R EOTF.
 //
 // Note: Unlike the ITU-R EOTF, it never includes the OOTF - even for systems
 // where the EOTF includes the OOTF (such as HLG).
-void pl_shader_linearize(pl_shader sh, enum pl_color_transfer trc);
+void pl_shader_linearize(pl_shader sh, struct pl_color_space csp);
 
-// Delinearize (compress), given a TRC as output. This loosely corresponds to
-// the inverse EOTF (not the OETF) in ITU-R terminology, again assuming a
-// reference monitor.
-void pl_shader_delinearize(pl_shader sh, enum pl_color_transfer trc);
+// Delinearize (compress), given a color space as output. This loosely
+// corresponds to the inverse EOTF (not the OETF) in ITU-R terminology, again
+// assuming a reference monitor.
+void pl_shader_delinearize(pl_shader sh, struct pl_color_space csp);
 
 struct pl_sigmoid_params {
     // The center (bias) of the sigmoid curve. Must be between 0.0 and 1.0.

@@ -284,6 +284,20 @@ struct pl_color_space {
     // given color space. (0 = unknown)
     float sig_avg;
 
+    // The signal floor, i.e. black point, relative to the reference white.
+    // This effectively determines the signal's contrast, as well. Note that
+    // for most SDR curves, this can only be 0.0 and will effectively be
+    // ignored if otherwise. It only applies to absolute luminance transfer
+    // functions (such as PQ or S-Log), as well as BT.1886.
+    //
+    // Note that a value of 0.0 exactly is treated effectively as "unknown",
+    // and will be defaulted to a contrast of 1000:1 for BT.1886. To override
+    // this logic (thus turning BT.1886 into a true gamma 2.4 function), either
+    // set the transfer function explicitly to PL_COLOR_TRC_GAMMA24, or set
+    // this value to something sufficiently low like FLT_EPSILON. (Never mind
+    // that such high contrast values are unrealistic anyway)
+    float sig_floor;
+
     // Additional scale factor for the signal's reference white. If this is set
     // to a value higher than 1.0, then it's assumed that the signal's encoded
     // reference white is assumed to be brighter than normal by this factor.
@@ -299,6 +313,11 @@ struct pl_color_space {
 // This is true when the effective signal peak is greater than the SDR
 // reference white (1.0), after application of the `sig_scale`.
 bool pl_color_space_is_hdr(struct pl_color_space csp);
+
+// Returns whether or not a color space is "black scaled", in which case 0.0 is
+// the true black point. This is true for SDR signals other than BT.1886, as
+// well as for HLG.
+bool pl_color_space_is_black_scaled(struct pl_color_space csp);
 
 // Replaces unknown values in the first struct by those of the second struct.
 void pl_color_space_merge(struct pl_color_space *orig,

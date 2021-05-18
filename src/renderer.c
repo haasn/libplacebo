@@ -1698,7 +1698,7 @@ static bool pass_scale_main(pl_renderer rr, struct pass_state *pass,
     }
 
     if (use_linear) {
-        pl_shader_linearize(img_sh(pass, img), img->color.transfer);
+        pl_shader_linearize(img_sh(pass, img), img->color);
         img->color.transfer = PL_COLOR_TRC_LINEAR;
         pass_hook(pass, img, PL_HOOK_LINEAR, params);
     }
@@ -1809,7 +1809,7 @@ static bool pass_output_target(pl_renderer rr, struct pass_state *pass,
         case PL_LUT_NORMALIZED:
             if (!prelinearized) {
                 // PL_LUT_NORMALIZED wants linear input data
-                pl_shader_linearize(sh, img->color.transfer);
+                pl_shader_linearize(sh, img->color);
                 img->color.transfer = PL_COLOR_TRC_LINEAR;
                 prelinearized = true;
             }
