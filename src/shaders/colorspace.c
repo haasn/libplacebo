@@ -819,6 +819,8 @@ bool pl_get_detected_peak(const pl_shader_obj state,
     struct sh_peak_obj *obj = state->priv;
     pl_gpu gpu = state->gpu;
     pl_buf buf = obj->buf;
+    if (!buf)
+        return false;
 
     float average[2] = {0};
     pl_assert(obj->buf->params.size >= sizeof(average));
