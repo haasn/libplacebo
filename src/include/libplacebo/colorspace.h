@@ -310,6 +310,13 @@ bool pl_color_space_equal(const struct pl_color_space *c1,
 // PL_COLOR_*_UNKNOWN or 0.0.
 void pl_color_space_infer(struct pl_color_space *space);
 
+// Like `pl_color_space_infer`, but takes default values from the reference
+// color space (excluding certain special cases like HDR or wide gamut). This
+// is basically the logic used by `pl_shader_color_map` to decide the output
+// color space in a conservative way.
+void pl_color_space_infer_ref(struct pl_color_space *space,
+                              const struct pl_color_space *ref);
+
 // Some common color spaces. Note: These don't necessarily have all fields
 // filled, in particular `sig_peak` and `sig_avg` are left unset.
 extern const struct pl_color_space pl_color_space_unknown;

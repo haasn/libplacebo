@@ -2367,8 +2367,7 @@ static bool pass_infer_state(struct pass_state *pass, bool adjust_rects)
     fix_color_space(image);
 
     // Infer the target color space info based on the image's
-    target->color.primaries = PL_DEF(target->color.primaries, image->color.primaries);
-    target->color.transfer = PL_DEF(target->color.transfer, image->color.transfer);
+    pl_color_space_infer_ref(&target->color, &image->color);
     fix_color_space(target);
     return true;
 }

@@ -362,6 +362,42 @@ void pl_color_space_infer(struct pl_color_space *space)
         space->sig_avg = sdr_avg / space->sig_scale;
 }
 
+void pl_color_space_infer_ref(struct pl_color_space *space,
+                              const struct pl_color_space *refp)
+{
+    struct pl_color_space ref = *refp;
+    pl_color_space_infer(&ref);
+
+    if (!space->primaries) {
+        if (pl_color_primaries_is_wide_gamut(ref.primaries)) {
+            space->primaries = PL_COLOR_PRIM_BT_709;
+        } else {
+            space->primaries = ref.primaries;
+        }
+    }
+
+    if (!space->transfer) {
+        if (pl_color_transfer_is_hdr(ref.transfer) ||
+            ref.transfer == PL_COLOR_TRC_LINEAR)
+        {
+            space->transfer = PL_COLOR_TRC_GAMMA22;
+        } else {
+            space->transfer = ref.transfer;
+        }
+    }
+
+    // Defaults the sig_avg based on the ref, unless only the ref is HDR
+    if (!space->sig_avg) {
+        bool csp_hdr = pl_color_space_is_hdr(*space);
+        bool ref_hdr = pl_color_space_is_hdr(ref);
+        if (!(ref_hdr && !csp_hdr))
+            space->sig_avg = ref.sig_avg;
+    }
+
+    // Infer the remaining fields after making the above choices
+    pl_color_space_infer(space);
+}
+
 const struct pl_color_adjustment pl_color_adjustment_neutral = {
     .brightness     = 0.0,
     .contrast       = 1.0,

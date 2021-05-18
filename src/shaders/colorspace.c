@@ -1085,40 +1085,8 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
     GLSL("{\n");
     params = PL_DEF(params, &pl_color_map_default_params);
 
-    // Default the source color space to reasonable values
     pl_color_space_infer(&src);
-
-    // To be as conservative as possible, color mapping is disabled by default
-    // except for special cases which are considered to be "sufficiently
-    // different" from the source space. For primaries, this means anything
-    // wide gamut; and for transfers, this means anything radically different
-    // from the typical SDR curves.
-    if (!dst.primaries) {
-        dst.primaries = src.primaries;
-        if (pl_color_primaries_is_wide_gamut(dst.primaries))
-            dst.primaries = PL_COLOR_PRIM_BT_709;
-    }
-
-    if (!dst.transfer) {
-        dst.transfer = src.transfer;
-        if (pl_color_transfer_is_hdr(dst.transfer) ||
-            dst.transfer == PL_COLOR_TRC_LINEAR)
-        {
-            dst.transfer = PL_COLOR_TRC_GAMMA22;
-        }
-    }
-
-    // Defaults the dest average based on the source average, unless the source
-    // is HDR and the destination is not
-    if (!dst.sig_avg) {
-        bool src_hdr = pl_color_space_is_hdr(src);
-        bool dst_hdr = pl_color_space_is_hdr(dst);
-        if (!(src_hdr && !dst_hdr))
-            dst.sig_avg = src.sig_avg;
-    }
-
-    // Infer the remaining fields after making the above choices
-    pl_color_space_infer(&dst);
+    pl_color_space_infer_ref(&dst, &src);
 
     // All operations from here on require linear light as a starting point,
     // so we linearize even if src.transfer == dst.transfer when one of the other
