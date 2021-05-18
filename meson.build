@@ -26,7 +26,7 @@ if git.found()
 endif
 
 
-# Global build options
+# Project build options
 build_opts = [
   # Warnings
   '-Wundef', '-Wshadow', '-Wparentheses', '-Wpointer-arith',
@@ -69,9 +69,9 @@ if cc.has_link_argument(vflag)
   link_args += [vflag]
 endif
 
-add_global_arguments(build_opts + c_opts, language: 'c')
-add_global_arguments(build_opts + cpp_opts, language: 'cpp')
-add_global_link_arguments(link_args, language: 'c')
+add_project_arguments(build_opts + c_opts, language: 'c')
+add_project_arguments(build_opts + cpp_opts, language: 'cpp')
+add_project_link_arguments(link_args, language: 'c')
 
 subdir('src')
 
