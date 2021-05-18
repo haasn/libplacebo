@@ -288,7 +288,7 @@ const struct pl_color_space pl_color_space_bt2020_hlg = {
 
 const struct pl_color_space pl_color_space_monitor = {
     .primaries = PL_COLOR_PRIM_BT_709, // sRGB primaries
-    .transfer  = PL_COLOR_TRC_GAMMA22, // typical response
+    .transfer  = PL_COLOR_TRC_UNKNOWN, // unknown SDR response
     .light     = PL_COLOR_LIGHT_DISPLAY,
 };
 
