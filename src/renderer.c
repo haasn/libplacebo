@@ -2194,7 +2194,7 @@ static inline void default_rect(struct pl_rect2df *rc,
         *rc = *backup;
 }
 
-static void fix_refs_and_rects(struct pass_state *pass, bool adjust_rects)
+static void fix_refs_and_rects(struct pass_state *pass)
 {
     struct pl_frame *image = &pass->image;
     struct pl_frame *target = &pass->target;
@@ -2247,42 +2247,40 @@ static void fix_refs_and_rects(struct pass_state *pass, bool adjust_rects)
         dst->y1 = dst_ref->params.h;
     }
 
-    if (adjust_rects) {
-        // Keep track of whether the end-to-end rendering is flipped
-        bool flipped_x = (src->x0 > src->x1) != (dst->x0 > dst->x1),
-             flipped_y = (src->y0 > src->y1) != (dst->y0 > dst->y1);
+    // Keep track of whether the end-to-end rendering is flipped
+    bool flipped_x = (src->x0 > src->x1) != (dst->x0 > dst->x1),
+         flipped_y = (src->y0 > src->y1) != (dst->y0 > dst->y1);
 
-        // Normalize both rects to make the math easier
-        pl_rect2df_normalize(src);
-        pl_rect2df_normalize(dst);
+    // Normalize both rects to make the math easier
+    pl_rect2df_normalize(src);
+    pl_rect2df_normalize(dst);
 
-        // Round the output rect and clip it to the framebuffer dimensions
-        float rx0 = roundf(PL_MAX(dst->x0, 0.0)),
-              ry0 = roundf(PL_MAX(dst->y0, 0.0)),
-              rx1 = roundf(PL_MIN(dst->x1, dst_ref->params.w)),
-              ry1 = roundf(PL_MIN(dst->y1, dst_ref->params.h));
+    // Round the output rect and clip it to the framebuffer dimensions
+    float rx0 = roundf(PL_MAX(dst->x0, 0.0)),
+          ry0 = roundf(PL_MAX(dst->y0, 0.0)),
+          rx1 = roundf(PL_MIN(dst->x1, dst_ref->params.w)),
+          ry1 = roundf(PL_MIN(dst->y1, dst_ref->params.h));
 
-        // Adjust the src rect corresponding to the rounded crop
-        float scale_x = pl_rect_w(*src) / pl_rect_w(*dst),
-              scale_y = pl_rect_h(*src) / pl_rect_h(*dst),
-              base_x = src->x0,
-              base_y = src->y0;
+    // Adjust the src rect corresponding to the rounded crop
+    float scale_x = pl_rect_w(*src) / pl_rect_w(*dst),
+          scale_y = pl_rect_h(*src) / pl_rect_h(*dst),
+          base_x = src->x0,
+          base_y = src->y0;
 
-        src->x0 = base_x + (rx0 - dst->x0) * scale_x;
-        src->x1 = base_x + (rx1 - dst->x0) * scale_x;
-        src->y0 = base_y + (ry0 - dst->y0) * scale_y;
-        src->y1 = base_y + (ry1 - dst->y0) * scale_y;
+    src->x0 = base_x + (rx0 - dst->x0) * scale_x;
+    src->x1 = base_x + (rx1 - dst->x0) * scale_x;
+    src->y0 = base_y + (ry0 - dst->y0) * scale_y;
+    src->y1 = base_y + (ry1 - dst->y0) * scale_y;
 
-        // Update dst_rect to the rounded values and re-apply flip if needed. We
-        // always do this in the `dst` rather than the `src`` because this allows
-        // e.g. polar sampling compute shaders to work.
-        *dst = (struct pl_rect2df) {
-            .x0 = flipped_x ? rx1 : rx0,
-            .y0 = flipped_y ? ry1 : ry0,
-            .x1 = flipped_x ? rx0 : rx1,
-            .y1 = flipped_y ? ry0 : ry1,
-        };
-    }
+    // Update dst_rect to the rounded values and re-apply flip if needed. We
+    // always do this in the `dst` rather than the `src`` because this allows
+    // e.g. polar sampling compute shaders to work.
+    *dst = (struct pl_rect2df) {
+        .x0 = flipped_x ? rx1 : rx0,
+        .y0 = flipped_y ? ry1 : ry0,
+        .x1 = flipped_x ? rx0 : rx1,
+        .y1 = flipped_y ? ry0 : ry1,
+    };
 
     // Copies of the above, for convenience
     pass->ref_rect = *src;
@@ -2343,7 +2341,7 @@ static void fix_color_space(struct pl_frame *frame)
     }
 }
 
-static bool pass_infer_state(struct pass_state *pass, bool adjust_rects)
+static bool pass_infer_state(struct pass_state *pass)
 {
     // Backwards compatibility hacks
     struct pl_frame *image = &pass->image;
@@ -2363,7 +2361,7 @@ static bool pass_infer_state(struct pass_state *pass, bool adjust_rects)
     if (!validate_structs(pass->rr, image, target))
         return false;
 
-    fix_refs_and_rects(pass, adjust_rects);
+    fix_refs_and_rects(pass);
     fix_color_space(image);
 
     // Infer the target color space info based on the image's
@@ -2436,7 +2434,7 @@ bool pl_render_image(pl_renderer rr, const struct pl_frame *pimage,
         .target = *ptarget,
     };
 
-    if (!pass_infer_state(&pass, true))
+    if (!pass_infer_state(&pass))
         return false;
 
     pass.tmp = pl_tmp(NULL),
@@ -2568,7 +2566,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     if (images->num_frames == 1)
         goto fallback;
 
-    if (!pass_infer_state(&pass, false))
+    if (!pass_infer_state(&pass))
         return false;
 
     int out_w = abs(pl_rect_w(pass.dst_rect)),
@@ -2706,7 +2704,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             };
 
             // Render a single frame up to `pass_output_target`
-            if (!pass_infer_state(&inter_pass, false))
+            if (!pass_infer_state(&inter_pass))
                 goto error;
 
             pl_dispatch_reset_frame(rr->dp);
