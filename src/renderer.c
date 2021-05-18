@@ -2555,6 +2555,12 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         }
     }
 
+    struct pass_state pass = {
+        .rr = rr,
+        .image = *refimg,
+        .target = *ptarget,
+    };
+
     if (!params->frame_mixer || rr->disable_mixing || !FBOFMT(4))
         goto fallback;
 
@@ -2562,33 +2568,17 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     if (images->num_frames == 1)
         goto fallback;
 
-    struct pass_state pass = {
-        .rr = rr,
-        .image = *refimg,
-        .target = *ptarget,
-    };
-
     if (!pass_infer_state(&pass, false))
         return false;
 
     int out_w = abs(pl_rect_w(pass.dst_rect)),
         out_h = abs(pl_rect_h(pass.dst_rect));
 
-    // The color space to mix the frames in. We arbitrarily choose to use the
-    // "current" frame's color space, but converted to RGB.
-    //
-    // TODO: Maybe mix in linear light instead of the native colorspace?
-    const struct pl_color_space mix_color = pass.image.color;
-    static const struct pl_color_repr mix_repr = {
-        .sys = PL_COLOR_SYSTEM_RGB,
-        .levels = PL_COLOR_LEVELS_PC,
-        .alpha = PL_ALPHA_PREMULTIPLIED,
-    };
-
     int fidx = 0;
     struct cached_frame frames[MAX_MIX_FRAMES];
     float weights[MAX_MIX_FRAMES];
     float wsum = 0.0;
+    pass.tmp = pl_tmp(NULL);
 
     // Garbage collect the cache by evicting all frames from the cache that are
     // not determined to still be required
@@ -2684,13 +2674,13 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         }
 
         if (!can_reuse) {
-            // If we can't reuse the entry, we need to render to this
-            // texture first
+            // If we can't reuse the entry, we need to re-render this frame
             PL_TRACE(rr, "  -> Cached texture missing or invalid.. (re)creating");
             if (!f->tex) {
                 if (PL_ARRAY_POP(rr->frame_fbos, &f->tex))
                     pl_tex_invalidate(rr->gpu, f->tex);
             }
+
             bool ok = pl_tex_recreate(rr->gpu, &f->tex, &(struct pl_tex_params) {
                 .w = out_w,
                 .h = out_h,
@@ -2707,31 +2697,41 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                 goto fallback;
             }
 
-            // In the intermediate frame cache, we store all images as RGB, but
-            // in their native colorspaces. Preserving the original colorspace
-            // avoids precision loss due to unnecessary color space roundtrips.
-            // We also explicitly clear the ICC profile, see below for why.
-            struct pl_frame image = *images->frames[i];
-            image.profile = (struct pl_icc_profile) {0};
-
-            struct pl_frame inter_target = {
-                .num_planes = 1,
-                .planes[0] = {
-                    .texture = f->tex,
-                    .components = rr->fbofmt[4]->num_components,
-                    .component_mapping = {0, 1, 2, 3},
-                },
-                .color = f->color,
-                .repr = mix_repr,
+            struct pass_state inter_pass = {
+                .rr = rr,
+                .tmp = pass.tmp,
+                .fbos_used = pl_calloc(pass.tmp, rr->fbos.num, sizeof(bool)),
+                .image = *images->frames[i],
+                .target = pass.target,
             };
 
-            if (!pl_render_image(rr, &image, &inter_target, params)) {
-                PL_ERR(rr, "Could not render image for frame mixing.. disabling!");
-                rr->disable_mixing = true;
-                goto fallback;
+            // Render a single frame up to `pass_output_target`
+            if (!pass_infer_state(&inter_pass, false))
+                goto error;
+
+            pl_dispatch_reset_frame(rr->dp);
+            for (int n = 0; n < params->num_hooks; n++) {
+                if (params->hooks[n]->reset)
+                    params->hooks[n]->reset(params->hooks[n]->priv);
             }
 
+            if (!pass_read_image(rr, &inter_pass, params))
+                goto error;
+            if (!pass_scale_main(rr, &inter_pass, params))
+                goto error;
+
+            pl_assert(inter_pass.img.w == out_w &&
+                      inter_pass.img.h == out_h);
+
+            ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
+                .shader = &inter_pass.img.sh,
+                .target = f->tex,
+            });
+            if (!ok)
+                goto error;
+
             f->params_hash = params_hash;
+            f->color = inter_pass.img.color;
         }
 
         pl_assert(fidx < MAX_MIX_FRAMES);
@@ -2755,10 +2755,17 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     }
 
     // Sample and mix the output color
+    pl_dispatch_reset_frame(rr->dp);
     pl_shader sh = pl_dispatch_begin(rr->dp);
     sh->res.output = PL_SHADER_SIG_COLOR;
     sh->output_w = out_w;
     sh->output_h = out_h;
+
+    // The color space to mix the frames in. We arbitrarily choose to use the
+    // "current" frame's color space, but converted to RGB.
+    //
+    // TODO: Maybe mix in linear light instead of the native colorspace?
+    const struct pl_color_space mix_color = pass.image.color;
 
     GLSL("vec4 color;                   \n"
          "// pl_render_image_mix        \n"
@@ -2801,7 +2808,6 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
          "}                  \n");
 
     // Dispatch this to the destination
-    pass.tmp = pl_tmp(NULL),
     pass.fbos_used = pl_calloc(pass.tmp, rr->fbos.num, sizeof(bool));
     pass.img = (struct img) {
         .sh = sh,
@@ -2809,8 +2815,17 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         .h = out_h,
         .comps = 4,
         .color = mix_color,
-        .repr = mix_repr,
+        .repr = {
+            .sys = PL_COLOR_SYSTEM_RGB,
+            .levels = PL_COLOR_LEVELS_PC,
+            .alpha = PL_ALPHA_PREMULTIPLIED,
+        },
     };
+
+    for (int i = 0; i < params->num_hooks; i++) {
+        if (params->hooks[i]->reset)
+            params->hooks[i]->reset(params->hooks[i]->priv);
+    }
 
     if (!pass_output_target(rr, &pass, params)) {
         pl_free(pass.tmp);
@@ -2820,8 +2835,16 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     pl_free(pass.tmp);
     return true;
 
+error:
+    PL_ERR(rr, "Could not render image for frame mixing.. disabling!");
+    rr->disable_mixing = true;
+    // fall through
+
 fallback:
+    pl_free(pass.tmp);
     return pl_render_image(rr, refimg, ptarget, params);
+
+
 }
 
 void pl_frame_set_chroma_location(struct pl_frame *frame,
