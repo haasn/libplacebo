@@ -189,11 +189,7 @@ static bool gl_sw_start_frame(pl_swapchain sw,
                 .color_depth = p->fb->params.format->component_depth[0],
             },
         },
-        .color_space = {
-            .primaries = PL_COLOR_PRIM_UNKNOWN,
-            .transfer = PL_COLOR_TRC_UNKNOWN,
-            .light = PL_COLOR_LIGHT_DISPLAY,
-        },
+        .color_space = pl_color_space_monitor,
     };
 
     ok = p->frame_started = gl_check_err(sw->gpu, "gl_sw_start_frame");
