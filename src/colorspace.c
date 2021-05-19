@@ -343,14 +343,16 @@ void pl_color_space_infer(struct pl_color_space *space)
             ? PL_COLOR_LIGHT_SCENE_HLG
             : PL_COLOR_LIGHT_DISPLAY;
     }
+    float nom_peak = pl_color_transfer_nominal_peak(space->transfer);
+    space->sig_peak = PL_CLAMP(space->sig_peak, 0.0, nom_peak);
     if (!space->sig_peak) {
-        space->sig_peak = pl_color_transfer_nominal_peak(space->transfer);
+        space->sig_peak = nom_peak;
 
         // Exception: For HLG content, we want to infer a value of 1000 cd/m²
         // (corresponding to a peak of 10.0) instead of the true nominal peak
         // of 12.0. A peak of 1000 is considered the "reference" HLG display.
         if (space->transfer == PL_COLOR_TRC_HLG)
-            space->sig_peak = 10.0;
+            space->sig_peak = 10.0 / PL_COLOR_SDR_WHITE_HLG;
     }
 
     if (!space->sig_scale)
