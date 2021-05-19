@@ -59,7 +59,10 @@ struct plplay {
     struct pl_color_map_params color_map_params;
     struct pl_dither_params dither_params;
     struct pl_cone_params cone_params;
-    int force_depth;
+    struct pl_color_space target_color;
+    struct pl_color_repr target_repr;
+    bool target_override;
+    bool levels_override;
 
     // custom shaders
     const struct pl_hook **shader_hooks;
@@ -287,17 +290,20 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
     pl_frame_from_swapchain(&target, frame);
     update_settings(p);
 
+    // Update the global settings based on this swapchain frame, then use those
+    pl_color_space_merge(&p->target_color, &target.color);
+    pl_color_repr_merge(&p->target_repr, &target.repr);
+    if (p->target_override) {
+        target.color = p->target_color;
+        target.repr = p->target_repr;
+    }
+
     assert(mix->num_frames);
     const AVFrame *avframe = mix->frames[0]->user_data;
     double dar = pl_rect2df_aspect(&mix->frames[0]->crop);
     if (avframe->sample_aspect_ratio.num)
         dar *= av_q2d(avframe->sample_aspect_ratio);
     pl_rect2df_aspect_set(&target.crop, dar, 0.0);
-
-    if (p->force_depth) {
-        target.repr.bits.color_depth = p->force_depth;
-        target.repr.bits.sample_depth = p->force_depth;
-    }
 
     if (!pl_render_image_mix(p->renderer, mix, &target, &p->params))
         return false;
@@ -873,7 +879,166 @@ static void update_settings(struct plplay *p)
             }
 
             nk_checkbox_label(nk, "Temporal dithering", &dpar->temporal);
-            nk_property_int(nk, "Bit depth override", 0, &p->force_depth, 16, 1, 0);
+
+            nk_tree_pop(nk);
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Output color override", NK_MINIMIZED)) {
+            struct pl_color_space *tcol = &p->target_color;
+            struct pl_color_repr *trepr = &p->target_repr;
+            nk_layout_row_dynamic(nk, 24, 2);
+            nk_checkbox_label(nk, "Enable", &p->target_override);
+            bool reset = nk_button_label(nk, "Reset settings");
+
+            nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
+
+            static const char *primaries[PL_COLOR_PRIM_COUNT] = {
+                [PL_COLOR_PRIM_UNKNOWN]     = "Auto (unknown)",
+                [PL_COLOR_PRIM_BT_601_525]  = "ITU-R Rec. BT.601 (525-line = NTSC, SMPTE-C)",
+                [PL_COLOR_PRIM_BT_601_625]  = "ITU-R Rec. BT.601 (625-line = PAL, SECAM)",
+                [PL_COLOR_PRIM_BT_709]      = "ITU-R Rec. BT.709 (HD), also sRGB",
+                [PL_COLOR_PRIM_BT_470M]     = "ITU-R Rec. BT.470 M",
+                [PL_COLOR_PRIM_EBU_3213]    = "EBU Tech. 3213-E / JEDEC P22 phosphors",
+                [PL_COLOR_PRIM_BT_2020]     = "ITU-R Rec. BT.2020 (UltraHD)",
+                [PL_COLOR_PRIM_APPLE]       = "Apple RGB",
+                [PL_COLOR_PRIM_ADOBE]       = "Adobe RGB (1998)",
+                [PL_COLOR_PRIM_PRO_PHOTO]   = "ProPhoto RGB (ROMM)",
+                [PL_COLOR_PRIM_CIE_1931]    = "CIE 1931 RGB primaries",
+                [PL_COLOR_PRIM_DCI_P3]      = "DCI-P3 (Digital Cinema)",
+                [PL_COLOR_PRIM_DISPLAY_P3]  = "DCI-P3 (Digital Cinema) with D65 white point",
+                [PL_COLOR_PRIM_V_GAMUT]     = "Panasonic V-Gamut (VARICAM)",
+                [PL_COLOR_PRIM_S_GAMUT]     = "Sony S-Gamut",
+                [PL_COLOR_PRIM_FILM_C]      = "Traditional film primaries with Illuminant C",
+            };
+
+            nk_label(nk, "Primaries:", NK_TEXT_LEFT);
+            tcol->primaries = nk_combo(nk, primaries, PL_COLOR_PRIM_COUNT, tcol->primaries,
+                                       16, nk_vec2(nk_widget_width(nk), 200));
+
+            static const char *transfers[PL_COLOR_TRC_COUNT] = {
+                [PL_COLOR_TRC_UNKNOWN]      = "Auto (unknown)",
+                [PL_COLOR_TRC_BT_1886]      = "ITU-R Rec. BT.1886 (CRT emulation + OOTF)",
+                [PL_COLOR_TRC_SRGB]         = "IEC 61966-2-4 sRGB (CRT emulation)",
+                [PL_COLOR_TRC_LINEAR]       = "Linear light content",
+                [PL_COLOR_TRC_GAMMA18]      = "Pure power gamma 1.8",
+                [PL_COLOR_TRC_GAMMA20]      = "Pure power gamma 2.0",
+                [PL_COLOR_TRC_GAMMA22]      = "Pure power gamma 2.2",
+                [PL_COLOR_TRC_GAMMA24]      = "Pure power gamma 2.4",
+                [PL_COLOR_TRC_GAMMA26]      = "Pure power gamma 2.6",
+                [PL_COLOR_TRC_GAMMA28]      = "Pure power gamma 2.8",
+                [PL_COLOR_TRC_PRO_PHOTO]    = "ProPhoto RGB (ROMM)",
+                [PL_COLOR_TRC_PQ]           = "ITU-R BT.2100 PQ (perceptual quantizer), aka SMPTE ST2048",
+                [PL_COLOR_TRC_HLG]          = "ITU-R BT.2100 HLG (hybrid log-gamma), aka ARIB STD-B67",
+                [PL_COLOR_TRC_V_LOG]        = "Panasonic V-Log (VARICAM)",
+                [PL_COLOR_TRC_S_LOG1]       = "Sony S-Log1",
+                [PL_COLOR_TRC_S_LOG2]       = "Sony S-Log2",
+            };
+
+            nk_label(nk, "Transfer:", NK_TEXT_LEFT);
+            tcol->transfer = nk_combo(nk, transfers, PL_COLOR_TRC_COUNT, tcol->transfer,
+                                      16, nk_vec2(nk_widget_width(nk), 200));
+
+            static const char *lights[PL_COLOR_LIGHT_COUNT] = {
+                [PL_COLOR_LIGHT_UNKNOWN]    = "Auto (unknown)",
+                [PL_COLOR_LIGHT_DISPLAY]    = "Display-referred, output as-is",
+                [PL_COLOR_LIGHT_SCENE_HLG]  = "Scene-referred, HLG OOTF",
+                [PL_COLOR_LIGHT_SCENE_709_1886] = "Scene-referred, OOTF = BT.709+1886 interaction",
+                [PL_COLOR_LIGHT_SCENE_1_2]  = "Scene-referred, OOTF = gamma 1.2",
+            };
+
+            nk_label(nk, "Light:", NK_TEXT_LEFT);
+            tcol->light = nk_combo(nk, lights, PL_COLOR_LIGHT_COUNT, tcol->light,
+                                   16, nk_vec2(nk_widget_width(nk), 200));
+
+            nk_layout_row_dynamic(nk, 24, 2);
+            nk_checkbox_label(nk, "Override HDR levels", &p->levels_override);
+            bool reset_levels = nk_button_label(nk, "Reset levels");
+
+            if (p->levels_override) {
+                // Ensure these values are always legal by going through
+                // `pl_color_space_infer`, without clobbering the rest
+                nk_layout_row_dynamic(nk, 24, 2);
+                struct pl_color_space fix = *tcol;
+                pl_color_space_infer(&fix);
+                float peak = fix.sig_peak * fix.sig_scale * PL_COLOR_SDR_WHITE;
+                float avg = fix.sig_avg * fix.sig_scale * PL_COLOR_SDR_WHITE;
+                float sfloor = fix.sig_floor * fix.sig_scale * PL_COLOR_SDR_WHITE;
+                nk_property_float(nk, "White point (cd/m²)", 0.0, &peak, 10000.0, 1, 0.1);
+                nk_property_float(nk, "Black point (cd/m²)", 0.0, &sfloor, 10.0, 0.001, 0.0001);
+                nk_property_float(nk, "Frame average (cd/m²)", 0.0, &avg, 1000.0, 1, 0.01);
+                fix.sig_peak = fmax(peak, 1e-3) / (fix.sig_scale * PL_COLOR_SDR_WHITE);
+                fix.sig_avg = fmax(avg, 1e-4) / (fix.sig_scale * PL_COLOR_SDR_WHITE);
+                fix.sig_floor = fmax(sfloor, 1e-6) / (fix.sig_scale * PL_COLOR_SDR_WHITE);
+                nk_property_float(nk, "Output scale", 0.0, &fix.sig_scale, 10000.0 / PL_COLOR_SDR_WHITE, 0.01, 0.001);
+                pl_color_space_infer(&fix);
+                tcol->sig_peak = fix.sig_peak;
+                tcol->sig_avg = fix.sig_avg;
+                tcol->sig_floor = fix.sig_floor;
+                tcol->sig_scale = fix.sig_scale;
+            } else {
+                reset_levels = true;
+            }
+
+            nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
+
+            static const char *systems[PL_COLOR_SYSTEM_COUNT] = {
+                [PL_COLOR_SYSTEM_UNKNOWN]       = "Auto (unknown)",
+                [PL_COLOR_SYSTEM_BT_601]        = "ITU-R Rec. BT.601 (SD)",
+                [PL_COLOR_SYSTEM_BT_709]        = "ITU-R Rec. BT.709 (HD)",
+                [PL_COLOR_SYSTEM_SMPTE_240M]    = "SMPTE-240M",
+                [PL_COLOR_SYSTEM_BT_2020_NC]    = "ITU-R Rec. BT.2020 (non-constant luminance)",
+                [PL_COLOR_SYSTEM_BT_2020_C]     = "ITU-R Rec. BT.2020 (constant luminance)",
+                [PL_COLOR_SYSTEM_BT_2100_PQ]    = "ITU-R Rec. BT.2100 ICtCp PQ variant",
+                [PL_COLOR_SYSTEM_BT_2100_HLG]   = "ITU-R Rec. BT.2100 ICtCp HLG variant",
+                [PL_COLOR_SYSTEM_YCGCO]         = "YCgCo (derived from RGB)",
+                [PL_COLOR_SYSTEM_RGB]           = "Red, Green and Blue",
+                [PL_COLOR_SYSTEM_XYZ]           = "CIE 1931 XYZ, pre-encoded with gamma 2.6",
+            };
+
+            nk_label(nk, "System:", NK_TEXT_LEFT);
+            trepr->sys = nk_combo(nk, systems, PL_COLOR_SYSTEM_COUNT, trepr->sys,
+                                  16, nk_vec2(nk_widget_width(nk), 200));
+
+            static const char *levels[PL_COLOR_LEVELS_COUNT] = {
+                [PL_COLOR_LEVELS_UNKNOWN]   = "Auto (unknown)",
+                [PL_COLOR_LEVELS_LIMITED]   = "Limited/TV range, e.g. 16-235",
+                [PL_COLOR_LEVELS_FULL]      = "Full/PC range, e.g. 0-255",
+            };
+
+            nk_label(nk, "Levels:", NK_TEXT_LEFT);
+            trepr->levels = nk_combo(nk, levels, PL_COLOR_LEVELS_COUNT, trepr->levels,
+                                     16, nk_vec2(nk_widget_width(nk), 200));
+
+            static const char *alphas[PL_ALPHA_MODE_COUNT] = {
+                [PL_ALPHA_UNKNOWN]          = "Auto (unknown, or no alpha)",
+                [PL_ALPHA_INDEPENDENT]      = "Independent alpha channel",
+                [PL_ALPHA_PREMULTIPLIED]    = "Premultiplied alpha channel",
+            };
+
+            nk_label(nk, "Alpha:", NK_TEXT_LEFT);
+            trepr->alpha = nk_combo(nk, alphas, PL_ALPHA_MODE_COUNT, trepr->alpha,
+                                    16, nk_vec2(nk_widget_width(nk), 200));
+
+            // Adjust these two fields in unison
+            int bits = trepr->bits.color_depth;
+            nk_label(nk, "Bit depth:", NK_TEXT_LEFT);
+            nk_property_int(nk, "", 0, &bits, 16, 1, 0);
+            trepr->bits.color_depth = bits;
+            trepr->bits.sample_depth = bits;
+
+            // Apply the reset last to prevent the UI from flashing for a frame
+            if (reset) {
+                *tcol = (struct pl_color_space) {0};
+                *trepr = (struct pl_color_repr) {0};
+            }
+
+            if (reset_levels) {
+                tcol->sig_peak = 0;
+                tcol->sig_avg = 0;
+                tcol->sig_floor = 0;
+                tcol->sig_scale = 0;
+            }
+
             nk_tree_pop(nk);
         }
 
