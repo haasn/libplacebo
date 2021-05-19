@@ -2825,10 +2825,8 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             params->hooks[i]->reset(params->hooks[i]->priv);
     }
 
-    if (!pass_output_target(rr, &pass, params)) {
-        pl_free(pass.tmp);
+    if (!pass_output_target(rr, &pass, params))
         goto fallback;
-    }
 
     pl_free(pass.tmp);
     return true;
