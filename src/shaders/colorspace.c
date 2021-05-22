@@ -1156,16 +1156,17 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
 
         if (!pl_primaries_superset(csp_dst, csp_src)) {
             if (params->gamut_clipping) {
-                GLSL("float cmin = min(min(color.r, color.g), color.b);     \n"
-                     "if (cmin < 0.0) {                                     \n"
-                     "    float luma = dot(%s, color.rgb);                  \n"
-                     "    float coeff = cmin / (cmin - luma);               \n"
-                     "    color.rgb = mix(color.rgb, vec3(luma), coeff);    \n"
-                     "}                                                     \n"
-                     "float cmax = max(max(color.r, color.g), color.b);     \n"
-                     "if (cmax > 1.0)                                       \n"
-                     "    color.rgb /= cmax;                                \n",
-                     sh_luma_coeffs(sh, dst.primaries));
+                GLSL("float cmin = min(min(color.r, color.g), color.b);         \n"
+                     "if (cmin < 0.0) {                                         \n"
+                     "    float luma = dot(%s, color.rgb);                      \n"
+                     "    float coeff = cmin / (cmin - luma);                   \n"
+                     "    color.rgb = mix(color.rgb, vec3(luma), coeff);        \n"
+                     "}                                                         \n"
+                     "float cmax = 1.0/%s * max(max(color.r, color.g), color.b);\n"
+                     "if (cmax > 1.0)                                           \n"
+                     "    color.rgb /= cmax;                                    \n",
+                     sh_luma_coeffs(sh, dst.primaries),
+                     SH_FLOAT(dst.sig_peak * dst.sig_scale));
 
             } else {
                 need_gamut_warn = true;
