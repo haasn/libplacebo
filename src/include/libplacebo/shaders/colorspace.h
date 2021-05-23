@@ -231,8 +231,9 @@ struct pl_color_map_params {
     // If you want to always use the saturating/colorimetric tone mapping, set
     // the strength to 0.0. If you want to always use the desaturating/hollywood
     // tone mapping, set the strength to 1.0 and the exponent to 0.0. The
-    // default settings are strength 0.75, exponent 1.5 and base 0.18, which
-    // provides a reasonable balance.
+    // default settings are strength 0.90, exponent 0.2 and base 0.18, which
+    // provide a fairly strong preset while nonetheless preserving some amount
+    // of colorimetric accuracy.
     float desaturation_strength;
     float desaturation_exponent;
     float desaturation_base;

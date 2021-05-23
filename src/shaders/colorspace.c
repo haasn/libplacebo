@@ -915,8 +915,8 @@ static inline float pq_delinearize(float x)
 const struct pl_color_map_params pl_color_map_default_params = {
     .intent                 = PL_INTENT_RELATIVE_COLORIMETRIC,
     .tone_mapping_algo      = PL_TONE_MAPPING_BT_2390,
-    .desaturation_strength  = 0.75,
-    .desaturation_exponent  = 1.50,
+    .desaturation_strength  = 0.90,
+    .desaturation_exponent  = 0.20,
     .desaturation_base      = 0.18,
     .gamut_clipping         = true,
 };
