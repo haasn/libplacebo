@@ -389,13 +389,30 @@ static inline void pl_avframe_set_color(AVFrame *frame, struct pl_color_space sp
 
         if (sd) {
             AVContentLightMetadata *clm = (AVContentLightMetadata *) sd->data;
-            *clm = (struct AVContentLightMetadata) {
+            *clm = (AVContentLightMetadata) {
                 .MaxCLL = space.sig_peak * PL_COLOR_SDR_WHITE,
                 .MaxFALL = space.sig_avg * PL_COLOR_SDR_WHITE,
             };
 
             if (!clm->MaxFALL)
                 clm->MaxFALL = clm->MaxCLL;
+        }
+    }
+
+    if (space.sig_floor > 0.0) {
+        sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA);
+        if (!sd) {
+            sd = av_frame_new_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA,
+                                        sizeof(AVMasteringDisplayMetadata));
+        }
+
+        if (sd) {
+            AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *) sd->data;
+            *mdm = (AVMasteringDisplayMetadata) {
+                .max_luminance = av_d2q(space.sig_peak * PL_COLOR_SDR_WHITE, 100000),
+                .min_luminance = av_d2q(space.sig_floor * PL_COLOR_SDR_WHITE, 100000),
+                .has_luminance = 1,
+            };
         }
     }
 
@@ -515,8 +532,10 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
     // This overrides the CLL values above, if both are present
     if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA))) {
         const AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *) sd->data;
-        if (mdm->has_luminance)
+        if (mdm->has_luminance) {
             out->color.sig_peak = av_q2d(mdm->max_luminance) / PL_COLOR_SDR_WHITE;
+            out->color.sig_floor = av_q2d(mdm->min_luminance) / PL_COLOR_SDR_WHITE;
+        }
     }
 
     // Make sure this value is more or less legal
