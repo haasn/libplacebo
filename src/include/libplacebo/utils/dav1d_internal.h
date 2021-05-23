@@ -206,6 +206,11 @@ static inline float pl_fixed24_8(uint32_t n)
     return (float) n / (1 << 8);
 }
 
+static inline float pl_fixed18_14(uint32_t n)
+{
+    return (float) n / (1 << 14);
+}
+
 // Align to a power of 2
 #define PL_ALIGN2(x, align) (((x) + (align) - 1) & ~((align) - 1))
 
@@ -288,8 +293,10 @@ static inline void pl_frame_from_dav1dpicture(struct pl_frame *out,
 
     // This overrides the CLL values above, if both are present
     const Dav1dMasteringDisplay *md = picture->mastering_display;
-    if (md)
+    if (md) {
         out->color.sig_peak = pl_fixed24_8(md->max_luminance) / PL_COLOR_SDR_WHITE;
+        out->color.sig_floor = pl_fixed18_14(md->min_luminance) / PL_COLOR_SDR_WHITE;
+    }
 
     // Make sure this value is more or less legal
     if (out->color.sig_peak < 1.0 || out->color.sig_peak > 50.0)
