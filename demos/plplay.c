@@ -433,6 +433,10 @@ int main(int argc, char **argv)
     state.params.color_map_params = &state.color_map_params;
     state.params.cone_params = &state.cone_params;
 
+    // Enable dynamic parameters by default, due to plplay's heavy reliance on
+    // GUI controls for dynamically adjusting render parameters.
+    state.params.dynamic_constants = true;
+
     struct plplay *p = &state;
     if (!open_file(p, filename))
         goto error;
@@ -950,6 +954,7 @@ static void update_settings(struct plplay *p)
             nk_checkbox_label(nk, "Force-enable 3DLUT", &par->force_icc_lut);
             nk_checkbox_label(nk, "Force-enable dither", &par->force_dither);
             nk_checkbox_label(nk, "Disable FBOs / advanced rendering", &par->disable_fbos);
+            nk_checkbox_label(nk, "Disable constant hard-coding", &par->dynamic_constants);
             nk_checkbox_label(nk, "Ignore ICC profiles", &par->ignore_icc_profiles);
 
             nk_layout_row_dynamic(nk, 24, 2);
