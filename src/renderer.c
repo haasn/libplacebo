@@ -777,7 +777,8 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
         GLSL("// overlay \n");
         switch (ol.mode) {
         case PL_OVERLAY_NORMAL:
-            GLSL("vec4 color = texture(%s, coord); \n", tex);
+            GLSL("vec4 color = %s(%s, coord); \n",
+                 sh_tex_fn(sh, ol.tex->params), tex);
             break;
         case PL_OVERLAY_MONOCHROME:
             GLSL("vec4 color = osd_color; \n");
