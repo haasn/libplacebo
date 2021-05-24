@@ -964,14 +964,14 @@ static bool bind_pass_tex(pl_shader sh, pl_str name,
     }));
 
     struct pl_color_repr repr = ptex->repr;
-    float scale = pl_color_repr_normalize(&repr);
-    GLSLH("#define %.*s_mul %f \n", PL_STR_FMT(name), scale);
+    ident_t scale = SH_FLOAT(pl_color_repr_normalize(&repr));
+    GLSLH("#define %.*s_mul %s \n", PL_STR_FMT(name), scale);
 
     // Compatibility with mpv
     GLSLH("#define %.*s_rot mat2(1.0, 0.0, 0.0, 1.0) \n", PL_STR_FMT(name));
 
     // Sampling function boilerplate
-    GLSLH("#define %.*s_tex(pos) (%f * vec4(%s(%s, pos))) \n",
+    GLSLH("#define %.*s_tex(pos) (%s * vec4(%s(%s, pos))) \n",
           PL_STR_FMT(name), scale, sh_tex_fn(sh, ptex->tex->params), id);
     GLSLH("#define %.*s_texOff(off) (%.*s_tex(%s + %s * vec2(off))) \n",
           PL_STR_FMT(name), PL_STR_FMT(name), pos, pt);
