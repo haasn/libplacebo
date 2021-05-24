@@ -900,18 +900,18 @@ bool pl_shader_av1_grain(pl_shader sh,
     int bits = PL_DEF(params->repr->bits.color_depth, 8);
     pl_assert(bits >= 8);
 
-    float minValue, maxLuma, maxChroma;
+    ident_t minValue, maxLuma, maxChroma;
     if (pl_color_levels_guess(params->repr) == PL_COLOR_LEVELS_LIMITED) {
         float out_scale = (1 << bits) / ((1 << bits) - 1.0);
-        minValue  = 16  / 256.0 * out_scale;
-        maxLuma   = 235 / 256.0 * out_scale;
-        maxChroma = 240 / 256.0 * out_scale;
+        minValue  = SH_FLOAT(16  / 256.0 * out_scale);
+        maxLuma   = SH_FLOAT(235 / 256.0 * out_scale);
+        maxChroma = SH_FLOAT(240 / 256.0 * out_scale);
         if (!pl_color_system_is_ycbcr_like(params->repr->sys))
             maxChroma = maxLuma;
     } else {
-        minValue  = 0.0;
-        maxLuma   = 1.0;
-        maxChroma = maxLuma;
+        minValue  = SH_FLOAT(0.0);
+        maxLuma   = SH_FLOAT(1.0);
+        maxChroma = SH_FLOAT(1.0);
     }
 
     // Load the color value of the tex itself
@@ -923,8 +923,9 @@ bool pl_shader_av1_grain(pl_shader sh,
         },
     });
 
-    GLSL("color = vec4(%f) * texelFetch(%s, ivec2(global_id), 0); \n",
-         scale.texture_scale, tex);
+    ident_t tex_scale = SH_FLOAT(scale.texture_scale);
+    GLSL("color = vec4(%s) * texelFetch(%s, ivec2(global_id), 0); \n",
+         tex_scale, tex);
 
     // If we need access to the external luma plane, load it now
     if (tex_is_cb || tex_is_cr) {
@@ -933,7 +934,7 @@ bool pl_shader_av1_grain(pl_shader sh,
             // We already have the luma channel as part of the pre-sampled color
             for (int i = 0; i < 3; i++) {
                 if (channel_map(i, params) == PL_CHANNEL_Y) {
-                    GLSL("averageLuma = color[%d]; \n", i);
+                    GLSL("averageLuma = color[%s]; \n", SH_INT(i));
                     break;
                 }
             }
@@ -949,11 +950,14 @@ bool pl_shader_av1_grain(pl_shader sh,
             });
 
             GLSL("pos = global_id * uvec2(%du, %du);                    \n"
-                 "averageLuma = %f * texelFetch(%s, ivec2(pos), 0)[%d]; \n",
-                 1 << sub_x, 1 << sub_y, scale.texture_scale, luma,
-                 params->luma_comp);
+                 "averageLuma = %s * texelFetch(%s, ivec2(pos), 0)[%s]; \n",
+                 1 << sub_x, 1 << sub_y, tex_scale, luma,
+                 SH_INT(params->luma_comp));
         }
     }
+
+    ident_t grain_min = SH_FLOAT(scale.grain_min * scale.grain_scale);
+    ident_t grain_max = SH_FLOAT(scale.grain_max * scale.grain_scale);
 
     for (int i = 0; i < params->components; i++) {
         enum pl_channel c = channel_map(i, params);
@@ -1000,14 +1004,12 @@ bool pl_shader_av1_grain(pl_shader sh,
                  "}                                             \n");
 
             // Correctly clip the interpolated grain
-            GLSL("grain = clamp(grain, %f, %f); \n",
-                 scale.grain_min * scale.grain_scale,
-                 scale.grain_max * scale.grain_scale);
+            GLSL("grain = clamp(grain, %s, %s); \n", grain_min, grain_max);
         }
 
         if (c == PL_CHANNEL_Y) {
             GLSL("color[%d] += %s(color[%d]) * grain;   \n"
-                 "color[%d] = clamp(color[%d], %f, %f); \n",
+                 "color[%d] = clamp(color[%d], %s, %s); \n",
                  i, scaling[c], i,
                  i, i, minValue, maxLuma);
         } else {
@@ -1034,7 +1036,7 @@ bool pl_shader_av1_grain(pl_shader sh,
                 GLSL("val += %s; \n", offset);
             }
             GLSL("color[%d] += %s(val) * grain;         \n"
-                 "color[%d] = clamp(color[%d], %f, %f); \n",
+                 "color[%d] = clamp(color[%d], %s, %s); \n",
                  i, scaling[c],
                  i, i, minValue, maxChroma);
         }
