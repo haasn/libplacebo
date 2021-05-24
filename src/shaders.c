@@ -226,6 +226,19 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
 
 ident_t sh_const(pl_shader sh, struct pl_shader_const sc)
 {
+    if (sh->res.params.dynamic_constants && !sc.compile_time) {
+        return sh_var(sh, (struct pl_shader_var) {
+            .var = {
+                .name = sc.name,
+                .type = sc.type,
+                .dim_v = 1,
+                .dim_m = 1,
+                .dim_a = 1,
+            },
+            .data = sc.data,
+        });
+    }
+
     sc.name = sh_fresh(sh, sc.name);
 
     pl_gpu gpu = SH_GPU(sh);

@@ -40,6 +40,7 @@ struct pl_dispatch {
     pl_gpu gpu;
     uint8_t current_ident;
     uint8_t current_index;
+    bool dynamic_constants;
     int max_passes;
 
     PL_ARRAY(pl_shader) shaders;                // to avoid re-allocations
@@ -135,6 +136,7 @@ pl_shader pl_dispatch_begin_ex(pl_dispatch dp, bool unique)
         .id = unique ? dp->current_ident++ : 0,
         .gpu = dp->gpu,
         .index = dp->current_index,
+        .dynamic_constants = dp->dynamic_constants,
     };
 
     pl_shader sh = NULL;
@@ -155,6 +157,11 @@ void pl_dispatch_reset_frame(pl_dispatch dp)
     dp->current_ident = 0;
     dp->current_index++;
     pthread_mutex_unlock(&dp->lock);
+}
+
+void pl_dispatch_mark_dynamic(pl_dispatch dp, bool dynamic)
+{
+    dp->dynamic_constants = dynamic;
 }
 
 pl_shader pl_dispatch_begin(pl_dispatch dp)

@@ -632,8 +632,19 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
              "ivec2 rel = ivec2(round((base - wbase) * size));              \n",
              pos);
 
-        ident_t iw_c = sh_const_int(sh, "iw", iw);
-        ident_t ih_c = sh_const_int(sh, "ih", ih);
+        ident_t iw_c = sh_const(sh, (struct pl_shader_const) {
+            .type = PL_VAR_SINT,
+            .compile_time = true,
+            .name ="iw",
+            .data = &iw,
+        });
+
+        ident_t ih_c = sh_const(sh, (struct pl_shader_const) {
+            .type = PL_VAR_SINT,
+            .compile_time = true,
+            .name = "ih",
+            .data = &ih,
+        });
 
         // Load all relevant texels into shmem
         GLSL("for (int y = int(gl_LocalInvocationID.y); y < %s; y += %d) {  \n"

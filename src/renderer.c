@@ -2426,6 +2426,7 @@ bool pl_render_image(pl_renderer rr, const struct pl_frame *pimage,
                      const struct pl_render_params *params)
 {
     params = PL_DEF(params, &pl_render_default_params);
+    pl_dispatch_mark_dynamic(rr->dp, params->dynamic_constants);
     if (!pimage)
         return draw_empty_overlays(rr, ptarget, params);
 
@@ -2535,6 +2536,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
     params = PL_DEF(params, &pl_render_default_params);
     uint64_t params_hash = render_params_hash(params);
+    pl_dispatch_mark_dynamic(rr->dp, params->dynamic_constants);
 
     require(images->num_frames >= 1);
     for (int i = 0; i < images->num_frames - 1; i++)

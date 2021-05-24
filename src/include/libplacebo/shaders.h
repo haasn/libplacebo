@@ -58,6 +58,11 @@ struct pl_shader_params {
     // determine the effective GLSL mode and capabilities. If `gpu` is also
     // set, then this overrides `gpu->glsl`.
     struct pl_glsl_desc glsl;
+
+    // If this is true, all constants in the shader will be replaced by
+    // dynaminic variables. This is mainly useful to avoid recompilation for
+    // shaders which expect to have their values change constantly.
+    bool dynamic_constants;
 };
 
 // Creates a new, blank, mutable pl_shader object.
@@ -206,6 +211,11 @@ struct pl_shader_const {
     enum pl_var_type type;
     const char *name;
     const void *data;
+
+    // If true, this constant *must* be a compile-time constant, which
+    // basically just overrides `pl_shader_params.dynamic_constants`. Useful
+    // for constants which will serve as inputs to e.g. array sizes.
+    bool compile_time;
 };
 
 // Finalize a pl_shader. It is no longer mutable at this point, and any further

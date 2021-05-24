@@ -964,7 +964,7 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
         // mobius as sig_peak -> 1.0 is a linear function, so we can just skip
         // tone-mapping in this case
         GLSL("if (sig_peak > 1.0 + 1e-6) {                                      \n"
-             "    const float j = %s;                                           \n"
+             "    float j = %s;                                                 \n"
              // solve for M(j) = j; M(sig_peak) = 1.0; M'(j) = 1.0
              // where M(x) = scale * (x+a)/(x+b)
              "    float a = -j*j * (sig_peak - 1.0) / (j*j - 2.0*j + sig_peak); \n"
@@ -1003,7 +1003,8 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
     }
 
     case PL_TONE_MAPPING_GAMMA:
-        GLSL("const float cutoff = 0.05, gamma = 1.0/%s;            \n"
+        GLSL("const float cutoff = 0.05;                            \n"
+             "float gamma = 1.0/%s;                                 \n"
              "float scale = pow(cutoff / sig_peak, gamma) / cutoff; \n"
              "sig = mix(scale * sig,                                \n"
              "          pow(sig / sig_peak, vec3(gamma)),           \n"

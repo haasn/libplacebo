@@ -33,3 +33,8 @@ pl_shader pl_dispatch_begin_ex(pl_dispatch dp, bool unique);
 //
 // This is a private API since it's only relevant if using `pl_dispatch_begin_ex`
 void pl_dispatch_reset_frame(pl_dispatch dp);
+
+// Set the `dynamic_constants` field for newly created `pl_shader` objects.
+//
+// This is a private API because it's sort of clunky/stateful.
+void pl_dispatch_mark_dynamic(pl_dispatch dp, bool dynamic);

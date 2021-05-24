@@ -237,6 +237,16 @@ struct pl_render_params {
     // texture format available. This disables most features.
     bool disable_fbos;
 
+    // If this is true, all shaders will be generated as "dynamic" shaders,
+    // with any compile-time constants being replaced by runtime-adjustable
+    // values. This is generally a performance loss, but has the advantage of
+    // being able to freely change parameters without triggering shader
+    // recompilations.
+    //
+    // It's a good idea to enable while presenting configurable settings to the
+    // user, but it should be set to false once those values are "dialed in".
+    bool dynamic_constants;
+
     // --- Deprecated aliases
     const struct pl_icc_params *lut3d_params PL_DEPRECATED; // fallback for `icc_params`
     bool force_3dlut PL_DEPRECATED; // fallback for `force_icc_lut`
