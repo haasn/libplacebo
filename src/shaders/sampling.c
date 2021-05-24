@@ -230,23 +230,26 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
           average, state, prng, prng, M_PI * 2,
           fn, tex, pt, fn, tex, pt, fn, tex, pt, fn, tex, pt);
 
+    ident_t radius = sh_const_float(sh, "radius", params->radius);
+    ident_t threshold = sh_const_float(sh, "threshold",
+                                       params->threshold / (1000 * scale));
+
     // For each iteration, compute the average at a given distance and
     // pick it instead of the color if the difference is below the threshold.
     for (int i = 1; i <= params->iterations; i++) {
-        GLSL("avg = %s(pos, %f, %s);                                    \n"
-             "diff = abs(color - avg);                                  \n"
-             "color = mix(avg, color, %s(greaterThan(diff, vec4(%f)))); \n",
-             average, i * params->radius, state,
-             sh_bvec(sh, 4), params->threshold / (1000 * i * scale));
+        GLSL("avg = %s(pos, %d.0 * %s, %s);                                     \n"
+             "diff = abs(color - avg);                                          \n"
+             "color = mix(avg, color, %s(greaterThan(diff, vec4(%s / %d.0))));  \n",
+             average, i, radius, state, sh_bvec(sh, 4), threshold, i);
     }
 
-    GLSL("color *= vec4(%f);\n", scale);
+    GLSL("color *= vec4(%s);\n", SH_FLOAT(scale));
 
     // Add some random noise to smooth out residual differences
     if (params->grain > 0) {
         GLSL("vec3 noise = vec3(%s, %s, %s);         \n"
-             "color.rgb += %f * (noise - vec3(0.5)); \n",
-             prng, prng, prng, params->grain / 1000.0);
+             "color.rgb += %s * (noise - vec3(0.5)); \n",
+             prng, prng, prng, SH_FLOAT(params->grain / 1000.0));
     }
 
     GLSL("}\n");
@@ -262,8 +265,8 @@ bool pl_shader_sample_direct(pl_shader sh, const struct pl_sample_src *src)
         return false;
 
     GLSL("// pl_shader_sample_direct          \n"
-         "vec4 color = vec4(%f) * %s(%s, %s); \n",
-         scale, fn, tex, pos);
+         "vec4 color = vec4(%s) * %s(%s, %s); \n",
+         SH_FLOAT(scale), fn, tex, pos);
     return true;
 }
 
@@ -277,8 +280,8 @@ bool pl_shader_sample_nearest(pl_shader sh, const struct pl_sample_src *src)
         return false;
 
     GLSL("// pl_shader_sample_nearest         \n"
-         "vec4 color = vec4(%f) * %s(%s, %s); \n",
-         scale, fn, tex, pos);
+         "vec4 color = vec4(%s) * %s(%s, %s); \n",
+         SH_FLOAT(scale), fn, tex, pos);
     return true;
 }
 
@@ -292,8 +295,8 @@ bool pl_shader_sample_bilinear(pl_shader sh, const struct pl_sample_src *src)
         return false;
 
     GLSL("// pl_shader_sample_bilinear        \n"
-         "vec4 color = vec4(%f) * %s(%s, %s); \n",
-         scale, fn, tex, pos);
+         "vec4 color = vec4(%s) * %s(%s, %s); \n",
+         SH_FLOAT(scale), fn, tex, pos);
     return true;
 }
 
@@ -353,9 +356,9 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
          "vec4 bg = %s(%s, pos + cdelta.zw);        \n"
          "vec4 aa = mix(bg, br, parmy.b);           \n"
          // x-interpolation
-         "color = vec4(%f) * mix(aa, ab, parmx.b);  \n"
+         "color = vec4(%s) * mix(aa, ab, parmx.b);  \n"
          "}                                         \n",
-         fn, tex, fn, tex, fn, tex, fn, tex, scale);
+         fn, tex, fn, tex, fn, tex, fn, tex, SH_FLOAT(scale));
 
     return true;
 }
@@ -387,16 +390,17 @@ bool pl_shader_sample_oversample(pl_shader sh, const struct pl_sample_src *src,
 
     if (threshold > 0.0) {
         threshold = PL_MIN(threshold, 1.0);
-        GLSL("coeff = (coeff - %f) * 1.0/%f; \n",
-             threshold, 1.0 - 2 * threshold);
+        ident_t thresh = sh_const_float(sh, "threshold", threshold);
+        GLSL("coeff = (coeff - %s) / (1.0 - 2.0 * %s);  \n",
+             thresh, thresh);
     }
 
     // Compute the right output blend of colors
     GLSL("coeff = clamp(coeff, 0.0, 1.0);               \n"
          "pos += (coeff - fcoord) * pt;                 \n"
-         "color = vec4(%f) * %s(%s, pos);               \n"
+         "color = vec4(%s) * %s(%s, pos);               \n"
          "}                                             \n",
-         scale, fn, tex);
+         SH_FLOAT(scale), fn, tex);
 
     return true;
 }
@@ -422,8 +426,8 @@ static bool filter_compat(pl_filter filter, float inv_scale,
 // If `in` is set, takes the pixel from inX[idx] where X is the component,
 // `in` is the given identifier, and `idx` must be defined by the caller
 static void polar_sample(pl_shader sh, pl_filter filter, const char *fn,
-                         ident_t tex, ident_t lut, int x, int y,
-                         uint8_t comp_mask, ident_t in)
+                         ident_t tex, ident_t lut, ident_t cutoff, ident_t radius,
+                         int x, int y, uint8_t comp_mask, ident_t in)
 {
     // Since we can't know the subpixel position in advance, assume a
     // worst case scenario
@@ -438,12 +442,12 @@ static void polar_sample(pl_shader sh, pl_filter filter, const char *fn,
     // Check for samples that might be skippable
     bool maybe_skippable = dmax >= filter->radius_cutoff - M_SQRT2;
     if (maybe_skippable)
-        GLSL("if (d < %f) {\n", filter->radius_cutoff);
+        GLSL("if (d < %s) {\n", cutoff);
 
     // Get the weight for this pixel
-    GLSL("w = %s(d * 1.0/%f); \n"
+    GLSL("w = %s(d * 1.0/%s); \n"
          "wsum += w;          \n",
-         lut, filter->radius);
+         lut, radius);
 
     if (in) {
         for (uint8_t comps = comp_mask; comps;) {
@@ -618,6 +622,9 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         return false;
     }
 
+    ident_t cutoff_c = sh_const_float(sh, "radius_cutoff", obj->filter->radius_cutoff);
+    ident_t radius_c = sh_const_float(sh, "radius", obj->filter->radius);
+
     if (is_compute) {
         // Compute shader kernel
         GLSL("vec2 wpos = %s_map(gl_WorkGroupID * gl_WorkGroupSize);        \n"
@@ -625,17 +632,20 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
              "ivec2 rel = ivec2(round((base - wbase) * size));              \n",
              pos);
 
+        ident_t iw_c = sh_const_int(sh, "iw", iw);
+        ident_t ih_c = sh_const_int(sh, "ih", ih);
+
         // Load all relevant texels into shmem
-        GLSL("for (int y = int(gl_LocalInvocationID.y); y < %d; y += %d) {  \n"
-             "for (int x = int(gl_LocalInvocationID.x); x < %d; x += %d) {  \n"
+        GLSL("for (int y = int(gl_LocalInvocationID.y); y < %s; y += %d) {  \n"
+             "for (int x = int(gl_LocalInvocationID.x); x < %s; x += %d) {  \n"
              "c = %s(%s, wbase + pt * vec2(x - %d, y - %d));                \n",
-             ih, bh, iw, bw, fn, src_tex, offset, offset);
+             ih_c, bh, iw_c, bw, fn, src_tex, offset, offset);
 
         in = sh_fresh(sh, "in");
         for (uint8_t comps = comp_mask; comps;) {
             uint8_t c = __builtin_ctz(comps);
-            GLSLH("shared float %s%d[%d];   \n", in, c, ih * iw);
-            GLSL("%s%d[%d * y + x] = c[%d]; \n", in, c, iw, c);
+            GLSLH("shared float %s%d[%s * %s]; \n", in, c, ih_c, iw_c);
+            GLSL("%s%d[%s * y + x] = c[%d]; \n", in, c, iw_c, c);
             comps &= ~(1 << c);
         }
 
@@ -645,9 +655,10 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         // Dispatch the actual samples
         for (int y = 1 - bound; y <= bound; y++) {
             for (int x = 1 - bound; x <= bound; x++) {
-                GLSL("idx = %d * rel.y + rel.x + %d;\n",
-                     iw, iw * (y + offset) + x + offset);
-                polar_sample(sh, obj->filter, fn, src_tex, lut, x, y, comp_mask, in);
+                GLSL("idx = %s * rel.y + rel.x + %s * %d + %d; \n",
+                     iw_c, iw_c, y + offset, x + offset);
+                polar_sample(sh, obj->filter, fn, src_tex, lut, cutoff_c, radius_c,
+                             x, y, comp_mask, in);
             }
         }
     } else {
@@ -704,8 +715,8 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 
                 if (!use_gather) {
                     // Switch to direct sampling instead
-                    polar_sample(sh, obj->filter, fn, src_tex, lut, x, y,
-                                 comp_mask, NULL);
+                    polar_sample(sh, obj->filter, fn, src_tex, lut, cutoff_c,
+                                 radius_c, x, y, comp_mask, NULL);
                     continue;
                 }
 
@@ -742,8 +753,8 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                         continue; // next subpixel
 
                     GLSL("idx = %d;\n", p);
-                    polar_sample(sh, obj->filter, fn, src_tex, lut,
-                                 x+xo[p], y+yo[p], comp_mask, "in");
+                    polar_sample(sh, obj->filter, fn, src_tex, lut, cutoff_c,
+                                 radius_c, x+xo[p], y+yo[p], comp_mask, "in");
                 }
 
                 // Mark the other next row's pixels as already gathered
@@ -757,7 +768,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         }
     }
 
-    GLSL("color = vec4(%f / wsum) * color; \n", scale);
+    GLSL("color = vec4(%s / wsum) * color; \n", SH_FLOAT(scale));
     if (!(comp_mask & (1 << PL_CHANNEL_A)))
         GLSL("color.a = 1.0; \n");
 
@@ -874,16 +885,16 @@ bool pl_shader_sample_ortho(pl_shader sh, int pass,
         return false;
     }
 
-    const float dir[PL_SEP_PASSES][2] = {
-        [PL_SEP_HORIZ] = {1.0, 0.0},
-        [PL_SEP_VERT]  = {0.0, 1.0},
+    const int dir[PL_SEP_PASSES][2] = {
+        [PL_SEP_HORIZ] = {1, 0},
+        [PL_SEP_VERT]  = {0, 1},
     };
 
     GLSL("// pl_shader_sample_ortho                        \n"
          "vec4 color = vec4(0.0);                          \n"
          "{                                                \n"
          "vec2 pos = %s, size = %s, pt = %s;               \n"
-         "vec2 dir = vec2(%f, %f);                         \n"
+         "vec2 dir = vec2(%d.0, %d.0);                     \n"
          "pt *= dir;                                       \n"
          "vec2 fcoord2 = fract(pos * size - vec2(0.5));    \n"
          "float fcoord = dot(fcoord2, dir);                \n"
@@ -929,11 +940,11 @@ bool pl_shader_sample_ortho(pl_shader sh, int pass,
     }
 
     if (use_ar) {
-        GLSL("color = mix(color, clamp(color, lo, hi), %f);\n",
-             params->antiring);
+        GLSL("color = mix(color, clamp(color, lo, hi), %s);\n",
+             sh_const_float(sh, "antiring", params->antiring));
     }
 
-    GLSL("color *= vec4(%f);\n", scale);
+    GLSL("color *= vec4(%s);\n", SH_FLOAT(scale));
     if (!(comp_mask & (1 << PL_CHANNEL_A)))
         GLSL("color.a = 1.0; \n");
 
