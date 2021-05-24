@@ -1602,7 +1602,7 @@ static bool pass_read_image(pl_renderer rr, struct pass_state *pass,
     if (lut_type == PL_LUT_NATIVE || lut_type == PL_LUT_CONVERSION) {
         // Fix bit depth normalization before applying LUT
         float scale = pl_color_repr_normalize(&pass->img.repr);
-        GLSL("color *= vec4(%f); \n", scale);
+        GLSL("color *= vec4(%s); \n", SH_FLOAT(scale));
         pl_shader_custom_lut(sh, image->lut, &rr->lut_state[LUT_IMAGE]);
 
         if (lut_type == PL_LUT_CONVERSION) {
@@ -1820,15 +1820,15 @@ static bool pass_output_target(pl_renderer rr, struct pass_state *pass,
                             NULL, prelinearized);
 
         if (params->lut_type == PL_LUT_NORMALIZED) {
-            GLSLF("color.rgb *= vec3(1.0/%f); \n",
-                  pl_color_transfer_nominal_peak(lut_in.transfer));
+            GLSLF("color.rgb *= vec3(1.0/%s); \n",
+                  SH_FLOAT(pl_color_transfer_nominal_peak(lut_in.transfer)));
         }
 
         pl_shader_custom_lut(sh, params->lut, &rr->lut_state[LUT_PARAMS]);
 
         if (params->lut_type == PL_LUT_NORMALIZED) {
-            GLSLF("color.rgb *= vec3(%f); \n",
-                  pl_color_transfer_nominal_peak(lut_out.transfer));
+            GLSLF("color.rgb *= vec3(%s); \n",
+                  SH_FLOAT(pl_color_transfer_nominal_peak(lut_out.transfer)));
         }
 
         if (params->lut_type != PL_LUT_CONVERSION) {
@@ -2003,7 +2003,7 @@ fallback:
 
         }
 
-        GLSL("color *= vec4(1.0 / %f); \n", scale);
+        GLSL("color *= vec4(1.0 / %s); \n", SH_FLOAT(scale));
         swizzle_color(sh, plane->components, plane->component_mapping, false);
 
         if (params->dither_params) {
