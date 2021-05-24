@@ -585,7 +585,8 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     }
 
     // Determine GPU capabilities
-    gpu->caps |= PL_GPU_CAP_CALLBACKS | PL_GPU_CAP_THREAD_SAFE;
+    gpu->caps |= PL_GPU_CAP_CALLBACKS | PL_GPU_CAP_THREAD_SAFE |
+                 PL_GPU_CAP_SPEC_CONSTANTS;
 
     VkShaderStageFlags req_stages = VK_SHADER_STAGE_FRAGMENT_BIT |
                                     VK_SHADER_STAGE_COMPUTE_BIT;
@@ -2449,6 +2450,7 @@ static int vk_desc_namespace(pl_gpu gpu, enum pl_desc_type type)
 // For pl_pass.priv
 struct pl_pass_vk {
     // Pipeline / render pass
+    VkPipeline base;
     VkPipeline pipe;
     VkPipelineLayout pipeLayout;
     VkRenderPass renderPass;
@@ -2463,10 +2465,18 @@ struct pl_pass_vk {
     VkDescriptorSet dss[16];
     uint16_t dmask;
 
+    // For recompilation
+    VkVertexInputAttributeDescription *attrs;
+    VkPipelineCache cache;
+    VkShaderModule vert;
+    VkShaderModule shader;
+
     // For updating
     VkWriteDescriptorSet *dswrite;
     VkDescriptorImageInfo *dsiinfo;
     VkDescriptorBufferInfo *dsbinfo;
+    VkSpecializationInfo specInfo;
+    size_t spec_size;
 };
 
 static void vk_pass_destroy(pl_gpu gpu, pl_pass pass)
@@ -2476,10 +2486,14 @@ static void vk_pass_destroy(pl_gpu gpu, pl_pass pass)
     struct pl_pass_vk *pass_vk = PL_PRIV(pass);
 
     vk->DestroyPipeline(vk->dev, pass_vk->pipe, PL_VK_ALLOC);
+    vk->DestroyPipeline(vk->dev, pass_vk->base, PL_VK_ALLOC);
     vk->DestroyRenderPass(vk->dev, pass_vk->renderPass, PL_VK_ALLOC);
     vk->DestroyPipelineLayout(vk->dev, pass_vk->pipeLayout, PL_VK_ALLOC);
+    vk->DestroyPipelineCache(vk->dev, pass_vk->cache, PL_VK_ALLOC);
     vk->DestroyDescriptorPool(vk->dev, pass_vk->dsPool, PL_VK_ALLOC);
     vk->DestroyDescriptorSetLayout(vk->dev, pass_vk->dsLayout, PL_VK_ALLOC);
+    vk->DestroyShaderModule(vk->dev, pass_vk->vert, PL_VK_ALLOC);
+    vk->DestroyShaderModule(vk->dev, pass_vk->shader, PL_VK_ALLOC);
 
     pl_free((void *) pass);
 }
@@ -2579,6 +2593,166 @@ static const VkShaderStageFlags stageFlags[] = {
     [PL_PASS_COMPUTE] = VK_SHADER_STAGE_COMPUTE_BIT,
 };
 
+static void destroy_pipeline(struct vk_ctx *vk, VkPipeline pipeline)
+{
+    vk->DestroyPipeline(vk->dev, pipeline, PL_VK_ALLOC);
+}
+
+static VkResult vk_recreate_pipelines(struct vk_ctx *vk, pl_pass pass,
+                                      bool derivable, VkPipeline base,
+                                      VkPipeline *out_pipe)
+{
+    struct pl_pass_vk *pass_vk = PL_PRIV(pass);
+    const struct pl_pass_params *params = &pass->params;
+
+    // The old pipeline might still be in use, so we have to destroy it
+    // asynchronously with a device idle callback
+    if (*out_pipe) {
+        vk_dev_callback(vk, (vk_cb) destroy_pipeline, vk, *out_pipe);
+        *out_pipe = NULL;
+    }
+
+    VkPipelineCreateFlags flags = 0;
+    if (derivable)
+        flags |= VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT;
+    if (base)
+        flags |= VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+
+    const VkSpecializationInfo *specInfo = &pass_vk->specInfo;
+    if (!specInfo->dataSize)
+        specInfo = NULL;
+
+    switch (params->type) {
+    case PL_PASS_RASTER: {
+        static const VkBlendFactor blendFactors[] = {
+            [PL_BLEND_ZERO]                = VK_BLEND_FACTOR_ZERO,
+            [PL_BLEND_ONE]                 = VK_BLEND_FACTOR_ONE,
+            [PL_BLEND_SRC_ALPHA]           = VK_BLEND_FACTOR_SRC_ALPHA,
+            [PL_BLEND_ONE_MINUS_SRC_ALPHA] = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        };
+
+        VkPipelineColorBlendAttachmentState blendState = {
+            .colorBlendOp = VK_BLEND_OP_ADD,
+            .alphaBlendOp = VK_BLEND_OP_ADD,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                              VK_COLOR_COMPONENT_G_BIT |
+                              VK_COLOR_COMPONENT_B_BIT |
+                              VK_COLOR_COMPONENT_A_BIT,
+        };
+
+        const struct pl_blend_params *blend = params->blend_params;
+        if (blend) {
+            blendState.blendEnable = true;
+            blendState.srcColorBlendFactor = blendFactors[blend->src_rgb];
+            blendState.dstColorBlendFactor = blendFactors[blend->dst_rgb];
+            blendState.srcAlphaBlendFactor = blendFactors[blend->src_alpha];
+            blendState.dstAlphaBlendFactor = blendFactors[blend->dst_alpha];
+        }
+
+        static const VkPrimitiveTopology topologies[PL_PRIM_TYPE_COUNT] = {
+            [PL_PRIM_TRIANGLE_LIST]  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            [PL_PRIM_TRIANGLE_STRIP] = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+        };
+
+        VkGraphicsPipelineCreateInfo cinfo = {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .flags = flags,
+            .stageCount = 2,
+            .pStages = (VkPipelineShaderStageCreateInfo[]) {
+                {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    .stage = VK_SHADER_STAGE_VERTEX_BIT,
+                    .module = pass_vk->vert,
+                    .pName = "main",
+                }, {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .module = pass_vk->shader,
+                    .pName = "main",
+                    .pSpecializationInfo = specInfo,
+                }
+            },
+            .pVertexInputState = &(VkPipelineVertexInputStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                .vertexBindingDescriptionCount = 1,
+                .pVertexBindingDescriptions = &(VkVertexInputBindingDescription) {
+                    .binding = 0,
+                    .stride = params->vertex_stride,
+                    .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+                },
+                .vertexAttributeDescriptionCount = params->num_vertex_attribs,
+                .pVertexAttributeDescriptions = pass_vk->attrs,
+            },
+            .pInputAssemblyState = &(VkPipelineInputAssemblyStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                .topology = topologies[params->vertex_type],
+            },
+            .pViewportState = &(VkPipelineViewportStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                .viewportCount = 1,
+                .scissorCount = 1,
+            },
+            .pRasterizationState = &(VkPipelineRasterizationStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                .polygonMode = VK_POLYGON_MODE_FILL,
+                .cullMode = VK_CULL_MODE_NONE,
+                .lineWidth = 1.0f,
+            },
+            .pMultisampleState = &(VkPipelineMultisampleStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+            },
+            .pColorBlendState = &(VkPipelineColorBlendStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                .attachmentCount = 1,
+                .pAttachments = &blendState,
+            },
+            .pDynamicState = &(VkPipelineDynamicStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                .dynamicStateCount = 2,
+                .pDynamicStates = (VkDynamicState[]){
+                    VK_DYNAMIC_STATE_VIEWPORT,
+                    VK_DYNAMIC_STATE_SCISSOR,
+                },
+            },
+            .layout = pass_vk->pipeLayout,
+            .renderPass = pass_vk->renderPass,
+            .basePipelineHandle = base,
+            .basePipelineIndex = -1,
+        };
+
+        return vk->CreateGraphicsPipelines(vk->dev, pass_vk->cache, 1, &cinfo,
+                                           PL_VK_ALLOC, out_pipe);
+    }
+
+    case PL_PASS_COMPUTE: {
+        VkComputePipelineCreateInfo cinfo = {
+            .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .flags = flags,
+            .stage = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                .module = pass_vk->shader,
+                .pName = "main",
+                .pSpecializationInfo = specInfo,
+            },
+            .layout = pass_vk->pipeLayout,
+            .basePipelineHandle = base,
+            .basePipelineIndex = -1,
+        };
+
+        return vk->CreateComputePipelines(vk->dev, pass_vk->cache, 1, &cinfo,
+                                          PL_VK_ALLOC, out_pipe);
+    }
+
+    case PL_PASS_INVALID:
+    case PL_PASS_TYPE_COUNT:
+        break;
+    }
+
+    pl_unreachable();
+}
+
 static pl_pass vk_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 {
     struct pl_vk *p = PL_PRIV(gpu);
@@ -2593,11 +2767,6 @@ static pl_pass vk_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 
     // temporary allocations
     void *tmp = pl_tmp(NULL);
-
-    VkPipelineCache pipeCache = VK_NULL_HANDLE;
-    VkShaderModule vert_shader = VK_NULL_HANDLE;
-    VkShaderModule frag_shader = VK_NULL_HANDLE;
-    VkShaderModule comp_shader = VK_NULL_HANDLE;
 
     int num_desc = params->num_descriptors;
     if (!num_desc)
@@ -2681,6 +2850,37 @@ static pl_pass vk_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 
 no_descriptors: ;
 
+    bool has_spec = params->num_constants;
+    if (has_spec) {
+        PL_ARRAY(VkSpecializationMapEntry) entries = {0};
+        PL_ARRAY_RESIZE(pass, entries, params->num_constants);
+        size_t spec_size = 0;
+
+        for (int i = 0; i < params->num_constants; i++) {
+            const struct pl_constant *con = &params->constants[i];
+            size_t con_size = pl_var_type_size(con->type);
+            entries.elem[i] = (VkSpecializationMapEntry) {
+                .constantID = con->id,
+                .offset = con->offset,
+                .size = con_size,
+            };
+
+            size_t req_size = con->offset + con_size;
+            spec_size = PL_MAX(spec_size, req_size);
+        }
+
+        pass_vk->spec_size = spec_size;
+        pass_vk->specInfo = (VkSpecializationInfo) {
+            .mapEntryCount = params->num_constants,
+            .pMapEntries = entries.elem,
+        };
+
+        if (params->constant_data) {
+            pass_vk->specInfo.pData = pl_memdup(pass, params->constant_data, spec_size);
+            pass_vk->specInfo.dataSize = spec_size;
+        }
+    }
+
     VkPipelineLayoutCreateInfo linfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = num_desc ? 1 : 0,
@@ -2727,7 +2927,7 @@ no_descriptors: ;
         .initialDataSize = pipecache.len,
     };
 
-    VK(vk->CreatePipelineCache(vk->dev, &pcinfo, PL_VK_ALLOC, &pipeCache));
+    VK(vk->CreatePipelineCache(vk->dev, &pcinfo, PL_VK_ALLOC, &pass_vk->cache));
 
     VkShaderModuleCreateInfo sinfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -2738,22 +2938,20 @@ no_descriptors: ;
     case PL_PASS_RASTER: {
         sinfo.pCode = (uint32_t *) vert.buf;
         sinfo.codeSize = vert.len;
-        VK(vk->CreateShaderModule(vk->dev, &sinfo, PL_VK_ALLOC, &vert_shader));
-        PL_VK_NAME(SHADER_MODULE, vert_shader, "vertex");
+        VK(vk->CreateShaderModule(vk->dev, &sinfo, PL_VK_ALLOC, &pass_vk->vert));
+        PL_VK_NAME(SHADER_MODULE, pass_vk->vert, "vertex");
 
         sinfo.pCode = (uint32_t *) frag.buf;
         sinfo.codeSize = frag.len;
-        VK(vk->CreateShaderModule(vk->dev, &sinfo, PL_VK_ALLOC, &frag_shader));
-        PL_VK_NAME(SHADER_MODULE, frag_shader, "fragment");
+        VK(vk->CreateShaderModule(vk->dev, &sinfo, PL_VK_ALLOC, &pass_vk->shader));
+        PL_VK_NAME(SHADER_MODULE, pass_vk->shader, "fragment");
 
-        VkVertexInputAttributeDescription *attrs =
-            pl_calloc_ptr(tmp, params->num_vertex_attribs, attrs);
-
+        pass_vk->attrs = pl_calloc_ptr(pass, params->num_vertex_attribs, pass_vk->attrs);
         for (int i = 0; i < params->num_vertex_attribs; i++) {
             struct pl_vertex_attrib *va = &params->vertex_attribs[i];
             const struct vk_format **pfmt_vk = PL_PRIV(va->fmt);
 
-            attrs[i] = (VkVertexInputAttributeDescription) {
+            pass_vk->attrs[i] = (VkVertexInputAttributeDescription) {
                 .binding  = 0,
                 .location = va->location,
                 .offset   = va->offset,
@@ -2792,123 +2990,13 @@ no_descriptors: ;
         VK(vk_create_render_pass(vk, texparams.format, loadOp,
                                  pass_vk->initialLayout, pass_vk->finalLayout,
                                  &pass_vk->renderPass));
-
-        static const VkBlendFactor blendFactors[] = {
-            [PL_BLEND_ZERO]                = VK_BLEND_FACTOR_ZERO,
-            [PL_BLEND_ONE]                 = VK_BLEND_FACTOR_ONE,
-            [PL_BLEND_SRC_ALPHA]           = VK_BLEND_FACTOR_SRC_ALPHA,
-            [PL_BLEND_ONE_MINUS_SRC_ALPHA] = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-        };
-
-        VkPipelineColorBlendAttachmentState blendState = {
-            .colorBlendOp = VK_BLEND_OP_ADD,
-            .alphaBlendOp = VK_BLEND_OP_ADD,
-            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-                              VK_COLOR_COMPONENT_G_BIT |
-                              VK_COLOR_COMPONENT_B_BIT |
-                              VK_COLOR_COMPONENT_A_BIT,
-        };
-
-        const struct pl_blend_params *blend = params->blend_params;
-        if (blend) {
-            blendState.blendEnable = true;
-            blendState.srcColorBlendFactor = blendFactors[blend->src_rgb];
-            blendState.dstColorBlendFactor = blendFactors[blend->dst_rgb];
-            blendState.srcAlphaBlendFactor = blendFactors[blend->src_alpha];
-            blendState.dstAlphaBlendFactor = blendFactors[blend->dst_alpha];
-        }
-
-        static const VkPrimitiveTopology topologies[PL_PRIM_TYPE_COUNT] = {
-            [PL_PRIM_TRIANGLE_LIST]  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-            [PL_PRIM_TRIANGLE_STRIP] = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
-        };
-
-        VkGraphicsPipelineCreateInfo cinfo = {
-            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .stageCount = 2,
-            .pStages = (VkPipelineShaderStageCreateInfo[]) {
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                    .stage = VK_SHADER_STAGE_VERTEX_BIT,
-                    .module = vert_shader,
-                    .pName = "main",
-                }, {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                    .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-                    .module = frag_shader,
-                    .pName = "main",
-                }
-            },
-            .pVertexInputState = &(VkPipelineVertexInputStateCreateInfo) {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-                .vertexBindingDescriptionCount = 1,
-                .pVertexBindingDescriptions = &(VkVertexInputBindingDescription) {
-                    .binding = 0,
-                    .stride = params->vertex_stride,
-                    .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-                },
-                .vertexAttributeDescriptionCount = params->num_vertex_attribs,
-                .pVertexAttributeDescriptions = attrs,
-            },
-            .pInputAssemblyState = &(VkPipelineInputAssemblyStateCreateInfo) {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-                .topology = topologies[params->vertex_type],
-            },
-            .pViewportState = &(VkPipelineViewportStateCreateInfo) {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-                .viewportCount = 1,
-                .scissorCount = 1,
-            },
-            .pRasterizationState = &(VkPipelineRasterizationStateCreateInfo) {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-                .polygonMode = VK_POLYGON_MODE_FILL,
-                .cullMode = VK_CULL_MODE_NONE,
-                .lineWidth = 1.0f,
-            },
-            .pMultisampleState = &(VkPipelineMultisampleStateCreateInfo) {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-            },
-            .pColorBlendState = &(VkPipelineColorBlendStateCreateInfo) {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-                .attachmentCount = 1,
-                .pAttachments = &blendState,
-            },
-            .pDynamicState = &(VkPipelineDynamicStateCreateInfo) {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-                .dynamicStateCount = 2,
-                .pDynamicStates = (VkDynamicState[]){
-                    VK_DYNAMIC_STATE_VIEWPORT,
-                    VK_DYNAMIC_STATE_SCISSOR,
-                },
-            },
-            .layout = pass_vk->pipeLayout,
-            .renderPass = pass_vk->renderPass,
-        };
-
-        VK(vk->CreateGraphicsPipelines(vk->dev, pipeCache, 1, &cinfo,
-                                       PL_VK_ALLOC, &pass_vk->pipe));
         break;
     }
     case PL_PASS_COMPUTE: {
         sinfo.pCode = (uint32_t *) comp.buf;
         sinfo.codeSize = comp.len;
-        VK(vk->CreateShaderModule(vk->dev, &sinfo, PL_VK_ALLOC, &comp_shader));
-        PL_VK_NAME(SHADER_MODULE, comp_shader, "compute");
-
-        VkComputePipelineCreateInfo cinfo = {
-            .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-            .stage = {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-                .module = comp_shader,
-                .pName = "main",
-            },
-            .layout = pass_vk->pipeLayout,
-        };
-
-        VK(vk->CreateComputePipelines(vk->dev, pipeCache, 1, &cinfo,
-                                      PL_VK_ALLOC, &pass_vk->pipe));
+        VK(vk->CreateShaderModule(vk->dev, &sinfo, PL_VK_ALLOC, &pass_vk->shader));
+        PL_VK_NAME(SHADER_MODULE, pass_vk->shader, "compute");
         break;
     }
     case PL_PASS_INVALID:
@@ -2916,13 +3004,32 @@ no_descriptors: ;
         pl_unreachable();
     }
 
-    pl_log_cpu_time(gpu->log, start, clock(), "compiling shader");
+    clock_t after_compilation = clock();
+    pl_log_cpu_time(gpu->log, start, after_compilation, "compiling shader");
+
+    // Create the graphics/compute pipeline
+    VkPipeline *pipe = has_spec ? &pass_vk->base : &pass_vk->pipe;
+    VK(vk_recreate_pipelines(vk, pass, has_spec, NULL, pipe));
+    pl_log_cpu_time(gpu->log, after_compilation, clock(), "creating pipeline");
+
+    if (!has_spec) {
+        // We can free these if we no longer need them for specialization
+        pl_free_ptr(&pass_vk->attrs);
+        vk->DestroyShaderModule(vk->dev, pass_vk->vert, PL_VK_ALLOC);
+        vk->DestroyShaderModule(vk->dev, pass_vk->shader, PL_VK_ALLOC);
+        pass_vk->vert = VK_NULL_HANDLE;
+        pass_vk->shader = VK_NULL_HANDLE;
+    }
 
     // Update params->cached_program
     pl_str cache = {0};
-    VK(vk->GetPipelineCacheData(vk->dev, pipeCache, &cache.len, NULL));
+    VK(vk->GetPipelineCacheData(vk->dev, pass_vk->cache, &cache.len, NULL));
     cache.buf = pl_alloc(tmp, cache.len);
-    VK(vk->GetPipelineCacheData(vk->dev, pipeCache, &cache.len, cache.buf));
+    VK(vk->GetPipelineCacheData(vk->dev, pass_vk->cache, &cache.len, cache.buf));
+    if (!has_spec) {
+        vk->DestroyPipelineCache(vk->dev, pass_vk->cache, PL_VK_ALLOC);
+        pass_vk->cache = VK_NULL_HANDLE;
+    }
 
     struct vk_cache_header header = {
         .magic = CACHE_MAGIC,
@@ -2959,10 +3066,6 @@ error:
 
 #undef NUM_DS
 
-    vk->DestroyShaderModule(vk->dev, vert_shader, PL_VK_ALLOC);
-    vk->DestroyShaderModule(vk->dev, frag_shader, PL_VK_ALLOC);
-    vk->DestroyShaderModule(vk->dev, comp_shader, PL_VK_ALLOC);
-    vk->DestroyPipelineCache(vk->dev, pipeCache, PL_VK_ALLOC);
     pl_free(tmp);
     return pass;
 }
@@ -3116,6 +3219,30 @@ static void set_ds(struct pl_pass_vk *pass_vk, void *dsbit)
     pass_vk->dmask |= (uintptr_t) dsbit;
 }
 
+static bool need_respec(pl_pass pass, const struct pl_pass_run_params *params)
+{
+    struct pl_pass_vk *pass_vk = PL_PRIV(pass);
+    if (!pass_vk->spec_size || !params->constant_data)
+        return false;
+
+    VkSpecializationInfo *specInfo = &pass_vk->specInfo;
+    size_t size = pass_vk->spec_size;
+    if (!specInfo->pData) {
+        // Shader was never specialized before
+        specInfo->pData = pl_memdup((void *) pass, params->constant_data, size);
+        specInfo->dataSize = size;
+        return true;
+    }
+
+    // Shader is being re-specialized with new values
+    if (memcmp(specInfo->pData, params->constant_data, size) != 0) {
+        memcpy((void *) specInfo->pData, params->constant_data, size);
+        return true;
+    }
+
+    return false;
+}
+
 static void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 {
     struct pl_vk *p = PL_PRIV(gpu);
@@ -3125,6 +3252,13 @@ static void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 
     if (params->vertex_data || params->index_data)
         return pl_pass_run_vbo(gpu, params);
+
+    // Check if we need to re-specialize this pipeline
+    if (need_respec(pass, params)) {
+        clock_t start = clock();
+        VK(vk_recreate_pipelines(vk, pass, false, pass_vk->base, &pass_vk->pipe));
+        pl_log_cpu_time(gpu->log, start, clock(), "re-specializing shader");
+    }
 
     if (!pass_vk->use_pushd) {
         // Wait for a free descriptor set
@@ -3177,7 +3311,8 @@ static void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         [PL_PASS_COMPUTE] = VK_PIPELINE_BIND_POINT_COMPUTE,
     };
 
-    vk->CmdBindPipeline(cmd->buf, bindPoint[pass->params.type], pass_vk->pipe);
+    vk->CmdBindPipeline(cmd->buf, bindPoint[pass->params.type],
+                        PL_DEF(pass_vk->pipe, pass_vk->base));
 
     if (ds) {
         vk->CmdBindDescriptorSets(cmd->buf, bindPoint[pass->params.type],
