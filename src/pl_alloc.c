@@ -251,15 +251,14 @@ void *pl_steal(void *parent, void *ptr)
 
 void *pl_memdup(void *parent, const void *ptr, size_t size)
 {
-    if (!ptr) {
-        assert(!size);
+    if (!size)
         return NULL;
-    }
 
     void *new = pl_alloc(parent, size);
     if (!new)
         return oom();
 
+    assert(ptr);
     memcpy(new, ptr, size);
     return new;
 }
