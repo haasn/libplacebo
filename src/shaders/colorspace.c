@@ -38,8 +38,8 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
 
     // XYZ needs special handling due to the input gamma logic
     if (repr->sys == PL_COLOR_SYSTEM_XYZ) {
-        float scale = pl_color_repr_normalize(repr);
-        GLSL("color.rgb = pow(vec3(%f) * color.rgb, vec3(2.6));\n", scale);
+        ident_t scale = SH_FLOAT(pl_color_repr_normalize(repr));
+        GLSL("color.rgb = pow(vec3(%s) * color.rgb, vec3(2.6));\n", scale);
     }
 
     enum pl_color_system orig_sys = repr->sys;
@@ -230,9 +230,9 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
 
     if (!skip) {
         struct pl_color_repr copy = *repr;
-        float xyzscale = (repr->sys == PL_COLOR_SYSTEM_XYZ)
-                            ? pl_color_repr_normalize(&copy)
-                            : 0.0;
+        ident_t xyzscale = NULL;
+        if (repr->sys == PL_COLOR_SYSTEM_XYZ)
+            xyzscale = SH_FLOAT(1.0 / pl_color_repr_normalize(&copy));
 
         struct pl_transform3x3 tr = pl_color_repr_decode(&copy, NULL);
         pl_transform3x3_invert(&tr);
@@ -249,8 +249,8 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
 
         GLSL("color.rgb = %s * color.rgb + %s;\n", cmat, cmat_c);
 
-        if (repr->sys == PL_COLOR_SYSTEM_XYZ)
-            GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.6)) * vec3(1.0/%f); \n", xyzscale);
+        if (xyzscale)
+            GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.6)) * vec3(%s); \n", xyzscale);
     }
 
     if (repr->alpha == PL_ALPHA_INDEPENDENT)
@@ -475,9 +475,9 @@ void pl_shader_sigmoidize(pl_shader sh, const struct pl_sigmoid_params *params)
 
     GLSL("// pl_shader_sigmoidize                                          \n"
          "color = clamp(color, 0.0, 1.0);                                  \n"
-         "color = vec4(%f) - log(vec4(1.0) / (color * vec4(%f) + vec4(%f)) \n"
-         "                         - vec4(1.0)) * vec4(%f);                \n",
-         center, scale, offset, 1.0 / slope);
+         "color = vec4(%s) - log(vec4(1.0) / (color * vec4(%s) + vec4(%s)) \n"
+         "                         - vec4(1.0)) * vec4(%s);                \n",
+         SH_FLOAT(center), SH_FLOAT(scale), SH_FLOAT(offset), SH_FLOAT(1.0 / slope));
 }
 
 void pl_shader_unsigmoidize(pl_shader sh, const struct pl_sigmoid_params *params)
@@ -494,9 +494,9 @@ void pl_shader_unsigmoidize(pl_shader sh, const struct pl_sigmoid_params *params
 
     GLSL("// pl_shader_unsigmoidize                                           \n"
          "color = clamp(color, 0.0, 1.0);                                     \n"
-         "color = vec4(%f) / (vec4(1.0) + exp(vec4(%f) * (vec4(%f) - color))) \n"
-         "           - vec4(%f);                                              \n",
-         1.0 / scale, slope, center, offset / scale);
+         "color = vec4(%s) / (vec4(1.0) + exp(vec4(%s) * (vec4(%s) - color))) \n"
+         "           - vec4(%s);                                              \n",
+         SH_FLOAT(1.0 / scale), SH_FLOAT(slope), SH_FLOAT(center), SH_FLOAT(offset / scale));
 }
 
 static ident_t sh_luma_coeffs(pl_shader sh, enum pl_color_primaries prim)
@@ -513,7 +513,7 @@ static ident_t sh_luma_coeffs(pl_shader sh, enum pl_color_primaries prim)
 static void pl_shader_ootf(pl_shader sh, struct pl_color_space csp)
 {
     if (csp.sig_scale != 1.0)
-        GLSL("color.rgb *= vec3(%f); \n", csp.sig_scale);
+        GLSL("color.rgb *= vec3(%s); \n", SH_FLOAT(csp.sig_scale));
 
     if (!csp.light || csp.light == PL_COLOR_LIGHT_DISPLAY)
         return;
@@ -528,10 +528,10 @@ static void pl_shader_ootf(pl_shader sh, struct pl_color_space csp)
         float peak = csp.sig_peak * PL_COLOR_SDR_WHITE;
         float gamma = 1.2 + 0.42 * log10(peak / 1000.0);
         gamma = PL_MAX(gamma, 1.0);
-        GLSL("color.rgb *= vec3(%f * pow(dot(%s, color.rgb), %f));\n",
-             csp.sig_peak / pow(12.0 / PL_COLOR_SDR_WHITE_HLG, gamma),
+        GLSL("color.rgb *= vec3(%s * pow(dot(%s, color.rgb), %s));\n",
+             SH_FLOAT(csp.sig_peak / pow(12.0 / PL_COLOR_SDR_WHITE_HLG, gamma)),
              sh_luma_coeffs(sh, csp.primaries),
-             gamma - 1.0);
+             SH_FLOAT(gamma - 1.0));
         return;
     }
     case PL_COLOR_LIGHT_SCENE_709_1886:
@@ -571,12 +571,12 @@ static void pl_shader_inverse_ootf(pl_shader sh, struct pl_color_space csp)
         float peak = csp.sig_peak * PL_COLOR_SDR_WHITE;
         float gamma = 1.2 + 0.42 * log10(peak / 1000.0);
         gamma = PL_MAX(gamma, 1.0);
-        GLSL("color.rgb *= vec3(1.0/%f);                                \n"
+        GLSL("color.rgb *= vec3(1.0/%s);                                \n"
              "color.rgb /= vec3(max(1e-6, pow(dot(%s, color.rgb),       \n"
-             "                                %f)));                    \n",
-             csp.sig_peak / pow(12.0 / PL_COLOR_SDR_WHITE_HLG, gamma),
+             "                                %s)));                    \n",
+             SH_FLOAT(csp.sig_peak / pow(12.0 / PL_COLOR_SDR_WHITE_HLG, gamma)),
              sh_luma_coeffs(sh, csp.primaries),
-             (gamma - 1.0) / gamma);
+             SH_FLOAT((gamma - 1.0) / gamma));
         goto done;
     }
     case PL_COLOR_LIGHT_SCENE_709_1886:
@@ -600,7 +600,7 @@ static void pl_shader_inverse_ootf(pl_shader sh, struct pl_color_space csp)
 
 done:
     if (csp.sig_scale != 1.0)
-        GLSL("color.rgb *= vec3(1.0 / %f); \n", csp.sig_scale);
+        GLSL("color.rgb *= vec3(1.0 / %s); \n", SH_FLOAT(csp.sig_scale));
 }
 
 const struct pl_peak_detect_params pl_peak_detect_default_params = {
@@ -787,16 +787,16 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
           "            average = cur;    \n");
 
     // Use an IIR low-pass filter to smooth out the detected values
-    GLSLF("        average += %f * (cur - average); \n",
-          iir_coeff(PL_DEF(params->smoothing_period, 100.0)));
+    GLSLF("        average += %s * (cur - average); \n",
+          SH_FLOAT(iir_coeff(PL_DEF(params->smoothing_period, 100.0))));
 
     // Scene change hysteresis
     float log_db = 10.0 / log(10.0);
     if (params->scene_threshold_low > 0 && params->scene_threshold_high > 0) {
         GLSLF("    float delta = abs(log(cur.x / average.x));               \n"
-              "    average = mix(average, cur, smoothstep(%f, %f, delta));  \n",
-              params->scene_threshold_low / log_db,
-              params->scene_threshold_high / log_db);
+              "    average = mix(average, cur, smoothstep(%s, %s, delta));  \n",
+              SH_FLOAT(params->scene_threshold_low / log_db),
+              SH_FLOAT(params->scene_threshold_high / log_db));
     }
 
     // Reset SSBO state for the next frame
@@ -900,10 +900,10 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
          "if (color[1] > color[sig_idx]) sig_idx = 1;   \n"
          "if (color[2] > color[sig_idx]) sig_idx = 2;   \n"
          "float sig_max = color[sig_idx];               \n"
-         "float sig_peak = %f;                          \n"
-         "float sig_avg = %f;                           \n",
-         src.sig_peak * src.sig_scale,
-         src.sig_avg * src.sig_scale);
+         "float sig_peak = %s;                          \n"
+         "float sig_avg = %s;                           \n",
+         SH_FLOAT(src.sig_peak * src.sig_scale),
+         SH_FLOAT(src.sig_avg * src.sig_scale));
 
     // Update the variables based on values from the peak detection buffer
     if (peak_detect_state) {
@@ -920,8 +920,8 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
             // Apply a tiny bit of extra margin of error for overshoot to the
             // smoothed peak values, clamped to the maximum reasonable range.
             if (obj->margin > 0.0) {
-                GLSL("sig_peak = min(sig_peak * %f, %f); \n",
-                     1.0 + obj->margin,
+                GLSL("sig_peak = min(sig_peak * %s, %f); \n",
+                     SH_FLOAT(1.0 + obj->margin),
                      10000 / PL_COLOR_SDR_WHITE);
             }
         }
@@ -934,9 +934,10 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
     bool need_norm = params->tone_mapping_algo != PL_TONE_MAPPING_BT_2390;
     float dst_range = dst.sig_peak * dst.sig_scale;
     if (dst_range > 1.0 && need_norm) {
-        GLSL("color.rgb *= 1.0 / %f; \n"
-             "sig_peak *= 1.0 / %f;  \n",
-             dst_range, dst_range);
+        ident_t dst_range_c = sh_const_float(sh, "dst_range", dst_range);
+        GLSL("color.rgb *= 1.0 / %s; \n"
+             "sig_peak *= 1.0 / %s;  \n",
+             dst_range_c, dst_range_c);
     }
 
     // Rename `color.rgb` to something shorter for conciseness, and also
@@ -946,15 +947,16 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
          "vec3 sig_orig = color.rgb;           \n");
 
     // Scale the signal to compensate for differences in the average brightness
-    GLSL("float slope = min(%f, %f / sig_avg); \n"
+    GLSL("float slope = min(%s, %s / sig_avg); \n"
          "sig *= slope;                        \n"
          "sig_peak *= slope;                   \n",
-         PL_DEF(params->max_boost, 1.0), dst.sig_avg * dst.sig_scale);
+         SH_FLOAT(PL_DEF(params->max_boost, 1.0)),
+         SH_FLOAT(dst.sig_avg * dst.sig_scale));
 
     float param = params->tone_mapping_param;
     switch (params->tone_mapping_algo) {
     case PL_TONE_MAPPING_CLIP:
-        GLSL("sig *= min(%f, 1.0) ;\n", PL_DEF(param, 1.0));
+        GLSL("sig *= min(%s, 1.0) ;\n", SH_FLOAT(PL_DEF(param, 1.0)));
         break;
 
     case PL_TONE_MAPPING_MOBIUS:
@@ -962,7 +964,7 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
         // mobius as sig_peak -> 1.0 is a linear function, so we can just skip
         // tone-mapping in this case
         GLSL("if (sig_peak > 1.0 + 1e-6) {                                      \n"
-             "    const float j = %f;                                           \n"
+             "    const float j = %s;                                           \n"
              // solve for M(j) = j; M(sig_peak) = 1.0; M'(j) = 1.0
              // where M(x) = scale * (x+a)/(x+b)
              "    float a = -j*j * (sig_peak - 1.0) / (j*j - 2.0*j + sig_peak); \n"
@@ -972,17 +974,18 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
              "    sig = mix(sig, scale * (sig + vec3(a)) / (sig + vec3(b)),     \n"
              "              %s(greaterThan(sig, vec3(j))));                     \n"
              "}                                                                 \n",
-             PL_DEF(param, 0.3),
+             SH_FLOAT(PL_DEF(param, 0.3)),
              sh_bvec(sh, 3));
         break;
 
     case PL_TONE_MAPPING_REINHARD: {
         float contrast = PL_DEF(param, 0.5),
               offset = (1.0 - contrast) / contrast;
-        GLSL("sig = sig / (sig + vec3(%f));             \n"
-             "float scale = (sig_peak + %f) / sig_peak; \n"
+        ident_t offset_c = sh_const_float(sh, "offset", offset);
+        GLSL("sig = sig / (sig + vec3(%s));             \n"
+             "float scale = (sig_peak + %s) / sig_peak; \n"
              "sig *= scale;                             \n",
-             offset, offset);
+             offset_c, offset_c);
         break;
     }
 
@@ -1000,17 +1003,17 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
     }
 
     case PL_TONE_MAPPING_GAMMA:
-        GLSL("const float cutoff = 0.05, gamma = 1.0/%f;            \n"
+        GLSL("const float cutoff = 0.05, gamma = 1.0/%s;            \n"
              "float scale = pow(cutoff / sig_peak, gamma) / cutoff; \n"
              "sig = mix(scale * sig,                                \n"
              "          pow(sig / sig_peak, vec3(gamma)),           \n"
              "          %s(greaterThan(sig, vec3(cutoff))));        \n",
-             PL_DEF(param, 1.8),
+             SH_FLOAT(PL_DEF(param, 1.8)),
              sh_bvec(sh, 3));
         break;
 
     case PL_TONE_MAPPING_LINEAR:
-        GLSL("sig *= min(%f / sig_peak, 1.0);\n", PL_DEF(param, 1.0));
+        GLSL("sig *= min(%s / sig_peak, 1.0);\n", SH_FLOAT(PL_DEF(param, 1.0)));
         break;
 
     case PL_TONE_MAPPING_BT_2390:
@@ -1026,8 +1029,8 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
         // the source peak brightness, and figure out the target peak in this space
         GLSL("float scale = 1.0 / sig_pq.a;                                     \n"
              "sig_pq.rgb = min(vec3(scale) * sig_pq.rgb, 1.0);                  \n"
-             "float maxLum = %f * scale;                                        \n",
-             pq_delinearize(dst_range));
+             "float maxLum = %s * scale;                                        \n",
+             SH_FLOAT(pq_delinearize(dst_range)));
         // Apply piece-wise hermite spline
         GLSL("float ks = 1.5 * maxLum - 0.5;                                    \n"
              "vec3 tb = (sig_pq.rgb - vec3(ks)) / vec3(1.0 - ks);               \n"
@@ -1057,20 +1060,20 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
     // Mix between the per-channel tone mapped `sig` and the linear tone
     // mapped `sig_lin` based on the desaturation strength
     if (params->desaturation_strength > 0.0) {
-        GLSL("float coeff = max(sig[sig_idx] - %f, 1e-6) /  \n"
+        GLSL("float coeff = max(sig[sig_idx] - %s, 1e-6) /  \n"
              "              max(sig[sig_idx], 1.0);         \n"
-             "coeff = %f * pow(coeff, %f);                  \n"
+             "coeff = %s * pow(coeff, %s);                  \n"
              "color.rgb = mix(sig_lin, sig, coeff);         \n",
-             params->desaturation_base,
-             params->desaturation_strength,
-             params->desaturation_exponent);
+             SH_FLOAT(params->desaturation_base),
+             SH_FLOAT(params->desaturation_strength),
+             SH_FLOAT(params->desaturation_exponent));
     } else {
         GLSL("color.rgb = sig_lin; \n");
     }
 
     // Undo the normalization by `dst_peak`
     if (dst_range > 1.0 && need_norm)
-        GLSL("color.rgb *= %f; \n", dst_range);
+        GLSL("color.rgb *= %s; \n", SH_FLOAT(dst_range));
 
     GLSL("} \n");
 }
@@ -1149,10 +1152,10 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
 
     // Warn for remaining out-of-gamut colors if enabled
     if (params->gamut_warning && need_gamut_warn) {
-        GLSL("if (any(greaterThan(color.rgb, vec3(%f + 0.005))) ||\n"
+        GLSL("if (any(greaterThan(color.rgb, vec3(%s + 0.005))) ||\n"
              "    any(lessThan(color.rgb, vec3(-0.005))))\n"
              "    color.rgb = vec3(1.0, 0.0, 1.0); // magenta\n",
-             dst.sig_peak * dst.sig_scale);
+             SH_FLOAT(dst.sig_peak * dst.sig_scale));
     }
 
     if (need_linear)
@@ -1324,7 +1327,7 @@ done: ;
 
     if (size) {
         // Transform the screen position to the cyclic range [0,1)
-        GLSL("vec2 pos = fract(gl_FragCoord.xy * 1.0/%d.0);\n", size);
+        GLSL("vec2 pos = fract(gl_FragCoord.xy * 1.0/%s);\n", SH_INT(size));
 
         if (params->temporal) {
             int phase = SH_PARAMS(sh).index % 8;
@@ -1371,7 +1374,7 @@ done: ;
     case PL_DITHER_BLUE_NOISE:
     case PL_DITHER_ORDERED_LUT:
         pl_assert(lut);
-        GLSL("bias = %s(ivec2(pos * %d.0));\n", lut, lut_size);
+        GLSL("bias = %s(ivec2(pos * %s));\n", lut, SH_FLOAT(lut_size));
         break;
 
     case PL_DITHER_METHOD_COUNT:
