@@ -61,10 +61,11 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
         .mutable = true,
 
         // Preserve array allocations
-        .tmp.elem   = sh->tmp.elem,
-        .vars.elem  = sh->vars.elem,
-        .descs.elem = sh->descs.elem,
-        .vas.elem   = sh->vas.elem,
+        .tmp.elem       = sh->tmp.elem,
+        .vas.elem       = sh->vas.elem,
+        .vars.elem      = sh->vars.elem,
+        .descs.elem     = sh->descs.elem,
+        .consts.elem    = sh->consts.elem,
     };
 
     if (params)
@@ -222,6 +223,64 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
     PL_ARRAY_APPEND(sh, sh->descs, sd);
     return (ident_t) sd.desc.name;
 }
+
+ident_t sh_const(pl_shader sh, struct pl_shader_const sc)
+{
+    sc.name = sh_fresh(sh, sc.name);
+
+    pl_gpu gpu = SH_GPU(sh);
+    if (gpu && (gpu->caps & PL_GPU_CAP_SPEC_CONSTANTS)) {
+        sc.data = pl_memdup(SH_TMP(sh), sc.data, pl_var_type_size(sc.type));
+        PL_ARRAY_APPEND(sh, sh->consts, sc);
+        return (ident_t) sc.name;
+    }
+
+    // Fallback for GPUs without specialization constants
+    switch (sc.type) {
+    case PL_VAR_SINT:
+        GLSLH("const int %s = %d; \n", sc.name, *(int *) sc.data);
+        return (ident_t) sc.name;
+    case PL_VAR_UINT:
+        GLSLH("const uint %s = %uu; \n", sc.name, *(unsigned int *) sc.data);
+        return (ident_t) sc.name;
+    case PL_VAR_FLOAT:
+        GLSLH("const float %s = %f; \n", sc.name, *(float *) sc.data);
+        return (ident_t) sc.name;
+    case PL_VAR_INVALID:
+    case PL_VAR_TYPE_COUNT:
+        break;
+    }
+
+    pl_unreachable();
+}
+
+ident_t sh_const_int(pl_shader sh, const char *name, int val)
+{
+    return sh_const(sh, (struct pl_shader_const) {
+        .type = PL_VAR_SINT,
+        .name = name,
+        .data = &val,
+    });
+}
+
+ident_t sh_const_uint(pl_shader sh, const char *name, unsigned int val)
+{
+    return sh_const(sh, (struct pl_shader_const) {
+        .type = PL_VAR_UINT,
+        .name = name,
+        .data = &val,
+    });
+}
+
+ident_t sh_const_float(pl_shader sh, const char *name, float val)
+{
+    return sh_const(sh, (struct pl_shader_const) {
+        .type = PL_VAR_FLOAT,
+        .name = name,
+        .data = &val,
+    });
+}
+
 
 ident_t sh_attr_vec2(pl_shader sh, const char *name,
                      const struct pl_rect2df *rc)
@@ -458,9 +517,10 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
     // Copy over all of the descriptors etc.
     for (int i = 0; i < sub->tmp.num; i++)
         PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_dup(sub->tmp.elem[i]));
+    PL_ARRAY_CONCAT(sh, sh->vas, sub->vas);
     PL_ARRAY_CONCAT(sh, sh->vars, sub->vars);
     PL_ARRAY_CONCAT(sh, sh->descs, sub->descs);
-    PL_ARRAY_CONCAT(sh, sh->vas, sub->vas);
+    PL_ARRAY_CONCAT(sh, sh->consts, sub->consts);
 
     return name;
 }
@@ -524,6 +584,8 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
     sh->res.num_variables = sh->vars.num;
     sh->res.descriptors = sh->descs.elem;
     sh->res.num_descriptors = sh->descs.num;
+    sh->res.constants = sh->consts.elem;
+    sh->res.num_constants = sh->consts.num;
 
     // Update the result pointer and return
     sh->res.glsl = glsl->buf;
@@ -673,8 +735,8 @@ ident_t sh_prng(pl_shader sh, bool temporal, ident_t *p_state)
 static ident_t sh_lut_pos(pl_shader sh, int lut_size)
 {
     ident_t name = sh_fresh(sh, "LUT_POS");
-    GLSLH("#define %s(x) mix(%f, %f, (x)) \n",
-          name, 0.5 / lut_size, 1.0 - 0.5 / lut_size);
+    GLSLH("#define %s(x) mix(%s, %s, (x)) \n",
+          name, SH_FLOAT(0.5 / lut_size), SH_FLOAT(1.0 - 0.5 / lut_size));
     return name;
 }
 

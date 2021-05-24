@@ -59,6 +59,13 @@ bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
         PL_ARRAY_APPEND(sh, sh->vas, sva);
     }
 
+    for (int i = 0; i < params->num_constants; i++) {
+        struct pl_shader_const sc = params->constants[i];
+        size_t csize = pl_var_type_size(sc.type);
+        sc.data = pl_memdup(SH_TMP(sh), sc.data, csize);
+        PL_ARRAY_APPEND(sh, sh->consts, sc);
+    }
+
     if (params->prelude)
         GLSLP("// pl_shader_custom prelude: \n%s\n", params->prelude);
     if (params->header)

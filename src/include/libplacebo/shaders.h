@@ -146,6 +146,10 @@ struct pl_shader_res {
     // A list of input descriptors needed by this shader fragment,
     const struct pl_shader_desc *descriptors;
     int num_descriptors;
+
+    // A list of compile-time constants used by this shader fragment.
+    const struct pl_shader_const *constants;
+    int num_constants;
 };
 
 // Represents a vertex attribute. The four values will be bound to the four
@@ -160,7 +164,7 @@ struct pl_shader_va {
 // Represents a bound shared variable / descriptor
 struct pl_shader_var {
     struct pl_var var;  // the underlying variable description
-    const void *data;   // the raw data (interpretation as with pl_var_update)
+    const void *data;   // the raw data (as per `pl_var_host_layout`)
     bool dynamic;       // if true, the value is expected to change frequently
 };
 
@@ -194,6 +198,14 @@ struct pl_shader_desc {
 
     // Deprecated. Moved to `binding.object`. Still used as a fallback.
     const void *object PL_DEPRECATED;
+};
+
+// Represents a compile-time constant. This can be lowered to a specialization
+// constant to support cheaper recompilations.
+struct pl_shader_const {
+    enum pl_var_type type;
+    const char *name;
+    const void *data;
 };
 
 // Finalize a pl_shader. It is no longer mutable at this point, and any further

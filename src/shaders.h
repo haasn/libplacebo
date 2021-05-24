@@ -55,6 +55,7 @@ struct pl_shader {
     PL_ARRAY(struct pl_shader_va) vas;
     PL_ARRAY(struct pl_shader_var) vars;
     PL_ARRAY(struct pl_shader_desc) descs;
+    PL_ARRAY(struct pl_shader_const) consts;
 };
 
 // Helper functions for convenience
@@ -79,17 +80,26 @@ bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem);
 ident_t sh_subpass(pl_shader sh, const pl_shader sub);
 
 // Helpers for adding new variables/descriptors/etc. with fresh, unique
-// identifier names. These will never conflcit with other identifiers, even
+// identifier names. These will never conflict with other identifiers, even
 // if the shaders are merged together.
 ident_t sh_fresh(pl_shader sh, const char *name);
 
 // Add a new shader var and return its identifier
 ident_t sh_var(pl_shader sh, struct pl_shader_var sv);
 
-// Add a new shader desc and return its identifier. This function takes care of
-// setting the binding to a fresh bind point according to the namespace
-// requirements, so the caller may leave it blank.
+// Add a new shader desc and return its identifier.
 ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd);
+
+// Add a new shader constant and return its identifier.
+ident_t sh_const(pl_shader sh, struct pl_shader_const sc);
+
+// Helper functions for `sh_const`
+ident_t sh_const_int(pl_shader sh, const char *name, int val);
+ident_t sh_const_uint(pl_shader sh, const char *name, unsigned int val);
+ident_t sh_const_float(pl_shader sh, const char *name, float val);
+#define SH_INT(val)     sh_const_int(sh, "const", val)
+#define SH_UINT(val)    sh_const_uint(sh, "const", val)
+#define SH_FLOAT(val)   sh_const_float(sh, "const", val)
 
 // Add a new vec2 vertex attribute from a pl_rect2df, or returns NULL on failure.
 ident_t sh_attr_vec2(pl_shader sh, const char *name,

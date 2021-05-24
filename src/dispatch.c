@@ -389,6 +389,19 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
         add_buffer_vars(dp, tmp, pre, pc_bvars.elem, pc_bvars.num);
     }
 
+    // Add all of the specialization constants
+    for (int i = 0; i < res->num_constants; i++) {
+        static const char *types[PL_VAR_TYPE_COUNT] = {
+            [PL_VAR_SINT]   = "int",
+            [PL_VAR_UINT]   = "uint",
+            [PL_VAR_FLOAT]  = "float",
+        };
+
+        const struct pl_shader_const *sc = &res->constants[i];
+        ADD(pre, "layout(constant_id=%"PRIu32") const %s %s = 0; \n",
+            params->constants[i].id, types[sc->type], sc->name);
+    }
+
     // Add all of the required descriptors
     for (int i = 0; i < res->num_descriptors; i++) {
         const struct pl_shader_desc *sd = &res->descriptors[i];
@@ -732,6 +745,33 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
             pl_hash_merge(&pass->signature, pl_mem_hash(blend, sizeof(*blend)));
     }
 
+    // Place all of the compile-time constants
+    uint8_t *constant_data = NULL;
+    if (sh->consts.num) {
+        params.num_constants = sh->consts.num;
+        params.constants = pl_alloc(tmp, sh->consts.num * sizeof(struct pl_constant));
+
+        // Compute offsets
+        size_t total_size = 0;
+        uint32_t const_id = 0;
+        for (int i = 0; i < sh->consts.num; i++) {
+            params.constants[i] = (struct pl_constant) {
+                .type = sh->consts.elem[i].type,
+                .id = const_id++,
+                .offset = total_size,
+            };
+            total_size += pl_var_type_size(sh->consts.elem[i].type);
+        }
+
+        // Write values into the constants buffer
+        params.constant_data = constant_data = pl_alloc(pass, total_size);
+        for (int i = 0; i < sh->consts.num; i++) {
+            const struct pl_shader_const *sc = &sh->consts.elem[i];
+            void *data = constant_data + params.constants[i].offset;
+            memcpy(data, sc->data, pl_var_type_size(sc->type));
+        }
+    }
+
     // Place all the variables; these will dynamically end up in different
     // locations based on what the underlying GPU supports (UBOs, pushc, etc.)
     //
@@ -776,6 +816,8 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
         // Found existing shader, re-use directly
         if (p->ubo)
             sh->descs.elem[p->ubo_index].binding.object = p->ubo;
+        pl_free(p->run_params.constant_data);
+        p->run_params.constant_data = pl_steal(p, constant_data);
         p->last_index = dp->current_index;
         pl_free(pass);
         return p;
@@ -802,6 +844,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
 
     struct pl_pass_run_params *rparams = &pass->run_params;
     rparams->pass = pass->pass;
+    rparams->constant_data = constant_data;
     rparams->push_constants = pl_zalloc(pass, params.push_constants_size);
     rparams->desc_bindings = pl_calloc_ptr(pass, params.num_descriptors,
                                            rparams->desc_bindings);

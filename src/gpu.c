@@ -1351,6 +1351,10 @@ pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
         require(pl_var_glsl_type_name(var));
     }
 
+    require(!params->num_constants || (gpu->caps & PL_GPU_CAP_SPEC_CONSTANTS));
+    for (int i = 0; i < params->num_constants; i++)
+        require(params->constants[i].type);
+
     for (int i = 0; i < params->num_descriptors; i++) {
         struct pl_desc desc = params->descriptors[i];
         require(desc.name);
@@ -2095,6 +2099,10 @@ struct pl_pass_params pl_pass_params_copy(void *alloc, const struct pl_pass_para
     DUPNAMES(vertex_attribs);
 
 #undef DUPNAMES
+
+    new.constant_data = NULL;
+    new.constants = pl_memdup(alloc, new.constants,
+                              new.num_constants * sizeof(new.constants[0]));
 
     return new;
 }

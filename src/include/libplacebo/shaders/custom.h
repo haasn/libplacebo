@@ -69,6 +69,8 @@ struct pl_custom_shader {
     int num_variables;
     const struct pl_shader_va *vertex_attribs;
     int num_vertex_attribs;
+    const struct pl_shader_const *constants;
+    int num_constants;
 
     // If true, this shader must be a compute shader. The desired workgroup
     // size and shared memory usage can be optionally specified, or 0 if no

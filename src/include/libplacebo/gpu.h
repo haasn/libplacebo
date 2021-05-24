@@ -53,6 +53,7 @@ enum {
     PL_GPU_CAP_SUBGROUPS        = 1 << 5, // supports subgroups
     PL_GPU_CAP_CALLBACKS        = 1 << 6, // supports asynchronous callbacks
     PL_GPU_CAP_THREAD_SAFE      = 1 << 7, // `pl_gpu` is thread safe
+    PL_GPU_CAP_SPEC_CONSTANTS   = 1 << 8, // supports specialization constants
 
     // Note on subgroup support: PL_GPU_CAP_SUBGROUPS implies subgroup support
     // for both fragment and compute shaders, but not necessarily any other
@@ -999,6 +1000,13 @@ struct pl_var_layout pl_std430_layout(size_t offset, const struct pl_var *var);
 void memcpy_layout(void *dst, struct pl_var_layout dst_layout,
                    const void *src, struct pl_var_layout src_layout);
 
+// Represents a compile-time constant.
+struct pl_constant {
+    enum pl_var_type type;  // constant data type
+    uint32_t id;            // GLSL `constant_id`
+    size_t offset;          // byte offset in `constant_data`
+};
+
 // Represents a vertex attribute.
 struct pl_vertex_attrib {
     const char *name;   // name as used in the shader
@@ -1104,6 +1112,15 @@ struct pl_pass_params {
     struct pl_desc *descriptors;
     int num_descriptors;
 
+    // Compile-time specialization constants. Only supported if
+    // PL_GPU_CAP_SPEC_CONSTANTS is set. Otherwise, num_constants must be 0.
+    struct pl_constant *constants;
+    int num_constants;
+
+    // Initial data for the specialization constants. Optional. If NULL,
+    // specialization constants receive the values from the shader text.
+    void *constant_data;
+
     // Push constant region. Must be be a multiple of 4 <= limits.max_pushc_size
     size_t push_constants_size;
 
@@ -1190,6 +1207,15 @@ struct pl_var_update {
 
 struct pl_pass_run_params {
     pl_pass pass;
+
+    // If present, the shader will be re-specialized with the new constants
+    // provided. This is a significantly cheaper operation than recompiling a
+    // brand new shader, but should still be avoided if possible.
+    //
+    // Leaving it as NULL re-uses the existing specialization values. Ignored
+    // if the shader has no specialization constants. Guaranteed to be a no-op
+    // if the values have not changed since the last invocation.
+    void *constant_data;
 
     // This list only contains descriptors/variables which have changed
     // since the previous invocation. All non-mentioned variables implicitly
