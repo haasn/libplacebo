@@ -40,6 +40,7 @@ bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
     for (int i = 0; i < params->num_variables; i++) {
         struct pl_shader_var sv = params->variables[i];
         sv.data = pl_memdup(SH_TMP(sh), sv.data, pl_var_host_layout(0, &sv.var).size);
+        sv.var.name = pl_strdup0(SH_TMP(sh), pl_str0(sv.var.name));
         PL_ARRAY_APPEND(sh, sh->vars, sv);
     }
 
@@ -48,6 +49,7 @@ bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
         size_t bsize = sizeof(sd.buffer_vars[0]) * sd.num_buffer_vars;
         if (bsize)
             sd.buffer_vars = pl_memdup(SH_TMP(sh), sd.buffer_vars, bsize);
+        sd.desc.name = pl_strdup0(SH_TMP(sh), pl_str0(sd.desc.name));
         PL_ARRAY_APPEND(sh, sh->descs, sd);
     }
 
@@ -56,6 +58,7 @@ bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
         size_t vsize = sva.attr.fmt->texel_size;
         for (int n = 0; n < PL_ARRAY_SIZE(sva.data); n++)
             sva.data[n] = pl_memdup(SH_TMP(sh), sva.data[n], vsize);
+        sva.attr.name = pl_strdup0(SH_TMP(sh), pl_str0(sva.attr.name));
         PL_ARRAY_APPEND(sh, sh->vas, sva);
     }
 
@@ -63,6 +66,7 @@ bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
         struct pl_shader_const sc = params->constants[i];
         size_t csize = pl_var_type_size(sc.type);
         sc.data = pl_memdup(SH_TMP(sh), sc.data, csize);
+        sc.name = pl_strdup0(SH_TMP(sh), pl_str0(sc.name));
         PL_ARRAY_APPEND(sh, sh->consts, sc);
     }
 
