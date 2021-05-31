@@ -797,8 +797,10 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
 
         repr.alpha = PL_ALPHA_PREMULTIPLIED;
         pl_shader_encode_color(sh, &repr);
-        if (ol.mode == PL_OVERLAY_MONOCHROME)
-            GLSL("color.rgba *= texture(%s, coord).r; \n", tex);
+        if (ol.mode == PL_OVERLAY_MONOCHROME) {
+            GLSL("color.rgba *= %s(%s, coord).r; \n",
+                 sh_tex_fn(sh, ol.tex->params), tex);
+        }
 
         swizzle_color(sh, comps, comp_map, true);
 
