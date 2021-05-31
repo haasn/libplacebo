@@ -53,7 +53,7 @@ struct pl_dispatch {
 
 enum pass_var_type {
     PASS_VAR_NONE = 0,
-    PASS_VAR_GLOBAL, // regular/global uniforms (PL_GPU_CAP_INPUT_VARIABLES)
+    PASS_VAR_GLOBAL, // regular/global uniforms
     PASS_VAR_UBO,    // uniform buffers
     PASS_VAR_PUSHC   // push constants
 };
@@ -202,7 +202,7 @@ static bool add_pass_var(pl_dispatch dp, void *tmp, struct pass *pass,
     // safety net for driver bugs (and also rules out potentially buggy drivers)
     // Also avoid UBOs for highly dynamic stuff since that requires synchronizing
     // the UBO writes every frame
-    bool try_ubo = !(gpu->caps & PL_GPU_CAP_INPUT_VARIABLES) || !sv->dynamic;
+    bool try_ubo = params->num_variables == gpu->limits.max_variables || !sv->dynamic;
     if (try_ubo && gpu->glsl.version >= 440 && gpu->limits.max_ubo_size) {
         if (sh_buf_desc_append(tmp, gpu, &pass->ubo_desc, &pv->layout, sv->var)) {
             pv->type = PASS_VAR_UBO;
@@ -211,7 +211,7 @@ static bool add_pass_var(pl_dispatch dp, void *tmp, struct pass *pass,
     }
 
     // Otherwise, use global uniforms
-    if (gpu->caps & PL_GPU_CAP_INPUT_VARIABLES) {
+    if (params->num_variables < gpu->limits.max_variables) {
         pv->type = PASS_VAR_GLOBAL;
         pv->index = params->num_variables;
         pv->layout = pl_var_host_layout(0, &sv->var);
@@ -223,7 +223,7 @@ static bool add_pass_var(pl_dispatch dp, void *tmp, struct pass *pass,
     // this can happen is if we're using a GPU that does not support global
     // input vars and we've exhausted the UBO size limits.
     PL_ERR(dp, "Unable to add input variable '%s': possibly exhausted "
-           "UBO size limits?", sv->var.name);
+           "variable count / UBO size limits?", sv->var.name);
     return false;
 }
 
@@ -299,7 +299,7 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
 
     // Enable this unconditionally if the GPU supports it, since we have no way
     // of knowing whether subgroups are being used or not
-    if (gpu->caps & PL_GPU_CAP_SUBGROUPS) {
+    if (gpu->glsl.subgroup_size) {
         ADD(pre, "#extension GL_KHR_shader_subgroup_basic : enable \n"
                  "#extension GL_KHR_shader_subgroup_vote : enable \n"
                  "#extension GL_KHR_shader_subgroup_arithmetic : enable \n"
@@ -1069,11 +1069,12 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
         goto error;
     }
 
+    const struct pl_gpu_limits *limits = &dp->gpu->limits;
     if (pl_shader_is_compute(sh) && !tpars->storable) {
         PL_ERR(dp, "Trying to dispatch using a compute shader with a "
                "non-storable target texture.");
         goto error;
-    } else if (tpars->storable && (dp->gpu->caps & PL_GPU_CAP_PARALLEL_COMPUTE)) {
+    } else if (tpars->storable && limits->compute_queues > limits->fragment_queues) {
         if (sh_try_compute(sh, 16, 16, true, 0))
             PL_TRACE(dp, "Upgrading fragment shader to compute shader.");
     }

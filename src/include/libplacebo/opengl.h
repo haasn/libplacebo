@@ -43,10 +43,8 @@ struct pl_opengl_params {
     // undesirable when GPU-accelerated processing is expected.
     bool allow_software;
 
-    // Restrict specific features to e.g. work around driver bugs, or simply
-    // for testing purposes
-    pl_gpu_caps blacklist_caps; // capabilities to be excluded
-    int max_glsl_version;       // limit the maximum GLSL version
+    // Restrict the maximum allowed GLSL version. (Mainly for testing)
+    int max_glsl_version;
 
     // Optional. Required when importing/exporting dmabufs as textures.
     void *egl_display;
@@ -54,8 +52,8 @@ struct pl_opengl_params {
 
     // Optional callbacks to bind/release the OpenGL context on the current
     // thread. If these are specified, then the resulting `pl_gpu` will have
-    // `PL_GPU_CAP_THREAD_SAFE`, and may therefore be used from any thread
-    // without first needing to bind the OpenGL context.
+    // `pl_gpu_limits.thread_safe` enabled, and may therefore be used from any
+    // thread without first needing to bind the OpenGL context.
     //
     // If the user is re-using the same OpenGL context in non-libplacebo code,
     // then these callbacks should include whatever synchronization is

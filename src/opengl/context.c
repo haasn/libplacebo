@@ -182,19 +182,12 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     if (!pl_gl->gpu)
         goto error;
 
-    // Restrict caps/version
-    if (params->blacklist_caps) {
-        pl_gpu_caps *caps = (pl_gpu_caps*) &pl_gl->gpu->caps;
-        *caps &= ~(params->blacklist_caps);
-        PL_INFO(p, "Restricting capabilities 0x%x... new caps are 0x%x",
-                (unsigned int) params->blacklist_caps, (unsigned int) *caps);
-    }
-
+    // Restrict version
     if (params->max_glsl_version) {
-        struct pl_glsl_desc *desc = (struct pl_glsl_desc *) &pl_gl->gpu->glsl;
-        desc->version = PL_MIN(desc->version, params->max_glsl_version);
+        struct pl_glsl_version *glsl = (struct pl_glsl_version *) &pl_gl->gpu->glsl;
+        glsl->version = PL_MIN(glsl->version, params->max_glsl_version);
         PL_INFO(p, "Restricting GLSL version to %d... new version is %d",
-                params->max_glsl_version, desc->version);
+                params->max_glsl_version, glsl->version);
     }
 
     gl_release_current(pl_gl);

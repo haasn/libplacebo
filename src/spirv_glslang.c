@@ -38,7 +38,7 @@ static struct spirv_compiler *glslang_create(pl_log log, uint32_t api_version)
     struct spirv_compiler *spirv;
     spirv = pl_zalloc_obj(NULL, spirv, struct priv);
     spirv->compiler_version = pl_glslang_version();
-    spirv->glsl = (struct pl_glsl_desc) {
+    spirv->glsl = (struct pl_glsl_version) {
         .version = 450,
         .vulkan  = true,
     };

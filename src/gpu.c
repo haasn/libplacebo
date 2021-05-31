@@ -45,6 +45,79 @@ void pl_gpu_destroy(pl_gpu gpu)
     impl->destroy(gpu);
 }
 
+bool pl_fmt_is_ordered(pl_fmt fmt)
+{
+    bool ret = !fmt->opaque;
+    for (int i = 0; i < fmt->num_components; i++)
+        ret &= fmt->sample_order[i] == i;
+    return ret;
+}
+
+bool pl_fmt_is_float(pl_fmt fmt)
+{
+    switch (fmt->type) {
+    case PL_FMT_UNKNOWN: // more likely than not
+    case PL_FMT_FLOAT:
+    case PL_FMT_UNORM:
+    case PL_FMT_SNORM:
+        return true;
+
+    case PL_FMT_UINT:
+    case PL_FMT_SINT:
+        return false;
+
+    case PL_FMT_TYPE_COUNT:
+        break;
+    }
+
+    pl_unreachable();
+}
+
+static int cmp_fmt(const void *pa, const void *pb)
+{
+    pl_fmt a = *(pl_fmt *)pa;
+    pl_fmt b = *(pl_fmt *)pb;
+
+    // Always prefer non-opaque formats
+    if (a->opaque != b->opaque)
+        return PL_CMP(a->opaque, b->opaque);
+
+    // Always prefer non-emulated formats
+    if (a->emulated != b->emulated)
+        return PL_CMP(a->emulated, b->emulated);
+
+    int ca = __builtin_popcount(a->caps),
+        cb = __builtin_popcount(b->caps);
+    if (ca != cb)
+        return -PL_CMP(ca, cb); // invert to sort higher values first
+
+    // If the population count is the same but the caps are different, prefer
+    // the caps with a "lower" value (which tend to be more fundamental caps)
+    if (a->caps != b->caps)
+        return PL_CMP(a->caps, b->caps);
+
+    // If the capabilities are equal, sort based on the component attributes
+    for (int i = 0; i < PL_ARRAY_SIZE(a->component_depth); i++) {
+        int da = a->component_depth[i],
+            db = b->component_depth[i];
+        if (da != db)
+            return PL_CMP(da, db);
+
+        int ha = a->host_bits[i],
+            hb = b->host_bits[i];
+        if (ha != hb)
+            return PL_CMP(ha, hb);
+
+        int oa = a->sample_order[i],
+            ob = b->sample_order[i];
+        if (oa != ob)
+            return PL_CMP(oa, ob);
+    }
+
+    // Fall back to sorting by the name (for stability)
+    return strcmp(a->name, b->name);
+}
+
 #define FMT_BOOL(letter, cap) ((cap) ? (letter) : '-')
 #define FMT_IDX4(f) (f)[0], (f)[1], (f)[2], (f)[3]
 
@@ -111,38 +184,15 @@ static void print_formats(pl_gpu gpu)
     }
 }
 
-bool pl_fmt_is_ordered(pl_fmt fmt)
+pl_gpu pl_gpu_finalize(struct pl_gpu *gpu)
 {
-    bool ret = !fmt->opaque;
-    for (int i = 0; i < fmt->num_components; i++)
-        ret &= fmt->sample_order[i] == i;
-    return ret;
-}
+    // Sort formats
+    qsort(gpu->formats, gpu->num_formats, sizeof(pl_fmt), cmp_fmt);
 
-bool pl_fmt_is_float(pl_fmt fmt)
-{
-    switch (fmt->type) {
-    case PL_FMT_UNKNOWN: // more likely than not
-    case PL_FMT_FLOAT:
-    case PL_FMT_UNORM:
-    case PL_FMT_SNORM:
-        return true;
-
-    case PL_FMT_UINT:
-    case PL_FMT_SINT:
-        return false;
-
-    case PL_FMT_TYPE_COUNT:
-        break;
-    }
-
-    pl_unreachable();
-}
-
-static void gpu_verify(pl_gpu gpu)
-{
+    // Verification
     pl_assert(gpu->ctx == gpu->log);
     pl_assert(gpu->limits.max_tex_2d_dim);
+    pl_assert(gpu->limits.max_variables || gpu->limits.max_ubo_size);
 
     for (int n = 0; n < gpu->num_formats; n++) {
         pl_fmt fmt = gpu->formats[n];
@@ -173,56 +223,60 @@ static void gpu_verify(pl_gpu gpu)
         for (int o = n + 1; o < gpu->num_formats; o++)
             pl_assert(strcmp(fmt->name, gpu->formats[o]->name) != 0);
     }
-}
 
-void pl_gpu_print_info(pl_gpu gpu)
-{
+    // Print info
     PL_INFO(gpu, "GPU information:");
-    PL_INFO(gpu, "    GLSL version: %d%s", gpu->glsl.version,
-           gpu->glsl.vulkan ? " (vulkan)" : gpu->glsl.gles ? " es" : "");
-
-    PL_INFO(gpu, "    Capabilities: %c%c%c%c%c%c%c%c (0x%x)",
-            FMT_BOOL('C', gpu->caps & PL_GPU_CAP_COMPUTE),
-            FMT_BOOL('P', gpu->caps & PL_GPU_CAP_PARALLEL_COMPUTE),
-            FMT_BOOL('V', gpu->caps & PL_GPU_CAP_INPUT_VARIABLES),
-            FMT_BOOL('M', gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS),
-            FMT_BOOL('B', gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D),
-            FMT_BOOL('G', gpu->caps & PL_GPU_CAP_SUBGROUPS),
-            FMT_BOOL('c', gpu->caps & PL_GPU_CAP_CALLBACKS),
-            FMT_BOOL('T', gpu->caps & PL_GPU_CAP_THREAD_SAFE),
-            (unsigned int) gpu->caps);
-
-    PL_INFO(gpu, "    Limits:");
 
 #define LOG(fmt, field) \
-    PL_INFO(gpu, "      %-26s %" fmt, #field ":", gpu->limits.field)
+    PL_INFO(gpu, "      %-26s %" fmt, #field ":", gpu->LOG_STRUCT.field)
 
-    LOG(PRIu32, max_tex_1d_dim);
-    LOG(PRIu32, max_tex_2d_dim);
-    LOG(PRIu32, max_tex_3d_dim);
-    LOG("zu", max_pushc_size);
-    LOG("zu", max_buf_size);
-    LOG("zu", max_ubo_size);
-    LOG("zu", max_ssbo_size);
-    LOG("zu", max_vbo_size);
-    LOG(PRIu64, max_buffer_texels);
-    LOG(PRId16, min_gather_offset);
-    LOG(PRId16, max_gather_offset);
-    LOG(PRIu32, subgroup_size);
-
-    if (gpu->caps & PL_GPU_CAP_COMPUTE) {
+#define LOG_STRUCT glsl
+    PL_INFO(gpu, "    GLSL version: %d%s", gpu->glsl.version,
+           gpu->glsl.vulkan ? " (vulkan)" : gpu->glsl.gles ? " es" : "");
+    if (gpu->glsl.compute) {
         LOG("zu", max_shmem_size);
         LOG(PRIu32, max_group_threads);
         LOG(PRIu32, max_group_size[0]);
         LOG(PRIu32, max_group_size[1]);
         LOG(PRIu32, max_group_size[2]);
+    }
+    LOG(PRIu32, subgroup_size);
+    LOG(PRIi16, min_gather_offset);
+    LOG(PRIi16, max_gather_offset);
+#undef LOG_STRUCT
+
+#define LOG_STRUCT limits
+    PL_INFO(gpu, "    Limits:");
+    // pl_gpu
+    LOG("d", thread_safe);
+    LOG("d", callbacks);
+    // pl_buf
+    LOG("zu", max_buf_size);
+    LOG("zu", max_ubo_size);
+    LOG("zu", max_ssbo_size);
+    LOG("zu", max_vbo_size);
+    LOG("zu", max_mapped_size);
+    LOG(PRIu64, max_buffer_texels);
+    LOG("zu", align_host_ptr);
+    // pl_tex
+    LOG(PRIu32, max_tex_1d_dim);
+    LOG(PRIu32, max_tex_2d_dim);
+    LOG(PRIu32, max_tex_3d_dim);
+    LOG("d", blittable_1d_3d);
+    LOG(PRIu32, align_tex_xfer_stride);
+    LOG("zu", align_tex_xfer_offset);
+    // pl_pass
+    LOG("zu", max_variables);
+    LOG("zu", max_constants);
+    LOG("zu", max_pushc_size);
+    if (gpu->glsl.compute) {
         LOG(PRIu32, max_dispatch[0]);
         LOG(PRIu32, max_dispatch[1]);
         LOG(PRIu32, max_dispatch[2]);
     }
-
-    LOG(PRIu32, align_tex_xfer_stride);
-    LOG("zu", align_tex_xfer_offset);
+    LOG(PRIu32, fragment_queues);
+    LOG(PRIu32, compute_queues);
+#undef LOG_STRUCT
 #undef LOG
 
     if (pl_gpu_supports_interop(gpu)) {
@@ -246,57 +300,39 @@ void pl_gpu_print_info(pl_gpu gpu)
     }
 
     print_formats(gpu);
-    gpu_verify(gpu);
-}
 
-static int cmp_fmt(const void *pa, const void *pb)
-{
-    pl_fmt a = *(pl_fmt *)pa;
-    pl_fmt b = *(pl_fmt *)pb;
+    // Set `gpu->caps` for backwards compatibility
+    pl_gpu_caps caps = 0;
+    if (gpu->glsl.compute)
+        caps |= PL_GPU_CAP_COMPUTE;
+    if (gpu->limits.compute_queues > gpu->limits.fragment_queues)
+        caps |= PL_GPU_CAP_PARALLEL_COMPUTE;
+    if (gpu->limits.max_variables)
+        caps |= PL_GPU_CAP_INPUT_VARIABLES;
+    if (gpu->limits.max_mapped_size)
+        caps |= PL_GPU_CAP_MAPPED_BUFFERS;
+    if (gpu->limits.blittable_1d_3d)
+        caps |= PL_GPU_CAP_BLITTABLE_1D_3D;
+    if (gpu->glsl.subgroup_size)
+        caps |= PL_GPU_CAP_SUBGROUPS;
+    if (gpu->limits.callbacks)
+        caps |= PL_GPU_CAP_CALLBACKS;
+    if (gpu->limits.thread_safe)
+        caps |= PL_GPU_CAP_THREAD_SAFE;
+    if (gpu->limits.max_constants)
+        caps |= PL_GPU_CAP_SPEC_CONSTANTS;
+    gpu->caps = caps;
 
-    // Always prefer non-opaque formats
-    if (a->opaque != b->opaque)
-        return PL_CMP(a->opaque, b->opaque);
+    // Set the backwards compatibility fields in `limits`
+    gpu->limits.max_shmem_size = gpu->glsl.max_shmem_size;
+    gpu->limits.max_group_threads = gpu->glsl.max_group_threads;
+    for (int i = 0; i < 3; i++)
+        gpu->limits.max_group_size[i] = gpu->glsl.max_group_size[i];
+    gpu->limits.subgroup_size = gpu->glsl.subgroup_size;
+    gpu->limits.min_gather_offset = gpu->glsl.min_gather_offset;
+    gpu->limits.max_gather_offset = gpu->glsl.max_gather_offset;
 
-    // Always prefer non-emulated formats
-    if (a->emulated != b->emulated)
-        return PL_CMP(a->emulated, b->emulated);
-
-    int ca = __builtin_popcount(a->caps),
-        cb = __builtin_popcount(b->caps);
-    if (ca != cb)
-        return -PL_CMP(ca, cb); // invert to sort higher values first
-
-    // If the population count is the same but the caps are different, prefer
-    // the caps with a "lower" value (which tend to be more fundamental caps)
-    if (a->caps != b->caps)
-        return PL_CMP(a->caps, b->caps);
-
-    // If the capabilities are equal, sort based on the component attributes
-    for (int i = 0; i < PL_ARRAY_SIZE(a->component_depth); i++) {
-        int da = a->component_depth[i],
-            db = b->component_depth[i];
-        if (da != db)
-            return PL_CMP(da, db);
-
-        int ha = a->host_bits[i],
-            hb = b->host_bits[i];
-        if (ha != hb)
-            return PL_CMP(ha, hb);
-
-        int oa = a->sample_order[i],
-            ob = b->sample_order[i];
-        if (oa != ob)
-            return PL_CMP(oa, ob);
-    }
-
-    // Fall back to sorting by the name (for stability)
-    return strcmp(a->name, b->name);
-}
-
-void pl_gpu_sort_formats(struct pl_gpu *gpu)
-{
-    qsort(gpu->formats, gpu->num_formats, sizeof(pl_fmt), cmp_fmt);
+    return gpu;
 }
 
 struct glsl_fmt {
@@ -580,8 +616,8 @@ pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         require(params->w > 0);
         require(params->w <= gpu->limits.max_tex_1d_dim);
         require(!params->renderable);
-        require(!params->blit_src || gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D);
-        require(!params->blit_dst || gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D);
+        require(!params->blit_src || gpu->limits.blittable_1d_3d);
+        require(!params->blit_dst || gpu->limits.blittable_1d_3d);
         break;
     case 2:
         require(params->w > 0 && params->h > 0);
@@ -594,8 +630,8 @@ pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         require(params->h <= gpu->limits.max_tex_3d_dim);
         require(params->d <= gpu->limits.max_tex_3d_dim);
         require(!params->renderable);
-        require(!params->blit_src || gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D);
-        require(!params->blit_dst || gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D);
+        require(!params->blit_src || gpu->limits.blittable_1d_3d);
+        require(!params->blit_dst || gpu->limits.blittable_1d_3d);
         break;
     }
 
@@ -840,7 +876,7 @@ static bool fix_tex_transfer(pl_gpu gpu, struct pl_tex_transfer_params *params)
         require(params->buf_offset + size <= buf->params.size);
     }
 
-    require(!params->callback || (gpu->caps & PL_GPU_CAP_CALLBACKS));
+    require(!params->callback || gpu->limits.callbacks);
     return true;
 
 error:
@@ -958,6 +994,7 @@ pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *pparams)
     require(!params.uniform || params.size <= gpu->limits.max_ubo_size);
     require(!params.storable || params.size <= gpu->limits.max_ssbo_size);
     require(!params.drawable || params.size <= gpu->limits.max_vbo_size);
+    require(!params.host_mapped || params.size <= gpu->limits.max_mapped_size);
 
     if (params.format) {
         pl_fmt fmt = params.format;
@@ -965,8 +1002,6 @@ pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *pparams)
         require(!params.uniform || (fmt->caps & PL_FMT_CAP_TEXEL_UNIFORM));
         require(!params.storable || (fmt->caps & PL_FMT_CAP_TEXEL_STORAGE));
     }
-
-    require(!params.host_mapped || (gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS));
 
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     pl_buf buf = impl->buf_create(gpu, &params);
@@ -1339,21 +1374,21 @@ pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
         require(!params->blend_params || params->load_target);
         break;
     case PL_PASS_COMPUTE:
-        require(gpu->caps & PL_GPU_CAP_COMPUTE);
+        require(gpu->glsl.compute);
         break;
     case PL_PASS_INVALID:
     case PL_PASS_TYPE_COUNT:
         pl_unreachable();
     }
 
+    require(params->num_variables <= gpu->limits.max_variables);
     for (int i = 0; i < params->num_variables; i++) {
-        require(gpu->caps & PL_GPU_CAP_INPUT_VARIABLES);
         struct pl_var var = params->variables[i];
         require(var.name);
         require(pl_var_glsl_type_name(var));
     }
 
-    require(!params->num_constants || (gpu->caps & PL_GPU_CAP_SPEC_CONSTANTS));
+    require(params->num_constants <= gpu->limits.max_constants);
     for (int i = 0; i < params->num_constants; i++)
         require(params->constants[i].type);
 

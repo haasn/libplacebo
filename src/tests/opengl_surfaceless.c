@@ -175,8 +175,7 @@ int main()
         { EGL_OPENGL_ES_API,    EGL_OPENGL_ES2_BIT, 2, 0, 100, },
     };
 
-    pl_gpu_caps last_caps = 0;
-    struct pl_glsl_desc last_glsl = {0};
+    struct pl_glsl_version last_glsl = {0};
     struct pl_gpu_limits last_limits = {0};
 
     pl_log log = pl_test_logger();
@@ -253,15 +252,13 @@ int main()
 
         // Skip repeat tests
         pl_gpu gpu = gl->gpu;
-        if (last_caps == gpu->caps &&
-            memcmp(&last_glsl, &gpu->glsl, sizeof(last_glsl)) == 0 &&
+        if (memcmp(&last_glsl, &gpu->glsl, sizeof(last_glsl)) == 0 &&
             memcmp(&last_limits, &gpu->limits, sizeof(last_limits)) == 0)
         {
             printf("Skipping tests due to duplicate capabilities/version\n");
             goto next;
         }
 
-        last_caps = gpu->caps;
         last_glsl = gpu->glsl;
         last_limits = gpu->limits;
 

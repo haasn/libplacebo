@@ -1093,11 +1093,6 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     if (idx_comp < 0 && qfs[idx_gfx].queueFlags & VK_QUEUE_COMPUTE_BIT)
         idx_comp = idx_gfx;
 
-    if (params->blacklist_caps & PL_GPU_CAP_COMPUTE) {
-        PL_INFO(vk, "Disabling compute shaders (blacklisted)");
-        idx_comp = -1;
-    }
-
     if (idx_tf >= 0 && idx_tf != idx_gfx)
         PL_INFO(vk, "Using async transfer (queue %d)", idx_tf);
     if (idx_comp >= 0 && idx_comp != idx_gfx)
@@ -1367,18 +1362,11 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
         goto error;
 
     // Blacklist / restrict features
-    if (params->blacklist_caps) {
-        pl_gpu_caps *caps = (pl_gpu_caps*) &pl_vk->gpu->caps;
-        *caps &= ~(params->blacklist_caps);
-        PL_INFO(vk, "Restricting capabilities 0x%x... new caps are 0x%x",
-                (unsigned int) params->blacklist_caps, (unsigned int) *caps);
-    }
-
     if (params->max_glsl_version) {
-        struct pl_glsl_desc *desc = (struct pl_glsl_desc *) &pl_vk->gpu->glsl;
-        desc->version = PL_MIN(desc->version, params->max_glsl_version);
+        struct pl_glsl_version *glsl = (struct pl_glsl_version *) &pl_vk->gpu->glsl;
+        glsl->version = PL_MIN(glsl->version, params->max_glsl_version);
         PL_INFO(vk, "Restricting GLSL version to %d... new version is %d",
-                params->max_glsl_version, desc->version);
+                params->max_glsl_version, glsl->version);
     }
 
     vk->disable_events = params->disable_events;
@@ -1550,26 +1538,16 @@ next_qf: ;
     if (!vk->pool_compute && (vk->pool_graphics->props.queueFlags & VK_QUEUE_COMPUTE_BIT))
         vk->pool_compute = vk->pool_graphics;
 
-    if (params->blacklist_caps & PL_GPU_CAP_COMPUTE)
-        vk->pool_compute = NULL;
-
     pl_vk->gpu = pl_gpu_create_vk(vk);
     if (!pl_vk->gpu)
         goto error;
 
     // Blacklist / restrict features
-    if (params->blacklist_caps) {
-        pl_gpu_caps *caps = (pl_gpu_caps*) &pl_vk->gpu->caps;
-        *caps &= ~(params->blacklist_caps);
-        PL_INFO(vk, "Restricting capabilities 0x%x... new caps are 0x%x",
-                (unsigned int) params->blacklist_caps, (unsigned int) *caps);
-    }
-
     if (params->max_glsl_version) {
-        struct pl_glsl_desc *desc = (struct pl_glsl_desc *) &pl_vk->gpu->glsl;
-        desc->version = PL_MIN(desc->version, params->max_glsl_version);
+        struct pl_glsl_version *glsl = (struct pl_glsl_version *) &pl_vk->gpu->glsl;
+        glsl->version = PL_MIN(glsl->version, params->max_glsl_version);
         PL_INFO(vk, "Restricting GLSL version to %d... new version is %d",
-                params->max_glsl_version, desc->version);
+                params->max_glsl_version, glsl->version);
     }
 
     vk->disable_events = params->disable_events;

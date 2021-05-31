@@ -61,7 +61,7 @@ static void pl_buffer_tests(pl_gpu gpu)
     pl_buf_destroy(gpu, &buf);
     pl_buf_destroy(gpu, &tbuf);
 
-    if (gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS) {
+    if (buf_size <= gpu->limits.max_mapped_size) {
         printf("test host mapped buffer readback\n");
         buf = pl_buf_create(gpu, &(struct pl_buf_params) {
             .size = buf_size,
@@ -114,7 +114,7 @@ static void pl_test_roundtrip(pl_gpu gpu, pl_tex tex[2],
         .tex = tex[0],
         .ptr = src,
         .timer = ul,
-        .callback = (gpu->caps & PL_GPU_CAP_CALLBACKS) ? test_cb : NULL,
+        .callback = gpu->limits.callbacks ? test_cb : NULL,
         .priv = &ran_ul,
     }));
 
@@ -133,12 +133,12 @@ static void pl_test_roundtrip(pl_gpu gpu, pl_tex tex[2],
         .tex = dst_tex,
         .ptr = dst,
         .timer = dl,
-        .callback = (gpu->caps & PL_GPU_CAP_CALLBACKS) ? test_cb : NULL,
+        .callback = gpu->limits.callbacks ? test_cb : NULL,
         .priv = &ran_dl,
     }));
 
     pl_gpu_finish(gpu);
-    if (gpu->caps & PL_GPU_CAP_CALLBACKS)
+    if (gpu->limits.callbacks)
         REQUIRE(ran_ul && ran_dl);
 
     if (fmt->emulated && fmt->type == PL_FMT_FLOAT) {
@@ -185,7 +185,7 @@ static void pl_texture_tests(pl_gpu gpu)
             printf("... 1D\n");
             struct pl_tex_params params = ref_params;
             params.w = 16;
-            if (!(gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D))
+            if (!gpu->limits.blittable_1d_3d)
                 params.blit_src = params.blit_dst = false;
             for (int i = 0; i < PL_ARRAY_SIZE(tex); i++)
                 tex[i] = pl_tex_create(gpu, &params);
@@ -209,7 +209,7 @@ static void pl_texture_tests(pl_gpu gpu)
             printf("... 3D\n");
             struct pl_tex_params params = ref_params;
             params.w = params.h = params.d = 16;
-            if (!(gpu->caps & PL_GPU_CAP_BLITTABLE_1D_3D))
+            if (!gpu->limits.blittable_1d_3d)
                 params.blit_src = params.blit_dst = false;
             for (int i = 0; i < PL_ARRAY_SIZE(tex); i++)
                 tex[i] = pl_tex_create(gpu, &params);
@@ -538,7 +538,7 @@ static void pl_shader_tests(pl_gpu gpu)
         sh = pl_dispatch_begin(dp);
 
         // For testing, force the use of CS if possible
-        if (gpu->caps & PL_GPU_CAP_COMPUTE) {
+        if (gpu->glsl.compute) {
             sh->is_compute = true;
             sh->res.compute_group_size[0] = 8;
             sh->res.compute_group_size[1] = 8;
@@ -1028,7 +1028,7 @@ static void pl_render_tests(pl_gpu gpu)
         hook = pl_mpv_user_shader_parse(gpu, user_shader_tests[i],
                                         strlen(user_shader_tests[i]));
 
-        if (gpu->caps & PL_GPU_CAP_COMPUTE) {
+        if (gpu->glsl.compute) {
             REQUIRE(hook);
         } else {
             // Not all shaders compile without compute shader support
@@ -1385,7 +1385,7 @@ static void pl_test_host_ptr(pl_gpu gpu)
 #ifdef __unix__
 
     printf("testing host ptr\n");
-    REQUIRE(gpu->caps & PL_GPU_CAP_MAPPED_BUFFERS);
+    REQUIRE(gpu->limits.max_mapped_size);
 
     const size_t size = 2 << 20;
     const size_t offset = 2 << 10;

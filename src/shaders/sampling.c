@@ -502,10 +502,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         return false;
     }
 
-    pl_gpu gpu = SH_GPU(sh);
-    pl_assert(gpu);
-
-    bool has_compute = gpu->caps & PL_GPU_CAP_COMPUTE && !params->no_compute;
+    bool has_compute = sh_glsl(sh).compute && !params->no_compute;
     has_compute &= sh_glsl(sh).version >= 130; // needed for round()
     if (!src->tex && has_compute) {
         // FIXME: Could maybe solve this by communicating the wbase from
@@ -589,7 +586,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     // Determined experimentally on modern AMD and Nvidia hardware. 32 is a
     // good tradeoff for the horizontal work group size. Apart from that,
     // just use as many threads as possible.
-    const int bw = 32, bh = gpu->limits.max_group_threads / bw;
+    const int bw = 32, bh = sh_glsl(sh).max_group_threads / bw;
 
     // We need to sample everything from base_min to base_max, so make sure
     // we have enough room in shmem
@@ -711,8 +708,8 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                 int xx = x*x, xx1 = (x+1)*(x+1);
                 int yy = y*y, yy1 = (y+1)*(y+1);
                 bool use_gather = PL_MAX(xx, xx1) + PL_MAX(yy, yy1) < radius2;
-                use_gather &= PL_MAX(x, y) <= gpu->limits.max_gather_offset;
-                use_gather &= PL_MIN(x, y) >= gpu->limits.min_gather_offset;
+                use_gather &= PL_MAX(x, y) <= sh_glsl(sh).max_gather_offset;
+                use_gather &= PL_MIN(x, y) >= sh_glsl(sh).min_gather_offset;
                 use_gather &= !src->tex || src->tex->params.format->gatherable;
 
                 // Gathering from components other than the R channel requires

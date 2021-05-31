@@ -777,7 +777,7 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
          log_min, sig_scale, log_scale);
 
     // Update the work group's shared atomics
-    if (gpu->caps & PL_GPU_CAP_SUBGROUPS) {
+    if (sh_glsl(sh).subgroup_size) {
         GLSL("int group_max = subgroupMax(isig_max);    \n"
              "int group_sum = subgroupAdd(isig_log);    \n"
              "if (subgroupElect()) {                    \n"

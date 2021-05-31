@@ -85,13 +85,10 @@ static inline bool pl_gpu_supports_interop(pl_gpu gpu)
 
 // GPU-internal helpers: these should not be used outside of GPU implementations
 
-// Log some metadata about the created GPU, and perform verification
-void pl_gpu_print_info(pl_gpu gpu);
-
-// Sort the pl_fmt list into an optimal order. This tries to prefer formats
-// supporting more capabilities, while also trying to maintain a sane order in
-// terms of bit depth / component index.
-void pl_gpu_sort_formats(struct pl_gpu *gpu);
+// This performs several tasks. It sorts the format list, logs GPU metadata,
+// performs verification and fixes up backwards compatibility fields. This
+// should be returned as the last step when creating a `pl_gpu`.
+pl_gpu pl_gpu_finalize(struct pl_gpu *gpu);
 
 // Look up the right GLSL image format qualifier from a partially filled-in
 // pl_fmt, or NULL if the format does not have a legal matching GLSL name.

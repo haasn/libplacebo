@@ -34,17 +34,16 @@ PL_API_BEGIN
 // textures simply containing their data in a host-accessible way.
 
 struct pl_gpu_dummy_params {
-    // These GPU parameters correspond to their equialents in struct `pl_gpu`,
-    // and must obey the same rules as documented there. The values from
+    // These GPU parameters correspond to their equivalents in `pl_gpu`, and
+    // must obey the same rules as documented there. The values from
     // `pl_gpu_dummy_default_params` are set to support pretty much everything
     // and are set for GLSL version 450.
     //
-    // Individual fields such as PL_GPU_CAP_COMPUTE or the glsl version
-    // description can and should be overriden by the user based on their
-    // requirements. Individual limits should ideally be set based on the
-    // corresponding `glGet` queries etc.
-    pl_gpu_caps caps;
-    struct pl_glsl_desc glsl;
+    // Individual fields such as `glsl.compute` or `glsl.version` description
+    // can and should be overriden by the user based on their requirements.
+    // Individual limits should ideally be set based on the corresponding
+    // `glGet` queries etc.
+    struct pl_glsl_version glsl;
     struct pl_gpu_limits limits;
 };
 

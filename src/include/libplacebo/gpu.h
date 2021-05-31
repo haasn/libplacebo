@@ -26,6 +26,24 @@
 
 PL_API_BEGIN
 
+// Type of a shader input descriptor.
+enum pl_desc_type {
+    PL_DESC_INVALID = 0,
+    PL_DESC_SAMPLED_TEX,    // C: pl_tex*    GLSL: combined texture sampler
+                            // (`pl_tex->params.sampleable` must be set)
+    PL_DESC_STORAGE_IMG,    // C: pl_tex*    GLSL: storage image
+                            // (`pl_tex->params.storable` must be set)
+    PL_DESC_BUF_UNIFORM,    // C: pl_buf*    GLSL: uniform buffer
+                            // (`pl_buf->params.uniform` must be set)
+    PL_DESC_BUF_STORAGE,    // C: pl_buf*    GLSL: storage buffer
+                            // (`pl_buf->params.storable` must be set)
+    PL_DESC_BUF_TEXEL_UNIFORM,// C: pl_buf*  GLSL: uniform samplerBuffer
+                              // (`pl_buf->params.uniform` and `format` must be set)
+    PL_DESC_BUF_TEXEL_STORAGE,// C: pl_buf*  GLSL: uniform imageBuffer
+                              // (`pl_buf->params.uniform` and `format` must be set)
+    PL_DESC_TYPE_COUNT
+};
+
 // This file contains the definition of an API which is designed to abstract
 // away from platform-specific APIs like the various OpenGL variants, Direct3D
 // and Vulkan in a common way. It is a much more limited API than those APIs,
@@ -37,34 +55,95 @@ PL_API_BEGIN
 // graceful failure. Exceptions are noted where they exist.
 
 // Structure which wraps metadata describing GLSL capabilities.
-struct pl_glsl_desc {
+struct pl_glsl_version {
     int version;        // GLSL version (e.g. 450), for #version
     bool gles;          // GLSL ES semantics (ESSL)
     bool vulkan;        // GL_KHR_vulkan_glsl semantics
+
+    // Compute shader support and limits. If `compute` is false, then all
+    // of the remaining fields in this section are {0}.
+    bool compute;
+    size_t max_shmem_size;      // maximum compute shader shared memory size
+    uint32_t max_group_threads; // maximum number of local threads per work group
+    uint32_t max_group_size[3]; // maximum work group size per dimension
+
+    // If nonzero, signals availability of shader subgroups. This guarantess
+    // availability of all of the following extensions:
+    // - GL_KHR_shader_subgroup_basic
+    // - GL_KHR_shader_subgroup_vote
+    // - GL_KHR_shader_subgroup_arithmetic
+    // - GL_KHR_shader_subgroup_ballot
+    // - GL_KHR_shader_subgroup_shuffle
+    uint32_t subgroup_size;
+
+    // Miscellaneous shader limits
+    int16_t min_gather_offset;  // minimum `textureGatherOffset` offset
+    int16_t max_gather_offset;  // maximum `textureGatherOffset` offset
 };
 
-typedef uint64_t pl_gpu_caps;
-enum {
-    PL_GPU_CAP_COMPUTE          = 1 << 0, // supports compute shaders
-    PL_GPU_CAP_PARALLEL_COMPUTE = 1 << 1, // supports multiple compute queues
-    PL_GPU_CAP_INPUT_VARIABLES  = 1 << 2, // supports shader input variables
-    PL_GPU_CAP_MAPPED_BUFFERS   = 1 << 3, // supports host-mapped buffers
-    PL_GPU_CAP_BLITTABLE_1D_3D  = 1 << 4, // supports blittable 1D/3D textures
-    PL_GPU_CAP_SUBGROUPS        = 1 << 5, // supports subgroups
-    PL_GPU_CAP_CALLBACKS        = 1 << 6, // supports asynchronous callbacks
-    PL_GPU_CAP_THREAD_SAFE      = 1 << 7, // `pl_gpu` is thread safe
-    PL_GPU_CAP_SPEC_CONSTANTS   = 1 << 8, // supports specialization constants
+// Backwards compatibility alias
+#define pl_glsl_desc pl_glsl_version
 
-    // Note on subgroup support: PL_GPU_CAP_SUBGROUPS implies subgroup support
-    // for both fragment and compute shaders, but not necessarily any other
-    // stages. In terms of the supported feature set, currently at least the
-    // following capabilities are required:
-    // - basic
-    // - voting
-    // - arithmetic
-    // - ballot
-    // - shuffle
+// Structure defining the physical limits and capabilities of this GPU
+// instance. If a limit is given as 0, that means that feature is unsupported.
+struct pl_gpu_limits {
+    // --- pl_gpu
+    bool thread_safe;           // `pl_gpu` calls are thread-safe
+    bool callbacks;             // supports asynchronous GPU callbacks
+
+    // --- pl_buf
+    size_t max_buf_size;        // maximum size of any buffer
+    size_t max_ubo_size;        // maximum size of a `uniform` buffer
+    size_t max_ssbo_size;       // maximum size of a `storable` buffer
+    size_t max_vbo_size;        // maximum size of a `drawable` buffer
+    size_t max_mapped_size;     // maximum size of a `host_mapped` buffer
+    uint64_t max_buffer_texels; // maximum number of texels in a texel buffer
+
+    // Required alignment for PL_HANDLE_HOST_PTR imports. This is provided
+    // merely as a hint to the user. If the host pointer being imported is
+    // misaligned, libplacebo will internally round (over-map) the region.
+    size_t align_host_ptr;
+
+    // --- pl_tex
+    uint32_t max_tex_1d_dim;    // maximum width for a 1D texture
+    uint32_t max_tex_2d_dim;    // maximum width/height for a 2D texture (required)
+    uint32_t max_tex_3d_dim;    // maximum width/height/depth for a 3D texture
+    bool blittable_1d_3d;       // supports blittable 1D/3D textures
+
+    // These don't represent hard limits but indicate performance hints for
+    // optimal alignment. For best performance, the corresponding field
+    // should be aligned to a multiple of these. They will always be a power
+    // of two.
+    uint32_t align_tex_xfer_stride; // optimal `pl_tex_transfer_params.stride_w/h`
+    size_t align_tex_xfer_offset;   // optimal `pl_tex_transfer_params.buf_offset`
+
+    // --- pl_pass
+    size_t max_variables;       // maximum `pl_pass_params.num_variables`
+    size_t max_constants;       // maximum `pl_pass_params.num_constants`
+    size_t max_pushc_size;      // maximum `push_constants_size`
+    uint32_t max_dispatch[3];   // maximum dispatch size per dimension
+
+    // Note: At least one of `max_variables` or `max_ubo_size` is guaranteed to
+    // be nonzero.
+
+    // As a performance hint, the GPU may signal the number of command queues
+    // it has for fragment and compute shaders, respectively. Users may use
+    // this information to decide the appropriate type of shader to dispatch.
+    uint32_t fragment_queues;
+    uint32_t compute_queues;
+
+    // --- Deprecated fields. Provided for backwards compatibility. See the
+    // corresponding fields in `pl_glsl_version` for their replacements.
+    size_t max_shmem_size PL_DEPRECATED;
+    uint32_t max_group_threads PL_DEPRECATED;
+    uint32_t max_group_size[3] PL_DEPRECATED;
+    uint32_t subgroup_size PL_DEPRECATED;
+    int16_t min_gather_offset PL_DEPRECATED;
+    int16_t max_gather_offset PL_DEPRECATED;
 };
+
+// Backwards compatibility alias
+#define max_xfer_size max_buf_size
 
 // Some `pl_gpu` operations allow sharing GPU resources with external APIs -
 // examples include interop with other graphics APIs such as CUDA, and also
@@ -122,44 +201,6 @@ struct pl_shared_mem {
     size_t stride_h;
 };
 
-// Structure defining the physical limits of this GPU instance. If a limit is
-// given as 0, that means that feature is unsupported.
-struct pl_gpu_limits {
-    uint32_t max_tex_1d_dim;    // maximum width for a 1D texture
-    uint32_t max_tex_2d_dim;    // maximum width/height for a 2D texture (required)
-    uint32_t max_tex_3d_dim;    // maximum width/height/depth for a 3D texture
-    size_t max_pushc_size;      // maximum `push_constants_size`
-    size_t max_buf_size;        // maximum size of any buffer
-    size_t max_ubo_size;        // maximum size of a `uniform` buffer
-    size_t max_ssbo_size;       // maximum size of a `storable` buffer
-    size_t max_vbo_size;        // maximum size of a `drawable` buffer
-    uint64_t max_buffer_texels; // maximum number of texels in a texel buffer
-    int16_t min_gather_offset;  // minimum `textureGatherOffset` offset
-    int16_t max_gather_offset;  // maximum `textureGatherOffset` offset
-    uint32_t subgroup_size;     // number of threads in a subgroup
-
-    // Compute shader limits. Always available (non-zero) if PL_GPU_CAP_COMPUTE set
-    size_t max_shmem_size;      // maximum compute shader shared memory size
-    uint32_t max_group_threads; // maximum number of local threads per work group
-    uint32_t max_group_size[3]; // maximum work group size per dimension
-    uint32_t max_dispatch[3];   // maximum dispatch size per dimension
-
-    // These don't represent hard limits but indicate performance hints for
-    // optimal alignment. For best performance, the corresponding field
-    // should be aligned to a multiple of these. They will always be a power
-    // of two.
-    uint32_t align_tex_xfer_stride; // optimal `pl_tex_transfer_params.stride_w/h`
-    size_t align_tex_xfer_offset;   // optimal `pl_tex_transfer_params.buf_offset`
-
-    // Required alignment for PL_HANDLE_HOST_PTR imports. This is provided
-    // merely as a hint to the user. If the host pointer being imported is
-    // misaligned, libplacebo will internally round (over-map) the region.
-    size_t align_host_ptr;
-};
-
-// Backwards compatibility alias
-#define max_xfer_size max_buf_size
-
 // Structure grouping PCI bus address fields for GPU devices
 struct pl_gpu_pci_address {
     uint32_t domain;
@@ -168,20 +209,31 @@ struct pl_gpu_pci_address {
     uint32_t function;
 };
 
+// (Deprecated) Capability bits. Provided for backwards compatibility.
+typedef uint64_t pl_gpu_caps;
+enum PL_DEPRECATED {
+    PL_GPU_CAP_COMPUTE          = 1 << 0, // see `pl_glsl_version.compute`
+    PL_GPU_CAP_PARALLEL_COMPUTE = 1 << 1, // see `pl_gpu_limits.compute_queues`
+    PL_GPU_CAP_INPUT_VARIABLES  = 1 << 2, // see `pl_gpu_limits.max_variables`
+    PL_GPU_CAP_MAPPED_BUFFERS   = 1 << 3, // see `pl_gpu_limits.max_mapped_size`
+    PL_GPU_CAP_BLITTABLE_1D_3D  = 1 << 4, // see `pl_gpu_limits.blittable_1d_3d`
+    PL_GPU_CAP_SUBGROUPS        = 1 << 5, // see `pl_glsl_version.subgroup_size`
+    PL_GPU_CAP_CALLBACKS        = 1 << 6, // see `pl_gpu_limits.callbacks`
+    PL_GPU_CAP_THREAD_SAFE      = 1 << 7, // see `pl_gpu_limits.thread_safe`
+    PL_GPU_CAP_SPEC_CONSTANTS   = 1 << 8, // see `pl_gpu_limits.max_constants`
+};
+
 typedef const PL_STRUCT(pl_fmt) *pl_fmt;
 
 // Abstract device context which wraps an underlying graphics context and can
 // be used to dispatch rendering commands.
 //
-// Thread-safety: Depends on `PL_GPU_CAP_THREAD_SAFE`
+// Thread-safety: Depends on `pl_gpu_limits.thread_safe`
 typedef const PL_STRUCT(pl_gpu) {
     pl_log log;
 
-    pl_gpu_caps caps;            // PL_GPU_CAP_* bit field
-    struct pl_glsl_desc glsl;    // GLSL version supported by this GPU
-    struct pl_gpu_limits limits; // physical device limits
-    // Note: Every GPU must support at least one of PL_GPU_CAP_INPUT_VARIABLES
-    // or uniform buffers (limits.max_ubo_size > 0).
+    struct pl_glsl_version glsl; // GLSL features supported by this GPU
+    struct pl_gpu_limits limits; // physical device limits and capabilities
 
     // Fields relevant to external API interop. If the underlying device does
     // not support interop with other APIs, these will all be {0}.
@@ -198,8 +250,9 @@ typedef const PL_STRUCT(pl_gpu) {
     // This will only be filled in if interop is supported.
     struct pl_gpu_pci_address pci;
 
-    // (Deprecated) Backwards compatibility field. Equal to `log`.
-    pl_log ctx PL_DEPRECATED;
+    // (Deprecated) Backwards compatibility fields.
+    pl_log ctx PL_DEPRECATED;       // equal to `log`
+    pl_gpu_caps caps PL_DEPRECATED; // replaced by `glsl` and `limits`
 } *pl_gpu;
 
 // Helper function to align the given dimension (e.g. width or height) to a
@@ -230,7 +283,7 @@ enum pl_fmt_caps {
 
     // Notes:
     // - PL_FMT_CAP_LINEAR also implies PL_FMT_CAP_SAMPLEABLE
-    // - PL_FMT_CAP_STORABLE also implies PL_GPU_CAP_COMPUTE
+    // - PL_FMT_CAP_STORABLE also implies `pl_gpu.glsl.compute`
     // - PL_FMT_CAP_BLENDABLE implies PL_FMT_CAP_RENDERABLE
     // - PL_FMT_CAP_VERTEX implies that the format is non-opaque
     // - PL_FMT_CAP_HOST_READABLE implies that the format is non-opaque
@@ -384,7 +437,6 @@ struct pl_buf_params {
     bool host_writable; // contents may be updated via pl_buf_write()
     bool host_readable; // contents may be read back via pl_buf_read()
     bool host_mapped;   // create a persistent, RW mapping (pl_buf.data)
-                        // (requires PL_GPU_CAP_MAPPED_BUFFERS)
 
     // May be used as PL_DESC_BUF_UNIFORM or PL_DESC_BUF_TEXEL_UNIFORM.
     // Requires `size <= pl_gpu_limits.max_ubo_size`
@@ -581,7 +633,7 @@ bool pl_buf_export(pl_gpu gpu, pl_buf buf);
 // However, it may be used to do non-blocking queries before calling blocking
 // functions such as `pl_buf_read`.
 //
-// Note: If `PL_GPU_CAP_THREAD_SAFE` is set, this function is implicitly
+// Note: If `pl_gpu_limits.thread_safe` is set, this function is implicitly
 // synchronized, meaning it can safely be called on a `pl_buf` that is in use
 // by another thread.
 bool pl_buf_poll(pl_gpu gpu, pl_buf buf, uint64_t timeout);
@@ -617,7 +669,7 @@ struct pl_tex_params {
     bool host_readable; // may be fetched with pl_tex_download()
 
     // Note: For `blit_src`, `blit_dst`, the texture must either be
-    // 2-dimensional or `PL_GPU_CAP_BLITTABLE_1D_3D` must set.
+    // 2-dimensional or `pl_gpu_limits.blittable_1d_3d` must be set.
 
     // At most one of `export_handle` and `import_handle` can be set for a
     // texture.
@@ -797,7 +849,7 @@ struct pl_tex_transfer_params {
     // such, it's recommended to always try using asynchronous texture
     // transfers wherever possible.
     //
-    // Note: Requires PL_GPU_CAP_CALLBACKS
+    // Note: Requires `pl_gpu_limits.callbacks`
     //
     // Note: Callbacks are implicitly synchronized, meaning that callbacks are
     // guaranteed to never execute concurrently with other callbacks. However,
@@ -851,7 +903,7 @@ bool pl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params);
 // while (pl_tex_poll(gpu, buf, UINT64_MAX))
 //      ; // do nothing
 //
-// Note: If `PL_GPU_CAP_THREAD_SAFE` is set, this function is implicitly
+// Note: If `pl_gpu_limits.thread_safe` is set, this function is implicitly
 // synchronized, meaning it can safely be called on a `pl_tex` that is in use
 // by another thread.
 bool pl_tex_poll(pl_gpu gpu, pl_tex tex, uint64_t timeout);
@@ -1015,24 +1067,6 @@ struct pl_vertex_attrib {
     int location;       // vertex location (as used in the shader)
 };
 
-// Type of a shader input descriptor.
-enum pl_desc_type {
-    PL_DESC_INVALID = 0,
-    PL_DESC_SAMPLED_TEX,    // C: pl_tex*    GLSL: combined texture sampler
-                            // (`pl_tex->params.sampleable` must be set)
-    PL_DESC_STORAGE_IMG,    // C: pl_tex*    GLSL: storage image
-                            // (`pl_tex->params.storable` must be set)
-    PL_DESC_BUF_UNIFORM,    // C: pl_buf*    GLSL: uniform buffer
-                            // (`pl_buf->params.uniform` must be set)
-    PL_DESC_BUF_STORAGE,    // C: pl_buf*    GLSL: storage buffer
-                            // (`pl_buf->params.storable` must be set)
-    PL_DESC_BUF_TEXEL_UNIFORM,// C: pl_buf*  GLSL: uniform samplerBuffer
-                              // (`pl_buf->params.uniform` and `format` must be set)
-    PL_DESC_BUF_TEXEL_STORAGE,// C: pl_buf*  GLSL: uniform imageBuffer
-                              // (`pl_buf->params.uniform` and `format` must be set)
-    PL_DESC_TYPE_COUNT
-};
-
 // Returns an abstract namespace index for a given descriptor type. This will
 // always be a value >= 0 and < PL_DESC_TYPE_COUNT. Implementations can use
 // this to figure out which descriptors may share the same value of `binding`.
@@ -1093,7 +1127,7 @@ enum pl_prim_type {
 enum pl_pass_type {
     PL_PASS_INVALID = 0,
     PL_PASS_RASTER,  // vertex+fragment shader
-    PL_PASS_COMPUTE, // compute shader (requires PL_GPU_CAP_COMPUTE)
+    PL_PASS_COMPUTE, // compute shader (requires `pl_gpu.glsl.compute`)
     PL_PASS_TYPE_COUNT,
 };
 
@@ -1103,17 +1137,15 @@ enum pl_pass_type {
 struct pl_pass_params {
     enum pl_pass_type type;
 
-    // Input variables. Only supported if PL_GPU_CAP_INPUT_VARIABLES is set.
-    // Otherwise, num_variables must be 0.
+    // Input variables.
     struct pl_var *variables;
     int num_variables;
 
-    // Input descriptors. (Always supported)
+    // Input descriptors.
     struct pl_desc *descriptors;
     int num_descriptors;
 
-    // Compile-time specialization constants. Only supported if
-    // PL_GPU_CAP_SPEC_CONSTANTS is set. Otherwise, num_constants must be 0.
+    // Compile-time specialization constants.
     struct pl_constant *constants;
     int num_constants;
 

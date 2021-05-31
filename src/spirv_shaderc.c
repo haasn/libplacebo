@@ -59,7 +59,7 @@ static struct spirv_compiler *shaderc_create(pl_log log, uint32_t api_version)
             ver >> 16, (ver >> 8) & 0xff, rev);
 
     spirv->compiler_version = ver * 100 + rev;
-    spirv->glsl = (struct pl_glsl_desc) {
+    spirv->glsl = (struct pl_glsl_version) {
         .version = 450, // this is impossible to query, so hard-code it
         .vulkan  = true,
     };

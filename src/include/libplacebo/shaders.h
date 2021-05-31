@@ -57,7 +57,7 @@ struct pl_shader_params {
     // If `glsl.version` is nonzero, then this structure will be used to
     // determine the effective GLSL mode and capabilities. If `gpu` is also
     // set, then this overrides `gpu->glsl`.
-    struct pl_glsl_desc glsl;
+    struct pl_glsl_version glsl;
 
     // If this is true, all constants in the shader will be replaced by
     // dynaminic variables. This is mainly useful to avoid recompilation for
@@ -88,8 +88,8 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params);
 bool pl_shader_is_failed(const pl_shader sh);
 
 // Returns whether or not a pl_shader needs to be run as a compute shader. This
-// will never be the case unless the `gpu` this pl_shader was created against
-// supports PL_GPU_CAP_COMPUTE.
+// will never be the case unless the `pl_glsl_version` this `pl_shader` was
+// created using has `compute` support enabled.
 bool pl_shader_is_compute(const pl_shader sh);
 
 // Returns whether or not the shader has any particular output size

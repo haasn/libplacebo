@@ -34,7 +34,7 @@ struct spirv_compiler {
     pl_log log;
 
     // implementation-specific fields
-    struct pl_glsl_desc glsl;      // supported GLSL capabilities
+    struct pl_glsl_version glsl;   // supported GLSL version
     int compiler_version;          // for cache invalidation, may be left as 0
 };
 

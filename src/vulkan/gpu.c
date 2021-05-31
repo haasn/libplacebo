@@ -180,7 +180,7 @@ static void vk_setup_formats(struct pl_gpu *gpu)
     PL_ARRAY(pl_fmt) formats = {0};
 
     // Texture format emulation requires at least support for texel buffers
-    bool has_emu = (gpu->caps & PL_GPU_CAP_COMPUTE) && gpu->limits.max_buffer_texels;
+    bool has_emu = gpu->glsl.compute && gpu->limits.max_buffer_texels;
 
     for (const struct vk_format *pvk_fmt = vk_formats; pvk_fmt->tfmt; pvk_fmt++) {
         const struct vk_format *vk_fmt = pvk_fmt;
@@ -356,12 +356,8 @@ static void vk_setup_formats(struct pl_gpu *gpu)
         // Disable implied capabilities where the dependencies are unavailable
         if (!(fmt->caps & PL_FMT_CAP_SAMPLEABLE))
             fmt->caps &= ~PL_FMT_CAP_LINEAR;
-        if (!(gpu->caps & PL_GPU_CAP_COMPUTE))
+        if (!gpu->glsl.compute)
             fmt->caps &= ~(PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE);
-
-        // Only set this gpu-wide cap if at least one blittable fmt exists
-        if (fmt->caps & PL_FMT_CAP_BLITTABLE)
-            gpu->caps |= PL_GPU_CAP_BLITTABLE_1D_3D;
 
         enum pl_fmt_caps storable = PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE;
         if (fmt->caps & storable) {
@@ -384,7 +380,6 @@ static void vk_setup_formats(struct pl_gpu *gpu)
 
     gpu->formats = formats.elem;
     gpu->num_formats = formats.num;
-    pl_gpu_sort_formats(gpu);
 }
 
 static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
@@ -506,30 +501,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     if (!p->alloc || !p->spirv)
         goto error;
 
-    gpu->glsl = p->spirv->glsl;
-    gpu->limits = (struct pl_gpu_limits) {
-        .max_tex_1d_dim    = vk->limits.maxImageDimension1D,
-        .max_tex_2d_dim    = vk->limits.maxImageDimension2D,
-        .max_tex_3d_dim    = vk->limits.maxImageDimension3D,
-        .max_pushc_size    = vk->limits.maxPushConstantsSize,
-        .max_buf_size      = SIZE_MAX, // no limit imposed by vulkan
-        .max_ubo_size      = vk->limits.maxUniformBufferRange,
-        .max_ssbo_size     = vk->limits.maxStorageBufferRange,
-        .max_vbo_size      = SIZE_MAX,
-        .max_buffer_texels = vk->limits.maxTexelBufferElements,
-        .min_gather_offset = vk->limits.minTexelGatherOffset,
-        .max_gather_offset = vk->limits.maxTexelGatherOffset,
-        .align_tex_xfer_stride = vk->limits.optimalBufferCopyRowPitchAlignment,
-        .align_tex_xfer_offset = pl_lcm(vk->limits.optimalBufferCopyOffsetAlignment, 4),
-    };
-
-    gpu->export_caps.buf = vk_malloc_handle_caps(p->alloc, false);
-    gpu->import_caps.buf = vk_malloc_handle_caps(p->alloc, true);
-    gpu->export_caps.tex = vk_tex_handle_caps(vk, false);
-    gpu->import_caps.tex = vk_tex_handle_caps(vk, true);
-    gpu->export_caps.sync = vk_sync_handle_caps(vk);
-    gpu->import_caps.sync = 0; // Not supported yet
-
+    // Query all device properties
     VkPhysicalDevicePCIBusInfoPropertiesEXT pci_props = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT,
     };
@@ -560,7 +532,74 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     };
 
     vk->GetPhysicalDeviceProperties2(vk->physd, &props);
-    gpu->limits.align_host_ptr = host_props.minImportedHostPointerAlignment;
+
+    // Determine GLSL features and limits
+    gpu->glsl = p->spirv->glsl;
+    if (vk->pool_compute) {
+        gpu->glsl.compute = true;
+        gpu->glsl.max_shmem_size = vk->limits.maxComputeSharedMemorySize;
+        gpu->glsl.max_group_threads = vk->limits.maxComputeWorkGroupInvocations;
+        for (int i = 0; i < 3; i++)
+            gpu->glsl.max_group_size[i] = vk->limits.maxComputeWorkGroupSize[i];
+    }
+
+    VkShaderStageFlags req_stages = VK_SHADER_STAGE_FRAGMENT_BIT |
+                                    VK_SHADER_STAGE_COMPUTE_BIT;
+    VkSubgroupFeatureFlags req_flags = VK_SUBGROUP_FEATURE_BASIC_BIT |
+                                       VK_SUBGROUP_FEATURE_VOTE_BIT |
+                                       VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
+                                       VK_SUBGROUP_FEATURE_BALLOT_BIT |
+                                       VK_SUBGROUP_FEATURE_SHUFFLE_BIT;
+
+    if ((group_props.supportedStages & req_stages) == req_stages &&
+        (group_props.supportedOperations & req_flags) == req_flags)
+    {
+        gpu->glsl.subgroup_size = group_props.subgroupSize;
+    }
+
+    if (vk->features.features.shaderImageGatherExtended) {
+        gpu->glsl.min_gather_offset = vk->limits.minTexelGatherOffset;
+        gpu->glsl.max_gather_offset = vk->limits.maxTexelGatherOffset;
+    }
+
+    gpu->limits = (struct pl_gpu_limits) {
+        // pl_gpu
+        .thread_safe        = true,
+        .callbacks          = true,
+        // pl_buf
+        .max_buf_size       = SIZE_MAX, // no limit imposed by vulkan
+        .max_ubo_size       = vk->limits.maxUniformBufferRange,
+        .max_ssbo_size      = vk->limits.maxStorageBufferRange,
+        .max_vbo_size       = SIZE_MAX,
+        .max_mapped_size    = SIZE_MAX,
+        .max_buffer_texels  = vk->limits.maxTexelBufferElements,
+        .align_host_ptr     = host_props.minImportedHostPointerAlignment,
+        // pl_tex
+        .max_tex_1d_dim     = vk->limits.maxImageDimension1D,
+        .max_tex_2d_dim     = vk->limits.maxImageDimension2D,
+        .max_tex_3d_dim     = vk->limits.maxImageDimension3D,
+        .blittable_1d_3d    = true,
+        .align_tex_xfer_stride = vk->limits.optimalBufferCopyRowPitchAlignment,
+        .align_tex_xfer_offset = pl_lcm(vk->limits.optimalBufferCopyOffsetAlignment, 4),
+        // pl_pass
+        .max_variables      = 0, // vulkan doesn't support these at all
+        .max_constants      = SIZE_MAX,
+        .max_pushc_size     = vk->limits.maxPushConstantsSize,
+        .max_dispatch = {
+            vk->limits.maxComputeWorkGroupCount[0],
+            vk->limits.maxComputeWorkGroupCount[1],
+            vk->limits.maxComputeWorkGroupCount[2],
+        },
+        .fragment_queues    = vk->pool_graphics->num_queues,
+        .compute_queues     = vk->pool_compute ? vk->pool_compute->num_queues : 0,
+    };
+
+    gpu->export_caps.buf = vk_malloc_handle_caps(p->alloc, false);
+    gpu->import_caps.buf = vk_malloc_handle_caps(p->alloc, true);
+    gpu->export_caps.tex = vk_tex_handle_caps(vk, false);
+    gpu->import_caps.tex = vk_tex_handle_caps(vk, true);
+    gpu->export_caps.sync = vk_sync_handle_caps(vk);
+    gpu->import_caps.sync = 0; // Not supported yet
 
     if (pl_gpu_supports_interop(gpu)) {
         assert(sizeof(gpu->uuid) == VK_UUID_SIZE);
@@ -582,49 +621,6 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
 
         if (host_query_reset)
             p->host_query_reset = host_query_reset->hostQueryReset;
-    }
-
-    // Determine GPU capabilities
-    gpu->caps |= PL_GPU_CAP_CALLBACKS | PL_GPU_CAP_THREAD_SAFE |
-                 PL_GPU_CAP_SPEC_CONSTANTS;
-
-    VkShaderStageFlags req_stages = VK_SHADER_STAGE_FRAGMENT_BIT |
-                                    VK_SHADER_STAGE_COMPUTE_BIT;
-    VkSubgroupFeatureFlags req_flags = VK_SUBGROUP_FEATURE_BASIC_BIT |
-                                       VK_SUBGROUP_FEATURE_VOTE_BIT |
-                                       VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
-                                       VK_SUBGROUP_FEATURE_BALLOT_BIT |
-                                       VK_SUBGROUP_FEATURE_SHUFFLE_BIT;
-
-    if ((group_props.supportedStages & req_stages) == req_stages &&
-        (group_props.supportedOperations & req_flags) == req_flags)
-    {
-        gpu->limits.subgroup_size = group_props.subgroupSize;
-        gpu->caps |= PL_GPU_CAP_SUBGROUPS;
-    }
-
-    // We ostensibly support this, although it can still fail on buffer
-    // creation (for certain combinations of buffers)
-    gpu->caps |= PL_GPU_CAP_MAPPED_BUFFERS;
-
-    if (vk->pool_compute) {
-        gpu->caps |= PL_GPU_CAP_COMPUTE;
-        gpu->limits.max_shmem_size = vk->limits.maxComputeSharedMemorySize;
-        gpu->limits.max_group_threads = vk->limits.maxComputeWorkGroupInvocations;
-        for (int i = 0; i < 3; i++) {
-            gpu->limits.max_group_size[i] = vk->limits.maxComputeWorkGroupSize[i];
-            gpu->limits.max_dispatch[i] = vk->limits.maxComputeWorkGroupCount[i];
-        }
-
-        // If we have more compute queues than graphics queues, we probably
-        // want to be using them. (This seems mostly relevant for AMD)
-        if (vk->pool_compute->num_queues > vk->pool_graphics->num_queues)
-            gpu->caps |= PL_GPU_CAP_PARALLEL_COMPUTE;
-    }
-
-    if (!vk->features.features.shaderImageGatherExtended) {
-        gpu->limits.min_gather_offset = 0;
-        gpu->limits.max_gather_offset = 0;
     }
 
     vk_setup_formats(gpu);
@@ -664,8 +660,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
 
     // Create the dispatch last, after any setup of `gpu` is done
     p->dp = pl_dispatch_create(vk->log, gpu);
-    pl_gpu_print_info(gpu);
-    return gpu;
+    return pl_gpu_finalize(gpu);
 
 error:
     vk_destroy_gpu(gpu);
@@ -2134,7 +2129,7 @@ static enum queue_type vk_img_copy_queue(pl_gpu gpu, pl_tex tex,
     VkExtent3D alignment = vk->pool_transfer->props.minImageTransferGranularity;
 
     enum queue_type fallback = GRAPHICS;
-    if (gpu->caps & PL_GPU_CAP_PARALLEL_COMPUTE)
+    if (gpu->limits.compute_queues > gpu->limits.fragment_queues)
         fallback = COMPUTE; // prefer async compute queue
 
     int tex_w = PL_DEF(tex->params.w, 1),

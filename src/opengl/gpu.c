@@ -222,7 +222,7 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
     if (p->gl_ver || (fmt->caps & PL_FMT_CAP_RENDERABLE))
         fmt->caps |= PL_FMT_CAP_HOST_READABLE;
 
-    if ((gpu->caps & PL_GPU_CAP_COMPUTE) && fmt->glsl_format && p->has_storage)
+    if (gpu->glsl.compute && fmt->glsl_format && p->has_storage)
         fmt->caps |= PL_FMT_CAP_STORABLE;
 
     // Only float-type formats are considered blendable in OpenGL
@@ -249,7 +249,6 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
 static bool gl_setup_formats(struct pl_gpu *gpu)
 {
     pl_gl_enumerate_formats(gpu, add_format);
-    pl_gpu_sort_formats(gpu);
     return gl_check_err(gpu, "gl_setup_formats");
 }
 
@@ -297,26 +296,16 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct pl_gl);
     gpu->log = log;
     gpu->ctx = gpu->log;
-    gpu->glsl.gles = !epoxy_is_desktop_gl();
 
     struct pl_gl *p = PL_PRIV(gpu);
     p->impl = pl_fns_gl;
     p->gl = gl;
 
+    struct pl_glsl_version *glsl = &gpu->glsl;
     int ver = epoxy_gl_version();
-    p->gl_ver = gpu->glsl.gles ? 0 : ver;
-    p->gles_ver = gpu->glsl.gles ? ver : 0;
-
-    // Query support for the capabilities
-    gpu->caps |= PL_GPU_CAP_INPUT_VARIABLES;
-    if (test_ext(gpu, "GL_ARB_compute_shader", 43, 0))
-        gpu->caps |= PL_GPU_CAP_COMPUTE;
-    if (test_ext(gpu, "GL_ARB_buffer_storage", 44, 0))
-        gpu->caps |= PL_GPU_CAP_MAPPED_BUFFERS;
-    if (test_ext(gpu, "GL_ARB_sync", 32, 30))
-        gpu->caps |= PL_GPU_CAP_CALLBACKS;
-    if (params->make_current)
-        gpu->caps |= PL_GPU_CAP_THREAD_SAFE;
+    glsl->gles = !epoxy_is_desktop_gl();
+    p->gl_ver = glsl->gles ? 0 : ver;
+    p->gles_ver = glsl->gles ? ver : 0;
 
     // If possible, query the GLSL version from the implementation
     const char *glslver = glGetString(GL_SHADING_LANGUAGE_VERSION);
@@ -324,19 +313,60 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
         PL_INFO(gpu, "    GL_SHADING_LANGUAGE_VERSION: %s", glslver);
         int major = 0, minor = 0;
         if (sscanf(glslver, "%d.%d", &major, &minor) == 2)
-            gpu->glsl.version = major * 100 + minor;
+            glsl->version = major * 100 + minor;
     }
 
-    if (!gpu->glsl.version) {
+    if (!glsl->version) {
         // Otherwise, use the fixed magic versions 200 and 300 for early GLES,
         // and otherwise fall back to 110 if all else fails.
         if (p->gles_ver >= 30) {
-            gpu->glsl.version = 300;
+            glsl->version = 300;
         } else if (p->gles_ver >= 20) {
-            gpu->glsl.version = 200;
+            glsl->version = 200;
         } else {
-            gpu->glsl.version = 110;
+            glsl->version = 110;
         }
+    }
+
+    if (test_ext(gpu, "GL_ARB_compute_shader", 43, 0)) {
+        glsl->compute = true;
+        get(GL_MAX_COMPUTE_SHARED_MEMORY_SIZE, &glsl->max_shmem_size);
+        get(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &glsl->max_group_threads);
+        for (int i = 0; i < 3; i++)
+            geti(GL_MAX_COMPUTE_WORK_GROUP_SIZE, i, &glsl->max_group_size[i]);
+    }
+
+    if (test_ext(gpu, "GL_ARB_texture_gather", 40, 0)) {
+        get(GL_MAX_PROGRAM_TEXTURE_GATHER_COMPONENTS_ARB, &p->gather_comps);
+        get(GL_MIN_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &glsl->min_gather_offset);
+        get(GL_MAX_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &glsl->max_gather_offset);
+    }
+
+    // Query all device limits
+    struct pl_gpu_limits *limits = &gpu->limits;
+    limits->thread_safe = params->make_current;
+    limits->callbacks = test_ext(gpu, "GL_ARB_sync", 32, 30);
+    if (test_ext(gpu, "GL_ARB_pixel_buffer_object", 31, 0))
+        limits->max_buf_size = SIZE_MAX; // no restriction imposed by GL
+    if (test_ext(gpu, "GL_ARB_uniform_buffer_object", 31, 0))
+        get(GL_MAX_UNIFORM_BLOCK_SIZE, &limits->max_ubo_size);
+    if (test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0))
+        get(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &limits->max_ssbo_size);
+    limits->max_vbo_size = limits->max_buf_size; // No additional restrictions
+    if (test_ext(gpu, "GL_ARB_buffer_storage", 44, 0))
+        limits->max_mapped_size = limits->max_buf_size;
+
+    get(GL_MAX_TEXTURE_SIZE, &limits->max_tex_2d_dim);
+    if (test_ext(gpu, "GL_EXT_texture3D", 21, 30))
+        get(GL_MAX_3D_TEXTURE_SIZE, &limits->max_tex_3d_dim);
+    // There's no equivalent limit for 1D textures for whatever reason, so
+    // just set it to the same as the 2D limit
+    if (p->gl_ver >= 21)
+        limits->max_tex_1d_dim = limits->max_tex_2d_dim;
+    get(GL_MAX_FRAGMENT_UNIFORM_COMPONENTS, &limits->max_variables);
+    if (glsl->compute) {
+        for (int i = 0; i < 3; i++)
+            geti(GL_MAX_COMPUTE_WORK_GROUP_COUNT, i, &limits->max_dispatch[i]);
     }
 
     // Query import/export support
@@ -357,43 +387,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
         gpu->limits.align_host_ptr = get_page_size();
     }
 
-    // Query all device limits
-    struct pl_gpu_limits *l = &gpu->limits;
-    get(GL_MAX_TEXTURE_SIZE, &l->max_tex_2d_dim);
-    if (test_ext(gpu, "GL_EXT_texture3D", 21, 30))
-        get(GL_MAX_3D_TEXTURE_SIZE, &l->max_tex_3d_dim);
-
-    // There's no equivalent limit for 1D textures for whatever reason, so
-    // just set it to the same as the 2D limit
-    if (p->gl_ver >= 21)
-        l->max_tex_1d_dim = l->max_tex_2d_dim;
-
-    if (test_ext(gpu, "GL_ARB_pixel_buffer_object", 31, 0))
-        l->max_buf_size = SIZE_MAX; // no restriction imposed by GL
-    if (test_ext(gpu, "GL_ARB_uniform_buffer_object", 31, 0))
-        get(GL_MAX_UNIFORM_BLOCK_SIZE, &l->max_ubo_size);
-    if (test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0))
-        get(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &l->max_ssbo_size);
-
-    if (test_ext(gpu, "GL_ARB_texture_gather", 40, 0)) {
-        get(GL_MAX_PROGRAM_TEXTURE_GATHER_COMPONENTS_ARB, &p->gather_comps);
-        get(GL_MIN_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &l->min_gather_offset);
-        get(GL_MAX_PROGRAM_TEXTURE_GATHER_OFFSET_ARB, &l->max_gather_offset);
-    }
-
-    if (gpu->caps & PL_GPU_CAP_COMPUTE) {
-        get(GL_MAX_COMPUTE_SHARED_MEMORY_SIZE, &l->max_shmem_size);
-        get(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &l->max_group_threads);
-        for (int i = 0; i < 3; i++) {
-            geti(GL_MAX_COMPUTE_WORK_GROUP_COUNT, i, &l->max_dispatch[i]);
-            geti(GL_MAX_COMPUTE_WORK_GROUP_SIZE, i, &l->max_group_size[i]);
-        }
-    }
-
-    // No additional restriction, so just enable if buffers are
-    l->max_vbo_size = l->max_buf_size;
-
-    // Cache some existing capability checks
+    // Cache some internal capability checks
     p->has_stride = test_ext(gpu, "GL_EXT_unpack_subimage", 11, 30);
     p->has_vao = test_ext(gpu, "GL_ARB_vertex_array_object", 30, 0);
     p->has_invalidate_fb = test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
@@ -403,10 +397,12 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     p->has_storage = test_ext(gpu, "GL_ARB_shader_image_load_store", 42, 0);
 
     // We simply don't know, so make up some values
-    gpu->limits.align_tex_xfer_offset = 32;
-    gpu->limits.align_tex_xfer_stride = 1;
+    limits->align_tex_xfer_offset = 32;
+    limits->align_tex_xfer_stride = 1;
+    limits->fragment_queues = 1;
+    limits->compute_queues = 1;
     if (test_ext(gpu, "GL_EXT_unpack_subimage", 11, 30))
-        gpu->limits.align_tex_xfer_stride = 4;
+        limits->align_tex_xfer_stride = 4;
 
     if (!gl_check_err(gpu, "pl_gpu_create_gl"))
         goto error;
@@ -418,8 +414,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     if (!formats_ok)
         goto error;
 
-    pl_gpu_print_info(gpu);
-    return gpu;
+    return pl_gpu_finalize(gpu);
 
 error:
     gl_destroy_gpu(gpu);

@@ -63,8 +63,8 @@ struct pl_shader {
 #define SH_GPU(sh) (SH_PARAMS(sh).gpu)
 #define SH_TMP(sh) ((sh)->tmp.elem[0])
 
-// Returns the GLSL description, defaulting to desktop 130.
-struct pl_glsl_desc sh_glsl(const pl_shader sh);
+// Returns the GLSL version, defaulting to desktop 130.
+struct pl_glsl_version sh_glsl(const pl_shader sh);
 
 #define SH_FAIL(sh, ...) do {    \
         sh->failed = true;       \

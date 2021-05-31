@@ -339,7 +339,7 @@ int main()
 
     // Polar sampling
     benchmark(vk->gpu, "polar", BENCH_SH(bench_polar));
-    if (vk->gpu->caps & PL_GPU_CAP_COMPUTE)
+    if (vk->gpu->glsl.compute)
         benchmark(vk->gpu, "polar_nocompute", BENCH_SH(bench_polar_nocompute));
 
     // Dithering algorithms
@@ -348,7 +348,7 @@ int main()
     benchmark(vk->gpu, "dither_ordered_fixed", BENCH_SH(bench_dither_ordered_fix));
 
     // HDR peak detection
-    if (vk->gpu->caps & PL_GPU_CAP_COMPUTE)
+    if (vk->gpu->glsl.compute)
         benchmark(vk->gpu, "hdr_peakdetect", BENCH_SH(bench_hdr_peak));
 
     // Misc stuff

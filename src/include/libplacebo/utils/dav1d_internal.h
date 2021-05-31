@@ -425,7 +425,7 @@ static inline bool pl_upload_dav1dpicture(pl_gpu gpu,
         // Re-use pre-allocated buffers directly
         assert(alloc->gpu == gpu);
         buf = alloc->buf;
-    } else if (params->asynchronous && (gpu->caps & PL_GPU_CAP_CALLBACKS)) {
+    } else if (params->asynchronous && gpu->limits.callbacks) {
         ref = malloc(sizeof(*ref));
         if (!ref)
             return false;

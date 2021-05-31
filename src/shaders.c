@@ -84,7 +84,7 @@ bool pl_shader_is_failed(const pl_shader sh)
     return sh->failed;
 }
 
-struct pl_glsl_desc sh_glsl(const pl_shader sh)
+struct pl_glsl_version sh_glsl(const pl_shader sh)
 {
     if (SH_PARAMS(sh).glsl.version)
         return SH_PARAMS(sh).glsl;
@@ -92,7 +92,7 @@ struct pl_glsl_desc sh_glsl(const pl_shader sh)
     if (SH_GPU(sh))
         return SH_GPU(sh)->glsl;
 
-    return (struct pl_glsl_desc) { .version = 130 };
+    return (struct pl_glsl_version) { .version = 130 };
 }
 
 bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem)
@@ -101,20 +101,20 @@ bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem)
     int *sh_bw = &sh->res.compute_group_size[0];
     int *sh_bh = &sh->res.compute_group_size[1];
 
-    pl_gpu gpu = SH_GPU(sh);
-    if (!gpu || !(gpu->caps & PL_GPU_CAP_COMPUTE)) {
-        PL_TRACE(sh, "Disabling compute shader due to missing PL_GPU_CAP_COMPUTE");
+    struct pl_glsl_version glsl = sh_glsl(sh);
+    if (!glsl.compute) {
+        PL_TRACE(sh, "Disabling compute shader due to missing `compute` support");
         return false;
     }
 
-    if (sh->res.compute_shmem + mem > gpu->limits.max_shmem_size) {
+    if (sh->res.compute_shmem + mem > glsl.max_shmem_size) {
         PL_TRACE(sh, "Disabling compute shader due to insufficient shmem");
         return false;
     }
 
-    if (bw > gpu->limits.max_group_size[0] ||
-        bh > gpu->limits.max_group_size[1] ||
-        (bw * bh) > gpu->limits.max_group_threads)
+    if (bw > glsl.max_group_size[0] ||
+        bh > glsl.max_group_size[1] ||
+        (bw * bh) > glsl.max_group_threads)
     {
         if (!flex) {
             PL_TRACE(sh, "Disabling compute shader due to exceeded group "
@@ -122,8 +122,8 @@ bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem)
             return false;
         } else {
             // Pick better group sizes
-            bw = PL_MIN(bw, gpu->limits.max_group_size[0]);
-            bh = gpu->limits.max_group_threads / bw;
+            bw = PL_MIN(bw, glsl.max_group_size[0]);
+            bh = glsl.max_group_threads / bw;
         }
     }
 
@@ -142,7 +142,7 @@ bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem)
     if (sh->flexible_work_groups && flex) {
         *sh_bw = PL_MAX(*sh_bw, bw);
         *sh_bh = PL_MAX(*sh_bh, bh);
-        pl_assert(*sh_bw * *sh_bh <= gpu->limits.max_group_threads);
+        pl_assert(*sh_bw * *sh_bh <= glsl.max_group_threads);
         return true;
     }
 
@@ -242,7 +242,7 @@ ident_t sh_const(pl_shader sh, struct pl_shader_const sc)
     sc.name = sh_fresh(sh, sc.name);
 
     pl_gpu gpu = SH_GPU(sh);
-    if (gpu && (gpu->caps & PL_GPU_CAP_SPEC_CONSTANTS)) {
+    if (gpu && gpu->limits.max_constants) {
         sc.data = pl_memdup(SH_TMP(sh), sc.data, pl_var_type_size(sc.type));
         PL_ARRAY_APPEND(sh, sh->consts, sc);
         return (ident_t) sc.name;

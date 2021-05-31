@@ -21,32 +21,42 @@
 #include "gpu.h"
 
 const struct pl_gpu_dummy_params pl_gpu_dummy_default_params = {
-    .caps = PL_GPU_CAP_COMPUTE | PL_GPU_CAP_INPUT_VARIABLES |
-            PL_GPU_CAP_MAPPED_BUFFERS | PL_GPU_CAP_THREAD_SAFE,
     .glsl = {
-        .version    = 450,
-        .gles       = false,
-        .vulkan     = false,
+        .version            = 450,
+        .gles               = false,
+        .vulkan             = false,
+        .compute            = true,
+        .max_shmem_size     = SIZE_MAX,
+        .max_group_threads  = 1024,
+        .max_group_size     = { 1024, 1024, 1024 },
+        .subgroup_size      = 32,
+        .min_gather_offset  = INT16_MIN,
+        .max_gather_offset  = INT16_MAX,
     },
-
     .limits = {
-        .max_tex_1d_dim     = UINT32_MAX,
-        .max_tex_2d_dim     = UINT32_MAX,
-        .max_tex_3d_dim     = UINT32_MAX,
-        .max_pushc_size     = SIZE_MAX,
+        // pl_gpu
+        .callbacks          = false,
+        .thread_safe        = true,
+        // pl_buf
         .max_buf_size       = SIZE_MAX,
         .max_ubo_size       = SIZE_MAX,
         .max_ssbo_size      = SIZE_MAX,
         .max_vbo_size       = SIZE_MAX,
+        .max_mapped_size    = SIZE_MAX,
         .max_buffer_texels  = UINT64_MAX,
-        .min_gather_offset  = INT16_MIN,
-        .max_gather_offset  = INT16_MAX,
-        .max_shmem_size     = SIZE_MAX,
-        .max_group_threads  = 1024,
-        .max_group_size     = { 1024, 1024, 1024 },
-        .max_dispatch       = { UINT32_MAX, UINT32_MAX, UINT32_MAX },
+        // pl_tex
+        .max_tex_1d_dim     = UINT32_MAX,
+        .max_tex_2d_dim     = UINT32_MAX,
+        .max_tex_3d_dim     = UINT32_MAX,
         .align_tex_xfer_stride = 1,
         .align_tex_xfer_offset = 1,
+        // pl_pass
+        .max_variables      = SIZE_MAX,
+        .max_constants      = SIZE_MAX,
+        .max_pushc_size     = SIZE_MAX,
+        .max_dispatch       = { UINT32_MAX, UINT32_MAX, UINT32_MAX },
+        .fragment_queues    = 0,
+        .compute_queues     = 0,
     },
 };
 
@@ -64,7 +74,6 @@ pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params)
     struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct priv);
     gpu->log = log;
     gpu->ctx = gpu->log;
-    gpu->caps = params->caps;
     gpu->glsl = params->glsl;
     gpu->limits = params->limits;
 
@@ -124,7 +133,7 @@ pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params)
                     fmt->sample_order[i] = i;
                 }
 
-                if (gpu->caps & PL_GPU_CAP_COMPUTE)
+                if (gpu->glsl.compute)
                     fmt->caps |= PL_FMT_CAP_STORABLE;
                 if (gpu->limits.max_buffer_texels && gpu->limits.max_ubo_size)
                     fmt->caps |= PL_FMT_CAP_TEXEL_UNIFORM;
@@ -143,9 +152,7 @@ pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params)
 
     gpu->formats = formats.elem;
     gpu->num_formats = formats.num;
-    pl_gpu_sort_formats(gpu);
-    pl_gpu_print_info(gpu);
-    return gpu;
+    return pl_gpu_finalize(gpu);
 }
 
 static void dumb_destroy(pl_gpu gpu)

@@ -677,7 +677,7 @@ static inline bool pl_upload_avframe(pl_gpu gpu,
             data[p].pixels = NULL;
             data[p].buf = buf;
             data[p].buf_offset = (uintptr_t) frame->data[p] - (uintptr_t) buf->data;
-        } else if (gpu->caps & PL_GPU_CAP_CALLBACKS) {
+        } else if (gpu->limits.callbacks) {
             // Use asynchronous upload if possible
             data[p].callback = pl_avframe_free;
             data[p].priv = av_frame_clone(frame);
@@ -761,7 +761,7 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
     int planes = pl_plane_data_from_pixfmt(data, NULL, pic->format);
     if (!(avctx->codec->capabilities & AV_CODEC_CAP_DR1) || !planes)
         goto fallback;
-    if (!gpu || !(gpu->caps & PL_GPU_CAP_THREAD_SAFE))
+    if (!gpu || !gpu->limits.thread_safe)
         goto fallback;
 
     memset(pic->data, 0, sizeof(pic->data));
