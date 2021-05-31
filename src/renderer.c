@@ -2764,11 +2764,10 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     sh->output_w = out_w;
     sh->output_h = out_h;
 
-    // The color space to mix the frames in. We arbitrarily choose to use the
-    // "current" frame's color space, but converted to RGB.
-    //
-    // TODO: Maybe mix in linear light instead of the native colorspace?
-    const struct pl_color_space mix_color = pass.image.color;
+    // The color space to mix the frames in. Arbitrarily use the newest frame's
+    // color, since this is unlikely to change very often mid-playback.
+    pl_assert(fidx > 0);
+    const struct pl_color_space mix_color = frames[fidx - 1].color;
 
     GLSL("vec4 color;                   \n"
          "// pl_render_image_mix        \n"
