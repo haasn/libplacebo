@@ -521,10 +521,14 @@ static ident_t sh_luma_coeffs(pl_shader sh, enum pl_color_primaries prim)
 {
     struct pl_matrix3x3 rgb2xyz;
     rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(prim));
-    return sh_var(sh, (struct pl_shader_var) {
-        .var = pl_var_vec3("luma_coeffs"),
-        .data = rgb2xyz.m[1], // RGB->Y vector
-    });
+
+    // FIXME: Cannot use `const vec3` due to glslang bug #2025
+    ident_t coeffs = sh_fresh(sh, "luma_coeffs");
+    GLSLH("#define %s vec3(%s, %s, %s) \n", coeffs,
+          SH_FLOAT(rgb2xyz.m[1][0]), // RGB->Y vector
+          SH_FLOAT(rgb2xyz.m[1][1]),
+          SH_FLOAT(rgb2xyz.m[1][2]));
+    return coeffs;
 }
 
 // Applies the OOTF / inverse OOTF - including the sig_scale adaptation
