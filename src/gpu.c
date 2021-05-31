@@ -204,6 +204,7 @@ void pl_gpu_print_info(pl_gpu gpu)
     LOG("zu", max_buf_size);
     LOG("zu", max_ubo_size);
     LOG("zu", max_ssbo_size);
+    LOG("zu", max_vbo_size);
     LOG(PRIu64, max_buffer_texels);
     LOG(PRId16, min_gather_offset);
     LOG(PRId16, max_gather_offset);
@@ -956,6 +957,7 @@ pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *pparams)
     require(params.size > 0 && params.size <= gpu->limits.max_buf_size);
     require(!params.uniform || params.size <= gpu->limits.max_ubo_size);
     require(!params.storable || params.size <= gpu->limits.max_ssbo_size);
+    require(!params.drawable || params.size <= gpu->limits.max_vbo_size);
 
     if (params.format) {
         pl_fmt fmt = params.format;

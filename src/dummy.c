@@ -37,6 +37,7 @@ const struct pl_gpu_dummy_params pl_gpu_dummy_default_params = {
         .max_buf_size       = SIZE_MAX,
         .max_ubo_size       = SIZE_MAX,
         .max_ssbo_size      = SIZE_MAX,
+        .max_vbo_size       = SIZE_MAX,
         .max_buffer_texels  = UINT64_MAX,
         .min_gather_offset  = INT16_MIN,
         .max_gather_offset  = INT16_MAX,
