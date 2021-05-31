@@ -109,6 +109,7 @@ struct pl_gpu_limits {
     uint32_t max_tex_2d_dim;    // maximum width/height for a 2D texture (required)
     uint32_t max_tex_3d_dim;    // maximum width/height/depth for a 3D texture
     bool blittable_1d_3d;       // supports blittable 1D/3D textures
+    bool buf_transfer;          // supports `pl_tex_transfer_params.buf`
 
     // These don't represent hard limits but indicate performance hints for
     // optimal alignment. For best performance, the corresponding field
@@ -860,7 +861,7 @@ struct pl_tex_transfer_params {
     // For the data source/target of a transfer operation, there are two valid
     // options:
     //
-    // 1. Transferring to/from a buffer:
+    // 1. Transferring to/from a buffer: (requires `pl_gpu_limits.buf_transfer`)
     pl_buf buf;         // buffer to use
     size_t buf_offset;  // offset of data within buffer, should be a
                         // multiple of `tex->params.format->texel_size`

@@ -46,7 +46,7 @@ struct pl_plane_data {
     // 1. Uploading from host memory
     const void *pixels;     // the actual data underlying this plane
 
-    // 2. Uploading from a buffer
+    // 2. Uploading from a buffer (requires `pl_gpu_limits.buf_transfer`)
     pl_buf buf;             // the buffer to use
     size_t buf_offset;      // offset of data within buffer, must be a
                             // multiple of `pixel_stride` as well as of 4

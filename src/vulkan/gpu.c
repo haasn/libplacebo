@@ -579,6 +579,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         .max_tex_2d_dim     = vk->limits.maxImageDimension2D,
         .max_tex_3d_dim     = vk->limits.maxImageDimension3D,
         .blittable_1d_3d    = true,
+        .buf_transfer       = true,
         .align_tex_xfer_stride = vk->limits.optimalBufferCopyRowPitchAlignment,
         .align_tex_xfer_offset = pl_lcm(vk->limits.optimalBufferCopyOffsetAlignment, 4),
         // pl_pass

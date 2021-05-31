@@ -363,6 +363,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     // just set it to the same as the 2D limit
     if (p->gl_ver >= 21)
         limits->max_tex_1d_dim = limits->max_tex_2d_dim;
+    limits->buf_transfer = true;
     get(GL_MAX_FRAGMENT_UNIFORM_COMPONENTS, &limits->max_variables);
     if (glsl->compute) {
         for (int i = 0; i < 3; i++)

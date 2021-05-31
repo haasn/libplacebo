@@ -465,7 +465,7 @@ static inline bool pl_upload_dav1dpicture(pl_gpu gpu,
 static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, void *cookie)
 {
     pl_gpu gpu = cookie;
-    if (!gpu->limits.max_buf_size)
+    if (!gpu->limits.max_buf_size || !gpu->limits.buf_transfer)
         return DAV1D_ERR(ENOTSUP);
 
     // Copied from dav1d_default_picture_alloc

@@ -48,6 +48,7 @@ const struct pl_gpu_dummy_params pl_gpu_dummy_default_params = {
         .max_tex_1d_dim     = UINT32_MAX,
         .max_tex_2d_dim     = UINT32_MAX,
         .max_tex_3d_dim     = UINT32_MAX,
+        .buf_transfer       = true,
         .align_tex_xfer_stride = 1,
         .align_tex_xfer_offset = 1,
         // pl_pass

@@ -613,6 +613,8 @@ enum api2_status api2_process(void *priv)
 bool api2_alloc(void *priv, size_t size, struct api2_buf *out)
 {
     struct priv *p = priv;
+    if (!p->gpu->limits.buf_transfer || size > p->gpu->limits.max_mapped_size)
+        return false;
 
     pl_buf buf = pl_buf_create(p->gpu, &(struct pl_buf_params) {
         .size = size,

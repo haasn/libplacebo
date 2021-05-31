@@ -263,6 +263,7 @@ pl_gpu pl_gpu_finalize(struct pl_gpu *gpu)
     LOG(PRIu32, max_tex_2d_dim);
     LOG(PRIu32, max_tex_3d_dim);
     LOG("d", blittable_1d_3d);
+    LOG("d", buf_transfer);
     LOG(PRIu32, align_tex_xfer_stride);
     LOG("zu", align_tex_xfer_offset);
     // pl_pass
@@ -874,6 +875,7 @@ static bool fix_tex_transfer(pl_gpu gpu, struct pl_tex_transfer_params *params)
         pl_buf buf = params->buf;
         size_t size = pl_tex_transfer_size(params);
         require(params->buf_offset + size <= buf->params.size);
+        require(gpu->limits.buf_transfer);
     }
 
     require(!params->callback || gpu->limits.callbacks);
