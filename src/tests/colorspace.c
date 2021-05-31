@@ -239,7 +239,7 @@ int main()
     struct pl_color_space unknown = {0};
     struct pl_color_space display = {
         .primaries = PL_COLOR_PRIM_BT_709,
-        .transfer = PL_COLOR_TRC_GAMMA22,
+        .transfer = PL_COLOR_TRC_BT_1886,
         .light = PL_COLOR_LIGHT_DISPLAY,
         .sig_peak = 1.0,
         .sig_avg = 0.25,

@@ -369,7 +369,7 @@ void pl_color_space_infer(struct pl_color_space *space)
     if (!space->primaries)
         space->primaries = PL_COLOR_PRIM_BT_709;
     if (!space->transfer)
-        space->transfer = PL_COLOR_TRC_GAMMA22;
+        space->transfer = PL_COLOR_TRC_BT_1886;
     if (!space->light) {
         space->light = (space->transfer == PL_COLOR_TRC_HLG)
             ? PL_COLOR_LIGHT_SCENE_HLG
@@ -429,9 +429,9 @@ void pl_color_space_infer_ref(struct pl_color_space *space,
     }
 
     if (!space->transfer) {
-        if (pl_color_transfer_is_hdr(ref.transfer) ||
-            ref.transfer == PL_COLOR_TRC_LINEAR)
-        {
+        if (pl_color_transfer_is_hdr(ref.transfer)) {
+            space->transfer = PL_COLOR_TRC_BT_1886;
+        } else if (ref.transfer == PL_COLOR_TRC_LINEAR) {
             space->transfer = PL_COLOR_TRC_GAMMA22;
         } else {
             space->transfer = ref.transfer;

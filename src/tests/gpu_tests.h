@@ -488,9 +488,12 @@ static void pl_shader_tests(pl_gpu gpu)
     }
 
     for (enum pl_color_light light = 0; light < PL_COLOR_LIGHT_COUNT; light++) {
+        struct pl_color_space dst_space = { .transfer = PL_COLOR_TRC_LINEAR };
+        struct pl_color_space src_space = {
+            .transfer = PL_COLOR_TRC_LINEAR,
+            .light = light
+        };
         sh = pl_dispatch_begin(dp);
-        struct pl_color_space src_space = { .light = light };
-        struct pl_color_space dst_space = { 0 };
         pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
         pl_shader_color_map(sh, NULL, src_space, dst_space, NULL, false);
         pl_shader_color_map(sh, NULL, dst_space, src_space, NULL, false);
@@ -558,7 +561,8 @@ static void pl_shader_tests(pl_gpu gpu)
     pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
 
     pl_shader_obj peak_state = NULL;
-    if (pl_shader_detect_peak(sh, pl_color_space_monitor, &peak_state, NULL)) {
+    struct pl_color_space csp_gamma22 = { .transfer = PL_COLOR_TRC_GAMMA22 };
+    if (pl_shader_detect_peak(sh, csp_gamma22, &peak_state, NULL)) {
         REQUIRE(pl_dispatch_compute(dp, &(struct pl_dispatch_compute_params) {
             .shader = &sh,
             .width = fbo->params.w,
