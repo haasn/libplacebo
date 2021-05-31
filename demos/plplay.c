@@ -409,10 +409,15 @@ error:
 int main(int argc, char **argv)
 {
     const char *filename;
-    if (argc == 2) {
+    enum pl_log_level log_level = PL_LOG_INFO;
+
+    if (argc == 3 && strcmp(argv[1], "-v") == 0) {
+        filename = argv[2];
+        log_level = PL_LOG_DEBUG;
+    } else if (argc == 2) {
         filename = argv[1];
     } else {
-        fprintf(stderr, "Usage: ./%s <filename>\n", argv[0]);
+        fprintf(stderr, "Usage: ./%s [-v] <filename>\n", argv[0]);
         return -1;
     }
 
@@ -462,7 +467,7 @@ int main(int argc, char **argv)
 
     p->log = pl_log_create(PL_API_VER, &(struct pl_log_params) {
         .log_cb = pl_log_color,
-        .log_level = PL_LOG_INFO,
+        .log_level = log_level,
     });
 
     p->win = window_create(p->log, "plplay", par->width, par->height, flags);
