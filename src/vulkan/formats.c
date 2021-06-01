@@ -180,3 +180,214 @@ const struct vk_format vk_formats[] = {
 #undef IDX
 #undef REGFMT
 #undef FMT
+
+void vk_setup_formats(struct pl_gpu *gpu)
+{
+    struct pl_vk *p = PL_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+    PL_ARRAY(pl_fmt) formats = {0};
+
+    // Texture format emulation requires at least support for texel buffers
+    bool has_emu = gpu->glsl.compute && gpu->limits.max_buffer_texels;
+
+    for (const struct vk_format *pvk_fmt = vk_formats; pvk_fmt->tfmt; pvk_fmt++) {
+        const struct vk_format *vk_fmt = pvk_fmt;
+
+        // Skip formats with innately emulated representation if unsupported
+        if (vk_fmt->fmt.emulated && !has_emu)
+            continue;
+
+        // Suppress some errors/warnings spit out by the format probing code
+        pl_log_level_cap(vk->log, PL_LOG_INFO);
+
+        bool has_drm_mods = vk->GetImageDrmFormatModifierPropertiesEXT;
+        VkDrmFormatModifierPropertiesEXT modifiers[16] = {0};
+        VkDrmFormatModifierPropertiesListEXT drm_props = {
+            .sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT,
+            .drmFormatModifierCount = PL_ARRAY_SIZE(modifiers),
+            .pDrmFormatModifierProperties = modifiers,
+        };
+
+        VkFormatProperties2KHR prop2 = {
+            .sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2,
+            .pNext = has_drm_mods ? &drm_props : NULL,
+        };
+
+        vk->GetPhysicalDeviceFormatProperties2KHR(vk->physd, vk_fmt->tfmt, &prop2);
+
+        // If wholly unsupported, try falling back to the emulation formats
+        // for texture operations
+        VkFormatProperties *prop = &prop2.formatProperties;
+        while (has_emu && !prop->optimalTilingFeatures && vk_fmt->emufmt) {
+            vk_fmt = vk_fmt->emufmt;
+            vk->GetPhysicalDeviceFormatProperties2KHR(vk->physd, vk_fmt->tfmt, &prop2);
+        }
+
+        VkFormatFeatureFlags texflags = prop->optimalTilingFeatures;
+        VkFormatFeatureFlags bufflags = prop->bufferFeatures;
+        if (vk_fmt->fmt.emulated) {
+            // Emulated formats might have a different buffer representation
+            // than their texture representation. If they don't, assume their
+            // buffer representation is nonsensical (e.g. r16f)
+            if (vk_fmt->bfmt) {
+                vk->GetPhysicalDeviceFormatProperties(vk->physd, vk_fmt->bfmt, prop);
+                bufflags = prop->bufferFeatures;
+            } else {
+                bufflags = 0;
+            }
+        }
+
+        pl_log_level_cap(vk->log, PL_LOG_NONE);
+
+        struct pl_fmt *fmt = pl_alloc_obj(gpu, fmt, struct pl_fmt_vk);
+        struct pl_fmt_vk *fmtp = PL_PRIV(fmt);
+        *fmt = vk_fmt->fmt;
+        *fmtp = (struct pl_fmt_vk) {
+            .vk_fmt = vk_fmt
+        };
+
+        // For sanity, clear the superfluous fields
+        for (int i = fmt->num_components; i < 4; i++) {
+            fmt->component_depth[i] = 0;
+            fmt->sample_order[i] = 0;
+            fmt->host_bits[i] = 0;
+        }
+
+        // We can set this universally
+        fmt->fourcc = pl_fmt_fourcc(fmt);
+
+        if (has_drm_mods) {
+
+            if (drm_props.drmFormatModifierCount == PL_ARRAY_SIZE(modifiers)) {
+                PL_WARN(gpu, "DRM modifier list for format %s possibly truncated",
+                        fmt->name);
+            }
+
+            // Query the list of supported DRM modifiers from the driver
+            PL_ARRAY(uint64_t) modlist = {0};
+            for (int i = 0; i < drm_props.drmFormatModifierCount; i++) {
+                if (modifiers[i].drmFormatModifierPlaneCount > 1) {
+                    PL_DEBUG(gpu, "Ignoring format modifier %s of "
+                             "format %s because its plane count %d > 1",
+                             PRINT_DRM_MOD(modifiers[i].drmFormatModifier),
+                             fmt->name, modifiers[i].drmFormatModifierPlaneCount);
+                    continue;
+                }
+
+                // Only warn about texture format features relevant to us
+                const VkFormatFeatureFlags flag_mask =
+                    VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
+                    VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+                    VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                    VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT |
+                    VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+                    VK_FORMAT_FEATURE_BLIT_SRC_BIT |
+                    VK_FORMAT_FEATURE_BLIT_DST_BIT;
+
+
+                VkFormatFeatureFlags flags = modifiers[i].drmFormatModifierTilingFeatures;
+                if ((flags & flag_mask) != (texflags & flag_mask)) {
+                    PL_INFO(gpu, "DRM format modifier %s of format %s "
+                            "supports fewer caps (0x%"PRIx32") than optimal tiling "
+                            "(0x%"PRIx32"), may result in limited capability!",
+                            PRINT_DRM_MOD(modifiers[i].drmFormatModifier),
+                            fmt->name, flags, texflags);
+                }
+
+                PL_ARRAY_APPEND(fmt, modlist, modifiers[i].drmFormatModifier);
+            }
+
+            fmt->num_modifiers = modlist.num;
+            fmt->modifiers = modlist.elem;
+
+        } else if (gpu->export_caps.tex & PL_HANDLE_DMA_BUF) {
+
+            // Hard-code a list of static mods that we're likely to support
+            static const uint64_t static_mods[2] = {
+                DRM_FORMAT_MOD_INVALID,
+                DRM_FORMAT_MOD_LINEAR,
+            };
+
+            fmt->num_modifiers = PL_ARRAY_SIZE(static_mods);
+            fmt->modifiers = static_mods;
+
+        }
+
+        struct { VkFormatFeatureFlags flags; enum pl_fmt_caps caps; } bufbits[] = {
+            {VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT,        PL_FMT_CAP_VERTEX},
+            {VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT, PL_FMT_CAP_TEXEL_UNIFORM},
+            {VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT, PL_FMT_CAP_TEXEL_STORAGE},
+        };
+
+        for (int i = 0; i < PL_ARRAY_SIZE(bufbits); i++) {
+            if ((bufflags & bufbits[i].flags) == bufbits[i].flags)
+                fmt->caps |= bufbits[i].caps;
+        }
+
+        if (fmt->caps) {
+            fmt->glsl_type = pl_var_glsl_type_name(pl_var_from_fmt(fmt, ""));
+            pl_assert(fmt->glsl_type);
+        }
+
+        struct { VkFormatFeatureFlags flags; enum pl_fmt_caps caps; } bits[] = {
+            {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT,      PL_FMT_CAP_BLENDABLE},
+            {VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT, PL_FMT_CAP_LINEAR},
+            {VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,               PL_FMT_CAP_SAMPLEABLE},
+            {VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT,               PL_FMT_CAP_STORABLE},
+            {VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT,            PL_FMT_CAP_RENDERABLE},
+
+            // We don't distinguish between the two blit modes for pl_fmt_caps
+            {VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT,
+                PL_FMT_CAP_BLITTABLE},
+        };
+
+        for (int i = 0; i < PL_ARRAY_SIZE(bits); i++) {
+            if ((texflags & bits[i].flags) == bits[i].flags)
+                fmt->caps |= bits[i].caps;
+        }
+
+        // For blit emulation via compute shaders
+        if (!(fmt->caps & PL_FMT_CAP_BLITTABLE) && (fmt->caps & PL_FMT_CAP_STORABLE)) {
+            fmt->caps |= PL_FMT_CAP_BLITTABLE;
+            fmtp->blit_emulated = true;
+        }
+
+        // This is technically supported for all textures, but the semantics
+        // of pl_gpu require it only be listed for non-opaque ones
+        if (!fmt->opaque)
+            fmt->caps |= PL_FMT_CAP_HOST_READABLE;
+
+        // Vulkan requires a minimum GLSL version that supports textureGather()
+        if (fmt->caps & PL_FMT_CAP_SAMPLEABLE)
+            fmt->gatherable = true;
+
+        // Disable implied capabilities where the dependencies are unavailable
+        enum pl_fmt_caps storable = PL_FMT_CAP_STORABLE | PL_FMT_CAP_TEXEL_STORAGE;
+        if (!(fmt->caps & PL_FMT_CAP_SAMPLEABLE))
+            fmt->caps &= ~PL_FMT_CAP_LINEAR;
+        if (!gpu->glsl.compute)
+            fmt->caps &= ~storable;
+
+        bool has_nofmt = vk->features.features.shaderStorageImageReadWithoutFormat &&
+                         vk->features.features.shaderStorageImageWriteWithoutFormat;
+
+        if (fmt->caps & storable) {
+            int real_comps = PL_DEF(vk_fmt->icomps, fmt->num_components);
+            fmt->glsl_format = pl_fmt_glsl_format(fmt, real_comps);
+            if (!fmt->glsl_format && !has_nofmt) {
+                PL_WARN(gpu, "Storable format '%s' has no matching GLSL "
+                        "format qualifier but read/write without format "
+                        "is not supported.. disabling", fmt->name);
+                fmt->caps &= ~storable;
+            }
+        }
+
+        if (fmt->caps & storable)
+            fmt->caps |= PL_FMT_CAP_READWRITE;
+
+        PL_ARRAY_APPEND(gpu, formats, fmt);
+    }
+
+    gpu->formats = formats.elem;
+    gpu->num_formats = formats.num;
+}

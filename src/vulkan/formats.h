@@ -29,3 +29,6 @@ struct vk_format {
 };
 
 extern const struct vk_format vk_formats[];
+
+// Add all supported formats to the `pl_gpu` format list
+void vk_setup_formats(struct pl_gpu *gpu);
