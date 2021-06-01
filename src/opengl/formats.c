@@ -15,8 +15,10 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "formats.h"
+#include "gpu.h"
 #include "common.h"
+#include "formats.h"
+#include "utils.h"
 
 #define FMT(_name, bits, ftype, _caps)               \
     (struct pl_fmt) {                                \
@@ -171,13 +173,174 @@ const struct gl_format formats_basic_vertex[] = {
     {GL_RGBA32F,        RGBA,  FLT, FMT("rgba32f", 32, FLOAT, V)},
 };
 
+static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
+{
+    struct pl_gpu *gpu = (struct pl_gpu *) pgpu;
+    struct pl_gl *p = PL_PRIV(gpu);
+
+    struct pl_fmt *fmt = pl_alloc_obj(gpu, fmt, gl_fmt);
+    const struct gl_format **fmtp = PL_PRIV(fmt);
+    *fmt = gl_fmt->tmpl;
+    *fmtp = gl_fmt;
+
+    // Calculate the host size and number of components
+    switch (gl_fmt->fmt) {
+    case GL_RED:
+    case GL_RED_INTEGER:
+        fmt->num_components = 1;
+        break;
+    case GL_RG:
+    case GL_RG_INTEGER:
+        fmt->num_components = 2;
+        break;
+    case GL_RGB:
+    case GL_RGB_INTEGER:
+        fmt->num_components = 3;
+        break;
+    case GL_RGBA:
+    case GL_RGBA_INTEGER:
+        fmt->num_components = 4;
+        break;
+    default:
+        pl_unreachable();
+    }
+
+    int size;
+    switch (gl_fmt->type) {
+    case GL_BYTE:
+    case GL_UNSIGNED_BYTE:
+        size = 1;
+        break;
+    case GL_SHORT:
+    case GL_UNSIGNED_SHORT:
+        size = 2;
+        break;
+    case GL_INT:
+    case GL_UNSIGNED_INT:
+    case GL_FLOAT:
+        size = 4;
+        break;
+    default:
+        pl_unreachable();
+    }
+
+    // Host visible representation
+    fmt->texel_size = fmt->num_components * size;
+    for (int i = 0; i < fmt->num_components; i++)
+        fmt->host_bits[i] = size * 8;
+
+    // Compute internal size by summing up the depth
+    int ibits = 0;
+    for (int i = 0; i < fmt->num_components; i++)
+        ibits += fmt->component_depth[i];
+    fmt->internal_size = (ibits + 7) / 8;
+
+    // We're not the ones actually emulating these texture format - the
+    // driver is - but we might as well set the hint.
+    fmt->emulated = fmt->texel_size != fmt->internal_size;
+
+    // 3-component formats are almost surely also emulated
+    if (fmt->num_components == 3)
+        fmt->emulated = true;
+
+    // Older OpenGL most likely emulates 32-bit float formats as well
+    if (p->gl_ver < 30 && fmt->component_depth[0] >= 32)
+        fmt->emulated = true;
+
+    // For sanity, clear the superfluous fields
+    for (int i = fmt->num_components; i < 4; i++) {
+        fmt->component_depth[i] = 0;
+        fmt->sample_order[i] = 0;
+        fmt->host_bits[i] = 0;
+    }
+
+    fmt->glsl_type = pl_var_glsl_type_name(pl_var_from_fmt(fmt, ""));
+    fmt->glsl_format = pl_fmt_glsl_format(fmt, fmt->num_components);
+    fmt->fourcc = pl_fmt_fourcc(fmt);
+    pl_assert(fmt->glsl_type);
+
+#ifdef PL_HAVE_UNIX
+    if (p->has_modifiers) {
+        int num_mods = 0;
+        bool ok = eglQueryDmaBufModifiersEXT(p->egl_dpy, fmt->fourcc,
+                                             0, NULL, NULL, &num_mods);
+        if (ok && num_mods) {
+            // On my system eglQueryDmaBufModifiersEXT seems to never return
+            // MOD_INVALID even though eglExportDMABUFImageQueryMESA happily
+            // returns such modifiers. Since we handle INVALID by not
+            // requiring modifiers at all, always add this value to the
+            // list of supported modifiers. May result in duplicates, but
+            // whatever.
+            uint64_t *mods = pl_calloc(fmt, num_mods + 1, sizeof(uint64_t));
+            mods[0] = DRM_FORMAT_MOD_INVALID;
+            ok = eglQueryDmaBufModifiersEXT(p->egl_dpy, fmt->fourcc, num_mods,
+                                            &mods[1], NULL, &num_mods);
+
+            if (ok) {
+                fmt->modifiers = mods;
+                fmt->num_modifiers = num_mods + 1;
+            }
+        }
+
+        eglGetError(); // ignore probing errors
+    }
+
+    if (!fmt->num_modifiers) {
+        // Hacky fallback for older drivers that don't support properly
+        // querying modifiers
+        static const uint64_t static_mods[] = {
+            DRM_FORMAT_MOD_INVALID,
+            DRM_FORMAT_MOD_LINEAR,
+        };
+
+        fmt->num_modifiers = PL_ARRAY_SIZE(static_mods);
+        fmt->modifiers = static_mods;
+    }
+#endif
+
+    // Gathering requires checking the format type (and extension presence)
+    if (fmt->caps & PL_FMT_CAP_SAMPLEABLE)
+        fmt->gatherable = p->gather_comps >= fmt->num_components;
+
+    // Mask renderable/blittable if no FBOs available
+    if (!p->has_fbos)
+        fmt->caps &= ~(PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE);
+
+    // Reading from textures on GLES requires FBO support for this fmt
+    if (p->gl_ver || (fmt->caps & PL_FMT_CAP_RENDERABLE))
+        fmt->caps |= PL_FMT_CAP_HOST_READABLE;
+
+    if (gpu->glsl.compute && fmt->glsl_format && p->has_storage)
+        fmt->caps |= PL_FMT_CAP_STORABLE | PL_FMT_CAP_READWRITE;
+
+    // Only float-type formats are considered blendable in OpenGL
+    switch (fmt->type) {
+    case PL_FMT_UNKNOWN:
+    case PL_FMT_UINT:
+    case PL_FMT_SINT:
+        break;
+    case PL_FMT_FLOAT:
+    case PL_FMT_UNORM:
+    case PL_FMT_SNORM:
+        if (fmt->caps & PL_FMT_CAP_RENDERABLE)
+            fmt->caps |= PL_FMT_CAP_BLENDABLE;
+        break;
+    case PL_FMT_TYPE_COUNT:
+        pl_unreachable();
+    }
+
+    // TODO: Texel buffers
+
+    PL_ARRAY_APPEND_RAW(gpu, gpu->formats, gpu->num_formats, fmt);
+}
+
 #define DO_FORMATS(formats)                                 \
     do {                                                    \
         for (int i = 0; i < PL_ARRAY_SIZE(formats); i++)    \
-            do_format(gpu, &formats[i]);                    \
+            add_format(gpu, &formats[i]);                   \
     } while (0)
 
-void pl_gl_enumerate_formats(pl_gpu gpu, gl_format_cb do_format)
+bool gl_setup_formats(struct pl_gpu *gpu)
 {
     struct pl_gl *p = PL_PRIV(gpu);
 
@@ -188,7 +351,7 @@ void pl_gl_enumerate_formats(pl_gpu gpu, gl_format_cb do_format)
         DO_FORMATS(formats_rgb16_fbo);
         DO_FORMATS(formats_float);
         DO_FORMATS(formats_uint);
-        return;
+        goto done;
     }
 
     if (p->gl_ver >= 21) {
@@ -207,7 +370,7 @@ void pl_gl_enumerate_formats(pl_gpu gpu, gl_format_cb do_format)
             DO_FORMATS(formats_legacy_gl2);
             DO_FORMATS(formats_basic_vertex);
         }
-        return;
+        goto done;
     }
 
     if (p->gles_ver >= 30) {
@@ -221,7 +384,7 @@ void pl_gl_enumerate_formats(pl_gpu gpu, gl_format_cb do_format)
         } else {
             DO_FORMATS(formats_float16_fallback);
         }
-        return;
+        goto done;
     }
 
     if (p->gles_ver >= 20) {
@@ -233,9 +396,13 @@ void pl_gl_enumerate_formats(pl_gpu gpu, gl_format_cb do_format)
             DO_FORMATS(formats_norm16);
             DO_FORMATS(formats_rgb16_fallback);
         }
-        return;
+        goto done;
     }
 
     // Last resort fallback. Probably not very useful
     DO_FORMATS(formats_basic_vertex);
+    goto done;
+
+done:
+    return gl_check_err(gpu, "gl_setup_formats");
 }

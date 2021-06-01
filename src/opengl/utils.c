@@ -16,6 +16,7 @@
  */
 
 #include "common.h"
+#include "gpu.h"
 #include "utils.h"
 
 const char *gl_err_str(GLenum err)
@@ -94,6 +95,17 @@ bool gl_is_software(void)
            strcmp(vendor, "Microsoft Corporation") == 0 ||
            strcmp(renderer, "Mesa X11") == 0 ||
            strcmp(renderer, "Apple Software Renderer") == 0;
+}
+
+bool gl_test_ext(pl_gpu gpu, const char *ext, int gl_ver, int gles_ver)
+{
+    struct pl_gl *p = PL_PRIV(gpu);
+    if (gl_ver && p->gl_ver >= gl_ver)
+        return true;
+    if (gles_ver && p->gles_ver >= gles_ver)
+        return true;
+
+    return ext ? epoxy_has_gl_extension(ext) : false;
 }
 
 #ifdef EPOXY_HAS_EGL

@@ -246,6 +246,8 @@ components = [
     'srcs': [ 'opengl/context.c',
               'opengl/formats.c',
               'opengl/gpu.c',
+              'opengl/gpu_tex.c',
+              'opengl/gpu_pass.c',
               'opengl/swapchain.c',
               'opengl/utils.c',
             ],

@@ -28,5 +28,5 @@ struct gl_format {
 
 typedef void (gl_format_cb)(pl_gpu gpu, const struct gl_format *glfmt);
 
-// Enumerates all formats supported by the GL version, using the given callback
-void pl_gl_enumerate_formats(pl_gpu gpu, gl_format_cb do_format);
+// Add all supported formats to the `pl_gpu` format list.
+bool gl_setup_formats(struct pl_gpu *gpu);
