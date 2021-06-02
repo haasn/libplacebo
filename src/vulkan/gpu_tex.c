@@ -536,7 +536,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             VK(vk->GetImageDrmFormatModifierPropertiesEXT(vk->dev, tex_vk->img, &mod_props));
             tex->shared_mem.drm_format_mod = mod_props.drmFormatModifier;
 
-            VkSubresourceLayout layout;
+            VkSubresourceLayout layout = {0};
             VkImageSubresource plane = {
                 .aspectMask = VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT,
             };
