@@ -358,6 +358,12 @@ pl_pass vk_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     int num_desc = params->num_descriptors;
     if (!num_desc)
         goto no_descriptors;
+    if (num_desc > vk->limits.maxPerStageResources) {
+        PL_ERR(gpu, "Pass with %d descriptors exceeds the maximum number of "
+               "per-stage resources %" PRIu32"!",
+               num_desc, vk->limits.maxPerStageResources);
+        goto error;
+    }
 
     pass_vk->dswrite = pl_calloc(pass, num_desc, sizeof(VkWriteDescriptorSet));
     pass_vk->dsiinfo = pl_calloc(pass, num_desc, sizeof(VkDescriptorImageInfo));
@@ -368,8 +374,27 @@ pl_pass vk_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     static int dsSize[PL_DESC_TYPE_COUNT] = {0};
     VkDescriptorSetLayoutBinding *bindings = pl_calloc_ptr(tmp, num_desc, bindings);
 
+    uint32_t max_tex = vk->limits.maxPerStageDescriptorSampledImages,
+             max_img = vk->limits.maxPerStageDescriptorStorageImages,
+             max_ubo = vk->limits.maxPerStageDescriptorUniformBuffers,
+             max_ssbo = vk->limits.maxPerStageDescriptorStorageBuffers;
+
+    uint32_t *dsLimits[PL_DESC_TYPE_COUNT] = {
+        [PL_DESC_SAMPLED_TEX] = &max_tex,
+        [PL_DESC_STORAGE_IMG] = &max_img,
+        [PL_DESC_BUF_UNIFORM] = &max_ubo,
+        [PL_DESC_BUF_STORAGE] = &max_ssbo,
+        [PL_DESC_BUF_TEXEL_UNIFORM] = &max_tex,
+        [PL_DESC_BUF_TEXEL_STORAGE] = &max_img,
+    };
+
     for (int i = 0; i < num_desc; i++) {
         struct pl_desc *desc = &params->descriptors[i];
+        if (!(*dsLimits[desc->type])--) {
+            PL_ERR(gpu, "Pass exceeds the maximum number of per-stage "
+                   "descriptors of type %u!", (unsigned) desc->type);
+            goto error;
+        }
 
         dsSize[desc->type]++;
         bindings[i] = (VkDescriptorSetLayoutBinding) {
