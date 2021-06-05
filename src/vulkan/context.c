@@ -1365,6 +1365,7 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
     if (params->max_glsl_version) {
         struct pl_glsl_version *glsl = (struct pl_glsl_version *) &pl_vk->gpu->glsl;
         glsl->version = PL_MIN(glsl->version, params->max_glsl_version);
+        glsl->version = PL_MAX(glsl->version, 140); // required for GL_KHR_vulkan_glsl
         PL_INFO(vk, "Restricting GLSL version to %d... new version is %d",
                 params->max_glsl_version, glsl->version);
     }
