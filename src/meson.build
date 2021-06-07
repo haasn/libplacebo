@@ -7,7 +7,7 @@ test_deps = []
 
 vulkan = dependency('vulkan', version: '>=1.1', required: get_option('vulkan'))
 opengl = dependency('epoxy', version: '>=1.4.0', required: get_option('opengl'))
-shaderc = dependency('shaderc', version: '>=2018.0', required: get_option('shaderc'))
+shaderc = dependency('shaderc', version: '>=2019.1', required: get_option('shaderc'))
 
 # configuration data
 conf_public = configuration_data()
@@ -172,6 +172,8 @@ sources = [
   'dummy.c',
   'filters.c',
   'format.c',
+  'glsl/spirv.c',
+  'glsl/utils.c',
   'gpu.c',
   'log.c',
   'pl_alloc.c',
@@ -184,7 +186,6 @@ sources = [
   'shaders/custom.c',
   'shaders/lut.c',
   'shaders/sampling.c',
-  'spirv.c',
   'swapchain.c',
   'utils/frame_queue.c',
   'utils/upload.c',
@@ -219,12 +220,12 @@ components = [
     'name': 'glslang',
     'deps': glslang_combined,
     'srcs': [ 'glsl/glslang.cc',
-              'spirv_glslang.c',
+              'glsl/spirv_glslang.c',
             ],
   }, {
     'name': 'shaderc',
     'deps': shaderc,
-    'srcs': 'spirv_shaderc.c',
+    'srcs': 'glsl/spirv_shaderc.c',
   }, {
     'name': 'vulkan',
     'deps': vulkan_headers,

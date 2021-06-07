@@ -17,7 +17,7 @@
 
 #include "gpu.h"
 #include "formats.h"
-#include "spirv.h"
+#include "glsl/spirv.h"
 
 #ifdef PL_HAVE_UNIX
 #include <unistd.h>
@@ -386,7 +386,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     p->impl = pl_fns_vk;
     p->vk = vk;
 
-    p->spirv = spirv_compiler_create(vk->log, vk->api_ver);
+    p->spirv = spirv_compiler_create(vk->log);
     p->alloc = vk_malloc_create(vk);
     if (!p->alloc || !p->spirv)
         goto error;
@@ -424,7 +424,11 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     vk->GetPhysicalDeviceProperties2(vk->physd, &props);
 
     // Determine GLSL features and limits
-    gpu->glsl = p->spirv->glsl;
+    gpu->glsl = (struct pl_glsl_version) {
+        .version = 450,
+        .vulkan = true,
+    };
+
     if (vk->pool_compute) {
         gpu->glsl.compute = true;
         gpu->glsl.max_shmem_size = vk->limits.maxComputeSharedMemorySize;

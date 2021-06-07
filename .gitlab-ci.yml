@@ -63,7 +63,7 @@ win64:
         - cd build && meson test -t 5 -v --num-processes=1
 
 aarch64:
-    image: registry.videolan.org/libplacebo-ubuntu-eoan-aarch64:20200525090115
+    image: registry.videolan.org/libplacebo-ubuntu-focal-aarch64:20210628185808
     stage: compile
     tags:
         - docker

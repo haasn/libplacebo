@@ -15,37 +15,27 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
-
-#include <stdlib.h>
-#include <stdbool.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+#include "common.h"
 #include "utils.h"
 
-int pl_glslang_version(void);
-bool pl_glslang_init(void);
-void pl_glslang_uninit(void);
-
-struct pl_glslang_res {
-    // Compilation status
-    bool success;
-    const char *error_msg;
-
-    // Compiled shader memory, or NULL
-    void *data;
-    size_t size;
+static const struct pl_spirv_version spv_ver_vulkan_1_0 = {
+    .vulkan = true,
+    .env_version = 1 << 22,
+    .spv_version = 1 << 16,
 };
 
-// Compile GLSL into a SPIRV stream, if possible. The resulting
-// pl_glslang_res can simply be freed with pl_free() when done.
-struct pl_glslang_res *pl_glslang_compile(const struct pl_glsl_version *glsl,
-                                          enum glsl_shader_stage stage,
-                                          const char *shader);
+static const struct pl_spirv_version spv_ver_vulkan_1_1 = {
+    .vulkan = true,
+    .env_version = 1 << 22 | 1 << 12,
+    .spv_version = 1 << 16 | 3 << 8,
+};
 
-#ifdef __cplusplus
+struct pl_spirv_version pl_glsl_spv_version(const struct pl_glsl_version *glsl)
+{
+    // We don't currently use SPIR-V for OpenGL
+    pl_assert(glsl->vulkan);
+
+    if (glsl->subgroup_size)
+        return spv_ver_vulkan_1_1;
+    return spv_ver_vulkan_1_0;
 }
-#endif

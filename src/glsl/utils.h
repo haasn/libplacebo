@@ -17,35 +17,22 @@
 
 #pragma once
 
-#include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "config.h"
+#include "include/libplacebo/gpu.h"
 
-#include "utils.h"
-
-int pl_glslang_version(void);
-bool pl_glslang_init(void);
-void pl_glslang_uninit(void);
-
-struct pl_glslang_res {
-    // Compilation status
-    bool success;
-    const char *error_msg;
-
-    // Compiled shader memory, or NULL
-    void *data;
-    size_t size;
+struct pl_spirv_version {
+    bool vulkan;
+    uint32_t env_version;
+    uint32_t spv_version;
 };
 
-// Compile GLSL into a SPIRV stream, if possible. The resulting
-// pl_glslang_res can simply be freed with pl_free() when done.
-struct pl_glslang_res *pl_glslang_compile(const struct pl_glsl_version *glsl,
-                                          enum glsl_shader_stage stage,
-                                          const char *shader);
+struct pl_spirv_version pl_glsl_spv_version(const struct pl_glsl_version *glsl);
 
-#ifdef __cplusplus
-}
-#endif
+enum glsl_shader_stage {
+    GLSL_SHADER_VERTEX = 0,
+    GLSL_SHADER_FRAGMENT,
+    GLSL_SHADER_COMPUTE,
+};

@@ -17,11 +17,7 @@
 
 #pragma once
 
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
+#include "common.h"
 
 typedef struct pl_str {
     uint8_t *buf;

@@ -16,7 +16,7 @@
  */
 
 #include "gpu.h"
-#include "spirv.h"
+#include "glsl/spirv.h"
 
 // For pl_pass.priv
 struct pl_pass_vk {
@@ -150,8 +150,9 @@ static bool vk_use_cached_program(const struct pl_pass_params *params,
 }
 
 static VkResult vk_compile_glsl(pl_gpu gpu, void *alloc,
-                                enum glsl_shader_stage type, const char *glsl,
-                                pl_str *spirv)
+                                enum glsl_shader_stage stage,
+                                const char *shader,
+                                pl_str *out_spirv)
 {
     struct pl_vk *p = PL_PRIV(gpu);
 
@@ -161,12 +162,13 @@ static VkResult vk_compile_glsl(pl_gpu gpu, void *alloc,
         [GLSL_SHADER_COMPUTE]  = "compute",
     };
 
-    PL_DEBUG(gpu, "%s shader source:", shader_names[type]);
-    pl_msg_source(gpu->log, PL_LOG_DEBUG, glsl);
+    PL_DEBUG(gpu, "%s shader source:", shader_names[stage]);
+    pl_msg_source(gpu->log, PL_LOG_DEBUG, shader);
 
     clock_t start = clock();
-    if (!p->spirv->impl->compile_glsl(p->spirv, alloc, type, glsl, spirv)) {
-        pl_msg_source(gpu->log, PL_LOG_ERR, glsl);
+    *out_spirv = spirv_compile_glsl(p->spirv, alloc, &gpu->glsl, stage, shader);
+    if (!out_spirv->len) {
+        pl_msg_source(gpu->log, PL_LOG_ERR, shader);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 

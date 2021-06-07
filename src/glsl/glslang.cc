@@ -69,34 +69,37 @@ void pl_glslang_uninit(void)
 
 extern const TBuiltInResource DefaultTBuiltInResource;
 
-struct pl_glslang_res *pl_glslang_compile(const char *glsl, uint32_t api_ver,
-                                          enum pl_glslang_stage stage)
+struct pl_glslang_res *pl_glslang_compile(const struct pl_glsl_version *glsl,
+                                          enum glsl_shader_stage stage,
+                                          const char *text)
 {
+    assert(pl_glslang_refcount);
     struct pl_glslang_res *res = pl_zalloc_ptr(NULL, res);
 
     EShLanguage lang;
     switch (stage) {
-    case PL_GLSLANG_VERTEX:     lang = EShLangVertex; break;
-    case PL_GLSLANG_FRAGMENT:   lang = EShLangFragment; break;
-    case PL_GLSLANG_COMPUTE:    lang = EShLangCompute; break;
+    case GLSL_SHADER_VERTEX:     lang = EShLangVertex; break;
+    case GLSL_SHADER_FRAGMENT:   lang = EShLangFragment; break;
+    case GLSL_SHADER_COMPUTE:    lang = EShLangCompute; break;
     default: abort();
     }
 
-    EShTargetLanguageVersion spirv_version = EShTargetSpv_1_0;
-    if (api_ver >= EShTargetVulkan_1_1)
-        spirv_version = EShTargetSpv_1_3;
-
-#if GLSLANG_VERSION_CHECK(0, 0, 3667)
-    if (api_ver >= EShTargetVulkan_1_2)
-        spirv_version = EShTargetSpv_1_5;
-#endif
-
-    assert(pl_glslang_refcount);
     TShader *shader = new TShader(lang);
-    shader->setEnvClient(EShClientVulkan, (EShTargetClientVersion) api_ver);
-    shader->setEnvTarget(EShTargetSpv, spirv_version);
-    shader->setStrings(&glsl, 1);
-    if (!shader->parse(&DefaultTBuiltInResource, api_ver, true, EShMsgDefault)) {
+
+    struct pl_spirv_version spirv_ver = pl_glsl_spv_version(glsl);
+    shader->setEnvClient(spirv_ver.vulkan ? EShClientVulkan : EShClientOpenGL,
+                         (EShTargetClientVersion) spirv_ver.env_version);
+    shader->setEnvTarget(EShTargetSpv, (EShTargetLanguageVersion) spirv_ver.spv_version);
+    shader->setStrings(&text, 1);
+
+    TBuiltInResource limits = DefaultTBuiltInResource;
+    limits.maxComputeWorkGroupSizeX = glsl->max_group_size[0];
+    limits.maxComputeWorkGroupSizeY = glsl->max_group_size[1];
+    limits.maxComputeWorkGroupSizeZ = glsl->max_group_size[2];
+    limits.minProgramTexelOffset = glsl->min_gather_offset;
+    limits.maxProgramTexelOffset = glsl->max_gather_offset;
+
+    if (!shader->parse(&limits, 0, true, EShMsgDefault)) {
         res->error_msg = pl_str0dup0(res, shader->getInfoLog());
         delete shader;
         return res;
