@@ -197,10 +197,11 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
                    true, &fn, LINEAR))
         return;
 
-    GLSL("vec4 color;\n");
-    GLSL("// pl_shader_deband\n");
-    GLSL("{\n");
     params = PL_DEF(params, &pl_deband_default_params);
+    sh_describe(sh, "debanding");
+    GLSL("vec4 color;           \n"
+         "// pl_shader_deband   \n"
+         "{                     \n");
 
     ident_t prng, state;
     prng = sh_prng(sh, true, &state);
@@ -279,6 +280,7 @@ bool pl_shader_sample_nearest(pl_shader sh, const struct pl_sample_src *src)
                    true, &fn, NEAREST))
         return false;
 
+    sh_describe(sh, "nearest");
     GLSL("// pl_shader_sample_nearest         \n"
          "vec4 color = vec4(%s) * %s(%s, %s); \n",
          SH_FLOAT(scale), fn, tex, pos);
@@ -294,6 +296,7 @@ bool pl_shader_sample_bilinear(pl_shader sh, const struct pl_sample_src *src)
                    true, &fn, LINEAR))
         return false;
 
+    sh_describe(sh, "bilinear");
     GLSL("// pl_shader_sample_bilinear        \n"
          "vec4 color = vec4(%s) * %s(%s, %s); \n",
          SH_FLOAT(scale), fn, tex, pos);
@@ -332,6 +335,7 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
                  "will most likely result in nasty aliasing!");
     }
 
+    sh_describe(sh, "bicubic");
     GLSL("// pl_shader_sample_bicubic                   \n"
          "vec4 color;                                   \n"
          "{                                             \n"
@@ -378,7 +382,8 @@ bool pl_shader_sample_oversample(pl_shader sh, const struct pl_sample_src *src,
         .data = &(float[2]) { rx, ry },
     });
 
-     // Round the position to the nearest pixel
+    // Round the position to the nearest pixel
+    sh_describe(sh, "oversample");
     GLSL("// pl_shader_sample_oversample                \n"
          "vec4 color;                                   \n"
          "{                                             \n"
@@ -567,6 +572,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         }
     }
 
+    sh_describe(sh, "polar scaling");
     GLSL("// pl_shader_sample_polar                     \n"
          "vec4 color = vec4(0.0);                       \n"
          "{                                             \n"
@@ -898,6 +904,12 @@ bool pl_shader_sample_ortho(pl_shader sh, int pass,
         [PL_SEP_VERT]  = {0, 1},
     };
 
+    static const char *names[PL_SEP_PASSES] = {
+        [PL_SEP_HORIZ] = "ortho scaling (horiz)",
+        [PL_SEP_VERT]  = "ortho scaling (vert)",
+    };
+
+    sh_describe(sh, names[pass]);
     GLSL("// pl_shader_sample_ortho                        \n"
          "vec4 color = vec4(0.0);                          \n"
          "{                                                \n"

@@ -252,10 +252,12 @@ void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
 
     switch (dims) {
     case 1:
+        sh_describe(sh, "custom 1DLUT");
         GLSL("color.rgb = vec3(%s(color.r).r, %s(color.g).g, %s(color.b).b); \n",
              fun, fun, fun);
         break;
     case 3:
+        sh_describe(sh, "custom 3DLUT");
         GLSL("color.rgb = %s(color.rgb).rgb; \n", fun);
         break;
     }

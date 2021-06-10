@@ -47,6 +47,9 @@ struct pl_custom_shader {
     // uniforms, shared memory variables or buffer descriptions.
     const char *header;
 
+    // A friendly name for the shader. (Optional)
+    const char *description;
+
     // The "primary" GLSL code. This will be effectively appended to the "main"
     // function. It lives in an environment given by the `input` signature, and
     // is expected to return results in a way given by the `output` signature.

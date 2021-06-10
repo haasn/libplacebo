@@ -24,6 +24,7 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
+    sh_describe(sh, "color decoding");
     GLSL("// pl_shader_decode_color \n"
          "{ \n");
 
@@ -163,6 +164,7 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
+    sh_describe(sh, "color encoding");
     GLSL("// pl_shader_encode_color \n"
          "{ \n");
 
@@ -749,6 +751,8 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     obj->desc.desc.access = PL_DESC_ACCESS_READWRITE;
     obj->desc.memory = PL_MEMORY_COHERENT;
     sh_desc(sh, obj->desc);
+
+    sh_describe(sh, "peak detection");
     GLSL("// pl_shader_detect_peak \n"
          "{                        \n"
          "vec4 color_orig = color; \n");
@@ -927,6 +931,7 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
                                pl_shader_obj *peak_detect_state,
                                const struct pl_color_map_params *params)
 {
+    sh_describe(sh, "tone mapping");
     GLSL("// pl_shader_tone_map \n"
          "{                     \n"
          "float sig_peak = %s;  \n"
@@ -1176,6 +1181,9 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
     pl_color_space_infer(&src);
     pl_color_space_infer_ref(&dst, &src);
 
+    if (!pl_color_space_equal(&src, &dst))
+        sh_describe(sh, "colorspace conversion");
+
     // All operations from here on require linear light as a starting point,
     // so we linearize even if src.transfer == dst.transfer when one of the other
     // operations needs it
@@ -1277,6 +1285,7 @@ void pl_shader_cone_distort(pl_shader sh, struct pl_color_space csp,
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
+    sh_describe(sh, "cone distortion");
     GLSL("// pl_shader_cone_distort\n");
     GLSL("{\n");
 
@@ -1359,6 +1368,7 @@ void pl_shader_dither(pl_shader sh, int new_depth,
         return;
     }
 
+    sh_describe(sh, "dithering");
     GLSL("// pl_shader_dither \n"
         "{                    \n"
         "float bias;          \n");

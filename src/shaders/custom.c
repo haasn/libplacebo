@@ -75,6 +75,9 @@ bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
     if (params->header)
         GLSLH("// pl_shader_custom header: \n%s\n", params->header);
 
+    if (params->description)
+        sh_describe(sh, pl_strdup0(SH_TMP(sh), pl_str0(params->description)));
+
     if (params->body) {
         const char *output_decl = "";
         if (params->output != params->input) {
@@ -312,7 +315,7 @@ static inline pl_str split_magic(pl_str *body)
 static bool parse_hook(pl_log log, pl_str *body, struct custom_shader_hook *out)
 {
     *out = (struct custom_shader_hook){
-        .pass_desc = pl_str0("(unknown)"),
+        .pass_desc = pl_str0("unknown user shader"),
         .width = {{ SZEXP_VAR_W, { .varname = pl_str0("HOOKED") }}},
         .height = {{ SZEXP_VAR_H, { .varname = pl_str0("HOOKED") }}},
         .cond = {{ SZEXP_CONST, { .cval = 1.0 }}},
@@ -1205,6 +1208,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         // Load and run the user shader itself
         sh_append_str(sh, SH_BUF_HEADER, hook->pass_body);
+        sh_describe(sh, pl_strdup0(SH_TMP(sh), hook->pass_desc));
 
         bool ok;
         if (hook->is_compute) {

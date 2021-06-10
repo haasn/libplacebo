@@ -865,6 +865,7 @@ bool pl_shader_av1_grain(pl_shader sh,
     obj->fg_has_u = fg_has_u;
     obj->fg_has_v = fg_has_v;
 
+    sh_describe(sh, "AV1 film grain");
     GLSL("vec4 color;            \n"
          "// pl_shader_av1_grain \n"
          "{                      \n"

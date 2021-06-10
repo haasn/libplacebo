@@ -56,6 +56,7 @@ struct pl_shader {
     PL_ARRAY(struct pl_shader_var) vars;
     PL_ARRAY(struct pl_shader_desc) descs;
     PL_ARRAY(struct pl_shader_const) consts;
+    PL_ARRAY(const char *) steps;
 };
 
 // Helper functions for convenience
@@ -141,6 +142,12 @@ void sh_append_str(pl_shader sh, enum pl_shader_buf buf, pl_str str);
 #define GLSLH(...) sh_append(sh, SH_BUF_HEADER, __VA_ARGS__)
 #define GLSL(...)  sh_append(sh, SH_BUF_BODY, __VA_ARGS__)
 #define GLSLF(...) sh_append(sh, SH_BUF_FOOTER, __VA_ARGS__)
+
+// Attach a description to a shader
+static inline void sh_describe(pl_shader sh, const char *desc)
+{
+    PL_ARRAY_APPEND(sh, sh->steps, desc);
+};
 
 // Requires that the share is mutable, has an output signature compatible
 // with the given input signature, as well as an output size compatible with

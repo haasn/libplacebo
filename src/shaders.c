@@ -66,6 +66,7 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
         .vars.elem      = sh->vars.elem,
         .descs.elem     = sh->descs.elem,
         .consts.elem    = sh->consts.elem,
+        .steps.elem     = sh->steps.elem,
     };
 
     if (params)
@@ -534,6 +535,7 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
     PL_ARRAY_CONCAT(sh, sh->vars, sub->vars);
     PL_ARRAY_CONCAT(sh, sh->descs, sub->descs);
     PL_ARRAY_CONCAT(sh, sh->consts, sub->consts);
+    PL_ARRAY_CONCAT(sh, sh->steps, sub->steps);
 
     return name;
 }
@@ -590,6 +592,38 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
     pl_str *glsl = &sh->buffers[SH_BUF_PRELUDE];
     pl_str_append(sh, glsl, sh->buffers[SH_BUF_HEADER]);
 
+    // Generate the pretty description
+    sh->res.description = "(unknown shader)";
+    if (sh->steps.num) {
+        // Reuse this buffer
+        pl_str *desc = &sh->buffers[SH_BUF_BODY];
+        desc->len = 0;
+
+        for (int i = 0; i < sh->steps.num; i++) {
+            const char *step = sh->steps.elem[i];
+            if (!step)
+                continue;
+
+            // Group together duplicates. We're okay using a weak equality
+            // check here because all pass descriptions are static strings.
+            int count = 1;
+            for (int j = i+1; j < sh->steps.num; j++) {
+                if (sh->steps.elem[j] == step) {
+                    sh->steps.elem[j] = NULL;
+                    count++;
+                }
+            }
+
+            if (i > 0)
+                pl_str_append(sh, desc, pl_str0(", "));
+            pl_str_append(sh, desc, pl_str0(step));
+            if (count > 1)
+                pl_str_append_asprintf(sh, desc, " x%d", count);
+        }
+
+        sh->res.description = desc->buf;
+    }
+
     // Set the vas/vars/descs
     sh->res.vertex_attribs = sh->vas.elem;
     sh->res.num_vertex_attribs = sh->vas.num;
@@ -599,6 +633,8 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
     sh->res.num_descriptors = sh->descs.num;
     sh->res.constants = sh->consts.elem;
     sh->res.num_constants = sh->consts.num;
+    sh->res.steps = sh->steps.elem;
+    sh->res.num_steps = sh->steps.num;
 
     // Update the result pointer and return
     sh->res.glsl = glsl->buf;

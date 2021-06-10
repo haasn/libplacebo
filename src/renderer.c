@@ -774,7 +774,9 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
             },
         });
 
+        sh_describe(sh, "overlay");
         GLSL("// overlay \n");
+
         switch (ol.mode) {
         case PL_OVERLAY_NORMAL:
             GLSL("vec4 color = %s(%s, coord); \n",
@@ -1384,6 +1386,7 @@ static bool pass_read_image(pl_renderer rr, struct pass_state *pass,
             pl_shader sh = sti->img.sh;
             if (!sh) {
                 sh = sti->img.sh = pl_dispatch_begin_ex(pass->rr->dp, true);
+                sh_describe(sh, "merging planes");
                 GLSL("vec4 tmp; \n");
                 pl_shader_sample_direct(sh, &(struct pl_sample_src) {
                     .tex = sti->img.tex,

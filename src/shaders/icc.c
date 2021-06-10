@@ -307,6 +307,7 @@ void pl_icc_apply(pl_shader sh, pl_shader_obj *icc)
         return;
     }
 
+    sh_describe(sh, "ICC 3DLUT");
     GLSL("// pl_icc_apply \n"
          "color.rgb = %s(color.rgb).rgb; \n",
          obj->lut);

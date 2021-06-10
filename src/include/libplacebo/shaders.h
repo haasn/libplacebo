@@ -123,6 +123,15 @@ struct pl_shader_res {
     // A copy of the parameters used to create the shader.
     struct pl_shader_params params;
 
+    // A list of friendly names for the semantic operations being performed by
+    // this shader, e.g. "color decoding" or "debanding".
+    const char **steps;
+    int num_steps;
+
+    // As a convenience, this contains a pretty-printed version of the
+    // above list, with entries tallied and separated by commas
+    const char *description;
+
     // The shader text, as literal GLSL. This will always be a function
     // definition, such that the the function with the indicated name and
     // signature may be called by the user.
