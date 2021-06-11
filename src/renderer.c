@@ -343,6 +343,7 @@ struct pass_state {
     void *tmp;
     pl_renderer rr;
     const struct pl_render_params *params;
+    struct pl_render_info info; // for info callback
 
     // Represents the "current" image which we're in the process of rendering.
     // This is initially set by pass_read_image, and all of the subsequent
@@ -370,6 +371,19 @@ struct pass_state {
     // Metadata for `rr->fbos`
     bool *fbos_used;
 };
+
+static void info_callback(void *priv, const struct pl_dispatch_info *dinfo)
+{
+    struct pass_state *pass = priv;
+    const struct pl_render_params *params = pass->params;
+    if (!params->info_callback)
+        return;
+
+    pass->info.pass = dinfo;
+    params->info_callback(params->info_priv, &pass->info);
+    if (pass->info.stage == PL_RENDER_STAGE_FRAME)
+        pass->info.index++;
+}
 
 static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt, int comps)
 {
@@ -2393,6 +2407,7 @@ static bool draw_empty_overlays(pl_renderer rr,
         .rr = rr,
         .params = params,
         .target = *ptarget,
+        .info.stage = PL_RENDER_STAGE_FRAME,
     };
 
     struct pl_frame *target = &pass.target;
@@ -2404,6 +2419,7 @@ static bool draw_empty_overlays(pl_renderer rr,
         validate_overlay(target->overlays[i]);
     fix_color_space(target);
 
+    pl_dispatch_callback(rr->dp, &pass, info_callback);
     pl_dispatch_reset_frame(rr->dp);
 
     pl_tex ref = frame_ref(target);
@@ -2444,6 +2460,7 @@ bool pl_render_image(pl_renderer rr, const struct pl_frame *pimage,
         .params = params,
         .image = *pimage,
         .target = *ptarget,
+        .info.stage = PL_RENDER_STAGE_FRAME,
     };
 
     if (!pass_infer_state(&pass))
@@ -2452,6 +2469,7 @@ bool pl_render_image(pl_renderer rr, const struct pl_frame *pimage,
     pass.tmp = pl_tmp(NULL),
     pass.fbos_used = pl_calloc(pass.tmp, rr->fbos.num, sizeof(bool));
 
+    pl_dispatch_callback(rr->dp, &pass, info_callback);
     pl_dispatch_reset_frame(rr->dp);
 
     for (int i = 0; i < params->num_hooks; i++) {
@@ -2571,6 +2589,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         .params = params,
         .image = *refimg,
         .target = *ptarget,
+        .info.stage = PL_RENDER_STAGE_BLEND,
     };
 
     if (!params->frame_mixer || rr->disable_mixing || !FBOFMT(4))
@@ -2716,12 +2735,14 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                 .fbos_used = pl_calloc(pass.tmp, rr->fbos.num, sizeof(bool)),
                 .image = *images->frames[i],
                 .target = pass.target,
+                .info.stage = PL_RENDER_STAGE_FRAME,
             };
 
             // Render a single frame up to `pass_output_target`
             if (!pass_infer_state(&inter_pass))
                 goto error;
 
+            pl_dispatch_callback(rr->dp, &inter_pass, info_callback);
             pl_dispatch_reset_frame(rr->dp);
             for (int n = 0; n < params->num_hooks; n++) {
                 if (params->hooks[n]->reset)
@@ -2768,8 +2789,12 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     }
 
     // Sample and mix the output color
+    pl_dispatch_callback(rr->dp, &pass, info_callback);
     pl_dispatch_reset_frame(rr->dp);
+    pass.info.index = fidx;
+
     pl_shader sh = pl_dispatch_begin(rr->dp);
+    sh_describe(sh, "frame mixing");
     sh->res.output = PL_SHADER_SIG_COLOR;
     sh->output_w = out_w;
     sh->output_h = out_h;

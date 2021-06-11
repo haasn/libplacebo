@@ -67,6 +67,24 @@ enum pl_lut_type {
     // LUT's tagged metadata, and otherwise falls back to PL_LUT_NATIVE.
 };
 
+enum pl_render_stage {
+    PL_RENDER_STAGE_FRAME,  // full frame redraws, for fresh/uncached frames
+    PL_RENDER_STAGE_BLEND,  // the output blend pass (only for pl_render_image_mix)
+    PL_RENDER_STAGE_COUNT,
+};
+
+struct pl_render_info {
+    const struct pl_dispatch_info *pass;    // information about the shader
+    enum pl_render_stage stage;             // the associated render stage
+
+    // For PL_RENDER_STAGE_FRAME, this specifies the chronological index
+    // of this pass within the frame (starting at `index == 0`).
+    //
+    // For PL_RENDER_STAGE_BLEND, this specifies the number of frames
+    // being blended (since that results in a different shader).
+    int index;
+};
+
 // Represents the options used for rendering. These affect the quality of
 // the result.
 struct pl_render_params {
@@ -246,6 +264,13 @@ struct pl_render_params {
     // It's a good idea to enable while presenting configurable settings to the
     // user, but it should be set to false once those values are "dialed in".
     bool dynamic_constants;
+
+    // This callback is invoked for every pass successfully executed in the
+    // process of rendering a frame. Optional.
+    //
+    // Note: `info` is only valid until this function returns.
+    void (*info_callback)(void *priv, const struct pl_render_info *info);
+    void *info_priv;
 
     // --- Deprecated aliases
     const struct pl_icc_params *lut3d_params PL_DEPRECATED; // fallback for `icc_params`

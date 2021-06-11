@@ -889,6 +889,12 @@ static enum pl_queue_status get_frame_ptr(struct pl_source_frame *out_frame,
     return PL_QUEUE_OK;
 }
 
+static void render_info_cb(void *priv, const struct pl_render_info *info)
+{
+    printf("{%d} Executed shader: %s\n", info->index,
+           info->pass->shader->description);
+}
+
 static void pl_render_tests(pl_gpu gpu)
 {
     pl_tex img5x5_tex = NULL, fbo = NULL;
@@ -1103,6 +1109,7 @@ static void pl_render_tests(pl_gpu gpu)
     printf("testing frame mixing \n");
     struct pl_render_params mix_params = {
         .frame_mixer = &pl_filter_mitchell_clamp,
+        .info_callback = render_info_cb,
     };
 
     struct pl_queue_params qparams = {
