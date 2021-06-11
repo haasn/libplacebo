@@ -43,6 +43,9 @@ struct pl_dispatch {
     bool dynamic_constants;
     int max_passes;
 
+    void (*info_callback)(void *, const struct pl_dispatch_info *);
+    void *info_priv;
+
     PL_ARRAY(pl_shader) shaders;                // to avoid re-allocations
     PL_ARRAY(struct pass *) passes;             // compiled passes
     PL_ARRAY(struct cached_pass) cached_passes; // not-yet-compiled passes
@@ -83,6 +86,14 @@ struct pass {
     // for the push constants, descriptor bindings (including the binding for
     // the UBO pre-filled), vertex array and variable updates
     struct pl_pass_run_params run_params;
+
+    // for pl_dispatch_info
+    pl_timer timer;
+    uint64_t ts_last;
+    uint64_t ts_peak;
+    uint64_t ts_sum;
+    uint64_t samples[PL_ARRAY_SIZE(((struct pl_dispatch_info *) NULL)->samples)];
+    int ts_idx;
 };
 
 struct cached_pass {
@@ -98,6 +109,7 @@ static void pass_destroy(pl_dispatch dp, struct pass *pass)
 
     pl_buf_destroy(dp->gpu, &pass->ubo);
     pl_pass_destroy(dp->gpu, &pass->pass);
+    pl_timer_destroy(dp->gpu, &pass->timer);
     pl_free(pass);
 }
 
@@ -162,6 +174,13 @@ void pl_dispatch_reset_frame(pl_dispatch dp)
 void pl_dispatch_mark_dynamic(pl_dispatch dp, bool dynamic)
 {
     dp->dynamic_constants = dynamic;
+}
+
+void pl_dispatch_callback(pl_dispatch dp, void *priv,
+                          void (*cb)(void *priv, const struct pl_dispatch_info *))
+{
+    dp->info_callback = cb;
+    dp->info_priv = priv;
 }
 
 pl_shader pl_dispatch_begin(pl_dispatch dp)
@@ -879,12 +898,14 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
         rparams->vertex_data = pl_zalloc(pass, vert_size);
     }
 
+    pass->timer = pl_timer_create(dp->gpu);
+
     garbage_collect_passes(dp);
     PL_ARRAY_APPEND(dp, dp->passes, pass);
     return pass;
 
 error:
-    pl_free(pass);
+    pass_destroy(dp, pass);
     return NULL;
 }
 
@@ -1040,6 +1061,59 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
     sh->res.output = PL_SHADER_SIG_NONE;
 }
 
+static void run_pass(pl_dispatch dp, pl_shader sh, struct pass *pass)
+{
+    const struct pl_shader_res *res = pl_shader_finalize(sh);
+    pl_pass_run(dp->gpu, &pass->run_params);
+
+    for (uint64_t ts; (ts = pl_timer_query(dp->gpu, pass->timer));) {
+        PL_TRACE(dp, "Spent %.3f ms on shader: %s", ts / 1e6, res->description);
+
+        uint64_t old = pass->samples[pass->ts_idx];
+        pass->samples[pass->ts_idx] = ts;
+        pass->ts_last = ts;
+        pass->ts_peak = PL_MAX(pass->ts_peak, ts);
+        pass->ts_sum += ts;
+        pass->ts_idx = (pass->ts_idx + 1) % PL_ARRAY_SIZE(pass->samples);
+
+        if (old) {
+            pass->ts_sum -= old;
+            if (old == pass->ts_peak) {
+                uint64_t new_peak = 0;
+                for (int i = 0; i < PL_ARRAY_SIZE(pass->samples); i++)
+                    new_peak = PL_MAX(new_peak, pass->samples[i]);
+                pass->ts_peak = new_peak;
+            }
+        }
+    }
+
+    if (!dp->info_callback)
+        return;
+
+    struct pl_dispatch_info info;
+    info.signature = pass->signature;
+    info.shader = res;
+
+    // Test to see if the ring buffer already wrapped around once
+    if (pass->samples[pass->ts_idx]) {
+        info.num_samples = PL_ARRAY_SIZE(pass->samples);
+        int num_wrapped = info.num_samples - pass->ts_idx;
+        memcpy(info.samples, &pass->samples[pass->ts_idx],
+               num_wrapped * sizeof(info.samples[0]));
+        memcpy(&info.samples[num_wrapped], pass->samples,
+               pass->ts_idx * sizeof(info.samples[0]));
+    } else {
+        info.num_samples = pass->ts_idx;
+        memcpy(info.samples, pass->samples,
+               pass->ts_idx * sizeof(info.samples[0]));
+    }
+
+    info.last = pass->ts_last;
+    info.peak = pass->ts_peak;
+    info.average = pass->ts_sum / PL_MAX(info.num_samples, 1);
+    dp->info_callback(dp->info_priv, &info);
+}
+
 bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
 {
     pl_shader sh = *params->shader;
@@ -1181,9 +1255,11 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
 
     // Dispatch the actual shader
     rparams->target = params->target;
-    rparams->timer = params->timer;
-    pl_pass_run(dp->gpu, &pass->run_params);
+    rparams->timer = PL_DEF(params->timer, pass->timer);
+    run_pass(dp, sh, pass);
+
     ret = true;
+    // fall through
 
 error:
     // Reset the temporary buffers which we use to build the shader
@@ -1272,9 +1348,11 @@ bool pl_dispatch_compute(pl_dispatch dp, const struct pl_dispatch_compute_params
     }
 
     // Dispatch the actual shader
-    rparams->timer = params->timer;
-    pl_pass_run(dp->gpu, &pass->run_params);
+    rparams->timer = PL_DEF(params->timer, pass->timer);
+    run_pass(dp, sh, pass);
+
     ret = true;
+    // fall through
 
 error:
     // Reset the temporary buffers which we use to build the shader
@@ -1408,9 +1486,11 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
     rparams->index_data = params->index_data;
     rparams->index_buf = params->index_buf;
     rparams->index_offset = params->index_offset;
-    rparams->timer = params->timer;
-    pl_pass_run(dp->gpu, &pass->run_params);
+    rparams->timer = PL_DEF(params->timer, pass->timer);
+    run_pass(dp, sh, pass);
+
     ret = true;
+    // fall through
 
 error:
     // Reset the temporary buffers which we use to build the shader

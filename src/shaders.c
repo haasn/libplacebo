@@ -577,10 +577,8 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
     if (sh->failed)
         return NULL;
 
-    if (!sh->mutable) {
-        PL_WARN(sh, "Attempted to finalize a shader twice?");
+    if (!sh->mutable)
         return &sh->res;
-    }
 
     // Split the shader. This finalizes the body and adds it to the header
     sh->res.name = sh_split(sh);

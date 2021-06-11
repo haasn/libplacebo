@@ -233,7 +233,8 @@ struct pl_shader_const {
 // called on an already-finalized shader)
 //
 // The returned pl_shader_res is bound to the lifetime of the pl_shader - and
-// will only remain valid until the pl_shader is freed or reset.
+// will only remain valid until the pl_shader is freed or reset. This function
+// may be called multiple times, and will produce the same result each time.
 //
 // This function will return NULL if the shader is considered to be in a
 // "failed" state (see pl_shader_is_failed).

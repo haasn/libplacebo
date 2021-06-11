@@ -37,6 +37,30 @@ void pl_dispatch_destroy(pl_dispatch *dp);
 // For more information, see the header documentation in `shaders/*.h`.
 pl_shader pl_dispatch_begin(pl_dispatch dp);
 
+// Struct passed to `info_callback`. Only valid until that function returns.
+struct pl_dispatch_info {
+    // The finalized/generated shader for this shader execution, as well
+    // as a signature uniquely identifying it.
+    const struct pl_shader_res *shader;
+    uint64_t signature;
+
+    // A list of execution times for this pass, in nanoseconds. May be empty.
+    uint64_t samples[256];
+    int num_samples;
+
+    // As a convenience, this contains the last, average and peak of the above
+    // list of samples. If `num_samples` is 0, these values are also 0.
+    uint64_t last;
+    uint64_t peak;
+    uint64_t average;
+};
+
+// Set up a dispatch callback for this `pl_dispatch` object. The given callback
+// will be run for every successfully dispatched shader. Call this again with
+// `cb == NULL` to disable.
+void pl_dispatch_callback(pl_dispatch dp, void *priv,
+                          void (*cb)(void *priv, const struct pl_dispatch_info *));
+
 struct pl_dispatch_params {
     // The shader to execute. The pl_dispatch will take over ownership
     // of this shader, and return it back to the internal pool.
@@ -66,6 +90,10 @@ struct pl_dispatch_params {
 
     // If set, records the execution time of this dispatch into the given
     // timer object. Optional.
+    //
+    // Note: If this is set, `pl_dispatch` cannot internally measure the
+    // execution time of the shader, which means `pl_dispatch_info.samples` may
+    // be empty as a result.
     pl_timer timer;
 };
 
@@ -92,6 +120,10 @@ struct pl_dispatch_compute_params {
 
     // If set, records the execution time of this dispatch into the given
     // timer object. Optional.
+    //
+    // Note: If this is set, `pl_dispatch` cannot internally measure the
+    // execution time of the shader, which means `pl_dispatch_info.samples` may
+    // be empty as a result.
     pl_timer timer;
 };
 
@@ -153,6 +185,10 @@ struct pl_dispatch_vertex_params {
 
     // If set, records the execution time of this dispatch into the given
     // timer object. Optional.
+    //
+    // Note: If this is set, `pl_dispatch` cannot internally measure the
+    // execution time of the shader, which means `pl_dispatch_info.samples` may
+    // be empty as a result.
     pl_timer timer;
 };
 
