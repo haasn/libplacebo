@@ -341,9 +341,8 @@ enum plane_type {
 
 struct pass_state {
     void *tmp;
-
-    // Pointer back to the renderer itself, for callbacks
     pl_renderer rr;
+    const struct pl_render_params *params;
 
     // Represents the "current" image which we're in the process of rendering.
     // This is initially set by pass_read_image, and all of the subsequent
@@ -372,8 +371,7 @@ struct pass_state {
     bool *fbos_used;
 };
 
-static pl_tex get_fbo(struct pass_state *pass, int w, int h,
-                                    pl_fmt fmt, int comps)
+static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt, int comps)
 {
     pl_renderer rr = pass->rr;
     comps = PL_DEF(comps, 4);
@@ -498,11 +496,12 @@ struct sampler_info {
     enum sampler_dir dir_sep[2];
 };
 
-static struct sampler_info sample_src_info(pl_renderer rr,
-                                           const struct pl_sample_src *src,
-                                           const struct pl_render_params *params)
+static struct sampler_info sample_src_info(struct pass_state *pass,
+                                           const struct pl_sample_src *src)
 {
+    const struct pl_render_params *params = pass->params;
     struct sampler_info info = {0};
+    pl_renderer rr = pass->rr;
 
     float rx = src->new_w / fabs(pl_rect_w(src->rect));
     if (rx < 1.0 - 1e-6) {
@@ -560,14 +559,14 @@ static struct sampler_info sample_src_info(pl_renderer rr,
 
 static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
                              struct sampler *sampler, bool no_compute,
-                             const struct pl_render_params *params,
                              const struct pl_sample_src *src)
 {
+    const struct pl_render_params *params = pass->params;
     if (!sampler)
         goto fallback;
 
     pl_renderer rr = pass->rr;
-    struct sampler_info info = sample_src_info(rr, src, params);
+    struct sampler_info info = sample_src_info(pass, src);
     pl_shader_obj *lut = NULL;
     switch (info.dir) {
     case SAMPLER_NOOP:
@@ -677,9 +676,9 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
                           int comps, const int comp_map[4],
                           const struct pl_overlay *overlays, int num,
                           struct pl_color_space color, struct pl_color_repr repr,
-                          bool use_sigmoid, struct pl_transform2x2 *scale,
-                          const struct pl_render_params *params)
+                          bool use_sigmoid, struct pl_transform2x2 *scale)
 {
+    const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
     if (num <= 0 || rr->disable_overlay)
         return;
@@ -846,9 +845,9 @@ static pl_tex get_hook_tex(void *priv, int width, int height)
 
 // Returns if any hook was applied (even if there were errors)
 static bool pass_hook(struct pass_state *pass, struct img *img,
-                      enum pl_hook_stage stage,
-                      const struct pl_render_params *params)
+                      enum pl_hook_stage stage)
 {
+    const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
     if (!rr->fbofmt[4] || rr->disable_hooks)
         return false;
@@ -982,9 +981,9 @@ enum {
 };
 
 static int deband_src(struct pass_state *pass, pl_shader psh,
-                      const struct pl_render_params *params,
                       struct pl_sample_src *psrc)
 {
+    const struct pl_render_params *params = pass->params;
     const struct pl_frame *image = &pass->image;
     pl_renderer rr = pass->rr;
     if (rr->disable_debanding || !params->deband_params)
@@ -999,7 +998,7 @@ static int deband_src(struct pass_state *pass, pl_shader psh,
     }
 
     // The debanding shader can replace direct GPU sampling
-    bool deband_scales = sample_src_info(rr, psrc, params).type == SAMPLER_DIRECT;
+    bool deband_scales = sample_src_info(pass, psrc).type == SAMPLER_DIRECT;
 
     pl_shader sh = psh;
     struct pl_sample_src *src = psrc;
@@ -1066,9 +1065,9 @@ static int deband_src(struct pass_state *pass, pl_shader psh,
     return DEBAND_NORMAL;
 }
 
-static void hdr_update_peak(struct pass_state *pass,
-                            const struct pl_render_params *params)
+static void hdr_update_peak(struct pass_state *pass)
 {
+    const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
     if (!params->peak_detect_params || !pl_color_space_is_hdr(pass->img.color))
         goto cleanup;
@@ -1170,9 +1169,9 @@ static void log_plane_info(pl_renderer rr, const struct plane_state *st)
 static bool plane_av1_grain(struct pass_state *pass, int plane_idx,
                             struct plane_state *st,
                             const struct plane_state *ref,
-                            const struct pl_frame *image,
-                            const struct pl_render_params *params)
+                            const struct pl_frame *image)
 {
+    const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
     if (rr->disable_grain)
         return false;
@@ -1284,9 +1283,9 @@ static pl_fmt merge_fmt(pl_renderer rr,
 // for operations that we *know* benefit from merged planes
 static bool want_merge(struct pass_state *pass,
                        const struct plane_state *st,
-                       const struct plane_state *ref,
-                       const struct pl_render_params *params)
+                       const struct plane_state *ref)
 {
+    const struct pl_render_params *params = pass->params;
     const pl_renderer rr = pass->rr;
     if (!rr->fbofmt[4])
         return false;
@@ -1312,7 +1311,7 @@ static bool want_merge(struct pass_state *pass,
         },
     };
 
-    struct sampler_info info = sample_src_info(pass->rr, &src, params);
+    struct sampler_info info = sample_src_info(pass, &src);
     if (info.type == SAMPLER_COMPLEX)
         return true;
 
@@ -1334,10 +1333,11 @@ static bool want_merge(struct pass_state *pass,
 }
 
 // This scales and merges all of the source images, and initializes pass->img.
-static bool pass_read_image(pl_renderer rr, struct pass_state *pass,
-                            const struct pl_render_params *params)
+static bool pass_read_image(struct pass_state *pass)
 {
+    const struct pl_render_params *params = pass->params;
     struct pl_frame *image = &pass->image;
+    pl_renderer rr = pass->rr;
 
     struct plane_state planes[4];
     struct plane_state *ref = &planes[pass->src_ref];
@@ -1365,7 +1365,7 @@ static bool pass_read_image(pl_renderer rr, struct pass_state *pass,
         struct plane_state *sti = &planes[i];
         if (!sti->type)
             continue;
-        if (!want_merge(pass, sti, ref, params))
+        if (!want_merge(pass, sti, ref))
             continue;
 
         for (int j = i+1; j < image->num_planes; j++) {
@@ -1460,12 +1460,12 @@ static bool pass_read_image(pl_renderer rr, struct pass_state *pass,
         // intent of the spec (which is to apply synthesis effectively during
         // decoding)
 
-        if (plane_av1_grain(pass, i, st, ref, image, params)) {
+        if (plane_av1_grain(pass, i, st, ref, image)) {
             PL_TRACE(rr, "After AV1 grain:");
             log_plane_info(rr, st);
         }
 
-        if (pass_hook(pass, &st->img, plane_hook_stages[st->type], params)) {
+        if (pass_hook(pass, &st->img, plane_hook_stages[st->type])) {
             PL_TRACE(rr, "After user hooks:");
             log_plane_info(rr, st);
         }
@@ -1531,8 +1531,8 @@ static bool pass_read_image(pl_renderer rr, struct pass_state *pass,
                  src.rect.x1, src.rect.y1);
 
         pl_shader psh = pl_dispatch_begin_ex(rr->dp, true);
-        if (deband_src(pass, psh, params, &src) != DEBAND_SCALED)
-            dispatch_sampler(pass, psh, &rr->samplers_src[i], false, params, &src);
+        if (deband_src(pass, psh,  &src) != DEBAND_SCALED)
+            dispatch_sampler(pass, psh, &rr->samplers_src[i], false, &src);
 
         ident_t sub = sh_subpass(sh, psh);
         if (!sub) {
@@ -1597,7 +1597,7 @@ static bool pass_read_image(pl_renderer rr, struct pass_state *pass,
     // Update the reference rect to our adjusted image coordinates
     pass->ref_rect = pass->img.rect;
 
-    pass_hook(pass, &pass->img, PL_HOOK_NATIVE,  params);
+    pass_hook(pass, &pass->img, PL_HOOK_NATIVE);
 
     // Apply LUT logic and colorspace conversion
     enum pl_lut_type lut_type = guess_frame_lut_type(image, false);
@@ -1622,17 +1622,19 @@ static bool pass_read_image(pl_renderer rr, struct pass_state *pass,
     if (lut_type == PL_LUT_NORMALIZED)
         pl_shader_custom_lut(sh, image->lut, &rr->lut_state[LUT_IMAGE]);
 
-    pass_hook(pass, &pass->img, PL_HOOK_RGB, params);
+    pass_hook(pass, &pass->img, PL_HOOK_RGB);
     sh = NULL;
 
     // HDR peak detection, do this as early as possible
-    hdr_update_peak(pass, params);
+    hdr_update_peak(pass);
     return true;
 }
 
-static bool pass_scale_main(pl_renderer rr, struct pass_state *pass,
-                            const struct pl_render_params *params)
+static bool pass_scale_main(struct pass_state *pass)
 {
+    const struct pl_render_params *params = pass->params;
+    pl_renderer rr = pass->rr;
+
     if (!FBOFMT(pass->img.comps)) {
         PL_TRACE(rr, "Skipping main scaler (no FBOs)");
         return true;
@@ -1655,7 +1657,7 @@ static bool pass_scale_main(pl_renderer rr, struct pass_state *pass,
     if (img->sh && pl_shader_output_size(img->sh, &out_w, &out_h))
         need_fbo |= out_w != src.new_w || out_h != src.new_h;
 
-    struct sampler_info info = sample_src_info(rr, &src, params);
+    struct sampler_info info = sample_src_info(pass, &src);
     bool use_sigmoid = info.dir == SAMPLER_UP && params->sigmoid_params;
     bool use_linear  = use_sigmoid || info.dir == SAMPLER_DOWN;
 
@@ -1703,15 +1705,15 @@ static bool pass_scale_main(pl_renderer rr, struct pass_state *pass,
     if (use_linear) {
         pl_shader_linearize(img_sh(pass, img), img->color);
         img->color.transfer = PL_COLOR_TRC_LINEAR;
-        pass_hook(pass, img, PL_HOOK_LINEAR, params);
+        pass_hook(pass, img, PL_HOOK_LINEAR);
     }
 
     if (use_sigmoid) {
         pl_shader_sigmoidize(img_sh(pass, img), params->sigmoid_params);
-        pass_hook(pass, img, PL_HOOK_SIGMOID, params);
+        pass_hook(pass, img, PL_HOOK_SIGMOID);
     }
 
-    pass_hook(pass, img, PL_HOOK_PRE_OVERLAY, params);
+    pass_hook(pass, img, PL_HOOK_PRE_OVERLAY);
 
     img->tex = img_tex(pass, img);
     if (!img->tex)
@@ -1734,14 +1736,13 @@ static bool pass_scale_main(pl_renderer rr, struct pass_state *pass,
     }
 
     draw_overlays(pass, img->tex, img->comps, NULL, image->overlays,
-                  image->num_overlays, img->color, img->repr, use_sigmoid,
-                  &tf, params);
+                  image->num_overlays, img->color, img->repr, use_sigmoid, &tf);
 
-    pass_hook(pass, img, PL_HOOK_PRE_KERNEL, params);
+    pass_hook(pass, img, PL_HOOK_PRE_KERNEL);
 
     src.tex = img_tex(pass, img);
     pl_shader sh = pl_dispatch_begin_ex(rr->dp, true);
-    dispatch_sampler(pass, sh, &rr->sampler_main, false, params, &src);
+    dispatch_sampler(pass, sh, &rr->sampler_main, false, &src);
     *img = (struct img) {
         .sh     = sh,
         .w      = src.new_w,
@@ -1752,12 +1753,12 @@ static bool pass_scale_main(pl_renderer rr, struct pass_state *pass,
         .comps  = img->comps,
     };
 
-    pass_hook(pass, img, PL_HOOK_POST_KERNEL, params);
+    pass_hook(pass, img, PL_HOOK_POST_KERNEL);
 
     if (use_sigmoid)
         pl_shader_unsigmoidize(img_sh(pass, img), params->sigmoid_params);
 
-    pass_hook(pass, img, PL_HOOK_SCALED, params);
+    pass_hook(pass, img, PL_HOOK_SCALED);
     return true;
 }
 
@@ -1769,11 +1770,13 @@ static bool pass_scale_main(pl_renderer rr, struct pass_state *pass,
         1.0 - (params)->background_transparency,                                \
     }
 
-static bool pass_output_target(pl_renderer rr, struct pass_state *pass,
-                               const struct pl_render_params *params)
+static bool pass_output_target(struct pass_state *pass)
 {
+    const struct pl_render_params *params = pass->params;
     const struct pl_frame *image = &pass->image;
     const struct pl_frame *target = &pass->target;
+    pl_renderer rr = pass->rr;
+
     struct img *img = &pass->img;
     pl_shader sh = img_sh(pass, img);
 
@@ -1912,7 +1915,7 @@ fallback:
         pl_shader_encode_color(sh, &repr);
     if (lut_type == PL_LUT_NATIVE)
         pl_shader_custom_lut(sh, target->lut, &rr->lut_state[LUT_TARGET]);
-    pass_hook(pass, img, PL_HOOK_OUTPUT, params);
+    pass_hook(pass, img, PL_HOOK_OUTPUT);
     sh = NULL;
 
     const struct pl_plane *ref = &target->planes[pass->dst_ref];
@@ -1987,7 +1990,7 @@ fallback:
 
             sh = pl_dispatch_begin(rr->dp);
             dispatch_sampler(pass, sh, &rr->samplers_dst[p],
-                             !plane->texture->params.storable, params, &src);
+                             !plane->texture->params.storable, &src);
 
         } else {
 
@@ -2057,7 +2060,7 @@ fallback:
             draw_overlays(pass, plane->texture, plane->components,
                           plane->component_mapping, image->overlays,
                           image->num_overlays, target->color, target->repr,
-                          false, &iscale, params);
+                          false, &iscale);
         }
 
         struct pl_transform2x2 tscale = {
@@ -2068,7 +2071,7 @@ fallback:
         draw_overlays(pass, plane->texture, plane->components,
                       plane->component_mapping, target->overlays,
                       target->num_overlays, target->color, target->repr,
-                      false, &tscale, params);
+                      false, &tscale);
     }
 
     *img = (struct img) {0};
@@ -2388,6 +2391,7 @@ static bool draw_empty_overlays(pl_renderer rr,
 
     struct pass_state pass = {
         .rr = rr,
+        .params = params,
         .target = *ptarget,
     };
 
@@ -2420,7 +2424,7 @@ static bool draw_empty_overlays(pl_renderer rr,
         draw_overlays(&pass, plane->texture, plane->components,
                       plane->component_mapping, target->overlays,
                       target->num_overlays, target->color, target->repr,
-                      false, &tscale, params);
+                      false, &tscale);
     }
 
     return true;
@@ -2437,6 +2441,7 @@ bool pl_render_image(pl_renderer rr, const struct pl_frame *pimage,
 
     struct pass_state pass = {
         .rr = rr,
+        .params = params,
         .image = *pimage,
         .target = *ptarget,
     };
@@ -2454,13 +2459,13 @@ bool pl_render_image(pl_renderer rr, const struct pl_frame *pimage,
             params->hooks[i]->reset(params->hooks[i]->priv);
     }
 
-    if (!pass_read_image(rr, &pass, params))
+    if (!pass_read_image(&pass))
         goto error;
 
-    if (!pass_scale_main(rr, &pass, params))
+    if (!pass_scale_main(&pass))
         goto error;
 
-    if (!pass_output_target(rr, &pass, params))
+    if (!pass_output_target(&pass))
         goto error;
 
     pl_free(pass.tmp);
@@ -2563,6 +2568,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
     struct pass_state pass = {
         .rr = rr,
+        .params = params,
         .image = *refimg,
         .target = *ptarget,
     };
@@ -2706,6 +2712,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             struct pass_state inter_pass = {
                 .rr = rr,
                 .tmp = pass.tmp,
+                .params = pass.params,
                 .fbos_used = pl_calloc(pass.tmp, rr->fbos.num, sizeof(bool)),
                 .image = *images->frames[i],
                 .target = pass.target,
@@ -2721,9 +2728,9 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                     params->hooks[n]->reset(params->hooks[n]->priv);
             }
 
-            if (!pass_read_image(rr, &inter_pass, params))
+            if (!pass_read_image(&inter_pass))
                 goto error;
-            if (!pass_scale_main(rr, &inter_pass, params))
+            if (!pass_scale_main(&inter_pass))
                 goto error;
 
             pl_assert(inter_pass.img.w == out_w &&
@@ -2832,7 +2839,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             params->hooks[i]->reset(params->hooks[i]->priv);
     }
 
-    if (!pass_output_target(rr, &pass, params))
+    if (!pass_output_target(&pass))
         goto fallback;
 
     pl_free(pass.tmp);
