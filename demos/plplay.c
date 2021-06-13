@@ -33,6 +33,14 @@ static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { ret
 #include <libplacebo/utils/libav.h>
 #include <libplacebo/utils/frame_queue.h>
 
+#define MAX_FRAME_PASSES 256
+#define MAX_BLEND_FRAMES 8
+
+struct pass_info {
+    struct pl_dispatch_info pass;
+    char *name;
+};
+
 struct plplay {
     struct window *win;
     struct ui *ui;
@@ -69,6 +77,11 @@ struct plplay {
     char **shader_paths;
     size_t shader_num;
     size_t shader_size;
+
+    // pass metadata
+    struct pass_info blend_info[MAX_BLEND_FRAMES];
+    struct pass_info frame_info[MAX_FRAME_PASSES];
+    int num_frame_passes;
 };
 
 static void uninit(struct plplay *p)
@@ -406,6 +419,32 @@ error:
     return false;
 }
 
+static void info_callback(void *priv, const struct pl_render_info *info)
+{
+    struct plplay *p = priv;
+    struct pass_info *pass;
+    switch (info->stage) {
+    case PL_RENDER_STAGE_FRAME:
+        if (info->index >= MAX_FRAME_PASSES)
+            return;
+        p->num_frame_passes = info->index + 1;
+        pass = &p->frame_info[info->index];
+        break;
+
+    case PL_RENDER_STAGE_BLEND:
+        if (info->index >= MAX_BLEND_FRAMES)
+            return;
+        pass = &p->blend_info[info->index];
+        break;
+
+    case PL_RENDER_STAGE_COUNT: abort();
+    }
+
+    free(pass->name);
+    pass->name = strdup(info->pass->shader->description);
+    pass->pass = *info->pass;
+}
+
 int main(int argc, char **argv)
 {
     const char *filename;
@@ -447,6 +486,10 @@ int main(int argc, char **argv)
     // Enable dynamic parameters by default, due to plplay's heavy reliance on
     // GUI controls for dynamically adjusting render parameters.
     state.params.dynamic_constants = true;
+
+    // Hook up our pass info callback
+    state.params.info_callback = info_callback;
+    state.params.info_priv = &state;
 
     struct plplay *p = &state;
     if (!open_file(p, filename))
@@ -1134,6 +1177,59 @@ static void update_settings(struct plplay *p)
                 pl_renderer_destroy(&p->renderer);
                 p->renderer = pl_renderer_create(p->log, p->win->gpu);
             }
+
+            if (nk_tree_push(nk, NK_TREE_NODE, "Shader passes", NK_MINIMIZED)) {
+                nk_layout_row_dynamic(nk, 26, 1);
+                nk_label(nk, "Full frames:", NK_TEXT_LEFT);
+                for (int i = 0; i < p->num_frame_passes; i++) {
+                    struct pass_info *info = &p->frame_info[i];
+                    nk_layout_row_dynamic(nk, 24, 1);
+                    nk_labelf(nk, NK_TEXT_LEFT, "- %s: %.3f / %.3f / %.3f ms",
+                              info->name,
+                              info->pass.last / 1e6,
+                              info->pass.average / 1e6,
+                              info->pass.peak / 1e6);
+
+                    nk_layout_row_dynamic(nk, 32, 1);
+                    if (nk_chart_begin(nk, NK_CHART_LINES,
+                                       info->pass.num_samples,
+                                       0.0f, info->pass.peak))
+                    {
+                        for (int k = 0; k < info->pass.num_samples; k++)
+                            nk_chart_push(nk, info->pass.samples[k]);
+                        nk_chart_end(nk);
+                    }
+                }
+
+                nk_layout_row_dynamic(nk, 26, 1);
+                nk_label(nk, "Output blending:", NK_TEXT_LEFT);
+                for (int i = 0; i < MAX_BLEND_FRAMES; i++) {
+                    struct pass_info *info = &p->blend_info[i];
+                    if (!info->name)
+                        continue;
+
+                    nk_layout_row_dynamic(nk, 24, 1);
+                    nk_labelf(nk, NK_TEXT_LEFT,
+                              "- (%d frame%s) %s: %.3f / %.3f / %.3f ms",
+                              i, i > 1 ? "s" : "", info->name,
+                              info->pass.last / 1e6,
+                              info->pass.average / 1e6,
+                              info->pass.peak / 1e6);
+
+                    nk_layout_row_dynamic(nk, 32, 1);
+                    if (nk_chart_begin(nk, NK_CHART_LINES,
+                                       info->pass.num_samples,
+                                       0.0f, info->pass.peak))
+                    {
+                        for (int k = 0; k < info->pass.num_samples; k++)
+                            nk_chart_push(nk, info->pass.samples[k]);
+                        nk_chart_end(nk);
+                    }
+                }
+
+                nk_tree_pop(nk);
+            }
+
             nk_tree_pop(nk);
         }
     }
