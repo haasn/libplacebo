@@ -384,9 +384,10 @@ if get_option('tests')
     tests += 'dav1d.c'
   endif
 
-  libav = dependency('libavutil', version: '>=55.74.100', required: false)
-  if libav.found()
-    tdep += libav
+  lavu = dependency('libavutil', version: '>=55.74.100', required: false)
+  lavc = dependency('libavcodec', required: false)
+  if lavu.found() and lavc.found()
+    tdep += [lavu, lavc]
     tests += 'libav.c'
   endif
 
