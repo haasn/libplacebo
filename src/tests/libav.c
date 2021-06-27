@@ -85,8 +85,8 @@ int main()
         }
     };
 
-    TEST(AV_PIX_FMT_YUV420P10, yuvp16);
-    TEST(AV_PIX_FMT_YUV420P16, yuvp16);
+    TEST(AV_PIX_FMT_YUV420P10LE, yuvp16);
+    TEST(AV_PIX_FMT_YUV420P16LE, yuvp16);
 
     static const struct pl_plane_data nv12[] = {
         {
@@ -134,8 +134,8 @@ int main()
         }
     };
 
-    TEST(AV_PIX_FMT_P010, p016);
-    TEST(AV_PIX_FMT_P016, p016);
+    TEST(AV_PIX_FMT_P010LE, p016);
+    TEST(AV_PIX_FMT_P016LE, p016);
 
     // Packed formats
     static const struct pl_plane_data r8[] = {
@@ -258,7 +258,7 @@ int main()
         }
     };
 
-    TEST(AV_PIX_FMT_GRAY16, r16);
+    TEST(AV_PIX_FMT_GRAY16LE, r16);
 
     static const struct pl_plane_data rgb16[] = {
         {
@@ -269,7 +269,7 @@ int main()
         }
     };
 
-    TEST(AV_PIX_FMT_RGB48, rgb16);
+    TEST(AV_PIX_FMT_RGB48LE, rgb16);
 
     static const struct pl_plane_data rgb565[] = {
         {
@@ -280,7 +280,7 @@ int main()
         }
     };
 
-    TEST(AV_PIX_FMT_RGB565, rgb565);
+    TEST(AV_PIX_FMT_RGB565LE, rgb565);
 
     // Test pl_frame <- AVFrame bridge
     struct pl_frame image;
