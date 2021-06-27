@@ -1556,6 +1556,9 @@ void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         require(pl_rect_h(*vp) > 0);
         require(pl_rect_w(*sc) > 0);
         require(pl_rect_h(*sc) > 0);
+
+        if (!pass->params.load_target)
+            pl_tex_invalidate(gpu, target);
         break;
     }
     case PL_PASS_COMPUTE:
@@ -1568,9 +1571,6 @@ void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
     case PL_PASS_TYPE_COUNT:
         pl_unreachable();
     }
-
-    if (params->target && !pass->params.load_target)
-        pl_tex_invalidate(gpu, params->target);
 
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->pass_run(gpu, &new);
