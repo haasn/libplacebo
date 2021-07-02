@@ -119,6 +119,10 @@ bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
 bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
                          const struct pl_tex_blit_params *params);
 
+// Helper to do a 2D blit with stretch and scale using a raster pass
+void pl_tex_blit_raster(pl_gpu gpu, pl_dispatch dp,
+                        const struct pl_tex_blit_params *params);
+
 void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params);
 
 // Make a deep-copy of the pass params. Note: cached_program etc. are not

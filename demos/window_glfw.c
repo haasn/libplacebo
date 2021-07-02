@@ -1,7 +1,7 @@
 // License: CC0 / Public Domain
 
-#if !defined(USE_GL) && !defined(USE_VK) || defined(USE_GL) && defined(USE_VK)
-#error Specify exactly one of -DUSE_GL or -DUSE_VK when compiling!
+#if defined(USE_GL) + defined(USE_VK) + defined(USE_D3D11) != 1
+#error Specify exactly one of -DUSE_GL, -DUSE_VK or -DUSE_D3D11 when compiling!
 #endif
 
 #include <string.h>
@@ -23,7 +23,18 @@
 #define IMPL_NAME "GLFW (opengl)"
 #endif
 
+#ifdef USE_D3D11
+#include <libplacebo/d3d11.h>
+#define IMPL win_impl_glfw_d3d11
+#define IMPL_NAME "GLFW (D3D11)"
+#endif
+
 #include <GLFW/glfw3.h>
+
+#ifdef USE_D3D11
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
 
 #ifdef NDEBUG
 #define DEBUG false
@@ -45,6 +56,10 @@ struct priv {
 
 #ifdef USE_GL
     pl_opengl gl;
+#endif
+
+#ifdef USE_D3D11
+    pl_d3d11 d3d11;
 #endif
 
     float scroll_dx, scroll_dy;
@@ -140,6 +155,10 @@ static struct window *glfw_create(pl_log log, const char *title,
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 #endif // USE_VK
+
+#ifdef USE_D3D11
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+#endif // USE_D3D11
 
 #ifdef USE_GL
     glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
@@ -247,6 +266,28 @@ static struct window *glfw_create(pl_log log, const char *title,
     p->w.gpu = p->gl->gpu;
 #endif // USE_GL
 
+#ifdef USE_D3D11
+    struct pl_d3d11_params params = pl_d3d11_default_params;
+    params.debug = DEBUG;
+
+    p->d3d11 = pl_d3d11_create(log, &params);
+    if (!p->d3d11) {
+        fprintf(stderr, "libplacebo: Failed creating D3D11 device\n");
+        goto error;
+    }
+
+    p->w.swapchain = pl_d3d11_create_swapchain(p->d3d11,
+                                               &(struct pl_d3d11_swapchain_params) {
+        .window = glfwGetWin32Window(p->win),
+    });
+    if (!p->w.swapchain) {
+        fprintf(stderr, "libplacebo: Failed creating D3D11 swapchain\n");
+        goto error;
+    }
+
+    p->w.gpu = p->d3d11->gpu;
+#endif // USE_D3D11
+
     if (!pl_swapchain_resize(p->w.swapchain, &width, &height)) {
         fprintf(stderr, "libplacebo: Failed initializing swapchain\n");
         goto error;
@@ -279,6 +320,10 @@ static void glfw_destroy(struct window **window)
 
 #ifdef USE_GL
     pl_opengl_destroy(&p->gl);
+#endif
+
+#ifdef USE_D3D11
+    pl_d3d11_destroy(&p->d3d11);
 #endif
 
     for (int i = 0; i < p->files_num; i++)

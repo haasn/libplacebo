@@ -2064,6 +2064,45 @@ bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
     });
 }
 
+void pl_tex_blit_raster(pl_gpu gpu, pl_dispatch dp,
+                        const struct pl_tex_blit_params *params)
+{
+    enum pl_fmt_type src_type = params->src->params.format->type;
+    enum pl_fmt_type dst_type = params->dst->params.format->type;
+
+    // Only for 2D textures
+    pl_assert(params->src->params.h && !params->src->params.d);
+    pl_assert(params->dst->params.h && !params->dst->params.d);
+
+    // Integer textures are not supported
+    pl_assert(src_type != PL_FMT_UINT && src_type != PL_FMT_SINT);
+    pl_assert(dst_type != PL_FMT_UINT && dst_type != PL_FMT_SINT);
+
+    struct pl_rect2df src_rc = {
+        .x0 = params->src_rc.x0, .x1 = params->src_rc.x1,
+        .y0 = params->src_rc.y0, .y1 = params->src_rc.y1,
+    };
+    struct pl_rect2d dst_rc = {
+        .x0 = params->dst_rc.x0, .x1 = params->dst_rc.x1,
+        .y0 = params->dst_rc.y0, .y1 = params->dst_rc.y1,
+    };
+
+    pl_shader sh = pl_dispatch_begin(dp);
+    sh->res.output = PL_SHADER_SIG_COLOR;
+
+    ident_t pos, src = sh_bind(sh, params->src, PL_TEX_ADDRESS_CLAMP,
+        params->sample_mode, "src_tex", &src_rc, &pos, NULL, NULL);
+
+    GLSL("vec4 color = %s(%s, %s); \n",
+         sh_tex_fn(sh, params->src->params), src, pos);
+
+    pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+        .shader = &sh,
+        .target = params->dst,
+        .rect = dst_rc,
+    });
+}
+
 void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params)
 {
     if (!params->vertex_data && !params->index_data)

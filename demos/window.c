@@ -5,6 +5,7 @@
 
 extern const struct window_impl win_impl_glfw_vk;
 extern const struct window_impl win_impl_glfw_gl;
+extern const struct window_impl win_impl_glfw_d3d11;
 extern const struct window_impl win_impl_sdl_vk;
 extern const struct window_impl win_impl_sdl_gl;
 
@@ -14,6 +15,9 @@ static const struct window_impl *win_impls[] = {
 #endif
 #ifdef HAVE_GLFW_OPENGL
     &win_impl_glfw_gl,
+#endif
+#ifdef HAVE_GLFW_D3D11
+    &win_impl_glfw_d3d11,
 #endif
 #ifdef HAVE_SDL_VULKAN
     &win_impl_sdl_vk,

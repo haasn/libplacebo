@@ -43,9 +43,10 @@ spaces, obscure subsampling modes, image metadata manipulation, and so on.
 Expert-level functionality is packed into easy-to-use functions like
 `pl_frame_from_avframe` and `pl_render_image`.
 
-libplacebo currently supports both Vulkan (including MoltenVK) and OpenGL, and
-contains backwards compatibility code for very old versions of GLSL down to
-GLES 2.0 and OpenGL 1.3.
+libplacebo currently supports Vulkan (including MoltenVK), OpenGL, and
+Direct3D 11. It contains backwards compatibility code for very old versions of
+GLSL down to GLES 2.0 and OpenGL 1.3 and very old Direct3D feature levels down
+to 9_1.
 
 ### Examples
 
@@ -119,6 +120,7 @@ and even the GPU in general.
   frames for presentation (e.g. to a window or display device).
 - `vulkan.h`: GPU API implementation based on Vulkan.
 - `opengl.h`: GPU API implementation based on OpenGL.
+- `d3d11.h`: GPU API implementation based on Direct3D 11.
 
 As part of the public API, libplacebo exports a middle-level abstraction for
 dealing with GPU objects and state. Basically, this is the API libplacebo uses
@@ -261,8 +263,8 @@ on distro packages.
 
 In principle, libplacebo has no mandatory dependencies - only optional ones.
 However, to get a useful version of libplacebo. you most likely want to build
-with support for either `opengl` or `vulkan`. libplacebo built without these
-can still be used (e.g. to generate GLSL shaders such as the ones used in
+with support for either `opengl`, `vulkan` or `d3d11`. libplacebo built without
+these can still be used (e.g. to generate GLSL shaders such as the ones used in
 VLC), but the usefulness is severely impacted since most components will be
 missing, impaired or otherwise not functional.
 

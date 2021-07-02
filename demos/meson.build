@@ -57,6 +57,15 @@ if glfw.found()
       c_args: '-DUSE_GL',
     )
   endif
+
+  if d3d11.found()
+    conf_demos.set('HAVE_GLFW_D3D11', true)
+    apis += static_library('glfw-d3d11',
+      dependencies: [libplacebo, glfw],
+      sources: 'window_glfw.c',
+      c_args: '-DUSE_D3D11',
+    )
+  endif
 endif
 
 if sdl.found()

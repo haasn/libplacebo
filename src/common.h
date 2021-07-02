@@ -86,6 +86,10 @@
 #include "include/libplacebo/opengl.h"
 #endif
 
+#ifdef PL_HAVE_D3D11
+#include "include/libplacebo/d3d11.h"
+#endif
+
 #pragma GCC visibility pop
 
 // Align up to the nearest multiple of an arbitrary alignment, which may also

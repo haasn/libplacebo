@@ -8,6 +8,7 @@ test_deps = []
 vulkan = dependency('vulkan', version: '>=1.1', required: get_option('vulkan'))
 opengl = dependency('epoxy', version: '>=1.4.0', required: get_option('opengl'))
 shaderc = dependency('shaderc', version: '>=2019.1', required: get_option('shaderc'))
+cross = dependency('spirv-cross-c-shared', version: '>=0.29.0', required: get_option('d3d11'))
 
 # configuration data
 conf_public = configuration_data()
@@ -34,6 +35,28 @@ if not vulkan_headers.found() and not get_option('vulkan').disabled()
   if cc.check_header('vulkan/vulkan.h')
     vulkan_headers = declare_dependency()
   endif
+endif
+
+d3d11 = disabler()
+d3d11_inc = ['d3d11_4.h', 'dxgi1_6.h']
+d3d11_deps = [
+  cross,
+  cc.find_library('version', required: get_option('d3d11')),
+]
+
+d3d11_found = true
+foreach h : d3d11_inc
+  d3d11_found = d3d11_found and cc.check_header(h, required: get_option('d3d11'))
+endforeach
+foreach d : d3d11_deps
+  d3d11_found = d3d11_found and d.found()
+endforeach
+
+if d3d11_found
+  d3d11 = declare_dependency(
+    compile_args: ['-DCOBJMACROS', '-DINITGUID'],
+    dependencies: d3d11_deps,
+  )
 endif
 
 # work-arounds for glslang braindeath
@@ -254,7 +277,21 @@ components = [
             ],
     'headers': 'opengl.h',
     'test': 'opengl_surfaceless.c',
-  }
+  }, {
+    'name': 'd3d11',
+    'deps': d3d11,
+    'srcs': [ 'd3d11/context.c',
+              'd3d11/formats.c',
+              'd3d11/gpu.c',
+              'd3d11/gpu_buf.c',
+              'd3d11/gpu_tex.c',
+              'd3d11/gpu_pass.c',
+              'd3d11/swapchain.c',
+              'd3d11/utils.c',
+            ],
+    'headers': 'd3d11.h',
+    'test': 'd3d11.c',
+   }
 ]
 
 defs = ''
@@ -300,7 +337,7 @@ if comps.has('vulkan')
 endif
 
 # Check to see if libplacebo built this way is sane
-if not (comps.has('vulkan') or comps.has('opengl'))
+if not (comps.has('vulkan') or comps.has('opengl') or comps.has('d3d11'))
   warning('Building without any graphics API. libplacebo built this way still ' +
           'has some limited use (e.g. generating GLSL shaders), but most of ' +
           'its functionality will be missing or impaired!')

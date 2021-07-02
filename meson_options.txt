@@ -11,6 +11,9 @@ option('vulkan-registry', type: 'string', value: '',
 option('opengl', type: 'feature', value: 'auto',
        description: 'OpenGL-based renderer')
 
+option('d3d11', type: 'feature', value: 'auto',
+       description: 'Direct3D 11 based renderer')
+
 option('glslang', type: 'feature', value: 'auto',
        description: 'glslang SPIR-V compiler')
 
