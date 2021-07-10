@@ -80,13 +80,39 @@ struct pl_hdr_metadata {
     float max_fall;               // max frame average light level (in cd/m²)
 };
 
-// Attempt setting the HDR metadata of the display to the given struct. Returns
-// false if HDR metadata is not supported by the swapchain or hardware.
+extern const struct pl_hdr_metadata pl_hdr_metadata_empty; // equal to {0}
+extern const struct pl_hdr_metadata pl_hdr_metadata_hdr10; // generic HDR10 display
+
+// Returns whether two sets of HDR metadata are exactly identical.
+bool pl_hdr_metadata_equal(const struct pl_hdr_metadata *a,
+                           const struct pl_hdr_metadata *b);
+
+struct pl_swapchain_colors {
+    enum pl_color_primaries primaries;  // preferred nominal content primaries
+    enum pl_color_transfer transfer;    // preferred nominal transfer function
+    struct pl_hdr_metadata hdr;         // associated HDR metadata, or {0}
+
+    // Note: If `trc` is a HDR transfer curve but HDR metadata is left
+    // unspecified, the HDR metadata defaults to `pl_hdr_metadata_hdr10`.
+    // Conversely, if the HDR metadata is non-empty but `trc` is left as
+    // PL_COLOR_TRC_UNKNOWN, then it instead defaults to PL_COLOR_TRC_PQ.
+};
+
+// Inform the swapchain about the input color space. This API deliberately
+// provides no feedback, because the swapchain can internally decide what to do
+// with this information, including ignoring it entirely, or applying it
+// asynchronously. Users must still base their rendering on the value of
+// `pl_swapchain_frame.color_space`.
 //
-// This can be called on `NULL` to effectively query for HDR support without
-// attempting to change anything. Such usage is a no-op. To "reset" metadata
-// after having set it, call this with a {0} struct.
-bool pl_swapchain_hdr_metadata(pl_swapchain sw, const struct pl_hdr_metadata *metadata);
+// Note that calling this function a second time completely overrides any
+// previously specified hint. So calling this on {0} or NULL resets the
+// swapchain back to its initial/preferred colorspace.
+void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_swapchain_colors *csp);
+
+// Backwards compatibility wrapper for `pl_swapchain_colorspace_hint`. Always
+// returns `true`. (Deprecated)
+bool pl_swapchain_hdr_metadata(pl_swapchain sw, const struct pl_hdr_metadata *metadata)
+    PL_DEPRECATED;
 
 // The struct used to hold the results of `pl_swapchain_start_frame`
 struct pl_swapchain_frame {

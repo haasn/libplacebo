@@ -26,7 +26,7 @@ struct pl_sw_fns {
 
     SW_PFN(latency); // optional
     SW_PFN(resize); // optional
-    SW_PFN(hdr_metadata); // optional
+    SW_PFN(colorspace_hint); // optional
     SW_PFN(start_frame);
     SW_PFN(submit_frame);
     SW_PFN(swap_buffers);

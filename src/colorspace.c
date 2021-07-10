@@ -509,6 +509,16 @@ struct pl_cie_xy pl_white_from_temp(float temp)
     };
 }
 
+
+bool pl_raw_primaries_equal(const struct pl_raw_primaries *a,
+                            const struct pl_raw_primaries *b)
+{
+    return pl_cie_xy_equal(&a->red,   &b->red)   &&
+           pl_cie_xy_equal(&a->green, &b->green) &&
+           pl_cie_xy_equal(&a->blue,  &b->blue)  &&
+           pl_cie_xy_equal(&a->white, &b->white);
+}
+
 const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim)
 {
     /*

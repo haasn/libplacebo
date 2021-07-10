@@ -51,13 +51,64 @@ bool pl_swapchain_resize(pl_swapchain sw, int *width, int *height)
     return sw->impl->resize(sw, width, height);
 }
 
-bool pl_swapchain_hdr_metadata(pl_swapchain sw,
-                               const struct pl_hdr_metadata *metadata)
-{
-    if (!sw->impl->hdr_metadata)
-        return false;
+const struct pl_hdr_metadata pl_hdr_metadata_empty = {0};
+const struct pl_hdr_metadata pl_hdr_metadata_hdr10 ={
+    .prim = {
+        .red   = {0.708,    0.292},
+        .green = {0.170,    0.797},
+        .blue  = {0.131,    0.046},
+        .white = {0.31271,  0.32902},
+    },
+    .min_luma = 0,
+    .max_luma = 10000,
+    .max_cll  = 10000,
+    .max_fall = 0, // unknown
+};
 
-    return sw->impl->hdr_metadata(sw, metadata);
+bool pl_hdr_metadata_equal(const struct pl_hdr_metadata *a,
+                           const struct pl_hdr_metadata *b)
+{
+    return pl_raw_primaries_equal(&a->prim, &b->prim) &&
+           a->min_luma == b->min_luma &&
+           a->max_luma == b->max_luma &&
+           a->max_cll  == b->max_cll  &&
+           a->max_fall == b->max_fall;
+}
+
+void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_swapchain_colors *csp)
+{
+    if (!sw->impl->colorspace_hint)
+        return;
+
+    struct pl_swapchain_colors fix = {0};
+    if (csp) {
+        fix = *csp;
+
+        bool has_metadata = !pl_hdr_metadata_equal(&fix.hdr, &pl_hdr_metadata_empty);
+        bool is_hdr = pl_color_transfer_is_hdr(fix.transfer);
+
+        // Ensure consistency of the metadata and requested transfer function
+        if (has_metadata && !fix.transfer) {
+            fix.transfer = PL_COLOR_TRC_PQ;
+        } else if (has_metadata && !is_hdr) {
+            fix.hdr = pl_hdr_metadata_empty;
+        } else if (!has_metadata && is_hdr) {
+            fix.hdr = pl_hdr_metadata_hdr10;
+        }
+    }
+
+    sw->impl->colorspace_hint(sw, &fix);
+}
+
+bool pl_swapchain_hdr_metadata(pl_swapchain sw, const struct pl_hdr_metadata *metadata)
+{
+    if (metadata) {
+        pl_swapchain_colorspace_hint(sw, &(struct pl_swapchain_colors) {
+            .hdr = *metadata,
+        });
+    }
+
+    return true;
 }
 
 bool pl_swapchain_start_frame(pl_swapchain sw,

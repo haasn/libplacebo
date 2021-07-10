@@ -295,14 +295,12 @@ struct pl_vulkan_swapchain_params {
     // creating this. Must belong to the same VkInstance as `vk->instance`.
     VkSurfaceKHR surface;
 
-    // The image format and colorspace we should be using. Optional, if left
-    // as {0}, libplacebo will pick the best surface format based on what the
-    // GPU/surface seems to support. (Prioritizing the highest bit depth)
-    VkSurfaceFormatKHR surface_format;
-
-    // When choosing the surface format, prefer HDR formats over SDR formats,
-    // if any is available. Setting a specific `surface_format` overrides this.
-    bool prefer_hdr;
+    // When choosing the initial surface format, prefer HDR formats over SDR
+    // formats, if any is available.
+    //
+    // Deprecated in favor of `pl_swapchain_colorspace_hint`, which overrides
+    // this parameter if called.
+    bool prefer_hdr PL_DEPRECATED;
 
     // The preferred presentation mode. See the vulkan documentation for more
     // information about these. If the device/surface combination does not

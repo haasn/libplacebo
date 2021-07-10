@@ -403,6 +403,12 @@ static inline float pl_cie_Z(struct pl_cie_xy xy) {
     return (1 - xy.x - xy.y) / xy.y;
 }
 
+static inline float pl_cie_xy_equal(const struct pl_cie_xy *a,
+                                    const struct pl_cie_xy *b)
+{
+    return a->x == b->x && a->y == b->y;
+}
+
 // Computes the CIE xy chromaticity coordinates of a CIE D-series illuminant
 // with the given correlated color temperature.
 //
@@ -413,6 +419,10 @@ struct pl_cie_xy pl_white_from_temp(float temperature);
 struct pl_raw_primaries {
     struct pl_cie_xy red, green, blue, white;
 };
+
+// Returns whether two raw primaries are exactly identical.
+bool pl_raw_primaries_equal(const struct pl_raw_primaries *a,
+                            const struct pl_raw_primaries *b);
 
 // Returns the raw primaries for a given color space.
 const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim);
