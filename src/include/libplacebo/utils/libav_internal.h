@@ -599,6 +599,44 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
     }
 }
 
+static inline void pl_swapchain_colors_from_avframe(struct pl_swapchain_colors *out_colors,
+                                                    const AVFrame *avframe)
+{
+    const AVFrameSideData *sd;
+    struct pl_frame frame;
+    pl_frame_from_avframe(&frame, avframe);
+
+    *out_colors = (struct pl_swapchain_colors) {
+        .primaries = frame.color.primaries,
+        .transfer = frame.color.transfer,
+    };
+
+    if ((sd = av_frame_get_side_data(avframe, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL))) {
+        const AVContentLightMetadata *clm = (AVContentLightMetadata *) sd->data;
+        out_colors->hdr.max_cll = clm->MaxCLL;
+        out_colors->hdr.max_fall = clm->MaxFALL;
+    }
+
+    if ((sd = av_frame_get_side_data(avframe, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA))) {
+        const AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *) sd->data;
+        if (mdm->has_luminance) {
+            out_colors->hdr.min_luma = av_q2d(mdm->min_luminance);
+            out_colors->hdr.max_luma = av_q2d(mdm->max_luminance);
+        }
+
+        if (mdm->has_primaries) {
+            out_colors->hdr.prim.red.x   = av_q2d(mdm->display_primaries[0][0]);
+            out_colors->hdr.prim.red.y   = av_q2d(mdm->display_primaries[0][1]);
+            out_colors->hdr.prim.green.x = av_q2d(mdm->display_primaries[1][0]);
+            out_colors->hdr.prim.green.y = av_q2d(mdm->display_primaries[1][1]);
+            out_colors->hdr.prim.blue.x  = av_q2d(mdm->display_primaries[2][0]);
+            out_colors->hdr.prim.blue.y  = av_q2d(mdm->display_primaries[2][1]);
+            out_colors->hdr.prim.white.x = av_q2d(mdm->white_point[0]);
+            out_colors->hdr.prim.white.y = av_q2d(mdm->white_point[1]);
+        }
+    }
+}
+
 static inline bool pl_frame_recreate_from_avframe(pl_gpu gpu,
                                                   struct pl_frame *out,
                                                   pl_tex tex[4],

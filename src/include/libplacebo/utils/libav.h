@@ -42,6 +42,11 @@ static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *fra
 #define pl_image_from_avframe pl_frame_from_avframe
 #define pl_target_from_avframe pl_frame_from_avframe
 
+// Helper function to generate a `pl_swapchain_colors` struct from an AVFrame.
+// Useful to update the swapchain colorspace mode dynamically (e.g. for HDR).
+static void pl_swapchain_colors_from_avframe(struct pl_swapchain_colors *out_colors,
+                                             const AVFrame *frame);
+
 // Helper function to test if a pixfmt would be supported by the GPU.
 // Essentially, this can be used to check if `pl_upload_avframe` would work for
 // a given AVPixelFormat, without actually uploading or allocating anything.

@@ -211,6 +211,11 @@ static inline float pl_fixed18_14(uint32_t n)
     return (float) n / (1 << 14);
 }
 
+static inline float pl_fixed0_16(uint16_t n)
+{
+    return (float) n / (1 << 16);
+}
+
 // Align to a power of 2
 #define PL_ALIGN2(x, align) (((x) + (align) - 1) & ~((align) - 1))
 
@@ -336,6 +341,38 @@ static inline void pl_frame_from_dav1dpicture(struct pl_frame *out,
         // Only set the chroma location for definitely subsampled images
         pl_frame_set_chroma_location(out, pl_chroma_from_dav1d(seq_hdr->chr));
         break;
+    }
+}
+
+static void pl_swapchain_colors_from_dav1dpicture(struct pl_swapchain_colors *out_colors,
+                                                  const Dav1dPicture *picture)
+{
+    struct pl_frame frame;
+    pl_frame_from_dav1dpicture(&frame, picture);
+
+    *out_colors = (struct pl_swapchain_colors) {
+        .primaries = frame.color.primaries,
+        .transfer = frame.color.transfer,
+    };
+
+    const Dav1dContentLightLevel *cll = picture->content_light;
+    if (cll) {
+        out_colors->hdr.max_cll = cll->max_content_light_level;
+        out_colors->hdr.max_fall = cll->max_frame_average_light_level;
+    }
+
+    const Dav1dMasteringDisplay *md = picture->mastering_display;
+    if (md) {
+        out_colors->hdr.min_luma = pl_fixed18_14(md->min_luminance);
+        out_colors->hdr.max_luma = pl_fixed24_8(md->max_luminance);
+        out_colors->hdr.prim.red.x   = pl_fixed0_16(md->primaries[0][0]);
+        out_colors->hdr.prim.red.y   = pl_fixed0_16(md->primaries[0][1]);
+        out_colors->hdr.prim.green.x = pl_fixed0_16(md->primaries[1][0]);
+        out_colors->hdr.prim.green.y = pl_fixed0_16(md->primaries[1][1]);
+        out_colors->hdr.prim.blue.x  = pl_fixed0_16(md->primaries[2][0]);
+        out_colors->hdr.prim.blue.y  = pl_fixed0_16(md->primaries[2][1]);
+        out_colors->hdr.prim.white.x = pl_fixed0_16(md->white_point[0]);
+        out_colors->hdr.prim.white.y = pl_fixed0_16(md->white_point[1]);
     }
 }
 
