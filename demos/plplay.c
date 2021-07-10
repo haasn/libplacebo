@@ -298,6 +298,24 @@ done:
 
 static void update_settings(struct plplay *p);
 
+static void update_colorspace_hint(struct plplay *p, const struct pl_frame_mix *mix)
+{
+    const struct pl_frame *frame = NULL;
+
+    for (int i = 0; i < mix->num_frames; i++) {
+        if (mix->timestamps[i] > 0.0)
+            break;
+        frame = mix->frames[i];
+    }
+
+    if (!frame)
+        return;
+
+    struct pl_swapchain_colors hint;
+    pl_swapchain_colors_from_avframe(&hint, frame->user_data);
+    pl_swapchain_colorspace_hint(p->win->swapchain, &hint);
+}
+
 static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *frame,
                          const struct pl_frame_mix *mix)
 {
@@ -348,6 +366,7 @@ static bool render_loop(struct plplay *p)
     }
 
     struct pl_swapchain_frame frame;
+    update_colorspace_hint(p, &mix);
     if (!pl_swapchain_start_frame(p->win->swapchain, &frame))
         goto error;
     if (!render_frame(p, &frame, &mix))
@@ -371,6 +390,7 @@ static bool render_loop(struct plplay *p)
     bool stuck = false;
 
     while (!p->win->window_lost) {
+        update_colorspace_hint(p, &mix);
         if (!pl_swapchain_start_frame(p->win->swapchain, &frame)) {
             // Window stuck/invisible? Block for events and try again.
             window_poll(p->win, true);
@@ -500,8 +520,6 @@ int main(int argc, char **argv)
         goto error;
 
     enum winflags flags = 0;
-    if (is_file_hdr(p))
-        flags |= WIN_HDR;
     if (desc->flags & AV_PIX_FMT_FLAG_ALPHA) {
         flags |= WIN_ALPHA;
         state.params.background_transparency = 1.0;

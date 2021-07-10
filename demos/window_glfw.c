@@ -235,7 +235,6 @@ static struct window *glfw_create(pl_log log, const char *title,
     p->w.swapchain = pl_vulkan_create_swapchain(p->vk, &(struct pl_vulkan_swapchain_params) {
         .surface = p->surf,
         .present_mode = VK_PRESENT_MODE_FIFO_KHR,
-        .prefer_hdr = (flags & WIN_HDR),
     });
 
     if (!p->w.swapchain) {

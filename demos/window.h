@@ -12,7 +12,6 @@ struct window {
 
 enum winflags {
     WIN_ALPHA,
-    WIN_HDR,
 };
 
 struct window *window_create(pl_log log, const char *title,
