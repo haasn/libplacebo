@@ -646,6 +646,7 @@ const struct pl_peak_detect_params pl_peak_detect_default_params = {
     .scene_threshold_low    = 5.5,
     .scene_threshold_high   = 10.0,
     .overshoot_margin       = 0.05,
+    .minimum_peak           = 1.0,
 };
 
 struct sh_peak_obj {
@@ -819,8 +820,9 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
           "    if (atomicAdd(counter, 1u) == num_wg - 1u) {                     \n"
           "        vec2 cur = vec2(float(frame_sum) / float(num_wg), frame_max);\n"
           "        cur *= vec2(1.0 / %f, 1.0 / %f);                             \n"
-          "        cur.x = exp(cur.x);                                          \n",
-          log_scale, sig_scale);
+          "        cur.x = exp(cur.x);                                          \n"
+          "        cur.y = max(cur.y, %s);                                      \n",
+          log_scale, sig_scale, SH_FLOAT(PL_DEF(params->minimum_peak, 1.0)));
 
     // Set the initial value accordingly if it contains no data
     GLSLF("        if (average.y == 0.0) \n"

@@ -566,7 +566,8 @@ static void pl_shader_tests(pl_gpu gpu)
 
     pl_shader_obj peak_state = NULL;
     struct pl_color_space csp_gamma22 = { .transfer = PL_COLOR_TRC_GAMMA22 };
-    if (pl_shader_detect_peak(sh, csp_gamma22, &peak_state, NULL)) {
+    struct pl_peak_detect_params peak_params = { .minimum_peak = 0.01 };
+    if (pl_shader_detect_peak(sh, csp_gamma22, &peak_state, &peak_params)) {
         REQUIRE(pl_dispatch_compute(dp, &(struct pl_dispatch_compute_params) {
             .shader = &sh,
             .width = fbo->params.w,
@@ -588,7 +589,6 @@ static void pl_shader_tests(pl_gpu gpu)
             }
         }
 
-        real_peak *= 1.0 + pl_peak_detect_default_params.overshoot_margin;
         real_avg = expf(real_avg / (FBO_W * FBO_H));
         printf("real peak: %f, real average: %f\n", real_peak, real_avg);
         REQUIRE(feq(peak, real_peak, 1e-4));

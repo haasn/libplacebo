@@ -106,6 +106,11 @@ struct pl_peak_detect_params {
     // by this amount, as a percentage of the actual measured peak. If left
     // as 0.0, this logic is disabled. The default value is 0.05.
     float overshoot_margin;
+
+    // To avoid over-tone-mapping very dark scenes (or black frames), this
+    // imposes a hard lower bound on the detected peak. If left as 0.0, it
+    // instead defaults to a value of 1.0.
+    float minimum_peak;
 };
 
 extern const struct pl_peak_detect_params pl_peak_detect_default_params;

@@ -799,6 +799,7 @@ static void update_settings(struct plplay *p)
                 nk_property_float(nk, "Threshold low", 0.0, &ppar->scene_threshold_low, 20.0, 0.5, 0.005);
                 nk_property_float(nk, "Threshold high", 0.0, &ppar->scene_threshold_high, 20.0, 0.5, 0.005);
                 nk_property_float(nk, "Smoothing period", 1.0, &ppar->smoothing_period, 1000.0, 5.0, 1.0);
+                nk_property_float(nk, "Minimum peak", 0.0, &ppar->minimum_peak, 10.0, 0.1, 0.01);
 
                 int overshoot = roundf(ppar->overshoot_margin * 100.0);
                 nk_property_int(nk, "Overshoot (%)", 0, &overshoot, 200, 1, 1);
