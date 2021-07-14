@@ -10,13 +10,17 @@ struct window {
     bool window_lost;
 };
 
-enum winflags {
-    WIN_ALPHA,
+struct window_params {
+    const char *title;
+    int width;
+    int height;
+
+    // initial color space
+    struct pl_swapchain_colors colors;
+    bool alpha;
 };
 
-struct window *window_create(pl_log log, const char *title,
-                             int width, int height, enum winflags flags);
-
+struct window *window_create(pl_log log, const struct window_params *params);
 void window_destroy(struct window **win);
 
 // Poll/wait for window events

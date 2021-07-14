@@ -31,7 +31,12 @@ int main(int argc, char **argv)
         .log_level = PL_LOG_DEBUG,
     });
 
-    win = window_create(logger, "colors demo", 640, 480, WIN_ALPHA);
+    win = window_create(logger, &(struct window_params) {
+        .title = "colors demo",
+        .width = 640,
+        .height = 480,
+        .alpha = true,
+    });
     if (!win)
         uninit(1);
 

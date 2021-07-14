@@ -519,9 +519,19 @@ int main(int argc, char **argv)
     if (!desc)
         goto error;
 
-    enum winflags flags = 0;
+    struct window_params params = {
+        .title = "plplay",
+        .width = par->width,
+        .height = par->height,
+        .colors = {
+            .primaries = pl_primaries_from_av(par->color_primaries),
+            .transfer = pl_transfer_from_av(par->color_trc),
+            // HDR metadata will come from AVFrame side data
+        },
+    };
+
     if (desc->flags & AV_PIX_FMT_FLAG_ALPHA) {
-        flags |= WIN_ALPHA;
+        params.alpha = true;
         state.params.background_transparency = 1.0;
     }
 
@@ -530,7 +540,7 @@ int main(int argc, char **argv)
         .log_level = log_level,
     });
 
-    p->win = window_create(p->log, "plplay", par->width, par->height, flags);
+    p->win = window_create(p->log, &params);
     if (!p->win)
         goto error;
 

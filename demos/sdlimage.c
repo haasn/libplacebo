@@ -208,7 +208,11 @@ int main(int argc, char **argv)
 
     // Create window
     unsigned int start = SDL_GetTicks();
-    win = window_create(logger, "SDL2_image demo", img->w, img->h, 0);
+    win = window_create(logger, &(struct window_params) {
+        .title = "SDL2_image demo",
+        .width = img->w,
+        .height = img->h,
+    });
     if (!win)
         uninit(1);
 

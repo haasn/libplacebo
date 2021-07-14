@@ -69,8 +69,7 @@ static void release_current(void *priv)
 }
 #endif
 
-static struct window *sdl_create(pl_log log, const char *title,
-                                 int width, int height, enum winflags flags)
+static struct window *sdl_create(pl_log log, const struct window_params *params)
 {
     struct priv *p = calloc(1, sizeof(struct priv));
     if (!p)
@@ -83,8 +82,8 @@ static struct window *sdl_create(pl_log log, const char *title,
     }
 
     uint32_t sdl_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | WINFLAG_API;
-    p->win = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                              width, height, sdl_flags);
+    p->win = SDL_CreateWindow(params->title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+                              params->width, params->height, sdl_flags);
     if (!p->win) {
         fprintf(stderr, "SDL2: Failed creating window: %s\n", SDL_GetError());
         goto error;
@@ -118,12 +117,12 @@ static struct window *sdl_create(pl_log log, const char *title,
         goto error;
     }
 
-    struct pl_vulkan_params params = pl_vulkan_default_params;
-    params.instance = p->vk_inst->instance;
-    params.get_proc_addr = p->vk_inst->get_proc_addr;
-    params.surface = p->surf;
-    params.allow_software = true;
-    p->vk = pl_vulkan_create(log, &params);
+    struct pl_vulkan_params vkparams = pl_vulkan_default_params;
+    vkparams.instance = p->vk_inst->instance;
+    vkparams.get_proc_addr = p->vk_inst->get_proc_addr;
+    vkparams.surface = p->surf;
+    vkparams.allow_software = true;
+    p->vk = pl_vulkan_create(log, &vkparams);
     if (!p->vk) {
         fprintf(stderr, "libplacebo: Failed creating vulkan device\n");
         goto error;
@@ -149,14 +148,14 @@ static struct window *sdl_create(pl_log log, const char *title,
         goto error;
     }
 
-    struct pl_opengl_params params = pl_opengl_default_params;
-    params.allow_software = true;
-    params.debug = DEBUG;
-    params.make_current = make_current;
-    params.release_current = release_current;
-    params.priv = p;
+    struct pl_opengl_params glparams = pl_opengl_default_params;
+    glparams.allow_software = true;
+    glparams.debug = DEBUG;
+    glparams.make_current = make_current;
+    glparams.release_current = release_current;
+    glparams.priv = p;
 
-    p->gl = pl_opengl_create(log, &params);
+    p->gl = pl_opengl_create(log, &glparams);
     if (!p->gl) {
         fprintf(stderr, "libplacebo: Failed creating opengl device\n");
         goto error;
@@ -175,7 +174,9 @@ static struct window *sdl_create(pl_log log, const char *title,
     p->w.gpu = p->gl->gpu;
 #endif // USE_GL
 
-    if (!pl_swapchain_resize(p->w.swapchain, &width, &height)) {
+    int w = params->width, h = params->height;
+    pl_swapchain_colorspace_hint(p->w.swapchain, &params->colors);
+    if (!pl_swapchain_resize(p->w.swapchain, &w, &h)) {
         fprintf(stderr, "libplacebo: Failed initializing swapchain\n");
         goto error;
     }

@@ -139,8 +139,7 @@ static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL get_vk_proc_addr(VkInstance inst
 }
 #endif
 
-static struct window *glfw_create(pl_log log, const char *title,
-                                  int width, int height, enum winflags flags)
+static struct window *glfw_create(pl_log log, const struct window_params *params)
 {
     struct priv *p = calloc(1, sizeof(struct priv));
     if (!p)
@@ -177,14 +176,13 @@ static struct window *glfw_create(pl_log log, const char *title,
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #endif // USE_GL
 
-    bool alpha = flags & WIN_ALPHA;
-    if (alpha)
+    if (params->alpha)
         glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
 
-    printf("Creating %dx%d window%s...\n", width, height,
-           alpha ? " (with alpha)" : "");
+    printf("Creating %dx%d window%s...\n", params->width, params->height,
+           params->alpha ? " (with alpha)" : "");
 
-    p->win = glfwCreateWindow(width, height, title, NULL, NULL);
+    p->win = glfwCreateWindow(params->width, params->height, params->title, NULL, NULL);
     if (!p->win) {
         fprintf(stderr, "GLFW: Failed creating window\n");
         goto error;
@@ -221,12 +219,12 @@ static struct window *glfw_create(pl_log log, const char *title,
         goto error;
     }
 
-    struct pl_vulkan_params params = pl_vulkan_default_params;
-    params.instance = p->vk_inst->instance;
-    params.get_proc_addr = p->vk_inst->get_proc_addr;
-    params.surface = p->surf;
-    params.allow_software = true;
-    p->vk = pl_vulkan_create(log, &params);
+    struct pl_vulkan_params vkparams = pl_vulkan_default_params;
+    vkparams.instance = p->vk_inst->instance;
+    vkparams.get_proc_addr = p->vk_inst->get_proc_addr;
+    vkparams.surface = p->surf;
+    vkparams.allow_software = true;
+    p->vk = pl_vulkan_create(log, &vkparams);
     if (!p->vk) {
         fprintf(stderr, "libplacebo: Failed creating vulkan device\n");
         goto error;
@@ -246,14 +244,14 @@ static struct window *glfw_create(pl_log log, const char *title,
 #endif // USE_VK
 
 #ifdef USE_GL
-    struct pl_opengl_params params = pl_opengl_default_params;
-    params.allow_software = true;
-    params.debug = DEBUG;
-    params.make_current = make_current;
-    params.release_current = release_current;
-    params.priv = p->win;
+    struct pl_opengl_params glparams = pl_opengl_default_params;
+    glparams.allow_software = true;
+    glparams.debug = DEBUG;
+    glparams.make_current = make_current;
+    glparams.release_current = release_current;
+    glparams.priv = p->win;
 
-    p->gl = pl_opengl_create(log, &params);
+    p->gl = pl_opengl_create(log, &glparams);
     if (!p->gl) {
         fprintf(stderr, "libplacebo: Failed creating opengl device\n");
         goto error;
@@ -273,10 +271,10 @@ static struct window *glfw_create(pl_log log, const char *title,
 #endif // USE_GL
 
 #ifdef USE_D3D11
-    struct pl_d3d11_params params = pl_d3d11_default_params;
-    params.debug = DEBUG;
+    struct pl_d3d11_params d3dparams = pl_d3d11_default_params;
+    d3dparams.debug = DEBUG;
 
-    p->d3d11 = pl_d3d11_create(log, &params);
+    p->d3d11 = pl_d3d11_create(log, &d3dparams);
     if (!p->d3d11) {
         fprintf(stderr, "libplacebo: Failed creating D3D11 device\n");
         goto error;
@@ -294,7 +292,9 @@ static struct window *glfw_create(pl_log log, const char *title,
     p->w.gpu = p->d3d11->gpu;
 #endif // USE_D3D11
 
-    if (!pl_swapchain_resize(p->w.swapchain, &width, &height)) {
+    int w = params->width, h = params->height;
+    pl_swapchain_colorspace_hint(p->w.swapchain, &params->colors);
+    if (!pl_swapchain_resize(p->w.swapchain, &w, &h)) {
         fprintf(stderr, "libplacebo: Failed initializing swapchain\n");
         goto error;
     }
