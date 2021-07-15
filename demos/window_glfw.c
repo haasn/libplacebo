@@ -132,6 +132,13 @@ static void release_current(void *priv)
 }
 #endif
 
+#ifdef USE_VK
+static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL get_vk_proc_addr(VkInstance instance, const char* pName)
+{
+    return (PFN_vkVoidFunction) glfwGetInstanceProcAddress(instance, pName);
+}
+#endif
+
 static struct window *glfw_create(pl_log log, const char *title,
                                   int width, int height, enum winflags flags)
 {
@@ -194,7 +201,7 @@ static struct window *glfw_create(pl_log log, const char *title,
     VkResult err;
 
     struct pl_vk_inst_params iparams = pl_vk_inst_default_params;
-    iparams.get_proc_addr = glfwGetInstanceProcAddress,
+    iparams.get_proc_addr = get_vk_proc_addr,
     iparams.debug = DEBUG;
 
     // Load all extensions required for WSI
