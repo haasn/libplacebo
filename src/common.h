@@ -192,10 +192,11 @@ static inline size_t pl_lcm(size_t x, size_t y)
 #endif
 
 #define pl_cond_timedwait(cond, mutex, timeout)                                 \
-    (pthread_cond_timedwait(cond, mutex, &(struct timespec) {                   \
-        .tv_sec  = (timeout) / 1000000000LLU,                                   \
-        .tv_nsec = (timeout) % 1000000000LLU,                                   \
-    }))
+    ((timeout) == UINT64_MAX ? pthread_cond_wait(cond, mutex) :                 \
+        pthread_cond_timedwait(cond, mutex, &(struct timespec) {                \
+            .tv_sec  = (timeout) / 1000000000LLU,                               \
+            .tv_nsec = (timeout) % 1000000000LLU,                               \
+        }))
 
 // Refcounting helpers
 typedef _Atomic uint64_t pl_rc_t;
