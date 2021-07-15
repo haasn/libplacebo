@@ -145,6 +145,7 @@ static bool open_file(struct plplay *p, const char *filename)
     printf("Resolution: %d x %d\n", par->width, par->height);
     printf("FPS: %f\n", av_q2d(stream->avg_frame_rate));
     printf("Bitrate: %"PRIi64" kbps\n", par->bit_rate / 1000);
+    printf("Format: %s\n", av_get_pix_fmt_name(par->format));
 
     p->stream = stream;
     return true;
@@ -516,6 +517,12 @@ int main(int argc, char **argv)
     p->win = window_create(p->log, "plplay", par->width, par->height, flags);
     if (!p->win)
         goto error;
+
+    // Test the AVPixelFormat against the GPU capabilities
+    if (!pl_test_pixfmt(p->win->gpu, par->format)) {
+        fprintf(stderr, "Unsupported AVPixelFormat: %s\n", desc->name);
+        goto error;
+    }
 
 #ifdef HAVE_NUKLEAR
     p->ui = ui_create(p->win->gpu);
