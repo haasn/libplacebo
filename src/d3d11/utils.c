@@ -52,7 +52,7 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
     // Copy debug layer messages to libplacebo's log output
     D3D11_MESSAGE *d3dmsg = NULL;
     for (uint64_t i = 0; i < messages; i++) {
-        size_t len;
+        SIZE_T len;
         D3D(ID3D11InfoQueue_GetMessage(ctx->iqueue, i, NULL, &len));
 
         d3dmsg = pl_zalloc(NULL, len);
