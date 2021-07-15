@@ -43,7 +43,7 @@ if glfw.found()
   if comps.has('vulkan')
     conf_demos.set('HAVE_GLFW_VULKAN', true)
     apis += static_library('glfw-vk',
-      dependencies: [libplacebo, glfw],
+      dependencies: [libplacebo, glfw, vulkan_headers],
       sources: 'window_glfw.c',
       c_args: '-DUSE_VK',
     )
@@ -72,7 +72,7 @@ if sdl.found()
   if comps.has('vulkan')
     conf_demos.set('HAVE_SDL_VULKAN', true)
     apis += static_library('sdl-vk',
-      dependencies: [libplacebo, sdl],
+      dependencies: [libplacebo, sdl, vulkan_headers],
       sources: 'window_sdl.c',
       c_args: '-DUSE_VK',
     )
