@@ -11,6 +11,7 @@
 #include <time.h>
 
 #include "common.h"
+#include "utils.h"
 #include "window.h"
 
 static pl_log logger;
@@ -34,9 +35,8 @@ int main(int argc, char **argv)
     if (!win)
         uninit(1);
 
-    struct timespec ts_start, ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts_start) < 0) {
-        fprintf(stderr, "%s\n", strerror(errno));
+    double ts_start, ts;
+    if (!utils_gettime(&ts_start)) {
         uninit(1);
     }
 
@@ -50,12 +50,11 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
+        if (!utils_gettime(&ts))
             uninit(1);
 
-        const int period = 10; // in seconds
-        float secs = (ts.tv_sec - ts_start.tv_sec) % period +
-                     (ts.tv_nsec - ts_start.tv_nsec) * 1e-9;
+        const double period = 10.; // in seconds
+        float secs = fmod(ts - ts_start, period);
 
         float pos = 2 * M_PI * secs / period;
         float alpha = (cosf(pos) + 1.0) / 2.0;

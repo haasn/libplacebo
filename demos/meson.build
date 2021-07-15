@@ -101,7 +101,7 @@ else
 
   dep = declare_dependency(
     dependencies: libplacebo,
-    sources: 'window.c',
+    sources: ['window.c', 'utils.c'],
     link_with: apis,
   )
 

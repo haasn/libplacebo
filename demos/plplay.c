@@ -10,7 +10,6 @@
  */
 
 #include <pthread.h>
-#include <time.h>
 
 #include <libavutil/file.h>
 #include <libavutil/pixdesc.h>
@@ -18,6 +17,7 @@
 #include <libavcodec/avcodec.h>
 
 #include "common.h"
+#include "utils.h"
 #include "window.h"
 
 #ifdef HAVE_NUKLEAR
@@ -359,11 +359,9 @@ static bool render_loop(struct plplay *p)
     // first vsync.
     pl_gpu_finish(p->win->gpu);
 
-    struct timespec ts_prev, ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts_prev) < 0) {
-        fprintf(stderr, "%s\n", strerror(errno));
+    double ts, ts_prev;
+    if (!utils_gettime(&ts_prev))
         goto error;
-    }
 
     pl_swapchain_swap_buffers(p->win->swapchain);
     window_poll(p->win, false);
@@ -379,12 +377,11 @@ static bool render_loop(struct plplay *p)
         }
 
 retry:
-        if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
+        if (!utils_gettime(&ts))
             goto error;
 
         if (!stuck) {
-            pts += (ts.tv_sec - ts_prev.tv_sec) +
-                   (ts.tv_nsec - ts_prev.tv_nsec) * 1e-9;
+            pts += (ts - ts_prev);
         }
         ts_prev = ts;
 
