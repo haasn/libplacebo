@@ -42,6 +42,10 @@
 
 #include "common.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include <libplacebo/dispatch.h>
 #include <libplacebo/shaders/sampling.h>
 #include <libplacebo/utils/upload.h>
@@ -798,7 +802,11 @@ static void api2_example(void)
         }
 
         // Sleep a short time (100us) to prevent busy waiting the CPU
+    #ifdef _WIN32
+        Sleep(0);
+    #else
         nanosleep(&(struct timespec) { .tv_nsec = 100000 }, NULL);
+    #endif
         check_timers(vf);
     }
 
