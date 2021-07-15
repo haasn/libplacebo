@@ -55,6 +55,7 @@ struct plplay {
     AVCodecContext *codec;
     const AVStream *stream; // points to first video stream of `format`
     pthread_t decoder_thread;
+    bool decoder_thread_created;
     bool exit_thread;
 
     // settings / ui state
@@ -86,7 +87,7 @@ struct plplay {
 
 static void uninit(struct plplay *p)
 {
-    if (p->decoder_thread) {
+    if (p->decoder_thread_created) {
         p->exit_thread = true;
         pl_queue_push(p->queue, NULL); // Signal EOF to wake up thread
         pthread_join(p->decoder_thread, NULL);
@@ -552,6 +553,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "Failed creating decode thread: %s\n", strerror(errno));
         goto error;
     }
+
+    p->decoder_thread_created = true;
 
     p->renderer = pl_renderer_create(p->log, p->win->gpu);
     if (!render_loop(p))
