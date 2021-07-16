@@ -125,7 +125,8 @@ static bool gl_tex_import(pl_gpu gpu,
 
         tex_gl->fd = dup(shared_mem->handle.fd);
         if (tex_gl->fd == -1) {
-            PL_ERR(gpu, "%s: cannot duplicate fd for importing", __func__);
+            PL_ERR(gpu, "%s: cannot duplicate fd %d for importing: %s",
+                   __func__, shared_mem->handle.fd, strerror(errno));
             goto error;
         }
 
