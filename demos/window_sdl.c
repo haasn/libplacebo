@@ -293,6 +293,15 @@ static bool sdl_get_button(const struct window *window, enum button btn)
     return SDL_GetMouseState(NULL, NULL) & button_mask[btn];
 }
 
+static bool sdl_get_key(const struct window *window, enum key key)
+{
+    static const size_t key_map[] = {
+        [KEY_ESC] = SDL_SCANCODE_ESCAPE,
+    };
+
+    return SDL_GetKeyboardState(NULL)[key_map[key]];
+}
+
 static void sdl_get_scroll(const struct window *window, float *dx, float *dy)
 {
     struct priv *p = (struct priv *) window;
@@ -325,6 +334,7 @@ const struct window_impl IMPL = {
     .poll = sdl_poll,
     .get_cursor = sdl_get_cursor,
     .get_button = sdl_get_button,
+    .get_key = sdl_get_key,
     .get_scroll = sdl_get_scroll,
     .get_file = sdl_get_file,
 };

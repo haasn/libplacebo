@@ -67,6 +67,11 @@ bool window_get_button(const struct window *win, enum button btn)
     return win->impl->get_button(win, btn);
 }
 
+bool window_get_key(const struct window *win, enum key key)
+{
+    return win->impl->get_key(win, key);
+}
+
 char *window_get_file(const struct window *win)
 {
     return win->impl->get_file(win);

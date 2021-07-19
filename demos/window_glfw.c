@@ -371,6 +371,16 @@ static bool glfw_get_button(const struct window *window, enum button btn)
     return glfwGetMouseButton(p->win, button_map[btn]) == GLFW_PRESS;
 }
 
+static bool glfw_get_key(const struct window *window, enum key key)
+{
+    static const int key_map[] = {
+        [KEY_ESC] = GLFW_KEY_ESCAPE,
+    };
+
+    struct priv *p = (struct priv *) window;
+    return glfwGetKey(p->win, key_map[key]) == GLFW_PRESS;
+}
+
 static void glfw_get_scroll(const struct window *window, float *dx, float *dy)
 {
     struct priv *p = (struct priv *) window;
@@ -403,6 +413,7 @@ const struct window_impl IMPL = {
     .poll = glfw_poll,
     .get_cursor = glfw_get_cursor,
     .get_button = glfw_get_button,
+    .get_key = glfw_get_key,
     .get_scroll = glfw_get_scroll,
     .get_file = glfw_get_file,
 };

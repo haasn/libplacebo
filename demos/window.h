@@ -33,9 +33,14 @@ enum button {
     BTN_MIDDLE,
 };
 
+enum key {
+    KEY_ESC,
+};
+
 void window_get_cursor(const struct window *win, int *x, int *y);
 void window_get_scroll(const struct window *win, float *dx, float *dy);
 bool window_get_button(const struct window *win, enum button);
+bool window_get_key(const struct window *win, enum key);
 char *window_get_file(const struct window *win);
 
 // For implementations
@@ -47,5 +52,6 @@ struct window_impl {
     __typeof__(window_get_cursor) *get_cursor;
     __typeof__(window_get_scroll) *get_scroll;
     __typeof__(window_get_button) *get_button;
+    __typeof__(window_get_key) *get_key;
     __typeof__(window_get_file) *get_file;
 };

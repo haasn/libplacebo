@@ -390,6 +390,9 @@ static bool render_loop(struct plplay *p)
     bool stuck = false;
 
     while (!p->win->window_lost) {
+        if (window_get_key(p->win, KEY_ESC))
+            break;
+
         update_colorspace_hint(p, &mix);
         if (!pl_swapchain_start_frame(p->win->swapchain, &frame)) {
             // Window stuck/invisible? Block for events and try again.
