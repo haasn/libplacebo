@@ -937,7 +937,7 @@ static void pl_render_tests(pl_gpu gpu)
             .sys        = PL_COLOR_SYSTEM_BT_709,
             .levels     = PL_COLOR_LEVELS_FULL,
         },
-        .color          = pl_color_space_bt709,
+        .color          = pl_color_space_srgb,
         .crop           = {-1.0, 0.0, width - 1.0, height},
     };
 
