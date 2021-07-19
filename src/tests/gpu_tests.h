@@ -970,6 +970,7 @@ static void pl_render_tests(pl_gpu gpu)
 #define TEST(SNAME, STYPE, DEFAULT, FIELD, LIMIT)                       \
     do {                                                                \
         for (int i = 0; i <= LIMIT; i++) {                              \
+            printf("testing `" #STYPE "." #FIELD " = %d`\n", i);        \
             struct pl_render_params params = pl_render_default_params;  \
             params.force_dither = true;                                 \
             struct STYPE tmp = DEFAULT;                                 \
@@ -988,6 +989,7 @@ static void pl_render_tests(pl_gpu gpu)
     for (int i = 0; i < pl_num_scale_filters; i++) {
         struct pl_render_params params = pl_render_default_params;
         params.upscaler = pl_scale_filters[i].filter;
+        printf("testing `params.upscaler = /* %s */`\n", pl_scale_filters[i].name);
         REQUIRE(pl_render_image(rr, &image, &target, &params));
         pl_gpu_flush(gpu);
     }
