@@ -187,6 +187,9 @@ int main()
         gpu_shader_tests(vk->gpu);
         vulkan_swapchain_tests(vk, surf);
 
+        // Print heap statistics
+        pl_vk_print_heap(vk->gpu, PL_LOG_DEBUG);
+
         // Test importing this context via the vulkan interop API
         struct pl_vulkan_import_params iparams = {
             .instance = vk->instance,

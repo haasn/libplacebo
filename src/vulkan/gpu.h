@@ -32,6 +32,9 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk);
 // submit it as well.
 struct vk_cmd *pl_vk_steal_cmd(pl_gpu gpu);
 
+// Print memory usage statistics
+void pl_vk_print_heap(pl_gpu, enum pl_log_level);
+
 // --- pl_gpu internal structs and helpers
 
 struct pl_fmt_vk {

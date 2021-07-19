@@ -730,6 +730,12 @@ struct vk_cmd *pl_vk_steal_cmd(pl_gpu gpu)
     return cmd;
 }
 
+void pl_vk_print_heap(pl_gpu gpu, enum pl_log_level lev)
+{
+    struct pl_vk *p = PL_PRIV(gpu);
+    vk_malloc_print_heap(p->alloc, lev);
+}
+
 static const struct pl_gpu_fns pl_fns_vk = {
     .destroy                = vk_gpu_destroy,
     .tex_create             = vk_tex_create,

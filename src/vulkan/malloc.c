@@ -99,6 +99,67 @@ struct vk_malloc {
     PL_ARRAY(struct vk_heap) heaps;
 };
 
+void vk_malloc_print_heap(struct vk_malloc *ma, enum pl_log_level lev)
+{
+    struct vk_ctx *vk = ma->vk;
+    size_t total_used = 0;
+    size_t total_size = 0;
+
+    pthread_mutex_lock(&ma->lock);
+    for (int i = 0; i < ma->heaps.num; i++) {
+        struct vk_heap *heap = &ma->heaps.elem[i];
+        const struct vk_malloc_params *par = &heap->params;
+
+        PL_MSG(vk, lev, "Memory heap %d:", i);
+        PL_MSG(vk, lev, "    Compatible types: 0x%"PRIx32, par->reqs.memoryTypeBits);
+        if (par->required)
+            PL_MSG(vk, lev, "    Required flags: 0x%"PRIx32, par->required);
+        if (par->optimal)
+            PL_MSG(vk, lev, "    Optimal flags: 0x%"PRIx32, par->optimal);
+        if (par->buf_usage)
+            PL_MSG(vk, lev, "    Buffer flags: 0x%"PRIx32, par->buf_usage);
+        if (par->export_handle)
+            PL_MSG(vk, lev, "    Export handle: 0x%x", par->export_handle);
+
+        size_t heap_used = 0;
+        size_t heap_size = 0;
+
+        for (int j = 0; j < heap->slabs.num; j++) {
+            struct vk_slab *slab = heap->slabs.elem[j];
+            pthread_mutex_lock(&slab->lock);
+            PL_MSG(vk, lev, "    Slab %d:", j);
+            PL_MSG(vk, lev, "      Used: %zu", slab->used);
+            PL_MSG(vk, lev, "      Size: %zu", slab->size);
+            PL_MSG(vk, lev, "      Regions: %d", slab->regions.num);
+
+            if (slab->used > 0) {
+                size_t largest_region = 0;
+                for (int k = 0; k < slab->regions.num; k++) {
+                    if (region_len(slab->regions.elem[k]) > largest_region)
+                        largest_region = region_len(slab->regions.elem[k]);
+                }
+
+                float efficiency = slab->used / (slab->size - largest_region);
+                PL_MSG(vk, lev, "      Efficiency: %.1f%%", 100 * efficiency);
+            }
+
+            heap_used += slab->used;
+            heap_size += slab->size;
+            pthread_mutex_unlock(&slab->lock);
+        }
+
+        PL_MSG(vk, lev, "    Heap summary: %zu used / %zu total",
+               heap_used, heap_size);
+
+        total_used += heap_used;
+        total_size += heap_size;
+    }
+    pthread_mutex_unlock(&ma->lock);
+
+    PL_MSG(vk, lev, "Memory summary: %zu used / %zu total",
+           total_used, total_size);
+}
+
 static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
 {
     if (!slab)
@@ -237,7 +298,7 @@ static bool buf_external_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
 }
 
 // thread-safety: safe
-static struct vk_slab *slab_alloc(const struct vk_malloc *ma,
+static struct vk_slab *slab_alloc(struct vk_malloc *ma,
                                   const struct vk_malloc_params *params)
 {
     struct vk_ctx *vk = ma->vk;
@@ -333,7 +394,18 @@ static struct vk_slab *slab_alloc(const struct vk_malloc *ma,
              (size_t) slab->size, (unsigned) mtype->propertyFlags,
              (int) minfo.memoryTypeIndex, (int) mtype->heapIndex);
 
-    VK(vk->AllocateMemory(vk->dev, &minfo, PL_VK_ALLOC, &slab->mem));
+    VkResult res = vk->AllocateMemory(vk->dev, &minfo, PL_VK_ALLOC, &slab->mem);
+    switch (res) {
+    case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+    case VK_ERROR_OUT_OF_HOST_MEMORY:
+        PL_ERR(vk, "Allocation of size %zu failed: %s!",
+               (size_t) slab->size, vk_res_str(res));
+        vk_malloc_print_heap(ma, PL_LOG_ERR);
+        goto error;
+
+    default:
+        PL_VK_ASSERT(res, "vkAllocateMemory");
+    }
 
     slab->flags = ma->props.memoryTypes[minfo.memoryTypeIndex].propertyFlags;
     if (slab->flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {

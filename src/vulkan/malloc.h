@@ -56,3 +56,6 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
                      const struct vk_malloc_params *params);
 
 void vk_malloc_free(struct vk_malloc *ma, struct vk_memslice *slice);
+
+// For debugging purposes. Doesn't include dedicated slab allocations!
+void vk_malloc_print_heap(struct vk_malloc *ma, enum pl_log_level);
