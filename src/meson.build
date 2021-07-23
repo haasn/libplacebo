@@ -2,7 +2,13 @@
 prog_python = import('python').find_installation()
 libm = cc.find_library('m', required: false)
 
-build_deps = [ libm ]
+if host_machine.system() == 'windows'
+    thread_deps = declare_dependency()
+else
+    thread_deps = dependency('threads')
+endif
+
+build_deps = [ libm, thread_deps ]
 test_deps = []
 
 vulkan = dependency('vulkan', version: '>=1.1', required: get_option('vulkan'))
@@ -366,7 +372,6 @@ configure_file(
 )
 
 # work around meson bugs
-build_deps += dependency('threads')
 inc = [
   include_directories('./include'),
   include_directories('./include/dummy'),

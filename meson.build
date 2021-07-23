@@ -69,6 +69,11 @@ if cc.has_link_argument(vflag)
   link_args += [vflag]
 endif
 
+# OS specific build options
+if host_machine.system() == 'windows'
+    build_opts += ['-D_WIN32_WINNT=0x0601']
+endif
+
 add_project_arguments(build_opts + c_opts, language: 'c')
 add_project_arguments(build_opts + cpp_opts, language: 'cpp')
 add_project_link_arguments(link_args, language: 'c')

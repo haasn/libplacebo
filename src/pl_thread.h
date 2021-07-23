@@ -17,14 +17,18 @@
 
 #pragma once
 
-#include <pthread.h>
-
 #include "common.h"
 
 enum pl_mutex_type {
     PL_MUTEX_NORMAL = 0,
     PL_MUTEX_RECURSIVE,
 };
+
+#ifdef PL_HAVE_WIN32
+#include "pl_thread_win32.h"
+#else
+
+#include <pthread.h>
 
 typedef pthread_mutex_t pl_mutex;
 typedef pthread_cond_t  pl_cond;
@@ -86,3 +90,5 @@ static inline int pl_cond_timedwait(pl_cond *cond, pl_mutex *mutex, uint64_t tim
             .tv_nsec = (timeout) % 1000000000LLU,
         });
 }
+
+#endif
