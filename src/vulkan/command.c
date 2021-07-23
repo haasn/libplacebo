@@ -39,10 +39,10 @@ static void vk_cmd_reset(struct vk_ctx *vk, struct vk_cmd *cmd)
     cmd->objs.num = 0;
 
     // also make sure to reset vk->last_cmd in case this was the last command
-    pthread_mutex_lock(&vk->lock);
+    pl_mutex_lock(&vk->lock);
     if (vk->last_cmd == cmd)
         vk->last_cmd = NULL;
-    pthread_mutex_unlock(&vk->lock);
+    pl_mutex_unlock(&vk->lock);
 }
 
 static void vk_cmd_destroy(struct vk_ctx *vk, struct vk_cmd *cmd)
@@ -91,14 +91,14 @@ error:
 void vk_dev_callback(struct vk_ctx *vk, vk_cb callback,
                      const void *priv, const void *arg)
 {
-    pthread_mutex_lock(&vk->lock);
+    pl_mutex_lock(&vk->lock);
     if (vk->last_cmd) {
         vk_cmd_callback(vk->last_cmd, callback, priv, arg);
     } else {
         // The device was already idle, so we can just immediately call it
         callback((void *) priv, (void *) arg);
     }
-    pthread_mutex_unlock(&vk->lock);
+    pl_mutex_unlock(&vk->lock);
 }
 
 void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback,
@@ -217,14 +217,14 @@ static bool unsignal(struct vk_ctx *vk, struct vk_cmd *cmd, VkSemaphore sem)
         return true;
 
     // Attempt to remove it from any queued commands
-    pthread_mutex_lock(&vk->lock);
+    pl_mutex_lock(&vk->lock);
     for (int i = 0; i < vk->cmds_queued.num; i++) {
         if (unsignal_cmd(vk->cmds_queued.elem[i], sem)) {
-            pthread_mutex_unlock(&vk->lock);
+            pl_mutex_unlock(&vk->lock);
             return true;
         }
     }
-    pthread_mutex_unlock(&vk->lock);
+    pl_mutex_unlock(&vk->lock);
 
     return false;
 }
@@ -238,9 +238,9 @@ static void release_signal(struct vk_ctx *vk, struct vk_signal *sig)
         vk->ResetEvent(vk->dev, sig->event);
     sig->source = NULL;
 
-    pthread_mutex_lock(&vk->lock);
+    pl_mutex_lock(&vk->lock);
     PL_ARRAY_APPEND(vk->alloc, vk->signals, sig);
-    pthread_mutex_unlock(&vk->lock);
+    pl_mutex_unlock(&vk->lock);
 }
 
 enum vk_wait_type vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
@@ -338,17 +338,17 @@ struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool)
     vk_poll_commands(vk, 0);
 
     struct vk_cmd *cmd = NULL;
-    pthread_mutex_lock(&vk->lock);
+    pl_mutex_lock(&vk->lock);
     if (!PL_ARRAY_POP(pool->cmds, &cmd)) {
         cmd = vk_cmd_create(vk, pool);
         if (!cmd) {
-            pthread_mutex_unlock(&vk->lock);
+            pl_mutex_unlock(&vk->lock);
             goto error;
         }
     }
 
     cmd->queue = pool->queues[pool->idx_queues];
-    pthread_mutex_unlock(&vk->lock);
+    pl_mutex_unlock(&vk->lock);
 
     VkCommandBufferBeginInfo binfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -377,7 +377,7 @@ bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd **pcmd)
     VK(vk->EndCommandBuffer(cmd->buf));
     VK(vk->ResetFences(vk->dev, 1, &cmd->fence));
 
-    pthread_mutex_lock(&vk->lock);
+    pl_mutex_lock(&vk->lock);
     PL_ARRAY_APPEND(vk->alloc, vk->cmds_queued, cmd);
     vk->last_cmd = cmd;
 
@@ -387,14 +387,14 @@ bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd **pcmd)
         vk_flush_commands(vk);
     }
 
-    pthread_mutex_unlock(&vk->lock);
+    pl_mutex_unlock(&vk->lock);
     return true;
 
 error:
     vk_cmd_reset(vk, cmd);
-    pthread_mutex_lock(&vk->lock);
+    pl_mutex_lock(&vk->lock);
     PL_ARRAY_APPEND(pool, pool->cmds, cmd);
-    pthread_mutex_unlock(&vk->lock);
+    pl_mutex_unlock(&vk->lock);
     vk->failed = true;
     return false;
 }
@@ -402,15 +402,15 @@ error:
 bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
 {
     bool ret = false;
-    pthread_mutex_lock(&vk->lock);
+    pl_mutex_lock(&vk->lock);
 
     while (vk->cmds_pending.num > 0) {
         struct vk_cmd *cmd = vk->cmds_pending.elem[0];
         struct vk_cmdpool *pool = cmd->pool;
-        pthread_mutex_unlock(&vk->lock); // don't hold mutex while blocking
+        pl_mutex_unlock(&vk->lock); // don't hold mutex while blocking
         if (vk_cmd_poll(vk, cmd, timeout) == VK_TIMEOUT)
             return ret;
-        pthread_mutex_lock(&vk->lock);
+        pl_mutex_lock(&vk->lock);
 
         PL_TRACE(vk, "VkFence signalled: %p", (void *) cmd->fence);
         vk_cmd_reset(vk, cmd);
@@ -426,7 +426,7 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
         timeout = 0;
     }
 
-    pthread_mutex_unlock(&vk->lock);
+    pl_mutex_unlock(&vk->lock);
     return ret;
 }
 
@@ -437,7 +437,7 @@ bool vk_flush_commands(struct vk_ctx *vk)
 
 bool vk_flush_obj(struct vk_ctx *vk, const void *obj)
 {
-    pthread_mutex_lock(&vk->lock);
+    pl_mutex_lock(&vk->lock);
 
     // Count how many commands we want to flush
     int num_to_flush = vk->cmds_queued.num;
@@ -457,7 +457,7 @@ next_cmd: ;
     }
 
     if (!num_to_flush) {
-        pthread_mutex_unlock(&vk->lock);
+        pl_mutex_unlock(&vk->lock);
         return true;
     }
 
@@ -515,18 +515,18 @@ error:
 
     // Wait until we've processed some of the now pending commands
     while (vk->cmds_pending.num > PL_VK_MAX_PENDING_CMDS) {
-        pthread_mutex_unlock(&vk->lock); // don't hold mutex while blocking
+        pl_mutex_unlock(&vk->lock); // don't hold mutex while blocking
         vk_poll_commands(vk, UINT64_MAX);
-        pthread_mutex_lock(&vk->lock);
+        pl_mutex_lock(&vk->lock);
     }
 
-    pthread_mutex_unlock(&vk->lock);
+    pl_mutex_unlock(&vk->lock);
     return ret;
 }
 
 void vk_rotate_queues(struct vk_ctx *vk)
 {
-    pthread_mutex_lock(&vk->lock);
+    pl_mutex_lock(&vk->lock);
 
     // Rotate the queues to ensure good parallelism across frames
     for (int i = 0; i < vk->pools.num; i++) {
@@ -535,7 +535,7 @@ void vk_rotate_queues(struct vk_ctx *vk)
         PL_TRACE(vk, "QF %d: %d/%d", pool->qf, pool->idx_queues, pool->num_queues);
     }
 
-    pthread_mutex_unlock(&vk->lock);
+    pl_mutex_unlock(&vk->lock);
 }
 
 void vk_wait_idle(struct vk_ctx *vk)

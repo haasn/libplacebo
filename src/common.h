@@ -24,7 +24,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <inttypes.h>
-#include <pthread.h>
 
 #if defined(__MINGW32__) && !defined(__clang__)
 #define PL_PRINTF(fmt, va) __attribute__ ((format(gnu_printf, fmt, va)))
@@ -172,31 +171,6 @@ static inline size_t pl_lcm(size_t x, size_t y)
             abort();                                                            \
         }                                                                       \
     } while (0)
-
-// Mutex helpers
-#define pl_mutex_init_type(mutex, mtype)                                        \
-    do {                                                                        \
-        pthread_mutexattr_t _attr;                                              \
-        PL_CHECK_ERR(pthread_mutexattr_init(&_attr));                           \
-        pthread_mutexattr_settype(&_attr, mtype);                               \
-        PL_CHECK_ERR(pthread_mutex_init(mutex, &_attr));                        \
-        pthread_mutexattr_destroy(&_attr);                                      \
-    } while (0)
-
-#ifndef NDEBUG
-#define pl_mutex_init(mutex) \
-    pl_mutex_init_type(mutex, PTHREAD_MUTEX_ERRORCHECK)
-#else
-#define pl_mutex_init(mutex) \
-    PL_CHECK_ERR(pthread_mutex_init(mutex, NULL))
-#endif
-
-#define pl_cond_timedwait(cond, mutex, timeout)                                 \
-    ((timeout) == UINT64_MAX ? pthread_cond_wait(cond, mutex) :                 \
-        pthread_cond_timedwait(cond, mutex, &(struct timespec) {                \
-            .tv_sec  = (timeout) / 1000000000LLU,                               \
-            .tv_nsec = (timeout) % 1000000000LLU,                               \
-        }))
 
 // Refcounting helpers
 typedef _Atomic uint64_t pl_rc_t;

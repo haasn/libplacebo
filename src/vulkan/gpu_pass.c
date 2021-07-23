@@ -78,13 +78,13 @@ void vk_pass_destroy(pl_gpu gpu, pl_pass pass)
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    pthread_mutex_lock(&p->recording);
+    pl_mutex_lock(&p->recording);
     if (p->cmd) {
         vk_cmd_callback(p->cmd, (vk_cb) pass_destroy_cb, gpu, pass);
     } else {
         vk_dev_callback(vk, (vk_cb) pass_destroy_cb, gpu, pass);
     }
-    pthread_mutex_unlock(&p->recording);
+    pl_mutex_unlock(&p->recording);
 }
 
 static const VkDescriptorType dsType[] = {

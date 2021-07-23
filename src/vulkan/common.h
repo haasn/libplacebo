@@ -20,7 +20,7 @@
 #define VK_NO_PROTOTYPES
 #include "../common.h"
 #include "../log.h"
-#include <pthread.h>
+#include "../pl_thread.h"
 
 #ifdef PL_HAVE_WIN32
 #include <windows.h>
@@ -50,7 +50,7 @@
 
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
-    pthread_mutex_t lock;
+    pl_mutex lock;
     void *alloc; // allocations bound to the lifetime of this vk_ctx
     pl_vk_inst internal_instance;
     pl_log log;

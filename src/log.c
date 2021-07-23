@@ -17,13 +17,13 @@
 
 #include <stdio.h>
 #include <locale.h>
-#include <pthread.h>
 
 #include "common.h"
 #include "log.h"
+#include "pl_thread.h"
 
 struct priv {
-    pthread_mutex_t lock;
+    pl_mutex lock;
     enum pl_log_level log_level_cap;
     pl_str logbuffer;
 };
@@ -46,13 +46,7 @@ pl_log pl_log_create(int api_ver, const struct pl_log_params *params)
     struct pl_log *log = pl_zalloc_obj(NULL, log, struct priv);
     struct priv *p = PL_PRIV(log);
     log->params = *PL_DEF(params, &pl_log_default_params);
-    int err = pthread_mutex_init(&p->lock, NULL);
-    if (err != 0) {
-        fprintf(stderr, "Failed initializing pthread mutex: %s\n", strerror(err));
-        pl_free(log);
-        return NULL;
-    }
-
+    pl_mutex_init(&p->lock);
     pl_info(log, "Initialized libplacebo %s (API v%d)", PL_VERSION, PL_API_VER);
     return log;
 }
@@ -66,7 +60,7 @@ void pl_log_destroy(pl_log *plog)
         return;
 
     struct priv *p = PL_PRIV(log);
-    pthread_mutex_destroy(&p->lock);
+    pl_mutex_destroy(&p->lock);
     pl_free((void *) log);
     *plog = NULL;
 }
@@ -78,10 +72,10 @@ struct pl_log_params pl_log_update(pl_log ptr, const struct pl_log_params *param
         return pl_log_default_params;
 
     struct priv *p = PL_PRIV(log);
-    pthread_mutex_lock(&p->lock);
+    pl_mutex_lock(&p->lock);
     struct pl_log_params prev_params = log->params;
     log->params = *PL_DEF(params, &pl_log_default_params);
-    pthread_mutex_unlock(&p->lock);
+    pl_mutex_unlock(&p->lock);
 
     return prev_params;
 }
@@ -93,10 +87,10 @@ enum pl_log_level pl_log_level_update(pl_log ptr, enum pl_log_level level)
         return PL_LOG_NONE;
 
     struct priv *p = PL_PRIV(log);
-    pthread_mutex_lock(&p->lock);
+    pl_mutex_lock(&p->lock);
     enum pl_log_level prev_level = log->params.log_level;
     log->params.log_level = level;
-    pthread_mutex_unlock(&p->lock);
+    pl_mutex_unlock(&p->lock);
 
     return prev_level;
 }
@@ -107,9 +101,9 @@ void pl_log_level_cap(pl_log log, enum pl_log_level cap)
         return;
 
     struct priv *p = PL_PRIV(log);
-    pthread_mutex_lock(&p->lock);
+    pl_mutex_lock(&p->lock);
     p->log_level_cap = cap;
-    pthread_mutex_unlock(&p->lock);
+    pl_mutex_unlock(&p->lock);
 }
 
 static FILE *default_stream(void *stream, enum pl_log_level level)
@@ -165,7 +159,7 @@ static void pl_msg_va(pl_log log, enum pl_log_level lev,
     // Re-test the log message level with held lock to avoid false positives,
     // which would be a considerably bigger deal than false negatives
     struct priv *p = PL_PRIV(log);
-    pthread_mutex_lock(&p->lock);
+    pl_mutex_lock(&p->lock);
 
     // Apply this cap before re-testing the log level, to avoid giving users
     // messages that should have been dropped by the log level.
@@ -178,7 +172,7 @@ static void pl_msg_va(pl_log log, enum pl_log_level lev,
     log->params.log_cb(log->params.log_priv, lev, p->logbuffer.buf);
 
 done:
-    pthread_mutex_unlock(&p->lock);
+    pl_mutex_unlock(&p->lock);
 }
 
 void pl_msg(pl_log log, enum pl_log_level lev, const char *fmt, ...)

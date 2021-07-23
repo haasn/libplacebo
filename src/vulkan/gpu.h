@@ -24,6 +24,7 @@
 #include "utils.h"
 
 #include "../gpu.h"
+#include "../pl_thread.h"
 
 pl_gpu pl_gpu_create_vk(struct vk_ctx *vk);
 
@@ -68,7 +69,7 @@ struct pl_vk {
 
     // The "currently recording" command. This will be queued and replaced by
     // a new command every time we need to "switch" between queue families.
-    pthread_mutex_t recording;
+    pl_mutex recording;
     struct vk_cmd *cmd;
     pl_timer cmd_timer;
 

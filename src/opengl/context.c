@@ -18,6 +18,7 @@
 #include "common.h"
 #include "utils.h"
 #include "gpu.h"
+#include "pl_thread.h"
 
 const struct pl_opengl_params pl_opengl_default_params = {0};
 
@@ -28,7 +29,7 @@ struct priv {
     bool is_debug_egl;
 
     // For context locking
-    pthread_mutex_t lock;
+    pl_mutex lock;
     int count;
 };
 
@@ -93,7 +94,7 @@ void pl_opengl_destroy(pl_opengl *ptr)
 
     pl_gpu_destroy(pl_gl->gpu);
     gl_release_current(pl_gl);
-    pthread_mutex_destroy(&p->lock);
+    pl_mutex_destroy(&p->lock);
     pl_free_ptr((void **) ptr);
 }
 
@@ -105,7 +106,7 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     p->params = *params;
     p->log = log;
 
-    pl_mutex_init_type(&p->lock, PTHREAD_MUTEX_RECURSIVE);
+    pl_mutex_init_type(&p->lock, PL_MUTEX_RECURSIVE);
     if (!gl_make_current(pl_gl)) {
         pl_free(pl_gl);
         return NULL;
@@ -203,11 +204,11 @@ error:
 bool gl_make_current(pl_opengl gl)
 {
     struct priv *p = PL_PRIV(gl);
-    pthread_mutex_lock(&p->lock);
+    pl_mutex_lock(&p->lock);
     if (!p->count && p->params.make_current) {
         if (!p->params.make_current(p->params.priv)) {
             PL_ERR(p, "Failed making OpenGL context current on calling thread!");
-            pthread_mutex_unlock(&p->lock);
+            pl_mutex_unlock(&p->lock);
             return false;
         }
     }
@@ -222,5 +223,5 @@ void gl_release_current(pl_opengl gl)
     p->count--;
     if (!p->count && p->params.release_current)
         p->params.release_current(p->params.priv);
-    pthread_mutex_unlock(&p->lock);
+    pl_mutex_unlock(&p->lock);
 }

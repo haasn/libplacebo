@@ -74,13 +74,13 @@ static void vk_timer_destroy(pl_gpu gpu, pl_timer timer)
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    pthread_mutex_lock(&p->recording);
+    pl_mutex_lock(&p->recording);
     if (p->cmd) {
         vk_cmd_callback(p->cmd, (vk_cb) timer_destroy_cb, gpu, timer);
     } else {
         vk_dev_callback(vk, (vk_cb) timer_destroy_cb, gpu, timer);
     }
-    pthread_mutex_unlock(&p->recording);
+    pl_mutex_unlock(&p->recording);
 }
 
 static uint64_t vk_timer_query(pl_gpu gpu, pl_timer timer)
@@ -162,7 +162,7 @@ struct vk_cmd *_begin_cmd(pl_gpu gpu, enum queue_type type, const char *label,
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
-    pthread_mutex_lock(&p->recording);
+    pl_mutex_lock(&p->recording);
 
     struct vk_cmdpool *pool;
     switch (type) {
@@ -212,9 +212,9 @@ void _end_cmd(pl_gpu gpu, struct vk_cmd **pcmd, bool submit)
     struct vk_ctx *vk = p->vk;
     if (!pcmd) {
         if (submit) {
-            pthread_mutex_lock(&p->recording);
+            pl_mutex_lock(&p->recording);
             vk_cmd_queue(p->vk, &p->cmd);
-            pthread_mutex_unlock(&p->recording);
+            pl_mutex_unlock(&p->recording);
         }
         return;
     }
@@ -246,7 +246,7 @@ void _end_cmd(pl_gpu gpu, struct vk_cmd **pcmd, bool submit)
     if (submit)
         vk_cmd_queue(vk, &p->cmd);
 
-    pthread_mutex_unlock(&p->recording);
+    pl_mutex_unlock(&p->recording);
 }
 
 static void vk_gpu_destroy(pl_gpu gpu)
@@ -266,7 +266,7 @@ static void vk_gpu_destroy(pl_gpu gpu)
     vk_malloc_destroy(&p->alloc);
     spirv_compiler_destroy(&p->spirv);
 
-    pthread_mutex_destroy(&p->recording);
+    pl_mutex_destroy(&p->recording);
     pl_free((void *) gpu);
 }
 
@@ -716,10 +716,10 @@ struct vk_cmd *pl_vk_steal_cmd(pl_gpu gpu)
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    pthread_mutex_lock(&p->recording);
+    pl_mutex_lock(&p->recording);
     struct vk_cmd *cmd = p->cmd;
     p->cmd = NULL;
-    pthread_mutex_unlock(&p->recording);
+    pl_mutex_unlock(&p->recording);
 
     struct vk_cmdpool *pool = vk->pool_graphics;
     if (!cmd || cmd->pool != pool) {

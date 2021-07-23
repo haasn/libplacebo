@@ -20,6 +20,7 @@
 
 #include "common.h"
 #include "log.h"
+#include "pl_thread.h"
 
 struct cache_entry {
     pl_tex tex[4];
@@ -70,9 +71,9 @@ struct pl_queue {
     // In particular, `pl_queue_reset` and `pl_queue_update` will take
     // the strong lock, while `pl_queue_push_*` will only take the weak
     // lock.
-    pthread_mutex_t lock_strong;
-    pthread_mutex_t lock_weak;
-    pthread_cond_t wakeup;
+    pl_mutex lock_strong;
+    pl_mutex lock_weak;
+    pl_cond wakeup;
 
     // Frame queue and state
     PL_ARRAY(struct entry) queue;
@@ -106,7 +107,7 @@ pl_queue pl_queue_create(pl_gpu gpu)
 
     pl_mutex_init(&p->lock_strong);
     pl_mutex_init(&p->lock_weak);
-    PL_CHECK_ERR(pthread_cond_init(&p->wakeup, NULL));
+    PL_CHECK_ERR(pl_cond_init(&p->wakeup));
     return p;
 }
 
@@ -142,9 +143,9 @@ void pl_queue_destroy(pl_queue *queue)
             pl_tex_destroy(p->gpu, &p->cache.elem[n].tex[i]);
     }
 
-    pthread_cond_destroy(&p->wakeup);
-    pthread_mutex_destroy(&p->lock_weak);
-    pthread_mutex_destroy(&p->lock_strong);
+    pl_cond_destroy(&p->wakeup);
+    pl_mutex_destroy(&p->lock_weak);
+    pl_mutex_destroy(&p->lock_strong);
     pl_free(p);
     *queue = NULL;
 }
@@ -166,8 +167,8 @@ static inline void cull_entry(pl_queue p, struct entry *entry)
 
 void pl_queue_reset(pl_queue p)
 {
-    pthread_mutex_lock(&p->lock_strong);
-    pthread_mutex_lock(&p->lock_weak);
+    pl_mutex_lock(&p->lock_strong);
+    pl_mutex_lock(&p->lock_weak);
 
     for (int i = 0; i < p->queue.num; i++)
         cull_entry(p, &p->queue.elem[i]);
@@ -176,7 +177,7 @@ void pl_queue_reset(pl_queue p)
         .gpu = p->gpu,
         .log = p->log,
 
-        // Reuse pthread objects
+        // Reuse lock objects
         .lock_strong = p->lock_strong,
         .lock_weak = p->lock_weak,
         .wakeup = p->wakeup,
@@ -191,9 +192,9 @@ void pl_queue_reset(pl_queue p)
         .cache = p->cache,
     };
 
-    pthread_cond_signal(&p->wakeup);
-    pthread_mutex_unlock(&p->lock_weak);
-    pthread_mutex_unlock(&p->lock_strong);
+    pl_cond_signal(&p->wakeup);
+    pl_mutex_unlock(&p->lock_weak);
+    pl_mutex_unlock(&p->lock_strong);
 }
 
 static inline float delta(float old, float new)
@@ -236,7 +237,7 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
         return;
     }
 
-    pthread_cond_signal(&p->wakeup);
+    pl_cond_signal(&p->wakeup);
 
     if (!src) {
         PL_TRACE(p, "Received EOF, draining frame queue...");
@@ -278,9 +279,9 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
 
 void pl_queue_push(pl_queue p, const struct pl_source_frame *frame)
 {
-    pthread_mutex_lock(&p->lock_weak);
+    pl_mutex_lock(&p->lock_weak);
     queue_push(p, frame);
-    pthread_mutex_unlock(&p->lock_weak);
+    pl_mutex_unlock(&p->lock_weak);
 }
 
 static bool queue_has_room(pl_queue p)
@@ -302,13 +303,13 @@ static bool queue_has_room(pl_queue p)
 bool pl_queue_push_block(pl_queue p, uint64_t timeout,
                          const struct pl_source_frame *frame)
 {
-    pthread_mutex_lock(&p->lock_weak);
+    pl_mutex_lock(&p->lock_weak);
     if (!timeout || !frame || p->eof)
         goto skip_blocking;
 
     while (!queue_has_room(p) && !p->eof) {
         if (pl_cond_timedwait(&p->wakeup, &p->lock_weak, timeout) == ETIMEDOUT) {
-            pthread_mutex_unlock(&p->lock_weak);
+            pl_mutex_unlock(&p->lock_weak);
             return false;
         }
     }
@@ -316,7 +317,7 @@ bool pl_queue_push_block(pl_queue p, uint64_t timeout,
 skip_blocking:
 
     queue_push(p, frame);
-    pthread_mutex_unlock(&p->lock_weak);
+    pl_mutex_unlock(&p->lock_weak);
     return true;
 }
 
@@ -352,7 +353,7 @@ static enum pl_queue_status get_frame(pl_queue p, const struct pl_queue_params *
             return PL_QUEUE_MORE;
 
         p->want_frame = true;
-        pthread_cond_signal(&p->wakeup);
+        pl_cond_signal(&p->wakeup);
 
         while (p->want_frame) {
             if (pl_cond_timedwait(&p->wakeup, &p->lock_weak, params->timeout) == ETIMEDOUT)
@@ -364,7 +365,7 @@ static enum pl_queue_status get_frame(pl_queue p, const struct pl_queue_params *
 
     // Don't hold the weak mutex while calling into `get_frame`, to allow
     // `pl_queue_push` to run concurrently while we're waiting for frames
-    pthread_mutex_unlock(&p->lock_weak);
+    pl_mutex_unlock(&p->lock_weak);
 
     struct pl_source_frame src;
     enum pl_queue_status ret;
@@ -380,7 +381,7 @@ static enum pl_queue_status get_frame(pl_queue p, const struct pl_queue_params *
         break;
     }
 
-    pthread_mutex_lock(&p->lock_weak);
+    pl_mutex_lock(&p->lock_weak);
     return ret;
 }
 
@@ -716,8 +717,8 @@ static inline void default_estimate(struct pool *pool, float val)
 enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
                                      const struct pl_queue_params *params)
 {
-    pthread_mutex_lock(&p->lock_strong);
-    pthread_mutex_lock(&p->lock_weak);
+    pl_mutex_lock(&p->lock_strong);
+    pl_mutex_lock(&p->lock_weak);
     default_estimate(&p->fps, params->frame_duration);
     default_estimate(&p->vps, params->vsync_duration);
 
@@ -733,8 +734,8 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
                    "increasing! Please use `pl_queue_reset` to reset the frame "
                    "queue on discontinuous PTS jumps.",
                    params->pts, p->queue.elem[0].src.pts);
-            pthread_mutex_unlock(&p->lock_weak);
-            pthread_mutex_unlock(&p->lock_strong);
+            pl_mutex_unlock(&p->lock_weak);
+            pl_mutex_unlock(&p->lock_strong);
             return PL_QUEUE_ERR;
         }
 
@@ -757,8 +758,8 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
     // As a special case, prefill the queue if this is the first frame
     if (!params->pts && !p->queue.num) {
         if (!prefill(p, params)) {
-            pthread_mutex_unlock(&p->lock_weak);
-            pthread_mutex_unlock(&p->lock_strong);
+            pl_mutex_unlock(&p->lock_weak);
+            pl_mutex_unlock(&p->lock_strong);
             return PL_QUEUE_ERR;
         }
     }
@@ -776,8 +777,8 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
         ret = nearest(p, out_mix, params);
     }
 
-    pthread_cond_signal(&p->wakeup);
-    pthread_mutex_unlock(&p->lock_weak);
-    pthread_mutex_unlock(&p->lock_strong);
+    pl_cond_signal(&p->wakeup);
+    pl_mutex_unlock(&p->lock_weak);
+    pl_mutex_unlock(&p->lock_strong);
     return ret;
 }

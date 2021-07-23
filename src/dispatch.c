@@ -20,6 +20,7 @@
 #include "shaders.h"
 #include "dispatch.h"
 #include "gpu.h"
+#include "pl_thread.h"
 
 // Maximum number of passes to keep around at once. If full, passes older than
 // MIN_AGE are evicted to make room. (Failing that, the cache size doubles)
@@ -35,7 +36,7 @@ enum {
 };
 
 struct pl_dispatch {
-    pthread_mutex_t lock;
+    pl_mutex lock;
     pl_log log;
     pl_gpu gpu;
     uint8_t current_ident;
@@ -135,14 +136,14 @@ void pl_dispatch_destroy(pl_dispatch *ptr)
     for (int i = 0; i < dp->shaders.num; i++)
         pl_shader_free(&dp->shaders.elem[i]);
 
-    pthread_mutex_destroy(&dp->lock);
+    pl_mutex_destroy(&dp->lock);
     pl_free(dp);
     *ptr = NULL;
 }
 
 pl_shader pl_dispatch_begin_ex(pl_dispatch dp, bool unique)
 {
-    pthread_mutex_lock(&dp->lock);
+    pl_mutex_lock(&dp->lock);
 
     struct pl_shader_params params = {
         .id = unique ? dp->current_ident++ : 0,
@@ -153,7 +154,7 @@ pl_shader pl_dispatch_begin_ex(pl_dispatch dp, bool unique)
 
     pl_shader sh = NULL;
     PL_ARRAY_POP(dp->shaders, &sh);
-    pthread_mutex_unlock(&dp->lock);
+    pl_mutex_unlock(&dp->lock);
 
     if (sh) {
         sh->res.params = params;
@@ -165,10 +166,10 @@ pl_shader pl_dispatch_begin_ex(pl_dispatch dp, bool unique)
 
 void pl_dispatch_reset_frame(pl_dispatch dp)
 {
-    pthread_mutex_lock(&dp->lock);
+    pl_mutex_lock(&dp->lock);
     dp->current_ident = 0;
     dp->current_index++;
-    pthread_mutex_unlock(&dp->lock);
+    pl_mutex_unlock(&dp->lock);
 }
 
 void pl_dispatch_mark_dynamic(pl_dispatch dp, bool dynamic)
@@ -1119,7 +1120,7 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
     pl_shader sh = *params->shader;
     const struct pl_shader_res *res = &sh->res;
     bool ret = false;
-    pthread_mutex_lock(&dp->lock);
+    pl_mutex_lock(&dp->lock);
 
     if (sh->failed) {
         PL_ERR(sh, "Trying to dispatch a failed shader.");
@@ -1266,7 +1267,7 @@ error:
     for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
         dp->tmp[i].len = 0;
 
-    pthread_mutex_unlock(&dp->lock);
+    pl_mutex_unlock(&dp->lock);
     pl_dispatch_abort(dp, params->shader);
     return ret;
 }
@@ -1276,7 +1277,7 @@ bool pl_dispatch_compute(pl_dispatch dp, const struct pl_dispatch_compute_params
     pl_shader sh = *params->shader;
     const struct pl_shader_res *res = &sh->res;
     bool ret = false;
-    pthread_mutex_lock(&dp->lock);
+    pl_mutex_lock(&dp->lock);
 
     if (sh->failed) {
         PL_ERR(sh, "Trying to dispatch a failed shader.");
@@ -1359,7 +1360,7 @@ error:
     for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
         dp->tmp[i].len = 0;
 
-    pthread_mutex_unlock(&dp->lock);
+    pl_mutex_unlock(&dp->lock);
     pl_dispatch_abort(dp, params->shader);
     return ret;
 }
@@ -1369,7 +1370,7 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
     pl_shader sh = *params->shader;
     const struct pl_shader_res *res = &sh->res;
     bool ret = false;
-    pthread_mutex_lock(&dp->lock);
+    pl_mutex_lock(&dp->lock);
 
     if (sh->failed) {
         PL_ERR(sh, "Trying to dispatch a failed shader.");
@@ -1497,7 +1498,7 @@ error:
     for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
         dp->tmp[i].len = 0;
 
-    pthread_mutex_unlock(&dp->lock);
+    pl_mutex_unlock(&dp->lock);
     pl_dispatch_abort(dp, params->shader);
     return ret;
 }
@@ -1512,9 +1513,9 @@ void pl_dispatch_abort(pl_dispatch dp, pl_shader *psh)
     pl_shader_reset(sh, NULL);
 
     // Re-add the shader to the internal pool of shaders
-    pthread_mutex_lock(&dp->lock);
+    pl_mutex_lock(&dp->lock);
     PL_ARRAY_APPEND(dp, dp->shaders, sh);
-    pthread_mutex_unlock(&dp->lock);
+    pl_mutex_unlock(&dp->lock);
     *psh = NULL;
 }
 
@@ -1540,7 +1541,7 @@ static void write_buf(uint8_t *buf, size_t *pos, const void *src, size_t size)
 size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
 {
     size_t size = 0;
-    pthread_mutex_lock(&dp->lock);
+    pl_mutex_lock(&dp->lock);
 
     write_buf(out, &size, cache_magic, sizeof(cache_magic));
     WRITE(uint32_t, cache_version);
@@ -1594,7 +1595,7 @@ size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
     if (out)
         memcpy(out_num, &num_passes, sizeof(num_passes));
 
-    pthread_mutex_unlock(&dp->lock);
+    pl_mutex_unlock(&dp->lock);
     return size;
 }
 
@@ -1617,7 +1618,7 @@ void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache)
     uint32_t num;
     LOAD(num);
 
-    pthread_mutex_lock(&dp->lock);
+    pl_mutex_lock(&dp->lock);
     for (int i = 0; i < num; i++) {
         uint64_t sig, size;
         LOAD(sig);
@@ -1659,5 +1660,5 @@ void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache)
         pass->cached_program_len = size;
         cache += size;
     }
-    pthread_mutex_unlock(&dp->lock);
+    pl_mutex_unlock(&dp->lock);
 }

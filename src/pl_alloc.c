@@ -15,7 +15,6 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <pthread.h>
 #include "common.h"
 
 struct header {

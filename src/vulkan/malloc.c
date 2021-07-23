@@ -18,6 +18,7 @@
 #include "malloc.h"
 #include "command.h"
 #include "utils.h"
+#include "pl_thread.h"
 
 #ifdef PL_HAVE_UNIX
 #include <errno.h>
@@ -60,7 +61,7 @@ static inline size_t region_len(struct vk_region r)
 // allocations are served as slices of this. Slabs are organized into linked
 // lists, which represent individual heaps.
 struct vk_slab {
-    pthread_mutex_t lock;
+    pl_mutex lock;
     VkDeviceMemory mem;   // underlying device allocation
     size_t size;          // total size of `slab`
     size_t used;          // number of bytes actually in use (for GC accounting)
@@ -94,7 +95,7 @@ struct vk_heap {
 // memory type.
 struct vk_malloc {
     struct vk_ctx *vk;
-    pthread_mutex_t lock;
+    pl_mutex lock;
     VkPhysicalDeviceMemoryProperties props;
     PL_ARRAY(struct vk_heap) heaps;
 };
@@ -105,7 +106,7 @@ void vk_malloc_print_heap(struct vk_malloc *ma, enum pl_log_level lev)
     size_t total_used = 0;
     size_t total_size = 0;
 
-    pthread_mutex_lock(&ma->lock);
+    pl_mutex_lock(&ma->lock);
     for (int i = 0; i < ma->heaps.num; i++) {
         struct vk_heap *heap = &ma->heaps.elem[i];
         const struct vk_malloc_params *par = &heap->params;
@@ -126,7 +127,7 @@ void vk_malloc_print_heap(struct vk_malloc *ma, enum pl_log_level lev)
 
         for (int j = 0; j < heap->slabs.num; j++) {
             struct vk_slab *slab = heap->slabs.elem[j];
-            pthread_mutex_lock(&slab->lock);
+            pl_mutex_lock(&slab->lock);
             PL_MSG(vk, lev, "    Slab %d:", j);
             PL_MSG(vk, lev, "      Used: %zu", slab->used);
             PL_MSG(vk, lev, "      Size: %zu", slab->size);
@@ -145,7 +146,7 @@ void vk_malloc_print_heap(struct vk_malloc *ma, enum pl_log_level lev)
 
             heap_used += slab->used;
             heap_size += slab->size;
-            pthread_mutex_unlock(&slab->lock);
+            pl_mutex_unlock(&slab->lock);
         }
 
         PL_MSG(vk, lev, "    Heap summary: %zu used / %zu total",
@@ -154,7 +155,7 @@ void vk_malloc_print_heap(struct vk_malloc *ma, enum pl_log_level lev)
         total_used += heap_used;
         total_size += heap_size;
     }
-    pthread_mutex_unlock(&ma->lock);
+    pl_mutex_unlock(&ma->lock);
 
     PL_MSG(vk, lev, "Memory summary: %zu used / %zu total",
            total_used, total_size);
@@ -222,7 +223,7 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
     // also implicitly unmaps the memory if needed
     vk->FreeMemory(vk->dev, slab->mem, PL_VK_ALLOC);
 
-    pthread_mutex_destroy(&slab->lock);
+    pl_mutex_destroy(&slab->lock);
     pl_free(slab);
 }
 
@@ -550,7 +551,7 @@ void vk_malloc_destroy(struct vk_malloc **ma_ptr)
     for (int i = 0; i < ma->heaps.num; i++)
         heap_uninit(ma->vk, &ma->heaps.elem[i]);
 
-    pthread_mutex_destroy(&ma->lock);
+    pl_mutex_destroy(&ma->lock);
     pl_free_ptr(ma_ptr);
 }
 
@@ -579,12 +580,12 @@ void vk_malloc_free(struct vk_malloc *ma, struct vk_memslice *slice)
     if (!slab)
         goto done;
 
-    pthread_mutex_lock(&slab->lock);
+    pl_mutex_lock(&slab->lock);
     pl_assert(slab->used >= slice->size);
     slab->used -= slice->size;
 
     if (slab->dedicated) {
-        pthread_mutex_unlock(&slab->lock); // don't destroy locked mutex
+        pl_mutex_unlock(&slab->lock); // don't destroy locked mutex
         slab_free(vk, slab);
     } else {
         PL_TRACE(vk, "Freeing slice %zu + %zu from slab with size %zu",
@@ -596,7 +597,7 @@ void vk_malloc_free(struct vk_malloc *ma, struct vk_memslice *slice)
             .start = slice->offset,
             .end   = slice->offset + slice->size,
         });
-        pthread_mutex_unlock(&slab->lock);
+        pl_mutex_unlock(&slab->lock);
     }
 
 done:
@@ -661,7 +662,7 @@ static struct vk_slab *heap_get_slab(struct vk_malloc *ma, struct vk_heap *heap,
             continue;
 
         // Attempt a best fit search
-        pthread_mutex_lock(&slab->lock);
+        pl_mutex_lock(&slab->lock);
         size_t best_size = 0;
         int best_idx;
         for (int n = 0; n < slab->regions.num; n++) {
@@ -679,7 +680,7 @@ static struct vk_slab *heap_get_slab(struct vk_malloc *ma, struct vk_heap *heap,
             PL_ARRAY_REMOVE_AT(slab->regions, best_idx);
             return slab;
         } else {
-            pthread_mutex_unlock(&slab->lock);
+            pl_mutex_unlock(&slab->lock);
             continue;
         }
     }
@@ -696,13 +697,13 @@ static struct vk_slab *heap_get_slab(struct vk_malloc *ma, struct vk_heap *heap,
 
     // Don't hold the lock while allocating the slab, because it can be a
     // potentially very costly operation.
-    pthread_mutex_unlock(&ma->lock);
+    pl_mutex_unlock(&ma->lock);
     slab = slab_alloc(ma, &params);
-    pthread_mutex_lock(&ma->lock);
+    pl_mutex_lock(&ma->lock);
 
     if (!slab)
         return NULL;
-    pthread_mutex_lock(&slab->lock);
+    pl_mutex_lock(&slab->lock);
     PL_ARRAY_APPEND(NULL, heap->slabs, slab);
 
     // Return the only region there is in a newly allocated slab
@@ -955,11 +956,11 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
         slab->used = size;
         offset = 0;
     } else {
-        pthread_mutex_lock(&ma->lock);
+        pl_mutex_lock(&ma->lock);
         struct vk_heap *heap = find_heap(ma, params);
         struct vk_region region;
         slab = heap_get_slab(ma, heap, size, align, &region);
-        pthread_mutex_unlock(&ma->lock);
+        pl_mutex_unlock(&ma->lock);
         if (!slab)
             return false;
 
@@ -975,7 +976,7 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
         insert_region(slab, (struct vk_region) { region.start, offset });
         insert_region(slab, (struct vk_region) { out_end, region.end });
         slab->used += size;
-        pthread_mutex_unlock(&slab->lock);
+        pl_mutex_unlock(&slab->lock);
 
         PL_TRACE(vk, "Sub-allocating slice %zu + %zu from slab with size %zu",
                  (size_t) offset,  size, (size_t) slab->size);

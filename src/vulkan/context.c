@@ -856,7 +856,7 @@ void pl_vulkan_destroy(pl_vulkan *pl_vk)
     }
 
     pl_vk_inst_destroy(&vk->internal_instance);
-    pthread_mutex_destroy(&vk->lock);
+    pl_mutex_destroy(&vk->lock);
     pl_free_ptr((void **) pl_vk);
 }
 
@@ -1273,7 +1273,7 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
         .GetInstanceProcAddr = get_proc_addr_fallback(log, params->get_proc_addr),
     };
 
-    pl_mutex_init_type(&vk->lock, PTHREAD_MUTEX_RECURSIVE);
+    pl_mutex_init_type(&vk->lock, PL_MUTEX_RECURSIVE);
     if (!vk->GetInstanceProcAddr)
         goto error;
 
@@ -1421,7 +1421,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
         .GetInstanceProcAddr = get_proc_addr_fallback(log, params->get_proc_addr),
     };
 
-    pl_mutex_init_type(&vk->lock, PTHREAD_MUTEX_RECURSIVE);
+    pl_mutex_init_type(&vk->lock, PL_MUTEX_RECURSIVE);
     if (!vk->GetInstanceProcAddr)
         goto error;
 
