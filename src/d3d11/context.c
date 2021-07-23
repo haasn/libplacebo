@@ -15,8 +15,6 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <pthread.h>
-
 #include "gpu.h"
 
 // Windows 8 enum value, not present in mingw-w64 v7
@@ -26,22 +24,30 @@ const struct pl_d3d11_params pl_d3d11_default_params = {
     .allow_software = true,
 };
 
-static pthread_once_t d3d11_once = PTHREAD_ONCE_INIT;
+static INIT_ONCE d3d11_once = INIT_ONCE_STATIC_INIT;
 static PFN_D3D11_CREATE_DEVICE pD3D11CreateDevice = NULL;
 static PFN_CREATE_DXGI_FACTORY pCreateDXGIFactory1 = NULL;
 static void d3d11_load(void)
 {
-    HMODULE d3d11 = LoadLibraryW(L"d3d11.dll");
-    if (d3d11) {
-        pD3D11CreateDevice = (void *)
-            GetProcAddress(d3d11, "D3D11CreateDevice");
+    BOOL bPending = FALSE;
+    InitOnceBeginInitialize(&d3d11_once, 0, &bPending, NULL);
+
+    if (bPending)
+    {
+        HMODULE d3d11 = LoadLibraryW(L"d3d11.dll");
+        if (d3d11) {
+            pD3D11CreateDevice = (void *)
+                GetProcAddress(d3d11, "D3D11CreateDevice");
+        }
+
+        HMODULE dxgi = LoadLibraryW(L"dxgi.dll");
+        if (dxgi) {
+            pCreateDXGIFactory1 = (void *)
+                GetProcAddress(dxgi, "CreateDXGIFactory1");
+        }
     }
 
-    HMODULE dxgi = LoadLibraryW(L"dxgi.dll");
-    if (dxgi) {
-        pCreateDXGIFactory1 = (void *)
-            GetProcAddress(dxgi, "CreateDXGIFactory1");
-    }
+    InitOnceComplete(&d3d11_once, 0, NULL);
 }
 
 // Get a const array of D3D_FEATURE_LEVELs from max_fl to min_fl (inclusive)
@@ -142,7 +148,8 @@ static ID3D11Device *create_device(struct pl_d3d11 *d3d11,
     bool release_adapter = false;
     HRESULT hr;
 
-    pthread_once(&d3d11_once, d3d11_load);
+    d3d11_load();
+
     if (!pD3D11CreateDevice) {
         PL_FATAL(ctx, "Failed to load d3d11.dll");
         goto error;
