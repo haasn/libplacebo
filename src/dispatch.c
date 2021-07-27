@@ -767,7 +767,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
         pl_hash_merge(&pass->signature, (uint64_t) params.vertex_type);
         pl_hash_merge(&pass->signature, (uint64_t) params.vertex_stride);
         pl_hash_merge(&pass->signature, (uint64_t) params.load_target);
-        pl_hash_merge(&pass->signature, (uint64_t) target->params.format); // hash ptr
+        pl_hash_merge(&pass->signature, (uintptr_t) target->params.format);
         if (blend)
             pl_hash_merge(&pass->signature, pl_mem_hash(blend, sizeof(*blend)));
     }
