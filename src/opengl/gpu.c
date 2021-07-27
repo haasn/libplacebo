@@ -168,7 +168,14 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     if (p->gl_ver >= 21)
         limits->max_tex_1d_dim = limits->max_tex_2d_dim;
     limits->buf_transfer = true;
-    get(GL_MAX_FRAGMENT_UNIFORM_COMPONENTS, &limits->max_variables);
+
+    // This doesn't really map too well to OpenGL, so just set a conservative
+    // upper bound, which assumes (optimistically) that all uniforms are
+    // individual floats.
+    size_t max_vectors = 0;
+    get(GL_MAX_FRAGMENT_UNIFORM_VECTORS, &max_vectors);
+    limits->max_variables = max_vectors * 4;
+
     if (glsl->compute) {
         for (int i = 0; i < 3; i++)
             geti(GL_MAX_COMPUTE_WORK_GROUP_COUNT, i, &limits->max_dispatch[i]);
