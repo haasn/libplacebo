@@ -152,12 +152,13 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     }
 
     if (params->debug) {
-        if (epoxy_has_gl_extension("GL_ARB_debug_output")) {
+        if (epoxy_has_gl_extension("GL_KHR_debug")) {
             glDebugMessageCallback(debug_cb, log);
+            glEnable(GL_DEBUG_OUTPUT);
             p->is_debug = true;
         } else {
-            PL_WARN(p, "OpenGL debugging requested but GL_ARB_debug_output "
-                    "unavailable.. ignoring!");
+            PL_WARN(p, "OpenGL debugging requested, but GL_KHR_debug is not "
+                    "available... ignoring!");
         }
 
 #ifdef EPOXY_HAS_EGL
