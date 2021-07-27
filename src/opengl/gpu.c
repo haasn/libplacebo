@@ -269,7 +269,7 @@ pl_buf gl_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
     buf_gl->id = ++p->buf_id;
 
     // Just use this since the generic GL_BUFFER doesn't work
-    GLenum target = GL_COPY_WRITE_BUFFER;
+    GLenum target = GL_ARRAY_BUFFER;
     const void *data = params->initial_data;
     size_t total_size = params->size;
     bool import = false;
