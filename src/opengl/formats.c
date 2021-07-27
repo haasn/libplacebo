@@ -426,6 +426,9 @@ bool gl_setup_formats(struct pl_gpu *gpu)
         // float16 depending on GL_EXT_texture_norm16 being present
         DO_FORMATS(formats_legacy_gles2);
         DO_FORMATS(formats_basic_vertex);
+        if (epoxy_has_gl_extension("GL_EXT_texture_rg")) {
+            DO_FORMATS(formats_norm8);
+        }
         if (epoxy_has_gl_extension("GL_EXT_texture_norm16")) {
             DO_FORMATS(formats_norm16);
             DO_FORMATS(formats_rgb16_fallback);
