@@ -4,10 +4,10 @@
 #error Specify exactly one of -DUSE_GL or -DUSE_VK when compiling!
 #endif
 
+#include <SDL.h>
+
 #include "common.h"
 #include "window.h"
-
-#include <SDL.h>
 
 #ifdef USE_VK
 #define VK_NO_PROTOTYPES
