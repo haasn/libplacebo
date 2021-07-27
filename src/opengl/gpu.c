@@ -121,14 +121,13 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     }
 
     if (!glsl->version) {
-        // Otherwise, use the fixed magic versions 200 and 300 for early GLES,
-        // and otherwise fall back to 110 if all else fails.
+        // Otherwise, use the fixed magic versions 100 and 300 for GLES.
         if (p->gles_ver >= 30) {
             glsl->version = 300;
         } else if (p->gles_ver >= 20) {
-            glsl->version = 200;
+            glsl->version = 100;
         } else {
-            glsl->version = 110;
+            goto error;
         }
     }
 
