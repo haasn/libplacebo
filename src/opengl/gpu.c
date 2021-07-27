@@ -200,6 +200,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
 
     // Cache some internal capability checks
     p->has_stride = gl_test_ext(gpu, "GL_EXT_unpack_subimage", 11, 30);
+    p->has_unpack_image_height = p->gl_ver >= 12 || p->gles_ver >= 30;
     p->has_vao = gl_test_ext(gpu, "GL_ARB_vertex_array_object", 30, 0);
     p->has_invalidate_fb = gl_test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 30);
     p->has_invalidate_tex = gl_test_ext(gpu, "GL_ARB_invalidate_subdata", 43, 0);

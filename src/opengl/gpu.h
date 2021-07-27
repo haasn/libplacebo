@@ -56,6 +56,7 @@ struct pl_gl {
     bool has_fbos;
     bool has_storage;
     bool has_stride;
+    bool has_unpack_image_height;
     bool has_invalidate_fb;
     bool has_invalidate_tex;
     bool has_vao;

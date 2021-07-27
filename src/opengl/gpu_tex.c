@@ -918,7 +918,7 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
     int imgs = pl_rect_d(params->rc);
     if (params->stride_h != tex->params.h) {
-        if (p->has_stride) {
+        if (p->has_unpack_image_height) {
             glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, params->stride_h);
         } else {
             imgs = tex->params.h == params->stride_h ? imgs : 1;
@@ -954,10 +954,10 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     gl_timer_end(params->timer);
     glBindTexture(tex_gl->target, 0);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    if (p->has_stride) {
+    if (p->has_stride && params->stride_w != tex->params.w)
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-        glPixelStorei(GL_UNPACK_IMAGE_HEIGHT,0);
-    }
+    if (p->has_unpack_image_height && params->stride_h != tex->params.h)
+        glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
 
     if (buf) {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
