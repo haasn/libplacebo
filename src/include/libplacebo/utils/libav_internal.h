@@ -799,7 +799,7 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
     int planes = pl_plane_data_from_pixfmt(data, NULL, pic->format);
     if (!(avctx->codec->capabilities & AV_CODEC_CAP_DR1) || !planes)
         goto fallback;
-    if (!gpu || !gpu->limits.thread_safe)
+    if (!gpu || !gpu->limits.thread_safe || !gpu->limits.max_mapped_size)
         goto fallback;
 
     memset(pic->data, 0, sizeof(pic->data));
@@ -833,6 +833,9 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
         offsets[p] = PL_ALIGN(offsets[p], data[p].pixel_stride);
         total_size = offsets[p] + plane_size;
     }
+
+    if (total_size > gpu->limits.max_mapped_size)
+        goto fallback;
 
     // Create data buffer
     buf = pl_buf_create(gpu, &(struct pl_buf_params) {
