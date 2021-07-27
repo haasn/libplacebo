@@ -42,6 +42,8 @@
 #define DEBUG true
 #endif
 
+#define PL_ARRAY_SIZE(s) (sizeof(s) / sizeof((s)[0]))
+
 const struct window_impl IMPL;
 
 struct priv {
@@ -167,22 +169,50 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
 #endif // USE_D3D11
 
 #ifdef USE_GL
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+    struct {
+        int api;
+        int major, minor;
+        int glsl_ver;
+        int profile;
+    } gl_vers[] = {
+        { GLFW_OPENGL_API,    4, 6, 460, GLFW_OPENGL_CORE_PROFILE },
+        { GLFW_OPENGL_API,    4, 5, 450, GLFW_OPENGL_CORE_PROFILE },
+        { GLFW_OPENGL_API,    4, 4, 440, GLFW_OPENGL_CORE_PROFILE },
+        { GLFW_OPENGL_API,    4, 0, 400, GLFW_OPENGL_CORE_PROFILE },
+        { GLFW_OPENGL_API,    3, 3, 330, GLFW_OPENGL_CORE_PROFILE },
+        { GLFW_OPENGL_API,    3, 2, 150, GLFW_OPENGL_CORE_PROFILE },
+        { GLFW_OPENGL_ES_API, 3, 2, 320, },
+        { GLFW_OPENGL_API,    3, 1, 140, },
+        { GLFW_OPENGL_ES_API, 3, 1, 310, },
+        { GLFW_OPENGL_API,    3, 0, 130, },
+        { GLFW_OPENGL_ES_API, 3, 0, 300, },
+        { GLFW_OPENGL_ES_API, 2, 0, 100, },
+        { GLFW_OPENGL_API,    2, 1, 120, },
+        { GLFW_OPENGL_API,    2, 0, 110, },
+    };
 
-    // Request OpenGL 3.2 (or higher) core profile
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    for (int i = 0; i < PL_ARRAY_SIZE(gl_vers); i++) {
+        glfwWindowHint(GLFW_CLIENT_API, gl_vers[i].api);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, gl_vers[i].major);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, gl_vers[i].minor);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, gl_vers[i].profile);
+
 #endif // USE_GL
 
-    if (params->alpha)
-        glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
+        if (params->alpha)
+            glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
 
-    printf("Creating %dx%d window%s...\n", params->width, params->height,
-           params->alpha ? " (with alpha)" : "");
+        printf("Creating %dx%d window%s...\n", params->width, params->height,
+               params->alpha ? " (with alpha)" : "");
 
-    p->win = glfwCreateWindow(params->width, params->height, params->title, NULL, NULL);
+        p->win = glfwCreateWindow(params->width, params->height, params->title, NULL, NULL);
+
+#ifdef USE_GL
+        if (p->win)
+            break;
+    }
+#endif // USE_GL
+
     if (!p->win) {
         fprintf(stderr, "GLFW: Failed creating window\n");
         goto error;
