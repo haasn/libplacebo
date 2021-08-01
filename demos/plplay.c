@@ -11,6 +11,7 @@
 
 #include <pthread.h>
 
+#include <libavutil/cpu.h>
 #include <libavutil/file.h>
 #include <libavutil/pixdesc.h>
 #include <libavformat/avformat.h>
