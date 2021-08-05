@@ -33,7 +33,7 @@ endif
 
 vulkan_headers = vulkan
 if vulkan.found() and not get_option('vulkan-link')
-  vulkan_headers = vulkan.partial_dependency(includes: true)
+  vulkan_headers = vulkan.partial_dependency(includes: true, compile_args: true)
 endif
 
 if not vulkan_headers.found() and not get_option('vulkan').disabled()
