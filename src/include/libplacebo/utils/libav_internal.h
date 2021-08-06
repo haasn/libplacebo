@@ -653,8 +653,8 @@ static inline bool pl_frame_recreate_from_avframe(pl_gpu gpu,
 
     for (int p = 0; p < planes; p++) {
         bool is_chroma = p == 1 || p == 2; // matches lavu logic
-        data[p].width = frame->width >> (is_chroma ? desc->log2_chroma_w : 0);
-        data[p].height = frame->height >> (is_chroma ? desc->log2_chroma_h : 0);
+        data[p].width = AV_CEIL_RSHIFT(frame->width, is_chroma ? desc->log2_chroma_w : 0);
+        data[p].height = AV_CEIL_RSHIFT(frame->height, is_chroma ? desc->log2_chroma_h : 0);
 
         if (!pl_recreate_plane(gpu, &out->planes[p], &tex[p], &data[p]))
             return false;
@@ -706,8 +706,8 @@ static inline bool pl_upload_avframe(pl_gpu gpu,
 
     for (int p = 0; p < planes; p++) {
         bool is_chroma = p == 1 || p == 2; // matches lavu logic
-        data[p].width = frame->width >> (is_chroma ? desc->log2_chroma_w : 0);
-        data[p].height = frame->height >> (is_chroma ? desc->log2_chroma_h : 0);
+        data[p].width = AV_CEIL_RSHIFT(frame->width, is_chroma ? desc->log2_chroma_w : 0);
+        data[p].height = AV_CEIL_RSHIFT(frame->height, is_chroma ? desc->log2_chroma_h : 0);
         data[p].row_stride = frame->linesize[p];
         data[p].pixels = frame->data[p];
 
