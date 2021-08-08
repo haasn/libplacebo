@@ -20,6 +20,16 @@
 #include "formats.h"
 #include "utils.h"
 
+#ifdef PL_HAVE_UNIX
+static bool supported_fourcc(struct pl_gl *p, EGLint fourcc)
+{
+    for (int i = 0; i < p->egl_formats.num; ++i)
+        if (fourcc == p->egl_formats.elem[i])
+            return true;
+    return false;
+}
+#endif
+
 #define FMT(_name, bits, ftype, _caps)               \
     (struct pl_fmt) {                                \
         .name = _name,                               \
@@ -260,7 +270,7 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
     pl_assert(fmt->glsl_type);
 
 #ifdef PL_HAVE_UNIX
-    if (p->has_modifiers) {
+    if (p->has_modifiers && fmt->fourcc && supported_fourcc(p, fmt->fourcc)) {
         int num_mods = 0;
         bool ok = eglQueryDmaBufModifiersEXT(p->egl_dpy, fmt->fourcc,
                                              0, NULL, NULL, &num_mods);
@@ -343,6 +353,27 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
 bool gl_setup_formats(struct pl_gpu *gpu)
 {
     struct pl_gl *p = PL_PRIV(gpu);
+
+#ifdef PL_HAVE_UNIX
+    if (p->has_modifiers) {
+        EGLint num_formats = 0;
+        bool ok = eglQueryDmaBufFormatsEXT(p->egl_dpy, 0, NULL,
+                                           &num_formats);
+        if (ok && num_formats) {
+            p->egl_formats.elem = pl_calloc(gpu, num_formats, sizeof(EGLint));
+            p->egl_formats.num = num_formats;
+            ok = eglQueryDmaBufFormatsEXT(p->egl_dpy, num_formats,
+                                          p->egl_formats.elem, &num_formats);
+            pl_assert(ok);
+
+            PL_DEBUG(gpu, "EGL formats supported:");
+            for (int i = 0; i < num_formats; ++i) {
+                PL_DEBUG(gpu, "    0x%08x(%.4s)", p->egl_formats.elem[i],
+                         PRINT_FOURCC(p->egl_formats.elem[i]));
+            }
+        }
+    }
+#endif
 
     if (p->gl_ver >= 30) {
         // Desktop GL3+ has everything

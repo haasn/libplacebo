@@ -42,6 +42,11 @@ struct pl_gl {
     // Sync objects and associated callbacks
     PL_ARRAY(struct gl_cb) callbacks;
 
+#ifdef PL_HAVE_UNIX
+    // List of formats supported by EGL_EXT_image_dma_buf_import
+    PL_ARRAY(EGLint) egl_formats;
+#endif
+
     // Incrementing counters to keep track of object uniqueness
     int buf_id;
 
