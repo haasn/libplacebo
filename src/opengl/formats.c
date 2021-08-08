@@ -289,6 +289,8 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
             if (ok) {
                 fmt->modifiers = mods;
                 fmt->num_modifiers = num_mods + 1;
+            } else {
+                pl_free(mods);
             }
         }
 
