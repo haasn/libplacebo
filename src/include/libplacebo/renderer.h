@@ -516,9 +516,8 @@ void pl_frame_clear_rgba(pl_gpu gpu, const struct pl_frame *frame,
 static inline void pl_frame_clear(pl_gpu gpu, const struct pl_frame *frame,
                                   const float clear_color[3])
 {
-    pl_frame_clear_rgba(gpu, frame, (float[4]) {
-        clear_color[0], clear_color[1], clear_color[2], 1.0,
-    });
+    const float clear_color_rgba[4] = { clear_color[0], clear_color[1], clear_color[2], 1.0 };
+    pl_frame_clear_rgba(gpu, frame, clear_color_rgba);
 }
 
 // Deprecated aliases, provided for backwards compatibility
