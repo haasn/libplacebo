@@ -40,6 +40,10 @@ const char *pl_version(void);
 @extra_defs@
 
 // Extra compiler-specific stuff
+#if defined(_MSC_VER)
+#define PL_DEPRECATED
+#else
 #define PL_DEPRECATED __attribute__((deprecated))
+#endif
 
 #endif // LIBPLACEBO_CONTEXT_H_
