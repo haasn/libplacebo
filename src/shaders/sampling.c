@@ -164,7 +164,7 @@ static bool setup_src(pl_shader sh, const struct pl_sample_src *src,
         }
 
         if (fn)
-            *fn = sh_tex_fn(sh, (struct pl_tex_params) { .w = 1, .d = 1 }); // 2D
+            *fn = sh_tex_fn(sh, (struct pl_tex_params) { .w = 1, .h = 1 }); // 2D
 
         sh->sampler_type = src->sampler;
 
