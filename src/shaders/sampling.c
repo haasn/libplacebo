@@ -211,37 +211,39 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
          "color = %s(%s, pos); \n",
          pos, fn, tex);
 
-    // Helper function: Compute a stochastic approximation of the avg color
-    // around a pixel, given a specified radius
-    ident_t average = sh_fresh(sh, "average");
-    GLSLH("vec4 %s(vec2 pos, float range, inout float %s) {     \n"
-          // Compute a random angle and distance
-          "    float dist = %s * range;                         \n"
-          "    float dir  = %s * %f;                            \n"
-          "    vec2 o = dist * vec2(cos(dir), sin(dir));        \n"
-          // Sample at quarter-turn intervals around the source pixel
-          "    vec4 sum = vec4(0.0);                            \n"
-          "    sum += %s(%s, pos + %s * vec2( o.x,  o.y)); \n"
-          "    sum += %s(%s, pos + %s * vec2(-o.x,  o.y)); \n"
-          "    sum += %s(%s, pos + %s * vec2(-o.x, -o.y)); \n"
-          "    sum += %s(%s, pos + %s * vec2( o.x, -o.y)); \n"
-          // Return the (normalized) average
-          "    return 0.25 * sum;                               \n"
-          "}\n",
-          average, state, prng, prng, M_PI * 2,
-          fn, tex, pt, fn, tex, pt, fn, tex, pt, fn, tex, pt);
+    if (params->iterations > 0) {
+        // Helper function: Compute a stochastic approximation of the avg color
+        // around a pixel, given a specified radius
+        ident_t average = sh_fresh(sh, "average");
+        GLSLH("vec4 %s(vec2 pos, float range, inout float %s) {     \n"
+              // Compute a random angle and distance
+              "    float dist = %s * range;                         \n"
+              "    float dir  = %s * %f;                            \n"
+              "    vec2 o = dist * vec2(cos(dir), sin(dir));        \n"
+              // Sample at quarter-turn intervals around the source pixel
+              "    vec4 sum = vec4(0.0);                            \n"
+              "    sum += %s(%s, pos + %s * vec2( o.x,  o.y)); \n"
+              "    sum += %s(%s, pos + %s * vec2(-o.x,  o.y)); \n"
+              "    sum += %s(%s, pos + %s * vec2(-o.x, -o.y)); \n"
+              "    sum += %s(%s, pos + %s * vec2( o.x, -o.y)); \n"
+              // Return the (normalized) average
+              "    return 0.25 * sum;                               \n"
+              "}\n",
+              average, state, prng, prng, M_PI * 2,
+              fn, tex, pt, fn, tex, pt, fn, tex, pt, fn, tex, pt);
 
-    ident_t radius = sh_const_float(sh, "radius", params->radius);
-    ident_t threshold = sh_const_float(sh, "threshold",
-                                       params->threshold / (1000 * scale));
+        ident_t radius = sh_const_float(sh, "radius", params->radius);
+        ident_t threshold = sh_const_float(sh, "threshold",
+                                           params->threshold / (1000 * scale));
 
-    // For each iteration, compute the average at a given distance and
-    // pick it instead of the color if the difference is below the threshold.
-    for (int i = 1; i <= params->iterations; i++) {
-        GLSL("avg = %s(pos, %d.0 * %s, %s);                                     \n"
-             "diff = abs(color - avg);                                          \n"
-             "color = mix(avg, color, %s(greaterThan(diff, vec4(%s / %d.0))));  \n",
-             average, i, radius, state, sh_bvec(sh, 4), threshold, i);
+        // For each iteration, compute the average at a given distance and
+        // pick it instead of the color if the difference is below the threshold.
+        for (int i = 1; i <= params->iterations; i++) {
+            GLSL("avg = %s(pos, %d.0 * %s, %s);                                     \n"
+                 "diff = abs(color - avg);                                          \n"
+                 "color = mix(avg, color, %s(greaterThan(diff, vec4(%s / %d.0))));  \n",
+                 average, i, radius, state, sh_bvec(sh, 4), threshold, i);
+        }
     }
 
     GLSL("color *= vec4(%s);\n", SH_FLOAT(scale));
