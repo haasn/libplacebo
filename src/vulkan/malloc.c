@@ -870,6 +870,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         .used = shmem->size,
         .handle_type = params->import_handle,
     };
+    pl_mutex_init(&slab->lock);
 
     *out = (struct vk_memslice) {
         .vkmem = vkmem,
