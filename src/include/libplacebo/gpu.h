@@ -366,7 +366,7 @@ pl_fmt pl_find_fmt(pl_gpu gpu, enum pl_fmt_type type, int num_components,
                     int min_depth, int host_bits, enum pl_fmt_caps caps);
 
 // Finds a vertex format for a given configuration. The resulting vertex will
-// have a component depth equivalent to to the sizeof() the equivalent host type.
+// have a component depth equivalent to the sizeof() the equivalent host type.
 // (e.g. PL_FMT_FLOAT will always have sizeof(float))
 pl_fmt pl_find_vertex_fmt(pl_gpu gpu, enum pl_fmt_type type, int num_components);
 
