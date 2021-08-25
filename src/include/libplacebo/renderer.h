@@ -456,7 +456,7 @@ struct pl_frame {
     int num_overlays;
 
     // Note on subsampling and plane correspondence: All planes belonging to
-    // the same frame will only be streched by an integer multiple (or inverse
+    // the same frame will only be stretched by an integer multiple (or inverse
     // thereof) in order to match the reference dimensions of this image. For
     // example, suppose you have an 8x4 image. A valid plane scaling would be
     // 4x2 -> 8x4 or 4x4 -> 4x4, but not 6x4 -> 8x4. So if a 6x4 plane is

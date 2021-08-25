@@ -84,7 +84,7 @@ struct vk_slab {
 // practice, because some combinations simply never occur, and others will
 // generally be the same for the same objects.
 //
-// Note: `vk_heap` addresses are not immutable, so we musn't expose any dangling
+// Note: `vk_heap` addresses are not immutable, so we mustn't expose any dangling
 // references to a `vk_heap` from e.g. `vk_memslice.priv = vk_slab`.
 struct vk_heap {
     struct vk_malloc_params params;   // allocation params (with some fields nulled)

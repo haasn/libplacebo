@@ -68,7 +68,7 @@ extern const struct pl_filter_function pl_filter_function_triangle;
 extern const struct pl_filter_function pl_filter_function_cosine;
 
 // Hann function: Cosine filter named after Julius von Hann. Also commonly
-// mislabeled as a "Hanning" function, due to its similary to the Hamming
+// mislabeled as a "Hanning" function, due to its similarly to the Hamming
 // function.
 extern const struct pl_filter_function pl_filter_function_hann;
 

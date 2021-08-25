@@ -1,4 +1,4 @@
-# Depedencies
+# Dependencies
 prog_python = import('python').find_installation()
 libm = cc.find_library('m', required: false)
 

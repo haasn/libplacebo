@@ -412,7 +412,7 @@ static inline float pl_cie_xy_equal(const struct pl_cie_xy *a,
 // Computes the CIE xy chromaticity coordinates of a CIE D-series illuminant
 // with the given correlated color temperature.
 //
-// `temperature` must be betwen 2500 K and 25000 K, inclusive.
+// `temperature` must be between 2500 K and 25000 K, inclusive.
 struct pl_cie_xy pl_white_from_temp(float temperature);
 
 // Represents the raw physical primaries corresponding to a color space.

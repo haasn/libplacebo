@@ -89,7 +89,7 @@ struct pl_peak_detect_params {
     float smoothing_period;
 
     // In order to avoid reacting sluggishly on scene changes as a result of
-    // the low-pass filter, we disable it when the difference betwen the
+    // the low-pass filter, we disable it when the difference between the
     // current frame brightness and the average frame brightness exceeds a
     // given threshold difference. But rather than a single hard cutoff, which
     // would lead to weird discontinuities on fades, we gradually disable it
@@ -196,7 +196,7 @@ enum pl_tone_mapping_algorithm {
     // Linearly stretches the source gamut to the destination gamut. This will
     // preserve all details accurately, but results in a significantly darker
     // image. Best when combined with peak detection. The parameter can be used
-    // as an aditional scaling coefficient to make the image (linearly)
+    // as an additional scaling coefficient to make the image (linearly)
     // brighter or darker. Defaults to 1.0.
     PL_TONE_MAPPING_LINEAR,
 

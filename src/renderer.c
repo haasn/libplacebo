@@ -350,7 +350,7 @@ struct pass_state {
     // rendering steps will mutate this in-place.
     struct img img;
 
-    // Represents the "reference rect". Canonically, this is functionallity
+    // Represents the "reference rect". Canonically, this is functionally
     // equivalent to `image.crop`, but both guaranteed to be valid, and also
     // updates as the refplane evolves (e.g. due to user hook prescalers)
     struct pl_rect2df ref_rect;

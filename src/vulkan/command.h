@@ -92,7 +92,7 @@ struct vk_signal;
 
 // Generates a signal after the execution of all previous commands matching the
 // given the pipeline stage. The signal is owned by the caller, and must be
-// consumed eith vk_cmd_wait or released with vk_signal_cancel in order to
+// consumed with vk_cmd_wait or released with vk_signal_cancel in order to
 // free the resources.
 struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
                                 VkPipelineStageFlags stage);

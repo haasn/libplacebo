@@ -47,7 +47,7 @@ enum pl_desc_type {
 // This file contains the definition of an API which is designed to abstract
 // away from platform-specific APIs like the various OpenGL variants, Direct3D
 // and Vulkan in a common way. It is a much more limited API than those APIs,
-// since it tries targetting a very small common subset of features that is
+// since it tries targeting a very small common subset of features that is
 // needed to implement libplacebo's rendering.
 //
 // NOTE: Most, but not all, parameter conditions (phrases such as "must" or
@@ -641,7 +641,7 @@ bool pl_buf_export(pl_gpu gpu, pl_buf buf);
 bool pl_buf_poll(pl_gpu gpu, pl_buf buf, uint64_t timeout);
 
 enum pl_tex_sample_mode {
-    PL_TEX_SAMPLE_NEAREST,  // nearest neighour sampling
+    PL_TEX_SAMPLE_NEAREST,  // nearest neighbour sampling
     PL_TEX_SAMPLE_LINEAR,   // linear filtering, requires PL_FMT_CAP_LINEAR
     PL_TEX_SAMPLE_MODE_COUNT,
 };
@@ -1168,7 +1168,7 @@ struct pl_pass_params {
     // known/cached shaders.
     //
     // Note: There are no restrictions on this. Passing an out-of-date cache,
-    // passing a cache corresponding to a different progam, or passing a cache
+    // passing a cache corresponding to a different program, or passing a cache
     // belonging to a different GPU, are all valid. But obviously, in such cases,
     // there is no benefit in doing so.
     const uint8_t *cached_program;

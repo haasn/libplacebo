@@ -298,7 +298,7 @@ static ident_t sh_var_from_va(pl_shader sh, const char *name,
 
 static inline struct pl_desc_binding sd_binding(const struct pl_shader_desc sd)
 {
-    // For backwards compatbility with the deprecated field sd.object
+    // For backwards compatibility with the deprecated field sd.object
     struct pl_desc_binding binding = sd.binding;
     binding.object = PL_DEF(binding.object, sd.object);
     return binding;

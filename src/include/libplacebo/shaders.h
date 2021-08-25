@@ -50,7 +50,7 @@ struct pl_shader_params {
     // The `index` represents an abstract frame index, which shaders may use
     // internally to do things like temporal dithering or seeding PRNGs. If the
     // user does not care about temporal dithering/debanding, or wants
-    // determinstic rendering, this may safely be left as 0. Otherwise, it
+    // deterministic rendering, this may safely be left as 0. Otherwise, it
     // should be incremented by 1 on successive frames.
     uint8_t index;
 
@@ -118,7 +118,7 @@ enum pl_shader_sig {
 
 // Represents a finalized shader fragment. This is not a complete shader, but a
 // collection of raw shader text together with description of the input
-// attributes, variables and vertexes it expects to be available.
+// attributes, variables and vertices it expects to be available.
 struct pl_shader_res {
     // A copy of the parameters used to create the shader.
     struct pl_shader_params params;

@@ -209,7 +209,7 @@ static bool unsignal_cmd(struct vk_cmd *cmd, VkSemaphore sem)
     return false;
 }
 
-// Attempts to remove a queued signal operation. Returns true if sucessful,
+// Attempts to remove a queued signal operation. Returns true if successful,
 // i.e. the signal could be removed before it ever got fired.
 static bool unsignal(struct vk_ctx *vk, struct vk_cmd *cmd, VkSemaphore sem)
 {

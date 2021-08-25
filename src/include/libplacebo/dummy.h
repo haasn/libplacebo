@@ -40,7 +40,7 @@ struct pl_gpu_dummy_params {
     // and are set for GLSL version 450.
     //
     // Individual fields such as `glsl.compute` or `glsl.version` description
-    // can and should be overriden by the user based on their requirements.
+    // can and should be overridden by the user based on their requirements.
     // Individual limits should ideally be set based on the corresponding
     // `glGet` queries etc.
     struct pl_glsl_version glsl;
