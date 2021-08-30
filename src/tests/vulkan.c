@@ -163,6 +163,12 @@ int main()
     for (int i = 0; i < num; i++) {
         VkPhysicalDeviceProperties props = {0};
         GetPhysicalDeviceProperties(devices[i], &props);
+#ifndef CI_ALLOW_SW
+        if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU) {
+            printf("Skipping device %d: %s\n", i, props.deviceName);
+            continue;
+        }
+#endif
         printf("Testing device %d: %s\n", i, props.deviceName);
 
         // Make sure we can choose this device by name
