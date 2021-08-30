@@ -642,9 +642,10 @@ bool pl_shader_av1_grain(pl_shader sh,
                          const struct pl_av1_grain_params *params)
 {
     if (!pl_needs_av1_grain(params)) {
-        PL_DEBUG(sh, "pl_shader_av1_grain called but no AV1 grain needs to be "
-                 "applied, consider testing with `pl_needs_av1_grain` first!");
-        return true; // nothing to do
+        // FIXME: Instead of erroring, sample directly
+        SH_FAIL(sh, "pl_shader_av1_grain called but no AV1 grain needs to be "
+                    "applied, test with `pl_needs_av1_grain` first!");
+        return false;
     }
 
     int sub_x = 0, sub_y = 0;
