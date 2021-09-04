@@ -17,10 +17,10 @@ on both quality and performance. These include features such as the following:
   scaling.
 - **Color management** and format conversions for a wide variety of HDR or
   wide gamut color spaces. This includes support for ICC profiles, ITU-R
-  BT.1886 emulation, colorimetrically accurate clipping, scene-referred OOTFs
-  (such as HLG), constant luminance formats including ICtCp and a variety of
-  film industry formats ranging from XYZ to Sony's S-Log or Panasonic's
-  V-Gamut.
+  BT.1886 emulation, colorimetrically accurate clipping, custom 1D/3D LUTs,
+  scene-referred OOTFs (such as HLG), constant luminance formats including
+  ICtCp and a variety of film industry formats ranging from XYZ to Sony's
+  S-Log or Panasonic's V-Gamut.
 - Tunable **debanding** shader. This is based on flash3kyuu, expanded to
   provide high quality by combining multiple debanding passes.
 - Dynamic **HDR tone mapping**, including shaders for real-time peak and
@@ -152,6 +152,7 @@ routines which libplacebo exports:
   `pl_shader` abstraction, either as bare GLSL or in [mpv .hook
   format](https://mpv.io/manual/master/#options-glsl-shaders).
 - `shaders/icc.h`: Shader for ICC profile based color management.
+- `shaders/lut.h`: Code for applying arbitrary 1D/3D LUTs.
 - `shaders/sampling.h`: Shader routines for various algorithms that sample
   from images, such as debanding and scaling.
 
