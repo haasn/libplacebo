@@ -121,6 +121,7 @@ and even the GPU in general.
 - `vulkan.h`: GPU API implementation based on Vulkan.
 - `opengl.h`: GPU API implementation based on OpenGL.
 - `d3d11.h`: GPU API implementation based on Direct3D 11.
+- `dummy.h`: Dummy GPI API (interfaces with CPU only, no shader support)
 
 As part of the public API, libplacebo exports a middle-level abstraction for
 dealing with GPU objects and state. Basically, this is the API libplacebo uses
