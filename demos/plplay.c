@@ -187,6 +187,9 @@ static bool init_codec(struct plplay *p)
 #if LIBAVCODEC_VERSION_MAJOR < 60
     p->codec->thread_safe_callbacks = 1;
 #endif
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 113, 100)
+    p->codec->export_side_data |= AV_CODEC_EXPORT_DATA_FILM_GRAIN;
+#endif
 
     if (avcodec_open2(p->codec, codec, NULL) < 0) {
         fprintf(stderr, "libavcodec: Failed opening codec\n");
