@@ -574,6 +574,34 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
             memcpy(dst->ar_coeffs_uv, src->ar_coeffs_uv, sizeof(dst->ar_coeffs_uv));
             break;
         }
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 2, 100)
+        case AV_FILM_GRAIN_PARAMS_H274: {
+            const AVFilmGrainH274Params *src = &fgp->codec.h274;
+            struct pl_h274_grain_data *dst = &out->film_grain.params.h274;
+            out->film_grain.type = PL_FILM_GRAIN_H274;
+            *dst = (struct pl_h274_grain_data) {
+                .model_id = src->model_id,
+                .blending_mode_id = src->blending_mode_id,
+                .log2_scale_factor = src->log2_scale_factor,
+                .component_model_present = {
+                    src->component_model_present[0],
+                    src->component_model_present[1],
+                    src->component_model_present[2],
+                },
+            };
+            memcpy(dst->num_model_values, src->num_model_values,
+                   sizeof(dst->num_model_values));
+            memcpy(dst->intensity_interval_lower_bound,
+                   src->intensity_interval_lower_bound,
+                   sizeof(dst->intensity_interval_lower_bound));
+            memcpy(dst->intensity_interval_upper_bound,
+                   src->intensity_interval_upper_bound,
+                   sizeof(dst->intensity_interval_upper_bound));
+            memcpy(dst->comp_model_value, src->comp_model_value,
+                   sizeof(dst->comp_model_value));
+            break;
+        }
+#endif
         }
     }
 #endif // HAVE_LAV_FILM_GRAIN

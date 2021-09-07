@@ -1202,6 +1202,7 @@ static bool plane_film_grain(struct pass_state *pass, int plane_idx,
 
     switch (image->film_grain.type) {
     case PL_FILM_GRAIN_NONE: return false;
+    case PL_FILM_GRAIN_H274: break;
     case PL_FILM_GRAIN_AV1:
         grain_params.luma_tex = ref->plane.texture;
         for (int c = 0; c < ref->plane.components; c++) {

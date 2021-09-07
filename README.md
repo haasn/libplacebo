@@ -27,8 +27,8 @@ on both quality and performance. These include features such as the following:
   scene-change detection, chroma-preserving (luma-only) tone mapping,
   highlight desaturation, dynamic exposure control and a variety of
   industry-standard EETFs including BT.2390.
-- High performance AV1 **film grain synthesis**, allowing media players to
-  offload this part of AV1 decoding from the CPU to the GPU.
+- High performance **film grain synthesis** for AV1 and H.274, allowing media
+  players to offload this part of decoding from the CPU to the GPU.
 - A **pluggable, extensible custom shader syntax**, equivalent to an improved
   version of [mpv's `.hook`
   syntax](https://mpv.io/manual/master/#options-glsl-shaders). This can be
@@ -150,7 +150,7 @@ routines which libplacebo exports:
 - `shaders/custom.h`: Allows directly ingesting custom GLSL logic into the
   `pl_shader` abstraction, either as bare GLSL or in [mpv .hook
   format](https://mpv.io/manual/master/#options-glsl-shaders).
-- `shaders/film_grain.h`: Film grain synthesis shaders for AV1.
+- `shaders/film_grain.h`: Film grain synthesis shaders for AV1 and H.274.
 - `shaders/icc.h`: Shader for ICC profile based color management.
 - `shaders/lut.h`: Code for applying arbitrary 1D/3D LUTs.
 - `shaders/sampling.h`: Shader routines for various algorithms that sample

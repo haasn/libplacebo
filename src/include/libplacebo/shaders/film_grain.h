@@ -27,7 +27,7 @@
 #ifndef LIBPLACEBO_SHADERS_FILM_GRAIN_H_
 #define LIBPLACEBO_SHADERS_FILM_GRAIN_H_
 
-// Film grain synthesis shaders for AV1.
+// Film grain synthesis shaders for AV1 / H.274.
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -40,6 +40,7 @@ PL_API_BEGIN
 enum pl_film_grain_type {
     PL_FILM_GRAIN_NONE = 0,
     PL_FILM_GRAIN_AV1,
+    PL_FILM_GRAIN_H274,
     PL_FILM_GRAIN_COUNT,
 };
 
@@ -63,6 +64,20 @@ struct pl_av1_grain_data {
     bool overlap;
 };
 
+// H.274 film grain parameters. For the exact meaning of these, see the H.274
+// specification (section 8.5).
+struct pl_h274_grain_data {
+    int model_id;
+    int blending_mode_id;
+    int log2_scale_factor;
+    bool component_model_present[3];
+    uint16_t num_intensity_intervals[3];
+    uint8_t num_model_values[3];
+    uint8_t intensity_interval_lower_bound[3][256];
+    uint8_t intensity_interval_upper_bound[3][256];
+    int16_t comp_model_value[3][256][6];
+};
+
 // Tagged union for film grain data
 struct pl_film_grain_data {
     enum pl_film_grain_type type;   // film grain type
@@ -72,6 +87,7 @@ struct pl_film_grain_data {
         // Warning: These values are not sanity-checked at all, Invalid grain
         // data results in undefined behavior!
         struct pl_av1_grain_data av1;
+        struct pl_h274_grain_data h274;
     } params;
 };
 

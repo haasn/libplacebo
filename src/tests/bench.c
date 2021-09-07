@@ -273,6 +273,23 @@ static void bench_av1_grain_lap(pl_shader sh, pl_shader_obj *state, pl_tex src)
     pl_shader_film_grain(sh, state, &params);
 }
 
+static void bench_h274_grain(pl_shader sh, pl_shader_obj *state, pl_tex src)
+{
+    struct pl_film_grain_params params = {
+        .data = {
+            .type = PL_FILM_GRAIN_H274,
+            .params.h274 = h274_grain_data,
+            .seed = rand(),
+        },
+        .tex = src,
+        .components = 3,
+        .component_mapping = {0, 1, 2},
+        .repr = &(struct pl_color_repr) {0},
+    };
+
+    pl_shader_film_grain(sh, state, &params);
+}
+
 static float data[TEX_SIZE * TEX_SIZE * 4 + 8192];
 
 static void bench_download(pl_gpu gpu, pl_tex tex)
@@ -360,6 +377,7 @@ int main()
     // Misc stuff
     benchmark(vk->gpu, "av1_grain", BENCH_SH(bench_av1_grain));
     benchmark(vk->gpu, "av1_grain_lap", BENCH_SH(bench_av1_grain_lap));
+    benchmark(vk->gpu, "h274_grain", BENCH_SH(bench_h274_grain));
 
     pl_vulkan_destroy(&vk);
     pl_log_destroy(&log);

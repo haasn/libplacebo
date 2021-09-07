@@ -214,6 +214,7 @@ sources = [
   'shaders/custom.c',
   'shaders/film_grain.c',
   'shaders/film_grain_av1.c',
+  'shaders/film_grain_h274.c',
   'shaders/lut.c',
   'shaders/sampling.c',
   'swapchain.c',

@@ -113,3 +113,15 @@ static const struct pl_av1_grain_data av1_grain_data = {
     .uv_mult_luma = {64, 64},
     .uv_offset = {0, 0},
 };
+
+static const struct pl_h274_grain_data h274_grain_data = {
+    .model_id = 0,
+    .blending_mode_id = 0,
+    .log2_scale_factor = 2,
+    .component_model_present = {true},
+    .num_intensity_intervals = {1},
+    .num_model_values = {3},
+    .intensity_interval_lower_bound = {{10}},
+    .intensity_interval_upper_bound = {{250}},
+    .comp_model_value = {{{16, 12, 14}}},
+};

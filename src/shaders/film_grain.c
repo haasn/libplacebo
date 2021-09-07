@@ -23,18 +23,21 @@ bool pl_needs_film_grain(const struct pl_film_grain_params *params)
     switch (params->data.type) {
     case PL_FILM_GRAIN_NONE: return false;
     case PL_FILM_GRAIN_AV1:  return pl_needs_fg_av1(params);
+    case PL_FILM_GRAIN_H274: return pl_needs_fg_h274(params);
     default: pl_unreachable();
     }
 }
 
 struct sh_grain_obj {
     pl_shader_obj av1;
+    pl_shader_obj h274;
 };
 
 static void sh_grain_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_grain_obj *obj = ptr;
     pl_shader_obj_destroy(&obj->av1);
+    pl_shader_obj_destroy(&obj->h274);
 }
 
 bool pl_shader_film_grain(pl_shader sh, pl_shader_obj *grain_state,
@@ -56,6 +59,7 @@ bool pl_shader_film_grain(pl_shader sh, pl_shader_obj *grain_state,
     switch (params->data.type) {
     case PL_FILM_GRAIN_NONE: return false;
     case PL_FILM_GRAIN_AV1:  return pl_shader_fg_av1(sh, &obj->av1, params);
+    case PL_FILM_GRAIN_H274: return pl_shader_fg_h274(sh, &obj->h274, params);
     default: pl_unreachable();
     }
 }

@@ -20,8 +20,10 @@
 #include "common.h"
 
 bool pl_needs_fg_av1(const struct pl_film_grain_params *);
+bool pl_needs_fg_h274(const struct pl_film_grain_params *);
 
 bool pl_shader_fg_av1(pl_shader, pl_shader_obj *, const struct pl_film_grain_params *);
+bool pl_shader_fg_h274(pl_shader, pl_shader_obj *, const struct pl_film_grain_params *);
 
 // Common helper function
 static inline enum pl_channel channel_map(int i, const struct pl_film_grain_params *params)

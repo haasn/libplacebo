@@ -646,6 +646,17 @@ static void pl_shader_tests(pl_gpu gpu)
             .target = fbo,
         }));
     }
+
+    grain_params.data.type = PL_FILM_GRAIN_H274;
+    grain_params.data.params.h274 = h274_grain_data;
+    grain_params.data.seed = rand();
+
+    sh = pl_dispatch_begin(dp);
+    pl_shader_film_grain(sh, &grain, &grain_params);
+    REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+        .shader = &sh,
+        .target = fbo,
+    }));
     pl_shader_obj_destroy(&grain);
 
     // Test custom shaders
@@ -1030,6 +1041,9 @@ static void pl_render_tests(pl_gpu gpu)
     // Test film grain synthesis
     image.film_grain.type = PL_FILM_GRAIN_AV1;
     image.film_grain.params.av1 = av1_grain_data,
+    REQUIRE(pl_render_image(rr, &image, &target, &params));
+    image.film_grain.type = PL_FILM_GRAIN_H274;
+    image.film_grain.params.h274 = h274_grain_data,
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     image.film_grain = (struct pl_film_grain_data) {0};
 
