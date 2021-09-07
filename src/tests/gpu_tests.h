@@ -620,25 +620,27 @@ static void pl_shader_tests(pl_gpu gpu)
     pl_shader_obj_destroy(&icc);
 #endif
 
-    // Test AV1 grain synthesis
+    // Test film grain synthesis
     pl_shader_obj grain = NULL;
+    struct pl_film_grain_params grain_params = {
+        .tex = src,
+        .components = 3,
+        .component_mapping = { 0, 1, 2},
+        .repr = &(struct pl_color_repr) {
+            .sys = PL_COLOR_SYSTEM_BT_709,
+            .levels = PL_COLOR_LEVELS_LIMITED,
+            .bits = { .color_depth = 10, .sample_depth = 10 },
+        },
+    };
+
     for (int i = 0; i < 2; i++) {
-        struct pl_av1_grain_params grain_params = {
-            .data = av1_grain_data,
-            .tex = src,
-            .components = 3,
-            .component_mapping = { 0, 1, 2 },
-            .repr = &(struct pl_color_repr) {
-                .sys = PL_COLOR_SYSTEM_BT_709,
-                .levels = PL_COLOR_LEVELS_LIMITED,
-                .bits = { .color_depth = 10, .sample_depth = 10 },
-            },
-        };
-        grain_params.data.grain_seed = rand();
-        grain_params.data.overlap = !!i;
+        grain_params.data.type = PL_FILM_GRAIN_AV1;
+        grain_params.data.params.av1 = av1_grain_data;
+        grain_params.data.params.av1.overlap = !!i;
+        grain_params.data.seed = rand();
 
         sh = pl_dispatch_begin(dp);
-        pl_shader_av1_grain(sh, &grain, &grain_params);
+        pl_shader_film_grain(sh, &grain, &grain_params);
         REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
             .shader = &sh,
             .target = fbo,
@@ -1025,9 +1027,11 @@ static void pl_render_tests(pl_gpu gpu)
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     params = pl_render_default_params;
 
-    image.av1_grain = av1_grain_data;
+    // Test film grain synthesis
+    image.film_grain.type = PL_FILM_GRAIN_AV1;
+    image.film_grain.params.av1 = av1_grain_data,
     REQUIRE(pl_render_image(rr, &image, &target, &params));
-    image.av1_grain = (struct pl_av1_grain_data) {0};
+    image.film_grain = (struct pl_film_grain_data) {0};
 
     // Test mpv-style custom shaders
     for (int i = 0; i < PL_ARRAY_SIZE(user_shader_tests); i++) {

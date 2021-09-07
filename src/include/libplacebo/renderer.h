@@ -22,8 +22,8 @@
 #include <libplacebo/colorspace.h>
 #include <libplacebo/filters.h>
 #include <libplacebo/gpu.h>
-#include <libplacebo/shaders/av1.h>
 #include <libplacebo/shaders/colorspace.h>
+#include <libplacebo/shaders/film_grain.h>
 #include <libplacebo/shaders/lut.h>
 #include <libplacebo/shaders/sampling.h>
 #include <libplacebo/shaders/custom.h>
@@ -471,12 +471,11 @@ struct pl_frame {
     // treated by libplacebo as an oversized chroma plane - i.e. the plane
     // would get sampled as if it was 17.5 pixels wide and 11.5 pixels large.
 
-    // Associated AV1 grain params (see <libplacebo/shaders/av1.h>). This is
-    // entirely optional, the default of {0} corresponds to no extra grain.
+    // Associated film grain data (see <libplacebo/shaders/film_grain.h>).
     //
     // Note: This is ignored for the `target` of `pl_render_image`, since
     // un-applying grain makes little sense.
-    struct pl_av1_grain_data av1_grain;
+    struct pl_film_grain_data film_grain;
 
     // Ignored by libplacebo. May be useful for users.
     void *user_data;

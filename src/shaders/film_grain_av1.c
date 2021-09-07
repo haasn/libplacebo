@@ -1,7 +1,7 @@
 /*
  * This file is part of libplacebo, which is normally licensed under the terms
- * of the LGPL v2.1+. However, this file (av1.c) is also available under the
- * terms of the more permissive MIT license:
+ * of the LGPL v2.1+. However, this file (film_grain_av1.c) is also available
+ * under the terms of the more permissive MIT license:
  *
  * Copyright (c) 2018-2019 Niklas Haas
  *
@@ -24,9 +24,8 @@
  * SOFTWARE.
  */
 
+#include "film_grain.h"
 #include "shaders.h"
-
-#include <libplacebo/shaders/av1.h>
 
 // Taken from the spec. Range is [-2048, 2047], mean is 0 and stddev is 512
 static const int16_t gaussian_sequence[2048] = {
@@ -280,7 +279,7 @@ static inline int bit_depth(const struct pl_color_repr *repr)
     return depth;
 }
 
-static struct grain_scale get_grain_scale(const struct pl_av1_grain_params *params)
+static struct grain_scale get_grain_scale(const struct pl_film_grain_params *params)
 {
     int bits = bit_depth(params->repr);
     struct grain_scale ret = {
@@ -303,11 +302,11 @@ static struct grain_scale get_grain_scale(const struct pl_av1_grain_params *para
 // Generates the basic grain table (LumaGrain in the spec).
 static void generate_grain_y(float out[GRAIN_HEIGHT_LUT][GRAIN_WIDTH_LUT],
                              int16_t buf[GRAIN_HEIGHT][GRAIN_WIDTH],
-                             const struct pl_av1_grain_params *params)
+                             const struct pl_film_grain_params *params)
 {
-    const struct pl_av1_grain_data *data = &params->data;
+    const struct pl_av1_grain_data *data = &params->data.params.av1;
     struct grain_scale scale = get_grain_scale(params);
-    uint16_t seed = data->grain_seed;
+    uint16_t seed = (uint16_t) params->data.seed;
     int bits = bit_depth(params->repr);
     int shift = 12 - bits + data->grain_scale_shift;
     pl_assert(shift >= 0);
@@ -351,15 +350,15 @@ static void generate_grain_y(float out[GRAIN_HEIGHT_LUT][GRAIN_WIDTH_LUT],
 static void generate_grain_uv(float *out, int16_t buf[GRAIN_HEIGHT][GRAIN_WIDTH],
                               const int16_t buf_y[GRAIN_HEIGHT][GRAIN_WIDTH],
                               enum pl_channel channel, int sub_x, int sub_y,
-                              const struct pl_av1_grain_params *params)
+                              const struct pl_film_grain_params *params)
 {
-    const struct pl_av1_grain_data *data = &params->data;
+    const struct pl_av1_grain_data *data = &params->data.params.av1;
     struct grain_scale scale = get_grain_scale(params);
     int bits = bit_depth(params->repr);
     int shift = 12 - bits + data->grain_scale_shift;
     pl_assert(shift >= 0);
 
-    uint16_t seed = data->grain_seed;
+    uint16_t seed = params->data.seed;
     if (channel == PL_CHANNEL_CB) {
         seed ^= 0xb524;
     } else if (channel == PL_CHANNEL_CR) {
@@ -434,12 +433,12 @@ static void generate_grain_uv(float *out, int16_t buf[GRAIN_HEIGHT][GRAIN_WIDTH]
 
 static void generate_offsets(void *pbuf, const struct sh_lut_params *params)
 {
-    const struct pl_av1_grain_data *data = params->priv;
+    const struct pl_film_grain_data *data = params->priv;
     unsigned int *buf = pbuf;
     assert(sizeof(unsigned int) >= sizeof(uint32_t));
 
     for (int y = 0; y < params->height; y++) {
-        uint16_t state = data->grain_seed;
+        uint16_t state = data->seed;
         state ^= ((y * 37 + 178) & 0xFF) << 8;
         state ^= ((y * 173 + 105) & 0xFF);
 
@@ -518,14 +517,14 @@ static void sample(pl_shader sh, enum offset off, ident_t lut, int idx,
          lut, idx >= 0 ? index_strs[idx] : "");
 }
 
-struct sh_grain_obj {
+struct grain_obj_av1 {
     // LUT objects for the offsets, grain and scaling luts
     pl_shader_obj lut_offsets;
     pl_shader_obj lut_grain[2];
     pl_shader_obj lut_scaling[3];
 
     // Previous parameters used to check reusability
-    struct pl_av1_grain_data data;
+    struct pl_film_grain_data data;
     struct pl_color_repr repr;
     bool fg_has_y;
     bool fg_has_u;
@@ -538,66 +537,20 @@ struct sh_grain_obj {
     int16_t grain_tmp_uv[GRAIN_HEIGHT][GRAIN_WIDTH];
 };
 
-static void sh_grain_uninit(pl_gpu gpu, void *ptr)
+static void av1_grain_uninit(pl_gpu gpu, void *ptr)
 {
-    struct sh_grain_obj *obj = ptr;
+    struct grain_obj_av1 *obj = ptr;
     pl_shader_obj_destroy(&obj->lut_offsets);
     for (int i = 0; i < PL_ARRAY_SIZE(obj->lut_grain); i++)
         pl_shader_obj_destroy(&obj->lut_grain[i]);
     for (int i = 0; i < PL_ARRAY_SIZE(obj->lut_scaling); i++)
         pl_shader_obj_destroy(&obj->lut_scaling[i]);
-    *obj = (struct sh_grain_obj) {0};
+    *obj = (struct grain_obj_av1) {0};
 }
 
-static inline enum pl_channel channel_map(int i, const struct pl_av1_grain_params *params)
+bool pl_needs_fg_av1(const struct pl_film_grain_params *params)
 {
-    static const enum pl_channel map_rgb[3] = {
-        [PL_CHANNEL_G] = PL_CHANNEL_Y,
-        [PL_CHANNEL_B] = PL_CHANNEL_CB,
-        [PL_CHANNEL_R] = PL_CHANNEL_CR,
-    };
-
-    static const enum pl_channel map_xyz[3] = {
-        [1] = PL_CHANNEL_Y,  // Y
-        [2] = PL_CHANNEL_CB, // Z
-        [0] = PL_CHANNEL_CR, // X
-    };
-
-    if (i >= params->components)
-        return PL_CHANNEL_NONE;
-
-    int comp = params->component_mapping[i];
-    if (comp < 0 || comp > 2)
-        return PL_CHANNEL_NONE;
-
-    switch (params->repr->sys) {
-    case PL_COLOR_SYSTEM_UNKNOWN:
-    case PL_COLOR_SYSTEM_RGB:
-        return map_rgb[comp];
-
-    case PL_COLOR_SYSTEM_XYZ:
-        return map_xyz[comp];
-
-    case PL_COLOR_SYSTEM_BT_601:
-    case PL_COLOR_SYSTEM_BT_709:
-    case PL_COLOR_SYSTEM_SMPTE_240M:
-    case PL_COLOR_SYSTEM_BT_2020_NC:
-    case PL_COLOR_SYSTEM_BT_2020_C:
-    case PL_COLOR_SYSTEM_BT_2100_PQ:
-    case PL_COLOR_SYSTEM_BT_2100_HLG:
-    case PL_COLOR_SYSTEM_YCGCO:
-        return comp;
-
-    case PL_COLOR_SYSTEM_COUNT:
-        break;
-    }
-
-    pl_unreachable();
-}
-
-bool pl_needs_av1_grain(const struct pl_av1_grain_params *params)
-{
-    const struct pl_av1_grain_data *data = &params->data;
+    const struct pl_av1_grain_data *data = &params->data.params.av1;
     bool has_y = data->num_points_y > 0;
     bool has_u = data->num_points_uv[0] > 0 || data->chroma_scaling_from_luma;
     bool has_v = data->num_points_uv[1] > 0 || data->chroma_scaling_from_luma;
@@ -615,12 +568,13 @@ bool pl_needs_av1_grain(const struct pl_av1_grain_params *params)
     return false;
 }
 
-static inline bool av1_grain_data_eq(const struct pl_av1_grain_data *a,
-                                     const struct pl_av1_grain_data *b)
+static inline bool av1_grain_data_eq(const struct pl_film_grain_data *da,
+                                     const struct pl_film_grain_data *db)
 {
-    // Only check the fields that are relevant for grain LUT generation
+    const struct pl_av1_grain_data *a = &da->params.av1, *b = &db->params.av1;
 
-    return a->grain_seed == b->grain_seed &&
+    // Only check the fields that are relevant for grain LUT generation
+    return da->seed == db->seed &&
            a->chroma_scaling_from_luma == b->chroma_scaling_from_luma &&
            a->scaling_shift == b->scaling_shift &&
            a->ar_coeff_lag == b->ar_coeff_lag &&
@@ -632,22 +586,14 @@ static inline bool av1_grain_data_eq(const struct pl_av1_grain_data *a,
 
 static void fill_grain_lut(void *data, const struct sh_lut_params *params)
 {
-    struct sh_grain_obj *obj = params->priv;
+    struct grain_obj_av1 *obj = params->priv;
     size_t entries = params->width * params->height * params->comps;
     memcpy(data, obj->grain, entries * sizeof(float));
 }
 
-bool pl_shader_av1_grain(pl_shader sh,
-                         pl_shader_obj *grain_state,
-                         const struct pl_av1_grain_params *params)
+bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
+                      const struct pl_film_grain_params *params)
 {
-    if (!pl_needs_av1_grain(params)) {
-        // FIXME: Instead of erroring, sample directly
-        SH_FAIL(sh, "pl_shader_av1_grain called but no AV1 grain needs to be "
-                    "applied, test with `pl_needs_av1_grain` first!");
-        return false;
-    }
-
     int sub_x = 0, sub_y = 0;
     int tex_w = params->tex->params.w,
         tex_h = params->tex->params.h;
@@ -657,7 +603,7 @@ bool pl_shader_av1_grain(pl_shader sh,
         sub_y = params->luma_tex->params.h > tex_h;
     }
 
-    const struct pl_av1_grain_data *data = &params->data;
+    const struct pl_av1_grain_data *data = &params->data.params.av1;
     bool fg_has_y = data->num_points_y > 0;
     bool fg_has_u = data->num_points_uv[0] > 0 || data->chroma_scaling_from_luma;
     bool fg_has_v = data->num_points_uv[1] > 0 || data->chroma_scaling_from_luma;
@@ -673,7 +619,7 @@ bool pl_shader_av1_grain(pl_shader sh,
     }
 
     if (tex_is_y && (sub_x || sub_y)) {
-        PL_WARN(sh, "pl_av1_grain_params.channels includes PL_CHANNEL_Y but "
+        PL_WARN(sh, "pl_film_grain_params.channels includes PL_CHANNEL_Y but "
                 "plane is subsampled, this makes no sense. Continuing anyway "
                 "but output is likely incorrect.");
     }
@@ -683,12 +629,12 @@ bool pl_shader_av1_grain(pl_shader sh,
 
     pl_gpu gpu = SH_GPU(sh);
     if (!gpu) {
-        PL_ERR(sh, "pl_shader_av1_grain requires a non-NULL pl_gpu!");
+        PL_ERR(sh, "AV1 film grain synthesis requires a non-NULL pl_gpu!");
         return false;
     }
 
     if (sh_glsl(sh).version < 130) {
-        PL_ERR(sh, "pl_shader_av1_grain requires GLSL >= 130!");
+        PL_ERR(sh, "AV1 film grain synthesis requires GLSL >= 130!");
         return false;
     }
 
@@ -701,17 +647,17 @@ bool pl_shader_av1_grain(pl_shader sh,
     int bh = BLOCK_SIZE >> sub_y;
     bool is_compute = sh_try_compute(sh, bw, bh, false, sizeof(uint32_t));
 
-    struct sh_grain_obj *obj;
+    struct grain_obj_av1 *obj;
     obj = SH_OBJ(sh, grain_state, PL_SHADER_OBJ_AV1_GRAIN,
-                 struct sh_grain_obj, sh_grain_uninit);
+                 struct grain_obj_av1, av1_grain_uninit);
     if (!obj)
         return false;
 
     // Note: In theory we could check only the parameters related to luma or
     // only related to chroma and skip updating for changes to irrelevant
-    // parts, but this is probably not worth it since the grain_seed is
-    // expected to change per frame anyway.
-    bool needs_update = !av1_grain_data_eq(data, &obj->data) ||
+    // parts, but this is probably not worth it since the seed is expected to
+    // change per frame anyway.
+    bool needs_update = !av1_grain_data_eq(&params->data, &obj->data) ||
                         !pl_color_repr_equal(params->repr, &obj->repr) ||
                         fg_has_y != obj->fg_has_y ||
                         fg_has_u != obj->fg_has_u ||
@@ -793,30 +739,31 @@ bool pl_shader_av1_grain(pl_shader sh,
         .update = needs_update,
         .dynamic = true,
         .fill = generate_offsets,
-        .priv = (void *) data,
+        .priv = (void *) &params->data,
     });
 
     // For the scaling LUTs, we assume they'll be relatively constant
     // throughout the video so doing some extra work to avoid reinitializing
     // them constantly is probably worth it. Probably.
+    const struct pl_av1_grain_data *obj_data = &obj->data.params.av1;
     bool scaling_changed = false;
     if (fg_has_y || data->chroma_scaling_from_luma) {
-        scaling_changed |= data->num_points_y != obj->data.num_points_y;
-        scaling_changed |= memcmp(data->points_y, obj->data.points_y,
+        scaling_changed |= data->num_points_y != obj_data->num_points_y;
+        scaling_changed |= memcmp(data->points_y, obj_data->points_y,
                                   sizeof(data->points_y));
     }
 
     if (fg_has_u && !data->chroma_scaling_from_luma) {
-        scaling_changed |= data->num_points_uv[0] != obj->data.num_points_uv[0];
+        scaling_changed |= data->num_points_uv[0] != obj_data->num_points_uv[0];
         scaling_changed |= memcmp(data->points_uv[0],
-                                  obj->data.points_uv[0],
+                                  obj_data->points_uv[0],
                                   sizeof(data->points_uv[0]));
     }
 
     if (fg_has_v && !data->chroma_scaling_from_luma) {
-        scaling_changed |= data->num_points_uv[1] != obj->data.num_points_uv[1];
+        scaling_changed |= data->num_points_uv[1] != obj_data->num_points_uv[1];
         scaling_changed |= memcmp(data->points_uv[1],
-                                  obj->data.points_uv[1],
+                                  obj_data->points_uv[1],
                                   sizeof(data->points_uv[1]));
     }
 
@@ -860,20 +807,20 @@ bool pl_shader_av1_grain(pl_shader sh,
     }
 
     // Done updating LUTs
-    obj->data = *data;
+    obj->data = params->data;
     obj->repr = *params->repr;
     obj->fg_has_y = fg_has_y;
     obj->fg_has_u = fg_has_u;
     obj->fg_has_v = fg_has_v;
 
     sh_describe(sh, "AV1 film grain");
-    GLSL("vec4 color;            \n"
-         "// pl_shader_av1_grain \n"
-         "{                      \n"
-         "uvec2 offset;          \n"
-         "uvec2 pos;             \n"
-         "float val;             \n"
-         "float grain;           \n");
+    GLSL("vec4 color;                   \n"
+         "// pl_shader_film_grain (AV1) \n"
+         "{                             \n"
+         "uvec2 offset;                 \n"
+         "uvec2 pos;                    \n"
+         "float val;                    \n"
+         "float grain;                  \n");
 
     if (is_compute) {
         GLSL("uvec2 block_id  = gl_WorkGroupID.xy;        \n"

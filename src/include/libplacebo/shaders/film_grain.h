@@ -1,7 +1,7 @@
 /*
  * This file is part of libplacebo, which is normally licensed under the terms
- * of the LGPL v2.1+. However, this file (av1.h) is also available under the
- * terms of the more permissive MIT license:
+ * of the LGPL v2.1+. However, this file (film_grain.h) is also available under
+ * the terms of the more permissive MIT license:
  *
  * Copyright (c) 2018-2019 Niklas Haas
  *
@@ -24,10 +24,10 @@
  * SOFTWARE.
  */
 
-#ifndef LIBPLACEBO_SHADERS_AV1_H_
-#define LIBPLACEBO_SHADERS_AV1_H_
+#ifndef LIBPLACEBO_SHADERS_FILM_GRAIN_H_
+#define LIBPLACEBO_SHADERS_FILM_GRAIN_H_
 
-// Helper shaders for AV1. For now, just film grain.
+// Film grain synthesis shaders for AV1.
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -37,15 +37,15 @@
 
 PL_API_BEGIN
 
+enum pl_film_grain_type {
+    PL_FILM_GRAIN_NONE = 0,
+    PL_FILM_GRAIN_AV1,
+    PL_FILM_GRAIN_COUNT,
+};
+
 // AV1 film grain parameters. For the exact meaning of these, see the AV1
 // specification (section 6.8.20).
-//
-// NOTE: These parameters are currently *not* sanity checked. Calling these
-// functions with e.g. too large `num_points_y` or negative width/height is UB!
-// Please make sure to sanity check the grain parameters signalled by the file
-// before calling into these functions.
 struct pl_av1_grain_data {
-    uint16_t grain_seed;
     int num_points_y;
     uint8_t points_y[14][2];     // [n][0] = value, [n][1] = scaling
     bool chroma_scaling_from_luma;
@@ -63,42 +63,57 @@ struct pl_av1_grain_data {
     bool overlap;
 };
 
-// Struct containing extra options for the `pl_shader_av1_grain` call.
-struct pl_av1_grain_params {
-    struct pl_av1_grain_data data;  // av1 grain metadata itself
+// Tagged union for film grain data
+struct pl_film_grain_data {
+    enum pl_film_grain_type type;   // film grain type
+    uint64_t seed;                  // shared seed value
+
+    union {
+        // Warning: These values are not sanity-checked at all, Invalid grain
+        // data results in undefined behavior!
+        struct pl_av1_grain_data av1;
+    } params;
+};
+
+// Options for the `pl_shader_film_grain` call.
+struct pl_film_grain_params {
+    // Required for all film grain types:
+    struct pl_film_grain_data data; // film grain data
     pl_tex tex;                     // texture to sample from
-    pl_tex luma_tex;                // "luma" texture (see notes)
     struct pl_color_repr *repr;     // underlying color representation (see notes)
     int components;
     int component_mapping[4];       // same as `struct pl_plane`
-    int luma_comp;                  // index of luma in `luma_tex`
 
     // Notes for `repr`:
     //  - repr->bits affects the rounding for grain generation
     //  - repr->levels affects whether or not we clip to full range or not
     //  - repr->sys affects the interpretation of channels
     //  - *repr gets normalized by this shader, which is why it's a pointer
-    //
+
+    // Required for PL_FILM_GRAIN_AV1 only:
+    pl_tex luma_tex;                // "luma" texture (see notes)
+    int luma_comp;                  // index of luma in `luma_tex`
+
     // Notes for `luma_tex`:
     //  - `luma_tex` must be specified if the `tex` does not itself contain the
     //     "luma-like" component. For XYZ systems, the Y channel is the luma
     //     component. For RGB systems, the G channel is.
 };
 
-// Test if AV1 film grain needs to be applied. This is a helper function
-// that users can use to decide whether or not `pl_shader_av1_grain` needs
-// to be called, based on the given grain metadata.
-bool pl_needs_av1_grain(const struct pl_av1_grain_params *params);
+// Test if film grain needs to be applied. This is a helper function that users
+// can use to decide whether or not `pl_shader_film_grain` needs to be called,
+// based on the given grain metadata.
+bool pl_needs_film_grain(const struct pl_film_grain_params *params);
 
-// Sample from a texture while applying AV1 grain at the same time.
-// `grain_state` should be unique for every plane, as it only contains the
-// state relevant for this particular plane configuration.
+// Sample from a texture while applying film grain at the same time.
+// `grain_state` must be unique for every plane configuration, as it may
+// contain plane-dependent state.
 //
-// Returns false on any error, or if AV1 grain generation is not supported.
-// (Requires GLSL version 130 or newer)
-bool pl_shader_av1_grain(pl_shader sh, pl_shader_obj *grain_state,
-                         const struct pl_av1_grain_params *params);
+// Returns false on any error, or if film grain generation is not supported
+// due to GLSL limitations.
+bool pl_shader_film_grain(pl_shader sh, pl_shader_obj *grain_state,
+                          const struct pl_film_grain_params *params);
 
 PL_API_END
 
-#endif // LIBPLACEBO_SHADERS_AV1_H_
+#endif // LIBPLACEBO_SHADERS_FILM_GRAIN_H_

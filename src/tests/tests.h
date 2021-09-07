@@ -92,8 +92,6 @@ static inline bool feq(float a, float b, float epsilon)
     }
 
 static const struct pl_av1_grain_data av1_grain_data = {
-    .grain_seed = 48476,
-
     .num_points_y = 6,
     .points_y = {{0, 4}, {27, 33}, {54, 55}, {67, 61}, {108, 71}, {255, 72}},
     .chroma_scaling_from_luma = false,

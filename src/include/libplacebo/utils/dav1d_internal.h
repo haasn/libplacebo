@@ -309,22 +309,25 @@ static inline void pl_frame_from_dav1dpicture(struct pl_frame *out,
 
     if (picture->frame_hdr->film_grain.present) {
         const Dav1dFilmGrainData *fg = &picture->frame_hdr->film_grain.data;
-        struct pl_av1_grain_data *av1 = &out->av1_grain;
-        *av1 = (struct pl_av1_grain_data) {
-            .grain_seed = fg->seed,
-            .num_points_y = fg->num_y_points,
-            .chroma_scaling_from_luma = fg->chroma_scaling_from_luma,
-            .num_points_uv = { fg->num_uv_points[0], fg->num_uv_points[1] },
-            .scaling_shift = fg->scaling_shift,
-            .ar_coeff_lag = fg->ar_coeff_lag,
-            .ar_coeff_shift = (int) fg->ar_coeff_shift,
-            .grain_scale_shift = fg->grain_scale_shift,
-            .uv_mult = { fg->uv_mult[0], fg->uv_mult[1] },
-            .uv_mult_luma = { fg->uv_luma_mult[0], fg->uv_luma_mult[1] },
-            .uv_offset = { fg->uv_offset[0], fg->uv_offset[1] },
-            .overlap = fg->overlap_flag,
+        out->film_grain = (struct pl_film_grain_data) {
+            .type = PL_FILM_GRAIN_AV1,
+            .seed = fg->seed,
+            .params.av1 = {
+                .num_points_y = fg->num_y_points,
+                .chroma_scaling_from_luma = fg->chroma_scaling_from_luma,
+                .num_points_uv = { fg->num_uv_points[0], fg->num_uv_points[1] },
+                .scaling_shift = fg->scaling_shift,
+                .ar_coeff_lag = fg->ar_coeff_lag,
+                .ar_coeff_shift = (int) fg->ar_coeff_shift,
+                .grain_scale_shift = fg->grain_scale_shift,
+                .uv_mult = { fg->uv_mult[0], fg->uv_mult[1] },
+                .uv_mult_luma = { fg->uv_luma_mult[0], fg->uv_luma_mult[1] },
+                .uv_offset = { fg->uv_offset[0], fg->uv_offset[1] },
+                .overlap = fg->overlap_flag,
+            },
         };
 
+        struct pl_av1_grain_data *av1 = &out->film_grain.params.av1;
         memcpy(av1->points_y, fg->y_points, sizeof(av1->points_y));
         memcpy(av1->points_uv, fg->uv_points, sizeof(av1->points_uv));
         memcpy(av1->ar_coeffs_y, fg->ar_coeffs_y, sizeof(av1->ar_coeffs_y));
@@ -407,7 +410,7 @@ static inline bool pl_upload_dav1dpicture(pl_gpu gpu,
     Dav1dPicture *pic = params->picture;
     pl_frame_from_dav1dpicture(out, pic);
     if (!params->film_grain)
-        out->av1_grain = (struct pl_av1_grain_data) {0};
+        out->film_grain.type = PL_FILM_GRAIN_NONE;
 
     const int bytes = (pic->p.bpc + 7) / 8; // rounded up
     int sub_x = 0, sub_y = 0;

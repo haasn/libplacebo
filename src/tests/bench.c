@@ -240,31 +240,37 @@ static void bench_hdr_peak(pl_shader sh, pl_shader_obj *state, pl_tex src)
 
 static void bench_av1_grain(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    struct pl_av1_grain_params params = {
-        .data = av1_grain_data,
+    struct pl_film_grain_params params = {
+        .data = {
+            .type = PL_FILM_GRAIN_AV1,
+            .params.av1 = av1_grain_data,
+            .seed = rand(),
+        },
         .tex = src,
         .components = 3,
         .component_mapping = {0, 1, 2},
         .repr = &(struct pl_color_repr) {0},
     };
 
-    params.data.grain_seed = rand();
-    pl_shader_av1_grain(sh, state, &params);
+    pl_shader_film_grain(sh, state, &params);
 }
 
 static void bench_av1_grain_lap(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    struct pl_av1_grain_params params = {
-        .data = av1_grain_data,
+    struct pl_film_grain_params params = {
+        .data = {
+            .type = PL_FILM_GRAIN_AV1,
+            .params.av1 = av1_grain_data,
+            .seed = rand(),
+        },
         .tex = src,
         .components = 3,
         .component_mapping = {0, 1, 2},
         .repr = &(struct pl_color_repr) {0},
     };
 
-    params.data.overlap = true;
-    params.data.grain_seed = rand();
-    pl_shader_av1_grain(sh, state, &params);
+    params.data.params.av1.overlap = true;
+    pl_shader_film_grain(sh, state, &params);
 }
 
 static float data[TEX_SIZE * TEX_SIZE * 4 + 8192];

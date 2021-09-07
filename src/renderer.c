@@ -60,7 +60,7 @@ struct pl_renderer {
     bool disable_overlay;       // disable rendering overlays
     bool disable_icc;           // disable usage of ICC profiles
     bool disable_peak_detect;   // disable peak detection shader
-    bool disable_grain;         // disable AV1 grain code
+    bool disable_grain;         // disable film grain code
     bool disable_hooks;         // disable user hooks / custom shaders
     bool disable_mixing;        // disable frame mixing
 
@@ -1180,10 +1180,10 @@ static void log_plane_info(pl_renderer rr, const struct plane_state *st)
 }
 
 // Returns true if grain was applied
-static bool plane_av1_grain(struct pass_state *pass, int plane_idx,
-                            struct plane_state *st,
-                            const struct plane_state *ref,
-                            const struct pl_frame *image)
+static bool plane_film_grain(struct pass_state *pass, int plane_idx,
+                             struct plane_state *st,
+                             const struct plane_state *ref,
+                             const struct pl_frame *image)
 {
     const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
@@ -1193,26 +1193,33 @@ static bool plane_av1_grain(struct pass_state *pass, int plane_idx,
     struct img *img = &st->img;
     struct pl_plane *plane = &st->plane;
     struct pl_color_repr repr = st->img.repr;
-    struct pl_av1_grain_params grain_params = {
-        .data = image->av1_grain,
+    struct pl_film_grain_params grain_params = {
+        .data = image->film_grain,
         .luma_tex = ref->plane.texture,
         .repr = &repr,
         .components = plane->components,
     };
 
+    switch (image->film_grain.type) {
+    case PL_FILM_GRAIN_NONE: return false;
+    case PL_FILM_GRAIN_AV1:
+        grain_params.luma_tex = ref->plane.texture;
+        for (int c = 0; c < ref->plane.components; c++) {
+            if (ref->plane.component_mapping[c] == PL_CHANNEL_Y)
+                grain_params.luma_comp = c;
+        }
+        break;
+    default: pl_unreachable();
+    }
+
     for (int c = 0; c < plane->components; c++)
         grain_params.component_mapping[c] = plane->component_mapping[c];
 
-    for (int c = 0; c < ref->plane.components; c++) {
-        if (ref->plane.component_mapping[c] == PL_CHANNEL_Y)
-            grain_params.luma_comp = c;
-    }
-
-    if (!pl_needs_av1_grain(&grain_params))
+    if (!pl_needs_film_grain(&grain_params))
         return false;
 
     if (!FBOFMT(plane->components)) {
-        PL_ERR(rr, "AV1 grain required but no renderable format available.. "
+        PL_ERR(rr, "Film grain required but no renderable format available.. "
               "disabling!");
         rr->disable_grain = true;
         return false;
@@ -1223,7 +1230,7 @@ static bool plane_av1_grain(struct pass_state *pass, int plane_idx,
         return false;
 
     img->sh = pl_dispatch_begin_ex(rr->dp, true);
-    if (!pl_shader_av1_grain(img->sh, &rr->grain_state[plane_idx], &grain_params)) {
+    if (!pl_shader_film_grain(img->sh, &rr->grain_state[plane_idx], &grain_params)) {
         pl_dispatch_abort(rr->dp, &img->sh);
         rr->disable_grain = true;
         return false;
@@ -1231,7 +1238,7 @@ static bool plane_av1_grain(struct pass_state *pass, int plane_idx,
 
     img->tex = NULL;
     if (!img_tex(pass, img)) {
-        PL_ERR(rr, "Failed applying AV1 grain.. disabling!");
+        PL_ERR(rr, "Failed applying film grain.. disabling!");
         pl_dispatch_abort(rr->dp, &img->sh);
         img->tex = grain_params.tex;
         rr->disable_grain = true;
@@ -1329,10 +1336,10 @@ static bool want_merge(struct pass_state *pass,
     if (info.type == SAMPLER_COMPLEX)
         return true;
 
-    // AV1 grain synthesis, can be merged for compatible channels, saving on
+    // Film grain synthesis, can be merged for compatible channels, saving on
     // redundant sampling of the grain/offset textures
-    struct pl_av1_grain_params grain_params = {
-        .data = pass->image.av1_grain,
+    struct pl_film_grain_params grain_params = {
+        .data = pass->image.film_grain,
         .repr = (struct pl_color_repr *) &st->img.repr,
         .components = st->plane.components,
     };
@@ -1340,7 +1347,7 @@ static bool want_merge(struct pass_state *pass,
     for (int c = 0; c < st->plane.components; c++)
         grain_params.component_mapping[c] = st->plane.component_mapping[c];
 
-    if (!rr->disable_grain && pl_needs_av1_grain(&grain_params))
+    if (!rr->disable_grain && pl_needs_film_grain(&grain_params))
         return true;
 
     return false;
@@ -1469,13 +1476,13 @@ static bool pass_read_image(struct pass_state *pass)
         PL_TRACE(rr, "Plane %d:", i);
         log_plane_info(rr, st);
 
-        // Perform AV1 grain synthesis if needed. Do this first because it
+        // Perform film grain synthesis if needed. Do this first because it
         // requires unmodified plane sizes, and also because it's closer to the
         // intent of the spec (which is to apply synthesis effectively during
         // decoding)
 
-        if (plane_av1_grain(pass, i, st, ref, image)) {
-            PL_TRACE(rr, "After AV1 grain:");
+        if (plane_film_grain(pass, i, st, ref, image)) {
+            PL_TRACE(rr, "After film grain:");
             log_plane_info(rr, st);
         }
 

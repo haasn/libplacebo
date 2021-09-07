@@ -145,13 +145,12 @@ other developers of GPU-accelerated image processing software.
 In addition to this low-level interface, there are several available shader
 routines which libplacebo exports:
 
-- `shaders/av1.h`: Helper shaders for AV1 decoding, currently only implements
-  a film grain synthesis shader.
 - `shaders/colorspace.h`: Shader routines for decoding and transforming
   colors, tone mapping, dithering, and so forth.
 - `shaders/custom.h`: Allows directly ingesting custom GLSL logic into the
   `pl_shader` abstraction, either as bare GLSL or in [mpv .hook
   format](https://mpv.io/manual/master/#options-glsl-shaders).
+- `shaders/film_grain.h`: Film grain synthesis shaders for AV1.
 - `shaders/icc.h`: Shader for ICC profile based color management.
 - `shaders/lut.h`: Code for applying arbitrary 1D/3D LUTs.
 - `shaders/sampling.h`: Shader routines for various algorithms that sample

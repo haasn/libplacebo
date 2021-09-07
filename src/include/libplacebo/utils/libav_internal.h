@@ -545,37 +545,38 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
 #ifdef HAVE_LAV_FILM_GRAIN
     if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS))) {
         const AVFilmGrainParams *fgp = (AVFilmGrainParams *) sd->data;
+        out->film_grain.seed = fgp->seed;
+
         switch (fgp->type) {
-        case AV_FILM_GRAIN_PARAMS_NONE:
-            break;
+        case AV_FILM_GRAIN_PARAMS_NONE: break;
         case AV_FILM_GRAIN_PARAMS_AV1: {
-            const AVFilmGrainAOMParams *aom = &fgp->codec.aom;
-            struct pl_av1_grain_data *av1 = &out->av1_grain;
-            *av1 = (struct pl_av1_grain_data) {
-                .grain_seed = fgp->seed,
-                .num_points_y = aom->num_y_points,
-                .chroma_scaling_from_luma = aom->chroma_scaling_from_luma,
-                .num_points_uv = { aom->num_uv_points[0], aom->num_uv_points[1] },
-                .scaling_shift = aom->scaling_shift,
-                .ar_coeff_lag = aom->ar_coeff_lag,
-                .ar_coeff_shift = aom->ar_coeff_shift,
-                .grain_scale_shift = aom->grain_scale_shift,
-                .uv_mult = { aom->uv_mult[0], aom->uv_mult[1] },
-                .uv_mult_luma = { aom->uv_mult_luma[0], aom->uv_mult_luma[1] },
-                .uv_offset = { aom->uv_offset[0], aom->uv_offset[1] },
-                .overlap = aom->overlap_flag,
+            const AVFilmGrainAOMParams *src = &fgp->codec.aom;
+            struct pl_av1_grain_data *dst = &out->film_grain.params.av1;
+            out->film_grain.type = PL_FILM_GRAIN_AV1;
+            *dst = (struct pl_av1_grain_data) {
+                .num_points_y = src->num_y_points,
+                .chroma_scaling_from_luma = src->chroma_scaling_from_luma,
+                .num_points_uv = { src->num_uv_points[0], src->num_uv_points[1] },
+                .scaling_shift = src->scaling_shift,
+                .ar_coeff_lag = src->ar_coeff_lag,
+                .ar_coeff_shift = src->ar_coeff_shift,
+                .grain_scale_shift = src->grain_scale_shift,
+                .uv_mult = { src->uv_mult[0], src->uv_mult[1] },
+                .uv_mult_luma = { src->uv_mult_luma[0], src->uv_mult_luma[1] },
+                .uv_offset = { src->uv_offset[0], src->uv_offset[1] },
+                .overlap = src->overlap_flag,
             };
 
-            assert(sizeof(av1->ar_coeffs_uv) == sizeof(aom->ar_coeffs_uv));
-            memcpy(av1->points_y, aom->y_points, sizeof(av1->points_y));
-            memcpy(av1->points_uv, aom->uv_points, sizeof(av1->points_uv));
-            memcpy(av1->ar_coeffs_y, aom->ar_coeffs_y, sizeof(av1->ar_coeffs_y));
-            memcpy(av1->ar_coeffs_uv, aom->ar_coeffs_uv, sizeof(av1->ar_coeffs_uv));
+            assert(sizeof(dst->ar_coeffs_uv) == sizeof(src->ar_coeffs_uv));
+            memcpy(dst->points_y, src->y_points, sizeof(dst->points_y));
+            memcpy(dst->points_uv, src->uv_points, sizeof(dst->points_uv));
+            memcpy(dst->ar_coeffs_y, src->ar_coeffs_y, sizeof(dst->ar_coeffs_y));
+            memcpy(dst->ar_coeffs_uv, src->ar_coeffs_uv, sizeof(dst->ar_coeffs_uv));
             break;
         }
         }
     }
-#endif // HAVE_LAV_AV1_GRAIN
+#endif // HAVE_LAV_FILM_GRAIN
 
     for (int p = 0; p < out->num_planes; p++) {
         struct pl_plane *plane = &out->planes[p];
