@@ -64,14 +64,12 @@ static void generate_slice(float *out, size_t out_width, uint8_t h, uint8_t v,
                 sum += R64T[y][p] * grain[x][p];
             tmp[y][x] = (sum + 128) >> 8;
         }
-        for (int x = freq_h+1; x < 64; x++)
-            tmp[y][x] = 0;
     }
 
     for (int y = 0; y < 64; y++) {
         for (int x = 0; x < 64; x++) {
             int32_t sum = 0;
-            for (int p = 0; p < 64; p++)
+            for (int p = 0; p <= freq_h; p++)
                 sum += tmp[y][p] * R64T[x][p]; // R64T^T = R64
             sum = (sum + 128) >> 8;
             grain[y][x] = PL_CLAMP(sum, -127, 127);
