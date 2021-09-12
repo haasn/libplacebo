@@ -183,10 +183,10 @@ void *sh_require_obj(pl_shader sh, pl_shader_obj *ptr,
     ((t*) sh_require_obj(sh, ptr, type, sizeof(t), uninit))
 
 // Initializes a PRNG. The resulting string will directly evaluate to a
-// pseudorandom, uniformly distributed float from [0.0,1.0]. Since this
+// pseudorandom, uniformly distributed vec3 from [0.0,1.0]. Since this
 // algorithm works by mutating a state variable, if the user wants to use the
-// resulting PRNG inside a subfunction, they must add an extra `inout float %s`
-// with the name of `state` to the signature. (Optional)
+// resulting PRNG inside a subfunction, they must add an extra `inout prng_t %s`
+// with the contents of `state` to the signature. (Optional)
 //
 // If `temporal` is set, the PRNG will vary across frames.
 ident_t sh_prng(pl_shader sh, bool temporal, ident_t *state);

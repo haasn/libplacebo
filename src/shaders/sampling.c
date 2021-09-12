@@ -215,21 +215,20 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
         // Helper function: Compute a stochastic approximation of the avg color
         // around a pixel, given a specified radius
         ident_t average = sh_fresh(sh, "average");
-        GLSLH("vec4 %s(vec2 pos, float range, inout float %s) {     \n"
+        GLSLH("vec4 %s(vec2 pos, float range, inout prng_t %s) {\n"
               // Compute a random angle and distance
-              "    float dist = %s * range;                         \n"
-              "    float dir  = %s * %f;                            \n"
-              "    vec2 o = dist * vec2(cos(dir), sin(dir));        \n"
+              "    vec2 dd = %s.xy * vec2(range, %f);           \n"
+              "    vec2 o = dd.x * vec2(cos(dd.y), sin(dd.y));  \n"
               // Sample at quarter-turn intervals around the source pixel
-              "    vec4 sum = vec4(0.0);                            \n"
-              "    sum += %s(%s, pos + %s * vec2( o.x,  o.y)); \n"
-              "    sum += %s(%s, pos + %s * vec2(-o.x,  o.y)); \n"
-              "    sum += %s(%s, pos + %s * vec2(-o.x, -o.y)); \n"
-              "    sum += %s(%s, pos + %s * vec2( o.x, -o.y)); \n"
+              "    vec4 sum = vec4(0.0);                        \n"
+              "    sum += %s(%s, pos + %s * vec2( o.x,  o.y));  \n"
+              "    sum += %s(%s, pos + %s * vec2(-o.x,  o.y));  \n"
+              "    sum += %s(%s, pos + %s * vec2(-o.x, -o.y));  \n"
+              "    sum += %s(%s, pos + %s * vec2( o.x, -o.y));  \n"
               // Return the (normalized) average
               "    return 0.25 * sum;                               \n"
               "}\n",
-              average, state, prng, prng, M_PI * 2,
+              average, state, prng, M_PI * 2,
               fn, tex, pt, fn, tex, pt, fn, tex, pt, fn, tex, pt);
 
         ident_t radius = sh_const_float(sh, "radius", params->radius);
@@ -250,9 +249,8 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
 
     // Add some random noise to smooth out residual differences
     if (params->grain > 0) {
-        GLSL("vec3 noise = vec3(%s, %s, %s);         \n"
-             "color.rgb += %s * (noise - vec3(0.5)); \n",
-             prng, prng, prng, SH_FLOAT(params->grain / 1000.0));
+        GLSL( "color.rgb += %s * (%s - vec3(0.5)); \n",
+             SH_FLOAT(params->grain / 1000.0), prng);
     }
 
     GLSL("}\n");

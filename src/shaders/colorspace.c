@@ -1463,7 +1463,7 @@ done: ;
     switch (method) {
     case PL_DITHER_WHITE_NOISE: {
         ident_t prng = sh_prng(sh, params->temporal, NULL);
-        GLSL("bias = %s;\n", prng);
+        GLSL("bias = %s.x;\n", prng);
         break;
     }
 
