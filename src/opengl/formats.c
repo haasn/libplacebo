@@ -55,6 +55,7 @@ enum {
     RG    = GL_RG,
     RGB   = GL_RGB,
     RGBA  = GL_RGBA,
+    BGRA  = GL_BGRA,
     RI    = GL_RED_INTEGER,
     RGI   = GL_RG_INTEGER,
     RGBI  = GL_RGB_INTEGER,
@@ -73,6 +74,11 @@ const struct gl_format formats_norm8[] = {
     {GL_RG8,            RG,    U8,  FMT("rg8",      8, UNORM, S|L|F|V)},
     {GL_RGB8,           RGB,   U8,  FMT("rgb8",     8, UNORM, S|L|F|V)},
     {GL_RGBA8,          RGBA,  U8,  FMT("rgba8",    8, UNORM, S|L|F|V)},
+};
+
+// BGRA 8-bit
+const struct gl_format formats_bgra8[] = {
+    {GL_RGBA8,          BGRA,  U8,  FMT("bgra8",    8, UNORM, S|L|F|V)},
 };
 
 // Basic 16-bit formats, excluding rgb16 (special cased below)
@@ -175,6 +181,11 @@ const struct gl_format formats_legacy_gles2[] = {
     {GL_RGBA,           RGBA,  U8,  FMT("rgba",     8, UNORM, S|L)},
 };
 
+// GLES BGRA
+const struct gl_format formats_bgra_gles[] = {
+    {GL_BGRA,           BGRA,  U8,  FMT("bgra",     8, UNORM, S|L|F|V)},
+};
+
 // Fallback for vertex-only formats, as a last resort
 const struct gl_format formats_basic_vertex[] = {
     {GL_R32F,           R,     FLT, FMT("r32f",    32, FLOAT, V)},
@@ -209,6 +220,7 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
         break;
     case GL_RGBA:
     case GL_RGBA_INTEGER:
+    case GL_BGRA:
         fmt->num_components = 4;
         break;
     default:
@@ -380,6 +392,7 @@ bool gl_setup_formats(struct pl_gpu *gpu)
     if (p->gl_ver >= 30) {
         // Desktop GL3+ has everything
         DO_FORMATS(formats_norm8);
+        DO_FORMATS(formats_bgra8);
         DO_FORMATS(formats_norm16);
         DO_FORMATS(formats_rgb16_fbo);
         DO_FORMATS(formats_float);
@@ -395,6 +408,7 @@ bool gl_setup_formats(struct pl_gpu *gpu)
             epoxy_has_gl_extension("GL_ARB_framebuffer_object"))
         {
             DO_FORMATS(formats_norm8);
+            DO_FORMATS(formats_bgra8);
             DO_FORMATS(formats_norm16);
             DO_FORMATS(formats_rgb16_fbo);
             DO_FORMATS(formats_float);
@@ -410,6 +424,8 @@ bool gl_setup_formats(struct pl_gpu *gpu)
         // GLES 3.0 has some basic formats, with framebuffers for float16
         // depending on GL_EXT_color_buffer_half_float support
         DO_FORMATS(formats_norm8);
+        if (epoxy_has_gl_extension("GL_EXT_texture_format_BGRA8888"))
+            DO_FORMATS(formats_bgra_gles);
         if (epoxy_has_gl_extension("GL_EXT_texture_integer"))
             DO_FORMATS(formats_uint);
         DO_FORMATS(formats_basic_vertex);
@@ -428,6 +444,9 @@ bool gl_setup_formats(struct pl_gpu *gpu)
         DO_FORMATS(formats_basic_vertex);
         if (epoxy_has_gl_extension("GL_EXT_texture_rg")) {
             DO_FORMATS(formats_norm8);
+        }
+        if (epoxy_has_gl_extension("GL_EXT_texture_format_BGRA8888")) {
+            DO_FORMATS(formats_bgra_gles);
         }
         if (epoxy_has_gl_extension("GL_EXT_texture_norm16")) {
             DO_FORMATS(formats_norm16);
