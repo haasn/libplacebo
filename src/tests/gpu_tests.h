@@ -983,10 +983,8 @@ static void pl_render_tests(pl_gpu gpu)
             struct STYPE tmp = DEFAULT;                                 \
             tmp.FIELD = i;                                              \
             params.SNAME = &tmp;                                        \
-            for (int p = 0; p < 5; p++) {                               \
-                REQUIRE(pl_render_image(rr, &image, &target, &params)); \
-                pl_gpu_flush(gpu);                                      \
-            }                                                           \
+            REQUIRE(pl_render_image(rr, &image, &target, &params));     \
+            pl_gpu_flush(gpu);                                          \
         }                                                               \
     } while (0)
 
