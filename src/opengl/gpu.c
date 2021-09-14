@@ -207,6 +207,33 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     p->has_queries = gl_test_ext(gpu, "GL_ARB_timer_query", 33, 0);
     p->has_fbos = gl_test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20);
     p->has_storage = gl_test_ext(gpu, "GL_ARB_shader_image_load_store", 42, 0);
+    p->has_readback = p->has_fbos;
+
+    if (p->has_readback && p->gles_ver) {
+        GLuint fbo = 0, tex = 0;
+        GLint read_type = 0, read_fmt = 0;
+        glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glGenFramebuffers(1, &fbo);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 64, 64, 0, GL_RED,
+                     GL_UNSIGNED_BYTE, NULL);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_TEXTURE_2D, tex, 0);
+        glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
+        glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &read_fmt);
+        if (read_type != GL_UNSIGNED_BYTE || read_fmt != GL_RED) {
+            PL_INFO(gpu, "GPU does not seem to support lossless texture "
+                    "readback, restricting readback capabilities! This is a "
+                    "GLES/driver limitation, there is little we can do to "
+                    "work around it.");
+            p->has_readback = false;
+        }
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glDeleteFramebuffers(1, &fbo);
+        glDeleteTextures(1, &tex);
+    }
 
     // We simply don't know, so make up some values
     limits->align_tex_xfer_offset = 32;

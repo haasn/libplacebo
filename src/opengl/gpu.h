@@ -62,6 +62,7 @@ struct pl_gl {
     bool has_vao;
     bool has_queries;
     bool has_modifiers;
+    bool has_readback;
     int gather_comps;
 };
 
