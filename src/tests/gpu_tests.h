@@ -1070,6 +1070,12 @@ static void pl_render_tests(pl_gpu gpu)
         lut = pl_lut_parse_cube(gpu->log, test_luts[i], strlen(test_luts[i]));
         REQUIRE(lut);
 
+        bool has_3dlut = gpu->limits.max_tex_3d_dim && gpu->glsl.version > 100;
+        if (lut->size[2] && !has_3dlut) {
+            pl_lut_free(&lut);
+            continue;
+        }
+
         // Test all three at the same time to reduce the number of tests
         image.lut = target.lut = params.lut = lut;
 
