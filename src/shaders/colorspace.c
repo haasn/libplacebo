@@ -1440,7 +1440,7 @@ done: ;
 
     if (size) {
         // Transform the screen position to the cyclic range [0,1)
-        GLSL("vec2 pos = fract(gl_FragCoord.xy * 1.0/%s);\n", SH_INT(size));
+        GLSL("vec2 pos = fract(gl_FragCoord.xy * 1.0/%s);\n", SH_FLOAT(size));
 
         if (params->temporal) {
             int phase = SH_PARAMS(sh).index % 8;
