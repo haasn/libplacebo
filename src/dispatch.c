@@ -394,6 +394,9 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
             ADD(pre, "precision mediump sampler1D; \n");
         if (gpu->limits.max_tex_3d_dim && gpu->glsl.version > 100)
             ADD(pre, "precision mediump sampler3D; \n");
+
+        // Integer math has a good chance of caring about precision
+        ADD(pre, "precision highp int; \n");
     }
 
     // Add all of the push constants as their own element
