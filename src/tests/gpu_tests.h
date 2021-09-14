@@ -964,6 +964,7 @@ static void pl_render_tests(pl_gpu gpu)
         .repr = {
             .sys        = PL_COLOR_SYSTEM_RGB,
             .levels     = PL_COLOR_LEVELS_FULL,
+            .bits.color_depth = 32,
         },
         .color          = pl_color_space_srgb,
     };
