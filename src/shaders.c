@@ -864,7 +864,7 @@ ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
     uint32_t max_tex_dim[] = {
         gpu ? gpu->limits.max_tex_1d_dim : 0,
         gpu ? gpu->limits.max_tex_2d_dim : 0,
-        gpu ? gpu->limits.max_tex_3d_dim : 0,
+        (gpu && gpu->glsl.version > 100) ? gpu->limits.max_tex_3d_dim : 0,
     };
 
     // Try picking the right number of dimensions for the texture LUT. This
