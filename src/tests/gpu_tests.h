@@ -913,7 +913,6 @@ static void pl_render_tests(pl_gpu gpu)
     pl_tex img5x5_tex = NULL, fbo = NULL;
     pl_renderer rr = NULL;
 
-    float *fbo_data = NULL;
     static float data_5x5[5][5] = {
         { 0.0, 0.0, 0.0, 0.0, 0.0 },
         { 0.0, 0.0, 0.0, 0.0, 0.0 },
@@ -970,12 +969,6 @@ static void pl_render_tests(pl_gpu gpu)
     };
 
     REQUIRE(pl_render_image(rr, &image, &target, NULL));
-
-    fbo_data = malloc(fbo->params.w * fbo->params.h * sizeof(float[4]));
-    REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
-        .tex            = fbo,
-        .ptr            = fbo_data,
-    }));
 
     // TODO: embed a reference texture and ensure it matches
 
@@ -1200,7 +1193,6 @@ static void pl_render_tests(pl_gpu gpu)
     pl_queue_destroy(&queue);
 
 error:
-    free(fbo_data);
     pl_renderer_destroy(&rr);
     pl_tex_destroy(gpu, &img5x5_tex);
     pl_tex_destroy(gpu, &fbo);

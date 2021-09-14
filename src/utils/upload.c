@@ -275,7 +275,7 @@ bool pl_recreate_plane(pl_gpu gpu, struct pl_plane *out_plane,
         .h = data->height,
         .format = fmt,
         .renderable = true,
-        .host_readable = true,
+        .host_readable = fmt->caps & PL_FMT_CAP_HOST_READABLE,
         .blit_dst = fmt->caps & PL_FMT_CAP_BLITTABLE,
         .storable = fmt->caps & PL_FMT_CAP_STORABLE,
     });

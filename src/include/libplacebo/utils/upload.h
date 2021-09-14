@@ -134,7 +134,7 @@ bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
 // example, prepare textures to be used as the target of rendering.
 //
 // The resulting texture is guaranteed to be `renderable`, and it will also try
-// to maximize compatibility with the other `pl_renderer` reequirements
+// to maximize compatibility with the other `pl_renderer` requirements
 // (blittable, storable, etc.).
 bool pl_recreate_plane(pl_gpu gpu, struct pl_plane *out_plane,
                        pl_tex *tex, const struct pl_plane_data *data);
