@@ -148,9 +148,6 @@ static const struct vk_ext vk_device_extensions[] = {
 #endif
     }, {
         .name = VK_EXT_PCI_BUS_INFO_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
-            {0}
-        },
     }, {
         .name = VK_EXT_HDR_METADATA_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
@@ -167,9 +164,6 @@ static const struct vk_ext vk_device_extensions[] = {
     }, {
         .name = VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
         .core_ver = VK_API_VERSION_1_2,
-        .funs = (struct vk_fun[]) {
-            {0}
-        },
     }, {
         .name = VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
@@ -1126,7 +1120,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         const struct vk_ext *ext = &vk_device_extensions[i];
         if (ext->core_ver && vk->api_ver >= ext->core_ver) {
             // Layer is already implicitly enabled by the API version
-            for (const struct vk_fun *f = ext->funs; f->name; f++)
+            for (const struct vk_fun *f = ext->funs; f && f->name; f++)
                 PL_ARRAY_APPEND(tmp, ext_funs,  f);
             continue;
         }
@@ -1134,7 +1128,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         for (int n = 0; n < num_exts_avail; n++) {
             if (strcmp(ext->name, exts_avail[n].extensionName) == 0) {
                 PL_ARRAY_APPEND(vk->alloc, vk->exts, ext->name);
-                for (const struct vk_fun *f = ext->funs; f->name; f++)
+                for (const struct vk_fun *f = ext->funs; f && f->name; f++)
                     PL_ARRAY_APPEND(tmp, ext_funs, f);
                 break;
             }
@@ -1480,7 +1474,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
                 (ext->core_ver && ext->core_ver >= vk->api_ver))
             {
                 // Extension is available, directly load it
-                for (const struct vk_fun *f = ext->funs; f->name; f++)
+                for (const struct vk_fun *f = ext->funs; f && f->name; f++)
                     load_vk_fun(vk, f);
                 break;
             }
