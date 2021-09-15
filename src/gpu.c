@@ -269,6 +269,7 @@ pl_gpu pl_gpu_finalize(struct pl_gpu *gpu)
     LOG("zu", max_variables);
     LOG("zu", max_constants);
     LOG("zu", max_pushc_size);
+    LOG("zu", align_vertex_stride);
     if (gpu->glsl.compute) {
         LOG(PRIu32, max_dispatch[0]);
         LOG(PRIu32, max_dispatch[1]);
@@ -1368,6 +1369,7 @@ pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     switch(params->type) {
     case PL_PASS_RASTER:
         require(params->vertex_shader);
+        require(params->vertex_stride % gpu->limits.align_vertex_stride == 0);
         for (int i = 0; i < params->num_vertex_attribs; i++) {
             struct pl_vertex_attrib va = params->vertex_attribs[i];
             require(va.name);

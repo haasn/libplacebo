@@ -127,6 +127,7 @@ struct pl_gpu_limits {
     size_t max_variables;       // maximum `pl_pass_params.num_variables`
     size_t max_constants;       // maximum `pl_pass_params.num_constants`
     size_t max_pushc_size;      // maximum `push_constants_size`
+    size_t align_vertex_stride; // alignment of `pl_pass_params.vertex_stride`
     uint32_t max_dispatch[3];   // maximum dispatch size per dimension
 
     // Note: At least one of `max_variables` or `max_ubo_size` is guaranteed to
@@ -1206,7 +1207,7 @@ struct pl_pass_params {
     enum pl_prim_type vertex_type;
     struct pl_vertex_attrib *vertex_attribs;
     int num_vertex_attribs;
-    size_t vertex_stride;
+    size_t vertex_stride; // must be a multiple of limits.align_vertex_stride
 
     // The vertex shader itself.
     const char *vertex_shader;

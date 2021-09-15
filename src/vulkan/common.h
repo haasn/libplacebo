@@ -18,6 +18,8 @@
 #pragma once
 
 #define VK_NO_PROTOTYPES
+#define VK_ENABLE_BETA_EXTENSIONS // for VK_KHR_portability_subset
+
 #include "../common.h"
 #include "../log.h"
 #include "../pl_thread.h"

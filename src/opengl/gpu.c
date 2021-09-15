@@ -158,6 +158,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     limits->max_vbo_size = limits->max_buf_size; // No additional restrictions
     if (gl_test_ext(gpu, "GL_ARB_buffer_storage", 44, 0))
         limits->max_mapped_size = limits->max_buf_size;
+    limits->align_vertex_stride = 1;
 
     get(GL_MAX_TEXTURE_SIZE, &limits->max_tex_2d_dim);
     if (gl_test_ext(gpu, "GL_EXT_texture3D", 21, 30))

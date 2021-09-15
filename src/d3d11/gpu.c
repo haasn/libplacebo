@@ -445,6 +445,7 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
         .max_buf_size = max_res_size,
         .max_ssbo_size = max_res_size,
         .max_vbo_size = max_res_size,
+        .align_vertex_stride = 1,
 
         // Make up some values
         .align_tex_xfer_offset = 32,

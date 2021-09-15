@@ -28,6 +28,7 @@ project('libplacebo', ['c', 'cpp'],
       '175': 'require timeline semaphores for all vulkan devices',
       '176': 'revert vulkan 1.2 requirement',
       '177': 'add debug_tag to pl_tex/buf_params',
+      '178': 'add pl_gpu_limits.align_vertex_stride',
     }.keys().length(),
     # Fix version
     0)

@@ -45,6 +45,7 @@ pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params)
     // Forcibly override these, because we know for sure what the values are
     gpu->limits.align_tex_xfer_pitch = 1;
     gpu->limits.align_tex_xfer_offset = 1;
+    gpu->limits.align_vertex_stride = 1;
 
     // Set up the dummy formats, add one for each possible format type that we
     // can represent on the host

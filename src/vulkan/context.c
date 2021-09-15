@@ -177,6 +177,10 @@ static const struct vk_ext vk_device_extensions[] = {
             PL_VK_DEV_FUN(WaitSemaphoresKHR),
             {0}
         },
+#ifdef VK_KHR_portability_subset
+    }, {
+        .name = VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
+#endif
     },
 };
 
@@ -197,6 +201,9 @@ const char * const pl_vulkan_recommended_extensions[] = {
     VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
     VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
     VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
+#ifdef VK_KHR_portability_subset
+    VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
+#endif
 };
 
 const int pl_vulkan_num_recommended_extensions =
