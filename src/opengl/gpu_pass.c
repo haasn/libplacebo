@@ -180,6 +180,7 @@ struct pl_pass_gl {
     uint64_t vao_id;    // buf_gl.id of VAO
     size_t vao_offset;  // VBO offset of VAO
     GLuint buffer;      // VBO for raw vertex pointers
+    GLuint index_buffer;
     GLint *var_locs;
 };
 
@@ -193,6 +194,7 @@ void gl_pass_destroy(pl_gpu gpu, pl_pass pass)
     struct pl_pass_gl *pass_gl = PL_PRIV(pass);
     if (pass_gl->vao)
         glDeleteVertexArrays(1, &pass_gl->vao);
+    glDeleteBuffers(1, &pass_gl->index_buffer);
     glDeleteBuffers(1, &pass_gl->buffer);
     glDeleteProgram(pass_gl->program);
 
@@ -635,9 +637,15 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 
         if (params->index_data) {
 
-            // GL allows taking indices directly from a pointer
-            glDrawElements(mode, params->vertex_count, GL_UNSIGNED_SHORT,
-                           params->index_data);
+            // Upload indices to temporary buffer object
+            if (!pass_gl->index_buffer)
+                glGenBuffers(1, &pass_gl->index_buffer); // lazily allocated
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pass_gl->index_buffer);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                         params->vertex_count * sizeof(uint16_t),
+                         params->index_data, GL_STREAM_DRAW);
+            glDrawElements(mode, params->vertex_count, GL_UNSIGNED_SHORT, 0);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
         } else if (params->index_buf) {
 
