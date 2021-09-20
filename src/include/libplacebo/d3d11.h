@@ -177,6 +177,11 @@ struct pl_d3d11_swapchain_params {
     // Update for Windows 7. When unset, libplacebo will try to use the flip
     // presentation model and only fall back to bitblt if flip is unavailable.
     bool blit;
+
+    // additional swapchain flags
+    // No validation on these flags is being performed, and swapchain creation
+    // may fail if an unsupported combination is requested.
+    UINT flags;
 };
 
 #define pl_d3d11_swapchain_params(...) (&(struct pl_d3d11_swapchain_params) { __VA_ARGS__ })

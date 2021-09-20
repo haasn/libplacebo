@@ -36,6 +36,7 @@ project('libplacebo', ['c', 'cpp'],
       '183': 'relax pl_shared_mem.size > 0 requirement',
       '184': 'add pl_map_avframe/pl_unmap_avframe, deprecate pl_upload_avframe',
       '185': 'add PL_COLOR_SYSTEM_DOLBYVISION and reshaping',
+      '186': 'add pl_d3d11_swapchain_params.flags',
     }.keys().length(),
     # Fix version
     0)

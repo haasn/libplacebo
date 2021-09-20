@@ -167,6 +167,7 @@ static HRESULT create_swapchain_1_2(struct d3d11_ctx *ctx,
         .Format = format,
         .SampleDesc.Count = 1,
         .BufferUsage = DXGI_USAGE_SHADER_INPUT | DXGI_USAGE_RENDER_TARGET_OUTPUT,
+        .Flags = params->flags,
     };
 
     if (ID3D11Device_GetFeatureLevel(ctx->dev) >= D3D_FEATURE_LEVEL_11_0)
@@ -234,6 +235,7 @@ static HRESULT create_swapchain_1_1(struct d3d11_ctx *ctx,
         .OutputWindow = params->window,
         .Windowed = TRUE,
         .SwapEffect = DXGI_SWAP_EFFECT_DISCARD,
+        .Flags = params->flags,
     };
 
     return IDXGIFactory1_CreateSwapChain(factory, (IUnknown *) ctx->dev, &desc,
