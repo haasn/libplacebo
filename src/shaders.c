@@ -337,8 +337,13 @@ ident_t sh_bind(pl_shader sh, pl_tex tex,
                 const char *name, const struct pl_rect2df *rect,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt)
 {
-    if (pl_tex_params_dimension(tex->params) != 2 || !tex->params.sampleable) {
-        SH_FAIL(sh, "Failed binding texture '%s': incompatible params!", name);
+    if (pl_tex_params_dimension(tex->params) != 2) {
+        SH_FAIL(sh, "Failed binding texture '%s': not a 2D texture!", name);
+        return NULL;
+    }
+
+    if (!tex->params.sampleable) {
+        SH_FAIL(sh, "Failed binding texture '%s': texture not sampleable!", name);
         return NULL;
     }
 
