@@ -37,7 +37,7 @@ struct window *window_create(pl_log log, const struct window_params *params)
             return win;
     }
 
-    fprintf(stderr, "No windowing system / graphical API compiled or supported!");
+    fprintf(stderr, "No windowing system / graphical API compiled or supported!\n");
     exit(1);
 }
 
