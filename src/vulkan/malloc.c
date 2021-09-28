@@ -140,7 +140,7 @@ void vk_malloc_print_heap(struct vk_malloc *ma, enum pl_log_level lev)
                         largest_region = region_len(slab->regions.elem[k]);
                 }
 
-                float efficiency = slab->used / (slab->size - largest_region);
+                float efficiency = (float) slab->used / (slab->size - largest_region);
                 PL_MSG(vk, lev, "      Efficiency: %.1f%%", 100 * efficiency);
             }
 
