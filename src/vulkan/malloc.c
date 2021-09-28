@@ -29,22 +29,22 @@
 // Controls the multiplication factor for new slab allocations. The new slab
 // will always be allocated such that the size of the slab is this factor times
 // the previous slab. Higher values make it grow faster.
-#define PL_VK_HEAP_SLAB_GROWTH_RATE 4
+#define PL_VK_POOL_SLAB_GROWTH_RATE 4
 
 // Controls the minimum slab size, to reduce the frequency at which very small
 // slabs would need to get allocated when allocating the first few buffers.
 // (Default: 1 MB)
-#define PL_VK_HEAP_MINIMUM_SLAB_SIZE (1LLU << 20)
+#define PL_VK_POOL_MINIMUM_SLAB_SIZE (1LLU << 20)
 
 // Controls the maximum slab size, to reduce the effect of unbounded slab
 // growth exhausting memory. If the application needs a single allocation
 // that's bigger than this value, it will be allocated directly from the
 // device. (Default: 256 MB)
-#define PL_VK_HEAP_MAXIMUM_SLAB_SIZE (1LLU << 28)
+#define PL_VK_POOL_MAXIMUM_SLAB_SIZE (1LLU << 28)
 
 // Controls the minimum free region size, to reduce thrashing the free space
 // map with lots of small buffers during uninit. (Default: 1 KB)
-#define PL_VK_HEAP_MINIMUM_REGION_SIZE (1LLU << 10)
+#define PL_VK_POOL_MINIMUM_REGION_SIZE (1LLU << 10)
 
 // Represents a region of available memory
 struct vk_region {
@@ -59,7 +59,7 @@ static inline size_t region_len(struct vk_region r)
 
 // A single slab represents a contiguous region of allocated memory. Actual
 // allocations are served as slices of this. Slabs are organized into linked
-// lists, which represent individual heaps.
+// lists, which represent individual poolss.
 struct vk_slab {
     pl_mutex lock;
     VkDeviceMemory mem;   // underlying device allocation
@@ -79,39 +79,40 @@ struct vk_slab {
     VkMemoryPropertyFlags flags;
 };
 
-// Represents a single memory heap. We keep track of a vk_heap for each
+// Represents a single memory pool. We keep track of a vk_pool for each
 // combination of malloc parameters. This shouldn't actually be that many in
 // practice, because some combinations simply never occur, and others will
 // generally be the same for the same objects.
 //
-// Note: `vk_heap` addresses are not immutable, so we mustn't expose any dangling
-// references to a `vk_heap` from e.g. `vk_memslice.priv = vk_slab`.
-struct vk_heap {
+// Note: `vk_pool` addresses are not immutable, so we mustn't expose any
+// dangling references to a `vk_pool` from e.g. `vk_memslice.priv = vk_slab`.
+struct vk_pool {
     struct vk_malloc_params params;   // allocation params (with some fields nulled)
     PL_ARRAY(struct vk_slab *) slabs; // array of slabs sorted by size
+    int index;                        // running index in `vk_malloc.pools`
 };
 
-// The overall state of the allocator, which keeps track of a vk_heap for each
+// The overall state of the allocator, which keeps track of a vk_pool for each
 // memory type.
 struct vk_malloc {
     struct vk_ctx *vk;
     pl_mutex lock;
     VkPhysicalDeviceMemoryProperties props;
-    PL_ARRAY(struct vk_heap) heaps;
+    PL_ARRAY(struct vk_pool) pools;
 };
 
-void vk_malloc_print_heap(struct vk_malloc *ma, enum pl_log_level lev)
+void vk_malloc_print_stats(struct vk_malloc *ma, enum pl_log_level lev)
 {
     struct vk_ctx *vk = ma->vk;
     size_t total_used = 0;
     size_t total_size = 0;
 
     pl_mutex_lock(&ma->lock);
-    for (int i = 0; i < ma->heaps.num; i++) {
-        struct vk_heap *heap = &ma->heaps.elem[i];
-        const struct vk_malloc_params *par = &heap->params;
+    for (int i = 0; i < ma->pools.num; i++) {
+        struct vk_pool *pool = &ma->pools.elem[i];
+        const struct vk_malloc_params *par = &pool->params;
 
-        PL_MSG(vk, lev, "Memory heap %d:", i);
+        PL_MSG(vk, lev, "Memory pool %d:", i);
         PL_MSG(vk, lev, "    Compatible types: 0x%"PRIx32, par->reqs.memoryTypeBits);
         if (par->required)
             PL_MSG(vk, lev, "    Required flags: 0x%"PRIx32, par->required);
@@ -122,11 +123,11 @@ void vk_malloc_print_heap(struct vk_malloc *ma, enum pl_log_level lev)
         if (par->export_handle)
             PL_MSG(vk, lev, "    Export handle: 0x%x", par->export_handle);
 
-        size_t heap_used = 0;
-        size_t heap_size = 0;
+        size_t pool_used = 0;
+        size_t pool_size = 0;
 
-        for (int j = 0; j < heap->slabs.num; j++) {
-            struct vk_slab *slab = heap->slabs.elem[j];
+        for (int j = 0; j < pool->slabs.num; j++) {
+            struct vk_slab *slab = pool->slabs.elem[j];
             pl_mutex_lock(&slab->lock);
             PL_MSG(vk, lev, "    Slab %d:", j);
             PL_MSG(vk, lev, "      Used: %zu", slab->used);
@@ -144,16 +145,16 @@ void vk_malloc_print_heap(struct vk_malloc *ma, enum pl_log_level lev)
                 PL_MSG(vk, lev, "      Efficiency: %.1f%%", 100 * efficiency);
             }
 
-            heap_used += slab->used;
-            heap_size += slab->size;
+            pool_used += slab->used;
+            pool_size += slab->size;
             pl_mutex_unlock(&slab->lock);
         }
 
-        PL_MSG(vk, lev, "    Heap summary: %zu used / %zu total",
-               heap_used, heap_size);
+        PL_MSG(vk, lev, "    Pool summary: %zu used / %zu total",
+               pool_used, pool_size);
 
-        total_used += heap_used;
-        total_size += heap_size;
+        total_used += pool_used;
+        total_size += pool_size;
     }
     pl_mutex_unlock(&ma->lock);
 
@@ -401,7 +402,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
     case VK_ERROR_OUT_OF_HOST_MEMORY:
         PL_ERR(vk, "Allocation of size %zu failed: %s!",
                (size_t) slab->size, vk_res_str(res));
-        vk_malloc_print_heap(ma, PL_LOG_ERR);
+        vk_malloc_print_stats(ma, PL_LOG_ERR);
         goto error;
 
     default:
@@ -464,7 +465,7 @@ static void insert_region(struct vk_slab *slab, struct vk_region region)
         return;
 
     pl_assert(!slab->dedicated);
-    bool big_enough = region_len(region) >= PL_VK_HEAP_MINIMUM_REGION_SIZE;
+    bool big_enough = region_len(region) >= PL_VK_POOL_MINIMUM_REGION_SIZE;
 
     // Find the index of the first region that comes after this
     for (int i = 0; i < slab->regions.num; i++) {
@@ -509,13 +510,13 @@ static void insert_region(struct vk_slab *slab, struct vk_region region)
         PL_ARRAY_APPEND(slab, slab->regions, region);
 }
 
-static void heap_uninit(struct vk_ctx *vk, struct vk_heap *heap)
+static void pool_uninit(struct vk_ctx *vk, struct vk_pool *pool)
 {
-    for (int i = 0; i < heap->slabs.num; i++)
-        slab_free(vk, heap->slabs.elem[i]);
+    for (int i = 0; i < pool->slabs.num; i++)
+        slab_free(vk, pool->slabs.elem[i]);
 
-    pl_free(heap->slabs.elem);
-    *heap = (struct vk_heap) {0};
+    pl_free(pool->slabs.elem);
+    *pool = (struct vk_pool) {0};
 }
 
 struct vk_malloc *vk_malloc_create(struct vk_ctx *vk)
@@ -548,8 +549,8 @@ void vk_malloc_destroy(struct vk_malloc **ma_ptr)
     if (!ma)
         return;
 
-    for (int i = 0; i < ma->heaps.num; i++)
-        heap_uninit(ma->vk, &ma->heaps.elem[i]);
+    for (int i = 0; i < ma->pools.num; i++)
+        pool_uninit(ma->vk, &ma->pools.elem[i]);
 
     pl_mutex_destroy(&ma->lock);
     pl_free_ptr(ma_ptr);
@@ -604,7 +605,7 @@ done:
     *slice = (struct vk_memslice) {0};
 }
 
-static inline bool heap_params_eq(const struct vk_malloc_params *a,
+static inline bool pool_params_eq(const struct vk_malloc_params *a,
                                   const struct vk_malloc_params *b)
 {
     return a->reqs.size == b->reqs.size &&
@@ -616,7 +617,7 @@ static inline bool heap_params_eq(const struct vk_malloc_params *a,
            a->export_handle == b->export_handle;
 }
 
-static struct vk_heap *find_heap(struct vk_malloc *ma,
+static struct vk_pool *find_pool(struct vk_malloc *ma,
                                  const struct vk_malloc_params *params)
 {
     pl_assert(!params->import_handle);
@@ -627,18 +628,19 @@ static struct vk_heap *find_heap(struct vk_malloc *ma,
     fixed.reqs.size = 0;
     fixed.shared_mem = (struct pl_shared_mem) {0};
 
-    for (int i = 0; i < ma->heaps.num; i++) {
-        if (heap_params_eq(&ma->heaps.elem[i].params, &fixed))
-            return &ma->heaps.elem[i];
+    for (int i = 0; i < ma->pools.num; i++) {
+        if (pool_params_eq(&ma->pools.elem[i].params, &fixed))
+            return &ma->pools.elem[i];
     }
 
     // Not found => add it
-    PL_ARRAY_GROW(ma, ma->heaps);
-    struct vk_heap *heap = &ma->heaps.elem[ma->heaps.num++];
-    *heap = (struct vk_heap) {
+    PL_ARRAY_GROW(ma, ma->pools);
+    size_t idx = ma->pools.num++;
+    ma->pools.elem[idx] = (struct vk_pool) {
         .params = fixed,
+        .index = idx,
     };
-    return heap;
+    return &ma->pools.elem[idx];
 }
 
 static inline bool region_fits(struct vk_region r, size_t size, size_t align)
@@ -646,18 +648,18 @@ static inline bool region_fits(struct vk_region r, size_t size, size_t align)
     return PL_ALIGN(r.start, align) + size <= r.end;
 }
 
-// Finds the best-fitting slab in a heap. If the heap is too small or too
+// Finds the best-fitting slab in a pool. If the pool is too small or too
 // fragmented, a new slab will be allocated under the hood.
 //
 // Note: This locks the slab it returns
-static struct vk_slab *heap_get_slab(struct vk_malloc *ma, struct vk_heap *heap,
+static struct vk_slab *pool_get_slab(struct vk_malloc *ma, struct vk_pool *pool,
                                      size_t size, size_t align,
                                      struct vk_region *out_region)
 {
     struct vk_slab *slab = NULL;
 
-    for (int i = 0; i < heap->slabs.num; i++) {
-        slab = heap->slabs.elem[i];
+    for (int i = 0; i < pool->slabs.num; i++) {
+        slab = pool->slabs.elem[i];
         if (slab->size < size)
             continue;
 
@@ -687,12 +689,12 @@ static struct vk_slab *heap_get_slab(struct vk_malloc *ma, struct vk_heap *heap,
 
     // Otherwise, allocate a new vk_slab and append it to the list.
     size_t cur_size = PL_MAX(size, slab ? slab->size : 0);
-    size_t slab_size = PL_VK_HEAP_SLAB_GROWTH_RATE * cur_size;
-    slab_size = PL_MAX(PL_VK_HEAP_MINIMUM_SLAB_SIZE, slab_size);
-    slab_size = PL_MIN(PL_VK_HEAP_MAXIMUM_SLAB_SIZE, slab_size);
+    size_t slab_size = PL_VK_POOL_SLAB_GROWTH_RATE * cur_size;
+    slab_size = PL_MAX(PL_VK_POOL_MINIMUM_SLAB_SIZE, slab_size);
+    slab_size = PL_MIN(PL_VK_POOL_MAXIMUM_SLAB_SIZE, slab_size);
     pl_assert(slab_size >= size);
 
-    struct vk_malloc_params params = heap->params;
+    struct vk_malloc_params params = pool->params;
     params.reqs.size = slab_size;
 
     // Don't hold the lock while allocating the slab, because it can be a
@@ -701,10 +703,14 @@ static struct vk_slab *heap_get_slab(struct vk_malloc *ma, struct vk_heap *heap,
     slab = slab_alloc(ma, &params);
     pl_mutex_lock(&ma->lock);
 
-    if (!slab)
+    if (!slab) {
+        PL_ERR(ma->vk, "No slab to serve request for %zu bytes in pool %d!",
+               size, pool->index);
         return NULL;
+    }
+
     pl_mutex_lock(&slab->lock);
-    PL_ARRAY_APPEND(NULL, heap->slabs, slab);
+    PL_ARRAY_APPEND(NULL, pool->slabs, slab);
 
     // Return the only region there is in a newly allocated slab
     assert(slab->regions.num == 1);
@@ -949,7 +955,7 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
     struct vk_slab *slab;
     VkDeviceSize offset;
 
-    if (params->ded_image || size >= PL_VK_HEAP_MAXIMUM_SLAB_SIZE) {
+    if (params->ded_image || size >= PL_VK_POOL_MAXIMUM_SLAB_SIZE) {
         slab = slab_alloc(ma, params);
         if (!slab)
             return false;
@@ -958,9 +964,9 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
         offset = 0;
     } else {
         pl_mutex_lock(&ma->lock);
-        struct vk_heap *heap = find_heap(ma, params);
+        struct vk_pool *pool = find_pool(ma, params);
         struct vk_region region;
-        slab = heap_get_slab(ma, heap, size, align, &region);
+        slab = pool_get_slab(ma, pool, size, align, &region);
         pl_mutex_unlock(&ma->lock);
         if (!slab)
             return false;

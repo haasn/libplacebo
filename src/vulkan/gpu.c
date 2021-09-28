@@ -733,7 +733,7 @@ struct vk_cmd *pl_vk_steal_cmd(pl_gpu gpu)
 void pl_vk_print_heap(pl_gpu gpu, enum pl_log_level lev)
 {
     struct pl_vk *p = PL_PRIV(gpu);
-    vk_malloc_print_heap(p->alloc, lev);
+    vk_malloc_print_stats(p->alloc, lev);
 }
 
 static const struct pl_gpu_fns pl_fns_vk = {
