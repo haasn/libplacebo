@@ -42,10 +42,6 @@
 // device. (Default: 256 MB)
 #define PL_VK_POOL_MAXIMUM_SLAB_SIZE (1LLU << 28)
 
-// Controls the minimum free region size, to reduce thrashing the free space
-// map with lots of small buffers during uninit. (Default: 1 KB)
-#define PL_VK_POOL_MINIMUM_REGION_SIZE (1LLU << 10)
-
 // Represents a region of available memory
 struct vk_region {
     size_t start; // first offset in region
@@ -465,7 +461,6 @@ static void insert_region(struct vk_slab *slab, struct vk_region region)
         return;
 
     pl_assert(!slab->dedicated);
-    bool big_enough = region_len(region) >= PL_VK_POOL_MINIMUM_REGION_SIZE;
 
     // Find the index of the first region that comes after this
     for (int i = 0; i < slab->regions.num; i++) {
@@ -498,16 +493,14 @@ static void insert_region(struct vk_slab *slab, struct vk_region region)
         if (r->start > region.start) {
             // The new region comes somewhere before this region, so insert
             // it into this index in the array.
-            if (big_enough)
-                PL_ARRAY_INSERT_AT(slab, slab->regions, i, region);
+            PL_ARRAY_INSERT_AT(slab, slab->regions, i, region);
             return;
         }
     }
 
     // If we've reached the end of this loop, then all of the regions
     // come before the new region, and are disconnected - so append it
-    if (big_enough)
-        PL_ARRAY_APPEND(slab, slab->regions, region);
+    PL_ARRAY_APPEND(slab, slab->regions, region);
 }
 
 static void pool_uninit(struct vk_ctx *vk, struct vk_pool *pool)
