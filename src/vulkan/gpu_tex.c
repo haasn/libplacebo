@@ -131,7 +131,7 @@ static void vk_tex_destroy(pl_gpu gpu, struct pl_tex *tex)
     vk->DestroyImageView(vk->dev, tex_vk->view, PL_VK_ALLOC);
     if (!tex_vk->external_img) {
         vk->DestroyImage(vk->dev, tex_vk->img, PL_VK_ALLOC);
-        vk_malloc_free(p->alloc, &tex_vk->mem);
+        vk_malloc_free(vk->ma, &tex_vk->mem);
     }
 
     pl_free(tex);
@@ -515,7 +515,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         mparams.ded_image = tex_vk->img;
 
     struct vk_memslice *mem = &tex_vk->mem;
-    if (!vk_malloc_slice(p->alloc, mem, &mparams))
+    if (!vk_malloc_slice(vk->ma, mem, &mparams))
         goto error;
 
     VK(vk->BindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));

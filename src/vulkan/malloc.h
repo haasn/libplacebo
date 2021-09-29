@@ -57,5 +57,9 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
 
 void vk_malloc_free(struct vk_malloc *ma, struct vk_memslice *slice);
 
+// Clean up unused slabs. Call this roughly once per frame to reduce
+// memory pressure / memory leaks.
+void vk_malloc_garbage_collect(struct vk_malloc *ma);
+
 // For debugging purposes. Doesn't include dedicated slab allocations!
 void vk_malloc_print_stats(struct vk_malloc *ma, enum pl_log_level);

@@ -154,7 +154,7 @@ void vk_buf_deref(pl_gpu gpu, pl_buf buf)
     if (pl_rc_deref(&buf_vk->rc)) {
         vk_signal_destroy(vk, &buf_vk->sig);
         vk->DestroyBufferView(vk->dev, buf_vk->view, PL_VK_ALLOC);
-        vk_malloc_free(p->alloc, &buf_vk->mem);
+        vk_malloc_free(vk->ma, &buf_vk->mem);
         pl_free((void *) buf);
     }
 }
@@ -282,7 +282,7 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
         *align = pl_lcm(*align, extra_align);
     }
 
-    if (!vk_malloc_slice(p->alloc, &buf_vk->mem, &mparams))
+    if (!vk_malloc_slice(vk->ma, &buf_vk->mem, &mparams))
         goto error;
 
     if (params->host_mapped)

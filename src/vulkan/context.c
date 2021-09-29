@@ -832,9 +832,10 @@ void pl_vulkan_destroy(pl_vulkan *pl_vk)
     if (!*pl_vk)
         return;
 
-    pl_gpu_destroy((*pl_vk)->gpu);
-
     struct vk_ctx *vk = PL_PRIV(*pl_vk);
+    pl_gpu_destroy((*pl_vk)->gpu);
+    vk_malloc_destroy(&vk->ma);
+
     if (vk->dev) {
         PL_DEBUG(vk, "Flushing remaining commands...");
         vk_wait_idle(vk);
@@ -1351,6 +1352,10 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
     if (!device_init(vk, params))
         goto error;
 
+    vk->ma = vk_malloc_create(vk);
+    if (!vk->ma)
+        goto error;
+
     pl_vk->gpu = pl_gpu_create_vk(vk);
     if (!pl_vk->gpu)
         goto error;
@@ -1532,6 +1537,10 @@ next_qf: ;
 
     if (!vk->pool_compute && (vk->pool_graphics->props.queueFlags & VK_QUEUE_COMPUTE_BIT))
         vk->pool_compute = vk->pool_graphics;
+
+    vk->ma = vk_malloc_create(vk);
+    if (!vk->ma)
+        goto error;
 
     pl_vk->gpu = pl_gpu_create_vk(vk);
     if (!pl_vk->gpu)

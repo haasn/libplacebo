@@ -51,7 +51,8 @@
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
     pl_mutex lock;
-    void *alloc; // allocations bound to the lifetime of this vk_ctx
+    void *alloc; // host allocations bound to the lifetime of this vk_ctx
+    struct vk_malloc *ma; // VRAM malloc layer
     pl_vk_inst internal_instance;
     pl_log log;
     VkInstance inst;

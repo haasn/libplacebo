@@ -786,6 +786,7 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
     VkQueue queue = pool->queues[pool->idx_queues];
 
     vk_rotate_queues(p->vk);
+    vk_malloc_garbage_collect(vk->ma);
 
     VkPresentInfoKHR pinfo = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,

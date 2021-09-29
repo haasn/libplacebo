@@ -263,9 +263,7 @@ static void vk_gpu_destroy(pl_gpu gpu)
             vk->DestroySampler(vk->dev, p->samplers[s][a], PL_VK_ALLOC);
     }
 
-    vk_malloc_destroy(&p->alloc);
     spirv_compiler_destroy(&p->spirv);
-
     pl_mutex_destroy(&p->recording);
     pl_free((void *) gpu);
 }
@@ -387,8 +385,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     p->vk = vk;
 
     p->spirv = spirv_compiler_create(vk->log);
-    p->alloc = vk_malloc_create(vk);
-    if (!p->alloc || !p->spirv)
+    if (!p->spirv)
         goto error;
 
     // Query all device properties
@@ -489,8 +486,8 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         .compute_queues     = vk->pool_compute ? vk->pool_compute->num_queues : 0,
     };
 
-    gpu->export_caps.buf = vk_malloc_handle_caps(p->alloc, false);
-    gpu->import_caps.buf = vk_malloc_handle_caps(p->alloc, true);
+    gpu->export_caps.buf = vk_malloc_handle_caps(vk->ma, false);
+    gpu->import_caps.buf = vk_malloc_handle_caps(vk->ma, true);
     gpu->export_caps.tex = vk_tex_handle_caps(vk, false);
     gpu->import_caps.tex = vk_tex_handle_caps(vk, true);
     gpu->export_caps.sync = vk_sync_handle_caps(vk);
@@ -694,6 +691,7 @@ static void vk_gpu_flush(pl_gpu gpu)
     CMD_SUBMIT(NULL);
     vk_flush_commands(vk);
     vk_rotate_queues(vk);
+    vk_malloc_garbage_collect(vk->ma);
 }
 
 static void vk_gpu_finish(pl_gpu gpu)
@@ -733,7 +731,8 @@ struct vk_cmd *pl_vk_steal_cmd(pl_gpu gpu)
 void pl_vk_print_heap(pl_gpu gpu, enum pl_log_level lev)
 {
     struct pl_vk *p = PL_PRIV(gpu);
-    vk_malloc_print_stats(p->alloc, lev);
+    struct vk_ctx *vk = p->vk;
+    vk_malloc_print_stats(vk->ma, lev);
 }
 
 static const struct pl_gpu_fns pl_fns_vk = {

@@ -101,6 +101,9 @@
 // Returns the log base 2 of an unsigned long long
 #define PL_LOG2(x) ((unsigned) (8*sizeof (unsigned long long) - __builtin_clzll((x)) - 1))
 
+// Rounds a number up to the nearest power of two
+#define PL_ALIGN_POT(x) (0x1LLU << (PL_LOG2((x) - 1) + 1))
+
 // Returns whether or not a number is a power of two (or zero)
 #define PL_ISPOT(x) (((x) & ((x) - 1)) == 0)
 

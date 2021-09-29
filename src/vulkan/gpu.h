@@ -53,7 +53,6 @@ enum queue_type {
 struct pl_vk {
     struct pl_gpu_fns impl;
     struct vk_ctx *vk;
-    struct vk_malloc *alloc;
     struct spirv_compiler *spirv;
 
     // Some additional cached device limits and features checks
