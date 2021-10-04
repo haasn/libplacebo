@@ -2218,13 +2218,6 @@ static inline enum plane_type detect_plane_type(const struct pl_plane *plane,
     pl_unreachable();
 }
 
-static inline void default_rect(struct pl_rect2df *rc,
-                                const struct pl_rect2df *backup)
-{
-    if (!rc->x0 && !rc->y0 && !rc->x1 && !rc->y1)
-        *rc = *backup;
-}
-
 static void fix_refs_and_rects(struct pass_state *pass)
 {
     struct pl_frame *image = &pass->image;
