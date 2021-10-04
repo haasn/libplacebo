@@ -412,18 +412,6 @@ void pl_timer_destroy(pl_gpu gpu, pl_timer *);
 // all of its results, or older results will be overwritten by newer ones.
 uint64_t pl_timer_query(pl_gpu gpu, pl_timer);
 
-// (Deprecated) Buffer usage type. This defines what types of operations may be
-// performed on a buffer. They are defined merely for backwards compatibility,
-// and correspond to merely enabling the respective usage flags.
-enum pl_buf_type {
-    PL_BUF_TEX_TRANSFER,  // no extra usage flags
-    PL_BUF_UNIFORM,       // enables `uniform`
-    PL_BUF_STORAGE,       // enables `storable`
-    PL_BUF_TEXEL_UNIFORM, // equivalent to PL_BUF_UNIFORM (when `format` is set)
-    PL_BUF_TEXEL_STORAGE, // equivalent to PL_BUF_STORAGE (when `format` is set)
-    PL_BUF_TYPE_COUNT,
-};
-
 enum pl_buf_mem_type {
     PL_BUF_MEM_AUTO = 0, // use whatever seems most appropriate
     PL_BUF_MEM_HOST,     // try allocating from host memory (RAM)
@@ -488,11 +476,6 @@ struct pl_buf_params {
 
     // Arbitrary user data. libplacebo does not use this at all.
     void *user_data;
-
-    // Deprecated. Setting a type now effectively just enables some of the
-    // buffer usage flags. See `pl_buf_type`. This field will be removed
-    // in the future.
-    enum pl_buf_type type PL_DEPRECATED;
 };
 
 // A generic buffer, which can be used for multiple purposes (texture transfer,
@@ -697,11 +680,6 @@ struct pl_tex_params {
 
     // Arbitrary user data. libplacebo does not use this at all.
     void *user_data;
-
-    // Deprecated fields. These are now ignored entirely, and controlled
-    // via other mechanisms.
-    enum pl_tex_sample_mode sample_mode PL_DEPRECATED;
-    enum pl_tex_address_mode address_mode PL_DEPRECATED;
 };
 
 static inline int pl_tex_params_dimension(const struct pl_tex_params params)

@@ -926,46 +926,26 @@ bool pl_tex_poll(pl_gpu gpu, pl_tex tex, uint64_t t)
     return impl->tex_poll ? impl->tex_poll(gpu, tex, t) : false;
 }
 
-static struct pl_buf_params pl_buf_params_infer(struct pl_buf_params params)
-{
-    switch (params.type) {
-    case PL_BUF_UNIFORM:
-    case PL_BUF_TEXEL_UNIFORM:
-        params.uniform = true;
-        break;
-    case PL_BUF_STORAGE:
-    case PL_BUF_TEXEL_STORAGE:
-        params.storable = true;
-        break;
-    case PL_BUF_TEX_TRANSFER:
-        break;
-    case PL_BUF_TYPE_COUNT:
-        pl_unreachable();
-    }
-
-    return params;
-}
-
 static bool warned_rounding = false;
 
-pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *pparams)
+pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
 {
-    struct pl_buf_params params = pl_buf_params_infer(*pparams);
+    struct pl_buf_params params_rounded;
 
-    require(!params.import_handle || !params.export_handle);
-    if (params.export_handle) {
-        require(PL_ISPOT(params.export_handle));
-        require(params.export_handle & gpu->export_caps.buf);
+    require(!params->import_handle || !params->export_handle);
+    if (params->export_handle) {
+        require(PL_ISPOT(params->export_handle));
+        require(params->export_handle & gpu->export_caps.buf);
     }
-    if (params.import_handle) {
-        require(PL_ISPOT(params.import_handle));
-        require(params.import_handle & gpu->import_caps.buf);
-        struct pl_shared_mem *shmem = &params.shared_mem;
-        require(shmem->offset + params.size <= shmem->size);
-        require(params.import_handle != PL_HANDLE_DMA_BUF || !shmem->drm_format_mod);
+    if (params->import_handle) {
+        require(PL_ISPOT(params->import_handle));
+        require(params->import_handle & gpu->import_caps.buf);
+        const struct pl_shared_mem *shmem = &params->shared_mem;
+        require(shmem->offset + params->size <= shmem->size);
+        require(params->import_handle != PL_HANDLE_DMA_BUF || !shmem->drm_format_mod);
 
         // Fix misalignment on host pointer imports
-        if (params.import_handle == PL_HANDLE_HOST_PTR) {
+        if (params->import_handle == PL_HANDLE_HOST_PTR) {
             uintptr_t page_mask = ~(gpu->limits.align_host_ptr - 1);
             uintptr_t ptr_base = (uintptr_t) shmem->handle.ptr & page_mask;
             size_t ptr_offset = (uintptr_t) shmem->handle.ptr - ptr_base;
@@ -987,29 +967,31 @@ pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *pparams)
                           (void *) ptr_base, buf_offset, ptr_size);
             }
 
-            shmem->handle.ptr = (void *) ptr_base;
-            shmem->offset = buf_offset;
-            shmem->size = ptr_size;
+            params_rounded = *params;
+            params_rounded.shared_mem.handle.ptr = (void *) ptr_base;
+            params_rounded.shared_mem.offset = buf_offset;
+            params_rounded.shared_mem.size = ptr_size;
+            params = &params_rounded;
         }
     }
 
-    require(params.size > 0 && params.size <= gpu->limits.max_buf_size);
-    require(!params.uniform || params.size <= gpu->limits.max_ubo_size);
-    require(!params.storable || params.size <= gpu->limits.max_ssbo_size);
-    require(!params.drawable || params.size <= gpu->limits.max_vbo_size);
-    require(!params.host_mapped || params.size <= gpu->limits.max_mapped_size);
+    require(params->size > 0 && params->size <= gpu->limits.max_buf_size);
+    require(!params->uniform || params->size <= gpu->limits.max_ubo_size);
+    require(!params->storable || params->size <= gpu->limits.max_ssbo_size);
+    require(!params->drawable || params->size <= gpu->limits.max_vbo_size);
+    require(!params->host_mapped || params->size <= gpu->limits.max_mapped_size);
 
-    if (params.format) {
-        pl_fmt fmt = params.format;
-        require(params.size <= gpu->limits.max_buffer_texels * fmt->texel_size);
-        require(!params.uniform || (fmt->caps & PL_FMT_CAP_TEXEL_UNIFORM));
-        require(!params.storable || (fmt->caps & PL_FMT_CAP_TEXEL_STORAGE));
+    if (params->format) {
+        pl_fmt fmt = params->format;
+        require(params->size <= gpu->limits.max_buffer_texels * fmt->texel_size);
+        require(!params->uniform || (fmt->caps & PL_FMT_CAP_TEXEL_UNIFORM));
+        require(!params->storable || (fmt->caps & PL_FMT_CAP_TEXEL_STORAGE));
     }
 
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
-    pl_buf buf = impl->buf_create(gpu, &params);
+    pl_buf buf = impl->buf_create(gpu, params);
     if (buf)
-        require(!params.host_mapped || buf->data);
+        require(!params->host_mapped || buf->data);
 
     return buf;
 
@@ -1040,22 +1022,20 @@ static bool pl_buf_params_superset(struct pl_buf_params a, struct pl_buf_params 
            (a.drawable       || !b.drawable);
 }
 
-bool pl_buf_recreate(pl_gpu gpu, pl_buf *buf, const struct pl_buf_params *pparams)
+bool pl_buf_recreate(pl_gpu gpu, pl_buf *buf, const struct pl_buf_params *params)
 {
 
-    struct pl_buf_params params = pl_buf_params_infer(*pparams);
-
-    if (params.initial_data) {
+    if (params->initial_data) {
         PL_ERR(gpu, "pl_buf_recreate may not be used with `initial_data`!");
         return false;
     }
 
-    if (*buf && pl_buf_params_superset((*buf)->params, params))
+    if (*buf && pl_buf_params_superset((*buf)->params, *params))
         return true;
 
-    PL_INFO(gpu, "(Re)creating %zu buffer", params.size);
+    PL_INFO(gpu, "(Re)creating %zu buffer", params->size);
     pl_buf_destroy(gpu, buf);
-    *buf = pl_buf_create(gpu, &params);
+    *buf = pl_buf_create(gpu, params);
 
     return !!*buf;
 }

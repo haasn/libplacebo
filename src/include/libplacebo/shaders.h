@@ -209,9 +209,6 @@ struct pl_shader_desc {
     // qualifiers on the descriptor. It's highly recommended to always use
     // at least PL_MEMORY_RESTRICT. Ignored for other descriptor types.
     pl_memory_qualifiers memory;
-
-    // Deprecated. Moved to `binding.object`. Still used as a fallback.
-    const void *object PL_DEPRECATED;
 };
 
 // Represents a compile-time constant. This can be lowered to a specialization

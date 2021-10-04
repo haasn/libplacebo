@@ -425,10 +425,6 @@ struct pl_vulkan_wrap_params {
     // pl_tex capabilities to include whatever it can, as determined by the set
     // of enabled usage flags.
     VkImageUsageFlags usage;
-
-    // Deprecated fields. These are now ignored entirely.
-    enum pl_tex_sample_mode sample_mode PL_DEPRECATED;
-    enum pl_tex_address_mode address_mode PL_DEPRECATED;
 };
 
 // Wraps an external VkImage into a pl_tex abstraction. By default, the image

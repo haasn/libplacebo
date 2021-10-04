@@ -479,15 +479,6 @@ struct pl_frame {
 
     // Ignored by libplacebo. May be useful for users.
     void *user_data;
-
-    // Deprecated fields provided merely for backwards compatibility. The
-    // use of these should be discontinued as soon as possible.
-    int width PL_DEPRECATED; // ignored
-    int height PL_DEPRECATED;
-    uint64_t signature PL_DEPRECATED; // ignored
-    pl_tex fbo PL_DEPRECATED; // fallback for `target.planes`
-    struct pl_rect2df src_rect PL_DEPRECATED; // fallback for `image.crop`
-    struct pl_rect2df dst_rect PL_DEPRECATED; // fallback for `target.crop`
 };
 
 // Helper function to infer the chroma location offset for each plane in a
@@ -517,34 +508,6 @@ static inline void pl_frame_clear(pl_gpu gpu, const struct pl_frame *frame,
 {
     const float clear_color_rgba[4] = { clear_color[0], clear_color[1], clear_color[2], 1.0 };
     pl_frame_clear_rgba(gpu, frame, clear_color_rgba);
-}
-
-// Deprecated aliases, provided for backwards compatibility
-#define pl_image pl_frame
-#define pl_render_target pl_frame
-
-static PL_DEPRECATED inline void pl_image_set_chroma_location(
-        struct pl_frame *frame, enum pl_chroma_location chroma_loc)
-{
-    return pl_frame_set_chroma_location(frame, chroma_loc);
-}
-
-static PL_DEPRECATED inline void pl_render_target_set_chroma_location(
-        struct pl_frame *frame, enum pl_chroma_location chroma_loc)
-{
-    return pl_frame_set_chroma_location(frame, chroma_loc);
-}
-
-static PL_DEPRECATED inline void pl_render_target_from_swapchain(
-        struct pl_frame *out_frame, const struct pl_swapchain_frame *frame)
-{
-    return pl_frame_from_swapchain(out_frame, frame);
-}
-
-static PL_DEPRECATED inline bool pl_render_target_partial(
-        const struct pl_frame *frame)
-{
-    return pl_frame_is_cropped(frame);
 }
 
 // Render a single image to a target using the given parameters. This is

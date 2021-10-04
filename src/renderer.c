@@ -2374,21 +2374,8 @@ static void fix_color_space(struct pl_frame *frame)
 
 static bool pass_infer_state(struct pass_state *pass)
 {
-    // Backwards compatibility hacks
     struct pl_frame *image = &pass->image;
     struct pl_frame *target = &pass->target;
-    default_rect(&image->crop, &image->src_rect);
-    default_rect(&target->crop, &target->dst_rect);
-
-    if (!target->num_planes && target->fbo) {
-        target->num_planes = 1;
-        target->planes[0] = (struct pl_plane) {
-            .texture = target->fbo,
-            .components = target->fbo->params.format->num_components,
-            .component_mapping = {0, 1, 2, 3},
-        };
-    }
-
     if (!validate_structs(pass->rr, image, target))
         return false;
 
@@ -2579,7 +2566,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         require(images->timestamps[i] <= images->timestamps[i+1]);
 
     // As the canonical reference, find the nearest neighbour frame
-    const struct pl_image *refimg = images->frames[0];
+    const struct pl_frame *refimg = images->frames[0];
     float best = fabs(images->timestamps[0]);
     for (int i = 1; i < images->num_frames; i++) {
         float dist = fabs(images->timestamps[i]);

@@ -1420,7 +1420,6 @@ static void pl_test_host_ptr(pl_gpu gpu)
         data[i] = (uint8_t) i;
 
     pl_buf buf = pl_buf_create(gpu, &(struct pl_buf_params) {
-        .type = PL_BUF_TEX_TRANSFER,
         .size = slice,
         .import_handle = PL_HANDLE_HOST_PTR,
         .shared_mem = {
