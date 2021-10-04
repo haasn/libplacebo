@@ -29,7 +29,6 @@
 # define PL_API_END
 #endif
 
-#include <libplacebo/log.h>
 #include <stdbool.h>
 
 PL_API_BEGIN

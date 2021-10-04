@@ -23,6 +23,7 @@
 #include <stdint.h>
 
 #include <libplacebo/common.h>
+#include <libplacebo/log.h>
 
 PL_API_BEGIN
 
