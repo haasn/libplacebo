@@ -392,6 +392,9 @@ libplacebo = declare_dependency(
   include_directories: inc,
 )
 
+# Allows projects to build libplacebo by cloning into ./subprojects/libplacebo
+meson.override_dependency('libplacebo', libplacebo)
+
 # Install process
 foreach h : headers
   parts = h.split('/')
