@@ -77,7 +77,7 @@ struct pl_plane_data {
     // and working with non-byte-aligned pixels is awkward in general, the
     // convention is to represent yuv420p10 as 16-bit samples with either the
     // high or low bits set to 0. In this scenario, the `component_size` of the
-    // `pl_plane_repr` and `pl_bit_encoding.sample_depth` would be 16, while
+    // `pl_plane_data` and `pl_bit_encoding.sample_depth` would be 16, while
     // the `pl_bit_encoding.color_depth` would be 10 (and additionally, the
     // `pl_bit_encoding.bit_shift` would be either 0 or  6, depending on
     // whether the low or the high bits are used).
