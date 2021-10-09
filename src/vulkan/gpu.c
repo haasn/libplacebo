@@ -186,6 +186,10 @@ struct vk_cmd *_begin_cmd(pl_gpu gpu, enum queue_type type, const char *label,
     if (!p->cmd || p->cmd->pool != pool) {
         vk_cmd_queue(vk, &p->cmd);
         p->cmd = vk_cmd_begin(vk, pool);
+        if (!p->cmd) {
+            pl_mutex_unlock(&p->recording);
+            return NULL;
+        }
     }
 
     if (vk->CmdBeginDebugUtilsLabelEXT && supports_marks(p->cmd)) {
