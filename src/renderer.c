@@ -2033,9 +2033,6 @@ fallback:
 
         }
 
-        GLSL("color *= vec4(1.0 / %s); \n", SH_FLOAT(scale));
-        swizzle_color(sh, plane->components, plane->component_mapping, false);
-
         if (params->dither_params) {
             // Ignore dithering for > 16-bit FBOs by default, since it makes
             // little sense to do so (and probably just adds errors)
@@ -2043,6 +2040,9 @@ fallback:
             if (depth && (depth <= 16 || params->force_dither))
                 pl_shader_dither(sh, depth, &rr->dither_state, params->dither_params);
         }
+
+        GLSL("color *= vec4(1.0 / %s); \n", SH_FLOAT(scale));
+        swizzle_color(sh, plane->components, plane->component_mapping, false);
 
         bool ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
             .shader = &sh,
