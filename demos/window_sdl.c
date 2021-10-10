@@ -90,9 +90,6 @@ static struct window *sdl_create(pl_log log, const struct window_params *params)
     }
 
 #ifdef USE_VK
-    struct pl_vk_inst_params iparams = pl_vk_inst_default_params;
-    iparams.get_proc_addr = SDL_Vulkan_GetVkGetInstanceProcAddr();
-    iparams.debug = DEBUG;
 
     unsigned int num = 0;
     if (!SDL_Vulkan_GetInstanceExtensions(p->win, &num, NULL)) {
@@ -102,10 +99,13 @@ static struct window *sdl_create(pl_log log, const struct window_params *params)
 
     const char **exts = malloc(num * sizeof(const char *));
     SDL_Vulkan_GetInstanceExtensions(p->win, &num, exts);
-    iparams.extensions = exts;
-    iparams.num_extensions = num;
 
-    p->vk_inst = pl_vk_inst_create(log, &iparams);
+    p->vk_inst = pl_vk_inst_create(log, pl_vk_inst_params(
+        .get_proc_addr = SDL_Vulkan_GetVkGetInstanceProcAddr(),
+        .debug = DEBUG,
+        .extensions = exts,
+        .num_extensions = num,
+    ));
     free(exts);
     if (!p->vk_inst) {
         fprintf(stderr, "libplacebo: Failed creating vulkan instance!\n");
@@ -117,21 +117,21 @@ static struct window *sdl_create(pl_log log, const struct window_params *params)
         goto error;
     }
 
-    struct pl_vulkan_params vkparams = pl_vulkan_default_params;
-    vkparams.instance = p->vk_inst->instance;
-    vkparams.get_proc_addr = p->vk_inst->get_proc_addr;
-    vkparams.surface = p->surf;
-    vkparams.allow_software = true;
-    p->vk = pl_vulkan_create(log, &vkparams);
+    p->vk = pl_vulkan_create(log, pl_vulkan_params(
+        .instance = p->vk_inst->instance,
+        .get_proc_addr = p->vk_inst->get_proc_addr,
+        .surface = p->surf,
+        .allow_software = true,
+    ));
     if (!p->vk) {
         fprintf(stderr, "libplacebo: Failed creating vulkan device\n");
         goto error;
     }
 
-    p->w.swapchain = pl_vulkan_create_swapchain(p->vk, &(struct pl_vulkan_swapchain_params) {
+    p->w.swapchain = pl_vulkan_create_swapchain(p->vk, pl_vulkan_swapchain_params(
         .surface = p->surf,
         .present_mode = VK_PRESENT_MODE_FIFO_KHR,
-    });
+    ));
 
     if (!p->w.swapchain) {
         fprintf(stderr, "libplacebo: Failed creating vulkan swapchain\n");
@@ -148,23 +148,22 @@ static struct window *sdl_create(pl_log log, const struct window_params *params)
         goto error;
     }
 
-    struct pl_opengl_params glparams = pl_opengl_default_params;
-    glparams.allow_software = true;
-    glparams.debug = DEBUG;
-    glparams.make_current = make_current;
-    glparams.release_current = release_current;
-    glparams.priv = p;
-
-    p->gl = pl_opengl_create(log, &glparams);
+    p->gl = pl_opengl_create(log, pl_opengl_params(
+        .allow_software = true,
+        .debug = DEBUG,
+        .make_current = make_current,
+        .release_current = release_current,
+        .priv = p,
+    ));
     if (!p->gl) {
         fprintf(stderr, "libplacebo: Failed creating opengl device\n");
         goto error;
     }
 
-    p->w.swapchain = pl_opengl_create_swapchain(p->gl, &(struct pl_opengl_swapchain_params) {
+    p->w.swapchain = pl_opengl_create_swapchain(p->gl, pl_opengl_swapchain_params(
         .swap_buffers = (void (*)(void *)) SDL_GL_SwapWindow,
         .priv = p->win,
-    });
+    ));
 
     if (!p->w.swapchain) {
         fprintf(stderr, "libplacebo: Failed creating opengl swapchain\n");

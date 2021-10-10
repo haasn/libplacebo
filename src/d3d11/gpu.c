@@ -638,16 +638,16 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
     // If fences are not available, we will have to poll a event query instead
     if (!p->finish_fence) {
         // Buffers for dummy copy/readback (see d3d11_gpu_finish())
-        p->finish_buf_src = pl_buf_create(gpu, &(struct pl_buf_params) {
+        p->finish_buf_src = pl_buf_create(gpu, pl_buf_params(
             .size = sizeof(uint32_t),
             .drawable = true, // Make these vertex buffers for 10level9
             .initial_data = &(uint32_t) {0x11223344},
-        });
-        p->finish_buf_dst = pl_buf_create(gpu, &(struct pl_buf_params) {
+        ));
+        p->finish_buf_dst = pl_buf_create(gpu, pl_buf_params(
             .size = sizeof(uint32_t),
             .host_readable = true,
             .drawable = true,
-        });
+        ));
 
         D3D(ID3D11Device_CreateQuery(p->dev,
             &(D3D11_QUERY_DESC) { D3D11_QUERY_EVENT }, &p->finish_query));

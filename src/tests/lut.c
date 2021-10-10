@@ -68,7 +68,7 @@ int main()
         lut = pl_lut_parse_cube(log, luts[i], strlen(luts[i]));
         REQUIRE(lut);
 
-        pl_shader_reset(sh, &(struct pl_shader_params) { .gpu = gpu});
+        pl_shader_reset(sh, pl_shader_params( .gpu = gpu ));
         pl_shader_custom_lut(sh, lut, &obj);
         const struct pl_shader_res *res = pl_shader_finalize(sh);
         REQUIRE(res);

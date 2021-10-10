@@ -178,7 +178,7 @@ bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame)
         pl_shader_color_map(sh, NULL, pl_color_space_srgb, frame->color_space, NULL, false);
         pl_shader_encode_color(sh, &repr);
 
-        bool ok = pl_dispatch_vertex(ui->dp, &(struct pl_dispatch_vertex_params) {
+        bool ok = pl_dispatch_vertex(ui->dp, pl_dispatch_vertex_params(
             .shader = &sh,
             .target = frame->fbo,
             .blend_params = &pl_alpha_overlay,
@@ -198,7 +198,7 @@ bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame)
             .vertex_count = cmd->elem_count,
             .vertex_data = vertices,
             .index_data = indices,
-        });
+        ));
 
         if (!ok) {
             fprintf(stderr, "placebo: failed rendering UI!\n");

@@ -450,13 +450,13 @@ static void pl_shader_tests(pl_gpu gpu)
     // Test encoding/decoding of all gamma functions, color spaces, etc.
     for (enum pl_color_transfer trc = 0; trc < PL_COLOR_TRC_COUNT; trc++) {
         sh = pl_dispatch_begin(dp);
-        pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
+        pl_shader_sample_nearest(sh, pl_sample_src( .tex = src ));
         pl_shader_delinearize(sh, (struct pl_color_space) { .transfer = trc });
         pl_shader_linearize(sh, (struct pl_color_space) { .transfer = trc });
-        REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+        REQUIRE(pl_dispatch_finish(dp, pl_dispatch_params(
             .shader = &sh,
             .target = fbo,
-        }));
+        )));
 
         float epsilon = pl_color_transfer_is_hdr(trc) ? 1e-4 : 1e-6;
         TEST_FBO_PATTERN(epsilon, "transfer function %d", (int) trc);
@@ -464,7 +464,7 @@ static void pl_shader_tests(pl_gpu gpu)
 
     for (enum pl_color_system sys = 0; sys < PL_COLOR_SYSTEM_COUNT; sys++) {
         sh = pl_dispatch_begin(dp);
-        pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
+        pl_shader_sample_nearest(sh, pl_sample_src( .tex = src ));
         pl_shader_encode_color(sh, &(struct pl_color_repr) { .sys = sys });
         pl_shader_decode_color(sh, &(struct pl_color_repr) { .sys = sys }, NULL);
         REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
@@ -498,13 +498,13 @@ static void pl_shader_tests(pl_gpu gpu)
             .light = light
         };
         sh = pl_dispatch_begin(dp);
-        pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
+        pl_shader_sample_nearest(sh, pl_sample_src( .tex = src ));
         pl_shader_color_map(sh, NULL, src_space, dst_space, NULL, false);
         pl_shader_color_map(sh, NULL, dst_space, src_space, NULL, false);
-        REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+        REQUIRE(pl_dispatch_finish(dp, pl_dispatch_params(
             .shader = &sh,
             .target = fbo,
-        }));
+        )));
 
         TEST_FBO_PATTERN(1e-6, "light %d", (int) light);
     }
@@ -544,14 +544,10 @@ static void pl_shader_tests(pl_gpu gpu)
             sh->res.compute_group_size[1] = 8;
         }
 
-        pl_shader_deband(sh,
-            &(struct pl_sample_src) {
-                .tex            = src,
-            },
-            &(struct pl_deband_params) {
-                .iterations     = 0,
-                .grain          = 0.0,
-        });
+        pl_shader_deband(sh, pl_sample_src( .tex = src ), pl_deband_params(
+            .iterations     = 0,
+            .grain          = 0.0,
+        ));
 
         REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
             .shader = &sh,
@@ -562,7 +558,7 @@ static void pl_shader_tests(pl_gpu gpu)
 
     // Test peak detection and readback if possible
     sh = pl_dispatch_begin(dp);
-    pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
+    pl_shader_sample_nearest(sh, pl_sample_src( .tex = src ));
 
     pl_shader_obj peak_state = NULL;
     struct pl_color_space csp_gamma22 = { .transfer = PL_COLOR_TRC_GAMMA22 };
@@ -601,7 +597,7 @@ static void pl_shader_tests(pl_gpu gpu)
 #ifdef PL_HAVE_LCMS
     // Test the use of ICC profiles if available
     sh = pl_dispatch_begin(dp);
-    pl_shader_sample_nearest(sh, &(struct pl_sample_src) { .tex = src });
+    pl_shader_sample_nearest(sh, pl_sample_src( .tex = src ));
 
     pl_shader_obj icc = NULL;
     struct pl_icc_color_space src_color = { .color = pl_color_space_bt709 };
@@ -741,16 +737,16 @@ static void pl_scaler_tests(pl_gpu gpu)
 
     pl_shader sh = pl_dispatch_begin(dp);
     REQUIRE(pl_shader_sample_polar(sh,
-        &(struct pl_sample_src) {
+        pl_sample_src(
             .tex        = dot5x5,
             .new_w      = fbo->params.w,
             .new_h      = fbo->params.h,
-        },
-        &(struct pl_sample_filter_params) {
+        ),
+        pl_sample_filter_params(
             .filter     = pl_filter_ewa_lanczos,
             .lut        = &lut,
             .no_compute = !fbo->params.storable,
-        }
+        )
     ));
     REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
         .shader = &sh,

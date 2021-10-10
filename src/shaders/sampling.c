@@ -553,12 +553,12 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 
     if (update) {
         pl_filter_free(&obj->filter);
-        obj->filter = pl_filter_generate(sh->log, &(struct pl_filter_params) {
+        obj->filter = pl_filter_generate(sh->log, pl_filter_params(
             .config         = params->filter,
             .lut_entries    = lut_entries,
             .filter_scale   = inv_scale,
             .cutoff         = cutoff,
-        });
+        ));
 
         if (!obj->filter) {
             // This should never happen, but just in case ..
@@ -603,7 +603,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     // using a texture-based LUT is better. For the fragment shader fallback
     // code, which is primarily texture bound, the extra cost of LUT
     // interpolation is worth the reduction in texel fetches.
-    ident_t lut = sh_lut(sh, &(struct sh_lut_params) {
+    ident_t lut = sh_lut(sh, sh_lut_params(
         .object = &obj->lut,
         .method = is_compute ? SH_LUT_TEXTURE : SH_LUT_AUTO,
         .type = PL_VAR_FLOAT,
@@ -613,7 +613,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         .update = update,
         .fill = fill_polar_lut,
         .priv = obj,
-    });
+    ));
 
     if (!lut) {
         SH_FAIL(sh, "Failed initializing polar LUT!");
@@ -861,13 +861,13 @@ bool pl_shader_sample_ortho(pl_shader sh, int pass,
 
     if (update) {
         pl_filter_free(&obj->filter);
-        obj->filter = pl_filter_generate(sh->log, &(struct pl_filter_params) {
+        obj->filter = pl_filter_generate(sh->log, pl_filter_params(
             .config             = params->filter,
             .lut_entries        = lut_entries,
             .filter_scale       = inv_scale,
             .max_row_size       = gpu->limits.max_tex_2d_dim / 4,
             .row_stride_align   = 4,
-        });
+        ));
 
         if (!obj->filter) {
             // This should never happen, but just in case ..
@@ -878,7 +878,7 @@ bool pl_shader_sample_ortho(pl_shader sh, int pass,
 
     int N = obj->filter->row_size; // number of samples to convolve
     int width = obj->filter->row_stride / 4; // width of the LUT texture
-    ident_t lut = sh_lut(sh, &(struct sh_lut_params) {
+    ident_t lut = sh_lut(sh, sh_lut_params(
         .object = &obj->lut,
         .type = PL_VAR_FLOAT,
         .width = width,
@@ -888,7 +888,7 @@ bool pl_shader_sample_ortho(pl_shader sh, int pass,
         .update = update,
         .fill = fill_ortho_lut,
         .priv = obj,
-    });
+    ));
     if (!lut) {
         SH_FAIL(sh, "Failed initializing separated LUT!");
         return false;

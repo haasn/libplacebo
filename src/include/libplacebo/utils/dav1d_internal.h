@@ -536,11 +536,11 @@ static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, void *cookie)
     if (total_size > gpu->limits.max_mapped_size)
         return DAV1D_ERR(ENOMEM);
 
-    pl_buf buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+    pl_buf buf = pl_buf_create(gpu, pl_buf_params(
         .size = total_size,
         .host_mapped = true,
         .memory_type = PL_BUF_MEM_HOST,
-    });
+    ));
 
     if (!buf)
         return DAV1D_ERR(ENOMEM);

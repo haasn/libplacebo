@@ -225,14 +225,14 @@ bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
         // TODO: try soft-converting to a supported format using e.g zimg?
     }
 
-    bool ok = pl_tex_recreate(gpu, tex, &(struct pl_tex_params) {
+    bool ok = pl_tex_recreate(gpu, tex, pl_tex_params(
         .w = data->width,
         .h = data->height,
         .format = fmt,
         .sampleable = true,
         .host_writable = true,
         .blit_src = fmt->caps & PL_FMT_CAP_BLITTABLE,
-    });
+    ));
 
     if (!ok) {
         PL_ERR(gpu, "Failed initializing plane texture!");
@@ -249,7 +249,7 @@ bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
         }
     }
 
-    return pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
+    return pl_tex_upload(gpu, pl_tex_transfer_params(
         .tex        = *tex,
         .stride_w   = stride_texels,
         .ptr        = (void *) data->pixels,
@@ -257,7 +257,7 @@ bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
         .buf_offset = data->buf_offset,
         .callback   = data->callback,
         .priv       = data->priv,
-    });
+    ));
 }
 
 bool pl_recreate_plane(pl_gpu gpu, struct pl_plane *out_plane,
@@ -270,7 +270,7 @@ bool pl_recreate_plane(pl_gpu gpu, struct pl_plane *out_plane,
         return false;
     }
 
-    bool ok = pl_tex_recreate(gpu, tex, &(struct pl_tex_params) {
+    bool ok = pl_tex_recreate(gpu, tex, pl_tex_params(
         .w = data->width,
         .h = data->height,
         .format = fmt,
@@ -278,7 +278,7 @@ bool pl_recreate_plane(pl_gpu gpu, struct pl_plane *out_plane,
         .host_readable = fmt->caps & PL_FMT_CAP_HOST_READABLE,
         .blit_dst = fmt->caps & PL_FMT_CAP_BLITTABLE,
         .storable = fmt->caps & PL_FMT_CAP_STORABLE,
-    });
+    ));
 
     if (!ok) {
         PL_ERR(gpu, "Failed initializing plane texture!");

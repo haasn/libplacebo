@@ -274,7 +274,7 @@ bool pl_icc_update(pl_shader sh,
     obj->intent = params->intent;
     obj->src = *src;
     obj->dst = *dst;
-    obj->lut = sh_lut(sh, &(struct sh_lut_params) {
+    obj->lut = sh_lut(sh, sh_lut_params(
         .object = &obj->lut_obj,
         .type = PL_VAR_FLOAT,
         .width = s_r,
@@ -285,7 +285,7 @@ bool pl_icc_update(pl_shader sh,
         .update = changed,
         .fill = fill_icc,
         .priv = obj,
-    });
+    ));
     if (!obj->lut || !obj->ok)
         return false;
 

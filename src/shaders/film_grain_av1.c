@@ -672,7 +672,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
     int idx[3] = {-1};
 
     if (fg_has_y) {
-        lut[0] = sh_lut(sh, &(struct sh_lut_params) {
+        lut[0] = sh_lut(sh, sh_lut_params(
             .object = &obj->lut_grain[0],
             .method = SH_LUT_TEXTURE,
             .type = PL_VAR_FLOAT,
@@ -683,7 +683,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
             .dynamic = true,
             .fill = fill_grain_lut,
             .priv = obj,
-        });
+        ));
 
         if (!lut[0]) {
             SH_FAIL(sh, "Failed generating/uploading luma grain LUT!");
@@ -707,7 +707,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
     }
 
     if (chroma_comps > 0) {
-        lut[1] = lut[2] = sh_lut(sh, &(struct sh_lut_params) {
+        lut[1] = lut[2] = sh_lut(sh, sh_lut_params(
             .object = &obj->lut_grain[1],
             .method = SH_LUT_TEXTURE,
             .type = PL_VAR_FLOAT,
@@ -718,7 +718,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
             .dynamic = true,
             .fill = fill_grain_lut,
             .priv = obj,
-        });
+        ));
 
         if (!lut[1]) {
             SH_FAIL(sh, "Failed generating/uploading chroma grain LUT!");
@@ -729,7 +729,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
             idx[1] = idx[2] = -1;
     }
 
-    ident_t offsets = sh_lut(sh, &(struct sh_lut_params) {
+    ident_t offsets = sh_lut(sh, sh_lut_params(
         .object = &obj->lut_offsets,
         .method = SH_LUT_AUTO,
         .type = PL_VAR_UINT,
@@ -740,7 +740,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
         .dynamic = true,
         .fill = generate_offsets,
         .priv = (void *) &params->data,
-    });
+    ));
 
     // For the scaling LUTs, we assume they'll be relatively constant
     // throughout the video so doing some extra work to avoid reinitializing
@@ -787,7 +787,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
         // Skip scaling for unneeded channels
         bool has_c[3] = { fg_has_y, fg_has_u, fg_has_v };
         if (has_c[i] && priv.num > 0) {
-            scaling[i] = sh_lut(sh, &(struct sh_lut_params) {
+            scaling[i] = sh_lut(sh, sh_lut_params(
                 .object = &obj->lut_scaling[i],
                 .type = PL_VAR_FLOAT,
                 .width = SCALING_LUT_SIZE,
@@ -797,7 +797,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
                 .dynamic = true,
                 .fill = generate_scaling,
                 .priv = &priv,
-            });
+            ));
 
             if (!scaling[i]) {
                 SH_FAIL(sh, "Failed generating/uploading scaling LUTs!");

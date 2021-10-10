@@ -542,10 +542,10 @@ int main(int argc, char **argv)
         state.params.background_transparency = 1.0;
     }
 
-    p->log = pl_log_create(PL_API_VER, &(struct pl_log_params) {
+    p->log = pl_log_create(PL_API_VER, pl_log_params(
         .log_cb = pl_log_color,
         .log_level = log_level,
-    });
+    ));
 
     p->win = window_create(p->log, &params);
     if (!p->win)

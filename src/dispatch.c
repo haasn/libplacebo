@@ -873,11 +873,11 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
 
     if (ubo_size && pass->pass) {
         // Create the UBO
-        pass->ubo = pl_buf_create(dp->gpu, &(struct pl_buf_params) {
+        pass->ubo = pl_buf_create(dp->gpu, pl_buf_params(
             .size = ubo_size,
             .uniform = true,
             .host_writable = true,
-        });
+        ));
 
         if (!pass->ubo) {
             PL_ERR(dp, "Failed creating uniform buffer for dispatch");

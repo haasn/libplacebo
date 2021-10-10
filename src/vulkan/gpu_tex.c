@@ -798,13 +798,13 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         }
 
         // Copy the source data buffer into an intermediate buffer
-        pl_buf tbuf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        pl_buf tbuf = pl_buf_create(gpu, pl_buf_params(
             .uniform = emulated && ubo,
             .storable = emulated && !ubo,
             .size = size,
             .memory_type = PL_BUF_MEM_DEVICE,
             .format = tex_vk->texel_fmt,
-        });
+        ));
 
         if (!tbuf) {
             PL_ERR(gpu, "Failed creating buffer for tex upload fallback!");
@@ -914,12 +914,12 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     if (emulated || unaligned) {
 
         // Download into an intermediate buffer first
-        pl_buf tbuf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        pl_buf tbuf = pl_buf_create(gpu, pl_buf_params(
             .storable = emulated,
             .size = size,
             .memory_type = PL_BUF_MEM_DEVICE,
             .format = tex_vk->texel_fmt,
-        });
+        ));
 
         if (!tbuf) {
             PL_ERR(gpu, "Failed creating buffer for tex download fallback!");

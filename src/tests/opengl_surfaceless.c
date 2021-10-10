@@ -18,14 +18,14 @@ static void opengl_interop_tests(pl_gpu gpu)
     if (!fmt)
         return;
 
-    pl_tex export = pl_tex_create(gpu, &(struct pl_tex_params) {
+    pl_tex export = pl_tex_create(gpu, pl_tex_params(
         .w = 32,
         .h = 32,
         .format = fmt,
         .sampleable = true,
         .renderable = true,
         .blit_dst = fmt->caps & PL_FMT_CAP_BLITTABLE,
-    });
+    ));
 
     REQUIRE(export);
 
@@ -70,10 +70,10 @@ static void opengl_swapchain_tests(pl_opengl gl,
     printf("testing opengl swapchain\n");
     pl_gpu gpu = gl->gpu;
     pl_swapchain sw;
-    sw = pl_opengl_create_swapchain(gl, &(struct pl_opengl_swapchain_params) {
+    sw = pl_opengl_create_swapchain(gl, pl_opengl_swapchain_params(
         .swap_buffers = swap_buffers,
         .priv = &(struct swapchain_priv) { display, surface },
-    });
+    ));
     REQUIRE(sw);
 
     int w = PBUFFER_WIDTH, h = PBUFFER_HEIGHT;
@@ -114,22 +114,22 @@ static void opengl_test_export_import(pl_opengl gl,
         return;
     }
 
-    pl_tex export = pl_tex_create(gpu, &(struct pl_tex_params) {
+    pl_tex export = pl_tex_create(gpu, pl_tex_params(
         .w = 32,
         .h = 32,
         .format = fmt,
         .export_handle = handle_type,
-    });
+    ));
     REQUIRE(export);
     REQUIRE_HANDLE(export->shared_mem, handle_type);
 
-    pl_tex import = pl_tex_create(gpu, &(struct pl_tex_params) {
+    pl_tex import = pl_tex_create(gpu, pl_tex_params(
         .w = 32,
         .h = 32,
         .format = fmt,
         .import_handle = handle_type,
         .shared_mem = export->shared_mem,
-    });
+    ));
     REQUIRE(import);
 
     pl_tex_destroy(gpu, &import);
@@ -237,16 +237,15 @@ int main()
         if (!eglMakeCurrent(dpy, surf, surf, egl))
             goto error;
 
-        struct pl_opengl_params params = pl_opengl_default_params;
-        params.max_glsl_version = egl_vers[i].glsl_ver;
-        params.debug = true;
-        params.egl_display = dpy;
-        params.egl_context = egl;
+        pl_opengl gl = pl_opengl_create(log, pl_opengl_params(
+            .max_glsl_version = egl_vers[i].glsl_ver,
+            .debug = true,
+            .egl_display = dpy,
+            .egl_context = egl,
 #ifdef CI_ALLOW_SW
-        params.allow_software = true;
+            .allow_software = true,
 #endif
-
-        pl_opengl gl = pl_opengl_create(log, &params);
+        ));
         if (!gl)
             goto next;
 

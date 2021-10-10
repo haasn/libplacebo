@@ -164,7 +164,7 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
         return false;
     }
 
-    ident_t db = sh_lut(sh, &(struct sh_lut_params) {
+    ident_t db = sh_lut(sh, sh_lut_params(
         .object = grain_state,
         .method = SH_LUT_TEXTURE,
         .type = PL_VAR_FLOAT,
@@ -172,7 +172,7 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
         .height = 13 * 64,
         .comps = 1,
         .fill = fill_grain_lut,
-    });
+    ));
 
     sh_describe(sh, "H.274 film grain");
     GLSL("vec4 color;                       \n"

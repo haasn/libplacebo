@@ -869,10 +869,10 @@ bool pl_get_detected_peak(const pl_shader_obj state,
     } else {
 
         // We can't read directly from the SSBO, go via an intermediary
-        pl_buf tmp = pl_buf_create(gpu, &(struct pl_buf_params) {
+        pl_buf tmp = pl_buf_create(gpu, pl_buf_params(
             .size = sizeof(average),
             .host_readable = true,
-        });
+        ));
 
         if (!tmp) {
             PL_ERR(gpu, "Failed creating buffer for SSBO read-back");
@@ -1393,7 +1393,7 @@ void pl_shader_dither(pl_shader sh, int new_depth,
         obj->method = method;
 
         lut_size = 1 << PL_DEF(params->lut_size, 6);
-        lut = sh_lut(sh, &(struct sh_lut_params) {
+        lut = sh_lut(sh, sh_lut_params(
             .object = &obj->lut,
             .type = PL_VAR_FLOAT,
             .width = lut_size,
@@ -1402,7 +1402,7 @@ void pl_shader_dither(pl_shader sh, int new_depth,
             .update = changed,
             .fill = fill_dither_matrix,
             .priv = obj,
-        });
+        ));
         if (!lut)
             goto fallback;
     }

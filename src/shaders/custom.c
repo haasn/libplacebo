@@ -758,12 +758,12 @@ static bool parse_buf(pl_gpu gpu, void *alloc, pl_str *body,
         return false;
     }
 
-    out->binding.object = pl_buf_create(gpu, &(struct pl_buf_params) {
+    out->binding.object = pl_buf_create(gpu, pl_buf_params(
         .size = buf_size,
         .uniform = out->desc.type == PL_DESC_BUF_UNIFORM,
         .storable = out->desc.type == PL_DESC_BUF_STORAGE,
         .initial_data = data.len ? data.buf : NULL,
-    });
+    ));
 
     if (!out->binding.object) {
         PL_ERR(gpu, "Failed creating custom buffer!");
@@ -1224,7 +1224,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             sh->res.output = PL_SHADER_SIG_NONE;
 
             GLSL("hook(); \n");
-            ok = pl_dispatch_compute(params->dispatch, &(struct pl_dispatch_compute_params) {
+            ok = pl_dispatch_compute(params->dispatch, pl_dispatch_compute_params(
                 .shader = &sh,
                 .dispatch_size = {
                     // Round up as many blocks as are needed to cover the image
@@ -1234,13 +1234,13 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 },
                 .width  = out_w,
                 .height = out_h,
-            });
+            ));
         } else {
             GLSL("vec4 color = hook(); \n");
-            ok = pl_dispatch_finish(params->dispatch, &(struct pl_dispatch_params) {
+            ok = pl_dispatch_finish(params->dispatch, pl_dispatch_params(
                 .shader = &sh,
                 .target = fbo,
-            });
+            ));
         }
 
         if (!ok)

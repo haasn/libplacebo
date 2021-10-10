@@ -10,10 +10,10 @@ static void vulkan_interop_tests(pl_vulkan pl_vk,
     printf("testing vulkan interop for handle type 0x%x\n", handle_type);
 
     if (gpu->export_caps.buf & handle_type) {
-        pl_buf buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        pl_buf buf = pl_buf_create(gpu, pl_buf_params(
             .size = 1024,
             .export_handle = handle_type,
-        });
+        ));
 
         REQUIRE(buf);
         REQUIRE_HANDLE(buf->shared_mem, handle_type);
@@ -28,12 +28,12 @@ static void vulkan_interop_tests(pl_vulkan pl_vk,
 
     if (gpu->export_caps.sync & handle_type) {
         pl_sync sync = pl_sync_create(gpu, handle_type);
-        pl_tex tex = pl_tex_create(gpu, &(struct pl_tex_params) {
+        pl_tex tex = pl_tex_create(gpu, pl_tex_params(
             .w = 32,
             .h = 32,
             .format = fmt,
             .blit_dst = true,
-        });
+        ));
 
         REQUIRE(sync);
         REQUIRE(tex);
@@ -72,9 +72,9 @@ static void vulkan_swapchain_tests(pl_vulkan vk, VkSurfaceKHR surf)
     printf("testing vulkan swapchain\n");
     pl_gpu gpu = vk->gpu;
     pl_swapchain sw;
-    sw = pl_vulkan_create_swapchain(vk, &(struct pl_vulkan_swapchain_params) {
+    sw = pl_vulkan_create_swapchain(vk, pl_vulkan_swapchain_params(
         .surface = surf,
-    });
+    ));
     REQUIRE(sw);
 
     // Attempt actually initializing the swapchain
@@ -108,7 +108,7 @@ static void vulkan_swapchain_tests(pl_vulkan vk, VkSurfaceKHR surf)
 int main()
 {
     pl_log log = pl_test_logger();
-    pl_vk_inst inst = pl_vk_inst_create(log, &(struct pl_vk_inst_params) {
+    pl_vk_inst inst = pl_vk_inst_create(log, pl_vk_inst_params(
         .debug = true,
         .debug_extra = true,
         .get_proc_addr = vkGetInstanceProcAddr,
@@ -117,7 +117,7 @@ int main()
             "VK_EXT_headless_surface", // in case it isn't defined
         },
         .num_opt_extensions = 2,
-    });
+    ));
 
     if (!inst)
         return SKIP;
@@ -151,12 +151,12 @@ int main()
 
     // Make sure choosing any device works
     VkPhysicalDevice dev;
-    dev = pl_vulkan_choose_device(log, &(struct pl_vulkan_device_params) {
+    dev = pl_vulkan_choose_device(log, pl_vulkan_device_params(
         .instance = inst->instance,
         .get_proc_addr = inst->get_proc_addr,
         .allow_software = true,
         .surface = surf,
-    });
+    ));
     REQUIRE(dev);
 
     // Test all attached devices
@@ -172,19 +172,20 @@ int main()
         printf("Testing device %d: %s\n", i, props.deviceName);
 
         // Make sure we can choose this device by name
-        dev = pl_vulkan_choose_device(log, &(struct pl_vulkan_device_params) {
+        dev = pl_vulkan_choose_device(log, pl_vulkan_device_params(
             .instance = inst->instance,
             .get_proc_addr = inst->get_proc_addr,
             .device_name = props.deviceName,
-        });
+        ));
         REQUIRE(dev == devices[i]);
 
-        struct pl_vulkan_params params = pl_vulkan_default_params;
-        params.instance = inst->instance;
-        params.get_proc_addr = inst->get_proc_addr;
-        params.device = devices[i];
-        params.queue_count = 8; // test inter-queue stuff
-        params.surface = surf;
+        struct pl_vulkan_params params = *pl_vulkan_params(
+            .instance = inst->instance,
+            .get_proc_addr = inst->get_proc_addr,
+            .device = devices[i],
+            .queue_count = 8, // test inter-queue stuff
+            .surface = surf,
+        );
 
         pl_vulkan vk = pl_vulkan_create(log, &params);
         if (!vk)
@@ -197,7 +198,7 @@ int main()
         pl_vk_print_heap(vk->gpu, PL_LOG_DEBUG);
 
         // Test importing this context via the vulkan interop API
-        struct pl_vulkan_import_params iparams = {
+        pl_vulkan vk2 = pl_vulkan_import(log, pl_vulkan_import_params(
             .instance = vk->instance,
             .get_proc_addr = inst->get_proc_addr,
             .phys_device = vk->phys_device,
@@ -209,8 +210,7 @@ int main()
             .queue_graphics = vk->queue_graphics,
             .queue_compute = vk->queue_compute,
             .queue_transfer = vk->queue_transfer,
-        };
-        pl_vulkan vk2 = pl_vulkan_import(log, &iparams);
+        ));
         REQUIRE(vk2);
         pl_vulkan_destroy(&vk2);
 

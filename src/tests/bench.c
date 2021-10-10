@@ -34,13 +34,13 @@ static pl_tex create_test_img(pl_gpu gpu)
         }
     }
 
-    pl_tex tex = pl_tex_create(gpu, &(struct pl_tex_params) {
+    pl_tex tex = pl_tex_create(gpu, pl_tex_params(
         .format         = fmt,
         .w              = TEX_SIZE,
         .h              = TEX_SIZE,
         .sampleable     = true,
         .initial_data   = data,
-    });
+    ));
 
     free(data);
     REQUIRE(tex);
@@ -63,11 +63,11 @@ static void run_bench(pl_gpu gpu, pl_dispatch dp,
         pl_shader sh = pl_dispatch_begin(dp);
         bench->run_sh(sh, state, src);
 
-        pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+        pl_dispatch_finish(dp, pl_dispatch_params(
             .shader = &sh,
             .target = fbo,
             .timer = timer,
-        });
+        ));
     } else {
         bench->run_tex(gpu, fbo);
     }
@@ -87,7 +87,7 @@ static void benchmark(pl_gpu gpu, const char *name,
 
     pl_tex fbos[NUM_FBOS] = {0};
     for (int i = 0; i < NUM_FBOS; i++) {
-        fbos[i] = pl_tex_create(gpu, &(struct pl_tex_params) {
+        fbos[i] = pl_tex_create(gpu, pl_tex_params(
             .format         = fmt,
             .w              = TEX_SIZE,
             .h              = TEX_SIZE,
@@ -96,7 +96,7 @@ static void benchmark(pl_gpu gpu, const char *name,
             .host_writable  = true,
             .host_readable  = true,
             .storable       = !!(fmt->caps & PL_FMT_CAP_STORABLE),
-        });
+        ));
         REQUIRE(fbos[i]);
 
         pl_tex_clear(gpu, fbos[i], (float[4]){ 0.0 });
@@ -159,55 +159,51 @@ static void benchmark(pl_gpu gpu, const char *name,
 // List of benchmarks
 static void bench_deband(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_deband(sh, &(struct pl_sample_src) { .tex = src }, NULL);
+    pl_shader_deband(sh, pl_sample_src( .tex = src ), NULL);
 }
 
 static void bench_deband_heavy(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_deband(sh, &(struct pl_sample_src) { .tex = src },
-        &(struct pl_deband_params) {
+    pl_shader_deband(sh, pl_sample_src( .tex = src ), pl_deband_params(
         .iterations = 4,
         .threshold  = 4.0,
         .radius     = 4.0,
         .grain      = 16.0,
-    });
+    ));
 }
 
 static void bench_bilinear(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_sample_bilinear(sh, &(struct pl_sample_src) { .tex = src });
+    pl_shader_sample_bilinear(sh, pl_sample_src( .tex = src ));
 }
 
 static void bench_bicubic(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_sample_bicubic(sh, &(struct pl_sample_src) { .tex = src });
+    pl_shader_sample_bicubic(sh, pl_sample_src( .tex = src ));
 }
 
 static void bench_dither_blue(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    struct pl_dither_params params = pl_dither_default_params;
-    params.method = PL_DITHER_BLUE_NOISE;
-
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
-    pl_shader_dither(sh, 8, state, &params);
+    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    pl_shader_dither(sh, 8, state, pl_dither_params(
+        .method = PL_DITHER_BLUE_NOISE,
+    ));
 }
 
 static void bench_dither_white(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    struct pl_dither_params params = pl_dither_default_params;
-    params.method = PL_DITHER_WHITE_NOISE;
-
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
-    pl_shader_dither(sh, 8, state, &params);
+    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    pl_shader_dither(sh, 8, state, pl_dither_params(
+        .method = PL_DITHER_WHITE_NOISE,
+    ));
 }
 
 static void bench_dither_ordered_fix(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    struct pl_dither_params params = pl_dither_default_params;
-    params.method = PL_DITHER_ORDERED_FIXED;
-
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
-    pl_shader_dither(sh, 8, state, &params);
+    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    pl_shader_dither(sh, 8, state, pl_dither_params(
+        .method = PL_DITHER_ORDERED_FIXED,
+    ));
 }
 
 static void bench_polar(pl_shader sh, pl_shader_obj *state, pl_tex src)
@@ -217,7 +213,7 @@ static void bench_polar(pl_shader sh, pl_shader_obj *state, pl_tex src)
         .lut = state,
     };
 
-    pl_shader_sample_polar(sh, &(struct pl_sample_src) { .tex = src }, &params);
+    pl_shader_sample_polar(sh, pl_sample_src( .tex = src ), &params);
 }
 
 static void bench_polar_nocompute(pl_shader sh, pl_shader_obj *state, pl_tex src)
@@ -228,13 +224,13 @@ static void bench_polar_nocompute(pl_shader sh, pl_shader_obj *state, pl_tex src
         .lut = state,
     };
 
-    pl_shader_sample_polar(sh, &(struct pl_sample_src) { .tex = src }, &params);
+    pl_shader_sample_polar(sh, pl_sample_src( .tex = src ), &params);
 }
 
 
 static void bench_hdr_peak(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_sample_direct(sh, &(struct pl_sample_src) { .tex = src });
+    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
     pl_shader_detect_peak(sh, pl_color_space_hdr10, state, NULL);
 }
 
@@ -294,38 +290,38 @@ static float data[TEX_SIZE * TEX_SIZE * 4 + 8192];
 
 static void bench_download(pl_gpu gpu, pl_tex tex)
 {
-    pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
+    pl_tex_download(gpu, pl_tex_transfer_params(
         .tex = tex,
         .ptr = (uint8_t *) PL_ALIGN((uintptr_t) data, 4096),
-    });
+    ));
 }
 
 static void bench_upload(pl_gpu gpu, pl_tex tex)
 {
-    pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
+    pl_tex_upload(gpu, pl_tex_transfer_params(
         .tex = tex,
         .ptr = (uint8_t *) PL_ALIGN((uintptr_t) data, 4096),
-    });
+    ));
 }
 
 static void dummy_cb(void *arg) {}
 
 static void bench_download_async(pl_gpu gpu, pl_tex tex)
 {
-    pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
+    pl_tex_download(gpu, pl_tex_transfer_params(
         .tex = tex,
         .ptr = (uint8_t *) PL_ALIGN((uintptr_t) data, 4096),
         .callback = dummy_cb,
-    });
+    ));
 }
 
 static void bench_upload_async(pl_gpu gpu, pl_tex tex)
 {
-    pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
+    pl_tex_upload(gpu, pl_tex_transfer_params(
         .tex = tex,
         .ptr = (uint8_t *) PL_ALIGN((uintptr_t) data, 4096),
         .callback = dummy_cb,
-    });
+    ));
 }
 
 int main()
@@ -333,16 +329,16 @@ int main()
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);
 
-    pl_log log = pl_log_create(PL_API_VER, &(struct pl_log_params) {
+    pl_log log = pl_log_create(PL_API_VER, pl_log_params(
         .log_cb     = isatty(fileno(stdout)) ? pl_log_color : pl_log_simple,
         .log_level  = PL_LOG_WARN,
-    });
+    ));
 
-    pl_vulkan vk = pl_vulkan_create(log, &(struct pl_vulkan_params) {
+    pl_vulkan vk = pl_vulkan_create(log, pl_vulkan_params(
         .allow_software = true,
-        .async_compute = true,
+        .async_transfer = false,
         .queue_count = NUM_FBOS,
-    });
+    ));
 
     if (!vk)
         return SKIP;

@@ -1799,14 +1799,14 @@ bool pl_tex_upload_texel(pl_gpu gpu, pl_dispatch dp,
     };
 
     GLSL("imageStore(%s, %s(pos), color);\n", img, coord_types[dims]);
-    return pl_dispatch_compute(dp, &(struct pl_dispatch_compute_params) {
+    return pl_dispatch_compute(dp, pl_dispatch_compute_params(
         .shader = &sh,
         .dispatch_size = {
             groups_x,
             pl_rect_h(params->rc),
             pl_rect_d(params->rc),
         },
-    });
+    ));
 
 error:
     return false;
@@ -1868,14 +1868,14 @@ bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
     for (int i = 0; i < fmt->num_components; i++)
         GLSL("imageStore(%s, base + %d, vec4(color[%d])); \n", buf, i, i);
 
-    return pl_dispatch_compute(dp, &(struct pl_dispatch_compute_params) {
+    return pl_dispatch_compute(dp, pl_dispatch_compute_params(
         .shader = &sh,
         .dispatch_size = {
             groups_x,
             pl_rect_h(params->rc),
             pl_rect_d(params->rc),
         },
-    });
+    ));
 
 error:
     return false;
@@ -2034,14 +2034,14 @@ bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
 
     }
 
-    return pl_dispatch_compute(dp, &(struct pl_dispatch_compute_params) {
+    return pl_dispatch_compute(dp, pl_dispatch_compute_params(
         .shader = &sh,
         .dispatch_size = {
             groups_x,
             groups_y,
             pl_rect_d(dst_rc),
         },
-    });
+    ));
 }
 
 void pl_tex_blit_raster(pl_gpu gpu, pl_dispatch dp,
@@ -2076,11 +2076,11 @@ void pl_tex_blit_raster(pl_gpu gpu, pl_dispatch dp,
     GLSL("vec4 color = %s(%s, %s); \n",
          sh_tex_fn(sh, params->src->params), src, pos);
 
-    pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+    pl_dispatch_finish(dp, pl_dispatch_params(
         .shader = &sh,
         .target = params->dst,
         .rect = dst_rc,
-    });
+    ));
 }
 
 void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params)
@@ -2102,11 +2102,11 @@ void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params)
             num_vertices = params->vertex_count;
         }
 
-        vert = pl_buf_create(gpu, &(struct pl_buf_params) {
+        vert = pl_buf_create(gpu, pl_buf_params(
             .size = num_vertices * params->pass->params.vertex_stride,
             .initial_data = params->vertex_data,
             .drawable = true,
-        });
+        ));
 
         if (!vert) {
             PL_ERR(gpu, "Failed allocating vertex buffer!");
@@ -2118,11 +2118,11 @@ void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params)
     }
 
     if (params->index_data) {
-        index = pl_buf_create(gpu, &(struct pl_buf_params) {
+        index = pl_buf_create(gpu, pl_buf_params(
             .size = params->vertex_count * sizeof(*params->index_data),
             .initial_data = params->index_data,
             .drawable = true,
-        });
+        ));
 
         if (!index) {
             PL_ERR(gpu, "Failed allocating index buffer!");

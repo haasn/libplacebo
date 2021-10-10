@@ -222,7 +222,7 @@ void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
-    ident_t fun = sh_lut(sh, &(struct sh_lut_params) {
+    ident_t fun = sh_lut(sh, sh_lut_params(
         .object = lut_state,
         .type = PL_VAR_FLOAT,
         .width = lut->size[0],
@@ -233,7 +233,7 @@ void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
         .signature = lut->signature,
         .fill = fill_lut,
         .priv = (void *) lut,
-    });
+    ));
 
     if (!fun) {
         SH_FAIL(sh, "pl_shader_custom_lut: failed generating LUT object");

@@ -775,14 +775,14 @@ static inline bool pl_download_avframe(pl_gpu gpu,
 
     for (int p = 0; p < frame->num_planes; p++) {
         size_t texel_size = frame->planes[p].texture->params.format->texel_size;
-        bool ok = pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
+        bool ok = pl_tex_download(gpu, pl_tex_transfer_params(
             .tex = frame->planes[p].texture,
             .stride_w = out_frame->linesize[p] / texel_size,
             .ptr = out_frame->data[p],
             // Use synchronous transfer for the last plane
             .callback = (p+1) < frame->num_planes ? pl_done_cb : NULL,
             .priv = &done[p],
-        });
+        ));
 
         if (!ok)
             return false;
@@ -867,11 +867,11 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
         goto fallback;
 
     // Create data buffer
-    buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+    buf = pl_buf_create(gpu, pl_buf_params(
         .size = total_size,
         .memory_type = PL_BUF_MEM_HOST,
         .host_mapped = true,
-    });
+    ));
     if (!buf)
         goto fallback;
 

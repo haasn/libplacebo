@@ -624,13 +624,13 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
 
     for (int i = 0; i < num_images; i++) {
         const VkExtent2D *ext = &sinfo.imageExtent;
-        pl_tex tex = pl_vulkan_wrap(gpu, &(struct pl_vulkan_wrap_params) {
+        pl_tex tex = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
             .image = vkimages[i],
             .width = ext->width,
             .height = ext->height,
             .format = sinfo.imageFormat,
             .usage = sinfo.imageUsage,
-        });
+        ));
         if (!tex)
             goto error;
         PL_ARRAY_APPEND(sw, p->images, tex);

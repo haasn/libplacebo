@@ -984,10 +984,10 @@ next_dim: ; // `continue` out of the inner loop
             if (params->dynamic) {
                 ok = pl_tex_recreate(gpu, &lut->tex, &tex_params);
                 if (ok) {
-                    ok = pl_tex_upload(gpu, &(struct pl_tex_transfer_params) {
+                    ok = pl_tex_upload(gpu, pl_tex_transfer_params(
                         .tex = lut->tex,
                         .ptr = tmp,
-                    });
+                    ));
                 }
             } else {
                 // Can't use pl_tex_recreate because of `initial_data`

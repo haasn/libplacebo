@@ -56,9 +56,9 @@ static pl_tex get_backbuffer(pl_swapchain sw)
     D3D(IDXGISwapChain_GetBuffer(p->swapchain, 0, &IID_ID3D11Texture2D,
                                  (void **) &backbuffer));
 
-    tex = pl_d3d11_wrap(sw->gpu, &(struct pl_d3d11_wrap_params) {
+    tex = pl_d3d11_wrap(sw->gpu, pl_d3d11_wrap_params(
         .tex = (ID3D11Resource *) backbuffer,
-    });
+    ));
 
 error:
     SAFE_RELEASE(backbuffer);

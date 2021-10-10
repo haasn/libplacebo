@@ -26,10 +26,10 @@ static void uninit(int ret)
 
 int main(int argc, char **argv)
 {
-    logger = pl_log_create(PL_API_VER, &(struct pl_log_params) {
+    logger = pl_log_create(PL_API_VER, pl_log_params(
         .log_cb = pl_log_color,
         .log_level = PL_LOG_DEBUG,
-    });
+    ));
 
     win = window_create(logger, &(struct window_params) {
         .title = "colors demo",

@@ -220,18 +220,18 @@ void *init(void) {
     if (!p)
         return NULL;
 
-    p->log = pl_log_create(PL_API_VER, &(struct pl_log_params) {
+    p->log = pl_log_create(PL_API_VER, pl_log_params(
         .log_cb = pl_log_simple,
         .log_level = PL_LOG_WARN,
-    });
+    ));
 
-    p->vk = pl_vulkan_create(p->log, &(struct pl_vulkan_params) {
+    p->vk = pl_vulkan_create(p->log, pl_vulkan_params(
         // Note: This is for API #2. In API #1 you could just pass params=NULL
         // and it wouldn't really matter much.
         .async_transfer = true,
         .async_compute = true,
         .queue_count = PARALLELISM,
-    });
+    ));
 
     if (!p->vk) {
         fprintf(stderr, "Failed creating vulkan context\n");
@@ -330,13 +330,13 @@ static bool do_plane(struct priv *p, pl_tex dst, pl_tex src)
     // Do some debanding, and then also make sure to dither to the new depth
     // so that our debanded gradients are actually preserved well
     pl_shader sh = pl_dispatch_begin(p->dp);
-    pl_shader_deband(sh, &(struct pl_sample_src){ .tex = src }, NULL);
+    pl_shader_deband(sh, pl_sample_src( .tex = src ), NULL);
     pl_shader_dither(sh, new_depth, &p->dither_state, NULL);
-    return pl_dispatch_finish(p->dp, &(struct pl_dispatch_params) {
+    return pl_dispatch_finish(p->dp, pl_dispatch_params(
         .shader = &sh,
         .target = dst,
         .timer  = p->render_timer,
-    });
+    ));
 }
 
 static void check_timers(struct priv *p)
@@ -380,21 +380,21 @@ bool api1_reconfig(void *priv, const struct image *proxy)
         }
 
         bool ok = true;
-        ok &= pl_tex_recreate(p->gpu, &p->tex_in[i], &(struct pl_tex_params) {
+        ok &= pl_tex_recreate(p->gpu, &p->tex_in[i], pl_tex_params(
             .w = data[i].width,
             .h = data[i].height,
             .format = fmt,
             .sampleable = true,
             .host_writable = true,
-        });
+        ));
 
-        ok &= pl_tex_recreate(p->gpu, &p->tex_out[i], &(struct pl_tex_params) {
+        ok &= pl_tex_recreate(p->gpu, &p->tex_out[i], pl_tex_params(
             .w = data[i].width,
             .h = data[i].height,
             .format = fmt,
             .renderable = true,
             .host_readable = true,
-        });
+        ));
 
         if (!ok) {
             fprintf(stderr, "Failed creating GPU textures!\n");
@@ -413,12 +413,12 @@ bool api1_filter(void *priv, struct image *dst, struct image *src)
 
     // Upload planes
     for (int i = 0; i < src->num_planes; i++) {
-        bool ok = pl_tex_upload(p->gpu, &(struct pl_tex_transfer_params) {
+        bool ok = pl_tex_upload(p->gpu, pl_tex_transfer_params(
             .tex = p->tex_in[i],
             .stride_w = data[i].row_stride / data[i].pixel_stride,
             .ptr = src->planes[i].data,
             .timer = p->upload_timer,
-        });
+        ));
 
         if (!ok) {
             fprintf(stderr, "Failed uploading data to the GPU!\n");
@@ -436,12 +436,12 @@ bool api1_filter(void *priv, struct image *dst, struct image *src)
 
     // Download planes
     for (int i = 0; i < src->num_planes; i++) {
-        bool ok = pl_tex_download(p->gpu, &(struct pl_tex_transfer_params) {
+        bool ok = pl_tex_download(p->gpu, pl_tex_transfer_params(
             .tex = p->tex_out[i],
             .stride_w = dst->planes[i].stride / data[i].pixel_stride,
             .ptr = dst->planes[i].data,
             .timer = p->download_timer,
-        });
+        ));
 
         if (!ok) {
             fprintf(stderr, "Failed downloading data from the GPU!\n");
@@ -491,13 +491,13 @@ static enum api2_status submit_work(struct priv *p, struct entry *e,
             return API2_ERR_UNKNOWN;
 
         // Re-create the target FBO as well with this format if necessary
-        bool ok = pl_tex_recreate(p->gpu, &e->tex_out[i], &(struct pl_tex_params) {
+        bool ok = pl_tex_recreate(p->gpu, &e->tex_out[i], pl_tex_params(
             .w = data[i].width,
             .h = data[i].height,
             .format = fmt,
             .renderable = true,
             .host_readable = true,
-        });
+        ));
         if (!ok)
             return API2_ERR_UNKNOWN;
     }
@@ -528,21 +528,21 @@ static enum api2_status submit_work(struct priv *p, struct entry *e,
     }
 
     // Dispatch the asynchronous download into a mapped buffer
-    bool ok = pl_buf_recreate(p->gpu, &e->buf, &(struct pl_buf_params) {
+    bool ok = pl_buf_recreate(p->gpu, &e->buf, pl_buf_params(
         .size = total_size,
         .host_mapped = true,
-    });
+    ));
     if (!ok)
         return API2_ERR_UNKNOWN;
 
     for (int i = 0; i < img->num_planes; i++) {
-        ok = pl_tex_download(p->gpu, &(struct pl_tex_transfer_params) {
+        ok = pl_tex_download(p->gpu, pl_tex_transfer_params(
             .tex = e->tex_out[i],
             .stride_w = stride[i] / data[i].pixel_stride,
             .buf = e->buf,
             .buf_offset = offset[i],
             .timer = p->download_timer,
-        });
+        ));
         if (!ok)
             return API2_ERR_UNKNOWN;
 
@@ -620,10 +620,10 @@ bool api2_alloc(void *priv, size_t size, struct api2_buf *out)
     if (!p->gpu->limits.buf_transfer || size > p->gpu->limits.max_mapped_size)
         return false;
 
-    pl_buf buf = pl_buf_create(p->gpu, &(struct pl_buf_params) {
+    pl_buf buf = pl_buf_create(p->gpu, pl_buf_params(
         .size = size,
         .host_mapped = true,
-    });
+    ));
 
     if (!buf)
         return false;

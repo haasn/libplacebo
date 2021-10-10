@@ -38,11 +38,10 @@ int main()
         }
         SAFE_RELEASE(adapter1);
 
-        const struct pl_d3d11 *d3d11;
-        struct pl_d3d11_params params = pl_d3d11_default_params;
-        params.debug = true;
-        params.adapter_luid = desc.AdapterLuid;
-        d3d11 = pl_d3d11_create(log, &params);
+        const struct pl_d3d11 *d3d11 = pl_d3d11_create(log, pl_d3d11_params(
+            .debug = true,
+            .adapter_luid = desc.AdapterLuid,
+        ));
         REQUIRE(d3d11);
 
         gpu_shader_tests(d3d11->gpu);

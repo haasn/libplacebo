@@ -51,10 +51,10 @@ static inline pl_log pl_test_logger()
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);
 
-    return pl_log_create(PL_API_VER, &(struct pl_log_params) {
+    return pl_log_create(PL_API_VER, pl_log_params(
         .log_cb    = isatty(fileno(stdout)) ? pl_log_color : pl_log_timestamp,
         .log_level = PL_LOG_DEBUG,
-    });
+    ));
 }
 
 static inline void require(bool b, const char *msg, const char *file, int line)

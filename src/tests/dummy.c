@@ -8,11 +8,11 @@ int main()
     pl_texture_tests(gpu);
 
     // Attempt creating a shader and accessing the resulting LUT
-    pl_tex dummy = pl_tex_dummy_create(gpu, &(struct pl_tex_dummy_params) {
+    pl_tex dummy = pl_tex_dummy_create(gpu, pl_tex_dummy_params(
         .w = 100,
         .h = 100,
         .format = pl_find_named_fmt(gpu, "rgba8"),
-    });
+    ));
 
     struct pl_sample_src src = {
         .tex = dummy,
@@ -26,7 +26,7 @@ int main()
         .lut = &lut,
     };
 
-    pl_shader sh = pl_shader_alloc(log, &(struct pl_shader_params) { .gpu = gpu });
+    pl_shader sh = pl_shader_alloc(log, pl_shader_params( .gpu = gpu ));
     REQUIRE(pl_shader_sample_polar(sh, &src, &filter_params));
     const struct pl_shader_res *res = pl_shader_finalize(sh);
     REQUIRE(res);
@@ -53,7 +53,7 @@ int main()
     src.sampler = PL_SAMPLER_NORMAL;
     src.mode = PL_TEX_SAMPLE_LINEAR;
 
-    pl_shader_reset(sh, &(struct pl_shader_params) { .gpu = gpu });
+    pl_shader_reset(sh, pl_shader_params( .gpu = gpu ));
     REQUIRE(pl_shader_sample_polar(sh, &src, &filter_params));
     REQUIRE((res = pl_shader_finalize(sh)));
     REQUIRE(res->input == PL_SHADER_SIG_SAMPLER);

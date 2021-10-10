@@ -445,10 +445,10 @@ static pl_tex img_tex(struct pass_state *pass, struct img *img)
     }
 
     pl_assert(img->sh);
-    bool ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
+    bool ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
         .shader = &img->sh,
         .target = tex,
-    });
+    ));
 
     if (!ok) {
         PL_ERR(rr, "Failed dispatching intermediate pass!");
@@ -470,9 +470,7 @@ static pl_shader img_sh(struct pass_state *pass, struct img *img)
 
     pl_assert(img->tex);
     img->sh = pl_dispatch_begin(pass->rr->dp);
-    pl_shader_sample_direct(img->sh, &(struct pl_sample_src) {
-        .tex = img->tex,
-    });
+    pl_shader_sample_direct(img->sh, pl_sample_src( .tex = img->tex ));
 
     img->tex = NULL;
     return img->sh;
@@ -816,7 +814,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
             .dst_alpha = PL_BLEND_ONE_MINUS_SRC_ALPHA,
         };
 
-        bool ok = pl_dispatch_vertex(rr->dp, &(struct pl_dispatch_vertex_params) {
+        bool ok = pl_dispatch_vertex(rr->dp, pl_dispatch_vertex_params(
             .shader = &sh,
             .target = fbo,
             .blend_params = rr->disable_blending ? NULL : &blend_params,
@@ -829,7 +827,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
             .vertex_count = rr->osd_indices.num,
             .vertex_data = rr->osd_vertices.elem,
             .index_data = rr->osd_indices.elem,
-        });
+        ));
 
         if (!ok) {
             PL_ERR(rr, "Failed rendering overlays!");
@@ -1399,16 +1397,12 @@ static bool pass_read_image(struct pass_state *pass)
                 sh = sti->img.sh = pl_dispatch_begin_ex(pass->rr->dp, true);
                 sh_describe(sh, "merging planes");
                 GLSL("vec4 tmp; \n");
-                pl_shader_sample_direct(sh, &(struct pl_sample_src) {
-                    .tex = sti->img.tex,
-                });
+                pl_shader_sample_direct(sh, pl_sample_src( .tex = sti->img.tex ));
                 sti->img.tex = NULL;
             }
 
             pl_shader psh = pl_dispatch_begin_ex(pass->rr->dp, true);
-            pl_shader_sample_direct(psh, &(struct pl_sample_src) {
-                .tex = stj->img.tex,
-            });
+            pl_shader_sample_direct(psh, pl_sample_src( .tex = stj->img.tex ));
 
             ident_t sub = sh_subpass(sh, psh);
             pl_dispatch_abort(rr->dp, &psh);
@@ -1567,10 +1561,7 @@ static bool pass_read_image(struct pass_state *pass)
             }
 
             psh = pl_dispatch_begin_ex(rr->dp, true);
-            pl_shader_sample_direct(psh, &(struct pl_sample_src) {
-                .tex = inter_tex,
-            });
-
+            pl_shader_sample_direct(psh, pl_sample_src( .tex = inter_tex ));
             sub = sh_subpass(sh, psh);
             pl_assert(sub);
         }
@@ -2033,7 +2024,7 @@ fallback:
         GLSL("color *= vec4(1.0 / %s); \n", SH_FLOAT(scale));
         swizzle_color(sh, plane->components, plane->component_mapping, false);
 
-        bool ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
+        bool ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
             .shader = &sh,
             .target = plane->texture,
             .blend_params = params->blend_params,
@@ -2043,7 +2034,7 @@ fallback:
                 .x1 = flipped_x ? rx0 : rx1,
                 .y1 = flipped_y ? ry0 : ry1,
             },
-        });
+        ));
 
         if (!ok)
             return false;
@@ -2689,14 +2680,14 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                     pl_tex_invalidate(rr->gpu, f->tex);
             }
 
-            bool ok = pl_tex_recreate(rr->gpu, &f->tex, &(struct pl_tex_params) {
+            bool ok = pl_tex_recreate(rr->gpu, &f->tex, pl_tex_params(
                 .w = out_w,
                 .h = out_h,
                 .format = rr->fbofmt[4],
                 .sampleable = true,
                 .renderable = true,
                 .storable = rr->fbofmt[4]->caps & PL_FMT_CAP_STORABLE,
-            });
+            ));
 
             if (!ok) {
                 PL_ERR(rr, "Could not create intermediate texture for "
@@ -2734,10 +2725,10 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             pl_assert(inter_pass.img.w == out_w &&
                       inter_pass.img.h == out_h);
 
-            ok = pl_dispatch_finish(rr->dp, &(struct pl_dispatch_params) {
+            ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
                 .shader = &inter_pass.img.sh,
                 .target = f->tex,
-            });
+            ));
             if (!ok)
                 goto error;
 
