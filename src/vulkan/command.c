@@ -411,6 +411,8 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
         if (vk_cmd_poll(vk, cmd, timeout) == VK_TIMEOUT)
             return ret;
         pl_mutex_lock(&vk->lock);
+        if (!vk->cmds_pending.num || vk->cmds_pending.elem[0] != cmd)
+            continue; // another thread modified this state while blocking
 
         PL_TRACE(vk, "VkFence signalled: %p", (void *) cmd->fence);
         vk_cmd_reset(vk, cmd);

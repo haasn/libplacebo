@@ -695,10 +695,8 @@ static bool vk_sw_start_frame(pl_swapchain sw,
 
     for (int attempts = 0; attempts < 2; attempts++) {
         uint32_t imgidx = 0;
-        pl_mutex_unlock(&p->lock); // don't hold mutex while blocking
         VkResult res = vk->AcquireNextImageKHR(vk->dev, p->swapchain, UINT64_MAX,
                                                sem_in, VK_NULL_HANDLE, &imgidx);
-        pl_mutex_lock(&p->lock);
 
         switch (res) {
         case VK_SUBOPTIMAL_KHR:
