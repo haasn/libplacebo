@@ -18,12 +18,7 @@
 #include <math.h>
 #include "shaders.h"
 
-const struct pl_deband_params pl_deband_default_params = {
-    .iterations = 1,
-    .threshold  = 4.0,
-    .radius     = 16.0,
-    .grain      = 6.0,
-};
+const struct pl_deband_params pl_deband_default_params = { PL_DEBAND_DEFAULTS };
 
 static inline struct pl_tex_params src_params(const struct pl_sample_src *src)
 {

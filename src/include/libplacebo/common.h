@@ -27,6 +27,8 @@
 # define PL_STRUCT(name) struct name
 # define PL_API_BEGIN
 # define PL_API_END
+// Disable this warning because libplacebo's params macros override fields
+# pragma GCC diagnostic ignored "-Woverride-init"
 #endif
 
 #include <stdbool.h>

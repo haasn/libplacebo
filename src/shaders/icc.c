@@ -315,9 +315,4 @@ void pl_icc_apply(pl_shader sh, pl_shader_obj *icc)
     obj->updated = false;
 }
 
-const struct pl_icc_params pl_icc_default_params = {
-    .intent = PL_INTENT_RELATIVE_COLORIMETRIC,
-    .size_r = 64,
-    .size_g = 64,
-    .size_b = 64,
-};
+const struct pl_icc_params pl_icc_default_params = { PL_ICC_DEFAULTS };

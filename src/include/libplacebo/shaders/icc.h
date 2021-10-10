@@ -39,6 +39,13 @@ struct pl_icc_params {
     size_t size_r, size_g, size_b;
 };
 
+#define PL_ICC_DEFAULTS                         \
+    .intent = PL_INTENT_RELATIVE_COLORIMETRIC,  \
+    .size_r = 64,                               \
+    .size_g = 64,                               \
+    .size_b = 64,
+
+#define pl_icc_params(...) (&(struct pl_icc_params) { PL_ICC_DEFAULTS __VA_ARGS__ })
 extern const struct pl_icc_params pl_icc_default_params;
 
 struct pl_icc_color_space {

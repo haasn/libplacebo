@@ -64,6 +64,7 @@ struct pl_opengl_params {
 };
 
 // Default/recommended parameters
+#define pl_opengl_params(...) (&(struct pl_opengl_params) { __VA_ARGS__ })
 extern const struct pl_opengl_params pl_opengl_default_params;
 
 // Creates a new OpenGL renderer based on the given parameters. This will
@@ -115,6 +116,8 @@ struct pl_opengl_swapchain_params {
     void *priv;
 };
 
+#define pl_opengl_swapchain_params(...) (&(struct pl_opengl_swapchain_params) { __VA_ARGS__ })
+
 // Creates an instance of `pl_swapchain` tied to the active context.
 // Note: Due to OpenGL semantics, users *must* call `pl_swapchain_resize`
 // before attempting to use this swapchain, otherwise calls to
@@ -161,6 +164,8 @@ struct pl_opengl_wrap_params {
     // The texture's GLint sized internal format (e.g. GL_RGBA16F). Required.
     int iformat;
 };
+
+#define pl_opengl_wrap_params(...) (&(struct pl_opengl_wrap_params) { __VA_ARGS__ })
 
 // Wraps an external OpenGL object into a `pl_tex` abstraction. Due to the
 // internally synchronized nature of OpenGL, no explicit synchronization

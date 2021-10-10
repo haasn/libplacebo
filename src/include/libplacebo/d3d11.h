@@ -119,6 +119,10 @@ struct pl_d3d11_params {
 };
 
 // Default/recommended parameters. Should generally be safe and efficient.
+#define PL_D3D11_DEFAULTS   \
+    .allow_software = true,
+
+#define pl_d3d11_params(...) (&(struct pl_d3d11_params) { PL_D3D11_DEFAULTS __VA_ARGS__ })
 extern const struct pl_d3d11_params pl_d3d11_default_params;
 
 // Creates a new Direct3D 11 device based on the given parameters, or wraps an
@@ -171,6 +175,8 @@ struct pl_d3d11_swapchain_params {
     bool blit;
 };
 
+#define pl_d3d11_swapchain_params(...) (&(struct pl_d3d11_swapchain_params) { __VA_ARGS__ })
+
 // Creates a new Direct3D 11 swapchain, or wraps an existing one. If an existing
 // swapchain is provided in params->swapchain, `pl_d3d11_create_swapchain` will
 // take a reference to it that will be released in `pl_swapchain_destroy`.
@@ -208,6 +214,8 @@ struct pl_d3d11_wrap_params {
     int w;
     int h;
 };
+
+#define pl_d3d11_wrap_params(...) (&(struct pl_d3d11_wrap_params) { __VA_ARGS__ })
 
 // Wraps an external texture into a pl_tex abstraction. `pl_d3d11_wrap` takes a
 // reference to the texture, which is released when `pl_tex_destroy` is called.

@@ -20,47 +20,7 @@
 
 #include "gpu.h"
 
-const struct pl_gpu_dummy_params pl_gpu_dummy_default_params = {
-    .glsl = {
-        .version            = 450,
-        .gles               = false,
-        .vulkan             = false,
-        .compute            = true,
-        .max_shmem_size     = SIZE_MAX,
-        .max_group_threads  = 1024,
-        .max_group_size     = { 1024, 1024, 1024 },
-        .subgroup_size      = 32,
-        .min_gather_offset  = INT16_MIN,
-        .max_gather_offset  = INT16_MAX,
-    },
-    .limits = {
-        // pl_gpu
-        .callbacks          = false,
-        .thread_safe        = true,
-        // pl_buf
-        .max_buf_size       = SIZE_MAX,
-        .max_ubo_size       = SIZE_MAX,
-        .max_ssbo_size      = SIZE_MAX,
-        .max_vbo_size       = SIZE_MAX,
-        .max_mapped_size    = SIZE_MAX,
-        .max_buffer_texels  = UINT64_MAX,
-        // pl_tex
-        .max_tex_1d_dim     = UINT32_MAX,
-        .max_tex_2d_dim     = UINT32_MAX,
-        .max_tex_3d_dim     = UINT32_MAX,
-        .buf_transfer       = true,
-        .align_tex_xfer_stride = 1,
-        .align_tex_xfer_offset = 1,
-        // pl_pass
-        .max_variables      = SIZE_MAX,
-        .max_constants      = SIZE_MAX,
-        .max_pushc_size     = SIZE_MAX,
-        .max_dispatch       = { UINT32_MAX, UINT32_MAX, UINT32_MAX },
-        .fragment_queues    = 0,
-        .compute_queues     = 0,
-    },
-};
-
+const struct pl_gpu_dummy_params pl_gpu_dummy_default_params = { PL_GPU_DUMMY_DEFAULTS };
 static const struct pl_gpu_fns pl_fns_dummy;
 
 struct priv {

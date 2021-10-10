@@ -821,11 +821,7 @@ error:
     return NULL;
 }
 
-const struct pl_vulkan_params pl_vulkan_default_params = {
-    .async_transfer = true,
-    .async_compute  = true,
-    .queue_count    = 1, // enabling multiple queues often decreases perf
-};
+const struct pl_vulkan_params pl_vulkan_default_params = { PL_VULKAN_DEFAULTS };
 
 void pl_vulkan_destroy(pl_vulkan *pl_vk)
 {

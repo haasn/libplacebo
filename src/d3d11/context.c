@@ -20,9 +20,7 @@
 // Windows 8 enum value, not present in mingw-w64 v7
 #define DXGI_ADAPTER_FLAG_SOFTWARE (2)
 
-const struct pl_d3d11_params pl_d3d11_default_params = {
-    .allow_software = true,
-};
+const struct pl_d3d11_params pl_d3d11_default_params = { PL_D3D11_DEFAULTS };
 
 static INIT_ONCE d3d11_once = INIT_ONCE_STATIC_INIT;
 static PFN_D3D11_CREATE_DEVICE pD3D11CreateDevice = NULL;

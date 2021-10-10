@@ -1330,10 +1330,10 @@ const char *pl_desc_access_glsl_name(enum pl_desc_access mode)
 }
 
 const struct pl_blend_params pl_alpha_overlay = {
-    .src_rgb = PL_BLEND_SRC_ALPHA,
-    .dst_rgb = PL_BLEND_ONE_MINUS_SRC_ALPHA,
-    .src_alpha = PL_BLEND_ONE,
-    .dst_alpha = PL_BLEND_ONE_MINUS_SRC_ALPHA,
+    .src_rgb    = PL_BLEND_SRC_ALPHA,
+    .dst_rgb    = PL_BLEND_ONE_MINUS_SRC_ALPHA,
+    .src_alpha  = PL_BLEND_ONE,
+    .dst_alpha  = PL_BLEND_ONE_MINUS_SRC_ALPHA,
 };
 
 pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)

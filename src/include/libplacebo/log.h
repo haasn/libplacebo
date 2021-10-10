@@ -50,6 +50,9 @@ struct pl_log_params {
     enum pl_log_level log_level;
 };
 
+#define pl_log_params(...) (&(struct pl_log_params) { __VA_ARGS__ })
+extern const struct pl_log_params pl_log_default_params;
+
 // Thread-safety: Safe
 //
 // Note: In any context in which `pl_log` is used, users may also pass NULL
@@ -65,9 +68,6 @@ typedef const PL_STRUCT(pl_log) {
 // Note: As a general rule, any `params` struct used as an argument to a
 // function need only live until the corresponding function returns.
 pl_log pl_log_create(int api_ver, const struct pl_log_params *params);
-
-// Equal to (struct pl_log_params) {0}
-extern const struct pl_log_params pl_log_default_params;
 
 // Destroy a `pl_log` object.
 //

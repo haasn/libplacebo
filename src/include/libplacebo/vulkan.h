@@ -89,6 +89,7 @@ struct pl_vk_inst_params {
     int num_opt_layers;
 };
 
+#define pl_vk_inst_params(...) (&(struct pl_vk_inst_params) { __VA_ARGS__ })
 extern const struct pl_vk_inst_params pl_vk_inst_default_params;
 
 // Helper function to simplify instance creation. The user could also bypass
@@ -247,6 +248,13 @@ struct pl_vulkan_params {
 };
 
 // Default/recommended parameters. Should generally be safe and efficient.
+#define PL_VULKAN_DEFAULTS                              \
+    .async_transfer = true,                             \
+    .async_compute  = true,                             \
+    /* enabling multiple queues often decreases perf */ \
+    .queue_count    = 1,
+
+#define pl_vulkan_params(...) (&(struct pl_vulkan_params) { PL_VULKAN_DEFAULTS __VA_ARGS__ })
 extern const struct pl_vulkan_params pl_vulkan_default_params;
 
 // Creates a new vulkan device based on the given parameters and initializes
@@ -283,6 +291,8 @@ struct pl_vulkan_device_params {
     uint8_t device_uuid[16];
     bool allow_software;
 };
+
+#define pl_vulkan_device_params(...) (&(struct pl_vulkan_device_params) { __VA_ARGS__ })
 
 // Helper function to choose the best VkPhysicalDevice, given a VkInstance.
 // This uses the same logic as `pl_vulkan_create` uses internally. If no
@@ -328,6 +338,8 @@ struct pl_vulkan_swapchain_params {
     // the "suboptimal" status indefinitely.
     bool allow_suboptimal;
 };
+
+#define pl_vulkan_swapchain_params(...) (&(struct pl_vulkan_swapchain_params) { __VA_ARGS__ })
 
 // Creates a new vulkan swapchain based on an existing VkSurfaceKHR. Using this
 // function requires that the vulkan device was created with the
@@ -397,6 +409,8 @@ struct pl_vulkan_import_params {
     uint32_t max_api_version;
 };
 
+#define pl_vulkan_import_params(...) (&(struct pl_vulkan_import_params) { __VA_ARGS__ })
+
 // Import an existing VkDevice instead of creating a new one, and wrap it into
 // a `pl_vulkan` abstraction. It's safe to `pl_vulkan_destroy` this, which will
 // destroy application state related to libplacebo but leave the underlying
@@ -426,6 +440,8 @@ struct pl_vulkan_wrap_params {
     // of enabled usage flags.
     VkImageUsageFlags usage;
 };
+
+#define pl_vulkan_wrap_params(...) (&(struct pl_vulkan_wrap_params) { __VA_ARGS__ })
 
 // Wraps an external VkImage into a pl_tex abstraction. By default, the image
 // is considered "held" by the user and must be released before calling any

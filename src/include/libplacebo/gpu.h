@@ -479,6 +479,8 @@ struct pl_buf_params {
     void *user_data;
 };
 
+#define pl_buf_params(...) (&(struct pl_buf_params) { __VA_ARGS__ })
+
 // A generic buffer, which can be used for multiple purposes (texture transfer,
 // storage buffer, uniform buffer, etc.)
 //
@@ -683,6 +685,8 @@ struct pl_tex_params {
     void *user_data;
 };
 
+#define pl_tex_params(...) (&(struct pl_tex_params) { __VA_ARGS__ })
+
 static inline int pl_tex_params_dimension(const struct pl_tex_params params)
 {
     return params.d ? 3 : params.h ? 2 : 1;
@@ -791,6 +795,8 @@ struct pl_tex_blit_params {
     enum pl_tex_sample_mode sample_mode;
 };
 
+#define pl_tex_blit_params(...) (&(struct pl_tex_blit_params) { __VA_ARGS__ })
+
 // Copy a sub-rectangle from one texture to another.
 void pl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params);
 
@@ -851,6 +857,8 @@ struct pl_tex_transfer_params {
     // Note: The contents of the memory region / buffer must exactly match the
     // texture format; i.e. there is no explicit conversion between formats.
 };
+
+#define pl_tex_transfer_params(...) (&(struct pl_tex_transfer_params) { __VA_ARGS__ })
 
 // Upload data to a texture. Returns whether successful.
 bool pl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params);
@@ -1097,7 +1105,10 @@ struct pl_blend_params {
     enum pl_blend_mode dst_alpha;
 };
 
-extern const struct pl_blend_params pl_alpha_overlay; // typical alpha compositing
+#define pl_blend_params(...) (&(struct pl_blend_params) { __VA_ARGS__ })
+
+// Typical alpha compositing
+extern const struct pl_blend_params pl_alpha_overlay;
 
 enum pl_prim_type {
     PL_PRIM_TRIANGLE_LIST,
@@ -1183,6 +1194,8 @@ struct pl_pass_params {
     // Specifying `blend_params` requires `load_target` to be true.
     bool load_target;
 };
+
+#define pl_pass_params(...) (&(struct pl_pass_params) { __VA_ARGS__ })
 
 // Conflates the following typical GPU API concepts:
 // - various kinds of shaders
@@ -1293,6 +1306,8 @@ struct pl_pass_run_params {
     // corresponding index of limits.max_dispatch
     int compute_groups[3];
 };
+
+#define pl_pass_run_params(...) (&(struct pl_pass_run_params) { __VA_ARGS__ })
 
 // Execute a render pass.
 void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params);

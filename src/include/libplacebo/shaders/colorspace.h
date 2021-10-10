@@ -63,6 +63,11 @@ struct pl_sigmoid_params {
     float slope;
 };
 
+#define PL_SIGMOID_DEFAULTS \
+    .center = 0.75,         \
+    .slope  = 6.50,
+
+#define pl_sigmoid_params(...) (&(struct pl_sigmoid_params) { PL_SIGMOID_DEFAULTS __VA_ARGS__ })
 extern const struct pl_sigmoid_params pl_sigmoid_default_params;
 
 // Applies a sigmoidal color transform to all channels. This helps avoid
@@ -113,6 +118,14 @@ struct pl_peak_detect_params {
     float minimum_peak;
 };
 
+#define PL_PEAK_DETECT_DEFAULTS         \
+    .smoothing_period       = 100.0,    \
+    .scene_threshold_low    = 5.5,      \
+    .scene_threshold_high   = 10.0,     \
+    .overshoot_margin       = 0.05,     \
+    .minimum_peak           = 1.0,
+
+#define pl_peak_detect_params(...) (&(struct pl_peak_detect_params) { PL_PEAK_DETECT_DEFAULTS __VA_ARGS__ })
 extern const struct pl_peak_detect_params pl_peak_detect_default_params;
 
 // This function can be used to measure the `sig_peak` and `sig_avg` of a
@@ -261,6 +274,15 @@ struct pl_color_map_params {
     bool gamut_clipping;
 };
 
+#define PL_COLOR_MAP_DEFAULTS                                   \
+    .intent                 = PL_INTENT_RELATIVE_COLORIMETRIC,  \
+    .tone_mapping_algo      = PL_TONE_MAPPING_BT_2390,          \
+    .desaturation_strength  = 0.90,                             \
+    .desaturation_exponent  = 0.20,                             \
+    .desaturation_base      = 0.18,                             \
+    .gamut_clipping         = true,
+
+#define pl_color_map_params(...) (&(struct pl_color_map_params) { PL_COLOR_MAP_DEFAULTS __VA_ARGS__ })
 extern const struct pl_color_map_params pl_color_map_default_params;
 
 // Maps `vec4 color` from one color space to another color space according
@@ -335,6 +357,13 @@ struct pl_dither_params {
     bool temporal;
 };
 
+#define PL_DITHER_DEFAULTS                              \
+    .method     = PL_DITHER_BLUE_NOISE,                 \
+    .lut_size   = 6,                                    \
+    /* temporal dithering commonly flickers on LCDs */  \
+    .temporal   = false,
+
+#define pl_dither_params(...) (&(struct pl_dither_params) { PL_DITHER_DEFAULTS __VA_ARGS__ })
 extern const struct pl_dither_params pl_dither_default_params;
 
 // Dither the colors to a lower depth, given in bits. This can be used on input

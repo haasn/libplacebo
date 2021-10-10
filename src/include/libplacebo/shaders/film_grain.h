@@ -116,6 +116,8 @@ struct pl_film_grain_params {
     //     component. For RGB systems, the G channel is.
 };
 
+#define pl_film_grain_params(...) (&(struct pl_film_grain_params) { __VA_ARGS__ })
+
 // Test if film grain needs to be applied. This is a helper function that users
 // can use to decide whether or not `pl_shader_film_grain` needs to be called,
 // based on the given grain metadata.

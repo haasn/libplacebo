@@ -65,6 +65,8 @@ struct pl_shader_params {
     bool dynamic_constants;
 };
 
+#define pl_shader_params(...) (&(struct pl_shader_params) { __VA_ARGS__ })
+
 // Creates a new, blank, mutable pl_shader object.
 //
 // Note: Rather than allocating and destroying many shaders, users are

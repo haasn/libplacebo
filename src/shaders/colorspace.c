@@ -488,10 +488,7 @@ void pl_shader_delinearize(pl_shader sh, struct pl_color_space csp)
     pl_unreachable();
 }
 
-const struct pl_sigmoid_params pl_sigmoid_default_params = {
-    .center = 0.75,
-    .slope  = 6.50,
-};
+const struct pl_sigmoid_params pl_sigmoid_default_params = { PL_SIGMOID_DEFAULTS };
 
 void pl_shader_sigmoidize(pl_shader sh, const struct pl_sigmoid_params *params)
 {
@@ -641,13 +638,7 @@ done:
         GLSL("color.rgb *= vec3(1.0 / %s); \n", SH_FLOAT(csp.sig_scale));
 }
 
-const struct pl_peak_detect_params pl_peak_detect_default_params = {
-    .smoothing_period       = 100.0,
-    .scene_threshold_low    = 5.5,
-    .scene_threshold_high   = 10.0,
-    .overshoot_margin       = 0.05,
-    .minimum_peak           = 1.0,
-};
+const struct pl_peak_detect_params pl_peak_detect_default_params = { PL_PEAK_DETECT_DEFAULTS };
 
 struct sh_peak_obj {
     pl_buf buf;
@@ -918,14 +909,7 @@ static inline float pq_delinearize(float x)
     return x;
 }
 
-const struct pl_color_map_params pl_color_map_default_params = {
-    .intent                 = PL_INTENT_RELATIVE_COLORIMETRIC,
-    .tone_mapping_algo      = PL_TONE_MAPPING_BT_2390,
-    .desaturation_strength  = 0.90,
-    .desaturation_exponent  = 0.20,
-    .desaturation_base      = 0.18,
-    .gamut_clipping         = true,
-};
+const struct pl_color_map_params pl_color_map_default_params = { PL_COLOR_MAP_DEFAULTS };
 
 static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
                                struct pl_color_space dst,
@@ -1501,8 +1485,4 @@ done: ;
          (long long unsigned) scale, (long long unsigned) scale);
 }
 
-const struct pl_dither_params pl_dither_default_params = {
-    .method     = PL_DITHER_BLUE_NOISE,
-    .lut_size   = 6,
-    .temporal   = false, // commonly flickers on LCDs
-};
+const struct pl_dither_params pl_dither_default_params = { PL_DITHER_DEFAULTS };

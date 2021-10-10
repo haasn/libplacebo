@@ -473,6 +473,8 @@ struct pl_cone_params {
                         // (1.0 = Unaffected, 0.0 = Full blindness)
 };
 
+#define pl_cone_params(...) (&(struct pl_cone_params) { __VA_ARGS__ })
+
 // Built-in color blindness models
 extern const struct pl_cone_params pl_vision_normal;        // No distortion (92%)
 extern const struct pl_cone_params pl_vision_protanomaly;   // Red deficiency (0.66%)

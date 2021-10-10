@@ -171,6 +171,8 @@ struct pl_queue_params {
     void *priv;
 };
 
+#define pl_queue_params(...) (&(struct pl_queue_params) { __VA_ARGS__ })
+
 // Advance the frame queue's internal state to the target timestamp. Any frames
 // which are no longer needed (i.e. too far in the past) are automatically
 // unmapped and evicted. Any future frames which are needed to fill the queue

@@ -60,6 +60,8 @@ struct pl_sample_src {
     // former is preferred if both are specified.
 };
 
+#define pl_sample_src(...) (&(struct pl_sample_src) { __VA_ARGS__ })
+
 struct pl_deband_params {
     // The number of debanding steps to perform per sample. Each step reduces a
     // bit more banding, but takes time to compute. Note that the strength of
@@ -87,6 +89,13 @@ struct pl_deband_params {
     float grain;
 };
 
+#define PL_DEBAND_DEFAULTS  \
+    .iterations = 1,        \
+    .threshold  = 4.0,      \
+    .radius     = 16.0,     \
+    .grain      = 6.0,
+
+#define pl_deband_params(...) (&(struct pl_deband_params) {PL_DEBAND_DEFAULTS __VA_ARGS__ })
 extern const struct pl_deband_params pl_deband_default_params;
 
 // Debands a given texture and returns the sampled color in `vec4 color`. If
@@ -157,6 +166,8 @@ struct pl_sample_filter_params {
     // ratios. Must be set to a valid pointer, and the target NULL-initialized.
     pl_shader_obj *lut;
 };
+
+#define pl_sample_filter_params(...) (&(struct pl_sample_filter_params) { __VA_ARGS__ })
 
 // Performs polar sampling. This internally chooses between an optimized compute
 // shader, and various fragment shaders, depending on the supported GLSL version

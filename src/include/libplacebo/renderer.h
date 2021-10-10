@@ -280,14 +280,25 @@ struct pl_render_params {
     bool disable_overlay_sampling PL_DEPRECATED; // no longer used
 };
 
+// Bare minimum parameters, with no features enabled. This is the fastest
+// possible configuration, and should therefore be fine on any system.
+#define PL_RENDER_DEFAULTS                              \
+    /* set a frame mixer for pl_render_image_mix */     \
+    .frame_mixer        = &pl_filter_oversample,        \
+    .color_map_params   = &pl_color_map_default_params, \
+    .lut_entries        = 64,                           \
+    .polar_cutoff       = 0.001,
+
+#define pl_render_params(...) (&(struct pl_render_params) { PL_RENDER_DEFAULTS __VA_ARGS__ })
+extern const struct pl_render_params pl_render_fast_params;
+
 // This contains the default/recommended options for reasonable image quality,
 // while also not being too terribly slow. All of the *_params structs are
 // defaulted to the corresponding *_default_params, except for deband_params,
 // which is disabled by default.
 //
-// This should be fine on most integrated GPUs, but if it's too slow, consider
-// setting the params to {0} instead, or alternatively setting
-// `pl_render_params.disable_fbos` to true.
+// This should be fine on most integrated GPUs, but if it's too slow,
+// consider using `pl_render_fast_params` instead.
 extern const struct pl_render_params pl_render_default_params;
 
 // This contains a higher quality preset for better image quality at the cost

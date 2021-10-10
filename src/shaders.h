@@ -236,6 +236,8 @@ struct sh_lut_params {
     void *priv;
 };
 
+#define sh_lut_params(...) (&(struct sh_lut_params) { __VA_ARGS__ })
+
 // Makes a table of values available as a shader variable, using an a given
 // method (falling back if needed). The resulting identifier can be sampled
 // directly as %s(pos), where pos is a vector with the right number of

@@ -243,31 +243,20 @@ void pl_renderer_flush_cache(pl_renderer rr)
     pl_shader_obj_destroy(&rr->peak_detect_state);
 }
 
+const struct pl_render_params pl_render_fast_params = { PL_RENDER_DEFAULTS };
 const struct pl_render_params pl_render_default_params = {
+    PL_RENDER_DEFAULTS
     .upscaler           = &pl_filter_spline36,
     .downscaler         = &pl_filter_mitchell,
-    .frame_mixer        = &pl_oversample_frame_mixer,
-    .lut_entries        = 64,
-    .polar_cutoff       = 0.001,
-
     .sigmoid_params     = &pl_sigmoid_default_params,
     .peak_detect_params = &pl_peak_detect_default_params,
-    .color_map_params   = &pl_color_map_default_params,
     .dither_params      = &pl_dither_default_params,
 };
 
 const struct pl_render_params pl_render_high_quality_params = {
+    PL_RENDER_DEFAULTS
     .upscaler           = &pl_filter_ewa_lanczos,
-    .downscaler         = &pl_filter_mitchell,
-    .frame_mixer        = &pl_oversample_frame_mixer,
-    .lut_entries        = 64,
-    .polar_cutoff       = 0.001,
-
     .deband_params      = &pl_deband_default_params,
-    .sigmoid_params     = &pl_sigmoid_default_params,
-    .peak_detect_params = &pl_peak_detect_default_params,
-    .color_map_params   = &pl_color_map_default_params,
-    .dither_params      = &pl_dither_default_params,
 };
 
 // This is only used as a sentinel, to use the GLSL implementation

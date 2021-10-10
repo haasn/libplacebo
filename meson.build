@@ -10,6 +10,7 @@ project('libplacebo', ['c', 'cpp'],
       # Incremental log of API changes (since v4.157.0)
       'add support for H.274 film grain',
       'remove fields deprecated for libplacebo v3',
+      'add preprocessor macros for default params',
     ].length(),
     # Fix version
     0)

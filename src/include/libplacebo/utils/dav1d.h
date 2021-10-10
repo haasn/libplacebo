@@ -67,6 +67,8 @@ struct pl_dav1d_upload_params {
     bool asynchronous;
 };
 
+#define pl_dav1d_upload_params(...) (&(struct pl_dav1d_upload_params) { __VA_ARGS__ })
+
 // Very high level helper function to take a `Dav1dPicture` and upload it to
 // the GPU. Similar in spirit to `pl_upload_plane`, and the same notes apply.
 // `tex` must be an array of 3 pointers of type `pl_tex`, each

@@ -286,6 +286,8 @@ struct pl_filter_params {
     int row_stride_align;
 };
 
+#define pl_filter_params(...) (&(struct pl_filter_params) { __VA_ARGS__ })
+
 // Represents an initialized instance of a particular filter, with a
 // precomputed LUT. The interpretation of the LUT depends on the type of the
 // filter (polar or separable).
