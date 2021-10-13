@@ -2,7 +2,17 @@ project('libplacebo', ['c', 'cpp'],
   license: 'LGPL2.1+',
   default_options: ['c_std=c99', 'cpp_std=c++11', 'warning_level=2'],
   meson_version: '>=0.54',
-  version: '4.159.0',
+  version: '@0@.@1@.@2@'.format(
+    # Major version
+    4,
+    # API version
+    157 + [
+      # Incremental log of API changes (since v4.157.0)
+      'add support for H.274 film grain',
+      'remove fields deprecated for libplacebo v3',
+    ].length(),
+    # Fix version
+    0)
 )
 
 # Version number
