@@ -571,6 +571,8 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         glScissor(params->scissors.x0, params->scissors.y0,
                   pl_rect_w(params->scissors), pl_rect_h(params->scissors));
         glEnable(GL_SCISSOR_TEST);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
         gl_check_err(gpu, "gl_pass_run: enabling viewport/scissor");
 
         const struct pl_blend_params *blend = pass->params.blend_params;
