@@ -781,19 +781,16 @@ void gl_tex_invalidate(pl_gpu gpu, pl_tex tex)
 {
     struct pl_gl *p = PL_PRIV(gpu);
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
-    if (!p->has_invalidate_fb || !MAKE_CURRENT())
+    if (!MAKE_CURRENT())
         return;
 
-    if (tex_gl->wrapped_fb) {
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
-        glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, (GLenum[]){GL_COLOR});
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    } else if (p->has_invalidate_tex) {
+    if (tex_gl->texture && p->has_invalidate_tex)
         glInvalidateTexImage(tex_gl->texture, 0);
-    } else {
+
+    if ((tex_gl->wrapped_fb || tex_gl->fbo) && p->has_invalidate_fb) {
+        GLenum attachment = tex_gl->fbo ? GL_COLOR_ATTACHMENT0 : GL_COLOR;
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
-        glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER,
-                                1, (GLenum[]){GL_COLOR_ATTACHMENT0});
+        glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &attachment);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     }
 
