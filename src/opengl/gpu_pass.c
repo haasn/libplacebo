@@ -587,8 +587,8 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
                                 map_blend[blend->src_alpha],
                                 map_blend[blend->dst_alpha]);
             glEnable(GL_BLEND);
+            gl_check_err(gpu, "gl_pass_run: enabling blend");
         }
-        gl_check_err(gpu, "gl_pass_run: enabling blend");
 
         // Update VBO and VAO
         pl_buf vert = params->vertex_buf;
