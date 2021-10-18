@@ -604,6 +604,8 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
                     src->comp_model_value[2],
                 },
             };
+            memcpy(dst->num_intensity_intervals, src->num_intensity_intervals,
+                   sizeof(dst->num_intensity_intervals);
             memcpy(dst->num_model_values, src->num_model_values,
                    sizeof(dst->num_model_values));
             break;
