@@ -588,17 +588,24 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
                     src->component_model_present[1],
                     src->component_model_present[2],
                 },
+                .intensity_interval_lower_bound = {
+                    src->intensity_interval_lower_bound[0],
+                    src->intensity_interval_lower_bound[1],
+                    src->intensity_interval_lower_bound[2],
+                },
+                .intensity_interval_upper_bound = {
+                    src->intensity_interval_upper_bound[0],
+                    src->intensity_interval_upper_bound[1],
+                    src->intensity_interval_upper_bound[2],
+                },
+                .comp_model_value = {
+                    src->comp_model_value[0],
+                    src->comp_model_value[1],
+                    src->comp_model_value[2],
+                },
             };
             memcpy(dst->num_model_values, src->num_model_values,
                    sizeof(dst->num_model_values));
-            memcpy(dst->intensity_interval_lower_bound,
-                   src->intensity_interval_lower_bound,
-                   sizeof(dst->intensity_interval_lower_bound));
-            memcpy(dst->intensity_interval_upper_bound,
-                   src->intensity_interval_upper_bound,
-                   sizeof(dst->intensity_interval_upper_bound));
-            memcpy(dst->comp_model_value, src->comp_model_value,
-                   sizeof(dst->comp_model_value));
             break;
         }
 #endif

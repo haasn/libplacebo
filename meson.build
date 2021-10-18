@@ -11,6 +11,7 @@ project('libplacebo', ['c', 'cpp'],
       'add support for H.274 film grain',
       'remove fields deprecated for libplacebo v3',
       'add preprocessor macros for default params',
+      'make H.274 film grain values indirect',
     ].length(),
     # Fix version
     0)

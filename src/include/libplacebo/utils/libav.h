@@ -32,10 +32,10 @@ PL_API_BEGIN
 // texture itself (`planes[N].texture`), as well as any overlays (e.g.
 // subtitles).
 //
-// Note: If the AVFrame contains an embedded ICC profile, the resulting
-// `out_image->profile` will reference this pointer, meaning that in general,
-// the `pl_frame` is only guaranteed to be valid as long as the AVFrame is not
-// freed.
+// Note: If the AVFrame contains an embedded ICC profile or H.274 film grain
+// metadata, the resulting `out_image->profile` will reference this pointer,
+// meaning that in general, the `pl_frame` is only guaranteed to be valid as
+// long as the AVFrame is not freed.
 static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *frame);
 
 // Deprecated aliases for backwards compatibility

@@ -73,9 +73,9 @@ struct pl_h274_grain_data {
     bool component_model_present[3];
     uint16_t num_intensity_intervals[3];
     uint8_t num_model_values[3];
-    uint8_t intensity_interval_lower_bound[3][256];
-    uint8_t intensity_interval_upper_bound[3][256];
-    int16_t comp_model_value[3][256][6];
+    const uint8_t *intensity_interval_lower_bound[3];
+    const uint8_t *intensity_interval_upper_bound[3];
+    const int16_t (*comp_model_value[3])[6];
 };
 
 // Tagged union for film grain data

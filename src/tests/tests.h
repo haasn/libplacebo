@@ -114,6 +114,10 @@ static const struct pl_av1_grain_data av1_grain_data = {
     .uv_offset = {0, 0},
 };
 
+static const uint8_t h274_lower_bound = 10;
+static const uint8_t h274_upper_bound = 250;
+static const int16_t h274_values[6] = {16, 12, 14};
+
 static const struct pl_h274_grain_data h274_grain_data = {
     .model_id = 0,
     .blending_mode_id = 0,
@@ -121,7 +125,7 @@ static const struct pl_h274_grain_data h274_grain_data = {
     .component_model_present = {true},
     .num_intensity_intervals = {1},
     .num_model_values = {3},
-    .intensity_interval_lower_bound = {{10}},
-    .intensity_interval_upper_bound = {{250}},
-    .comp_model_value = {{{16, 12, 14}}},
+    .intensity_interval_lower_bound = {&h274_lower_bound},
+    .intensity_interval_upper_bound = {&h274_upper_bound},
+    .comp_model_value = {&h274_values},
 };
