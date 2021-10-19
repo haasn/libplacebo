@@ -296,17 +296,29 @@ static ident_t sh_var_from_va(pl_shader sh, const char *name,
     });
 }
 
-static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
-                             struct pl_pass_params *params, pl_shader sh,
-                             ident_t vert_pos, ident_t out_proj)
+struct generate_params {
+    void *tmp;
+    pl_shader sh;
+    struct pass *pass;
+    struct pl_pass_params *pass_params;
+    ident_t vert_pos;
+    ident_t out_mat;
+    ident_t out_off;
+};
+
+static void generate_shaders(pl_dispatch dp, const struct generate_params *params)
 {
     pl_gpu gpu = dp->gpu;
+    pl_shader sh = params->sh;
+    void *tmp = params->tmp;
     const struct pl_shader_res *res = pl_shader_finalize(sh);
+    struct pass *pass = params->pass;
+    struct pl_pass_params *pass_params = params->pass_params;
 
     pl_str *pre = &dp->tmp[TMP_PRELUDE];
     ADD(pre, "#version %d%s\n", gpu->glsl.version,
         (gpu->glsl.gles && gpu->glsl.version > 100) ? " es" : "");
-    if (params->type == PL_PASS_COMPUTE)
+    if (pass_params->type == PL_PASS_COMPUTE)
         ADD(pre, "#extension GL_ARB_compute_shader : enable\n");
 
     // Enable this unconditionally if the GPU supports it, since we have no way
@@ -392,7 +404,7 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
     }
 
     // Add all of the push constants as their own element
-    if (params->push_constants_size) {
+    if (pass_params->push_constants_size) {
         // We re-use add_buffer_vars to make sure variables are sorted, this
         // is important because the push constants can be out-of-order in
         // `pass->vars`
@@ -421,13 +433,13 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
 
         const struct pl_shader_const *sc = &res->constants[i];
         ADD(pre, "layout(constant_id=%"PRIu32") const %s %s = 0; \n",
-            params->constants[i].id, types[sc->type], sc->name);
+            pass_params->constants[i].id, types[sc->type], sc->name);
     }
 
     // Add all of the required descriptors
     for (int i = 0; i < res->num_descriptors; i++) {
         const struct pl_shader_desc *sd = &res->descriptors[i];
-        const struct pl_desc *desc = &params->descriptors[i];
+        const struct pl_desc *desc = &pass_params->descriptors[i];
 
         switch (desc->type) {
         case PL_DESC_SAMPLED_TEX: {
@@ -574,9 +586,9 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
     ADD_STR(glsl, *pre);
 
     const char *out_color = "gl_FragColor";
-    switch(params->type) {
+    switch(pass_params->type) {
     case PL_PASS_RASTER: {
-        pl_assert(vert_pos);
+        pl_assert(params->vert_pos);
         pl_str *vert_head = &dp->tmp[TMP_VERT_HEAD];
         pl_str *vert_body = &dp->tmp[TMP_VERT_BODY];
 
@@ -584,7 +596,7 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
         ADD_STR(vert_head, *pre);
         ADD(vert_body, "void main() {\n");
         for (int i = 0; i < sh->vas.num; i++) {
-            const struct pl_vertex_attrib *va = &params->vertex_attribs[i];
+            const struct pl_vertex_attrib *va = &pass_params->vertex_attribs[i];
             const struct pl_shader_va *sva = &sh->vas.elem[i];
             const char *type = va->fmt->glsl_type;
 
@@ -599,14 +611,14 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
                 loc[0] = '\0';
             ADD(vert_head, "%s %s %s %s;\n", loc, vert_in, type, va->name);
 
-            if (strcmp(name, vert_pos) == 0) {
+            if (strcmp(name, params->vert_pos) == 0) {
                 pl_assert(va->fmt->num_components == 2);
-                if (out_proj) {
-                    ADD(vert_body, "gl_Position = vec4((%s * vec3(%s, 1.0)).xy, 0.0, 1.0); \n",
-                        out_proj, va->name);
-                } else {
-                    ADD(vert_body, "gl_Position = vec4(%s, 0.0, 1.0);\n", va->name);
-                }
+                ADD(vert_body, "vec2 va_pos = %s; \n", va->name);
+                if (params->out_mat)
+                    ADD(vert_body, "va_pos = %s * va_pos; \n", params->out_mat);
+                if (params->out_off)
+                    ADD(vert_body, "va_pos += %s; \n", params->out_off);
+                ADD(vert_body, "gl_Position = vec4(va_pos, 0.0, 1.0); \n");
             } else {
                 // Everything else is just blindly passed through
                 ADD(vert_head, "%s %s %s %s;\n", loc, vert_out, type, name);
@@ -617,7 +629,7 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
 
         ADD(vert_body, "}");
         ADD_STR(vert_head, *vert_body);
-        params->vertex_shader = vert_head->buf;
+        pass_params->vertex_shader = vert_head->buf;
         pl_hash_merge(&pass->signature, pl_str_hash(*vert_head));
 
         // GLSL 130+ doesn't use the magic gl_FragColor
@@ -643,7 +655,7 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
     ADD(glsl, "void main() {\n");
 
     pl_assert(res->input == PL_SHADER_SIG_NONE);
-    switch (params->type) {
+    switch (pass_params->type) {
     case PL_PASS_RASTER:
         pl_assert(res->output == PL_SHADER_SIG_COLOR);
         ADD(glsl, "%s = %s();\n", out_color, res->name);
@@ -657,7 +669,7 @@ static void generate_shaders(pl_dispatch dp, void *tmp, struct pass *pass,
     }
 
     ADD(glsl, "}");
-    params->glsl_shader = glsl->buf;
+    pass_params->glsl_shader = glsl->buf;
     pl_hash_merge(&pass->signature, pl_str_hash(*glsl));
 }
 
@@ -702,7 +714,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
                                   pl_tex target, ident_t vert_pos,
                                   const struct pl_blend_params *blend, bool load,
                                   const struct pl_dispatch_vertex_params *vparams,
-                                  ident_t out_proj)
+                                  const struct pl_transform2x2 *proj)
 {
     struct pass *pass = pl_alloc_ptr(dp, pass);
     *pass = (struct pass) {
@@ -725,6 +737,14 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
         .vertex_type = vparams ? vparams->vertex_type : PL_PRIM_TRIANGLE_STRIP,
         .vertex_stride = vparams ? vparams->vertex_stride : 0,
         .blend_params = blend,
+    };
+
+    struct generate_params gen_params = {
+        .tmp = tmp,
+        .pass = pass,
+        .pass_params = &params,
+        .sh = sh,
+        .vert_pos = vert_pos,
     };
 
     if (params.type == PL_PASS_RASTER) {
@@ -765,6 +785,21 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
         pl_hash_merge(&pass->signature, (uintptr_t) target->params.format);
         if (blend)
             pl_hash_merge(&pass->signature, pl_mem_hash(blend, sizeof(*blend)));
+
+        // Load projection matrix if required
+        if (proj && memcmp(&proj->mat, &pl_matrix2x2_identity, sizeof(proj->mat)) != 0) {
+            gen_params.out_mat = sh_var(sh, (struct pl_shader_var) {
+                .var = pl_var_mat2("proj"),
+                .data = PL_TRANSPOSE_2X2(proj->mat.m),
+            });
+        }
+
+        if (proj && (proj->c[0] || proj->c[1])) {
+            gen_params.out_off = sh_var(sh, (struct pl_shader_var) {
+                .var = pl_var_vec2("offset"),
+                .data = proj->c,
+            });
+        }
     }
 
     // Place all of the compile-time constants
@@ -829,7 +864,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
     }
 
     // Finalize the shader and look it up in the pass cache
-    generate_shaders(dp, tmp, pass, &params, sh, vert_pos, out_proj);
+    generate_shaders(dp, &gen_params);
     for (int i = 0; i < dp->passes.num; i++) {
         struct pass *p = dp->passes.elem[i];
         if (p->signature != pass->signature)
@@ -1173,7 +1208,6 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
     }
 
     ident_t vert_pos = NULL;
-
     if (pl_shader_is_compute(sh)) {
         // Translate the compute shader to simulate vertices etc.
         translate_compute_shader(dp, sh, &rc, params);
@@ -1432,23 +1466,9 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
         }
         break;
     }
-
-    ident_t out_proj = NULL;
-    if (memcmp(&proj, &pl_transform2x2_identity, sizeof(proj)) != 0) {
-        struct pl_matrix3x3 mat = {{
-            {proj.mat.m[0][0], proj.mat.m[0][1], proj.c[0]},
-            {proj.mat.m[1][0], proj.mat.m[1][1], proj.c[1]},
-            {0.0, 0.0, 1.0},
-        }};
-        out_proj = sh_var(sh, (struct pl_shader_var) {
-            .var = pl_var_mat3("proj"),
-            .data = PL_TRANSPOSE_3X3(mat.m),
-        });
-    }
-
     ident_t vert_pos = params->vertex_attribs[pos_idx].name;
     struct pass *pass = finalize_pass(dp, sh, params->target, vert_pos,
-                                      params->blend_params, true, params, out_proj);
+                                      params->blend_params, true, params, &proj);
 
     // Silently return on failed passes
     if (!pass || !pass->pass)
