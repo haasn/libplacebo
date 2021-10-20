@@ -78,7 +78,13 @@ const struct gl_format formats_norm8[] = {
 
 // BGRA 8-bit
 const struct gl_format formats_bgra8[] = {
-    {GL_RGBA8,          BGRA,  U8,  FMT("bgra8",    8, UNORM, S|L|F|V)},
+    {GL_RGBA8,          BGRA,  U8,  {
+        .name               = "bgra8",
+        .type               = PL_FMT_UNORM,
+        .caps               = S|L|F|V,
+        .sample_order       = {2, 1, 0, 3},
+        .component_depth    = {8, 8, 8, 8},
+    }},
 };
 
 // Basic 16-bit formats, excluding rgb16 (special cased below)
@@ -183,7 +189,13 @@ const struct gl_format formats_legacy_gles2[] = {
 
 // GLES BGRA
 const struct gl_format formats_bgra_gles[] = {
-    {GL_BGRA,           BGRA,  U8,  FMT("bgra",     8, UNORM, S|L|F|V)},
+    {GL_BGRA,           BGRA,  U8,  {
+        .name               = "bgra",
+        .type               = PL_FMT_UNORM,
+        .caps               = S|L|F|V,
+        .sample_order       = {2, 1, 0, 3},
+        .component_depth    = {8, 8, 8, 8},
+    }},
 };
 
 // Fallback for vertex-only formats, as a last resort
