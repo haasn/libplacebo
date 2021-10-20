@@ -1928,6 +1928,15 @@ fallback:
              "color = vec4(color.rgb + bg_color * (1.0 - color.a), 1.0);  \n",
              sh_bvec(sh, 2), SH_FLOAT(1.0 / size));
         img->comps = 3;
+    } else if (img->comps == 4 && !target->repr.alpha) {
+        // Strip alpha channel if not representable in the destination
+        pl_assert(img->repr.alpha != PL_ALPHA_INDEPENDENT);
+        GLSLH("#define bg_color vec3(%s, %s, %s) \n",
+              SH_FLOAT(params->background_color[0]),
+              SH_FLOAT(params->background_color[1]),
+              SH_FLOAT(params->background_color[2]));
+        GLSL("color = vec4(color.rgb + bg_color * (1.0 - color.a), 1.0); \n");
+        img->comps = 3;
     }
 
     // Apply the color scale separately, after encoding is done, to make sure
@@ -2396,6 +2405,20 @@ static bool pass_infer_state(struct pass_state *pass)
     // Infer the target color space info based on the image's
     pl_color_space_infer_ref(&target->color, &image->color);
     fix_color_space(target);
+
+    // Detect the presence of an alpha channel in the target and explicitly
+    // default the alpha mode in this case, so we can use it to detect whether
+    // or not to strip the alpha channel during rendering.
+    if (!target->repr.alpha) {
+        for (int i = 0; i < target->num_planes; i++) {
+            const struct pl_plane *plane = &target->planes[i];
+            for (int c = 0; c < plane->components; c++) {
+                if (plane->component_mapping[c] == PL_CHANNEL_A)
+                    target->repr.alpha = PL_ALPHA_PREMULTIPLIED;
+            }
+        }
+    }
+
     return true;
 }
 
