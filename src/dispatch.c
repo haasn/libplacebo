@@ -1066,9 +1066,10 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
     });
 
     int dx = rc->x0 > rc->x1 ? -1 : 1, dy = rc->y0 > rc->y1 ? -1 : 1;
+    const char *swiz = sh->transpose ? "yx" : "xy";
     GLSL("ivec2 dir = ivec2(%d, %d);\n", dx, dy); // hard-code, not worth var
-    GLSL("ivec2 pos = %s + dir * ivec2(gl_GlobalInvocationID);\n", base);
-    GLSL("vec2 fpos = %s * vec2(gl_GlobalInvocationID);\n", out_scale);
+    GLSL("ivec2 pos = %s + dir * ivec2(gl_GlobalInvocationID).%s;\n", base, swiz);
+    GLSL("vec2 fpos = %s * vec2(gl_GlobalInvocationID).%s;\n", out_scale, swiz);
     GLSL("if (fpos.x < 1.0 && fpos.y < 1.0) {\n");
     if (params->blend_params) {
         GLSL("vec4 orig = imageLoad(%s, pos);\n", fbo);
@@ -1202,23 +1203,36 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
     if (pl_shader_output_size(sh, &w, &h) && (w != tw || h != th))
     {
         PL_ERR(dp, "Trying to dispatch a shader with explicit output size "
-               "requirements %dx%d using a target rect of size %dx%d.",
-               w, h, tw, th);
+               "requirements %dx%d%s using a target rect of size %dx%d.",
+               w, h, sh->transpose ? " (transposed)" : "", tw, th);
         goto error;
     }
 
     ident_t vert_pos = NULL;
+    const struct pl_transform2x2 *proj = NULL;
     if (pl_shader_is_compute(sh)) {
         // Translate the compute shader to simulate vertices etc.
         translate_compute_shader(dp, sh, &rc, params);
     } else {
         // Add the vertex information encoding the position
-        vert_pos = sh_attr_vec2(sh, "position", &(const struct pl_rect2df) {
+        struct pl_rect2df vert_rect = {
             .x0 = 2.0 * rc.x0 / tpars->w - 1.0,
             .y0 = 2.0 * rc.y0 / tpars->h - 1.0,
             .x1 = 2.0 * rc.x1 / tpars->w - 1.0,
             .y1 = 2.0 * rc.y1 / tpars->h - 1.0,
-        });
+        };
+
+        if (sh->transpose) {
+            static const struct pl_transform2x2 transpose_proj = {{{
+                { 0, 1 },
+                { 1, 0 },
+            }}};
+            proj = &transpose_proj;
+            PL_SWAP(vert_rect.x0, vert_rect.y0);
+            PL_SWAP(vert_rect.x1, vert_rect.y1);
+        }
+
+        vert_pos = sh_attr_vec2(sh, "position", &vert_rect);
     }
 
     // We need to set pl_pass_params.load_target when either blending is
@@ -1233,7 +1247,7 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
     bool load = params->blend_params || !pl_rect2d_eq(rc_norm, full);
 
     struct pass *pass = finalize_pass(dp, sh, params->target, vert_pos,
-                                      params->blend_params, load, NULL, NULL);
+                                      params->blend_params, load, NULL, proj);
 
     // Silently return on failed passes
     if (!pass || !pass->pass)
@@ -1434,6 +1448,13 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
         goto error;
     }
 
+    if (sh->transpose) {
+        PL_ERR(dp, "Trying to dispatch a transposed shader using "
+               "pl_dispatch_vertex, unlikely to be correct. Erroring as a "
+               "safety precaution!");
+        goto error;
+    }
+
     int pos_idx = params->vertex_position_idx;
     if (pos_idx < 0 || pos_idx >= params->num_vertex_attribs) {
         PL_ERR(dp, "Vertex position index out of range?");
@@ -1466,6 +1487,7 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
         }
         break;
     }
+
     ident_t vert_pos = params->vertex_attribs[pos_idx].name;
     struct pass *pass = finalize_pass(dp, sh, params->target, vert_pos,
                                       params->blend_params, true, params, &proj);

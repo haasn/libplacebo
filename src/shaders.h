@@ -44,6 +44,7 @@ struct pl_shader {
     bool mutable;
     int output_w;
     int output_h;
+    bool transpose;
     pl_str buffers[SH_BUF_COUNT];
     bool is_compute;
     bool flexible_work_groups;

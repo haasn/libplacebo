@@ -173,8 +173,8 @@ bool pl_shader_output_size(const pl_shader sh, int *w, int *h)
     if (!sh->output_w || !sh->output_h)
         return false;
 
-    *w = sh->output_w;
-    *h = sh->output_h;
+    *w = sh->transpose ? sh->output_h : sh->output_w;
+    *h = sh->transpose ? sh->output_w : sh->output_h;
     return true;
 }
 
