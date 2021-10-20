@@ -188,6 +188,13 @@ struct pl_render_params {
     float background_transparency; // 0.0 for opaque, 1.0 for fully transparent
     bool skip_target_clearing;
 
+    // If true, then transparent images will made opaque by painting them
+    // against a checkerboard pattern consisting of alternating colors. If both
+    // colors are left as {0}, they default respectively to 93% and 87% gray.
+    bool blend_against_tiles;
+    float tile_colors[2][3];
+    int tile_size;
+
     // --- Performance / quality trade-off options:
     // These should generally be left off where quality is desired, as they can
     // degrade the result quite noticeably; but may be useful for older or
@@ -287,6 +294,9 @@ struct pl_render_params {
     .frame_mixer        = &pl_filter_oversample,        \
     .color_map_params   = &pl_color_map_default_params, \
     .lut_entries        = 64,                           \
+    .tile_colors        = {{0.93, 0.93, 0.93},          \
+                           {0.87, 0.87, 0.87}},         \
+    .tile_size          = 32,                           \
     .polar_cutoff       = 0.001,
 
 #define pl_render_params(...) (&(struct pl_render_params) { PL_RENDER_DEFAULTS __VA_ARGS__ })

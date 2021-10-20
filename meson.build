@@ -14,6 +14,7 @@ project('libplacebo', ['c', 'cpp'],
       'make H.274 film grain values indirect',
       'support rotation in pl_renderer',
       'add pl_frame_copy_stream_props',
+      'support blending against tiles',
     ].length(),
     # Fix version
     0)

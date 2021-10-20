@@ -28,6 +28,7 @@ struct cached_frame {
     struct pl_color_space color;
     struct pl_icc_profile profile;
     pl_tex tex;
+    int comps;
     bool evict; // for garbage collection
 };
 
@@ -1912,6 +1913,23 @@ fallback:
     if (lut_type == PL_LUT_NORMALIZED || lut_type == PL_LUT_CONVERSION)
         pl_shader_custom_lut(sh, target->lut, &rr->lut_state[LUT_TARGET]);
 
+    if (img->comps == 4 && params->blend_against_tiles) {
+        static const float zero[2][3] = {0};
+        const float (*color)[3] = params->tile_colors;
+        if (memcmp(color, zero, sizeof(zero)) == 0)
+            color = pl_render_default_params.tile_colors;
+        int size = PL_DEF(params->tile_size, pl_render_default_params.tile_size);
+        GLSLH("#define bg_tile_a vec3(%s, %s, %s) \n",
+              SH_FLOAT(color[0][0]), SH_FLOAT(color[0][1]), SH_FLOAT(color[0][2]));
+        GLSLH("#define bg_tile_b vec3(%s, %s, %s) \n",
+              SH_FLOAT(color[1][0]), SH_FLOAT(color[1][1]), SH_FLOAT(color[1][2]));
+        GLSL("%s tile = lessThan(fract(gl_FragCoord.xy * %s), vec2(0.5));   \n"
+             "vec3 bg_color = tile.x == tile.y ? bg_tile_a : bg_tile_b;   \n"
+             "color = vec4(color.rgb + bg_color * (1.0 - color.a), 1.0);  \n",
+             sh_bvec(sh, 2), SH_FLOAT(1.0 / size));
+        img->comps = 3;
+    }
+
     // Apply the color scale separately, after encoding is done, to make sure
     // that the intermediate FBO (if any) has the correct precision.
     struct pl_color_repr repr = target->repr;
@@ -2754,6 +2772,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
             f->params_hash = params_hash;
             f->color = inter_pass.img.color;
+            f->comps = inter_pass.img.comps;
         }
 
         pl_assert(fidx < MAX_MIX_FRAMES);
@@ -2797,6 +2816,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
          "{                             \n"
          "vec4 mix_color = vec4(0.0);   \n");
 
+    int comps = 0;
     for (int i = 0; i < fidx; i++) {
         const struct pl_tex_params *tpars = &frames[i].tex->params;
 
@@ -2827,6 +2847,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         });
 
         GLSL("mix_color += %s * color; \n", weight);
+        comps = PL_MAX(comps, frames[i].comps);
     }
 
     GLSL("color = mix_color; \n"
@@ -2838,7 +2859,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         .sh = sh,
         .w = out_w,
         .h = out_h,
-        .comps = 4,
+        .comps = comps,
         .color = mix_color,
         .repr = {
             .sys = PL_COLOR_SYSTEM_RGB,
