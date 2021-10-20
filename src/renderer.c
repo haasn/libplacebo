@@ -2946,11 +2946,15 @@ void pl_frame_from_swapchain(struct pl_frame *out_frame,
                              const struct pl_swapchain_frame *frame)
 {
     pl_tex fbo = frame->fbo;
+    int num_comps = fbo->params.format->num_components;
+    if (!frame->color_repr.alpha)
+        num_comps = PL_MIN(num_comps, 3);
+
     *out_frame = (struct pl_frame) {
         .num_planes = 1,
         .planes = {{
             .texture = fbo,
-            .components = fbo->params.format->num_components,
+            .components = num_comps,
             .component_mapping = {0, 1, 2, 3},
         }},
         .crop = { 0, 0, fbo->params.w, fbo->params.h },
