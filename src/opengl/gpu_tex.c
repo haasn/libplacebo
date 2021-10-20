@@ -482,7 +482,7 @@ static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt *fmt,
         .fmt = GL_RGBA,
     };
 
-    bool can_query = !gl_test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20);
+    bool can_query = gl_test_ext(gpu, "GL_ARB_framebuffer_object", 30, 20);
     if (!fbo && p->gles_ver && p->gles_ver < 30)
         can_query = false; // can't query default framebuffer on GLES 2.0
 
