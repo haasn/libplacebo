@@ -516,6 +516,10 @@ static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt *fmt,
 
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         gl_check_err(gpu, "gl_fb_query");
+
+        // Strip missing components from component map
+        while (!fmt->component_depth[fmt->num_components - 1])
+            fmt->num_components--;
     }
 
     int gpu_bits = 0;
