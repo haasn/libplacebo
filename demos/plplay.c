@@ -377,6 +377,12 @@ static bool render_loop(struct plplay *p)
     update_colorspace_hint(p, &mix);
     if (!pl_swapchain_start_frame(p->win->swapchain, &frame))
         goto error;
+
+    // Disable background transparency by default if the swapchain does not
+    // appear to support alpha transaprency
+    if (frame.color_repr.alpha == PL_ALPHA_UNKNOWN)
+        p->params.background_transparency = 0.0;
+
     if (!render_frame(p, &frame, &mix))
         goto error;
     if (!pl_swapchain_submit_frame(p->win->swapchain))
@@ -665,24 +671,51 @@ static void update_settings(struct plplay *p)
 
     if (nk_begin(nk, "Settings", nk_rect(100, 100, 600, 600), win_flags)) {
 
-        struct nk_colorf bg = {
-            par->background_color[0],
-            par->background_color[1],
-            par->background_color[2],
-            1.0 - par->background_transparency,
-        };
+        if (nk_tree_push(nk, NK_TREE_NODE, "Window settings", NK_MAXIMIZED)) {
+            struct nk_colorf bg = {
+                par->background_color[0],
+                par->background_color[1],
+                par->background_color[2],
+                1.0 - par->background_transparency,
+            };
 
-        nk_layout_row_dynamic(nk, 24, 2);
-        nk_label(nk, "Background color:", NK_TEXT_LEFT);
-        if (nk_combo_begin_color(nk, nk_rgb_cf(bg), nk_vec2(nk_widget_width(nk), 300))) {
-            nk_layout_row_dynamic(nk, 200, 1);
-            nk_color_pick(nk, &bg, NK_RGBA);
-            nk_combo_end(nk);
+            nk_layout_row_dynamic(nk, 24, 2);
+            nk_label(nk, "Background color:", NK_TEXT_LEFT);
+            if (nk_combo_begin_color(nk, nk_rgb_cf(bg), nk_vec2(nk_widget_width(nk), 300))) {
+                nk_layout_row_dynamic(nk, 200, 1);
+                nk_color_pick(nk, &bg, NK_RGBA);
+                nk_combo_end(nk);
 
-            par->background_color[0] = bg.r;
-            par->background_color[1] = bg.g;
-            par->background_color[2] = bg.b;
-            par->background_transparency = 1.0 - bg.a;
+                par->background_color[0] = bg.r;
+                par->background_color[1] = bg.g;
+                par->background_color[2] = bg.b;
+                par->background_transparency = 1.0 - bg.a;
+            }
+
+            nk_layout_row_dynamic(nk, 24, 2);
+            par->blend_against_tiles = nk_check_label(nk, "Blend against tiles", par->blend_against_tiles);
+            nk_property_int(nk, "Tile size", 2, &par->tile_size, 256, 1, 1);
+
+            nk_layout_row(nk, NK_DYNAMIC, 24, 3, (float[]){ 0.4, 0.3, 0.3 });
+            nk_label(nk, "Tile colors:", NK_TEXT_LEFT);
+            for (int i = 0; i < 2; i++) {
+                bg = (struct nk_colorf) {
+                    par->tile_colors[i][0],
+                    par->tile_colors[i][1],
+                    par->tile_colors[i][2],
+                };
+
+                if (nk_combo_begin_color(nk, nk_rgb_cf(bg), nk_vec2(nk_widget_width(nk), 300))) {
+                    nk_layout_row_dynamic(nk, 200, 1);
+                    nk_color_pick(nk, &bg, NK_RGB);
+                    nk_combo_end(nk);
+
+                    par->tile_colors[i][0] = bg.r;
+                    par->tile_colors[i][1] = bg.g;
+                    par->tile_colors[i][2] = bg.b;
+                }
+            }
+            nk_tree_pop(nk);
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Image scaling", NK_MAXIMIZED)) {
