@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
       'remove fields deprecated for libplacebo v3',
       'add preprocessor macros for default params',
       'make H.274 film grain values indirect',
+      'support rotation in pl_renderer',
     ].length(),
     # Fix version
     0)

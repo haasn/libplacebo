@@ -347,6 +347,9 @@ struct pass_state {
     // Integer version of `target.crop`. Semantically identical.
     struct pl_rect2d dst_rect;
 
+    // Logical end-to-end rotation
+    pl_rotation rotation;
+
     // Cached copies of the `image` / `target` for this rendering pass,
     // corrected to make sure all rects etc. are properly defaulted/inferred.
     struct pl_frame image;
@@ -1917,12 +1920,22 @@ fallback:
         pl_shader_encode_color(sh, &repr);
     if (lut_type == PL_LUT_NATIVE)
         pl_shader_custom_lut(sh, target->lut, &rr->lut_state[LUT_TARGET]);
+
+    // Rotation handling
+    struct pl_rect2d dst_rect = pass->dst_rect;
+    if (pass->rotation % PL_ROTATION_180 == PL_ROTATION_90) {
+        PL_SWAP(dst_rect.x0, dst_rect.y0);
+        PL_SWAP(dst_rect.x1, dst_rect.y1);
+        PL_SWAP(img->w, img->h);
+        sh->transpose = true;
+    }
+
     pass_hook(pass, img, PL_HOOK_OUTPUT);
     sh = NULL;
 
     const struct pl_plane *ref = &target->planes[pass->dst_ref];
-    bool flipped_x = pass->dst_rect.x1 < pass->dst_rect.x0,
-         flipped_y = pass->dst_rect.y1 < pass->dst_rect.y0;
+    bool flipped_x = dst_rect.x1 < dst_rect.x0,
+         flipped_y = dst_rect.y1 < dst_rect.y0;
 
     if (!params->skip_target_clearing && pl_frame_is_cropped(target))
         pl_frame_clear_rgba(rr->gpu, target, CLEAR_COL(params));
@@ -1940,10 +1953,10 @@ fallback:
         float sx = plane->shift_x, sy = plane->shift_y;
 
         struct pl_rect2df dst_rectf = {
-            .x0 = (pass->dst_rect.x0 - sx) * rrx,
-            .y0 = (pass->dst_rect.y0 - sy) * rry,
-            .x1 = (pass->dst_rect.x1 - sx) * rrx,
-            .y1 = (pass->dst_rect.y1 - sy) * rry,
+            .x0 = (dst_rect.x0 - sx) * rrx,
+            .y0 = (dst_rect.y0 - sy) * rry,
+            .x1 = (dst_rect.x1 - sx) * rrx,
+            .y1 = (dst_rect.y1 - sy) * rry,
         };
 
         // Normalize to make the math easier
@@ -1960,7 +1973,7 @@ fallback:
 
         if (target->num_planes > 1) {
 
-            // Planar input, so we need to sample from an intermediate FBO
+            // Planar output, so we need to sample from an intermediate FBO
             struct pl_sample_src src = {
                 .tex        = img_tex(pass, img),
                 .new_w      = rx1 - rx0,
@@ -2240,6 +2253,7 @@ static void fix_refs_and_rects(struct pass_state *pass)
     struct pl_rect2df *src = &image->crop, *dst = &target->crop;
     pl_tex src_ref = pass->image.planes[pass->src_ref].texture;
     pl_tex dst_ref = pass->target.planes[pass->dst_ref].texture;
+    int dst_w = dst_ref->params.w, dst_h = dst_ref->params.h;
 
     if ((!src->x0 && !src->x1) || (!src->y0 && !src->y1)) {
         src->x1 = src_ref->params.w;
@@ -2247,9 +2261,15 @@ static void fix_refs_and_rects(struct pass_state *pass)
     };
 
     if ((!dst->x0 && !dst->x1) || (!dst->y0 && !dst->y1)) {
-        dst->x1 = dst_ref->params.w;
-        dst->y1 = dst_ref->params.h;
+        dst->x1 = dst_w;
+        dst->y1 = dst_h;
     }
+
+    // Compute end-to-end rotation
+    pass->rotation = pl_rotation_normalize(image->rotation - target->rotation);
+    pl_rect2df_rotate(dst, -pass->rotation); // normalize by counter-rotating
+    if (pass->rotation % PL_ROTATION_180 == PL_ROTATION_90)
+        PL_SWAP(dst_w, dst_h);
 
     // Keep track of whether the end-to-end rendering is flipped
     bool flipped_x = (src->x0 > src->x1) != (dst->x0 > dst->x1),
@@ -2262,8 +2282,8 @@ static void fix_refs_and_rects(struct pass_state *pass)
     // Round the output rect and clip it to the framebuffer dimensions
     float rx0 = roundf(PL_MAX(dst->x0, 0.0)),
           ry0 = roundf(PL_MAX(dst->y0, 0.0)),
-          rx1 = roundf(PL_MIN(dst->x1, dst_ref->params.w)),
-          ry1 = roundf(PL_MIN(dst->y1, dst_ref->params.h));
+          rx1 = roundf(PL_MIN(dst->x1, dst_w)),
+          ry1 = roundf(PL_MIN(dst->y1, dst_h));
 
     // Adjust the src rect corresponding to the rounded crop
     float scale_x = pl_rect_w(*src) / pl_rect_w(*dst),
@@ -2702,7 +2722,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                 .params = pass.params,
                 .fbos_used = pl_calloc(pass.tmp, rr->fbos.num, sizeof(bool)),
                 .image = *images->frames[i],
-                .target = pass.target,
+                .target = *ptarget,
                 .info.stage = PL_RENDER_STAGE_FRAME,
             };
 

@@ -340,7 +340,7 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
     double dar = pl_rect2df_aspect(&mix->frames[0]->crop);
     if (avframe->sample_aspect_ratio.num)
         dar *= av_q2d(avframe->sample_aspect_ratio);
-    pl_rect2df_aspect_set(&target.crop, dar, 0.0);
+    pl_rect2df_aspect_set_rot(&target.crop, dar, mix->frames[0]->rotation, 0.0);
 
     if (!pl_render_image_mix(p->renderer, mix, &target, &p->params))
         return false;

@@ -360,3 +360,36 @@ void pl_rect2df_offset(struct pl_rect2df *rc, float offset_x, float offset_y)
     rc->y0 += offset_y;
     rc->y1 += offset_y;
 }
+
+void pl_rect2df_rotate(struct pl_rect2df *rc, pl_rotation rot)
+{
+    if (!(rot = pl_rotation_normalize(rot)))
+        return;
+
+    float x0 = rc->x0, y0 = rc->y0, x1 = rc->x1, y1 = rc->y1;
+    if (rot >= PL_ROTATION_180) {
+        rot -= PL_ROTATION_180;
+        PL_SWAP(x0, x1);
+        PL_SWAP(y0, y1);
+    }
+
+    switch (rot) {
+    case PL_ROTATION_0:
+        *rc = (struct pl_rect2df) {
+            .x0 = x0,
+            .y0 = y0,
+            .x1 = x1,
+            .y1 = y1,
+        };
+        return;
+    case PL_ROTATION_90:
+        *rc = (struct pl_rect2df) {
+            .x0 = y1,
+            .y0 = x0,
+            .x1 = y0,
+            .y1 = x1,
+        };
+        return;
+    default: pl_unreachable();
+    }
+}

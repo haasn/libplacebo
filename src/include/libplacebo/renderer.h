@@ -460,6 +460,24 @@ struct pl_frame {
     // the aspect ratio, use a dedicated function like pl_rect2df_aspect_copy.
     struct pl_rect2df crop;
 
+    // Logical rotation of the image, with respect to the underlying planes.
+    // For example, if this is PL_ROTATION_90, then the image will be rotated
+    // to the right by 90° when mapping to `crop`. The actual position on-screen
+    // is unaffected, so users should ensure that the (rotated) aspect ratio
+    // matches the source. (Or use a helper like `pl_rect2df_aspect_set_rot`)
+    //
+    // Note: For `target` frames, this corresponds to a rotation of the
+    // display, for `image` frames, this corresponds to a rotation of the
+    // camera.
+    //
+    // So, as an example, target->rotation = PL_ROTATE_90 means the end user
+    // has rotated the display to the right by 90° (meaning rendering will be
+    // rotated 90° to the *left* to compensate), and image->rotation =
+    // PL_ROTATE_90 means the video provider has rotated the camera to the
+    // right by 90° (so rendering will be rotated 90° to the *right* to
+    // compensate).
+    pl_rotation rotation;
+
     // A list of additional overlays to render directly on top of this frame.
     // These overlays will be treated as though they were part of the frame
     // data, and can be used for things like subtitles or on-screen displays.

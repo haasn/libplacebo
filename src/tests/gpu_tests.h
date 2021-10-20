@@ -1119,6 +1119,12 @@ static void pl_render_tests(pl_gpu gpu)
     REQUIRE(pl_render_image(rr, NULL, &target, &params));
     target.num_overlays = 0;
 
+    // Test rotation
+    for (pl_rotation rot = 0; rot < PL_ROTATION_360; rot += PL_ROTATION_90) {
+        image.rotation = rot;
+        REQUIRE(pl_render_image(rr, &image, &target, &params));
+    }
+
     // Attempt frame mixing, using the mixer queue helper
     printf("testing frame mixing \n");
     struct pl_render_params mix_params = {
