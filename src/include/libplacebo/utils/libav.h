@@ -23,6 +23,7 @@
 
 PL_API_BEGIN
 
+#include <libavformat/avformat.h>
 #include <libavutil/frame.h>
 #include <libavcodec/avcodec.h>
 
@@ -41,6 +42,13 @@ static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *fra
 // Deprecated aliases for backwards compatibility
 #define pl_image_from_avframe pl_frame_from_avframe
 #define pl_target_from_avframe pl_frame_from_avframe
+
+// Copy extra metadata from an AVStream to a pl_frame. This should be called
+// after `pl_frame_from_avframe` or `pl_upload_avframe` (respectively), and
+// sets metadata associated with stream-level side data. This is needed because
+// FFmpeg rather annoyingly does not propagate stream-level metadata to frames.
+static void pl_frame_copy_stream_props(struct pl_frame *out_frame,
+                                       const AVStream *stream);
 
 // Helper function to generate a `pl_swapchain_colors` struct from an AVFrame.
 // Useful to update the swapchain colorspace mode dynamically (e.g. for HDR).

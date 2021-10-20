@@ -203,12 +203,15 @@ static bool map_frame(pl_gpu gpu, pl_tex *tex,
                       const struct pl_source_frame *src,
                       struct pl_frame *out_frame)
 {
-    if (!pl_upload_avframe(gpu, out_frame, tex, src->frame_data)) {
+    AVFrame *frame = src->frame_data;
+    struct plplay *p = frame->opaque;
+    if (!pl_upload_avframe(gpu, out_frame, tex, frame)) {
         fprintf(stderr, "Failed uploading AVFrame!\n");
         return false;
     }
 
-    out_frame->user_data = src->frame_data;
+    pl_frame_copy_stream_props(out_frame, p->stream);
+    out_frame->user_data = frame;
     return true;
 }
 
@@ -271,6 +274,7 @@ static void *decode_loop(void *arg)
                 first_frame = false;
             }
 
+            frame->opaque = p;
             pl_queue_push_block(p->queue, UINT64_MAX, &(struct pl_source_frame) {
                 .pts = pts - start_pts,
                 .map = map_frame,

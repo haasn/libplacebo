@@ -637,6 +637,25 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
     }
 }
 
+static inline void pl_frame_copy_stream_props(struct pl_frame *out,
+                                              const AVStream *stream)
+{
+    const uint8_t *sd;
+    if ((sd = av_stream_get_side_data(stream, AV_PKT_DATA_CONTENT_LIGHT_LEVEL, NULL))) {
+        const AVContentLightMetadata *clm = (AVContentLightMetadata *) sd;
+        out->color.sig_peak = clm->MaxCLL / PL_COLOR_SDR_WHITE;
+        out->color.sig_avg = clm->MaxFALL / PL_COLOR_SDR_WHITE;
+    }
+
+    if ((sd = av_stream_get_side_data(stream, AV_PKT_DATA_MASTERING_DISPLAY_METADATA, NULL))) {
+        const AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *) sd;
+        if (mdm->has_luminance) {
+            out->color.sig_peak = av_q2d(mdm->max_luminance) / PL_COLOR_SDR_WHITE;
+            out->color.sig_floor = av_q2d(mdm->min_luminance) / PL_COLOR_SDR_WHITE;
+        }
+    }
+}
+
 static inline void pl_swapchain_colors_from_avframe(struct pl_swapchain_colors *out_colors,
                                                     const AVFrame *avframe)
 {

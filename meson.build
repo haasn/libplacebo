@@ -13,6 +13,7 @@ project('libplacebo', ['c', 'cpp'],
       'add preprocessor macros for default params',
       'make H.274 film grain values indirect',
       'support rotation in pl_renderer',
+      'add pl_frame_copy_stream_props',
     ].length(),
     # Fix version
     0)
