@@ -25,6 +25,7 @@
 #include <libavutil/imgutils.h>
 #include <libavutil/mastering_display_metadata.h>
 #include <libavutil/pixdesc.h>
+#include <libavutil/display.h>
 
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(56, 61, 100)
 #define HAVE_LAV_FILM_GRAIN
@@ -538,6 +539,11 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
         }
     }
 
+    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DISPLAYMATRIX))) {
+        double rot = av_display_rotation_get((const int32_t *) sd->data);
+        out->rotation = pl_rotation_normalize(-round(rot / 90.0));
+    }
+
     // Make sure this value is more or less legal
     if (out->color.sig_peak < 1.0 || out->color.sig_peak > 50.0)
         out->color.sig_peak = 0.0;
@@ -653,6 +659,11 @@ static inline void pl_frame_copy_stream_props(struct pl_frame *out,
             out->color.sig_peak = av_q2d(mdm->max_luminance) / PL_COLOR_SDR_WHITE;
             out->color.sig_floor = av_q2d(mdm->min_luminance) / PL_COLOR_SDR_WHITE;
         }
+    }
+
+    if ((sd = av_stream_get_side_data(stream, AV_PKT_DATA_DISPLAYMATRIX, NULL))) {
+        double rot = av_display_rotation_get((const int32_t *) sd);
+        out->rotation = pl_rotation_normalize(-round(rot / 90.0));
     }
 }
 

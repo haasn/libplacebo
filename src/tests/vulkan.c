@@ -157,7 +157,8 @@ int main()
         .allow_software = true,
         .surface = surf,
     ));
-    REQUIRE(dev);
+    if (!dev)
+        return SKIP;
 
     // Test all attached devices
     for (int i = 0; i < num; i++) {
