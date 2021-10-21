@@ -71,6 +71,7 @@ struct plplay {
     struct pl_cone_params cone_params;
     struct pl_color_space target_color;
     struct pl_color_repr target_repr;
+    pl_rotation target_rot;
     bool target_override;
     bool levels_override;
 
@@ -344,7 +345,10 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
     double dar = pl_rect2df_aspect(&mix->frames[0]->crop);
     if (avframe->sample_aspect_ratio.num)
         dar *= av_q2d(avframe->sample_aspect_ratio);
-    pl_rect2df_aspect_set_rot(&target.crop, dar, mix->frames[0]->rotation, 0.0);
+    target.rotation = p->target_rot;
+    pl_rect2df_aspect_set_rot(&target.crop, dar,
+                              mix->frames[0]->rotation - target.rotation,
+                              0.0);
 
     if (!pl_render_image_mix(p->renderer, mix, &target, &p->params))
         return false;
@@ -715,6 +719,18 @@ static void update_settings(struct plplay *p)
                     par->tile_colors[i][2] = bg.b;
                 }
             }
+
+            static const char *rotations[4] = {
+                [PL_ROTATION_0]   = "0°",
+                [PL_ROTATION_90]  = "90°",
+                [PL_ROTATION_180] = "180°",
+                [PL_ROTATION_270] = "270°",
+            };
+
+            nk_layout_row_dynamic(nk, 24, 2);
+            nk_label(nk, "Display orientation:", NK_TEXT_LEFT);
+            p->target_rot = nk_combo(nk, rotations, 4, p->target_rot,
+                                     16, nk_vec2(nk_widget_width(nk), 100));
             nk_tree_pop(nk);
         }
 
