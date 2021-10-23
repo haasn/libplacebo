@@ -1506,7 +1506,6 @@ static bool pass_read_image(struct pass_state *pass)
           stretch_x = roundf(pl_rect_w(ref->img.rect)) / pl_rect_w(ref->img.rect),
           stretch_y = roundf(pl_rect_h(ref->img.rect)) / pl_rect_h(ref->img.rect);
 
-    bool has_alpha = false;
     for (int i = 0; i < image->num_planes; i++) {
         struct plane_state *st = &planes[i];
         const struct pl_plane *plane = &st->plane;
@@ -1575,8 +1574,6 @@ static bool pass_read_image(struct pass_state *pass)
             if (plane->component_mapping[c] < 0)
                 continue;
             GLSL("color[%d] = tmp[%d];\n", plane->component_mapping[c], c);
-
-            has_alpha |= plane->component_mapping[c] == PL_CHANNEL_A;
         }
 
         // we don't need it anymore
@@ -1591,7 +1588,7 @@ static bool pass_read_image(struct pass_state *pass)
         .h      = ref->img.h,
         .repr   = ref->img.repr,
         .color  = image->color,
-        .comps  = has_alpha ? 4 : 3,
+        .comps  = ref->img.repr.alpha ? 4 : 3,
         .rect   = {
             off_x,
             off_y,
@@ -1919,6 +1916,7 @@ fallback:
         if (memcmp(color, zero, sizeof(zero)) == 0)
             color = pl_render_default_params.tile_colors;
         int size = PL_DEF(params->tile_size, pl_render_default_params.tile_size);
+        pl_assert(img->repr.alpha != PL_ALPHA_INDEPENDENT);
         GLSLH("#define bg_tile_a vec3(%s, %s, %s) \n",
               SH_FLOAT(color[0][0]), SH_FLOAT(color[0][1]), SH_FLOAT(color[0][2]));
         GLSLH("#define bg_tile_b vec3(%s, %s, %s) \n",
@@ -2406,9 +2404,24 @@ static bool pass_infer_state(struct pass_state *pass)
     pl_color_space_infer_ref(&target->color, &image->color);
     fix_color_space(target);
 
-    // Detect the presence of an alpha channel in the target and explicitly
+    // Detect the presence of an alpha channel in the frames and explicitly
     // default the alpha mode in this case, so we can use it to detect whether
     // or not to strip the alpha channel during rendering.
+    //
+    // Note the different defaults for the image and target, because files
+    // are usually independent but windowing systems usually expect
+    // premultiplied. (We also premultiply for internal rendering, so this
+    // way of doing it avoids a possible division-by-zero path!)
+    if (!image->repr.alpha) {
+        for (int i = 0; i < image->num_planes; i++) {
+            const struct pl_plane *plane = &image->planes[i];
+            for (int c = 0; c < plane->components; c++) {
+                if (plane->component_mapping[c] == PL_CHANNEL_A)
+                    image->repr.alpha = PL_ALPHA_INDEPENDENT;
+            }
+        }
+    }
+
     if (!target->repr.alpha) {
         for (int i = 0; i < target->num_planes; i++) {
             const struct pl_plane *plane = &target->planes[i];
