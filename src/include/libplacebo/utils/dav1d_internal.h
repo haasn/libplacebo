@@ -19,7 +19,9 @@
 #error This header should be included as part of <libplacebo/utils/dav1d.h>
 #else
 
+#include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 static inline enum pl_color_system pl_system_from_dav1d(enum Dav1dMatrixCoefficients mc)
 {
