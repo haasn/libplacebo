@@ -904,14 +904,14 @@ static bool lookup_tex(void *priv, pl_str var, float size[2])
     }
 
     if (pl_str_equals0(var, "NATIVE_CROPPED")) {
-        size[0] = pl_rect_w(params->src_rect);
-        size[1] = pl_rect_h(params->src_rect);
+        size[0] = fabs(pl_rect_w(params->src_rect));
+        size[1] = fabs(pl_rect_h(params->src_rect));
         return true;
     }
 
     if (pl_str_equals0(var, "OUTPUT")) {
-        size[0] = pl_rect_w(params->dst_rect);
-        size[1] = pl_rect_h(params->dst_rect);
+        size[0] = abs(pl_rect_w(params->dst_rect));
+        size[1] = abs(pl_rect_h(params->dst_rect));
         return true;
     }
 
