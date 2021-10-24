@@ -601,12 +601,11 @@ no_descriptors: ;
             loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         }
 
-        struct pl_fmt_vk *fmt_vk = PL_PRIV(texparams.format);
         VkRenderPassCreateInfo rinfo = {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
             .attachmentCount = 1,
             .pAttachments = &(VkAttachmentDescription) {
-                .format = fmt_vk->vk_fmt->tfmt,
+                .format = (VkFormat) texparams.format->signature,
                 .samples = VK_SAMPLE_COUNT_1_BIT,
                 .loadOp = loadOp,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,

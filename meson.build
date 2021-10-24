@@ -15,6 +15,7 @@ project('libplacebo', ['c', 'cpp'],
       'support rotation in pl_renderer',
       'add pl_frame_copy_stream_props',
       'support blending against tiles',
+      'add pl_fmt.signature',
     ].length(),
     # Fix version
     0)

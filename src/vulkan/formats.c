@@ -246,6 +246,10 @@ void vk_setup_formats(struct pl_gpu *gpu)
             .vk_fmt = vk_fmt
         };
 
+        // Always set the signature to the actual texture format, so we can use
+        // it to guarantee renderpass compatibility.
+        fmt->signature = (uint64_t) vk_fmt->tfmt;
+
         // For sanity, clear the superfluous fields
         for (int i = fmt->num_components; i < 4; i++) {
             fmt->component_depth[i] = 0;

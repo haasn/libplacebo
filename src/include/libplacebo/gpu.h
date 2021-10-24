@@ -295,6 +295,7 @@ enum pl_fmt_caps {
 // Structure describing a texel/vertex format.
 PL_STRUCT(pl_fmt) {
     const char *name;       // symbolic name for this format (e.g. rgba32f)
+    uint64_t signature;     // unique but stable signature (for pass reusability)
 
     enum pl_fmt_type type;  // the format's data type and interpretation
     enum pl_fmt_caps caps;  // the features supported by this format
@@ -1265,8 +1266,10 @@ struct pl_pass_run_params {
 
     // --- pass->params.type==PL_PASS_RASTER only
 
-    // Target must be a 2D texture, target->params.renderable must be true, and
-    // target->params.format must match pass->params.target_dummy.params.format.
+    // Target must be a 2D texture, `target->params.renderable` must be true,
+    // and `target->params.format->signature` must match the signature provided
+    // in `pass->params.target_dummy.params.format`.
+    //
     // If the viewport or scissors are left blank, they are inferred from
     // target->params.
     //

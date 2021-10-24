@@ -1504,7 +1504,9 @@ void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         pl_tex target = params->target;
         require(target);
         require(pl_tex_params_dimension(target->params) == 2);
-        require(target->params.format == pass->params.target_dummy.params.format);
+        pl_fmt target_fmt = target->params.format;
+        pl_fmt pass_target_fmt = pass->params.target_dummy.params.format;
+        require(target_fmt->signature == pass_target_fmt->signature);
         require(target->params.renderable);
         struct pl_rect2d *vp = &new.viewport;
         struct pl_rect2d *sc = &new.scissors;
