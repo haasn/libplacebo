@@ -434,8 +434,10 @@ if get_option('tests')
 
   lavu = dependency('libavutil', version: '>=55.74.100', required: false)
   lavc = dependency('libavcodec', required: false)
-  if lavu.found() and lavc.found()
-    tdep += [lavu, lavc]
+  lavf = dependency('libavformat', required: false)
+  libav_found = lavu.found() and lavc.found() and lavf.found()
+  if libav_found
+    tdep += [lavu, lavc, lavf]
     tests += 'libav.c'
   endif
 
