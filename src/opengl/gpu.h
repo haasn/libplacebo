@@ -36,9 +36,6 @@ struct pl_gl {
     EGLContext egl_ctx;
 #endif
 
-    // Dynamic array of FBO formats, to ensure format uniqueness
-    PL_ARRAY(struct fbo_format) fbo_formats;
-
     // Sync objects and associated callbacks
     PL_ARRAY(struct gl_cb) callbacks;
 

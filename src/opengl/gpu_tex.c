@@ -606,38 +606,17 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
         }
     } else {
         // Wrapping framebuffer: Allocate/infer generic FBO format
-        struct pl_fmt new_fmt;
-        struct gl_format new_glfmt;
-        memset(&new_fmt, 0, sizeof(new_fmt)); // to enable memcmp
-        memset(&new_glfmt, 0, sizeof(new_glfmt));
-        if (!gl_fb_query(gpu, params->framebuffer, &new_fmt, &new_glfmt)) {
+        fmt = pl_alloc_obj((void *) gpu, fmt, const struct gl_format *);
+        glfmt = pl_alloc_ptr((void *) fmt, glfmt);
+        const struct gl_format **glfmtp = PL_PRIV(fmt);
+        *glfmtp = glfmt;
+        if (!gl_fb_query(gpu, params->framebuffer,
+                         (struct pl_fmt *) fmt,
+                         (struct gl_format *) glfmt))
+        {
             PL_ERR(gpu, "Failed querying framebuffer specifics!");
+            pl_free((void *) fmt);
             goto error;
-        }
-
-        // Look up this fmt/glfmt in the existing list of FBO formats
-        for (int i = 0; i < p->fbo_formats.num; i++) {
-            const struct fbo_format *fbofmt = &p->fbo_formats.elem[i];
-            if (memcmp(&new_fmt, fbofmt->fmt, sizeof(new_fmt)) == 0 &&
-                memcmp(&new_glfmt, fbofmt->glfmt, sizeof(new_glfmt)) == 0)
-            {
-                fmt = fbofmt->fmt;
-                glfmt = fbofmt->glfmt;
-                break;
-            }
-        }
-
-        if (!fmt) {
-            fmt = pl_alloc_obj((void *) gpu, fmt, const struct gl_format *);
-            memcpy((struct pl_fmt *) fmt, &new_fmt, sizeof(new_fmt));
-            glfmt = pl_memdup((void *) gpu, &new_glfmt, sizeof(new_glfmt));
-            const struct gl_format **glfmtp = PL_PRIV(fmt);
-            *glfmtp = glfmt;
-
-            PL_ARRAY_APPEND(gpu, p->fbo_formats, (struct fbo_format) {
-                .fmt = fmt,
-                .glfmt = glfmt,
-            });
         }
     }
 
