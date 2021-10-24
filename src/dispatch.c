@@ -1037,6 +1037,8 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
                                      const struct pl_dispatch_params *params)
 {
     int width = abs(pl_rect_w(*rc)), height = abs(pl_rect_h(*rc));
+    if (sh->transpose)
+        PL_SWAP(width, height);
     ident_t out_scale;
     compute_vertex_attribs(dp, sh, width, height, &out_scale);
 
@@ -1069,7 +1071,7 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
     const char *swiz = sh->transpose ? "yx" : "xy";
     GLSL("ivec2 dir = ivec2(%d, %d);\n", dx, dy); // hard-code, not worth var
     GLSL("ivec2 pos = %s + dir * ivec2(gl_GlobalInvocationID).%s;\n", base, swiz);
-    GLSL("vec2 fpos = %s * vec2(gl_GlobalInvocationID).%s;\n", out_scale, swiz);
+    GLSL("vec2 fpos = %s * vec2(gl_GlobalInvocationID);\n", out_scale);
     GLSL("if (fpos.x < 1.0 && fpos.y < 1.0) {\n");
     if (params->blend_params) {
         GLSL("vec4 orig = imageLoad(%s, pos);\n", fbo);
@@ -1281,10 +1283,12 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
 
     // For compute shaders: also update the dispatch dimensions
     if (pl_shader_is_compute(sh)) {
-        // Round up to make sure we don-t leave off a part of the target
         int width = abs(pl_rect_w(rc)),
-            height = abs(pl_rect_h(rc)),
-            block_w = res->compute_group_size[0],
+            height = abs(pl_rect_h(rc));
+        if (sh->transpose)
+            PL_SWAP(width, height);
+        // Round up to make sure we don't leave off a part of the target
+        int block_w = res->compute_group_size[0],
             block_h = res->compute_group_size[1],
             num_x   = (width  + block_w - 1) / block_w,
             num_y   = (height + block_h - 1) / block_h;
