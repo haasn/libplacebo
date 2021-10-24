@@ -459,8 +459,9 @@ if get_option('tests')
   # Ensure all headers compile
   foreach h : headers
 
-    # These are special cased because of their single-header nature
-    if h.contains('dav1d') or h.contains('libav')
+    if (h.contains('internal') or
+        h.contains('dav1d') and not dav1d.found() or
+        h.contains('libav') and not libav_found)
       continue
     endif
 
