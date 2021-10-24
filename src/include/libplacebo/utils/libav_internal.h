@@ -541,7 +541,7 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
 
     if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DISPLAYMATRIX))) {
         double rot = av_display_rotation_get((const int32_t *) sd->data);
-        out->rotation = pl_rotation_normalize(-round(rot / 90.0));
+        out->rotation = pl_rotation_normalize(4.5 - rot / 90.0);
     }
 
     // Make sure this value is more or less legal
@@ -663,7 +663,7 @@ static inline void pl_frame_copy_stream_props(struct pl_frame *out,
 
     if ((sd = av_stream_get_side_data(stream, AV_PKT_DATA_DISPLAYMATRIX, NULL))) {
         double rot = av_display_rotation_get((const int32_t *) sd);
-        out->rotation = pl_rotation_normalize(-round(rot / 90.0));
+        out->rotation = pl_rotation_normalize(4.5 - rot / 90.0);
     }
 }
 
