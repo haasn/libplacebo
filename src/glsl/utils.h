@@ -20,8 +20,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "config.h"
-#include "include/libplacebo/gpu.h"
+#include <libplacebo/gpu.h>
 
 struct pl_spirv_version {
     bool vulkan;

@@ -1,5 +1,4 @@
-#include "config.h"
-#include "include/libplacebo/@header@"
+#include <libplacebo/@header@>
 
 int main()
 {

@@ -50,28 +50,32 @@
 // as being externally visible. (Otherwise, all symbols are hidden by default)
 #pragma GCC visibility push(default)
 
-#include "config.h"
+#include <libplacebo/config.h>
 #undef PL_DEPRECATED
 #define PL_DEPRECATED
 
-#include "include/libplacebo/colorspace.h"
-#include "include/libplacebo/common.h"
-#include "include/libplacebo/log.h"
-#include "include/libplacebo/dispatch.h"
-#include "include/libplacebo/dither.h"
-#include "include/libplacebo/dummy.h"
-#include "include/libplacebo/filters.h"
-#include "include/libplacebo/gpu.h"
-#include "include/libplacebo/renderer.h"
-#include "include/libplacebo/shaders.h"
-#include "include/libplacebo/shaders/colorspace.h"
-#include "include/libplacebo/shaders/custom.h"
-#include "include/libplacebo/shaders/film_grain.h"
-#include "include/libplacebo/shaders/lut.h"
-#include "include/libplacebo/shaders/sampling.h"
-#include "include/libplacebo/swapchain.h"
-#include "include/libplacebo/utils/frame_queue.h"
-#include "include/libplacebo/utils/upload.h"
+#if PL_API_VER != BUILD_API_VER
+#error Header mismatch? <libplacebo/config.h> pulled from elsewhere!
+#endif
+
+#include <libplacebo/colorspace.h>
+#include <libplacebo/common.h>
+#include <libplacebo/log.h>
+#include <libplacebo/dispatch.h>
+#include <libplacebo/dither.h>
+#include <libplacebo/dummy.h>
+#include <libplacebo/filters.h>
+#include <libplacebo/gpu.h>
+#include <libplacebo/renderer.h>
+#include <libplacebo/shaders.h>
+#include <libplacebo/shaders/colorspace.h>
+#include <libplacebo/shaders/custom.h>
+#include <libplacebo/shaders/film_grain.h>
+#include <libplacebo/shaders/lut.h>
+#include <libplacebo/shaders/sampling.h>
+#include <libplacebo/swapchain.h>
+#include <libplacebo/utils/frame_queue.h>
+#include <libplacebo/utils/upload.h>
 
 #ifdef PL_HAVE_LCMS
 #include "include/libplacebo/shaders/icc.h"

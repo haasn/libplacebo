@@ -21,6 +21,7 @@ conf_public = configuration_data()
 conf_internal = configuration_data()
 conf_public.set('majorver', majorver)
 conf_public.set('apiver', apiver)
+conf_internal.set('BUILD_API_VER', apiver)
 conf_internal.set('BUILD_FIX_VER', fixver)
 conf_internal.set_quoted('BUILD_VERSION', version_pretty)
 
@@ -360,25 +361,14 @@ endif
 
 # Build process
 conf_public.set('extra_defs', defs)
-
-configure_file(
-  input: 'config.h.in',
-  output: 'config.h',
-  install_dir: join_paths(get_option('includedir'), proj_name),
-  configuration: conf_public,
-)
+subdir('./include/libplacebo') # generate config.h in the right location
 
 configure_file(
   output: 'config_internal.h',
   configuration: conf_internal
 )
 
-# work around meson bugs
-inc = [
-  include_directories('./include'),
-  include_directories('./include/dummy'),
-]
-
+inc = include_directories('./include')
 lib = library('placebo', sources,
   install: true,
   dependencies: build_deps,
