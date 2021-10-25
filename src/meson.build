@@ -27,9 +27,7 @@ conf_internal.set_quoted('BUILD_VERSION', version_pretty)
 
 if opengl.found()
   has_egl = opengl.get_variable(pkgconfig: 'epoxy_has_egl', default_value: '0')
-  if has_egl.to_int() == 1
-    conf_internal.set10('EPOXY_HAS_EGL', true)
-  endif
+  conf_internal.set('EPOXY_HAS_EGL', has_egl.to_int() == 1)
 endif
 
 vulkan_headers = vulkan
