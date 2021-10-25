@@ -43,6 +43,5 @@
     {"ewa_robidouxsharp",   &pl_filter_ewa_robidouxsharp, "EWA RobidouxSharp"}, \
                                                                                 \
     /* Aliases */                                                               \
-    {"box",                 &pl_filter_nearest},                                \
     {"triangle",            &pl_filter_bilinear},                               \
     {"ewa_hanning",         &pl_filter_ewa_hann}

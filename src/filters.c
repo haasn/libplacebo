@@ -229,7 +229,6 @@ static double box(const struct pl_filter_function *f, double x)
 }
 
 const struct pl_filter_function pl_filter_function_box = {
-    .resizable = true,
     .weight    = box,
     .radius    = 1.0,
 };
