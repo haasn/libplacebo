@@ -64,7 +64,22 @@ static inline int pl_mutex_init_type_internal(pl_mutex *mutex, enum pl_mutex_typ
 #define pl_mutex_lock       pthread_mutex_lock
 #define pl_mutex_unlock     pthread_mutex_unlock
 
-#define pl_cond_init(cond)  pthread_cond_init(cond, NULL)
+static inline int pl_cond_init(pl_cond *cond)
+{
+    int ret = 0;
+    pthread_condattr_t attr;
+    ret = pthread_condattr_init(&attr);
+    if (ret != 0)
+        return ret;
+
+#ifdef PTHREAD_HAS_SETCLOCK
+    pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+#endif
+    ret = pthread_cond_init(cond, &attr);
+    pthread_condattr_destroy(&attr);
+    return ret;
+}
+
 #define pl_cond_destroy     pthread_cond_destroy
 #define pl_cond_broadcast   pthread_cond_broadcast
 #define pl_cond_signal      pthread_cond_signal
@@ -75,8 +90,19 @@ static inline int pl_cond_timedwait(pl_cond *cond, pl_mutex *mutex, uint64_t tim
     if (timeout == UINT64_MAX)
         return pthread_cond_wait(cond, mutex);
 
-    return pthread_cond_timedwait(cond, mutex, &(struct timespec) {
-            .tv_sec  = (timeout) / 1000000000LLU,
-            .tv_nsec = (timeout) % 1000000000LLU,
-        });
+    struct timespec ts;
+#ifdef PTHREAD_HAS_SETCLOCK
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+#else
+    clock_gettime(CLOCK_REALTIME, &ts);
+#endif
+    ts.tv_sec  += timeout / 1000000000LLU;
+    ts.tv_nsec += timeout % 1000000000LLU;
+
+    if (ts.tv_nsec > 1000000000LLU) {
+        ts.tv_nsec -= 1000000000LLU;
+        ts.tv_sec++;
+    }
+
+    return pthread_cond_timedwait(cond, mutex, &ts);
 }

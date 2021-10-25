@@ -16,6 +16,12 @@ if host_machine.system() == 'windows'
 else
     threads = dependency('threads')
     conf_internal.set('PL_HAVE_PTHREAD', threads.found())
+    conf_internal.set('PTHREAD_HAS_SETCLOCK', cc.has_header_symbol(
+      'pthread.h',
+      'pthread_condattr_setclock',
+      dependencies: threads,
+      args: c_opts,
+    ))
 endif
 
 build_deps = [ libm, threads ]
