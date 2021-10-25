@@ -17,7 +17,9 @@
 
 #pragma once
 
+#include <stdalign.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -81,9 +83,8 @@ char *pl_strndup0(void *parent, const char *str, size_t size);
 // `priv` at the address of `pub` + sizeof(pub), rounded up to the maximum
 // alignment requirements.
 
-#define pl_max_align offsetof(struct { char c; intmax_t x; }, x)
 #define PL_ALIGN_MEM(size) \
-    (((size) + pl_max_align - 1) & ~(pl_max_align - 1))
+    (((size) + alignof(max_align_t) - 1) & ~(alignof(max_align_t) - 1))
 
 #define PL_PRIV(pub) \
     (void *) ((uintptr_t) (pub) + PL_ALIGN_MEM(sizeof(*(pub))))
