@@ -32,3 +32,6 @@
       }                                                         \
   } while (0)
 #endif
+
+// In C11, static asserts must have a string message
+#define pl_static_assert(expr) static_assert(expr, #expr)

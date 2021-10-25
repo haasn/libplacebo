@@ -606,7 +606,7 @@ void vk_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    false);
 
-    assert(sizeof(VkClearColorValue) == sizeof(union pl_clear_color));
+    pl_static_assert(sizeof(VkClearColorValue) == sizeof(union pl_clear_color));
     const VkClearColorValue *clearColor = (const VkClearColorValue *) &color;
 
     static const VkImageSubresourceRange range = {

@@ -435,7 +435,7 @@ static void generate_offsets(void *pbuf, const struct sh_lut_params *params)
 {
     const struct pl_film_grain_data *data = params->priv;
     unsigned int *buf = pbuf;
-    assert(sizeof(unsigned int) >= sizeof(uint32_t));
+    pl_static_assert(sizeof(unsigned int) >= sizeof(uint32_t));
 
     for (int y = 0; y < params->height; y++) {
         uint16_t state = data->seed;

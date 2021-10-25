@@ -498,7 +498,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     gpu->import_caps.sync = 0; // Not supported yet
 
     if (pl_gpu_supports_interop(gpu)) {
-        assert(sizeof(gpu->uuid) == VK_UUID_SIZE);
+        pl_static_assert(sizeof(gpu->uuid) == VK_UUID_SIZE);
         memcpy(gpu->uuid, id_props.deviceUUID, sizeof(gpu->uuid));
 
         gpu->pci.domain = pci_props.pciDomain;
