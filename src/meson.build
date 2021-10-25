@@ -1,22 +1,4 @@
-# Dependencies
-prog_python = import('python').find_installation()
-libm = cc.find_library('m', required: false)
-
-if host_machine.system() == 'windows'
-    thread_deps = declare_dependency()
-else
-    thread_deps = dependency('threads')
-endif
-
-build_deps = [ libm, thread_deps ]
-test_deps = []
-
-vulkan = dependency('vulkan', version: '>=1.1', required: get_option('vulkan'))
-opengl = dependency('epoxy', version: '>=1.4.0', required: get_option('opengl'))
-shaderc = dependency('shaderc', version: '>=2019.1', required: get_option('shaderc'))
-cross = dependency('spirv-cross-c-shared', version: '>=0.29.0', required: get_option('d3d11'))
-
-# configuration data
+# Configuration data
 conf_public = configuration_data()
 conf_internal = configuration_data()
 conf_public.set('majorver', majorver)
@@ -24,6 +6,25 @@ conf_public.set('apiver', apiver)
 conf_internal.set('BUILD_API_VER', apiver)
 conf_internal.set('BUILD_FIX_VER', fixver)
 conf_internal.set_quoted('BUILD_VERSION', version_pretty)
+
+# Dependencies
+prog_python = import('python').find_installation()
+libm = cc.find_library('m', required: false)
+
+if host_machine.system() == 'windows'
+    threads = declare_dependency()
+else
+    threads = dependency('threads')
+    conf_internal.set('PL_HAVE_PTHREAD', threads.found())
+endif
+
+build_deps = [ libm, threads ]
+test_deps = []
+
+vulkan = dependency('vulkan', version: '>=1.1', required: get_option('vulkan'))
+opengl = dependency('epoxy', version: '>=1.4.0', required: get_option('opengl'))
+shaderc = dependency('shaderc', version: '>=2019.1', required: get_option('shaderc'))
+cross = dependency('spirv-cross-c-shared', version: '>=0.29.0', required: get_option('d3d11'))
 
 if opengl.found()
   has_egl = opengl.get_variable(pkgconfig: 'epoxy_has_egl', default_value: '0')

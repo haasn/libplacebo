@@ -23,6 +23,11 @@
 typedef CRITICAL_SECTION   pl_mutex;
 typedef CONDITION_VARIABLE pl_cond;
 
+enum pl_mutex_type {
+    PL_MUTEX_NORMAL = 0,
+    PL_MUTEX_RECURSIVE,
+};
+
 static inline int pl_mutex_init_type_internal(pl_mutex *mutex, enum pl_mutex_type mtype)
 {
     return !InitializeCriticalSectionEx(mutex, 0, 0);
@@ -30,9 +35,6 @@ static inline int pl_mutex_init_type_internal(pl_mutex *mutex, enum pl_mutex_typ
 
 #define pl_mutex_init_type(mutex, mtype) \
     PL_CHECK_ERR(pl_mutex_init_type_internal(mutex, mtype))
-
-#define pl_mutex_init(mutex) \
-    pl_mutex_init_type(mutex, PL_MUTEX_NORMAL)
 
 static inline int pl_mutex_destroy(pl_mutex *mutex)
 {
