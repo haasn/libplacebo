@@ -1,6 +1,6 @@
 project('libplacebo', ['c', 'cpp'],
   license: 'LGPL2.1+',
-  default_options: ['c_std=c99', 'cpp_std=c++11', 'warning_level=2'],
+  default_options: ['c_std=c11', 'cpp_std=c++11', 'warning_level=2'],
   meson_version: '>=0.54',
   version: '@0@.@1@.@2@'.format(
     # Major version
@@ -55,7 +55,7 @@ cc = meson.get_compiler('c')
 cxx = meson.get_compiler('cpp')
 
 c_opts = [
-  '-D_ISOC99_SOURCE', '-D_GNU_SOURCE', '-D_XOPEN_SOURCE=700',
+  '-D_ISOC99_SOURCE', '-D_ISOC11_SOURCE', '-D_GNU_SOURCE', '-D_XOPEN_SOURCE=700',
   '-U__STRICT_ANSI__', '-fvisibility=hidden', '-Wmissing-prototypes',
 
   # Warnings to ignore
