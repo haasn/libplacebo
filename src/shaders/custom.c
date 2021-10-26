@@ -1109,7 +1109,9 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             // Compatibility alias, because MAIN and MAINPRESUB mean the same
             // thing to libplacebo, but user shaders are still written as
             // though they can be different concepts.
-            if (pl_str_equals0(texname, "MAIN")) {
+            if (pl_str_equals0(texname, "MAIN") ||
+                pl_str_equals0(texname, "MAINPRESUB"))
+            {
                 GLSLH("#define MAIN_raw MAINPRESUB_raw \n");
                 GLSLH("#define MAIN_pos MAINPRESUB_pos \n");
                 GLSLH("#define MAIN_size MAINPRESUB_size \n");
