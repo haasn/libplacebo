@@ -182,8 +182,11 @@ static void fill_icc(void *datap, const struct sh_lut_params *params)
     }
 
     cmsSetLogErrorHandlerTHR(cms, error_callback);
+    clock_t start = clock();
     dstp = get_profile(obj->log, cms, obj->dst, NULL, &obj->result.dst_color);
     srcp = get_profile(obj->log, cms, obj->src, dstp, &obj->result.src_color);
+    clock_t after_profiles = clock();
+    pl_log_cpu_time(obj->log, start, after_profiles, "opening ICC profiles");
     if (!srcp || !dstp)
         goto error;
 
@@ -192,6 +195,8 @@ static void fill_icc(void *datap, const struct sh_lut_params *params)
 
     trafo = cmsCreateTransformTHR(cms, srcp, TYPE_RGB_16, dstp, TYPE_RGB_16,
                                   obj->intent, flags);
+    clock_t after_transform = clock();
+    pl_log_cpu_time(obj->log, after_profiles, after_transform, "creating ICC transform");
     if (!trafo) {
         PL_ERR(obj, "Failed creating CMS transform!");
         goto error;
@@ -224,6 +229,7 @@ static void fill_icc(void *datap, const struct sh_lut_params *params)
         }
     }
 
+    pl_log_cpu_time(obj->log, after_transform, clock(), "generating ICC 3DLUT");
     obj->ok = true;
     // fall through
 
