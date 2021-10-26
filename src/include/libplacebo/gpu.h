@@ -1117,6 +1117,12 @@ enum pl_prim_type {
     PL_PRIM_TYPE_COUNT,
 };
 
+enum pl_index_format {
+    PL_INDEX_UINT16 = 0,
+    PL_INDEX_UINT32,
+    PL_INDEX_FORMAT_COUNT,
+};
+
 enum pl_pass_type {
     PL_PASS_INVALID = 0,
     PL_PASS_RASTER,  // vertex+fragment shader
@@ -1291,11 +1297,12 @@ struct pl_pass_run_params {
     pl_buf vertex_buf;
     size_t buf_offset;
 
-    // (Optional) Index data may be provided in the form of `uint16_t` index
-    // offsets. These will be used for instanced rendering. Similar to
-    // vertex data, this can be provided in two forms:
+    // (Optional) Index data may be provided in the form given by `index_fmt`.
+    // These will be used for instanced rendering. Similar to vertex data, this
+    // can be provided in two forms:
     // 1. From host memory
-    const uint16_t *index_data;
+    const void *index_data;
+    enum pl_index_format index_fmt;
     // 2. From an index buffer (requires `index_buf->params.drawable`)
     pl_buf index_buf;
     size_t index_offset;

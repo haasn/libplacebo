@@ -1526,6 +1526,7 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
     rparams->vertex_buf = params->vertex_buf;
     rparams->buf_offset = params->buf_offset;
     rparams->index_data = params->index_data;
+    rparams->index_fmt = params->index_fmt;
     rparams->index_buf = params->index_buf;
     rparams->index_offset = params->index_offset;
     rparams->timer = PL_DEF(params->timer, pass->timer);

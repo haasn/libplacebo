@@ -600,17 +600,8 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         if (!vert) {
             // Update the buffer directly. In theory we could also do a memcmp
             // cache here to avoid unnecessary updates.
-            int num_vertices = 0;
-            if (params->index_data) {
-                // Indexed draw, so we need to store all indexed vertices
-                for (int i = 0; i < params->vertex_count; i++)
-                    num_vertices = PL_MAX(num_vertices, params->index_data[i]);
-                num_vertices += 1;
-            } else {
-                num_vertices = params->vertex_count;
-            }
-            size_t vert_size = num_vertices * pass->params.vertex_stride;
-            glBufferData(GL_ARRAY_BUFFER, vert_size, params->vertex_data, GL_STREAM_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, pl_vertex_buf_size(params),
+                         params->vertex_data, GL_STREAM_DRAW);
         }
 
         if (pass_gl->vao)
@@ -639,14 +630,19 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 
         if (params->index_data) {
 
+            static const GLenum index_fmts[PL_INDEX_FORMAT_COUNT] = {
+                [PL_INDEX_UINT16] = GL_UNSIGNED_SHORT,
+                [PL_INDEX_UINT32] = GL_UNSIGNED_INT,
+            };
+
             // Upload indices to temporary buffer object
             if (!pass_gl->index_buffer)
                 glGenBuffers(1, &pass_gl->index_buffer); // lazily allocated
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pass_gl->index_buffer);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                         params->vertex_count * sizeof(uint16_t),
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, pl_index_buf_size(params),
                          params->index_data, GL_STREAM_DRAW);
-            glDrawElements(mode, params->vertex_count, GL_UNSIGNED_SHORT, 0);
+            glDrawElements(mode, params->vertex_count,
+                           index_fmts[params->index_fmt], 0);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
         } else if (params->index_buf) {

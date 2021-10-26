@@ -183,7 +183,8 @@ struct pl_dispatch_vertex_params {
     size_t buf_offset;
 
     // Index data. See `pl_pass_run_params.index_data`. Optional.
-    const uint16_t *index_data;
+    const void *index_data;
+    enum pl_index_format index_fmt;
     pl_buf index_buf;
     size_t index_offset;
 

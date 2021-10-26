@@ -1497,7 +1497,7 @@ void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             pl_buf index_buf = params->index_buf;
             require(!params->vertex_data);
             require(index_buf->params.drawable);
-            size_t index_size = params->vertex_count * sizeof(*params->index_data);
+            size_t index_size = pl_index_buf_size(params);
             require(params->index_offset + index_size <= index_buf->params.size);
         }
 
@@ -2094,18 +2094,8 @@ void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params)
     pl_buf vert = NULL, index = NULL;
 
     if (params->vertex_data) {
-        int num_vertices = 0;
-        if (params->index_data) {
-            // Indexed draw, so we need to store all indexed vertices
-            for (int i = 0; i < params->vertex_count; i++)
-                num_vertices = PL_MAX(num_vertices, params->index_data[i]);
-            num_vertices += 1;
-        } else {
-            num_vertices = params->vertex_count;
-        }
-
         vert = pl_buf_create(gpu, pl_buf_params(
-            .size = num_vertices * params->pass->params.vertex_stride,
+            .size = pl_vertex_buf_size(params),
             .initial_data = params->vertex_data,
             .drawable = true,
         ));
@@ -2121,7 +2111,7 @@ void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params)
 
     if (params->index_data) {
         index = pl_buf_create(gpu, pl_buf_params(
-            .size = params->vertex_count * sizeof(*params->index_data),
+            .size = pl_index_buf_size(params),
             .initial_data = params->index_data,
             .drawable = true,
         ));

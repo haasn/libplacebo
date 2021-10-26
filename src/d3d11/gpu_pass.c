@@ -862,24 +862,21 @@ static void pass_run_raster(pl_gpu gpu, const struct pl_pass_run_params *params)
         return;
     }
 
-    // Figure out how much vertex data to upload, if any
-    size_t vertex_alloc = 0;
-    if (params->vertex_data) {
-        int num_verticies = 0;
-        if (params->index_data) {
-            // Indexed draw, so we need to store all indexed vertices
-            for (int i = 0; i < params->vertex_count; i++)
-                num_verticies = PL_MAX(num_verticies, params->index_data[i] + 1);
-        } else {
-            num_verticies = params->vertex_count;
-        }
-        vertex_alloc = num_verticies * pass->params.vertex_stride;
+    if (p->fl <= D3D_FEATURE_LEVEL_9_1 && params->index_data &&
+        params->index_fmt != PL_INDEX_UINT16)
+    {
+        PL_ERR(gpu, "32-bit index format is unsupported in FL9_1");
+        return;
     }
 
-    // Figure out how much index data to upload, if any
-    size_t index_alloc = 0;
-    if (params->index_data)
-        index_alloc = params->vertex_count * sizeof(uint16_t);
+    // Figure out how much vertex/index data to upload, if any
+    size_t vertex_alloc = params->vertex_data ? pl_vertex_buf_size(params) : 0;
+    size_t index_alloc = params->index_data ? pl_index_buf_size(params) : 0;
+
+    static const DXGI_FORMAT index_fmts[PL_INDEX_FORMAT_COUNT] = {
+        [PL_INDEX_UINT16] = DXGI_FORMAT_R16_UINT,
+        [PL_INDEX_UINT32] = DXGI_FORMAT_R32_UINT,
+    };
 
     // Upload vertex data. On >=FL10_0 we use the same buffer for index data, so
     // upload that too.
@@ -902,7 +899,7 @@ static void pass_run_raster(pl_gpu gpu, const struct pl_pass_run_params *params)
         }
         if (share_vertex_index_buf && index_alloc) {
             ID3D11DeviceContext_IASetIndexBuffer(p->imm, p->vbuf.buf,
-                DXGI_FORMAT_R16_UINT, slices[1].offset);
+                index_fmts[params->index_fmt], slices[1].offset);
         }
     }
 
@@ -918,7 +915,7 @@ static void pass_run_raster(pl_gpu gpu, const struct pl_pass_run_params *params)
         }
 
         ID3D11DeviceContext_IASetIndexBuffer(p->imm, p->ibuf.buf,
-            DXGI_FORMAT_R16_UINT, slices[0].offset);
+            index_fmts[params->index_fmt], slices[0].offset);
     }
 
     if (params->vertex_buf) {
@@ -931,7 +928,7 @@ static void pass_run_raster(pl_gpu gpu, const struct pl_pass_run_params *params)
     if (params->index_buf) {
         struct pl_buf_d3d11 *buf_p = PL_PRIV(params->index_buf);
         ID3D11DeviceContext_IASetIndexBuffer(p->imm, buf_p->buf,
-            DXGI_FORMAT_R16_UINT, params->index_offset);
+            index_fmts[params->index_fmt], params->index_offset);
     }
 
     ID3D11DeviceContext_IASetInputLayout(p->imm, pass_p->layout);

@@ -129,6 +129,41 @@ void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params);
 // copied, but cleared explicitly.
 struct pl_pass_params pl_pass_params_copy(void *alloc, const struct pl_pass_params *params);
 
+// Helper to compute the size of an index buffer
+static inline size_t pl_index_buf_size(const struct pl_pass_run_params *params)
+{
+    switch (params->index_fmt) {
+    case PL_INDEX_UINT16: return params->vertex_count * sizeof(uint16_t);
+    case PL_INDEX_UINT32: return params->vertex_count * sizeof(uint32_t);
+    case PL_INDEX_FORMAT_COUNT: break;
+    }
+
+    pl_unreachable();
+}
+
+// Helper to compute the size of a vertex buffer required to fit all indices
+static inline size_t pl_vertex_buf_size(const struct pl_pass_run_params *params)
+{
+    if (!params->index_data)
+        return params->vertex_count * params->pass->params.vertex_stride;
+
+    int num_vertices = 0;
+    const void *idx = params->index_data;
+    switch (params->index_fmt) {
+    case PL_INDEX_UINT16:
+        for (int i = 0; i < params->vertex_count; i++)
+            num_vertices = PL_MAX(num_vertices, ((const uint16_t *) idx)[i]);
+        break;
+    case PL_INDEX_UINT32:
+        for (int i = 0; i < params->vertex_count; i++)
+            num_vertices = PL_MAX(num_vertices, ((const uint32_t *) idx)[i]);
+        break;
+    case PL_INDEX_FORMAT_COUNT: pl_unreachable();
+    }
+
+    return (num_vertices + 1) * params->pass->params.vertex_stride;
+}
+
 // Utility function for pretty-printing UUIDs
 #define UUID_SIZE 16
 #define PRINT_UUID(uuid) (print_uuid((char[3 * UUID_SIZE]){0}, (uuid)))

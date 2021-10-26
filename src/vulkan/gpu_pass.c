@@ -994,9 +994,14 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
                                BUF_READ);
             }
 
+            static const VkIndexType index_fmts[PL_INDEX_FORMAT_COUNT] = {
+                [PL_INDEX_UINT16] = VK_INDEX_TYPE_UINT16,
+                [PL_INDEX_UINT32] = VK_INDEX_TYPE_UINT32,
+            };
+
             vk->CmdBindIndexBuffer(cmd->buf, index_vk->mem.buf,
                                    index_vk->mem.offset + params->index_offset,
-                                   VK_INDEX_TYPE_UINT16);
+                                   index_fmts[params->index_fmt]);
         }
 
         vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,

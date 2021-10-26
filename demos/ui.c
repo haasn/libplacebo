@@ -198,6 +198,7 @@ bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame)
             .vertex_count = cmd->elem_count,
             .vertex_data = vertices,
             .index_data = indices,
+            .index_fmt = PL_INDEX_UINT32,
         ));
 
         if (!ok) {
