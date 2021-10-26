@@ -169,7 +169,6 @@ static void fill_icc(void *datap, const struct sh_lut_params *params)
 {
     struct sh_icc_obj *obj = params->priv;
     pl_assert(params->comps == 4);
-    float *data = datap;
 
     cmsHPROFILE srcp = NULL, dstp = NULL;
     cmsHTRANSFORM trafo = NULL;
@@ -191,7 +190,7 @@ static void fill_icc(void *datap, const struct sh_lut_params *params)
     uint32_t flags = cmsFLAGS_HIGHRESPRECALC | cmsFLAGS_BLACKPOINTCOMPENSATION |
                      cmsFLAGS_NOCACHE;
 
-    trafo = cmsCreateTransformTHR(cms, srcp, TYPE_RGB_16, dstp, TYPE_RGBA_FLT,
+    trafo = cmsCreateTransformTHR(cms, srcp, TYPE_RGB_16, dstp, TYPE_RGB_16,
                                   obj->intent, flags);
     if (!trafo) {
         PL_ERR(obj, "Failed creating CMS transform!");
@@ -200,20 +199,28 @@ static void fill_icc(void *datap, const struct sh_lut_params *params)
 
     int s_r = params->width, s_g = params->height, s_b = params->depth;
     pl_assert(s_r > 1 && s_g > 1 && s_b > 1);
-    tmp = pl_alloc(NULL, s_r * 3 * sizeof(uint16_t));
+    tmp = pl_alloc(NULL, 2 * s_r * 3 * sizeof(tmp[0]));
 
+    uint16_t *out = tmp + s_r * 3;
     for (int b = 0; b < s_b; b++) {
         for (int g = 0; g < s_g; g++) {
-            // Fill in a single line of the temporary buffer
+            // Transform a single line of the output buffer
             for (int r = 0; r < s_r; r++) {
                 tmp[r * 3 + 0] = r * 65535 / (s_r - 1);
                 tmp[r * 3 + 1] = g * 65535 / (s_g - 1);
                 tmp[r * 3 + 2] = b * 65535 / (s_b - 1);
             }
+            cmsDoTransform(trafo, tmp, out, s_r);
 
-            // Transform this line into the right output position
+            // Write this line into the right output position
             size_t offset = (b * s_g + g) * s_r * 4;
-            cmsDoTransform(trafo, tmp, data + offset, s_r);
+            float *data = ((float *) datap) + offset;
+            for (int r = 0; r < s_r; r++) {
+                data[r * 4 + 0] = out[r * 3 + 0] / 65535.0;
+                data[r * 4 + 1] = out[r * 3 + 1] / 65535.0;
+                data[r * 4 + 2] = out[r * 3 + 2] / 65535.0;
+                data[r * 4 + 3] = 1.0;
+            }
         }
     }
 
