@@ -31,8 +31,8 @@ PL_API_BEGIN
 // nothing particularly special about `pl_lut_parse_cube`.
 struct pl_custom_lut {
     // Some unique signature identifying this LUT, needed to detect state
-    // changes (for cache invalidation). This could be anything that uniquely
-    // identifies the LUT, such as an incrementing counter or hash of the file.
+    // changes (for cache invalidation). This should ideally be a hash of the
+    // file contents. (Which is what `pl_lut_parse_*` will set it to.)
     uint64_t signature;
 
     // Size of each dimension, in the order R, G, B. For 1D LUTs, only the R

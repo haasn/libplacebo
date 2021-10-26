@@ -526,12 +526,10 @@ struct pl_icc_profile {
     const void *data;
     size_t len;
 
-    // If a profile is set, this signature must uniquely identify it. It could
-    // be, for example, a checksum of the profile contents. Alternatively, it
-    // could be the pointer to the ICC profile itself, as long as the user
-    // makes sure that this memory is used in an immutable way. For a third
-    // possible interpretation, consider simply incrementing this uint64_t
-    // every time you suspect the profile has changed.
+    // If a profile is set, this signature must uniquely identify it, ideally
+    // using a checksum of the profile contents. The user is free to choose the
+    // method of determining this signature, but note the existence of the
+    // `pl_icc_profile_compute_signature` helper.
     uint64_t signature;
 };
 
@@ -542,6 +540,9 @@ bool pl_icc_profile_equal(const struct pl_icc_profile *p1,
 // Sets `signature` to a hash of `profile->data`, if non-NULL. Provided as a
 // convenience function for the sake of users ingesting arbitrary ICC profiles
 // from sources where they can't reliably detect profile changes.
+//
+// Note: This is based on a very fast hash, and will compute a signature for
+// even large (10 MB) ICC profiles in, typically, a fraction of a millisecond.
 void pl_icc_profile_compute_signature(struct pl_icc_profile *profile);
 
 PL_API_END
