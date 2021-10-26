@@ -574,14 +574,13 @@ static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, void *cookie)
 
 static inline void pl_release_dav1dpicture(Dav1dPicture *p, void *cookie)
 {
-    pl_gpu gpu = cookie;
     struct pl_dav1dalloc *alloc = p->allocator_data;
     if (!alloc)
         return;
 
     assert(alloc->magic[0] == PL_MAGIC0);
     assert(alloc->magic[1] == PL_MAGIC1);
-    assert(alloc->gpu == gpu);
+    assert(alloc->gpu == cookie);
     pl_buf_destroy(alloc->gpu, &alloc->buf);
     free(alloc);
 
