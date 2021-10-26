@@ -135,6 +135,7 @@ struct pl_custom_lut *pl_lut_parse_cube(pl_log log, const char *cstr, size_t cst
     lut->data = data;
 
     // Parse LUT body
+    clock_t start = clock();
     for (int n = 0; n < entries; n++) {
         for (int c = 0; c < 3; c++) {
             static const char * const digits = "0123456789.-";
@@ -171,6 +172,7 @@ struct pl_custom_lut *pl_lut_parse_cube(pl_log log, const char *cstr, size_t cst
     if (str.len)
         pl_warn(log, "Extra data after LUT?... ignoring");
 
+    pl_log_cpu_time(log, start, clock(), "parsing .cube LUT");
     return lut;
 
 error:
