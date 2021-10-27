@@ -19,12 +19,12 @@
 
 #include "common.h"
 
-int pl_fix_ver()
+int pl_fix_ver(void)
 {
     return BUILD_FIX_VER;
 }
 
-const char *pl_version()
+const char *pl_version(void)
 {
     return BUILD_VERSION;
 }

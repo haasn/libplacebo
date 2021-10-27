@@ -46,7 +46,7 @@ static void pl_log_timestamp(void *stream, enum pl_log_level level, const char *
     }
 }
 
-static inline pl_log pl_test_logger()
+static inline pl_log pl_test_logger(void)
 {
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);

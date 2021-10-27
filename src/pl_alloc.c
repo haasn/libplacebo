@@ -55,7 +55,7 @@ static inline struct header *get_header(void *ptr)
     return hdr;
 }
 
-static inline void *oom()
+static inline void *oom(void)
 {
     fprintf(stderr, "out of memory\n");
     abort();

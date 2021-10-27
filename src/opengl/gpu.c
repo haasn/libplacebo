@@ -65,7 +65,7 @@ static pl_handle_caps tex_handle_caps(pl_gpu gpu, bool import)
 
 #endif // EPOXY_HAS_EGL
 
-static inline size_t get_page_size()
+static inline size_t get_page_size(void)
 {
 
 #ifdef PL_HAVE_UNIX
