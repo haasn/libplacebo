@@ -629,6 +629,7 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
         .iformat = glfmt->ifmt,
         .format = glfmt->fmt,
         .type = glfmt->type,
+        .fd = -1,
     };
 
     int dims = pl_tex_params_dimension(tex->params);
