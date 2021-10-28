@@ -493,8 +493,10 @@ int main(int argc, char **argv)
     if (argc == 3 && strcmp(argv[1], "-v") == 0) {
         filename = argv[2];
         log_level = PL_LOG_DEBUG;
+        av_log_set_level(AV_LOG_VERBOSE);
     } else if (argc == 2) {
         filename = argv[1];
+        av_log_set_level(AV_LOG_INFO);
     } else {
         fprintf(stderr, "Usage: ./%s [-v] <filename>\n", argv[0]);
         return -1;
