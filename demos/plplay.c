@@ -197,6 +197,7 @@ static bool init_codec(struct plplay *p)
         return false;
     }
 
+    printf("Codec: %s (%s)\n", codec->name, codec->long_name);
     return true;
 }
 
