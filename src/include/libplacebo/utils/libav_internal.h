@@ -753,6 +753,7 @@ static inline bool pl_upload_avframe(pl_gpu gpu,
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     struct pl_plane_data data[4] = {0};
+    struct pl_avalloc *alloc;
     int planes;
 
     pl_frame_from_avframe(out, frame);
@@ -764,14 +765,6 @@ static inline bool pl_upload_avframe(pl_gpu gpu,
     if (!planes)
         return false;
 
-    // Probe for frames allocated by our get_buffer2
-    struct pl_avalloc *alloc = frame->buf[0] ? av_buffer_get_opaque(frame->buf[0]) : NULL;
-    pl_buf buf = NULL;
-    if (alloc && alloc->magic[0] == PL_MAGIC0 && alloc->magic[1] == PL_MAGIC1) {
-        assert(alloc->gpu == gpu);
-        buf = alloc->buf;
-    }
-
     for (int p = 0; p < planes; p++) {
         bool is_chroma = p == 1 || p == 2; // matches lavu logic
         data[p].width = AV_CEIL_RSHIFT(frame->width, is_chroma ? desc->log2_chroma_w : 0);
@@ -779,10 +772,12 @@ static inline bool pl_upload_avframe(pl_gpu gpu,
         data[p].row_stride = frame->linesize[p];
         data[p].pixels = frame->data[p];
 
-        if (buf) {
+        // Probe for frames allocated by pl_get_buffer2
+        alloc = frame->buf[p] ? av_buffer_get_opaque(frame->buf[p]) : NULL;
+        if (alloc && alloc->magic[0] == PL_MAGIC0 && alloc->magic[1] == PL_MAGIC1) {
             data[p].pixels = NULL;
-            data[p].buf = buf;
-            data[p].buf_offset = (uintptr_t) frame->data[p] - (uintptr_t) buf->data;
+            data[p].buf = alloc->buf;
+            data[p].buf_offset = (uintptr_t) frame->data[p] - (uintptr_t) alloc->buf->data;
         } else if (gpu->limits.callbacks) {
             // Use asynchronous upload if possible
             data[p].callback = pl_avframe_free;
@@ -836,7 +831,6 @@ static inline bool pl_download_avframe(pl_gpu gpu,
 }
 
 #define PL_ALIGN(x, align) ((align) ? ((x) + (align) - 1) / (align) * (align) : (x))
-#define PL_ALIGN2(x, align) (((x) + (align) - 1) & ~((align) - 1))
 #define PL_MAX(x, y) ((x) > (y) ? (x) : (y))
 
 static inline void pl_avalloc_free(void *opaque, uint8_t *data)
@@ -852,96 +846,106 @@ static inline void pl_avalloc_free(void *opaque, uint8_t *data)
 static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
 {
     int linesize_align[AV_NUM_DATA_POINTERS];
-    uint8_t *pointers[5];
-    size_t offsets[4];
+    ptrdiff_t linesize[4];
+    size_t planesize[4];
+    size_t alignment;
     int width = pic->width;
     int height = pic->height;
-    size_t total_size = 0;
-    int ret;
+    int ret = 0;
 
     pl_gpu *pgpu = avctx->opaque;
     pl_gpu gpu = pgpu ? *pgpu : NULL;
-    pl_buf buf;
     struct pl_plane_data data[4];
-    struct pl_avalloc *alloc = malloc(sizeof(struct pl_avalloc));
+    struct pl_avalloc *alloc;
     int planes = pl_plane_data_from_pixfmt(data, NULL, pic->format);
-    if (!(avctx->codec->capabilities & AV_CODEC_CAP_DR1) || !planes)
-        goto fallback;
-    if (!gpu || !gpu->limits.thread_safe || !gpu->limits.max_mapped_size)
-        goto fallback;
 
+    // Sanitize frame structs
     memset(pic->data, 0, sizeof(pic->data));
     memset(pic->linesize, 0, sizeof(pic->linesize));
     memset(pic->buf, 0, sizeof(pic->buf));
     pic->extended_data = pic->data;
     pic->extended_buf = NULL;
 
+    if (!(avctx->codec->capabilities & AV_CODEC_CAP_DR1) || !planes)
+        goto fallback;
+    if (!gpu || !gpu->limits.thread_safe || !gpu->limits.max_mapped_size)
+        goto fallback;
+
     avcodec_align_dimensions2(avctx, &width, &height, linesize_align);
     if ((ret = av_image_fill_linesizes(pic->linesize, pic->format, width)))
         return ret;
 
+    // Align all planes and strides to a multiple of the highest alignment
+    // requirement, so that relationships between luma and chroma strides are
+    // preserved. Also include the performance hints and pixel strides, even
+    // though these alignments aren't strictly required - it will guarantee no
+    // extra memcpy pass is needed (in common cases).
+    alignment = gpu->limits.align_tex_xfer_stride;
+    alignment = PL_MAX(alignment, gpu->limits.align_tex_xfer_offset);
+    for (int p = 0; p < 4; p++)
+        alignment = PL_MAX(alignment, linesize_align[p]);
     for (int p = 0; p < planes; p++) {
-        int align = PL_MAX(linesize_align[p], gpu->limits.align_tex_xfer_stride);
-        pic->linesize[p] = PL_ALIGN2(pic->linesize[p], align);
-        pic->linesize[p] = PL_ALIGN(pic->linesize[p], data[p].pixel_stride);
+        if (alignment % data[p].pixel_stride)
+            alignment *= data[p].pixel_stride; // force lcm for e.g. rgb8
     }
 
-    // Properly align each plane offset, using the pointers as a proxy to
-    // figure out the size of each plane
-    ret = av_image_fill_pointers(pointers, pic->format, height, NULL, pic->linesize);
-    if (ret < 0) {
-        free(alloc);
+    for (int p = 0; p < 4; p++) {
+        pic->linesize[p] = PL_ALIGN(pic->linesize[p], alignment);
+        linesize[p] = pic->linesize[p];
+    }
+
+    ret = av_image_fill_plane_sizes(planesize, pic->format, height, linesize);
+    if (ret < 0)
         return ret;
-    }
-    pointers[planes] = (uint8_t *) (uintptr_t) ret;
 
     for (int p = 0; p < planes; p++) {
-        size_t plane_size = (uintptr_t) pointers[p+1] - (uintptr_t) pointers[p];
-        offsets[p] = PL_ALIGN2(total_size, gpu->limits.align_tex_xfer_offset);
-        offsets[p] = PL_ALIGN(offsets[p], data[p].pixel_stride);
-        total_size = offsets[p] + plane_size;
-    }
+        const size_t buf_size = planesize[p] + alignment;
+        if (buf_size > gpu->limits.max_mapped_size) {
+            av_frame_unref(pic);
+            goto fallback;
+        }
 
-    if (total_size > gpu->limits.max_mapped_size)
-        goto fallback;
+        alloc = malloc(sizeof(*alloc));
+        if (!alloc) {
+            av_frame_unref(pic);
+            return AVERROR(ENOMEM);
+        }
 
-    // Create data buffer
-    buf = pl_buf_create(gpu, pl_buf_params(
-        .size = total_size,
-        .memory_type = PL_BUF_MEM_HOST,
-        .host_mapped = true,
-    ));
-    if (!buf)
-        goto fallback;
+        *alloc = (struct pl_avalloc) {
+            .magic = { PL_MAGIC0, PL_MAGIC1 },
+            .gpu = gpu,
+            .buf = pl_buf_create(gpu, pl_buf_params(
+                .size = buf_size,
+                .memory_type = PL_BUF_MEM_HOST,
+                .host_mapped = true,
+            )),
+        };
 
-    for (int p = 0; p < planes; p++)
-        pic->data[p] = buf->data + offsets[p];
+        if (!alloc->buf) {
+            free(alloc);
+            av_frame_unref(pic);
+            return AVERROR(ENOMEM);
+        }
 
-    // Create buffer ref
-    pic->buf[0] = av_buffer_create(buf->data, total_size, pl_avalloc_free, alloc, 0);
-    *alloc = (struct pl_avalloc) {
-        .magic = { PL_MAGIC0, PL_MAGIC1 },
-        .gpu = gpu,
-        .buf = buf,
-    };
-
-    if (!pic->buf[0]) {
-        pl_buf_destroy(gpu, &buf);
-        free(alloc);
-        return AVERROR(ENOMEM);
+        pic->data[p] = (uint8_t *) PL_ALIGN((uintptr_t) alloc->buf->data, alignment);
+        pic->buf[p] = av_buffer_create(alloc->buf->data, buf_size, pl_avalloc_free, alloc, 0);
+        if (!pic->buf[p]) {
+            free(alloc);
+            pl_buf_destroy(gpu, &alloc->buf);
+            av_frame_unref(pic);
+            return AVERROR(ENOMEM);
+        }
     }
 
     return 0;
 
 fallback:
-    free(alloc);
     return avcodec_default_get_buffer2(avctx, pic, flags);
 }
 
 #undef PL_MAGIC0
 #undef PL_MAGIC1
 #undef PL_ALIGN
-#undef PL_ALIGN2
 #undef PL_MAX
 
 #endif // LIBPLACEBO_LIBAV_H_
