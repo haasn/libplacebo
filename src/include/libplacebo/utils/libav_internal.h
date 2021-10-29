@@ -846,7 +846,6 @@ static inline void pl_avalloc_free(void *opaque, uint8_t *data)
 static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
 {
     int linesize_align[AV_NUM_DATA_POINTERS];
-    ptrdiff_t linesize[4];
     size_t planesize[4];
     size_t alignment;
     int width = pic->width;
@@ -889,14 +888,23 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
             alignment *= data[p].pixel_stride; // force lcm for e.g. rgb8
     }
 
-    for (int p = 0; p < 4; p++) {
+    for (int p = 0; p < 4; p++)
         pic->linesize[p] = PL_ALIGN(pic->linesize[p], alignment);
-        linesize[p] = pic->linesize[p];
-    }
 
-    ret = av_image_fill_plane_sizes(planesize, pic->format, height, linesize);
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(56, 56, 100)
+    ret = av_image_fill_plane_sizes(planesize, pic->format, height, (ptrdiff_t[4]) {
+        pic->linesize[0], pic->linesize[1], pic->linesize[2], pic->linesize[3],
+    });
     if (ret < 0)
         return ret;
+#else
+    uint8_t *ptrs[4], * const base = (uint8_t *) 0x10000;
+    ret = av_image_fill_pointers(ptrs, pic->format, height, base, pic->linesize);
+    if (ret < 0)
+        return ret;
+    for (int p = 0; p < 4; p++)
+        planesize[p] = (uintptr_t) ptrs[p] - (uintptr_t) base;
+#endif
 
     for (int p = 0; p < planes; p++) {
         const size_t buf_size = planesize[p] + alignment;
