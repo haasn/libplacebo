@@ -415,7 +415,7 @@ bool api1_filter(void *priv, struct image *dst, struct image *src)
     for (int i = 0; i < src->num_planes; i++) {
         bool ok = pl_tex_upload(p->gpu, pl_tex_transfer_params(
             .tex = p->tex_in[i],
-            .stride_w = data[i].row_stride / data[i].pixel_stride,
+            .row_pitch = data[i].row_stride,
             .ptr = src->planes[i].data,
             .timer = p->upload_timer,
         ));
@@ -438,7 +438,7 @@ bool api1_filter(void *priv, struct image *dst, struct image *src)
     for (int i = 0; i < src->num_planes; i++) {
         bool ok = pl_tex_download(p->gpu, pl_tex_transfer_params(
             .tex = p->tex_out[i],
-            .stride_w = dst->planes[i].stride / data[i].pixel_stride,
+            .row_pitch = dst->planes[i].stride,
             .ptr = dst->planes[i].data,
             .timer = p->download_timer,
         ));
@@ -518,7 +518,7 @@ static enum api2_status submit_work(struct priv *p, struct entry *e,
         // to a multiple of the GPU's preferred texture transfer stride
         // (This is entirely optional)
         stride[i] = ALIGN2(img->planes[i].stride,
-                           p->gpu->limits.align_tex_xfer_stride);
+                           p->gpu->limits.align_tex_xfer_pitch);
         int height = img->height >> img->planes[i].suby;
 
         // Round up the offset to the nearest multiple of the optimal
@@ -538,7 +538,7 @@ static enum api2_status submit_work(struct priv *p, struct entry *e,
     for (int i = 0; i < img->num_planes; i++) {
         ok = pl_tex_download(p->gpu, pl_tex_transfer_params(
             .tex = e->tex_out[i],
-            .stride_w = stride[i] / data[i].pixel_stride,
+            .row_pitch = stride[i],
             .buf = e->buf,
             .buf_offset = offset[i],
             .timer = p->download_timer,

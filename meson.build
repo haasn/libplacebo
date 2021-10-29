@@ -18,6 +18,7 @@ project('libplacebo', ['c', 'cpp'],
       'add pl_fmt.signature',
       'add pl_index_format',
       'expose pl_dispatch_reset_frame',
+      'refactor pl_tex_transfer.stride_w/h into row/depth_pitch'
     ].length(),
     # Fix version
     0)

@@ -448,7 +448,7 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
 
         // Make up some values
         .align_tex_xfer_offset = 32,
-        .align_tex_xfer_stride = 1,
+        .align_tex_xfer_pitch = 1,
         .fragment_queues = 1,
     };
 

@@ -846,13 +846,13 @@ void gl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
     RELEASE_CURRENT();
 }
 
-static int get_alignment(int stride)
+static int get_alignment(size_t pitch)
 {
-    if (stride % 8 == 0)
+    if (pitch % 8 == 0)
         return 8;
-    if (stride % 4 == 0)
+    if (pitch % 4 == 0)
         return 4;
-    if (stride % 2 == 0)
+    if (pitch % 2 == 0)
         return 2;
     return 1;
 }
@@ -861,6 +861,7 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
     struct pl_gl *p = PL_PRIV(gpu);
     pl_tex tex = params->tex;
+    pl_fmt fmt = tex->params.format;
     pl_buf buf = params->buf;
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     struct pl_buf_gl *buf_gl = buf ? PL_PRIV(buf) : NULL;
@@ -884,25 +885,29 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         src = (void *) (buf_gl->offset + params->buf_offset);
     }
 
+    bool misaligned = params->row_pitch % fmt->texel_size;
+    int stride_w = params->row_pitch / fmt->texel_size;
+    int stride_h = params->depth_pitch / params->row_pitch;
+
     int dims = pl_tex_params_dimension(tex->params);
     if (dims > 1)
-        glPixelStorei(GL_UNPACK_ALIGNMENT, get_alignment(params->stride_w));
+        glPixelStorei(GL_UNPACK_ALIGNMENT, get_alignment(params->row_pitch));
 
     int rows = pl_rect_h(params->rc);
-    if (params->stride_w != tex->params.w) {
-        if (p->has_stride) {
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, params->stride_w);
+    if (stride_w != tex->params.w || misaligned) {
+        if (p->has_stride && !misaligned) {
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, stride_w);
         } else {
-            rows = tex->params.w == params->stride_w ? rows : 1;
+            rows = 1;
         }
     }
 
     int imgs = pl_rect_d(params->rc);
-    if (params->stride_h != tex->params.h) {
+    if (stride_h != tex->params.h) {
         if (p->has_unpack_image_height) {
-            glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, params->stride_h);
+            glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, stride_h);
         } else {
-            imgs = tex->params.h == params->stride_h ? imgs : 1;
+            imgs = 1;
         }
     }
 
@@ -935,9 +940,9 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     gl_timer_end(params->timer);
     glBindTexture(tex_gl->target, 0);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    if (p->has_stride && params->stride_w != tex->params.w)
+    if (p->has_stride)
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    if (p->has_unpack_image_height && params->stride_h != tex->params.h)
+    if (p->has_unpack_image_height)
         glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
 
     if (buf) {
@@ -968,6 +973,7 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
     struct pl_gl *p = PL_PRIV(gpu);
     pl_tex tex = params->tex;
+    pl_fmt fmt = tex->params.format;
     pl_buf buf = params->buf;
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     struct pl_buf_gl *buf_gl = buf ? PL_PRIV(buf) : NULL;
@@ -996,26 +1002,29 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         PL_DEF(tex->params.d, 1),
     };
 
+    bool misaligned = params->row_pitch % fmt->texel_size;
+    int stride_w = params->row_pitch / fmt->texel_size;
+    int stride_h = params->depth_pitch / params->row_pitch;
+
     int dims = pl_tex_params_dimension(tex->params);
     bool is_copy = pl_rect3d_eq(params->rc, full) &&
-                   params->stride_w == tex->params.w &&
-                   params->stride_h == PL_DEF(tex->params.h, 1);
+                   stride_w == tex->params.w &&
+                   stride_h == PL_DEF(tex->params.h, 1) &&
+                   !misaligned;
 
     gl_timer_begin(params->timer);
 
     if (tex_gl->fbo || tex_gl->wrapped_fb) {
         // We can use a more efficient path when we have an FBO available
-        if (dims > 1) {
-            size_t real_stride = params->stride_w * tex->params.format->texel_size;
-            glPixelStorei(GL_PACK_ALIGNMENT, get_alignment(real_stride));
-        }
+        if (dims > 1)
+            glPixelStorei(GL_PACK_ALIGNMENT, get_alignment(params->row_pitch));
 
         int rows = pl_rect_h(params->rc);
-        if (params->stride_w != tex->params.w) {
-            if (p->has_stride) {
-                glPixelStorei(GL_PACK_ROW_LENGTH, params->stride_w);
+        if (stride_w != tex->params.w || misaligned) {
+            if (p->has_stride && !misaligned) {
+                glPixelStorei(GL_PACK_ROW_LENGTH, stride_w);
             } else {
-                rows = tex->params.w == params->stride_w ? rows : 1;
+                rows = 1;
             }
         }
 

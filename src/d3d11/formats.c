@@ -27,6 +27,7 @@
             .num_components  = num,                        \
             .component_depth = bits,                       \
             .texel_size      = size,                       \
+            .texel_align     = 1,                          \
             .internal_size   = size,                       \
             .host_bits       = bits,                       \
             .sample_order    = order,                      \

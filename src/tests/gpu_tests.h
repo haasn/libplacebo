@@ -1230,7 +1230,7 @@ static void pl_ycbcr_tests(pl_gpu gpu)
             .component_map = {i},
             .pixel_stride = sizeof(uint16_t),
             .row_stride = PL_ALIGN2(width * sizeof(uint16_t),
-                                    gpu->limits.align_tex_xfer_stride),
+                                    gpu->limits.align_tex_xfer_pitch),
         };
     }
 
@@ -1315,7 +1315,7 @@ static void pl_ycbcr_tests(pl_gpu gpu)
         REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {
             .tex = dst_tex[i],
             .ptr = dst_buffer,
-            .stride_w = data[i].row_stride / data[i].pixel_stride,
+            .row_pitch = data[i].row_stride,
         }));
 
         for (int y = 0; y < data[i].height; y++) {

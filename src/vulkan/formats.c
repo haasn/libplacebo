@@ -26,6 +26,7 @@
         .internal_size   = size,                \
         .opaque          = false,               \
         .texel_size      = size,                \
+        .texel_align     = size,                \
         .host_bits       = bits,                \
         .sample_order    = idx,                 \
     }
@@ -48,6 +49,7 @@
         .opaque          = false,               \
         .emulated        = true,                \
         .texel_size      = (en) * (eb) / 8,     \
+        .texel_align     = (eb) / 8,            \
         .host_bits       = BITS(eb, eb, eb, eb),\
         .sample_order    = IDX(0, 1, 2, 3),     \
     }

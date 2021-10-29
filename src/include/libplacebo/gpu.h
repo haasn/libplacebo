@@ -116,7 +116,7 @@ struct pl_gpu_limits {
     // optimal alignment. For best performance, the corresponding field
     // should be aligned to a multiple of these. They will always be a power
     // of two.
-    uint32_t align_tex_xfer_stride; // optimal `pl_tex_transfer_params.stride_w/h`
+    size_t align_tex_xfer_pitch;    // optimal `pl_tex_transfer_params.row_pitch`
     size_t align_tex_xfer_offset;   // optimal `pl_tex_transfer_params.buf_offset`
 
     // --- pl_pass
@@ -144,8 +144,9 @@ struct pl_gpu_limits {
     int16_t max_gather_offset PL_DEPRECATED;
 };
 
-// Backwards compatibility alias
+// Backwards compatibility aliases
 #define max_xfer_size max_buf_size
+#define align_tex_xfer_stride align_tex_xfer_pitch
 
 // Some `pl_gpu` operations allow sharing GPU resources with external APIs -
 // examples include interop with other graphics APIs such as CUDA, and also
@@ -257,9 +258,12 @@ typedef const PL_STRUCT(pl_gpu) {
     pl_gpu_caps caps PL_DEPRECATED; // replaced by `glsl` and `limits`
 } *pl_gpu;
 
-// Helper function to align the given dimension (e.g. width or height) to a
-// multiple of the optimal texture transfer stride.
-int pl_optimal_transfer_stride(pl_gpu gpu, int dimension);
+// No longer functional. See `pl_gpu_limits.align_tex_xfer_pitch`.
+PL_DEPRECATED static inline int pl_optimal_transfer_stride(pl_gpu _gpu, int dim)
+{
+    (void) _gpu;
+    return dim;
+}
 
 enum pl_fmt_type {
     PL_FMT_UNKNOWN = 0, // also used for inconsistent multi-component formats
@@ -322,6 +326,7 @@ PL_STRUCT(pl_fmt) {
     bool opaque;
     bool emulated;
     size_t texel_size;      // total size in bytes per texel
+    size_t texel_align;     // texel alignment requirements (bytes)
     int host_bits[4];       // number of meaningful bits in host memory
     int sample_order[4];    // sampled index for each component, e.g.
                             // {2, 1, 0, 3} for BGRA textures
@@ -809,15 +814,23 @@ struct pl_tex_transfer_params {
     pl_tex tex;
 
     // Note: Superfluous parameters are ignored, i.e. for a 1D texture, the y
-    // and z fields of `rc`, as well as the corresponding strides, are ignored.
-    // In all other cases, the stride must be >= the corresponding dimension of
-    // `rc`, and the `rc` must be normalized and fully contained within the
-    // image dimensions. Missing fields in the `rc` are inferred from the image
-    // size. If unset, the strides are inferred from `rc` (that is, it's
-    // assumed that the data is tightly packed in the buffer).
+    // and z fields of `rc`, as well as the corresponding pitches, are ignored.
+    // In all other cases, the pitch must be large enough to contain the
+    // corresponding dimension of `rc`, and the `rc` must be normalized and
+    // fully contained within the image dimensions. Missing fields in the `rc`
+    // are inferred from the image size. If unset, the pitch is inferred
+    // from `rc` (that is, it's assumed that the data is tightly packed in the
+    // buffer). Otherwise, `row_pitch` *must* be a multiple of
+    // `tex->params.format->texel_align`, and `depth_pitch` must be a multiple
+    // of `row_pitch`.
     struct pl_rect3d rc;   // region of the texture to transfer
-    unsigned int stride_w; // the number of texels per horizontal row (x axis)
-    unsigned int stride_h; // the number of texels per vertical column (y axis)
+    size_t row_pitch;      // the number of bytes separating image rows
+    size_t depth_pitch;    // the number of bytes separating image planes
+
+    // Deprecated variants of `row_pitch` and `depth_pitch` for backwards
+    // compatibility with older versions of libplacebo. Avoid using.
+    unsigned int stride_w PL_DEPRECATED;
+    unsigned int stride_h PL_DEPRECATED;
 
     // An optional timer to report the approximate duration of the texture
     // transfer to. Note that this is only an approximation, since the actual

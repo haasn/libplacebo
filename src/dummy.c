@@ -43,7 +43,7 @@ pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params)
     p->params = *params;
 
     // Forcibly override these, because we know for sure what the values are
-    gpu->limits.align_tex_xfer_stride = 1;
+    gpu->limits.align_tex_xfer_pitch = 1;
     gpu->limits.align_tex_xfer_offset = 1;
 
     // Set up the dummy formats, add one for each possible format type that we
@@ -83,6 +83,7 @@ pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params)
                     .gatherable = true,
                     .internal_size = comps * depth / 8,
                     .texel_size = comps * depth / 8,
+                    .texel_align = 1,
                     .caps = PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_LINEAR |
                             PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLENDABLE |
                             PL_FMT_CAP_VERTEX | PL_FMT_CAP_HOST_READABLE,
@@ -270,10 +271,10 @@ static bool dumb_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *par
     size_t texel_size = tex->params.format->texel_size;
     size_t row_size = pl_rect_w(params->rc) * texel_size;
     for (int z = params->rc.z0; z < params->rc.z1; z++) {
-        size_t src_plane = z * params->stride_h * params->stride_w * texel_size;
+        size_t src_plane = z * params->depth_pitch;
         size_t dst_plane = z * tex->params.h * tex->params.w * texel_size;
         for (int y = params->rc.y0; y < params->rc.y1; y++) {
-            size_t src_row = src_plane + y * params->stride_w * texel_size;
+            size_t src_row = src_plane + y * params->row_pitch;
             size_t dst_row = dst_plane + y * tex->params.w * texel_size;
             size_t pos = params->rc.x0 * texel_size;
             memcpy(&dst[dst_row + pos], &src[src_row + pos], row_size);
@@ -300,10 +301,10 @@ static bool dumb_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *p
     size_t row_size = pl_rect_w(params->rc) * texel_size;
     for (int z = params->rc.z0; z < params->rc.z1; z++) {
         size_t src_plane = z * tex->params.h * tex->params.w * texel_size;
-        size_t dst_plane = z * params->stride_h * params->stride_w * texel_size;
+        size_t dst_plane = z * params->depth_pitch;
         for (int y = params->rc.y0; y < params->rc.y1; y++) {
             size_t src_row = src_plane + y * tex->params.w * texel_size;
-            size_t dst_row = dst_plane + y * params->stride_w * texel_size;
+            size_t dst_row = dst_plane + y * params->row_pitch;
             size_t pos = params->rc.x0 * texel_size;
             memcpy(&dst[dst_row + pos], &src[src_row + pos], row_size);
         }

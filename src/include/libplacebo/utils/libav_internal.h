@@ -808,10 +808,9 @@ static inline bool pl_download_avframe(pl_gpu gpu,
         return false;
 
     for (int p = 0; p < frame->num_planes; p++) {
-        size_t texel_size = frame->planes[p].texture->params.format->texel_size;
         bool ok = pl_tex_download(gpu, pl_tex_transfer_params(
             .tex = frame->planes[p].texture,
-            .stride_w = out_frame->linesize[p] / texel_size,
+            .row_pitch = out_frame->linesize[p],
             .ptr = out_frame->data[p],
             // Use synchronous transfer for the last plane
             .callback = (p+1) < frame->num_planes ? pl_done_cb : NULL,
@@ -830,7 +829,7 @@ static inline bool pl_download_avframe(pl_gpu gpu,
     return true;
 }
 
-#define PL_ALIGN(x, align) ((align) ? ((x) + (align) - 1) / (align) * (align) : (x))
+#define PL_ALIGN2(x, align) (((x) + (align) - 1) & ~((align) - 1))
 #define PL_MAX(x, y) ((x) > (y) ? (x) : (y))
 
 static inline void pl_avalloc_free(void *opaque, uint8_t *data)
@@ -845,11 +844,10 @@ static inline void pl_avalloc_free(void *opaque, uint8_t *data)
 
 static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
 {
-    int linesize_align[AV_NUM_DATA_POINTERS];
-    size_t planesize[4];
-    size_t alignment;
+    int alignment[AV_NUM_DATA_POINTERS];
     int width = pic->width;
     int height = pic->height;
+    size_t planesize[4];
     int ret = 0;
 
     pl_gpu *pgpu = avctx->opaque;
@@ -870,26 +868,15 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
     if (!gpu || !gpu->limits.thread_safe || !gpu->limits.max_mapped_size)
         goto fallback;
 
-    avcodec_align_dimensions2(avctx, &width, &height, linesize_align);
+    avcodec_align_dimensions2(avctx, &width, &height, alignment);
     if ((ret = av_image_fill_linesizes(pic->linesize, pic->format, width)))
         return ret;
 
-    // Align all planes and strides to a multiple of the highest alignment
-    // requirement, so that relationships between luma and chroma strides are
-    // preserved. Also include the performance hints and pixel strides, even
-    // though these alignments aren't strictly required - it will guarantee no
-    // extra memcpy pass is needed (in common cases).
-    alignment = gpu->limits.align_tex_xfer_stride;
-    alignment = PL_MAX(alignment, gpu->limits.align_tex_xfer_offset);
-    for (int p = 0; p < 4; p++)
-        alignment = PL_MAX(alignment, linesize_align[p]);
-    for (int p = 0; p < planes; p++) {
-        if (alignment % data[p].pixel_stride)
-            alignment *= data[p].pixel_stride; // force lcm for e.g. rgb8
+    for (int p = 0; p < 4; p++) {
+        alignment[p] = PL_ALIGN2(alignment[p], gpu->limits.align_tex_xfer_pitch);
+        alignment[p] = PL_ALIGN2(alignment[p], gpu->limits.align_tex_xfer_offset);
+        pic->linesize[p] = PL_ALIGN2(pic->linesize[p], alignment[p]);
     }
-
-    for (int p = 0; p < 4; p++)
-        pic->linesize[p] = PL_ALIGN(pic->linesize[p], alignment);
 
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(56, 56, 100)
     ret = av_image_fill_plane_sizes(planesize, pic->format, height, (ptrdiff_t[4]) {
@@ -907,7 +894,7 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
 #endif
 
     for (int p = 0; p < planes; p++) {
-        const size_t buf_size = planesize[p] + alignment;
+        const size_t buf_size = planesize[p] + alignment[p];
         if (buf_size > gpu->limits.max_mapped_size) {
             av_frame_unref(pic);
             goto fallback;
@@ -935,7 +922,7 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
             return AVERROR(ENOMEM);
         }
 
-        pic->data[p] = (uint8_t *) PL_ALIGN((uintptr_t) alloc->buf->data, alignment);
+        pic->data[p] = (uint8_t *) PL_ALIGN2((uintptr_t) alloc->buf->data, alignment[p]);
         pic->buf[p] = av_buffer_create(alloc->buf->data, buf_size, pl_avalloc_free, alloc, 0);
         if (!pic->buf[p]) {
             free(alloc);

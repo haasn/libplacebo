@@ -521,14 +521,11 @@ bool pl_d3d11_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params
     pl_tex tex = params->tex;
     struct pl_tex_d3d11 *tex_p = PL_PRIV(tex);
 
-    UINT row_pitch = params->stride_w * tex->params.format->texel_size;
-    UINT depth_pitch = row_pitch * params->stride_h;
-
     pl_d3d11_timer_start(gpu, params->timer);
 
     ID3D11DeviceContext_UpdateSubresource(p->imm, tex_p->res,
         tex_subresource(tex), &pl_rect3d_to_box(params->rc), params->ptr,
-        row_pitch, depth_pitch);
+        params->row_pitch, params->depth_pitch);
 
     pl_d3d11_timer_end(gpu, params->timer);
     pl_d3d11_flush_message_queue(ctx, "After texture upload");
@@ -553,9 +550,6 @@ bool pl_d3d11_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *para
         params->rc.z0, tex_p->res, tex_subresource(tex),
         &pl_rect3d_to_box(params->rc));
 
-    UINT row_pitch = params->stride_w * tex->params.format->texel_size;
-    UINT depth_pitch = row_pitch * params->stride_h;
-
     D3D11_MAPPED_SUBRESOURCE lock;
     D3D(ID3D11DeviceContext_Map(p->imm, (ID3D11Resource *) tex_p->staging, 0,
                                 D3D11_MAP_READ, 0, &lock));
@@ -565,7 +559,7 @@ bool pl_d3d11_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *para
     size_t line_size = pl_rect_w(params->rc) * tex->params.format->texel_size;
     for (int z = 0; z < pl_rect_d(params->rc); z++) {
         for (int y = 0; y < pl_rect_h(params->rc); y++) {
-            memcpy(cdst + z * depth_pitch + y * row_pitch,
+            memcpy(cdst + z * params->depth_pitch + y * params->row_pitch,
                    csrc + (params->rc.z0 + z) * lock.DepthPitch +
                           (params->rc.y0 + y) * lock.RowPitch + params->rc.x0,
                    line_size);

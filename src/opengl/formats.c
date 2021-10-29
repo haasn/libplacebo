@@ -260,6 +260,7 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
 
     // Host visible representation
     fmt->texel_size = fmt->num_components * size;
+    fmt->texel_align = 1;
     for (int i = 0; i < fmt->num_components; i++)
         fmt->host_bits[i] = size * 8;
 

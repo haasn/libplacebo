@@ -237,11 +237,11 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
 
     // We simply don't know, so make up some values
     limits->align_tex_xfer_offset = 32;
-    limits->align_tex_xfer_stride = 1;
+    limits->align_tex_xfer_pitch = 1;
     limits->fragment_queues = 1;
     limits->compute_queues = 1;
     if (gl_test_ext(gpu, "GL_EXT_unpack_subimage", 11, 30))
-        limits->align_tex_xfer_stride = 4;
+        limits->align_tex_xfer_pitch = 4;
 
     if (!gl_check_err(gpu, "pl_gpu_create_gl"))
         goto error;

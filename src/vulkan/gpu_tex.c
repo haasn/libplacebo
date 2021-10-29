@@ -293,7 +293,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 
         // Statically check to see if we'd even be able to upload it at all
         // and refuse right away if not. In theory, uploading can still fail
-        // based on the size of pl_tex_transfer_params.stride_w, but for now
+        // based on the size of pl_tex_transfer_params.row_pitch, but for now
         // this should be enough.
         uint64_t texels = params->w * PL_DEF(params->h, 1) * PL_DEF(params->d, 1) *
                           params->format->num_components;
@@ -566,8 +566,6 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             .tex = tex,
             .ptr = (void *) params->initial_data,
             .rc = { 0, 0, 0, params->w, params->h, params->d },
-            .stride_w = params->w,
-            .stride_h = params->h,
         };
 
         // Since we re-use GPU helpers which require writable images, just fake it
@@ -765,6 +763,7 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     pl_tex tex = params->tex;
+    pl_fmt fmt = tex->params.format;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
     if (!params->buf)
@@ -776,15 +775,14 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     size_t size = pl_tex_transfer_size(params);
 
     size_t buf_offset = buf_vk->mem.offset + params->buf_offset;
-    bool emulated = tex->params.format->emulated;
-    bool unaligned = buf_offset % tex->params.format->texel_size;
+    bool unaligned = buf_offset % fmt->texel_size;
     if (unaligned)
         PL_TRACE(gpu, "vk_tex_upload: unaligned transfer (slow path)");
 
-    if (emulated || unaligned) {
+    if (fmt->emulated || unaligned) {
 
         bool ubo;
-        if (emulated) {
+        if (fmt->emulated) {
             if (size <= gpu->limits.max_ubo_size) {
                 ubo = true;
             } else if (size <= gpu->limits.max_ssbo_size) {
@@ -799,8 +797,8 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
         // Copy the source data buffer into an intermediate buffer
         pl_buf tbuf = pl_buf_create(gpu, pl_buf_params(
-            .uniform = emulated && ubo,
-            .storable = emulated && !ubo,
+            .uniform = fmt->emulated && ubo,
+            .storable = fmt->emulated && !ubo,
             .size = size,
             .memory_type = PL_BUF_MEM_DEVICE,
             .format = tex_vk->texel_fmt,
@@ -842,18 +840,19 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         fixed.buf = tbuf;
         fixed.buf_offset = 0;
 
-        bool ok = emulated ? pl_tex_upload_texel(gpu, p->dp, &fixed)
-                           : pl_tex_upload(gpu, &fixed);
+        bool ok = fmt->emulated ? pl_tex_upload_texel(gpu, p->dp, &fixed)
+                                : pl_tex_upload(gpu, &fixed);
 
         pl_buf_destroy(gpu, &tbuf);
         return ok;
 
     } else {
 
+        pl_assert(fmt->texel_align == fmt->texel_size);
         VkBufferImageCopy region = {
             .bufferOffset = buf_offset,
-            .bufferRowLength = params->stride_w,
-            .bufferImageHeight = params->stride_h,
+            .bufferRowLength = params->row_pitch / fmt->texel_size,
+            .bufferImageHeight = params->depth_pitch / params->row_pitch,
             .imageOffset = { rc.x0, rc.y0, rc.z0 },
             .imageExtent = { rc.x1, rc.y1, rc.z1 },
             .imageSubresource = {
@@ -895,6 +894,7 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     pl_tex tex = params->tex;
+    pl_fmt fmt = tex->params.format;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
     if (!params->buf)
@@ -906,16 +906,15 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     size_t size = pl_tex_transfer_size(params);
 
     size_t buf_offset = buf_vk->mem.offset + params->buf_offset;
-    bool emulated = tex->params.format->emulated;
-    bool unaligned = buf_offset % tex->params.format->texel_size;
+    bool unaligned = buf_offset % fmt->texel_size;
     if (unaligned)
         PL_TRACE(gpu, "vk_tex_download: unaligned transfer (slow path)");
 
-    if (emulated || unaligned) {
+    if (fmt->emulated || unaligned) {
 
         // Download into an intermediate buffer first
         pl_buf tbuf = pl_buf_create(gpu, pl_buf_params(
-            .storable = emulated,
+            .storable = fmt->emulated,
             .size = size,
             .memory_type = PL_BUF_MEM_DEVICE,
             .format = tex_vk->texel_fmt,
@@ -930,8 +929,8 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         fixed.buf = tbuf;
         fixed.buf_offset = 0;
 
-        bool ok = emulated ? pl_tex_download_texel(gpu, p->dp, &fixed)
-                           : pl_tex_download(gpu, &fixed);
+        bool ok = fmt->emulated ? pl_tex_download_texel(gpu, p->dp, &fixed)
+                                : pl_tex_download(gpu, &fixed);
         if (!ok) {
             pl_buf_destroy(gpu, &tbuf);
             goto error;
@@ -970,10 +969,11 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
     } else {
 
+        pl_assert(fmt->texel_align == fmt->texel_size);
         VkBufferImageCopy region = {
             .bufferOffset = buf_offset,
-            .bufferRowLength = params->stride_w,
-            .bufferImageHeight = params->stride_h,
+            .bufferRowLength = params->row_pitch / fmt->texel_size,
+            .bufferImageHeight = params->depth_pitch / params->row_pitch,
             .imageOffset = { rc.x0, rc.y0, rc.z0 },
             .imageExtent = { rc.x1, rc.y1, rc.z1 },
             .imageSubresource = {

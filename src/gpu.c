@@ -31,11 +31,6 @@
       }                                                         \
   } while (0)
 
-int pl_optimal_transfer_stride(pl_gpu gpu, int dimension)
-{
-    return PL_ALIGN2(dimension, gpu->limits.align_tex_xfer_stride);
-}
-
 void pl_gpu_destroy(pl_gpu gpu)
 {
     if (!gpu)
@@ -217,6 +212,8 @@ pl_gpu pl_gpu_finalize(struct pl_gpu *gpu)
             pl_assert(!fmt->opaque);
         }
         pl_assert(!fmt->opaque || !(fmt->caps & PL_FMT_CAP_HOST_READABLE));
+        pl_assert(!fmt->texel_size == !fmt->texel_align);
+        pl_assert(fmt->texel_size % fmt->texel_align == 0);
         if (fmt->internal_size != fmt->texel_size && !fmt->opaque)
             pl_assert(fmt->emulated);
 
@@ -265,7 +262,7 @@ pl_gpu pl_gpu_finalize(struct pl_gpu *gpu)
     LOG(PRIu32, max_tex_3d_dim);
     LOG("d", blittable_1d_3d);
     LOG("d", buf_transfer);
-    LOG(PRIu32, align_tex_xfer_stride);
+    LOG("zu", align_tex_xfer_pitch);
     LOG("zu", align_tex_xfer_offset);
     // pl_pass
     LOG("zu", max_variables);
@@ -818,34 +815,33 @@ error:
 
 size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par)
 {
-    pl_tex tex = par->tex;
     int w = pl_rect_w(par->rc), h = pl_rect_h(par->rc), d = pl_rect_d(par->rc);
+    size_t pixel_pitch = par->tex->params.format->texel_size;
 
     // This generates the absolute bare minimum size of a buffer required to
     // hold the data of a texture upload/download, by including stride padding
     // only where strictly necessary.
-    int texels = ((d - 1) * par->stride_h + (h - 1)) * par->stride_w + w;
-    return texels * tex->params.format->texel_size;
+    return (d - 1) * par->depth_pitch + (h - 1) * par->row_pitch + w * pixel_pitch;
 }
 
 static bool fix_tex_transfer(pl_gpu gpu, struct pl_tex_transfer_params *params)
 {
     pl_tex tex = params->tex;
+    pl_fmt fmt = tex->params.format;
     struct pl_rect3d rc = params->rc;
 
     // Infer the default values
     infer_rc(tex, &rc);
-    if (!params->stride_w)
-        params->stride_w = pl_rect_w(rc);
-    if (!params->stride_h)
-        params->stride_h = pl_rect_h(rc);
-
-    // Sanitize superfluous coordinates for the benefit of the GPU
     strip_coords(tex, &rc);
-    if (!tex->params.w)
-        params->stride_w = 1;
-    if (!tex->params.h)
-        params->stride_h = 1;
+
+    if (!params->row_pitch && params->stride_w)
+        params->row_pitch = params->stride_w * fmt->texel_size;
+    if (!params->row_pitch || !tex->params.w)
+        params->row_pitch = pl_rect_w(rc) * fmt->texel_size;
+    if (!params->depth_pitch && params->stride_h)
+        params->depth_pitch = params->stride_h * params->row_pitch;
+    if (!params->depth_pitch || !tex->params.d)
+        params->depth_pitch = pl_rect_h(rc) * params->row_pitch;
 
     params->rc = rc;
 
@@ -856,13 +852,15 @@ static bool fix_tex_transfer(pl_gpu gpu, struct pl_tex_transfer_params *params)
         require(rc.z1 > rc.z0);
         require(rc.z0 >= 0 && rc.z0 <  tex->params.d);
         require(rc.z1 >  0 && rc.z1 <= tex->params.d);
-        require(params->stride_h >= pl_rect_h(rc));
+        require(params->depth_pitch >= pl_rect_h(rc) * params->row_pitch);
+        require(params->depth_pitch % params->row_pitch == 0);
         // fall through
     case 2:
         require(rc.y1 > rc.y0);
         require(rc.y0 >= 0 && rc.y0 <  tex->params.h);
         require(rc.y1 >  0 && rc.y1 <= tex->params.h);
-        require(params->stride_w >= pl_rect_w(rc));
+        require(params->row_pitch >= pl_rect_w(rc) * fmt->texel_size);
+        require(params->row_pitch % fmt->texel_align == 0);
         // fall through
     case 1:
         require(rc.x1 > rc.x0);
@@ -1782,11 +1780,15 @@ bool pl_tex_upload_texel(pl_gpu gpu, pl_dispatch dp,
              pl_rect_w(params->rc));
     }
 
+    // fmt->texel_align contains the size of an individual color value
+    assert(fmt->texel_size == fmt->num_components * fmt->texel_align);
     GLSL("vec4 color = vec4(0.0);                                       \n"
          "ivec3 pos = ivec3(gl_GlobalInvocationID) + ivec3(%d, %d, %d); \n"
-         "int base = ((pos.z * %d + pos.y) * %d + pos.x) * %d;          \n",
+         "int base = pos.z * %s + pos.y * %s + pos.x * %s;              \n",
          params->rc.x0, params->rc.y0, params->rc.z0,
-         params->stride_h, params->stride_w, fmt->num_components);
+         SH_INT(params->depth_pitch / fmt->texel_align),
+         SH_INT(params->row_pitch / fmt->texel_align),
+         SH_INT(fmt->texel_size / fmt->texel_align));
 
     for (int i = 0; i < fmt->num_components; i++) {
         GLSL("color[%d] = %s(%s, base + %d).r; \n",
@@ -1860,11 +1862,14 @@ bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
         [3] = "ivec3",
     };
 
+    assert(fmt->texel_size == fmt->num_components * fmt->texel_align);
     GLSL("ivec3 pos = ivec3(gl_GlobalInvocationID) + ivec3(%d, %d, %d); \n"
-         "int base = ((pos.z * %d + pos.y) * %d + pos.x) * %d;          \n"
+         "int base = pos.z * %s + pos.y * %s + pos.x * %s;              \n"
          "vec4 color = imageLoad(%s, %s(pos));                          \n",
          params->rc.x0, params->rc.y0, params->rc.z0,
-         params->stride_h, params->stride_w, fmt->num_components,
+         SH_INT(params->depth_pitch / fmt->texel_align),
+         SH_INT(params->row_pitch / fmt->texel_align),
+         SH_INT(fmt->texel_size / fmt->texel_align),
          img, coord_types[dims]);
 
     for (int i = 0; i < fmt->num_components; i++)

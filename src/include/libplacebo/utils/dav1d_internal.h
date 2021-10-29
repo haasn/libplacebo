@@ -521,10 +521,10 @@ static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, void *cookie)
     p->stride[1] = has_chroma ? (aligned_w >> ss_hor) << hbd : 0;
 
     // Align strides up to multiples of the GPU performance hints
-    p->stride[0] = PL_ALIGN2(p->stride[0], gpu->limits.align_tex_xfer_stride);
-    p->stride[1] = PL_ALIGN2(p->stride[1], gpu->limits.align_tex_xfer_stride);
+    p->stride[0] = PL_ALIGN2(p->stride[0], gpu->limits.align_tex_xfer_pitch);
+    p->stride[1] = PL_ALIGN2(p->stride[1], gpu->limits.align_tex_xfer_pitch);
 
-    // Aligning offsets to 4 also implicitly aligns to the texel size (1 or 2)
+    // Aligning offsets to 4 also implicitly aligns to the texel alignment (1 or 2)
     size_t off_align = PL_ALIGN2(gpu->limits.align_tex_xfer_offset, 4);
     const size_t y_sz = PL_ALIGN2(p->stride[0] * aligned_h, off_align);
     const size_t uv_sz = PL_ALIGN2(p->stride[1] * (aligned_h >> ss_ver), off_align);

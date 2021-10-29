@@ -173,6 +173,8 @@ pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data 
             continue;
         if (!(fmt->caps & PL_FMT_CAP_SAMPLEABLE))
             continue;
+        if (data->row_stride % fmt->texel_align)
+            continue; // reject misaligned formats
 
         int idx = 0;
 
@@ -207,13 +209,6 @@ bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
     if (data->buf) {
         pl_assert(data->buf_offset == PL_ALIGN2(data->buf_offset, 4));
         pl_assert(data->buf_offset == PL_ALIGN(data->buf_offset, data->pixel_stride));
-    }
-
-    size_t row_stride = PL_DEF(data->row_stride, data->pixel_stride * data->width);
-    unsigned int stride_texels = row_stride / data->pixel_stride;
-    if (stride_texels * data->pixel_stride != row_stride) {
-        PL_ERR(gpu, "data->row_stride must be a multiple of data->pixel_stride!");
-        return false;
     }
 
     int out_map[4];
@@ -251,7 +246,7 @@ bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
 
     return pl_tex_upload(gpu, pl_tex_transfer_params(
         .tex        = *tex,
-        .stride_w   = stride_texels,
+        .row_pitch  = data->row_stride,
         .ptr        = (void *) data->pixels,
         .buf        = data->buf,
         .buf_offset = data->buf_offset,
