@@ -463,7 +463,7 @@ error:
 static void info_callback(void *priv, const struct pl_render_info *info)
 {
     struct plplay *p = priv;
-    struct pass_info *pass;
+    struct pass_info *pass = NULL;
     switch (info->stage) {
     case PL_RENDER_STAGE_FRAME:
         if (info->index >= MAX_FRAME_PASSES)
