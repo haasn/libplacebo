@@ -17,6 +17,7 @@ project('libplacebo', ['c', 'cpp'],
       'support blending against tiles',
       'add pl_fmt.signature',
       'add pl_index_format',
+      'expose pl_dispatch_reset_frame',
     ].length(),
     # Fix version
     0)

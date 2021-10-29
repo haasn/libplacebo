@@ -164,14 +164,6 @@ pl_shader pl_dispatch_begin_ex(pl_dispatch dp, bool unique)
     return pl_shader_alloc(dp->log, &params);
 }
 
-void pl_dispatch_reset_frame(pl_dispatch dp)
-{
-    pl_mutex_lock(&dp->lock);
-    dp->current_ident = 0;
-    dp->current_index++;
-    pl_mutex_unlock(&dp->lock);
-}
-
 void pl_dispatch_mark_dynamic(pl_dispatch dp, bool dynamic)
 {
     dp->dynamic_constants = dynamic;
@@ -931,7 +923,6 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
 
     pass->timer = pl_timer_create(dp->gpu);
 
-    garbage_collect_passes(dp);
     PL_ARRAY_APPEND(dp, dp->passes, pass);
     return pass;
 
@@ -1559,6 +1550,17 @@ void pl_dispatch_abort(pl_dispatch dp, pl_shader *psh)
     PL_ARRAY_APPEND(dp, dp->shaders, sh);
     pl_mutex_unlock(&dp->lock);
     *psh = NULL;
+}
+
+void pl_dispatch_reset_frame(pl_dispatch dp)
+{
+    pl_mutex_lock(&dp->lock);
+
+    dp->current_ident = 0;
+    dp->current_index++;
+    garbage_collect_passes(dp);
+
+    pl_mutex_unlock(&dp->lock);
 }
 
 // Stuff related to caching
