@@ -42,6 +42,10 @@
 // will be served by dedicated allocations. (Default: 64 MB)
 #define MAXIMUM_PAGE_SIZE (1LLU << 26)
 
+// Controls the minimum slab size, to avoid excessive re-allocation of very
+// small slabs. (Default: 256 KB)
+#define MINIMUM_SLAB_SIZE (1LLU << 18)
+
 // Controls the maximum slab size, to avoid ballooning memory requirements
 // due to overzealous allocation of extra pages. (Default: 256 MB)
 #define MAXIMUM_SLAB_SIZE (1LLU << 28)
@@ -678,7 +682,8 @@ static struct vk_slab *pool_get_page(struct vk_malloc *ma, struct vk_pool *pool,
     // Otherwise, allocate a new vk_slab and append it to the list.
     size_t pagesize = PL_ALIGN(size, align);
     VkDeviceSize slab_size = slab_pages * pagesize;
-    slab_size = PL_MIN(slab_size, MAXIMUM_SLAB_SIZE);
+    pl_static_assert(MINIMUM_SLAB_SIZE <= PAGE_SIZE_ALIGN * MAXIMUM_PAGE_COUNT);
+    slab_size = PL_CLAMP(slab_size, MINIMUM_SLAB_SIZE, MAXIMUM_SLAB_SIZE);
     slab_pages = slab_size / pagesize;
 
     struct vk_malloc_params params = pool->params;
