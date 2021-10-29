@@ -801,19 +801,19 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
         if (use_sigmoid)
             pl_shader_sigmoidize(sh, params->sigmoid_params);
 
-        repr.alpha = PL_ALPHA_PREMULTIPLIED;
+        bool independent = repr.alpha == PL_ALPHA_INDEPENDENT;
         pl_shader_encode_color(sh, &repr);
         if (ol.mode == PL_OVERLAY_MONOCHROME) {
-            GLSL("color.rgba *= %s(%s, coord).r; \n",
+            GLSL("color.%s *= %s(%s, coord).r; \n",
+                 independent ? "a" : "rgba",
                  sh_tex_fn(sh, ol.tex->params), tex);
         }
 
         swizzle_color(sh, comps, comp_map, true);
 
         struct pl_blend_params blend_params = {
-            .src_rgb = PL_BLEND_ONE,
-            .src_alpha = PL_BLEND_SRC_ALPHA,
-            // FIXME: What if the target is not premultiplied?
+            .src_rgb = independent ? PL_BLEND_SRC_ALPHA : PL_BLEND_ONE,
+            .src_alpha = PL_BLEND_ONE,
             .dst_rgb = PL_BLEND_ONE_MINUS_SRC_ALPHA,
             .dst_alpha = PL_BLEND_ONE_MINUS_SRC_ALPHA,
         };
