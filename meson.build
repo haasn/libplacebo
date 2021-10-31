@@ -6,20 +6,20 @@ project('libplacebo', ['c', 'cpp'],
     # Major version
     4,
     # API version
-    157 + [
+    157 + {
       # Incremental log of API changes (since v4.157.0)
-      'add support for H.274 film grain',
-      'remove fields deprecated for libplacebo v3',
-      'add preprocessor macros for default params',
-      'make H.274 film grain values indirect',
-      'support rotation in pl_renderer',
-      'add pl_frame_copy_stream_props',
-      'support blending against tiles',
-      'add pl_fmt.signature',
-      'add pl_index_format',
-      'expose pl_dispatch_reset_frame',
-      'refactor pl_tex_transfer.stride_w/h into row/depth_pitch'
-    ].length(),
+      '158': 'add support for H.274 film grain',
+      '159': 'remove fields deprecated for libplacebo v3',
+      '160': 'add preprocessor macros for default params',
+      '161': 'make H.274 film grain values indirect',
+      '162': 'support rotation in pl_renderer',
+      '163': 'add pl_frame_copy_stream_props',
+      '164': 'support blending against tiles',
+      '165': 'add pl_fmt.signature',
+      '166': 'add pl_index_format',
+      '167': 'expose pl_dispatch_reset_frame',
+      '168': 'refactor pl_tex_transfer.stride_w/h into row/depth_pitch',
+    }.keys().length(),
     # Fix version
     0)
 )
