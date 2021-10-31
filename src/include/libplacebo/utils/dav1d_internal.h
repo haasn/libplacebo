@@ -349,8 +349,8 @@ static inline void pl_frame_from_dav1dpicture(struct pl_frame *out,
     }
 }
 
-static void pl_swapchain_colors_from_dav1dpicture(struct pl_swapchain_colors *out_colors,
-                                                  const Dav1dPicture *picture)
+static inline void pl_swapchain_colors_from_dav1dpicture(struct pl_swapchain_colors *out_colors,
+                                                         const Dav1dPicture *picture)
 {
     struct pl_frame frame;
     pl_frame_from_dav1dpicture(&frame, picture);
