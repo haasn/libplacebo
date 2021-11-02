@@ -2717,9 +2717,11 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         }
 
         // Skip frames with negligible contributions. Do this after the loop
-        // above to make sure these frames don't get evicted just yet.
+        // above to make sure these frames don't get evicted just yet, and
+        // also exclude the reference image from this optimization to ensure
+        // that we always have at least one frame.
         const float cutoff = 1e-3;
-        if (fabs(weight) <= cutoff) {
+        if (fabs(weight) <= cutoff && images->frames[i] != refimg) {
             PL_TRACE(rr, "   -> Skipping: weight (%f) below threshold (%f)",
                      weight, cutoff);
             continue;
