@@ -26,7 +26,6 @@ struct pl_pass_vk {
     VkPipelineLayout pipeLayout;
     VkRenderPass renderPass;
     VkImageLayout initialLayout;
-    VkImageLayout finalLayout;
     // Descriptor set (bindings)
     bool use_pushd;
     VkDescriptorSetLayout dsLayout;
@@ -573,22 +572,8 @@ no_descriptors: ;
             };
         }
 
-        pass_vk->finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        // Figure out which case we should try and optimize for based on some
-        // dumb heuristics. Extremely naive, but good enough for most cases.
-        struct pl_tex_params texparams = params->target_dummy.params;
-        if (texparams.sampleable)
-            pass_vk->finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        if (texparams.blit_src || texparams.host_readable)
-            pass_vk->finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-
-        // Assume we're ping-ponging between a render pass and some other
-        // operation. This is the most likely scenario, or rather, the only one
-        // we can really optimize for.
-        pass_vk->initialLayout = pass_vk->finalLayout;
-
         VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        pass_vk->initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         // If we're blending, then we need to explicitly load the previous
         // contents of the color attachment
@@ -605,12 +590,12 @@ no_descriptors: ;
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
             .attachmentCount = 1,
             .pAttachments = &(VkAttachmentDescription) {
-                .format = (VkFormat) texparams.format->signature,
+                .format = (VkFormat) params->target_dummy.params.format->signature,
                 .samples = VK_SAMPLE_COUNT_1_BIT,
                 .loadOp = loadOp,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                 .initialLayout = pass_vk->initialLayout,
-                .finalLayout = pass_vk->finalLayout,
+                .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             },
             .subpassCount = 1,
             .pSubpasses = &(VkSubpassDescription) {
@@ -1005,8 +990,8 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         }
 
         vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                      pass_vk->initialLayout, false);
+                       VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                       pass_vk->initialLayout, false);
 
         VkViewport viewport = {
             .x = params->viewport.x0,
@@ -1045,7 +1030,7 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             vk_buf_signal(gpu, cmd, index, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
 
         // The renderPass implicitly transitions the texture to this layout
-        tex_vk->current_layout = pass_vk->finalLayout;
+        tex_vk->current_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         vk_tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         break;
     }
