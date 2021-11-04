@@ -590,7 +590,7 @@ no_descriptors: ;
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
             .attachmentCount = 1,
             .pAttachments = &(VkAttachmentDescription) {
-                .format = (VkFormat) params->target_dummy.params.format->signature,
+                .format = (VkFormat) params->target_format->signature,
                 .samples = VK_SAMPLE_COUNT_1_BIT,
                 .loadOp = loadOp,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,

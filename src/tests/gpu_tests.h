@@ -284,7 +284,7 @@ static void pl_shader_tests(pl_gpu gpu)
     pl_pass pass;
     pass = pl_pass_create(gpu, &(struct pl_pass_params) {
         .type           = PL_PASS_RASTER,
-        .target_dummy   = *fbo,
+        .target_format  = fbo_fmt,
         .vertex_shader  = vert_shader,
         .glsl_shader    = frag_shader,
 

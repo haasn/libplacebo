@@ -1336,6 +1336,8 @@ const struct pl_blend_params pl_alpha_overlay = {
 
 pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 {
+    struct pl_pass_params fixed;
+
     require(params->glsl_shader);
     switch(params->type) {
     case PL_PASS_RASTER:
@@ -1348,10 +1350,16 @@ pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
             require(va.offset + va.fmt->texel_size <= params->vertex_stride);
         }
 
-        pl_fmt target_fmt = params->target_dummy.params.format;
-        require(target_fmt);
-        require(target_fmt->caps & PL_FMT_CAP_RENDERABLE);
-        require(!params->blend_params || target_fmt->caps & PL_FMT_CAP_BLENDABLE);
+        if (!params->target_format) {
+            // Compatibility with older API
+            fixed = *params;
+            fixed.target_format = params->target_dummy.params.format;
+            params = &fixed;
+        }
+
+        require(params->target_format);
+        require(params->target_format->caps & PL_FMT_CAP_RENDERABLE);
+        require(!params->blend_params || params->target_format->caps & PL_FMT_CAP_BLENDABLE);
         require(!params->blend_params || params->load_target);
         break;
     case PL_PASS_COMPUTE:
@@ -1502,9 +1510,7 @@ void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         pl_tex target = params->target;
         require(target);
         require(pl_tex_params_dimension(target->params) == 2);
-        pl_fmt target_fmt = target->params.format;
-        pl_fmt pass_target_fmt = pass->params.target_dummy.params.format;
-        require(target_fmt->signature == pass_target_fmt->signature);
+        require(target->params.format->signature == pass->params.target_format->signature);
         require(target->params.renderable);
         struct pl_rect2d *vp = &new.viewport;
         struct pl_rect2d *sc = &new.scissors;

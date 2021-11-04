@@ -1195,16 +1195,13 @@ struct pl_pass_params {
     // The vertex shader itself.
     const char *vertex_shader;
 
-    // The target texture this render pass is intended to be used with. This
-    // doesn't have to come from a real texture - the caller can also invent
-    // values or pass a blank struct, as long as `target_dummy.params.format`
-    // is set. The format must support `PL_FMT_CAP_RENDERABLE`. If any other
-    // fields are set, the GPU may be able to further optimize the render pass
-    // for this particular type of texture.
-    PL_STRUCT(pl_tex) target_dummy;
+    // Target format. The format must support PL_FMT_CAP_RENDERABLE. The
+    // resulting pass may only be used on textures that have a format with a
+    // `pl_fmt.signature` compatible to this format.
+    pl_fmt target_format;
 
     // Target blending mode. If this is NULL, blending is disabled. Otherwise,
-    // the `target_dummy.params.format` must have PL_FMT_CAP_BLENDABLE.
+    // the `target_format` must also support PL_FMT_CAP_BLENDABLE.
     const struct pl_blend_params *blend_params;
 
     // If false, the target's existing contents will be discarded before the
@@ -1213,6 +1210,9 @@ struct pl_pass_params {
     //
     // Specifying `blend_params` requires `load_target` to be true.
     bool load_target;
+
+    // (Deprecated) Fallback for `target_format`.
+    PL_STRUCT(pl_tex) target_dummy PL_DEPRECATED;
 };
 
 #define pl_pass_params(...) (&(struct pl_pass_params) { __VA_ARGS__ })
@@ -1287,7 +1287,7 @@ struct pl_pass_run_params {
 
     // Target must be a 2D texture, `target->params.renderable` must be true,
     // and `target->params.format->signature` must match the signature provided
-    // in `pass->params.target_dummy.params.format`.
+    // in `pass->params.target_format`.
     //
     // If the viewport or scissors are left blank, they are inferred from
     // target->params.

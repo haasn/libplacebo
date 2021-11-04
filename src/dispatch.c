@@ -741,7 +741,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
 
     if (params.type == PL_PASS_RASTER) {
         assert(target);
-        params.target_dummy = *target;
+        params.target_format = target->params.format;
         params.load_target = load;
 
         // Fill in the vertex attributes array
