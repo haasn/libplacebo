@@ -117,8 +117,10 @@ static void find_fbo_format(pl_renderer rr)
 
     pl_fmt fmt = NULL;
     for (int i = 0; i < PL_ARRAY_SIZE(configs); i++) {
+        const enum pl_fmt_caps min_caps = PL_FMT_CAP_RENDERABLE |
+                                          PL_FMT_CAP_BLITTABLE;
         fmt = pl_find_fmt(rr->gpu, configs[i].type, 4, configs[i].depth, 0,
-                          configs[i].caps | PL_FMT_CAP_RENDERABLE);
+                          min_caps | configs[i].caps);
         if (fmt) {
             rr->fbofmt[4] = fmt;
 
@@ -392,6 +394,7 @@ static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt, int com
         .format = fmt,
         .sampleable = true,
         .renderable = true,
+        .blit_src   = true,
         .storable   = fmt->caps & PL_FMT_CAP_STORABLE,
     };
 
@@ -2762,6 +2765,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                 .format = rr->fbofmt[4],
                 .sampleable = true,
                 .renderable = true,
+                .blit_dst = true,
                 .storable = rr->fbofmt[4]->caps & PL_FMT_CAP_STORABLE,
             ));
 
@@ -2801,12 +2805,19 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             pl_assert(inter_pass.img.w == out_w &&
                       inter_pass.img.h == out_h);
 
-            ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
-                .shader = &inter_pass.img.sh,
-                .target = f->tex,
-            ));
-            if (!ok)
-                goto error;
+            if (inter_pass.img.tex) {
+                pl_tex_blit(rr->gpu, pl_tex_blit_params(
+                    .src = inter_pass.img.tex,
+                    .dst = f->tex,
+                ));
+            } else {
+                ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
+                    .shader = &inter_pass.img.sh,
+                    .target = f->tex,
+                ));
+                if (!ok)
+                    goto error;
+            }
 
             f->params_hash = params_hash;
             f->color = inter_pass.img.color;
