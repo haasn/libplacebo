@@ -28,7 +28,7 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
     pl_assert(!tex_vk->held);
 
     for (int i = 0; i < tex_vk->ext_deps.num; i++)
-        vk_cmd_dep(cmd, tex_vk->ext_deps.elem[i], stage);
+        vk_cmd_dep(cmd, stage, tex_vk->ext_deps.elem[i]);
     tex_vk->ext_deps.num = 0;
 
     // CONCURRENT images require transitioning to/from IGNORED, EXCLUSIVE
@@ -1048,14 +1048,14 @@ bool vk_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync)
     vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                    0, VK_IMAGE_LAYOUT_GENERAL, true);
 
-    vk_cmd_sig(cmd, sync_vk->wait);
+    vk_cmd_sig(cmd, (pl_vulkan_sem){ sync_vk->wait });
     CMD_SUBMIT(&cmd);
 
     if (!vk_flush_commands(vk))
         goto error;
 
     // Remember the other dependency and hold on to the sync object
-    PL_ARRAY_APPEND(tex, tex_vk->ext_deps, sync_vk->signal);
+    PL_ARRAY_APPEND(tex, tex_vk->ext_deps, (pl_vulkan_sem){ sync_vk->signal });
     pl_rc_ref(&sync_vk->rc);
     tex_vk->ext_sync = sync;
     return true;
@@ -1153,12 +1153,12 @@ VkImage pl_vulkan_unwrap(pl_gpu gpu, pl_tex tex, VkFormat *out_format,
 }
 
 bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
-                    VkAccessFlags access, VkSemaphore sem_out)
+                    VkAccessFlags access, pl_vulkan_sem sem_out)
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
-    pl_assert(sem_out);
+    pl_assert(sem_out.sem);
 
     if (tex_vk->held) {
         PL_ERR(gpu, "Attempting to hold an already held image!");
@@ -1182,7 +1182,7 @@ bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
 }
 
 bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *layout,
-                        VkAccessFlags *access, VkSemaphore sem_out)
+                        VkAccessFlags *access, pl_vulkan_sem sem_out)
 {
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     bool user_may_invalidate = tex_vk->may_invalidate;
@@ -1202,7 +1202,7 @@ bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *layout,
 }
 
 void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
-                       VkAccessFlags access, VkSemaphore sem_in)
+                       VkAccessFlags access, pl_vulkan_sem sem_in)
 {
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     if (!tex_vk->held) {
@@ -1210,7 +1210,7 @@ void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
         return;
     }
 
-    if (sem_in)
+    if (sem_in.sem)
         PL_ARRAY_APPEND(tex, tex_vk->ext_deps, sem_in);
 
     tex_vk->current_layout = layout;

@@ -189,8 +189,14 @@ static_assert(PL_ARRAY_SIZE(pl_vulkan_recommended_extensions) + 1 ==
               "vk_device_extensions?");
 
 // pNext chain of features we want enabled
+static const VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphores = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
+    .timelineSemaphore = true,
+};
+
 static const VkPhysicalDeviceHostQueryResetFeatures host_query_reset = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES,
+    .pNext = (void *) &timeline_semaphores,
     .hostQueryReset = true,
 };
 

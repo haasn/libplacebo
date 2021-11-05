@@ -48,9 +48,11 @@ struct vk_cmd {
     // this command can be executed. These are *not* owned by the vk_cmd
     PL_ARRAY(VkSemaphore) deps;
     PL_ARRAY(VkPipelineStageFlags) depstages;
+    PL_ARRAY(uint64_t) depvalues;
     // The signals represent semaphores that fire once the command finishes
     // executing. These are also not owned by the vk_cmd
     PL_ARRAY(VkSemaphore) sigs;
+    PL_ARRAY(uint64_t) sigvalues;
     // Since VkFences are useless, we have to manually track "callbacks"
     // to fire once the VkFence completes. These are used for multiple purposes,
     // ranging from garbage collection (resource deallocation) to fencing.
@@ -67,7 +69,7 @@ void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback,
 
 // Associate a raw dependency for the current command. This semaphore must
 // signal by the corresponding stage before the command may execute.
-void vk_cmd_dep(struct vk_cmd *cmd, VkSemaphore dep, VkPipelineStageFlags stage);
+void vk_cmd_dep(struct vk_cmd *cmd, VkPipelineStageFlags stage, pl_vulkan_sem dep);
 
 // Associate an object with a command. This can be used to partially flush
 // commands only involving the object in question.
@@ -75,7 +77,7 @@ void vk_cmd_obj(struct vk_cmd *cmd, const void *obj);
 
 // Associate a raw signal with the current command. This semaphore will signal
 // after the command completes.
-void vk_cmd_sig(struct vk_cmd *cmd, VkSemaphore sig);
+void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig);
 
 enum vk_wait_type {
     VK_WAIT_NONE,    // no synchronization needed

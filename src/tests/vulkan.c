@@ -50,7 +50,7 @@ static void vulkan_interop_tests(pl_vulkan pl_vk,
         struct vk_cmd *cmd = vk_cmd_begin(vk, vk->pool_graphics);
         REQUIRE(cmd);
         struct pl_sync_vk *sync_vk = PL_PRIV(sync);
-        vk_cmd_sig(cmd, sync_vk->signal);
+        vk_cmd_sig(cmd, (pl_vulkan_sem){ sync_vk->signal });
         vk_cmd_queue(vk, &cmd);
         REQUIRE(vk_flush_commands(vk));
 

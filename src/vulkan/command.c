@@ -47,7 +47,9 @@ static void vk_cmd_reset(struct vk_ctx *vk, struct vk_cmd *cmd)
     cmd->callbacks.num = 0;
     cmd->deps.num = 0;
     cmd->depstages.num = 0;
+    cmd->depvalues.num = 0;
     cmd->sigs.num = 0;
+    cmd->sigvalues.num = 0;
     cmd->objs.num = 0;
 
     // also make sure to reset vk->last_cmd in case this was the last command
@@ -123,10 +125,12 @@ void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback,
     });
 }
 
-void vk_cmd_dep(struct vk_cmd *cmd, VkSemaphore dep, VkPipelineStageFlags stage)
+void vk_cmd_dep(struct vk_cmd *cmd, VkPipelineStageFlags stage, pl_vulkan_sem dep)
 {
-    pl_assert(cmd->deps.num == cmd->depstages.num);
-    PL_ARRAY_APPEND(cmd, cmd->deps, dep);
+    assert(cmd->deps.num == cmd->depstages.num);
+    assert(cmd->deps.num == cmd->depvalues.num);
+    PL_ARRAY_APPEND(cmd, cmd->deps, dep.sem);
+    PL_ARRAY_APPEND(cmd, cmd->depvalues, dep.value);
     PL_ARRAY_APPEND(cmd, cmd->depstages, stage);
 }
 
@@ -135,9 +139,11 @@ void vk_cmd_obj(struct vk_cmd *cmd, const void *obj)
     PL_ARRAY_APPEND(cmd, cmd->objs, obj);
 }
 
-void vk_cmd_sig(struct vk_cmd *cmd, VkSemaphore sig)
+void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig)
 {
-    PL_ARRAY_APPEND(cmd, cmd->sigs, sig);
+    assert(cmd->sigs.num == cmd->sigvalues.num);
+    PL_ARRAY_APPEND(cmd, cmd->sigs, sig.sem);
+    PL_ARRAY_APPEND(cmd, cmd->sigvalues, sig.value);
 }
 
 struct vk_signal {
@@ -190,7 +196,7 @@ done:
     sig->type = VK_WAIT_NONE;
     sig->source = cmd->queue;
     if (sig->semaphore)
-        vk_cmd_sig(cmd, sig->semaphore);
+        vk_cmd_sig(cmd, (pl_vulkan_sem){ sig->semaphore });
 
     VkQueueFlags req = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
     if (sig->event && (cmd->pool->props.queueFlags & req)) {
@@ -214,6 +220,7 @@ static bool unsignal_cmd(struct vk_cmd *cmd, VkSemaphore sem)
     for (int n = 0; n < cmd->sigs.num; n++) {
         if (cmd->sigs.elem[n] == sem) {
             PL_ARRAY_REMOVE_AT(cmd->sigs, n);
+            PL_ARRAY_REMOVE_AT(cmd->sigvalues, n);
             return true;
         }
     }
@@ -277,7 +284,7 @@ enum vk_wait_type vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
     } else {
         // Otherwise, we use the semaphore. (This also unsignals it as a result
         // of the command execution)
-        vk_cmd_dep(cmd, sig->semaphore, stage);
+        vk_cmd_dep(cmd, stage, (pl_vulkan_sem){ sig->semaphore });
         sig->type = VK_WAIT_NONE;
     }
 
@@ -484,8 +491,17 @@ next_cmd: ;
         struct vk_cmd *cmd = vk->cmds_queued.elem[i];
         struct vk_cmdpool *pool = cmd->pool;
 
+        VkTimelineSemaphoreSubmitInfo tinfo = {
+            .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
+            .waitSemaphoreValueCount = cmd->depvalues.num,
+            .pWaitSemaphoreValues = cmd->depvalues.elem,
+            .signalSemaphoreValueCount = cmd->sigvalues.num,
+            .pSignalSemaphoreValues = cmd->sigvalues.elem,
+        };
+
         VkSubmitInfo sinfo = {
             .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = &tinfo,
             .commandBufferCount = 1,
             .pCommandBuffers = &cmd->buf,
             .waitSemaphoreCount = cmd->deps.num,
@@ -500,10 +516,14 @@ next_cmd: ;
                      (void *)cmd->queue, pool->qf);
             for (int n = 0; n < cmd->objs.num; n++)
                 PL_TRACE(vk, "    uses object %p", cmd->objs.elem[n]);
-            for (int n = 0; n < cmd->deps.num; n++)
-                PL_TRACE(vk, "    waits on semaphore %p", (void *) cmd->deps.elem[n]);
-            for (int n = 0; n < cmd->sigs.num; n++)
-                PL_TRACE(vk, "    signals semaphore %p", (void *) cmd->sigs.elem[n]);
+            for (int n = 0; n < cmd->deps.num; n++) {
+                PL_TRACE(vk, "    waits on semaphore %p = %"PRIu64,
+                         (void *) cmd->deps.elem[n], cmd->depvalues.elem[n]);
+            }
+            for (int n = 0; n < cmd->sigs.num; n++) {
+                PL_TRACE(vk, "    signals semaphore %p = %"PRIu64,
+                        (void *) cmd->sigs.elem[n], cmd->sigvalues.elem[n]);
+            }
             PL_TRACE(vk, "    signals fence %p", (void *) cmd->fence);
             if (cmd->callbacks.num)
                 PL_TRACE(vk, "    signals %d callbacks", cmd->callbacks.num);

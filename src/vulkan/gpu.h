@@ -111,7 +111,7 @@ struct pl_tex_vk {
     // the signal guards reuse, and can be NULL
     struct vk_signal *sig;
     VkPipelineStageFlags sig_stage;
-    PL_ARRAY(VkSemaphore) ext_deps; // external semaphore, not owned by the pl_tex
+    PL_ARRAY(pl_vulkan_sem) ext_deps; // external semaphore, not owned by the pl_tex
     pl_sync ext_sync; // indicates an exported image
 };
 
