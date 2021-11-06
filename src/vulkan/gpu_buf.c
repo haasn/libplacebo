@@ -17,120 +17,58 @@
 
 #include "gpu.h"
 
-static void vk_buf_finish_write(pl_gpu gpu, pl_buf buf)
-{
-    if (!buf)
-        return;
-
-    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
-    buf_vk->writes--;
-}
-
 void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
-                    VkPipelineStageFlags stage, VkAccessFlags newAccess,
-                    size_t offset, size_t size, enum buffer_op op)
+                    VkPipelineStageFlags stage, VkAccessFlags access,
+                    size_t offset, size_t size, bool export)
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
+    pl_assert(!export || !buf_vk->exported); // can't re-export exported buffers
     pl_rc_ref(&buf_vk->rc);
+
+    bool needs_flush = buf_vk->needs_flush || buf->params.host_mapped ||
+                       buf->params.import_handle == PL_HANDLE_HOST_PTR;
+    bool noncoherent = buf_vk->mem.data && !buf_vk->mem.coherent;
+    if (needs_flush && noncoherent) {
+        buf_vk->needs_flush = false;
+        VK(vk->FlushMappedMemoryRanges(vk->dev, 1, &(struct VkMappedMemoryRange) {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = buf_vk->mem.vkmem,
+            .offset = buf_vk->mem.offset,
+            .size = buf_vk->mem.size,
+        }));
+
+        // Just ignore errors, not much we can do about them other than
+        // logging them and moving on...
+    error: ;
+    }
+
+    struct vk_sync_scope last;
+    last = vk_sem_barrier(vk, cmd, &buf_vk->sem, stage, access, export);
 
     // CONCURRENT buffers require transitioning to/from IGNORED, EXCLUSIVE
     // buffers require transitioning to/from the concrete QF index
     uint32_t qf = vk->pools.num > 1 ? VK_QUEUE_FAMILY_IGNORED : cmd->pool->qf;
-
-    VkBufferMemoryBarrier buffBarrier = {
+    VkBufferMemoryBarrier barr = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
         .srcQueueFamilyIndex = buf_vk->exported ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
-        .dstQueueFamilyIndex = (op & BUF_EXPORT) ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
-        .srcAccessMask = buf_vk->current_access,
-        .dstAccessMask = newAccess,
+        .dstQueueFamilyIndex = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
+        .srcAccessMask = last.access,
+        .dstAccessMask = access,
         .buffer = buf_vk->mem.buf,
         .offset = buf_vk->mem.offset + offset,
         .size = size,
     };
 
-    // Can't re-export exported buffers
-    pl_assert(!(op & BUF_EXPORT) || !buf_vk->exported);
-
-    enum vk_wait_type type = vk_cmd_wait(vk, cmd, &buf_vk->sig, stage);
-    VkPipelineStageFlags src_stages = 0;
-
-    if (buf_vk->needs_flush || buf->params.host_mapped ||
-        buf->params.import_handle == PL_HANDLE_HOST_PTR)
-    {
-        if (!buf_vk->exported) {
-            buffBarrier.srcAccessMask |= VK_ACCESS_HOST_WRITE_BIT;
-            src_stages |= VK_PIPELINE_STAGE_HOST_BIT;
-        }
-
-        if (buf_vk->mem.data && !buf_vk->mem.coherent) {
-            if (buf_vk->exported) {
-                // TODO: figure out and clean up the semantics?
-                PL_WARN(vk, "Mixing host-mapped or user-writable buffers with "
-                        "external APIs is risky and untested. If you run into "
-                        "any issues, please try using a non-mapped buffer and "
-                        "avoid pl_buf_write.");
-            }
-
-            VK(vk->FlushMappedMemoryRanges(vk->dev, 1, &(struct VkMappedMemoryRange) {
-                .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-                .memory = buf_vk->mem.vkmem,
-                .offset = buf_vk->mem.offset,
-                .size = buf_vk->mem.size,
-            }));
-
-            // Just ignore errors, not much we can do about them other than
-            // logging them and moving on...
-        error: ;
-        }
-
-        buf_vk->needs_flush = false;
+    if (last.access || barr.srcQueueFamilyIndex != barr.dstQueueFamilyIndex) {
+        vk->CmdPipelineBarrier(cmd->buf, last.stage, stage, 0, 0, NULL,
+                               1, &barr, 0, NULL);
     }
 
-    bool need_barrier = buffBarrier.srcAccessMask != buffBarrier.dstAccessMask ||
-                        (buffBarrier.srcAccessMask & vk_access_write) ||
-                        (buffBarrier.srcQueueFamilyIndex !=
-                         buffBarrier.dstQueueFamilyIndex);
-
-    if (need_barrier) {
-        switch (type) {
-        case VK_WAIT_NONE:
-            // No synchronization required, so we can safely transition out of
-            // VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-            buffBarrier.srcAccessMask = 0;
-            src_stages |= VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            vk->CmdPipelineBarrier(cmd->buf, src_stages, stage, 0, 0, NULL,
-                                   1, &buffBarrier, 0, NULL);
-            break;
-        case VK_WAIT_BARRIER:
-            // Regular pipeline barrier is required
-            vk->CmdPipelineBarrier(cmd->buf, buf_vk->sig_stage | src_stages,
-                                   stage, 0, 0, NULL, 1, &buffBarrier, 0, NULL);
-            break;
-        }
-    }
-
-    if (op & BUF_WRITE) {
-        buf_vk->writes++;
-        vk_cmd_callback(cmd, (vk_cb) vk_buf_finish_write, gpu, buf);
-    }
-
-    buf_vk->current_access = newAccess;
-    buf_vk->exported = (op & BUF_EXPORT);
+    buf_vk->exported = export;
     vk_cmd_callback(cmd, (vk_cb) vk_buf_deref, gpu, buf);
     vk_cmd_obj(cmd, buf);
-}
-
-void vk_buf_signal(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
-                   VkPipelineStageFlags stage)
-{
-    struct pl_vk *p = PL_PRIV(gpu);
-    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
-    pl_assert(!buf_vk->sig);
-
-    buf_vk->sig = vk_cmd_signal(p->vk, cmd, stage);
-    buf_vk->sig_stage = stage;
 }
 
 void vk_buf_deref(pl_gpu gpu, pl_buf buf)
@@ -143,7 +81,7 @@ void vk_buf_deref(pl_gpu gpu, pl_buf buf)
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
     if (pl_rc_deref(&buf_vk->rc)) {
-        vk_signal_destroy(vk, &buf_vk->sig);
+        vk_sem_uninit(vk, &buf_vk->sem);
         vk->DestroyBufferView(vk->dev, buf_vk->view, PL_VK_ALLOC);
         vk_malloc_free(vk->ma, &buf_vk->mem);
         pl_free((void *) buf);
@@ -160,8 +98,9 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
     buf->params.initial_data = NULL;
 
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
-    buf_vk->current_access = 0;
     pl_rc_init(&buf_vk->rc);
+    if (!vk_sem_init(vk, &buf_vk->sem))
+        goto error;
 
     struct vk_malloc_params mparams = {
         .reqs = {
@@ -346,7 +285,7 @@ void vk_buf_flush(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .srcAccessMask = buf_vk->current_access,
+        .srcAccessMask = buf_vk->sem.write.access,
         .dstAccessMask = (can_read ? VK_ACCESS_HOST_READ_BIT : 0)
                        | (can_write ? VK_ACCESS_HOST_WRITE_BIT : 0),
         .buffer = buf_vk->mem.buf,
@@ -354,7 +293,7 @@ void vk_buf_flush(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
         .size = size,
     };
 
-    vk->CmdPipelineBarrier(cmd->buf, buf_vk->sig_stage,
+    vk->CmdPipelineBarrier(cmd->buf, buf_vk->sem.write.stage,
                            VK_PIPELINE_STAGE_HOST_BIT, 0,
                            0, NULL, 1, &buffBarrier, 0, NULL);
 
@@ -409,7 +348,7 @@ void vk_buf_write(pl_gpu gpu, pl_buf buf, size_t offset,
         }
 
         vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_ACCESS_TRANSFER_WRITE_BIT, offset, size, BUF_WRITE);
+                       VK_ACCESS_TRANSFER_WRITE_BIT, offset, size, false);
 
         // Vulkan requires `size` to be a multiple of 4, so we need to make
         // sure to handle the end separately if the original data is not
@@ -439,23 +378,36 @@ void vk_buf_write(pl_gpu gpu, pl_buf buf, size_t offset,
         }
 
         pl_assert(!buf->params.host_readable); // no flush needed due to this
-        vk_buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         CMD_FINISH(&cmd);
     }
 }
 
 bool vk_buf_read(pl_gpu gpu, pl_buf buf, size_t offset, void *dest, size_t size)
 {
+    struct pl_vk *p = PL_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     pl_assert(buf_vk->mem.data);
 
-    // ensure no more queued writes
-    while (buf_vk->writes)
-        vk_buf_poll(gpu, buf, UINT64_MAX);
+    if (vk_buf_poll(gpu, buf, 0)) {
+        // ensure no more queued writes
+        VK(vk->WaitSemaphores(vk->dev, &(VkSemaphoreWaitInfo) {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+            .semaphoreCount = 1,
+            .pSemaphores = &buf_vk->sem.semaphore,
+            .pValues = &buf_vk->sem.write.value,
+        }, UINT64_MAX));
+
+        // process callbacks
+        vk_poll_commands(vk, 0);
+    }
 
     uintptr_t addr = (uintptr_t) buf_vk->mem.data + (size_t) offset;
     memcpy(dest, (void *) addr, size);
     return true;
+
+error:
+    return false;
 }
 
 void vk_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
@@ -473,9 +425,9 @@ void vk_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
     }
 
     vk_buf_barrier(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                   VK_ACCESS_TRANSFER_WRITE_BIT, dst_offset, size, BUF_WRITE);
+                   VK_ACCESS_TRANSFER_WRITE_BIT, dst_offset, size, false);
     vk_buf_barrier(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                   VK_ACCESS_TRANSFER_READ_BIT, src_offset, size, BUF_READ);
+                   VK_ACCESS_TRANSFER_READ_BIT, src_offset, size, false);
 
     VkBufferCopy region = {
         .srcOffset = src_vk->mem.offset + src_offset,
@@ -486,8 +438,6 @@ void vk_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
     vk->CmdCopyBuffer(cmd->buf, src_vk->mem.buf, dst_vk->mem.buf,
                       1, &region);
 
-    vk_buf_signal(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT);
-    vk_buf_signal(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT);
     vk_buf_flush(gpu, cmd, dst, dst_offset, size);
     CMD_FINISH(&cmd);
 }
@@ -509,7 +459,7 @@ bool vk_buf_export(pl_gpu gpu, pl_buf buf)
     // For the queue family ownership transfer, we can ignore all pipeline
     // stages since the synchronization via fences/semaphores is required
     vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
-                   0, buf->params.size, BUF_EXPORT);
+                   0, buf->params.size, true);
 
 
     CMD_SUBMIT(&cmd);

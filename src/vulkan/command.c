@@ -146,129 +146,113 @@ void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig)
     PL_ARRAY_APPEND(cmd, cmd->sigvalues, sig.value);
 }
 
-struct vk_signal {
-    VkSemaphore semaphore;
-    enum vk_wait_type type; // last signal type
-    VkQueue source;         // last signal source
-};
-
-struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
-                                VkPipelineStageFlags stage)
+void vk_sem_uninit(struct vk_ctx *vk, struct vk_sem *sem)
 {
-    struct vk_signal *sig = NULL;
-    if (PL_ARRAY_POP(vk->signals, &sig))
-        goto done;
+    vk->DestroySemaphore(vk->dev, sem->semaphore, PL_VK_ALLOC);
+    *sem = (struct vk_sem) {0};
+}
 
-    // no available signal => initialize a new one
-    sig = pl_zalloc_ptr(NULL, sig);
-    static const VkSemaphoreCreateInfo sinfo = {
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+bool vk_sem_init(struct vk_ctx *vk, struct vk_sem *sem)
+{
+    *sem = (struct vk_sem) {
+        .write.stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        .read.stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
     };
 
-    // We can skip creating the semaphores if there's only one queue
-    if (vk->pools.num > 1 || vk->pools.elem[0]->num_queues > 1) {
-        VK(vk->CreateSemaphore(vk->dev, &sinfo, PL_VK_ALLOC, &sig->semaphore));
-        PL_VK_NAME(SEMAPHORE, sig->semaphore, "sig");
-    }
+    static const VkSemaphoreTypeCreateInfo stinfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .semaphoreType  = VK_SEMAPHORE_TYPE_TIMELINE,
+        .initialValue   = 0,
+    };
 
-done:
-    sig->type = VK_WAIT_NONE;
-    sig->source = cmd->queue;
-    if (sig->semaphore)
-        vk_cmd_sig(cmd, (pl_vulkan_sem){ sig->semaphore });
+    static const VkSemaphoreCreateInfo sinfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = &stinfo,
+    };
 
-    return sig;
+    // We always create a semaphore, so we can perform host waits on it
+    VK(vk->CreateSemaphore(vk->dev, &sinfo, PL_VK_ALLOC, &sem->semaphore));
+    PL_VK_NAME(SEMAPHORE, sem->semaphore, "vk_sem");
+    return true;
 
 error:
-    vk_signal_destroy(vk, &sig);
     vk->failed = true;
-    return NULL;
-}
-
-static bool unsignal_cmd(struct vk_cmd *cmd, VkSemaphore sem)
-{
-    if (!sem)
-        return true;
-
-    for (int n = 0; n < cmd->sigs.num; n++) {
-        if (cmd->sigs.elem[n] == sem) {
-            PL_ARRAY_REMOVE_AT(cmd->sigs, n);
-            PL_ARRAY_REMOVE_AT(cmd->sigvalues, n);
-            return true;
-        }
-    }
-
     return false;
 }
 
-// Attempts to remove a queued signal operation. Returns true if successful,
-// i.e. the signal could be removed before it ever got fired.
-static bool unsignal(struct vk_ctx *vk, struct vk_cmd *cmd, VkSemaphore sem)
+struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
+                                    struct vk_sem *sem, VkPipelineStageFlags stage,
+                                    VkAccessFlags access, bool is_trans)
 {
-    if (unsignal_cmd(cmd, sem))
-        return true;
+    bool is_write = (access & vk_access_write) || is_trans;
 
-    // Attempt to remove it from any queued commands
-    pl_mutex_lock(&vk->lock);
-    for (int i = 0; i < vk->cmds_queued.num; i++) {
-        if (unsignal_cmd(vk->cmds_queued.elem[i], sem)) {
-            pl_mutex_unlock(&vk->lock);
-            return true;
+    // Writes need to be synchronized against the last *read* (which is
+    // transitively synchronized against the last write), reads only
+    // need to be synchronized against the last write.
+    struct vk_sync_scope last = sem->write;
+    if (is_write && sem->read.access)
+        last = sem->read;
+
+    if (last.queue != cmd->queue) {
+        if (!is_write && sem->read.queue == cmd->queue) {
+            // No semaphore needed in this case because the implicit submission
+            // order execution dependencies already transitively imply a wait
+            // for the previous write
+        } else if (last.queue) {
+            vk_cmd_dep(cmd, stage, (pl_vulkan_sem) {
+                .sem = sem->semaphore,
+                .value = last.value,
+            });
         }
+        last.stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        last.access = 0;
     }
-    pl_mutex_unlock(&vk->lock);
 
-    return false;
-}
+    if (!is_write && sem->read.queue == cmd->queue &&
+        (sem->read.stage & stage) == stage &&
+        (sem->read.access & access) == access)
+    {
+        // A past pipeline barrier already covers this access transitively, so
+        // we don't need to emit another pipeline barrier at all
+        last.stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        last.access = 0;
+    }
 
-static void release_signal(struct vk_ctx *vk, struct vk_signal *sig)
-{
-    // The semaphore never needs to be recreated, because it's either
-    // unsignaled while still queued, or unsignaled as a result of a device
-    // wait.
-    sig->source = NULL;
+    pl_assert(sem->read.value >= sem->write.value);
+    uint64_t next_value = sem->read.value + 1;
+    vk_cmd_sig(cmd, (pl_vulkan_sem) {
+        .sem = sem->semaphore,
+        .value = next_value,
+    });
 
-    pl_mutex_lock(&vk->lock);
-    PL_ARRAY_APPEND(vk->alloc, vk->signals, sig);
-    pl_mutex_unlock(&vk->lock);
-}
+    if (is_write) {
+        sem->write = (struct vk_sync_scope) {
+            .value = next_value,
+            .queue = cmd->queue,
+            .stage = stage,
+            .access = access,
+        };
 
-enum vk_wait_type vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
-                              struct vk_signal **sigptr,
-                              VkPipelineStageFlags stage)
-{
-    struct vk_signal *sig = *sigptr;
-    if (!sig)
-        return VK_WAIT_NONE;
-
-    if (sig->source == cmd->queue && unsignal(vk, cmd, sig->semaphore)) {
-        // If we can remove the semaphore signal operation from the history and
-        // pretend it never happened, then we get to use the more efficient
-        // synchronization primitives. However, this requires that we're still
-        // in the same VkQueue.
-        sig->type = VK_WAIT_BARRIER;
+        sem->read = (struct vk_sync_scope) {
+            .value = next_value,
+            .queue = cmd->queue,
+            // no stage or access scope, because no reads happened yet
+        };
+    } else if (sem->read.queue == cmd->queue) {
+        // Coalesce multiple same-queue reads into a single access scope
+        sem->read.value = next_value;
+        sem->read.stage |= stage;
+        sem->read.access |= access;
     } else {
-        // Otherwise, we use the semaphore. (This also unsignals it as a result
-        // of the command execution)
-        vk_cmd_dep(cmd, stage, (pl_vulkan_sem){ sig->semaphore });
-        sig->type = VK_WAIT_NONE;
+        sem->read = (struct vk_sync_scope) {
+            .value = next_value,
+            .queue = cmd->queue,
+            .stage = stage,
+            .access = access,
+        };
     }
 
-    // In either case, once the command completes, we can release the signal
-    // resource back to the pool.
-    vk_cmd_callback(cmd, (vk_cb) release_signal, vk, sig);
-    *sigptr = NULL;
-    return sig->type;
-}
-
-void vk_signal_destroy(struct vk_ctx *vk, struct vk_signal **sig)
-{
-    if (!*sig)
-        return;
-
-    vk->DestroySemaphore(vk->dev, (*sig)->semaphore, PL_VK_ALLOC);
-    pl_free(*sig);
-    *sig = NULL;
+    return last;
 }
 
 struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk,

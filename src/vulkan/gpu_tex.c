@@ -18,8 +18,8 @@
 #include "gpu.h"
 
 void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
-                    VkPipelineStageFlags stage, VkAccessFlags newAccess,
-                    VkImageLayout newLayout, bool export)
+                    VkPipelineStageFlags stage, VkAccessFlags access,
+                    VkImageLayout layout, bool export)
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
@@ -31,18 +31,27 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
         vk_cmd_dep(cmd, stage, tex_vk->ext_deps.elem[i]);
     tex_vk->ext_deps.num = 0;
 
+    // Transitioning to VK_IMAGE_LAYOUT_UNDEFINED is a pseudo-operation for
+    // render passes, which means that we don't actually need to perform
+    // any image layout transition
+    if (layout == VK_IMAGE_LAYOUT_UNDEFINED)
+        layout = tex_vk->layout;
+
+    struct vk_sync_scope last;
+    bool is_trans = layout != tex_vk->layout;
+    last = vk_sem_barrier(vk, cmd, &tex_vk->sem, stage, access, is_trans || export);
+
     // CONCURRENT images require transitioning to/from IGNORED, EXCLUSIVE
     // images require transitioning to/from the concrete QF index
     uint32_t qf = vk->pools.num > 1 ? VK_QUEUE_FAMILY_IGNORED : cmd->pool->qf;
-
-    VkImageMemoryBarrier imgBarrier = {
+    VkImageMemoryBarrier barr = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .oldLayout = tex_vk->current_layout,
-        .newLayout = newLayout,
+        .oldLayout = tex_vk->layout,
+        .newLayout = layout,
         .srcQueueFamilyIndex = qf,
         .dstQueueFamilyIndex = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
-        .srcAccessMask = tex_vk->current_access,
-        .dstAccessMask = newAccess,
+        .srcAccessMask = last.access,
+        .dstAccessMask = access,
         .image = tex_vk->img,
         .subresourceRange = {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -52,8 +61,8 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
     };
 
     if (tex_vk->ext_sync) {
-        if (tex_vk->current_layout != VK_IMAGE_LAYOUT_UNDEFINED) {
-            imgBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL_KHR;
+        if (tex_vk->layout != VK_IMAGE_LAYOUT_UNDEFINED) {
+            barr.srcQueueFamilyIndex = VK_QUEUE_FAMILY_EXTERNAL_KHR;
             pl_assert(!export); // can't re-export exported images
         }
         vk_cmd_callback(cmd, (vk_cb) vk_sync_deref, gpu, tex_vk->ext_sync);
@@ -62,52 +71,18 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
 
     if (tex_vk->may_invalidate) {
         tex_vk->may_invalidate = false;
-        imgBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imgBarrier.srcAccessMask = 0;
+        barr.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     }
 
-    enum vk_wait_type type = vk_cmd_wait(vk, cmd, &tex_vk->sig, stage);
-    bool need_barrier = tex_vk->current_layout != newLayout ||
-                        tex_vk->current_access != newAccess ||
-                        (tex_vk->current_access & vk_access_write) ||
-                        (imgBarrier.srcQueueFamilyIndex !=
-                         imgBarrier.dstQueueFamilyIndex);
-
-    // Transitioning to VK_IMAGE_LAYOUT_UNDEFINED is a pseudo-operation
-    // that for us means we don't need to perform the actual transition
-    if (need_barrier && newLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
-        switch (type) {
-        case VK_WAIT_NONE:
-            // No synchronization required, so we can safely transition out of
-            // VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-            imgBarrier.srcAccessMask = 0;
-            vk->CmdPipelineBarrier(cmd->buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                   stage, 0, 0, NULL, 0, NULL, 1, &imgBarrier);
-            break;
-        case VK_WAIT_BARRIER:
-            // Regular pipeline barrier is required
-            vk->CmdPipelineBarrier(cmd->buf, tex_vk->sig_stage, stage, 0, 0, NULL,
-                                   0, NULL, 1, &imgBarrier);
-            break;
-        }
+    bool is_xfer = barr.srcQueueFamilyIndex != barr.dstQueueFamilyIndex;
+    if (last.access || is_trans || is_xfer) {
+        vk->CmdPipelineBarrier(cmd->buf, last.stage, stage, 0, 0, NULL,
+                               0, NULL, 1, &barr);
     }
 
-    tex_vk->current_layout = newLayout;
-    tex_vk->current_access = newAccess;
+    tex_vk->layout = layout;
     vk_cmd_callback(cmd, (vk_cb) vk_tex_deref, gpu, tex);
     vk_cmd_obj(cmd, tex);
-}
-
-void vk_tex_signal(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
-                   VkPipelineStageFlags stage)
-{
-    struct pl_vk *p = PL_PRIV(gpu);
-    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
-    struct vk_ctx *vk = p->vk;
-    pl_assert(!tex_vk->sig);
-
-    tex_vk->sig = vk_cmd_signal(vk, cmd, stage);
-    tex_vk->sig_stage = stage;
 }
 
 static void vk_tex_destroy(pl_gpu gpu, struct pl_tex *tex)
@@ -120,7 +95,7 @@ static void vk_tex_destroy(pl_gpu gpu, struct pl_tex *tex)
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
     vk_sync_deref(gpu, tex_vk->ext_sync);
-    vk_signal_destroy(vk, &tex_vk->sig);
+    vk_sem_uninit(vk, &tex_vk->sem);
     vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, PL_VK_ALLOC);
     vk->DestroyImageView(vk->dev, tex_vk->view, PL_VK_ALLOC);
     if (!tex_vk->external_img) {
@@ -154,8 +129,9 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, const char *name)
     PL_VK_NAME(IMAGE, tex_vk->img, name);
 
     pl_rc_init(&tex_vk->rc);
-    tex_vk->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    tex_vk->current_access = 0;
+    if (!vk_sem_init(vk, &tex_vk->sem))
+        return false;
+    tex_vk->layout = VK_IMAGE_LAYOUT_UNDEFINED;
     tex_vk->transfer_queue = GRAPHICS;
 
     // Always use the transfer pool if available, for efficiency
@@ -607,10 +583,9 @@ void vk_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
         .layerCount = 1,
     };
 
-    vk->CmdClearColorImage(cmd->buf, tex_vk->img, tex_vk->current_layout,
+    vk->CmdClearColorImage(cmd->buf, tex_vk->img, tex_vk->layout,
                            clearColor, 1, &range);
 
-    vk_tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
     CMD_FINISH(&cmd);
 }
 
@@ -668,8 +643,8 @@ void vk_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
             },
         };
 
-        vk->CmdCopyImage(cmd->buf, src_vk->img, src_vk->current_layout,
-                         dst_vk->img, dst_vk->current_layout, 1, &region);
+        vk->CmdCopyImage(cmd->buf, src_vk->img, src_vk->layout,
+                         dst_vk->img, dst_vk->layout, 1, &region);
     } else {
         VkImageBlit region = {
             .srcSubresource = layers,
@@ -685,13 +660,11 @@ void vk_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
             [PL_TEX_SAMPLE_LINEAR]  = VK_FILTER_LINEAR,
         };
 
-        vk->CmdBlitImage(cmd->buf, src_vk->img, src_vk->current_layout,
-                         dst_vk->img, dst_vk->current_layout, 1, &region,
+        vk->CmdBlitImage(cmd->buf, src_vk->img, src_vk->layout,
+                         dst_vk->img, dst_vk->layout, 1, &region,
                          filters[params->sample_mode]);
     }
 
-    vk_tex_signal(gpu, cmd, params->src, VK_PIPELINE_STAGE_TRANSFER_BIT);
-    vk_tex_signal(gpu, cmd, params->dst, VK_PIPELINE_STAGE_TRANSFER_BIT);
     CMD_FINISH(&cmd);
 }
 
@@ -816,14 +789,11 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
         vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                        VK_ACCESS_TRANSFER_READ_BIT, params->buf_offset, size,
-                       BUF_READ);
+                       false);
         vk_buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_ACCESS_TRANSFER_WRITE_BIT, 0, size, BUF_WRITE);
+                       VK_ACCESS_TRANSFER_WRITE_BIT, 0, size, false);
         vk->CmdCopyBuffer(cmd->buf, buf_vk->mem.buf, tbuf_vk->mem.buf,
                           1, &region);
-
-        vk_buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
-        vk_buf_signal(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
         if (params->callback)
             vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
@@ -862,14 +832,12 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
         vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                        VK_ACCESS_TRANSFER_READ_BIT, params->buf_offset, size,
-                       BUF_READ);
+                       false);
         vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                        VK_ACCESS_TRANSFER_WRITE_BIT,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, false);
         vk->CmdCopyBufferToImage(cmd->buf, buf_vk->mem.buf, tex_vk->img,
-                                 tex_vk->current_layout, 1, &region);
-        vk_buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
-        vk_tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
+                                 tex_vk->layout, 1, &region);
 
         if (params->callback)
             vk_cmd_callback(cmd, tex_xfer_cb, params->callback, params->priv);
@@ -944,14 +912,12 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         };
 
         vk_buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_ACCESS_TRANSFER_READ_BIT, 0, size, BUF_READ);
+                       VK_ACCESS_TRANSFER_READ_BIT, 0, size, false);
         vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                        VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size,
-                       BUF_WRITE);
+                       false);
         vk->CmdCopyBuffer(cmd->buf, tbuf_vk->mem.buf, buf_vk->mem.buf,
                           1, &region);
-        vk_buf_signal(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT);
-        vk_buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
         vk_buf_flush(gpu, cmd, buf, params->buf_offset, size);
 
         if (params->callback)
@@ -984,14 +950,12 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
         vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
                        VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size,
-                       BUF_WRITE);
+                       false);
         vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
                        VK_ACCESS_TRANSFER_READ_BIT,
                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, false);
-        vk->CmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->current_layout,
+        vk->CmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->layout,
                                  buf_vk->mem.buf, 1, &region);
-        vk_buf_signal(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT);
-        vk_tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
         vk_buf_flush(gpu, cmd, buf, params->buf_offset, size);
 
         if (params->callback)
@@ -1041,6 +1005,9 @@ bool vk_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync)
 
     vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                    0, VK_IMAGE_LAYOUT_GENERAL, true);
+
+    // Make the next barrier appear as though coming from a different queue
+    tex_vk->sem.write.queue = tex_vk->sem.read.queue = NULL;
 
     vk_cmd_sig(cmd, (pl_vulkan_sem){ sync_vk->wait });
     CMD_SUBMIT(&cmd);
@@ -1168,6 +1135,8 @@ bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
     vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                    0, layout, false);
 
+    tex_vk->sem.write.queue = tex_vk->sem.read.queue = NULL;
+
     vk_cmd_sig(cmd, sem_out);
     CMD_SUBMIT(&cmd);
 
@@ -1180,13 +1149,13 @@ bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *layout,
 {
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     bool user_may_invalidate = tex_vk->may_invalidate;
-    if (!pl_vulkan_hold(gpu, tex, tex_vk->current_layout, sem_out))
+    if (!pl_vulkan_hold(gpu, tex, tex_vk->layout, sem_out))
         return false;
 
     if (user_may_invalidate) {
         *layout = VK_IMAGE_LAYOUT_UNDEFINED;
     } else {
-        *layout = tex_vk->current_layout;
+        *layout = tex_vk->layout;
     }
 
     return true;
@@ -1204,7 +1173,6 @@ void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
     if (sem_in.sem)
         PL_ARRAY_APPEND(tex, tex_vk->ext_deps, sem_in);
 
-    tex_vk->current_layout = layout;
-    tex_vk->current_access = 0;
+    tex_vk->layout = layout;
     tex_vk->held = false;
 }

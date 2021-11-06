@@ -93,9 +93,6 @@ struct vk_ctx {
     // the command completes.
     struct vk_cmd *last_cmd;
 
-    // Common pool of signals, to avoid having to re-create these objects often
-    PL_ARRAY(struct vk_signal *) signals;
-
     // Instance-level function pointers
     PL_VK_FUN(CreateDevice);
     PL_VK_FUN(EnumerateDeviceExtensionProperties);
@@ -221,6 +218,7 @@ struct vk_ctx {
     PL_VK_FUN(SetHdrMetadataEXT);
     PL_VK_FUN(UpdateDescriptorSets);
     PL_VK_FUN(WaitForFences);
+    PL_VK_FUN(WaitSemaphores);
 
 #ifdef PL_HAVE_WIN32
     PL_VK_FUN(GetMemoryWin32HandleKHR);

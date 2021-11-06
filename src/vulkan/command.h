@@ -79,38 +79,33 @@ void vk_cmd_obj(struct vk_cmd *cmd, const void *obj);
 // after the command completes.
 void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig);
 
-enum vk_wait_type {
-    VK_WAIT_NONE,    // no synchronization needed
-    VK_WAIT_BARRIER, // synchronization via pipeline barriers
+// Synchronization scope
+struct vk_sync_scope {
+    uint64_t value;             // last timeline semaphore value
+    VkQueue queue;              // source queue of last access
+    VkPipelineStageFlags stage; // stage bitmask of last access
+    VkAccessFlags access;       // access type bitmask
 };
 
-// Signal abstraction: represents an abstract synchronization mechanism.
+// Synchronization primitive
+struct vk_sem {
+    // timeline semaphores, together with a pair of structs respectively
+    // describing the last read and write access, separately
+    VkSemaphore semaphore;
+    struct vk_sync_scope read, write;
+};
+
+bool vk_sem_init(struct vk_ctx *vk, struct vk_sem *sem);
+void vk_sem_uninit(struct vk_ctx *vk, struct vk_sem *sem);
+
+// Updates the `vk_sem` state for a given access. If `is_trans` is set, this
+// access is treated as a write (since it alters the resource's state).
 //
-// Thread-safety: Unsafe
-struct vk_signal;
-
-// Generates a signal after the execution of all previous commands matching the
-// given the pipeline stage. The signal is owned by the caller, and must be
-// consumed with vk_cmd_wait or released with vk_signal_cancel in order to
-// free the resources.
-struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
-                                VkPipelineStageFlags stage);
-
-// Consumes a previously generated signal. This signal must fire by the
-// indicated stage before the command can run. This function takes over
-// ownership of the signal (and the signal will be released/reused
-// automatically)
-//
-// The return type indicates what the caller needs to do:
-//   VK_SIGNAL_NONE:    no further handling needed, caller can use TOP_OF_PIPE
-//   VK_SIGNAL_BARRIER: caller must use pipeline barrier from last stage
-enum vk_wait_type vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
-                              struct vk_signal **sigptr,
-                              VkPipelineStageFlags stage);
-
-// Destroys a currently pending signal, for example if the resource is no
-// longer relevant.
-void vk_signal_destroy(struct vk_ctx *vk, struct vk_signal **sig);
+// Returns a struct describing the previous access to a resource. A pipeline
+// barrier is only required if the previous access scope is nonzero.
+struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
+                                    struct vk_sem *sem, VkPipelineStageFlags stage,
+                                    VkAccessFlags access, bool is_trans);
 
 // Command pool / queue family hybrid abstraction
 struct vk_cmdpool {

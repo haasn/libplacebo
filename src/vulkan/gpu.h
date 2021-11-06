@@ -89,9 +89,7 @@ void _end_cmd(pl_gpu, struct vk_cmd **, bool submit);
 
 struct pl_tex_vk {
     pl_rc_t rc;
-    bool held;
     bool external_img;
-    bool may_invalidate;
     enum queue_type transfer_queue;
     VkImageType type;
     VkImage img;
@@ -105,14 +103,14 @@ struct pl_tex_vk {
     VkFramebuffer framebuffer;
     // for vk_tex_upload/download fallback code
     pl_fmt texel_fmt;
-    // "current" metadata, can change during the course of execution
-    VkImageLayout current_layout;
-    VkAccessFlags current_access;
-    // the signal guards reuse, and can be NULL
-    struct vk_signal *sig;
-    VkPipelineStageFlags sig_stage;
+
+    // synchronization and current state
+    struct vk_sem sem;
+    VkImageLayout layout;
     PL_ARRAY(pl_vulkan_sem) ext_deps; // external semaphore, not owned by the pl_tex
     pl_sync ext_sync; // indicates an exported image
+    bool may_invalidate;
+    bool held;
 };
 
 pl_tex vk_tex_create(pl_gpu, const struct pl_tex_params *);
@@ -124,26 +122,19 @@ bool vk_tex_upload(pl_gpu, const struct pl_tex_transfer_params *);
 bool vk_tex_download(pl_gpu, const struct pl_tex_transfer_params *);
 bool vk_tex_poll(pl_gpu, pl_tex, uint64_t timeout);
 bool vk_tex_export(pl_gpu, pl_tex, pl_sync);
-
-// Small helper to ease image barrier creation. if `discard` is set, the
-// contents of the image will be undefined after the barrier
 void vk_tex_barrier(pl_gpu, struct vk_cmd *, pl_tex, VkPipelineStageFlags,
                     VkAccessFlags, VkImageLayout, bool export);
-void vk_tex_signal(pl_gpu, struct vk_cmd *, pl_tex, VkPipelineStageFlags);
 
 struct pl_buf_vk {
-    struct vk_memslice mem;
     pl_rc_t rc;
-    int writes; // number of queued write commands
+    struct vk_memslice mem;
     enum queue_type update_queue;
     VkBufferView view; // for texel buffers
-    // "current" metadata, can change during course of execution
-    VkAccessFlags current_access;
+
+    // synchronization and current state
+    struct vk_sem sem;
     bool exported;
     bool needs_flush;
-    // the signal guards reuse, and can be NULL
-    struct vk_signal *sig;
-    VkPipelineStageFlags sig_stage;
 };
 
 pl_buf vk_buf_create(pl_gpu, const struct pl_buf_params *);
@@ -155,16 +146,9 @@ void vk_buf_copy(pl_gpu, pl_buf dst, size_t dst_offset,
 bool vk_buf_export(pl_gpu, pl_buf);
 bool vk_buf_poll(pl_gpu, pl_buf, uint64_t timeout);
 
-enum buffer_op {
-    BUF_READ    = (1 << 0),
-    BUF_WRITE   = (1 << 1),
-    BUF_EXPORT  = (1 << 2),
-};
-
-// Helpers to ease buffer barrier creation. (`offset` is relative to pl_buf)
+// Helper to ease buffer barrier creation. (`offset` is relative to pl_buf)
 void vk_buf_barrier(pl_gpu, struct vk_cmd *, pl_buf, VkPipelineStageFlags,
-                    VkAccessFlags, size_t offset, size_t size, enum buffer_op);
-void vk_buf_signal(pl_gpu, struct vk_cmd *, pl_buf, VkPipelineStageFlags);
+                    VkAccessFlags, size_t offset, size_t size, bool export);
 
 // Flush visible writes to a buffer made by the API
 void vk_buf_flush(pl_gpu, struct vk_cmd *, pl_buf, size_t offset, size_t size);

@@ -312,6 +312,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(SetDebugUtilsObjectNameEXT),
     PL_VK_DEV_FUN(UpdateDescriptorSets),
     PL_VK_DEV_FUN(WaitForFences),
+    PL_VK_DEV_FUN(WaitSemaphores),
 };
 
 static void load_vk_fun(struct vk_ctx *vk, const struct vk_fun *fun)
@@ -844,8 +845,6 @@ void pl_vulkan_destroy(pl_vulkan *pl_vk)
         pl_assert(vk->cmds_pending.num == 0);
         for (int i = 0; i < vk->pools.num; i++)
             vk_cmdpool_destroy(vk, vk->pools.elem[i]);
-        for (int i = 0; i < vk->signals.num; i++)
-            vk_signal_destroy(vk, &vk->signals.elem[i]);
 
         if (!vk->imported)
             vk->DestroyDevice(vk->dev, PL_VK_ALLOC);

@@ -573,17 +573,12 @@ no_descriptors: ;
         }
 
         VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        pass_vk->initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        // If we're blending, then we need to explicitly load the previous
-        // contents of the color attachment
-        if (pass->params.blend_params)
-            loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-
-        // If we're ignoring the FBO, we don't need to load or transition
-        if (!pass->params.load_target) {
+        if (pass->params.load_target) {
+            if (pass->params.blend_params)
+                loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+            pass_vk->initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        } else {
             pass_vk->initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         }
 
         VkRenderPassCreateInfo rinfo = {
@@ -712,24 +707,12 @@ static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
         .descriptorType = dsType[desc->type],
     };
 
-    VkAccessFlags access = 0;
-    enum buffer_op buf_op = 0;
-    switch (desc->access) {
-    case PL_DESC_ACCESS_READONLY:
-        access = VK_ACCESS_SHADER_READ_BIT;
-        buf_op = BUF_READ;
-        break;
-    case PL_DESC_ACCESS_WRITEONLY:
-        access = VK_ACCESS_SHADER_WRITE_BIT;
-        buf_op = BUF_WRITE;
-        break;
-    case PL_DESC_ACCESS_READWRITE:
-        access = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-        buf_op = BUF_READ | BUF_WRITE;
-        break;
-    case PL_DESC_ACCESS_COUNT:
-        pl_unreachable();
-    }
+    static const VkAccessFlags access[PL_DESC_ACCESS_COUNT] = {
+        [PL_DESC_ACCESS_READONLY]   = VK_ACCESS_SHADER_READ_BIT,
+        [PL_DESC_ACCESS_WRITEONLY]  = VK_ACCESS_SHADER_WRITE_BIT,
+        [PL_DESC_ACCESS_READWRITE]  = VK_ACCESS_SHADER_READ_BIT |
+                                      VK_ACCESS_SHADER_WRITE_BIT,
+    };
 
     switch (desc->type) {
     case PL_DESC_SAMPLED_TEX: {
@@ -744,7 +727,7 @@ static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
         *iinfo = (VkDescriptorImageInfo) {
             .sampler = p->samplers[db.sample_mode][db.address_mode],
             .imageView = tex_vk->view,
-            .imageLayout = tex_vk->current_layout,
+            .imageLayout = tex_vk->layout,
         };
 
         wds->pImageInfo = iinfo;
@@ -754,13 +737,13 @@ static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
         pl_tex tex = db.object;
         struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
-        vk_tex_barrier(gpu, cmd, tex, passStages[pass->params.type], access,
-                      VK_IMAGE_LAYOUT_GENERAL, false);
+        vk_tex_barrier(gpu, cmd, tex, passStages[pass->params.type],
+                       access[desc->access], VK_IMAGE_LAYOUT_GENERAL, false);
 
         VkDescriptorImageInfo *iinfo = &pass_vk->dsiinfo[idx];
         *iinfo = (VkDescriptorImageInfo) {
             .imageView = tex_vk->view,
-            .imageLayout = tex_vk->current_layout,
+            .imageLayout = tex_vk->layout,
         };
 
         wds->pImageInfo = iinfo;
@@ -772,7 +755,7 @@ static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
         struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
         vk_buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
-                       access, 0, buf->params.size, buf_op);
+                       access[desc->access], 0, buf->params.size, false);
 
         VkDescriptorBufferInfo *binfo = &pass_vk->dsbinfo[idx];
         *binfo = (VkDescriptorBufferInfo) {
@@ -790,7 +773,7 @@ static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
         struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
         vk_buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
-                       access, 0, buf->params.size, buf_op);
+                       access[desc->access], 0, buf->params.size, false);
 
         wds->pTexelBufferView = &buf_vk->view;
         return;
@@ -812,19 +795,15 @@ static void vk_release_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
     case PL_DESC_BUF_UNIFORM:
     case PL_DESC_BUF_STORAGE:
     case PL_DESC_BUF_TEXEL_UNIFORM:
-    case PL_DESC_BUF_TEXEL_STORAGE: {
-        pl_buf buf = db.object;
-        vk_buf_signal(gpu, cmd, buf, passStages[pass->params.type]);
-        if (desc->access != PL_DESC_ACCESS_READONLY)
+    case PL_DESC_BUF_TEXEL_STORAGE:
+        if (desc->access != PL_DESC_ACCESS_READONLY) {
+            pl_buf buf = db.object;
             vk_buf_flush(gpu, cmd, buf, 0, buf->params.size);
+        }
         return;
-    }
     case PL_DESC_SAMPLED_TEX:
-    case PL_DESC_STORAGE_IMG: {
-        pl_tex tex = db.object;
-        vk_tex_signal(gpu, cmd, tex, passStages[pass->params.type]);
+    case PL_DESC_STORAGE_IMG:
         return;
-    }
     case PL_DESC_INVALID:
     case PL_DESC_TYPE_COUNT:
         break;
@@ -967,7 +946,7 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             vbo_flags |= VK_ACCESS_INDEX_READ_BIT;
 
         vk_buf_barrier(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
-                       vbo_flags, 0, vert->params.size, BUF_READ);
+                       vbo_flags, 0, vert->params.size, false);
 
         VkDeviceSize offset = vert_vk->mem.offset + params->buf_offset;
         vk->CmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->mem.buf, &offset);
@@ -976,7 +955,7 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             if (index != vert) {
                 vk_buf_barrier(gpu, cmd, index, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
                                VK_ACCESS_INDEX_READ_BIT, 0, index->params.size,
-                               BUF_READ);
+                               false);
             }
 
             static const VkIndexType index_fmts[PL_INDEX_FORMAT_COUNT] = {
@@ -1025,13 +1004,8 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 
         vk->CmdEndRenderPass(cmd->buf);
 
-        vk_buf_signal(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
-        if (index && index != vert)
-            vk_buf_signal(gpu, cmd, index, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
-
         // The renderPass implicitly transitions the texture to this layout
-        tex_vk->current_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        vk_tex_signal(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        tex_vk->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         break;
     }
     case PL_PASS_COMPUTE:
