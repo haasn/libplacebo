@@ -21,6 +21,7 @@ project('libplacebo', ['c', 'cpp'],
       '168': 'refactor pl_tex_transfer.stride_w/h into row/depth_pitch',
       '169': 'refactor pl_pass_params.target_dummy into target_format',
       '170': 'allow pl_queue_update on NULL',
+      '171': 'make vulkan 1.2 the minimum version',
     }.keys().length(),
     # Fix version
     0)

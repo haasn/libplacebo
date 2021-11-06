@@ -151,7 +151,7 @@ struct pl_vulkan_params {
     // create a VkInstance with the settings from `instance_params`.
     //
     // Note: The VkInstance provided by the user *MUST* be created with a
-    // VkApplicationInfo.apiVersion of VK_API_VERSION_1_1 or higher.
+    // VkApplicationInfo.apiVersion of VK_API_VERSION_1_2 or higher.
     VkInstance instance;
 
     // Pointer to `vkGetInstanceProcAddr`. If this is NULL, libplacebo will
@@ -187,11 +187,6 @@ struct pl_vulkan_params {
     // When choosing the device, only choose a device with this exact UUID.
     // This overrides `allow_software` and `device_name`. No effect if `device`
     // is set.
-    //
-    // Note: This relies on instance-level support for at least one of the
-    // VK_KHR_external_*_capabilities extensions (or vulkan 1.1). If this field
-    // is set when the instance does not support it, an error will be
-    // generated.
     uint8_t device_uuid[16];
 
     // When choosing the device, controls whether or not to also allow software
@@ -280,8 +275,8 @@ void pl_vulkan_destroy(pl_vulkan *vk);
 struct pl_vulkan_device_params {
     // The instance to use. Required!
     //
-    // Note: The VkInstance provided by the user *MUST* be created with a
-    // VkApplicationInfo.apiVersion of VK_API_VERSION_1_1 or higher.
+    // Note: The VkInstance provided by the user *must* be created with a
+    // VkApplicationInfo.apiVersion of VK_API_VERSION_1_2 or higher.
     VkInstance instance;
 
     // Mirrored from `pl_vulkan_params`. All of these fields are optional.
@@ -360,8 +355,8 @@ bool pl_vulkan_swapchain_suboptimal(pl_swapchain sw);
 struct pl_vulkan_import_params {
     // The vulkan instance. Required.
     //
-    // Note: The VkInstance provided by the user *MUST* be created with a
-    // VkApplicationInfo.apiVersion of VK_API_VERSION_1_1 or higher.
+    // Note: The VkInstance provided by the user *must* be created with a
+    // VkApplicationInfo.apiVersion of VK_API_VERSION_1_2 or higher.
     VkInstance instance;
 
     // Pointer to `vkGetInstanceProcAddr`. If this is NULL, libplacebo will
