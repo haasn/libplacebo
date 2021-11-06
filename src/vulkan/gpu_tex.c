@@ -1153,7 +1153,7 @@ VkImage pl_vulkan_unwrap(pl_gpu gpu, pl_tex tex, VkFormat *out_format,
 }
 
 bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
-                    VkAccessFlags access, pl_vulkan_sem sem_out)
+                    pl_vulkan_sem sem_out)
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
@@ -1172,7 +1172,7 @@ bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
     }
 
     vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                   access, layout, false);
+                   0, layout, false);
 
     vk_cmd_sig(cmd, sem_out);
     CMD_SUBMIT(&cmd);
@@ -1182,27 +1182,24 @@ bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
 }
 
 bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *layout,
-                        VkAccessFlags *access, pl_vulkan_sem sem_out)
+                        pl_vulkan_sem sem_out)
 {
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     bool user_may_invalidate = tex_vk->may_invalidate;
-
-    if (!pl_vulkan_hold(gpu, tex, tex_vk->current_layout, tex_vk->current_access, sem_out))
+    if (!pl_vulkan_hold(gpu, tex, tex_vk->current_layout, sem_out))
         return false;
 
     if (user_may_invalidate) {
         *layout = VK_IMAGE_LAYOUT_UNDEFINED;
-        *access = 0;
     } else {
         *layout = tex_vk->current_layout;
-        *access = tex_vk->current_access;
     }
 
     return true;
 }
 
 void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
-                       VkAccessFlags access, pl_vulkan_sem sem_in)
+                       pl_vulkan_sem sem_in)
 {
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     if (!tex_vk->held) {
@@ -1214,6 +1211,6 @@ void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
         PL_ARRAY_APPEND(tex, tex_vk->ext_deps, sem_in);
 
     tex_vk->current_layout = layout;
-    tex_vk->current_access = access;
+    tex_vk->current_access = 0;
     tex_vk->held = false;
 }
