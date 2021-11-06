@@ -1457,8 +1457,30 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
 
     VkPhysicalDeviceFeatures2 *features;
     features = vk_chain_memdup(vk->alloc, params->features);
-    if (features)
+    if (features) {
+        // Go through and replace all meta-features structs by their individual
+        // extension variants, since that's what we check for in our code
+        const VkPhysicalDeviceVulkan12Features *vk12 = vk_find_struct(features,
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES);
+
+        if (vk12 && vk12->hostQueryReset) {
+            const VkPhysicalDeviceHostQueryResetFeatures hqr = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES,
+                .hostQueryReset = true,
+            };
+            vk_link_struct(features, vk_struct_memdup(vk->alloc, &hqr));
+        }
+
+        if (vk12 && vk12->timelineSemaphore) {
+            const VkPhysicalDeviceTimelineSemaphoreFeatures ts = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
+                .timelineSemaphore = true,
+            };
+            vk_link_struct(features, vk_struct_memdup(vk->alloc, &ts));
+        }
+
         vk->features = *features;
+    }
 
     // Load all mandatory device-level functions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++)
