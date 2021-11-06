@@ -118,6 +118,9 @@ size_t vk_struct_size(VkStructureType stype)
     default: return 0;
     }
 }
+
+const VkAccessFlags vk_access_read = ${hex(vkaccess.read)}LLU;
+const VkAccessFlags vk_access_write = ${hex(vkaccess.write)}LLU;
 """)
 
 class Obj(object):
@@ -171,6 +174,15 @@ def get_vkstructs(registry):
             yield Obj(stype = stype.attrib['values'],
                       name = e.attrib['name'])
 
+def get_vkaccess(registry):
+    access = Obj(read = 0, write = 0)
+    for e in findall_enum(registry, 'VkAccessFlagBits'):
+        if '_READ_' in e.attrib['name']:
+            access.read |= 1 << int(e.attrib['bitpos'])
+        if '_WRITE_' in e.attrib['name']:
+            access.write |= 1 << int(e.attrib['bitpos'])
+    return access
+
 def find_registry_xml():
     registry_paths = [
         '%VULKAN_SDK%/share/vulkan/registry/vk.xml',
@@ -209,4 +221,5 @@ if __name__ == '__main__':
             vktransforms = get_vkenum(registry, 'VkSurfaceTransformFlagBitsKHR'),
             vkobjects = get_vkobjects(registry),
             vkstructs = get_vkstructs(registry),
+            vkaccess = get_vkaccess(registry),
         ))

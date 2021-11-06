@@ -68,15 +68,15 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
 
     VkEvent event = VK_NULL_HANDLE;
     enum vk_wait_type type = vk_cmd_wait(vk, cmd, &tex_vk->sig, stage, &event);
-
-    bool need_trans = tex_vk->current_layout != newLayout ||
-                      tex_vk->current_access != newAccess ||
-                      (imgBarrier.srcQueueFamilyIndex !=
-                       imgBarrier.dstQueueFamilyIndex);
+    bool need_barrier = tex_vk->current_layout != newLayout ||
+                        tex_vk->current_access != newAccess ||
+                        (tex_vk->current_access & vk_access_write) ||
+                        (imgBarrier.srcQueueFamilyIndex !=
+                         imgBarrier.dstQueueFamilyIndex);
 
     // Transitioning to VK_IMAGE_LAYOUT_UNDEFINED is a pseudo-operation
     // that for us means we don't need to perform the actual transition
-    if (need_trans && newLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
+    if (need_barrier && newLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
         switch (type) {
         case VK_WAIT_NONE:
             // No synchronization required, so we can safely transition out of

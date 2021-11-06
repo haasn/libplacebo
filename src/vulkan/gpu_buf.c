@@ -94,9 +94,12 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
         buf_vk->needs_flush = false;
     }
 
-    if (buffBarrier.srcAccessMask != buffBarrier.dstAccessMask ||
-        buffBarrier.srcQueueFamilyIndex != buffBarrier.dstQueueFamilyIndex)
-    {
+    bool need_barrier = buffBarrier.srcAccessMask != buffBarrier.dstAccessMask ||
+                        (buffBarrier.srcAccessMask & vk_access_write) ||
+                        (buffBarrier.srcQueueFamilyIndex !=
+                         buffBarrier.dstQueueFamilyIndex);
+
+    if (need_barrier) {
         switch (type) {
         case VK_WAIT_NONE:
             // No synchronization required, so we can safely transition out of
