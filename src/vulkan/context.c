@@ -1169,6 +1169,14 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     vk->GetPhysicalDeviceFeatures2KHR(vk->physd, &vk->features);
 
+    const VkPhysicalDeviceTimelineSemaphoreFeatures *timeline_sem;
+    timeline_sem = vk_find_struct(&vk->features,
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES);
+    if (!timeline_sem || !timeline_sem->timelineSemaphore) {
+        PL_ERR(vk, "Selected vulkan device does not support timeline semaphores!");
+        goto error;
+    }
+
     // Go through the features chain a second time and mask every option
     // that wasn't whitelisted by either libplacebo or the user
     for (VkBaseOutStructure *chain = (VkBaseOutStructure *) &vk->features;
@@ -1478,6 +1486,15 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
         }
 
         vk->features = *features;
+    }
+
+    const VkPhysicalDeviceTimelineSemaphoreFeatures *timeline_sem;
+    timeline_sem = vk_find_struct(&vk->features,
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES);
+    if (!timeline_sem || !timeline_sem->timelineSemaphore) {
+        PL_ERR(vk, "Imported Vulkan device does not support timeline "
+               "semaphores. Please enable this device feature.");
+        goto error;
     }
 
     // Load all mandatory device-level functions

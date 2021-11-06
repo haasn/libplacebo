@@ -25,6 +25,7 @@ project('libplacebo', ['c', 'cpp'],
       '172': 'replace VkSemaphore by pl_vulkan_sem in pl_vulkan_hold/release',
       '173': 'remove VkAccessFlags from pl_vulkan_hold/release',
       '174': 'deprecate pl_vulkan_params.disable_events',
+      '175': 'require timeline semaphores for all vulkan devices',
     }.keys().length(),
     # Fix version
     0)

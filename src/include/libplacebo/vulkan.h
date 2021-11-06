@@ -393,8 +393,8 @@ struct pl_vulkan_import_params {
     struct pl_vulkan_queue queue_compute;  // must support VK_QUEUE_COMPUTE_BIT
     struct pl_vulkan_queue queue_transfer; // must support VK_QUEUE_TRANSFER_BIT
 
-    // Enabled VkPhysicalDeviceFeatures. May be left as NULL, in which case
-    // libplacebo will assume no extra device features were enabled.
+    // Enabled VkPhysicalDeviceFeatures. The VkDevice provided by the user
+    // *must* be created with the `timelineSemaphore` feature enabled.
     const VkPhysicalDeviceFeatures2 *features;
 
     // --- Misc/debugging options
