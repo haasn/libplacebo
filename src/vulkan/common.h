@@ -95,7 +95,6 @@ struct vk_ctx {
 
     // Common pool of signals, to avoid having to re-create these objects often
     PL_ARRAY(struct vk_signal *) signals;
-    bool disable_events;
 
     // Instance-level function pointers
     PL_VK_FUN(CreateDevice);

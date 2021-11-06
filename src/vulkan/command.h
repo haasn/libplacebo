@@ -82,12 +82,9 @@ void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig);
 enum vk_wait_type {
     VK_WAIT_NONE,    // no synchronization needed
     VK_WAIT_BARRIER, // synchronization via pipeline barriers
-    VK_WAIT_EVENT,   // synchronization via events
 };
 
 // Signal abstraction: represents an abstract synchronization mechanism.
-// Internally, this may either resolve as a semaphore or an event depending
-// on whether the appropriate conditions are met.
 //
 // Thread-safety: Unsafe
 struct vk_signal;
@@ -107,12 +104,9 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
 // The return type indicates what the caller needs to do:
 //   VK_SIGNAL_NONE:    no further handling needed, caller can use TOP_OF_PIPE
 //   VK_SIGNAL_BARRIER: caller must use pipeline barrier from last stage
-//   VK_SIGNAL_EVENT:   caller must use VkEvent from last stage
-//                      (never returned if out_event is NULL)
 enum vk_wait_type vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
                               struct vk_signal **sigptr,
-                              VkPipelineStageFlags stage,
-                              VkEvent *out_event);
+                              VkPipelineStageFlags stage);
 
 // Destroys a currently pending signal, for example if the resource is no
 // longer relevant.

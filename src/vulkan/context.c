@@ -1362,8 +1362,6 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
                 params->max_glsl_version, glsl->version);
     }
 
-    vk->disable_events = params->disable_events;
-
     // Expose the resulting vulkan objects
     pl_vk->instance = vk->inst;
     pl_vk->phys_device = vk->physd;
@@ -1568,8 +1566,6 @@ next_qf: ;
         PL_INFO(vk, "Restricting GLSL version to %d... new version is %d",
                 params->max_glsl_version, glsl->version);
     }
-
-    vk->disable_events = params->disable_events;
 
     // Expose the resulting vulkan objects
     pl_vk->instance = vk->inst;

@@ -66,8 +66,7 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
         imgBarrier.srcAccessMask = 0;
     }
 
-    VkEvent event = VK_NULL_HANDLE;
-    enum vk_wait_type type = vk_cmd_wait(vk, cmd, &tex_vk->sig, stage, &event);
+    enum vk_wait_type type = vk_cmd_wait(vk, cmd, &tex_vk->sig, stage);
     bool need_barrier = tex_vk->current_layout != newLayout ||
                         tex_vk->current_access != newAccess ||
                         (tex_vk->current_access & vk_access_write) ||
@@ -89,11 +88,6 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
             // Regular pipeline barrier is required
             vk->CmdPipelineBarrier(cmd->buf, tex_vk->sig_stage, stage, 0, 0, NULL,
                                    0, NULL, 1, &imgBarrier);
-            break;
-        case VK_WAIT_EVENT:
-            // We can/should use the VkEvent for synchronization
-            vk->CmdWaitEvents(cmd->buf, 1, &event, tex_vk->sig_stage,
-                              stage, 0, NULL, 0, NULL, 1, &imgBarrier);
             break;
         }
     }

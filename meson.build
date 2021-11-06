@@ -24,6 +24,7 @@ project('libplacebo', ['c', 'cpp'],
       '171': 'make vulkan 1.2 the minimum version',
       '172': 'replace VkSemaphore by pl_vulkan_sem in pl_vulkan_hold/release',
       '173': 'remove VkAccessFlags from pl_vulkan_hold/release',
+      '174': 'deprecate pl_vulkan_params.disable_events',
     }.keys().length(),
     # Fix version
     0)

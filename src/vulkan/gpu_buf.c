@@ -53,8 +53,7 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
     // Can't re-export exported buffers
     pl_assert(!(op & BUF_EXPORT) || !buf_vk->exported);
 
-    VkEvent event = VK_NULL_HANDLE;
-    enum vk_wait_type type = vk_cmd_wait(vk, cmd, &buf_vk->sig, stage, &event);
+    enum vk_wait_type type = vk_cmd_wait(vk, cmd, &buf_vk->sig, stage);
     VkPipelineStageFlags src_stages = 0;
 
     if (buf_vk->needs_flush || buf->params.host_mapped ||
@@ -86,11 +85,6 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
         error: ;
         }
 
-        // Forcibly degrade to non-event based pipeline barrier, because
-        // mixing events with host writes is nonsensical
-        if (type == VK_WAIT_EVENT)
-            type = VK_WAIT_BARRIER;
-
         buf_vk->needs_flush = false;
     }
 
@@ -113,12 +107,6 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
             // Regular pipeline barrier is required
             vk->CmdPipelineBarrier(cmd->buf, buf_vk->sig_stage | src_stages,
                                    stage, 0, 0, NULL, 1, &buffBarrier, 0, NULL);
-            break;
-        case VK_WAIT_EVENT:
-            // We can/should use the VkEvent for synchronization
-            pl_assert(!src_stages);
-            vk->CmdWaitEvents(cmd->buf, 1, &event, buf_vk->sig_stage,
-                              stage, 0, NULL, 1, &buffBarrier, 0, NULL);
             break;
         }
     }

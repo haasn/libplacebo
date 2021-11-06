@@ -148,7 +148,6 @@ void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig)
 
 struct vk_signal {
     VkSemaphore semaphore;
-    VkEvent event;
     enum vk_wait_type type; // last signal type
     VkQueue source;         // last signal source
 };
@@ -172,37 +171,11 @@ struct vk_signal *vk_cmd_signal(struct vk_ctx *vk, struct vk_cmd *cmd,
         PL_VK_NAME(SEMAPHORE, sig->semaphore, "sig");
     }
 
-    static const VkEventCreateInfo einfo = {
-        .sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO,
-    };
-
-    if (!vk->disable_events) {
-        VkResult res = vk->CreateEvent(vk->dev, &einfo, PL_VK_ALLOC, &sig->event);
-        if (res == VK_ERROR_FEATURE_NOT_PRESENT) {
-            // Some vulkan implementations don't support VkEvents since they are
-            // not part of the vulkan portable subset. So fail gracefully here.
-            sig->event = VK_NULL_HANDLE;
-            vk->disable_events = true;
-            PL_INFO(vk, "VkEvent creation failed.. disabling events");
-        } else {
-            PL_VK_ASSERT(res, "Creating VkEvent");
-            PL_VK_NAME(EVENT, sig->event, "sig");
-        }
-    }
-
 done:
-    // Signal both the semaphore, and the event if possible. (We will only
-    // end up using one or the other)
     sig->type = VK_WAIT_NONE;
     sig->source = cmd->queue;
     if (sig->semaphore)
         vk_cmd_sig(cmd, (pl_vulkan_sem){ sig->semaphore });
-
-    VkQueueFlags req = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-    if (sig->event && (cmd->pool->props.queueFlags & req)) {
-        vk->CmdSetEvent(cmd->buf, sig->event, stage);
-        sig->type = VK_WAIT_EVENT;
-    }
 
     return sig;
 
@@ -252,9 +225,7 @@ static void release_signal(struct vk_ctx *vk, struct vk_signal *sig)
 {
     // The semaphore never needs to be recreated, because it's either
     // unsignaled while still queued, or unsignaled as a result of a device
-    // wait. But the event *may* need to be reset, so just always reset it.
-    if (sig->event)
-        vk->ResetEvent(vk->dev, sig->event);
+    // wait.
     sig->source = NULL;
 
     pl_mutex_lock(&vk->lock);
@@ -264,8 +235,7 @@ static void release_signal(struct vk_ctx *vk, struct vk_signal *sig)
 
 enum vk_wait_type vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
                               struct vk_signal **sigptr,
-                              VkPipelineStageFlags stage,
-                              VkEvent *out_event)
+                              VkPipelineStageFlags stage)
 {
     struct vk_signal *sig = *sigptr;
     if (!sig)
@@ -276,11 +246,7 @@ enum vk_wait_type vk_cmd_wait(struct vk_ctx *vk, struct vk_cmd *cmd,
         // pretend it never happened, then we get to use the more efficient
         // synchronization primitives. However, this requires that we're still
         // in the same VkQueue.
-        if (sig->type == VK_WAIT_EVENT && out_event) {
-            *out_event = sig->event;
-        } else {
-            sig->type = VK_WAIT_BARRIER;
-        }
+        sig->type = VK_WAIT_BARRIER;
     } else {
         // Otherwise, we use the semaphore. (This also unsignals it as a result
         // of the command execution)
@@ -301,7 +267,6 @@ void vk_signal_destroy(struct vk_ctx *vk, struct vk_signal **sig)
         return;
 
     vk->DestroySemaphore(vk->dev, (*sig)->semaphore, PL_VK_ALLOC);
-    vk->DestroyEvent(vk->dev, (*sig)->event, PL_VK_ALLOC);
     pl_free(*sig);
     *sig = NULL;
 }
