@@ -177,7 +177,8 @@ struct pl_queue_params {
 // which are no longer needed (i.e. too far in the past) are automatically
 // unmapped and evicted. Any future frames which are needed to fill the queue
 // must either have been pushed in advance, or will be requested using the
-// provided `get_frame` callback.
+// provided `get_frame` callback. If you call this on `out_mix == NULL`, the
+// queue state will advance, but no frames will be mapped.
 //
 // This function may return with PL_QUEUE_MORE, in which case the user may wish
 // to ensure more frames are available and then re-run this function with the
