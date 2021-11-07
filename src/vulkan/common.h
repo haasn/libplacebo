@@ -82,6 +82,12 @@ struct vk_ctx {
     PL_ARRAY(struct vk_cmd *) cmds_queued;  // recorded but not yet submitted
     PL_ARRAY(struct vk_cmd *) cmds_pending; // submitted but not completed
 
+    // Pending callbacks that still need to be drained before processing
+    // callbacks for the next command (in case commands are recursively being
+    // polled from another callback)
+    const struct vk_callback *pending_callbacks;
+    int num_pending_callbacks;
+
     // A dynamic reference to the most recently submitted command that has not
     // yet completed. Used to implement vk_dev_callback. Gets cleared when
     // the command completes.

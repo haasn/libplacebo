@@ -25,12 +25,24 @@ static VkResult vk_cmd_poll(struct vk_ctx *vk, struct vk_cmd *cmd,
     return vk->WaitForFences(vk->dev, 1, &cmd->fence, false, timeout);
 }
 
-static void vk_cmd_reset(struct vk_ctx *vk, struct vk_cmd *cmd)
+static void flush_callbacks(struct vk_ctx *vk)
 {
-    for (int i = 0; i < cmd->callbacks.num; i++) {
-        struct vk_callback *cb = &cmd->callbacks.elem[i];
+    while (vk->num_pending_callbacks) {
+        const struct vk_callback *cb = vk->pending_callbacks++;
+        vk->num_pending_callbacks--;
         cb->run(cb->priv, cb->arg);
     }
+}
+
+static void vk_cmd_reset(struct vk_ctx *vk, struct vk_cmd *cmd)
+{
+    // Flush possible callbacks left over from a previous command still in the
+    // process of being reset, whose callback triggered this command being
+    // reset.
+    flush_callbacks(vk);
+    vk->pending_callbacks = cmd->callbacks.elem;
+    vk->num_pending_callbacks = cmd->callbacks.num;
+    flush_callbacks(vk);
 
     cmd->callbacks.num = 0;
     cmd->deps.num = 0;
@@ -404,7 +416,7 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
     bool ret = false;
     pl_mutex_lock(&vk->lock);
 
-    while (vk->cmds_pending.num > 0) {
+    while (vk->cmds_pending.num) {
         struct vk_cmd *cmd = vk->cmds_pending.elem[0];
         struct vk_cmdpool *pool = cmd->pool;
         pl_mutex_unlock(&vk->lock); // don't hold mutex while blocking
@@ -415,8 +427,8 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
             continue; // another thread modified this state while blocking
 
         PL_TRACE(vk, "VkFence signalled: %p", (void *) cmd->fence);
+        PL_ARRAY_REMOVE_AT(vk->cmds_pending, 0); // remove before callbacks
         vk_cmd_reset(vk, cmd);
-        PL_ARRAY_REMOVE_AT(vk->cmds_pending, 0);
         PL_ARRAY_APPEND(pool, pool->cmds, cmd);
         ret = true;
 
