@@ -194,6 +194,12 @@ const char * const pl_vulkan_recommended_extensions[] = {
 const int pl_vulkan_num_recommended_extensions =
     PL_ARRAY_SIZE(pl_vulkan_recommended_extensions);
 
+// +1 because VK_KHR_swapchain is not automatically pulled in
+static_assert(PL_ARRAY_SIZE(pl_vulkan_recommended_extensions) + 1 ==
+              PL_ARRAY_SIZE(vk_device_extensions),
+              "pl_vulkan_recommended_extensions out of sync with "
+              "vk_device_extensions?");
+
 // pNext chain of features we want enabled
 static const VkPhysicalDeviceHostQueryResetFeaturesEXT host_query_reset = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT,
