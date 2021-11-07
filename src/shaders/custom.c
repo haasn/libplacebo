@@ -1079,6 +1079,10 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 PL_ERR(p, "Failed dispatching COMPUTE shader");
                 goto error;
             }
+        } else {
+            // Default non-COMPUTE shaders to explicitly use fragment shaders
+            // only, to avoid breaking things like fwidth()
+            sh->type = PL_DEF(sh->type, SH_FRAGMENT);
         }
 
         // Bind all necessary input textures

@@ -113,6 +113,12 @@ bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem)
         return false;
     }
 
+    if (sh->type == SH_FRAGMENT) {
+        PL_TRACE(sh, "Disabling compute shader because shader is already marked "
+                 "as fragment shader");
+        return false;
+    }
+
     if (bw > glsl.max_group_size[0] ||
         bh > glsl.max_group_size[1] ||
         (bw * bh) > glsl.max_group_threads)
@@ -132,10 +138,10 @@ bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem)
 
     // If the current shader is either not a compute shader, or we have no
     // choice but to override the metadata, always do so
-    if (!sh->is_compute || (sh->flexible_work_groups && !flex)) {
+    if (sh->type != SH_COMPUTE || (sh->flexible_work_groups && !flex)) {
         *sh_bw = bw;
         *sh_bh = bh;
-        sh->is_compute = true;
+        sh->type = SH_COMPUTE;
         return true;
     }
 
@@ -165,7 +171,7 @@ bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem)
 
 bool pl_shader_is_compute(const pl_shader sh)
 {
-    return sh->is_compute;
+    return sh->type == SH_COMPUTE;
 }
 
 bool pl_shader_output_size(const pl_shader sh, int *w, int *h)
@@ -501,7 +507,7 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
         return NULL;
     }
 
-    if (sub->is_compute) {
+    if (sub->type == SH_COMPUTE) {
         int subw = sub->res.compute_group_size[0],
             subh = sub->res.compute_group_size[1];
         bool flex = sub->flexible_work_groups;

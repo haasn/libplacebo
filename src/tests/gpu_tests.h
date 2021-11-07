@@ -539,7 +539,7 @@ static void pl_shader_tests(pl_gpu gpu)
 
         // For testing, force the use of CS if possible
         if (gpu->glsl.compute) {
-            sh->is_compute = true;
+            sh->type = SH_COMPUTE;
             sh->res.compute_group_size[0] = 8;
             sh->res.compute_group_size[1] = 8;
         }

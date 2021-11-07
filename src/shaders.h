@@ -36,6 +36,12 @@ enum pl_shader_buf {
     SH_BUF_COUNT,
 };
 
+enum pl_shader_type {
+    SH_AUTO,
+    SH_COMPUTE,
+    SH_FRAGMENT
+};
+
 struct pl_shader {
     pl_log log;
     struct pl_shader_res res; // for accumulating some of the fields
@@ -46,7 +52,7 @@ struct pl_shader {
     int output_h;
     bool transpose;
     pl_str buffers[SH_BUF_COUNT];
-    bool is_compute;
+    enum pl_shader_type type;
     bool flexible_work_groups;
     enum pl_sampler_type sampler_type;
     char sampler_prefix;
