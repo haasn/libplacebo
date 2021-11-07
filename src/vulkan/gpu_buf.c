@@ -206,7 +206,6 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
         mem_type = PL_BUF_MEM_DEVICE;
         if (params->format) {
             mparams.buf_usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
-            *align = pl_lcm(*align, vk->limits.minTexelBufferOffsetAlignment);
             is_texel = true;
         }
     }
@@ -218,9 +217,13 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
         mem_type = PL_BUF_MEM_DEVICE;
         if (params->format) {
             mparams.buf_usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
-            *align = pl_lcm(*align, vk->limits.minTexelBufferOffsetAlignment);
             is_texel = true;
         }
+    }
+
+    if (is_texel) {
+        *align = pl_lcm(*align, vk->limits.minTexelBufferOffsetAlignment);
+        *align = pl_lcm(*align, params->format->texel_size);
     }
 
     if (params->drawable) {
