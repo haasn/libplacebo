@@ -937,7 +937,7 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
         return vk_malloc_import(ma, out, params);
 
     pl_assert(params->reqs.size);
-    const size_t size = params->reqs.size;
+    size_t size = params->reqs.size;
     size_t align = params->reqs.alignment;
     align = pl_lcm(align, vk->limits.bufferImageGranularity);
     align = pl_lcm(align, vk->limits.nonCoherentAtomSize);
@@ -962,6 +962,10 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
             return false;
         }
 
+        // For accounting, just treat the alignment as part of the used size.
+        // Doing it this way makes sure that the sizes reported to vk_memslice
+        // consumers are always aligned properly.
+        size = PL_ALIGN(size, align);
         slab->used += size;
         slab->age = ma->age;
         pl_mutex_unlock(&slab->lock);
