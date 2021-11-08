@@ -888,6 +888,7 @@ static void hook_reset(void *priv)
 struct szexp_ctx {
     struct hook_priv *priv;
     const struct pl_hook_params *params;
+    struct pass_tex hooked;
 };
 
 static bool lookup_tex(void *priv, pl_str var, float size[2])
@@ -897,9 +898,9 @@ static bool lookup_tex(void *priv, pl_str var, float size[2])
     const struct pl_hook_params *params = ctx->params;
 
     if (pl_str_equals0(var, "HOOKED")) {
-        pl_assert(params->tex);
-        size[0] = params->tex->params.w;
-        size[1] = params->tex->params.h;
+        pl_assert(ctx->hooked.tex);
+        size[0] = ctx->hooked.tex->params.w;
+        size[1] = ctx->hooked.tex->params.h;
         return true;
     }
 
@@ -1007,28 +1008,26 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
     pl_str stage = pl_stage_to_mp(params->stage);
     struct pl_hook_res res = {0};
 
-    // Save the input texture if needed
-    if (p->save_stages & params->stage) {
-        pl_assert(params->tex);
-        struct pass_tex ptex = {
+    pl_shader sh = NULL;
+    struct szexp_ctx scope = {
+        .priv = p,
+        .params = params,
+        .hooked = {
             .name = stage,
             .tex = params->tex,
             .rect = params->rect,
             .repr = params->repr,
             .color = params->color,
             .comps = params->components,
-        };
-
-        PL_TRACE(p, "Saving input texture '%.*s' for binding",
-                 PL_STR_FMT(ptex.name));
-        save_pass_tex(p, ptex);
-    }
-
-    pl_shader sh = NULL;
-    struct szexp_ctx scope = {
-        .priv = p,
-        .params = params,
+        },
     };
+
+    // Save the input texture if needed
+    if (p->save_stages & params->stage) {
+        PL_TRACE(p, "Saving input texture '%.*s' for binding",
+                 PL_STR_FMT(scope.hooked.name));
+        save_pass_tex(p, scope.hooked);
+    }
 
     for (int n = 0; n < p->hook_passes.num; n++) {
         const struct hook_pass *pass = &p->hook_passes.elem[n];
@@ -1292,13 +1291,14 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         save_pass_tex(p, ptex);
 
         // Update the result object, unless we saved to a different name
-        if (!hook->save_tex.len) {
+        if (pl_str_equals(ptex.name, stage)) {
+            scope.hooked = ptex;
             res = (struct pl_hook_res) {
                 .output = PL_HOOK_SIG_TEX,
                 .tex = fbo,
                 .repr = ptex.repr,
                 .color = ptex.color,
-                .components = PL_DEF(hook->comps, params->components),
+                .components = ptex.comps,
                 .rect = new_rect,
             };
         }
