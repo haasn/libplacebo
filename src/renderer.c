@@ -3025,7 +3025,8 @@ void pl_frame_clear_rgba(pl_gpu gpu, const struct pl_frame *frame,
         const struct pl_plane *plane =  &frame->planes[p];
         float clear[4] = { 0.0, 0.0, 0.0, rgba[3] };
         for (int c = 0; c < plane->components; c++) {
-            if (plane->component_mapping[c] >= 0)
+            int ch = plane->component_mapping[c];
+            if (ch >= 0 && ch < 3)
                 clear[c] = mult * encoded[plane->component_mapping[c]];
         }
 
