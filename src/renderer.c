@@ -665,8 +665,8 @@ static void swizzle_color(pl_shader sh, int comps, const int comp_map[4],
                           bool force_alpha)
 {
     ident_t orig = sh_fresh(sh, "orig_color");
-    GLSL("vec4 %s = color;   \n"
-         "color = vec4(0.0); \n", orig);
+    GLSL("vec4 %s = color;                  \n"
+         "color = vec4(0.0, 0.0, 0.0, 1.0); \n", orig);
 
     static const int def_map[4] = {0, 1, 2, 3};
     comp_map = PL_DEF(comp_map, def_map);
