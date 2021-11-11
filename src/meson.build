@@ -27,7 +27,7 @@ endif
 build_deps = [ libm, threads ]
 test_deps = []
 
-vulkan = dependency('vulkan', version: '>=1.1', required: get_option('vulkan'))
+vulkan = dependency('vulkan', version: '>=1.2', required: get_option('vulkan'))
 opengl = dependency('epoxy', version: '>=1.4.0', required: get_option('opengl'))
 shaderc = dependency('shaderc', version: '>=2019.1', required: get_option('shaderc'))
 cross = dependency('spirv-cross-c-shared', version: '>=0.29.0', required: get_option('d3d11'))
