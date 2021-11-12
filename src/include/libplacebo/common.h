@@ -18,20 +18,9 @@
 #ifndef LIBPLACEBO_COMMON_H_
 #define LIBPLACEBO_COMMON_H_
 
-// C++ compatibility
-#ifdef __cplusplus
-# define PL_STRUCT(name) struct name##_t
-# define PL_API_BEGIN extern "C" {
-# define PL_API_END }
-#else
-# define PL_STRUCT(name) struct name
-# define PL_API_BEGIN
-# define PL_API_END
-// Disable this warning because libplacebo's params macros override fields
-# pragma GCC diagnostic ignored "-Woverride-init"
-#endif
-
 #include <stdbool.h>
+
+#include <libplacebo/config.h>
 
 PL_API_BEGIN
 
