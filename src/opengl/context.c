@@ -47,7 +47,9 @@ static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
     case GL_DEBUG_SEVERITY_HIGH:        level = PL_LOG_ERR; break;
     }
 
+#ifndef MSAN
     pl_msg(log, level, "GL: %s", message);
+#endif
 }
 
 #ifdef EPOXY_HAS_EGL
@@ -66,8 +68,10 @@ static void debug_cb_egl(EGLenum error, const char *command,
     case EGL_DEBUG_MSG_INFO_KHR:        level = PL_LOG_DEBUG; break;
     }
 
+#ifndef MSAN
     pl_msg(log, level, "EGL: %s: %s %s", command, egl_err_str(error),
            message);
+#endif
 }
 
 #endif // EPOXY_HAS_EGL
