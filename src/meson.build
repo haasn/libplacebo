@@ -69,6 +69,10 @@ if d3d11_found
   add_project_arguments(['-DCOBJMACROS', '-DINITGUID'], language: 'c')
 endif
 
+unwind = dependency('libunwind', required: get_option('unwind'))
+conf_internal.set('PL_HAVE_UNWIND', unwind.found())
+build_deps += unwind
+
 # work-arounds for glslang braindeath
 glslang_combined = disabler()
 glslang_min_ver = '>=0.0.2763'

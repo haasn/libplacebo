@@ -35,3 +35,6 @@ option('bench', type: 'boolean', value: false,
 
 option('fuzz', type: 'boolean', value: false,
        description: 'Enable building fuzzer binaries (`CC=afl-cc`)')
+
+option('unwind', type: 'feature', value: 'auto',
+       description: 'Enable linking against libunwind for printing stack traces caused by runtime errors')

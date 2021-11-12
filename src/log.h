@@ -78,3 +78,6 @@ static inline void pl_log_cpu_time(pl_log log, time_t start, time_t stop,
     pl_msg(log, lev, "Spent %.3f ms %s%s", ms, operation,
            ms > 100 ? " (slow!)" : "");
 }
+
+// Log stack trace
+void pl_log_stack_trace(pl_log log, enum pl_log_level lev);

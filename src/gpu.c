@@ -27,6 +27,7 @@
       if (!(expr)) {                                            \
           PL_ERR(gpu, "Validation failed: %s (%s:%d)",          \
                   #expr, __FILE__, __LINE__);                   \
+          pl_log_stack_trace(gpu->log, PL_LOG_ERR);             \
           goto error;                                           \
       }                                                         \
   } while (0)

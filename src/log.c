@@ -201,3 +201,64 @@ void pl_msg_source(pl_log log, enum pl_log_level lev, const char *src)
         line++;
     }
 }
+
+#ifdef PL_HAVE_UNWIND
+#define UNW_LOCAL_ONLY
+#include <libunwind.h>
+#include <dlfcn.h>
+
+void pl_log_stack_trace(pl_log log, enum pl_log_level lev)
+{
+    if (!pl_msg_test(log, lev))
+        return;
+
+    unw_cursor_t cursor;
+    unw_context_t uc;
+    unw_word_t ip, off;
+    unw_getcontext(&uc);
+    unw_init_local(&cursor, &uc);
+
+    int depth = 0;
+    pl_msg(log, lev, "  Backtrace:");
+    while (unw_step(&cursor) > 0) {
+        char symbol[256] = "<unknown>";
+        Dl_info info = {
+            .dli_fname = "<unknown>",
+        };
+
+        unw_get_reg(&cursor, UNW_REG_IP, &ip);
+        unw_get_proc_name(&cursor, symbol, sizeof(symbol), &off);
+        dladdr((void *) (uintptr_t) ip, &info);
+        pl_msg(log, lev, "    #%-2d 0x%016" PRIxPTR " in %s+0x%" PRIxPTR" at %s+0x%" PRIxPTR,
+               depth++, ip, symbol, off, info.dli_fname, ip - (uintptr_t) info.dli_fbase);
+    }
+}
+
+#elif defined(__linux__) && !defined(MSAN)
+#include <execinfo.h>
+
+void pl_log_stack_trace(pl_log log, enum pl_log_level lev)
+{
+    if (!pl_msg_test(log, lev))
+        return;
+
+    PL_ARRAY(void *) buf = {0};
+    size_t buf_avail = 16;
+    do {
+        buf_avail *= 2;
+        PL_ARRAY_RESIZE(NULL, buf, buf_avail);
+        buf.num = backtrace(buf.elem, buf_avail);
+    } while (buf.num == buf_avail);
+
+    pl_msg(log, lev, "  Backtrace:");
+    char **strings = backtrace_symbols(buf.elem, buf.num);
+    for (int i = 0; i < buf.num; i++)
+        pl_msg(log, lev, "    #%-2d %s", i, strings[i]);
+
+    free(strings);
+    pl_free(buf.elem);
+}
+
+#else
+void pl_log_stack_trace(pl_log log, enum pl_log_level lev) { }
+#endif
