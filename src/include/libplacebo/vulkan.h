@@ -513,6 +513,14 @@ bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *layout,
 //
 // If `sem_in` is specified, it must fire before libplacebo will actually use
 // or modify the image. (Optional)
+//
+// Note: the lifetime of `sem_in` is indeterminate, and destroying it while the
+// texture is still depending on that semaphore is undefined behavior.
+//
+// Technically, the only way to be sure that it's safe to free is to use
+// `pl_gpu_finish()` or similar (e.g. `pl_vulkan_destroy` or
+// `vkDeviceWaitIdle`) after another operation involving `tex` has been emitted
+// (or the texture has been destroyed).
 void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
                        pl_vulkan_sem sem_in);
 
