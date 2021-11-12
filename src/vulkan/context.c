@@ -351,7 +351,6 @@ static void load_vk_fun(struct vk_ctx *vk, const struct vk_fun *fun)
 
 // Private struct for pl_vk_inst
 struct priv {
-    VkDebugReportCallbackEXT debug_report_cb;
     VkDebugUtilsMessengerEXT debug_utils_cb;
 };
 
@@ -362,11 +361,6 @@ void pl_vk_inst_destroy(pl_vk_inst *inst_ptr)
         return;
 
     struct priv *p = PL_PRIV(inst);
-    if (p->debug_report_cb) {
-        PL_VK_LOAD_FUN(inst->instance, DestroyDebugReportCallbackEXT, inst->get_proc_addr);
-        DestroyDebugReportCallbackEXT(inst->instance, p->debug_report_cb, PL_VK_ALLOC);
-    }
-
     if (p->debug_utils_cb) {
         PL_VK_LOAD_FUN(inst->instance, DestroyDebugUtilsMessengerEXT, inst->get_proc_addr);
         DestroyDebugUtilsMessengerEXT(inst->instance, p->debug_utils_cb, PL_VK_ALLOC);
@@ -442,33 +436,6 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
                     (msgType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT);
 
     return is_error;
-}
-
-// Legacy version of the above callback for the simpler VK_EXT_debug_report
-static VkBool32 VKAPI_PTR vk_dbg_report_cb(VkDebugReportFlagsEXT flags,
-                                           VkDebugReportObjectTypeEXT objType,
-                                           uint64_t obj, size_t loc,
-                                           int32_t msgCode, const char *layer,
-                                           const char *msg, void *priv)
-{
-    pl_log log = priv;
-
-    enum pl_log_level lev;
-    switch (flags) {
-    case VK_DEBUG_REPORT_ERROR_BIT_EXT:                 lev = PL_LOG_ERR;   break;
-    case VK_DEBUG_REPORT_WARNING_BIT_EXT:               lev = PL_LOG_WARN;  break;
-    case VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT:   lev = PL_LOG_WARN;  break;
-    case VK_DEBUG_REPORT_DEBUG_BIT_EXT:                 lev = PL_LOG_DEBUG; break;
-    case VK_DEBUG_REPORT_INFORMATION_BIT_EXT:           lev = PL_LOG_TRACE; break;
-    default:                                            lev = PL_LOG_INFO;  break;
-    };
-
-    // Note: We can freely cast VkDebugReportObjectTypeEXT to VkObjectType
-    pl_msg(log, lev, "vk [%s] %d: %s (obj 0x%llx (%s), loc 0x%zx)",
-           layer, (int) msgCode, msg, (unsigned long long) obj,
-           vk_obj_type((VkObjectType) objType), loc);
-
-    return !!(flags & VK_DEBUG_REPORT_ERROR_BIT_EXT);
 }
 
 static PFN_vkGetInstanceProcAddr get_proc_addr_fallback(pl_log log,
@@ -717,35 +684,26 @@ next_user_ext: ;
 next_opt_user_ext: ;
     }
 
-    // If debugging is enabled, add the debug report extension so we get useful
-    // debugging callbacks, sorted by priority since debug_utils deprecates
-    // debug_report
-    static const char *debug_ext = NULL;
-    static const char *debug_exts[] = {
-        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-        VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
-    };
-
+    // If debugging is enabled, load the necessary debug utils extension
     if (debug) {
-        for (int i = 0; i < PL_ARRAY_SIZE(debug_exts); i++) {
-            for (int n = 0; n < num_exts_avail; n++) {
-                if (strcmp(debug_exts[i], exts_avail[n].extensionName) != 0)
-                    continue;
+        for (int n = 0; n < num_exts_avail; n++) {
+            const char * const debug_ext = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+            if (strcmp(debug_ext, exts_avail[n].extensionName) != 0)
+                continue;
 
-                pl_info(log, "Enabling debug report extension: %s", debug_exts[i]);
-                PL_ARRAY_APPEND(tmp, exts, debug_exts[i]);
-                debug_ext = debug_exts[i];
-                goto debug_exts_done;
-            }
+            pl_info(log, "Enabling debug report extension: %s", debug_ext);
+            PL_ARRAY_APPEND(tmp, exts, debug_ext);
+            goto debug_ext_done;
         }
 
         // No extension found
         pl_warn(log, "API debug layers enabled but no debug report extension "
                 "found... ignoring. Debug messages may be spilling to "
                 "stdout/stderr!");
+        debug = false;
     }
 
-debug_exts_done: ;
+debug_ext_done: ;
 
     info.ppEnabledExtensionNames = exts.elem;
     info.enabledExtensionCount = exts.num;
@@ -782,7 +740,7 @@ debug_exts_done: ;
     };
 
     // Set up a debug callback to catch validation messages
-    if (debug_ext && strcmp(debug_ext, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0) {
+    if (debug) {
         VkDebugUtilsMessengerCreateInfoEXT dinfo = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
             .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
@@ -798,20 +756,6 @@ debug_exts_done: ;
 
         PL_VK_LOAD_FUN(inst, CreateDebugUtilsMessengerEXT, get_addr);
         CreateDebugUtilsMessengerEXT(inst, &dinfo, PL_VK_ALLOC, &p->debug_utils_cb);
-    } else if (debug_ext && strcmp(debug_ext, VK_EXT_DEBUG_REPORT_EXTENSION_NAME) == 0) {
-        VkDebugReportCallbackCreateInfoEXT dinfo = {
-            .sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
-            .flags = VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
-                     VK_DEBUG_REPORT_WARNING_BIT_EXT |
-                     VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
-                     VK_DEBUG_REPORT_ERROR_BIT_EXT |
-                     VK_DEBUG_REPORT_DEBUG_BIT_EXT,
-            .pfnCallback = vk_dbg_report_cb,
-            .pUserData = (void *) log,
-        };
-
-        PL_VK_LOAD_FUN(inst, CreateDebugReportCallbackEXT, get_addr)
-        CreateDebugReportCallbackEXT(inst, &dinfo, PL_VK_ALLOC, &p->debug_report_cb);
     }
 
     pl_free(tmp);
