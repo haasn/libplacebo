@@ -148,10 +148,10 @@ def get_vkenum(registry, enum):
         yield e.attrib['name']
 
 def get_vkobjects(registry):
-    for e in findall_enum(registry, 'VkObjectType'):
-        if 'comment' in e.attrib:
-            yield Obj(enum = e.attrib['name'],
-                      name = e.attrib['comment'])
+    for t in registry.iterfind('types/type[@category="handle"]'):
+        if 'objtypeenum' in t.attrib:
+            yield Obj(enum = t.attrib['objtypeenum'],
+                      name = t.find('name').text)
 
 def get_vkstructs(registry):
     for e in registry.iterfind('types/type[@category="struct"]'):
