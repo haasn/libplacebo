@@ -65,10 +65,8 @@ foreach d : d3d11_deps
 endforeach
 
 if d3d11_found
-  d3d11 = declare_dependency(
-    compile_args: ['-DCOBJMACROS', '-DINITGUID'],
-    dependencies: d3d11_deps,
-  )
+  d3d11 = declare_dependency(dependencies: d3d11_deps)
+  add_project_arguments(['-DCOBJMACROS', '-DINITGUID'], language: 'c')
 endif
 
 # work-arounds for glslang braindeath
