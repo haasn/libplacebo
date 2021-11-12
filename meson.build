@@ -27,6 +27,7 @@ project('libplacebo', ['c', 'cpp'],
       '174': 'deprecate pl_vulkan_params.disable_events',
       '175': 'require timeline semaphores for all vulkan devices',
       '176': 'revert vulkan 1.2 requirement',
+      '177': 'add debug_tag to pl_tex/buf_params',
     }.keys().length(),
     # Fix version
     0)

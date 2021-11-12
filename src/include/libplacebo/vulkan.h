@@ -438,9 +438,16 @@ struct pl_vulkan_wrap_params {
     // pl_tex capabilities to include whatever it can, as determined by the set
     // of enabled usage flags.
     VkImageUsageFlags usage;
+
+    // See `pl_tex_params`
+    void *user_data;
+    pl_debug_tag debug_tag;
 };
 
-#define pl_vulkan_wrap_params(...) (&(struct pl_vulkan_wrap_params) { __VA_ARGS__ })
+#define pl_vulkan_wrap_params(...) (&(struct pl_vulkan_wrap_params) {   \
+        .debug_tag = PL_DEBUG_TAG,                                      \
+        __VA_ARGS__                                                     \
+    })
 
 // Wraps an external VkImage into a pl_tex abstraction. By default, the image
 // is considered "held" by the user and must be released before calling any

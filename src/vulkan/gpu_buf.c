@@ -99,7 +99,7 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
 
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     pl_rc_init(&buf_vk->rc);
-    if (!vk_sem_init(vk, &buf_vk->sem))
+    if (!vk_sem_init(vk, &buf_vk->sem, PL_DEF(params->debug_tag, "vk_buf")))
         goto error;
 
     struct vk_malloc_params mparams = {
@@ -238,7 +238,7 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
         };
 
         VK(vk->CreateBufferView(vk->dev, &vinfo, PL_VK_ALLOC, &buf_vk->view));
-        PL_VK_NAME(BUFFER_VIEW, buf_vk->view, "texel");
+        PL_VK_NAME(BUFFER_VIEW, buf_vk->view, PL_DEF(params->debug_tag, "texel"));
     }
 
     if (params->initial_data)

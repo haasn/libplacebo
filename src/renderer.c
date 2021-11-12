@@ -380,7 +380,8 @@ static void info_callback(void *priv, const struct pl_dispatch_info *dinfo)
         pass->info.index++;
 }
 
-static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt, int comps)
+static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt,
+                      int comps, pl_debug_tag debug_tag)
 {
     pl_renderer rr = pass->rr;
     comps = PL_DEF(comps, 4);
@@ -389,13 +390,14 @@ static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt, int com
         return NULL;
 
     struct pl_tex_params params = {
-        .w = w,
-        .h = h,
-        .format = fmt,
+        .w          = w,
+        .h          = h,
+        .format     = fmt,
         .sampleable = true,
         .renderable = true,
         .blit_src   = true,
         .storable   = fmt->caps & PL_FMT_CAP_STORABLE,
+        .debug_tag  = debug_tag,
     };
 
     int best_idx = -1;
@@ -433,7 +435,7 @@ static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt, int com
 }
 
 // Forcibly convert an img to `tex`, dispatching where necessary
-static pl_tex img_tex(struct pass_state *pass, struct img *img)
+static pl_tex _img_tex(struct pass_state *pass, struct img *img, pl_debug_tag tag)
 {
     if (img->tex) {
         pl_assert(!img->sh);
@@ -441,7 +443,7 @@ static pl_tex img_tex(struct pass_state *pass, struct img *img)
     }
 
     pl_renderer rr = pass->rr;
-    pl_tex tex = get_fbo(pass, img->w, img->h, img->fmt, img->comps);
+    pl_tex tex = get_fbo(pass, img->w, img->h, img->fmt, img->comps, tag);
     img->fmt = NULL;
 
     if (!tex) {
@@ -466,6 +468,8 @@ static pl_tex img_tex(struct pass_state *pass, struct img *img)
     img->tex = tex;
     return img->tex;
 }
+
+#define img_tex(pass, img) _img_tex(pass, img, PL_DEBUG_TAG)
 
 // Forcibly convert an img to `sh`, sampling where necessary
 static pl_shader img_sh(struct pass_state *pass, struct img *img)
@@ -848,7 +852,7 @@ static pl_tex get_hook_tex(void *priv, int width, int height)
 {
     struct pass_state *pass = priv;
 
-    return get_fbo(pass, width, height, NULL, 4);
+    return get_fbo(pass, width, height, NULL, 4, PL_DEBUG_TAG);
 }
 
 // Returns if any hook was applied (even if there were errors)

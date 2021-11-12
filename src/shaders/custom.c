@@ -475,6 +475,7 @@ static bool parse_tex(pl_gpu gpu, void *alloc, pl_str *body,
     struct pl_tex_params params = {
         .w = 1, .h = 1, .d = 0,
         .sampleable = true,
+        .debug_tag = PL_DEBUG_TAG,
     };
 
     while (true) {

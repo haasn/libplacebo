@@ -59,4 +59,8 @@ const char *pl_version(void);
 # pragma GCC diagnostic ignored "-Woverride-init"
 #endif
 
+// Extra helper macros
+#define PL_TOSTRING_INNER(x) #x
+#define PL_TOSTRING(x) PL_TOSTRING_INNER(x)
+
 #endif // LIBPLACEBO_CONTEXT_H_

@@ -152,7 +152,7 @@ void vk_sem_uninit(struct vk_ctx *vk, struct vk_sem *sem)
     *sem = (struct vk_sem) {0};
 }
 
-bool vk_sem_init(struct vk_ctx *vk, struct vk_sem *sem)
+bool vk_sem_init(struct vk_ctx *vk, struct vk_sem *sem, pl_debug_tag debug_tag)
 {
     *sem = (struct vk_sem) {
         .write.stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
@@ -172,7 +172,7 @@ bool vk_sem_init(struct vk_ctx *vk, struct vk_sem *sem)
 
     // We always create a semaphore, so we can perform host waits on it
     VK(vk->CreateSemaphore(vk->dev, &sinfo, PL_VK_ALLOC, &sem->semaphore));
-    PL_VK_NAME(SEMAPHORE, sem->semaphore, "vk_sem");
+    PL_VK_NAME(SEMAPHORE, sem->semaphore, PL_DEF(debug_tag, "vk_sem"));
     return true;
 
 error:

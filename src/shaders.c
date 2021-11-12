@@ -993,6 +993,7 @@ next_dim: ; // `continue` out of the inner loop
                 .sampleable     = true,
                 .host_writable  = params->dynamic,
                 .initial_data   = params->dynamic ? NULL : tmp,
+                .debug_tag      = PL_DEBUG_TAG,
             };
 
             bool ok;

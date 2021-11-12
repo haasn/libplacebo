@@ -718,6 +718,7 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
             .memory_type = PL_BUF_MEM_DEVICE,
             .storable = true,
             .initial_data = zero,
+            .debug_tag = PL_DEBUG_TAG,
         };
 
         // Attempt creating host-readable SSBO first, suppress errors

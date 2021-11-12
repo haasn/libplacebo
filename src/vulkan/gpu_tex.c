@@ -118,7 +118,7 @@ void vk_tex_deref(pl_gpu gpu, pl_tex tex)
 
 
 // Initializes non-VkImage values like the image view, framebuffers, etc.
-static bool vk_init_image(pl_gpu gpu, pl_tex tex, const char *name)
+static bool vk_init_image(pl_gpu gpu, pl_tex tex, pl_debug_tag debug_tag)
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
@@ -126,10 +126,10 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, const char *name)
     const struct pl_tex_params *params = &tex->params;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     pl_assert(tex_vk->img);
-    PL_VK_NAME(IMAGE, tex_vk->img, name);
+    PL_VK_NAME(IMAGE, tex_vk->img, debug_tag);
 
     pl_rc_init(&tex_vk->rc);
-    if (!vk_sem_init(vk, &tex_vk->sem))
+    if (!vk_sem_init(vk, &tex_vk->sem, debug_tag))
         return false;
     tex_vk->layout = VK_IMAGE_LAYOUT_UNDEFINED;
     tex_vk->transfer_queue = GRAPHICS;
@@ -166,7 +166,7 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, const char *name)
         };
 
         VK(vk->CreateImageView(vk->dev, &vinfo, PL_VK_ALLOC, &tex_vk->view));
-        PL_VK_NAME(IMAGE_VIEW, tex_vk->view, name);
+        PL_VK_NAME(IMAGE_VIEW, tex_vk->view, debug_tag);
     }
 
     if (params->renderable) {
@@ -219,7 +219,7 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, const char *name)
 
         VK(vk->CreateFramebuffer(vk->dev, &finfo, PL_VK_ALLOC,
                                  &tex_vk->framebuffer));
-        PL_VK_NAME(FRAMEBUFFER, tex_vk->framebuffer, name);
+        PL_VK_NAME(FRAMEBUFFER, tex_vk->framebuffer, debug_tag);
     }
 
     ret = true;
@@ -495,8 +495,11 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     if (!vk_malloc_slice(vk->ma, mem, &mparams))
         goto error;
 
+    const char *debug_tag = params->debug_tag ? params->debug_tag :
+                            params->import_handle ? "imported" : "created";
+
     VK(vk->BindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
-    if (!vk_init_image(gpu, tex, params->import_handle ? "imported" : "created"))
+    if (!vk_init_image(gpu, tex, debug_tag))
         goto error;
 
     if (params->export_handle)
@@ -1056,13 +1059,15 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
         .w = params->width,
         .h = params->height,
         .d = params->depth,
-        .sampleable  = !!(params->usage & VK_IMAGE_USAGE_SAMPLED_BIT),
-        .renderable  = !!(params->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
-        .storable    = !!(params->usage & VK_IMAGE_USAGE_STORAGE_BIT),
-        .blit_src    = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
-        .blit_dst    = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
+        .sampleable = !!(params->usage & VK_IMAGE_USAGE_SAMPLED_BIT),
+        .renderable = !!(params->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
+        .storable   = !!(params->usage & VK_IMAGE_USAGE_STORAGE_BIT),
+        .blit_src   = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
+        .blit_dst   = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
         .host_writable = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
         .host_readable = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
+        .user_data  = params->user_data,
+        .debug_tag  = params->debug_tag,
     };
 
     // Mask out capabilities not permitted by the `pl_fmt`
@@ -1097,7 +1102,7 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
     tex_vk->img_fmt = params->format;
     tex_vk->usage_flags = params->usage;
 
-    if (!vk_init_image(gpu, tex, "wrapped"))
+    if (!vk_init_image(gpu, tex, PL_DEF(params->debug_tag, "wrapped")))
         goto error;
 
     return tex;

@@ -650,6 +650,8 @@ pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     return impl->tex_create(gpu, params);
 
 error:
+    if (params->debug_tag)
+        PL_ERR(gpu, "  for texture: %s", params->debug_tag);
     return NULL;
 }
 
@@ -705,9 +707,11 @@ void pl_tex_clear_ex(pl_gpu gpu, pl_tex dst, const union pl_clear_color color)
     if (impl->tex_invalidate)
         impl->tex_invalidate(gpu, dst);
     impl->tex_clear_ex(gpu, dst, color);
+    return;
 
 error:
-    return;
+    if (dst->params.debug_tag)
+        PL_ERR(gpu, "  for texture: %s", dst->params.debug_tag);
 }
 
 void pl_tex_clear(pl_gpu gpu, pl_tex dst, const float color[4])
@@ -809,9 +813,14 @@ void pl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
 
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->tex_blit(gpu, &fixed);
+    return;
 
 error:
-    return;
+    if (src->params.debug_tag || dst->params.debug_tag) {
+        PL_ERR(gpu, "  for textures: src %s, dst %s",
+               PL_DEF(src->params.debug_tag, "(unknown)"),
+               PL_DEF(dst->params.debug_tag, "(unknown)"));
+    }
 }
 
 size_t pl_tex_transfer_size(const struct pl_tex_transfer_params *par)
@@ -882,13 +891,14 @@ static bool fix_tex_transfer(pl_gpu gpu, struct pl_tex_transfer_params *params)
     return true;
 
 error:
+    if (tex->params.debug_tag)
+        PL_ERR(gpu, "  for texture: %s", tex->params.debug_tag);
     return false;
 }
 
 bool pl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
     pl_tex tex = params->tex;
-    require(tex);
     require(tex->params.host_writable);
 
     struct pl_tex_transfer_params fixed = *params;
@@ -899,13 +909,14 @@ bool pl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     return impl->tex_upload(gpu, &fixed);
 
 error:
+    if (tex->params.debug_tag)
+        PL_ERR(gpu, "  for texture: %s", tex->params.debug_tag);
     return false;
 }
 
 bool pl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
     pl_tex tex = params->tex;
-    require(tex);
     require(tex->params.host_readable);
 
     struct pl_tex_transfer_params fixed = *params;
@@ -916,6 +927,8 @@ bool pl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     return impl->tex_download(gpu, &fixed);
 
 error:
+    if (tex->params.debug_tag)
+        PL_ERR(gpu, "  for texture: %s", tex->params.debug_tag);
     return false;
 }
 
@@ -995,6 +1008,8 @@ pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
     return buf;
 
 error:
+    if (params->debug_tag)
+        PL_ERR(gpu, "  for buffer: %s", params->debug_tag);
     return NULL;
 }
 
@@ -1048,9 +1063,11 @@ void pl_buf_write(pl_gpu gpu, pl_buf buf, size_t buf_offset,
 
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->buf_write(gpu, buf, buf_offset, data, size);
+    return;
 
 error:
-    return;
+    if (buf->params.debug_tag)
+        PL_ERR(gpu, "  for buffer: %s", buf->params.debug_tag);
 }
 
 bool pl_buf_read(pl_gpu gpu, pl_buf buf, size_t buf_offset,
@@ -1063,6 +1080,8 @@ bool pl_buf_read(pl_gpu gpu, pl_buf buf, size_t buf_offset,
     return impl->buf_read(gpu, buf, buf_offset, dest, size);
 
 error:
+    if (buf->params.debug_tag)
+        PL_ERR(gpu, "  for buffer: %s", buf->params.debug_tag);
     return false;
 }
 
@@ -1074,9 +1093,13 @@ void pl_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
 
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->buf_copy(gpu, dst, dst_offset, src, src_offset, size);
+    return;
 
 error:
-    return;
+    if (src->params.debug_tag || dst->params.debug_tag) {
+        PL_ERR(gpu, "  for buffers: src %s, dst %s",
+               src->params.debug_tag, dst->params.debug_tag);
+    }
 }
 
 bool pl_buf_export(pl_gpu gpu, pl_buf buf)
@@ -1087,6 +1110,8 @@ bool pl_buf_export(pl_gpu gpu, pl_buf buf)
     return impl->buf_export(gpu, buf);
 
 error:
+    if (buf->params.debug_tag)
+        PL_ERR(gpu, "  for buffer: %s", buf->params.debug_tag);
     return false;
 }
 
@@ -1598,6 +1623,7 @@ bool pl_tex_upload_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     pl_buf buf = NULL;
     struct pl_buf_params bufparams = {
         .size = pl_tex_transfer_size(params),
+        .debug_tag = PL_DEBUG_TAG,
     };
 
     // If we can import host pointers directly, and the function is being used
@@ -1668,6 +1694,7 @@ bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params
     pl_buf buf = NULL;
     struct pl_buf_params bufparams = {
         .size = pl_tex_transfer_size(params),
+        .debug_tag = PL_DEBUG_TAG,
     };
 
     // If we can import host pointers directly, we can avoid an extra memcpy
@@ -2205,6 +2232,8 @@ bool pl_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync)
     return impl->tex_export(gpu, tex, sync);
 
 error:
+    if (tex->params.debug_tag)
+        PL_ERR(gpu, "  for texture: %s", tex->params.debug_tag);
     return false;
 }
 

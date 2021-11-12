@@ -177,6 +177,7 @@ static void pl_texture_tests(pl_gpu gpu)
             .blit_dst      = (fmt->caps & PL_FMT_CAP_BLITTABLE),
             .host_writable = true,
             .host_readable = true,
+            .debug_tag     = PL_DEBUG_TAG,
         };
 
         pl_tex tex[2];

@@ -76,6 +76,7 @@ struct ui *ui_create(pl_gpu gpu)
         .sampleable = true,
         .initial_data = nk_font_atlas_bake(&ui->atlas, &tparams.w, &tparams.h,
                                            NK_FONT_ATLAS_ALPHA8),
+        .debug_tag = PL_DEBUG_TAG,
     };
     ui->font_tex = pl_tex_create(gpu, &tparams);
     nk_font_atlas_end(&ui->atlas, nk_handle_ptr((void *) ui->font_tex),

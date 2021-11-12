@@ -95,7 +95,7 @@ struct vk_sem {
     struct vk_sync_scope read, write;
 };
 
-bool vk_sem_init(struct vk_ctx *vk, struct vk_sem *sem);
+bool vk_sem_init(struct vk_ctx *vk, struct vk_sem *sem, pl_debug_tag debug_tag);
 void vk_sem_uninit(struct vk_ctx *vk, struct vk_sem *sem);
 
 // Updates the `vk_sem` state for a given access. If `is_trans` is set, this

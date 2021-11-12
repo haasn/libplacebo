@@ -27,6 +27,10 @@
 
 PL_API_BEGIN
 
+// These are not memory managed, and should represent compile-time constants
+typedef const char *pl_debug_tag;
+#define PL_DEBUG_TAG (__FILE__ ":" PL_TOSTRING(__LINE__))
+
 // Type of a shader input descriptor.
 enum pl_desc_type {
     PL_DESC_INVALID = 0,
@@ -483,9 +487,15 @@ struct pl_buf_params {
 
     // Arbitrary user data. libplacebo does not use this at all.
     void *user_data;
+
+    // Arbitrary identifying tag. Used only for debugging purposes.
+    pl_debug_tag debug_tag;
 };
 
-#define pl_buf_params(...) (&(struct pl_buf_params) { __VA_ARGS__ })
+#define pl_buf_params(...) (&(struct pl_buf_params) {   \
+        .debug_tag = PL_DEBUG_TAG,                      \
+        __VA_ARGS__                                     \
+    })
 
 // A generic buffer, which can be used for multiple purposes (texture transfer,
 // storage buffer, uniform buffer, etc.)
@@ -689,9 +699,15 @@ struct pl_tex_params {
 
     // Arbitrary user data. libplacebo does not use this at all.
     void *user_data;
+
+    // Arbitrary identifying tag. Used only for debugging purposes.
+    pl_debug_tag debug_tag;
 };
 
-#define pl_tex_params(...) (&(struct pl_tex_params) { __VA_ARGS__ })
+#define pl_tex_params(...) (&(struct pl_tex_params) {   \
+        .debug_tag = PL_DEBUG_TAG,                      \
+        __VA_ARGS__                                     \
+    })
 
 static inline int pl_tex_params_dimension(const struct pl_tex_params params)
 {
