@@ -720,17 +720,11 @@ static void pl_scaler_tests(pl_gpu gpu)
         .h              = 100,
         .format         = fbo_fmt,
         .renderable     = true,
-        .storable       = !!(fbo_fmt->caps & PL_FMT_CAP_STORABLE),
-        .host_readable  = true,
+        .storable       = fbo_fmt->caps & PL_FMT_CAP_STORABLE,
+        .host_readable  = fbo_fmt->caps & PL_FMT_CAP_HOST_READABLE,
     };
 
     pl_tex fbo = pl_tex_create(gpu, &fbo_params);
-    if (!fbo) {
-        printf("Failed creating readable FBO... falling back to non-readable\n");
-        fbo_params.host_readable = false;
-        fbo = pl_tex_create(gpu, &fbo_params);
-    }
-
     pl_dispatch dp = pl_dispatch_create(gpu->log, gpu);
     if (!dot5x5 || !fbo || !dp)
         goto error;
