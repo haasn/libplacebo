@@ -653,12 +653,13 @@ static struct vk_slab *pool_get_page(struct vk_malloc *ma, struct vk_pool *pool,
     struct vk_slab *slab = NULL;
     int slab_pages = MINIMUM_PAGE_COUNT;
     size = PL_ALIGN2(size, PAGE_SIZE_ALIGN);
+    const size_t pagesize = PL_ALIGN(size, align);
 
     for (int i = 0; i < pool->slabs.num; i++) {
         slab = pool->slabs.elem[i];
         if (slab->pagesize < size)
             continue;
-        if (slab->pagesize > size * MINIMUM_PAGE_COUNT) // rough heuristic
+        if (slab->pagesize > pagesize * MINIMUM_PAGE_COUNT) // rough heuristic
             continue;
         if (slab->pagesize % align)
             continue;
@@ -680,7 +681,6 @@ static struct vk_slab *pool_get_page(struct vk_malloc *ma, struct vk_pool *pool,
     }
 
     // Otherwise, allocate a new vk_slab and append it to the list.
-    size_t pagesize = PL_ALIGN(size, align);
     VkDeviceSize slab_size = slab_pages * pagesize;
     pl_static_assert(MINIMUM_SLAB_SIZE <= PAGE_SIZE_ALIGN * MAXIMUM_PAGE_COUNT);
     slab_size = PL_CLAMP(slab_size, MINIMUM_SLAB_SIZE, MAXIMUM_SLAB_SIZE);
@@ -957,8 +957,9 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
         slab = pool_get_page(ma, pool, size, align, &offset);
         pl_mutex_unlock(&ma->lock);
         if (!slab) {
-            PL_ERR(ma->vk, "No slab to serve request for %s bytes in pool %d!",
-                   PRINT_SIZE(size), pool->index);
+            PL_ERR(ma->vk, "No slab to serve request for %s bytes (with "
+                   "alignment 0x%zx) in pool %d!",
+                   PRINT_SIZE(size), align, pool->index);
             return false;
         }
 
