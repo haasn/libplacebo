@@ -86,25 +86,19 @@ if glslang_req.auto() and shaderc.found()
 else
 
   glslang_deps = [
-    cxx.find_library('glslang',     required: glslang_req),
-    cxx.find_library('HLSL',        required: glslang_req),
-    cxx.find_library('OGLCompiler', required: glslang_req),
-    cxx.find_library('OSDependent', required: glslang_req),
-    cxx.find_library('SPIRV',       required: glslang_req),
-    cxx.find_library('SPVRemapper', required: glslang_req),
+    cxx.find_library('glslang',             required: glslang_req),
+    cxx.find_library('MachineIndependent',  required: false),
+    cxx.find_library('OSDependent',         required: glslang_req),
+    cxx.find_library('HLSL',                required: glslang_req),
+    cxx.find_library('OGLCompiler',         required: glslang_req),
+    cxx.find_library('GenericCodeGen',      required: false),
+    cxx.find_library('SPVRemapper',         required: glslang_req),
+    cxx.find_library('SPIRV',               required: glslang_req),
+    cxx.find_library('SPIRV-Tools-opt',     required: false),
+    cxx.find_library('SPIRV-Tools',         required: false),
   ]
 
-  glslang_opt_deps = [
-    cxx.find_library('GenericCodeGen',     required: false),
-    cxx.find_library('MachineIndependent', required: false),
-    cxx.find_library('SPIRV-Tools',        required: false),
-    cxx.find_library('SPIRV-Tools-opt',    required: false),
-  ]
-
-  glslang_found = true
-  foreach d : glslang_deps
-    glslang_found = glslang_found and d.found()
-  endforeach
+  glslang_found = glslang_deps[0].found()
 
 endif
 
@@ -147,7 +141,7 @@ if glslang_found
     # -pthread) doesn't work. We actually need -lpthreads for the glslang
     # object files to link, for whatever weird reason.
     pthread = cxx.find_library('pthread', required: false)
-    glslang_all_deps = glslang_deps + glslang_opt_deps + [pthread]
+    glslang_all_deps = glslang_deps + [pthread]
     glslang_combined = declare_dependency(dependencies: glslang_all_deps)
 
     # Work around a glslang include path bug w.r.t stuff previously namespaced
