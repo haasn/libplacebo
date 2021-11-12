@@ -943,9 +943,9 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
                 obj->desc.desc.access = PL_DESC_ACCESS_READONLY;
                 obj->desc.memory = 0;
                 sh_desc(sh, obj->desc);
-                GLSL("sig_avg  = average.x; \n"
-                     "sig_peak = average.y; \n");
-
+                GLSL("if (average.y != 0.0) {       \n"
+                     "    sig_avg  = average.x;     \n"
+                     "    sig_peak = average.y;     \n");
                 // Allow a tiny bit of extra overshoot for the smoothed peak
                 // values, clamped to the maximum reasonable range.
                 if (obj->margin > 0.0) {
@@ -953,6 +953,7 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
                          SH_FLOAT(1.0 + obj->margin),
                          10000 / PL_COLOR_SDR_WHITE);
                 }
+                GLSL("}\n");
             }
         }
     }
