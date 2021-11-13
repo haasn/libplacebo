@@ -71,7 +71,9 @@ endif
 
 unwind = dependency('libunwind', required: get_option('unwind'))
 conf_internal.set('PL_HAVE_UNWIND', unwind.found())
-build_deps += unwind
+if unwind.found()
+  build_deps += [unwind, cc.find_library('dl', required : false)]
+endif
 
 # work-arounds for glslang braindeath
 glslang_combined = disabler()
