@@ -189,7 +189,7 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
     ident_t tex, pos, pt;
     const char *fn;
     if (!setup_src(sh, src, &tex, &pos, NULL, &pt, NULL, NULL, NULL, &scale,
-                   true, &fn, LINEAR))
+                   false, &fn, LINEAR))
         return;
 
     params = PL_DEF(params, &pl_deband_default_params);

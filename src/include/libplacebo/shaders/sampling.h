@@ -102,7 +102,7 @@ extern const struct pl_deband_params pl_deband_default_params;
 // `params` is left as NULL, it defaults to &pl_deband_default_params. Note
 // that `tex->params.format` must have PL_FMT_CAP_LINEAR. When the given
 // `pl_sample_src` implies scaling, this effectively performs bilinear
-// sampling.
+// sampling on the input (but not the output).
 //
 // Note: This can also be used as a pure grain function, by setting the number
 // of iterations to 0.
