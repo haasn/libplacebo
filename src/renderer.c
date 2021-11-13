@@ -1005,34 +1005,28 @@ static int deband_src(struct pass_state *pass, pl_shader psh,
         return DEBAND_NOOP;
     }
 
-    // The debanding shader can replace direct GPU sampling
-    bool deband_scales = sample_src_info(pass, psrc).type == SAMPLER_DIRECT;
+    bool deband_scales = false;
 
     pl_shader sh = psh;
-    struct pl_sample_src *src = psrc;
-    struct pl_sample_src fixed;
-    if (!deband_scales) {
-        // Only sample/deband the relevant cut-out, but round it to the nearest
-        // integer to avoid doing fractional scaling
-        fixed = *src;
-        fixed.rect.x0 = floorf(fixed.rect.x0);
-        fixed.rect.y0 = floorf(fixed.rect.y0);
-        fixed.rect.x1 = ceilf(fixed.rect.x1);
-        fixed.rect.y1 = ceilf(fixed.rect.y1);
-        fixed.new_w = pl_rect_w(fixed.rect);
-        fixed.new_h = pl_rect_h(fixed.rect);
-        src = &fixed;
+    struct pl_sample_src src = *psrc;
+    // Only sample/deband the relevant cut-out, but round it to the nearest
+    // integer to avoid doing fractional scaling
+    src.rect.x0 = floorf(src.rect.x0);
+    src.rect.y0 = floorf(src.rect.y0);
+    src.rect.x1 = ceilf(src.rect.x1);
+    src.rect.y1 = ceilf(src.rect.y1);
+    src.new_w = pl_rect_w(src.rect);
+    src.new_h = pl_rect_h(src.rect);
 
-        if (fixed.new_w == psrc->new_w &&
-            fixed.new_h == psrc->new_h &&
-            pl_rect2d_eq(fixed.rect, psrc->rect))
-        {
-            // If there's nothing left to be done (i.e. we're already rendering
-            // an exact integer crop without scaling), also skip the scalers
-            deband_scales = true;
-        } else {
-            sh = pl_dispatch_begin_ex(rr->dp, true);
-        }
+    if (src.new_w == psrc->new_w &&
+        src.new_h == psrc->new_h &&
+        pl_rect2d_eq(src.rect, psrc->rect))
+    {
+        // If there's nothing left to be done (i.e. we're already rendering
+        // an exact integer crop without scaling), also skip the scalers
+        deband_scales = true;
+    } else {
+        sh = pl_dispatch_begin_ex(rr->dp, true);
     }
 
     // Divide the deband grain scale by the effective current colorspace nominal
@@ -1044,16 +1038,16 @@ static int deband_src(struct pass_state *pass, pl_shader psh,
                 * image->color.sig_scale;
     dparams.grain /= scale;
 
-    pl_shader_deband(sh, src, &dparams);
+    pl_shader_deband(sh, &src, &dparams);
 
     if (deband_scales)
         return DEBAND_SCALED;
 
     struct img img = {
         .sh = sh,
-        .w  = src->new_w,
-        .h  = src->new_h,
-        .comps = src->components,
+        .w  = src.new_w,
+        .h  = src.new_h,
+        .comps = src.components,
     };
 
     pl_tex new = img_tex(pass, &img);
@@ -1065,10 +1059,10 @@ static int deband_src(struct pass_state *pass, pl_shader psh,
 
     // Update the original pl_sample_src to point to the new texture
     psrc->tex = new;
-    psrc->rect.x0 -= src->rect.x0;
-    psrc->rect.y0 -= src->rect.y0;
-    psrc->rect.x1 -= src->rect.x0;
-    psrc->rect.y1 -= src->rect.y0;
+    psrc->rect.x0 -= src.rect.x0;
+    psrc->rect.y0 -= src.rect.y0;
+    psrc->rect.x1 -= src.rect.x0;
+    psrc->rect.y1 -= src.rect.y0;
     psrc->scale = 1.0;
     return DEBAND_NORMAL;
 }
