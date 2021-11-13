@@ -449,6 +449,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
         PL_ERR(vk, "Allocation of size %s failed: %s!",
                PRINT_SIZE(slab->size), vk_res_str(res));
         vk_malloc_print_stats(ma, PL_LOG_ERR);
+        pl_log_stack_trace(vk->log, PL_LOG_ERR);
         goto error;
 
     default:
