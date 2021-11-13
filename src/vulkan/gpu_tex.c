@@ -321,6 +321,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         .pPlaneLayouts = &(VkSubresourceLayout) {
             .rowPitch = PL_DEF(params->shared_mem.stride_w, params->w),
             .depthPitch = params->d ? PL_DEF(params->shared_mem.stride_h, params->h) : 0,
+            .offset = params->shared_mem.offset,
         },
     };
 
@@ -364,6 +365,13 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         p->warned_modless = true;
     }
 
+    struct vk_malloc_params mparams = {
+        .optimal = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        .export_handle = params->export_handle,
+        .import_handle = params->import_handle,
+        .shared_mem = params->shared_mem,
+    };
+
     if (params->import_handle == PL_HANDLE_DMA_BUF) {
         if (has_drm_mods) {
 
@@ -371,6 +379,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             // format modifiers properly
             vk_link_struct(&iinfo, &drm_explicit);
             iinfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+            mparams.shared_mem.offset = 0x0; // handled via plane offsets
 
         } else {
 
@@ -458,13 +467,6 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     VK(vk->CreateImage(vk->dev, &iinfo, PL_VK_ALLOC, &tex_vk->img));
     tex_vk->usage_flags = iinfo.usage;
 
-    struct vk_malloc_params mparams = {
-        .optimal = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        .export_handle = params->export_handle,
-        .import_handle = params->import_handle,
-        .shared_mem = params->shared_mem,
-    };
-
     VkMemoryDedicatedRequirements ded_reqs = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS_KHR,
     };
@@ -481,8 +483,10 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 
     vk->GetImageMemoryRequirements2(vk->dev, &req_info, &reqs);
     mparams.reqs = reqs.memoryRequirements;
-    if (ded_reqs.prefersDedicatedAllocation)
+    if (ded_reqs.prefersDedicatedAllocation) {
+        mparams.shared_mem.size = reqs.memoryRequirements.size;
         mparams.ded_image = tex_vk->img;
+    }
 
     struct vk_memslice *mem = &tex_vk->mem;
     if (!vk_malloc_slice(vk->ma, mem, &mparams))
