@@ -213,12 +213,12 @@ struct vk_ctx {
     PL_VK_FUN(QueueSubmit);
     PL_VK_FUN(ResetEvent);
     PL_VK_FUN(ResetFences);
-    PL_VK_FUN(ResetQueryPool);
+    PL_VK_FUN(ResetQueryPoolEXT);
     PL_VK_FUN(SetDebugUtilsObjectNameEXT);
     PL_VK_FUN(SetHdrMetadataEXT);
     PL_VK_FUN(UpdateDescriptorSets);
     PL_VK_FUN(WaitForFences);
-    PL_VK_FUN(WaitSemaphores);
+    PL_VK_FUN(WaitSemaphoresKHR);
 
 #ifdef PL_HAVE_WIN32
     PL_VK_FUN(GetMemoryWin32HandleKHR);
