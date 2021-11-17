@@ -435,7 +435,7 @@ bool gl_setup_formats(struct pl_gpu *gpu)
 
     if (p->gles_ver >= 30) {
         // GLES 3.0 has some basic formats, with framebuffers for float16
-        // depending on GL_EXT_color_buffer_half_float support
+        // depending on GL_EXT_color_buffer_(half_)float support
         DO_FORMATS(formats_norm8);
         if (epoxy_has_gl_extension("GL_EXT_texture_norm16")) {
             DO_FORMATS(formats_norm16);
@@ -446,7 +446,8 @@ bool gl_setup_formats(struct pl_gpu *gpu)
         if (epoxy_has_gl_extension("GL_EXT_texture_integer"))
             DO_FORMATS(formats_uint);
         DO_FORMATS(formats_basic_vertex);
-        if (p->gles_ver >= 32 || epoxy_has_gl_extension("GL_EXT_color_buffer_half_float")) {
+        if (p->gles_ver >= 32 || epoxy_has_gl_extension("GL_EXT_color_buffer_half_float")
+                              || epoxy_has_gl_extension("GL_EXT_color_buffer_float")) {
             DO_FORMATS(formats_float16_fbo);
         } else {
             DO_FORMATS(formats_float16_fallback);
