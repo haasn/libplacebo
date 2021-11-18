@@ -145,9 +145,11 @@ pl_d3d11 pl_d3d11_get(pl_gpu gpu);
 
 struct pl_d3d11_swapchain_params {
     // The Direct3D 11 swapchain to wrap. Optional. If NULL, libplacebo will
-    // create its own swapchain using the options below. If set, all the options
-    // below will be ignored. The provided swapchain must have been created by
-    // the same device used by `gpu` and must not have multisampled backbuffers.
+    // create its own swapchain using the options below. If set, all the
+    // swapchain creation options will be ignored.
+    //
+    // The provided swapchain must have been created by the same device used
+    // by `gpu` and must not have multisampled backbuffers.
     IDXGISwapChain *swapchain;
 
     // --- Swapchain creation options
@@ -182,6 +184,11 @@ struct pl_d3d11_swapchain_params {
     // No validation on these flags is being performed, and swapchain creation
     // may fail if an unsupported combination is requested.
     UINT flags;
+
+    // --- Swapchain usage behavior options
+
+    // Disable using a 10-bit swapchain format for SDR output
+    bool disable_10bit_sdr;
 };
 
 #define pl_d3d11_swapchain_params(...) (&(struct pl_d3d11_swapchain_params) { __VA_ARGS__ })

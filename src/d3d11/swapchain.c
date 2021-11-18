@@ -17,14 +17,71 @@
 
 #include <windows.h>
 #include <versionhelpers.h>
+#include <math.h>
 
 #include "gpu.h"
 #include "swapchain.h"
+#include "utils.h"
+
+struct d3d11_csp_mapping {
+    DXGI_COLOR_SPACE_TYPE d3d11_csp;
+    DXGI_FORMAT           d3d11_fmt;
+    struct pl_color_space out_csp;
+};
+
+static struct d3d11_csp_mapping map_pl_csp_to_d3d11(const struct pl_color_space *hint,
+                                                    bool use_8bit_sdr)
+{
+    if (pl_color_space_is_hdr(hint) &&
+        hint->transfer != PL_COLOR_TRC_LINEAR)
+    {
+        struct pl_color_space pl_csp = pl_color_space_hdr10;
+        pl_csp.hdr = hint->hdr;
+
+        return (struct d3d11_csp_mapping){
+            .d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
+            .d3d11_fmt = DXGI_FORMAT_R10G10B10A2_UNORM,
+            .out_csp   = pl_csp,
+        };
+    } else if (pl_color_primaries_is_wide_gamut(hint->primaries) ||
+               hint->transfer == PL_COLOR_TRC_LINEAR)
+    {
+        // scRGB a la VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT,
+        // so could be utilized for HDR/wide gamut content as well
+        // with content that goes beyond 0.0-1.0.
+        return (struct d3d11_csp_mapping){
+            .d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709,
+            .d3d11_fmt = DXGI_FORMAT_R16G16B16A16_FLOAT,
+            .out_csp = {
+                .primaries = PL_COLOR_PRIM_BT_709,
+                .transfer  = PL_COLOR_TRC_LINEAR,
+            }
+        };
+    }
+
+    return (struct d3d11_csp_mapping){
+        .d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
+        .d3d11_fmt = use_8bit_sdr ? DXGI_FORMAT_R8G8B8A8_UNORM :
+                                    DXGI_FORMAT_R10G10B10A2_UNORM,
+        .out_csp = pl_color_space_monitor,
+    };
+}
 
 struct priv {
     struct d3d11_ctx *ctx;
     IDXGISwapChain *swapchain;
     pl_tex backbuffer;
+
+    // Currently requested or applied swap chain configuration.
+    // Affected by received colorspace hints.
+    struct d3d11_csp_mapping csp_map;
+
+    // Whether a swapchain backbuffer format reconfiguration has been
+    // requested by means of an additional resize action.
+    bool update_swapchain_format;
+
+    // Whether 10-bit backbuffer format is disabled for SDR content.
+    bool disable_10bit_sdr;
 };
 
 static void d3d11_sw_destroy(pl_swapchain sw)
@@ -74,8 +131,16 @@ static bool d3d11_sw_resize(pl_swapchain sw, int *width, int *height)
     IDXGISwapChain_GetDesc(p->swapchain, &desc);
     int w = PL_DEF(*width, desc.BufferDesc.Width);
     int h = PL_DEF(*height, desc.BufferDesc.Height);
+    bool format_changed = p->csp_map.d3d11_fmt != desc.BufferDesc.Format;
+    if (format_changed) {
+        PL_INFO(ctx, "Attempting to reconfigure swap chain format: %s -> %s",
+                pl_get_dxgi_format_name(desc.BufferDesc.Format),
+                pl_get_dxgi_format_name(p->csp_map.d3d11_fmt));
+    }
 
-    if (w != desc.BufferDesc.Width || h != desc.BufferDesc.Height) {
+    if (w != desc.BufferDesc.Width || h != desc.BufferDesc.Height ||
+        format_changed)
+    {
         if (p->backbuffer) {
             PL_ERR(sw, "Tried resizing the swapchain while a frame was in "
                    "progress! Please submit the current frame first.");
@@ -83,11 +148,12 @@ static bool d3d11_sw_resize(pl_swapchain sw, int *width, int *height)
         }
 
         D3D(IDXGISwapChain_ResizeBuffers(p->swapchain, 0, w, h,
-                                         DXGI_FORMAT_UNKNOWN, desc.Flags));
+                                         p->csp_map.d3d11_fmt, desc.Flags));
     }
 
     *width = w;
     *height = h;
+    p->update_swapchain_format = false;
     return true;
 
 error:
@@ -108,9 +174,20 @@ static bool d3d11_sw_start_frame(pl_swapchain sw,
         return false;
     }
 
+    if (p->update_swapchain_format) {
+        int w = 0, h = 0;
+        if (!d3d11_sw_resize(sw, &w, &h))
+            return false;
+    }
+
     p->backbuffer = get_backbuffer(sw);
     if (!p->backbuffer)
         return false;
+
+    int bits = 0;
+    pl_fmt fmt = p->backbuffer->params.format;
+    for (int i = 0; i < fmt->num_components; i++)
+        bits = PL_MAX(bits, fmt->component_depth[i]);
 
     *out_frame = (struct pl_swapchain_frame) {
         .fbo = p->backbuffer,
@@ -120,11 +197,11 @@ static bool d3d11_sw_start_frame(pl_swapchain sw,
             .levels = PL_COLOR_LEVELS_FULL,
             .alpha = PL_ALPHA_UNKNOWN,
             .bits = {
-                .sample_depth = 8,
-                .color_depth = 8,
+                .sample_depth = bits,
+                .color_depth = bits,
             },
         },
-        .color_space = pl_color_space_monitor,
+        .color_space = p->csp_map.out_csp,
     };
 
     return true;
@@ -155,6 +232,151 @@ error:
     return;
 }
 
+static DXGI_HDR_METADATA_HDR10 set_hdr10_metadata(const struct pl_hdr_metadata hdr)
+{
+    return (DXGI_HDR_METADATA_HDR10){
+        .RedPrimary   = { roundf(hdr.prim.red.x   * 50000),
+                          roundf(hdr.prim.red.y   * 50000) },
+        .GreenPrimary = { roundf(hdr.prim.green.x * 50000),
+                          roundf(hdr.prim.green.y * 50000) },
+        .BluePrimary  = { roundf(hdr.prim.blue.x  * 50000),
+                          roundf(hdr.prim.blue.y  * 50000) },
+        .WhitePoint   = { roundf(hdr.prim.white.x * 50000),
+                          roundf(hdr.prim.white.y * 50000) },
+        .MaxMasteringLuminance     = roundf(hdr.max_luma),
+        .MinMasteringLuminance     = roundf(hdr.min_luma * 10000),
+        .MaxContentLightLevel      = roundf(hdr.max_cll),
+        .MaxFrameAverageLightLevel = roundf(hdr.max_fall),
+    };
+}
+
+static bool set_swapchain_metadata(struct d3d11_ctx *ctx,
+                                   IDXGISwapChain3 *swapchain3,
+                                   const struct d3d11_csp_mapping csp_map)
+{
+    IDXGISwapChain4 *swapchain4 = NULL;
+    bool ret = false;
+    bool is_hdr = pl_color_space_is_hdr(&csp_map.out_csp);
+    DXGI_HDR_METADATA_HDR10 hdr10 = is_hdr ?
+        set_hdr10_metadata(csp_map.out_csp.hdr) : (DXGI_HDR_METADATA_HDR10){ 0 };
+
+    D3D(IDXGISwapChain3_SetColorSpace1(swapchain3, csp_map.d3d11_csp));
+
+    // if we succeeded to set the color space, it's good enough,
+    // since older versions of Windows 10 will not have swapchain v4 available.
+    ret = true;
+
+    if (FAILED(IDXGISwapChain3_QueryInterface(swapchain3, &IID_IDXGISwapChain4,
+                                              (void **)&swapchain4)))
+    {
+        PL_TRACE(ctx, "v4 swap chain interface is not available, skipping HDR10 "
+                      "metadata configuration.");
+        goto error;
+    }
+
+    D3D(IDXGISwapChain4_SetHDRMetaData(swapchain4,
+                                       is_hdr ?
+                                       DXGI_HDR_METADATA_TYPE_HDR10 :
+                                       DXGI_HDR_METADATA_TYPE_NONE,
+                                       is_hdr ? sizeof(hdr10) : 0,
+                                       is_hdr ? &hdr10 : NULL));
+
+error:
+    SAFE_RELEASE(swapchain4);
+    return ret;
+}
+
+static bool d3d11_format_supported(struct d3d11_ctx *ctx, DXGI_FORMAT fmt)
+{
+    UINT sup = 0;
+    UINT wanted_sup =
+        D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_DISPLAY |
+        D3D11_FORMAT_SUPPORT_SHADER_SAMPLE | D3D11_FORMAT_SUPPORT_RENDER_TARGET |
+        D3D11_FORMAT_SUPPORT_BLENDABLE;
+
+    D3D(ID3D11Device_CheckFormatSupport(ctx->dev, fmt, &sup));
+
+    return (sup & wanted_sup) == wanted_sup;
+
+error:
+    return false;
+}
+
+static bool d3d11_csp_supported(struct d3d11_ctx *ctx,
+                                IDXGISwapChain3 *swapchain3,
+                                DXGI_COLOR_SPACE_TYPE color_space)
+{
+    UINT csp_support_flags = 0;
+
+    D3D(IDXGISwapChain3_CheckColorSpaceSupport(swapchain3,
+                                               color_space,
+                                               &csp_support_flags));
+
+    return (csp_support_flags & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT);
+
+error:
+    return false;
+}
+
+static void d3d11_sw_colorspace_hint(pl_swapchain sw,
+                                     const struct pl_color_space *csp)
+{
+    struct priv *p = PL_PRIV(sw);
+    struct d3d11_ctx *ctx = p->ctx;
+    IDXGISwapChain3 *swapchain3 = NULL;
+    struct d3d11_csp_mapping old_map = p->csp_map;
+    HRESULT hr = IDXGISwapChain_QueryInterface(p->swapchain, &IID_IDXGISwapChain3,
+                                               (void **)&swapchain3);
+    if (FAILED(hr)) {
+        PL_TRACE(ctx, "v3 swap chain interface is not available, skipping "
+                      "color space configuration.");
+        swapchain3 = NULL;
+    }
+
+    // Lack of swap chain v3 means we cannot control swap chain color space;
+    // Only effective formats are the 8 and 10 bit RGB ones.
+    struct d3d11_csp_mapping csp_map =
+        map_pl_csp_to_d3d11(swapchain3 ? csp : &pl_color_space_unknown,
+                            p->disable_10bit_sdr);
+
+    if (p->csp_map.d3d11_fmt == csp_map.d3d11_fmt &&
+        p->csp_map.d3d11_csp == csp_map.d3d11_csp &&
+        pl_color_space_equal(&p->csp_map.out_csp, &csp_map.out_csp))
+        goto cleanup;
+
+    PL_INFO(ctx, "New swap chain configuration received from hint: "
+                 "format: %s, color space: %s.",
+            pl_get_dxgi_format_name(csp_map.d3d11_fmt),
+            pl_get_dxgi_csp_name(csp_map.d3d11_csp));
+
+    bool fmt_supported = d3d11_format_supported(ctx, csp_map.d3d11_fmt);
+    bool csp_supported = swapchain3 ?
+        d3d11_csp_supported(ctx, swapchain3, csp_map.d3d11_csp) : true;
+    if (!fmt_supported || !csp_supported) {
+        PL_ERR(ctx, "New swap chain configuration was deemed not supported: "
+                    "format: %s, color space: %s. Failling back to 8bit RGB.",
+               fmt_supported ? "supported" : "unsupported",
+               csp_supported ? "supported" : "unsupported");
+        // fall back to 8bit sRGB if requested configuration is not supported
+        csp_map = map_pl_csp_to_d3d11(&pl_color_space_unknown, true);
+    }
+
+    p->csp_map = csp_map;
+    p->update_swapchain_format = true;
+
+    if (!swapchain3)
+        goto cleanup;
+
+    if (!set_swapchain_metadata(ctx, swapchain3, csp_map)) {
+        // format succeeded, but color space configuration failed
+        p->csp_map = old_map;
+        p->csp_map.d3d11_fmt = csp_map.d3d11_fmt;
+    }
+
+cleanup:
+    SAFE_RELEASE(swapchain3);
+}
+
 IDXGISwapChain *pl_d3d11_swapchain_unwrap(pl_swapchain sw)
 {
     struct priv *p = PL_PRIV(sw);
@@ -163,12 +385,13 @@ IDXGISwapChain *pl_d3d11_swapchain_unwrap(pl_swapchain sw)
 }
 
 static struct pl_sw_fns d3d11_swapchain = {
-    .destroy      = d3d11_sw_destroy,
-    .latency      = d3d11_sw_latency,
-    .resize       = d3d11_sw_resize,
-    .start_frame  = d3d11_sw_start_frame,
-    .submit_frame = d3d11_sw_submit_frame,
-    .swap_buffers = d3d11_sw_swap_buffers,
+    .destroy         = d3d11_sw_destroy,
+    .latency         = d3d11_sw_latency,
+    .resize          = d3d11_sw_resize,
+    .colorspace_hint = d3d11_sw_colorspace_hint,
+    .start_frame     = d3d11_sw_start_frame,
+    .submit_frame    = d3d11_sw_submit_frame,
+    .swap_buffers    = d3d11_sw_swap_buffers,
 };
 
 static HRESULT create_swapchain_1_2(struct d3d11_ctx *ctx,
@@ -262,7 +485,7 @@ static HRESULT create_swapchain_1_1(struct d3d11_ctx *ctx,
 }
 
 static IDXGISwapChain *create_swapchain(struct d3d11_ctx *ctx,
-    const struct pl_d3d11_swapchain_params *params)
+    const struct pl_d3d11_swapchain_params *params, DXGI_FORMAT format)
 {
     IDXGIDevice1 *dxgi_dev = NULL;
     IDXGIAdapter1 *adapter = NULL;
@@ -300,12 +523,11 @@ static IDXGISwapChain *create_swapchain(struct d3d11_ctx *ctx,
         if (factory2) {
             // Create a DXGI 1.2+ (Windows 8+) swap chain if possible
             hr = create_swapchain_1_2(ctx, factory2, params, flip, width,
-                                      height, DXGI_FORMAT_R8G8B8A8_UNORM,
-                                      &swapchain);
+                                      height, format, &swapchain);
         } else {
             // Fall back to DXGI 1.1 (Windows 7)
             hr = create_swapchain_1_1(ctx, factory, params, width, height,
-                                      DXGI_FORMAT_R8G8B8A8_UNORM, &swapchain);
+                                      format, &swapchain);
         }
         if (SUCCEEDED(hr))
             break;
@@ -354,13 +576,21 @@ pl_swapchain pl_d3d11_create_swapchain(pl_d3d11 d3d11,
     };
     *p = (struct priv) {
         .ctx = ctx,
+        // default to standard 8 or 10 bit RGB, unset pl_color_space
+        .csp_map = {
+            .d3d11_fmt = params->disable_10bit_sdr ?
+                DXGI_FORMAT_R8G8B8A8_UNORM :
+                (d3d11_format_supported(ctx, DXGI_FORMAT_R10G10B10A2_UNORM) ?
+                 DXGI_FORMAT_R10G10B10A2_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM),
+        },
+        .disable_10bit_sdr = params->disable_10bit_sdr,
     };
 
     if (params->swapchain) {
         p->swapchain = params->swapchain;
         IDXGISwapChain_AddRef(params->swapchain);
     } else {
-        p->swapchain = create_swapchain(ctx, params);
+        p->swapchain = create_swapchain(ctx, params, p->csp_map.d3d11_fmt);
         if (!p->swapchain)
             goto error;
     }
@@ -373,6 +603,10 @@ pl_swapchain pl_d3d11_create_swapchain(pl_d3d11 d3d11,
     } else {
         PL_INFO(gpu, "Using bitblt-model presentation");
     }
+
+    p->csp_map.d3d11_fmt = scd.BufferDesc.Format;
+
+    d3d11_sw_colorspace_hint(sw, &pl_color_space_unknown);
 
     success = true;
 error:

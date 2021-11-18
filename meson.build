@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     4,
     # API version
     {
+      '204': 'add pl_d3d11_swapchain_params.disable_10bit_sdr',
       '203': 'add pl_film_grain_from_av',
       '202': 'add pl_frame.acquire/release',
       '201': 'add pl_vulkan.(un)lock_queue',
