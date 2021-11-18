@@ -43,7 +43,7 @@ if glfw.found()
   if comps.has('vulkan')
     conf_demos.set('HAVE_GLFW_VULKAN', true)
     apis += static_library('glfw-vk',
-      dependencies: [libplacebo, glfw, vulkan_headers],
+      dependencies: [libplacebo, libm, glfw, vulkan_headers],
       sources: 'window_glfw.c',
       c_args: '-DUSE_VK',
     )

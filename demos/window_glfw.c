@@ -5,6 +5,7 @@
 #endif
 
 #include <string.h>
+#include <math.h>
 
 #include "common.h"
 #include "window.h"
@@ -377,9 +378,12 @@ static void glfw_get_cursor(const struct window *window, int *x, int *y)
 {
     struct priv *p = (struct priv *) window;
     double dx, dy;
+    int fw, fh, ww, wh;
     glfwGetCursorPos(p->win, &dx, &dy);
-    *x = dx;
-    *y = dy;
+    glfwGetFramebufferSize(p->win, &fw, &fh);
+    glfwGetWindowSize(p->win, &ww, &wh);
+    *x = floor(dx * fw / ww);
+    *y = floor(dy * fh / wh);
 }
 
 static bool glfw_get_button(const struct window *window, enum button btn)
