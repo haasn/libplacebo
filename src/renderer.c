@@ -2660,10 +2660,6 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     if (rr->disable_mixing || !FBOFMT(4))
         goto fallback;
 
-    bool single_frame = !params->frame_mixer || images->num_frames == 1;
-    if (single_frame && params->skip_caching_single_frame)
-        goto fallback;
-
     if (!pass_infer_state(&pass))
         return false;
 
@@ -2690,7 +2686,8 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
         float weight;
         const struct pl_filter_config *mixer = params->frame_mixer;
-        if (!mixer || images->num_frames == 1) {
+        bool single_frame = !mixer || images->num_frames == 1;
+        if (single_frame) {
 
             // Only render the refimg, ignore others
             if (images->frames[i] == refimg) {
@@ -2758,6 +2755,12 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             continue;
         }
 
+        bool skip_cache = single_frame && params->skip_caching_single_frame;
+        if (!f && skip_cache) {
+            PL_TRACE(rr, "Single frame not found in cache, bypassing");
+            goto fallback;
+        }
+
         if (!f) {
             // Signature does not exist in the cache at all yet,
             // so grow the cache by this entry.
@@ -2772,11 +2775,17 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
         // Check to see if we can blindly reuse this cache entry. This is the
         // case if either the params are compatible, or the user doesn't care
+        bool strict_reuse = !params->preserve_mixing_cache || skip_cache;
         bool can_reuse = f->tex;
-        if (can_reuse && !params->preserve_mixing_cache) {
+        if (can_reuse && strict_reuse) {
             can_reuse = f->tex->params.w == out_w &&
                         f->tex->params.h == out_h &&
                         f->params_hash == params_hash;
+        }
+
+        if (!can_reuse && skip_cache) {
+            PL_TRACE(rr, "Single frame cache entry invalid, bypassing");
+            goto fallback;
         }
 
         if (!can_reuse) {

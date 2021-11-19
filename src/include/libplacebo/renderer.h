@@ -231,8 +231,8 @@ struct pl_render_params {
 
     // Normally, `pl_render_image_mix` will also push single frames through the
     // mixer cache, in order to speed up re-draws. Enabling this option
-    // disables that logic, causing single frames to instead bypass the cache,
-    // as though they were passed to `pl_render_image` directly.
+    // disables that logic, causing single frames to bypass the cache. (Though
+    // it will still read from, if they happen to already be cached)
     bool skip_caching_single_frame;
 
     // --- Performance tuning / debugging options
