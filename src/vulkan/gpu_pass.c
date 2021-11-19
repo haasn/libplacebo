@@ -572,13 +572,13 @@ no_descriptors: ;
             };
         }
 
-        VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        VkAttachmentLoadOp loadOp;
         if (pass->params.load_target) {
-            if (pass->params.blend_params)
-                loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
             pass_vk->initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
         } else {
             pass_vk->initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         }
 
         VkRenderPassCreateInfo rinfo = {
@@ -991,7 +991,7 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = pass_vk->renderPass,
             .framebuffer = tex_vk->framebuffer,
-            .renderArea = (VkRect2D){{0, 0}, {tex->params.w, tex->params.h}},
+            .renderArea.extent = {tex->params.w, tex->params.h},
         };
 
         vk->CmdBeginRenderPass(cmd->buf, &binfo, VK_SUBPASS_CONTENTS_INLINE);
