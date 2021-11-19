@@ -2636,11 +2636,11 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         .info.stage = PL_RENDER_STAGE_BLEND,
     };
 
-    if (!params->frame_mixer || rr->disable_mixing || !FBOFMT(4))
+    if (rr->disable_mixing || !FBOFMT(4))
         goto fallback;
 
-    // Can't reasonably interpolate a single image, so just directly render it
-    if (images->num_frames == 1)
+    bool single_frame = !params->frame_mixer || images->num_frames == 1;
+    if (single_frame && params->skip_caching_single_frame)
         goto fallback;
 
     if (!pass_infer_state(&pass))
@@ -2668,11 +2668,19 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                  (unsigned long long) sig, pts);
 
         float weight;
+        const struct pl_filter_config *mixer = params->frame_mixer;
+        if (!mixer || images->num_frames == 1) {
+
+            // Only render the refimg, ignore others
+            if (images->frames[i] == refimg) {
+                weight = 1.0;
+            } else {
+                PL_TRACE(rr, "  -> Skipping: no frame mixer");
+                continue;
+            }
 
         // For backwards compatibility, treat !kernel as oversample
-        const struct pl_filter_function *kernel = params->frame_mixer->kernel;
-        kernel = PL_DEF(kernel, &oversample_kernel);
-        if (kernel->weight == oversample) {
+        } else if (!mixer->kernel || mixer->kernel->weight == oversample) {
 
             // Compute the visible interval [pts, end] of this frame
             float end = i+1 < images->num_frames ? images->timestamps[i+1] : INFINITY;
@@ -2690,21 +2698,21 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             PL_TRACE(rr, "  -> Frame [%f, %f] intersects [%f, %f] = weight %f",
                      pts, end, 0.0, images->vsync_duration, weight);
 
-            if (weight < kernel->params[0]) {
+            if (weight < mixer->kernel->params[0]) {
                 PL_TRACE(rr, "     (culling due to threshold)");
                 weight = 0.0;
             }
 
         } else {
 
-            if (fabs(pts) >= kernel->radius) {
+            if (fabs(pts) >= mixer->kernel->radius) {
                 PL_TRACE(rr, "  -> Skipping: outside filter radius (%f)",
-                         kernel->radius);
+                         mixer->kernel->radius);
                 continue;
             }
 
             // Weight is directly sampled from the filter
-            weight = pl_filter_sample(params->frame_mixer, pts);
+            weight = pl_filter_sample(mixer, pts);
             PL_TRACE(rr, "  -> Filter offset %f = weight %f", pts, weight);
 
         }
@@ -2888,11 +2896,14 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         // exceptionally unlikely hypothetical.
         pl_shader_color_map(sh, NULL, frames[i].color, mix_color, NULL, false);
 
-        ident_t weight = sh_var(sh, (struct pl_shader_var) {
-            .var = pl_var_float("weight"),
-            .data = &(float){ weights[i] / wsum },
-            .dynamic = true,
-        });
+        ident_t weight = "1.0";
+        if (weights[i] != wsum) { // skip loading weight for nearest neighbour
+            weight = sh_var(sh, (struct pl_shader_var) {
+                .var = pl_var_float("weight"),
+                .data = &(float){ weights[i] / wsum },
+                .dynamic = true,
+            });
+        }
 
         GLSL("mix_color += %s * color; \n", weight);
         comps = PL_MAX(comps, frames[i].comps);

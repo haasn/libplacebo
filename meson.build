@@ -29,6 +29,7 @@ project('libplacebo', ['c', 'cpp'],
       '176': 'revert vulkan 1.2 requirement',
       '177': 'add debug_tag to pl_tex/buf_params',
       '178': 'add pl_gpu_limits.align_vertex_stride',
+      '179': 'add pl_render_params.skip_caching_single_frame',
     }.keys().length(),
     # Fix version
     0)

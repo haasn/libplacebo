@@ -115,8 +115,9 @@ struct pl_render_params {
     // used for 1D mixing and thus only 1D filters are compatible.
     //
     // If set to NULL, frame mixing is disabled, in which case
-    // `pl_render_image_mix` behaves as `pl_render_image`, also completely
-    // bypassing the mixing cache.
+    // `pl_render_image_mix` will use nearest-neighbour semantics. (Note that
+    // this still goes through the redraw cache, unless you also enable
+    // `skip_caching_single_frame`)
     const struct pl_filter_config *frame_mixer;
 
     // Configures the settings used to deband source textures. Leaving this as
@@ -227,6 +228,12 @@ struct pl_render_params {
     // size if necessary), which comes at a quality loss shortly after a
     // resize, but should make it much more smooth.
     bool preserve_mixing_cache;
+
+    // Normally, `pl_render_image_mix` will also push single frames through the
+    // mixer cache, in order to speed up re-draws. Enabling this option
+    // disables that logic, causing single frames to instead bypass the cache,
+    // as though they were passed to `pl_render_image` directly.
+    bool skip_caching_single_frame;
 
     // --- Performance tuning / debugging options
     // These may affect performance or may make debugging problems easier,
@@ -597,8 +604,7 @@ struct pl_frame_mix {
     // section below for more information.
     //
     // If the number of frames is 0, this call will be equivalent to
-    // `pl_render_image` with `image == NULL`. If the number of frames is 1,
-    // this is equivalent to `pl_render_image` with that image.
+    // `pl_render_image` with `image == NULL`.
     int num_frames;
 
     // A list of the frames themselves. The frames can have different
