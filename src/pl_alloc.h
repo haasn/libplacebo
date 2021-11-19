@@ -158,7 +158,7 @@ void pl_ref_deref(struct pl_ref **ref);
 #define PL_ARRAY_INSERT_AT(parent, arr, idx, ...)                               \
     do {                                                                        \
         size_t _idx = (idx);                                                    \
-        assert(_idx < (arr).num);                                               \
+        assert(_idx <= (arr).num);                                              \
         PL_ARRAY_GROW(parent, arr);                                             \
         memmove(&(arr).elem[_idx + 1], &(arr).elem[_idx],                       \
                 ((arr).num++ - _idx) * sizeof((arr).elem[0]));                  \

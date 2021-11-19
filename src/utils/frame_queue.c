@@ -248,17 +248,14 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
 
     PL_TRACE(p, "Received new frame with PTS %f", src->pts);
 
+    // Update FPS estimates if possible/reasonable
     if (p->queue.num) {
-        float prev_pts = p->queue.elem[p->queue.num - 1].src.pts;
-        float delta = src->pts - prev_pts;
+        float last_pts = p->queue.elem[p->queue.num - 1].src.pts;
+        float delta = src->pts - last_pts;
         if (delta < 0.0) {
-            PL_WARN(p, "Backwards source PTS jump %f -> %f, discarding frame...",
-                    prev_pts, src->pts);
-            if (src->discard)
-                src->discard(src);
-            return;
+            PL_DEBUG(p, "Backwards source PTS jump %f -> %f", last_pts, src->pts);
         } else if (p->fps.estimate && delta > 10.0 * p->fps.estimate) {
-            PL_WARN(p, "Discontinuous source PTS jump %f -> %f", prev_pts, src->pts);
+            PL_DEBUG(p, "Discontinuous source PTS jump %f -> %f", last_pts, src->pts);
         } else {
             update_estimate(&p->fps, delta);
         }
@@ -266,13 +263,19 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
         PL_DEBUG(p, "First frame received with non-zero PTS %f", src->pts);
     }
 
-    struct cache_entry cache = {0};
-    PL_ARRAY_POP(p->cache, &cache);
-    PL_ARRAY_APPEND(p, p->queue, (struct entry) {
+    struct entry entry = {
         .signature = p->signature++,
-        .cache = cache,
         .src = *src,
-    });
+    };
+    PL_ARRAY_POP(p->cache, &entry.cache);
+
+    // Insert new entry into the correct spot in the queue, sorted by PTS
+    for (int i = p->queue.num;; i--) {
+        if (i == 0 || p->queue.elem[i - 1].src.pts <= src->pts) {
+            PL_ARRAY_INSERT_AT(p, p->queue, i, entry);
+            break;
+        }
+    }
 
     p->want_frame = false;
 }

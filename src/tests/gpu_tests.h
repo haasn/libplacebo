@@ -1149,8 +1149,11 @@ static void pl_render_tests(pl_gpu gpu)
 
     // Test pre-pushing all frames, with delayed EOF.
     for (int i = 0; i < NUM_MIX_FRAMES; i++) {
-        if (!pl_queue_push_block(queue, 1, &srcframes[i])) // mini-sleep
-            pl_queue_push(queue, &srcframes[i]); // push it anyway, for testing
+        const struct pl_source_frame *src = &srcframes[i];
+        if (i > 10) // test pushing in reverse order
+            src = &srcframes[NUM_MIX_FRAMES - 1 - i];
+        if (!pl_queue_push_block(queue, 1, src)) // mini-sleep
+            pl_queue_push(queue, src); // push it anyway, for testing
     }
 
     struct pl_frame_mix mix;
