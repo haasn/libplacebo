@@ -432,9 +432,9 @@ void gl_buf_write(pl_gpu gpu, pl_buf buf, size_t offset,
         return;
 
     struct pl_buf_gl *buf_gl = PL_PRIV(buf);
-    glBindBuffer(GL_COPY_WRITE_BUFFER, buf_gl->buffer);
-    glBufferSubData(GL_COPY_WRITE_BUFFER, buf_gl->offset + offset, size, data);
-    glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, buf_gl->buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, buf_gl->offset + offset, size, data);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     gl_check_err(gpu, "gl_buf_write");
     RELEASE_CURRENT();
 }
@@ -446,9 +446,9 @@ bool gl_buf_read(pl_gpu gpu, pl_buf buf, size_t offset,
         return false;
 
     struct pl_buf_gl *buf_gl = PL_PRIV(buf);
-    glBindBuffer(GL_COPY_READ_BUFFER, buf_gl->buffer);
-    glGetBufferSubData(GL_COPY_READ_BUFFER, buf_gl->offset + offset, size, dest);
-    glBindBuffer(GL_COPY_READ_BUFFER, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, buf_gl->buffer);
+    glGetBufferSubData(GL_ARRAY_BUFFER, buf_gl->offset + offset, size, dest);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     bool ok = gl_check_err(gpu, "gl_buf_read");
     RELEASE_CURRENT();
     return ok;
