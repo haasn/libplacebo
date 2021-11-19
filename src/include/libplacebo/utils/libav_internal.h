@@ -366,6 +366,7 @@ static inline bool pl_test_pixfmt(pl_gpu gpu,
         return false;
 
     for (int i = 0; i < planes; i++) {
+        data[i].row_stride = 0;
         if (!pl_plane_find_fmt(gpu, NULL, &data[i]))
             return false;
     }
