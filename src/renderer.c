@@ -2566,7 +2566,6 @@ static uint64_t render_params_hash(const struct pl_render_params *params_orig)
 
     HASH_FILTER(params.upscaler);
     HASH_FILTER(params.downscaler);
-    HASH_FILTER(params.frame_mixer);
 
     HASH_PTR(params.deband_params);
     HASH_PTR(params.sigmoid_params);
@@ -2574,17 +2573,14 @@ static uint64_t render_params_hash(const struct pl_render_params *params_orig)
     HASH_PTR(params.peak_detect_params);
     HASH_PTR(params.color_map_params);
     HASH_PTR(params.dither_params);
-    HASH_PTR(params.cone_params);
-    HASH_PTR(params.blend_params);
-
-#ifdef PL_HAVE_LCMS
-    HASH_PTR(params.icc_params);
-    HASH_PTR(params.lut3d_params);
-#endif
 
     // Hash all hooks
-    for (int i = 0; i < params.num_hooks; i++)
-        pl_hash_merge(&hash, pl_mem_hash(&params.hooks[i], sizeof(params.hooks[i])));
+    for (int i = 0; i < params.num_hooks; i++) {
+        const struct pl_hook *hook = params.hooks[i];
+        if (hook->stages == PL_HOOK_OUTPUT)
+            continue; // ignore hooks only relevant to pass_output_target
+        pl_hash_merge(&hash, pl_mem_hash(hook, sizeof(*hook)));
+    }
     params.hooks = NULL;
 
     // Hash the LUT by only looking at the signature
@@ -2592,6 +2588,31 @@ static uint64_t render_params_hash(const struct pl_render_params *params_orig)
         pl_hash_merge(&hash, params.lut->signature);
         params.lut = NULL;
     }
+
+#define CLEAR(field) field = (__typeof__(field)) {0}
+
+    // Clear out fields only relevant to pl_render_image_mix
+    CLEAR(params.frame_mixer);
+    CLEAR(params.preserve_mixing_cache);
+    CLEAR(params.skip_caching_single_frame);
+    memset(params.background_color, 0, sizeof(params.background_color));
+    CLEAR(params.background_transparency);
+    CLEAR(params.skip_target_clearing);
+    CLEAR(params.blend_against_tiles);
+    memset(params.tile_colors, 0, sizeof(params.tile_colors));
+    CLEAR(params.tile_size);
+
+    // Clear out fields only relevant to pass_output_target
+    CLEAR(params.blend_params);
+    CLEAR(params.cone_params);
+    CLEAR(params.icc_params);
+    CLEAR(params.lut3d_params);
+    CLEAR(params.ignore_icc_profiles);
+    CLEAR(params.force_icc_lut);
+    CLEAR(params.force_3dlut);
+    CLEAR(params.force_dither);
+    CLEAR(params.dynamic_constants);
+    CLEAR(params.allow_delayed_peak_detect);
 
     pl_hash_merge(&hash, pl_mem_hash(&params, sizeof(params)));
     return hash;
