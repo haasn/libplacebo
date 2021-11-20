@@ -189,7 +189,7 @@ pl_gpu pl_gpu_finalize(struct pl_gpu *gpu)
     // Verification
     pl_assert(gpu->ctx == gpu->log);
     pl_assert(gpu->limits.max_tex_2d_dim);
-    pl_assert(gpu->limits.max_variables || gpu->limits.max_ubo_size);
+    pl_assert(gpu->limits.max_variable_comps || gpu->limits.max_ubo_size);
 
     for (int n = 0; n < gpu->num_formats; n++) {
         pl_fmt fmt = gpu->formats[n];
@@ -266,7 +266,7 @@ pl_gpu pl_gpu_finalize(struct pl_gpu *gpu)
     LOG("zu", align_tex_xfer_pitch);
     LOG("zu", align_tex_xfer_offset);
     // pl_pass
-    LOG("zu", max_variables);
+    LOG("zu", max_variable_comps);
     LOG("zu", max_constants);
     LOG("zu", max_pushc_size);
     LOG("zu", align_vertex_stride);
@@ -308,7 +308,7 @@ pl_gpu pl_gpu_finalize(struct pl_gpu *gpu)
         caps |= PL_GPU_CAP_COMPUTE;
     if (gpu->limits.compute_queues > gpu->limits.fragment_queues)
         caps |= PL_GPU_CAP_PARALLEL_COMPUTE;
-    if (gpu->limits.max_variables)
+    if (gpu->limits.max_variable_comps)
         caps |= PL_GPU_CAP_INPUT_VARIABLES;
     if (gpu->limits.max_mapped_size)
         caps |= PL_GPU_CAP_MAPPED_BUFFERS;
@@ -332,6 +332,7 @@ pl_gpu pl_gpu_finalize(struct pl_gpu *gpu)
     gpu->limits.subgroup_size = gpu->glsl.subgroup_size;
     gpu->limits.min_gather_offset = gpu->glsl.min_gather_offset;
     gpu->limits.max_gather_offset = gpu->glsl.max_gather_offset;
+    gpu->limits.max_variables = gpu->limits.max_variable_comps;
 
     return gpu;
 }
@@ -1398,12 +1399,14 @@ pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
         pl_unreachable();
     }
 
-    require(params->num_variables <= gpu->limits.max_variables);
+    size_t num_var_comps = 0;
     for (int i = 0; i < params->num_variables; i++) {
         struct pl_var var = params->variables[i];
+        num_var_comps += var.dim_v * var.dim_m * var.dim_a;
         require(var.name);
         require(pl_var_glsl_type_name(var));
     }
+    require(num_var_comps <= gpu->limits.max_variable_comps);
 
     require(params->num_constants <= gpu->limits.max_constants);
     for (int i = 0; i < params->num_constants; i++)

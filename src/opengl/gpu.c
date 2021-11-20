@@ -169,13 +169,13 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
         limits->max_tex_1d_dim = limits->max_tex_2d_dim;
     limits->buf_transfer = true;
 
-    // This doesn't really map too well to OpenGL, so just set a conservative
-    // upper bound, which assumes (optimistically) that all uniforms are
-    // individual floats.
-    size_t max_vectors = 16; // conservative default
-    if (gl_test_ext(gpu, NULL, 30, 20))
-        get(GL_MAX_FRAGMENT_UNIFORM_VECTORS, &max_vectors);
-    limits->max_variables = max_vectors * 4;
+    if (p->gl_ver || p->gles_ver >= 30) {
+        get(GL_MAX_FRAGMENT_UNIFORM_COMPONENTS, &limits->max_variable_comps);
+    } else {
+        // fallback for GLES 2.0, which doesn't have max_comps
+        get(GL_MAX_FRAGMENT_UNIFORM_VECTORS, &limits->max_variable_comps);
+        limits->max_variable_comps *= 4;
+    }
 
     if (glsl->compute) {
         for (int i = 0; i < 3; i++)

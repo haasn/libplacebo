@@ -77,6 +77,7 @@ struct pass {
 
     // contains cached data and update metadata, same order as pl_shader
     struct pass_var *vars;
+    int num_var_locs;
 
     // for uniform buffer updates
     struct pl_shader_desc ubo_desc; // temporary
@@ -208,13 +209,16 @@ static bool add_pass_var(pl_dispatch dp, void *tmp, struct pass *pass,
     if (!greedy)
         return true;
 
+    int num_locs = sv->var.dim_v * sv->var.dim_m * sv->var.dim_a;
+    bool can_var = pass->num_var_locs + num_locs <= gpu->limits.max_variable_comps;
+
     // Attempt using uniform buffer next. The GLSL version 440 check is due
     // to explicit offsets on UBO entries. In theory we could leave away
     // the offsets and support UBOs for older GL as well, but this is a nice
     // safety net for driver bugs (and also rules out potentially buggy drivers)
     // Also avoid UBOs for highly dynamic stuff since that requires synchronizing
     // the UBO writes every frame
-    bool try_ubo = params->num_variables == gpu->limits.max_variables || !sv->dynamic;
+    bool try_ubo = !can_var || !sv->dynamic;
     if (try_ubo && gpu->glsl.version >= 440 && gpu->limits.max_ubo_size) {
         if (sh_buf_desc_append(tmp, gpu, &pass->ubo_desc, &pv->layout, sv->var)) {
             pv->type = PASS_VAR_UBO;
@@ -223,11 +227,12 @@ static bool add_pass_var(pl_dispatch dp, void *tmp, struct pass *pass,
     }
 
     // Otherwise, use global uniforms
-    if (params->num_variables < gpu->limits.max_variables) {
+    if (can_var) {
         pv->type = PASS_VAR_GLOBAL;
         pv->index = params->num_variables;
         pv->layout = pl_var_host_layout(0, &sv->var);
         PL_ARRAY_APPEND_RAW(tmp, params->variables, params->num_variables, sv->var);
+        pass->num_var_locs += num_locs;
         return true;
     }
 

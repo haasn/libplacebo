@@ -30,6 +30,7 @@ project('libplacebo', ['c', 'cpp'],
       '177': 'add debug_tag to pl_tex/buf_params',
       '178': 'add pl_gpu_limits.align_vertex_stride',
       '179': 'add pl_render_params.skip_caching_single_frame',
+      '180': 'add pl_gpu_limits.max_variable_comps',
     }.keys().length(),
     # Fix version
     0)

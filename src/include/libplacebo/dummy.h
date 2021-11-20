@@ -79,7 +79,7 @@ struct pl_gpu_dummy_params {
         .align_tex_xfer_pitch = 1,                                      \
         .align_tex_xfer_offset = 1,                                     \
         /* pl_pass */                                                   \
-        .max_variables      = SIZE_MAX,                                 \
+        .max_variable_comps = SIZE_MAX,                                 \
         .max_constants      = SIZE_MAX,                                 \
         .max_pushc_size     = SIZE_MAX,                                 \
         .max_dispatch       = { UINT32_MAX, UINT32_MAX, UINT32_MAX },   \

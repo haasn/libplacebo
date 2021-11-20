@@ -124,14 +124,14 @@ struct pl_gpu_limits {
     size_t align_tex_xfer_offset;   // optimal `pl_tex_transfer_params.buf_offset`
 
     // --- pl_pass
-    size_t max_variables;       // maximum `pl_pass_params.num_variables`
+    size_t max_variable_comps;  // maximum components passed in variables
     size_t max_constants;       // maximum `pl_pass_params.num_constants`
     size_t max_pushc_size;      // maximum `push_constants_size`
     size_t align_vertex_stride; // alignment of `pl_pass_params.vertex_stride`
     uint32_t max_dispatch[3];   // maximum dispatch size per dimension
 
-    // Note: At least one of `max_variables` or `max_ubo_size` is guaranteed to
-    // be nonzero.
+    // Note: At least one of `max_variable_comps` or `max_ubo_size` is
+    // guaranteed to be nonzero.
 
     // As a performance hint, the GPU may signal the number of command queues
     // it has for fragment and compute shaders, respectively. Users may use
@@ -147,6 +147,7 @@ struct pl_gpu_limits {
     uint32_t subgroup_size PL_DEPRECATED;
     int16_t min_gather_offset PL_DEPRECATED;
     int16_t max_gather_offset PL_DEPRECATED;
+    size_t max_variables PL_DEPRECATED; // see `max_variable_comps`
 };
 
 // Backwards compatibility aliases
@@ -222,7 +223,7 @@ typedef uint64_t pl_gpu_caps;
 enum PL_DEPRECATED {
     PL_GPU_CAP_COMPUTE          = 1 << 0, // see `pl_glsl_version.compute`
     PL_GPU_CAP_PARALLEL_COMPUTE = 1 << 1, // see `pl_gpu_limits.compute_queues`
-    PL_GPU_CAP_INPUT_VARIABLES  = 1 << 2, // see `pl_gpu_limits.max_variables`
+    PL_GPU_CAP_INPUT_VARIABLES  = 1 << 2, // see `pl_gpu_limits.max_variable_comps`
     PL_GPU_CAP_MAPPED_BUFFERS   = 1 << 3, // see `pl_gpu_limits.max_mapped_size`
     PL_GPU_CAP_BLITTABLE_1D_3D  = 1 << 4, // see `pl_gpu_limits.blittable_1d_3d`
     PL_GPU_CAP_SUBGROUPS        = 1 << 5, // see `pl_glsl_version.subgroup_size`

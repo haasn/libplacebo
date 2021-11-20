@@ -487,7 +487,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         .align_tex_xfer_pitch  = vk->limits.optimalBufferCopyRowPitchAlignment,
         .align_tex_xfer_offset = pl_lcm(vk->limits.optimalBufferCopyOffsetAlignment, 4),
         // pl_pass
-        .max_variables      = 0, // vulkan doesn't support these at all
+        .max_variable_comps = 0, // vulkan doesn't support these at all
         .max_constants      = SIZE_MAX,
         .max_pushc_size     = vk->limits.maxPushConstantsSize,
 #ifdef VK_KHR_portability_subset
