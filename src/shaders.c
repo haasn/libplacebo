@@ -845,6 +845,7 @@ struct sh_lut_obj {
     bool linear;
     int width, height, depth, comps;
     uint64_t signature;
+    bool error; // reset if params change
 
     // weights, depending on the method
     pl_tex tex;
@@ -869,7 +870,6 @@ ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
 {
     pl_gpu gpu = SH_GPU(sh);
     void *tmp = NULL;
-    ident_t ret = NULL;
 
     pl_assert(params->width > 0 && params->height >= 0 && params->depth >= 0);
     pl_assert(params->comps > 0);
@@ -886,6 +886,20 @@ ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
         gpu ? gpu->limits.max_tex_2d_dim : 0,
         (gpu && gpu->glsl.version > 100) ? gpu->limits.max_tex_3d_dim : 0,
     };
+
+    struct sh_lut_obj *lut = SH_OBJ(sh, params->object, PL_SHADER_OBJ_LUT,
+                                    struct sh_lut_obj, sh_lut_uninit);
+
+    if (!lut)
+        return NULL;
+
+    bool update = params->update || lut->signature != params->signature ||
+                  params->type != lut->type || params->linear != lut->linear ||
+                  params->width != lut->width || params->height != lut->height ||
+                  params->depth != lut->depth || params->comps != lut->comps;
+
+    if (lut->error && !update)
+        return NULL; // suppress error spam until something changes
 
     // Try picking the right number of dimensions for the texture LUT. This
     // allows e.g. falling back to 2D textures if 1D textures are unsupported.
@@ -922,14 +936,6 @@ next_dim: ; // `continue` out of the inner loop
                              texcaps);
     }
 
-    struct sh_lut_obj *lut = SH_OBJ(sh, params->object, PL_SHADER_OBJ_LUT,
-                                    struct sh_lut_obj, sh_lut_uninit);
-
-    if (!lut) {
-        SH_FAIL(sh, "Failed initializing LUT object!");
-        goto error;
-    }
-
     enum sh_lut_method method = params->method;
 
     // The linear sampling code currently only supports 1D linear interpolation
@@ -937,14 +943,16 @@ next_dim: ; // `continue` out of the inner loop
         if (texfmt) {
             method = SH_LUT_TEXTURE;
         } else {
-            SH_FAIL(sh, "Can't emulate linear LUTs for 2D/3D LUTs and no "
-                    "texture support available!");
+            PL_ERR(sh, "Can't emulate linear LUTs for 2D/3D LUTs and no "
+                  "texture support available!");
             goto error;
         }
     }
 
-    // Older GLSL forbids literal array constructors
-    bool can_literal = sh_glsl(sh).version > 110;
+    bool can_literal = sh_glsl(sh).version > 110; // needed for literal arrays
+    bool can_uniform = gpu && gpu->limits.max_variable_comps >= size * params->comps;
+    if (method == SH_LUT_UNIFORM && !can_uniform)
+        method = SH_LUT_AUTO;
 
     // Pick the best method
     if (!method && size <= SH_LUT_MAX_LITERAL && !params->dynamic && can_literal)
@@ -954,21 +962,18 @@ next_dim: ; // `continue` out of the inner loop
         method = SH_LUT_TEXTURE; // use textures if a texfmt exists
 
     // Use an input variable as a last fallback
-    if (!method)
+    if (!method && can_uniform)
         method = SH_LUT_UNIFORM;
 
-    // Forcibly reinitialize the existing LUT if needed
-    bool update = params->update || lut->signature != params->signature;
-    if (method != lut->method || params->type != lut->type ||
-        params->linear != lut->linear || params->width != lut->width ||
-        params->height != lut->height || params->depth != lut->depth ||
-        params->comps != lut->comps)
-    {
-        PL_DEBUG(sh, "LUT cache invalidated, regenerating..");
-        update = true;
+    if (!method) {
+        PL_ERR(sh, "Can't generate LUT: no compatible methods!");
+        goto error;
     }
 
+    // Reinitialize the existing LUT if needed
+    update |= method != lut->method;
     if (update) {
+        PL_DEBUG(sh, "LUT cache invalidated, regenerating..");
         size_t buf_size = size * params->comps * pl_var_type_size(params->type);
         tmp = pl_zalloc(NULL, buf_size);
         params->fill(tmp, params);
@@ -976,12 +981,12 @@ next_dim: ; // `continue` out of the inner loop
         switch (method) {
         case SH_LUT_TEXTURE: {
             if (!texdim) {
-                SH_FAIL(sh, "Texture LUT exceeds texture dimensions!");
+                PL_ERR(sh, "Texture LUT exceeds texture dimensions!");
                 goto error;
             }
 
             if (!texfmt) {
-                SH_FAIL(sh, "Found no compatible texture format for LUT!");
+                PL_ERR(sh, "Found no compatible texture format for LUT!");
                 goto error;
             }
 
@@ -1013,7 +1018,7 @@ next_dim: ; // `continue` out of the inner loop
             }
 
             if (!ok) {
-                SH_FAIL(sh, "Failed creating LUT texture!");
+                PL_ERR(sh, "Failed creating LUT texture!");
                 goto error;
             }
             break;
@@ -1199,12 +1204,15 @@ next_dim: ; // `continue` out of the inner loop
         }
     }
 
-    pl_assert(name);
-    ret = name;
-    // fall through
-error:
+    lut->error = false;
     pl_free(tmp);
-    return ret;
+    pl_assert(name);
+    return name;
+
+error:
+    lut->error = true;
+    pl_free(tmp);
+    return NULL;
 }
 
 const char *sh_bvec(const pl_shader sh, int dims)
