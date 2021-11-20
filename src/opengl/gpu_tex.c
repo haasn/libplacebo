@@ -879,10 +879,10 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     if (!MAKE_CURRENT())
         return false;
 
-    const void *src = params->ptr;
+    const uint8_t *src = params->ptr;
     if (buf) {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, buf_gl->buffer);
-        src = (void *) (buf_gl->offset + params->buf_offset);
+        src = (uint8_t *) (buf_gl->offset + params->buf_offset);
     }
 
     bool misaligned = params->row_pitch % fmt->texel_size;
@@ -903,7 +903,7 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     }
 
     int imgs = pl_rect_d(params->rc);
-    if (stride_h != pl_rect_h(params->rc)) {
+    if (stride_h != pl_rect_h(params->rc) || rows < pl_rect_w(params->rc)) {
         if (p->has_unpack_image_height) {
             glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, stride_h);
         } else {
@@ -924,15 +924,19 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
             glTexSubImage2D(tex_gl->target, 0, params->rc.x0, y,
                             pl_rect_w(params->rc), rows, tex_gl->format,
                             tex_gl->type, src);
+            src += params->row_pitch * rows;
         }
         break;
     case 3:
         for (int z = params->rc.z0; z < params->rc.z1; z += imgs) {
+            const uint8_t *row_src = src;
             for (int y = params->rc.y0; y < params->rc.y1; y += rows) {
                 glTexSubImage3D(tex_gl->target, 0, params->rc.x0, y, z,
                                 pl_rect_w(params->rc), rows, imgs,
-                                tex_gl->format, tex_gl->type, src);
+                                tex_gl->format, tex_gl->type, row_src);
+                row_src += params->row_pitch * rows;
             }
+            src += params->depth_pitch * imgs;
         }
         break;
     }
@@ -989,10 +993,10 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     if (!MAKE_CURRENT())
         return false;
 
-    void *dst = params->ptr;
+    uint8_t *dst = params->ptr;
     if (buf) {
         glBindBuffer(GL_PIXEL_PACK_BUFFER, buf_gl->buffer);
-        dst = (void *) (buf_gl->offset + params->buf_offset);
+        dst = (uint8_t *) (buf_gl->offset + params->buf_offset);
     }
 
     struct pl_rect3d full = {
@@ -1035,6 +1039,7 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         for (int y = params->rc.y0; y < params->rc.y1; y += rows) {
             glReadPixels(params->rc.x0, y, pl_rect_w(params->rc), rows,
                          tex_gl->format, tex_gl->type, dst);
+            dst += params->row_pitch * rows;
         }
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         glPixelStorei(GL_PACK_ALIGNMENT, 4);
