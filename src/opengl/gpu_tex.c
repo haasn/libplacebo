@@ -894,7 +894,7 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         glPixelStorei(GL_UNPACK_ALIGNMENT, get_alignment(params->row_pitch));
 
     int rows = pl_rect_h(params->rc);
-    if (stride_w != tex->params.w || misaligned) {
+    if (stride_w != pl_rect_w(params->rc) || misaligned) {
         if (p->has_stride && !misaligned) {
             glPixelStorei(GL_UNPACK_ROW_LENGTH, stride_w);
         } else {
@@ -903,7 +903,7 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     }
 
     int imgs = pl_rect_d(params->rc);
-    if (stride_h != tex->params.h) {
+    if (stride_h != pl_rect_h(params->rc)) {
         if (p->has_unpack_image_height) {
             glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, stride_h);
         } else {
