@@ -903,7 +903,7 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     }
 
     int imgs = pl_rect_d(params->rc);
-    if (stride_h != pl_rect_h(params->rc) || rows < pl_rect_w(params->rc)) {
+    if (stride_h != pl_rect_h(params->rc) || rows < stride_h) {
         if (p->has_unpack_image_height) {
             glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, stride_h);
         } else {
