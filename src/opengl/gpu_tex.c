@@ -879,10 +879,10 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     if (!MAKE_CURRENT())
         return false;
 
-    const uint8_t *src = params->ptr;
+    uintptr_t src = (uintptr_t) params->ptr;
     if (buf) {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, buf_gl->buffer);
-        src = (uint8_t *) (buf_gl->offset + params->buf_offset);
+        src = buf_gl->offset + params->buf_offset;
     }
 
     bool misaligned = params->row_pitch % fmt->texel_size;
@@ -917,24 +917,24 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     switch (dims) {
     case 1:
         glTexSubImage1D(tex_gl->target, 0, params->rc.x0, pl_rect_w(params->rc),
-                        tex_gl->format, tex_gl->type, src);
+                        tex_gl->format, tex_gl->type, (void *) src);
         break;
     case 2:
         for (int y = params->rc.y0; y < params->rc.y1; y += rows) {
             glTexSubImage2D(tex_gl->target, 0, params->rc.x0, y,
                             pl_rect_w(params->rc), rows, tex_gl->format,
-                            tex_gl->type, src);
+                            tex_gl->type, (void *) src);
             src += params->row_pitch * rows;
         }
         break;
     case 3:
         for (int z = params->rc.z0; z < params->rc.z1; z += imgs) {
-            const uint8_t *row_src = src;
+            uintptr_t row_src = src;
             for (int y = params->rc.y0; y < params->rc.y1; y += rows) {
                 glTexSubImage3D(tex_gl->target, 0, params->rc.x0, y, z,
                                 pl_rect_w(params->rc), rows, imgs,
-                                tex_gl->format, tex_gl->type, row_src);
-                row_src += params->row_pitch * rows;
+                                tex_gl->format, tex_gl->type, (void *) row_src);
+                row_src = (uintptr_t) row_src + params->row_pitch * rows;
             }
             src += params->depth_pitch * imgs;
         }
@@ -993,10 +993,10 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     if (!MAKE_CURRENT())
         return false;
 
-    uint8_t *dst = params->ptr;
+    uintptr_t dst = (uintptr_t) params->ptr;
     if (buf) {
         glBindBuffer(GL_PIXEL_PACK_BUFFER, buf_gl->buffer);
-        dst = (uint8_t *) (buf_gl->offset + params->buf_offset);
+        dst = buf_gl->offset + params->buf_offset;
     }
 
     struct pl_rect3d full = {
@@ -1038,7 +1038,7 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         glBindFramebuffer(GL_READ_FRAMEBUFFER, tex_gl->fbo);
         for (int y = params->rc.y0; y < params->rc.y1; y += rows) {
             glReadPixels(params->rc.x0, y, pl_rect_w(params->rc), rows,
-                         tex_gl->format, tex_gl->type, dst);
+                         tex_gl->format, tex_gl->type, (void *) dst);
             dst += params->row_pitch * rows;
         }
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
@@ -1048,7 +1048,7 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     } else if (is_copy) {
         // We're downloading the entire texture
         glBindTexture(tex_gl->target, tex_gl->texture);
-        glGetTexImage(tex_gl->target, 0, tex_gl->format, tex_gl->type, dst);
+        glGetTexImage(tex_gl->target, 0, tex_gl->format, tex_gl->type, (void *) dst);
         glBindTexture(tex_gl->target, 0);
     } else {
         PL_ERR(gpu, "Partial downloads of 3D textures not implemented!");
