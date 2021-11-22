@@ -164,6 +164,7 @@ static inline bool is_file_hdr(struct plplay *p)
 static bool init_codec(struct plplay *p)
 {
     assert(p->stream);
+    assert(p->win->gpu);
 
     const AVCodec *codec = avcodec_find_decoder(p->stream->codecpar->codec_id);
     if (!codec) {
@@ -182,6 +183,31 @@ static bool init_codec(struct plplay *p)
         return false;
     }
 
+    printf("Codec: %s (%s)\n", codec->name, codec->long_name);
+
+    const AVCodecHWConfig *hwcfg;
+    for (int i = 0; (hwcfg = avcodec_get_hw_config(codec, i)); i++) {
+        if (!pl_test_pixfmt(p->win->gpu, hwcfg->pix_fmt))
+            continue;
+        if (!(hwcfg->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX))
+            continue;
+
+        int ret = av_hwdevice_ctx_create(&p->codec->hw_device_ctx,
+                                         hwcfg->device_type,
+                                         NULL, NULL, 0);
+        if (ret < 0) {
+            fprintf(stderr, "libavcodec: Failed opening HW device context, skipping\n");
+            continue;
+        }
+
+        const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwcfg->pix_fmt);
+        printf("Using hardware frame format: %s\n", desc->name);
+        break;
+    }
+
+    if (!hwcfg)
+        printf("Using software decoding\n");
+
     p->codec->thread_count = av_cpu_count();
     p->codec->get_buffer2 = pl_get_buffer2;
     p->codec->opaque = &p->win->gpu;
@@ -197,7 +223,6 @@ static bool init_codec(struct plplay *p)
         return false;
     }
 
-    printf("Codec: %s (%s)\n", codec->name, codec->long_name);
     return true;
 }
 
@@ -207,25 +232,27 @@ static bool map_frame(pl_gpu gpu, pl_tex *tex,
 {
     AVFrame *frame = src->frame_data;
     struct plplay *p = frame->opaque;
-    if (!pl_upload_avframe(gpu, out_frame, tex, frame)) {
-        fprintf(stderr, "Failed uploading AVFrame!\n");
+    bool ok = pl_map_avframe(gpu, out_frame, tex, frame);
+    av_frame_free(&frame); // references are preserved by `out_frame`
+    if (!ok) {
+        fprintf(stderr, "Failed mapping AVFrame!\n");
         return false;
     }
 
     pl_frame_copy_stream_props(out_frame, p->stream);
-    out_frame->user_data = frame;
     return true;
 }
 
 static void unmap_frame(pl_gpu gpu, struct pl_frame *frame,
                         const struct pl_source_frame *src)
 {
-    av_frame_free((AVFrame **) &src->frame_data);
+    pl_unmap_avframe(gpu, frame);
 }
 
 static void discard_frame(const struct pl_source_frame *src)
 {
-    av_frame_free((AVFrame **) &src->frame_data);
+    AVFrame *frame = src->frame_data;
+    av_frame_free(&frame);
     printf("Dropped frame with PTS %.3f\n", src->pts);
 }
 
