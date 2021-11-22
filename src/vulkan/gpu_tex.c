@@ -485,10 +485,8 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     mparams.reqs = reqs.memoryRequirements;
     if (ded_reqs.prefersDedicatedAllocation) {
         mparams.ded_image = tex_vk->img;
-        if (params->import_handle) {
-            pl_assert(mparams.shared_mem.size >= reqs.memoryRequirements.size);
+        if (params->import_handle)
             mparams.shared_mem.size = reqs.memoryRequirements.size;
-        }
     }
 
     struct vk_memslice *mem = &tex_vk->mem;

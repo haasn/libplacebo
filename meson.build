@@ -33,6 +33,7 @@ project('libplacebo', ['c', 'cpp'],
       '180': 'add pl_gpu_limits.max_variable_comps',
       '181': 'add pl_shader_set_alpha, change alpha handling of pl_shader_decode_color',
       '182': 'add pl_vulkan_get, pl_opengl_get, pl_d3d11_get',
+      '183': 'relax pl_shared_mem.size > 0 requirement',
     }.keys().length(),
     # Fix version
     0)

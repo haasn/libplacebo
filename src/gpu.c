@@ -602,7 +602,6 @@ pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     if (params->import_handle) {
         require(params->import_handle & gpu->import_caps.tex);
         require(PL_ISPOT(params->import_handle));
-        require(params->shared_mem.size > 0);
         if (params->import_handle == PL_HANDLE_DMA_BUF) {
             if (!check_mod(gpu, params->format, params->shared_mem.drm_format_mod))
                 goto error;

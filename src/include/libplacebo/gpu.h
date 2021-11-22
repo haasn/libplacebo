@@ -197,6 +197,9 @@ struct pl_shared_mem {
     size_t size;   // the total size of the memory referenced by this handle
     size_t offset; // the offset of the object within the referenced memory
 
+    // Note: `size` is optional for some APIs and handle types, in particular
+    // when importing DMABUFs or D3D11 textures.
+
     // For PL_HANDLE_DMA_BUF, this specifies the DRM format modifier that
     // describes this resource. Note that when importing `pl_buf`, this must
     // be DRM_FORMAT_MOD_LINEAR. For importing `pl_tex`, it can be any
