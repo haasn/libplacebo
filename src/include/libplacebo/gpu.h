@@ -374,6 +374,9 @@ bool pl_fmt_is_ordered(pl_fmt fmt);
 // Returns whether or not a pl_fmt is sampled as a float (e.g. UNORM)
 bool pl_fmt_is_float(pl_fmt fmt);
 
+// Returns whether or not a pl_fmt supports a given DRM modifier.
+bool pl_fmt_has_modifier(pl_fmt fmt, uint64_t modifier);
+
 // Helper function to find a format with a given number of components and
 // minimum effective precision per component. If `host_bits` is set, then the
 // format will always be non-opaque, unpadded, ordered and have exactly this

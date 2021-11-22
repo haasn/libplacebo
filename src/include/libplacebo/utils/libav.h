@@ -18,6 +18,13 @@
 #ifndef LIBPLACEBO_LIBAV_H_
 #define LIBPLACEBO_LIBAV_H_
 
+// Note: Support for various hardware decoding formats depends on support
+// being available in FFmpeg. To ensure compatibility with this header, please
+// make sure to include, if possible, the following headers, *before* including
+// this one:
+//
+// - <libavutil/hwcontext_vulkan.h> (for AV_PIX_FMT_VULKAN)
+
 #include <libplacebo/gpu.h>
 #include <libplacebo/utils/upload.h>
 
@@ -68,24 +75,31 @@ static bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt);
 static bool pl_frame_recreate_from_avframe(pl_gpu gpu, struct pl_frame *out_frame,
                                            pl_tex tex[4], const AVFrame *frame);
 
-// Very high level helper function to take an `AVFrame` and upload it to the
-// GPU. Similar in spirit to `pl_upload_plane`, and the same notes apply. `tex`
-// must be an array of 4 pointers of type `pl_tex`, each either
-// pointing to a valid texture, or NULL. Returns whether successful.
+// Very high level helper function to take an `AVFrame` and map it to the GPU.
+// The resulting `pl_frame` remains valid until `pl_unmap_avframe` is called,
+// which must be called at some point to clean up state. The `AVFrame` is
+// automatically ref'd and unref'd if needed. Returns whether successful.
 //
-// Note: This function will currently fail on HW accelerated AVFrame formats.
-// For those, users must still use the specific interop functions from e.g.
-// <libplacebo/vulkan.h>, depending on the HWAccel type.
+// `tex` must point to an array of four textures (or NULL), which will be used
+// as backing storage for frames if possible. (Note that hwaccel-mapped frames
+// will never use this backing storage)
 //
-// Note: This function performs asynchronous uploads wherever possible. This
-// means that it may return *before* the source pixels are done being read
-// from. The frame's data buffers are ref'd and freed automatically.
+// Note: `out_frame->user_data` will hold a reference to the AVFrame
+// corresponding to the `pl_frame`. It will automatically be unref'd by
+// `pl_unmap_avframe`.
 //
-// Note: As with `pl_frame_from_avframe`, the resulting `pl_frame` may
-// reference data embedded in the AVFrame. As such, its lifetime is only
-// valid as long as the AVFrame is valid.
-static bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
-                              pl_tex tex[4], const AVFrame *frame);
+// Note: `pl_unmap_avframe` will not clean up any textures in `tex`.
+static bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out_frame,
+                           pl_tex tex[4], const AVFrame *avframe);
+static void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame);
+
+// Deprecated variant of `pl_map_frame`, with the following differences:
+// - Does not support hardware-accelerated frames
+// - Does not require manual unmapping
+// - Does not touch `frame->user_data`.
+// - `frame` must not be freed by the user before `frame` is done being used
+static PL_DEPRECATED bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
+                                            pl_tex tex[4], const AVFrame *frame);
 
 // Download the texture contents of a `pl_frame` back to a corresponding
 // AVFrame. Blocks until completion.

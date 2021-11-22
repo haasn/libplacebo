@@ -34,6 +34,7 @@ project('libplacebo', ['c', 'cpp'],
       '181': 'add pl_shader_set_alpha, change alpha handling of pl_shader_decode_color',
       '182': 'add pl_vulkan_get, pl_opengl_get, pl_d3d11_get',
       '183': 'relax pl_shared_mem.size > 0 requirement',
+      '184': 'add pl_map_avframe/pl_unmap_avframe, deprecate pl_upload_avframe',
     }.keys().length(),
     # Fix version
     0)

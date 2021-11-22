@@ -69,6 +69,19 @@ bool pl_fmt_is_float(pl_fmt fmt)
     pl_unreachable();
 }
 
+bool pl_fmt_has_modifier(pl_fmt fmt, uint64_t modifier)
+{
+    if (!fmt)
+        return false;
+
+    for (int i = 0; i < fmt->num_modifiers; i++) {
+        if (fmt->modifiers[i] == modifier)
+            return true;
+    }
+
+    return false;
+}
+
 static int cmp_fmt(const void *pa, const void *pb)
 {
     pl_fmt a = *(pl_fmt *)pa;

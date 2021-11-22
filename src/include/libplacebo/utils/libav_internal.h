@@ -16,20 +16,34 @@
  */
 
 #ifndef LIBPLACEBO_LIBAV_H_
-#error This header should be included as part of <libplacebo/utils/libav.h>
+# error This header should be included as part of <libplacebo/utils/libav.h>
 #else
 
 #include <assert.h>
 
 #include <libavutil/hwcontext.h>
+#include <libavutil/hwcontext_drm.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/mastering_display_metadata.h>
 #include <libavutil/pixdesc.h>
 #include <libavutil/display.h>
 
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(56, 61, 100)
-#define HAVE_LAV_FILM_GRAIN
-#include <libavutil/film_grain_params.h>
+# define HAVE_LAV_FILM_GRAIN
+# include <libavutil/film_grain_params.h>
+#endif
+
+// Try including hwcontext_vulkan.h automatically if possible (GCC/clang)
+#ifdef __has_include
+# if __has_include(<libavutil/hwcontext_vulkan.h>)
+#  include <libavutil/hwcontext_vulkan.h>
+# endif
+#endif
+
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 8, 100) && \
+    defined(AVUTIL_HWCONTEXT_VULKAN_H) && defined(PL_HAVE_VULKAN)
+# define HAVE_LAV_VULKAN
+# include <libplacebo/vulkan.h>
 #endif
 
 static inline enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
@@ -361,7 +375,22 @@ static inline bool pl_test_pixfmt(pl_gpu gpu,
 {
     struct pl_bit_encoding bits;
     struct pl_plane_data data[4];
-    int planes = pl_plane_data_from_pixfmt(data, &bits, pixfmt);
+    int planes;
+
+    switch (pixfmt) {
+    case AV_PIX_FMT_DRM_PRIME:
+    case AV_PIX_FMT_VAAPI:
+        return gpu->import_caps.tex & PL_HANDLE_DMA_BUF;
+
+#ifdef HAVE_LAV_VULKAN
+    case AV_PIX_FMT_VULKAN:
+        return pl_vulkan_get(gpu);
+#endif
+
+    default: break;
+    }
+
+    planes = pl_plane_data_from_pixfmt(data, &bits, pixfmt);
     if (!planes)
         return false;
 
@@ -482,8 +511,8 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
             // For sake of simplicity, just use the first component's depth as
             // the authoritative color depth for the whole image. Usually, this
             // will be overwritten by more specific information when using e.g.
-            // `pl_upload_avframe`, but for the sake of e.g. users only wishing
-            // to map hwaccel frames, this is a good default.
+            // `pl_map_avframe`, but for the sake of e.g. users wishing to map
+            // hwaccel frames manually, this is a good default.
             .bits.color_depth = desc->comp[0].depth,
         },
     };
@@ -732,7 +761,7 @@ static inline bool pl_frame_recreate_from_avframe(pl_gpu gpu,
     return true;
 }
 
-static void pl_avframe_free(void *priv)
+static void pl_avframe_free_cb(void *priv)
 {
     AVFrame *frame = priv;
     av_frame_free(&frame);
@@ -747,10 +776,151 @@ struct pl_avalloc {
     pl_buf buf;
 };
 
-static inline bool pl_upload_avframe(pl_gpu gpu,
-                                     struct pl_frame *out,
-                                     pl_tex tex[4],
-                                     const AVFrame *frame)
+static void pl_fix_hwframe_sample_depth(struct pl_frame *out, const AVFrame *frame)
+{
+    const AVHWFramesContext *hwfc = (AVHWFramesContext *) frame->hw_frames_ctx->data;
+    pl_fmt fmt = out->planes[0].texture->params.format;
+    struct pl_bit_encoding *bits = &out->repr.bits;
+
+    bits->sample_depth = fmt->component_depth[0];
+
+    switch (hwfc->sw_format) {
+    case AV_PIX_FMT_P010: bits->bit_shift = 6; break;
+    default: break;
+    }
+}
+
+static bool pl_map_avframe_drm(pl_gpu gpu, struct pl_frame *out,
+                               const AVFrame *frame)
+{
+    const AVHWFramesContext *hwfc = (AVHWFramesContext *) frame->hw_frames_ctx->data;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwfc->sw_format);
+    const AVDRMFrameDescriptor *drm = (AVDRMFrameDescriptor *) frame->data[0];
+    assert(frame->format == AV_PIX_FMT_DRM_PRIME);
+    if (!(gpu->import_caps.tex & PL_HANDLE_DMA_BUF))
+        return false;
+
+    assert(drm->nb_layers >= out->num_planes);
+    for (int n = 0; n < out->num_planes; n++) {
+        const AVDRMLayerDescriptor *layer = &drm->layers[n];
+        const AVDRMPlaneDescriptor *plane = &layer->planes[0];
+        const AVDRMObjectDescriptor *object = &drm->objects[plane->object_index];
+        pl_fmt fmt = pl_find_fourcc(gpu, layer->format);
+        bool is_chroma = n == 1 || n == 2;
+        if (!fmt || !pl_fmt_has_modifier(fmt, object->format_modifier))
+            return false;
+
+        assert(layer->nb_planes == 1); // we only support planar formats
+        out->planes[n].texture = pl_tex_create(gpu, pl_tex_params(
+            .w = AV_CEIL_RSHIFT(frame->width, is_chroma ? desc->log2_chroma_w : 0),
+            .h = AV_CEIL_RSHIFT(frame->height, is_chroma ? desc->log2_chroma_h : 0),
+            .format = fmt,
+            .sampleable = true,
+            .blit_src = fmt->caps & PL_FMT_CAP_BLITTABLE,
+            .import_handle = PL_HANDLE_DMA_BUF,
+            .shared_mem = {
+                .handle.fd = object->fd,
+                .size = object->size,
+                .offset = plane->offset,
+                .drm_format_mod = object->format_modifier,
+                .stride_w = plane->pitch,
+            },
+        ));
+        if (!out->planes[n].texture)
+            return false;
+    }
+
+    pl_fix_hwframe_sample_depth(out, frame);
+    return true;
+}
+
+// Derive a DMABUF from any other hwaccel format, and map that instead
+static bool pl_map_avframe_derived(pl_gpu gpu, struct pl_frame *out,
+                                   const AVFrame *frame)
+{
+    const int flags = AV_HWFRAME_MAP_READ | AV_HWFRAME_MAP_DIRECT;
+    AVFrame *derived = av_frame_alloc();
+    derived->width = frame->width;
+    derived->height = frame->height;
+    derived->format = AV_PIX_FMT_DRM_PRIME;
+    derived->hw_frames_ctx = av_buffer_ref(frame->hw_frames_ctx);
+    if (av_hwframe_map(derived, frame, flags) < 0)
+        goto error;
+    if (av_frame_copy_props(derived, frame) < 0)
+        goto error;
+    if (!pl_map_avframe_drm(gpu, out, derived))
+        goto error;
+
+    av_frame_free((AVFrame **) &out->user_data);
+    out->user_data = derived;
+    return true;
+
+error:
+    av_frame_free(&derived);
+    return false;
+}
+
+#ifdef HAVE_LAV_VULKAN
+static bool pl_map_avframe_vulkan(pl_gpu gpu, struct pl_frame *out,
+                                  const AVFrame *frame)
+{
+    const AVHWFramesContext *hwfc = (AVHWFramesContext *) frame->hw_frames_ctx->data;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwfc->sw_format);
+    const AVVulkanFramesContext *vkfc = hwfc->hwctx;
+    const VkFormat *vk_fmt = av_vkfmt_from_pixfmt(hwfc->sw_format);
+    AVVkFrame *vkf = (AVVkFrame *) frame->data[0];
+    pl_vulkan vk = pl_vulkan_get(gpu);
+    assert(frame->format == AV_PIX_FMT_VULKAN);
+    if (!vk)
+        return false;
+
+    for (int n = 0; n < out->num_planes; n++) {
+        pl_tex *tex = &out->planes[n].texture;
+        bool chroma = n == 1 || n == 2;
+        *tex = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
+            .image = vkf->img[n],
+            .width = AV_CEIL_RSHIFT(frame->width, chroma ? desc->log2_chroma_w : 0),
+            .height = AV_CEIL_RSHIFT(frame->height, chroma ? desc->log2_chroma_h : 0),
+            .format = vk_fmt[n],
+            .usage = vkfc->usage,
+        ));
+        if (!*tex)
+            return false;
+
+        pl_vulkan_release(gpu, *tex, vkf->layout[n], (pl_vulkan_sem) {
+            .sem = vkf->sem[n],
+            .value = vkf->sem_value[n],
+        });
+    }
+
+    pl_fix_hwframe_sample_depth(out, frame);
+    return true;
+}
+
+static void pl_unmap_avframe_vulkan(pl_gpu gpu, struct pl_frame *frame)
+{
+    const AVFrame *avframe = frame->user_data;
+    AVVkFrame *vkf = (AVVkFrame *) avframe->data[0];
+    int ok;
+
+    for (int n = 0; n < frame->num_planes; n++) {
+        pl_tex *tex = &frame->planes[n].texture;
+        if (!*tex)
+            continue;
+        ok = pl_vulkan_hold_raw(gpu, *tex, &vkf->layout[n], (pl_vulkan_sem) {
+            .sem = vkf->sem[n],
+            .value = vkf->sem_value[n] + 1,
+        });
+
+        vkf->access[n] = 0;
+        vkf->sem_value[n] += !!ok;
+        pl_tex_destroy(gpu, tex);
+    }
+}
+#endif
+
+static inline bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out,
+                                  pl_tex tex[4], const AVFrame *frame)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     struct pl_plane_data data[4] = {0};
@@ -758,13 +928,32 @@ static inline bool pl_upload_avframe(pl_gpu gpu,
     int planes;
 
     pl_frame_from_avframe(out, frame);
+    out->user_data = av_frame_clone(frame);
 
-    // TODO: support HW-accelerated formats (e.g. wrapping vulkan frames,
-    // importing DRM buffers, and so on)
+    switch (frame->format) {
+    case AV_PIX_FMT_DRM_PRIME:
+        if (!pl_map_avframe_drm(gpu, out, frame))
+            goto error;
+        return true;
+
+    case AV_PIX_FMT_VAAPI:
+        if (!pl_map_avframe_derived(gpu, out, frame))
+            goto error;
+        return true;
+
+#ifdef HAVE_LAV_VULKAN
+    case AV_PIX_FMT_VULKAN:
+        if (!pl_map_avframe_vulkan(gpu, out, frame))
+            goto error;
+        return true;
+#endif
+
+    default: break;
+    }
 
     planes = pl_plane_data_from_pixfmt(data, &out->repr.bits, frame->format);
     if (!planes)
-        return false;
+        goto error;
 
     for (int p = 0; p < planes; p++) {
         bool is_chroma = p == 1 || p == 2; // matches lavu logic
@@ -781,16 +970,55 @@ static inline bool pl_upload_avframe(pl_gpu gpu,
             data[p].buf_offset = (uintptr_t) frame->data[p] - (uintptr_t) alloc->buf->data;
         } else if (gpu->limits.callbacks) {
             // Use asynchronous upload if possible
-            data[p].callback = pl_avframe_free;
+            data[p].callback = pl_avframe_free_cb;
             data[p].priv = av_frame_clone(frame);
         }
 
         if (!pl_upload_plane(gpu, &out->planes[p], &tex[p], &data[p])) {
-            pl_avframe_free(data[p].priv);
-            return false;
+            av_frame_free((AVFrame **) &data[p].priv);
+            goto error;
         }
+
+        out->planes[p].texture = tex[p];
     }
 
+    return true;
+
+error:
+    pl_unmap_avframe(gpu, out);
+    return false;
+}
+
+static inline void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame)
+{
+    AVFrame *avframe = frame->user_data;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(avframe->format);
+
+#ifdef HAVE_LAV_VULKAN
+    if (avframe->format == AV_PIX_FMT_VULKAN)
+        pl_unmap_avframe_vulkan(gpu, frame);
+#endif
+
+    if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) {
+        for (int i = 0; i < 4; i++)
+            pl_tex_destroy(gpu, &frame->planes[i].texture);
+    }
+
+    av_frame_free(&avframe);
+    memset(frame, 0, sizeof(*frame)); // sanity
+}
+
+static inline bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
+                                     pl_tex tex[4], const AVFrame *frame)
+{
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
+    if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL)
+        return false;
+
+    if (!pl_map_avframe(gpu, out_frame, tex, frame))
+        return false;
+
+    av_frame_free((AVFrame **) &out_frame->user_data);
     return true;
 }
 
