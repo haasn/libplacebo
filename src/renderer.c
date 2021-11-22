@@ -2919,7 +2919,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         // converting between different image profiles, and the headache of
         // finagling that state is just not worth it because this is an
         // exceptionally unlikely hypothetical.
-        pl_shader_color_map(sh, NULL, frames[i].color, refimg->color, NULL, false);
+        pl_shader_color_map(sh, NULL, frames[i].color, pass.image.color, NULL, false);
 
         ident_t weight = "1.0";
         if (weights[i] != wsum) { // skip loading weight for nearest neighbour
@@ -2944,7 +2944,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         .w = out_w,
         .h = out_h,
         .comps = comps,
-        .color = refimg->color,
+        .color = pass.image.color,
         .repr = {
             .sys = PL_COLOR_SYSTEM_RGB,
             .levels = PL_COLOR_LEVELS_PC,
