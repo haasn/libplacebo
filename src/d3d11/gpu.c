@@ -268,7 +268,7 @@ static bool d3d11_gpu_is_failed(pl_gpu gpu)
     return ctx->is_failed;
 }
 
-static void d3d11_destroy_gpu(pl_gpu gpu)
+static void d3d11_gpu_destroy(pl_gpu gpu)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
 
@@ -303,6 +303,17 @@ static void d3d11_destroy_gpu(pl_gpu gpu)
     SAFE_RELEASE(p->imm);
 
     pl_free((void *) gpu);
+}
+
+pl_d3d11 pl_d3d11_get(pl_gpu gpu)
+{
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
+    if (impl->destroy == d3d11_gpu_destroy) {
+        struct pl_gpu_d3d11 *p = (struct pl_gpu_d3d11 *) impl;
+        return p->ctx->d3d11;
+    }
+
+    return NULL;
 }
 
 static bool load_d3d_compiler(pl_gpu gpu)
@@ -370,7 +381,7 @@ static struct pl_gpu_fns pl_fns_d3d11 = {
     .gpu_flush              = d3d11_gpu_flush,
     .gpu_finish             = d3d11_gpu_finish,
     .gpu_is_failed          = d3d11_gpu_is_failed,
-    .destroy                = d3d11_destroy_gpu,
+    .destroy                = d3d11_gpu_destroy,
 };
 
 pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
@@ -666,7 +677,7 @@ error:
     if (success) {
         return pl_gpu_finalize(gpu);
     } else {
-        d3d11_destroy_gpu(gpu);
+        d3d11_gpu_destroy(gpu);
         return NULL;
     }
 }

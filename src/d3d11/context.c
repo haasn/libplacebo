@@ -321,6 +321,7 @@ pl_d3d11 pl_d3d11_create(pl_log log, const struct pl_d3d11_params *params)
     struct pl_d3d11 *d3d11 = pl_zalloc_obj(NULL, d3d11, struct d3d11_ctx);
     struct d3d11_ctx *ctx = PL_PRIV(d3d11);
     ctx->log = log;
+    ctx->d3d11 = d3d11;
 
     if (params->device) {
         d3d11->device = params->device;

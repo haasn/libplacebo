@@ -139,6 +139,10 @@ pl_d3d11 pl_d3d11_create(pl_log log, const struct pl_d3d11_params *params);
 // destroyed by the user before calling this.
 void pl_d3d11_destroy(pl_d3d11 *d3d11);
 
+// For a `pl_gpu` backed by `pl_d3d11`, this function can be used to retrieve
+// the underlying `pl_d3d11`. Returns NULL for any other type of `gpu`.
+pl_d3d11 pl_d3d11_get(pl_gpu gpu);
+
 struct pl_d3d11_swapchain_params {
     // The Direct3D 11 swapchain to wrap. Optional. If NULL, libplacebo will
     // create its own swapchain using the options below. If set, all the options

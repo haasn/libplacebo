@@ -23,6 +23,7 @@
 // Shared struct used to hold the D3D11 device and associated interfaces
 struct d3d11_ctx {
     pl_log log;
+    pl_d3d11 d3d11;
 
     // Copy of the device from pl_d3d11 for convenience. Does not hold an
     // additional reference.

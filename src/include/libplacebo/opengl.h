@@ -83,6 +83,10 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params);
 // be explicitly destroyed by the user before calling `pl_opengl_destroy`.
 void pl_opengl_destroy(pl_opengl *gl);
 
+// For a `pl_gpu` backed by `pl_opengl`, this function can be used to retrieve
+// the underlying `pl_opengl`. Returns NULL for any other type of `gpu`.
+pl_opengl pl_opengl_get(pl_gpu gpu);
+
 struct pl_opengl_framebuffer {
     // ID of the framebuffer, or 0 to use the context's default framebuffer.
     int id;

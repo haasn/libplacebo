@@ -272,6 +272,17 @@ static void vk_gpu_destroy(pl_gpu gpu)
     pl_free((void *) gpu);
 }
 
+pl_vulkan pl_vulkan_get(pl_gpu gpu)
+{
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
+    if (impl->destroy == vk_gpu_destroy) {
+        struct pl_vk *p = (struct pl_vk *) impl;
+        return p->vk->vulkan;
+    }
+
+    return NULL;
+}
+
 static pl_handle_caps vk_sync_handle_caps(struct vk_ctx *vk)
 {
     pl_handle_caps caps = 0;

@@ -274,6 +274,10 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params);
 // before `pl_vulkan_destroy`.
 void pl_vulkan_destroy(pl_vulkan *vk);
 
+// For a `pl_gpu` backed by `pl_vulkan`, this function can be used to retrieve
+// the underlying `pl_vulkan`. Returns NULL for any other type of `gpu`.
+pl_vulkan pl_vulkan_get(pl_gpu gpu);
+
 struct pl_vulkan_device_params {
     // The instance to use. Required!
     //

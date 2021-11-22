@@ -31,7 +31,7 @@
 
 static const struct pl_gpu_fns pl_fns_gl;
 
-static void gl_destroy_gpu(pl_gpu gpu)
+static void gl_gpu_destroy(pl_gpu gpu)
 {
     struct pl_gl *p = PL_PRIV(gpu);
 
@@ -40,6 +40,17 @@ static void gl_destroy_gpu(pl_gpu gpu)
         gl_poll_callbacks(gpu);
 
     pl_free((void *) gpu);
+}
+
+pl_opengl pl_opengl_get(pl_gpu gpu)
+{
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
+    if (impl->destroy == gl_gpu_destroy) {
+        struct pl_gl *p = (struct pl_gl *) impl;
+        return p->gl;
+    }
+
+    return NULL;
 }
 
 #ifdef EPOXY_HAS_EGL
@@ -258,7 +269,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     return pl_gpu_finalize(gpu);
 
 error:
-    gl_destroy_gpu(gpu);
+    gl_gpu_destroy(gpu);
     return NULL;
 }
 
@@ -577,7 +588,7 @@ static bool gl_gpu_is_failed(pl_gpu gpu)
 }
 
 static const struct pl_gpu_fns pl_fns_gl = {
-    .destroy                = gl_destroy_gpu,
+    .destroy                = gl_gpu_destroy,
     .tex_create             = gl_tex_create,
     .tex_destroy            = gl_tex_destroy,
     .tex_invalidate         = gl_tex_invalidate,
