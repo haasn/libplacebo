@@ -686,13 +686,18 @@ bool pl_tex_recreate(pl_gpu gpu, pl_tex *tex, const struct pl_tex_params *params
         return false;
     }
 
+    if (params->import_handle) {
+        PL_ERR(gpu, "pl_tex_recreate may not be used with `import_handle`!");
+        return false;
+    }
+
     if (*tex && pl_tex_params_superset((*tex)->params, *params)) {
         pl_tex_invalidate(gpu, *tex);
         return true;
     }
 
-    PL_INFO(gpu, "(Re)creating %dx%dx%d texture with format %s",
-            params->w, params->h, params->d, params->format->name);
+    PL_DEBUG(gpu, "(Re)creating %dx%dx%d texture with format %s",
+             params->w, params->h, params->d, params->format->name);
 
     pl_tex_destroy(gpu, tex);
     *tex = pl_tex_create(gpu, params);
