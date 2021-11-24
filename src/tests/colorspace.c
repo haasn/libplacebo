@@ -247,6 +247,7 @@ int main()
     };
 
     pl_color_space_infer(&unknown);
+    unknown.sig_floor = 0.0; // exclude from the comparison
     REQUIRE(pl_color_space_equal(&unknown, &display));
 
     float x, y;

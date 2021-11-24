@@ -345,6 +345,8 @@ void pl_color_space_merge(struct pl_color_space *orig,
         orig->sig_peak = new->sig_peak;
     if (!orig->sig_avg)
         orig->sig_avg = new->sig_avg;
+    if (!orig->sig_floor)
+        orig->sig_floor = new->sig_floor;
     if (!orig->sig_scale)
         orig->sig_scale = new->sig_scale;
 }
@@ -357,6 +359,7 @@ bool pl_color_space_equal(const struct pl_color_space *c1,
            c1->light     == c2->light &&
            c1->sig_peak  == c2->sig_peak &&
            c1->sig_avg   == c2->sig_avg &&
+           c1->sig_floor == c2->sig_floor &&
            c1->sig_scale == c2->sig_scale;
 }
 
