@@ -2919,6 +2919,14 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
          "{                             \n"
          "vec4 mix_color = vec4(0.0);   \n");
 
+    // Mix in the image color space, but using the transfer function of
+    // (arbitrarily) the latest rendered frame. This avoids unnecessary ping
+    // ponging between linear and nonlinear light when combining linearly
+    // scaled images with frame mixing.
+    struct pl_color_space mix_color = pass.image.color;
+    pl_assert(fidx > 0);
+    mix_color.transfer = frames[fidx - 1].color.transfer;
+
     int comps = 0;
     for (int i = 0; i < fidx; i++) {
         const struct pl_tex_params *tpars = &frames[i].tex->params;
@@ -2941,7 +2949,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         // converting between different image profiles, and the headache of
         // finagling that state is just not worth it because this is an
         // exceptionally unlikely hypothetical.
-        pl_shader_color_map(sh, NULL, frames[i].color, pass.image.color, NULL, false);
+        pl_shader_color_map(sh, NULL, frames[i].color, mix_color, NULL, false);
 
         ident_t weight = "1.0";
         if (weights[i] != wsum) { // skip loading weight for nearest neighbour
@@ -2966,7 +2974,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         .w = out_w,
         .h = out_h,
         .comps = comps,
-        .color = pass.image.color,
+        .color = mix_color,
         .repr = {
             .sys = PL_COLOR_SYSTEM_RGB,
             .levels = PL_COLOR_LEVELS_PC,
