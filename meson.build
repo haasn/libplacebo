@@ -31,6 +31,7 @@ project('libplacebo', ['c', 'cpp'],
       '178': 'add pl_gpu_limits.align_vertex_stride',
       '179': 'add pl_render_params.skip_caching_single_frame',
       '180': 'add pl_gpu_limits.max_variable_comps',
+      '181': 'add pl_shader_set_alpha, change alpha handling of pl_shader_decode_color',
     }.keys().length(),
     # Fix version
     0)

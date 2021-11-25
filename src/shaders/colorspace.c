@@ -18,6 +18,21 @@
 #include <math.h>
 #include "shaders.h"
 
+void pl_shader_set_alpha(pl_shader sh, struct pl_color_repr *repr,
+                         enum pl_alpha_mode mode)
+{
+    if (repr->alpha == PL_ALPHA_PREMULTIPLIED && mode == PL_ALPHA_INDEPENDENT) {
+        GLSL("if (color.a > 1e-6)               \n"
+             "    color.rgb /= vec3(color.a);   \n");
+        repr->alpha = PL_ALPHA_INDEPENDENT;
+    }
+
+    if (repr->alpha == PL_ALPHA_INDEPENDENT && mode == PL_ALPHA_PREMULTIPLIED) {
+        GLSL("color.rgb *= vec3(color.a); \n");
+        repr->alpha = PL_ALPHA_PREMULTIPLIED;
+    }
+}
+
 void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
                             const struct pl_color_adjustment *params)
 {
@@ -28,14 +43,8 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
     GLSL("// pl_shader_decode_color \n"
          "{ \n");
 
-    // For the non-linear color systems we need some special input handling
-    // to make sure we don't accidentally screw everything up because of the
-    // alpha multiplication, which only commutes with linear operations.
-    bool is_nonlinear = !pl_color_system_is_linear(repr->sys);
-    if (is_nonlinear && repr->alpha == PL_ALPHA_PREMULTIPLIED) {
-        GLSL("color.rgb /= vec3(max(color.a, 1e-6));\n");
-        repr->alpha = PL_ALPHA_INDEPENDENT;
-    }
+    // Do this first because the following operations are potentially nonlinear
+    pl_shader_set_alpha(sh, repr, PL_ALPHA_INDEPENDENT);
 
     // XYZ needs special handling due to the input gamma logic
     if (repr->sys == PL_COLOR_SYSTEM_XYZ) {
@@ -138,11 +147,6 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
 
     case PL_COLOR_SYSTEM_COUNT:
         pl_unreachable();
-    }
-
-    if (repr->alpha == PL_ALPHA_INDEPENDENT) {
-        GLSL("color.rgb *= vec3(color.a);\n");
-        repr->alpha = PL_ALPHA_PREMULTIPLIED;
     }
 
     // Gamma adjustment. Doing this here (in non-linear light) is technically
@@ -259,8 +263,8 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
             GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.6)) * vec3(%s); \n", xyzscale);
     }
 
-    if (repr->alpha == PL_ALPHA_INDEPENDENT)
-        GLSL("color.rgb /= vec3(max(color.a, 1e-6));\n");
+    if (repr->alpha == PL_ALPHA_PREMULTIPLIED)
+        GLSL("color.rgb *= vec3(color.a); \n");
 
     GLSL("}\n");
 }

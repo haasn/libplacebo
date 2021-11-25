@@ -808,18 +808,18 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
         if (use_sigmoid)
             pl_shader_sigmoidize(sh, params->sigmoid_params);
 
-        bool independent = repr.alpha == PL_ALPHA_INDEPENDENT;
+        bool premul = repr.alpha == PL_ALPHA_PREMULTIPLIED;
         pl_shader_encode_color(sh, &repr);
         if (ol.mode == PL_OVERLAY_MONOCHROME) {
             GLSL("color.%s *= %s(%s, coord).r; \n",
-                 independent ? "a" : "rgba",
+                 premul ? "rgba" : "a",
                  sh_tex_fn(sh, ol.tex->params), tex);
         }
 
         swizzle_color(sh, comps, comp_map, true);
 
         struct pl_blend_params blend_params = {
-            .src_rgb = independent ? PL_BLEND_SRC_ALPHA : PL_BLEND_ONE,
+            .src_rgb = premul ? PL_BLEND_ONE : PL_BLEND_SRC_ALPHA,
             .src_alpha = PL_BLEND_ONE,
             .dst_rgb = PL_BLEND_ONE_MINUS_SRC_ALPHA,
             .dst_alpha = PL_BLEND_ONE_MINUS_SRC_ALPHA,
@@ -1612,6 +1612,7 @@ static bool pass_read_image(struct pass_state *pass)
         // Fix bit depth normalization before applying LUT
         float scale = pl_color_repr_normalize(&pass->img.repr);
         GLSL("color *= vec4(%s); \n", SH_FLOAT(scale));
+        pl_shader_set_alpha(sh, &pass->img.repr, PL_ALPHA_INDEPENDENT);
         pl_shader_custom_lut(sh, image->lut, &rr->lut_state[LUT_IMAGE]);
 
         if (lut_type == PL_LUT_CONVERSION) {
@@ -1625,6 +1626,10 @@ static bool pass_read_image(struct pass_state *pass)
         pl_shader_decode_color(sh, &pass->img.repr, params->color_adjustment);
     if (lut_type == PL_LUT_NORMALIZED)
         pl_shader_custom_lut(sh, image->lut, &rr->lut_state[LUT_IMAGE]);
+
+    // Pre-multiply alpha channel before the rest of the pipeline, to avoid
+    // bleeding colors from transparent regions into non-transparent regions
+    pl_shader_set_alpha(sh, &pass->img.repr, PL_ALPHA_PREMULTIPLIED);
 
     pass_hook(pass, &pass->img, PL_HOOK_RGB);
     sh = NULL;
@@ -1789,8 +1794,21 @@ static bool pass_output_target(struct pass_state *pass)
     bool need_conversion = true;
     assert(image->color.primaries == img->color.primaries);
     assert(image->color.light == img->color.light);
-    if (img->color.transfer == PL_COLOR_TRC_LINEAR)
-        prelinearized = true;
+    if (img->color.transfer == PL_COLOR_TRC_LINEAR) {
+        if (img->repr.alpha == PL_ALPHA_PREMULTIPLIED) {
+            // Very annoying edge case: since prelinerization happens with
+            // premultiplied alpha, but color mapping happens with independent
+            // alpha, we need to go back to non-linear representation *before*
+            // alpha mode conversion, to avoid distortion
+            img->color.transfer = image->color.transfer;
+            pl_shader_delinearize(sh, img->color);
+        } else {
+            prelinearized = true;
+        }
+    }
+
+    // Do all processing in independent alpha, to avoid nonlinear distortions
+    pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_INDEPENDENT);
 
     bool need_icc = !params->ignore_icc_profiles &&
                     (image->profile.data || target->profile.data) &&
@@ -1911,30 +1929,31 @@ fallback:
     if (lut_type == PL_LUT_NORMALIZED || lut_type == PL_LUT_CONVERSION)
         pl_shader_custom_lut(sh, target->lut, &rr->lut_state[LUT_TARGET]);
 
-    if (img->comps == 4 && params->blend_against_tiles) {
-        static const float zero[2][3] = {0};
-        const float (*color)[3] = params->tile_colors;
-        if (memcmp(color, zero, sizeof(zero)) == 0)
-            color = pl_render_default_params.tile_colors;
-        int size = PL_DEF(params->tile_size, pl_render_default_params.tile_size);
-        pl_assert(img->repr.alpha != PL_ALPHA_INDEPENDENT);
-        GLSLH("#define bg_tile_a vec3(%s, %s, %s) \n",
-              SH_FLOAT(color[0][0]), SH_FLOAT(color[0][1]), SH_FLOAT(color[0][2]));
-        GLSLH("#define bg_tile_b vec3(%s, %s, %s) \n",
-              SH_FLOAT(color[1][0]), SH_FLOAT(color[1][1]), SH_FLOAT(color[1][2]));
-        GLSL("%s tile = lessThan(fract(gl_FragCoord.xy * %s), vec2(0.5));   \n"
-             "vec3 bg_color = tile.x == tile.y ? bg_tile_a : bg_tile_b;   \n"
-             "color = vec4(color.rgb + bg_color * (1.0 - color.a), 1.0);  \n",
-             sh_bvec(sh, 2), SH_FLOAT(1.0 / size));
-        img->comps = 3;
-    } else if (img->comps == 4 && !target->repr.alpha) {
-        // Strip alpha channel if not representable in the destination
-        pl_assert(img->repr.alpha != PL_ALPHA_INDEPENDENT);
-        GLSLH("#define bg_color vec3(%s, %s, %s) \n",
-              SH_FLOAT(params->background_color[0]),
-              SH_FLOAT(params->background_color[1]),
-              SH_FLOAT(params->background_color[2]));
-        GLSL("color = vec4(color.rgb + bg_color * (1.0 - color.a), 1.0); \n");
+    bool need_blend = params->blend_against_tiles || !target->repr.alpha;
+    if (img->comps == 4 && need_blend) {
+        if (params->blend_against_tiles) {
+            static const float zero[2][3] = {0};
+            const float (*color)[3] = params->tile_colors;
+            if (memcmp(color, zero, sizeof(zero)) == 0)
+                color = pl_render_default_params.tile_colors;
+            int size = PL_DEF(params->tile_size, pl_render_default_params.tile_size);
+            GLSLH("#define bg_tile_a vec3(%s, %s, %s) \n",
+                  SH_FLOAT(color[0][0]), SH_FLOAT(color[0][1]), SH_FLOAT(color[0][2]));
+            GLSLH("#define bg_tile_b vec3(%s, %s, %s) \n",
+                  SH_FLOAT(color[1][0]), SH_FLOAT(color[1][1]), SH_FLOAT(color[1][2]));
+            GLSL("%s tile = lessThan(fract(gl_FragCoord.xy * %s), vec2(0.5));   \n"
+                 "vec3 bg_color = tile.x == tile.y ? bg_tile_a : bg_tile_b;     \n",
+                 sh_bvec(sh, 2), SH_FLOAT(1.0 / size));
+        } else {
+            GLSLH("#define bg_color vec3(%s, %s, %s) \n",
+                  SH_FLOAT(params->background_color[0]),
+                  SH_FLOAT(params->background_color[1]),
+                  SH_FLOAT(params->background_color[2]));
+        }
+
+        pl_assert(img->repr.alpha != PL_ALPHA_PREMULTIPLIED);
+        GLSL("color = vec4(mix(bg_color, color.rgb, color.a), 1.0); \n");
+        img->repr.alpha = PL_ALPHA_UNKNOWN;
         img->comps = 3;
     }
 
@@ -1944,8 +1963,10 @@ fallback:
     float scale = pl_color_repr_normalize(&repr);
     if (lut_type != PL_LUT_CONVERSION)
         pl_shader_encode_color(sh, &repr);
-    if (lut_type == PL_LUT_NATIVE)
+    if (lut_type == PL_LUT_NATIVE) {
         pl_shader_custom_lut(sh, target->lut, &rr->lut_state[LUT_TARGET]);
+        pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_PREMULTIPLIED);
+    }
 
     // Rotation handling
     struct pl_rect2d dst_rect = pass->dst_rect;
@@ -2859,6 +2880,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             f->params_hash = params_hash;
             f->color = inter_pass.img.color;
             f->comps = inter_pass.img.comps;
+            pl_assert(inter_pass.img.repr.alpha != PL_ALPHA_INDEPENDENT);
         }
 
         pl_assert(fidx < MAX_MIX_FRAMES);
@@ -2948,7 +2970,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         .repr = {
             .sys = PL_COLOR_SYSTEM_RGB,
             .levels = PL_COLOR_LEVELS_PC,
-            .alpha = PL_ALPHA_PREMULTIPLIED,
+            .alpha = comps >= 4 ? PL_ALPHA_PREMULTIPLIED : PL_ALPHA_UNKNOWN,
         },
     };
 
@@ -3055,7 +3077,7 @@ void pl_frame_clear_rgba(pl_gpu gpu, const struct pl_frame *frame,
     float encoded[3] = { rgba[0], rgba[1], rgba[2] };
     pl_transform3x3_apply(&tr, encoded);
 
-    float mult = frame->repr.alpha == PL_ALPHA_INDEPENDENT ? 1.0 : rgba[3];
+    float mult = frame->repr.alpha == PL_ALPHA_PREMULTIPLIED ? rgba[3] : 1.0;
     for (int p = 0; p < frame->num_planes; p++) {
         const struct pl_plane *plane =  &frame->planes[p];
         float clear[4] = { 0.0, 0.0, 0.0, rgba[3] };

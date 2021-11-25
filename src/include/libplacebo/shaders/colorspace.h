@@ -26,18 +26,24 @@
 
 PL_API_BEGIN
 
+// Transform the input color, in its given representation, to ensure
+// compatibility with the indicated alpha mode. Mutates `repr` to reflect the
+// change. Note that this is a no-op if the input is PL_ALPHA_UNKNOWN.
+void pl_shader_set_alpha(pl_shader sh, struct pl_color_repr *repr,
+                         enum pl_alpha_mode mode);
+
 // Decode the color into normalized RGB, given a specified color_repr. This
 // also takes care of additional pre- and post-conversions requires for the
 // "special" color systems (XYZ, BT.2020-C, etc.). If `params` is left as NULL,
 // it defaults to &pl_color_adjustment_neutral.
 //
-// Note: This function always returns PC-range RGB with pre-multiplied alpha.
+// Note: This function always returns PC-range RGB with independent alpha.
 // It mutates the pl_color_repr to reflect the change.
 void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
                             const struct pl_color_adjustment *params);
 
-// Encodes a color from normalized, PC-range, pre-multiplied RGB into a given
-// representation. That is, this performs the inverse operation of
+// Encodes a color from normalized, PC-range, independent alpha RGB into a
+// given representation. That is, this performs the inverse operation of
 // `pl_shader_decode_color` (sans color adjustments).
 void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr);
 
