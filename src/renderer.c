@@ -2705,6 +2705,12 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         PL_TRACE(rr, "Considering image with signature 0x%llx, pts %f",
                  (unsigned long long) sig, pts);
 
+        // Combining images with different rotations is basically unfeasible
+        if (pl_rotation_normalize(images->frames[i]->rotation - refimg->rotation)) {
+            PL_TRACE(rr, "  -> Skipping: incompatible rotation");
+            continue;
+        }
+
         float weight;
         const struct pl_filter_config *mixer = params->frame_mixer;
         bool single_frame = !mixer || images->num_frames == 1;
