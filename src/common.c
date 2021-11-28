@@ -262,6 +262,24 @@ void pl_matrix2x2_apply_rc(const struct pl_matrix2x2 *mat, struct pl_rect2df *rc
     rc->y1 = mat->m[1][0] * x1 + mat->m[1][1] * y1;
 }
 
+void pl_matrix2x2_mul(struct pl_matrix2x2 *a, const struct pl_matrix2x2 *b)
+{
+    float a00 = a->m[0][0], a01 = a->m[0][1],
+          a10 = a->m[1][0], a11 = a->m[1][1];
+
+    for (int i = 0; i < 2; i++) {
+        a->m[0][i] = a00 * b->m[0][i] + a01 * b->m[1][i];
+        a->m[1][i] = a10 * b->m[0][i] + a11 * b->m[1][i];
+    }
+}
+
+void pl_matrix2x2_rmul(const struct pl_matrix2x2 *a, struct pl_matrix2x2 *b)
+{
+    struct pl_matrix2x2 m = *a;
+    pl_matrix2x2_mul(&m, b);
+    *b = m;
+}
+
 const struct pl_transform2x2 pl_transform2x2_identity = {
     .mat = {{
         { 1, 0 },
@@ -285,6 +303,20 @@ void pl_transform2x2_apply_rc(const struct pl_transform2x2 *t, struct pl_rect2df
     rc->x1 += t->c[0];
     rc->y0 += t->c[1];
     rc->y1 += t->c[1];
+}
+
+void pl_transform2x2_mul(struct pl_transform2x2 *a, const struct pl_transform2x2 *b)
+{
+    float c[2] = { b->c[0], b->c[1] };
+    pl_transform2x2_apply(a, c);
+    memcpy(a->c, c, sizeof(c));
+    pl_matrix2x2_mul(&a->mat, &b->mat);
+}
+
+void pl_transform2x2_rmul(const struct pl_transform2x2 *a, struct pl_transform2x2 *b)
+{
+    pl_transform2x2_apply(a, b->c);
+    pl_matrix2x2_rmul(&a->mat, &b->mat);
 }
 
 float pl_rect2df_aspect(const struct pl_rect2df *rc)

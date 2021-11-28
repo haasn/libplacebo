@@ -140,6 +140,9 @@ extern const struct pl_matrix2x2 pl_matrix2x2_identity;
 void pl_matrix2x2_apply(const struct pl_matrix2x2 *mat, float vec[2]);
 void pl_matrix2x2_apply_rc(const struct pl_matrix2x2 *mat, struct pl_rect2df *rc);
 
+void pl_matrix2x2_mul(struct pl_matrix2x2 *a, const struct pl_matrix2x2 *b);
+void pl_matrix2x2_rmul(const struct pl_matrix2x2 *a, struct pl_matrix2x2 *b);
+
 struct pl_transform2x2 {
     struct pl_matrix2x2 mat;
     float c[2];
@@ -149,6 +152,9 @@ extern const struct pl_transform2x2 pl_transform2x2_identity;
 
 void pl_transform2x2_apply(const struct pl_transform2x2 *t, float vec[2]);
 void pl_transform2x2_apply_rc(const struct pl_transform2x2 *t, struct pl_rect2df *rc);
+
+void pl_transform2x2_mul(struct pl_transform2x2 *a, const struct pl_transform2x2 *b);
+void pl_transform2x2_rmul(const struct pl_transform2x2 *a, struct pl_transform2x2 *b);
 
 // Helper functions for dealing with aspect ratios and stretched/scaled rects.
 

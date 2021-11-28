@@ -152,7 +152,8 @@ static bool render_frame(const struct pl_swapchain_frame *frame)
         .len = icc_file.size,
     };
 
-    pl_rect2df_aspect_copy(&target.crop, &image.crop, 0.0);
+    image.rotation = PL_ROTATION_0; // for testing
+    pl_rect2df_aspect_copy_rot(&target.crop, &image.crop, 0.0, image.rotation);
 
     struct pl_overlay osd;
     struct pl_overlay_part osd_part;
@@ -166,6 +167,7 @@ static bool render_frame(const struct pl_swapchain_frame *frame)
             .mode       = PL_OVERLAY_NORMAL,
             .repr       = image.repr,
             .color      = image.color,
+            .coords     = PL_OVERLAY_COORDS_DST_FRAME,
             .parts      = &osd_part,
             .num_parts  = 1,
         };

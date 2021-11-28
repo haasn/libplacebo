@@ -416,9 +416,23 @@ enum pl_overlay_mode {
     PL_OVERLAY_MODE_COUNT,
 };
 
+enum pl_overlay_coords {
+    PL_OVERLAY_COORDS_AUTO = 0,  // equal to SRC/DST_FRAME, respectively
+    PL_OVERLAY_COORDS_SRC_FRAME, // relative to the raw src frame
+    PL_OVERLAY_COORDS_SRC_CROP,  // relative to the src frame crop
+    PL_OVERLAY_COORDS_DST_FRAME, // relative to the raw dst frame
+    PL_OVERLAY_COORDS_DST_CROP,  // relative to the dst frame crop
+    PL_OVERLAY_COORDS_COUNT,
+
+    // Note on rotations: If there is an end-to-end rotation between `src` and
+    // `dst`, then any overlays relative to SRC_FRAME or SRC_CROP will be
+    // rotated alongside the image, while overlays relative to DST_FRAME or
+    // DST_CROP will not.
+};
+
 struct pl_overlay_part {
-    struct pl_rect2df src; // source coordinate with respect to `tex`
-    struct pl_rect2d dst;  // target coordinates with respect to the frame
+    struct pl_rect2df src; // source coordinate with respect to `pl_overlay.tex`
+    struct pl_rect2df dst; // target coordinates with respect to `pl_overlay.coords`
 
     // If `mode` is PL_OVERLAY_MONOCHROME, then this specifies the color of
     // this overlay part. The color is multiplied into the sampled texture's
@@ -435,6 +449,9 @@ struct pl_overlay {
 
     // This controls the coloring mode of this overlay.
     enum pl_overlay_mode mode;
+
+    // Controls which coordinates this overlay is addressed relative to.
+    enum pl_overlay_coords coords;
 
     // This controls the colorspace information for this overlay. The contents
     // of the texture / the value of `color` are interpreted according to this.
@@ -501,9 +518,9 @@ struct pl_frame {
     // compensate).
     pl_rotation rotation;
 
-    // A list of additional overlays to render directly on top of this frame.
-    // These overlays will be treated as though they were part of the frame
-    // data, and can be used for things like subtitles or on-screen displays.
+    // A list of additional overlays associated with this frame. Note that will
+    // be rendered directly onto intermediate/cache frames, so changing any of
+    // these overlays may require flushing the renderer cache.
     const struct pl_overlay *overlays;
     int num_overlays;
 
