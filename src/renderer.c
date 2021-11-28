@@ -515,14 +515,14 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
     struct sampler_info info = {0};
     pl_renderer rr = pass->rr;
 
-    float rx = src->new_w / fabs(pl_rect_w(src->rect));
+    float rx = src->new_w / fabsf(pl_rect_w(src->rect));
     if (rx < 1.0 - 1e-6) {
         info.dir_sep[0] = SAMPLER_DOWN;
     } else if (rx > 1.0 + 1e-6) {
         info.dir_sep[0] = SAMPLER_UP;
     }
 
-    float ry = src->new_h / fabs(pl_rect_h(src->rect));
+    float ry = src->new_h / fabsf(pl_rect_h(src->rect));
     if (ry < 1.0 - 1e-6) {
         info.dir_sep[1] = SAMPLER_DOWN;
     } else if (ry > 1.0 + 1e-6) {
@@ -2658,9 +2658,9 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
     // As the canonical reference, find the nearest neighbour frame
     const struct pl_frame *refimg = images->frames[0];
-    float best = fabs(images->timestamps[0]);
+    float best = fabsf(images->timestamps[0]);
     for (int i = 1; i < images->num_frames; i++) {
-        float dist = fabs(images->timestamps[i]);
+        float dist = fabsf(images->timestamps[i]);
         if (dist < best) {
             refimg = images->frames[i];
             best = dist;
@@ -2750,7 +2750,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
         } else {
 
-            if (fabs(pts) >= mixer->kernel->radius) {
+            if (fabsf(pts) >= mixer->kernel->radius) {
                 PL_TRACE(rr, "  -> Skipping: outside filter radius (%f)",
                          mixer->kernel->radius);
                 continue;
@@ -2776,7 +2776,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         // also exclude the reference image from this optimization to ensure
         // that we always have at least one frame.
         const float cutoff = 1e-3;
-        if (fabs(weight) <= cutoff && images->frames[i] != refimg) {
+        if (fabsf(weight) <= cutoff && images->frames[i] != refimg) {
             PL_TRACE(rr, "   -> Skipping: weight (%f) below threshold (%f)",
                      weight, cutoff);
             continue;
