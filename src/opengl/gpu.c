@@ -53,7 +53,7 @@ static pl_handle_caps tex_handle_caps(pl_gpu gpu, bool import)
         return 0;
 
     if (import) {
-        if (epoxy_has_egl_extension(p->egl_dpy, "EXT_image_dma_buf_import"))
+        if (epoxy_has_egl_extension(p->egl_dpy, "EGL_EXT_image_dma_buf_import"))
             caps |= PL_HANDLE_DMA_BUF;
     } else if (!import && p->egl_ctx) {
         if (epoxy_has_egl_extension(p->egl_dpy, "EGL_MESA_image_dma_buf_export"))
@@ -191,7 +191,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
 
     if (p->egl_dpy) {
         p->has_modifiers = epoxy_has_egl_extension(p->egl_dpy,
-                                        "EXT_image_dma_buf_import_modifiers");
+                                        "EGL_EXT_image_dma_buf_import_modifiers");
     }
 #endif
 

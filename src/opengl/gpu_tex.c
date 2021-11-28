@@ -130,12 +130,12 @@ static bool gl_tex_import(pl_gpu gpu,
             goto error;
         }
 
-        if (shared_mem->drm_format_mod != DRM_FORMAT_MOD_INVALID)
-            ADD_DMABUF_PLANE_MODIFIERS(0, shared_mem->drm_format_mod);
-
         ADD_ATTRIB(EGL_LINUX_DRM_FOURCC_EXT, params->format->fourcc);
         ADD_DMABUF_PLANE_ATTRIBS(0, tex_gl->fd, shared_mem->offset,
                                  PL_DEF(shared_mem->stride_w, params->w));
+        if (p->has_modifiers)
+            ADD_DMABUF_PLANE_MODIFIERS(0, shared_mem->drm_format_mod);
+
         attribs[num_attribs] = EGL_NONE;
 
         // EGL_LINUX_DMA_BUF_EXT requires EGL_NO_CONTEXT
