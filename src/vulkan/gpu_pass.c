@@ -95,8 +95,8 @@ static const VkDescriptorType dsType[] = {
     [PL_DESC_BUF_TEXEL_STORAGE] = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
 };
 
-#define CACHE_MAGIC {'R','A','V','K'}
-#define CACHE_VERSION 2
+#define CACHE_MAGIC {'P','L','V','K'}
+#define CACHE_VERSION 3
 static const char vk_cache_magic[4] = CACHE_MAGIC;
 
 struct vk_cache_header {
@@ -108,12 +108,14 @@ struct vk_cache_header {
     size_t frag_spirv_len;
     size_t comp_spirv_len;
     size_t pipecache_len;
+    uint64_t hash;
 };
 
 static bool vk_use_cached_program(const struct pl_pass_params *params,
                                   const struct spirv_compiler *spirv,
                                   pl_str *vert_spirv, pl_str *frag_spirv,
-                                  pl_str *comp_spirv, pl_str *pipecache)
+                                  pl_str *comp_spirv, pl_str *pipecache,
+                                  uint64_t hash)
 {
     pl_str cache = {
         .buf = (uint8_t *) params->cached_program,
@@ -129,6 +131,8 @@ static bool vk_use_cached_program(const struct pl_pass_params *params,
     if (strncmp(header->magic, vk_cache_magic, sizeof(vk_cache_magic)) != 0)
         return false;
     if (header->cache_version != CACHE_VERSION)
+        return false;
+    if (header->hash != hash)
         return false;
     if (strncmp(header->compiler, spirv->name, sizeof(header->compiler)) != 0)
         return false;
@@ -510,7 +514,11 @@ no_descriptors: ;
                                 &pass_vk->pipeLayout));
 
     pl_str vert = {0}, frag = {0}, comp = {0}, pipecache = {0};
-    if (vk_use_cached_program(params, p->spirv, &vert, &frag, &comp, &pipecache)) {
+    uint64_t hash = pl_str_hash(pl_str0(params->glsl_shader));
+    if (params->type == PL_PASS_RASTER)
+        pl_hash_merge(&hash, pl_str_hash(pl_str0(params->vertex_shader)));
+
+    if (vk_use_cached_program(params, p->spirv, &vert, &frag, &comp, &pipecache, hash)) {
         PL_DEBUG(gpu, "Using cached SPIR-V and VkPipeline");
     } else {
         pipecache.len = 0;
@@ -653,6 +661,7 @@ no_descriptors: ;
         .frag_spirv_len = frag.len,
         .comp_spirv_len = comp.len,
         .pipecache_len = cache.len,
+        .hash = hash,
     };
 
     PL_DEBUG(vk, "Pass statistics: size %zu, SPIR-V: vert %zu frag %zu comp %zu",
