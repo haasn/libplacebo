@@ -1195,10 +1195,14 @@ struct pl_pass_params {
     // the same shader. Can be used to speed up pass creation on already
     // known/cached shaders.
     //
-    // Note: There are no restrictions on this. Passing an out-of-date cache,
-    // passing a cache corresponding to a different program, or passing a cache
-    // belonging to a different GPU, are all valid. But obviously, in such cases,
-    // there is no benefit in doing so.
+    // Note: There are a few restrictions on this. Passing an out-of-date
+    // cache, passing a cache corresponding to a different program, or passing
+    // a cache belonging to a different GPU, are all guaranteed to be valid.
+    //
+    // It is, however, undefined behavior to pass arbitrary or maliciously
+    // crafted bytes - and users are advised that attaching a shader cache
+    // obtained from the internet could lead to arbitrary program behavior
+    // (possibly including code execution).
     const uint8_t *cached_program;
     size_t cached_program_len;
 
