@@ -172,6 +172,7 @@ enum pl_shader_obj_type {
     PL_SHADER_OBJ_LUT,
     PL_SHADER_OBJ_AV1_GRAIN,
     PL_SHADER_OBJ_FILM_GRAIN,
+    PL_SHADER_OBJ_RESHAPE,
 };
 
 struct pl_shader_obj {

@@ -51,7 +51,6 @@ static inline enum pl_channel channel_map(int i, const struct pl_film_grain_para
     case PL_COLOR_SYSTEM_UNKNOWN:
     case PL_COLOR_SYSTEM_RGB:
         return map_rgb[comp];
-
     case PL_COLOR_SYSTEM_XYZ:
         return map_xyz[comp];
 
@@ -62,6 +61,7 @@ static inline enum pl_channel channel_map(int i, const struct pl_film_grain_para
     case PL_COLOR_SYSTEM_BT_2020_C:
     case PL_COLOR_SYSTEM_BT_2100_PQ:
     case PL_COLOR_SYSTEM_BT_2100_HLG:
+    case PL_COLOR_SYSTEM_DOLBYVISION:
     case PL_COLOR_SYSTEM_YCGCO:
         return comp;
 

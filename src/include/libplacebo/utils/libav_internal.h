@@ -84,6 +84,7 @@ static inline enum AVColorSpace pl_system_to_av(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_BT_2020_C:     return AVCOL_SPC_BT2020_CL;
     case PL_COLOR_SYSTEM_BT_2100_PQ:    return AVCOL_SPC_ICTCP;
     case PL_COLOR_SYSTEM_BT_2100_HLG:   return AVCOL_SPC_ICTCP;
+    case PL_COLOR_SYSTEM_DOLBYVISION:   return AVCOL_SPC_UNSPECIFIED; // missing
     case PL_COLOR_SYSTEM_YCGCO:         return AVCOL_SPC_YCGCO;
     case PL_COLOR_SYSTEM_RGB:           return AVCOL_SPC_RGB;
     case PL_COLOR_SYSTEM_XYZ:           return AVCOL_SPC_UNSPECIFIED; // handled differently

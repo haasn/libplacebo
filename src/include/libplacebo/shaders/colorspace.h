@@ -32,6 +32,10 @@ PL_API_BEGIN
 void pl_shader_set_alpha(pl_shader sh, struct pl_color_repr *repr,
                          enum pl_alpha_mode mode);
 
+// Colorspace reshaping for PL_COLOR_SYSTEM_DOLBYVISION. Note that this is done
+// automatically by `pl_shader_decode_color` for PL_COLOR_SYSTEM_DOLBYVISION.
+void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data);
+
 // Decode the color into normalized RGB, given a specified color_repr. This
 // also takes care of additional pre- and post-conversions requires for the
 // "special" color systems (XYZ, BT.2020-C, etc.). If `params` is left as NULL,

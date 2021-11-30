@@ -37,6 +37,7 @@ enum pl_color_system {
     PL_COLOR_SYSTEM_BT_2020_C,   // ITU-R Rec. BT.2020 (constant luminance)
     PL_COLOR_SYSTEM_BT_2100_PQ,  // ITU-R Rec. BT.2100 ICtCp PQ variant
     PL_COLOR_SYSTEM_BT_2100_HLG, // ITU-R Rec. BT.2100 ICtCp HLG variant
+    PL_COLOR_SYSTEM_DOLBYVISION, // Dolby Vision (see pl_dovi_metadata)
     PL_COLOR_SYSTEM_YCGCO,       // YCgCo (derived from RGB)
     // Other color systems:
     PL_COLOR_SYSTEM_RGB,         // Red, Green and Blue
@@ -120,6 +121,26 @@ struct pl_bit_encoding {
 bool pl_bit_encoding_equal(const struct pl_bit_encoding *b1,
                            const struct pl_bit_encoding *b2);
 
+// Parsed metadata from the Dolby Vision RPU
+struct pl_dovi_metadata {
+    // Colorspace transformation metadata
+    float nonlinear_offset[3];      // input offset ("ycc_to_rgb_offset")
+    struct pl_matrix3x3 nonlinear;  // before PQ, also called "ycc_to_rgb"
+    struct pl_matrix3x3 linear;     // after PQ, also called "rgb_to_lms"
+
+    // Reshape data, grouped by component
+    struct pl_reshape_data {
+        uint8_t num_pivots;
+        float pivots[9]; // normalized to [0.0, 1.0] based on BL bit depth
+        uint8_t method[8]; // 0 = polynomial, 1 = MMR
+        // Note: these must be normalized (divide by coefficient_log2_denom)
+        float poly_coeffs[8][3]; // x^0, x^1, x^2, unused must be 0
+        uint8_t mmr_order[8]; // 1, 2 or 3
+        float mmr_constant[8];
+        float mmr_coeffs[8][3 /* order */][7];
+    } comp[3];
+};
+
 // Struct describing the underlying color system and representation. This
 // information is needed to convert an encoded color to a normalized RGB triple
 // in the range 0-1.
@@ -128,6 +149,14 @@ struct pl_color_repr {
     enum pl_color_levels levels;
     enum pl_alpha_mode alpha;
     struct pl_bit_encoding bits; // or {0} if unknown
+
+    // Metadata for PL_COLOR_SYSTEM_DOLBYVISION. Note that, for the sake of
+    // efficiency, this is treated purely as an opaque reference - functions
+    // like pl_color_repr_equal will merely do a pointer equality test.
+    //
+    // The only functions that actually dereference it in any way are
+    // pl_color_repr_decode,  pl_shader_decode_color and pl_render_image(_mix).
+    const struct pl_dovi_metadata *dovi;
 };
 
 // Some common color representations. It's worth pointing out that all of these

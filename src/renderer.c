@@ -2251,6 +2251,7 @@ static inline enum plane_type detect_plane_type(const struct pl_plane *plane,
     case PL_COLOR_SYSTEM_BT_2020_C:
     case PL_COLOR_SYSTEM_BT_2100_PQ:
     case PL_COLOR_SYSTEM_BT_2100_HLG:
+    case PL_COLOR_SYSTEM_DOLBYVISION:
     case PL_COLOR_SYSTEM_YCGCO:
     case PL_COLOR_SYSTEM_COUNT:
         break;

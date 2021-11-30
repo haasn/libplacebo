@@ -35,6 +35,7 @@ project('libplacebo', ['c', 'cpp'],
       '182': 'add pl_vulkan_get, pl_opengl_get, pl_d3d11_get',
       '183': 'relax pl_shared_mem.size > 0 requirement',
       '184': 'add pl_map_avframe/pl_unmap_avframe, deprecate pl_upload_avframe',
+      '185': 'add PL_COLOR_SYSTEM_DOLBYVISION and reshaping',
     }.keys().length(),
     # Fix version
     0)

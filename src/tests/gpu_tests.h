@@ -464,6 +464,8 @@ static void pl_shader_tests(pl_gpu gpu)
     }
 
     for (enum pl_color_system sys = 0; sys < PL_COLOR_SYSTEM_COUNT; sys++) {
+        if (sys == PL_COLOR_SYSTEM_DOLBYVISION)
+            continue; // requires metadata
         sh = pl_dispatch_begin(dp);
         pl_shader_sample_nearest(sh, pl_sample_src( .tex = src ));
         pl_shader_encode_color(sh, &(struct pl_color_repr) { .sys = sys });
@@ -684,6 +686,22 @@ static void pl_shader_tests(pl_gpu gpu)
         .shader = &sh,
         .target = fbo,
     }));
+
+    // Test dolbyvision
+    if (gpu->glsl.version >= 130) {
+        struct pl_color_repr repr = {
+            .sys = PL_COLOR_SYSTEM_DOLBYVISION,
+            .dovi = &dovi_meta,
+        };
+
+        sh = pl_dispatch_begin(dp);
+        pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+        pl_shader_decode_color(sh, &repr, NULL);
+        REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+            .shader = &sh,
+            .target = fbo,
+        }));
+    }
 
     pl_dispatch_destroy(&dp);
     pl_tex_destroy(gpu, &src);

@@ -286,6 +286,44 @@ static void bench_h274_grain(pl_shader sh, pl_shader_obj *state, pl_tex src)
     pl_shader_film_grain(sh, state, &params);
 }
 
+static void bench_reshape_poly(pl_shader sh, pl_shader_obj *state, pl_tex src)
+{
+    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    pl_shader_dovi_reshape(sh, &(struct pl_dovi_metadata) { .comp = {
+        {
+            .num_pivots = 8,
+            .pivots = {0.0, 0.00488758553, 0.0420332365, 0.177908108,
+                       0.428152502, 0.678396881, 0.92864126, 1.0},
+            .method = {0, 0, 0, 0, 0, 0, 0},
+            .poly_coeffs = {
+                {0.00290930271, 2.30019712, 50.1446037},
+                {0.00725257397, 1.88119054, -4.49443769},
+                {0.0150123835, 1.61106598, -1.64833081},
+                {0.0498571396, 1.2059114, -0.430627108},
+                {0.0878019333, 1.01845241, -0.19669354},
+                {0.120447636, 0.920134187, -0.122338772},
+                {2.12430835, -3.30913281, 2.10893941},
+            },
+        }, {
+            .num_pivots = 2,
+            .pivots = {0.0, 1.0},
+            .method = {0},
+            .poly_coeffs = {{-0.397901177, 1.85908031, 0}},
+        }, {
+            .num_pivots = 2,
+            .pivots = {0.0, 1.0},
+            .method = {0},
+            .poly_coeffs = {{-0.399355531, 1.85591626, 0}},
+        },
+    }});
+}
+
+static void bench_reshape_mmr(pl_shader sh, pl_shader_obj *state, pl_tex src)
+{
+    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    pl_shader_dovi_reshape(sh, &dovi_meta); // this includes MMR
+}
+
 static float data[TEX_SIZE * TEX_SIZE * 4 + 8192];
 
 static void bench_download(pl_gpu gpu, pl_tex tex)
@@ -374,6 +412,8 @@ int main()
     benchmark(vk->gpu, "av1_grain", BENCH_SH(bench_av1_grain));
     benchmark(vk->gpu, "av1_grain_lap", BENCH_SH(bench_av1_grain_lap));
     benchmark(vk->gpu, "h274_grain", BENCH_SH(bench_h274_grain));
+    benchmark(vk->gpu, "reshape_poly", BENCH_SH(bench_reshape_poly));
+    benchmark(vk->gpu, "reshape_mmr", BENCH_SH(bench_reshape_mmr));
 
     pl_vulkan_destroy(&vk);
     pl_log_destroy(&log);

@@ -60,6 +60,7 @@ static inline enum Dav1dMatrixCoefficients pl_system_to_dav1d(enum pl_color_syst
     case PL_COLOR_SYSTEM_BT_2020_C:     return DAV1D_MC_BT2020_CL;
     case PL_COLOR_SYSTEM_BT_2100_PQ:    return DAV1D_MC_ICTCP;
     case PL_COLOR_SYSTEM_BT_2100_HLG:   return DAV1D_MC_ICTCP;
+    case PL_COLOR_SYSTEM_DOLBYVISION:   return DAV1D_MC_UNKNOWN; // missing
     case PL_COLOR_SYSTEM_YCGCO:         return DAV1D_MC_SMPTE_YCGCO;
     case PL_COLOR_SYSTEM_RGB:           return DAV1D_MC_IDENTITY;
     case PL_COLOR_SYSTEM_XYZ:           return DAV1D_MC_IDENTITY;

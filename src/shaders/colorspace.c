@@ -33,6 +33,212 @@ void pl_shader_set_alpha(pl_shader sh, struct pl_color_repr *repr,
     }
 }
 
+static inline void reshape_mmr(pl_shader sh, ident_t mmr, bool single,
+                               int min_order, int max_order)
+{
+    if (sh_glsl(sh).version < 130) {
+        SH_FAIL(sh, "MMR reshaping requires GLSL 130+");
+        return;
+    }
+
+    if (single) {
+        GLSL("const uint mmr_idx = 0u; \n");
+    } else {
+        GLSL("uint mmr_idx = uint(coeffs.y); \n");
+    }
+
+    assert(min_order <= max_order);
+    if (min_order < max_order)
+        GLSL("uint order = uint(coeffs.w); \n");
+
+    GLSL("vec4 sigX;                                            \n"
+         "s = coeffs.x;                                         \n"
+         "sigX.xyz = sig.xxy * sig.yzz;                         \n"
+         "sigX.w = sigX.x * sig.z;                              \n"
+         "s += dot(%s[mmr_idx + 0].xyz, sig);                   \n"
+         "s += dot(%s[mmr_idx + 1], sigX);                      \n",
+         mmr, mmr);
+
+    if (max_order >= 2) {
+        if (min_order < 2)
+            GLSL("if (order >= 2) { \n");
+
+        GLSL("vec3 sig2 = sig * sig;                            \n"
+             "vec4 sigX2 = sigX * sigX;                         \n"
+             "s += dot(%s[mmr_idx + 2].xyz, sig2);              \n"
+             "s += dot(%s[mmr_idx + 3], sigX2);                 \n",
+             mmr, mmr);
+
+        if (max_order == 3) {
+            if (min_order < 3)
+                GLSL("if (order >= 3 { \n");
+
+            GLSL("s += dot(%s[mmr_idx + 4].xyz, sig2 * sig);    \n"
+                 "s += dot(%s[mmr_idx + 5], sigX2 * sigX);      \n",
+                 mmr, mmr);
+
+            if (min_order < 3)
+                GLSL("} \n");
+        }
+
+        if (min_order < 2)
+            GLSL("} \n");
+    }
+}
+
+static inline void reshape_poly(pl_shader sh)
+{
+    GLSL("s = (coeffs.z * s + coeffs.y) * s + coeffs.x; \n");
+}
+
+
+void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
+{
+    if (!data || !sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
+    sh_describe(sh, "reshaping");
+    GLSL("// pl_shader_reshape                  \n"
+         "{                                     \n"
+         "vec3 sig;                             \n"
+         "vec4 coeffs;                          \n"
+         "float s;                              \n"
+         "sig = clamp(color.rgb, 0.0, 1.0);     \n");
+
+    float coeffs_data[8][4];
+    float mmr_packed_data[8*6][4];
+
+    for (int c = 0; c < 3; c++) {
+        const struct pl_reshape_data *comp = &data->comp[c];
+        if (!comp->num_pivots)
+            continue;
+
+        pl_assert(comp->num_pivots >= 2 && comp->num_pivots <= 9);
+
+        // Prepare coefficients for GPU
+        bool has_poly = false, has_mmr = false, mmr_single = true;
+        int mmr_idx = 0, min_order = 3, max_order = 1;
+        for (int i = 0; i < comp->num_pivots - 1; i++) {
+            switch (comp->method[i]) {
+            case 0: // polynomial
+                has_poly = true;
+                coeffs_data[i][3] = 0.0; // order=0 signals polynomial
+                for (int k = 0; k < 3; k++)
+                    coeffs_data[i][k] = comp->poly_coeffs[i][k];
+                break;
+
+            case 1:
+                min_order = PL_MIN(min_order, comp->mmr_order[i]);
+                max_order = PL_MAX(max_order, comp->mmr_order[i]);
+                mmr_single = !has_mmr;
+                has_mmr = true;
+                coeffs_data[i][3] = (float) comp->mmr_order[i];
+                coeffs_data[i][0] = comp->mmr_constant[i];
+                coeffs_data[i][1] = (float) mmr_idx;
+                for (int j = 0; j < comp->mmr_order[i]; j++) {
+                    // store weights per order as two packed vec4s
+                    float *mmr = &mmr_packed_data[mmr_idx][0];
+                    mmr[0] = comp->mmr_coeffs[i][j][0];
+                    mmr[1] = comp->mmr_coeffs[i][j][1];
+                    mmr[2] = comp->mmr_coeffs[i][j][2];
+                    mmr[3] = 0.0; // unused
+                    mmr[4] = comp->mmr_coeffs[i][j][3];
+                    mmr[5] = comp->mmr_coeffs[i][j][4];
+                    mmr[6] = comp->mmr_coeffs[i][j][5];
+                    mmr[7] = comp->mmr_coeffs[i][j][6];
+                    mmr_idx += 2;
+                }
+                break;
+
+            default:
+                pl_unreachable();
+            }
+        }
+
+        // Don't mark these as dynamic, because they don't typically change
+        // _that_ frequently, and we would prefer to avoid putting them in PCs
+        ident_t pivots = NULL;
+        if (comp->num_pivots > 2) {
+            pivots = sh_var(sh, (struct pl_shader_var) {
+                .data = &comp->pivots[1], // skip lower bound
+                .var = {
+                    .name = "pivots",
+                    .type = PL_VAR_FLOAT,
+                    .dim_v = 1,
+                    .dim_m = 1,
+                    .dim_a = comp->num_pivots - 2, // skip lower/upper bounds
+                },
+            });
+        }
+
+        ident_t coeffs = sh_var(sh, (struct pl_shader_var) {
+            .data = coeffs_data,
+            .var = {
+                .name = "coeffs",
+                .type = PL_VAR_FLOAT,
+                .dim_v = 4,
+                .dim_m = 1,
+                .dim_a = comp->num_pivots - 1,
+            },
+        });
+
+        ident_t mmr = NULL;
+        if (has_mmr) {
+            mmr = sh_var(sh, (struct pl_shader_var) {
+                .data = mmr_packed_data,
+                .var = {
+                    .name = "mmr",
+                    .type = PL_VAR_FLOAT,
+                    .dim_v = 4,
+                    .dim_m = 1,
+                    .dim_a = mmr_idx,
+                },
+            });
+        }
+
+        // Select the right coefficient based on the pivot points
+        if (comp->num_pivots > 2) {
+            GLSL("coeffs = %s[%d]; \n", coeffs, comp->num_pivots - 2);
+        } else {
+            GLSL("coeffs = %s; \n", coeffs);
+        }
+
+        GLSL("s = sig[%d]; \n", c);
+        for (int idx = comp->num_pivots - 3; idx >= 0; idx--) {
+            if (comp->num_pivots > 3) {
+                GLSL("coeffs = mix(coeffs, %s[%d], bvec4(s < %s[%d])); \n",
+                     coeffs, idx, pivots, idx);
+            } else {
+                GLSL("coeffs = mix(coeffs, %s[%d], bvec4(s < %s)); \n",
+                     coeffs, idx, pivots);
+            }
+        }
+
+        if (has_mmr && has_poly) {
+            GLSL("if (coeffs.w == 0.0) { \n");
+            reshape_poly(sh);
+            GLSL("} else { \n");
+            reshape_mmr(sh, mmr, mmr_single, min_order, max_order);
+            GLSL("} \n");
+        } else if (has_poly) {
+            reshape_poly(sh);
+        } else {
+            assert(has_mmr);
+            GLSL("{ \n");
+            reshape_mmr(sh, mmr, mmr_single, min_order, max_order);
+            GLSL("} \n");
+        }
+
+        // Hard-code these as constants because they're exceptionally unlikely
+        // to change from frame to frame (if they do, shoot the sample author)
+        ident_t lo = SH_FLOAT(comp->pivots[0]);
+        ident_t hi = SH_FLOAT(comp->pivots[comp->num_pivots - 1]);
+        GLSL("color[%d] = clamp(s, %s, %s); \n", c, lo, hi);
+    }
+
+    GLSL("}\n");
+}
+
 void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
                             const struct pl_color_adjustment *params)
 {
@@ -50,6 +256,12 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
     if (repr->sys == PL_COLOR_SYSTEM_XYZ) {
         ident_t scale = SH_FLOAT(pl_color_repr_normalize(repr));
         GLSL("color.rgb = pow(vec3(%s) * color.rgb, vec3(2.6));\n", scale);
+    }
+
+    if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION) {
+        ident_t scale = SH_FLOAT(pl_color_repr_normalize(repr));
+        GLSL("color.rgb *= vec3(%s); \n", scale);
+        pl_shader_dovi_reshape(sh, repr->dovi);
     }
 
     enum pl_color_system orig_sys = repr->sys;
@@ -135,6 +347,27 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
         break;
     }
 
+    case PL_COLOR_SYSTEM_DOLBYVISION: {
+        // Dolby Vision always outputs BT.2020-referred HPE LMS, so hard-code
+        // the inverse LMS->RGB matrix corresponding to this color space.
+        struct pl_matrix3x3 dovi_lms2rgb = {{
+            { 3.06441879, -2.16597676,  0.10155818},
+            {-0.65612108,  1.78554118, -0.12943749},
+            { 0.01736321, -0.04725154,  1.03004253},
+        }};
+
+        pl_matrix3x3_mul(&dovi_lms2rgb, &repr->dovi->linear);
+        ident_t mat = sh_var(sh, (struct pl_shader_var) {
+            .var = pl_var_mat3("lms2rgb"),
+            .data = PL_TRANSPOSE_3X3(dovi_lms2rgb.m),
+        });
+
+        pl_shader_linearize(sh, pl_color_space_hdr10);
+        GLSL("color.rgb = %s * color.rgb; \n", mat);
+        pl_shader_delinearize(sh, pl_color_space_hdr10);
+        break;
+    }
+
     case PL_COLOR_SYSTEM_UNKNOWN:
     case PL_COLOR_SYSTEM_RGB:
     case PL_COLOR_SYSTEM_XYZ:
@@ -215,6 +448,10 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
         pl_shader_delinearize(sh, csp);
         break;
     }
+
+    case PL_COLOR_SYSTEM_DOLBYVISION:
+        SH_FAIL(sh, "Cannot un-apply dolbyvision yet (no inverse reshaping)!");
+        return;
 
     case PL_COLOR_SYSTEM_UNKNOWN:
     case PL_COLOR_SYSTEM_RGB:

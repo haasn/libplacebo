@@ -33,6 +33,7 @@ bool pl_color_system_is_ycbcr_like(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_BT_2020_C:
     case PL_COLOR_SYSTEM_BT_2100_PQ:
     case PL_COLOR_SYSTEM_BT_2100_HLG:
+    case PL_COLOR_SYSTEM_DOLBYVISION:
     case PL_COLOR_SYSTEM_YCGCO:
         return true;
     case PL_COLOR_SYSTEM_COUNT: break;
@@ -55,6 +56,7 @@ bool pl_color_system_is_linear(enum pl_color_system sys)
     case PL_COLOR_SYSTEM_BT_2020_C:
     case PL_COLOR_SYSTEM_BT_2100_PQ:
     case PL_COLOR_SYSTEM_BT_2100_HLG:
+    case PL_COLOR_SYSTEM_DOLBYVISION:
     case PL_COLOR_SYSTEM_XYZ:
         return false;
     case PL_COLOR_SYSTEM_COUNT: break;
@@ -115,6 +117,7 @@ bool pl_color_repr_equal(const struct pl_color_repr *c1,
     return c1->sys    == c2->sys &&
            c1->levels == c2->levels &&
            c1->alpha  == c2->alpha &&
+           c1->dovi   == c2->dovi &&
            pl_bit_encoding_equal(&c1->bits, &c2->bits);
 }
 
@@ -134,12 +137,16 @@ void pl_color_repr_merge(struct pl_color_repr *orig, const struct pl_color_repr 
         .sys    = PL_DEF(orig->sys,    new->sys),
         .levels = PL_DEF(orig->levels, new->levels),
         .alpha  = PL_DEF(orig->alpha,  new->alpha),
+        .dovi   = PL_DEF(orig->dovi,   new->dovi),
         .bits   = pl_bit_encoding_merge(&orig->bits, &new->bits),
     };
 }
 
 enum pl_color_levels pl_color_levels_guess(const struct pl_color_repr *repr)
 {
+    if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
+        return PL_COLOR_LEVELS_FULL;
+
     if (repr->levels)
         return repr->levels;
 
@@ -1024,7 +1031,7 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         m = (struct pl_matrix3x3) {{
             {0, 0, 1},
             {1, 0, 0},
-            {0, 1, 0}
+            {0, 1, 0},
         }};
         break;
     case PL_COLOR_SYSTEM_BT_2100_PQ: {
@@ -1049,6 +1056,9 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         }};
         break;
     }
+    case PL_COLOR_SYSTEM_DOLBYVISION:
+        m = repr->dovi->nonlinear;
+        break;
     case PL_COLOR_SYSTEM_YCGCO:
         m = (struct pl_matrix3x3) {{
             {1,  -1,  1},
@@ -1126,7 +1136,14 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     double mul[3]   = { ymul, ymul, ymul };
     double black[3] = { ymin, ymin, ymin };
 
-    if (pl_color_system_is_ycbcr_like(repr->sys)) {
+    if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION) {
+        // The RPU matrix already includes levels normalization, but in this
+        // case we also have to respect the signalled color offsets
+        for (int i = 0; i < 3; i++) {
+            mul[i] = 1.0;
+            black[i] = repr->dovi->nonlinear_offset[i] * scale;
+        }
+    } else if (pl_color_system_is_ycbcr_like(repr->sys)) {
         mul[1]   = mul[2]   = cmul;
         black[1] = black[2] = cmid;
     }
