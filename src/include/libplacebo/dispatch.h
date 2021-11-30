@@ -230,6 +230,8 @@ size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out_cache);
 // never fail. It doesn't forget about any existing shaders, but merely
 // initializes an internal state cache needed to more efficiently compile
 // shaders that are not yet present in the `pl_dispatch`.
+//
+// Note: See the security warnings on `pl_pass_params.cached_program`.
 void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache);
 
 PL_API_END

@@ -47,6 +47,8 @@ size_t pl_renderer_save(pl_renderer rr, uint8_t *out_cache);
 
 // Load the result of a previous `pl_renderer_save` call. See
 // `pl_dispatch_load` for more information.
+//
+// Note: See the security warnings on `pl_pass_params.cached_program`.
 void pl_renderer_load(pl_renderer rr, const uint8_t *cache);
 
 enum pl_lut_type {
