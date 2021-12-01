@@ -2,6 +2,7 @@ glfw = dependency('glfw3', required: false)
 sdl = dependency('sdl2', required: false)
 sdl_image = dependency('SDL2_image', required: false)
 pthread = dependency('threads', required: false)
+dovi = dependency('dovi', required: false)
 
 ffmpeg_deps = [
   dependency('libavcodec', required: false),
@@ -35,6 +36,7 @@ endif
 
 conf_demos = configuration_data()
 conf_demos.set('HAVE_NUKLEAR', nuklear_found)
+conf_demos.set('HAVE_DOVI', dovi.found())
 
 apis = []
 
@@ -117,7 +119,7 @@ else
   endif
 
   if ffmpeg_found
-    plplay_deps = [ dep, pthread] + ffmpeg_deps
+    plplay_deps = [ dep, pthread, dovi ] + ffmpeg_deps
     if nuklear_found
       plplay_deps += nuklear
     endif

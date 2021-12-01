@@ -29,6 +29,15 @@ static void ui_destroy(struct ui **ui) {}
 static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { return true; };
 #endif
 
+// Dolby Vision support requires quite new libavformat
+#ifdef HAVE_DOVI
+# if LIBAVFORMAT_VERSION_INT >= AV_VERSION_INT(57, 9, 100)
+#  include "libdovi/rpu_parser.h"
+# else
+#  undef HAVE_DOVI
+# endif
+#endif
+
 #include <libplacebo/renderer.h>
 #include <libplacebo/shaders/lut.h>
 #include <libplacebo/utils/libav.h>
@@ -85,6 +94,11 @@ struct plplay {
     struct pass_info blend_info[MAX_BLEND_FRAMES];
     struct pass_info frame_info[MAX_FRAME_PASSES];
     int num_frame_passes;
+
+#ifdef HAVE_DOVI
+    // for persistent metadata
+    struct pl_dovi_metadata dovi;
+#endif
 };
 
 static void uninit(struct plplay *p)
@@ -226,6 +240,11 @@ static bool init_codec(struct plplay *p)
     return true;
 }
 
+#ifdef HAVE_DOVI
+static struct pl_dovi_metadata *
+create_dovi_meta(struct plplay *p, DoviRpuOpaque *rpu, const DoviRpuDataHeader *hdr);
+#endif
+
 static bool map_frame(pl_gpu gpu, pl_tex *tex,
                       const struct pl_source_frame *src,
                       struct pl_frame *out_frame)
@@ -233,19 +252,42 @@ static bool map_frame(pl_gpu gpu, pl_tex *tex,
     AVFrame *frame = src->frame_data;
     struct plplay *p = frame->opaque;
     bool ok = pl_map_avframe(gpu, out_frame, tex, frame);
-    av_frame_free(&frame); // references are preserved by `out_frame`
     if (!ok) {
         fprintf(stderr, "Failed mapping AVFrame!\n");
+        av_frame_free(&frame);
         return false;
     }
 
     pl_frame_copy_stream_props(out_frame, p->stream);
+
+#ifdef HAVE_DOVI
+    const AVFrameSideData *sd;
+    sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DOVI_RPU_BUFFER);
+    if (sd && sd->size) {
+        DoviRpuOpaque *rpu = dovi_parse_unspec62_nalu(sd->data, sd->size);
+        const DoviRpuDataHeader *header = dovi_rpu_get_header(rpu);
+        if (!header) {
+            fprintf(stderr, "Failed parsing RPU: %s\n", dovi_rpu_get_error(rpu));
+        } else {
+            out_frame->repr.dovi = create_dovi_meta(p, rpu, header);
+            out_frame->repr.sys = PL_COLOR_SYSTEM_DOLBYVISION;
+            out_frame->color.primaries = PL_COLOR_PRIM_BT_2020;
+            out_frame->color.transfer = PL_COLOR_TRC_PQ;
+
+            dovi_rpu_free_header(header);
+        }
+        dovi_rpu_free(rpu);
+    }
+#endif
+
+    av_frame_free(&frame); // references are preserved by `out_frame`
     return true;
 }
 
 static void unmap_frame(pl_gpu gpu, struct pl_frame *frame,
                         const struct pl_source_frame *src)
 {
+    free((void *) frame->repr.dovi);
     pl_unmap_avframe(gpu, frame);
 }
 
@@ -1364,4 +1406,88 @@ static void update_settings(struct plplay *p)
 
 #else
 static void update_settings(struct plplay *p) { }
-#endif
+#endif // HAVE_NUKLEAR
+
+#ifdef HAVE_DOVI
+static struct pl_dovi_metadata *
+create_dovi_meta(struct plplay *p, DoviRpuOpaque *rpu, const DoviRpuDataHeader *hdr)
+{
+    if (hdr->use_prev_vdr_rpu_flag)
+        goto skip_vdm;
+
+    const DoviRpuDataMapping *vdm = dovi_rpu_get_data_mapping(rpu);
+    if (!vdm)
+        goto skip_vdm;
+
+    const uint8_t bits = hdr->bl_bit_depth_minus8 + 8;
+    const float scale = 1.0f / (1 << hdr->coefficient_log2_denom);
+
+    for (int c = 0; c < 3; c++) {
+        struct pl_reshape_data *cmp = &p->dovi.comp[c];
+        uint16_t pivot = 0;
+        cmp->num_pivots = hdr->num_pivots_minus_2[c] + 2;
+        for (int pivot_idx = 0; pivot_idx < cmp->num_pivots; pivot_idx++) {
+            pivot += hdr->pred_pivot_value[c].data[pivot_idx];
+            cmp->pivots[pivot_idx] = (float) pivot / ((1 << bits) - 1);
+        }
+
+        for (int i = 0; i < cmp->num_pivots - 1; i++) {
+            memset(cmp->poly_coeffs[i], 0, sizeof(cmp->poly_coeffs[i]));
+            cmp->method[i] = vdm->mapping_idc[c].data[i];
+
+            switch (cmp->method[i]) {
+            case 0: // polynomial
+                for (int k = 0; k <= vdm->poly_order_minus1[c].data[i] + 1; k++) {
+                    int64_t ipart = vdm->poly_coef_int[c].list[i]->data[k];
+                    uint64_t fpart = vdm->poly_coef[c].list[i]->data[k];
+                    cmp->poly_coeffs[i][k] = ipart + scale * fpart;
+                }
+                break;
+            case 1: // MMR
+                int64_t ipart = vdm->mmr_constant_int[c].data[i];
+                uint64_t fpart = vdm->mmr_constant[c].data[i];
+                cmp->mmr_constant[i] = ipart + scale * fpart;
+                cmp->mmr_order[i] = vdm->mmr_order_minus1[c].data[i] + 1;
+                for (int j = 1; j <= cmp->mmr_order[i]; j++) {
+                    for (int k = 0; k < 7; k++) {
+                        ipart = vdm->mmr_coef_int[c].list[i]->list[j]->data[k];
+                        fpart = vdm->mmr_coef[c].list[i]->list[j]->data[k];
+                        cmp->mmr_coeffs[i][j - 1][k] = ipart + scale * fpart;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    dovi_rpu_free_data_mapping(vdm);
+
+skip_vdm:
+    if (hdr->vdr_dm_metadata_present_flag) {
+        const DoviVdrDmData *dm_data = dovi_rpu_get_vdr_dm_data(rpu);
+        if (!dm_data)
+            goto done;
+
+        const uint32_t *off = &dm_data->ycc_to_rgb_offset0;
+        for (int i = 0; i < 3; i++)
+            p->dovi.nonlinear_offset[i] = (float) off[i] / (1 << 28);
+
+        const int16_t *src = &dm_data->ycc_to_rgb_coef0;
+        float *dst = &p->dovi.nonlinear.m[0][0];
+        for (int i = 0; i < 9; i++)
+            dst[i] = src[i] / 8192.0;
+
+        src = &dm_data->rgb_to_lms_coef0;
+        dst = &p->dovi.linear.m[0][0];
+        for (int i = 0; i < 9; i++)
+            dst[i] = src[i] / 16384.0;
+
+        dovi_rpu_free_vdr_dm_data(dm_data);
+    }
+
+done: ;
+    struct pl_dovi_metadata *ret = malloc(sizeof(p->dovi));
+    memcpy(ret, &p->dovi, sizeof(p->dovi));
+    return ret;
+}
+#endif // HAVE_DOVI
