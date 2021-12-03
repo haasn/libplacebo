@@ -1127,7 +1127,7 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
     }
 
     if (need_peak) {
-        GLSL("float orig = max(sig_orig[sig_idx], 1e-10);       \n"
+        GLSL("float orig = max(sig_orig[sig_idx], 1e-6);        \n"
              "vec3 sig_lin = sig_orig * sig[sig_idx] / orig;    \n");
 
         // Mix between the per-channel tone mapped `sig` and the linear tone
