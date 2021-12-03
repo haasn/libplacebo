@@ -1461,4 +1461,5 @@ void pl_mpv_user_shader_destroy(const struct pl_hook **hookp)
     }
 
     pl_free((void *) hook);
+    *hookp = NULL;
 }
