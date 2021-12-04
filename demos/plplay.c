@@ -31,7 +31,7 @@ static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { ret
 
 // Dolby Vision support requires quite new libavformat
 #ifdef HAVE_DOVI
-# if LIBAVFORMAT_VERSION_INT >= AV_VERSION_INT(57, 9, 100)
+# if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 9, 100)
 #  include "libdovi/rpu_parser.h"
 # else
 #  undef HAVE_DOVI
