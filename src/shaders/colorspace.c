@@ -255,7 +255,9 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
     // XYZ needs special handling due to the input gamma logic
     if (repr->sys == PL_COLOR_SYSTEM_XYZ) {
         ident_t scale = SH_FLOAT(pl_color_repr_normalize(repr));
-        GLSL("color.rgb = pow(vec3(%s) * color.rgb, vec3(2.6));\n", scale);
+        GLSL("color.rgb = max(color.rgb, vec3(0.0));            \n"
+             "color.rgb = pow(vec3(%s) * color.rgb, vec3(2.6)); \n",
+             scale);
     }
 
     if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION) {
@@ -390,7 +392,7 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
             .var = pl_var_float("gamma"),
             .data = &params->gamma,
         });
-        GLSL("color.rgb = pow(color.rgb, vec3(%s)); \n", gamma);
+        GLSL("color.rgb = pow(max(color.rgb, vec3(0.0)), vec3(%s)); \n", gamma);
     }
 
     GLSL("}\n");
