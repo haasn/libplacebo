@@ -636,8 +636,15 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
           max_pts = params->pts + params->radius * p->fps.estimate;
 
     enum pl_queue_status ret;
-    if ((ret = advance(p, min_pts, params)))
+    switch ((ret = advance(p, min_pts, params))) {
+    case PL_QUEUE_ERR:
+    case PL_QUEUE_EOF:
         return ret;
+    case PL_QUEUE_MORE:
+        goto done;
+    case PL_QUEUE_OK:
+        break;
+    }
 
     // Keep adding new frames until we've covered the range we care about
     pl_assert(p->queue.num);
@@ -683,7 +690,6 @@ done: ;
         .vsync_duration = p->vps.estimate / p->fps.estimate,
     };
 
-    pl_assert(mix->num_frames);
     PL_TRACE(p, "Showing mix of %d frames for target PTS %f:",
              mix->num_frames, params->pts);
     for (int i = 0; i < mix->num_frames; i++)
