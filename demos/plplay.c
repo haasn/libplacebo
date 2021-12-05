@@ -1443,7 +1443,7 @@ create_dovi_meta(struct plplay *p, DoviRpuOpaque *rpu, const DoviRpuDataHeader *
                     cmp->poly_coeffs[i][k] = ipart + scale * fpart;
                 }
                 break;
-            case 1: // MMR
+            case 1: { // MMR
                 int64_t ipart = vdm->mmr_constant_int[c].data[i];
                 uint64_t fpart = vdm->mmr_constant[c].data[i];
                 cmp->mmr_constant[i] = ipart + scale * fpart;
@@ -1456,6 +1456,7 @@ create_dovi_meta(struct plplay *p, DoviRpuOpaque *rpu, const DoviRpuDataHeader *
                     }
                 }
                 break;
+            }
             }
         }
     }
