@@ -728,6 +728,61 @@ static inline void pl_frame_copy_stream_props(struct pl_frame *out,
     }
 }
 
+#ifdef PL_HAVE_LAV_DOLBY_VISION
+static void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
+                                 const AVDOVIMetadata *data)
+{
+    const AVDOVIRpuDataHeader *header;
+    const AVDOVIDataMapping *mapping;
+    const AVDOVIColorMetadata *color;
+    if (!data)
+        return;
+
+    header = av_dovi_get_header(data);
+    mapping = av_dovi_get_mapping(data);
+    color = av_dovi_get_color(data);
+
+    for (int i = 0; i < 3; i++)
+        out->nonlinear_offset[i] = av_q2d(color->ycc_to_rgb_offset[i]);
+    for (int i = 0; i < 9; i++) {
+        float *nonlinear = &out->nonlinear.m[0][0];
+        float *linear = &out->linear.m[0][0];
+        nonlinear[i] = av_q2d(color->ycc_to_rgb_matrix[i]);
+        linear[i] = av_q2d(color->rgb_to_lms_matrix[i]);
+    }
+    for (int c = 0; c < 3; c++) {
+        const AVDOVIReshapingCurve *csrc = &mapping->curves[c];
+        struct pl_reshape_data *cdst = &out->comp[c];
+        cdst->num_pivots = csrc->num_pivots;
+        for (int i = 0; i < csrc->num_pivots; i++) {
+            const float scale = 1.0f / ((1 << header->bl_bit_depth) - 1);
+            cdst->pivots[i] = scale * csrc->pivots[i];
+        }
+        for (int i = 0; i < csrc->num_pivots - 1; i++) {
+            const float scale = 1.0f / (1 << header->coef_log2_denom);
+            cdst->method[i] = csrc->mapping_idc[i];
+            switch (csrc->mapping_idc[i]) {
+            case AV_DOVI_MAPPING_POLYNOMIAL:
+                for (int k = 0; k < 3; k++) {
+                    cdst->poly_coeffs[i][k] = (k <= csrc->poly_order[i])
+                        ? scale * csrc->poly_coef[i][k]
+                        : 0.0f;
+                }
+                break;
+            case AV_DOVI_MAPPING_MMR:
+                cdst->mmr_order[i] = csrc->mmr_order[i];
+                cdst->mmr_constant[i] = scale * csrc->mmr_constant[i];
+                for (int j = 0; j < csrc->mmr_order[i]; j++) {
+                    for (int k = 0; k < 7; k++)
+                        cdst->mmr_coeffs[i][j][k] = scale * csrc->mmr_coef[i][j][k];
+                }
+                break;
+            }
+        }
+    }
+}
+#endif // PL_HAVE_LAV_DOLBY_VISION
+
 static inline bool pl_frame_recreate_from_avframe(pl_gpu gpu,
                                                   struct pl_frame *out,
                                                   pl_tex tex[4],
@@ -912,8 +967,9 @@ static void pl_unmap_avframe_vulkan(pl_gpu gpu, struct pl_frame *frame)
 }
 #endif
 
-static inline bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out,
-                                  pl_tex tex[4], const AVFrame *frame)
+static inline bool pl_map_avframe_internal(pl_gpu gpu, struct pl_frame *out,
+                                           pl_tex tex[4], const AVFrame *frame,
+                                           bool can_alloc)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     struct pl_plane_data data[4] = {0};
@@ -921,7 +977,23 @@ static inline bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out,
     int planes;
 
     pl_frame_from_avframe(out, frame);
-    out->user_data = av_frame_clone(frame);
+    if (can_alloc) {
+#ifdef PL_HAVE_LAV_DOLBY_VISION
+        AVFrameSideData *sd;
+        if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DOVI_METADATA))) {
+            struct pl_dovi_metadata *dovi = malloc(sizeof(*dovi));
+            if (!dovi)
+                goto error; /* oom */
+
+            pl_map_dovi_metadata(dovi, (AVDOVIMetadata *) sd->data);
+            out->repr.dovi = dovi;
+            out->repr.sys = PL_COLOR_SYSTEM_DOLBYVISION;
+            out->color.primaries = PL_COLOR_PRIM_BT_2020;
+            out->color.transfer = PL_COLOR_TRC_PQ;
+        }
+#endif
+        out->user_data = av_frame_clone(frame);
+    }
 
     switch (frame->format) {
     case AV_PIX_FMT_DRM_PRIME:
@@ -982,22 +1054,34 @@ error:
     return false;
 }
 
+static inline bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out,
+                                  pl_tex tex[4], const AVFrame *frame)
+{
+    return pl_map_avframe_internal(gpu, out, tex, frame, true);
+}
+
 static inline void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame)
 {
     AVFrame *avframe = frame->user_data;
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(avframe->format);
+    const AVPixFmtDescriptor *desc;
+    if (!avframe)
+        goto done;
 
 #ifdef HAVE_LAV_VULKAN
     if (avframe->format == AV_PIX_FMT_VULKAN)
         pl_unmap_avframe_vulkan(gpu, frame);
 #endif
 
+    desc = av_pix_fmt_desc_get(avframe->format);
     if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) {
         for (int i = 0; i < 4; i++)
             pl_tex_destroy(gpu, &frame->planes[i].texture);
     }
 
     av_frame_free(&avframe);
+    free((void *) frame->repr.dovi);
+
+done:
     memset(frame, 0, sizeof(*frame)); // sanity
 }
 
@@ -1006,12 +1090,11 @@ static inline bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL)
+        return false; // requires allocation
+
+    if (!pl_map_avframe_internal(gpu, out_frame, tex, frame, false))
         return false;
 
-    if (!pl_map_avframe(gpu, out_frame, tex, frame))
-        return false;
-
-    av_frame_free((AVFrame **) &out_frame->user_data);
     return true;
 }
 

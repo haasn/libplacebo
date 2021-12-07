@@ -27,6 +27,11 @@ PL_API_BEGIN
 #include <libavutil/frame.h>
 #include <libavcodec/avcodec.h>
 
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 16, 100)
+# define PL_HAVE_LAV_DOLBY_VISION
+# include <libavutil/dovi_meta.h>
+#endif
+
 // Fill in the details of a `pl_frame` from an AVFrame. This function will
 // explicitly clear `out_frame`, setting all extra fields to 0. After this
 // function returns, the only missing data is information related to the plane
@@ -37,6 +42,10 @@ PL_API_BEGIN
 // metadata, the resulting `out_image->profile` will reference this pointer,
 // meaning that in general, the `pl_frame` is only guaranteed to be valid as
 // long as the AVFrame is not freed.
+//
+// Note: This will ignore Dolby Vision metadata by default (to avoid leaking
+// memory), either switch to pl_map_avframe or do it manually using
+// pl_map_dovi_metadata.
 static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *frame);
 
 // Deprecated aliases for backwards compatibility
@@ -49,6 +58,12 @@ static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *fra
 // FFmpeg rather annoyingly does not propagate stream-level metadata to frames.
 static void pl_frame_copy_stream_props(struct pl_frame *out_frame,
                                        const AVStream *stream);
+
+#ifdef PL_HAVE_LAV_DOLBY_VISION
+// Helper function to map Dolby Vision metadata from the FFmpeg format.
+static void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
+                                 const AVDOVIMetadata *metadata);
+#endif
 
 // Helper function to test if a pixfmt would be supported by the GPU.
 // Essentially, this can be used to check if `pl_upload_avframe` would work for
@@ -85,6 +100,7 @@ static void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame);
 // - Does not support hardware-accelerated frames
 // - Does not require manual unmapping
 // - Does not touch `frame->user_data`.
+// - Does not automatically map dovi metadata
 // - `frame` must not be freed by the user before `frame` is done being used
 static PL_DEPRECATED bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
                                             pl_tex tex[4], const AVFrame *frame);
