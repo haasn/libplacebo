@@ -1206,6 +1206,7 @@ static void update_settings(struct plplay *p)
                 [PL_COLOR_SYSTEM_BT_2020_C]     = "ITU-R Rec. BT.2020 (constant luminance)",
                 [PL_COLOR_SYSTEM_BT_2100_PQ]    = "ITU-R Rec. BT.2100 ICtCp PQ variant",
                 [PL_COLOR_SYSTEM_BT_2100_HLG]   = "ITU-R Rec. BT.2100 ICtCp HLG variant",
+                [PL_COLOR_SYSTEM_DOLBYVISION]   = "Dolby Vision (invalid for output)",
                 [PL_COLOR_SYSTEM_YCGCO]         = "YCgCo (derived from RGB)",
                 [PL_COLOR_SYSTEM_RGB]           = "Red, Green and Blue",
                 [PL_COLOR_SYSTEM_XYZ]           = "CIE 1931 XYZ, pre-encoded with gamma 2.6",
@@ -1214,6 +1215,8 @@ static void update_settings(struct plplay *p)
             nk_label(nk, "System:", NK_TEXT_LEFT);
             trepr->sys = nk_combo(nk, systems, PL_COLOR_SYSTEM_COUNT, trepr->sys,
                                   16, nk_vec2(nk_widget_width(nk), 200));
+            if (trepr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
+                trepr->sys =PL_COLOR_SYSTEM_UNKNOWN;
 
             static const char *levels[PL_COLOR_LEVELS_COUNT] = {
                 [PL_COLOR_LEVELS_UNKNOWN]   = "Auto (unknown)",
