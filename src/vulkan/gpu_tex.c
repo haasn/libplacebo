@@ -82,7 +82,6 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
 
     tex_vk->layout = layout;
     vk_cmd_callback(cmd, (vk_cb) vk_tex_deref, gpu, tex);
-    vk_cmd_obj(cmd, tex);
 }
 
 static void vk_tex_destroy(pl_gpu gpu, struct pl_tex *tex)
@@ -990,11 +989,9 @@ bool vk_tex_poll(pl_gpu gpu, pl_tex tex, uint64_t timeout)
     if (pl_rc_count(&tex_vk->rc) == 1)
         return false;
 
-    // Otherwise, we're force to submit all queued commands so that the
-    // user is guaranteed to see progress eventually, even if they call
-    // this in a tight loop
+    // Otherwise, we're force to submit any queued command so that the user is
+    // guaranteed to see progress eventually, even if they call this in a loop
     CMD_SUBMIT(NULL);
-    vk_flush_obj(vk, tex);
     vk_poll_commands(vk, timeout);
 
     return pl_rc_count(&tex_vk->rc) > 1;
@@ -1002,8 +999,6 @@ bool vk_tex_poll(pl_gpu gpu, pl_tex tex, uint64_t timeout)
 
 bool vk_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync)
 {
-    struct pl_vk *p = PL_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     struct pl_sync_vk *sync_vk = PL_PRIV(sync);
 
@@ -1018,9 +1013,7 @@ bool vk_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync)
     tex_vk->sem.write.queue = tex_vk->sem.read.queue = NULL;
 
     vk_cmd_sig(cmd, (pl_vulkan_sem){ sync_vk->wait });
-    CMD_SUBMIT(&cmd);
-
-    if (!vk_flush_commands(vk))
+    if (!CMD_SUBMIT(&cmd))
         goto error;
 
     // Remember the other dependency and hold on to the sync object
@@ -1126,8 +1119,6 @@ VkImage pl_vulkan_unwrap(pl_gpu gpu, pl_tex tex, VkFormat *out_format,
 bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
                     pl_vulkan_sem sem_out)
 {
-    struct pl_vk *p = PL_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     pl_assert(sem_out.sem);
 
@@ -1145,12 +1136,10 @@ bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
     vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                    0, layout, false);
 
-    tex_vk->sem.write.queue = tex_vk->sem.read.queue = NULL;
-
     vk_cmd_sig(cmd, sem_out);
-    CMD_SUBMIT(&cmd);
 
-    tex_vk->held = vk_flush_commands(vk);
+    tex_vk->sem.write.queue = tex_vk->sem.read.queue = NULL;
+    tex_vk->held = CMD_SUBMIT(&cmd);
     return tex_vk->held;
 }
 

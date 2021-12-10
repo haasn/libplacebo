@@ -57,9 +57,6 @@ struct vk_cmd {
     // to fire once the VkFence completes. These are used for multiple purposes,
     // ranging from garbage collection (resource deallocation) to fencing.
     PL_ARRAY(struct vk_callback) callbacks;
-    // Abstract objects associated with this command. Can be used to
-    // selectively flush.
-    PL_ARRAY(const void *) objs;
 };
 
 // Associate a callback with the completion of the current command. This
@@ -70,10 +67,6 @@ void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback,
 // Associate a raw dependency for the current command. This semaphore must
 // signal by the corresponding stage before the command may execute.
 void vk_cmd_dep(struct vk_cmd *cmd, VkPipelineStageFlags stage, pl_vulkan_sem dep);
-
-// Associate an object with a command. This can be used to partially flush
-// commands only involving the object in question.
-void vk_cmd_obj(struct vk_cmd *cmd, const void *obj);
 
 // Associate a raw signal with the current command. This semaphore will signal
 // after the command completes.
@@ -131,9 +124,9 @@ void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool);
 // Returns NULL on failure.
 struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool);
 
-// Finish recording a command buffer and queue it for execution. This function
+// Finish recording a command buffer and submit it for execution. This function
 // takes over ownership of **cmd, and sets *cmd to NULL in doing so.
-bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd **cmd);
+bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **cmd);
 
 // Block until some commands complete executing. This is the only function that
 // actually processes the callbacks. Will wait at most `timeout` nanoseconds
@@ -145,14 +138,6 @@ bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd **cmd);
 // in infinite loops if waiting for the completion of callbacks that were
 // never flushed!
 bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout);
-
-// Flush all currently queued commands. Returns whether successful. Failed
-// commands will be implicitly dropped.
-bool vk_flush_commands(struct vk_ctx *vk);
-
-// Like `vk_flush_commands`, but only flushes up to the last command involving
-// `obj`, inclusive. If `obj` is NULL, behaves as `vk_flush_commands`.
-bool vk_flush_obj(struct vk_ctx *vk, const void *obj);
 
 // Rotate through queues in each command pool. Call this once per frame, after
 // submitting all of the command buffers for that frame. Calling this more

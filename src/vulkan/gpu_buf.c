@@ -68,7 +68,6 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
 
     buf_vk->exported = export;
     vk_cmd_callback(cmd, (vk_cb) vk_buf_deref, gpu, buf);
-    vk_cmd_obj(cmd, buf);
 }
 
 void vk_buf_deref(pl_gpu gpu, pl_buf buf)
@@ -313,11 +312,10 @@ bool vk_buf_poll(pl_gpu gpu, pl_buf buf, uint64_t timeout)
     if (pl_rc_count(&buf_vk->rc) == 1)
         return false;
 
-    // Otherwise, we're force to submit all queued commands so that the
+    // Otherwise, we're force to submit any queued command so that the
     // user is guaranteed to see progress eventually, even if they call
     // this in a tight loop
     CMD_SUBMIT(NULL);
-    vk_flush_obj(vk, buf);
     vk_poll_commands(vk, timeout);
 
     return pl_rc_count(&buf_vk->rc) > 1;
@@ -444,8 +442,6 @@ void vk_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
 
 bool vk_buf_export(pl_gpu gpu, pl_buf buf)
 {
-    struct pl_vk *p = PL_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     if (buf_vk->exported)
         return true;
@@ -462,6 +458,5 @@ bool vk_buf_export(pl_gpu gpu, pl_buf buf)
                    0, buf->params.size, true);
 
 
-    CMD_SUBMIT(&cmd);
-    return vk_flush_commands(vk);
+    return CMD_SUBMIT(&cmd);
 }

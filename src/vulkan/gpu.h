@@ -80,7 +80,7 @@ struct pl_vk {
 };
 
 struct vk_cmd *_begin_cmd(pl_gpu, enum queue_type, const char *label, pl_timer);
-void _end_cmd(pl_gpu, struct vk_cmd **, bool submit);
+bool _end_cmd(pl_gpu, struct vk_cmd **, bool submit);
 
 #define CMD_BEGIN(type)              _begin_cmd(gpu, type, __func__, NULL)
 #define CMD_BEGIN_TIMED(type, timer) _begin_cmd(gpu, type, __func__, timer)

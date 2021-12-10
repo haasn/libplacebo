@@ -562,10 +562,8 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     // It's invalid to trigger another swapchain recreation while there's more
     // than one swapchain already active, so we need to flush any pending
     // asynchronous swapchain release operations that may be ongoing
-    while (p->old_swapchain) {
-        vk_flush_commands(vk);
+    while (p->old_swapchain)
         vk_poll_commands(vk, UINT64_MAX);
-    }
 
     VkSwapchainCreateInfoKHR sinfo = p->protoInfo;
     sinfo.oldSwapchain = p->swapchain;
@@ -773,9 +771,7 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
 
     p->frames_in_flight++;
     vk_cmd_callback(cmd, (vk_cb) present_cb, p, NULL);
-
-    vk_cmd_queue(vk, &cmd);
-    if (!vk_flush_commands(vk)) {
+    if (!vk_cmd_submit(vk, &cmd)) {
         pl_mutex_unlock(&p->lock);
         return false;
     }

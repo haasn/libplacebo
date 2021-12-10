@@ -871,7 +871,6 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         // Wait for a free descriptor set
         while (!pass_vk->dmask) {
             PL_TRACE(gpu, "No free descriptor sets! ...blocking (slow path)");
-            vk_flush_obj(vk, pass);
             vk_poll_commands(vk, 10000000); // 10 ms
         }
     }
@@ -893,7 +892,6 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             if (pass_vk->dmask & dsbit) {
                 ds = pass_vk->dss[i];
                 pass_vk->dmask &= ~dsbit; // unset
-                vk_cmd_obj(cmd, pass);
                 vk_cmd_callback(cmd, (vk_cb) set_ds, pass_vk,
                                 (void *)(uintptr_t) dsbit);
                 break;

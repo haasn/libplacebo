@@ -42,7 +42,6 @@
     PL_VK_FUN(name) = (PFN_vk##name) get_addr(inst, "vk" #name);
 
 // Hard-coded limit on the number of pending commands, to avoid OOM loops
-#define PL_VK_MAX_QUEUED_CMDS 1024
 #define PL_VK_MAX_PENDING_CMDS 1024
 
 // Shitty compatibility alias for very old vulkan.h versions
@@ -80,9 +79,8 @@ struct vk_ctx {
     struct vk_cmdpool *pool_compute;  // optional
     struct vk_cmdpool *pool_transfer; // optional
 
-    // Queued/pending commands. These are shared for the entire mpvk_ctx to
-    // ensure submission and callbacks are FIFO
-    PL_ARRAY(struct vk_cmd *) cmds_queued;  // recorded but not yet submitted
+    // Pending commands. These are shared for the entire mpvk_ctx to ensure
+    // submission and callbacks are FIFO
     PL_ARRAY(struct vk_cmd *) cmds_pending; // submitted but not completed
 
     // Pending callbacks that still need to be drained before processing
@@ -90,11 +88,6 @@ struct vk_ctx {
     // polled from another callback)
     const struct vk_callback *pending_callbacks;
     int num_pending_callbacks;
-
-    // A dynamic reference to the most recently submitted command that has not
-    // yet completed. Used to implement vk_dev_callback. Gets cleared when
-    // the command completes.
-    struct vk_cmd *last_cmd;
 
     // Instance-level function pointers
     PL_VK_FUN(CreateDevice);

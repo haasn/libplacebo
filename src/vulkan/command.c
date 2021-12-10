@@ -50,13 +50,6 @@ static void vk_cmd_reset(struct vk_ctx *vk, struct vk_cmd *cmd)
     cmd->depvalues.num = 0;
     cmd->sigs.num = 0;
     cmd->sigvalues.num = 0;
-    cmd->objs.num = 0;
-
-    // also make sure to reset vk->last_cmd in case this was the last command
-    pl_mutex_lock(&vk->lock);
-    if (vk->last_cmd == cmd)
-        vk->last_cmd = NULL;
-    pl_mutex_unlock(&vk->lock);
 }
 
 static void vk_cmd_destroy(struct vk_ctx *vk, struct vk_cmd *cmd)
@@ -106,8 +99,9 @@ void vk_dev_callback(struct vk_ctx *vk, vk_cb callback,
                      const void *priv, const void *arg)
 {
     pl_mutex_lock(&vk->lock);
-    if (vk->last_cmd) {
-        vk_cmd_callback(vk->last_cmd, callback, priv, arg);
+    if (vk->cmds_pending.num > 0) {
+        struct vk_cmd *last_cmd = vk->cmds_pending.elem[vk->cmds_pending.num - 1];
+        vk_cmd_callback(last_cmd, callback, priv, arg);
     } else {
         // The device was already idle, so we can just immediately call it
         callback((void *) priv, (void *) arg);
@@ -132,11 +126,6 @@ void vk_cmd_dep(struct vk_cmd *cmd, VkPipelineStageFlags stage, pl_vulkan_sem de
     PL_ARRAY_APPEND(cmd, cmd->deps, dep.sem);
     PL_ARRAY_APPEND(cmd, cmd->depvalues, dep.value);
     PL_ARRAY_APPEND(cmd, cmd->depstages, stage);
-}
-
-void vk_cmd_obj(struct vk_cmd *cmd, const void *obj)
-{
-    PL_ARRAY_APPEND(cmd, cmd->objs, obj);
 }
 
 void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig)
@@ -333,7 +322,7 @@ error:
     return NULL;
 }
 
-bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd **pcmd)
+bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
 {
     struct vk_cmd *cmd = *pcmd;
     if (!cmd)
@@ -345,16 +334,45 @@ bool vk_cmd_queue(struct vk_ctx *vk, struct vk_cmd **pcmd)
     VK(vk->EndCommandBuffer(cmd->buf));
     VK(vk->ResetFences(vk->dev, 1, &cmd->fence));
 
-    pl_mutex_lock(&vk->lock);
-    PL_ARRAY_APPEND(vk->alloc, vk->cmds_queued, cmd);
-    vk->last_cmd = cmd;
+    VkTimelineSemaphoreSubmitInfo tinfo = {
+        .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
+        .waitSemaphoreValueCount = cmd->depvalues.num,
+        .pWaitSemaphoreValues = cmd->depvalues.elem,
+        .signalSemaphoreValueCount = cmd->sigvalues.num,
+        .pSignalSemaphoreValues = cmd->sigvalues.elem,
+    };
 
-    if (vk->cmds_queued.num >= PL_VK_MAX_QUEUED_CMDS) {
-        PL_WARN(vk, "Exhausted the queued command limit.. forcing a flush now. "
-                "Consider using pl_gpu_flush after submitting a batch of work?");
-        vk_flush_commands(vk);
+    VkSubmitInfo sinfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = &tinfo,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd->buf,
+        .waitSemaphoreCount = cmd->deps.num,
+        .pWaitSemaphores = cmd->deps.elem,
+        .pWaitDstStageMask = cmd->depstages.elem,
+        .signalSemaphoreCount = cmd->sigs.num,
+        .pSignalSemaphores = cmd->sigs.elem,
+    };
+
+    if (pl_msg_test(vk->log, PL_LOG_TRACE)) {
+        PL_TRACE(vk, "Submitting command on queue %p (QF %d):",
+                 (void *)cmd->queue, pool->qf);
+        for (int n = 0; n < cmd->deps.num; n++) {
+            PL_TRACE(vk, "    waits on semaphore %p = %"PRIu64,
+                     (void *) cmd->deps.elem[n], cmd->depvalues.elem[n]);
+        }
+        for (int n = 0; n < cmd->sigs.num; n++) {
+            PL_TRACE(vk, "    signals semaphore %p = %"PRIu64,
+                    (void *) cmd->sigs.elem[n], cmd->sigvalues.elem[n]);
+        }
+        PL_TRACE(vk, "    signals fence %p", (void *) cmd->fence);
+        if (cmd->callbacks.num)
+            PL_TRACE(vk, "    signals %d callbacks", cmd->callbacks.num);
     }
 
+    VK(vk->QueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));
+    pl_mutex_lock(&vk->lock);
+    PL_ARRAY_APPEND(vk->alloc, vk->cmds_pending, cmd);
     pl_mutex_unlock(&vk->lock);
     return true;
 
@@ -400,113 +418,6 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
     return ret;
 }
 
-bool vk_flush_commands(struct vk_ctx *vk)
-{
-    return vk_flush_obj(vk, NULL);
-}
-
-bool vk_flush_obj(struct vk_ctx *vk, const void *obj)
-{
-    pl_mutex_lock(&vk->lock);
-
-    // Count how many commands we want to flush
-    int num_to_flush = vk->cmds_queued.num;
-    if (obj) {
-        num_to_flush = 0;
-        for (int i = 0; i < vk->cmds_queued.num; i++) {
-            struct vk_cmd *cmd = vk->cmds_queued.elem[i];
-            for (int o = 0; o < cmd->objs.num; o++) {
-                if (cmd->objs.elem[o] == obj) {
-                    num_to_flush = i+1;
-                    goto next_cmd;
-                }
-            }
-
-next_cmd: ;
-        }
-    }
-
-    if (!num_to_flush) {
-        pl_mutex_unlock(&vk->lock);
-        return true;
-    }
-
-    PL_TRACE(vk, "Flushing %d/%d queued commands",
-             num_to_flush, vk->cmds_queued.num);
-
-    bool ret = true;
-
-    for (int i = 0; i < num_to_flush; i++) {
-        struct vk_cmd *cmd = vk->cmds_queued.elem[i];
-        struct vk_cmdpool *pool = cmd->pool;
-
-        VkTimelineSemaphoreSubmitInfo tinfo = {
-            .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
-            .waitSemaphoreValueCount = cmd->depvalues.num,
-            .pWaitSemaphoreValues = cmd->depvalues.elem,
-            .signalSemaphoreValueCount = cmd->sigvalues.num,
-            .pSignalSemaphoreValues = cmd->sigvalues.elem,
-        };
-
-        VkSubmitInfo sinfo = {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .pNext = &tinfo,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &cmd->buf,
-            .waitSemaphoreCount = cmd->deps.num,
-            .pWaitSemaphores = cmd->deps.elem,
-            .pWaitDstStageMask = cmd->depstages.elem,
-            .signalSemaphoreCount = cmd->sigs.num,
-            .pSignalSemaphores = cmd->sigs.elem,
-        };
-
-        if (pl_msg_test(vk->log, PL_LOG_TRACE)) {
-            PL_TRACE(vk, "Submitting command on queue %p (QF %d):",
-                     (void *)cmd->queue, pool->qf);
-            for (int n = 0; n < cmd->objs.num; n++)
-                PL_TRACE(vk, "    uses object %p", cmd->objs.elem[n]);
-            for (int n = 0; n < cmd->deps.num; n++) {
-                PL_TRACE(vk, "    waits on semaphore %p = %"PRIu64,
-                         (void *) cmd->deps.elem[n], cmd->depvalues.elem[n]);
-            }
-            for (int n = 0; n < cmd->sigs.num; n++) {
-                PL_TRACE(vk, "    signals semaphore %p = %"PRIu64,
-                        (void *) cmd->sigs.elem[n], cmd->sigvalues.elem[n]);
-            }
-            PL_TRACE(vk, "    signals fence %p", (void *) cmd->fence);
-            if (cmd->callbacks.num)
-                PL_TRACE(vk, "    signals %d callbacks", cmd->callbacks.num);
-        }
-
-        VK(vk->QueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));
-        PL_ARRAY_APPEND(vk->alloc, vk->cmds_pending, cmd);
-        continue;
-
-error:
-        vk_cmd_reset(vk, cmd);
-        PL_ARRAY_APPEND(pool, pool->cmds, cmd);
-        vk->failed = true;
-        ret = false;
-    }
-
-    // Move remaining commands back to index 0
-    vk->cmds_queued.num -= num_to_flush;
-    if (vk->cmds_queued.num) {
-        memmove(vk->cmds_queued.elem, &vk->cmds_queued.elem[num_to_flush],
-                vk->cmds_queued.num * sizeof(vk->cmds_queued.elem[0]));
-    }
-
-    // Wait until we've processed some of the now pending commands
-    while (vk->cmds_pending.num > PL_VK_MAX_PENDING_CMDS) {
-        pl_mutex_unlock(&vk->lock); // don't hold mutex while blocking
-        vk_poll_commands(vk, UINT64_MAX);
-        pl_mutex_lock(&vk->lock);
-    }
-
-    pl_mutex_unlock(&vk->lock);
-    return ret;
-}
-
 void vk_rotate_queues(struct vk_ctx *vk)
 {
     pl_mutex_lock(&vk->lock);
@@ -523,6 +434,5 @@ void vk_rotate_queues(struct vk_ctx *vk)
 
 void vk_wait_idle(struct vk_ctx *vk)
 {
-    vk_flush_commands(vk);
     while (vk_poll_commands(vk, UINT64_MAX)) ;
 }

@@ -809,9 +809,8 @@ void pl_vulkan_destroy(pl_vulkan *pl_vk)
     vk_malloc_destroy(&vk->ma);
 
     if (vk->dev) {
-        PL_DEBUG(vk, "Flushing remaining commands...");
+        PL_DEBUG(vk, "Waiting for remaining commands...");
         vk_wait_idle(vk);
-        pl_assert(vk->cmds_queued.num == 0);
         pl_assert(vk->cmds_pending.num == 0);
         for (int i = 0; i < vk->pools.num; i++)
             vk_cmdpool_destroy(vk, vk->pools.elem[i]);
