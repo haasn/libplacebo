@@ -33,15 +33,7 @@
 # include <libavutil/film_grain_params.h>
 #endif
 
-// Try including hwcontext_vulkan.h automatically if possible (GCC/clang)
-#ifdef __has_include
-# if __has_include(<libavutil/hwcontext_vulkan.h>)
-#  include <libavutil/hwcontext_vulkan.h>
-# endif
-#endif
-
-#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 8, 100) && \
-    defined(AVUTIL_HWCONTEXT_VULKAN_H) && defined(PL_HAVE_VULKAN)
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 8, 100)
 # define HAVE_LAV_VULKAN
 # include <libplacebo/vulkan.h>
 #endif

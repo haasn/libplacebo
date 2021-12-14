@@ -18,13 +18,6 @@
 #ifndef LIBPLACEBO_LIBAV_H_
 #define LIBPLACEBO_LIBAV_H_
 
-// Note: Support for various hardware decoding formats depends on support
-// being available in FFmpeg. To ensure compatibility with this header, please
-// make sure to include, if possible, the following headers, *before* including
-// this one:
-//
-// - <libavutil/hwcontext_vulkan.h> (for AV_PIX_FMT_VULKAN)
-
 #include <libplacebo/gpu.h>
 #include <libplacebo/utils/upload.h>
 
