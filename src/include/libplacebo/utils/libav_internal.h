@@ -35,6 +35,7 @@
 
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 8, 100)
 # define HAVE_LAV_VULKAN
+# include <libavutil/hwcontext_vulkan.h>
 # include <libplacebo/vulkan.h>
 #endif
 
