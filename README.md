@@ -106,6 +106,8 @@ libplacebo to take care of everything.
   the needs of libplacebo, but may be useful to somebody else regardless. Also
   contains the structs needed to define a filter kernel for the purposes of
   libplacebo's upscaling routines.
+- `tone_mapping.h`: A collection of tone mapping functions, used for
+  conversions between HDR and SDR content.
 
 The API functions in this tier are either used throughout the program
 (context, common etc.) or are low-level implementations of filter kernels,

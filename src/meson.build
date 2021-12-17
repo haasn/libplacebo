@@ -189,6 +189,7 @@ headers = [
   'shaders/sampling.h',
   'shaders.h',
   'swapchain.h',
+  'tone_mapping.h',
   'utils/dav1d.h',
   'utils/dav1d_internal.h',
   'utils/frame_queue.h',
@@ -222,6 +223,7 @@ sources = [
   'shaders/lut.c',
   'shaders/sampling.c',
   'swapchain.c',
+  'tone_mapping.c',
   'utils/frame_queue.c',
   'utils/upload.c',
 ]
@@ -234,6 +236,7 @@ tests = [
   'lut.c',
   'filters.c',
   'string.c',
+  'tone_mapping.c',
   'utils.c',
 ]
 

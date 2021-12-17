@@ -1144,14 +1144,6 @@ bool pl_get_detected_peak(const pl_shader_obj state,
     return true;
 }
 
-static inline float pq_delinearize(float x)
-{
-    x *= PL_COLOR_SDR_WHITE / 10000.0;
-    x = powf(x, PQ_M1);
-    x = (PQ_C1 + PQ_C2 * x) / (1.0 + PQ_C3 * x);
-    x = pow(x, PQ_M2);
-    return x;
-}
 
 const struct pl_color_map_params pl_color_map_default_params = { PL_COLOR_MAP_DEFAULTS };
 
@@ -1311,7 +1303,8 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
              10000 / PL_COLOR_SDR_WHITE, PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
 
         // Normalize to be relative to the source brightness range
-        float pqlb = pq_delinearize(src.sig_floor * src.sig_scale);
+        float pqlb = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ,
+                                    src.sig_floor * src.sig_scale);
         ident_t pqlb_c = SH_FLOAT(pqlb);
         GLSL("float scale = 1.0 / (sig_pq.a - %s);                              \n"
              "sig = clamp(vec3(scale) * (sig_pq.rgb - vec3(%s)), 0.0, 1.0);     \n",
@@ -1327,7 +1320,8 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
                  "          (tb3 - 2.0 * tb2 + tb) * vec3(1.0 - ks) +           \n"
                  "          (-2.0 * tb3 + 3.0 * tb2) * vec3(maxLum);            \n"
                  "sig = mix(sig, pb, %s(greaterThan(sig, vec3(ks))));           \n",
-                 SH_FLOAT(pq_delinearize(dst.sig_peak * dst.sig_scale) - pqlb),
+                 SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ,
+                                         dst.sig_peak * dst.sig_scale) - pqlb),
                  sh_bvec(sh, 3));
         }
         if (need_black) {
@@ -1338,7 +1332,8 @@ static void pl_shader_tone_map(pl_shader sh, struct pl_color_space src,
                  "    p = min(1.0 / minLum, 4.0);                               \n"
                  "vec3 boost = vec3(minLum) * pow(vec3(1.0) - sig, vec3(p));    \n"
                  "vec3 sig_lift = sig + boost;                                  \n",
-                 SH_FLOAT(pq_delinearize(dst.sig_floor * dst.sig_scale) - pqlb));
+                 SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ,
+                          dst.sig_floor * dst.sig_scale) - pqlb));
             if (need_peak) {
                  GLSL("if (maxLum < 1.0) {                                      \n"
                       "sig_lift -= vec3(minLum);                                \n"
