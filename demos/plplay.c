@@ -751,7 +751,6 @@ static void update_settings(struct plplay *p)
     ui_update_input(p->ui, p->win);
     const char *dropped_file = window_get_file(p->win);
 
-    const struct pl_filter_preset *f;
     struct pl_render_params *par = &p->params;
 
     if (nk_begin(nk, "Settings", nk_rect(100, 100, 600, 600), win_flags)) {
@@ -816,6 +815,7 @@ static void update_settings(struct plplay *p)
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Image scaling", NK_MAXIMIZED)) {
+            const struct pl_filter_preset *f;
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
             nk_label(nk, "Upscaler:", NK_TEXT_LEFT);
             if (nk_combo_begin_label(nk, p->upscaler->description, nk_vec2(nk_widget_width(nk), 500))) {
@@ -963,71 +963,52 @@ static void update_settings(struct plplay *p)
             cpar->intent = nk_combo(nk, rendering_intents, 4, cpar->intent,
                                     16, nk_vec2(nk_widget_width(nk), 100));
 
-            static const char *tone_mapping_algos[PL_TONE_MAPPING_ALGORITHM_COUNT] = {
-                [PL_TONE_MAPPING_CLIP]              = "Clip",
-                [PL_TONE_MAPPING_MOBIUS]            = "Mobius",
-                [PL_TONE_MAPPING_REINHARD]          = "Reinhard",
-                [PL_TONE_MAPPING_HABLE]             = "Hable",
-                [PL_TONE_MAPPING_GAMMA]             = "Gamma",
-                [PL_TONE_MAPPING_LINEAR]            = "Linear",
-                [PL_TONE_MAPPING_BT_2390]           = "BT.2390",
-            };
-
-            nk_label(nk, "Tone mapping algorithm:", NK_TEXT_LEFT);
-            enum pl_tone_mapping_algorithm new_algo;
-            new_algo = nk_combo(nk, tone_mapping_algos, PL_TONE_MAPPING_ALGORITHM_COUNT,
-                                cpar->tone_mapping_algo, 16, nk_vec2(nk_widget_width(nk), 300));
-
-            const char *param = NULL;
-            float param_min, param_max, param_def = 0.0;
-            switch (new_algo) {
-            case PL_TONE_MAPPING_MOBIUS:
-                param = "Knee point";
-                param_min = 0.00;
-                param_max = 1.00;
-                param_def = 0.5;
-                break;
-            case PL_TONE_MAPPING_REINHARD:
-                param = "Contrast";
-                param_min = 0.00;
-                param_max = 1.00;
-                param_def = 0.5;
-                break;
-            case PL_TONE_MAPPING_GAMMA:
-                param = "Exponent";
-                param_min = 0.5;
-                param_max = 4.0;
-                param_def = 1.8;
-                break;
-            case PL_TONE_MAPPING_LINEAR:
-                param = "Exposure";
-                param_min = 0.1;
-                param_max = 100.0;
-                param_def = 1.0;
-                break;
-            default: break;
+            nk_label(nk, "Tone mapping function:", NK_TEXT_LEFT);
+            if (nk_combo_begin_label(nk, cpar->tone_mapping_function->description,
+                                     nk_vec2(nk_widget_width(nk), 500)))
+            {
+                nk_layout_row_dynamic(nk, 16, 1);
+                for (int i = 0; i < pl_num_tone_map_functions; i++) {
+                    const struct pl_tone_map_function *f = pl_tone_map_functions[i];
+                    if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT)) {
+                        if (f != cpar->tone_mapping_function)
+                            cpar->tone_mapping_param = f->param_def;
+                        cpar->tone_mapping_function = f;
+                    }
+                }
+                nk_combo_end(nk);
             }
 
-            // Explicitly reset the tone mapping parameter when changing this
-            // function, since the interpretation depends on the algorithm
-            if (new_algo != cpar->tone_mapping_algo)
-                cpar->tone_mapping_param = param_def;
-            cpar->tone_mapping_algo = new_algo;
+            static const char *tone_mapping_modes[PL_TONE_MAP_MODE_COUNT] = {
+                [PL_TONE_MAP_AUTO]                  = "Automatic selection",
+                [PL_TONE_MAP_RGB]                   = "Per-channel (RGB)",
+                [PL_TONE_MAP_MAX]                   = "Maximum component",
+                [PL_TONE_MAP_HYBRID]                = "Hybrid luminance",
+                [PL_TONE_MAP_LUMA]                  = "Luminance (BT.2446 A)",
+            };
+
+            nk_label(nk, "Tone mapping mode:", NK_TEXT_LEFT);
+            cpar->tone_mapping_mode = nk_combo(nk, tone_mapping_modes,
+                                               PL_TONE_MAP_MODE_COUNT,
+                                               cpar->tone_mapping_mode,
+                                               16, nk_vec2(nk_widget_width(nk), 300));
 
             nk_label(nk, "Algorithm parameter:", NK_TEXT_LEFT);
-            if (param) {
-                nk_property_float(nk, param, param_min, &cpar->tone_mapping_param,
-                                  param_max, 0.1, 0.01);
+            const struct pl_tone_map_function *fun = cpar->tone_mapping_function;
+            if (fun->param_desc) {
+                nk_property_float(nk, fun->param_desc, fmaxf(fun->param_min, 0.001),
+                                  &cpar->tone_mapping_param, fun->param_max,
+                                  0.01, 0.001);
             } else {
                 nk_label(nk, "(N/A)", NK_TEXT_LEFT);
             }
 
-            nk_property_float(nk, "Maximum boost", 1.0, &cpar->max_boost, 10.0, 0.1, 0.01);
-            nk_property_float(nk, "Desaturation", 0.0, &cpar->desaturation_strength, 1.0, 0.1, 0.01);
-            nk_property_float(nk, "Desat exponent", 0.0, &cpar->desaturation_exponent, 10.0, 0.1, 0.01);
-            nk_property_float(nk, "Desat base", 0.0, &cpar->desaturation_base, 10.0, 0.1, 0.01);
+            nk_property_int(nk, "LUT size", 16, &cpar->lut_size, 1024, 1, 1);
+            nk_property_float(nk, "Crosstalk", 0.0, &cpar->tone_mapping_crosstalk, 0.30, 0.01, 0.001);
+            nk_checkbox_label(nk, "Inverse tone mapping", &cpar->inverse_tone_mapping);
             nk_checkbox_label(nk, "Gamut warning", &cpar->gamut_warning);
             nk_checkbox_label(nk, "Colorimetric clipping", &cpar->gamut_clipping);
+            nk_checkbox_label(nk, "Force full LUT", &cpar->force_tone_mapping_lut);
 
             nk_layout_row_dynamic(nk, 50, 1);
             if (ui_widget_hover(nk, "Drop .cube file here...") && dropped_file) {
