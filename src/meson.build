@@ -71,6 +71,7 @@ endif
 
 unwind = dependency('libunwind', required: get_option('unwind'))
 conf_internal.set('PL_HAVE_UNWIND', unwind.found())
+conf_internal.set('PL_HAVE_EXECINFO', cc.has_header('execinfo.h'))
 if unwind.found()
   build_deps += [unwind, cc.find_library('dl', required : false)]
 endif

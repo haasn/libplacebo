@@ -234,7 +234,7 @@ void pl_log_stack_trace(pl_log log, enum pl_log_level lev)
     }
 }
 
-#elif defined(__linux__) && !defined(MSAN)
+#elif defined(PL_HAVE_EXECINFO) && !defined(MSAN)
 #include <execinfo.h>
 
 void pl_log_stack_trace(pl_log log, enum pl_log_level lev)
