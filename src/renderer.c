@@ -66,7 +66,7 @@ struct pl_renderer {
     bool disable_mixing;        // disable frame mixing
 
     // Shader resource objects and intermediate textures (FBOs)
-    pl_shader_obj peak_detect_state;
+    pl_shader_obj tone_map_state;
     pl_shader_obj dither_state;
     pl_shader_obj icc_state;
     pl_shader_obj grain_state[4];
@@ -75,6 +75,7 @@ struct pl_renderer {
     struct sampler sampler_main;
     struct sampler samplers_src[4];
     struct sampler samplers_dst[4];
+    bool peak_detect_active;
 
     // Temporary storage for vertex/index data
     PL_ARRAY(struct osd_vertex) osd_vertices;
@@ -208,7 +209,7 @@ void pl_renderer_destroy(pl_renderer *p_rr)
         pl_tex_destroy(rr->gpu, &rr->frame_fbos.elem[i]);
 
     // Free all shader resource objects
-    pl_shader_obj_destroy(&rr->peak_detect_state);
+    pl_shader_obj_destroy(&rr->tone_map_state);
     pl_shader_obj_destroy(&rr->dither_state);
     pl_shader_obj_destroy(&rr->icc_state);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->lut_state); i++)
@@ -243,7 +244,8 @@ void pl_renderer_flush_cache(pl_renderer rr)
         pl_tex_destroy(rr->gpu, &rr->frames.elem[i].tex);
     rr->frames.num = 0;
 
-    pl_shader_obj_destroy(&rr->peak_detect_state);
+    pl_reset_detected_peak(rr->tone_map_state);
+    rr->peak_detect_active = false;
 }
 
 const struct pl_render_params pl_render_fast_params = { PL_RENDER_DEFAULTS };
@@ -1102,20 +1104,21 @@ static void hdr_update_peak(struct pass_state *pass)
     }
 
     bool ok = pl_shader_detect_peak(img_sh(pass, &pass->img), pass->img.color,
-                                    &rr->peak_detect_state,
-                                    params->peak_detect_params);
+                                    &rr->tone_map_state, params->peak_detect_params);
     if (!ok) {
         PL_WARN(rr, "Failed creating HDR peak detection shader.. disabling");
         rr->disable_peak_detect = true;
         goto cleanup;
     }
 
+    rr->peak_detect_active = true;
     return;
 
 cleanup:
     // No peak detection required or supported, so clean up the state to avoid
     // confusing it with later frames where peak detection is enabled again
-    pl_shader_obj_destroy(&rr->peak_detect_state);
+    pl_reset_detected_peak(rr->tone_map_state);
+    rr->peak_detect_active = false;
 }
 
 struct plane_state {
@@ -1663,7 +1666,7 @@ static bool pass_scale_main(struct pass_state *pass)
 
     const struct pl_frame *image = &pass->image;
     bool need_fbo = image->num_overlays > 0;
-    need_fbo |= rr->peak_detect_state && !params->allow_delayed_peak_detect;
+    need_fbo |= rr->peak_detect_active && !params->allow_delayed_peak_detect;
 
     // Force FBO indirection if this shader is non-resizable
     int out_w, out_h;
@@ -1897,7 +1900,7 @@ static bool pass_output_target(struct pass_state *pass)
 
         // current -> ICC in
         pl_shader_color_map(sh, params->color_map_params, image->color,
-                            res.src_color, &rr->peak_detect_state, prelinearized);
+                            res.src_color, &rr->tone_map_state, prelinearized);
         // ICC in -> ICC out
         pl_icc_apply(sh, &rr->icc_state);
         // ICC out -> target
@@ -1922,7 +1925,7 @@ fallback:
     if (need_conversion) {
         // current -> target
         pl_shader_color_map(sh, params->color_map_params, image->color,
-                            target->color, &rr->peak_detect_state, prelinearized);
+                            target->color, &rr->tone_map_state, prelinearized);
     }
 
     // Apply color blindness simulation if requested

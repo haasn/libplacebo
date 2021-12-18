@@ -22,6 +22,7 @@
 // value (PL_SHADER_SIG_COLOR).
 
 #include <libplacebo/colorspace.h>
+#include <libplacebo/tone_mapping.h>
 #include <libplacebo/shaders.h>
 
 PL_API_BEGIN
@@ -138,16 +139,17 @@ struct pl_peak_detect_params {
 #define pl_peak_detect_params(...) (&(struct pl_peak_detect_params) { PL_PEAK_DETECT_DEFAULTS __VA_ARGS__ })
 extern const struct pl_peak_detect_params pl_peak_detect_default_params;
 
-// This function can be used to measure the `sig_peak` and `sig_avg` of a
-// video source automatically, using a compute shader. The measured values
-// are smoothed automatically (depending on the parameters), so to keep track
-// of the measured results over time, a shader object is used to hold the state.
-// Returns false on failure initializing the peak detection object, or if
-// compute shaders are not supported.
+// This function can be used to measure the `sig_peak` and `sig_avg` of a video
+// source automatically, using a compute shader. The measured values are
+// smoothed automatically (depending on the parameters), so to keep track of
+// the measured results over time, a tone mapping shader state object is used
+// to hold the state. Returns false on failure initializing the tone mapping
+// object, or if compute shaders are not supported.
 //
 // It's important that the same shader object is used for successive frames
 // belonging to the same source. If the source changes (e.g. due to a file
-// change or seek), the user should not re-use the same state object.
+// change or seek), the user should reset it with `pl_reset_detected_peak` (or
+// destroy it and use a new state object).
 //
 // The parameter `csp` holds the representation of the color values that are
 // the input to this function. (They must already be in decoded RGB form, i.e.
@@ -163,71 +165,51 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
 // Note: This function will block until the shader object is no longer in use
 // by the GPU, so its use should be avoided due to performance reasons. This
 // function is *not* needed when the user only wants to use `pl_shader_color_map`,
-// since that can ingest the peak detection state object directly. It only
+// since that can ingest the results from the state object directly. It only
 // serves as a utility/debugging function.
 bool pl_get_detected_peak(const pl_shader_obj state,
                           float *out_peak, float *out_avg);
 
-// A collection of various tone mapping algorithms supported by libplacebo.
+// Resets the peak detection state in a given tone mapping state object. This
+// is not equal to `pl_shader_obj_destroy`, because it does not destroy any
+// state used by `pl_shader_tone_map`.
+void pl_reset_detected_peak(pl_shader_obj state);
+
+// Deprecated. See <libplacebo/tone_mapping.h> for replacements.
 enum pl_tone_mapping_algorithm {
-    // Performs no tone-mapping, just clips out-of-gamut colors. Retains perfect
-    // color accuracy for in-gamut colors but completely destroys out-of-gamut
-    // information.
     PL_TONE_MAPPING_CLIP,
-
-    // Generalization of the reinhard tone mapping algorithm to support an
-    // additional linear slope near black. The tone mapping parameter indicates
-    // the trade-off between the linear section and the non-linear section.
-    // Essentially, for param=0.5, every color value below 0.5 will be mapped
-    // linearly, with the higher values being non-linearly tone mapped. Values
-    // near 1.0 make this curve behave like CLIP, and values near 0.0 make this
-    // curve behave like REINHARD. The default value is 0.3, which provides a
-    // good balance between colorimetric accuracy and preserving out-of-gamut
-    // details. The name is derived from its function shape (ax+b)/(cx+d), which
-    // is known as a Möbius transformation in mathematics.
-    //
-    // This is the recommended tone mapping function to use when stretching an
-    // SDR curve over an HDR display (i.e. `dst.sig_scale > 1.0`), which can
-    // come in handy when calibrating a true HDR display to an SDR curve
-    // for compatibility with legacy display stacks.
     PL_TONE_MAPPING_MOBIUS,
-
-    // Simple non-linear, global tone mapping algorithm. Named after Erik
-    // Reinhard. The parameter specifies the local contrast coefficient at the
-    // display peak. Essentially, a value of param=0.5 implies that the
-    // reference white will be about half as bright as when clipping. Defaults
-    // to 0.5, which results in the simplest formulation of this function.
     PL_TONE_MAPPING_REINHARD,
-
-    // Piece-wise, filmic tone-mapping algorithm developed by John Hable for
-    // use in Uncharted 2, inspired by a similar tone-mapping algorithm used by
-    // Kodak. Popularized by its use in video games with HDR rendering.
-    // Preserves both dark and bright details very well, but comes with the
-    // drawback of darkening the overall image quite significantly. Users are
-    // recommended to use HDR peak detection to compensate for the missing
-    // brightness. This is sort of similar to REINHARD tone-mapping + parameter
-    // 0.24.
     PL_TONE_MAPPING_HABLE,
-
-    // Fits a gamma (power) function to transfer between the source and target
-    // color spaces. This preserves details at all scales fairly accurately,
-    // but can result in an image with a muted or dull appearance. Best when
-    // combined with peak detection. The parameter is used as the exponent of
-    // the gamma function, defaulting to 1.8.
     PL_TONE_MAPPING_GAMMA,
-
-    // Linearly stretches the source gamut to the destination gamut. This will
-    // preserve all details accurately, but results in a significantly darker
-    // image. Best when combined with peak detection. The parameter can be used
-    // as an additional scaling coefficient to make the image (linearly)
-    // brighter or darker. Defaults to 1.0.
     PL_TONE_MAPPING_LINEAR,
-
-    // EETF from the ITU-R Report BT.2390, a hermite spline roll-off with
-    // linear segment. Not configurable.
     PL_TONE_MAPPING_BT_2390,
-
     PL_TONE_MAPPING_ALGORITHM_COUNT,
+};
+
+enum pl_tone_map_mode {
+    // Picks the best tone-mapping mode based on internal heuristics.
+    PL_TONE_MAP_AUTO,
+
+    // Per-channel tone-mapping in RGB. Guarantees no clipping and heavily
+    // desaturates the output, but distorts the colors quite significantly.
+    PL_TONE_MAP_RGB,
+
+    // Tone-mapping is performed on the brightest component found in the
+    // signal. Good at preserving details in highlights, but has a tendency to
+    // crush blacks.
+    PL_TONE_MAP_MAX,
+
+    // Tone-map per-channel for highlights and linearly (luma-based) for
+    // midtones/shadows, based on a fixed gamma 2.4 coefficient curve.
+    PL_TONE_MAP_HYBRID,
+
+    // Tone-map linearly on the luma component, and adjust (desaturate) the
+    // chromaticities to compensate using a simple constant factor. This is
+    // essentially the mode used in ITU-R BT.2446 method A.
+    PL_TONE_MAP_LUMA,
+
+    PL_TONE_MAP_MODE_COUNT,
 };
 
 struct pl_color_map_params {
@@ -235,41 +217,30 @@ struct pl_color_map_params {
     // Defaults to PL_INTENT_RELATIVE_COLORIMETRIC.
     enum pl_rendering_intent intent;
 
-    // Algorithm and configuration used for tone-mapping. For non-tunable
-    // algorithms, the `param` is ignored. If the tone mapping parameter is
+    // Function and configuration used for tone-mapping. For non-tunable
+    // functions, the `param` is ignored. If the tone mapping parameter is
     // left as 0.0, the tone-mapping curve's preferred default parameter will
-    // be used. The default algorithm is PL_TONE_MAPPING_BT_2390.
-    enum pl_tone_mapping_algorithm tone_mapping_algo;
+    // be used. The default function is pl_tone_map_auto.
+    //
+    // Note: This pointer changing invalidates the LUT, so make sure to only
+    // use stable (or static) storage for the pl_tone_map_function.
+    const struct pl_tone_map_function *tone_mapping_function;
+    enum pl_tone_map_mode tone_mapping_mode;
     float tone_mapping_param;
 
-    // The tone mapping algorithm can operate in two modes: The first is known
-    // as "desaturating" (per-channel) mode, aka "hollywood/TV" style tone
-    // mapping; and the second is called "saturating" (linear) mode, aka
-    // "chromatic/colorimetric" tone mapping. The saturating tone mapping
-    // algorithm preserves colors from the source faithfully, but can suffer
-    // from weird-looking, blown out highlights in very bright regions. To
-    // provide a trade-off between these two approaches, we mix the result
-    // between the two approaches based on the overall brightness of the pixel.
-    //
-    // These settings control the parameter of this mixing. The `strength`
-    // controls how much of the desaturating result is mixed into the pixel,
-    // with values ranging from 0.0 to 1.0 - while the `base` and `exponent`
-    // controls the placement and steepness of the mixing curve.
-    //
-    // If you want to always use the saturating/colorimetric tone mapping, set
-    // the strength to 0.0. If you want to always use the desaturating/hollywood
-    // tone mapping, set the strength to 1.0 and the exponent to 0.0. The
-    // default settings are strength 0.90, exponent 0.2 and base 0.18, which
-    // provide a fairly strong preset while nonetheless preserving some amount
-    // of colorimetric accuracy.
-    float desaturation_strength;
-    float desaturation_exponent;
-    float desaturation_base;
+    // If true, and supported by the given tone mapping function, libplacebo
+    // will perform inverse tone mapping to expand the dynamic range of a
+    // signal. libplacebo is not liable for any HDR-induced eye damage.
+    bool inverse_tone_mapping;
 
-    // When tone mapping, this represents the upper limit of how much the
-    // scene may be over-exposed in order to hit the `dst.sig_avg` target.
-    // If left unset, defaults to 1.0, which corresponds to no boost.
-    float max_boost;
+    // Extra crosstalk factor to apply before tone-mapping. Optional. May help
+    // to improve the appearance of very bright, monochromatic highlights.
+    float tone_mapping_crosstalk;
+
+    // Tone mapping LUT size. Defaults to 256. Note that when combining
+    // this with peak detection, the resulting LUT is actually squared, so
+    // avoid setting it too high.
+    int lut_size;
 
     // If true, enables the gamut warning feature. This will visibly highlight
     // all out-of-gamut colors (by coloring them pink), if they would have been
@@ -282,15 +253,28 @@ struct pl_color_map_params {
     // clipping preserves luminance between the source and the destination, at
     // the cost of introducing some color distortion in the opposite direction.
     bool gamut_clipping;
+
+    // --- Debugging options
+
+    // Force the use of a full tone-mapping LUT even for functions that have
+    // faster pure GLSL replacements (e.g. clip).
+    bool force_tone_mapping_lut;
+
+    // --- Deprecated fields
+    enum pl_tone_mapping_algorithm tone_mapping_algo PL_DEPRECATED;
+    float desaturation_strength PL_DEPRECATED;
+    float desaturation_exponent PL_DEPRECATED;
+    float desaturation_base PL_DEPRECATED;
+    float max_boost PL_DEPRECATED;
 };
 
 #define PL_COLOR_MAP_DEFAULTS                                   \
     .intent                 = PL_INTENT_RELATIVE_COLORIMETRIC,  \
-    .tone_mapping_algo      = PL_TONE_MAPPING_BT_2390,          \
-    .desaturation_strength  = 0.90,                             \
-    .desaturation_exponent  = 0.20,                             \
-    .desaturation_base      = 0.18,                             \
-    .gamut_clipping         = true,
+    .tone_mapping_function  = &pl_tone_map_auto,                \
+    .tone_mapping_mode      = PL_TONE_MAP_AUTO,                 \
+    .tone_mapping_crosstalk = 0.04,                             \
+    .gamut_clipping         = true,                             \
+    .lut_size               = 256,
 
 #define pl_color_map_params(...) (&(struct pl_color_map_params) { PL_COLOR_MAP_DEFAULTS __VA_ARGS__ })
 extern const struct pl_color_map_params pl_color_map_default_params;
@@ -301,9 +285,11 @@ extern const struct pl_color_map_params pl_color_map_default_params;
 // is true, the logic will assume the input has already been linearized by the
 // caller (e.g. as part of a previous linear light scaling operation).
 //
-// If `peak_detect_state` is set to a valid peak detection state object (as
-// created by `pl_shader_detect_peak`), the detected values will be used in
-// place of `src.sig_peak` / `src.sig_avg`.
+// `tone_mapping_state` is required if tone mapping is desired, and will be
+// used to store state related to tone mapping. Note that this is the same
+// state object used by the peak detection shader (`pl_shader_detect_peak`). If
+// that function has been called on the same state object before this one, the
+// detected values may be used to guide the tone mapping algorithm.
 //
 // Note: The peak detection state object is only updated after the shader is
 // dispatched, so if `pl_shader_detect_peak` is called as part of the same
@@ -314,7 +300,7 @@ extern const struct pl_color_map_params pl_color_map_default_params;
 void pl_shader_color_map(pl_shader sh,
                          const struct pl_color_map_params *params,
                          struct pl_color_space src, struct pl_color_space dst,
-                         pl_shader_obj *peak_detect_state,
+                         pl_shader_obj *tone_mapping_state,
                          bool prelinearized);
 
 // Applies a set of cone distortion parameters to `vec4 color` in a given color
