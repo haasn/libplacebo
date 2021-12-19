@@ -234,6 +234,32 @@ static void bench_hdr_peak(pl_shader sh, pl_shader_obj *state, pl_tex src)
     pl_shader_detect_peak(sh, pl_color_space_hdr10, state, NULL);
 }
 
+static void bench_hdr_lut(pl_shader sh, pl_shader_obj *state, pl_tex src)
+{
+    struct pl_color_map_params params = {
+        PL_COLOR_MAP_DEFAULTS
+        .tone_mapping_function  = &pl_tone_map_linear,
+        .tone_mapping_mode      = PL_TONE_MAP_RGB,
+    };
+
+    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    pl_shader_color_map(sh, &params, pl_color_space_hdr10,
+                        pl_color_space_monitor, state, false);
+}
+
+static void bench_hdr_clip(pl_shader sh, pl_shader_obj *state, pl_tex src)
+{
+    struct pl_color_map_params params = {
+        PL_COLOR_MAP_DEFAULTS
+        .tone_mapping_function  = &pl_tone_map_clip,
+        .tone_mapping_mode      = PL_TONE_MAP_RGB,
+    };
+
+    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    pl_shader_color_map(sh, &params, pl_color_space_hdr10,
+                        pl_color_space_monitor, state, false);
+}
+
 static void bench_av1_grain(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     struct pl_film_grain_params params = {
@@ -407,6 +433,10 @@ int main()
     // HDR peak detection
     if (vk->gpu->glsl.compute)
         benchmark(vk->gpu, "hdr_peakdetect", BENCH_SH(bench_hdr_peak));
+
+    // Tone mapping
+    benchmark(vk->gpu, "hdr_lut", BENCH_SH(bench_hdr_lut));
+    benchmark(vk->gpu, "hdr_clip", BENCH_SH(bench_hdr_clip));
 
     // Misc stuff
     benchmark(vk->gpu, "av1_grain", BENCH_SH(bench_av1_grain));
