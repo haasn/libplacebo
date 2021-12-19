@@ -10,6 +10,7 @@
  */
 
 #include <pthread.h>
+#include <libgen.h>
 
 #include <libavutil/cpu.h>
 #include <libavutil/file.h>
@@ -80,6 +81,8 @@ struct plplay {
     struct pl_cone_params cone_params;
     struct pl_color_space target_color;
     struct pl_color_repr target_repr;
+    struct pl_icc_profile target_icc;
+    char *target_icc_name;
     pl_rotation target_rot;
     bool target_override;
     bool levels_override;
@@ -119,6 +122,8 @@ static void uninit(struct plplay *p)
 
     free(p->shader_hooks);
     free(p->shader_paths);
+    free(p->target_icc_name);
+    av_file_unmap((void *) p->target_icc.data, p->target_icc.len);
 
     // Free this before destroying the window to release associated GPU buffers
     avcodec_free_context(&p->codec);
@@ -417,6 +422,7 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
     if (p->target_override) {
         target.color = p->target_color;
         target.repr = p->target_repr;
+        target.profile = p->target_icc;
     }
 
     assert(mix->num_frames);
@@ -1089,12 +1095,13 @@ static void update_settings(struct plplay *p)
             nk_tree_pop(nk);
         }
 
-        if (nk_tree_push(nk, NK_TREE_NODE, "Output color override", NK_MINIMIZED)) {
+        if (nk_tree_push(nk, NK_TREE_NODE, "Output color space", NK_MINIMIZED)) {
             struct pl_color_space *tcol = &p->target_color;
             struct pl_color_repr *trepr = &p->target_repr;
             nk_layout_row_dynamic(nk, 24, 2);
             nk_checkbox_label(nk, "Enable", &p->target_override);
             bool reset = nk_button_label(nk, "Reset settings");
+            bool reset_icc = reset;
 
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
 
@@ -1235,10 +1242,44 @@ static void update_settings(struct plplay *p)
             trepr->bits.color_depth = bits;
             trepr->bits.sample_depth = bits;
 
+            nk_layout_row_dynamic(nk, 50, 1);
+            if (ui_widget_hover(nk, "Drop ICC profile here...") && dropped_file) {
+                uint8_t *buf;
+                size_t size;
+                int ret = av_file_map(dropped_file, &buf, &size, 0, NULL);
+                if (ret < 0) {
+                    fprintf(stderr, "Failed opening '%s': %s\n", dropped_file,
+                            av_err2str(ret));
+                } else {
+                    av_file_unmap((void *) p->target_icc.data, p->target_icc.len);
+                    p->target_icc.data = buf;
+                    p->target_icc.len = size;
+                    p->target_icc.signature++;
+                    free(p->target_icc_name);
+                    p->target_icc_name = strdup(basename((char *) dropped_file));
+                }
+            }
+
+            if (p->target_icc.len) {
+                nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.7, 0.3 });
+                nk_labelf(nk, NK_TEXT_LEFT, "Loaded: %s",
+                          p->target_icc_name ? p->target_icc_name : "(unknown)");
+                reset_icc |= nk_button_label(nk, "Reset ICC");
+            }
+
             // Apply the reset last to prevent the UI from flashing for a frame
             if (reset) {
                 *tcol = (struct pl_color_space) {0};
                 *trepr = (struct pl_color_repr) {0};
+            }
+
+            if (reset_icc && p->target_icc.len) {
+                av_file_unmap((void *) p->target_icc.data, p->target_icc.len);
+                free(p->target_icc_name);
+                p->target_icc_name = NULL;
+                p->target_icc = (struct pl_icc_profile) {
+                    .signature = p->target_icc.signature + 1,
+                };
             }
 
             if (reset_levels) {
