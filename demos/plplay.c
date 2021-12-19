@@ -307,7 +307,7 @@ static void *decode_loop(void *arg)
     if (!frame || !packet)
         goto done;
 
-    double start_pts = 0.0;
+    double first_pts = 0.0, base_pts = 0.0, last_pts = 0.0;
     bool first_frame = true;
 
     while (!p->exit_thread) {
@@ -339,15 +339,15 @@ static void *decode_loop(void *arg)
 
         // Decode all frames from this packet
         while ((ret = avcodec_receive_frame(p->codec, frame)) == 0) {
-            double pts = frame->pts * av_q2d(p->stream->time_base);
+            last_pts = frame->pts * av_q2d(p->stream->time_base);
             if (first_frame) {
-                start_pts = pts;
+                first_pts = last_pts;
                 first_frame = false;
             }
 
             frame->opaque = p;
             pl_queue_push_block(p->queue, UINT64_MAX, &(struct pl_source_frame) {
-                .pts = pts - start_pts,
+                .pts = last_pts - first_pts + base_pts,
                 .map = map_frame,
                 .unmap = unmap_frame,
                 .discard = discard_frame,
@@ -360,7 +360,17 @@ static void *decode_loop(void *arg)
         case AVERROR(EAGAIN):
             continue;
         case AVERROR_EOF:
-            goto done;
+            // loop infinitely
+            ret = av_seek_frame(p->format, p->stream->index, 0, AVSEEK_FLAG_BACKWARD);
+            if (ret < 0) {
+                fprintf(stderr, "libavformat: Failed seeking in stream: %s\n",
+                        av_err2str(ret));
+                goto done;
+            }
+            avcodec_flush_buffers(p->codec);
+            base_pts += last_pts;
+            first_frame = true;
+            continue;
         default:
             fprintf(stderr, "libavcodec: Failed decoding frame: %s\n",
                     av_err2str(ret));
