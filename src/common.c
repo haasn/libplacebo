@@ -18,6 +18,7 @@
 #include <math.h>
 
 #include "common.h"
+#include "version.h"
 
 int pl_fix_ver(void)
 {

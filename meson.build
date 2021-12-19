@@ -52,16 +52,6 @@ fixver = version_split[2]
 
 proj_name = meson.project_name()
 
-# update `version_pretty` with `git describe` information if available
-git = find_program('git', required: false)
-if git.found()
-  gitdesc = run_command(git, 'describe')
-  if gitdesc.returncode() == 0
-    version_pretty = gitdesc.stdout().strip()
-  endif
-endif
-
-
 # Project build options
 build_opts = [
   # Warnings

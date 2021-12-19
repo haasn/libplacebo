@@ -5,7 +5,6 @@ conf_public.set('majorver', majorver)
 conf_public.set('apiver', apiver)
 conf_internal.set('BUILD_API_VER', apiver)
 conf_internal.set('BUILD_FIX_VER', fixver)
-conf_internal.set_quoted('BUILD_VERSION', version_pretty)
 
 # Dependencies
 prog_python = import('python').find_installation()
@@ -370,6 +369,14 @@ subdir('./include/libplacebo') # generate config.h in the right location
 configure_file(
   output: 'config_internal.h',
   configuration: conf_internal
+)
+
+sources += vcs_tag(
+  command: ['git', 'describe'],
+  fallback: version_pretty,
+  replace_string: '@buildver@',
+  input: 'version.h.in',
+  output: 'version.h',
 )
 
 inc = include_directories('./include')
