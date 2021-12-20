@@ -596,6 +596,7 @@ int main(int argc, char **argv)
         .color_map_params = pl_color_map_default_params,
         .dither_params = pl_dither_default_params,
         .cone_params = pl_vision_normal,
+        .target_override = true,
     };
 
     // Redirect all of the pointers in `params.default` to instead point to the
