@@ -953,8 +953,10 @@ static void update_settings(struct plplay *p)
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Tone mapping", NK_MINIMIZED)) {
             struct pl_color_map_params *cpar = &p->color_map_params;
+            static const struct pl_color_map_params null_settings = {0};
             nk_layout_row_dynamic(nk, 24, 2);
-            par->color_map_params = nk_check_label(nk, "Enable", par->color_map_params) ? cpar : NULL;
+            par->color_map_params = nk_check_label(nk, "Enable",
+                par->color_map_params == cpar) ? cpar : &null_settings;
             if (nk_button_label(nk, "Reset settings"))
                 *cpar = pl_color_map_default_params;
 
