@@ -864,7 +864,8 @@ static void sh_lut_uninit(pl_gpu gpu, void *ptr)
 }
 
 // Maximum number of floats to embed as a literal array (when using SH_LUT_AUTO)
-#define SH_LUT_MAX_LITERAL 256
+#define SH_LUT_MAX_LITERAL_SOFT 64
+#define SH_LUT_MAX_LITERAL_HARD 256
 
 ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
 {
@@ -949,21 +950,27 @@ next_dim: ; // `continue` out of the inner loop
         }
     }
 
-    bool can_literal = sh_glsl(sh).version > 110; // needed for literal arrays
     bool can_uniform = gpu && gpu->limits.max_variable_comps >= size * params->comps;
+    bool can_literal = sh_glsl(sh).version > 110; // needed for literal arrays
+    can_literal &= size <= SH_LUT_MAX_LITERAL_HARD && !params->dynamic;
+
+    // Deselect unsupported methods
     if (method == SH_LUT_UNIFORM && !can_uniform)
         method = SH_LUT_AUTO;
+    if (method == SH_LUT_LITERAL && !can_literal)
+        method = SH_LUT_AUTO;
+    if (method == SH_LUT_TEXTURE && !texfmt)
+        method = SH_LUT_AUTO;
 
-    // Pick the best method
-    if (!method && size <= SH_LUT_MAX_LITERAL && !params->dynamic && can_literal)
-        method = SH_LUT_LITERAL; // use literals for small constant LUTs
-
+    // Sorted by priority
+    if (!method && can_literal && size <= SH_LUT_MAX_LITERAL_SOFT)
+        method = SH_LUT_LITERAL;
     if (!method && texfmt)
-        method = SH_LUT_TEXTURE; // use textures if a texfmt exists
-
-    // Use an input variable as a last fallback
+        method = SH_LUT_TEXTURE;
     if (!method && can_uniform)
         method = SH_LUT_UNIFORM;
+    if (!method && can_literal)
+        method = SH_LUT_LITERAL;
 
     if (!method) {
         PL_ERR(sh, "Can't generate LUT: no compatible methods!");
