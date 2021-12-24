@@ -544,7 +544,8 @@ static int ccSeqParseInt64( char *seq, int seqlength, int64_t *retint )
   {
     negflag = 1;
     i = 1;
-  }
+  } else if( *seq == '+' )
+    i = 1;
 
   workint = 0;
   for( ; i < seqlength ; i++ )

@@ -138,7 +138,7 @@ struct pl_custom_lut *pl_lut_parse_cube(pl_log log, const char *cstr, size_t cst
     clock_t start = clock();
     for (int n = 0; n < entries; n++) {
         for (int c = 0; c < 3; c++) {
-            static const char * const digits = "0123456789.-";
+            static const char * const digits = "0123456789.-+e";
 
             // Extract valid digit sequence
             size_t len = pl_strspn(str, digits);

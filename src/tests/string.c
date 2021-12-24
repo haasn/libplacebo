@@ -84,8 +84,10 @@ int main()
     REQUIRE(pl_str_parse_float(pl_str0("-0"), &f) && feq(f, 0.0f, 1e-8));
     REQUIRE(pl_str_parse_float(pl_str0("-3.14e20"), &f) && feq(f, -3.14e20f, 1e-8));
     REQUIRE(pl_str_parse_float(pl_str0("0.5e-5"), &f) && feq(f, 0.5e-5f, 1e-8));
+    REQUIRE(pl_str_parse_float(pl_str0("0.5e+5"), &f) && feq(f, 0.5e+5f, 1e-8));
     REQUIRE(pl_str_parse_int(pl_str0("64239"), &i) && i == 64239);
     REQUIRE(pl_str_parse_int(pl_str0("-102"), &i) && i == -102);
+    REQUIRE(pl_str_parse_int(pl_str0("+1"), &i) && i == 1);
     REQUIRE(pl_str_parse_int(pl_str0("-0"), &i) && i == 0);
     REQUIRE(!pl_str_parse_float(null, &f));
     REQUIRE(!pl_str_parse_float(test, &f));
