@@ -147,8 +147,13 @@ struct pl_custom_lut *pl_lut_parse_cube(pl_log log, const char *cstr, size_t cst
             str.len -= len;
 
             if (!entry.len) {
-                pl_err(log, "Missing LUT entries? Expected %d, got %d",
-                       entries * 3, n * 3 + c + 1);
+                if (!str.len) {
+                    pl_err(log, "Failed parsing LUT: Unexpected EOF, expected "
+                           "%d entries, got %d", entries * 3, n * 3 + c + 1);
+                } else {
+                    pl_err(log, "Failed parsing LUT: Unexpected '%c', expected "
+                           "digit", str.buf[0]);
+                }
                 goto error;
             }
 
@@ -161,16 +166,14 @@ struct pl_custom_lut *pl_lut_parse_cube(pl_log log, const char *cstr, size_t cst
             // Rescale to range 0.0 - 1.0
             *data++ = (num - min[c]) / (max[c] - min[c]);
 
-            // Skip invalid trailing characters
-            size_t sep = pl_strcspn(str, digits);
-            str.buf += sep;
-            str.len -= sep;
+            // Skip whitespace between digits
+            str = pl_str_strip(str);
         }
     }
 
     str = pl_str_strip(str);
     if (str.len)
-        pl_warn(log, "Extra data after LUT?... ignoring");
+        pl_warn(log, "Extra data after LUT?... ignoring '%c'", str.buf[0]);
 
     pl_log_cpu_time(log, start, clock(), "parsing .cube LUT");
     return lut;
