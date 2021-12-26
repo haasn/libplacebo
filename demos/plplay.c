@@ -1178,13 +1178,13 @@ static void update_settings(struct plplay *p)
                 pl_color_space_infer(&fix);
                 float peak = fix.sig_peak * fix.sig_scale * PL_COLOR_SDR_WHITE;
                 float avg = fix.sig_avg * fix.sig_scale * PL_COLOR_SDR_WHITE;
-                float sfloor = fix.sig_floor * fix.sig_scale * PL_COLOR_SDR_WHITE;
-                nk_property_float(nk, "White point (cd/m²)", 0.0, &peak, 10000.0, 1, 0.1);
-                nk_property_float(nk, "Black point (cd/m²)", 0.0, &sfloor, 10.0, 0.001, 0.0001);
+                float sfloor = fix.sig_floor * fix.sig_scale * PL_COLOR_SDR_WHITE * 1000;
+                nk_property_float(nk, "White point (cd/m²)", 1e-2, &peak, 10000.0, peak / 100, peak / 1000);
+                nk_property_float(nk, "Black point (mcd/m²)", 1e-3, &sfloor, 10000.0, sfloor / 100, sfloor / 1000);
                 nk_property_float(nk, "Frame average (cd/m²)", 0.0, &avg, 1000.0, 1, 0.01);
                 fix.sig_peak = fmax(peak, 1e-3) / (fix.sig_scale * PL_COLOR_SDR_WHITE);
                 fix.sig_avg = fmax(avg, 1e-4) / (fix.sig_scale * PL_COLOR_SDR_WHITE);
-                fix.sig_floor = fmax(sfloor, 1e-6) / (fix.sig_scale * PL_COLOR_SDR_WHITE);
+                fix.sig_floor = fmax(sfloor / 1000, 1e-6) / (fix.sig_scale * PL_COLOR_SDR_WHITE);
                 nk_property_float(nk, "Output scale", 0.0, &fix.sig_scale, 10000.0 / PL_COLOR_SDR_WHITE, 0.01, 0.001);
                 pl_color_space_infer(&fix);
                 tcol->sig_peak = fix.sig_peak;
