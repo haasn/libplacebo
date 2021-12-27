@@ -30,13 +30,15 @@ static bool tex_init(pl_gpu gpu, pl_tex tex)
     struct d3d11_ctx *ctx = p->ctx;
     struct pl_tex_d3d11 *tex_p = PL_PRIV(tex);
 
+    // View formats may be omitted when they match the texture format, but for
+    // simplicity's sake we always set it. It will match the texture format for
+    // textures created with tex_create, but it can be different for video
+    // textures wrapped with pl_d3d11_wrap.
+    DXGI_FORMAT fmt = fmt_to_dxgi(tex->params.format);
+
     if (tex->params.sampleable || tex->params.storable) {
-        // The SRV format may be omitted when it matches the texture format, but
-        // for simplicity's sake we always set it. It will match the texture
-        // format for textures created with tex_create, but it can be different
-        // for video textures wrapped with pl_d3d11_wrap.
         D3D11_SHADER_RESOURCE_VIEW_DESC srvdesc = {
-            .Format = fmt_to_dxgi(tex->params.format),
+            .Format = fmt,
         };
         switch (pl_tex_params_dimension(tex->params)) {
         case 1:
@@ -72,12 +74,66 @@ static bool tex_init(pl_gpu gpu, pl_tex tex)
     }
 
     if (tex->params.renderable) {
-        D3D(ID3D11Device_CreateRenderTargetView(p->dev, tex_p->res, NULL,
+        D3D11_RENDER_TARGET_VIEW_DESC rtvdesc = {
+            .Format = fmt,
+        };
+        switch (pl_tex_params_dimension(tex->params)) {
+        case 1:
+            if (tex_p->array_slice >= 0) {
+                rtvdesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE1DARRAY;
+                rtvdesc.Texture1DArray.FirstArraySlice = tex_p->array_slice;
+                rtvdesc.Texture1DArray.ArraySize = 1;
+            } else {
+                rtvdesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE1D;
+            }
+            break;
+        case 2:
+            if (tex_p->array_slice >= 0) {
+                rtvdesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+                rtvdesc.Texture2DArray.FirstArraySlice = tex_p->array_slice;
+                rtvdesc.Texture2DArray.ArraySize = 1;
+            } else {
+                rtvdesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+            }
+            break;
+        case 3:
+            // D3D11 does not have Texture3D arrays
+            rtvdesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE3D;
+            break;
+        }
+        D3D(ID3D11Device_CreateRenderTargetView(p->dev, tex_p->res, &rtvdesc,
                                                 &tex_p->rtv));
     }
 
     if (p->fl >= D3D_FEATURE_LEVEL_11_0 && tex->params.storable) {
-        D3D(ID3D11Device_CreateUnorderedAccessView(p->dev, tex_p->res, NULL,
+        D3D11_UNORDERED_ACCESS_VIEW_DESC uavdesc = {
+            .Format = fmt,
+        };
+        switch (pl_tex_params_dimension(tex->params)) {
+        case 1:
+            if (tex_p->array_slice >= 0) {
+                uavdesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE1DARRAY;
+                uavdesc.Texture1DArray.FirstArraySlice = tex_p->array_slice;
+                uavdesc.Texture1DArray.ArraySize = 1;
+            } else {
+                uavdesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE1D;
+            }
+            break;
+        case 2:
+            if (tex_p->array_slice >= 0) {
+                uavdesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
+                uavdesc.Texture2DArray.FirstArraySlice = tex_p->array_slice;
+                uavdesc.Texture2DArray.ArraySize = 1;
+            } else {
+                uavdesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+            }
+            break;
+        case 3:
+            // D3D11 does not have Texture3D arrays
+            uavdesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE3D;
+            break;
+        }
+        D3D(ID3D11Device_CreateUnorderedAccessView(p->dev, tex_p->res, &uavdesc,
                                                    &tex_p->uav));
     }
 
