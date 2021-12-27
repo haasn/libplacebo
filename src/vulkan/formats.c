@@ -117,10 +117,6 @@ const struct vk_format vk_formats[] = {
     {VK_FORMAT_R32G32_UINT,           REGFMT("rg32u",    2, 32, UINT)},
     {VK_FORMAT_R32G32B32_UINT,        REGFMT("rgb32u",   3, 32, UINT)},
     {VK_FORMAT_R32G32B32A32_UINT,     REGFMT("rgba32u",  4, 32, UINT)},
-    {VK_FORMAT_R64_UINT,              REGFMT("r64u",     1, 64, UINT)},
-    {VK_FORMAT_R64G64_UINT,           REGFMT("rg64u",    2, 64, UINT)},
-    {VK_FORMAT_R64G64B64_UINT,        REGFMT("rgb64u",   3, 64, UINT)},
-    {VK_FORMAT_R64G64B64A64_UINT,     REGFMT("rgba64u",  4, 64, UINT)},
 
     {VK_FORMAT_R8_SINT,               REGFMT("r8i",      1,  8, SINT)},
     {VK_FORMAT_R8G8_SINT,             REGFMT("rg8i",     2,  8, SINT)},
@@ -134,10 +130,6 @@ const struct vk_format vk_formats[] = {
     {VK_FORMAT_R32G32_SINT,           REGFMT("rg32i",    2, 32, SINT)},
     {VK_FORMAT_R32G32B32_SINT,        REGFMT("rgb32i",   3, 32, SINT)},
     {VK_FORMAT_R32G32B32A32_SINT,     REGFMT("rgba32i",  4, 32, SINT)},
-    {VK_FORMAT_R64_SINT,              REGFMT("r64i",     1, 64, SINT)},
-    {VK_FORMAT_R64G64_SINT,           REGFMT("rg64i",    2, 64, SINT)},
-    {VK_FORMAT_R64G64B64_SINT,        REGFMT("rgb64i",   3, 64, SINT)},
-    {VK_FORMAT_R64G64B64A64_SINT,     REGFMT("rgba64i",  4, 64, SINT)},
 
     // "Swapped" component order formats
     {VK_FORMAT_B8G8R8_UNORM,             FMT("bgr8",     3,  3, UNORM, BITS(8,  8,  8),     IDX(2, 1, 0))},
