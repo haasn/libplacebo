@@ -972,6 +972,19 @@ static void update_settings(struct plplay *p)
             cpar->intent = nk_combo(nk, rendering_intents, 4, cpar->intent,
                                     16, nk_vec2(nk_widget_width(nk), 100));
 
+            static const char *gamut_modes[PL_GAMUT_MODE_COUNT] = {
+                [PL_GAMUT_CLIP]                     = "Hard-clip",
+                [PL_GAMUT_WARN]                     = "Highlight",
+                [PL_GAMUT_DARKEN]                   = "Darken",
+                [PL_GAMUT_DESATURATE]               = "Desaturate",
+            };
+
+            nk_label(nk, "Out-of-gamut handling:", NK_TEXT_LEFT);
+            cpar->gamut_mode = nk_combo(nk, gamut_modes,
+                                        PL_GAMUT_MODE_COUNT,
+                                        cpar->gamut_mode,
+                                        16, nk_vec2(nk_widget_width(nk), 300));
+
             nk_label(nk, "Tone mapping function:", NK_TEXT_LEFT);
             if (nk_combo_begin_label(nk, cpar->tone_mapping_function->description,
                                      nk_vec2(nk_widget_width(nk), 500)))
@@ -1015,8 +1028,6 @@ static void update_settings(struct plplay *p)
             nk_property_int(nk, "LUT size", 16, &cpar->lut_size, 1024, 1, 1);
             nk_property_float(nk, "Crosstalk", 0.0, &cpar->tone_mapping_crosstalk, 0.30, 0.01, 0.001);
             nk_checkbox_label(nk, "Inverse tone mapping", &cpar->inverse_tone_mapping);
-            nk_checkbox_label(nk, "Gamut warning", &cpar->gamut_warning);
-            nk_checkbox_label(nk, "Colorimetric clipping", &cpar->gamut_clipping);
             nk_checkbox_label(nk, "Force full LUT", &cpar->force_tone_mapping_lut);
 
             nk_layout_row_dynamic(nk, 50, 1);

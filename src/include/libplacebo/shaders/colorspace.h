@@ -213,10 +213,34 @@ enum pl_tone_map_mode {
     PL_TONE_MAP_MODE_COUNT,
 };
 
+enum pl_gamut_mode {
+    // Do nothing, simply clip out-of-range colors to the RGB volume.
+    PL_GAMUT_CLIP,
+
+    // Equal to PL_GAMUT_CLIP but also highlights out-of-gamut colors (by
+    // coloring them pink).
+    PL_GAMUT_WARN,
+
+    // Linearly reduces content brightness to preserves saturated details,
+    // followed by clipping the remaining out-of-gamut colors. As the name
+    // implies, this makes everything darker, but provides a good balance
+    // between preserving details and colors.
+    PL_GAMUT_DARKEN,
+
+    // Hard-desaturates out-of-gamut colors towards white, while preserving the
+    // luminance. Has a tendency to shift colors.
+    PL_GAMUT_DESATURATE,
+
+    PL_GAMUT_MODE_COUNT,
+};
+
 struct pl_color_map_params {
     // The rendering intent to use for RGB->RGB primary conversions.
     // Defaults to PL_INTENT_RELATIVE_COLORIMETRIC.
     enum pl_rendering_intent intent;
+
+    // How to handle out-of-gamut colors when changing the content primaries.
+    enum pl_gamut_mode gamut_mode;
 
     // Function and configuration used for tone-mapping. For non-tunable
     // functions, the `param` is ignored. If the tone mapping parameter is
@@ -243,18 +267,6 @@ struct pl_color_map_params {
     // avoid setting it too high.
     int lut_size;
 
-    // If true, enables the gamut warning feature. This will visibly highlight
-    // all out-of-gamut colors (by coloring them pink), if they would have been
-    // clipped as a result of gamut or tone mapping.
-    bool gamut_warning;
-
-    // If true, enables colorimetric clipping. This will colorimetrically clip
-    // out-of-gamut colors by desaturating them until they hit the boundary of
-    // the permissible color volume, rather than by hard-clipping. This mode of
-    // clipping preserves luminance between the source and the destination, at
-    // the cost of introducing some color distortion in the opposite direction.
-    bool gamut_clipping;
-
     // --- Debugging options
 
     // Force the use of a full tone-mapping LUT even for functions that have
@@ -267,14 +279,16 @@ struct pl_color_map_params {
     float desaturation_exponent PL_DEPRECATED;
     float desaturation_base PL_DEPRECATED;
     float max_boost PL_DEPRECATED;
+    bool gamut_warning PL_DEPRECATED;   // replaced by PL_GAMUT_WARN
+    bool gamut_clipping PL_DEPRECATED;  // replaced by PL_GAMUT_DESATURATE
 };
 
 #define PL_COLOR_MAP_DEFAULTS                                   \
     .intent                 = PL_INTENT_RELATIVE_COLORIMETRIC,  \
+    .gamut_mode             = PL_GAMUT_DARKEN,                  \
     .tone_mapping_function  = &pl_tone_map_auto,                \
     .tone_mapping_mode      = PL_TONE_MAP_AUTO,                 \
     .tone_mapping_crosstalk = 0.04,                             \
-    .gamut_clipping         = true,                             \
     .lut_size               = 256,
 
 #define pl_color_map_params(...) (&(struct pl_color_map_params) { PL_COLOR_MAP_DEFAULTS __VA_ARGS__ })

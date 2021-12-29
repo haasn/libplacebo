@@ -40,6 +40,7 @@ project('libplacebo', ['c', 'cpp'],
       '187': 'add <libplacebo/tone_mapping.h>',
       '188': 'refactor pl_color_map_params tone mapping settings',
       '189': 'refactor pl_color_space, merging it with pl_hdr_metadata',
+      '190': 'add pl_color_map_params.gamut_mode, replacing gamut_clipping/warning',
     }.keys().length(),
     # Fix version
     0)

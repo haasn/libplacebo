@@ -1483,6 +1483,83 @@ static void tone_map(pl_shader sh,
     GLSL("#undef tone_map \n");
 }
 
+static void adapt_colors(pl_shader sh,
+                         const struct pl_color_space *src,
+                         const struct pl_color_space *dst,
+                         const struct pl_color_map_params *params)
+{
+    if (src->primaries == dst->primaries)
+        return;
+
+    const struct pl_raw_primaries *csp_src, *csp_dst;
+    struct pl_matrix3x3 cms_mat;
+    csp_src = pl_raw_primaries_get(src->primaries),
+    csp_dst = pl_raw_primaries_get(dst->primaries);
+    cms_mat = pl_get_color_mapping_matrix(csp_src, csp_dst, params->intent);
+
+    GLSL("color.rgb = %s * color.rgb;\n", sh_var(sh, (struct pl_shader_var) {
+        .var = pl_var_mat3("cms_matrix"),
+        .data = PL_TRANSPOSE_3X3(cms_mat.m),
+    }));
+
+    if (pl_primaries_superset(&dst->hdr.prim, &src->hdr.prim))
+        return;
+
+    enum pl_gamut_mode mode = params->gamut_mode;
+    if (params->gamut_warning)
+        mode = PL_GAMUT_WARN;
+    if (params->gamut_clipping)
+        mode = PL_GAMUT_DESATURATE;
+    if (mode == PL_GAMUT_CLIP)
+        return;
+
+    // Normalize colors to range [0-1]
+    float lb = dst->hdr.min_luma / PL_COLOR_SDR_WHITE;
+    float lw = dst->hdr.max_luma / PL_COLOR_SDR_WHITE;
+    GLSL("color.rgb = %s * color.rgb + %s; \n",
+         SH_FLOAT(1 / (lw - lb)), SH_FLOAT(-lb / (lw - lb)));
+
+    switch (mode) {
+    case PL_GAMUT_WARN:
+        GLSL("if (any(lessThan(color.rgb, vec3(-0.005))) ||     \n"
+             "    any(greaterThan(color.rgb, vec3(1.005))))     \n"
+             "    color.rgb = vec3(1.0, 0.0, 1.0); // magenta   \n");
+        break;
+
+    case PL_GAMUT_DARKEN: {
+        struct pl_matrix3x3 gamut_mat;
+        gamut_mat = pl_get_color_mapping_matrix(&src->hdr.prim, &dst->hdr.prim,
+                                                PL_INTENT_ABSOLUTE_COLORIMETRIC);
+        float cmax = 1;
+        for (int i = 0; i < 3; i++)
+            cmax = PL_MAX(cmax, gamut_mat.m[i][i]);
+        GLSL("color.rgb *= %s; \n", SH_FLOAT(1 / cmax));
+        break;
+    }
+
+    case PL_GAMUT_DESATURATE:
+        GLSL("float cmin = min(min(color.r, color.g), color.b); \n"
+             "float luma = dot(%s, color.rgb);                  \n"
+             "if (cmin < 0.0)                                   \n"
+             "    color.rgb = mix(color.rgb, vec3(luma),        \n"
+             "                    -cmin / (luma - cmin));       \n"
+             "float cmax = max(max(color.r, color.g), color.b); \n"
+             "if (cmax > 1.0)                                   \n"
+             "    color.rgb = mix(color.rgb, vec3(luma),        \n"
+             "                    (1.0 - cmax) / (luma - cmax));\n",
+            sh_luma_coeffs(sh, dst->primaries));
+        break;
+
+    case PL_GAMUT_CLIP:
+    case PL_GAMUT_MODE_COUNT:
+        pl_unreachable();
+    }
+
+    // Undo normalization
+    GLSL("color.rgb = %s * color.rgb + %s; \n",
+         SH_FLOAT(lw - lb), SH_FLOAT(lb));
+}
+
 void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
                          struct pl_color_space src, struct pl_color_space dst,
                          pl_shader_obj *tone_map_state,
@@ -1506,53 +1583,8 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
 
     if (!prelinearized)
         pl_shader_linearize(sh, &src);
-
     tone_map(sh, &src, &dst, tone_map_state, params);
-
-    // Adapt to the right colorspace (primaries) if necessary
-    if (src.primaries != dst.primaries) {
-        const struct pl_raw_primaries *csp_src, *csp_dst;
-        struct pl_matrix3x3 cms_mat;
-        csp_src = pl_raw_primaries_get(src.primaries),
-        csp_dst = pl_raw_primaries_get(dst.primaries);
-        cms_mat = pl_get_color_mapping_matrix(csp_src, csp_dst, params->intent);
-
-        GLSL("color.rgb = %s * color.rgb;\n", sh_var(sh, (struct pl_shader_var) {
-            .var = pl_var_mat3("cms_matrix"),
-            .data = PL_TRANSPOSE_3X3(cms_mat.m),
-        }));
-
-        if (!pl_primaries_superset(csp_dst, csp_src)) {
-            if (params->gamut_clipping) {
-                ident_t dst_min = SH_FLOAT(dst.hdr.min_luma / PL_COLOR_SDR_WHITE);
-                ident_t dst_max = SH_FLOAT(dst.hdr.max_luma / PL_COLOR_SDR_WHITE);
-
-                GLSL("float cmin = min(min(color.r, color.g), color.b);         \n"
-                     "if (cmin < %s) {                                          \n"
-                     "    float luma = dot(%s, color.rgb);                      \n"
-                     "    float coeff = (%s - cmin) / (luma - cmin);            \n"
-                     "    coeff = clamp(coeff, 0.0, 1.0);                       \n"
-                     "    color.rgb = mix(color.rgb, vec3(luma), coeff);        \n"
-                     "}                                                         \n"
-                     "float cmax = 1.0/%s * max(max(color.r, color.g), color.b);\n"
-                     "if (cmax > 1.0)                                           \n"
-                     "    color.rgb /= cmax;                                    \n",
-                     dst_min,
-                     sh_luma_coeffs(sh, dst.primaries),
-                     dst_min,
-                     dst_max);
-            } else if (params->gamut_warning) {
-                ident_t dst_min = SH_FLOAT(dst.hdr.min_luma / PL_COLOR_SDR_WHITE);
-                ident_t dst_max = SH_FLOAT(dst.hdr.max_luma / PL_COLOR_SDR_WHITE);
-
-                GLSL("if (any(greaterThan(color.rgb, vec3(%s + 0.005))) ||  \n"
-                     "    any(lessThan(color.rgb, vec3(%s - 0.005))))       \n"
-                     "    color.rgb = vec3(1.0, 0.0, 1.0); // magenta       \n",
-                     dst_max, dst_min);
-            }
-        }
-    }
-
+    adapt_colors(sh, &src, &dst, params);
     pl_shader_delinearize(sh, &dst);
     GLSL("}\n");
 }
