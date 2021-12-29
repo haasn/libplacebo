@@ -1154,18 +1154,6 @@ static void update_settings(struct plplay *p)
             tcol->transfer = nk_combo(nk, transfers, PL_COLOR_TRC_COUNT, tcol->transfer,
                                       16, nk_vec2(nk_widget_width(nk), 200));
 
-            static const char *lights[PL_COLOR_LIGHT_COUNT] = {
-                [PL_COLOR_LIGHT_UNKNOWN]    = "Auto (unknown)",
-                [PL_COLOR_LIGHT_DISPLAY]    = "Display-referred, output as-is",
-                [PL_COLOR_LIGHT_SCENE_HLG]  = "Scene-referred, HLG OOTF",
-                [PL_COLOR_LIGHT_SCENE_709_1886] = "Scene-referred, OOTF = BT.709+1886 interaction",
-                [PL_COLOR_LIGHT_SCENE_1_2]  = "Scene-referred, OOTF = gamma 1.2",
-            };
-
-            nk_label(nk, "Light:", NK_TEXT_LEFT);
-            tcol->light = nk_combo(nk, lights, PL_COLOR_LIGHT_COUNT, tcol->light,
-                                   16, nk_vec2(nk_widget_width(nk), 200));
-
             nk_layout_row_dynamic(nk, 24, 2);
             nk_checkbox_label(nk, "Override HDR levels", &p->levels_override);
             bool reset_levels = nk_button_label(nk, "Reset levels");
@@ -1176,21 +1164,16 @@ static void update_settings(struct plplay *p)
                 nk_layout_row_dynamic(nk, 24, 2);
                 struct pl_color_space fix = *tcol;
                 pl_color_space_infer(&fix);
-                float peak = fix.sig_peak * fix.sig_scale * PL_COLOR_SDR_WHITE;
-                float avg = fix.sig_avg * fix.sig_scale * PL_COLOR_SDR_WHITE;
-                float sfloor = fix.sig_floor * fix.sig_scale * PL_COLOR_SDR_WHITE * 1000;
-                nk_property_float(nk, "White point (cd/m²)", 1e-2, &peak, 10000.0, peak / 100, peak / 1000);
-                nk_property_float(nk, "Black point (mcd/m²)", 1e-3, &sfloor, 10000.0, sfloor / 100, sfloor / 1000);
-                nk_property_float(nk, "Frame average (cd/m²)", 0.0, &avg, 1000.0, 1, 0.01);
-                fix.sig_peak = fmax(peak, 1e-3) / (fix.sig_scale * PL_COLOR_SDR_WHITE);
-                fix.sig_avg = fmax(avg, 1e-4) / (fix.sig_scale * PL_COLOR_SDR_WHITE);
-                fix.sig_floor = fmax(sfloor / 1000, 1e-6) / (fix.sig_scale * PL_COLOR_SDR_WHITE);
-                nk_property_float(nk, "Output scale", 0.0, &fix.sig_scale, 10000.0 / PL_COLOR_SDR_WHITE, 0.01, 0.001);
+                fix.hdr.min_luma *= 1000; // better value range
+                nk_property_float(nk, "White point (cd/m²)",
+                                  1e-2, &fix.hdr.max_luma, 10000.0,
+                                  fix.hdr.max_luma / 100, fix.hdr.max_luma / 1000);
+                nk_property_float(nk, "Black point (mcd/m²)",
+                                  1e-3, &fix.hdr.min_luma, 10000.0,
+                                  fix.hdr.min_luma / 100, fix.hdr.min_luma / 1000);
+                fix.hdr.min_luma /= 1000;
                 pl_color_space_infer(&fix);
-                tcol->sig_peak = fix.sig_peak;
-                tcol->sig_avg = fix.sig_avg;
-                tcol->sig_floor = fix.sig_floor;
-                tcol->sig_scale = fix.sig_scale;
+                tcol->hdr = fix.hdr;
             } else {
                 reset_levels = true;
             }
@@ -1285,12 +1268,8 @@ static void update_settings(struct plplay *p)
                 };
             }
 
-            if (reset_levels) {
-                tcol->sig_peak = 0;
-                tcol->sig_avg = 0;
-                tcol->sig_floor = 0;
-                tcol->sig_scale = 0;
-            }
+            if (reset_levels)
+                tcol->hdr = (struct pl_hdr_metadata) {0};
 
             nk_tree_pop(nk);
         }

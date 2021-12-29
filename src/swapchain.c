@@ -51,31 +51,7 @@ bool pl_swapchain_resize(pl_swapchain sw, int *width, int *height)
     return sw->impl->resize(sw, width, height);
 }
 
-const struct pl_hdr_metadata pl_hdr_metadata_empty = {0};
-const struct pl_hdr_metadata pl_hdr_metadata_hdr10 ={
-    .prim = {
-        .red   = {0.708,    0.292},
-        .green = {0.170,    0.797},
-        .blue  = {0.131,    0.046},
-        .white = {0.31271,  0.32902},
-    },
-    .min_luma = 0,
-    .max_luma = 10000,
-    .max_cll  = 10000,
-    .max_fall = 0, // unknown
-};
-
-bool pl_hdr_metadata_equal(const struct pl_hdr_metadata *a,
-                           const struct pl_hdr_metadata *b)
-{
-    return pl_raw_primaries_equal(&a->prim, &b->prim) &&
-           a->min_luma == b->min_luma &&
-           a->max_luma == b->max_luma &&
-           a->max_cll  == b->max_cll  &&
-           a->max_fall == b->max_fall;
-}
-
-void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_swapchain_colors *csp)
+void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_color_space *csp)
 {
     if (!sw->impl->colorspace_hint)
         return;
@@ -102,11 +78,8 @@ void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_swapchain_col
 
 bool pl_swapchain_hdr_metadata(pl_swapchain sw, const struct pl_hdr_metadata *metadata)
 {
-    if (metadata) {
-        pl_swapchain_colorspace_hint(sw, &(struct pl_swapchain_colors) {
-            .hdr = *metadata,
-        });
-    }
+    if (metadata)
+        pl_swapchain_colorspace_hint(sw, pl_color_space( .hdr = *metadata ));
 
     return true;
 }

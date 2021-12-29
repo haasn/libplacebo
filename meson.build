@@ -39,6 +39,7 @@ project('libplacebo', ['c', 'cpp'],
       '186': 'add pl_d3d11_swapchain_params.flags',
       '187': 'add <libplacebo/tone_mapping.h>',
       '188': 'refactor pl_color_map_params tone mapping settings',
+      '189': 'refactor pl_color_space, merging it with pl_hdr_metadata',
     }.keys().length(),
     # Fix version
     0)

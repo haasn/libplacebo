@@ -452,8 +452,8 @@ static void pl_shader_tests(pl_gpu gpu)
     for (enum pl_color_transfer trc = 0; trc < PL_COLOR_TRC_COUNT; trc++) {
         sh = pl_dispatch_begin(dp);
         pl_shader_sample_nearest(sh, pl_sample_src( .tex = src ));
-        pl_shader_delinearize(sh, (struct pl_color_space) { .transfer = trc });
-        pl_shader_linearize(sh, (struct pl_color_space) { .transfer = trc });
+        pl_shader_delinearize(sh, pl_color_space( .transfer = trc ));
+        pl_shader_linearize(sh, pl_color_space( .transfer = trc ));
         REQUIRE(pl_dispatch_finish(dp, pl_dispatch_params(
             .shader = &sh,
             .target = fbo,
@@ -492,24 +492,6 @@ static void pl_shader_tests(pl_gpu gpu)
         }
 
         TEST_FBO_PATTERN(epsilon, "color system %d", (int) sys);
-    }
-
-    for (enum pl_color_light light = 0; light < PL_COLOR_LIGHT_COUNT; light++) {
-        struct pl_color_space dst_space = { .transfer = PL_COLOR_TRC_LINEAR };
-        struct pl_color_space src_space = {
-            .transfer = PL_COLOR_TRC_LINEAR,
-            .light = light
-        };
-        sh = pl_dispatch_begin(dp);
-        pl_shader_sample_nearest(sh, pl_sample_src( .tex = src ));
-        pl_shader_color_map(sh, NULL, src_space, dst_space, NULL, false);
-        pl_shader_color_map(sh, NULL, dst_space, src_space, NULL, false);
-        REQUIRE(pl_dispatch_finish(dp, pl_dispatch_params(
-            .shader = &sh,
-            .target = fbo,
-        )));
-
-        TEST_FBO_PATTERN(1e-6, "light %d", (int) light);
     }
 
     // Repeat this a few times to test the caching
@@ -582,6 +564,7 @@ static void pl_shader_tests(pl_gpu gpu)
             for (int x = 0; x < FBO_W; x++) {
                 float *color = &data[(y * FBO_W + x) * 4];
                 float smax = powf(PL_MAX(color[0], color[1]), 2.2);
+                smax = (1 - 1e-3f) * smax + 1e-3f;
                 float slog = logf(PL_MAX(smax, 0.001));
                 real_peak = PL_MAX(smax, real_peak);
                 real_avg += slog;
@@ -1011,16 +994,16 @@ static void pl_render_tests(pl_gpu gpu)
     TEST_PARAMS(deband, iterations, 3);
     TEST_PARAMS(sigmoid, center, 1);
     TEST_PARAMS(color_map, intent, PL_INTENT_ABSOLUTE_COLORIMETRIC);
-    TEST_PARAMS(color_map, gamut_warning, 1);
     TEST_PARAMS(dither, method, PL_DITHER_WHITE_NOISE);
     TEST_PARAMS(dither, temporal, true);
     TEST(cone_params, pl_cone_params, pl_vision_deuteranomaly, strength, 0);
 
-    // Test HDR stuff
-    image.color.sig_scale = 10.0;
-    target.color.sig_scale = 2.0;
+    // Test HDR tone mapping
+    image.color = pl_color_space_hdr10;
     TEST_PARAMS(color_map, tone_mapping_mode, PL_TONE_MAP_MODE_COUNT - 1);
-    image.color.sig_scale = target.color.sig_scale = 0.0;
+    TEST_PARAMS(color_map, gamut_warning, 1);
+    TEST_PARAMS(color_map, gamut_clipping, 1);
+    image.color = pl_color_space_srgb;
 
     // Test some misc stuff
     struct pl_render_params params = pl_render_default_params;

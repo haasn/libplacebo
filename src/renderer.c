@@ -1043,9 +1043,7 @@ static int deband_src(struct pass_state *pass, pl_shader psh,
     // of the source as possible, even though it happens this early in the
     // process (well before any linearization / output adaptation)
     struct pl_deband_params dparams = *params->deband_params;
-    float scale = pl_color_transfer_nominal_peak(image->color.transfer)
-                * image->color.sig_scale;
-    dparams.grain /= scale;
+    dparams.grain /= image->color.hdr.max_luma / PL_COLOR_SDR_WHITE;
 
     pl_shader_deband(sh, &src, &dparams);
 
@@ -1080,15 +1078,13 @@ static void hdr_update_peak(struct pass_state *pass)
 {
     const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
-    if (!params->peak_detect_params || !pl_color_space_is_hdr(pass->img.color))
+    if (!params->peak_detect_params || !pl_color_space_is_hdr(&pass->img.color))
         goto cleanup;
 
     if (rr->disable_compute || rr->disable_peak_detect)
         goto cleanup;
 
-    float src_peak = pass->img.color.sig_peak * pass->img.color.sig_scale;
-    float dst_peak = pass->target.color.sig_peak * pass->target.color.sig_scale;
-    if (src_peak <= dst_peak + 1e-6)
+    if (pass->img.color.hdr.max_luma <= pass->target.color.hdr.max_luma + 1e-6)
         goto cleanup; // no adaptation needed
 
     if (params->lut && params->lut_type == PL_LUT_CONVERSION)
@@ -1718,7 +1714,7 @@ static bool pass_scale_main(struct pass_state *pass)
     }
 
     if (use_linear) {
-        pl_shader_linearize(img_sh(pass, img), img->color);
+        pl_shader_linearize(img_sh(pass, img), &img->color);
         img->color.transfer = PL_COLOR_TRC_LINEAR;
         pass_hook(pass, img, PL_HOOK_LINEAR);
     }
@@ -1799,7 +1795,6 @@ static bool pass_output_target(struct pass_state *pass)
     bool prelinearized = false;
     bool need_conversion = true;
     assert(image->color.primaries == img->color.primaries);
-    assert(image->color.light == img->color.light);
     if (img->color.transfer == PL_COLOR_TRC_LINEAR) {
         if (img->repr.alpha == PL_ALPHA_PREMULTIPLIED) {
             // Very annoying edge case: since prelinerization happens with
@@ -1807,7 +1802,7 @@ static bool pass_output_target(struct pass_state *pass)
             // alpha, we need to go back to non-linear representation *before*
             // alpha mode conversion, to avoid distortion
             img->color.transfer = image->color.transfer;
-            pl_shader_delinearize(sh, img->color);
+            pl_shader_delinearize(sh, &img->color);
         } else {
             prelinearized = true;
         }
@@ -1843,7 +1838,7 @@ static bool pass_output_target(struct pass_state *pass)
         case PL_LUT_NORMALIZED:
             if (!prelinearized) {
                 // PL_LUT_NORMALIZED wants linear input data
-                pl_shader_linearize(sh, img->color);
+                pl_shader_linearize(sh, &img->color);
                 img->color.transfer = PL_COLOR_TRC_LINEAR;
                 prelinearized = true;
             }

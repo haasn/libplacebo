@@ -18,6 +18,32 @@
 #include <math.h>
 #include "shaders.h"
 
+// Common constants for SMPTE ST.2084 (PQ)
+static const float PQ_M1 = 2610./4096 * 1./4,
+                   PQ_M2 = 2523./4096 * 128,
+                   PQ_C1 = 3424./4096,
+                   PQ_C2 = 2413./4096 * 32,
+                   PQ_C3 = 2392./4096 * 32;
+
+// Common constants for ARIB STD-B67 (HLG)
+static const float HLG_A = 0.17883277,
+                   HLG_B = 0.28466892,
+                   HLG_C = 0.55991073,
+                   HLG_REF = 1000.0 / PL_COLOR_SDR_WHITE;
+
+// Common constants for Panasonic V-Log
+static const float VLOG_B = 0.00873,
+                   VLOG_C = 0.241514,
+                   VLOG_D = 0.598206;
+
+// Common constants for Sony S-Log
+static const float SLOG_A = 0.432699,
+                   SLOG_B = 0.037584,
+                   SLOG_C = 0.616596 + 0.03,
+                   SLOG_P = 3.538813,
+                   SLOG_Q = 0.030001,
+                   SLOG_K2 = 155.0 / 219.0;
+
 void pl_shader_set_alpha(pl_shader sh, struct pl_color_repr *repr,
                          enum pl_alpha_mode mode)
 {
@@ -90,7 +116,6 @@ static inline void reshape_poly(pl_shader sh)
 {
     GLSL("s = (coeffs.z * s + coeffs.y) * s + coeffs.x; \n");
 }
-
 
 void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
 {
@@ -319,8 +344,7 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
              sh_bvec(sh, 1));
         break;
 
-    case PL_COLOR_SYSTEM_BT_2100_PQ:
-    case PL_COLOR_SYSTEM_BT_2100_HLG: {
+    case PL_COLOR_SYSTEM_BT_2100_PQ:;
         // Conversion process from the spec:
         //
         // 1. L'M'S' = cmat * ICtCp
@@ -331,11 +355,6 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
         // (It's important we keep the transfer function conversion separate
         // from the color system decoding, so we have to partially undo our
         // work here even though we will end up linearizing later on anyway)
-        struct pl_color_space csp = {
-            .transfer = repr->sys == PL_COLOR_SYSTEM_BT_2100_PQ
-                            ? PL_COLOR_TRC_PQ
-                            : PL_COLOR_TRC_HLG,
-        };
 
         // Inverted from the matrix in the spec, transposed to column major
         static const char *bt2100_lms2rgb = "mat3("
@@ -343,13 +362,39 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
             " -2.50645,    1.9836, -0.0989137, "
             "0.0698454, -0.192271,    1.12486) ";
 
-        pl_shader_linearize(sh, csp);
+        // PQ EOTF
+        GLSL("color.rgb = pow(color.rgb, vec3(1.0/%f));         \n"
+             "color.rgb = max(color.rgb - vec3(%f), 0.0)        \n"
+             "             / (vec3(%f) - vec3(%f) * color.rgb); \n"
+             "color.rgb = pow(color.rgb, vec3(1.0/%f));         \n",
+             PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1);
+        // LMS matrix
         GLSL("color.rgb = %s * color.rgb; \n", bt2100_lms2rgb);
-        pl_shader_delinearize(sh, csp);
+        // PQ OETF
+        GLSL("color.rgb = pow(color.rgb, vec3(%f));              \n"
+             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)      \n"
+             "             / (vec3(1.0) + vec3(%f) * color.rgb); \n"
+             "color.rgb = pow(color.rgb, vec3(%f));              \n",
+             PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
         break;
-    }
 
-    case PL_COLOR_SYSTEM_DOLBYVISION: {
+    case PL_COLOR_SYSTEM_BT_2100_HLG:
+        // HLG OETF^-1
+        GLSL("color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,         \n"
+             "                exp((color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
+             "                    + vec3(%f),                            \n"
+             "                %s(lessThan(vec3(0.5), color.rgb)));       \n",
+             HLG_C, HLG_A, HLG_B, sh_bvec(sh, 3));
+        // LMS matrix
+        GLSL("color.rgb = %s * color.rgb; \n", bt2100_lms2rgb);
+        // HLG OETF
+        GLSL("color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                     \n"
+             "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f), \n"
+             "                %s(lessThan(vec3(1.0), color.rgb)));             \n",
+             HLG_A, HLG_B, HLG_C, sh_bvec(sh, 3));
+        break;
+
+    case PL_COLOR_SYSTEM_DOLBYVISION:;
         // Dolby Vision always outputs BT.2020-referred HPE LMS, so hard-code
         // the inverse LMS->RGB matrix corresponding to this color space.
         struct pl_matrix3x3 dovi_lms2rgb = {{
@@ -364,11 +409,21 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
             .data = PL_TRANSPOSE_3X3(dovi_lms2rgb.m),
         });
 
-        pl_shader_linearize(sh, pl_color_space_hdr10);
+        // PQ EOTF
+        GLSL("color.rgb = pow(color.rgb, vec3(1.0/%f));         \n"
+             "color.rgb = max(color.rgb - vec3(%f), 0.0)        \n"
+             "             / (vec3(%f) - vec3(%f) * color.rgb); \n"
+             "color.rgb = pow(color.rgb, vec3(1.0/%f));         \n",
+             PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1);
+        // LMS matrix
         GLSL("color.rgb = %s * color.rgb; \n", mat);
-        pl_shader_delinearize(sh, pl_color_space_hdr10);
+        // PQ OETF
+        GLSL("color.rgb = pow(color.rgb, vec3(%f));              \n"
+             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)      \n"
+             "             / (vec3(1.0) + vec3(%f) * color.rgb); \n"
+             "color.rgb = pow(color.rgb, vec3(%f));              \n",
+             PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
         break;
-    }
 
     case PL_COLOR_SYSTEM_UNKNOWN:
     case PL_COLOR_SYSTEM_RGB:
@@ -431,25 +486,38 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
              sh_bvec(sh, 2));
         break;
 
-    case PL_COLOR_SYSTEM_BT_2100_PQ:
-    case PL_COLOR_SYSTEM_BT_2100_HLG: {
-        struct pl_color_space csp = {
-            .transfer = repr->sys == PL_COLOR_SYSTEM_BT_2100_PQ
-                            ? PL_COLOR_TRC_PQ
-                            : PL_COLOR_TRC_HLG,
-        };
-
+    case PL_COLOR_SYSTEM_BT_2100_PQ:;
         // Inverse of the matrix above
         static const char *bt2100_rgb2lms = "mat3("
             "0.412109, 0.166748, 0.024170, "
             "0.523925, 0.720459, 0.075440, "
             "0.063965, 0.112793, 0.900394) ";
 
-        pl_shader_linearize(sh, csp);
+        GLSL("color.rgb = pow(color.rgb, vec3(1.0/%f));         \n"
+             "color.rgb = max(color.rgb - vec3(%f), 0.0)        \n"
+             "             / (vec3(%f) - vec3(%f) * color.rgb); \n"
+             "color.rgb = pow(color.rgb, vec3(1.0/%f));         \n",
+             PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1);
         GLSL("color.rgb = %s * color.rgb; \n", bt2100_rgb2lms);
-        pl_shader_delinearize(sh, csp);
+        GLSL("color.rgb = pow(color.rgb, vec3(%f));              \n"
+             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)      \n"
+             "             / (vec3(1.0) + vec3(%f) * color.rgb); \n"
+             "color.rgb = pow(color.rgb, vec3(%f));              \n",
+             PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
         break;
-    }
+
+    case PL_COLOR_SYSTEM_BT_2100_HLG:
+        GLSL("color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,         \n"
+             "                exp((color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
+             "                    + vec3(%f),                            \n"
+             "                %s(lessThan(vec3(0.5), color.rgb)));       \n",
+             HLG_C, HLG_A, HLG_B, sh_bvec(sh, 3));
+        GLSL("color.rgb = %s * color.rgb; \n", bt2100_rgb2lms);
+        GLSL("color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                     \n"
+             "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f), \n"
+             "                %s(lessThan(vec3(1.0), color.rgb)));             \n",
+             HLG_A, HLG_B, HLG_C, sh_bvec(sh, 3));
+        break;
 
     case PL_COLOR_SYSTEM_DOLBYVISION:
         SH_FAIL(sh, "Cannot un-apply dolbyvision yet (no inverse reshaping)!");
@@ -508,37 +576,26 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
     GLSL("}\n");
 }
 
-// Common constants for SMPTE ST.2084 (PQ)
-static const float PQ_M1 = 2610./4096 * 1./4,
-                   PQ_M2 = 2523./4096 * 128,
-                   PQ_C1 = 3424./4096,
-                   PQ_C2 = 2413./4096 * 32,
-                   PQ_C3 = 2392./4096 * 32;
+static ident_t sh_luma_coeffs(pl_shader sh, enum pl_color_primaries prim)
+{
+    struct pl_matrix3x3 rgb2xyz;
+    rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(prim));
 
-// Common constants for ARIB STD-B67 (HLG)
-static const float HLG_A = 0.17883277,
-                   HLG_B = 0.28466892,
-                   HLG_C = 0.55991073;
+    // FIXME: Cannot use `const vec3` due to glslang bug #2025
+    ident_t coeffs = sh_fresh(sh, "luma_coeffs");
+    GLSLH("#define %s vec3(%s, %s, %s) \n", coeffs,
+          SH_FLOAT(rgb2xyz.m[1][0]), // RGB->Y vector
+          SH_FLOAT(rgb2xyz.m[1][1]),
+          SH_FLOAT(rgb2xyz.m[1][2]));
+    return coeffs;
+}
 
-// Common constants for Panasonic V-Log
-static const float VLOG_B = 0.00873,
-                   VLOG_C = 0.241514,
-                   VLOG_D = 0.598206;
-
-// Common constants for Sony S-Log
-static const float SLOG_A = 0.432699,
-                   SLOG_B = 0.037584,
-                   SLOG_C = 0.616596 + 0.03,
-                   SLOG_P = 3.538813,
-                   SLOG_Q = 0.030001,
-                   SLOG_K2 = 155.0 / 219.0;
-
-void pl_shader_linearize(pl_shader sh, struct pl_color_space csp)
+void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
-    if (csp.transfer == PL_COLOR_TRC_LINEAR)
+    if (csp->transfer == PL_COLOR_TRC_LINEAR)
         return;
 
     // Note that this clamp may technically violate the definition of
@@ -549,47 +606,52 @@ void pl_shader_linearize(pl_shader sh, struct pl_color_space csp)
     GLSL("// pl_shader_linearize           \n"
          "color.rgb = max(color.rgb, 0.0); \n");
 
-    switch (csp.transfer) {
+    float csp_min = csp->hdr.min_luma / PL_COLOR_SDR_WHITE;
+    float csp_max = csp->hdr.max_luma / PL_COLOR_SDR_WHITE;
+    csp_max = PL_DEF(csp_max, 1);
+
+    switch (csp->transfer) {
     case PL_COLOR_TRC_SRGB:
         GLSL("color.rgb = mix(color.rgb * vec3(1.0/12.92),               \n"
              "                pow((color.rgb + vec3(0.055))/vec3(1.055), \n"
              "                    vec3(2.4)),                            \n"
              "                %s(lessThan(vec3(0.04045), color.rgb)));   \n",
              sh_bvec(sh, 3));
-        return;
+        goto scale_out;
     case PL_COLOR_TRC_BT_1886: {
-        float binv = powf(PL_CLAMP(csp.sig_floor, 0.0, 1.0), 1.0/2.4);
-        float a = powf(1.0 - binv, 2.4);
-        float b = binv / (1.0 - binv);
-        GLSL("color.rgb = vec3(%s) * pow(color.rgb + vec3(%s), vec3(2.4));\n",
+        const float lb = powf(csp_min, 1/2.4f);
+        const float lw = powf(csp_max, 1/2.4f);
+        const float a = powf(lw - lb, 2.4f);
+        const float b = lb / (lw - lb);
+        GLSL("color.rgb = %s * pow(color.rgb + vec3(%s), vec3(2.4)); \n",
              SH_FLOAT(a), SH_FLOAT(b));
         return;
     }
     case PL_COLOR_TRC_GAMMA18:
         GLSL("color.rgb = pow(color.rgb, vec3(1.8));\n");
-        return;
+        goto scale_out;
     case PL_COLOR_TRC_GAMMA20:
         GLSL("color.rgb = pow(color.rgb, vec3(2.0));\n");
-        return;
+        goto scale_out;
     case PL_COLOR_TRC_UNKNOWN:
     case PL_COLOR_TRC_GAMMA22:
         GLSL("color.rgb = pow(color.rgb, vec3(2.2));\n");
-        return;
+        goto scale_out;
     case PL_COLOR_TRC_GAMMA24:
         GLSL("color.rgb = pow(color.rgb, vec3(2.4));\n");
-        return;
+        goto scale_out;
     case PL_COLOR_TRC_GAMMA26:
         GLSL("color.rgb = pow(color.rgb, vec3(2.6));\n");
-        return;
+        goto scale_out;
     case PL_COLOR_TRC_GAMMA28:
         GLSL("color.rgb = pow(color.rgb, vec3(2.8));\n");
-        return;
+        goto scale_out;
     case PL_COLOR_TRC_PRO_PHOTO:
         GLSL("color.rgb = mix(color.rgb * vec3(1.0/16.0),              \n"
              "                pow(color.rgb, vec3(1.8)),               \n"
              "                %s(lessThan(vec3(0.03125), color.rgb))); \n",
              sh_bvec(sh, 3));
-        return;
+        goto scale_out;
     case PL_COLOR_TRC_PQ:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/%f));         \n"
              "color.rgb = max(color.rgb - vec3(%f), 0.0)        \n"
@@ -600,15 +662,25 @@ void pl_shader_linearize(pl_shader sh, struct pl_color_space csp)
              "color.rgb *= vec3(%f);                            \n",
              PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1, 10000.0 / PL_COLOR_SDR_WHITE);
         return;
-    case PL_COLOR_TRC_HLG:
-        GLSL("color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,         \n"
+    case PL_COLOR_TRC_HLG: {
+        const float y = fmaxf(1.2f + 0.42f * log10f(csp_max / HLG_REF), 1);
+        const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
+        // OETF^-1
+        GLSL("color.rgb = %s * color.rgb + vec3(%s);                     \n"
+             "color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,         \n"
              "                exp((color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
              "                    + vec3(%f),                            \n"
-             "                %s(lessThan(vec3(0.5), color.rgb)));       \n"
-             // Rescale from 0-12 to be relative to PL_COLOR_SDR_WHITE_HLG
-             "color.rgb *= vec3(1.0/%f);                                 \n",
-             HLG_C, HLG_A, HLG_B, sh_bvec(sh, 3), PL_COLOR_SDR_WHITE_HLG);
+             "                %s(lessThan(vec3(0.5), color.rgb)));       \n",
+             SH_FLOAT(1 - b), SH_FLOAT(b),
+             HLG_C, HLG_A, HLG_B, sh_bvec(sh, 3));
+        // OOTF
+        GLSL("color.rgb *= 1.0 / 12.0;                                   \n"
+             "color.rgb *= %s * pow(max(dot(%s, color.rgb), 0.0), %s);   \n",
+             SH_FLOAT(csp_max),
+             sh_luma_coeffs(sh, csp->primaries),
+             SH_FLOAT(y - 1));
         return;
+    }
     case PL_COLOR_TRC_V_LOG:
         GLSL("color.rgb = mix((color.rgb - vec3(0.125)) * vec3(1.0/5.6), \n"
              "    pow(vec3(10.0), (color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
@@ -635,20 +707,58 @@ void pl_shader_linearize(pl_shader sh, struct pl_color_space csp)
     }
 
     pl_unreachable();
+
+scale_out:
+    if (csp_max != 1 || csp_min != 0) {
+        GLSL("color.rgb = %s * color.rgb + vec3(%s); \n",
+             SH_FLOAT(csp_max - csp_min), SH_FLOAT(csp_min));
+    }
 }
 
-void pl_shader_delinearize(pl_shader sh, struct pl_color_space csp)
+void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
-    if (csp.transfer == PL_COLOR_TRC_LINEAR)
+    if (csp->transfer == PL_COLOR_TRC_LINEAR)
         return;
 
-    GLSL("// pl_shader_delinearize         \n"
-         "color.rgb = max(color.rgb, 0.0); \n");
+    GLSL("// pl_shader_delinearize \n");
+    float csp_min = csp->hdr.min_luma / PL_COLOR_SDR_WHITE;
+    float csp_max = csp->hdr.max_luma / PL_COLOR_SDR_WHITE;
+    csp_max = PL_DEF(csp_max, 1);
 
-    switch (csp.transfer) {
+    switch (csp->transfer) {
+    case PL_COLOR_TRC_UNKNOWN:
+    case PL_COLOR_TRC_SRGB:
+    case PL_COLOR_TRC_LINEAR:
+    case PL_COLOR_TRC_GAMMA18:
+    case PL_COLOR_TRC_GAMMA20:
+    case PL_COLOR_TRC_GAMMA22:
+    case PL_COLOR_TRC_GAMMA24:
+    case PL_COLOR_TRC_GAMMA26:
+    case PL_COLOR_TRC_GAMMA28:
+    case PL_COLOR_TRC_PRO_PHOTO: ;
+        if (csp_max != 1 || csp_min != 0) {
+            GLSL("color.rgb = %s * color.rgb + vec3(%s); \n",
+                 SH_FLOAT(1 / (csp_max - csp_min)),
+                 SH_FLOAT(-csp_min / (csp_max - csp_min)));
+        }
+        break;
+    case PL_COLOR_TRC_BT_1886:
+    case PL_COLOR_TRC_PQ:
+    case PL_COLOR_TRC_HLG:
+    case PL_COLOR_TRC_V_LOG:
+    case PL_COLOR_TRC_S_LOG1:
+    case PL_COLOR_TRC_S_LOG2:
+        break; // scene-referred or absolute scale
+    case PL_COLOR_TRC_COUNT:
+        pl_unreachable();
+    }
+
+    GLSL("color.rgb = max(color.rgb, 0.0); \n");
+
+    switch (csp->transfer) {
     case PL_COLOR_TRC_SRGB:
         GLSL("color.rgb = mix(color.rgb * vec3(12.92),                        \n"
              "                vec3(1.055) * pow(color.rgb, vec3(1.0/2.4))     \n"
@@ -657,10 +767,11 @@ void pl_shader_delinearize(pl_shader sh, struct pl_color_space csp)
              sh_bvec(sh, 3));
         return;
     case PL_COLOR_TRC_BT_1886: {
-        float binv = powf(PL_CLAMP(csp.sig_floor, 0.0, 1.0), 1.0/2.4);
-        float a = powf(1.0 - binv, 2.4);
-        float b = binv / (1.0 - binv);
-        GLSL("color.rgb = pow(vec3(%s) * color.rgb, vec3(1.0/2.4)) - vec3(%s);\n",
+        const float lb = powf(csp_min, 1/2.4f);
+        const float lw = powf(csp_max, 1/2.4f);
+        const float a = powf(lw - lb, 2.4f);
+        const float b = lb / (lw - lb);
+        GLSL("color.rgb = pow(%s * color.rgb, vec3(1.0/2.4)) - vec3(%s); \n",
              SH_FLOAT(1.0 / a), SH_FLOAT(b));
         return;
     }
@@ -697,13 +808,24 @@ void pl_shader_delinearize(pl_shader sh, struct pl_color_space csp)
              "color.rgb = pow(color.rgb, vec3(%f));              \n",
              10000 / PL_COLOR_SDR_WHITE, PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
         return;
-    case PL_COLOR_TRC_HLG:
-        GLSL("color.rgb *= vec3(%f);                                           \n"
-             "color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                     \n"
+    case PL_COLOR_TRC_HLG: {
+        const float y = fmaxf(1.2f + 0.42f * log10f(csp_max / HLG_REF), 1);
+        const float b = sqrtf(3 * powf(csp_min / csp_max, 1 / y));
+        // OOTF^-1
+        GLSL("color.rgb *= 1.0 / %s;                                      \n"
+             "color.rgb *= 12.0 * max(1e-6, pow(dot(%s, color.rgb), %s)); \n",
+             SH_FLOAT(csp_max),
+             sh_luma_coeffs(sh, csp->primaries),
+             SH_FLOAT((1 - y) / y));
+        // OETF
+        GLSL("color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                     \n"
              "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f), \n"
-             "                %s(lessThan(vec3(1.0), color.rgb)));             \n",
-             PL_COLOR_SDR_WHITE_HLG, HLG_A, HLG_B, HLG_C, sh_bvec(sh, 3));
+             "                %s(lessThan(vec3(1.0), color.rgb)));             \n"
+             "color.rgb = %s * color.rgb + vec3(%s);                           \n",
+             HLG_A, HLG_B, HLG_C, sh_bvec(sh, 3),
+             SH_FLOAT(1 / (1 - b)), SH_FLOAT(-b / (1 - b)));
         return;
+    }
     case PL_COLOR_TRC_V_LOG:
         GLSL("color.rgb = mix(vec3(5.6) * color.rgb + vec3(0.125),       \n"
              "                vec3(%f) * log(color.rgb + vec3(%f))       \n"
@@ -771,114 +893,6 @@ void pl_shader_unsigmoidize(pl_shader sh, const struct pl_sigmoid_params *params
          "color = vec4(%s) / (vec4(1.0) + exp(vec4(%s) * (vec4(%s) - color))) \n"
          "           - vec4(%s);                                              \n",
          SH_FLOAT(1.0 / scale), SH_FLOAT(slope), SH_FLOAT(center), SH_FLOAT(offset / scale));
-}
-
-static ident_t sh_luma_coeffs(pl_shader sh, enum pl_color_primaries prim)
-{
-    struct pl_matrix3x3 rgb2xyz;
-    rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(prim));
-
-    // FIXME: Cannot use `const vec3` due to glslang bug #2025
-    ident_t coeffs = sh_fresh(sh, "luma_coeffs");
-    GLSLH("#define %s vec3(%s, %s, %s) \n", coeffs,
-          SH_FLOAT(rgb2xyz.m[1][0]), // RGB->Y vector
-          SH_FLOAT(rgb2xyz.m[1][1]),
-          SH_FLOAT(rgb2xyz.m[1][2]));
-    return coeffs;
-}
-
-// Applies the OOTF / inverse OOTF - including the sig_scale adaptation
-static void pl_shader_ootf(pl_shader sh, struct pl_color_space csp)
-{
-    if (csp.sig_scale != 1.0)
-        GLSL("color.rgb *= vec3(%s); \n", SH_FLOAT(csp.sig_scale));
-
-    if (!csp.light || csp.light == PL_COLOR_LIGHT_DISPLAY)
-        return;
-
-    GLSL("// pl_shader_ootf                \n"
-         "color.rgb = max(color.rgb, 0.0); \n");
-
-    switch (csp.light)
-    {
-    case PL_COLOR_LIGHT_SCENE_HLG: {
-        // HLG OOTF from BT.2100, tuned to the indicated peak
-        float peak = csp.sig_peak * PL_COLOR_SDR_WHITE;
-        float gamma = 1.2 + 0.42 * log10(peak / 1000.0);
-        gamma = PL_MAX(gamma, 1.0);
-        GLSL("color.rgb *= vec3(%s * pow(dot(%s, color.rgb), %s));\n",
-             SH_FLOAT(csp.sig_peak / pow(12.0 / PL_COLOR_SDR_WHITE_HLG, gamma)),
-             sh_luma_coeffs(sh, csp.primaries),
-             SH_FLOAT(gamma - 1.0));
-        return;
-    }
-    case PL_COLOR_LIGHT_SCENE_709_1886:
-        // This OOTF is defined by encoding the result as 709 and then decoding
-        // it as 1886; although this is called 709_1886 we actually use the
-        // more precise (by one decimal) values from BT.2020 instead
-        GLSL("color.rgb = mix(color.rgb * vec3(4.5),                    \n"
-             "                vec3(1.0993) * pow(color.rgb, vec3(0.45)) \n"
-             "                             - vec3(0.0993),              \n"
-             "                %s(lessThan(vec3(0.0181), color.rgb)));   \n"
-             "color.rgb = pow(color.rgb, vec3(2.4));                    \n",
-             sh_bvec(sh, 3));
-        return;
-    case PL_COLOR_LIGHT_SCENE_1_2:
-        GLSL("color.rgb = pow(color.rgb, vec3(1.2));\n");
-        return;
-    case PL_COLOR_LIGHT_UNKNOWN:
-    case PL_COLOR_LIGHT_DISPLAY:
-    case PL_COLOR_LIGHT_COUNT:
-        break;
-    }
-
-    pl_unreachable();
-}
-
-static void pl_shader_inverse_ootf(pl_shader sh, struct pl_color_space csp)
-{
-    if (!csp.light || csp.light == PL_COLOR_LIGHT_DISPLAY)
-        goto done;
-
-    GLSL("// pl_shader_inverse_ootf        \n"
-         "color.rgb = max(color.rgb, 0.0); \n");
-
-    switch (csp.light)
-    {
-    case PL_COLOR_LIGHT_SCENE_HLG: {
-        float peak = csp.sig_peak * PL_COLOR_SDR_WHITE;
-        float gamma = 1.2 + 0.42 * log10(peak / 1000.0);
-        gamma = PL_MAX(gamma, 1.0);
-        GLSL("color.rgb *= vec3(1.0/%s);                                \n"
-             "color.rgb /= vec3(max(1e-6, pow(dot(%s, color.rgb),       \n"
-             "                                %s)));                    \n",
-             SH_FLOAT(csp.sig_peak / pow(12.0 / PL_COLOR_SDR_WHITE_HLG, gamma)),
-             sh_luma_coeffs(sh, csp.primaries),
-             SH_FLOAT((gamma - 1.0) / gamma));
-        goto done;
-    }
-    case PL_COLOR_LIGHT_SCENE_709_1886:
-        GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.4));                         \n"
-             "color.rgb = mix(color.rgb * vec3(1.0/4.5),                         \n"
-             "                pow((color.rgb + vec3(0.0993)) * vec3(1.0/1.0993), \n"
-             "                    vec3(1/0.45)),                                 \n"
-             "                %s(lessThan(vec3(0.08145), color.rgb)));           \n",
-             sh_bvec(sh, 3));
-        goto done;
-    case PL_COLOR_LIGHT_SCENE_1_2:
-        GLSL("color.rgb = pow(color.rgb, vec3(1.0/1.2));\n");
-        goto done;
-    case PL_COLOR_LIGHT_UNKNOWN:
-    case PL_COLOR_LIGHT_DISPLAY:
-    case PL_COLOR_LIGHT_COUNT:
-        break;
-    }
-
-    pl_unreachable();
-
-done:
-    if (csp.sig_scale != 1.0)
-        GLSL("color.rgb *= vec3(1.0 / %s); \n", SH_FLOAT(csp.sig_scale));
 }
 
 const struct pl_peak_detect_params pl_peak_detect_default_params = { PL_PEAK_DETECT_DEFAULTS };
@@ -1000,8 +1014,7 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
 
     // Decode the color into linear light absolute scale representation
     pl_color_space_infer(&csp);
-    pl_shader_linearize(sh, csp);
-    pl_shader_ootf(sh, csp);
+    pl_shader_linearize(sh, &csp);
 
     // For performance, we want to do as few atomic operations on global
     // memory as possible, so use an atomic in shmem for the work group.
@@ -1200,17 +1213,15 @@ static void fill_lut(void *data, const struct sh_lut_params *params)
 }
 
 static void tone_map(pl_shader sh,
-                     struct pl_color_space src,
-                     struct pl_color_space dst,
+                     const struct pl_color_space *src,
+                     const struct pl_color_space *dst,
                      pl_shader_obj *state,
                      const struct pl_color_map_params *params)
 {
-    float src_min = src.sig_floor * src.sig_scale,
-          src_avg = src.sig_avg   * src.sig_scale,
-          src_max = src.sig_peak  * src.sig_scale,
-          dst_min = dst.sig_floor * dst.sig_scale,
-          dst_avg = dst.sig_avg   * dst.sig_scale,
-          dst_max = dst.sig_peak  * dst.sig_scale;
+    float src_min = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, src->hdr.min_luma),
+          src_max = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, src->hdr.max_luma),
+          dst_min = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, dst->hdr.min_luma),
+          dst_max = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, dst->hdr.max_luma);
 
     // Some tone mapping functions don't handle values of absolute 0 very well,
     // so clip the minimums to a very small positive value
@@ -1221,7 +1232,6 @@ static void tone_map(pl_shader sh,
         // Never exceed the source unless requested, but still allow
         // black point adaptation
         dst_max = PL_MIN(dst_max, src_max);
-        dst_avg = PL_MIN(dst_avg, src_avg);
     }
 
     // Round sufficiently similar values
@@ -1399,7 +1409,7 @@ static void tone_map(pl_shader sh,
         GLSL("float luma_orig = dot(%s, color.rgb);                 \n"
              "float luma_new = tone_map(luma_orig);                 \n"
              "vec3 color_lin = luma_new / luma_orig * color.rgb;    \n",
-             sh_luma_coeffs(sh, src.primaries));
+             sh_luma_coeffs(sh, src->primaries));
         for (int c = 0; c < 3; c++)
             GLSL("color[%d] = tone_map(color[%d]); \n", c, c);
 
@@ -1415,7 +1425,7 @@ static void tone_map(pl_shader sh,
     }
 
     case PL_TONE_MAP_LUMA: {
-        const struct pl_raw_primaries *prim = pl_raw_primaries_get(src.primaries);
+        const struct pl_raw_primaries *prim = pl_raw_primaries_get(src->primaries);
         struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
         pl_matrix3x3_mul(&rgb2xyz, &crosstalk);
 
@@ -1482,7 +1492,7 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
     pl_color_space_infer_ref(&dst, &src);
     if (pl_color_space_equal(&src, &dst)) {
         if (prelinearized)
-            pl_shader_delinearize(sh, dst);
+            pl_shader_delinearize(sh, &dst);
         return;
     }
 
@@ -1495,10 +1505,9 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
     params = PL_DEF(params, &pl_color_map_default_params);
 
     if (!prelinearized)
-        pl_shader_linearize(sh, src);
+        pl_shader_linearize(sh, &src);
 
-    pl_shader_ootf(sh, src);
-    tone_map(sh, src, dst, tone_map_state, params);
+    tone_map(sh, &src, &dst, tone_map_state, params);
 
     // Adapt to the right colorspace (primaries) if necessary
     if (src.primaries != dst.primaries) {
@@ -1515,8 +1524,8 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
 
         if (!pl_primaries_superset(csp_dst, csp_src)) {
             if (params->gamut_clipping) {
-                ident_t dst_min = SH_FLOAT(dst.sig_floor * dst.sig_scale);
-                ident_t dst_max = SH_FLOAT(dst.sig_peak * dst.sig_scale);
+                ident_t dst_min = SH_FLOAT(dst.hdr.min_luma / PL_COLOR_SDR_WHITE);
+                ident_t dst_max = SH_FLOAT(dst.hdr.max_luma / PL_COLOR_SDR_WHITE);
 
                 GLSL("float cmin = min(min(color.r, color.g), color.b);         \n"
                      "if (cmin < %s) {                                          \n"
@@ -1533,8 +1542,8 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
                      dst_min,
                      dst_max);
             } else if (params->gamut_warning) {
-                ident_t dst_min = SH_FLOAT(dst.sig_floor * dst.sig_scale);
-                ident_t dst_max = SH_FLOAT(dst.sig_peak * dst.sig_scale);
+                ident_t dst_min = SH_FLOAT(dst.hdr.min_luma / PL_COLOR_SDR_WHITE);
+                ident_t dst_max = SH_FLOAT(dst.hdr.max_luma / PL_COLOR_SDR_WHITE);
 
                 GLSL("if (any(greaterThan(color.rgb, vec3(%s + 0.005))) ||  \n"
                      "    any(lessThan(color.rgb, vec3(%s - 0.005))))       \n"
@@ -1544,8 +1553,7 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
         }
     }
 
-    pl_shader_inverse_ootf(sh, dst);
-    pl_shader_delinearize(sh, dst);
+    pl_shader_delinearize(sh, &dst);
     GLSL("}\n");
 }
 
@@ -1563,7 +1571,7 @@ void pl_shader_cone_distort(pl_shader sh, struct pl_color_space csp,
     GLSL("{\n");
 
     pl_color_space_infer(&csp);
-    pl_shader_linearize(sh, csp);
+    pl_shader_linearize(sh, &csp);
 
     struct pl_matrix3x3 cone_mat;
     cone_mat = pl_get_cone_matrix(params, pl_raw_primaries_get(csp.primaries));
@@ -1572,7 +1580,7 @@ void pl_shader_cone_distort(pl_shader sh, struct pl_color_space csp,
         .data = PL_TRANSPOSE_3X3(cone_mat.m),
     }));
 
-    pl_shader_delinearize(sh, csp);
+    pl_shader_delinearize(sh, &csp);
     GLSL("}\n");
 }
 

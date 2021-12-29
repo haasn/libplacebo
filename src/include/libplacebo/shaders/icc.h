@@ -37,13 +37,21 @@ struct pl_icc_params {
     // The size of the 3DLUT to generate. If left as NULL, these individually
     // default to 64, which is the recommended default for all three.
     size_t size_r, size_g, size_b;
+
+    // If true, the detected contrast (from the output ICC profile) will be
+    // forwarded to to the input of the 3DLUT as well. This will result in the
+    // input curve being tuned to the given contrast, rather than the tagged
+    // metadata (or 1000:1 by default for SDR curves). Has no effect when the
+    // input color space is also an ICC profile.
+    bool use_display_contrast;
 };
 
 #define PL_ICC_DEFAULTS                         \
     .intent = PL_INTENT_RELATIVE_COLORIMETRIC,  \
     .size_r = 64,                               \
     .size_g = 64,                               \
-    .size_b = 64,
+    .size_b = 64,                               \
+    .use_display_contrast = true,
 
 #define pl_icc_params(...) (&(struct pl_icc_params) { PL_ICC_DEFAULTS __VA_ARGS__ })
 extern const struct pl_icc_params pl_icc_default_params;

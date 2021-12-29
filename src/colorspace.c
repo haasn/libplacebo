@@ -270,49 +270,81 @@ bool pl_color_light_is_scene_referred(enum pl_color_light light)
     pl_unreachable();
 }
 
+const struct pl_hdr_metadata pl_hdr_metadata_empty = {0};
+const struct pl_hdr_metadata pl_hdr_metadata_hdr10 ={
+    .prim = {
+        .red   = {0.708,    0.292},
+        .green = {0.170,    0.797},
+        .blue  = {0.131,    0.046},
+        .white = {0.31271,  0.32902},
+    },
+    .min_luma = 0,
+    .max_luma = 10000,
+    .max_cll  = 10000,
+    .max_fall = 0, // unknown
+};
+
+bool pl_hdr_metadata_equal(const struct pl_hdr_metadata *a,
+                           const struct pl_hdr_metadata *b)
+{
+    return pl_raw_primaries_equal(&a->prim, &b->prim) &&
+           a->min_luma == b->min_luma &&
+           a->max_luma == b->max_luma &&
+           a->max_cll  == b->max_cll  &&
+           a->max_fall == b->max_fall;
+}
+
+void pl_hdr_metadata_merge(struct pl_hdr_metadata *orig,
+                           const struct pl_hdr_metadata *update)
+{
+    pl_raw_primaries_merge(&orig->prim, &update->prim);
+    if (!orig->min_luma)
+        orig->min_luma = update->min_luma;
+    if (!orig->max_luma)
+        orig->max_luma = update->max_luma;
+    if (!orig->max_cll)
+        orig->max_cll = update->max_cll;
+    if (!orig->max_fall)
+        orig->max_fall = update->max_fall;
+}
+
 const struct pl_color_space pl_color_space_unknown = {0};
 
 const struct pl_color_space pl_color_space_srgb = {
     .primaries = PL_COLOR_PRIM_BT_709,
     .transfer  = PL_COLOR_TRC_SRGB,
-    .light     = PL_COLOR_LIGHT_DISPLAY,
 };
 
 const struct pl_color_space pl_color_space_bt709 = {
     .primaries = PL_COLOR_PRIM_BT_709,
     .transfer  = PL_COLOR_TRC_BT_1886,
-    .light     = PL_COLOR_LIGHT_DISPLAY,
 };
 
 const struct pl_color_space pl_color_space_hdr10 = {
     .primaries = PL_COLOR_PRIM_BT_2020,
     .transfer  = PL_COLOR_TRC_PQ,
-    .light     = PL_COLOR_LIGHT_DISPLAY,
 };
 
 const struct pl_color_space pl_color_space_bt2020_hlg = {
     .primaries = PL_COLOR_PRIM_BT_2020,
     .transfer  = PL_COLOR_TRC_HLG,
-    .light     = PL_COLOR_LIGHT_SCENE_HLG,
 };
 
 const struct pl_color_space pl_color_space_monitor = {
     .primaries = PL_COLOR_PRIM_BT_709, // sRGB primaries
     .transfer  = PL_COLOR_TRC_UNKNOWN, // unknown SDR response
-    .light     = PL_COLOR_LIGHT_DISPLAY,
 };
 
-bool pl_color_space_is_hdr(struct pl_color_space csp)
+bool pl_color_space_is_hdr(const struct pl_color_space *csp)
 {
-    float peak = pl_color_transfer_nominal_peak(csp.transfer);
-    peak *= PL_DEF(csp.sig_scale, 1.0);
-
-    return peak > 1.0;
+    return csp->hdr.max_luma > PL_COLOR_SDR_WHITE ||
+           csp->sig_scale > 1 ||
+           pl_color_transfer_is_hdr(csp->transfer);
 }
 
-bool pl_color_space_is_black_scaled(struct pl_color_space csp)
+bool pl_color_space_is_black_scaled(const struct pl_color_space *csp)
 {
-    switch (csp.transfer) {
+    switch (csp->transfer) {
     case PL_COLOR_TRC_UNKNOWN:
     case PL_COLOR_TRC_SRGB:
     case PL_COLOR_TRC_LINEAR:
@@ -346,16 +378,7 @@ void pl_color_space_merge(struct pl_color_space *orig,
         orig->primaries = new->primaries;
     if (!orig->transfer)
         orig->transfer = new->transfer;
-    if (!orig->light)
-        orig->light = new->light;
-    if (!orig->sig_peak)
-        orig->sig_peak = new->sig_peak;
-    if (!orig->sig_avg)
-        orig->sig_avg = new->sig_avg;
-    if (!orig->sig_floor)
-        orig->sig_floor = new->sig_floor;
-    if (!orig->sig_scale)
-        orig->sig_scale = new->sig_scale;
+    pl_hdr_metadata_merge(&orig->hdr, &new->hdr);
 }
 
 bool pl_color_space_equal(const struct pl_color_space *c1,
@@ -363,16 +386,8 @@ bool pl_color_space_equal(const struct pl_color_space *c1,
 {
     return c1->primaries == c2->primaries &&
            c1->transfer  == c2->transfer &&
-           c1->light     == c2->light &&
-           c1->sig_peak  == c2->sig_peak &&
-           c1->sig_avg   == c2->sig_avg &&
-           c1->sig_floor == c2->sig_floor &&
-           c1->sig_scale == c2->sig_scale;
+           pl_hdr_metadata_equal(&c1->hdr, &c2->hdr);
 }
-
-// Average light level for SDR signals. This is equal to a signal level of 0.5
-// under a typical presentation gamma of about 2.0.
-static const float sdr_avg = 0.25;
 
 void pl_color_space_infer(struct pl_color_space *space)
 {
@@ -380,48 +395,46 @@ void pl_color_space_infer(struct pl_color_space *space)
         space->primaries = PL_COLOR_PRIM_BT_709;
     if (!space->transfer)
         space->transfer = PL_COLOR_TRC_BT_1886;
-    if (!space->light) {
-        space->light = (space->transfer == PL_COLOR_TRC_HLG)
-            ? PL_COLOR_LIGHT_SCENE_HLG
-            : PL_COLOR_LIGHT_DISPLAY;
-    }
-    float nom_peak = pl_color_transfer_nominal_peak(space->transfer);
-    space->sig_peak = PL_CLAMP(space->sig_peak, 0.0, nom_peak);
-    if (!space->sig_peak) {
-        space->sig_peak = nom_peak;
 
-        // Exception: For HLG content, we want to infer a value of 1000 cd/m²
-        // (corresponding to a peak of 10.0) instead of the true nominal peak
-        // of 12.0. A peak of 1000 is considered the "reference" HLG display.
+    // Backwards-compatibility with deprecated fields
+    if (space->sig_peak) {
+        space->hdr.max_luma = space->sig_peak * PL_COLOR_SDR_WHITE;
+        space->sig_peak = 0;
+    }
+    if (space->sig_floor) {
+        space->hdr.min_luma = space->sig_floor * PL_COLOR_SDR_WHITE;
+        space->sig_floor = 0;
+    }
+
+    if (space->hdr.max_luma < space->hdr.min_luma) // sanity
+        space->hdr.max_luma = space->hdr.min_luma = 0;
+
+    if (space->hdr.max_luma < 1 || space->hdr.max_luma > 10000) {
+        space->hdr.max_luma = pl_color_transfer_nominal_peak(space->transfer)
+                              * PL_COLOR_SDR_WHITE;
+
+        // Exception: For HLG content, we want to infer a value of 1000 cd/m²,
+        // a value which is considered the "reference" HLG display.
         if (space->transfer == PL_COLOR_TRC_HLG)
-            space->sig_peak = 10.0 / PL_COLOR_SDR_WHITE_HLG;
+            space->hdr.max_luma = 1000;
     }
 
-    if (!space->sig_scale)
-        space->sig_scale = 1.0;
-
-    // In theory, for HDR signals, this is typically no longer true - but
-    // without adequate metadata there's not much else we can assume
-    if (!space->sig_avg)
-        space->sig_avg = sdr_avg / space->sig_scale;
-
-    // First infer this to good values, and then strip it for color spaces for
-    // which it doesn't make any sense
-    if (!space->sig_floor) {
+    if (space->hdr.min_luma <= 0 || space->hdr.min_luma > 100) {
         if (pl_color_transfer_is_hdr(space->transfer)) {
-            space->sig_floor = 0.0050 / PL_COLOR_SDR_WHITE; // Typical HDR black
+            space->hdr.min_luma = 0.0050f; // Typical HDR black
         } else {
-            space->sig_floor = space->sig_peak / 1000.0; // Typical SDR contrast
+            space->hdr.min_luma = space->hdr.max_luma / 1000; // Typical SDR contrast
         }
     }
 
-    // Preserve metadata for PL_COLOR_TRC_LINEAR in particular because it's
-    // used heavily as an intermediate color space.
-    if (pl_color_space_is_black_scaled(*space) &&
-        space->transfer != PL_COLOR_TRC_LINEAR)
-    {
-        space->sig_floor = 0.0;
+    if (space->sig_scale && !pl_color_transfer_is_hdr(space->transfer)) {
+        space->hdr.max_luma *= space->sig_scale;
+        space->hdr.min_luma *= space->sig_scale;
+        space->sig_scale = 0;
     }
+
+    // Default the signal color space based on the nominal raw primaries
+    pl_raw_primaries_merge(&space->hdr.prim, pl_raw_primaries_get(space->primaries));
 }
 
 void pl_color_space_infer_ref(struct pl_color_space *space,
@@ -446,14 +459,6 @@ void pl_color_space_infer_ref(struct pl_color_space *space,
         } else {
             space->transfer = ref.transfer;
         }
-    }
-
-    // Defaults the sig_avg based on the ref, unless only the ref is HDR
-    if (!space->sig_avg) {
-        bool csp_hdr = pl_color_space_is_hdr(*space);
-        bool ref_hdr = pl_color_space_is_hdr(ref);
-        if (!(ref_hdr && !csp_hdr))
-            space->sig_avg = ref.sig_avg;
     }
 
     // Infer the remaining fields after making the above choices
@@ -519,7 +524,6 @@ struct pl_cie_xy pl_white_from_temp(float temp)
     };
 }
 
-
 bool pl_raw_primaries_equal(const struct pl_raw_primaries *a,
                             const struct pl_raw_primaries *b)
 {
@@ -527,6 +531,20 @@ bool pl_raw_primaries_equal(const struct pl_raw_primaries *a,
            pl_cie_xy_equal(&a->green, &b->green) &&
            pl_cie_xy_equal(&a->blue,  &b->blue)  &&
            pl_cie_xy_equal(&a->white, &b->white);
+}
+
+void pl_raw_primaries_merge(struct pl_raw_primaries *orig,
+                            const struct pl_raw_primaries *update)
+{
+    union {
+        struct pl_raw_primaries prim;
+        float raw[8];
+    } *pa = (void *) orig,
+      *pb = (void *) update;
+
+    pl_static_assert(sizeof(*pa) == sizeof(*orig));
+    for (int i = 0; i < PL_ARRAY_SIZE(pa->raw); i++)
+        pa->raw[i] = PL_DEF(pa->raw[i], pb->raw[i]);
 }
 
 const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim)

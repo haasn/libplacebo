@@ -234,20 +234,16 @@ int main()
     };
 
     pl_color_space_infer(&hlg);
-    REQUIRE(hlg.light == PL_COLOR_LIGHT_SCENE_HLG);
+    REQUIRE(hlg.hdr.max_luma == 1000.0f);
 
     struct pl_color_space unknown = {0};
     struct pl_color_space display = {
         .primaries = PL_COLOR_PRIM_BT_709,
         .transfer = PL_COLOR_TRC_BT_1886,
-        .light = PL_COLOR_LIGHT_DISPLAY,
-        .sig_peak = 1.0,
-        .sig_avg = 0.25,
-        .sig_scale = 1.0,
     };
 
     pl_color_space_infer(&unknown);
-    unknown.sig_floor = 0.0; // exclude from the comparison
+    pl_color_space_infer(&display);
     REQUIRE(pl_color_space_equal(&unknown, &display));
 
     float x, y;

@@ -262,19 +262,80 @@ static inline bool pl_color_transfer_is_hdr(enum pl_color_transfer trc)
 // This defines the display-space standard reference white level (in cd/m^2)
 // that is assumed for SDR content, for use when mapping between HDR and SDR in
 // display space. See ITU-R Report BT.2408 for more information.
-#define PL_COLOR_SDR_WHITE 203.0
+#define PL_COLOR_SDR_WHITE 203.0f
 
-// For HLG, which is scene-referred and dependent on the peak luminance of the
-// display device, rather than targeting a fixed cd/m^2 level in display space,
-// we target the 75% level in scene space. This maps to the same brightness
-// level in display space when viewed under the OOTF of a 1000 cd/m^2 HLG
-// reference display.
-#define PL_COLOR_SDR_WHITE_HLG 3.17955
+// Deprecated. For compatibility with older versions of libplacebo.
+#define PL_COLOR_REF_WHITE      PL_COLOR_SDR_WHITE
+#define PL_COLOR_SDR_WHITE_HLG  3.17955
 
-// Compatibility alias for older versions of libplacebo
-#define PL_COLOR_REF_WHITE PL_COLOR_SDR_WHITE
+// Represents a single CIE xy coordinate (e.g. CIE Yxy with Y = 1.0)
+struct pl_cie_xy {
+    float x, y;
+};
 
-// The semantic interpretation of the decoded image, how is it mastered?
+// Recovers (X / Y) from a CIE xy value.
+static inline float pl_cie_X(struct pl_cie_xy xy) {
+    return xy.x / xy.y;
+}
+
+// Recovers (Z / Y) from a CIE xy value.
+static inline float pl_cie_Z(struct pl_cie_xy xy) {
+    return (1 - xy.x - xy.y) / xy.y;
+}
+
+static inline float pl_cie_xy_equal(const struct pl_cie_xy *a,
+                                    const struct pl_cie_xy *b)
+{
+    return a->x == b->x && a->y == b->y;
+}
+
+// Computes the CIE xy chromaticity coordinates of a CIE D-series illuminant
+// with the given correlated color temperature.
+//
+// `temperature` must be between 2500 K and 25000 K, inclusive.
+struct pl_cie_xy pl_white_from_temp(float temperature);
+
+// Represents the raw physical primaries corresponding to a color space.
+struct pl_raw_primaries {
+    struct pl_cie_xy red, green, blue, white;
+};
+
+// Returns whether two raw primaries are exactly identical.
+bool pl_raw_primaries_equal(const struct pl_raw_primaries *a,
+                            const struct pl_raw_primaries *b);
+
+// Replaces unknown values in the first struct by those of the second struct.
+void pl_raw_primaries_merge(struct pl_raw_primaries *orig,
+                            const struct pl_raw_primaries *update);
+
+// Returns the raw primaries for a given color space.
+const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim);
+
+// Represents raw HDR metadata as defined by SMPTE 2086 / CTA 861.3, which is
+// often attached to HDR sources and can be forwarded to HDR-capable displays,
+// or used to guide the libplacebo built-in tone mapping.
+struct pl_hdr_metadata {
+    // Mastering display metadata. This is used for tone-mapping.
+    struct pl_raw_primaries prim; // mastering display primaries
+    float min_luma, max_luma;     // min/max luminance (in cd/m²)
+
+    // Content light level. This is ignored by libplacebo itself.
+    float max_cll;                // max content light level (in cd/m²)
+    float max_fall;               // max frame average light level (in cd/m²)
+};
+
+extern const struct pl_hdr_metadata pl_hdr_metadata_empty; // equal to {0}
+extern const struct pl_hdr_metadata pl_hdr_metadata_hdr10; // generic HDR10 display
+
+// Returns whether two sets of HDR metadata are exactly identical.
+bool pl_hdr_metadata_equal(const struct pl_hdr_metadata *a,
+                           const struct pl_hdr_metadata *b);
+
+// Replaces unknown values in the first struct by those of the second struct.
+void pl_hdr_metadata_merge(struct pl_hdr_metadata *orig,
+                           const struct pl_hdr_metadata *update);
+
+// Deprecated. No longer used by libplacebo.
 enum pl_color_light {
     PL_COLOR_LIGHT_UNKNOWN = 0,
     PL_COLOR_LIGHT_DISPLAY,     // Display-referred, output as-is
@@ -284,7 +345,7 @@ enum pl_color_light {
     PL_COLOR_LIGHT_COUNT
 };
 
-bool pl_color_light_is_scene_referred(enum pl_color_light light);
+PL_DEPRECATED bool pl_color_light_is_scene_referred(enum pl_color_light light);
 
 // Rendering intent for colorspace transformations. These constants match the
 // ICC specification (Table 23)
@@ -301,52 +362,31 @@ enum pl_rendering_intent {
 struct pl_color_space {
     enum pl_color_primaries primaries;
     enum pl_color_transfer transfer;
-    enum pl_color_light light;
 
-    // The highest value that occurs in the signal, relative to the reference
-    // white, alternatively the brightest color value supported by a given
-    // color space. (0 = unknown)
-    float sig_peak;
+    // HDR metadata for this color space. Note that this can also be combined
+    // with SDR color transfers, in which case it's assumed that the color
+    // transfer in question is linearly "stretched" relative to these values.
+    struct pl_hdr_metadata hdr;
 
-    // The average light level that occurs in the signal, relative to the
-    // reference white, alternatively the desired average brightness level of a
-    // given color space. (0 = unknown)
-    float sig_avg;
-
-    // The signal floor, i.e. black point, relative to the reference white.
-    // This effectively determines the signal's contrast, as well. Note that
-    // for most SDR curves, this can only be 0.0 and will effectively be
-    // ignored if otherwise. It only applies to absolute luminance transfer
-    // functions (such as PQ or S-Log), as well as BT.1886.
-    //
-    // Note that a value of 0.0 exactly is treated effectively as "unknown",
-    // and will be defaulted to a contrast of 1000:1 for BT.1886. To override
-    // this logic (thus turning BT.1886 into a true gamma 2.4 function), either
-    // set the transfer function explicitly to PL_COLOR_TRC_GAMMA24, or set
-    // this value to something sufficiently low like FLT_EPSILON. (Never mind
-    // that such high contrast values are unrealistic anyway)
-    float sig_floor;
-
-    // Additional scale factor for the signal's reference white. If this is set
-    // to a value higher than 1.0, then it's assumed that the signal's encoded
-    // reference white is assumed to be brighter than normal by this factor.
-    // This can be used to over- or under-expose content, especially HDR
-    // content. (0 = unknown)
-    //
-    // An example of where this could come in use is for using an SDR transfer
-    // function (e.g. PL_COLOR_TRC_LINEAR) to encode a HDR image or display.
-    float sig_scale;
+    // Deprecated fields
+    enum pl_color_light light PL_DEPRECATED; // ignored
+    float sig_peak;     // replaced by `hdr.max_luma`
+    float sig_avg;      // ignored
+    float sig_floor;    // replaced by `hdr.min_luma`
+    float sig_scale;    // merged into `hdr.max/min_luma`
 };
+
+#define pl_color_space(...) (&(struct pl_color_space) { __VA_ARGS__ })
 
 // Returns whether or not a color space is considered as effectively HDR.
 // This is true when the effective signal peak is greater than the SDR
-// reference white (1.0), after application of the `sig_scale`.
-bool pl_color_space_is_hdr(struct pl_color_space csp);
+// reference white (1.0), taking into account `csp->hdr`.
+bool pl_color_space_is_hdr(const struct pl_color_space *csp);
 
 // Returns whether or not a color space is "black scaled", in which case 0.0 is
 // the true black point. This is true for SDR signals other than BT.1886, as
 // well as for HLG.
-bool pl_color_space_is_black_scaled(struct pl_color_space csp);
+bool pl_color_space_is_black_scaled(const struct pl_color_space *csp);
 
 // Replaces unknown values in the first struct by those of the second struct.
 void pl_color_space_merge(struct pl_color_space *orig,
@@ -369,7 +409,7 @@ void pl_color_space_infer_ref(struct pl_color_space *space,
                               const struct pl_color_space *ref);
 
 // Some common color spaces. Note: These don't necessarily have all fields
-// filled, in particular `sig_peak` and `sig_avg` are left unset.
+// filled, in particular `hdr` is left unset.
 extern const struct pl_color_space pl_color_space_unknown;
 extern const struct pl_color_space pl_color_space_srgb;
 extern const struct pl_color_space pl_color_space_bt709;
@@ -416,45 +456,6 @@ enum pl_chroma_location {
 //
 // Note: PL_CHROMA_UNKNOWN defaults to PL_CHROMA_LEFT
 void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y);
-
-// Represents a single CIE xy coordinate (e.g. CIE Yxy with Y = 1.0)
-struct pl_cie_xy {
-    float x, y;
-};
-
-// Recovers (X / Y) from a CIE xy value.
-static inline float pl_cie_X(struct pl_cie_xy xy) {
-    return xy.x / xy.y;
-}
-
-// Recovers (Z / Y) from a CIE xy value.
-static inline float pl_cie_Z(struct pl_cie_xy xy) {
-    return (1 - xy.x - xy.y) / xy.y;
-}
-
-static inline float pl_cie_xy_equal(const struct pl_cie_xy *a,
-                                    const struct pl_cie_xy *b)
-{
-    return a->x == b->x && a->y == b->y;
-}
-
-// Computes the CIE xy chromaticity coordinates of a CIE D-series illuminant
-// with the given correlated color temperature.
-//
-// `temperature` must be between 2500 K and 25000 K, inclusive.
-struct pl_cie_xy pl_white_from_temp(float temperature);
-
-// Represents the raw physical primaries corresponding to a color space.
-struct pl_raw_primaries {
-    struct pl_cie_xy red, green, blue, white;
-};
-
-// Returns whether two raw primaries are exactly identical.
-bool pl_raw_primaries_equal(const struct pl_raw_primaries *a,
-                            const struct pl_raw_primaries *b);
-
-// Returns the raw primaries for a given color space.
-const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim);
 
 // Returns an RGB->XYZ conversion matrix for a given set of primaries.
 // Multiplying this into the RGB color transforms it to CIE XYZ, centered

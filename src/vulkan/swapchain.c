@@ -148,7 +148,7 @@ static bool map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
     }
 }
 
-static bool pick_surf_format(pl_swapchain sw, const struct pl_swapchain_colors *hint)
+static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
 {
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
@@ -848,15 +848,14 @@ static bool vk_sw_resize(pl_swapchain sw, int *width, int *height)
     return ok;
 }
 
-static void vk_sw_colorspace_hint(pl_swapchain sw,
-                                  const struct pl_swapchain_colors *colors)
+static void vk_sw_colorspace_hint(pl_swapchain sw, const struct pl_color_space *csp)
 {
     struct priv *p = PL_PRIV(sw);
     pl_mutex_lock(&p->lock);
 
     // This should never fail if the swapchain already exists
-    bool ok = pick_surf_format(sw, colors);
-    set_hdr_metadata(p, &colors->hdr);
+    bool ok = pick_surf_format(sw, csp);
+    set_hdr_metadata(p, &csp->hdr);
     pl_assert(ok);
 
     pl_mutex_unlock(&p->lock);

@@ -67,36 +67,8 @@ int pl_swapchain_latency(pl_swapchain sw);
 // effectively be used to probe if creating a swapchain works.
 bool pl_swapchain_resize(pl_swapchain sw, int *width, int *height);
 
-// Represents raw HDR metadata as defined by SMPTE 2086 / CTA 861.3, which
-// is often attached to HDR sources and can be forwarded to HDR-capable
-// displays in order to enhance their tone mapping. It's worth pointing out
-// that libplacebo does not make use of this information in its own internal
-// tone mapping routines, instead consulting the functionally similar fields
-// in `pl_color_space`.
-struct pl_hdr_metadata {
-    struct pl_raw_primaries prim; // mastering display primaries
-    float min_luma, max_luma;     // min/max luminance (in cd/m²)
-    float max_cll;                // max content light level (in cd/m²)
-    float max_fall;               // max frame average light level (in cd/m²)
-};
-
-extern const struct pl_hdr_metadata pl_hdr_metadata_empty; // equal to {0}
-extern const struct pl_hdr_metadata pl_hdr_metadata_hdr10; // generic HDR10 display
-
-// Returns whether two sets of HDR metadata are exactly identical.
-bool pl_hdr_metadata_equal(const struct pl_hdr_metadata *a,
-                           const struct pl_hdr_metadata *b);
-
-struct pl_swapchain_colors {
-    enum pl_color_primaries primaries;  // preferred nominal content primaries
-    enum pl_color_transfer transfer;    // preferred nominal transfer function
-    struct pl_hdr_metadata hdr;         // associated HDR metadata, or {0}
-
-    // Note: If `trc` is a HDR transfer curve but HDR metadata is left
-    // unspecified, the HDR metadata defaults to `pl_hdr_metadata_hdr10`.
-    // Conversely, if the HDR metadata is non-empty but `trc` is left as
-    // PL_COLOR_TRC_UNKNOWN, then it instead defaults to PL_COLOR_TRC_PQ.
-};
+// Backwards compatibility
+#define pl_swapchain_colors pl_color_space
 
 // Inform the swapchain about the input color space. This API deliberately
 // provides no feedback, because the swapchain can internally decide what to do
@@ -104,10 +76,15 @@ struct pl_swapchain_colors {
 // asynchronously. Users must still base their rendering on the value of
 // `pl_swapchain_frame.color_space`.
 //
-// Note that calling this function a second time completely overrides any
+// Note: Calling this function a second time completely overrides any
 // previously specified hint. So calling this on {0} or NULL resets the
 // swapchain back to its initial/preferred colorspace.
-void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_swapchain_colors *csp);
+//
+// Note: If `csp->transfer` is a HDR transfer curve but HDR metadata is left
+// unspecified, the HDR metadata defaults to `pl_hdr_metadata_hdr10`.
+// Conversely, if the HDR metadata is non-empty but `csp->transfer` is left as
+// PL_COLOR_TRC_UNKNOWN, then it instead defaults to PL_COLOR_TRC_PQ.
+void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_color_space *csp);
 
 // Backwards compatibility wrapper for `pl_swapchain_colorspace_hint`. Always
 // returns `true`. (Deprecated)

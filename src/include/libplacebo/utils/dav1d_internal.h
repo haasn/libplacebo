@@ -260,7 +260,6 @@ static inline void pl_frame_from_dav1dpicture(struct pl_frame *out,
         .color = {
             .primaries = pl_primaries_from_dav1d(seq_hdr->pri),
             .transfer = pl_transfer_from_dav1d(seq_hdr->trc),
-            .light = PL_COLOR_LIGHT_UNKNOWN,
         },
         .repr = {
             .sys = pl_system_from_dav1d(seq_hdr->mtrx),
@@ -295,20 +294,26 @@ static inline void pl_frame_from_dav1dpicture(struct pl_frame *out,
 
     const Dav1dContentLightLevel *cll = picture->content_light;
     if (cll) {
-        out->color.sig_peak = cll->max_content_light_level / PL_COLOR_SDR_WHITE;
-        out->color.sig_avg = cll->max_frame_average_light_level / PL_COLOR_SDR_WHITE;
+        out->color.hdr.max_cll = cll->max_content_light_level;
+        out->color.hdr.max_fall = cll->max_frame_average_light_level;
     }
 
     // This overrides the CLL values above, if both are present
     const Dav1dMasteringDisplay *md = picture->mastering_display;
     if (md) {
-        out->color.sig_peak = pl_fixed24_8(md->max_luminance) / PL_COLOR_SDR_WHITE;
-        out->color.sig_floor = pl_fixed18_14(md->min_luminance) / PL_COLOR_SDR_WHITE;
+        out->color.hdr.max_luma = pl_fixed24_8(md->max_luminance);
+        out->color.hdr.min_luma = pl_fixed18_14(md->min_luminance);
+        out->color.hdr.prim = (struct pl_raw_primaries) {
+            .red.x   = pl_fixed0_16(md->primaries[0][0]),
+            .red.y   = pl_fixed0_16(md->primaries[0][1]),
+            .green.x = pl_fixed0_16(md->primaries[1][0]),
+            .green.y = pl_fixed0_16(md->primaries[1][1]),
+            .blue.x  = pl_fixed0_16(md->primaries[2][0]),
+            .blue.y  = pl_fixed0_16(md->primaries[2][1]),
+            .white.x = pl_fixed0_16(md->white_point[0]),
+            .white.y = pl_fixed0_16(md->white_point[1]),
+        };
     }
-
-    // Make sure this value is more or less legal
-    if (out->color.sig_peak < 1.0 || out->color.sig_peak > 50.0)
-        out->color.sig_peak = 0.0;
 
     if (picture->frame_hdr->film_grain.present) {
         const Dav1dFilmGrainData *fg = &picture->frame_hdr->film_grain.data;

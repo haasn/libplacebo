@@ -244,6 +244,42 @@ static inline enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc)
     return AVCHROMA_LOC_UNSPECIFIED;
 }
 
+static void pl_color_space_from_avframe(struct pl_color_space *out_csp,
+                                        const AVFrame *frame)
+{
+    const AVFrameSideData *sd;
+    *out_csp = (struct pl_swapchain_colors) {
+        .primaries = pl_primaries_from_av(frame->color_primaries),
+        .transfer = pl_transfer_from_av(frame->color_trc),
+    };
+
+    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL))) {
+        const AVContentLightMetadata *clm = (AVContentLightMetadata *) sd->data;
+        out_csp->hdr.max_cll = clm->MaxCLL;
+        out_csp->hdr.max_fall = clm->MaxFALL;
+    }
+
+    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA))) {
+        const AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *) sd->data;
+        if (mdm->has_luminance) {
+            out_csp->hdr.max_luma = av_q2d(mdm->max_luminance);
+            out_csp->hdr.min_luma = av_q2d(mdm->min_luminance);
+        }
+        if (mdm->has_primaries) {
+            out_csp->hdr.prim = (struct pl_raw_primaries) {
+                .red.x   = av_q2d(mdm->display_primaries[0][0]),
+                .red.y   = av_q2d(mdm->display_primaries[0][1]),
+                .green.x = av_q2d(mdm->display_primaries[1][0]),
+                .green.y = av_q2d(mdm->display_primaries[1][1]),
+                .blue.x  = av_q2d(mdm->display_primaries[2][0]),
+                .blue.y  = av_q2d(mdm->display_primaries[2][1]),
+                .white.x = av_q2d(mdm->white_point[0]),
+                .white.y = av_q2d(mdm->white_point[1]),
+            };
+        }
+    }
+}
+
 static inline int pl_plane_data_num_comps(const struct pl_plane_data *data)
 {
     for (int i = 0; i < 4; i++) {
@@ -397,15 +433,14 @@ static inline bool pl_test_pixfmt(pl_gpu gpu,
     return true;
 }
 
-static inline void pl_avframe_set_color(AVFrame *frame, struct pl_color_space space)
+static inline void pl_avframe_set_color(AVFrame *frame, struct pl_color_space csp)
 {
     const AVFrameSideData *sd;
 
-    frame->color_primaries = pl_primaries_to_av(space.primaries);
-    frame->color_trc = pl_transfer_to_av(space.transfer);
-    // No way to map space.light, so just ignore it
+    frame->color_primaries = pl_primaries_to_av(csp.primaries);
+    frame->color_trc = pl_transfer_to_av(csp.transfer);
 
-    if (space.sig_peak > 1 && space.sig_peak < pl_color_transfer_nominal_peak(space.transfer)) {
+    if (csp.hdr.max_cll) {
         sd = av_frame_get_side_data(frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL);
         if (!sd) {
             sd = av_frame_new_side_data(frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL,
@@ -415,16 +450,13 @@ static inline void pl_avframe_set_color(AVFrame *frame, struct pl_color_space sp
         if (sd) {
             AVContentLightMetadata *clm = (AVContentLightMetadata *) sd->data;
             *clm = (AVContentLightMetadata) {
-                .MaxCLL = space.sig_peak * PL_COLOR_SDR_WHITE,
-                .MaxFALL = space.sig_avg * PL_COLOR_SDR_WHITE,
+                .MaxCLL = csp.hdr.max_cll,
+                .MaxFALL = csp.hdr.max_fall,
             };
-
-            if (!clm->MaxFALL)
-                clm->MaxFALL = clm->MaxCLL;
         }
     }
 
-    if (space.sig_floor > 0.0) {
+    if (csp.hdr.max_luma || csp.hdr.prim.red.x) {
         sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA);
         if (!sd) {
             sd = av_frame_new_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA,
@@ -434,14 +466,29 @@ static inline void pl_avframe_set_color(AVFrame *frame, struct pl_color_space sp
         if (sd) {
             AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *) sd->data;
             *mdm = (AVMasteringDisplayMetadata) {
-                .max_luminance = av_d2q(space.sig_peak * PL_COLOR_SDR_WHITE, 100000),
-                .min_luminance = av_d2q(space.sig_floor * PL_COLOR_SDR_WHITE, 100000),
-                .has_luminance = 1,
+                .max_luminance = av_d2q(csp.hdr.max_luma, 1000000),
+                .min_luminance = av_d2q(csp.hdr.min_luma, 1000000),
+                .has_luminance = !!csp.hdr.max_luma,
+                .display_primaries = {
+                    {
+                        av_d2q(csp.hdr.prim.red.x, 1000000),
+                        av_d2q(csp.hdr.prim.red.y, 1000000),
+                    }, {
+                        av_d2q(csp.hdr.prim.green.x, 1000000),
+                        av_d2q(csp.hdr.prim.green.y, 1000000),
+                    }, {
+                        av_d2q(csp.hdr.prim.blue.x, 1000000),
+                        av_d2q(csp.hdr.prim.blue.y, 1000000),
+                    }
+                },
+                .white_point = {
+                    av_d2q(csp.hdr.prim.white.x, 1000000),
+                    av_d2q(csp.hdr.prim.white.y, 1000000),
+                },
+                .has_primaries = !!csp.hdr.prim.red.x,
             };
         }
     }
-
-    // No way to map space.sig_scale, so just ignore it
 }
 
 static inline void pl_avframe_set_repr(AVFrame *frame, struct pl_color_repr repr)
@@ -490,11 +537,6 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
             .x1 = frame->width - frame->crop_right,
             .y1 = frame->height - frame->crop_bottom,
         },
-        .color = {
-            .primaries = pl_primaries_from_av(frame->color_primaries),
-            .transfer = pl_transfer_from_av(frame->color_trc),
-            .light = PL_COLOR_LIGHT_UNKNOWN,
-        },
         .repr = {
             .sys = pl_system_from_av(frame->colorspace),
             .levels = pl_levels_from_av(frame->color_range),
@@ -510,6 +552,8 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
             .bits.color_depth = desc->comp[0].depth,
         },
     };
+
+    pl_color_space_from_avframe(&out->color, frame);
 
     if (frame->colorspace == AVCOL_SPC_ICTCP &&
         frame->color_trc == AVCOL_TRC_ARIB_STD_B67)
@@ -548,29 +592,10 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
         pl_icc_profile_compute_signature(&out->profile);
     }
 
-    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL))) {
-        const AVContentLightMetadata *clm = (AVContentLightMetadata *) sd->data;
-        out->color.sig_peak = clm->MaxCLL / PL_COLOR_SDR_WHITE;
-        out->color.sig_avg = clm->MaxFALL / PL_COLOR_SDR_WHITE;
-    }
-
-    // This overrides the CLL values above, if both are present
-    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA))) {
-        const AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *) sd->data;
-        if (mdm->has_luminance) {
-            out->color.sig_peak = av_q2d(mdm->max_luminance) / PL_COLOR_SDR_WHITE;
-            out->color.sig_floor = av_q2d(mdm->min_luminance) / PL_COLOR_SDR_WHITE;
-        }
-    }
-
     if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DISPLAYMATRIX))) {
         double rot = av_display_rotation_get((const int32_t *) sd->data);
         out->rotation = pl_rotation_normalize(4.5 - rot / 90.0);
     }
-
-    // Make sure this value is more or less legal
-    if (out->color.sig_peak < 1.0 || out->color.sig_peak > 50.0)
-        out->color.sig_peak = 0.0;
 
 #ifdef HAVE_LAV_FILM_GRAIN
     if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS))) {
@@ -673,59 +698,33 @@ static inline void pl_frame_copy_stream_props(struct pl_frame *out,
     const uint8_t *sd;
     if ((sd = av_stream_get_side_data(stream, AV_PKT_DATA_CONTENT_LIGHT_LEVEL, NULL))) {
         const AVContentLightMetadata *clm = (AVContentLightMetadata *) sd;
-        out->color.sig_peak = clm->MaxCLL / PL_COLOR_SDR_WHITE;
-        out->color.sig_avg = clm->MaxFALL / PL_COLOR_SDR_WHITE;
+        out->color.hdr.max_cll = clm->MaxCLL;
+        out->color.hdr.max_fall = clm->MaxFALL;
     }
 
     if ((sd = av_stream_get_side_data(stream, AV_PKT_DATA_MASTERING_DISPLAY_METADATA, NULL))) {
         const AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *) sd;
         if (mdm->has_luminance) {
-            out->color.sig_peak = av_q2d(mdm->max_luminance) / PL_COLOR_SDR_WHITE;
-            out->color.sig_floor = av_q2d(mdm->min_luminance) / PL_COLOR_SDR_WHITE;
+            out->color.hdr.max_cll = av_q2d(mdm->max_luminance);
+            out->color.hdr.max_fall = av_q2d(mdm->min_luminance);
+        }
+        if (mdm->has_primaries) {
+            out->color.hdr.prim = (struct pl_raw_primaries) {
+                .red.x   = av_q2d(mdm->display_primaries[0][0]),
+                .red.y   = av_q2d(mdm->display_primaries[0][1]),
+                .green.x = av_q2d(mdm->display_primaries[1][0]),
+                .green.y = av_q2d(mdm->display_primaries[1][1]),
+                .blue.x  = av_q2d(mdm->display_primaries[2][0]),
+                .blue.y  = av_q2d(mdm->display_primaries[2][1]),
+                .white.x = av_q2d(mdm->white_point[0]),
+                .white.y = av_q2d(mdm->white_point[1]),
+            };
         }
     }
 
     if ((sd = av_stream_get_side_data(stream, AV_PKT_DATA_DISPLAYMATRIX, NULL))) {
         double rot = av_display_rotation_get((const int32_t *) sd);
         out->rotation = pl_rotation_normalize(4.5 - rot / 90.0);
-    }
-}
-
-static inline void pl_swapchain_colors_from_avframe(struct pl_swapchain_colors *out_colors,
-                                                    const AVFrame *avframe)
-{
-    const AVFrameSideData *sd;
-    struct pl_frame frame;
-    pl_frame_from_avframe(&frame, avframe);
-
-    *out_colors = (struct pl_swapchain_colors) {
-        .primaries = frame.color.primaries,
-        .transfer = frame.color.transfer,
-    };
-
-    if ((sd = av_frame_get_side_data(avframe, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL))) {
-        const AVContentLightMetadata *clm = (AVContentLightMetadata *) sd->data;
-        out_colors->hdr.max_cll = clm->MaxCLL;
-        out_colors->hdr.max_fall = clm->MaxFALL;
-    }
-
-    if ((sd = av_frame_get_side_data(avframe, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA))) {
-        const AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *) sd->data;
-        if (mdm->has_luminance) {
-            out_colors->hdr.min_luma = av_q2d(mdm->min_luminance);
-            out_colors->hdr.max_luma = av_q2d(mdm->max_luminance);
-        }
-
-        if (mdm->has_primaries) {
-            out_colors->hdr.prim.red.x   = av_q2d(mdm->display_primaries[0][0]);
-            out_colors->hdr.prim.red.y   = av_q2d(mdm->display_primaries[0][1]);
-            out_colors->hdr.prim.green.x = av_q2d(mdm->display_primaries[1][0]);
-            out_colors->hdr.prim.green.y = av_q2d(mdm->display_primaries[1][1]);
-            out_colors->hdr.prim.blue.x  = av_q2d(mdm->display_primaries[2][0]);
-            out_colors->hdr.prim.blue.y  = av_q2d(mdm->display_primaries[2][1]);
-            out_colors->hdr.prim.white.x = av_q2d(mdm->white_point[0]);
-            out_colors->hdr.prim.white.y = av_q2d(mdm->white_point[1]);
-        }
     }
 }
 

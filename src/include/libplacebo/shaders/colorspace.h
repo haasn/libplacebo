@@ -57,12 +57,12 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr);
 //
 // Note: Unlike the ITU-R EOTF, it never includes the OOTF - even for systems
 // where the EOTF includes the OOTF (such as HLG).
-void pl_shader_linearize(pl_shader sh, struct pl_color_space csp);
+void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp);
 
 // Delinearize (compress), given a color space as output. This loosely
 // corresponds to the inverse EOTF (not the OETF) in ITU-R terminology, again
 // assuming a reference monitor.
-void pl_shader_delinearize(pl_shader sh, struct pl_color_space csp);
+void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp);
 
 struct pl_sigmoid_params {
     // The center (bias) of the sigmoid curve. Must be between 0.0 and 1.0.
@@ -139,7 +139,7 @@ struct pl_peak_detect_params {
 #define pl_peak_detect_params(...) (&(struct pl_peak_detect_params) { PL_PEAK_DETECT_DEFAULTS __VA_ARGS__ })
 extern const struct pl_peak_detect_params pl_peak_detect_default_params;
 
-// This function can be used to measure the `sig_peak` and `sig_avg` of a video
+// This function can be used to measure the CLL and FALL of a video
 // source automatically, using a compute shader. The measured values are
 // smoothed automatically (depending on the parameters), so to keep track of
 // the measured results over time, a tone mapping shader state object is used
@@ -159,8 +159,9 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
                            const struct pl_peak_detect_params *params);
 
 // After dispatching the above shader, this function *may* be used to read out
-// the detected `sig_peak` and `sig_avg` directly. If the shader has never been
-// dispatched yet, i.e. no information is available, this will return false.
+// the detected CLL and FALL directly (in PL_HDR_NORM units). If the shader
+// has never been dispatched yet, i.e. no information is available, this will
+// return false.
 //
 // Note: This function will block until the shader object is no longer in use
 // by the GPU, so its use should be avoided due to performance reasons. This
@@ -168,7 +169,7 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
 // since that can ingest the results from the state object directly. It only
 // serves as a utility/debugging function.
 bool pl_get_detected_peak(const pl_shader_obj state,
-                          float *out_peak, float *out_avg);
+                          float *out_cll, float *out_fall);
 
 // Resets the peak detection state in a given tone mapping state object. This
 // is not equal to `pl_shader_obj_destroy`, because it does not destroy any

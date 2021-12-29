@@ -50,11 +50,6 @@ static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *fra
 static void pl_frame_copy_stream_props(struct pl_frame *out_frame,
                                        const AVStream *stream);
 
-// Helper function to generate a `pl_swapchain_colors` struct from an AVFrame.
-// Useful to update the swapchain colorspace mode dynamically (e.g. for HDR).
-static void pl_swapchain_colors_from_avframe(struct pl_swapchain_colors *out_colors,
-                                             const AVFrame *frame);
-
 // Helper function to test if a pixfmt would be supported by the GPU.
 // Essentially, this can be used to check if `pl_upload_avframe` would work for
 // a given AVPixelFormat, without actually uploading or allocating anything.
@@ -159,6 +154,13 @@ static enum pl_color_transfer pl_transfer_from_av(enum AVColorTransferCharacteri
 static enum AVColorTransferCharacteristic pl_transfer_to_av(enum pl_color_transfer trc);
 static enum pl_chroma_location pl_chroma_from_av(enum AVChromaLocation loc);
 static enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc);
+
+// Helper function to generate a `pl_color_space` struct from an AVFrame.
+static void pl_color_space_from_avframe(struct pl_color_space *out_csp,
+                                        const AVFrame *frame);
+
+// Deprecated alias for backwards compatibility
+#define pl_swapchain_colors_from_avframe pl_color_space_from_avframe
 
 // Actual implementation, included as part of this header to avoid having
 // a compile-time dependency on libavutil.
