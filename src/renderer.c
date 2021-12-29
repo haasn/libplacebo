@@ -1670,7 +1670,7 @@ static bool pass_scale_main(struct pass_state *pass)
 
     struct sampler_info info = sample_src_info(pass, &src);
     bool use_sigmoid = info.dir == SAMPLER_UP && params->sigmoid_params;
-    bool use_linear  = use_sigmoid || info.dir == SAMPLER_DOWN;
+    bool use_linear  = info.dir == SAMPLER_DOWN;
 
     // We need to enable the full rendering pipeline if there are any user
     // shaders / hooks that might depend on it.
@@ -1706,14 +1706,14 @@ static bool pass_scale_main(struct pass_state *pass)
         use_sigmoid = use_linear = false;
 
     // Avoid sigmoidization for HDR content because it clips to [0,1]
-    if (pl_color_transfer_is_hdr(img->color.transfer)) {
+    if (pl_color_space_is_hdr(&img->color)) {
         use_sigmoid = false;
         // Also disable linearization if necessary
         if (rr->disable_linear_hdr)
             use_linear = false;
     }
 
-    if (use_linear) {
+    if (use_linear || use_sigmoid) {
         pl_shader_linearize(img_sh(pass, img), &img->color);
         img->color.transfer = PL_COLOR_TRC_LINEAR;
         pass_hook(pass, img, PL_HOOK_LINEAR);
