@@ -99,6 +99,7 @@ static bool tex_init(pl_gpu gpu, pl_tex tex)
         case 3:
             // D3D11 does not have Texture3D arrays
             rtvdesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE3D;
+            rtvdesc.Texture3D.WSize = -1;
             break;
         }
         D3D(ID3D11Device_CreateRenderTargetView(p->dev, tex_p->res, &rtvdesc,
@@ -131,6 +132,7 @@ static bool tex_init(pl_gpu gpu, pl_tex tex)
         case 3:
             // D3D11 does not have Texture3D arrays
             uavdesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE3D;
+            uavdesc.Texture3D.WSize = -1;
             break;
         }
         D3D(ID3D11Device_CreateUnorderedAccessView(p->dev, tex_p->res, &uavdesc,
