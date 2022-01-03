@@ -91,6 +91,7 @@ const struct d3d_format pl_d3d11_formats[] = {
     FMT("rgb10a2u", R10G10B10A2,  UINT,  4,  4, BITS(10, 10, 10,  2), IDX(0, 1, 2, 3)),
 
     FMT("bgra8",    B8G8R8A8,     UNORM, 4,  4, BITS( 8,  8,  8,  8), IDX(2, 1, 0, 3)),
+    FMT("bgrx8",    B8G8R8X8,     UNORM, 3,  4, BITS( 8,  8,  8),     IDX(2, 1, 0)),
     FMT("rg11b10f", R11G11B10,    FLOAT, 3,  4, BITS(11, 11, 10),     IDX(0, 1, 2)),
 
      // D3D11.1 16-bit formats (resurrected D3D9 formats)
