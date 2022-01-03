@@ -369,11 +369,11 @@ struct pl_color_space {
     struct pl_hdr_metadata hdr;
 
     // Deprecated fields
-    enum pl_color_light light PL_DEPRECATED; // ignored
-    float sig_peak;     // replaced by `hdr.max_luma`
-    float sig_avg;      // ignored
-    float sig_floor;    // replaced by `hdr.min_luma`
-    float sig_scale;    // merged into `hdr.max/min_luma`
+    enum pl_color_light light PL_DEPRECATED;    // ignored
+    float sig_peak PL_DEPRECATED;               // replaced by `hdr.max_luma`
+    float sig_avg PL_DEPRECATED;                // ignored
+    float sig_floor PL_DEPRECATED;              // replaced by `hdr.min_luma`
+    float sig_scale PL_DEPRECATED;              // merged into `hdr.max/min_luma`
 };
 
 #define pl_color_space(...) (&(struct pl_color_space) { __VA_ARGS__ })
