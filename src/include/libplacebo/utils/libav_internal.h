@@ -729,8 +729,8 @@ static inline void pl_frame_copy_stream_props(struct pl_frame *out,
 }
 
 #ifdef PL_HAVE_LAV_DOLBY_VISION
-static void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
-                                 const AVDOVIMetadata *data)
+static inline void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
+                                        const AVDOVIMetadata *data)
 {
     const AVDOVIRpuDataHeader *header;
     const AVDOVIDataMapping *mapping;
@@ -977,23 +977,8 @@ static inline bool pl_map_avframe_internal(pl_gpu gpu, struct pl_frame *out,
     int planes;
 
     pl_frame_from_avframe(out, frame);
-    if (can_alloc) {
-#ifdef PL_HAVE_LAV_DOLBY_VISION
-        AVFrameSideData *sd;
-        if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DOVI_METADATA))) {
-            struct pl_dovi_metadata *dovi = malloc(sizeof(*dovi));
-            if (!dovi)
-                goto error; /* oom */
-
-            pl_map_dovi_metadata(dovi, (AVDOVIMetadata *) sd->data);
-            out->repr.dovi = dovi;
-            out->repr.sys = PL_COLOR_SYSTEM_DOLBYVISION;
-            out->color.primaries = PL_COLOR_PRIM_BT_2020;
-            out->color.transfer = PL_COLOR_TRC_PQ;
-        }
-#endif
+    if (can_alloc)
         out->user_data = av_frame_clone(frame);
-    }
 
     switch (frame->format) {
     case AV_PIX_FMT_DRM_PRIME:
@@ -1079,7 +1064,6 @@ static inline void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame)
     }
 
     av_frame_free(&avframe);
-    free((void *) frame->repr.dovi);
 
 done:
     memset(frame, 0, sizeof(*frame)); // sanity

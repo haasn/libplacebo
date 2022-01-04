@@ -42,10 +42,6 @@ PL_API_BEGIN
 // metadata, the resulting `out_image->profile` will reference this pointer,
 // meaning that in general, the `pl_frame` is only guaranteed to be valid as
 // long as the AVFrame is not freed.
-//
-// Note: This will ignore Dolby Vision metadata by default (to avoid leaking
-// memory), either switch to pl_map_avframe or do it manually using
-// pl_map_dovi_metadata.
 static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *frame);
 
 // Deprecated aliases for backwards compatibility
@@ -100,7 +96,6 @@ static void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame);
 // - Does not support hardware-accelerated frames
 // - Does not require manual unmapping
 // - Does not touch `frame->user_data`.
-// - Does not automatically map dovi metadata
 // - `frame` must not be freed by the user before `frame` is done being used
 static PL_DEPRECATED bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
                                             pl_tex tex[4], const AVFrame *frame);
