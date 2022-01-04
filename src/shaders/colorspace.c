@@ -363,18 +363,18 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
             "0.0698454, -0.192271,    1.12486) ";
 
         // PQ EOTF
-        GLSL("color.rgb = pow(color.rgb, vec3(1.0/%f));         \n"
-             "color.rgb = max(color.rgb - vec3(%f), 0.0)        \n"
-             "             / (vec3(%f) - vec3(%f) * color.rgb); \n"
-             "color.rgb = pow(color.rgb, vec3(1.0/%f));         \n",
+        GLSL("color.rgb = pow(max(color.rgb, 0.0), vec3(1.0/%f));   \n"
+             "color.rgb = max(color.rgb - vec3(%f), 0.0)            \n"
+             "             / (vec3(%f) - vec3(%f) * color.rgb);     \n"
+             "color.rgb = pow(color.rgb, vec3(1.0/%f));             \n",
              PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1);
         // LMS matrix
         GLSL("color.rgb = %s * color.rgb; \n", bt2100_lms2rgb);
         // PQ OETF
-        GLSL("color.rgb = pow(color.rgb, vec3(%f));              \n"
-             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)      \n"
-             "             / (vec3(1.0) + vec3(%f) * color.rgb); \n"
-             "color.rgb = pow(color.rgb, vec3(%f));              \n",
+        GLSL("color.rgb = pow(max(color.rgb, 0.0), vec3(%f));       \n"
+             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)         \n"
+             "             / (vec3(1.0) + vec3(%f) * color.rgb);    \n"
+             "color.rgb = pow(color.rgb, vec3(%f));                 \n",
              PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
         break;
 
@@ -410,18 +410,18 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
         });
 
         // PQ EOTF
-        GLSL("color.rgb = pow(color.rgb, vec3(1.0/%f));         \n"
-             "color.rgb = max(color.rgb - vec3(%f), 0.0)        \n"
-             "             / (vec3(%f) - vec3(%f) * color.rgb); \n"
-             "color.rgb = pow(color.rgb, vec3(1.0/%f));         \n",
+        GLSL("color.rgb = pow(max(color.rgb, 0.0), vec3(1.0/%f));   \n"
+             "color.rgb = max(color.rgb - vec3(%f), 0.0)            \n"
+             "             / (vec3(%f) - vec3(%f) * color.rgb);     \n"
+             "color.rgb = pow(color.rgb, vec3(1.0/%f));             \n",
              PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1);
         // LMS matrix
         GLSL("color.rgb = %s * color.rgb; \n", mat);
         // PQ OETF
-        GLSL("color.rgb = pow(color.rgb, vec3(%f));              \n"
-             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)      \n"
-             "             / (vec3(1.0) + vec3(%f) * color.rgb); \n"
-             "color.rgb = pow(color.rgb, vec3(%f));              \n",
+        GLSL("color.rgb = pow(max(color.rgb, 0.0), vec3(%f));       \n"
+             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)         \n"
+             "             / (vec3(1.0) + vec3(%f) * color.rgb);    \n"
+             "color.rgb = pow(color.rgb, vec3(%f));                 \n",
              PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
         break;
 
@@ -493,16 +493,16 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
             "0.523925, 0.720459, 0.075440, "
             "0.063965, 0.112793, 0.900394) ";
 
-        GLSL("color.rgb = pow(color.rgb, vec3(1.0/%f));         \n"
-             "color.rgb = max(color.rgb - vec3(%f), 0.0)        \n"
-             "             / (vec3(%f) - vec3(%f) * color.rgb); \n"
-             "color.rgb = pow(color.rgb, vec3(1.0/%f));         \n",
+        GLSL("color.rgb = pow(max(color.rgb, 0.0), vec3(1.0/%f));   \n"
+             "color.rgb = max(color.rgb - vec3(%f), 0.0)            \n"
+             "             / (vec3(%f) - vec3(%f) * color.rgb);     \n"
+             "color.rgb = pow(color.rgb, vec3(1.0/%f));             \n",
              PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1);
         GLSL("color.rgb = %s * color.rgb; \n", bt2100_rgb2lms);
-        GLSL("color.rgb = pow(color.rgb, vec3(%f));              \n"
-             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)      \n"
-             "             / (vec3(1.0) + vec3(%f) * color.rgb); \n"
-             "color.rgb = pow(color.rgb, vec3(%f));              \n",
+        GLSL("color.rgb = pow(color.rgb, vec3(%f));                 \n"
+             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)         \n"
+             "             / (vec3(1.0) + vec3(%f) * color.rgb);    \n"
+             "color.rgb = pow(color.rgb, vec3(%f));                 \n",
              PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
         break;
 
