@@ -1540,11 +1540,11 @@ static void adapt_colors(pl_shader sh,
     case PL_GAMUT_DESATURATE:
         GLSL("float cmin = min(min(color.r, color.g), color.b); \n"
              "float luma = dot(%s, color.rgb);                  \n"
-             "if (cmin < 0.0)                                   \n"
+             "if (cmin < 0.0 - 1e-6)                            \n"
              "    color.rgb = mix(color.rgb, vec3(luma),        \n"
              "                    -cmin / (luma - cmin));       \n"
              "float cmax = max(max(color.r, color.g), color.b); \n"
-             "if (cmax > 1.0)                                   \n"
+             "if (cmax > 1.0 + 1e-6)                            \n"
              "    color.rgb = mix(color.rgb, vec3(luma),        \n"
              "                    (1.0 - cmax) / (luma - cmax));\n",
             sh_luma_coeffs(sh, dst->primaries));
