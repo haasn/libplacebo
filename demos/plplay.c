@@ -77,6 +77,7 @@ struct plplay {
     pl_rotation target_rot;
     bool target_override;
     bool levels_override;
+    bool ignore_dovi;
 
     // custom shaders
     const struct pl_hook **shader_hooks;
@@ -237,7 +238,12 @@ static bool map_frame(pl_gpu gpu, pl_tex *tex,
 {
     AVFrame *frame = src->frame_data;
     struct plplay *p = frame->opaque;
-    bool ok = pl_map_avframe(gpu, out_frame, tex, frame);
+    bool ok = pl_map_avframe_ex(gpu, out_frame, pl_avframe_params(
+        .frame      = frame,
+        .tex        = tex,
+        .map_dovi   = !p->ignore_dovi,
+    ));
+
     av_frame_free(&frame); // references are preserved by `out_frame`
     if (!ok) {
         fprintf(stderr, "Failed mapping AVFrame!\n");
@@ -1322,6 +1328,13 @@ static void update_settings(struct plplay *p)
             nk_checkbox_label(nk, "Disable FBOs / advanced rendering", &par->disable_fbos);
             nk_checkbox_label(nk, "Disable constant hard-coding", &par->dynamic_constants);
             nk_checkbox_label(nk, "Ignore ICC profiles", &par->ignore_icc_profiles);
+
+            if (nk_check_label(nk, "Ignore Dolby Vision metadata", p->ignore_dovi) != p->ignore_dovi) {
+                // Flush the renderer cache on changes, since this can
+                // drastically alter the subjective appearance of the stream
+                pl_renderer_flush_cache(p->renderer);
+                p->ignore_dovi = !p->ignore_dovi;
+            }
 
             nk_layout_row_dynamic(nk, 24, 2);
             if (nk_button_label(nk, "Flush renderer cache"))
