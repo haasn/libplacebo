@@ -42,6 +42,7 @@ project('libplacebo', ['c', 'cpp'],
       '189': 'refactor pl_color_space, merging it with pl_hdr_metadata',
       '190': 'add pl_color_map_params.gamut_mode, replacing gamut_clipping/warning',
       '191': 'add pl_map_dovi_metadata',
+      '192': 'add pl_map_avframe_ex',
     }.keys().length(),
     # Fix version
     0)

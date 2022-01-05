@@ -968,17 +968,42 @@ static void pl_unmap_avframe_vulkan(pl_gpu gpu, struct pl_frame *frame)
 #endif
 
 static inline bool pl_map_avframe_internal(pl_gpu gpu, struct pl_frame *out,
-                                           pl_tex tex[4], const AVFrame *frame,
+                                           const struct pl_avframe_params *params,
                                            bool can_alloc)
 {
+    const AVFrame *frame = params->frame;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     struct pl_plane_data data[4] = {0};
     struct pl_avalloc *alloc;
+    pl_tex *tex = params->tex;
     int planes;
 
     pl_frame_from_avframe(out, frame);
     if (can_alloc)
         out->user_data = av_frame_clone(frame);
+
+#ifdef PL_HAVE_LAV_DOLBY_VISION
+    if (can_alloc && params->map_dovi) {
+        AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DOVI_METADATA);
+        if (sd) {
+            const AVDOVIMetadata *metadata = (AVDOVIMetadata *) sd->data;
+            const AVDOVIColorMetadata *color = av_dovi_get_color(metadata);
+            struct pl_dovi_metadata *dovi = malloc(sizeof(*dovi));
+            if (!dovi)
+                goto error; // oom
+
+            pl_map_dovi_metadata(dovi, metadata);
+            out->repr.dovi = dovi;
+            out->repr.sys = PL_COLOR_SYSTEM_DOLBYVISION;
+            out->color.primaries = PL_COLOR_PRIM_BT_2020;
+            out->color.transfer = PL_COLOR_TRC_PQ;
+            out->color.hdr.min_luma =
+                pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, color->source_min_pq / 4095.0f);
+            out->color.hdr.max_luma =
+                pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, color->source_max_pq / 4095.0f);
+        }
+    }
+#endif
 
     switch (frame->format) {
     case AV_PIX_FMT_DRM_PRIME:
@@ -1000,6 +1025,10 @@ static inline bool pl_map_avframe_internal(pl_gpu gpu, struct pl_frame *out,
 
     default: break;
     }
+
+    // Backing textures are required from this point onwards
+    if (!tex)
+        goto error;
 
     planes = pl_plane_data_from_pixfmt(data, &out->repr.bits, frame->format);
     if (!planes)
@@ -1039,10 +1068,10 @@ error:
     return false;
 }
 
-static inline bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out,
-                                  pl_tex tex[4], const AVFrame *frame)
+static inline bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out_frame,
+                                     const struct pl_avframe_params *params)
 {
-    return pl_map_avframe_internal(gpu, out, tex, frame, true);
+    return pl_map_avframe_internal(gpu, out_frame, params, true);
 }
 
 static inline void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame)
@@ -1073,10 +1102,15 @@ static inline bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
                                      pl_tex tex[4], const AVFrame *frame)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
+    struct pl_avframe_params params = {
+        .frame = frame,
+        .tex = tex,
+    };
+
     if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL)
         return false; // requires allocation
 
-    if (!pl_map_avframe_internal(gpu, out_frame, tex, frame, false))
+    if (!pl_map_avframe_internal(gpu, out_frame, &params, false))
         return false;
 
     return true;

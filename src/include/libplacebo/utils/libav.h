@@ -42,6 +42,10 @@ PL_API_BEGIN
 // metadata, the resulting `out_image->profile` will reference this pointer,
 // meaning that in general, the `pl_frame` is only guaranteed to be valid as
 // long as the AVFrame is not freed.
+//
+// Note: This will ignore Dolby Vision metadata by default (to avoid leaking
+// memory), either switch to pl_map_avframe_ex or do it manually using
+// pl_map_dovi_metadata.
 static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *frame);
 
 // Deprecated aliases for backwards compatibility
@@ -74,28 +78,55 @@ static bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt);
 static bool pl_frame_recreate_from_avframe(pl_gpu gpu, struct pl_frame *out_frame,
                                            pl_tex tex[4], const AVFrame *frame);
 
+struct pl_avframe_params {
+    // The AVFrame to map. Required.
+    const AVFrame *frame;
+
+    // Backing textures for frame data. Required for all non-hwdec formats.
+    // This must point to an array of four valid textures (or NULL entries).
+    //
+    // Note: Not cleaned up by `pl_unmap_avframe`. The intent is for users to
+    // re-use this texture array for subsequent frames, to avoid texture
+    // creation/destruction overhead.
+    pl_tex *tex;
+
+    // Also map Dolby Vision metadata (if supported). Note that this also
+    // overrides the colorimetry metadata (forces BT.2020+PQ).
+    bool map_dovi;
+};
+
+#define PL_AVFRAME_DEFAULTS \
+    .map_dovi = true,
+
+#define pl_avframe_params(...) (&(struct pl_avframe_params) { PL_AVFRAME_DEFAULTS __VA_ARGS__ })
+
 // Very high level helper function to take an `AVFrame` and map it to the GPU.
 // The resulting `pl_frame` remains valid until `pl_unmap_avframe` is called,
 // which must be called at some point to clean up state. The `AVFrame` is
 // automatically ref'd and unref'd if needed. Returns whether successful.
 //
-// `tex` must point to an array of four textures (or NULL), which will be used
-// as backing storage for frames if possible. (Note that hwaccel-mapped frames
-// will never use this backing storage)
-//
 // Note: `out_frame->user_data` will hold a reference to the AVFrame
 // corresponding to the `pl_frame`. It will automatically be unref'd by
 // `pl_unmap_avframe`.
-//
-// Note: `pl_unmap_avframe` will not clean up any textures in `tex`.
-static bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out_frame,
-                           pl_tex tex[4], const AVFrame *avframe);
+static bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out_frame,
+                              const struct pl_avframe_params *params);
 static void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame);
+
+// Backwards compatibility with previous versions of this API.
+static inline bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out_frame,
+                                  pl_tex tex[4], const AVFrame *avframe)
+{
+    return pl_map_avframe_ex(gpu, out_frame, &(struct pl_avframe_params) {
+        .frame  = avframe,
+        .tex    = tex,
+    });
+}
 
 // Deprecated variant of `pl_map_frame`, with the following differences:
 // - Does not support hardware-accelerated frames
 // - Does not require manual unmapping
 // - Does not touch `frame->user_data`.
+// - Does not automatically map dovi metadata
 // - `frame` must not be freed by the user before `frame` is done being used
 static PL_DEPRECATED bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
                                             pl_tex tex[4], const AVFrame *frame);
