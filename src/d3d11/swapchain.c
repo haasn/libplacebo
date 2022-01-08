@@ -72,18 +72,22 @@ static bool d3d11_sw_resize(pl_swapchain sw, int *width, int *height)
 
     DXGI_SWAP_CHAIN_DESC desc = {0};
     IDXGISwapChain_GetDesc(p->swapchain, &desc);
-    *width = PL_DEF(*width, desc.BufferDesc.Width);
-    *height = PL_DEF(*height, desc.BufferDesc.Height);
+    int w = PL_DEF(*width, desc.BufferDesc.Width);
+    int h = PL_DEF(*height, desc.BufferDesc.Height);
 
-    if (*width != desc.BufferDesc.Width || *height != desc.BufferDesc.Height) {
-        pl_tex_destroy(sw->gpu, &p->backbuffer);
+    if (w != desc.BufferDesc.Width || h != desc.BufferDesc.Height) {
+        if (p->backbuffer) {
+            PL_ERR(sw, "Tried resizing the swapchain while a frame was in "
+                   "progress! Please submit the current frame first.");
+            return false;
+        }
 
-        D3D(IDXGISwapChain_ResizeBuffers(p->swapchain, 0, *width, *height,
+        D3D(IDXGISwapChain_ResizeBuffers(p->swapchain, 0, w, h,
                                          DXGI_FORMAT_UNKNOWN, desc.Flags));
-
-        p->backbuffer = get_backbuffer(sw);
     }
 
+    *width = w;
+    *height = h;
     return true;
 
 error:
@@ -96,7 +100,16 @@ static bool d3d11_sw_start_frame(pl_swapchain sw,
     struct priv *p = PL_PRIV(sw);
     struct d3d11_ctx *ctx = p->ctx;
 
-    if (ctx->is_failed || !p->backbuffer)
+    if (ctx->is_failed)
+        return false;
+    if (p->backbuffer) {
+        PL_ERR(sw, "Attempted calling `pl_swapchain_start_frame` while a frame "
+               "was already in progress! Call `pl_swapchain_submit_frame` first.");
+        return false;
+    }
+
+    p->backbuffer = get_backbuffer(sw);
+    if (!p->backbuffer)
         return false;
 
     *out_frame = (struct pl_swapchain_frame) {
@@ -121,6 +134,12 @@ static bool d3d11_sw_submit_frame(pl_swapchain sw)
 {
     struct priv *p = PL_PRIV(sw);
     struct d3d11_ctx *ctx = p->ctx;
+
+    // Release the backbuffer. We shouldn't hold onto it unnecessarily, because
+    // it prevents external code from resizing the swapchain, which we'd
+    // otherwise support just fine.
+    pl_tex_destroy(sw->gpu, &p->backbuffer);
+
     return !ctx->is_failed;
 }
 
@@ -354,10 +373,6 @@ pl_swapchain pl_d3d11_create_swapchain(pl_d3d11 d3d11,
     } else {
         PL_INFO(gpu, "Using bitblt-model presentation");
     }
-
-    p->backbuffer = get_backbuffer(sw);
-    if (!p->backbuffer)
-        goto error;
 
     success = true;
 error:
