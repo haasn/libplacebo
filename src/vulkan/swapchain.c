@@ -323,6 +323,7 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     p->surf = params->surface;
     p->swapchain_depth = PL_DEF(params->swapchain_depth, 3);
     pl_assert(p->swapchain_depth > 0);
+    p->last_imgidx = -1;
     p->protoInfo = (VkSwapchainCreateInfoKHR) {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = p->surf,
@@ -711,7 +712,7 @@ static bool vk_sw_start_frame(pl_swapchain sw,
                 .color_repr = p->color_repr,
                 .color_space = p->color_space,
             };
-            pl_mutex_unlock(&p->lock);
+            // keep lock held
             return true;
 
         case VK_ERROR_OUT_OF_DATE_KHR: {
@@ -746,16 +747,14 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
     pl_gpu gpu = sw->gpu;
     struct priv *p = PL_PRIV(sw);
     struct vk_ctx *vk = p->vk;
-    pl_mutex_lock(&p->lock);
-    if (!p->swapchain) {
-        pl_mutex_unlock(&p->lock);
-        return false;
-    }
-
+    pl_assert(p->last_imgidx >= 0);
+    pl_assert(p->swapchain);
+    uint32_t idx = p->last_imgidx;
     VkSemaphore sem_out = p->sems.elem[p->idx_sems++].out;
     p->idx_sems %= p->sems.num;
+    p->last_imgidx = -1;
 
-    bool held = pl_vulkan_hold(gpu, p->images.elem[p->last_imgidx],
+    bool held = pl_vulkan_hold(gpu, p->images.elem[idx],
                                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                                (pl_vulkan_sem){ sem_out });
     if (!held) {
@@ -789,7 +788,7 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
         .pWaitSemaphores = &sem_out,
         .swapchainCount = 1,
         .pSwapchains = &p->swapchain,
-        .pImageIndices = &p->last_imgidx,
+        .pImageIndices = &idx,
     };
 
     PL_TRACE(vk, "vkQueuePresentKHR waits on %p", (void *) sem_out);

@@ -136,6 +136,10 @@ bool pl_swapchain_start_frame(pl_swapchain sw, struct pl_swapchain_frame *out_fr
 // Returns whether successful. This should normally never fail, unless the
 // GPU/surface has been lost or some other critical error has occurred. The
 // "started" frame is consumed even in the event of failure.
+//
+// Note that `start_frame` and `submit_frame` form a lock pair, i.e. trying to
+// call e.g. `pl_swapchain_resize` from another thread will block until
+// `pl_swapchain_submit_frame` is finished.
 bool pl_swapchain_submit_frame(pl_swapchain sw);
 
 // Performs a "buffer swap", or some generalization of the concept. In layman's
