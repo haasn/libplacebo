@@ -195,11 +195,15 @@ static bool gl_sw_start_frame(pl_swapchain sw,
         .color_space = pl_color_space_monitor,
     };
 
-    ok = p->frame_started = gl_check_err(sw->gpu, "gl_sw_start_frame");
-    gl_release_current(p->gl);
-    // fall through
+    p->frame_started = gl_check_err(sw->gpu, "gl_sw_start_frame");
+    if (!p->frame_started)
+        goto error;
+
+    // keep lock held
+    return true;
 
 error:
+    gl_release_current(p->gl);
     pl_mutex_unlock(&p->lock);
     return ok;
 }
@@ -207,19 +211,7 @@ error:
 static bool gl_sw_submit_frame(pl_swapchain sw)
 {
     struct priv *p = PL_PRIV(sw);
-    pl_mutex_lock(&p->lock);
-    if (!p->frame_started) {
-        PL_ERR(sw, "Attempted calling `pl_swapchain_submit_frame` with no "
-               "frame in progress. Call `pl_swapchain_start_frame` first!");
-        pl_mutex_unlock(&p->lock);
-        return false;
-    }
-
-    if (!gl_make_current(p->gl)) {
-        pl_mutex_unlock(&p->lock);
-        return false;
-    }
-
+    pl_assert(p->frame_started);
     if (p->has_sync && p->params.max_swapchain_depth) {
         GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
         if (fence)
