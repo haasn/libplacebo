@@ -40,7 +40,7 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
 {
     for (const char *c; (c = strchr(fmt, '%')) != NULL; fmt = c + 1) {
         // Append the preceding string literal
-        pl_str_append(alloc, str, (pl_str) { (char *) fmt, c - fmt });
+        pl_str_append(alloc, str, (pl_str) { (uint8_t *) fmt, c - fmt });
         c++; // skip '%'
 
         char buf[32];
@@ -53,7 +53,7 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
             continue;
         case 'c':
             buf[0] = (char) va_arg(ap, int);
-            pl_str_append(alloc, str, (pl_str) { buf, 1 });
+            pl_str_append(alloc, str, (pl_str) { (uint8_t *) buf, 1 });
             continue;
         case 's': {
             const char *arg = va_arg(ap, const char *);
@@ -65,18 +65,18 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
             assert(c[2] == 's');
             pl_str arg;
             arg.len = va_arg(ap, int);
-            arg.buf = va_arg(ap, char *);
+            arg.buf = (uint8_t *) va_arg(ap, char *);
             pl_str_append(alloc, str, arg);
             c += 2; // skip '*s'
             continue;
         }
         case 'd':
             len = ccStrPrintInt32(buf, va_arg(ap, int));
-            pl_str_append(alloc, str, (pl_str) { buf, len });
+            pl_str_append(alloc, str, (pl_str) { (uint8_t *) buf, len });
             continue;
         case 'u':
             len = ccStrPrintUint32(buf, va_arg(ap, unsigned int));
-            pl_str_append(alloc, str, (pl_str) { buf, len });
+            pl_str_append(alloc, str, (pl_str) { (uint8_t *) buf, len });
             continue;
         case 'l':
             assert(c[1] == 'l');
@@ -89,18 +89,18 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
                 break;
             default: abort();
             }
-            pl_str_append(alloc, str, (pl_str) { buf, len });
+            pl_str_append(alloc, str, (pl_str) { (uint8_t *) buf, len });
             c += 2;
             continue;
         case 'z':
             assert(c[1] == 'u');
             len = ccStrPrintUint64(buf, va_arg(ap, size_t));
-            pl_str_append(alloc, str, (pl_str) { buf, len });
+            pl_str_append(alloc, str, (pl_str) { (uint8_t *) buf, len });
             c++;
             continue;
         case 'f':
             len = ccStrPrintDouble(buf, sizeof(buf), 20, va_arg(ap, double));
-            pl_str_append(alloc, str, (pl_str) { buf, len });
+            pl_str_append(alloc, str, (pl_str) { (uint8_t *) buf, len });
             continue;
         default:
             fprintf(stderr, "Invalid conversion character: '%c'!\n", c[0]);
@@ -114,12 +114,12 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
 
 bool pl_str_parse_double(pl_str str, double *out)
 {
-    return ccSeqParseDouble(str.buf, str.len, out);
+    return ccSeqParseDouble((char *) str.buf, str.len, out);
 }
 
 bool pl_str_parse_int64(pl_str str, int64_t *out)
 {
-    return ccSeqParseInt64(str.buf, str.len, out);
+    return ccSeqParseInt64((char *) str.buf, str.len, out);
 }
 
 /* *****************************************************************************

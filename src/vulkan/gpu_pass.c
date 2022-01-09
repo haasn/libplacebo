@@ -671,7 +671,7 @@ no_descriptors: ;
         header.compiler[i] = p->spirv->name[i];
 
     pl_str prog = {0};
-    pl_str_append(pass, &prog, (pl_str){ (char *) &header, sizeof(header) });
+    pl_str_append(pass, &prog, (pl_str){ (uint8_t *) &header, sizeof(header) });
     pl_str_append(pass, &prog, vert);
     pl_str_append(pass, &prog, frag);
     pl_str_append(pass, &prog, comp);

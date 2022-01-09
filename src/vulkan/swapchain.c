@@ -345,7 +345,7 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
 
     // Make sure the swapchain present mode is supported
     VkPresentModeKHR *modes = NULL;
-    int num_modes = 0;
+    uint32_t num_modes = 0;
     VK(vk->GetPhysicalDeviceSurfacePresentModesKHR(vk->physd, p->surf, &num_modes, NULL));
     modes = pl_calloc_ptr(NULL, num_modes, modes);
     VK(vk->GetPhysicalDeviceSurfacePresentModesKHR(vk->physd, p->surf, &num_modes, modes));
@@ -362,9 +362,11 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     }
 
     // Enumerate the supported surface color spaces
-    VK(vk->GetPhysicalDeviceSurfaceFormatsKHR(vk->physd, p->surf, &p->formats.num, NULL));
-    PL_ARRAY_RESIZE(sw, p->formats, p->formats.num);
-    VK(vk->GetPhysicalDeviceSurfaceFormatsKHR(vk->physd, p->surf, &p->formats.num, p->formats.elem));
+    uint32_t num_formats = 0;
+    VK(vk->GetPhysicalDeviceSurfaceFormatsKHR(vk->physd, p->surf, &num_formats, NULL));
+    PL_ARRAY_RESIZE(sw, p->formats, num_formats);
+    VK(vk->GetPhysicalDeviceSurfaceFormatsKHR(vk->physd, p->surf, &num_formats, p->formats.elem));
+    p->formats.num = num_formats;
 
     PL_INFO(gpu, "Available surface configurations:");
     for (int i = 0; i < p->formats.num; i++) {
@@ -560,7 +562,7 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     struct vk_ctx *vk = p->vk;
 
     VkImage *vkimages = NULL;
-    int num_images = 0;
+    uint32_t num_images = 0;
 
     // It's invalid to trigger another swapchain recreation while there's more
     // than one swapchain already active, so we need to flush any pending

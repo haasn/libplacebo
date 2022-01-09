@@ -169,7 +169,7 @@ static void pl_msg_va(pl_log log, enum pl_log_level lev,
 
     p->logbuffer.len = 0;
     pl_str_append_vasprintf((void *) log, &p->logbuffer, fmt, va);
-    log->params.log_cb(log->params.log_priv, lev, p->logbuffer.buf);
+    log->params.log_cb(log->params.log_priv, lev, (char *) p->logbuffer.buf);
 
 done:
     pl_mutex_unlock(&p->lock);

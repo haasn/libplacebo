@@ -626,7 +626,7 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
 
         ADD(vert_body, "}");
         ADD_STR(vert_head, *vert_body);
-        pass_params->vertex_shader = vert_head->buf;
+        pass_params->vertex_shader = (char *) vert_head->buf;
         pl_hash_merge(&pass->signature, pl_str_hash(*vert_head));
 
         // GLSL 130+ doesn't use the magic gl_FragColor
@@ -666,7 +666,7 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
     }
 
     ADD(glsl, "}");
-    pass_params->glsl_shader = glsl->buf;
+    pass_params->glsl_shader = (char *) glsl->buf;
     pl_hash_merge(&pass->signature, pl_str_hash(*glsl));
 }
 

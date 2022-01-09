@@ -896,7 +896,7 @@ static void update_settings(struct plplay *p)
                 *cpar = pl_vision_normal;
             nk_layout_row(nk, NK_DYNAMIC, 24, 5, (float[]){ 0.25, 0.25/3, 0.25/3, 0.25/3, 0.5 });
             nk_label(nk, "Cone model:", NK_TEXT_LEFT);
-            int cones = cpar->cones;
+            unsigned int cones = cpar->cones;
             nk_checkbox_flags_label(nk, "L", &cones, PL_CONE_L);
             nk_checkbox_flags_label(nk, "M", &cones, PL_CONE_M);
             nk_checkbox_flags_label(nk, "S", &cones, PL_CONE_S);
@@ -1012,7 +1012,7 @@ static void update_settings(struct plplay *p)
                             av_err2str(ret));
                 } else {
                     pl_lut_free((struct pl_custom_lut **) &par->lut);
-                    par->lut = pl_lut_parse_cube(p->log, buf, size);
+                    par->lut = pl_lut_parse_cube(p->log, (char *) buf, size);
                     av_file_unmap(buf, size);
                 }
             }
@@ -1269,7 +1269,7 @@ static void update_settings(struct plplay *p)
                             av_err2str(ret));
                 } else {
                     const struct pl_hook *hook;
-                    hook = pl_mpv_user_shader_parse(p->win->gpu, buf, size);
+                    hook = pl_mpv_user_shader_parse(p->win->gpu, (char *) buf, size);
                     av_file_unmap(buf, size);
                     add_hook(p, hook, dropped_file);
                 }

@@ -639,7 +639,7 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
                 pl_str_append_asprintf(sh, desc, " x%d", count);
         }
 
-        sh->res.description = desc->buf;
+        sh->res.description = (char *) desc->buf;
     }
 
     // Set the vas/vars/descs
@@ -655,7 +655,7 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
     sh->res.num_steps = sh->steps.num;
 
     // Update the result pointer and return
-    sh->res.glsl = glsl->buf;
+    sh->res.glsl = (char *) glsl->buf;
     sh->mutable = false;
     return &sh->res;
 }

@@ -123,7 +123,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     p->gles_ver = glsl->gles ? ver : 0;
 
     // If possible, query the GLSL version from the implementation
-    const char *glslver = glGetString(GL_SHADING_LANGUAGE_VERSION);
+    const char *glslver = (char *) glGetString(GL_SHADING_LANGUAGE_VERSION);
     if (glslver) {
         PL_INFO(gpu, "    GL_SHADING_LANGUAGE_VERSION: %s", glslver);
         int major = 0, minor = 0;

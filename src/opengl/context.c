@@ -130,9 +130,9 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     }
 
     PL_INFO(p, "Detected OpenGL version strings:");
-    PL_INFO(p, "    GL_VERSION:  %s", glGetString(GL_VERSION));
-    PL_INFO(p, "    GL_VENDOR:   %s", glGetString(GL_VENDOR));
-    PL_INFO(p, "    GL_RENDERER: %s", glGetString(GL_RENDERER));
+    PL_INFO(p, "    GL_VERSION:  %s", (char *) glGetString(GL_VERSION));
+    PL_INFO(p, "    GL_VENDOR:   %s", (char *) glGetString(GL_VENDOR));
+    PL_INFO(p, "    GL_RENDERER: %s", (char *) glGetString(GL_RENDERER));
 
     if (pl_msg_test(log, PL_LOG_DEBUG)) {
         if (ver >= 30) {
@@ -140,11 +140,11 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
             glGetIntegerv(GL_NUM_EXTENSIONS, &num_exts);
             PL_DEBUG(p, "    GL_EXTENSIONS:");
             for (int i = 0; i < num_exts; i++) {
-                const char *ext = glGetStringi(GL_EXTENSIONS, i);
+                const char *ext = (char *) glGetStringi(GL_EXTENSIONS, i);
                 PL_DEBUG(p, "        %s", ext);
             }
         } else {
-            PL_DEBUG(p, "    GL_EXTENSIONS: %s", glGetString(GL_EXTENSIONS));
+            PL_DEBUG(p, "    GL_EXTENSIONS: %s", (char *) glGetString(GL_EXTENSIONS));
         }
 
 #ifdef EPOXY_HAS_EGL

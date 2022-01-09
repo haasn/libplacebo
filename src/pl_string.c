@@ -59,7 +59,7 @@ void pl_str_append_vasprintf(void *alloc, pl_str *str, const char *fmt, va_list 
 
     // Make room in `str` and format to there directly
     grow_str(alloc, str, str->len + size + 1);
-    str->len += vsnprintf(str->buf + str->len, size + 1, fmt, ap);
+    str->len += vsnprintf((char *) (str->buf + str->len), size + 1, fmt, ap);
 }
 
 int pl_str_sscanf(pl_str str, const char *fmt, ...)
@@ -205,7 +205,7 @@ bool pl_str_decode_hex(void *alloc, pl_str hex, pl_str *out)
     if (!out)
         return false;
 
-    char *buf = pl_alloc(alloc, hex.len / 2);
+    uint8_t *buf = pl_alloc(alloc, hex.len / 2);
     int len = 0;
 
     while (hex.len) {

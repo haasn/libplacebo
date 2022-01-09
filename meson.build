@@ -75,7 +75,7 @@ c_opts = [
   '-U__STRICT_ANSI__', '-fvisibility=hidden', '-Wmissing-prototypes',
 
   # Warnings to ignore
-  '-Wno-pointer-sign', '-Wno-sign-compare', '-Wno-unused-parameter',
+  '-Wno-sign-compare', '-Wno-unused-parameter',
   '-Wno-missing-field-initializers', '-Wno-type-limits',
 
   # Warnings to treat as errors

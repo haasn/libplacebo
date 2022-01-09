@@ -1339,7 +1339,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
         },
     };
 
-    pl_str shader = { (char *) shader_text, shader_len };
+    pl_str shader = { (uint8_t *) shader_text, shader_len };
     shader = pl_strdup(hook, shader);
 
     // Skip all garbage (e.g. comments) before the first header

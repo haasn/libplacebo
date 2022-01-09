@@ -86,8 +86,8 @@ bool gl_check_err(pl_gpu gpu, const char *fun)
 
 bool gl_is_software(void)
 {
-    const char *renderer = glGetString(GL_RENDERER);
-    const char *vendor = glGetString(GL_VENDOR);
+    const char *renderer = (char *) glGetString(GL_RENDERER);
+    const char *vendor = (char *) glGetString(GL_VENDOR);
     return !(renderer && vendor) ||
            strcmp(renderer, "Software Rasterizer") == 0 ||
            strstr(renderer, "llvmpipe") ||

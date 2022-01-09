@@ -616,13 +616,13 @@ debug_layers_done: ;
 
     struct {
         VkExtensionProperties *exts;
-        int num_exts;
+        uint32_t num_exts;
     } *layer_exts = pl_calloc_ptr(tmp, num_layers_avail, layer_exts);
 
     // Enumerate extensions from layers
     for (int i = 0; i < num_layers_avail; i++) {
         VkExtensionProperties **lexts = &layer_exts[i].exts;
-        int *num = &layer_exts[i].num_exts;
+        uint32_t *num = &layer_exts[i].num_exts;
 
         EnumerateInstanceExtensionProperties(layers_avail[i].layerName, num, NULL);
         *lexts = pl_calloc_ptr(tmp, *num, *lexts);
@@ -1009,7 +1009,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     void *tmp = pl_tmp(NULL);
 
     // Enumerate the queue families and find suitable families for each task
-    int qfnum = 0;
+    uint32_t qfnum = 0;
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, NULL);
     VkQueueFamilyProperties *qfs = pl_calloc_ptr(tmp, qfnum, qfs);
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, qfs);
@@ -1486,7 +1486,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
         }
     }
 
-    int qfnum = 0;
+    uint32_t qfnum = 0;
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, NULL);
     VkQueueFamilyProperties *qfs = pl_calloc_ptr(tmp, qfnum, qfs);
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, qfs);
