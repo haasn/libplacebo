@@ -1539,7 +1539,7 @@ static void adapt_colors(pl_shader sh,
 
     case PL_GAMUT_DESATURATE:
         GLSL("float cmin = min(min(color.r, color.g), color.b); \n"
-             "float luma = dot(%s, color.rgb);                  \n"
+             "float luma = clamp(dot(%s, color.rgb), 0.0, 1.0); \n"
              "if (cmin < 0.0 - 1e-6)                            \n"
              "    color.rgb = mix(color.rgb, vec3(luma),        \n"
              "                    -cmin / (luma - cmin));       \n"
