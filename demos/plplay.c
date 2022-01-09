@@ -164,7 +164,15 @@ static inline bool is_file_hdr(struct plplay *p)
 {
     assert(p->stream);
     enum AVColorTransferCharacteristic trc = p->stream->codecpar->color_trc;
-    return pl_color_transfer_is_hdr(pl_transfer_from_av(trc));
+    if (pl_color_transfer_is_hdr(pl_transfer_from_av(trc)))
+        return true;
+
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 16, 100)
+    if (av_stream_get_side_data(p->stream, AV_PKT_DATA_DOVI_CONF, NULL))
+        return true;
+#endif
+
+    return false;
 }
 
 static bool init_codec(struct plplay *p)
