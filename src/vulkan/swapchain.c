@@ -41,9 +41,9 @@ struct priv {
     VkSwapchainKHR old_swapchain;
     int cur_width, cur_height;
     int swapchain_depth;
-    int frames_in_flight;   // number of frames currently queued
-    bool suboptimal;        // true once VK_SUBOPTIMAL_KHR is returned
-    bool needs_recreate;    // swapchain needs to be recreated
+    pl_rc_t frames_in_flight;       // number of frames currently queued
+    bool suboptimal;                // true once VK_SUBOPTIMAL_KHR is returned
+    bool needs_recreate;            // swapchain needs to be recreated
     struct pl_color_repr color_repr;
     struct pl_color_space color_space;
     struct pl_hdr_metadata hdr_metadata;
@@ -323,6 +323,7 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     p->surf = params->surface;
     p->swapchain_depth = PL_DEF(params->swapchain_depth, 3);
     pl_assert(p->swapchain_depth > 0);
+    atomic_init(&p->frames_in_flight, 0);
     p->last_imgidx = -1;
     p->protoInfo = (VkSwapchainCreateInfoKHR) {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -739,7 +740,7 @@ static bool vk_sw_start_frame(pl_swapchain sw,
 
 static void present_cb(struct priv *p, void *arg)
 {
-    p->frames_in_flight--;
+    (void) pl_rc_deref(&p->frames_in_flight);
 }
 
 static bool vk_sw_submit_frame(pl_swapchain sw)
@@ -769,7 +770,7 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
         return false;
     }
 
-    p->frames_in_flight++;
+    pl_rc_ref(&p->frames_in_flight);
     vk_cmd_callback(cmd, (vk_cb) present_cb, p, NULL);
     if (!vk_cmd_submit(vk, &cmd)) {
         pl_mutex_unlock(&p->lock);
@@ -819,7 +820,7 @@ static void vk_sw_swap_buffers(pl_swapchain sw)
     struct priv *p = PL_PRIV(sw);
 
     pl_mutex_lock(&p->lock);
-    while (p->frames_in_flight >= p->swapchain_depth) {
+    while (pl_rc_count(&p->frames_in_flight) >= p->swapchain_depth) {
         pl_mutex_unlock(&p->lock); // don't hold mutex while blocking
         vk_poll_commands(p->vk, UINT64_MAX);
         pl_mutex_lock(&p->lock);
