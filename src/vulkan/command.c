@@ -367,7 +367,7 @@ bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
         }
         PL_TRACE(vk, "    signals fence %p", (void *) cmd->fence);
         if (cmd->callbacks.num)
-            PL_TRACE(vk, "    signals %d callbacks", cmd->callbacks.num);
+            PL_TRACE(vk, "    signals %zu callbacks", cmd->callbacks.num);
     }
 
     VK(vk->QueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));

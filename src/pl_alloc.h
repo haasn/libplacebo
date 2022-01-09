@@ -107,7 +107,7 @@ void pl_ref_deref(struct pl_ref **ref);
 
 // Helper functions for dealing with arrays
 
-#define PL_ARRAY(type) struct { type *elem; int num; }
+#define PL_ARRAY(type) struct { type *elem; size_t num; }
 
 #define PL_ARRAY_RESIZE(parent, arr, len)                                       \
     do {                                                                        \
