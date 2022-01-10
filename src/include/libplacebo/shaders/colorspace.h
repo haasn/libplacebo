@@ -235,8 +235,12 @@ enum pl_gamut_mode {
 };
 
 struct pl_color_map_params {
-    // The rendering intent to use for RGB->RGB primary conversions.
-    // Defaults to PL_INTENT_RELATIVE_COLORIMETRIC.
+    // The rendering intent to use for gamut mapping. Note that this does not
+    // affect tone mapping, which is always applied independently (to get the
+    // equivalent of colorimetric intent for tone mapping, set the function to
+    // NULL).
+    //
+    // Defaults to PL_INTENT_RELATIVE_COLORIMETRIC
     enum pl_rendering_intent intent;
 
     // How to handle out-of-gamut colors when changing the content primaries.
