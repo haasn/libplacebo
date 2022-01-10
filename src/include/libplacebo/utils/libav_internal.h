@@ -248,12 +248,17 @@ static void pl_color_space_from_avframe(struct pl_color_space *out_csp,
                                         const AVFrame *frame)
 {
     const AVFrameSideData *sd;
+    bool is_hdr, is_wide;
     *out_csp = (struct pl_swapchain_colors) {
         .primaries = pl_primaries_from_av(frame->color_primaries),
         .transfer = pl_transfer_from_av(frame->color_trc),
     };
 
-    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL))) {
+    // Ignore mastering metadata for non-HDR/wide gamut content
+    is_hdr = pl_color_transfer_is_hdr(out_csp->transfer);
+    is_wide = pl_color_primaries_is_wide_gamut(out_csp->primaries);
+
+    if (is_hdr && (sd = av_frame_get_side_data(frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL))) {
         const AVContentLightMetadata *clm = (AVContentLightMetadata *) sd->data;
         out_csp->hdr.max_cll = clm->MaxCLL;
         out_csp->hdr.max_fall = clm->MaxFALL;
@@ -261,11 +266,11 @@ static void pl_color_space_from_avframe(struct pl_color_space *out_csp,
 
     if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA))) {
         const AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *) sd->data;
-        if (mdm->has_luminance) {
+        if (is_hdr && mdm->has_luminance) {
             out_csp->hdr.max_luma = av_q2d(mdm->max_luminance);
             out_csp->hdr.min_luma = av_q2d(mdm->min_luminance);
         }
-        if (mdm->has_primaries) {
+        if (is_wide && mdm->has_primaries) {
             out_csp->hdr.prim = (struct pl_raw_primaries) {
                 .red.x   = av_q2d(mdm->display_primaries[0][0]),
                 .red.y   = av_q2d(mdm->display_primaries[0][1]),
