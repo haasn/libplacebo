@@ -1255,6 +1255,7 @@ static void tone_map(pl_shader sh,
         .output_max = dst_max,
     };
 
+    enum pl_tone_map_mode mode = params->tone_mapping_mode;
     if (params->tone_mapping_algo) {
         // Backwards compatibility
         static const struct pl_tone_map_function *
@@ -1268,6 +1269,16 @@ static void tone_map(pl_shader sh,
             [PL_TONE_MAPPING_BT_2390]   = &pl_tone_map_bt2390,
         };
         lut_params.function = funcs[params->tone_mapping_algo];
+
+        // Backwards compatibility with older API, explicitly default the tone
+        // mapping mode based on the previous values of desat_str etc.
+        if (params->desaturation_strength == 1 && params->desaturation_exponent == 0) {
+            mode = PL_DEF(mode, PL_TONE_MAP_RGB);
+        } else if (params->desaturation_strength > 0) {
+            mode = PL_DEF(mode, PL_TONE_MAP_HYBRID);
+        } else {
+            mode = PL_DEF(mode, PL_TONE_MAP_LUMA);
+        }
     }
 
     if (pl_tone_map_params_noop(&lut_params))
@@ -1367,7 +1378,6 @@ static void tone_map(pl_shader sh,
 
     }
 
-    enum pl_tone_map_mode mode = params->tone_mapping_mode;
     if (mode == PL_TONE_MAP_AUTO) {
         if (is_noop || pure_bpc || src_max == dst_max) {
             // No-op, clip, pure BPC, etc. - do this per-channel
