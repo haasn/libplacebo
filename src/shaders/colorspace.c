@@ -442,10 +442,13 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
     // Gamma adjustment. Doing this here (in non-linear light) is technically
     // somewhat wrong, but this is just an aesthetic parameter and not really
     // meant for colorimetric precision, so we don't care too much.
-    if (params && params->gamma != 1.0) {
+    if (params && params->gamma == 0) {
+        // Avoid division by zero
+        GLSL("color.rgb = vec3(0.0); \n");
+    } else if (params && params->gamma != 1) {
         ident_t gamma = sh_var(sh, (struct pl_shader_var) {
             .var = pl_var_float("gamma"),
-            .data = &params->gamma,
+            .data = &(float){ 1 / params->gamma },
         });
         GLSL("color.rgb = pow(max(color.rgb, vec3(0.0)), vec3(%s)); \n", gamma);
     }
