@@ -443,6 +443,176 @@ error:;
     return success;
 }
 
+#define CACHE_MAGIC {'P','L','D','3','D',11}
+#define CACHE_VERSION 1
+static const char d3d11_cache_magic[6] = CACHE_MAGIC;
+
+struct d3d11_cache_header {
+    char magic[sizeof(d3d11_cache_magic)];
+    int cache_version;
+    uint64_t hash;
+    bool num_workgroups_used;
+    int num_main_cbvs;
+    int num_main_srvs;
+    int num_main_samplers;
+    int num_vertex_cbvs;
+    int num_vertex_srvs;
+    int num_vertex_samplers;
+    int num_uavs;
+    size_t vert_bc_len;
+    size_t frag_bc_len;
+    size_t comp_bc_len;
+};
+
+static inline uint64_t pass_cache_signature(pl_gpu gpu,
+                                            const struct pl_pass_params *params)
+{
+    struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
+
+    uint64_t hash = p->spirv->signature;
+
+    unsigned spvc_major, spvc_minor, spvc_patch;
+    spvc_get_version(&spvc_major, &spvc_minor, &spvc_patch);
+
+    pl_hash_merge(&hash, spvc_major);
+    pl_hash_merge(&hash, spvc_minor);
+    pl_hash_merge(&hash, spvc_patch);
+
+    pl_hash_merge(&hash, ((uint64_t)p->d3d_compiler_ver.major << 48)
+                       | ((uint64_t)p->d3d_compiler_ver.minor << 32)
+                       | ((uint64_t)p->d3d_compiler_ver.build << 16)
+                       |  (uint64_t)p->d3d_compiler_ver.revision);
+    pl_hash_merge(&hash, p->fl);
+
+    pl_hash_merge(&hash, pl_str_hash(pl_str0(params->glsl_shader)));
+    if (params->type == PL_PASS_RASTER)
+        pl_hash_merge(&hash, pl_str_hash(pl_str0(params->vertex_shader)));
+
+    return hash;
+}
+
+static inline size_t cache_payload_size(struct d3d11_cache_header *header)
+{
+    size_t required = (header->num_main_cbvs + header->num_main_srvs +
+                       header->num_main_samplers + header->num_vertex_cbvs +
+                       header->num_vertex_srvs + header->num_vertex_samplers +
+                       header->num_uavs) * sizeof(int) + header->vert_bc_len +
+                       header->frag_bc_len + header->comp_bc_len;
+
+    return required;
+}
+
+static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass *pass,
+                                     const struct pl_pass_params *params,
+                                     pl_str *vert_bc, pl_str *frag_bc, pl_str *comp_bc)
+{
+    struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
+
+    pl_str cache = {
+        .buf = (uint8_t *) params->cached_program,
+        .len = params->cached_program_len,
+    };
+
+    if (cache.len < sizeof(struct d3d11_cache_header))
+        return false;
+
+    struct d3d11_cache_header *header = (struct d3d11_cache_header *) cache.buf;
+    cache = pl_str_drop(cache, sizeof(*header));
+
+    if (strncmp(header->magic, d3d11_cache_magic, sizeof(d3d11_cache_magic)) != 0)
+        return false;
+    if (header->cache_version != CACHE_VERSION)
+        return false;
+    if (header->hash != pass_cache_signature(gpu, params))
+        return false;
+
+    // determine required cache size before reading anything
+    size_t required = cache_payload_size(header);
+
+    if (cache.len < required)
+        return false;
+
+    pass_p->num_workgroups_used = header->num_workgroups_used;
+
+#define GET_ARRAY(object, name, num_elements) {                     \
+    PL_ARRAY_MEMDUP(pass, (object)->name, cache.buf, num_elements); \
+    cache = pl_str_drop(cache, num_elements * sizeof(*(object)->name.elem)); }
+
+#define GET_STAGE_ARRAY(stage, name) \
+            GET_ARRAY(&pass_p->stage, name, header->num_##stage##_##name)
+
+    GET_STAGE_ARRAY(main, cbvs);
+    GET_STAGE_ARRAY(main, srvs);
+    GET_STAGE_ARRAY(main, samplers);
+    GET_STAGE_ARRAY(vertex, cbvs);
+    GET_STAGE_ARRAY(vertex, srvs);
+    GET_STAGE_ARRAY(vertex, samplers);
+    GET_ARRAY(pass_p, uavs, header->num_uavs);
+
+#define GET_SHADER(ptr)                               \
+        *ptr = pl_str_take(cache, header->ptr##_len); \
+        cache = pl_str_drop(cache, ptr->len);
+
+    GET_SHADER(vert_bc);
+    GET_SHADER(frag_bc);
+    GET_SHADER(comp_bc);
+
+    return true;
+}
+
+static void d3d11_update_program_cache(pl_gpu gpu, struct pl_pass *pass,
+                                       const pl_str *vs_str, const pl_str *ps_str,
+                                       const pl_str *cs_str)
+{
+    struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
+
+    struct d3d11_cache_header header = {
+        .magic = CACHE_MAGIC,
+        .cache_version = CACHE_VERSION,
+        .hash = pass_cache_signature(gpu, &pass->params),
+        .num_workgroups_used = pass_p->num_workgroups_used,
+        .num_main_cbvs = pass_p->main.cbvs.num,
+        .num_main_srvs = pass_p->main.srvs.num,
+        .num_main_samplers = pass_p->main.samplers.num,
+        .num_vertex_cbvs = pass_p->vertex.cbvs.num,
+        .num_vertex_srvs = pass_p->vertex.srvs.num,
+        .num_vertex_samplers = pass_p->vertex.samplers.num,
+        .num_uavs = pass_p->uavs.num,
+        .vert_bc_len = vs_str ? vs_str->len : 0,
+        .frag_bc_len = ps_str ? ps_str->len : 0,
+        .comp_bc_len = cs_str ? cs_str->len : 0,
+    };
+
+    size_t cache_size = sizeof(header) + cache_payload_size(&header);
+    pl_str cache = {0};
+    pl_str_append(pass, &cache, (pl_str){ (uint8_t *) &header, sizeof(header) });
+
+#define WRITE_ARRAY(name) pl_str_append(pass, &cache, \
+        (pl_str){ (uint8_t *) pass_p->name.elem, \
+                  sizeof(*pass_p->name.elem) * pass_p->name.num })
+    WRITE_ARRAY(main.cbvs);
+    WRITE_ARRAY(main.srvs);
+    WRITE_ARRAY(main.samplers);
+    WRITE_ARRAY(vertex.cbvs);
+    WRITE_ARRAY(vertex.srvs);
+    WRITE_ARRAY(vertex.samplers);
+    WRITE_ARRAY(uavs);
+
+    if (vs_str)
+        pl_str_append(pass, &cache, *vs_str);
+
+    if (ps_str)
+        pl_str_append(pass, &cache, *ps_str);
+
+    if (cs_str)
+        pl_str_append(pass, &cache, *cs_str);
+
+    pl_assert(cache_size == cache.len);
+
+    pass->params.cached_program = cache.buf;
+    pass->params.cached_program_len = cache.len;
+}
+
 void pl_d3d11_pass_destroy(pl_gpu gpu, pl_pass pass)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
@@ -555,6 +725,10 @@ static bool pass_create_raster(pl_gpu gpu, struct pl_pass *pass,
     }
     D3D(ID3D11Device_CreateBlendState(p->dev, &bdesc, &pass_p->bstate));
 
+    const pl_str vs_str = { (uint8_t *) vs_bytecode, vs_length };
+    const pl_str ps_str = { (uint8_t *) ps_bytecode, ps_length };
+    d3d11_update_program_cache(gpu, pass, &vs_str, &ps_str, NULL);
+
     success = true;
 error:
     SAFE_RELEASE(vs_blob);
@@ -600,6 +774,9 @@ static bool pass_create_compute(pl_gpu gpu, struct pl_pass *pass,
                                       &pass_p->num_workgroups_buf));
     }
 
+    pl_str cs_str = { (uint8_t *) cs_bytecode, cs_length };
+    d3d11_update_program_cache(gpu, pass, NULL, NULL, &cs_str);
+
     success = true;
 error:
     SAFE_RELEASE(cs_blob);
@@ -636,109 +813,114 @@ const struct pl_pass *pl_d3d11_pass_create(pl_gpu gpu,
         };
     }
 
-    // Compile GLSL to SPIR-V. This also sets `desc_stage.used` based on which
-    // resources are statically used in the shader for each pass.
-    if (params->type == PL_PASS_RASTER) {
-        if (!shader_compile_glsl(gpu, pass, &pass_p->vertex, GLSL_SHADER_VERTEX,
-                                 params->vertex_shader))
-            goto error;
-        if (!shader_compile_glsl(gpu, pass, &pass_p->main, GLSL_SHADER_FRAGMENT,
-                                 params->glsl_shader))
-            goto error;
+    pl_str vert = {0}, frag = {0}, comp = {0};
+    if (d3d11_use_cached_program(gpu, pass, params, &vert, &frag, &comp)) {
+        PL_DEBUG(gpu, "Using cached DXBC shaders");
     } else {
-        if (!shader_compile_glsl(gpu, pass, &pass_p->main, GLSL_SHADER_COMPUTE,
-                                 params->glsl_shader))
-            goto error;
-    }
-
-    // In a raster pass, one of the UAV slots is used by the runtime for the RTV
-    int uav_offset = params->type == PL_PASS_COMPUTE ? 0 : 1;
-    int max_uavs = p->max_uavs - uav_offset;
-
-    for (int desc_idx = 0; desc_idx < params->num_descriptors; desc_idx++) {
-        struct pl_desc *desc = &params->descriptors[desc_idx];
-        struct pl_desc_d3d11 *desc_p = &pass_p->descriptors[desc_idx];
-
-        bool has_cbv = false, has_srv = false, has_sampler = false, has_uav = false;
-
-        switch (desc->type) {
-        case PL_DESC_SAMPLED_TEX:
-            has_sampler = true;
-            has_srv = true;
-            break;
-        case PL_DESC_BUF_STORAGE:
-        case PL_DESC_STORAGE_IMG:
-        case PL_DESC_BUF_TEXEL_STORAGE:
-            if (desc->access == PL_DESC_ACCESS_READONLY) {
-                has_srv = true;
-            } else {
-                has_uav = true;
-            }
-            break;
-        case PL_DESC_BUF_UNIFORM:
-            has_cbv = true;
-            break;
-        case PL_DESC_BUF_TEXEL_UNIFORM:
-            has_srv = true;
-            break;
-        case PL_DESC_INVALID:
-        case PL_DESC_TYPE_COUNT:
-            pl_unreachable();
-        }
-
-        // Allocate HLSL register numbers for each shader stage
-        struct d3d_pass_stage *stages[] = { &pass_p->main, &pass_p->vertex };
-        for (int j = 0; j < PL_ARRAY_SIZE(stages); j++) {
-            struct d3d_pass_stage *pass_s = stages[j];
-            struct d3d_desc_stage *desc_s =
-                pass_s == &pass_p->vertex ? &desc_p->vertex : &desc_p->main;
-            if (!desc_s->used)
-                continue;
-
-            if (has_cbv) {
-                desc_s->cbv_slot = pass_s->cbvs.num;
-                PL_ARRAY_APPEND(pass, pass_s->cbvs, desc_idx);
-                if (pass_s->cbvs.num > D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT) {
-                    PL_ERR(gpu, "Too many constant buffers in shader");
-                    goto error;
-                }
-            }
-
-            if (has_srv) {
-                desc_s->srv_slot = pass_s->srvs.num;
-                PL_ARRAY_APPEND(pass, pass_s->srvs, desc_idx);
-                if (pass_s->srvs.num > p->max_srvs) {
-                    PL_ERR(gpu, "Too many SRVs in shader");
-                    goto error;
-                }
-            }
-
-            if (has_sampler) {
-                desc_s->sampler_slot = pass_s->samplers.num;
-                PL_ARRAY_APPEND(pass, pass_s->samplers, desc_idx);
-                if (pass_s->srvs.num > D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT) {
-                    PL_ERR(gpu, "Too many samplers in shader");
-                    goto error;
-                }
-            }
-        }
-
-        // UAV bindings are shared between all shader stages
-        if (has_uav && (desc_p->main.used || desc_p->vertex.used)) {
-            desc_p->main.uav_slot = pass_p->uavs.num + uav_offset;
-            PL_ARRAY_APPEND(pass, pass_p->uavs, desc_idx);
-            if (pass_p->uavs.num > max_uavs) {
-                PL_ERR(gpu, "Too many UAVs in shader");
+        // Compile GLSL to SPIR-V. This also sets `desc_stage.used` based on which
+        // resources are statically used in the shader for each pass.
+        if (params->type == PL_PASS_RASTER) {
+            if (!shader_compile_glsl(gpu, pass, &pass_p->vertex, GLSL_SHADER_VERTEX,
+                                     params->vertex_shader))
                 goto error;
+            if (!shader_compile_glsl(gpu, pass, &pass_p->main, GLSL_SHADER_FRAGMENT,
+                                     params->glsl_shader))
+                goto error;
+        } else {
+            if (!shader_compile_glsl(gpu, pass, &pass_p->main, GLSL_SHADER_COMPUTE,
+                                     params->glsl_shader))
+                goto error;
+        }
+
+        // In a raster pass, one of the UAV slots is used by the runtime for the RTV
+        int uav_offset = params->type == PL_PASS_COMPUTE ? 0 : 1;
+        int max_uavs = p->max_uavs - uav_offset;
+
+        for (int desc_idx = 0; desc_idx < params->num_descriptors; desc_idx++) {
+            struct pl_desc *desc = &params->descriptors[desc_idx];
+            struct pl_desc_d3d11 *desc_p = &pass_p->descriptors[desc_idx];
+
+            bool has_cbv = false, has_srv = false, has_sampler = false, has_uav = false;
+
+            switch (desc->type) {
+            case PL_DESC_SAMPLED_TEX:
+                has_sampler = true;
+                has_srv = true;
+                break;
+            case PL_DESC_BUF_STORAGE:
+            case PL_DESC_STORAGE_IMG:
+            case PL_DESC_BUF_TEXEL_STORAGE:
+                if (desc->access == PL_DESC_ACCESS_READONLY) {
+                    has_srv = true;
+                } else {
+                    has_uav = true;
+                }
+                break;
+            case PL_DESC_BUF_UNIFORM:
+                has_cbv = true;
+                break;
+            case PL_DESC_BUF_TEXEL_UNIFORM:
+                has_srv = true;
+                break;
+            case PL_DESC_INVALID:
+            case PL_DESC_TYPE_COUNT:
+                pl_unreachable();
+            }
+
+            // Allocate HLSL register numbers for each shader stage
+            struct d3d_pass_stage *stages[] = { &pass_p->main, &pass_p->vertex };
+            for (int j = 0; j < PL_ARRAY_SIZE(stages); j++) {
+                struct d3d_pass_stage *pass_s = stages[j];
+                struct d3d_desc_stage *desc_s =
+                    pass_s == &pass_p->vertex ? &desc_p->vertex : &desc_p->main;
+                if (!desc_s->used)
+                    continue;
+
+                if (has_cbv) {
+                    desc_s->cbv_slot = pass_s->cbvs.num;
+                    PL_ARRAY_APPEND(pass, pass_s->cbvs, desc_idx);
+                    if (pass_s->cbvs.num > D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT) {
+                        PL_ERR(gpu, "Too many constant buffers in shader");
+                        goto error;
+                    }
+                }
+
+                if (has_srv) {
+                    desc_s->srv_slot = pass_s->srvs.num;
+                    PL_ARRAY_APPEND(pass, pass_s->srvs, desc_idx);
+                    if (pass_s->srvs.num > p->max_srvs) {
+                        PL_ERR(gpu, "Too many SRVs in shader");
+                        goto error;
+                    }
+                }
+
+                if (has_sampler) {
+                    desc_s->sampler_slot = pass_s->samplers.num;
+                    PL_ARRAY_APPEND(pass, pass_s->samplers, desc_idx);
+                    if (pass_s->srvs.num > D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT) {
+                        PL_ERR(gpu, "Too many samplers in shader");
+                        goto error;
+                    }
+                }
+            }
+
+            // UAV bindings are shared between all shader stages
+            if (has_uav && (desc_p->main.used || desc_p->vertex.used)) {
+                desc_p->main.uav_slot = pass_p->uavs.num + uav_offset;
+                PL_ARRAY_APPEND(pass, pass_p->uavs, desc_idx);
+                if (pass_p->uavs.num > max_uavs) {
+                    PL_ERR(gpu, "Too many UAVs in shader");
+                    goto error;
+                }
             }
         }
     }
 
     if (params->type == PL_PASS_COMPUTE) {
-        if (!pass_create_compute(gpu, pass, params, NULL))
+        if (!pass_create_compute(gpu, pass, params, &comp))
             goto error;
     } else {
-        if (!pass_create_raster(gpu, pass, params, NULL, NULL))
+        if (!pass_create_raster(gpu, pass, params, &vert, &frag))
             goto error;
     }
 
