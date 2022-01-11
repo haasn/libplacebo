@@ -190,7 +190,7 @@ const struct gl_format formats_legacy_gles2[] = {
 // GLES BGRA
 const struct gl_format formats_bgra_gles[] = {
     {GL_BGRA,           BGRA,  U8,  {
-        .name               = "bgra",
+        .name               = "bgra8",
         .type               = PL_FMT_UNORM,
         .caps               = S|L|F|V,
         .sample_order       = {2, 1, 0, 3},
