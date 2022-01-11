@@ -470,31 +470,47 @@ void pl_d3d11_pass_destroy(pl_gpu gpu, pl_pass pass)
 }
 
 static bool pass_create_raster(pl_gpu gpu, struct pl_pass *pass,
-                               const struct pl_pass_params *params)
+                               const struct pl_pass_params *params,
+                               pl_str *vs_bc, pl_str *ps_bc)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     struct d3d11_ctx *ctx = p->ctx;
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
     ID3DBlob *vs_blob = NULL;
     ID3DBlob *ps_blob = NULL;
+    const void *vs_bytecode = NULL, *ps_bytecode = NULL;
+    size_t vs_length = 0, ps_length = 0;
     D3D11_INPUT_ELEMENT_DESC *in_descs = NULL;
     bool success = false;
 
-    if (!shader_compile_hlsl(gpu, pass, &pass_p->vertex, GLSL_SHADER_VERTEX,
-                             params->vertex_shader, &vs_blob))
-        goto error;
+    pl_assert((vs_bc == NULL || vs_bc->len == 0) ==
+              (ps_bc == NULL || ps_bc->len == 0));
+    if (vs_bc == NULL || vs_bc->len == 0) {
+        if (!shader_compile_hlsl(gpu, pass, &pass_p->vertex, GLSL_SHADER_VERTEX,
+                                 params->vertex_shader, &vs_blob))
+            goto error;
+
+        vs_bytecode = ID3D10Blob_GetBufferPointer(vs_blob);
+        vs_length = ID3D10Blob_GetBufferSize(vs_blob);
+
+        if (!shader_compile_hlsl(gpu, pass, &pass_p->main, GLSL_SHADER_FRAGMENT,
+                                 params->glsl_shader, &ps_blob))
+            goto error;
+
+        ps_bytecode = ID3D10Blob_GetBufferPointer(ps_blob);
+        ps_length = ID3D10Blob_GetBufferSize(ps_blob);
+    } else {
+        vs_bytecode = vs_bc->buf;
+        vs_length = vs_bc->len;
+        ps_bytecode = ps_bc->buf;
+        ps_length = ps_bc->len;
+    }
 
     D3D(ID3D11Device_CreateVertexShader(p->dev,
-        ID3D10Blob_GetBufferPointer(vs_blob), ID3D10Blob_GetBufferSize(vs_blob),
-        NULL, &pass_p->vs));
-
-    if (!shader_compile_hlsl(gpu, pass, &pass_p->main, GLSL_SHADER_FRAGMENT,
-                             params->glsl_shader, &ps_blob))
-        goto error;
+        vs_bytecode, vs_length, NULL, &pass_p->vs));
 
     D3D(ID3D11Device_CreatePixelShader(p->dev,
-        ID3D10Blob_GetBufferPointer(ps_blob), ID3D10Blob_GetBufferSize(ps_blob),
-        NULL, &pass_p->ps));
+        ps_bytecode, ps_length, NULL, &pass_p->ps));
 
     in_descs = pl_calloc_ptr(pass, params->num_vertex_attribs, in_descs);
     for (int i = 0; i < params->num_vertex_attribs; i++) {
@@ -511,8 +527,7 @@ static bool pass_create_raster(pl_gpu gpu, struct pl_pass *pass,
         };
     }
     D3D(ID3D11Device_CreateInputLayout(p->dev, in_descs,
-        params->num_vertex_attribs, ID3D10Blob_GetBufferPointer(vs_blob),
-        ID3D10Blob_GetBufferSize(vs_blob), &pass_p->layout));
+        params->num_vertex_attribs, vs_bytecode, vs_length, &pass_p->layout));
 
     static const D3D11_BLEND blend_options[] = {
         [PL_BLEND_ZERO] = D3D11_BLEND_ZERO,
@@ -549,20 +564,31 @@ error:
 }
 
 static bool pass_create_compute(pl_gpu gpu, struct pl_pass *pass,
-                                const struct pl_pass_params *params)
+                                const struct pl_pass_params *params,
+                                pl_str *comp_bc)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     struct d3d11_ctx *ctx = p->ctx;
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
     ID3DBlob *cs_blob = NULL;
     bool success = false;
+    const void *cs_bytecode = NULL;
+    size_t cs_length = 0;
 
-    if (!shader_compile_hlsl(gpu, pass, &pass_p->main, GLSL_SHADER_COMPUTE,
-                             params->glsl_shader, &cs_blob))
-        goto error;
+    if (comp_bc == NULL || comp_bc->len == 0) {
+        if (!shader_compile_hlsl(gpu, pass, &pass_p->main, GLSL_SHADER_COMPUTE,
+                                 params->glsl_shader, &cs_blob))
+            goto error;
+
+        cs_bytecode = ID3D10Blob_GetBufferPointer(cs_blob);
+        cs_length = ID3D10Blob_GetBufferSize(cs_blob);
+    } else {
+        cs_bytecode = comp_bc->buf;
+        cs_length = comp_bc->len;
+    }
 
     D3D(ID3D11Device_CreateComputeShader(p->dev,
-        ID3D10Blob_GetBufferPointer(cs_blob), ID3D10Blob_GetBufferSize(cs_blob),
+        cs_bytecode, cs_length,
         NULL, &pass_p->cs));
 
     if (pass_p->num_workgroups_used) {
@@ -709,10 +735,10 @@ const struct pl_pass *pl_d3d11_pass_create(pl_gpu gpu,
     }
 
     if (params->type == PL_PASS_COMPUTE) {
-        if (!pass_create_compute(gpu, pass, params))
+        if (!pass_create_compute(gpu, pass, params, NULL))
             goto error;
     } else {
-        if (!pass_create_raster(gpu, pass, params))
+        if (!pass_create_raster(gpu, pass, params, NULL, NULL))
             goto error;
     }
 
