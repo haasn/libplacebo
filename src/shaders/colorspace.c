@@ -139,10 +139,12 @@ void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
             continue;
 
         pl_assert(comp->num_pivots >= 2 && comp->num_pivots <= 9);
+        GLSL("s = sig[%d]; \n", c);
 
         // Prepare coefficients for GPU
         bool has_poly = false, has_mmr = false, mmr_single = true;
         int mmr_idx = 0, min_order = 3, max_order = 1;
+        memset(coeffs_data, 0, sizeof(coeffs_data));
         for (int i = 0; i < comp->num_pivots - 1; i++) {
             switch (comp->method[i]) {
             case 0: // polynomial
@@ -180,32 +182,60 @@ void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
             }
         }
 
-        // Don't mark these as dynamic, because they don't typically change
-        // _that_ frequently, and we would prefer to avoid putting them in PCs
-        ident_t pivots = NULL;
         if (comp->num_pivots > 2) {
-            pivots = sh_var(sh, (struct pl_shader_var) {
-                .data = &comp->pivots[1], // skip lower bound
+
+            // Skip the (irrelevant) lower and upper bounds
+            float pivots_data[7];
+            memcpy(pivots_data, comp->pivots + 1,
+                   (comp->num_pivots - 2) * sizeof(pivots_data[0]));
+
+            // Fill the remainder with a quasi-infinite sentinel pivot
+            for (int i = comp->num_pivots - 2; i < PL_ARRAY_SIZE(pivots_data); i++)
+                pivots_data[i] = 1e9f;
+
+            ident_t pivots = sh_var(sh, (struct pl_shader_var) {
+                .data = pivots_data,
                 .var = {
                     .name = "pivots",
                     .type = PL_VAR_FLOAT,
                     .dim_v = 1,
                     .dim_m = 1,
-                    .dim_a = comp->num_pivots - 2, // skip lower/upper bounds
+                    .dim_a = PL_ARRAY_SIZE(pivots_data),
                 },
             });
-        }
 
-        ident_t coeffs = sh_var(sh, (struct pl_shader_var) {
-            .data = coeffs_data,
-            .var = {
-                .name = "coeffs",
-                .type = PL_VAR_FLOAT,
-                .dim_v = 4,
-                .dim_m = 1,
-                .dim_a = comp->num_pivots - 1,
-            },
-        });
+            ident_t coeffs = sh_var(sh, (struct pl_shader_var) {
+                .data = coeffs_data,
+                .var = {
+                    .name = "coeffs",
+                    .type = PL_VAR_FLOAT,
+                    .dim_v = 4,
+                    .dim_m = 1,
+                    .dim_a = PL_ARRAY_SIZE(coeffs_data),
+                },
+            });
+
+            // Efficiently branch into the correct set of coefficients
+            GLSL("#define test(i) bvec4(s >= %s[i])                 \n"
+                 "#define coef(i) %s[i]                             \n"
+                 "coeffs = mix(mix(mix(coef(0), coef(1), test(0)),  \n"
+                 "                 mix(coef(2), coef(3), test(2)),  \n"
+                 "                 test(1)),                        \n"
+                 "             mix(mix(coef(4), coef(5), test(4)),  \n"
+                 "                 mix(coef(6), coef(7), test(6)),  \n"
+                 "                 test(5)),                        \n"
+                 "             test(3));                            \n",
+                 pivots, coeffs);
+
+        } else {
+
+            // No need for a single pivot, just set the coeffs directly
+            GLSL("coeffs = %s; \n", sh_var(sh, (struct pl_shader_var) {
+                .var = pl_var_vec4("coeffs"),
+                .data = coeffs_data,
+            }));
+
+        }
 
         ident_t mmr = NULL;
         if (has_mmr) {
@@ -219,24 +249,6 @@ void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
                     .dim_a = mmr_idx,
                 },
             });
-        }
-
-        // Select the right coefficient based on the pivot points
-        if (comp->num_pivots > 2) {
-            GLSL("coeffs = %s[%d]; \n", coeffs, comp->num_pivots - 2);
-        } else {
-            GLSL("coeffs = %s; \n", coeffs);
-        }
-
-        GLSL("s = sig[%d]; \n", c);
-        for (int idx = comp->num_pivots - 3; idx >= 0; idx--) {
-            if (comp->num_pivots > 3) {
-                GLSL("coeffs = mix(coeffs, %s[%d], bvec4(s < %s[%d])); \n",
-                     coeffs, idx, pivots, idx);
-            } else {
-                GLSL("coeffs = mix(coeffs, %s[%d], bvec4(s < %s)); \n",
-                     coeffs, idx, pivots);
-            }
         }
 
         if (has_mmr && has_poly) {
@@ -261,7 +273,9 @@ void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
         GLSL("color[%d] = clamp(s, %s, %s); \n", c, lo, hi);
     }
 
-    GLSL("}\n");
+    GLSL("#undef test \n"
+         "#undef coef \n"
+         "}           \n");
 }
 
 void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
