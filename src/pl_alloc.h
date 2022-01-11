@@ -115,6 +115,14 @@ void pl_ref_deref(struct pl_ref **ref);
         (arr).elem = pl_realloc((void *) parent, (arr).elem, _new_size);        \
     } while (0)
 
+#define PL_ARRAY_MEMDUP(parent, arr, ptr, len)                                  \
+    do {                                                                        \
+        size_t _len = (len);                                                    \
+        PL_ARRAY_RESIZE(parent, arr, _len);                                     \
+        memcpy((arr).elem, ptr, _len * sizeof((arr).elem[0]));                  \
+        (arr).num = _len;                                                       \
+    } while (0)
+
 #define PL_ARRAY_GROW(parent, arr)                                              \
     do {                                                                        \
         size_t _avail = pl_get_size((arr).elem) / sizeof((arr).elem[0]);        \
