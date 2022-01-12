@@ -38,9 +38,9 @@ static struct spirv_compiler *shaderc_create(pl_log log)
 {
     struct spirv_compiler *spirv = pl_alloc_obj(NULL, spirv, shaderc_compiler_t);
     *spirv = (struct spirv_compiler) {
-        .log = log,
-        .name = "shaderc",
+        .signature = pl_str0_hash(pl_spirv_shaderc.name),
         .impl = &pl_spirv_shaderc,
+        .log = log,
     };
 
     struct priv *p = PL_PRIV(spirv);
@@ -52,7 +52,8 @@ static struct spirv_compiler *shaderc_create(pl_log log)
     shaderc_get_spv_version(&ver, &rev);
     pl_info(log, "shaderc SPIR-V version %u.%u rev %u",
             ver >> 16, (ver >> 8) & 0xff, rev);
-    spirv->compiler_version = ver * 100 + rev;
+
+    pl_hash_merge(&spirv->signature, (uint64_t) ver << 32 | rev);
     return spirv;
 
 error:
@@ -144,6 +145,7 @@ static pl_str shaderc_compile(struct spirv_compiler *spirv, void *alloc,
 }
 
 const struct spirv_compiler_impl pl_spirv_shaderc = {
+    .name       = "shaderc",
     .destroy    = shaderc_destroy,
     .create     = shaderc_create,
     .compile    = shaderc_compile,

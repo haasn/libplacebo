@@ -96,26 +96,35 @@ static const VkDescriptorType dsType[] = {
 };
 
 #define CACHE_MAGIC {'P','L','V','K'}
-#define CACHE_VERSION 3
+#define CACHE_VERSION 4
 static const char vk_cache_magic[4] = CACHE_MAGIC;
 
 struct vk_cache_header {
     char magic[sizeof(vk_cache_magic)];
     int cache_version;
-    char compiler[SPIRV_NAME_MAX_LEN];
-    int compiler_version;
+    uint64_t signature;
     size_t vert_spirv_len;
     size_t frag_spirv_len;
     size_t comp_spirv_len;
     size_t pipecache_len;
-    uint64_t hash;
 };
+
+static uint64_t cache_signature(pl_gpu gpu, const struct pl_pass_params *params)
+{
+    struct pl_vk *p = PL_PRIV(gpu);
+    uint64_t sig = p->spirv->signature;
+
+    pl_hash_merge(&sig, pl_str0_hash(params->glsl_shader));
+    if (params->type == PL_PASS_RASTER)
+        pl_hash_merge(&sig, pl_str0_hash(params->vertex_shader));
+    return sig;
+}
 
 static bool vk_use_cached_program(const struct pl_pass_params *params,
                                   const struct spirv_compiler *spirv,
                                   pl_str *vert_spirv, pl_str *frag_spirv,
                                   pl_str *comp_spirv, pl_str *pipecache,
-                                  uint64_t hash)
+                                  uint64_t signature)
 {
     pl_str cache = {
         .buf = (uint8_t *) params->cached_program,
@@ -132,11 +141,7 @@ static bool vk_use_cached_program(const struct pl_pass_params *params,
         return false;
     if (header->cache_version != CACHE_VERSION)
         return false;
-    if (header->hash != hash)
-        return false;
-    if (strncmp(header->compiler, spirv->name, sizeof(header->compiler)) != 0)
-        return false;
-    if (header->compiler_version != spirv->compiler_version)
+    if (header->signature != signature)
         return false;
 
 #define GET(ptr)                                        \
@@ -514,11 +519,8 @@ no_descriptors: ;
                                 &pass_vk->pipeLayout));
 
     pl_str vert = {0}, frag = {0}, comp = {0}, pipecache = {0};
-    uint64_t hash = pl_str_hash(pl_str0(params->glsl_shader));
-    if (params->type == PL_PASS_RASTER)
-        pl_hash_merge(&hash, pl_str_hash(pl_str0(params->vertex_shader)));
-
-    if (vk_use_cached_program(params, p->spirv, &vert, &frag, &comp, &pipecache, hash)) {
+    uint64_t sig = cache_signature(gpu, params);
+    if (vk_use_cached_program(params, p->spirv, &vert, &frag, &comp, &pipecache, sig)) {
         PL_DEBUG(gpu, "Using cached SPIR-V and VkPipeline");
     } else {
         pipecache.len = 0;
@@ -656,19 +658,15 @@ no_descriptors: ;
     struct vk_cache_header header = {
         .magic = CACHE_MAGIC,
         .cache_version = CACHE_VERSION,
-        .compiler_version = p->spirv->compiler_version,
+        .signature = sig,
         .vert_spirv_len = vert.len,
         .frag_spirv_len = frag.len,
         .comp_spirv_len = comp.len,
         .pipecache_len = cache.len,
-        .hash = hash,
     };
 
     PL_DEBUG(vk, "Pass statistics: size %zu, SPIR-V: vert %zu frag %zu comp %zu",
              cache.len, vert.len, frag.len, comp.len);
-
-    for (int i = 0; i < sizeof(p->spirv->name); i++)
-        header.compiler[i] = p->spirv->name[i];
 
     pl_str prog = {0};
     pl_str_append(pass, &prog, (pl_str){ (uint8_t *) &header, sizeof(header) });

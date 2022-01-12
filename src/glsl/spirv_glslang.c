@@ -35,10 +35,9 @@ static struct spirv_compiler *glslang_create(pl_log log)
 
     struct spirv_compiler *spirv = pl_alloc_ptr(NULL, spirv);
     *spirv = (struct spirv_compiler) {
-        .log = log,
-        .name = "glslang",
+        .signature = pl_str0_hash(pl_spirv_glslang.name),
         .impl = &pl_spirv_glslang,
-        .compiler_version = pl_glslang_version(),
+        .log = log,
     };
 
     pl_info(log, "glslang version: %d.%d.%d",
@@ -46,6 +45,9 @@ static struct spirv_compiler *glslang_create(pl_log log)
             GLSLANG_VERSION_MINOR,
             GLSLANG_VERSION_PATCH);
 
+    pl_hash_merge(&spirv->signature, (GLSLANG_VERSION_MAJOR & 0xFF) << 24 |
+                                     (GLSLANG_VERSION_MINOR & 0xFF) << 16 |
+                                     (GLSLANG_VERSION_PATCH & 0xFFFF));
     return spirv;
 }
 
@@ -71,6 +73,7 @@ static pl_str glslang_compile(struct spirv_compiler *spirv, void *alloc,
 }
 
 const struct spirv_compiler_impl pl_spirv_glslang = {
+    .name       = "glslang",
     .destroy    = glslang_destroy,
     .create     = glslang_create,
     .compile    = glslang_compile,

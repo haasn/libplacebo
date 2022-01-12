@@ -21,15 +21,13 @@
 #include "log.h"
 #include "utils.h"
 
-#define SPIRV_NAME_MAX_LEN 32
-
 struct spirv_compiler {
-    char name[SPIRV_NAME_MAX_LEN];
     const struct spirv_compiler_impl *impl;
     pl_log log;
 
-    // For cache invalidation, may be left as 0
-    int compiler_version;
+    // For cache invalidation, should uniquely identify everything about this
+    // spirv compiler and its configuration.
+    uint64_t signature;
 };
 
 // Initialize a SPIR-V compiler instance, or returns NULL on failure.
@@ -43,6 +41,7 @@ pl_str spirv_compile_glsl(struct spirv_compiler *spirv, void *alloc,
                           const char *shader);
 
 struct spirv_compiler_impl {
+    const char *name;
     void (*destroy)(struct spirv_compiler *spirv);
     __typeof__(spirv_compiler_create) *create;
     __typeof__(spirv_compile_glsl) *compile;

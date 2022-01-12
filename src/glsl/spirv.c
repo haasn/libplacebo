@@ -36,7 +36,7 @@ struct spirv_compiler *spirv_compiler_create(pl_log log)
         if (!spirv)
             continue;
 
-        pl_info(log, "Initialized SPIR-V compiler '%s'", spirv->name);
+        pl_info(log, "Initialized SPIR-V compiler '%s'", compilers[i]->name);
         return spirv;
     }
 

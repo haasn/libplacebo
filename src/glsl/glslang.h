@@ -26,7 +26,6 @@ extern "C" {
 
 #include "utils.h"
 
-int pl_glslang_version(void);
 bool pl_glslang_init(void);
 void pl_glslang_uninit(void);
 
