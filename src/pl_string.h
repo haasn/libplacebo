@@ -145,6 +145,15 @@ static inline void pl_hash_merge(uint64_t *accum, uint64_t hash) {
     *accum ^= hash + 0x9e3779b9 + (*accum << 6) + (*accum >> 2);
 }
 
+#define pl_hash_merge_struct(hash, x)                                           \
+    do {                                                                        \
+        /* the ugly double typeof is to strip qualifiers e.g. const */          \
+        __typeof__ ((__typeof__(x))(x)) _tmp;                                   \
+        memset(&_tmp, 0, sizeof(_tmp));                                         \
+        _tmp = (x);                                                             \
+        pl_hash_merge(hash, pl_mem_hash(&_tmp, sizeof(_tmp)));                  \
+    } while (0)
+
 static inline uint64_t pl_str_hash(pl_str str)
 {
     return pl_mem_hash(str.buf, str.len);

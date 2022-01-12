@@ -781,7 +781,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
         pl_hash_merge(&pass->signature, (uint64_t) params.load_target);
         pl_hash_merge(&pass->signature, target->params.format->signature);
         if (blend)
-            pl_hash_merge(&pass->signature, pl_mem_hash(blend, sizeof(*blend)));
+            pl_hash_merge_struct(&pass->signature, *blend);
 
         // Load projection matrix if required
         if (proj && memcmp(&proj->mat, &pl_matrix2x2_identity, sizeof(proj->mat)) != 0) {

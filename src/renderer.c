@@ -2571,7 +2571,7 @@ static uint64_t render_params_hash(const struct pl_render_params *params_orig)
 #define HASH_PTR(ptr)                                                           \
     do {                                                                        \
         if (ptr) {                                                              \
-            pl_hash_merge(&hash, pl_mem_hash(ptr, sizeof(*ptr)));               \
+            pl_hash_merge_struct(&hash, *ptr);                                  \
             ptr = NULL;                                                         \
         }                                                                       \
     } while (0)
@@ -2582,7 +2582,7 @@ static uint64_t render_params_hash(const struct pl_render_params *params_orig)
             struct pl_filter_config filter = *scaler;                           \
             HASH_PTR(filter.kernel);                                            \
             HASH_PTR(filter.window);                                            \
-            pl_hash_merge(&hash, pl_mem_hash(&filter, sizeof(filter)));         \
+            pl_hash_merge_struct(&hash, filter);                                \
             scaler = NULL;                                                      \
         }                                                                       \
     } while (0)
@@ -2602,7 +2602,7 @@ static uint64_t render_params_hash(const struct pl_render_params *params_orig)
         const struct pl_hook *hook = params.hooks[i];
         if (hook->stages == PL_HOOK_OUTPUT)
             continue; // ignore hooks only relevant to pass_output_target
-        pl_hash_merge(&hash, pl_mem_hash(hook, sizeof(*hook)));
+        pl_hash_merge_struct(&hash, *hook);
     }
     params.hooks = NULL;
 
@@ -2637,7 +2637,7 @@ static uint64_t render_params_hash(const struct pl_render_params *params_orig)
     CLEAR(params.dynamic_constants);
     CLEAR(params.allow_delayed_peak_detect);
 
-    pl_hash_merge(&hash, pl_mem_hash(&params, sizeof(params)));
+    pl_hash_merge_struct(&hash, params);
     return hash;
 }
 
