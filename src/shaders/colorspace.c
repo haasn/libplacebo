@@ -224,7 +224,9 @@ void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
                  "             mix(mix(coef(4), coef(5), test(4)),  \n"
                  "                 mix(coef(6), coef(7), test(6)),  \n"
                  "                 test(5)),                        \n"
-                 "             test(3));                            \n",
+                 "             test(3));                            \n"
+                 "#undef test                                       \n"
+                 "#undef coef                                       \n",
                  pivots, coeffs);
 
         } else {
@@ -273,9 +275,7 @@ void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
         GLSL("color[%d] = clamp(s, %s, %s); \n", c, lo, hi);
     }
 
-    GLSL("#undef test \n"
-         "#undef coef \n"
-         "}           \n");
+    GLSL("} \n");
 }
 
 void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
