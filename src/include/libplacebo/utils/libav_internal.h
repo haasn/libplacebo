@@ -33,7 +33,7 @@
 # include <libavutil/film_grain_params.h>
 #endif
 
-#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 8, 100)
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 8, 100) && defined(PL_HAVE_VULKAN)
 # define HAVE_LAV_VULKAN
 # include <libavutil/hwcontext_vulkan.h>
 # include <libplacebo/vulkan.h>
