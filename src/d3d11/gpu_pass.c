@@ -144,32 +144,76 @@ static const char *get_shader_target(pl_gpu gpu, enum glsl_shader_stage stage)
     return NULL;
 }
 
-#define SC(cmd)                                                              \
-    do {                                                                     \
-        spvc_result res = (cmd);                                             \
-        if (res != SPVC_SUCCESS) {                                           \
-            PL_ERR(gpu, "%s: %s (%d) (%s:%d)",                               \
-                   #cmd, pass_s->sc ?                                        \
-                       spvc_context_get_last_error_string(pass_s->sc) : "",  \
-                   res, __FILE__, __LINE__);                                 \
-            goto error;                                                      \
-        }                                                                    \
+static SpvExecutionModel stage_to_spv(enum glsl_shader_stage stage)
+{
+    static const SpvExecutionModel spv_execution_model[] = {
+        [GLSL_SHADER_VERTEX]   = SpvExecutionModelVertex,
+        [GLSL_SHADER_FRAGMENT] = SpvExecutionModelFragment,
+        [GLSL_SHADER_COMPUTE]  = SpvExecutionModelGLCompute,
+    };
+    return spv_execution_model[stage];
+}
+
+#define SC(cmd)                                                             \
+    do {                                                                    \
+        spvc_result res = (cmd);                                            \
+        if (res != SPVC_SUCCESS) {                                          \
+            PL_ERR(gpu, "%s: %s (%d) (%s:%d)",                              \
+                   #cmd, sc ? spvc_context_get_last_error_string(sc) : "",  \
+                   res, __FILE__, __LINE__);                                \
+            goto error;                                                     \
+        }                                                                   \
     } while (0)
 
-static spvc_result mark_resources_used(pl_pass pass, spvc_compiler sc_comp,
-                                       spvc_resources resources,
-                                       spvc_resource_type res_type,
-                                       enum glsl_shader_stage stage)
+// Some decorations, like SpvDecorationNonWritable, are actually found on the
+// members of a buffer block, rather than the buffer block itself. If all
+// members have a certain decoration, SPIRV-Cross considers it to apply to the
+// buffer block too, which determines things like whether a SRV or UAV is used
+// for an SSBO. This function checks if SPIRV-Cross considers a decoration to
+// apply to a buffer block.
+static spvc_result buffer_block_has_decoration(spvc_compiler sc_comp,
+                                               spvc_variable_id id,
+                                               SpvDecoration decoration,
+                                               bool *out)
 {
+    const SpvDecoration *decorations;
+    size_t num_decorations = 0;
+
+    spvc_result res = spvc_compiler_get_buffer_block_decorations(sc_comp, id,
+        &decorations, &num_decorations);
+    if (res != SPVC_SUCCESS)
+        return res;
+
+    for (size_t j = 0; j < num_decorations; j++) {
+        if (decorations[j] == decoration) {
+            *out = true;
+            return res;
+        }
+    }
+
+    *out = false;
+    return res;
+}
+
+static bool alloc_hlsl_reg_bindings(pl_gpu gpu, pl_pass pass,
+                                    struct d3d_pass_stage *pass_s,
+                                    spvc_context sc,
+                                    spvc_compiler sc_comp,
+                                    spvc_resources resources,
+                                    spvc_resource_type res_type,
+                                    enum glsl_shader_stage stage)
+{
+    struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
     const spvc_reflected_resource *res_list;
     size_t res_count;
-    spvc_result res;
 
-    res = spvc_resources_get_resource_list_for_type(resources, res_type,
-                                                    &res_list, &res_count);
-    if (res != SPVC_SUCCESS)
-        return res;
+    SC(spvc_resources_get_resource_list_for_type(resources, res_type,
+                                                 &res_list, &res_count));
+
+    // In a raster pass, one of the UAV slots is used by the runtime for the RTV
+    int uav_offset = stage == GLSL_SHADER_COMPUTE ? 0 : 1;
+    int max_uavs = p->max_uavs - uav_offset;
 
     for (int i = 0; i < res_count; i++) {
         unsigned int binding = spvc_compiler_get_decoration(sc_comp,
@@ -179,22 +223,108 @@ static spvc_result mark_resources_used(pl_pass pass, spvc_compiler sc_comp,
         if (descriptor_set != 0)
             continue;
 
-        // Find the pl_desc with this binding and mark it as used
-        for (int j = 0; j < pass->params.num_descriptors; j++) {
-            struct pl_desc *desc = &pass->params.descriptors[j];
-            if (desc->binding != binding)
-                continue;
+        pass_p->max_binding = PL_MAX(pass_p->max_binding, binding);
 
-            struct pl_desc_d3d11 *desc_p = &pass_p->descriptors[j];
-            if (stage == GLSL_SHADER_VERTEX) {
-                desc_p->vertex.used = true;
+        spvc_hlsl_resource_binding hlslbind;
+        spvc_hlsl_resource_binding_init(&hlslbind);
+        hlslbind.stage = stage_to_spv(stage);
+        hlslbind.binding = binding;
+        hlslbind.desc_set = descriptor_set;
+
+        bool has_cbv = false, has_sampler = false, has_srv = false, has_uav = false;
+        switch (res_type) {
+        case SPVC_RESOURCE_TYPE_UNIFORM_BUFFER:
+            has_cbv = true;
+            break;
+        case SPVC_RESOURCE_TYPE_STORAGE_BUFFER:;
+            bool non_writable_bb = false;
+            SC(buffer_block_has_decoration(sc_comp, res_list[i].id,
+                SpvDecorationNonWritable, &non_writable_bb));
+            if (non_writable_bb) {
+                has_srv = true;
             } else {
-                desc_p->main.used = true;
+                has_uav = true;
+            }
+            break;
+        case SPVC_RESOURCE_TYPE_STORAGE_IMAGE:;
+            bool non_writable = spvc_compiler_has_decoration(sc_comp,
+                res_list[i].id, SpvDecorationNonWritable);
+            if (non_writable) {
+                has_srv = true;
+            } else {
+                has_uav = true;
+            }
+            break;
+        case SPVC_RESOURCE_TYPE_SEPARATE_IMAGE:
+            has_srv = true;
+            break;
+        case SPVC_RESOURCE_TYPE_SAMPLED_IMAGE:;
+            spvc_type type = spvc_compiler_get_type_handle(sc_comp,
+                                                           res_list[i].type_id);
+            SpvDim dimension = spvc_type_get_image_dimension(type);
+            // Uniform texel buffers are technically sampled images, but they
+            // aren't sampled from, so don't allocate a sampler
+            if (dimension != SpvDimBuffer)
+                has_sampler = true;
+            has_srv = true;
+            break;
+        default:
+            break;
+        }
+
+        if (has_cbv) {
+            hlslbind.cbv.register_binding = pass_s->cbvs.num;
+            PL_ARRAY_APPEND(pass, pass_s->cbvs, binding);
+            if (pass_s->cbvs.num > D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT) {
+                PL_ERR(gpu, "Too many constant buffers in shader");
+                goto error;
             }
         }
+
+        if (has_sampler) {
+            hlslbind.sampler.register_binding = pass_s->samplers.num;
+            PL_ARRAY_APPEND(pass, pass_s->samplers, binding);
+            if (pass_s->srvs.num > D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT) {
+                PL_ERR(gpu, "Too many samplers in shader");
+                goto error;
+            }
+        }
+
+        if (has_srv) {
+            hlslbind.srv.register_binding = pass_s->srvs.num;
+            PL_ARRAY_APPEND(pass, pass_s->srvs, binding);
+            if (pass_s->srvs.num > p->max_srvs) {
+                PL_ERR(gpu, "Too many SRVs in shader");
+                goto error;
+            }
+        }
+
+        if (has_uav) {
+            // UAV registers are shared between the vertex and fragment shaders
+            // in a raster pass, so check if the UAV for this resource has
+            // already been allocated
+            bool uav_bound = false;
+            for (int j = 0; j < pass_p->uavs.num; j++) {
+                if (pass_p->uavs.elem[i] == binding)
+                    uav_bound = true;
+            }
+
+            if (!uav_bound) {
+                hlslbind.uav.register_binding = pass_p->uavs.num + uav_offset;
+                PL_ARRAY_APPEND(pass, pass_p->uavs, binding);
+                if (pass_p->uavs.num > max_uavs) {
+                    PL_ERR(gpu, "Too many UAVs in shader");
+                    goto error;
+                }
+            }
+        }
+
+        SC(spvc_compiler_hlsl_add_resource_binding(sc_comp, &hlslbind));
     }
 
-    return res;
+    return true;
+error:
+    return false;
 }
 
 static const char *shader_names[] = {
@@ -203,33 +333,41 @@ static const char *shader_names[] = {
     [GLSL_SHADER_COMPUTE]  = "compute",
 };
 
-static bool shader_compile_glsl(pl_gpu gpu, pl_pass pass,
-                                struct d3d_pass_stage *pass_s,
-                                enum glsl_shader_stage stage, const char *glsl)
+static ID3DBlob *shader_compile_glsl(pl_gpu gpu, pl_pass pass,
+                                     struct d3d_pass_stage *pass_s,
+                                     enum glsl_shader_stage stage,
+                                     const char *glsl)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
+    struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
     void *tmp = pl_tmp(NULL);
-    bool success = false;
+    spvc_context sc = NULL;
+    spvc_compiler sc_comp = NULL;
+    const char *hlsl = NULL;
+    ID3DBlob *out = NULL;
+    ID3DBlob *errors = NULL;
+    HRESULT hr;
 
     clock_t start = clock();
     pl_str spirv = spirv_compile_glsl(p->spirv, tmp, &gpu->glsl, stage, glsl);
     if (!spirv.len)
         goto error;
 
-    pl_log_cpu_time(gpu->log, start, clock(), "translating GLSL to SPIR-V");
+    clock_t after_glsl = clock();
+    pl_log_cpu_time(gpu->log, start, after_glsl, "translating GLSL to SPIR-V");
 
-    SC(spvc_context_create(&pass_s->sc));
+    SC(spvc_context_create(&sc));
 
     spvc_parsed_ir sc_ir;
-    SC(spvc_context_parse_spirv(pass_s->sc, (SpvId *) spirv.buf,
+    SC(spvc_context_parse_spirv(sc, (SpvId *) spirv.buf,
                                 spirv.len / sizeof(SpvId), &sc_ir));
 
-    SC(spvc_context_create_compiler(pass_s->sc, SPVC_BACKEND_HLSL, sc_ir,
+    SC(spvc_context_create_compiler(sc, SPVC_BACKEND_HLSL, sc_ir,
                                     SPVC_CAPTURE_MODE_TAKE_OWNERSHIP,
-                                    &pass_s->sc_comp));
+                                    &sc_comp));
 
     spvc_compiler_options sc_opts;
-    SC(spvc_compiler_create_compiler_options(pass_s->sc_comp, &sc_opts));
+    SC(spvc_compiler_create_compiler_options(sc_comp, &sc_opts));
 
     int sc_shader_model;
     if (p->fl >= D3D_FEATURE_LEVEL_11_0) {
@@ -268,106 +406,38 @@ static bool shader_compile_glsl(pl_gpu gpu, pl_pass pass,
     SC(spvc_compiler_options_set_bool(sc_opts,
         SPVC_COMPILER_OPTION_HLSL_NONWRITABLE_UAV_TEXTURE_AS_SRV, SPVC_TRUE));
 
-    SC(spvc_compiler_install_compiler_options(pass_s->sc_comp, sc_opts));
+    SC(spvc_compiler_install_compiler_options(sc_comp, sc_opts));
 
     spvc_set active = NULL;
-    SC(spvc_compiler_get_active_interface_variables(pass_s->sc_comp, &active));
+    SC(spvc_compiler_get_active_interface_variables(sc_comp, &active));
     spvc_resources resources = NULL;
     SC(spvc_compiler_create_shader_resources_for_active_variables(
-        pass_s->sc_comp, &resources, active));
+        sc_comp, &resources, active));
 
-    // In D3D11, the vertex shader and fragment shader can have a different set
-    // of bindings. At this point, SPIRV-Cross knows which resources are
-    // statically used in each stage. We can use this information to optimize
-    // HLSL register allocation by not binding resources to shader stages
-    // they're not used in.
-    mark_resources_used(pass, pass_s->sc_comp, resources,
-                        SPVC_RESOURCE_TYPE_UNIFORM_BUFFER, stage);
-    mark_resources_used(pass, pass_s->sc_comp, resources,
-                        SPVC_RESOURCE_TYPE_STORAGE_BUFFER, stage);
-    mark_resources_used(pass, pass_s->sc_comp, resources,
-                        SPVC_RESOURCE_TYPE_STORAGE_IMAGE, stage);
-    mark_resources_used(pass, pass_s->sc_comp, resources,
-                        SPVC_RESOURCE_TYPE_SAMPLED_IMAGE, stage);
-
-    success = true;
-error:;
-    if (!success) {
-        PL_ERR(gpu, "%s shader GLSL source:", shader_names[stage]);
-        pl_msg_source(gpu->ctx, PL_LOG_ERR, glsl);
-
-        if (pass_s->sc) {
-            spvc_context_destroy(pass_s->sc);
-            pass_s->sc = NULL;
-        }
-    }
-    pl_free(tmp);
-
-    return success;
-}
-
-static bool shader_compile_hlsl(pl_gpu gpu, pl_pass pass,
-                                struct d3d_pass_stage *pass_s,
-                                enum glsl_shader_stage stage, const char *glsl,
-                                ID3DBlob **out)
-{
-    struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
-    struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
-    const char *hlsl = NULL;
-    ID3DBlob *errors = NULL;
-    bool success = false;
-    HRESULT hr;
-
-    int max_binding = -1;
-
-    // This should not be called without first calling shader_compile_glsl
-    pl_assert(pass_s->sc_comp);
-
-    static const SpvExecutionModel spv_execution_model[] = {
-        [GLSL_SHADER_VERTEX]   = SpvExecutionModelVertex,
-        [GLSL_SHADER_FRAGMENT] = SpvExecutionModelFragment,
-        [GLSL_SHADER_COMPUTE]  = SpvExecutionModelGLCompute,
-    };
-
-    // Assign the HLSL register numbers we want to use for each resource
-    for (int i = 0; i < pass->params.num_descriptors; i++) {
-        struct pl_desc *desc = &pass->params.descriptors[i];
-        struct pl_desc_d3d11 *desc_p = &pass_p->descriptors[i];
-        struct d3d_desc_stage *desc_s =
-            stage == GLSL_SHADER_VERTEX ? &desc_p->vertex : &desc_p->main;
-
-        // Skip resources that aren't in this shader stage
-        if (!desc_s->used)
-            continue;
-
-        spvc_hlsl_resource_binding binding;
-        spvc_hlsl_resource_binding_init(&binding);
-        binding.stage = spv_execution_model[stage];
-        binding.binding = desc->binding;
-        max_binding = PL_MAX(max_binding, desc->binding);
-        if (desc_s->cbv_slot > 0)
-            binding.cbv.register_binding = desc_s->cbv_slot;
-        if (desc_s->srv_slot > 0)
-            binding.srv.register_binding = desc_s->srv_slot;
-        if (desc_s->sampler_slot > 0)
-            binding.sampler.register_binding = desc_s->sampler_slot;
-        if (desc_s->uav_slot > 0)
-            binding.uav.register_binding = desc_s->uav_slot;
-        SC(spvc_compiler_hlsl_add_resource_binding(pass_s->sc_comp, &binding));
-    }
+    // Allocate HLSL registers for each resource type
+    alloc_hlsl_reg_bindings(gpu, pass, pass_s, sc, sc_comp, resources,
+                            SPVC_RESOURCE_TYPE_SAMPLED_IMAGE, stage);
+    alloc_hlsl_reg_bindings(gpu, pass, pass_s, sc, sc_comp, resources,
+                            SPVC_RESOURCE_TYPE_SEPARATE_IMAGE, stage);
+    alloc_hlsl_reg_bindings(gpu, pass, pass_s, sc, sc_comp, resources,
+                            SPVC_RESOURCE_TYPE_UNIFORM_BUFFER, stage);
+    alloc_hlsl_reg_bindings(gpu, pass, pass_s, sc, sc_comp, resources,
+                            SPVC_RESOURCE_TYPE_STORAGE_BUFFER, stage);
+    alloc_hlsl_reg_bindings(gpu, pass, pass_s, sc, sc_comp, resources,
+                            SPVC_RESOURCE_TYPE_STORAGE_IMAGE, stage);
 
     if (stage == GLSL_SHADER_COMPUTE) {
         // Check if the gl_NumWorkGroups builtin is used. If it is, we have to
         // emulate it with a constant buffer, so allocate it a CBV register.
         spvc_variable_id num_workgroups_id =
-            spvc_compiler_hlsl_remap_num_workgroups_builtin(pass_s->sc_comp);
+            spvc_compiler_hlsl_remap_num_workgroups_builtin(sc_comp);
         if (num_workgroups_id) {
             pass_p->num_workgroups_used = true;
 
             spvc_hlsl_resource_binding binding;
             spvc_hlsl_resource_binding_init(&binding);
-            binding.stage = spv_execution_model[stage];
-            binding.binding = max_binding + 1;
+            binding.stage = stage_to_spv(stage);
+            binding.binding = pass_p->max_binding + 1;
 
             // Allocate a CBV register for the buffer
             binding.cbv.register_binding = pass_s->cbvs.num;
@@ -378,45 +448,26 @@ static bool shader_compile_hlsl(pl_gpu gpu, pl_pass pass,
                 goto error;
             }
 
-            spvc_compiler_set_decoration(pass_s->sc_comp, num_workgroups_id,
+            spvc_compiler_set_decoration(sc_comp, num_workgroups_id,
                                          SpvDecorationDescriptorSet, 0);
-            spvc_compiler_set_decoration(pass_s->sc_comp, num_workgroups_id,
+            spvc_compiler_set_decoration(sc_comp, num_workgroups_id,
                                          SpvDecorationBinding, binding.binding);
 
-            SC(spvc_compiler_hlsl_add_resource_binding(pass_s->sc_comp, &binding));
+            SC(spvc_compiler_hlsl_add_resource_binding(sc_comp, &binding));
         }
     }
 
-    clock_t start = clock();
-    SC(spvc_compiler_compile(pass_s->sc_comp, &hlsl));
+    SC(spvc_compiler_compile(sc_comp, &hlsl));
 
     clock_t after_spvc = clock();
-    pl_log_cpu_time(gpu->log, start, after_spvc, "translating SPIR-V to HLSL");
-
-    // Check if each resource binding was actually used by SPIRV-Cross in the
-    // compiled HLSL. This information can be used to optimize resource binding
-    // to the pipeline.
-    for (int i = 0; i < pass->params.num_descriptors; i++) {
-        struct pl_desc *desc = &pass->params.descriptors[i];
-        struct pl_desc_d3d11 *desc_p = &pass_p->descriptors[i];
-        struct d3d_desc_stage *desc_s =
-            stage == GLSL_SHADER_VERTEX ? &desc_p->vertex : &desc_p->main;
-
-        // Skip resources that aren't in this shader stage
-        if (!desc_s->used)
-            continue;
-
-        bool used = spvc_compiler_hlsl_is_resource_used(pass_s->sc_comp,
-            spv_execution_model[stage], 0, desc->binding);
-        if (!used)
-            desc_s->used = false;
-    }
+    pl_log_cpu_time(gpu->log, after_glsl, after_spvc, "translating SPIR-V to HLSL");
 
     hr = p->D3DCompile(hlsl, strlen(hlsl), NULL, NULL, NULL, "main",
         get_shader_target(gpu, stage),
-        D3DCOMPILE_SKIP_VALIDATION | D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, out,
+        D3DCOMPILE_SKIP_VALIDATION | D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &out,
         &errors);
     if (FAILED(hr)) {
+        SAFE_RELEASE(out);
         PL_ERR(gpu, "D3DCompile failed: %s\n%.*s", pl_hresult_to_str(hr),
                (int) ID3D10Blob_GetBufferSize(errors),
                (char *) ID3D10Blob_GetBufferPointer(errors));
@@ -425,9 +476,8 @@ static bool shader_compile_hlsl(pl_gpu gpu, pl_pass pass,
 
     pl_log_cpu_time(gpu->log, after_spvc, clock(), "translating HLSL to DXBC");
 
-    success = true;
 error:;
-    int level = success ? PL_LOG_DEBUG : PL_LOG_ERR;
+    int level = out ? PL_LOG_DEBUG : PL_LOG_ERR;
     PL_MSG(gpu, level, "%s shader GLSL source:", shader_names[stage]);
     pl_msg_source(gpu->ctx, level, glsl);
     if (hlsl) {
@@ -435,16 +485,15 @@ error:;
         pl_msg_source(gpu->ctx, level, hlsl);
     }
 
-    if (pass_s->sc) {
-        spvc_context_destroy(pass_s->sc);
-        pass_s->sc = NULL;
-    }
+    if (sc)
+        spvc_context_destroy(sc);
     SAFE_RELEASE(errors);
-    return success;
+    pl_free(tmp);
+    return out;
 }
 
 #define CACHE_MAGIC {'P','L','D','3','D',11}
-#define CACHE_VERSION 1
+#define CACHE_VERSION 2
 static const char d3d11_cache_magic[6] = CACHE_MAGIC;
 
 struct d3d11_cache_header {
@@ -551,10 +600,11 @@ static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass *pass,
     GET_STAGE_ARRAY(vertex, samplers);
     GET_ARRAY(pass_p, uavs, header->num_uavs);
 
-#define GET_SHADER(ptr)                                \
-    do {                                               \
-        *ptr = pl_str_take(cache, header->ptr##_len);  \
-        cache = pl_str_drop(cache, ptr->len);          \
+#define GET_SHADER(ptr)                                    \
+    do {                                                   \
+        if (ptr)                                           \
+            *ptr = pl_str_take(cache, header->ptr##_len);  \
+        cache = pl_str_drop(cache, header->ptr##_len);     \
     } while (0)
 
     GET_SHADER(vert_bc);
@@ -623,15 +673,6 @@ void pl_d3d11_pass_destroy(pl_gpu gpu, pl_pass pass)
     struct d3d11_ctx *ctx = p->ctx;
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
 
-    if (pass_p->main.sc) {
-        spvc_context_destroy(pass_p->main.sc);
-        pass_p->main.sc = NULL;
-    }
-    if (pass_p->vertex.sc) {
-        spvc_context_destroy(pass_p->vertex.sc);
-        pass_p->vertex.sc = NULL;
-    }
-
     SAFE_RELEASE(pass_p->vs);
     SAFE_RELEASE(pass_p->ps);
     SAFE_RELEASE(pass_p->cs);
@@ -644,47 +685,49 @@ void pl_d3d11_pass_destroy(pl_gpu gpu, pl_pass pass)
 }
 
 static bool pass_create_raster(pl_gpu gpu, struct pl_pass *pass,
-                               const struct pl_pass_params *params,
-                               pl_str *vs_bc, pl_str *ps_bc)
+                               const struct pl_pass_params *params)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     struct d3d11_ctx *ctx = p->ctx;
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
     ID3DBlob *vs_blob = NULL;
+    pl_str vs_str = {0};
     ID3DBlob *ps_blob = NULL;
-    const void *vs_bytecode = NULL, *ps_bytecode = NULL;
-    size_t vs_length = 0, ps_length = 0;
+    pl_str ps_str = {0};
     D3D11_INPUT_ELEMENT_DESC *in_descs = NULL;
     bool success = false;
 
-    pl_assert((vs_bc == NULL || vs_bc->len == 0) ==
-              (ps_bc == NULL || ps_bc->len == 0));
-    if (vs_bc == NULL || vs_bc->len == 0) {
-        if (!shader_compile_hlsl(gpu, pass, &pass_p->vertex, GLSL_SHADER_VERTEX,
-                                 params->vertex_shader, &vs_blob))
+    if (d3d11_use_cached_program(gpu, pass, params, &vs_str, &ps_str, NULL))
+        PL_DEBUG(gpu, "Using cached DXBC shaders");
+
+    pl_assert((vs_str.len == 0) == (ps_str.len == 0));
+    if (vs_str.len == 0) {
+        vs_blob = shader_compile_glsl(gpu, pass, &pass_p->vertex,
+                                      GLSL_SHADER_VERTEX, params->vertex_shader);
+        if (!vs_blob)
             goto error;
 
-        vs_bytecode = ID3D10Blob_GetBufferPointer(vs_blob);
-        vs_length = ID3D10Blob_GetBufferSize(vs_blob);
+        vs_str = (pl_str) {
+            .buf = ID3D10Blob_GetBufferPointer(vs_blob),
+            .len = ID3D10Blob_GetBufferSize(vs_blob),
+        };
 
-        if (!shader_compile_hlsl(gpu, pass, &pass_p->main, GLSL_SHADER_FRAGMENT,
-                                 params->glsl_shader, &ps_blob))
+        ps_blob = shader_compile_glsl(gpu, pass, &pass_p->main,
+                                      GLSL_SHADER_FRAGMENT, params->glsl_shader);
+        if (!ps_blob)
             goto error;
 
-        ps_bytecode = ID3D10Blob_GetBufferPointer(ps_blob);
-        ps_length = ID3D10Blob_GetBufferSize(ps_blob);
-    } else {
-        vs_bytecode = vs_bc->buf;
-        vs_length = vs_bc->len;
-        ps_bytecode = ps_bc->buf;
-        ps_length = ps_bc->len;
+        ps_str = (pl_str) {
+            .buf = ID3D10Blob_GetBufferPointer(ps_blob),
+            .len = ID3D10Blob_GetBufferSize(ps_blob),
+        };
     }
 
-    D3D(ID3D11Device_CreateVertexShader(p->dev,
-        vs_bytecode, vs_length, NULL, &pass_p->vs));
+    D3D(ID3D11Device_CreateVertexShader(p->dev, vs_str.buf, vs_str.len, NULL,
+                                        &pass_p->vs));
 
-    D3D(ID3D11Device_CreatePixelShader(p->dev,
-        ps_bytecode, ps_length, NULL, &pass_p->ps));
+    D3D(ID3D11Device_CreatePixelShader(p->dev, ps_str.buf, ps_str.len, NULL,
+                                       &pass_p->ps));
 
     in_descs = pl_calloc_ptr(pass, params->num_vertex_attribs, in_descs);
     for (int i = 0; i < params->num_vertex_attribs; i++) {
@@ -701,7 +744,7 @@ static bool pass_create_raster(pl_gpu gpu, struct pl_pass *pass,
         };
     }
     D3D(ID3D11Device_CreateInputLayout(p->dev, in_descs,
-        params->num_vertex_attribs, vs_bytecode, vs_length, &pass_p->layout));
+        params->num_vertex_attribs, vs_str.buf, vs_str.len, &pass_p->layout));
 
     static const D3D11_BLEND blend_options[] = {
         [PL_BLEND_ZERO] = D3D11_BLEND_ZERO,
@@ -729,8 +772,6 @@ static bool pass_create_raster(pl_gpu gpu, struct pl_pass *pass,
     }
     D3D(ID3D11Device_CreateBlendState(p->dev, &bdesc, &pass_p->bstate));
 
-    const pl_str vs_str = { (uint8_t *) vs_bytecode, vs_length };
-    const pl_str ps_str = { (uint8_t *) ps_bytecode, ps_length };
     d3d11_update_program_cache(gpu, pass, &vs_str, &ps_str, NULL);
 
     success = true;
@@ -742,32 +783,32 @@ error:
 }
 
 static bool pass_create_compute(pl_gpu gpu, struct pl_pass *pass,
-                                const struct pl_pass_params *params,
-                                pl_str *comp_bc)
+                                const struct pl_pass_params *params)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     struct d3d11_ctx *ctx = p->ctx;
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
     ID3DBlob *cs_blob = NULL;
+    pl_str cs_str = {0};
     bool success = false;
-    const void *cs_bytecode = NULL;
-    size_t cs_length = 0;
 
-    if (comp_bc == NULL || comp_bc->len == 0) {
-        if (!shader_compile_hlsl(gpu, pass, &pass_p->main, GLSL_SHADER_COMPUTE,
-                                 params->glsl_shader, &cs_blob))
+    if (d3d11_use_cached_program(gpu, pass, params, NULL, NULL, &cs_str))
+        PL_DEBUG(gpu, "Using cached DXBC shader");
+
+    if (cs_str.len == 0) {
+        cs_blob = shader_compile_glsl(gpu, pass, &pass_p->main,
+                                      GLSL_SHADER_COMPUTE, params->glsl_shader);
+        if (!cs_blob)
             goto error;
 
-        cs_bytecode = ID3D10Blob_GetBufferPointer(cs_blob);
-        cs_length = ID3D10Blob_GetBufferSize(cs_blob);
-    } else {
-        cs_bytecode = comp_bc->buf;
-        cs_length = comp_bc->len;
+        cs_str = (pl_str) {
+            .buf = ID3D10Blob_GetBufferPointer(cs_blob),
+            .len = ID3D10Blob_GetBufferSize(cs_blob),
+        };
     }
 
-    D3D(ID3D11Device_CreateComputeShader(p->dev,
-        cs_bytecode, cs_length,
-        NULL, &pass_p->cs));
+    D3D(ID3D11Device_CreateComputeShader(p->dev, cs_str.buf, cs_str.len, NULL,
+                                         &pass_p->cs));
 
     if (pass_p->num_workgroups_used) {
         D3D11_BUFFER_DESC bdesc = {
@@ -778,7 +819,6 @@ static bool pass_create_compute(pl_gpu gpu, struct pl_pass *pass,
                                       &pass_p->num_workgroups_buf));
     }
 
-    pl_str cs_str = { (uint8_t *) cs_bytecode, cs_length };
     d3d11_update_program_cache(gpu, pass, NULL, NULL, &cs_str);
 
     success = true;
@@ -795,136 +835,16 @@ const struct pl_pass *pl_d3d11_pass_create(pl_gpu gpu,
 
     struct pl_pass *pass = pl_zalloc_obj(NULL, pass, struct pl_pass_d3d11);
     pass->params = pl_pass_params_copy(pass, params);
-
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
-
-    pass_p->descriptors = pl_calloc_ptr(pass, params->num_descriptors,
-                                        pass_p->descriptors);
-    for (int i = 0; i < params->num_descriptors; i++) {
-        struct pl_desc_d3d11 *desc_p = &pass_p->descriptors[i];
-        *desc_p = (struct pl_desc_d3d11) {
-            .main = {
-                .cbv_slot = -1,
-                .srv_slot = -1,
-                .sampler_slot = -1,
-                .uav_slot = -1,
-            },
-            .vertex = {
-                .cbv_slot = -1,
-                .srv_slot = -1,
-                .sampler_slot = -1,
-            },
-        };
-    }
-
-    pl_str vert = {0}, frag = {0}, comp = {0};
-    if (d3d11_use_cached_program(gpu, pass, params, &vert, &frag, &comp)) {
-        PL_DEBUG(gpu, "Using cached DXBC shaders");
-    } else {
-        // Compile GLSL to SPIR-V. This also sets `desc_stage.used` based on which
-        // resources are statically used in the shader for each pass.
-        if (params->type == PL_PASS_RASTER) {
-            if (!shader_compile_glsl(gpu, pass, &pass_p->vertex, GLSL_SHADER_VERTEX,
-                                     params->vertex_shader))
-                goto error;
-            if (!shader_compile_glsl(gpu, pass, &pass_p->main, GLSL_SHADER_FRAGMENT,
-                                     params->glsl_shader))
-                goto error;
-        } else {
-            if (!shader_compile_glsl(gpu, pass, &pass_p->main, GLSL_SHADER_COMPUTE,
-                                     params->glsl_shader))
-                goto error;
-        }
-
-        // In a raster pass, one of the UAV slots is used by the runtime for the RTV
-        int uav_offset = params->type == PL_PASS_COMPUTE ? 0 : 1;
-        int max_uavs = p->max_uavs - uav_offset;
-
-        for (int desc_idx = 0; desc_idx < params->num_descriptors; desc_idx++) {
-            struct pl_desc *desc = &params->descriptors[desc_idx];
-            struct pl_desc_d3d11 *desc_p = &pass_p->descriptors[desc_idx];
-
-            bool has_cbv = false, has_srv = false, has_sampler = false, has_uav = false;
-
-            switch (desc->type) {
-            case PL_DESC_SAMPLED_TEX:
-                has_sampler = true;
-                has_srv = true;
-                break;
-            case PL_DESC_BUF_STORAGE:
-            case PL_DESC_STORAGE_IMG:
-            case PL_DESC_BUF_TEXEL_STORAGE:
-                if (desc->access == PL_DESC_ACCESS_READONLY) {
-                    has_srv = true;
-                } else {
-                    has_uav = true;
-                }
-                break;
-            case PL_DESC_BUF_UNIFORM:
-                has_cbv = true;
-                break;
-            case PL_DESC_BUF_TEXEL_UNIFORM:
-                has_srv = true;
-                break;
-            case PL_DESC_INVALID:
-            case PL_DESC_TYPE_COUNT:
-                pl_unreachable();
-            }
-
-            // Allocate HLSL register numbers for each shader stage
-            struct d3d_pass_stage *stages[] = { &pass_p->main, &pass_p->vertex };
-            for (int j = 0; j < PL_ARRAY_SIZE(stages); j++) {
-                struct d3d_pass_stage *pass_s = stages[j];
-                struct d3d_desc_stage *desc_s =
-                    pass_s == &pass_p->vertex ? &desc_p->vertex : &desc_p->main;
-                if (!desc_s->used)
-                    continue;
-
-                if (has_cbv) {
-                    desc_s->cbv_slot = pass_s->cbvs.num;
-                    PL_ARRAY_APPEND(pass, pass_s->cbvs, desc_idx);
-                    if (pass_s->cbvs.num > D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT) {
-                        PL_ERR(gpu, "Too many constant buffers in shader");
-                        goto error;
-                    }
-                }
-
-                if (has_srv) {
-                    desc_s->srv_slot = pass_s->srvs.num;
-                    PL_ARRAY_APPEND(pass, pass_s->srvs, desc_idx);
-                    if (pass_s->srvs.num > p->max_srvs) {
-                        PL_ERR(gpu, "Too many SRVs in shader");
-                        goto error;
-                    }
-                }
-
-                if (has_sampler) {
-                    desc_s->sampler_slot = pass_s->samplers.num;
-                    PL_ARRAY_APPEND(pass, pass_s->samplers, desc_idx);
-                    if (pass_s->srvs.num > D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT) {
-                        PL_ERR(gpu, "Too many samplers in shader");
-                        goto error;
-                    }
-                }
-            }
-
-            // UAV bindings are shared between all shader stages
-            if (has_uav && (desc_p->main.used || desc_p->vertex.used)) {
-                desc_p->main.uav_slot = pass_p->uavs.num + uav_offset;
-                PL_ARRAY_APPEND(pass, pass_p->uavs, desc_idx);
-                if (pass_p->uavs.num > max_uavs) {
-                    PL_ERR(gpu, "Too many UAVs in shader");
-                    goto error;
-                }
-            }
-        }
-    }
+    *pass_p = (struct pl_pass_d3d11) {
+        .max_binding = -1,
+    };
 
     if (params->type == PL_PASS_COMPUTE) {
-        if (!pass_create_compute(gpu, pass, params, &comp))
+        if (!pass_create_compute(gpu, pass, params))
             goto error;
     } else {
-        if (!pass_create_raster(gpu, pass, params, &vert, &frag))
+        if (!pass_create_raster(gpu, pass, params))
             goto error;
     }
 
@@ -939,6 +859,47 @@ const struct pl_pass *pl_d3d11_pass_create(pl_gpu gpu,
         PL_MAX(pass_p->main.samplers.num, pass_p->vertex.samplers.num),
         sizeof(*pass_p->sampler_arr));
     pass_p->uav_arr = pl_calloc(pass, pass_p->uavs.num, sizeof(*pass_p->uav_arr));
+
+    // Find the highest binding number used in `params->descriptors` if we
+    // haven't found it already. (If the shader was compiled fresh rather than
+    // loaded from cache, `pass_p->max_binding` should already be set.)
+    if (pass_p->max_binding == -1) {
+        for (int i = 0; i < params->num_descriptors; i++) {
+            pass_p->max_binding = PL_MAX(pass_p->max_binding,
+                                         params->descriptors[i].binding);
+        }
+    }
+
+    // Build a mapping from binding numbers to descriptor array indexes
+    int *binding_map = pl_calloc_ptr(pass, pass_p->max_binding + 1, binding_map);
+    for (int i = 0; i <= pass_p->max_binding; i++)
+        binding_map[i] = HLSL_BINDING_NOT_USED;
+    for (int i = 0; i < params->num_descriptors; i++)
+        binding_map[params->descriptors[i].binding] = i;
+
+#define MAP_RESOURCES(array)                                 \
+    do {                                                     \
+        for (int i = 0; i < array.num; i++) {                \
+            if (array.elem[i] > pass_p->max_binding) {       \
+                array.elem[i] = HLSL_BINDING_NOT_USED;       \
+            } else if (array.elem[i] >= 0) {                 \
+                array.elem[i] = binding_map[array.elem[i]];  \
+            }                                                \
+        }                                                    \
+    } while (0)
+
+    // During shader compilation (or after loading a compiled shader from cache)
+    // the entries of the following resource lists are shader binding numbers,
+    // however, it's more efficient for `pl_pass_run` if they refer to indexes
+    // of the `params->descriptors` array instead, so remap them here
+    MAP_RESOURCES(pass_p->main.cbvs);
+    MAP_RESOURCES(pass_p->main.samplers);
+    MAP_RESOURCES(pass_p->main.srvs);
+    MAP_RESOURCES(pass_p->vertex.cbvs);
+    MAP_RESOURCES(pass_p->vertex.samplers);
+    MAP_RESOURCES(pass_p->vertex.srvs);
+    MAP_RESOURCES(pass_p->uavs);
+    pl_free(binding_map);
 
     pl_d3d11_flush_message_queue(ctx, "After pass create");
 
@@ -962,11 +923,11 @@ static void fill_resources(pl_gpu gpu, pl_pass pass,
 
     for (int i = 0; i < pass_s->cbvs.num; i++) {
         int binding = pass_s->cbvs.elem[i];
-        if (binding == HLSL_BINDING_NOT_USED) {
-            cbvs[i] = NULL;
-            continue;
-        } else if (binding == HLSL_BINDING_NUM_WORKGROUPS) {
+        if (binding == HLSL_BINDING_NUM_WORKGROUPS) {
             cbvs[i] = pass_p->num_workgroups_buf;
+            continue;
+        } else if (binding < 0) {
+            cbvs[i] = NULL;
             continue;
         }
 
@@ -978,7 +939,7 @@ static void fill_resources(pl_gpu gpu, pl_pass pass,
 
     for (int i = 0; i < pass_s->srvs.num; i++) {
         int binding = pass_s->srvs.elem[i];
-        if (binding == HLSL_BINDING_NOT_USED) {
+        if (binding < 0) {
             srvs[i] = NULL;
             continue;
         }
@@ -1012,7 +973,7 @@ static void fill_resources(pl_gpu gpu, pl_pass pass,
 
     for (int i = 0; i < pass_s->samplers.num; i++) {
         int binding = pass_s->samplers.elem[i];
-        if (binding == HLSL_BINDING_NOT_USED) {
+        if (binding < 0) {
             samplers[i] = NULL;
             continue;
         }
@@ -1029,7 +990,7 @@ static void fill_uavs(pl_pass pass, const struct pl_pass_run_params *params,
 
     for (int i = 0; i < pass_p->uavs.num; i++) {
         int binding = pass_p->uavs.elem[i];
-        if (binding == HLSL_BINDING_NOT_USED) {
+        if (binding < 0) {
             uavs[i] = NULL;
             continue;
         }

@@ -159,25 +159,6 @@ struct d3d_num_workgroups_buf {
     alignas(CBUF_ELEM) uint32_t num_wgs[3];
 };
 
-// Represents a descriptor binding to a specific shader stage (VS, PS, CS)
-struct d3d_desc_stage {
-    // The HLSL register number used for this resource
-    int cbv_slot;     // register(bN)
-    int srv_slot;     // register(tN)
-    int sampler_slot; // register(sN)
-    int uav_slot;     // register(uN)
-
-    // Is the resource used in this shader pass? Used to optimize pipeline
-    // binding for resources that are used in the vertex shader but not the
-    // fragment shader or vice versa.
-    bool used;
-};
-
-struct pl_desc_d3d11 {
-    struct d3d_desc_stage main; // PS and CS
-    struct d3d_desc_stage vertex;
-};
-
 enum {
     HLSL_BINDING_NOT_USED = -1, // Slot should always be bound as NULL
     HLSL_BINDING_NUM_WORKGROUPS = -2, // Slot used for gl_NumWorkGroups emulation
@@ -185,10 +166,6 @@ enum {
 
 // Represents a specific shader stage in a pl_pass (VS, PS, CS)
 struct d3d_pass_stage {
-    // GLSL->HLSL translator state
-    spvc_context sc;
-    spvc_compiler sc_comp;
-
     // Lists for each resource type, to simplify binding in pl_pass_run. Indexes
     // match the index of the arrays passed to the ID3D11DeviceContext methods.
     // Entries are the index of pass->params.descriptors which should be bound
@@ -210,7 +187,8 @@ struct pl_pass_d3d11 {
     ID3D11Buffer *num_workgroups_buf;
     bool num_workgroups_used;
 
-    struct pl_desc_d3d11 *descriptors;
+    // Maximum binding number
+    int max_binding;
 
     struct d3d_pass_stage main; // PS and CS
     struct d3d_pass_stage vertex;
