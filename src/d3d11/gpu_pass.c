@@ -534,9 +534,11 @@ static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass *pass,
 
     pass_p->num_workgroups_used = header->num_workgroups_used;
 
-#define GET_ARRAY(object, name, num_elements) {                     \
-    PL_ARRAY_MEMDUP(pass, (object)->name, cache.buf, num_elements); \
-    cache = pl_str_drop(cache, num_elements * sizeof(*(object)->name.elem)); }
+#define GET_ARRAY(object, name, num_elems)                                     \
+    do {                                                                       \
+        PL_ARRAY_MEMDUP(pass, (object)->name, cache.buf, num_elems);           \
+        cache = pl_str_drop(cache, num_elems * sizeof(*(object)->name.elem));  \
+    } while (0)
 
 #define GET_STAGE_ARRAY(stage, name) \
             GET_ARRAY(&pass_p->stage, name, header->num_##stage##_##name)
@@ -549,9 +551,11 @@ static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass *pass,
     GET_STAGE_ARRAY(vertex, samplers);
     GET_ARRAY(pass_p, uavs, header->num_uavs);
 
-#define GET_SHADER(ptr)                               \
-        *ptr = pl_str_take(cache, header->ptr##_len); \
-        cache = pl_str_drop(cache, ptr->len);
+#define GET_SHADER(ptr)                                \
+    do {                                               \
+        *ptr = pl_str_take(cache, header->ptr##_len);  \
+        cache = pl_str_drop(cache, ptr->len);          \
+    } while (0)
 
     GET_SHADER(vert_bc);
     GET_SHADER(frag_bc);
