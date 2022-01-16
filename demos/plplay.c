@@ -120,7 +120,7 @@ static void uninit(struct plplay *p)
     window_destroy(&p->win);
 
     pl_log_destroy(&p->log);
-    *p = (struct plplay) {0};
+    memset(p, 0, sizeof(*p));
 }
 
 static bool open_file(struct plplay *p, const char *filename)
@@ -542,6 +542,8 @@ static void info_callback(void *priv, const struct pl_render_info *info)
     pass->pass = *info->pass;
 }
 
+static struct plplay state;
+
 int main(int argc, char **argv)
 {
     const char *filename;
@@ -559,7 +561,7 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    struct plplay state = {
+    state = (struct plplay) {
         .params = pl_render_default_params,
         .deband_params = pl_deband_default_params,
         .sigmoid_params = pl_sigmoid_default_params,
