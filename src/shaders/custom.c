@@ -950,7 +950,7 @@ static double prng_step(uint64_t s[4])
 static bool bind_pass_tex(pl_shader sh, pl_str name,
                           const struct pass_tex *ptex,
                           const struct pl_rect2df *rect,
-                          const char *alias)
+                          bool hooked, bool mainpresub)
 {
     ident_t id, pos, size, pt;
 
@@ -986,24 +986,40 @@ static bool bind_pass_tex(pl_shader sh, pl_str name,
     GLSLH("#define %.*s_texOff(off) (%.*s_tex(%s + %s * vec2(off))) \n",
           PL_STR_FMT(name), PL_STR_FMT(name), pos, pt);
 
-    if (ptex->tex->params.format->gatherable) {
+    bool can_gather = ptex->tex->params.format->gatherable;
+    if (can_gather) {
         GLSLH("#define %.*s_gather(pos, c) (%s * vec4(textureGather(%s, pos, c))) \n",
               PL_STR_FMT(name), scale, id);
     }
 
-    if (alias) {
-        GLSLH("#define %s_raw %.*s_raw \n", alias, PL_STR_FMT(name));
-        GLSLH("#define %s_pos %.*s_pos \n", alias, PL_STR_FMT(name));
-        GLSLH("#define %s_size %.*s_size \n", alias, PL_STR_FMT(name));
-        GLSLH("#define %s_rot %.*s_rot \n", alias, PL_STR_FMT(name));
-        GLSLH("#define %s_off %.*s_off \n", alias, PL_STR_FMT(name));
-        GLSLH("#define %s_pt %.*s_pt \n", alias, PL_STR_FMT(name));
-        GLSLH("#define %s_map %.*s_map \n", alias, PL_STR_FMT(name));
-        GLSLH("#define %s_mul %.*s_mul \n", alias, PL_STR_FMT(name));
-        GLSLH("#define %s_tex %.*s_tex \n", alias, PL_STR_FMT(name));
-        GLSLH("#define %s_texOff %.*s_texOff \n", alias, PL_STR_FMT(name));
-        if (ptex->tex->params.format->gatherable)
-            GLSLH("#define %s_gather %.*s_gather \n", alias, PL_STR_FMT(name));
+    if (hooked) {
+        GLSLH("#define HOOKED_raw %.*s_raw \n", PL_STR_FMT(name));
+        GLSLH("#define HOOKED_pos %.*s_pos \n", PL_STR_FMT(name));
+        GLSLH("#define HOOKED_size %.*s_size \n", PL_STR_FMT(name));
+        GLSLH("#define HOOKED_rot %.*s_rot \n", PL_STR_FMT(name));
+        GLSLH("#define HOOKED_off %.*s_off \n", PL_STR_FMT(name));
+        GLSLH("#define HOOKED_pt %.*s_pt \n", PL_STR_FMT(name));
+        GLSLH("#define HOOKED_map %.*s_map \n", PL_STR_FMT(name));
+        GLSLH("#define HOOKED_mul %.*s_mul \n", PL_STR_FMT(name));
+        GLSLH("#define HOOKED_tex %.*s_tex \n", PL_STR_FMT(name));
+        GLSLH("#define HOOKED_texOff %.*s_texOff \n", PL_STR_FMT(name));
+        if (can_gather)
+            GLSLH("#define HOOKED_gather %.*s_gather \n", PL_STR_FMT(name));
+    }
+
+    if (mainpresub) {
+        GLSLH("#define MAIN_raw MAINPRESUB_raw \n");
+        GLSLH("#define MAIN_pos MAINPRESUB_pos \n");
+        GLSLH("#define MAIN_size MAINPRESUB_size \n");
+        GLSLH("#define MAIN_rot MAINPRESUB_rot \n");
+        GLSLH("#define MAIN_off MAINPRESUB_off \n");
+        GLSLH("#define MAIN_pt MAINPRESUB_pt \n");
+        GLSLH("#define MAIN_map MAINPRESUB_map \n");
+        GLSLH("#define MAIN_mul MAINPRESUB_mul \n");
+        GLSLH("#define MAIN_tex MAINPRESUB_tex \n");
+        GLSLH("#define MAIN_texOff MAINPRESUB_texOff \n");
+        if (can_gather)
+            GLSLH("#define MAIN_gather MAINPRESUB_gather \n");
     }
 
     return true;
@@ -1115,11 +1131,11 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             // Convenience alias, to allow writing shaders that are oblivious
             // of the exact stage they hooked. This simply translates to
             // whatever stage actually fired the hook.
-            const char *alias = NULL;
+            bool hooked = false, mainpresub = false;
             if (pl_str_equals0(texname, "HOOKED")) {
                 // Continue with binding this, under the new name
                 texname = stage;
-                alias = "HOOKED";
+                hooked = true;
             }
 
             // Compatibility alias, because MAIN and MAINPRESUB mean the same
@@ -1129,7 +1145,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 pl_str_equals0(texname, "MAINPRESUB"))
             {
                 texname = pl_str0("MAINPRESUB");
-                alias = "MAIN";
+                mainpresub = true;
             }
 
             for (int j = 0; j < p->descriptors.num; j++) {
@@ -1168,8 +1184,11 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                         pl_rect2df_offset(&rect, ox, oy);
                     }
 
-                    if (!bind_pass_tex(sh, texname, &p->pass_textures.elem[j], &rect, alias))
+                    if (!bind_pass_tex(sh, texname, &p->pass_textures.elem[j],
+                                       &rect, hooked, mainpresub))
+                    {
                         goto error;
+                    }
                     goto next_bind;
                 }
             }
