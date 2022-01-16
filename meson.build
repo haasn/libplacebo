@@ -1,6 +1,11 @@
 project('libplacebo', ['c', 'cpp'],
   license: 'LGPL2.1+',
-  default_options: ['c_std=c11', 'cpp_std=c++11', 'warning_level=2'],
+  default_options: [
+    'buildtype=debugoptimized',
+    'warning_level=2',
+    'c_std=c11',
+    'cpp_std=c++11',
+  ],
   meson_version: '>=0.54',
   version: '@0@.@1@.@2@'.format(
     # Major version
