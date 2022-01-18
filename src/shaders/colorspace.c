@@ -119,7 +119,7 @@ static inline void reshape_poly(pl_shader sh)
 
 void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
 {
-    if (!data || !sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0) || !data)
         return;
 
     sh_describe(sh, "reshaping");
@@ -1626,6 +1626,9 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
                          pl_shader_obj *tone_map_state,
                          bool prelinearized)
 {
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
     pl_color_space_infer(&src);
     pl_color_space_infer_ref(&dst, &src);
     if (pl_color_space_equal(&src, &dst)) {
@@ -1633,9 +1636,6 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
             pl_shader_delinearize(sh, &dst);
         return;
     }
-
-    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
-        return;
 
     sh_describe(sh, "colorspace conversion");
     GLSL("// pl_shader_color_map\n");
@@ -1653,10 +1653,9 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
 void pl_shader_cone_distort(pl_shader sh, struct pl_color_space csp,
                             const struct pl_cone_params *params)
 {
-    if (!params || !params->cones)
-        return;
-
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+    if (!params || !params->cones)
         return;
 
     sh_describe(sh, "cone distortion");
