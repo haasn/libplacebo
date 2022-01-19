@@ -49,10 +49,10 @@ static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
 
 #ifndef MSAN
     pl_msg(log, level, "GL: %s", message);
-#endif
 
     if (level <= PL_LOG_ERR)
         pl_log_stack_trace(log, level);
+#endif
 }
 
 #ifdef EPOXY_HAS_EGL
@@ -74,10 +74,10 @@ static void debug_cb_egl(EGLenum error, const char *command,
 #ifndef MSAN
     pl_msg(log, level, "EGL: %s: %s %s", command, egl_err_str(error),
            message);
-#endif
 
     if (level <= PL_LOG_ERR)
         pl_log_stack_trace(log, level);
+#endif
 }
 
 #endif // EPOXY_HAS_EGL
