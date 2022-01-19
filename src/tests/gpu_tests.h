@@ -1232,7 +1232,8 @@ static void pl_ycbcr_tests(pl_gpu gpu)
     }
 
     pl_fmt fmt = pl_plane_find_fmt(gpu, NULL, &data[0]);
-    if (!fmt || !(fmt->caps & (PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_HOST_READABLE)))
+    enum pl_fmt_caps caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_HOST_READABLE;
+    if (!fmt || (fmt->caps & caps) != caps)
         return;
 
     pl_tex src_tex[3] = {0};
