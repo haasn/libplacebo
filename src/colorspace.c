@@ -178,7 +178,7 @@ float pl_color_repr_normalize(struct pl_color_repr *repr)
         scale *= ((1LL << tex_bits) - 1.) / ((1LL << col_bits) - 1.);
     }
 
-    bits->sample_depth = bits->color_depth;
+    bits->color_depth = bits->sample_depth;
     return scale;
 }
 
