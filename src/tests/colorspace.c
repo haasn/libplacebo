@@ -124,13 +124,21 @@ int main()
         struct pl_color_repr repr = {
             .levels = PL_COLOR_LEVELS_LIMITED,
             .sys = sys,
+            .bits = {
+                // synthetic test
+                .color_depth = 8,
+                .sample_depth = 10,
+            },
         };
 
+        float scale = pl_color_repr_normalize(&repr);
         struct pl_transform3x3 yuv2rgb = pl_color_repr_decode(&repr, NULL);
-        static const float white_ycbcr[3] = { 235/255., 128/255., 128/255. };
-        static const float black_ycbcr[3] = {  16/255., 128/255., 128/255. };
-        static const float white_other[3] = { 235/255., 235/255., 235/255. };
-        static const float black_other[3] = {  16/255.,  16/255.,  16/255. };
+        pl_matrix3x3_scale(&yuv2rgb.mat, scale);
+
+        static const float white_ycbcr[3] = { 235/1023., 128/1023., 128/1023. };
+        static const float black_ycbcr[3] = {  16/1023., 128/1023., 128/1023. };
+        static const float white_other[3] = { 235/1023., 235/1023., 235/1023. };
+        static const float black_other[3] = {  16/1023.,  16/1023.,  16/1023. };
 
         float white[3], black[3];
         for (int i = 0; i < 3; i++) {
