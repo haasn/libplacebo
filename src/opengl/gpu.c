@@ -256,8 +256,11 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     if (gl_test_ext(gpu, "GL_EXT_unpack_subimage", 11, 30))
         limits->align_tex_xfer_pitch = 4;
 
-    if (!gl_check_err(gpu, "pl_gpu_create_gl"))
-        goto error;
+    if (!gl_check_err(gpu, "pl_gpu_create_gl")) {
+        PL_WARN(gpu, "Encountered errors while detecting GPU capabilities... "
+                "ignoring, but expect limitations/issues");
+        p->failed = false;
+    }
 
     // Filter out error messages during format probing
     pl_log_level_cap(gpu->log, PL_LOG_INFO);
