@@ -169,6 +169,18 @@ if glslang_found
   endif
 endif
 
+# Work around missing atomics on some (obscure) platforms
+atomic_test = '''
+#include <stdatomic.h>
+#include <stdint.h>
+int main(void) {
+  _Atomic uint32_t x32;
+  atomic_init(&x32, 0);
+}'''
+
+if not cc.links(atomic_test)
+  build_deps += cc.find_library('atomic')
+endif
 
 # Source files
 headers = [
