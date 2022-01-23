@@ -182,7 +182,7 @@ static inline size_t pl_lcm(size_t x, size_t y)
     } while (0)
 
 // Refcounting helpers
-typedef _Atomic uint64_t pl_rc_t;
+typedef _Atomic uint32_t pl_rc_t;
 #define pl_rc_init(rc)  atomic_init(rc, 1)
 #define pl_rc_ref(rc)   ((void) atomic_fetch_add_explicit(rc, 1, memory_order_acquire))
 #define pl_rc_deref(rc) (atomic_fetch_sub_explicit(rc, 1, memory_order_release) == 1)
