@@ -230,7 +230,7 @@ void pl_d3d11_setup_formats(struct pl_gpu *gpu)
         } else {
             // On <FL11_0 we use a raster pass
             static const enum pl_fmt_caps req = PL_FMT_CAP_RENDERABLE |
-                                                PL_FMT_CAP_STORABLE;
+                                                PL_FMT_CAP_SAMPLEABLE;
             if ((fmt->caps & req) == req)
                 fmt->caps |= PL_FMT_CAP_BLITTABLE;
         }
