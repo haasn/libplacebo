@@ -118,10 +118,8 @@ static void find_fbo_format(pl_renderer rr)
 
     pl_fmt fmt = NULL;
     for (int i = 0; i < PL_ARRAY_SIZE(configs); i++) {
-        const enum pl_fmt_caps min_caps = PL_FMT_CAP_RENDERABLE |
-                                          PL_FMT_CAP_BLITTABLE;
         fmt = pl_find_fmt(rr->gpu, configs[i].type, 4, configs[i].depth, 0,
-                          min_caps | configs[i].caps);
+                          PL_FMT_CAP_RENDERABLE | configs[i].caps);
         if (fmt) {
             rr->fbofmt[4] = fmt;
 
@@ -400,7 +398,7 @@ static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt,
         .format     = fmt,
         .sampleable = true,
         .renderable = true,
-        .blit_src   = true,
+        .blit_src   = fmt->caps & PL_FMT_CAP_BLITTABLE,
         .storable   = fmt->caps & PL_FMT_CAP_STORABLE,
         .debug_tag  = debug_tag,
     };
@@ -2831,7 +2829,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                 .format = rr->fbofmt[4],
                 .sampleable = true,
                 .renderable = true,
-                .blit_dst = true,
+                .blit_dst = rr->fbofmt[4]->caps & PL_FMT_CAP_BLITTABLE,
                 .storable = rr->fbofmt[4]->caps & PL_FMT_CAP_STORABLE,
             ));
 
@@ -2872,10 +2870,16 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                       inter_pass.img.h == out_h);
 
             if (inter_pass.img.tex) {
-                pl_tex_blit(rr->gpu, pl_tex_blit_params(
+                struct pl_tex_blit_params blit = {
                     .src = inter_pass.img.tex,
                     .dst = f->tex,
-                ));
+                };
+
+                if (blit.src->params.blit_src && blit.dst->params.blit_dst) {
+                    pl_tex_blit(rr->gpu, &blit);
+                } else {
+                    pl_tex_blit_raster(rr->gpu, rr->dp, &blit);
+                }
             } else {
                 ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
                     .shader = &inter_pass.img.sh,
