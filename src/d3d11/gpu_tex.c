@@ -522,7 +522,7 @@ void pl_d3d11_tex_clear_ex(pl_gpu gpu, pl_tex tex,
     } else if (tex->params.format->type == PL_FMT_SINT) {
         if (tex_p->uav) {
             ID3D11DeviceContext_ClearUnorderedAccessViewUint(p->imm, tex_p->uav,
-                                                             color.i);
+                                                             (const uint32_t *)color.i);
         } else {
             float c[4] = { color.i[0], color.i[1], color.i[2], color.i[3] };
             ID3D11DeviceContext_ClearRenderTargetView(p->imm, tex_p->rtv, c);
