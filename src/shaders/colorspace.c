@@ -1411,8 +1411,8 @@ static void tone_map(pl_shader sh,
         { ct,       ct,       1 - 2*ct },
     }};
 
-    // PL_TONE_MAP_LUMA can do the crosstalk for free
-    bool needs_ct = ct && mode != PL_TONE_MAP_LUMA;
+    // PL_TONE_MAP_LUMA/HYBRID can do the crosstalk for free
+    bool needs_ct = ct && mode != PL_TONE_MAP_LUMA && mode != PL_TONE_MAP_HYBRID;
     if (needs_ct) {
         GLSL("color.rgb = %s * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
             .var = pl_var_mat3("crosstalk"),
@@ -1432,26 +1432,8 @@ static void tone_map(pl_shader sh,
              SH_FLOAT(dst_min));
         break;
 
+    case PL_TONE_MAP_LUMA:
     case PL_TONE_MAP_HYBRID: {
-        GLSL("float luma_orig = dot(%s, color.rgb);                 \n"
-             "float luma_new = tone_map(luma_orig);                 \n"
-             "vec3 color_lin = luma_new / luma_orig * color.rgb;    \n",
-             sh_luma_coeffs(sh, pl_raw_primaries_get(src->primaries)));
-        for (int c = 0; c < 3; c++)
-            GLSL("color[%d] = tone_map(color[%d]); \n", c, c);
-
-        const float y = 2.4f;
-        const float lb = powf(dst_min, y);
-        const float lw = powf(dst_max, y);
-        const float a = 1 / (lw - lb);
-        const float b = -lb * a;
-        GLSL("float coeff = %s * pow(luma_new, %f) + %s;            \n"
-             "color.rgb = mix(color_lin, color.rgb, coeff);         \n",
-             SH_FLOAT(a), y, SH_FLOAT(b));
-        break;
-    }
-
-    case PL_TONE_MAP_LUMA: {
         const struct pl_raw_primaries *prim = pl_raw_primaries_get(src->primaries);
         struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
         pl_matrix3x3_mul(&rgb2xyz, &crosstalk);
@@ -1482,10 +1464,27 @@ static void tone_map(pl_shader sh,
             GLSL("xyz.y -= max(0.1 * xyz.x, 0.0); \n");
 
         pl_matrix3x3_invert(&rgb2xyz);
-        GLSL("color.rgb = %s * xyz; \n", sh_var(sh, (struct pl_shader_var) {
+        GLSL("vec3 color_lin = %s * xyz; \n", sh_var(sh, (struct pl_shader_var) {
             .var = pl_var_mat3("xyz2rgb"),
             .data = PL_TRANSPOSE_3X3(rgb2xyz.m),
         }));
+
+        if (mode == PL_TONE_MAP_HYBRID) {
+            for (int c = 0; c < 3; c++)
+                GLSL("color[%d] = tone_map(color[%d]); \n", c, c);
+
+            // coeff(x) = max(a * x^-y, b * x^y)
+            //   solve for coeff(dst_min) = 1, coeff(dst_max) = 1
+            const float y = 2.4f;
+            const float a = powf(dst_min, y);
+            const float b = powf(dst_max, -y);
+            GLSL("float coeff = pow(xyz.y, %f);                         \n"
+                 "coeff = max(%s / coeff, %s * coeff);                  \n"
+                 "color.rgb = mix(color_lin, color.rgb, coeff);         \n",
+                 y, SH_FLOAT(a), SH_FLOAT(b));
+        } else {
+            GLSL("color.rgb = color_lin; \n");
+        }
         break;
     }
 
