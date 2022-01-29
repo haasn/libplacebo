@@ -132,6 +132,14 @@ error:
     return adapter;
 }
 
+static bool has_sdk_layers(void)
+{
+    // This will fail if the SDK layers aren't installed
+    return SUCCEEDED(pD3D11CreateDevice(NULL, D3D_DRIVER_TYPE_NULL, NULL,
+        D3D11_CREATE_DEVICE_DEBUG, NULL, 0, D3D11_SDK_VERSION, NULL, NULL,
+        NULL));
+}
+
 static ID3D11Device *create_device(struct pl_d3d11 *d3d11,
                                    const struct pl_d3d11_params *params)
 {
@@ -158,6 +166,11 @@ static ID3D11Device *create_device(struct pl_d3d11 *d3d11,
     } else if (!is_null_luid(params->adapter_luid)) {
         adapter = get_adapter(d3d11, params->adapter_luid);
         release_adapter = true;
+    }
+
+    if (debug && !has_sdk_layers()) {
+        PL_INFO(ctx, "Debug layer not available, removing debug flag");
+        debug = false;
     }
 
     // Return here to retry creating the device
@@ -191,12 +204,6 @@ static ID3D11Device *create_device(struct pl_d3d11 *d3d11,
                                 D3D11_SDK_VERSION, &dev, NULL, NULL);
         if (SUCCEEDED(hr))
             break;
-
-        if (hr == DXGI_ERROR_SDK_COMPONENT_MISSING && debug) {
-            PL_DEBUG(ctx, "Debug layer not available, removing debug flag");
-            debug = false;
-            continue;
-        }
 
         // Trying to create a D3D_FEATURE_LEVEL_12_0 device on Windows 8.1 or
         // below will not succeed. Try an 11_1 device.
