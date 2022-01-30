@@ -207,9 +207,8 @@ static ID3D11Device *create_device(struct pl_d3d11 *d3d11,
 
         // Trying to create a D3D_FEATURE_LEVEL_12_0 device on Windows 8.1 or
         // below will not succeed. Try an 11_1 device.
-        if (max_fl >= D3D_FEATURE_LEVEL_12_0 &&
-            min_fl <= D3D_FEATURE_LEVEL_11_1)
-        {
+        if (hr == E_INVALIDARG && max_fl >= D3D_FEATURE_LEVEL_12_0 &&
+                                  min_fl <= D3D_FEATURE_LEVEL_11_1) {
             PL_DEBUG(ctx, "Failed to create 12_0+ device, trying 11_1");
             max_fl = D3D_FEATURE_LEVEL_11_1;
             continue;
@@ -217,9 +216,8 @@ static ID3D11Device *create_device(struct pl_d3d11 *d3d11,
 
         // Trying to create a D3D_FEATURE_LEVEL_11_1 device on Windows 7
         // without the platform update will not succeed. Try an 11_0 device.
-        if (max_fl >= D3D_FEATURE_LEVEL_11_1 &&
-            min_fl <= D3D_FEATURE_LEVEL_11_0)
-        {
+        if (hr == E_INVALIDARG && max_fl >= D3D_FEATURE_LEVEL_11_1 &&
+                                  min_fl <= D3D_FEATURE_LEVEL_11_0) {
             PL_DEBUG(ctx, "Failed to create 11_1+ device, trying 11_0");
             max_fl = D3D_FEATURE_LEVEL_11_0;
             continue;
@@ -227,7 +225,8 @@ static ID3D11Device *create_device(struct pl_d3d11 *d3d11,
 
         // Retry with WARP if allowed
         if (!adapter && !warp && params->allow_software) {
-            PL_DEBUG(ctx, "Failed to create hardware device, trying WARP");
+            PL_DEBUG(ctx, "Failed to create hardware device, trying WARP: %s",
+                     pl_hresult_to_str(hr));
             warp = true;
             max_fl = params->max_feature_level;
             min_fl = params->min_feature_level;
