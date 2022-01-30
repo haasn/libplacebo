@@ -69,10 +69,13 @@ if d3d11_found
 endif
 
 unwind = dependency('libunwind', required: get_option('unwind'))
+has_execinfo = cc.has_header('execinfo.h')
 conf_internal.set('PL_HAVE_UNWIND', unwind.found())
-conf_internal.set('PL_HAVE_EXECINFO', cc.has_header('execinfo.h'))
+conf_internal.set('PL_HAVE_EXECINFO', has_execinfo)
 if unwind.found()
   build_deps += [unwind, cc.find_library('dl', required : false)]
+elif has_execinfo
+  build_deps += cc.find_library('execinfo', required: false)
 endif
 
 # work-arounds for glslang braindeath
