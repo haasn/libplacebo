@@ -18,28 +18,29 @@
 #include "formats.h"
 #include "gpu.h"
 
-#define FMT(_name, _dxfmt, _type, num, size, bits, order)  \
-    (struct d3d_format) {                                  \
-        .dxfmt = DXGI_FORMAT_##_dxfmt##_##_type,           \
-        .fmt = {                                           \
-            .name = _name,                                 \
-            .type = PL_FMT_##_type,                        \
-            .num_components  = num,                        \
-            .component_depth = bits,                       \
-            .texel_size      = size,                       \
-            .texel_align     = 1,                          \
-            .internal_size   = size,                       \
-            .host_bits       = bits,                       \
-            .sample_order    = order,                      \
-        },                                                 \
+#define FMT(_minor, _name, _dxfmt, _type, num, size, bits, order)  \
+    (struct d3d_format) {                                          \
+        .dxfmt = DXGI_FORMAT_##_dxfmt##_##_type,                   \
+        .minor = _minor,                                           \
+        .fmt = {                                                   \
+            .name = _name,                                         \
+            .type = PL_FMT_##_type,                                \
+            .num_components  = num,                                \
+            .component_depth = bits,                               \
+            .texel_size      = size,                               \
+            .texel_align     = 1,                                  \
+            .internal_size   = size,                               \
+            .host_bits       = bits,                               \
+            .sample_order    = order,                              \
+        },                                                         \
     }
 
 #define IDX(...) {__VA_ARGS__}
 #define BITS(...) {__VA_ARGS__}
 
-#define REGFMT(name, dxfmt, type, num, bits)         \
-    FMT(name, dxfmt, type, num, (num) * (bits) / 8,  \
-        BITS(bits, bits, bits, bits),                \
+#define REGFMT(name, dxfmt, type, num, bits)            \
+    FMT(0, name, dxfmt, type, num, (num) * (bits) / 8,  \
+        BITS(bits, bits, bits, bits),                   \
         IDX(0, 1, 2, 3))
 
 const struct d3d_format pl_d3d11_formats[] = {
@@ -87,17 +88,17 @@ const struct d3d_format pl_d3d11_formats[] = {
     REGFMT("rgb32i",   R32G32B32,    SINT,  3, 32),
     REGFMT("rgba32i",  R32G32B32A32, SINT,  4, 32),
 
-    FMT("rgb10a2",  R10G10B10A2,  UNORM, 4,  4, BITS(10, 10, 10,  2), IDX(0, 1, 2, 3)),
-    FMT("rgb10a2u", R10G10B10A2,  UINT,  4,  4, BITS(10, 10, 10,  2), IDX(0, 1, 2, 3)),
+    FMT(0, "rgb10a2",  R10G10B10A2,  UNORM, 4,  4, BITS(10, 10, 10,  2), IDX(0, 1, 2, 3)),
+    FMT(0, "rgb10a2u", R10G10B10A2,  UINT,  4,  4, BITS(10, 10, 10,  2), IDX(0, 1, 2, 3)),
 
-    FMT("bgra8",    B8G8R8A8,     UNORM, 4,  4, BITS( 8,  8,  8,  8), IDX(2, 1, 0, 3)),
-    FMT("bgrx8",    B8G8R8X8,     UNORM, 3,  4, BITS( 8,  8,  8),     IDX(2, 1, 0)),
-    FMT("rg11b10f", R11G11B10,    FLOAT, 3,  4, BITS(11, 11, 10),     IDX(0, 1, 2)),
+    FMT(0, "bgra8",    B8G8R8A8,     UNORM, 4,  4, BITS( 8,  8,  8,  8), IDX(2, 1, 0, 3)),
+    FMT(0, "bgrx8",    B8G8R8X8,     UNORM, 3,  4, BITS( 8,  8,  8),     IDX(2, 1, 0)),
+    FMT(0, "rg11b10f", R11G11B10,    FLOAT, 3,  4, BITS(11, 11, 10),     IDX(0, 1, 2)),
 
      // D3D11.1 16-bit formats (resurrected D3D9 formats)
-    FMT("bgr565",   B5G6R5,       UNORM, 3,  2, BITS( 5,  6,  5),     IDX(2, 1, 0)),
-    FMT("bgr5a1",   B5G5R5A1,     UNORM, 4,  2, BITS( 5,  5,  5,  1), IDX(2, 1, 0, 3)),
-    FMT("bgra4",    B4G4R4A4,     UNORM, 4,  2, BITS( 4,  4,  4,  4), IDX(2, 1, 0, 3)),
+    FMT(1, "bgr565",   B5G6R5,       UNORM, 3,  2, BITS( 5,  6,  5),     IDX(2, 1, 0)),
+    FMT(1, "bgr5a1",   B5G5R5A1,     UNORM, 4,  2, BITS( 5,  5,  5,  1), IDX(2, 1, 0, 3)),
+    FMT(1, "bgra4",    B4G4R4A4,     UNORM, 4,  2, BITS( 4,  4,  4,  4), IDX(2, 1, 0, 3)),
 
     {0}
 };
@@ -114,6 +115,11 @@ void pl_d3d11_setup_formats(struct pl_gpu *gpu)
 
     for (int i = 0; pl_d3d11_formats[i].dxfmt; i++) {
         const struct d3d_format *d3d_fmt = &pl_d3d11_formats[i];
+
+        // The Direct3D 11.0 debug layer will segfault if CheckFormatSupport is
+        // called on a format it doesn't know about
+        if (pl_d3d11_formats[i].minor > p->minor)
+            continue;
 
         UINT sup = 0;
         hr = ID3D11Device_CheckFormatSupport(p->dev, d3d_fmt->dxfmt, &sup);

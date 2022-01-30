@@ -53,6 +53,9 @@ struct pl_gpu_d3d11 {
     ID3D11DeviceContext1 *imm1;
     ID3D11DeviceContext4 *imm4;
 
+    // The Direct3D 11 minor version number
+    int minor;
+
     struct spirv_compiler *spirv;
 
     pD3DCompile D3DCompile;

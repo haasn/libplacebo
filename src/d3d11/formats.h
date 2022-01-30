@@ -21,6 +21,7 @@
 
 struct d3d_format {
     DXGI_FORMAT dxfmt;
+    int minor; // The D3D11 minor version number which supports this format
     struct pl_fmt fmt;
 };
 

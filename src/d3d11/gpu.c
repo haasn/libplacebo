@@ -412,13 +412,11 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
     ID3D11Device_AddRef(p->dev);
     ID3D11Device_GetImmediateContext(p->dev, &p->imm);
 
-    int minor = 0; // The Direct3D 11 minor version number
-
     // Check D3D11.1 interfaces
     hr = ID3D11Device_QueryInterface(p->dev, &IID_ID3D11Device1,
                                      (void **) &p->dev1);
     if (SUCCEEDED(hr)) {
-        minor = 1;
+        p->minor = 1;
         ID3D11Device1_GetImmediateContext1(p->dev1, &p->imm1);
     }
 
@@ -430,10 +428,10 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
         hr = ID3D11DeviceContext_QueryInterface(p->imm, &IID_ID3D11DeviceContext4,
                                                 (void **) &p->imm4);
         if (SUCCEEDED(hr))
-            minor = 4;
+            p->minor = 4;
     }
 
-    PL_INFO(gpu, "Using Direct3D 11.%d runtime", minor);
+    PL_INFO(gpu, "Using Direct3D 11.%d runtime", p->minor);
 
     D3D(ID3D11Device_QueryInterface(p->dev, &IID_IDXGIDevice1, (void **) &dxgi_dev));
     D3D(IDXGIDevice1_GetParent(dxgi_dev, &IID_IDXGIAdapter1, (void **) &adapter));
