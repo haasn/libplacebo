@@ -1404,21 +1404,11 @@ static void tone_map(pl_shader sh,
         }
     }
 
-    const float ct = params->tone_mapping_crosstalk;
-    const struct pl_matrix3x3 crosstalk = {{
-        { 1 - 2*ct, ct,       ct       },
-        { ct,       1 - 2*ct, ct       },
-        { ct,       ct,       1 - 2*ct },
-    }};
-
-    // PL_TONE_MAP_LUMA/HYBRID can do the crosstalk for free
-    bool needs_ct = ct && mode != PL_TONE_MAP_LUMA && mode != PL_TONE_MAP_HYBRID;
-    if (needs_ct) {
-        GLSL("color.rgb = %s * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
-            .var = pl_var_mat3("crosstalk"),
-            .data = crosstalk.m, // no need to transpose, matrix is symmetric
-        }));
-    }
+    ident_t ct = SH_FLOAT(params->tone_mapping_crosstalk);
+    GLSL("const float ct_scale = 1.0 - 3.0 * %s;                \n"
+         "float ct = %s * (color.r + color.g + color.b);        \n"
+         "color.rgb = ct_scale * color.rgb + vec3(ct);          \n",
+         ct, ct);
 
     switch (mode) {
     case PL_TONE_MAP_RGB:
@@ -1436,7 +1426,6 @@ static void tone_map(pl_shader sh,
     case PL_TONE_MAP_HYBRID: {
         const struct pl_raw_primaries *prim = pl_raw_primaries_get(src->primaries);
         struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
-        pl_matrix3x3_mul(&rgb2xyz, &crosstalk);
 
         // Normalize X and Z by the white point
         for (int i = 0; i < 3; i++) {
@@ -1493,18 +1482,10 @@ static void tone_map(pl_shader sh,
         pl_unreachable();
     }
 
-    if (needs_ct) {
-        const float s = 1 / (1 - 3 * ct);
-        const struct pl_matrix3x3 crosstalk_inv = {{
-            {-ct * s + s, -ct * s,     -ct * s     },
-            {-ct * s,     -ct * s + s, -ct * s     },
-            {-ct * s,     -ct * s,     -ct * s + s },
-        }};
-        GLSL("color.rgb = %s * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
-            .var = pl_var_mat3("crosstalk_inv"),
-            .data = crosstalk_inv.m,
-        }));
-    }
+    // Inverse crosstalk
+    GLSL("ct = %s * (color.r + color.g + color.b);          \n"
+         "color.rgb = (color.rgb - vec3(ct)) / ct_scale;    \n",
+         ct);
 
     GLSL("#undef tone_map \n");
 }
