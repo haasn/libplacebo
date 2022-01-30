@@ -210,9 +210,6 @@ void pl_d3d11_setup_formats(struct pl_gpu *gpu)
             }
         }
 
-        if (sup & D3D11_FORMAT_SUPPORT_SHADER_GATHER)
-            fmt->gatherable = true;
-
         // PL_FMT_CAP_STORABLE implies compute shaders, so don't set it if we
         // don't have them
         if (!gpu->glsl.compute)
@@ -225,6 +222,13 @@ void pl_d3d11_setup_formats(struct pl_gpu *gpu)
         // We can't sample from integer textures
         if (fmt->type == PL_FMT_UINT || fmt->type == PL_FMT_SINT)
             fmt->caps &= ~(PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_LINEAR);
+
+        // `fmt->gatherable` must have PL_FMT_CAP_SAMPLEABLE
+        if ((fmt->caps & PL_FMT_CAP_SAMPLEABLE) &&
+            (sup & D3D11_FORMAT_SUPPORT_SHADER_GATHER))
+        {
+            fmt->gatherable = true;
+        }
 
         // PL_FMT_CAP_BLITTABLE implies support for stretching, flipping and
         // loose format conversion, which require a shader pass in D3D11
