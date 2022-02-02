@@ -19,6 +19,73 @@
 
 #include "utils.h"
 
+// D3D11.3 message IDs, not present in mingw-w64 v9
+#define D3D11_MESSAGE_ID_CREATE_FENCE (0x300209)
+#define D3D11_MESSAGE_ID_DESTROY_FENCE (0x30020b)
+
+static enum pl_log_level log_level_override(unsigned int id)
+{
+    switch (id) {
+        // These warnings can happen when a pl_timer is used too often before a
+        // blocking pl_swapchain_swap_buffers() or pl_gpu_finish(), overflowing
+        // its internal ring buffer and causing older query objects to be reused
+        // before their results are read. This is expected behavior, so reduce
+        // the log level to PL_LOG_TRACE to prevent log spam.
+    case D3D11_MESSAGE_ID_QUERY_BEGIN_ABANDONING_PREVIOUS_RESULTS:
+    case D3D11_MESSAGE_ID_QUERY_END_ABANDONING_PREVIOUS_RESULTS:
+        return PL_LOG_TRACE;
+
+        // D3D11 writes log messages every time an object is created or
+        // destroyed. That results in a lot of log spam, so force PL_LOG_TRACE.
+#define OBJ_LIFETIME_MESSAGES(obj)          \
+    case D3D11_MESSAGE_ID_CREATE_ ## obj:   \
+    case D3D11_MESSAGE_ID_DESTROY_ ## obj
+
+    OBJ_LIFETIME_MESSAGES(CONTEXT):
+    OBJ_LIFETIME_MESSAGES(BUFFER):
+    OBJ_LIFETIME_MESSAGES(TEXTURE1D):
+    OBJ_LIFETIME_MESSAGES(TEXTURE2D):
+    OBJ_LIFETIME_MESSAGES(TEXTURE3D):
+    OBJ_LIFETIME_MESSAGES(SHADERRESOURCEVIEW):
+    OBJ_LIFETIME_MESSAGES(RENDERTARGETVIEW):
+    OBJ_LIFETIME_MESSAGES(DEPTHSTENCILVIEW):
+    OBJ_LIFETIME_MESSAGES(VERTEXSHADER):
+    OBJ_LIFETIME_MESSAGES(HULLSHADER):
+    OBJ_LIFETIME_MESSAGES(DOMAINSHADER):
+    OBJ_LIFETIME_MESSAGES(GEOMETRYSHADER):
+    OBJ_LIFETIME_MESSAGES(PIXELSHADER):
+    OBJ_LIFETIME_MESSAGES(INPUTLAYOUT):
+    OBJ_LIFETIME_MESSAGES(SAMPLER):
+    OBJ_LIFETIME_MESSAGES(BLENDSTATE):
+    OBJ_LIFETIME_MESSAGES(DEPTHSTENCILSTATE):
+    OBJ_LIFETIME_MESSAGES(RASTERIZERSTATE):
+    OBJ_LIFETIME_MESSAGES(QUERY):
+    OBJ_LIFETIME_MESSAGES(PREDICATE):
+    OBJ_LIFETIME_MESSAGES(COUNTER):
+    OBJ_LIFETIME_MESSAGES(COMMANDLIST):
+    OBJ_LIFETIME_MESSAGES(CLASSINSTANCE):
+    OBJ_LIFETIME_MESSAGES(CLASSLINKAGE):
+    OBJ_LIFETIME_MESSAGES(COMPUTESHADER):
+    OBJ_LIFETIME_MESSAGES(UNORDEREDACCESSVIEW):
+    OBJ_LIFETIME_MESSAGES(VIDEODECODER):
+    OBJ_LIFETIME_MESSAGES(VIDEOPROCESSORENUM):
+    OBJ_LIFETIME_MESSAGES(VIDEOPROCESSOR):
+    OBJ_LIFETIME_MESSAGES(DECODEROUTPUTVIEW):
+    OBJ_LIFETIME_MESSAGES(PROCESSORINPUTVIEW):
+    OBJ_LIFETIME_MESSAGES(PROCESSOROUTPUTVIEW):
+    OBJ_LIFETIME_MESSAGES(DEVICECONTEXTSTATE):
+    OBJ_LIFETIME_MESSAGES(FENCE):
+        return PL_LOG_TRACE;
+
+#undef OBJ_LIFETIME_MESSAGES
+
+        // Don't force the log level of any other messages. It will be mapped
+        // from the D3D severity code instead.
+    default:
+        return PL_LOG_NONE;
+    }
+}
+
 void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
 {
     if (!ctx->iqueue)
@@ -58,7 +125,10 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
         d3dmsg = pl_zalloc(NULL, len);
         D3D(ID3D11InfoQueue_GetMessage(ctx->iqueue, i, d3dmsg, &len));
 
-        enum pl_log_level level = severity_map[d3dmsg->Severity];
+        enum pl_log_level level = log_level_override(d3dmsg->ID);
+        if (level == PL_LOG_NONE)
+            level = severity_map[d3dmsg->Severity];
+
         if (pl_msg_test(ctx->log, level)) {
             // If the header hasn't been printed, or it was printed for a lower
             // log level than the current message, print it (again)

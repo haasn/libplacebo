@@ -268,14 +268,6 @@ static void init_debug_layer(struct d3d11_ctx *ctx)
         // linearly sampled from, we shouldn't ever bind a non-point sampler to
         // a format that doesn't support it.
         D3D11_MESSAGE_ID_DEVICE_DRAW_RESOURCE_FORMAT_SAMPLE_UNSUPPORTED,
-
-        // These warnings can happen when a pl_timer is used too often before a
-        // blocking pl_swapchain_swap_buffers() or pl_gpu_finish(), overflowing
-        // its internal ring buffer and causing older query objects to be reused
-        // before their results are read. This is expected behavior, so ignore
-        // these warnings to prevent log spam.
-        D3D11_MESSAGE_ID_QUERY_BEGIN_ABANDONING_PREVIOUS_RESULTS,
-        D3D11_MESSAGE_ID_QUERY_END_ABANDONING_PREVIOUS_RESULTS,
     };
     D3D11_INFO_QUEUE_FILTER filter = {
         .DenyList = {
