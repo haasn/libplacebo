@@ -50,7 +50,7 @@ project('libplacebo', ['c', 'cpp'],
       '192': 'add pl_map_avframe_ex',
     }.keys().length(),
     # Fix version
-    0)
+    1)
 )
 
 # Version number
