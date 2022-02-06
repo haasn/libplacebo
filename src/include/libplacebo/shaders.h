@@ -60,7 +60,7 @@ struct pl_shader_params {
     struct pl_glsl_version glsl;
 
     // If this is true, all constants in the shader will be replaced by
-    // dynaminic variables. This is mainly useful to avoid recompilation for
+    // dynamic variables. This is mainly useful to avoid recompilation for
     // shaders which expect to have their values change constantly.
     bool dynamic_constants;
 };
