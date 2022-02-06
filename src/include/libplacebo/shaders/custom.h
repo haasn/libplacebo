@@ -209,6 +209,10 @@ struct pl_hook_params {
     struct pl_color_space color;
     int components;
 
+    // The representation and colorspace of the original image, for reference.
+    const struct pl_color_repr *orig_repr;
+    const struct pl_color_space *orig_color;
+
     // The (cropped) source and destination rectangles of the overall
     // rendering. These are functionallty equivalent to `image.crop` and
     // `target.crop`, respectively, but `src_rect` in particular may change as

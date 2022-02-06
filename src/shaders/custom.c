@@ -874,6 +874,7 @@ struct hook_priv {
     // Dynamic per pass
     enum pl_hook_stage save_stages;
     PL_ARRAY(struct pass_tex) pass_textures;
+    pl_shader trc_helper;
 
     // State for PRNG/frame count
     int frame_count;
@@ -1233,6 +1234,22 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             .data = tex_off,
         }));
 
+        // Helper sub-shaders
+        uint64_t sh_id = SH_PARAMS(sh).id;
+        pl_shader_reset(p->trc_helper, pl_shader_params(
+            .id = ++sh_id,
+            .gpu = p->gpu,
+        ));
+        pl_shader_linearize(p->trc_helper, params->orig_color);
+        GLSLH("#define linearize %s \n", sh_subpass(sh, p->trc_helper));
+
+        pl_shader_reset(p->trc_helper, pl_shader_params(
+            .id = ++sh_id,
+            .gpu = p->gpu,
+        ));
+        pl_shader_delinearize(p->trc_helper, params->orig_color);
+        GLSLH("#define delinearize %s \n", sh_subpass(sh, p->trc_helper));
+
         // Load and run the user shader itself
         sh_append_str(sh, SH_BUF_HEADER, hook->pass_body);
         sh_describe(sh, pl_strdup0(SH_TMP(sh), hook->pass_desc));
@@ -1353,6 +1370,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
         .log = gpu->log,
         .gpu = gpu,
         .alloc = hook,
+        .trc_helper = pl_shader_alloc(gpu->log, NULL),
         .prng_state = {
             // Determined by fair die roll
             0xb76d71f9443c228allu, 0x93a02092fc4807e8llu,
@@ -1481,6 +1499,7 @@ void pl_mpv_user_shader_destroy(const struct pl_hook **hookp)
         }
     }
 
+    pl_shader_free(&p->trc_helper);
     pl_free((void *) hook);
     *hookp = NULL;
 }

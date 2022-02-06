@@ -48,6 +48,7 @@ project('libplacebo', ['c', 'cpp'],
       '190': 'add pl_color_map_params.gamut_mode, replacing gamut_clipping/warning',
       '191': 'add pl_map_dovi_metadata',
       '192': 'add pl_map_avframe_ex',
+      '193': 'add pl_hook_params.orig_repr/color',
     }.keys().length(),
     # Fix version
     0)
