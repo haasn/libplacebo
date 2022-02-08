@@ -50,6 +50,7 @@ project('libplacebo', ['c', 'cpp'],
       '192': 'add pl_map_avframe_ex',
       '193': 'add pl_hook_params.orig_repr/color',
       '194': 'add pl_primaries_valid',
+      '195': 'change pl_log_create prototype to pl_log_create_${api_ver} to do linking time api check',
     }.keys().length(),
     # Fix version
     0)

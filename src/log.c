@@ -30,19 +30,7 @@ struct priv {
 
 pl_log pl_log_create(int api_ver, const struct pl_log_params *params)
 {
-    if (api_ver != PL_API_VER) {
-        fprintf(stderr,
-               "*************************************************************\n"
-               "libplacebo: ABI mismatch detected! (requested: %d, compiled: %d)\n"
-               "\n"
-               "This is usually indicative of a linking mismatch, and will\n"
-               "result in serious issues including stack corruption, random\n"
-               "crashes and arbitrary code execution. Aborting as a safety\n"
-               "precaution. Fix your system!\n",
-               api_ver, PL_API_VER);
-        abort();
-    }
-
+    (void) api_ver;
     struct pl_log *log = pl_zalloc_obj(NULL, log, struct priv);
     struct priv *p = PL_PRIV(log);
     log->params = *PL_DEF(params, &pl_log_default_params);
