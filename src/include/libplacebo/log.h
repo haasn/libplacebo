@@ -61,9 +61,13 @@ typedef const PL_STRUCT(pl_log) {
     struct pl_log_params params;
 } *pl_log;
 
-// Creates a pl_log. For historical reasons, the argument `api_ver` must be
-// given as PL_API_VER. `params` defaults to `&pl_log_default_params` if left
-// as NULL.
+#define pl_log_glue1(x, y) x##y
+#define pl_log_glue2(x, y) pl_log_glue1(x, y)
+// Force a link error in the case of linking against an incompatible API
+// version.
+#define pl_log_create pl_log_glue2(pl_log_create_, PL_API_VER)
+// Creates a pl_log. `api_ver` is for historical reasons and ignored currently.
+// `params` defaults to `&pl_log_default_params` if left as NULL.
 //
 // Note: As a general rule, any `params` struct used as an argument to a
 // function need only live until the corresponding function returns.
