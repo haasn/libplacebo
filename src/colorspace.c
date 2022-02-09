@@ -433,6 +433,9 @@ void pl_color_space_infer(struct pl_color_space *space)
         space->sig_scale = 0;
     }
 
+    if (!pl_primaries_valid(&space->hdr.prim))
+        memset(&space->hdr.prim, 0, sizeof(space->hdr.prim));
+
     // Default the signal color space based on the nominal raw primaries
     pl_raw_primaries_merge(&space->hdr.prim, pl_raw_primaries_get(space->primaries));
 }
@@ -986,6 +989,15 @@ bool pl_primaries_superset(const struct pl_raw_primaries *a,
     return test_point_gamut(b->red, a) &&
            test_point_gamut(b->green, a) &&
            test_point_gamut(b->blue, a);
+}
+
+bool pl_primaries_valid(const struct pl_raw_primaries *prim)
+{
+    // Test to see if the primaries form a valid triangle (nonzero area)
+    float area = (prim->blue.x - prim->green.x) * (prim->red.y  - prim->green.y)
+               - (prim->red.x  - prim->green.x) * (prim->blue.y - prim->green.y);
+
+    return fabs(area) > 1e-6 && test_point_gamut(prim->white, prim);
 }
 
 /* Fill in the Y, U, V vectors of a yuv-to-rgb conversion matrix

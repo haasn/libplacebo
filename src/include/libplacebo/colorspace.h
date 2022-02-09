@@ -482,6 +482,11 @@ struct pl_matrix3x3 pl_get_adaptation_matrix(struct pl_cie_xy src, struct pl_cie
 bool pl_primaries_superset(const struct pl_raw_primaries *a,
                            const struct pl_raw_primaries *b);
 
+// Returns true if `prim` forms a nominally valid set of primaries. This does
+// not check whether or not these primaries are actually physically realisable,
+// merely that they satisfy the requirements for colorspace math (to avoid NaN).
+bool pl_primaries_valid(const struct pl_raw_primaries *prim);
+
 // Cone types involved in human vision
 enum pl_cone {
     PL_CONE_L = 1 << 0,
