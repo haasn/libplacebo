@@ -78,6 +78,8 @@ int main()
     const struct pl_raw_primaries *bt709, *bt2020;
     bt709 = pl_raw_primaries_get(PL_COLOR_PRIM_BT_709);
     bt2020 = pl_raw_primaries_get(PL_COLOR_PRIM_BT_2020);
+    REQUIRE(pl_primaries_superset(bt2020, bt709));
+    REQUIRE(!pl_primaries_superset(bt709, bt2020));
 
     struct pl_matrix3x3 rgb2xyz, rgb2xyz_;
     rgb2xyz = rgb2xyz_ = pl_get_rgb2xyz_matrix(bt709);
