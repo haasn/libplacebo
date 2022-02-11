@@ -206,11 +206,6 @@ bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
 {
     pl_assert(!data->buf ^ !data->pixels); // exactly one
 
-    if (data->buf) {
-        pl_assert(data->buf_offset == PL_ALIGN2(data->buf_offset, 4));
-        pl_assert(data->buf_offset == PL_ALIGN(data->buf_offset, data->pixel_stride));
-    }
-
     int out_map[4];
     pl_fmt fmt = pl_plane_find_fmt(gpu, out_map, data);
     if (!fmt) {
