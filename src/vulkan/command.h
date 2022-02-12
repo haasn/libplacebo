@@ -122,7 +122,8 @@ void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool);
 
 // Fetch a command buffer from a command pool and begin recording to it.
 // Returns NULL on failure.
-struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool);
+struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool,
+                            pl_debug_tag debug_tag);
 
 // Finish recording a command buffer and submit it for execution. This function
 // takes over ownership of **cmd, and sets *cmd to NULL in doing so.

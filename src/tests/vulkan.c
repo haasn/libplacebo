@@ -47,7 +47,7 @@ static void vulkan_interop_tests(pl_vulkan pl_vk,
 
         // Re-use our internal helpers to signal this VkSemaphore
         struct vk_ctx *vk = PL_PRIV(pl_vk);
-        struct vk_cmd *cmd = vk_cmd_begin(vk, vk->pool_graphics);
+        struct vk_cmd *cmd = vk_cmd_begin(vk, vk->pool_graphics, NULL);
         REQUIRE(cmd);
         struct pl_sync_vk *sync_vk = PL_PRIV(sync);
         vk_cmd_sig(cmd, (pl_vulkan_sem){ sync_vk->signal });

@@ -185,7 +185,7 @@ struct vk_cmd *_begin_cmd(pl_gpu gpu, enum queue_type type, const char *label,
 
     if (!p->cmd || p->cmd->pool != pool) {
         vk_cmd_submit(vk, &p->cmd);
-        p->cmd = vk_cmd_begin(vk, pool);
+        p->cmd = vk_cmd_begin(vk, pool, label);
         if (!p->cmd) {
             pl_mutex_unlock(&p->recording);
             return NULL;
@@ -751,7 +751,7 @@ struct vk_cmd *pl_vk_steal_cmd(pl_gpu gpu)
     struct vk_cmdpool *pool = vk->pool_graphics;
     if (!cmd || cmd->pool != pool) {
         vk_cmd_submit(vk, &cmd);
-        cmd = vk_cmd_begin(vk, pool);
+        cmd = vk_cmd_begin(vk, pool, NULL);
     }
 
     return cmd;

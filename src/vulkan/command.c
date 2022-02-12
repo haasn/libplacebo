@@ -288,7 +288,8 @@ void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool)
     pl_free(pool);
 }
 
-struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool)
+struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool,
+                            pl_debug_tag debug_tag)
 {
     // Garbage collect the cmdpool first, to increase the chances of getting
     // an already-available command buffer.
@@ -313,6 +314,10 @@ struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool)
     };
 
     VK(vk->BeginCommandBuffer(cmd->buf, &binfo));
+
+    debug_tag = PL_DEF(debug_tag, "vk_cmd");
+    PL_VK_NAME(COMMAND_BUFFER, cmd->buf, debug_tag);
+    PL_VK_NAME(FENCE, cmd->fence, debug_tag);
     return cmd;
 
 error:
@@ -355,8 +360,8 @@ bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
     };
 
     if (pl_msg_test(vk->log, PL_LOG_TRACE)) {
-        PL_TRACE(vk, "Submitting command on queue %p (QF %d):",
-                 (void *)cmd->queue, pool->qf);
+        PL_TRACE(vk, "Submitting command %p on queue %p (QF %d):",
+                 (void *) cmd->buf, (void *) cmd->queue, pool->qf);
         for (int n = 0; n < cmd->deps.num; n++) {
             PL_TRACE(vk, "    waits on semaphore %p = %"PRIu64,
                      (void *) cmd->deps.elem[n], cmd->depvalues.elem[n]);
