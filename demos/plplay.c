@@ -1336,6 +1336,7 @@ static void update_settings(struct plplay *p)
             nk_checkbox_label(nk, "Force-enable 3DLUT", &par->force_icc_lut);
             nk_checkbox_label(nk, "Force-enable dither", &par->force_dither);
             nk_checkbox_label(nk, "Disable FBOs / advanced rendering", &par->disable_fbos);
+            nk_checkbox_label(nk, "Force low-bit depth FBOs", &par->force_low_bit_depth_fbos);
             nk_checkbox_label(nk, "Disable constant hard-coding", &par->dynamic_constants);
             nk_checkbox_label(nk, "Ignore ICC profiles", &par->ignore_icc_profiles);
 

@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     4,
     # API version
     {
+      '196': 'add pl_render_params.force_low_bit_depth_fbos',
       '195': 'change pl_log_create prototype to pl_log_create_${api_ver} to do linking time api check',
       '194': 'add pl_primaries_valid',
       '193': 'add pl_hook_params.orig_repr/color',

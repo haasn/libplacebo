@@ -48,15 +48,10 @@ struct pl_renderer {
     pl_dispatch dp;
     pl_log log;
 
-    // Texture format to use for intermediate textures
-    pl_fmt fbofmt[5];
-
     // Cached feature checks (inverted)
-    bool disable_compute;       // disable the use of compute shaders
+    bool disable_fbos;          // disable the use of FBOs (skip fbofmt probing)
     bool disable_sampling;      // disable use of advanced scalers
     bool disable_debanding;     // disable the use of debanding shaders
-    bool disable_linear_hdr;    // disable linear scaling for HDR signals
-    bool disable_linear_sdr;    // disable linear scaling for SDR signals
     bool disable_blending;      // disable blending for the target/fbofmt
     bool disable_overlay;       // disable rendering overlays
     bool disable_icc;           // disable usage of ICC profiles
@@ -94,69 +89,6 @@ enum {
     LUT_PARAMS,
 };
 
-static void find_fbo_format(pl_renderer rr)
-{
-    struct {
-        enum pl_fmt_type type;
-        int depth;
-        enum pl_fmt_caps caps;
-    } configs[] = {
-        // Prefer floating point formats first
-        {PL_FMT_FLOAT, 16, PL_FMT_CAP_LINEAR},
-        {PL_FMT_FLOAT, 16, PL_FMT_CAP_SAMPLEABLE},
-
-        // Otherwise, fall back to unorm/snorm, preferring linearly sampleable
-        {PL_FMT_UNORM, 16, PL_FMT_CAP_LINEAR},
-        {PL_FMT_SNORM, 16, PL_FMT_CAP_LINEAR},
-        {PL_FMT_UNORM, 16, PL_FMT_CAP_SAMPLEABLE},
-        {PL_FMT_SNORM, 16, PL_FMT_CAP_SAMPLEABLE},
-
-        // As a final fallback, allow 8-bit FBO formats (for UNORM only)
-        {PL_FMT_UNORM, 8, PL_FMT_CAP_LINEAR},
-        {PL_FMT_UNORM, 8, PL_FMT_CAP_SAMPLEABLE},
-    };
-
-    pl_fmt fmt = NULL;
-    for (int i = 0; i < PL_ARRAY_SIZE(configs); i++) {
-        fmt = pl_find_fmt(rr->gpu, configs[i].type, 4, configs[i].depth, 0,
-                          PL_FMT_CAP_RENDERABLE | configs[i].caps);
-        if (fmt) {
-            rr->fbofmt[4] = fmt;
-
-            // Probe the right variant for each number of channels, falling
-            // back to the next biggest format
-            for (int c = 1; c < 4; c++) {
-                rr->fbofmt[c] = pl_find_fmt(rr->gpu, configs[i].type, c,
-                                            configs[i].depth, 0, fmt->caps);
-                rr->fbofmt[c] = PL_DEF(rr->fbofmt[c], rr->fbofmt[c+1]);
-            }
-            break;
-        }
-    }
-
-    if (!fmt) {
-        PL_WARN(rr, "Found no renderable FBO format! Most features disabled");
-        return;
-    }
-
-    if (!(fmt->caps & PL_FMT_CAP_STORABLE)) {
-        PL_INFO(rr, "Found no storable FBO format; compute shaders disabled");
-        rr->disable_compute = true;
-    }
-
-    if (fmt->type != PL_FMT_FLOAT) {
-        PL_INFO(rr, "Found no floating point FBO format; linear light "
-                "processing disabled for HDR material");
-        rr->disable_linear_hdr = true;
-    }
-
-    if (fmt->component_depth[0] < 16) {
-        PL_WARN(rr, "FBO format precision low (<16 bit); linear light "
-                "processing disabled");
-        rr->disable_linear_sdr = true;
-    }
-}
-
 pl_renderer pl_renderer_create(pl_log log, pl_gpu gpu)
 {
     pl_renderer rr = pl_alloc_ptr(NULL, rr);
@@ -182,7 +114,6 @@ pl_renderer pl_renderer_create(pl_log log, pl_gpu gpu)
     };
 
     assert(rr->dp);
-    find_fbo_format(rr);
     return rr;
 }
 
@@ -299,8 +230,6 @@ const struct pl_filter_preset pl_scale_filters[] = {
 
 const int pl_num_scale_filters = PL_ARRAY_SIZE(pl_scale_filters) - 1;
 
-#define FBOFMT(n) (params->disable_fbos ? NULL : rr->fbofmt[n])
-
 // Represents a "in-flight" image, which is either a shader that's in the
 // process of producing some sort of image, or a texture that needs to be
 // sampled from
@@ -308,7 +237,7 @@ struct img {
     // Effective texture size, always set
     int w, h;
 
-    // Recommended format (falls back to FBOFMT otherwise), only for shaders
+    // Recommended format (falls back to fbofmt otherwise), only for shaders
     pl_fmt fmt;
 
     // Exactly *one* of these two is set:
@@ -367,8 +296,63 @@ struct pass_state {
     int src_ref, dst_ref; // index into `planes`
 
     // Metadata for `rr->fbos`
+    pl_fmt fbofmt[5];
     bool *fbos_used;
+
 };
+
+static void find_fbo_format(struct pass_state *pass)
+{
+    const struct pl_render_params *params = pass->params;
+    pl_renderer rr = pass->rr;
+    if (params->disable_fbos || rr->disable_fbos || pass->fbofmt[4])
+        return;
+
+    struct {
+        enum pl_fmt_type type;
+        int depth;
+        enum pl_fmt_caps caps;
+    } configs[] = {
+        // Prefer floating point formats first
+        {PL_FMT_FLOAT, 16, PL_FMT_CAP_LINEAR},
+        {PL_FMT_FLOAT, 16, PL_FMT_CAP_SAMPLEABLE},
+
+        // Otherwise, fall back to unorm/snorm, preferring linearly sampleable
+        {PL_FMT_UNORM, 16, PL_FMT_CAP_LINEAR},
+        {PL_FMT_SNORM, 16, PL_FMT_CAP_LINEAR},
+        {PL_FMT_UNORM, 16, PL_FMT_CAP_SAMPLEABLE},
+        {PL_FMT_SNORM, 16, PL_FMT_CAP_SAMPLEABLE},
+
+        // As a final fallback, allow 8-bit FBO formats (for UNORM only)
+        {PL_FMT_UNORM, 8, PL_FMT_CAP_LINEAR},
+        {PL_FMT_UNORM, 8, PL_FMT_CAP_SAMPLEABLE},
+    };
+
+    pl_fmt fmt = NULL;
+    for (int i = 0; i < PL_ARRAY_SIZE(configs); i++) {
+        if (params->force_low_bit_depth_fbos && configs[i].depth > 8)
+            continue;
+
+        fmt = pl_find_fmt(rr->gpu, configs[i].type, 4, configs[i].depth, 0,
+                          PL_FMT_CAP_RENDERABLE | configs[i].caps);
+        if (!fmt)
+            continue;
+
+        pass->fbofmt[4] = fmt;
+
+        // Probe the right variant for each number of channels, falling
+        // back to the next biggest format
+        for (int c = 1; c < 4; c++) {
+            pass->fbofmt[c] = pl_find_fmt(rr->gpu, configs[i].type, c,
+                                        configs[i].depth, 0, fmt->caps);
+            pass->fbofmt[c] = PL_DEF(pass->fbofmt[c], pass->fbofmt[c+1]);
+        }
+        return;
+    }
+
+    PL_WARN(rr, "Found no renderable FBO format! Most features disabled");
+    rr->disable_fbos = true;
+}
 
 static void info_callback(void *priv, const struct pl_dispatch_info *dinfo)
 {
@@ -388,7 +372,7 @@ static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt,
 {
     pl_renderer rr = pass->rr;
     comps = PL_DEF(comps, 4);
-    fmt = PL_DEF(fmt, rr->fbofmt[comps]);
+    fmt = PL_DEF(fmt, pass->fbofmt[comps]);
     if (!fmt)
         return NULL;
 
@@ -451,8 +435,9 @@ static pl_tex _img_tex(struct pass_state *pass, struct img *img, pl_debug_tag ta
 
     if (!tex) {
         PL_ERR(rr, "Failed creating FBO texture! Disabling advanced rendering..");
-        memset(rr->fbofmt, 0, sizeof(rr->fbofmt));
+        memset(pass->fbofmt, 0, sizeof(pass->fbofmt));
         pl_dispatch_abort(rr->dp, &img->sh);
+        rr->disable_fbos = true;
         return NULL;
     }
 
@@ -546,8 +531,7 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
         return info;
     }
 
-    int comps = PL_DEF(src->components, 4);
-    if (!FBOFMT(comps) || rr->disable_sampling || !info.config) {
+    if (!pass->fbofmt[4] || rr->disable_sampling || !info.config) {
         info.type = SAMPLER_DIRECT;
     } else if (info.config->kernel->weight == oversample) {
         info.type = SAMPLER_OVERSAMPLE;
@@ -555,7 +539,7 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
         info.type = SAMPLER_COMPLEX;
 
         // Try using faster replacements for GPU built-in scalers
-        pl_fmt texfmt = src->tex ? src->tex->params.format : rr->fbofmt[comps];
+        pl_fmt texfmt = src->tex ? src->tex->params.format : pass->fbofmt[4];
         bool can_linear = texfmt->caps & PL_FMT_CAP_LINEAR;
         bool can_fast = info.dir == SAMPLER_UP || params->skip_anti_aliasing;
 
@@ -573,7 +557,7 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
 }
 
 static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
-                             struct sampler *sampler, bool no_compute,
+                             struct sampler *sampler, pl_tex target_tex,
                              const struct pl_sample_src *src)
 {
     const struct pl_render_params *params = pass->params;
@@ -616,10 +600,15 @@ static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
         .lut_entries = params->lut_entries,
         .cutoff      = params->polar_cutoff,
         .antiring    = params->antiringing_strength,
-        .no_compute  = rr->disable_compute || no_compute,
         .no_widening = params->skip_anti_aliasing,
         .lut         = lut,
     };
+
+    if (target_tex) {
+        fparams.no_compute = !target_tex->params.storable;
+    } else {
+        fparams.no_compute = !(pass->fbofmt[4]->caps & PL_FMT_CAP_STORABLE);
+    }
 
     bool ok;
     if (info.config->polar) {
@@ -864,7 +853,7 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
 {
     const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
-    if (!rr->fbofmt[4] || rr->disable_hooks)
+    if (!pass->fbofmt[4] || rr->disable_hooks)
         return false;
 
     bool ret = false;
@@ -1003,7 +992,7 @@ static int deband_src(struct pass_state *pass, pl_shader psh,
     const struct pl_render_params *params = pass->params;
     const struct pl_frame *image = &pass->image;
     pl_renderer rr = pass->rr;
-    if (rr->disable_debanding || !params->deband_params)
+    if (rr->disable_debanding || !params->deband_params || !pass->fbofmt[4])
         return DEBAND_NOOP;
 
     if (!(psrc->tex->params.format->caps & PL_FMT_CAP_LINEAR)) {
@@ -1081,7 +1070,10 @@ static void hdr_update_peak(struct pass_state *pass)
     if (!params->peak_detect_params || !pl_color_space_is_hdr(&pass->img.color))
         goto cleanup;
 
-    if (rr->disable_compute || rr->disable_peak_detect)
+    if (rr->disable_peak_detect)
+        goto cleanup;
+
+    if (pass->fbofmt[4] && !(pass->fbofmt[4]->caps & PL_FMT_CAP_STORABLE))
         goto cleanup;
 
     if (pass->img.color.hdr.max_luma <= pass->target.color.hdr.max_luma + 1e-6)
@@ -1090,7 +1082,7 @@ static void hdr_update_peak(struct pass_state *pass)
     if (params->lut && params->lut_type == PL_LUT_CONVERSION)
         goto cleanup; // LUT handles tone mapping
 
-    if (!FBOFMT(4) && !params->allow_delayed_peak_detect) {
+    if (!pass->fbofmt[4] && !params->allow_delayed_peak_detect) {
         PL_WARN(rr, "Disabling peak detection because "
                 "`allow_delayed_peak_detect` is false, but lack of FBOs "
                 "forces the result to be delayed.");
@@ -1179,7 +1171,6 @@ static bool plane_film_grain(struct pass_state *pass, int plane_idx,
                              const struct plane_state *ref,
                              const struct pl_frame *image)
 {
-    const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
     if (rr->disable_grain)
         return false;
@@ -1213,7 +1204,7 @@ static bool plane_film_grain(struct pass_state *pass, int plane_idx,
     if (!pl_needs_film_grain(&grain_params))
         return false;
 
-    if (!FBOFMT(plane->components)) {
+    if (!pass->fbofmt[plane->components]) {
         PL_ERR(rr, "Film grain required but no renderable format available.. "
               "disabling!");
         rr->disable_grain = true;
@@ -1303,7 +1294,7 @@ static bool want_merge(struct pass_state *pass,
 {
     const struct pl_render_params *params = pass->params;
     const pl_renderer rr = pass->rr;
-    if (!rr->fbofmt[4])
+    if (!pass->fbofmt[4])
         return false;
 
     // Debanding
@@ -1434,7 +1425,8 @@ static bool pass_read_image(struct pass_state *pass)
 
         if (!img_tex(pass, &sti->img)) {
             PL_ERR(rr, "Failed dispatching plane merging shader, disabling FBOs!");
-            memset(rr->fbofmt, 0, sizeof(rr->fbofmt));
+            memset(pass->fbofmt, 0, sizeof(pass->fbofmt));
+            rr->disable_fbos = true;
             return false;
         }
     }
@@ -1543,7 +1535,7 @@ static bool pass_read_image(struct pass_state *pass)
 
         pl_shader psh = pl_dispatch_begin_ex(rr->dp, true);
         if (deband_src(pass, psh,  &src) != DEBAND_SCALED)
-            dispatch_sampler(pass, psh, &rr->samplers_src[i], false, &src);
+            dispatch_sampler(pass, psh, &rr->samplers_src[i], NULL, &src);
 
         ident_t sub = sh_subpass(sh, psh);
         if (!sub) {
@@ -1646,7 +1638,8 @@ static bool pass_scale_main(struct pass_state *pass)
     const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
 
-    if (!FBOFMT(pass->img.comps)) {
+    pl_fmt fbofmt = pass->fbofmt[pass->img.comps];
+    if (!fbofmt) {
         PL_TRACE(rr, "Skipping main scaler (no FBOs)");
         return true;
     }
@@ -1702,15 +1695,14 @@ static bool pass_scale_main(struct pass_state *pass)
     }
 
     // Hard-disable both sigmoidization and linearization when required
-    if (params->disable_linear_scaling || rr->disable_linear_sdr)
+    if (params->disable_linear_scaling || fbofmt->component_depth[0] < 16)
         use_sigmoid = use_linear = false;
 
     // Avoid sigmoidization for HDR content because it clips to [0,1]
     if (pl_color_space_is_hdr(&img->color)) {
         use_sigmoid = false;
-        // Also disable linearization if necessary
-        if (rr->disable_linear_hdr)
-            use_linear = false;
+        if (fbofmt->type != PL_FMT_FLOAT)
+            use_linear = false; // linear HDR needs out-of-range signals
     }
 
     if (use_linear || use_sigmoid) {
@@ -1753,7 +1745,7 @@ static bool pass_scale_main(struct pass_state *pass)
 
     src.tex = img_tex(pass, img);
     pl_shader sh = pl_dispatch_begin_ex(rr->dp, true);
-    dispatch_sampler(pass, sh, &rr->sampler_main, false, &src);
+    dispatch_sampler(pass, sh, &rr->sampler_main, NULL, &src);
     *img = (struct img) {
         .sh     = sh,
         .w      = src.new_w,
@@ -2052,8 +2044,7 @@ fallback:
             }
 
             sh = pl_dispatch_begin(rr->dp);
-            dispatch_sampler(pass, sh, &rr->samplers_dst[p],
-                             !plane->texture->params.storable, &src);
+            dispatch_sampler(pass, sh, &rr->samplers_dst[p], plane->texture, &src);
 
         } else {
 
@@ -2103,7 +2094,7 @@ fallback:
         // Render any overlays, including overlays that need to be rendered
         // from the `image` itself, but which couldn't be rendered as
         // part of the intermediate scaling pass due to missing FBOs.
-        if (image->num_overlays > 0 && !FBOFMT(img->comps)) {
+        if (image->num_overlays > 0 && !pass->fbofmt[img->comps]) {
             // The original image dimensions need to be scaled by the effective
             // end-to-end scaling ratio to compensate for the mismatch in
             // pixel coordinates between the image and target.
@@ -2424,6 +2415,7 @@ static bool pass_infer_state(struct pass_state *pass)
 
     fix_refs_and_rects(pass);
     fix_color_space(image);
+    find_fbo_format(pass);
 
     // Infer the target color space info based on the image's
     pl_color_space_infer_ref(&target->color, &image->color);
@@ -2680,11 +2672,12 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         .info.stage = PL_RENDER_STAGE_BLEND,
     };
 
-    if (rr->disable_mixing || !FBOFMT(4))
+    if (rr->disable_mixing)
         goto fallback;
-
     if (!pass_infer_state(&pass))
         return false;
+    if (!pass.fbofmt[4])
+        goto fallback;
 
     int out_w = abs(pl_rect_w(pass.dst_rect)),
         out_h = abs(pl_rect_h(pass.dst_rect));
@@ -2828,11 +2821,11 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             bool ok = pl_tex_recreate(rr->gpu, &f->tex, pl_tex_params(
                 .w = out_w,
                 .h = out_h,
-                .format = rr->fbofmt[4],
+                .format = pass.fbofmt[4],
                 .sampleable = true,
                 .renderable = true,
-                .blit_dst = rr->fbofmt[4]->caps & PL_FMT_CAP_BLITTABLE,
-                .storable = rr->fbofmt[4]->caps & PL_FMT_CAP_STORABLE,
+                .blit_dst = pass.fbofmt[4]->caps & PL_FMT_CAP_BLITTABLE,
+                .storable = pass.fbofmt[4]->caps & PL_FMT_CAP_STORABLE,
             ));
 
             if (!ok) {
@@ -2853,6 +2846,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             };
 
             // Render a single frame up to `pass_output_target`
+            memcpy(inter_pass.fbofmt, pass.fbofmt, sizeof(pass.fbofmt));
             if (!pass_infer_state(&inter_pass))
                 goto error;
 

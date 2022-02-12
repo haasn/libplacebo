@@ -271,6 +271,10 @@ struct pl_render_params {
     // texture format available. This disables most features.
     bool disable_fbos;
 
+    // Use only low-bit-depth FBOs (8 bits). Note that this also implies
+    // disabling linear scaling and sigmoidization.
+    bool force_low_bit_depth_fbos;
+
     // If this is true, all shaders will be generated as "dynamic" shaders,
     // with any compile-time constants being replaced by runtime-adjustable
     // values. This is generally a performance loss, but has the advantage of

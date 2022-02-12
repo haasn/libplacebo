@@ -541,7 +541,7 @@ next_fmt: ; // equivalent to `continue`
     }
 
     // ran out of formats
-    PL_DEBUG(gpu, "No matching format found");
+    PL_TRACE(gpu, "No matching format found");
     return NULL;
 }
 
