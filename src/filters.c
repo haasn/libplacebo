@@ -376,10 +376,10 @@ static double hpl_2007_179(const struct pl_filter_function *f, double x)
 
 const struct pl_filter_function pl_filter_function_hpl_2007_179 = {
     .resizable = true,
-    .tunable = {true, true},
-    .weight = hpl_2007_179,
-    .radius = 2.0,
-    .params  = {0.414, 0.61},
+    .tunable   = {true, true},
+    .weight    = hpl_2007_179,
+    .radius    = 2.0,
+    .params    = {0.414, 0.61},
 };
 
 static double sinc(const struct pl_filter_function *f, double x)
