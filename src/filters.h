@@ -41,7 +41,7 @@
     {"robidouxsharp",       &pl_filter_robidouxsharp,     "RobidouxSharp"},     \
     {"ewa_robidoux",        &pl_filter_ewa_robidoux,      "EWA Robidoux"},      \
     {"ewa_robidouxsharp",   &pl_filter_ewa_robidouxsharp, "EWA RobidouxSharp"}, \
-    {"hpl_2007_179",        &pl_filter_hpl_2007_179, "hpl_2007_179"}, \
+    {"hpl_2007_179",        &pl_filter_hpl_2007_179, "hpl_2007_179"},           \
                                                                                 \
     /* Aliases */                                                               \
     {"triangle",            &pl_filter_bilinear},                               \
