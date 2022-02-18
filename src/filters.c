@@ -366,6 +366,8 @@ const struct pl_filter_function pl_filter_function_quadratic = {
 
 static double hpl_2007_179(const struct pl_filter_function *f, double x)
 {
+    if (x < 1e-8)
+        return 1.0;
     double pix = M_PI * x;
     double chi = f->params[0],
            eta = f->params[1];
