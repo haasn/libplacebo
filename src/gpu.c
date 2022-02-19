@@ -1838,7 +1838,7 @@ bool pl_tex_upload_texel(pl_gpu gpu, pl_dispatch dp,
 
     // fmt->texel_align contains the size of an individual color value
     assert(fmt->texel_size == fmt->num_components * fmt->texel_align);
-    GLSL("vec4 color = vec4(0.0);                                       \n"
+    GLSL("vec4 color = vec4(0.0, 0.0, 0.0, 1.0);                        \n"
          "ivec3 pos = ivec3(gl_GlobalInvocationID) + ivec3(%d, %d, %d); \n"
          "int base = pos.z * %s + pos.y * %s + pos.x * %s;              \n",
          params->rc.x0, params->rc.y0, params->rc.z0,
