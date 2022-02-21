@@ -1329,8 +1329,6 @@ static void tone_map(pl_shader sh,
             .fill = fill_lut,
             .priv = &lut_params,
         ));
-        if (!lut)
-            is_noop = true;
         obj->params = lut_params;
     }
 
@@ -1352,7 +1350,7 @@ static void tone_map(pl_shader sh,
         GLSL("#define tone_map(x) (%s * (x) + %s) \n",
              SH_FLOAT(scale), SH_FLOAT(dst_min - scale * src_min));
 
-    } else if (dynamic_peak) {
+    } else if (lut && dynamic_peak) {
 
         // Dynamic 2D LUT
         obj->desc.desc.access = PL_DESC_ACCESS_READONLY;
@@ -1382,13 +1380,35 @@ static void tone_map(pl_shader sh,
              "#define tone_map(x) (%s(vec2(scale * sqrt(x) + base, curve))) \n",
              SH_FLOAT(lut_params.input_min), lut);
 
-    } else {
+    } else if (lut) {
 
         // Regular 1D LUT
         const float lut_range = lut_params.input_max - lut_params.input_min;
         GLSL("#define tone_map(x) (%s(%s * sqrt(x) + %s))   \n",
              lut, SH_FLOAT(1.0f / lut_range),
              SH_FLOAT(-lut_params.input_min / lut_range));
+
+    } else {
+
+        // Fall back to hard-coded hable function for lack of anything better
+        float A = 0.15f, B = 0.50f, C = 0.10f, D = 0.20f, E = 0.02f, F = 0.30f;
+        ident_t hable = sh_fresh(sh, "hable");
+        GLSLH("float %s(float x) {                      \n"
+              "    return (x * (%f*x + %f) + %f) /      \n"
+              "           (x * (%f*x + %f) + %f) - %f;  \n"
+              "}                                        \n",
+              hable, A, C*B, D*E, A, B, D*F, E/F);
+
+        const float scale = 1.0f / (dst_max - dst_min);
+        const float peak = scale * (src_max - src_min);
+        const float peak_out = ((peak * (A*peak + C*B) + D*E) /
+                                (peak * (A*peak + B) + D*F)) - E/F;
+
+        GLSL("#define tone_map(x) (%s * %s(%s * x + %s) + %s)    \n",
+             SH_FLOAT((dst_max - dst_min) / peak_out),
+             hable, SH_FLOAT(scale),
+             SH_FLOAT(-scale * src_min),
+             SH_FLOAT(dst_min));
 
     }
 
