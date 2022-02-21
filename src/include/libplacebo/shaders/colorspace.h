@@ -289,7 +289,7 @@ struct pl_color_map_params {
 
 #define PL_COLOR_MAP_DEFAULTS                                   \
     .intent                 = PL_INTENT_RELATIVE_COLORIMETRIC,  \
-    .gamut_mode             = PL_GAMUT_DARKEN,                  \
+    .gamut_mode             = PL_GAMUT_CLIP,                    \
     .tone_mapping_function  = &pl_tone_map_auto,                \
     .tone_mapping_mode      = PL_TONE_MAP_AUTO,                 \
     .tone_mapping_crosstalk = 0.04,                             \
