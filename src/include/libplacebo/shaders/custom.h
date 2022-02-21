@@ -117,11 +117,13 @@ enum pl_hook_stage {
     PL_HOOK_RGB             = 1 << 8,  // After conversion to RGB (resizable)
     PL_HOOK_LINEAR          = 1 << 9,  // After linearization but before scaling
     PL_HOOK_SIGMOID         = 1 << 10, // After sigmoidization
-    PL_HOOK_PRE_OVERLAY     = 1 << 11, // Before applying on-image overlays
-    PL_HOOK_PRE_KERNEL      = 1 << 12, // Immediately before the main scaler kernel (after overlays)
-    PL_HOOK_POST_KERNEL     = 1 << 13, // Immediately after the main scaler kernel
-    PL_HOOK_SCALED          = 1 << 14, // After scaling, before color management
-    PL_HOOK_OUTPUT          = 1 << 15, // After color management, before dithering
+    PL_HOOK_PRE_KERNEL      = 1 << 11, // Immediately before the main scaler kernel (after overlays)
+    PL_HOOK_POST_KERNEL     = 1 << 12, // Immediately after the main scaler kernel
+    PL_HOOK_SCALED          = 1 << 13, // After scaling, before color management
+    PL_HOOK_OUTPUT          = 1 << 14, // After color management, before dithering
+
+    // Deprecated alias
+    PL_HOOK_PRE_OVERLAY PL_DEPRECATED = PL_HOOK_PRE_KERNEL,
 };
 
 // Returns true if a given hook stage is resizable
@@ -140,7 +142,6 @@ static inline bool pl_hook_stage_resizable(enum pl_hook_stage stage) {
     case PL_HOOK_ALPHA_SCALED:
     case PL_HOOK_LINEAR:
     case PL_HOOK_SIGMOID:
-    case PL_HOOK_PRE_OVERLAY:
     case PL_HOOK_PRE_KERNEL:
     case PL_HOOK_POST_KERNEL:
     case PL_HOOK_SCALED:

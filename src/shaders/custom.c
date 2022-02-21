@@ -834,7 +834,6 @@ static pl_str pl_stage_to_mp(enum pl_hook_stage stage)
 
     case PL_HOOK_LINEAR:        return pl_str0("LINEAR");
     case PL_HOOK_SIGMOID:       return pl_str0("SIGMOID");
-    case PL_HOOK_PRE_OVERLAY:   return pl_str0("PREOVERLAY"); // Note: doesn't exist!
     case PL_HOOK_PRE_KERNEL:    return pl_str0("PREKERNEL");
     case PL_HOOK_POST_KERNEL:   return pl_str0("POSTKERNEL");
 

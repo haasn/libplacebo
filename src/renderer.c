@@ -1773,8 +1773,7 @@ static bool pass_scale_main(struct pass_state *pass)
 
     // We need to enable the full rendering pipeline if there are any user
     // shaders / hooks that might depend on it.
-    uint64_t scaling_hooks = PL_HOOK_PRE_OVERLAY | PL_HOOK_PRE_KERNEL |
-                             PL_HOOK_POST_KERNEL;
+    uint64_t scaling_hooks = PL_HOOK_PRE_KERNEL | PL_HOOK_POST_KERNEL;
     uint64_t linear_hooks = PL_HOOK_LINEAR | PL_HOOK_SIGMOID;
 
     for (int i = 0; i < params->num_hooks; i++) {
@@ -1822,7 +1821,6 @@ static bool pass_scale_main(struct pass_state *pass)
         pass_hook(pass, img, PL_HOOK_SIGMOID);
     }
 
-    pass_hook(pass, img, PL_HOOK_PRE_OVERLAY);
     pass_hook(pass, img, PL_HOOK_PRE_KERNEL);
 
     src.tex = img_tex(pass, img);
