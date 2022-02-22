@@ -173,10 +173,6 @@ static bool render_frame(const struct pl_swapchain_frame *frame)
         };
         target.overlays = &osd;
         target.num_overlays = 1;
-        if (frame->flipped) {
-            osd_part.dst.y0 = frame->fbo->params.h - osd_part.dst.y0;
-            osd_part.dst.y1 = frame->fbo->params.h - osd_part.dst.y1;
-        }
     }
 
     // Use the heaviest preset purely for demonstration/testing purposes

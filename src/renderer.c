@@ -1116,6 +1116,7 @@ static int deband_src(struct pass_state *pass, pl_shader psh,
     struct pl_sample_src src = *psrc;
     // Only sample/deband the relevant cut-out, but round it to the nearest
     // integer to avoid doing fractional scaling
+    pl_rect2df_normalize(&src.rect);
     src.rect.x0 = floorf(src.rect.x0);
     src.rect.y0 = floorf(src.rect.y0);
     src.rect.x1 = ceilf(src.rect.x1);
@@ -1219,6 +1220,7 @@ struct plane_state {
     enum plane_type type;
     struct pl_plane plane;
     struct img img; // for per-plane shaders
+    float plane_w, plane_h; // logical plane dimensions
 };
 
 static const char *plane_type_names[] = {
@@ -1562,6 +1564,9 @@ static bool pass_read_image(struct pass_state *pass)
             .y1 = (image->crop.y1 - sy) / rry,
         };
 
+        st->plane_w = ref_tex->params.w / rrx;
+        st->plane_h = ref_tex->params.h / rry;
+
         PL_TRACE(rr, "Plane %d:", i);
         log_plane_info(rr, st);
 
@@ -1633,11 +1638,17 @@ static bool pass_read_image(struct pass_state *pass)
             },
         };
 
-        PL_TRACE(rr, "Aligning plane %d: {%f %f %f %f} -> {%f %f %f %f}",
+        if (plane->flipped) {
+            src.rect.y0 = st->plane_h - src.rect.y0;
+            src.rect.y1 = st->plane_h - src.rect.y1;
+        }
+
+        PL_TRACE(rr, "Aligning plane %d: {%f %f %f %f} -> {%f %f %f %f}%s",
                  i, st->img.rect.x0, st->img.rect.y0,
                  st->img.rect.x1, st->img.rect.y1,
                  src.rect.x0, src.rect.y0,
-                 src.rect.x1, src.rect.y1);
+                 src.rect.x1, src.rect.y1,
+                 plane->flipped ? " (flipped) " : "");
 
         pl_shader psh = pl_dispatch_begin_ex(rr->dp, true);
         if (deband_src(pass, psh,  &src) != DEBAND_SCALED)
@@ -2075,7 +2086,7 @@ fallback:
               rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry);
         float sx = plane->shift_x, sy = plane->shift_y;
 
-        struct pl_rect2df dst_rectf = {
+        struct pl_rect2df plane_rectf = {
             .x0 = (dst_rect.x0 - sx) * rrx,
             .y0 = (dst_rect.y0 - sy) * rry,
             .x1 = (dst_rect.x1 - sx) * rrx,
@@ -2083,15 +2094,15 @@ fallback:
         };
 
         // Normalize to make the math easier
-        pl_rect2df_normalize(&dst_rectf);
+        pl_rect2df_normalize(&plane_rectf);
 
         // Round the output rect
-        int rx0 = floorf(dst_rectf.x0), ry0 = floorf(dst_rectf.y0),
-            rx1 =  ceilf(dst_rectf.x1), ry1 =  ceilf(dst_rectf.y1);
+        int rx0 = floorf(plane_rectf.x0), ry0 = floorf(plane_rectf.y0),
+            rx1 =  ceilf(plane_rectf.x1), ry1 =  ceilf(plane_rectf.y1);
 
         PL_TRACE(rr, "Subsampled target %d: {%f %f %f %f} -> {%d %d %d %d}",
-                 p, dst_rectf.x0, dst_rectf.y0,
-                 dst_rectf.x1, dst_rectf.y1,
+                 p, plane_rectf.x0, plane_rectf.y0,
+                 plane_rectf.x1, plane_rectf.y1,
                  rx0, ry0, rx1, ry1);
 
         if (target->num_planes > 1) {
@@ -2102,10 +2113,10 @@ fallback:
                 .new_w      = rx1 - rx0,
                 .new_h      = ry1 - ry0,
                 .rect = {
-                    .x0 = (rx0 - dst_rectf.x0) / rrx,
-                    .x1 = (rx1 - dst_rectf.x0) / rrx,
-                    .y0 = (ry0 - dst_rectf.y0) / rry,
-                    .y1 = (ry1 - dst_rectf.y0) / rry,
+                    .x0 = (rx0 - plane_rectf.x0) / rrx,
+                    .x1 = (rx1 - plane_rectf.x0) / rrx,
+                    .y0 = (ry0 - plane_rectf.y0) / rry,
+                    .y1 = (ry1 - plane_rectf.y0) / rry,
                 },
             };
 
@@ -2159,25 +2170,35 @@ fallback:
         GLSL("color *= vec4(1.0 / %s); \n", SH_FLOAT(scale));
         swizzle_color(sh, plane->components, plane->component_mapping, false);
 
-        bool ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
-            .shader = &sh,
-            .target = plane->texture,
-            .blend_params = params->blend_params,
-            .rect = {
-                .x0 = flipped_x ? rx1 : rx0,
-                .y0 = flipped_y ? ry1 : ry0,
-                .x1 = flipped_x ? rx0 : rx1,
-                .y1 = flipped_y ? ry0 : ry1,
-            },
-        ));
-
-        if (!ok)
-            return false;
+        struct pl_rect2d plane_rect = {
+            .x0 = flipped_x ? rx1 : rx0,
+            .x1 = flipped_x ? rx0 : rx1,
+            .y0 = flipped_y ? ry1 : ry0,
+            .y1 = flipped_y ? ry0 : ry1,
+        };
 
         struct pl_transform2x2 tscale = {
             .mat = {{{ rrx, 0.0 }, { 0.0, rry }}},
             .c = { -sx, -sy },
         };
+
+        if (plane->flipped) {
+            int plane_h = rry * ref->texture->params.h;
+            plane_rect.y0 = plane_h - plane_rect.y0;
+            plane_rect.y1 = plane_h - plane_rect.y1;
+            tscale.mat.m[1][1] = -tscale.mat.m[1][1];
+            tscale.c[1] += plane->texture->params.h;
+        }
+
+        bool ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
+            .shader = &sh,
+            .target = plane->texture,
+            .blend_params = params->blend_params,
+            .rect = plane_rect,
+        ));
+
+        if (!ok)
+            return false;
 
         if (pass->info.stage != PL_RENDER_STAGE_BLEND) {
             draw_overlays(pass, plane->texture, plane->components,
@@ -3063,6 +3084,7 @@ void pl_frame_from_swapchain(struct pl_frame *out_frame,
         .num_planes = 1,
         .planes = {{
             .texture = fbo,
+            .flipped = frame->flipped,
             .components = num_comps,
             .component_mapping = {0, 1, 2, 3},
         }},
@@ -3070,9 +3092,6 @@ void pl_frame_from_swapchain(struct pl_frame *out_frame,
         .repr = frame->color_repr,
         .color = frame->color_space,
     };
-
-    if (frame->flipped)
-        PL_SWAP(out_frame->crop.y0, out_frame->crop.y1);
 }
 
 bool pl_frame_is_cropped(const struct pl_frame *frame)

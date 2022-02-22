@@ -864,6 +864,7 @@ static bool pl_map_avframe_drm(pl_gpu gpu, struct pl_frame *out,
             return false;
 
         assert(layer->nb_planes == 1); // we only support planar formats
+        assert(plane->pitch >= 0); // definitely requires special handling
         out->planes[n].texture = pl_tex_create(gpu, pl_tex_params(
             .w = AV_CEIL_RSHIFT(frame->width, is_chroma ? desc->log2_chroma_w : 0),
             .h = AV_CEIL_RSHIFT(frame->height, is_chroma ? desc->log2_chroma_h : 0),
@@ -1043,15 +1044,21 @@ static inline bool pl_map_avframe_internal(pl_gpu gpu, struct pl_frame *out,
         bool is_chroma = p == 1 || p == 2; // matches lavu logic
         data[p].width = AV_CEIL_RSHIFT(frame->width, is_chroma ? desc->log2_chroma_w : 0);
         data[p].height = AV_CEIL_RSHIFT(frame->height, is_chroma ? desc->log2_chroma_h : 0);
-        data[p].row_stride = frame->linesize[p];
-        data[p].pixels = frame->data[p];
+        if (frame->linesize[p] < 0) {
+            data[p].pixels = frame->data[p] + frame->linesize[p] * (data[p].height - 1);
+            data[p].row_stride = -frame->linesize[p];
+            out->planes[p].flipped = true;
+        } else {
+            data[p].pixels = frame->data[p];
+            data[p].row_stride = frame->linesize[p];
+        }
 
         // Probe for frames allocated by pl_get_buffer2
         alloc = frame->buf[p] ? av_buffer_get_opaque(frame->buf[p]) : NULL;
         if (alloc && alloc->magic[0] == PL_MAGIC0 && alloc->magic[1] == PL_MAGIC1) {
-            data[p].pixels = NULL;
             data[p].buf = alloc->buf;
-            data[p].buf_offset = (uintptr_t) frame->data[p] - (uintptr_t) alloc->buf->data;
+            data[p].buf_offset = (uintptr_t) data[p].pixels - (uintptr_t) alloc->buf->data;
+            data[p].pixels = NULL;
         } else if (gpu->limits.callbacks) {
             // Use asynchronous upload if possible
             data[p].callback = pl_avframe_free_cb;

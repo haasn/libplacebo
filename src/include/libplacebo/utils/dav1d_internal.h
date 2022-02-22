@@ -441,7 +441,6 @@ static inline bool pl_upload_dav1dpicture(pl_gpu gpu,
             .width          = pic->p.w,
             .height         = pic->p.h,
             .pixel_stride   = bytes,
-            .row_stride     = pic->stride[0],
             .component_size = {bytes * 8},
             .component_map  = {0},
         }, {
@@ -450,7 +449,6 @@ static inline bool pl_upload_dav1dpicture(pl_gpu gpu,
             .width          = pic->p.w >> sub_x,
             .height         = pic->p.h >> sub_y,
             .pixel_stride   = bytes,
-            .row_stride     = pic->stride[1],
             .component_size = {bytes * 8},
             .component_map  = {1},
         }, {
@@ -459,7 +457,6 @@ static inline bool pl_upload_dav1dpicture(pl_gpu gpu,
             .width          = pic->p.w >> sub_x,
             .height         = pic->p.h >> sub_y,
             .pixel_stride   = bytes,
-            .row_stride     = pic->stride[1],
             .component_size = {bytes * 8},
             .component_map  = {2},
         },
@@ -482,15 +479,23 @@ static inline bool pl_upload_dav1dpicture(pl_gpu gpu,
     }
 
     for (int p = 0; p < out->num_planes; p++) {
-        if (buf) {
-            data[p].buf = buf;
-            data[p].buf_offset = (uintptr_t) pic->data[p] - (uintptr_t) buf->data;
+        ptrdiff_t stride = p > 0 ? pic->stride[1] : pic->stride[0];
+        if (stride < 0) {
+            data[p].pixels = (uint8_t *) pic->data[p] + stride * (data[p].height - 1);
+            data[p].row_stride = -stride;
+            out->planes[p].flipped = true;
         } else {
             data[p].pixels = pic->data[p];
-            if (ref) {
-                data[p].priv = ref;
-                data[p].callback = pl_dav1dpicture_unref;
-            }
+            data[p].row_stride = stride;
+        }
+
+        if (buf) {
+            data[p].buf = buf;
+            data[p].buf_offset = (uintptr_t) data[p].pixels - (uintptr_t) buf->data;
+            data[p].pixels = NULL;
+        } else if (ref) {
+            data[p].priv = ref;
+            data[p].callback = pl_dav1dpicture_unref;
         }
 
         if (!pl_upload_plane(gpu, &out->planes[p], &tex[p], &data[p])) {

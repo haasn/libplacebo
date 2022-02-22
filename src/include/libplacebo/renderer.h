@@ -364,6 +364,20 @@ struct pl_plane {
     // since the default (PL_TEX_ADDRESS_CLAMP) is very reasonable.
     enum pl_tex_address_mode address_mode;
 
+    // Controls whether or not the `texture` will be considered flipped
+    // vertically with respect to the overall image dimensions. It's generally
+    // preferable to flip planes using this setting instead of the crop in
+    // cases where the flipping is the result of e.g. negative plane strides or
+    // flipped framebuffers (OpenGL).
+    //
+    // Note that any planar padding (due to e.g. size mismatch or misalignment
+    // of subsampled planes) is always at the physical end of the texture
+    // (highest y coordinate) - even if this bool is true. However, any
+    // subsampling shift (`shift_y`) is applied with respect to the flipped
+    // direction. This ensures the correct interpretation when e.g. vertically
+    // flipping 4:2:0 sources by flipping all planes.
+    bool flipped;
+
     // Describes the number and interpretation of the components in this plane.
     // This defines the mapping from component index to the canonical component
     // order (RGBA, YCbCrA or XYZA). It's worth pointing out that this is

@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     4,
     # API version
     {
+      '199': 'add pl_plane.flipped',
       '198': 'remove PL_HOOK_PRE_OVERLAY',
       '197': 'add pl_overlay.coords, change type of pl_overlay_part.dst',
       '196': 'add pl_render_params.force_low_bit_depth_fbos',

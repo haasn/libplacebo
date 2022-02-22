@@ -124,8 +124,8 @@ pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data 
 // and maximize compatibility with the other `pl_renderer` requirements
 // (blittable, linear filterable, etc.).
 //
-// Note: `out_plane->shift_x/y` are left uninitialized, and should be set
-// explicitly by the user.
+// Note: `out_plane->shift_x/y` and `out_plane->flipped` are left
+// uninitialized, and should be set explicitly by the user.
 bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
                      pl_tex *tex, const struct pl_plane_data *data);
 
