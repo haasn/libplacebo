@@ -502,30 +502,6 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         return false;
     }
 
-    bool has_compute = sh_glsl(sh).compute && !params->no_compute;
-    has_compute &= sh_glsl(sh).version >= 130; // needed for round()
-    if (!src->tex && has_compute) {
-        // FIXME: Could maybe solve this by communicating the wbase from
-        // invocation 0 to the rest of the workgroup using shmem, which would
-        // also allow us to avoid the use of the hacky %s_map below.
-        PL_WARN(sh, "Combining pl_shader_sample_polar with the sampler2D "
-                "interface prevents the use of compute shaders, which is a "
-                "potentially massive performance hit. If you're sure you want "
-                "this, set `params.no_compute` to suppress this warning.");
-        has_compute = false;
-    }
-
-    bool flipped = src->rect.x0 > src->rect.x1 || src->rect.y0 > src->rect.y1;
-    if (flipped && has_compute) {
-        // FIXME: I'm sure this case could actually be supported with some
-        // extra math in the positional calculations, should implement it
-        PL_WARN(sh, "Trying to use a flipped src.rect with polar sampling! "
-                "This prevents the use of compute shaders, which is a "
-                "potentially massive performance hit. If you're really sure you "
-                "want this, set `params.no_compute` to suppress this warning.");
-        has_compute = false;
-    }
-
     uint8_t comp_mask;
     float rx, ry, scale;
     ident_t src_tex, pos, size, pt;
@@ -596,8 +572,11 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 
     ident_t in = NULL;
     int num_comps = __builtin_popcount(comp_mask);
-    int shmem_req = iw * ih * num_comps * sizeof(float);
-    bool is_compute = has_compute && sh_try_compute(sh, bw, bh, false, shmem_req);
+    int shmem_req = (iw * ih * num_comps + 2) * sizeof(float);
+    bool is_compute = !params->no_compute &&
+                      sh_glsl(sh).compute &&
+                      sh_glsl(sh).version >= 130 && // needed for round()
+                      sh_try_compute(sh, bw, bh, false, shmem_req);
 
     // For compute shaders, which read the input texels primarily from shmem,
     // using a texture-based LUT is better. For the fragment shader fallback
@@ -624,11 +603,21 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     ident_t radius_c = sh_const_float(sh, "radius", obj->filter->radius);
 
     if (is_compute) {
+
         // Compute shader kernel
-        GLSL("vec2 wpos = %s_map(gl_WorkGroupID * gl_WorkGroupSize);        \n"
-             "vec2 wbase = wpos - pt * fract(wpos * size - vec2(0.5));      \n"
-             "ivec2 rel = ivec2(round((base - wbase) * size));              \n",
-             pos);
+        GLSL("uvec2 base_id = uvec2(0u); \n");
+        if (src->rect.x0 > src->rect.x1)
+            GLSL("base_id.x = gl_WorkGroupSize.x - 1u; \n");
+        if (src->rect.y0 > src->rect.y1)
+            GLSL("base_id.y = gl_WorkGroupSize.y - 1u; \n");
+
+        in = sh_fresh(sh, "in");
+        GLSLH("shared vec2 %s_base; \n", in);
+        GLSL("if (gl_LocalInvocationID.xy == base_id)               \n"
+             "    %s_base = base;                                   \n"
+             "barrier();                                            \n"
+             "ivec2 rel = ivec2(round((base - %s_base) * size));    \n",
+             in, in);
 
         ident_t iw_c = sh_const(sh, (struct pl_shader_const) {
             .type = PL_VAR_SINT,
@@ -647,10 +636,9 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         // Load all relevant texels into shmem
         GLSL("for (int y = int(gl_LocalInvocationID.y); y < %s; y += %d) {  \n"
              "for (int x = int(gl_LocalInvocationID.x); x < %s; x += %d) {  \n"
-             "c = %s(%s, wbase + pt * vec2(x - %d, y - %d));                \n",
-             ih_c, bh, iw_c, bw, fn, src_tex, offset, offset);
+             "c = %s(%s, %s_base + pt * vec2(x - %d, y - %d));              \n",
+             ih_c, bh, iw_c, bw, fn, src_tex, in, offset, offset);
 
-        in = sh_fresh(sh, "in");
         for (uint8_t comps = comp_mask; comps;) {
             uint8_t c = __builtin_ctz(comps);
             GLSLH("shared float %s%d[%s * %s]; \n", in, c, ih_c, iw_c);
