@@ -1545,8 +1545,8 @@ static bool pass_read_image(struct pass_state *pass)
         if (!st->type)
             continue;
 
-        float rx = (float) ref_tex->params.w / st->plane.texture->params.w,
-              ry = (float) ref_tex->params.h / st->plane.texture->params.h;
+        float rx = (float) st->plane.texture->params.w / ref_tex->params.w,
+              ry = (float) st->plane.texture->params.h / ref_tex->params.h;
 
         // Only accept integer scaling ratios. This accounts for the fact that
         // fractionally subsampled planes get rounded up to the nearest integer
@@ -1558,14 +1558,14 @@ static bool pass_read_image(struct pass_state *pass)
               sy = st->plane.shift_y;
 
         st->img.rect = (struct pl_rect2df) {
-            .x0 = (image->crop.x0 - sx) / rrx,
-            .y0 = (image->crop.y0 - sy) / rry,
-            .x1 = (image->crop.x1 - sx) / rrx,
-            .y1 = (image->crop.y1 - sy) / rry,
+            .x0 = (image->crop.x0 - sx) * rrx,
+            .y0 = (image->crop.y0 - sy) * rry,
+            .x1 = (image->crop.x1 - sx) * rrx,
+            .y1 = (image->crop.y1 - sy) * rry,
         };
 
-        st->plane_w = ref_tex->params.w / rrx;
-        st->plane_h = ref_tex->params.h / rry;
+        st->plane_w = ref_tex->params.w * rrx;
+        st->plane_h = ref_tex->params.h * rry;
 
         PL_TRACE(rr, "Plane %d:", i);
         log_plane_info(rr, st);
