@@ -902,6 +902,7 @@ static bool fix_tex_transfer(pl_gpu gpu, struct pl_tex_transfer_params *params)
     if (params->buf) {
         pl_buf buf = params->buf;
         size_t size = pl_tex_transfer_size(params);
+        require(params->buf_offset + size >= params->buf_offset); // overflow check
         require(params->buf_offset + size <= buf->params.size);
         require(gpu->limits.buf_transfer);
     }
