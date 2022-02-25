@@ -113,9 +113,11 @@ enum szexp_op {
     SZEXP_OP_SUB,
     SZEXP_OP_MUL,
     SZEXP_OP_DIV,
+    SZEXP_OP_MOD,
     SZEXP_OP_NOT,
     SZEXP_OP_GT,
     SZEXP_OP_LT,
+    SZEXP_OP_EQ,
 };
 
 enum szexp_tag {
@@ -191,9 +193,11 @@ static bool parse_rpn_szexpr(pl_str line, struct szexp out[MAX_SZEXP_SIZE])
         case '-': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_SUB; continue;
         case '*': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_MUL; continue;
         case '/': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_DIV; continue;
+        case '%': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_MOD; continue;
         case '!': exp->tag = SZEXP_OP1; exp->val.op = SZEXP_OP_NOT; continue;
         case '>': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_GT;  continue;
         case '<': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_LT;  continue;
+        case '=': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_EQ;  continue;
         }
 
         if (word.buf[0] >= '0' && word.buf[0] <= '9') {
@@ -259,8 +263,10 @@ static bool pl_eval_szexpr(pl_log log, void *priv,
             case SZEXP_OP_SUB: res = op1 - op2; break;
             case SZEXP_OP_MUL: res = op1 * op2; break;
             case SZEXP_OP_DIV: res = op1 / op2; break;
+            case SZEXP_OP_MOD: res = fmodf(op1, op2); break;
             case SZEXP_OP_GT:  res = op1 > op2; break;
             case SZEXP_OP_LT:  res = op1 < op2; break;
+            case SZEXP_OP_EQ:  res = fabsf(op1 - op2) <= 1e-6 * fmaxf(op1, op2); break;
             case SZEXP_OP_NOT: pl_unreachable();
             }
 
