@@ -382,22 +382,24 @@ bool pl_shader_sample_oversample(pl_shader sh, const struct pl_sample_src *src,
     GLSL("// pl_shader_sample_oversample                \n"
          "vec4 color;                                   \n"
          "{                                             \n"
-         "vec2 pt = %s;                                 \n"
-         "vec2 pos = %s - vec2(0.5) * pt;               \n"
-         "vec2 fcoord = fract(pos * %s - vec2(0.5));    \n"
-         "vec2 coeff = fcoord * %s;                     \n",
-         pt, pos, size, ratio);
+         "vec2 pt = %s, size = %s, pos = %s;            \n"
+         "vec2 fcoord = fract(pos * size - vec2(0.5));  \n"
+         "vec2 coeff = (fcoord - vec2(0.5)) * %s;       \n"
+         "coeff = clamp(coeff + vec2(0.5), 0.0, 1.0);   \n",
+         pt, size, pos, ratio);
 
-    if (threshold > 0.0) {
-        threshold = PL_MIN(threshold, 1.0);
+    if (threshold > 0) {
+        threshold = PL_MIN(threshold, 0.5f);
         ident_t thresh = sh_const_float(sh, "threshold", threshold);
-        GLSL("coeff = (coeff - %s) / (1.0 - 2.0 * %s);  \n",
+        GLSL("coeff = mix(coeff, vec2(0.0),             \n"
+             "    lessThan(coeff, vec2(%s)));           \n"
+             "coeff = mix(coeff, vec2(1.0),             \n"
+             "    greaterThan(coeff, vec2(1.0 - %s)));  \n",
              thresh, thresh);
     }
 
     // Compute the right output blend of colors
-    GLSL("coeff = clamp(coeff, 0.0, 1.0);               \n"
-         "pos += (coeff - fcoord) * pt;                 \n"
+    GLSL("pos += (coeff - fcoord) * pt;                 \n"
          "color = vec4(%s) * %s(%s, pos);               \n"
          "}                                             \n",
          SH_FLOAT(scale), fn, tex);
