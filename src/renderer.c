@@ -2160,10 +2160,10 @@ fallback:
         }
 
         if (params->dither_params) {
-            // Ignore dithering for > 16-bit FBOs by default, since it makes
+            // Ignore dithering for > 16-bit outputs by default, since it makes
             // little sense to do so (and probably just adds errors)
-            int depth = repr.bits.sample_depth;
-            if (depth && (depth <= 16 || params->force_dither))
+            int depth = target->repr.bits.color_depth;
+            if (depth && (depth < 16 || params->force_dither))
                 pl_shader_dither(sh, depth, &rr->dither_state, params->dither_params);
         }
 
