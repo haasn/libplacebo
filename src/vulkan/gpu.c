@@ -317,9 +317,14 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
 {
     pl_handle_caps caps = 0;
 
-    bool has_drm_mods = vk->GetImageDrmFormatModifierPropertiesEXT;
     for (int i = 0; vk_mem_handle_list[i]; i++) {
         enum pl_handle_type handle_type = vk_mem_handle_list[i];
+        if (handle_type == PL_HANDLE_DMA_BUF && !vk->GetImageDrmFormatModifierPropertiesEXT) {
+            PL_DEBUG(vk, "Tex caps for %s (0x%x) unsupported: no DRM modifiers",
+                     vk_handle_name(vk_mem_handle_type(PL_HANDLE_DMA_BUF)),
+                     (unsigned int) PL_HANDLE_DMA_BUF);
+            continue;
+        }
 
         // Query whether creation of a "basic" dummy texture would work
         VkPhysicalDeviceImageDrmFormatModifierInfoEXT drm_pinfo = {
@@ -342,7 +347,7 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
             .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         };
 
-        if (handle_type == PL_HANDLE_DMA_BUF && has_drm_mods) {
+        if (handle_type == PL_HANDLE_DMA_BUF) {
             vk_link_struct(&pinfo, &drm_pinfo);
             pinfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
         }
@@ -358,11 +363,6 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
 
         VkResult res;
         res = vk->GetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
-        if (res != VK_SUCCESS && handle_type == PL_HANDLE_DMA_BUF && !has_drm_mods) {
-            // Try again with VK_IMAGE_TILING_LINEAR, as a dumb hack
-            pinfo.tiling = VK_IMAGE_TILING_LINEAR;
-            res = vk->GetPhysicalDeviceImageFormatProperties2KHR(vk->physd, &pinfo, &props);
-        }
         if (res != VK_SUCCESS) {
             PL_DEBUG(vk, "Tex caps for %s (0x%x) unsupported: %s",
                      vk_handle_name(ext_pinfo.handleType),

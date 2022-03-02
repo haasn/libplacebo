@@ -357,13 +357,6 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         .pQueueFamilyIndices = qfs,
     };
 
-    bool has_drm_mods = vk->GetImageDrmFormatModifierPropertiesEXT;
-    if (handle_type == PL_HANDLE_DMA_BUF && !has_drm_mods && !p->warned_modless) {
-        PL_WARN(gpu, "Using legacy hacks for DMA buffers without modifiers. "
-                "May result in corruption!");
-        p->warned_modless = true;
-    }
-
     struct vk_malloc_params mparams = {
         .optimal = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         .export_handle = params->export_handle,
@@ -372,27 +365,12 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     };
 
     if (params->import_handle == PL_HANDLE_DMA_BUF) {
-        if (has_drm_mods) {
-
-            // We have VK_EXT_image_drm_format_modifier, so we can use
-            // format modifiers properly
-            vk_link_struct(&iinfo, &drm_explicit);
-            iinfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
-            mparams.shared_mem.offset = 0x0; // handled via plane offsets
-
-        } else {
-
-            // Legacy fallback for older drivers. Based on hacks and guesswork.
-            switch (drm_explicit.drmFormatModifier) {
-            case DRM_FORMAT_MOD_LINEAR:
-                iinfo.tiling = VK_IMAGE_TILING_LINEAR;
-                break;
-            }
-
-        }
+        vk_link_struct(&iinfo, &drm_explicit);
+        iinfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+        mparams.shared_mem.offset = 0x0; // handled via plane offsets
     }
 
-    if (params->export_handle == PL_HANDLE_DMA_BUF && has_drm_mods) {
+    if (params->export_handle == PL_HANDLE_DMA_BUF) {
         vk_link_struct(&iinfo, &drm_list);
         iinfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
     }
@@ -411,7 +389,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         .handleType = ext_info.handleTypes,
     };
 
-    if (handle_type == PL_HANDLE_DMA_BUF && has_drm_mods)
+    if (handle_type == PL_HANDLE_DMA_BUF)
         vk_link_struct(&ext_pinfo, &drm_pinfo);
 
     VkPhysicalDeviceImageFormatInfo2KHR pinfo = {
