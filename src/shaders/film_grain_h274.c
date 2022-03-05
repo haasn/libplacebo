@@ -245,7 +245,7 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
         // Hard-coded unrolled loop, to avoid having to load a dynamically
         // sized array into the shader - and to optimize for the very common
         // case of there only being a single intensity interval
-        GLSL("uvec3 values; \n");
+        GLSL("uint val; \n");
         for (int i = 0; i < data->num_intensity_intervals[c]; i++) {
             ident_t bounds = sh_var(sh, (struct pl_shader_var) {
                 .var = pl_var_vec2("bounds"),
@@ -267,20 +267,24 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
             if (c > 0 && pl_color_system_is_ycbcr_like(params->repr->sys))
                 scale >>= 1;
 
+            pl_static_assert(sizeof(unsigned int) >= sizeof(uint32_t));
             ident_t values = sh_var(sh, (struct pl_shader_var) {
-                .var = pl_var_ivec3("comp_model_value"),
-                .data = &(int[3]) { scale, h, v },
+                .var = pl_var_uint("comp_model_value"),
+                .data = &(unsigned int) {
+                    (uint16_t) scale << 16 | h << 8 | v,
+                },
             });
 
             GLSL("if (avg >= %s.x && avg <= %s.y)   \n"
-                 "    values = %s; else             \n",
+                 "    val = %s; else                \n",
                  bounds, bounds, values);
         }
-        GLSL("    values = uvec3(0u); \n");
+        GLSL("    val = 0u; \n");
 
         // Extract the grain parameters from comp_model_value
-        GLSL("uvec2 offset = 64u * uvec2(values.yz);    \n"
-             "float scale = %s * float(values.x);       \n"
+        GLSL("uvec2 offset = uvec2((val & 0xFF00) >> 2, \n"
+             "                     (val & 0xFF) << 6);  \n"
+             "float scale = %s * float(int(val >> 16)); \n"
              // Add randomness
              "uint rand = pcg[%d];                      \n"
              "offset.y += (rand >> 16u) %% 52u;         \n"
