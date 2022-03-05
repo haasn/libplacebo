@@ -255,13 +255,21 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
                 },
             });
 
+            const uint8_t num_values = data->num_model_values[c];
+            uint8_t h = num_values > 1 ? data->comp_model_value[c][i][1] : 8;
+            uint8_t v = num_values > 2 ? data->comp_model_value[c][i][2] : h;
+            h = PL_CLAMP(h, 2, 14) - 2;
+            v = PL_CLAMP(v, 2, 14) - 2;
+            // FIXME: double h/v for subsampled planes!
+
+            // Reduce scale for chroma planes
+            int16_t scale = data->comp_model_value[c][i][0];
+            if (c > 0 && pl_color_system_is_ycbcr_like(params->repr->sys))
+                scale >>= 1;
+
             ident_t values = sh_var(sh, (struct pl_shader_var) {
-                .var = pl_var_uvec3("comp_model_value"),
-                .data = &(unsigned int[3]) {
-                    data->comp_model_value[c][i][0],
-                    data->comp_model_value[c][i][1] - 2,
-                    data->comp_model_value[c][i][2] - 2,
-                },
+                .var = pl_var_ivec3("comp_model_value"),
+                .data = &(int[3]) { scale, h, v },
             });
 
             GLSL("if (avg >= %s.x && avg <= %s.y)   \n"
@@ -271,7 +279,7 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
         GLSL("    values = uvec3(0u); \n");
 
         // Extract the grain parameters from comp_model_value
-        GLSL("uvec2 offset = 64u * values.yz;           \n"
+        GLSL("uvec2 offset = 64u * uvec2(values.yz);    \n"
              "float scale = %s * float(values.x);       \n"
              // Add randomness
              "uint rand = pcg[%d];                      \n"
