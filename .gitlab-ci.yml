@@ -129,6 +129,7 @@ gpu:
                       --werror
                       -Dtests=true
                       -Ddemos=false
+                      -Ddebug-abort=true
                       -Dshaderc=disabled
                       -Db_coverage=true
         - ninja -C build
