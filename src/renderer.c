@@ -2223,6 +2223,7 @@ fallback:
           PL_ERR(rr, "Validation failed: %s (%s:%d)",                           \
                   #expr, __FILE__, __LINE__);                                   \
           pl_log_stack_trace(rr->log, PL_LOG_ERR);                              \
+          pl_debug_abort();                                                     \
           return false;                                                         \
       }                                                                         \
   } while (0)

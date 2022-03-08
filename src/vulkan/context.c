@@ -458,8 +458,10 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
     bool is_error = (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) &&
                     (msgType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT);
 
-    if (is_error)
+    if (is_error) {
         pl_log_stack_trace(log, lev);
+        pl_debug_abort();
+    }
 
     return is_error;
 }

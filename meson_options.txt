@@ -38,3 +38,6 @@ option('fuzz', type: 'boolean', value: false,
 
 option('unwind', type: 'feature', value: 'auto',
        description: 'Enable linking against libunwind for printing stack traces caused by runtime errors')
+
+option('debug-abort', type: 'boolean', value: false,
+       description: 'abort() on most runtime errors (only for debugging purposes)')

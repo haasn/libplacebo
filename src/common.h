@@ -181,6 +181,13 @@ static inline size_t pl_lcm(size_t x, size_t y)
         }                                                                       \
     } while (0)
 
+// Conditional abort() macro that depends on the configuration option
+#ifdef PL_DEBUG_ABORT
+# define pl_debug_abort() abort()
+#else
+# define pl_debug_abort()
+#endif
+
 // Refcounting helpers
 typedef _Atomic uint32_t pl_rc_t;
 #define pl_rc_init(rc)  atomic_init(rc, 1)

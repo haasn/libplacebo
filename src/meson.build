@@ -5,6 +5,7 @@ conf_public.set('majorver', majorver)
 conf_public.set('apiver', apiver)
 conf_internal.set('BUILD_API_VER', apiver)
 conf_internal.set('BUILD_FIX_VER', fixver)
+conf_internal.set('PL_DEBUG_ABORT', get_option('debug-abort'))
 
 # Dependencies
 prog_python = import('python').find_installation()
