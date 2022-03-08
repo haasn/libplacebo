@@ -282,8 +282,8 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
         GLSL("    val = 0u; \n");
 
         // Extract the grain parameters from comp_model_value
-        GLSL("uvec2 offset = uvec2((val & 0xFF00) >> 2, \n"
-             "                     (val & 0xFF) << 6);  \n"
+        GLSL("uvec2 offset = uvec2((val & 0xFF00u) >> 2,\n"
+             "                     (val & 0xFFu) << 6); \n"
              "float scale = %s * float(int(val >> 16)); \n"
              // Add randomness
              "uint rand = pcg[%d];                      \n"
