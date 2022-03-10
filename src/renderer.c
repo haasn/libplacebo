@@ -1594,15 +1594,21 @@ static bool pass_read_image(struct pass_state *pass)
     sh_require(sh, PL_SHADER_SIG_NONE, 0, 0);
 
     // Initialize the color to black
-    const char *neutral = "0.0, 0.0, 0.0";
-    if (pl_color_system_is_ycbcr_like(image->repr.sys))
-        neutral = "0.0, 0.5, 0.5";
+    const char *neutral_chroma = "0.0";
+    if (pl_color_system_is_ycbcr_like(image->repr.sys)) {
+        int bits = image->repr.bits.sample_depth;
+        if (bits) {
+            neutral_chroma = SH_FLOAT((float) (1 << (bits - 1)) / ((1 << bits) - 1));
+        } else {
+            neutral_chroma = "0.5"; // floating point formats
+        }
+    }
 
-    GLSL("vec4 color = vec4(%s, 1.0);            \n"
+    GLSL("vec4 color = vec4(0.0, %s, %s, 1.0);   \n"
          "// pass_read_image                     \n"
          "{                                      \n"
          "vec4 tmp;                              \n",
-         neutral);
+         neutral_chroma, neutral_chroma);
 
     // For quality reasons, explicitly drop subpixel offsets from the ref rect
     // and re-add them as part of `pass->img.rect`, always rounding towards 0.
