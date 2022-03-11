@@ -74,10 +74,10 @@ struct vk_ctx {
     // Command pools (one per queue family)
     PL_ARRAY(struct vk_cmdpool *) pools;
 
-    // Pointers into `pools`
-    struct vk_cmdpool *pool_graphics; // required
-    struct vk_cmdpool *pool_compute;  // optional
-    struct vk_cmdpool *pool_transfer; // optional
+    // Pointers into `pools` (always set)
+    struct vk_cmdpool *pool_graphics;
+    struct vk_cmdpool *pool_compute;
+    struct vk_cmdpool *pool_transfer;
 
     // Pending commands. These are shared for the entire mpvk_ctx to ensure
     // submission and callbacks are FIFO

@@ -1022,17 +1022,30 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
                  (unsigned) qfs[i].queueFlags, (int) qfs[i].queueCount);
     }
 
-    int idx_gfx = -1, idx_comp = -1, idx_tf = -1;
-    idx_gfx = find_qf(qfs, qfnum, VK_QUEUE_GRAPHICS_BIT);
-    if (params->async_compute)
-        idx_comp = find_qf(qfs, qfnum, VK_QUEUE_COMPUTE_BIT);
-    if (params->async_transfer)
-        idx_tf = find_qf(qfs, qfnum, VK_QUEUE_TRANSFER_BIT);
+    VkQueueFlagBits gfx_flags = VK_QUEUE_GRAPHICS_BIT;
+    if (!params->async_compute)
+        gfx_flags |= VK_QUEUE_COMPUTE_BIT;
 
-    // Vulkan requires at least one GRAPHICS queue, so if this fails something
-    // is horribly wrong.
-    pl_assert(idx_gfx >= 0);
+    int idx_gfx  = find_qf(qfs, qfnum, gfx_flags);
+    int idx_comp = find_qf(qfs, qfnum, VK_QUEUE_COMPUTE_BIT);
+    int idx_tf   = find_qf(qfs, qfnum, VK_QUEUE_TRANSFER_BIT);
+    if (idx_tf < 0)
+        idx_tf = idx_comp;
+
+    if (!params->async_compute)
+        idx_comp = idx_gfx;
+    if (!params->async_transfer)
+        idx_tf = idx_gfx;
+
     PL_DEBUG(vk, "Using graphics queue %d", idx_gfx);
+    if (idx_tf != idx_gfx)
+        PL_INFO(vk, "Using async transfer (queue %d)", idx_tf);
+    if (idx_comp != idx_gfx)
+        PL_INFO(vk, "Using async compute (queue %d)", idx_comp);
+
+    // Vulkan requires at least one GRAPHICS+COMPUTE queue, so if this fails
+    // something is horribly wrong.
+    pl_assert(idx_gfx >= 0 && idx_comp >= 0 && idx_tf >= 0);
 
     // If needed, ensure we can actually present to the surface using this queue
     if (params->surface) {
@@ -1044,16 +1057,6 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
             goto error;
         }
     }
-
-    // Fall back to supporting compute shaders via the graphics pool for
-    // devices which support compute shaders but not async compute.
-    if (idx_comp < 0 && qfs[idx_gfx].queueFlags & VK_QUEUE_COMPUTE_BIT)
-        idx_comp = idx_gfx;
-
-    if (idx_tf >= 0 && idx_tf != idx_gfx)
-        PL_INFO(vk, "Using async transfer (queue %d)", idx_tf);
-    if (idx_comp >= 0 && idx_comp != idx_gfx)
-        PL_INFO(vk, "Using async compute (queue %d)", idx_comp);
 
     // Now that we know which QFs we want, we can create the logical device
     qinfo_arr_t qinfos = {0};
@@ -1230,6 +1233,10 @@ static bool finalize_context(struct pl_vulkan *pl_vk, int max_glsl_version)
 {
     struct vk_ctx *vk = PL_PRIV(pl_vk);
 
+    pl_assert(vk->pool_graphics);
+    pl_assert(vk->pool_compute);
+    pl_assert(vk->pool_transfer);
+
     vk->ma = vk_malloc_create(vk);
     if (!vk->ma)
         return false;
@@ -1266,17 +1273,10 @@ static bool finalize_context(struct pl_vulkan *pl_vk, int max_glsl_version)
 
         if (vk->pools.elem[i] == vk->pool_graphics)
             pl_vk->queue_graphics = queues[i];
-        if (vk->pools.elem[i] == vk->pool_compute &&
-            vk->pool_compute != vk->pool_graphics)
-        {
+        if (vk->pools.elem[i] == vk->pool_compute)
             pl_vk->queue_compute = queues[i];
-        }
-        if (vk->pools.elem[i] == vk->pool_transfer &&
-            vk->pool_transfer != vk->pool_graphics &&
-            vk->pool_transfer != vk->pool_compute)
-        {
+        if (vk->pools.elem[i] == vk->pool_transfer)
             pl_vk->queue_transfer = queues[i];
-        }
     }
 
     return true;
@@ -1513,16 +1513,22 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
     struct {
         const struct pl_vulkan_queue *info;
         struct vk_cmdpool **pool;
+        VkQueueFlagBits flags; // *any* of these flags provide the cap
     } qinfos[] = {
         {
             .info = &params->queue_graphics,
             .pool = &vk->pool_graphics,
+            .flags = VK_QUEUE_GRAPHICS_BIT,
         }, {
             .info = &params->queue_compute,
             .pool = &vk->pool_compute,
+            .flags = VK_QUEUE_COMPUTE_BIT,
         }, {
             .info = &params->queue_transfer,
             .pool = &vk->pool_transfer,
+            .flags = VK_QUEUE_TRANSFER_BIT |
+                     VK_QUEUE_GRAPHICS_BIT |
+                     VK_QUEUE_COMPUTE_BIT,
         }
     };
 
@@ -1531,6 +1537,9 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
         struct vk_cmdpool **pool = qinfos[i].pool;
         if (!qinfos[i].info->count)
             continue;
+
+        // API sanity check
+        pl_assert(qfs[qf].queueFlags & qinfos[i].flags);
 
         // See if we already created a pool for this queue family
         for (int j = 0; j < i; j++) {
@@ -1550,11 +1559,19 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
             goto error;
         PL_ARRAY_APPEND(vk->alloc, vk->pools, *pool);
 
+        // Pre-emptively set "lower priority" pools as well
+        for (int j = i+1; j < PL_ARRAY_SIZE(qinfos); j++) {
+            if (qfs[qf].queueFlags & qinfos[j].flags)
+                *qinfos[j].pool = *pool;
+        }
+
 next_qf: ;
     }
 
-    if (!vk->pool_compute && (vk->pool_graphics->props.queueFlags & VK_QUEUE_COMPUTE_BIT))
-        vk->pool_compute = vk->pool_graphics;
+    if (!vk->pool_graphics) {
+        PL_ERR(vk, "No valid queues provided?");
+        goto error;
+    }
 
     if (!finalize_context(pl_vk, params->max_glsl_version))
         goto error;
@@ -1564,7 +1581,7 @@ next_qf: ;
 
 error:
     PL_FATAL(vk, "Failed importing vulkan device");
-    pl_free(tmp);
     pl_vulkan_destroy((pl_vulkan *) &pl_vk);
+    pl_free(tmp);
     return NULL;
 }

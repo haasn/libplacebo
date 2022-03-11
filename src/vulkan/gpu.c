@@ -169,18 +169,8 @@ struct vk_cmd *_begin_cmd(pl_gpu gpu, enum queue_type type, const char *label,
     case ANY:      pool = p->cmd ? p->cmd->pool : vk->pool_graphics; break;
     case GRAPHICS: pool = vk->pool_graphics; break;
     case COMPUTE:  pool = vk->pool_compute;  break;
-
-    // GRAPHICS and COMPUTE also imply TRANSFER capability (vulkan spec)
-    case TRANSFER:
-        pool = vk->pool_transfer;
-        if (!pool)
-            pool = vk->pool_compute;
-        if (!pool)
-            pool = vk->pool_graphics;
-        break;
-
-    default:
-        pl_unreachable();
+    case TRANSFER: pool = vk->pool_transfer; break;
+    default: pl_unreachable();
     }
 
     if (!p->cmd || p->cmd->pool != pool) {
@@ -450,15 +440,15 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     gpu->glsl = (struct pl_glsl_version) {
         .version = 450,
         .vulkan = true,
+        .compute = true,
+        .max_shmem_size = vk->limits.maxComputeSharedMemorySize,
+        .max_group_threads = vk->limits.maxComputeWorkGroupInvocations,
+        .max_group_size = {
+            vk->limits.maxComputeWorkGroupSize[0],
+            vk->limits.maxComputeWorkGroupSize[1],
+            vk->limits.maxComputeWorkGroupSize[2],
+        },
     };
-
-    if (vk->pool_compute) {
-        gpu->glsl.compute = true;
-        gpu->glsl.max_shmem_size = vk->limits.maxComputeSharedMemorySize;
-        gpu->glsl.max_group_threads = vk->limits.maxComputeWorkGroupInvocations;
-        for (int i = 0; i < 3; i++)
-            gpu->glsl.max_group_size[i] = vk->limits.maxComputeWorkGroupSize[i];
-    }
 
     VkShaderStageFlags req_stages = VK_SHADER_STAGE_FRAGMENT_BIT |
                                     VK_SHADER_STAGE_COMPUTE_BIT;
@@ -514,7 +504,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
             vk->limits.maxComputeWorkGroupCount[2],
         },
         .fragment_queues    = vk->pool_graphics->num_queues,
-        .compute_queues     = vk->pool_compute ? vk->pool_compute->num_queues : 0,
+        .compute_queues     = vk->pool_compute->num_queues,
     };
 
     gpu->export_caps.buf = vk_malloc_handle_caps(vk->ma, false);

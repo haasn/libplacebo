@@ -128,14 +128,7 @@ typedef const PL_STRUCT(pl_vulkan) {
     // The device features that were enabled at device creation time.
     const VkPhysicalDeviceFeatures2 *features;
 
-    // The explicit queue families we are using to provide a given capability,
-    // or {0} if no appropriate dedicated queue family exists for this
-    // operation type.
-    //
-    // It's guaranteed that `queue_graphics` is always set, but the existence
-    // of the other two is optional, and libplacebo will only set them if
-    // they are different from the graphics queue. Note that queue_compute
-    // and queue_transfer may refer to the same queue family index.
+    // The explicit queue families we are using to provide a given capability.
     struct pl_vulkan_queue queue_graphics; // provides VK_QUEUE_GRAPHICS_BIT
     struct pl_vulkan_queue queue_compute;  // provides VK_QUEUE_COMPUTE_BIT
     struct pl_vulkan_queue queue_transfer; // provides VK_QUEUE_TRANSFER_BIT

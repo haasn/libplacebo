@@ -139,7 +139,7 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
     if (params->storable) {
         mparams.buf_usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         *align = pl_lcm(*align, vk->limits.minStorageBufferOffsetAlignment);
-        buf_vk->update_queue = vk->pool_compute ? COMPUTE : GRAPHICS;
+        buf_vk->update_queue = COMPUTE;
         mem_type = PL_BUF_MEM_DEVICE;
         if (params->format) {
             mparams.buf_usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;

@@ -662,7 +662,7 @@ static enum queue_type vk_img_copy_queue(pl_gpu gpu, pl_tex tex,
 
     const struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     enum queue_type queue = tex_vk->transfer_queue;
-    if (queue != TRANSFER || !vk->pool_transfer)
+    if (queue != TRANSFER)
         return queue;
 
     VkExtent3D alignment = vk->pool_transfer->props.minImageTransferGranularity;
