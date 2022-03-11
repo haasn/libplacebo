@@ -1226,6 +1226,62 @@ error:
     return false;
 }
 
+static bool finalize_context(struct pl_vulkan *pl_vk, int max_glsl_version)
+{
+    struct vk_ctx *vk = PL_PRIV(pl_vk);
+
+    vk->ma = vk_malloc_create(vk);
+    if (!vk->ma)
+        return false;
+
+    pl_vk->gpu = pl_gpu_create_vk(vk);
+    if (!pl_vk->gpu)
+        return false;
+
+    // Blacklist / restrict features
+    if (max_glsl_version) {
+        struct pl_glsl_version *glsl = (struct pl_glsl_version *) &pl_vk->gpu->glsl;
+        glsl->version = PL_MIN(glsl->version, max_glsl_version);
+        glsl->version = PL_MAX(glsl->version, 140); // required for GL_KHR_vulkan_glsl
+        PL_INFO(vk, "Restricting GLSL version to %d... new version is %d",
+                max_glsl_version, glsl->version);
+    }
+
+    // Expose the resulting vulkan objects
+    pl_vk->instance = vk->inst;
+    pl_vk->phys_device = vk->physd;
+    pl_vk->device = vk->dev;
+    pl_vk->api_version = vk->api_ver;
+    pl_vk->extensions = vk->exts.elem;
+    pl_vk->num_extensions = vk->exts.num;
+    pl_vk->features = &vk->features;
+    pl_vk->num_queues = vk->pools.num;
+    pl_vk->queues = pl_calloc_ptr(pl_vk, vk->pools.num, pl_vk->queues);
+    for (int i = 0; i < vk->pools.num; i++) {
+        struct pl_vulkan_queue *queues = (struct pl_vulkan_queue *) pl_vk->queues;
+        queues[i] = (struct pl_vulkan_queue) {
+            .index = vk->pools.elem[i]->qf,
+            .count = vk->pools.elem[i]->num_queues,
+        };
+
+        if (vk->pools.elem[i] == vk->pool_graphics)
+            pl_vk->queue_graphics = queues[i];
+        if (vk->pools.elem[i] == vk->pool_compute &&
+            vk->pool_compute != vk->pool_graphics)
+        {
+            pl_vk->queue_compute = queues[i];
+        }
+        if (vk->pools.elem[i] == vk->pool_transfer &&
+            vk->pool_transfer != vk->pool_graphics &&
+            vk->pool_transfer != vk->pool_compute)
+        {
+            pl_vk->queue_transfer = queues[i];
+        }
+    }
+
+    return true;
+}
+
 pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
 {
     params = PL_DEF(params, &pl_vulkan_default_params);
@@ -1323,47 +1379,8 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
     if (!device_init(vk, params))
         goto error;
 
-    vk->ma = vk_malloc_create(vk);
-    if (!vk->ma)
+    if (!finalize_context(pl_vk, params->max_glsl_version))
         goto error;
-
-    pl_vk->gpu = pl_gpu_create_vk(vk);
-    if (!pl_vk->gpu)
-        goto error;
-
-    // Blacklist / restrict features
-    if (params->max_glsl_version) {
-        struct pl_glsl_version *glsl = (struct pl_glsl_version *) &pl_vk->gpu->glsl;
-        glsl->version = PL_MIN(glsl->version, params->max_glsl_version);
-        glsl->version = PL_MAX(glsl->version, 140); // required for GL_KHR_vulkan_glsl
-        PL_INFO(vk, "Restricting GLSL version to %d... new version is %d",
-                params->max_glsl_version, glsl->version);
-    }
-
-    // Expose the resulting vulkan objects
-    pl_vk->instance = vk->inst;
-    pl_vk->phys_device = vk->physd;
-    pl_vk->device = vk->dev;
-    pl_vk->api_version = vk->api_ver;
-    pl_vk->extensions = vk->exts.elem;
-    pl_vk->num_extensions = vk->exts.num;
-    pl_vk->features = &vk->features;
-    pl_vk->num_queues = vk->pools.num;
-    pl_vk->queues = pl_calloc_ptr(pl_vk, vk->pools.num, pl_vk->queues);
-    for (int i = 0; i < vk->pools.num; i++) {
-        struct pl_vulkan_queue *queues = (struct pl_vulkan_queue *) pl_vk->queues;
-        queues[i] = (struct pl_vulkan_queue) {
-            .index = vk->pools.elem[i]->qf,
-            .count = vk->pools.elem[i]->num_queues,
-        };
-
-        if (vk->pools.elem[i] == vk->pool_graphics)
-            pl_vk->queue_graphics = queues[i];
-        if (vk->pools.elem[i] == vk->pool_compute && vk->pool_compute != vk->pool_graphics)
-            pl_vk->queue_compute = queues[i];
-        if (vk->pools.elem[i] == vk->pool_compute)
-            pl_vk->queue_compute = queues[i];
-    }
 
     return pl_vk;
 
@@ -1539,47 +1556,8 @@ next_qf: ;
     if (!vk->pool_compute && (vk->pool_graphics->props.queueFlags & VK_QUEUE_COMPUTE_BIT))
         vk->pool_compute = vk->pool_graphics;
 
-    vk->ma = vk_malloc_create(vk);
-    if (!vk->ma)
+    if (!finalize_context(pl_vk, params->max_glsl_version))
         goto error;
-
-    pl_vk->gpu = pl_gpu_create_vk(vk);
-    if (!pl_vk->gpu)
-        goto error;
-
-    // Blacklist / restrict features
-    if (params->max_glsl_version) {
-        struct pl_glsl_version *glsl = (struct pl_glsl_version *) &pl_vk->gpu->glsl;
-        glsl->version = PL_MIN(glsl->version, params->max_glsl_version);
-        PL_INFO(vk, "Restricting GLSL version to %d... new version is %d",
-                params->max_glsl_version, glsl->version);
-    }
-
-    // Expose the resulting vulkan objects
-    pl_vk->instance = vk->inst;
-    pl_vk->phys_device = vk->physd;
-    pl_vk->device = vk->dev;
-    pl_vk->api_version = vk->api_ver;
-    pl_vk->extensions = vk->exts.elem;
-    pl_vk->num_extensions = vk->exts.num;
-    pl_vk->features = &vk->features;
-    pl_vk->num_queues = vk->pools.num;
-    pl_vk->queues = pl_calloc_ptr(pl_vk, vk->pools.num, pl_vk->queues);
-    struct pl_vulkan_queue *queues = (struct pl_vulkan_queue *) pl_vk->queues;
-
-    for (int i = 0; i < vk->pools.num; i++) {
-        queues[i] = (struct pl_vulkan_queue) {
-            .index = vk->pools.elem[i]->qf,
-            .count = vk->pools.elem[i]->num_queues,
-        };
-
-        if (vk->pools.elem[i] == vk->pool_graphics)
-            pl_vk->queue_graphics = queues[i];
-        if (vk->pools.elem[i] == vk->pool_compute && vk->pool_compute != vk->pool_graphics)
-            pl_vk->queue_compute = queues[i];
-        if (vk->pools.elem[i] == vk->pool_compute)
-            pl_vk->queue_compute = queues[i];
-    }
 
     pl_free(tmp);
     return pl_vk;
