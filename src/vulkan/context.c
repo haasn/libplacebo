@@ -424,8 +424,6 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
         break;
     }
 
-#endif
-
     enum pl_log_level lev;
     switch (sev) {
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:     lev = PL_LOG_ERR;   break;
@@ -437,7 +435,6 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
 
     pl_msg(log, lev, "vk %s", data->pMessage);
 
-#ifndef MSAN
     for (int i = 0; i < data->queueLabelCount; i++)
         pl_msg(log, lev, "    during %s", data->pQueueLabels[i].pLabelName);
     for (int i = 0; i < data->cmdBufLabelCount; i++)
@@ -449,7 +446,6 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
                obj->pObjectName ? obj->pObjectName : "anon",
                (unsigned long long) obj->objectHandle);
     }
-#endif
 
     // The return value of this function determines whether the call will
     // be explicitly aborted (to prevent GPU errors) or not. In this case,
@@ -461,9 +457,12 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
     if (is_error) {
         pl_log_stack_trace(log, lev);
         pl_debug_abort();
+        return true;
     }
 
-    return is_error;
+#endif // MSAN
+
+    return false;
 }
 
 static PFN_vkGetInstanceProcAddr get_proc_addr_fallback(pl_log log,
