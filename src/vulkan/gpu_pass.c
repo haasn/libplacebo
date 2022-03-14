@@ -164,24 +164,11 @@ static VkResult vk_compile_glsl(pl_gpu gpu, void *alloc,
 {
     struct pl_vk *p = PL_PRIV(gpu);
 
-    static const char *shader_names[] = {
-        [GLSL_SHADER_VERTEX]   = "vertex",
-        [GLSL_SHADER_FRAGMENT] = "fragment",
-        [GLSL_SHADER_COMPUTE]  = "compute",
-    };
-
-    PL_DEBUG(gpu, "%s shader source:", shader_names[stage]);
-    pl_msg_source(gpu->log, PL_LOG_DEBUG, shader);
-
     clock_t start = clock();
     *out_spirv = spirv_compile_glsl(p->spirv, alloc, &gpu->glsl, stage, shader);
-    if (!out_spirv->len) {
-        pl_msg_source(gpu->log, PL_LOG_ERR, shader);
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-
     pl_log_cpu_time(gpu->log, start, clock(), "translating SPIR-V");
-    return VK_SUCCESS;
+
+    return out_spirv->len ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
 }
 
 static const VkShaderStageFlags stageFlags[] = {

@@ -96,17 +96,6 @@ static bool gl_attach_shader(pl_gpu gpu, GLuint program, GLenum type, const char
 
     enum pl_log_level level = gl_log_level(status, log_length);
     if (pl_msg_test(gpu->log, level)) {
-        static const char *shader_name;
-        switch (type) {
-        case GL_VERTEX_SHADER:   shader_name = "vertex"; break;
-        case GL_FRAGMENT_SHADER: shader_name = "fragment"; break;
-        case GL_COMPUTE_SHADER:  shader_name = "compute"; break;
-        default: pl_unreachable();
-        };
-
-        PL_MSG(gpu, level, "%s shader source:", shader_name);
-        pl_msg_source(gpu->log, level, src);
-
         GLchar *logstr = pl_zalloc(NULL, log_length + 1);
         glGetShaderInfoLog(shader, log_length, NULL, logstr);
         PL_MSG(gpu, level, "shader compile log (status=%d): %s", status, logstr);

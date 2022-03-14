@@ -477,10 +477,8 @@ static ID3DBlob *shader_compile_glsl(pl_gpu gpu, pl_pass pass,
     pl_log_cpu_time(gpu->log, after_spvc, clock(), "translating HLSL to DXBC");
 
 error:;
-    int level = out ? PL_LOG_DEBUG : PL_LOG_ERR;
-    PL_MSG(gpu, level, "%s shader GLSL source:", shader_names[stage]);
-    pl_msg_source(gpu->ctx, level, glsl);
     if (hlsl) {
+        int level = out ? PL_LOG_DEBUG : PL_LOG_ERR;
         PL_MSG(gpu, level, "%s shader HLSL source:", shader_names[stage]);
         pl_msg_source(gpu->ctx, level, hlsl);
     }

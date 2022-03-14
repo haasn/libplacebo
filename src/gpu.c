@@ -1381,6 +1381,35 @@ const struct pl_blend_params pl_alpha_overlay = {
     .dst_alpha  = PL_BLEND_ONE_MINUS_SRC_ALPHA,
 };
 
+static inline void log_shader_sources(pl_log log, enum pl_log_level level,
+                                      const struct pl_pass_params *params)
+{
+    if (!pl_msg_test(log, level) || !params->glsl_shader)
+        return;
+
+    switch (params->type) {
+    case PL_PASS_RASTER:
+        if (!params->vertex_shader)
+            return;
+        pl_msg(log, level, "vertex shader source:");
+        pl_msg_source(log, level, params->vertex_shader);
+        pl_msg(log, level, "fragment shader source:");
+        pl_msg_source(log, level, params->glsl_shader);
+        return;
+
+    case PL_PASS_COMPUTE:
+        pl_msg(log, level, "compute shader source:");
+        pl_msg_source(log, level, params->glsl_shader);
+        return;
+
+    case PL_PASS_INVALID:
+    case PL_PASS_TYPE_COUNT:
+        break;
+    }
+
+    pl_unreachable();
+}
+
 pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 {
     struct pl_pass_params fixed;
@@ -1448,9 +1477,15 @@ pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     require(params->push_constants_size == PL_ALIGN2(params->push_constants_size, 4));
 
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
-    return impl->pass_create(gpu, params);
+    log_shader_sources(gpu->log, PL_LOG_DEBUG, params);
+    pl_pass pass = impl->pass_create(gpu, params);
+    if (!pass)
+        goto error;
+
+    return pass;
 
 error:
+    log_shader_sources(gpu->log, PL_LOG_ERR, params);
     return NULL;
 }
 
