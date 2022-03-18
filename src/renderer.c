@@ -2419,12 +2419,19 @@ static void fix_color_space(struct pl_frame *frame)
     }
 }
 
-static bool pass_infer_state(struct pass_state *pass)
+static void pass_uninit(struct pass_state *pass)
+{
+    pl_renderer rr = pass->rr;
+    pl_dispatch_abort(rr->dp, &pass->img.sh);
+    pl_free_ptr(&pass->tmp);
+}
+
+static bool pass_init(struct pass_state *pass)
 {
     struct pl_frame *image = &pass->image;
     struct pl_frame *target = &pass->target;
     if (!validate_structs(pass->rr, image, target))
-        return false;
+        goto error;
 
     fix_refs_and_rects(pass);
     fix_color_space(image);
@@ -2462,7 +2469,30 @@ static bool pass_infer_state(struct pass_state *pass)
         }
     }
 
+    pass->tmp = pl_tmp(NULL);
     return true;
+
+error:
+    pass_uninit(pass);
+    return false;
+}
+
+static void pass_begin_frame(struct pass_state *pass)
+{
+    pl_renderer rr = pass->rr;
+    const struct pl_render_params *params = pass->params;
+
+    pl_dispatch_callback(rr->dp, pass, info_callback);
+    pl_dispatch_reset_frame(rr->dp);
+
+    for (int i = 0; i < params->num_hooks; i++) {
+        if (params->hooks[i]->reset)
+            params->hooks[i]->reset(params->hooks[i]->priv);
+    }
+
+    size_t size = rr->fbos.num * sizeof(bool);
+    pass->fbos_used = pl_realloc(pass->tmp, pass->fbos_used, size);
+    memset(pass->fbos_used, 0, size);
 }
 
 static bool draw_empty_overlays(pl_renderer rr,
@@ -2483,6 +2513,7 @@ static bool draw_empty_overlays(pl_renderer rr,
         .src_ref = -1,
     };
 
+    // Can't use `pass_init` because `image` is not set!
     struct pl_frame *target = &pass.target;
     require(target->num_planes > 0 && target->num_planes <= PL_MAX_PLANES);
     for (int i = 0; i < target->num_planes; i++)
@@ -2493,9 +2524,7 @@ static bool draw_empty_overlays(pl_renderer rr,
     fix_color_space(target);
     pass.dst_ref = frame_ref(target);
 
-    pl_dispatch_callback(rr->dp, &pass, info_callback);
-    pl_dispatch_reset_frame(rr->dp);
-
+    pass_begin_frame(&pass);
     pl_tex ref = target->planes[pass.dst_ref].texture;
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];
@@ -2517,6 +2546,7 @@ static bool draw_empty_overlays(pl_renderer rr,
                       &tscale);
     }
 
+    pass_uninit(&pass);
     return true;
 }
 
@@ -2537,36 +2567,23 @@ bool pl_render_image(pl_renderer rr, const struct pl_frame *pimage,
         .info.stage = PL_RENDER_STAGE_FRAME,
     };
 
-    if (!pass_infer_state(&pass))
+    if (!pass_init(&pass))
         return false;
 
-    pass.tmp = pl_tmp(NULL),
-    pass.fbos_used = pl_calloc(pass.tmp, rr->fbos.num, sizeof(bool));
-
-    pl_dispatch_callback(rr->dp, &pass, info_callback);
-    pl_dispatch_reset_frame(rr->dp);
-
-    for (int i = 0; i < params->num_hooks; i++) {
-        if (params->hooks[i]->reset)
-            params->hooks[i]->reset(params->hooks[i]->priv);
-    }
-
+    pass_begin_frame(&pass);
     if (!pass_read_image(&pass))
         goto error;
-
     if (!pass_scale_main(&pass))
         goto error;
-
     if (!pass_output_target(&pass))
         goto error;
 
-    pl_free(pass.tmp);
+    pass_uninit(&pass);
     return true;
 
 error:
-    pl_dispatch_abort(rr->dp, &pass.img.sh);
-    pl_free(pass.tmp);
     PL_ERR(rr, "Failed rendering image!");
+    pass_uninit(&pass);
     return false;
 }
 
@@ -2689,7 +2706,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
     if (rr->disable_mixing)
         goto fallback;
-    if (!pass_infer_state(&pass))
+    if (!pass_init(&pass))
         return false;
     if (!pass.fbofmt[4])
         goto fallback;
@@ -2852,9 +2869,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
             struct pass_state inter_pass = {
                 .rr = rr,
-                .tmp = pass.tmp,
                 .params = pass.params,
-                .fbos_used = pl_calloc(pass.tmp, rr->fbos.num, sizeof(bool)),
                 .image = *images->frames[i],
                 .target = *ptarget,
                 .info.stage = PL_RENDER_STAGE_FRAME,
@@ -2862,20 +2877,14 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
             // Render a single frame up to `pass_output_target`
             memcpy(inter_pass.fbofmt, pass.fbofmt, sizeof(pass.fbofmt));
-            if (!pass_infer_state(&inter_pass))
+            if (!pass_init(&inter_pass))
                 goto error;
 
-            pl_dispatch_callback(rr->dp, &inter_pass, info_callback);
-            pl_dispatch_reset_frame(rr->dp);
-            for (int n = 0; n < params->num_hooks; n++) {
-                if (params->hooks[n]->reset)
-                    params->hooks[n]->reset(params->hooks[n]->priv);
-            }
-
-            if (!pass_read_image(&inter_pass))
-                goto error;
-            if (!pass_scale_main(&inter_pass))
-                goto error;
+            pass_begin_frame(&inter_pass);
+            if (!(ok = pass_read_image(&inter_pass)))
+                goto inter_pass_error;
+            if (!(ok = pass_scale_main(&inter_pass)))
+                goto inter_pass_error;
 
             pl_assert(inter_pass.img.w == out_w &&
                       inter_pass.img.h == out_h);
@@ -2897,7 +2906,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                     .target = f->tex,
                 ));
                 if (!ok)
-                    goto error;
+                    goto inter_pass_error;
             }
 
             float sx = out_w / pl_rect_w(inter_pass.dst_rect),
@@ -2927,6 +2936,12 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             f->color = inter_pass.img.color;
             f->comps = inter_pass.img.comps;
             pl_assert(inter_pass.img.repr.alpha != PL_ALPHA_INDEPENDENT);
+            // fall through
+
+inter_pass_error:
+            pass_uninit(&inter_pass);
+            if (!ok)
+                goto error;
         }
 
         pl_assert(fidx < MAX_MIX_FRAMES);
@@ -2950,8 +2965,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     }
 
     // Sample and mix the output color
-    pl_dispatch_callback(rr->dp, &pass, info_callback);
-    pl_dispatch_reset_frame(rr->dp);
+    pass_begin_frame(&pass);
     pass.info.index = fidx;
 
     pl_shader sh = pl_dispatch_begin(rr->dp);
@@ -3014,7 +3028,6 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
          "}                  \n");
 
     // Dispatch this to the destination
-    pass.fbos_used = pl_calloc(pass.tmp, rr->fbos.num, sizeof(bool));
     pass.img = (struct img) {
         .sh = sh,
         .w = out_w,
@@ -3028,15 +3041,10 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         },
     };
 
-    for (int i = 0; i < params->num_hooks; i++) {
-        if (params->hooks[i]->reset)
-            params->hooks[i]->reset(params->hooks[i]->priv);
-    }
-
     if (!pass_output_target(&pass))
         goto fallback;
 
-    pl_free(pass.tmp);
+    pass_uninit(&pass);
     return true;
 
 error:
@@ -3045,7 +3053,7 @@ error:
     // fall through
 
 fallback:
-    pl_free(pass.tmp);
+    pass_uninit(&pass);
     return pl_render_image(rr, refimg, ptarget, params);
 
 
