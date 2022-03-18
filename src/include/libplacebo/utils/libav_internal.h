@@ -915,6 +915,39 @@ error:
 }
 
 #ifdef HAVE_LAV_VULKAN
+static bool pl_acquire_avframe(pl_gpu gpu, struct pl_frame *frame)
+{
+    const AVFrame *avframe = frame->user_data;
+    AVVkFrame *vkf = (AVVkFrame *) avframe->data[0];
+
+    for (int n = 0; n < frame->num_planes; n++) {
+        pl_tex tex = frame->planes[n].texture;
+        pl_vulkan_release(gpu, tex, vkf->layout[n], (pl_vulkan_sem) {
+            .sem = vkf->sem[n],
+            .value = vkf->sem_value[n],
+        });
+    }
+
+    return true;
+}
+
+static void pl_release_avframe(pl_gpu gpu, struct pl_frame *frame)
+{
+    const AVFrame *avframe = frame->user_data;
+    AVVkFrame *vkf = (AVVkFrame *) avframe->data[0];
+
+    for (int n = 0; n < frame->num_planes; n++) {
+        pl_tex tex = frame->planes[n].texture;
+        int ok = pl_vulkan_hold_raw(gpu, tex, &vkf->layout[n], (pl_vulkan_sem) {
+            .sem = vkf->sem[n],
+            .value = vkf->sem_value[n] + 1,
+        });
+
+        vkf->access[n] = 0;
+        vkf->sem_value[n] += !!ok;
+    }
+}
+
 static bool pl_map_avframe_vulkan(pl_gpu gpu, struct pl_frame *out,
                                   const AVFrame *frame)
 {
@@ -929,47 +962,29 @@ static bool pl_map_avframe_vulkan(pl_gpu gpu, struct pl_frame *out,
         return false;
 
     for (int n = 0; n < out->num_planes; n++) {
-        pl_tex *tex = &out->planes[n].texture;
+        struct pl_plane *plane = &out->planes[n];
         bool chroma = n == 1 || n == 2;
-        *tex = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
+        plane->texture = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
             .image = vkf->img[n],
             .width = AV_CEIL_RSHIFT(frame->width, chroma ? desc->log2_chroma_w : 0),
             .height = AV_CEIL_RSHIFT(frame->height, chroma ? desc->log2_chroma_h : 0),
             .format = vk_fmt[n],
             .usage = vkfc->usage,
         ));
-        if (!*tex)
+        if (!plane->texture)
             return false;
-
-        pl_vulkan_release(gpu, *tex, vkf->layout[n], (pl_vulkan_sem) {
-            .sem = vkf->sem[n],
-            .value = vkf->sem_value[n],
-        });
     }
 
+    out->acquire = pl_acquire_avframe;
+    out->release = pl_release_avframe;
     pl_fix_hwframe_sample_depth(out, frame);
     return true;
 }
 
 static void pl_unmap_avframe_vulkan(pl_gpu gpu, struct pl_frame *frame)
 {
-    const AVFrame *avframe = frame->user_data;
-    AVVkFrame *vkf = (AVVkFrame *) avframe->data[0];
-    int ok;
-
-    for (int n = 0; n < frame->num_planes; n++) {
-        pl_tex *tex = &frame->planes[n].texture;
-        if (!*tex)
-            continue;
-        ok = pl_vulkan_hold_raw(gpu, *tex, &vkf->layout[n], (pl_vulkan_sem) {
-            .sem = vkf->sem[n],
-            .value = vkf->sem_value[n] + 1,
-        });
-
-        vkf->access[n] = 0;
-        vkf->sem_value[n] += !!ok;
-        pl_tex_destroy(gpu, tex);
-    }
+    for (int n = 0; n < frame->num_planes; n++)
+        pl_tex_destroy(gpu, &frame->planes[n].texture);
 }
 #endif
 
