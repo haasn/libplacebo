@@ -2273,24 +2273,24 @@ static bool validate_structs(pl_renderer rr,
 {
     // Rendering to/from a frame with no planes is technically allowed, but so
     // pointless that it's more likely to be a user error worth catching.
-    require(image->num_planes > 0 && image->num_planes <= PL_MAX_PLANES);
     require(target->num_planes > 0 && target->num_planes <= PL_MAX_PLANES);
-    for (int i = 0; i < image->num_planes; i++)
-        validate_plane(image->planes[i], sampleable);
     for (int i = 0; i < target->num_planes; i++)
         validate_plane(target->planes[i], renderable);
-
-    float src_w = pl_rect_w(image->crop), src_h = pl_rect_h(image->crop);
-    float dst_w = pl_rect_w(target->crop), dst_h = pl_rect_h(target->crop);
-    require(!src_w == !src_h);
-    require(!dst_w == !dst_h);
-
-    require(image->num_overlays >= 0);
+    require(!pl_rect_w(target->crop) == !pl_rect_h(target->crop));
     require(target->num_overlays >= 0);
-    for (int i = 0; i < image->num_overlays; i++)
-        validate_overlay(image->overlays[i]);
     for (int i = 0; i < target->num_overlays; i++)
         validate_overlay(target->overlays[i]);
+
+    if (!image)
+        return true;
+
+    require(image->num_planes > 0 && image->num_planes <= PL_MAX_PLANES);
+    for (int i = 0; i < image->num_planes; i++)
+        validate_plane(image->planes[i], sampleable);
+    require(!pl_rect_w(image->crop) == !pl_rect_h(image->crop));
+    require(image->num_overlays >= 0);
+    for (int i = 0; i < image->num_overlays; i++)
+        validate_overlay(image->overlays[i]);
 
     return true;
 }
@@ -2318,26 +2318,48 @@ static int frame_ref(const struct pl_frame *frame)
 
 static void fix_refs_and_rects(struct pass_state *pass)
 {
-    struct pl_frame *image = &pass->image;
     struct pl_frame *target = &pass->target;
-    pass->src_ref = frame_ref(image);
+    struct pl_rect2df *dst = &target->crop;
     pass->dst_ref = frame_ref(target);
-
-    // Fix the rendering rects
-    struct pl_rect2df *src = &image->crop, *dst = &target->crop;
-    pl_tex src_ref = image->planes[pass->src_ref].texture;
     pl_tex dst_ref = target->planes[pass->dst_ref].texture;
     int dst_w = dst_ref->params.w, dst_h = dst_ref->params.h;
-
-    if ((!src->x0 && !src->x1) || (!src->y0 && !src->y1)) {
-        src->x1 = src_ref->params.w;
-        src->y1 = src_ref->params.h;
-    };
 
     if ((!dst->x0 && !dst->x1) || (!dst->y0 && !dst->y1)) {
         dst->x1 = dst_w;
         dst->y1 = dst_h;
     }
+
+    if (pass->src_ref < 0) {
+        // Simplified version of the below code which only rounds the target
+        // rect but doesn't retroactively apply the crop to the image
+        pass->rotation = pl_rotation_normalize(-target->rotation);
+        pl_rect2df_rotate(dst, -pass->rotation);
+        if (pass->rotation % PL_ROTATION_180 == PL_ROTATION_90)
+            PL_SWAP(dst_w, dst_h);
+
+        *dst = (struct pl_rect2df) {
+            .x0 = roundf(PL_CLAMP(dst->x0, 0.0, dst_w)),
+            .y0 = roundf(PL_CLAMP(dst->y0, 0.0, dst_w)),
+            .x1 = roundf(PL_CLAMP(dst->x1, 0.0, dst_w)),
+            .y1 = roundf(PL_CLAMP(dst->y1, 0.0, dst_w)),
+        };
+
+        pass->dst_rect = (struct pl_rect2d) {
+            dst->x0, dst->y0, dst->x1, dst->y1,
+        };
+
+        return;
+    }
+
+    struct pl_frame *image = &pass->image;
+    struct pl_rect2df *src = &image->crop;
+    pass->src_ref = frame_ref(image);
+    pl_tex src_ref = image->planes[pass->src_ref].texture;
+
+    if ((!src->x0 && !src->x1) || (!src->y0 && !src->y1)) {
+        src->x1 = src_ref->params.w;
+        src->y1 = src_ref->params.h;
+    };
 
     // Compute end-to-end rotation
     pass->rotation = pl_rotation_normalize(image->rotation - target->rotation);
@@ -2428,17 +2450,19 @@ static void pass_uninit(struct pass_state *pass)
 
 static bool pass_init(struct pass_state *pass)
 {
-    struct pl_frame *image = &pass->image;
+    struct pl_frame *image = pass->src_ref < 0 ? NULL : &pass->image;
     struct pl_frame *target = &pass->target;
     if (!validate_structs(pass->rr, image, target))
         goto error;
 
     fix_refs_and_rects(pass);
-    fix_color_space(image);
     find_fbo_format(pass);
 
     // Infer the target color space info based on the image's
-    pl_color_space_infer_ref(&target->color, &image->color);
+    if (image) {
+        fix_color_space(image);
+        pl_color_space_infer_ref(&target->color, &image->color);
+    }
     fix_color_space(target);
 
     // Detect the presence of an alpha channel in the frames and explicitly
@@ -2449,7 +2473,7 @@ static bool pass_init(struct pass_state *pass)
     // are usually independent but windowing systems usually expect
     // premultiplied. (We also premultiply for internal rendering, so this
     // way of doing it avoids a possible division-by-zero path!)
-    if (!image->repr.alpha) {
+    if (image && !image->repr.alpha) {
         for (int i = 0; i < image->num_planes; i++) {
             const struct pl_plane *plane = &image->planes[i];
             for (int c = 0; c < plane->components; c++) {
@@ -2508,24 +2532,17 @@ static bool draw_empty_overlays(pl_renderer rr,
     struct pass_state pass = {
         .rr = rr,
         .params = params,
+        .src_ref = -1,
         .target = *ptarget,
         .info.stage = PL_RENDER_STAGE_BLEND,
         .info.index = 0,
-        .src_ref = -1,
     };
 
-    // Can't use `pass_init` because `image` is not set!
-    struct pl_frame *target = &pass.target;
-    require(target->num_planes > 0 && target->num_planes <= PL_MAX_PLANES);
-    for (int i = 0; i < target->num_planes; i++)
-        validate_plane(target->planes[i], renderable);
-    require(target->num_overlays >= 0);
-    for (int i = 0; i < target->num_overlays; i++)
-        validate_overlay(target->overlays[i]);
-    fix_color_space(target);
-    pass.dst_ref = frame_ref(target);
+    if (!pass_init(&pass))
+        return false;
 
     pass_begin_frame(&pass);
+    struct pl_frame *target = &pass.target;
     pl_tex ref = target->planes[pass.dst_ref].texture;
     for (int p = 0; p < target->num_planes; p++) {
         const struct pl_plane *plane = &target->planes[p];
