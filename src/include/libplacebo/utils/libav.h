@@ -25,6 +25,7 @@ PL_API_BEGIN
 
 #include <libavformat/avformat.h>
 #include <libavutil/frame.h>
+#include <libavutil/version.h>
 #include <libavcodec/avcodec.h>
 
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 16, 100)
