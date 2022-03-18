@@ -2509,7 +2509,8 @@ static bool draw_empty_overlays(pl_renderer rr,
         .rr = rr,
         .params = params,
         .target = *ptarget,
-        .info.stage = PL_RENDER_STAGE_FRAME,
+        .info.stage = PL_RENDER_STAGE_BLEND,
+        .info.index = 0,
         .src_ref = -1,
     };
 
