@@ -2441,17 +2441,33 @@ static void fix_color_space(struct pl_frame *frame)
     }
 }
 
+static bool acquire_frame(struct pass_state *pass, struct pl_frame *frame)
+{
+    if (!frame || !frame->acquire)
+        return true;
+
+    return frame->acquire(pass->rr->gpu, frame);
+}
+
 static void pass_uninit(struct pass_state *pass)
 {
     pl_renderer rr = pass->rr;
     pl_dispatch_abort(rr->dp, &pass->img.sh);
+    if (pass->image.release)
+        pass->image.release(rr->gpu, &pass->image);
+    if (pass->target.release)
+        pass->target.release(rr->gpu, &pass->target);
     pl_free_ptr(&pass->tmp);
 }
 
-static bool pass_init(struct pass_state *pass)
+static bool pass_init(struct pass_state *pass, bool acquire_image)
 {
     struct pl_frame *image = pass->src_ref < 0 ? NULL : &pass->image;
     struct pl_frame *target = &pass->target;
+    if (acquire_image && !acquire_frame(pass, image))
+        goto error;
+    if (!acquire_frame(pass, target))
+        goto error;
     if (!validate_structs(pass->rr, image, target))
         goto error;
 
@@ -2538,7 +2554,7 @@ static bool draw_empty_overlays(pl_renderer rr,
         .info.index = 0,
     };
 
-    if (!pass_init(&pass))
+    if (!pass_init(&pass, false))
         return false;
 
     pass_begin_frame(&pass);
@@ -2585,7 +2601,7 @@ bool pl_render_image(pl_renderer rr, const struct pl_frame *pimage,
         .info.stage = PL_RENDER_STAGE_FRAME,
     };
 
-    if (!pass_init(&pass))
+    if (!pass_init(&pass, true))
         return false;
 
     pass_begin_frame(&pass);
@@ -2724,7 +2740,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
     if (rr->disable_mixing)
         goto fallback;
-    if (!pass_init(&pass))
+    if (!pass_init(&pass, false))
         return false;
     if (!pass.fbofmt[4])
         goto fallback;
@@ -2895,7 +2911,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
             // Render a single frame up to `pass_output_target`
             memcpy(inter_pass.fbofmt, pass.fbofmt, sizeof(pass.fbofmt));
-            if (!pass_init(&inter_pass))
+            if (!pass_init(&inter_pass, true))
                 goto error;
 
             pass_begin_frame(&inter_pass);

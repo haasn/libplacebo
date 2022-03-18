@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     4,
     # API version
     {
+      '202': 'add pl_frame.acquire/release',
       '201': 'add pl_vulkan.(un)lock_queue',
       '200': 'always set pl_vulkan.queue_*',
       '199': 'add pl_plane.flipped',

@@ -491,6 +491,30 @@ struct pl_frame {
     int num_planes;
     struct pl_plane planes[PL_MAX_PLANES];
 
+    // If set, will be called immediately before GPU access to this frame. This
+    // function *may* be used to, for example, perform synchronization with
+    // external APIs (e.g. `pl_vulkan_hold/release`). If your mapping requires
+    // a memcpy of some sort (e.g. pl_tex_transfer), users *should* instead do
+    // the memcpy up-front and avoid the use of these callbacks - because they
+    // might be called multiple times on the same frame.
+    //
+    // This function *may* arbitrarily mutate the `pl_frame`, but it *should*
+    // ideally only update `planes` - in particular, color metadata and so
+    // forth should be provided up-front as best as possible. Note that changes
+    // here will not be reflected back to the structs provided in the original
+    // `pl_render_*` call (e.g. via `pl_frame_mix`).
+    //
+    // Note: Only one frame will ever be acquired at a time per `pl_render_*`
+    // call. So users *can* safely use this with, for example, hwdec mappers
+    // that can only map a single frame at a time. When using this with, for
+    // example, `pl_render_image_mix`, each frame to be blended is acquired and
+    // release in succession, before moving on to the next frame.
+    bool (*acquire)(pl_gpu gpu, struct pl_frame *frame);
+
+    // If set, will be called after a plane is done being used by the GPU,
+    // *including* after any errors (e.g. `acquire` returning false).
+    void (*release)(pl_gpu gpu, struct pl_frame *frame);
+
     // Color representation / encoding / semantics of this frame.
     struct pl_color_repr repr;
     struct pl_color_space color;
