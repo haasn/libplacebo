@@ -780,7 +780,8 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
     }
 
     struct vk_cmdpool *pool = vk->pool_graphics;
-    VkQueue queue = pool->queues[pool->idx_queues];
+    int qidx = pool->idx_queues;
+    VkQueue queue = pool->queues[qidx];
 
     vk_rotate_queues(p->vk);
     vk_malloc_garbage_collect(vk->ma);
@@ -795,7 +796,9 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
     };
 
     PL_TRACE(vk, "vkQueuePresentKHR waits on %p", (void *) sem_out);
+    vk->lock_queue(vk->queue_ctx, pool->qf, qidx);
     VkResult res = vk->QueuePresentKHR(queue, &pinfo);
+    vk->unlock_queue(vk->queue_ctx, pool->qf, qidx);
     pl_mutex_unlock(&p->lock);
 
     switch (res) {

@@ -305,7 +305,8 @@ struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool,
         }
     }
 
-    cmd->queue = pool->queues[pool->idx_queues];
+    cmd->qindex = pool->idx_queues;
+    cmd->queue = pool->queues[cmd->qindex];
     pl_mutex_unlock(&vk->lock);
 
     VkCommandBufferBeginInfo binfo = {
@@ -375,7 +376,11 @@ bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
             PL_TRACE(vk, "    signals %d callbacks", cmd->callbacks.num);
     }
 
-    VK(vk->QueueSubmit(cmd->queue, 1, &sinfo, cmd->fence));
+    vk->lock_queue(vk->queue_ctx, pool->qf, cmd->qindex);
+    VkResult res = vk->QueueSubmit(cmd->queue, 1, &sinfo, cmd->fence);
+    vk->unlock_queue(vk->queue_ctx, pool->qf, cmd->qindex);
+    PL_VK_ASSERT(res, "vkQueueSubmit");
+
     pl_mutex_lock(&vk->lock);
     PL_ARRAY_APPEND(vk->alloc, vk->cmds_pending, cmd);
     pl_mutex_unlock(&vk->lock);

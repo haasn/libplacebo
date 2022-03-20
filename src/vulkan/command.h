@@ -42,6 +42,7 @@ void vk_dev_callback(struct vk_ctx *vk, vk_cb callback,
 struct vk_cmd {
     struct vk_cmdpool *pool; // pool it was allocated from
     VkQueue queue;           // the submission queue (for recording/pending)
+    int qindex;              // the index of `queue` in `pool`
     VkCommandBuffer buf;     // the command buffer itself
     VkFence fence;           // the fence guards cmd buffer reuse
     // The semaphores represent dependencies that need to complete before

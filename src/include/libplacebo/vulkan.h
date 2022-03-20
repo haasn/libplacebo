@@ -105,7 +105,8 @@ struct pl_vulkan_queue {
 };
 
 // Structure representing the actual vulkan device and associated GPU instance
-typedef const PL_STRUCT(pl_vulkan) {
+typedef const PL_STRUCT(pl_vulkan) *pl_vulkan;
+PL_STRUCT(pl_vulkan) {
     pl_gpu gpu;
 
     // The vulkan objects in use. The user may use this for their own purposes,
@@ -137,7 +138,14 @@ typedef const PL_STRUCT(pl_vulkan) {
     // queue counts in list form. This list does not contain duplicates.
     const struct pl_vulkan_queue *queues;
     int num_queues;
-} *pl_vulkan;
+
+    // Functions for locking a queue. These must be used to lock VkQueues for
+    // submission or other related operations when sharing the VkDevice between
+    // multiple threads, Using this on queue families or indices not contained
+    // in `queues` is undefined behavior.
+    void (*lock_queue)(pl_vulkan vk, int qf, int qidx);
+    void (*unlock_queue)(pl_vulkan vk, int qf, int qidx);
+};
 
 struct pl_vulkan_params {
     // The vulkan instance. Optional, if NULL then libplacebo will internally
@@ -393,6 +401,12 @@ struct pl_vulkan_import_params {
     // Enabled VkPhysicalDeviceFeatures. The VkDevice provided by the user
     // *must* be created with the `timelineSemaphore` feature enabled.
     const VkPhysicalDeviceFeatures2 *features;
+
+    // Functions for locking a queue. If set, these will be used instead of
+    // libplacebo's internal functions for `pl_vulkan.(un)lock_queue`.
+    void (*lock_queue)(void *ctx, int qf, int qidx);
+    void (*unlock_queue)(void *ctx, int qf, int qidx);
+    void *queue_ctx;
 
     // --- Misc/debugging options
 

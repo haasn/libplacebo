@@ -79,6 +79,12 @@ struct vk_ctx {
     struct vk_cmdpool *pool_compute;
     struct vk_cmdpool *pool_transfer;
 
+    // Queue locking functions
+    PL_ARRAY(pl_mutex *) queue_locks;
+    void (*lock_queue)(void *queue_ctx, int qf, int idx);
+    void (*unlock_queue)(void *queue_ctx, int qf, int idx);
+    void *queue_ctx;
+
     // Pending commands. These are shared for the entire mpvk_ctx to ensure
     // submission and callbacks are FIFO
     PL_ARRAY(struct vk_cmd *) cmds_pending; // submitted but not completed
