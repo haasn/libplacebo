@@ -517,9 +517,18 @@ static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt *fmt,
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         gl_check_err(gpu, "gl_fb_query");
 
+        if (!fmt->component_depth[0]) {
+            PL_INFO(gpu, "OpenGL framebuffer did not export depth information,"
+                    "assuming 8-bit framebuffer");
+            for (int i = 0; i < PL_ARRAY_SIZE(fmt->component_depth); i++)
+                fmt->component_depth[i] = 8;
+        }
+
         // Strip missing components from component map
-        while (!fmt->component_depth[fmt->num_components - 1])
+        while (!fmt->component_depth[fmt->num_components - 1]) {
             fmt->num_components--;
+            pl_assert(fmt->num_components);
+        }
     }
 
     int gpu_bits = 0;
