@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     4,
     # API version
     {
+      '203': 'add pl_film_grain_from_av',
       '202': 'add pl_frame.acquire/release',
       '201': 'add pl_vulkan.(un)lock_queue',
       '200': 'always set pl_vulkan.queue_*',

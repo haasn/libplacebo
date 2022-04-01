@@ -28,11 +28,6 @@
 #include <libavutil/pixdesc.h>
 #include <libavutil/display.h>
 
-#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(56, 61, 100)
-# define HAVE_LAV_FILM_GRAIN
-# include <libavutil/film_grain_params.h>
-#endif
-
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 8, 100) && defined(PL_HAVE_VULKAN)
 # define HAVE_LAV_VULKAN
 # include <libavutil/hwcontext_vulkan.h>
@@ -284,6 +279,80 @@ static void pl_color_space_from_avframe(struct pl_color_space *out_csp,
         }
     }
 }
+
+#ifdef PL_HAVE_LAV_FILM_GRAIN
+static void pl_film_grain_from_av(struct pl_film_grain_data *out_data,
+                                  const AVFilmGrainParams *fgp)
+{
+    out_data->seed = fgp->seed;
+
+    switch (fgp->type) {
+    case AV_FILM_GRAIN_PARAMS_NONE: break;
+    case AV_FILM_GRAIN_PARAMS_AV1: {
+        const AVFilmGrainAOMParams *src = &fgp->codec.aom;
+        struct pl_av1_grain_data *dst = &out_data->params.av1;
+        out_data->type = PL_FILM_GRAIN_AV1;
+        *dst = (struct pl_av1_grain_data) {
+            .num_points_y = src->num_y_points,
+            .chroma_scaling_from_luma = src->chroma_scaling_from_luma,
+            .num_points_uv = { src->num_uv_points[0], src->num_uv_points[1] },
+            .scaling_shift = src->scaling_shift,
+            .ar_coeff_lag = src->ar_coeff_lag,
+            .ar_coeff_shift = src->ar_coeff_shift,
+            .grain_scale_shift = src->grain_scale_shift,
+            .uv_mult = { src->uv_mult[0], src->uv_mult[1] },
+            .uv_mult_luma = { src->uv_mult_luma[0], src->uv_mult_luma[1] },
+            .uv_offset = { src->uv_offset[0], src->uv_offset[1] },
+            .overlap = src->overlap_flag,
+        };
+
+        assert(sizeof(dst->ar_coeffs_uv) == sizeof(src->ar_coeffs_uv));
+        memcpy(dst->points_y, src->y_points, sizeof(dst->points_y));
+        memcpy(dst->points_uv, src->uv_points, sizeof(dst->points_uv));
+        memcpy(dst->ar_coeffs_y, src->ar_coeffs_y, sizeof(dst->ar_coeffs_y));
+        memcpy(dst->ar_coeffs_uv, src->ar_coeffs_uv, sizeof(dst->ar_coeffs_uv));
+        break;
+    }
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 2, 100)
+    case AV_FILM_GRAIN_PARAMS_H274: {
+        const AVFilmGrainH274Params *src = &fgp->codec.h274;
+        struct pl_h274_grain_data *dst = &out_data->params.h274;
+        out_data->type = PL_FILM_GRAIN_H274;
+        *dst = (struct pl_h274_grain_data) {
+            .model_id = src->model_id,
+            .blending_mode_id = src->blending_mode_id,
+            .log2_scale_factor = src->log2_scale_factor,
+            .component_model_present = {
+                src->component_model_present[0],
+                src->component_model_present[1],
+                src->component_model_present[2],
+            },
+            .intensity_interval_lower_bound = {
+                src->intensity_interval_lower_bound[0],
+                src->intensity_interval_lower_bound[1],
+                src->intensity_interval_lower_bound[2],
+            },
+            .intensity_interval_upper_bound = {
+                src->intensity_interval_upper_bound[0],
+                src->intensity_interval_upper_bound[1],
+                src->intensity_interval_upper_bound[2],
+            },
+            .comp_model_value = {
+                src->comp_model_value[0],
+                src->comp_model_value[1],
+                src->comp_model_value[2],
+            },
+        };
+        memcpy(dst->num_intensity_intervals, src->num_intensity_intervals,
+               sizeof(dst->num_intensity_intervals));
+        memcpy(dst->num_model_values, src->num_model_values,
+               sizeof(dst->num_model_values));
+        break;
+    }
+#endif
+    }
+}
+#endif // PL_HAVE_LAV_FILM_GRAIN
 
 static inline int pl_plane_data_num_comps(const struct pl_plane_data *data)
 {
@@ -602,77 +671,9 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
         out->rotation = pl_rotation_normalize(4.5 - rot / 90.0);
     }
 
-#ifdef HAVE_LAV_FILM_GRAIN
-    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS))) {
-        const AVFilmGrainParams *fgp = (AVFilmGrainParams *) sd->data;
-        out->film_grain.seed = fgp->seed;
-
-        switch (fgp->type) {
-        case AV_FILM_GRAIN_PARAMS_NONE: break;
-        case AV_FILM_GRAIN_PARAMS_AV1: {
-            const AVFilmGrainAOMParams *src = &fgp->codec.aom;
-            struct pl_av1_grain_data *dst = &out->film_grain.params.av1;
-            out->film_grain.type = PL_FILM_GRAIN_AV1;
-            *dst = (struct pl_av1_grain_data) {
-                .num_points_y = src->num_y_points,
-                .chroma_scaling_from_luma = src->chroma_scaling_from_luma,
-                .num_points_uv = { src->num_uv_points[0], src->num_uv_points[1] },
-                .scaling_shift = src->scaling_shift,
-                .ar_coeff_lag = src->ar_coeff_lag,
-                .ar_coeff_shift = src->ar_coeff_shift,
-                .grain_scale_shift = src->grain_scale_shift,
-                .uv_mult = { src->uv_mult[0], src->uv_mult[1] },
-                .uv_mult_luma = { src->uv_mult_luma[0], src->uv_mult_luma[1] },
-                .uv_offset = { src->uv_offset[0], src->uv_offset[1] },
-                .overlap = src->overlap_flag,
-            };
-
-            assert(sizeof(dst->ar_coeffs_uv) == sizeof(src->ar_coeffs_uv));
-            memcpy(dst->points_y, src->y_points, sizeof(dst->points_y));
-            memcpy(dst->points_uv, src->uv_points, sizeof(dst->points_uv));
-            memcpy(dst->ar_coeffs_y, src->ar_coeffs_y, sizeof(dst->ar_coeffs_y));
-            memcpy(dst->ar_coeffs_uv, src->ar_coeffs_uv, sizeof(dst->ar_coeffs_uv));
-            break;
-        }
-#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 2, 100)
-        case AV_FILM_GRAIN_PARAMS_H274: {
-            const AVFilmGrainH274Params *src = &fgp->codec.h274;
-            struct pl_h274_grain_data *dst = &out->film_grain.params.h274;
-            out->film_grain.type = PL_FILM_GRAIN_H274;
-            *dst = (struct pl_h274_grain_data) {
-                .model_id = src->model_id,
-                .blending_mode_id = src->blending_mode_id,
-                .log2_scale_factor = src->log2_scale_factor,
-                .component_model_present = {
-                    src->component_model_present[0],
-                    src->component_model_present[1],
-                    src->component_model_present[2],
-                },
-                .intensity_interval_lower_bound = {
-                    src->intensity_interval_lower_bound[0],
-                    src->intensity_interval_lower_bound[1],
-                    src->intensity_interval_lower_bound[2],
-                },
-                .intensity_interval_upper_bound = {
-                    src->intensity_interval_upper_bound[0],
-                    src->intensity_interval_upper_bound[1],
-                    src->intensity_interval_upper_bound[2],
-                },
-                .comp_model_value = {
-                    src->comp_model_value[0],
-                    src->comp_model_value[1],
-                    src->comp_model_value[2],
-                },
-            };
-            memcpy(dst->num_intensity_intervals, src->num_intensity_intervals,
-                   sizeof(dst->num_intensity_intervals));
-            memcpy(dst->num_model_values, src->num_model_values,
-                   sizeof(dst->num_model_values));
-            break;
-        }
-#endif
-        }
-    }
+#ifdef PL_HAVE_LAV_FILM_GRAIN
+    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS)))
+        pl_film_grain_from_av(&out->film_grain, (AVFilmGrainParams *) sd->data);
 #endif // HAVE_LAV_FILM_GRAIN
 
     for (int p = 0; p < out->num_planes; p++) {

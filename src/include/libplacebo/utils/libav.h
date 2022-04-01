@@ -33,6 +33,11 @@ PL_API_BEGIN
 # include <libavutil/dovi_meta.h>
 #endif
 
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(56, 61, 100)
+# define PL_HAVE_LAV_FILM_GRAIN
+# include <libavutil/film_grain_params.h>
+#endif
+
 // Fill in the details of a `pl_frame` from an AVFrame. This function will
 // explicitly clear `out_frame`, setting all extra fields to 0. After this
 // function returns, the only missing data is information related to the plane
@@ -201,6 +206,15 @@ static enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc);
 // Helper function to generate a `pl_color_space` struct from an AVFrame.
 static void pl_color_space_from_avframe(struct pl_color_space *out_csp,
                                         const AVFrame *frame);
+
+#ifdef PL_HAVE_LAV_FILM_GRAIN
+// Fill in film grain parameters from an AVFilmGrainParams.
+//
+// Note: The resulting struct will only remain valid as long as the
+// `AVFilmGrainParams` remains valid.
+static void pl_film_grain_from_av(struct pl_film_grain_data *out_data,
+                                  const AVFilmGrainParams *fgp);
+#endif
 
 // Deprecated alias for backwards compatibility
 #define pl_swapchain_colors_from_avframe pl_color_space_from_avframe
