@@ -226,7 +226,9 @@ static bool init_codec(struct plplay *p)
     p->codec->get_buffer2 = pl_get_buffer2;
     p->codec->opaque = &p->win->gpu;
 #if LIBAVCODEC_VERSION_MAJOR < 60
-    p->codec->thread_safe_callbacks = 1;
+    AV_NOWARN_DEPRECATED({
+        p->codec->thread_safe_callbacks = 1;
+    });
 #endif
 #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 113, 100)
     p->codec->export_side_data |= AV_CODEC_EXPORT_DATA_FILM_GRAIN;
