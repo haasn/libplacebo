@@ -19,6 +19,12 @@
 
 #include "common.h"
 
+#define DXGI_COLOR_SPACE_RGB_STUDIO_G24_NONE_P709       ((DXGI_COLOR_SPACE_TYPE)20)
+#define DXGI_COLOR_SPACE_RGB_STUDIO_G24_NONE_P2020      ((DXGI_COLOR_SPACE_TYPE)21)
+#define DXGI_COLOR_SPACE_YCBCR_STUDIO_G24_LEFT_P709     ((DXGI_COLOR_SPACE_TYPE)22)
+#define DXGI_COLOR_SPACE_YCBCR_STUDIO_G24_LEFT_P2020    ((DXGI_COLOR_SPACE_TYPE)23)
+#define DXGI_COLOR_SPACE_YCBCR_STUDIO_G24_TOPLEFT_P2020 ((DXGI_COLOR_SPACE_TYPE)24)
+
 // Flush debug messages from D3D11's info queue to libplacebo's log output.
 // Should be called regularly.
 void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header);
@@ -77,3 +83,6 @@ char *pl_to_utf8(void *ctx, const wchar_t *str);
 
 #define pl_hresult_to_str(hr) pl_hresult_to_str_buf((char[256]){0}, 256, (hr))
 char *pl_hresult_to_str_buf(char *buf, size_t buf_size, HRESULT hr);
+
+const char *pl_get_dxgi_csp_name(DXGI_COLOR_SPACE_TYPE csp);
+const char *pl_get_dxgi_format_name(DXGI_FORMAT fmt);
