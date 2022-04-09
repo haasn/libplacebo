@@ -2414,7 +2414,7 @@ static void fix_color_space(struct pl_frame *frame)
     pl_tex tex = frame->planes[frame_ref(frame)].texture;
 
     // If the primaries are not known, guess them based on the resolution
-    if (!frame->color.primaries)
+    if (tex && !frame->color.primaries)
         frame->color.primaries = pl_color_primaries_guess(tex->params.w, tex->params.h);
 
     pl_color_space_infer(&frame->color);
@@ -2424,7 +2424,7 @@ static void fix_color_space(struct pl_frame *frame)
     // doesn't really work out for them anyways, and it's best not to do
     // anything too crazy unless the user provides explicit details.
     struct pl_bit_encoding *bits = &frame->repr.bits;
-    if (!bits->sample_depth && tex->params.format->type == PL_FMT_UNORM) {
+    if (!bits->sample_depth && tex && tex->params.format->type == PL_FMT_UNORM) {
         // Just assume the first component's depth is canonical. This works in
         // practice, since for cases like rgb565 we want to use the lower depth
         // anyway. Plus, every format has at least one component.
@@ -2468,7 +2468,7 @@ static bool pass_init(struct pass_state *pass, bool acquire_image)
         goto error;
     if (!acquire_frame(pass, target))
         goto error;
-    if (!validate_structs(pass->rr, image, target))
+    if (!validate_structs(pass->rr, acquire_image ? image : NULL, target))
         goto error;
 
     fix_refs_and_rects(pass);
