@@ -273,18 +273,27 @@ struct pl_cie_xy {
     float x, y;
 };
 
+// Creates a pl_cie_xyz from raw XYZ values
+static inline struct pl_cie_xy pl_cie_from_XYZ(float X, float Y, float Z)
+{
+    float k = 1.0f / (X + Y + Z);
+    return (struct pl_cie_xy) { k * X, k * Y };
+}
+
 // Recovers (X / Y) from a CIE xy value.
-static inline float pl_cie_X(struct pl_cie_xy xy) {
+static inline float pl_cie_X(struct pl_cie_xy xy)
+{
     return xy.x / xy.y;
 }
 
 // Recovers (Z / Y) from a CIE xy value.
-static inline float pl_cie_Z(struct pl_cie_xy xy) {
+static inline float pl_cie_Z(struct pl_cie_xy xy)
+{
     return (1 - xy.x - xy.y) / xy.y;
 }
 
-static inline float pl_cie_xy_equal(const struct pl_cie_xy *a,
-                                    const struct pl_cie_xy *b)
+static inline bool pl_cie_xy_equal(const struct pl_cie_xy *a,
+                                   const struct pl_cie_xy *b)
 {
     return a->x == b->x && a->y == b->y;
 }
@@ -303,6 +312,10 @@ struct pl_raw_primaries {
 // Returns whether two raw primaries are exactly identical.
 bool pl_raw_primaries_equal(const struct pl_raw_primaries *a,
                             const struct pl_raw_primaries *b);
+
+// Returns whether two raw primaries are approximately equal
+bool pl_raw_primaries_similar(const struct pl_raw_primaries *a,
+                              const struct pl_raw_primaries *b);
 
 // Replaces unknown values in the first struct by those of the second struct.
 void pl_raw_primaries_merge(struct pl_raw_primaries *orig,

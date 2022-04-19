@@ -536,6 +536,21 @@ bool pl_raw_primaries_equal(const struct pl_raw_primaries *a,
            pl_cie_xy_equal(&a->white, &b->white);
 }
 
+bool pl_raw_primaries_similar(const struct pl_raw_primaries *a,
+                              const struct pl_raw_primaries *b)
+{
+    float delta = fabsf(a->red.x   - b->red.x)   +
+                  fabsf(a->red.y   - b->red.y)   +
+                  fabsf(a->green.x - b->green.x) +
+                  fabsf(a->green.y - b->green.y) +
+                  fabsf(a->blue.x  - b->blue.x)  +
+                  fabsf(a->blue.y  - b->blue.y)  +
+                  fabsf(a->white.x - b->white.x) +
+                  fabsf(a->white.y - b->white.y);
+
+    return delta < 0.001;
+}
+
 void pl_raw_primaries_merge(struct pl_raw_primaries *orig,
                             const struct pl_raw_primaries *update)
 {
