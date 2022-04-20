@@ -1091,6 +1091,7 @@ next_dim: ; // `continue` out of the inner loop
         lut->height = params->height;
         lut->depth = params->depth;
         lut->comps = params->comps;
+        lut->signature = params->signature;
     }
 
     // Done updating, generate the GLSL
