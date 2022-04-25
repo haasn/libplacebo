@@ -197,6 +197,10 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, gl_vers[i].major);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, gl_vers[i].minor);
         glfwWindowHint(GLFW_OPENGL_PROFILE, gl_vers[i].profile);
+#ifdef __APPLE__
+        if (gl_vers[i].profile == GLFW_OPENGL_CORE_PROFILE)
+            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
 
 #endif // USE_GL
 
