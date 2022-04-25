@@ -1425,7 +1425,7 @@ static void tone_map(pl_shader sh,
     }
 
     ident_t ct = SH_FLOAT(params->tone_mapping_crosstalk);
-    GLSL("const float ct_scale = 1.0 - 3.0 * %s;                \n"
+    GLSL("float ct_scale = 1.0 - 3.0 * %s;                      \n"
          "float ct = %s * (color.r + color.g + color.b);        \n"
          "color.rgb = ct_scale * color.rgb + vec3(ct);          \n",
          ct, ct);
