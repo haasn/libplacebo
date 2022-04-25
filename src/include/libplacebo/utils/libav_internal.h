@@ -28,10 +28,12 @@
 #include <libavutil/pixdesc.h>
 #include <libavutil/display.h>
 
+#ifndef HAVE_LAV_VULKAN
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 8, 100) && defined(PL_HAVE_VULKAN)
-# define HAVE_LAV_VULKAN
+# define HAVE_LAV_VULKAN 1
 # include <libavutil/hwcontext_vulkan.h>
 # include <libplacebo/vulkan.h>
+#endif
 #endif
 
 static inline enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
@@ -486,7 +488,7 @@ static inline bool pl_test_pixfmt(pl_gpu gpu,
     case AV_PIX_FMT_VAAPI:
         return gpu->import_caps.tex & PL_HANDLE_DMA_BUF;
 
-#ifdef HAVE_LAV_VULKAN
+#if HAVE_LAV_VULKAN
     case AV_PIX_FMT_VULKAN:
         return pl_vulkan_get(gpu);
 #endif
@@ -915,7 +917,7 @@ error:
     return false;
 }
 
-#ifdef HAVE_LAV_VULKAN
+#if HAVE_LAV_VULKAN
 static bool pl_acquire_avframe(pl_gpu gpu, struct pl_frame *frame)
 {
     const AVFrame *avframe = frame->user_data;
@@ -1038,7 +1040,7 @@ static inline bool pl_map_avframe_internal(pl_gpu gpu, struct pl_frame *out,
             goto error;
         return true;
 
-#ifdef HAVE_LAV_VULKAN
+#if HAVE_LAV_VULKAN
     case AV_PIX_FMT_VULKAN:
         if (!pl_map_avframe_vulkan(gpu, out, frame))
             goto error;
@@ -1109,7 +1111,7 @@ static inline void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame)
     if (!avframe)
         goto done;
 
-#ifdef HAVE_LAV_VULKAN
+#if HAVE_LAV_VULKAN
     if (avframe->format == AV_PIX_FMT_VULKAN)
         pl_unmap_avframe_vulkan(gpu, frame);
 #endif
