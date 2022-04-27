@@ -2621,26 +2621,41 @@ error:
     return false;
 }
 
-static uint64_t render_params_hash(const struct pl_render_params *params_orig)
+struct params_info {
+    uint64_t hash;
+    bool trivial;
+};
+
+static struct params_info render_params_info(const struct pl_render_params *params_orig)
 {
     struct pl_render_params params = *params_orig;
-    uint64_t hash = 0;
+    struct params_info info = {
+        .trivial = true,
+        .hash = 0,
+    };
 
-#define HASH_PTR(ptr)                                                           \
+#define HASH_PTR(ptr, def, ptr_trivial)                                         \
     do {                                                                        \
         if (ptr) {                                                              \
-            pl_hash_merge(&hash, pl_mem_hash(ptr, sizeof(*ptr)));               \
+            pl_hash_merge(&info.hash, pl_mem_hash(ptr, sizeof(*ptr)));          \
+            info.trivial &= (ptr_trivial);                                      \
             ptr = NULL;                                                         \
+        } else if ((def) != NULL) {                                             \
+            pl_hash_merge(&info.hash, pl_mem_hash(def, sizeof(*ptr)));          \
         }                                                                       \
     } while (0)
 
 #define HASH_FILTER(scaler)                                                     \
     do {                                                                        \
-        if (scaler) {                                                           \
+        if ((scaler == &pl_filter_bilinear || scaler == &pl_filter_nearest) &&  \
+            params.skip_anti_aliasing)                                          \
+        {                                                                       \
+            /* treat as NULL */                                                 \
+        } else if (scaler) {                                                    \
             struct pl_filter_config filter = *scaler;                           \
-            HASH_PTR(filter.kernel);                                            \
-            HASH_PTR(filter.window);                                            \
-            pl_hash_merge(&hash, pl_mem_hash(&filter, sizeof(filter)));         \
+            HASH_PTR(filter.kernel, NULL, false);                               \
+            HASH_PTR(filter.window, NULL, false);                               \
+            pl_hash_merge(&info.hash, pl_mem_hash(&filter, sizeof(filter)));    \
             scaler = NULL;                                                      \
         }                                                                       \
     } while (0)
@@ -2648,25 +2663,26 @@ static uint64_t render_params_hash(const struct pl_render_params *params_orig)
     HASH_FILTER(params.upscaler);
     HASH_FILTER(params.downscaler);
 
-    HASH_PTR(params.deband_params);
-    HASH_PTR(params.sigmoid_params);
-    HASH_PTR(params.color_adjustment);
-    HASH_PTR(params.peak_detect_params);
-    HASH_PTR(params.color_map_params);
-    HASH_PTR(params.dither_params);
+    HASH_PTR(params.deband_params, NULL, false);
+    HASH_PTR(params.sigmoid_params, NULL, false);
+    HASH_PTR(params.color_adjustment, &pl_color_adjustment_neutral, true);
+    HASH_PTR(params.peak_detect_params, NULL, params.allow_delayed_peak_detect);
+    HASH_PTR(params.color_map_params, &pl_color_map_default_params, true);
 
     // Hash all hooks
     for (int i = 0; i < params.num_hooks; i++) {
         const struct pl_hook *hook = params.hooks[i];
         if (hook->stages == PL_HOOK_OUTPUT)
             continue; // ignore hooks only relevant to pass_output_target
-        pl_hash_merge(&hash, pl_mem_hash(hook, sizeof(*hook)));
+        pl_hash_merge(&info.hash, pl_mem_hash(hook, sizeof(*hook)));
+        info.trivial = false;
     }
     params.hooks = NULL;
 
     // Hash the LUT by only looking at the signature
     if (params.lut) {
-        pl_hash_merge(&hash, params.lut->signature);
+        pl_hash_merge(&info.hash, params.lut->signature);
+        info.trivial = false;
         params.lut = NULL;
     }
 
@@ -2686,6 +2702,7 @@ static uint64_t render_params_hash(const struct pl_render_params *params_orig)
     // Clear out fields only relevant to pass_output_target
     CLEAR(params.blend_params);
     CLEAR(params.cone_params);
+    CLEAR(params.dither_params);
     CLEAR(params.icc_params);
     CLEAR(params.lut3d_params);
     CLEAR(params.ignore_icc_profiles);
@@ -2695,8 +2712,12 @@ static uint64_t render_params_hash(const struct pl_render_params *params_orig)
     CLEAR(params.dynamic_constants);
     CLEAR(params.allow_delayed_peak_detect);
 
-    pl_hash_merge(&hash, pl_mem_hash(&params, sizeof(params)));
-    return hash;
+    // Clear out other irrelevant fields
+    CLEAR(params.info_callback);
+    CLEAR(params.info_priv);
+
+    pl_hash_merge(&info.hash, pl_mem_hash(&params, sizeof(params)));
+    return info;
 }
 
 #define MAX_MIX_FRAMES 16
@@ -2709,7 +2730,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         return pl_render_image(rr, NULL, ptarget, params);
 
     params = PL_DEF(params, &pl_render_default_params);
-    uint64_t params_hash = render_params_hash(params);
+    struct params_info par_info = render_params_info(params);
     pl_dispatch_mark_dynamic(rr->dp, params->dynamic_constants);
 
     require(images->num_frames >= 1);
@@ -2843,7 +2864,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
             continue;
         }
 
-        bool skip_cache = single_frame && params->skip_caching_single_frame;
+        bool skip_cache = single_frame && (params->skip_caching_single_frame || par_info.trivial);
         if (!f && skip_cache) {
             PL_TRACE(rr, "Single frame not found in cache, bypassing");
             goto fallback;
@@ -2868,7 +2889,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         if (can_reuse && strict_reuse) {
             can_reuse = f->tex->params.w == out_w &&
                         f->tex->params.h == out_h &&
-                        f->params_hash == params_hash;
+                        f->params_hash == par_info.hash;
         }
 
         if (!can_reuse && skip_cache) {
@@ -2966,7 +2987,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
                           inter_pass.img.repr,
                           &shift);
 
-            f->params_hash = params_hash;
+            f->params_hash = par_info.hash;
             f->color = inter_pass.img.color;
             f->comps = inter_pass.img.comps;
             pl_assert(inter_pass.img.repr.alpha != PL_ALPHA_INDEPENDENT);
