@@ -1827,6 +1827,13 @@ static bool pass_scale_main(struct pass_state *pass)
             use_linear = false; // linear HDR needs out-of-range signals
     }
 
+    if (!use_linear && img->color.transfer == PL_COLOR_TRC_LINEAR) {
+        img->color.transfer = image->color.transfer;
+        if (image->color.transfer == PL_COLOR_TRC_LINEAR)
+            img->color.transfer = PL_COLOR_TRC_GAMMA22; // arbitrary fallback
+        pl_shader_delinearize(img_sh(pass, img), &img->color);
+    }
+
     if (use_linear || use_sigmoid) {
         pl_shader_linearize(img_sh(pass, img), &img->color);
         img->color.transfer = PL_COLOR_TRC_LINEAR;
