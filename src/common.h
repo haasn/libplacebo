@@ -83,15 +83,13 @@
 #endif
 
 #ifdef PL_HAVE_VULKAN
-#include "include/libplacebo/vulkan.h"
+#include <libplacebo/vulkan.h>
 #endif
-
 #ifdef PL_HAVE_OPENGL
-#include "include/libplacebo/opengl.h"
+#include <libplacebo/opengl.h>
 #endif
-
 #ifdef PL_HAVE_D3D11
-#include "include/libplacebo/d3d11.h"
+#include <libplacebo/d3d11.h>
 #endif
 
 #pragma GCC visibility pop

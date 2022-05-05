@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     4,
     # API version
     {
+      '206': 'add new ICC profile API (pl_icc_open, ...)',
       '205': 'add pl_cie_from_XYZ and pl_raw_primaries_similar, fix pl_cie_xy_equal',
       '204': 'add pl_d3d11_swapchain_params.disable_10bit_sdr',
       '203': 'add pl_film_grain_from_av',

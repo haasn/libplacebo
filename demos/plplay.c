@@ -1335,7 +1335,6 @@ static void update_settings(struct plplay *p)
             nk_checkbox_label(nk, "Preserve mixing cache", &par->preserve_mixing_cache);
             nk_checkbox_label(nk, "Disable linear scaling", &par->disable_linear_scaling);
             nk_checkbox_label(nk, "Disable built-in scalers", &par->disable_builtin_scalers);
-            nk_checkbox_label(nk, "Force-enable 3DLUT", &par->force_icc_lut);
             nk_checkbox_label(nk, "Force-enable dither", &par->force_dither);
             nk_checkbox_label(nk, "Disable FBOs / advanced rendering", &par->disable_fbos);
             nk_checkbox_label(nk, "Force low-bit depth FBOs", &par->force_low_bit_depth_fbos);
