@@ -69,6 +69,7 @@ struct plplay {
     struct pl_peak_detect_params peak_detect_params;
     struct pl_color_map_params color_map_params;
     struct pl_dither_params dither_params;
+    struct pl_icc_params icc_params;
     struct pl_cone_params cone_params;
     struct pl_color_space target_color;
     struct pl_color_repr target_repr;
@@ -571,6 +572,7 @@ int main(int argc, char **argv)
         .peak_detect_params = pl_peak_detect_default_params,
         .color_map_params = pl_color_map_default_params,
         .dither_params = pl_dither_default_params,
+        .icc_params = pl_icc_default_params,
         .cone_params = pl_vision_normal,
         .target_override = true,
     };
@@ -586,6 +588,7 @@ int main(int argc, char **argv)
     state.params.color_adjustment = &state.color_adjustment;
     state.params.color_map_params = &state.color_map_params;
     state.params.cone_params = &state.cone_params;
+    state.params.icc_params = &state.icc_params;
 
     // Enable dynamic parameters by default, due to plplay's heavy reliance on
     // GUI controls for dynamically adjusting render parameters.
@@ -1088,6 +1091,7 @@ static void update_settings(struct plplay *p)
         if (nk_tree_push(nk, NK_TREE_NODE, "Output color space", NK_MINIMIZED)) {
             struct pl_color_space *tcol = &p->target_color;
             struct pl_color_repr *trepr = &p->target_repr;
+            struct pl_icc_params *iccpar = &p->icc_params;
             nk_layout_row_dynamic(nk, 24, 2);
             nk_checkbox_label(nk, "Enable", &p->target_override);
             bool reset = nk_button_label(nk, "Reset settings");
@@ -1161,6 +1165,7 @@ static void update_settings(struct plplay *p)
                 fix.hdr.min_luma /= 1000;
                 pl_color_space_infer(&fix);
                 tcol->hdr = fix.hdr;
+                iccpar->max_luma = fix.hdr.max_luma;
             } else {
                 reset_levels = true;
             }
@@ -1255,8 +1260,10 @@ static void update_settings(struct plplay *p)
                 };
             }
 
-            if (reset_levels)
+            if (reset_levels) {
                 tcol->hdr = (struct pl_hdr_metadata) {0};
+                *iccpar = pl_icc_default_params;
+            }
 
             nk_tree_pop(nk);
         }

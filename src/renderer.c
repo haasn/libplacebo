@@ -43,6 +43,14 @@ struct osd_vertex {
     float color[4];
 };
 
+struct icc_state {
+    struct pl_icc_params params;
+    uint64_t signature;
+    pl_icc_object obj;
+    pl_shader_obj lut;
+    bool error;
+};
+
 struct pl_renderer {
     pl_gpu gpu;
     pl_dispatch dp;
@@ -54,7 +62,6 @@ struct pl_renderer {
     bool disable_debanding;     // disable the use of debanding shaders
     bool disable_blending;      // disable blending for the target/fbofmt
     bool disable_overlay;       // disable rendering overlays
-    bool disable_icc;           // disable usage of ICC profiles
     bool disable_peak_detect;   // disable peak detection shader
     bool disable_grain;         // disable film grain code
     bool disable_hooks;         // disable user hooks / custom shaders
@@ -63,7 +70,6 @@ struct pl_renderer {
     // Shader resource objects and intermediate textures (FBOs)
     pl_shader_obj tone_map_state;
     pl_shader_obj dither_state;
-    pl_shader_obj icc_state;
     pl_shader_obj grain_state[4];
     pl_shader_obj lut_state[3];
     PL_ARRAY(pl_tex) fbos;
@@ -71,6 +77,7 @@ struct pl_renderer {
     struct sampler samplers_src[4];
     struct sampler samplers_dst[4];
     bool peak_detect_active;
+    struct icc_state icc[2];
 
     // Temporary storage for vertex/index data
     PL_ARRAY(struct osd_vertex) osd_vertices;
@@ -140,7 +147,6 @@ void pl_renderer_destroy(pl_renderer *p_rr)
     // Free all shader resource objects
     pl_shader_obj_destroy(&rr->tone_map_state);
     pl_shader_obj_destroy(&rr->dither_state);
-    pl_shader_obj_destroy(&rr->icc_state);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->lut_state); i++)
         pl_shader_obj_destroy(&rr->lut_state[i]);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->grain_state); i++)
@@ -152,6 +158,12 @@ void pl_renderer_destroy(pl_renderer *p_rr)
         sampler_destroy(rr, &rr->samplers_src[i]);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->samplers_dst); i++)
         sampler_destroy(rr, &rr->samplers_dst[i]);
+
+    // Close all ICC profiles
+    for (int i = 0; i < PL_ARRAY_SIZE(rr->icc); i++) {
+        pl_shader_obj_destroy(&rr->icc[i].lut);
+        pl_icc_close(&rr->icc[i].obj);
+    }
 
     pl_dispatch_destroy(&rr->dp);
     pl_free_ptr(p_rr);
@@ -338,6 +350,9 @@ struct pass_state {
     // corrected to make sure all rects etc. are properly defaulted/inferred.
     struct pl_frame image;
     struct pl_frame target;
+
+    // Currently active (to-be-applied) ICC profiles for this rendering pass.
+    struct icc_state *src_icc, *dst_icc;
 
     // Some extra plane metadata, inferred from `planes`
     enum plane_type src_type[4];
@@ -1744,6 +1759,11 @@ static bool pass_read_image(struct pass_state *pass)
     if (lut_type == PL_LUT_NORMALIZED)
         pl_shader_custom_lut(sh, image->lut, &rr->lut_state[LUT_IMAGE]);
 
+    if (pass->src_icc) {
+        pl_shader_set_alpha(sh, &pass->img.repr, PL_ALPHA_INDEPENDENT);
+        pl_icc_decode(sh, pass->src_icc->obj, &pass->src_icc->lut, &pass->img.color);
+    }
+
     // Pre-multiply alpha channel before the rest of the pipeline, to avoid
     // bleeding colors from transparent regions into non-transparent regions
     pl_shader_set_alpha(sh, &pass->img.repr, PL_ALPHA_PREMULTIPLIED);
@@ -1910,14 +1930,6 @@ static bool pass_output_target(struct pass_state *pass)
     // Do all processing in independent alpha, to avoid nonlinear distortions
     pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_INDEPENDENT);
 
-    bool need_icc = !params->ignore_icc_profiles &&
-                    (image->profile.data || target->profile.data) &&
-                    !pl_icc_profile_equal(&image->profile, &target->profile);
-
-    if (params->force_icc_lut || params->force_3dlut)
-        need_icc |= !pl_color_space_equal(&image->color, &target->color);
-    need_icc &= !rr->disable_icc;
-
     if (params->lut) {
         struct pl_color_space lut_in = params->lut->color_in;
         struct pl_color_space lut_out = params->lut->color_out;
@@ -1931,7 +1943,6 @@ static bool pass_output_target(struct pass_state *pass)
             pl_color_space_merge(&lut_in, &image->color);
             pl_color_space_merge(&lut_out, &target->color);
             // Conversion LUT the highest priority
-            need_icc = false;
             need_conversion = false;
             break;
         case PL_LUT_NORMALIZED:
@@ -1967,63 +1978,24 @@ static bool pass_output_target(struct pass_state *pass)
         }
     }
 
-#ifdef PL_HAVE_LCMS
-
-    if (need_icc) {
-        struct pl_icc_color_space src = {
-            .color = image->color,
-            .profile = image->profile,
-        };
-
-        struct pl_icc_color_space dst = {
-            .color = target->color,
-            .profile = target->profile,
-        };
-
-        if (params->ignore_icc_profiles)
-            src.profile = dst.profile = (struct pl_icc_profile) {0};
-
-        struct pl_icc_result res;
-        bool ok = pl_icc_update(sh, &src, &dst, &rr->icc_state, &res,
-                                PL_DEF(params->icc_params, params->lut3d_params));
-        if (!ok) {
-            rr->disable_icc = true;
-            goto fallback;
-        }
-
-        // current -> ICC in
-        pl_shader_color_map(sh, params->color_map_params, image->color,
-                            res.src_color, &rr->tone_map_state, prelinearized);
-        // ICC in -> ICC out
-        pl_icc_apply(sh, &rr->icc_state);
-        // ICC out -> target
-        pl_shader_color_map(sh, params->color_map_params, res.dst_color,
-                            target->color, NULL, false);
-
-        need_conversion = false;
+    struct pl_color_space target_csp = target->color;
+    if (pass->dst_icc) {
+        target_csp.transfer = PL_COLOR_TRC_LINEAR;
+        need_conversion = true;
     }
-
-fallback:
-
-#else // !PL_HAVE_LCMS
-
-    if (need_icc) {
-        PL_WARN(rr, "An ICC profile was set, but libplacebo is built without "
-                "support for LittleCMS! Disabling..");
-        rr->disable_icc = true;
-    }
-
-#endif
 
     if (need_conversion) {
         // current -> target
         pl_shader_color_map(sh, params->color_map_params, image->color,
-                            target->color, &rr->tone_map_state, prelinearized);
+                            target_csp, &rr->tone_map_state, prelinearized);
     }
 
     // Apply color blindness simulation if requested
     if (params->cone_params)
-        pl_shader_cone_distort(sh, target->color, params->cone_params);
+        pl_shader_cone_distort(sh, target_csp, params->cone_params);
+
+    if (pass->dst_icc)
+        pl_icc_encode(sh, pass->dst_icc->obj, &pass->dst_icc->lut);
 
     enum pl_lut_type lut_type = guess_frame_lut_type(target, true);
     if (lut_type == PL_LUT_NORMALIZED || lut_type == PL_LUT_CONVERSION)
@@ -2467,10 +2439,55 @@ static void pass_uninit(struct pass_state *pass)
     pl_free_ptr(&pass->tmp);
 }
 
+static bool icc_params_compat(const struct pl_icc_params *a,
+                              const struct pl_icc_params *b)
+{
+    return a->intent == b->intent &&
+           a->size_r == b->size_r &&
+           a->size_g == b->size_g &&
+           a->size_b == b->size_b;
+}
+
+static struct icc_state *update_icc(struct pass_state *pass,
+                                    struct icc_state *state,
+                                    struct pl_frame *frame)
+{
+    pl_renderer rr = pass->rr;
+    if (!frame || !frame->profile.data)
+        return NULL;
+
+    const struct pl_icc_params *par;
+    par = PL_DEF(pass->params->icc_params, &pl_icc_default_params);
+
+    if (frame->profile.signature == state->signature) {
+        if (state->obj && icc_params_compat(par, &state->params))
+            goto done;
+        if (state->error)
+            return NULL; // don't re-attempt already failed profiles
+    }
+
+    pl_icc_close(&state->obj);
+    state->params = *par;
+    state->signature = frame->profile.signature;
+    state->obj = pl_icc_open(rr->log, &frame->profile, par);
+    state->error = !state->obj;
+    if (state->error) {
+        PL_WARN(rr, "Failed opening ICC profile... ignoring");
+        return NULL;
+    }
+
+done:
+    frame->color.primaries = state->obj->containing_primaries;
+    frame->color.hdr = state->obj->csp.hdr;
+    return state;
+}
+
 static bool pass_init(struct pass_state *pass, bool acquire_image)
 {
+    pl_renderer rr = pass->rr;
     struct pl_frame *image = pass->src_ref < 0 ? NULL : &pass->image;
     struct pl_frame *target = &pass->target;
+
     if (acquire_image && !acquire_frame(pass, image))
         goto error;
     if (!acquire_frame(pass, target))
@@ -2515,6 +2532,10 @@ static bool pass_init(struct pass_state *pass, bool acquire_image)
             }
         }
     }
+
+    // Update ICC profiles
+    pass->src_icc = acquire_image ? update_icc(pass, &rr->icc[0], image) : NULL;
+    pass->dst_icc = update_icc(pass, &rr->icc[1], target);
 
     pass->tmp = pl_tmp(NULL);
     return true;
@@ -2712,7 +2733,6 @@ static struct params_info render_params_info(const struct pl_render_params *para
     CLEAR(params.dither_params);
     CLEAR(params.icc_params);
     CLEAR(params.lut3d_params);
-    CLEAR(params.ignore_icc_profiles);
     CLEAR(params.force_icc_lut);
     CLEAR(params.force_3dlut);
     CLEAR(params.force_dither);

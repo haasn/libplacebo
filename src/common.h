@@ -71,16 +71,13 @@
 #include <libplacebo/shaders/colorspace.h>
 #include <libplacebo/shaders/custom.h>
 #include <libplacebo/shaders/film_grain.h>
+#include <libplacebo/shaders/icc.h>
 #include <libplacebo/shaders/lut.h>
 #include <libplacebo/shaders/sampling.h>
 #include <libplacebo/swapchain.h>
 #include <libplacebo/tone_mapping.h>
 #include <libplacebo/utils/frame_queue.h>
 #include <libplacebo/utils/upload.h>
-
-#ifdef PL_HAVE_LCMS
-#include "include/libplacebo/shaders/icc.h"
-#endif
 
 #ifdef PL_HAVE_VULKAN
 #include <libplacebo/vulkan.h>

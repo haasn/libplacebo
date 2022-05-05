@@ -201,6 +201,7 @@ headers = [
   'shaders/colorspace.h',
   'shaders/custom.h',
   'shaders/film_grain.h',
+  'shaders/icc.h',
   'shaders/lut.h',
   'shaders/sampling.h',
   'shaders.h',
@@ -236,6 +237,7 @@ sources = [
   'shaders/film_grain.c',
   'shaders/film_grain_av1.c',
   'shaders/film_grain_h274.c',
+  'shaders/icc.c',
   'shaders/lut.c',
   'shaders/sampling.c',
   'swapchain.c',
@@ -267,9 +269,8 @@ fuzzers = [
 components = [
   {
     'name': 'lcms',
-    'deps':  dependency('lcms2', version: '>=2.6', required: get_option('lcms')),
-    'srcs': 'shaders/icc.c',
-    'headers': 'shaders/icc.h',
+    'deps':  dependency('lcms2', version: '>=2.13', required: get_option('lcms')),
+    'test': 'icc.c',
   }, {
     'name': 'glslang',
     'deps': glslang_combined,

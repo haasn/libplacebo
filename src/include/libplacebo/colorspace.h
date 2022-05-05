@@ -363,6 +363,7 @@ PL_DEPRECATED bool pl_color_light_is_scene_referred(enum pl_color_light light);
 // Rendering intent for colorspace transformations. These constants match the
 // ICC specification (Table 23)
 enum pl_rendering_intent {
+    PL_INTENT_AUTO = -1, // not a valid ICC intent, but used to auto-infer
     PL_INTENT_PERCEPTUAL = 0,
     PL_INTENT_RELATIVE_COLORIMETRIC = 1,
     PL_INTENT_SATURATION = 2,

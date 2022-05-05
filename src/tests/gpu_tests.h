@@ -580,28 +580,6 @@ static void pl_shader_tests(pl_gpu gpu)
     pl_dispatch_abort(dp, &sh);
     pl_shader_obj_destroy(&peak_state);
 
-#ifdef PL_HAVE_LCMS
-    // Test the use of ICC profiles if available
-    sh = pl_dispatch_begin(dp);
-    pl_shader_sample_nearest(sh, pl_sample_src( .tex = src ));
-
-    pl_shader_obj icc = NULL;
-    struct pl_icc_color_space src_color = { .color = pl_color_space_bt709 };
-    struct pl_icc_color_space dst_color = { .color = pl_color_space_srgb };
-    struct pl_icc_result out;
-
-    if (pl_icc_update(sh, &src_color, &dst_color, &icc, &out, NULL)) {
-        pl_icc_apply(sh, &icc);
-        REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
-            .shader = &sh,
-            .target = fbo,
-        }));
-    }
-
-    pl_dispatch_abort(dp, &sh);
-    pl_shader_obj_destroy(&icc);
-#endif
-
     // Test film grain synthesis
     pl_shader_obj grain = NULL;
     struct pl_film_grain_params grain_params = {
@@ -1079,6 +1057,24 @@ static void pl_render_tests(pl_gpu gpu)
         image.lut = target.lut = params.lut = NULL;
         pl_lut_free(&lut);
     }
+
+#ifdef PL_HAVE_LCMS
+    // Test ICC profiles
+    image.profile = TEST_PROFILE(sRGB_v2_nano_icc);
+    REQUIRE(pl_render_image(rr, &image, &target, &params));
+    image.profile = (struct pl_icc_profile) {0};
+
+    target.profile = TEST_PROFILE(sRGB_v2_nano_icc);
+    REQUIRE(pl_render_image(rr, &image, &target, &params));
+    target.profile = (struct pl_icc_profile) {0};
+
+    image.profile = TEST_PROFILE(sRGB_v2_nano_icc);
+    target.profile = image.profile;
+    REQUIRE(pl_render_image(rr, &image, &target, &params));
+    image.profile = (struct pl_icc_profile) {0};
+    target.profile = (struct pl_icc_profile) {0};
+
+#endif
 
     // Test overlays
     image.num_overlays = 1;

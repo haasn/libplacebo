@@ -15,161 +15,22 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <lcms2.h>
 #include <math.h>
-
 #include "shaders.h"
 
-static cmsHPROFILE get_profile(pl_log log, cmsContext cms,
-                               struct pl_icc_color_space iccsp,
-                               struct pl_color_space *csp)
-{
-    *csp = iccsp.color;
+const struct pl_icc_params pl_icc_default_params = { PL_ICC_DEFAULTS };
 
-    // The input profile for the transformation is dependent on the video
-    // primaries, transfer characteristics, and brightness levels
-    const float lb = csp->hdr.min_luma / PL_COLOR_SDR_WHITE;
-    const float lw = csp->hdr.max_luma / PL_COLOR_SDR_WHITE;
+#ifdef PL_HAVE_LCMS
 
-    const struct pl_raw_primaries *prim = pl_raw_primaries_get(csp->primaries);
-    cmsCIExyY wp_xyY = { prim->white.x, prim->white.y, 1.0 };
-    cmsCIExyYTRIPLE prim_xyY = {
-        .Red   = { prim->red.x,   prim->red.y,   1.0 },
-        .Green = { prim->green.x, prim->green.y, 1.0 },
-        .Blue  = { prim->blue.x,  prim->blue.y,  1.0 },
-    };
+#include <lcms2.h>
+#include <lcms2_plugin.h>
 
-    if (iccsp.profile.data) {
-        pl_info(log, "Opening ICC profile..");
-        cmsHPROFILE prof = cmsOpenProfileFromMemTHR(cms, iccsp.profile.data,
-                                                   iccsp.profile.len);
-        if (!prof) {
-            pl_err(log, "Failed opening ICC profile, falling back to color struct");
-            goto fallback;
-        }
-
-        // Update contrast information with detected black point
-        const int intent = PL_INTENT_RELATIVE_COLORIMETRIC;
-        cmsCIEXYZ bp_XYZ;
-        if (!cmsDetectBlackPoint(&bp_XYZ, prof, intent, 0))
-            return prof;
-
-        // Map this XYZ value back into the (linear) source space
-        cmsToneCurve *linear = cmsBuildGamma(cms, 1.0);
-        cmsHPROFILE rev_profile = cmsCreateRGBProfileTHR(cms, &wp_xyY, &prim_xyY,
-                (cmsToneCurve*[3]){linear, linear, linear});
-        cmsHPROFILE xyz_profile = cmsCreateXYZProfile();
-        cmsHTRANSFORM xyz2src = cmsCreateTransformTHR(cms,
-                xyz_profile, TYPE_XYZ_DBL, rev_profile, TYPE_RGB_DBL,
-                intent, 0);
-        cmsFreeToneCurve(linear);
-        cmsCloseProfile(rev_profile);
-        cmsCloseProfile(xyz_profile);
-        if (!xyz2src)
-            return prof;
-
-        double src_black[3] = {0};
-        cmsDoTransform(xyz2src, &bp_XYZ, src_black, 1);
-        cmsDeleteTransform(xyz2src);
-
-        // Convert to (relative) output luminance using RGB->XYZ matrix
-        struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(&csp->hdr.prim);
-        float min_luma = 0.0f;
-        for (int i = 0; i < 3; i++)
-            min_luma += rgb2xyz.m[1][i] * src_black[i];
-
-        csp->hdr.min_luma = min_luma * csp->hdr.max_luma;
-        return prof;
-    }
-
-    // fall through
-fallback:;
-
-    cmsToneCurve *tonecurve = NULL;
-    switch (csp->transfer) {
-    case PL_COLOR_TRC_LINEAR:
-        tonecurve = cmsBuildGamma(cms, 1.0);
-        break;
-    case PL_COLOR_TRC_GAMMA18:
-        tonecurve = cmsBuildParametricToneCurve(cms, 6,
-                (double[4]) { 1.8f, powf(lw - lb, 1/1.8f), 0, lb });
-        break;
-    case PL_COLOR_TRC_GAMMA20:
-        tonecurve = cmsBuildParametricToneCurve(cms, 6,
-                (double[4]) { 2.0f, powf(lw - lb, 1/2.0f), 0, lb });
-        break;
-    case PL_COLOR_TRC_GAMMA24:
-        tonecurve = cmsBuildParametricToneCurve(cms, 6,
-                (double[4]) { 2.4f, powf(lw - lb, 1/2.4f), 0, lb });
-        break;
-    case PL_COLOR_TRC_GAMMA26:
-        tonecurve = cmsBuildParametricToneCurve(cms, 6,
-                (double[4]) { 2.6f, powf(lw - lb, 1/2.6f), 0, lb });
-        break;
-    case PL_COLOR_TRC_GAMMA28:
-        tonecurve = cmsBuildParametricToneCurve(cms, 6,
-                (double[4]) { 2.6f, powf(lw - lb, 1/2.8f), 0, lb });
-        break;
-    case PL_COLOR_TRC_UNKNOWN:
-    case PL_COLOR_TRC_PQ:
-    case PL_COLOR_TRC_HLG:
-    case PL_COLOR_TRC_S_LOG1:
-    case PL_COLOR_TRC_S_LOG2:
-    case PL_COLOR_TRC_V_LOG:
-    case PL_COLOR_TRC_GAMMA22:
-        // Catch-all bucket for unimplemented/unknown TRCs
-        csp->transfer = PL_COLOR_TRC_GAMMA22;
-        tonecurve = cmsBuildParametricToneCurve(cms, 6,
-                (double[4]) { 2.2f, powf(lw - lb, 1/2.2f), 0, lb });
-        break;
-    case PL_COLOR_TRC_SRGB: {
-        // Curve definition:
-        //   (aX + b)^y + e  | X >= d
-        //   cX + f          | X < d
-        const float y = 2.4f;
-        const float s = powf(lw - lb, 1/y);
-        const float a = s / 1.055f;
-        const float b = a * 0.055f;
-        const float c = (lw - lb) / 12.92f;
-        const float d = 0.04045f;
-        tonecurve = cmsBuildParametricToneCurve(cms, 5,
-                (double[7]) { y, a, b, c, d, lb, lb });
-        break;
-    }
-    case PL_COLOR_TRC_PRO_PHOTO: {
-        // Curve definition:
-        //   (aX + b)^y + e  | X >= d
-        //   cX + f          | X < d
-        const float y = 1.8f;
-        const float s = powf(lw - lb, 1/y);
-        const float c = (lw - lb) / 16;
-        const float d = 0.03125f;
-        tonecurve = cmsBuildParametricToneCurve(cms, 5,
-                (double[7]){ y, s, 0, c, d, lb, lb });
-        break;
-    }
-    case PL_COLOR_TRC_BT_1886: {
-        // Curve definition:
-        //   (aX + b)^y + c
-        const float y = 2.4f;
-        const float lby = powf(lb, 1/y);
-        const float lwy = powf(lw, 1/y);
-        tonecurve = cmsBuildParametricToneCurve(cms, 6,
-                (double[4]){ y, lwy - lby, lby, 0 });
-        break;
-    }
-    case PL_COLOR_TRC_COUNT:
-        pl_unreachable();
-    }
-
-    if (!tonecurve)
-        return NULL;
-
-    cmsToneCurve *curves[3] = { tonecurve, tonecurve, tonecurve };
-    cmsHPROFILE ret = cmsCreateRGBProfileTHR(cms, &wp_xyY, &prim_xyY, curves);
-    cmsFreeToneCurve(tonecurve);
-    return ret;
-}
+struct icc_priv {
+    cmsContext cms;
+    cmsHPROFILE profile;
+    cmsHPROFILE approx; // approximation profile
+    cmsCIEXYZ black;
+};
 
 static void error_callback(cmsContext cms, cmsUInt32Number code,
                            const char *msg)
@@ -178,64 +39,301 @@ static void error_callback(cmsContext cms, cmsUInt32Number code,
     pl_err(log, "lcms2: [%d] %s", (int) code, msg);
 }
 
-struct sh_icc_obj {
-    pl_log log;
-    struct pl_icc_params params;
-    struct pl_icc_color_space src, dst;
-    struct pl_icc_result result;
-    pl_shader_obj lut_obj;
-    bool updated; // to detect misuse of the API
-    bool ok;
-    ident_t lut;
-};
-
-static void fill_icc(void *datap, const struct sh_lut_params *params)
+void pl_icc_close(pl_icc_object *picc)
 {
-    struct sh_icc_obj *obj = params->priv;
-    pl_assert(params->comps == 4);
+    pl_icc_object icc = *picc;
+    if (!icc)
+        return;
 
-    struct pl_icc_color_space src = obj->src;
-    cmsHPROFILE srcp = NULL, dstp = NULL;
-    cmsHTRANSFORM trafo = NULL;
-    uint16_t *tmp = NULL;
-    obj->ok = false;
+    struct icc_priv *p = PL_PRIV(icc);
+    cmsCloseProfile(p->approx);
+    cmsCloseProfile(p->profile);
+    cmsDeleteContext(p->cms);
+    pl_free_ptr((void **) picc);
+}
 
-    cmsContext cms = cmsCreateContext(NULL, (void *) obj->log);
-    if (!cms) {
-        PL_ERR(obj, "Failed creating LittleCMS context!");
+static bool read_primaries(pl_icc_object icc, struct pl_raw_primaries *prim)
+{
+    struct icc_priv *p = PL_PRIV(icc);
+    cmsHTRANSFORM tf;
+    cmsHPROFILE xyz = cmsCreateXYZProfileTHR(p->cms);
+    if (!xyz)
+        return false;
+
+    // We need to use an unadapted observer to get the raw values
+    cmsFloat64Number prev_adapt = cmsSetAdaptationStateTHR(p->cms, 0.0);
+    tf = cmsCreateTransformTHR(p->cms, p->profile, TYPE_RGB_8, xyz, TYPE_XYZ_DBL,
+                               INTENT_ABSOLUTE_COLORIMETRIC,
+                               /* Note: These flags mostly don't do anything
+                                * anyway, but specify them regardless */
+                               cmsFLAGS_NOCACHE |
+                               cmsFLAGS_NOOPTIMIZE |
+                               cmsFLAGS_LOWRESPRECALC |
+                               cmsFLAGS_GRIDPOINTS(2));
+    cmsSetAdaptationStateTHR(p->cms, prev_adapt);
+    cmsCloseProfile(xyz);
+    if (!tf)
+        return false;
+
+    static const uint8_t testprimaries[4][3] = {
+        { 0xFF,    0,    0 }, /* red */
+        {    0, 0xFF,    0 }, /* green */
+        {    0,    0, 0xFF }, /* blue */
+        { 0xFF, 0xFF, 0xFF }, /* white */
+    };
+
+    cmsCIEXYZ dst[4];
+    cmsDoTransform(tf, testprimaries, dst, 4);
+    cmsDeleteTransform(tf);
+
+    prim->red   = pl_cie_from_XYZ(dst[0].X, dst[0].Y, dst[0].Z);
+    prim->green = pl_cie_from_XYZ(dst[1].X, dst[1].Y, dst[1].Z);
+    prim->blue  = pl_cie_from_XYZ(dst[2].X, dst[2].Y, dst[2].Z);
+    prim->white = pl_cie_from_XYZ(dst[3].X, dst[3].Y, dst[3].Z);
+    return true;
+}
+
+static bool detect_contrast(pl_icc_object icc, struct pl_hdr_metadata *hdr,
+                            float max_luma)
+{
+    struct icc_priv *p = PL_PRIV(icc);
+    cmsCIEXYZ *white = cmsReadTag(p->profile, cmsSigLuminanceTag);
+    if (!cmsDetectDestinationBlackPoint(&p->black, p->profile, icc->params.intent, 0))
+        return false;
+
+    if (max_luma <= 0)
+        max_luma = white ? white->Y : PL_COLOR_SDR_WHITE;
+
+    hdr->max_luma = max_luma;
+    hdr->min_luma = p->black.Y * max_luma;
+    hdr->min_luma = PL_MAX(hdr->min_luma, 1e-6); // prevent true 0
+    return true;
+}
+
+static void infer_clut_size(pl_log log, struct pl_icc_object *icc)
+{
+    struct icc_priv *p = PL_PRIV(icc);
+    struct pl_icc_params *params = &icc->params;
+    if (params->size_r && params->size_g && params->size_b) {
+        pl_debug(log, "Using fixed 3DLUT size: %dx%dx%d",
+                 (int) params->size_r, (int) params->size_g, (int) params->size_b);
+        return;
+    }
+
+#define REQUIRE_SIZE(N) \
+    params->size_r = PL_MAX(params->size_r, N); \
+    params->size_g = PL_MAX(params->size_g, N); \
+    params->size_b = PL_MAX(params->size_b, N)
+
+    // Default size for sanity
+    REQUIRE_SIZE(9);
+
+    // Ensure enough precision to track the (absolute) black point
+    if (p->black.Y > 1e-4) {
+        float black_rel = powf(p->black.Y, 1.0f / icc->gamma);
+        int min_size = 2 * (int) ceilf(1.0f / black_rel);
+        REQUIRE_SIZE(min_size);
+    }
+
+    // Ensure enough precision to track the gamma curve
+    if (cmsDetectRGBProfileGamma(p->profile, 1e-2) < 0) {
+        REQUIRE_SIZE(65);
+    } else if (cmsDetectRGBProfileGamma(p->profile, 1e-3) < 0) {
+        REQUIRE_SIZE(33);
+    } else if (cmsDetectRGBProfileGamma(p->profile, 1e-4) < 0) {
+        REQUIRE_SIZE(17);
+    }
+
+    // Ensure enough precision to track any internal CLUTs
+    cmsPipeline *pipe = NULL;
+    switch (icc->params.intent) {
+    case PL_INTENT_SATURATION:
+        pipe = cmsReadTag(p->profile, cmsSigBToA2Tag);
+        if (pipe)
+            break;
+        // fall through
+    case PL_INTENT_RELATIVE_COLORIMETRIC:
+    case PL_INTENT_ABSOLUTE_COLORIMETRIC:
+    default:
+        pipe = cmsReadTag(p->profile, cmsSigBToA1Tag);
+        if (pipe)
+            break;
+        // fall through
+    case PL_INTENT_PERCEPTUAL:
+        pipe = cmsReadTag(p->profile, cmsSigBToA0Tag);
+        break;
+    }
+
+    if (!pipe) {
+        switch (icc->params.intent) {
+        case PL_INTENT_SATURATION:
+            pipe = cmsReadTag(p->profile, cmsSigAToB2Tag);
+            if (pipe)
+                break;
+            // fall through
+        case PL_INTENT_RELATIVE_COLORIMETRIC:
+        case PL_INTENT_ABSOLUTE_COLORIMETRIC:
+        default:
+            pipe = cmsReadTag(p->profile, cmsSigAToB1Tag);
+            if (pipe)
+                break;
+            // fall through
+        case PL_INTENT_PERCEPTUAL:
+            pipe = cmsReadTag(p->profile, cmsSigAToB0Tag);
+            break;
+        }
+    }
+
+    if (pipe) {
+        for (cmsStage *stage = cmsPipelineGetPtrToFirstStage(pipe);
+             stage; stage = cmsStageNext(stage))
+        {
+            switch (cmsStageType(stage)) {
+            case cmsSigCLutElemType: ;
+                _cmsStageCLutData *data = cmsStageData(stage);
+                if (data->Params->nInputs != 3)
+                    continue;
+                params->size_r = PL_MAX(params->size_r, data->Params->nSamples[0]);
+                params->size_g = PL_MAX(params->size_g, data->Params->nSamples[1]);
+                params->size_b = PL_MAX(params->size_b, data->Params->nSamples[2]);
+                break;
+
+            default:
+                continue;
+            }
+        }
+    }
+
+    // Clamp the output size to make sure profiles are not too large
+    params->size_r = PL_MIN(params->size_r, 129);
+    params->size_g = PL_MIN(params->size_g, 129);
+    params->size_b = PL_MIN(params->size_b, 129);
+
+    // Constrain the total LUT size to roughly 1M entries
+    const size_t max_size = 1000000;
+    size_t total_size = params->size_r * params->size_g * params->size_b;
+    if (total_size > max_size) {
+        float factor = powf((float) max_size / total_size, 1/3.0f);
+        params->size_r = ceilf(factor * params->size_r);
+        params->size_g = ceilf(factor * params->size_g);
+        params->size_b = ceilf(factor * params->size_b);
+    }
+
+    pl_info(log, "Chosen 3DLUT size: %dx%dx%d",
+            (int) params->size_r, (int) params->size_g, (int) params->size_b);
+}
+
+pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
+                          const struct pl_icc_params *pparams)
+{
+    if (!profile->data)
+        return NULL;
+
+    struct pl_icc_object *icc = pl_zalloc_obj(NULL, icc, struct icc_priv);
+    struct icc_priv *p = PL_PRIV(icc);
+    struct pl_icc_params *params = &icc->params;
+    *params = pparams ? *pparams : pl_icc_default_params;
+    icc->signature = profile->signature;
+    p->cms = cmsCreateContext(NULL, (void *) log);
+    if (!p->cms) {
+        pl_err(log, "Failed creating LittleCMS context!");
         goto error;
     }
 
-    cmsSetLogErrorHandlerTHR(cms, error_callback);
+    cmsSetLogErrorHandlerTHR(p->cms, error_callback);
+    pl_info(log, "Opening ICC profile..");
+    p->profile = cmsOpenProfileFromMemTHR(p->cms, profile->data, profile->len);
+    if (!p->profile) {
+        pl_err(log, "Failed opening ICC profile");
+        goto error;
+    }
+
+    if (cmsGetColorSpace(p->profile) != cmsSigRgbData) {
+        pl_err(log, "Invalid ICC profile: not RGB");
+        goto error;
+    }
+
+    if (params->intent < 0 || params->intent > PL_INTENT_ABSOLUTE_COLORIMETRIC)
+        params->intent = cmsGetHeaderRenderingIntent(p->profile);
+
+    struct pl_raw_primaries *out_prim = &icc->csp.hdr.prim;
+    if (!read_primaries(icc, out_prim))
+        goto error;
+    if (!detect_contrast(icc, &icc->csp.hdr, params->max_luma))
+        goto error;
+    if ((icc->gamma = cmsDetectRGBProfileGamma(p->profile, 10)) < 0)
+        goto error;
+    infer_clut_size(log, icc);
+
+    const struct pl_raw_primaries *best = NULL;
+    for (enum pl_color_primaries prim = 1; prim < PL_COLOR_PRIM_COUNT; prim++) {
+        const struct pl_raw_primaries *raw = pl_raw_primaries_get(prim);
+        if (!icc->csp.primaries && pl_raw_primaries_similar(raw, out_prim)) {
+            icc->containing_primaries = prim;
+            icc->csp.primaries = prim;
+            best = raw;
+            break;
+        }
+
+        if (pl_primaries_superset(raw, out_prim) &&
+            (!best || pl_primaries_superset(best, raw)))
+        {
+            icc->containing_primaries = prim;
+            best = raw;
+        }
+    }
+
+    if (!best) {
+        pl_err(log, "ICC profile too wide to handle!");
+        goto error;
+    }
+
+    // Create approximation profile
+    cmsToneCurve *curve = cmsBuildGamma(p->cms, icc->gamma);
+    if (!curve)
+        goto error;
+
+    cmsCIExyY wp_xyY = { best->white.x, best->white.y, 1.0 };
+    cmsCIExyYTRIPLE prim_xyY = {
+        .Red   = { best->red.x,   best->red.y,   1.0 },
+        .Green = { best->green.x, best->green.y, 1.0 },
+        .Blue  = { best->blue.x,  best->blue.y,  1.0 },
+    };
+
+    p->approx = cmsCreateRGBProfileTHR(p->cms, &wp_xyY, &prim_xyY,
+                        (cmsToneCurve *[3]){ curve, curve, curve });
+    cmsFreeToneCurve(curve);
+    if (!p->approx)
+        goto error;
+
+    return icc;
+
+error:
+    pl_icc_close((pl_icc_object *) &icc);
+    return NULL;
+}
+
+static void fill_lut(void *datap, const struct sh_lut_params *params, bool decode)
+{
+    pl_icc_object icc = params->priv;
+    struct icc_priv *p = PL_PRIV(icc);
+    pl_log log = cmsGetContextUserData(p->cms);
+    cmsHPROFILE srcp = decode ? p->profile : p->approx;
+    cmsHPROFILE dstp = decode ? p->approx  : p->profile;
+
     clock_t start = clock();
-    dstp = get_profile(obj->log, cms, obj->dst, &obj->result.dst_color);
-    if (obj->params.use_display_contrast) {
-        src.color.hdr.max_luma = obj->result.dst_color.hdr.max_luma;
-        src.color.hdr.min_luma = obj->result.dst_color.hdr.min_luma;
-    }
-    srcp = get_profile(obj->log, cms, src, &obj->result.src_color);
-    clock_t after_profiles = clock();
-    pl_log_cpu_time(obj->log, start, after_profiles, "opening ICC profiles");
-    if (!srcp || !dstp)
-        goto error;
+    cmsHTRANSFORM tf = cmsCreateTransformTHR(p->cms, srcp, TYPE_RGB_16,
+                                             dstp, TYPE_RGBA_FLT,
+                                             icc->params.intent,
+                                             cmsFLAGS_NOCACHE | cmsFLAGS_NOOPTIMIZE);
+    if (!tf)
+        return;
 
-    uint32_t flags = cmsFLAGS_HIGHRESPRECALC | cmsFLAGS_BLACKPOINTCOMPENSATION |
-                     cmsFLAGS_NOCACHE;
-
-    trafo = cmsCreateTransformTHR(cms, srcp, TYPE_RGB_16, dstp, TYPE_RGB_16,
-                                  obj->params.intent, flags);
     clock_t after_transform = clock();
-    pl_log_cpu_time(obj->log, after_profiles, after_transform, "creating ICC transform");
-    if (!trafo) {
-        PL_ERR(obj, "Failed creating CMS transform!");
-        goto error;
-    }
+    pl_log_cpu_time(log, start, after_transform, "creating ICC transform");
 
     int s_r = params->width, s_g = params->height, s_b = params->depth;
-    pl_assert(s_r > 1 && s_g > 1 && s_b > 1);
-    tmp = pl_alloc(NULL, 2 * s_r * 3 * sizeof(tmp[0]));
-
-    uint16_t *out = tmp + s_r * 3;
+    uint16_t *tmp = pl_alloc(NULL, s_r * 3 * sizeof(tmp[0]));
     for (int b = 0; b < s_b; b++) {
         for (int g = 0; g < s_g; g++) {
             // Transform a single line of the output buffer
@@ -244,121 +342,119 @@ static void fill_icc(void *datap, const struct sh_lut_params *params)
                 tmp[r * 3 + 1] = g * 65535 / (s_g - 1);
                 tmp[r * 3 + 2] = b * 65535 / (s_b - 1);
             }
-            cmsDoTransform(trafo, tmp, out, s_r);
 
-            // Write this line into the right output position
             size_t offset = (b * s_g + g) * s_r * 4;
             float *data = ((float *) datap) + offset;
-            for (int r = 0; r < s_r; r++) {
-                data[r * 4 + 0] = out[r * 3 + 0] / 65535.0;
-                data[r * 4 + 1] = out[r * 3 + 1] / 65535.0;
-                data[r * 4 + 2] = out[r * 3 + 2] / 65535.0;
-                data[r * 4 + 3] = 1.0;
-            }
+            cmsDoTransform(tf, tmp, data, s_r);
         }
     }
 
-    pl_log_cpu_time(obj->log, after_transform, clock(), "generating ICC 3DLUT");
-    obj->ok = true;
-    // fall through
-
-error:
-    if (trafo)
-        cmsDeleteTransform(trafo);
-    if (srcp)
-        cmsCloseProfile(srcp);
-    if (dstp)
-        cmsCloseProfile(dstp);
-    if (cms)
-        cmsDeleteContext(cms);
-
-    pl_free_ptr(&tmp);
+    pl_log_cpu_time(log, after_transform, clock(), "generating ICC 3DLUT");
+    cmsDeleteTransform(tf);
+    pl_free(tmp);
 }
 
-static void sh_icc_uninit(pl_gpu gpu, void *ptr)
+static void fill_decode(void *datap, const struct sh_lut_params *params)
 {
-    struct sh_icc_obj *obj = ptr;
-    pl_shader_obj_destroy(&obj->lut_obj);
-    *obj = (struct sh_icc_obj) {0};
+    fill_lut(datap, params, true);
 }
 
-static bool icc_csp_eq(const struct pl_icc_color_space *a,
-                       const struct pl_icc_color_space *b)
+static void fill_encode(void *datap, const struct sh_lut_params *params)
 {
-    return pl_icc_profile_equal(&a->profile, &b->profile) &&
-           pl_color_space_equal(&a->color, &b->color);
+    fill_lut(datap, params, false);
 }
 
-bool pl_icc_update(pl_shader sh,
-                   const struct pl_icc_color_space *srcp,
-                   const struct pl_icc_color_space *dstp,
-                   pl_shader_obj *icc,
-                   struct pl_icc_result *out,
-                   const struct pl_icc_params *params)
-{
-    params = PL_DEF(params, &pl_icc_default_params);
-    size_t s_r = PL_DEF(params->size_r, 64),
-           s_g = PL_DEF(params->size_g, 64),
-           s_b = PL_DEF(params->size_b, 64);
-
-    struct sh_icc_obj *obj;
-    obj = SH_OBJ(sh, icc, PL_SHADER_OBJ_ICC,
-                 struct sh_icc_obj, sh_icc_uninit);
-    if (!obj)
-        return false;
-
-    struct pl_icc_color_space src = *srcp, dst = *dstp;
-    pl_color_space_infer(&src.color);
-    pl_color_space_infer_ref(&dst.color, &src.color);
-
-    bool changed = !icc_csp_eq(&obj->src, &src) ||
-                   !icc_csp_eq(&obj->dst, &dst) ||
-                   memcmp(&obj->params, params, sizeof(*params));
-
-    // Update the object, since we need this information from `fill_icc`
-    obj->log = sh->log;
-    obj->params = *params;
-    obj->src = src;
-    obj->dst = dst;
-    obj->lut = sh_lut(sh, sh_lut_params(
-        .object = &obj->lut_obj,
-        .type = PL_VAR_FLOAT,
-        .width = s_r,
-        .height = s_g,
-        .depth = s_b,
-        .comps = 4,
-        .linear = true,
-        .update = changed,
-        .fill = fill_icc,
-        .priv = obj,
-    ));
-    if (!obj->lut || !obj->ok)
-        return false;
-
-    obj->updated = true;
-    *out = obj->result;
-    return true;
-}
-
-void pl_icc_apply(pl_shader sh, pl_shader_obj *icc)
+void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,
+                   struct pl_color_space *out_csp)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
-    struct sh_icc_obj *obj;
-    obj = SH_OBJ(sh, icc, PL_SHADER_OBJ_ICC,
-                 struct sh_icc_obj, sh_icc_uninit);
-    if (!obj || !obj->lut || !obj->updated || !obj->ok) {
-        SH_FAIL(sh, "pl_icc_apply called without prior pl_icc_update?");
-        return;
-    }
+    uint64_t sig = icc->signature;
+    pl_hash_merge(&sig, icc->params.intent);
+
+    ident_t lut = sh_lut(sh, sh_lut_params(
+        .object     = lut_obj,
+        .type       = PL_VAR_FLOAT,
+        .width      = icc->params.size_r,
+        .height     = icc->params.size_g,
+        .depth      = icc->params.size_b,
+        .comps      = 4,
+        .linear     = true,
+        .signature  = sig,
+        .fill       = fill_decode,
+        .priv       = (void *) icc,
+    ));
 
     sh_describe(sh, "ICC 3DLUT");
-    GLSL("// pl_icc_apply \n"
-         "color.rgb = %s(color.rgb).rgb; \n",
-         obj->lut);
+    GLSL("// pl_icc_decode                      \n"
+         "{                                     \n"
+         "color.rgb = %s(color.rgb).rgb;        \n"
+         "color.rgb = max(color.rgb, 0.0);      \n"
+         "color.rgb = pow(color.rgb, vec3(%s)); \n"
+         "color.rgb = %s * color.rgb;           \n"  // expand HDR levels
+         "}                                     \n",
+         lut, SH_FLOAT(icc->gamma),
+         SH_FLOAT(pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, icc->csp.hdr.max_luma)));
 
-    obj->updated = false;
+    if (out_csp) {
+        *out_csp = (struct pl_color_space) {
+            .primaries  = icc->containing_primaries,
+            .transfer   = PL_COLOR_TRC_LINEAR,
+            .hdr        = icc->csp.hdr,
+        };
+    }
 }
 
-const struct pl_icc_params pl_icc_default_params = { PL_ICC_DEFAULTS };
+void pl_icc_encode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj)
+{
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
+    ident_t lut = sh_lut(sh, sh_lut_params(
+        .object     = lut_obj,
+        .type       = PL_VAR_FLOAT,
+        .width      = icc->params.size_r,
+        .height     = icc->params.size_g,
+        .depth      = icc->params.size_b,
+        .comps      = 4,
+        .linear     = true,
+        .signature  = ~icc->signature, // avoid confusion with decoding LUTs
+        .fill       = fill_encode,
+        .priv       = (void *) icc,
+    ));
+
+    sh_describe(sh, "ICC 3DLUT");
+    GLSL("// pl_icc_encode                      \n"
+         "{                                     \n"
+         "color.rgb = 1.0/%s * color.rgb;       \n"
+         "color.rgb = max(color.rgb, 0.0);      \n"
+         "color.rgb = pow(color.rgb, vec3(%s)); \n"
+         "color.rgb = %s(color.rgb).rgb;        \n"
+         "}                                     \n",
+         SH_FLOAT(pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, icc->csp.hdr.max_luma)),
+         SH_FLOAT(1.0f / icc->gamma), lut);
+}
+
+#else // !PL_HAVE_LCMS
+
+void pl_icc_close(pl_icc_object *picc) {};
+pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
+                          const struct pl_icc_params *pparams)
+{
+    pl_err(log, "libplacebo compiled without LittleCMS 2 support!");
+    return NULL;
+}
+
+void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,
+                   struct pl_color_space *out_csp)
+{
+    pl_unreachable(); // can't get a pl_icc_object
+}
+
+void pl_icc_encode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj)
+{
+    pl_unreachable();
+}
+
+#endif

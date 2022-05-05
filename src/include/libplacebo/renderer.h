@@ -24,6 +24,7 @@
 #include <libplacebo/gpu.h>
 #include <libplacebo/shaders/colorspace.h>
 #include <libplacebo/shaders/film_grain.h>
+#include <libplacebo/shaders/icc.h>
 #include <libplacebo/shaders/lut.h>
 #include <libplacebo/shaders/sampling.h>
 #include <libplacebo/shaders/custom.h>
@@ -252,13 +253,7 @@ struct pl_render_params {
     // general-purpose ones.
     bool disable_builtin_scalers;
 
-    // Forces the use of an ICC 3DLUT, even in cases where the use of one is
-    // unnecessary. This is slower, but may improve the quality of the gamut
-    // reduction step, if one is performed.
-    bool force_icc_lut;
-
     // Ignore ICC profiles attached to either `image` or `target`.
-    // Note: A LUT may still be generated if `force_icc_lut` is also enabled.
     bool ignore_icc_profiles;
 
     // Forces the use of dithering, even when rendering to 16-bit FBOs. This is
@@ -298,6 +293,7 @@ struct pl_render_params {
 
     // --- Deprecated/removed fields
     bool disable_overlay_sampling PL_DEPRECATED; // no longer used
+    bool force_icc_lut PL_DEPRECATED; // no longer functional
 };
 
 // Bare minimum parameters, with no features enabled. This is the fastest
