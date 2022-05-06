@@ -114,6 +114,9 @@ static struct pl_tone_map_params fix_params(const struct pl_tone_map_params *par
         if (ratio > 10) {
             // Extreme reduction: Pick spline for its quasi-linear behavior
             fun = &pl_tone_map_spline;
+        } else if (src_max < 1 + 1e-3 && dst_max < 1 + 1e-3) {
+            // SDR<->SDR range conversion, use linear light stretching
+            fun = &pl_tone_map_linear;
         } else if (fmaxf(ratio, 1 / ratio) > 2) {
             // Reasonably ranged HDR<->SDR conversion, pick BT.2446a since it
             // was designed for this task
