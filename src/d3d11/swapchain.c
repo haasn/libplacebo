@@ -318,8 +318,9 @@ error:
     return false;
 }
 
-static void d3d11_sw_colorspace_hint(pl_swapchain sw,
-                                     const struct pl_color_space *csp)
+static void update_swapchain_color_config(pl_swapchain sw,
+                                          const struct pl_color_space *csp,
+                                          bool is_internal)
 {
     struct priv *p = PL_PRIV(sw);
     struct d3d11_ctx *ctx = p->ctx;
@@ -344,8 +345,9 @@ static void d3d11_sw_colorspace_hint(pl_swapchain sw,
         pl_color_space_equal(&p->csp_map.out_csp, &csp_map.out_csp))
         goto cleanup;
 
-    PL_INFO(ctx, "New swap chain configuration received from hint: "
-                 "format: %s, color space: %s.",
+    PL_INFO(ctx, "%s swap chain configuration%s: format: %s, color space: %s.",
+            is_internal ? "Initial" : "New",
+            is_internal ? "" : " received from hint",
             pl_get_dxgi_format_name(csp_map.d3d11_fmt),
             pl_get_dxgi_csp_name(csp_map.d3d11_csp));
 
@@ -375,6 +377,12 @@ static void d3d11_sw_colorspace_hint(pl_swapchain sw,
 
 cleanup:
     SAFE_RELEASE(swapchain3);
+}
+
+static void d3d11_sw_colorspace_hint(pl_swapchain sw,
+                                     const struct pl_color_space *csp)
+{
+    update_swapchain_color_config(sw, csp, false);
 }
 
 IDXGISwapChain *pl_d3d11_swapchain_unwrap(pl_swapchain sw)
@@ -606,7 +614,7 @@ pl_swapchain pl_d3d11_create_swapchain(pl_d3d11 d3d11,
 
     p->csp_map.d3d11_fmt = scd.BufferDesc.Format;
 
-    d3d11_sw_colorspace_hint(sw, &pl_color_space_unknown);
+    update_swapchain_color_config(sw, &pl_color_space_unknown, true);
 
     success = true;
 error:
