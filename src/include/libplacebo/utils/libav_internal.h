@@ -1276,8 +1276,8 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
         pic->data[p] = (uint8_t *) PL_ALIGN2((uintptr_t) alloc->buf->data, alignment[p]);
         pic->buf[p] = av_buffer_create(alloc->buf->data, buf_size, pl_avalloc_free, alloc, 0);
         if (!pic->buf[p]) {
-            free(alloc);
             pl_buf_destroy(gpu, &alloc->buf);
+            free(alloc);
             av_frame_unref(pic);
             return AVERROR(ENOMEM);
         }
