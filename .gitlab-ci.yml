@@ -146,7 +146,9 @@ gpu:
         paths:
             - coverage/
         reports:
-            cobertura: build/meson-logs/coverage.xml
+            coverage_report:
+              coverage_format: cobertura
+              path: build/meson-logs/coverage.xml
 
 asan:
     image: registry.videolan.org/libplacebo-ubuntu-focal:20210412100944
