@@ -18,11 +18,11 @@
 #include <windows.h>
 #include <versionhelpers.h>
 
+#include "common.h"
 #include "gpu.h"
 #include "formats.h"
 #include "glsl/spirv.h"
 
-#define D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE (0x80)
 #define DXGI_ADAPTER_FLAG3_SUPPORT_MONITORED_FENCES (0x8)
 
 struct timer_query {

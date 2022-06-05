@@ -48,3 +48,7 @@ typedef HRESULT (WINAPI *PFN_CREATE_DXGI_FACTORY)(REFIID riid, void **ppFactory)
 // proper user-mode error code. See:
 // https://docs.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgiswapchain-present
 #define D3DDDIERR_DEVICEREMOVED (0x88760870)
+
+#ifndef D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE
+#define D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE (0x80)
+#endif
