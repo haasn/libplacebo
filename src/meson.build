@@ -27,7 +27,8 @@ endif
 build_deps = [ libm, threads ]
 test_deps = []
 
-vulkan = dependency('vulkan', required: get_option('vulkan'))
+vulkan_opt = get_option('vulkan')
+vulkan = dependency('vulkan', required: vulkan_opt)
 opengl = dependency('epoxy', version: '>=1.4.0', required: get_option('opengl'))
 shaderc = dependency('shaderc', version: '>=2019.1', required: get_option('shaderc'))
 cross = dependency('spirv-cross-c-shared', version: '>=0.29.0', required: get_option('d3d11'))
@@ -42,7 +43,7 @@ if vulkan.found() and not get_option('vulkan-link')
   vulkan_headers = vulkan.partial_dependency(includes: true, compile_args: true)
 endif
 
-if not vulkan_headers.found() and not get_option('vulkan').disabled()
+if not vulkan_headers.found() and not vulkan_opt.disabled()
   # Probe for <vulkan/vulkan.h> as a fallback for the vulkan headers
   if cc.check_header('vulkan/vulkan.h')
     vulkan_headers = declare_dependency()
@@ -170,6 +171,16 @@ if glslang_found
   else
     error('glslang version @0@ too old! Must be at least @1@'
           .format(glslang_ver, glslang_min_ver))
+  endif
+endif
+
+if not (glslang_found or shaderc.found())
+  spirv_msg = 'vulkan support requires either `shaderc` or `glslang`'
+  if vulkan_opt.enabled()
+    error(spirv_msg)
+  elif vulkan_headers.found()
+    warning(spirv_msg + ', disabling')
+    vulkan_headers = vulkan = disabler()
   endif
 endif
 
@@ -373,12 +384,6 @@ if not (comps.has('vulkan') or comps.has('opengl') or comps.has('d3d11'))
   warning('Building without any graphics API. libplacebo built this way still ' +
           'has some limited use (e.g. generating GLSL shaders), but most of ' +
           'its functionality will be missing or impaired!')
-endif
-
-if comps.has('vulkan') and not (comps.has('shaderc') or comps.has('glslang'))
-  error('Building with support for Vulkan requires either `shaderc` or ' +
-        '`glslang` to be of any use, otherwise libplacebo would fail to ' +
-        'compile GLSL to SPIR-V (needed by the Vulkan API)!')
 endif
 
 
