@@ -180,7 +180,8 @@ if not (glslang_found or shaderc.found())
     error(spirv_msg)
   elif vulkan_headers.found()
     warning(spirv_msg + ', disabling')
-    vulkan_headers = vulkan = disabler()
+    vulkan_headers = disabler()
+    vulkan = disabler()
   endif
 endif
 
