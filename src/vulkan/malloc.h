@@ -39,6 +39,8 @@ struct vk_memslice {
     VkBuffer buf;   // associated buffer (when `buf_usage` is nonzero)
     void *data;     // pointer to slice (for persistently mapped slices)
     bool coherent;  // whether `data` is coherent
+    VkDeviceSize map_offset; // can be larger than offset/size
+    VkDeviceSize map_size;
 };
 
 struct vk_malloc_params {

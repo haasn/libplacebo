@@ -35,8 +35,8 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
         VK(vk->FlushMappedMemoryRanges(vk->dev, 1, &(struct VkMappedMemoryRange) {
             .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
             .memory = buf_vk->mem.vkmem,
-            .offset = buf_vk->mem.offset,
-            .size = buf_vk->mem.size,
+            .offset = buf_vk->mem.map_offset,
+            .size = buf_vk->mem.map_size,
         }));
 
         // Just ignore errors, not much we can do about them other than
@@ -255,8 +255,8 @@ static void invalidate_memslice(struct vk_ctx *vk, const struct vk_memslice *mem
     VK(vk->InvalidateMappedMemoryRanges(vk->dev, 1, &(VkMappedMemoryRange) {
         .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
         .memory = mem->vkmem,
-        .offset = mem->offset,
-        .size = mem->size,
+        .offset = mem->map_offset,
+        .size = mem->map_size,
     }));
 
     // Ignore errors (after logging), nothing useful we can do anyway

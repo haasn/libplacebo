@@ -904,11 +904,17 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         out->data = (uint8_t *) slab->data + out->offset;
         out->coherent = slab->coherent;
         if (!slab->coherent) {
+            // Use entire buffer range, since this is a dedicated memory
+            // allocation. This avoids issues with noncoherent atomicity
+            out->map_offset = 0;
+            out->map_size = VK_WHOLE_SIZE;
+
             // Mapping does not implicitly invalidate mapped memory
             VK(vk->InvalidateMappedMemoryRanges(vk->dev, 1, &(VkMappedMemoryRange) {
                 .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
                 .memory = slab->mem,
-                .size = VK_WHOLE_SIZE,
+                .offset = out->map_offset,
+                .size = out->map_size,
             }));
         }
     }
@@ -981,6 +987,8 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
         .buf = slab->buffer,
         .data = slab->data ? (uint8_t *) slab->data + offset : 0x0,
         .coherent = slab->coherent,
+        .map_offset = slab->data ? offset : 0,
+        .map_size = slab->data ? size : 0,
         .priv = slab,
         .shared_mem = {
             .handle = slab->handle,
