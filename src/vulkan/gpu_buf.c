@@ -250,17 +250,22 @@ error:
     return NULL;
 }
 
-static void invalidate_memslice(struct vk_ctx *vk, const struct vk_memslice *mem)
+static void invalidate_buf(pl_gpu gpu, pl_buf buf)
 {
+    struct pl_vk *p = PL_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+    struct pl_buf_vk *buf_vk = PL_PRIV(buf);
+
     VK(vk->InvalidateMappedMemoryRanges(vk->dev, 1, &(VkMappedMemoryRange) {
         .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-        .memory = mem->vkmem,
-        .offset = mem->map_offset,
-        .size = mem->map_size,
+        .memory = buf_vk->mem.vkmem,
+        .offset = buf_vk->mem.map_offset,
+        .size = buf_vk->mem.map_size,
     }));
 
     // Ignore errors (after logging), nothing useful we can do anyway
 error: ;
+   vk_buf_deref(gpu, buf);
 }
 
 void vk_buf_flush(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
@@ -297,8 +302,10 @@ void vk_buf_flush(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
                            0, NULL, 1, &buffBarrier, 0, NULL);
 
     // Invalidate the mapped memory as soon as this barrier completes
-    if (buf_vk->mem.data && !buf_vk->mem.coherent)
-        vk_cmd_callback(cmd, (vk_cb) invalidate_memslice, vk, &buf_vk->mem);
+    if (buf_vk->mem.data && !buf_vk->mem.coherent) {
+        pl_rc_ref(&buf_vk->rc);
+        vk_cmd_callback(cmd, (vk_cb) invalidate_buf, gpu, buf);
+    }
 }
 
 bool vk_buf_poll(pl_gpu gpu, pl_buf buf, uint64_t timeout)
