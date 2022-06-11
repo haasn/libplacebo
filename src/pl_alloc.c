@@ -27,7 +27,7 @@ struct header {
     struct ext *ext;
 
     // Pointer to actual data, for alignment purposes
-    intmax_t data[1];
+    intmax_t data[];
 };
 
 // Lazily allocated, to save space for leaf allocations and allocations which
