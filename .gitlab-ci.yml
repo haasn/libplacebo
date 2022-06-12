@@ -4,7 +4,7 @@ stages:
     - sanitize
 
 variables:
-    IMAGE_UBUNTU_FOCAL: registry.videolan.org/libplacebo-ubuntu-focal:20210412100944
+    IMAGE_UBUNTU_FOCAL: registry.videolan.org/libplacebo-ubuntu-focal:20220610192633
     IMAGE_UBUNTU_FOCAL_AARCH: registry.videolan.org/libplacebo-ubuntu-focal-aarch64:20211020160908
 
 linux:
