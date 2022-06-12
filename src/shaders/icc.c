@@ -82,7 +82,7 @@ static bool read_primaries(pl_icc_object icc, struct pl_raw_primaries *prim)
         { 0xFF, 0xFF, 0xFF }, /* white */
     };
 
-    cmsCIEXYZ dst[4];
+    cmsCIEXYZ dst[4] = {0};
     cmsDoTransform(tf, testprimaries, dst, 4);
     cmsDeleteTransform(tf);
 
