@@ -5,6 +5,7 @@ stages:
 
 variables:
     IMAGE_UBUNTU_FOCAL: registry.videolan.org/libplacebo-ubuntu-focal:20220610192633
+    IMAGE_UBUNTU_JAMMY: registry.videolan.org/libplacebo-ubuntu-jammy:20220619074648
     IMAGE_UBUNTU_FOCAL_AARCH: registry.videolan.org/libplacebo-ubuntu-focal-aarch64:20211020160908
 
 linux:
@@ -123,7 +124,7 @@ llvmpipe:
         - cd build && meson test -t 5 -v --num-processes=1
 
 gpu:
-    image: $IMAGE_UBUNTU_FOCAL
+    image: $IMAGE_UBUNTU_JAMMY
     stage: test
     tags:
         - gpu
@@ -154,7 +155,7 @@ gpu:
               path: build/meson-logs/coverage.xml
 
 asan:
-    image: $IMAGE_UBUNTU_FOCAL
+    image: $IMAGE_UBUNTU_JAMMY
     stage: sanitize
     tags:
         - gpu
@@ -170,7 +171,7 @@ asan:
         - cd build && time meson test -t 5 -v --num-processes=1
 
 msan:
-    image: $IMAGE_UBUNTU_FOCAL
+    image: $IMAGE_UBUNTU_JAMMY
     stage: sanitize
     tags:
         - gpu
@@ -188,7 +189,7 @@ msan:
         - cd build && time meson test -t 5 -v --num-processes=1
 
 ubsan:
-    image: $IMAGE_UBUNTU_FOCAL
+    image: $IMAGE_UBUNTU_JAMMY
     stage: sanitize
     tags:
         - gpu
