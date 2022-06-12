@@ -1077,6 +1077,8 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     // Add all extensions we need
     if (params->surface)
         PL_ARRAY_APPEND(vk->alloc, vk->exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    if (vk->api_ver < VK_API_VERSION_1_2)
+        PL_ARRAY_APPEND(vk->alloc, vk->exts, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
 
     // Keep track of all optional function pointers associated with extensions
     PL_ARRAY(const struct vk_fun *) ext_funs = {0};
