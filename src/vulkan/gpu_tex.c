@@ -31,12 +31,6 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
         vk_cmd_dep(cmd, stage, tex_vk->ext_deps.elem[i]);
     tex_vk->ext_deps.num = 0;
 
-    // Transitioning to VK_IMAGE_LAYOUT_UNDEFINED is a pseudo-operation for
-    // render passes, which means that we don't actually need to perform
-    // any image layout transition
-    if (layout == VK_IMAGE_LAYOUT_UNDEFINED)
-        layout = tex_vk->layout;
-
     struct vk_sync_scope last;
     bool is_trans = layout != tex_vk->layout;
     last = vk_sem_barrier(vk, cmd, &tex_vk->sem, stage, access, is_trans || export);

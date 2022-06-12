@@ -25,7 +25,6 @@ struct pl_pass_vk {
     VkPipeline pipe;
     VkPipelineLayout pipeLayout;
     VkRenderPass renderPass;
-    VkImageLayout initialLayout;
     // Descriptor set (bindings)
     bool use_pushd;
     VkDescriptorSetLayout dsLayout;
@@ -569,24 +568,17 @@ no_descriptors: ;
             };
         }
 
-        VkAttachmentLoadOp loadOp;
-        if (pass->params.load_target) {
-            pass_vk->initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-        } else {
-            pass_vk->initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        }
-
         VkRenderPassCreateInfo rinfo = {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
             .attachmentCount = 1,
             .pAttachments = &(VkAttachmentDescription) {
                 .format = (VkFormat) params->target_format->signature,
                 .samples = VK_SAMPLE_COUNT_1_BIT,
-                .loadOp = loadOp,
+                .loadOp = pass->params.load_target
+                            ? VK_ATTACHMENT_LOAD_OP_LOAD
+                            : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                .initialLayout = pass_vk->initialLayout,
+                .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                 .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             },
             .subpassCount = 1,
@@ -962,7 +954,7 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 
         vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                       pass_vk->initialLayout, false);
+                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, false);
 
         VkViewport viewport = {
             .x = params->viewport.x0,
