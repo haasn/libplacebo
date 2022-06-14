@@ -2808,6 +2808,8 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         rr->frames.elem[i].evict = true;
 
     // Traverse the input frames and determine/prepare the ones we need
+    bool single_frame = !params->frame_mixer || images->num_frames == 1;
+retry:
     for (int i = 0; i < images->num_frames; i++) {
         uint64_t sig = images->signatures[i];
         float pts = images->timestamps[i];
@@ -2822,7 +2824,6 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 
         float weight;
         const struct pl_filter_config *mixer = params->frame_mixer;
-        bool single_frame = !mixer || images->num_frames == 1;
         if (single_frame) {
 
             // Only render the refimg, ignore others
@@ -3046,9 +3047,17 @@ inter_pass_error:
         }
     }
 
+    // If we got back no frames, retry with ZOH semantics
+    if (!fidx) {
+        pl_assert(!single_frame);
+        single_frame = true;
+        goto retry;
+    }
+
     // Sample and mix the output color
     pass_begin_frame(&pass);
     pass.info.index = fidx;
+    pl_assert(fidx > 0);
 
     pl_shader sh = pl_dispatch_begin(rr->dp);
     sh_describe(sh, "frame mixing");
@@ -3066,7 +3075,6 @@ inter_pass_error:
     // ponging between linear and nonlinear light when combining linearly
     // scaled images with frame mixing.
     struct pl_color_space mix_color = pass.image.color;
-    pl_assert(fidx > 0);
     mix_color.transfer = frames[fidx - 1].color.transfer;
 
     int comps = 0;

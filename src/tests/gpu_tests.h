@@ -1130,6 +1130,17 @@ static void pl_render_tests(pl_gpu gpu)
         .frame_duration = 1.0 / 24.0,
     };
 
+    // Test large PTS jumps in frame mix
+    struct pl_frame_mix mix = (struct pl_frame_mix) {
+        .num_frames = 2,
+        .frames = (const struct pl_frame *[]) { &image, &image },
+        .signatures = (uint64_t[]) { 0xFFF1, 0xFFF2 },
+        .timestamps = (float[]) { -100, 100 },
+        .vsync_duration = 1.6,
+    };
+    REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
+
+    // Test mixer queue
 #define NUM_MIX_FRAMES 20
     struct pl_source_frame srcframes[NUM_MIX_FRAMES+1];
     srcframes[NUM_MIX_FRAMES] = (struct pl_source_frame) {0};
@@ -1153,7 +1164,6 @@ static void pl_render_tests(pl_gpu gpu)
             pl_queue_push(queue, src); // push it anyway, for testing
     }
 
-    struct pl_frame_mix mix;
     while ((ret = pl_queue_update(queue, &mix, &qparams)) != PL_QUEUE_EOF) {
         if (ret == PL_QUEUE_MORE) {
             REQUIRE(qparams.pts > 0.0);
