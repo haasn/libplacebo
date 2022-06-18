@@ -666,6 +666,17 @@ debug_layers_done: ;
         }
     }
 
+#ifdef VK_KHR_portability_enumeration
+    // Required for macOS ( MoltenVK ) compatibility
+    for (int n = 0; n < num_exts_avail; n++) {
+        if (strcmp(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME, exts_avail[n].extensionName) == 0) {
+            PL_ARRAY_APPEND(tmp, exts, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+            info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+            break;
+        }
+    }
+#endif
+
     // Add extra user extensions
     for (int i = 0; i < params->num_extensions; i++) {
         const char *ext = params->extensions[i];
