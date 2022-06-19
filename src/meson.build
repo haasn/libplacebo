@@ -281,7 +281,7 @@ fuzzers = [
 components = [
   {
     'name': 'lcms',
-    'deps':  dependency('lcms2', version: '>=2.13', required: get_option('lcms')),
+    'deps':  dependency('lcms2', version: '>=2.9', required: get_option('lcms')),
     'test': 'icc.c',
   }, {
     'name': 'glslang',

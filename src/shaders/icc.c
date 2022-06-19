@@ -30,6 +30,7 @@ struct icc_priv {
     cmsHPROFILE profile;
     cmsHPROFILE approx; // approximation profile
     cmsCIEXYZ black;
+    float gamma_stddev;
 };
 
 static void error_callback(cmsContext cms, cmsUInt32Number code,
@@ -52,7 +53,8 @@ void pl_icc_close(pl_icc_object *picc)
     pl_free_ptr((void **) picc);
 }
 
-static bool read_primaries(pl_icc_object icc, struct pl_raw_primaries *prim)
+static bool detect_csp(pl_icc_object icc, struct pl_raw_primaries *prim,
+                       float *gamma)
 {
     struct icc_priv *p = PL_PRIV(icc);
     cmsHTRANSFORM tf;
@@ -75,21 +77,77 @@ static bool read_primaries(pl_icc_object icc, struct pl_raw_primaries *prim)
     if (!tf)
         return false;
 
-    static const uint8_t testprimaries[4][3] = {
-        { 0xFF,    0,    0 }, /* red */
-        {    0, 0xFF,    0 }, /* green */
-        {    0,    0, 0xFF }, /* blue */
-        { 0xFF, 0xFF, 0xFF }, /* white */
+    static const uint8_t test[][3] = {
+        { 0xFF,    0,    0 }, // red
+        {    0, 0xFF,    0 }, // green
+        {    0,    0, 0xFF }, // blue
+        { 0xFF, 0xFF, 0xFF }, // white
+
+        // Grayscale ramp (excluding endpoints)
+#define V(d) { d, d, d }
+                 V(0x01), V(0x02), V(0x03), V(0x04), V(0x05), V(0x06), V(0x07),
+        V(0x08), V(0x09), V(0x0A), V(0x0B), V(0x0C), V(0x0D), V(0x0E), V(0x0F),
+        V(0x10), V(0x11), V(0x12), V(0x13), V(0x14), V(0x15), V(0x16), V(0x17),
+        V(0x18), V(0x19), V(0x1A), V(0x1B), V(0x1C), V(0x1D), V(0x1E), V(0x1F),
+        V(0x20), V(0x21), V(0x22), V(0x23), V(0x24), V(0x25), V(0x26), V(0x27),
+        V(0x28), V(0x29), V(0x2A), V(0x2B), V(0x2C), V(0x2D), V(0x2E), V(0x2F),
+        V(0x30), V(0x31), V(0x32), V(0x33), V(0x34), V(0x35), V(0x36), V(0x37),
+        V(0x38), V(0x39), V(0x3A), V(0x3B), V(0x3C), V(0x3D), V(0x3E), V(0x3F),
+        V(0x40), V(0x41), V(0x42), V(0x43), V(0x44), V(0x45), V(0x46), V(0x47),
+        V(0x48), V(0x49), V(0x4A), V(0x4B), V(0x4C), V(0x4D), V(0x4E), V(0x4F),
+        V(0x50), V(0x51), V(0x52), V(0x53), V(0x54), V(0x55), V(0x56), V(0x57),
+        V(0x58), V(0x59), V(0x5A), V(0x5B), V(0x5C), V(0x5D), V(0x5E), V(0x5F),
+        V(0x60), V(0x61), V(0x62), V(0x63), V(0x64), V(0x65), V(0x66), V(0x67),
+        V(0x68), V(0x69), V(0x6A), V(0x6B), V(0x6C), V(0x6D), V(0x6E), V(0x6F),
+        V(0x70), V(0x71), V(0x72), V(0x73), V(0x74), V(0x75), V(0x76), V(0x77),
+        V(0x78), V(0x79), V(0x7A), V(0x7B), V(0x7C), V(0x7D), V(0x7E), V(0x7F),
+        V(0x80), V(0x81), V(0x82), V(0x83), V(0x84), V(0x85), V(0x86), V(0x87),
+        V(0x88), V(0x89), V(0x8A), V(0x8B), V(0x8C), V(0x8D), V(0x8E), V(0x8F),
+        V(0x90), V(0x91), V(0x92), V(0x93), V(0x94), V(0x95), V(0x96), V(0x97),
+        V(0x98), V(0x99), V(0x9A), V(0x9B), V(0x9C), V(0x9D), V(0x9E), V(0x9F),
+        V(0xA0), V(0xA1), V(0xA2), V(0xA3), V(0xA4), V(0xA5), V(0xA6), V(0xA7),
+        V(0xA8), V(0xA9), V(0xAA), V(0xAB), V(0xAC), V(0xAD), V(0xAE), V(0xAF),
+        V(0xB0), V(0xB1), V(0xB2), V(0xB3), V(0xB4), V(0xB5), V(0xB6), V(0xB7),
+        V(0xB8), V(0xB9), V(0xBA), V(0xBB), V(0xBC), V(0xBD), V(0xBE), V(0xBF),
+        V(0xC0), V(0xC1), V(0xC2), V(0xC3), V(0xC4), V(0xC5), V(0xC6), V(0xC7),
+        V(0xC8), V(0xC9), V(0xCA), V(0xCB), V(0xCC), V(0xCD), V(0xCE), V(0xCF),
+        V(0xD0), V(0xD1), V(0xD2), V(0xD3), V(0xD4), V(0xD5), V(0xD6), V(0xD7),
+        V(0xD8), V(0xD9), V(0xDA), V(0xDB), V(0xDC), V(0xDD), V(0xDE), V(0xDF),
+        V(0xE0), V(0xE1), V(0xE2), V(0xE3), V(0xE4), V(0xE5), V(0xE6), V(0xE7),
+        V(0xE8), V(0xE9), V(0xEA), V(0xEB), V(0xEC), V(0xED), V(0xEE), V(0xEF),
+        V(0xF0), V(0xF1), V(0xF2), V(0xF3), V(0xF4), V(0xF5), V(0xF6), V(0xF7),
+        V(0xF8), V(0xF9), V(0xFA), V(0xFB), V(0xFC), V(0xFD), V(0xFE),
+#undef V
     };
 
-    cmsCIEXYZ dst[4] = {0};
-    cmsDoTransform(tf, testprimaries, dst, 4);
+    cmsCIEXYZ dst[PL_ARRAY_SIZE(test)] = {0};
+    cmsDoTransform(tf, test, dst, PL_ARRAY_SIZE(dst));
     cmsDeleteTransform(tf);
 
+    // Read primaries from transformed RGBW values
     prim->red   = pl_cie_from_XYZ(dst[0].X, dst[0].Y, dst[0].Z);
     prim->green = pl_cie_from_XYZ(dst[1].X, dst[1].Y, dst[1].Z);
     prim->blue  = pl_cie_from_XYZ(dst[2].X, dst[2].Y, dst[2].Z);
     prim->white = pl_cie_from_XYZ(dst[3].X, dst[3].Y, dst[3].Z);
+
+    // Estimate mean and stddev of gamma (Welford's method)
+    float M = 0.0, S = 0.0;
+    int k = 1;
+    for (int i = 4; i < PL_ARRAY_SIZE(dst); i++) { // exclude RGBW cube
+        if (dst[i].Y <= 0 || dst[i].Y >= 1)
+            continue;
+        float y = log(dst[i].Y) / log(test[i][0] / 255.0);
+        float tmpM = M;
+        M += (y - tmpM) / k;
+        S += (y - tmpM) * (y - M);
+        k++;
+    }
+    S = sqrt(S / (k - 1));
+    if (S > 0.5)
+        return false; // too big deviation, probably something broken??
+
+    *gamma = M;
+    p->gamma_stddev = S;
     return true;
 }
 
@@ -136,11 +194,11 @@ static void infer_clut_size(pl_log log, struct pl_icc_object *icc)
     }
 
     // Ensure enough precision to track the gamma curve
-    if (cmsDetectRGBProfileGamma(p->profile, 1e-2) < 0) {
+    if (p->gamma_stddev > 1e-2) {
         REQUIRE_SIZE(65);
-    } else if (cmsDetectRGBProfileGamma(p->profile, 1e-3) < 0) {
+    } else if (p->gamma_stddev > 1e-3) {
         REQUIRE_SIZE(33);
-    } else if (cmsDetectRGBProfileGamma(p->profile, 1e-4) < 0) {
+    } else if (p->gamma_stddev > 1e-4) {
         REQUIRE_SIZE(17);
     }
 
@@ -257,11 +315,9 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
         params->intent = cmsGetHeaderRenderingIntent(p->profile);
 
     struct pl_raw_primaries *out_prim = &icc->csp.hdr.prim;
-    if (!read_primaries(icc, out_prim))
+    if (!detect_csp(icc, out_prim, &icc->gamma))
         goto error;
     if (!detect_contrast(icc, &icc->csp.hdr, params->max_luma))
-        goto error;
-    if ((icc->gamma = cmsDetectRGBProfileGamma(p->profile, 10)) < 0)
         goto error;
     infer_clut_size(log, icc);
 
