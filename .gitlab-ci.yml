@@ -80,7 +80,7 @@ macos:
     stage: compile
     tags:
         - amd64
-        - catalina
+        - monterey
     script:
         - meson build --buildtype release
                       -Ddefault_library=both
