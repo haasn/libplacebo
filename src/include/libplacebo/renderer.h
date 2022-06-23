@@ -105,6 +105,15 @@ struct pl_render_params {
     const struct pl_filter_config *upscaler;
     const struct pl_filter_config *downscaler;
 
+    // If set, this overrides the value of `upscaler`/`downscaling` for
+    // subsampled (chroma) planes. These scalers are used whenever the size of
+    // multiple different `pl_plane`s in a single `pl_frame` differ, requiring
+    // adaptation when converting to/from RGB. Note that a value of NULL simply
+    // means "no override". To force built-in scaling explicitly, set this to
+    // `&pl_filter_bilinear`.
+    const struct pl_filter_config *plane_upscaler;
+    const struct pl_filter_config *plane_downscaler;
+
     // The number of entries for the scaler LUTs. Defaults to 64 if left unset.
     int lut_entries;
 

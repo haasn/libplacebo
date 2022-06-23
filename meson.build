@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     4,
     # API version
     {
+      '207': 'add pl_render_params.plane_upscaler and plane_downscaler',
       '206': 'add new ICC profile API (pl_icc_open, ...)',
       '205': 'add pl_cie_from_XYZ and pl_raw_primaries_similar, fix pl_cie_xy_equal',
       '204': 'add pl_d3d11_swapchain_params.disable_10bit_sdr',
