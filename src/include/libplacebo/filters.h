@@ -51,6 +51,9 @@ struct pl_filter_function {
     // function's preferred defaults. if the relevant setting is not tunable,
     // they are ignored entirely.
     float params[PL_FILTER_MAX_PARAMS];
+
+    // The cosmetic name associated with this filter function. Optional.
+    const char *name;
 };
 
 bool pl_filter_function_eq(const struct pl_filter_function *a,
@@ -188,6 +191,9 @@ struct pl_filter_config {
     // instead of a separable/1D filter. Does not affect the actual sampling,
     // but provides information about how the results are to be interpreted.
     bool polar;
+
+    // The cosmetic name associated with this filter config. Optional.
+    const char *name;
 };
 
 bool pl_filter_config_eq(const struct pl_filter_config *a,

@@ -221,13 +221,15 @@ static double oversample(const struct pl_filter_function *k, double x)
 }
 
 static const struct pl_filter_function oversample_kernel = {
-    .weight = oversample,
-    .tunable = {true},
-    .params = {0.0},
+    .weight     = oversample,
+    .tunable    = {true},
+    .params     = {0.0},
+    .name       = "oversample",
 };
 
 const struct pl_filter_config pl_filter_oversample = {
     .kernel = &oversample_kernel,
+    .name   = "oversample",
 };
 
 const struct pl_filter_preset pl_frame_mixers[] = {
