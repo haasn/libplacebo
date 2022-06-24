@@ -407,6 +407,32 @@ bool pl_shader_sample_oversample(pl_shader sh, const struct pl_sample_src *src,
     return true;
 }
 
+static void describe_filter(pl_shader sh, const struct pl_filter_config *cfg,
+                            const char *stage, float rx, float ry)
+{
+    const char *dir;
+    if (rx > 1 && ry > 1) {
+        dir = "up";
+    } else if (rx < 1 && ry < 1) {
+        dir = "down";
+    } else if (rx == 1 && ry == 1) {
+        dir = "noop";
+    } else {
+        dir = "ana";
+    }
+
+    if (cfg->name) {
+        sh_describef(sh, "%s %sscaling (%s)", stage, dir, cfg->name);
+    } else if (cfg->window) {
+        sh_describef(sh, "%s %sscaling (%s+%s)", stage, dir,
+                     PL_DEF(cfg->kernel->name, "unknown"),
+                     PL_DEF(cfg->window->name, "unknown"));
+    } else {
+        sh_describef(sh, "%s %sscaling (%s)", stage, dir,
+                     PL_DEF(cfg->kernel->name, "unknown"));
+    }
+}
+
 static bool filter_compat(pl_filter filter, float inv_scale,
                           int lut_entries, float cutoff,
                           const struct pl_filter_config *params)
@@ -545,7 +571,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         }
     }
 
-    sh_describe(sh, "polar scaling");
+    describe_filter(sh, &params->filter, "polar", rx, ry);
     GLSL("// pl_shader_sample_polar                     \n"
          "vec4 color = vec4(0.0);                       \n"
          "{                                             \n"
@@ -890,11 +916,11 @@ bool pl_shader_sample_ortho(pl_shader sh, int pass,
     };
 
     static const char *names[PL_SEP_PASSES] = {
-        [PL_SEP_HORIZ] = "ortho scaling (horiz)",
-        [PL_SEP_VERT]  = "ortho scaling (vert)",
+        [PL_SEP_HORIZ] = "ortho (horiz)",
+        [PL_SEP_VERT]  = "ortho (vert)",
     };
 
-    sh_describe(sh, names[pass]);
+    describe_filter(sh, &params->filter, names[pass], ratio[pass], ratio[pass]);
     GLSL("// pl_shader_sample_ortho                        \n"
          "vec4 color = vec4(0.0);                          \n"
          "{                                                \n"

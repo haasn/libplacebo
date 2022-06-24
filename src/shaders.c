@@ -473,6 +473,14 @@ void sh_append_str(pl_shader sh, enum pl_shader_buf buf, pl_str str)
     pl_str_append(sh, &sh->buffers[buf], str);
 }
 
+void sh_describef(pl_shader sh, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    sh_describe(sh, pl_vasprintf(SH_TMP(sh), fmt, ap));
+    va_end(ap);
+}
+
 static const char *insigs[] = {
     [PL_SHADER_SIG_NONE]  = "",
     [PL_SHADER_SIG_COLOR] = "vec4 color",

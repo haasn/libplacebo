@@ -151,6 +151,9 @@ void sh_append_str(pl_shader sh, enum pl_shader_buf buf, pl_str str);
 #define GLSLF(...) sh_append(sh, SH_BUF_FOOTER, __VA_ARGS__)
 
 // Attach a description to a shader
+void sh_describef(pl_shader sh, const char *fmt, ...)
+    PL_PRINTF(2, 3);
+
 static inline void sh_describe(pl_shader sh, const char *desc)
 {
     PL_ARRAY_APPEND(sh, sh->steps, desc);
