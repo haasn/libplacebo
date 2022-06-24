@@ -61,7 +61,7 @@ struct plplay {
     bool exit_thread;
 
     // settings / ui state
-    const struct pl_filter_preset *upscaler, *downscaler, *frame_mixer;
+    const struct pl_filter_preset *upscaler, *downscaler, *plane_scaler, *frame_mixer;
     struct pl_render_params params;
     struct pl_deband_params deband_params;
     struct pl_sigmoid_params sigmoid_params;
@@ -650,6 +650,8 @@ int main(int argc, char **argv)
             p->upscaler = f;
         if (p->params.downscaler == f->filter)
             p->downscaler = f;
+        if (p->params.plane_upscaler == f->filter)
+            p->plane_scaler = f;
     }
 
     for (f = pl_frame_mixers; f->name; f++) {
@@ -725,6 +727,11 @@ static void add_hook(struct plplay *p, const struct pl_hook *hook, const char *p
 
 error:
     pl_mpv_user_shader_destroy(&hook);
+}
+
+static const char *pscale_desc(const struct pl_filter_preset *f)
+{
+    return f->filter ? f->description : "None (Use regular upscaler)";
 }
 
 static void update_settings(struct plplay *p)
@@ -826,6 +833,19 @@ static void update_settings(struct plplay *p)
                         p->downscaler = f;
                 }
                 par->downscaler = p->downscaler->filter;
+                nk_combo_end(nk);
+            }
+
+            nk_label(nk, "Plane scaler:", NK_TEXT_LEFT);
+            if (nk_combo_begin_label(nk, pscale_desc(p->plane_scaler), nk_vec2(nk_widget_width(nk), 500))) {
+                nk_layout_row_dynamic(nk, 16, 1);
+                for (f = pl_scale_filters; f->name; f++) {
+                    if (!f->description)
+                        continue;
+                    if (nk_combo_item_label(nk, pscale_desc(f), NK_TEXT_LEFT))
+                        p->plane_scaler = f;
+                }
+                par->plane_upscaler = p->plane_scaler->filter;
                 nk_combo_end(nk);
             }
 
