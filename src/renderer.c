@@ -2616,6 +2616,11 @@ static bool draw_empty_overlays(pl_renderer rr,
             .c = { -sx, -sy },
         };
 
+        if (plane->flipped) {
+            tscale.mat.m[1][1] = -tscale.mat.m[1][1];
+            tscale.c[1] += plane->texture->params.h;
+        }
+
         draw_overlays(&pass, plane->texture, plane->components,
                       plane->component_mapping, target->overlays,
                       target->num_overlays, target->color, target->repr,
