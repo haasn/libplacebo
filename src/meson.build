@@ -365,10 +365,11 @@ endforeach
 # Extra checks/steps required for vulkan in particular
 if comps.has('vulkan')
   registry_xml = get_option('vulkan-registry')
+  datadir = get_option('prefix') / get_option('datadir')
   sources += custom_target('vulkan boilerplate',
     input: 'vulkan/utils_gen.py',
     output: 'utils_gen.c',
-    command: [prog_python, '@INPUT@', registry_xml, '@OUTPUT@']
+    command: [prog_python, '@INPUT@', datadir,registry_xml, '@OUTPUT@']
   )
 
   if vulkan.found() and get_option('vulkan-link')

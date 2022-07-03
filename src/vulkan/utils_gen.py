@@ -183,8 +183,9 @@ def get_vkaccess(registry):
             access.write |= 1 << int(e.attrib['bitpos'])
     return access
 
-def find_registry_xml():
+def find_registry_xml(datadir):
     registry_paths = [
+        '{0}/vulkan/registry/vk.xml'.format(datadir),
         '%VULKAN_SDK%/share/vulkan/registry/vk.xml',
         '$VULKAN_SDK/share/vulkan/registry/vk.xml',
         '$MINGW_PREFIX/share/vulkan/registry/vk.xml',
@@ -203,12 +204,13 @@ def find_registry_xml():
     sys.exit(1)
 
 if __name__ == '__main__':
-    assert len(sys.argv) == 3
-    xmlfile = sys.argv[1]
-    outfile = sys.argv[2]
+    assert len(sys.argv) == 4
+    datadir = sys.argv[1]
+    xmlfile = sys.argv[2]
+    outfile = sys.argv[3]
 
     if not xmlfile or xmlfile == '':
-        xmlfile = find_registry_xml()
+        xmlfile = find_registry_xml(datadir)
 
     registry = ET.parse(xmlfile)
     with open(outfile, 'w') as f:
