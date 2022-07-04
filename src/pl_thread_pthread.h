@@ -17,7 +17,9 @@
 
 #pragma once
 
+#include <errno.h>
 #include <pthread.h>
+#include <sys/time.h>
 #include <time.h>
 
 typedef pthread_mutex_t pl_mutex;
@@ -92,10 +94,16 @@ static inline int pl_cond_timedwait(pl_cond *cond, pl_mutex *mutex, uint64_t tim
 
     struct timespec ts;
 #ifdef PTHREAD_HAS_SETCLOCK
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
+        return errno;
 #else
-    clock_gettime(CLOCK_REALTIME, &ts);
+    struct timeval tv;
+    if (gettimeofday(&tv, NULL) < 0) // equivalent to CLOCK_REALTIME
+        return errno;
+    ts.tv_sec = tv.tv_sec;
+    ts.tv_nsec = tv.tv_usec * 1000;
 #endif
+
     ts.tv_sec  += timeout / 1000000000LLU;
     ts.tv_nsec += timeout % 1000000000LLU;
 
