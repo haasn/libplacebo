@@ -112,7 +112,7 @@ else
 
   if sdl_image.found()
     executable('sdlimage', 'sdlimage.c',
-      dependencies: [ dep, sdl_image ],
+      dependencies: [ dep, libm, sdl_image ],
     )
   endif
 
