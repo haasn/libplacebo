@@ -30,11 +30,6 @@ extern "C" {
 
 #include "glslang.h"
 
-#define GLSLANG_VERSION_CHECK(major, minor, patch) \
-    (((major) < GLSLANG_VERSION_MAJOR) || ((major) == GLSLANG_VERSION_MAJOR && \
-    (((minor) < GLSLANG_VERSION_MINOR) || ((minor) == GLSLANG_VERSION_MINOR && \
-     ((patch) <= GLSLANG_VERSION_PATCH)))))
-
 using namespace glslang;
 
 static pthread_mutex_t pl_glslang_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -204,7 +199,6 @@ const TBuiltInResource DefaultTBuiltInResource = {
     /* .MaxCullDistances = */ 8,
     /* .MaxCombinedClipAndCullDistances = */ 8,
     /* .MaxSamples = */ 4,
-#if GLSLANG_VERSION_CHECK(0, 0, 2892)
     /* .maxMeshOutputVerticesNV = */ 256,
     /* .maxMeshOutputPrimitivesNV = */ 512,
     /* .maxMeshWorkGroupSizeX_NV = */ 32,
@@ -214,10 +208,7 @@ const TBuiltInResource DefaultTBuiltInResource = {
     /* .maxTaskWorkGroupSizeY_NV = */ 1,
     /* .maxTaskWorkGroupSizeZ_NV = */ 1,
     /* .maxMeshViewCountNV = */ 4,
-#endif
-#if GLSLANG_VERSION_CHECK(0, 0, 3763)
     /* .maxDualSourceDrawBuffersEXT = */ 1,
-#endif
 
     /* .limits = */ {
         /* .nonInductiveForLoops = */ 1,

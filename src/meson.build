@@ -81,16 +81,13 @@ elif has_execinfo
 endif
 
 # work-arounds for glslang braindeath
-glslang_combined = disabler()
-glslang_min_ver = '>=0.0.2763'
+glslang = disabler()
 glslang_req = get_option('glslang')
 
 if glslang_req.auto() and shaderc.found()
 
   # we only need one or the other, and shaderc is preferred
   message('Skipping `glslang` because `shaderc` is available')
-  glslang_req = false
-  glslang_found = false
 
 else
 
@@ -105,76 +102,16 @@ else
     cxx.find_library('SPIRV',               required: glslang_req),
     cxx.find_library('SPIRV-Tools-opt',     required: false),
     cxx.find_library('SPIRV-Tools',         required: false),
+    cxx.find_library('pthread',             required: false)
   ]
 
-  glslang_found = glslang_deps[0].found()
+  if glslang_deps[0].found() and cc.has_header('glslang/build_info.h')
+    glslang = declare_dependency(dependencies: glslang_deps)
+  endif
 
 endif
 
-if glslang_found
-  glslang_header_old = 'glslang/Include/revision.h'
-  glslang_header_new = 'glslang/build_info.h'
-
-  if cc.has_header(glslang_header_new)
-    glslang_ver_major = cxx.get_define('GLSLANG_VERSION_MAJOR',
-        prefix: '#include <' + glslang_header_new + '>'
-    ).to_int()
-    glslang_ver_minor = cxx.get_define('GLSLANG_VERSION_MINOR',
-        prefix: '#include <' + glslang_header_new + '>'
-    ).to_int()
-    glslang_ver_patch = cxx.get_define('GLSLANG_VERSION_PATCH',
-        prefix: '#include <' + glslang_header_new + '>'
-    ).to_int()
-  elif cc.has_header(glslang_header_old)
-    # This is technically incorrect, but since we don't care about major
-    # versions for this version range, it's an acceptable substitute
-    glslang_ver_major = 0
-    glslang_ver_minor = 0
-    glslang_ver_patch = cxx.get_define('GLSLANG_PATCH_LEVEL',
-        prefix: '#include <' + glslang_header_old+ '>'
-    ).to_int()
-  else
-    error('No glslang version header found?')
-  endif
-
-    glslang_ver = '@0@.@1@.@2@'.format(
-        glslang_ver_major,
-        glslang_ver_minor,
-        glslang_ver_patch,
-    )
-
-  if glslang_ver.version_compare(glslang_min_ver)
-    # glslang must be linked against pthreads on platforms where pthreads is
-    # available. Because of their horrible architecture, gcc can't do it
-    # automatically, and for some reason dependency('threads') (which uses
-    # -pthread) doesn't work. We actually need -lpthreads for the glslang
-    # object files to link, for whatever weird reason.
-    pthread = cxx.find_library('pthread', required: false)
-    glslang_all_deps = glslang_deps + [pthread]
-    glslang_combined = declare_dependency(dependencies: glslang_all_deps)
-
-    # Work around a glslang include path bug w.r.t stuff previously namespaced
-    # under /usr/include/SPIRV now being moved to /usr/include/glslang/SPIRV.
-    extra_glslang_inc = [
-      '/usr/include/glslang',
-      get_option('prefix') / get_option('includedir') / 'glslang',
-    ]
-
-    foreach i : extra_glslang_inc
-      add_project_arguments('-I' + i, language: 'cpp')
-    endforeach
-
-    conf_internal.set('GLSLANG_VERSION_MAJOR', glslang_ver_major)
-    conf_internal.set('GLSLANG_VERSION_MINOR', glslang_ver_minor)
-    conf_internal.set('GLSLANG_VERSION_PATCH', glslang_ver_patch)
-
-  else
-    error('glslang version @0@ too old! Must be at least @1@'
-          .format(glslang_ver, glslang_min_ver))
-  endif
-endif
-
-if not (glslang_found or shaderc.found())
+if not (glslang.found() or shaderc.found())
   spirv_msg = 'vulkan support requires either `shaderc` or `glslang`'
   if vulkan_opt.enabled()
     error(spirv_msg)
@@ -285,7 +222,7 @@ components = [
     'test': 'icc.c',
   }, {
     'name': 'glslang',
-    'deps': glslang_combined,
+    'deps': glslang,
     'srcs': [ 'glsl/glslang.cc',
               'glsl/spirv_glslang.c',
             ],
