@@ -18,6 +18,9 @@
 #include "spirv.h"
 #include "glsl/glslang.h"
 
+// This header contains only preprocessor definitions
+#include <glslang/build_info.h>
+
 const struct spirv_compiler_impl pl_spirv_glslang;
 
 static void glslang_destroy(struct spirv_compiler *spirv)
