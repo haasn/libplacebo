@@ -379,7 +379,7 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
 
     clock_t start = clock();
     cmsHTRANSFORM tf = cmsCreateTransformTHR(p->cms, srcp, TYPE_RGB_16,
-                                             dstp, TYPE_RGBA_FLT,
+                                             dstp, TYPE_RGBA_16,
                                              icc->params.intent,
                                              cmsFLAGS_NOCACHE | cmsFLAGS_NOOPTIMIZE);
     if (!tf)
@@ -400,7 +400,7 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
             }
 
             size_t offset = (b * s_g + g) * s_r * 4;
-            float *data = ((float *) datap) + offset;
+            uint16_t *data = ((uint16_t *) datap) + offset;
             cmsDoTransform(tf, tmp, data, s_r);
         }
     }
@@ -432,6 +432,8 @@ void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,
     ident_t lut = sh_lut(sh, sh_lut_params(
         .object     = lut_obj,
         .type       = PL_VAR_FLOAT,
+        .fmt        = pl_find_fmt(SH_GPU(sh), PL_FMT_UNORM, 4,
+                                  16, 16, PL_FMT_CAP_LINEAR),
         .width      = icc->params.size_r,
         .height     = icc->params.size_g,
         .depth      = icc->params.size_b,
@@ -470,6 +472,8 @@ void pl_icc_encode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj)
     ident_t lut = sh_lut(sh, sh_lut_params(
         .object     = lut_obj,
         .type       = PL_VAR_FLOAT,
+        .fmt        = pl_find_fmt(SH_GPU(sh), PL_FMT_UNORM, 4,
+                                  16, 16, PL_FMT_CAP_LINEAR),
         .width      = icc->params.size_r,
         .height     = icc->params.size_g,
         .depth      = icc->params.size_b,
