@@ -69,9 +69,7 @@ static bool detect_csp(pl_icc_object icc, struct pl_raw_primaries *prim,
                                /* Note: These flags mostly don't do anything
                                 * anyway, but specify them regardless */
                                cmsFLAGS_NOCACHE |
-                               cmsFLAGS_NOOPTIMIZE |
-                               cmsFLAGS_LOWRESPRECALC |
-                               cmsFLAGS_GRIDPOINTS(2));
+                               cmsFLAGS_NOOPTIMIZE);
     cmsSetAdaptationStateTHR(p->cms, prev_adapt);
     cmsCloseProfile(xyz);
     if (!tf)
