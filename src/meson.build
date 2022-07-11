@@ -282,6 +282,7 @@ comps = configuration_data()
 foreach c : components
   name = c['name']
   deps = c['deps']
+  summary(name, deps.found(), section: 'Components', bool_yn: true)
 
   pretty = name.underscorify().to_upper()
 
