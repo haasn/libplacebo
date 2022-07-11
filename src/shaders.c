@@ -850,6 +850,7 @@ static ident_t sh_lut_pos(pl_shader sh, int lut_size)
 struct sh_lut_obj {
     enum sh_lut_method method;
     enum pl_var_type type;
+    pl_fmt fmt;
     bool linear;
     int width, height, depth, comps;
     uint64_t signature;
@@ -903,7 +904,8 @@ ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
         return NULL;
 
     bool update = params->update || lut->signature != params->signature ||
-                  params->type != lut->type || params->linear != lut->linear ||
+                  params->type != lut->type || params->fmt != lut->fmt ||
+                  params->linear != lut->linear ||
                   params->width != lut->width || params->height != lut->height ||
                   params->depth != lut->depth || params->comps != lut->comps;
 
@@ -937,8 +939,29 @@ next_dim: ; // `continue` out of the inner loop
     if (params->linear)
         texcaps |= PL_FMT_CAP_LINEAR;
 
-    pl_fmt texfmt = NULL;
-    if (texdim) {
+    pl_fmt texfmt = params->fmt;
+    if (texfmt) {
+        bool ok;
+        switch (texfmt->type) {
+        case PL_FMT_SINT: ok = params->type == PL_VAR_SINT; break;
+        case PL_FMT_UINT: ok = params->type == PL_VAR_UINT; break;
+        default:          ok = params->type == PL_VAR_FLOAT; break;
+        }
+
+        if (!ok) {
+            PL_ERR(sh, "Specified texture format '%s' does not match LUT "
+                   "data type!", texfmt->name);
+            goto error;
+        }
+
+        if (~texfmt->caps & texcaps) {
+            PL_ERR(sh, "Specified texture format '%s' does not match "
+                   "required capabilities 0x%x!\n", texfmt->name, texcaps);
+            goto error;
+        }
+    }
+
+    if (texdim && !texfmt) {
         texfmt = pl_find_fmt(gpu, fmt_type[params->type], params->comps,
                              params->type == PL_VAR_FLOAT ? 16 : 32,
                              pl_var_type_size(params->type) * 8,
@@ -1094,6 +1117,7 @@ next_dim: ; // `continue` out of the inner loop
 
         lut->method = method;
         lut->type = params->type;
+        lut->fmt = params->fmt;
         lut->linear = params->linear;
         lut->width = params->width;
         lut->height = params->height;

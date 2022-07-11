@@ -215,6 +215,10 @@ struct sh_lut_params {
     enum sh_lut_method method;
     enum pl_var_type type;
 
+    // For SH_LUT_TEXTURE, this can be used to override the texture's internal
+    // format, in which case it takes precedence over the default for `type`.
+    pl_fmt fmt;
+
     // LUT dimensions. Unused dimensions may be left as 0.
     int width;
     int height;
@@ -241,7 +245,7 @@ struct sh_lut_params {
     // be computed, which happens whenever the size is changed, the shader
     // object is invalidated, or `update` is set to true.
     //
-    // Note: Interpretation of `data` is according to `pl_var_type`.
+    // Note: Interpretation of `data` is according to `type` and `fmt`.
     void (*fill)(void *data, const struct sh_lut_params *params);
     void *priv;
 };
