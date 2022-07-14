@@ -593,10 +593,12 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     // just use as many threads as possible.
     const int bw = 32, bh = sh_glsl(sh).max_group_threads / bw;
 
-    // We need to sample everything from base_min to base_max, so make sure
-    // we have enough room in shmem
-    int iw = (int) ceil(bw / rx) + padding + 1,
-        ih = (int) ceil(bh / ry) + padding + 1;
+    // We need to sample everything from base_min to base_max, so make sure we
+    // have enough room in shmem. The extra margin on the ceilf guards against
+    // floating point inaccuracy on near-integer scaling ratios.
+    const float margin = 1e-5;
+    int iw = (int) ceilf(bw / rx - margin) + padding + 1,
+        ih = (int) ceilf(bh / ry - margin) + padding + 1;
 
     ident_t in = NULL;
     int num_comps = __builtin_popcount(comp_mask);
