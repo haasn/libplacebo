@@ -425,14 +425,21 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         .pNext = &host_props,
     };
 
+    bool is_portability = false;
+
 #ifdef VK_KHR_portability_subset
     VkPhysicalDevicePortabilitySubsetPropertiesKHR port_props = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_PROPERTIES_KHR,
         .minVertexInputBindingStrideAlignment = 1,
     };
-    vk_link_struct(&props, &port_props);
-#endif
 
+    for (int i = 0; i < vk->vulkan->num_extensions; i++) {
+        if (!strcmp(vk->vulkan->extensions[i], VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)) {
+            vk_link_struct(&props, &port_props);
+            is_portability = true;
+        }
+    }
+#endif
 
     vk->GetPhysicalDeviceProperties2(vk->physd, &props);
 
@@ -492,6 +499,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         // pl_pass
         .max_variable_comps = 0, // vulkan doesn't support these at all
         .max_constants      = SIZE_MAX,
+        .array_size_constants = !is_portability,
         .max_pushc_size     = vk->limits.maxPushConstantsSize,
 #ifdef VK_KHR_portability_subset
         .align_vertex_stride = port_props.minVertexInputBindingStrideAlignment,
