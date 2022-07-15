@@ -599,10 +599,20 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     const float margin = 1e-5;
     int iw = (int) ceilf(bw / rx - margin) + padding + 1,
         ih = (int) ceilf(bh / ry - margin) + padding + 1;
+    int sizew = iw, sizeh = ih;
+
+    pl_gpu gpu = SH_GPU(sh);
+    bool dynamic_size = SH_PARAMS(sh).dynamic_constants ||
+                        !gpu || !gpu->limits.array_size_constants;
+    if (dynamic_size) {
+        // Overallocate the array slightly to reduce recompilation overhead
+        sizew = PL_ALIGN2(sizew, 8);
+        sizeh = PL_ALIGN2(sizeh, 8);
+    }
 
     ident_t in = NULL;
     int num_comps = __builtin_popcount(comp_mask);
-    int shmem_req = (iw * ih * num_comps + 2) * sizeof(float);
+    int shmem_req = (sizew * sizeh * num_comps + 2) * sizeof(float);
     bool is_compute = !params->no_compute &&
                       sh_glsl(sh).compute &&
                       sh_glsl(sh).version >= 130 && // needed for round()
@@ -649,19 +659,25 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
              "ivec2 rel = ivec2(round((base - %s_base) * size));    \n",
              in, in);
 
-        ident_t iw_c = sh_const(sh, (struct pl_shader_const) {
+        ident_t sizew_c = sh_const(sh, (struct pl_shader_const) {
             .type = PL_VAR_SINT,
             .compile_time = true,
-            .name ="iw",
-            .data = &iw,
+            .name = "sizew",
+            .data = &sizew,
         });
 
-        ident_t ih_c = sh_const(sh, (struct pl_shader_const) {
+        ident_t sizeh_c = sh_const(sh, (struct pl_shader_const) {
             .type = PL_VAR_SINT,
             .compile_time = true,
-            .name = "ih",
-            .data = &ih,
+            .name = "sizeh",
+            .data = &sizeh,
         });
+
+        ident_t iw_c = sizew_c, ih_c = sizeh_c;
+        if (dynamic_size) {
+            iw_c = sh_const_int(sh, "iw", iw);
+            ih_c = sh_const_int(sh, "ih", ih);
+        }
 
         // Load all relevant texels into shmem
         GLSL("for (int y = int(gl_LocalInvocationID.y); y < %s; y += %d) {  \n"
@@ -671,8 +687,8 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 
         for (uint8_t comps = comp_mask; comps;) {
             uint8_t c = __builtin_ctz(comps);
-            GLSLH("shared float %s%d[%s * %s]; \n", in, c, ih_c, iw_c);
-            GLSL("%s%d[%s * y + x] = c[%d]; \n", in, c, iw_c, c);
+            GLSLH("shared float %s%d[%s * %s]; \n", in, c, sizeh_c, sizew_c);
+            GLSL("%s%d[%s * y + x] = c[%d]; \n", in, c, sizew_c, c);
             comps &= ~(1 << c);
         }
 
@@ -683,7 +699,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         for (int y = 1 - bound; y <= bound; y++) {
             for (int x = 1 - bound; x <= bound; x++) {
                 GLSL("idx = %s * rel.y + rel.x + %s * %d + %d; \n",
-                     iw_c, iw_c, y + offset, x + offset);
+                     sizew_c, sizew_c, y + offset, x + offset);
                 polar_sample(sh, obj->filter, fn, src_tex, lut, cutoff_c, radius_c,
                              x, y, comp_mask, in);
             }
