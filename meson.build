@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '209': 'add pl_gpu_limits.array_size_constants',
       '208': 'add pl_filter_function.name and pl_filter_config.name',
       '207': 'add pl_render_params.plane_upscaler and plane_downscaler',
       '206': 'add new ICC profile API (pl_icc_open, ...)',

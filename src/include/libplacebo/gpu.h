@@ -126,6 +126,7 @@ struct pl_gpu_limits {
     // --- pl_pass
     size_t max_variable_comps;  // maximum components passed in variables
     size_t max_constants;       // maximum `pl_pass_params.num_constants`
+    bool array_size_constants;  // push constants can be used to size arrays
     size_t max_pushc_size;      // maximum `push_constants_size`
     size_t align_vertex_stride; // alignment of `pl_pass_params.vertex_stride`
     uint32_t max_dispatch[3];   // maximum dispatch size per dimension
