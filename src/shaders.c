@@ -259,9 +259,11 @@ ident_t sh_const(pl_shader sh, struct pl_shader_const sc)
 
     pl_gpu gpu = SH_GPU(sh);
     if (gpu && gpu->limits.max_constants) {
-        sc.data = pl_memdup(SH_TMP(sh), sc.data, pl_var_type_size(sc.type));
-        PL_ARRAY_APPEND(sh, sh->consts, sc);
-        return (ident_t) sc.name;
+        if (!sc.compile_time || gpu->limits.array_size_constants) {
+            sc.data = pl_memdup(SH_TMP(sh), sc.data, pl_var_type_size(sc.type));
+            PL_ARRAY_APPEND(sh, sh->consts, sc);
+            return (ident_t) sc.name;
+        }
     }
 
     // Fallback for GPUs without specialization constants
