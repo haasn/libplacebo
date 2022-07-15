@@ -576,9 +576,9 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     if (!update_swapchain_info(p, &sinfo, w, h))
         return false;
 
-    PL_INFO(sw, "(Re)creating swapchain of size %dx%d",
-            sinfo.imageExtent.width,
-            sinfo.imageExtent.height);
+    PL_DEBUG(sw, "(Re)creating swapchain of size %dx%d",
+             sinfo.imageExtent.width,
+             sinfo.imageExtent.height);
 
     VK(vk->CreateSwapchainKHR(vk->dev, &sinfo, PL_VK_ALLOC, &p->swapchain));
 
