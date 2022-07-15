@@ -9,7 +9,7 @@ project('libplacebo', ['c', 'cpp'],
   meson_version: '>=0.54',
   version: '@0@.@1@.@2@'.format(
     # Major version
-    4,
+    5,
     # API version
     {
       '208': 'add pl_filter_function.name and pl_filter_config.name',
