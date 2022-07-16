@@ -31,7 +31,7 @@ struct priv {
 pl_log pl_log_create(int api_ver, const struct pl_log_params *params)
 {
     (void) api_ver;
-    struct pl_log *log = pl_zalloc_obj(NULL, log, struct priv);
+    struct pl_log_t *log = pl_zalloc_obj(NULL, log, struct priv);
     struct priv *p = PL_PRIV(log);
     log->params = *PL_DEF(params, &pl_log_default_params);
     pl_mutex_init(&p->lock);
@@ -55,7 +55,7 @@ void pl_log_destroy(pl_log *plog)
 
 struct pl_log_params pl_log_update(pl_log ptr, const struct pl_log_params *params)
 {
-    struct pl_log *log = (struct pl_log *) ptr;
+    struct pl_log_t *log = (struct pl_log_t *) ptr;
     if (!log)
         return pl_log_default_params;
 
@@ -70,7 +70,7 @@ struct pl_log_params pl_log_update(pl_log ptr, const struct pl_log_params *param
 
 enum pl_log_level pl_log_level_update(pl_log ptr, enum pl_log_level level)
 {
-    struct pl_log *log = (struct pl_log *) ptr;
+    struct pl_log_t *log = (struct pl_log_t *) ptr;
     if (!log)
         return PL_LOG_NONE;
 

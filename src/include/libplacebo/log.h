@@ -57,7 +57,7 @@ extern const struct pl_log_params pl_log_default_params;
 //
 // Note: In any context in which `pl_log` is used, users may also pass NULL
 // to disable logging. In other words, NULL is a valid `pl_log`.
-typedef const PL_STRUCT(pl_log) {
+typedef const struct pl_log_t {
     struct pl_log_params params;
 } *pl_log;
 
