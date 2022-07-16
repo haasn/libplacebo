@@ -374,14 +374,8 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
                 vk_csp_name(p->formats.elem[i].colorSpace));
     }
 
-    struct pl_swapchain_colors hint = {0};
-    if (params->prefer_hdr) {
-        hint.primaries = PL_COLOR_PRIM_BT_2020;
-        hint.transfer = PL_COLOR_TRC_PQ;
-        hint.hdr = pl_hdr_metadata_hdr10;
-    }
-
     // Ensure there exists at least some valid renderable surface format
+    struct pl_color_space hint = {0};
     if (!pick_surf_format(sw, &hint))
         goto error;
 
