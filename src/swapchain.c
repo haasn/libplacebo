@@ -76,14 +76,6 @@ void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_color_space *
     sw->impl->colorspace_hint(sw, &fix);
 }
 
-bool pl_swapchain_hdr_metadata(pl_swapchain sw, const struct pl_hdr_metadata *metadata)
-{
-    if (metadata)
-        pl_swapchain_colorspace_hint(sw, pl_color_space( .hdr = *metadata ));
-
-    return true;
-}
-
 bool pl_swapchain_start_frame(pl_swapchain sw,
                               struct pl_swapchain_frame *out_frame)
 {

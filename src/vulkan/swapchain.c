@@ -313,7 +313,6 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     struct pl_swapchain *sw = pl_zalloc_obj(NULL, sw, struct priv);
     sw->impl = &vulkan_swapchain;
     sw->log = vk->log;
-    sw->ctx = sw->log;
     sw->gpu = gpu;
 
     struct priv *p = PL_PRIV(sw);
@@ -652,7 +651,7 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     p->color_repr.bits.sample_depth = bits;
     p->color_repr.bits.color_depth = bits;
 
-    // FIXME: infer `p->color_space.sig_peak` etc. from HDR metadata?
+    // FIXME: infer `p->color_space.hdr` etc. from swapchain HDR metadata?
     map_color_space(sinfo.imageColorSpace, &p->color_space);
 
     // Forcibly re-apply HDR metadata, bypassing the no-op check

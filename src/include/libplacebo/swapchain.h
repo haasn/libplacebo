@@ -36,9 +36,6 @@ typedef const PL_STRUCT(pl_swapchain) {
 
     // The underlying implementation
     struct pl_sw_fns *impl;
-
-    // (Deprecated) Backwards compatibility field. Equal to `log`.
-    pl_log ctx PL_DEPRECATED;
 } *pl_swapchain;
 
 // Destroys this swapchain. May be used at any time, and may block until the
@@ -85,11 +82,6 @@ bool pl_swapchain_resize(pl_swapchain sw, int *width, int *height);
 // Conversely, if the HDR metadata is non-empty but `csp->transfer` is left as
 // PL_COLOR_TRC_UNKNOWN, then it instead defaults to PL_COLOR_TRC_PQ.
 void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_color_space *csp);
-
-// Backwards compatibility wrapper for `pl_swapchain_colorspace_hint`. Always
-// returns `true`. (Deprecated)
-bool pl_swapchain_hdr_metadata(pl_swapchain sw, const struct pl_hdr_metadata *metadata)
-    PL_DEPRECATED;
 
 // The struct used to hold the results of `pl_swapchain_start_frame`
 struct pl_swapchain_frame {
