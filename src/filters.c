@@ -103,7 +103,7 @@ double pl_filter_sample(const struct pl_filter_config *c, double x)
 
 // Compute a single row of weights for a given filter in one dimension, indexed
 // by the indicated subpixel offset. Writes `f->row_size` values to `out`.
-static void compute_row(struct pl_filter *f, double offset, float *out)
+static void compute_row(struct pl_filter_t *f, double offset, float *out)
 {
     double wsum = 0.0;
     for (int i = 0; i < f->row_size; i++) {
@@ -145,7 +145,7 @@ pl_filter pl_filter_generate(pl_log log, const struct pl_filter_params *params)
         return NULL;
     }
 
-    struct pl_filter *f = pl_zalloc_ptr(NULL, f);
+    struct pl_filter_t *f = pl_zalloc_ptr(NULL, f);
     f->params = *params;
     f->params.config.kernel = dupfilter(f, params->config.kernel);
     f->params.config.window = dupfilter(f, params->config.window);
