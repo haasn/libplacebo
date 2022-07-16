@@ -798,34 +798,6 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
 
     for (int n = 0; n < num; n++) {
         struct pl_overlay ol = overlays[n];
-        struct pl_overlay_part fallback;
-        if (!ol.tex) {
-            // Backwards compatibility
-            ol.tex = ol.plane.texture;
-            ol.parts = &fallback;
-            ol.num_parts = 1;
-            fallback = (struct pl_overlay_part) {
-                .src = {
-                    .x0 = -ol.plane.shift_x,
-                    .y0 = -ol.plane.shift_y,
-                    .x1 = ol.tex->params.w - ol.plane.shift_x,
-                    .y1 = ol.tex->params.h - ol.plane.shift_y,
-                },
-                .dst = {
-                    .x0 = ol.rect.x0,
-                    .y0 = ol.rect.y0,
-                    .x1 = ol.rect.x1,
-                    .y1 = ol.rect.y1,
-                },
-                .color = {
-                    ol.base_color[0],
-                    ol.base_color[1],
-                    ol.base_color[2],
-                    1.0,
-                },
-            };
-        }
-
         if (!ol.num_parts)
             continue;
 
@@ -2240,18 +2212,12 @@ static bool pass_output_target(struct pass_state *pass)
 
 #define validate_overlay(overlay)                                               \
   do {                                                                          \
-      require(!(overlay).tex ^ !(overlay).plane.texture);                       \
-      if ((overlay).tex) {                                                      \
-          require((overlay).tex->params.sampleable);                            \
-          require((overlay).num_parts >= 0);                                    \
-          for (int n = 0; n < (overlay).num_parts; n++) {                       \
-              const struct pl_overlay_part *p = &(overlay).parts[n];            \
-              require(pl_rect_w(p->dst) && pl_rect_h(p->dst));                  \
-          }                                                                     \
-      } else {                                                                  \
-          require((overlay).num_parts == 0);                                    \
-          require((overlay).plane.texture->params.sampleable);                  \
-          require(pl_rect_w((overlay).rect) && pl_rect_h((overlay).rect));      \
+      require((overlay).tex);                                                   \
+      require((overlay).tex->params.sampleable);                                \
+      require((overlay).num_parts >= 0);                                        \
+      for (int n = 0; n < (overlay).num_parts; n++) {                           \
+          const struct pl_overlay_part *p = &(overlay).parts[n];                \
+          require(pl_rect_w(p->dst) && pl_rect_h(p->dst));                      \
       }                                                                         \
   } while (0)
 
@@ -2751,9 +2717,7 @@ static struct params_info render_params_info(const struct pl_render_params *para
     CLEAR(params.cone_params);
     CLEAR(params.dither_params);
     CLEAR(params.icc_params);
-    CLEAR(params.lut3d_params);
     CLEAR(params.force_icc_lut);
-    CLEAR(params.force_3dlut);
     CLEAR(params.force_dither);
     CLEAR(params.dynamic_constants);
     CLEAR(params.allow_delayed_peak_detect);

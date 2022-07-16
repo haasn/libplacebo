@@ -296,12 +296,7 @@ struct pl_render_params {
     void (*info_callback)(void *priv, const struct pl_render_info *info);
     void *info_priv;
 
-    // --- Deprecated aliases
-    const struct pl_icc_params *lut3d_params PL_DEPRECATED; // fallback for `icc_params`
-    bool force_3dlut PL_DEPRECATED; // fallback for `force_icc_lut`
-
     // --- Deprecated/removed fields
-    bool disable_overlay_sampling PL_DEPRECATED; // no longer used
     bool force_icc_lut PL_DEPRECATED; // no longer functional
 };
 
@@ -480,13 +475,6 @@ struct pl_overlay {
     // The number of parts for this overlay.
     const struct pl_overlay_part *parts;
     int num_parts;
-
-    // (Deprecated) These fields exist for backwards compatibility. They must
-    // not be used as the same times as `tex`. They are interpreted as an
-    // overlay with a single part.
-    struct pl_plane plane PL_DEPRECATED;
-    struct pl_rect2d rect PL_DEPRECATED; // analog to `pl_overlay_part.dst`
-    float base_color[3] PL_DEPRECATED; // analog to `pl_overlay_part.color`
 };
 
 // High-level description of a complete frame, including metadata and planes
