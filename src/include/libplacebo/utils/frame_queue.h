@@ -38,12 +38,6 @@ enum pl_queue_status {
     PL_QUEUE_EOF,      // no more frames are available
     PL_QUEUE_MORE,     // more frames needed, but not (yet) available
     PL_QUEUE_ERR = -1, // some unknown error occurred while retrieving frames
-
-// (Deprecated) Aliases for backwards compatibility
-    QUEUE_OK   PL_DEPRECATED = PL_QUEUE_OK,
-    QUEUE_EOF  PL_DEPRECATED = PL_QUEUE_EOF,
-    QUEUE_MORE PL_DEPRECATED = PL_QUEUE_MORE,
-    QUEUE_ERR  PL_DEPRECATED = PL_QUEUE_ERR,
 };
 
 struct pl_source_frame {
