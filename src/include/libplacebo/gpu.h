@@ -142,12 +142,6 @@ struct pl_gpu_limits {
 
     // --- Deprecated fields. Provided for backwards compatibility. See the
     // corresponding fields in `pl_glsl_version` for their replacements.
-    size_t max_shmem_size PL_DEPRECATED;
-    uint32_t max_group_threads PL_DEPRECATED;
-    uint32_t max_group_size[3] PL_DEPRECATED;
-    uint32_t subgroup_size PL_DEPRECATED;
-    int16_t min_gather_offset PL_DEPRECATED;
-    int16_t max_gather_offset PL_DEPRECATED;
     size_t max_variables PL_DEPRECATED; // see `max_variable_comps`
 };
 
@@ -228,20 +222,6 @@ struct pl_gpu_pci_address {
     uint32_t function;
 };
 
-// (Deprecated) Capability bits. Provided for backwards compatibility.
-typedef uint64_t pl_gpu_caps;
-enum PL_DEPRECATED {
-    PL_GPU_CAP_COMPUTE          = 1 << 0, // see `pl_glsl_version.compute`
-    PL_GPU_CAP_PARALLEL_COMPUTE = 1 << 1, // see `pl_gpu_limits.compute_queues`
-    PL_GPU_CAP_INPUT_VARIABLES  = 1 << 2, // see `pl_gpu_limits.max_variable_comps`
-    PL_GPU_CAP_MAPPED_BUFFERS   = 1 << 3, // see `pl_gpu_limits.max_mapped_size`
-    PL_GPU_CAP_BLITTABLE_1D_3D  = 1 << 4, // see `pl_gpu_limits.blittable_1d_3d`
-    PL_GPU_CAP_SUBGROUPS        = 1 << 5, // see `pl_glsl_version.subgroup_size`
-    PL_GPU_CAP_CALLBACKS        = 1 << 6, // see `pl_gpu_limits.callbacks`
-    PL_GPU_CAP_THREAD_SAFE      = 1 << 7, // see `pl_gpu_limits.thread_safe`
-    PL_GPU_CAP_SPEC_CONSTANTS   = 1 << 8, // see `pl_gpu_limits.max_constants`
-};
-
 typedef const PL_STRUCT(pl_fmt) *pl_fmt;
 
 // Abstract device context which wraps an underlying graphics context and can
@@ -268,10 +248,6 @@ typedef const PL_STRUCT(pl_gpu) {
     // PCI Bus address of the underlying device, to help with interop.
     // This will only be filled in if interop is supported.
     struct pl_gpu_pci_address pci;
-
-    // (Deprecated) Backwards compatibility fields.
-    pl_log ctx PL_DEPRECATED;       // equal to `log`
-    pl_gpu_caps caps PL_DEPRECATED; // replaced by `glsl` and `limits`
 } *pl_gpu;
 
 // No longer functional. See `pl_gpu_limits.align_tex_xfer_pitch`.

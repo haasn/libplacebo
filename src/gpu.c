@@ -201,7 +201,6 @@ pl_gpu pl_gpu_finalize(struct pl_gpu *gpu)
     qsort(gpu->formats, gpu->num_formats, sizeof(pl_fmt), cmp_fmt);
 
     // Verification
-    pl_assert(gpu->ctx == gpu->log);
     pl_assert(gpu->limits.max_tex_2d_dim);
     pl_assert(gpu->limits.max_variable_comps || gpu->limits.max_ubo_size);
 
@@ -316,36 +315,7 @@ pl_gpu pl_gpu_finalize(struct pl_gpu *gpu)
 
     print_formats(gpu);
 
-    // Set `gpu->caps` for backwards compatibility
-    pl_gpu_caps caps = 0;
-    if (gpu->glsl.compute)
-        caps |= PL_GPU_CAP_COMPUTE;
-    if (gpu->limits.compute_queues > gpu->limits.fragment_queues)
-        caps |= PL_GPU_CAP_PARALLEL_COMPUTE;
-    if (gpu->limits.max_variable_comps)
-        caps |= PL_GPU_CAP_INPUT_VARIABLES;
-    if (gpu->limits.max_mapped_size)
-        caps |= PL_GPU_CAP_MAPPED_BUFFERS;
-    if (gpu->limits.blittable_1d_3d)
-        caps |= PL_GPU_CAP_BLITTABLE_1D_3D;
-    if (gpu->glsl.subgroup_size)
-        caps |= PL_GPU_CAP_SUBGROUPS;
-    if (gpu->limits.callbacks)
-        caps |= PL_GPU_CAP_CALLBACKS;
-    if (gpu->limits.thread_safe)
-        caps |= PL_GPU_CAP_THREAD_SAFE;
-    if (gpu->limits.max_constants)
-        caps |= PL_GPU_CAP_SPEC_CONSTANTS;
-    gpu->caps = caps;
-
     // Set the backwards compatibility fields in `limits`
-    gpu->limits.max_shmem_size = gpu->glsl.max_shmem_size;
-    gpu->limits.max_group_threads = gpu->glsl.max_group_threads;
-    for (int i = 0; i < 3; i++)
-        gpu->limits.max_group_size[i] = gpu->glsl.max_group_size[i];
-    gpu->limits.subgroup_size = gpu->glsl.subgroup_size;
-    gpu->limits.min_gather_offset = gpu->glsl.min_gather_offset;
-    gpu->limits.max_gather_offset = gpu->glsl.max_gather_offset;
     gpu->limits.max_variables = gpu->limits.max_variable_comps;
 
     return gpu;

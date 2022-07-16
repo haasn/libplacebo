@@ -34,7 +34,6 @@ pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params)
 
     struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct priv);
     gpu->log = log;
-    gpu->ctx = gpu->log;
     gpu->glsl = params->glsl;
     gpu->limits = params->limits;
 

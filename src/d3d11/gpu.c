@@ -395,7 +395,6 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
 
     struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct pl_gpu_d3d11);
     gpu->log = ctx->log;
-    gpu->ctx = gpu->log;
 
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     *p = (struct pl_gpu_d3d11) {

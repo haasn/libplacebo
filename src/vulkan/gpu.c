@@ -389,7 +389,6 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
 
     struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct pl_vk);
     gpu->log = vk->log;
-    gpu->ctx = gpu->log;
 
     struct pl_vk *p = PL_PRIV(gpu);
     pl_mutex_init(&p->recording);

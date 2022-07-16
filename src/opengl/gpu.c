@@ -110,7 +110,6 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
 {
     struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct pl_gl);
     gpu->log = log;
-    gpu->ctx = gpu->log;
 
     struct pl_gl *p = PL_PRIV(gpu);
     p->impl = pl_fns_gl;
