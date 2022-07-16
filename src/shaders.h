@@ -42,7 +42,7 @@ enum pl_shader_type {
     SH_FRAGMENT
 };
 
-struct pl_shader {
+struct pl_shader_t {
     pl_log log;
     struct pl_shader_res res; // for accumulating some of the fields
     PL_ARRAY(struct pl_ref *) tmp; // only used for var/va/desc names and data
@@ -177,7 +177,7 @@ enum pl_shader_obj_type {
     PL_SHADER_OBJ_RESHAPE,
 };
 
-struct pl_shader_obj {
+struct pl_shader_obj_t {
     enum pl_shader_obj_type type;
     pl_gpu gpu;
     void (*uninit)(pl_gpu gpu, void *priv);

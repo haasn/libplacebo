@@ -25,7 +25,7 @@
 pl_shader pl_shader_alloc(pl_log log, const struct pl_shader_params *params)
 {
     pl_shader sh = pl_alloc_ptr(NULL, sh);
-    *sh = (struct pl_shader) {
+    *sh = (struct pl_shader_t) {
         .log = log,
         .mutable = true,
     };
@@ -56,7 +56,7 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
     for (int i = 0; i < sh->tmp.num; i++)
         pl_ref_deref(&sh->tmp.elem[i]);
 
-    struct pl_shader new = {
+    struct pl_shader_t new = {
         .log = sh->log,
         .mutable = true,
 
