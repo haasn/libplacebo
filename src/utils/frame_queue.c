@@ -59,7 +59,7 @@ struct pool {
     int total;
 };
 
-struct pl_queue {
+struct pl_queue_t {
     pl_gpu gpu;
     pl_log log;
 
@@ -100,7 +100,7 @@ struct pl_queue {
 pl_queue pl_queue_create(pl_gpu gpu)
 {
     pl_queue p = pl_alloc_ptr(NULL, p);
-    *p = (struct pl_queue) {
+    *p = (struct pl_queue_t) {
         .gpu = gpu,
         .log = gpu->log,
     };
@@ -177,7 +177,7 @@ void pl_queue_reset(pl_queue p)
     for (int i = 0; i < p->queue.num; i++)
         cull_entry(p, p->queue.elem[i]);
 
-    *p = (struct pl_queue) {
+    *p = (struct pl_queue_t) {
         .gpu = p->gpu,
         .log = p->log,
 

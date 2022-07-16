@@ -31,7 +31,7 @@ PL_API_BEGIN
 // of any configured frame mixer.
 //
 // Thread-safety: Safe
-typedef PL_STRUCT(pl_queue) *pl_queue;
+typedef struct pl_queue_t *pl_queue;
 
 enum pl_queue_status {
     PL_QUEUE_OK,       // success
