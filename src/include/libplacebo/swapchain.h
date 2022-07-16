@@ -30,7 +30,7 @@ PL_API_BEGIN
 // sister API to gpu.h and follows the same convention w.r.t undefined behavior.
 //
 // Thread-safety: Safe
-typedef const PL_STRUCT(pl_swapchain) {
+typedef const struct pl_swapchain_t {
     pl_log log;
     pl_gpu gpu;
 

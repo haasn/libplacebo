@@ -575,9 +575,9 @@ pl_swapchain pl_d3d11_create_swapchain(pl_d3d11 d3d11,
     pl_gpu gpu = d3d11->gpu;
     bool success = false;
 
-    struct pl_swapchain *sw = pl_zalloc_obj(NULL, sw, struct priv);
+    struct pl_swapchain_t *sw = pl_zalloc_obj(NULL, sw, struct priv);
     struct priv *p = PL_PRIV(sw);
-    *sw = (struct pl_swapchain) {
+    *sw = (struct pl_swapchain_t) {
         .impl = &d3d11_swapchain,
         .log = gpu->log,
         .gpu = gpu,

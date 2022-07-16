@@ -52,7 +52,7 @@ pl_swapchain pl_opengl_create_swapchain(pl_opengl pl_gl,
     if (!gl_make_current(pl_gl))
         return NULL;
 
-    struct pl_swapchain *sw = pl_zalloc_obj(NULL, sw, struct priv);
+    struct pl_swapchain_t *sw = pl_zalloc_obj(NULL, sw, struct priv);
     sw->impl = &opengl_swapchain;
     sw->log = gpu->log;
     sw->gpu = gpu;

@@ -310,7 +310,7 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
         return NULL;
     }
 
-    struct pl_swapchain *sw = pl_zalloc_obj(NULL, sw, struct priv);
+    struct pl_swapchain_t *sw = pl_zalloc_obj(NULL, sw, struct priv);
     sw->impl = &vulkan_swapchain;
     sw->log = vk->log;
     sw->gpu = gpu;
