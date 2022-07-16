@@ -151,7 +151,7 @@ static bool pl_download_avframe(pl_gpu gpu,
 // the values specified in the given color space / color repr / profile.
 //
 // Note: These functions can and will allocate AVFrame side data if needed,
-// in particular to encode `space.sig_peak` etc.
+// in particular to encode HDR metadata in `space.hdr`.
 static void pl_avframe_set_color(AVFrame *frame, struct pl_color_space space);
 static void pl_avframe_set_repr(AVFrame *frame, struct pl_color_repr repr);
 static void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile profile);
