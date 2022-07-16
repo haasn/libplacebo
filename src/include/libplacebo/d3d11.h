@@ -25,7 +25,7 @@
 #include <libplacebo/swapchain.h>
 
 // Structure representing the actual D3D11 device and associated GPU instance
-typedef const PL_STRUCT(pl_d3d11) {
+typedef const struct pl_d3d11_t {
     pl_gpu gpu;
 
     // The D3D11 device in use. The user is free to use this for their own

@@ -38,7 +38,7 @@ int main()
         }
         SAFE_RELEASE(adapter1);
 
-        const struct pl_d3d11 *d3d11 = pl_d3d11_create(log, pl_d3d11_params(
+        const struct pl_d3d11_t *d3d11 = pl_d3d11_create(log, pl_d3d11_params(
             .debug = true,
             .adapter_luid = desc.AdapterLuid,
         ));

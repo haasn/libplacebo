@@ -140,7 +140,7 @@ static bool has_sdk_layers(void)
         NULL));
 }
 
-static ID3D11Device *create_device(struct pl_d3d11 *d3d11,
+static ID3D11Device *create_device(struct pl_d3d11_t *d3d11,
                                    const struct pl_d3d11_params *params)
 {
     struct d3d11_ctx *ctx = PL_PRIV(d3d11);
@@ -316,7 +316,7 @@ pl_d3d11 pl_d3d11_create(pl_log log, const struct pl_d3d11_params *params)
     bool success = false;
     HRESULT hr;
 
-    struct pl_d3d11 *d3d11 = pl_zalloc_obj(NULL, d3d11, struct d3d11_ctx);
+    struct pl_d3d11_t *d3d11 = pl_zalloc_obj(NULL, d3d11, struct d3d11_ctx);
     struct d3d11_ctx *ctx = PL_PRIV(d3d11);
     ctx->log = log;
     ctx->d3d11 = d3d11;
@@ -445,7 +445,7 @@ pl_d3d11 pl_d3d11_create(pl_log log, const struct pl_d3d11_params *params)
 error:
     if (!success) {
         PL_FATAL(ctx, "Failed initializing Direct3D 11 device");
-        pl_d3d11_destroy((const struct pl_d3d11 **) &d3d11);
+        pl_d3d11_destroy((pl_d3d11 *) &d3d11);
     }
     SAFE_RELEASE(adapter);
     SAFE_RELEASE(adapter2);
