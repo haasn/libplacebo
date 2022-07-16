@@ -26,7 +26,7 @@
 // Gives us enough queries for 8 results
 #define QUERY_POOL_SIZE 16
 
-struct pl_timer {
+struct pl_timer_t {
     VkQueryPool qpool; // even=start, odd=stop
     int index_write; // next index to write to
     int index_read; // next index to read from
@@ -54,7 +54,7 @@ static pl_timer vk_timer_create(pl_gpu gpu)
     struct vk_ctx *vk = p->vk;
 
     pl_timer timer = pl_alloc_ptr(NULL, timer);
-    *timer = (struct pl_timer) {0};
+    *timer = (struct pl_timer_t) {0};
 
     struct VkQueryPoolCreateInfo qinfo = {
         .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
@@ -387,7 +387,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
 {
     pl_assert(vk->dev);
 
-    struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct pl_vk);
+    struct pl_gpu_t *gpu = pl_zalloc_obj(NULL, gpu, struct pl_vk);
     gpu->log = vk->log;
 
     struct pl_vk *p = PL_PRIV(gpu);
@@ -639,7 +639,7 @@ static pl_sync vk_sync_create(pl_gpu gpu, enum pl_handle_type handle_type)
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    struct pl_sync *sync = pl_zalloc_obj(NULL, sync, struct pl_sync_vk);
+    struct pl_sync_t *sync = pl_zalloc_obj(NULL, sync, struct pl_sync_vk);
     sync->handle_type = handle_type;
 
     struct pl_sync_vk *sync_vk = PL_PRIV(sync);

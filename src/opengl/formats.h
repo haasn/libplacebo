@@ -20,13 +20,13 @@
 #include "common.h"
 
 struct gl_format {
-    GLint ifmt;         // sized internal format (e.g. GL_RGBA16F)
-    GLenum fmt;         // base internal format (e.g. GL_RGBA)
-    GLenum type;        // host-visible type (e.g. GL_FLOAT)
-    struct pl_fmt tmpl; // pl_fmt template
+    GLint ifmt;             // sized internal format (e.g. GL_RGBA16F)
+    GLenum fmt;             // base internal format (e.g. GL_RGBA)
+    GLenum type;            // host-visible type (e.g. GL_FLOAT)
+    struct pl_fmt_t tmpl;   // pl_fmt template
 };
 
 typedef void (gl_format_cb)(pl_gpu gpu, const struct gl_format *glfmt);
 
 // Add all supported formats to the `pl_gpu` format list.
-bool gl_setup_formats(struct pl_gpu *gpu);
+bool gl_setup_formats(struct pl_gpu_t *gpu);

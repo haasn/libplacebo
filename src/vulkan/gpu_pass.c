@@ -342,7 +342,7 @@ pl_pass vk_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     struct vk_ctx *vk = p->vk;
     bool success = false;
 
-    struct pl_pass *pass = pl_zalloc_obj(NULL, pass, struct pl_pass_vk);
+    struct pl_pass_t *pass = pl_zalloc_obj(NULL, pass, struct pl_pass_vk);
     pass->params = pl_pass_params_copy(pass, params);
 
     struct pl_pass_vk *pass_vk = PL_PRIV(pass);

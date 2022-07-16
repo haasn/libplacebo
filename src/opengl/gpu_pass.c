@@ -234,7 +234,7 @@ pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
         return NULL;
 
     struct pl_gl *p = PL_PRIV(gpu);
-    struct pl_pass *pass = pl_zalloc_obj(NULL, pass, struct pl_pass_gl);
+    struct pl_pass_t *pass = pl_zalloc_obj(NULL, pass, struct pl_pass_gl);
     struct pl_pass_gl *pass_gl = PL_PRIV(pass);
     pass->params = pl_pass_params_copy(pass, params);
 

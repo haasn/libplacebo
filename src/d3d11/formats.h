@@ -22,7 +22,7 @@
 struct d3d_format {
     DXGI_FORMAT dxfmt;
     int minor; // The D3D11 minor version number which supports this format
-    struct pl_fmt fmt;
+    struct pl_fmt_t fmt;
 };
 
 extern const struct d3d_format pl_d3d11_formats[];
@@ -33,4 +33,4 @@ static inline DXGI_FORMAT fmt_to_dxgi(pl_fmt fmt)
     return (*fmtp)->dxfmt;
 }
 
-void pl_d3d11_setup_formats(struct pl_gpu *gpu);
+void pl_d3d11_setup_formats(struct pl_gpu_t *gpu);

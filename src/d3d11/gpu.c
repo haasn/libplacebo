@@ -31,7 +31,7 @@ struct timer_query {
     ID3D11Query *disjoint;
 };
 
-struct pl_timer {
+struct pl_timer_t {
     // Ring buffer of timer queries to use
     int current;
     int pending;
@@ -187,8 +187,8 @@ static pl_timer d3d11_timer_create(pl_gpu gpu)
     if (!p->has_timestamp_queries)
         return NULL;
 
-    struct pl_timer *timer = pl_alloc_ptr(NULL, timer);
-    *timer = (struct pl_timer) {0};
+    struct pl_timer_t *timer = pl_alloc_ptr(NULL, timer);
+    *timer = (struct pl_timer_t) {0};
     return timer;
 }
 
@@ -393,7 +393,7 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
     bool success = false;
     HRESULT hr;
 
-    struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct pl_gpu_d3d11);
+    struct pl_gpu_t *gpu = pl_zalloc_obj(NULL, gpu, struct pl_gpu_d3d11);
     gpu->log = ctx->log;
 
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);

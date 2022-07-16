@@ -41,7 +41,7 @@ pl_buf pl_d3d11_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     struct d3d11_ctx *ctx = p->ctx;
 
-    struct pl_buf *buf = pl_zalloc_obj(NULL, buf, struct pl_buf_d3d11);
+    struct pl_buf_t *buf = pl_zalloc_obj(NULL, buf, struct pl_buf_d3d11);
     buf->params = *params;
     buf->params.initial_data = NULL;
 

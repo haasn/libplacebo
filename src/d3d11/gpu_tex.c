@@ -166,7 +166,7 @@ pl_tex pl_d3d11_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     struct d3d11_ctx *ctx = p->ctx;
 
-    struct pl_tex *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_d3d11);
+    struct pl_tex_t *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_d3d11);
     tex->params = *params;
     tex->params.initial_data = NULL;
     tex->sampler_type = PL_SAMPLER_NORMAL;
@@ -322,7 +322,7 @@ pl_tex pl_d3d11_wrap(pl_gpu gpu, const struct pl_d3d11_wrap_params *params)
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     struct d3d11_ctx *ctx = p->ctx;
 
-    struct pl_tex *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_d3d11);
+    struct pl_tex_t *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_d3d11);
     tex->sampler_type = PL_SAMPLER_NORMAL;
 
     struct pl_tex_d3d11 *tex_p = PL_PRIV(tex);
@@ -595,7 +595,7 @@ bool pl_d3d11_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *para
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     struct d3d11_ctx *ctx = p->ctx;
-    const struct pl_tex *tex = params->tex;
+    const struct pl_tex_t *tex = params->tex;
     struct pl_tex_d3d11 *tex_p = PL_PRIV(tex);
 
     if (!tex_p->staging)

@@ -107,7 +107,7 @@ const struct d3d_format pl_d3d11_formats[] = {
 #undef REGFMT
 #undef FMT
 
-void pl_d3d11_setup_formats(struct pl_gpu *gpu)
+void pl_d3d11_setup_formats(struct pl_gpu_t *gpu)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     PL_ARRAY(pl_fmt) formats = {0};
@@ -130,7 +130,7 @@ void pl_d3d11_setup_formats(struct pl_gpu *gpu)
         ID3D11Device_CheckFeatureSupport(p->dev, D3D11_FEATURE_FORMAT_SUPPORT2,
                                          &sup2, sizeof(sup2));
 
-        struct pl_fmt *fmt = pl_alloc_obj(gpu, fmt, struct d3d_fmt *);
+        struct pl_fmt_t *fmt = pl_alloc_obj(gpu, fmt, struct d3d_fmt *);
         const struct d3d_format **fmtp = PL_PRIV(fmt);
         *fmt = d3d_fmt->fmt;
         *fmtp = d3d_fmt;

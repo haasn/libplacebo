@@ -97,7 +97,7 @@ static GLbitfield tex_barrier(pl_tex tex)
 static bool gl_tex_import(pl_gpu gpu,
                           enum pl_handle_type handle_type,
                           const struct pl_shared_mem *shared_mem,
-                          struct pl_tex *tex)
+                          struct pl_tex_t *tex)
 {
     const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
@@ -188,7 +188,7 @@ static EGLenum egl_from_gl_target(pl_gpu gpu, int target)
 }
 
 static bool gl_tex_export(pl_gpu gpu, enum pl_handle_type handle_type,
-                          bool preserved, struct pl_tex *tex)
+                          bool preserved, struct pl_tex_t *tex)
 {
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     struct pl_gl *p = PL_PRIV(gpu);
@@ -313,7 +313,7 @@ pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         return NULL;
 
     struct pl_gl *p = PL_PRIV(gpu);
-    struct pl_tex *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_gl);
+    struct pl_tex_t *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_gl);
     tex->params = *params;
     tex->params.initial_data = NULL;
     tex->sampler_type = PL_SAMPLER_NORMAL;
@@ -456,12 +456,12 @@ error:
     return NULL;
 }
 
-static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt *fmt,
+static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt_t *fmt,
                         struct gl_format *glfmt)
 {
     const gl_funcs *gl = gl_funcs_get(gpu);
     struct pl_gl *p = PL_PRIV(gpu);
-    *fmt = (struct pl_fmt) {
+    *fmt = (struct pl_fmt_t) {
         .name = "fbo",
         .type = PL_FMT_UNKNOWN,
         .caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_BLITTABLE | PL_FMT_CAP_BLENDABLE,
@@ -576,9 +576,9 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
         return NULL;
 
     struct pl_gl *p = PL_PRIV(gpu);
-    struct pl_tex *tex = pl_alloc_obj(NULL, tex, struct pl_tex_gl);
+    struct pl_tex_t *tex = pl_alloc_obj(NULL, tex, struct pl_tex_gl);
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
-    *tex = (struct pl_tex) {
+    *tex = (struct pl_tex_t) {
         .params = {
             .w = params->width,
             .h = params->height,
@@ -613,7 +613,7 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
         const struct gl_format **glfmtp = PL_PRIV(fmt);
         *glfmtp = glfmt;
         if (!gl_fb_query(gpu, params->framebuffer,
-                         (struct pl_fmt *) fmt,
+                         (struct pl_fmt_t *) fmt,
                          (struct gl_format *) glfmt))
         {
             PL_ERR(gpu, "Failed querying framebuffer specifics!");

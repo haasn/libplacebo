@@ -32,7 +32,7 @@ pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params)
 {
     params = PL_DEF(params, &pl_gpu_dummy_default_params);
 
-    struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct priv);
+    struct pl_gpu_t *gpu = pl_zalloc_obj(NULL, gpu, struct priv);
     gpu->log = log;
     gpu->glsl = params->glsl;
     gpu->limits = params->limits;
@@ -74,8 +74,8 @@ pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params)
                 if (type == PL_FMT_FLOAT && depth == 16)
                     tname = "hf";
 
-                struct pl_fmt *fmt = pl_alloc_ptr(gpu, fmt);
-                *fmt = (struct pl_fmt) {
+                struct pl_fmt_t *fmt = pl_alloc_ptr(gpu, fmt);
+                *fmt = (struct pl_fmt_t) {
                     .name = pl_asprintf(fmt, "%s%d%s", cnames[comps], depth, tname),
                     .type = type,
                     .num_components = comps,
@@ -134,7 +134,7 @@ struct buf_priv {
 
 static pl_buf dumb_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
 {
-    struct pl_buf *buf = pl_zalloc_obj(NULL, buf, struct buf_priv);
+    struct pl_buf_t *buf = pl_zalloc_obj(NULL, buf, struct buf_priv);
     buf->params = *params;
     buf->params.initial_data = NULL;
 
@@ -204,7 +204,7 @@ static size_t tex_size(pl_gpu gpu, pl_tex tex)
 
 static pl_tex dumb_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 {
-    struct pl_tex *tex = pl_zalloc_obj(NULL, tex, void *);
+    struct pl_tex_t *tex = pl_zalloc_obj(NULL, tex, void *);
     tex->params = *params;
     tex->params.initial_data = NULL;
 
@@ -227,7 +227,7 @@ pl_tex pl_tex_dummy_create(pl_gpu gpu, const struct pl_tex_dummy_params *params)
     // Only do minimal sanity checking, since this is just a dummy texture
     pl_assert(params->format && params->w >= 0 && params->h >= 0 && params->d >= 0);
 
-    struct pl_tex *tex = pl_zalloc_obj(NULL, tex, struct tex_priv);
+    struct pl_tex_t *tex = pl_zalloc_obj(NULL, tex, struct tex_priv);
     tex->sampler_type = params->sampler_type;
     tex->params = (struct pl_tex_params) {
         .w = params->w,

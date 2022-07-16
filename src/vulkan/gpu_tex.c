@@ -78,7 +78,7 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
     vk_cmd_callback(cmd, (vk_cb) vk_tex_deref, gpu, tex);
 }
 
-static void vk_tex_destroy(pl_gpu gpu, struct pl_tex *tex)
+static void vk_tex_destroy(pl_gpu gpu, struct pl_tex_t *tex)
 {
     if (!tex)
         return;
@@ -106,7 +106,7 @@ void vk_tex_deref(pl_gpu gpu, pl_tex tex)
 
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     if (pl_rc_deref(&tex_vk->rc))
-        vk_tex_destroy(gpu, (struct pl_tex *) tex);
+        vk_tex_destroy(gpu, (struct pl_tex_t *) tex);
 }
 
 
@@ -231,7 +231,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
                                       params->import_handle;
     VkExternalMemoryHandleTypeFlagBitsKHR vk_handle_type = vk_mem_handle_type(handle_type);
 
-    struct pl_tex *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_vk);
+    struct pl_tex_t *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_vk);
     tex->params = *params;
     tex->params.initial_data = NULL;
     tex->sampler_type = PL_SAMPLER_NORMAL;
@@ -1042,7 +1042,7 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
         return NULL;
     }
 
-    struct pl_tex *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_vk);
+    struct pl_tex_t *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_vk);
     tex->params = (struct pl_tex_params) {
         .format = format,
         .w = params->width,

@@ -21,14 +21,14 @@
 #include "gpu.h"
 
 struct vk_format {
-    VkFormat tfmt;     // internal vulkan format enum (textures)
-    struct pl_fmt fmt; // pl_fmt template (features will be auto-detected)
-    int icomps;        // internal component count (or 0 to infer from `fmt`)
-    VkFormat bfmt;     // vulkan format for use as buffers (or 0 to use `tfmt`)
+    VkFormat tfmt;      // internal vulkan format enum (textures)
+    struct pl_fmt_t fmt;// pl_fmt template (features will be auto-detected)
+    int icomps;         // internal component count (or 0 to infer from `fmt`)
+    VkFormat bfmt;      // vulkan format for use as buffers (or 0 to use `tfmt`)
     const struct vk_format *emufmt; // alternate format for emulation
 };
 
 extern const struct vk_format vk_formats[];
 
 // Add all supported formats to the `pl_gpu` format list
-void vk_setup_formats(struct pl_gpu *gpu);
+void vk_setup_formats(struct pl_gpu_t *gpu);

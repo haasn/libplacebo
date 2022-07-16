@@ -92,7 +92,7 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    struct pl_buf *buf = pl_zalloc_obj(NULL, buf, struct pl_buf_vk);
+    struct pl_buf_t *buf = pl_zalloc_obj(NULL, buf, struct pl_buf_vk);
     buf->params = *params;
     buf->params.initial_data = NULL;
 

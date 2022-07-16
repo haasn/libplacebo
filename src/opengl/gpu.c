@@ -104,7 +104,7 @@ static inline size_t get_page_size(void)
 
 pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_params *params)
 {
-    struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct pl_gl);
+    struct pl_gpu_t *gpu = pl_zalloc_obj(NULL, gpu, struct pl_gl);
     gpu->log = log;
 
     struct pl_gl *p = PL_PRIV(gpu);
@@ -301,7 +301,7 @@ pl_buf gl_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
     if (!MAKE_CURRENT())
         return NULL;
 
-    struct pl_buf *buf = pl_zalloc_obj(NULL, buf, struct pl_buf_gl);
+    struct pl_buf_t *buf = pl_zalloc_obj(NULL, buf, struct pl_buf_gl);
     buf->params = *params;
     buf->params.initial_data = NULL;
 
@@ -489,7 +489,7 @@ void gl_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
 
 #define QUERY_OBJECT_NUM 8
 
-struct pl_timer {
+struct pl_timer_t {
     GLuint query[QUERY_OBJECT_NUM];
     int index_write; // next index to write to
     int index_read; // next index to read from

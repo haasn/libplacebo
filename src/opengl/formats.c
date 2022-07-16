@@ -31,7 +31,7 @@ static bool supported_fourcc(struct pl_gl *p, EGLint fourcc)
 #endif
 
 #define FMT(_name, bits, ftype, _caps)               \
-    (struct pl_fmt) {                                \
+    (struct pl_fmt_t) {                              \
         .name = _name,                               \
         .type = PL_FMT_##ftype,                      \
         .caps = (enum pl_fmt_caps) (_caps),          \
@@ -208,10 +208,10 @@ const struct gl_format formats_basic_vertex[] = {
 
 static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
 {
-    struct pl_gpu *gpu = (struct pl_gpu *) pgpu;
+    struct pl_gpu_t *gpu = (struct pl_gpu_t *) pgpu;
     struct pl_gl *p = PL_PRIV(gpu);
 
-    struct pl_fmt *fmt = pl_alloc_obj(gpu, fmt, gl_fmt);
+    struct pl_fmt_t *fmt = pl_alloc_obj(gpu, fmt, gl_fmt);
     const struct gl_format **fmtp = PL_PRIV(fmt);
     *fmt = gl_fmt->tmpl;
     *fmtp = gl_fmt;
@@ -377,7 +377,7 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
             add_format(gpu, &formats[i]);                   \
     } while (0)
 
-bool gl_setup_formats(struct pl_gpu *gpu)
+bool gl_setup_formats(struct pl_gpu_t *gpu)
 {
     struct pl_gl *p = PL_PRIV(gpu);
 

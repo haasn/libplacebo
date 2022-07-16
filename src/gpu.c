@@ -195,7 +195,7 @@ static void print_formats(pl_gpu gpu)
     }
 }
 
-pl_gpu pl_gpu_finalize(struct pl_gpu *gpu)
+pl_gpu pl_gpu_finalize(struct pl_gpu_t *gpu)
 {
     // Sort formats
     qsort(gpu->formats, gpu->num_formats, sizeof(pl_fmt), cmp_fmt);

@@ -549,7 +549,7 @@ static inline size_t cache_payload_size(struct d3d11_cache_header *header)
     return required;
 }
 
-static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass *pass,
+static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass_t *pass,
                                      const struct pl_pass_params *params,
                                      pl_str *vert_bc, pl_str *frag_bc, pl_str *comp_bc)
 {
@@ -612,7 +612,7 @@ static bool d3d11_use_cached_program(pl_gpu gpu, struct pl_pass *pass,
     return true;
 }
 
-static void d3d11_update_program_cache(pl_gpu gpu, struct pl_pass *pass,
+static void d3d11_update_program_cache(pl_gpu gpu, struct pl_pass_t *pass,
                                        const pl_str *vs_str, const pl_str *ps_str,
                                        const pl_str *cs_str)
 {
@@ -682,7 +682,7 @@ void pl_d3d11_pass_destroy(pl_gpu gpu, pl_pass pass)
     pl_free((void *) pass);
 }
 
-static bool pass_create_raster(pl_gpu gpu, struct pl_pass *pass,
+static bool pass_create_raster(pl_gpu gpu, struct pl_pass_t *pass,
                                const struct pl_pass_params *params)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
@@ -780,7 +780,7 @@ error:
     return success;
 }
 
-static bool pass_create_compute(pl_gpu gpu, struct pl_pass *pass,
+static bool pass_create_compute(pl_gpu gpu, struct pl_pass_t *pass,
                                 const struct pl_pass_params *params)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
@@ -825,13 +825,13 @@ error:
     return success;
 }
 
-const struct pl_pass *pl_d3d11_pass_create(pl_gpu gpu,
-                                           const struct pl_pass_params *params)
+const struct pl_pass_t *pl_d3d11_pass_create(pl_gpu gpu,
+                                             const struct pl_pass_params *params)
 {
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     struct d3d11_ctx *ctx = p->ctx;
 
-    struct pl_pass *pass = pl_zalloc_obj(NULL, pass, struct pl_pass_d3d11);
+    struct pl_pass_t *pass = pl_zalloc_obj(NULL, pass, struct pl_pass_d3d11);
     pass->params = pl_pass_params_copy(pass, params);
     struct pl_pass_d3d11 *pass_p = PL_PRIV(pass);
     *pass_p = (struct pl_pass_d3d11) {

@@ -96,7 +96,7 @@ struct pl_gpu_d3d11 {
     pl_buf finish_buf_dst;
 };
 
-void pl_d3d11_setup_formats(struct pl_gpu *gpu);
+void pl_d3d11_setup_formats(struct pl_gpu_t *gpu);
 
 void pl_d3d11_timer_start(pl_gpu gpu, pl_timer timer);
 void pl_d3d11_timer_end(pl_gpu gpu, pl_timer timer);
@@ -208,6 +208,6 @@ struct pl_pass_d3d11 {
 };
 
 void pl_d3d11_pass_destroy(pl_gpu gpu, pl_pass pass);
-const struct pl_pass *pl_d3d11_pass_create(pl_gpu gpu,
-                                           const struct pl_pass_params *params);
+const struct pl_pass_t *pl_d3d11_pass_create(pl_gpu gpu,
+                                             const struct pl_pass_params *params);
 void pl_d3d11_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params);

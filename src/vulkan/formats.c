@@ -18,7 +18,7 @@
 #include "formats.h"
 
 #define FMT(_name, num, size, ftype, bits, idx) \
-    (struct pl_fmt) {                           \
+    (struct pl_fmt_t) {                         \
         .name = _name,                          \
         .type = PL_FMT_##ftype,                 \
         .num_components  = num,                 \
@@ -40,7 +40,7 @@
         IDX(0, 1, 2, 3))
 
 #define EMUFMT(_name, in, en, ib, eb, ftype)    \
-    (struct pl_fmt) {                           \
+    (struct pl_fmt_t) {                         \
         .name = _name,                          \
         .type = PL_FMT_##ftype,                 \
         .num_components  = en,                  \
@@ -175,7 +175,7 @@ const struct vk_format vk_formats[] = {
 #undef REGFMT
 #undef FMT
 
-void vk_setup_formats(struct pl_gpu *gpu)
+void vk_setup_formats(struct pl_gpu_t *gpu)
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
@@ -233,7 +233,7 @@ void vk_setup_formats(struct pl_gpu *gpu)
 
         pl_log_level_cap(vk->log, PL_LOG_NONE);
 
-        struct pl_fmt *fmt = pl_alloc_obj(gpu, fmt, struct pl_fmt_vk);
+        struct pl_fmt_t *fmt = pl_alloc_obj(gpu, fmt, struct pl_fmt_vk);
         struct pl_fmt_vk *fmtp = PL_PRIV(fmt);
         *fmt = vk_fmt->fmt;
         *fmtp = (struct pl_fmt_vk) {

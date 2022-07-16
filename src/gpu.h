@@ -88,7 +88,7 @@ static inline bool pl_gpu_supports_interop(pl_gpu gpu)
 // This performs several tasks. It sorts the format list, logs GPU metadata,
 // performs verification and fixes up backwards compatibility fields. This
 // should be returned as the last step when creating a `pl_gpu`.
-pl_gpu pl_gpu_finalize(struct pl_gpu *gpu);
+pl_gpu pl_gpu_finalize(struct pl_gpu_t *gpu);
 
 // Look up the right GLSL image format qualifier from a partially filled-in
 // pl_fmt, or NULL if the format does not have a legal matching GLSL name.
