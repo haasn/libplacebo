@@ -776,9 +776,9 @@ debug_ext_done: ;
         goto error;
     }
 
-    struct pl_vk_inst *pl_vk = pl_zalloc_obj(NULL, pl_vk, struct priv);
+    struct pl_vk_inst_t *pl_vk = pl_zalloc_obj(NULL, pl_vk, struct priv);
     struct priv *p = PL_PRIV(pl_vk);
-    *pl_vk = (struct pl_vk_inst) {
+    *pl_vk = (struct pl_vk_inst_t) {
         .instance = inst,
         .api_version = api_ver,
         .get_proc_addr = get_addr,
@@ -1277,7 +1277,7 @@ static void unlock_queue(pl_vulkan pl_vk, int qf, int qidx)
     vk->unlock_queue(vk->queue_ctx, qf, qidx);
 }
 
-static bool finalize_context(struct pl_vulkan *pl_vk, int max_glsl_version)
+static bool finalize_context(struct pl_vulkan_t *pl_vk, int max_glsl_version)
 {
     struct vk_ctx *vk = PL_PRIV(pl_vk);
 
@@ -1358,7 +1358,7 @@ static bool finalize_context(struct pl_vulkan *pl_vk, int max_glsl_version)
 pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
 {
     params = PL_DEF(params, &pl_vulkan_default_params);
-    struct pl_vulkan *pl_vk = pl_zalloc_obj(NULL, pl_vk, struct vk_ctx);
+    struct pl_vulkan_t *pl_vk = pl_zalloc_obj(NULL, pl_vk, struct vk_ctx);
     struct vk_ctx *vk = PL_PRIV(pl_vk);
     *vk = (struct vk_ctx) {
         .vulkan = pl_vk,
@@ -1467,7 +1467,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
 {
     void *tmp = pl_tmp(NULL);
 
-    struct pl_vulkan *pl_vk = pl_zalloc_obj(NULL, pl_vk, struct vk_ctx);
+    struct pl_vulkan_t *pl_vk = pl_zalloc_obj(NULL, pl_vk, struct vk_ctx);
     struct vk_ctx *vk = PL_PRIV(pl_vk);
     *vk = (struct vk_ctx) {
         .vulkan = pl_vk,

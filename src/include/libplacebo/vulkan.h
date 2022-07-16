@@ -25,7 +25,7 @@
 PL_API_BEGIN
 
 // Structure representing a VkInstance. Using this is not required.
-typedef const PL_STRUCT(pl_vk_inst) {
+typedef const struct pl_vk_inst_t {
     VkInstance instance;
 
     // The Vulkan API version supported by this VkInstance.
@@ -105,8 +105,8 @@ struct pl_vulkan_queue {
 };
 
 // Structure representing the actual vulkan device and associated GPU instance
-typedef const PL_STRUCT(pl_vulkan) *pl_vulkan;
-PL_STRUCT(pl_vulkan) {
+typedef const struct pl_vulkan_t *pl_vulkan;
+struct pl_vulkan_t {
     pl_gpu gpu;
 
     // The vulkan objects in use. The user may use this for their own purposes,
