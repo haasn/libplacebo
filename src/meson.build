@@ -139,7 +139,6 @@ endif
 headers = [
   'colorspace.h',
   'common.h',
-  'context.h',
   'dispatch.h',
   'dither.h',
   'dummy.h',

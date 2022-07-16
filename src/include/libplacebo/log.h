@@ -105,26 +105,8 @@ void pl_log_simple(void *stream, enum pl_log_level level, const char *msg);
 void pl_log_color(void *stream, enum pl_log_level level, const char *msg);
 
 // Backwards compatibility with older versions of libplacebo
-
 #define pl_context pl_log
 #define pl_context_params pl_log_params
-
-static inline PL_DEPRECATED PL_STRUCT(pl_context) *
-pl_context_create(int api_ver, const struct pl_context_params *params)
-{
-    return (PL_STRUCT(pl_context) *) pl_log_create(api_ver, params);
-}
-
-static inline PL_DEPRECATED void pl_context_destroy(PL_STRUCT(pl_context) **pctx)
-{
-    pl_log_destroy((pl_log *) pctx);
-}
-
-static inline PL_DEPRECATED void
-pl_context_update(PL_STRUCT(pl_context) *ctx, const struct pl_context_params *params)
-{
-    pl_log_update((pl_log) ctx, params);
-}
 
 PL_API_END
 
