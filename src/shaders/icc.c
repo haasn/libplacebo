@@ -166,7 +166,7 @@ static bool detect_contrast(pl_icc_object icc, struct pl_hdr_metadata *hdr,
     return true;
 }
 
-static void infer_clut_size(pl_log log, struct pl_icc_object *icc)
+static void infer_clut_size(pl_log log, struct pl_icc_object_t *icc)
 {
     struct icc_priv *p = PL_PRIV(icc);
     struct pl_icc_params *params = &icc->params;
@@ -285,7 +285,7 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     if (!profile->data)
         return NULL;
 
-    struct pl_icc_object *icc = pl_zalloc_obj(NULL, icc, struct icc_priv);
+    struct pl_icc_object_t *icc = pl_zalloc_obj(NULL, icc, struct icc_priv);
     struct icc_priv *p = PL_PRIV(icc);
     struct pl_icc_params *params = &icc->params;
     *params = pparams ? *pparams : pl_icc_default_params;

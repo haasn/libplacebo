@@ -60,7 +60,7 @@ struct pl_icc_params {
 extern const struct pl_icc_params pl_icc_default_params;
 
 // This object represents a "parsed" ICC profile.
-typedef const PL_STRUCT(pl_icc_object) {
+typedef const struct pl_icc_object_t {
     // Provided params, with the `intent` and `size` fields set (as described)
     struct pl_icc_params params;
 
