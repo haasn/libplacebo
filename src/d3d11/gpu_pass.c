@@ -480,7 +480,7 @@ error:;
     if (hlsl) {
         int level = out ? PL_LOG_DEBUG : PL_LOG_ERR;
         PL_MSG(gpu, level, "%s shader HLSL source:", shader_names[stage]);
-        pl_msg_source(gpu->ctx, level, hlsl);
+        pl_msg_source(gpu->log, level, hlsl);
     }
 
     if (sc)
