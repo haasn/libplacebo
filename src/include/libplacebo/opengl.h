@@ -30,7 +30,7 @@ PL_API_BEGIN
 // context. In other words, they must only be called from the thread the OpenGL
 // context is current on.
 
-typedef const PL_STRUCT(pl_opengl) {
+typedef const struct pl_opengl_t {
     pl_gpu gpu;
 
     // Detected GL version

@@ -107,7 +107,7 @@ static void add_exts_str(void *alloc, ext_arr_t *arr, const char *extstr)
 pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
 {
     params = PL_DEF(params, &pl_opengl_default_params);
-    struct pl_opengl *pl_gl = pl_zalloc_obj(NULL, pl_gl, struct gl_ctx);
+    struct pl_opengl_t *pl_gl = pl_zalloc_obj(NULL, pl_gl, struct gl_ctx);
     struct gl_ctx *p = PL_PRIV(pl_gl);
     gl_funcs *gl = &p->func;
     p->params = *params;
