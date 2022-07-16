@@ -51,7 +51,7 @@ struct icc_state {
     bool error;
 };
 
-struct pl_renderer {
+struct pl_renderer_t {
     pl_gpu gpu;
     pl_dispatch dp;
     pl_log log;
@@ -100,7 +100,7 @@ enum {
 pl_renderer pl_renderer_create(pl_log log, pl_gpu gpu)
 {
     pl_renderer rr = pl_alloc_ptr(NULL, rr);
-    *rr = (struct pl_renderer) {
+    *rr = (struct pl_renderer_t) {
         .gpu  = gpu,
         .log = log,
         .dp  = pl_dispatch_create(log, gpu),

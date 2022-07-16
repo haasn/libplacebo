@@ -33,7 +33,7 @@
 PL_API_BEGIN
 
 // Thread-safety: Unsafe
-typedef PL_STRUCT(pl_renderer) *pl_renderer;
+typedef struct pl_renderer_t *pl_renderer;
 
 // Creates a new renderer object, which is backed by a GPU context. This is a
 // high-level object that takes care of the rendering chain as a whole, from
