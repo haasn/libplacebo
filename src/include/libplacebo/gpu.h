@@ -166,6 +166,8 @@ enum pl_handle_type {
     PL_HANDLE_WIN32_KMT = (1 << 2), // `HANDLE` for pre-Windows-8 win32 API
     PL_HANDLE_DMA_BUF   = (1 << 3), // 'int fd' for a dma_buf fd
     PL_HANDLE_HOST_PTR  = (1 << 4), // `void *` for a host-allocated pointer
+    PL_HANDLE_MTL_TEX   = (1 << 5), // `MTLTexture*` for Apple platforms
+    PL_HANDLE_IOSURFACE = (1 << 6), // `IOSurfaceRef` for Apple platforms
 };
 
 struct pl_gpu_handle_caps {
@@ -183,7 +185,7 @@ struct pl_gpu_handle_caps {
 // but does not take ownership of a win32 handle).
 union pl_handle {
     int fd;         // PL_HANDLE_FD / PL_HANDLE_DMA_BUF
-    void *handle;   // PL_HANDLE_WIN32 / PL_HANDLE_WIN32_KMT
+    void *handle;   // PL_HANDLE_WIN32 / PL_HANDLE_WIN32_KMT / PL_HANDLE_MTL_TEX / PL_HANDLE_IOSURFACE
     void *ptr;      // PL_HANDLE_HOST_PTR
 };
 
@@ -212,6 +214,10 @@ struct pl_shared_mem {
     // the image width/height.
     size_t stride_w;
     size_t stride_h;
+
+    // When importing a `pl_tex` of type PL_HANDLE_MTL_TEX, this determines
+    // which plane is imported (0 - 2).
+    unsigned plane;
 };
 
 // Structure grouping PCI bus address fields for GPU devices

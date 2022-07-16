@@ -19,6 +19,7 @@
 
 #define VK_NO_PROTOTYPES
 #define VK_ENABLE_BETA_EXTENSIONS // for VK_KHR_portability_subset
+#define VK_USE_PLATFORM_METAL_EXT
 
 #include "../common.h"
 #include "../log.h"
@@ -225,5 +226,9 @@ struct vk_ctx {
 #ifdef PL_HAVE_WIN32
     PL_VK_FUN(GetMemoryWin32HandleKHR);
     PL_VK_FUN(GetSemaphoreWin32HandleKHR);
+#endif
+
+#ifdef VK_EXT_metal_objects
+    PL_VK_FUN(ExportMetalObjectsEXT);
 #endif
 };

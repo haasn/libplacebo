@@ -152,6 +152,8 @@ static bool gl_tex_import(pl_gpu gpu,
     case PL_HANDLE_WIN32_KMT:
     case PL_HANDLE_HOST_PTR:
     case PL_HANDLE_FD:
+    case PL_HANDLE_MTL_TEX:
+    case PL_HANDLE_IOSURFACE:
         pl_unreachable();
 
     }
@@ -268,6 +270,8 @@ static bool gl_tex_export(pl_gpu gpu, enum pl_handle_type handle_type,
     case PL_HANDLE_WIN32_KMT:
     case PL_HANDLE_HOST_PTR:
     case PL_HANDLE_FD:
+    case PL_HANDLE_MTL_TEX:
+    case PL_HANDLE_IOSURFACE:
         pl_unreachable();
 
     }

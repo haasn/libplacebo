@@ -34,6 +34,9 @@ vk_mem_handle_type(enum pl_handle_type handle_type)
         return VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
     case PL_HANDLE_HOST_PTR:
         return VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+    case PL_HANDLE_MTL_TEX:
+    case PL_HANDLE_IOSURFACE:
+        return 0;
     }
 
     pl_unreachable();
@@ -54,6 +57,8 @@ vk_sync_handle_type(enum pl_handle_type handle_type)
         return VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT_KHR;
     case PL_HANDLE_DMA_BUF:
     case PL_HANDLE_HOST_PTR:
+    case PL_HANDLE_MTL_TEX:
+    case PL_HANDLE_IOSURFACE:
         return 0;
     }
 

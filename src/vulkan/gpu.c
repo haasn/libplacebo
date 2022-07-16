@@ -368,6 +368,11 @@ static pl_handle_caps vk_tex_handle_caps(struct vk_ctx *vk, bool import)
         }
     }
 
+#ifdef VK_EXT_metal_objects
+    if (vk->ExportMetalObjectsEXT && import)
+        caps |= PL_HANDLE_MTL_TEX | PL_HANDLE_IOSURFACE;
+#endif
+
     return caps;
 }
 
@@ -658,6 +663,8 @@ static pl_sync vk_sync_create(pl_gpu gpu, enum pl_handle_type handle_type)
         break;
     case PL_HANDLE_DMA_BUF:
     case PL_HANDLE_HOST_PTR:
+    case PL_HANDLE_MTL_TEX:
+    case PL_HANDLE_IOSURFACE:
         pl_unreachable();
     }
 

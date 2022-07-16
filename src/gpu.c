@@ -623,6 +623,8 @@ pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
                 require(params->w && params->shared_mem.stride_w >= params->w);
             if (params->shared_mem.stride_h)
                 require(params->h && params->shared_mem.stride_h >= params->h);
+        } else if (params->import_handle == PL_HANDLE_MTL_TEX) {
+            require(params->shared_mem.plane <= 2);
         }
     }
 

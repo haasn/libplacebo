@@ -82,9 +82,12 @@ static inline bool feq(float a, float b, float epsilon)
         break;                                                                  \
     case PL_HANDLE_WIN32:                                                       \
     case PL_HANDLE_WIN32_KMT:                                                   \
-        REQUIRE(shmem.handle.handle);                                           \
         /* INVALID_HANDLE_VALUE = (-1) */                                       \
         REQUIRE(shmem.handle.handle != (void *)(intptr_t) (-1));                \
+        /* fallthrough */                                                       \
+    case PL_HANDLE_MTL_TEX:                                                     \
+    case PL_HANDLE_IOSURFACE:                                                   \
+        REQUIRE(shmem.handle.handle);                                           \
         break;                                                                  \
     case PL_HANDLE_HOST_PTR:                                                    \
         REQUIRE(shmem.handle.ptr);                                              \

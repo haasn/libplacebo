@@ -238,6 +238,9 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
             PL_TRACE(vk, "Unimporting slab of size %s from ptr: %p",
                      PRINT_SIZE(slab->size), (void *) slab->handle.ptr);
             break;
+        case PL_HANDLE_IOSURFACE:
+        case PL_HANDLE_MTL_TEX:
+            pl_unreachable();
         }
     } else {
         switch (slab->handle_type) {
@@ -260,6 +263,9 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
         case PL_HANDLE_HOST_PTR:
             // Implicitly unmapped
             break;
+        case PL_HANDLE_IOSURFACE:
+        case PL_HANDLE_MTL_TEX:
+            pl_unreachable();
         }
 
         PL_DEBUG(vk, "Freeing slab of size %s", PRINT_SIZE(slab->size));
@@ -338,7 +344,9 @@ static bool buf_external_check(struct vk_ctx *vk, VkBufferUsageFlags usage,
         .sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES_KHR,
     };
 
-    pl_assert(info.handleType);
+    if (!info.handleType)
+        return false;
+
     vk->GetPhysicalDeviceExternalBufferProperties(vk->physd, &info, &props);
     return vk_external_mem_check(vk, &props.externalMemoryProperties,
                                  handle_type, import);
@@ -364,6 +372,8 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
         break;
     case PL_HANDLE_WIN32:
     case PL_HANDLE_WIN32_KMT:
+    case PL_HANDLE_MTL_TEX:
+    case PL_HANDLE_IOSURFACE:
         slab->handle.handle = NULL;
         break;
     case PL_HANDLE_HOST_PTR:
@@ -841,6 +851,8 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     case PL_HANDLE_FD:
     case PL_HANDLE_WIN32:
     case PL_HANDLE_WIN32_KMT:
+    case PL_HANDLE_IOSURFACE:
+    case PL_HANDLE_MTL_TEX:
         PL_ERR(vk, "vk_malloc_import: unsupported handle type %d",
                params->import_handle);
         goto error;
@@ -894,6 +906,8 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         break;
     case PL_HANDLE_WIN32:
     case PL_HANDLE_WIN32_KMT:
+    case PL_HANDLE_IOSURFACE:
+    case PL_HANDLE_MTL_TEX:
         break;
     }
 

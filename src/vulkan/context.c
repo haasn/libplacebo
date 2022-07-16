@@ -181,6 +181,14 @@ static const struct vk_ext vk_device_extensions[] = {
     }, {
         .name = VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
 #endif
+#ifdef VK_EXT_metal_objects
+    }, {
+        .name = VK_EXT_METAL_OBJECTS_EXTENSION_NAME,
+        .funs = (struct vk_fun[]) {
+            PL_VK_DEV_FUN(ExportMetalObjectsEXT),
+            {0}
+        },
+#endif
     },
 };
 
@@ -203,6 +211,9 @@ const char * const pl_vulkan_recommended_extensions[] = {
     VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
 #ifdef VK_KHR_portability_subset
     VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
+#endif
+#ifdef VK_EXT_metal_objects
+    VK_EXT_METAL_OBJECTS_EXTENSION_NAME,
 #endif
 };
 

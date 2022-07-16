@@ -229,6 +229,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 
     enum pl_handle_type handle_type = params->export_handle |
                                       params->import_handle;
+    VkExternalMemoryHandleTypeFlagBitsKHR vk_handle_type = vk_mem_handle_type(handle_type);
 
     struct pl_tex *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_vk);
     tex->params = *params;
@@ -318,6 +319,17 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         },
     };
 
+#ifdef VK_EXT_metal_objects
+    VkImportMetalTextureInfoEXT import_metal_tex = {
+        .sType = VK_STRUCTURE_TYPE_IMPORT_METAL_TEXTURE_INFO_EXT,
+        .plane = VK_IMAGE_ASPECT_PLANE_0_BIT << params->shared_mem.plane,
+    };
+
+    VkImportMetalIOSurfaceInfoEXT import_iosurface = {
+        .sType = VK_STRUCTURE_TYPE_IMPORT_METAL_IO_SURFACE_INFO_EXT,
+    };
+#endif
+
     VkImageDrmFormatModifierListCreateInfoEXT drm_list = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT,
         .drmFormatModifierCount = params->format->num_modifiers,
@@ -326,12 +338,12 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 
     VkExternalMemoryImageCreateInfoKHR ext_info = {
         .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_KHR,
-        .handleTypes = vk_mem_handle_type(handle_type),
+        .handleTypes = vk_handle_type,
     };
 
     VkImageCreateInfo iinfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .pNext = handle_type ? &ext_info : NULL,
+        .pNext = vk_handle_type ? &ext_info : NULL,
         .imageType = tex_vk->type,
         .format = tex_vk->img_fmt,
         .extent = (VkExtent3D) {
@@ -364,6 +376,18 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         mparams.shared_mem.offset = 0x0; // handled via plane offsets
     }
 
+#ifdef VK_EXT_metal_objects
+    if (params->import_handle == PL_HANDLE_MTL_TEX) {
+        vk_link_struct(&iinfo, &import_metal_tex);
+        import_metal_tex.mtlTexture = params->shared_mem.handle.handle;
+    }
+
+    if (params->import_handle == PL_HANDLE_IOSURFACE) {
+        vk_link_struct(&iinfo, &import_iosurface);
+        import_iosurface.ioSurface = params->shared_mem.handle.handle;
+    }
+#endif
+
     if (params->export_handle == PL_HANDLE_DMA_BUF) {
         vk_link_struct(&iinfo, &drm_list);
         iinfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
@@ -388,7 +412,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 
     VkPhysicalDeviceImageFormatInfo2KHR pinfo = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR,
-        .pNext = handle_type ? &ext_pinfo : NULL,
+        .pNext = vk_handle_type ? &ext_pinfo : NULL,
         .format = iinfo.format,
         .type = iinfo.imageType,
         .tiling = iinfo.tiling,
@@ -402,7 +426,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 
     VkImageFormatProperties2KHR props = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2_KHR,
-        .pNext = handle_type ? &ext_props : NULL,
+        .pNext = vk_handle_type ? &ext_props : NULL,
     };
 
     VkResult res;
@@ -424,7 +448,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     }
 
     // Ensure the handle type is supported
-    if (handle_type) {
+    if (vk_handle_type) {
         bool ok = vk_external_mem_check(vk, &ext_props.externalMemoryProperties,
                                         handle_type, params->import_handle);
         if (!ok) {
@@ -456,18 +480,21 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     mparams.reqs = reqs.memoryRequirements;
     if (ded_reqs.prefersDedicatedAllocation) {
         mparams.ded_image = tex_vk->img;
-        if (params->import_handle)
+        if (vk_mem_handle_type(params->import_handle))
             mparams.shared_mem.size = reqs.memoryRequirements.size;
     }
-
-    struct vk_memslice *mem = &tex_vk->mem;
-    if (!vk_malloc_slice(vk->ma, mem, &mparams))
-        goto error;
 
     const char *debug_tag = params->debug_tag ? params->debug_tag :
                             params->import_handle ? "imported" : "created";
 
-    VK(vk->BindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
+    if (!params->import_handle || vk_mem_handle_type(params->import_handle)) {
+        struct vk_memslice *mem = &tex_vk->mem;
+        if (!vk_malloc_slice(vk->ma, mem, &mparams))
+            goto error;
+
+        VK(vk->BindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
+    }
+
     if (!vk_init_image(gpu, tex, debug_tag))
         goto error;
 
