@@ -35,7 +35,7 @@ enum {
     TMP_COUNT,
 };
 
-struct pl_dispatch {
+struct pl_dispatch_t {
     pl_mutex lock;
     pl_log log;
     pl_gpu gpu;
@@ -117,7 +117,7 @@ static void pass_destroy(pl_dispatch dp, struct pass *pass)
 
 pl_dispatch pl_dispatch_create(pl_log log, pl_gpu gpu)
 {
-    struct pl_dispatch *dp = pl_zalloc_ptr(NULL, dp);
+    struct pl_dispatch_t *dp = pl_zalloc_ptr(NULL, dp);
     pl_mutex_init(&dp->lock);
     dp->log = log;
     dp->gpu = gpu;

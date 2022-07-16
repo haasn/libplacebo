@@ -24,7 +24,7 @@
 PL_API_BEGIN
 
 // Thread-safety: Safe
-typedef PL_STRUCT(pl_dispatch) *pl_dispatch;
+typedef struct pl_dispatch_t *pl_dispatch;
 
 // Creates a new shader dispatch object. This object provides a translation
 // layer between generated shaders (pl_shader) and the ra context such that it
