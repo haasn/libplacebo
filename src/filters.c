@@ -674,17 +674,6 @@ const struct pl_filter_config pl_filter_ewa_hann = {
     .name   = "ewa_hann",
 };
 
-const struct pl_filter_config pl_filter_haasnsoft = {
-    .kernel = &jinc3,
-    .window = &pl_filter_function_hann,
-    // The blur is tuned to equal out orthogonal and diagonal contributions
-    // on a regular grid. This has the effect of almost completely killing
-    // aliasing.
-    .blur   = 1.11,
-    .polar  = true,
-    .name   = "haasnsoft",
-};
-
 // Spline family
 const struct pl_filter_config pl_filter_bicubic = {
     .kernel = &pl_filter_function_bicubic,
