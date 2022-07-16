@@ -22,7 +22,6 @@
 
 #ifdef PL_HAVE_UNIX
 #include <errno.h>
-#include <strings.h>
 #include <unistd.h>
 #endif
 

@@ -15,8 +15,6 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <strings.h>
-
 #include "log.h"
 #include "common.h"
 #include "gpu.h"
