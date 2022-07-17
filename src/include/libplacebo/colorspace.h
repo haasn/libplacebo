@@ -277,7 +277,8 @@ struct pl_cie_xy {
 static inline struct pl_cie_xy pl_cie_from_XYZ(float X, float Y, float Z)
 {
     float k = 1.0f / (X + Y + Z);
-    return (struct pl_cie_xy) { k * X, k * Y };
+    struct pl_cie_xy xy = { k * X, k * Y };
+    return xy;
 }
 
 // Recovers (X / Y) from a CIE xy value.
