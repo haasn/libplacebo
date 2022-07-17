@@ -15,6 +15,7 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include "shaders.h"
 
