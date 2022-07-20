@@ -330,7 +330,7 @@ endif
 conf_public.set('extra_defs', defs)
 subdir('./include/libplacebo') # generate config.h in the right location
 
-configure_file(
+sources += configure_file(
   output: 'config_internal.h',
   configuration: conf_internal
 )

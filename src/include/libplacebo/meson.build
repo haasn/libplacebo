@@ -1,4 +1,4 @@
-configure_file(
+sources += configure_file(
   input: 'config.h.in',
   output: 'config.h',
   install_dir: get_option('includedir') / proj_name,
