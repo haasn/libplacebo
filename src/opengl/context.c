@@ -114,6 +114,7 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     params = PL_DEF(params, &pl_opengl_default_params);
     struct pl_opengl *pl_gl = pl_zalloc_obj(NULL, pl_gl, struct gl_ctx);
     struct gl_ctx *p = PL_PRIV(pl_gl);
+    gl_funcs *gl = &p->func;
     p->params = *params;
     p->log = log;
 
@@ -121,6 +122,12 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     if (!gl_make_current(pl_gl)) {
         pl_free(pl_gl);
         return NULL;
+    }
+
+    if (!gladLoaderLoadGLContext(gl)) {
+        PL_FATAL(p, "Failed to initialize OpenGL context - make sure a valid "
+                 "OpenGL context is bound to the current thread!");
+        goto error;
     }
 
     const char *version = (const char *) glGetString(GL_VERSION);

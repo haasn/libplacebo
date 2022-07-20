@@ -34,6 +34,8 @@
 #define GLAD_GL
 #include <glad/gl.h>
 
+typedef GladGLContext gl_funcs;
+
 // PL_PRIV(pl_opengl)
 struct gl_ctx {
     pl_log log;
@@ -44,6 +46,9 @@ struct gl_ctx {
     // For context locking
     pl_mutex lock;
     int count;
+
+    // Dispatch table
+    gl_funcs func;
 };
 
 struct gl_cb {
