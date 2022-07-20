@@ -64,10 +64,10 @@ static pl_handle_caps tex_handle_caps(pl_gpu gpu, bool import)
         return 0;
 
     if (import) {
-        if (epoxy_has_egl_extension(p->egl_dpy, "EGL_EXT_image_dma_buf_import"))
+        if (pl_opengl_has_ext(p->gl, "EGL_EXT_image_dma_buf_import"))
             caps |= PL_HANDLE_DMA_BUF;
     } else if (!import && p->egl_ctx) {
-        if (epoxy_has_egl_extension(p->egl_dpy, "EGL_MESA_image_dma_buf_export"))
+        if (pl_opengl_has_ext(p->gl, "EGL_MESA_image_dma_buf_export"))
             caps |= PL_HANDLE_DMA_BUF;
     }
 
@@ -200,12 +200,12 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     gpu->import_caps.tex = tex_handle_caps(gpu, true);
 
     if (p->egl_dpy) {
-        p->has_modifiers = epoxy_has_egl_extension(p->egl_dpy,
+        p->has_modifiers = pl_opengl_has_ext(p->gl,
                                         "EGL_EXT_image_dma_buf_import_modifiers");
     }
 #endif
 
-    if (epoxy_has_gl_extension("GL_AMD_pinned_memory")) {
+    if (pl_opengl_has_ext(gl, "GL_AMD_pinned_memory")) {
         gpu->import_caps.buf |= PL_HANDLE_HOST_PTR;
         gpu->limits.align_host_ptr = get_page_size();
     }

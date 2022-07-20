@@ -60,7 +60,7 @@ pl_swapchain pl_opengl_create_swapchain(pl_opengl gl,
     struct priv *p = PL_PRIV(sw);
     pl_mutex_init(&p->lock);
     p->params = *params;
-    p->has_sync = epoxy_has_gl_extension("GL_ARB_sync");
+    p->has_sync = pl_opengl_has_ext(gl, "GL_ARB_sync");
     p->gl = gl;
 
     gl_release_current(gl);

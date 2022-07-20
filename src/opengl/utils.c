@@ -105,7 +105,7 @@ bool gl_test_ext(pl_gpu gpu, const char *ext, int gl_ver, int gles_ver)
     if (gles_ver && p->gles_ver >= gles_ver)
         return true;
 
-    return ext ? epoxy_has_gl_extension(ext) : false;
+    return ext ? pl_opengl_has_ext(p->gl, ext) : false;
 }
 
 #ifdef EPOXY_HAS_EGL

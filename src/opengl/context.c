@@ -186,7 +186,7 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     }
 
     if (params->debug) {
-        if (epoxy_has_gl_extension("GL_KHR_debug")) {
+        if (pl_opengl_has_ext(pl_gl, "GL_KHR_debug")) {
             glDebugMessageCallback(debug_cb, log);
             glEnable(GL_DEBUG_OUTPUT);
             p->is_debug = true;
@@ -196,7 +196,7 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
         }
 
 #ifdef EPOXY_HAS_EGL
-        if (params->egl_display && epoxy_has_egl_extension(params->egl_display, "EGL_KHR_debug")) {
+        if (params->egl_display && pl_opengl_has_ext(pl_gl, "EGL_KHR_debug")) {
             static const EGLAttrib attribs[] = {
                 // Enable everything under the sun, because the `pl_ctx` log
                 // level may change at runtime.

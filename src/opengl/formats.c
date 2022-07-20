@@ -416,9 +416,9 @@ bool gl_setup_formats(struct pl_gpu *gpu)
     if (p->gl_ver >= 21) {
         // If we have a reasonable set of extensions, we can enable most
         // things. Otherwise, pick simple fallback formats
-        if (epoxy_has_gl_extension("GL_ARB_texture_float") &&
-            epoxy_has_gl_extension("GL_ARB_texture_rg") &&
-            epoxy_has_gl_extension("GL_ARB_framebuffer_object"))
+        if (pl_opengl_has_ext(p->gl, "GL_ARB_texture_float") &&
+            pl_opengl_has_ext(p->gl, "GL_ARB_texture_rg") &&
+            pl_opengl_has_ext(p->gl, "GL_ARB_framebuffer_object"))
         {
             DO_FORMATS(formats_norm8);
             DO_FORMATS(formats_bgra8);
@@ -437,17 +437,17 @@ bool gl_setup_formats(struct pl_gpu *gpu)
         // GLES 3.0 has some basic formats, with framebuffers for float16
         // depending on GL_EXT_color_buffer_(half_)float support
         DO_FORMATS(formats_norm8);
-        if (epoxy_has_gl_extension("GL_EXT_texture_norm16")) {
+        if (pl_opengl_has_ext(p->gl, "GL_EXT_texture_norm16")) {
             DO_FORMATS(formats_norm16);
             DO_FORMATS(formats_rgb16_fallback);
         }
-        if (epoxy_has_gl_extension("GL_EXT_texture_format_BGRA8888"))
+        if (pl_opengl_has_ext(p->gl, "GL_EXT_texture_format_BGRA8888"))
             DO_FORMATS(formats_bgra_gles);
-        if (epoxy_has_gl_extension("GL_EXT_texture_integer"))
+        if (pl_opengl_has_ext(p->gl, "GL_EXT_texture_integer"))
             DO_FORMATS(formats_uint);
         DO_FORMATS(formats_basic_vertex);
-        if (p->gles_ver >= 32 || epoxy_has_gl_extension("GL_EXT_color_buffer_half_float")
-                              || epoxy_has_gl_extension("GL_EXT_color_buffer_float")) {
+        if (p->gles_ver >= 32 || pl_opengl_has_ext(p->gl, "GL_EXT_color_buffer_half_float")
+                              || pl_opengl_has_ext(p->gl, "GL_EXT_color_buffer_float")) {
             DO_FORMATS(formats_float16_fbo);
         } else {
             DO_FORMATS(formats_float16_fallback);
@@ -460,10 +460,10 @@ bool gl_setup_formats(struct pl_gpu *gpu)
         // float16 depending on GL_EXT_texture_norm16 being present
         DO_FORMATS(formats_legacy_gles2);
         DO_FORMATS(formats_basic_vertex);
-        if (epoxy_has_gl_extension("GL_EXT_texture_rg")) {
+        if (pl_opengl_has_ext(p->gl, "GL_EXT_texture_rg")) {
             DO_FORMATS(formats_norm8);
         }
-        if (epoxy_has_gl_extension("GL_EXT_texture_format_BGRA8888")) {
+        if (pl_opengl_has_ext(p->gl, "GL_EXT_texture_format_BGRA8888")) {
             DO_FORMATS(formats_bgra_gles);
         }
         goto done;
