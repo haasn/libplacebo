@@ -303,7 +303,7 @@ endforeach
 if comps.has('vulkan')
   registry_xml = get_option('vulkan-registry')
   datadir = get_option('prefix') / get_option('datadir')
-  sources += custom_target('vulkan boilerplate',
+  sources += custom_target('utils_gen.c',
     input: 'vulkan/utils_gen.py',
     output: 'utils_gen.c',
     command: [prog_python, '@INPUT@', datadir, registry_xml, '@OUTPUT@']
