@@ -116,8 +116,9 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     p->gl = gl;
 
     struct pl_glsl_version *glsl = &gpu->glsl;
+    const char *verstr = (char *) glGetString(GL_VERSION);
+    glsl->gles = pl_str_startswith0(pl_str0(verstr), "OpenGL ES");
     int ver = gl->major * 10 + gl->minor;
-    glsl->gles = !epoxy_is_desktop_gl();
     p->gl_ver = glsl->gles ? 0 : ver;
     p->gles_ver = glsl->gles ? ver : 0;
 
