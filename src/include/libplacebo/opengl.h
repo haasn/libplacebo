@@ -18,6 +18,8 @@
 #ifndef LIBPLACEBO_OPENGL_H_
 #define LIBPLACEBO_OPENGL_H_
 
+#include <string.h>
+
 #include <libplacebo/gpu.h>
 #include <libplacebo/swapchain.h>
 
@@ -30,7 +32,19 @@ PL_API_BEGIN
 
 typedef const PL_STRUCT(pl_opengl) {
     pl_gpu gpu;
+
+    // List of GL/EGL extensions, provided for convenience
+    const char * const *extensions;
+    int num_extensions;
 } *pl_opengl;
+
+static inline bool pl_opengl_has_ext(pl_opengl gl, const char *ext)
+{
+    for (int i = 0; i < gl->num_extensions; i++)
+        if (!strcmp(ext, gl->extensions[i]))
+            return true;
+    return false;
+}
 
 struct pl_opengl_params {
     // Enable OpenGL debug report callbacks. May have little effect depending

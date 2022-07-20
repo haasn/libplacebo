@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '211': 'add pl_opengl.extensions and pl_opengl_has_ext',
       '210': 'add PL_HANDLE_MTL_TEX, PL_HANDLE_IOSURFACE, and pl_shared_mem.plane',
       '209': 'add pl_gpu_limits.array_size_constants',
       '208': 'add pl_filter_function.name and pl_filter_config.name',

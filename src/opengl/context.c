@@ -108,6 +108,19 @@ void pl_opengl_destroy(pl_opengl *ptr)
     pl_free_ptr((void **) ptr);
 }
 
+typedef PL_ARRAY(const char *) ext_arr_t;
+static void add_exts_str(void *alloc, ext_arr_t *arr, const char *extstr0)
+{
+    pl_str extstr = pl_str_strip(pl_str0(extstr0));
+    extstr.len += 1; // include trailing NULL byte in allocation
+    pl_str rest = pl_strdup(alloc, extstr);
+    while (rest.len) {
+        pl_str ext = pl_str_split_char(rest, ' ', &rest);
+        ext.buf[ext.len] = '\0'; // re-use separator for terminator
+        PL_ARRAY_APPEND(alloc, *arr, (char *) ext.buf);
+    }
+}
+
 pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
 {
     params = PL_DEF(params, &pl_opengl_default_params);
@@ -134,26 +147,37 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     PL_INFO(p, "    GL_VENDOR:   %s", (char *) glGetString(GL_VENDOR));
     PL_INFO(p, "    GL_RENDERER: %s", (char *) glGetString(GL_RENDERER));
 
+    ext_arr_t exts = {0};
+    if (ver >= 30) {
+        glGetIntegerv(GL_NUM_EXTENSIONS, &exts.num);
+        PL_ARRAY_RESIZE(pl_gl, exts, exts.num);
+        for (int i = 0; i < exts.num; i++)
+            exts.elem[i] = (const char *) glGetStringi(GL_EXTENSIONS, i);
+    } else {
+        add_exts_str(pl_gl, &exts, (const char *) glGetString(GL_EXTENSIONS));
+    }
+
     if (pl_msg_test(log, PL_LOG_DEBUG)) {
-        if (ver >= 30) {
-            int num_exts = 0;
-            glGetIntegerv(GL_NUM_EXTENSIONS, &num_exts);
-            PL_DEBUG(p, "    GL_EXTENSIONS:");
-            for (int i = 0; i < num_exts; i++) {
-                const char *ext = (char *) glGetStringi(GL_EXTENSIONS, i);
-                PL_DEBUG(p, "        %s", ext);
-            }
-        } else {
-            PL_DEBUG(p, "    GL_EXTENSIONS: %s", (char *) glGetString(GL_EXTENSIONS));
-        }
+        PL_DEBUG(p, "    GL_EXTENSIONS:");
+        for (int i = 0; i < exts.num; i++)
+            PL_DEBUG(p, "        %s", exts.elem[i]);
+    }
 
 #ifdef EPOXY_HAS_EGL
-        if (params->egl_display) {
-            PL_DEBUG(p, "    EGL_EXTENSIONS: %s",
-                     eglQueryString(params->egl_display, EGL_EXTENSIONS));
+    if (params->egl_display) {
+        int start = exts.num;
+        add_exts_str(pl_gl, &exts, eglQueryString(params->egl_display,
+                                                  EGL_EXTENSIONS));
+        if (exts.num > start) {
+            PL_DEBUG(p, "    EGL_EXTENSIONS:");
+            for (int i = start; i < exts.num; i++)
+                PL_DEBUG(p, "        %s", exts.elem[i]);
         }
-#endif
     }
+#endif
+
+    pl_gl->extensions = exts.elem;
+    pl_gl->num_extensions = exts.num;
 
     if (!params->allow_software && gl_is_software()) {
         PL_FATAL(p, "OpenGL context is suspected to be a software rasterizer, "
