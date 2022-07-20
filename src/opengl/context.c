@@ -15,6 +15,8 @@
  * License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <ctype.h>
+
 #include "common.h"
 #include "utils.h"
 #include "gpu.h"
@@ -135,20 +137,30 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
         return NULL;
     }
 
-    int ver = epoxy_gl_version();
-    if (!ver) {
+    const char *version = (const char *) glGetString(GL_VERSION);
+    if (version) {
+        const char *ver = version;
+        while (!isdigit(*ver) && *ver != '\0')
+            ver++;
+        if (sscanf(ver, "%d.%d", &pl_gl->major, &pl_gl->minor) != 2) {
+            PL_FATAL(p, "Invalid GL_VERSION string: %s\n", version);
+            goto error;
+        }
+    }
+
+    if (!pl_gl->major) {
         PL_FATAL(p, "No OpenGL version detected - make sure an OpenGL context "
                  "is bound to the current thread!");
         goto error;
     }
 
     PL_INFO(p, "Detected OpenGL version strings:");
-    PL_INFO(p, "    GL_VERSION:  %s", (char *) glGetString(GL_VERSION));
+    PL_INFO(p, "    GL_VERSION:  %s", version);
     PL_INFO(p, "    GL_VENDOR:   %s", (char *) glGetString(GL_VENDOR));
     PL_INFO(p, "    GL_RENDERER: %s", (char *) glGetString(GL_RENDERER));
 
     ext_arr_t exts = {0};
-    if (ver >= 30) {
+    if (pl_gl->major >= 3) {
         glGetIntegerv(GL_NUM_EXTENSIONS, &exts.num);
         PL_ARRAY_RESIZE(pl_gl, exts, exts.num);
         for (int i = 0; i < exts.num; i++)

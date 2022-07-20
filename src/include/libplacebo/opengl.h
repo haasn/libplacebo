@@ -33,6 +33,9 @@ PL_API_BEGIN
 typedef const PL_STRUCT(pl_opengl) {
     pl_gpu gpu;
 
+    // Detected GL version
+    int major, minor;
+
     // List of GL/EGL extensions, provided for convenience
     const char * const *extensions;
     int num_extensions;
