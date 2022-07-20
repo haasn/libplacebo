@@ -79,13 +79,14 @@ void pl_opengl_destroy(pl_opengl *ptr)
         return;
 
     struct gl_ctx *p = PL_PRIV(pl_gl);
+    const gl_funcs *gl = &p->func;
     if (!gl_make_current(pl_gl)) {
         PL_WARN(p, "Failed uninitializing OpenGL context, leaking resources!");
         return;
     }
 
     if (p->is_debug)
-        glDebugMessageCallback(NULL, NULL);
+        gl->DebugMessageCallback(NULL, NULL);
 
 #ifdef EPOXY_HAS_EGL
     if (p->is_debug_egl)
@@ -130,7 +131,7 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
         goto error;
     }
 
-    const char *version = (const char *) glGetString(GL_VERSION);
+    const char *version = (const char *) gl->GetString(GL_VERSION);
     if (version) {
         const char *ver = version;
         while (!isdigit(*ver) && *ver != '\0')
@@ -149,17 +150,17 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
 
     PL_INFO(p, "Detected OpenGL version strings:");
     PL_INFO(p, "    GL_VERSION:  %s", version);
-    PL_INFO(p, "    GL_VENDOR:   %s", (char *) glGetString(GL_VENDOR));
-    PL_INFO(p, "    GL_RENDERER: %s", (char *) glGetString(GL_RENDERER));
+    PL_INFO(p, "    GL_VENDOR:   %s", (char *) gl->GetString(GL_VENDOR));
+    PL_INFO(p, "    GL_RENDERER: %s", (char *) gl->GetString(GL_RENDERER));
 
     ext_arr_t exts = {0};
     if (pl_gl->major >= 3) {
-        glGetIntegerv(GL_NUM_EXTENSIONS, &exts.num);
+        gl->GetIntegerv(GL_NUM_EXTENSIONS, &exts.num);
         PL_ARRAY_RESIZE(pl_gl, exts, exts.num);
         for (int i = 0; i < exts.num; i++)
-            exts.elem[i] = (const char *) glGetStringi(GL_EXTENSIONS, i);
+            exts.elem[i] = (const char *) gl->GetStringi(GL_EXTENSIONS, i);
     } else {
-        add_exts_str(pl_gl, &exts, (const char *) glGetString(GL_EXTENSIONS));
+        add_exts_str(pl_gl, &exts, (const char *) gl->GetString(GL_EXTENSIONS));
     }
 
     if (pl_msg_test(log, PL_LOG_DEBUG)) {
@@ -192,8 +193,8 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
 
     if (params->debug) {
         if (pl_opengl_has_ext(pl_gl, "GL_KHR_debug")) {
-            glDebugMessageCallback(debug_cb, log);
-            glEnable(GL_DEBUG_OUTPUT);
+            gl->DebugMessageCallback(debug_cb, log);
+            gl->Enable(GL_DEBUG_OUTPUT);
             p->is_debug = true;
         } else {
             PL_WARN(p, "OpenGL debugging requested, but GL_KHR_debug is not "
