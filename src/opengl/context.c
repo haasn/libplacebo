@@ -20,20 +20,8 @@
 #include "common.h"
 #include "utils.h"
 #include "gpu.h"
-#include "pl_thread.h"
 
 const struct pl_opengl_params pl_opengl_default_params = {0};
-
-struct priv {
-    struct pl_opengl_params params;
-    pl_log log;
-    bool is_debug;
-    bool is_debug_egl;
-
-    // For context locking
-    pl_mutex lock;
-    int count;
-};
 
 static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
                                 GLenum severity, GLsizei length,
@@ -90,7 +78,7 @@ void pl_opengl_destroy(pl_opengl *ptr)
     if (!pl_gl)
         return;
 
-    struct priv *p = PL_PRIV(pl_gl);
+    struct gl_ctx *p = PL_PRIV(pl_gl);
     if (!gl_make_current(pl_gl)) {
         PL_WARN(p, "Failed uninitializing OpenGL context, leaking resources!");
         return;
@@ -124,8 +112,8 @@ static void add_exts_str(void *alloc, ext_arr_t *arr, const char *extstr)
 pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
 {
     params = PL_DEF(params, &pl_opengl_default_params);
-    struct pl_opengl *pl_gl = pl_zalloc_obj(NULL, pl_gl, struct priv);
-    struct priv *p = PL_PRIV(pl_gl);
+    struct pl_opengl *pl_gl = pl_zalloc_obj(NULL, pl_gl, struct gl_ctx);
+    struct gl_ctx *p = PL_PRIV(pl_gl);
     p->params = *params;
     p->log = log;
 
@@ -246,9 +234,9 @@ error:
     return NULL;
 }
 
-bool gl_make_current(pl_opengl gl)
+bool gl_make_current(pl_opengl pl_gl)
 {
-    struct priv *p = PL_PRIV(gl);
+    struct gl_ctx *p = PL_PRIV(pl_gl);
     pl_mutex_lock(&p->lock);
     if (!p->count && p->params.make_current) {
         if (!p->params.make_current(p->params.priv)) {
@@ -262,9 +250,9 @@ bool gl_make_current(pl_opengl gl)
     return true;
 }
 
-void gl_release_current(pl_opengl gl)
+void gl_release_current(pl_opengl pl_gl)
 {
-    struct priv *p = PL_PRIV(gl);
+    struct gl_ctx *p = PL_PRIV(pl_gl);
     p->count--;
     if (!p->count && p->params.release_current)
         p->params.release_current(p->params.priv);

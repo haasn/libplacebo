@@ -20,12 +20,25 @@
 #include "../common.h"
 #include "../log.h"
 #include "../gpu.h"
+#include "pl_thread.h"
 
 #include <epoxy/gl.h>
 
 #ifdef EPOXY_HAS_EGL
 #include <epoxy/egl.h>
 #endif
+
+// PL_PRIV(pl_opengl)
+struct gl_ctx {
+    pl_log log;
+    struct pl_opengl_params params;
+    bool is_debug;
+    bool is_debug_egl;
+
+    // For context locking
+    pl_mutex lock;
+    int count;
+};
 
 struct gl_cb {
     void (*callback)(void *priv);
