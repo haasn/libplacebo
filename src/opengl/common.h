@@ -28,6 +28,12 @@
 #include <epoxy/egl.h>
 #endif
 
+// Transitional: suppress duplicate import check
+#undef __gl_h_
+#undef __glext_h_
+#define GLAD_GL
+#include <glad/gl.h>
+
 // PL_PRIV(pl_opengl)
 struct gl_ctx {
     pl_log log;
