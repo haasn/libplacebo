@@ -437,8 +437,8 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         .minVertexInputBindingStrideAlignment = 1,
     };
 
-    for (int i = 0; i < vk->vulkan->num_extensions; i++) {
-        if (!strcmp(vk->vulkan->extensions[i], VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)) {
+    for (int i = 0; i < vk->exts.num; i++) {
+        if (!strcmp(vk->exts.elem[i], VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)) {
             vk_link_struct(&props, &port_props);
             is_portability = true;
         }
