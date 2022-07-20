@@ -306,7 +306,7 @@ if comps.has('vulkan')
   sources += custom_target('vulkan boilerplate',
     input: 'vulkan/utils_gen.py',
     output: 'utils_gen.c',
-    command: [prog_python, '@INPUT@', datadir,registry_xml, '@OUTPUT@']
+    command: [prog_python, '@INPUT@', datadir, registry_xml, '@OUTPUT@']
   )
 
   if vulkan.found() and get_option('vulkan-link')
