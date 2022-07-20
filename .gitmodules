@@ -4,3 +4,12 @@
 [submodule "3rdparty/mako"]
 	path = 3rdparty/mako
 	url = https://github.com/sqlalchemy/mako/
+[submodule "3rdparty/glad"]
+	path = 3rdparty/glad
+	url = https://github.com/Dav1dde/glad
+[submodule "3rdparty/jinja"]
+	path = 3rdparty/jinja
+	url = https://github.com/pallets/jinja
+[submodule "3rdparty/markupsafe"]
+	path = 3rdparty/markupsafe
+	url = https://github.com/pallets/markupsafe

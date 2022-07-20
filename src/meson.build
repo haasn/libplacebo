@@ -13,6 +13,8 @@ thirdparty = meson.project_source_root()/'3rdparty'
 python = import('python').find_installation()
 python_env = environment()
 python_env.append('PYTHONPATH', thirdparty/'mako')
+python_env.append('PYTHONPATH', thirdparty/'jinja'/'src')
+python_env.append('PYTHONPATH', thirdparty/'markupsafe'/'src')
 
 if host_machine.system() == 'windows'
     threads = declare_dependency()
