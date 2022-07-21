@@ -8,8 +8,11 @@ conf_internal.set('BUILD_FIX_VER', fixver)
 conf_internal.set('PL_DEBUG_ABORT', get_option('debug-abort'))
 
 # Dependencies
-prog_python = import('python').find_installation()
 libm = cc.find_library('m', required: false)
+thirdparty = meson.project_source_root()/'3rdparty'
+python = import('python').find_installation()
+python_env = environment()
+python_env.append('PYTHONPATH', thirdparty/'mako')
 
 if host_machine.system() == 'windows'
     threads = declare_dependency()
@@ -306,7 +309,8 @@ if comps.has('vulkan')
   sources += custom_target('utils_gen.c',
     input: 'vulkan/utils_gen.py',
     output: 'utils_gen.c',
-    command: [prog_python, '@INPUT@', datadir, registry_xml, '@OUTPUT@']
+    command: [python, '@INPUT@', datadir, registry_xml, '@OUTPUT@'],
+    env: python_env,
   )
 
   if vulkan.found() and get_option('vulkan-link')
