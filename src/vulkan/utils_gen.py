@@ -23,7 +23,9 @@ try:
     from mako.template import Template
 except ModuleNotFoundError:
     print('Module \'mako\' not found, please install \'python3-mako\' or '
-          'an equivalent package on your system!', file=sys.stderr)
+          'an equivalent package on your system! Alternatively, run '
+          '`git submodule update --init` followed by `meson --wipe`.',
+          file=sys.stderr)
     sys.exit(1)
 
 TEMPLATE = Template("""
