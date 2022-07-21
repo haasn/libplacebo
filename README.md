@@ -245,6 +245,23 @@ Please open an issue if you have a use case for a BSD2-licensed libplacebo.
 
 An ebuild is available as `media-libs/libplacebo` in the gentoo repository.
 
+### Obtaining
+
+When cloning libplacebo, make sure to provide the `--recursive``` flag:
+
+```bash
+$ git clone --recursive https://code.videolan.org/videolan/libplacebo
+```
+
+Alternatively (on an existing clone):
+
+```bash
+$ git submodule update --init
+```
+
+Doing either of these pulls in a handful of bundled 3rdparty dependencies.
+Alternatively, they can be provided via the system.
+
 ### Building from source
 
 libplacebo is built using the [meson build system](http://mesonbuild.com/).
@@ -277,7 +294,9 @@ A full list of optional dependencies each feature requires:
 - **lcms**: `liblcms2`
 - **opengl**: `libepoxy`
 - **shaderc**: `libshaderc`
-- **vulkan**: `libvulkan`, `python3-mako`
+- **vulkan**: `libvulkan`, `python3-mako` (*)
+
+(*) This dependency is bundled automatically when doing a recursive clone.
 
 #### Vulkan support
 
