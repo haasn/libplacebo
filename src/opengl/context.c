@@ -45,8 +45,6 @@ static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
 #endif
 }
 
-#ifdef EPOXY_HAS_EGL
-
 static void GLAPIENTRY debug_cb_egl(EGLenum error, const char *command,
                                     EGLint messageType, EGLLabelKHR threadLabel,
                                     EGLLabelKHR objectLabel, const char *message)
@@ -70,8 +68,6 @@ static void GLAPIENTRY debug_cb_egl(EGLenum error, const char *command,
 #endif
 }
 
-#endif // EPOXY_HAS_EGL
-
 void pl_opengl_destroy(pl_opengl *ptr)
 {
     pl_opengl pl_gl = *ptr;
@@ -88,10 +84,8 @@ void pl_opengl_destroy(pl_opengl *ptr)
     if (p->is_debug)
         gl->DebugMessageCallback(NULL, NULL);
 
-#ifdef EPOXY_HAS_EGL
     if (p->is_debug_egl)
         eglDebugMessageControlKHR(NULL, NULL);
-#endif
 
     pl_gpu_destroy(pl_gl->gpu);
     gl_release_current(pl_gl);
@@ -125,7 +119,9 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
         return NULL;
     }
 
-    if (!gladLoaderLoadGLContext(gl)) {
+    bool ok = gladLoaderLoadGLContext(gl);
+    ok |= gladLoaderLoadGLES2Context(gl);
+    if (!ok) {
         PL_FATAL(p, "Failed to initialize OpenGL context - make sure a valid "
                  "OpenGL context is bound to the current thread!");
         goto error;
@@ -169,8 +165,12 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
             PL_DEBUG(p, "        %s", exts.elem[i]);
     }
 
-#ifdef EPOXY_HAS_EGL
     if (params->egl_display) {
+        if (!gladLoaderLoadEGL(params->egl_display)) {
+            PL_FATAL(p, "Failed loading EGL functions - double check EGLDisplay?");
+            goto error;
+        }
+
         int start = exts.num;
         add_exts_str(pl_gl, &exts, eglQueryString(params->egl_display,
                                                   EGL_EXTENSIONS));
@@ -180,7 +180,6 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
                 PL_DEBUG(p, "        %s", exts.elem[i]);
         }
     }
-#endif
 
     pl_gl->extensions = exts.elem;
     pl_gl->num_extensions = exts.num;
@@ -201,7 +200,6 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
                     "available... ignoring!");
         }
 
-#ifdef EPOXY_HAS_EGL
         if (params->egl_display && pl_opengl_has_ext(pl_gl, "EGL_KHR_debug")) {
             static const EGLAttrib attribs[] = {
                 // Enable everything under the sun, because the `pl_ctx` log
@@ -217,7 +215,6 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
             eglLabelObjectKHR(NULL, EGL_OBJECT_THREAD_KHR, NULL, (void *) log);
             p->is_debug_egl = true;
         }
-#endif // EPOXY_HAS_EGL
     }
 
     pl_gl->gpu = pl_gpu_create_gl(log, pl_gl, params);

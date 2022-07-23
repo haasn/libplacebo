@@ -23,7 +23,9 @@
 #include "pl_thread.h"
 
 #define GLAD_GL
+#define GLAD_GLES2
 #include <glad/gl.h>
+#include <glad/egl.h>
 
 typedef GladGLContext gl_funcs;
 
