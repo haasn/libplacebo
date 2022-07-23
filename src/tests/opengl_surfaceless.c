@@ -1,15 +1,5 @@
 #include "gpu_tests.h"
-
-#ifndef EPOXY_HAS_EGL
-int main()
-{
-    return SKIP;
-}
-#else // EPOXY_HAS_EGL
-
 #include "opengl/utils.h"
-#include <epoxy/gl.h>
-#include <epoxy/egl.h>
 
 static void opengl_interop_tests(pl_gpu gpu)
 {
@@ -138,10 +128,14 @@ static void opengl_test_export_import(pl_opengl gl,
 
 int main()
 {
-    // Create the OpenGL context
-    if (!epoxy_has_egl_extension(EGL_NO_DISPLAY, "EGL_MESA_platform_surfaceless"))
+    if (!gladLoaderLoadEGL(EGL_NO_DISPLAY))
         return SKIP;
 
+    const char *extstr = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
+    if (!extstr || !strstr(extstr, "EGL_MESA_platform_surfaceless"))
+        return SKIP;
+
+    // Create the OpenGL context
     EGLDisplay dpy = eglGetPlatformDisplayEXT(EGL_PLATFORM_SURFACELESS_MESA,
                                               (void *) EGL_DEFAULT_DISPLAY, NULL);
     if (dpy == EGL_NO_DISPLAY)
@@ -149,6 +143,9 @@ int main()
 
     EGLint major, minor;
     if (!eglInitialize(dpy, &major, &minor))
+        return SKIP;
+
+    if (!gladLoaderLoadEGL(dpy))
         return SKIP;
 
     printf("Initialized EGL v%d.%d\n", major, minor);
@@ -283,10 +280,9 @@ error: ;
     }
 
     eglTerminate(dpy);
+    gladLoaderUnloadEGL();
     pl_log_destroy(&log);
 
     if (!last_glsl.version)
         return SKIP;
 }
-
-#endif // EPOXY_HAS_EGL
