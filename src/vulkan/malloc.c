@@ -864,7 +864,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         goto error;
     }
 
-    VkDeviceMemory vkmem = NULL;
+    VkDeviceMemory vkmem = VK_NULL_HANDLE;
     VK(vk->AllocateMemory(vk->dev, &ainfo, PL_VK_ALLOC, &vkmem));
 
     slab = pl_alloc_ptr(NULL, slab);

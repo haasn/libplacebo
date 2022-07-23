@@ -597,7 +597,7 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
 
     // If needed, allocate some more semaphores
     while (num_images > p->sems.num) {
-        VkSemaphore sem_in = NULL, sem_out = NULL;
+        VkSemaphore sem_in = VK_NULL_HANDLE, sem_out = VK_NULL_HANDLE;
         static const VkSemaphoreCreateInfo seminfo = {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         };

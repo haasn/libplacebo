@@ -191,8 +191,8 @@ static VkResult vk_recreate_pipelines(struct vk_ctx *vk, pl_pass pass,
     // The old pipeline might still be in use, so we have to destroy it
     // asynchronously with a device idle callback
     if (*out_pipe) {
-        vk_dev_callback(vk, (vk_cb) destroy_pipeline, vk, *out_pipe);
-        *out_pipe = NULL;
+        vk_dev_callback(vk, (vk_cb) destroy_pipeline, vk, (void*)(uintptr_t)*out_pipe);
+        *out_pipe = VK_NULL_HANDLE;
     }
 
     VkPipelineCreateFlags flags = 0;
@@ -612,7 +612,7 @@ no_descriptors: ;
 
     // Create the graphics/compute pipeline
     VkPipeline *pipe = has_spec ? &pass_vk->base : &pass_vk->pipe;
-    VK(vk_recreate_pipelines(vk, pass, has_spec, NULL, pipe));
+    VK(vk_recreate_pipelines(vk, pass, has_spec, VK_NULL_HANDLE, pipe));
     pl_log_cpu_time(gpu->log, after_compilation, clock(), "creating pipeline");
 
     if (!has_spec) {
