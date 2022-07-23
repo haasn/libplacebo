@@ -282,6 +282,7 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
         .debug = DEBUG,
         .make_current = make_current,
         .release_current = release_current,
+        .get_proc_addr = glfwGetProcAddress,
         .priv = p->win,
     ));
     if (!p->gl) {

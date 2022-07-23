@@ -153,6 +153,7 @@ static struct window *sdl_create(pl_log log, const struct window_params *params)
         .debug = DEBUG,
         .make_current = make_current,
         .release_current = release_current,
+        .get_proc_addr = (void *) SDL_GL_GetProcAddress,
         .priv = p,
     ));
     if (!p->gl) {
