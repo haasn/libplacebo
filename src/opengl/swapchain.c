@@ -39,17 +39,17 @@ struct priv {
 
 static struct pl_sw_fns opengl_swapchain;
 
-pl_swapchain pl_opengl_create_swapchain(pl_opengl gl,
+pl_swapchain pl_opengl_create_swapchain(pl_opengl pl_gl,
                               const struct pl_opengl_swapchain_params *params)
 {
-    pl_gpu gpu = gl->gpu;
+    pl_gpu gpu = pl_gl->gpu;
 
     if (params->max_swapchain_depth < 0) {
         PL_ERR(gpu, "Tried specifying negative swapchain depth?");
         return NULL;
     }
 
-    if (!gl_make_current(gl))
+    if (!gl_make_current(pl_gl))
         return NULL;
 
     struct pl_swapchain *sw = pl_zalloc_obj(NULL, sw, struct priv);
@@ -60,10 +60,10 @@ pl_swapchain pl_opengl_create_swapchain(pl_opengl gl,
     struct priv *p = PL_PRIV(sw);
     pl_mutex_init(&p->lock);
     p->params = *params;
-    p->has_sync = pl_opengl_has_ext(gl, "GL_ARB_sync");
-    p->gl = gl;
+    p->has_sync = pl_opengl_has_ext(pl_gl, "GL_ARB_sync");
+    p->gl = pl_gl;
 
-    gl_release_current(gl);
+    gl_release_current(pl_gl);
     return sw;
 }
 
@@ -211,6 +211,8 @@ error:
 static bool gl_sw_submit_frame(pl_swapchain sw)
 {
     struct priv *p = PL_PRIV(sw);
+    struct gl_ctx *glctx = PL_PRIV(p->gl);
+    const gl_funcs *gl = &glctx->func;
     if (!gl_make_current(p->gl)) {
         p->frame_started = false;
         pl_mutex_unlock(&p->lock);
@@ -219,7 +221,7 @@ static bool gl_sw_submit_frame(pl_swapchain sw)
 
     pl_assert(p->frame_started);
     if (p->has_sync && p->params.max_swapchain_depth) {
-        GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        GLsync fence = gl->FenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
         if (fence)
             PL_ARRAY_APPEND(sw, p->vsync_fences, fence);
     }
@@ -235,6 +237,8 @@ static bool gl_sw_submit_frame(pl_swapchain sw)
 static void gl_sw_swap_buffers(pl_swapchain sw)
 {
     struct priv *p = PL_PRIV(sw);
+    struct gl_ctx *glctx = PL_PRIV(p->gl);
+    const gl_funcs *gl = &glctx->func;
     if (!p->params.swap_buffers) {
         PL_ERR(sw, "`pl_swapchain_swap_buffers` called but no "
                "`params.swap_buffers` callback set!");
@@ -251,8 +255,8 @@ static void gl_sw_swap_buffers(pl_swapchain sw)
 
     const int max_depth = p->params.max_swapchain_depth;
     while (max_depth && p->vsync_fences.num >= max_depth) {
-        glClientWaitSync(p->vsync_fences.elem[0], GL_SYNC_FLUSH_COMMANDS_BIT, 1e9);
-        glDeleteSync(p->vsync_fences.elem[0]);
+        gl->ClientWaitSync(p->vsync_fences.elem[0], GL_SYNC_FLUSH_COMMANDS_BIT, 1e9);
+        gl->DeleteSync(p->vsync_fences.elem[0]);
         PL_ARRAY_REMOVE_AT(p->vsync_fences, 0);
     }
 
