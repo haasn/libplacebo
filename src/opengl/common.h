@@ -22,15 +22,6 @@
 #include "../gpu.h"
 #include "pl_thread.h"
 
-#include <epoxy/gl.h>
-
-#ifdef EPOXY_HAS_EGL
-#include <epoxy/egl.h>
-#endif
-
-// Transitional: suppress duplicate import check
-#undef __gl_h_
-#undef __glext_h_
 #define GLAD_GL
 #include <glad/gl.h>
 

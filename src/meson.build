@@ -36,13 +36,12 @@ test_deps = []
 
 vulkan_opt = get_option('vulkan')
 vulkan = dependency('vulkan', version: '>=1.2.0', required: vulkan_opt)
-opengl = dependency('epoxy', version: '>=1.4.0', required: get_option('opengl'))
 shaderc = dependency('shaderc', version: '>=2019.1', required: get_option('shaderc'))
 cross = dependency('spirv-cross-c-shared', version: '>=0.29.0', required: get_option('d3d11'))
 
-if opengl.found()
-  has_egl = opengl.get_variable(pkgconfig: 'epoxy_has_egl', default_value: '0')
-  conf_internal.set('EPOXY_HAS_EGL', has_egl.to_int() == 1)
+opengl = disabler()
+if not get_option('opengl').disabled()
+  opengl = declare_dependency()
 endif
 
 vulkan_headers = vulkan
