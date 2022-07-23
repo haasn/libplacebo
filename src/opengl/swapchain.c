@@ -198,7 +198,8 @@ static bool gl_sw_start_frame(pl_swapchain sw,
     if (!p->frame_started)
         goto error;
 
-    // keep lock held
+    // keep p->lock held
+    gl_release_current(p->gl);
     return true;
 
 error:
@@ -210,6 +211,12 @@ error:
 static bool gl_sw_submit_frame(pl_swapchain sw)
 {
     struct priv *p = PL_PRIV(sw);
+    if (!gl_make_current(p->gl)) {
+        p->frame_started = false;
+        pl_mutex_unlock(&p->lock);
+        return false;
+    }
+
     pl_assert(p->frame_started);
     if (p->has_sync && p->params.max_swapchain_depth) {
         GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
