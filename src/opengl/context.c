@@ -111,11 +111,9 @@ void pl_opengl_destroy(pl_opengl *ptr)
 }
 
 typedef PL_ARRAY(const char *) ext_arr_t;
-static void add_exts_str(void *alloc, ext_arr_t *arr, const char *extstr0)
+static void add_exts_str(void *alloc, ext_arr_t *arr, const char *extstr)
 {
-    pl_str extstr = pl_str_strip(pl_str0(extstr0));
-    extstr.len += 1; // include trailing NULL byte in allocation
-    pl_str rest = pl_strdup(alloc, extstr);
+    pl_str rest = pl_str_strip(pl_str0(pl_strdup0(alloc, pl_str0(extstr))));
     while (rest.len) {
         pl_str ext = pl_str_split_char(rest, ' ', &rest);
         ext.buf[ext.len] = '\0'; // re-use separator for terminator
