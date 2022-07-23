@@ -26,6 +26,7 @@
 
 void gl_tex_destroy(pl_gpu gpu, pl_tex tex)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT()) {
         PL_ERR(gpu, "Failed uninitializing texture, leaking resources!");
         return;
@@ -33,7 +34,7 @@ void gl_tex_destroy(pl_gpu gpu, pl_tex tex)
 
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     if (tex_gl->fbo && !tex_gl->wrapped_fb)
-        glDeleteFramebuffers(1, &tex_gl->fbo);
+        gl->DeleteFramebuffers(1, &tex_gl->fbo);
 #ifdef EPOXY_HAS_EGL
     if (tex_gl->image) {
         struct pl_gl *p = PL_PRIV(gpu);
@@ -41,7 +42,7 @@ void gl_tex_destroy(pl_gpu gpu, pl_tex tex)
     }
 #endif
     if (!tex_gl->wrapped_tex)
-        glDeleteTextures(1, &tex_gl->texture);
+        gl->DeleteTextures(1, &tex_gl->texture);
 
 #ifdef PL_HAVE_UNIX
     if (tex_gl->fd != -1)
@@ -102,6 +103,7 @@ static bool gl_tex_import(pl_gpu gpu,
                           const struct pl_shared_mem *shared_mem,
                           struct pl_tex *tex)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return false;
 
@@ -165,7 +167,7 @@ static bool gl_tex_import(pl_gpu gpu,
         goto error;
 
     // tex_gl->image should be already bound
-    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, tex_gl->image);
+    gl->EGLImageTargetTexture2DOES(GL_TEXTURE_2D, tex_gl->image);
     if (!egl_check_err(gpu, "EGLImageTargetTexture2DOES"))
         goto error;
 
@@ -327,6 +329,7 @@ static const char *fb_err_str(GLenum err)
 
 pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return NULL;
 
@@ -358,32 +361,32 @@ pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     pl_assert(dims >= 1 && dims <= 3);
     tex_gl->target = targets[dims];
 
-    glGenTextures(1, &tex_gl->texture);
-    glBindTexture(tex_gl->target, tex_gl->texture);
+    gl->GenTextures(1, &tex_gl->texture);
+    gl->BindTexture(tex_gl->target, tex_gl->texture);
 
     if (params->import_handle) {
         if (!gl_tex_import(gpu, params->import_handle, &params->shared_mem, tex))
             goto error;
     } else {
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        gl->PixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
         switch (dims) {
         case 1:
-            glTexImage1D(tex_gl->target, 0, tex_gl->iformat, params->w, 0,
-                         tex_gl->format, tex_gl->type, params->initial_data);
+            gl->TexImage1D(tex_gl->target, 0, tex_gl->iformat, params->w, 0,
+                           tex_gl->format, tex_gl->type, params->initial_data);
             break;
         case 2:
-            glTexImage2D(tex_gl->target, 0, tex_gl->iformat, params->w, params->h,
-                         0, tex_gl->format, tex_gl->type, params->initial_data);
+            gl->TexImage2D(tex_gl->target, 0, tex_gl->iformat, params->w, params->h,
+                           0, tex_gl->format, tex_gl->type, params->initial_data);
             break;
         case 3:
-            glTexImage3D(tex_gl->target, 0, tex_gl->iformat, params->w, params->h,
-                         params->d, 0, tex_gl->format, tex_gl->type,
-                         params->initial_data);
+            gl->TexImage3D(tex_gl->target, 0, tex_gl->iformat, params->w, params->h,
+                           params->d, 0, tex_gl->format, tex_gl->type,
+                           params->initial_data);
             break;
         }
 
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        gl->PixelStorei(GL_UNPACK_ALIGNMENT, 4);
     }
 
     if (params->export_handle) {
@@ -391,7 +394,7 @@ pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             goto error;
     }
 
-    glBindTexture(tex_gl->target, 0);
+    gl->BindTexture(tex_gl->target, 0);
 
     if (!gl_check_err(gpu, "gl_tex_create: texture"))
         goto error;
@@ -422,33 +425,33 @@ pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             goto error;
         }
 
-        glGenFramebuffers(1, &tex_gl->fbo);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
+        gl->GenFramebuffers(1, &tex_gl->fbo);
+        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
         switch (dims) {
         case 1:
-            glFramebufferTexture1D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                   GL_TEXTURE_1D, tex_gl->texture, 0);
+            gl->FramebufferTexture1D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                     GL_TEXTURE_1D, tex_gl->texture, 0);
             break;
         case 2:
-            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                   GL_TEXTURE_2D, tex_gl->texture, 0);
+            gl->FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                     GL_TEXTURE_2D, tex_gl->texture, 0);
             break;
         case 3: pl_unreachable();
         }
 
-        GLenum err = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+        GLenum err = gl->CheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
         if (err != GL_FRAMEBUFFER_COMPLETE) {
-            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
             PL_ERR(gpu, "Failed creating framebuffer: %s", fb_err_str(err));
             goto error;
         }
 
         if (params->host_readable && p->gles_ver) {
             GLint read_type = 0, read_fmt = 0;
-            glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
-            glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &read_fmt);
+            gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
+            gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &read_fmt);
             if (read_type != tex_gl->type || read_fmt != tex_gl->format) {
-                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+                gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
                 PL_ERR(gpu, "Trying to create host_readable texture whose "
                        "implementation-defined pixel read format "
                        "(type=0x%X, fmt=0x%X) does not match the texture's "
@@ -460,7 +463,7 @@ pl_tex gl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             }
         }
 
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         if (!gl_check_err(gpu, "gl_tex_create: fbo"))
             goto error;
     }
@@ -477,6 +480,7 @@ error:
 static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt *fmt,
                         struct gl_format *glfmt)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     struct pl_gl *p = PL_PRIV(gpu);
     *fmt = (struct pl_fmt) {
         .name = "fbo",
@@ -496,15 +500,15 @@ static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt *fmt,
         can_query = false; // can't query default framebuffer on GLES 2.0
 
     if (can_query) {
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
 
         GLenum obj = p->gles_ver ? GL_BACK : GL_BACK_LEFT;
         if (fbo != 0)
             obj = GL_COLOR_ATTACHMENT0;
 
         GLint type = 0;
-        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
-                GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE, &type);
+        gl->GetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
+                            GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE, &type);
         switch (type) {
         case GL_FLOAT:                  fmt->type = PL_FMT_FLOAT; break;
         case GL_INT:                    fmt->type = PL_FMT_SINT; break;
@@ -514,16 +518,16 @@ static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt *fmt,
         default:                        fmt->type = PL_FMT_UNKNOWN; break;
         }
 
-        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
+        gl->GetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
                 GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE, &fmt->component_depth[0]);
-        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
+        gl->GetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
                 GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE, &fmt->component_depth[1]);
-        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
+        gl->GetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
                 GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE, &fmt->component_depth[2]);
-        glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
+        gl->GetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, obj,
                 GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE, &fmt->component_depth[3]);
 
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         gl_check_err(gpu, "gl_fb_query");
 
         if (!fmt->component_depth[0]) {
@@ -588,6 +592,7 @@ static bool gl_fb_query(pl_gpu gpu, int fbo, struct pl_fmt *fmt,
 
 pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return NULL;
 
@@ -696,37 +701,37 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params)
                    dims < 3;
 
     if (can_fbo && !tex_gl->fbo) {
-        glGenFramebuffers(1, &tex_gl->fbo);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
+        gl->GenFramebuffers(1, &tex_gl->fbo);
+        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
         switch (dims) {
         case 1:
-            glFramebufferTexture1D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                   tex_gl->target, tex_gl->texture, 0);
+            gl->FramebufferTexture1D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                     tex_gl->target, tex_gl->texture, 0);
             break;
         case 2:
-            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                   tex_gl->target, tex_gl->texture, 0);
+            gl->FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                     tex_gl->target, tex_gl->texture, 0);
             break;
         }
 
-        GLenum err = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+        GLenum err = gl->CheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
         if (err != GL_FRAMEBUFFER_COMPLETE) {
-            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
             PL_ERR(gpu, "Failed creating framebuffer: error code %d", err);
             goto error;
         }
 
         if (p->gles_ver) {
             GLint read_type = 0, read_fmt = 0;
-            glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
-            glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &read_fmt);
+            gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
+            gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &read_fmt);
             tex->params.host_readable = read_type == tex_gl->type &&
                                         read_fmt == tex_gl->format;
         } else {
             tex->params.host_readable = true;
         }
 
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         if (!gl_check_err(gpu, "pl_opengl_wrap: fbo"))
             goto error;
     }
@@ -781,19 +786,20 @@ unsigned int pl_opengl_unwrap(pl_gpu gpu, pl_tex tex,
 
 void gl_tex_invalidate(pl_gpu gpu, pl_tex tex)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     struct pl_gl *p = PL_PRIV(gpu);
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     if (!MAKE_CURRENT())
         return;
 
     if (tex_gl->texture && p->has_invalidate_tex)
-        glInvalidateTexImage(tex_gl->texture, 0);
+        gl->InvalidateTexImage(tex_gl->texture, 0);
 
     if ((tex_gl->wrapped_fb || tex_gl->fbo) && p->has_invalidate_fb) {
         GLenum attachment = tex_gl->fbo ? GL_COLOR_ATTACHMENT0 : GL_COLOR;
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
-        glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &attachment);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
+        gl->InvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &attachment);
+        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     }
 
     gl_check_err(gpu, "gl_tex_invalidate");
@@ -802,6 +808,7 @@ void gl_tex_invalidate(pl_gpu gpu, pl_tex tex)
 
 void gl_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return;
 
@@ -813,30 +820,31 @@ void gl_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
     case PL_FMT_FLOAT:
     case PL_FMT_UNORM:
     case PL_FMT_SNORM:
-        glClearColor(color.f[0], color.f[1], color.f[2], color.f[3]);
+        gl->ClearColor(color.f[0], color.f[1], color.f[2], color.f[3]);
         break;
 
     case PL_FMT_UINT:
-        glClearColorIuiEXT(color.u[0], color.u[1], color.u[2], color.u[3]);
+        gl->ClearColorIuiEXT(color.u[0], color.u[1], color.u[2], color.u[3]);
         break;
 
     case PL_FMT_SINT:
-        glClearColorIiEXT(color.i[0], color.i[1], color.i[2], color.i[3]);
+        gl->ClearColorIiEXT(color.i[0], color.i[1], color.i[2], color.i[3]);
         break;
 
     case PL_FMT_TYPE_COUNT:
         pl_unreachable();
     }
 
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, tex_gl->fbo);
+    gl->Clear(GL_COLOR_BUFFER_BIT);
+    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     gl_check_err(gpu, "gl_tex_clear");
     RELEASE_CURRENT();
 }
 
 void gl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return;
 
@@ -845,8 +853,8 @@ void gl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
 
     pl_assert(src_gl->fbo || src_gl->wrapped_fb);
     pl_assert(dst_gl->fbo || dst_gl->wrapped_fb);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, src_gl->fbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst_gl->fbo);
+    gl->BindFramebuffer(GL_READ_FRAMEBUFFER, src_gl->fbo);
+    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, dst_gl->fbo);
 
     static const GLint filters[PL_TEX_SAMPLE_MODE_COUNT] = {
         [PL_TEX_SAMPLE_NEAREST] = GL_NEAREST,
@@ -854,12 +862,12 @@ void gl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
     };
 
     struct pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
-    glBlitFramebuffer(src_rc.x0, src_rc.y0, src_rc.x1, src_rc.y1,
-                      dst_rc.x0, dst_rc.y0, dst_rc.x1, dst_rc.y1,
-                      GL_COLOR_BUFFER_BIT, filters[params->sample_mode]);
+    gl->BlitFramebuffer(src_rc.x0, src_rc.y0, src_rc.x1, src_rc.y1,
+                        dst_rc.x0, dst_rc.y0, dst_rc.x1, dst_rc.y1,
+                        GL_COLOR_BUFFER_BIT, filters[params->sample_mode]);
 
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    gl->BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     gl_check_err(gpu, "gl_tex_blit");
     RELEASE_CURRENT();
 }
@@ -877,6 +885,7 @@ static int get_alignment(size_t pitch)
 
 bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     struct pl_gl *p = PL_PRIV(gpu);
     pl_tex tex = params->tex;
     pl_fmt fmt = tex->params.format;
@@ -899,7 +908,7 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
     uintptr_t src = (uintptr_t) params->ptr;
     if (buf) {
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, buf_gl->buffer);
+        gl->BindBuffer(GL_PIXEL_UNPACK_BUFFER, buf_gl->buffer);
         src = buf_gl->offset + params->buf_offset;
     }
 
@@ -909,12 +918,12 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
     int dims = pl_tex_params_dimension(tex->params);
     if (dims > 1)
-        glPixelStorei(GL_UNPACK_ALIGNMENT, get_alignment(params->row_pitch));
+        gl->PixelStorei(GL_UNPACK_ALIGNMENT, get_alignment(params->row_pitch));
 
     int rows = pl_rect_h(params->rc);
     if (stride_w != pl_rect_w(params->rc) || misaligned) {
         if (p->has_stride && !misaligned) {
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, stride_w);
+            gl->PixelStorei(GL_UNPACK_ROW_LENGTH, stride_w);
         } else {
             rows = 1;
         }
@@ -923,25 +932,25 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     int imgs = pl_rect_d(params->rc);
     if (stride_h != pl_rect_h(params->rc) || rows < stride_h) {
         if (p->has_unpack_image_height) {
-            glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, stride_h);
+            gl->PixelStorei(GL_UNPACK_IMAGE_HEIGHT, stride_h);
         } else {
             imgs = 1;
         }
     }
 
-    glBindTexture(tex_gl->target, tex_gl->texture);
+    gl->BindTexture(tex_gl->target, tex_gl->texture);
     gl_timer_begin(gpu, params->timer);
 
     switch (dims) {
     case 1:
-        glTexSubImage1D(tex_gl->target, 0, params->rc.x0, pl_rect_w(params->rc),
-                        tex_gl->format, tex_gl->type, (void *) src);
+        gl->TexSubImage1D(tex_gl->target, 0, params->rc.x0, pl_rect_w(params->rc),
+                          tex_gl->format, tex_gl->type, (void *) src);
         break;
     case 2:
         for (int y = params->rc.y0; y < params->rc.y1; y += rows) {
-            glTexSubImage2D(tex_gl->target, 0, params->rc.x0, y,
-                            pl_rect_w(params->rc), rows, tex_gl->format,
-                            tex_gl->type, (void *) src);
+            gl->TexSubImage2D(tex_gl->target, 0, params->rc.x0, y,
+                              pl_rect_w(params->rc), rows, tex_gl->format,
+                              tex_gl->type, (void *) src);
             src += params->row_pitch * rows;
         }
         break;
@@ -949,9 +958,9 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         for (int z = params->rc.z0; z < params->rc.z1; z += imgs) {
             uintptr_t row_src = src;
             for (int y = params->rc.y0; y < params->rc.y1; y += rows) {
-                glTexSubImage3D(tex_gl->target, 0, params->rc.x0, y, z,
-                                pl_rect_w(params->rc), rows, imgs,
-                                tex_gl->format, tex_gl->type, (void *) row_src);
+                gl->TexSubImage3D(tex_gl->target, 0, params->rc.x0, y, z,
+                                  pl_rect_w(params->rc), rows, imgs,
+                                  tex_gl->format, tex_gl->type, (void *) row_src);
                 row_src = (uintptr_t) row_src + params->row_pitch * rows;
             }
             src += params->depth_pitch * imgs;
@@ -960,27 +969,27 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     }
 
     gl_timer_end(gpu, params->timer);
-    glBindTexture(tex_gl->target, 0);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    gl->BindTexture(tex_gl->target, 0);
+    gl->PixelStorei(GL_UNPACK_ALIGNMENT, 4);
     if (p->has_stride)
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        gl->PixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     if (p->has_unpack_image_height)
-        glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
+        gl->PixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
 
     if (buf) {
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        gl->BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
         if (buf->params.host_mapped) {
             // Make sure the PBO is not reused until GL is done with it. If a
             // previous operation is pending, "update" it by creating a new
             // fence that will cover the previous operation as well.
-            glDeleteSync(buf_gl->fence);
-            buf_gl->fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+            gl->DeleteSync(buf_gl->fence);
+            buf_gl->fence = gl->FenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
         }
     }
 
     if (params->callback) {
         PL_ARRAY_APPEND(gpu, p->callbacks, (struct gl_cb) {
-            .sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0),
+            .sync = gl->FenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0),
             .callback = params->callback,
             .priv = params->priv,
         });
@@ -993,6 +1002,7 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
 bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     struct pl_gl *p = PL_PRIV(gpu);
     pl_tex tex = params->tex;
     pl_fmt fmt = tex->params.format;
@@ -1013,7 +1023,7 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
     uintptr_t dst = (uintptr_t) params->ptr;
     if (buf) {
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, buf_gl->buffer);
+        gl->BindBuffer(GL_PIXEL_PACK_BUFFER, buf_gl->buffer);
         dst = buf_gl->offset + params->buf_offset;
     }
 
@@ -1039,12 +1049,12 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     if (tex_gl->fbo || tex_gl->wrapped_fb) {
         // We can use a more efficient path when we have an FBO available
         if (dims > 1)
-            glPixelStorei(GL_PACK_ALIGNMENT, get_alignment(params->row_pitch));
+            gl->PixelStorei(GL_PACK_ALIGNMENT, get_alignment(params->row_pitch));
 
         int rows = pl_rect_h(params->rc);
         if (stride_w != tex->params.w || misaligned) {
             if (p->has_stride && !misaligned) {
-                glPixelStorei(GL_PACK_ROW_LENGTH, stride_w);
+                gl->PixelStorei(GL_PACK_ROW_LENGTH, stride_w);
             } else {
                 rows = 1;
             }
@@ -1053,21 +1063,21 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         // No 3D framebuffers
         pl_assert(pl_rect_d(params->rc) == 1);
 
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, tex_gl->fbo);
+        gl->BindFramebuffer(GL_READ_FRAMEBUFFER, tex_gl->fbo);
         for (int y = params->rc.y0; y < params->rc.y1; y += rows) {
-            glReadPixels(params->rc.x0, y, pl_rect_w(params->rc), rows,
-                         tex_gl->format, tex_gl->type, (void *) dst);
+            gl->ReadPixels(params->rc.x0, y, pl_rect_w(params->rc), rows,
+                           tex_gl->format, tex_gl->type, (void *) dst);
             dst += params->row_pitch * rows;
         }
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-        glPixelStorei(GL_PACK_ALIGNMENT, 4);
+        gl->BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        gl->PixelStorei(GL_PACK_ALIGNMENT, 4);
         if (p->has_stride)
-            glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+            gl->PixelStorei(GL_PACK_ROW_LENGTH, 0);
     } else if (is_copy) {
         // We're downloading the entire texture
-        glBindTexture(tex_gl->target, tex_gl->texture);
-        glGetTexImage(tex_gl->target, 0, tex_gl->format, tex_gl->type, (void *) dst);
-        glBindTexture(tex_gl->target, 0);
+        gl->BindTexture(tex_gl->target, tex_gl->texture);
+        gl->GetTexImage(tex_gl->target, 0, tex_gl->format, tex_gl->type, (void *) dst);
+        gl->BindTexture(tex_gl->target, 0);
     } else {
         PL_ERR(gpu, "Partial downloads of 3D textures not implemented!");
         ok = false;
@@ -1076,16 +1086,16 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     gl_timer_end(gpu, params->timer);
 
     if (buf) {
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        gl->BindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         if (ok && buf->params.host_mapped) {
-            glDeleteSync(buf_gl->fence);
-            buf_gl->fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+            gl->DeleteSync(buf_gl->fence);
+            buf_gl->fence = gl->FenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
         }
     }
 
     if (params->callback) {
         PL_ARRAY_APPEND(gpu, p->callbacks, (struct gl_cb) {
-            .sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0),
+            .sync = gl->FenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0),
             .callback = params->callback,
             .priv = params->priv,
         });
