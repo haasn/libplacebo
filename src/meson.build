@@ -264,7 +264,6 @@ components = [
               'opengl/utils.c',
             ],
     'headers': 'opengl.h',
-    'test': 'opengl_surfaceless.c',
   }, {
     'name': 'd3d11',
     'deps': d3d11,
@@ -328,6 +327,18 @@ if comps.has('vulkan')
 endif
 
 if comps.has('opengl')
+  if libdl.found() and get_option('opengl-loader')
+    build_deps += libdl
+    tests += 'opengl_surfaceless.c'
+    defs += '#define PL_HAVE_GL_PROC_ADDR 1\n'
+    pc_vars += 'pl_has_gl_proc_addr=1'
+    gl_loader = true
+  else
+    defs += '#undef PL_HAVE_GL_PROC_ADDR\n'
+    pc_vars += 'pl_has_gl_proc_addr=0'
+    gl_loader = false
+  endif
+
   gl_extensions = [
     'GL_AMD_pinned_memory',
     'GL_ARB_buffer_storage',
@@ -368,7 +379,7 @@ if comps.has('opengl')
   # Generate GL loader. Adding it to `build_deps` instead of `sources` makes
   # sure it also gets correctly pulled into the test framework
   subdir('include/glad')
-  build_deps += declare_dependency(dependencies: libdl, sources: glad)
+  build_deps += declare_dependency(sources: glad)
 endif
 
 # Check to see if libplacebo built this way is sane

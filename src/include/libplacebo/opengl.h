@@ -49,7 +49,14 @@ static inline bool pl_opengl_has_ext(pl_opengl gl, const char *ext)
     return false;
 }
 
+typedef void (*pl_voidfunc_t)(void);
+
 struct pl_opengl_params {
+    // Main gl*GetProcAddr function. This will be used to load all GL/EGL
+    // functions. Optional - if unspecified, libplacebo will default to an
+    // internal loading logic which should work on most platforms.
+    pl_voidfunc_t (*get_proc_addr)(const char *procname);
+
     // Enable OpenGL debug report callbacks. May have little effect depending
     // on whether or not the GL context was initialized with appropriate
     // debugging enabled.

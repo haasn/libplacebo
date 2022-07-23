@@ -11,6 +11,9 @@ option('vulkan-registry', type: 'string', value: '',
 option('opengl', type: 'feature', value: 'auto',
        description: 'OpenGL-based renderer')
 
+option('opengl-loader', type: 'boolean', value: true,
+       description: 'Enable built-in OpenGL loader (uses dlopen, dlsym...)')
+
 option('d3d11', type: 'feature', value: 'auto',
        description: 'Direct3D 11 based renderer')
 

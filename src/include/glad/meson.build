@@ -4,7 +4,6 @@ glad = custom_target('gl.h',
   command: [
     python, '-m', 'glad', '--out-path=@OUTDIR@/../../',
     '--reproducible', '--merge', '--api=gl:core,gles2,egl',
-    '--extensions=' + ','.join(gl_extensions),
-    'c', '--header-only', '--mx', '--loader',
-  ]
+    '--extensions=' + ','.join(gl_extensions), 'c', '--header-only', '--mx'
+  ] + (gl_loader ? ['--loader'] : [])
 )

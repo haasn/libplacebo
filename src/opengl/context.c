@@ -119,8 +119,21 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
         return NULL;
     }
 
-    bool ok = gladLoaderLoadGLContext(gl);
-    ok |= gladLoaderLoadGLES2Context(gl);
+    bool ok = false;
+    if (params->get_proc_addr) {
+        ok |= gladLoadGLContext(gl, params->get_proc_addr);
+        ok |= gladLoadGLES2Context(gl, params->get_proc_addr);
+    } else {
+#ifdef PL_HAVE_GL_PROC_ADDR
+        ok |= gladLoaderLoadGLContext(gl);
+        ok |= gladLoaderLoadGLES2Context(gl);
+#else
+        PL_FATAL(p, "No `glGetProcAddress` function provided, and libplacebo "
+                 "built without its built-in OpenGL loader!");
+        goto error;
+#endif
+    }
+
     if (!ok) {
         PL_FATAL(p, "Failed to initialize OpenGL context - make sure a valid "
                  "OpenGL context is bound to the current thread!");
@@ -166,7 +179,17 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     }
 
     if (params->egl_display) {
-        if (!gladLoaderLoadEGL(params->egl_display)) {
+        if (params->get_proc_addr) {
+            ok = gladLoadEGL(params->egl_display, params->get_proc_addr);
+        } else {
+#ifdef PL_HAVE_GL_PROC_ADDR
+            ok = gladLoaderLoadEGL(params->egl_display);
+#else
+            pl_unreachable();
+#endif
+        }
+
+        if (!ok) {
             PL_FATAL(p, "Failed loading EGL functions - double check EGLDisplay?");
             goto error;
         }
