@@ -39,21 +39,22 @@ const char *gl_err_str(GLenum err)
 
 void gl_poll_callbacks(pl_gpu gpu)
 {
-    struct pl_gl *gl = PL_PRIV(gpu);
-    while (gl->callbacks.num) {
-        struct gl_cb cb = gl->callbacks.elem[0];
-        GLenum res = glClientWaitSync(cb.sync, 0, 0);
+    const gl_funcs *gl = gl_funcs_get(gpu);
+    struct pl_gl *p = PL_PRIV(gpu);
+    while (p->callbacks.num) {
+        struct gl_cb cb = p->callbacks.elem[0];
+        GLenum res = gl->ClientWaitSync(cb.sync, 0, 0);
         switch (res) {
         case GL_ALREADY_SIGNALED:
         case GL_CONDITION_SATISFIED:
-            PL_ARRAY_REMOVE_AT(gl->callbacks, 0);
+            PL_ARRAY_REMOVE_AT(p->callbacks, 0);
             cb.callback(cb.priv);
             continue;
 
         case GL_WAIT_FAILED:
-            PL_ARRAY_REMOVE_AT(gl->callbacks, 0);
-            glDeleteSync(cb.sync);
-            gl->failed = true;
+            PL_ARRAY_REMOVE_AT(p->callbacks, 0);
+            gl->DeleteSync(cb.sync);
+            p->failed = true;
             gl_check_err(gpu, "gl_poll_callbacks"); // NOTE: will recurse!
             return;
 
@@ -68,26 +69,29 @@ void gl_poll_callbacks(pl_gpu gpu)
 
 bool gl_check_err(pl_gpu gpu, const char *fun)
 {
-    struct pl_gl *gl = PL_PRIV(gpu);
+    const gl_funcs *gl = gl_funcs_get(gpu);
+    struct pl_gl *p = PL_PRIV(gpu);
     bool ret = true;
 
     while (true) {
-        GLenum error = glGetError();
+        GLenum error = gl->GetError();
         if (error == GL_NO_ERROR)
             break;
         PL_ERR(gpu, "%s: OpenGL error: %s", fun, gl_err_str(error));
         ret = false;
-        gl->failed = true;
+        p->failed = true;
     }
 
     gl_poll_callbacks(gpu);
     return ret;
 }
 
-bool gl_is_software(void)
+bool gl_is_software(pl_opengl pl_gl)
 {
-    const char *renderer = (char *) glGetString(GL_RENDERER);
-    const char *vendor = (char *) glGetString(GL_VENDOR);
+    struct gl_ctx *glctx = PL_PRIV(pl_gl);
+    const gl_funcs *gl = &glctx->func;
+    const char *renderer = (char *) gl->GetString(GL_RENDERER);
+    const char *vendor = (char *) gl->GetString(GL_VENDOR);
     return !(renderer && vendor) ||
            strcmp(renderer, "Software Rasterizer") == 0 ||
            strstr(renderer, "llvmpipe") ||
@@ -136,7 +140,7 @@ const char *egl_err_str(EGLenum err)
 
 bool egl_check_err(pl_gpu gpu, const char *fun)
 {
-    struct pl_gl *gl = PL_PRIV(gpu);
+    struct pl_gl *p = PL_PRIV(gpu);
     bool ret = true;
 
     while (true) {
@@ -145,7 +149,7 @@ bool egl_check_err(pl_gpu gpu, const char *fun)
             return ret;
         PL_ERR(gpu, "%s: EGL error: %s", fun, egl_err_str(error));
         ret = false;
-        gl->failed = true;
+        p->failed = true;
     }
 }
 

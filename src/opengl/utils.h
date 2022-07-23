@@ -38,7 +38,7 @@ bool gl_check_err(pl_gpu gpu, const char *fun);
 // Returns true if the context is a suspected software rasterizer
 //
 // Thread-safety: Unsafe
-bool gl_is_software(void);
+bool gl_is_software(pl_opengl gl);
 
 // Check for presence of an extension, alternatively a minimum GL version
 //

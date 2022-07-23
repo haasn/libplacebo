@@ -185,7 +185,7 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     pl_gl->extensions = exts.elem;
     pl_gl->num_extensions = exts.num;
 
-    if (!params->allow_software && gl_is_software()) {
+    if (!params->allow_software && gl_is_software(pl_gl)) {
         PL_FATAL(p, "OpenGL context is suspected to be a software rasterizer, "
                  "but `allow_software` is false.");
         goto error;
