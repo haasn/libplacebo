@@ -615,7 +615,7 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         };
         GLenum mode = map_prim[pass->params.vertex_type];
 
-        gl_timer_begin(params->timer);
+        gl_timer_begin(gpu, params->timer);
 
         if (params->index_data) {
 
@@ -649,7 +649,7 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             glDrawArrays(mode, 0, params->vertex_count);
         }
 
-        gl_timer_end(params->timer);
+        gl_timer_end(gpu, params->timer);
         gl_check_err(gpu, "gl_pass_run: drawing");
 
         if (pass_gl->vao) {
@@ -667,11 +667,11 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
     }
 
     case PL_PASS_COMPUTE:
-        gl_timer_begin(params->timer);
+        gl_timer_begin(gpu, params->timer);
         glDispatchCompute(params->compute_groups[0],
                           params->compute_groups[1],
                           params->compute_groups[2]);
-        gl_timer_end(params->timer);
+        gl_timer_end(gpu, params->timer);
         break;
 
     case PL_PASS_INVALID:

@@ -95,35 +95,36 @@ static inline size_t get_page_size(void)
 #define get(pname, field)                   \
     do {                                    \
         GLint tmp = 0;                      \
-        glGetIntegerv((pname), &tmp);       \
+        gl->GetIntegerv((pname), &tmp);     \
         *(field) = tmp;                     \
     } while (0)
 
 #define geti(pname, i, field)               \
     do {                                    \
         GLint tmp = 0;                      \
-        glGetIntegeri_v((pname), i, &tmp);  \
+        gl->GetIntegeri_v((pname), i, &tmp);\
         *(field) = tmp;                     \
     } while (0)
 
-pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params *params)
+pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_params *params)
 {
     struct pl_gpu *gpu = pl_zalloc_obj(NULL, gpu, struct pl_gl);
     gpu->log = log;
 
     struct pl_gl *p = PL_PRIV(gpu);
     p->impl = pl_fns_gl;
-    p->gl = gl;
+    p->gl = pl_gl;
 
+    const gl_funcs *gl = gl_funcs_get(gpu);
     struct pl_glsl_version *glsl = &gpu->glsl;
-    const char *verstr = (char *) glGetString(GL_VERSION);
+    const char *verstr = (char *) gl->GetString(GL_VERSION);
     glsl->gles = pl_str_startswith0(pl_str0(verstr), "OpenGL ES");
-    int ver = gl->major * 10 + gl->minor;
+    int ver = pl_gl->major * 10 + pl_gl->minor;
     p->gl_ver = glsl->gles ? 0 : ver;
     p->gles_ver = glsl->gles ? ver : 0;
 
     // If possible, query the GLSL version from the implementation
-    const char *glslver = (char *) glGetString(GL_SHADING_LANGUAGE_VERSION);
+    const char *glslver = (char *) gl->GetString(GL_SHADING_LANGUAGE_VERSION);
     if (glslver) {
         PL_INFO(gpu, "    GL_SHADING_LANGUAGE_VERSION: %s", glslver);
         int major = 0, minor = 0;
@@ -206,7 +207,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     }
 #endif
 
-    if (pl_opengl_has_ext(gl, "GL_AMD_pinned_memory")) {
+    if (pl_opengl_has_ext(pl_gl, "GL_AMD_pinned_memory")) {
         gpu->import_caps.buf |= PL_HANDLE_HOST_PTR;
         gpu->limits.align_host_ptr = get_page_size();
     }
@@ -225,16 +226,16 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
     if (p->has_readback && p->gles_ver) {
         GLuint fbo = 0, tex = 0;
         GLint read_type = 0, read_fmt = 0;
-        glGenTextures(1, &tex);
-        glBindTexture(GL_TEXTURE_2D, tex);
-        glGenFramebuffers(1, &fbo);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 64, 64, 0, GL_RED,
-                     GL_UNSIGNED_BYTE, NULL);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                               GL_TEXTURE_2D, tex, 0);
-        glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
-        glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &read_fmt);
+        gl->GenTextures(1, &tex);
+        gl->BindTexture(GL_TEXTURE_2D, tex);
+        gl->GenFramebuffers(1, &fbo);
+        gl->TexImage2D(GL_TEXTURE_2D, 0, GL_R8, 64, 64, 0, GL_RED,
+                       GL_UNSIGNED_BYTE, NULL);
+        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+        gl->FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                 GL_TEXTURE_2D, tex, 0);
+        gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
+        gl->GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &read_fmt);
         if (read_type != GL_UNSIGNED_BYTE || read_fmt != GL_RED) {
             PL_INFO(gpu, "GPU does not seem to support lossless texture "
                     "readback, restricting readback capabilities! This is a "
@@ -242,10 +243,10 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl gl, const struct pl_opengl_params 
                     "work around it.");
             p->has_readback = false;
         }
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        glDeleteFramebuffers(1, &fbo);
-        glDeleteTextures(1, &tex);
+        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        gl->BindTexture(GL_TEXTURE_2D, 0);
+        gl->DeleteFramebuffers(1, &fbo);
+        gl->DeleteTextures(1, &tex);
     }
 
     // We simply don't know, so make up some values
@@ -278,6 +279,7 @@ error:
 
 void gl_buf_destroy(pl_gpu gpu, pl_buf buf)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT()) {
         PL_ERR(gpu, "Failed uninitializing buffer, leaking resources!");
         return;
@@ -285,15 +287,15 @@ void gl_buf_destroy(pl_gpu gpu, pl_buf buf)
 
     struct pl_buf_gl *buf_gl = PL_PRIV(buf);
     if (buf_gl->fence)
-        glDeleteSync(buf_gl->fence);
+        gl->DeleteSync(buf_gl->fence);
 
     if (buf_gl->mapped) {
-        glBindBuffer(GL_COPY_WRITE_BUFFER, buf_gl->buffer);
-        glUnmapBuffer(GL_COPY_WRITE_BUFFER);
-        glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
+        gl->BindBuffer(GL_COPY_WRITE_BUFFER, buf_gl->buffer);
+        gl->UnmapBuffer(GL_COPY_WRITE_BUFFER);
+        gl->BindBuffer(GL_COPY_WRITE_BUFFER, 0);
     }
 
-    glDeleteBuffers(1, &buf_gl->buffer);
+    gl->DeleteBuffers(1, &buf_gl->buffer);
     gl_check_err(gpu, "gl_buf_destroy");
     RELEASE_CURRENT();
     pl_free((void *) buf);
@@ -301,6 +303,7 @@ void gl_buf_destroy(pl_gpu gpu, pl_buf buf)
 
 pl_buf gl_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return NULL;
 
@@ -338,8 +341,8 @@ pl_buf gl_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
         }
     }
 
-    glGenBuffers(1, &buf_gl->buffer);
-    glBindBuffer(target, buf_gl->buffer);
+    gl->GenBuffers(1, &buf_gl->buffer);
+    gl->BindBuffer(target, buf_gl->buffer);
 
     if (gl_test_ext(gpu, "GL_ARB_buffer_storage", 44, 0) && !import) {
 
@@ -353,14 +356,14 @@ pl_buf gl_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
         if (params->memory_type == PL_BUF_MEM_HOST)
             storflags |= GL_CLIENT_STORAGE_BIT; // hopefully this works
 
-        glBufferStorage(target, total_size, data, storflags | mapflags);
+        gl->BufferStorage(target, total_size, data, storflags | mapflags);
 
         if (params->host_mapped) {
             buf_gl->mapped = true;
-            buf->data = glMapBufferRange(target, buf_gl->offset, params->size,
-                                         mapflags);
+            buf->data = gl->MapBufferRange(target, buf_gl->offset, params->size,
+                                           mapflags);
             if (!buf->data) {
-                glBindBuffer(target, 0);
+                gl->BindBuffer(target, 0);
                 if (!gl_check_err(gpu, "gl_buf_create: map"))
                     PL_ERR(gpu, "Failed mapping buffer: unknown reason");
                 goto error;
@@ -378,16 +381,16 @@ pl_buf gl_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
         if (params->storable)
             hint = GL_DYNAMIC_COPY;
 
-        glBufferData(target, total_size, data, hint);
+        gl->BufferData(target, total_size, data, hint);
 
-        if (import && glGetError() == GL_INVALID_OPERATION) {
+        if (import && gl->GetError() == GL_INVALID_OPERATION) {
             PL_ERR(gpu, "Failed importing host pointer!");
             goto error;
         }
 
     }
 
-    glBindBuffer(target, 0);
+    gl->BindBuffer(target, 0);
     if (!gl_check_err(gpu, "gl_buf_create"))
         goto error;
 
@@ -415,6 +418,8 @@ error:
 
 bool gl_buf_poll(pl_gpu gpu, pl_buf buf, uint64_t timeout)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
+
     // Non-persistently mapped buffers are always implicitly reusable in OpenGL,
     // the implementation will create more buffers under the hood if needed.
     if (!buf->data)
@@ -425,11 +430,11 @@ bool gl_buf_poll(pl_gpu gpu, pl_buf buf, uint64_t timeout)
 
     struct pl_buf_gl *buf_gl = PL_PRIV(buf);
     if (buf_gl->fence) {
-        GLenum res = glClientWaitSync(buf_gl->fence,
-                                      timeout ? GL_SYNC_FLUSH_COMMANDS_BIT : 0,
-                                      timeout);
+        GLenum res = gl->ClientWaitSync(buf_gl->fence,
+                                        timeout ? GL_SYNC_FLUSH_COMMANDS_BIT : 0,
+                                        timeout);
         if (res == GL_ALREADY_SIGNALED || res == GL_CONDITION_SATISFIED) {
-            glDeleteSync(buf_gl->fence);
+            gl->DeleteSync(buf_gl->fence);
             buf_gl->fence = NULL;
         }
     }
@@ -442,13 +447,14 @@ bool gl_buf_poll(pl_gpu gpu, pl_buf buf, uint64_t timeout)
 void gl_buf_write(pl_gpu gpu, pl_buf buf, size_t offset,
                   const void *data, size_t size)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return;
 
     struct pl_buf_gl *buf_gl = PL_PRIV(buf);
-    glBindBuffer(GL_ARRAY_BUFFER, buf_gl->buffer);
-    glBufferSubData(GL_ARRAY_BUFFER, buf_gl->offset + offset, size, data);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    gl->BindBuffer(GL_ARRAY_BUFFER, buf_gl->buffer);
+    gl->BufferSubData(GL_ARRAY_BUFFER, buf_gl->offset + offset, size, data);
+    gl->BindBuffer(GL_ARRAY_BUFFER, 0);
     gl_check_err(gpu, "gl_buf_write");
     RELEASE_CURRENT();
 }
@@ -456,13 +462,14 @@ void gl_buf_write(pl_gpu gpu, pl_buf buf, size_t offset,
 bool gl_buf_read(pl_gpu gpu, pl_buf buf, size_t offset,
                  void *dest, size_t size)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return false;
 
     struct pl_buf_gl *buf_gl = PL_PRIV(buf);
-    glBindBuffer(GL_ARRAY_BUFFER, buf_gl->buffer);
-    glGetBufferSubData(GL_ARRAY_BUFFER, buf_gl->offset + offset, size, dest);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    gl->BindBuffer(GL_ARRAY_BUFFER, buf_gl->buffer);
+    gl->GetBufferSubData(GL_ARRAY_BUFFER, buf_gl->offset + offset, size, dest);
+    gl->BindBuffer(GL_ARRAY_BUFFER, 0);
     bool ok = gl_check_err(gpu, "gl_buf_read");
     RELEASE_CURRENT();
     return ok;
@@ -471,16 +478,17 @@ bool gl_buf_read(pl_gpu gpu, pl_buf buf, size_t offset,
 void gl_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
                  pl_buf src, size_t src_offset, size_t size)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return;
 
     struct pl_buf_gl *src_gl = PL_PRIV(src);
     struct pl_buf_gl *dst_gl = PL_PRIV(dst);
-    glBindBuffer(GL_COPY_READ_BUFFER, src_gl->buffer);
-    glBindBuffer(GL_COPY_WRITE_BUFFER, dst_gl->buffer);
-    glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER,
-                        src_gl->offset + src_offset,
-                        dst_gl->offset + dst_offset, size);
+    gl->BindBuffer(GL_COPY_READ_BUFFER, src_gl->buffer);
+    gl->BindBuffer(GL_COPY_WRITE_BUFFER, dst_gl->buffer);
+    gl->CopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER,
+                          src_gl->offset + src_offset,
+                          dst_gl->offset + dst_offset, size);
     gl_check_err(gpu, "gl_buf_copy");
     RELEASE_CURRENT();
 }
@@ -495,24 +503,26 @@ struct pl_timer {
 
 static pl_timer gl_timer_create(pl_gpu gpu)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     struct pl_gl *p = PL_PRIV(gpu);
     if (!p->has_queries || !MAKE_CURRENT())
         return NULL;
 
     pl_timer timer = pl_zalloc_ptr(NULL, timer);
-    glGenQueries(QUERY_OBJECT_NUM, timer->query);
+    gl->GenQueries(QUERY_OBJECT_NUM, timer->query);
     RELEASE_CURRENT();
     return timer;
 }
 
 static void gl_timer_destroy(pl_gpu gpu, pl_timer timer)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT()) {
         PL_ERR(gpu, "Failed uninitializing timer, leaking resources!");
         return;
     }
 
-    glDeleteQueries(QUERY_OBJECT_NUM, timer->query);
+    gl->DeleteQueries(QUERY_OBJECT_NUM, timer->query);
     gl_check_err(gpu, "gl_timer_destroy");
     RELEASE_CURRENT();
     pl_free(timer);
@@ -523,16 +533,17 @@ static uint64_t gl_timer_query(pl_gpu gpu, pl_timer timer)
     if (timer->index_read == timer->index_write)
         return 0; // no more unprocessed results
 
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return 0;
 
     uint64_t res = 0;
     GLuint query = timer->query[timer->index_read];
     int avail = 0;
-    glGetQueryObjectiv(query, GL_QUERY_RESULT_AVAILABLE, &avail);
+    gl->GetQueryObjectiv(query, GL_QUERY_RESULT_AVAILABLE, &avail);
     if (!avail)
         goto done;
-    glGetQueryObjectui64v(query, GL_QUERY_RESULT, &res);
+    gl->GetQueryObjectui64v(query, GL_QUERY_RESULT, &res);
 
     timer->index_read = (timer->index_read + 1) % QUERY_OBJECT_NUM;
     // fall through
@@ -542,20 +553,22 @@ done:
     return res;
 }
 
-void gl_timer_begin(pl_timer timer)
+void gl_timer_begin(pl_gpu gpu, pl_timer timer)
 {
     if (!timer)
         return;
 
-    glBeginQuery(GL_TIME_ELAPSED, timer->query[timer->index_write]);
+    const gl_funcs *gl = gl_funcs_get(gpu);
+    gl->BeginQuery(GL_TIME_ELAPSED, timer->query[timer->index_write]);
 }
 
-void gl_timer_end(pl_timer timer)
+void gl_timer_end(pl_gpu gpu, pl_timer timer)
 {
     if (!timer)
         return;
 
-    glEndQuery(GL_TIME_ELAPSED);
+    const gl_funcs *gl = gl_funcs_get(gpu);
+    gl->EndQuery(GL_TIME_ELAPSED);
 
     timer->index_write = (timer->index_write + 1) % QUERY_OBJECT_NUM;
     if (timer->index_write == timer->index_read) {
@@ -566,20 +579,22 @@ void gl_timer_end(pl_timer timer)
 
 static void gl_gpu_flush(pl_gpu gpu)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return;
 
-    glFlush();
+    gl->Flush();
     gl_check_err(gpu, "gl_gpu_flush");
     RELEASE_CURRENT();
 }
 
 static void gl_gpu_finish(pl_gpu gpu)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return;
 
-    glFinish();
+    gl->Finish();
     gl_check_err(gpu, "gl_gpu_finish");
     RELEASE_CURRENT();
 }

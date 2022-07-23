@@ -930,7 +930,7 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     }
 
     glBindTexture(tex_gl->target, tex_gl->texture);
-    gl_timer_begin(params->timer);
+    gl_timer_begin(gpu, params->timer);
 
     switch (dims) {
     case 1:
@@ -959,7 +959,7 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         break;
     }
 
-    gl_timer_end(params->timer);
+    gl_timer_end(gpu, params->timer);
     glBindTexture(tex_gl->target, 0);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     if (p->has_stride)
@@ -1034,7 +1034,7 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
                    stride_h == PL_DEF(tex->params.h, 1) &&
                    !misaligned;
 
-    gl_timer_begin(params->timer);
+    gl_timer_begin(gpu, params->timer);
 
     if (tex_gl->fbo || tex_gl->wrapped_fb) {
         // We can use a more efficient path when we have an FBO available
@@ -1073,7 +1073,7 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         ok = false;
     }
 
-    gl_timer_end(params->timer);
+    gl_timer_end(gpu, params->timer);
 
     if (buf) {
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);

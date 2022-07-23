@@ -63,8 +63,15 @@ struct pl_gl {
     int gather_comps;
 };
 
-void gl_timer_begin(pl_timer timer);
-void gl_timer_end(pl_timer timer);
+static inline const gl_funcs *gl_funcs_get(pl_gpu gpu)
+{
+    struct pl_gl *p = PL_PRIV(gpu);
+    struct gl_ctx *glctx = PL_PRIV(p->gl);
+    return &glctx->func;
+}
+
+void gl_timer_begin(pl_gpu gpu, pl_timer timer);
+void gl_timer_end(pl_gpu gpu, pl_timer timer);
 
 static inline bool _make_current(pl_gpu gpu)
 {
