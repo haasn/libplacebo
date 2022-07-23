@@ -30,15 +30,13 @@ struct pl_gl {
     pl_opengl gl;
     bool failed;
 
-#ifdef EPOXY_HAS_EGL
     // For import/export
     EGLDisplay egl_dpy;
     EGLContext egl_ctx;
-# ifdef PL_HAVE_UNIX
+#ifdef PL_HAVE_UNIX
     // List of formats supported by EGL_EXT_image_dma_buf_import
     PL_ARRAY(EGLint) egl_formats;
-# endif
-#endif //!EPOXY_HAS_EGL
+#endif
 
     // Sync objects and associated callbacks
     PL_ARRAY(struct gl_cb) callbacks;
@@ -107,9 +105,7 @@ struct pl_tex_gl {
     GLenum type;
 
     // For imported/exported textures
-#ifdef EPOXY_HAS_EGL
     EGLImageKHR image;
-#endif
     int fd;
 };
 

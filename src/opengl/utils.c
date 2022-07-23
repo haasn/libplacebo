@@ -112,8 +112,6 @@ bool gl_test_ext(pl_gpu gpu, const char *ext, int gl_ver, int gles_ver)
     return ext ? pl_opengl_has_ext(p->gl, ext) : false;
 }
 
-#ifdef EPOXY_HAS_EGL
-
 const char *egl_err_str(EGLenum err)
 {
     switch (err) {
@@ -152,5 +150,3 @@ bool egl_check_err(pl_gpu gpu, const char *fun)
         p->failed = true;
     }
 }
-
-#endif // EPOXY_HAS_EGL

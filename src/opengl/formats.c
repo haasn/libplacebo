@@ -20,7 +20,7 @@
 #include "formats.h"
 #include "utils.h"
 
-#if defined(PL_HAVE_UNIX) && defined(EPOXY_HAS_EGL)
+#ifdef PL_HAVE_UNIX
 static bool supported_fourcc(struct pl_gl *p, EGLint fourcc)
 {
     for (int i = 0; i < p->egl_formats.num; ++i)
@@ -294,7 +294,7 @@ static void add_format(pl_gpu pgpu, const struct gl_format *gl_fmt)
     fmt->fourcc = pl_fmt_fourcc(fmt);
     pl_assert(fmt->glsl_type);
 
-#if defined(PL_HAVE_UNIX) && defined(EPOXY_HAS_EGL)
+#ifdef PL_HAVE_UNIX
     if (p->has_modifiers && fmt->fourcc && supported_fourcc(p, fmt->fourcc)) {
         int num_mods = 0;
         bool ok = eglQueryDmaBufModifiersEXT(p->egl_dpy, fmt->fourcc,
@@ -381,7 +381,7 @@ bool gl_setup_formats(struct pl_gpu *gpu)
 {
     struct pl_gl *p = PL_PRIV(gpu);
 
-#if defined(PL_HAVE_UNIX) && defined(EPOXY_HAS_EGL)
+#ifdef PL_HAVE_UNIX
     if (p->has_modifiers) {
         EGLint num_formats = 0;
         bool ok = eglQueryDmaBufFormatsEXT(p->egl_dpy, 0, NULL,

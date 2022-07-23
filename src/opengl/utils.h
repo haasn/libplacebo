@@ -45,10 +45,8 @@ bool gl_is_software(pl_opengl gl);
 // Thread-safety: Unsafe
 bool gl_test_ext(pl_gpu gpu, const char *ext, int gl_ver, int gles_ver);
 
-#ifdef EPOXY_HAS_EGL
 // Thread-safety: Safe
 const char *egl_err_str(EGLenum err);
 
 // Thread-safety: Unsafe
 bool egl_check_err(pl_gpu gpu, const char *fun);
-#endif

@@ -53,8 +53,6 @@ pl_opengl pl_opengl_get(pl_gpu gpu)
     return NULL;
 }
 
-#ifdef EPOXY_HAS_EGL
-
 static pl_handle_caps tex_handle_caps(pl_gpu gpu, bool import)
 {
     pl_handle_caps caps = 0;
@@ -73,8 +71,6 @@ static pl_handle_caps tex_handle_caps(pl_gpu gpu, bool import)
 
     return caps;
 }
-
-#endif // EPOXY_HAS_EGL
 
 static inline size_t get_page_size(void)
 {
@@ -195,7 +191,6 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
     }
 
     // Query import/export support
-#ifdef EPOXY_HAS_EGL
     p->egl_dpy = params->egl_display;
     p->egl_ctx = params->egl_context;
     gpu->export_caps.tex = tex_handle_caps(gpu, false);
@@ -205,7 +200,6 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
         p->has_modifiers = pl_opengl_has_ext(p->gl,
                                         "EGL_EXT_image_dma_buf_import_modifiers");
     }
-#endif
 
     if (pl_opengl_has_ext(pl_gl, "GL_AMD_pinned_memory")) {
         gpu->import_caps.buf |= PL_HANDLE_HOST_PTR;

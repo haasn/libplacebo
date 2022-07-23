@@ -35,12 +35,10 @@ void gl_tex_destroy(pl_gpu gpu, pl_tex tex)
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     if (tex_gl->fbo && !tex_gl->wrapped_fb)
         gl->DeleteFramebuffers(1, &tex_gl->fbo);
-#ifdef EPOXY_HAS_EGL
     if (tex_gl->image) {
         struct pl_gl *p = PL_PRIV(gpu);
         eglDestroyImageKHR(p->egl_dpy, tex_gl->image);
     }
-#endif
     if (!tex_gl->wrapped_tex)
         gl->DeleteTextures(1, &tex_gl->texture);
 
@@ -70,8 +68,6 @@ static GLbitfield tex_barrier(pl_tex tex)
 
     return barrier;
 }
-
-#ifdef EPOXY_HAS_EGL
 
 #define ADD_ATTRIB(name, value)                                     \
     do {                                                            \
@@ -289,23 +285,6 @@ error:
     PL_ERR(gpu, "Failed exporting GL texture!");
     return false;
 }
-
-#else // !EPOXY_HAS_EGL
-
-static bool gl_tex_import(pl_gpu gpu, enum pl_handle_type handle_type,
-                          const struct pl_shared_mem *shared_mem,
-                          struct pl_tex *tex)
-{
-    abort(); // no implementations
-}
-
-static bool gl_tex_export(pl_gpu gpu, enum pl_handle_type handle_type,
-                          bool preserved, struct pl_tex *tex)
-{
-    abort(); // no implementations
-}
-
-#endif // EPOXY_HAS_EGL
 
 static const char *fb_err_str(GLenum err)
 {
