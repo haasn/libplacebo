@@ -754,12 +754,19 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
     if (fmt->emulated || unaligned) {
 
-        bool ubo;
+        // Copy the source data buffer into an intermediate buffer
+        struct pl_buf_params tbuf_params = {
+            .debug_tag = PL_DEBUG_TAG,
+            .memory_type = PL_BUF_MEM_DEVICE,
+            .format = tex_vk->texel_fmt,
+            .size = size,
+        };
+
         if (fmt->emulated) {
             if (size <= gpu->limits.max_ubo_size) {
-                ubo = true;
+                tbuf_params.uniform = true;
             } else if (size <= gpu->limits.max_ssbo_size) {
-                ubo = false;
+                tbuf_params.storable = true;
             } else {
                 // TODO: Implement strided upload path if really necessary
                 PL_ERR(gpu, "Texel buffer size requirements exceed GPU "
@@ -768,15 +775,7 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
             }
         }
 
-        // Copy the source data buffer into an intermediate buffer
-        pl_buf tbuf = pl_buf_create(gpu, pl_buf_params(
-            .uniform = fmt->emulated && ubo,
-            .storable = fmt->emulated && !ubo,
-            .size = size,
-            .memory_type = PL_BUF_MEM_DEVICE,
-            .format = tex_vk->texel_fmt,
-        ));
-
+        pl_buf tbuf = pl_buf_create(gpu, &tbuf_params);
         if (!tbuf) {
             PL_ERR(gpu, "Failed creating buffer for tex upload fallback!");
             goto error;
