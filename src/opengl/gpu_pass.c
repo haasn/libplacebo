@@ -36,6 +36,7 @@ struct gl_cache_header {
 
 static GLuint load_cached_program(pl_gpu gpu, const struct pl_pass_params *params)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!gl_test_ext(gpu, "GL_ARB_get_program_binary", 41, 30))
         return 0;
 
@@ -55,19 +56,19 @@ static GLuint load_cached_program(pl_gpu gpu, const struct pl_pass_params *param
     if (header->cache_version != CACHE_VERSION)
         return 0;
 
-    GLuint prog = glCreateProgram();
+    GLuint prog = gl->CreateProgram();
     if (!gl_check_err(gpu, "load_cached_program: glCreateProgram"))
         return 0;
 
-    glProgramBinary(prog, header->format, cache.buf, cache.len);
-    glGetError(); // discard potential useless error
+    gl->ProgramBinary(prog, header->format, cache.buf, cache.len);
+    gl->GetError(); // discard potential useless error
 
     GLint status = 0;
-    glGetProgramiv(prog, GL_LINK_STATUS, &status);
+    gl->GetProgramiv(prog, GL_LINK_STATUS, &status);
     if (status)
         return prog;
 
-    glDeleteProgram(prog);
+    gl->DeleteProgram(prog);
     gl_check_err(gpu, "load_cached_program: glProgramBinary");
     return 0;
 }
@@ -85,19 +86,20 @@ static enum pl_log_level gl_log_level(GLint status, GLint log_length)
 
 static bool gl_attach_shader(pl_gpu gpu, GLuint program, GLenum type, const char *src)
 {
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &src, NULL);
-    glCompileShader(shader);
+    const gl_funcs *gl = gl_funcs_get(gpu);
+    GLuint shader = gl->CreateShader(type);
+    gl->ShaderSource(shader, 1, &src, NULL);
+    gl->CompileShader(shader);
 
     GLint status = 0;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+    gl->GetShaderiv(shader, GL_COMPILE_STATUS, &status);
     GLint log_length = 0;
-    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_length);
+    gl->GetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_length);
 
     enum pl_log_level level = gl_log_level(status, log_length);
     if (pl_msg_test(gpu->log, level)) {
         GLchar *logstr = pl_zalloc(NULL, log_length + 1);
-        glGetShaderInfoLog(shader, log_length, NULL, logstr);
+        gl->GetShaderInfoLog(shader, log_length, NULL, logstr);
         PL_MSG(gpu, level, "shader compile log (status=%d): %s", status, logstr);
         pl_free(logstr);
     }
@@ -105,18 +107,19 @@ static bool gl_attach_shader(pl_gpu gpu, GLuint program, GLenum type, const char
     if (!status || !gl_check_err(gpu, "gl_attach_shader"))
         goto error;
 
-    glAttachShader(program, shader);
-    glDeleteShader(shader);
+    gl->AttachShader(program, shader);
+    gl->DeleteShader(shader);
     return true;
 
 error:
-    glDeleteShader(shader);
+    gl->DeleteShader(shader);
     return false;
 }
 
 static GLuint gl_compile_program(pl_gpu gpu, const struct pl_pass_params *params)
 {
-    GLuint prog = glCreateProgram();
+    const gl_funcs *gl = gl_funcs_get(gpu);
+    GLuint prog = gl->CreateProgram();
     bool ok = true;
 
     switch (params->type) {
@@ -127,7 +130,7 @@ static GLuint gl_compile_program(pl_gpu gpu, const struct pl_pass_params *params
         ok &= gl_attach_shader(gpu, prog, GL_VERTEX_SHADER, params->vertex_shader);
         ok &= gl_attach_shader(gpu, prog, GL_FRAGMENT_SHADER, params->glsl_shader);
         for (int i = 0; i < params->num_vertex_attribs; i++)
-            glBindAttribLocation(prog, i, params->vertex_attribs[i].name);
+            gl->BindAttribLocation(prog, i, params->vertex_attribs[i].name);
         break;
     case PL_PASS_INVALID:
     case PL_PASS_TYPE_COUNT:
@@ -137,16 +140,16 @@ static GLuint gl_compile_program(pl_gpu gpu, const struct pl_pass_params *params
     if (!ok || !gl_check_err(gpu, "gl_compile_program: attach shader"))
         goto error;
 
-    glLinkProgram(prog);
+    gl->LinkProgram(prog);
     GLint status = 0;
-    glGetProgramiv(prog, GL_LINK_STATUS, &status);
+    gl->GetProgramiv(prog, GL_LINK_STATUS, &status);
     GLint log_length = 0;
-    glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &log_length);
+    gl->GetProgramiv(prog, GL_INFO_LOG_LENGTH, &log_length);
 
     enum pl_log_level level = gl_log_level(status, log_length);
     if (pl_msg_test(gpu->log, level)) {
         GLchar *logstr = pl_zalloc(NULL, log_length + 1);
-        glGetProgramInfoLog(prog, log_length, NULL, logstr);
+        gl->GetProgramInfoLog(prog, log_length, NULL, logstr);
         PL_MSG(gpu, level, "shader link log (status=%d): %s", status, logstr);
         pl_free(logstr);
     }
@@ -157,7 +160,7 @@ static GLuint gl_compile_program(pl_gpu gpu, const struct pl_pass_params *params
     return prog;
 
 error:
-    glDeleteProgram(prog);
+    gl->DeleteProgram(prog);
     PL_ERR(gpu, "Failed compiling/linking GLSL program");
     return 0;
 }
@@ -175,6 +178,7 @@ struct pl_pass_gl {
 
 void gl_pass_destroy(pl_gpu gpu, pl_pass pass)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT()) {
         PL_ERR(gpu, "Failed uninitializing pass, leaking resources!");
         return;
@@ -182,18 +186,19 @@ void gl_pass_destroy(pl_gpu gpu, pl_pass pass)
 
     struct pl_pass_gl *pass_gl = PL_PRIV(pass);
     if (pass_gl->vao)
-        glDeleteVertexArrays(1, &pass_gl->vao);
-    glDeleteBuffers(1, &pass_gl->index_buffer);
-    glDeleteBuffers(1, &pass_gl->buffer);
-    glDeleteProgram(pass_gl->program);
+        gl->DeleteVertexArrays(1, &pass_gl->vao);
+    gl->DeleteBuffers(1, &pass_gl->index_buffer);
+    gl->DeleteBuffers(1, &pass_gl->buffer);
+    gl->DeleteProgram(pass_gl->program);
 
     gl_check_err(gpu, "gl_pass_destroy");
     RELEASE_CURRENT();
     pl_free((void *) pass);
 }
 
-static void gl_update_va(pl_pass pass, size_t vbo_offset)
+static void gl_update_va(pl_gpu gpu, pl_pass pass, size_t vbo_offset)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     for (int i = 0; i < pass->params.num_vertex_attribs; i++) {
         const struct pl_vertex_attrib *va = &pass->params.vertex_attribs[i];
         const struct gl_format **glfmtp = PL_PRIV(va->fmt);
@@ -215,15 +220,16 @@ static void gl_update_va(pl_pass pass, size_t vbo_offset)
             pl_unreachable();
         }
 
-        glEnableVertexAttribArray(i);
-        glVertexAttribPointer(i, va->fmt->num_components, glfmt->type, norm,
-                              pass->params.vertex_stride,
-                              (void *) (va->offset + vbo_offset));
+        gl->EnableVertexAttribArray(i);
+        gl->VertexAttribPointer(i, va->fmt->num_components, glfmt->type, norm,
+                                pass->params.vertex_stride,
+                                (void *) (va->offset + vbo_offset));
     }
 }
 
 pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return NULL;
 
@@ -247,7 +253,7 @@ pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     // Update program cache if possible
     if (gl_test_ext(gpu, "GL_ARB_get_program_binary", 41, 30)) {
         GLint size = 0;
-        glGetProgramiv(pass_gl->program, GL_PROGRAM_BINARY_LENGTH, &size);
+        gl->GetProgramiv(pass_gl->program, GL_PROGRAM_BINARY_LENGTH, &size);
 
         if (size > 0) {
             uint8_t *buffer = pl_alloc(NULL, size);
@@ -257,8 +263,8 @@ pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
                 .cache_version = CACHE_VERSION,
             };
 
-            glGetProgramBinary(pass_gl->program, size, &actual_size,
-                               &header.format, buffer);
+            gl->GetProgramBinary(pass_gl->program, size, &actual_size,
+                                 &header.format, buffer);
             if (actual_size > 0) {
                 pl_str cache = {0};
                 pl_str_append(pass, &cache, (pl_str) { (void *) &header, sizeof(header) });
@@ -278,19 +284,19 @@ pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
         }
     }
 
-    glUseProgram(pass_gl->program);
+    gl->UseProgram(pass_gl->program);
     pass_gl->var_locs = pl_calloc(pass, params->num_variables, sizeof(GLint));
 
     for (int i = 0; i < params->num_variables; i++) {
-        pass_gl->var_locs[i] = glGetUniformLocation(pass_gl->program,
-                                                    params->variables[i].name);
+        pass_gl->var_locs[i] = gl->GetUniformLocation(pass_gl->program,
+                                                      params->variables[i].name);
 
         // Due to OpenGL API restrictions, we need to ensure that this is a
         // variable type we can actually *update*. Fortunately, this is easily
         // checked by virtue of the fact that all legal combinations of
         // parameters will have a valid GLSL type name
         if (!pl_var_glsl_type_name(params->variables[i])) {
-            glUseProgram(0);
+            gl->UseProgram(0);
             PL_ERR(gpu, "Input variable '%s' does not match any known type!",
                    params->variables[i].name);
             goto error;
@@ -301,21 +307,21 @@ pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
         // For compatibility with older OpenGL, we need to explicitly update
         // the texture/image unit bindings after creating the shader program,
         // since specifying it directly requires GLSL 4.20+
-        GLint loc = glGetUniformLocation(pass_gl->program, params->descriptors[i].name);
-        glUniform1i(loc, params->descriptors[i].binding);
+        GLint loc = gl->GetUniformLocation(pass_gl->program, params->descriptors[i].name);
+        gl->Uniform1i(loc, params->descriptors[i].binding);
     }
 
-    glUseProgram(0);
+    gl->UseProgram(0);
 
     // Initialize the VAO and single vertex buffer
-    glGenBuffers(1, &pass_gl->buffer);
+    gl->GenBuffers(1, &pass_gl->buffer);
     if (p->has_vao) {
-        glGenVertexArrays(1, &pass_gl->vao);
-        glBindBuffer(GL_ARRAY_BUFFER, pass_gl->buffer);
-        glBindVertexArray(pass_gl->vao);
-        gl_update_va(pass, 0);
-        glBindVertexArray(0);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        gl->GenVertexArrays(1, &pass_gl->vao);
+        gl->BindBuffer(GL_ARRAY_BUFFER, pass_gl->buffer);
+        gl->BindVertexArray(pass_gl->vao);
+        gl_update_va(gpu, pass, 0);
+        gl->BindVertexArray(0);
+        gl->BindBuffer(GL_ARRAY_BUFFER, 0);
     }
 
     if (!gl_check_err(gpu, "gl_pass_create"))
@@ -331,8 +337,10 @@ error:
     return NULL;
 }
 
-static void update_var(pl_pass pass, const struct pl_var_update *vu)
+static void update_var(pl_gpu gpu, pl_pass pass,
+                       const struct pl_var_update *vu)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     struct pl_pass_gl *pass_gl = PL_PRIV(pass);
     const struct pl_var *var = &pass->params.variables[vu->index];
     GLint loc = pass_gl->var_locs[vu->index];
@@ -342,10 +350,10 @@ static void update_var(pl_pass pass, const struct pl_var_update *vu)
         const int *i = vu->data;
         pl_assert(var->dim_m == 1);
         switch (var->dim_v) {
-        case 1: glUniform1iv(loc, var->dim_a, i); break;
-        case 2: glUniform2iv(loc, var->dim_a, i); break;
-        case 3: glUniform3iv(loc, var->dim_a, i); break;
-        case 4: glUniform4iv(loc, var->dim_a, i); break;
+        case 1: gl->Uniform1iv(loc, var->dim_a, i); break;
+        case 2: gl->Uniform2iv(loc, var->dim_a, i); break;
+        case 3: gl->Uniform3iv(loc, var->dim_a, i); break;
+        case 4: gl->Uniform4iv(loc, var->dim_a, i); break;
         default: pl_unreachable();
         }
         return;
@@ -354,10 +362,10 @@ static void update_var(pl_pass pass, const struct pl_var_update *vu)
         const unsigned int *u = vu->data;
         pl_assert(var->dim_m == 1);
         switch (var->dim_v) {
-        case 1: glUniform1uiv(loc, var->dim_a, u); break;
-        case 2: glUniform2uiv(loc, var->dim_a, u); break;
-        case 3: glUniform3uiv(loc, var->dim_a, u); break;
-        case 4: glUniform4uiv(loc, var->dim_a, u); break;
+        case 1: gl->Uniform1uiv(loc, var->dim_a, u); break;
+        case 2: gl->Uniform2uiv(loc, var->dim_a, u); break;
+        case 3: gl->Uniform3uiv(loc, var->dim_a, u); break;
+        case 4: gl->Uniform4uiv(loc, var->dim_a, u); break;
         default: pl_unreachable();
         }
         return;
@@ -366,30 +374,30 @@ static void update_var(pl_pass pass, const struct pl_var_update *vu)
         const float *f = vu->data;
         if (var->dim_m == 1) {
             switch (var->dim_v) {
-            case 1: glUniform1fv(loc, var->dim_a, f); break;
-            case 2: glUniform2fv(loc, var->dim_a, f); break;
-            case 3: glUniform3fv(loc, var->dim_a, f); break;
-            case 4: glUniform4fv(loc, var->dim_a, f); break;
+            case 1: gl->Uniform1fv(loc, var->dim_a, f); break;
+            case 2: gl->Uniform2fv(loc, var->dim_a, f); break;
+            case 3: gl->Uniform3fv(loc, var->dim_a, f); break;
+            case 4: gl->Uniform4fv(loc, var->dim_a, f); break;
             default: pl_unreachable();
             }
         } else if (var->dim_m == 2 && var->dim_v == 2) {
-            glUniformMatrix2fv(loc, var->dim_a, GL_FALSE, f);
+            gl->UniformMatrix2fv(loc, var->dim_a, GL_FALSE, f);
         } else if (var->dim_m == 3 && var->dim_v == 3) {
-            glUniformMatrix3fv(loc, var->dim_a, GL_FALSE, f);
+            gl->UniformMatrix3fv(loc, var->dim_a, GL_FALSE, f);
         } else if (var->dim_m == 4 && var->dim_v == 4) {
-            glUniformMatrix4fv(loc, var->dim_a, GL_FALSE, f);
+            gl->UniformMatrix4fv(loc, var->dim_a, GL_FALSE, f);
         } else if (var->dim_m == 2 && var->dim_v == 3) {
-            glUniformMatrix2x3fv(loc, var->dim_a, GL_FALSE, f);
+            gl->UniformMatrix2x3fv(loc, var->dim_a, GL_FALSE, f);
         } else if (var->dim_m == 3 && var->dim_v == 2) {
-            glUniformMatrix3x2fv(loc, var->dim_a, GL_FALSE, f);
+            gl->UniformMatrix3x2fv(loc, var->dim_a, GL_FALSE, f);
         } else if (var->dim_m == 2 && var->dim_v == 4) {
-            glUniformMatrix2x4fv(loc, var->dim_a, GL_FALSE, f);
+            gl->UniformMatrix2x4fv(loc, var->dim_a, GL_FALSE, f);
         } else if (var->dim_m == 4 && var->dim_v == 2) {
-            glUniformMatrix4x2fv(loc, var->dim_a, GL_FALSE, f);
+            gl->UniformMatrix4x2fv(loc, var->dim_a, GL_FALSE, f);
         } else if (var->dim_m == 3 && var->dim_v == 4) {
-            glUniformMatrix3x4fv(loc, var->dim_a, GL_FALSE, f);
+            gl->UniformMatrix3x4fv(loc, var->dim_a, GL_FALSE, f);
         } else if (var->dim_m == 4 && var->dim_v == 3) {
-            glUniformMatrix4x3fv(loc, var->dim_a, GL_FALSE, f);
+            gl->UniformMatrix4x3fv(loc, var->dim_a, GL_FALSE, f);
         } else {
             pl_unreachable();
         }
@@ -404,8 +412,10 @@ static void update_var(pl_pass pass, const struct pl_var_update *vu)
     pl_unreachable();
 }
 
-static void update_desc(pl_pass pass, int index, const struct pl_desc_binding *db)
+static void update_desc(pl_gpu gpu, pl_pass pass, int index,
+                        const struct pl_desc_binding *db)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     const struct pl_desc *desc = &pass->params.descriptors[index];
 
     static const GLenum access[] = {
@@ -429,21 +439,21 @@ static void update_desc(pl_pass pass, int index, const struct pl_desc_binding *d
     case PL_DESC_SAMPLED_TEX: {
         pl_tex tex = db->object;
         struct pl_tex_gl *tex_gl = PL_PRIV(tex);
-        glActiveTexture(GL_TEXTURE0 + desc->binding);
-        glBindTexture(tex_gl->target, tex_gl->texture);
+        gl->ActiveTexture(GL_TEXTURE0 + desc->binding);
+        gl->BindTexture(tex_gl->target, tex_gl->texture);
 
         GLint filter = filters[db->sample_mode];
         GLint wrap = wraps[db->address_mode];
-        glTexParameteri(tex_gl->target, GL_TEXTURE_MIN_FILTER, filter);
-        glTexParameteri(tex_gl->target, GL_TEXTURE_MAG_FILTER, filter);
+        gl->TexParameteri(tex_gl->target, GL_TEXTURE_MIN_FILTER, filter);
+        gl->TexParameteri(tex_gl->target, GL_TEXTURE_MAG_FILTER, filter);
         switch (pl_tex_params_dimension(tex->params)) {
-        case 3: glTexParameteri(tex_gl->target, GL_TEXTURE_WRAP_R, wrap);
+        case 3: gl->TexParameteri(tex_gl->target, GL_TEXTURE_WRAP_R, wrap);
             // fall through
         case 2:
-            glTexParameteri(tex_gl->target, GL_TEXTURE_WRAP_T, wrap);
+            gl->TexParameteri(tex_gl->target, GL_TEXTURE_WRAP_T, wrap);
             // fall through
         case 1:
-            glTexParameteri(tex_gl->target, GL_TEXTURE_WRAP_S, wrap);
+            gl->TexParameteri(tex_gl->target, GL_TEXTURE_WRAP_S, wrap);
             break;
         }
         return;
@@ -451,22 +461,22 @@ static void update_desc(pl_pass pass, int index, const struct pl_desc_binding *d
     case PL_DESC_STORAGE_IMG: {
         pl_tex tex = db->object;
         struct pl_tex_gl *tex_gl = PL_PRIV(tex);
-        glBindImageTexture(desc->binding, tex_gl->texture, 0, GL_FALSE, 0,
-                           access[desc->access], tex_gl->iformat);
+        gl->BindImageTexture(desc->binding, tex_gl->texture, 0, GL_FALSE, 0,
+                             access[desc->access], tex_gl->iformat);
         return;
     }
     case PL_DESC_BUF_UNIFORM: {
         pl_buf buf = db->object;
         struct pl_buf_gl *buf_gl = PL_PRIV(buf);
-        glBindBufferRange(GL_UNIFORM_BUFFER, desc->binding, buf_gl->buffer,
-                          buf_gl->offset, buf->params.size);
+        gl->BindBufferRange(GL_UNIFORM_BUFFER, desc->binding, buf_gl->buffer,
+                            buf_gl->offset, buf->params.size);
         return;
     }
     case PL_DESC_BUF_STORAGE: {
         pl_buf buf = db->object;
         struct pl_buf_gl *buf_gl = PL_PRIV(buf);
-        glBindBufferRange(GL_SHADER_STORAGE_BUFFER, desc->binding, buf_gl->buffer,
-                          buf_gl->offset, buf->params.size);
+        gl->BindBufferRange(GL_SHADER_STORAGE_BUFFER, desc->binding, buf_gl->buffer,
+                            buf_gl->offset, buf->params.size);
         return;
     }
     case PL_DESC_BUF_TEXEL_UNIFORM:
@@ -481,36 +491,38 @@ static void update_desc(pl_pass pass, int index, const struct pl_desc_binding *d
     pl_unreachable();
 }
 
-static void unbind_desc(pl_pass pass, int index, const struct pl_desc_binding *db)
+static void unbind_desc(pl_gpu gpu, pl_pass pass, int index,
+                        const struct pl_desc_binding *db)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     const struct pl_desc *desc = &pass->params.descriptors[index];
 
     switch (desc->type) {
     case PL_DESC_SAMPLED_TEX: {
         pl_tex tex = db->object;
         struct pl_tex_gl *tex_gl = PL_PRIV(tex);
-        glActiveTexture(GL_TEXTURE0 + desc->binding);
-        glBindTexture(tex_gl->target, 0);
+        gl->ActiveTexture(GL_TEXTURE0 + desc->binding);
+        gl->BindTexture(tex_gl->target, 0);
         return;
     }
     case PL_DESC_STORAGE_IMG: {
         pl_tex tex = db->object;
         struct pl_tex_gl *tex_gl = PL_PRIV(tex);
-        glBindImageTexture(desc->binding, 0, 0, GL_FALSE, 0,
-                           GL_WRITE_ONLY, GL_R32F);
+        gl->BindImageTexture(desc->binding, 0, 0, GL_FALSE, 0,
+                             GL_WRITE_ONLY, GL_R32F);
         if (desc->access != PL_DESC_ACCESS_READONLY)
-            glMemoryBarrier(tex_gl->barrier);
+            gl->MemoryBarrier(tex_gl->barrier);
         return;
     }
     case PL_DESC_BUF_UNIFORM:
-        glBindBufferBase(GL_UNIFORM_BUFFER, desc->binding, 0);
+        gl->BindBufferBase(GL_UNIFORM_BUFFER, desc->binding, 0);
         return;
     case PL_DESC_BUF_STORAGE: {
         pl_buf buf = db->object;
         struct pl_buf_gl *buf_gl = PL_PRIV(buf);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, desc->binding, 0);
+        gl->BindBufferBase(GL_SHADER_STORAGE_BUFFER, desc->binding, 0);
         if (desc->access != PL_DESC_ACCESS_READONLY)
-            glMemoryBarrier(buf_gl->barrier);
+            gl->MemoryBarrier(buf_gl->barrier);
         return;
     }
     case PL_DESC_BUF_TEXEL_UNIFORM:
@@ -526,6 +538,7 @@ static void unbind_desc(pl_pass pass, int index, const struct pl_desc_binding *d
 
 void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 {
+    const gl_funcs *gl = gl_funcs_get(gpu);
     if (!MAKE_CURRENT())
         return;
 
@@ -533,13 +546,13 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
     struct pl_pass_gl *pass_gl = PL_PRIV(pass);
     struct pl_gl *p = PL_PRIV(gpu);
 
-    glUseProgram(pass_gl->program);
+    gl->UseProgram(pass_gl->program);
 
     for (int i = 0; i < params->num_var_updates; i++)
-        update_var(pass, &params->var_updates[i]);
+        update_var(gpu, pass, &params->var_updates[i]);
     for (int i = 0; i < pass->params.num_descriptors; i++)
-        update_desc(pass, i, &params->desc_bindings[i]);
-    glActiveTexture(GL_TEXTURE0);
+        update_desc(gpu, pass, i, &params->desc_bindings[i]);
+    gl->ActiveTexture(GL_TEXTURE0);
 
     if (!gl_check_err(gpu, "gl_pass_run: updating uniforms")) {
         RELEASE_CURRENT();
@@ -549,19 +562,19 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
     switch (pass->params.type) {
     case PL_PASS_RASTER: {
         struct pl_tex_gl *target_gl = PL_PRIV(params->target);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, target_gl->fbo);
+        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, target_gl->fbo);
         if (!pass->params.load_target && p->has_invalidate_fb) {
             GLenum fb = target_gl->fbo ? GL_COLOR_ATTACHMENT0 : GL_COLOR;
-            glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &fb);
+            gl->InvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &fb);
         }
 
-        glViewport(params->viewport.x0, params->viewport.y0,
-                   pl_rect_w(params->viewport), pl_rect_h(params->viewport));
-        glScissor(params->scissors.x0, params->scissors.y0,
-                  pl_rect_w(params->scissors), pl_rect_h(params->scissors));
-        glEnable(GL_SCISSOR_TEST);
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_CULL_FACE);
+        gl->Viewport(params->viewport.x0, params->viewport.y0,
+                     pl_rect_w(params->viewport), pl_rect_h(params->viewport));
+        gl->Scissor(params->scissors.x0, params->scissors.y0,
+                    pl_rect_w(params->scissors), pl_rect_h(params->scissors));
+        gl->Enable(GL_SCISSOR_TEST);
+        gl->Disable(GL_DEPTH_TEST);
+        gl->Disable(GL_CULL_FACE);
         gl_check_err(gpu, "gl_pass_run: enabling viewport/scissor");
 
         const struct pl_blend_params *blend = pass->params.blend_params;
@@ -573,28 +586,28 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
                 [PL_BLEND_ONE_MINUS_SRC_ALPHA]  = GL_ONE_MINUS_SRC_ALPHA,
             };
 
-            glBlendFuncSeparate(map_blend[blend->src_rgb],
-                                map_blend[blend->dst_rgb],
-                                map_blend[blend->src_alpha],
-                                map_blend[blend->dst_alpha]);
-            glEnable(GL_BLEND);
+            gl->BlendFuncSeparate(map_blend[blend->src_rgb],
+                                  map_blend[blend->dst_rgb],
+                                  map_blend[blend->src_alpha],
+                                  map_blend[blend->dst_alpha]);
+            gl->Enable(GL_BLEND);
             gl_check_err(gpu, "gl_pass_run: enabling blend");
         }
 
         // Update VBO and VAO
         pl_buf vert = params->vertex_buf;
         struct pl_buf_gl *vert_gl = vert ? PL_PRIV(vert) : NULL;
-        glBindBuffer(GL_ARRAY_BUFFER, vert ? vert_gl->buffer : pass_gl->buffer);
+        gl->BindBuffer(GL_ARRAY_BUFFER, vert ? vert_gl->buffer : pass_gl->buffer);
 
         if (!vert) {
             // Update the buffer directly. In theory we could also do a memcmp
             // cache here to avoid unnecessary updates.
-            glBufferData(GL_ARRAY_BUFFER, pl_vertex_buf_size(params),
-                         params->vertex_data, GL_STREAM_DRAW);
+            gl->BufferData(GL_ARRAY_BUFFER, pl_vertex_buf_size(params),
+                           params->vertex_data, GL_STREAM_DRAW);
         }
 
         if (pass_gl->vao)
-            glBindVertexArray(pass_gl->vao);
+            gl->BindVertexArray(pass_gl->vao);
 
         uint64_t vert_id = vert ? vert_gl->id : 0;
         size_t vert_offset = vert ? params->buf_offset : 0;
@@ -602,7 +615,7 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
              pass_gl->vao_offset != vert_offset)
         {
             // We need to update the VAO when the buffer ID or offset changes
-            gl_update_va(pass, vert_offset);
+            gl_update_va(gpu, pass, vert_offset);
             pass_gl->vao_id = vert_id;
             pass_gl->vao_offset = vert_offset;
         }
@@ -626,51 +639,51 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 
             // Upload indices to temporary buffer object
             if (!pass_gl->index_buffer)
-                glGenBuffers(1, &pass_gl->index_buffer); // lazily allocated
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pass_gl->index_buffer);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, pl_index_buf_size(params),
-                         params->index_data, GL_STREAM_DRAW);
-            glDrawElements(mode, params->vertex_count,
-                           index_fmts[params->index_fmt], 0);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+                gl->GenBuffers(1, &pass_gl->index_buffer); // lazily allocated
+            gl->BindBuffer(GL_ELEMENT_ARRAY_BUFFER, pass_gl->index_buffer);
+            gl->BufferData(GL_ELEMENT_ARRAY_BUFFER, pl_index_buf_size(params),
+                           params->index_data, GL_STREAM_DRAW);
+            gl->DrawElements(mode, params->vertex_count,
+                             index_fmts[params->index_fmt], 0);
+            gl->BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
         } else if (params->index_buf) {
 
             // The pointer argument becomes the index buffer offset
             struct pl_buf_gl *index_gl = PL_PRIV(params->index_buf);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_gl->buffer);
-            glDrawElements(mode, params->vertex_count, GL_UNSIGNED_SHORT,
-                           (void *) params->index_offset);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+            gl->BindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_gl->buffer);
+            gl->DrawElements(mode, params->vertex_count, GL_UNSIGNED_SHORT,
+                             (void *) params->index_offset);
+            gl->BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
         } else {
 
             // Note: the VBO offset is handled in the VAO
-            glDrawArrays(mode, 0, params->vertex_count);
+            gl->DrawArrays(mode, 0, params->vertex_count);
         }
 
         gl_timer_end(gpu, params->timer);
         gl_check_err(gpu, "gl_pass_run: drawing");
 
         if (pass_gl->vao) {
-            glBindVertexArray(0);
+            gl->BindVertexArray(0);
         } else {
             for (int i = 0; i < pass->params.num_vertex_attribs; i++)
-                glDisableVertexAttribArray(i);
+                gl->DisableVertexAttribArray(i);
         }
 
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glDisable(GL_SCISSOR_TEST);
-        glDisable(GL_BLEND);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        gl->BindBuffer(GL_ARRAY_BUFFER, 0);
+        gl->Disable(GL_SCISSOR_TEST);
+        gl->Disable(GL_BLEND);
+        gl->BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         break;
     }
 
     case PL_PASS_COMPUTE:
         gl_timer_begin(gpu, params->timer);
-        glDispatchCompute(params->compute_groups[0],
-                          params->compute_groups[1],
-                          params->compute_groups[2]);
+        gl->DispatchCompute(params->compute_groups[0],
+                            params->compute_groups[1],
+                            params->compute_groups[2]);
         gl_timer_end(gpu, params->timer);
         break;
 
@@ -680,10 +693,10 @@ void gl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
     }
 
     for (int i = 0; i < pass->params.num_descriptors; i++)
-        unbind_desc(pass, i, &params->desc_bindings[i]);
-    glActiveTexture(GL_TEXTURE0);
+        unbind_desc(gpu, pass, i, &params->desc_bindings[i]);
+    gl->ActiveTexture(GL_TEXTURE0);
 
-    glUseProgram(0);
+    gl->UseProgram(0);
     gl_check_err(gpu, "gl_pass_run");
     RELEASE_CURRENT();
 }
