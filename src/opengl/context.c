@@ -59,9 +59,9 @@ static void GLAPIENTRY debug_cb(GLenum source, GLenum type, GLuint id,
 
 #ifdef EPOXY_HAS_EGL
 
-static void debug_cb_egl(EGLenum error, const char *command,
-                         EGLint messageType, EGLLabelKHR threadLabel,
-                         EGLLabelKHR objectLabel, const char *message)
+static void GLAPIENTRY debug_cb_egl(EGLenum error, const char *command,
+                                    EGLint messageType, EGLLabelKHR threadLabel,
+                                    EGLLabelKHR objectLabel, const char *message)
 {
     pl_log log = threadLabel;
     enum pl_log_level level = PL_LOG_ERR;
