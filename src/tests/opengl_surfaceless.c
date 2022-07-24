@@ -143,7 +143,7 @@ int main()
         return SKIP;
 
     EGLDisplay dpy = eglGetPlatformDisplayEXT(EGL_PLATFORM_SURFACELESS_MESA,
-                                              EGL_DEFAULT_DISPLAY, NULL);
+                                              (void *) EGL_DEFAULT_DISPLAY, NULL);
     if (dpy == EGL_NO_DISPLAY)
         return SKIP;
 
