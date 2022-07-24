@@ -314,10 +314,10 @@ if comps.has('vulkan')
   )
 
   if vulkan.found() and get_option('vulkan-link')
-    defs += '#define PL_HAVE_VK_PROC_ADDR 1'
+    defs += '#define PL_HAVE_VK_PROC_ADDR 1\n'
     pc_vars += 'pl_has_vk_proc_addr=1'
   else
-    defs += '#undef PL_HAVE_VK_PROC_ADDR'
+    defs += '#undef PL_HAVE_VK_PROC_ADDR\n'
     pc_vars += 'pl_has_vk_proc_addr=0'
   endif
 endif
