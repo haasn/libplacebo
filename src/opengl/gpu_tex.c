@@ -105,7 +105,6 @@ static bool gl_tex_import(pl_gpu gpu,
     if (!MAKE_CURRENT())
         return false;
 
-    struct pl_gl *p = PL_PRIV(gpu);
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     const struct pl_tex_params *params = &tex->params;
 
@@ -133,6 +132,7 @@ static bool gl_tex_import(pl_gpu gpu,
         ADD_ATTRIB(EGL_LINUX_DRM_FOURCC_EXT, params->format->fourcc);
         ADD_DMABUF_PLANE_ATTRIBS(0, tex_gl->fd, shared_mem->offset,
                                  PL_DEF(shared_mem->stride_w, params->w));
+        struct pl_gl *p = PL_PRIV(gpu);
         if (p->has_modifiers)
             ADD_DMABUF_PLANE_MODIFIERS(0, shared_mem->drm_format_mod);
 
@@ -146,7 +146,10 @@ static bool gl_tex_import(pl_gpu gpu,
                                           attribs);
 
         break;
-#endif // PL_HAVE_UNIX
+#else // !PL_HAVE_UNIX
+    case PL_HANDLE_DMA_BUF:
+        pl_unreachable();
+#endif
 
     case PL_HANDLE_WIN32:
     case PL_HANDLE_WIN32_KMT:
@@ -191,8 +194,6 @@ static bool gl_tex_export(pl_gpu gpu, enum pl_handle_type handle_type,
 {
     struct pl_tex_gl *tex_gl = PL_PRIV(tex);
     struct pl_gl *p = PL_PRIV(gpu);
-    struct pl_shared_mem *shared_mem = &tex->shared_mem;
-    bool ok;
 
     EGLenum egltarget = egl_from_gl_target(gpu, tex_gl->target);
     if (!egltarget)
@@ -219,6 +220,7 @@ static bool gl_tex_export(pl_gpu gpu, enum pl_handle_type handle_type,
         int fourcc = 0;
         int num_planes = 0;
         EGLuint64KHR modifier = 0;
+        bool ok;
         ok = eglExportDMABUFImageQueryMESA(p->egl_dpy,
                                            tex_gl->image,
                                            &fourcc,
@@ -255,7 +257,7 @@ static bool gl_tex_export(pl_gpu gpu, enum pl_handle_type handle_type,
             goto error;
         }
 
-        *shared_mem = (struct pl_shared_mem) {
+        tex->shared_mem = (struct pl_shared_mem) {
             .handle.fd = tex_gl->fd,
             .size = fdsize,
             .offset = offset,
@@ -264,7 +266,10 @@ static bool gl_tex_export(pl_gpu gpu, enum pl_handle_type handle_type,
         };
         break;
     }
-#endif // PL_HAVE_UNIX
+#else // !PL_HAVE_UNIX
+    case PL_HANDLE_DMA_BUF:
+        pl_unreachable();
+#endif
 
     case PL_HANDLE_WIN32:
     case PL_HANDLE_WIN32_KMT:
