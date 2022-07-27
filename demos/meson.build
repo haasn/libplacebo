@@ -100,7 +100,7 @@ if apis.length() == 0
 else
 
   dep = declare_dependency(
-    dependencies: libplacebo,
+    dependencies: [ libplacebo, build_deps ],
     sources: ['window.c', 'utils.c'],
     link_with: apis,
   )
