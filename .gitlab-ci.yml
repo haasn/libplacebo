@@ -6,7 +6,7 @@ stages:
 variables:
     GIT_SUBMODULE_STRATEGY: recursive
     IMAGE_UBUNTU_FOCAL: registry.videolan.org/libplacebo-ubuntu-focal:20220610192633
-    IMAGE_UBUNTU_JAMMY: registry.videolan.org/libplacebo-ubuntu-jammy:20220619074648
+    IMAGE_UBUNTU_JAMMY: registry.videolan.org/libplacebo-ubuntu-jammy:20220728170740
     IMAGE_UBUNTU_FOCAL_AARCH: registry.videolan.org/libplacebo-ubuntu-focal-aarch64:20211020160908
 
 linux:
