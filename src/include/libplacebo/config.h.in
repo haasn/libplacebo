@@ -48,11 +48,9 @@ const char *pl_version(void);
 
 // C++ compatibility
 #ifdef __cplusplus
-# define PL_STRUCT(name) struct name##_t
 # define PL_API_BEGIN extern "C" {
 # define PL_API_END }
 #else
-# define PL_STRUCT(name) struct name
 # define PL_API_BEGIN
 # define PL_API_END
 // Disable this warning because libplacebo's params macros override fields
@@ -62,5 +60,8 @@ const char *pl_version(void);
 // Extra helper macros
 #define PL_TOSTRING_INNER(x) #x
 #define PL_TOSTRING(x) PL_TOSTRING_INNER(x)
+
+// Deprecated macro for back-compatibility
+#define PL_STRUCT(name) struct name##_t
 
 #endif // LIBPLACEBO_CONTEXT_H_
