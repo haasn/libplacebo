@@ -29,6 +29,7 @@ struct icc_priv {
     cmsContext cms;
     cmsHPROFILE profile;
     cmsHPROFILE approx; // approximation profile
+    float a, b, scale; // approxmation tone curve parameters and scaling
     cmsCIEXYZ black;
     float gamma_stddev;
 };
@@ -75,11 +76,23 @@ static bool detect_csp(pl_icc_object icc, struct pl_raw_primaries *prim,
     if (!tf)
         return false;
 
+    enum {
+        RED,
+        GREEN,
+        BLUE,
+        WHITE,
+        BLACK,
+        GRAY,
+        RAMP,
+    };
+
     static const uint8_t test[][3] = {
-        { 0xFF,    0,    0 }, // red
-        {    0, 0xFF,    0 }, // green
-        {    0,    0, 0xFF }, // blue
-        { 0xFF, 0xFF, 0xFF }, // white
+        [RED]   = { 0xFF,    0,    0 },
+        [GREEN] = {    0, 0xFF,    0 },
+        [BLUE]  = {    0,    0, 0xFF },
+        [WHITE] = { 0xFF, 0xFF, 0xFF },
+        [BLACK] = { 0x00, 0x00, 0x00 },
+        [GRAY]  = { 0x80, 0x80, 0x80 },
 
         // Grayscale ramp (excluding endpoints)
 #define V(d) { d, d, d }
@@ -123,22 +136,30 @@ static bool detect_csp(pl_icc_object icc, struct pl_raw_primaries *prim,
     cmsDeleteTransform(tf);
 
     // Read primaries from transformed RGBW values
-    prim->red   = pl_cie_from_XYZ(dst[0].X, dst[0].Y, dst[0].Z);
-    prim->green = pl_cie_from_XYZ(dst[1].X, dst[1].Y, dst[1].Z);
-    prim->blue  = pl_cie_from_XYZ(dst[2].X, dst[2].Y, dst[2].Z);
-    prim->white = pl_cie_from_XYZ(dst[3].X, dst[3].Y, dst[3].Z);
+    prim->red   = pl_cie_from_XYZ(dst[RED].X, dst[RED].Y, dst[RED].Z);
+    prim->green = pl_cie_from_XYZ(dst[GREEN].X, dst[GREEN].Y, dst[GREEN].Z);
+    prim->blue  = pl_cie_from_XYZ(dst[BLUE].X, dst[BLUE].Y, dst[BLUE].Z);
+    prim->white = pl_cie_from_XYZ(dst[WHITE].X, dst[WHITE].Y, dst[WHITE].Z);
+
+    // Rough estimate of overall gamma and starting point for curve black point
+    const float y_approx = log(dst[GRAY].Y) / log(0.5);
+    float b = powf(dst[BLACK].Y, 1 / y_approx);
 
     // Estimate mean and stddev of gamma (Welford's method)
     float M = 0.0, S = 0.0;
     int k = 1;
-    for (int i = 4; i < PL_ARRAY_SIZE(dst); i++) { // exclude RGBW cube
+    for (int i = RAMP; i < PL_ARRAY_SIZE(dst); i++) { // exclude primaries
         if (dst[i].Y <= 0 || dst[i].Y >= 1)
             continue;
-        float y = log(dst[i].Y) / log(test[i][0] / 255.0);
+        float src = (1 - b) * (test[i][0] / 255.0) + b;
+        float y = log(dst[i].Y) / log(src);
         float tmpM = M;
         M += (y - tmpM) / k;
         S += (y - tmpM) * (y - M);
         k++;
+
+        // Update estimate of black point according to current gamma estimate
+        b = powf(dst[BLACK].Y, 1 / M);
     }
     S = sqrt(S / (k - 1));
     if (S > 0.5)
@@ -348,8 +369,18 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
         goto error;
     }
 
-    // Create approximation profile
-    cmsToneCurve *curve = cmsBuildGamma(p->cms, icc->gamma);
+    // Create approximation profile. Use a tone-curve based on a BT.1886-style
+    // pure power curve, with an approximation gamma matched to the ICC
+    // profile. We stretch the luminance range *before* the input to the gamma
+    // function, to avoid numerical issues near the black point. (This removes
+    // the need for a separate linear section)
+    //
+    // Y = scale * (aX + b)^y, where Y = PCS luma and X = encoded value ([0-1])
+    p->scale = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, icc->csp.hdr.max_luma);
+    p->b = powf(icc->csp.hdr.min_luma / icc->csp.hdr.max_luma, 1.0f / icc->gamma);
+    p->a = (1 - p->b);
+    cmsToneCurve *curve = cmsBuildParametricToneCurve(p->cms, 2,
+            (double[3]) { icc->gamma, p->a, p->b });
     if (!curve)
         goto error;
 
@@ -365,6 +396,11 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     cmsFreeToneCurve(curve);
     if (!p->approx)
         goto error;
+
+    // We need to create an ICC V2 profile because ICC V4 perceptual profiles
+    // have normalized semantics, but we want colorimetric mapping with BPC
+    cmsSetHeaderRenderingIntent(p->approx, icc->params.intent);
+    cmsSetProfileVersion(p->approx, 2.2);
 
     return icc;
 
@@ -385,6 +421,7 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
     cmsHTRANSFORM tf = cmsCreateTransformTHR(p->cms, srcp, TYPE_RGB_16,
                                              dstp, TYPE_RGBA_16,
                                              icc->params.intent,
+                                             cmsFLAGS_BLACKPOINTCOMPENSATION |
                                              cmsFLAGS_NOCACHE | cmsFLAGS_NOOPTIMIZE);
     if (!tf)
         return;
@@ -448,16 +485,20 @@ void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,
         .priv       = (void *) icc,
     ));
 
+    // Y = scale * (aX + b)^y
+    struct icc_priv *p = PL_PRIV(icc);
     sh_describe(sh, "ICC 3DLUT");
     GLSL("// pl_icc_decode                      \n"
          "{                                     \n"
          "color.rgb = %s(color.rgb).rgb;        \n"
-         "color.rgb = max(color.rgb, 0.0);      \n"
+         "color.rgb = %s * color.rgb + vec3(%s);\n"
          "color.rgb = pow(color.rgb, vec3(%s)); \n"
-         "color.rgb = %s * color.rgb;           \n"  // expand HDR levels
+         "color.rgb = %s * color.rgb;           \n"
          "}                                     \n",
-         lut, SH_FLOAT(icc->gamma),
-         SH_FLOAT(pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, icc->csp.hdr.max_luma)));
+         lut,
+         SH_FLOAT(p->a), SH_FLOAT(p->b),
+         SH_FLOAT(icc->gamma),
+         SH_FLOAT(p->scale));
 
     if (out_csp) {
         *out_csp = (struct pl_color_space) {
@@ -488,16 +529,24 @@ void pl_icc_encode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj)
         .priv       = (void *) icc,
     ));
 
+    // X = 1/a * (Y/scale)^(1/y) - b/a
+    struct icc_priv *p = PL_PRIV(icc);
     sh_describe(sh, "ICC 3DLUT");
     GLSL("// pl_icc_encode                      \n"
          "{                                     \n"
-         "color.rgb = 1.0/%s * color.rgb;       \n"
+         "if (any(greaterThan(color.rgb, vec3(%s)))) \n"
+         "    color.rgb = vec3(1,0,0); \n"
          "color.rgb = max(color.rgb, 0.0);      \n"
+         "color.rgb = 1.0/%s * color.rgb;       \n"
          "color.rgb = pow(color.rgb, vec3(%s)); \n"
+         "color.rgb = 1.0/%s * color.rgb - %s;  \n"
          "color.rgb = %s(color.rgb).rgb;        \n"
          "}                                     \n",
-         SH_FLOAT(pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, icc->csp.hdr.max_luma)),
-         SH_FLOAT(1.0f / icc->gamma), lut);
+         SH_FLOAT(icc->csp.hdr.min_luma + 1e4),
+         SH_FLOAT(p->scale),
+         SH_FLOAT(1.0f / icc->gamma),
+         SH_FLOAT(p->a), SH_FLOAT(p->b / p->a),
+         lut);
 }
 
 #else // !PL_HAVE_LCMS
