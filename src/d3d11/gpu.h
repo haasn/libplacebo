@@ -72,7 +72,7 @@ struct pl_gpu_d3d11 {
     // This is a pl_dispatch used on ourselves for the purposes of dispatching
     // shaders for performing various emulation tasks (e.g. blits).
     // Warning: As in pl_vk, care must be taken to avoid recursive calls.
-    struct pl_dispatch *dp;
+    pl_dispatch dp;
 
     // Streaming vertex and index buffers
     struct d3d_stream_buf vbuf;
