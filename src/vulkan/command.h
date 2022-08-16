@@ -54,9 +54,8 @@ struct vk_cmd {
     // executing. These are also not owned by the vk_cmd
     PL_ARRAY(VkSemaphore) sigs;
     PL_ARRAY(uint64_t) sigvalues;
-    // Since VkFences are useless, we have to manually track "callbacks"
-    // to fire once the VkFence completes. These are used for multiple purposes,
-    // ranging from garbage collection (resource deallocation) to fencing.
+    // "Callbacks" to fire once a command completes. These are used for
+    // multiple purposes, ranging from resource deallocation to fencing.
     PL_ARRAY(struct vk_callback) callbacks;
 };
 
