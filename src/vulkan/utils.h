@@ -89,3 +89,29 @@ void *vk_chain_memdup(void *alloc, const void *in);
             });                                                                 \
         }                                                                       \
     } while (0)
+
+// Helper functions to wrap and unwrap non-dispatchable handles into pointers.
+// Note that wrap/unwrap must always be used linearly.
+#if VK_USE_64_BIT_PTR_DEFINES == 1
+#define vk_wrap_handle(h) (h)
+#define vk_unwrap_handle(h) (h)
+#elif UINTPTR_MAX >= UINT64_MAX
+#define vk_wrap_handle(h) ((void *) (uintptr_t) (h))
+#define vk_unwrap_handle(h) ((uint64_t) (uintptr_t) (h))
+#else
+static inline void *vk_wrap_handle(uint64_t h)
+{
+    uint64_t *wrapper = malloc(sizeof(h));
+    assert(wrapper);
+    *wrapper = h;
+    return wrapper;
+}
+
+static inline uint64_t vk_unwrap_handle(void *h)
+{
+    uint64_t *wrapper = h;
+    uint64_t ret = *wrapper;
+    free(wrapper);
+    return ret;
+}
+#endif
