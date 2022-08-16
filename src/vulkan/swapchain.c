@@ -38,7 +38,6 @@ struct priv {
     struct pl_vulkan_swapchain_params params;
     VkSwapchainCreateInfoKHR protoInfo; // partially filled-in prototype
     VkSwapchainKHR swapchain;
-    VkSwapchainKHR old_swapchain;
     int cur_width, cur_height;
     int swapchain_depth;
     pl_rc_t frames_in_flight;       // number of frames currently queued
@@ -541,11 +540,9 @@ error:
     return false;
 }
 
-static void destroy_swapchain(struct vk_ctx *vk, struct priv *p)
+static void destroy_swapchain(struct vk_ctx *vk, void *swapchain)
 {
-    assert(p->old_swapchain);
-    vk->DestroySwapchainKHR(vk->dev, p->old_swapchain, PL_VK_ALLOC);
-    p->old_swapchain = VK_NULL_HANDLE;
+    vk->DestroySwapchainKHR(vk->dev, vk_unwrap_handle(swapchain), PL_VK_ALLOC);
 }
 
 static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
@@ -557,35 +554,27 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     VkImage *vkimages = NULL;
     uint32_t num_images = 0;
 
-    // It's invalid to trigger another swapchain recreation while there's more
-    // than one swapchain already active, so we need to flush any pending
-    // asynchronous swapchain release operations that may be ongoing
-    while (p->old_swapchain)
-        vk_poll_commands(vk, UINT64_MAX);
-
     VkSwapchainCreateInfoKHR sinfo = p->protoInfo;
-    sinfo.oldSwapchain = p->swapchain;
-
     if (!update_swapchain_info(p, &sinfo, w, h))
         return false;
-
-    PL_DEBUG(sw, "(Re)creating swapchain of size %dx%d",
-             sinfo.imageExtent.width,
-             sinfo.imageExtent.height);
-
-    VK(vk->CreateSwapchainKHR(vk->dev, &sinfo, PL_VK_ALLOC, &p->swapchain));
 
     p->suboptimal = false;
     p->needs_recreate = false;
     p->cur_width = sinfo.imageExtent.width;
     p->cur_height = sinfo.imageExtent.height;
 
-    // Freeing the old swapchain while it's still in use is an error, so do it
-    // asynchronously once the device is idle
-    if (sinfo.oldSwapchain) {
-        p->old_swapchain = sinfo.oldSwapchain;
-        vk_dev_callback(vk, (vk_cb) destroy_swapchain, vk, p);
-    }
+    PL_DEBUG(sw, "(Re)creating swapchain of size %dx%d",
+             sinfo.imageExtent.width,
+             sinfo.imageExtent.height);
+
+    // Calling `vkCreateSwapchainKHR` puts sinfo.oldSwapchain into a retired
+    // state whether the call succeeds or not, so we always need to garbage
+    // collect it afterwards - asynchronously as it may still be in use
+    sinfo.oldSwapchain = p->swapchain;
+    p->swapchain = VK_NULL_HANDLE;
+    VkResult res = vk->CreateSwapchainKHR(vk->dev, &sinfo, PL_VK_ALLOC, &p->swapchain);
+    vk_dev_callback(vk, (vk_cb) destroy_swapchain, vk, vk_wrap_handle(sinfo.oldSwapchain));
+    PL_VK_ASSERT(res, "vk->CreateSwapchainKHR(...)");
 
     // Get the new swapchain images
     VK(vk->GetSwapchainImagesKHR(vk->dev, p->swapchain, &num_images, NULL));
@@ -659,13 +648,9 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
 error:
     PL_ERR(vk, "Failed (re)creating swapchain!");
     pl_free(vkimages);
-    if (p->swapchain != sinfo.oldSwapchain) {
-        vk->DestroySwapchainKHR(vk->dev, p->swapchain, PL_VK_ALLOC);
-        p->swapchain = VK_NULL_HANDLE;
-        p->cur_width = p->cur_height = 0;
-        p->suboptimal = false;
-        p->needs_recreate = false;
-    }
+    vk->DestroySwapchainKHR(vk->dev, p->swapchain, PL_VK_ALLOC);
+    p->swapchain = VK_NULL_HANDLE;
+    p->cur_width = p->cur_height = 0;
     return false;
 }
 
