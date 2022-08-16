@@ -176,9 +176,9 @@ static const VkShaderStageFlags stageFlags[] = {
     [PL_PASS_COMPUTE] = VK_SHADER_STAGE_COMPUTE_BIT,
 };
 
-static void destroy_pipeline(struct vk_ctx *vk, VkPipeline pipeline)
+static void destroy_pipeline(struct vk_ctx *vk, void *pipeline)
 {
-    vk->DestroyPipeline(vk->dev, pipeline, PL_VK_ALLOC);
+    vk->DestroyPipeline(vk->dev, vk_unwrap_handle(pipeline), PL_VK_ALLOC);
 }
 
 static VkResult vk_recreate_pipelines(struct vk_ctx *vk, pl_pass pass,
@@ -191,7 +191,7 @@ static VkResult vk_recreate_pipelines(struct vk_ctx *vk, pl_pass pass,
     // The old pipeline might still be in use, so we have to destroy it
     // asynchronously with a device idle callback
     if (*out_pipe) {
-        vk_dev_callback(vk, (vk_cb) destroy_pipeline, vk, (void*)(uintptr_t)*out_pipe);
+        vk_dev_callback(vk, (vk_cb) destroy_pipeline, vk, vk_wrap_handle(*out_pipe));
         *out_pipe = VK_NULL_HANDLE;
     }
 
