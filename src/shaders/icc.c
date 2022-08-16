@@ -154,7 +154,13 @@ static bool detect_contrast(pl_icc_object icc, struct pl_hdr_metadata *hdr,
 {
     struct icc_priv *p = PL_PRIV(icc);
     cmsCIEXYZ *white = cmsReadTag(p->profile, cmsSigLuminanceTag);
-    if (!cmsDetectDestinationBlackPoint(&p->black, p->profile, icc->params.intent, 0))
+    enum pl_rendering_intent intent = icc->params.intent;
+    /* LittleCMS refuses to detect an intent in absolute colorimetric intent,
+     * so fall back to relative colorimetric since we only care about the
+     * brightness value here */
+    if (intent == PL_INTENT_ABSOLUTE_COLORIMETRIC)
+        intent = PL_INTENT_RELATIVE_COLORIMETRIC;
+    if (!cmsDetectDestinationBlackPoint(&p->black, p->profile, intent, 0))
         return false;
 
     if (max_luma <= 0)
