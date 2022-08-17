@@ -82,6 +82,9 @@ struct priv {
 
     // Whether 10-bit backbuffer format is disabled for SDR content.
     bool disable_10bit_sdr;
+
+    // Fallback to 8-bit RGB was triggered due to lack of compatiblity
+    bool fallback_8bit_rgb;
 };
 
 static void d3d11_sw_destroy(pl_swapchain sw)
@@ -147,8 +150,24 @@ static bool d3d11_sw_resize(pl_swapchain sw, int *width, int *height)
             return false;
         }
 
-        D3D(IDXGISwapChain_ResizeBuffers(p->swapchain, 0, w, h,
-                                         p->csp_map.d3d11_fmt, desc.Flags));
+        HRESULT hr = IDXGISwapChain_ResizeBuffers(p->swapchain, 0, w, h,
+                                                  p->csp_map.d3d11_fmt, desc.Flags);
+
+        if (hr == E_INVALIDARG && p->csp_map.d3d11_fmt != DXGI_FORMAT_R8G8B8A8_UNORM)
+        {
+            PL_WARN(sw, "Reconfiguring the swapchain failed, re-trying with R8G8B8A8_UNORM fallback.");
+            D3D(IDXGISwapChain_ResizeBuffers(p->swapchain, 0, w, h,
+                                             DXGI_FORMAT_R8G8B8A8_UNORM, desc.Flags));
+
+            // re-configure the colorspace to 8-bit RGB SDR fallback
+            p->csp_map = map_pl_csp_to_d3d11(&pl_color_space_unknown, true);
+            p->fallback_8bit_rgb = true;
+        }
+        else if (FAILED(hr))
+        {
+            PL_ERR(sw, "Reconfiguring the swapchain failed with error: %s", pl_hresult_to_str(hr));
+            return false;
+        }
     }
 
     *width = w;
@@ -326,6 +345,11 @@ static void update_swapchain_color_config(pl_swapchain sw,
     struct d3d11_ctx *ctx = p->ctx;
     IDXGISwapChain3 *swapchain3 = NULL;
     struct d3d11_csp_mapping old_map = p->csp_map;
+
+    // ignore config changes in fallback mode
+    if (p->fallback_8bit_rgb)
+        goto cleanup;
+
     HRESULT hr = IDXGISwapChain_QueryInterface(p->swapchain, &IID_IDXGISwapChain3,
                                                (void **)&swapchain3);
     if (FAILED(hr)) {
