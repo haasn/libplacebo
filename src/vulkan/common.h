@@ -45,9 +45,17 @@
 // Hard-coded limit on the number of pending commands, to avoid OOM loops
 #define PL_VK_MAX_PENDING_CMDS 1024
 
-// Shitty compatibility alias for very old vulkan.h versions
+// Shitty backwards compatibility for very old vulkan.h versions
 #ifndef VK_API_VERSION_1_2
 #define VK_API_VERSION_1_2 VK_MAKE_VERSION(1, 2, 0)
+#endif
+
+#ifndef VK_USE_64_BIT_PTR_DEFINES
+    #if defined(__LP64__) || defined(_WIN64) || (defined(__x86_64__) && !defined(__ILP32__) ) || defined(_M_X64) || defined(__ia64) || defined (_M_IA64) || defined(__aarch64__) || defined(__powerpc64__)
+        #define VK_USE_64_BIT_PTR_DEFINES 1
+    #else
+        #define VK_USE_64_BIT_PTR_DEFINES 0
+    #endif
 #endif
 
 // Shared struct used to hold vulkan context information
