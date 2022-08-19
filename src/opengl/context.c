@@ -120,7 +120,10 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     }
 
     bool ok = false;
-    if (params->get_proc_addr) {
+    if (params->get_proc_addr_ex) {
+        ok |= gladLoadGLContextUserPtr(gl, params->get_proc_addr_ex, params->proc_ctx);
+        ok |= gladLoadGLES2ContextUserPtr(gl, params->get_proc_addr_ex, params->proc_ctx);
+    } else if (params->get_proc_addr) {
         ok |= gladLoadGLContext(gl, params->get_proc_addr);
         ok |= gladLoadGLES2Context(gl, params->get_proc_addr);
     } else {

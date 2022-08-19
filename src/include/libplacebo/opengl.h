@@ -55,6 +55,11 @@ struct pl_opengl_params {
     // Main gl*GetProcAddr function. This will be used to load all GL/EGL
     // functions. Optional - if unspecified, libplacebo will default to an
     // internal loading logic which should work on most platforms.
+    pl_voidfunc_t (*get_proc_addr_ex)(void *proc_ctx, const char *procname);
+    void *proc_ctx;
+
+    // Simpler API for backwards compatibility / convenience. (This one
+    // directly matches the signature of most gl*GetProcAddr library functions)
     pl_voidfunc_t (*get_proc_addr)(const char *procname);
 
     // Enable OpenGL debug report callbacks. May have little effect depending
