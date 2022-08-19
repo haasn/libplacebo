@@ -188,9 +188,9 @@ struct pl_render_params {
     // are scaled so 1.0 corresponds to the `pl_color_transfer_nominal_peak`.
     //
     // Note: A PL_LUT_CONVERSION fully replaces the color adaptation from
-    // `image` to `target`, including any tone-mapping (if necessary). It has
-    // the same representation as PL_LUT_NATIVE, so in this case the input
-    // and output are (respectively) non-linear light RGB.
+    // `image` to `target`, including any tone-mapping (if necessary) and ICC
+    // profiles. It has the same representation as PL_LUT_NATIVE, so in this
+    // case the input and output are (respectively) non-linear light RGB.
     const struct pl_custom_lut *lut;
     enum pl_lut_type lut_type;
 

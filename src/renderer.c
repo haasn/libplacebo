@@ -1745,7 +1745,9 @@ static bool pass_read_image(struct pass_state *pass)
     if (lut_type == PL_LUT_NORMALIZED)
         pl_shader_custom_lut(sh, image->lut, &rr->lut_state[LUT_IMAGE]);
 
-    if (pass->src_icc) {
+    // A main PL_LUT_CONVERSION LUT overrides ICC profiles
+    bool main_lut_override = params->lut && params->lut_type == PL_LUT_CONVERSION;
+    if (pass->src_icc && !main_lut_override) {
         pl_shader_set_alpha(sh, &pass->img.repr, PL_ALPHA_INDEPENDENT);
         pl_icc_decode(sh, pass->src_icc->obj, &pass->src_icc->lut, &pass->img.color);
     }
@@ -1916,6 +1918,10 @@ static bool pass_output_target(struct pass_state *pass)
     // Do all processing in independent alpha, to avoid nonlinear distortions
     pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_INDEPENDENT);
 
+    // Apply color blindness simulation if requested
+    if (params->cone_params)
+        pl_shader_cone_distort(sh, img->color, params->cone_params);
+
     if (params->lut) {
         struct pl_color_space lut_in = params->lut->color_in;
         struct pl_color_space lut_out = params->lut->color_out;
@@ -1964,24 +1970,18 @@ static bool pass_output_target(struct pass_state *pass)
         }
     }
 
-    struct pl_color_space target_csp = target->color;
-    if (pass->dst_icc) {
-        target_csp.transfer = PL_COLOR_TRC_LINEAR;
-        need_conversion = true;
-    }
-
     if (need_conversion) {
+        struct pl_color_space target_csp = target->color;
+        if (pass->dst_icc)
+            target_csp.transfer = PL_COLOR_TRC_LINEAR;
+
         // current -> target
         pl_shader_color_map(sh, params->color_map_params, image->color,
                             target_csp, &rr->tone_map_state, prelinearized);
+
+        if (pass->dst_icc)
+            pl_icc_encode(sh, pass->dst_icc->obj, &pass->dst_icc->lut);
     }
-
-    // Apply color blindness simulation if requested
-    if (params->cone_params)
-        pl_shader_cone_distort(sh, target_csp, params->cone_params);
-
-    if (pass->dst_icc)
-        pl_icc_encode(sh, pass->dst_icc->obj, &pass->dst_icc->lut);
 
     enum pl_lut_type lut_type = guess_frame_lut_type(target, true);
     if (lut_type == PL_LUT_NORMALIZED || lut_type == PL_LUT_CONVERSION)
