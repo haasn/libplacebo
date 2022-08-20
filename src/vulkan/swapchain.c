@@ -296,6 +296,9 @@ static void set_hdr_metadata(struct priv *p, const struct pl_hdr_metadata *metad
         .maxContentLightLevel = metadata->max_cll,
         .maxFrameAverageLightLevel = metadata->max_fall,
     });
+
+    // Keep track of applied HDR colorimetry metadata
+    p->color_space.hdr = *metadata;
 }
 
 pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
@@ -634,7 +637,7 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     p->color_repr.bits.sample_depth = bits;
     p->color_repr.bits.color_depth = bits;
 
-    // FIXME: infer `p->color_space.hdr` etc. from swapchain HDR metadata?
+    // Note: `p->color_space.hdr` is (re-)applied by `set_hdr_metadata`
     map_color_space(sinfo.imageColorSpace, &p->color_space);
 
     // Forcibly re-apply HDR metadata, bypassing the no-op check
