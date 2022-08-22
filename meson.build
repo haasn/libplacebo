@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '218': 'add <libplacbeo/shaders/deinterlacing.h> and pl_shader_deinterlace',
       '217': 'add pl_color_space_infer_map',
       '216': 'add pl_deband_params.grain_neutral',
       '215': 'add pl_opengl_params.get_proc_addr_ex',

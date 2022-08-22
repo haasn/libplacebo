@@ -152,6 +152,7 @@ routines which libplacebo exports:
 - `shaders/custom.h`: Allows directly ingesting custom GLSL logic into the
   `pl_shader` abstraction, either as bare GLSL or in [mpv .hook
   format](https://mpv.io/manual/master/#options-glsl-shaders).
+- `shaders/deinterlacing.h`: GPU deinterlacing shader based on yadif.
 - `shaders/film_grain.h`: Film grain synthesis shaders for AV1 and H.274.
 - `shaders/icc.h`: Shader for ICC profile based color management.
 - `shaders/lut.h`: Code for applying arbitrary 1D/3D LUTs.

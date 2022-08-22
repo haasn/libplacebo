@@ -280,6 +280,13 @@ static void pl_color_space_from_avframe(struct pl_color_space *out_csp,
     }
 }
 
+static inline enum pl_field pl_field_from_avframe(const AVFrame *frame)
+{
+    if (!frame || !frame->interlaced_frame)
+        return PL_FIELD_NONE;
+    return frame->top_field_first ? PL_FIELD_TOP : PL_FIELD_BOTTOM;
+}
+
 #ifdef PL_HAVE_LAV_FILM_GRAIN
 static void pl_film_grain_from_av(struct pl_film_grain_data *out_data,
                                   const AVFilmGrainParams *fgp)

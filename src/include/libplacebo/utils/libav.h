@@ -19,6 +19,7 @@
 #define LIBPLACEBO_LIBAV_H_
 
 #include <libplacebo/gpu.h>
+#include <libplacebo/shaders/deinterlacing.h>
 #include <libplacebo/utils/upload.h>
 
 PL_API_BEGIN
@@ -206,6 +207,9 @@ static enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc);
 // Helper function to generate a `pl_color_space` struct from an AVFrame.
 static void pl_color_space_from_avframe(struct pl_color_space *out_csp,
                                         const AVFrame *frame);
+
+// Helper function to pick the right `pl_field` value for an AVFrame.
+static enum pl_field pl_field_from_avframe(const AVFrame *frame);
 
 #ifdef PL_HAVE_LAV_FILM_GRAIN
 // Fill in film grain parameters from an AVFilmGrainParams.

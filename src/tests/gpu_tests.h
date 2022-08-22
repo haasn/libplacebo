@@ -666,6 +666,14 @@ static void pl_shader_tests(pl_gpu gpu)
         }));
     }
 
+    // Test deinterlacing
+    sh = pl_dispatch_begin(dp);
+    pl_shader_deinterlace(sh, pl_deinterlace_source( .cur = pl_field_pair(src) ), NULL);
+    REQUIRE(pl_dispatch_finish(dp, pl_dispatch_params(
+        .shader = &sh,
+        .target = fbo,
+    )));
+
     pl_dispatch_destroy(&dp);
     pl_tex_destroy(gpu, &src);
     pl_tex_destroy(gpu, &fbo);
