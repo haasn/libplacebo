@@ -1382,6 +1382,33 @@ static inline void log_shader_sources(pl_log log, enum pl_log_level level,
     pl_unreachable();
 }
 
+static void log_spec_constants(pl_log log, enum pl_log_level lev,
+                               const struct pl_pass_params *params,
+                               const void *constant_data)
+{
+    if (!constant_data || !params->num_constants || !pl_msg_test(log, lev))
+        return;
+
+    pl_msg(log, lev, "Specialization constant values:");
+
+    uintptr_t data_base = (uintptr_t) constant_data;
+    for (int i = 0; i < params->num_constants; i++) {
+        union {
+            int i;
+            unsigned u;
+            float f;
+        } *data = (void *) (data_base + params->constants[i].offset);
+        int id = params->constants[i].id;
+
+        switch (params->constants[i].type) {
+        case PL_VAR_SINT:  pl_msg(log, lev, "  constant_id=%d: %d", id, data->i); break;
+        case PL_VAR_UINT:  pl_msg(log, lev, "  constant_id=%d: %u", id, data->u); break;
+        case PL_VAR_FLOAT: pl_msg(log, lev, "  constant_id=%d: %f", id, data->f); break;
+        default: pl_unreachable();
+        }
+    }
+}
+
 pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 {
     struct pl_pass_params fixed;
@@ -1448,8 +1475,10 @@ pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     require(params->push_constants_size <= gpu->limits.max_pushc_size);
     require(params->push_constants_size == PL_ALIGN2(params->push_constants_size, 4));
 
-    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     log_shader_sources(gpu->log, PL_LOG_DEBUG, params);
+    log_spec_constants(gpu->log, PL_LOG_DEBUG, params, params->constant_data);
+
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     pl_pass pass = impl->pass_create(gpu, params);
     if (!pass)
         goto error;
