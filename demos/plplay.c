@@ -1316,9 +1316,11 @@ static void update_settings(struct plplay *p)
             }
 
             if (p->target_icc.len) {
-                nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.7, 0.3 });
+                nk_layout_row_dynamic(nk, 24, 1);
                 nk_labelf(nk, NK_TEXT_LEFT, "Loaded: %s",
                           p->target_icc_name ? p->target_icc_name : "(unknown)");
+                nk_layout_row_dynamic(nk, 24, 2);
+                nk_checkbox_label(nk, "Force BPC", &iccpar->force_bpc);
                 reset_icc |= nk_button_label(nk, "Reset ICC");
             }
 
@@ -1339,7 +1341,7 @@ static void update_settings(struct plplay *p)
 
             if (reset_levels) {
                 tcol->hdr = (struct pl_hdr_metadata) {0};
-                *iccpar = pl_icc_default_params;
+                iccpar->max_luma = 0;
             }
 
             nk_tree_pop(nk);
