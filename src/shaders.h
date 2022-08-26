@@ -279,3 +279,29 @@ static inline const char *sh_tex_fn(const pl_shader sh,
     int dims = pl_tex_params_dimension(params);
     return sh_glsl(sh).version >= 130 ? "texture" : suffixed[dims];
 }
+
+static inline const char *sh_float_type(uint8_t num_comps)
+{
+    switch (num_comps) {
+    case 1: return "float";
+    case 2: return "vec2";
+    case 3: return "vec3";
+    case 4: return "vec4";
+    }
+
+    pl_unreachable();
+}
+
+static inline uint8_t sh_tex_swiz(char swiz[5], uint8_t comp_mask)
+{
+    uint8_t num_comps = 0;
+    for (uint8_t comps = comp_mask; comps;) {
+        uint8_t c = __builtin_ctz(comps);
+        assert(c < 4 && num_comps < 4);
+        swiz[num_comps++] = "xyzw"[c];
+        comps &= ~(1u << c);
+    }
+
+    swiz[num_comps] = '\0';
+    return num_comps;
+}
