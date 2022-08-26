@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '228': 'add pl_icc_params.force_bpc',
       '227': 'refactor `pl_render_info.index` and add `pl_render_info.count`',
       '226': 'add `pl_dither_params.transfer` and `pl_render_params.disable_dither_gamma_correction`',
       '225': 'add `pl_render_params.error_diffusion`',

@@ -469,6 +469,23 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
             size_t offset = (b * s_g + g) * s_r * 4;
             uint16_t *data = ((uint16_t *) datap) + offset;
             cmsDoTransform(tf, tmp, data, s_r);
+
+            if (!icc->params.force_bpc)
+                continue;
+
+            // Fix the black point manually. Work-around for "improper"
+            // profiles, as black point compensation should already have
+            // taken care of this normally.
+            const uint16_t knee = 16u << 8;
+            if (tmp[0] >= knee || tmp[1] >= knee)
+                continue;
+            for (int r = 0; r < s_r; r++) {
+                uint16_t s = (2 * tmp[1] + tmp[2] + tmp[r * 3]) >> 2;
+                if (s >= knee)
+                    break;
+                for (int c = 0; c < 3; c++)
+                    data[r * 3 + c] = (s * data[r * 3 + c] + (knee - s) * s) >> 12;
+            }
         }
     }
 

@@ -48,6 +48,12 @@ struct pl_icc_params {
     // if unavailable.
     float max_luma;
 
+    // Force black point compensation. May help avoid crushed or raised black
+    // points on "improper" profiles containing e.g. colorimetric tables that
+    // do not round-trip. Should not be required on well-behaved profiles,
+    // or when using PL_INTENT_PERCEPTUAL, but YMMV.
+    bool force_bpc;
+
     // 3DLUT caching API. Providing these functions can help speed up ICC LUT
     // generation by saving/loading profiles to/from disk. Both of these
     // callbacks are optional.

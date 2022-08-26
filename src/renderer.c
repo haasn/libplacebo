@@ -2538,11 +2538,12 @@ static void pass_uninit(struct pass_state *pass)
 static bool icc_params_compat(const struct pl_icc_params *a,
                               const struct pl_icc_params *b)
 {
-    return a->intent   == b->intent &&
-           a->size_r   == b->size_r &&
-           a->size_g   == b->size_g &&
-           a->size_b   == b->size_b &&
-           a->max_luma == b->max_luma;
+    return a->intent    == b->intent    &&
+           a->size_r    == b->size_r    &&
+           a->size_g    == b->size_g    &&
+           a->size_b    == b->size_b    &&
+           a->max_luma  == b->max_luma  &&
+           a->force_bpc == b->force_bpc;
 }
 
 static struct icc_state *update_icc(struct pass_state *pass,
