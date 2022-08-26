@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '216': 'add pl_deband_params.grain_neutral',
       '215': 'add pl_opengl_params.get_proc_addr_ex',
       '214': 'drop deprecated legacy C struct names',
       '213': 'add pl_opengl_params.get_proc_addr',

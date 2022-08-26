@@ -87,6 +87,12 @@ struct pl_deband_params {
     //
     // Defaults to 6.0, which is very mild.
     float grain;
+
+    // 'Neutral' grain value for each channel being debanded (sorted in order
+    // from low to high index). Grain application will be modulated to avoid
+    // disturbing colors close to this value. Set this to a value corresponding
+    // to black in the relevant colorspace.
+    float grain_neutral[3];
 };
 
 #define PL_DEBAND_DEFAULTS  \

@@ -203,6 +203,7 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
          fn, tex, pos);
 
     uint8_t num_comps = sh_tex_swiz(swiz, mask & ~0x8u); // ignore alpha
+    pl_assert(num_comps <= 3);
     if (!num_comps) {
         GLSL("color *= %s;  \n"
              "}             \n",
@@ -256,9 +257,16 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
 
     // Add some random noise to smooth out residual differences
     if (params->grain > 0) {
-        pl_assert(num_comps <= 3);
-        GLSL("res += %s * (T(%s) - T(0.5)); \n",
-             SH_FLOAT(params->grain / (1000 * scale)), prng);
+        // Avoid adding grain near true black
+        GLSL("bound = T(\n");
+        for (int c = 0; c < num_comps; c++) {
+            GLSL("%c%s", c > 0 ? ',' : ' ',
+                 SH_FLOAT(params->grain_neutral[c] / scale));
+        }
+        GLSL(");                                        \n"
+             "T strength = min(abs(res - bound), %s);   \n"
+             "res += strength * (T(%s) - T(0.5));       \n",
+             SH_FLOAT(params->grain / (1000.0 * scale)), prng);
     }
 
     GLSL("color.%s = res;   \n"
