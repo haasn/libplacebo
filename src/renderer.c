@@ -1095,7 +1095,7 @@ enum {
 };
 
 static int deband_src(struct pass_state *pass, pl_shader psh,
-                      struct pl_sample_src *psrc)
+                      struct pl_sample_src *psrc, float neutral[3])
 {
     const struct pl_render_params *params = pass->params;
     const struct pl_frame *image = &pass->image;
@@ -1142,6 +1142,7 @@ static int deband_src(struct pass_state *pass, pl_shader psh,
     // process (well before any linearization / output adaptation)
     struct pl_deband_params dparams = *params->deband_params;
     dparams.grain /= image->color.hdr.max_luma / PL_COLOR_SDR_WHITE;
+    memcpy(dparams.grain_neutral, neutral, sizeof(dparams.grain_neutral));
 
     pl_shader_deband(sh, &src, &dparams);
 
@@ -1595,21 +1596,19 @@ static bool pass_read_image(struct pass_state *pass)
     sh_require(sh, PL_SHADER_SIG_NONE, 0, 0);
 
     // Initialize the color to black
-    const char *neutral_chroma = "0.0";
-    if (pl_color_system_is_ycbcr_like(image->repr.sys)) {
-        int bits = image->repr.bits.sample_depth;
-        if (bits) {
-            neutral_chroma = SH_FLOAT((float) (1 << (bits - 1)) / ((1 << bits) - 1));
-        } else {
-            neutral_chroma = "0.5"; // floating point formats
-        }
-    }
+    int bits = image->repr.bits.sample_depth;
+    float out_scale = bits ? (1 << bits) / ((1 << bits) - 1.0f) : 1.0f;
+    float neutral_luma = 0.0, neutral_chroma = 0.5f * out_scale;
+    if (pl_color_levels_guess(&image->repr) == PL_COLOR_LEVELS_LIMITED)
+        neutral_luma = 16 / 256.0f * out_scale;
+    if (!pl_color_system_is_ycbcr_like(image->repr.sys))
+        neutral_chroma = neutral_luma;
 
-    GLSL("vec4 color = vec4(0.0, %s, %s, 1.0);   \n"
+    GLSL("vec4 color = vec4(%s, vec2(%s), 1.0);  \n"
          "// pass_read_image                     \n"
          "{                                      \n"
          "vec4 tmp;                              \n",
-         neutral_chroma, neutral_chroma);
+         SH_FLOAT(neutral_luma), SH_FLOAT(neutral_chroma));
 
     // For quality reasons, explicitly drop subpixel offsets from the ref rect
     // and re-add them as part of `pass->img.rect`, always rounding towards 0.
@@ -1629,6 +1628,15 @@ static bool pass_read_image(struct pass_state *pass)
               scale_y = pl_rect_h(st->img.rect) / pl_rect_h(ref->img.rect),
               base_x = st->img.rect.x0 - scale_x * off_x,
               base_y = st->img.rect.y0 - scale_y * off_y;
+
+        float neutral[3] = {0.0};
+        for (int c = 0; c < plane->components; c++) {
+            switch (plane->component_mapping[c]) {
+            case PL_CHANNEL_Y: neutral[c] = neutral_luma; break;
+            case PL_CHANNEL_U: // fall through
+            case PL_CHANNEL_V: neutral[c] = neutral_chroma; break;
+            }
+        }
 
         struct pl_sample_src src = {
             .tex        = st->img.tex,
@@ -1658,7 +1666,7 @@ static bool pass_read_image(struct pass_state *pass)
                  plane->flipped ? " (flipped) " : "");
 
         pl_shader psh = pl_dispatch_begin_ex(rr->dp, true);
-        if (deband_src(pass, psh,  &src) != DEBAND_SCALED)
+        if (deband_src(pass, psh,  &src, neutral) != DEBAND_SCALED)
             dispatch_sampler(pass, psh, &rr->samplers_src[i], NULL, &src);
 
         ident_t sub = sh_subpass(sh, psh);
