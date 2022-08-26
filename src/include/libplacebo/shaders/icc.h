@@ -76,7 +76,7 @@ struct pl_icc_params {
 
 #define PL_ICC_DEFAULTS                         \
     .intent = PL_INTENT_RELATIVE_COLORIMETRIC,  \
-    .max_luma = PL_COLOR_SDR_WHITE
+    .max_luma = PL_COLOR_SDR_WHITE,
 
 #define pl_icc_params(...) (&(struct pl_icc_params) { PL_ICC_DEFAULTS __VA_ARGS__ })
 extern const struct pl_icc_params pl_icc_default_params;
