@@ -189,44 +189,40 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
     float scale;
     ident_t tex, pos, pt;
     const char *fn;
-    if (!setup_src(sh, src, &tex, &pos, NULL, &pt, NULL, NULL, NULL, &scale,
+    uint8_t mask;
+    char swiz[5];
+    if (!setup_src(sh, src, &tex, &pos, NULL, &pt, NULL, NULL, &mask, &scale,
                    false, &fn, LINEAR))
         return;
 
     params = PL_DEF(params, &pl_deband_default_params);
     sh_describe(sh, "debanding");
-    GLSL("vec4 color;           \n"
-         "// pl_shader_deband   \n"
-         "{                     \n");
+    GLSL("vec4 color = %s(%s, %s);  \n"
+         "// pl_shader_deband       \n"
+         "{                         \n",
+         fn, tex, pos);
 
-    ident_t prng, state;
-    prng = sh_prng(sh, true, &state);
+    uint8_t num_comps = sh_tex_swiz(swiz, mask & ~0x8u); // ignore alpha
+    if (!num_comps) {
+        GLSL("color *= %s;  \n"
+             "}             \n",
+             SH_FLOAT(scale));
+        return;
+    }
 
-    GLSL("vec2 pos = %s;       \n"
-         "vec4 avg, diff;      \n"
-         "color = %s(%s, pos); \n",
-         pos, fn, tex);
+    GLSL("#define GET(X, Y) (%s(%s, %s + %s * vec2(X, Y)).%s)   \n"
+         "#define T %s                                          \n",
+         fn, tex, pos, pt, swiz,
+         sh_float_type(num_comps));
+
+    const char *bvec = sh_bvec(sh, num_comps);
+    ident_t prng = sh_prng(sh, true, NULL);
+    GLSL("T avg, diff, bound;   \n"
+         "T res = color.%s;     \n"
+         "vec2 d;               \n",
+         swiz);
 
     if (params->iterations > 0) {
-        // Helper function: Compute a stochastic approximation of the avg color
-        // around a pixel, given a specified radius
-        ident_t average = sh_fresh(sh, "average");
-        GLSLH("vec4 %s(vec2 pos, float range, inout prng_t %s) {\n"
-              // Compute a random angle and distance
-              "    vec2 dd = %s.xy * vec2(range, %f);           \n"
-              "    vec2 o = dd.x * vec2(cos(dd.y), sin(dd.y));  \n"
-              // Sample at quarter-turn intervals around the source pixel
-              "    vec4 sum = vec4(0.0);                        \n"
-              "    sum += %s(%s, pos + %s * vec2( o.x,  o.y));  \n"
-              "    sum += %s(%s, pos + %s * vec2(-o.x,  o.y));  \n"
-              "    sum += %s(%s, pos + %s * vec2(-o.x, -o.y));  \n"
-              "    sum += %s(%s, pos + %s * vec2( o.x, -o.y));  \n"
-              // Return the (normalized) average
-              "    return 0.25 * sum;                               \n"
-              "}\n",
-              average, state, prng, M_PI * 2,
-              fn, tex, pt, fn, tex, pt, fn, tex, pt, fn, tex, pt);
-
         ident_t radius = sh_const_float(sh, "radius", params->radius);
         ident_t threshold = sh_const_float(sh, "threshold",
                                            params->threshold / (1000 * scale));
@@ -234,22 +230,43 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
         // For each iteration, compute the average at a given distance and
         // pick it instead of the color if the difference is below the threshold.
         for (int i = 1; i <= params->iterations; i++) {
-            GLSL("avg = %s(pos, %d.0 * %s, %s);                                     \n"
-                 "diff = abs(color - avg);                                          \n"
-                 "color = mix(avg, color, %s(greaterThan(diff, vec4(%s / %d.0))));  \n",
-                 average, i, radius, state, sh_bvec(sh, 4), threshold, i);
+            GLSL(// Compute a random angle and distance
+                 "d = %s.xy * vec2(%d.0 * %s, %f);                  \n"
+                 "d = d.x * vec2(cos(d.y), sin(d.y));               \n"
+                 // Sample at quarter-turn intervals around the source pixel
+                 "avg = T(0.0);                                     \n"
+                 "avg += GET(+d.x, +d.y);                           \n"
+                 "avg += GET(-d.x, +d.y);                           \n"
+                 "avg += GET(-d.x, -d.y);                           \n"
+                 "avg += GET(+d.x, -d.y);                           \n"
+                 "avg *= 0.25;                                      \n"
+                 // Compare the (normalized) average against the pixel
+                 "diff = abs(res - avg);                            \n"
+                 "bound = T(%s / %d.0);                             \n",
+                 prng, i, radius, M_PI * 2,
+                 threshold, i);
+
+            if (num_comps > 1) {
+                GLSL("res = mix(avg, res, %s(greaterThan(diff, bound))); \n", bvec);
+            } else {
+                GLSL("res = mix(avg, res, %s(diff > bound)); \n", bvec);
+            }
         }
     }
 
-    GLSL("color *= vec4(%s);\n", SH_FLOAT(scale));
-
     // Add some random noise to smooth out residual differences
     if (params->grain > 0) {
-        GLSL( "color.rgb += %s * (%s - vec3(0.5)); \n",
-             SH_FLOAT(params->grain / 1000.0), prng);
+        pl_assert(num_comps <= 3);
+        GLSL("res += %s * (T(%s) - T(0.5)); \n",
+             SH_FLOAT(params->grain / (1000 * scale)), prng);
     }
 
-    GLSL("}\n");
+    GLSL("color.%s = res;   \n"
+         "color *= %s;      \n"
+         "#undef T          \n"
+         "#undef GET        \n"
+         "}                 \n",
+         swiz, SH_FLOAT(scale));
 }
 
 bool pl_shader_sample_direct(pl_shader sh, const struct pl_sample_src *src)
