@@ -421,7 +421,17 @@ void pl_color_space_infer(struct pl_color_space *space)
 
     if (space->hdr.min_luma <= 0 || space->hdr.min_luma > 100) {
         if (pl_color_transfer_is_hdr(space->transfer)) {
-            space->hdr.min_luma = 0.0050f; // Typical HDR black
+            // Use a slightly nonzero black level, for the following reasons:
+            // - 0 may be seen as 'missing/undefined' in HDR10 metadata structs
+            //
+            // - we need to clamp to 1e-7 to avoid issues with some tone
+            //   mapping functions anyway, so doing it here also advertises
+            //   this fact downstream
+            //
+            // - true infinite contrast does not exist in reality, even 1e-7
+            //   is extremely generous considering typical viewing environments
+            //   are not absolutely devoid of stray ambient light
+            space->hdr.min_luma = 1e-7;
         } else {
             space->hdr.min_luma = space->hdr.max_luma / 1000; // Typical SDR contrast
         }
