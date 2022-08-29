@@ -450,32 +450,55 @@ void pl_color_space_infer(struct pl_color_space *space)
     pl_raw_primaries_merge(&space->hdr.prim, pl_raw_primaries_get(space->primaries));
 }
 
-void pl_color_space_infer_ref(struct pl_color_space *space,
-                              const struct pl_color_space *refp)
+static void infer_both_ref(struct pl_color_space *space,
+                           struct pl_color_space *ref)
 {
-    struct pl_color_space ref = *refp;
-    pl_color_space_infer(&ref);
+    pl_color_space_infer(ref);
 
     if (!space->primaries) {
-        if (pl_color_primaries_is_wide_gamut(ref.primaries)) {
+        if (pl_color_primaries_is_wide_gamut(ref->primaries)) {
             space->primaries = PL_COLOR_PRIM_BT_709;
         } else {
-            space->primaries = ref.primaries;
+            space->primaries = ref->primaries;
         }
     }
 
     if (!space->transfer) {
-        if (pl_color_transfer_is_hdr(ref.transfer)) {
+        if (pl_color_transfer_is_hdr(ref->transfer)) {
             space->transfer = PL_COLOR_TRC_BT_1886;
-        } else if (ref.transfer == PL_COLOR_TRC_LINEAR) {
+        } else if (ref->transfer == PL_COLOR_TRC_LINEAR) {
             space->transfer = PL_COLOR_TRC_GAMMA22;
         } else {
-            space->transfer = ref.transfer;
+            space->transfer = ref->transfer;
         }
     }
 
     // Infer the remaining fields after making the above choices
     pl_color_space_infer(space);
+}
+
+void pl_color_space_infer_ref(struct pl_color_space *space,
+                              const struct pl_color_space *refp)
+{
+    // Make a copy of `refp` to infer missing values first
+    struct pl_color_space ref = *refp;
+    infer_both_ref(space, &ref);
+}
+
+void pl_color_space_infer_map(struct pl_color_space *src,
+                              struct pl_color_space *dst)
+{
+    bool unknown_contrast = !src->hdr.min_luma;
+    infer_both_ref(dst, src);
+
+    // If the src has an unspecified SDR-like gamma, default it to match the
+    // dst colorspace contrast. This does not matter in most cases, but ensures
+    // that BT.1886 is tuned to the appropriate black point by default.
+    bool dynamic_contrast = pl_color_space_is_black_scaled(src) ||
+                            src->transfer == PL_COLOR_TRC_BT_1886;
+
+    if (unknown_contrast && dynamic_contrast)
+        src->hdr.min_luma = dst->hdr.min_luma;
 }
 
 const struct pl_color_adjustment pl_color_adjustment_neutral = {

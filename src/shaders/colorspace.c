@@ -1630,8 +1630,7 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
-    pl_color_space_infer(&src);
-    pl_color_space_infer_ref(&dst, &src);
+    pl_color_space_infer_map(&src, &dst);
     if (pl_color_space_equal(&src, &dst)) {
         if (prelinearized)
             pl_shader_delinearize(sh, &dst);

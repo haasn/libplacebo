@@ -2376,15 +2376,13 @@ static void fix_refs_and_rects(struct pass_state *pass)
     };
 }
 
-static void fix_color_space(struct pl_frame *frame)
+static void fix_frame(struct pl_frame *frame)
 {
     pl_tex tex = frame->planes[frame_ref(frame)].texture;
 
     // If the primaries are not known, guess them based on the resolution
     if (tex && !frame->color.primaries)
         frame->color.primaries = pl_color_primaries_guess(tex->params.w, tex->params.h);
-
-    pl_color_space_infer(&frame->color);
 
     // For UNORM formats, we can infer the sampled bit depth from the texture
     // itself. This is ignored for other format types, because the logic
@@ -2488,10 +2486,13 @@ static bool pass_init(struct pass_state *pass, bool acquire_image)
 
     // Infer the target color space info based on the image's
     if (image) {
-        fix_color_space(image);
-        pl_color_space_infer_ref(&target->color, &image->color);
+        fix_frame(image);
+        pl_color_space_infer_map(&image->color, &target->color);
+        fix_frame(target); // do this only after infer_map
+    } else {
+        fix_frame(target);
+        pl_color_space_infer(&target->color);
     }
-    fix_color_space(target);
 
     // Detect the presence of an alpha channel in the frames and explicitly
     // default the alpha mode in this case, so we can use it to detect whether
