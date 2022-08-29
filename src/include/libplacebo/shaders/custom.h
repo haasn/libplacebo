@@ -123,7 +123,7 @@ enum pl_hook_stage {
     PL_HOOK_OUTPUT          = 1 << 14, // After color management, before dithering
 
     // Deprecated alias
-    PL_HOOK_PRE_OVERLAY PL_DEPRECATED = PL_HOOK_PRE_KERNEL,
+    PL_HOOK_PRE_OVERLAY PL_DEPRECATED_ENUMERATOR = PL_HOOK_PRE_KERNEL,
 };
 
 // Returns true if a given hook stage is resizable
