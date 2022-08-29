@@ -50,6 +50,12 @@ const char *pl_version(void);
 #define __has_feature(x) 0
 #endif
 
+#if (defined(__GNUC__) && (__GNUC__ >= 6)) || __has_feature(enumerator_attributes)
+#define PL_DEPRECATED_ENUMERATOR PL_DEPRECATED
+#else
+#define PL_DEPRECATED_ENUMERATOR
+#endif
+
 // C++ compatibility
 #ifdef __cplusplus
 # define PL_API_BEGIN extern "C" {
