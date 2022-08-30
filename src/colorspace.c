@@ -406,9 +406,7 @@ void pl_color_space_infer(struct pl_color_space *space)
         space->sig_floor = 0;
     }
 
-    if (space->hdr.max_luma < space->hdr.min_luma) // sanity
-        space->hdr.max_luma = space->hdr.min_luma = 0;
-
+reinfer_peaks:
     if (space->hdr.max_luma < 1 || space->hdr.max_luma > 10000) {
         space->hdr.max_luma = pl_color_transfer_nominal_peak(space->transfer)
                               * PL_COLOR_SDR_WHITE;
@@ -435,6 +433,12 @@ void pl_color_space_infer(struct pl_color_space *space)
         } else {
             space->hdr.min_luma = space->hdr.max_luma / 1000; // Typical SDR contrast
         }
+    }
+
+    pl_assert(space->hdr.min_luma && space->hdr.max_luma);
+    if (space->hdr.max_luma < space->hdr.min_luma) { // sanity
+        space->hdr.max_luma = space->hdr.min_luma = 0;
+        goto reinfer_peaks;
     }
 
     if (space->sig_scale && !pl_color_transfer_is_hdr(space->transfer)) {
