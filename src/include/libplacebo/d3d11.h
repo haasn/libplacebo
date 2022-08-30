@@ -108,8 +108,8 @@ struct pl_d3d11_params {
     //
     // If these restrictions are undesirable and you don't need to support
     // ancient hardware, set `min_feature_level` to D3D_FEATURE_LEVEL_10_0.
-    int min_feature_level; // Defaults to D3D_FEATURE_LEVEL_12_1 if unset
-    int max_feature_level; // Defaults to D3D_FEATURE_LEVEL_9_1 if unset
+    int min_feature_level; // Defaults to D3D_FEATURE_LEVEL_9_1 if unset
+    int max_feature_level; // Defaults to D3D_FEATURE_LEVEL_12_1 if unset
 
     // Allow up to N in-flight frames. Similar to swapchain_depth for Vulkan and
     // OpenGL, though with DXGI this is a device-wide setting that affects all
