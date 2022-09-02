@@ -27,6 +27,7 @@ struct cache_entry {
 };
 
 struct entry {
+    pl_rc_t rc;
     struct cache_entry cache;
     struct pl_source_frame src;
     struct pl_frame frame;
@@ -111,8 +112,34 @@ pl_queue pl_queue_create(pl_gpu gpu)
     return p;
 }
 
-static inline void unmap_frame(pl_queue p, struct entry *entry)
+static void recycle_cache(pl_queue p, struct cache_entry *cache, bool recycle)
 {
+    bool has_textures = false;
+    for (int i = 0; i < PL_ARRAY_SIZE(cache->tex); i++) {
+        if (!cache->tex[i])
+            continue;
+
+        has_textures = true;
+        if (recycle) {
+            pl_tex_invalidate(p->gpu, cache->tex[i]);
+        } else {
+            pl_tex_destroy(p->gpu, &cache->tex[i]);
+        }
+    }
+
+    if (recycle && has_textures)
+        PL_ARRAY_APPEND(p, p->cache, *cache);
+
+    memset(cache, 0, sizeof(*cache)); // sanity
+}
+
+static void entry_deref(pl_queue p, struct entry **pentry, bool recycle)
+{
+    struct entry *entry = *pentry;
+    *pentry = NULL;
+    if (!entry || !pl_rc_deref(&entry->rc))
+        return;
+
     if (!entry->mapped && entry->src.discard) {
         PL_TRACE(p, "Discarding unused frame id %"PRIu64" with PTS %f",
                  entry->signature, entry->src.pts);
@@ -124,8 +151,10 @@ static inline void unmap_frame(pl_queue p, struct entry *entry)
                  entry->signature, entry->src.pts);
         entry->src.unmap(p->gpu, &entry->frame, &entry->src);
     }
-}
 
+    recycle_cache(p, &entry->cache, recycle);
+    pl_free(entry);
+}
 
 void pl_queue_destroy(pl_queue *queue)
 {
@@ -133,13 +162,8 @@ void pl_queue_destroy(pl_queue *queue)
     if (!p)
         return;
 
-    for (int n = 0; n < p->queue.num; n++) {
-        struct entry *entry = p->queue.elem[n];
-        unmap_frame(p, entry);
-        for (int i = 0; i < PL_ARRAY_SIZE(entry->cache.tex); i++)
-            pl_tex_destroy(p->gpu, &entry->cache.tex[i]);
-    }
-
+    for (int n = 0; n < p->queue.num; n++)
+        entry_deref(p, &p->queue.elem[n], false);
     for (int n = 0; n < p->cache.num; n++) {
         for (int i = 0; i < PL_ARRAY_SIZE(p->cache.elem[n].tex); i++)
             pl_tex_destroy(p->gpu, &p->cache.elem[n].tex[i]);
@@ -152,30 +176,13 @@ void pl_queue_destroy(pl_queue *queue)
     *queue = NULL;
 }
 
-static inline void cull_entry(pl_queue p, struct entry *entry)
-{
-    unmap_frame(p, entry);
-
-    // Recycle non-empty texture cache entries
-    static const struct cache_entry null_cache = {0};
-    if (memcmp(&entry->cache, &null_cache, sizeof(null_cache)) != 0) {
-        for (int i = 0; i < PL_ARRAY_SIZE(entry->cache.tex); i++) {
-            if (entry->cache.tex[i])
-                pl_tex_invalidate(p->gpu, entry->cache.tex[i]);
-        }
-        PL_ARRAY_APPEND(p, p->cache, entry->cache);
-    }
-
-    pl_free(entry);
-}
-
 void pl_queue_reset(pl_queue p)
 {
     pl_mutex_lock(&p->lock_strong);
     pl_mutex_lock(&p->lock_weak);
 
     for (int i = 0; i < p->queue.num; i++)
-        cull_entry(p, p->queue.elem[i]);
+        entry_deref(p, &p->queue.elem[i], false);
 
     *p = (struct pl_queue_t) {
         .gpu = p->gpu,
@@ -270,6 +277,7 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
         .signature = p->signature++,
         .src = *src,
     };
+    pl_rc_init(&entry->rc);
     PL_ARRAY_POP(p->cache, &entry->cache);
     PL_TRACE(p, "Added new frame id %"PRIu64" with PTS %f",
              entry->signature, src->pts);
@@ -420,7 +428,7 @@ static enum pl_queue_status advance(pl_queue p, float pts,
     int culled = 0;
     for (int i = 1; i < p->queue.num; i++) {
         if (p->queue.elem[i]->src.pts <= pts) {
-            cull_entry(p, p->queue.elem[i - 1]);
+            entry_deref(p, &p->queue.elem[i - 1], true);
             culled++;
         }
     }
@@ -439,7 +447,7 @@ static enum pl_queue_status advance(pl_queue p, float pts,
         case PL_QUEUE_MORE:
         case PL_QUEUE_OK:
             while (p->queue.num > 1 && p->queue.elem[1]->src.pts <= pts) {
-                cull_entry(p, p->queue.elem[0]);
+                entry_deref(p, &p->queue.elem[0], true);
                 PL_ARRAY_REMOVE_AT(p->queue, 0);
             }
             if (ret == PL_QUEUE_MORE)
@@ -461,7 +469,7 @@ done:
         // Last frame is held for an extra `p->fps.estimate` duration,
         // afterwards this function just returns EOF.
         if (p->queue.elem[0]->src.pts + p->fps.estimate < pts) {
-            cull_entry(p, p->queue.elem[0]);
+            entry_deref(p, &p->queue.elem[0], true);
             p->queue.num = 0;
             return PL_QUEUE_EOF;
         }
