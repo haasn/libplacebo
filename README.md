@@ -148,11 +148,12 @@ In addition to this low-level interface, there are several available shader
 routines which libplacebo exports:
 
 - `shaders/colorspace.h`: Shader routines for decoding and transforming
-  colors, tone mapping, dithering, and so forth.
+  colors, tone mapping, and so forth.
 - `shaders/custom.h`: Allows directly ingesting custom GLSL logic into the
   `pl_shader` abstraction, either as bare GLSL or in [mpv .hook
   format](https://mpv.io/manual/master/#options-glsl-shaders).
 - `shaders/deinterlacing.h`: GPU deinterlacing shader based on yadif.
+- `shaders/dithering.h`: Shader routine for various GPU dithering methods.
 - `shaders/film_grain.h`: Film grain synthesis shaders for AV1 and H.274.
 - `shaders/icc.h`: Shader for ICC profile based color management.
 - `shaders/lut.h`: Code for applying arbitrary 1D/3D LUTs.

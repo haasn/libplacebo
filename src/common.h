@@ -71,6 +71,7 @@
 #include <libplacebo/shaders/colorspace.h>
 #include <libplacebo/shaders/custom.h>
 #include <libplacebo/shaders/deinterlacing.h>
+#include <libplacebo/shaders/dithering.h>
 #include <libplacebo/shaders/film_grain.h>
 #include <libplacebo/shaders/icc.h>
 #include <libplacebo/shaders/lut.h>
