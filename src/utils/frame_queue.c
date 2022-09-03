@@ -213,6 +213,12 @@ static inline float delta(float old, float new)
     return fabs((new - old) / PL_MIN(new, old));
 }
 
+static inline void default_estimate(struct pool *pool, float val)
+{
+    if (!pool->estimate && isnormal(val) && val > 0.0)
+        pool->estimate = val;
+}
+
 static inline void update_estimate(struct pool *pool, float cur)
 {
     if (pool->num) {
@@ -258,6 +264,7 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
     }
 
     // Update FPS estimates if possible/reasonable
+    default_estimate(&p->fps, src->duration);
     if (p->queue.num) {
         float last_pts = p->queue.elem[p->queue.num - 1]->src.pts;
         float delta = src->pts - last_pts;
@@ -741,12 +748,6 @@ static bool prefill(pl_queue p, const struct pl_queue_params *params)
     }
 
     return true;
-}
-
-static inline void default_estimate(struct pool *pool, float val)
-{
-    if (!pool->estimate && isnormal(val) && val > 0.0)
-        pool->estimate = val;
 }
 
 enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,

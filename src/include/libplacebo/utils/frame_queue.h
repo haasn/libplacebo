@@ -47,6 +47,12 @@ struct pl_source_frame {
     // frame queue with `pl_queue_reset` and restart from PTS 0.0.
     float pts;
 
+    // The frame's duration. This is not needed in normal scenarios, as the
+    // FPS can be inferred from the `pts` values themselves. Providing it
+    // only helps initialize the value for initial frames, which can smooth
+    // out the interpolation weights. (Optional)
+    float duration;
+
     // Abstract frame data itself. To allow mapping frames only when they're
     // actually needed, frames use a lazy representation. The provided
     // callbacks will be invoked to interface with it.
@@ -129,11 +135,6 @@ struct pl_queue_params {
     // between calls to `pl_queue_update`. (Optional)
     float vsync_duration;
 
-    // The estimated duration of a frame, in seconds. This will only be used as
-    // an initial hint, the true value will be estimated by comparing `pts`
-    // timestamps between source frames. (Optional)
-    float frame_duration;
-
     // If the difference between the (estimated) vsync duration and the
     // (measured) frame duration is smaller than this threshold, silently
     // disable interpolation and switch to ZOH semantics instead.
@@ -163,6 +164,9 @@ struct pl_queue_params {
     enum pl_queue_status (*get_frame)(struct pl_source_frame *out_frame,
                                       const struct pl_queue_params *params);
     void *priv;
+
+    // Deprecated fields
+    float frame_duration PL_DEPRECATED; // see `pl_source_frame.duration`
 };
 
 #define pl_queue_params(...) (&(struct pl_queue_params) { __VA_ARGS__ })
