@@ -186,3 +186,130 @@ void pl_generate_blue_noise(float *data, int size)
     }
     pl_free(k);
 }
+
+const struct pl_error_diffusion_kernel pl_error_diffusion_simple = {
+    .name = "simple",
+    .description = "Simple error diffusion",
+    .shift = 1,
+    .pattern = {{0, 0, 0, 1, 0},
+                {0, 0, 1, 0, 0},
+                {0, 0, 0, 0, 0}},
+    .divisor = 2,
+};
+
+const struct pl_error_diffusion_kernel pl_error_diffusion_false_fs = {
+    .name = "false-fs",
+    .description = "False Floyd-Steinberg kernel",
+    .shift = 1,
+    .pattern = {{0, 0, 0, 3, 0},
+                {0, 0, 3, 2, 0},
+                {0, 0, 0, 0, 0}},
+    .divisor = 8,
+};
+
+const struct pl_error_diffusion_kernel pl_error_diffusion_sierra_lite = {
+    .name = "sierra-lite",
+    .description = "Sierra Lite kernel",
+    .shift = 2,
+    .pattern = {{0, 0, 0, 2, 0},
+                {0, 1, 1, 0, 0},
+                {0, 0, 0, 0, 0}},
+    .divisor = 4,
+};
+
+const struct pl_error_diffusion_kernel pl_error_diffusion_floyd_steinberg = {
+    .name = "floyd-steinberg",
+    .description = "Floyd Steinberg kernel",
+    .shift = 2,
+    .pattern = {{0, 0, 0, 7, 0},
+                {0, 3, 5, 1, 0},
+                {0, 0, 0, 0, 0}},
+    .divisor = 16,
+};
+
+const struct pl_error_diffusion_kernel pl_error_diffusion_atkinson = {
+    .name = "atkinson",
+    .description = "Atkinson kernel",
+    .shift = 2,
+    .pattern = {{0, 0, 0, 1, 1},
+                {0, 1, 1, 1, 0},
+                {0, 0, 1, 0, 0}},
+    .divisor = 8,
+};
+
+const struct pl_error_diffusion_kernel pl_error_diffusion_jarvis_judice_ninke = {
+    .name = "jarvis-judice-ninke",
+    .description = "Jarvis, Judice & Ninke kernel",
+    .shift = 3,
+    .pattern = {{0, 0, 0, 7, 5},
+                {3, 5, 7, 5, 3},
+                {1, 3, 5, 3, 1}},
+    .divisor = 48,
+};
+
+const struct pl_error_diffusion_kernel pl_error_diffusion_stucki = {
+    .name = "stucki",
+    .description = "Stucki kernel",
+    .shift = 3,
+    .pattern = {{0, 0, 0, 8, 4},
+                {2, 4, 8, 4, 2},
+                {1, 2, 4, 2, 1}},
+    .divisor = 42,
+};
+
+const struct pl_error_diffusion_kernel pl_error_diffusion_burkes = {
+    .name = "burkes",
+    .description = "Burkes kernel",
+    .shift = 3,
+    .pattern = {{0, 0, 0, 8, 4},
+                {2, 4, 8, 4, 2},
+                {0, 0, 0, 0, 0}},
+    .divisor = 32,
+};
+
+const struct pl_error_diffusion_kernel pl_error_diffusion_sierra2 = {
+    .name = "sierra-2",
+    .description = "Two-row Sierra",
+    .shift = 3,
+    .pattern = {{0, 0, 0, 4, 3},
+                {1, 2, 3, 2, 1},
+                {0, 0, 0, 0, 0}},
+    .divisor = 16,
+};
+
+const struct pl_error_diffusion_kernel pl_error_diffusion_sierra3 = {
+    .name = "sierra-3",
+    .description = "Three-row Sierra",
+    .shift = 3,
+    .pattern = {{0, 0, 0, 5, 3},
+                {2, 4, 5, 4, 2},
+                {0, 2, 3, 2, 0}},
+    .divisor = 32,
+};
+
+const struct pl_error_diffusion_kernel * const pl_error_diffusion_kernels[] = {
+    &pl_error_diffusion_simple,
+    &pl_error_diffusion_false_fs,
+    &pl_error_diffusion_sierra_lite,
+    &pl_error_diffusion_floyd_steinberg,
+    &pl_error_diffusion_atkinson,
+    &pl_error_diffusion_jarvis_judice_ninke,
+    &pl_error_diffusion_stucki,
+    &pl_error_diffusion_burkes,
+    &pl_error_diffusion_sierra2,
+    &pl_error_diffusion_sierra3,
+    NULL
+};
+
+const int pl_num_error_diffusion_kernels = PL_ARRAY_SIZE(pl_error_diffusion_kernels) - 1;
+
+// Find the error diffusion kernel with the given name, or NULL on failure.
+const struct pl_error_diffusion_kernel *pl_find_error_diffusion_kernel(const char *name)
+{
+    for (int i = 0; i < pl_num_error_diffusion_kernels; i++) {
+        if (strcmp(name, pl_error_diffusion_kernels[i]->name) == 0)
+            return pl_error_diffusion_kernels[i];
+    }
+
+    return NULL;
+}

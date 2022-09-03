@@ -20,6 +20,7 @@
 
 // Dithering shaders
 
+#include <libplacebo/dither.h>
 #include <libplacebo/shaders.h>
 
 PL_API_BEGIN
@@ -97,6 +98,38 @@ extern const struct pl_dither_params pl_dither_default_params;
 void pl_shader_dither(pl_shader sh, int new_depth,
                       pl_shader_obj *dither_state,
                       const struct pl_dither_params *params);
+
+struct pl_error_diffusion_params {
+    // Both the input and output texture must be provided up-front, with the
+    // same size. The output texture must be storable, and the input texture
+    // must be sampleable.
+    pl_tex input_tex;
+    pl_tex output_tex;
+
+    // Depth to dither to. Required.
+    int new_depth;
+
+    // Error diffusion kernel to use. Optional. If unspecified, defaults to
+    // `&pl_error_diffusion_sierra_lite`.
+    const struct pl_error_diffusion_kernel *kernel;
+};
+
+#define pl_error_diffusion_params(...) (&(struct pl_error_diffusion_params) { __VA_ARGS__ })
+
+// Computes the shared memory requirements for a given error diffusion kernel.
+// This can be used to test up-front whether or not error diffusion would be
+// supported or not, before having to initialize textures.
+size_t pl_error_diffusion_shmem_req(const struct pl_error_diffusion_kernel *kernel,
+                                    int height);
+
+// Apply an error diffusion dithering kernel. This is a much more expensive and
+// heavy dithering method, and is not generally recommended for realtime usage
+// where performance is critical.
+//
+// Requires compute shader support. Returns false if dithering fail e.g. as a
+// result of shader memory limits being exceeded. The resulting shader must be
+// dispatched with a work group count of exactly 1.
+bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_params *params);
 
 PL_API_END
 

@@ -35,6 +35,48 @@ void pl_generate_bayer_matrix(float *data, int size);
 // dither matrix with size 256 can take several seconds on a modern processor.
 void pl_generate_blue_noise(float *data, int size);
 
+// Defines the border of all error diffusion kernels
+#define PL_EDF_MIN_DX (-2)
+#define PL_EDF_MAX_DX  (2)
+#define PL_EDF_MAX_DY  (2)
+
+struct pl_error_diffusion_kernel {
+    const char *name; // Short and concise identifier
+    const char *description; // Longer / friendly name
+
+    // The minimum value such that a (y, x) -> (y, x + y * shift) mapping will
+    // make all error pushing operations affect next column (and after it)
+    // only.
+    //
+    // Higher shift values are significantly more computationally intensive.
+    int shift;
+
+    // The diffusion factor for (y, x) is pattern[y][x - PL_EDF_MIN_DX] / divisor.
+    int pattern[PL_EDF_MAX_DY + 1][PL_EDF_MAX_DX - PL_EDF_MIN_DX + 1];
+    int divisor;
+};
+
+// Algorithms with shift=1:
+extern const struct pl_error_diffusion_kernel pl_error_diffusion_simple;
+extern const struct pl_error_diffusion_kernel pl_error_diffusion_false_fs;
+// Algorithms with shift=2:
+extern const struct pl_error_diffusion_kernel pl_error_diffusion_sierra_lite;
+extern const struct pl_error_diffusion_kernel pl_error_diffusion_floyd_steinberg;
+extern const struct pl_error_diffusion_kernel pl_error_diffusion_atkinson;
+// Algorithms with shift=3, probably too heavy for low end GPUs:
+extern const struct pl_error_diffusion_kernel pl_error_diffusion_jarvis_judice_ninke;
+extern const struct pl_error_diffusion_kernel pl_error_diffusion_stucki;
+extern const struct pl_error_diffusion_kernel pl_error_diffusion_burkes;
+extern const struct pl_error_diffusion_kernel pl_error_diffusion_sierra2;
+extern const struct pl_error_diffusion_kernel pl_error_diffusion_sierra3;
+
+// A list of built-in error diffusion kernels, terminated by NULL
+extern const struct pl_error_diffusion_kernel * const pl_error_diffusion_kernels[];
+extern const int pl_num_error_diffusion_kernels; // excluding trailing NULL
+
+// Find the error diffusion kernel with the given name, or NULL on failure.
+const struct pl_error_diffusion_kernel *pl_find_error_diffusion_kernel(const char *name);
+
 PL_API_END
 
 #endif // LIBPLACEBO_DITHER_H_
