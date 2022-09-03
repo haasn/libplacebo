@@ -527,3 +527,13 @@ const struct pl_tone_map_function * const pl_tone_map_functions[] = {
 };
 
 const int pl_num_tone_map_functions = PL_ARRAY_SIZE(pl_tone_map_functions) - 1;
+
+const struct pl_tone_map_function *pl_find_tone_map_function(const char *name)
+{
+    for (int i = 0; i < pl_num_tone_map_functions; i++) {
+        if (strcmp(name, pl_tone_map_functions[i]->name) == 0)
+            return pl_tone_map_functions[i];
+    }
+
+    return NULL;
+}
