@@ -1135,7 +1135,6 @@ static void pl_render_tests(pl_gpu gpu)
     struct pl_queue_params qparams = {
         .radius = pl_frame_mix_radius(&mix_params),
         .vsync_duration = 1.0 / 60.0,
-        .frame_duration = 1.0 / 24.0,
     };
 
     // Test large PTS jumps in frame mix
@@ -1150,11 +1149,13 @@ static void pl_render_tests(pl_gpu gpu)
 
     // Test mixer queue
 #define NUM_MIX_FRAMES 20
+    const float frame_duration = 1.0 / 24.0;
     struct pl_source_frame srcframes[NUM_MIX_FRAMES+1];
     srcframes[NUM_MIX_FRAMES] = (struct pl_source_frame) {0};
     for (int i = 0; i < NUM_MIX_FRAMES; i++) {
         srcframes[i] = (struct pl_source_frame) {
-            .pts = i * qparams.frame_duration,
+            .pts = i * frame_duration,
+            .duration = frame_duration,
             .map = frame_passthrough,
             .frame_data = &image,
         };
@@ -1193,7 +1194,6 @@ static void pl_render_tests(pl_gpu gpu)
     qparams = (struct pl_queue_params) {
         .radius = pl_frame_mix_radius(&mix_params),
         .vsync_duration = qparams.vsync_duration,
-        .frame_duration = qparams.frame_duration,
         .get_frame = get_frame_ptr,
         .priv = &frame_ptr,
     };
