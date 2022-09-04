@@ -423,6 +423,7 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
     case 0x8928392f: // UNASSIGNED-BestPractices-NonSuccess-Result
     case 0xdc18ad6b: // UNASSIGNED-BestPractices-vkAllocateMemory-small-allocation
     case 0xb3d4346b: // UNASSIGNED-BestPractices-vkBindMemory-small-dedicated-allocation
+    case 0x6cfe18a5: // UNASSIGNED-BestPractices-SemaphoreCount
         return false;
 
     // Work-around for validation layers bug
