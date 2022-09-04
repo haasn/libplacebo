@@ -69,6 +69,7 @@ struct plplay {
     struct pl_peak_detect_params peak_detect_params;
     struct pl_color_map_params color_map_params;
     struct pl_dither_params dither_params;
+    struct pl_deinterlace_params deinterlace_params;
     struct pl_icc_params icc_params;
     struct pl_cone_params cone_params;
     struct pl_color_space target_color;
@@ -332,6 +333,11 @@ static void *decode_loop(void *arg)
                 .unmap = unmap_frame,
                 .discard = discard_frame,
                 .frame_data = frame,
+
+                // allow soft-disabling deinterlacing at the source frame level
+                .first_field = p->params.deinterlace_params
+                                    ? pl_field_from_avframe(frame)
+                                    : PL_FIELD_NONE,
             });
             frame = av_frame_alloc();
         }
@@ -576,6 +582,7 @@ int main(int argc, char **argv)
         .dither_params = pl_dither_default_params,
         .icc_params = pl_icc_default_params,
         .cone_params = pl_vision_normal,
+        .deinterlace_params = pl_deinterlace_default_params,
         .target_override = true,
     };
 
@@ -587,6 +594,7 @@ int main(int argc, char **argv)
     DEFAULT_PARAMS(sigmoid_params);
     DEFAULT_PARAMS(peak_detect_params);
     DEFAULT_PARAMS(dither_params);
+    DEFAULT_PARAMS(deinterlace_params);
     state.params.color_adjustment = &state.color_adjustment;
     state.params.color_map_params = &state.color_map_params;
     state.params.cone_params = &state.cone_params;
@@ -880,6 +888,35 @@ static void update_settings(struct plplay *p)
                 *spar = pl_sigmoid_default_params;
             nk_property_float(nk, "Sigmoid center", 0, &spar->center, 1, 0.1, 0.01);
             nk_property_float(nk, "Sigmoid slope", 0, &spar->slope, 100, 1, 0.1);
+            nk_tree_pop(nk);
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Deinterlacing", NK_MINIMIZED)) {
+            struct pl_deinterlace_params *dpar = &p->deinterlace_params;
+            nk_layout_row_dynamic(nk, 24, 2);
+            par->deinterlace_params = nk_check_label(nk, "Enable", par->deinterlace_params) ? dpar : NULL;
+            if (nk_button_label(nk, "Reset settings"))
+                *dpar = pl_deinterlace_default_params;
+
+            static const char *deint_algos[PL_DEINTERLACE_ALGORITHM_COUNT] = {
+                [PL_DEINTERLACE_WEAVE]  = "Field weaving (no-op)",
+                [PL_DEINTERLACE_BOB]    = "Naive bob (line doubling)",
+                [PL_DEINTERLACE_YADIF]  = "Yadif (\"yet another deinterlacing filter\")",
+            };
+
+            nk_label(nk, "Deinterlacing algorithm", NK_TEXT_LEFT);
+            dpar->algo = nk_combo(nk, deint_algos, PL_DEINTERLACE_ALGORITHM_COUNT,
+                                  dpar->algo, 16, nk_vec2(nk_widget_width(nk), 300));
+
+            switch (dpar->algo) {
+            case PL_DEINTERLACE_WEAVE:
+            case PL_DEINTERLACE_BOB:
+                break;
+            case PL_DEINTERLACE_YADIF:
+                nk_checkbox_label(nk, "Skip spatial check", &dpar->skip_spatial_check);
+                break;
+            default: abort();
+            }
             nk_tree_pop(nk);
         }
 
