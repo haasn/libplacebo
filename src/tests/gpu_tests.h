@@ -1210,6 +1210,28 @@ static void pl_render_tests(pl_gpu gpu)
     pl_queue_reset(queue);
     REQUIRE(pl_queue_update(queue, &mix, &qparams) == PL_QUEUE_EOF);
 
+    if (gpu->glsl.version >= 130) {
+        // Test deinterlacing
+        pl_queue_reset(queue);
+        printf("testing deinterlacing \n");
+        for (int i = 0; i < NUM_MIX_FRAMES; i++) {
+            struct pl_source_frame *src = &srcframes[i];
+            if (i > 10)
+                src = &srcframes[NUM_MIX_FRAMES + 10 - i];
+            src->first_field = PL_FIELD_EVEN;
+            pl_queue_push(queue, src);
+        }
+        pl_queue_push(queue, NULL);
+
+        qparams.pts = 0;
+        qparams.get_frame = NULL;
+        while ((ret = pl_queue_update(queue, &mix, &qparams)) != PL_QUEUE_EOF) {
+            REQUIRE(ret == PL_QUEUE_OK);
+            REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
+            qparams.pts += qparams.vsync_duration;
+        }
+    }
+
     pl_queue_destroy(&queue);
 
 error:
