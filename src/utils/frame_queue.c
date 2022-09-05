@@ -28,12 +28,19 @@ struct cache_entry {
 
 struct entry {
     pl_rc_t rc;
+    float pts;
     struct cache_entry cache;
     struct pl_source_frame src;
     struct pl_frame frame;
     uint64_t signature;
     bool mapped;
     bool ok;
+
+    // for interlaced frames
+    enum pl_field field;
+    struct entry *primary;
+    struct entry *prev, *next;
+    bool dirty;
 };
 
 // Hard limits for vsync timing validity
@@ -156,6 +163,22 @@ static void entry_deref(pl_queue p, struct entry **pentry, bool recycle)
     pl_free(entry);
 }
 
+static struct entry *entry_ref(struct entry *entry)
+{
+    pl_rc_ref(&entry->rc);
+    return entry;
+}
+
+static void entry_cull(pl_queue p, struct entry *entry, bool recycle)
+{
+    // Forcibly clean up references to prev/next frames, even if `entry` has
+    // remaining refs pointing at it. This is to prevent cyclic references.
+    entry_deref(p, &entry->primary, recycle);
+    entry_deref(p, &entry->prev, recycle);
+    entry_deref(p, &entry->next, recycle);
+    entry_deref(p, &entry, recycle);
+}
+
 void pl_queue_destroy(pl_queue *queue)
 {
     pl_queue p = *queue;
@@ -163,7 +186,7 @@ void pl_queue_destroy(pl_queue *queue)
         return;
 
     for (int n = 0; n < p->queue.num; n++)
-        entry_deref(p, &p->queue.elem[n], false);
+        entry_cull(p, p->queue.elem[n], false);
     for (int n = 0; n < p->cache.num; n++) {
         for (int i = 0; i < PL_ARRAY_SIZE(p->cache.elem[n].tex); i++)
             pl_tex_destroy(p->gpu, &p->cache.elem[n].tex[i]);
@@ -182,7 +205,7 @@ void pl_queue_reset(pl_queue p)
     pl_mutex_lock(&p->lock_weak);
 
     for (int i = 0; i < p->queue.num; i++)
-        entry_deref(p, &p->queue.elem[i], false);
+        entry_cull(p, p->queue.elem[i], false);
 
     *p = (struct pl_queue_t) {
         .gpu = p->gpu,
@@ -264,9 +287,9 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
     }
 
     // Update FPS estimates if possible/reasonable
-    default_estimate(&p->fps, src->duration);
+    default_estimate(&p->fps, src->first_field ? src->duration / 2 : src->duration);
     if (p->queue.num) {
-        float last_pts = p->queue.elem[p->queue.num - 1]->src.pts;
+        float last_pts = p->queue.elem[p->queue.num - 1]->pts;
         float delta = src->pts - last_pts;
         if (delta < 0.0) {
             PL_DEBUG(p, "Backwards source PTS jump %f -> %f", last_pts, src->pts);
@@ -282,18 +305,89 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
     struct entry *entry = pl_alloc_ptr(NULL, entry);
     *entry = (struct entry) {
         .signature = p->signature++,
+        .pts = src->pts,
         .src = *src,
     };
     pl_rc_init(&entry->rc);
     PL_ARRAY_POP(p->cache, &entry->cache);
     PL_TRACE(p, "Added new frame id %"PRIu64" with PTS %f",
-             entry->signature, src->pts);
+             entry->signature, entry->pts);
 
     // Insert new entry into the correct spot in the queue, sorted by PTS
     for (int i = p->queue.num;; i--) {
-        if (i == 0 || p->queue.elem[i - 1]->src.pts <= src->pts) {
-            PL_ARRAY_INSERT_AT(p, p->queue, i, entry);
-            break;
+        if (i == 0 || p->queue.elem[i - 1]->pts <= entry->pts) {
+            if (src->first_field == PL_FIELD_NONE) {
+                // Progressive
+                PL_ARRAY_INSERT_AT(p, p->queue, i, entry);
+                break;
+            } else {
+                // Interlaced
+                struct entry *prev = i > 0 ? p->queue.elem[i - 1] : NULL;
+                struct entry *next = i < p->queue.num ? p->queue.elem[i] : NULL;
+                struct entry *entry2 = pl_zalloc_ptr(NULL, entry2);
+                if (next) {
+                    entry2->pts = (entry->pts + next->pts) / 2;
+                } else if (src->duration) {
+                    entry2->pts = entry->pts + src->duration / 2;
+                } else if (p->fps.estimate) {
+                    entry2->pts = entry->pts + p->fps.estimate;
+                } else {
+                    PL_ERR(p, "Frame with PTS %f specified as interlaced, but "
+                           "no FPS information known yet! Please specify a "
+                           "valid `pl_source_frame.duration`. Treating as "
+                           "progressive...", src->pts);
+                    PL_ARRAY_INSERT_AT(p, p->queue, i, entry);
+                    pl_free(entry2);
+                    break;
+                }
+
+                entry->field = src->first_field;
+                entry2->primary = entry_ref(entry);
+                entry2->field = pl_field_other(entry->field);
+                entry2->signature = p->signature++;
+
+                PL_TRACE(p, "Added second field id %"PRIu64" with PTS %f",
+                         entry2->signature, entry2->pts);
+
+                // Link previous/next frames
+                if (prev) {
+                    entry->prev = entry_ref(PL_DEF(prev->primary, prev));
+                    entry2->prev = entry_ref(PL_DEF(prev->primary, prev));
+                    // Retroactively re-link the previous frames that should
+                    // be referencing this frame
+                    for (int j = i - 1; j >= 0; --j) {
+                        struct entry *e = p->queue.elem[j];
+                        if (e != prev && e != prev->primary)
+                            break;
+                        entry_deref(p, &e->next, true);
+                        e->next = entry_ref(entry);
+                        if (e->dirty) { // reset signature to signal change
+                            e->signature = p->signature++;
+                            e->dirty = false;
+                        }
+                    }
+                }
+
+                if (next) {
+                    entry->next = entry_ref(PL_DEF(next->primary, next));
+                    entry2->next = entry_ref(PL_DEF(next->primary, next));
+                    for (int j = i; j < p->queue.num; j++) {
+                        struct entry *e = p->queue.elem[j];
+                        if (e != next && e != next->primary)
+                            break;
+                        entry_deref(p, &e->prev, true);
+                        e->prev = entry_ref(entry);
+                        if (e->dirty) {
+                            e->signature = p->signature++;
+                            e->dirty = false;
+                        }
+                    }
+                }
+
+                PL_ARRAY_INSERT_AT(p, p->queue, i, entry);
+                PL_ARRAY_INSERT_AT(p, p->queue, i+1, entry2);
+                break;
+            }
         }
     }
 
@@ -307,6 +401,11 @@ void pl_queue_push(pl_queue p, const struct pl_source_frame *frame)
     pl_mutex_unlock(&p->lock_weak);
 }
 
+static inline bool entry_mapped(struct entry *entry)
+{
+    return entry->mapped || (entry->primary && entry->primary->mapped);
+}
+
 static bool queue_has_room(pl_queue p)
 {
     if (p->want_frame)
@@ -314,7 +413,7 @@ static bool queue_has_room(pl_queue p)
 
     // Examine the queue tail
     for (int i = p->queue.num - 1; i >= 0; i--) {
-        if (p->queue.elem[i]->mapped)
+        if (entry_mapped(p->queue.elem[i]))
             return true;
         if (p->queue.num - i >= PREFETCH_FRAMES)
             return false;
@@ -408,20 +507,49 @@ static enum pl_queue_status get_frame(pl_queue p, const struct pl_queue_params *
     return ret;
 }
 
-static bool map_frame(pl_queue p, struct entry *entry)
+static inline bool map_frame(pl_queue p, struct entry *entry)
 {
     if (!entry->mapped) {
         PL_TRACE(p, "Mapping frame id %"PRIu64" with PTS %f",
-                 entry->signature, entry->src.pts);
+                 entry->signature, entry->pts);
         entry->mapped = true;
         entry->ok = entry->src.map(p->gpu, entry->cache.tex,
                                    &entry->src, &entry->frame);
         if (!entry->ok)
             PL_ERR(p, "Failed mapping frame id %"PRIu64" with PTS %f",
-                   entry->signature, entry->src.pts);
+                   entry->signature, entry->pts);
     }
 
     return entry->ok;
+}
+
+static bool map_entry(pl_queue p, struct entry *entry)
+{
+    bool ok = map_frame(p, entry->primary ? entry->primary : entry);
+    if (entry->prev)
+        ok &= map_frame(p, entry->prev);
+    if (entry->next)
+        ok &= map_frame(p, entry->next);
+    if (!ok)
+        return false;
+
+    if (entry->primary)
+        entry->frame = entry->primary->frame;
+
+    if (entry->field) {
+        entry->frame.field = entry->field;
+        entry->frame.first_field = PL_DEF(entry->primary, entry)->src.first_field;
+        entry->frame.prev = entry->prev ? &entry->prev->frame : NULL;
+        entry->frame.next = entry->next ? &entry->next->frame : NULL;
+        entry->dirty = true;
+    }
+
+    return true;
+}
+
+static bool entry_complete(struct entry *entry)
+{
+    return entry->field ? !!entry->next : true;
 }
 
 // Advance the queue as needed to make sure idx 0 is the last frame before
@@ -434,16 +562,16 @@ static enum pl_queue_status advance(pl_queue p, float pts,
     // Cull all frames except the last frame before `pts`
     int culled = 0;
     for (int i = 1; i < p->queue.num; i++) {
-        if (p->queue.elem[i]->src.pts <= pts) {
-            entry_deref(p, &p->queue.elem[i - 1], true);
+        if (p->queue.elem[i]->pts <= pts) {
+            entry_cull(p, p->queue.elem[i - 1], true);
             culled++;
         }
     }
     PL_ARRAY_REMOVE_RANGE(p->queue, 0, culled);
 
     // Keep adding new frames until we find one in the future, or EOF
+    enum pl_queue_status ret = PL_QUEUE_OK;
     while (p->queue.num < 2) {
-        enum pl_queue_status ret;
         switch ((ret = get_frame(p, params))) {
         case PL_QUEUE_ERR:
             return ret;
@@ -453,8 +581,8 @@ static enum pl_queue_status advance(pl_queue p, float pts,
             goto done;
         case PL_QUEUE_MORE:
         case PL_QUEUE_OK:
-            while (p->queue.num > 1 && p->queue.elem[1]->src.pts <= pts) {
-                entry_deref(p, &p->queue.elem[0], true);
+            while (p->queue.num > 1 && p->queue.elem[1]->pts <= pts) {
+                entry_cull(p, p->queue.elem[0], true);
                 PL_ARRAY_REMOVE_AT(p->queue, 0);
             }
             if (ret == PL_QUEUE_MORE)
@@ -463,9 +591,22 @@ static enum pl_queue_status advance(pl_queue p, float pts,
         }
     }
 
+    if (!entry_complete(p->queue.elem[1])) {
+        switch (get_frame(p, params)) {
+        case PL_QUEUE_ERR:
+            return PL_QUEUE_ERR;
+        case PL_QUEUE_MORE:
+            ret = PL_QUEUE_MORE;
+            // fall through
+        case PL_QUEUE_EOF:
+        case PL_QUEUE_OK:
+            goto done;
+        }
+    }
+
 done:
     if (p->eof && p->queue.num == 1) {
-        if (p->queue.elem[0]->src.pts == 0.0 || !p->fps.estimate) {
+        if (p->queue.elem[0]->pts == 0.0 || !p->fps.estimate) {
             // If the last frame has PTS 0.0, or we have no FPS estimate, then
             // this is probably a single-frame file, in which case we want to
             // extend the ZOH to infinity, rather than returning. Not a perfect
@@ -475,15 +616,15 @@ done:
 
         // Last frame is held for an extra `p->fps.estimate` duration,
         // afterwards this function just returns EOF.
-        if (p->queue.elem[0]->src.pts + p->fps.estimate < pts) {
-            entry_deref(p, &p->queue.elem[0], true);
+        if (p->queue.elem[0]->pts + p->fps.estimate < pts) {
+            entry_cull(p, p->queue.elem[0], true);
             p->queue.num = 0;
             return PL_QUEUE_EOF;
         }
     }
 
     pl_assert(p->queue.num);
-    return PL_QUEUE_OK;
+    return ret;
 }
 
 static inline enum pl_queue_status point(pl_queue p, struct pl_frame_mix *mix,
@@ -492,9 +633,9 @@ static inline enum pl_queue_status point(pl_queue p, struct pl_frame_mix *mix,
     // Find closest frame (nearest neighbour semantics)
     pl_assert(p->queue.num);
     struct entry *entry = p->queue.elem[0];
-    double best = fabs(entry->src.pts - params->pts);
+    double best = fabs(entry->pts - params->pts);
     for (int i = 1; i < p->queue.num; i++) {
-        double dist = fabs(p->queue.elem[i]->src.pts - params->pts);
+        double dist = fabs(p->queue.elem[i]->pts - params->pts);
         if (dist < best) {
             entry = p->queue.elem[i];
             best = dist;
@@ -504,7 +645,7 @@ static inline enum pl_queue_status point(pl_queue p, struct pl_frame_mix *mix,
         }
     }
 
-    if (!map_frame(p, entry))
+    if (!map_entry(p, entry))
         return PL_QUEUE_ERR;
 
     // Return a mix containing only this single frame
@@ -521,7 +662,7 @@ static inline enum pl_queue_status point(pl_queue p, struct pl_frame_mix *mix,
     };
 
     PL_TRACE(p, "Showing single frame id %"PRIu64" with PTS %f for target PTS %f",
-             entry->signature, entry->src.pts, params->pts);
+             entry->signature, entry->pts, params->pts);
 
     report_estimates(p);
     return PL_QUEUE_OK;
@@ -578,23 +719,22 @@ static enum pl_queue_status oversample(pl_queue p, struct pl_frame_mix *mix,
         return PL_QUEUE_OK;
 
     // Can't oversample with only a single frame, fall back to point sampling
-    if (p->queue.num < 2 || p->queue.elem[0]->src.pts > params->pts) {
+    if (p->queue.num < 2 || p->queue.elem[0]->pts > params->pts) {
         if (point(p, mix, params) != PL_QUEUE_OK)
             return PL_QUEUE_ERR;
         return ret;
     }
 
     struct entry *entries[2] = { p->queue.elem[0], p->queue.elem[1] };
-    pl_assert(entries[0]->src.pts <= params->pts);
-    pl_assert(entries[1]->src.pts >= params->pts);
+    pl_assert(entries[0]->pts <= params->pts);
+    pl_assert(entries[1]->pts >= params->pts);
 
     // Returning a mix containing both of these two frames
     p->tmp_sig.num = p->tmp_ts.num = p->tmp_frame.num = 0;
     for (int i = 0; i < 2; i++) {
-        if (!map_frame(p, entries[i]))
+        if (!map_entry(p, entries[i]))
             return PL_QUEUE_ERR;
-
-        float ts = (entries[i]->src.pts - params->pts) / p->fps.estimate;
+        float ts = (entries[i]->pts - params->pts) / p->fps.estimate;
         PL_ARRAY_APPEND(p, p->tmp_sig, entries[i]->signature);
         PL_ARRAY_APPEND(p, p->tmp_frame, &entries[i]->frame);
         PL_ARRAY_APPEND(p, p->tmp_ts, ts);
@@ -670,7 +810,7 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
 
     // Keep adding new frames until we've covered the range we care about
     pl_assert(p->queue.num);
-    while (p->queue.elem[p->queue.num - 1]->src.pts < max_pts) {
+    while (p->queue.elem[p->queue.num - 1]->pts < max_pts) {
         switch ((ret = get_frame(p, params))) {
         case PL_QUEUE_ERR:
             return ret;
@@ -680,6 +820,12 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
         case PL_QUEUE_OK:
             continue;
         }
+    }
+
+    if (!entry_complete(p->queue.elem[p->queue.num - 1])) {
+        ret = get_frame(p, params);
+        if (ret == PL_QUEUE_ERR)
+            return ret;
     }
 
 done: ;
@@ -693,12 +839,11 @@ done: ;
     p->tmp_sig.num = p->tmp_ts.num = p->tmp_frame.num = 0;
     for (int i = 0; i < p->queue.num; i++) {
         struct entry *entry = p->queue.elem[i];
-        if (entry->src.pts > max_pts)
+        if (entry->pts > max_pts)
             break;
-        if (!map_frame(p, entry))
+        if (!map_entry(p, entry))
             return PL_QUEUE_ERR;
-
-        float ts = (entry->src.pts - params->pts) / p->fps.estimate;
+        float ts = (entry->pts - params->pts) / p->fps.estimate;
         PL_ARRAY_APPEND(p, p->tmp_sig, entry->signature);
         PL_ARRAY_APPEND(p, p->tmp_frame, &entry->frame);
         PL_ARRAY_APPEND(p, p->tmp_ts, ts);
@@ -743,7 +888,7 @@ static bool prefill(pl_queue p, const struct pl_queue_params *params)
     // better than the alternative of missing the cache later, when timing is
     // more relevant.
     for (int i = 0; i < min_frames; i++) {
-        if (!map_frame(p, p->queue.elem[i]))
+        if (!map_entry(p, p->queue.elem[i]))
             return false;
     }
 
@@ -764,12 +909,12 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
         // This is a backwards PTS jump. This is something we can handle
         // semi-gracefully, but only if we haven't culled past the current
         // frame yet.
-        if (p->queue.num && p->queue.elem[0]->src.pts > params->pts) {
+        if (p->queue.num && p->queue.elem[0]->pts > params->pts) {
             PL_ERR(p, "Requested PTS %f is lower than the oldest frame "
                    "PTS %f. This is not supported, PTS must be monotonically "
                    "increasing! Please use `pl_queue_reset` to reset the frame "
                    "queue on discontinuous PTS jumps.",
-                   params->pts, p->queue.elem[0]->src.pts);
+                   params->pts, p->queue.elem[0]->pts);
             pl_mutex_unlock(&p->lock_weak);
             pl_mutex_unlock(&p->lock_strong);
             return PL_QUEUE_ERR;

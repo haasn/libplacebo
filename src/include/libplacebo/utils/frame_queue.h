@@ -19,6 +19,7 @@
 #define LIBPLACEBO_FRAME_QUEUE_H
 
 #include <libplacebo/renderer.h>
+#include <libplacebo/shaders/deinterlacing.h>
 
 PL_API_BEGIN
 
@@ -50,8 +51,22 @@ struct pl_source_frame {
     // The frame's duration. This is not needed in normal scenarios, as the
     // FPS can be inferred from the `pts` values themselves. Providing it
     // only helps initialize the value for initial frames, which can smooth
-    // out the interpolation weights. (Optional)
+    // out the interpolation weights. Its use is also highly recommended
+    // when displaying interlaced frames. (Optional)
     float duration;
+
+    // If set to something other than PL_FIELD_NONE, this source frame is
+    // marked as interlaced. It will be split up into two separate frames
+    // internally, and exported to the resulting `pl_frame_mix` as a pair of
+    // fields, referencing the corresponding previous and next frames. The
+    // first field will have the same PTS as `pts`, and the second field will
+    // be inserted at the timestamp `pts + duration/2`.
+    //
+    // Note: As a result of FPS estimates being unreliable around streams with
+    // mixed FPS (or when mixing interlaced and progressive frames), it's
+    // highly recommended to always specify a valid `duration` for interlaced
+    // frames.
+    enum pl_field first_field;
 
     // Abstract frame data itself. To allow mapping frames only when they're
     // actually needed, frames use a lazy representation. The provided
@@ -181,7 +196,10 @@ struct pl_queue_params {
 // This function may return with PL_QUEUE_MORE, in which case the user may wish
 // to ensure more frames are available and then re-run this function with the
 // same parameters. In this case, `out_mix` is still written to, but it may be
-// incomplete (or even contain no frames at all).
+// incomplete (or even contain no frames at all). Additionally, when the source
+// contains interlaced frames (see `pl_source_frame.first_field`), this
+// function may return with PL_QUEUE_MORE if a frame is missing references to
+// a future frame.
 //
 // The resulting mix of frames in `out_mix` will represent the neighbourhood of
 // the target timestamp, and can be passed to `pl_render_image_mix` as-is.
