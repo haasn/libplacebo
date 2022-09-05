@@ -66,6 +66,7 @@ struct pl_renderer_t {
     bool disable_grain;         // disable film grain code
     bool disable_hooks;         // disable user hooks / custom shaders
     bool disable_mixing;        // disable frame mixing
+    bool disable_deinterlacing; // disable deinterlacing
 
     // Shader resource objects and intermediate textures (FBOs)
     pl_shader_obj tone_map_state;
@@ -358,6 +359,9 @@ struct pass_state {
     // corrected to make sure all rects etc. are properly defaulted/inferred.
     struct pl_frame image;
     struct pl_frame target;
+
+    // Cached copies of the `prev` / `next` frames, for deinterlacing.
+    struct pl_frame prev, next;
 
     // Currently active (to-be-applied) ICC profiles for this rendering pass.
     struct icc_state *src_icc, *dst_icc;
@@ -1472,6 +1476,31 @@ static bool pass_read_image(struct pass_state *pass)
                 .comps = image->planes[i].components,
             },
         };
+
+        // Deinterlace plane if needed
+        if (image->field != PL_FIELD_NONE && params->deinterlace_params &&
+            pass->fbofmt[4] && !rr->disable_deinterlacing)
+        {
+            struct img *img = &planes[i].img;
+            struct pl_deinterlace_source src = {
+                .cur.top  = img->tex,
+                .prev.top = image->prev ? image->prev->planes[i].texture : NULL,
+                .next.top = image->next ? image->next->planes[i].texture : NULL,
+                .field    = image->field,
+                .first_field = image->first_field,
+                .component_mask = (1 << img->comps) - 1,
+            };
+
+            img->tex = NULL;
+            img->sh = pl_dispatch_begin(pass->rr->dp);
+            pl_shader_deinterlace(img->sh, &src, params->deinterlace_params);
+            if (!img_tex(pass, img)) {
+                PL_ERR(rr, "Failed deinterlacing plane.. disabling!");
+                pl_dispatch_abort(rr->dp, &img->sh);
+                img->tex = planes[i].plane.texture;
+                rr->disable_deinterlacing = true;
+            }
+        }
     }
 
     // Original ref texture, even after preprocessing
@@ -2229,6 +2258,20 @@ static bool pass_output_target(struct pass_state *pass)
       }                                                                         \
   } while (0)
 
+#define validate_deinterlace_ref(image, ref)                                    \
+  do {                                                                          \
+      require((image)->num_planes == (ref)->num_planes);                        \
+      const struct pl_tex_params *imgp, *refp;                                  \
+      for (int p = 0; p < (image)->num_planes; p++) {                           \
+          validate_plane((ref)->planes[p], sampleable);                         \
+          imgp = &(image)->planes[p].texture->params;                           \
+          refp = &(ref)->planes[p].texture->params;                             \
+          require(imgp->w == refp->w);                                          \
+          require(imgp->h == refp->h);                                          \
+          require(imgp->format->num_components == refp->format->num_components);\
+      }                                                                         \
+  } while (0)
+
 // Perform some basic validity checks on incoming structs to help catch invalid
 // API usage. This is not an exhaustive check. In particular, enums are not
 // bounds checked. This is because most functions accepting enums already
@@ -2258,6 +2301,14 @@ static bool validate_structs(pl_renderer rr,
     require(image->num_overlays >= 0);
     for (int i = 0; i < image->num_overlays; i++)
         validate_overlay(image->overlays[i]);
+
+    if (image->field != PL_FIELD_NONE) {
+        require(image->first_field != PL_FIELD_NONE);
+        if (image->prev)
+            validate_deinterlace_ref(image, image->prev);
+        if (image->next)
+            validate_deinterlace_ref(image, image->next);
+    }
 
     return true;
 }
@@ -2418,6 +2469,10 @@ static void pass_uninit(struct pass_state *pass)
 {
     pl_renderer rr = pass->rr;
     pl_dispatch_abort(rr->dp, &pass->img.sh);
+    if (pass->next.release)
+        pass->next.release(rr->gpu, &pass->next);
+    if (pass->prev.release)
+        pass->prev.release(rr->gpu, &pass->prev);
     if (pass->image.release)
         pass->image.release(rr->gpu, &pass->image);
     if (pass->target.release)
@@ -2471,13 +2526,35 @@ done:
 static bool pass_init(struct pass_state *pass, bool acquire_image)
 {
     pl_renderer rr = pass->rr;
+    const struct pl_render_params *params = pass->params;
     struct pl_frame *image = pass->src_ref < 0 ? NULL : &pass->image;
     struct pl_frame *target = &pass->target;
 
-    if (acquire_image && !acquire_frame(pass, image))
+    // Acquire all frames before handling any errors, to avoid calling
+    // release() on a never-acquired frame
+    bool acquire_ok = acquire_frame(pass, target);
+    if (acquire_image && image) {
+        acquire_ok &= acquire_frame(pass, image);
+
+        const struct pl_deinterlace_params *deint = params->deinterlace_params;
+        bool needs_refs = image->field != PL_FIELD_NONE && deint &&
+                          pl_deinterlace_needs_refs(deint->algo);
+
+        if (image->prev && needs_refs) {
+            // Move into local copy so we can acquire/release it
+            pass->prev = *image->prev;
+            image->prev = &pass->prev;
+            acquire_ok &= acquire_frame(pass, &pass->prev);
+        }
+        if (image->next && needs_refs) {
+            pass->next = *image->next;
+            image->next = &pass->next;
+            acquire_ok &= acquire_frame(pass, &pass->next);
+        }
+    }
+    if (!acquire_ok)
         goto error;
-    if (!acquire_frame(pass, target))
-        goto error;
+
     if (!validate_structs(pass->rr, acquire_image ? image : NULL, target))
         goto error;
 
@@ -2687,6 +2764,7 @@ static struct params_info render_params_info(const struct pl_render_params *para
 
     HASH_PTR(params.deband_params, NULL, false);
     HASH_PTR(params.sigmoid_params, NULL, false);
+    HASH_PTR(params.deinterlace_params, NULL, false);
     HASH_PTR(params.color_adjustment, &pl_color_adjustment_neutral, true);
     HASH_PTR(params.peak_detect_params, NULL, params.allow_delayed_peak_detect);
     HASH_PTR(params.color_map_params, &pl_color_map_default_params, true);

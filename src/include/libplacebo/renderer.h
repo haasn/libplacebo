@@ -23,6 +23,7 @@
 #include <libplacebo/filters.h>
 #include <libplacebo/gpu.h>
 #include <libplacebo/shaders/colorspace.h>
+#include <libplacebo/shaders/deinterlacing.h>
 #include <libplacebo/shaders/film_grain.h>
 #include <libplacebo/shaders/icc.h>
 #include <libplacebo/shaders/lut.h>
@@ -174,6 +175,17 @@ struct pl_render_params {
     // framebuffer contents will be blended using this blend mode. Requires
     // that the target format has PL_FMT_CAP_BLENDABLE. NULL disables blending.
     const struct pl_blend_params *blend_params;
+
+    // Configures the settings used to deinterlace frames (see
+    // `pl_frame.field`), if required.. If NULL, deinterlacing is "disabled",
+    // meaning interlaced frames are rendered as weaved frames instead.
+    //
+    // Note: As a consequence of how `pl_frame` represents individual fields,
+    // and especially when using the `pl_queue`, this will still result in
+    // frames being redundantly rendered twice. As such, it's highly
+    // recommended to, instead, fully disable deinterlacing by not marking
+    // source frames as interlaced in the first place.
+    const struct pl_deinterlace_params *deinterlace_params;
 
     // List of custom user shaders / hooks.
     // See <libplacebo/shaders/custom.h> for more information.
@@ -484,6 +496,17 @@ struct pl_frame {
     int num_planes;
     struct pl_plane planes[PL_MAX_PLANES];
 
+    // For interlaced frames. If set, this `pl_frame` corresponds to a single
+    // field of the underlying source textures. `first_field` indicates which
+    // of these fields is ordered first in time. `prev` and `next` should point
+    // to the previous/next frames in the file, or NULL if there are none.
+    //
+    // Note: Setting these fields on the render target has no meaning and will
+    // be ignored.
+    enum pl_field field;
+    enum pl_field first_field;
+    const struct pl_frame *prev, *next;
+
     // If set, will be called immediately before GPU access to this frame. This
     // function *may* be used to, for example, perform synchronization with
     // external APIs (e.g. `pl_vulkan_hold/release`). If your mapping requires
@@ -497,11 +520,13 @@ struct pl_frame {
     // here will not be reflected back to the structs provided in the original
     // `pl_render_*` call (e.g. via `pl_frame_mix`).
     //
-    // Note: Only one frame will ever be acquired at a time per `pl_render_*`
-    // call. So users *can* safely use this with, for example, hwdec mappers
-    // that can only map a single frame at a time. When using this with, for
-    // example, `pl_render_image_mix`, each frame to be blended is acquired and
-    // release in succession, before moving on to the next frame.
+    // Note: Unless dealing with interlaced frames, only one frame will ever be
+    // acquired at a time per `pl_render_*` call. So users *can* safely use
+    // this with, for example, hwdec mappers that can only map a single frame
+    // at a time. When using this with, for example, `pl_render_image_mix`,
+    // each frame to be blended is acquired and release in succession, before
+    // moving on to the next frame. For interlaced frames, the previous and
+    // next frames must also be acquired simultaneously.
     bool (*acquire)(pl_gpu gpu, struct pl_frame *frame);
 
     // If set, will be called after a plane is done being used by the GPU,
