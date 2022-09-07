@@ -260,6 +260,44 @@ static void bench_hdr_clip(pl_shader sh, pl_shader_obj *state, pl_tex src)
                         pl_color_space_monitor, state, false);
 }
 
+static void bench_weave(pl_shader sh, pl_shader_obj *state, pl_tex src)
+{
+    struct pl_deinterlace_source dsrc = {
+        .cur = pl_field_pair(src),
+        .field = PL_FIELD_TOP,
+    };
+
+    pl_shader_deinterlace(sh, &dsrc, pl_deinterlace_params(
+        .algo = PL_DEINTERLACE_WEAVE,
+    ));
+}
+
+static void bench_bob(pl_shader sh, pl_shader_obj *state, pl_tex src)
+{
+    struct pl_deinterlace_source dsrc = {
+        .cur = pl_field_pair(src),
+        .field = PL_FIELD_TOP,
+    };
+
+    pl_shader_deinterlace(sh, &dsrc, pl_deinterlace_params(
+        .algo = PL_DEINTERLACE_BOB,
+    ));
+}
+
+static void bench_yadif(pl_shader sh, pl_shader_obj *state, pl_tex src)
+{
+    struct pl_deinterlace_source dsrc = {
+        .prev = pl_field_pair(src),
+        .cur = pl_field_pair(src),
+        .next = pl_field_pair(src),
+        .field = PL_FIELD_TOP,
+    };
+
+    pl_shader_deinterlace(sh, &dsrc, pl_deinterlace_params(
+        .algo = PL_DEINTERLACE_YADIF,
+    ));
+}
+
 static void bench_av1_grain(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     struct pl_film_grain_params params = {
@@ -419,6 +457,11 @@ int main()
     benchmark(vk->gpu, "bicubic", BENCH_SH(bench_bicubic));
     benchmark(vk->gpu, "deband", BENCH_SH(bench_deband));
     benchmark(vk->gpu, "deband_heavy", BENCH_SH(bench_deband_heavy));
+
+    // Deinterlacing
+    benchmark(vk->gpu, "weave", BENCH_SH(bench_weave));
+    benchmark(vk->gpu, "bob", BENCH_SH(bench_bob));
+    benchmark(vk->gpu, "yadif", BENCH_SH(bench_yadif));
 
     // Polar sampling
     benchmark(vk->gpu, "polar", BENCH_SH(bench_polar));
