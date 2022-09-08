@@ -217,6 +217,7 @@ static bool init_codec(struct plplay *p)
 
         const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwcfg->pix_fmt);
         printf("Using hardware frame format: %s\n", desc->name);
+        p->codec->extra_hw_frames = 4;
         break;
     }
 
