@@ -225,11 +225,14 @@ pl_gpu pl_gpu_finalize(struct pl_gpu_t *gpu)
             pl_assert(fmt->glsl_type);
             pl_assert(!fmt->opaque);
         }
-        pl_assert(!fmt->opaque || !(fmt->caps & PL_FMT_CAP_HOST_READABLE));
-        pl_assert(!fmt->texel_size == !fmt->texel_align);
-        pl_assert(fmt->texel_size % fmt->texel_align == 0);
-        if (fmt->internal_size != fmt->texel_size && !fmt->opaque)
-            pl_assert(fmt->emulated);
+        if (!fmt->opaque) {
+            pl_assert(fmt->texel_size && fmt->texel_align);
+            pl_assert((fmt->texel_size % fmt->texel_align) == 0);
+            pl_assert(fmt->internal_size == fmt->texel_size || fmt->emulated);
+        } else {
+            pl_assert(!fmt->texel_size && !fmt->texel_align);
+            pl_assert(!(fmt->caps & PL_FMT_CAP_HOST_READABLE));
+        }
 
         // Assert uniqueness of name
         for (int o = n + 1; o < gpu->num_formats; o++)
