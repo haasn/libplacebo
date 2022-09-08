@@ -422,7 +422,6 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
 static bool render_loop(struct plplay *p)
 {
     struct pl_queue_params qparams = {
-        .radius = pl_frame_mix_radius(&p->params),
         .frame_duration = av_q2d(av_inv_q(p->stream->avg_frame_rate)),
         .interpolation_threshold = 0.01,
         .timeout = UINT64_MAX,
@@ -487,6 +486,7 @@ retry:
         }
         ts_prev = ts;
 
+        qparams.radius = pl_frame_mix_radius(&p->params);
         qparams.timeout = 50000000; // 50 ms
         qparams.pts = pts;
 
