@@ -32,6 +32,7 @@ struct icc_priv {
     float a, b, scale; // approxmation tone curve parameters and scaling
     cmsCIEXYZ black;
     float gamma_stddev;
+    uint64_t lut_sig;
 };
 
 static void error_callback(cmsContext cms, cmsUInt32Number code,
@@ -402,6 +403,16 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     cmsSetHeaderRenderingIntent(p->approx, icc->params.intent);
     cmsSetProfileVersion(p->approx, 2.2);
 
+    // Hash all parameters affecting the generated 3DLUT
+    p->lut_sig = icc->signature;
+    pl_hash_merge(&p->lut_sig, params->intent);
+    pl_hash_merge(&p->lut_sig, params->size_r);
+    pl_hash_merge(&p->lut_sig, params->size_g);
+    pl_hash_merge(&p->lut_sig, params->size_b);
+    union { double d; uint64_t u; } v = { .d = icc->csp.hdr.max_luma };
+    pl_hash_merge(&p->lut_sig, v.u);
+    // min luma depends only on the max luma and profile
+
     return icc;
 
 error:
@@ -464,11 +475,9 @@ static void fill_encode(void *datap, const struct sh_lut_params *params)
 void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,
                    struct pl_color_space *out_csp)
 {
+    struct icc_priv *p = PL_PRIV(icc);
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
-
-    uint64_t sig = icc->signature;
-    pl_hash_merge(&sig, icc->params.intent);
 
     ident_t lut = sh_lut(sh, sh_lut_params(
         .object     = lut_obj,
@@ -480,13 +489,12 @@ void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,
         .depth      = icc->params.size_b,
         .comps      = 4,
         .linear     = true,
-        .signature  = sig,
+        .signature  = p->lut_sig,
         .fill       = fill_decode,
         .priv       = (void *) icc,
     ));
 
     // Y = scale * (aX + b)^y
-    struct icc_priv *p = PL_PRIV(icc);
     sh_describe(sh, "ICC 3DLUT");
     GLSL("// pl_icc_decode                      \n"
          "{                                     \n"
@@ -511,6 +519,7 @@ void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,
 
 void pl_icc_encode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj)
 {
+    struct icc_priv *p = PL_PRIV(icc);
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
@@ -524,13 +533,12 @@ void pl_icc_encode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj)
         .depth      = icc->params.size_b,
         .comps      = 4,
         .linear     = true,
-        .signature  = ~icc->signature, // avoid confusion with decoding LUTs
+        .signature  = ~p->lut_sig, // avoid confusion with decoding LUTs
         .fill       = fill_encode,
         .priv       = (void *) icc,
     ));
 
     // X = 1/a * (Y/scale)^(1/y) - b/a
-    struct icc_priv *p = PL_PRIV(icc);
     sh_describe(sh, "ICC 3DLUT");
     GLSL("// pl_icc_encode                      \n"
          "{                                     \n"
