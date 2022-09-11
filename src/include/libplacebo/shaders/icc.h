@@ -48,6 +48,28 @@ struct pl_icc_params {
     // if unavailable.
     float max_luma;
 
+    // 3DLUT caching API. Providing these functions can help speed up ICC LUT
+    // generation by saving/loading profiles to/from disk. Both of these
+    // callbacks are optional.
+    void *cache_priv;
+    //
+    // This is called to inform users of new cache entries. The user may store
+    // this cache to disk or some other internal caching mechanism.
+    void (*cache_save)(void *priv, uint64_t sig, const uint8_t *cache, size_t size);
+    //
+    // This is called to query for existing cache entries. The user should look
+    // up this cache entry and write its contents to `cache`, ensuring that no
+    // more than `size` bytes are written, and return `true` on success.
+    bool (*cache_load)(void *priv, uint64_t sig, uint8_t *cache, size_t size);
+    //
+    // Note: The `signature` of a cache entry is NOT equal to the `signature`
+    // of the underlying `pl_icc_object` - it is split up into separate entries
+    // for `pl_icc_decode` and `pl_icc_encode`, and also includes a hashed
+    // representation of the encoded parameters.
+    //
+    // Note: These callbacks will only be called from within `pl_icc_decode` /
+    // `pl_icc_encode`, so `cache_priv` should exceed this lifetime.
+
     // Deprecated / removed options.
     bool use_display_contrast PL_DEPRECATED; // Always on
 };

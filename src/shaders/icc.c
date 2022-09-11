@@ -420,6 +420,15 @@ error:
     return NULL;
 }
 
+static inline bool cache_load(pl_icc_object icc, uint64_t sig,
+                              uint8_t *cache, size_t size)
+{
+    if (icc->params.cache_load)
+        return icc->params.cache_load(icc->params.cache_priv, sig, cache, size);
+
+    return false;
+}
+
 static void fill_lut(void *datap, const struct sh_lut_params *params, bool decode)
 {
     pl_icc_object icc = params->priv;
@@ -427,6 +436,13 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
     pl_log log = cmsGetContextUserData(p->cms);
     cmsHPROFILE srcp = decode ? p->profile : p->approx;
     cmsHPROFILE dstp = decode ? p->approx  : p->profile;
+
+    int s_r = params->width, s_g = params->height, s_b = params->depth;
+    size_t data_size = s_r * s_g * s_b * sizeof(uint16_t[4]);
+    if (cache_load(icc, params->signature, datap, data_size)) {
+        pl_info(log, "Using cached 3DLUT (0x%"PRIX64")", params->signature);
+        return;
+    }
 
     clock_t start = clock();
     cmsHTRANSFORM tf = cmsCreateTransformTHR(p->cms, srcp, TYPE_RGB_16,
@@ -440,7 +456,6 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
     clock_t after_transform = clock();
     pl_log_cpu_time(log, start, after_transform, "creating ICC transform");
 
-    int s_r = params->width, s_g = params->height, s_b = params->depth;
     uint16_t *tmp = pl_alloc(NULL, s_r * 3 * sizeof(tmp[0]));
     for (int b = 0; b < s_b; b++) {
         for (int g = 0; g < s_g; g++) {
@@ -460,6 +475,11 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
     pl_log_cpu_time(log, after_transform, clock(), "generating ICC 3DLUT");
     cmsDeleteTransform(tf);
     pl_free(tmp);
+
+    if (icc->params.cache_save) {
+        icc->params.cache_save(icc->params.cache_priv, params->signature,
+                               datap, data_size);
+    }
 }
 
 static void fill_decode(void *datap, const struct sh_lut_params *params)

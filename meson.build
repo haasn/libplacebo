@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '222': 'add `pl_icc_params.cache_save/load`',
       '221': 'add `pl_source_frame.first_field`',
       '220': 'add deinterlacing-related fields to `pl_frame` and `pl_render_params`',
       '219': 'add pl_source_frame.duration, deprecating pl_queue_params.frame_duration',
