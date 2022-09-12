@@ -213,6 +213,8 @@ enum sh_lut_type {
 enum sh_lut_method {
     SH_LUT_NONE = 0,    // no interpolation, integer indices
     SH_LUT_LINEAR,      // linear interpolation, vecN indices in range [0,1]
+    SH_LUT_TETRAHEDRAL, // tetrahedral interpolation for vec3, equivalent to
+                        // SH_LUT_LINEAR for lower dimensions
 };
 
 struct sh_lut_params {

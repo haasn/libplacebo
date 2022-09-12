@@ -893,6 +893,8 @@ ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
     int size = params->width * PL_DEF(params->height, 1) * PL_DEF(params->depth, 1);
     int dims = params->depth ? 3 : params->height ? 2 : 1;
     enum sh_lut_method method = params->method;
+    if (method == SH_LUT_TETRAHEDRAL && dims != 3)
+        method = SH_LUT_LINEAR;
 
     int texdim = 0;
     uint32_t max_tex_dim[] = {
@@ -973,6 +975,26 @@ next_dim: ; // `continue` out of the inner loop
 
     enum sh_lut_type type = params->lut_type;
 
+    // Integer texture sampling requires GLSL >= 130 (for texelFetch)
+    bool can_fetch = sh_glsl(sh).version >= 130;
+    bool needs_integer = method != SH_LUT_LINEAR;
+    if (needs_integer && !can_fetch) {
+        if (method == SH_LUT_TETRAHEDRAL) {
+            // Fall back to normal trilinear interpolation
+            if (texfmt && (texfmt->caps & PL_FMT_CAP_LINEAR)) {
+                method = SH_LUT_LINEAR;
+            } else {
+                PL_ERR(sh, "Cannot compute tetrahedral interpolation on GLSL "
+                       "versions below 130, and no trilinear interpolation "
+                       "available!");
+                goto error;
+            }
+        } else {
+            // Integer sampling, disable textures
+            texfmt = NULL;
+        }
+    }
+
     // The linear sampling code currently only supports 1D linear interpolation
     if (method == SH_LUT_LINEAR && dims > 1) {
         if (texfmt) {
@@ -983,12 +1005,6 @@ next_dim: ; // `continue` out of the inner loop
             goto error;
         }
     }
-
-    // Integer texture sampling requires GLSL >= 130 (for texelFetch)
-    bool can_fetch = sh_glsl(sh).version >= 130;
-    bool needs_integer = method != SH_LUT_LINEAR;
-    if (needs_integer && !can_fetch)
-        texfmt = NULL;
 
     bool can_uniform = gpu && gpu->limits.max_variable_comps >= size * params->comps;
     bool can_literal = sh_glsl(sh).version > 110; // needed for literal arrays
@@ -1252,6 +1268,55 @@ next_dim: ; // `continue` out of the inner loop
                   size - 1,
                   arr_lut, arr_lut);
         }
+    }
+
+    if (method == SH_LUT_TETRAHEDRAL) {
+        ident_t int_lut = name;
+        name = sh_fresh(sh, "lut_barycentric");
+        GLSLH("%s %s(vec3 pos) {                                            \n"
+              // Compute bounding vertices and fractinoal part
+              "    pos = clamp(pos, 0.0, 1.0) * vec3(%d.0, %d.0, %d.0);     \n"
+              "    vec3 base = floor(pos);                                  \n"
+              "    vec3 fpart = pos - base;                                 \n"
+              // v0 and v3 are always 'black' and 'white', respectively
+              // v1 and v2 are the closest RGB and CMY vertices, respectively
+              "    ivec3 v0 = ivec3(base), v3 = ivec3(ceil(pos));           \n"
+              "    ivec3 v1 = v0, v2 = v3;                                  \n"
+              // Table of boolean checks to simplify following math
+              "    bvec3 c = greaterThanEqual(fpart.xyz, fpart.yzx);        \n"
+              "    bool c_xy = c.x, c_yx = !c.x,                            \n"
+              "       c_yz = c.y, c_zy = !c.y,                              \n"
+              "       c_zx = c.z, c_xz = !c.z;                              \n"
+              "    vec3 s = fpart.xyz;                                      \n"
+              "    bool cond;                                               \n",
+              vartypes[PL_VAR_FLOAT][params->comps - 1], name,
+              sizes[0] - 1, sizes[1] - 1, sizes[2] - 1);
+
+        // Subdivision of the cube into six congruent tetrahedras
+        //
+        // For each tetrahedron, test if the point is inside, and if so, update
+        // the edge vertices. We test all six, even though only one case will
+        // ever be true, because this avoids branches.
+        static const char *indices[] = { "xyz", "xzy", "zxy", "zyx", "yzx", "yxz"};
+        for (int i = 0; i < PL_ARRAY_SIZE(indices); i++) {
+            const char x = indices[i][0], y = indices[i][1], z = indices[i][2];
+            GLSLH("cond = c_%c%c && c_%c%c;          \n"
+                  "s = cond ? fpart.%c%c%c : s;      \n"
+                  "v1.%c = cond ? v3.%c : v1.%c;     \n"
+                  "v2.%c = cond ? v0.%c : v2.%c;     \n",
+                  x, y, y, z,
+                  x, y, z,
+                  x, x, x,
+                  z, z, z);
+        }
+
+        // Interpolate in barycentric coordinates, with four texel fetches
+        GLSLH("    return (1.0 - s.x) * %s(v0) +    \n"
+              "           (s.x - s.y) * %s(v1) +    \n"
+              "           (s.y - s.z) * %s(v2) +    \n"
+              "           (s.z)       * %s(v3);     \n"
+              "}                                    \n",
+              int_lut, int_lut, int_lut, int_lut);
     }
 
     lut->error = false;
