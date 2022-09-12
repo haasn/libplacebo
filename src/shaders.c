@@ -984,6 +984,12 @@ next_dim: ; // `continue` out of the inner loop
         }
     }
 
+    // Integer texture sampling requires GLSL >= 130 (for texelFetch)
+    bool can_fetch = sh_glsl(sh).version >= 130;
+    bool needs_integer = method != SH_LUT_LINEAR;
+    if (needs_integer && !can_fetch)
+        texfmt = NULL;
+
     bool can_uniform = gpu && gpu->limits.max_variable_comps >= size * params->comps;
     bool can_literal = sh_glsl(sh).version > 110; // needed for literal arrays
     can_literal &= size <= SH_LUT_MAX_LITERAL_HARD && !params->dynamic;
@@ -1158,8 +1164,7 @@ next_dim: ; // `continue` out of the inner loop
             }
         });
 
-        // texelFetch requires GLSL >= 130, so fall back to the linear code
-        if (method == SH_LUT_LINEAR || gpu->glsl.version < 130) {
+        if (method == SH_LUT_LINEAR) {
             ident_t pos_macros[PL_ARRAY_SIZE(sizes)] = {0};
             for (int i = 0; i < dims; i++)
                 pos_macros[i] = sh_lut_pos(sh, sizes[i]);
