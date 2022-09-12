@@ -673,16 +673,16 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
 
     if (fg_has_y) {
         lut[0] = sh_lut(sh, sh_lut_params(
-            .object = &obj->lut_grain[0],
-            .method = SH_LUT_TEXTURE,
-            .type = PL_VAR_FLOAT,
-            .width = GRAIN_WIDTH_LUT,
-            .height = GRAIN_HEIGHT_LUT,
-            .comps = 1,
-            .update = needs_update,
-            .dynamic = true,
-            .fill = fill_grain_lut,
-            .priv = obj,
+            .object     = &obj->lut_grain[0],
+            .var_type   = PL_VAR_FLOAT,
+            .lut_type   = SH_LUT_TEXTURE,
+            .width      = GRAIN_WIDTH_LUT,
+            .height     = GRAIN_HEIGHT_LUT,
+            .comps      = 1,
+            .update     = needs_update,
+            .dynamic    = true,
+            .fill       = fill_grain_lut,
+            .priv       = obj,
         ));
 
         if (!lut[0]) {
@@ -708,16 +708,16 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
 
     if (chroma_comps > 0) {
         lut[1] = lut[2] = sh_lut(sh, sh_lut_params(
-            .object = &obj->lut_grain[1],
-            .method = SH_LUT_TEXTURE,
-            .type = PL_VAR_FLOAT,
-            .width = GRAIN_WIDTH_LUT >> sub_x,
-            .height = GRAIN_HEIGHT_LUT >> sub_y,
-            .comps = chroma_comps,
-            .update = needs_update,
-            .dynamic = true,
-            .fill = fill_grain_lut,
-            .priv = obj,
+            .object     = &obj->lut_grain[1],
+            .var_type   = PL_VAR_FLOAT,
+            .lut_type   = SH_LUT_TEXTURE,
+            .width      = GRAIN_WIDTH_LUT >> sub_x,
+            .height     = GRAIN_HEIGHT_LUT >> sub_y,
+            .comps      = chroma_comps,
+            .update     = needs_update,
+            .dynamic    = true,
+            .fill       = fill_grain_lut,
+            .priv       = obj,
         ));
 
         if (!lut[1]) {
@@ -730,16 +730,16 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
     }
 
     ident_t offsets = sh_lut(sh, sh_lut_params(
-        .object = &obj->lut_offsets,
-        .method = SH_LUT_AUTO,
-        .type = PL_VAR_UINT,
-        .width = PL_ALIGN2(tex_w << sub_x, 128) / 32,
-        .height = PL_ALIGN2(tex_h << sub_y, 128) / 32,
-        .comps = 1,
-        .update = needs_update,
-        .dynamic = true,
-        .fill = generate_offsets,
-        .priv = (void *) &params->data,
+        .object     = &obj->lut_offsets,
+        .var_type   = PL_VAR_UINT,
+        .lut_type   = SH_LUT_AUTO,
+        .width      = PL_ALIGN2(tex_w << sub_x, 128) / 32,
+        .height     = PL_ALIGN2(tex_h << sub_y, 128) / 32,
+        .comps      = 1,
+        .update     = needs_update,
+        .dynamic    = true,
+        .fill       = generate_offsets,
+        .priv       = (void *) &params->data,
     ));
 
     // For the scaling LUTs, we assume they'll be relatively constant
@@ -788,15 +788,15 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
         bool has_c[3] = { fg_has_y, fg_has_u, fg_has_v };
         if (has_c[i] && priv.num > 0) {
             scaling[i] = sh_lut(sh, sh_lut_params(
-                .object = &obj->lut_scaling[i],
-                .type = PL_VAR_FLOAT,
-                .width = SCALING_LUT_SIZE,
-                .comps = 1,
-                .linear = true,
-                .update = scaling_changed,
-                .dynamic = true,
-                .fill = generate_scaling,
-                .priv = &priv,
+                .object     = &obj->lut_scaling[i],
+                .var_type   = PL_VAR_FLOAT,
+                .width      = SCALING_LUT_SIZE,
+                .comps      = 1,
+                .linear     = true,
+                .update     = scaling_changed,
+                .dynamic    = true,
+                .fill       = generate_scaling,
+                .priv       = &priv,
             ));
 
             if (!scaling[i]) {

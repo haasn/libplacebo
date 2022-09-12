@@ -113,7 +113,7 @@ static void fill_grain_lut(void *data, const struct sh_lut_params *params)
     } *tmp = pl_alloc_ptr(NULL, tmp);
 
     float *out = data;
-    assert(params->type == PL_VAR_FLOAT);
+    assert(params->var_type == PL_VAR_FLOAT);
 
     for (int h = 0; h < 13; h++) {
         for (int v = 0; v < 13; v++) {
@@ -165,13 +165,13 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
     }
 
     ident_t db = sh_lut(sh, sh_lut_params(
-        .object = grain_state,
-        .method = SH_LUT_TEXTURE,
-        .type = PL_VAR_FLOAT,
-        .width = 13 * 64,
-        .height = 13 * 64,
-        .comps = 1,
-        .fill = fill_grain_lut,
+        .object     = grain_state,
+        .var_type   = PL_VAR_FLOAT,
+        .lut_type   = SH_LUT_TEXTURE,
+        .width      = 13 * 64,
+        .height     = 13 * 64,
+        .comps      = 1,
+        .fill       = fill_grain_lut,
     ));
 
     sh_describe(sh, "H.274 film grain");

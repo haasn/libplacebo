@@ -201,7 +201,8 @@ void *sh_require_obj(pl_shader sh, pl_shader_obj *ptr,
 // If `temporal` is set, the PRNG will vary across frames.
 ident_t sh_prng(pl_shader sh, bool temporal, ident_t *state);
 
-enum sh_lut_method {
+// Backing memory type
+enum sh_lut_type {
     SH_LUT_AUTO = 0, // pick whatever makes the most sense
     SH_LUT_TEXTURE,  // upload as texture
     SH_LUT_UNIFORM,  // uniform array
@@ -211,9 +212,9 @@ enum sh_lut_method {
 struct sh_lut_params {
     pl_shader_obj *object;
 
-    // Method and type of the LUT we intend to generate.
-    enum sh_lut_method method;
-    enum pl_var_type type;
+    // Type of the LUT we intend to generate.
+    enum pl_var_type var_type;
+    enum sh_lut_type lut_type;
 
     // For SH_LUT_TEXTURE, this can be used to override the texture's internal
     // format, in which case it takes precedence over the default for `type`.

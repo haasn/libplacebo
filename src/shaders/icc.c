@@ -501,7 +501,7 @@ void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,
 
     ident_t lut = sh_lut(sh, sh_lut_params(
         .object     = lut_obj,
-        .type       = PL_VAR_FLOAT,
+        .var_type   = PL_VAR_FLOAT,
         .fmt        = pl_find_fmt(SH_GPU(sh), PL_FMT_UNORM, 4,
                                   16, 16, PL_FMT_CAP_LINEAR),
         .width      = icc->params.size_r,
@@ -545,7 +545,7 @@ void pl_icc_encode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj)
 
     ident_t lut = sh_lut(sh, sh_lut_params(
         .object     = lut_obj,
-        .type       = PL_VAR_FLOAT,
+        .var_type   = PL_VAR_FLOAT,
         .fmt        = pl_find_fmt(SH_GPU(sh), PL_FMT_UNORM, 4,
                                   16, 16, PL_FMT_CAP_LINEAR),
         .width      = icc->params.size_r,

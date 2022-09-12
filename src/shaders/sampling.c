@@ -649,15 +649,15 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     // code, which is primarily texture bound, the extra cost of LUT
     // interpolation is worth the reduction in texel fetches.
     ident_t lut = sh_lut(sh, sh_lut_params(
-        .object = &obj->lut,
-        .method = is_compute ? SH_LUT_TEXTURE : SH_LUT_AUTO,
-        .type = PL_VAR_FLOAT,
-        .width = lut_entries,
-        .comps = 1,
-        .linear = true,
-        .update = update,
-        .fill = fill_polar_lut,
-        .priv = obj,
+        .object     = &obj->lut,
+        .lut_type   = is_compute ? SH_LUT_TEXTURE : SH_LUT_AUTO,
+        .var_type   = PL_VAR_FLOAT,
+        .width      = lut_entries,
+        .comps      = 1,
+        .linear     = true,
+        .update     = update,
+        .fill       = fill_polar_lut,
+        .priv       = obj,
     ));
 
     if (!lut) {
@@ -939,15 +939,15 @@ bool pl_shader_sample_ortho(pl_shader sh, int pass,
     int N = obj->filter->row_size; // number of samples to convolve
     int width = obj->filter->row_stride / 4; // width of the LUT texture
     ident_t lut = sh_lut(sh, sh_lut_params(
-        .object = &obj->lut,
-        .type = PL_VAR_FLOAT,
-        .width = width,
-        .height = lut_entries,
-        .comps = 4,
-        .linear = true,
-        .update = update,
-        .fill = fill_ortho_lut,
-        .priv = obj,
+        .object     = &obj->lut,
+        .var_type   = PL_VAR_FLOAT,
+        .width      = width,
+        .height     = lut_entries,
+        .comps      = 4,
+        .linear     = true,
+        .update     = update,
+        .fill       = fill_ortho_lut,
+        .priv       = obj,
     ));
     if (!lut) {
         SH_FAIL(sh, "Failed initializing separated LUT!");

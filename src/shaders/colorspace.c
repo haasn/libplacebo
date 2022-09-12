@@ -1319,16 +1319,16 @@ static void tone_map(pl_shader sh,
         dynamic_peak = obj->peak_buf && src_max > dst_max;
 
         lut = sh_lut(sh, sh_lut_params(
-            .object = &obj->lut,
-            .method = SH_LUT_AUTO,
-            .type = PL_VAR_FLOAT,
-            .width = lut_params.lut_size,
-            .height = dynamic_peak ? lut_params.lut_size : 0,
-            .comps = 1,
-            .linear = true,
-            .update = !pl_tone_map_params_equal(&lut_params, &obj->params),
-            .fill = fill_lut,
-            .priv = &lut_params,
+            .object     = &obj->lut,
+            .var_type   = PL_VAR_FLOAT,
+            .lut_type   = SH_LUT_AUTO,
+            .width      = lut_params.lut_size,
+            .height     = dynamic_peak ? lut_params.lut_size : 0,
+            .comps      = 1,
+            .linear     = true,
+            .update     = !pl_tone_map_params_equal(&lut_params, &obj->params),
+            .fill       = fill_lut,
+            .priv       = &lut_params,
         ));
         obj->params = lut_params;
     }
@@ -1781,14 +1781,14 @@ void pl_shader_dither(pl_shader sh, int new_depth,
 
         lut_size = 1 << PL_DEF(params->lut_size, 6);
         lut = sh_lut(sh, sh_lut_params(
-            .object = &obj->lut,
-            .type = PL_VAR_FLOAT,
-            .width = lut_size,
-            .height = lut_size,
-            .comps = 1,
-            .update = changed,
-            .fill = fill_dither_matrix,
-            .priv = obj,
+            .object     = &obj->lut,
+            .var_type   = PL_VAR_FLOAT,
+            .width      = lut_size,
+            .height     = lut_size,
+            .comps      = 1,
+            .update     = changed,
+            .fill       = fill_dither_matrix,
+            .priv       = obj,
         ));
         if (!lut)
             goto fallback;
