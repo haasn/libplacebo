@@ -209,12 +209,21 @@ enum sh_lut_type {
     SH_LUT_LITERAL,  // constant / literal array in shader source (fallback)
 };
 
+// Interpolation method
+enum sh_lut_method {
+    SH_LUT_NONE = 0,    // no interpolation, integer indices
+    SH_LUT_LINEAR,      // linear interpolation, vecN indices in range [0,1]
+};
+
 struct sh_lut_params {
     pl_shader_obj *object;
 
     // Type of the LUT we intend to generate.
+    //
+    // Note: If `var_type` is PL_VAR_*INT, `method` must be SH_LUT_NONE.
     enum pl_var_type var_type;
     enum sh_lut_type lut_type;
+    enum sh_lut_method method;
 
     // For SH_LUT_TEXTURE, this can be used to override the texture's internal
     // format, in which case it takes precedence over the default for `type`.
@@ -225,10 +234,6 @@ struct sh_lut_params {
     int height;
     int depth;
     int comps;
-
-    // If true, LUT takes a vecN coordinate and linearly interpolates values,
-    // rather than taking an ivecN. Requires `type == PL_VAR_FLOAT`!
-    bool linear;
 
     // If true, the LUT will always be regenerated, even if the dimensions have
     // not changed.

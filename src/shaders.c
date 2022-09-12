@@ -851,9 +851,9 @@ static ident_t sh_lut_pos(pl_shader sh, int lut_size)
 
 struct sh_lut_obj {
     enum sh_lut_type type;
+    enum sh_lut_method method;
     enum pl_var_type vartype;
     pl_fmt fmt;
-    bool linear;
     int width, height, depth, comps;
     uint64_t signature;
     bool error; // reset if params change
@@ -884,14 +884,15 @@ ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
     void *tmp = NULL;
 
     const enum pl_var_type vartype = params->var_type;
+    pl_assert(vartype != PL_VAR_INVALID);
+    pl_assert(params->method == SH_LUT_NONE || vartype == PL_VAR_FLOAT);
     pl_assert(params->width > 0 && params->height >= 0 && params->depth >= 0);
     pl_assert(params->comps > 0);
-    pl_assert(vartype != PL_VAR_INVALID);
-    pl_assert(!params->linear || vartype == PL_VAR_FLOAT);
 
     int sizes[] = { params->width, params->height, params->depth };
     int size = params->width * PL_DEF(params->height, 1) * PL_DEF(params->depth, 1);
     int dims = params->depth ? 3 : params->height ? 2 : 1;
+    enum sh_lut_method method = params->method;
 
     int texdim = 0;
     uint32_t max_tex_dim[] = {
@@ -908,7 +909,6 @@ ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
 
     bool update = params->update || lut->signature != params->signature ||
                   vartype != lut->vartype || params->fmt != lut->fmt ||
-                  params->linear != lut->linear ||
                   params->width != lut->width || params->height != lut->height ||
                   params->depth != lut->depth || params->comps != lut->comps;
 
@@ -939,7 +939,7 @@ next_dim: ; // `continue` out of the inner loop
     };
 
     enum pl_fmt_caps texcaps = PL_FMT_CAP_SAMPLEABLE;
-    if (params->linear)
+    if (method == SH_LUT_LINEAR)
         texcaps |= PL_FMT_CAP_LINEAR;
 
     pl_fmt texfmt = params->fmt;
@@ -974,7 +974,7 @@ next_dim: ; // `continue` out of the inner loop
     enum sh_lut_type type = params->lut_type;
 
     // The linear sampling code currently only supports 1D linear interpolation
-    if (params->linear && dims > 1) {
+    if (method == SH_LUT_LINEAR && dims > 1) {
         if (texfmt) {
             type = SH_LUT_TEXTURE;
         } else {
@@ -1013,6 +1013,8 @@ next_dim: ; // `continue` out of the inner loop
 
     // Reinitialize the existing LUT if needed
     update |= type != lut->type;
+    update |= method != lut->method;
+
     if (update) {
         PL_DEBUG(sh, "LUT cache invalidated, regenerating..");
         size_t buf_size = size * params->comps * pl_var_type_size(vartype);
@@ -1119,9 +1121,9 @@ next_dim: ; // `continue` out of the inner loop
         }
 
         lut->type = type;
+        lut->method = method;
         lut->vartype = vartype;
         lut->fmt = params->fmt;
-        lut->linear = params->linear;
         lut->width = params->width;
         lut->height = params->height;
         lut->depth = params->depth;
@@ -1150,13 +1152,14 @@ next_dim: ; // `continue` out of the inner loop
             },
             .binding = {
                 .object = lut->tex,
-                .sample_mode = params->linear ? PL_TEX_SAMPLE_LINEAR
-                                              : PL_TEX_SAMPLE_NEAREST,
+                .sample_mode = method == SH_LUT_LINEAR
+                                    ? PL_TEX_SAMPLE_LINEAR
+                                    : PL_TEX_SAMPLE_NEAREST,
             }
         });
 
         // texelFetch requires GLSL >= 130, so fall back to the linear code
-        if (params->linear || gpu->glsl.version < 130) {
+        if (method == SH_LUT_LINEAR || gpu->glsl.version < 130) {
             ident_t pos_macros[PL_ARRAY_SIZE(sizes)] = {0};
             for (int i = 0; i < dims; i++)
                 pos_macros[i] = sh_lut_pos(sh, sizes[i]);
@@ -1189,7 +1192,6 @@ next_dim: ; // `continue` out of the inner loop
 
             GLSLH("), 0).%s)\n", swizzles[params->comps - 1]);
         }
-
         break;
     }
 
@@ -1229,7 +1231,7 @@ next_dim: ; // `continue` out of the inner loop
         }
         GLSLH("  ])\n");
 
-        if (params->linear) {
+        if (method == SH_LUT_LINEAR) {
             pl_assert(dims == 1);
             pl_assert(vartype == PL_VAR_FLOAT);
             ident_t arr_lut = name;
