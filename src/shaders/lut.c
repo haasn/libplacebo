@@ -230,7 +230,7 @@ void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
     ident_t fun = sh_lut(sh, sh_lut_params(
         .object     = lut_state,
         .var_type   = PL_VAR_FLOAT,
-        .method     = SH_LUT_LINEAR,
+        .method     = SH_LUT_TETRAHEDRAL,
         .width      = lut->size[0],
         .height     = lut->size[1],
         .depth      = lut->size[2],
