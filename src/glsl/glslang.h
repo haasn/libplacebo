@@ -20,6 +20,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+typedef struct TLimits TLimits;
+typedef struct TBuiltInResource TBuiltInResource;
+#include <glslang/Include/ResourceLimits.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -44,6 +48,8 @@ struct pl_glslang_res {
 struct pl_glslang_res *pl_glslang_compile(const struct pl_glsl_version *glsl,
                                           enum glsl_shader_stage stage,
                                           const char *shader);
+
+extern const TBuiltInResource DefaultTBuiltInResource;
 
 #ifdef __cplusplus
 }

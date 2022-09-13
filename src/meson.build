@@ -232,6 +232,7 @@ components = [
     'name': 'glslang',
     'deps': glslang,
     'srcs': [ 'glsl/glslang.cc',
+              'glsl/glslang_resources.c',
               'glsl/spirv_glslang.c',
             ],
   }, {
