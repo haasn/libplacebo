@@ -67,6 +67,7 @@ struct pl_renderer_t {
     bool disable_hooks;         // disable user hooks / custom shaders
     bool disable_mixing;        // disable frame mixing
     bool disable_deinterlacing; // disable deinterlacing
+    bool disable_error_diffusion; // disable error diffusion
 
     // Shader resource objects and intermediate textures (FBOs)
     pl_shader_obj tone_map_state;
@@ -1917,6 +1918,70 @@ static bool pass_scale_main(struct pass_state *pass)
     return true;
 }
 
+// Returns true if error diffusion was successfully performed
+static bool pass_error_diffusion(struct pass_state *pass, pl_shader *sh,
+                                 int new_depth, int comps, int out_w, int out_h)
+{
+    const struct pl_render_params *params = pass->params;
+    pl_renderer rr = pass->rr;
+    if (!params->error_diffusion || rr->disable_error_diffusion)
+        return false;
+
+    size_t shmem_req = pl_error_diffusion_shmem_req(params->error_diffusion, out_h);
+    if (shmem_req > rr->gpu->glsl.max_shmem_size) {
+        PL_TRACE(rr, "Disabling error diffusion due to shmem requirements (%zu) "
+                 "exceeding capabilities (%zu)", shmem_req, rr->gpu->glsl.max_shmem_size);
+        return false;
+    }
+
+    pl_fmt fmt = pass->fbofmt[comps];
+    if (!fmt || !(fmt->caps & PL_FMT_CAP_STORABLE)) {
+        PL_ERR(rr, "Error diffusion requires storable FBOs but GPU does not "
+               "provide them... disabling!");
+        goto error;
+    }
+
+    struct pl_error_diffusion_params edpars = {
+        .new_depth = new_depth,
+        .kernel = params->error_diffusion,
+    };
+
+    // Create temporary framebuffers
+    edpars.input_tex = get_fbo(pass, out_w, out_h, fmt, comps, PL_DEBUG_TAG);
+    edpars.output_tex = get_fbo(pass, out_w, out_h, fmt, comps, PL_DEBUG_TAG);
+    if (!edpars.input_tex || !edpars.output_tex)
+        goto error;
+
+    pl_shader dsh = pl_dispatch_begin(rr->dp);
+    if (!pl_shader_error_diffusion(dsh, &edpars)) {
+        pl_dispatch_abort(rr->dp, &dsh);
+        goto error;
+    }
+
+    // Everything was okay, run the shaders
+    bool ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
+        .shader = sh,
+        .target = edpars.input_tex,
+    ));
+
+    if (ok) {
+        ok = pl_dispatch_compute(rr->dp, pl_dispatch_compute_params(
+            .shader = &dsh,
+            .dispatch_size = {1, 1, 1},
+        ));
+    }
+
+    *sh = pl_dispatch_begin(rr->dp);
+    pl_shader_sample_direct(*sh, pl_sample_src(
+        .tex = ok ? edpars.output_tex : edpars.input_tex,
+    ));
+    return ok;
+
+error:
+    rr->disable_error_diffusion = true;
+    return false;
+}
+
 #define CLEAR_COL(params)                                                       \
     (float[4]) {                                                                \
         (params)->background_color[0],                                          \
@@ -2167,11 +2232,13 @@ static bool pass_output_target(struct pass_state *pass)
 
         }
 
-        if (params->dither_params) {
-            // Ignore dithering for > 16-bit outputs by default, since it makes
-            // little sense to do so (and probably just adds errors)
-            int depth = target->repr.bits.color_depth;
-            if (depth && (depth < 16 || params->force_dither))
+        // Ignore dithering for > 16-bit outputs by default, since it makes
+        // little sense to do so (and probably just adds errors)
+        int depth = target->repr.bits.color_depth;
+        if (depth && (depth < 16 || params->force_dither)) {
+            bool ed = pass_error_diffusion(pass, &sh, depth, plane->components,
+                                           rx1 - rx0, ry1 - ry0);
+            if (!ed && params->dither_params)
                 pl_shader_dither(sh, depth, &rr->dither_state, params->dither_params);
         }
 
@@ -2804,6 +2871,7 @@ static struct params_info render_params_info(const struct pl_render_params *para
     CLEAR(params.blend_params);
     CLEAR(params.cone_params);
     CLEAR(params.dither_params);
+    CLEAR(params.error_diffusion);
     CLEAR(params.icc_params);
     CLEAR(params.force_icc_lut);
     CLEAR(params.force_dither);

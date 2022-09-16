@@ -164,6 +164,11 @@ struct pl_render_params {
     // as NULL disables dithering.
     const struct pl_dither_params *dither_params;
 
+    // Configures the error diffusion kernel to use for error diffusion
+    // dithering. If set, this will be used instead of `dither_params` whenever
+    // possible. Leaving this as NULL disables error diffusion.
+    const struct pl_error_diffusion_kernel *error_diffusion;
+
     // Configures the settings used to handle ICC profiles, if required. If
     // NULL, defaults to `&pl_icc_default_params`.
     const struct pl_icc_params *icc_params;
