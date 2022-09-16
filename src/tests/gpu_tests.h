@@ -674,6 +674,31 @@ static void pl_shader_tests(pl_gpu gpu)
         .target = fbo,
     )));
 
+    // Test error diffusion
+    if (fbo->params.storable) {
+        for (int i = 0; i < pl_num_error_diffusion_kernels; i++) {
+            const struct pl_error_diffusion_kernel *k = pl_error_diffusion_kernels[i];
+            printf("testing error diffusion kernel '%s'\n", k->name);
+            sh = pl_dispatch_begin(dp);
+            bool ok = pl_shader_error_diffusion(sh, pl_error_diffusion_params(
+                .input_tex  = src,
+                .output_tex = fbo,
+                .new_depth  = 8,
+                .kernel     = k,
+            ));
+
+            if (!ok) {
+                fprintf(stderr, "kernel '%s' exceeds GPU limits, skipping...\n", k->name);
+                continue;
+            }
+
+            REQUIRE(pl_dispatch_compute(dp, pl_dispatch_compute_params(
+                .shader = &sh,
+                .dispatch_size = {1, 1, 1},
+            )));
+        }
+    }
+
     pl_dispatch_destroy(&dp);
     pl_tex_destroy(gpu, &src);
     pl_tex_destroy(gpu, &fbo);
