@@ -1144,6 +1144,21 @@ static void update_settings(struct plplay *p)
 
             nk_checkbox_label(nk, "Temporal dithering", &dpar->temporal);
 
+            nk_layout_row_dynamic(nk, 24, 2);
+            nk_label(nk, "Error diffusion:", NK_TEXT_LEFT);
+            const char *name = par->error_diffusion ? par->error_diffusion->description : "(None)";
+            if (nk_combo_begin_label(nk, name, nk_vec2(nk_widget_width(nk), 500))) {
+                nk_layout_row_dynamic(nk, 16, 1);
+                if (nk_combo_item_label(nk, "(None)", NK_TEXT_LEFT))
+                    par->error_diffusion = NULL;
+                for (int i = 0; i < pl_num_error_diffusion_kernels; i++) {
+                    const struct pl_error_diffusion_kernel *k = pl_error_diffusion_kernels[i];
+                    if (nk_combo_item_label(nk, k->description, NK_TEXT_LEFT))
+                        par->error_diffusion = k;
+                }
+                nk_combo_end(nk);
+            }
+
             nk_tree_pop(nk);
         }
 
