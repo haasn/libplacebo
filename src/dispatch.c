@@ -429,7 +429,7 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
         };
 
         const struct pl_shader_const *sc = &res->constants[i];
-        ADD(pre, "layout(constant_id=%"PRIu32") const %s %s = 0; \n",
+        ADD(pre, "layout(constant_id=%"PRIu32") const %s %s = 1; \n",
             pass_params->constants[i].id, types[sc->type], sc->name);
     }
 
