@@ -1,10 +1,7 @@
-shaderc = dependency('shaderc', version: '>=2019.1', required: get_option('shaderc'))
-cross = dependency('spirv-cross-c-shared', version: '>=0.29.0', required: get_option('d3d11'))
-
 d3d11 = disabler()
 d3d11_inc = ['d3d11_4.h', 'dxgi1_6.h']
 d3d11_deps = [
-  cross,
+  dependency('spirv-cross-c-shared', version: '>=0.29.0', required: get_option('d3d11')),
   cc.find_library('version', required: get_option('d3d11')),
 ]
 
@@ -30,37 +27,6 @@ if unwind.found()
   build_deps += [unwind, cc.find_library('dl', required : false)]
 elif has_execinfo
   build_deps += libexecinfo
-endif
-
-# work-arounds for glslang braindeath
-glslang = disabler()
-glslang_req = get_option('glslang')
-
-if glslang_req.auto() and shaderc.found()
-
-  # we only need one or the other, and shaderc is preferred
-  message('Skipping `glslang` because `shaderc` is available')
-
-else
-
-  glslang_deps = [
-    cxx.find_library('glslang',             required: glslang_req),
-    cxx.find_library('MachineIndependent',  required: false),
-    cxx.find_library('OSDependent',         required: glslang_req),
-    cxx.find_library('HLSL',                required: glslang_req),
-    cxx.find_library('OGLCompiler',         required: glslang_req),
-    cxx.find_library('GenericCodeGen',      required: false),
-    cxx.find_library('SPVRemapper',         required: glslang_req),
-    cxx.find_library('SPIRV',               required: glslang_req),
-    cxx.find_library('SPIRV-Tools-opt',     required: false),
-    cxx.find_library('SPIRV-Tools',         required: false),
-    cxx.find_library('pthread',             required: false)
-  ]
-
-  if glslang_deps[0].found() and cc.has_header('glslang/build_info.h')
-    glslang = declare_dependency(dependencies: glslang_deps)
-  endif
-
 endif
 
 # Work around missing atomics on some (obscure) platforms
@@ -161,6 +127,7 @@ components = configuration_data()
 
 
 # Optional dependencies / components
+subdir('glsl')
 subdir('opengl')
 subdir('vulkan')
 
@@ -169,22 +136,6 @@ components.set('lcms', lcms.found())
 if lcms.found()
   build_deps += lcms
   tests += 'icc.c'
-endif
-
-components.set('glslang', glslang.found())
-if glslang.found()
-  build_deps += glslang
-  sources += [
-    'glsl/glslang.cc',
-    'glsl/glslang_resources.c',
-    'glsl/spirv_glslang.c',
-  ]
-endif
-
-components.set('shaderc', shaderc.found())
-if shaderc.found()
-  build_deps += shaderc
-  sources += 'glsl/spirv_shaderc.c'
 endif
 
 components.set('d3d11', d3d11.found())
