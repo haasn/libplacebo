@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '226': 'add `pl_dither_params.transfer` and `pl_render_params.disable_dither_gamma_correction`',
       '225': 'add `pl_render_params.error_diffusion`',
       '224': 'add `pl_shader_error_diffusion` and related functions',
       '223': 'add <libplacebo/shaders/dithering.h>',

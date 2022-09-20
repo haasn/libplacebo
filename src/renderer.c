@@ -2238,8 +2238,12 @@ static bool pass_output_target(struct pass_state *pass)
         if (depth && (depth < 16 || params->force_dither)) {
             bool ed = pass_error_diffusion(pass, &sh, depth, plane->components,
                                            rx1 - rx0, ry1 - ry0);
-            if (!ed && params->dither_params)
-                pl_shader_dither(sh, depth, &rr->dither_state, params->dither_params);
+            if (!ed && params->dither_params) {
+                struct pl_dither_params dparams = *params->dither_params;
+                if (!params->disable_dither_gamma_correction)
+                    dparams.transfer = target->color.transfer;
+                pl_shader_dither(sh, depth, &rr->dither_state, &dparams);
+            }
         }
 
         GLSL("color *= vec4(1.0 / %s); \n", SH_FLOAT(scale));

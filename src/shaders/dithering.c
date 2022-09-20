@@ -74,6 +74,36 @@ static bool dither_method_is_lut(enum pl_dither_method method)
     pl_unreachable();
 }
 
+static inline float approx_gamma(enum pl_color_transfer trc)
+{
+    switch (trc) {
+    case PL_COLOR_TRC_UNKNOWN:  return 1.0f;
+    case PL_COLOR_TRC_LINEAR:   return 1.0f;
+    case PL_COLOR_TRC_PRO_PHOTO:return 1.8f;
+    case PL_COLOR_TRC_GAMMA18:  return 1.8f;
+    case PL_COLOR_TRC_GAMMA20:  return 2.0f;
+    case PL_COLOR_TRC_GAMMA24:  return 2.4f;
+    case PL_COLOR_TRC_GAMMA26:  return 2.6f;
+    case PL_COLOR_TRC_GAMMA28:  return 2.8f;
+
+    case PL_COLOR_TRC_SRGB:
+    case PL_COLOR_TRC_BT_1886:
+    case PL_COLOR_TRC_GAMMA22:
+        return 2.2f;
+
+    case PL_COLOR_TRC_PQ:
+    case PL_COLOR_TRC_HLG:
+    case PL_COLOR_TRC_V_LOG:
+    case PL_COLOR_TRC_S_LOG1:
+    case PL_COLOR_TRC_S_LOG2:
+        return 2.0f; // TODO: handle this better
+
+    case PL_COLOR_TRC_COUNT: break;
+    }
+
+    pl_unreachable();
+}
+
 void pl_shader_dither(pl_shader sh, int new_depth,
                       pl_shader_obj *dither_state,
                       const struct pl_dither_params *params)
@@ -210,11 +240,46 @@ done: ;
         pl_unreachable();
     }
 
-    uint64_t scale = (1LLU << new_depth) - 1;
-    GLSL("color = vec4(%llu.0) * color + vec4(bias); \n"
-         "color = floor(color) * vec4(1.0 / %llu.0); \n"
-         "}                                          \n",
-         (long long unsigned) scale, (long long unsigned) scale);
+    // Scale factor for dither rounding
+    GLSL("const float scale = %llu.0; \n", (1LLU << new_depth) - 1);
+
+    const float gamma = approx_gamma(params->transfer);
+    if (gamma != 1.0f && new_depth <= 4) {
+        GLSL("const float gamma = %s;                   \n"
+             "vec4 color_lin = pow(color, vec4(gamma)); \n",
+             SH_FLOAT(gamma));
+
+        if (new_depth == 1) {
+            // Special case for bit depth 1 dithering, in this case we can just
+            // ignore the low/high rounding because we know we are always
+            // dithering between 0.0 and 1.0.
+            GLSL("const vec4 low = vec4(0.0);           \n"
+                 "const vec4 high = vec4(1.0);          \n"
+                 "vec4 offset = color_lin;              \n");
+        } else {
+            // Linearize the low, high and current color values
+            GLSL("vec4 low = floor(color * scale) / scale;  \n"
+                 "vec4 high = ceil(color * scale) / scale;  \n"
+                 "vec4 low_lin = pow(low, vec4(gamma));     \n"
+                 "vec4 high_lin = pow(high, vec4(gamma));   \n"
+                 "vec4 range = high_lin - low_lin;          \n"
+                 "vec4 offset = (color_lin - low_lin) /     \n"
+                 "              max(range, 1e-6);           \n");
+        }
+
+        // Mix in the correct ratio corresponding to the offset and bias
+        GLSL("color = mix(low, high, %s(greaterThan(offset, vec4(bias)))); \n",
+             sh_bvec(sh, 4));
+    } else {
+        // Approximate each gamma segment as a straight line, this simplifies
+        // the process of dithering down to a single scale and (biased) round.
+        uint64_t scale = (1LLU << new_depth) - 1;
+        GLSL("color = vec4(%llu.0) * color + vec4(bias); \n"
+             "color = floor(color) * vec4(1.0 / %llu.0); \n",
+             (long long unsigned) scale, (long long unsigned) scale);
+    }
+
+    GLSL("} \n");
 }
 
 /* Error diffusion code is taken from mpv, original copyright (c) 2019 Bin Jin

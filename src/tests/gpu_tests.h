@@ -1011,6 +1011,11 @@ static void pl_render_tests(pl_gpu gpu)
     TEST_PARAMS(dither, temporal, true);
     TEST(cone_params, pl_cone_params, pl_vision_deuteranomaly, strength, 0);
 
+    // Test gamma-correct dithering
+    target.repr.bits.color_depth = 2;
+    TEST_PARAMS(dither, transfer, PL_COLOR_TRC_GAMMA22);
+    target.repr.bits.color_depth = 32;
+
     // Test HDR tone mapping
     image.color = pl_color_space_hdr10;
     TEST_PARAMS(color_map, tone_mapping_mode, PL_TONE_MAP_MODE_COUNT - 1);

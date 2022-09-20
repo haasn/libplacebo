@@ -289,6 +289,10 @@ struct pl_render_params {
     // but this can be used to test the dither code.
     bool force_dither;
 
+    // Disables the gamma-correct dithering logic which normally applies when
+    // dithering to low bit depths. No real use, outside of testing.
+    bool disable_dither_gamma_correction;
+
     // Completely overrides the use of FBOs, as if there were no renderable
     // texture format available. This disables most features.
     bool disable_fbos;

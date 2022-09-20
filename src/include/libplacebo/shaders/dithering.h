@@ -20,6 +20,7 @@
 
 // Dithering shaders
 
+#include <libplacebo/colorspace.h>
 #include <libplacebo/dither.h>
 #include <libplacebo/shaders.h>
 
@@ -67,6 +68,10 @@ struct pl_dither_params {
     // artifacts by perturbing the dithering matrix per frame.
     // Warning: This can cause nasty aliasing artifacts on some LCD screens.
     bool temporal;
+
+    // Gamma function to use for dither gamma correction. This will only have
+    // an effect when dithering to low bit depths (<= 4).
+    enum pl_color_transfer transfer;
 };
 
 #define PL_DITHER_DEFAULTS                              \
