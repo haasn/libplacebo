@@ -1,39 +1,3 @@
-# Configuration data
-conf_public = configuration_data()
-conf_internal = configuration_data()
-conf_public.set('majorver', majorver)
-conf_public.set('apiver', apiver)
-conf_internal.set('BUILD_API_VER', apiver)
-conf_internal.set('BUILD_FIX_VER', fixver)
-conf_internal.set('PL_DEBUG_ABORT', get_option('debug-abort'))
-
-# Dependencies
-libm = cc.find_library('m', required: false)
-libdl = cc.find_library('dl', required : false)
-thirdparty = meson.project_source_root()/'3rdparty'
-python = import('python').find_installation()
-python_env = environment()
-python_env.append('PYTHONPATH', thirdparty/'mako')
-python_env.append('PYTHONPATH', thirdparty/'jinja'/'src')
-python_env.append('PYTHONPATH', thirdparty/'markupsafe'/'src')
-python_env.append('PYTHONPATH', thirdparty/'glad')
-
-if host_machine.system() == 'windows'
-    threads = declare_dependency()
-else
-    threads = dependency('threads')
-    conf_internal.set('PL_HAVE_PTHREAD', threads.found())
-    conf_internal.set('PTHREAD_HAS_SETCLOCK', cc.has_header_symbol(
-      'pthread.h',
-      'pthread_condattr_setclock',
-      dependencies: threads,
-      args: c_opts,
-    ))
-endif
-
-build_deps = [ libm, threads ]
-test_deps = []
-
 vulkan_opt = get_option('vulkan')
 vulkan = dependency('vulkan', version: '>=1.2.0', required: vulkan_opt)
 shaderc = dependency('shaderc', version: '>=2019.1', required: get_option('shaderc'))
@@ -431,6 +395,7 @@ libplacebo = declare_dependency(
 meson.override_dependency('libplacebo', libplacebo)
 
 # Install process
+proj_name = meson.project_name()
 foreach h : headers
   parts = h.split('/')
   path = proj_name
