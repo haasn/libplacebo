@@ -40,7 +40,7 @@ apis = []
 
 # Enable all supported combinations of API and windowing system
 if glfw.found()
-  if comps.has('vulkan')
+  if components.get('vulkan')
     conf_demos.set('HAVE_GLFW_VULKAN', true)
     apis += static_library('glfw-vk',
       dependencies: [libplacebo, libm, glfw, vulkan_headers],
@@ -49,7 +49,7 @@ if glfw.found()
     )
   endif
 
-  if comps.has('opengl')
+  if components.get('opengl')
     conf_demos.set('HAVE_GLFW_OPENGL', true)
     apis += static_library('glfw-gl',
       dependencies: [libplacebo, glfw],
@@ -69,7 +69,7 @@ if glfw.found()
 endif
 
 if sdl.found()
-  if comps.has('vulkan')
+  if components.get('vulkan')
     conf_demos.set('HAVE_SDL_VULKAN', true)
     apis += static_library('sdl-vk',
       dependencies: [libplacebo, sdl, vulkan_headers],
@@ -78,7 +78,7 @@ if sdl.found()
     )
   endif
 
-  if comps.has('opengl')
+  if components.get('opengl')
     conf_demos.set('HAVE_SDL_OPENGL', true)
     apis += static_library('sdl-gl',
       dependencies: [libplacebo, sdl],

@@ -187,97 +187,50 @@ fuzzers = [
   'user_shaders.c',
 ]
 
+components = configuration_data()
+
 
 # Optional dependencies / components
-components = [
-  {
-    'name': 'lcms',
-    'deps':  dependency('lcms2', version: '>=2.9', required: get_option('lcms')),
-    'test': 'icc.c',
-  }, {
-    'name': 'glslang',
-    'deps': glslang,
-    'srcs': [ 'glsl/glslang.cc',
-              'glsl/glslang_resources.c',
-              'glsl/spirv_glslang.c',
-            ],
-  }, {
-    'name': 'shaderc',
-    'deps': shaderc,
-    'srcs': 'glsl/spirv_shaderc.c',
-  }, {
-    'name': 'vulkan',
-    'deps': vulkan_headers,
-    'srcs': [ 'vulkan/command.c',
-              'vulkan/context.c',
-              'vulkan/formats.c',
-              'vulkan/gpu.c',
-              'vulkan/gpu_buf.c',
-              'vulkan/gpu_tex.c',
-              'vulkan/gpu_pass.c',
-              'vulkan/malloc.c',
-              'vulkan/swapchain.c',
-              'vulkan/utils.c',
-            ],
-    'headers': 'vulkan.h',
-  }, {
-    'name': 'opengl',
-    'deps': opengl,
-    'srcs': [ 'opengl/context.c',
-              'opengl/formats.c',
-              'opengl/loader_gl.c',
-              'opengl/loader_egl.c',
-              'opengl/gpu.c',
-              'opengl/gpu_tex.c',
-              'opengl/gpu_pass.c',
-              'opengl/swapchain.c',
-              'opengl/utils.c',
-            ],
-    'headers': 'opengl.h',
-  }, {
-    'name': 'd3d11',
-    'deps': d3d11,
-    'srcs': [ 'd3d11/context.c',
-              'd3d11/formats.c',
-              'd3d11/gpu.c',
-              'd3d11/gpu_buf.c',
-              'd3d11/gpu_tex.c',
-              'd3d11/gpu_pass.c',
-              'd3d11/swapchain.c',
-              'd3d11/utils.c',
-            ],
-    'headers': 'd3d11.h',
-    'test': 'd3d11.c',
-   }
-]
+lcms = dependency('lcms2', version: '>=2.9', required: get_option('lcms'))
+components.set('lcms', lcms.found())
+if lcms.found()
+  build_deps += lcms
+  tests += 'icc.c'
+endif
 
-defs = ''
-pc_vars = []
-comps = configuration_data()
+components.set('glslang', glslang.found())
+if glslang.found()
+  build_deps += glslang
+  sources += [
+    'glsl/glslang.cc',
+    'glsl/glslang_resources.c',
+    'glsl/spirv_glslang.c',
+  ]
+endif
 
-foreach c : components
-  name = c['name']
-  deps = c['deps']
-  summary(name, deps.found(), section: 'Components', bool_yn: true)
+components.set('shaderc', shaderc.found())
+if shaderc.found()
+  build_deps += shaderc
+  sources += 'glsl/spirv_shaderc.c'
+endif
 
-  pretty = name.underscorify().to_upper()
+components.set('vulkan', vulkan_headers.found())
+if vulkan_headers.found()
+  build_deps += vulkan_headers
+  headers += 'vulkan.h'
+  sources += [
+    'vulkan/command.c',
+    'vulkan/context.c',
+    'vulkan/formats.c',
+    'vulkan/gpu.c',
+    'vulkan/gpu_buf.c',
+    'vulkan/gpu_tex.c',
+    'vulkan/gpu_pass.c',
+    'vulkan/malloc.c',
+    'vulkan/swapchain.c',
+    'vulkan/utils.c',
+  ]
 
-  if deps.found()
-    defs += '#define PL_HAVE_@0@ 1\n'.format(pretty)
-    pc_vars += 'pl_has_@0@=1'.format(pretty.to_lower())
-    comps.set(name, 1)
-    build_deps += deps
-    sources += c.get('srcs', [])
-    headers += c.get('headers', [])
-    tests += c.get('test', [])
-  else
-    defs += '#undef PL_HAVE_@0@\n'.format(pretty)
-    pc_vars += 'pl_has_@0@=0'.format(pretty.to_lower())
-  endif
-endforeach
-
-# Extra checks/steps required for vulkan in particular
-if comps.has('vulkan')
   registry_xml = get_option('vulkan-registry')
   datadir = get_option('prefix') / get_option('datadir')
   sources += custom_target('utils_gen.c',
@@ -287,26 +240,31 @@ if comps.has('vulkan')
     env: python_env,
   )
 
-  if vulkan.found() and get_option('vulkan-link')
-    defs += '#define PL_HAVE_VK_PROC_ADDR 1\n'
-    pc_vars += 'pl_has_vk_proc_addr=1'
-  else
-    defs += '#undef PL_HAVE_VK_PROC_ADDR\n'
-    pc_vars += 'pl_has_vk_proc_addr=0'
-  endif
+  vk_loader = vulkan.found() and get_option('vulkan-link')
+  components.set('vk-proc-addr', vk_loader)
 endif
 
-if comps.has('opengl')
-  if libdl.found() and get_option('opengl-loader')
+components.set('opengl', opengl.found())
+if opengl.found()
+  build_deps += opengl
+  headers += 'opengl.h'
+  sources += [
+    'opengl/context.c',
+    'opengl/formats.c',
+    'opengl/loader_gl.c',
+    'opengl/loader_egl.c',
+    'opengl/gpu.c',
+    'opengl/gpu_tex.c',
+    'opengl/gpu_pass.c',
+    'opengl/swapchain.c',
+    'opengl/utils.c',
+  ]
+
+  gl_loader = libdl.found() and get_option('opengl-loader')
+  components.set('gl-proc-addr', gl_loader)
+  if gl_loader
     build_deps += libdl
     tests += 'opengl_surfaceless.c'
-    defs += '#define PL_HAVE_GL_PROC_ADDR 1\n'
-    pc_vars += 'pl_has_gl_proc_addr=1'
-    gl_loader = true
-  else
-    defs += '#undef PL_HAVE_GL_PROC_ADDR\n'
-    pc_vars += 'pl_has_gl_proc_addr=0'
-    gl_loader = false
   endif
 
   gl_extensions = [
@@ -352,8 +310,36 @@ if comps.has('opengl')
   build_deps += declare_dependency(sources: glad)
 endif
 
+components.set('d3d11', d3d11.found())
+if d3d11.found()
+  build_deps += d3d11
+  headers += 'd3d11.h'
+  tests += 'd3d11.c'
+  sources += [
+    'd3d11/context.c',
+    'd3d11/formats.c',
+    'd3d11/gpu.c',
+    'd3d11/gpu_buf.c',
+    'd3d11/gpu_tex.c',
+    'd3d11/gpu_pass.c',
+    'd3d11/swapchain.c',
+    'd3d11/utils.c',
+  ]
+endif
+
+defs = ''
+pc_vars = []
+
+foreach comp : components.keys()
+  found = components.get(comp)
+  varname = comp.underscorify().to_upper()
+  summary(comp, found, section: 'Optional features', bool_yn: true)
+  defs += (found ? '#define PL_HAVE_@0@ 1\n' : '#undef PL_HAVE_@0@\n').format(varname)
+  pc_vars += 'pl_has_@0@=@1@'.format(varname.to_lower(), found ? 1 : 0)
+endforeach
+
 # Check to see if libplacebo built this way is sane
-if not (comps.has('vulkan') or comps.has('opengl') or comps.has('d3d11'))
+if not (components.get('vulkan') or components.get('opengl') or components.get('d3d11'))
   warning('Building without any graphics API. libplacebo built this way still ' +
           'has some limited use (e.g. generating GLSL shaders), but most of ' +
           'its functionality will be missing or impaired!')
