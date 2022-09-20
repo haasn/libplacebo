@@ -1,3 +1,4 @@
+### Common dependencies
 unwind = dependency('libunwind', required: get_option('unwind'))
 libexecinfo = cc.find_library('execinfo', required: false)
 has_execinfo = cc.has_function('backtrace_symbols', dependencies: libexecinfo, prefix: '#include <execinfo.h>')
@@ -22,7 +23,8 @@ if not cc.links(atomic_test)
   build_deps += cc.find_library('atomic')
 endif
 
-# Source files
+
+### Common source files
 headers = [
   'colorspace.h',
   'common.h',
@@ -106,7 +108,7 @@ fuzzers = [
 components = configuration_data()
 
 
-# Optional dependencies / components
+### Optional dependencies / components
 subdir('glsl')
 subdir('d3d11')
 subdir('opengl')
@@ -119,6 +121,22 @@ if lcms.found()
   tests += 'icc.c'
 endif
 
+# Check to see if libplacebo built this way is sane
+if not (components.get('vulkan') or components.get('opengl') or components.get('d3d11'))
+  warning('Building without any graphics API. libplacebo built this way still ' +
+          'has some limited use (e.g. generating GLSL shaders), but most of ' +
+          'its functionality will be missing or impaired!')
+endif
+
+has_spirv = components.get('shaderc') or components.get('glslang')
+needs_spirv = components.get('vulkan') or components.get('d3d11')
+if needs_spirv and not has_spirv
+  warning('Building without any GLSL compiler (shaderc, glslang), but with ' +
+          'APIs required that require one (vulkan, d3d11). This build is very ' +
+          'likely to be very limited in functionality!')
+endif
+
+# Generate configuration files
 defs = ''
 pc_vars = []
 
@@ -130,18 +148,8 @@ foreach comp : components.keys()
   pc_vars += 'pl_has_@0@=@1@'.format(varname.to_lower(), found ? 1 : 0)
 endforeach
 
-# Check to see if libplacebo built this way is sane
-if not (components.get('vulkan') or components.get('opengl') or components.get('d3d11'))
-  warning('Building without any graphics API. libplacebo built this way still ' +
-          'has some limited use (e.g. generating GLSL shaders), but most of ' +
-          'its functionality will be missing or impaired!')
-endif
-
-
-# Build process
 conf_public.set('extra_defs', defs)
 subdir('./include/libplacebo') # generate config.h in the right location
-
 sources += configure_file(
   output: 'config_internal.h',
   configuration: conf_internal
@@ -155,6 +163,8 @@ sources += vcs_tag(
   output: 'version.h',
 )
 
+
+### Main library build process
 inc = include_directories('./include')
 lib = library('placebo', sources,
   install: true,
@@ -165,14 +175,12 @@ lib = library('placebo', sources,
 )
 
 libplacebo = declare_dependency(
-  link_with: lib,
   include_directories: inc,
+  link_with: lib,
 )
 
-# Allows projects to build libplacebo by cloning into ./subprojects/libplacebo
-meson.override_dependency('libplacebo', libplacebo)
 
-# Install process
+### Install process
 proj_name = meson.project_name()
 foreach h : headers
   parts = h.split('/')
@@ -196,11 +204,11 @@ pkg.generate(
 )
 
 
-# Tests
+### Tests
 tdep = [ declare_dependency(
-    link_with: lib,
     dependencies: build_deps + test_deps,
     include_directories: inc,
+    link_with: lib,
 ) ]
 
 if get_option('tests')

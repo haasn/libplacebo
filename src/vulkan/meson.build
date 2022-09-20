@@ -13,17 +13,6 @@ if not vulkan_headers.found() and not vulkan_opt.disabled()
   endif
 endif
 
-if not (glslang.found() or shaderc.found())
-  spirv_msg = 'Vulkan support requires either `shaderc` or `glslang`'
-  if vulkan_opt.enabled()
-    error(spirv_msg)
-  elif vulkan_headers.found()
-    warning(spirv_msg + ', disabling')
-    vulkan_headers = disabler()
-    vulkan = disabler()
-  endif
-endif
-
 components.set('vulkan', vulkan_headers.found())
 if vulkan_headers.found()
   build_deps += vulkan_headers

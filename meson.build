@@ -346,3 +346,6 @@ subdir('src')
 if get_option('demos')
   subdir('demos')
 endif
+
+# Allows projects to build libplacebo by cloning into ./subprojects/libplacebo
+meson.override_dependency('libplacebo', libplacebo)
