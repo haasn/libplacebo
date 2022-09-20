@@ -41,5 +41,8 @@ if vulkan_headers.found()
 
   vk_loader = vulkan.found() and get_option('vulkan-link')
   components.set('vk-proc-addr', vk_loader)
+  if vk_loader
+    tests += 'vulkan.c'
+  endif
 endif
 
