@@ -58,7 +58,7 @@ if glfw.found()
     )
   endif
 
-  if d3d11.found()
+  if components.get('d3d11')
     conf_demos.set('HAVE_GLFW_D3D11', true)
     apis += static_library('glfw-d3d11',
       dependencies: [libplacebo, glfw],

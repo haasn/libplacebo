@@ -1,23 +1,3 @@
-d3d11 = disabler()
-d3d11_inc = ['d3d11_4.h', 'dxgi1_6.h']
-d3d11_deps = [
-  dependency('spirv-cross-c-shared', version: '>=0.29.0', required: get_option('d3d11')),
-  cc.find_library('version', required: get_option('d3d11')),
-]
-
-d3d11_found = true
-foreach h : d3d11_inc
-  d3d11_found = d3d11_found and cc.check_header(h, required: get_option('d3d11'))
-endforeach
-foreach d : d3d11_deps
-  d3d11_found = d3d11_found and d.found()
-endforeach
-
-if d3d11_found
-  d3d11 = declare_dependency(dependencies: d3d11_deps)
-  add_project_arguments(['-DCOBJMACROS', '-DINITGUID'], language: 'c')
-endif
-
 unwind = dependency('libunwind', required: get_option('unwind'))
 libexecinfo = cc.find_library('execinfo', required: false)
 has_execinfo = cc.has_function('backtrace_symbols', dependencies: libexecinfo, prefix: '#include <execinfo.h>')
@@ -128,6 +108,7 @@ components = configuration_data()
 
 # Optional dependencies / components
 subdir('glsl')
+subdir('d3d11')
 subdir('opengl')
 subdir('vulkan')
 
@@ -136,23 +117,6 @@ components.set('lcms', lcms.found())
 if lcms.found()
   build_deps += lcms
   tests += 'icc.c'
-endif
-
-components.set('d3d11', d3d11.found())
-if d3d11.found()
-  build_deps += d3d11
-  headers += 'd3d11.h'
-  tests += 'd3d11.c'
-  sources += [
-    'd3d11/context.c',
-    'd3d11/formats.c',
-    'd3d11/gpu.c',
-    'd3d11/gpu_buf.c',
-    'd3d11/gpu_tex.c',
-    'd3d11/gpu_pass.c',
-    'd3d11/swapchain.c',
-    'd3d11/utils.c',
-  ]
 endif
 
 defs = ''
