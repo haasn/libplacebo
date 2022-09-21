@@ -14,9 +14,9 @@ foreach dep : ffmpeg_deps
   ffmpeg_found = ffmpeg_found and dep.found()
 endforeach
 
+nuklear = disabler()
 nuklear_inc = include_directories('./3rdparty/nuklear')
-nuklear_found = cc.has_header('nuklear.h', include_directories: nuklear_inc)
-if nuklear_found
+if cc.has_header('nuklear.h', include_directories: nuklear_inc)
   nuklear_lib = static_library('nuklear',
     include_directories: nuklear_inc,
     c_args: ['-O2', '-Wno-missing-prototypes'],
@@ -34,7 +34,7 @@ else
 endif
 
 conf_demos = configuration_data()
-conf_demos.set('HAVE_NUKLEAR', nuklear_found)
+conf_demos.set('HAVE_NUKLEAR', nuklear.found())
 
 apis = []
 
@@ -118,7 +118,7 @@ else
 
   if ffmpeg_found
     plplay_deps = [ dep, pthread] + ffmpeg_deps
-    if nuklear_found
+    if nuklear.found()
       plplay_deps += nuklear
     endif
     executable('plplay', 'plplay.c',
