@@ -376,6 +376,26 @@ const struct pl_filter_function pl_filter_function_quadratic = {
     .radius = 1.5,
 };
 
+static double hpl_2007_179(const struct pl_filter_function *f, double x)
+{
+    if (x < 1e-8)
+        return 1.0;
+    double pix = M_PI * x;
+    double chi = f->params[0],
+           eta = f->params[1];
+    double n = M_PI * chi * x / (2.0 - eta);
+    n *= n;
+    return sin(pix) / pix * cosh(sqrt(2.0 * eta) * M_PI * chi * x / (2.0 - eta)) * pow(M_E, -n);
+}
+
+const struct pl_filter_function pl_filter_function_hpl_2007_179 = {
+    .resizable = true,
+    .tunable   = {true, true},
+    .weight    = hpl_2007_179,
+    .radius    = 2.0,
+    .params    = {0.414, 0.61},
+};
+
 static double sinc(const struct pl_filter_function *f, double x)
 {
     if (x < 1e-8)
@@ -566,6 +586,7 @@ const struct pl_filter_function_preset pl_filter_function_presets[] = {
     {"gaussian",        &pl_filter_function_gaussian},
     {"quadratic",       &pl_filter_function_quadratic},
     {"quadric",         &pl_filter_function_quadratic}, // alias
+    {"hpl_2007_179",    &pl_filter_function_hpl_2007_179},
     {"sinc",            &pl_filter_function_sinc},
     {"jinc",            &pl_filter_function_jinc},
     {"sphinx",          &pl_filter_function_sphinx},
@@ -613,6 +634,10 @@ const struct pl_filter_config pl_filter_bilinear = {
 const struct pl_filter_config pl_filter_gaussian = {
     .kernel = &pl_filter_function_gaussian,
     .name   = "gaussian",
+};
+
+const struct pl_filter_config pl_filter_hpl_2007_179 = {
+    .kernel = &pl_filter_function_hpl_2007_179,
 };
 
 // Sinc configured to three taps
