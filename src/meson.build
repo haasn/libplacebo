@@ -216,7 +216,7 @@ if get_option('tests')
 endif
 
 if get_option('bench')
-  if not vulkan.found()
+  if not components.get('vk-proc-addr')
     error('Compiling the benchmark suite requires vulkan support!')
   endif
 

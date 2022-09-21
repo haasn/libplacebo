@@ -130,9 +130,9 @@ else
 endif
 
 # Headless video filtering demo
-if vulkan.found()
+if components.get('vk-proc-addr')
   executable('video-filtering', 'video-filtering.c',
-    dependencies: [ libplacebo, vulkan ],
+    dependencies: [ libplacebo, vulkan_loader ],
     c_args: '-O2',
   )
 endif

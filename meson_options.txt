@@ -2,7 +2,7 @@
 option('vulkan', type: 'feature', value: 'auto',
        description: 'Vulkan-based renderer')
 
-option('vulkan-link', type: 'boolean', value: true,
+option('vk-proc-addr', type: 'feature', value: 'auto',
        description: 'Link directly against vkGetInstanceProcAddr from libvulkan.so')
 
 option('vulkan-registry', type: 'string', value: '',

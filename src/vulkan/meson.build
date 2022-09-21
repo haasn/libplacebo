@@ -1,20 +1,23 @@
-vulkan_opt = get_option('vulkan')
-vulkan = dependency('vulkan', version: '>=1.2.0', required: vulkan_opt)
+vulkan_build = get_option('vulkan')
+vulkan_link = get_option('vk-proc-addr')
+vulkan_loader = dependency('vulkan', version: '>=1.2.0', required: vulkan_link)
+vulkan_headers = disabler()
 
-vulkan_headers = vulkan
-if vulkan.found() and not get_option('vulkan-link')
-  vulkan_headers = vulkan.partial_dependency(includes: true, compile_args: true)
-endif
-
-if not vulkan_headers.found() and not vulkan_opt.disabled()
+if vulkan_loader.found()
+  vulkan_headers = vulkan_loader.partial_dependency(includes: true, compile_args: true)
+else
   # Probe for <vulkan/vulkan.h> as a fallback for the vulkan headers
   if cc.has_header_symbol('vulkan/vulkan_core.h', 'VULKAN_1_2')
     vulkan_headers = declare_dependency()
   endif
 endif
 
-components.set('vulkan', vulkan_headers.found())
-if vulkan_headers.found()
+vulkan_build = vulkan_build.require(vulkan_headers.found())
+vulkan_link = vulkan_link.require(vulkan_loader.found())
+components.set('vulkan', vulkan_build.allowed())
+components.set('vk-proc-addr', vulkan_link.allowed())
+
+if vulkan_build.allowed()
   build_deps += vulkan_headers
   headers += 'vulkan.h'
   sources += [
@@ -39,10 +42,8 @@ if vulkan_headers.found()
     env: python_env,
   )
 
-  vk_loader = vulkan.found() and get_option('vulkan-link')
-  components.set('vk-proc-addr', vk_loader)
-  if vk_loader
+  if vulkan_link.allowed()
+    build_deps += vulkan_loader
     tests += 'vulkan.c'
   endif
 endif
-
