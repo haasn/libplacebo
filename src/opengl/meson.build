@@ -1,6 +1,12 @@
-has_opengl = not get_option('opengl').disabled()
-components.set('opengl', has_opengl)
-if has_opengl
+opengl_build = get_option('opengl')
+opengl_link = get_option('gl-proc-addr')
+
+libdl = cc.find_library('dl', required : opengl_link)
+opengl_link = opengl_link.require(libdl.found())
+components.set('opengl', opengl_build.allowed())
+components.set('gl-proc-addr', opengl_link.allowed())
+
+if opengl_build.allowed()
   headers += 'opengl.h'
   sources += [
     'opengl/context.c',
@@ -14,9 +20,7 @@ if has_opengl
     'opengl/utils.c',
   ]
 
-  gl_loader = libdl.found() and get_option('opengl-loader')
-  components.set('gl-proc-addr', gl_loader)
-  if gl_loader
+  if opengl_link.allowed()
     build_deps += libdl
     tests += 'opengl_surfaceless.c'
   endif
@@ -61,11 +65,8 @@ if has_opengl
   # Generate GL loader. Adding it to `build_deps` instead of `sources` makes
   # sure it also gets correctly pulled into the test framework
   subdir('include/glad')
-
-  glad_inc = include_directories('./include')
   build_deps += declare_dependency(
-    include_directories: glad_inc,
+    include_directories: include_directories('./include'),
     sources: glad,
   )
 endif
-
