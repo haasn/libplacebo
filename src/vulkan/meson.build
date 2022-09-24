@@ -16,20 +16,18 @@ elif fs.is_dir(thirdparty/'Vulkan-Headers')
   registry_xml = thirdparty/'Vulkan-Headers/registry/vk.xml'
 endif
 
-if vulkan_build.enabled() and not vulkan_headers.found()
+build_deps += vulkan_headers
+if not vulkan_headers.found()
   error('vulkan.h was not found on the system, nor inside ' +
         '`3rdparty/Vulkan-Headers`. Please run `git submodule update --init` ' +
         'followed by `meson --wipe`.')
 endif
 
-vulkan_build = vulkan_build.require(vulkan_headers.found())
 vulkan_link = vulkan_link.require(vulkan_loader.found())
 components.set('vulkan', vulkan_build.allowed())
 components.set('vk-proc-addr', vulkan_link.allowed())
 
 if vulkan_build.allowed()
-  build_deps += vulkan_headers
-  headers += 'vulkan.h'
   sources += [
     'vulkan/command.c',
     'vulkan/context.c',
@@ -55,4 +53,6 @@ if vulkan_build.allowed()
     build_deps += vulkan_loader
     tests += 'vulkan.c'
   endif
+else
+  sources += 'vulkan/stubs.c'
 endif

@@ -80,10 +80,7 @@
 #include <libplacebo/tone_mapping.h>
 #include <libplacebo/utils/frame_queue.h>
 #include <libplacebo/utils/upload.h>
-
-#ifdef PL_HAVE_VULKAN
 #include <libplacebo/vulkan.h>
-#endif
 #ifdef PL_HAVE_OPENGL
 #include <libplacebo/opengl.h>
 #endif

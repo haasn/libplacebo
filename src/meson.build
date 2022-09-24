@@ -52,6 +52,7 @@ headers = [
   'utils/libav.h',
   'utils/libav_internal.h',
   'utils/upload.h',
+  'vulkan.h',
 ]
 
 sources = [
