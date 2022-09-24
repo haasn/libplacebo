@@ -7,7 +7,6 @@ components.set('opengl', opengl_build.allowed())
 components.set('gl-proc-addr', opengl_link.allowed())
 
 if opengl_build.allowed()
-  headers += 'opengl.h'
   sources += [
     'opengl/context.c',
     'opengl/formats.c',
@@ -69,4 +68,6 @@ if opengl_build.allowed()
     include_directories: include_directories('./include'),
     sources: glad,
   )
+else
+  sources += 'opengl/stubs.c'
 endif

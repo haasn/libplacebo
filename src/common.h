@@ -66,6 +66,7 @@
 #include <libplacebo/dummy.h>
 #include <libplacebo/filters.h>
 #include <libplacebo/gpu.h>
+#include <libplacebo/opengl.h>
 #include <libplacebo/renderer.h>
 #include <libplacebo/shaders.h>
 #include <libplacebo/shaders/colorspace.h>
@@ -81,9 +82,6 @@
 #include <libplacebo/utils/frame_queue.h>
 #include <libplacebo/utils/upload.h>
 #include <libplacebo/vulkan.h>
-#ifdef PL_HAVE_OPENGL
-#include <libplacebo/opengl.h>
-#endif
 #ifdef PL_HAVE_D3D11
 #include <libplacebo/d3d11.h>
 #endif

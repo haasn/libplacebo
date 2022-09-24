@@ -34,6 +34,7 @@ headers = [
   'filters.h',
   'gpu.h',
   'log.h',
+  'opengl.h',
   'renderer.h',
   'shaders/colorspace.h',
   'shaders/custom.h',
