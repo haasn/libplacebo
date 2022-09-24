@@ -315,6 +315,7 @@ add_project_link_arguments(link_args, language: 'c')
 
 
 # Global dependencies
+fs = import('fs')
 libm = cc.find_library('m', required: false)
 thirdparty = meson.project_source_root()/'3rdparty'
 python = import('python').find_installation()

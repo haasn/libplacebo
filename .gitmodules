@@ -13,3 +13,6 @@
 [submodule "3rdparty/markupsafe"]
 	path = 3rdparty/markupsafe
 	url = https://github.com/pallets/markupsafe
+[submodule "3rdparty/Vulkan-Headers"]
+	path = 3rdparty/Vulkan-Headers
+	url = https://github.com/KhronosGroup/Vulkan-Headers
