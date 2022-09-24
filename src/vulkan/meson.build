@@ -5,11 +5,9 @@ vulkan_headers = disabler()
 
 if vulkan_loader.found()
   vulkan_headers = vulkan_loader.partial_dependency(includes: true, compile_args: true)
-else
-  # Probe for <vulkan/vulkan.h> as a fallback for the vulkan headers
-  if cc.has_header_symbol('vulkan/vulkan_core.h', 'VULKAN_1_2')
-    vulkan_headers = declare_dependency()
-  endif
+# Probe for <vulkan/vulkan.h> as a fallback for the vulkan headers
+elif cc.has_header_symbol('vulkan/vulkan_core.h', 'VK_VERSION_1_2')
+  vulkan_headers = declare_dependency()
 endif
 
 vulkan_build = vulkan_build.require(vulkan_headers.found())
