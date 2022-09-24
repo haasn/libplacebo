@@ -421,11 +421,13 @@ void pl_color_space_infer(struct pl_color_space *space);
 void pl_color_space_infer_ref(struct pl_color_space *space,
                               const struct pl_color_space *ref);
 
-// Infer both the source and destination gamut simultaneously. This is mostly
-// the same as `pl_color_space_infer(src)` followed by
-// `pl_color_space_infer_ref`, but also takes into account the SDR contrast
-// levels. This is basically the logic used by `pl_shader_color_map` and
-// `pl_renderer` to decide the output color space in a conservative way.
+// Infer both the source and destination gamut simultaneously, and also adjust
+// values for optimal display. This is mostly the same as
+// `pl_color_space_infer(src)` followed by `pl_color_space_infer_ref`, but also
+// takes into account the SDR contrast levels and PQ black points. This is
+// basically the logic used by `pl_shader_color_map` and `pl_renderer` to
+// decide the output color space in a conservative way and compute the final
+// end-to-end color transformation that needs to be done.
 void pl_color_space_infer_map(struct pl_color_space *src,
                               struct pl_color_space *dst);
 

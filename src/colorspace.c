@@ -493,6 +493,18 @@ void pl_color_space_infer_map(struct pl_color_space *src,
                               struct pl_color_space *dst)
 {
     bool unknown_contrast = !src->hdr.min_luma;
+
+    // PQ is always scaled down to absolute black, regardless of what the
+    // metadata says. So treat it as such. We do this here, rather than in e.g.
+    // pl_color_space_infer, because the latter is also used to sanitize values
+    // in cases where we don't want to override mastering metadata.
+    // Additionally, doing it here allows e.g. correct propagation of black
+    // levels for BT.1886 -> PQ expansion in the step further below.
+    if (src->transfer == PL_COLOR_TRC_PQ)
+        src->hdr.min_luma = 0;
+    if (dst->transfer == PL_COLOR_TRC_PQ)
+        dst->hdr.min_luma = 0;
+
     infer_both_ref(dst, src);
 
     // If the src has an unspecified SDR-like gamma, default it to match the
