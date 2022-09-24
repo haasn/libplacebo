@@ -28,7 +28,8 @@ foreach h : headers
 
   if (h.contains('internal') or
       h.contains('dav1d') and not dav1d.found() or
-      h.contains('libav') and not libav_found)
+      h.contains('libav') and not libav_found or
+      h.contains('d3d11') and not d3d11_header)
     continue
   endif
 

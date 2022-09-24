@@ -28,6 +28,7 @@ endif
 headers = [
   'colorspace.h',
   'common.h',
+  'd3d11.h',
   'dispatch.h',
   'dither.h',
   'dummy.h',

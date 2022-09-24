@@ -82,7 +82,7 @@
 #include <libplacebo/utils/frame_queue.h>
 #include <libplacebo/utils/upload.h>
 #include <libplacebo/vulkan.h>
-#ifdef PL_HAVE_D3D11
+#ifdef PL_HAVE_WIN32
 #include <libplacebo/d3d11.h>
 #endif
 
