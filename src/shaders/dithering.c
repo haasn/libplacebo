@@ -431,8 +431,7 @@ bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_par
          "int y = int(id %% height), x_shifted = int(id / height);              \n"
          "int x = x_shifted - y * %d;                                           \n"
          // Proceed only if we are processing a valid pixel.
-         "if (x < 0 || x > %s)                                                  \n"
-         "    continue;                                                         \n"
+         "if (x >= 0 && x <= %s) {                                              \n"
          // The index that the current pixel have on the ring buffer.
          "uint idx = uint(x_shifted * %s + y) %% %s;                            \n"
          // Fetch the current pixel.
@@ -531,6 +530,6 @@ bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_par
         }
     }
 
-    GLSL("} \n"); // end of main loop
+    GLSL("}} \n"); // end of main loop + valid pixel conditional
     return true;
 }
