@@ -1241,7 +1241,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         }
 
         for (int n = 0; n < pool->num_queues; n++)
-            PL_VK_NAME(QUEUE, pool->queues[n], qf_name);
+            PL_VK_NAME_HANDLE(QUEUE, pool->queues[n], qf_name);
     }
 
     pl_free(tmp);

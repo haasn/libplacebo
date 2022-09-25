@@ -90,6 +90,10 @@ void *vk_chain_memdup(void *alloc, const void *in);
         }                                                                       \
     } while (0)
 
+// Variant of PL_VK_NAME for dispatchable handles
+#define PL_VK_NAME_HANDLE(type, obj, name) \
+    PL_VK_NAME(type, (uintptr_t) (obj), name)
+
 // Helper functions to wrap and unwrap non-dispatchable handles into pointers.
 // Note that wrap/unwrap must always be used linearly.
 #if VK_USE_64_BIT_PTR_DEFINES == 1

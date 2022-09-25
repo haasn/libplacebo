@@ -317,7 +317,7 @@ struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool,
     VK(vk->BeginCommandBuffer(cmd->buf, &binfo));
 
     debug_tag = PL_DEF(debug_tag, "vk_cmd");
-    PL_VK_NAME(COMMAND_BUFFER, cmd->buf, debug_tag);
+    PL_VK_NAME_HANDLE(COMMAND_BUFFER, cmd->buf, debug_tag);
     PL_VK_NAME(FENCE, cmd->fence, debug_tag);
     return cmd;
 
