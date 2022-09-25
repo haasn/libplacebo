@@ -57,6 +57,7 @@ static const char *vk_instance_extensions[] = {
     VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME,
     VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
     VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
+    VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
 };
 
 // List of mandatory instance-level function pointers, including functions
@@ -189,6 +190,13 @@ static const struct vk_ext vk_device_extensions[] = {
             {0}
         },
 #endif
+#ifdef VK_EXT_full_screen_exclusive
+    }, {
+        .name = VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME,
+        .funs = (struct vk_fun[]) {
+            PL_VK_DEV_FUN(AcquireFullScreenExclusiveModeEXT),
+        },
+#endif
     },
 };
 
@@ -214,6 +222,9 @@ const char * const pl_vulkan_recommended_extensions[] = {
 #endif
 #ifdef VK_EXT_metal_objects
     VK_EXT_METAL_OBJECTS_EXTENSION_NAME,
+#endif
+#ifdef VK_EXT_full_screen_exclusive
+    VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME,
 #endif
 };
 

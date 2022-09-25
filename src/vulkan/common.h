@@ -239,4 +239,7 @@ struct vk_ctx {
 #ifdef VK_EXT_metal_objects
     PL_VK_FUN(ExportMetalObjectsEXT);
 #endif
+#ifdef VK_EXT_full_screen_exclusive
+    PL_VK_FUN(AcquireFullScreenExclusiveModeEXT);
+#endif
 };

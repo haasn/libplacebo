@@ -561,6 +561,16 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     if (!update_swapchain_info(p, &sinfo, w, h))
         return false;
 
+#ifdef VK_EXT_full_screen_exclusive
+    // Explicitly disallow full screen exclusive mode if possible
+    static const VkSurfaceFullScreenExclusiveInfoEXT fsinfo = {
+        .sType = VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT,
+        .fullScreenExclusive = VK_FULL_SCREEN_EXCLUSIVE_DISALLOWED_EXT,
+    };
+    if (vk->AcquireFullScreenExclusiveModeEXT)
+        vk_link_struct(&sinfo, &fsinfo);
+#endif
+
     p->suboptimal = false;
     p->needs_recreate = false;
     p->cur_width = sinfo.imageExtent.width;
