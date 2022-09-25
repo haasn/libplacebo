@@ -410,7 +410,7 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
         if (!vk->cmds_pending.num || vk->cmds_pending.elem[0] != cmd)
             continue; // another thread modified this state while blocking
 
-        PL_TRACE(vk, "VkFence signalled: %p", (void *) cmd->fence);
+        PL_TRACE(vk, "VkFence signalled: 0x%"PRIx64, (uint64_t) cmd->fence);
         PL_ARRAY_REMOVE_AT(vk->cmds_pending, 0); // remove before callbacks
         vk_cmd_reset(vk, cmd);
         PL_ARRAY_APPEND(pool, pool->cmds, cmd);
