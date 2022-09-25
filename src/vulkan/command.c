@@ -364,14 +364,14 @@ bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
         PL_TRACE(vk, "Submitting command %p on queue %p (QF %d):",
                  (void *) cmd->buf, (void *) cmd->queue, pool->qf);
         for (int n = 0; n < cmd->deps.num; n++) {
-            PL_TRACE(vk, "    waits on semaphore %p = %"PRIu64,
-                     (void *) cmd->deps.elem[n], cmd->depvalues.elem[n]);
+            PL_TRACE(vk, "    waits on semaphore 0x%"PRIx64" = %"PRIu64,
+                     (uint64_t) cmd->deps.elem[n], cmd->depvalues.elem[n]);
         }
         for (int n = 0; n < cmd->sigs.num; n++) {
-            PL_TRACE(vk, "    signals semaphore %p = %"PRIu64,
-                    (void *) cmd->sigs.elem[n], cmd->sigvalues.elem[n]);
+            PL_TRACE(vk, "    signals semaphore 0x%"PRIx64" = %"PRIu64,
+                    (uint64_t) cmd->sigs.elem[n], cmd->sigvalues.elem[n]);
         }
-        PL_TRACE(vk, "    signals fence %p", (void *) cmd->fence);
+        PL_TRACE(vk, "    signals fence 0x%"PRIx64, (uint64_t) cmd->fence);
         if (cmd->callbacks.num)
             PL_TRACE(vk, "    signals %d callbacks", cmd->callbacks.num);
     }

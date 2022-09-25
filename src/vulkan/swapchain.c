@@ -674,7 +674,7 @@ static bool vk_sw_start_frame(pl_swapchain sw,
     }
 
     VkSemaphore sem_in = p->sems.elem[p->idx_sems].in;
-    PL_TRACE(vk, "vkAcquireNextImageKHR signals %p", (void *) sem_in);
+    PL_TRACE(vk, "vkAcquireNextImageKHR signals 0x%"PRIx64, (uint64_t) sem_in);
 
     for (int attempts = 0; attempts < 2; attempts++) {
         uint32_t imgidx = 0;
@@ -776,7 +776,7 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
         .pImageIndices = &idx,
     };
 
-    PL_TRACE(vk, "vkQueuePresentKHR waits on %p", (void *) sem_out);
+    PL_TRACE(vk, "vkQueuePresentKHR waits on 0x%"PRIx64, (uint64_t) sem_out);
     vk->lock_queue(vk->queue_ctx, pool->qf, qidx);
     VkResult res = vk->QueuePresentKHR(queue, &pinfo);
     vk->unlock_queue(vk->queue_ctx, pool->qf, qidx);
