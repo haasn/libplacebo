@@ -36,6 +36,7 @@ static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { ret
 #include <libplacebo/utils/frame_queue.h>
 
 #define MAX_FRAME_PASSES 256
+#define MAX_BLEND_PASSES 8
 #define MAX_BLEND_FRAMES 8
 
 struct pass_info {
@@ -88,9 +89,10 @@ struct plplay {
     size_t shader_size;
 
     // pass metadata
-    struct pass_info blend_info[MAX_BLEND_FRAMES];
+    struct pass_info blend_info[MAX_BLEND_FRAMES][MAX_BLEND_PASSES];
     struct pass_info frame_info[MAX_FRAME_PASSES];
     int num_frame_passes;
+    int num_blend_passes[MAX_BLEND_FRAMES];
 };
 
 static void uninit(struct plplay *p)
@@ -540,9 +542,10 @@ static void info_callback(void *priv, const struct pl_render_info *info)
         break;
 
     case PL_RENDER_STAGE_BLEND:
-        if (info->index >= MAX_BLEND_FRAMES)
+        if (info->index >= MAX_BLEND_PASSES || info->count >= MAX_BLEND_FRAMES)
             return;
-        pass = &p->blend_info[info->index];
+        p->num_blend_passes[info->count] = info->index + 1;
+        pass = &p->blend_info[info->count][info->index];
         break;
 
     case PL_RENDER_STAGE_COUNT: abort();
@@ -1463,27 +1466,29 @@ static void update_settings(struct plplay *p)
 
                 nk_layout_row_dynamic(nk, 26, 1);
                 nk_label(nk, "Output blending:", NK_TEXT_LEFT);
-                for (int i = 0; i < MAX_BLEND_FRAMES; i++) {
-                    struct pass_info *info = &p->blend_info[i];
-                    if (!info->name)
-                        continue;
+                for (int j = 0; j < MAX_BLEND_FRAMES; j++) {
+                    for (int i = 0; i < p->num_blend_passes[j]; i++) {
+                        struct pass_info *info = &p->blend_info[j][i];
+                        if (!info->name)
+                            continue;
 
-                    nk_layout_row_dynamic(nk, 24, 1);
-                    nk_labelf(nk, NK_TEXT_LEFT,
-                              "- (%d frame%s) %s: %.3f / %.3f / %.3f ms",
-                              i, i > 1 ? "s" : "", info->name,
-                              info->pass.last / 1e6,
-                              info->pass.average / 1e6,
-                              info->pass.peak / 1e6);
+                        nk_layout_row_dynamic(nk, 24, 1);
+                        nk_labelf(nk, NK_TEXT_LEFT,
+                                  "- (%d frame%s) %s: %.3f / %.3f / %.3f ms",
+                                  j, j == 1 ? "" : "s", info->name,
+                                  info->pass.last / 1e6,
+                                  info->pass.average / 1e6,
+                                  info->pass.peak / 1e6);
 
-                    nk_layout_row_dynamic(nk, 32, 1);
-                    if (nk_chart_begin(nk, NK_CHART_LINES,
-                                       info->pass.num_samples,
-                                       0.0f, info->pass.peak))
-                    {
-                        for (int k = 0; k < info->pass.num_samples; k++)
-                            nk_chart_push(nk, info->pass.samples[k]);
-                        nk_chart_end(nk);
+                        nk_layout_row_dynamic(nk, 32, 1);
+                        if (nk_chart_begin(nk, NK_CHART_LINES,
+                                           info->pass.num_samples,
+                                           0.0f, info->pass.peak))
+                        {
+                            for (int k = 0; k < info->pass.num_samples; k++)
+                                nk_chart_push(nk, info->pass.samples[k]);
+                            nk_chart_end(nk);
+                        }
                     }
                 }
 
