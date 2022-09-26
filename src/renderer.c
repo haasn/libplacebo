@@ -439,8 +439,7 @@ static void info_callback(void *priv, const struct pl_dispatch_info *dinfo)
 
     pass->info.pass = dinfo;
     params->info_callback(params->info_priv, &pass->info);
-    if (pass->info.stage == PL_RENDER_STAGE_FRAME)
-        pass->info.index++;
+    pass->info.index++;
 }
 
 static pl_tex get_fbo(struct pass_state *pass, int w, int h, pl_fmt fmt,
@@ -2717,7 +2716,7 @@ static bool draw_empty_overlays(pl_renderer rr,
         .src_ref = -1,
         .target = *ptarget,
         .info.stage = PL_RENDER_STAGE_BLEND,
-        .info.index = 0,
+        .info.count = 0,
     };
 
     if (!pass_init(&pass, false))
@@ -3199,7 +3198,7 @@ inter_pass_error:
 
     // Sample and mix the output color
     pass_begin_frame(&pass);
-    pass.info.index = fidx;
+    pass.info.count = fidx;
     pl_assert(fidx > 0);
 
     pl_shader sh = pl_dispatch_begin(rr->dp);

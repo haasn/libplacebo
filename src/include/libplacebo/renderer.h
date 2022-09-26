@@ -82,12 +82,13 @@ struct pl_render_info {
     const struct pl_dispatch_info *pass;    // information about the shader
     enum pl_render_stage stage;             // the associated render stage
 
-    // For PL_RENDER_STAGE_FRAME, this specifies the chronological index
-    // of this pass within the frame (starting at `index == 0`).
-    //
+    // This specifies the chronological index of this pass within the frame and
+    // stage (starting at `index == 0`).
+    int index;
+
     // For PL_RENDER_STAGE_BLEND, this specifies the number of frames
     // being blended (since that results in a different shader).
-    int index;
+    int count;
 };
 
 // Represents the options used for rendering. These affect the quality of
