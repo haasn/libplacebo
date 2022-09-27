@@ -39,6 +39,12 @@ PL_API_BEGIN
 # include <libavutil/film_grain_params.h>
 #endif
 
+//------------------------------------------------------------------------
+// Important note: For support for AVVkFrame, which depends on <vulkan.h>,
+// users *SHOULD* include <vulkan/vulkan.h> manually before this header.
+//------------------------------------------------------------------------
+
+
 // Fill in the details of a `pl_frame` from an AVFrame. This function will
 // explicitly clear `out_frame`, setting all extra fields to 0. After this
 // function returns, the only missing data is information related to the plane

@@ -28,7 +28,15 @@
 #include <libavutil/pixdesc.h>
 #include <libavutil/display.h>
 
-#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 8, 100) && defined(PL_HAVE_VULKAN)
+// Try importing <vulkan.h> dynamically if it wasn't already
+#if !defined(VK_API_VERSION_1_2) && defined(__has_include)
+# if __has_include(<vulkan/vulkan.h>)
+#  include <vulkan/vulkan.h>
+# endif
+#endif
+
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 8, 100) && \
+    defined(PL_HAVE_VULKAN) && defined(VK_API_VERSION_1_2)
 # define HAVE_LAV_VULKAN
 # include <libavutil/hwcontext_vulkan.h>
 # include <libplacebo/vulkan.h>
