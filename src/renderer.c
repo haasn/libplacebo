@@ -1283,9 +1283,9 @@ static void log_plane_info(pl_renderer rr, const struct plane_state *st)
 // Returns true if grain was applied
 static bool plane_film_grain(struct pass_state *pass, int plane_idx,
                              struct plane_state *st,
-                             const struct plane_state *ref,
-                             const struct pl_frame *image)
+                             const struct plane_state *ref)
 {
+    const struct pl_frame *image = &pass->image;
     pl_renderer rr = pass->rr;
     if (rr->disable_grain)
         return false;
@@ -1606,7 +1606,7 @@ static bool pass_read_image(struct pass_state *pass)
         // intent of the spec (which is to apply synthesis effectively during
         // decoding)
 
-        if (plane_film_grain(pass, i, st, ref, image)) {
+        if (plane_film_grain(pass, i, st, ref)) {
             PL_TRACE(rr, "After film grain:");
             log_plane_info(rr, st);
         }
