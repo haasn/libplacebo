@@ -1091,92 +1091,6 @@ error:
     return ret;
 }
 
-// `deband_src` results
-enum {
-    DEBAND_NOOP = 0, // no debanding was performing
-    DEBAND_NORMAL,   // debanding was performed, the plane should still be scaled
-    DEBAND_SCALED,   // debanding took care of scaling as well
-};
-
-static int deband_src(struct pass_state *pass, pl_shader psh,
-                      struct pl_sample_src *psrc, float neutral[3])
-{
-    const struct pl_render_params *params = pass->params;
-    const struct pl_frame *image = &pass->image;
-    pl_renderer rr = pass->rr;
-    if (rr->disable_debanding || !params->deband_params || !pass->fbofmt[4])
-        return DEBAND_NOOP;
-
-    if (!(psrc->tex->params.format->caps & PL_FMT_CAP_LINEAR)) {
-        PL_WARN(rr, "Debanding requires uploaded textures to be linearly "
-                "sampleable (params.sample_mode = PL_TEX_SAMPLE_LINEAR)! "
-                "Disabling debanding..");
-        rr->disable_debanding = true;
-        return DEBAND_NOOP;
-    }
-
-    bool deband_scales = false;
-
-    pl_shader sh = psh;
-    struct pl_sample_src src = *psrc;
-    // Only sample/deband the relevant cut-out, but round it to the nearest
-    // integer to avoid doing fractional scaling
-    pl_rect2df_normalize(&src.rect);
-    src.rect.x0 = floorf(src.rect.x0);
-    src.rect.y0 = floorf(src.rect.y0);
-    src.rect.x1 = ceilf(src.rect.x1);
-    src.rect.y1 = ceilf(src.rect.y1);
-    src.new_w = pl_rect_w(src.rect);
-    src.new_h = pl_rect_h(src.rect);
-
-    if (src.new_w == psrc->new_w &&
-        src.new_h == psrc->new_h &&
-        pl_rect2d_eq(src.rect, psrc->rect))
-    {
-        // If there's nothing left to be done (i.e. we're already rendering
-        // an exact integer crop without scaling), also skip the scalers
-        deband_scales = true;
-    } else {
-        sh = pl_dispatch_begin_ex(rr->dp, true);
-    }
-
-    // Divide the deband grain scale by the effective current colorspace nominal
-    // peak, to make sure the output intensity of the grain is as independent
-    // of the source as possible, even though it happens this early in the
-    // process (well before any linearization / output adaptation)
-    struct pl_deband_params dparams = *params->deband_params;
-    dparams.grain /= image->color.hdr.max_luma / PL_COLOR_SDR_WHITE;
-    memcpy(dparams.grain_neutral, neutral, sizeof(dparams.grain_neutral));
-
-    pl_shader_deband(sh, &src, &dparams);
-
-    if (deband_scales)
-        return DEBAND_SCALED;
-
-    struct img img = {
-        .sh = sh,
-        .w  = src.new_w,
-        .h  = src.new_h,
-        .comps = src.components,
-    };
-
-    pl_tex new = img_tex(pass, &img);
-    if (!new) {
-        PL_ERR(rr, "Failed dispatching debanding shader.. disabling debanding!");
-        rr->disable_debanding = true;
-        return DEBAND_NOOP;
-    }
-
-    // Update the original pl_sample_src to point to the new texture
-    psrc->tex = new;
-    psrc->rect.x0 -= src.rect.x0;
-    psrc->rect.y0 -= src.rect.y0;
-    psrc->rect.x1 -= src.rect.x0;
-    psrc->rect.y1 -= src.rect.y0;
-    psrc->scale = 1.0;
-    return DEBAND_NORMAL;
-}
-
 static void hdr_update_peak(struct pass_state *pass)
 {
     const struct pl_render_params *params = pass->params;
@@ -1278,6 +1192,53 @@ static void log_plane_info(pl_renderer rr, const struct plane_state *st)
              st->img.repr.bits.color_depth,
              st->img.repr.bits.sample_depth,
              st->img.repr.bits.bit_shift);
+}
+
+// Returns true if debanding was applied
+static bool plane_deband(struct pass_state *pass, struct img *img, float neutral[3])
+{
+    const struct pl_render_params *params = pass->params;
+    const struct pl_frame *image = &pass->image;
+    pl_renderer rr = pass->rr;
+    if (rr->disable_debanding || !params->deband_params || !pass->fbofmt[4])
+        return false;
+
+    struct pl_color_repr repr = img->repr;
+    struct pl_sample_src src = {
+        .tex = img_tex(pass, img),
+        .components = img->comps,
+        .scale = pl_color_repr_normalize(&repr),
+    };
+
+    if (!(src.tex->params.format->caps & PL_FMT_CAP_LINEAR)) {
+        PL_WARN(rr, "Debanding requires uploaded textures to be linearly "
+                "sampleable (params.sample_mode = PL_TEX_SAMPLE_LINEAR)! "
+                "Disabling debanding..");
+        rr->disable_debanding = true;
+        return false;
+    }
+
+    // Divide the deband grain scale by the effective current colorspace nominal
+    // peak, to make sure the output intensity of the grain is as independent
+    // of the source as possible, even though it happens this early in the
+    // process (well before any linearization / output adaptation)
+    struct pl_deband_params dparams = *params->deband_params;
+    dparams.grain /= image->color.hdr.max_luma / PL_COLOR_SDR_WHITE;
+    memcpy(dparams.grain_neutral, neutral, sizeof(dparams.grain_neutral));
+
+    img->tex = NULL;
+    img->sh = pl_dispatch_begin(rr->dp);
+    pl_shader_deband(img->sh, &src, &dparams);
+
+    if (!img_tex(pass, img)) {
+        PL_ERR(rr, "Failed applying debanding... disabling!");
+        pl_dispatch_abort(rr->dp, &img->sh);
+        img->tex = src.tex;
+        return false;
+    }
+
+    img->repr = repr;
+    return true;
 }
 
 // Returns true if grain was applied
@@ -1571,6 +1532,14 @@ static bool pass_read_image(struct pass_state *pass)
         }
     }
 
+    int bits = image->repr.bits.sample_depth;
+    float out_scale = bits ? (1 << bits) / ((1 << bits) - 1.0f) : 1.0f;
+    float neutral_luma = 0.0, neutral_chroma = 0.5f * out_scale;
+    if (pl_color_levels_guess(&image->repr) == PL_COLOR_LEVELS_LIMITED)
+        neutral_luma = 16 / 256.0f * out_scale;
+    if (!pl_color_system_is_ycbcr_like(image->repr.sys))
+        neutral_chroma = neutral_luma;
+
     // Compute the sampling rc of each plane
     for (int i = 0; i < image->num_planes; i++) {
         struct plane_state *st = &planes[i];
@@ -1602,10 +1571,25 @@ static bool pass_read_image(struct pass_state *pass)
         PL_TRACE(rr, "Plane %d:", i);
         log_plane_info(rr, st);
 
-        // Perform film grain synthesis if needed. Do this first because it
-        // requires unmodified plane sizes, and also because it's closer to the
-        // intent of the spec (which is to apply synthesis effectively during
-        // decoding)
+        float neutral[3] = {0.0};
+        for (int c = 0; c < st->plane.components; c++) {
+            switch (st->plane.component_mapping[c]) {
+            case PL_CHANNEL_Y: neutral[c] = neutral_luma; break;
+            case PL_CHANNEL_U: // fall through
+            case PL_CHANNEL_V: neutral[c] = neutral_chroma; break;
+            }
+        }
+
+        // The order of operations (deband -> film grain -> user hooks) is
+        // chosen to maximize quality. Note that film grain requires unmodified
+        // plane sizes, so it has to be before user hooks. As for debanding,
+        // it's reduced in quality after e.g. plane scalers as well. It's also
+        // made less effective by performing film grain synthesis first.
+
+        if (plane_deband(pass, &st->img, neutral)) {
+            PL_TRACE(rr, "After debanding:");
+            log_plane_info(rr, st);
+        }
 
         if (plane_film_grain(pass, i, st, ref)) {
             PL_TRACE(rr, "After film grain:");
@@ -1626,14 +1610,6 @@ static bool pass_read_image(struct pass_state *pass)
     sh_require(sh, PL_SHADER_SIG_NONE, 0, 0);
 
     // Initialize the color to black
-    int bits = image->repr.bits.sample_depth;
-    float out_scale = bits ? (1 << bits) / ((1 << bits) - 1.0f) : 1.0f;
-    float neutral_luma = 0.0, neutral_chroma = 0.5f * out_scale;
-    if (pl_color_levels_guess(&image->repr) == PL_COLOR_LEVELS_LIMITED)
-        neutral_luma = 16 / 256.0f * out_scale;
-    if (!pl_color_system_is_ycbcr_like(image->repr.sys))
-        neutral_chroma = neutral_luma;
-
     GLSL("vec4 color = vec4(%s, vec2(%s), 1.0);  \n"
          "// pass_read_image                     \n"
          "{                                      \n"
@@ -1658,15 +1634,6 @@ static bool pass_read_image(struct pass_state *pass)
               scale_y = pl_rect_h(st->img.rect) / pl_rect_h(ref->img.rect),
               base_x = st->img.rect.x0 - scale_x * off_x,
               base_y = st->img.rect.y0 - scale_y * off_y;
-
-        float neutral[3] = {0.0};
-        for (int c = 0; c < plane->components; c++) {
-            switch (plane->component_mapping[c]) {
-            case PL_CHANNEL_Y: neutral[c] = neutral_luma; break;
-            case PL_CHANNEL_U: // fall through
-            case PL_CHANNEL_V: neutral[c] = neutral_chroma; break;
-            }
-        }
 
         struct pl_sample_src src = {
             .tex        = st->img.tex,
@@ -1696,8 +1663,7 @@ static bool pass_read_image(struct pass_state *pass)
                  plane->flipped ? " (flipped) " : "");
 
         pl_shader psh = pl_dispatch_begin_ex(rr->dp, true);
-        if (deband_src(pass, psh,  &src, neutral) != DEBAND_SCALED)
-            dispatch_sampler(pass, psh, &rr->samplers_src[i], NULL, &src);
+        dispatch_sampler(pass, psh, &rr->samplers_src[i], NULL, &src);
 
         ident_t sub = sh_subpass(sh, psh);
         if (!sub) {
