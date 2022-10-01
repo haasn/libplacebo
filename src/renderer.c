@@ -1462,6 +1462,7 @@ static bool pass_read_image(struct pass_state *pass)
 
     struct plane_state planes[4];
     struct plane_state *ref = &planes[pass->src_ref];
+    pl_assert(pass->src_ref >= 0 && pass->src_ref < image->num_planes);
 
     for (int i = 0; i < image->num_planes; i++) {
         planes[i] = (struct plane_state) {
