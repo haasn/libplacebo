@@ -2955,9 +2955,9 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
 retry:
     for (int i = 0; i < images->num_frames; i++) {
         uint64_t sig = images->signatures[i];
-        float pts = images->timestamps[i];
-        PL_TRACE(rr, "Considering image with signature 0x%llx, pts %f",
-                 (unsigned long long) sig, pts);
+        float rts = images->timestamps[i];
+        PL_TRACE(rr, "Considering image with signature 0x%llx, rts %f",
+                 (unsigned long long) sig, rts);
 
         // Combining images with different rotations is basically unfeasible
         if (pl_rotation_normalize(images->frames[i]->rotation - refimg->rotation)) {
@@ -2980,21 +2980,21 @@ retry:
         // For backwards compatibility, treat !kernel as oversample
         } else if (!mixer->kernel || mixer->kernel->weight == oversample) {
 
-            // Compute the visible interval [pts, end] of this frame
+            // Compute the visible interval [rts, end] of this frame
             float end = i+1 < images->num_frames ? images->timestamps[i+1] : INFINITY;
-            if (pts > images->vsync_duration || end < 0.0) {
+            if (rts > images->vsync_duration || end < 0.0) {
                 PL_TRACE(rr, "  -> Skipping: no intersection with vsync");
                 continue;
             } else {
-                pts = PL_MAX(pts, 0.0);
+                rts = PL_MAX(rts, 0.0);
                 end = PL_MIN(end, images->vsync_duration);
-                pl_assert(end >= pts);
+                pl_assert(end >= rts);
             }
 
             // Weight is the fraction of vsync interval that frame is visible
-            weight = (end - pts) / images->vsync_duration;
+            weight = (end - rts) / images->vsync_duration;
             PL_TRACE(rr, "  -> Frame [%f, %f] intersects [%f, %f] = weight %f",
-                     pts, end, 0.0, images->vsync_duration, weight);
+                     rts, end, 0.0, images->vsync_duration, weight);
 
             if (weight < mixer->kernel->params[0]) {
                 PL_TRACE(rr, "     (culling due to threshold)");
@@ -3003,15 +3003,15 @@ retry:
 
         } else {
 
-            if (fabsf(pts) >= mixer->kernel->radius) {
+            if (fabsf(rts) >= mixer->kernel->radius) {
                 PL_TRACE(rr, "  -> Skipping: outside filter radius (%f)",
                          mixer->kernel->radius);
                 continue;
             }
 
             // Weight is directly sampled from the filter
-            weight = pl_filter_sample(mixer, pts);
-            PL_TRACE(rr, "  -> Filter offset %f = weight %f", pts, weight);
+            weight = pl_filter_sample(mixer, rts);
+            PL_TRACE(rr, "  -> Filter offset %f = weight %f", rts, weight);
 
         }
 
