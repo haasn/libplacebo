@@ -130,6 +130,14 @@ void vk_cmd_dep(struct vk_cmd *cmd, VkPipelineStageFlags stage, pl_vulkan_sem de
 
 void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig)
 {
+    // Try updating existing semaphore signal operations in-place
+    for (int i = 0; i < cmd->sigs.num; i++) {
+        if (cmd->sigs.elem[i] == sig.sem) {
+            cmd->sigvalues.elem[i] = PL_MAX(cmd->sigvalues.elem[i], sig.value);
+            return;
+        }
+    }
+
     assert(cmd->sigs.num == cmd->sigvalues.num);
     PL_ARRAY_APPEND(cmd, cmd->sigs, sig.sem);
     PL_ARRAY_APPEND(cmd, cmd->sigvalues, sig.value);
