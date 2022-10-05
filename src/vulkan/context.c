@@ -978,7 +978,7 @@ static int find_qf(VkQueueFamilyProperties *qfs, int qfnum, VkQueueFlags flags)
 {
     int idx = -1;
     for (int i = 0; i < qfnum; i++) {
-        if (!(qfs[i].queueFlags & flags))
+        if ((qfs[i].queueFlags & flags) != flags)
             continue;
 
         // QF is more specialized. Since we don't care about other bits like
