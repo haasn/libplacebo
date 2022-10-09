@@ -1019,7 +1019,7 @@ next_dim: ; // `continue` out of the inner loop
         type = SH_LUT_AUTO;
 
     // Sorted by priority
-    if (!type && can_literal && size <= SH_LUT_MAX_LITERAL_SOFT)
+    if (!type && can_literal && !method && size <= SH_LUT_MAX_LITERAL_SOFT)
         type = SH_LUT_LITERAL;
     if (!type && texfmt)
         type = SH_LUT_TEXTURE;
