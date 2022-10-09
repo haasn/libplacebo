@@ -644,13 +644,11 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                       sh_glsl(sh).version >= 130 && // needed for round()
                       sh_try_compute(sh, bw, bh, false, shmem_req);
 
-    // For compute shaders, which read the input texels primarily from shmem,
-    // using a texture-based LUT is better. For the fragment shader fallback
-    // code, which is primarily texture bound, the extra cost of LUT
-    // interpolation is worth the reduction in texel fetches.
+    // Note: SH_LUT_LITERAL might be faster in some specific cases, but not by
+    // much, and it's catastrophically slow on other platforms.
     ident_t lut = sh_lut(sh, sh_lut_params(
         .object     = &obj->lut,
-        .lut_type   = is_compute ? SH_LUT_TEXTURE : SH_LUT_AUTO,
+        .lut_type   = SH_LUT_TEXTURE,
         .var_type   = PL_VAR_FLOAT,
         .method     = SH_LUT_LINEAR,
         .width      = lut_entries,
