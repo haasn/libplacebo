@@ -266,6 +266,11 @@ struct img {
     pl_shader sh;
     pl_tex tex;
 
+    // Information about what to log/disable/fallback to if the shader fails
+    const char *err_msg;
+    bool *err_bool;
+    pl_tex err_tex;
+
     // Current effective source area, will be sampled by the main scaler
     struct pl_rect2df rect;
 
@@ -513,7 +518,7 @@ static pl_tex _img_tex(struct pass_state *pass, struct img *img, pl_debug_tag ta
         memset(pass->fbofmt, 0, sizeof(pass->fbofmt));
         pl_dispatch_abort(rr->dp, &img->sh);
         rr->disable_fbos = true;
-        return NULL;
+        return img->err_tex;
     }
 
     pl_assert(img->sh);
@@ -522,10 +527,20 @@ static pl_tex _img_tex(struct pass_state *pass, struct img *img, pl_debug_tag ta
         .target = tex,
     ));
 
+    const char *err_msg = img->err_msg;
+    bool *err_bool = img->err_bool;
+    pl_tex err_tex = img->err_tex;
+    img->err_msg = NULL;
+    img->err_bool = NULL;
+    img->err_tex = NULL;
+
     if (!ok) {
-        PL_ERR(rr, "Failed dispatching intermediate pass!");
+        PL_ERR(rr, "%s", PL_DEF(err_msg, "Failed dispatching intermediate pass!"));
+        if (err_bool)
+            *err_bool = true;
         img->sh = pl_dispatch_begin(rr->dp);
-        return NULL;
+        img->tex = err_tex;
+        return img->tex;
     }
 
     img->tex = tex;
@@ -1229,14 +1244,9 @@ static bool plane_deband(struct pass_state *pass, struct img *img, float neutral
     img->tex = NULL;
     img->sh = pl_dispatch_begin(rr->dp);
     pl_shader_deband(img->sh, &src, &dparams);
-
-    if (!img_tex(pass, img)) {
-        PL_ERR(rr, "Failed applying debanding... disabling!");
-        pl_dispatch_abort(rr->dp, &img->sh);
-        img->tex = src.tex;
-        return false;
-    }
-
+    img->err_msg = "Failed applying debanding... disabling!";
+    img->err_bool = &rr->disable_debanding;
+    img->err_tex = src.tex;
     img->repr = repr;
     return true;
 }
@@ -1299,14 +1309,9 @@ static bool plane_film_grain(struct pass_state *pass, int plane_idx,
     }
 
     img->tex = NULL;
-    if (!img_tex(pass, img)) {
-        PL_ERR(rr, "Failed applying film grain.. disabling!");
-        pl_dispatch_abort(rr->dp, &img->sh);
-        img->tex = grain_params.tex;
-        rr->disable_grain = true;
-        return false;
-    }
-
+    img->err_msg = "Failed applying film grain.. disabling!";
+    img->err_bool = &rr->disable_grain;
+    img->err_tex = grain_params.tex;
     img->repr = repr;
     return true;
 }
@@ -1456,12 +1461,9 @@ static bool pass_read_image(struct pass_state *pass)
             img->tex = NULL;
             img->sh = pl_dispatch_begin(pass->rr->dp);
             pl_shader_deinterlace(img->sh, &src, params->deinterlace_params);
-            if (!img_tex(pass, img)) {
-                PL_ERR(rr, "Failed deinterlacing plane.. disabling!");
-                pl_dispatch_abort(rr->dp, &img->sh);
-                img->tex = planes[i].plane.texture;
-                rr->disable_deinterlacing = true;
-            }
+            img->err_msg = "Failed deinterlacing plane.. disabling!";
+            img->err_bool = &rr->disable_deinterlacing;
+            img->err_tex = planes[i].plane.texture;
         }
     }
 
@@ -1600,10 +1602,6 @@ static bool pass_read_image(struct pass_state *pass)
             PL_TRACE(rr, "After user hooks:");
             log_plane_info(rr, st);
         }
-
-        // Update the conceptual width/height after applying plane shaders
-        st->img.w = roundf(pl_rect_w(st->img.rect));
-        st->img.h = roundf(pl_rect_h(st->img.rect));
     }
 
     pl_shader sh = pl_dispatch_begin_ex(rr->dp, true);
@@ -1619,10 +1617,21 @@ static bool pass_read_image(struct pass_state *pass)
     // For quality reasons, explicitly drop subpixel offsets from the ref rect
     // and re-add them as part of `pass->img.rect`, always rounding towards 0.
     // Additionally, drop anamorphic subpixel mismatches.
-    float off_x = ref->img.rect.x0 - truncf(ref->img.rect.x0),
-          off_y = ref->img.rect.y0 - truncf(ref->img.rect.y0),
-          stretch_x = roundf(pl_rect_w(ref->img.rect)) / pl_rect_w(ref->img.rect),
-          stretch_y = roundf(pl_rect_h(ref->img.rect)) / pl_rect_h(ref->img.rect);
+    struct pl_rect2d ref_rounded = {
+        .x0 = truncf(ref->img.rect.x0),
+        .y0 = truncf(ref->img.rect.y0),
+        .x1 = ref_rounded.x0 + roundf(pl_rect_w(ref->img.rect)),
+        .y1 = ref_rounded.y0 + roundf(pl_rect_h(ref->img.rect)),
+    };
+
+    PL_TRACE(rr, "Rounded reference rect: {%d %d %d %d}",
+             ref_rounded.x0, ref_rounded.y0,
+             ref_rounded.x1, ref_rounded.y1);
+
+    float off_x = ref->img.rect.x0 - ref_rounded.x0,
+          off_y = ref->img.rect.y0 - ref_rounded.y0,
+          stretch_x = pl_rect_w(ref_rounded) / pl_rect_w(ref->img.rect),
+          stretch_y = pl_rect_h(ref_rounded) / pl_rect_h(ref->img.rect);
 
     for (int i = 0; i < image->num_planes; i++) {
         struct plane_state *st = &planes[i];
@@ -1636,12 +1645,12 @@ static bool pass_read_image(struct pass_state *pass)
               base_y = st->img.rect.y0 - scale_y * off_y;
 
         struct pl_sample_src src = {
-            .tex        = st->img.tex,
+            .tex        = img_tex(pass, &st->img),
             .components = plane->components,
             .address_mode = plane->address_mode,
             .scale      = pl_color_repr_normalize(&st->img.repr),
-            .new_w      = ref->img.w,
-            .new_h      = ref->img.h,
+            .new_w      = pl_rect_w(ref_rounded),
+            .new_h      = pl_rect_h(ref_rounded),
             .rect = {
                 base_x,
                 base_y,
@@ -1670,8 +1679,8 @@ static bool pass_read_image(struct pass_state *pass)
             // Can't merge shaders, so instead force FBO indirection here
             struct img inter_img = {
                 .sh = psh,
-                .w = ref->img.w,
-                .h = ref->img.h,
+                .w = src.new_w,
+                .h = src.new_h,
                 .comps = src.components,
             };
 
@@ -1707,8 +1716,8 @@ static bool pass_read_image(struct pass_state *pass)
 
     pass->img = (struct img) {
         .sh     = sh,
-        .w      = ref->img.w,
-        .h      = ref->img.h,
+        .w      = pl_rect_w(ref_rounded),
+        .h      = pl_rect_h(ref_rounded),
         .repr   = ref->img.repr,
         .color  = image->color,
         .comps  = ref->img.repr.alpha ? 4 : 3,
