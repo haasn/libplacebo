@@ -1645,7 +1645,6 @@ static bool pass_read_image(struct pass_state *pass)
               base_y = st->img.rect.y0 - scale_y * off_y;
 
         struct pl_sample_src src = {
-            .tex        = img_tex(pass, &st->img),
             .components = plane->components,
             .address_mode = plane->address_mode,
             .scale      = pl_color_repr_normalize(&st->img.repr),
@@ -1671,8 +1670,18 @@ static bool pass_read_image(struct pass_state *pass)
                  src.rect.x1, src.rect.y1,
                  plane->flipped ? " (flipped) " : "");
 
-        pl_shader psh = pl_dispatch_begin_ex(rr->dp, true);
-        dispatch_sampler(pass, psh, &rr->samplers_src[i], NULL, &src);
+        pl_shader psh;
+        struct pl_rect2d unscaled = { .x1 = src.new_w, .y1 = src.new_h };
+        if (st->img.sh && st->img.w == src.new_w && st->img.h == src.new_h &&
+            pl_rect2d_eq(src.rect, unscaled))
+        {
+            // Image rects are already equal, no indirect scaling needed
+            psh = st->img.sh;
+        } else {
+            src.tex = img_tex(pass, &st->img);
+            psh = pl_dispatch_begin_ex(rr->dp, true);
+            dispatch_sampler(pass, psh, &rr->samplers_src[i], NULL, &src);
+        }
 
         ident_t sub = sh_subpass(sh, psh);
         if (!sub) {
