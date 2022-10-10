@@ -1242,7 +1242,7 @@ static bool plane_deband(struct pass_state *pass, struct img *img, float neutral
     memcpy(dparams.grain_neutral, neutral, sizeof(dparams.grain_neutral));
 
     img->tex = NULL;
-    img->sh = pl_dispatch_begin(rr->dp);
+    img->sh = pl_dispatch_begin_ex(rr->dp, true);
     pl_shader_deband(img->sh, &src, &dparams);
     img->err_msg = "Failed applying debanding... disabling!";
     img->err_bool = &rr->disable_debanding;
