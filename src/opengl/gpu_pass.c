@@ -447,14 +447,9 @@ static void update_desc(pl_gpu gpu, pl_pass pass, int index,
         gl->TexParameteri(tex_gl->target, GL_TEXTURE_MIN_FILTER, filter);
         gl->TexParameteri(tex_gl->target, GL_TEXTURE_MAG_FILTER, filter);
         switch (pl_tex_params_dimension(tex->params)) {
-        case 3: gl->TexParameteri(tex_gl->target, GL_TEXTURE_WRAP_R, wrap);
-            // fall through
-        case 2:
-            gl->TexParameteri(tex_gl->target, GL_TEXTURE_WRAP_T, wrap);
-            // fall through
-        case 1:
-            gl->TexParameteri(tex_gl->target, GL_TEXTURE_WRAP_S, wrap);
-            break;
+        case 3: gl->TexParameteri(tex_gl->target, GL_TEXTURE_WRAP_R, wrap); // fall through
+        case 2: gl->TexParameteri(tex_gl->target, GL_TEXTURE_WRAP_T, wrap); // fall through
+        case 1: gl->TexParameteri(tex_gl->target, GL_TEXTURE_WRAP_S, wrap); break;
         }
         return;
     }
