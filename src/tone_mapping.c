@@ -96,10 +96,11 @@ bool pl_tone_map_params_noop(const struct pl_tone_map_params *p)
     float in_max = pl_hdr_rescale(p->input_scaling, PL_HDR_NITS, p->input_max);
     float out_min = pl_hdr_rescale(p->output_scaling, PL_HDR_NITS, p->output_min);
     float out_max = pl_hdr_rescale(p->output_scaling, PL_HDR_NITS, p->output_max);
+    bool can_inverse = p->function == &pl_tone_map_auto || p->function->map_inverse;
 
     return fabs(in_min - out_min) < 1e-4 && // no BPC
            in_max < out_max + 1e-2 && // no range reduction
-           (out_max < in_max + 1e-2 || !p->function->map_inverse);
+           (out_max < in_max + 1e-2 || !can_inverse); // no inverse tone-mapping
 }
 
 static struct pl_tone_map_params fix_params(const struct pl_tone_map_params *params)
