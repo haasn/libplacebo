@@ -276,13 +276,16 @@ void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
 }
 
 // Defines a LUT position helper macro. This translates from an absolute texel
-// scale (0.0 - 1.0) to the texture coordinate scale for the corresponding
-// sample in a texture of dimension `lut_size`.
-static ident_t sh_lut_pos(pl_shader sh, int lut_size)
+// scale (either in texels, or normalized to [0,1]) to the texture coordinate
+// scale for the corresponding sample in a texture of dimension `lut_size`.
+static ident_t texel_scale(pl_shader sh, int lut_size, bool normalized)
 {
-    ident_t name = sh_fresh(sh, "LUT_POS");
-    GLSLH("#define %s(x) mix(%s, %s, (x)) \n",
-          name, SH_FLOAT(0.5 / lut_size), SH_FLOAT(1.0 - 0.5 / lut_size));
+    const float base = 0.5f / lut_size;
+    const float end = 1.0f - 0.5f / lut_size;
+    const float scale = (end - base) / (normalized ? 1.0f : (lut_size - 1));
+
+    ident_t name = sh_fresh(sh, "LUT_SCALE");
+    GLSLH("#define %s(x) (%s * (x) + %s) \n", name, SH_FLOAT(scale), SH_FLOAT(base));
     return name;
 }
 
@@ -411,26 +414,6 @@ next_dim: ; // `continue` out of the inner loop
     }
 
     enum sh_lut_type type = params->lut_type;
-
-    // Integer texture sampling requires GLSL >= 130 (for texelFetch)
-    bool can_fetch = sh_glsl(sh).version >= 130;
-    bool needs_integer = method != SH_LUT_LINEAR;
-    if (needs_integer && !can_fetch) {
-        if (method == SH_LUT_TETRAHEDRAL) {
-            // Fall back to normal trilinear interpolation
-            if (texfmt && (texfmt->caps & PL_FMT_CAP_LINEAR)) {
-                method = SH_LUT_LINEAR;
-            } else {
-                PL_ERR(sh, "Cannot compute tetrahedral interpolation on GLSL "
-                       "versions below 130, and no trilinear interpolation "
-                       "available!");
-                goto error;
-            }
-        } else {
-            // Integer sampling, disable textures
-            texfmt = NULL;
-        }
-    }
 
     // The linear sampling code currently only supports 1D linear interpolation
     if (method == SH_LUT_LINEAR && dims > 1) {
@@ -617,10 +600,11 @@ next_dim: ; // `continue` out of the inner loop
             }
         });
 
-        if (method == SH_LUT_LINEAR) {
+        bool can_fetch = sh_glsl(sh).version >= 130;
+        if (method == SH_LUT_LINEAR || !can_fetch) {
             ident_t pos_macros[PL_ARRAY_SIZE(sizes)] = {0};
             for (int i = 0; i < dims; i++)
-                pos_macros[i] = sh_lut_pos(sh, sizes[i]);
+                pos_macros[i] = texel_scale(sh, sizes[i], method == SH_LUT_LINEAR);
 
             GLSLH("#define %s(pos) (%s(%s, %s(\\\n",
                   name, sh_tex_fn(sh, lut->tex->params),
