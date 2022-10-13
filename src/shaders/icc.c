@@ -409,6 +409,7 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     pl_hash_merge(&p->lut_sig, params->size_r);
     pl_hash_merge(&p->lut_sig, params->size_g);
     pl_hash_merge(&p->lut_sig, params->size_b);
+    pl_hash_merge(&p->lut_sig, params->force_bpc);
     union { double d; uint64_t u; } v = { .d = icc->csp.hdr.max_luma };
     pl_hash_merge(&p->lut_sig, v.u);
     // min luma depends only on the max luma and profile
