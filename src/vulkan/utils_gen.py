@@ -20,24 +20,24 @@ import sys
 import xml.etree.ElementTree as ET
 
 try:
-    from mako.template import Template
+    from jinja2 import Environment
 except ModuleNotFoundError:
-    print('Module \'mako\' not found, please install \'python3-mako\' or '
+    print('Module \'jinja2\' not found, please install \'python3-Jinja2\' or '
           'an equivalent package on your system! Alternatively, run '
           '`git submodule update --init` followed by `meson --wipe`.',
           file=sys.stderr)
     sys.exit(1)
 
-TEMPLATE = Template("""
+TEMPLATE = Environment(trim_blocks=True).from_string("""
 #define VK_ENABLE_BETA_EXTENSIONS
 #include "vulkan/utils.h"
 
 const char *vk_res_str(VkResult res)
 {
     switch (res) {
-%for res in vkresults:
-    case ${res}: return "${res}";
-%endfor
+{% for res in vkresults %}
+    case {{ res }}: return "{{ res }}";
+{% endfor %}
 
     default: return "unknown error";
     }
@@ -46,9 +46,9 @@ const char *vk_res_str(VkResult res)
 const char *vk_fmt_name(VkFormat fmt)
 {
     switch (fmt) {
-%for fmt in vkformats:
-    case ${fmt}: return "${fmt}";
-%endfor
+{% for fmt in vkformats %}
+    case {{ fmt }}: return "{{ fmt }}";
+{% endfor %}
 
     default: return "unknown format";
     }
@@ -57,9 +57,9 @@ const char *vk_fmt_name(VkFormat fmt)
 const char *vk_csp_name(VkColorSpaceKHR csp)
 {
     switch (csp) {
-%for csp in vkspaces:
-    case ${csp}: return "${csp}";
-%endfor
+{% for csp in vkspaces %}
+    case {{ csp }}: return "{{ csp }}";
+{% endfor %}
 
     default: return "unknown color space";
     }
@@ -68,9 +68,9 @@ const char *vk_csp_name(VkColorSpaceKHR csp)
 const char *vk_handle_name(VkExternalMemoryHandleTypeFlagBitsKHR handle)
 {
     switch (handle) {
-%for handle in vkhandles:
-    case ${handle}: return "${handle}";
-%endfor
+{% for handle in vkhandles %}
+    case {{ handle }}: return "{{ handle }}";
+{% endfor %}
 
     default: return "unknown handle type";
     }
@@ -79,9 +79,9 @@ const char *vk_handle_name(VkExternalMemoryHandleTypeFlagBitsKHR handle)
 const char *vk_alpha_mode(VkCompositeAlphaFlagsKHR alpha)
 {
     switch (alpha) {
-%for mode in vkalphas:
-    case ${mode}: return "${mode}";
-%endfor
+{% for mode in vkalphas %}
+    case {{ mode }}: return "{{ mode }}";
+{% endfor %}
 
     default: return "unknown alpha mode";
     }
@@ -90,9 +90,9 @@ const char *vk_alpha_mode(VkCompositeAlphaFlagsKHR alpha)
 const char *vk_surface_transform(VkSurfaceTransformFlagsKHR tf)
 {
     switch (tf) {
-%for tf in vktransforms:
-    case ${tf}: return "${tf}";
-%endfor
+{% for tf in vktransforms %}
+    case {{ tf }}: return "{{ tf }}";
+{% endfor %}
 
     default: return "unknown surface transform";
     }
@@ -102,9 +102,9 @@ const char *vk_surface_transform(VkSurfaceTransformFlagsKHR tf)
 const char *vk_obj_type(VkObjectType obj)
 {
     switch (obj) {
-%for obj in vkobjects:
-    case ${obj.enum}: return "${obj.name}";
-%endfor
+{% for obj in vkobjects %}
+    case {{ obj.enum }}: return "{{ obj.name }}";
+{% endfor %}
 
     default: return "unknown object";
     }
@@ -113,16 +113,16 @@ const char *vk_obj_type(VkObjectType obj)
 size_t vk_struct_size(VkStructureType stype)
 {
     switch (stype) {
-%for struct in vkstructs:
-    case ${struct.stype}: return sizeof(${struct.name});
-%endfor
+{% for struct in vkstructs %}
+    case {{ struct.stype }}: return sizeof({{ struct.name }});
+{% endfor %}
 
     default: return 0;
     }
 }
 
-const VkAccessFlags vk_access_read = ${hex(vkaccess.read)}LLU;
-const VkAccessFlags vk_access_write = ${hex(vkaccess.write)}LLU;
+const VkAccessFlags vk_access_read = {{ '0x%x' % vkaccess.read }}LLU;
+const VkAccessFlags vk_access_write = {{ '0x%x' % vkaccess.write }}LLU;
 """)
 
 class Obj(object):

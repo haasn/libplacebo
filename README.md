@@ -296,7 +296,7 @@ A full list of optional dependencies each feature requires:
 - **lcms**: `liblcms2`
 - **opengl**: `glad2` (*)
 - **shaderc**: `libshaderc`
-- **vulkan**: `libvulkan`, `python3-mako` (*)
+- **vulkan**: `libvulkan`, `python3-jinja2` (*)
 
 (*) This dependency is bundled automatically when doing a recursive clone.
 
