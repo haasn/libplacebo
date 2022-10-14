@@ -1,9 +1,6 @@
 [submodule "demos/3rdparty/nuklear"]
 	path = demos/3rdparty/nuklear
 	url = https://github.com/Immediate-Mode-UI/Nuklear.git
-[submodule "3rdparty/mako"]
-	path = 3rdparty/mako
-	url = https://github.com/sqlalchemy/mako/
 [submodule "3rdparty/glad"]
 	path = 3rdparty/glad
 	url = https://github.com/Dav1dde/glad
