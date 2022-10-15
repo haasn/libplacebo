@@ -47,6 +47,11 @@ int pl_cond_signal(pl_cond *cond);
 int pl_cond_timedwait(pl_cond *cond, pl_mutex *mutex, uint64_t timeout);
 int pl_cond_wait(pl_cond *cond, pl_mutex *mutex);
 
+typedef void pl_static_mutex;
+#define PL_STATIC_MUTEX_INITIALIZER
+int pl_static_mutex_lock(pl_static_mutex *mutex);
+int pl_static_mutex_unlock(pl_static_mutex *mutex);
+
 #endif
 
 // Actual platform-specific implementation

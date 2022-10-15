@@ -24,6 +24,8 @@
 
 typedef pthread_mutex_t pl_mutex;
 typedef pthread_cond_t  pl_cond;
+typedef pthread_mutex_t pl_static_mutex;
+#define PL_STATIC_MUTEX_INITIALIZER PTHREAD_MUTEX_INITIALIZER
 
 static inline int pl_mutex_init_type_internal(pl_mutex *mutex, enum pl_mutex_type mtype)
 {
@@ -109,3 +111,6 @@ static inline int pl_cond_timedwait(pl_cond *cond, pl_mutex *mutex, uint64_t tim
 
     return pthread_cond_timedwait(cond, mutex, &ts);
 }
+
+#define pl_static_mutex_lock    pthread_mutex_lock
+#define pl_static_mutex_unlock  pthread_mutex_unlock

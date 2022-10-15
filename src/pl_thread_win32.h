@@ -93,3 +93,18 @@ static inline int pl_cond_timedwait(pl_cond *cond, pl_mutex *mutex, uint64_t tim
     }
     return 0;
 }
+
+typedef SRWLOCK pl_static_mutex;
+#define PL_STATIC_MUTEX_INITIALIZER SRWLOCK_INIT
+
+static inline int pl_static_mutex_lock(pl_static_mutex *mutex)
+{
+    AcquireSRWLockExclusive(mutex);
+    return 0;
+}
+
+static inline int pl_static_mutex_unlock(pl_static_mutex *mutex)
+{
+    ReleaseSRWLockExclusive(mutex);
+    return 0;
+}
