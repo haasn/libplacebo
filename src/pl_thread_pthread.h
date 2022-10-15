@@ -25,11 +25,6 @@
 typedef pthread_mutex_t pl_mutex;
 typedef pthread_cond_t  pl_cond;
 
-enum pl_mutex_type {
-    PL_MUTEX_NORMAL = 0,
-    PL_MUTEX_RECURSIVE,
-};
-
 static inline int pl_mutex_init_type_internal(pl_mutex *mutex, enum pl_mutex_type mtype)
 {
     int mutex_type;

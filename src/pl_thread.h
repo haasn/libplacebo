@@ -19,6 +19,37 @@
 
 #include "common.h"
 
+enum pl_mutex_type {
+    PL_MUTEX_NORMAL = 0,
+    PL_MUTEX_RECURSIVE,
+};
+
+#define pl_mutex_init(mutex) \
+    pl_mutex_init_type(mutex, PL_MUTEX_NORMAL)
+
+// Note: This is never compiled, and only documents the API. The actual
+// implementations of these prototypes may be macros.
+#ifdef PL_API_REFERENCE
+
+typedef void pl_mutex;
+void pl_mutex_init_type(pl_mutex *mutex, enum pl_mutex_type mtype);
+int pl_mutex_destroy(pl_mutex *mutex);
+int pl_mutex_lock(pl_mutex *mutex);
+int pl_mutex_unlock(pl_mutex *mutex);
+
+typedef void pl_cond;
+int pl_cond_init(pl_cond *cond);
+int pl_cond_destroy(pl_cond *cond);
+int pl_cond_broadcast(pl_cond *cond);
+int pl_cond_signal(pl_cond *cond);
+
+// `timeout` is in nanoseconds, or UINT64_MAX to block forever
+int pl_cond_timedwait(pl_cond *cond, pl_mutex *mutex, uint64_t timeout);
+int pl_cond_wait(pl_cond *cond, pl_mutex *mutex);
+
+#endif
+
+// Actual platform-specific implementation
 #ifdef PL_HAVE_WIN32
 #include "pl_thread_win32.h"
 #elif defined(PL_HAVE_PTHREAD)
@@ -26,6 +57,3 @@
 #else
 #error No threading implementation available!
 #endif
-
-#define pl_mutex_init(mutex) \
-    pl_mutex_init_type(mutex, PL_MUTEX_NORMAL)
