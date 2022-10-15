@@ -127,7 +127,7 @@ const void *vk_find_struct(const void *chain, VkStructureType stype)
     return NULL;
 }
 
-void vk_link_struct(void *chain, void *in)
+void vk_link_struct(void *chain, const void *in)
 {
     if (!in)
         return;
@@ -136,7 +136,7 @@ void vk_link_struct(void *chain, void *in)
     while (out->pNext)
         out = out->pNext;
 
-    out->pNext = in;
+    out->pNext = (void *) in;
 }
 
 void *vk_struct_memdup(void *alloc, const void *pin)

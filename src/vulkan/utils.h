@@ -53,7 +53,7 @@ extern const enum pl_handle_type vk_sync_handle_list[];
 const void *vk_find_struct(const void *chain, VkStructureType stype);
 
 // Link a structure into a pNext chain
-void vk_link_struct(void *chain, void *in);
+void vk_link_struct(void *chain, const void *in);
 
 // Make a copy of a structure, not including the pNext chain
 void *vk_struct_memdup(void *alloc, const void *in);
