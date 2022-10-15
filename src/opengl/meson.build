@@ -1,7 +1,11 @@
 opengl_build = get_option('opengl')
 opengl_link = get_option('gl-proc-addr')
 
-libdl = cc.find_library('dl', required : opengl_link)
+if host_machine.system() == 'windows'
+    libdl = declare_dependency()
+else
+    libdl = cc.find_library('dl', required : opengl_link)
+endif
 opengl_link = opengl_link.require(libdl.found())
 components.set('opengl', opengl_build.allowed())
 components.set('gl-proc-addr', opengl_link.allowed())
