@@ -35,6 +35,7 @@ struct gl_ctx {
     struct pl_opengl_params params;
     bool is_debug;
     bool is_debug_egl;
+    bool gl_loaded; // used internal loader
 
     // For context locking
     pl_mutex lock;

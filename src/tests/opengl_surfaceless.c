@@ -269,6 +269,7 @@ int main()
 
 next:
         pl_opengl_destroy(&gl);
+        gladLoaderLoadEGL(EGL_NO_DISPLAY); // re-load after `pl_opengl_destroy`
         eglDestroySurface(dpy, surf);
         eglDestroyContext(dpy, egl);
         continue;
