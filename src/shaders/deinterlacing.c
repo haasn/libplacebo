@@ -103,13 +103,21 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
         const int bw = PL_DEF(sh_glsl(sh).subgroup_size, 32);
         sh_try_compute(sh, bw, 1, true, 0);
 
+        // This magic constant is hard-coded in the original implementation as
+        // '1' on an 8-bit scale. Since we work with arbitrary bit depth
+        // floating point textures, we have to convert this somehow. Hard-code
+        // it as 1/255 under the assumption that the original intent was to be
+        // roughly 1 unit of brightness increment on an 8-bit source. This may
+        // or may not produce suboptimal results on higher-bit-depth content.
+        static const float spatial_bias = 1 / 255.0f;
+
         // Calculate spatial prediction
         ident_t spatial_pred = sh_fresh(sh, "spatial_predictor");
         GLSLH("float %s(float a, float b, float c, float d, float e, float f, float g,  \n"
               "         float h, float i, float j, float k, float l, float m, float n)  \n"
               "{                                                                        \n"
               "    float spatial_pred = (d + k) / 2.0;                                  \n"
-              "    float spatial_score = abs(c - j) + abs(d - k) + abs(e - l);          \n"
+              "    float spatial_score = abs(c - j) + abs(d - k) + abs(e - l) - %f;     \n"
 
               "    float score = abs(b - k) + abs(c - l) + abs(d - m);                  \n"
               "    if (score < spatial_score) {                                         \n"
@@ -133,7 +141,7 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
               "    }                                                                    \n"
               "    return spatial_pred;                                                 \n"
               "}                                                                        \n",
-              spatial_pred);
+              spatial_pred, spatial_bias);
 
         GLSL("T a = GET(%s, -3, -1);    \n"
              "T b = GET(%s, -2, -1);    \n"
@@ -174,7 +182,7 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
               "    float p3 = G;                                                \n"
               "    float p4 = (E + J) / 2.0;                                    \n"
 
-              "    float tdiff0 = abs(D - I);                                   \n"
+              "    float tdiff0 = abs(D - I) / 2.0;                             \n"
               "    float tdiff1 = (abs(A - F) + abs(B - G)) / 2.0;              \n"
               "    float tdiff2 = (abs(K - F) + abs(G - L)) / 2.0;              \n"
               "    float diff = max(tdiff0, max(tdiff1, tdiff2));               \n",
