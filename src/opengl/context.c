@@ -182,7 +182,10 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     }
 
     if (params->egl_display) {
-        if (params->get_proc_addr) {
+        if (params->get_proc_addr_ex) {
+            ok = gladLoadEGLUserPtr(params->egl_display, params->get_proc_addr_ex,
+                                    params->proc_ctx);
+        } else if (params->get_proc_addr) {
             ok = gladLoadEGL(params->egl_display, params->get_proc_addr);
         } else {
 #ifdef PL_HAVE_GL_PROC_ADDR
