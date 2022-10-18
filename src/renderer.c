@@ -1347,10 +1347,12 @@ static enum pl_lut_type guess_frame_lut_type(const struct pl_frame *frame,
     return PL_LUT_NATIVE;
 }
 
-static pl_fmt merge_fmt(pl_renderer rr, const struct img *a, const struct img *b)
+static pl_fmt merge_fmt(struct pass_state *pass, const struct img *a,
+                        const struct img *b)
 {
-    pl_fmt fmta = a->tex ? a->tex->params.format : a->fmt;
-    pl_fmt fmtb = b->tex->params.format;
+    pl_renderer rr = pass->rr;
+    pl_fmt fmta = a->tex ? a->tex->params.format : PL_DEF(a->fmt, pass->fbofmt[a->comps]);
+    pl_fmt fmtb = b->tex ? b->tex->params.format : PL_DEF(b->fmt, pass->fbofmt[b->comps]);
     pl_assert(fmta && fmtb);
     if (fmta->type != fmtb->type)
         return NULL;
@@ -1459,7 +1461,7 @@ static bool pass_read_image(struct pass_state *pass)
             };
 
             img->tex = NULL;
-            img->sh = pl_dispatch_begin(pass->rr->dp);
+            img->sh = pl_dispatch_begin_ex(pass->rr->dp, true);
             pl_shader_deinterlace(img->sh, &src, params->deinterlace_params);
             img->err_msg = "Failed deinterlacing plane.. disabling!";
             img->err_bool = &rr->disable_deinterlacing;
@@ -1478,6 +1480,7 @@ static bool pass_read_image(struct pass_state *pass)
         if (!want_merge(pass, sti, ref))
             continue;
 
+        bool did_merge = false;
         for (int j = i+1; j < image->num_planes; j++) {
             struct plane_state *stj = &planes[j];
             bool merge = sti->type == stj->type &&
@@ -1488,7 +1491,7 @@ static bool pass_read_image(struct pass_state *pass)
             if (!merge)
                 continue;
 
-            pl_fmt fmt = merge_fmt(rr, &sti->img, &stj->img);
+            pl_fmt fmt = merge_fmt(pass, &sti->img, &stj->img);
             if (!fmt)
                 continue;
 
@@ -1496,21 +1499,24 @@ static bool pass_read_image(struct pass_state *pass)
             pl_shader sh = sti->img.sh;
             if (!sh) {
                 sh = sti->img.sh = pl_dispatch_begin_ex(pass->rr->dp, true);
-                sh_describe(sh, "merging planes");
-                GLSL("vec4 tmp; \n");
                 pl_shader_sample_direct(sh, pl_sample_src( .tex = sti->img.tex ));
                 sti->img.tex = NULL;
             }
 
-            pl_shader psh = pl_dispatch_begin_ex(pass->rr->dp, true);
-            pl_shader_sample_direct(psh, pl_sample_src( .tex = stj->img.tex ));
+            pl_shader psh = NULL;
+            if (!stj->img.sh) {
+                psh = pl_dispatch_begin_ex(pass->rr->dp, true);
+                pl_shader_sample_direct(psh, pl_sample_src( .tex = stj->img.tex ));
+            }
 
-            ident_t sub = sh_subpass(sh, psh);
+            ident_t sub = sh_subpass(sh, psh ? psh : stj->img.sh);
             pl_dispatch_abort(rr->dp, &psh);
             if (!sub)
                 break; // skip merging
 
-            GLSL("tmp = %s(); \n", sub);
+            sh_describe(sh, "merging planes");
+            GLSL("{                 \n"
+                 "vec4 tmp = %s();  \n", sub);
             for (int jc = 0; jc < stj->img.comps; jc++) {
                 int map = stj->plane.component_mapping[jc];
                 if (!map)
@@ -1521,10 +1527,15 @@ static bool pass_read_image(struct pass_state *pass)
                 sti->plane.components = sti->img.comps;
                 sti->plane.component_mapping[ic] = map;
             }
+            GLSL("} \n");
 
             sti->img.fmt = fmt;
             *stj = (struct plane_state) {0};
+            did_merge = true;
         }
+
+        if (!did_merge)
+            continue;
 
         if (!img_tex(pass, &sti->img)) {
             PL_ERR(rr, "Failed dispatching plane merging shader, disabling FBOs!");
