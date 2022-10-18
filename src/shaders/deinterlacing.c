@@ -219,9 +219,8 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
         }
 
         enum pl_field first_field = PL_DEF(src->first_field, PL_FIELD_TOP);
-        bool is_second_field = src->field == first_field;
-        ident_t prev1 = is_second_field ? cur : prev2;
-        ident_t next1 = is_second_field ? next2 : cur;
+        ident_t prev1 = src->field == first_field ? prev2 : cur;
+        ident_t next1 = src->field == first_field ? cur : next2;
 
         GLSL("T A = GET(%s, 0, -1); \n"
              "T B = GET(%s, 0,  1); \n"
