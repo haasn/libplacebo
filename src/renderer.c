@@ -2019,9 +2019,7 @@ static bool pass_output_target(struct pass_state *pass)
             break;
         case PL_LUT_CONVERSION:
             pl_color_space_merge(&lut_in, &image->color);
-            pl_color_space_merge(&lut_out, &target->color);
-            // Conversion LUT the highest priority
-            need_conversion = false;
+            need_conversion = false; // conversion LUT the highest priority
             break;
         case PL_LUT_NORMALIZED:
             if (!prelinearized) {
