@@ -113,8 +113,7 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
 
     const gl_funcs *gl = gl_funcs_get(gpu);
     struct pl_glsl_version *glsl = &gpu->glsl;
-    const char *verstr = (char *) gl->GetString(GL_VERSION);
-    glsl->gles = pl_str_startswith0(pl_str0(verstr), "OpenGL ES");
+    glsl->gles = gl_is_gles(pl_gl);
     int ver = pl_gl->major * 10 + pl_gl->minor;
     p->gl_ver = glsl->gles ? 0 : ver;
     p->gles_ver = glsl->gles ? ver : 0;

@@ -101,6 +101,14 @@ bool gl_is_software(pl_opengl pl_gl)
            strcmp(renderer, "Apple Software Renderer") == 0;
 }
 
+bool gl_is_gles(pl_opengl pl_gl)
+{
+    struct gl_ctx *glctx = PL_PRIV(pl_gl);
+    const gl_funcs *gl = &glctx->func;
+    const char *version = (char *) gl->GetString(GL_VERSION);
+    return pl_str_startswith0(pl_str0(version), "OpenGL ES");
+}
+
 bool gl_test_ext(pl_gpu gpu, const char *ext, int gl_ver, int gles_ver)
 {
     struct pl_gl *p = PL_PRIV(gpu);

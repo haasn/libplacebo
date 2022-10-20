@@ -40,6 +40,11 @@ bool gl_check_err(pl_gpu gpu, const char *fun);
 // Thread-safety: Unsafe
 bool gl_is_software(pl_opengl gl);
 
+// Returns true if the context is detected as OpenGL ES
+//
+// Thread-safety: Unsafe
+bool gl_is_gles(pl_opengl gl);
+
 // Check for presence of an extension, alternatively a minimum GL version
 //
 // Thread-safety: Unsafe
