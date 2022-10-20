@@ -58,7 +58,7 @@ static pl_handle_caps tex_handle_caps(pl_gpu gpu, bool import)
     pl_handle_caps caps = 0;
     struct pl_gl *p = PL_PRIV(gpu);
 
-    if (!p->egl_dpy)
+    if (!p->egl_dpy || (!p->has_egl_storage && !p->has_egl_import))
         return 0;
 
     if (import) {
@@ -193,6 +193,8 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
     // Query import/export support
     p->egl_dpy = params->egl_display;
     p->egl_ctx = params->egl_context;
+    p->has_egl_storage = pl_opengl_has_ext(p->gl, "GL_EXT_EGL_image_storage");
+    p->has_egl_import = pl_opengl_has_ext(p->gl, "GL_OES_EGL_image_external");
     gpu->export_caps.tex = tex_handle_caps(gpu, false);
     gpu->import_caps.tex = tex_handle_caps(gpu, true);
 

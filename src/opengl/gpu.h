@@ -33,6 +33,7 @@ struct pl_gl {
     // For import/export
     EGLDisplay egl_dpy;
     EGLContext egl_ctx;
+    bool egl_storage;
 #ifdef PL_HAVE_UNIX
     // List of formats supported by EGL_EXT_image_dma_buf_import
     PL_ARRAY(EGLint) egl_formats;
@@ -58,6 +59,8 @@ struct pl_gl {
     bool has_queries;
     bool has_modifiers;
     bool has_readback;
+    bool has_egl_storage;
+    bool has_egl_import;
     int gather_comps;
 };
 

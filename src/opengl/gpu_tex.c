@@ -100,6 +100,7 @@ static bool gl_tex_import(pl_gpu gpu,
                           struct pl_tex_t *tex)
 {
     const gl_funcs *gl = gl_funcs_get(gpu);
+    struct pl_gl *p = PL_PRIV(gpu);
     if (!MAKE_CURRENT())
         return false;
 
@@ -130,7 +131,6 @@ static bool gl_tex_import(pl_gpu gpu,
         ADD_ATTRIB(EGL_LINUX_DRM_FOURCC_EXT, params->format->fourcc);
         ADD_DMABUF_PLANE_ATTRIBS(0, tex_gl->fd, shared_mem->offset,
                                  PL_DEF(shared_mem->stride_w, params->w));
-        struct pl_gl *p = PL_PRIV(gpu);
         if (p->has_modifiers)
             ADD_DMABUF_PLANE_MODIFIERS(0, shared_mem->drm_format_mod);
 
@@ -163,7 +163,11 @@ static bool gl_tex_import(pl_gpu gpu,
         goto error;
 
     // tex_gl->image should be already bound
-    gl->EGLImageTargetTexture2DOES(GL_TEXTURE_2D, tex_gl->image);
+    if (p->has_egl_storage) {
+        gl->EGLImageTargetTexStorageEXT(GL_TEXTURE_2D, tex_gl->image, NULL);
+    } else {
+        gl->EGLImageTargetTexture2DOES(GL_TEXTURE_2D, tex_gl->image);
+    }
     if (!egl_check_err(gpu, "EGLImageTargetTexture2DOES"))
         goto error;
 
