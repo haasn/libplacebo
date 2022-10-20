@@ -97,7 +97,8 @@ void pl_opengl_destroy(pl_opengl *ptr)
 #ifdef PL_HAVE_GL_PROC_ADDR
     if (p->gl_loaded) {
         pl_static_mutex_lock(&glad_loader_mutex);
-        gladLoaderUnloadEGL();
+        if (p->params.egl_display)
+            gladLoaderUnloadEGL();
         gladLoaderUnloadGLES2();
         gladLoaderUnloadGL();
         pl_static_mutex_unlock(&glad_loader_mutex);
