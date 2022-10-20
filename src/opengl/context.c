@@ -95,7 +95,7 @@ void pl_opengl_destroy(pl_opengl *ptr)
     pl_gpu_destroy(pl_gl->gpu);
 
 #ifdef PL_HAVE_GL_PROC_ADDR
-    if (p->gl_loaded) {
+    if (!p->params.get_proc_addr && !p->params.get_proc_addr_ex) {
         pl_static_mutex_lock(&glad_loader_mutex);
         if (p->params.egl_display)
             gladLoaderUnloadEGL();
@@ -150,7 +150,6 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
         ok |= gladLoaderLoadGLContext(gl);
         ok |= gladLoaderLoadGLES2Context(gl);
         pl_static_mutex_unlock(&glad_loader_mutex);
-        p->gl_loaded = true;
 #else
         PL_FATAL(p, "No `glGetProcAddress` function provided, and libplacebo "
                  "built without its built-in OpenGL loader!");
