@@ -35,6 +35,7 @@ struct gl_ctx {
     struct pl_opengl_params params;
     bool is_debug;
     bool is_debug_egl;
+    bool is_gles;
 
     // For context locking
     pl_mutex lock;

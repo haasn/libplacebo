@@ -99,8 +99,11 @@ void pl_opengl_destroy(pl_opengl *ptr)
         pl_static_mutex_lock(&glad_loader_mutex);
         if (p->params.egl_display)
             gladLoaderUnloadEGL();
-        gladLoaderUnloadGLES2();
-        gladLoaderUnloadGL();
+        if (p->is_gles) {
+            gladLoaderUnloadGLES2();
+        } else {
+            gladLoaderUnloadGL();
+        }
         pl_static_mutex_unlock(&glad_loader_mutex);
     }
 #endif
@@ -137,24 +140,46 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
         return NULL;
     }
 
-    bool ok = false;
+    bool ok;
     if (params->get_proc_addr_ex) {
-        ok |= gladLoadGLContextUserPtr(gl, params->get_proc_addr_ex, params->proc_ctx);
-        ok |= gladLoadGLES2ContextUserPtr(gl, params->get_proc_addr_ex, params->proc_ctx);
+        ok = gladLoadGLContextUserPtr(gl, params->get_proc_addr_ex, params->proc_ctx);
     } else if (params->get_proc_addr) {
-        ok |= gladLoadGLContext(gl, params->get_proc_addr);
-        ok |= gladLoadGLES2Context(gl, params->get_proc_addr);
+        ok = gladLoadGLContext(gl, params->get_proc_addr);
     } else {
 #ifdef PL_HAVE_GL_PROC_ADDR
         pl_static_mutex_lock(&glad_loader_mutex);
-        ok |= gladLoaderLoadGLContext(gl);
-        ok |= gladLoaderLoadGLES2Context(gl);
+        ok = gladLoaderLoadGLContext(gl);
         pl_static_mutex_unlock(&glad_loader_mutex);
 #else
         PL_FATAL(p, "No `glGetProcAddress` function provided, and libplacebo "
                  "built without its built-in OpenGL loader!");
         goto error;
 #endif
+    }
+
+    if (!ok) {
+        PL_INFO(p, "Failed loading core GL, retrying as GLES2...");
+    } else if (gl_is_gles(pl_gl)) {
+        PL_INFO(p, "GL context seems to be OpenGL ES, reloading as GLES2...");
+        ok = false;
+    }
+
+    if (!ok) {
+        memset(gl, 0, sizeof(*gl));
+        if (params->get_proc_addr_ex) {
+            ok = gladLoadGLES2ContextUserPtr(gl, params->get_proc_addr_ex, params->proc_ctx);
+        } else if (params->get_proc_addr) {
+            ok = gladLoadGLES2Context(gl, params->get_proc_addr);
+        } else {
+#ifdef PL_HAVE_GL_PROC_ADDR
+            pl_static_mutex_lock(&glad_loader_mutex);
+            ok = gladLoaderLoadGLES2Context(gl);
+            pl_static_mutex_unlock(&glad_loader_mutex);
+#else
+            pl_unreachable();
+#endif
+        }
+        p->is_gles = ok;
     }
 
     if (!ok) {
