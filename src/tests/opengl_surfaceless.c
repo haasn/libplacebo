@@ -235,6 +235,7 @@ int main()
             goto error;
 
         pl_opengl gl = pl_opengl_create(log, pl_opengl_params(
+            .get_proc_addr = (pl_voidfunc_t (*)(const char *)) eglGetProcAddress,
             .max_glsl_version = egl_vers[i].glsl_ver,
             .debug = true,
             .egl_display = dpy,
@@ -269,7 +270,6 @@ int main()
 
 next:
         pl_opengl_destroy(&gl);
-        gladLoaderLoadEGL(EGL_NO_DISPLAY); // re-load after `pl_opengl_destroy`
         eglDestroySurface(dpy, surf);
         eglDestroyContext(dpy, egl);
         continue;
