@@ -80,7 +80,7 @@ void pl_opengl_destroy(pl_opengl *ptr)
         return;
 
     struct gl_ctx *p = PL_PRIV(pl_gl);
-    const gl_funcs *gl = &p->func;
+    gl_funcs *gl = &p->func;
     if (!gl_make_current(pl_gl)) {
         PL_WARN(p, "Failed uninitializing OpenGL context, leaking resources!");
         return;
@@ -100,9 +100,9 @@ void pl_opengl_destroy(pl_opengl *ptr)
         if (p->params.egl_display)
             gladLoaderUnloadEGL();
         if (p->is_gles) {
-            gladLoaderUnloadGLES2();
+            gladLoaderUnloadGLES2Context(gl);
         } else {
-            gladLoaderUnloadGL();
+            gladLoaderUnloadGLContext(gl);
         }
         pl_static_mutex_unlock(&glad_loader_mutex);
     }
