@@ -68,10 +68,8 @@ static void GLAPIENTRY debug_cb_egl(EGLenum error, const char *command,
 #endif
 }
 
-#ifdef PL_HAVE_GL_PROC_ADDR
-// Guards access to the (thread-unsafe) glad internal loader
-static pl_static_mutex glad_loader_mutex = PL_STATIC_MUTEX_INITIALIZER;
-#endif
+// Guards access to the (thread-unsafe) glad global EGL state
+static pl_static_mutex glad_egl_mutex = PL_STATIC_MUTEX_INITIALIZER;
 
 void pl_opengl_destroy(pl_opengl *ptr)
 {
@@ -95,16 +93,17 @@ void pl_opengl_destroy(pl_opengl *ptr)
     pl_gpu_destroy(pl_gl->gpu);
 
 #ifdef PL_HAVE_GL_PROC_ADDR
-    if (!p->params.get_proc_addr && !p->params.get_proc_addr_ex) {
-        pl_static_mutex_lock(&glad_loader_mutex);
-        if (p->params.egl_display)
-            gladLoaderUnloadEGL();
-        if (p->is_gles) {
-            gladLoaderUnloadGLES2Context(gl);
-        } else {
-            gladLoaderUnloadGLContext(gl);
-        }
-        pl_static_mutex_unlock(&glad_loader_mutex);
+    if (p->is_gles) {
+        gladLoaderUnloadGLES2Context(gl);
+    } else {
+        gladLoaderUnloadGLContext(gl);
+    }
+
+    bool used_loader = !p->params.get_proc_addr && !p->params.get_proc_addr_ex;
+    if (p->params.egl_display && used_loader) {
+        pl_static_mutex_lock(&glad_egl_mutex);
+        gladLoaderUnloadEGL();
+        pl_static_mutex_unlock(&glad_egl_mutex);
     }
 #endif
 
@@ -147,9 +146,7 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
         ok = gladLoadGLContext(gl, params->get_proc_addr);
     } else {
 #ifdef PL_HAVE_GL_PROC_ADDR
-        pl_static_mutex_lock(&glad_loader_mutex);
         ok = gladLoaderLoadGLContext(gl);
-        pl_static_mutex_unlock(&glad_loader_mutex);
 #else
         PL_FATAL(p, "No `glGetProcAddress` function provided, and libplacebo "
                  "built without its built-in OpenGL loader!");
@@ -172,9 +169,7 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
             ok = gladLoadGLES2Context(gl, params->get_proc_addr);
         } else {
 #ifdef PL_HAVE_GL_PROC_ADDR
-            pl_static_mutex_lock(&glad_loader_mutex);
             ok = gladLoaderLoadGLES2Context(gl);
-            pl_static_mutex_unlock(&glad_loader_mutex);
 #else
             pl_unreachable();
 #endif
@@ -227,6 +222,7 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     }
 
     if (params->egl_display) {
+        pl_static_mutex_lock(&glad_egl_mutex);
         if (params->get_proc_addr_ex) {
             ok = gladLoadEGLUserPtr(params->egl_display, params->get_proc_addr_ex,
                                     params->proc_ctx);
@@ -234,13 +230,12 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
             ok = gladLoadEGL(params->egl_display, params->get_proc_addr);
         } else {
 #ifdef PL_HAVE_GL_PROC_ADDR
-            pl_static_mutex_lock(&glad_loader_mutex);
             ok = gladLoaderLoadEGL(params->egl_display);
-            pl_static_mutex_unlock(&glad_loader_mutex);
 #else
             pl_unreachable();
 #endif
         }
+        pl_static_mutex_unlock(&glad_egl_mutex);
 
         if (!ok) {
             PL_FATAL(p, "Failed loading EGL functions - double check EGLDisplay?");
