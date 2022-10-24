@@ -27,6 +27,9 @@
 #include <glad/gl.h>
 #include <glad/egl.h>
 
+// Collision with llvm-mingw <winnt.h>
+#undef MemoryBarrier
+
 typedef GladGLContext gl_funcs;
 
 // PL_PRIV(pl_opengl)
