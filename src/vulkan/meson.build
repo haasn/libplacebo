@@ -9,7 +9,7 @@ if vulkan_loader.found()
 # Probe for <vulkan/vulkan.h> as a fallback for the vulkan headers
 elif cc.has_header_symbol('vulkan/vulkan_core.h', 'VK_VERSION_1_2')
   vulkan_headers = declare_dependency()
-elif fs.is_dir(thirdparty/'Vulkan-Headers')
+elif fs.is_dir(thirdparty/'Vulkan-Headers/include')
   vulkan_inc = include_directories('../../3rdparty/Vulkan-Headers/include')
   vulkan_headers = declare_dependency(include_directories: vulkan_inc)
   # Force the use of this vk.xml because it has to be in sync with the headers
