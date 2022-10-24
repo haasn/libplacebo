@@ -322,8 +322,8 @@ libm = cc.find_library('m', required: false)
 thirdparty = meson.project_source_root()/'3rdparty'
 python = import('python').find_installation()
 python_env = environment()
-python_env.append('PYTHONPATH', thirdparty/'jinja'/'src')
-python_env.append('PYTHONPATH', thirdparty/'markupsafe'/'src')
+python_env.append('PYTHONPATH', thirdparty/'jinja/src')
+python_env.append('PYTHONPATH', thirdparty/'markupsafe/src')
 python_env.append('PYTHONPATH', thirdparty/'glad')
 
 if host_machine.system() == 'windows'
