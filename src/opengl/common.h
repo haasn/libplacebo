@@ -22,13 +22,13 @@
 #include "../gpu.h"
 #include "pl_thread.h"
 
+// Collision with llvm-mingw <winnt.h>
+#undef MemoryBarrier
+
 #define GLAD_GL
 #define GLAD_GLES2
 #include <glad/gl.h>
 #include <glad/egl.h>
-
-// Collision with llvm-mingw <winnt.h>
-#undef MemoryBarrier
 
 typedef GladGLContext gl_funcs;
 
