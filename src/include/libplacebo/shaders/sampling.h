@@ -183,28 +183,32 @@ struct pl_sample_filter_params {
 bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
                             const struct pl_sample_filter_params *params);
 
-enum {
-    PL_SEP_VERT = 0,
-    PL_SEP_HORIZ,
-    PL_SEP_PASSES
-};
-
 // Performs orthogonal (1D) sampling. Using this twice in a row (once vertical
 // and once horizontal) effectively performs a 2D upscale. This is lower
 // quality than polar sampling, but significantly faster, and therefore the
 // recommended default. Returns whether or not it was successful.
 //
-// 0 <= pass < PL_SEP_PASSES indicates which component of the transformation to
-// apply. PL_SEP_VERT only applies the vertical component, and PL_SEP_HORIZ
-// only the horizontal. The non-relevant component of the `src->rect` is ignored
-// entirely.
+// `src` must represent a scaling operation that only scales in one direction,
+// i.e. either only X or only Y. The other direction must be left unscaled.
 //
 // Note: Due to internal limitations, this may currently only be used on 2D
 // textures - even though the basic principle would work for 1D and 3D textures
 // as well.
-bool pl_shader_sample_ortho(pl_shader sh, int pass,
-                            const struct pl_sample_src *src,
-                            const struct pl_sample_filter_params *params);
+bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
+                             const struct pl_sample_filter_params *params);
+
+// Deprecated variant of `pl_shader_sample_ortho2` that hard-overrides the
+// unscaled component. Should not be used, because it breaks e.g. scaling
+// cropped sources.
+PL_DEPRECATED bool pl_shader_sample_ortho(pl_shader sh, int pass,
+                                          const struct pl_sample_src *src,
+                                          const struct pl_sample_filter_params *params);
+
+enum PL_DEPRECATED { // for `int pass`
+    PL_SEP_VERT = 0,
+    PL_SEP_HORIZ,
+    PL_SEP_PASSES
+};
 
 PL_API_END
 

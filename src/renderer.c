@@ -712,8 +712,13 @@ static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
         ok = pl_shader_sample_polar(sh, src, &fparams);
     } else if (info.dir_sep[0] && info.dir_sep[1]) {
         // Scaling is needed in both directions
+        struct pl_sample_src src1 = *src, src2 = *src;
+        src1.new_w = pl_rect_w(src->rect);
+        src2.rect.y0 = 0;
+        src2.rect.y1 = src1.new_h;
+
         pl_shader tsh = pl_dispatch_begin(rr->dp);
-        ok = pl_shader_sample_ortho(tsh, PL_SEP_VERT, src, &fparams);
+        ok = pl_shader_sample_ortho2(tsh, &src1, &fparams);
         if (!ok) {
             pl_dispatch_abort(rr->dp, &tsh);
             goto done;
@@ -721,22 +726,17 @@ static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
 
         struct img img = {
             .sh = tsh,
-            .w  = src->tex->params.w,
-            .h  = src->new_h,
+            .w  = src1.new_w,
+            .h  = src1.new_h,
             .comps = src->components,
         };
 
-        struct pl_sample_src src2 = *src;
         src2.tex = img_tex(pass, &img);
         src2.scale = 1.0;
-        ok = src2.tex && pl_shader_sample_ortho(sh, PL_SEP_HORIZ, &src2, &fparams);
-    } else if (info.dir_sep[0]) {
-        // Scaling is needed only in the horizontal direction
-        ok = pl_shader_sample_ortho(sh, PL_SEP_HORIZ, src, &fparams);
+        ok = src2.tex && pl_shader_sample_ortho2(sh, &src2, &fparams);
     } else {
-        // Scaling is needed only in the vertical direction
-        pl_assert(info.dir_sep[1]);
-        ok = pl_shader_sample_ortho(sh, PL_SEP_VERT, src, &fparams);
+        // Scaling is needed only in one direction
+        ok = pl_shader_sample_ortho2(sh, src, &fparams);
     }
 
 done:

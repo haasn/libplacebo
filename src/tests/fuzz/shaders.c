@@ -63,8 +63,10 @@ int main()
                     .filter = pl_filter_ewa_lanczos,
                     .lut = &polar,
                 ));
-            case 'O':
-                pl_shader_sample_ortho(sh, PL_SEP_VERT, &src, pl_sample_filter_params(
+            case 'O': ;
+                struct pl_sample_src srcfix = src;
+                srcfix.new_w = WIDTH;
+                pl_shader_sample_ortho2(sh, &srcfix, pl_sample_filter_params(
                     .filter = pl_filter_spline36,
                     .lut = &ortho,
                 ));

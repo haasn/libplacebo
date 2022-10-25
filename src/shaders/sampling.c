@@ -853,9 +853,14 @@ static void fill_ortho_lut(void *data, const struct sh_lut_params *params)
     memcpy(data, filt->weights, entries * sizeof(float));
 }
 
-bool pl_shader_sample_ortho(pl_shader sh, int pass,
-                            const struct pl_sample_src *src,
-                            const struct pl_sample_filter_params *params)
+enum {
+    SEP_VERT = 0,
+    SEP_HORIZ,
+    SEP_PASSES
+};
+
+bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
+                             const struct pl_sample_filter_params *params)
 {
     pl_assert(params);
     if (params->filter.polar) {
@@ -866,26 +871,28 @@ bool pl_shader_sample_ortho(pl_shader sh, int pass,
     pl_gpu gpu = SH_GPU(sh);
     pl_assert(gpu);
 
-    struct pl_sample_src srcfix = *src;
-    switch (pass) {
-    case PL_SEP_VERT:
-        srcfix.rect.x0 = 0;
-        srcfix.rect.x1 = srcfix.new_w = src_params(src).w;
-        break;
-    case PL_SEP_HORIZ:
-        srcfix.rect.y0 = 0;
-        srcfix.rect.y1 = srcfix.new_h = src_params(src).h;
-        break;
-    }
-
     uint8_t comp_mask;
-    float ratio[PL_SEP_PASSES], scale;
+    float ratio[SEP_PASSES], scale;
     ident_t src_tex, pos, size, pt;
     const char *fn;
-    if (!setup_src(sh, &srcfix, &src_tex, &pos, &size, &pt,
-                   &ratio[PL_SEP_HORIZ], &ratio[PL_SEP_VERT],
+    if (!setup_src(sh, src, &src_tex, &pos, &size, &pt,
+                   &ratio[SEP_HORIZ], &ratio[SEP_VERT],
                    &comp_mask, &scale, false, &fn, FASTEST))
         return false;
+
+
+    int pass;
+    if (ratio[SEP_HORIZ] == 1) {
+        pass = SEP_VERT;
+    } else if (ratio[SEP_VERT] == 1) {
+        pass = SEP_HORIZ;
+    } else {
+        SH_FAIL(sh, "Trying to use pl_shader_sample_ortho with a "
+                "pl_sample_src that requires scaling in multiple directions "
+                "(rx=%f, ry=%f), this is not possible!",
+                ratio[SEP_HORIZ], ratio[SEP_VERT]);
+        return false;
+    }
 
     // We can store a separate sampler object per dimension, so dispatch the
     // right one. This is needed for two reasons:
@@ -952,14 +959,14 @@ bool pl_shader_sample_ortho(pl_shader sh, int pass,
         return false;
     }
 
-    const int dir[PL_SEP_PASSES][2] = {
-        [PL_SEP_HORIZ] = {1, 0},
-        [PL_SEP_VERT]  = {0, 1},
+    const int dir[SEP_PASSES][2] = {
+        [SEP_HORIZ] = {1, 0},
+        [SEP_VERT]  = {0, 1},
     };
 
-    static const char *names[PL_SEP_PASSES] = {
-        [PL_SEP_HORIZ] = "ortho (horiz)",
-        [PL_SEP_VERT]  = "ortho (vert)",
+    static const char *names[SEP_PASSES] = {
+        [SEP_HORIZ] = "ortho (horiz)",
+        [SEP_VERT]  = "ortho (vert)",
     };
 
     describe_filter(sh, &params->filter, names[pass], ratio[pass], ratio[pass]);
@@ -1023,4 +1030,23 @@ bool pl_shader_sample_ortho(pl_shader sh, int pass,
 
     GLSL("}\n");
     return true;
+}
+
+bool pl_shader_sample_ortho(pl_shader sh, int pass,
+                            const struct pl_sample_src *src,
+                            const struct pl_sample_filter_params *params)
+{
+    struct pl_sample_src srcfix = *src;
+    switch (pass) {
+    case PL_SEP_VERT:
+        srcfix.rect.x0 = 0;
+        srcfix.rect.x1 = srcfix.new_w = src_params(src).w;
+        break;
+    case PL_SEP_HORIZ:
+        srcfix.rect.y0 = 0;
+        srcfix.rect.y1 = srcfix.new_h = src_params(src).h;
+        break;
+    }
+
+    return pl_shader_sample_ortho2(sh, &srcfix, params);
 }
