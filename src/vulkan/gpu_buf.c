@@ -256,8 +256,7 @@ static void invalidate_buf(pl_gpu gpu, pl_buf buf)
     struct vk_ctx *vk = p->vk;
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
-    if (!buf_vk->mem.coherent) {
-        pl_assert(buf_vk->mem.data);
+    if (buf_vk->mem.data && !buf_vk->mem.coherent) {
         VK(vk->InvalidateMappedMemoryRanges(vk->dev, 1, &(VkMappedMemoryRange) {
             .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
             .memory = buf_vk->mem.vkmem,
