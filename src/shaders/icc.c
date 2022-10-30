@@ -55,8 +55,8 @@ void pl_icc_close(pl_icc_object *picc)
     pl_free_ptr((void **) picc);
 }
 
-static bool detect_csp(pl_icc_object icc, struct pl_raw_primaries *prim,
-                       float *gamma)
+static bool detect_csp(pl_log pllog, pl_icc_object icc,
+                       struct pl_raw_primaries *prim, float *gamma)
 {
     struct icc_priv *p = PL_PRIV(icc);
     cmsHTRANSFORM tf;
@@ -163,8 +163,11 @@ static bool detect_csp(pl_icc_object icc, struct pl_raw_primaries *prim,
         b = powf(dst[BLACK].Y, 1 / M);
     }
     S = sqrt(S / (k - 1));
-    if (S > 0.5)
-        return false; // too big deviation, probably something broken??
+    if (S > 0.5) {
+        pl_warn(pllog, "Detected profile gamma (%.3f) very far from pure power "
+                "response (stddev=%.1f), suspected unusual or broken profile. "
+                "Ignoring, but results may be poor.", M, S);
+    }
 
     *gamma = M;
     p->gamma_stddev = S;
@@ -341,7 +344,7 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
         params->intent = cmsGetHeaderRenderingIntent(p->profile);
 
     struct pl_raw_primaries *out_prim = &icc->csp.hdr.prim;
-    if (!detect_csp(icc, out_prim, &icc->gamma))
+    if (!detect_csp(log, icc, out_prim, &icc->gamma))
         goto error;
     if (!detect_contrast(icc, &icc->csp.hdr, params->max_luma))
         goto error;
