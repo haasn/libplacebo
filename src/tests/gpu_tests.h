@@ -864,8 +864,24 @@ static const char *user_shader_tests[] = {
     "//!BUFFER buf_storage                                                  \n"
     "//!VAR vec2 bat                                                        \n"
     "//!VAR int big[32];                                                    \n"
-    "//!STORAGE                                                             \n"
+    "//!STORAGE                                                             \n",
 
+    // Test custom parameters
+    "//!PARAM test                                                          \n"
+    "//!DESC test parameter                                                 \n"
+    "//!TYPE DYNAMIC float                                                  \n"
+    "//!MINIMUM 0.0                                                         \n"
+    "//!MAXIMUM 100.0                                                       \n"
+    "1.0                                                                    \n"
+    "                                                                       \n"
+    "//!PARAM testconst                                                     \n"
+    "//!TYPE CONSTANT uint                                                  \n"
+    "//!MAXIMUM 16                                                          \n"
+    "3                                                                      \n"
+    "                                                                       \n"
+    "//!PARAM testdefine                                                    \n"
+    "//!TYPE DEFINE                                                         \n"
+    "100                                                                    \n"
 };
 
 static const char *test_luts[] = {
