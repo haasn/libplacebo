@@ -25,6 +25,7 @@ static int ccStrPrintInt64( char *str, int64_t n );
 static int ccStrPrintUint64( char *str, uint64_t n );
 static int ccStrPrintDouble( char *str, int bufsize, int decimals, double value );
 static int ccSeqParseInt64( char *seq, int seqlength, int64_t *retint );
+static int ccSeqParseUint64( char *seq, int seqlength, uint64_t *retint );
 static int ccSeqParseDouble( char *seq, int seqlength, double *retdouble );
 
 void pl_str_append_asprintf_c(void *alloc, pl_str *str, const char *fmt, ...)
@@ -120,6 +121,11 @@ bool pl_str_parse_double(pl_str str, double *out)
 bool pl_str_parse_int64(pl_str str, int64_t *out)
 {
     return ccSeqParseInt64((char *) str.buf, str.len, out);
+}
+
+bool pl_str_parse_uint64(pl_str str, uint64_t *out)
+{
+    return ccSeqParseUint64((char *) str.buf, str.len, out);
 }
 
 /* *****************************************************************************
@@ -565,6 +571,39 @@ static int ccSeqParseInt64( char *seq, int seqlength, int64_t *retint )
 
   if( negflag )
     workint = -workint;
+  *retint = workint;
+  return 1;
+}
+
+static int ccSeqParseUint64( char *seq, int seqlength, uint64_t *retint )
+{
+  int i;
+  char c;
+  uint64_t workint;
+
+  *retint = 0;
+  if( !( seqlength ) )
+    return 0;
+  i = 0;
+  if( *seq == '+' )
+    i = 1;
+
+  workint = 0;
+  for( ; i < seqlength ; i++ )
+  {
+    c = seq[i];
+    if( ( c >= '0' ) && ( c <= '9' ) )
+    {
+      if( workint >= (uint64_t)0x1999999999999999LL )
+        return 0;
+      workint = ( workint * 10 ) + ( c - '0' );
+    }
+    else if( CC_CHAR_IS_DELIMITER( c ) )
+      break;
+    else
+      return 0;
+  }
+
   *retint = workint;
   return 1;
 }

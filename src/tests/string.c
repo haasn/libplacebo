@@ -79,6 +79,10 @@ int main()
 
     float f;
     int i;
+    unsigned u;
+    int64_t i64;
+    uint64_t u64;
+
     REQUIRE(pl_str_parse_float(pl_str0("1.3984"), &f) && feq(f, 1.3984f, 1e-8));
     REQUIRE(pl_str_parse_float(pl_str0("-8.9100083"), &f) && feq(f, -8.9100083f, 1e-8));
     REQUIRE(pl_str_parse_float(pl_str0("-0"), &f) && feq(f, 0.0f, 1e-8));
@@ -89,12 +93,20 @@ int main()
     REQUIRE(pl_str_parse_int(pl_str0("-102"), &i) && i == -102);
     REQUIRE(pl_str_parse_int(pl_str0("+1"), &i) && i == 1);
     REQUIRE(pl_str_parse_int(pl_str0("-0"), &i) && i == 0);
+    REQUIRE(pl_str_parse_uint(pl_str0("64239"), &u) && u == 64239);
+    REQUIRE(pl_str_parse_uint(pl_str0("+1"), &u) && u == 1);
+    REQUIRE(pl_str_parse_int64(pl_str0("9223372036854775799"), &i64) && i64 == 9223372036854775799LL);
+    REQUIRE(pl_str_parse_int64(pl_str0("-9223372036854775799"), &i64) && i64 == -9223372036854775799LL);
+    REQUIRE(pl_str_parse_uint64(pl_str0("18446744073709551609"), &u64) && u64 == 18446744073709551609LLU);
     REQUIRE(!pl_str_parse_float(null, &f));
     REQUIRE(!pl_str_parse_float(test, &f));
     REQUIRE(!pl_str_parse_float(empty, &f));
     REQUIRE(!pl_str_parse_int(null, &i));
     REQUIRE(!pl_str_parse_int(test, &i));
     REQUIRE(!pl_str_parse_int(empty, &i));
+    REQUIRE(!pl_str_parse_uint(null, &u));
+    REQUIRE(!pl_str_parse_uint(test, &u));
+    REQUIRE(!pl_str_parse_uint(empty, &u));
 
     pl_free(tmp);
     return 0;

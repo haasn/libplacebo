@@ -77,6 +77,7 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt, va_lis
 // Locale-invariant number parsing
 bool pl_str_parse_double(pl_str str, double *out);
 bool pl_str_parse_int64(pl_str str, int64_t *out);
+bool pl_str_parse_uint64(pl_str str, uint64_t *out);
 
 static inline bool pl_str_parse_float(pl_str str, float *out)
 {
@@ -91,6 +92,14 @@ static inline bool pl_str_parse_int(pl_str str, int *out)
     int64_t i64;
     bool ret = pl_str_parse_int64(str, &i64);
     *out = (int) i64;
+    return ret;
+}
+
+static inline bool pl_str_parse_uint(pl_str str, unsigned int *out)
+{
+    uint64_t u64;
+    bool ret = pl_str_parse_uint64(str, &u64);
+    *out = (unsigned int) u64;
     return ret;
 }
 
