@@ -16,6 +16,8 @@
  */
 
 #include <math.h>
+#include <limits.h>
+
 #include "gpu.h"
 #include "shaders.h"
 
@@ -784,6 +786,196 @@ static bool parse_buf(pl_gpu gpu, void *alloc, pl_str *body,
     return true;
 }
 
+static bool parse_var(pl_log log, pl_str str, enum pl_var_type type, pl_var_data *out)
+{
+    if (!str.len)
+        return true;
+
+    pl_str buf = str;
+    bool ok = false;
+    switch (type) {
+    case PL_VAR_SINT:
+        ok = pl_str_parse_int(pl_str_split_char(buf, ' ', &buf), &out->i);
+        break;
+    case PL_VAR_UINT:
+        ok = pl_str_parse_uint(pl_str_split_char(buf, ' ', &buf), &out->u);
+        break;
+    case PL_VAR_FLOAT:
+        ok = pl_str_parse_float(pl_str_split_char(buf, ' ', &buf), &out->f);
+        break;
+    case PL_VAR_INVALID:
+    case PL_VAR_TYPE_COUNT:
+        pl_unreachable();
+    }
+
+    if (pl_str_strip(buf).len > 0)
+        ok = false; // left-over garbage
+
+    if (!ok) {
+        pl_err(log, "Failed parsing variable data: %.*s", PL_STR_FMT(str));
+        return false;
+    }
+
+    return true;
+}
+
+static bool check_bounds(pl_log log, enum pl_var_type type, const pl_var_data data,
+                         const pl_var_data minimum, const pl_var_data maximum)
+{
+#define CHECK_BOUNDS(v, fmt) do                                                 \
+{                                                                               \
+    if (data.v < minimum.v) {                                                   \
+        pl_err(log, "Initial value "fmt" below declared minimum "fmt"!",        \
+                data.v, minimum.v);                                             \
+        return false;                                                           \
+    }                                                                           \
+    if (data.v > maximum.v) {                                                   \
+        pl_err(log, "Initial value "fmt" above declared maximum "fmt"!",        \
+                data.v, maximum.v);                                             \
+        return false;                                                           \
+    }                                                                           \
+} while (0)
+
+    switch (type) {
+    case PL_VAR_SINT:
+        CHECK_BOUNDS(i, "%d");
+        break;
+    case PL_VAR_UINT:
+        CHECK_BOUNDS(u, "%u");
+        break;
+    case PL_VAR_FLOAT:
+        CHECK_BOUNDS(f, "%f");
+        break;
+    case PL_VAR_INVALID:
+    case PL_VAR_TYPE_COUNT:
+        pl_unreachable();
+    }
+
+#undef CHECK_BOUNDS
+    return true;
+}
+
+static bool parse_param(pl_log log, void *alloc, pl_str *body,
+                        struct pl_hook_par *out)
+{
+    *out = (struct pl_hook_par) {0};
+    pl_str minimum = {0};
+    pl_str maximum = {0};
+
+    while (true) {
+        pl_str rest;
+        pl_str line = pl_str_strip(pl_str_getline(*body, &rest));
+
+        if (!pl_str_eatstart0(&line, "//!"))
+            break;
+
+        *body = rest;
+
+        if (pl_str_eatstart0(&line, "PARAM")) {
+            out->name = pl_strdup0(alloc, pl_str_strip(line));
+            continue;
+        }
+
+        if (pl_str_eatstart0(&line, "DESC")) {
+            out->description = pl_strdup0(alloc, pl_str_strip(line));
+            continue;
+        }
+
+        if (pl_str_eatstart0(&line, "MINIMUM")) {
+            minimum = pl_str_strip(line);
+            continue;
+        }
+
+        if (pl_str_eatstart0(&line, "MAXIMUM")) {
+            maximum = pl_str_strip(line);
+            continue;
+        }
+
+        if (pl_str_eatstart0(&line, "TYPE")) {
+            line = pl_str_strip(line);
+            if (pl_str_eatstart0(&line, "DYNAMIC")) {
+                out->mode = PL_HOOK_PAR_DYNAMIC;
+            } else if (pl_str_eatstart0(&line, "CONSTANT")) {
+                out->mode = PL_HOOK_PAR_CONSTANT;
+            } else if (pl_str_eatstart0(&line, "DEFINE")) {
+                out->mode = PL_HOOK_PAR_DEFINE;
+                out->type = PL_VAR_SINT;
+                if (pl_str_strip(line).len > 0) {
+                    pl_err(log, "TYPE DEFINE does not take any extra arguments, "
+                           "unexpected: '%.*s'", PL_STR_FMT(line));
+                    return false;
+                }
+                continue;
+            } else {
+                out->mode = PL_HOOK_PAR_VARIABLE;
+            }
+
+            line = pl_str_strip(line);
+            for (const struct pl_named_var *nv = pl_var_glsl_types;
+                 nv->glsl_name; nv++)
+            {
+                if (pl_str_equals0(line, nv->glsl_name)) {
+                    if (nv->var.dim_v > 1 || nv->var.dim_m > 1) {
+                        pl_err(log, "GLSL type '%s' is incompatible with "
+                               "shader parameters, must be scalar type!",
+                               nv->glsl_name);
+                        return false;
+                    }
+
+                    out->type = nv->var.type;
+                    goto next;
+                }
+            }
+
+            pl_err(log, "Unrecognized GLSL type '%.*s'!", PL_STR_FMT(line));
+            return false;
+        }
+
+        pl_err(log, "Unrecognized command '%.*s'!", PL_STR_FMT(line));
+        return false;
+
+next: ;
+    }
+
+    switch (out->type) {
+    case PL_VAR_INVALID:
+        pl_err(log, "Missing variable type!");
+        return false;
+    case PL_VAR_SINT:
+        out->minimum.i = INT_MIN;
+        out->maximum.i = INT_MAX;
+        break;
+    case PL_VAR_UINT:
+        out->minimum.u = 0;
+        out->maximum.u = UINT_MAX;
+        break;
+    case PL_VAR_FLOAT:
+        out->minimum.f = -INFINITY;
+        out->maximum.f = INFINITY;
+        break;
+    case PL_VAR_TYPE_COUNT:
+        pl_unreachable();
+    }
+
+    pl_str initial = pl_str_strip(split_magic(body));
+    if (!initial.len) {
+        pl_err(log, "Missing initial parameter value!");
+        return false;
+    }
+
+    if (!parse_var(log, initial, out->type, &out->initial))
+        return false;
+    if (!parse_var(log, minimum, out->type, &out->minimum))
+        return false;
+    if (!parse_var(log, maximum, out->type, &out->maximum))
+        return false;
+    if (!check_bounds(log, out->type, out->initial, out->minimum, out->maximum))
+        return false;
+
+    out->data = pl_memdup(alloc, &out->initial, sizeof(out->initial));
+    return true;
+}
+
 static enum pl_hook_stage mp_stage_to_pl(pl_str stage)
 {
     if (pl_str_equals0(stage, "RGB"))
@@ -875,6 +1067,7 @@ struct hook_priv {
     void *alloc;
 
     PL_ARRAY(struct hook_pass) hook_passes;
+    PL_ARRAY(struct pl_hook_par) hook_params;
 
     // Fixed (for shader-local resources)
     PL_ARRAY(struct pl_shader_desc) descriptors;
@@ -1212,6 +1405,45 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             .data = tex_off,
         }));
 
+        // Custom parameters
+        for (int i = 0; i < p->hook_params.num; i++) {
+            const struct pl_hook_par *hp = &p->hook_params.elem[i];
+            switch (hp->mode) {
+            case PL_HOOK_PAR_VARIABLE:
+            case PL_HOOK_PAR_DYNAMIC:
+                GLSLH("#define %s %s \n", hp->name,
+                      sh_var(sh, (struct pl_shader_var) {
+                        .var = {
+                            .name = hp->name,
+                            .type = hp->type,
+                            .dim_v = 1,
+                            .dim_m = 1,
+                            .dim_a = 1,
+                        },
+                        .data = hp->data,
+                        .dynamic = hp->mode == PL_HOOK_PAR_DYNAMIC,
+                }));
+                break;
+
+            case PL_HOOK_PAR_CONSTANT:
+                GLSLH("#define %s %s \n", hp->name,
+                      sh_const(sh, (struct pl_shader_const) {
+                        .name = hp->name,
+                        .type = hp->type,
+                        .data = hp->data,
+                        .compile_time = true,
+                }));
+                break;
+
+            case PL_HOOK_PAR_DEFINE:
+                GLSLH("#define %s %d \n", hp->name, hp->data->i);
+                break;
+
+            case PL_HOOK_PAR_MODE_COUNT:
+                pl_unreachable();
+            }
+        }
+
         // Helper sub-shaders
         uint64_t sh_id = SH_PARAMS(sh).id;
         pl_shader_reset(p->trc_helper, pl_shader_params(
@@ -1431,6 +1663,16 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
             continue;
         }
 
+        if (pl_str_startswith0(shader, "//!PARAM")) {
+            struct pl_hook_par hp;
+            if (!parse_param(gpu->log, hook, &shader, &hp))
+                goto error;
+
+            PL_INFO(gpu, "Registering named parameter '%s'", hp.name);
+            PL_ARRAY_APPEND(hook, p->hook_params, hp);
+            continue;
+        }
+
         struct custom_shader_hook h;
         if (!parse_hook(gpu->log, &shader, &h))
             goto error;
@@ -1479,6 +1721,8 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
     for (int i = 0; i < p->hook_passes.num; i++)
         hook->stages |= p->hook_passes.elem[i].exec_stages;
 
+    hook->parameters = p->hook_params.elem;
+    hook->num_parameters = p->hook_params.num;
     return hook;
 
 error:
