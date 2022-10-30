@@ -557,7 +557,7 @@ static bool parse_tex(pl_gpu gpu, void *alloc, pl_str *body,
             continue;
         }
 
-        if (pl_str_eatstart0(&line, "FORMAT ")) {
+        if (pl_str_eatstart0(&line, "FORMAT")) {
             line = pl_str_strip(line);
             params.format = NULL;
             for (int n = 0; n < gpu->num_formats; n++) {
