@@ -255,6 +255,41 @@ struct pl_hook_res {
     struct pl_rect2df rect;
 };
 
+enum pl_hook_par_mode {
+    PL_HOOK_PAR_VARIABLE,   // normal shader variable
+    PL_HOOK_PAR_DYNAMIC,    // dynamic shader variable, e.g. per-frame changing
+    PL_HOOK_PAR_CONSTANT,   // fixed at compile time (e.g. for array sizes),
+                            // must be scalar (non-vector/matrix)
+    PL_HOOK_PAR_DEFINE,     // defined in the preprocessor, must be `int`
+    PL_HOOK_PAR_MODE_COUNT,
+};
+
+typedef union pl_var_data {
+    int i;
+    unsigned u;
+    float f;
+} pl_var_data;
+
+struct pl_hook_par {
+    // Name as used in the shader.
+    const char *name;
+
+    // Type of this shader parameter, and how it's manifested in the shader.
+    enum pl_var_type type;
+    enum pl_hook_par_mode mode;
+
+    // Human-readable explanation of this parameter. (Optional)
+    const char *description;
+
+    // Mutable data pointer to current value of variable.
+    pl_var_data *data;
+
+    // Default/initial value, and lower/upper bounds.
+    pl_var_data initial;
+    pl_var_data minimum;
+    pl_var_data maximum;
+};
+
 // Struct describing a hook.
 //
 // Note: Users may freely create their own instances of this struct, there is
@@ -263,6 +298,12 @@ struct pl_hook {
     enum pl_hook_stage stages;  // Which stages to hook on
     enum pl_hook_sig input;     // Which input signature this hook expects
     void *priv;                 // Arbitrary user context
+
+    // Custom tunable shader parameters exported by this hook. These may be
+    // updated at any time by the user, to influence the behavior of the hook.
+    // Contents are arbitrary and subject to the method of hook construction.
+    const struct pl_hook_par *parameters;
+    int num_parameters;
 
     // Called at the beginning of passes, to reset/initialize the hook. (Optional)
     void (*reset)(void *priv);
