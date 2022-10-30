@@ -882,9 +882,9 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
 
 
     int pass;
-    if (ratio[SEP_HORIZ] == 1) {
+    if (fabs(ratio[SEP_HORIZ] - 1.0f) < 1e-6f) {
         pass = SEP_VERT;
-    } else if (ratio[SEP_VERT] == 1) {
+    } else if (fabs(ratio[SEP_VERT] - 1.0f) < 1e-6f) {
         pass = SEP_HORIZ;
     } else {
         SH_FAIL(sh, "Trying to use pl_shader_sample_ortho with a "
