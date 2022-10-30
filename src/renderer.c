@@ -713,7 +713,7 @@ static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
     } else if (info.dir_sep[0] && info.dir_sep[1]) {
         // Scaling is needed in both directions
         struct pl_sample_src src1 = *src, src2 = *src;
-        src1.new_w = pl_rect_w(src->rect);
+        src1.new_w = roundf(pl_rect_w(src->rect));
         src2.rect.y0 = 0;
         src2.rect.y1 = src1.new_h;
 
