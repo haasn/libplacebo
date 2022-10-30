@@ -202,6 +202,8 @@ bool pl_color_primaries_is_wide_gamut(enum pl_color_primaries prim)
     case PL_COLOR_PRIM_V_GAMUT:
     case PL_COLOR_PRIM_S_GAMUT:
     case PL_COLOR_PRIM_FILM_C:
+    case PL_COLOR_PRIM_ACES_AP0:
+    case PL_COLOR_PRIM_ACES_AP1:
         return true;
     case PL_COLOR_PRIM_COUNT: break;
     }
@@ -729,6 +731,19 @@ const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim
             .green = {0.295, 0.605},
             .blue  = {0.155, 0.077},
             .white = CIE_D65,
+        },
+    // From Wikipedia
+        [PL_COLOR_PRIM_ACES_AP0] = {
+            .red   = {0.7347, 0.2653},
+            .green = {0.0000, 1.0000},
+            .blue  = {0.0001, -0.0770},
+            .white = {0.32168, 0.33767},
+        },
+        [PL_COLOR_PRIM_ACES_AP1] = {
+            .red   = {0.713, 0.293},
+            .green = {0.165, 0.830},
+            .blue  = {0.128, 0.044},
+            .white = {0.32168, 0.33767},
         },
     };
 

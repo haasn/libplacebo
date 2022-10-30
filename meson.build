@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '230': 'add PL_COLOR_PRIM_ACES_AP0 and PL_COLOR_PRIM_ACES_AP1',
       '229': 'add pl_shader_sample_ortho2, deprecate pl_shader_sample_ortho',
       '228': 'add pl_icc_params.force_bpc',
       '227': 'refactor `pl_render_info.index` and add `pl_render_info.count`',

@@ -120,6 +120,8 @@ static inline enum Dav1dColorPrimaries pl_primaries_to_dav1d(enum pl_color_prima
     case PL_COLOR_PRIM_V_GAMUT:     return DAV1D_COLOR_PRI_UNKNOWN; // missing
     case PL_COLOR_PRIM_S_GAMUT:     return DAV1D_COLOR_PRI_UNKNOWN; // missing
     case PL_COLOR_PRIM_FILM_C:      return DAV1D_COLOR_PRI_FILM;
+    case PL_COLOR_PRIM_ACES_AP0:    return DAV1D_COLOR_PRI_UNKNOWN; // missing
+    case PL_COLOR_PRIM_ACES_AP1:    return DAV1D_COLOR_PRI_UNKNOWN; // missing
     case PL_COLOR_PRIM_COUNT: abort();
     }
 

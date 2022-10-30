@@ -1193,6 +1193,8 @@ static void update_settings(struct plplay *p)
                 [PL_COLOR_PRIM_V_GAMUT]     = "Panasonic V-Gamut (VARICAM)",
                 [PL_COLOR_PRIM_S_GAMUT]     = "Sony S-Gamut",
                 [PL_COLOR_PRIM_FILM_C]      = "Traditional film primaries with Illuminant C",
+                [PL_COLOR_PRIM_ACES_AP0]    = "ACES Primaries #0",
+                [PL_COLOR_PRIM_ACES_AP1]    = "ACES Primaries #1",
             };
 
             nk_label(nk, "Primaries:", NK_TEXT_LEFT);

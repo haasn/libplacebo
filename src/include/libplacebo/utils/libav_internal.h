@@ -156,6 +156,8 @@ static inline enum AVColorPrimaries pl_primaries_to_av(enum pl_color_primaries p
     case PL_COLOR_PRIM_V_GAMUT:     return AVCOL_PRI_UNSPECIFIED; // missing
     case PL_COLOR_PRIM_S_GAMUT:     return AVCOL_PRI_UNSPECIFIED; // missing
     case PL_COLOR_PRIM_FILM_C:      return AVCOL_PRI_FILM;
+    case PL_COLOR_PRIM_ACES_AP0:    return AVCOL_PRI_UNSPECIFIED; // missing
+    case PL_COLOR_PRIM_ACES_AP1:    return AVCOL_PRI_UNSPECIFIED; // missing
     case PL_COLOR_PRIM_COUNT:       return AVCOL_PRI_NB;
     }
 
