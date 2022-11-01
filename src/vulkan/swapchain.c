@@ -397,6 +397,15 @@ static void vk_sw_destroy(pl_swapchain sw)
 
     pl_gpu_flush(gpu);
     vk_wait_idle(vk);
+
+    // Vulkan offers no way to know when a queue presentation command is done,
+    // leading to spec-mandated undefined behavior when destroying resources
+    // tied to the swapchain. Use an extra `vkQueueWaitIdle` on all of the
+    // queues we may have oustanding presentation calls on, to hopefully inform
+    // the driver that we want to wait until the device is truly idle.
+    for (int i = 0; i < vk->pool_graphics->num_queues; i++)
+        vk->QueueWaitIdle(vk->pool_graphics->queues[i]);
+
     for (int i = 0; i < p->images.num; i++)
         pl_tex_destroy(gpu, &p->images.elem[i]);
     for (int i = 0; i < p->sems.num; i++) {
