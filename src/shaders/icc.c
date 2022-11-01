@@ -167,6 +167,10 @@ static bool detect_csp(pl_log pllog, pl_icc_object icc,
         pl_warn(pllog, "Detected profile gamma (%.3f) very far from pure power "
                 "response (stddev=%.1f), suspected unusual or broken profile. "
                 "Ignoring, but results may be poor.", M, S);
+    } else if (!(M > 0)) {
+        pl_err(pllog, "Arithmetic error in ICC profile gamma estimation? "
+               "Please open an issue");
+        return false;
     }
 
     *gamma = M;
