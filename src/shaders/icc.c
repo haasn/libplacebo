@@ -144,7 +144,8 @@ static bool detect_csp(pl_log pllog, pl_icc_object icc,
 
     // Rough estimate of overall gamma and starting point for curve black point
     const float y_approx = log(dst[GRAY].Y) / log(0.5);
-    float b = powf(dst[BLACK].Y, 1 / y_approx);
+    const float kb = fmaxf(dst[BLACK].Y, 0.0f);
+    float b = powf(kb, 1 / y_approx);
 
     // Estimate mean and stddev of gamma (Welford's method)
     float M = 0.0, S = 0.0;
@@ -160,7 +161,7 @@ static bool detect_csp(pl_log pllog, pl_icc_object icc,
         k++;
 
         // Update estimate of black point according to current gamma estimate
-        b = powf(dst[BLACK].Y, 1 / M);
+        b = powf(kb, 1 / M);
     }
     S = sqrt(S / (k - 1));
     if (S > 0.5) {
