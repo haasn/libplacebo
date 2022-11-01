@@ -374,8 +374,9 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     }
 
     if (!best) {
-        pl_err(log, "ICC profile too wide to handle!");
-        goto error;
+        pl_warn(log, "ICC profile too wide to handle, colors may be clipped!");
+        icc->containing_primaries = PL_COLOR_PRIM_ACES_AP0;
+        best = pl_raw_primaries_get(icc->containing_primaries);
     }
 
     // Create approximation profile. Use a tone-curve based on a BT.1886-style
