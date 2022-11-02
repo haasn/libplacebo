@@ -1296,6 +1296,7 @@ static void tone_map(pl_shader sh,
         }
     }
 
+    pl_tone_map_params_infer(&lut_params);
     if (pl_tone_map_params_noop(&lut_params))
         return;
 
