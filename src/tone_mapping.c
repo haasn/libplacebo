@@ -103,48 +103,57 @@ bool pl_tone_map_params_noop(const struct pl_tone_map_params *p)
            (out_max < in_max + 1e-2 || !can_inverse); // no inverse tone-mapping
 }
 
-static struct pl_tone_map_params fix_params(const struct pl_tone_map_params *params)
+void pl_tone_map_params_infer(struct pl_tone_map_params *par)
 {
-    const struct pl_tone_map_function *fun = PL_DEF(params->function, &pl_tone_map_clip);
-    float param = PL_DEF(params->param, fun->param_def);
+    if (!par->function)
+        par->function = &pl_tone_map_clip;
 
-    if (fun == &pl_tone_map_auto) {
-        float src_max = pl_hdr_rescale(params->input_scaling, PL_HDR_NORM, params->input_max);
-        float dst_max = pl_hdr_rescale(params->output_scaling, PL_HDR_NORM, params->output_max);
+    par->param = PL_CLAMP(par->param, par->function->param_min, par->function->param_max);
+    if (!par->param)
+        par->param = par->function->param_def;
+
+    if (par->function == &pl_tone_map_auto) {
+        float src_max = pl_hdr_rescale(par->input_scaling, PL_HDR_NORM, par->input_max);
+        float dst_max = pl_hdr_rescale(par->output_scaling, PL_HDR_NORM, par->output_max);
         float ratio = src_max / dst_max;
         if (ratio > 10) {
             // Extreme reduction: Pick spline for its quasi-linear behavior
-            fun = &pl_tone_map_spline;
+            par->function = &pl_tone_map_spline;
         } else if (src_max < 1 + 1e-3 && dst_max < 1 + 1e-3) {
             // SDR<->SDR range conversion, use linear light stretching
-            fun = &pl_tone_map_linear;
+            par->function = &pl_tone_map_linear;
         } else if (fmaxf(ratio, 1 / ratio) > 2) {
             // Reasonably ranged HDR<->SDR conversion, pick BT.2446a since it
             // was designed for this task
-            fun = &pl_tone_map_bt2446a;
+            par->function = &pl_tone_map_bt2446a;
         } else if (ratio < 1) {
             // Small range inverse tone mapping, pick spline since BT.2446a
             // distorts colors too much
-            fun = &pl_tone_map_spline;
+            par->function = &pl_tone_map_spline;
         } else {
             // Small range conversion (nearly no-op), pick BT.2390 because it
             // has the best asymptotic behavior (approximately linear).
-            fun = &pl_tone_map_bt2390;
+            par->function = &pl_tone_map_bt2390;
         }
-        param = fun->param_def;
+        par->param = par->function->param_def;
     }
+}
 
-    return (struct pl_tone_map_params) {
-        .function = fun,
-        .param = PL_CLAMP(param, fun->param_min, fun->param_max),
-        .lut_size = params->lut_size,
-        .input_scaling = fun->scaling,
-        .output_scaling = fun->scaling,
-        .input_min = pl_hdr_rescale(params->input_scaling, fun->scaling, params->input_min),
-        .input_max = pl_hdr_rescale(params->input_scaling, fun->scaling, params->input_max),
-        .output_min = pl_hdr_rescale(params->output_scaling, fun->scaling, params->output_min),
-        .output_max = pl_hdr_rescale(params->output_scaling, fun->scaling, params->output_max),
-    };
+// Infer params and rescale to function scaling
+static struct pl_tone_map_params fix_params(const struct pl_tone_map_params *params)
+{
+    struct pl_tone_map_params fixed = *params;
+    pl_tone_map_params_infer(&fixed);
+
+    const struct pl_tone_map_function *fun = params->function;
+    fixed.input_scaling = fun->scaling;
+    fixed.output_scaling = fun->scaling;
+    fixed.input_min = pl_hdr_rescale(params->input_scaling, fun->scaling, params->input_min);
+    fixed.input_max = pl_hdr_rescale(params->input_scaling, fun->scaling, params->input_max);
+    fixed.output_min = pl_hdr_rescale(params->output_scaling, fun->scaling, params->output_min);
+    fixed.output_max = pl_hdr_rescale(params->output_scaling, fun->scaling, params->output_max);
+
+    return fixed;
 }
 
 #define FOREACH_LUT(lut, V)                                                     \

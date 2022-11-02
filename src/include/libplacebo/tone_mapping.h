@@ -101,6 +101,10 @@ struct pl_tone_map_params {
 bool pl_tone_map_params_equal(const struct pl_tone_map_params *a,
                               const struct pl_tone_map_params *b);
 
+// Resolves `pl_tone_map_auto` to a specific tone-mapping function, based on
+// the tone mapping parameters, and also clamps/defaults the parameter.
+void pl_tone_map_params_infer(struct pl_tone_map_params *params);
+
 // Returns true if the given tone mapping configuration effectively represents
 // a no-op configuration. Tone mapping can be skipped in this case (although
 // strictly speaking, the LUT would still clip illegal input values)
