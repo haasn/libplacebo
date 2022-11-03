@@ -125,8 +125,8 @@ enum shexp_op {
 enum shexp_tag {
     SHEXP_END = 0, // End of an RPN expression
     SHEXP_CONST, // Push a constant value onto the stack
-    SHEXP_VAR_W, // Get the width/height of a named texture (variable)
-    SHEXP_VAR_H,
+    SHEXP_TEX_W, // Get the width/height of a named texture (variable)
+    SHEXP_TEX_H,
     SHEXP_OP2, // Pop two elements and push the result of a dyadic operation
     SHEXP_OP1, // Pop one element and push the result of a monadic operation
 };
@@ -179,13 +179,13 @@ static bool parse_rpn_shexpr(pl_str line, struct shexp out[MAX_SHEXP_SIZE])
         struct shexp *exp = &out[pos++];
 
         if (pl_str_eatend0(&word, ".w") || pl_str_eatend0(&word, ".width")) {
-            exp->tag = SHEXP_VAR_W;
+            exp->tag = SHEXP_TEX_W;
             exp->val.varname = word;
             continue;
         }
 
         if (pl_str_eatend0(&word, ".h") || pl_str_eatend0(&word, ".height")) {
-            exp->tag = SHEXP_VAR_H;
+            exp->tag = SHEXP_TEX_H;
             exp->val.varname = word;
             continue;
         }
@@ -232,8 +232,8 @@ static bool parse_hook(pl_log log, pl_str *body, struct custom_shader_hook *out)
 {
     *out = (struct custom_shader_hook){
         .pass_desc = pl_str0("unknown user shader"),
-        .width = {{ SHEXP_VAR_W, { .varname = pl_str0("HOOKED") }}},
-        .height = {{ SHEXP_VAR_H, { .varname = pl_str0("HOOKED") }}},
+        .width = {{ SHEXP_TEX_W, { .varname = pl_str0("HOOKED") }}},
+        .height = {{ SHEXP_TEX_H, { .varname = pl_str0("HOOKED") }}},
         .cond = {{ SHEXP_CONST, { .cval = 1.0 }}},
     };
 
@@ -1105,8 +1105,8 @@ static bool eval_shexpr(struct hook_ctx *ctx,
             stack[idx++] = res;
             continue;
 
-        case SHEXP_VAR_W:
-        case SHEXP_VAR_H: {
+        case SHEXP_TEX_W:
+        case SHEXP_TEX_H: {
             pl_str name = expr[i].val.varname;
             float size[2];
 
@@ -1116,7 +1116,7 @@ static bool eval_shexpr(struct hook_ctx *ctx,
                 return false;
             }
 
-            stack[idx++] = (expr[i].tag == SHEXP_VAR_W) ? size[0] : size[1];
+            stack[idx++] = (expr[i].tag == SHEXP_TEX_W) ? size[0] : size[1];
             continue;
             }
         }
@@ -1696,15 +1696,15 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
         // undocumented mpv quirk, but shaders rely on it in practice)
         enum pl_hook_stage rpn_stages = 0;
         for (int i = 0; i < PL_ARRAY_SIZE(h.width); i++) {
-            if (h.width[i].tag == SHEXP_VAR_W || h.width[i].tag == SHEXP_VAR_H)
+            if (h.width[i].tag == SHEXP_TEX_W || h.width[i].tag == SHEXP_TEX_H)
                 rpn_stages |= mp_stage_to_pl(h.width[i].val.varname);
         }
         for (int i = 0; i < PL_ARRAY_SIZE(h.height); i++) {
-            if (h.height[i].tag == SHEXP_VAR_W || h.height[i].tag == SHEXP_VAR_H)
+            if (h.height[i].tag == SHEXP_TEX_W || h.height[i].tag == SHEXP_TEX_H)
                 rpn_stages |= mp_stage_to_pl(h.height[i].val.varname);
         }
         for (int i = 0; i < PL_ARRAY_SIZE(h.cond); i++) {
-            if (h.cond[i].tag == SHEXP_VAR_W || h.cond[i].tag == SHEXP_VAR_H)
+            if (h.cond[i].tag == SHEXP_TEX_W || h.cond[i].tag == SHEXP_TEX_H)
                 rpn_stages |= mp_stage_to_pl(h.cond[i].val.varname);
         }
 
