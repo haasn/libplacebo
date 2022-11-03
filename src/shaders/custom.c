@@ -129,6 +129,7 @@ enum shexp_tag {
     SHEXP_TEX_H,
     SHEXP_OP2, // Pop two elements and push the result of a dyadic operation
     SHEXP_OP1, // Pop one element and push the result of a monadic operation
+    SHEXP_VAR, // Arbitrary variable (e.g. shader parameters)
 };
 
 struct shexp {
@@ -209,8 +210,9 @@ static bool parse_rpn_shexpr(pl_str line, struct shexp out[MAX_SHEXP_SIZE])
             continue;
         }
 
-        // Some sort of illegal expression
-        return false;
+        // Treat as generic variable
+        exp->tag = SHEXP_VAR;
+        exp->val.varname = word;
     }
 
     return true;
@@ -1042,6 +1044,30 @@ static bool lookup_tex(struct hook_ctx *ctx, pl_str var, float size[2])
     return false;
 }
 
+static bool lookup_var(struct hook_ctx *ctx, pl_str var, float *val)
+{
+    struct hook_priv *p = ctx->priv;
+    for (int i = 0; i < p->hook_params.num; i++) {
+        const struct pl_hook_par *hp = &p->hook_params.elem[i];
+        if (!pl_str_equals0(var, hp->name))
+            continue;
+
+        switch (hp->type) {
+        case PL_VAR_SINT:  *val = hp->data->i; return true;
+        case PL_VAR_UINT:  *val = hp->data->u; return true;
+        case PL_VAR_FLOAT: *val = hp->data->f; return true;
+        case PL_VAR_INVALID:
+        case PL_VAR_TYPE_COUNT:
+            break;
+        }
+
+        pl_unreachable();
+    }
+
+    PL_WARN(p, "Variable '%.*s' not found in RPN expression!", PL_STR_FMT(var));
+    return false;
+}
+
 // Returns whether successful. 'result' is left untouched on failure
 static bool eval_shexpr(struct hook_ctx *ctx,
                         const struct shexp expr[MAX_SHEXP_SIZE],
@@ -1118,7 +1144,16 @@ static bool eval_shexpr(struct hook_ctx *ctx,
 
             stack[idx++] = (expr[i].tag == SHEXP_TEX_W) ? size[0] : size[1];
             continue;
-            }
+        }
+
+        case SHEXP_VAR: {
+            pl_str name = expr[i].val.varname;
+            float val;
+            if (!lookup_var(ctx, name, &val))
+                return false;
+            stack[idx++] = val;
+            continue;
+        }
         }
     }
 

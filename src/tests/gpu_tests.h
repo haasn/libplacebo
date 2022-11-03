@@ -882,6 +882,10 @@ static const char *user_shader_tests[] = {
     "//!PARAM testdefine                                                    \n"
     "//!TYPE DEFINE                                                         \n"
     "100                                                                    \n"
+    "                                                                       \n"
+    "//!HOOK MAIN                                                           \n"
+    "//!WHEN testconst 30 >                                                 \n"
+    "#error should not be run                                               \n",
 };
 
 static const char *test_luts[] = {
