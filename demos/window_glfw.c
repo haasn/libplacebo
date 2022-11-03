@@ -32,6 +32,11 @@
 
 #include <GLFW/glfw3.h>
 
+#if defined(USE_GL) && defined(HAVE_EGL)
+#define GLFW_EXPOSE_NATIVE_EGL
+#include <GLFW/glfw3native.h>
+#endif
+
 #ifdef USE_D3D11
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
@@ -194,6 +199,9 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
 
     for (int i = 0; i < PL_ARRAY_SIZE(gl_vers); i++) {
         glfwWindowHint(GLFW_CLIENT_API, gl_vers[i].api);
+#ifdef HAVE_EGL
+        glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
+#endif
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, gl_vers[i].major);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, gl_vers[i].minor);
         glfwWindowHint(GLFW_OPENGL_PROFILE, gl_vers[i].profile);
@@ -280,6 +288,10 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
     p->gl = pl_opengl_create(log, pl_opengl_params(
         .allow_software = true,
         .debug = DEBUG,
+#ifdef HAVE_EGL
+        .egl_display = glfwGetEGLDisplay(),
+        .egl_context = glfwGetEGLContext(p->win),
+#endif
         .make_current = make_current,
         .release_current = release_current,
         .get_proc_addr = glfwGetProcAddress,
