@@ -59,7 +59,7 @@ void pl_free_children(void *ptr);
     } while (0)
 
 // Get the current size of an allocation.
-size_t pl_get_size(void *ptr);
+size_t pl_get_size(const void *ptr);
 
 #define pl_grow(parent, ptr, size)                      \
     do {                                                \
