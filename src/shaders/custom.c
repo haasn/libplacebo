@@ -216,98 +216,6 @@ static bool parse_rpn_szexpr(pl_str line, struct szexp out[MAX_SZEXP_SIZE])
     return true;
 }
 
-// Evaluate a `szexp`, given a lookup function for named textures
-// Returns whether successful. 'result' is left untouched on failure
-static bool pl_eval_szexpr(pl_log log, void *priv,
-                           bool (*lookup)(void *priv, pl_str var, float size[2]),
-                           const struct szexp expr[MAX_SZEXP_SIZE],
-                           float *result)
-{
-    float stack[MAX_SZEXP_SIZE] = {0};
-    int idx = 0; // points to next element to push
-
-    for (int i = 0; i < MAX_SZEXP_SIZE; i++) {
-        switch (expr[i].tag) {
-        case SZEXP_END:
-            goto done;
-
-        case SZEXP_CONST:
-            // Since our SZEXPs are bound by MAX_SZEXP_SIZE, it should be
-            // impossible to overflow the stack
-            assert(idx < MAX_SZEXP_SIZE);
-            stack[idx++] = expr[i].val.cval;
-            continue;
-
-        case SZEXP_OP1:
-            if (idx < 1) {
-                pl_warn(log, "Stack underflow in RPN expression!");
-                return false;
-            }
-
-            switch (expr[i].val.op) {
-            case SZEXP_OP_NOT: stack[idx-1] = !stack[idx-1]; break;
-            default: pl_unreachable();
-            }
-            continue;
-
-        case SZEXP_OP2:
-            if (idx < 2) {
-                pl_warn(log, "Stack underflow in RPN expression!");
-                return false;
-            }
-
-            // Pop the operands in reverse order
-            float op2 = stack[--idx];
-            float op1 = stack[--idx];
-            float res = 0.0;
-            switch (expr[i].val.op) {
-            case SZEXP_OP_ADD: res = op1 + op2; break;
-            case SZEXP_OP_SUB: res = op1 - op2; break;
-            case SZEXP_OP_MUL: res = op1 * op2; break;
-            case SZEXP_OP_DIV: res = op1 / op2; break;
-            case SZEXP_OP_MOD: res = fmodf(op1, op2); break;
-            case SZEXP_OP_GT:  res = op1 > op2; break;
-            case SZEXP_OP_LT:  res = op1 < op2; break;
-            case SZEXP_OP_EQ:  res = fabsf(op1 - op2) <= 1e-6 * fmaxf(op1, op2); break;
-            case SZEXP_OP_NOT: pl_unreachable();
-            }
-
-            if (!isfinite(res)) {
-                pl_warn(log, "Illegal operation in RPN expression!");
-                return false;
-            }
-
-            stack[idx++] = res;
-            continue;
-
-        case SZEXP_VAR_W:
-        case SZEXP_VAR_H: {
-            pl_str name = expr[i].val.varname;
-            float size[2];
-
-            if (!lookup(priv, name, size)) {
-                pl_warn(log, "Variable '%.*s' not found in RPN expression!",
-                        PL_STR_FMT(name));
-                return false;
-            }
-
-            stack[idx++] = (expr[i].tag == SZEXP_VAR_W) ? size[0] : size[1];
-            continue;
-            }
-        }
-    }
-
-done:
-    // Return the single stack element
-    if (idx != 1) {
-        pl_warn(log, "Malformed stack after RPN expression!");
-        return false;
-    }
-
-    *result = stack[0];
-    return true;
-}
-
 static inline pl_str split_magic(pl_str *body)
 {
     pl_str ret = pl_str_split_str0(*body, "//!", body);
@@ -1088,15 +996,15 @@ static void hook_reset(void *priv)
     p->pass_textures.num = 0;
 }
 
-struct szexp_ctx {
+// Context during execution of a hook
+struct hook_ctx {
     struct hook_priv *priv;
     const struct pl_hook_params *params;
     struct pass_tex hooked;
 };
 
-static bool lookup_tex(void *priv, pl_str var, float size[2])
+static bool lookup_tex(struct hook_ctx *ctx, pl_str var, float size[2])
 {
-    struct szexp_ctx *ctx = priv;
     struct hook_priv *p = ctx->priv;
     const struct pl_hook_params *params = ctx->params;
 
@@ -1132,6 +1040,97 @@ static bool lookup_tex(void *priv, pl_str var, float size[2])
     }
 
     return false;
+}
+
+// Returns whether successful. 'result' is left untouched on failure
+static bool eval_szexpr(struct hook_ctx *ctx,
+                        const struct szexp expr[MAX_SZEXP_SIZE],
+                        float *result)
+{
+    struct hook_priv *p = ctx->priv;
+    float stack[MAX_SZEXP_SIZE] = {0};
+    int idx = 0; // points to next element to push
+
+    for (int i = 0; i < MAX_SZEXP_SIZE; i++) {
+        switch (expr[i].tag) {
+        case SZEXP_END:
+            goto done;
+
+        case SZEXP_CONST:
+            // Since our SZEXPs are bound by MAX_SZEXP_SIZE, it should be
+            // impossible to overflow the stack
+            assert(idx < MAX_SZEXP_SIZE);
+            stack[idx++] = expr[i].val.cval;
+            continue;
+
+        case SZEXP_OP1:
+            if (idx < 1) {
+                PL_WARN(p, "Stack underflow in RPN expression!");
+                return false;
+            }
+
+            switch (expr[i].val.op) {
+            case SZEXP_OP_NOT: stack[idx-1] = !stack[idx-1]; break;
+            default: pl_unreachable();
+            }
+            continue;
+
+        case SZEXP_OP2:
+            if (idx < 2) {
+                PL_WARN(p, "Stack underflow in RPN expression!");
+                return false;
+            }
+
+            // Pop the operands in reverse order
+            float op2 = stack[--idx];
+            float op1 = stack[--idx];
+            float res = 0.0;
+            switch (expr[i].val.op) {
+            case SZEXP_OP_ADD: res = op1 + op2; break;
+            case SZEXP_OP_SUB: res = op1 - op2; break;
+            case SZEXP_OP_MUL: res = op1 * op2; break;
+            case SZEXP_OP_DIV: res = op1 / op2; break;
+            case SZEXP_OP_MOD: res = fmodf(op1, op2); break;
+            case SZEXP_OP_GT:  res = op1 > op2; break;
+            case SZEXP_OP_LT:  res = op1 < op2; break;
+            case SZEXP_OP_EQ:  res = fabsf(op1 - op2) <= 1e-6 * fmaxf(op1, op2); break;
+            case SZEXP_OP_NOT: pl_unreachable();
+            }
+
+            if (!isfinite(res)) {
+                PL_WARN(p, "Illegal operation in RPN expression!");
+                return false;
+            }
+
+            stack[idx++] = res;
+            continue;
+
+        case SZEXP_VAR_W:
+        case SZEXP_VAR_H: {
+            pl_str name = expr[i].val.varname;
+            float size[2];
+
+            if (!lookup_tex(ctx, name, size)) {
+                PL_WARN(p, "Variable '%.*s' not found in RPN expression!",
+                        PL_STR_FMT(name));
+                return false;
+            }
+
+            stack[idx++] = (expr[i].tag == SZEXP_VAR_W) ? size[0] : size[1];
+            continue;
+            }
+        }
+    }
+
+done:
+    // Return the single stack element
+    if (idx != 1) {
+        PL_WARN(p, "Malformed stack after RPN expression!");
+        return false;
+    }
+
+    *result = stack[0];
+    return true;
 }
 
 static double prng_step(uint64_t s[4])
@@ -1249,7 +1248,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
     struct pl_hook_res res = {0};
 
     pl_shader sh = NULL;
-    struct szexp_ctx scope = {
+    struct hook_ctx ctx = {
         .priv = p,
         .params = params,
         .hooked = {
@@ -1265,8 +1264,8 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
     // Save the input texture if needed
     if (p->save_stages & params->stage) {
         PL_TRACE(p, "Saving input texture '%.*s' for binding",
-                 PL_STR_FMT(scope.hooked.name));
-        save_pass_tex(p, scope.hooked);
+                 PL_STR_FMT(ctx.hooked.name));
+        save_pass_tex(p, ctx.hooked);
     }
 
     for (int n = 0; n < p->hook_passes.num; n++) {
@@ -1280,7 +1279,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         // Test for execution condition
         float run = 0;
-        if (!pl_eval_szexpr(p->log, &scope, lookup_tex, hook->cond, &run))
+        if (!eval_szexpr(&ctx, hook->cond, &run))
             goto error;
 
         if (!run) {
@@ -1466,8 +1465,8 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         // Resolve output size and create framebuffer
         float out_size[2] = {0};
-        if (!pl_eval_szexpr(p->log, &scope, lookup_tex, hook->width,  &out_size[0]) ||
-            !pl_eval_szexpr(p->log, &scope, lookup_tex, hook->height, &out_size[1]))
+        if (!eval_szexpr(&ctx, hook->width,  &out_size[0]) ||
+            !eval_szexpr(&ctx, hook->height, &out_size[1]))
         {
             goto error;
         }
@@ -1578,7 +1577,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         // Update the result object, unless we saved to a different name
         if (pl_str_equals(ptex.name, stage)) {
-            scope.hooked = ptex;
+            ctx.hooked = ptex;
             res = (struct pl_hook_res) {
                 .output = PL_HOOK_SIG_TEX,
                 .tex = fbo,
