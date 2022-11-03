@@ -108,35 +108,35 @@ bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
 // Hard-coded size limits, mainly for convenience (to avoid dynamic memory)
 #define SHADER_MAX_HOOKS 16
 #define SHADER_MAX_BINDS 16
-#define MAX_SZEXP_SIZE 32
+#define MAX_SHEXP_SIZE 32
 
-enum szexp_op {
-    SZEXP_OP_ADD,
-    SZEXP_OP_SUB,
-    SZEXP_OP_MUL,
-    SZEXP_OP_DIV,
-    SZEXP_OP_MOD,
-    SZEXP_OP_NOT,
-    SZEXP_OP_GT,
-    SZEXP_OP_LT,
-    SZEXP_OP_EQ,
+enum shexp_op {
+    SHEXP_OP_ADD,
+    SHEXP_OP_SUB,
+    SHEXP_OP_MUL,
+    SHEXP_OP_DIV,
+    SHEXP_OP_MOD,
+    SHEXP_OP_NOT,
+    SHEXP_OP_GT,
+    SHEXP_OP_LT,
+    SHEXP_OP_EQ,
 };
 
-enum szexp_tag {
-    SZEXP_END = 0, // End of an RPN expression
-    SZEXP_CONST, // Push a constant value onto the stack
-    SZEXP_VAR_W, // Get the width/height of a named texture (variable)
-    SZEXP_VAR_H,
-    SZEXP_OP2, // Pop two elements and push the result of a dyadic operation
-    SZEXP_OP1, // Pop one element and push the result of a monadic operation
+enum shexp_tag {
+    SHEXP_END = 0, // End of an RPN expression
+    SHEXP_CONST, // Push a constant value onto the stack
+    SHEXP_VAR_W, // Get the width/height of a named texture (variable)
+    SHEXP_VAR_H,
+    SHEXP_OP2, // Pop two elements and push the result of a dyadic operation
+    SHEXP_OP1, // Pop one element and push the result of a monadic operation
 };
 
-struct szexp {
-    enum szexp_tag tag;
+struct shexp {
+    enum shexp_tag tag;
     union {
         float cval;
         pl_str varname;
-        enum szexp_op op;
+        enum shexp_op op;
     } val;
 };
 
@@ -154,9 +154,9 @@ struct custom_shader_hook {
     int comps;
 
     // Special expressions governing the output size and execution conditions
-    struct szexp width[MAX_SZEXP_SIZE];
-    struct szexp height[MAX_SZEXP_SIZE];
-    struct szexp cond[MAX_SZEXP_SIZE];
+    struct shexp width[MAX_SHEXP_SIZE];
+    struct shexp height[MAX_SHEXP_SIZE];
+    struct shexp cond[MAX_SHEXP_SIZE];
 
     // Special metadata for compute shaders
     bool is_compute;
@@ -164,7 +164,7 @@ struct custom_shader_hook {
     int threads_w, threads_h;   // How many threads form a WG
 };
 
-static bool parse_rpn_szexpr(pl_str line, struct szexp out[MAX_SZEXP_SIZE])
+static bool parse_rpn_shexpr(pl_str line, struct shexp out[MAX_SHEXP_SIZE])
 {
     int pos = 0;
 
@@ -173,37 +173,37 @@ static bool parse_rpn_szexpr(pl_str line, struct szexp out[MAX_SZEXP_SIZE])
         if (word.len == 0)
             continue;
 
-        if (pos >= MAX_SZEXP_SIZE)
+        if (pos >= MAX_SHEXP_SIZE)
             return false;
 
-        struct szexp *exp = &out[pos++];
+        struct shexp *exp = &out[pos++];
 
         if (pl_str_eatend0(&word, ".w") || pl_str_eatend0(&word, ".width")) {
-            exp->tag = SZEXP_VAR_W;
+            exp->tag = SHEXP_VAR_W;
             exp->val.varname = word;
             continue;
         }
 
         if (pl_str_eatend0(&word, ".h") || pl_str_eatend0(&word, ".height")) {
-            exp->tag = SZEXP_VAR_H;
+            exp->tag = SHEXP_VAR_H;
             exp->val.varname = word;
             continue;
         }
 
         switch (word.buf[0]) {
-        case '+': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_ADD; continue;
-        case '-': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_SUB; continue;
-        case '*': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_MUL; continue;
-        case '/': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_DIV; continue;
-        case '%': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_MOD; continue;
-        case '!': exp->tag = SZEXP_OP1; exp->val.op = SZEXP_OP_NOT; continue;
-        case '>': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_GT;  continue;
-        case '<': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_LT;  continue;
-        case '=': exp->tag = SZEXP_OP2; exp->val.op = SZEXP_OP_EQ;  continue;
+        case '+': exp->tag = SHEXP_OP2; exp->val.op = SHEXP_OP_ADD; continue;
+        case '-': exp->tag = SHEXP_OP2; exp->val.op = SHEXP_OP_SUB; continue;
+        case '*': exp->tag = SHEXP_OP2; exp->val.op = SHEXP_OP_MUL; continue;
+        case '/': exp->tag = SHEXP_OP2; exp->val.op = SHEXP_OP_DIV; continue;
+        case '%': exp->tag = SHEXP_OP2; exp->val.op = SHEXP_OP_MOD; continue;
+        case '!': exp->tag = SHEXP_OP1; exp->val.op = SHEXP_OP_NOT; continue;
+        case '>': exp->tag = SHEXP_OP2; exp->val.op = SHEXP_OP_GT;  continue;
+        case '<': exp->tag = SHEXP_OP2; exp->val.op = SHEXP_OP_LT;  continue;
+        case '=': exp->tag = SHEXP_OP2; exp->val.op = SHEXP_OP_EQ;  continue;
         }
 
         if (word.buf[0] >= '0' && word.buf[0] <= '9') {
-            exp->tag = SZEXP_CONST;
+            exp->tag = SHEXP_CONST;
             if (!pl_str_parse_float(word, &exp->val.cval))
                 return false;
             continue;
@@ -232,9 +232,9 @@ static bool parse_hook(pl_log log, pl_str *body, struct custom_shader_hook *out)
 {
     *out = (struct custom_shader_hook){
         .pass_desc = pl_str0("unknown user shader"),
-        .width = {{ SZEXP_VAR_W, { .varname = pl_str0("HOOKED") }}},
-        .height = {{ SZEXP_VAR_H, { .varname = pl_str0("HOOKED") }}},
-        .cond = {{ SZEXP_CONST, { .cval = 1.0 }}},
+        .width = {{ SHEXP_VAR_W, { .varname = pl_str0("HOOKED") }}},
+        .height = {{ SHEXP_VAR_H, { .varname = pl_str0("HOOKED") }}},
+        .cond = {{ SHEXP_CONST, { .cval = 1.0 }}},
     };
 
     int hook_idx = 0;
@@ -310,7 +310,7 @@ static bool parse_hook(pl_log log, pl_str *body, struct custom_shader_hook *out)
         }
 
         if (pl_str_eatstart0(&line, "WIDTH")) {
-            if (!parse_rpn_szexpr(line, out->width)) {
+            if (!parse_rpn_shexpr(line, out->width)) {
                 pl_err(log, "Error while parsing WIDTH!");
                 return false;
             }
@@ -318,7 +318,7 @@ static bool parse_hook(pl_log log, pl_str *body, struct custom_shader_hook *out)
         }
 
         if (pl_str_eatstart0(&line, "HEIGHT")) {
-            if (!parse_rpn_szexpr(line, out->height)) {
+            if (!parse_rpn_shexpr(line, out->height)) {
                 pl_err(log, "Error while parsing HEIGHT!");
                 return false;
             }
@@ -326,7 +326,7 @@ static bool parse_hook(pl_log log, pl_str *body, struct custom_shader_hook *out)
         }
 
         if (pl_str_eatstart0(&line, "WHEN")) {
-            if (!parse_rpn_szexpr(line, out->cond)) {
+            if (!parse_rpn_shexpr(line, out->cond)) {
                 pl_err(log, "Error while parsing WHEN!");
                 return false;
             }
@@ -1043,39 +1043,39 @@ static bool lookup_tex(struct hook_ctx *ctx, pl_str var, float size[2])
 }
 
 // Returns whether successful. 'result' is left untouched on failure
-static bool eval_szexpr(struct hook_ctx *ctx,
-                        const struct szexp expr[MAX_SZEXP_SIZE],
+static bool eval_shexpr(struct hook_ctx *ctx,
+                        const struct shexp expr[MAX_SHEXP_SIZE],
                         float *result)
 {
     struct hook_priv *p = ctx->priv;
-    float stack[MAX_SZEXP_SIZE] = {0};
+    float stack[MAX_SHEXP_SIZE] = {0};
     int idx = 0; // points to next element to push
 
-    for (int i = 0; i < MAX_SZEXP_SIZE; i++) {
+    for (int i = 0; i < MAX_SHEXP_SIZE; i++) {
         switch (expr[i].tag) {
-        case SZEXP_END:
+        case SHEXP_END:
             goto done;
 
-        case SZEXP_CONST:
-            // Since our SZEXPs are bound by MAX_SZEXP_SIZE, it should be
+        case SHEXP_CONST:
+            // Since our SHEXPs are bound by MAX_SHEXP_SIZE, it should be
             // impossible to overflow the stack
-            assert(idx < MAX_SZEXP_SIZE);
+            assert(idx < MAX_SHEXP_SIZE);
             stack[idx++] = expr[i].val.cval;
             continue;
 
-        case SZEXP_OP1:
+        case SHEXP_OP1:
             if (idx < 1) {
                 PL_WARN(p, "Stack underflow in RPN expression!");
                 return false;
             }
 
             switch (expr[i].val.op) {
-            case SZEXP_OP_NOT: stack[idx-1] = !stack[idx-1]; break;
+            case SHEXP_OP_NOT: stack[idx-1] = !stack[idx-1]; break;
             default: pl_unreachable();
             }
             continue;
 
-        case SZEXP_OP2:
+        case SHEXP_OP2:
             if (idx < 2) {
                 PL_WARN(p, "Stack underflow in RPN expression!");
                 return false;
@@ -1086,15 +1086,15 @@ static bool eval_szexpr(struct hook_ctx *ctx,
             float op1 = stack[--idx];
             float res = 0.0;
             switch (expr[i].val.op) {
-            case SZEXP_OP_ADD: res = op1 + op2; break;
-            case SZEXP_OP_SUB: res = op1 - op2; break;
-            case SZEXP_OP_MUL: res = op1 * op2; break;
-            case SZEXP_OP_DIV: res = op1 / op2; break;
-            case SZEXP_OP_MOD: res = fmodf(op1, op2); break;
-            case SZEXP_OP_GT:  res = op1 > op2; break;
-            case SZEXP_OP_LT:  res = op1 < op2; break;
-            case SZEXP_OP_EQ:  res = fabsf(op1 - op2) <= 1e-6 * fmaxf(op1, op2); break;
-            case SZEXP_OP_NOT: pl_unreachable();
+            case SHEXP_OP_ADD: res = op1 + op2; break;
+            case SHEXP_OP_SUB: res = op1 - op2; break;
+            case SHEXP_OP_MUL: res = op1 * op2; break;
+            case SHEXP_OP_DIV: res = op1 / op2; break;
+            case SHEXP_OP_MOD: res = fmodf(op1, op2); break;
+            case SHEXP_OP_GT:  res = op1 > op2; break;
+            case SHEXP_OP_LT:  res = op1 < op2; break;
+            case SHEXP_OP_EQ:  res = fabsf(op1 - op2) <= 1e-6 * fmaxf(op1, op2); break;
+            case SHEXP_OP_NOT: pl_unreachable();
             }
 
             if (!isfinite(res)) {
@@ -1105,8 +1105,8 @@ static bool eval_szexpr(struct hook_ctx *ctx,
             stack[idx++] = res;
             continue;
 
-        case SZEXP_VAR_W:
-        case SZEXP_VAR_H: {
+        case SHEXP_VAR_W:
+        case SHEXP_VAR_H: {
             pl_str name = expr[i].val.varname;
             float size[2];
 
@@ -1116,7 +1116,7 @@ static bool eval_szexpr(struct hook_ctx *ctx,
                 return false;
             }
 
-            stack[idx++] = (expr[i].tag == SZEXP_VAR_W) ? size[0] : size[1];
+            stack[idx++] = (expr[i].tag == SHEXP_VAR_W) ? size[0] : size[1];
             continue;
             }
         }
@@ -1279,7 +1279,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         // Test for execution condition
         float run = 0;
-        if (!eval_szexpr(&ctx, hook->cond, &run))
+        if (!eval_shexpr(&ctx, hook->cond, &run))
             goto error;
 
         if (!run) {
@@ -1465,8 +1465,8 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         // Resolve output size and create framebuffer
         float out_size[2] = {0};
-        if (!eval_szexpr(&ctx, hook->width,  &out_size[0]) ||
-            !eval_szexpr(&ctx, hook->height, &out_size[1]))
+        if (!eval_shexpr(&ctx, hook->width,  &out_size[0]) ||
+            !eval_shexpr(&ctx, hook->height, &out_size[1]))
         {
             goto error;
         }
@@ -1696,15 +1696,15 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
         // undocumented mpv quirk, but shaders rely on it in practice)
         enum pl_hook_stage rpn_stages = 0;
         for (int i = 0; i < PL_ARRAY_SIZE(h.width); i++) {
-            if (h.width[i].tag == SZEXP_VAR_W || h.width[i].tag == SZEXP_VAR_H)
+            if (h.width[i].tag == SHEXP_VAR_W || h.width[i].tag == SHEXP_VAR_H)
                 rpn_stages |= mp_stage_to_pl(h.width[i].val.varname);
         }
         for (int i = 0; i < PL_ARRAY_SIZE(h.height); i++) {
-            if (h.height[i].tag == SZEXP_VAR_W || h.height[i].tag == SZEXP_VAR_H)
+            if (h.height[i].tag == SHEXP_VAR_W || h.height[i].tag == SHEXP_VAR_H)
                 rpn_stages |= mp_stage_to_pl(h.height[i].val.varname);
         }
         for (int i = 0; i < PL_ARRAY_SIZE(h.cond); i++) {
-            if (h.cond[i].tag == SZEXP_VAR_W || h.cond[i].tag == SZEXP_VAR_H)
+            if (h.cond[i].tag == SHEXP_VAR_W || h.cond[i].tag == SHEXP_VAR_H)
                 rpn_stages |= mp_stage_to_pl(h.cond[i].val.varname);
         }
 
