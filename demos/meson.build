@@ -35,6 +35,7 @@ endif
 
 conf_demos = configuration_data()
 conf_demos.set('HAVE_NUKLEAR', nuklear.found())
+conf_demos.set('HAVE_EGL', cc.check_header('EGL/egl.h', required: false))
 
 apis = []
 
