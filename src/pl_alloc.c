@@ -227,9 +227,9 @@ void pl_free_children(void *ptr)
 #endif
 }
 
-size_t pl_get_size(void *ptr)
+size_t pl_get_size(const void *ptr)
 {
-    struct header *h = get_header(ptr);
+    const struct header *h = get_header((void *) ptr);
     return h ? h->size : 0;
 }
 
