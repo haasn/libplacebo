@@ -1095,41 +1095,8 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             continue;
         }
 
-        float out_size[2] = {0};
-        if (!pl_eval_szexpr(p->log, &scope, lookup_tex, hook->width,  &out_size[0]) ||
-            !pl_eval_szexpr(p->log, &scope, lookup_tex, hook->height, &out_size[1]))
-        {
-            goto error;
-        }
-
-        int out_w = roundf(out_size[0]),
-            out_h = roundf(out_size[1]);
-
-        // Generate a new texture to store the render result
-        pl_tex fbo;
-        fbo = params->get_tex(params->priv, out_w, out_h);
-        if (!fbo) {
-            PL_ERR(p, "Failed dispatching hook: `get_tex` callback failed?");
-            goto error;
-        }
-
         // Generate a new shader object
         sh = pl_dispatch_begin(params->dispatch);
-        if (!sh_require(sh, PL_SHADER_SIG_NONE, out_w, out_h))
-            goto error;
-
-        if (hook->is_compute) {
-            if (!sh_try_compute(sh, hook->threads_w, hook->threads_h, false, 0) ||
-                !fbo->params.storable)
-            {
-                PL_ERR(p, "Failed dispatching COMPUTE shader");
-                goto error;
-            }
-        } else {
-            // Default non-COMPUTE shaders to explicitly use fragment shaders
-            // only, to avoid breaking things like fwidth()
-            sh->type = PL_DEF(sh->type, SH_FRAGMENT);
-        }
 
         // Bind all necessary input textures
         for (int i = 0; i < PL_ARRAY_SIZE(hook->bind_tex); i++) {
@@ -1202,9 +1169,12 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 }
             }
 
-            // If none of the above matched, this is a bogus/unknown texture name
-            PL_ERR(p, "Tried binding unknown texture '%.*s'!", PL_STR_FMT(texname));
-            goto error;
+            // If none of the above matched, this is an unknown texture name,
+            // so silently ignore this pass to match the mpv behavior
+            PL_TRACE(p, "Skipping hook due to no texture named '%.*s'.",
+                     PL_STR_FMT(texname));
+            pl_dispatch_abort(params->dispatch, &sh);
+            goto next_pass;
 
     next_bind: ; // outer 'continue'
         }
@@ -1262,8 +1232,38 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         sh_append_str(sh, SH_BUF_HEADER, hook->pass_body);
         sh_describe(sh, pl_strdup0(SH_TMP(sh), hook->pass_desc));
 
+        // Resolve output size and create framebuffer
+        float out_size[2] = {0};
+        if (!pl_eval_szexpr(p->log, &scope, lookup_tex, hook->width,  &out_size[0]) ||
+            !pl_eval_szexpr(p->log, &scope, lookup_tex, hook->height, &out_size[1]))
+        {
+            goto error;
+        }
+
+        int out_w = roundf(out_size[0]),
+            out_h = roundf(out_size[1]);
+
+        if (!sh_require(sh, PL_SHADER_SIG_COLOR, out_w, out_h))
+            goto error;
+
+        // Generate a new texture to store the render result
+        pl_tex fbo;
+        fbo = params->get_tex(params->priv, out_w, out_h);
+        if (!fbo) {
+            PL_ERR(p, "Failed dispatching hook: `get_tex` callback failed?");
+            goto error;
+        }
+
         bool ok;
         if (hook->is_compute) {
+
+            if (!sh_try_compute(sh, hook->threads_w, hook->threads_h, false, 0) ||
+                !fbo->params.storable)
+            {
+                PL_ERR(p, "Failed dispatching COMPUTE shader");
+                goto error;
+            }
+
             GLSLP("#define out_image %s \n", sh_desc(sh, (struct pl_shader_desc) {
                 .binding.object = fbo,
                 .desc = {
@@ -1287,12 +1287,19 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 .width  = out_w,
                 .height = out_h,
             ));
+
         } else {
+
+            // Default non-COMPUTE shaders to explicitly use fragment shaders
+            // only, to avoid breaking things like fwidth()
+            sh->type = PL_DEF(sh->type, SH_FRAGMENT);
+
             GLSL("vec4 color = hook(); \n");
             ok = pl_dispatch_finish(params->dispatch, pl_dispatch_params(
                 .shader = &sh,
                 .target = fbo,
             ));
+
         }
 
         if (!ok)
@@ -1349,6 +1356,8 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 .rect = new_rect,
             };
         }
+
+next_pass: ;
     }
 
     return res;
