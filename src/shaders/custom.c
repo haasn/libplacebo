@@ -369,6 +369,9 @@ static bool parse_hook(pl_log log, pl_str *body, struct custom_shader_hook *out)
                 // texture, which we just signal by not having any `save_tex`
                 // name set.
                 out->save_tex = (pl_str) {0};
+            } else if (pl_str_equals0(save_tex, "MAIN")) {
+                // Compatibility alias
+                out->save_tex = pl_str0("MAINPRESUB");
             } else {
                 out->save_tex = save_tex;
             };
