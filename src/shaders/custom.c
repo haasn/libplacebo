@@ -1354,6 +1354,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
     return res;
 
 error:
+    pl_dispatch_abort(params->dispatch, &sh);
     return (struct pl_hook_res) { .failed = true };
 }
 
