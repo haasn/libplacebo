@@ -282,6 +282,21 @@ int main()
 
     TEST(AV_PIX_FMT_RGB565LE, rgb565);
 
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 37, 100)
+
+    static const struct pl_plane_data rgb32f[] = {
+        {
+            .type = PL_FMT_FLOAT,
+            .component_size = {32, 32, 32},
+            .component_map = {0, 1, 2},
+            .pixel_stride = 12,
+        }
+    };
+
+    TEST(AV_PIX_FMT_RGBF32LE, rgb32f);
+
+#endif
+
     // Test pl_frame <- AVFrame bridge
     struct pl_frame image;
     AVFrame *frame = av_frame_alloc();
