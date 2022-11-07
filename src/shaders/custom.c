@@ -1243,7 +1243,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
         int out_w = roundf(out_size[0]),
             out_h = roundf(out_size[1]);
 
-        if (!sh_require(sh, PL_SHADER_SIG_COLOR, out_w, out_h))
+        if (!sh_require(sh, PL_SHADER_SIG_NONE, out_w, out_h))
             goto error;
 
         // Generate a new texture to store the render result
