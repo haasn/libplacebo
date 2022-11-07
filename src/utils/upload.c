@@ -42,18 +42,14 @@ static int compare_comp(const void *pa, const void *pb)
     return PL_CMP(a->shift, b->shift);
 }
 
-void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4])
+void pl_plane_data_from_comps(struct pl_plane_data *data, int size[4],
+                              int shift[4])
 {
-    struct comp comps[MAX_COMPS] = { {0}, {1}, {2}, {3} };
-
+    struct comp comps[MAX_COMPS];
     for (int i = 0; i < PL_ARRAY_SIZE(comps); i++) {
-        comps[i].size = __builtin_popcountll(mask[i]);
-        comps[i].shift = PL_MAX(0, __builtin_ffsll(mask[i]) - 1);
-
-        // Sanity checking
-        uint64_t mask_reconstructed = (1LLU << comps[i].size) - 1;
-        mask_reconstructed <<= comps[i].shift;
-        pl_assert(mask_reconstructed == mask[i]);
+        comps[i].order = i;
+        comps[i].size = size[i];
+        comps[i].shift = shift[i];
     }
 
     // Sort the components by shift
@@ -75,6 +71,24 @@ void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4])
             data->component_map[i] = 0;
         }
     }
+}
+
+void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4])
+{
+    int size[4];
+    int shift[4];
+
+    for (int i = 0; i < PL_ARRAY_SIZE(size); i++) {
+        size[i] = __builtin_popcountll(mask[i]);
+        shift[i] = PL_MAX(0, __builtin_ffsll(mask[i]) - 1);
+
+        // Sanity checking
+        uint64_t mask_reconstructed = (1LLU << size[i]) - 1;
+        mask_reconstructed <<= shift[i];
+        pl_assert(mask_reconstructed == mask[i]);
+    }
+
+    pl_plane_data_from_comps(data, size, shift);
 }
 
 bool pl_plane_data_align(struct pl_plane_data *data, struct pl_bit_encoding *out_bits)

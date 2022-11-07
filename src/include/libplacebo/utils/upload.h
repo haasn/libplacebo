@@ -98,6 +98,14 @@ struct pl_plane_data {
 // RGBA). Each element of `mask` must have a contiguous range of set bits.
 void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4]);
 
+// Fills in the `component_size`, `component_pad` and `component_map` fields
+// based on the supplied sizes (in bits) and shift of each component (in
+// semantic order).
+//
+// Similar to `pl_plane_data_from_mask` but not limited to 64-bit pixels.
+void pl_plane_data_from_comps(struct pl_plane_data *data, int size[4],
+                              int shift[4]);
+
 // Helper function to take a `pl_plane_data` struct and try and improve its
 // alignment to make it more likely to correspond to a real `pl_fmt`. It does
 // this by attempting to round each component up to the nearest byte boundary.
