@@ -426,7 +426,8 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
     // Fill in the details for each plane
     for (int p = 0; p < planes; p++) {
         struct pl_plane_data *data = &out_data[p];
-        uint64_t masks[4] = {0};
+        int size[4] = {0};
+        int shift[4] = {0};
         data->type = (desc->flags & AV_PIX_FMT_FLAG_FLOAT)
                         ? PL_FMT_FLOAT
                         : PL_FMT_UNORM;
@@ -438,9 +439,8 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
             if (comp->plane != p)
                 continue;
 
-            masks[c] = (1LLU << comp->depth) - 1; // e.g. 0xFF for depth=8
-            masks[c] <<= comp->shift;
-            masks[c] <<= comp->offset * 8;
+            size[c] = comp->depth;
+            shift[c] = comp->shift + comp->offset * 8;
 
             if (data->pixel_stride && (int) data->pixel_stride != comp->step) {
                 // Pixel format contains components with different pixel stride
@@ -450,7 +450,7 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
             data->pixel_stride = comp->step;
         }
 
-        pl_plane_data_from_mask(data, masks);
+        pl_plane_data_from_comps(data, size, shift);
     }
 
     if (!out_bits)
@@ -491,8 +491,7 @@ misaligned:
     return planes;
 }
 
-static inline bool pl_test_pixfmt(pl_gpu gpu,
-                                  enum AVPixelFormat pixfmt)
+static inline bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt)
 {
     struct pl_bit_encoding bits;
     struct pl_plane_data data[4];
