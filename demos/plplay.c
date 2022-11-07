@@ -39,6 +39,8 @@ static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { ret
 #define MAX_BLEND_PASSES 8
 #define MAX_BLEND_FRAMES 8
 
+#define MIN(x, y) ((x) < (y) ? (x) : (y))
+
 struct pass_info {
     struct pl_dispatch_info pass;
     char *name;
@@ -1406,10 +1408,45 @@ static void update_settings(struct plplay *p)
                             (p->shader_num - i) * sizeof(void *));
                     memmove(&p->shader_paths[i], &p->shader_paths[i+1],
                             (p->shader_num - i) * sizeof(char *));
+                    if (i == p->shader_num)
+                        break;
                 }
 
-                if (i < p->shader_num)
+                if (p->shader_hooks[i]->num_parameters == 0) {
                     nk_label(nk, p->shader_paths[i], NK_TEXT_LEFT);
+                    continue;
+                }
+
+                if (nk_combo_begin_label(nk, p->shader_paths[i], nk_vec2(nk_widget_width(nk), 500))) {
+                    nk_layout_row_dynamic(nk, 32, 1);
+                    for (int j = 0; j < p->shader_hooks[i]->num_parameters; j++) {
+                        const struct pl_hook_par *hp = &p->shader_hooks[i]->parameters[j];
+                        const char *name = hp->description ? hp->description : hp->name;
+                        switch (hp->type) {
+                        case PL_VAR_FLOAT:
+                            nk_property_float(nk, name, hp->minimum.f,
+                                              &hp->data->f, hp->maximum.f,
+                                              hp->data->f / 100.0f,
+                                              hp->data->f / 1000.0f);
+                            break;
+                        case PL_VAR_SINT:
+                            nk_property_int(nk, name, hp->minimum.i,
+                                            &hp->data->i, hp->maximum.i,
+                                            1, 1.0f);
+                            break;
+                        case PL_VAR_UINT: {
+                            int min = MIN(hp->minimum.u, INT_MAX);
+                            int max = MIN(hp->maximum.u, INT_MAX);
+                            int val = MIN(hp->data->u, INT_MAX);
+                            nk_property_int(nk, name, min, &val, max, 1, 1);
+                            hp->data->u = val;
+                            break;
+                        }
+                        default: abort();
+                        }
+                    }
+                    nk_combo_end(nk);
+                }
             }
 
             par->hooks = p->shader_hooks;
