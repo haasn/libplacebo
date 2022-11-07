@@ -436,6 +436,10 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
             if (comp->plane != p)
                 continue;
 
+            // Reject >64-bit pixel formats
+            if (comp->depth + comp->shift + comp->offset * 8 > 64)
+                return 0;
+
             masks[c] = (1LLU << comp->depth) - 1; // e.g. 0xFF for depth=8
             masks[c] <<= comp->shift;
             masks[c] <<= comp->offset * 8;
@@ -489,8 +493,7 @@ misaligned:
     return planes;
 }
 
-static inline bool pl_test_pixfmt(pl_gpu gpu,
-                                  enum AVPixelFormat pixfmt)
+static inline bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt)
 {
     struct pl_bit_encoding bits;
     struct pl_plane_data data[4];
