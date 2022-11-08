@@ -76,6 +76,7 @@ sources = [
   'shaders.c',
   'shaders/colorspace.c',
   'shaders/custom.c',
+  'shaders/custom/mpv.c',
   'shaders/deinterlacing.c',
   'shaders/dithering.c',
   'shaders/film_grain.c',
