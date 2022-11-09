@@ -5,12 +5,11 @@ stages:
 
 variables:
     GIT_SUBMODULE_STRATEGY: recursive
-    IMAGE_UBUNTU_FOCAL: registry.videolan.org/libplacebo-ubuntu-focal:20220610192633
-    IMAGE_UBUNTU_JAMMY: registry.videolan.org/libplacebo-ubuntu-jammy:20220728170740
+    IMAGE_UBUNTU_JAMMY: registry.videolan.org/libplacebo-ubuntu-jammy:20230130122426
     IMAGE_UBUNTU_FOCAL_AARCH: registry.videolan.org/libplacebo-ubuntu-focal-aarch64:20211020160908
 
 linux:
-    image: $IMAGE_UBUNTU_FOCAL
+    image: $IMAGE_UBUNTU_JAMMY
     stage: compile
     tags:
         - docker
@@ -24,7 +23,7 @@ linux:
         - ninja -C build
 
 static:
-    image: $IMAGE_UBUNTU_FOCAL
+    image: $IMAGE_UBUNTU_JAMMY
     stage: compile
     tags:
         - docker
@@ -38,7 +37,7 @@ static:
         - ninja -C build
 
 win32:
-    image: $IMAGE_UBUNTU_FOCAL
+    image: $IMAGE_UBUNTU_JAMMY
     stage: compile
     tags:
         - docker
@@ -53,7 +52,7 @@ win32:
         - cd build && meson test -t 5 -v --num-processes=1
 
 win64:
-    image: $IMAGE_UBUNTU_FOCAL
+    image: $IMAGE_UBUNTU_JAMMY
     stage: compile
     tags:
         - docker
@@ -92,7 +91,7 @@ macos:
         - cd build && meson test -t 5 -v --num-processes=1
 
 scan:
-    image: $IMAGE_UBUNTU_FOCAL
+    image: $IMAGE_UBUNTU_JAMMY
     stage: compile
     tags:
         - docker
@@ -108,7 +107,7 @@ scan:
         - ninja -C build scan-build
 
 llvmpipe:
-    image: $IMAGE_UBUNTU_FOCAL
+    image: $IMAGE_UBUNTU_JAMMY
     stage: test
     tags:
         - docker
