@@ -1,7 +1,8 @@
 opengl_build = get_option('opengl')
 opengl_link = get_option('gl-proc-addr')
 
-if host_machine.system() == 'windows'
+if host_machine.system() == 'windows' or host_machine.system().endswith('bsd') or \
+   host_machine.system() == 'dragonfly'
     libdl = declare_dependency()
 else
     libdl = cc.find_library('dl', required : opengl_link)
