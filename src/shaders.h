@@ -46,6 +46,7 @@ struct pl_shader_t {
     pl_log log;
     struct pl_shader_res res; // for accumulating some of the fields
     PL_ARRAY(struct pl_ref *) tmp; // only used for var/va/desc names and data
+    PL_ARRAY(pl_shader_obj) obj;
     bool failed;
     bool mutable;
     int output_w;
@@ -179,6 +180,7 @@ enum pl_shader_obj_type {
 
 struct pl_shader_obj_t {
     enum pl_shader_obj_type type;
+    pl_rc_t rc;
     pl_gpu gpu;
     void (*uninit)(pl_gpu gpu, void *priv);
     void *priv;

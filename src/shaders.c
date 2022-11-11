@@ -39,22 +39,29 @@ pl_shader pl_shader_alloc(pl_log log, const struct pl_shader_params *params)
     return sh;
 }
 
+static void sh_obj_deref(pl_shader_obj obj);
+
+static void sh_deref(pl_shader sh)
+{
+    for (int i = 0; i < sh->tmp.num; i++)
+        pl_ref_deref(&sh->tmp.elem[i]);
+    for (int i = 0; i < sh->obj.num; i++)
+        sh_obj_deref(sh->obj.elem[i]);
+}
+
 void pl_shader_free(pl_shader *psh)
 {
     pl_shader sh = *psh;
     if (!sh)
         return;
 
-    for (int i = 0; i < sh->tmp.num; i++)
-        pl_ref_deref(&sh->tmp.elem[i]);
-
+    sh_deref(sh);
     pl_free_ptr(psh);
 }
 
 void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
 {
-    for (int i = 0; i < sh->tmp.num; i++)
-        pl_ref_deref(&sh->tmp.elem[i]);
+    sh_deref(sh);
 
     struct pl_shader_t new = {
         .log = sh->log,
@@ -715,17 +722,25 @@ bool sh_require(pl_shader sh, enum pl_shader_sig insig, int w, int h)
     return true;
 }
 
+static void sh_obj_deref(pl_shader_obj obj)
+{
+    if (!pl_rc_deref(&obj->rc))
+        return;
+
+    if (obj->uninit)
+        obj->uninit(obj->gpu, obj->priv);
+
+    pl_free(obj);
+}
+
 void pl_shader_obj_destroy(pl_shader_obj *ptr)
 {
     pl_shader_obj obj = *ptr;
     if (!obj)
         return;
 
-    if (obj->uninit)
-        obj->uninit(obj->gpu, obj->priv);
-
+    sh_obj_deref(obj);
     *ptr = NULL;
-    pl_free(obj);
 }
 
 void *sh_require_obj(pl_shader sh, pl_shader_obj *ptr,
@@ -749,11 +764,15 @@ void *sh_require_obj(pl_shader sh, pl_shader_obj *ptr,
 
     if (!obj) {
         obj = pl_zalloc_ptr(NULL, obj);
+        pl_rc_init(&obj->rc);
         obj->gpu = SH_GPU(sh);
         obj->type = type;
         obj->priv = pl_zalloc(obj, priv_size);
         obj->uninit = uninit;
     }
+
+    PL_ARRAY_APPEND(sh, sh->obj, obj);
+    pl_rc_ref(&obj->rc);
 
     *ptr = obj;
     return obj->priv;
