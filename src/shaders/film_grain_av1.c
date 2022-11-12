@@ -235,6 +235,14 @@ static inline int round2(int x, int shift)
     return (x + (1 << (shift - 1))) >> shift;
 }
 
+static ident_t sh_lut_quiet(pl_shader sh, const struct sh_lut_params *params)
+{
+    pl_log_level_cap(sh->log, PL_LOG_TRACE);
+    ident_t ret = sh_lut(sh, params);
+    pl_log_level_cap(sh->log, PL_LOG_NONE);
+    return ret;
+}
+
 enum {
     BLOCK_SIZE = 32,
     SCALING_LUT_SIZE = 256,
@@ -672,7 +680,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
     int idx[3] = {-1};
 
     if (fg_has_y) {
-        lut[0] = sh_lut(sh, sh_lut_params(
+        lut[0] = sh_lut_quiet(sh, sh_lut_params(
             .object     = &obj->lut_grain[0],
             .var_type   = PL_VAR_FLOAT,
             .lut_type   = SH_LUT_TEXTURE,
@@ -707,7 +715,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
     }
 
     if (chroma_comps > 0) {
-        lut[1] = lut[2] = sh_lut(sh, sh_lut_params(
+        lut[1] = lut[2] = sh_lut_quiet(sh, sh_lut_params(
             .object     = &obj->lut_grain[1],
             .var_type   = PL_VAR_FLOAT,
             .lut_type   = SH_LUT_TEXTURE,
@@ -729,7 +737,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
             idx[1] = idx[2] = -1;
     }
 
-    ident_t offsets = sh_lut(sh, sh_lut_params(
+    ident_t offsets = sh_lut_quiet(sh, sh_lut_params(
         .object     = &obj->lut_offsets,
         .var_type   = PL_VAR_UINT,
         .lut_type   = SH_LUT_AUTO,
@@ -787,7 +795,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
         // Skip scaling for unneeded channels
         bool has_c[3] = { fg_has_y, fg_has_u, fg_has_v };
         if (has_c[i] && priv.num > 0) {
-            scaling[i] = sh_lut(sh, sh_lut_params(
+            scaling[i] = sh_lut_quiet(sh, sh_lut_params(
                 .object     = &obj->lut_scaling[i],
                 .var_type   = PL_VAR_FLOAT,
                 .method     = SH_LUT_LINEAR,
