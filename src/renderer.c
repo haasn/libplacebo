@@ -1265,7 +1265,18 @@ static bool plane_film_grain(struct pass_state *pass, int plane_idx,
 
     struct img *img = &st->img;
     struct pl_plane *plane = &st->plane;
-    struct pl_color_repr repr = st->img.repr;
+    struct pl_color_repr repr = image->repr;
+    bool is_orig_repr = pl_color_repr_equal(&st->img.repr, &image->repr);
+    if (!is_orig_repr) {
+        // Propagate the original color depth to the film grain algorithm, but
+        // update the sample depth and effective bit shift based on the state
+        // of the current texture, which is guaranteed to already be
+        // normalized.
+        pl_assert(st->img.repr.bits.bit_shift == 0);
+        repr.bits.sample_depth = st->img.repr.bits.sample_depth;
+        repr.bits.bit_shift = repr.bits.sample_depth - repr.bits.color_depth;
+    }
+
     struct pl_film_grain_params grain_params = {
         .data = image->film_grain,
         .luma_tex = ref->plane.texture,
@@ -1314,7 +1325,8 @@ static bool plane_film_grain(struct pass_state *pass, int plane_idx,
     img->err_msg = "Failed applying film grain.. disabling!";
     img->err_bool = &rr->disable_grain;
     img->err_tex = grain_params.tex;
-    img->repr = repr;
+    if (is_orig_repr)
+        img->repr = repr;
     return true;
 }
 
