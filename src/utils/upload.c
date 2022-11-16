@@ -171,8 +171,6 @@ pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data 
             continue;
         if (!(fmt->caps & PL_FMT_CAP_SAMPLEABLE))
             continue;
-        if (data->row_stride % fmt->texel_align)
-            continue; // reject misaligned formats
 
         int idx = 0;
 
@@ -189,6 +187,17 @@ pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data 
             if (size && (idx >= 4 || fmt->host_bits[idx] != size))
                 goto next_fmt;
             out_map[idx++] = data->component_map[i];
+        }
+
+        // Reject misaligned formats, check this last to only log such errors
+        // if this is the only thing preventing a format from being used, as
+        // this is likely an issue in the API usage.
+        if (data->row_stride % fmt->texel_align) {
+            PL_WARN(gpu, "Rejecting texture format '%s' due to misalignment: "
+                    "Row stride %zu is not a clean multiple of texel size %zu! "
+                    "This is likely an API usage bug.",
+                    fmt->name, data->row_stride, fmt->texel_align);
+            continue;
         }
 
         return fmt;
