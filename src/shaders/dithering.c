@@ -273,10 +273,8 @@ done: ;
     } else {
         // Approximate each gamma segment as a straight line, this simplifies
         // the process of dithering down to a single scale and (biased) round.
-        uint64_t scale = (1LLU << new_depth) - 1;
-        GLSL("color = vec4(%llu.0) * color + vec4(bias); \n"
-             "color = floor(color) * vec4(1.0 / %llu.0); \n",
-             (long long unsigned) scale, (long long unsigned) scale);
+        GLSL("color = scale * color + vec4(bias);   \n"
+             "color = floor(color) * (1.0 / scale); \n");
     }
 
     GLSL("} \n");
