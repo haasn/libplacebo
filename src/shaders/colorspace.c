@@ -1462,13 +1462,21 @@ static void tone_map(pl_shader sh,
             .data = PL_TRANSPOSE_3X3(rgb2xyz.m),
         }));
 
-        // Tuned to meet the desired desaturation at 1000 -> SDR
-        float desat = dst_max > src_max ? 1.075f : 1.1f;
-        float exponent = logf(desat) / logf(1000 / PL_COLOR_SDR_WHITE);
-        GLSL("float orig = max(xyz.y, %s);                      \n"
-             "xyz.y = tone_map(xyz.y);                          \n"
-             "xyz.xz *= pow(xyz.y / orig, %s) * xyz.y / orig;   \n",
-             SH_FLOAT(dst_min), SH_FLOAT(exponent));
+        // Tuned to meet the desired desaturation at 1000 <-> SDR
+        const float ref_ratio = 1000 / PL_COLOR_SDR_WHITE;
+        float ratio = src_max / dst_max, desat;
+        if (ratio >= 1) {
+            float k = (ratio - 1) / (ref_ratio - 1);
+            desat = PL_MIX(1.0f, 1/1.1f, k);
+        } else {
+            float k = (1 - ratio) / (1 - 1 / ref_ratio);
+            desat = PL_MIX(1.0f, 1.075f, k);
+        }
+
+        GLSL("float orig = max(xyz.y, %s);  \n"
+             "xyz.y = tone_map(xyz.y);      \n"
+             "xyz.xz *= %s * xyz.y / orig;  \n",
+             SH_FLOAT(dst_min), SH_FLOAT(desat));
 
         // Extra luminance correction when reducing dynamic range
         if (src_max > dst_max)
