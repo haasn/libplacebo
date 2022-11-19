@@ -1462,15 +1462,9 @@ static void tone_map(pl_shader sh,
         }));
 
         // Tuned to meet the desired desaturation at 1000 <-> SDR
-        const float ref_ratio = 1000 / PL_COLOR_SDR_WHITE;
-        float ratio = src_max / dst_max, desat;
-        if (ratio >= 1) {
-            float k = (ratio - 1) / (ref_ratio - 1);
-            desat = PL_MIX(1.0f, 1/1.1f, k);
-        } else {
-            float k = (1 - ratio) / (1 - 1 / ref_ratio);
-            desat = PL_MIX(1.0f, 1.075f, k);
-        }
+        float ratio = logf(src_max / dst_max) / logf(1000 / PL_COLOR_SDR_WHITE);
+        float coeff = src_max > dst_max ? 1 / 1.1f : 1.075f;
+        float desat = (coeff - 1) * fabsf(ratio) + 1;
 
         GLSL("float orig = max(xyz.y, %s);  \n"
              "xyz.y = tone_map(xyz.y);      \n"
