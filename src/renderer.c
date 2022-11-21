@@ -1533,7 +1533,7 @@ static bool pass_read_image(struct pass_state *pass)
                  "vec4 tmp = %s();  \n", sub);
             for (int jc = 0; jc < stj->img.comps; jc++) {
                 int map = stj->plane.component_mapping[jc];
-                if (!map)
+                if (map == PL_CHANNEL_NONE)
                     continue;
                 int ic = sti->img.comps++;
                 pl_assert(ic < 4);
