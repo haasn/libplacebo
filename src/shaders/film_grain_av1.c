@@ -284,7 +284,7 @@ static inline int bit_depth(const struct pl_color_repr *repr)
     int depth = PL_DEF(repr->bits.color_depth,
                 PL_DEF(repr->bits.sample_depth, 8));
     pl_assert(depth >= 8);
-    return depth;
+    return PL_MIN(depth, 12);
 }
 
 static struct grain_scale get_grain_scale(const struct pl_film_grain_params *params)
