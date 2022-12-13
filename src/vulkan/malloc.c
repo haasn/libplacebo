@@ -857,8 +857,6 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
         goto error;
     }
 
-    pl_assert(ainfo.pNext);
-
     if (!find_best_memtype(ma, reqs.memoryTypeBits, params, &ainfo.memoryTypeIndex)) {
         PL_ERR(vk, "No compatible memory types offered for imported memory!");
         goto error;
