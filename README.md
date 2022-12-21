@@ -48,6 +48,9 @@ Direct3D 11. It contains backwards compatibility code for very old versions of
 GLSL down to GLES 2.0 and OpenGL 1.3 and very old Direct3D feature levels down
 to 9_1.
 
+For more documentation, including an introduction to the API, see [the project
+website](https://libplacebo.org).
+
 ### Examples
 
 This screenshot from the included [plplay demo program](./demos/plplay.c)
