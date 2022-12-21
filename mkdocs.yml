@@ -1,0 +1,27 @@
+site_name: libplacebo
+site_url: https://libplacebo.org/
+repo_url: https://code.videolan.org/videolan/libplacebo
+repo_name: videolan/libplacebo
+copyright: Copyright &copy; 2017-2022 Niklas Haas
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  icon:
+    repo: fontawesome/brands/gitlab
+  features:
+    - content.code.annotate
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.details
+  - pymdownx.snippets
+  - pymdownx.superfences
