@@ -233,10 +233,10 @@ static void decoder_thread(void)
 
     while ((frame = /* decode new frame */)) {
         pl_queue_push_block(queue, UINT64_MAX, &(struct pl_source_frame) {
-            .pts = /* frame pts */,
-            .duration = /* frame duration */,
-            .map = /* map callback */,
-            .unmap = /* unmap callback */,
+            .pts        = /* frame pts */,
+            .duration   = /* frame duration */,
+            .map        = /* map callback */,
+            .unmap      = /* unmap callback */,
             .frame_data = frame,
         });
     }
