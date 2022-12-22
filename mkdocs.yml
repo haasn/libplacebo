@@ -24,6 +24,7 @@ theme:
     - content.code.annotate
 markdown_extensions:
   - admonition
+  - footnotes
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.details
