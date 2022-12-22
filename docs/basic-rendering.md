@@ -1,4 +1,4 @@
-# Basic rendering example
+# Basic windowing / output example
 
 We will demonstrate the basics of the libplacebo GPU output API with a worked
 example. The goal is to show a simple color on screen.
