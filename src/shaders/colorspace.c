@@ -1577,9 +1577,13 @@ static void adapt_colors(pl_shader sh,
         break;
 
     case PL_GAMUT_WARN:
-        GLSL("if (any(lessThan(color.rgb, vec3(-0.005))) ||     \n"
-             "    any(greaterThan(color.rgb, vec3(1.005))))     \n"
-             "    color.rgb = vec3(1.0, 0.0, 1.0); // magenta   \n");
+        GLSL("if (any(lessThan(color.rgb, vec3(-1e-6))) ||          \n"
+             "    any(greaterThan(color.rgb, vec3(1.0 + 1e-6))))    \n"
+             "{                                                     \n"
+             "    float k = dot(color.rgb, vec3(2.0 / 3.0));        \n"
+             "    color.rgb = clamp(vec3(k) - color.rgb, 0.0, 1.0); \n"
+             "    color.rgb = sqrt(color.rgb);                      \n"
+             "}                                                     \n");
         break;
 
     case PL_GAMUT_DARKEN: {
