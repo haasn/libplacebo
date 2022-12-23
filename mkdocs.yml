@@ -3,6 +3,7 @@ site_url: https://libplacebo.org/
 repo_url: https://code.videolan.org/videolan/libplacebo
 repo_name: videolan/libplacebo
 copyright: Copyright &copy; 2017-2022 Niklas Haas
+
 theme:
   name: material
   palette:
@@ -22,6 +23,7 @@ theme:
     repo: fontawesome/brands/gitlab
   features:
     - content.code.annotate
+
 markdown_extensions:
   - admonition
   - footnotes
@@ -30,3 +32,9 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.snippets
   - pymdownx.superfences
+
+nav:
+  - index.md
+  - basic-rendering.md
+  - renderer.md
+  - custom-shaders.md
