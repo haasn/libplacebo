@@ -91,7 +91,7 @@ Here is a current list of hook points:
 
 * `RGB`: Input plane containing RGB values
 * `LUMA`: Input plane containing a Y value
-* `CHROMA: Input plane containing chroma values (one or both)
+* `CHROMA`: Input plane containing chroma values (one or both)
 * `ALPHA`: Input plane containing a single alpha value
 * `XYZ`: Input plane containing XYZ values
 * `CHROMA_SCALED`: Chroma plane, after merging and upscaling to luma size
