@@ -117,7 +117,7 @@ enum pl_hook_stage {
     PL_HOOK_RGB             = 1 << 8,  // After conversion to RGB (resizable)
     PL_HOOK_LINEAR          = 1 << 9,  // After linearization but before scaling
     PL_HOOK_SIGMOID         = 1 << 10, // After sigmoidization
-    PL_HOOK_PRE_KERNEL      = 1 << 11, // Immediately before the main scaler kernel (after overlays)
+    PL_HOOK_PRE_KERNEL      = 1 << 11, // Immediately before the main scaler kernel
     PL_HOOK_POST_KERNEL     = 1 << 12, // Immediately after the main scaler kernel
     PL_HOOK_SCALED          = 1 << 13, // After scaling, before color management
     PL_HOOK_OUTPUT          = 1 << 14, // After color management, before dithering
