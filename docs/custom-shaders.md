@@ -161,6 +161,9 @@ A bound texture will define the following GLSL functions (as macros):
 [^ifdef]: Because these are macros, their presence can be tested for using
   `#ifdef` inside the GLSL preprocessor.
 
+This same directive can also be used to bind buffer blocks (i.e.
+uniform/storage buffers), as defined by the [`BUFFER` directive](#buffer-name).
+
 ### `SAVE <texture>`
 
 By default, after execution of a shader stage, the resulting output is
