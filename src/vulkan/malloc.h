@@ -54,6 +54,10 @@ struct vk_malloc_params {
     struct pl_shared_mem shared_mem; // for `import_handle`
 };
 
+// Returns the amount of available memory matching a given set of property
+// flags. Always returns the highest single allocation, not the combined total.
+size_t vk_malloc_avail(struct vk_malloc *ma, VkMemoryPropertyFlags flags);
+
 bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
                      const struct vk_malloc_params *params);
 

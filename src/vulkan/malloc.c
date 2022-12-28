@@ -946,6 +946,19 @@ error:
     return false;
 }
 
+size_t vk_malloc_avail(struct vk_malloc *ma, VkMemoryPropertyFlags flags)
+{
+    size_t avail = 0;
+    for (int i = 0; i < ma->props.memoryTypeCount; i++) {
+        const VkMemoryType *mtype = &ma->props.memoryTypes[i];
+        if ((mtype->propertyFlags & flags) != flags)
+            continue;
+        avail = PL_MAX(avail, ma->props.memoryHeaps[mtype->heapIndex].size);
+    }
+
+    return avail;
+}
+
 bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
                      const struct vk_malloc_params *params)
 {
