@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '234': 'add `pl_gpu_limits.host_cached`',
       '233': 'add `pl_hook.parameters`, `struct pl_hook_par`',
       '232': 'add `pl_plane_data_from_comps`',
       '231': 'add `pl_tone_map_params_infer`',
