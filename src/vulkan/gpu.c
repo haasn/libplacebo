@@ -485,11 +485,11 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         .thread_safe        = true,
         .callbacks          = true,
         // pl_buf
-        .max_buf_size       = SIZE_MAX, // no limit imposed by vulkan
+        .max_buf_size       = vk_malloc_avail(vk->ma, 0),
         .max_ubo_size       = vk->limits.maxUniformBufferRange,
         .max_ssbo_size      = vk->limits.maxStorageBufferRange,
-        .max_vbo_size       = SIZE_MAX,
-        .max_mapped_size    = SIZE_MAX,
+        .max_vbo_size       = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+        .max_mapped_size    = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT),
         .max_buffer_texels  = vk->limits.maxTexelBufferElements,
         .align_host_ptr     = host_props.minImportedHostPointerAlignment,
         // pl_tex
