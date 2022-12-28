@@ -273,6 +273,7 @@ pl_gpu pl_gpu_finalize(struct pl_gpu_t *gpu)
     LOG("zu", max_mapped_size);
     LOG(PRIu64, max_buffer_texels);
     LOG("zu", align_host_ptr);
+    LOG("d", host_cached);
     // pl_tex
     LOG(PRIu32, max_tex_1d_dim);
     LOG(PRIu32, max_tex_2d_dim);
