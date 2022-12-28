@@ -170,9 +170,9 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
         mparams.required |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
         if (params->size > 1024) {
-            // Require cached memory for large buffers (1 kB) which may be read
+            // Prefer cached memory for large buffers (1 kB) which may be read
             // from, because uncached reads are extremely slow
-            mparams.required |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            mparams.optimal |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         }
     }
 
