@@ -2949,7 +2949,6 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     struct cached_frame frames[MAX_MIX_FRAMES];
     float weights[MAX_MIX_FRAMES];
     float wsum = 0.0;
-    pass.tmp = pl_tmp(NULL);
 
     // Garbage collect the cache by evicting all frames from the cache that are
     // not determined to still be required
