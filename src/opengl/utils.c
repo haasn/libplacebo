@@ -91,12 +91,10 @@ bool gl_is_software(pl_opengl pl_gl)
     struct gl_ctx *glctx = PL_PRIV(pl_gl);
     const gl_funcs *gl = &glctx->func;
     const char *renderer = (char *) gl->GetString(GL_RENDERER);
-    const char *vendor = (char *) gl->GetString(GL_VENDOR);
-    return !(renderer && vendor) ||
+    return !renderer ||
            strcmp(renderer, "Software Rasterizer") == 0 ||
            strstr(renderer, "llvmpipe") ||
            strstr(renderer, "softpipe") ||
-           strcmp(vendor, "Microsoft Corporation") == 0 ||
            strcmp(renderer, "Mesa X11") == 0 ||
            strcmp(renderer, "Apple Software Renderer") == 0;
 }
