@@ -271,6 +271,17 @@ int main()
 
     TEST(AV_PIX_FMT_RGB48LE, rgb16);
 
+    static const struct pl_plane_data rgba16[] = {
+        {
+            .type = PL_FMT_UNORM,
+            .component_size = {16, 16, 16, 16},
+            .component_map = {0, 1, 2, 3},
+            .pixel_stride = 8,
+        }
+    };
+
+    TEST(AV_PIX_FMT_RGBA64LE, rgba16);
+
     static const struct pl_plane_data rgb565[] = {
         {
             .type = PL_FMT_UNORM,
