@@ -109,7 +109,7 @@ int main()
     pl_log log = pl_test_logger();
     pl_vk_inst inst = pl_vk_inst_create(log, pl_vk_inst_params(
         .debug = true,
-        .debug_extra = true,
+        .debug_extra = false, // FIXME: re-enable when upstream fixed
         .get_proc_addr = vkGetInstanceProcAddr,
         .opt_extensions = (const char *[]){
             VK_KHR_SURFACE_EXTENSION_NAME,
