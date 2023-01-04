@@ -108,7 +108,6 @@ void pl_tone_map_params_infer(struct pl_tone_map_params *par)
     if (!par->function)
         par->function = &pl_tone_map_clip;
 
-    par->param = PL_CLAMP(par->param, par->function->param_min, par->function->param_max);
     if (!par->param)
         par->param = par->function->param_def;
 
@@ -137,6 +136,8 @@ void pl_tone_map_params_infer(struct pl_tone_map_params *par)
         }
         par->param = par->function->param_def;
     }
+
+    par->param = PL_CLAMP(par->param, par->function->param_min, par->function->param_max);
 }
 
 // Infer params and rescale to function scaling
