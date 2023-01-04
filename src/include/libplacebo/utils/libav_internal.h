@@ -1236,8 +1236,11 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
 
     if (!(avctx->codec->capabilities & AV_CODEC_CAP_DR1) || !planes)
         goto fallback;
-    if (!gpu || !gpu->limits.thread_safe || !gpu->limits.max_mapped_size)
+    if (!gpu || !gpu->limits.thread_safe || !gpu->limits.max_mapped_size ||
+        !gpu->limits.host_cached)
+    {
         goto fallback;
+    }
 
     avcodec_align_dimensions2(avctx, &width, &height, alignment);
     if ((ret = av_image_fill_linesizes(pic->linesize, pic->format, width)))
