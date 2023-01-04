@@ -243,7 +243,7 @@ project('libplacebo', ['c', 'cpp'],
       '1': '',
     }.keys().length(),
     # Fix version
-    0)
+    2)
 )
 
 ### Version number and configuration
