@@ -13,5 +13,6 @@
 ## Bugfix release (vX.Y.Z)
 
 1. Cherry-pick bug fixes onto version branch (`vX.Y`)
-2. Tag `vX.Y.Z` on this branch
-3. Fast-forward `release` branch iff this is the latest major release
+2. Update `Z` version number in `meson.build`
+3. Tag `vX.Y.Z` on this branch
+4. Fast-forward `release` branch iff this is the latest major release
