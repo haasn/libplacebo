@@ -520,8 +520,11 @@ static inline bool pl_upload_dav1dpicture(pl_gpu gpu,
 static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, void *cookie)
 {
     pl_gpu gpu = cookie;
-    if (!gpu->limits.max_mapped_size || !gpu->limits.buf_transfer)
+    if (!gpu->limits.max_mapped_size || !gpu->limits.host_cached ||
+        !gpu->limits.buf_transfer)
+    {
         return DAV1D_ERR(ENOTSUP);
+    }
 
     // Copied from dav1d_default_picture_alloc
     const int hbd = p->p.bpc > 8;
