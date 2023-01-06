@@ -2961,11 +2961,12 @@ retry:
     for (int i = 0; i < images->num_frames; i++) {
         uint64_t sig = images->signatures[i];
         float rts = images->timestamps[i];
+        const struct pl_frame *img = images->frames[i];
         PL_TRACE(rr, "Considering image with signature 0x%llx, rts %f",
                  (unsigned long long) sig, rts);
 
         // Combining images with different rotations is basically unfeasible
-        if (pl_rotation_normalize(images->frames[i]->rotation - refimg->rotation)) {
+        if (pl_rotation_normalize(img->rotation - refimg->rotation)) {
             PL_TRACE(rr, "  -> Skipping: incompatible rotation");
             continue;
         }
@@ -2975,7 +2976,7 @@ retry:
         if (single_frame) {
 
             // Only render the refimg, ignore others
-            if (images->frames[i] == refimg) {
+            if (img == refimg) {
                 weight = 1.0;
             } else {
                 PL_TRACE(rr, "  -> Skipping: no frame mixer");
@@ -3034,7 +3035,7 @@ retry:
         // also exclude the reference image from this optimization to ensure
         // that we always have at least one frame.
         const float cutoff = 1e-3;
-        if (fabsf(weight) <= cutoff && images->frames[i] != refimg) {
+        if (fabsf(weight) <= cutoff && img != refimg) {
             PL_TRACE(rr, "   -> Skipping: weight (%f) below threshold (%f)",
                      weight, cutoff);
             continue;
@@ -3053,8 +3054,8 @@ retry:
             f = &rr->frames.elem[rr->frames.num++];
             *f = (struct cached_frame) {
                 .signature = sig,
-                .color = images->frames[i]->color,
-                .profile = images->frames[i]->profile,
+                .color = img->color,
+                .profile = img->profile,
             };
         }
 
@@ -3101,7 +3102,7 @@ retry:
             struct pass_state inter_pass = {
                 .rr = rr,
                 .params = pass.params,
-                .image = *images->frames[i],
+                .image = *img,
                 .target = *ptarget,
                 .info.stage = PL_RENDER_STAGE_FRAME,
             };
