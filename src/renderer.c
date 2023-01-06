@@ -27,6 +27,7 @@ struct cached_frame {
     uint64_t params_hash; // for detecting `pl_render_params` changes
     struct pl_color_space color;
     struct pl_icc_profile profile;
+    struct pl_rect2df crop;
     pl_tex tex;
     int comps;
     bool evict; // for garbage collection
@@ -3066,6 +3067,7 @@ retry:
         if (can_reuse && strict_reuse) {
             can_reuse = f->tex->params.w == out_w &&
                         f->tex->params.h == out_h &&
+                        pl_rect2d_eq(f->crop, img->crop) &&
                         f->params_hash == par_info.hash;
         }
 
@@ -3165,6 +3167,7 @@ retry:
                           &shift);
 
             f->params_hash = par_info.hash;
+            f->crop = img->crop;
             f->color = inter_pass.img.color;
             f->comps = inter_pass.img.comps;
             pl_assert(inter_pass.img.repr.alpha != PL_ALPHA_INDEPENDENT);
