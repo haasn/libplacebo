@@ -223,6 +223,42 @@ static void pl_texture_tests(pl_gpu gpu)
     free(test_src);
 }
 
+static void pl_planar_tests(pl_gpu gpu)
+{
+    pl_fmt fmt = pl_find_named_fmt(gpu, "g8_b8_r8_420");
+    if (!fmt)
+        return;
+    REQUIRE(fmt->num_planes == 3);
+
+    const int width = 64, height = 32;
+    pl_tex tex = pl_tex_create(gpu, pl_tex_params(
+        .w              = width,
+        .h              = height,
+        .format         = fmt,
+        .blit_dst       = true,
+        .host_readable  = true,
+    ));
+    if (!tex)
+        return;
+    for (int i = 0; i < fmt->num_planes; i++)
+        REQUIRE(tex->planes[i]);
+
+    pl_tex plane = tex->planes[1];
+    uint8_t data[(width * height) >> 2];
+    REQUIRE(plane->params.w * plane->params.h == PL_ARRAY_SIZE(data));
+
+    pl_tex_clear(gpu, plane, (float[]){ 0.5, 0.0, 0.0, 1.0 });
+    REQUIRE(pl_tex_download(gpu, pl_tex_transfer_params(
+        .tex = plane,
+        .ptr = data,
+    )));
+
+    for (int i = 0; i < PL_ARRAY_SIZE(data); i++)
+        REQUIRE(data[i] == 0x80);
+
+    pl_tex_destroy(gpu, &tex);
+}
+
 static void pl_shader_tests(pl_gpu gpu)
 {
     if (gpu->glsl.version < 410)
@@ -1531,6 +1567,7 @@ static void gpu_shader_tests(pl_gpu gpu)
 {
     pl_buffer_tests(gpu);
     pl_texture_tests(gpu);
+    pl_planar_tests(gpu);
     pl_shader_tests(gpu);
     pl_scaler_tests(gpu);
     pl_render_tests(gpu);
