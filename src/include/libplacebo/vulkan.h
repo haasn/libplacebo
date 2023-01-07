@@ -432,6 +432,10 @@ struct pl_vulkan_wrap_params {
     // guarantees the use of only one queue family.
     VkImage image;
 
+    // Which aspect of `image` to wrap. Only useful for planar images, if left
+    // as 0, defaults to `VK_IMAGE_ASPECT_COLOR_BIT`.
+    VkImageAspectFlags aspect;
+
     // The image's dimensions (unused dimensions must be 0)
     int width;
     int height;

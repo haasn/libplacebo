@@ -1143,7 +1143,7 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
     tex_vk->img = params->image;
     tex_vk->img_fmt = params->format;
     tex_vk->usage_flags = params->usage;
-    tex_vk->aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+    tex_vk->aspect = PL_DEF(params->aspect, VK_IMAGE_ASPECT_COLOR_BIT);
 
     // Blitting to planar images requires fallback via compute shaders
     if (tex_vk->aspect != VK_IMAGE_ASPECT_COLOR_BIT) {
