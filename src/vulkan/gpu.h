@@ -93,6 +93,7 @@ struct pl_tex_vk {
     enum queue_type transfer_queue;
     VkImageType type;
     VkImage img;
+    VkImageAspectFlags aspect;
     struct vk_memslice mem;
     // cached properties
     VkFormat img_fmt;

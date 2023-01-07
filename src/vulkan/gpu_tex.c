@@ -50,7 +50,7 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
         .dstAccessMask = access,
         .image = tex_vk->img,
         .subresourceRange = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .aspectMask = tex_vk->aspect,
             .levelCount = 1,
             .layerCount = 1,
         },
@@ -149,13 +149,13 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, pl_debug_tag debug_tag)
             [VK_IMAGE_TYPE_3D] = VK_IMAGE_VIEW_TYPE_3D,
         };
 
-        VkImageViewCreateInfo vinfo = {
+        const VkImageViewCreateInfo vinfo = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .image = tex_vk->img,
             .viewType = viewType[tex_vk->type],
             .format = tex_vk->img_fmt,
             .subresourceRange = {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .aspectMask = tex_vk->aspect,
                 .levelCount = 1,
                 .layerCount = 1,
             },
@@ -242,6 +242,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     struct pl_fmt_vk *fmtp = PL_PRIV(params->format);
     tex_vk->img_fmt = fmtp->vk_fmt->tfmt;
+    tex_vk->aspect = VK_IMAGE_ASPECT_COLOR_BIT;
 
     switch (pl_tex_params_dimension(*params)) {
     case 1: tex_vk->type = VK_IMAGE_TYPE_1D; break;
@@ -630,19 +631,20 @@ void vk_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    VK_QUEUE_FAMILY_IGNORED);
 
-    static const VkImageSubresourceLayers layers = {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-        .layerCount = 1,
-    };
-
     // When the blit operation doesn't require scaling, we can use the more
     // efficient vkCmdCopyImage instead of vkCmdBlitImage
     if (!requires_scaling) {
         pl_rect3d_normalize(&src_rc);
 
         VkImageCopy region = {
-            .srcSubresource = layers,
-            .dstSubresource = layers,
+            .srcSubresource = {
+                .aspectMask = src_vk->aspect,
+                .layerCount = 1,
+            },
+            .dstSubresource = {
+                .aspectMask = dst_vk->aspect,
+                .layerCount = 1,
+            },
             .srcOffset = {src_rc.x0, src_rc.y0, src_rc.z0},
             .dstOffset = {src_rc.x0, src_rc.y0, src_rc.z0},
             .extent = {
@@ -656,8 +658,14 @@ void vk_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
                          dst_vk->img, dst_vk->layout, 1, &region);
     } else {
         VkImageBlit region = {
-            .srcSubresource = layers,
-            .dstSubresource = layers,
+            .srcSubresource = {
+                .aspectMask = src_vk->aspect,
+                .layerCount = 1,
+            },
+            .dstSubresource = {
+                .aspectMask = dst_vk->aspect,
+                .layerCount = 1,
+            },
             .srcOffsets = {{src_rc.x0, src_rc.y0, src_rc.z0},
                            {src_rc.x1, src_rc.y1, src_rc.z1}},
             .dstOffsets = {{dst_rc.x0, dst_rc.y0, dst_rc.z0},
@@ -821,14 +829,14 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     } else {
 
         pl_assert(fmt->texel_align == fmt->texel_size);
-        VkBufferImageCopy region = {
+        const VkBufferImageCopy region = {
             .bufferOffset = buf_offset,
             .bufferRowLength = params->row_pitch / fmt->texel_size,
             .bufferImageHeight = params->depth_pitch / params->row_pitch,
             .imageOffset = { rc.x0, rc.y0, rc.z0 },
             .imageExtent = { rc.x1, rc.y1, rc.z1 },
             .imageSubresource = {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .aspectMask = tex_vk->aspect,
                 .layerCount = 1,
             },
         };
@@ -939,14 +947,14 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     } else {
 
         pl_assert(fmt->texel_align == fmt->texel_size);
-        VkBufferImageCopy region = {
+        const VkBufferImageCopy region = {
             .bufferOffset = buf_offset,
             .bufferRowLength = params->row_pitch / fmt->texel_size,
             .bufferImageHeight = params->depth_pitch / params->row_pitch,
             .imageOffset = { rc.x0, rc.y0, rc.z0 },
             .imageExtent = { rc.x1, rc.y1, rc.z1 },
             .imageSubresource = {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .aspectMask = tex_vk->aspect,
                 .layerCount = 1,
             },
         };
@@ -1096,6 +1104,7 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
     tex_vk->img = params->image;
     tex_vk->img_fmt = params->format;
     tex_vk->usage_flags = params->usage;
+    tex_vk->aspect = VK_IMAGE_ASPECT_COLOR_BIT;
 
     if (!vk_init_image(gpu, tex, PL_DEF(params->debug_tag, "wrapped")))
         goto error;
