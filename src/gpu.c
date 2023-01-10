@@ -2121,7 +2121,7 @@ bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
         });
 
         if (needs_scaling) {
-            GLSL("ivec3 src_pos = ivec3(round(vec3(%f, %f, %f) * vec3(pos))); \n",
+            GLSL("ivec3 src_pos = ivec3(vec3(%f, %f, %f) * vec3(pos)); \n",
                  fabs((float) pl_rect_w(src_rc) / pl_rect_w(dst_rc)),
                  fabs((float) pl_rect_h(src_rc) / pl_rect_h(dst_rc)),
                  fabs((float) pl_rect_d(src_rc) / pl_rect_d(dst_rc)));
