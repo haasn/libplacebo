@@ -1989,7 +1989,7 @@ error:
 bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
                          const struct pl_tex_blit_params *params)
 {
-    if (!params->src->params.storable || !params->dst->params.storable)
+    if (!params->dst->params.storable)
         return false;
 
     // Normalize `dst_rc`, moving all flipping to `src_rc` instead.
@@ -2019,6 +2019,7 @@ bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
 
     // Manual trilinear interpolation would be too slow to justify
     bool needs_sampling = needs_scaling && params->sample_mode != PL_TEX_SAMPLE_NEAREST;
+    needs_sampling |= !params->src->params.storable;
     if (needs_sampling && !params->src->params.sampleable)
         return false;
 
