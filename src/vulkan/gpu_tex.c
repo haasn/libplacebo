@@ -569,11 +569,47 @@ void vk_tex_invalidate(pl_gpu gpu, pl_tex tex)
     tex_vk->may_invalidate = true;
 }
 
+static bool tex_clear_fallback(pl_gpu gpu, pl_tex tex,
+                               const union pl_clear_color color)
+{
+    pl_tex pixel = pl_tex_create(gpu, pl_tex_params(
+        .w = 1,
+        .h = 1,
+        .format = tex->params.format,
+        .storable = true,
+        .blit_src = true,
+        .blit_dst = true,
+    ));
+    if (!pixel)
+        return false;
+
+    pl_tex_clear_ex(gpu, pixel, color);
+
+    pl_assert(tex->params.storable);
+    pl_tex_blit(gpu, pl_tex_blit_params(
+        .src = pixel,
+        .dst = tex,
+        .sample_mode = PL_TEX_SAMPLE_NEAREST,
+    ));
+
+    pl_tex_destroy(gpu, &pixel);
+    return true;
+}
+
 void vk_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
 {
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
+
+    if (tex_vk->aspect != VK_IMAGE_ASPECT_COLOR_BIT) {
+        if (!tex_clear_fallback(gpu, tex,  color)) {
+            PL_ERR(gpu, "Failed clearing imported planar image: color aspect "
+                   "clears disallowed by spec and no shader fallback "
+                   "available");
+        }
+        return;
+    }
 
     struct vk_cmd *cmd = CMD_BEGIN(GRAPHICS);
     if (!cmd)
@@ -587,6 +623,7 @@ void vk_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
     pl_static_assert(sizeof(VkClearColorValue) == sizeof(union pl_clear_color));
     const VkClearColorValue *clearColor = (const VkClearColorValue *) &color;
 
+    pl_assert(tex_vk->aspect == VK_IMAGE_ASPECT_COLOR_BIT);
     static const VkImageSubresourceRange range = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
         .levelCount = 1,
