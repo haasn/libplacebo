@@ -608,10 +608,12 @@ void vk_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
     struct pl_fmt_vk *src_fmtp = PL_PRIV(params->src->params.format);
     struct pl_fmt_vk *dst_fmtp = PL_PRIV(params->dst->params.format);
     bool blit_emulated = src_fmtp->blit_emulated || dst_fmtp->blit_emulated;
+    bool planar_fallback = src_vk->aspect != VK_IMAGE_ASPECT_COLOR_BIT ||
+                           dst_vk->aspect != VK_IMAGE_ASPECT_COLOR_BIT;
 
     struct pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
     bool requires_scaling = !pl_rect3d_eq(src_rc, dst_rc);
-    if (requires_scaling && blit_emulated) {
+    if ((requires_scaling && blit_emulated) || planar_fallback) {
         if (!pl_tex_blit_compute(gpu, p->dp, params))
             PL_ERR(gpu, "Failed emulating texture blit, incompatible textures?");
         return;
@@ -1105,6 +1107,12 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
     tex_vk->img_fmt = params->format;
     tex_vk->usage_flags = params->usage;
     tex_vk->aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+
+    // Blitting to planar images requires fallback via compute shaders
+    if (tex_vk->aspect != VK_IMAGE_ASPECT_COLOR_BIT) {
+        tex->params.blit_src &= tex->params.storable;
+        tex->params.blit_dst &= tex->params.storable;
+    }
 
     if (!vk_init_image(gpu, tex, PL_DEF(params->debug_tag, "wrapped")))
         goto error;
