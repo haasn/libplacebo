@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '235': 'add `pl_vulkan.get_proc_addr`',
       '234': 'add `pl_gpu_limits.host_cached`',
       '233': 'add `pl_hook.parameters`, `struct pl_hook_par`',
       '232': 'add `pl_plane_data_from_comps`',

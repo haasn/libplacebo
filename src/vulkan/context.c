@@ -1319,6 +1319,7 @@ static bool finalize_context(struct pl_vulkan_t *pl_vk, int max_glsl_version)
     pl_vk->instance = vk->inst;
     pl_vk->phys_device = vk->physd;
     pl_vk->device = vk->dev;
+    pl_vk->get_proc_addr = vk->GetInstanceProcAddr;
     pl_vk->api_version = vk->api_ver;
     pl_vk->extensions = vk->exts.elem;
     pl_vk->num_extensions = vk->exts.num;

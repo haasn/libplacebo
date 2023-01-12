@@ -118,6 +118,9 @@ struct pl_vulkan_t {
     VkPhysicalDevice phys_device;
     VkDevice device;
 
+    // The associated vkGetInstanceProcAddr pointer.
+    PFN_vkGetInstanceProcAddr get_proc_addr;
+
     // The Vulkan API version supported by this VkPhysicalDevice.
     uint32_t api_version;
 
