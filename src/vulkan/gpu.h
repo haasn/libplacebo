@@ -104,8 +104,11 @@ struct pl_tex_vk {
     VkFramebuffer framebuffer;
     // for vk_tex_upload/download fallback code
     pl_fmt texel_fmt;
+    // for planar textures (as a convenience)
+    int num_planes;
+    struct pl_tex_vk *planes[4];
 
-    // synchronization and current state
+    // synchronization and current state (planes only)
     struct vk_sem sem;
     VkImageLayout layout;
     PL_ARRAY(pl_vulkan_sem) ext_deps; // external semaphore, not owned by the pl_tex

@@ -255,6 +255,9 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
             } else {
                 bufflags = 0;
             }
+        } else if (vk_fmt->fmt.num_planes) {
+            // Planar textures cannot be used directly
+            texflags = bufflags = 0;
         }
 
         pl_log_level_cap(vk->log, PL_LOG_NONE);
@@ -408,6 +411,20 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
 
         if (fmt->caps & storable)
             fmt->caps |= PL_FMT_CAP_READWRITE;
+
+        // Pick sub-plane formats for planar formats
+        for (int n = 0; n < fmt->num_planes; n++) {
+            for (int i = 0; i < formats.num; i++) {
+                if (formats.elem[i]->signature == vk_fmt->pfmt[n].fmt) {
+                    fmt->planes[n].format = formats.elem[i];
+                    fmt->planes[n].shift_x = vk_fmt->pfmt[n].sx;
+                    fmt->planes[n].shift_y = vk_fmt->pfmt[n].sy;
+                    break;
+                }
+            }
+
+            pl_assert(fmt->planes[n].format);
+        }
 
         PL_ARRAY_APPEND(gpu, formats, fmt);
     }

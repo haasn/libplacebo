@@ -26,6 +26,7 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     pl_rc_ref(&tex_vk->rc);
     pl_assert(!tex_vk->held);
+    pl_assert(!tex_vk->num_planes);
 
     // CONCURRENT images require transitioning to/from IGNORED, EXCLUSIVE
     // images require transitioning to/from the concrete QF index
@@ -93,6 +94,8 @@ static void vk_tex_destroy(pl_gpu gpu, struct pl_tex_t *tex)
     vk_sem_uninit(vk, &tex_vk->sem);
     vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, PL_VK_ALLOC);
     vk->DestroyImageView(vk->dev, tex_vk->view, PL_VK_ALLOC);
+    for (int i = 0; i < tex_vk->num_planes; i++)
+        vk_tex_deref(gpu, tex->planes[i]);
     if (!tex_vk->external_img) {
         vk->DestroyImage(vk->dev, tex_vk->img, PL_VK_ALLOC);
         vk_malloc_free(vk->ma, &tex_vk->mem);
@@ -243,7 +246,10 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     struct pl_fmt_vk *fmtp = PL_PRIV(fmt);
     tex_vk->img_fmt = fmtp->vk_fmt->tfmt;
-    tex_vk->aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+    tex_vk->num_planes = fmt->num_planes;
+    for (int i = 0; i < tex_vk->num_planes; i++)
+        tex_vk->aspect |= VK_IMAGE_ASPECT_PLANE_0_BIT << i;
+    tex_vk->aspect = PL_DEF(tex_vk->aspect, VK_IMAGE_ASPECT_COLOR_BIT);
 
     switch (pl_tex_params_dimension(*params)) {
     case 1: tex_vk->type = VK_IMAGE_TYPE_1D; break;
@@ -286,7 +292,12 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         tex->params.storable = true;
     }
 
+    // Blit emulation on planar textures requires storage
+    if ((params->blit_src || params->blit_dst) && tex_vk->num_planes)
+        tex->params.storable = true;
+
     VkImageUsageFlags usage = 0;
+    VkImageCreateFlags flags = 0;
     if (tex->params.sampleable)
         usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
     if (tex->params.renderable)
@@ -303,6 +314,11 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         // API is perfectly happy with a (useless) image. So just put
         // VK_IMAGE_USAGE_TRANSFER_DST_BIT since this harmless.
         usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    }
+
+    if (tex_vk->num_planes) {
+        flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT |
+                 VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
     }
 
     // FIXME: Since we can't keep track of queue family ownership properly,
@@ -361,6 +377,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = usage,
+        .flags = flags,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .sharingMode = vk->pools.num > 1 ? VK_SHARING_MODE_CONCURRENT
                                          : VK_SHARING_MODE_EXCLUSIVE,
@@ -500,6 +517,46 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         VK(vk->BindImageMemory(vk->dev, tex_vk->img, mem->vkmem, mem->offset));
     }
 
+    static const char * const plane_names[4] = {
+        "plane 0", "plane 1", "plane 2", "plane 3",
+    };
+
+    if (tex_vk->num_planes) {
+        for (int i = 0; i < tex_vk->num_planes; i++) {
+            struct pl_tex_t *plane;
+
+            pl_assert(!tex->params.d);
+            plane = (struct pl_tex_t *) pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
+                .image      = tex_vk->img,
+                .aspect     = VK_IMAGE_ASPECT_PLANE_0_BIT << i,
+                .width      = PL_RSHIFT_UP(tex->params.w, fmt->planes[i].shift_x),
+                .height     = PL_RSHIFT_UP(tex->params.h, fmt->planes[i].shift_y),
+                .format     = fmtp->vk_fmt->pfmt[i].fmt,
+                .usage      = usage,
+                .user_data  = params->user_data,
+                .debug_tag  = PL_DEF(params->debug_tag, plane_names[i]),
+            ));
+            if (!plane)
+                goto error;
+            plane->parent = tex;
+            tex->planes[i] = plane;
+            tex_vk->planes[i] = PL_PRIV(plane);
+            tex_vk->planes[i]->held = false;
+            tex_vk->planes[i]->layout = tex_vk->layout;
+
+        }
+
+        // Explicitly mask out all usage flags from planar parent images
+        pl_assert(!fmt->caps);
+        tex->params.sampleable      = false;
+        tex->params.renderable      = false;
+        tex->params.storable        = false;
+        tex->params.blit_src        = false;
+        tex->params.blit_dst        = false;
+        tex->params.host_writable   = false;
+        tex->params.host_readable   = false;
+    }
+
     if (!vk_init_image(gpu, tex, debug_tag))
         goto error;
 
@@ -568,6 +625,8 @@ void vk_tex_invalidate(pl_gpu gpu, pl_tex tex)
 {
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     tex_vk->may_invalidate = true;
+    for (int i = 0; i < tex_vk->num_planes; i++)
+        tex_vk->planes[i]->may_invalidate = true;
 }
 
 static bool tex_clear_fallback(pl_gpu gpu, pl_tex tex,
@@ -1096,21 +1155,25 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
         return NULL;
     }
 
+    VkImageUsageFlags usage = params->usage;
+    if (fmt->num_planes)
+        usage = 0; // mask capabilities from the base texture
+
     struct pl_tex_t *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_vk);
     tex->params = (struct pl_tex_params) {
-        .format = fmt,
-        .w = params->width,
-        .h = params->height,
-        .d = params->depth,
-        .sampleable = !!(params->usage & VK_IMAGE_USAGE_SAMPLED_BIT),
-        .renderable = !!(params->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
-        .storable   = !!(params->usage & VK_IMAGE_USAGE_STORAGE_BIT),
-        .blit_src   = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
-        .blit_dst   = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
-        .host_writable = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
-        .host_readable = !!(params->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
-        .user_data  = params->user_data,
-        .debug_tag  = params->debug_tag,
+        .format         = fmt,
+        .w              = params->width,
+        .h              = params->height,
+        .d              = params->depth,
+        .sampleable     = !!(usage & VK_IMAGE_USAGE_SAMPLED_BIT),
+        .renderable     = !!(usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
+        .storable       = !!(usage & VK_IMAGE_USAGE_STORAGE_BIT),
+        .blit_src       = !!(usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
+        .blit_dst       = !!(usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
+        .host_writable  = !!(usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT),
+        .host_readable  = !!(usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT),
+        .user_data      = params->user_data,
+        .debug_tag      = params->debug_tag,
     };
 
     // Mask out capabilities not permitted by the `pl_fmt`
@@ -1146,16 +1209,49 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
     case 3: tex_vk->type = VK_IMAGE_TYPE_3D; break;
     }
     tex_vk->external_img = true;
-    tex_vk->held = true;
+    tex_vk->held = !fmt->num_planes;
     tex_vk->img = params->image;
     tex_vk->img_fmt = params->format;
-    tex_vk->usage_flags = params->usage;
+    tex_vk->num_planes = fmt->num_planes;
+    tex_vk->usage_flags = usage;
     tex_vk->aspect = PL_DEF(params->aspect, VK_IMAGE_ASPECT_COLOR_BIT);
 
     // Blitting to planar images requires fallback via compute shaders
     if (tex_vk->aspect != VK_IMAGE_ASPECT_COLOR_BIT) {
         tex->params.blit_src &= tex->params.storable;
         tex->params.blit_dst &= tex->params.storable;
+    }
+
+    static const char * const wrapped_plane_names[4] = {
+        "wrapped plane 0", "wrapped plane 1", "wrapped plane 2", "wrapped plane 3",
+    };
+
+    for (int i = 0; i < tex_vk->num_planes; i++) {
+        struct pl_tex_t *plane;
+        VkImageAspectFlags aspect = VK_IMAGE_ASPECT_PLANE_0_BIT << i;
+        if (!(aspect & params->aspect)) {
+            PL_INFO(gpu, "Not wrapping plane %d due to aspect bit 0x%x not "
+                    "being contained in supplied params->aspect 0x%x!",
+                    i, (unsigned) aspect, (unsigned) params->aspect);
+            continue;
+        }
+
+        pl_assert(tex_vk->type == VK_IMAGE_TYPE_2D);
+        plane = (struct pl_tex_t *) pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
+            .image      = tex_vk->img,
+            .aspect     = aspect,
+            .width      = PL_RSHIFT_UP(tex->params.w, fmt->planes[i].shift_x),
+            .height     = PL_RSHIFT_UP(tex->params.h, fmt->planes[i].shift_y),
+            .format     = fmtp->vk_fmt->pfmt[i].fmt,
+            .usage      = params->usage,
+            .user_data  = params->user_data,
+            .debug_tag  = PL_DEF(params->debug_tag, wrapped_plane_names[i]),
+        ));
+        if (!plane)
+            goto error;
+        plane->parent = tex;
+        tex->planes[i] = plane;
+        tex_vk->planes[i] = PL_PRIV(plane);
     }
 
     if (!vk_init_image(gpu, tex, PL_DEF(params->debug_tag, "wrapped")))

@@ -553,7 +553,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     // Compute the correct minimum texture alignment
     p->min_texel_alignment = 1;
     for (int i = 0; i < gpu->num_formats; i++) {
-        if (gpu->formats[i]->emulated)
+        if (gpu->formats[i]->emulated || gpu->formats[i]->opaque)
             continue;
         size_t texel_size = gpu->formats[i]->texel_size;
         p->min_texel_alignment = pl_lcm(p->min_texel_alignment, texel_size);
