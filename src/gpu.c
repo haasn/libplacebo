@@ -2013,6 +2013,10 @@ bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
     needs_scaling |= pl_rect_h(dst_rc) != abs(pl_rect_h(src_rc));
     needs_scaling |= pl_rect_d(dst_rc) != abs(pl_rect_d(src_rc));
 
+    // Exception: fast path for 1-pixel blits, which don't require scaling
+    bool is_1pixel = abs(pl_rect_w(src_rc)) == 1 && abs(pl_rect_h(src_rc)) == 1;
+    needs_scaling &= !is_1pixel;
+
     // Manual trilinear interpolation would be too slow to justify
     bool needs_sampling = needs_scaling && params->sample_mode != PL_TEX_SAMPLE_NEAREST;
     if (needs_sampling && !params->src->params.sampleable)
@@ -2086,10 +2090,15 @@ bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
             }
         });
 
-        GLSL("vec3 fpos = (vec3(pos) + vec3(0.5)) / vec3(%d.0, %d.0, %d.0); \n"
-             "%s src_pos = %s(0.5);                                         \n"
-             "src_pos.x = mix(%f, %f, fpos.x);                              \n",
-             pl_rect_w(dst_rc), pl_rect_h(dst_rc), pl_rect_d(dst_rc),
+        if (is_1pixel) {
+            GLSL("%s fpos = %s(0.5); \n", vecs[src_dims], vecs[src_dims]);
+        } else {
+            GLSL("vec3 fpos = (vec3(pos) + vec3(0.5)) / vec3(%d.0, %d.0, %d.0); \n",
+                 pl_rect_w(dst_rc), pl_rect_h(dst_rc), pl_rect_d(dst_rc));
+        }
+
+        GLSL("%s src_pos = %s(0.5);             \n"
+             "src_pos.x = mix(%f, %f, fpos.x);  \n",
              vecs[src_dims], vecs[src_dims],
              (float) src_rc.x0 / params->src->params.w,
              (float) src_rc.x1 / params->src->params.w);
@@ -2120,7 +2129,9 @@ bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
             },
         });
 
-        if (needs_scaling) {
+        if (is_1pixel) {
+            GLSL("ivec3 src_pos = ivec3(0); \n");
+        } else if (needs_scaling) {
             GLSL("ivec3 src_pos = ivec3(vec3(%f, %f, %f) * vec3(pos)); \n",
                  fabs((float) pl_rect_w(src_rc) / pl_rect_w(dst_rc)),
                  fabs((float) pl_rect_h(src_rc) / pl_rect_h(dst_rc)),
