@@ -235,12 +235,13 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     VkExternalMemoryHandleTypeFlagBitsKHR vk_handle_type = vk_mem_handle_type(handle_type);
 
     struct pl_tex_t *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_vk);
+    pl_fmt fmt = params->format;
     tex->params = *params;
     tex->params.initial_data = NULL;
     tex->sampler_type = PL_SAMPLER_NORMAL;
 
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
-    struct pl_fmt_vk *fmtp = PL_PRIV(params->format);
+    struct pl_fmt_vk *fmtp = PL_PRIV(fmt);
     tex_vk->img_fmt = fmtp->vk_fmt->tfmt;
     tex_vk->aspect = VK_IMAGE_ASPECT_COLOR_BIT;
 
@@ -250,9 +251,9 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     case 3: tex_vk->type = VK_IMAGE_TYPE_3D; break;
     }
 
-    if (params->format->emulated) {
-        tex_vk->texel_fmt = pl_find_fmt(gpu, params->format->type, 1, 0,
-                                        params->format->host_bits[0],
+    if (fmt->emulated) {
+        tex_vk->texel_fmt = pl_find_fmt(gpu, fmt->type, 1, 0,
+                                        fmt->host_bits[0],
                                         PL_FMT_CAP_TEXEL_UNIFORM);
         if (!tex_vk->texel_fmt) {
             PL_ERR(gpu, "Failed picking texel format for emulated texture!");
@@ -264,7 +265,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         // based on the size of pl_tex_transfer_params.row_pitch, but for now
         // this should be enough.
         uint64_t texels = params->w * PL_DEF(params->h, 1) * PL_DEF(params->d, 1) *
-                          params->format->num_components;
+                          fmt->num_components;
 
         if (texels > gpu->limits.max_buffer_texels) {
             PL_ERR(gpu, "Failed creating texture with emulated texture format: "
@@ -281,7 +282,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 
     if (fmtp->blit_emulated) {
         // Enable what's required for sampling
-        tex->params.sampleable = params->format->caps & PL_FMT_CAP_SAMPLEABLE;
+        tex->params.sampleable = fmt->caps & PL_FMT_CAP_SAMPLEABLE;
         tex->params.storable = true;
     }
 
@@ -336,8 +337,8 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 
     VkImageDrmFormatModifierListCreateInfoEXT drm_list = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT,
-        .drmFormatModifierCount = params->format->num_modifiers,
-        .pDrmFormatModifiers = params->format->modifiers,
+        .drmFormatModifierCount = fmt->num_modifiers,
+        .pDrmFormatModifiers = fmt->modifiers,
     };
 
     VkExternalMemoryImageCreateInfoKHR ext_info = {
