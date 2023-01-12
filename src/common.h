@@ -101,6 +101,9 @@
 // Rounds a number up to the nearest power of two
 #define PL_ALIGN_POT(x) (0x1LLU << (PL_LOG2((x) - 1) + 1))
 
+// Right shift a number while rounding up
+#define PL_RSHIFT_UP(x, s) -((-(x)) >> (s))
+
 // Returns whether or not a number is a power of two (or zero)
 #define PL_ISPOT(x) (((x) & ((x) - 1)) == 0)
 
