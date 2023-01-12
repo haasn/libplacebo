@@ -339,7 +339,7 @@ struct pl_fmt_t {
     // unspecified.
     const char *glsl_format;
 
-    // If non-opaque, this gives the fourcc associated with the host
+    // If available, this gives the fourcc associated with the host
     // representation. In particular, this is intended for use with
     // PL_HANDLE_DMA_BUF, where this field will match the DRM format from
     // <drm_fourcc.h>. May be 0, for formats without matching DRM fourcc.

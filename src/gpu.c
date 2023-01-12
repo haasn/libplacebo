@@ -479,9 +479,6 @@ static const struct pl_fmt_fourcc pl_fmt_fourccs[] = {
 
 uint32_t pl_fmt_fourcc(pl_fmt fmt)
 {
-    if (fmt->opaque)
-        return 0;
-
     for (int n = 0; n < PL_ARRAY_SIZE(pl_fmt_fourccs); n++) {
         const struct pl_fmt_fourcc *fourcc = &pl_fmt_fourccs[n];
         if (strcmp(fmt->name, fourcc->name) == 0)
