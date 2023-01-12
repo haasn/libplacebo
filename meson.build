@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '239': 'add `pl_fmt.planes` and `pl_tex.planes`',
       '238': 'add `pl_vulkan_wrap_params.aspect`',
       '237': 'add `pl_vulkan_hold_ex` and `pl_vulkan_release_ex`',
       '236': 'add `pl_vulkan_sem_create` and `pl_vulkan_sem_destroy`',

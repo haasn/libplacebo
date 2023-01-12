@@ -216,6 +216,8 @@ pl_gpu pl_gpu_finalize(struct pl_gpu_t *gpu)
             pl_assert(fmt->component_depth[i]);
             pl_assert(fmt->opaque ? !fmt->host_bits[i] : fmt->host_bits[i]);
         }
+        for (int i = 0; i < fmt->num_planes; i++)
+            pl_assert(fmt->planes[i].format);
 
         enum pl_fmt_caps texel_caps = PL_FMT_CAP_VERTEX |
                                       PL_FMT_CAP_TEXEL_UNIFORM |
@@ -630,16 +632,22 @@ pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         break;
     }
 
-    pl_fmt fmt = params->format;
-    require(fmt);
-    require(!params->host_readable || fmt->caps & PL_FMT_CAP_HOST_READABLE);
-    require(!params->host_readable || !fmt->opaque);
-    require(!params->host_writable || !fmt->opaque);
-    require(!params->sampleable || fmt->caps & PL_FMT_CAP_SAMPLEABLE);
-    require(!params->renderable || fmt->caps & PL_FMT_CAP_RENDERABLE);
-    require(!params->storable   || fmt->caps & PL_FMT_CAP_STORABLE);
-    require(!params->blit_src   || fmt->caps & PL_FMT_CAP_BLITTABLE);
-    require(!params->blit_dst   || fmt->caps & PL_FMT_CAP_BLITTABLE);
+    require(params->format);
+    enum pl_fmt_caps fmt_caps = params->format->caps;
+    bool fmt_opaque = params->format->opaque;
+    for (int i = 0; i < params->format->num_planes; i++) {
+        pl_fmt pfmt = params->format->planes[i].format;
+        fmt_caps |= pfmt->caps;
+        fmt_opaque &= pfmt->opaque;
+    }
+
+    require(!params->host_readable || fmt_caps & PL_FMT_CAP_HOST_READABLE);
+    require(!params->host_writable || !fmt_opaque);
+    require(!params->sampleable || fmt_caps & PL_FMT_CAP_SAMPLEABLE);
+    require(!params->renderable || fmt_caps & PL_FMT_CAP_RENDERABLE);
+    require(!params->storable   || fmt_caps & PL_FMT_CAP_STORABLE);
+    require(!params->blit_src   || fmt_caps & PL_FMT_CAP_BLITTABLE);
+    require(!params->blit_dst   || fmt_caps & PL_FMT_CAP_BLITTABLE);
 
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     return impl->tex_create(gpu, params);

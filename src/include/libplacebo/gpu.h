@@ -289,6 +289,16 @@ enum pl_fmt_caps {
     // - PL_FMT_CAP_HOST_READABLE implies that the format is non-opaque
 };
 
+struct pl_fmt_plane {
+    // Underlying format of this particular sub-plane. This describes the
+    // components, texel size and host representation for the purpose of
+    // e.g. transfers, blits, and sampling.
+    pl_fmt format;
+
+    // X/Y subsampling shift factor for this plane.
+    uint8_t shift_x, shift_y;
+};
+
 // Structure describing a texel/vertex format.
 struct pl_fmt_t {
     const char *name;       // symbolic name for this format (e.g. rgba32f)
@@ -299,6 +309,14 @@ struct pl_fmt_t {
     int num_components;     // number of components for this format
     int component_depth[4]; // meaningful bits per component, texture precision
     size_t internal_size;   // internal texel size (for blit compatibility)
+
+    // For planar formats, this provides a description of each sub-plane.
+    //
+    // Note on planar formats: Planar formats are always opaque and typically
+    // support only a limit subset of capabilities (or none at all). Access
+    // should be done via sub-planes. (See `pl_tex.planes`)
+    struct pl_fmt_plane planes[4];
+    int num_planes;         // or 0 for non-planar textures
 
     // This controls the relationship between the data as seen by the host and
     // the way it's interpreted by the texture. The host representation is
@@ -655,6 +673,10 @@ struct pl_tex_params {
     // The following bools describe what operations can be performed. The
     // corresponding pl_fmt capability must be set for every enabled
     // operation type.
+    //
+    // Note: For planar formats, it is also possible to set capabilities only
+    // supported by sub-planes. In this case, the corresponding functionality
+    // will be available for the sub-plane, but not the planar texture itself.
     bool sampleable;    // usable as a PL_DESC_SAMPLED_TEX
     bool renderable;    // usable as a render target (pl_pass_run)
                         // (must only be used with 2D textures)
@@ -727,8 +749,17 @@ enum pl_sampler_type {
 // and/or rendered to.
 //
 // Thread-safety: Unsafe
-typedef const struct pl_tex_t {
+typedef const struct pl_tex_t *pl_tex;
+struct pl_tex_t {
     struct pl_tex_params params;
+
+    // If `params.format` is a planar format, this contains `pl_tex` handles
+    // encapsulating individual texture planes. Conversely, if this is a
+    // sub-plane of a planar texture, `parent` points to the planar texture.
+    //
+    // Note: Calling `pl_tex_destroy` on sub-planes is undefined behavior.
+    pl_tex planes[4];
+    pl_tex parent;
 
     // If `params.export_handle` is set, this structure references the shared
     // memory backing this buffer, via the requested handle type.
@@ -744,7 +775,7 @@ typedef const struct pl_tex_t {
     // If `params.sampleable` is true, this indicates the correct sampler type
     // to use when sampling from this texture.
     enum pl_sampler_type sampler_type;
-} *pl_tex;
+};
 
 // Create a texture (with undefined contents). Returns NULL on failure. This is
 // assumed to be an expensive/rare operation, and may need to perform memory
