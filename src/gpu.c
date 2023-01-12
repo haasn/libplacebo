@@ -153,7 +153,7 @@ static void print_formats(pl_gpu gpu)
     FMT_BOOL('G', fmt->gatherable)
 
     PL_DEBUG(gpu,  "GPU texture formats:");
-    PL_DEBUG(gpu,  "    %-10s %-6s %-4s %-4s " CAP_HEADER " %-3s %-13s %-13s %-10s %-10s %-6s",
+    PL_DEBUG(gpu,  "    %-20s %-6s %-4s %-4s " CAP_HEADER " %-3s %-13s %-13s %-10s %-10s %-6s",
             "NAME", "TYPE", "SIZE", "COMP", "CAPS", "EMU", "DEPTH", "HOST_BITS",
             "GLSL_TYPE", "GLSL_FMT", "FOURCC");
     for (int n = 0; n < gpu->num_formats; n++) {
@@ -176,7 +176,7 @@ static void print_formats(pl_gpu gpu)
         }
 
 
-        PL_DEBUG(gpu, "    %-10s %-6s %-4zu %c%c%c%c " CAP_FIELDS " %-3s "
+        PL_DEBUG(gpu, "    %-20s %-6s %-4zu %c%c%c%c " CAP_FIELDS " %-3s "
                  "{%-2d %-2d %-2d %-2d} {%-2d %-2d %-2d %-2d} %-10s %-10s %-6s",
                  fmt->name, types[fmt->type], fmt->texel_size,
                  FMT_IDX4(indices), CAP_VALUES, fmt->emulated ? "y" : "n",
