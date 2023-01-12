@@ -125,8 +125,9 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, pl_debug_tag debug_tag)
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     pl_assert(tex_vk->img);
     PL_VK_NAME(IMAGE, tex_vk->img, debug_tag);
-
     pl_rc_init(&tex_vk->rc);
+    if (tex_vk->num_planes)
+        return true;
     if (!vk_sem_init(vk, &tex_vk->sem, debug_tag))
         return false;
     tex_vk->layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -525,7 +526,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         for (int i = 0; i < tex_vk->num_planes; i++) {
             struct pl_tex_t *plane;
 
-            pl_assert(!tex->params.d);
+            pl_assert(tex_vk->type == VK_IMAGE_TYPE_2D);
             plane = (struct pl_tex_t *) pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
                 .image      = tex_vk->img,
                 .aspect     = VK_IMAGE_ASPECT_PLANE_0_BIT << i,
@@ -543,7 +544,6 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
             tex_vk->planes[i] = PL_PRIV(plane);
             tex_vk->planes[i]->held = false;
             tex_vk->planes[i]->layout = tex_vk->layout;
-
         }
 
         // Explicitly mask out all usage flags from planar parent images
@@ -1097,20 +1097,35 @@ bool vk_tex_poll(pl_gpu gpu, pl_tex tex, uint64_t timeout)
     // Opportunistically check if we can re-use this texture without flush
     vk_poll_commands(vk, 0);
     if (pl_rc_count(&tex_vk->rc) == 1)
-        return false;
+        goto skip_blocking;
 
     // Otherwise, we're force to submit any queued command so that the user is
     // guaranteed to see progress eventually, even if they call this in a loop
     CMD_SUBMIT(NULL);
     vk_poll_commands(vk, timeout);
+    if (pl_rc_count(&tex_vk->rc) > 1)
+        return true;
 
-    return pl_rc_count(&tex_vk->rc) > 1;
+    // fall through
+skip_blocking:
+    for (int i = 0; i < tex_vk->num_planes; i++) {
+        if (vk_tex_poll(gpu, tex->planes[i], timeout))
+            return true;
+    }
+
+    return false;
 }
 
 bool vk_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync)
 {
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
     struct pl_sync_vk *sync_vk = PL_PRIV(sync);
+
+    if (tex_vk->num_planes) {
+        PL_ERR(gpu, "`pl_tex_export` cannot be called on planar textures."
+               "Please see `pl_vulkan_hold_ex` for a replacement.");
+        return false;
+    }
 
     struct vk_cmd *cmd = CMD_BEGIN(ANY);
     if (!cmd)
@@ -1282,7 +1297,11 @@ bool pl_vulkan_hold_ex(pl_gpu gpu, const struct pl_vulkan_hold_params *params)
     struct pl_tex_vk *tex_vk = PL_PRIV(params->tex);
     pl_assert(params->semaphore.sem);
 
-    if (tex_vk->held) {
+    bool held = tex_vk->held;
+    for (int i = 0; i < tex_vk->num_planes; i++)
+        held |= tex_vk->planes[i]->held;
+
+    if (held) {
         PL_ERR(gpu, "Attempting to hold an already held image!");
         return false;
     }
@@ -1293,26 +1312,65 @@ bool pl_vulkan_hold_ex(pl_gpu gpu, const struct pl_vulkan_hold_params *params)
         return false;
     }
 
-    VkImageLayout layout = params->out_layout ? tex_vk->layout : params->layout;
-    bool may_invalidate = tex_vk->may_invalidate;
+    VkImageLayout layout = params->layout;
+    if (params->out_layout) {
+        // For planar images, arbitrarily pick the current image layout of the
+        // first plane. This should be fine in practice, since all planes will
+        // share the same usage capabilities.
+        if (tex_vk->num_planes) {
+            layout = tex_vk->planes[0]->layout;
+        } else {
+            layout = tex_vk->layout;
+        }
+    }
 
-    vk_tex_barrier(gpu, cmd, params->tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                   0, layout, params->qf);
+    bool may_invalidate = true;
+    if (!tex_vk->num_planes) {
+        may_invalidate &= tex_vk->may_invalidate;
+        vk_tex_barrier(gpu, cmd, params->tex,
+                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                       0, layout, params->qf);
+    }
+
+    for (int i = 0; i < tex_vk->num_planes; i++) {
+        may_invalidate &= tex_vk->planes[i]->may_invalidate;
+        vk_tex_barrier(gpu, cmd, params->tex->planes[i],
+                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                       0, layout, params->qf);
+    }
 
     vk_cmd_sig(cmd, params->semaphore);
+    bool ok = CMD_SUBMIT(&cmd);
 
-    tex_vk->sem.write.queue = tex_vk->sem.read.queue = NULL;
-    tex_vk->held = CMD_SUBMIT(&cmd);
-    if (!tex_vk->held)
-        return false;
-    if (params->out_layout)
+    if (!tex_vk->num_planes) {
+        tex_vk->sem.write.queue = tex_vk->sem.read.queue = NULL;
+        tex_vk->held = ok;
+    }
+
+    for (int i = 0; i < tex_vk->num_planes; i++) {
+        struct pl_tex_vk *plane_vk = tex_vk->planes[i];
+        plane_vk->sem.write.queue = plane_vk->sem.read.queue = NULL;
+        plane_vk->held = ok;
+    }
+
+    if (ok && params->out_layout)
         *params->out_layout = may_invalidate ? VK_IMAGE_LAYOUT_UNDEFINED : layout;
-    return true;
+
+    return ok;
 }
 
 void pl_vulkan_release_ex(pl_gpu gpu, const struct pl_vulkan_release_params *params)
 {
     struct pl_tex_vk *tex_vk = PL_PRIV(params->tex);
+    if (tex_vk->num_planes) {
+        struct pl_vulkan_release_params plane_pars = *params;
+        for (int i = 0; i < tex_vk->num_planes; i++) {
+            plane_pars.tex = params->tex->planes[i];
+            pl_vulkan_release_ex(gpu, &plane_pars);
+        }
+        return;
+    }
+
     if (!tex_vk->held) {
         PL_ERR(gpu, "Attempting to release an unheld image?");
         return;

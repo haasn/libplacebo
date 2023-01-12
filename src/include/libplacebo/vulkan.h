@@ -563,6 +563,12 @@ struct pl_vulkan_release_params {
     // `pl_gpu_finish()` or similar (e.g. `pl_vulkan_destroy` or
     // `vkDeviceWaitIdle`) after another operation involving `tex` has been
     // emitted (or the texture has been destroyed).
+    //
+    //
+    // Warning: If `tex` is a planar image (`pl_fmt.num_planes > 0`), and
+    // `semaphore` is specified, it *must* be a timeline semaphore! Failure to
+    // respect this will result in undefined behavior. This warning does not
+    // apply to individual planes (as exposed by `pl_tex.planes`).
     pl_vulkan_sem semaphore;
 };
 
