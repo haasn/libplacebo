@@ -538,6 +538,33 @@ bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *layout,
 void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
                        pl_vulkan_sem sem_in);
 
+struct pl_vulkan_sem_params {
+    // The type of semaphore to create.
+    VkSemaphoreType type;
+
+    // For VK_SEMAPHORE_TYPE_TIMELINE, sets the initial timeline value.
+    uint64_t initial_value;
+
+    // If set, exports this VkSemaphore to the handle given in `out_handle`.
+    // The user takes over ownership, and should manually close it before
+    // destroying this VkSemaphore (via `pl_vulkan_sem_destroy`).
+    enum pl_handle_type export_handle;
+    union pl_handle *out_handle;
+
+    // Optional debug tag to identify this semaphore.
+    pl_debug_tag debug_tag;
+};
+
+#define pl_vulkan_sem_params(...) (&(struct pl_vulkan_sem_params) {     \
+        .debug_tag = PL_DEBUG_TAG,                                      \
+        __VA_ARGS__                                                     \
+    })
+
+// Helper functions to create and destroy vulkan semaphores. Returns
+// VK_NULL_HANDLE on failure.
+VkSemaphore pl_vulkan_sem_create(pl_gpu gpu, const struct pl_vulkan_sem_params *params);
+void pl_vulkan_sem_destroy(pl_gpu gpu, VkSemaphore *semaphore);
+
 PL_API_END
 
 #endif // LIBPLACEBO_VULKAN_H_

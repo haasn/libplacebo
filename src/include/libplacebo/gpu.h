@@ -168,7 +168,7 @@ enum pl_handle_type {
 struct pl_gpu_handle_caps {
     pl_handle_caps tex;  // supported handles for `pl_tex` + `pl_shared_mem`
     pl_handle_caps buf;  // supported handles for `pl_buf` + `pl_shared_mem`
-    pl_handle_caps sync; // supported handles for `pl_sync`
+    pl_handle_caps sync; // supported handles for `pl_sync` / semaphores
 };
 
 // Wrapper for the handle used to communicate a shared resource externally.

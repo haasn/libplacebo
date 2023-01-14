@@ -102,3 +102,13 @@ void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
 {
     pl_unreachable();
 }
+
+VkSemaphore pl_vulkan_sem_create(pl_gpu gpu, const struct pl_vulkan_sem_params *params)
+{
+    pl_unreachable();
+}
+
+void pl_vulkan_sem_destroy(pl_gpu gpu, VkSemaphore *semaphore)
+{
+    pl_unreachable();
+}

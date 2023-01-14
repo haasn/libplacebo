@@ -719,6 +719,113 @@ error:
     return NULL;
 }
 
+void pl_vulkan_sem_destroy(pl_gpu gpu, VkSemaphore *semaphore)
+{
+    VkSemaphore sem = *semaphore;
+    if (!sem)
+        return;
+
+    struct pl_vk *p = PL_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+    vk->DestroySemaphore(vk->dev, sem, PL_VK_ALLOC);
+    *semaphore = VK_NULL_HANDLE;
+}
+
+VkSemaphore pl_vulkan_sem_create(pl_gpu gpu, const struct pl_vulkan_sem_params *params)
+{
+    struct pl_vk *p = PL_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+
+    pl_assert(PL_ISPOT(params->export_handle));
+    if ((params->export_handle & gpu->export_caps.sync) != params->export_handle) {
+        PL_ERR(gpu, "Invalid handle type 0x%"PRIx64" specified for "
+               "`pl_vulkan_sem_create`!", (uint64_t) params->export_handle);
+        return VK_NULL_HANDLE;
+    }
+
+    switch (params->export_handle) {
+    case PL_HANDLE_FD:
+        params->out_handle->fd = -1;
+        break;
+    case PL_HANDLE_WIN32:
+    case PL_HANDLE_WIN32_KMT:
+        params->out_handle->handle = NULL;
+        break;
+    case PL_HANDLE_DMA_BUF:
+    case PL_HANDLE_HOST_PTR:
+    case PL_HANDLE_MTL_TEX:
+    case PL_HANDLE_IOSURFACE:
+        pl_unreachable();
+    }
+
+    const VkExportSemaphoreCreateInfoKHR einfo = {
+        .sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO_KHR,
+        .handleTypes = vk_sync_handle_type(params->export_handle),
+    };
+
+    const VkSemaphoreTypeCreateInfo stinfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .pNext = params->export_handle ? &einfo : NULL,
+        .semaphoreType = params->type,
+        .initialValue = params->initial_value,
+    };
+
+    const VkSemaphoreCreateInfo sinfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = &stinfo,
+    };
+
+    VkSemaphore sem = VK_NULL_HANDLE;
+    VK(vk->CreateSemaphore(vk->dev, &sinfo, PL_VK_ALLOC, &sem));
+    PL_VK_NAME(SEMAPHORE, sem, PL_DEF(params->debug_tag, "pl_vulkan_sem"));
+
+#ifdef PL_HAVE_UNIX
+    if (params->export_handle == PL_HANDLE_FD) {
+        VkSemaphoreGetFdInfoKHR finfo = {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR,
+            .handleType = einfo.handleTypes,
+            .semaphore = sem,
+        };
+
+        VK(vk->GetSemaphoreFdKHR(vk->dev, &finfo, &params->out_handle->fd));
+    }
+#endif
+
+#ifdef PL_HAVE_WIN32
+    if (params->export_handle == PL_HANDLE_WIN32 ||
+        params->export_handle == PL_HANDLE_WIN32_KMT)
+    {
+        VkSemaphoreGetWin32HandleInfoKHR handle_info = {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_WIN32_HANDLE_INFO_KHR,
+            .handleType = einfo.handleTypes,
+            .semaphore = sem,
+        };
+
+        VK(vk->GetSemaphoreWin32HandleKHR(vk->dev, &handle_info,
+                                          &params->out_handle->handle));
+    }
+#endif
+
+    return sem;
+
+error:
+#ifdef PL_HAVE_UNIX
+    if (params->export_handle == PL_HANDLE_FD) {
+        if (params->out_handle->fd > -1)
+            close(params->out_handle->fd);
+    }
+#endif
+#ifdef PL_HAVE_WIN32
+    if (params->export_handle == PL_HANDLE_WIN32) {
+        if (params->out_handle->handle != NULL)
+            CloseHandle(params->out_handle->handle);
+    }
+    // PL_HANDLE_WIN32_KMT is just an identifier. It doesn't get closed.
+#endif
+    vk->DestroySemaphore(vk->dev, sem, PL_VK_ALLOC);
+    return VK_NULL_HANDLE;
+}
+
 static void vk_gpu_flush(pl_gpu gpu)
 {
     struct pl_vk *p = PL_PRIV(gpu);
