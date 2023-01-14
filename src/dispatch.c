@@ -374,8 +374,11 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
         ADD(pre, "#extension GL_ARB_shader_storage_buffer_object : enable\n");
     if (has_texel)
         ADD(pre, "#extension GL_ARB_texture_buffer_object : enable\n");
-    if (has_ext)
+    if (has_ext) {
+        if (gpu->glsl.version >= 300)
+            ADD(pre, "#extension GL_OES_EGL_image_external_essl3 : enable\n");
         ADD(pre, "#extension GL_OES_EGL_image_external : enable\n");
+    }
     if (has_nofmt)
         ADD(pre, "#extension GL_EXT_shader_image_load_formatted : enable\n");
     if (has_gather)
