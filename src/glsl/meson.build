@@ -19,9 +19,9 @@ else
   glslang_deps = [
     cxx.find_library('glslang',             required: glslang_req),
     cxx.find_library('MachineIndependent',  required: false),
-    cxx.find_library('OSDependent',         required: glslang_req),
+    cxx.find_library('OSDependent',         required: false),
     cxx.find_library('HLSL',                required: glslang_req),
-    cxx.find_library('OGLCompiler',         required: glslang_req),
+    cxx.find_library('OGLCompiler',         required: false),
     cxx.find_library('GenericCodeGen',      required: false),
     cxx.find_library('SPVRemapper',         required: glslang_req),
     cxx.find_library('SPIRV',               required: glslang_req),
