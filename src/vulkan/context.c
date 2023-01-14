@@ -962,7 +962,7 @@ VkPhysicalDevice pl_vulkan_choose_device(pl_log log,
         }
 
         if (!params->allow_software && t == VK_PHYSICAL_DEVICE_TYPE_CPU) {
-            PL_DEBUG(vk, "      -> excluding due to params->allow_software");
+            PL_DEBUG(vk, "      -> excluding due to !params->allow_software");
             continue;
         }
 
