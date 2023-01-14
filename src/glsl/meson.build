@@ -27,7 +27,8 @@ else
     cxx.find_library('SPIRV',               required: glslang_req),
     cxx.find_library('SPIRV-Tools-opt',     required: false),
     cxx.find_library('SPIRV-Tools',         required: false),
-    cxx.find_library('pthread',             required: false)
+    cxx.find_library('pthread',             required: false),
+    cxx.find_library('glslang-default-resource-limits', required: false),
   ]
 
   if glslang_deps[0].found() and cc.has_header('glslang/build_info.h')

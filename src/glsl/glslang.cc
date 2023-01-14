@@ -24,11 +24,16 @@ extern "C" {
 #include "pl_alloc.h"
 }
 
-#include <glslang/Include/ResourceLimits.h>
 #include <glslang/Public/ShaderLang.h>
 #include <glslang/SPIRV/GlslangToSpv.h>
+#include <glslang/build_info.h>
 
 #include "glslang.h"
+
+#if (GLSLANG_VERSION_MAJOR * 1000 + GLSLANG_VERSION_MINOR) >= 11013
+#include <glslang/Public/ResourceLimits.h>
+#define DefaultTBuiltInResource *GetDefaultResources()
+#endif
 
 using namespace glslang;
 
@@ -54,8 +59,6 @@ void pl_glslang_uninit(void)
         FinalizeProcess();
     pthread_mutex_unlock(&pl_glslang_mutex);
 }
-
-extern const TBuiltInResource DefaultTBuiltInResource;
 
 struct pl_glslang_res *pl_glslang_compile(const struct pl_glsl_version *glsl,
                                           enum glsl_shader_stage stage,
