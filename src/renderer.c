@@ -1759,8 +1759,8 @@ static bool pass_read_image(struct pass_state *pass)
         .rect   = {
             off_x,
             off_y,
-            off_x + pl_rect_w(ref->img.rect) / stretch_x,
-            off_y + pl_rect_h(ref->img.rect) / stretch_y,
+            off_x + pl_rect_w(ref->img.rect),
+            off_y + pl_rect_h(ref->img.rect),
         },
     };
 
