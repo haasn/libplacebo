@@ -85,20 +85,12 @@ VkImage pl_vulkan_unwrap(pl_gpu gpu, pl_tex tex,
     pl_unreachable();
 }
 
-bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
-                    pl_vulkan_sem sem_out)
+bool pl_vulkan_hold_ex(pl_gpu gpu, const struct pl_vulkan_hold_params *params)
 {
     pl_unreachable();
 }
 
-bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *layout,
-                        pl_vulkan_sem sem_out)
-{
-    pl_unreachable();
-}
-
-void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
-                       pl_vulkan_sem sem_in)
+void pl_vulkan_release_ex(pl_gpu gpu, const struct pl_vulkan_release_params *params)
 {
     pl_unreachable();
 }

@@ -502,41 +502,70 @@ typedef struct pl_vulkan_sem {
     uint64_t value;
 } pl_vulkan_sem;
 
-// "Hold" a shared image. This will transition the image into the layout
-// specified by the user, and fire the given semaphore (required) when this is
-// done. This marks the image as held. Attempting to perform any pl_tex_*
-// operation (except pl_tex_destroy) on a held image is undefined behavior.
-//
-// Returns whether successful.
-bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
-                    pl_vulkan_sem sem_out);
+struct pl_vulkan_hold_params {
+    // The Vulkan image to hold. It will be marked as held. Attempting to
+    // perform any pl_tex_* operation (except pl_tex_destroy) on a held image
+    // is undefined behavior.
+    pl_tex tex;
 
-// This function is similar to `pl_vulkan_hold`, except that rather than
-// forcibly transitioning to a given layout, the user is instead informed about
-// the current layout and is in charge of transitioning it to their own layout
-// before using it. May be more convenient for some users.
-//
-// Returns whether successful.
-bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *layout,
-                        pl_vulkan_sem sem_out);
+    // The layout to transition the image to when holding. Alternatively, a
+    // pointer to receive the current image layout. If `out_layout` is
+    // provided, `layout` is ignored.
+    VkImageLayout layout;
+    VkImageLayout *out_layout;
 
-// "Release" a shared image, meaning it is no longer held. `layout` describes
-// the current layout of the image at the point in time when the user is
-// releasing it. Performing any operation on the VkImage underlying this
-// `pl_tex` while it is not being held by the user is undefined behavior.
-//
-// If `sem_in` is specified, it must fire before libplacebo will actually use
-// or modify the image. (Optional)
-//
-// Note: the lifetime of `sem_in` is indeterminate, and destroying it while the
-// texture is still depending on that semaphore is undefined behavior.
-//
-// Technically, the only way to be sure that it's safe to free is to use
-// `pl_gpu_finish()` or similar (e.g. `pl_vulkan_destroy` or
-// `vkDeviceWaitIdle`) after another operation involving `tex` has been emitted
-// (or the texture has been destroyed).
-void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
-                       pl_vulkan_sem sem_in);
+    // The queue family index to transition the image to. This can be used with
+    // VK_QUEUE_FAMILY_EXTERNAL to transition the image to an external API. As
+    // a special case, if set to VK_QUEUE_FAMILY_IGNORED, libplacebo will not
+    // transition the image, even if this image was not set up for concurrent
+    // usage. Ignored for concurrent images.
+    uint32_t qf;
+
+    // The semaphore to fire when the image is available for use. (Required)
+    pl_vulkan_sem semaphore;
+};
+
+#define pl_vulkan_hold_params(...) (&(struct pl_vulkan_hold_params) { __VA_ARGS__ })
+
+// "Hold" a shared image, transferring control over the image to the user.
+// Returns whether successful.
+bool pl_vulkan_hold_ex(pl_gpu gpu, const struct pl_vulkan_hold_params *params);
+
+struct pl_vulkan_release_params {
+    // The image to be released. It must be marked as "held". Performing any
+    // operation on the VkImage underlying this `pl_tex` while it is not being
+    // held by the user is undefined behavior.
+    pl_tex tex;
+
+    // The current layout of the image at the point in time when `semaphore`
+    // fires, or if no semaphore is specified, at the time of call.
+    VkImageLayout layout;
+
+    // The queue family index to transition the image to. This can be used with
+    // VK_QUEUE_FAMILY_EXTERNAL to transition the image rom an external API. As
+    // a special case, if set to VK_QUEUE_FAMILY_IGNORED, libplacebo will not
+    // transition the image, even if this image was not set up for concurrent
+    // usage. Ignored for concurrent images.
+    uint32_t qf;
+
+    // The semaphore to wait on before libplacebo will actually use or modify
+    // the image. (Optional)
+    //
+    // Note: the lifetime of `semaphore` is indeterminate, and destroying it
+    // while the texture is still depending on that semaphore is undefined
+    // behavior.
+    //
+    // Technically, the only way to be sure that it's safe to free is to use
+    // `pl_gpu_finish()` or similar (e.g. `pl_vulkan_destroy` or
+    // `vkDeviceWaitIdle`) after another operation involving `tex` has been
+    // emitted (or the texture has been destroyed).
+    pl_vulkan_sem semaphore;
+};
+
+#define pl_vulkan_release_params(...) (&(struct pl_vulkan_release_params) { __VA_ARGS__ })
+
+// "Release" a shared image, transferring control to libplacebo.
+void pl_vulkan_release_ex(pl_gpu gpu, const struct pl_vulkan_release_params *params);
 
 struct pl_vulkan_sem_params {
     // The type of semaphore to create.
@@ -564,6 +593,41 @@ struct pl_vulkan_sem_params {
 // VK_NULL_HANDLE on failure.
 VkSemaphore pl_vulkan_sem_create(pl_gpu gpu, const struct pl_vulkan_sem_params *params);
 void pl_vulkan_sem_destroy(pl_gpu gpu, VkSemaphore *semaphore);
+
+// Backwards-compatibility wrappers for older versions of the API.
+static inline bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
+                                  pl_vulkan_sem sem_out)
+{
+    return pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
+        .tex        = tex,
+        .layout     = layout,
+        .semaphore  = sem_out,
+        .qf         = VK_QUEUE_FAMILY_IGNORED,
+    ));
+}
+
+static inline bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex,
+                                      VkImageLayout *out_layout,
+                                      pl_vulkan_sem sem_out)
+{
+    return pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
+        .tex        = tex,
+        .out_layout = out_layout,
+        .semaphore  = sem_out,
+        .qf         = VK_QUEUE_FAMILY_IGNORED,
+    ));
+}
+
+static inline void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
+                                     pl_vulkan_sem sem_in)
+{
+    pl_vulkan_release_ex(gpu, pl_vulkan_release_params(
+        .tex        = tex,
+        .layout     = layout,
+        .semaphore  = sem_in,
+        .qf         = VK_QUEUE_FAMILY_IGNORED,
+    ));
+}
 
 PL_API_END
 

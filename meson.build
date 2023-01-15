@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '237': 'add `pl_vulkan_hold_ex` and `pl_vulkan_release_ex`',
       '236': 'add `pl_vulkan_sem_create` and `pl_vulkan_sem_destroy`',
       '235': 'add `pl_vulkan.get_proc_addr`',
       '234': 'add `pl_gpu_limits.host_cached`',

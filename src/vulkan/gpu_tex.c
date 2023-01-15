@@ -1120,11 +1120,10 @@ VkImage pl_vulkan_unwrap(pl_gpu gpu, pl_tex tex, VkFormat *out_format,
     return tex_vk->img;
 }
 
-bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
-                    pl_vulkan_sem sem_out)
+bool pl_vulkan_hold_ex(pl_gpu gpu, const struct pl_vulkan_hold_params *params)
 {
-    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
-    pl_assert(sem_out.sem);
+    struct pl_tex_vk *tex_vk = PL_PRIV(params->tex);
+    pl_assert(params->semaphore.sem);
 
     if (tex_vk->held) {
         PL_ERR(gpu, "Attempting to hold an already held image!");
@@ -1137,45 +1136,35 @@ bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
         return false;
     }
 
-    vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                   0, layout, VK_QUEUE_FAMILY_IGNORED);
+    VkImageLayout layout = params->out_layout ? tex_vk->layout : params->layout;
+    bool may_invalidate = tex_vk->may_invalidate;
 
-    vk_cmd_sig(cmd, sem_out);
+    vk_tex_barrier(gpu, cmd, params->tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                   0, layout, params->qf);
+
+    vk_cmd_sig(cmd, params->semaphore);
 
     tex_vk->sem.write.queue = tex_vk->sem.read.queue = NULL;
     tex_vk->held = CMD_SUBMIT(&cmd);
-    return tex_vk->held;
-}
-
-bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex, VkImageLayout *layout,
-                        pl_vulkan_sem sem_out)
-{
-    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
-    bool user_may_invalidate = tex_vk->may_invalidate;
-    if (!pl_vulkan_hold(gpu, tex, tex_vk->layout, sem_out))
+    if (!tex_vk->held)
         return false;
-
-    if (user_may_invalidate) {
-        *layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    } else {
-        *layout = tex_vk->layout;
-    }
-
+    if (params->out_layout)
+        *params->out_layout = may_invalidate ? VK_IMAGE_LAYOUT_UNDEFINED : layout;
     return true;
 }
 
-void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
-                       pl_vulkan_sem sem_in)
+void pl_vulkan_release_ex(pl_gpu gpu, const struct pl_vulkan_release_params *params)
 {
-    struct pl_tex_vk *tex_vk = PL_PRIV(tex);
+    struct pl_tex_vk *tex_vk = PL_PRIV(params->tex);
     if (!tex_vk->held) {
         PL_ERR(gpu, "Attempting to release an unheld image?");
         return;
     }
 
-    if (sem_in.sem)
-        PL_ARRAY_APPEND(tex, tex_vk->ext_deps, sem_in);
+    if (params->semaphore.sem)
+        PL_ARRAY_APPEND(params->tex, tex_vk->ext_deps, params->semaphore);
 
-    tex_vk->layout = layout;
+    tex_vk->qf = params->qf;
+    tex_vk->layout = params->layout;
     tex_vk->held = false;
 }
