@@ -109,6 +109,7 @@ struct pl_tex_vk {
     VkImageLayout layout;
     PL_ARRAY(pl_vulkan_sem) ext_deps; // external semaphore, not owned by the pl_tex
     pl_sync ext_sync; // indicates an exported image
+    uint32_t qf; // last queue family to access this texture (for barriers)
     bool may_invalidate;
     bool held;
 };
@@ -123,7 +124,7 @@ bool vk_tex_download(pl_gpu, const struct pl_tex_transfer_params *);
 bool vk_tex_poll(pl_gpu, pl_tex, uint64_t timeout);
 bool vk_tex_export(pl_gpu, pl_tex, pl_sync);
 void vk_tex_barrier(pl_gpu, struct vk_cmd *, pl_tex, VkPipelineStageFlags,
-                    VkAccessFlags, VkImageLayout, bool export);
+                    VkAccessFlags, VkImageLayout, uint32_t qf);
 
 struct pl_buf_vk {
     pl_rc_t rc;

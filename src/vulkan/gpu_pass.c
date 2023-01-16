@@ -706,8 +706,9 @@ static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
         struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
         vk_tex_barrier(gpu, cmd, tex, passStages[pass->params.type],
-                      VK_ACCESS_SHADER_READ_BIT,
-                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false);
+                       VK_ACCESS_SHADER_READ_BIT,
+                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                       VK_QUEUE_FAMILY_IGNORED);
 
         VkDescriptorImageInfo *iinfo = &pass_vk->dsiinfo[idx];
         *iinfo = (VkDescriptorImageInfo) {
@@ -724,7 +725,8 @@ static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
         struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
         vk_tex_barrier(gpu, cmd, tex, passStages[pass->params.type],
-                       access[desc->access], VK_IMAGE_LAYOUT_GENERAL, false);
+                       access[desc->access], VK_IMAGE_LAYOUT_GENERAL,
+                       VK_QUEUE_FAMILY_IGNORED);
 
         VkDescriptorImageInfo *iinfo = &pass_vk->dsiinfo[idx];
         *iinfo = (VkDescriptorImageInfo) {
@@ -954,7 +956,8 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 
         vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, false);
+                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                       VK_QUEUE_FAMILY_IGNORED);
 
         VkViewport viewport = {
             .x = params->viewport.x0,
