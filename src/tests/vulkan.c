@@ -61,6 +61,46 @@ static void vulkan_interop_tests(pl_vulkan pl_vk,
         pl_sync_destroy(gpu, &sync);
         pl_tex_destroy(gpu, &tex);
     }
+
+    // Test interop API
+    if (gpu->export_caps.tex & handle_type) {
+        VkSemaphore sem = pl_vulkan_sem_create(gpu, pl_vulkan_sem_params(
+            .type           = VK_SEMAPHORE_TYPE_TIMELINE,
+            .initial_value  = 0,
+        ));
+
+        pl_tex tex = pl_tex_create(gpu, pl_tex_params(
+            .w              = 32,
+            .h              = 32,
+            .format         = fmt,
+            .blit_dst       = true,
+            .export_handle  = handle_type,
+        ));
+
+        REQUIRE(sem);
+        REQUIRE(tex);
+
+        REQUIRE(pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
+            .tex            = tex,
+            .layout         = VK_IMAGE_LAYOUT_GENERAL,
+            .qf             = VK_QUEUE_FAMILY_EXTERNAL,
+            .semaphore      = { sem, 1 },
+        )));
+
+        pl_vulkan_release_ex(gpu, pl_vulkan_release_params(
+            .tex            = tex,
+            .layout         = VK_IMAGE_LAYOUT_GENERAL,
+            .qf             = VK_QUEUE_FAMILY_EXTERNAL,
+            .semaphore      = { sem, 1 },
+        ));
+
+        pl_tex_clear(gpu, tex, (float[4]){0});
+        pl_gpu_finish(gpu);
+        REQUIRE(!pl_tex_poll(gpu, tex, 0));
+
+        pl_vulkan_sem_destroy(gpu, &sem);
+        pl_tex_destroy(gpu, &tex);
+    }
 }
 
 static void vulkan_swapchain_tests(pl_vulkan vk, VkSurfaceKHR surf)
