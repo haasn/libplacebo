@@ -706,9 +706,12 @@ static bool vk_sw_start_frame(pl_swapchain sw,
             // fall through
         case VK_SUCCESS:
             p->last_imgidx = imgidx;
-            pl_vulkan_release(sw->gpu, p->images.elem[imgidx],
-                              VK_IMAGE_LAYOUT_UNDEFINED,
-                              (pl_vulkan_sem){ sem_in });
+            pl_vulkan_release_ex(sw->gpu, pl_vulkan_release_params(
+                .tex        = p->images.elem[imgidx],
+                .layout     = VK_IMAGE_LAYOUT_UNDEFINED,
+                .qf         = VK_QUEUE_FAMILY_IGNORED,
+                .semaphore  = { sem_in },
+            ));
             *out_frame = (struct pl_swapchain_frame) {
                 .fbo = p->images.elem[imgidx],
                 .flipped = false,
@@ -757,9 +760,12 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
     p->idx_sems %= p->sems.num;
     p->last_imgidx = -1;
 
-    bool held = pl_vulkan_hold(gpu, p->images.elem[idx],
-                               VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                               (pl_vulkan_sem){ sem_out });
+    bool held = pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
+        .tex        = p->images.elem[idx],
+        .layout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .semaphore  = { sem_out },
+    ));
+
     if (!held) {
         PL_ERR(gpu, "Failed holding swapchain image for presentation");
         pl_mutex_unlock(&p->lock);
