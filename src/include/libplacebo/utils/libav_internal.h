@@ -938,11 +938,15 @@ static bool pl_acquire_avframe(pl_gpu gpu, struct pl_frame *frame)
     AVVkFrame *vkf = (AVVkFrame *) avframe->data[0];
 
     for (int n = 0; n < frame->num_planes; n++) {
-        pl_tex tex = frame->planes[n].texture;
-        pl_vulkan_release(gpu, tex, vkf->layout[n], (pl_vulkan_sem) {
-            .sem = vkf->sem[n],
-            .value = vkf->sem_value[n],
-        });
+        pl_vulkan_release_ex(gpu, pl_vulkan_release_params(
+            .tex        = frame->planes[n].texture,
+            .layout     = vkf->layout[n],
+            .qf         = VK_QUEUE_FAMILY_IGNORED,
+            .semaphore  = {
+                .sem    = vkf->sem[n],
+                .value  = vkf->sem_value[n],
+            },
+        ));
     }
 
     return true;
@@ -954,11 +958,15 @@ static void pl_release_avframe(pl_gpu gpu, struct pl_frame *frame)
     AVVkFrame *vkf = (AVVkFrame *) avframe->data[0];
 
     for (int n = 0; n < frame->num_planes; n++) {
-        pl_tex tex = frame->planes[n].texture;
-        int ok = pl_vulkan_hold_raw(gpu, tex, &vkf->layout[n], (pl_vulkan_sem) {
-            .sem = vkf->sem[n],
-            .value = vkf->sem_value[n] + 1,
-        });
+        int ok = pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
+            .tex        = frame->planes[n].texture,
+            .out_layout = &vkf->layout[n],
+            .qf         = VK_QUEUE_FAMILY_IGNORED,
+            .semaphore  = {
+                .sem    = vkf->sem[n],
+                .value  = vkf->sem_value[n] + 1,
+            },
+        ));
 
         vkf->access[n] = 0;
         vkf->sem_value[n] += !!ok;
