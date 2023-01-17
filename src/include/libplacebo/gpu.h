@@ -894,8 +894,8 @@ bool pl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params);
 // limited under ordinary circumstances. In practically all cases, textures do
 // not need to be directly synchronized by the user, except when interfacing
 // with external libraries. This function should NOT, however, be used as a
-// crutch to avoid having to implement semaphore-based synchronization. See
-// `pl_sync` for a better replacement for external API interop.
+// crutch to avoid having to implement semaphore-based synchronization. Use
+// the API-specific functions such as `pl_vulkan_hold/release` for that.
 //
 // A good example of a use case in which this function is required is when
 // interoperating with external memory management that needs to know when an
@@ -1347,56 +1347,6 @@ struct pl_pass_run_params {
 // Execute a render pass.
 void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params);
 
-// A generic synchronization object intended for use with an external API. This
-// is not required when solely using libplacebo API functions, as all required
-// synchronisation is done internally. This comes in the form of a pair of
-// semaphores - one to synchronize access in each direction.
-//
-// Thread-safety: Unsafe
-typedef const struct pl_sync_t {
-    enum pl_handle_type handle_type;
-
-    // This handle is signalled by the `pl_gpu`, and waited on by the user. It
-    // fires when it is safe for the user to access the shared resource.
-    union pl_handle wait_handle;
-
-    // This handle is signalled by the user, and waited on by the `pl_gpu`. It
-    // must fire when the user has finished accessing the shared resource.
-    union pl_handle signal_handle;
-} *pl_sync;
-
-// Create a synchronization object. Returns NULL on failure.
-//
-// `handle_type` must be exactly *one* of `pl_gpu.export_caps.sync`, and
-// indicates which type of handle to generate for sharing this sync object.
-pl_sync pl_sync_create(pl_gpu gpu, enum pl_handle_type handle_type);
-
-// Destroy a `pl_sync`. Note that this invalidates the externally imported
-// semaphores. Users should therefore make sure that all operations that
-// wait on or signal any of the semaphore have been fully submitted and
-// processed by the external API before destroying the `pl_sync`.
-//
-// Despite this, it's safe to destroy a `pl_sync` if the only pending
-// operations that involve it are internal to libplacebo.
-void pl_sync_destroy(pl_gpu gpu, pl_sync *sync);
-
-// Initiates a texture export operation, allowing a texture to be accessed by
-// an external API. Returns whether successful. After this operation
-// successfully returns, it is guaranteed that `sync->wait_handle` will
-// eventually be signalled. For APIs where this is relevant, the image layout
-// should be specified as "general", e.g. `GL_LAYOUT_GENERAL_EXT` for OpenGL.
-//
-// There is no corresponding "import" operation - the next operation that uses
-// a texture will implicitly import the texture. Valid API usage requires that
-// the user *must* submit a semaphore signal operation on `sync->signal_handle`
-// before doing so. Not doing so is undefined behavior and may very well
-// deadlock the calling process and/or the graphics card!
-//
-// Note that despite this restriction, it is always valid to call
-// `pl_tex_destroy`, even if the texture is in an exported state, without
-// having to signal the corresponding sync object first.
-bool pl_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync);
-
 // This is semantically a no-op, but it provides a hint that you want to flush
 // any partially queued up commands and begin execution. There is normally no
 // need to call this, because queued commands will always be implicitly flushed
@@ -1439,6 +1389,66 @@ void pl_gpu_finish(pl_gpu gpu);
 // If this returns true, users *should* destroy and recreate the `pl_gpu`,
 // including all associated resources, via the appropriate mechanism.
 bool pl_gpu_is_failed(pl_gpu gpu);
+
+
+// Deprecated objects and functions:
+
+// A generic synchronization object intended for use with an external API. This
+// is not required when solely using libplacebo API functions, as all required
+// synchronisation is done internally. This comes in the form of a pair of
+// semaphores - one to synchronize access in each direction.
+//
+// Thread-safety: Unsafe
+typedef const struct pl_sync_t {
+    enum pl_handle_type handle_type;
+
+    // This handle is signalled by the `pl_gpu`, and waited on by the user. It
+    // fires when it is safe for the user to access the shared resource.
+    union pl_handle wait_handle;
+
+    // This handle is signalled by the user, and waited on by the `pl_gpu`. It
+    // must fire when the user has finished accessing the shared resource.
+    union pl_handle signal_handle;
+} *pl_sync;
+
+// Create a synchronization object. Returns NULL on failure.
+//
+// `handle_type` must be exactly *one* of `pl_gpu.export_caps.sync`, and
+// indicates which type of handle to generate for sharing this sync object.
+//
+// Deprecated in favor of API-specific semaphore creation operations such as
+// `pl_vulkan_sem_create`.
+PL_DEPRECATED pl_sync pl_sync_create(pl_gpu gpu, enum pl_handle_type handle_type);
+
+// Destroy a `pl_sync`. Note that this invalidates the externally imported
+// semaphores. Users should therefore make sure that all operations that
+// wait on or signal any of the semaphore have been fully submitted and
+// processed by the external API before destroying the `pl_sync`.
+//
+// Despite this, it's safe to destroy a `pl_sync` if the only pending
+// operations that involve it are internal to libplacebo.
+PL_DEPRECATED void pl_sync_destroy(pl_gpu gpu, pl_sync *sync);
+
+// Initiates a texture export operation, allowing a texture to be accessed by
+// an external API. Returns whether successful. After this operation
+// successfully returns, it is guaranteed that `sync->wait_handle` will
+// eventually be signalled. For APIs where this is relevant, the image layout
+// should be specified as "general", e.g. `GL_LAYOUT_GENERAL_EXT` for OpenGL.
+//
+// There is no corresponding "import" operation - the next operation that uses
+// a texture will implicitly import the texture. Valid API usage requires that
+// the user *must* submit a semaphore signal operation on `sync->signal_handle`
+// before doing so. Not doing so is undefined behavior and may very well
+// deadlock the calling process and/or the graphics card!
+//
+// Note that despite this restriction, it is always valid to call
+// `pl_tex_destroy`, even if the texture is in an exported state, without
+// having to signal the corresponding sync object first.
+//
+// Deprecated in favor of API-specific synchronization mechanisms such as
+// `pl_vulkan_hold/release_ex`.
+PL_DEPRECATED bool pl_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync);
+
 
 PL_API_END
 
