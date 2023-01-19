@@ -195,6 +195,7 @@ static const struct vk_ext vk_device_extensions[] = {
         .name = VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME,
         .funs = (struct vk_fun[]) {
             PL_VK_DEV_FUN(AcquireFullScreenExclusiveModeEXT),
+            {0}
         },
 #endif
     },
