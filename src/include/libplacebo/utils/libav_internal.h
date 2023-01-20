@@ -657,7 +657,7 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
         // libav* handles this as a special case, but doesn't provide an
         // explicit flag for it either, so we have to resort to this ugly
         // hack...
-        out->repr.sys= PL_COLOR_SYSTEM_XYZ;
+        out->repr.sys = PL_COLOR_SYSTEM_XYZ;
 
     } else if (desc->flags & AV_PIX_FMT_FLAG_RGB) {
 
