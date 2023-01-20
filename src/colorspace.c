@@ -470,12 +470,38 @@ static void infer_both_ref(struct pl_color_space *space,
     }
 
     if (!space->transfer) {
-        if (pl_color_transfer_is_hdr(ref->transfer)) {
-            space->transfer = PL_COLOR_TRC_BT_1886;
-        } else if (ref->transfer == PL_COLOR_TRC_LINEAR) {
-            space->transfer = PL_COLOR_TRC_GAMMA22;
-        } else {
+        switch (ref->transfer) {
+        case PL_COLOR_TRC_UNKNOWN:
+        case PL_COLOR_TRC_COUNT:
+            pl_unreachable();
+        case PL_COLOR_TRC_BT_1886:
+        case PL_COLOR_TRC_SRGB:
+        case PL_COLOR_TRC_GAMMA22:
+            // Re-use input transfer curve to avoid small adaptations
             space->transfer = ref->transfer;
+            break;
+        case PL_COLOR_TRC_PQ:
+        case PL_COLOR_TRC_HLG:
+        case PL_COLOR_TRC_V_LOG:
+        case PL_COLOR_TRC_S_LOG1:
+        case PL_COLOR_TRC_S_LOG2:
+            // Pick BT.1886 model because it models SDR contrast accurately,
+            // and we need contrast information for tone mapping
+            space->transfer = PL_COLOR_TRC_BT_1886;
+            break;
+        case PL_COLOR_TRC_PRO_PHOTO:
+            // ProPhotoRGB and sRGB are both piecewise with linear slope
+            space->transfer = PL_COLOR_TRC_SRGB;
+            break;
+        case PL_COLOR_TRC_LINEAR:
+        case PL_COLOR_TRC_GAMMA18:
+        case PL_COLOR_TRC_GAMMA20:
+        case PL_COLOR_TRC_GAMMA24:
+        case PL_COLOR_TRC_GAMMA26:
+        case PL_COLOR_TRC_GAMMA28:
+            // Pick pure power output curve to avoid introducing black crush
+            space->transfer = PL_COLOR_TRC_GAMMA22;
+            break;
         }
     }
 
