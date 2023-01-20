@@ -2516,6 +2516,14 @@ static void fix_frame(struct pl_frame *frame)
 {
     pl_tex tex = frame->planes[frame_ref(frame)].texture;
 
+    if (frame->repr.sys == PL_COLOR_SYSTEM_XYZ) {
+        // Infer primaries as DCI-P3, because this is the most common case
+        if (!frame->color.primaries)
+            frame->color.primaries = PL_COLOR_PRIM_DCI_P3;
+        // Force XYZ gamma to be gamma2.6, because of inconsistent tagging
+        frame->color.transfer = PL_COLOR_TRC_GAMMA26;
+    }
+
     // If the primaries are not known, guess them based on the resolution
     if (tex && !frame->color.primaries)
         frame->color.primaries = pl_color_primaries_guess(tex->params.w, tex->params.h);
