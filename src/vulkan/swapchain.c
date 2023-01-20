@@ -763,6 +763,7 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
     bool held = pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
         .tex        = p->images.elem[idx],
         .layout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .qf         = VK_QUEUE_FAMILY_IGNORED,
         .semaphore  = { sem_out },
     ));
 
