@@ -1788,8 +1788,25 @@ static bool pass_read_image(struct pass_state *pass)
         }
     }
 
-    if (needs_conversion)
+    if (needs_conversion) {
+        if (pass->img.repr.sys == PL_COLOR_SYSTEM_XYZ) {
+            // Pre-convert to RGB before feeding it into `pl_shader_decode_color`
+            const struct pl_raw_primaries *prim = pl_raw_primaries_get(image->color.primaries);
+            struct pl_matrix3x3 xyz2rgb = pl_get_xyz2rgb_matrix(prim);
+            float scale = pl_color_repr_normalize(&pass->img.repr);
+            GLSL("color *= vec4(%s); \n", SH_FLOAT(scale));
+            pl_shader_set_alpha(sh, &pass->img.repr, PL_ALPHA_INDEPENDENT);
+            pl_shader_linearize(sh, &pass->img.color);
+            GLSL("color.rgb = %s * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
+                .var    = pl_var_mat3("xyz2rgb"),
+                .data   = PL_TRANSPOSE_3X3(xyz2rgb.m),
+            }));
+            pl_shader_delinearize(sh, &pass->img.color);
+            pass->img.repr.sys = PL_COLOR_SYSTEM_RGB;
+        }
+
         pl_shader_decode_color(sh, &pass->img.repr, params->color_adjustment);
+    }
     if (lut_type == PL_LUT_NORMALIZED)
         pl_shader_custom_lut(sh, image->lut, &rr->lut_state[LUT_IMAGE]);
 
