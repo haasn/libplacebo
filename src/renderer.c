@@ -2023,6 +2023,14 @@ static bool pass_output_target(struct pass_state *pass)
         } else {
             prelinearized = true;
         }
+    } else if (img->color.transfer != image->color.transfer) {
+        if (image->color.transfer == PL_COLOR_TRC_LINEAR) {
+            // Another annoying edge case: if the input is linear light, but we
+            // decide to un-linearize it for scaling purposes, we need to
+            // re-linearize before passing it into `pl_shader_color_map`
+            pl_shader_linearize(sh, &img->color);
+            img->color.transfer = PL_COLOR_TRC_LINEAR;
+        }
     }
 
     // Do all processing in independent alpha, to avoid nonlinear distortions
