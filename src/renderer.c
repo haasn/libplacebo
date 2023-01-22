@@ -1600,11 +1600,11 @@ static bool pass_read_image(struct pass_state *pass)
         log_plane_info(rr, st);
 
         float neutral[3] = {0.0};
-        for (int c = 0; c < st->plane.components; c++) {
+        for (int c = 0, idx = 0; c < st->plane.components; c++) {
             switch (st->plane.component_mapping[c]) {
-            case PL_CHANNEL_Y: neutral[c] = neutral_luma; break;
+            case PL_CHANNEL_Y: neutral[idx++] = neutral_luma; break;
             case PL_CHANNEL_U: // fall through
-            case PL_CHANNEL_V: neutral[c] = neutral_chroma; break;
+            case PL_CHANNEL_V: neutral[idx++] = neutral_chroma; break;
             }
         }
 
