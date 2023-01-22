@@ -12,7 +12,7 @@ static void pl_buffer_tests(pl_gpu gpu)
     assert(test_src && test_dst);
     memset(test_dst, 0, buf_size);
     for (int i = 0; i < buf_size; i++)
-        test_src[i] = (RANDOM * 256);
+        test_src[i] = RANDOM_U8;
 
     pl_buf buf = NULL, tbuf = NULL;
 
@@ -102,7 +102,7 @@ static void pl_test_roundtrip(pl_gpu gpu, pl_tex tex[2],
     memset(dst, 0, bytes);
 
     for (size_t i = 0; i < bytes; i++)
-        src[i] = (RANDOM * 256);
+        src[i] = RANDOM_U8;
 
     pl_timer ul, dl;
     ul = pl_timer_create(gpu);
