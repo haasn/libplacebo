@@ -917,6 +917,11 @@ struct pl_avalloc {
     pl_buf buf;
 };
 
+// Attached to `pl_frame.user_data` for mapped AVFrames
+struct pl_avframe_priv {
+    AVFrame *avframe;
+};
+
 static void pl_fix_hwframe_sample_depth(struct pl_frame *out, const AVFrame *frame)
 {
     const AVHWFramesContext *hwfc = (AVHWFramesContext *) frame->hw_frames_ctx->data;
@@ -981,6 +986,7 @@ static bool pl_map_avframe_derived(pl_gpu gpu, struct pl_frame *out,
                                    const AVFrame *frame)
 {
     const int flags = AV_HWFRAME_MAP_READ | AV_HWFRAME_MAP_DIRECT;
+    struct pl_avframe_priv *priv = out->user_data;
     AVFrame *derived = av_frame_alloc();
     derived->width = frame->width;
     derived->height = frame->height;
@@ -993,8 +999,8 @@ static bool pl_map_avframe_derived(pl_gpu gpu, struct pl_frame *out,
     if (!pl_map_avframe_drm(gpu, out, derived))
         goto error;
 
-    av_frame_free((AVFrame **) &out->user_data);
-    out->user_data = derived;
+    av_frame_free(&priv->avframe);
+    priv->avframe = derived;
     return true;
 
 error:
@@ -1005,8 +1011,8 @@ error:
 #ifdef PL_HAVE_LAV_VULKAN
 static bool pl_acquire_avframe(pl_gpu gpu, struct pl_frame *frame)
 {
-    const AVFrame *avframe = frame->user_data;
-    AVVkFrame *vkf = (AVVkFrame *) avframe->data[0];
+    const struct pl_avframe_priv *priv = frame->user_data;
+    AVVkFrame *vkf = (AVVkFrame *) priv->avframe->data[0];
 
     for (int n = 0; n < frame->num_planes; n++) {
         pl_vulkan_release_ex(gpu, pl_vulkan_release_params(
@@ -1025,8 +1031,8 @@ static bool pl_acquire_avframe(pl_gpu gpu, struct pl_frame *frame)
 
 static void pl_release_avframe(pl_gpu gpu, struct pl_frame *frame)
 {
-    const AVFrame *avframe = frame->user_data;
-    AVVkFrame *vkf = (AVVkFrame *) avframe->data[0];
+    const struct pl_avframe_priv *priv = frame->user_data;
+    AVVkFrame *vkf = (AVVkFrame *) priv->avframe->data[0];
 
     for (int n = 0; n < frame->num_planes; n++) {
         int ok = pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
@@ -1093,8 +1099,13 @@ PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out,
     pl_tex *tex = params->tex;
     int planes;
 
+    struct pl_avframe_priv *priv = malloc(sizeof(*priv));
+    if (!priv)
+        goto error;
+
     pl_frame_from_avframe(out, frame);
-    out->user_data = av_frame_clone(frame);
+    priv->avframe = av_frame_clone(frame);
+    out->user_data = priv;
 
 #ifdef PL_HAVE_LAV_DOLBY_VISION
     if (params->map_dovi) {
@@ -1204,23 +1215,24 @@ PL_LIBAV_API bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out_frame,
 
 PL_LIBAV_API void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame)
 {
-    AVFrame *avframe = frame->user_data;
+    struct pl_avframe_priv *priv = frame->user_data;
     const AVPixFmtDescriptor *desc;
-    if (!avframe)
+    if (!priv)
         goto done;
 
 #ifdef PL_HAVE_LAV_VULKAN
-    if (avframe->format == AV_PIX_FMT_VULKAN)
+    if (priv->avframe->format == AV_PIX_FMT_VULKAN)
         pl_unmap_avframe_vulkan(gpu, frame);
 #endif
 
-    desc = av_pix_fmt_desc_get(avframe->format);
+    desc = av_pix_fmt_desc_get(priv->avframe->format);
     if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) {
         for (int i = 0; i < 4; i++)
             pl_tex_destroy(gpu, &frame->planes[i].texture);
     }
 
-    av_frame_free(&avframe);
+    av_frame_free(&priv->avframe);
+    free(priv);
 
 done:
     memset(frame, 0, sizeof(*frame)); // sanity
