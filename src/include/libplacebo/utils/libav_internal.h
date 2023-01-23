@@ -930,6 +930,7 @@ struct pl_avalloc {
 struct pl_avframe_priv {
     AVFrame *avframe;
     struct pl_dovi_metadata dovi; // backing storage for per-frame dovi metadata
+    pl_tex planar; // for planar vulkan textures
 };
 
 static void pl_fix_hwframe_sample_depth(struct pl_frame *out, const AVFrame *frame)
@@ -1032,7 +1033,7 @@ static bool pl_acquire_avframe(pl_gpu gpu, struct pl_frame *frame)
 
     for (int n = 0; n < frame->num_planes; n++) {
         pl_vulkan_release_ex(gpu, pl_vulkan_release_params(
-            .tex        = frame->planes[n].texture,
+            .tex        = priv->planar ? priv->planar : frame->planes[n].texture,
             .layout     = vkf->layout[n],
             .qf         = VK_QUEUE_FAMILY_IGNORED,
             .semaphore  = {
@@ -1040,6 +1041,8 @@ static bool pl_acquire_avframe(pl_gpu gpu, struct pl_frame *frame)
                 .value  = vkf->sem_value[n],
             },
         ));
+        if (priv->planar)
+            break;
     }
 
     return true;
@@ -1054,7 +1057,7 @@ static void pl_release_avframe(pl_gpu gpu, struct pl_frame *frame)
 
     for (int n = 0; n < frame->num_planes; n++) {
         int ok = pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
-            .tex        = frame->planes[n].texture,
+            .tex        = priv->planar ? priv->planar : frame->planes[n].texture,
             .out_layout = &vkf->layout[n],
             .qf         = VK_QUEUE_FAMILY_IGNORED,
             .semaphore  = {
@@ -1065,6 +1068,8 @@ static void pl_release_avframe(pl_gpu gpu, struct pl_frame *frame)
 
         vkf->access[n] = 0;
         vkf->sem_value[n] += !!ok;
+        if (priv->planar)
+            break;
     }
 
 #ifdef PL_HAVE_LAV_VULKAN_V2
@@ -1078,25 +1083,45 @@ static bool pl_map_avframe_vulkan(pl_gpu gpu, struct pl_frame *out,
     const AVHWFramesContext *hwfc = (AVHWFramesContext *) frame->hw_frames_ctx->data;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwfc->sw_format);
     const AVVulkanFramesContext *vkfc = hwfc->hwctx;
-    const VkFormat *vk_fmt = av_vkfmt_from_pixfmt(hwfc->sw_format);
     AVVkFrame *vkf = (AVVkFrame *) frame->data[0];
+    struct pl_avframe_priv *priv = out->user_data;
     pl_vulkan vk = pl_vulkan_get(gpu);
+
+#ifdef PL_HAVE_LAV_VULKAN_V2
+    const VkFormat *vk_fmt = vkfc->format;
+#else
+    const VkFormat *vk_fmt = av_vkfmt_from_pixfmt(hwfc->sw_format);
+#endif
+
     assert(frame->format == AV_PIX_FMT_VULKAN);
+    priv->planar = NULL;
     if (!vk)
         return false;
 
     for (int n = 0; n < out->num_planes; n++) {
         struct pl_plane *plane = &out->planes[n];
         bool chroma = n == 1 || n == 2;
+        int num_subplanes;
+        assert(vk_fmt[n]);
+
         plane->texture = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
-            .image = vkf->img[n],
-            .width = AV_CEIL_RSHIFT(frame->width, chroma ? desc->log2_chroma_w : 0),
+            .image  = vkf->img[n],
+            .width  = AV_CEIL_RSHIFT(frame->width, chroma ? desc->log2_chroma_w : 0),
             .height = AV_CEIL_RSHIFT(frame->height, chroma ? desc->log2_chroma_h : 0),
             .format = vk_fmt[n],
-            .usage = vkfc->usage,
+            .usage  = vkfc->usage,
         ));
         if (!plane->texture)
             return false;
+
+        num_subplanes = plane->texture->params.format->num_planes;
+        if (num_subplanes) {
+            assert(num_subplanes == out->num_planes);
+            priv->planar = plane->texture;
+            for (int i = 0; i < num_subplanes; i++)
+                out->planes[i].texture = priv->planar->planes[i];
+            break;
+        }
     }
 
     out->acquire = pl_acquire_avframe;
@@ -1107,8 +1132,12 @@ static bool pl_map_avframe_vulkan(pl_gpu gpu, struct pl_frame *out,
 
 static void pl_unmap_avframe_vulkan(pl_gpu gpu, struct pl_frame *frame)
 {
-    for (int n = 0; n < frame->num_planes; n++)
-        pl_tex_destroy(gpu, &frame->planes[n].texture);
+    struct pl_avframe_priv *priv = frame->user_data;
+    if (priv->planar) {
+        pl_tex_destroy(gpu, &priv->planar);
+        for (int n = 0; n < frame->num_planes; n++)
+            frame->planes[n].texture = NULL;
+    }
 }
 #endif
 
