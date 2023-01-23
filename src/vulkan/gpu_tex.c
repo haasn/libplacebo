@@ -1123,10 +1123,12 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
         }                                                                       \
     } while (0)
 
-    MASK(sampleable, PL_FMT_CAP_SAMPLEABLE);
-    MASK(storable,   PL_FMT_CAP_STORABLE);
-    MASK(blit_src,   PL_FMT_CAP_BLITTABLE);
-    MASK(blit_dst,   PL_FMT_CAP_BLITTABLE);
+    MASK(sampleable,    PL_FMT_CAP_SAMPLEABLE);
+    MASK(renderable,    PL_FMT_CAP_RENDERABLE);
+    MASK(storable,      PL_FMT_CAP_STORABLE);
+    MASK(blit_src,      PL_FMT_CAP_BLITTABLE);
+    MASK(blit_dst,      PL_FMT_CAP_BLITTABLE);
+    MASK(host_readable, PL_FMT_CAP_HOST_READABLE);
 #undef MASK
 
     // For simplicity, explicitly mask out blit emulation for wrapped textures
