@@ -1137,7 +1137,11 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
     }
 
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
-    tex_vk->type = VK_IMAGE_TYPE_2D;
+    switch (pl_tex_params_dimension(tex->params)) {
+    case 1: tex_vk->type = VK_IMAGE_TYPE_1D; break;
+    case 2: tex_vk->type = VK_IMAGE_TYPE_2D; break;
+    case 3: tex_vk->type = VK_IMAGE_TYPE_3D; break;
+    }
     tex_vk->external_img = true;
     tex_vk->held = true;
     tex_vk->img = params->image;
