@@ -1080,16 +1080,16 @@ error:
 
 pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
 {
-    pl_fmt format = NULL;
+    pl_fmt fmt = NULL;
     for (int i = 0; i < gpu->num_formats; i++) {
-        const struct vk_format **fmt = PL_PRIV(gpu->formats[i]);
-        if ((*fmt)->tfmt == params->format) {
-            format = gpu->formats[i];
+        const struct vk_format **vkfmt = PL_PRIV(gpu->formats[i]);
+        if ((*vkfmt)->tfmt == params->format) {
+            fmt = gpu->formats[i];
             break;
         }
     }
 
-    if (!format) {
+    if (!fmt) {
         PL_ERR(gpu, "Could not find pl_fmt suitable for wrapped image "
                "with format %s", vk_fmt_name(params->format));
         return NULL;
@@ -1097,7 +1097,7 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
 
     struct pl_tex_t *tex = pl_zalloc_obj(NULL, tex, struct pl_tex_vk);
     tex->params = (struct pl_tex_params) {
-        .format = format,
+        .format = fmt,
         .w = params->width,
         .h = params->height,
         .d = params->depth,
@@ -1115,10 +1115,10 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
     // Mask out capabilities not permitted by the `pl_fmt`
 #define MASK(field, cap)                                                        \
     do {                                                                        \
-        if (tex->params.field && !(format->caps & cap)) {                       \
+        if (tex->params.field && !(fmt->caps & cap)) {                          \
             PL_WARN(gpu, "Masking `" #field "` from wrapped texture because "   \
                     "the corresponding format '%s' does not support " #cap,     \
-                    format->name);                                              \
+                    fmt->name);                                                 \
             tex->params.field = false;                                          \
         }                                                                       \
     } while (0)
@@ -1130,7 +1130,7 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
 #undef MASK
 
     // For simplicity, explicitly mask out blit emulation for wrapped textures
-    struct pl_fmt_vk *fmtp = PL_PRIV(format);
+    struct pl_fmt_vk *fmtp = PL_PRIV(fmt);
     if (fmtp->blit_emulated) {
         tex->params.blit_src = false;
         tex->params.blit_dst = false;
