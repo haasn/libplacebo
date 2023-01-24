@@ -67,6 +67,17 @@
         .sample_order    = IDX(0, 1, 2, 3),     \
     }
 
+#define PLANARFMT(_name, planes, size, bits)    \
+    (struct pl_fmt_t) {                         \
+        .name            = _name,               \
+        .type            = PL_FMT_UNORM,        \
+        .num_planes      = planes,              \
+        .num_components  = 3,                   \
+        .component_depth = {bits, bits, bits},  \
+        .internal_size   = size,                \
+        .opaque          = true,                \
+    }
+
 static const struct vk_format rgb8e = {
     .tfmt   = VK_FORMAT_R8G8B8A8_UNORM,
     .bfmt   = VK_FORMAT_R8G8B8_UNORM,
@@ -190,6 +201,171 @@ const struct vk_format vk_formats[] = {
     {VK_FORMAT_R12X4_UNORM_PACK16,                  PACKED16FMT("rx12",         1, 12)},
     {VK_FORMAT_R12X4G12X4_UNORM_2PACK16,            PACKED16FMT("rxgx12",       2, 12)},
     {VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16,  PACKED16FMT("rxgxbxax12",   4, 12)},
+
+    // Planar formats
+    {VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM, PLANARFMT("g8_b8_r8_420", 3, 12, 8),
+        .pfmt = {
+            {VK_FORMAT_R8_UNORM},
+            {VK_FORMAT_R8_UNORM, .sx = 1, .sy = 1},
+            {VK_FORMAT_R8_UNORM, .sx = 1, .sy = 1},
+        },
+    },
+    {VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM, PLANARFMT("g8_b8_r8_422", 3, 16, 8),
+        .pfmt = {
+            {VK_FORMAT_R8_UNORM},
+            {VK_FORMAT_R8_UNORM, .sx = 1},
+            {VK_FORMAT_R8_UNORM, .sx = 1},
+        },
+    },
+    {VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM, PLANARFMT("g8_b8_r8_444", 3, 24, 8),
+        .pfmt = {
+            {VK_FORMAT_R8_UNORM},
+            {VK_FORMAT_R8_UNORM},
+            {VK_FORMAT_R8_UNORM},
+        },
+    },
+
+    {VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, PLANARFMT("g16_b16_r16_420", 3, 24, 16),
+        .pfmt = {
+            {VK_FORMAT_R16_UNORM},
+            {VK_FORMAT_R16_UNORM, .sx = 1, .sy = 1},
+            {VK_FORMAT_R16_UNORM, .sx = 1, .sy = 1},
+        },
+    },
+    {VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM, PLANARFMT("g16_b16_r16_422", 3, 32, 16),
+        .pfmt = {
+            {VK_FORMAT_R16_UNORM},
+            {VK_FORMAT_R16_UNORM, .sx = 1},
+            {VK_FORMAT_R16_UNORM, .sx = 1},
+        },
+    },
+    {VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM, PLANARFMT("g16_b16_r16_444", 3, 48, 16),
+        .pfmt = {
+            {VK_FORMAT_R16_UNORM},
+            {VK_FORMAT_R16_UNORM},
+            {VK_FORMAT_R16_UNORM},
+        },
+    },
+
+    {VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16, PLANARFMT("gx10_bx10_rx10_420", 3, 24, 10),
+        .pfmt = {
+            {VK_FORMAT_R10X6_UNORM_PACK16},
+            {VK_FORMAT_R10X6_UNORM_PACK16, .sx = 1, .sy = 1},
+            {VK_FORMAT_R10X6_UNORM_PACK16, .sx = 1, .sy = 1},
+        },
+    },
+    {VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16, PLANARFMT("gx10_bx10_rx10_422", 3, 32, 10),
+        .pfmt = {
+            {VK_FORMAT_R10X6_UNORM_PACK16},
+            {VK_FORMAT_R10X6_UNORM_PACK16, .sx = 1},
+            {VK_FORMAT_R10X6_UNORM_PACK16, .sx = 1},
+        },
+    },
+    {VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16, PLANARFMT("gx10_bx10_rx10_444", 3, 48, 10),
+        .pfmt = {
+            {VK_FORMAT_R10X6_UNORM_PACK16},
+            {VK_FORMAT_R10X6_UNORM_PACK16},
+            {VK_FORMAT_R10X6_UNORM_PACK16},
+        },
+    },
+
+    {VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16, PLANARFMT("gx12_bx12_rx12_420", 3, 24, 12),
+        .pfmt = {
+            {VK_FORMAT_R12X4_UNORM_PACK16},
+            {VK_FORMAT_R12X4_UNORM_PACK16, .sx = 1, .sy = 1},
+            {VK_FORMAT_R12X4_UNORM_PACK16, .sx = 1, .sy = 1},
+        },
+    },
+    {VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16, PLANARFMT("gx12_bx12_rx12_422", 3, 32, 12),
+        .pfmt = {
+            {VK_FORMAT_R12X4_UNORM_PACK16},
+            {VK_FORMAT_R12X4_UNORM_PACK16, .sx = 1},
+            {VK_FORMAT_R12X4_UNORM_PACK16, .sx = 1},
+        },
+    },
+    {VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16, PLANARFMT("gx12_bx12_rx12_444", 3, 48, 12),
+        .pfmt = {
+            {VK_FORMAT_R12X4_UNORM_PACK16},
+            {VK_FORMAT_R12X4_UNORM_PACK16},
+            {VK_FORMAT_R12X4_UNORM_PACK16},
+        },
+    },
+
+    {VK_FORMAT_G8_B8R8_2PLANE_420_UNORM, PLANARFMT("g8_br8_420", 2, 12, 8),
+        .pfmt = {
+            {VK_FORMAT_R8_UNORM},
+            {VK_FORMAT_R8G8_UNORM, .sx = 1, .sy = 1},
+        },
+    },
+    {VK_FORMAT_G8_B8R8_2PLANE_422_UNORM, PLANARFMT("g8_br8_422", 2, 16, 8),
+        .pfmt = {
+            {VK_FORMAT_R8_UNORM},
+            {VK_FORMAT_R8G8_UNORM, .sx = 1},
+        },
+    },
+    {VK_FORMAT_G8_B8R8_2PLANE_444_UNORM, PLANARFMT("g8_br8_444", 2, 24, 8),
+        .pfmt = {
+            {VK_FORMAT_R8_UNORM},
+            {VK_FORMAT_R8G8_UNORM},
+        },
+    },
+
+    {VK_FORMAT_G16_B16R16_2PLANE_420_UNORM, PLANARFMT("g16_br16_420", 2, 24, 16),
+        .pfmt = {
+            {VK_FORMAT_R16_UNORM},
+            {VK_FORMAT_R16G16_UNORM, .sx = 1, .sy = 1},
+        },
+    },
+    {VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, PLANARFMT("g16_br16_422", 2, 32, 16),
+        .pfmt = {
+            {VK_FORMAT_R16_UNORM},
+            {VK_FORMAT_R16G16_UNORM, .sx = 1},
+        },
+    },
+    {VK_FORMAT_G16_B16R16_2PLANE_444_UNORM, PLANARFMT("g16_br16_444", 2, 48, 16),
+        .pfmt = {
+            {VK_FORMAT_R16_UNORM},
+            {VK_FORMAT_R16G16_UNORM},
+        },
+    },
+
+    {VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16, PLANARFMT("gx10_bxrx10_420", 2, 24, 10),
+        .pfmt = {
+            {VK_FORMAT_R10X6_UNORM_PACK16},
+            {VK_FORMAT_R10X6G10X6_UNORM_2PACK16, .sx = 1, .sy = 1},
+        },
+    },
+    {VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16, PLANARFMT("gx10_bxrx10_422", 2, 32, 10),
+        .pfmt = {
+            {VK_FORMAT_R10X6_UNORM_PACK16},
+            {VK_FORMAT_R10X6G10X6_UNORM_2PACK16, .sx = 1},
+        },
+    },
+    {VK_FORMAT_G10X6_B10X6R10X6_2PLANE_444_UNORM_3PACK16, PLANARFMT("gx10_bxrx10_444", 2, 48, 10),
+        .pfmt = {
+            {VK_FORMAT_R10X6_UNORM_PACK16},
+            {VK_FORMAT_R10X6G10X6_UNORM_2PACK16},
+        },
+    },
+
+    {VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16, PLANARFMT("gx12_bxrx12_420", 2, 24, 12),
+        .pfmt = {
+            {VK_FORMAT_R12X4_UNORM_PACK16},
+            {VK_FORMAT_R12X4G12X4_UNORM_2PACK16, .sx = 1, .sy = 1},
+        },
+    },
+    {VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16, PLANARFMT("gx12_bxrx12_422", 2, 32, 12),
+        .pfmt = {
+            {VK_FORMAT_R12X4_UNORM_PACK16},
+            {VK_FORMAT_R12X4G12X4_UNORM_2PACK16, .sx = 1},
+        },
+    },
+    {VK_FORMAT_G12X4_B12X4R12X4_2PLANE_444_UNORM_3PACK16, PLANARFMT("gx12_bxrx12_444", 2, 48, 12),
+        .pfmt = {
+            {VK_FORMAT_R12X4_UNORM_PACK16},
+            {VK_FORMAT_R12X4G12X4_UNORM_2PACK16},
+        },
+    },
 
 #endif // VK_VERSION_1_3
 
