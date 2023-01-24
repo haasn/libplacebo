@@ -330,7 +330,6 @@ struct glsl_fmt {
     int num_components;
     int depth[4];
     const char *glsl_format;
-    uint32_t drm_fourcc;
 };
 
 // List taken from the GLSL specification. (Yes, GLSL supports only exactly
