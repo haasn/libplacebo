@@ -1211,7 +1211,10 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     case PL_COLOR_SYSTEM_XYZ: {
         // For lack of anything saner to do, just assume the caller wants
         // DCI-P3 primaries, which is a reasonable assumption.
-        m = pl_get_xyz2rgb_matrix(pl_raw_primaries_get(PL_COLOR_PRIM_DCI_P3));
+        const struct pl_raw_primaries *dst = pl_raw_primaries_get(PL_COLOR_PRIM_DCI_P3);
+        m = pl_get_xyz2rgb_matrix(dst);
+        // DCDM X'Y'Z' is expected to have equal energy white point (EG 432-1 Annex H)
+        apply_chromatic_adaptation((struct pl_cie_xy)CIE_E, dst->white, &m);
         break;
     }
     case PL_COLOR_SYSTEM_COUNT:
