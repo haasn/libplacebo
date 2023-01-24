@@ -674,6 +674,9 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
              "                %s(lessThan(vec3(0.03125), color.rgb))); \n",
              sh_bvec(sh, 3));
         goto scale_out;
+    case PL_COLOR_TRC_ST428:
+        GLSL("color.rgb = vec3(52.37/48.0) * pow(color.rgb, vec3(2.6));\n");
+        goto scale_out;
     case PL_COLOR_TRC_PQ:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/%f));         \n"
              "color.rgb = max(color.rgb - vec3(%f), 0.0)        \n"
@@ -760,7 +763,8 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
     case PL_COLOR_TRC_GAMMA24:
     case PL_COLOR_TRC_GAMMA26:
     case PL_COLOR_TRC_GAMMA28:
-    case PL_COLOR_TRC_PRO_PHOTO: ;
+    case PL_COLOR_TRC_PRO_PHOTO:
+    case PL_COLOR_TRC_ST428: ;
         if (csp_max != 1 || csp_min != 0) {
             GLSL("color.rgb = %s * color.rgb + vec3(%s); \n",
                  SH_FLOAT(1 / (csp_max - csp_min)),
@@ -815,6 +819,9 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         return;
     case PL_COLOR_TRC_GAMMA28:
         GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.8));\n");
+        return;
+    case PL_COLOR_TRC_ST428:
+        GLSL("color.rgb = pow(color.rgb * vec3(48.0/52.37), vec3(1.0/2.6));\n");
         return;
     case PL_COLOR_TRC_PRO_PHOTO:
         GLSL("color.rgb = mix(color.rgb * vec3(16.0),                        \n"

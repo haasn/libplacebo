@@ -1215,6 +1215,7 @@ static void update_settings(struct plplay *p)
                 [PL_COLOR_TRC_GAMMA26]      = "Pure power gamma 2.6",
                 [PL_COLOR_TRC_GAMMA28]      = "Pure power gamma 2.8",
                 [PL_COLOR_TRC_PRO_PHOTO]    = "ProPhoto RGB (ROMM)",
+                [PL_COLOR_TRC_ST428]        = "Digital Cinema Distribution Master (XYZ)",
                 [PL_COLOR_TRC_PQ]           = "ITU-R BT.2100 PQ (perceptual quantizer), aka SMPTE ST2048",
                 [PL_COLOR_TRC_HLG]          = "ITU-R BT.2100 HLG (hybrid log-gamma), aka ARIB STD-B67",
                 [PL_COLOR_TRC_V_LOG]        = "Panasonic V-Log (VARICAM)",

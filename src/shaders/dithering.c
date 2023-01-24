@@ -84,6 +84,7 @@ static inline float approx_gamma(enum pl_color_transfer trc)
     case PL_COLOR_TRC_GAMMA20:  return 2.0f;
     case PL_COLOR_TRC_GAMMA24:  return 2.4f;
     case PL_COLOR_TRC_GAMMA26:  return 2.6f;
+    case PL_COLOR_TRC_ST428:    return 2.6f;
     case PL_COLOR_TRC_GAMMA28:  return 2.8f;
 
     case PL_COLOR_TRC_SRGB:

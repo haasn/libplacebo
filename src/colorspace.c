@@ -244,6 +244,7 @@ float pl_color_transfer_nominal_peak(enum pl_color_transfer trc)
     case PL_COLOR_TRC_GAMMA26:
     case PL_COLOR_TRC_GAMMA28:
     case PL_COLOR_TRC_PRO_PHOTO:
+    case PL_COLOR_TRC_ST428:
         return 1.0;
     case PL_COLOR_TRC_PQ:       return 10000.0 / PL_COLOR_SDR_WHITE;
     case PL_COLOR_TRC_HLG:      return 12.0 / PL_COLOR_SDR_WHITE_HLG;
@@ -357,6 +358,7 @@ bool pl_color_space_is_black_scaled(const struct pl_color_space *csp)
     case PL_COLOR_TRC_GAMMA26:
     case PL_COLOR_TRC_GAMMA28:
     case PL_COLOR_TRC_PRO_PHOTO:
+    case PL_COLOR_TRC_ST428:
     case PL_COLOR_TRC_HLG:
         return true;
 
@@ -499,6 +501,7 @@ static void infer_both_ref(struct pl_color_space *space,
         case PL_COLOR_TRC_GAMMA24:
         case PL_COLOR_TRC_GAMMA26:
         case PL_COLOR_TRC_GAMMA28:
+        case PL_COLOR_TRC_ST428:
             // Pick pure power output curve to avoid introducing black crush
             space->transfer = PL_COLOR_TRC_GAMMA22;
             break;
