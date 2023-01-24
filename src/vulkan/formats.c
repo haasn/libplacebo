@@ -54,6 +54,19 @@
         .sample_order    = IDX(0, 1, 2, 3),     \
     }
 
+#define PACKED16FMT(_name, num, b)              \
+    (struct pl_fmt_t) {                         \
+        .name            = _name,               \
+        .type            = PL_FMT_UNORM,        \
+        .num_components  = num,                 \
+        .component_depth = BITS(b, b, b, b),    \
+        .internal_size   = (num) * 2,           \
+        .texel_size      = (num) * 2,           \
+        .texel_align     = (num) * 2,           \
+        .host_bits       = BITS(16, 16, 16, 16),\
+        .sample_order    = IDX(0, 1, 2, 3),     \
+    }
+
 static const struct vk_format rgb8e = {
     .tfmt   = VK_FORMAT_R8G8B8A8_UNORM,
     .bfmt   = VK_FORMAT_R8G8B8_UNORM,
@@ -166,6 +179,19 @@ const struct vk_format vk_formats[] = {
     {VK_FORMAT_A2R10G10B10_UINT_PACK32,  FMT("bgr10a2u", 4,  4, UINT,  BITS(10, 10, 10, 2), IDX(2, 1, 0, 3))},
     {VK_FORMAT_A2B10G10R10_SINT_PACK32,  FMT("rgb10a2i", 4,  4, SINT,  BITS(10, 10, 10, 2), IDX(0, 1, 2, 3))},
     {VK_FORMAT_A2R10G10B10_SINT_PACK32,  FMT("bgr10a2i", 4,  4, SINT,  BITS(10, 10, 10, 2), IDX(2, 1, 0, 3))},
+
+
+#ifdef VK_VERSION_1_3
+
+    // Packed 16 bit formats
+    {VK_FORMAT_R10X6_UNORM_PACK16,                  PACKED16FMT("rx10",         1, 10)},
+    {VK_FORMAT_R10X6G10X6_UNORM_2PACK16,            PACKED16FMT("rxgx10",       2, 10)},
+    {VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16,  PACKED16FMT("rxgxbxax10",   4, 10)},
+    {VK_FORMAT_R12X4_UNORM_PACK16,                  PACKED16FMT("rx12",         1, 12)},
+    {VK_FORMAT_R12X4G12X4_UNORM_2PACK16,            PACKED16FMT("rxgx12",       2, 12)},
+    {VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16,  PACKED16FMT("rxgxbxax12",   4, 12)},
+
+#endif // VK_VERSION_1_3
 
     {0}
 };

@@ -467,6 +467,14 @@ static const struct pl_fmt_fourcc pl_fmt_fourccs[] = {
     {"rgba16hf",    FOURCC('A','B','4','H')},
     {"bgra16hf",    FOURCC('A','R','4','H')},
 
+    // packed 16-bit formats
+    // rx10:        N/A
+    // rxgx10:      N/A
+    {"rxgxbxax10",  FOURCC('A','B','1','0')},
+    // rx12:        N/A
+    // rxgx12:      N/A
+    // rxgxbxax12:  N/A
+
     // no planar formats yet (tm)
 };
 
