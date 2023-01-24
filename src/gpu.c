@@ -476,7 +476,26 @@ static const struct pl_fmt_fourcc pl_fmt_fourccs[] = {
     // rxgx12:      N/A
     // rxgxbxax12:  N/A
 
-    // no planar formats yet (tm)
+    // planar formats
+    {"g8_b8_r8_420",    FOURCC('Y','U','1','2')},
+    {"g8_b8_r8_422",    FOURCC('Y','U','1','6')},
+    {"g8_b8_r8_444",    FOURCC('Y','U','2','4')},
+    // g16_b18_r8_*:    N/A
+    // gx10_bx10_rx10_42*: N/A
+    {"gx10_bx10_rx10_444", FOURCC('Q','4','1','0')},
+    // gx12_bx12_rx12_*:N/A
+    {"g8_br8_420",      FOURCC('N','V','1','2')},
+    {"g8_br8_422",      FOURCC('N','V','1','6')},
+    {"g8_br8_444",      FOURCC('N','V','2','4')},
+    {"g16_br16_420",    FOURCC('P','0','1','6')},
+    // g16_br16_422:    N/A
+    // g16_br16_444:    N/A
+    {"gx10_bxrx10_420", FOURCC('P','0','1','0')},
+    {"gx10_bxrx10_422", FOURCC('P','2','1','0')},
+    // gx10_bxrx10_444: N/A
+    {"gx12_bxrx12_420", FOURCC('P','0','1','2')},
+    // gx12_bxrx12_422: N/A
+    // gx12_bxrx12_444: N/A
 };
 
 uint32_t pl_fmt_fourcc(pl_fmt fmt)
