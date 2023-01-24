@@ -296,19 +296,21 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
     // Do this first because the following operations are potentially nonlinear
     pl_shader_set_alpha(sh, repr, PL_ALPHA_INDEPENDENT);
 
-    // XYZ needs special handling due to the input gamma logic
-    if (repr->sys == PL_COLOR_SYSTEM_XYZ) {
-        ident_t scale = SH_FLOAT(pl_color_repr_normalize(repr));
-        GLSL("color.rgb = max(color.rgb, vec3(0.0));            \n"
-             "color.rgb = pow(vec3(%s) * color.rgb, vec3(2.6)); \n",
-             scale);
-    }
-
-    if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION) {
+    if (repr->sys == PL_COLOR_SYSTEM_XYZ ||
+        repr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
+    {
         ident_t scale = SH_FLOAT(pl_color_repr_normalize(repr));
         GLSL("color.rgb *= vec3(%s); \n", scale);
-        pl_shader_dovi_reshape(sh, repr->dovi);
     }
+
+    if (repr->sys == PL_COLOR_SYSTEM_XYZ) {
+        pl_shader_linearize(sh, &(struct pl_color_space) {
+            .transfer = PL_COLOR_TRC_ST428,
+        });
+    }
+
+    if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
+        pl_shader_dovi_reshape(sh, repr->dovi);
 
     enum pl_color_system orig_sys = repr->sys;
     struct pl_transform3x3 tr = pl_color_repr_decode(repr, params);
@@ -588,8 +590,12 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
 
         GLSL("color.rgb = %s * color.rgb + %s;\n", cmat, cmat_c);
 
-        if (xyzscale)
-            GLSL("color.rgb = pow(color.rgb, vec3(1.0/2.6)) * vec3(%s); \n", xyzscale);
+        if (repr->sys == PL_COLOR_SYSTEM_XYZ) {
+            pl_shader_delinearize(sh, &(struct pl_color_space) {
+                .transfer = PL_COLOR_TRC_ST428,
+            });
+            GLSL("color.rgb *= vec3(%s); \n", xyzscale);
+        }
     }
 
     if (repr->alpha == PL_ALPHA_PREMULTIPLIED)

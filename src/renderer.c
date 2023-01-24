@@ -1789,24 +1789,11 @@ static bool pass_read_image(struct pass_state *pass)
     }
 
     if (needs_conversion) {
-        if (pass->img.repr.sys == PL_COLOR_SYSTEM_XYZ) {
-            // Pre-convert to RGB before feeding it into `pl_shader_decode_color`
-            const struct pl_raw_primaries *prim = pl_raw_primaries_get(image->color.primaries);
-            struct pl_matrix3x3 xyz2rgb = pl_get_xyz2rgb_matrix(prim);
-            float scale = pl_color_repr_normalize(&pass->img.repr);
-            GLSL("color *= vec4(%s); \n", SH_FLOAT(scale));
-            pl_shader_set_alpha(sh, &pass->img.repr, PL_ALPHA_INDEPENDENT);
-            pl_shader_linearize(sh, &pass->img.color);
-            GLSL("color.rgb = %s * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
-                .var    = pl_var_mat3("xyz2rgb"),
-                .data   = PL_TRANSPOSE_3X3(xyz2rgb.m),
-            }));
-            pl_shader_delinearize(sh, &pass->img.color);
-            pass->img.repr.sys = PL_COLOR_SYSTEM_RGB;
-        }
-
+        if (pass->img.repr.sys == PL_COLOR_SYSTEM_XYZ)
+            pass->img.color.transfer = PL_COLOR_TRC_LINEAR;
         pl_shader_decode_color(sh, &pass->img.repr, params->color_adjustment);
     }
+
     if (lut_type == PL_LUT_NORMALIZED)
         pl_shader_custom_lut(sh, image->lut, &rr->lut_state[LUT_IMAGE]);
 
@@ -2534,11 +2521,9 @@ static void fix_frame(struct pl_frame *frame)
     pl_tex tex = frame->planes[frame_ref(frame)].texture;
 
     if (frame->repr.sys == PL_COLOR_SYSTEM_XYZ) {
-        // Infer primaries as DCI-P3, because this is the most common case
-        if (!frame->color.primaries)
-            frame->color.primaries = PL_COLOR_PRIM_DCI_P3;
-        // Force XYZ gamma to be gamma2.6, because of inconsistent tagging
-        frame->color.transfer = PL_COLOR_TRC_GAMMA26;
+        // XYZ is implicity converted to linear DCI-P3 in pl_color_repr_decode
+        frame->color.primaries = PL_COLOR_PRIM_DCI_P3;
+        frame->color.transfer = PL_COLOR_TRC_ST428;
     }
 
     // If the primaries are not known, guess them based on the resolution

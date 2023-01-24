@@ -1266,7 +1266,7 @@ static void update_settings(struct plplay *p)
                 [PL_COLOR_SYSTEM_DOLBYVISION]   = "Dolby Vision (invalid for output)",
                 [PL_COLOR_SYSTEM_YCGCO]         = "YCgCo (derived from RGB)",
                 [PL_COLOR_SYSTEM_RGB]           = "Red, Green and Blue",
-                [PL_COLOR_SYSTEM_XYZ]           = "CIE 1931 XYZ, pre-encoded with gamma 2.6",
+                [PL_COLOR_SYSTEM_XYZ]           = "Digital Cinema Distribution Master (XYZ)",
             };
 
             nk_label(nk, "System:", NK_TEXT_LEFT);

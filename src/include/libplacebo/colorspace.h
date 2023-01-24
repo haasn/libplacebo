@@ -41,7 +41,7 @@ enum pl_color_system {
     PL_COLOR_SYSTEM_YCGCO,       // YCgCo (derived from RGB)
     // Other color systems:
     PL_COLOR_SYSTEM_RGB,         // Red, Green and Blue
-    PL_COLOR_SYSTEM_XYZ,         // CIE 1931 XYZ, pre-encoded with gamma 2.6
+    PL_COLOR_SYSTEM_XYZ,         // Digital Cinema Distribution Master (XYZ)
     PL_COLOR_SYSTEM_COUNT
 };
 
@@ -574,8 +574,8 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
 // Note: For BT.2100 ICtCp, this outputs in the color space L'M'S'. Further
 // non-linear processing must be done by the caller.
 //
-// Note: For XYZ system, the input/encoding gamma must be pre-applied by the
-// user, typically this has a value of 2.6.
+// Note: XYZ system is expected to be in DCDM X'Y'Z' encoding (ST 428-1), in
+// practice this means normalizing by (48.0 / 52.37) factor and applying 2.6 gamma
 struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
                                     const struct pl_color_adjustment *params);
 

@@ -47,12 +47,16 @@ void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data);
 //
 // Note: This function always returns PC-range RGB with independent alpha.
 // It mutates the pl_color_repr to reflect the change.
+//
+// Note: For DCDM XYZ decoding output is linear
 void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
                             const struct pl_color_adjustment *params);
 
 // Encodes a color from normalized, PC-range, independent alpha RGB into a
 // given representation. That is, this performs the inverse operation of
 // `pl_shader_decode_color` (sans color adjustments).
+//
+// Note: For DCDM XYZ encoding input is expected to be linear
 void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr);
 
 // Linearize (expand) `vec4 color`, given a specified color space. In essence,
