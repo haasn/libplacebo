@@ -656,11 +656,11 @@ const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim
     */
 
     // CIE standard illuminant series
-#define CIE_D50 {0.34577, 0.35850}
-#define CIE_D65 {0.31271, 0.32902}
-#define CIE_DCI {0.31400, 0.35100}
-#define CIE_C   {0.31006, 0.31616}
+#define CIE_D50 {0.3457, 0.3585}
+#define CIE_D65 {0.3127, 0.3290}
+#define CIE_C   {0.3100, 0.3160}
 #define CIE_E   {1.0/3.0, 1.0/3.0}
+#define DCI     {0.3140, 0.3510}
 
     static const struct pl_raw_primaries primaries[] = {
         [PL_COLOR_PRIM_BT_470M] = {
@@ -723,7 +723,7 @@ const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim
             .red   = {0.680, 0.320},
             .green = {0.265, 0.690},
             .blue  = {0.150, 0.060},
-            .white = CIE_DCI,
+            .white = DCI,
         },
         [PL_COLOR_PRIM_DISPLAY_P3] = {
             .red   = {0.680, 0.320},
