@@ -184,7 +184,7 @@ static inline enum pl_color_transfer pl_transfer_from_av(enum AVColorTransferCha
     case AVCOL_TRC_BT2020_10:       return PL_COLOR_TRC_BT_1886; // EOTF != OETF
     case AVCOL_TRC_BT2020_12:       return PL_COLOR_TRC_BT_1886; // EOTF != OETF
     case AVCOL_TRC_SMPTE2084:       return PL_COLOR_TRC_PQ;
-    case AVCOL_TRC_SMPTE428:        return PL_COLOR_TRC_UNKNOWN; // missing
+    case AVCOL_TRC_SMPTE428:        return PL_COLOR_TRC_ST428;
     case AVCOL_TRC_ARIB_STD_B67:    return PL_COLOR_TRC_HLG;
     case AVCOL_TRC_NB:              return PL_COLOR_TRC_COUNT;
     }
@@ -205,6 +205,7 @@ static inline enum AVColorTransferCharacteristic pl_transfer_to_av(enum pl_color
     case PL_COLOR_TRC_GAMMA24:      return AVCOL_TRC_UNSPECIFIED; // missing
     case PL_COLOR_TRC_GAMMA26:      return AVCOL_TRC_UNSPECIFIED; // missing
     case PL_COLOR_TRC_GAMMA28:      return AVCOL_TRC_GAMMA28;
+    case PL_COLOR_TRC_ST428:        return AVCOL_TRC_SMPTE428;
     case PL_COLOR_TRC_PRO_PHOTO:    return AVCOL_TRC_UNSPECIFIED; // missing
     case PL_COLOR_TRC_PQ:           return AVCOL_TRC_SMPTE2084;
     case PL_COLOR_TRC_HLG:          return AVCOL_TRC_ARIB_STD_B67;

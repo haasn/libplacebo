@@ -92,7 +92,7 @@ static inline enum pl_color_primaries pl_primaries_from_dav1d(enum Dav1dColorPri
     case DAV1D_COLOR_PRI_SMPTE240:      return PL_COLOR_PRIM_BT_601_525;
     case DAV1D_COLOR_PRI_FILM:          return PL_COLOR_PRIM_FILM_C;
     case DAV1D_COLOR_PRI_BT2020:        return PL_COLOR_PRIM_BT_2020;
-    case DAV1D_COLOR_PRI_XYZ:           return PL_COLOR_PRIM_CIE_1931;
+    case DAV1D_COLOR_PRI_XYZ:           return PL_COLOR_PRIM_UNKNOWN;
     case DAV1D_COLOR_PRI_SMPTE431:      return PL_COLOR_PRIM_DCI_P3;
     case DAV1D_COLOR_PRI_SMPTE432:      return PL_COLOR_PRIM_DISPLAY_P3;
     case DAV1D_COLOR_PRI_EBU3213:       return PL_COLOR_PRIM_EBU_3213;
@@ -114,7 +114,7 @@ static inline enum Dav1dColorPrimaries pl_primaries_to_dav1d(enum pl_color_prima
     case PL_COLOR_PRIM_APPLE:       return DAV1D_COLOR_PRI_UNKNOWN; // missing
     case PL_COLOR_PRIM_ADOBE:       return DAV1D_COLOR_PRI_UNKNOWN; // missing
     case PL_COLOR_PRIM_PRO_PHOTO:   return DAV1D_COLOR_PRI_UNKNOWN; // missing
-    case PL_COLOR_PRIM_CIE_1931:    return DAV1D_COLOR_PRI_XYZ;
+    case PL_COLOR_PRIM_CIE_1931:    return DAV1D_COLOR_PRI_UNKNOWN; // missing
     case PL_COLOR_PRIM_DCI_P3:      return DAV1D_COLOR_PRI_SMPTE431;
     case PL_COLOR_PRIM_DISPLAY_P3:  return DAV1D_COLOR_PRI_SMPTE432;
     case PL_COLOR_PRIM_V_GAMUT:     return DAV1D_COLOR_PRI_UNKNOWN; // missing
@@ -146,7 +146,7 @@ static inline enum pl_color_transfer pl_transfer_from_dav1d(enum Dav1dTransferCh
     case DAV1D_TRC_BT2020_10BIT:    return PL_COLOR_TRC_BT_1886; // EOTF != OETF
     case DAV1D_TRC_BT2020_12BIT:    return PL_COLOR_TRC_BT_1886; // EOTF != OETF
     case DAV1D_TRC_SMPTE2084:       return PL_COLOR_TRC_PQ;
-    case DAV1D_TRC_SMPTE428:        return PL_COLOR_TRC_UNKNOWN; // missing
+    case DAV1D_TRC_SMPTE428:        return PL_COLOR_TRC_ST428;
     case DAV1D_TRC_HLG:             return PL_COLOR_TRC_HLG;
     case DAV1D_TRC_RESERVED: abort();
     }
@@ -167,6 +167,7 @@ static inline enum Dav1dTransferCharacteristics pl_transfer_to_dav1d(enum pl_col
     case PL_COLOR_TRC_GAMMA24:      return DAV1D_TRC_UNKNOWN; // missing
     case PL_COLOR_TRC_GAMMA26:      return DAV1D_TRC_UNKNOWN; // missing
     case PL_COLOR_TRC_GAMMA28:      return DAV1D_TRC_BT470BG;
+    case PL_COLOR_TRC_ST428:        return DAV1D_TRC_SMPTE428;
     case PL_COLOR_TRC_PRO_PHOTO:    return DAV1D_TRC_UNKNOWN; // missing
     case PL_COLOR_TRC_PQ:           return DAV1D_TRC_SMPTE2084;
     case PL_COLOR_TRC_HLG:          return DAV1D_TRC_HLG;
