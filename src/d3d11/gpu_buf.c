@@ -152,18 +152,30 @@ pl_buf pl_d3d11_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
 
     // Create a typed SRV for PL_BUF_TEXEL_UNIFORM and PL_BUF_TEXEL_STORAGE
     if (params->format) {
-        D3D11_SHADER_RESOURCE_VIEW_DESC sdesc = {
-            .Format = fmt_to_dxgi(params->format),
-            .ViewDimension = D3D11_SRV_DIMENSION_BUFFER,
-        };
-        D3D(ID3D11Device_CreateShaderResourceView(p->dev,
-            (ID3D11Resource *) buf_p->buf, &sdesc, &buf_p->texel_srv));
+        if (params->uniform) {
+            D3D11_SHADER_RESOURCE_VIEW_DESC sdesc = {
+                .Format = fmt_to_dxgi(params->format),
+                .ViewDimension = D3D11_SRV_DIMENSION_BUFFER,
+                .Buffer = {
+                    .NumElements =
+                        PL_ALIGN(buf->params.size, buf->params.format->texel_size)
+                            / buf->params.format->texel_size,
+                },
+            };
+            D3D(ID3D11Device_CreateShaderResourceView(p->dev,
+                (ID3D11Resource *) buf_p->buf, &sdesc, &buf_p->texel_srv));
+        }
 
         // Create a typed UAV for PL_BUF_TEXEL_STORAGE
         if (params->storable) {
             D3D11_UNORDERED_ACCESS_VIEW_DESC udesc = {
                 .Format = fmt_to_dxgi(buf->params.format),
                 .ViewDimension = D3D11_UAV_DIMENSION_BUFFER,
+                .Buffer = {
+                    .NumElements =
+                        PL_ALIGN(buf->params.size, buf->params.format->texel_size)
+                            / buf->params.format->texel_size,
+                },
             };
             D3D(ID3D11Device_CreateUnorderedAccessView(p->dev,
                 (ID3D11Resource *) buf_p->buf, &udesc, &buf_p->texel_uav));
