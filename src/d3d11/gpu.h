@@ -146,6 +146,9 @@ struct pl_tex_d3d11 {
     ID3D11ShaderResourceView *srv;
     ID3D11RenderTargetView *rtv;
     ID3D11UnorderedAccessView *uav;
+
+    // for tex_upload/download fallback code
+    pl_fmt texel_fmt;
 };
 
 void pl_d3d11_tex_destroy(pl_gpu gpu, pl_tex tex);

@@ -178,6 +178,31 @@ pl_tex pl_d3d11_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     D3D11_USAGE usage = D3D11_USAGE_DEFAULT;
     D3D11_BIND_FLAG bind_flags = 0;
 
+    if (params->format->emulated) {
+        tex_p->texel_fmt = pl_find_fmt(gpu, params->format->type, 1, 0,
+                                       params->format->host_bits[0],
+                                       PL_FMT_CAP_TEXEL_UNIFORM);
+
+        if (!tex_p->texel_fmt) {
+            PL_ERR(gpu, "Failed picking texel format for emulated texture!");
+            return NULL;
+        }
+
+        // Statically check to see if we'd even be able to upload it at all
+        // and refuse right away if not. In theory, uploading can still fail
+        // based on the size of pl_tex_transfer_params.row_pitch, but for now
+        // this should be enough.
+        uint64_t texels = params->w * PL_DEF(params->h, 1) * PL_DEF(params->d, 1) *
+                          params->format->num_components;
+
+        if (texels > gpu->limits.max_buffer_texels) {
+            PL_ERR(gpu, "Failed creating texture with emulated texture format: "
+                   "texture dimensions exceed maximum texel buffer size! Try "
+                   "again with a different (non-emulated) format?");
+            goto error;
+        }
+    }
+
     if (p->fl >= D3D_FEATURE_LEVEL_11_0) {
         // On >=FL11_0, blit emulation needs image storage
         tex->params.storable |= params->blit_src || params->blit_dst;
@@ -577,18 +602,65 @@ bool pl_d3d11_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     struct d3d11_ctx *ctx = p->ctx;
     pl_tex tex = params->tex;
+    pl_fmt fmt = tex->params.format;
     struct pl_tex_d3d11 *tex_p = PL_PRIV(tex);
+    bool ret = false;
 
     pl_d3d11_timer_start(gpu, params->timer);
 
-    ID3D11DeviceContext_UpdateSubresource(p->imm, tex_p->res,
-        tex_subresource(tex), &pl_rect3d_to_box(params->rc), params->ptr,
-        params->row_pitch, params->depth_pitch);
+    if (fmt->emulated) {
+        size_t size = pl_tex_transfer_size(params);
 
+        // Copy the source data buffer into an intermediate buffer
+        struct pl_buf_params tbuf_params = {
+            .debug_tag = PL_DEBUG_TAG,
+            .memory_type = PL_BUF_MEM_DEVICE,
+            .format = tex_p->texel_fmt,
+            .size = size,
+            .initial_data = params->ptr,
+        };
+
+        if (size <= gpu->limits.max_ubo_size) {
+            tbuf_params.uniform = true;
+        } else if (size <= gpu->limits.max_ssbo_size) {
+            tbuf_params.storable = true;
+        } else {
+            // TODO: Implement strided upload path if really necessary
+            PL_ERR(gpu,
+                   "Texel buffer size requirements exceed GPU "
+                   "capabilities, failed uploading!");
+            goto error;
+        }
+
+        pl_buf tbuf = pl_buf_create(gpu, &tbuf_params);
+        if (!tbuf) {
+            PL_ERR(gpu, "Failed creating buffer for tex upload fallback!");
+            goto error;
+        }
+
+        struct pl_tex_transfer_params fixed = *params;
+        fixed.buf = tbuf;
+        fixed.buf_offset = 0;
+
+        bool ok = pl_tex_upload_texel(gpu, p->dp, &fixed);
+
+        pl_buf_destroy(gpu, &tbuf);
+
+        if (!ok)
+            goto error;
+    } else {
+        ID3D11DeviceContext_UpdateSubresource(p->imm, tex_p->res,
+            tex_subresource(tex), &pl_rect3d_to_box(params->rc), params->ptr,
+            params->row_pitch, params->depth_pitch);
+    }
+
+    ret = true;
+
+error:
     pl_d3d11_timer_end(gpu, params->timer);
     pl_d3d11_flush_message_queue(ctx, "After texture upload");
 
-    return true;
+    return ret;
 }
 
 bool pl_d3d11_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
@@ -596,41 +668,74 @@ bool pl_d3d11_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *para
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
     struct d3d11_ctx *ctx = p->ctx;
     const struct pl_tex_t *tex = params->tex;
+    pl_fmt fmt = tex->params.format;
     struct pl_tex_d3d11 *tex_p = PL_PRIV(tex);
+    bool ret = false;
 
     if (!tex_p->staging)
         return false;
 
     pl_d3d11_timer_start(gpu, params->timer);
 
-    ID3D11DeviceContext_CopySubresourceRegion(p->imm,
-        (ID3D11Resource *) tex_p->staging, 0, params->rc.x0, params->rc.y0,
-        params->rc.z0, tex_p->res, tex_subresource(tex),
-        &pl_rect3d_to_box(params->rc));
+    if (fmt->emulated) {
+        size_t size = pl_tex_transfer_size(params);
 
-    D3D11_MAPPED_SUBRESOURCE lock;
-    D3D(ID3D11DeviceContext_Map(p->imm, (ID3D11Resource *) tex_p->staging, 0,
-                                D3D11_MAP_READ, 0, &lock));
+        // Download into an intermediate buffer first
+        pl_buf tbuf = pl_buf_create(gpu, pl_buf_params(
+            .storable = fmt->emulated,
+            .size = size,
+            .memory_type = PL_BUF_MEM_DEVICE,
+            .format = tex_p->texel_fmt,
+            .host_readable = true,
+        ));
 
-    char *cdst = params->ptr;
-    char *csrc = lock.pData;
-    size_t line_size = pl_rect_w(params->rc) * tex->params.format->texel_size;
-    for (int z = 0; z < pl_rect_d(params->rc); z++) {
-        for (int y = 0; y < pl_rect_h(params->rc); y++) {
-            memcpy(cdst + z * params->depth_pitch + y * params->row_pitch,
-                   csrc + (params->rc.z0 + z) * lock.DepthPitch +
-                          (params->rc.y0 + y) * lock.RowPitch + params->rc.x0,
-                   line_size);
+        if (!tbuf) {
+            PL_ERR(gpu, "Failed creating buffer for tex download fallback!");
+            goto error;
         }
+
+        struct pl_tex_transfer_params fixed = *params;
+        fixed.buf = tbuf;
+        fixed.buf_offset = 0;
+
+        bool ok = pl_tex_download_texel(gpu, p->dp, &fixed);
+
+        ok = ok && pl_buf_read(gpu, tbuf, 0, params->ptr, size);
+
+        pl_buf_destroy(gpu, &tbuf);
+
+        if (!ok)
+            goto error;
+    } else {
+        ID3D11DeviceContext_CopySubresourceRegion(p->imm,
+            (ID3D11Resource *) tex_p->staging, 0, params->rc.x0, params->rc.y0,
+            params->rc.z0, tex_p->res, tex_subresource(tex),
+            &pl_rect3d_to_box(params->rc));
+
+        D3D11_MAPPED_SUBRESOURCE lock;
+        D3D(ID3D11DeviceContext_Map(p->imm, (ID3D11Resource *) tex_p->staging, 0,
+                                    D3D11_MAP_READ, 0, &lock));
+
+        char *cdst = params->ptr;
+        char *csrc = lock.pData;
+        size_t line_size = pl_rect_w(params->rc) * tex->params.format->texel_size;
+        for (int z = 0; z < pl_rect_d(params->rc); z++) {
+            for (int y = 0; y < pl_rect_h(params->rc); y++) {
+                memcpy(cdst + z * params->depth_pitch + y * params->row_pitch,
+                    csrc + (params->rc.z0 + z) * lock.DepthPitch +
+                            (params->rc.y0 + y) * lock.RowPitch + params->rc.x0,
+                    line_size);
+            }
+        }
+
+        ID3D11DeviceContext_Unmap(p->imm, (ID3D11Resource*)tex_p->staging, 0);
     }
 
-    ID3D11DeviceContext_Unmap(p->imm, (ID3D11Resource*)tex_p->staging, 0);
+    ret = true;
 
+error:
     pl_d3d11_timer_end(gpu, params->timer);
     pl_d3d11_flush_message_queue(ctx, "After texture download");
 
-    return true;
-
-error:
-    return false;
+    return ret;
 }
