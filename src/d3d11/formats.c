@@ -43,12 +43,33 @@
         BITS(bits, bits, bits, bits),                   \
         IDX(0, 1, 2, 3))
 
+#define EMUFMT(_name, _dxfmt, _type, in, en, ib, eb)  \
+    (struct d3d_format) {                             \
+        .dxfmt = DXGI_FORMAT_##_dxfmt##_##_type,      \
+        .minor = 0,                                   \
+        .fmt = {                                      \
+            .name = _name,                            \
+            .type = PL_FMT_##_type,                   \
+            .num_components  = en,                    \
+            .component_depth = BITS(ib, ib, ib, ib),  \
+            .internal_size   = (in) * (ib) / 8,       \
+            .opaque          = false,                 \
+            .emulated        = true,                  \
+            .texel_size      = (en) * (eb) / 8,       \
+            .texel_align     = (eb) / 8,              \
+            .host_bits       = BITS(eb, eb, eb, eb),  \
+            .sample_order    = IDX(0, 1, 2, 3),       \
+        },                                            \
+    }
+
 const struct d3d_format pl_d3d11_formats[] = {
     REGFMT("r8",       R8,           UNORM, 1,  8),
     REGFMT("rg8",      R8G8,         UNORM, 2,  8),
+    EMUFMT("rgb8",     R8G8B8A8,     UNORM, 4,  3, 8, 8),
     REGFMT("rgba8",    R8G8B8A8,     UNORM, 4,  8),
     REGFMT("r16",      R16,          UNORM, 1, 16),
     REGFMT("rg16",     R16G16,       UNORM, 2, 16),
+    EMUFMT("rgb16",    R16G16B16A16, UNORM, 4,  3, 16, 16),
     REGFMT("rgba16",   R16G16B16A16, UNORM, 4, 16),
 
     REGFMT("r8s",      R8,           SNORM, 1,  8),
@@ -60,11 +81,17 @@ const struct d3d_format pl_d3d11_formats[] = {
 
     REGFMT("r16hf",    R16,          FLOAT, 1, 16),
     REGFMT("rg16hf",   R16G16,       FLOAT, 2, 16),
+    EMUFMT("rgb16hf",  R16G16B16A16, FLOAT, 4,  3, 16, 16),
     REGFMT("rgba16hf", R16G16B16A16, FLOAT, 4, 16),
     REGFMT("r32f",     R32,          FLOAT, 1, 32),
     REGFMT("rg32f",    R32G32,       FLOAT, 2, 32),
     REGFMT("rgb32f",   R32G32B32,    FLOAT, 3, 32),
     REGFMT("rgba32f",  R32G32B32A32, FLOAT, 4, 32),
+
+    EMUFMT("r16f",     R16,          FLOAT, 1,  1, 16, 32),
+    EMUFMT("rg16f",    R16G16,       FLOAT, 2,  2, 16, 32),
+    EMUFMT("rgb16f",   R16G16B16A16, FLOAT, 4,  3, 16, 32),
+    EMUFMT("rgba16f",  R16G16B16A16, FLOAT, 4,  4, 16, 32),
 
     REGFMT("r8u",      R8,           UINT,  1,  8),
     REGFMT("rg8u",     R8G8,         UINT,  2,  8),
