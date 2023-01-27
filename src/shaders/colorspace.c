@@ -269,10 +269,14 @@ void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
             GLSL("} \n");
         }
 
-        // Hard-code these as constants because they're exceptionally unlikely
-        // to change from frame to frame (if they do, shoot the sample author)
-        ident_t lo = SH_FLOAT(comp->pivots[0]);
-        ident_t hi = SH_FLOAT(comp->pivots[comp->num_pivots - 1]);
+        ident_t lo = sh_var(sh, (struct pl_shader_var) {
+            .var = pl_var_float("lo"),
+            .data = &comp->pivots[0],
+        });
+        ident_t hi = sh_var(sh, (struct pl_shader_var) {
+            .var = pl_var_float("hi"),
+            .data = &comp->pivots[comp->num_pivots - 1],
+        });
         GLSL("color[%d] = clamp(s, %s, %s); \n", c, lo, hi);
     }
 
