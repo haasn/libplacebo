@@ -435,6 +435,14 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
             pass_params->constants[i].id, types[sc->type], sc->name);
     }
 
+    static const char sampler_prefixes[PL_FMT_TYPE_COUNT] = {
+        [PL_FMT_FLOAT]  = ' ',
+        [PL_FMT_UNORM]  = ' ',
+        [PL_FMT_SNORM]  = ' ',
+        [PL_FMT_UINT]   = 'u',
+        [PL_FMT_SINT]   = 'i',
+    };
+
     // Add all of the required descriptors
     for (int i = 0; i < res->num_descriptors; i++) {
         const struct pl_shader_desc *sd = &res->descriptors[i];
@@ -455,15 +463,7 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
             const char *type = types[tex->sampler_type][dims];
             pl_assert(type);
 
-            static const char prefixes[PL_FMT_TYPE_COUNT] = {
-                [PL_FMT_FLOAT]  = ' ',
-                [PL_FMT_UNORM]  = ' ',
-                [PL_FMT_SNORM]  = ' ',
-                [PL_FMT_UINT]   = 'u',
-                [PL_FMT_SINT]   = 'i',
-            };
-
-            char prefix = prefixes[tex->params.format->type];
+            char prefix = sampler_prefixes[tex->params.format->type];
             pl_assert(prefix);
 
             const char *prec = "";
@@ -534,16 +534,20 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
             add_buffer_vars(dp, tmp, pre, sd->buffer_vars, sd->num_buffer_vars);
             break;
 
-        case PL_DESC_BUF_TEXEL_UNIFORM:
+        case PL_DESC_BUF_TEXEL_UNIFORM: {
+            pl_buf buf = sd->binding.object;
+            char prefix = sampler_prefixes[buf->params.format->type];
             if (gpu->glsl.vulkan)
                 ADD(pre, "layout(binding=%d) ", desc->binding);
-            ADD(pre, "uniform samplerBuffer %s;\n", desc->name);
+            ADD(pre, "uniform %csamplerBuffer %s;\n", prefix, desc->name);
             break;
+        }
 
         case PL_DESC_BUF_TEXEL_STORAGE: {
             pl_buf buf = sd->binding.object;
             const char *format = buf->params.format->glsl_format;
             const char *access = pl_desc_access_glsl_name(desc->access);
+            char prefix = sampler_prefixes[buf->params.format->type];
             if (gpu->glsl.vulkan) {
                 if (format) {
                     ADD(pre, "layout(binding=%d, %s) ", desc->binding, format);
@@ -554,10 +558,10 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
                 ADD(pre, "layout(%s) ", format);
             }
 
-            ADD(pre, "%s%s%s restrict uniform imageBuffer %s;\n", access,
+            ADD(pre, "%s%s%s restrict uniform %cimageBuffer %s;\n", access,
                 (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
                 (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",
-                desc->name);
+                prefix, desc->name);
             break;
         }
 
