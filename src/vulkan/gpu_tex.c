@@ -712,7 +712,7 @@ void vk_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
     struct pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
     bool requires_scaling = !pl_rect3d_eq(src_rc, dst_rc);
     if ((requires_scaling && blit_emulated) || planar_fallback) {
-        if (!pl_tex_blit_compute(gpu, p->dp, params))
+        if (!pl_tex_blit_compute(gpu, params))
             PL_ERR(gpu, "Failed emulating texture blit, incompatible textures?");
         return;
     }
@@ -920,7 +920,7 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         fixed.buf = tbuf;
         fixed.buf_offset = 0;
 
-        bool ok = fmt->emulated ? pl_tex_upload_texel(gpu, p->dp, &fixed)
+        bool ok = fmt->emulated ? pl_tex_upload_texel(gpu, &fixed)
                                 : pl_tex_upload(gpu, &fixed);
 
         pl_buf_destroy(gpu, &tbuf);
@@ -1008,7 +1008,7 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         fixed.buf = tbuf;
         fixed.buf_offset = 0;
 
-        bool ok = fmt->emulated ? pl_tex_download_texel(gpu, p->dp, &fixed)
+        bool ok = fmt->emulated ? pl_tex_download_texel(gpu, &fixed)
                                 : pl_tex_download(gpu, &fixed);
         if (!ok) {
             pl_buf_destroy(gpu, &tbuf);

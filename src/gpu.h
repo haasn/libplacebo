@@ -119,19 +119,15 @@ bool pl_tex_upload_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params);
 bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params);
 
 // This requires that params.buf has been set and is of type PL_BUF_TEXEL_*
-bool pl_tex_upload_texel(pl_gpu gpu, pl_dispatch dp,
-                         const struct pl_tex_transfer_params *params);
-bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
-                           const struct pl_tex_transfer_params *params);
+bool pl_tex_upload_texel(pl_gpu gpu, const struct pl_tex_transfer_params *params);
+bool pl_tex_download_texel(pl_gpu gpu, const struct pl_tex_transfer_params *params);
 
 // Both `src` and `dst must be storable. `src` must also be sampleable, if the
 // blit requires linear sampling. Returns false if these conditions are unmet.
-bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
-                         const struct pl_tex_blit_params *params);
+bool pl_tex_blit_compute(pl_gpu gpu, const struct pl_tex_blit_params *params);
 
 // Helper to do a 2D blit with stretch and scale using a raster pass
-void pl_tex_blit_raster(pl_gpu gpu, pl_dispatch dp,
-                        const struct pl_tex_blit_params *params);
+void pl_tex_blit_raster(pl_gpu gpu, const struct pl_tex_blit_params *params);
 
 void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params);
 

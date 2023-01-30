@@ -3143,7 +3143,7 @@ retry:
                 if (blit.src->params.blit_src && blit.dst->params.blit_dst) {
                     pl_tex_blit(rr->gpu, &blit);
                 } else {
-                    pl_tex_blit_raster(rr->gpu, rr->dp, &blit);
+                    pl_tex_blit_raster(rr->gpu, &blit);
                 }
             } else {
                 ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(

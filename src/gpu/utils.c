@@ -619,14 +619,14 @@ bool pl_tex_download_pbo(pl_gpu gpu, const struct pl_tex_transfer_params *params
     return ok;
 }
 
-bool pl_tex_upload_texel(pl_gpu gpu, pl_dispatch dp,
-                         const struct pl_tex_transfer_params *params)
+bool pl_tex_upload_texel(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
     const int threads = PL_MIN(256, pl_rect_w(params->rc));
     pl_tex tex = params->tex;
     pl_fmt fmt = tex->params.format;
     pl_require(gpu, params->buf);
 
+    pl_dispatch dp = pl_gpu_dispatch(gpu);
     pl_shader sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, threads, 1, false, 0)) {
         PL_ERR(gpu, "Failed emulating texture transfer!");
@@ -698,14 +698,14 @@ error:
     return false;
 }
 
-bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
-                           const struct pl_tex_transfer_params *params)
+bool pl_tex_download_texel(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 {
     const int threads = PL_MIN(256, pl_rect_w(params->rc));
     pl_tex tex = params->tex;
     pl_fmt fmt = tex->params.format;
     pl_require(gpu, params->buf);
 
+    pl_dispatch dp = pl_gpu_dispatch(gpu);
     pl_shader sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, threads, 1, false, 0)) {
         PL_ERR(gpu, "Failed emulating texture transfer!");
@@ -770,8 +770,7 @@ error:
     return false;
 }
 
-bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
-                         const struct pl_tex_blit_params *params)
+bool pl_tex_blit_compute(pl_gpu gpu, const struct pl_tex_blit_params *params)
 {
     if (!params->dst->params.storable)
         return false;
@@ -810,6 +809,7 @@ bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
     const int threads = 256;
     int bw = PL_MIN(32, pl_rect_w(dst_rc));
     int bh = PL_MIN(threads / bw, pl_rect_h(dst_rc));
+    pl_dispatch dp = pl_gpu_dispatch(gpu);
     pl_shader sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, bw, bh, false, 0)) {
         pl_dispatch_abort(dp, &sh);
@@ -945,8 +945,7 @@ bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
     ));
 }
 
-void pl_tex_blit_raster(pl_gpu gpu, pl_dispatch dp,
-                        const struct pl_tex_blit_params *params)
+void pl_tex_blit_raster(pl_gpu gpu, const struct pl_tex_blit_params *params)
 {
     enum pl_fmt_type src_type = params->src->params.format->type;
     enum pl_fmt_type dst_type = params->dst->params.format->type;
@@ -968,6 +967,7 @@ void pl_tex_blit_raster(pl_gpu gpu, pl_dispatch dp,
         .y0 = params->dst_rc.y0, .y1 = params->dst_rc.y1,
     };
 
+    pl_dispatch dp = pl_gpu_dispatch(gpu);
     pl_shader sh = pl_dispatch_begin(dp);
     sh->res.output = PL_SHADER_SIG_COLOR;
 

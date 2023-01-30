@@ -588,10 +588,10 @@ void pl_d3d11_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
             tex_subresource(params->dst), rc.x0, rc.y0, rc.z0, src_p->res,
             tex_subresource(params->src), &pl_rect3d_to_box(rc));
     } else if (p->fl >= D3D_FEATURE_LEVEL_11_0) {
-        if (!pl_tex_blit_compute(gpu, p->dp, params))
+        if (!pl_tex_blit_compute(gpu, params))
             PL_ERR(gpu, "Failed compute shader fallback blit");
     } else {
-        pl_tex_blit_raster(gpu, p->dp, params);
+        pl_tex_blit_raster(gpu, params);
     }
 
     pl_d3d11_flush_message_queue(ctx, "After texture blit");
@@ -642,7 +642,7 @@ bool pl_d3d11_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params
         fixed.buf = tbuf;
         fixed.buf_offset = 0;
 
-        bool ok = pl_tex_upload_texel(gpu, p->dp, &fixed);
+        bool ok = pl_tex_upload_texel(gpu, &fixed);
 
         pl_buf_destroy(gpu, &tbuf);
 
@@ -698,7 +698,7 @@ bool pl_d3d11_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *para
         fixed.buf = tbuf;
         fixed.buf_offset = 0;
 
-        bool ok = pl_tex_download_texel(gpu, p->dp, &fixed);
+        bool ok = pl_tex_download_texel(gpu, &fixed);
 
         ok = ok && pl_buf_read(gpu, tbuf, 0, params->ptr, size);
 
