@@ -521,11 +521,8 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
             break;
 
         case PL_DESC_BUF_STORAGE:
-            if (gpu->glsl.vulkan) {
+            if (gpu->glsl.version >= 140)
                 ADD(pre, "layout(std430, binding=%d) ", desc->binding);
-            } else if (gpu->glsl.version >= 140) {
-                ADD(pre, "layout(std430) ");
-            }
             ADD(pre, "%s%s%s restrict buffer %s ",
                 pl_desc_access_glsl_name(desc->access),
                 (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
