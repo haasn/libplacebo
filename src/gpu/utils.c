@@ -23,17 +23,6 @@
 
 // GPU-internal helpers
 
-#define require(expr)                                           \
-  do {                                                          \
-      if (!(expr)) {                                            \
-          PL_ERR(gpu, "Validation failed: %s (%s:%d)",          \
-                  #expr, __FILE__, __LINE__);                   \
-          pl_log_stack_trace(gpu->log, PL_LOG_ERR);             \
-          pl_debug_abort();                                     \
-          goto error;                                           \
-      }                                                         \
-  } while (0)
-
 static int cmp_fmt(const void *pa, const void *pb)
 {
     pl_fmt a = *(pl_fmt *)pa;
@@ -633,7 +622,7 @@ bool pl_tex_upload_texel(pl_gpu gpu, pl_dispatch dp,
     const int threads = PL_MIN(256, pl_rect_w(params->rc));
     pl_tex tex = params->tex;
     pl_fmt fmt = tex->params.format;
-    require(params->buf);
+    pl_require(gpu, params->buf);
 
     pl_shader sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, threads, 1, false, 0)) {
@@ -712,7 +701,7 @@ bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
     const int threads = PL_MIN(256, pl_rect_w(params->rc));
     pl_tex tex = params->tex;
     pl_fmt fmt = tex->params.format;
-    require(params->buf);
+    pl_require(gpu, params->buf);
 
     pl_shader sh = pl_dispatch_begin(dp);
     if (!sh_try_compute(sh, threads, 1, false, 0)) {

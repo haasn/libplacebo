@@ -18,16 +18,7 @@
 #include "common.h"
 #include "gpu.h"
 
-#define require(expr)                                           \
-  do {                                                          \
-      if (!(expr)) {                                            \
-          PL_ERR(gpu, "Validation failed: %s (%s:%d)",          \
-                  #expr, __FILE__, __LINE__);                   \
-          pl_log_stack_trace(gpu->log, PL_LOG_ERR);             \
-          pl_debug_abort();                                     \
-          goto error;                                           \
-      }                                                         \
-  } while (0)
+#define require(expr) pl_require(gpu, expr)
 
 void pl_gpu_destroy(pl_gpu gpu)
 {

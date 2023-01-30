@@ -191,3 +191,15 @@ typedef _Atomic uint32_t pl_rc_t;
 #define pl_rc_count(rc)  atomic_load(rc)
 
 #define pl_unreachable() (assert(!"unreachable"), __builtin_unreachable())
+
+// Helper for parameter validation
+#define pl_require(ctx, expr)                                   \
+  do {                                                          \
+      if (!(expr)) {                                            \
+          PL_ERR(ctx, "Validation failed: %s (%s:%d)",          \
+                  #expr, __FILE__, __LINE__);                   \
+          pl_log_stack_trace(ctx->log, PL_LOG_ERR);             \
+          pl_debug_abort();                                     \
+          goto error;                                           \
+      }                                                         \
+  } while (0)

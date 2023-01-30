@@ -2314,17 +2314,7 @@ static bool pass_output_target(struct pass_state *pass)
     return true;
 }
 
-#define require(expr)                                                           \
-  do {                                                                          \
-      if (!(expr)) {                                                            \
-          PL_ERR(rr, "Validation failed: %s (%s:%d)",                           \
-                  #expr, __FILE__, __LINE__);                                   \
-          pl_log_stack_trace(rr->log, PL_LOG_ERR);                              \
-          pl_debug_abort();                                                     \
-          return false;                                                         \
-      }                                                                         \
-  } while (0)
-
+#define require(expr) pl_require(rr, expr)
 #define validate_plane(plane, param)                                            \
   do {                                                                          \
       require((plane).texture);                                                 \
@@ -2400,6 +2390,9 @@ static bool validate_structs(pl_renderer rr,
     }
 
     return true;
+
+error:
+    return false;
 }
 
 // returns index
@@ -3130,7 +3123,7 @@ retry:
             // Render a single frame up to `pass_output_target`
             memcpy(inter_pass.fbofmt, pass.fbofmt, sizeof(pass.fbofmt));
             if (!pass_init(&inter_pass, true))
-                goto error;
+                goto fail;
 
             pass_begin_frame(&inter_pass);
             if (!(ok = pass_read_image(&inter_pass)))
@@ -3194,7 +3187,7 @@ retry:
 inter_pass_error:
             pass_uninit(&inter_pass);
             if (!ok)
-                goto error;
+                goto fail;
         }
 
         pl_assert(fidx < MAX_MIX_FRAMES);
@@ -3307,7 +3300,7 @@ inter_pass_error:
     pass_uninit(&pass);
     return true;
 
-error:
+fail:
     PL_ERR(rr, "Could not render image for frame mixing.. disabling!");
     rr->disable_mixing = true;
     // fall through
@@ -3316,7 +3309,8 @@ fallback:
     pass_uninit(&pass);
     return pl_render_image(rr, refimg, ptarget, params);
 
-
+error: // for parameter validation failures
+    return false;
 }
 
 void pl_frame_set_chroma_location(struct pl_frame *frame,
