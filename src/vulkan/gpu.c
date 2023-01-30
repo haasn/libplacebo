@@ -250,7 +250,6 @@ static void vk_gpu_destroy(pl_gpu gpu)
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    pl_dispatch_destroy(&p->dp);
     vk_cmd_submit(vk, &p->cmd);
     vk_wait_idle(vk);
 
@@ -583,8 +582,6 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         }
     }
 
-    // Create the dispatch last, after any setup of `gpu` is done
-    p->dp = pl_dispatch_create(vk->log, gpu);
     return pl_gpu_finalize(gpu);
 
 error:

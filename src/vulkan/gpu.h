@@ -60,12 +60,6 @@ struct pl_vk {
     size_t min_texel_alignment;
     bool host_query_reset;
 
-    // This is a pl_dispatch used (on ourselves!) for the purposes of
-    // dispatching compute shaders for performing various emulation tasks
-    // (e.g. partial clears, blits or emulated texture transfers).
-    // Warning: Care must be taken to avoid recursive calls.
-    pl_dispatch dp;
-
     // The "currently recording" command. This will be queued and replaced by
     // a new command every time we need to "switch" between queue families.
     pl_mutex recording;
