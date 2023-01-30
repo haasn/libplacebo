@@ -304,11 +304,36 @@ pl_pass gl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
     }
 
     for (int i = 0; i < params->num_descriptors; i++) {
-        // For compatibility with older OpenGL, we need to explicitly update
-        // the texture/image unit bindings after creating the shader program,
-        // since specifying it directly requires GLSL 4.20+
-        GLint loc = gl->GetUniformLocation(pass_gl->program, params->descriptors[i].name);
-        gl->Uniform1i(loc, params->descriptors[i].binding);
+        const struct pl_desc *desc = &params->descriptors[i];
+        switch (desc->type) {
+        case PL_DESC_SAMPLED_TEX:
+        case PL_DESC_STORAGE_IMG: {
+            // For compatibility with older OpenGL, we need to explicitly
+            // update the texture/image unit bindings after creating the shader
+            // program, since specifying it directly requires GLSL 4.20+
+            GLint loc = gl->GetUniformLocation(pass_gl->program, desc->name);
+            gl->Uniform1i(loc, desc->binding);
+            break;
+        }
+        case PL_DESC_BUF_UNIFORM: {
+            GLuint idx = gl->GetUniformBlockIndex(pass_gl->program, desc->name);
+            gl->UniformBlockBinding(pass_gl->program, idx, desc->binding);
+            break;
+        }
+        case PL_DESC_BUF_STORAGE: {
+            GLuint idx = gl->GetProgramResourceIndex(pass_gl->program,
+                                                     GL_SHADER_STORAGE_BLOCK,
+                                                     desc->name);
+            gl->ShaderStorageBlockBinding(pass_gl->program, idx, desc->binding);
+            break;
+        }
+        case PL_DESC_BUF_TEXEL_UNIFORM:
+        case PL_DESC_BUF_TEXEL_STORAGE:
+            assert(!"unimplemented"); // TODO
+        case PL_DESC_INVALID:
+        case PL_DESC_TYPE_COUNT:
+            pl_unreachable();
+        }
     }
 
     gl->UseProgram(0);
