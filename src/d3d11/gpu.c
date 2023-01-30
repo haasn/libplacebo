@@ -274,7 +274,6 @@ static void d3d11_gpu_destroy(pl_gpu gpu)
 
     pl_buf_destroy(gpu, &p->finish_buf_src);
     pl_buf_destroy(gpu, &p->finish_buf_dst);
-    pl_dispatch_destroy(&p->dp);
 
     // Release everything except the immediate context
     SAFE_RELEASE(p->dev);
@@ -661,9 +660,6 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
         D3D(ID3D11Device_CreateQuery(p->dev,
             &(D3D11_QUERY_DESC) { D3D11_QUERY_EVENT }, &p->finish_query));
     }
-
-    // Create the dispatch last, after any setup of `gpu` is done
-    p->dp = pl_dispatch_create(ctx->log, gpu);
 
     pl_d3d11_flush_message_queue(ctx, "After gpu create");
 
