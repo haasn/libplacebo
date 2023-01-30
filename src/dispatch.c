@@ -775,7 +775,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
             // The number of vertex attribute locations consumed by a vertex
             // attribute is the number of vec4s it consumes, rounded up
             const size_t va_loc_size = sizeof(float[4]);
-            va_loc += (va->fmt->texel_size + va_loc_size - 1) / va_loc_size;
+            va_loc += PL_DIV_UP(va->fmt->texel_size, va_loc_size);
         }
 
         // Hash in the raster state configuration
@@ -1291,8 +1291,8 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
         // Round up to make sure we don't leave off a part of the target
         int block_w = res->compute_group_size[0],
             block_h = res->compute_group_size[1],
-            num_x   = (width  + block_w - 1) / block_w,
-            num_y   = (height + block_h - 1) / block_h;
+            num_x   = PL_DIV_UP(width, block_w),
+            num_y   = PL_DIV_UP(height, block_h);
 
         rparams->compute_groups[0] = num_x;
         rparams->compute_groups[1] = num_y;
@@ -1388,8 +1388,8 @@ bool pl_dispatch_compute(pl_dispatch dp, const struct pl_dispatch_compute_params
         pl_assert(params->width && params->height);
         int block_w = res->compute_group_size[0],
             block_h = res->compute_group_size[1],
-            num_x   = (params->width  + block_w - 1) / block_w,
-            num_y   = (params->height + block_h - 1) / block_h;
+            num_x   = PL_DIV_UP(params->width, block_w),
+            num_y   = PL_DIV_UP(params->height, block_h);
 
         rparams->compute_groups[0] = num_x;
         rparams->compute_groups[1] = num_y;

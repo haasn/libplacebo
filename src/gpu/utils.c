@@ -652,7 +652,7 @@ bool pl_tex_upload_texel(pl_gpu gpu, pl_dispatch dp,
     // If the transfer width is a natural multiple of the thread size, we
     // can skip the bounds check. Otherwise, make sure we aren't blitting out
     // of the range since this would read out of bounds.
-    int groups_x = (pl_rect_w(params->rc) + threads - 1) / threads;
+    int groups_x = PL_DIV_UP(pl_rect_w(params->rc), threads);
     if (groups_x * threads != pl_rect_w(params->rc)) {
         GLSL("if (gl_GlobalInvocationID.x >= %d) \n"
              "    return;                        \n",
@@ -727,7 +727,7 @@ bool pl_tex_download_texel(pl_gpu gpu, pl_dispatch dp,
         },
     });
 
-    int groups_x = (pl_rect_w(params->rc) + threads - 1) / threads;
+    int groups_x = PL_DIV_UP(pl_rect_w(params->rc), threads);
     if (groups_x * threads != pl_rect_w(params->rc)) {
         GLSL("if (gl_GlobalInvocationID.x >= %d) \n"
              "    return;                        \n",
@@ -814,14 +814,14 @@ bool pl_tex_blit_compute(pl_gpu gpu, pl_dispatch dp,
     }
 
     // Avoid over-writing into `dst`
-    int groups_x = (pl_rect_w(dst_rc) + bw - 1) / bw;
+    int groups_x = PL_DIV_UP(pl_rect_w(dst_rc), bw);
     if (groups_x * bw != pl_rect_w(dst_rc)) {
         GLSL("if (gl_GlobalInvocationID.x >= %d) \n"
              "    return;                        \n",
              pl_rect_w(dst_rc));
     }
 
-    int groups_y = (pl_rect_h(dst_rc) + bh - 1) / bh;
+    int groups_y = PL_DIV_UP(pl_rect_h(dst_rc), bh);
     if (groups_y * bh != pl_rect_h(dst_rc)) {
         GLSL("if (gl_GlobalInvocationID.y >= %d) \n"
              "    return;                        \n",

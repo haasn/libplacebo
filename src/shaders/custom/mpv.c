@@ -1462,8 +1462,8 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 .shader = &sh,
                 .dispatch_size = {
                     // Round up as many blocks as are needed to cover the image
-                    (out_w + hook->block_w - 1) / hook->block_w,
-                    (out_h + hook->block_h - 1) / hook->block_h,
+                    PL_DIV_UP(out_w, hook->block_w),
+                    PL_DIV_UP(out_h, hook->block_h),
                     1,
                 },
                 .width  = out_w,

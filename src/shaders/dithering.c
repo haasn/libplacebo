@@ -366,7 +366,7 @@ bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_par
     // Figuring out how many block are required to process all pixels. We need
     // this explicitly to make the number of barrier() calls match.
     int block_size = PL_MIN(glsl.max_group_threads, height);
-    int blocks = (height * shifted_width + block_size - 1) / block_size;
+    int blocks = PL_DIV_UP(height * shifted_width, block_size);
 
     // If we figure out how many of the next columns will be affected while the
     // current columns is being processed. We can store errors of only a few
