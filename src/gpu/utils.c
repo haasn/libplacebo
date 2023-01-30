@@ -984,6 +984,108 @@ void pl_tex_blit_raster(pl_gpu gpu, const struct pl_tex_blit_params *params)
     ));
 }
 
+bool pl_buf_copy_swap(pl_gpu gpu, const struct pl_buf_copy_swap_params *params)
+{
+    pl_buf src = params->src, dst = params->dst;
+    pl_require(gpu, gpu->glsl.version >= 130);
+    pl_require(gpu, src->params.storable && dst->params.storable);
+    pl_require(gpu, params->src_offset % sizeof(unsigned) == 0);
+    pl_require(gpu, params->dst_offset % sizeof(unsigned) == 0);
+    pl_require(gpu, params->src_offset + params->size <= src->params.size);
+    pl_require(gpu, params->dst_offset + params->size <= dst->params.size);
+    pl_require(gpu, src != dst || params->src_offset == params->dst_offset);
+    pl_require(gpu, params->size % sizeof(unsigned) == 0);
+    pl_require(gpu, params->wordsize == sizeof(uint16_t) ||
+                    params->wordsize == sizeof(uint32_t));
+
+    const size_t words = params->size / sizeof(unsigned);
+    const size_t src_off = params->src_offset / sizeof(unsigned);
+    const size_t dst_off = params->dst_offset / sizeof(unsigned);
+
+    const int threads = PL_MIN(256, words);
+    pl_dispatch dp = pl_gpu_dispatch(gpu);
+    pl_shader sh = pl_dispatch_begin(dp);
+    if (!sh_try_compute(sh, threads, 1, false, 0)) {
+        pl_dispatch_abort(dp, &sh);
+        return false;
+    }
+
+    const size_t groups = PL_DIV_UP(words, threads);
+    if (groups * threads > words) {
+        GLSL("if (gl_GlobalInvocationID.x >= %zu) \n"
+             "    return;                         \n",
+             words);
+    }
+
+    sh_desc(sh, (struct pl_shader_desc) {
+        .binding.object = src,
+        .desc = {
+            .name = "SrcBuf",
+            .type = PL_DESC_BUF_STORAGE,
+            .access = src == dst ? PL_DESC_ACCESS_READWRITE : PL_DESC_ACCESS_READONLY,
+        },
+        .num_buffer_vars = 1,
+        .buffer_vars = &(struct pl_buffer_var) {
+            .var = {
+                .name = "src",
+                .type = PL_VAR_UINT,
+                .dim_v = 1,
+                .dim_m = 1,
+                .dim_a = src_off + words,
+            },
+        },
+    });
+
+    if (src != dst) {
+        sh_desc(sh, (struct pl_shader_desc) {
+            .binding.object = dst,
+            .desc = {
+                .name = "DstBuf",
+                .type = PL_DESC_BUF_STORAGE,
+                .access = PL_DESC_ACCESS_WRITEONLY,
+            },
+            .num_buffer_vars = 1,
+            .buffer_vars = &(struct pl_buffer_var) {
+                .var = {
+                    .name = "dst",
+                    .type = PL_VAR_UINT,
+                    .dim_v = 1,
+                    .dim_m = 1,
+                    .dim_a = dst_off + words,
+                },
+            },
+        });
+    } else {
+        GLSL("#define dst src \n");
+    }
+
+    GLSL("// pl_buf_copy_swap                               \n"
+         "{                                                 \n"
+         "uint word = src[%s + gl_GlobalInvocationID.x];    \n"
+         "word = (word & 0xFF00FF00u) >> 8 |                \n"
+         "       (word & 0x00FF00FFu) << 8;                 \n",
+         SH_UINT(src_off));
+    if (params->wordsize > 2) {
+        GLSL("word = (word & 0xFFFF0000u) >> 16 |           \n"
+             "       (word & 0x0000FFFFu) << 16;            \n");
+    }
+    GLSL("dst[%s + gl_GlobalInvocationID.x] = word;         \n"
+         "}                                                 \n",
+         SH_UINT(dst_off));
+
+    return pl_dispatch_compute(dp, pl_dispatch_compute_params(
+        .shader = &sh,
+        .dispatch_size = {groups, 1, 1},
+    ));
+
+error:
+    if (src->params.debug_tag || dst->params.debug_tag) {
+        PL_ERR(gpu, "  for buffers: src %s, dst %s",
+               src->params.debug_tag, dst->params.debug_tag);
+    }
+    return false;
+}
+
 void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params)
 {
     if (!params->vertex_data && !params->index_data)

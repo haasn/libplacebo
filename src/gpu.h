@@ -129,6 +129,28 @@ bool pl_tex_blit_compute(pl_gpu gpu, const struct pl_tex_blit_params *params);
 // Helper to do a 2D blit with stretch and scale using a raster pass
 void pl_tex_blit_raster(pl_gpu gpu, const struct pl_tex_blit_params *params);
 
+// Helper for GPU-accelerated endian swapping
+//
+// Note: `src` and `dst` can be the same buffer, for an in-place operation. In
+// this case, `src_offset` and `dst_offset` must be the same.
+struct pl_buf_copy_swap_params {
+    // Source of the copy operation. Must be `storable`.
+    pl_buf src;
+    size_t src_offset;
+
+    // Destination of the copy operation. Must be `storable`.
+    pl_buf dst;
+    size_t dst_offset;
+
+    // Number of bytes to copy. Must be a multiple of 4.
+    size_t size;
+
+    // Underlying word size. Must be 2 (for 16-bit swap) or 4 (for 32-bit swap)
+    int wordsize;
+};
+
+bool pl_buf_copy_swap(pl_gpu gpu, const struct pl_buf_copy_swap_params *params);
+
 void pl_pass_run_vbo(pl_gpu gpu, const struct pl_pass_run_params *params);
 
 // Make a deep-copy of the pass params. Note: cached_program etc. are not
