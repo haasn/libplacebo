@@ -169,6 +169,10 @@ pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data 
     int dummy[4] = {0};
     out_map = PL_DEF(out_map, dummy);
 
+    // Endian swapping requires compute shaders (currently)
+    if (data->swapped && !gpu->limits.max_ssbo_size)
+        return NULL;
+
     // Count the number of components and initialize out_map
     int num = 0;
     for (int i = 0; i < PL_ARRAY_SIZE(data->component_size); i++) {
@@ -260,15 +264,74 @@ bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
         }
     }
 
-    return pl_tex_upload(gpu, pl_tex_transfer_params(
+    struct pl_tex_transfer_params params = {
         .tex        = *tex,
-        .row_pitch  = data->row_stride,
+        .rc.x1      = data->width, // set these for `pl_tex_transfer_size`
+        .rc.y1      = data->height,
+        .rc.z1      = 1,
+        .row_pitch  = PL_DEF(data->row_stride, data->width * fmt->texel_size),
         .ptr        = (void *) data->pixels,
         .buf        = data->buf,
         .buf_offset = data->buf_offset,
         .callback   = data->callback,
         .priv       = data->priv,
-    ));
+    };
+
+    pl_buf swapbuf = NULL;
+    if (data->swapped) {
+        const size_t aligned = PL_ALIGN2(pl_tex_transfer_size(&params), 4);
+        swapbuf = pl_buf_create(gpu, pl_buf_params(
+            .size           = aligned,
+            .storable       = true,
+            .initial_data   = params.ptr,
+
+            // Note: This may over-read from `ptr` if `ptr` is not aligned to a
+            // word boundary, but the extra texels will be ignored by
+            // `pl_tex_upload` so this UB should be a non-issue in practice.
+        ));
+        if (!swapbuf) {
+            PL_ERR(gpu, "Failed creating endian swapping buffer!");
+            return false;
+        }
+
+        struct pl_buf_copy_swap_params swap_params = {
+            .src        = swapbuf,
+            .dst        = swapbuf,
+            .size       = aligned,
+            .wordsize   = fmt->texel_size / fmt->num_components,
+        };
+
+        bool can_reuse = params.buf && params.buf->params.storable &&
+                         params.buf_offset % 4 == 0 &&
+                         params.buf_offset + aligned <= params.buf->params.size;
+
+        if (params.ptr) {
+            // Data is already uploaded (no-op), can swap in-place
+        } else if (can_reuse) {
+            // We can sample directly from the source buffer
+            swap_params.src = params.buf;
+            swap_params.src_offset = params.buf_offset;
+        } else {
+            // We sadly need to do a second memcpy
+            PL_TRACE(gpu, "Double-slow path! pl_buf_copy -> pl_buf_copy_swap...");
+            pl_buf_copy(gpu, swapbuf, 0, params.buf, params.buf_offset,
+                        PL_MIN(aligned, params.buf->params.size - params.buf_offset));
+        }
+
+        if (!pl_buf_copy_swap(gpu, &swap_params)) {
+            PL_ERR(gpu, "Failed swapping endianness!");
+            pl_buf_destroy(gpu, &swapbuf);
+            return false;
+        }
+
+        params.ptr = NULL;
+        params.buf = swapbuf;
+        params.buf_offset = 0;
+    }
+
+    ok = pl_tex_upload(gpu, &params);
+    pl_buf_destroy(gpu, &swapbuf);
+    return ok;
 }
 
 bool pl_recreate_plane(pl_gpu gpu, struct pl_plane *out_plane,

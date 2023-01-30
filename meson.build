@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '241': 'add `pl_plane_data.swapped`',
       '240': 'add `PL_COLOR_TRC_ST428`',
       '239': 'add `pl_fmt.planes` and `pl_tex.planes`',
       '238': 'add `pl_vulkan_wrap_params.aspect`',

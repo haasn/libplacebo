@@ -38,6 +38,7 @@ struct pl_plane_data {
     int component_map[4];   // semantic meaning of each component (pixel order)
     size_t pixel_stride;    // offset in bytes between pixels (required)
     size_t row_stride;      // offset in bytes between rows (optional)
+    bool swapped;           // pixel data is endian-swapped (non-native)
 
     // Similar to `pl_tex_transfer_params`, you can either upload from a raw
     // pointer address, or a buffer + offset. Again, the use of these two
