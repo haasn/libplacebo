@@ -25,8 +25,15 @@ void pl_gpu_destroy(pl_gpu gpu)
     if (!gpu)
         return;
 
-    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
+    struct pl_gpu_fns *impl = PL_PRIV(gpu);
+    pl_dispatch_destroy(&impl->dp);
     impl->destroy(gpu);
+}
+
+pl_dispatch pl_gpu_dispatch(pl_gpu gpu)
+{
+    const struct pl_gpu_fns *impl = PL_PRIV(gpu);
+    return impl->dp;
 }
 
 bool pl_fmt_is_ordered(pl_fmt fmt)

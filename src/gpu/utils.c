@@ -264,6 +264,9 @@ pl_gpu pl_gpu_finalize(struct pl_gpu_t *gpu)
     // Set the backwards compatibility fields in `limits`
     gpu->limits.max_variables = gpu->limits.max_variable_comps;
 
+    // Finally, create a `pl_dispatch` object for internal operations
+    struct pl_gpu_fns *impl = PL_PRIV(gpu);
+    impl->dp = pl_dispatch_create(gpu->log, gpu);
     return gpu;
 }
 

@@ -31,6 +31,13 @@
 
 #define GPU_PFN(name) __typeof__(pl_##name) *name
 struct pl_gpu_fns {
+    // This is a pl_dispatch used (on the pl_gpu itself!) for the purposes of
+    // dispatching compute shaders for performing various emulation tasks (e.g.
+    // partial clears, blits or emulated texture transfers, see below).
+    //
+    // Warning: Care must be taken to avoid recursive calls.
+    pl_dispatch dp;
+
     // Destructors: These also free the corresponding objects, but they
     // must not be called on NULL. (The NULL checks are done by the pl_*_destroy
     // wrappers)
@@ -82,6 +89,9 @@ static inline bool pl_gpu_supports_interop(pl_gpu gpu)
            gpu->export_caps.sync ||
            gpu->import_caps.sync;
 }
+
+// Returns the GPU-internal `pl_dispatch` object.
+pl_dispatch pl_gpu_dispatch(pl_gpu gpu);
 
 // GPU-internal helpers: these should not be used outside of GPU implementations
 
