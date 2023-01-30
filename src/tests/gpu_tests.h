@@ -17,11 +17,11 @@ static void pl_buffer_tests(pl_gpu gpu)
     pl_buf buf = NULL, tbuf = NULL;
 
     printf("test buffer static creation and readback\n");
-    buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+    buf = pl_buf_create(gpu, pl_buf_params(
         .size = buf_size,
         .host_readable = true,
         .initial_data = test_src,
-    });
+    ));
 
     REQUIRE(buf);
     REQUIRE(pl_buf_read(gpu, buf, 0, test_dst, buf_size));
@@ -30,11 +30,11 @@ static void pl_buffer_tests(pl_gpu gpu)
 
     printf("test buffer empty creation, update and readback\n");
     memset(test_dst, 0, buf_size);
-    buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+    buf = pl_buf_create(gpu, pl_buf_params(
         .size = buf_size,
         .host_writable = true,
         .host_readable = true,
-    });
+    ));
 
     REQUIRE(buf);
     pl_buf_write(gpu, buf, 0, test_src, buf_size);
@@ -44,15 +44,15 @@ static void pl_buffer_tests(pl_gpu gpu)
 
     printf("test buffer-buffer copy and readback\n");
     memset(test_dst, 0, buf_size);
-    buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+    buf = pl_buf_create(gpu, pl_buf_params(
         .size = buf_size,
         .initial_data = test_src,
-    });
+    ));
 
-    tbuf = pl_buf_create(gpu, &(struct pl_buf_params) {
+    tbuf = pl_buf_create(gpu, pl_buf_params(
         .size = buf_size,
         .host_readable = true,
-    });
+    ));
 
     REQUIRE(buf && tbuf);
     pl_buf_copy(gpu, tbuf, 0, buf, 0, buf_size);
@@ -63,16 +63,64 @@ static void pl_buffer_tests(pl_gpu gpu)
 
     if (buf_size <= gpu->limits.max_mapped_size) {
         printf("test host mapped buffer readback\n");
-        buf = pl_buf_create(gpu, &(struct pl_buf_params) {
+        buf = pl_buf_create(gpu, pl_buf_params(
             .size = buf_size,
             .host_mapped = true,
             .initial_data = test_src,
-        });
+        ));
 
         REQUIRE(buf);
         REQUIRE(!pl_buf_poll(gpu, buf, 0));
         REQUIRE(memcmp(test_src, buf->data, buf_size) == 0);
         pl_buf_destroy(gpu, &buf);
+    }
+
+    // `compute_queues` check is to exclude dummy GPUs here
+    if (buf_size <= gpu->limits.max_ssbo_size &&
+        gpu->limits.compute_queues &&
+        gpu->glsl.version >= 130)
+    {
+        printf("test endian swapping\n");
+        buf = pl_buf_create(gpu, pl_buf_params(
+            .size = buf_size,
+            .storable = true,
+            .initial_data = test_src,
+        ));
+
+        tbuf = pl_buf_create(gpu, pl_buf_params(
+            .size = buf_size,
+            .storable = true,
+            .host_readable = true,
+        ));
+
+        REQUIRE(buf && tbuf);
+        REQUIRE(pl_buf_copy_swap(gpu, &(struct pl_buf_copy_swap_params) {
+            .src = buf,
+            .dst = tbuf,
+            .size = buf_size,
+            .wordsize = 2,
+        }));
+        REQUIRE(pl_buf_read(gpu, tbuf, 0, test_dst, buf_size));
+        for (int i = 0; i < buf_size / 2; i++) {
+            REQUIRE(test_src[2 * i + 0] == test_dst[2 * i + 1]);
+            REQUIRE(test_src[2 * i + 1] == test_dst[2 * i + 0]);
+        }
+        // test endian swap in-place
+        REQUIRE(pl_buf_copy_swap(gpu, &(struct pl_buf_copy_swap_params) {
+            .src = tbuf,
+            .dst = tbuf,
+            .size = buf_size,
+            .wordsize = 4,
+        }));
+        REQUIRE(pl_buf_read(gpu, tbuf, 0, test_dst, buf_size));
+        for (int i = 0; i < buf_size / 4; i++) {
+            REQUIRE(test_src[4 * i + 0] == test_dst[4 * i + 2]);
+            REQUIRE(test_src[4 * i + 1] == test_dst[4 * i + 3]);
+            REQUIRE(test_src[4 * i + 2] == test_dst[4 * i + 0]);
+            REQUIRE(test_src[4 * i + 3] == test_dst[4 * i + 1]);
+        }
+        pl_buf_destroy(gpu, &buf);
+        pl_buf_destroy(gpu, &tbuf);
     }
 
     free(test_src);
