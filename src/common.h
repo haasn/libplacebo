@@ -88,9 +88,12 @@
 
 #pragma GCC visibility pop
 
+// Divide a number while rounding up (careful: double-eval)
+#define PL_DIV_UP(x, y) (((x) + (y) - 1) / (y))
+
 // Align up to the nearest multiple of an arbitrary alignment, which may also
 // be 0 to signal no alignment requirements.
-#define PL_ALIGN(x, align) ((align) ? ((x) + (align) - 1) / (align) * (align) : (x))
+#define PL_ALIGN(x, align) ((align) ? PL_DIV_UP(x, align) * (align) : (x))
 
 // This is faster but must only be called on positive powers of two.
 #define PL_ALIGN2(x, align) (((x) + (align) - 1) & ~((align) - 1))
