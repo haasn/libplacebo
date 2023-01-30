@@ -394,12 +394,6 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
     if (!desc || planes < 0) // e.g. AV_PIX_FMT_NONE
         return 0;
 
-    if (desc->flags & AV_PIX_FMT_FLAG_BE) {
-        // Big endian formats are almost definitely not supported in any
-        // reasonable manner, erroring as a safety precation
-        return 0;
-    }
-
     if (desc->flags & AV_PIX_FMT_FLAG_BITSTREAM) {
         // Bitstream formats will most likely never be supported
         return 0;
@@ -429,6 +423,7 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
         struct pl_plane_data *data = &out_data[p];
         int size[4] = {0};
         int shift[4] = {0};
+        data->swapped = desc->flags & AV_PIX_FMT_FLAG_BE;
         data->type = (desc->flags & AV_PIX_FMT_FLAG_FLOAT)
                         ? PL_FMT_FLOAT
                         : PL_FMT_UNORM;
@@ -1234,6 +1229,7 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
     pl_gpu gpu = pgpu ? *pgpu : NULL;
     struct pl_plane_data data[4];
     struct pl_avalloc *alloc;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pic->format);
     int planes = pl_plane_data_from_pixfmt(data, NULL, pic->format);
 
     // Sanitize frame structs
@@ -1296,6 +1292,7 @@ static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
                 .size = buf_size,
                 .memory_type = PL_BUF_MEM_HOST,
                 .host_mapped = true,
+                .storable = desc->flags & AV_PIX_FMT_FLAG_BE,
             )),
         };
 
