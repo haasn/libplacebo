@@ -68,6 +68,7 @@ sources = [
   'glsl/spirv.c',
   'glsl/utils.c',
   'gpu.c',
+  'gpu/utils.c',
   'log.c',
   'pl_alloc.c',
   'pl_string.c',
