@@ -18,7 +18,11 @@ int main()
     if (!pCreateDXGIFactory1)
         return SKIP;
 
-    pCreateDXGIFactory1(&IID_IDXGIFactory1, (void **) &factory);
+    hr = pCreateDXGIFactory1(&IID_IDXGIFactory1, (void **) &factory);
+    if (FAILED(hr)) {
+        printf("Failed to create DXGI factory\n");
+        return SKIP;
+    }
 
     // Test all attached devices
     for (int i = 0;; i++) {
