@@ -5,7 +5,7 @@ stages:
 
 variables:
     GIT_SUBMODULE_STRATEGY: recursive
-    IMAGE_UBUNTU_JAMMY: registry.videolan.org/libplacebo-ubuntu-jammy:20230130122426
+    IMAGE_UBUNTU_JAMMY: registry.videolan.org/libplacebo-ubuntu-jammy:20230131170906
     IMAGE_UBUNTU_FOCAL_AARCH: registry.videolan.org/libplacebo-ubuntu-focal-aarch64:20211020160908
 
 linux:
@@ -46,7 +46,7 @@ win32:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
-                      --libdir lib
+                      -Dd3d11=enabled
                       --cross-file /opt/crossfiles/i686-w64-mingw32.meson
         - ninja -C build
         - cd build && meson test -t 5 -v --num-processes=1
@@ -61,7 +61,7 @@ win64:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
-                      --libdir lib
+                      -Dd3d11=enabled
                       --cross-file /opt/crossfiles/x86_64-w64-mingw32.meson
         - ninja -C build
         - cd build && meson test -t 5 -v --num-processes=1
