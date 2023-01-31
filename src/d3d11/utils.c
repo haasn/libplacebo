@@ -317,7 +317,7 @@ char *pl_hresult_to_str_buf(char *buf, size_t buf_size, HRESULT hr)
 
 const char *pl_get_dxgi_format_name(DXGI_FORMAT fmt)
 {
-    switch (fmt) {
+    switch ((int) fmt) {
     D3D11_DXGI_ENUM(DXGI_FORMAT_, UNKNOWN);
     D3D11_DXGI_ENUM(DXGI_FORMAT_, R32G32B32A32_TYPELESS);
     D3D11_DXGI_ENUM(DXGI_FORMAT_, R32G32B32A32_FLOAT);
@@ -445,7 +445,7 @@ const char *pl_get_dxgi_format_name(DXGI_FORMAT fmt)
 
 const char *pl_get_dxgi_csp_name(DXGI_COLOR_SPACE_TYPE csp)
 {
-    switch (csp) {
+    switch ((int) csp) {
     D3D11_DXGI_ENUM(DXGI_COLOR_SPACE_, RGB_FULL_G22_NONE_P709);
     D3D11_DXGI_ENUM(DXGI_COLOR_SPACE_, RGB_FULL_G10_NONE_P709);
     D3D11_DXGI_ENUM(DXGI_COLOR_SPACE_, RGB_STUDIO_G22_NONE_P709);
