@@ -6,6 +6,7 @@ stages:
 variables:
     GIT_SUBMODULE_STRATEGY: recursive
     IMAGE_UBUNTU_JAMMY: registry.videolan.org/libplacebo-ubuntu-jammy:20230131170906
+    IMAGE_UBUNTU_JAMMY_LLVMPIPE: registry.videolan.org/libplacebo-ubuntu-jammy:20230130122426
     IMAGE_UBUNTU_FOCAL_AARCH: registry.videolan.org/libplacebo-ubuntu-focal-aarch64:20211020160908
 
 linux:
@@ -107,7 +108,7 @@ scan:
         - ninja -C build scan-build
 
 llvmpipe:
-    image: $IMAGE_UBUNTU_JAMMY
+    image: $IMAGE_UBUNTU_JAMMY_LLVMPIPE
     stage: test
     tags:
         - docker
