@@ -317,7 +317,7 @@ char *pl_hresult_to_str_buf(char *buf, size_t buf_size, HRESULT hr)
 
 const char *pl_get_dxgi_format_name(DXGI_FORMAT fmt)
 {
-    switch ((int) fmt) {
+    switch (fmt) {
     D3D11_DXGI_ENUM(DXGI_FORMAT_, UNKNOWN);
     D3D11_DXGI_ENUM(DXGI_FORMAT_, R32G32B32A32_TYPELESS);
     D3D11_DXGI_ENUM(DXGI_FORMAT_, R32G32B32A32_FLOAT);
@@ -438,9 +438,9 @@ const char *pl_get_dxgi_format_name(DXGI_FORMAT fmt)
     D3D11_DXGI_ENUM(DXGI_FORMAT_, V208);
     D3D11_DXGI_ENUM(DXGI_FORMAT_, V408);
     D3D11_DXGI_ENUM(DXGI_FORMAT_, FORCE_UINT);
-    default:
-        return "<Unknown>";
     }
+
+    return "<unknown>";
 }
 
 const char *pl_get_dxgi_csp_name(DXGI_COLOR_SPACE_TYPE csp)
@@ -472,7 +472,7 @@ const char *pl_get_dxgi_csp_name(DXGI_COLOR_SPACE_TYPE csp)
     D3D11_DXGI_ENUM(DXGI_COLOR_SPACE_, YCBCR_STUDIO_G24_LEFT_P2020);
     D3D11_DXGI_ENUM(DXGI_COLOR_SPACE_, YCBCR_STUDIO_G24_TOPLEFT_P2020);
     D3D11_DXGI_ENUM(DXGI_COLOR_SPACE_, CUSTOM);
-    default:
-        return "<Unknown>";
     }
+
+    return "<unknown>";
 }
