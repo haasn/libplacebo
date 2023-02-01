@@ -84,7 +84,7 @@ static void close_file(struct file *file)
     *file = (struct file) {0};
 }
 
-static void uninit(int ret)
+SDL_NORETURN static void uninit(int ret)
 {
     pl_renderer_destroy(&renderer);
     pl_tex_destroy(win->gpu, &img_tex);
