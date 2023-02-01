@@ -138,7 +138,9 @@ static bool open_file(struct plplay *p, const char *filename)
     }
 
     printf("Format: %s\n", p->format->iformat->name);
-    printf("Duration: %.3f s\n", p->format->duration / 1e6);
+
+    if (p->format->duration != AV_NOPTS_VALUE)
+        printf("Duration: %.3f s\n", p->format->duration / 1e6);
 
     if (avformat_find_stream_info(p->format,  NULL) < 0) {
         fprintf(stderr, "libavformat: Failed finding stream info!\n");
@@ -158,8 +160,19 @@ static bool open_file(struct plplay *p, const char *filename)
     const AVCodecParameters *par = stream->codecpar;
     printf("Found video track (stream %d)\n", stream_idx);
     printf("Resolution: %d x %d\n", par->width, par->height);
-    printf("FPS: %f\n", av_q2d(stream->avg_frame_rate));
-    printf("Bitrate: %"PRIi64" kbps\n", par->bit_rate / 1000);
+
+    if (stream->avg_frame_rate.den && stream->avg_frame_rate.num)
+        printf("FPS: %f\n", av_q2d(stream->avg_frame_rate));
+
+    if (stream->r_frame_rate.den && stream->r_frame_rate.num)
+        printf("TBR: %f\n", av_q2d(stream->r_frame_rate));
+
+    if (stream->time_base.den && stream->time_base.num)
+        printf("TBN: %f\n", av_q2d(stream->time_base));
+
+    if (par->bit_rate)
+        printf("Bitrate: %"PRIi64" kbps\n", par->bit_rate / 1000);
+
     printf("Format: %s\n", av_get_pix_fmt_name(par->format));
 
     p->stream = stream;
