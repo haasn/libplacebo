@@ -80,7 +80,7 @@ struct ui *ui_create(pl_gpu gpu)
     };
     ui->font_tex = pl_tex_create(gpu, &tparams);
     nk_font_atlas_end(&ui->atlas, nk_handle_ptr((void *) ui->font_tex),
-                      &ui->convert_cfg.null);
+                      &ui->convert_cfg.tex_null);
     nk_font_atlas_cleanup(&ui->atlas);
 
     if (!ui->font_tex)
