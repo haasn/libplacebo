@@ -287,7 +287,8 @@ int main()
         pl_log_level_update(log, PL_LOG_INFO);
     }
 
-    vkDestroySurfaceKHR(inst->instance, surf, NULL);
+    if (surf)
+        vkDestroySurfaceKHR(inst->instance, surf, NULL);
     pl_vk_inst_destroy(&inst);
     pl_log_destroy(&log);
     free(devices);
