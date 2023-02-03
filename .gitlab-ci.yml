@@ -7,7 +7,7 @@ variables:
     GIT_SUBMODULE_STRATEGY: recursive
     IMAGE_UBUNTU_JAMMY: registry.videolan.org/libplacebo-ubuntu-jammy:20230131170906
     IMAGE_UBUNTU_JAMMY_LLVMPIPE: registry.videolan.org/libplacebo-ubuntu-jammy:20230130122426
-    IMAGE_UBUNTU_FOCAL_AARCH: registry.videolan.org/libplacebo-ubuntu-focal-aarch64:20211020160908
+    IMAGE_UBUNTU_JAMMY_AARCH: registry.videolan.org/libplacebo-ubuntu-jammy-aarch64:20230203024122
 
 linux:
     image: $IMAGE_UBUNTU_JAMMY
@@ -68,7 +68,7 @@ win64:
         - cd build && meson test -t 5 -v --num-processes=1
 
 aarch64:
-    image: $IMAGE_UBUNTU_FOCAL_AARCH
+    image: $IMAGE_UBUNTU_JAMMY_AARCH
     stage: compile
     tags:
         - docker
