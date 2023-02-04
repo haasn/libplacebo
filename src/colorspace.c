@@ -287,6 +287,16 @@ const struct pl_hdr_metadata pl_hdr_metadata_hdr10 ={
     .max_fall = 0, // unknown
 };
 
+static inline bool pl_hdr_bezier_equal(const struct pl_hdr_bezier *a,
+                                       const struct pl_hdr_bezier *b)
+{
+    return a->target_luma == b->target_luma &&
+           a->knee_x      == b->knee_x &&
+           a->knee_y      == b->knee_y &&
+           a->num_anchors == b->num_anchors &&
+           !memcmp(a->anchors, b->anchors, sizeof(a->anchors[0]) * a->num_anchors);
+}
+
 bool pl_hdr_metadata_equal(const struct pl_hdr_metadata *a,
                            const struct pl_hdr_metadata *b)
 {
@@ -294,7 +304,12 @@ bool pl_hdr_metadata_equal(const struct pl_hdr_metadata *a,
            a->min_luma == b->min_luma &&
            a->max_luma == b->max_luma &&
            a->max_cll  == b->max_cll  &&
-           a->max_fall == b->max_fall;
+           a->max_fall == b->max_fall &&
+           a->scene_max[0] == b->scene_max[0] &&
+           a->scene_max[1] == b->scene_max[1] &&
+           a->scene_max[2] == b->scene_max[2] &&
+           a->scene_avg == b->scene_avg &&
+           pl_hdr_bezier_equal(&a->ootf, &b->ootf);
 }
 
 void pl_hdr_metadata_merge(struct pl_hdr_metadata *orig,
@@ -309,6 +324,12 @@ void pl_hdr_metadata_merge(struct pl_hdr_metadata *orig,
         orig->max_cll = update->max_cll;
     if (!orig->max_fall)
         orig->max_fall = update->max_fall;
+    if (!orig->scene_max[1])
+        memcpy(orig->scene_max, update->scene_max, sizeof(orig->scene_max));
+    if (!orig->scene_avg)
+        orig->scene_avg = update->scene_avg;
+    if (!orig->ootf.target_luma)
+        orig->ootf = update->ootf;
 }
 
 const struct pl_color_space pl_color_space_unknown = {0};
@@ -409,6 +430,10 @@ void pl_color_space_infer(struct pl_color_space *space)
         space->hdr.min_luma = space->sig_floor * PL_COLOR_SDR_WHITE;
         space->sig_floor = 0;
     }
+    if (space->sig_avg) {
+        space->hdr.scene_avg = space->sig_avg * PL_COLOR_SDR_WHITE;
+        space->sig_avg = 0;
+    }
 
 reinfer_peaks:
     if (space->hdr.max_luma < 1 || space->hdr.max_luma > 10000) {
@@ -448,6 +473,7 @@ reinfer_peaks:
     if (space->sig_scale && !pl_color_transfer_is_hdr(space->transfer)) {
         space->hdr.max_luma *= space->sig_scale;
         space->hdr.min_luma *= space->sig_scale;
+        space->hdr.scene_avg *= space->sig_scale;
         space->sig_scale = 0;
     }
 

@@ -328,17 +328,30 @@ void pl_raw_primaries_merge(struct pl_raw_primaries *orig,
 // Returns the raw primaries for a given color space.
 const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim);
 
+// Bezier curve for HDR metadata
+struct pl_hdr_bezier {
+    float target_luma;      // target luminance (cd/m²) for this OOTF
+    float knee_x, knee_y;   // cross-over knee point (0-1)
+    float anchors[15];      // intermediate bezier curve control points (0-1)
+    uint8_t num_anchors;
+};
+
 // Represents raw HDR metadata as defined by SMPTE 2086 / CTA 861.3, which is
 // often attached to HDR sources and can be forwarded to HDR-capable displays,
 // or used to guide the libplacebo built-in tone mapping.
 struct pl_hdr_metadata {
     // Mastering display metadata. This is used for tone-mapping.
-    struct pl_raw_primaries prim; // mastering display primaries
-    float min_luma, max_luma;     // min/max luminance (in cd/m²)
+    struct pl_raw_primaries prim;   // mastering display primaries
+    float min_luma, max_luma;       // min/max luminance (in cd/m²)
 
     // Content light level. This is ignored by libplacebo itself.
-    float max_cll;                // max content light level (in cd/m²)
-    float max_fall;               // max frame average light level (in cd/m²)
+    float max_cll;                  // max content light level (in cd/m²)
+    float max_fall;                 // max frame average light level (in cd/m²)
+
+    // HDR10+ dynamic metadata (per-scene)
+    float scene_max[3];             // maxSCL in cd/m² per component (RGB)
+    float scene_avg;                // average of maxRGB in cd/m²
+    struct pl_hdr_bezier ootf;      // reference OOTF (optional)
 };
 
 extern const struct pl_hdr_metadata pl_hdr_metadata_empty; // equal to {0}
@@ -389,7 +402,7 @@ struct pl_color_space {
     // Deprecated fields
     enum pl_color_light light PL_DEPRECATED;    // ignored
     float sig_peak PL_DEPRECATED;               // replaced by `hdr.max_luma`
-    float sig_avg PL_DEPRECATED;                // ignored
+    float sig_avg PL_DEPRECATED;                // replaced by `hdr.scene_avg`
     float sig_floor PL_DEPRECATED;              // replaced by `hdr.min_luma`
     float sig_scale PL_DEPRECATED;              // merged into `hdr.max/min_luma`
 };
