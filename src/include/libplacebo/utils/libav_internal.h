@@ -434,6 +434,12 @@ static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
             const AVComponentDescriptor *comp = &desc->comp[c];
             if (comp->plane != p)
                 continue;
+            if (data->swapped && comp->shift) {
+                // We cannot naively handle packed big endian formats because
+                // swapping the words also swaps the component order, so just
+                // exit out as a stupid safety measure
+                return 0;
+            }
 
             size[c] = comp->depth;
             shift[c] = comp->shift + comp->offset * 8;
