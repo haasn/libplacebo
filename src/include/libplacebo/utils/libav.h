@@ -39,6 +39,12 @@ PL_API_BEGIN
 # include <libavutil/film_grain_params.h>
 #endif
 
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(56, 25, 100)
+# define PL_HAVE_LAV_HDR
+# include <libavutil/hdr_dynamic_metadata.h>
+# include <libavutil/mastering_display_metadata.h>
+#endif
+
 //------------------------------------------------------------------------
 // Important note: For support for AVVkFrame, which depends on <vulkan.h>,
 // users *SHOULD* include <vulkan/vulkan.h> manually before this header.
@@ -71,6 +77,21 @@ static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *fra
 // FFmpeg rather annoyingly does not propagate stream-level metadata to frames.
 static void pl_frame_copy_stream_props(struct pl_frame *out_frame,
                                        const AVStream *stream);
+
+#ifdef PL_HAVE_LAV_HDR
+struct pl_av_hdr_metadata {
+    // All fields are optional and may be passed as `NULL`.
+    const AVMasteringDisplayMetadata *mdm;
+    const AVContentLightMetadata *clm;
+    const AVDynamicHDRPlus *dhp;
+};
+
+// Helper function to update a `pl_hdr_metadata` struct from HDR10/HDR10+
+// metadata in the FFmpeg format. Unspecified/invalid elements will be left
+// uninitialized in `out`.
+static void pl_map_hdr_metadata(struct pl_hdr_metadata *out,
+                                const struct pl_av_hdr_metadata *metadata);
+#endif
 
 #ifdef PL_HAVE_LAV_DOLBY_VISION
 // Helper function to map Dolby Vision metadata from the FFmpeg format.

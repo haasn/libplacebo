@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '244': 'add `pl_map_hdr_metadata`',
       '243': 'add `pl_color_space.nominal_min/max`',
       '242': 'add `pl_hdr_metadata.scene_max/avg` and `pl_hdr_metadata.ootf`',
       '241': 'add `pl_plane_data.swapped`',
