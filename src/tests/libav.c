@@ -6,6 +6,11 @@ int main()
     struct pl_plane_data data[4] = {0};
     struct pl_bit_encoding bits;
 
+    // Make sure we don't crash on any av pixfmt
+    const AVPixFmtDescriptor *desc = NULL;
+    while ((desc = av_pix_fmt_desc_next(desc)))
+        pl_plane_data_from_pixfmt(data, &bits, av_pix_fmt_desc_get_id(desc));
+
 #define TEST(pixfmt, reference)                                         \
     do {                                                                \
         int planes = pl_plane_data_from_pixfmt(data, &bits, pixfmt);    \
