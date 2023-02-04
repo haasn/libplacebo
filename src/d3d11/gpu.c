@@ -667,6 +667,7 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
 error:
     SAFE_RELEASE(dxgi_dev);
     SAFE_RELEASE(adapter);
+    SAFE_RELEASE(adapter4);
     if (success) {
         return pl_gpu_finalize(gpu);
     } else {
