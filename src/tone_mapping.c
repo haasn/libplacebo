@@ -116,7 +116,10 @@ void pl_tone_map_params_infer(struct pl_tone_map_params *par)
         float src_max = pl_hdr_rescale(par->input_scaling, PL_HDR_NORM, par->input_max);
         float dst_max = pl_hdr_rescale(par->output_scaling, PL_HDR_NORM, par->output_max);
         float ratio = src_max / dst_max;
-        if (ratio > 10) {
+        if (par->hdr.ootf.num_anchors || par->hdr.scene_avg) {
+            // HDR10+ metadata available: Pick SMPTE ST2094-40
+            par->function = &pl_tone_map_st2094_40;
+        } else if (ratio > 10) {
             // Extreme reduction: Pick spline for its quasi-linear behavior
             par->function = &pl_tone_map_spline;
         } else if (src_max < 1 + 1e-3 && dst_max < 1 + 1e-3) {
