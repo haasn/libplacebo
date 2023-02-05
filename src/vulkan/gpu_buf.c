@@ -176,17 +176,13 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
         }
     }
 
-    if (params->host_writable || params->host_readable) {
-        // Prefer buffers requiring frequent host operations in host mem
-        mem_type = PL_DEF(mem_type, PL_BUF_MEM_HOST);
-    }
-
     switch (mem_type) {
     case PL_BUF_MEM_AUTO:
         // We generally prefer VRAM since it's faster than RAM, but any number
         // of other requirements could potentially exclude it, so just mark it
         // as optimal by default.
-        mparams.optimal |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        if (!(mparams.optimal & VK_MEMORY_PROPERTY_HOST_CACHED_BIT))
+            mparams.optimal |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         break;
     case PL_BUF_MEM_DEVICE:
         // Force device local memory.
@@ -197,6 +193,7 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
         // device-local bit locks out all memory heaps on iGPUs. Requiring
         // the memory be host-mapped is the easiest compromise.
         mparams.required |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        mparams.optimal  |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         break;
     case PL_BUF_MEM_TYPE_COUNT:
         pl_unreachable();
