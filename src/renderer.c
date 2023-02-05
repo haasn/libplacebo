@@ -1125,6 +1125,9 @@ static void hdr_update_peak(struct pass_state *pass)
     if (pass->img.color.nominal_max <= pass->target.color.nominal_max + 1e-6)
         goto cleanup; // no adaptation needed
 
+    if (pass->img.color.hdr.scene_avg)
+        goto cleanup; // per-scene values already known
+
     if (params->lut && params->lut_type == PL_LUT_CONVERSION)
         goto cleanup; // LUT handles tone mapping
 
