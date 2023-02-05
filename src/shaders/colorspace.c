@@ -1285,6 +1285,7 @@ static void tone_map(pl_shader sh,
         .input_max = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_SQRT, src_max),
         .output_min = dst_min,
         .output_max = dst_max,
+        .hdr = src->hdr,
     };
 
     enum pl_tone_map_mode mode = params->tone_mapping_mode;

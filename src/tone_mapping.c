@@ -87,7 +87,8 @@ bool pl_tone_map_params_equal(const struct pl_tone_map_params *a,
            a->input_min == b->input_min &&
            a->input_max == b->input_max &&
            a->output_min == b->output_min &&
-           a->output_max == b->output_max;
+           a->output_max == b->output_max &&
+           pl_hdr_metadata_equal(&a->hdr, &b->hdr);
 }
 
 bool pl_tone_map_params_noop(const struct pl_tone_map_params *p)

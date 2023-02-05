@@ -22,6 +22,7 @@
 #include <stdbool.h>
 
 #include <libplacebo/common.h>
+#include <libplacebo/colorspace.h>
 
 PL_API_BEGIN
 
@@ -93,6 +94,10 @@ struct pl_tone_map_params {
     // The desired characteristics of the output, in `output_scaling` units.
     float output_min;
     float output_max;
+
+    // The input HDR metadata. Only used by a select few tone-mapping
+    // functions. (Optional)
+    struct pl_hdr_metadata hdr;
 };
 
 #define pl_tone_map_params(...) (&(struct pl_tone_map_params) { __VA_ARGS__ });
