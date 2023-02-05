@@ -1346,6 +1346,7 @@ static void tone_map(pl_shader sh,
             .height     = dynamic_peak ? lut_params.lut_size : 0,
             .comps      = 1,
             .update     = !pl_tone_map_params_equal(&lut_params, &obj->params),
+            .dynamic    = src->hdr.scene_avg > 0, // these change frequently
             .fill       = fill_lut,
             .priv       = &lut_params,
         ));
