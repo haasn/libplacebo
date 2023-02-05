@@ -1250,17 +1250,18 @@ static void update_settings(struct plplay *p)
                 nk_layout_row_dynamic(nk, 24, 2);
                 struct pl_color_space fix = *tcol;
                 pl_color_space_infer(&fix);
-                fix.hdr.min_luma *= 1000; // better value range
+                fix.nominal_min *= 1000; // better value range
                 nk_property_float(nk, "White point (cd/m²)",
-                                  1e-2, &fix.hdr.max_luma, 10000.0,
-                                  fix.hdr.max_luma / 100, fix.hdr.max_luma / 1000);
+                                  1e-2, &fix.nominal_max, 10000.0,
+                                  fix.nominal_max / 100, fix.nominal_max / 1000);
                 nk_property_float(nk, "Black point (mcd/m²)",
-                                  1e-3, &fix.hdr.min_luma, 10000.0,
-                                  fix.hdr.min_luma / 100, fix.hdr.min_luma / 1000);
-                fix.hdr.min_luma /= 1000;
+                                  1e-3, &fix.nominal_min, 10000.0,
+                                  fix.nominal_min / 100, fix.nominal_min / 1000);
+                fix.nominal_min /= 1000;
                 pl_color_space_infer(&fix);
-                tcol->hdr = fix.hdr;
-                iccpar->max_luma = fix.hdr.max_luma;
+                tcol->nominal_min = fix.nominal_min;
+                tcol->nominal_max = fix.nominal_max;
+                iccpar->max_luma = fix.nominal_max;
             } else {
                 reset_levels = true;
             }
@@ -1358,7 +1359,8 @@ static void update_settings(struct plplay *p)
             }
 
             if (reset_levels) {
-                tcol->hdr = (struct pl_hdr_metadata) {0};
+                tcol->nominal_min = 0;
+                tcol->nominal_max = 0;
                 iccpar->max_luma = 0;
             }
 

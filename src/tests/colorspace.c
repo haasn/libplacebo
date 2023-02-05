@@ -244,7 +244,7 @@ int main()
     };
 
     pl_color_space_infer(&hlg);
-    REQUIRE(hlg.hdr.max_luma == 1000.0f);
+    REQUIRE(hlg.nominal_max == 1000.0f);
 
     struct pl_color_space unknown = {0};
     struct pl_color_space display = {

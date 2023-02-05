@@ -394,17 +394,28 @@ struct pl_color_space {
     enum pl_color_primaries primaries;
     enum pl_color_transfer transfer;
 
-    // HDR metadata for this color space. Note that this can also be combined
-    // with SDR color transfers, in which case it's assumed that the color
-    // transfer in question is linearly "stretched" relative to these values.
+    // Nominal minimum/maximum signal levels (in cd/m²), for tone-mapping.
+    // These values are inferred from the mastering display metadata, per-scene
+    // metadata (if present), and transfer function. Users should generally not
+    // set this directly, but let `pl_color_space_infer` auto-pick it based on
+    // the values supplied in `pl_hdr_metadata`.
+    //
+    // These values will always be set to sane defaults even in the absence of
+    // such metadata. Note that they can also be combined with SDR color
+    // transforms, in which case it's assumed that the color transfer in
+    // question is linearly "stretched" relative to these values.
+    float nominal_min;
+    float nominal_max;
+
+    // HDR metadata for this color space, if present. (Optional)
     struct pl_hdr_metadata hdr;
 
-    // Deprecated fields
-    enum pl_color_light light PL_DEPRECATED;    // ignored
-    float sig_peak PL_DEPRECATED;               // replaced by `hdr.max_luma`
-    float sig_avg PL_DEPRECATED;                // replaced by `hdr.scene_avg`
-    float sig_floor PL_DEPRECATED;              // replaced by `hdr.min_luma`
-    float sig_scale PL_DEPRECATED;              // merged into `hdr.max/min_luma`
+    // Deprecated fields (Ignored)
+    enum pl_color_light light PL_DEPRECATED;
+    float sig_peak PL_DEPRECATED;
+    float sig_avg PL_DEPRECATED;
+    float sig_floor PL_DEPRECATED;
+    float sig_scale PL_DEPRECATED;
 };
 
 #define pl_color_space(...) (&(struct pl_color_space) { __VA_ARGS__ })

@@ -361,8 +361,7 @@ const struct pl_color_space pl_color_space_monitor = {
 
 bool pl_color_space_is_hdr(const struct pl_color_space *csp)
 {
-    return csp->hdr.max_luma > PL_COLOR_SDR_WHITE ||
-           csp->sig_scale > 1 ||
+    return csp->nominal_max > PL_COLOR_SDR_WHITE ||
            pl_color_transfer_is_hdr(csp->transfer);
 }
 
@@ -420,33 +419,35 @@ void pl_color_space_infer(struct pl_color_space *space)
         space->primaries = PL_COLOR_PRIM_BT_709;
     if (!space->transfer)
         space->transfer = PL_COLOR_TRC_BT_1886;
-
-    // Backwards-compatibility with deprecated fields
-    if (space->sig_peak) {
-        space->hdr.max_luma = space->sig_peak * PL_COLOR_SDR_WHITE;
-        space->sig_peak = 0;
-    }
-    if (space->sig_floor) {
-        space->hdr.min_luma = space->sig_floor * PL_COLOR_SDR_WHITE;
-        space->sig_floor = 0;
-    }
-    if (space->sig_avg) {
-        space->hdr.scene_avg = space->sig_avg * PL_COLOR_SDR_WHITE;
-        space->sig_avg = 0;
+    if (!space->nominal_min)
+        space->nominal_min = space->hdr.min_luma;
+    if (!space->nominal_max) {
+        // Use the per-scene measured values if known, fall back to the
+        // mastering display metadata otherwise
+        const float scene_max = PL_MAX3(space->hdr.scene_max[0],
+                                        space->hdr.scene_max[1],
+                                        space->hdr.scene_max[2]);
+        space->nominal_max = PL_DEF(scene_max, space->hdr.max_luma);
     }
 
-reinfer_peaks:
-    if (space->hdr.max_luma < 1 || space->hdr.max_luma > 10000) {
-        space->hdr.max_luma = pl_color_transfer_nominal_peak(space->transfer)
-                              * PL_COLOR_SDR_WHITE;
+    // PQ is always scaled down to absolute black, regardless of what the
+    // metadata says, so strip this information, while preserving the mastering
+    // metadata.
+    if (space->transfer == PL_COLOR_TRC_PQ)
+        space->nominal_min = 0;
+
+reinfer_levels:
+    if (space->nominal_max < 1 || space->nominal_max > 10000) {
+        space->nominal_max = pl_color_transfer_nominal_peak(space->transfer)
+                             * PL_COLOR_SDR_WHITE;
 
         // Exception: For HLG content, we want to infer a value of 1000 cd/m²,
         // a value which is considered the "reference" HLG display.
         if (space->transfer == PL_COLOR_TRC_HLG)
-            space->hdr.max_luma = 1000;
+            space->nominal_max = 1000;
     }
 
-    if (space->hdr.min_luma <= 0 || space->hdr.min_luma > 100) {
+    if (space->nominal_min <= 0 || space->nominal_min > 100) {
         if (pl_color_transfer_is_hdr(space->transfer)) {
             // Use a slightly nonzero black level, for the following reasons:
             // - 0 may be seen as 'missing/undefined' in HDR10 metadata structs
@@ -458,23 +459,16 @@ reinfer_peaks:
             // - true infinite contrast does not exist in reality, even 1e-7
             //   is extremely generous considering typical viewing environments
             //   are not absolutely devoid of stray ambient light
-            space->hdr.min_luma = 1e-7;
+            space->nominal_min = 1e-7;
         } else {
-            space->hdr.min_luma = space->hdr.max_luma / 1000; // Typical SDR contrast
+            space->nominal_min = space->nominal_max / 1000; // Typical SDR contrast
         }
     }
 
-    pl_assert(space->hdr.min_luma && space->hdr.max_luma);
-    if (space->hdr.max_luma < space->hdr.min_luma) { // sanity
-        space->hdr.max_luma = space->hdr.min_luma = 0;
-        goto reinfer_peaks;
-    }
-
-    if (space->sig_scale && !pl_color_transfer_is_hdr(space->transfer)) {
-        space->hdr.max_luma *= space->sig_scale;
-        space->hdr.min_luma *= space->sig_scale;
-        space->hdr.scene_avg *= space->sig_scale;
-        space->sig_scale = 0;
+    pl_assert(space->nominal_min && space->nominal_max);
+    if (space->nominal_max < space->nominal_min) { // sanity
+        space->nominal_max = space->nominal_min = 0;
+        goto reinfer_levels;
     }
 
     if (!pl_primaries_valid(&space->hdr.prim))
@@ -549,18 +543,7 @@ void pl_color_space_infer_ref(struct pl_color_space *space,
 void pl_color_space_infer_map(struct pl_color_space *src,
                               struct pl_color_space *dst)
 {
-    bool unknown_contrast = !src->hdr.min_luma;
-
-    // PQ is always scaled down to absolute black, regardless of what the
-    // metadata says. So treat it as such. We do this here, rather than in e.g.
-    // pl_color_space_infer, because the latter is also used to sanitize values
-    // in cases where we don't want to override mastering metadata.
-    // Additionally, doing it here allows e.g. correct propagation of black
-    // levels for BT.1886 -> PQ expansion in the step further below.
-    if (src->transfer == PL_COLOR_TRC_PQ)
-        src->hdr.min_luma = 0;
-    if (dst->transfer == PL_COLOR_TRC_PQ)
-        dst->hdr.min_luma = 0;
+    bool unknown_contrast = !src->nominal_min;
 
     infer_both_ref(dst, src);
 
@@ -571,7 +554,7 @@ void pl_color_space_infer_map(struct pl_color_space *src,
                             src->transfer == PL_COLOR_TRC_BT_1886;
 
     if (unknown_contrast && dynamic_contrast)
-        src->hdr.min_luma = dst->hdr.min_luma;
+        src->nominal_min = dst->nominal_min;
 }
 
 const struct pl_color_adjustment pl_color_adjustment_neutral = {

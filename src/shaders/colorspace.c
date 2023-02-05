@@ -634,8 +634,8 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
     GLSL("// pl_shader_linearize           \n"
          "color.rgb = max(color.rgb, 0.0); \n");
 
-    float csp_min = csp->hdr.min_luma / PL_COLOR_SDR_WHITE;
-    float csp_max = csp->hdr.max_luma / PL_COLOR_SDR_WHITE;
+    float csp_min = csp->nominal_min / PL_COLOR_SDR_WHITE;
+    float csp_max = csp->nominal_max / PL_COLOR_SDR_WHITE;
     csp_max = PL_DEF(csp_max, 1);
 
     switch (csp->transfer) {
@@ -755,8 +755,8 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         return;
 
     GLSL("// pl_shader_delinearize \n");
-    float csp_min = csp->hdr.min_luma / PL_COLOR_SDR_WHITE;
-    float csp_max = csp->hdr.max_luma / PL_COLOR_SDR_WHITE;
+    float csp_min = csp->nominal_min / PL_COLOR_SDR_WHITE;
+    float csp_max = csp->nominal_max / PL_COLOR_SDR_WHITE;
     csp_max = PL_DEF(csp_max, 1);
 
     switch (csp->transfer) {
@@ -1253,10 +1253,10 @@ static void tone_map(pl_shader sh,
                      pl_shader_obj *state,
                      const struct pl_color_map_params *params)
 {
-    float src_min = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, src->hdr.min_luma),
-          src_max = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, src->hdr.max_luma),
-          dst_min = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, dst->hdr.min_luma),
-          dst_max = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, dst->hdr.max_luma);
+    float src_min = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, src->nominal_min),
+          src_max = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, src->nominal_max),
+          dst_min = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, dst->nominal_min),
+          dst_max = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, dst->nominal_max);
 
     // Some tone mapping functions don't handle values of absolute 0 very well,
     // so clip the minimums to a very small positive value
@@ -1559,8 +1559,8 @@ static void adapt_colors(pl_shader sh,
         pl_get_color_mapping_matrix(&src->hdr.prim, &dst->hdr.prim, params->intent);
 
     // Normalize colors to range [0-1]
-    float lb = dst->hdr.min_luma / PL_COLOR_SDR_WHITE;
-    float lw = dst->hdr.max_luma / PL_COLOR_SDR_WHITE;
+    float lb = dst->nominal_min / PL_COLOR_SDR_WHITE;
+    float lw = dst->nominal_max / PL_COLOR_SDR_WHITE;
     GLSL("color.rgb = %s * color.rgb + %s; \n",
          SH_FLOAT(1 / (lw - lb)), SH_FLOAT(-lb / (lw - lb)));
 
