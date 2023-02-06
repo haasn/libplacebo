@@ -255,7 +255,7 @@ static void pl_color_space_from_avframe(struct pl_color_space *out_csp,
 {
     const AVFrameSideData *sd;
     bool is_hdr, is_wide;
-    *out_csp = (struct pl_swapchain_colors) {
+    *out_csp = (struct pl_color_space) {
         .primaries = pl_primaries_from_av(frame->color_primaries),
         .transfer = pl_transfer_from_av(frame->color_trc),
     };
