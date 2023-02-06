@@ -141,6 +141,7 @@ static inline float *pl_transpose(int dim, float *out, const float *in)
 
 // Helper functions for some common numeric operations (careful: double-eval)
 #define PL_MAX(x, y) ((x) > (y) ? (x) : (y))
+#define PL_MAX3(x, y, z) PL_MAX(PL_MAX(x, y), z)
 #define PL_MIN(x, y) ((x) < (y) ? (x) : (y))
 #define PL_CLAMP(x, l, h) ((x) < (l) ? (l) : (x) > (h) ? (h) : (x))
 #define PL_CMP(a, b) ((a) < (b) ? -1 : (a) > (b) ? 1 : 0)
