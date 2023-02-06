@@ -96,7 +96,7 @@ struct pl_tone_map_params {
     float output_max;
 
     // The input HDR metadata. Only used by a select few tone-mapping
-    // functions. (Optional)
+    // functions, currently only SMPTE ST2094. (Optional)
     struct pl_hdr_metadata hdr;
 };
 
@@ -134,6 +134,23 @@ extern const struct pl_tone_map_function pl_tone_map_auto;
 // color accuracy for in-range colors but completely destroys out-of-range
 // information. Does not perform any black point adaptation.
 extern const struct pl_tone_map_function pl_tone_map_clip;
+
+// EETF from SMPTE ST 2094-40 Annex B, which uses the provided OOTF based on
+// Bezier curves to perform tone-mapping. The OOTF used is adjusted based on
+// the ratio between the targeted and actual display peak luminances.
+extern const struct pl_tone_map_function pl_tone_map_st2094_40;
+
+// EETF from SMPTE ST 2094-10 Annex B.2, which takes into account the input
+// signal average luminance in addition to the maximum/minimum. The
+// configurable contrast parameter influences the slope of the linear output
+// segment, defaulting to 1.0 for no increase/decrease in contrast.
+//
+// Note: If the average luminance data is not known, it defaults to 10.
+//
+// Note: This does *not* currently include the subjective gain/offset/gamma
+// controls defined in Annex B.3. (Open an issue with a valid sample file if
+// you want such parameters to be respected.)
+extern const struct pl_tone_map_function pl_tone_map_st2094_10;
 
 // EETF from the ITU-R Report BT.2390, a hermite spline roll-off with linear
 // segment. The knee point offset is configurable. Note that this defaults to

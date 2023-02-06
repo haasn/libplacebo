@@ -265,6 +265,191 @@ const struct pl_tone_map_function pl_tone_map_clip = {
     .map_inverse = noop,
 };
 
+// Helper function to pick a knee point (for suitable methods) based on the
+// HDR10+ brightness metadata and scene brightness average matching
+static void st2094_pick_knee(float *out_src_knee, float *out_dst_knee,
+                             const struct pl_tone_map_params *params)
+{
+    pl_assert(params->input_scaling == PL_HDR_NITS);
+    pl_assert(params->output_scaling == PL_HDR_NITS);
+
+    const float sdr_avg = PL_COLOR_SDR_WHITE / sqrtf(1000.0f); // typical contrast
+
+    // Infer the average from scene metadata if present, or default to 10.0 as
+    // this is an industry-standard value that produces good results on average
+    //
+    // Infer the destination from the desired output characteristics, clamping
+    // the lower bound to the characteristics of a typical SDR signal
+    float src_avg = PL_DEF(params->hdr.scene_avg, 10.0f);
+    float dst_avg = fmaxf(sqrtf(params->output_min * params->output_max), sdr_avg);
+    src_avg = PL_CLAMP(src_avg, params->input_min, params->input_max);
+    dst_avg = PL_CLAMP(dst_avg, params->output_min, params->output_max);
+
+    *out_src_knee = fminf(src_avg, 0.8f * params->input_max);
+    *out_dst_knee = fminf(sqrtf(src_avg * dst_avg), 0.8f * params->output_max);
+}
+
+// Pascal's triangle
+static const uint16_t binom[17][17] = {
+    {1},
+    {1,1},
+    {1,2,1},
+    {1,3,3,1},
+    {1,4,6,4,1},
+    {1,5,10,10,5,1},
+    {1,6,15,20,15,6,1},
+    {1,7,21,35,35,21,7,1},
+    {1,8,28,56,70,56,28,8,1},
+    {1,9,36,84,126,126,84,36,9,1},
+    {1,10,45,120,210,252,210,120,45,10,1},
+    {1,11,55,165,330,462,462,330,165,55,11,1},
+    {1,12,66,220,495,792,924,792,495,220,66,12,1},
+    {1,13,78,286,715,1287,1716,1716,1287,715,286,78,13,1},
+    {1,14,91,364,1001,2002,3003,3432,3003,2002,1001,364,91,14,1},
+    {1,15,105,455,1365,3003,5005,6435,6435,5005,3003,1365,455,105,15,1},
+    {1,16,120,560,1820,4368,8008,11440,12870,11440,8008,4368,1820,560,120,16,1},
+};
+
+static void st2094_40(float *lut, const struct pl_tone_map_params *params)
+{
+    const float D = params->output_max;
+
+    // Allocate space for the adjusted bezier control points, plus endpoints
+    float P[17], Kx, Ky, T;
+    uint8_t N;
+
+    if (params->hdr.ootf.num_anchors) {
+
+        // Use bezier curve from metadata
+        Kx = PL_CLAMP(params->hdr.ootf.knee_x, 0, 1);
+        Ky = PL_CLAMP(params->hdr.ootf.knee_y, 0, 1);
+        T = PL_CLAMP(params->hdr.ootf.target_luma, params->input_min, params->input_max);
+        N = params->hdr.ootf.num_anchors + 1;
+        pl_assert(N < PL_ARRAY_SIZE(P));
+        memcpy(P + 1, params->hdr.ootf.anchors, (N - 1) * sizeof(*P));
+        P[0] = 0.0f;
+        P[N] = 1.0f;
+
+    } else {
+
+        // Missing metadata, default to simple brightness matching
+        float src_knee, dst_knee;
+        st2094_pick_knee(&src_knee, &dst_knee, params);
+        Kx = src_knee / params->input_max;
+        Ky = dst_knee / params->output_max;
+
+        // Solve spline to match slope at knee intercept
+        const float slope = Ky / Kx * (1 - Kx) / (1 - Ky);
+        N = PL_CLAMP((int) ceilf(slope), 2, PL_ARRAY_SIZE(P) - 1);
+        P[0] = 0.0f;
+        P[1] = fminf(slope / N, 1.0f);
+        for (int i = 2; i <= N; i++)
+            P[i] = 1.0f;
+        T = D;
+
+    }
+
+    if (D < T) {
+
+        // Output display darker than OOTF target, make brighter
+        const float u = D / T;
+        Kx *= u;
+        Ky *= u;
+        for (int p = 1; p <= N; p++)
+            P[p] = PL_MIX(1.0f, P[p], u);
+
+    } else if (D > T) {
+
+        // Output display brighter than OOTF target, make more linear
+        pl_assert(params->input_max > T);
+        const float w = 1 - (D - T) / (params->input_max - T);
+        Kx = PL_MIX(0.5f, Kx, w);
+        Ky = PL_MIX(0.5f, Ky, w);
+        for (int p = 1; p <= N; p++)
+            P[p] = PL_MIX(p / N, P[p], w);
+
+    }
+
+    pl_assert(Kx >= 0 && Kx <= 1);
+    pl_assert(Ky >= 0 && Ky <= 1);
+
+    // Note: We don't fix the P[1] tangent because it breaks real-world samples
+    // P[1] = 1.0f / N * Ky / Kx * (1 - Kx) / (1 - Ky);
+
+    FOREACH_LUT(lut, x) {
+        x = bt1886_oetf(x, params->input_min, params->input_max);
+        x = bt1886_eotf(x, 0.0f, 1.0f);
+
+        if (x <= Kx && Kx) {
+            // Linear section
+            x *= Ky / Kx;
+        } else {
+            // Bezier section
+            const float t = (x - Kx) / (1 - Kx);
+
+            x = 0; // Bn
+            for (uint8_t p = 0; p <= N; p++)
+                x += binom[N][p] * powf(t, p) * powf(1 - t, N - p) * P[p];
+
+            x = Ky + (1 - Ky) * x;
+        }
+
+        x = bt1886_oetf(x, 0.0f, 1.0f);
+        x = bt1886_eotf(x, params->output_min, params->output_max);
+    }
+}
+
+const struct pl_tone_map_function pl_tone_map_st2094_40 = {
+    .name = "st2094-40",
+    .description = "SAMPTE ST 2094-40 Annex B",
+    .scaling = PL_HDR_NITS,
+    .map = st2094_40,
+};
+
+static void st2094_10(float *lut, const struct pl_tone_map_params *params)
+{
+    float src_knee, dst_knee;
+    st2094_pick_knee(&src_knee, &dst_knee, params);
+
+    const float x1 = powf(params->input_min, params->param);
+    const float x3 = powf(params->input_max, params->param);
+    const float x2 = powf(src_knee, params->param);
+
+    const float y1 = params->output_min;
+    const float y3 = params->output_max;
+    const float y2 = dst_knee;
+
+    const struct pl_matrix3x3 cmat = {{
+        { x2*x3*(y2 - y3), x1*x3*(y3 - y1), x1*x2*(y1 - y2) },
+        { x3*y3 - x2*y2,   x1*y1 - x3*y3,   x2*y2 - x1*y1   },
+        { x3 - x2,         x1 - x3,         x2 - x1         },
+    }};
+
+    float coeffs[3] = { y1, y2, y3 };
+    pl_matrix3x3_apply(&cmat, coeffs);
+
+    const float k = 1.0 / (x3*y3*(x1 - x2) + x2*y2*(x3 - x1) + x1*y1*(x2 - x3));
+    const float c1 = k * coeffs[0];
+    const float c2 = k * coeffs[1];
+    const float c3 = k * coeffs[2];
+
+    FOREACH_LUT(lut, x) {
+        float Ln = powf(x, params->param);
+        x = (c1 + c2 * Ln) / (1 + c3 * Ln);
+    }
+}
+
+const struct pl_tone_map_function pl_tone_map_st2094_10 = {
+    .name = "st2094-10",
+    .description = "SAMPTE ST 2094-10 Annex B.2",
+    .scaling = PL_HDR_NITS,
+    .param_desc = "Contrast",
+    .param_min = 0.20,
+    .param_def = 1.00,
+    .param_max = 2.00,
+    .map = st2094_10,
+};
+
 static void bt2390(float *lut, const struct pl_tone_map_params *params)
 {
     const float minLum = rescale_in(params->output_min, params);
@@ -527,6 +712,8 @@ const struct pl_tone_map_function pl_tone_map_linear = {
 const struct pl_tone_map_function * const pl_tone_map_functions[] = {
     &pl_tone_map_auto,
     &pl_tone_map_clip,
+    &pl_tone_map_st2094_40,
+    &pl_tone_map_st2094_10,
     &pl_tone_map_bt2390,
     &pl_tone_map_bt2446a,
     &pl_tone_map_spline,
