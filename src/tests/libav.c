@@ -276,6 +276,18 @@ int main()
 
     TEST(AV_PIX_FMT_RGB48LE, rgb16);
 
+    static const struct pl_plane_data rgb16be[] = {
+        {
+            .type = PL_FMT_UNORM,
+            .component_size = {16, 16, 16},
+            .component_map = {0, 1, 2},
+            .pixel_stride = 6,
+            .swapped = true,
+        }
+    };
+
+    TEST(AV_PIX_FMT_RGB48BE, rgb16be);
+
     static const struct pl_plane_data rgba16[] = {
         {
             .type = PL_FMT_UNORM,
@@ -286,6 +298,18 @@ int main()
     };
 
     TEST(AV_PIX_FMT_RGBA64LE, rgba16);
+
+    static const struct pl_plane_data rgba16be[] = {
+        {
+            .type = PL_FMT_UNORM,
+            .component_size = {16, 16, 16, 16},
+            .component_map = {0, 1, 2, 3},
+            .pixel_stride = 8,
+            .swapped = true,
+        }
+    };
+
+    TEST(AV_PIX_FMT_RGBA64BE, rgba16be);
 
     static const struct pl_plane_data rgb565[] = {
         {
