@@ -337,6 +337,12 @@ bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
 bool pl_recreate_plane(pl_gpu gpu, struct pl_plane *out_plane,
                        pl_tex *tex, const struct pl_plane_data *data)
 {
+    if (data->swapped) {
+        PL_ERR(gpu, "Cannot call pl_recreate_plane on non-native endian plane "
+               "data, this is only supported for `pl_upload_plane`!");
+        return false;
+    }
+
     int out_map[4];
     pl_fmt fmt = pl_plane_find_fmt(gpu, out_map, data);
     if (!fmt) {
