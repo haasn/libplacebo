@@ -78,5 +78,6 @@ int main()
 
     pl_shader_obj_destroy(&obj);
     pl_shader_free(&sh);
+    pl_gpu_dummy_destroy(&gpu);
     pl_log_destroy(&log);
 }
