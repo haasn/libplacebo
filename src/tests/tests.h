@@ -72,7 +72,7 @@ static inline bool feq(float a, float b, float epsilon)
 
 #define REQUIRE(cond) require((cond), #cond, __FILE__, __LINE__)
 #define RANDOM (rand() / (float) RAND_MAX)
-#define RANDOM_U8 (256.0f * rand() / (RAND_MAX + 1.0f))
+#define RANDOM_U8 ((uint8_t) (256.0 * rand() / (RAND_MAX + 1.0)))
 #define SKIP 77
 
 #define REQUIRE_HANDLE(shmem, type)                                             \
