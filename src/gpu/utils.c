@@ -856,7 +856,7 @@ bool pl_tex_blit_compute(pl_gpu gpu, const struct pl_tex_blit_params *params)
 
     int src_dims = pl_tex_params_dimension(params->src->params);
     int dst_dims = pl_tex_params_dimension(params->dst->params);
-    GLSL("const ivec3 pos = ivec3(gl_GlobalInvocationID);   \n"
+    GLSL("ivec3 pos = ivec3(gl_GlobalInvocationID); \n"
          "%s dst_pos = %s(pos + ivec3(%d, %d, %d)); \n",
          ivecs[dst_dims], ivecs[dst_dims],
          params->dst_rc.x0, params->dst_rc.y0, params->dst_rc.z0);
