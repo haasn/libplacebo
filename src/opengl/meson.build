@@ -37,6 +37,7 @@ if opengl_build.allowed()
     'GL_ARB_get_program_binary',
     'GL_ARB_invalidate_subdata',
     'GL_ARB_pixel_buffer_object',
+    'GL_ARB_program_interface_query',
     'GL_ARB_shader_image_load_store',
     'GL_ARB_shader_storage_buffer_object',
     'GL_ARB_sync',
