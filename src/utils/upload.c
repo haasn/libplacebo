@@ -313,6 +313,7 @@ bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
             swap_params.src_offset = params.buf_offset;
         } else {
             // We sadly need to do a second memcpy
+            assert(params.buf);
             PL_TRACE(gpu, "Double-slow path! pl_buf_copy -> pl_buf_copy_swap...");
             pl_buf_copy(gpu, swapbuf, 0, params.buf, params.buf_offset,
                         PL_MIN(aligned, params.buf->params.size - params.buf_offset));
