@@ -1379,10 +1379,6 @@ static struct pl_hook_res noop_hook(void *priv, const struct pl_hook_params *par
 
 static void pl_ycbcr_tests(pl_gpu gpu)
 {
-    pl_renderer rr = pl_renderer_create(gpu->log, gpu);
-    if (!rr)
-        return;
-
     struct pl_plane_data data[3];
     for (int i = 0; i < 3; i++) {
         const int sub = i > 0 ? 1 : 0;
@@ -1404,6 +1400,10 @@ static void pl_ycbcr_tests(pl_gpu gpu)
     pl_fmt fmt = pl_plane_find_fmt(gpu, NULL, &data[0]);
     enum pl_fmt_caps caps = PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_HOST_READABLE;
     if (!fmt || (fmt->caps & caps) != caps)
+        return;
+
+    pl_renderer rr = pl_renderer_create(gpu->log, gpu);
+    if (!rr)
         return;
 
     pl_tex src_tex[3] = {0};
