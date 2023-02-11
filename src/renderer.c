@@ -1643,12 +1643,11 @@ static bool pass_read_image(struct pass_state *pass)
     // For quality reasons, explicitly drop subpixel offsets from the ref rect
     // and re-add them as part of `pass->img.rect`, always rounding towards 0.
     // Additionally, drop anamorphic subpixel mismatches.
-    struct pl_rect2d ref_rounded = {
-        .x0 = truncf(ref->img.rect.x0),
-        .y0 = truncf(ref->img.rect.y0),
-        .x1 = ref_rounded.x0 + roundf(pl_rect_w(ref->img.rect)),
-        .y1 = ref_rounded.y0 + roundf(pl_rect_h(ref->img.rect)),
-    };
+    struct pl_rect2d ref_rounded;
+    ref_rounded.x0 = truncf(ref->img.rect.x0);
+    ref_rounded.y0 = truncf(ref->img.rect.y0);
+    ref_rounded.x1 = ref_rounded.x0 + roundf(pl_rect_w(ref->img.rect));
+    ref_rounded.y1 = ref_rounded.y0 + roundf(pl_rect_h(ref->img.rect));
 
     PL_TRACE(rr, "Rounded reference rect: {%d %d %d %d}",
              ref_rounded.x0, ref_rounded.y0,
