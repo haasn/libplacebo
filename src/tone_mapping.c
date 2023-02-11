@@ -370,8 +370,8 @@ static void spline(float *lut, const struct pl_tone_map_params *params)
     const float Pa = (out_min - in_min) / (in_min * in_min);
 
     // Solve Q of order 3 for:
-    //  Q(in_min) = out_min
-    //  Q''(in_min) = 0.0
+    //  Q(in_max) = out_max
+    //  Q''(in_max) = 0.0
     //  Q(0.0) = 0.0
     //  Q'(0.0) = 1.0
     const float t = 2 * in_max * in_max;
