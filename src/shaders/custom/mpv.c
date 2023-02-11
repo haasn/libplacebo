@@ -1676,7 +1676,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
     return hook;
 
 error:
-    pl_free(hook);
+    pl_mpv_user_shader_destroy((const struct pl_hook **) &hook);
     return NULL;
 }
 
