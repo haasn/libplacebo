@@ -76,9 +76,7 @@ static void pl_buffer_tests(pl_gpu gpu)
     }
 
     // `compute_queues` check is to exclude dummy GPUs here
-    if (buf_size <= gpu->limits.max_ssbo_size &&
-        gpu->limits.compute_queues &&
-        gpu->glsl.version >= 130)
+    if (buf_size <= gpu->limits.max_ssbo_size && gpu->limits.compute_queues)
     {
         printf("test endian swapping\n");
         buf = pl_buf_create(gpu, pl_buf_params(
@@ -1158,7 +1156,7 @@ static void pl_render_tests(pl_gpu gpu)
         hook = pl_mpv_user_shader_parse(gpu, user_shader_tests[i],
                                         strlen(user_shader_tests[i]));
 
-        if (gpu->glsl.compute) {
+        if (gpu->glsl.compute && gpu->limits.max_ssbo_size) {
             REQUIRE(hook);
         } else {
             // Not all shaders compile without compute shader support
