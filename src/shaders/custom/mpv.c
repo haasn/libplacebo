@@ -1556,7 +1556,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
     if (!shader_len)
         return NULL;
 
-    struct pl_hook *hook = pl_alloc_obj(NULL, hook, struct hook_priv);
+    struct pl_hook *hook = pl_zalloc_obj(NULL, hook, struct hook_priv);
     struct hook_priv *p = PL_PRIV(hook);
 
     *hook = (struct pl_hook) {
