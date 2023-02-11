@@ -325,6 +325,7 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
                 struct entry *prev = i > 0 ? p->queue.elem[i - 1] : NULL;
                 struct entry *next = i < p->queue.num ? p->queue.elem[i] : NULL;
                 struct entry *entry2 = pl_zalloc_ptr(NULL, entry2);
+                pl_rc_init(&entry2->rc);
                 if (next) {
                     entry2->pts = (entry->pts + next->pts) / 2;
                 } else if (src->duration) {
