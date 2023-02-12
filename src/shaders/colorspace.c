@@ -1457,11 +1457,42 @@ static void tone_map(pl_shader sh,
             GLSL("color[%d] = tone_map(color[%d]); \n", c, c);
         break;
 
-    case PL_TONE_MAP_MAX:
+    case PL_TONE_MAP_MAX: {
         GLSL("float sig_max = max(max(color.r, color.g), color.b);  \n"
              "color.rgb *= tone_map(sig_max) / max(sig_max, %s);    \n",
              SH_FLOAT(dst_min));
+
+        if (!src->hdr.scene_max[0])
+            break;
+
+        // Increase brightness based on the difference between the minimum and
+        // maximum color component in the scene, to avoid excessive darkness
+        // for highly monochromatic scenes
+        float maxrgb[3] = {
+            src->hdr.scene_max[0],
+            src->hdr.scene_max[1],
+            src->hdr.scene_max[2],
+        };
+
+        // Sort by ascending value
+        if (maxrgb[0] > maxrgb[1])
+            PL_SWAP(maxrgb[0], maxrgb[1]);
+        if (maxrgb[1] > maxrgb[2])
+            PL_SWAP(maxrgb[1], maxrgb[2]);
+        if (maxrgb[0] > maxrgb[1])
+            PL_SWAP(maxrgb[0], maxrgb[1]);
+
+        // Parameters taken from SMPTE ST2094-40 recommendation
+        const float threshold = 16;
+        const float limit = 2;
+        float ratio = fminf(maxrgb[2] / maxrgb[0], threshold);
+        float gain = 1 + (limit - 1) / (threshold - 1) * (ratio - 1);
+        GLSL("color.rgb *= %s; \n", sh_var(sh, (struct pl_shader_var) {
+            .var = pl_var_float("gain"),
+            .data = &gain,
+        }));
         break;
+    }
 
     case PL_TONE_MAP_LUMA:
     case PL_TONE_MAP_HYBRID: {
