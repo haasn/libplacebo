@@ -2,5 +2,6 @@
 /tags
 /TAGS
 /demos/3rdparty
+/3rdparty
 *.exe
 *.o
