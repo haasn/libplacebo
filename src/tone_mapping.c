@@ -288,6 +288,9 @@ static void st2094_pick_knee(float *out_src_knee, float *out_dst_knee,
     src_avg = PL_CLAMP(src_avg, params->input_min, params->input_max);
     dst_avg = PL_CLAMP(dst_avg, params->output_min, params->output_max);
 
+    const float max_slope = 1.2f; // don't raise brightness too much
+    dst_avg = fminf(dst_avg, src_avg * max_slope);
+
     *out_src_knee = fminf(src_avg, 0.8f * params->input_max);
     *out_dst_knee = fminf(sqrtf(src_avg * dst_avg), 0.8f * params->output_max);
 }
