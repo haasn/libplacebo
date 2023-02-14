@@ -57,23 +57,23 @@ static inline pl_log pl_test_logger(void)
     ));
 }
 
-static inline void require(bool b, const char *msg, const char *file, int line)
-{
-    if (!b) {
-        fprintf(stderr, "=== FAILED: '%s' at %s:%d\n\n", msg, file, line);
-        exit(1);
-    }
-}
+#define RANDOM (rand() / (float) RAND_MAX)
+#define RANDOM_U8 ((uint8_t) (256.0 * rand() / (RAND_MAX + 1.0)))
+#define SKIP 77
+
+// Helpers for performing various checks
+#define REQUIRE(cond) do                                                        \
+{                                                                               \
+    if (!(cond)) {                                                              \
+        fprintf(stderr, "=== FAILED: '"#cond"' at "__FILE__":%d\n\n", __LINE__);\
+        exit(1);                                                                \
+    }                                                                           \
+} while (0)
 
 static inline bool feq(float a, float b, float epsilon)
 {
     return fabs(a - b) < epsilon * fmax(1.0, fabs(a));
 }
-
-#define REQUIRE(cond) require((cond), #cond, __FILE__, __LINE__)
-#define RANDOM (rand() / (float) RAND_MAX)
-#define RANDOM_U8 ((uint8_t) (256.0 * rand() / (RAND_MAX + 1.0)))
-#define SKIP 77
 
 #define REQUIRE_HANDLE(shmem, type)                                             \
     switch (type) {                                                             \
