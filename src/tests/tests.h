@@ -88,6 +88,23 @@ static inline bool feq(float a, float b, float epsilon)
     return fabs(a - b) < epsilon * fmax(1.0, fabs(a));
 }
 
+#define REQUIRE_FEQ(a, b, epsilon) do                                           \
+{                                                                               \
+    float _va = (a);                                                            \
+    float _vb = (b);                                                            \
+    float _delta = (epsilon) * fmax(1.0, fabs(_va));                            \
+                                                                                \
+    if (fabs(_va - _vb) > _delta) {                                             \
+        fprintf(stderr, "=== FAILED: '"#a" ≈ "#b"' at "__FILE__":%d\n"          \
+                        " %-31s = %f\n"                                         \
+                        " %-31s = %f\n"                                         \
+                        " %-31s = %f\n\n",                                      \
+                __LINE__, #a, _va, #b, _vb,                                     \
+                "epsilon "#epsilon" -> max delta", _delta);                     \
+        exit(1);                                                                \
+    }                                                                           \
+} while (0)
+
 #define REQUIRE_HANDLE(shmem, type)                                             \
     switch (type) {                                                             \
     case PL_HANDLE_FD:                                                          \
