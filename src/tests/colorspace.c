@@ -4,17 +4,17 @@ int main()
 {
     for (enum pl_color_system sys = 0; sys < PL_COLOR_SYSTEM_COUNT; sys++) {
         bool ycbcr = sys >= PL_COLOR_SYSTEM_BT_601 && sys <= PL_COLOR_SYSTEM_YCGCO;
-        REQUIRE(ycbcr == pl_color_system_is_ycbcr_like(sys));
+        REQUIRE_CMP(ycbcr, ==, pl_color_system_is_ycbcr_like(sys), "d");
     }
 
     for (enum pl_color_transfer trc = 0; trc < PL_COLOR_TRC_COUNT; trc++) {
         bool hdr = trc >= PL_COLOR_TRC_PQ && trc <= PL_COLOR_TRC_S_LOG2;
-        REQUIRE(hdr == pl_color_transfer_is_hdr(trc));
-        REQUIRE(pl_color_transfer_nominal_peak(trc) >= 1.0);
+        REQUIRE_CMP(hdr, ==, pl_color_transfer_is_hdr(trc), "d");
+        REQUIRE_CMP(pl_color_transfer_nominal_peak(trc), >=, 1.0, "f");
     }
 
     float pq_peak = pl_color_transfer_nominal_peak(PL_COLOR_TRC_PQ);
-    REQUIRE(feq(PL_COLOR_SDR_WHITE * pq_peak, 10000, 1e-7));
+    REQUIRE_FEQ(PL_COLOR_SDR_WHITE * pq_peak, 10000, 1e-7);
 
     struct pl_color_repr tv_repr = {
         .sys       = PL_COLOR_SYSTEM_BT_709,
@@ -30,8 +30,8 @@ int main()
     for (int bits = 1; bits <= 16; bits++) {
         tv_repr.bits.color_depth = tv_repr.bits.sample_depth = bits;
         pc_repr.bits.color_depth = pc_repr.bits.sample_depth = bits;
-        REQUIRE(feq(pl_color_repr_normalize(&tv_repr), 1.0, 1e-7));
-        REQUIRE(feq(pl_color_repr_normalize(&pc_repr), 1.0, 1e-7));
+        REQUIRE_FEQ(pl_color_repr_normalize(&tv_repr), 1.0, 1e-7);
+        REQUIRE_FEQ(pl_color_repr_normalize(&pc_repr), 1.0, 1e-7);
     }
 
     tv_repr.bits.color_depth  = 8;
@@ -43,15 +43,15 @@ int main()
     float tv8to12 = pl_color_repr_normalize(&tv_repr);
 
     // Simulate the effect of GPU texture sampling on UNORM texture
-    REQUIRE(feq(tv8to10 * 16 /1023.,  64/1023., 1e-7)); // black
-    REQUIRE(feq(tv8to10 * 235/1023., 940/1023., 1e-7)); // nominal white
-    REQUIRE(feq(tv8to10 * 128/1023., 512/1023., 1e-7)); // achromatic
-    REQUIRE(feq(tv8to10 * 240/1023., 960/1023., 1e-7)); // nominal chroma peak
+    REQUIRE_FEQ(tv8to10 * 16 /1023.,  64/1023., 1e-7); // black
+    REQUIRE_FEQ(tv8to10 * 235/1023., 940/1023., 1e-7); // nominal white
+    REQUIRE_FEQ(tv8to10 * 128/1023., 512/1023., 1e-7); // achromatic
+    REQUIRE_FEQ(tv8to10 * 240/1023., 960/1023., 1e-7); // nominal chroma peak
 
-    REQUIRE(feq(tv8to12 * 16 /4095., 256 /4095., 1e-7)); // black
-    REQUIRE(feq(tv8to12 * 235/4095., 3760/4095., 1e-7)); // nominal white
-    REQUIRE(feq(tv8to12 * 128/4095., 2048/4095., 1e-7)); // achromatic
-    REQUIRE(feq(tv8to12 * 240/4095., 3840/4095., 1e-7)); // nominal chroma peak
+    REQUIRE_FEQ(tv8to12 * 16 /4095., 256 /4095., 1e-7); // black
+    REQUIRE_FEQ(tv8to12 * 235/4095., 3760/4095., 1e-7); // nominal white
+    REQUIRE_FEQ(tv8to12 * 128/4095., 2048/4095., 1e-7); // achromatic
+    REQUIRE_FEQ(tv8to12 * 240/4095., 3840/4095., 1e-7); // nominal chroma peak
 
     // Ensure lavc's xyz12 is handled correctly
     struct pl_color_repr xyz12 = {
@@ -65,7 +65,7 @@ int main()
     };
 
     float xyz = pl_color_repr_normalize(&xyz12);
-    REQUIRE(feq(xyz * (4095 << 4), 65535, 1e-7));
+    REQUIRE_FEQ(xyz * (4095 << 4), 65535, 1e-7);
 
     // Assume we uploaded a 10-bit source directly (unshifted) as a 16-bit
     // texture. This texture multiplication factor should make it behave as if
@@ -73,7 +73,7 @@ int main()
     pc_repr.bits.color_depth = 10;
     pc_repr.bits.sample_depth = 16;
     float pc10to16 = pl_color_repr_normalize(&pc_repr);
-    REQUIRE(feq(pc10to16 * 1000/65535., 1000/1023., 1e-7));
+    REQUIRE_FEQ(pc10to16 * 1000/65535., 1000/1023., 1e-7);
 
     const struct pl_raw_primaries *bt709, *bt2020;
     bt709 = pl_raw_primaries_get(PL_COLOR_PRIM_BT_709);
@@ -89,20 +89,20 @@ int main()
     // Make sure the double-inversion round trips
     for (int y = 0; y < 3; y++) {
         for (int x = 0; x < 3; x++)
-            REQUIRE(feq(rgb2xyz.m[y][x], rgb2xyz_.m[y][x], 1e-6));
+            REQUIRE_FEQ(rgb2xyz.m[y][x], rgb2xyz_.m[y][x], 1e-6);
     }
 
     // Make sure mapping the spectral RGB colors (i.e. the matrix rows) matches
     // our original primaries
     float Y = rgb2xyz.m[1][0];
-    REQUIRE(feq(rgb2xyz.m[0][0], pl_cie_X(bt709->red) * Y, 1e-7));
-    REQUIRE(feq(rgb2xyz.m[2][0], pl_cie_Z(bt709->red) * Y, 1e-7));
+    REQUIRE_FEQ(rgb2xyz.m[0][0], pl_cie_X(bt709->red) * Y, 1e-7);
+    REQUIRE_FEQ(rgb2xyz.m[2][0], pl_cie_Z(bt709->red) * Y, 1e-7);
     Y = rgb2xyz.m[1][1];
-    REQUIRE(feq(rgb2xyz.m[0][1], pl_cie_X(bt709->green) * Y, 1e-7));
-    REQUIRE(feq(rgb2xyz.m[2][1], pl_cie_Z(bt709->green) * Y, 1e-7));
+    REQUIRE_FEQ(rgb2xyz.m[0][1], pl_cie_X(bt709->green) * Y, 1e-7);
+    REQUIRE_FEQ(rgb2xyz.m[2][1], pl_cie_Z(bt709->green) * Y, 1e-7);
     Y = rgb2xyz.m[1][2];
-    REQUIRE(feq(rgb2xyz.m[0][2], pl_cie_X(bt709->blue) * Y, 1e-7));
-    REQUIRE(feq(rgb2xyz.m[2][2], pl_cie_Z(bt709->blue) * Y, 1e-7));
+    REQUIRE_FEQ(rgb2xyz.m[0][2], pl_cie_X(bt709->blue) * Y, 1e-7);
+    REQUIRE_FEQ(rgb2xyz.m[2][2], pl_cie_Z(bt709->blue) * Y, 1e-7);
 
     // Make sure the gamut mapping round-trips
     struct pl_matrix3x3 bt709_bt2020, bt2020_bt709;
@@ -114,7 +114,7 @@ int main()
         pl_matrix3x3_apply(&bt709_bt2020, dst);
         pl_matrix3x3_apply(&bt2020_bt709, dst);
         for (int i = 0; i < 3; i++)
-            REQUIRE(feq(dst[i], vec[i], 1e-6));
+            REQUIRE_FEQ(dst[i], vec[i], 1e-6);
     }
 
     // Ensure the decoding matrix round-trips to white/black
@@ -154,14 +154,14 @@ int main()
         }
 
         pl_transform3x3_apply(&yuv2rgb, white);
-        REQUIRE(feq(white[0], 1.0, 1e-6));
-        REQUIRE(feq(white[1], 1.0, 1e-6));
-        REQUIRE(feq(white[2], 1.0, 1e-6));
+        REQUIRE_FEQ(white[0], 1.0, 1e-6);
+        REQUIRE_FEQ(white[1], 1.0, 1e-6);
+        REQUIRE_FEQ(white[2], 1.0, 1e-6);
 
         pl_transform3x3_apply(&yuv2rgb, black);
-        REQUIRE(feq(black[0], 0.0, 1e-6));
-        REQUIRE(feq(black[1], 0.0, 1e-6));
-        REQUIRE(feq(black[2], 0.0, 1e-6));
+        REQUIRE_FEQ(black[0], 0.0, 1e-6);
+        REQUIRE_FEQ(black[1], 0.0, 1e-6);
+        REQUIRE_FEQ(black[2], 0.0, 1e-6);
     }
 
     // Make sure chromatic adaptation works
@@ -174,7 +174,9 @@ int main()
 
     float white[3] = { 1.0, 1.0, 1.0 };
     pl_matrix3x3_apply(&d50_d65, white);
-    REQUIRE(feq(white[0], 1.0, 1e-6) && feq(white[1], 1.0, 1e-6) && feq(white[2], 1.0, 1e-6));
+    REQUIRE_FEQ(white[0], 1.0, 1e-6);
+    REQUIRE_FEQ(white[1], 1.0, 1e-6);
+    REQUIRE_FEQ(white[2], 1.0, 1e-6);
 
     // Simulate a typical 10-bit YCbCr -> 16 bit texture conversion
     tv_repr.bits.color_depth  = 10;
@@ -183,27 +185,27 @@ int main()
     yuv2rgb = pl_color_repr_decode(&tv_repr, NULL);
     float test[3] = { 575/65535., 336/65535., 640/65535. };
     pl_transform3x3_apply(&yuv2rgb, test);
-    REQUIRE(feq(test[0], 0.808305, 1e-6));
-    REQUIRE(feq(test[1], 0.553254, 1e-6));
-    REQUIRE(feq(test[2], 0.218841, 1e-6));
+    REQUIRE_FEQ(test[0], 0.808305, 1e-6);
+    REQUIRE_FEQ(test[1], 0.553254, 1e-6);
+    REQUIRE_FEQ(test[2], 0.218841, 1e-6);
 
     // DVD
-    REQUIRE(pl_color_system_guess_ycbcr(720, 480) == PL_COLOR_SYSTEM_BT_601);
-    REQUIRE(pl_color_system_guess_ycbcr(720, 576) == PL_COLOR_SYSTEM_BT_601);
-    REQUIRE(pl_color_primaries_guess(720, 576) == PL_COLOR_PRIM_BT_601_625);
-    REQUIRE(pl_color_primaries_guess(720, 480) == PL_COLOR_PRIM_BT_601_525);
+    REQUIRE_CMP(pl_color_system_guess_ycbcr(720, 480), ==, PL_COLOR_SYSTEM_BT_601, "u");
+    REQUIRE_CMP(pl_color_system_guess_ycbcr(720, 576), ==, PL_COLOR_SYSTEM_BT_601, "u");
+    REQUIRE_CMP(pl_color_primaries_guess(720, 576), ==, PL_COLOR_PRIM_BT_601_625, "u");
+    REQUIRE_CMP(pl_color_primaries_guess(720, 480), ==, PL_COLOR_PRIM_BT_601_525, "u");
     // PAL 16:9
-    REQUIRE(pl_color_system_guess_ycbcr(1024, 576) == PL_COLOR_SYSTEM_BT_601);
-    REQUIRE(pl_color_primaries_guess(1024, 576) == PL_COLOR_PRIM_BT_601_625);
+    REQUIRE_CMP(pl_color_system_guess_ycbcr(1024, 576), ==, PL_COLOR_SYSTEM_BT_601, "u");
+    REQUIRE_CMP(pl_color_primaries_guess(1024, 576), ==, PL_COLOR_PRIM_BT_601_625, "u");
     // HD
-    REQUIRE(pl_color_system_guess_ycbcr(1280, 720)  == PL_COLOR_SYSTEM_BT_709);
-    REQUIRE(pl_color_system_guess_ycbcr(1920, 1080) == PL_COLOR_SYSTEM_BT_709);
-    REQUIRE(pl_color_primaries_guess(1280, 720)  == PL_COLOR_PRIM_BT_709);
-    REQUIRE(pl_color_primaries_guess(1920, 1080) == PL_COLOR_PRIM_BT_709);
+    REQUIRE_CMP(pl_color_system_guess_ycbcr(1280, 720),  ==, PL_COLOR_SYSTEM_BT_709, "u");
+    REQUIRE_CMP(pl_color_system_guess_ycbcr(1920, 1080), ==, PL_COLOR_SYSTEM_BT_709, "u");
+    REQUIRE_CMP(pl_color_primaries_guess(1280, 720),  ==, PL_COLOR_PRIM_BT_709, "u");
+    REQUIRE_CMP(pl_color_primaries_guess(1920, 1080), ==, PL_COLOR_PRIM_BT_709, "u");
 
     // Odd/weird videos
-    REQUIRE(pl_color_primaries_guess(2000, 576) == PL_COLOR_PRIM_BT_709);
-    REQUIRE(pl_color_primaries_guess(200, 200) == PL_COLOR_PRIM_BT_709);
+    REQUIRE_CMP(pl_color_primaries_guess(2000, 576), ==, PL_COLOR_PRIM_BT_709, "u");
+    REQUIRE_CMP(pl_color_primaries_guess(200, 200),  ==, PL_COLOR_PRIM_BT_709, "u");
 
     REQUIRE(pl_color_repr_equal(&pl_color_repr_sdtv, &pl_color_repr_sdtv));
     REQUIRE(!pl_color_repr_equal(&pl_color_repr_sdtv, &pl_color_repr_hdtv));
@@ -244,7 +246,7 @@ int main()
     };
 
     pl_color_space_infer(&hlg);
-    REQUIRE(hlg.nominal_max == 1000.0f);
+    REQUIRE_CMP(hlg.nominal_max, ==, 1000.0f, "f");
 
     struct pl_color_space unknown = {0};
     struct pl_color_space display = {
@@ -258,16 +260,20 @@ int main()
 
     float x, y;
     pl_chroma_location_offset(PL_CHROMA_LEFT, &x, &y);
-    REQUIRE(x == -0.5 && y == 0.0);
+    REQUIRE_CMP(x, ==, -0.5f, "f");
+    REQUIRE_CMP(y, ==,  0.0f, "f");
     pl_chroma_location_offset(PL_CHROMA_TOP_LEFT, &x, &y);
-    REQUIRE(x == -0.5 && y == -0.5);
+    REQUIRE_CMP(x, ==, -0.5f, "f");
+    REQUIRE_CMP(y, ==, -0.5f, "f");
     pl_chroma_location_offset(PL_CHROMA_CENTER, &x, &y);
-    REQUIRE(x == 0.0 && y == 0.0);
+    REQUIRE_CMP(x, ==,  0.0f, "f");
+    REQUIRE_CMP(y, ==,  0.0f, "f");
     pl_chroma_location_offset(PL_CHROMA_BOTTOM_CENTER, &x, &y);
-    REQUIRE(x == 0.0 && y == 0.5);
+    REQUIRE_CMP(x, ==,  0.0f, "f");
+    REQUIRE_CMP(y, ==,  0.5f, "f");
 
-    REQUIRE(pl_raw_primaries_get(PL_COLOR_PRIM_UNKNOWN) ==
-            pl_raw_primaries_get(PL_COLOR_PRIM_BT_709));
+    REQUIRE_CMP(pl_raw_primaries_get(PL_COLOR_PRIM_UNKNOWN), ==,
+                pl_raw_primaries_get(PL_COLOR_PRIM_BT_709), "p");
 
     // Color blindness tests
     float red[3]   = { 1.0, 0.0, 0.0 };
@@ -281,7 +287,7 @@ int main()
         pl_matrix3x3_apply(&mat, tmp);                                          \
         printf("%s + %s = %f %f %f\n", #model, #color, tmp[0], tmp[1], tmp[2]); \
         for (int i = 0; i < 3; i++)                                             \
-            REQUIRE(fabs((color)[i] - tmp[i]) < 1e-6);                          \
+            REQUIRE_FEQ((color)[i], tmp[i], 1e-6);                              \
     } while(0)
 
     struct pl_cone_params red_only = { .cones = PL_CONE_MS };
@@ -314,7 +320,9 @@ int main()
 
     // Color adaptation tests
     struct pl_cie_xy d65 = pl_white_from_temp(6504);
+    REQUIRE_FEQ(d65.x, 0.31271, 1e-3);
+    REQUIRE_FEQ(d65.y, 0.32902, 1e-3);
     struct pl_cie_xy d55 = pl_white_from_temp(5503);
-    REQUIRE(feq(d65.x, 0.31271, 1e-3) && feq(d65.y, 0.32902, 1e-3));
-    REQUIRE(feq(d55.x, 0.33242, 1e-3) && feq(d55.y, 0.34743, 1e-3));
+    REQUIRE_FEQ(d55.x, 0.33242, 1e-3);
+    REQUIRE_FEQ(d55.y, 0.34743, 1e-3);
 }
