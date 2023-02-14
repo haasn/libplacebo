@@ -8,15 +8,15 @@ int main()
     pl_log log = pl_test_logger();
 
     // PQ unit tests
-    REQUIRE(feq(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, 0.0), 0.0,     1e-2));
-    REQUIRE(feq(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, 1.0), 10000.0, 1e-2));
-    REQUIRE(feq(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, 0.58), 203.0,  1e-2));
+    REQUIRE_FEQ(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, 0.0), 0.0,     1e-2);
+    REQUIRE_FEQ(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, 1.0), 10000.0, 1e-2);
+    REQUIRE_FEQ(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, 0.58), 203.0,  1e-2);
 
     // Test round-trip
     for (float x = 0.0f; x < 1.0f; x += 0.01f) {
-        REQUIRE(feq(x, pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ,
+        REQUIRE_FEQ(x, pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ,
                        pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, x)),
-                    1e-5));
+                    1e-5);
     }
 
     static float lut[128];
@@ -75,7 +75,7 @@ int main()
     for (int j = 0; j < PL_ARRAY_SIZE(lut); j++) {
         float x = j / (PL_ARRAY_SIZE(lut) - 1.0f);
         x = PL_MIX(params.input_min, params.input_max, x);
-        REQUIRE(feq(x, lut[j], 1e-5));
+        REQUIRE_FEQ(x, lut[j], 1e-5);
     }
 
     pl_log_destroy(&log);
