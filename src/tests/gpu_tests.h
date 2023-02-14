@@ -25,7 +25,7 @@ static void pl_buffer_tests(pl_gpu gpu)
 
     REQUIRE(buf);
     REQUIRE(pl_buf_read(gpu, buf, 0, test_dst, buf_size));
-    REQUIRE(memcmp(test_src, test_dst, buf_size) == 0);
+    REQUIRE_MEMEQ(test_src, test_dst, buf_size);
     pl_buf_destroy(gpu, &buf);
 
     printf("test buffer empty creation, update and readback\n");
@@ -39,7 +39,7 @@ static void pl_buffer_tests(pl_gpu gpu)
     REQUIRE(buf);
     pl_buf_write(gpu, buf, 0, test_src, buf_size);
     REQUIRE(pl_buf_read(gpu, buf, 0, test_dst, buf_size));
-    REQUIRE(memcmp(test_src, test_dst, buf_size) == 0);
+    REQUIRE_MEMEQ(test_src, test_dst, buf_size);
     pl_buf_destroy(gpu, &buf);
 
     printf("test buffer-buffer copy and readback\n");
@@ -57,7 +57,7 @@ static void pl_buffer_tests(pl_gpu gpu)
     REQUIRE(buf && tbuf);
     pl_buf_copy(gpu, tbuf, 0, buf, 0, buf_size);
     REQUIRE(pl_buf_read(gpu, tbuf, 0, test_dst, buf_size));
-    REQUIRE(memcmp(test_src, test_dst, buf_size) == 0);
+    REQUIRE_MEMEQ(test_src, test_dst, buf_size);
     pl_buf_destroy(gpu, &buf);
     pl_buf_destroy(gpu, &tbuf);
 
@@ -71,7 +71,7 @@ static void pl_buffer_tests(pl_gpu gpu)
 
         REQUIRE(buf);
         REQUIRE(!pl_buf_poll(gpu, buf, 0));
-        REQUIRE(memcmp(test_src, buf->data, buf_size) == 0);
+        REQUIRE_MEMEQ(test_src, buf->data, buf_size);
         pl_buf_destroy(gpu, &buf);
     }
 
@@ -100,8 +100,8 @@ static void pl_buffer_tests(pl_gpu gpu)
         }));
         REQUIRE(pl_buf_read(gpu, tbuf, 0, test_dst, buf_size));
         for (int i = 0; i < buf_size / 2; i++) {
-            REQUIRE(test_src[2 * i + 0] == test_dst[2 * i + 1]);
-            REQUIRE(test_src[2 * i + 1] == test_dst[2 * i + 0]);
+            REQUIRE_CMP(test_src[2 * i + 0], ==, test_dst[2 * i + 1], PRIu8);
+            REQUIRE_CMP(test_src[2 * i + 1], ==, test_dst[2 * i + 0], PRIu8);
         }
         // test endian swap in-place
         REQUIRE(pl_buf_copy_swap(gpu, &(struct pl_buf_copy_swap_params) {
@@ -112,10 +112,10 @@ static void pl_buffer_tests(pl_gpu gpu)
         }));
         REQUIRE(pl_buf_read(gpu, tbuf, 0, test_dst, buf_size));
         for (int i = 0; i < buf_size / 4; i++) {
-            REQUIRE(test_src[4 * i + 0] == test_dst[4 * i + 2]);
-            REQUIRE(test_src[4 * i + 1] == test_dst[4 * i + 3]);
-            REQUIRE(test_src[4 * i + 2] == test_dst[4 * i + 0]);
-            REQUIRE(test_src[4 * i + 3] == test_dst[4 * i + 1]);
+            REQUIRE_CMP(test_src[4 * i + 0], ==, test_dst[4 * i + 2], PRIu8);
+            REQUIRE_CMP(test_src[4 * i + 1], ==, test_dst[4 * i + 3], PRIu8);
+            REQUIRE_CMP(test_src[4 * i + 2], ==, test_dst[4 * i + 0], PRIu8);
+            REQUIRE_CMP(test_src[4 * i + 3], ==, test_dst[4 * i + 1], PRIu8);
         }
         pl_buf_destroy(gpu, &buf);
         pl_buf_destroy(gpu, &tbuf);
@@ -192,7 +192,7 @@ static void pl_test_roundtrip(pl_gpu gpu, pl_tex tex[2],
         // emulated 16/32 bit upload paths, figure out a better way to
         // generate data and verify the roundtrip!
     } else {
-        REQUIRE(memcmp(src, dst, bytes) == 0);
+        REQUIRE_MEMEQ(src, dst, bytes);
     }
 
     // Report timer results
@@ -274,7 +274,7 @@ static void pl_planar_tests(pl_gpu gpu)
     pl_fmt fmt = pl_find_named_fmt(gpu, "g8_b8_r8_420");
     if (!fmt)
         return;
-    REQUIRE(fmt->num_planes == 3);
+    REQUIRE_CMP(fmt->num_planes, ==, 3, "d");
 
     const int width = 64, height = 32;
     pl_tex tex = pl_tex_create(gpu, pl_tex_params(
@@ -291,7 +291,7 @@ static void pl_planar_tests(pl_gpu gpu)
 
     pl_tex plane = tex->planes[1];
     uint8_t data[(width * height) >> 2];
-    REQUIRE(plane->params.w * plane->params.h == PL_ARRAY_SIZE(data));
+    REQUIRE_CMP(plane->params.w * plane->params.h, ==, PL_ARRAY_SIZE(data), "d");
 
     pl_tex_clear(gpu, plane, (float[]){ 0.5, 0.0, 0.0, 1.0 });
     REQUIRE(pl_tex_download(gpu, pl_tex_transfer_params(
@@ -300,7 +300,7 @@ static void pl_planar_tests(pl_gpu gpu)
     )));
 
     for (int i = 0; i < PL_ARRAY_SIZE(data); i++)
-        REQUIRE(data[i] == 0x80);
+        REQUIRE_CMP(data[i], ==, 0x80, PRIu8);
 
     pl_tex_destroy(gpu, &tex);
 }
@@ -421,10 +421,10 @@ static void pl_shader_tests(pl_gpu gpu)
         for (int y = 0; y < FBO_H; y++) {                                   \
             for (int x = 0; x < FBO_W; x++) {                               \
                 float *color = &data[(y * FBO_W + x) * 4];                  \
-                REQUIRE(feq(color[0], (x + 0.5) / FBO_W, eps));             \
-                REQUIRE(feq(color[1], (y + 0.5) / FBO_H, eps));             \
-                REQUIRE(feq(color[2], 0.0, eps));                           \
-                REQUIRE(feq(color[3], 1.0, eps));                           \
+                REQUIRE_FEQ(color[0], (x + 0.5) / FBO_W, eps);              \
+                REQUIRE_FEQ(color[1], (y + 0.5) / FBO_H, eps);              \
+                REQUIRE_FEQ(color[2], 0.0, eps);                            \
+                REQUIRE_FEQ(color[3], 1.0, eps);                            \
             }                                                               \
         }                                                                   \
     } while (0)
@@ -581,10 +581,10 @@ static void pl_shader_tests(pl_gpu gpu)
         if (i == 5) {
             printf("Recreating pl_dispatch to test the caching\n");
             size_t size = pl_dispatch_save(dp, NULL);
-            REQUIRE(size > 0);
+            REQUIRE(size);
             uint8_t *cache = malloc(size);
             REQUIRE(cache);
-            REQUIRE(pl_dispatch_save(dp, cache) == size);
+            REQUIRE_CMP(pl_dispatch_save(dp, cache), ==, size, "zu");
 
             pl_dispatch_destroy(&dp);
             dp = pl_dispatch_create(gpu->log, gpu);
@@ -595,9 +595,9 @@ static void pl_shader_tests(pl_gpu gpu)
             // this on MSAN because it doesn't like it when we read from
             // program cache data generated by the non-instrumented GPU driver
             uint64_t hash = pl_str_hash((pl_str) { cache, size });
-            REQUIRE(pl_dispatch_save(dp, NULL) == size);
-            REQUIRE(pl_dispatch_save(dp, cache) == size);
-            REQUIRE(pl_str_hash((pl_str) { cache, size }) == hash);
+            REQUIRE_CMP(pl_dispatch_save(dp, NULL), ==, size, "zu");
+            REQUIRE_CMP(pl_dispatch_save(dp, cache), ==, size, "zu");
+            REQUIRE_CMP(pl_str_hash((pl_str) { cache, size }), ==, hash, PRIu64);
 #endif
             free(cache);
         }
@@ -639,7 +639,6 @@ static void pl_shader_tests(pl_gpu gpu)
 
         float peak, avg;
         REQUIRE(pl_get_detected_peak(peak_state, &peak, &avg));
-        printf("detected peak: %f, average: %f\n", peak, avg);
 
         float real_peak = 0, real_avg = 0;
         for (int y = 0; y < FBO_H; y++) {
@@ -654,9 +653,8 @@ static void pl_shader_tests(pl_gpu gpu)
         }
 
         real_avg = expf(real_avg / (FBO_W * FBO_H));
-        printf("real peak: %f, real average: %f\n", real_peak, real_avg);
-        REQUIRE(feq(peak, real_peak, 1e-4));
-        REQUIRE(feq(avg, real_avg, 1e-3));
+        REQUIRE_FEQ(peak, real_peak, 1e-4);
+        REQUIRE_FEQ(avg, real_avg, 1e-3);
     }
 
     pl_dispatch_abort(dp, &sh);
@@ -1307,12 +1305,12 @@ static void pl_render_tests(pl_gpu gpu)
 
     while ((ret = pl_queue_update(queue, &mix, &qparams)) != PL_QUEUE_EOF) {
         if (ret == PL_QUEUE_MORE) {
-            REQUIRE(qparams.pts > 0.0);
+            REQUIRE_CMP(qparams.pts, >, 0.0f, "f");
             pl_queue_push(queue, NULL); // push delayed EOF
             continue;
         }
 
-        REQUIRE(ret == PL_QUEUE_OK);
+        REQUIRE_CMP(ret, ==, PL_QUEUE_OK, "u");
         REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
 
         // Simulate advancing vsync
@@ -1332,8 +1330,8 @@ static void pl_render_tests(pl_gpu gpu)
 
     pl_queue_reset(queue);
     while ((ret = pl_queue_update(queue, &mix, &qparams)) != PL_QUEUE_EOF) {
-        REQUIRE(ret == PL_QUEUE_OK);
-        REQUIRE(mix.num_frames <= 2);
+        REQUIRE_CMP(ret, ==, PL_QUEUE_OK, "u");
+        REQUIRE_CMP(mix.num_frames, <=, 2, "d");
         REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
         qparams.pts += qparams.vsync_duration;
     }
@@ -1358,7 +1356,7 @@ static void pl_render_tests(pl_gpu gpu)
         qparams.pts = 0;
         qparams.get_frame = NULL;
         while ((ret = pl_queue_update(queue, &mix, &qparams)) != PL_QUEUE_EOF) {
-            REQUIRE(ret == PL_QUEUE_OK);
+            REQUIRE_CMP(ret, ==, PL_QUEUE_OK, "u");
             REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
             qparams.pts += qparams.vsync_duration;
         }
@@ -1492,7 +1490,7 @@ static void pl_ycbcr_tests(pl_gpu gpu)
                 uint16_t *src_pixel = (uint16_t *) &src_buffer[i][off];
                 uint16_t *dst_pixel = (uint16_t *) &dst_buffer[off];
                 int diff = abs((int) *src_pixel - (int) *dst_pixel);
-                REQUIRE(diff <= 50); // a little under 0.1%
+                REQUIRE_CMP(diff, <=, 50, "d"); // a little under 0.1%
             }
         }
     }
@@ -1601,7 +1599,7 @@ static void pl_test_host_ptr(pl_gpu gpu)
     });
 
     REQUIRE(buf);
-    REQUIRE(memcmp(data + offset, buf->data, slice) == 0);
+    REQUIRE_MEMEQ(data + offset, buf->data, slice);
 
     pl_buf_destroy(gpu, &buf);
     free(data);
