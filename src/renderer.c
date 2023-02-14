@@ -54,22 +54,28 @@ struct icc_state {
     bool error;
 };
 
+enum pl_render_error {
+    PL_RENDER_ERR_NONE            = 0,
+    PL_RENDER_ERR_FBO             = 1 << 0,
+    PL_RENDER_ERR_SAMPLING        = 1 << 1,
+    PL_RENDER_ERR_DEBANDING       = 1 << 2,
+    PL_RENDER_ERR_BLENDING        = 1 << 3,
+    PL_RENDER_ERR_OVERLAY         = 1 << 4,
+    PL_RENDER_ERR_PEAK_DETECT     = 1 << 5,
+    PL_RENDER_ERR_FILM_GRAIN      = 1 << 6,
+    PL_RENDER_ERR_FRAME_MIXING    = 1 << 7,
+    PL_RENDER_ERR_DEINTERLACING   = 1 << 8,
+    PL_RENDER_ERR_ERROR_DIFFUSION = 1 << 9,
+    PL_RENDER_ERR_HOOKS           = 1 << 10,
+};
+
 struct pl_renderer_t {
     pl_gpu gpu;
     pl_dispatch dp;
     pl_log log;
 
     // Cached feature checks (inverted)
-    bool disable_fbos;          // disable the use of FBOs (skip fbofmt probing)
-    bool disable_sampling;      // disable use of advanced scalers
-    bool disable_debanding;     // disable the use of debanding shaders
-    bool disable_blending;      // disable blending for the target/fbofmt
-    bool disable_overlay;       // disable rendering overlays
-    bool disable_peak_detect;   // disable peak detection shader
-    bool disable_grain;         // disable film grain code
-    bool disable_mixing;        // disable frame mixing
-    bool disable_deinterlacing; // disable deinterlacing
-    bool disable_error_diffusion; // disable error diffusion
+    enum pl_render_error errors;
 
     // List containing signatures of disabled hooks
     PL_ARRAY(uint64_t) disabled_hooks;
@@ -273,7 +279,7 @@ struct img {
 
     // Information about what to log/disable/fallback to if the shader fails
     const char *err_msg;
-    bool *err_bool;
+    enum pl_render_error err_enum;
     pl_tex err_tex;
 
     // Current effective source area, will be sampled by the main scaler
@@ -391,7 +397,7 @@ static void find_fbo_format(struct pass_state *pass)
 {
     const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
-    if (params->disable_fbos || rr->disable_fbos || pass->fbofmt[4])
+    if (params->disable_fbos || (rr->errors & PL_RENDER_ERR_FBO) || pass->fbofmt[4])
         return;
 
     struct {
@@ -437,7 +443,7 @@ static void find_fbo_format(struct pass_state *pass)
     }
 
     PL_WARN(rr, "Found no renderable FBO format! Most features disabled");
-    rr->disable_fbos = true;
+    rr->errors |= PL_RENDER_ERR_FBO;
 }
 
 static void info_callback(void *priv, const struct pl_dispatch_info *dinfo)
@@ -522,7 +528,7 @@ static pl_tex _img_tex(struct pass_state *pass, struct img *img, pl_debug_tag ta
         PL_ERR(rr, "Failed creating FBO texture! Disabling advanced rendering..");
         memset(pass->fbofmt, 0, sizeof(pass->fbofmt));
         pl_dispatch_abort(rr->dp, &img->sh);
-        rr->disable_fbos = true;
+        rr->errors |= PL_RENDER_ERR_FBO;
         return img->err_tex;
     }
 
@@ -533,16 +539,15 @@ static pl_tex _img_tex(struct pass_state *pass, struct img *img, pl_debug_tag ta
     ));
 
     const char *err_msg = img->err_msg;
-    bool *err_bool = img->err_bool;
+    enum pl_render_error err_enum = img->err_enum;
     pl_tex err_tex = img->err_tex;
     img->err_msg = NULL;
-    img->err_bool = NULL;
+    img->err_enum = PL_RENDER_ERR_NONE;
     img->err_tex = NULL;
 
     if (!ok) {
         PL_ERR(rr, "%s", PL_DEF(err_msg, "Failed dispatching intermediate pass!"));
-        if (err_bool)
-            *err_bool = true;
+        rr->errors |= err_enum;
         img->sh = pl_dispatch_begin(rr->dp);
         img->tex = err_tex;
         return img->tex;
@@ -631,7 +636,9 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
         return info;
     }
 
-    if (!pass->fbofmt[4] || rr->disable_sampling || !info.config) {
+    if (!pass->fbofmt[4] || (rr->errors & PL_RENDER_ERR_SAMPLING) ||
+        !info.config)
+    {
         info.type = SAMPLER_DIRECT;
     } else if (info.config->kernel->weight == oversample) {
         info.type = SAMPLER_OVERSAMPLE;
@@ -749,7 +756,7 @@ static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
 done:
     if (!ok) {
         PL_ERR(rr, "Failed dispatching scaler.. disabling");
-        rr->disable_sampling = true;
+        rr->errors |= PL_RENDER_ERR_SAMPLING;
         goto fallback;
     }
 
@@ -788,14 +795,16 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
 {
     const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
-    if (num <= 0 || rr->disable_overlay)
+    if (num <= 0 || (rr->errors & PL_RENDER_ERR_OVERLAY))
         return;
 
     enum pl_fmt_caps caps = fbo->params.format->caps;
-    if (!rr->disable_blending && !(caps & PL_FMT_CAP_BLENDABLE)) {
+    if (!(rr->errors & PL_RENDER_ERR_BLENDING) &&
+        !(caps & PL_FMT_CAP_BLENDABLE))
+    {
         PL_WARN(rr, "Trying to draw an overlay to a non-blendable target. "
                 "Alpha blending is disabled, results may be incorrect!");
-        rr->disable_blending = true;
+        rr->errors |= PL_RENDER_ERR_BLENDING;
     }
 
     const struct pl_frame *image = pass->src_ref >= 0 ? &pass->image : NULL;
@@ -954,7 +963,8 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
         bool ok = pl_dispatch_vertex(rr->dp, pl_dispatch_vertex_params(
             .shader = &sh,
             .target = fbo,
-            .blend_params = rr->disable_blending ? NULL : &blend_params,
+            .blend_params = (rr->errors & PL_RENDER_ERR_BLENDING)
+                            ? NULL : &blend_params,
             .vertex_stride = sizeof(struct osd_vertex),
             .num_vertex_attribs = ol.mode == PL_OVERLAY_NORMAL ? 2 : 3,
             .vertex_attribs = rr->osd_attribs,
@@ -968,7 +978,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
 
         if (!ok) {
             PL_ERR(rr, "Failed rendering overlays!");
-            rr->disable_overlay = true;
+            rr->errors |= PL_RENDER_ERR_OVERLAY;
             return;
         }
     }
@@ -1114,6 +1124,7 @@ hook_skip:
         continue;
 hook_error:
         PL_ARRAY_APPEND(rr, rr->disabled_hooks, hook->signature);
+        rr->errors |= PL_RENDER_ERR_HOOKS;
     }
 
     // Make sure the state remains as valid as possible, even if the resulting
@@ -1130,7 +1141,7 @@ static void hdr_update_peak(struct pass_state *pass)
     if (!params->peak_detect_params || !pl_color_space_is_hdr(&pass->img.color))
         goto cleanup;
 
-    if (rr->disable_peak_detect)
+    if (rr->errors & PL_RENDER_ERR_PEAK_DETECT)
         goto cleanup;
 
     if (pass->fbofmt[4] && !(pass->fbofmt[4]->caps & PL_FMT_CAP_STORABLE))
@@ -1149,7 +1160,7 @@ static void hdr_update_peak(struct pass_state *pass)
         PL_WARN(rr, "Disabling peak detection because "
                 "`allow_delayed_peak_detect` is false, but lack of FBOs "
                 "forces the result to be delayed.");
-        rr->disable_peak_detect = true;
+        rr->errors |= PL_RENDER_ERR_PEAK_DETECT;
         goto cleanup;
     }
 
@@ -1157,7 +1168,7 @@ static void hdr_update_peak(struct pass_state *pass)
                                     &rr->tone_map_state, params->peak_detect_params);
     if (!ok) {
         PL_WARN(rr, "Failed creating HDR peak detection shader.. disabling");
-        rr->disable_peak_detect = true;
+        rr->errors |= PL_RENDER_ERR_PEAK_DETECT;
         goto cleanup;
     }
 
@@ -1235,8 +1246,11 @@ static bool plane_deband(struct pass_state *pass, struct img *img, float neutral
     const struct pl_render_params *params = pass->params;
     const struct pl_frame *image = &pass->image;
     pl_renderer rr = pass->rr;
-    if (rr->disable_debanding || !params->deband_params || !pass->fbofmt[4])
+    if ((rr->errors & PL_RENDER_ERR_DEBANDING) ||
+        !params->deband_params || !pass->fbofmt[4])
+    {
         return false;
+    }
 
     struct pl_color_repr repr = img->repr;
     struct pl_sample_src src = {
@@ -1249,7 +1263,7 @@ static bool plane_deband(struct pass_state *pass, struct img *img, float neutral
         PL_WARN(rr, "Debanding requires uploaded textures to be linearly "
                 "sampleable (params.sample_mode = PL_TEX_SAMPLE_LINEAR)! "
                 "Disabling debanding..");
-        rr->disable_debanding = true;
+        rr->errors |= PL_RENDER_ERR_DEBANDING;
         return false;
     }
 
@@ -1265,7 +1279,7 @@ static bool plane_deband(struct pass_state *pass, struct img *img, float neutral
     img->sh = pl_dispatch_begin_ex(rr->dp, true);
     pl_shader_deband(img->sh, &src, &dparams);
     img->err_msg = "Failed applying debanding... disabling!";
-    img->err_bool = &rr->disable_debanding;
+    img->err_enum = PL_RENDER_ERR_DEBANDING;
     img->err_tex = src.tex;
     img->repr = repr;
     return true;
@@ -1278,7 +1292,7 @@ static bool plane_film_grain(struct pass_state *pass, int plane_idx,
 {
     const struct pl_frame *image = &pass->image;
     pl_renderer rr = pass->rr;
-    if (rr->disable_grain)
+    if (rr->errors & PL_RENDER_ERR_FILM_GRAIN)
         return false;
 
     struct img *img = &st->img;
@@ -1324,7 +1338,7 @@ static bool plane_film_grain(struct pass_state *pass, int plane_idx,
     if (!pass->fbofmt[plane->components]) {
         PL_ERR(rr, "Film grain required but no renderable format available.. "
               "disabling!");
-        rr->disable_grain = true;
+        rr->errors |= PL_RENDER_ERR_FILM_GRAIN;
         return false;
     }
 
@@ -1335,13 +1349,13 @@ static bool plane_film_grain(struct pass_state *pass, int plane_idx,
     img->sh = pl_dispatch_begin_ex(rr->dp, true);
     if (!pl_shader_film_grain(img->sh, &rr->grain_state[plane_idx], &grain_params)) {
         pl_dispatch_abort(rr->dp, &img->sh);
-        rr->disable_grain = true;
+        rr->errors |= PL_RENDER_ERR_FILM_GRAIN;
         return false;
     }
 
     img->tex = NULL;
     img->err_msg = "Failed applying film grain.. disabling!";
-    img->err_bool = &rr->disable_grain;
+    img->err_enum = PL_RENDER_ERR_FILM_GRAIN;
     img->err_tex = grain_params.tex;
     if (is_orig_repr)
         img->repr = repr;
@@ -1412,7 +1426,7 @@ static bool want_merge(struct pass_state *pass,
         return false;
 
     // Debanding
-    if (!rr->disable_debanding && params->deband_params)
+    if (!(rr->errors & PL_RENDER_ERR_DEBANDING) && params->deband_params)
         return true;
 
     // Other plane hooks, which are generally nontrivial
@@ -1447,8 +1461,11 @@ static bool want_merge(struct pass_state *pass,
     for (int c = 0; c < st->plane.components; c++)
         grain_params.component_mapping[c] = st->plane.component_mapping[c];
 
-    if (!rr->disable_grain && pl_needs_film_grain(&grain_params))
+    if (!(rr->errors & PL_RENDER_ERR_FILM_GRAIN) &&
+        pl_needs_film_grain(&grain_params))
+    {
         return true;
+    }
 
     return false;
 }
@@ -1480,7 +1497,7 @@ static bool pass_read_image(struct pass_state *pass)
 
         // Deinterlace plane if needed
         if (image->field != PL_FIELD_NONE && params->deinterlace_params &&
-            pass->fbofmt[4] && !rr->disable_deinterlacing)
+            pass->fbofmt[4] && !(rr->errors & PL_RENDER_ERR_DEINTERLACING))
         {
             struct img *img = &planes[i].img;
             struct pl_deinterlace_source src = {
@@ -1496,7 +1513,7 @@ static bool pass_read_image(struct pass_state *pass)
             img->sh = pl_dispatch_begin_ex(pass->rr->dp, true);
             pl_shader_deinterlace(img->sh, &src, params->deinterlace_params);
             img->err_msg = "Failed deinterlacing plane.. disabling!";
-            img->err_bool = &rr->disable_deinterlacing;
+            img->err_enum = PL_RENDER_ERR_DEINTERLACING;
             img->err_tex = planes[i].plane.texture;
         }
     }
@@ -1572,7 +1589,7 @@ static bool pass_read_image(struct pass_state *pass)
         if (!img_tex(pass, &sti->img)) {
             PL_ERR(rr, "Failed dispatching plane merging shader, disabling FBOs!");
             memset(pass->fbofmt, 0, sizeof(pass->fbofmt));
-            rr->disable_fbos = true;
+            rr->errors |= PL_RENDER_ERR_FBO;
             return false;
         }
     }
@@ -1739,9 +1756,9 @@ static bool pass_read_image(struct pass_state *pass)
             if (!inter_tex) {
                 PL_ERR(rr, "Failed dispatching subpass for plane.. disabling "
                        "all plane shaders");
-                rr->disable_sampling = true;
-                rr->disable_debanding = true;
-                rr->disable_grain = true;
+                rr->errors |= PL_RENDER_ERR_SAMPLING  |
+                              PL_RENDER_ERR_DEBANDING |
+                              PL_RENDER_ERR_FILM_GRAIN;
                 pl_dispatch_abort(rr->dp, &sh);
                 return false;
             }
@@ -1952,7 +1969,7 @@ static bool pass_error_diffusion(struct pass_state *pass, pl_shader *sh,
 {
     const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
-    if (!params->error_diffusion || rr->disable_error_diffusion)
+    if (!params->error_diffusion || (rr->errors & PL_RENDER_ERR_ERROR_DIFFUSION))
         return false;
 
     size_t shmem_req = pl_error_diffusion_shmem_req(params->error_diffusion, out_h);
@@ -2006,7 +2023,7 @@ static bool pass_error_diffusion(struct pass_state *pass, pl_shader *sh,
     return ok;
 
 error:
-    rr->disable_error_diffusion = true;
+    rr->errors |= PL_RENDER_ERR_ERROR_DIFFUSION;
     return false;
 }
 
@@ -2963,7 +2980,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
         .info.stage = PL_RENDER_STAGE_BLEND,
     };
 
-    if (rr->disable_mixing)
+    if (rr->errors & PL_RENDER_ERR_FRAME_MIXING)
         goto fallback;
     if (!pass_init(&pass, false))
         return false;
@@ -3124,7 +3141,7 @@ retry:
             if (!ok) {
                 PL_ERR(rr, "Could not create intermediate texture for "
                        "frame mixing.. disabling!");
-                rr->disable_mixing = true;
+                rr->errors |= PL_RENDER_ERR_FRAME_MIXING;
                 goto fallback;
             }
 
@@ -3324,7 +3341,7 @@ inter_pass_error:
 
 fail:
     PL_ERR(rr, "Could not render image for frame mixing.. disabling!");
-    rr->disable_mixing = true;
+    rr->errors |= PL_RENDER_ERR_FRAME_MIXING;
     // fall through
 
 fallback:
