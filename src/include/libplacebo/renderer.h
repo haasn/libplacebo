@@ -37,6 +37,31 @@ PL_API_BEGIN
 // Thread-safety: Unsafe
 typedef struct pl_renderer_t *pl_renderer;
 
+// Enum values used in pl_renderer_errors_t as a bit positions for error flags
+enum pl_render_error {
+    PL_RENDER_ERR_NONE            = 0,
+    PL_RENDER_ERR_FBO             = 1 << 0,
+    PL_RENDER_ERR_SAMPLING        = 1 << 1,
+    PL_RENDER_ERR_DEBANDING       = 1 << 2,
+    PL_RENDER_ERR_BLENDING        = 1 << 3,
+    PL_RENDER_ERR_OVERLAY         = 1 << 4,
+    PL_RENDER_ERR_PEAK_DETECT     = 1 << 5,
+    PL_RENDER_ERR_FILM_GRAIN      = 1 << 6,
+    PL_RENDER_ERR_FRAME_MIXING    = 1 << 7,
+    PL_RENDER_ERR_DEINTERLACING   = 1 << 8,
+    PL_RENDER_ERR_ERROR_DIFFUSION = 1 << 9,
+    PL_RENDER_ERR_HOOKS           = 1 << 10,
+};
+
+// Struct describing current renderer state, including internal processing errors,
+// as well as list of signatures of disabled hooks.
+struct pl_render_errors {
+    enum pl_render_error errors;
+    // List containing signatures of disabled hooks
+    const uint64_t *disabled_hooks;
+    int num_disabled_hooks;
+};
+
 // Creates a new renderer object, which is backed by a GPU context. This is a
 // high-level object that takes care of the rendering chain as a whole, from
 // the source textures to the finished frame.
@@ -53,6 +78,16 @@ size_t pl_renderer_save(pl_renderer rr, uint8_t *out_cache);
 //
 // Note: See the security warnings on `pl_pass_params.cached_program`.
 void pl_renderer_load(pl_renderer rr, const uint8_t *cache);
+
+// Returns current renderer state, see pl_render_errors.
+struct pl_render_errors pl_renderer_get_errors(pl_renderer rr);
+
+// Clears errors state of renderer. If `errors` is NULL, all render errors will
+// be cleared. Otherwise only selected errors/hooks will be cleared.
+// If `PL_RENDER_ERR_HOOKS` is set and `num_disabled_hooks` is 0, clear all hooks.
+// Otherwise only selected hooks will be cleard based on `disabled_hooks` array.
+void pl_renderer_reset_errors(pl_renderer rr,
+                              const struct pl_render_errors *errors);
 
 enum pl_lut_type {
     PL_LUT_UNKNOWN = 0,

@@ -54,21 +54,6 @@ struct icc_state {
     bool error;
 };
 
-enum pl_render_error {
-    PL_RENDER_ERR_NONE            = 0,
-    PL_RENDER_ERR_FBO             = 1 << 0,
-    PL_RENDER_ERR_SAMPLING        = 1 << 1,
-    PL_RENDER_ERR_DEBANDING       = 1 << 2,
-    PL_RENDER_ERR_BLENDING        = 1 << 3,
-    PL_RENDER_ERR_OVERLAY         = 1 << 4,
-    PL_RENDER_ERR_PEAK_DETECT     = 1 << 5,
-    PL_RENDER_ERR_FILM_GRAIN      = 1 << 6,
-    PL_RENDER_ERR_FRAME_MIXING    = 1 << 7,
-    PL_RENDER_ERR_DEINTERLACING   = 1 << 8,
-    PL_RENDER_ERR_ERROR_DIFFUSION = 1 << 9,
-    PL_RENDER_ERR_HOOKS           = 1 << 10,
-};
-
 struct pl_renderer_t {
     pl_gpu gpu;
     pl_dispatch dp;
@@ -3442,4 +3427,58 @@ void pl_frame_clear_rgba(pl_gpu gpu, const struct pl_frame *frame,
 
         pl_tex_clear(gpu, plane->texture, clear);
     }
+}
+
+struct pl_render_errors pl_renderer_get_errors(pl_renderer rr)
+{
+    return (struct pl_render_errors) {
+        .errors = rr->errors,
+        .disabled_hooks = rr->disabled_hooks.elem,
+        .num_disabled_hooks = rr->disabled_hooks.num,
+    };
+}
+
+void pl_renderer_reset_errors(pl_renderer rr,
+                              const struct pl_render_errors *errors)
+{
+    if (!errors) {
+        // Reset everything
+        rr->errors = PL_RENDER_ERR_NONE;
+        rr->disabled_hooks.num = 0;
+        return;
+    }
+
+    // Reset only requested errors
+    rr->errors &= ~errors->errors;
+
+    // Not clearing hooks
+    if (!(errors->errors & PL_RENDER_ERR_HOOKS))
+        goto done;
+
+    // Remove all hook signatures
+    if (!errors->num_disabled_hooks) {
+        rr->disabled_hooks.num = 0;
+        goto done;
+    }
+
+    // At this point we require valid array of hooks
+    if (!errors->disabled_hooks) {
+        assert(errors->disabled_hooks);
+        goto done;
+    }
+
+    for (int i = 0; i < errors->num_disabled_hooks; i++) {
+        for (int j = 0; j < rr->disabled_hooks.num; j++) {
+            // Remove only requested hook signatures
+            if (rr->disabled_hooks.elem[j] == errors->disabled_hooks[i]) {
+                PL_ARRAY_REMOVE_AT(rr->disabled_hooks, j);
+                break;
+            }
+        }
+    }
+
+    done:
+        if (rr->disabled_hooks.num)
+            rr->errors |= PL_RENDER_ERR_HOOKS;
+        return;
 }
