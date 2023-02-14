@@ -1559,6 +1559,8 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
     if (!shader_len)
         return NULL;
 
+    pl_str shader = { (uint8_t *) shader_text, shader_len };
+
     struct pl_hook *hook = pl_zalloc_obj(NULL, hook, struct hook_priv);
     struct hook_priv *p = PL_PRIV(hook);
 
@@ -1567,6 +1569,7 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
         .priv = p,
         .reset = hook_reset,
         .hook = hook_hook,
+        .signature = pl_str_hash(shader),
     };
 
     *p = (struct hook_priv) {
@@ -1581,7 +1584,6 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
         },
     };
 
-    pl_str shader = { (uint8_t *) shader_text, shader_len };
     shader = pl_strdup(hook, shader);
 
     // Skip all garbage (e.g. comments) before the first header

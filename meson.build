@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '248': 'add pl_hook.signature',
       '247': 'add pl_color_map_params.visualize_lut',
       '246': 'add `pl_tone_map_st2094_10` and `pl_tone_map_st2094_40`',
       '245': 'add `pl_tone_map_params.hdr`',

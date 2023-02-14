@@ -311,6 +311,11 @@ struct pl_hook {
     // The hook function itself. Called by the renderer at any of the indicated
     // hook stages. See `pl_hook_res` for more info on the return values.
     struct pl_hook_res (*hook)(void *priv, const struct pl_hook_params *params);
+
+    // Unique signature identifying this hook, used to disable misbehaving hooks.
+    // All hooks with the same signature will be disabled, should they fail to
+    // execute during run-time.
+    uint64_t signature;
 };
 
 // Compatibility layer with `mpv` user shaders. See the mpv man page for more

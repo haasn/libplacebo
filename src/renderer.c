@@ -67,10 +67,12 @@ struct pl_renderer_t {
     bool disable_overlay;       // disable rendering overlays
     bool disable_peak_detect;   // disable peak detection shader
     bool disable_grain;         // disable film grain code
-    bool disable_hooks;         // disable user hooks / custom shaders
     bool disable_mixing;        // disable frame mixing
     bool disable_deinterlacing; // disable deinterlacing
     bool disable_error_diffusion; // disable error diffusion
+
+    // List containing signatures of disabled hooks
+    PL_ARRAY(uint64_t) disabled_hooks;
 
     // Shader resource objects and intermediate textures (FBOs)
     pl_shader_obj tone_map_state;
@@ -985,7 +987,7 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
 {
     const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
-    if (!pass->fbofmt[4] || rr->disable_hooks)
+    if (!pass->fbofmt[4])
         return false;
 
     bool ret = false;
@@ -995,7 +997,17 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
         if (!(hook->stages & stage))
             continue;
 
-        PL_TRACE(rr, "Dispatching hook %d stage 0x%x", n, stage);
+        // Hopefully the list of disabled hooks is small, search linearly.
+        for (int i = 0; i < rr->disabled_hooks.num; i++) {
+            if (rr->disabled_hooks.elem[i] != hook->signature)
+                continue;
+            PL_TRACE(rr, "Skipping hook %d (0x%"PRIx64") stage 0x%x",
+                     n, hook->signature, stage);
+            goto hook_skip;
+        }
+
+        PL_TRACE(rr, "Dispatching hook %d (0x%"PRIx64") stage 0x%x",
+                 n, hook->signature, stage);
         struct pl_hook_params hparams = {
             .gpu = rr->gpu,
             .dispatch = rr->dp,
@@ -1023,7 +1035,7 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
             hparams.tex = img_tex(pass, img);
             if (!hparams.tex) {
                 PL_ERR(rr, "Failed dispatching shader prior to hook!");
-                goto error;
+                goto hook_error;
             }
             break;
         }
@@ -1039,7 +1051,7 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
         struct pl_hook_res res = hook->hook(hook->priv, &hparams);
         if (res.failed) {
             PL_ERR(rr, "Failed executing hook, disabling");
-            goto error;
+            goto hook_error;
         }
 
         bool resizable = pl_hook_stage_resizable(stage);
@@ -1054,7 +1066,7 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
                     !pl_rect2d_eq(res.rect, img->rect))
                 {
                     PL_ERR(rr, "User hook tried resizing non-resizable stage!");
-                    goto error;
+                    goto hook_error;
                 }
             }
 
@@ -1076,7 +1088,7 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
                     !pl_rect2d_eq(res.rect, img->rect))
                 {
                     PL_ERR(rr, "User hook tried resizing non-resizable stage!");
-                    goto error;
+                    goto hook_error;
                 }
             }
 
@@ -1097,12 +1109,12 @@ static bool pass_hook(struct pass_state *pass, struct img *img,
 
         // a hook was performed successfully
         ret = true;
+
+hook_skip:
+        continue;
+hook_error:
+        PL_ARRAY_APPEND(rr, rr->disabled_hooks, hook->signature);
     }
-
-    return ret;
-
-error:
-    rr->disable_hooks = true;
 
     // Make sure the state remains as valid as possible, even if the resulting
     // shaders might end up nonsensical, to prevent segfaults
