@@ -31,10 +31,10 @@ int main()
 #define TEST_ALIGN(ref, ref_align, ref_bits, ...)                       \
     do {                                                                \
         pl_plane_data_from_mask(&data, (uint64_t[4]){ __VA_ARGS__ });   \
-        REQUIRE(memcmp(&data, &ref, sizeof(ref)) == 0);                 \
+        REQUIRE_MEMEQ(&data, &ref, sizeof(ref));                        \
         pl_plane_data_align(&data, &bits);                              \
-        REQUIRE(memcmp(&data, &ref_align, sizeof(ref_align)) == 0);     \
-        REQUIRE(memcmp(&bits, &ref_bits, sizeof(bits)) == 0);           \
+        REQUIRE_MEMEQ(&data, &ref_align, sizeof(ref_align));            \
+        REQUIRE_MEMEQ(&bits, &ref_bits, sizeof(bits));                  \
     } while (0)
 
 #define TEST(ref, bits, ...) TEST_ALIGN(ref, ref, bits, __VA_ARGS__)
@@ -104,60 +104,60 @@ int main()
 
     struct pl_var_layout layout;
     layout = pl_std140_layout(0, &vec2);
-    REQUIRE(layout.offset == 0);
-    REQUIRE(layout.stride == 2 * sizeof(float));
-    REQUIRE(layout.size == 2 * sizeof(float));
+    REQUIRE_CMP(layout.offset, ==, 0 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.stride, ==, 2 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.size, ==, 2 * sizeof(float), "zu");
 
     layout = pl_std140_layout(3 * sizeof(float), &vec3);
-    REQUIRE(layout.offset == 4 * sizeof(float));
-    REQUIRE(layout.stride == 3 * sizeof(float));
-    REQUIRE(layout.size == 3 * sizeof(float));
+    REQUIRE_CMP(layout.offset, ==, 4 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.stride, ==, 3 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.size, ==, 3 * sizeof(float), "zu");
 
     layout = pl_std140_layout(2 * sizeof(float), &mat3);
-    REQUIRE(layout.offset == 4 * sizeof(float));
-    REQUIRE(layout.stride == 4 * sizeof(float));
-    REQUIRE(layout.size == 3 * 4 * sizeof(float));
+    REQUIRE_CMP(layout.offset, ==, 4 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.stride, ==, 4 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.size, ==, 3 * 4 * sizeof(float), "zu");
 
     layout = pl_std430_layout(2 * sizeof(float), &mat3);
-    REQUIRE(layout.offset == 4 * sizeof(float));
-    REQUIRE(layout.stride == 4 * sizeof(float));
-    REQUIRE(layout.size == 4 * 3 * sizeof(float));
+    REQUIRE_CMP(layout.offset, ==, 4 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.stride, ==, 4 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.size, ==, 4 * 3 * sizeof(float), "zu");
 
     layout = pl_std140_layout(3 * sizeof(float), &vec1);
-    REQUIRE(layout.offset == 3 * sizeof(float));
-    REQUIRE(layout.stride == sizeof(float));
-    REQUIRE(layout.size == sizeof(float));
+    REQUIRE_CMP(layout.offset, ==, 3 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.stride, ==, sizeof(float), "zu");
+    REQUIRE_CMP(layout.size, ==, sizeof(float), "zu");
 
     struct pl_var vec2a = vec2;
     vec2a.dim_a = 50;
 
     layout = pl_std140_layout(sizeof(float), &vec2a);
-    REQUIRE(layout.offset == 4 * sizeof(float));
-    REQUIRE(layout.stride == 4 * sizeof(float));
-    REQUIRE(layout.size == 50 * 4 * sizeof(float));
+    REQUIRE_CMP(layout.offset, ==, 4 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.stride, ==, 4 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.size, ==, 50 * 4 * sizeof(float), "zu");
 
     layout = pl_std430_layout(sizeof(float), &vec2a);
-    REQUIRE(layout.offset == 2 * sizeof(float));
-    REQUIRE(layout.stride == 2 * sizeof(float));
-    REQUIRE(layout.size == 50 * 2 * sizeof(float));
+    REQUIRE_CMP(layout.offset, ==, 2 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.stride, ==, 2 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.size, ==, 50 * 2 * sizeof(float), "zu");
 
     struct pl_var mat2a = mat2;
     mat2a.dim_a = 20;
 
     layout = pl_std140_layout(5 * sizeof(float), &mat2a);
-    REQUIRE(layout.offset == 8 * sizeof(float));
-    REQUIRE(layout.stride == 4 * sizeof(float));
-    REQUIRE(layout.size == 20 * 2 * 4 * sizeof(float));
+    REQUIRE_CMP(layout.offset, ==, 8 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.stride, ==, 4 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.size, ==, 20 * 2 * 4 * sizeof(float), "zu");
 
     layout = pl_std430_layout(5 * sizeof(float), &mat2a);
-    REQUIRE(layout.offset == 6 * sizeof(float));
-    REQUIRE(layout.stride == 2 * sizeof(float));
-    REQUIRE(layout.size == 20 * 2 * 2 * sizeof(float));
+    REQUIRE_CMP(layout.offset, ==, 6 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.stride, ==, 2 * sizeof(float), "zu");
+    REQUIRE_CMP(layout.size, ==, 20 * 2 * 2 * sizeof(float), "zu");
 
     for (const struct pl_named_var *nvar = pl_var_glsl_types; nvar->glsl_name; nvar++) {
         struct pl_var var = nvar->var;
-        REQUIRE(nvar->glsl_name == pl_var_glsl_type_name(var));
+        REQUIRE_CMP(nvar->glsl_name, ==, pl_var_glsl_type_name(var), "s");
         var.dim_a = 100;
-        REQUIRE(nvar->glsl_name == pl_var_glsl_type_name(var));
+        REQUIRE_CMP(nvar->glsl_name, ==, pl_var_glsl_type_name(var), "s");
     }
 }
