@@ -299,8 +299,9 @@ static void pl_planar_tests(pl_gpu gpu)
         .ptr = data,
     )));
 
-    for (int i = 0; i < PL_ARRAY_SIZE(data); i++)
-        REQUIRE_CMP(data[i], ==, 0x80, PRIu8);
+    uint8_t ref[PL_ARRAY_SIZE(data)];
+    memset(ref, 0x80, sizeof(ref));
+    REQUIRE_MEMEQ(data, ref, PL_ARRAY_SIZE(data));
 
     pl_tex_destroy(gpu, &tex);
 }
