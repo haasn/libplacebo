@@ -31,7 +31,7 @@ static void opengl_interop_tests(pl_gpu gpu)
     pl_tex import = pl_opengl_wrap(gpu, &wrap);
     REQUIRE(import);
     REQUIRE(import->params.renderable);
-    REQUIRE(import->params.blit_dst == export->params.blit_dst);
+    REQUIRE_CMP(import->params.blit_dst, ==, export->params.blit_dst, "d");
 
     pl_tex_destroy(gpu, &import);
     pl_tex_destroy(gpu, &export);
