@@ -30,14 +30,14 @@ int main()
     pl_str_append_asprintf(tmp, &buf, "%.*s", PL_STR_FMT(test));
     REQUIRE(pl_str_equals(buf, test));
 
-    REQUIRE(pl_strchr(null, ' ') < 0);
-    REQUIRE(pl_strspn(null, " ") == 0);
-    REQUIRE(pl_strcspn(null, " ") == 0);
+    REQUIRE_CMP(pl_strchr(null, ' '), <, 0, "d");
+    REQUIRE_CMP((int) pl_strspn(null, " "), ==, 0, "d");
+    REQUIRE_CMP((int) pl_strcspn(null, " "), ==, 0, "d");
     REQUIRE(is_null(pl_str_strip(null)));
 
-    REQUIRE(pl_strchr(test, 's') == 2);
-    REQUIRE(pl_strspn(test, "et") == 2);
-    REQUIRE(pl_strcspn(test, "xs") == 2);
+    REQUIRE_CMP(pl_strchr(test, 's'), ==, 2, "d");
+    REQUIRE_CMP((int) pl_strspn(test, "et"), ==, 2, "d");
+    REQUIRE_CMP((int) pl_strcspn(test, "xs"), ==, 2, "d");
 
     REQUIRE(is_null(pl_str_take(null, 10)));
     REQUIRE(is_empty(pl_str_take(test, 0)));
@@ -45,10 +45,10 @@ int main()
     REQUIRE(is_null(pl_str_drop(test, test.len)));
     REQUIRE(pl_str_equals(pl_str_drop(test, 0), test));
 
-    REQUIRE(pl_str_find(null, test) < 0);
-    REQUIRE(pl_str_find(null, null) == 0);
-    REQUIRE(pl_str_find(test, null) == 0);
-    REQUIRE(pl_str_find(test, test) == 0);
+    REQUIRE_CMP(pl_str_find(null, test), <, 0, "d");
+    REQUIRE_CMP(pl_str_find(null, null), ==, 0, "d");
+    REQUIRE_CMP(pl_str_find(test, null), ==, 0, "d");
+    REQUIRE_CMP(pl_str_find(test, test), ==, 0, "d");
 
     pl_str rest;
     REQUIRE(is_null(pl_str_split_char(null, ' ', &rest)) && is_null(rest));
@@ -83,21 +83,24 @@ int main()
     int64_t i64;
     uint64_t u64;
 
-    REQUIRE(pl_str_parse_float(pl_str0("1.3984"), &f) && feq(f, 1.3984f, 1e-8));
-    REQUIRE(pl_str_parse_float(pl_str0("-8.9100083"), &f) && feq(f, -8.9100083f, 1e-8));
-    REQUIRE(pl_str_parse_float(pl_str0("-0"), &f) && feq(f, 0.0f, 1e-8));
-    REQUIRE(pl_str_parse_float(pl_str0("-3.14e20"), &f) && feq(f, -3.14e20f, 1e-8));
-    REQUIRE(pl_str_parse_float(pl_str0("0.5e-5"), &f) && feq(f, 0.5e-5f, 1e-8));
-    REQUIRE(pl_str_parse_float(pl_str0("0.5e+5"), &f) && feq(f, 0.5e+5f, 1e-8));
-    REQUIRE(pl_str_parse_int(pl_str0("64239"), &i) && i == 64239);
-    REQUIRE(pl_str_parse_int(pl_str0("-102"), &i) && i == -102);
-    REQUIRE(pl_str_parse_int(pl_str0("+1"), &i) && i == 1);
-    REQUIRE(pl_str_parse_int(pl_str0("-0"), &i) && i == 0);
-    REQUIRE(pl_str_parse_uint(pl_str0("64239"), &u) && u == 64239);
-    REQUIRE(pl_str_parse_uint(pl_str0("+1"), &u) && u == 1);
-    REQUIRE(pl_str_parse_int64(pl_str0("9223372036854775799"), &i64) && i64 == 9223372036854775799LL);
-    REQUIRE(pl_str_parse_int64(pl_str0("-9223372036854775799"), &i64) && i64 == -9223372036854775799LL);
-    REQUIRE(pl_str_parse_uint64(pl_str0("18446744073709551609"), &u64) && u64 == 18446744073709551609LLU);
+    REQUIRE(pl_str_parse_float(pl_str0("1.3984"), &f));     REQUIRE_FEQ(f, 1.3984f, 1e-8);
+    REQUIRE(pl_str_parse_float(pl_str0("-8.9100083"), &f)); REQUIRE_FEQ(f, -8.9100083f, 1e-8);
+    REQUIRE(pl_str_parse_float(pl_str0("-0"), &f));         REQUIRE_FEQ(f, 0.0f, 1e-8);
+    REQUIRE(pl_str_parse_float(pl_str0("-3.14e20"), &f));   REQUIRE_FEQ(f, -3.14e20f, 1e-8);
+    REQUIRE(pl_str_parse_float(pl_str0("0.5e-5"), &f));     REQUIRE_FEQ(f, 0.5e-5f, 1e-8);
+    REQUIRE(pl_str_parse_float(pl_str0("0.5e+5"), &f));     REQUIRE_FEQ(f, 0.5e+5f, 1e-8);
+    REQUIRE(pl_str_parse_int(pl_str0("64239"), &i));        REQUIRE_CMP(i, ==, 64239, "d");
+    REQUIRE(pl_str_parse_int(pl_str0("-102"), &i));         REQUIRE_CMP(i, ==, -102, "d");
+    REQUIRE(pl_str_parse_int(pl_str0("+1"), &i));           REQUIRE_CMP(i, ==, 1, "d");
+    REQUIRE(pl_str_parse_int(pl_str0("-0"), &i));           REQUIRE_CMP(i, ==, 0, "d");
+    REQUIRE(pl_str_parse_uint(pl_str0("64239"), &u));       REQUIRE_CMP(u, ==, 64239, "u");
+    REQUIRE(pl_str_parse_uint(pl_str0("+1"), &u));          REQUIRE_CMP(u, ==, 1, "u");
+    REQUIRE(pl_str_parse_int64(pl_str0("9223372036854775799"), &i64));
+    REQUIRE_CMP(i64, ==, 9223372036854775799LL, PRIi64);
+    REQUIRE(pl_str_parse_int64(pl_str0("-9223372036854775799"), &i64));
+    REQUIRE_CMP(i64, ==, -9223372036854775799LL, PRIi64);
+    REQUIRE(pl_str_parse_uint64(pl_str0("18446744073709551609"), &u64));
+    REQUIRE_CMP(u64, ==, 18446744073709551609LLU, PRIu64);
     REQUIRE(!pl_str_parse_float(null, &f));
     REQUIRE(!pl_str_parse_float(test, &f));
     REQUIRE(!pl_str_parse_float(empty, &f));
