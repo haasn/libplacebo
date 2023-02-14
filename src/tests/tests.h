@@ -70,6 +70,19 @@ static inline pl_log pl_test_logger(void)
     }                                                                           \
 } while (0)
 
+#define REQUIRE_CMP(a, op, b, fmt) do                                           \
+{                                                                               \
+    __typeof__(a) _va = (a), _vb = (b);                                         \
+                                                                                \
+    if (!(_va op _vb)) {                                                        \
+        fprintf(stderr, "=== FAILED: '"#a" "#op" "#b"' at "__FILE__":%d\n"      \
+                        " %-31s = %"fmt"\n"                                     \
+                        " %-31s = %"fmt"\n\n",                                  \
+                __LINE__, #a, _va, #b, _vb);                                    \
+        exit(1);                                                                \
+    }                                                                           \
+} while (0)
+
 static inline bool feq(float a, float b, float epsilon)
 {
     return fabs(a - b) < epsilon * fmax(1.0, fabs(a));
