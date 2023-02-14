@@ -89,15 +89,15 @@ int main()
     pl_icc_object icc;
 
     icc = pl_icc_open(log, &TEST_PROFILE(sRGB_v2_nano_icc), NULL);
-    REQUIRE(icc->csp.primaries == PL_COLOR_PRIM_BT_709);
+    REQUIRE_CMP(icc->csp.primaries, ==, PL_COLOR_PRIM_BT_709, "u");
     pl_icc_close(&icc);
 
     icc = pl_icc_open(log, &TEST_PROFILE(DisplayP3_v2_micro_icc), NULL);
-    REQUIRE(icc->csp.primaries == PL_COLOR_PRIM_DISPLAY_P3);
+    REQUIRE_CMP(icc->csp.primaries, ==, PL_COLOR_PRIM_DISPLAY_P3, "u");
     pl_icc_close(&icc);
 
     icc = pl_icc_open(log, &TEST_PROFILE(Rec2020_v2_micro_icc), NULL);
-    REQUIRE(icc->csp.primaries == PL_COLOR_PRIM_BT_2020);
+    REQUIRE_CMP(icc->csp.primaries, ==, PL_COLOR_PRIM_BT_2020, "u");
     pl_icc_close(&icc);
 
     pl_log_destroy(&log);
