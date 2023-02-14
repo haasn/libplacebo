@@ -17,7 +17,7 @@ static void vulkan_interop_tests(pl_vulkan pl_vk,
 
         REQUIRE(buf);
         REQUIRE_HANDLE(buf->shared_mem, handle_type);
-        REQUIRE(buf->shared_mem.size >= buf->params.size);
+        REQUIRE_CMP(buf->shared_mem.size, >=, buf->params.size, "zu");
         REQUIRE(pl_buf_export(gpu, buf));
         pl_buf_destroy(gpu, &buf);
     }
@@ -184,7 +184,7 @@ int main()
         };
 
         VkResult res = CreateHeadlessSurfaceEXT(inst->instance, &info, NULL, &surf);
-        REQUIRE(res == VK_SUCCESS);
+        REQUIRE_CMP(res, ==, VK_SUCCESS, "u");
     }
 #endif // VK_EXT_headless_surface
 
@@ -217,7 +217,7 @@ int main()
             .get_proc_addr = inst->get_proc_addr,
             .device_name = props.deviceName,
         ));
-        REQUIRE(dev == devices[i]);
+        REQUIRE_CMP(dev, ==, devices[i], "p");
 
         struct pl_vulkan_params params = *pl_vulkan_params(
             .instance = inst->instance,
