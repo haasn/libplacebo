@@ -41,8 +41,10 @@ int main()
         if (!data)
             continue; // means this was the `dummy` texture
 
+#ifdef PRINT_LUTS
         for (int i = 0; i < tex->params.w; i++)
             printf("lut[%d] = %f\n", i, data[i]);
+#endif
     }
 
     // Try out generation of the sampler2D interface
@@ -57,7 +59,6 @@ int main()
     REQUIRE(pl_shader_sample_polar(sh, &src, &filter_params));
     REQUIRE((res = pl_shader_finalize(sh)));
     REQUIRE(res->input == PL_SHADER_SIG_SAMPLER);
-    printf("generated sampler2D shader:\n\n%s\n", res->glsl);
 
     pl_shader_free(&sh);
     pl_shader_obj_destroy(&lut);
