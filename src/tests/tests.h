@@ -83,11 +83,6 @@ static inline pl_log pl_test_logger(void)
     }                                                                           \
 } while (0)
 
-static inline bool feq(float a, float b, float epsilon)
-{
-    return fabs(a - b) < epsilon * fmax(1.0, fabs(a));
-}
-
 #define REQUIRE_FEQ(a, b, epsilon) do                                           \
 {                                                                               \
     float _va = (a);                                                            \
