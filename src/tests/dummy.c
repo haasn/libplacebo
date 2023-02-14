@@ -58,7 +58,7 @@ int main()
     pl_shader_reset(sh, pl_shader_params( .gpu = gpu ));
     REQUIRE(pl_shader_sample_polar(sh, &src, &filter_params));
     REQUIRE((res = pl_shader_finalize(sh)));
-    REQUIRE(res->input == PL_SHADER_SIG_SAMPLER);
+    REQUIRE_CMP(res->input, ==, PL_SHADER_SIG_SAMPLER, "u");
 
     pl_shader_free(&sh);
     pl_shader_obj_destroy(&lut);
