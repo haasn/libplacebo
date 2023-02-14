@@ -11,11 +11,11 @@ int main()
     while ((desc = av_pix_fmt_desc_next(desc)))
         pl_plane_data_from_pixfmt(data, &bits, av_pix_fmt_desc_get_id(desc));
 
-#define TEST(pixfmt, reference)                                         \
-    do {                                                                \
-        int planes = pl_plane_data_from_pixfmt(data, &bits, pixfmt);    \
-        REQUIRE(planes == sizeof(reference) / sizeof(*reference));      \
-        REQUIRE(memcmp(data, reference, sizeof(reference)) == 0);       \
+#define TEST(pixfmt, reference)                                                 \
+    do {                                                                        \
+        int planes = pl_plane_data_from_pixfmt(data, &bits, pixfmt);            \
+        REQUIRE_CMP(planes, ==, sizeof(reference) / sizeof(*reference), "d");   \
+        REQUIRE_MEMEQ(data, reference, sizeof(reference));                      \
     } while (0)
 
     // Planar and semiplanar formats
@@ -342,8 +342,8 @@ int main()
     AVFrame *frame = av_frame_alloc();
     frame->format = AV_PIX_FMT_RGBA;
     pl_frame_from_avframe(&image, frame);
-    REQUIRE(image.num_planes == 1);
-    REQUIRE(image.repr.sys == PL_COLOR_SYSTEM_RGB);
+    REQUIRE_CMP(image.num_planes, ==, 1, "d");
+    REQUIRE_CMP(image.repr.sys, ==, PL_COLOR_SYSTEM_RGB, "u");
 
     // Test inverse mapping
     struct pl_color_space csp = image.color;
@@ -361,31 +361,33 @@ int main()
         enum AVColorSpace spc = pl_system_to_av(sys);
         enum pl_color_system sys2 = pl_system_from_av(spc);
         // Exception to the rule, due to different handling in libav*
-        if (sys != PL_COLOR_SYSTEM_BT_2100_HLG)
-            REQUIRE(!sys2 || sys2 == sys);
+        if (sys2 && sys != PL_COLOR_SYSTEM_BT_2100_HLG)
+            REQUIRE_CMP(sys, ==, sys2, "u");
     }
 
     for (enum pl_color_levels lev = 0; lev < PL_COLOR_LEVELS_COUNT; lev++) {
         enum AVColorRange range = pl_levels_to_av(lev);
         enum pl_color_levels lev2 = pl_levels_from_av(range);
-        REQUIRE(lev2 == lev);
+        REQUIRE_CMP(lev, ==, lev2, "u");
     }
 
     for (enum pl_color_primaries prim = 0; prim < PL_COLOR_PRIM_COUNT; prim++) {
         enum AVColorPrimaries avpri = pl_primaries_to_av(prim);
         enum pl_color_primaries prim2 = pl_primaries_from_av(avpri);
-        REQUIRE(!prim2 || prim2 == prim);
+        if (prim2)
+            REQUIRE_CMP(prim, ==, prim2, "u");
     }
 
     for (enum pl_color_transfer trc = 0; trc < PL_COLOR_TRC_COUNT; trc++) {
         enum AVColorTransferCharacteristic avtrc = pl_transfer_to_av(trc);
         enum pl_color_transfer trc2 = pl_transfer_from_av(avtrc);
-        REQUIRE(!trc2 || trc2 == trc);
+        if (trc2)
+            REQUIRE_CMP(trc, ==, trc2, "u");
     }
 
     for (enum pl_chroma_location loc = 0; loc < PL_CHROMA_COUNT; loc++) {
         enum AVChromaLocation avloc = pl_chroma_to_av(loc);
         enum pl_chroma_location loc2 = pl_chroma_from_av(avloc);
-        REQUIRE(loc2 == loc);
+        REQUIRE_CMP(loc, ==, loc2, "u");
     }
 }
