@@ -1080,6 +1080,7 @@ static void pl_render_tests(pl_gpu gpu)
     };
 
     REQUIRE(pl_render_image(rr, &image, &target, NULL));
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
 
     // TODO: embed a reference texture and ensure it matches
 
@@ -1095,6 +1096,7 @@ static void pl_render_tests(pl_gpu gpu)
             params.SNAME = &tmp;                                        \
             REQUIRE(pl_render_image(rr, &image, &target, &params));     \
             pl_gpu_flush(gpu);                                          \
+            REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE); \
         }                                                               \
     } while (0)
 
@@ -1107,6 +1109,7 @@ static void pl_render_tests(pl_gpu gpu)
         printf("testing `params.upscaler = /* %s */`\n", pl_scale_filters[i].name);
         REQUIRE(pl_render_image(rr, &image, &target, &params));
         pl_gpu_flush(gpu);
+        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     }
 
     TEST_PARAMS(deband, iterations, 3);
@@ -1146,19 +1149,37 @@ static void pl_render_tests(pl_gpu gpu)
         .temperature = 0.3,
     };
     REQUIRE(pl_render_image(rr, &image, &target, &params));
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     params = pl_render_default_params;
 
     params.force_icc_lut = true;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     params = pl_render_default_params;
 
     // Test film grain synthesis
     image.film_grain.type = PL_FILM_GRAIN_AV1;
     image.film_grain.params.av1 = av1_grain_data;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
+    // AV1 film grain synthesis requires GLSL >= 130
+    if (gpu->glsl.version >= 130) {
+        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
+    } else {
+        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_FILM_GRAIN);
+        pl_renderer_reset_errors(rr, NULL);
+    }
+
     image.film_grain.type = PL_FILM_GRAIN_H274;
     image.film_grain.params.h274 = h274_grain_data;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
+    // H.274 film grain synthesis requires compute shaders
+    if (gpu->glsl.compute && gpu->glsl.version >= 130) {
+        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
+    } else {
+        const struct pl_render_errors rr_err = pl_renderer_get_errors(rr);
+        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_FILM_GRAIN);
+        pl_renderer_reset_errors(rr, &rr_err);
+    }
     image.film_grain = (struct pl_film_grain_data) {0};
 
     // Test mpv-style custom shaders
@@ -1179,6 +1200,7 @@ static void pl_render_tests(pl_gpu gpu)
         params.hooks = &hook;
         params.num_hooks = 1;
         REQUIRE(pl_render_image(rr, &image, &target, &params));
+        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
 
         pl_mpv_user_shader_destroy(&hook);
     }
@@ -1204,6 +1226,7 @@ static void pl_render_tests(pl_gpu gpu)
             printf("testing LUT method %d\n", t);
             image.lut_type = target.lut_type = params.lut_type = t;
             REQUIRE(pl_render_image(rr, &image, &target, &params));
+            REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
         }
 
         image.lut = target.lut = params.lut = NULL;
@@ -1214,15 +1237,18 @@ static void pl_render_tests(pl_gpu gpu)
     // Test ICC profiles
     image.profile = TEST_PROFILE(sRGB_v2_nano_icc);
     REQUIRE(pl_render_image(rr, &image, &target, &params));
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     image.profile = (struct pl_icc_profile) {0};
 
     target.profile = TEST_PROFILE(sRGB_v2_nano_icc);
     REQUIRE(pl_render_image(rr, &image, &target, &params));
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     target.profile = (struct pl_icc_profile) {0};
 
     image.profile = TEST_PROFILE(sRGB_v2_nano_icc);
     target.profile = image.profile;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     image.profile = (struct pl_icc_profile) {0};
     target.profile = (struct pl_icc_profile) {0};
 
@@ -1243,8 +1269,10 @@ static void pl_render_tests(pl_gpu gpu)
         }},
     };
     REQUIRE(pl_render_image(rr, &image, &target, &params));
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     params.disable_fbos = true;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     image.num_overlays = 0;
     params = pl_render_default_params;
 
@@ -1260,13 +1288,16 @@ static void pl_render_tests(pl_gpu gpu)
         },
     };
     REQUIRE(pl_render_image(rr, &image, &target, &params));
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     REQUIRE(pl_render_image(rr, NULL, &target, &params));
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     target.num_overlays = 0;
 
     // Test rotation
     for (pl_rotation rot = 0; rot < PL_ROTATION_360; rot += PL_ROTATION_90) {
         image.rotation = rot;
         REQUIRE(pl_render_image(rr, &image, &target, &params));
+        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     }
 
     // Attempt frame mixing, using the mixer queue helper
@@ -1484,6 +1515,7 @@ static void pl_ycbcr_tests(pl_gpu gpu)
             .hook = noop_hook,
         }},
     }));
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
 
     size_t buf_size = data[0].height * data[0].row_stride;
     dst_buffer = malloc(buf_size);
