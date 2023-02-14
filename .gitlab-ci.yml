@@ -160,8 +160,6 @@ asan:
     stage: sanitize
     tags:
         - gpu
-    variables:
-        ASAN_OPTIONS: 'detect_leaks=0'
     script:
         - meson build --buildtype debugoptimized
                       -Dtests=true
