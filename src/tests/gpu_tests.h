@@ -1142,10 +1142,10 @@ static void pl_render_tests(pl_gpu gpu)
 
     // Test film grain synthesis
     image.film_grain.type = PL_FILM_GRAIN_AV1;
-    image.film_grain.params.av1 = av1_grain_data,
+    image.film_grain.params.av1 = av1_grain_data;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     image.film_grain.type = PL_FILM_GRAIN_H274;
-    image.film_grain.params.h274 = h274_grain_data,
+    image.film_grain.params.h274 = h274_grain_data;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     image.film_grain = (struct pl_film_grain_data) {0};
 
