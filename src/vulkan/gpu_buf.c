@@ -264,7 +264,7 @@ static void invalidate_buf(pl_gpu gpu, pl_buf buf)
 
     // Ignore errors (after logging), nothing useful we can do anyway
 error: ;
-   vk_buf_deref(gpu, buf);
+    vk_buf_deref(gpu, buf);
 }
 
 void vk_buf_flush(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
