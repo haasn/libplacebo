@@ -74,15 +74,7 @@ static void pass_destroy_cb(pl_gpu gpu, pl_pass pass)
 
 void vk_pass_destroy(pl_gpu gpu, pl_pass pass)
 {
-    struct pl_vk *p = PL_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
-    pl_mutex_lock(&p->recording);
-    if (p->cmd) {
-        vk_cmd_callback(p->cmd, (vk_cb) pass_destroy_cb, gpu, pass);
-    } else {
-        vk_dev_callback(vk, (vk_cb) pass_destroy_cb, gpu, pass);
-    }
-    pl_mutex_unlock(&p->recording);
+    vk_gpu_idle_callback(gpu, (vk_cb) pass_destroy_cb, gpu, pass);
 }
 
 static const VkDescriptorType dsType[] = {
@@ -191,6 +183,8 @@ static VkResult vk_recreate_pipelines(struct vk_ctx *vk, pl_pass pass,
     // The old pipeline might still be in use, so we have to destroy it
     // asynchronously with a device idle callback
     if (*out_pipe) {
+        // We don't need to use `vk_gpu_idle_callback` because the only command
+        // that can access a VkPipeline, `vk_pass_run`, always flushes `p->cmd`.
         vk_dev_callback(vk, (vk_cb) destroy_pipeline, vk, vk_wrap_handle(*out_pipe));
         *out_pipe = VK_NULL_HANDLE;
     }

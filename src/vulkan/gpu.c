@@ -72,15 +72,7 @@ error:
 
 static void vk_timer_destroy(pl_gpu gpu, pl_timer timer)
 {
-    struct pl_vk *p = PL_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
-    pl_mutex_lock(&p->recording);
-    if (p->cmd) {
-        vk_cmd_callback(p->cmd, (vk_cb) timer_destroy_cb, gpu, timer);
-    } else {
-        vk_dev_callback(vk, (vk_cb) timer_destroy_cb, gpu, timer);
-    }
-    pl_mutex_unlock(&p->recording);
+    vk_gpu_idle_callback(gpu, (vk_cb) timer_destroy_cb, gpu, timer);
 }
 
 static uint64_t vk_timer_query(pl_gpu gpu, pl_timer timer)
@@ -243,6 +235,20 @@ bool _end_cmd(pl_gpu gpu, struct vk_cmd **pcmd, bool submit)
 
     pl_mutex_unlock(&p->recording);
     return ret;
+}
+
+void vk_gpu_idle_callback(pl_gpu gpu, vk_cb cb, const void *priv, const void *arg)
+{
+    struct pl_vk *p = PL_PRIV(gpu);
+    struct vk_ctx *vk = p->vk;
+
+    pl_mutex_lock(&p->recording);
+    if (p->cmd) {
+        vk_cmd_callback(p->cmd, cb, priv, arg);
+    } else {
+        vk_dev_callback(vk, cb, priv, arg);
+    }
+    pl_mutex_unlock(&p->recording);
 }
 
 static void vk_gpu_destroy(pl_gpu gpu)

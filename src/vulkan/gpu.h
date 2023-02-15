@@ -81,6 +81,13 @@ bool _end_cmd(pl_gpu, struct vk_cmd **, bool submit);
 #define CMD_FINISH(cmd) _end_cmd(gpu, cmd, false)
 #define CMD_SUBMIT(cmd) _end_cmd(gpu, cmd, true)
 
+// Helper to fire a callback the next time the `pl_gpu` is in an idle state
+//
+// Use this instead of `vk_dev_callback` when you need to clean up after
+// resources that might possibly still be in use by the `pl_gpu` at the time of
+// creating the callback.
+void vk_gpu_idle_callback(pl_gpu, vk_cb, const void *priv, const void *arg);
+
 struct pl_tex_vk {
     pl_rc_t rc;
     bool external_img;
