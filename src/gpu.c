@@ -675,6 +675,7 @@ void pl_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
 {
     require(src_offset + size <= src->params.size);
     require(dst_offset + size <= dst->params.size);
+    require(src != dst);
 
     const struct pl_gpu_fns *impl = PL_PRIV(gpu);
     impl->buf_copy(gpu, dst, dst_offset, src, src_offset, size);
