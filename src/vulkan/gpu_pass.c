@@ -367,7 +367,7 @@ pl_pass vk_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 
 #define NUM_DS (PL_ARRAY_SIZE(pass_vk->dss))
 
-    static int dsSize[PL_DESC_TYPE_COUNT] = {0};
+    int dsSize[PL_DESC_TYPE_COUNT] = {0};
     VkDescriptorSetLayoutBinding *bindings = pl_calloc_ptr(tmp, num_desc, bindings);
 
     uint32_t max_tex = vk->limits.maxPerStageDescriptorSampledImages,
