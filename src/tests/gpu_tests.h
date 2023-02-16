@@ -1121,7 +1121,15 @@ static void pl_render_tests(pl_gpu gpu)
     image.color = pl_color_space_hdr10;
     TEST_PARAMS(color_map, tone_mapping_mode, PL_TONE_MAP_MODE_COUNT - 1);
     TEST_PARAMS(color_map, gamut_mode, PL_GAMUT_MODE_COUNT - 1);
+
+    // Test inverse tone-mapping and pure BPC
+    image.color.hdr.max_luma = 1000;
+    target.color.hdr.max_luma = 4000;
+    target.color.hdr.min_luma = 0.02;
+    TEST_PARAMS(color_map, inverse_tone_mapping, true);
+
     image.color = pl_color_space_srgb;
+    target.color = pl_color_space_srgb;
 
     // Test some misc stuff
     struct pl_render_params params = pl_render_default_params;
