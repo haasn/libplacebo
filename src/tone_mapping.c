@@ -172,12 +172,20 @@ static void map_lut(float *lut, const struct pl_tone_map_params *params)
         if (params->function->map_inverse) {
             params->function->map_inverse(lut, params);
         } else {
-            // Perform naive (linear-stretched) BPC only
+            // Perform (perceptually linear) BPC only
+            float input_min, input_max, output_min;
+            input_min = pl_hdr_rescale(params->input_scaling, PL_HDR_PQ,
+                                       params->input_min);
+            input_max = pl_hdr_rescale(params->input_scaling, PL_HDR_PQ,
+                                       params->input_max);
+            output_min = pl_hdr_rescale(params->output_scaling, PL_HDR_PQ,
+                                        params->output_min);
+            float coeff = (input_max - output_min) / (input_max - input_min);
+
             FOREACH_LUT(lut, x) {
-                x -= params->input_min;
-                x *= (params->input_max - params->output_min) /
-                     (params->input_max - params->input_min);
-                x += params->output_min;
+                x = pl_hdr_rescale(params->input_scaling, PL_HDR_PQ, x);
+                x = coeff * (x - input_min) + output_min;
+                x = pl_hdr_rescale(PL_HDR_PQ, params->output_scaling, x);
             }
         }
     } else {
