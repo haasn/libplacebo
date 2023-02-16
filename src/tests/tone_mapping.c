@@ -36,6 +36,8 @@ int main()
     PL_SWAP(params_inv.input_min, params_inv.output_min);
     PL_SWAP(params_inv.input_max, params_inv.output_max);
 
+    int tested_pure_bpc = 0;
+
     // Generate example tone mapping curves, forward and inverse
     for (int i = 0; i < pl_num_tone_map_functions; i++) {
         const struct pl_tone_map_function *fun = pl_tone_map_functions[i];
@@ -49,17 +51,21 @@ int main()
         pl_log_cpu_time(log, start, clock(), "generating LUT");
         for (int j = 0; j < PL_ARRAY_SIZE(lut); j++) {
             REQUIRE(isfinite(lut[j]) && !isnan(lut[j]));
+            if (j > 0)
+                REQUIRE_CMP(lut[j], >=, lut[j - 1], "f");
 #ifdef PRINT_LUTS
             printf("%f, %f\n", j / (PL_ARRAY_SIZE(lut) - 1.0f), lut[j]);
 #endif
         }
 
-        if (fun->map_inverse) {
+        if (fun->map_inverse || !tested_pure_bpc++) {
             start = clock();
             pl_tone_map_generate(lut, &params_inv);
             pl_log_cpu_time(log, start, clock(), "generating inverse LUT");
             for (int j = 0; j < PL_ARRAY_SIZE(lut); j++) {
                 REQUIRE(isfinite(lut[j]) && !isnan(lut[j]));
+                if (j > 0)
+                    REQUIRE_CMP(lut[j], >=, lut[j - 1], "f");
 #ifdef PRINT_LUTS
                 printf("%f, %f\n", j / (PL_ARRAY_SIZE(lut) - 1.0f), lut[j]);
 #endif
