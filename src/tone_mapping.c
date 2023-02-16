@@ -316,6 +316,15 @@ static const uint16_t binom[17][17] = {
     {1,16,120,560,1820,4368,8008,11440,12870,11440,8008,4368,1820,560,120,16,1},
 };
 
+static inline float st2094_intercept(uint8_t N, float Kx, float Ky)
+{
+    if (Kx <= 0 || Ky >= 1)
+        return 1.0f / N;
+
+    const float slope = Ky / Kx * (1 - Kx) / (1 - Ky);
+    return fminf(slope / N, 1.0f);
+}
+
 static void st2094_40(float *lut, const struct pl_tone_map_params *params)
 {
     const float D = params->output_max;
@@ -348,7 +357,7 @@ static void st2094_40(float *lut, const struct pl_tone_map_params *params)
         const float slope = Ky / Kx * (1 - Kx) / (1 - Ky);
         N = PL_CLAMP((int) ceilf(slope), 2, PL_ARRAY_SIZE(P) - 1);
         P[0] = 0.0f;
-        P[1] = fminf(slope / N, 1.0f);
+        P[1] = st2094_intercept(N, Kx, Ky);
         for (int i = 2; i <= N; i++)
             P[i] = 1.0f;
         T = D;
@@ -358,29 +367,50 @@ static void st2094_40(float *lut, const struct pl_tone_map_params *params)
     if (D < T) {
 
         // Output display darker than OOTF target, make brighter
-        const float u = D / T;
+        const float Dmin = 0.0f, u = fmaxf(0.0f, (D - Dmin) / (T - Dmin));
+
+        // Scale down the knee point to make more room for the OOTF
         Kx *= u;
         Ky *= u;
-        for (int p = 1; p <= N; p++)
+
+        // Make the slope of the knee more closely approximate a clip(),
+        // constrained to avoid exploding P[1]
+        const float beta = N * Kx / (1 - Kx);
+        const float Kxy = fminf(Kx * params->input_max / D, beta / (beta + 1));
+        Ky = PL_MIX(Kxy, Ky, u);
+
+        for (int p = 2; p <= N; p++)
             P[p] = PL_MIX(1.0f, P[p], u);
+
+        // Make the OOTF intercept linear as D -> Dmin
+        P[1] = PL_MIX(st2094_intercept(N, Kx, Ky), P[1], u);
 
     } else if (D > T) {
 
         // Output display brighter than OOTF target, make more linear
         pl_assert(params->input_max > T);
-        const float w = 1 - (D - T) / (params->input_max - T);
-        Kx = PL_MIX(0.5f, Kx, w);
-        Ky = PL_MIX(0.5f, Ky, w);
-        for (int p = 1; p <= N; p++)
-            P[p] = PL_MIX(p / N, P[p], w);
+        const float w = powf(1 - (D - T) / (params->input_max - T), 1.4f);
+
+        // Constrain the slope of the input knee to prevent it from
+        // exploding and making the picture way too bright
+        Ky *= T / D;
+
+        // Make the slope of the knee more linear by solving for f(Kx) = Kx
+        float Kxy = Kx * D / params->input_max;
+        Ky = PL_MIX(Kxy, Ky, w);
+
+        for (int p = 2; p < N; p++) {
+            float anchor_lin = (float) p / N;
+            P[p] = PL_MIX(anchor_lin, P[p], w);
+        }
+
+        // Make the OOTF intercept linear as D -> input_max
+        P[1] = PL_MIX(st2094_intercept(N, Kx, Ky), P[1], w);
 
     }
 
     pl_assert(Kx >= 0 && Kx <= 1);
     pl_assert(Ky >= 0 && Ky <= 1);
-
-    // Note: We don't fix the P[1] tangent because it breaks real-world samples
-    // P[1] = 1.0f / N * Ky / Kx * (1 - Kx) / (1 - Ky);
 
     FOREACH_LUT(lut, x) {
         x = bt1886_oetf(x, params->input_min, params->input_max);
