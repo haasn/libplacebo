@@ -1085,6 +1085,7 @@ static void update_settings(struct plplay *p)
             nk_property_float(nk, "Crosstalk", 0.0, &cpar->tone_mapping_crosstalk, 0.30, 0.01, 0.001);
             nk_checkbox_label(nk, "Inverse tone mapping", &cpar->inverse_tone_mapping);
             nk_checkbox_label(nk, "Force full LUT", &cpar->force_tone_mapping_lut);
+            nk_checkbox_label(nk, "Visualize LUT", &cpar->visualize_lut);
 
             nk_layout_row_dynamic(nk, 50, 1);
             if (ui_widget_hover(nk, "Drop .cube file here...") && dropped_file) {

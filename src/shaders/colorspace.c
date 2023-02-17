@@ -1246,6 +1246,95 @@ static void fill_lut(void *data, const struct sh_lut_params *params)
     }
 }
 
+static inline void visualize_tone_map(pl_shader sh, ident_t fun,
+                                      float xmin, float xmax,
+                                      float ymin, float ymax,
+                                      bool dynamic_peak)
+{
+    ident_t pos = sh_attr_vec2(sh, "screenpos", &(struct pl_rect2df) {
+        .x0 = 0.0f, .x1 = 1.0f,
+        .y0 = 1.0f, .y1 = 0.0f,
+    });
+
+    GLSL("// Visualize tone mapping                 \n"
+         "{                                         \n"
+         "float xmin = %s;                          \n"
+         "float xmax = %s;                          \n"
+         "float ymin = %s;                          \n"
+         "float ymax = %s;                          \n",
+         SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmin)),
+         SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmax)),
+         SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymin)),
+         SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymax)));
+
+    if (dynamic_peak) {
+        GLSL("vec2 avg = average.xy;                        \n"
+             "avg *= vec2(%f);                              \n"
+             "avg = pow(max(avg, 0.0), vec2(%f));           \n"
+             "avg = (vec2(%f) + vec2(%f) * avg)             \n"
+             "             / (vec2(1.0) + vec2(%f) * avg);  \n"
+             "avg = pow(avg, vec2(%f));                     \n"
+             "xmax = avg.y;                                 \n",
+             PL_COLOR_SDR_WHITE / 10000.0,
+             PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
+    }
+
+    GLSL("vec2 pos = %s;                            \n"
+         "vec3 viz = color.rgb;                     \n"
+         // PQ EOTF
+         "float vv = pos.x;                         \n"
+         "vv = pow(max(vv, 0.0), 1.0/%f);           \n"
+         "vv = max(vv - %f, 0.0) / (%f - %f * vv);  \n"
+         "vv = pow(vv, 1.0 / %f);                   \n"
+         "vv *= %f;                                 \n"
+         // Apply tone-mapping function
+         "vv = %s(vv);                              \n"
+         // PQ OETF
+         "vv *= %f;                                 \n"
+         "vv = pow(max(vv, 0.0), %f);               \n"
+         "vv = (%f + %f * vv) / (1.0 + %f * vv);    \n"
+         "vv = pow(vv, %f);                         \n"
+         // Color based on region
+         "if (pos.x < xmin || pos.x > xmax) {       \n" // outside source
+         "    viz = vec3(0.0);                      \n"
+         "} else if (pos.y < ymin || pos.y > ymax) {\n" // outside target
+         "    if (pos.y < xmin || pos.y > xmax) {   \n" //  and also source
+         "        viz = vec3(0.1, 0.1, 0.5);        \n"
+         "    } else {                              \n"
+         "        viz = vec3(0.4, 0.1, 0.1);        \n" //  but inside source
+         "    }                                     \n"
+         "} else {                                  \n" // inside domain
+         "    if (abs(pos.x - pos.y) < 1e-3) {      \n" // main diagonal
+         "        viz = vec3(0.2);                  \n"
+         "    } else if (pos.y < vv) {              \n" // inside function
+         "        viz = vec3(0.3, 1.0, 0.1);        \n"
+         "        if (vv > pos.x && pos.y > pos.x)  \n" // output brighter than input
+         "            viz.r = 0.7;                  \n"
+         "    } else {                              \n" // outside function
+         "        if (vv < pos.x && pos.y < pos.x)  \n" // output darker than input
+         "            viz = vec3(0.0, 0.05, 0.1);   \n"
+         "    }                                     \n"
+         "    if (pos.y > xmax) {                   \n" // inverse tone-mapping region
+         "        vec3 hi = vec3(0.2, 0.5, 0.8);    \n"
+         "        viz = mix(viz, hi, 0.5);          \n"
+         "    }                                     \n",
+         pos,
+         PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
+         10000.0 / PL_COLOR_SDR_WHITE,
+         fun,
+         PL_COLOR_SDR_WHITE / 10000.0,
+         PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
+
+    if (dynamic_peak) {
+        GLSL("    if (abs(pos.x - avg.x) < 1e-3)    \n" // source avg brightness
+             "        viz = vec3(0.5);              \n");
+    }
+
+    GLSL("}                                         \n"
+         "color.rgb = mix(color.rgb, viz, 0.5);     \n"
+         "}                                         \n");
+}
+
 static void tone_map(pl_shader sh,
                      const struct pl_color_space *src,
                      const struct pl_color_space *dst,
@@ -1584,6 +1673,11 @@ static void tone_map(pl_shader sh,
     GLSL("ct = %s * (color.r + color.g + color.b);          \n"
          "color.rgb = (color.rgb - vec3(ct)) / ct_scale;    \n",
          ct);
+
+    if (params->visualize_lut) {
+        visualize_tone_map(sh, "tone_map", src_min, src_max, dst_min, dst_max,
+                           dynamic_peak);
+    }
 
     GLSL("#undef tone_map \n");
 }

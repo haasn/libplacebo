@@ -284,6 +284,9 @@ struct pl_color_map_params {
     // faster pure GLSL replacements (e.g. clip).
     bool force_tone_mapping_lut;
 
+    // Visualize the tone-mapping curve / LUT. (PQ-PQ graph)
+    bool visualize_lut;
+
     // --- Deprecated fields
     enum pl_tone_mapping_algorithm tone_mapping_algo PL_DEPRECATED;
     float desaturation_strength PL_DEPRECATED;
