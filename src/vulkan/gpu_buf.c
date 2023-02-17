@@ -31,7 +31,6 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
                        buf->params.import_handle == PL_HANDLE_HOST_PTR;
     bool noncoherent = buf_vk->mem.data && !buf_vk->mem.coherent;
     if (needs_flush && noncoherent) {
-        buf_vk->needs_flush = false;
         VK(vk->FlushMappedMemoryRanges(vk->dev, 1, &(struct VkMappedMemoryRange) {
             .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
             .memory = buf_vk->mem.vkmem,
@@ -46,6 +45,16 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
 
     struct vk_sync_scope last;
     last = vk_sem_barrier(vk, cmd, &buf_vk->sem, stage, access, export);
+
+    if (needs_flush) {
+        last.access |= VK_ACCESS_HOST_WRITE_BIT;
+        last.stage  |= VK_PIPELINE_STAGE_HOST_BIT;
+    }
+
+    if (needs_flush || buf_vk->mem.data) {
+        last.access |= VK_ACCESS_HOST_READ_BIT;
+        last.stage  |= VK_PIPELINE_STAGE_HOST_BIT;
+    }
 
     // CONCURRENT buffers require transitioning to/from IGNORED, EXCLUSIVE
     // buffers require transitioning to/from the concrete QF index
@@ -66,6 +75,7 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
                                1, &barr, 0, NULL);
     }
 
+    buf_vk->needs_flush = false;
     buf_vk->exported = export;
     vk_cmd_callback(cmd, (vk_cb) vk_buf_deref, gpu, buf);
 }
