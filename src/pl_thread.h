@@ -52,6 +52,12 @@ typedef void pl_static_mutex;
 int pl_static_mutex_lock(pl_static_mutex *mutex);
 int pl_static_mutex_unlock(pl_static_mutex *mutex);
 
+typedef void pl_thread;
+#define PL_THREAD_VOID void
+#define PL_THREAD_RETURN() return
+bool pl_thread_create(pl_thread *thread, PL_THREAD_VOID (*fun)(void *), void *arg);
+int pl_thread_join(pl_thread thread);
+
 #endif
 
 // Actual platform-specific implementation
