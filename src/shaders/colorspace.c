@@ -939,7 +939,6 @@ struct sh_tone_map_obj {
     // Peak detection state
     pl_buf peak_buf;
     struct pl_shader_desc desc;
-    float margin;
 };
 
 static void sh_tone_map_uninit(pl_gpu gpu, void *ptr)
@@ -982,7 +981,6 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
         return false;
 
     pl_gpu gpu = SH_GPU(sh);
-    obj->margin = params->overshoot_margin;
 
     if (!obj->peak_buf) {
         obj->desc = (struct pl_shader_desc) {
@@ -1112,6 +1110,13 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
           "        cur.y = max(cur.y, %s);                                      \n",
           log_scale, sig_scale, SH_FLOAT(PL_DEF(params->minimum_peak, 1.0)));
 
+    // Allow a tiny bit of extra overshoot for the detected peak
+    if (params->overshoot_margin) {
+        GLSLF("cur.y = min(%s * cur.y, %f); \n",
+              SH_FLOAT(1.0f + params->overshoot_margin),
+              10000.0f / PL_COLOR_SDR_WHITE);
+    }
+
     // Set the initial value accordingly if it contains no data
     GLSLF("        if (average.y == 0.0) \n"
           "            average = cur;    \n");
@@ -1188,12 +1193,6 @@ bool pl_get_detected_peak(const pl_shader_obj state,
 
     *out_avg = average[0];
     *out_peak = average[1];
-
-    if (obj->margin > 0.0) {
-        *out_peak *= 1.0 + obj->margin;
-        *out_peak = PL_MIN(*out_peak, 10000 / PL_COLOR_SDR_WHITE);
-    }
-
     return true;
 }
 
@@ -1413,13 +1412,10 @@ static void tone_map(pl_shader sh,
              "const float idx_max = %s;                                     \n"
              "float input_max = idx_max;                                    \n"
              "if (average.y != 0.0) {                                       \n"
-             "    float sig_peak = average.y;                               \n",
+             "    float sig_peak = average.y;                               \n"
+             "    input_max = clamp(sqrt(sig_peak), idx_min, idx_max);      \n"
+             "}                                                             \n",
              SH_FLOAT(idx_min), SH_FLOAT(idx_max));
-        // Allow a tiny bit of extra overshoot for the smoothed peak
-        if (obj->margin > 0)
-            GLSL("sig_peak *= %s; \n", SH_FLOAT(obj->margin + 1));
-        GLSL("    input_max = clamp(sqrt(sig_peak), idx_min, idx_max);      \n"
-             "}                                                             \n");
 
         // Sample the 2D LUT from a position determined by the detected max
         GLSL("const float input_min = %s;                                   \n"
