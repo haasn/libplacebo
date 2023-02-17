@@ -685,7 +685,6 @@ static struct vk_slab *pool_get_page(struct vk_malloc *ma, struct vk_pool *pool,
         }
 
         slab->spacemap ^= 0x1LLU << page_idx;
-        pl_mutex_unlock(&slab->lock);
         *offset = page_idx * slab->pagesize;
         return slab;
     }
