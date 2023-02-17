@@ -3264,7 +3264,13 @@ inter_pass_error:
         // converting between different image profiles, and the headache of
         // finagling that state is just not worth it because this is an
         // exceptionally unlikely hypothetical.
-        pl_shader_color_map(sh, NULL, frames[i].color, mix_color, NULL, false);
+        //
+        // This also ignores differences in HDR metadata, which we deliberately
+        // ignore because it causes aggressive shader recompilation.
+        struct pl_color_space frame_csp = frames[i].color;
+        struct pl_color_space mix_csp = mix_color;
+        frame_csp.hdr = mix_csp.hdr = (struct pl_hdr_metadata) {0};
+        pl_shader_color_map(sh, NULL, frame_csp, mix_csp, NULL, false);
 
         ident_t weight = "1.0";
         if (weights[i] != wsum) { // skip loading weight for nearest neighbour
