@@ -125,7 +125,7 @@ void pl_tone_map_params_infer(struct pl_tone_map_params *par)
         } else if (src_max < 1 + 1e-3 && dst_max < 1 + 1e-3) {
             // SDR<->SDR range conversion, use linear light stretching
             par->function = &pl_tone_map_linear;
-        } else if (fmaxf(ratio, 1 / ratio) > 2) {
+        } else if (fmaxf(ratio, 1 / ratio) > 2 && fminf(src_max, dst_max) < 1.5f) {
             // Reasonably ranged HDR<->SDR conversion, pick BT.2446a since it
             // was designed for this task
             par->function = &pl_tone_map_bt2446a;
