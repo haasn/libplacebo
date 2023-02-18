@@ -460,7 +460,9 @@ next_dim: ; // `continue` out of the inner loop
     update |= method != lut->method;
 
     if (update) {
-        PL_DEBUG(sh, "LUT cache invalidated, regenerating..");
+        PL_MSG(sh, params->dynamic ? PL_LOG_TRACE : PL_LOG_DEBUG,
+               "LUT cache invalidated, regenerating..");
+
         size_t buf_size = size * params->comps * pl_var_type_size(vartype);
         tmp = pl_zalloc(NULL, buf_size);
         params->fill(tmp, params);
