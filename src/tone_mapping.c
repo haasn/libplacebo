@@ -280,29 +280,40 @@ const struct pl_tone_map_function pl_tone_map_clip = {
 
 // Helper function to pick a knee point (for suitable methods) based on the
 // HDR10+ brightness metadata and scene brightness average matching
+//
+// Inspired by SMPTE ST2094-10, with some modifications
 static void st2094_pick_knee(float *out_src_knee, float *out_dst_knee,
                              const struct pl_tone_map_params *params)
 {
-    pl_assert(params->input_scaling == PL_HDR_NITS);
-    pl_assert(params->output_scaling == PL_HDR_NITS);
+    const float default_avg = 10.0f; // default avg input brightness in nits
+    const float max_slope   = 1.1f;  // maximum brightness boost on dark scenes
+    const float max_knee    = 0.8f;  // maximum relative brightness of knee point
+    const float adaptation  = 0.5f;  // balance between src and dst avg
+    const float target_avg  = 0.4f;  // balance between dst_min and dst_max
 
-    const float sdr_avg = PL_COLOR_SDR_WHITE / sqrtf(1000.0f); // typical contrast
+    float src_min = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_min);
+    float src_max = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_max);
+    float dst_min = pl_hdr_rescale(params->output_scaling, PL_HDR_PQ, params->output_min);
+    float dst_max = pl_hdr_rescale(params->output_scaling, PL_HDR_PQ, params->output_max);
 
-    // Infer the average from scene metadata if present, or default to 10.0 as
-    // this is an industry-standard value that produces good results on average
-    //
-    // Infer the destination from the desired output characteristics, clamping
-    // the lower bound to the characteristics of a typical SDR signal
-    float src_avg = PL_DEF(params->hdr.scene_avg, 10.0f);
-    float dst_avg = fmaxf(sqrtf(params->output_min * params->output_max), sdr_avg);
-    src_avg = PL_CLAMP(src_avg, params->input_min, params->input_max);
-    dst_avg = PL_CLAMP(dst_avg, params->output_min, params->output_max);
+    // Infer the average from scene metadata if present, or default to 10 nits
+    // as this is a common industry value that produces good results on average
+    float src_avg = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ,
+                                   PL_DEF(params->hdr.scene_avg, default_avg));
+    src_avg = PL_CLAMP(src_avg, src_min, max_knee * src_max);
 
-    const float max_slope = 1.2f; // don't raise brightness too much
+    // Use a fixed point on the output display as the default display target,
+    // but clamp slope to avoid raising brightness of very dark scenes
+    float dst_avg = PL_MIX(dst_min, dst_max, target_avg);
     dst_avg = fminf(dst_avg, src_avg * max_slope);
 
-    *out_src_knee = fminf(src_avg, 0.8f * params->input_max);
-    *out_dst_knee = fminf(sqrtf(src_avg * dst_avg), 0.8f * params->output_max);
+    // Calculate the destination adaptation point by picking the perceptual
+    // mid-point between the source average and the desired average
+    float target_knee = PL_MIX(src_avg, dst_avg, adaptation);
+    target_knee = fminf(target_knee, max_knee * dst_max);
+
+    *out_src_knee = pl_hdr_rescale(PL_HDR_PQ, params->input_scaling, src_avg);
+    *out_dst_knee = pl_hdr_rescale(PL_HDR_PQ, params->output_scaling, target_knee);
 }
 
 // Pascal's triangle
