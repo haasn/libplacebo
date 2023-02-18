@@ -31,38 +31,44 @@
 // Friendly name (`git describe`) for the overall version of the library
 #define PL_VERSION (pl_version())
 
-int pl_fix_ver(void);
-const char *pl_version(void);
-
 // Feature tests. These aren't described in further detail, but may be useful
 // for programmers wanting to programmatically check for feature support
 // in their compiled libplacebo versions.
 @extra_defs@
 
 // Extra compiler-specific stuff
-#if defined(_MSC_VER)
-#define PL_DEPRECATED
-#else
-#define PL_DEPRECATED __attribute__((deprecated))
+#ifndef PL_DEPRECATED
+# if defined(_MSC_VER)
+# define PL_DEPRECATED
+# else
+# define PL_DEPRECATED __attribute__((deprecated))
+# endif
 #endif
 
 #ifndef __has_feature
 #define __has_feature(x) 0
 #endif
 
-#if (defined(__GNUC__) && (__GNUC__ >= 6)) || __has_feature(enumerator_attributes)
-#define PL_DEPRECATED_ENUMERATOR PL_DEPRECATED
-#else
-#define PL_DEPRECATED_ENUMERATOR
+#ifndef PL_DEPRECATED_ENUMERATOR
+# if (defined(__GNUC__) && (__GNUC__ >= 6)) || __has_feature(enumerator_attributes)
+# define PL_DEPRECATED_ENUMERATOR PL_DEPRECATED
+# else
+# define PL_DEPRECATED_ENUMERATOR
+# endif
 #endif
 
 // C++ compatibility
-#ifdef __cplusplus
-# define PL_API_BEGIN extern "C" {
-# define PL_API_END }
-#else
-# define PL_API_BEGIN
-# define PL_API_END
+#ifndef PL_API_BEGIN
+# ifdef __cplusplus
+#  define PL_API_BEGIN extern "C" {
+#  define PL_API_END }
+# else
+#  define PL_API_BEGIN
+#  define PL_API_END
+# endif
+#endif
+
+#ifndef __cplusplus
 // Disable this warning because libplacebo's params macros override fields
 # pragma GCC diagnostic ignored "-Woverride-init"
 #endif
@@ -74,4 +80,11 @@ const char *pl_version(void);
 // Deprecated macro for back-compatibility
 #define PL_STRUCT(name) struct name##_t
 
-#endif // LIBPLACEBO_CONTEXT_H_
+PL_API_BEGIN
+
+int pl_fix_ver(void);
+const char *pl_version(void);
+
+PL_API_END
+
+#endif // LIBPLACEBO_CONFIG_H_
