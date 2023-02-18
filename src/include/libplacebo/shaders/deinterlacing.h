@@ -30,6 +30,8 @@
 
 #include <libplacebo/shaders.h>
 
+PL_API_BEGIN
+
 enum pl_field {
     PL_FIELD_NONE = 0, // no deinterlacing
     PL_FIELD_EVEN,     // "top" fields, with even y coordinates
@@ -129,5 +131,7 @@ extern const struct pl_deinterlace_params pl_deinterlace_default_params;
 // `&pl_deinterlace_default_params`.
 void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src,
                            const struct pl_deinterlace_params *params);
+
+PL_API_END
 
 #endif // LIBPLACEBO_SHADERS_DEINTERLACING_H_
