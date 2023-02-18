@@ -844,6 +844,29 @@ static inline void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
         }
     }
 }
+
+static inline void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
+                                                struct pl_dovi_metadata *dovi,
+                                                const AVDOVIMetadata *metadata)
+{
+    if (!dovi || !metadata)
+        return;
+
+    const AVDOVIRpuDataHeader *header = av_dovi_get_header(metadata);
+    const AVDOVIColorMetadata *color = av_dovi_get_color(metadata);
+    if (header->disable_residual_flag) {
+        pl_map_dovi_metadata(dovi, metadata);
+
+        out_frame->repr.dovi = dovi;
+        out_frame->repr.sys = PL_COLOR_SYSTEM_DOLBYVISION;
+        out_frame->color.primaries = PL_COLOR_PRIM_BT_2020;
+        out_frame->color.transfer = PL_COLOR_TRC_PQ;
+        out_frame->color.hdr.min_luma =
+            pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, color->source_min_pq / 4095.0f);
+        out_frame->color.hdr.max_luma =
+            pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, color->source_max_pq / 4095.0f);
+    }
+}
 #endif // PL_HAVE_LAV_DOLBY_VISION
 
 static inline bool pl_frame_recreate_from_avframe(pl_gpu gpu,
@@ -1074,23 +1097,14 @@ static inline bool pl_map_avframe_internal(pl_gpu gpu, struct pl_frame *out,
         AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DOVI_METADATA);
         if (sd) {
             const AVDOVIMetadata *metadata = (AVDOVIMetadata *) sd->data;
-            const AVDOVIRpuDataHeader *rpu = av_dovi_get_header(metadata);
-            const AVDOVIColorMetadata *color = av_dovi_get_color(metadata);
-            if (rpu->disable_residual_flag) {
+            const AVDOVIRpuDataHeader *header = av_dovi_get_header(metadata);
+            if (header->disable_residual_flag) {
                 // Only automatically map DoVi RPUs that don't require an EL
                 struct pl_dovi_metadata *dovi = malloc(sizeof(*dovi));
                 if (!dovi)
                     goto error; // oom
 
-                pl_map_dovi_metadata(dovi, metadata);
-                out->repr.dovi = dovi;
-                out->repr.sys = PL_COLOR_SYSTEM_DOLBYVISION;
-                out->color.primaries = PL_COLOR_PRIM_BT_2020;
-                out->color.transfer = PL_COLOR_TRC_PQ;
-                out->color.hdr.min_luma =
-                    pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, color->source_min_pq / 4095.0f);
-                out->color.hdr.max_luma =
-                    pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, color->source_max_pq / 4095.0f);
+                pl_frame_map_avdovi_metadata(out, dovi, metadata);
             }
         }
     }

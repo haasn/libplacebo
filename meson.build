@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '250': 'add pl_frame_map_avdovi_metadata',
       '249': 'add `pl_render_error`, `pl_render_errors` and `pl_renderer_get_errors`',
       '248': 'add pl_hook.signature',
       '247': 'add pl_color_map_params.visualize_lut',

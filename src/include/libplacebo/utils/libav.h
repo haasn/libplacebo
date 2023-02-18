@@ -97,6 +97,18 @@ static void pl_map_hdr_metadata(struct pl_hdr_metadata *out,
 // Helper function to map Dolby Vision metadata from the FFmpeg format.
 static void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
                                  const AVDOVIMetadata *metadata);
+
+// Helper function to map Dolby Vision metadata from the FFmpeg format
+// to `pl_dovi_metadata`, and adds it to the `pl_frame`.
+// The `pl_frame` colorspace fields and HDR struct are also updated with
+// values from the `AVDOVIMetadata`.
+//
+// Note: The `pl_dovi_metadata` must be allocated externally.
+// Also, currently the metadata is only used if the `AVDOVIRpuDataHeader`
+// `disable_residual_flag` field is not zero and can be checked before allocating.
+static void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
+                                         struct pl_dovi_metadata *dovi,
+                                         const AVDOVIMetadata *metadata);
 #endif
 
 // Helper function to test if a pixfmt would be supported by the GPU.
