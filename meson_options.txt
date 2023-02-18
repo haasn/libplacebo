@@ -26,6 +26,9 @@ option('shaderc', type: 'feature', value: 'auto',
 option('lcms', type: 'feature', value: 'auto',
        description: 'LittleCMS 2 support')
 
+option('libdovi', type: 'feature', value: 'auto',
+       description: 'libdovi support')
+
 # Miscellaneous
 option('demos', type: 'boolean', value: true,
        description: 'Enable building (and installing) the demo programs')

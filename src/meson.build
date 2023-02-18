@@ -141,6 +141,12 @@ if needs_spirv and not has_spirv
           'likely to be very limited in functionality!')
 endif
 
+libdovi = dependency('dovi', version: '>=1.6.7', required: get_option('libdovi'))
+components.set('libdovi', libdovi.found())
+if libdovi.found()
+  build_deps += libdovi
+endif
+
 # Generate configuration files
 defs = ''
 pc_vars = []
