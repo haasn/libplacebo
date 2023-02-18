@@ -19,6 +19,8 @@
 
 #include "common.h"
 
+#include <libplacebo/shaders/film_grain.h>
+
 bool pl_needs_fg_av1(const struct pl_film_grain_params *);
 bool pl_needs_fg_h274(const struct pl_film_grain_params *);
 

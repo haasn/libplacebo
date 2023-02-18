@@ -1,5 +1,7 @@
 #include "gpu_tests.h"
 
+#include <libplacebo/dummy.h>
+
 int main()
 {
     pl_log log = pl_test_logger();

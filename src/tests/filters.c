@@ -1,5 +1,7 @@
 #include "tests.h"
 
+#include <libplacebo/filters.h>
+
 int main()
 {
     pl_log log = pl_test_logger();

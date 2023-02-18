@@ -19,6 +19,10 @@
 
 #include "common.h"
 
+#include <libplacebo/log.h>
+#include <libplacebo/colorspace.h>
+#include <libplacebo/shaders/film_grain.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>

@@ -20,6 +20,8 @@
 #include "../common.h"
 #include "../log.h"
 
+#include <libplacebo/d3d11.h>
+
 // Shared struct used to hold the D3D11 device and associated interfaces
 struct d3d11_ctx {
     pl_log log;

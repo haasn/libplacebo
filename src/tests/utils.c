@@ -1,6 +1,8 @@
 #include "tests.h"
 #include "gpu.h"
 
+#include <libplacebo/utils/upload.h>
+
 int main()
 {
     struct pl_bit_encoding bits = {0};

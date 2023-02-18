@@ -20,6 +20,8 @@
 
 #include "shaders.h"
 
+#include <libplacebo/shaders/lut.h>
+
 static inline bool isnumeric(char c)
 {
     return (c >= '0' && c <= '9') || c == '-';

@@ -19,6 +19,8 @@
 
 #include "common.h"
 
+#include <libplacebo/swapchain.h>
+
 #define SW_PFN(name) __typeof__(pl_swapchain_##name) *name
 struct pl_sw_fns {
     // This destructor follows the same rules as `pl_gpu_fns`

@@ -21,6 +21,9 @@
 #include "gpu.h"
 #include "shaders.h"
 
+#include <libplacebo/shaders/colorspace.h>
+#include <libplacebo/shaders/custom.h>
+
 // Hard-coded size limits, mainly for convenience (to avoid dynamic memory)
 #define SHADER_MAX_HOOKS 16
 #define SHADER_MAX_BINDS 16

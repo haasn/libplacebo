@@ -1,6 +1,10 @@
 #include "tests.h"
 #include "shaders.h"
 
+#include <libplacebo/renderer.h>
+#include <libplacebo/utils/frame_queue.h>
+#include <libplacebo/utils/upload.h>
+
 static void pl_buffer_tests(pl_gpu gpu)
 {
     const size_t buf_size = 1024;

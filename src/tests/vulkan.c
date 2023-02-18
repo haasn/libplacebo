@@ -1,7 +1,10 @@
+#include <vulkan/vulkan.h>
+
 #include "gpu_tests.h"
 #include "vulkan/command.h"
 #include "vulkan/gpu.h"
-#include <vulkan/vulkan.h>
+
+#include <libplacebo/vulkan.h>
 
 static void vulkan_interop_tests(pl_vulkan pl_vk,
                                  enum pl_handle_type handle_type)

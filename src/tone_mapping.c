@@ -19,6 +19,8 @@
 
 #include "common.h"
 
+#include <libplacebo/tone_mapping.h>
+
 static const float PQ_M1 = 2610./4096 * 1./4,
                    PQ_M2 = 2523./4096 * 128,
                    PQ_C1 = 3424./4096,

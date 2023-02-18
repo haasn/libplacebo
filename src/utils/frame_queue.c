@@ -22,6 +22,8 @@
 #include "log.h"
 #include "pl_thread.h"
 
+#include <libplacebo/utils/frame_queue.h>
+
 struct cache_entry {
     pl_tex tex[4];
 };

@@ -1,5 +1,8 @@
 #include "tests.h"
 
+#include <libplacebo/dummy.h>
+#include <libplacebo/shaders/lut.h>
+
 static const char *luts[] = {
 
     "TITLE \"1D LUT example\"   \n"

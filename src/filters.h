@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <libplacebo/filters.h>
+
 #define COMMON_FILTER_PRESETS                                                   \
     /* Highest priority / recommended filters */                                \
     {"bilinear",            &pl_filter_bilinear,    "Bilinear"},                \

@@ -18,6 +18,9 @@
 #include <math.h>
 #include "shaders.h"
 
+#include <libplacebo/tone_mapping.h>
+#include <libplacebo/shaders/icc.h>
+
 const struct pl_icc_params pl_icc_default_params = { PL_ICC_DEFAULTS };
 
 #ifdef PL_HAVE_LCMS

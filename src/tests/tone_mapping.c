@@ -1,6 +1,8 @@
 #include "tests.h"
 #include "log.h"
 
+#include <libplacebo/tone_mapping.h>
+
 //#define PRINT_LUTS
 
 int main()

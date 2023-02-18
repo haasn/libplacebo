@@ -1,6 +1,12 @@
 #include "tests.h"
 #include <sys/time.h>
 
+#include <libplacebo/dispatch.h>
+#include <libplacebo/vulkan.h>
+#include <libplacebo/shaders/colorspace.h>
+#include <libplacebo/shaders/deinterlacing.h>
+#include <libplacebo/shaders/sampling.h>
+
 #define TEX_SIZE 2048
 #define CUBE_SIZE 64
 #define NUM_FBOS 16

@@ -22,6 +22,8 @@
 
 #include "common.h"
 
+#include <libplacebo/log.h>
+
 // Internal logging-related functions
 
 // Warning: Not entirely thread-safe. Exercise caution when using. May result

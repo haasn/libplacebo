@@ -17,6 +17,8 @@
 
 #include "shaders.h"
 
+#include <libplacebo/shaders/custom.h>
+
 bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
 {
     if (params->compute) {

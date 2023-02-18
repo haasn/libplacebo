@@ -2,6 +2,8 @@
 #include "d3d11/gpu.h"
 #include <dxgi1_2.h>
 
+#include <libplacebo/d3d11.h>
+
 int main()
 {
     pl_log log = pl_test_logger();

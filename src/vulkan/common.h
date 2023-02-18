@@ -25,6 +25,8 @@
 #include "../log.h"
 #include "../pl_thread.h"
 
+#include <libplacebo/vulkan.h>
+
 #ifdef PL_HAVE_WIN32
 #include <windows.h>
 #include <vulkan/vulkan_win32.h>

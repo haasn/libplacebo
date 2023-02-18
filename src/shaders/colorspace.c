@@ -19,6 +19,8 @@
 #include <math.h>
 #include "shaders.h"
 
+#include <libplacebo/shaders/colorspace.h>
+
 // Common constants for SMPTE ST.2084 (PQ)
 static const float PQ_M1 = 2610./4096 * 1./4,
                    PQ_M2 = 2523./4096 * 128,

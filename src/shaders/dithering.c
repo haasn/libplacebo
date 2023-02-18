@@ -19,6 +19,8 @@
 #include <math.h>
 #include "shaders.h"
 
+#include <libplacebo/shaders/dithering.h>
+
 const struct pl_dither_params pl_dither_default_params = { PL_DITHER_DEFAULTS };
 
 struct sh_dither_obj {

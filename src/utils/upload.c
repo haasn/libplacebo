@@ -19,6 +19,8 @@
 #include "common.h"
 #include "gpu.h"
 
+#include <libplacebo/utils/upload.h>
+
 #define MAX_COMPS 4
 
 struct comp {

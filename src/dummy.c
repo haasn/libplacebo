@@ -20,6 +20,8 @@
 
 #include "gpu.h"
 
+#include <libplacebo/dummy.h>
+
 const struct pl_gpu_dummy_params pl_gpu_dummy_default_params = { PL_GPU_DUMMY_DEFAULTS };
 static const struct pl_gpu_fns pl_fns_dummy;
 

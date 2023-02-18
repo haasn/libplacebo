@@ -20,6 +20,8 @@
 #include "common.h"
 #include "version.h"
 
+#include <libplacebo/common.h>
+
 int pl_fix_ver(void)
 {
     return BUILD_FIX_VER;

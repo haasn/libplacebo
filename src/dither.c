@@ -31,6 +31,8 @@
 
 #include "common.h"
 
+#include <libplacebo/dither.h>
+
 void pl_generate_bayer_matrix(float *data, int size)
 {
     pl_assert(size >= 0);

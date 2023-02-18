@@ -1,6 +1,8 @@
 #include "gpu_tests.h"
 #include "opengl/utils.h"
 
+#include <libplacebo/opengl.h>
+
 static void opengl_interop_tests(pl_gpu gpu)
 {
     pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0,

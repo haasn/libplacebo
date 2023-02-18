@@ -61,34 +61,6 @@
 #error Header mismatch? <libplacebo/config.h> pulled from elsewhere!
 #endif
 
-#include <libplacebo/colorspace.h>
-#include <libplacebo/common.h>
-#include <libplacebo/log.h>
-#include <libplacebo/dispatch.h>
-#include <libplacebo/dither.h>
-#include <libplacebo/dummy.h>
-#include <libplacebo/filters.h>
-#include <libplacebo/gpu.h>
-#include <libplacebo/opengl.h>
-#include <libplacebo/renderer.h>
-#include <libplacebo/shaders.h>
-#include <libplacebo/shaders/colorspace.h>
-#include <libplacebo/shaders/custom.h>
-#include <libplacebo/shaders/deinterlacing.h>
-#include <libplacebo/shaders/dithering.h>
-#include <libplacebo/shaders/film_grain.h>
-#include <libplacebo/shaders/icc.h>
-#include <libplacebo/shaders/lut.h>
-#include <libplacebo/shaders/sampling.h>
-#include <libplacebo/swapchain.h>
-#include <libplacebo/tone_mapping.h>
-#include <libplacebo/utils/frame_queue.h>
-#include <libplacebo/utils/upload.h>
-#include <libplacebo/vulkan.h>
-#ifdef PL_HAVE_WIN32
-#include <libplacebo/d3d11.h>
-#endif
-
 // Divide a number while rounding up (careful: double-eval)
 #define PL_DIV_UP(x, y) (((x) + (y) - 1) / (y))
 

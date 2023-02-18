@@ -19,6 +19,9 @@
 #include <math.h>
 #include "shaders.h"
 
+#include <libplacebo/colorspace.h>
+#include <libplacebo/shaders/sampling.h>
+
 const struct pl_deband_params pl_deband_default_params = { PL_DEBAND_DEFAULTS };
 
 static inline struct pl_tex_params src_params(const struct pl_sample_src *src)

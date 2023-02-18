@@ -1,5 +1,8 @@
 #include "tests.h"
 
+#include <libplacebo/dither.h>
+#include <libplacebo/shaders/dithering.h>
+
 #define SHIFT 4
 #define SIZE (1 << SHIFT)
 float data[SIZE][SIZE];

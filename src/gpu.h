@@ -20,6 +20,9 @@
 #include "common.h"
 #include "log.h"
 
+#include <libplacebo/gpu.h>
+#include <libplacebo/dispatch.h>
+
 // To avoid having to include drm_fourcc.h
 #ifndef DRM_FORMAT_MOD_LINEAR
 #define DRM_FORMAT_MOD_LINEAR   UINT64_C(0x0)

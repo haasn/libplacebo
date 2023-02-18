@@ -18,6 +18,8 @@
 
 #include "shaders.h"
 
+#include <libplacebo/shaders/deinterlacing.h>
+
 const struct pl_deinterlace_params pl_deinterlace_default_params = { PL_DEINTERLACE_DEFAULTS };
 
 void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src,

@@ -22,6 +22,8 @@
 #include "shaders.h"
 #include "dispatch.h"
 
+#include <libplacebo/renderer.h>
+
 struct cached_frame {
     uint64_t signature;
     uint64_t params_hash; // for detecting `pl_render_params` changes

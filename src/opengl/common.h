@@ -22,6 +22,8 @@
 #include "../gpu.h"
 #include "pl_thread.h"
 
+#include <libplacebo/opengl.h>
+
 // Collision with llvm-mingw <winnt.h>
 #undef MemoryBarrier
 
