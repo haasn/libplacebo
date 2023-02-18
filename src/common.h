@@ -46,13 +46,16 @@
 #include "pl_alloc.h"
 #include "pl_string.h"
 
-// Include all of the symbols that should be public in a way that marks them
-// as being externally visible. (Otherwise, all symbols are hidden by default)
-#pragma GCC visibility push(default)
-
 #include <libplacebo/config.h>
 #undef PL_DEPRECATED
+#undef PL_API_BEGIN
+#undef PL_API_END
 #define PL_DEPRECATED
+
+// Include all of the symbols that should be public in a way that marks them
+// as being externally visible. (Otherwise, all symbols are hidden by default)
+#define PL_API_BEGIN _Pragma("GCC visibility push(default)")
+#define PL_API_END _Pragma("GCC visibility pop")
 
 #if PL_API_VER != BUILD_API_VER
 #error Header mismatch? <libplacebo/config.h> pulled from elsewhere!
@@ -85,8 +88,6 @@
 #ifdef PL_HAVE_WIN32
 #include <libplacebo/d3d11.h>
 #endif
-
-#pragma GCC visibility pop
 
 // Divide a number while rounding up (careful: double-eval)
 #define PL_DIV_UP(x, y) (((x) + (y) - 1) / (y))
