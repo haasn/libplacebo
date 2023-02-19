@@ -333,7 +333,8 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
     p->w.gpu = p->d3d11->gpu;
 #endif // USE_D3D11
 
-    int w = params->width, h = params->height;
+    int w, h;
+    glfwGetWindowSize(p->win, &w, &h);
     pl_swapchain_colorspace_hint(p->w.swapchain, &params->colors);
     if (!pl_swapchain_resize(p->w.swapchain, &w, &h)) {
         fprintf(stderr, "libplacebo: Failed initializing swapchain\n");
