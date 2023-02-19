@@ -44,9 +44,6 @@
 #define PL_VK_LOAD_FUN(inst, name, get_addr) \
     PL_VK_FUN(name) = (PFN_vk##name) get_addr(inst, "vk" #name);
 
-// Hard-coded limit on the number of pending commands, to avoid OOM loops
-#define PL_VK_MAX_PENDING_CMDS 1024
-
 // Shitty backwards compatibility for very old vulkan.h versions
 #ifndef VK_API_VERSION_1_2
 #define VK_API_VERSION_1_2 VK_MAKE_VERSION(1, 2, 0)
