@@ -24,6 +24,8 @@
 #include <libplacebo/gpu.h>
 #include <libplacebo/swapchain.h>
 
+PL_API_BEGIN
+
 // Structure representing the actual D3D11 device and associated GPU instance
 typedef const struct pl_d3d11_t {
     pl_gpu gpu;
@@ -239,5 +241,7 @@ struct pl_d3d11_wrap_params {
 // This function may fail due to incompatible formats, incompatible flags or
 // other reasons, in which case it will return NULL.
 pl_tex pl_d3d11_wrap(pl_gpu gpu, const struct pl_d3d11_wrap_params *params);
+
+PL_API_END
 
 #endif // LIBPLACEBO_D3D11_H_
