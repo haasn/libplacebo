@@ -523,8 +523,6 @@ bool pl_tex_poll(pl_gpu gpu, pl_tex tex, uint64_t t)
     return impl->tex_poll ? impl->tex_poll(gpu, tex, t) : false;
 }
 
-static bool warned_rounding = false;
-
 pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
 {
     struct pl_buf_params params_rounded;
@@ -551,6 +549,7 @@ pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
                                         gpu->limits.align_host_ptr);
 
             if (ptr_base != (uintptr_t) shmem->handle.ptr || ptr_size > shmem->size) {
+                static bool warned_rounding = false;
                 if (!warned_rounding) {
                     warned_rounding = true;
                     PL_WARN(gpu, "Imported host pointer is not page-aligned. "
