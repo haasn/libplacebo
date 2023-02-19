@@ -408,9 +408,9 @@ static void update_colorspace_hint(struct plplay *p, const struct pl_frame_mix *
     if (!frame)
         return;
 
-    struct pl_swapchain_colors hint = {0};
+    struct pl_color_space hint = {0};
     if (p->colorspace_hint)
-        pl_swapchain_colors_from_avframe(&hint, frame->user_data);
+        pl_color_space_from_avframe(&hint, frame->user_data);
     if (p->reset_colorspace)
         p->target_color = hint;
     if (p->reset_levels) {
