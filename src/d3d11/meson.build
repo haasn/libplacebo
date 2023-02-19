@@ -19,7 +19,7 @@ endforeach
 
 components.set('d3d11', d3d11.allowed())
 if d3d11.allowed()
-  add_project_arguments(['-DCOBJMACROS', '-DINITGUID'], language: 'c')
+  add_project_arguments(['-DCOBJMACROS'], language: 'c')
   build_deps += declare_dependency(dependencies: d3d11_deps)
   tests += 'd3d11.c'
   sources += [

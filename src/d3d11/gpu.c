@@ -15,6 +15,7 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <initguid.h>
 #include <windows.h>
 #include <versionhelpers.h>
 
