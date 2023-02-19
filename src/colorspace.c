@@ -430,10 +430,16 @@ void pl_color_space_infer(struct pl_color_space *space)
     if (!space->nominal_max) {
         // Use the per-scene measured values if known, fall back to the
         // mastering display metadata otherwise
-        const float scene_max = PL_MAX3(space->hdr.scene_max[0],
-                                        space->hdr.scene_max[1],
-                                        space->hdr.scene_max[2]);
-        space->nominal_max = PL_DEF(scene_max, space->hdr.max_luma);
+        if (space->hdr.scene_max[0] || space->hdr.scene_max[1] || space->hdr.scene_max[2]) {
+            struct pl_matrix3x3 rgb2xyz;
+            rgb2xyz = pl_get_rgb2xyz_matrix(pl_raw_primaries_get(space->primaries));
+            const float scene_max = rgb2xyz.m[1][0] * space->hdr.scene_max[0] +
+                                    rgb2xyz.m[1][1] * space->hdr.scene_max[1] +
+                                    rgb2xyz.m[1][2] * space->hdr.scene_max[2];
+            space->nominal_max = scene_max;
+        } else {
+            space->nominal_max = space->hdr.max_luma;
+        }
     }
 
     // PQ is always scaled down to absolute black, regardless of what the
