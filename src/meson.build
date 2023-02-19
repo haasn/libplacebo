@@ -50,6 +50,7 @@ headers = [
   'tone_mapping.h',
   'utils/dav1d.h',
   'utils/dav1d_internal.h',
+  'utils/dolbyvision.h',
   'utils/frame_queue.h',
   'utils/libav.h',
   'utils/libav_internal.h',
@@ -88,6 +89,7 @@ sources = [
   'shaders/sampling.c',
   'swapchain.c',
   'tone_mapping.c',
+  'utils/dolbyvision.c',
   'utils/frame_queue.c',
   'utils/upload.c',
 ]
