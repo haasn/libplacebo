@@ -273,9 +273,7 @@ struct pl_color_map_params {
     // to improve the appearance of very bright, monochromatic highlights.
     float tone_mapping_crosstalk;
 
-    // Tone mapping LUT size. Defaults to 256. Note that when combining
-    // this with peak detection, the resulting LUT is actually squared, so
-    // avoid setting it too high.
+    // Tone mapping LUT size. Defaults to 1024.
     int lut_size;
 
     // --- Debugging options
@@ -303,7 +301,7 @@ struct pl_color_map_params {
     .tone_mapping_function  = &pl_tone_map_auto,                \
     .tone_mapping_mode      = PL_TONE_MAP_AUTO,                 \
     .tone_mapping_crosstalk = 0.04,                             \
-    .lut_size               = 256,
+    .lut_size               = 1024,
 
 #define pl_color_map_params(...) (&(struct pl_color_map_params) { PL_COLOR_MAP_DEFAULTS __VA_ARGS__ })
 extern const struct pl_color_map_params pl_color_map_default_params;

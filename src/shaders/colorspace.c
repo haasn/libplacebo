@@ -1207,45 +1207,6 @@ void pl_reset_detected_peak(pl_shader_obj state)
 
 const struct pl_color_map_params pl_color_map_default_params = { PL_COLOR_MAP_DEFAULTS };
 
-// Get the LUT range for the dynamic tone mapping LUT
-static void dynamic_lut_range(float *idx_min, float *idx_max,
-                              const struct pl_tone_map_params *params)
-{
-    float max_peak = params->input_max;
-    float min_peak = pl_hdr_rescale(params->output_scaling,
-                                    params->input_scaling,
-                                    params->output_max);
-
-    // Add some headroom to avoid no-op tone mapping. (This is because
-    // many curves are not good approximations of a no-op tone mapping
-    // function even when tone mapping to very similar values)
-    *idx_min = PL_MIX(min_peak, max_peak, 0.05f);
-    *idx_max = max_peak;
-}
-
-static void fill_lut(void *data, const struct sh_lut_params *params)
-{
-    struct pl_tone_map_params *lut_params = params->priv;
-    assert(lut_params->lut_size == params->width);
-    float *lut = data;
-
-    if (params->height) {
-        // Dynamic tone-mapping, generate a LUT curve for each possible peak
-        float idx_min, idx_max;
-        dynamic_lut_range(&idx_min, &idx_max, lut_params);
-        for (int i = 0; i < params->height; i++) {
-            float x = (float) i / (params->height - 1);
-            lut_params->input_max = PL_MIX(idx_min, idx_max, x);
-            pl_tone_map_generate(lut, lut_params);
-            lut += params->width;
-        }
-        lut_params->input_max = idx_max; // sanity
-    } else {
-        // Static tone-mapping, generate only a single curve
-        pl_tone_map_generate(lut, lut_params);
-    }
-}
-
 static inline void visualize_tone_map(pl_shader sh, ident_t fun,
                                       float xmin, float xmax,
                                       float ymin, float ymax,
@@ -1318,6 +1279,13 @@ static inline void visualize_tone_map(pl_shader sh, ident_t fun,
          fun,
          PL_COLOR_SDR_WHITE / 10000.0,
          PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
+}
+
+static void fill_lut(void *data, const struct sh_lut_params *params)
+{
+    const struct pl_tone_map_params *lut_params = params->priv;
+    assert(lut_params->lut_size == params->width);
+    pl_tone_map_generate(data, lut_params);
 }
 
 static void tone_map(pl_shader sh,
@@ -1393,7 +1361,6 @@ static void tone_map(pl_shader sh,
     bool can_fixed = !params->force_tone_mapping_lut;
     bool is_noop = can_fixed && (!fun || fun == &pl_tone_map_clip);
     bool pure_bpc = can_fixed && src_max == dst_max;
-    bool dynamic_peak = false;
 
     if (state && !(is_noop || pure_bpc)) {
         obj = SH_OBJ(sh, state, PL_SHADER_OBJ_TONE_MAP, struct sh_tone_map_obj,
@@ -1401,16 +1368,12 @@ static void tone_map(pl_shader sh,
         if (!obj)
             return;
 
-        // Only use dynamic peak detection for range reductions
-        dynamic_peak = obj->peak_buf && src_max > dst_max;
-
         lut = sh_lut(sh, sh_lut_params(
             .object     = &obj->lut,
             .var_type   = PL_VAR_FLOAT,
             .lut_type   = SH_LUT_AUTO,
             .method     = SH_LUT_LINEAR,
             .width      = lut_params.lut_size,
-            .height     = dynamic_peak ? lut_params.lut_size : 0,
             .comps      = 1,
             .update     = !pl_tone_map_params_equal(&lut_params, &obj->params),
             .dynamic    = src->hdr.scene_avg > 0, // these change frequently
@@ -1465,33 +1428,6 @@ static void tone_map(pl_shader sh,
              10000.0 / PL_COLOR_SDR_WHITE);
 
         GLSL("#define tone_map(x) (%s(x)) \n", bpc);
-
-    } else if (lut && dynamic_peak) {
-
-        // Dynamic 2D LUT
-        obj->desc.desc.access = PL_DESC_ACCESS_READONLY;
-        obj->desc.memory = 0;
-        sh_desc(sh, obj->desc);
-
-        float idx_min, idx_max;
-        dynamic_lut_range(&idx_min, &idx_max, &lut_params);
-
-        GLSL("const float idx_min = %s;                                     \n"
-             "const float idx_max = %s;                                     \n"
-             "float input_max = idx_max;                                    \n"
-             "if (average.y != 0.0) {                                       \n"
-             "    float sig_peak = average.y;                               \n"
-             "    input_max = clamp(sqrt(sig_peak), idx_min, idx_max);      \n"
-             "}                                                             \n",
-             SH_FLOAT_DYN(idx_min), SH_FLOAT_DYN(idx_max));
-
-        // Sample the 2D LUT from a position determined by the detected max
-        GLSL("const float input_min = %s;                                   \n"
-             "float scale = 1.0 / (input_max - input_min);                  \n"
-             "float curve = (input_max - idx_min) / (idx_max - idx_min);    \n"
-             "float base = -input_min * scale;                              \n"
-             "#define tone_map(x) (%s(vec2(scale * sqrt(x) + base, curve))) \n",
-             SH_FLOAT_DYN(lut_params.input_min), lut);
 
     } else if (lut) {
 
@@ -1789,6 +1725,23 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
         if (prelinearized)
             pl_shader_delinearize(sh, &dst);
         return;
+    }
+
+    if (tone_map_state) {
+        float peak, avg;
+        if (pl_get_detected_peak(*tone_map_state, &peak, &avg) && avg > 0) {
+            peak = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, peak);
+            avg = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, avg);
+
+            // Add some headroom to avoid no-op tone mapping. (This is because
+            // many curves are not good approximations of a no-op tone mapping
+            // function even when tone mapping to very similar values)
+            if (dst.hdr.max_luma < src.hdr.max_luma)
+                peak = PL_MAX(peak, dst.hdr.max_luma + 1.0f);
+            for (int i = 0; i < 3; i++)
+                src.hdr.scene_max[i] = peak;
+            src.hdr.scene_avg = avg;
+        }
     }
 
     sh_describe(sh, "colorspace conversion");
