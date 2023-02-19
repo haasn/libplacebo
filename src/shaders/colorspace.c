@@ -1249,7 +1249,7 @@ static void fill_lut(void *data, const struct sh_lut_params *params)
 static inline void visualize_tone_map(pl_shader sh, ident_t fun,
                                       float xmin, float xmax,
                                       float ymin, float ymax,
-                                      bool dynamic_peak)
+                                      float scene_avg)
 {
     ident_t pos = sh_attr_vec2(sh, "screenpos", &(struct pl_rect2df) {
         .x0 = 0.0f, .x1 = 1.0f,
@@ -1260,26 +1260,10 @@ static inline void visualize_tone_map(pl_shader sh, ident_t fun,
          "{                                         \n"
          "float xmin = %s;                          \n"
          "float xmax = %s;                          \n"
+         "float xavg = %s;                          \n"
          "float ymin = %s;                          \n"
-         "float ymax = %s;                          \n",
-         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmin)),
-         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmax)),
-         SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymin)),
-         SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymax)));
-
-    if (dynamic_peak) {
-        GLSL("vec2 avg = average.xy;                        \n"
-             "avg *= vec2(%f);                              \n"
-             "avg = pow(max(avg, 0.0), vec2(%f));           \n"
-             "avg = (vec2(%f) + vec2(%f) * avg)             \n"
-             "             / (vec2(1.0) + vec2(%f) * avg);  \n"
-             "avg = pow(avg, vec2(%f));                     \n"
-             "xmax = avg.y;                                 \n",
-             PL_COLOR_SDR_WHITE / 10000.0,
-             PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
-    }
-
-    GLSL("vec2 pos = %s;                            \n"
+         "float ymax = %s;                          \n"
+         "vec2 pos = %s;                            \n"
          "vec3 viz = color.rgb;                     \n"
          // PQ EOTF
          "float vv = pos.x;                         \n"
@@ -1317,22 +1301,23 @@ static inline void visualize_tone_map(pl_shader sh, ident_t fun,
          "    if (pos.y > xmax) {                   \n" // inverse tone-mapping region
          "        vec3 hi = vec3(0.2, 0.5, 0.8);    \n"
          "        viz = mix(viz, hi, 0.5);          \n"
-         "    }                                     \n",
+         "    }                                     \n"
+         "    if (xavg > 0.0 && abs(pos.x - xavg) < 1e-3)\n" // source avg brightness
+         "        viz = vec3(0.5);                  \n"
+         "}                                         \n"
+         "color.rgb = mix(color.rgb, viz, 0.5);     \n"
+         "}                                         \n",
+         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmin)),
+         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmax)),
+         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, scene_avg)),
+         SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymin)),
+         SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymax)),
          pos,
          PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
          10000.0 / PL_COLOR_SDR_WHITE,
          fun,
          PL_COLOR_SDR_WHITE / 10000.0,
          PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
-
-    if (dynamic_peak) {
-        GLSL("    if (abs(pos.x - avg.x) < 1e-3)    \n" // source avg brightness
-             "        viz = vec3(0.5);              \n");
-    }
-
-    GLSL("}                                         \n"
-         "color.rgb = mix(color.rgb, viz, 0.5);     \n"
-         "}                                         \n");
 }
 
 static void tone_map(pl_shader sh,
@@ -1670,7 +1655,7 @@ static void tone_map(pl_shader sh,
 
     if (params->visualize_lut) {
         visualize_tone_map(sh, "tone_map", src_min, src_max, dst_min, dst_max,
-                           dynamic_peak);
+                           src->hdr.scene_avg);
     }
 
     GLSL("#undef tone_map \n");
