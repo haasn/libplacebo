@@ -177,6 +177,7 @@ lib = library('placebo', sources,
   soversion: apiver,
   include_directories: inc,
   link_args: link_args,
+  gnu_symbol_visibility: 'hidden',
 )
 
 libplacebo = declare_dependency(

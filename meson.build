@@ -296,7 +296,7 @@ cxx = meson.get_compiler('cpp')
 
 c_opts = [
   '-D_ISOC99_SOURCE', '-D_ISOC11_SOURCE', '-D_GNU_SOURCE', '-D_XOPEN_SOURCE=700',
-  '-U__STRICT_ANSI__', '-fvisibility=hidden', '-Wmissing-prototypes',
+  '-U__STRICT_ANSI__', '-Wmissing-prototypes',
 
   # Warnings to ignore
   '-Wno-sign-compare', '-Wno-unused-parameter',
@@ -304,10 +304,6 @@ c_opts = [
 
   # Warnings to treat as errors
   '-Werror=implicit-function-declaration',
-]
-
-cpp_opts = [
-  '-fvisibility=hidden',
 ]
 
 if cc.has_argument('-Wincompatible-pointer-types')
@@ -331,7 +327,6 @@ if host_machine.system() == 'windows'
 endif
 
 add_project_arguments(build_opts + c_opts, language: 'c')
-add_project_arguments(build_opts + cpp_opts, language: 'cpp')
 add_project_link_arguments(link_args, language: 'c')
 
 
