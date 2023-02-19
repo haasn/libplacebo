@@ -18,6 +18,7 @@
 #pragma once
 
 #include <windows.h>
+#include <process.h>
 #include <stdint.h>
 #include <errno.h>
 
@@ -115,5 +116,26 @@ static inline int pl_static_mutex_lock(pl_static_mutex *mutex)
 static inline int pl_static_mutex_unlock(pl_static_mutex *mutex)
 {
     ReleaseSRWLockExclusive(mutex);
+    return 0;
+}
+
+typedef HANDLE pl_thread;
+#define PL_THREAD_VOID unsigned __stdcall
+#define PL_THREAD_RETURN() return 0
+
+static inline int pl_thread_create(pl_thread *thread,
+                                   PL_THREAD_VOID (*fun)(void *),
+                                   void *restrict arg)
+{
+    *thread = (HANDLE) _beginthreadex(NULL, 0, fun, arg, 0, NULL);
+    return *thread ? 0 : -1;
+}
+
+static inline int pl_thread_join(pl_thread thread)
+{
+    DWORD ret = WaitForSingleObject(thread, INFINITE);
+    if (ret != WAIT_OBJECT_0)
+        return ret == WAIT_ABANDONED ? EINVAL : EDEADLK;
+    CloseHandle(thread);
     return 0;
 }
