@@ -404,6 +404,10 @@ void pl_color_space_merge(struct pl_color_space *orig,
         orig->primaries = new->primaries;
     if (!orig->transfer)
         orig->transfer = new->transfer;
+    if (!orig->nominal_min)
+        orig->nominal_min = new->nominal_min;
+    if (!orig->nominal_max)
+        orig->nominal_max = new->nominal_max;
     pl_hdr_metadata_merge(&orig->hdr, &new->hdr);
 }
 
