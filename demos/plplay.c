@@ -83,6 +83,7 @@ struct plplay {
     bool target_override;
     bool levels_override;
     bool ignore_dovi;
+    bool colorspace_hint;
 
     // custom shaders
     const struct pl_hook **shader_hooks;
@@ -405,8 +406,9 @@ static void update_colorspace_hint(struct plplay *p, const struct pl_frame_mix *
     if (!frame)
         return;
 
-    struct pl_swapchain_colors hint;
-    pl_swapchain_colors_from_avframe(&hint, frame->user_data);
+    struct pl_swapchain_colors hint = {0};
+    if (p->colorspace_hint)
+        pl_swapchain_colors_from_avframe(&hint, frame->user_data);
     pl_swapchain_colorspace_hint(p->win->swapchain, &hint);
 }
 
@@ -639,12 +641,15 @@ int main(int argc, char **argv)
         .title = "plplay",
         .width = par->width,
         .height = par->height,
-        .colors = {
+    };
+
+    if (p->colorspace_hint) {
+        params.colors = (struct pl_swapchain_colors) {
             .primaries = pl_primaries_from_av(par->color_primaries),
             .transfer = pl_transfer_from_av(par->color_trc),
             // HDR metadata will come from AVFrame side data
-        },
-    };
+        };
+    }
 
     if (desc->flags & AV_PIX_FMT_FLAG_ALPHA) {
         params.alpha = true;
@@ -1316,6 +1321,12 @@ static void update_settings(struct plplay *p)
             nk_property_int(nk, "", 0, &bits, 16, 1, 0);
             trepr->bits.color_depth = bits;
             trepr->bits.sample_depth = bits;
+
+            nk_layout_row_dynamic(nk, 24, 1);
+            p->reset_colorspace = nk_checkbox_label(nk,
+                                                    "Inform the swapchain about "
+                                                    "the input color space",
+                                                    &p->colorspace_hint);
 
             nk_layout_row_dynamic(nk, 50, 1);
             if (ui_widget_hover(nk, "Drop ICC profile here...") && dropped_file) {
