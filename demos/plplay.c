@@ -84,6 +84,8 @@ struct plplay {
     bool levels_override;
     bool ignore_dovi;
     bool colorspace_hint;
+    bool reset_colorspace;
+    bool reset_levels;
 
     // custom shaders
     const struct pl_hook **shader_hooks;
@@ -409,6 +411,17 @@ static void update_colorspace_hint(struct plplay *p, const struct pl_frame_mix *
     struct pl_swapchain_colors hint = {0};
     if (p->colorspace_hint)
         pl_swapchain_colors_from_avframe(&hint, frame->user_data);
+    if (p->reset_colorspace)
+        p->target_color = hint;
+    if (p->reset_levels) {
+        p->target_color.hdr = hint.hdr;
+        p->target_color.nominal_max = hint.nominal_max;
+        p->target_color.nominal_min = hint.nominal_min;
+    }
+    if (p->levels_override) {
+        hint.nominal_max = p->target_color.nominal_max;
+        hint.nominal_min = p->target_color.nominal_min;
+    }
     pl_swapchain_colorspace_hint(p->win->swapchain, &hint);
 }
 
@@ -1248,28 +1261,27 @@ static void update_settings(struct plplay *p)
 
             nk_layout_row_dynamic(nk, 24, 2);
             nk_checkbox_label(nk, "Override HDR levels", &p->levels_override);
-            bool reset_levels = nk_button_label(nk, "Reset levels");
+            p->reset_levels = nk_button_label(nk, "Reset levels");
+
+            // Ensure these values are always legal by going through
+            // `pl_color_space_infer`, without clobbering the rest
+            nk_layout_row_dynamic(nk, 24, 2);
+            struct pl_color_space fix = *tcol;
+            pl_color_space_infer(&fix);
+            fix.nominal_min *= 1000; // better value range
+            nk_property_float(nk, "White point (cd/m²)",
+                                1e-2, &fix.nominal_max, 10000.0,
+                                fix.nominal_max / 100, fix.nominal_max / 1000);
+            nk_property_float(nk, "Black point (mcd/m²)",
+                                1e-3, &fix.nominal_min, 10000.0,
+                                fix.nominal_min / 100, fix.nominal_min / 1000);
+            fix.nominal_min /= 1000;
+            pl_color_space_infer(&fix);
 
             if (p->levels_override) {
-                // Ensure these values are always legal by going through
-                // `pl_color_space_infer`, without clobbering the rest
-                nk_layout_row_dynamic(nk, 24, 2);
-                struct pl_color_space fix = *tcol;
-                pl_color_space_infer(&fix);
-                fix.nominal_min *= 1000; // better value range
-                nk_property_float(nk, "White point (cd/m²)",
-                                  1e-2, &fix.nominal_max, 10000.0,
-                                  fix.nominal_max / 100, fix.nominal_max / 1000);
-                nk_property_float(nk, "Black point (mcd/m²)",
-                                  1e-3, &fix.nominal_min, 10000.0,
-                                  fix.nominal_min / 100, fix.nominal_min / 1000);
-                fix.nominal_min /= 1000;
-                pl_color_space_infer(&fix);
                 tcol->nominal_min = fix.nominal_min;
                 tcol->nominal_max = fix.nominal_max;
                 iccpar->max_luma = fix.nominal_max;
-            } else {
-                reset_levels = true;
             }
 
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
@@ -1357,7 +1369,7 @@ static void update_settings(struct plplay *p)
 
             // Apply the reset last to prevent the UI from flashing for a frame
             if (reset) {
-                *tcol = (struct pl_color_space) {0};
+                p->reset_colorspace = true;
                 *trepr = (struct pl_color_repr) {0};
             }
 
@@ -1370,14 +1382,16 @@ static void update_settings(struct plplay *p)
                 };
             }
 
-            if (reset_levels) {
-                tcol->nominal_min = 0;
-                tcol->nominal_max = 0;
-                iccpar->max_luma = 0;
-            }
-
             nk_tree_pop(nk);
         }
+
+        if (!p->levels_override) {
+            // Reset levels also if override is disabled and section minimized
+            p->reset_levels = true;
+        }
+
+        if (p->reset_levels)
+            p->icc_params.max_luma = 0;
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Custom shaders", NK_MINIMIZED)) {
 
