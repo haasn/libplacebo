@@ -21,6 +21,8 @@
 
 #include <assert.h>
 
+#include <libplacebo/utils/dolbyvision.h>
+
 #include <libavutil/hwcontext.h>
 #include <libavutil/hwcontext_drm.h>
 #include <libavutil/imgutils.h>
@@ -1107,8 +1109,15 @@ static inline bool pl_map_avframe_internal(pl_gpu gpu, struct pl_frame *out,
                 pl_frame_map_avdovi_metadata(out, dovi, metadata);
             }
         }
+
+#ifdef PL_HAVE_LIBDOVI
+        sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DOVI_RPU_BUFFER);
+        if (sd)
+            pl_hdr_metadata_from_dovi_rpu(&out->color.hdr, sd->buf->data, sd->buf->size);
+#endif // PL_HAVE_LIBDOVI
     }
-#endif
+
+#endif // PL_HAVE_LAV_DOLBY_VISION
 
     switch (frame->format) {
     case AV_PIX_FMT_DRM_PRIME:
