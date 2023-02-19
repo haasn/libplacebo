@@ -297,6 +297,7 @@ A full list of optional dependencies each feature requires:
 
 - **glslang**: `glslang` + its related libraries (e.g. `libSPIRV.so`)
 - **lcms**: `liblcms2`
+- **libdovi**: `libdovi`
 - **opengl**: `glad2` (*)
 - **shaderc**: `libshaderc`
 - **vulkan**: `libvulkan`, `python3-jinja2` (*)
