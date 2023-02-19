@@ -129,56 +129,80 @@ class Obj(object):
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
 
-def findall_enum(registry, name):
-    for e in registry.iterfind('enums[@name="{0}"]/enum'.format(name)):
-        if not 'alias' in e.attrib:
-            yield e
-    for e in registry.iterfind('.//enum[@extends="{0}"]'.format(name)):
-        # ext 289 is a non-existing extension that defines some names for
-        # proprietary downstream consumers, causes problems unless excluded
-        if e.attrib.get('extnumber', '0') == '289':
-            continue
-        # some other extensions contain reserved identifiers that generally
-        # translate to compile failures
-        if 'RESERVED' in e.attrib['name']:
-            continue
-        if not 'alias' in e.attrib:
-            yield e
+class VkXML(ET.ElementTree):
+    def blacklist_block(self, req):
+        for t in req.iterfind('type'):
+            self.blacklist_types.add(t.attrib['name'])
+        for e in req.iterfind('enum'):
+            self.blacklist_enums.add(e.attrib['name'])
+
+    def __init__(self, *args, **kwargs):
+
+        super().__init__(*args, **kwargs)
+        self.blacklist_types = set()
+        self.blacklist_enums = set()
+
+        for f in self.iterfind('feature'):
+            # Feature block for non-Vulkan API
+            if not 'vulkan' in f.attrib['api'].split(','):
+                for r in f.iterfind('require'):
+                    self.blacklist_block(r)
+
+        for e in self.iterfind('extensions/extension'):
+            # Entire extension is unsupported on vulkan or platform-specifid
+            if not 'vulkan' in e.attrib['supported'].split(',') or 'platform' in e.attrib:
+                for r in e.iterfind('require'):
+                    self.blacklist_block(r)
+                continue
+
+            # Only individual <require> blocks are API-specific
+            for r in e.iterfind('require[@api]'):
+                if not 'vulkan' in r.attrib['api'].split(','):
+                    self.blacklist_block(r)
+
+    def findall_enum(self, name):
+        for e in self.iterfind('enums[@name="{0}"]/enum'.format(name)):
+            if not 'alias' in e.attrib:
+                if not e.attrib['name'] in self.blacklist_enums:
+                    yield e
+        for e in self.iterfind('.//enum[@extends="{0}"]'.format(name)):
+            if not 'alias' in e.attrib:
+                if not e.attrib['name'] in self.blacklist_enums:
+                    yield e
+
+    def findall_type(self, category):
+        for t in self.iterfind('types/type[@category="{0}"]'.format(category)):
+            name = t.attrib.get('name') or t.find('name').text
+            if name in self.blacklist_types:
+                continue
+            yield t
+
 
 def get_vkenum(registry, enum):
-    for e in findall_enum(registry, enum):
+    for e in registry.findall_enum(enum):
         yield e.attrib['name']
 
 def get_vkobjects(registry):
-    for t in registry.iterfind('types/type[@category="handle"]'):
+    for t in registry.findall_type('handle'):
         if 'objtypeenum' in t.attrib:
             yield Obj(enum = t.attrib['objtypeenum'],
                       name = t.find('name').text)
 
 def get_vkstructs(registry):
-    for e in registry.iterfind('types/type[@category="struct"]'):
-        # Strings for platform-specific crap we want to blacklist as they will
-        # most likely cause build failures
-        blacklist_strs = [
-            'ANDROID', 'Surface', 'Win32', 'D3D12', 'GGP', 'FUCHSIA', 'Metal',
-        ]
-
-        if any([ str in e.attrib['name'] for str in blacklist_strs ]):
-            continue
-
+    for t in registry.findall_type('struct'):
         stype = None
-        for m in e.iterfind('member'):
+        for m in t.iterfind('member'):
             if m.find('name').text == 'sType':
                 stype = m
                 break
 
         if stype and 'values' in stype.attrib:
             yield Obj(stype = stype.attrib['values'],
-                      name = e.attrib['name'])
+                      name = t.attrib['name'])
 
 def get_vkaccess(registry):
     access = Obj(read = 0, write = 0)
-    for e in findall_enum(registry, 'VkAccessFlagBits'):
+    for e in registry.findall_enum('VkAccessFlagBits'):
         if '_READ_' in e.attrib['name']:
             access.read |= 1 << int(e.attrib['bitpos'])
         if '_WRITE_' in e.attrib['name']:
@@ -214,7 +238,7 @@ if __name__ == '__main__':
     if not xmlfile or xmlfile == '':
         xmlfile = find_registry_xml(datadir)
 
-    registry = ET.parse(xmlfile)
+    registry = VkXML(ET.parse(xmlfile))
     with open(outfile, 'w') as f:
         f.write(TEMPLATE.render(
             vkresults = get_vkenum(registry, 'VkResult'),
