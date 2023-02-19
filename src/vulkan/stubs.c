@@ -18,6 +18,8 @@
 #include "../common.h"
 #include "log.h"
 
+#include <libplacebo/vulkan.h>
+
 const struct pl_vk_inst_params pl_vk_inst_default_params = {0};
 const struct pl_vulkan_params pl_vulkan_default_params = { PL_VULKAN_DEFAULTS };
 

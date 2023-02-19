@@ -18,6 +18,8 @@
 #include "../common.h"
 #include "log.h"
 
+#include <libplacebo/d3d11.h>
+
 const struct pl_d3d11_params pl_d3d11_default_params = { PL_D3D11_DEFAULTS };
 
 pl_d3d11 pl_d3d11_create(pl_log log, const struct pl_d3d11_params *params)

@@ -18,6 +18,8 @@
 #include "../common.h"
 #include "log.h"
 
+#include <libplacebo/opengl.h>
+
 const struct pl_opengl_params pl_opengl_default_params = {0};
 
 pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
