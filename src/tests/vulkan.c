@@ -177,7 +177,7 @@ int main()
         return 1;
     EnumeratePhysicalDevices(inst->instance, &num, devices);
 
-    VkSurfaceKHR surf = NULL;
+    VkSurfaceKHR surf = VK_NULL_HANDLE;
 
 #ifdef VK_EXT_headless_surface
     PL_VK_LOAD_FUN(inst->instance, CreateHeadlessSurfaceEXT, inst->get_proc_addr);
