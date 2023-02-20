@@ -146,8 +146,7 @@ void *vk_struct_memdup(void *alloc, const void *pin)
 
     const VkBaseInStructure *in = pin;
     size_t size = vk_struct_size(in->sType);
-    if (!size)
-        return NULL;
+    pl_assert(size);
 
     VkBaseOutStructure *out = pl_memdup(alloc, in, size);
     out->pNext = NULL;
@@ -156,10 +155,12 @@ void *vk_struct_memdup(void *alloc, const void *pin)
 
 void *vk_chain_memdup(void *alloc, const void *pin)
 {
+    if (!pin)
+        return NULL;
+
     const VkBaseInStructure *in = pin;
     VkBaseOutStructure *out = vk_struct_memdup(alloc, in);
-    if (!out)
-        return NULL;
+    pl_assert(out);
 
     out->pNext = vk_chain_memdup(alloc, in->pNext);
     return out;
