@@ -246,10 +246,6 @@ void pl_d3d11_setup_formats(struct pl_gpu_t *gpu)
         if (!(fmt->caps & PL_FMT_CAP_STORABLE))
             fmt->caps &= ~PL_FMT_CAP_READWRITE;
 
-        // We can't sample from integer textures
-        if (fmt->type == PL_FMT_UINT || fmt->type == PL_FMT_SINT)
-            fmt->caps &= ~(PL_FMT_CAP_SAMPLEABLE | PL_FMT_CAP_LINEAR);
-
         // `fmt->gatherable` must have PL_FMT_CAP_SAMPLEABLE
         if ((fmt->caps & PL_FMT_CAP_SAMPLEABLE) &&
             (sup & D3D11_FORMAT_SUPPORT_SHADER_GATHER))
