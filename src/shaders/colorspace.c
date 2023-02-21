@@ -1264,8 +1264,8 @@ static inline void visualize_tone_map(pl_shader sh, ident_t fun,
          "float xmax = %s;                          \n"
          "float ymin = %s;                          \n"
          "float ymax = %s;                          \n",
-         SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmin)),
-         SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmax)),
+         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmin)),
+         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmax)),
          SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymin)),
          SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymax)));
 
@@ -1447,7 +1447,7 @@ static void tone_map(pl_shader sh,
     // per-channel to fix issues with excessively oversaturated highlights in
     // broken files that contain values outside their stated brightness range.
     GLSL("color.rgb = clamp(color.rgb, %s, %s); \n",
-         SH_FLOAT(src_min), SH_FLOAT(src_max));
+         SH_FLOAT_DYN(src_min), SH_FLOAT_DYN(src_max));
 
     if (is_noop) {
 
@@ -1481,8 +1481,8 @@ static void tone_map(pl_shader sh,
              bpc,
              PL_COLOR_SDR_WHITE / 10000.0,
              PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
-             SH_FLOAT(pq_src_min),
-             SH_FLOAT((pq_src_max - pq_dst_min) / (pq_src_max - pq_src_min)),
+             SH_FLOAT_DYN(pq_src_min),
+             SH_FLOAT_DYN((pq_src_max - pq_dst_min) / (pq_src_max - pq_src_min)),
              SH_FLOAT(pq_dst_min),
              PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
              10000.0 / PL_COLOR_SDR_WHITE);
@@ -1506,7 +1506,7 @@ static void tone_map(pl_shader sh,
              "    float sig_peak = average.y;                               \n"
              "    input_max = clamp(sqrt(sig_peak), idx_min, idx_max);      \n"
              "}                                                             \n",
-             SH_FLOAT(idx_min), SH_FLOAT(idx_max));
+             SH_FLOAT_DYN(idx_min), SH_FLOAT_DYN(idx_max));
 
         // Sample the 2D LUT from a position determined by the detected max
         GLSL("const float input_min = %s;                                   \n"
@@ -1514,15 +1514,15 @@ static void tone_map(pl_shader sh,
              "float curve = (input_max - idx_min) / (idx_max - idx_min);    \n"
              "float base = -input_min * scale;                              \n"
              "#define tone_map(x) (%s(vec2(scale * sqrt(x) + base, curve))) \n",
-             SH_FLOAT(lut_params.input_min), lut);
+             SH_FLOAT_DYN(lut_params.input_min), lut);
 
     } else if (lut) {
 
         // Regular 1D LUT
         const float lut_range = lut_params.input_max - lut_params.input_min;
         GLSL("#define tone_map(x) (%s(%s * sqrt(x) + %s))   \n",
-             lut, SH_FLOAT(1.0f / lut_range),
-             SH_FLOAT(-lut_params.input_min / lut_range));
+             lut, SH_FLOAT_DYN(1.0f / lut_range),
+             SH_FLOAT_DYN(-lut_params.input_min / lut_range));
 
     } else {
 
@@ -1541,9 +1541,9 @@ static void tone_map(pl_shader sh,
                                 (peak * (A*peak + B) + D*F)) - E/F;
 
         GLSL("#define tone_map(x) (%s * %s(%s * x + %s) + %s)    \n",
-             SH_FLOAT((dst_max - dst_min) / peak_out),
-             hable, SH_FLOAT(scale),
-             SH_FLOAT(-scale * src_min),
+             SH_FLOAT_DYN((dst_max - dst_min) / peak_out),
+             hable, SH_FLOAT_DYN(scale),
+             SH_FLOAT_DYN(-scale * src_min),
              SH_FLOAT(dst_min));
 
     }
@@ -1635,7 +1635,7 @@ static void tone_map(pl_shader sh,
         GLSL("float orig = max(xyz.y, %s);  \n"
              "xyz.y = tone_map(xyz.y);      \n"
              "xyz.xz *= %s * xyz.y / orig;  \n",
-             SH_FLOAT(dst_min), SH_FLOAT(desat));
+             SH_FLOAT(dst_min), SH_FLOAT_DYN(desat));
 
         // Extra luminance correction when reducing dynamic range
         if (src_max > dst_max)
