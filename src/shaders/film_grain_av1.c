@@ -742,6 +742,11 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
         .priv       = (void *) &params->data,
     ));
 
+    if (!offsets) {
+        SH_FAIL(sh, "Failed generating/uploading block offsets LUT!");
+        return false;
+    }
+
     // For the scaling LUTs, we assume they'll be relatively constant
     // throughout the video so doing some extra work to avoid reinitializing
     // them constantly is probably worth it. Probably.
