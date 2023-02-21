@@ -599,42 +599,49 @@ const struct pl_tone_map_function pl_tone_map_bt2446a = {
 
 static void spline(float *lut, const struct pl_tone_map_params *params)
 {
+    float src_pivot, dst_pivot;
+    st2094_pick_knee(&src_pivot, &dst_pivot, params);
+
+    // Tune the slope at the knee point slightly
+    const float slope = params->param * dst_pivot / src_pivot;
+
     // Normalize everything the pivot to make the math easier
-    const float pivot = params->param;
-    const float in_min = params->input_min - pivot;
-    const float in_max = params->input_max - pivot;
-    const float out_min = params->output_min - pivot;
-    const float out_max = params->output_max - pivot;
+    const float in_min = params->input_min - src_pivot;
+    const float in_max = params->input_max - src_pivot;
+    const float out_min = params->output_min - dst_pivot;
+    const float out_max = params->output_max - dst_pivot;
 
     // Solve P of order 2 for:
     //  P(in_min) = out_min
-    //  P'(0.0) = 1.0
+    //  P'(0.0) = slope
     //  P(0.0) = 0.0
-    const float Pa = (out_min - in_min) / (in_min * in_min);
+    const float Pa = (out_min - slope * in_min) / (in_min * in_min);
+    const float Pb = slope;
 
     // Solve Q of order 3 for:
     //  Q(in_max) = out_max
     //  Q''(in_max) = 0.0
     //  Q(0.0) = 0.0
-    //  Q'(0.0) = 1.0
+    //  Q'(0.0) = slope
     const float t = 2 * in_max * in_max;
-    const float Qa = (in_max - out_max) / (in_max * t);
-    const float Qb = -3 * (in_max - out_max) / t;
+    const float Qa = (slope * in_max - out_max) / (in_max * t);
+    const float Qb = -3 * (slope * in_max - out_max) / t;
+    const float Qc = slope;
 
     FOREACH_LUT(lut, x) {
-        x -= pivot;
-        x = x > 0 ? ((Qa * x + Qb) * x + 1) * x : (Pa * x + 1) * x;
-        x += pivot;
+        x -= src_pivot;
+        x = x > 0 ? ((Qa * x + Qb) * x + Qc) * x : (Pa * x + Pb) * x;
+        x += dst_pivot;
     }
 }
 
 const struct pl_tone_map_function pl_tone_map_spline = {
     .name = "spline",
     .description = "Single-pivot polynomial spline",
-    .param_desc = "Pivot point",
-    .param_min = 0.15, // ~1 nits
-    .param_def = 0.30, // ~10 nits
-    .param_max = 0.50, // ~100 nits
+    .param_desc = "Contrast",
+    .param_min = 0.50,
+    .param_def = 1.00,
+    .param_max = 1.50,
     .scaling = PL_HDR_PQ,
     .map = spline,
     .map_inverse = spline,

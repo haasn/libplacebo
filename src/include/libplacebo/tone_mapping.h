@@ -162,8 +162,9 @@ extern const struct pl_tone_map_function pl_tone_map_bt2390;
 extern const struct pl_tone_map_function pl_tone_map_bt2446a;
 
 // Simple spline consisting of two polynomials, joined by a single pivot point.
-// The parameter gives the pivot point (in PQ space), defaulting to 0.30.
-// Can be used for both forward and inverse tone mapping.
+// The parameter is a subjective contrast gain, which controls the slope at the
+// pivot point. Defaults to 1.00. Can be used for both forward and inverse tone
+// mapping, and takes HDR10+ scene average brightness metadata into account.
 extern const struct pl_tone_map_function pl_tone_map_spline;
 
 // Simple non-linear, global tone mapping algorithm. Named after Erik Reinhard.
