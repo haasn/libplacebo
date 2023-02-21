@@ -778,7 +778,6 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
                           struct pl_color_space color, struct pl_color_repr repr,
                           const struct pl_transform2x2 *output_shift)
 {
-    const struct pl_render_params *params = pass->params;
     pl_renderer rr = pass->rr;
     if (num <= 0 || (rr->errors & PL_RENDER_ERR_OVERLAY))
         return;
@@ -925,8 +924,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
 
         sh->res.output = PL_SHADER_SIG_COLOR;
         pl_shader_decode_color(sh, &ol.repr, NULL);
-        pl_shader_color_map(sh, params->color_map_params, ol.color, color,
-                            NULL, false);
+        pl_shader_color_map(sh, NULL, ol.color, color, NULL, false);
 
         bool premul = repr.alpha == PL_ALPHA_PREMULTIPLIED;
         pl_shader_encode_color(sh, &repr);
