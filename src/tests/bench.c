@@ -22,6 +22,7 @@ static pl_tex create_test_img(pl_gpu gpu)
 
     assert(cube_count * CUBE_SIZE * CUBE_SIZE == TEX_SIZE * TEX_SIZE);
     float *data = malloc(TEX_SIZE * TEX_SIZE * sizeof(float[4]));
+    REQUIRE(data);
     for (int n = 0; n < cube_count; n++) {
         int xbase = (n % cube_stride) * CUBE_SIZE;
         int ybase = (n / cube_stride) * CUBE_SIZE;
@@ -65,6 +66,8 @@ static void run_bench(pl_gpu gpu, pl_dispatch dp,
                       pl_tex fbo, pl_timer timer,
                       const struct bench *bench)
 {
+    REQUIRE(bench);
+    REQUIRE(bench->run_sh || bench->run_tex);
     if (bench->run_sh) {
         pl_shader sh = pl_dispatch_begin(dp);
         bench->run_sh(sh, state, src);
@@ -83,6 +86,7 @@ static void benchmark(pl_gpu gpu, const char *name,
                       const struct bench *bench)
 {
     pl_dispatch dp = pl_dispatch_create(gpu->log, gpu);
+    REQUIRE(dp);
     pl_shader_obj state = NULL;
     pl_tex src = create_test_img(gpu);
 
@@ -180,17 +184,17 @@ static void bench_deband_heavy(pl_shader sh, pl_shader_obj *state, pl_tex src)
 
 static void bench_bilinear(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_sample_bilinear(sh, pl_sample_src( .tex = src ));
+    REQUIRE(pl_shader_sample_bilinear(sh, pl_sample_src( .tex = src )));
 }
 
 static void bench_bicubic(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_sample_bicubic(sh, pl_sample_src( .tex = src ));
+    REQUIRE(pl_shader_sample_bicubic(sh, pl_sample_src( .tex = src )));
 }
 
 static void bench_dither_blue(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
     pl_shader_dither(sh, 8, state, pl_dither_params(
         .method = PL_DITHER_BLUE_NOISE,
     ));
@@ -198,7 +202,7 @@ static void bench_dither_blue(pl_shader sh, pl_shader_obj *state, pl_tex src)
 
 static void bench_dither_white(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
     pl_shader_dither(sh, 8, state, pl_dither_params(
         .method = PL_DITHER_WHITE_NOISE,
     ));
@@ -206,7 +210,7 @@ static void bench_dither_white(pl_shader sh, pl_shader_obj *state, pl_tex src)
 
 static void bench_dither_ordered_fix(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
     pl_shader_dither(sh, 8, state, pl_dither_params(
         .method = PL_DITHER_ORDERED_FIXED,
     ));
@@ -219,7 +223,7 @@ static void bench_polar(pl_shader sh, pl_shader_obj *state, pl_tex src)
         .lut = state,
     };
 
-    pl_shader_sample_polar(sh, pl_sample_src( .tex = src ), &params);
+    REQUIRE(pl_shader_sample_polar(sh, pl_sample_src( .tex = src ), &params));
 }
 
 static void bench_polar_nocompute(pl_shader sh, pl_shader_obj *state, pl_tex src)
@@ -230,14 +234,14 @@ static void bench_polar_nocompute(pl_shader sh, pl_shader_obj *state, pl_tex src
         .lut = state,
     };
 
-    pl_shader_sample_polar(sh, pl_sample_src( .tex = src ), &params);
+    REQUIRE(pl_shader_sample_polar(sh, pl_sample_src( .tex = src ), &params));
 }
 
 
 static void bench_hdr_peak(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
-    pl_shader_detect_peak(sh, pl_color_space_hdr10, state, NULL);
+    REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
+    REQUIRE(pl_shader_detect_peak(sh, pl_color_space_hdr10, state, NULL));
 }
 
 static void bench_hdr_lut(pl_shader sh, pl_shader_obj *state, pl_tex src)
@@ -248,7 +252,7 @@ static void bench_hdr_lut(pl_shader sh, pl_shader_obj *state, pl_tex src)
         .tone_mapping_mode      = PL_TONE_MAP_RGB,
     };
 
-    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
     pl_shader_color_map(sh, &params, pl_color_space_hdr10,
                         pl_color_space_monitor, state, false);
 }
@@ -261,7 +265,7 @@ static void bench_hdr_clip(pl_shader sh, pl_shader_obj *state, pl_tex src)
         .tone_mapping_mode      = PL_TONE_MAP_RGB,
     };
 
-    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
     pl_shader_color_map(sh, &params, pl_color_space_hdr10,
                         pl_color_space_monitor, state, false);
 }
@@ -318,7 +322,7 @@ static void bench_av1_grain(pl_shader sh, pl_shader_obj *state, pl_tex src)
         .repr = &(struct pl_color_repr) {0},
     };
 
-    pl_shader_film_grain(sh, state, &params);
+    REQUIRE(pl_shader_film_grain(sh, state, &params));
 }
 
 static void bench_av1_grain_lap(pl_shader sh, pl_shader_obj *state, pl_tex src)
@@ -336,7 +340,7 @@ static void bench_av1_grain_lap(pl_shader sh, pl_shader_obj *state, pl_tex src)
     };
 
     params.data.params.av1.overlap = true;
-    pl_shader_film_grain(sh, state, &params);
+    REQUIRE(pl_shader_film_grain(sh, state, &params));
 }
 
 static void bench_h274_grain(pl_shader sh, pl_shader_obj *state, pl_tex src)
@@ -353,12 +357,12 @@ static void bench_h274_grain(pl_shader sh, pl_shader_obj *state, pl_tex src)
         .repr = &(struct pl_color_repr) {0},
     };
 
-    pl_shader_film_grain(sh, state, &params);
+    REQUIRE(pl_shader_film_grain(sh, state, &params));
 }
 
 static void bench_reshape_poly(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
     pl_shader_dovi_reshape(sh, &(struct pl_dovi_metadata) { .comp = {
         {
             .num_pivots = 8,
@@ -390,7 +394,7 @@ static void bench_reshape_poly(pl_shader sh, pl_shader_obj *state, pl_tex src)
 
 static void bench_reshape_mmr(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
-    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
     pl_shader_dovi_reshape(sh, &dovi_meta); // this includes MMR
 }
 
@@ -398,38 +402,38 @@ static float data[TEX_SIZE * TEX_SIZE * 4 + 8192];
 
 static void bench_download(pl_gpu gpu, pl_tex tex)
 {
-    pl_tex_download(gpu, pl_tex_transfer_params(
+    REQUIRE(pl_tex_download(gpu, pl_tex_transfer_params(
         .tex = tex,
         .ptr = (uint8_t *) PL_ALIGN((uintptr_t) data, 4096),
-    ));
+    )));
 }
 
 static void bench_upload(pl_gpu gpu, pl_tex tex)
 {
-    pl_tex_upload(gpu, pl_tex_transfer_params(
+    REQUIRE(pl_tex_upload(gpu, pl_tex_transfer_params(
         .tex = tex,
         .ptr = (uint8_t *) PL_ALIGN((uintptr_t) data, 4096),
-    ));
+    )));
 }
 
 static void dummy_cb(void *arg) {}
 
 static void bench_download_async(pl_gpu gpu, pl_tex tex)
 {
-    pl_tex_download(gpu, pl_tex_transfer_params(
+    REQUIRE(pl_tex_download(gpu, pl_tex_transfer_params(
         .tex = tex,
         .ptr = (uint8_t *) PL_ALIGN((uintptr_t) data, 4096),
         .callback = dummy_cb,
-    ));
+    )));
 }
 
 static void bench_upload_async(pl_gpu gpu, pl_tex tex)
 {
-    pl_tex_upload(gpu, pl_tex_transfer_params(
+    REQUIRE(pl_tex_upload(gpu, pl_tex_transfer_params(
         .tex = tex,
         .ptr = (uint8_t *) PL_ALIGN((uintptr_t) data, 4096),
         .callback = dummy_cb,
-    ));
+    )));
 }
 
 int main()
