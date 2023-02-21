@@ -26,9 +26,11 @@
 #include <inttypes.h>
 
 #if defined(__MINGW32__) && !defined(__clang__)
-#define PL_PRINTF(fmt, va) __attribute__ ((format(gnu_printf, fmt, va)))
+#define PL_PRINTF(fmt, va) __attribute__ ((format(gnu_printf, fmt, va))) \
+                           __attribute__ ((nonnull))
 #elif defined(__GNUC__)
-#define PL_PRINTF(fmt, va) __attribute__ ((format(printf, fmt, va)))
+#define PL_PRINTF(fmt, va) __attribute__ ((format(printf, fmt, va))) \
+                           __attribute__ ((nonnull))
 #else
 #define PL_PRINTF(fmt, va)
 #endif
