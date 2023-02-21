@@ -209,6 +209,33 @@ ident_t sh_var(pl_shader sh, struct pl_shader_var sv)
     return (ident_t) sv.var.name;
 }
 
+ident_t sh_var_int(pl_shader sh, const char *name, int val, bool dynamic)
+{
+    return sh_var(sh, (struct pl_shader_var) {
+        .var     = pl_var_int(name),
+        .data    = &val,
+        .dynamic = dynamic,
+    });
+}
+
+ident_t sh_var_uint(pl_shader sh, const char *name, unsigned int val, bool dynamic)
+{
+    return sh_var(sh, (struct pl_shader_var) {
+        .var     = pl_var_uint(name),
+        .data    = &val,
+        .dynamic = dynamic,
+    });
+}
+
+ident_t sh_var_float(pl_shader sh, const char *name, float val, bool dynamic)
+{
+    return sh_var(sh, (struct pl_shader_var) {
+        .var     = pl_var_float(name),
+        .data    = &val,
+        .dynamic = dynamic,
+    });
+}
+
 static void merge_access(enum pl_desc_access *a, enum pl_desc_access b)
 {
     if (*a != b)
@@ -322,7 +349,6 @@ ident_t sh_const_float(pl_shader sh, const char *name, float val)
         .data = &val,
     });
 }
-
 
 ident_t sh_attr_vec2(pl_shader sh, const char *name,
                      const struct pl_rect2df *rc)

@@ -102,6 +102,14 @@ ident_t sh_fresh(pl_shader sh, const char *name);
 // Add a new shader var and return its identifier
 ident_t sh_var(pl_shader sh, struct pl_shader_var sv);
 
+// Helper functions for `sh_var`
+ident_t sh_var_int(pl_shader sh, const char *name, int val, bool dynamic);
+ident_t sh_var_uint(pl_shader sh, const char *name, unsigned int val, bool dynamic);
+ident_t sh_var_float(pl_shader sh, const char *name, float val, bool dynamic);
+#define SH_INT_DYN(val)   sh_var_int(sh, "const", val, true)
+#define SH_UINT_DYN(val)  sh_var_uint(sh, "const", val, true)
+#define SH_FLOAT_DYN(val) sh_var_float(sh, "const", val, true)
+
 // Add a new shader desc and return its identifier.
 ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd);
 
