@@ -1234,23 +1234,27 @@ static void pl_render_tests(pl_gpu gpu)
     }
 
 #ifdef PL_HAVE_LCMS
-    // Test ICC profiles
-    image.profile = TEST_PROFILE(sRGB_v2_nano_icc);
-    REQUIRE(pl_render_image(rr, &image, &target, &params));
-    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
-    image.profile = (struct pl_icc_profile) {0};
 
-    target.profile = TEST_PROFILE(sRGB_v2_nano_icc);
-    REQUIRE(pl_render_image(rr, &image, &target, &params));
-    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
-    target.profile = (struct pl_icc_profile) {0};
+    // It doesn't fit without use of 3D textures on GLES2
+    if (gpu->glsl.version > 100) {
+        // Test ICC profiles
+        image.profile = TEST_PROFILE(sRGB_v2_nano_icc);
+        REQUIRE(pl_render_image(rr, &image, &target, &params));
+        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
+        image.profile = (struct pl_icc_profile) {0};
 
-    image.profile = TEST_PROFILE(sRGB_v2_nano_icc);
-    target.profile = image.profile;
-    REQUIRE(pl_render_image(rr, &image, &target, &params));
-    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
-    image.profile = (struct pl_icc_profile) {0};
-    target.profile = (struct pl_icc_profile) {0};
+        target.profile = TEST_PROFILE(sRGB_v2_nano_icc);
+        REQUIRE(pl_render_image(rr, &image, &target, &params));
+        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
+        target.profile = (struct pl_icc_profile) {0};
+
+        image.profile = TEST_PROFILE(sRGB_v2_nano_icc);
+        target.profile = image.profile;
+        REQUIRE(pl_render_image(rr, &image, &target, &params));
+        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
+        image.profile = (struct pl_icc_profile) {0};
+        target.profile = (struct pl_icc_profile) {0};
+    }
 
 #endif
 
