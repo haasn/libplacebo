@@ -544,6 +544,11 @@ void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,
         .priv       = (void *) icc,
     ));
 
+    if (!lut) {
+        SH_FAIL(sh, "pl_icc_decode: failed generating LUT object");
+        return;
+    }
+
     // Y = scale * (aX + b)^y
     sh_describe(sh, "ICC 3DLUT");
     GLSL("// pl_icc_decode                      \n"
@@ -587,6 +592,11 @@ void pl_icc_encode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj)
         .fill       = fill_encode,
         .priv       = (void *) icc,
     ));
+
+    if (!lut) {
+        SH_FAIL(sh, "pl_icc_encode: failed generating LUT object");
+        return;
+    }
 
     // X = 1/a * (Y/scale)^(1/y) - b/a
     sh_describe(sh, "ICC 3DLUT");
