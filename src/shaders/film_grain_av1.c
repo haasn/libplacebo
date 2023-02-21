@@ -980,7 +980,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
                     },
                 });
 
-                int c_offset = data->uv_offset[c - 1] << (bits - 8);
+                int c_offset = (unsigned) data->uv_offset[c - 1] << (bits - 8);
                 ident_t offset = sh_var(sh, (struct pl_shader_var) {
                     .var = pl_var_float("offset"),
                     .data = &(float) { c_offset * scale.grain_scale },
