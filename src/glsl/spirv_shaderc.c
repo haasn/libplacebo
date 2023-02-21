@@ -67,6 +67,7 @@ static pl_str shaderc_compile(struct spirv_compiler *spirv, void *alloc,
                               const char *shader)
 {
     struct priv *p = PL_PRIV(spirv);
+    const size_t len = strlen(shader);
 
     shaderc_compile_options_t opts = shaderc_compile_options_initialize();
     if (!opts)
@@ -100,9 +101,12 @@ static pl_str shaderc_compile(struct spirv_compiler *spirv, void *alloc,
         [GLSL_SHADER_COMPUTE]  = shaderc_glsl_compute_shader,
     };
 
+    static const char * const file_name = "input";
+    static const char * const entry_point = "main";
+
     shaderc_compilation_result_t res;
-    res = shaderc_compile_into_spv(p->compiler, shader, strlen(shader),
-                                   kinds[stage], "input", "main", opts);
+    res = shaderc_compile_into_spv(p->compiler, shader, len, kinds[stage],
+                                   file_name, entry_point, opts);
 
     int errs = shaderc_result_get_num_errors(res),
         warn = shaderc_result_get_num_warnings(res);
@@ -137,6 +141,17 @@ static pl_str shaderc_compile(struct spirv_compiler *spirv, void *alloc,
         pl_assert(bytes);
         ret.len = shaderc_result_get_length(res);
         ret.buf = pl_memdup(alloc, bytes, ret.len);
+
+        if (pl_msg_test(spirv->log, PL_LOG_TRACE)) {
+            shaderc_compilation_result_t dis;
+            dis = shaderc_compile_into_spv_assembly(p->compiler, shader, len,
+                                                    kinds[stage], file_name,
+                                                    entry_point, opts);
+            PL_TRACE(spirv, "Generated SPIR-V:\n%.*s",
+                     (int) shaderc_result_get_length(dis),
+                     shaderc_result_get_bytes(dis));
+            shaderc_result_release(dis);
+        }
     }
 
     shaderc_result_release(res);
