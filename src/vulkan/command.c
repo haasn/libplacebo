@@ -22,7 +22,12 @@
 static VkResult vk_cmd_poll(struct vk_ctx *vk, struct vk_cmd *cmd,
                             uint64_t timeout)
 {
-    return vk->WaitForFences(vk->dev, 1, &cmd->fence, false, timeout);
+    return vk->WaitSemaphoresKHR(vk->dev, &(VkSemaphoreWaitInfo) {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+        .semaphoreCount = 1,
+        .pSemaphores = &cmd->sync.sem,
+        .pValues = &cmd->sync.value,
+    }, timeout);
 }
 
 static void flush_callbacks(struct vk_ctx *vk)
@@ -59,7 +64,7 @@ static void vk_cmd_destroy(struct vk_ctx *vk, struct vk_cmd *cmd)
 
     vk_cmd_poll(vk, cmd, UINT64_MAX);
     vk_cmd_reset(vk, cmd);
-    vk->DestroyFence(vk->dev, cmd->fence, PL_VK_ALLOC);
+    vk->DestroySemaphore(vk->dev, cmd->sync.sem, PL_VK_ALLOC);
     vk->FreeCommandBuffers(vk->dev, cmd->pool->pool, 1, &cmd->buf);
 
     pl_free(cmd);
@@ -79,13 +84,19 @@ static struct vk_cmd *vk_cmd_create(struct vk_ctx *vk, struct vk_cmdpool *pool)
 
     VK(vk->AllocateCommandBuffers(vk->dev, &ainfo, &cmd->buf));
 
-    VkFenceCreateInfo finfo = {
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+    static const VkSemaphoreTypeCreateInfo stinfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .semaphoreType  = VK_SEMAPHORE_TYPE_TIMELINE,
+        .initialValue   = 0,
     };
 
-    VK(vk->CreateFence(vk->dev, &finfo, PL_VK_ALLOC, &cmd->fence));
-    PL_VK_NAME(FENCE, cmd->fence, "cmd");
+    static const VkSemaphoreCreateInfo sinfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = &stinfo,
+    };
+
+    VK(vk->CreateSemaphore(vk->dev, &sinfo, PL_VK_ALLOC, &cmd->sync.sem));
+    PL_VK_NAME(SEMAPHORE, cmd->sync.sem, "cmd");
 
     return cmd;
 
@@ -326,7 +337,10 @@ struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool,
 
     debug_tag = PL_DEF(debug_tag, "vk_cmd");
     PL_VK_NAME_HANDLE(COMMAND_BUFFER, cmd->buf, debug_tag);
-    PL_VK_NAME(FENCE, cmd->fence, debug_tag);
+    PL_VK_NAME(SEMAPHORE, cmd->sync.sem, debug_tag);
+
+    cmd->sync.value++;
+    vk_cmd_sig(cmd, cmd->sync);
     return cmd;
 
 error:
@@ -346,7 +360,6 @@ bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
     struct vk_cmdpool *pool = cmd->pool;
 
     VK(vk->EndCommandBuffer(cmd->buf));
-    VK(vk->ResetFences(vk->dev, 1, &cmd->fence));
 
     VkTimelineSemaphoreSubmitInfo tinfo = {
         .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
@@ -379,13 +392,12 @@ bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
             PL_TRACE(vk, "    signals semaphore 0x%"PRIx64" = %"PRIu64,
                     (uint64_t) cmd->sigs.elem[n], cmd->sigvalues.elem[n]);
         }
-        PL_TRACE(vk, "    signals fence 0x%"PRIx64, (uint64_t) cmd->fence);
         if (cmd->callbacks.num)
             PL_TRACE(vk, "    signals %d callbacks", cmd->callbacks.num);
     }
 
     vk->lock_queue(vk->queue_ctx, pool->qf, cmd->qindex);
-    VkResult res = vk->QueueSubmit(cmd->queue, 1, &sinfo, cmd->fence);
+    VkResult res = vk->QueueSubmit(cmd->queue, 1, &sinfo, VK_NULL_HANDLE);
     vk->unlock_queue(vk->queue_ctx, pool->qf, cmd->qindex);
     PL_VK_ASSERT(res, "vkQueueSubmit");
 
@@ -418,7 +430,8 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
         if (!vk->cmds_pending.num || vk->cmds_pending.elem[0] != cmd)
             continue; // another thread modified this state while blocking
 
-        PL_TRACE(vk, "VkFence signalled: 0x%"PRIx64, (uint64_t) cmd->fence);
+        PL_TRACE(vk, "VkSemaphore signalled: 0x%"PRIx64" = %"PRIu64,
+                 (uint64_t) cmd->sync.sem, cmd->sync.value);
         PL_ARRAY_REMOVE_AT(vk->cmds_pending, 0); // remove before callbacks
         vk_cmd_reset(vk, cmd);
         PL_ARRAY_APPEND(pool, pool->cmds, cmd);

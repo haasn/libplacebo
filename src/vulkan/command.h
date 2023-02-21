@@ -41,10 +41,10 @@ void vk_dev_callback(struct vk_ctx *vk, vk_cb callback,
 // Thread-safety: Unsafe
 struct vk_cmd {
     struct vk_cmdpool *pool; // pool it was allocated from
+    pl_vulkan_sem sync;      // pending execution, tied to lifetime of device
     VkQueue queue;           // the submission queue (for recording/pending)
     int qindex;              // the index of `queue` in `pool`
     VkCommandBuffer buf;     // the command buffer itself
-    VkFence fence;           // the fence guards cmd buffer reuse
     // The semaphores represent dependencies that need to complete before
     // this command can be executed. These are *not* owned by the vk_cmd
     PL_ARRAY(VkSemaphore) deps;
