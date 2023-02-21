@@ -74,7 +74,7 @@ void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig);
 
 // Synchronization scope
 struct vk_sync_scope {
-    uint64_t value;             // last timeline semaphore value
+    pl_vulkan_sem sync;         // semaphore of last access
     VkQueue queue;              // source queue of last access
     VkPipelineStageFlags stage; // stage bitmask of last access
     VkAccessFlags access;       // access type bitmask
@@ -82,14 +82,16 @@ struct vk_sync_scope {
 
 // Synchronization primitive
 struct vk_sem {
-    // timeline semaphores, together with a pair of structs respectively
-    // describing the last read and write access, separately
-    VkSemaphore semaphore;
     struct vk_sync_scope read, write;
 };
 
-bool vk_sem_init(struct vk_ctx *vk, struct vk_sem *sem, pl_debug_tag debug_tag);
-void vk_sem_uninit(struct vk_ctx *vk, struct vk_sem *sem);
+static inline void vk_sem_init(struct vk_sem *sem)
+{
+    *sem = (struct vk_sem) {
+        .write.stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        .read.stage  = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+    };
+};
 
 // Updates the `vk_sem` state for a given access. If `is_trans` is set, this
 // access is treated as a write (since it alters the resource's state).

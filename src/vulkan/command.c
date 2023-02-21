@@ -154,40 +154,6 @@ void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig)
     PL_ARRAY_APPEND(cmd, cmd->sigvalues, sig.value);
 }
 
-void vk_sem_uninit(struct vk_ctx *vk, struct vk_sem *sem)
-{
-    vk->DestroySemaphore(vk->dev, sem->semaphore, PL_VK_ALLOC);
-    *sem = (struct vk_sem) {0};
-}
-
-bool vk_sem_init(struct vk_ctx *vk, struct vk_sem *sem, pl_debug_tag debug_tag)
-{
-    *sem = (struct vk_sem) {
-        .write.stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        .read.stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-    };
-
-    static const VkSemaphoreTypeCreateInfo stinfo = {
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
-        .semaphoreType  = VK_SEMAPHORE_TYPE_TIMELINE,
-        .initialValue   = 0,
-    };
-
-    static const VkSemaphoreCreateInfo sinfo = {
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        .pNext = &stinfo,
-    };
-
-    // We always create a semaphore, so we can perform host waits on it
-    VK(vk->CreateSemaphore(vk->dev, &sinfo, PL_VK_ALLOC, &sem->semaphore));
-    PL_VK_NAME(SEMAPHORE, sem->semaphore, PL_DEF(debug_tag, "vk_sem"));
-    return true;
-
-error:
-    vk->failed = true;
-    return false;
-}
-
 struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
                                     struct vk_sem *sem, VkPipelineStageFlags stage,
                                     VkAccessFlags access, bool is_trans)
@@ -206,11 +172,8 @@ struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
             // No semaphore needed in this case because the implicit submission
             // order execution dependencies already transitively imply a wait
             // for the previous write
-        } else if (last.queue) {
-            vk_cmd_dep(cmd, stage, (pl_vulkan_sem) {
-                .sem = sem->semaphore,
-                .value = last.value,
-            });
+        } else if (last.sync.sem) {
+            vk_cmd_dep(cmd, stage, last.sync);
         }
         last.stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         last.access = 0;
@@ -226,34 +189,27 @@ struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
         last.access = 0;
     }
 
-    pl_assert(sem->read.value >= sem->write.value);
-    uint64_t next_value = sem->read.value + 1;
-    vk_cmd_sig(cmd, (pl_vulkan_sem) {
-        .sem = sem->semaphore,
-        .value = next_value,
-    });
-
     if (is_write) {
         sem->write = (struct vk_sync_scope) {
-            .value = next_value,
+            .sync = cmd->sync,
             .queue = cmd->queue,
             .stage = stage,
             .access = access,
         };
 
         sem->read = (struct vk_sync_scope) {
-            .value = next_value,
+            .sync = cmd->sync,
             .queue = cmd->queue,
             // no stage or access scope, because no reads happened yet
         };
     } else if (sem->read.queue == cmd->queue) {
         // Coalesce multiple same-queue reads into a single access scope
-        sem->read.value = next_value;
+        sem->read.sync = cmd->sync;
         sem->read.stage |= stage;
         sem->read.access |= access;
     } else {
         sem->read = (struct vk_sync_scope) {
-            .value = next_value,
+            .sync = cmd->sync,
             .queue = cmd->queue,
             .stage = stage,
             .access = access,

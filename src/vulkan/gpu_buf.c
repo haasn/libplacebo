@@ -90,7 +90,6 @@ void vk_buf_deref(pl_gpu gpu, pl_buf buf)
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
     if (pl_rc_deref(&buf_vk->rc)) {
-        vk_sem_uninit(vk, &buf_vk->sem);
         vk->DestroyBufferView(vk->dev, buf_vk->view, PL_VK_ALLOC);
         vk_malloc_free(vk->ma, &buf_vk->mem);
         pl_free((void *) buf);
@@ -108,8 +107,7 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
 
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     pl_rc_init(&buf_vk->rc);
-    if (!vk_sem_init(vk, &buf_vk->sem, PL_DEF(params->debug_tag, "vk_buf")))
-        goto error;
+    vk_sem_init(&buf_vk->sem);
 
     struct vk_malloc_params mparams = {
         .reqs = {
@@ -401,13 +399,13 @@ bool vk_buf_read(pl_gpu gpu, pl_buf buf, size_t offset, void *dest, size_t size)
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     pl_assert(buf_vk->mem.data);
 
-    if (vk_buf_poll(gpu, buf, 0)) {
+    if (vk_buf_poll(gpu, buf, 0) && buf_vk->sem.write.sync.sem) {
         // ensure no more queued writes
         VK(vk->WaitSemaphoresKHR(vk->dev, &(VkSemaphoreWaitInfo) {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
             .semaphoreCount = 1,
-            .pSemaphores = &buf_vk->sem.semaphore,
-            .pValues = &buf_vk->sem.write.value,
+            .pSemaphores = &buf_vk->sem.write.sync.sem,
+            .pValues = &buf_vk->sem.write.sync.value,
         }, UINT64_MAX));
 
         // process callbacks

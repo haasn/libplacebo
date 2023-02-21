@@ -91,7 +91,6 @@ static void vk_tex_destroy(pl_gpu gpu, struct pl_tex_t *tex)
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
     vk_sync_deref(gpu, tex_vk->ext_sync);
-    vk_sem_uninit(vk, &tex_vk->sem);
     vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, PL_VK_ALLOC);
     vk->DestroyImageView(vk->dev, tex_vk->view, PL_VK_ALLOC);
     for (int i = 0; i < tex_vk->num_planes; i++)
@@ -128,8 +127,7 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, pl_debug_tag debug_tag)
     pl_rc_init(&tex_vk->rc);
     if (tex_vk->num_planes)
         return true;
-    if (!vk_sem_init(vk, &tex_vk->sem, debug_tag))
-        return false;
+    vk_sem_init(&tex_vk->sem);
     tex_vk->layout = VK_IMAGE_LAYOUT_UNDEFINED;
     tex_vk->transfer_queue = GRAPHICS;
     tex_vk->qf = VK_QUEUE_FAMILY_IGNORED; // will be set on first use, if needed
