@@ -852,11 +852,13 @@ static inline void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
                                                 struct pl_dovi_metadata *dovi,
                                                 const AVDOVIMetadata *metadata)
 {
+    const AVDOVIRpuDataHeader *header;
+    const AVDOVIColorMetadata *color;
     if (!dovi || !metadata)
         return;
 
-    const AVDOVIRpuDataHeader *header = av_dovi_get_header(metadata);
-    const AVDOVIColorMetadata *color = av_dovi_get_color(metadata);
+    header = av_dovi_get_header(metadata);
+    color = av_dovi_get_color(metadata);
     if (header->disable_residual_flag) {
         pl_map_dovi_metadata(dovi, metadata);
 
