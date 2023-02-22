@@ -37,7 +37,7 @@ struct vk_fun {
 struct vk_ext {
     const char *name;
     uint32_t core_ver;
-    struct vk_fun *funs;
+    const struct vk_fun *funs;
 };
 
 #define PL_VK_INST_FUN(N)                   \
@@ -93,7 +93,7 @@ static const struct vk_fun vk_inst_funs[] = {
 static const struct vk_ext vk_device_extensions[] = {
     {
         .name = VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(AcquireNextImageKHR),
             PL_VK_DEV_FUN(CreateSwapchainKHR),
             PL_VK_DEV_FUN(DestroySwapchainKHR),
@@ -103,46 +103,46 @@ static const struct vk_ext vk_device_extensions[] = {
         },
     }, {
         .name = VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(CmdPushDescriptorSetKHR),
             {0}
         },
     }, {
         .name = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(GetMemoryFdKHR),
             {0}
         },
     }, {
         .name = VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(GetMemoryFdPropertiesKHR),
             {0}
         },
 #ifdef PL_HAVE_WIN32
     }, {
         .name = VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(GetMemoryWin32HandleKHR),
             {0}
         },
 #endif
     }, {
         .name = VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(GetMemoryHostPointerPropertiesEXT),
             {0}
         },
     }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(GetSemaphoreFdKHR),
             {0}
         },
 #ifdef PL_HAVE_WIN32
     }, {
         .name = VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(GetSemaphoreWin32HandleKHR),
             {0}
         },
@@ -151,14 +151,14 @@ static const struct vk_ext vk_device_extensions[] = {
         .name = VK_EXT_PCI_BUS_INFO_EXTENSION_NAME,
     }, {
         .name = VK_EXT_HDR_METADATA_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(SetHdrMetadataEXT),
             {0}
         },
     }, {
         .name = VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
         .core_ver = VK_API_VERSION_1_2,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(ResetQueryPoolEXT),
             {0}
         },
@@ -167,14 +167,14 @@ static const struct vk_ext vk_device_extensions[] = {
         .core_ver = VK_API_VERSION_1_2,
     }, {
         .name = VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(GetImageDrmFormatModifierPropertiesEXT),
             {0}
         },
     }, {
         .name = VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
         .core_ver = VK_API_VERSION_1_2,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(WaitSemaphoresKHR),
             {0}
         },
@@ -185,7 +185,7 @@ static const struct vk_ext vk_device_extensions[] = {
 #ifdef VK_EXT_metal_objects
     }, {
         .name = VK_EXT_METAL_OBJECTS_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(ExportMetalObjectsEXT),
             {0}
         },
@@ -193,7 +193,7 @@ static const struct vk_ext vk_device_extensions[] = {
 #ifdef VK_EXT_full_screen_exclusive
     }, {
         .name = VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME,
-        .funs = (struct vk_fun[]) {
+        .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(AcquireFullScreenExclusiveModeEXT),
             {0}
         },
