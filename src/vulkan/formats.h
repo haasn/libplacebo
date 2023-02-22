@@ -29,7 +29,5 @@ struct vk_format {
     struct { VkFormat fmt; int sx, sy; } pfmt[4]; // plane formats (for planar textures)
 };
 
-extern const struct vk_format vk_formats[];
-
 // Add all supported formats to the `pl_gpu` format list
 void vk_setup_formats(struct pl_gpu_t *gpu);

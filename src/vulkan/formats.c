@@ -92,7 +92,7 @@ static const struct vk_format rgb16e = {
     .fmt    = EMUFMT("rgb16", 4, 3, 16, 16, UNORM),
 };
 
-const struct vk_format vk_formats[] = {
+static const struct vk_format vk_formats[] = {
     // Regular, byte-aligned integer formats
     {VK_FORMAT_R8_UNORM,              REGFMT("r8",       1,  8, UNORM)},
     {VK_FORMAT_R8G8_UNORM,            REGFMT("rg8",      2,  8, UNORM)},
