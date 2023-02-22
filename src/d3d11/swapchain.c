@@ -280,15 +280,15 @@ static DXGI_HDR_METADATA_HDR10 set_hdr10_metadata(const struct pl_hdr_metadata h
 
 static bool set_swapchain_metadata(struct d3d11_ctx *ctx,
                                    IDXGISwapChain3 *swapchain3,
-                                   const struct d3d11_csp_mapping csp_map)
+                                   struct d3d11_csp_mapping *csp_map)
 {
     IDXGISwapChain4 *swapchain4 = NULL;
     bool ret = false;
-    bool is_hdr = pl_color_space_is_hdr(&csp_map.out_csp);
+    bool is_hdr = pl_color_space_is_hdr(&csp_map->out_csp);
     DXGI_HDR_METADATA_HDR10 hdr10 = is_hdr ?
-        set_hdr10_metadata(csp_map.out_csp.hdr) : (DXGI_HDR_METADATA_HDR10){ 0 };
+        set_hdr10_metadata(csp_map->out_csp.hdr) : (DXGI_HDR_METADATA_HDR10){ 0 };
 
-    D3D(IDXGISwapChain3_SetColorSpace1(swapchain3, csp_map.d3d11_csp));
+    D3D(IDXGISwapChain3_SetColorSpace1(swapchain3, csp_map->d3d11_csp));
 
     // if we succeeded to set the color space, it's good enough,
     // since older versions of Windows 10 will not have swapchain v4 available.
@@ -309,7 +309,11 @@ static bool set_swapchain_metadata(struct d3d11_ctx *ctx,
                                        is_hdr ? sizeof(hdr10) : 0,
                                        is_hdr ? &hdr10 : NULL));
 
+    goto success;
+
 error:
+    csp_map->out_csp.hdr = (struct pl_hdr_metadata) { 0 };
+success:
     SAFE_RELEASE(swapchain4);
     return ret;
 }
@@ -402,7 +406,7 @@ static void update_swapchain_color_config(pl_swapchain sw,
     if (!swapchain3)
         goto cleanup;
 
-    if (!set_swapchain_metadata(ctx, swapchain3, csp_map)) {
+    if (!set_swapchain_metadata(ctx, swapchain3, &p->csp_map)) {
         // format succeeded, but color space configuration failed
         p->csp_map = old_map;
         p->csp_map.d3d11_fmt = csp_map.d3d11_fmt;
