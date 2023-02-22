@@ -28,6 +28,7 @@
 #include <libavutil/imgutils.h>
 #include <libavutil/pixdesc.h>
 #include <libavutil/display.h>
+#include <libavcodec/version.h>
 
 // Try importing <vulkan.h> dynamically if it wasn't already
 #if !defined(VK_API_VERSION_1_2) && defined(__has_include)
