@@ -260,21 +260,21 @@ error:
     return;
 }
 
-static DXGI_HDR_METADATA_HDR10 set_hdr10_metadata(const struct pl_hdr_metadata hdr)
+static DXGI_HDR_METADATA_HDR10 set_hdr10_metadata(const struct pl_hdr_metadata *hdr)
 {
-    return (DXGI_HDR_METADATA_HDR10){
-        .RedPrimary   = { roundf(hdr.prim.red.x   * 50000),
-                          roundf(hdr.prim.red.y   * 50000) },
-        .GreenPrimary = { roundf(hdr.prim.green.x * 50000),
-                          roundf(hdr.prim.green.y * 50000) },
-        .BluePrimary  = { roundf(hdr.prim.blue.x  * 50000),
-                          roundf(hdr.prim.blue.y  * 50000) },
-        .WhitePoint   = { roundf(hdr.prim.white.x * 50000),
-                          roundf(hdr.prim.white.y * 50000) },
-        .MaxMasteringLuminance     = roundf(hdr.max_luma),
-        .MinMasteringLuminance     = roundf(hdr.min_luma * 10000),
-        .MaxContentLightLevel      = roundf(hdr.max_cll),
-        .MaxFrameAverageLightLevel = roundf(hdr.max_fall),
+    return (DXGI_HDR_METADATA_HDR10) {
+        .RedPrimary   = { roundf(hdr->prim.red.x   * 50000),
+                          roundf(hdr->prim.red.y   * 50000) },
+        .GreenPrimary = { roundf(hdr->prim.green.x * 50000),
+                          roundf(hdr->prim.green.y * 50000) },
+        .BluePrimary  = { roundf(hdr->prim.blue.x  * 50000),
+                          roundf(hdr->prim.blue.y  * 50000) },
+        .WhitePoint   = { roundf(hdr->prim.white.x * 50000),
+                          roundf(hdr->prim.white.y * 50000) },
+        .MaxMasteringLuminance     = roundf(hdr->max_luma),
+        .MinMasteringLuminance     = roundf(hdr->min_luma * 10000),
+        .MaxContentLightLevel      = roundf(hdr->max_cll),
+        .MaxFrameAverageLightLevel = roundf(hdr->max_fall),
     };
 }
 
@@ -286,7 +286,7 @@ static bool set_swapchain_metadata(struct d3d11_ctx *ctx,
     bool ret = false;
     bool is_hdr = pl_color_space_is_hdr(&csp_map->out_csp);
     DXGI_HDR_METADATA_HDR10 hdr10 = is_hdr ?
-        set_hdr10_metadata(csp_map->out_csp.hdr) : (DXGI_HDR_METADATA_HDR10){ 0 };
+        set_hdr10_metadata(&csp_map->out_csp.hdr) : (DXGI_HDR_METADATA_HDR10){ 0 };
 
     D3D(IDXGISwapChain3_SetColorSpace1(swapchain3, csp_map->d3d11_csp));
 
