@@ -56,7 +56,7 @@ struct priv {
     int last_imgidx;                // the image index last acquired (for submit)
 };
 
-static struct pl_sw_fns vulkan_swapchain;
+static const struct pl_sw_fns vulkan_swapchain;
 
 static bool map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
 {
@@ -881,7 +881,7 @@ bool pl_vulkan_swapchain_suboptimal(pl_swapchain sw)
     return p->suboptimal;
 }
 
-static struct pl_sw_fns vulkan_swapchain = {
+static const struct pl_sw_fns vulkan_swapchain = {
     .destroy            = vk_sw_destroy,
     .latency            = vk_sw_latency,
     .resize             = vk_sw_resize,

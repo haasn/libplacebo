@@ -39,7 +39,7 @@ struct priv {
     PL_ARRAY(GLsync) vsync_fences;
 };
 
-static struct pl_sw_fns opengl_swapchain;
+static const struct pl_sw_fns opengl_swapchain;
 
 pl_swapchain pl_opengl_create_swapchain(pl_opengl pl_gl,
                               const struct pl_opengl_swapchain_params *params)
@@ -267,7 +267,7 @@ static void gl_sw_swap_buffers(pl_swapchain sw)
     pl_mutex_unlock(&p->lock);
 }
 
-static struct pl_sw_fns opengl_swapchain = {
+static const struct pl_sw_fns opengl_swapchain = {
     .destroy      = gl_sw_destroy,
     .latency      = gl_sw_latency,
     .resize       = gl_sw_resize,

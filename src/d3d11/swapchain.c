@@ -420,7 +420,7 @@ IDXGISwapChain *pl_d3d11_swapchain_unwrap(pl_swapchain sw)
     return p->swapchain;
 }
 
-static struct pl_sw_fns d3d11_swapchain = {
+static const struct pl_sw_fns d3d11_swapchain = {
     .destroy         = d3d11_sw_destroy,
     .latency         = d3d11_sw_latency,
     .resize          = d3d11_sw_resize,
