@@ -33,6 +33,18 @@ void pl_hdr_metadata_from_dovi_rpu(struct pl_hdr_metadata *out,
         const DoviRpuDataHeader *header = dovi_rpu_get_header(rpu);
 
         if (header && header->vdr_dm_metadata_present_flag) {
+            // Profile 4 reshaping isn't done as it is a dual layer format.
+            // However there are still unknowns on its EOTF, so it cannot be enabled.
+            //
+            // For profile 7, the brightness metadata can still be used as most
+            // titles are going to have accurate metadata<->image brightness,
+            // with the exception of some titles that require the enhancement layer
+            // to be processed to restore the intended brightness, which would then
+            // match the metadata values.
+            if (header->guessed_profile == 4) {
+                goto done;
+            }
+
             const DoviVdrDmData *vdr_dm_data = dovi_rpu_get_vdr_dm_data(rpu);
             if (vdr_dm_data->dm_data.level1) {
                 const DoviExtMetadataBlockLevel1 *l1 = vdr_dm_data->dm_data.level1;
@@ -49,6 +61,7 @@ void pl_hdr_metadata_from_dovi_rpu(struct pl_hdr_metadata *out,
             dovi_rpu_free_vdr_dm_data(vdr_dm_data);
         }
 
+    done:
         dovi_rpu_free_header(header);
         dovi_rpu_free(rpu);
     }
