@@ -212,9 +212,9 @@ def get_vkaccess(registry):
 def find_registry_xml(datadir):
     registry_paths = [
         '{0}/vulkan/registry/vk.xml'.format(datadir),
+        '$MINGW_PREFIX/share/vulkan/registry/vk.xml',
         '%VULKAN_SDK%/share/vulkan/registry/vk.xml',
         '$VULKAN_SDK/share/vulkan/registry/vk.xml',
-        '$MINGW_PREFIX/share/vulkan/registry/vk.xml',
         '/usr/share/vulkan/registry/vk.xml',
     ]
 
