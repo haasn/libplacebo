@@ -102,6 +102,7 @@ struct cached_pass {
     uint64_t signature;
     const uint8_t *cached_program;
     size_t cached_program_len;
+    bool stale;
 };
 
 static void pass_destroy(pl_dispatch dp, struct pass *pass)
@@ -1575,7 +1576,7 @@ void pl_dispatch_reset_frame(pl_dispatch dp)
 
 // Stuff related to caching
 static const char cache_magic[] = {'P', 'L', 'D', 'P'};
-static const uint32_t cache_version = 1;
+static const uint32_t cache_version = 2;
 
 static void write_buf(uint8_t *buf, size_t *pos, const void *src, size_t size)
 {
@@ -1599,6 +1600,7 @@ size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
 
     write_buf(out, &size, cache_magic, sizeof(cache_magic));
     WRITE(uint32_t, cache_version);
+    WRITE(uint32_t, PL_API_VER);
 
     // Remember this position so we can go back and write the actual number of
     // cached programs
@@ -1632,7 +1634,7 @@ size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
     // by `pl_dispatch_save` return the same cache as was previously loaded.
     for (int i = 0; i < dp->cached_passes.num; i++) {
         const struct cached_pass *pass = &dp->cached_passes.elem[i];
-        if (!pass->cached_program_len)
+        if (!pass->cached_program_len || pass->stale)
             continue;
 
         if (out) {
@@ -1662,15 +1664,21 @@ void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache)
         return;
     }
 
-    uint32_t version;
+    uint32_t version, api_ver, num;
     LOAD(version);
     if (version != cache_version) {
-        PL_WARN(dp, "Failed loading dispatch cache: wrong version");
+        PL_INFO(dp, "Failed loading dispatch cache: wrong version... skipping");
         return;
     }
 
-    uint32_t num;
+    LOAD(api_ver);
     LOAD(num);
+
+    if (api_ver < PL_API_VER) {
+        PL_INFO(dp, "Loaded dispatch cache is stale (PL_API_VER %"PRIu32" < %d), "
+                "will flush stale passes",
+                api_ver, PL_API_VER);
+    }
 
     pl_mutex_lock(&dp->lock);
     for (int i = 0; i < num; i++) {
@@ -1703,7 +1711,10 @@ void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache)
             // None found, add a new entry
             PL_ARRAY_GROW(dp, dp->cached_passes);
             pass = &dp->cached_passes.elem[dp->cached_passes.num++];
-            *pass = (struct cached_pass) { .signature = sig };
+            *pass = (struct cached_pass) {
+                .signature = sig,
+                .stale = api_ver < PL_API_VER,
+            };
         }
 
         PL_DEBUG(dp, "Loading %zu bytes of cached program with signature 0x%llx",
