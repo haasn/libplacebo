@@ -111,6 +111,19 @@ int main()
     REQUIRE(!pl_str_parse_uint(test, &u));
     REQUIRE(!pl_str_parse_uint(empty, &u));
 
+    pl_str_builder builder = pl_str_builder_alloc(tmp);
+    pl_str_builder_const_str(builder, "hello");
+    pl_str_builder_str(builder, pl_str0("world"));
+    pl_str res = pl_str_builder_exec(builder);
+    REQUIRE(pl_str_equals0(res, "helloworld"));
+
+    pl_str_builder_reset(builder);
+    pl_str_builder_printf_c(builder, "foo %d bar %u bat %s baz %lld",
+            123, 56u, "quack", 0xDEADBEEFll);
+    pl_str_builder_printf_c(builder, " %.*s", PL_STR_FMT(pl_str0("test123")));
+    res = pl_str_builder_exec(builder);
+    REQUIRE(pl_str_equals0(res, "foo 123 bar 56 bat quack baz 3735928559 test123"));
+
     pl_free(tmp);
     return 0;
 }
