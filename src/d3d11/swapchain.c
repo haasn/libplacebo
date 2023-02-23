@@ -36,7 +36,14 @@ static struct d3d11_csp_mapping map_pl_csp_to_d3d11(const struct pl_color_space 
         hint->transfer != PL_COLOR_TRC_LINEAR)
     {
         struct pl_color_space pl_csp = pl_color_space_hdr10;
-        pl_csp.hdr = hint->hdr;
+        pl_csp.hdr = (struct pl_hdr_metadata) {
+            // Whitelist only values that we support signalling metadata for
+            .prim     = hint->hdr.prim,
+            .min_luma = hint->hdr.min_luma,
+            .max_luma = hint->hdr.max_luma,
+            .max_cll  = hint->hdr.max_cll,
+            .max_fall = hint->hdr.max_fall,
+        };
 
         return (struct d3d11_csp_mapping){
             .d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
