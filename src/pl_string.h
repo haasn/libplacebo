@@ -52,7 +52,11 @@ static inline char *pl_strdup0(void *alloc, pl_str str)
     return pl_strndup0(alloc, str.len ? (char *) str.buf : "", str.len);
 }
 
+// Adds a trailing \0 for convenience, even if `append` is an empty string
 void pl_str_append(void *alloc, pl_str *str, pl_str append);
+
+// Like `pl_str_append` but for raw memory, omits trailing \0
+void pl_str_append_raw(void *alloc, pl_str *str, const void *ptr, size_t size);
 
 // Locale-sensitive string functions
 char *pl_asprintf(void *parent, const char *fmt, ...)

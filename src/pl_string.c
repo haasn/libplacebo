@@ -26,15 +26,23 @@ static void grow_str(void *alloc, pl_str *str, size_t len)
 
 void pl_str_append(void *alloc, pl_str *str, pl_str append)
 {
-    if (!append.len)
-        return;
-
     // Also append an extra \0 for convenience, since a lot of the time
     // this function will be used to generate a string buffer
     grow_str(alloc, str, str->len + append.len + 1);
-    memcpy(str->buf + str->len, append.buf, append.len);
-    str->len += append.len;
+    if (append.len) {
+        memcpy(str->buf + str->len, append.buf, append.len);
+        str->len += append.len;
+    }
     str->buf[str->len] = '\0';
+}
+
+void pl_str_append_raw(void *alloc, pl_str *str, const void *ptr, size_t size)
+{
+    if (!size)
+        return;
+    grow_str(alloc, str, str->len + size);
+    memcpy(str->buf + str->len, ptr, size);
+    str->len += size;
 }
 
 void pl_str_append_asprintf(void *alloc, pl_str *str, const char *fmt, ...)
