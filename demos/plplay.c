@@ -75,17 +75,19 @@ struct plplay {
     struct pl_deinterlace_params deinterlace_params;
     struct pl_icc_params icc_params;
     struct pl_cone_params cone_params;
-    struct pl_color_space target_color;
-    struct pl_color_repr target_repr;
     struct pl_icc_profile target_icc;
     char *target_icc_name;
     pl_rotation target_rot;
-    bool target_override;
-    bool levels_override;
-    bool ignore_dovi;
     bool colorspace_hint;
-    bool reset_colorspace;
-    bool reset_levels;
+    bool ignore_dovi;
+
+    bool target_override; // if false, fields below are ignored
+    struct pl_color_repr force_repr;
+    enum pl_color_primaries force_prim;
+    enum pl_color_transfer force_trc;
+    struct pl_hdr_metadata force_hdr;
+    bool force_hdr_enable;
+    bool force_icc_luma;
 
     // custom shaders
     const struct pl_hook **shader_hooks;
@@ -393,7 +395,17 @@ done:
     return NULL;
 }
 
-static void update_settings(struct plplay *p);
+static void apply_csp_overrides(struct plplay *p, struct pl_color_space *csp)
+{
+    if (p->force_prim)
+        csp->primaries = p->force_prim;
+    if (p->force_trc)
+        csp->transfer = p->force_trc;
+    if (p->force_hdr_enable)
+        csp->hdr = p->force_hdr;
+}
+
+static void update_settings(struct plplay *p, const struct pl_frame *target);
 
 static void update_colorspace_hint(struct plplay *p, const struct pl_frame_mix *mix)
 {
@@ -411,14 +423,8 @@ static void update_colorspace_hint(struct plplay *p, const struct pl_frame_mix *
     struct pl_color_space hint = {0};
     if (p->colorspace_hint)
         pl_color_space_from_avframe(&hint, frame->user_data);
-    if (p->reset_colorspace)
-        p->target_color = hint;
-    if (p->reset_levels)
-        p->target_color.hdr = hint.hdr;
-    if (p->levels_override) {
-        hint.hdr.min_luma = p->target_color.hdr.min_luma;
-        hint.hdr.max_luma = p->target_color.hdr.max_luma;
-    }
+    if (p->target_override)
+        apply_csp_overrides(p, &hint);
     pl_swapchain_colorspace_hint(p->win->swapchain, &hint);
 }
 
@@ -427,15 +433,23 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
 {
     struct pl_frame target;
     pl_frame_from_swapchain(&target, frame);
-    update_settings(p);
+    update_settings(p, &target);
 
-    // Update the global settings based on this swapchain frame, then use those
-    pl_color_space_merge(&p->target_color, &target.color);
-    pl_color_repr_merge(&p->target_repr, &target.repr);
     if (p->target_override) {
-        target.color = p->target_color;
-        target.repr = p->target_repr;
         target.profile = p->target_icc;
+        target.repr = p->force_repr;
+        pl_color_repr_merge(&target.repr, &frame->color_repr);
+        apply_csp_overrides(p, &target.color);
+
+        if (p->force_icc_luma) {
+            // Always use detected luminance
+            p->icc_params.max_luma = 0;
+        } else {
+            // Use HDR levels if available, fall back to default luminance
+            p->icc_params.max_luma = target.color.hdr.max_luma;
+            if (!p->icc_params.max_luma)
+                p->icc_params.max_luma = pl_icc_default_params.max_luma;
+        }
     }
 
     assert(mix->num_frames);
@@ -653,14 +667,6 @@ int main(int argc, char **argv)
         .height = par->height,
     };
 
-    if (p->colorspace_hint) {
-        params.colors = (struct pl_swapchain_colors) {
-            .primaries = pl_primaries_from_av(par->color_primaries),
-            .transfer = pl_transfer_from_av(par->color_trc),
-            // HDR metadata will come from AVFrame side data
-        };
-    }
-
     if (desc->flags & AV_PIX_FMT_FLAG_ALPHA) {
         params.alpha = true;
         state.params.background_transparency = 1.0;
@@ -777,7 +783,7 @@ static const char *pscale_desc(const struct pl_filter_preset *f)
     return f->filter ? f->description : "None (Use regular upscaler)";
 }
 
-static void update_settings(struct plplay *p)
+static void update_settings(struct plplay *p, const struct pl_frame *target)
 {
     struct nk_context *nk = ui_get_context(p->ui);
     enum nk_panel_flags win_flags = NK_WINDOW_BORDER | NK_WINDOW_MOVABLE |
@@ -1197,8 +1203,6 @@ static void update_settings(struct plplay *p)
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Output color space", NK_MINIMIZED)) {
-            struct pl_color_space *tcol = &p->target_color;
-            struct pl_color_repr *trepr = &p->target_repr;
             struct pl_icc_params *iccpar = &p->icc_params;
             nk_layout_row_dynamic(nk, 24, 2);
             nk_checkbox_label(nk, "Enable", &p->target_override);
@@ -1229,7 +1233,7 @@ static void update_settings(struct plplay *p)
             };
 
             nk_label(nk, "Primaries:", NK_TEXT_LEFT);
-            tcol->primaries = nk_combo(nk, primaries, PL_COLOR_PRIM_COUNT, tcol->primaries,
+            p->force_prim = nk_combo(nk, primaries, PL_COLOR_PRIM_COUNT, p->force_prim,
                                        16, nk_vec2(nk_widget_width(nk), 200));
 
             static const char *transfers[PL_COLOR_TRC_COUNT] = {
@@ -1253,18 +1257,19 @@ static void update_settings(struct plplay *p)
             };
 
             nk_label(nk, "Transfer:", NK_TEXT_LEFT);
-            tcol->transfer = nk_combo(nk, transfers, PL_COLOR_TRC_COUNT, tcol->transfer,
+            p->force_trc = nk_combo(nk, transfers, PL_COLOR_TRC_COUNT, p->force_trc,
                                       16, nk_vec2(nk_widget_width(nk), 200));
 
             nk_layout_row_dynamic(nk, 24, 2);
-            nk_checkbox_label(nk, "Override HDR levels", &p->levels_override);
-            p->reset_levels = nk_button_label(nk, "Reset levels");
+            nk_checkbox_label(nk, "Override HDR levels", &p->force_hdr_enable);
 
             // Ensure these values are always legal by going through
-            // `pl_color_space_infer`, without clobbering the rest
+            // pl_color_space_infer
             nk_layout_row_dynamic(nk, 24, 2);
-            struct pl_color_space fix = *tcol;
+            struct pl_color_space fix = target->color;
+            apply_csp_overrides(p, &fix);
             pl_color_space_infer(&fix);
+
             fix.hdr.min_luma *= 1000; // better value range
             nk_property_float(nk, "White point (cd/m²)",
                                 1e-2, &fix.hdr.max_luma, 10000.0,
@@ -1274,13 +1279,9 @@ static void update_settings(struct plplay *p)
                                 fix.hdr.min_luma / 100, fix.hdr.min_luma / 1000);
             fix.hdr.min_luma /= 1000;
             pl_color_space_infer(&fix);
+            p->force_hdr = fix.hdr;
 
-            if (p->levels_override) {
-                tcol->hdr.min_luma = fix.hdr.min_luma;
-                tcol->hdr.max_luma = fix.hdr.max_luma;
-                iccpar->max_luma = fix.hdr.max_luma;
-            }
-
+            struct pl_color_repr *trepr = &p->force_repr;
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
 
             static const char *systems[PL_COLOR_SYSTEM_COUNT] = {
@@ -1302,7 +1303,7 @@ static void update_settings(struct plplay *p)
             trepr->sys = nk_combo(nk, systems, PL_COLOR_SYSTEM_COUNT, trepr->sys,
                                   16, nk_vec2(nk_widget_width(nk), 200));
             if (trepr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
-                trepr->sys =PL_COLOR_SYSTEM_UNKNOWN;
+                trepr->sys = PL_COLOR_SYSTEM_UNKNOWN;
 
             static const char *levels[PL_COLOR_LEVELS_COUNT] = {
                 [PL_COLOR_LEVELS_UNKNOWN]   = "Auto (unknown)",
@@ -1332,10 +1333,7 @@ static void update_settings(struct plplay *p)
             trepr->bits.sample_depth = bits;
 
             nk_layout_row_dynamic(nk, 24, 1);
-            p->reset_colorspace = nk_checkbox_label(nk,
-                                                    "Inform the swapchain about "
-                                                    "the input color space",
-                                                    &p->colorspace_hint);
+            nk_checkbox_label(nk, "Forward input color space to display", &p->colorspace_hint);
 
             nk_layout_row_dynamic(nk, 50, 1);
             if (ui_widget_hover(nk, "Drop ICC profile here...") && dropped_file) {
@@ -1356,18 +1354,21 @@ static void update_settings(struct plplay *p)
             }
 
             if (p->target_icc.len) {
-                nk_layout_row_dynamic(nk, 24, 1);
+                nk_layout_row_dynamic(nk, 24, 2);
                 nk_labelf(nk, NK_TEXT_LEFT, "Loaded: %s",
                           p->target_icc_name ? p->target_icc_name : "(unknown)");
-                nk_layout_row_dynamic(nk, 24, 2);
-                nk_checkbox_label(nk, "Force BPC", &iccpar->force_bpc);
                 reset_icc |= nk_button_label(nk, "Reset ICC");
+                nk_checkbox_label(nk, "Force BPC", &iccpar->force_bpc);
+                nk_checkbox_label(nk, "Use detected luminance", &p->force_icc_luma);
             }
 
             // Apply the reset last to prevent the UI from flashing for a frame
             if (reset) {
-                p->reset_colorspace = true;
-                *trepr = (struct pl_color_repr) {0};
+                p->force_repr = (struct pl_color_repr) {0};
+                p->force_prim = PL_COLOR_PRIM_UNKNOWN;
+                p->force_trc = PL_COLOR_TRC_UNKNOWN;
+                p->force_hdr = (struct pl_hdr_metadata) {0};
+                p->force_hdr_enable = false;
             }
 
             if (reset_icc && p->target_icc.len) {
@@ -1381,14 +1382,6 @@ static void update_settings(struct plplay *p)
 
             nk_tree_pop(nk);
         }
-
-        if (!p->levels_override) {
-            // Reset levels also if override is disabled and section minimized
-            p->reset_levels = true;
-        }
-
-        if (p->reset_levels)
-            p->icc_params.max_luma = 0;
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Custom shaders", NK_MINIMIZED)) {
 
@@ -1582,5 +1575,5 @@ static void update_settings(struct plplay *p)
 }
 
 #else
-static void update_settings(struct plplay *p) { }
+static void update_settings(struct plplay *p, const struct pl_frame *target) { }
 #endif // HAVE_NUKLEAR
