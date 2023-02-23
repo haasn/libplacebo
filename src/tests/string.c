@@ -26,7 +26,7 @@ int main()
 
     pl_str buf = {0};
     pl_str_append(tmp, &buf, null);
-    REQUIRE(is_null(buf));
+    REQUIRE(is_empty(buf));
     pl_str_append_asprintf(tmp, &buf, "%.*s", PL_STR_FMT(test));
     REQUIRE(pl_str_equals(buf, test));
 
