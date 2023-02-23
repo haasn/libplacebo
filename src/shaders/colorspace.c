@@ -628,6 +628,9 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
     if (csp->transfer == PL_COLOR_TRC_LINEAR)
         return;
 
+    float csp_min, csp_max;
+    pl_color_space_nominal_luma(csp, &csp_min, &csp_max);
+
     // Note that this clamp may technically violate the definition of
     // ITU-R BT.2100, which allows for sub-blacks and super-whites to be
     // displayed on the display where such would be possible. That said, the
@@ -635,10 +638,6 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
     // outside this range, so we ignore it and just clamp anyway for sanity.
     GLSL("// pl_shader_linearize           \n"
          "color.rgb = max(color.rgb, 0.0); \n");
-
-    float csp_min = csp->nominal_min / PL_COLOR_SDR_WHITE;
-    float csp_max = csp->nominal_max / PL_COLOR_SDR_WHITE;
-    csp_max = PL_DEF(csp_max, 1);
 
     switch (csp->transfer) {
     case PL_COLOR_TRC_SRGB:
@@ -756,11 +755,10 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
     if (csp->transfer == PL_COLOR_TRC_LINEAR)
         return;
 
-    GLSL("// pl_shader_delinearize \n");
-    float csp_min = csp->nominal_min / PL_COLOR_SDR_WHITE;
-    float csp_max = csp->nominal_max / PL_COLOR_SDR_WHITE;
-    csp_max = PL_DEF(csp_max, 1);
+    float csp_min, csp_max;
+    pl_color_space_nominal_luma(csp, &csp_min, &csp_max);
 
+    GLSL("// pl_shader_delinearize \n");
     switch (csp->transfer) {
     case PL_COLOR_TRC_UNKNOWN:
     case PL_COLOR_TRC_SRGB:
@@ -1343,15 +1341,9 @@ static void tone_map(pl_shader sh,
                      pl_shader_obj *state,
                      const struct pl_color_map_params *params)
 {
-    float src_min = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, src->nominal_min),
-          src_max = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, src->nominal_max),
-          dst_min = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, dst->nominal_min),
-          dst_max = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, dst->nominal_max);
-
-    // Some tone mapping functions don't handle values of absolute 0 very well,
-    // so clip the minimums to a very small positive value
-    src_min = PL_MAX(src_min, 1e-7);
-    dst_min = PL_MAX(dst_min, 1e-7);
+    float src_min, src_max, dst_min, dst_max;
+    pl_color_space_nominal_luma(src, &src_min, &src_max);
+    pl_color_space_nominal_luma(dst, &dst_min, &dst_max);
 
     if (!params->inverse_tone_mapping) {
         // Never exceed the source unless requested, but still allow
@@ -1712,8 +1704,8 @@ static void adapt_colors(pl_shader sh,
         pl_get_color_mapping_matrix(&src->hdr.prim, &dst->hdr.prim, params->intent);
 
     // Normalize colors to range [0-1]
-    float lb = dst->nominal_min / PL_COLOR_SDR_WHITE;
-    float lw = dst->nominal_max / PL_COLOR_SDR_WHITE;
+    float lb, lw;
+    pl_color_space_nominal_luma(dst, &lb, &lw);
     GLSL("color.rgb = %s * color.rgb + %s; \n",
          SH_FLOAT(1 / (lw - lb)), SH_FLOAT(-lb / (lw - lb)));
 

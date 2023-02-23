@@ -37,8 +37,6 @@ static struct d3d11_csp_mapping map_pl_csp_to_d3d11(const struct pl_color_space 
     {
         struct pl_color_space pl_csp = pl_color_space_hdr10;
         pl_csp.hdr = hint->hdr;
-        pl_csp.nominal_min = hint->nominal_min;
-        pl_csp.nominal_max = hint->nominal_max;
 
         return (struct d3d11_csp_mapping){
             .d3d11_csp = DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,

@@ -394,19 +394,6 @@ struct pl_color_space {
     enum pl_color_primaries primaries;
     enum pl_color_transfer transfer;
 
-    // Nominal minimum/maximum signal levels (in cd/m²), for tone-mapping.
-    // These values are inferred from the mastering display metadata, per-scene
-    // metadata (if present), and transfer function. Users should generally not
-    // set this directly, but let `pl_color_space_infer` auto-pick it based on
-    // the values supplied in `pl_hdr_metadata`.
-    //
-    // These values will always be set to sane defaults even in the absence of
-    // such metadata. Note that they can also be combined with SDR color
-    // transforms, in which case it's assumed that the color transfer in
-    // question is linearly "stretched" relative to these values.
-    float nominal_min;
-    float nominal_max;
-
     // HDR metadata for this color space, if present. (Optional)
     struct pl_hdr_metadata hdr;
 
@@ -430,6 +417,16 @@ bool pl_color_space_is_hdr(const struct pl_color_space *csp);
 // well as for HLG.
 bool pl_color_space_is_black_scaled(const struct pl_color_space *csp);
 
+// Returns the effective input/output luminance contained by a pl_color_space,
+// as a function of transfer function and HDR metadata, taking from the
+// per-scene values if known and static mastering display metadata otherwise.
+// Returns relative units (see pl_color_transfer_nominal_peak and PL_HDR_NORM).
+//
+// For SDR displays, this will default to a contrast level of 1000:1 unless
+// indicated otherwise in the `min/max_luma` fields.
+void pl_color_space_nominal_luma(const struct pl_color_space *csp,
+                                 float *out_min, float *out_max);
+
 // Replaces unknown values in the first struct by those of the second struct.
 void pl_color_space_merge(struct pl_color_space *orig,
                           const struct pl_color_space *update);
@@ -440,7 +437,7 @@ bool pl_color_space_equal(const struct pl_color_space *c1,
 
 // Go through a color-space and explicitly default all unknown fields to
 // reasonable values. After this function is called, none of the values will be
-// PL_COLOR_*_UNKNOWN or 0.0.
+// PL_COLOR_*_UNKNOWN or 0.0, except for some HDR metadata fields.
 void pl_color_space_infer(struct pl_color_space *space);
 
 // Like `pl_color_space_infer`, but takes default values from the reference

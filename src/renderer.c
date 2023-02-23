@@ -1132,7 +1132,7 @@ static void hdr_update_peak(struct pass_state *pass)
     if (pass->fbofmt[4] && !(pass->fbofmt[4]->caps & PL_FMT_CAP_STORABLE))
         goto cleanup;
 
-    if (pass->img.color.nominal_max <= pass->target.color.nominal_max + 1e-6)
+    if (pass->img.color.hdr.max_luma <= pass->target.color.hdr.max_luma + 1e-6)
         goto cleanup; // no adaptation needed
 
     if (pass->img.color.hdr.scene_avg)
@@ -1257,7 +1257,7 @@ static bool plane_deband(struct pass_state *pass, struct img *img, float neutral
     // of the source as possible, even though it happens this early in the
     // process (well before any linearization / output adaptation)
     struct pl_deband_params dparams = *params->deband_params;
-    dparams.grain /= image->color.nominal_max / PL_COLOR_SDR_WHITE;
+    dparams.grain /= image->color.hdr.max_luma / PL_COLOR_SDR_WHITE;
     memcpy(dparams.grain_neutral, neutral, sizeof(dparams.grain_neutral));
 
     img->tex = NULL;

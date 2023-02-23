@@ -413,14 +413,11 @@ static void update_colorspace_hint(struct plplay *p, const struct pl_frame_mix *
         pl_color_space_from_avframe(&hint, frame->user_data);
     if (p->reset_colorspace)
         p->target_color = hint;
-    if (p->reset_levels) {
+    if (p->reset_levels)
         p->target_color.hdr = hint.hdr;
-        p->target_color.nominal_max = hint.nominal_max;
-        p->target_color.nominal_min = hint.nominal_min;
-    }
     if (p->levels_override) {
-        hint.nominal_max = p->target_color.nominal_max;
-        hint.nominal_min = p->target_color.nominal_min;
+        hint.hdr.min_luma = p->target_color.hdr.min_luma;
+        hint.hdr.max_luma = p->target_color.hdr.max_luma;
     }
     pl_swapchain_colorspace_hint(p->win->swapchain, &hint);
 }
@@ -1268,20 +1265,20 @@ static void update_settings(struct plplay *p)
             nk_layout_row_dynamic(nk, 24, 2);
             struct pl_color_space fix = *tcol;
             pl_color_space_infer(&fix);
-            fix.nominal_min *= 1000; // better value range
+            fix.hdr.min_luma *= 1000; // better value range
             nk_property_float(nk, "White point (cd/m²)",
-                                1e-2, &fix.nominal_max, 10000.0,
-                                fix.nominal_max / 100, fix.nominal_max / 1000);
+                                1e-2, &fix.hdr.max_luma, 10000.0,
+                                fix.hdr.max_luma / 100, fix.hdr.max_luma / 1000);
             nk_property_float(nk, "Black point (mcd/m²)",
-                                1e-3, &fix.nominal_min, 10000.0,
-                                fix.nominal_min / 100, fix.nominal_min / 1000);
-            fix.nominal_min /= 1000;
+                                1e-3, &fix.hdr.min_luma, 10000.0,
+                                fix.hdr.min_luma / 100, fix.hdr.min_luma / 1000);
+            fix.hdr.min_luma /= 1000;
             pl_color_space_infer(&fix);
 
             if (p->levels_override) {
-                tcol->nominal_min = fix.nominal_min;
-                tcol->nominal_max = fix.nominal_max;
-                iccpar->max_luma = fix.nominal_max;
+                tcol->hdr.min_luma = fix.hdr.min_luma;
+                tcol->hdr.max_luma = fix.hdr.max_luma;
+                iccpar->max_luma = fix.hdr.max_luma;
             }
 
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });

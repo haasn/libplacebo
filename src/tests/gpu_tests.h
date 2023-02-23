@@ -537,10 +537,11 @@ static void pl_shader_tests(pl_gpu gpu)
 
     // Test encoding/decoding of all gamma functions, color spaces, etc.
     for (enum pl_color_transfer trc = 0; trc < PL_COLOR_TRC_COUNT; trc++) {
+        struct pl_color_space test_csp = { .transfer = trc, .hdr.min_luma = 1e-7 };
         sh = pl_dispatch_begin(dp);
         pl_shader_sample_nearest(sh, pl_sample_src( .tex = src ));
-        pl_shader_delinearize(sh, pl_color_space( .transfer = trc ));
-        pl_shader_linearize(sh, pl_color_space( .transfer = trc ));
+        pl_shader_delinearize(sh, &test_csp);
+        pl_shader_linearize(sh, &test_csp);
         REQUIRE(pl_dispatch_finish(dp, pl_dispatch_params(
             .shader = &sh,
             .target = fbo,
@@ -565,6 +566,7 @@ static void pl_shader_tests(pl_gpu gpu)
         float epsilon;
         switch (sys) {
         case PL_COLOR_SYSTEM_BT_2020_C:
+        case PL_COLOR_SYSTEM_XYZ:
             epsilon = 1e-5;
             break;
 
