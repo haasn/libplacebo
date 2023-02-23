@@ -273,12 +273,21 @@ static void set_hdr_metadata(struct priv *p, const struct pl_hdr_metadata *metad
     if (!vk->SetHdrMetadataEXT)
         return;
 
+    // Whitelist only values that we support signalling metadata for
+    struct pl_hdr_metadata fix = {
+        .prim     = metadata->prim,
+        .min_luma = metadata->min_luma,
+        .max_luma = metadata->max_luma,
+        .max_cll  = metadata->max_cll,
+        .max_fall = metadata->max_fall,
+    };
+
     // Ignore no-op changes
-    if (pl_hdr_metadata_equal(metadata, &p->hdr_metadata))
+    if (pl_hdr_metadata_equal(&fix, &p->hdr_metadata))
         return;
 
     // Remember the metadata so we can re-apply it after swapchain recreation
-    p->hdr_metadata = *metadata;
+    p->hdr_metadata = fix;
 
     // Ignore HDR metadata requests for SDR swapchains
     if (!pl_color_transfer_is_hdr(p->color_space.transfer))
@@ -289,18 +298,18 @@ static void set_hdr_metadata(struct priv *p, const struct pl_hdr_metadata *metad
 
     vk->SetHdrMetadataEXT(vk->dev, 1, &p->swapchain, &(VkHdrMetadataEXT) {
         .sType = VK_STRUCTURE_TYPE_HDR_METADATA_EXT,
-        .displayPrimaryRed   = { metadata->prim.red.x,   metadata->prim.red.y },
-        .displayPrimaryGreen = { metadata->prim.green.x, metadata->prim.green.y },
-        .displayPrimaryBlue  = { metadata->prim.blue.x,  metadata->prim.blue.y },
-        .whitePoint = { metadata->prim.white.x, metadata->prim.white.y },
-        .maxLuminance = metadata->max_luma,
-        .minLuminance = metadata->min_luma,
-        .maxContentLightLevel = metadata->max_cll,
-        .maxFrameAverageLightLevel = metadata->max_fall,
+        .displayPrimaryRed   = { fix.prim.red.x,   fix.prim.red.y },
+        .displayPrimaryGreen = { fix.prim.green.x, fix.prim.green.y },
+        .displayPrimaryBlue  = { fix.prim.blue.x,  fix.prim.blue.y },
+        .whitePoint = { fix.prim.white.x, fix.prim.white.y },
+        .maxLuminance = fix.max_luma,
+        .minLuminance = fix.min_luma,
+        .maxContentLightLevel = fix.max_cll,
+        .maxFrameAverageLightLevel = fix.max_fall,
     });
 
     // Keep track of applied HDR colorimetry metadata
-    p->color_space.hdr = *metadata;
+    p->color_space.hdr = p->hdr_metadata;
 }
 
 pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
