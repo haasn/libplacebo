@@ -70,6 +70,8 @@ static struct d3d11_csp_mapping map_pl_csp_to_d3d11(const struct pl_color_space 
 }
 
 struct priv {
+    struct pl_sw_fns impl;
+
     struct d3d11_ctx *ctx;
     IDXGISwapChain *swapchain;
     pl_tex backbuffer;
@@ -604,11 +606,11 @@ pl_swapchain pl_d3d11_create_swapchain(pl_d3d11 d3d11,
     struct pl_swapchain_t *sw = pl_zalloc_obj(NULL, sw, struct priv);
     struct priv *p = PL_PRIV(sw);
     *sw = (struct pl_swapchain_t) {
-        .impl = &d3d11_swapchain,
         .log = gpu->log,
         .gpu = gpu,
     };
     *p = (struct priv) {
+        .impl = d3d11_swapchain,
         .ctx = ctx,
         // default to standard 8 or 10 bit RGB, unset pl_color_space
         .csp_map = {

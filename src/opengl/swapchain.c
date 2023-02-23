@@ -23,6 +23,8 @@
 #include "pl_thread.h"
 
 struct priv {
+    struct pl_sw_fns impl;
+
     struct pl_opengl_swapchain_params params;
     pl_opengl gl;
     pl_mutex lock;
@@ -53,12 +55,12 @@ pl_swapchain pl_opengl_create_swapchain(pl_opengl pl_gl,
         return NULL;
 
     struct pl_swapchain_t *sw = pl_zalloc_obj(NULL, sw, struct priv);
-    sw->impl = &opengl_swapchain;
     sw->log = gpu->log;
     sw->gpu = gpu;
 
     struct priv *p = PL_PRIV(sw);
     pl_mutex_init(&p->lock);
+    p->impl = opengl_swapchain;
     p->params = *params;
     p->has_sync = pl_opengl_has_ext(pl_gl, "GL_ARB_sync");
     p->gl = pl_gl;

@@ -33,9 +33,6 @@ PL_API_BEGIN
 typedef const struct pl_swapchain_t {
     pl_log log;
     pl_gpu gpu;
-
-    // The underlying implementation
-    struct pl_sw_fns *impl;
 } *pl_swapchain;
 
 // Destroys this swapchain. May be used at any time, and may block until the

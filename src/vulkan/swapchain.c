@@ -29,6 +29,8 @@ struct sem_pair {
 };
 
 struct priv {
+    struct pl_sw_fns impl;
+
     pl_mutex lock;
     struct vk_ctx *vk;
     VkSurfaceKHR surf;
@@ -313,12 +315,12 @@ pl_swapchain pl_vulkan_create_swapchain(pl_vulkan plvk,
     }
 
     struct pl_swapchain_t *sw = pl_zalloc_obj(NULL, sw, struct priv);
-    sw->impl = &vulkan_swapchain;
     sw->log = vk->log;
     sw->gpu = gpu;
 
     struct priv *p = PL_PRIV(sw);
     pl_mutex_init(&p->lock);
+    p->impl = vulkan_swapchain;
     p->params = *params;
     p->vk = vk;
     p->surf = params->surface;

@@ -25,16 +25,18 @@ void pl_swapchain_destroy(pl_swapchain *ptr)
     if (!sw)
         return;
 
-    sw->impl->destroy(sw);
+    const struct pl_sw_fns *impl = PL_PRIV(sw);
+    impl->destroy(sw);
     *ptr = NULL;
 }
 
 int pl_swapchain_latency(pl_swapchain sw)
 {
-    if (!sw->impl->latency)
+    const struct pl_sw_fns *impl = PL_PRIV(sw);
+    if (!impl->latency)
         return 0;
 
-    return sw->impl->latency(sw);
+    return impl->latency(sw);
 }
 
 bool pl_swapchain_resize(pl_swapchain sw, int *width, int *height)
@@ -43,17 +45,19 @@ bool pl_swapchain_resize(pl_swapchain sw, int *width, int *height)
     width = PL_DEF(width, &dummy[0]);
     height = PL_DEF(height, &dummy[1]);
 
-    if (!sw->impl->resize) {
+    const struct pl_sw_fns *impl = PL_PRIV(sw);
+    if (!impl->resize) {
         *width = *height = 0;
         return true;
     }
 
-    return sw->impl->resize(sw, width, height);
+    return impl->resize(sw, width, height);
 }
 
 void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_color_space *csp)
 {
-    if (!sw->impl->colorspace_hint)
+    const struct pl_sw_fns *impl = PL_PRIV(sw);
+    if (!impl->colorspace_hint)
         return;
 
     struct pl_swapchain_colors fix = {0};
@@ -76,22 +80,26 @@ void pl_swapchain_colorspace_hint(pl_swapchain sw, const struct pl_color_space *
         pl_color_space_infer(&fix);
     }
 
-    sw->impl->colorspace_hint(sw, &fix);
+    impl->colorspace_hint(sw, &fix);
 }
 
 bool pl_swapchain_start_frame(pl_swapchain sw,
                               struct pl_swapchain_frame *out_frame)
 {
     *out_frame = (struct pl_swapchain_frame) {0}; // sanity
-    return sw->impl->start_frame(sw, out_frame);
+
+    const struct pl_sw_fns *impl = PL_PRIV(sw);
+    return impl->start_frame(sw, out_frame);
 }
 
 bool pl_swapchain_submit_frame(pl_swapchain sw)
 {
-    return sw->impl->submit_frame(sw);
+    const struct pl_sw_fns *impl = PL_PRIV(sw);
+    return impl->submit_frame(sw);
 }
 
 void pl_swapchain_swap_buffers(pl_swapchain sw)
 {
-    sw->impl->swap_buffers(sw);
+    const struct pl_sw_fns *impl = PL_PRIV(sw);
+    impl->swap_buffers(sw);
 }
