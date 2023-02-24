@@ -659,7 +659,7 @@ next_dim: ; // `continue` out of the inner loop
         GLSLH("const %s %s[%d] = %s[](\n  ",
               vartypes[vartype][params->comps - 1], arr_name, size,
               vartypes[vartype][params->comps - 1]);
-        pl_str_append(sh, &sh->buffers[SH_BUF_HEADER], lut->str);
+        sh_append_str(sh, SH_BUF_HEADER, lut->str);
         GLSLH(");\n");
         break;
 
