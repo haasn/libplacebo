@@ -54,7 +54,7 @@ struct pl_shader_t {
     int output_w;
     int output_h;
     bool transpose;
-    pl_str buffers[SH_BUF_COUNT];
+    pl_str_builder buffers[SH_BUF_COUNT];
     enum pl_shader_type type;
     bool flexible_work_groups;
     enum pl_sampler_type sampler_type;
@@ -143,10 +143,11 @@ size_t sh_buf_desc_size(const struct pl_shader_desc *buf_desc);
 
 
 // Underlying function for appending text to a shader
-void sh_append(pl_shader sh, enum pl_shader_buf buf, const char *fmt, ...)
-    PL_PRINTF(3, 4);
+#define sh_append(sh, buf, ...) \
+    pl_str_builder_addf((sh)->buffers[buf], __VA_ARGS__)
 
-void sh_append_str(pl_shader sh, enum pl_shader_buf buf, pl_str str);
+#define sh_append_str(sh, buf, str) \
+    pl_str_builder_str((sh)->buffers[buf], str)
 
 #define GLSLP(...) sh_append(sh, SH_BUF_PRELUDE, __VA_ARGS__)
 #define GLSLH(...) sh_append(sh, SH_BUF_HEADER, __VA_ARGS__)

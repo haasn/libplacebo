@@ -30,6 +30,9 @@ pl_shader pl_shader_alloc(pl_log log, const struct pl_shader_params *params)
         .mutable = true,
     };
 
+    for (int i = 0; i < PL_ARRAY_SIZE(sh->buffers); i++)
+        sh->buffers[i] = pl_str_builder_alloc(sh);
+
     // Ensure there's always at least one `tmp` object
     PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_new(NULL));
 
@@ -80,8 +83,9 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
         new.res.params = *params;
 
     // Preserve buffer allocations
+    memcpy(new.buffers, sh->buffers, sizeof(new.buffers));
     for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
-        new.buffers[i] = (pl_str) { .buf = sh->buffers[i].buf };
+        pl_str_builder_reset(new.buffers[i]);
 
     *sh = new;
     PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_new(NULL));
@@ -466,22 +470,6 @@ size_t sh_buf_desc_size(const struct pl_shader_desc *buf_desc)
     return last->layout.offset + last->layout.size;
 }
 
-void sh_append(pl_shader sh, enum pl_shader_buf buf, const char *fmt, ...)
-{
-    pl_assert(buf >= 0 && buf < SH_BUF_COUNT);
-
-    va_list ap;
-    va_start(ap, fmt);
-    pl_str_append_vasprintf_c(sh, &sh->buffers[buf], fmt, ap);
-    va_end(ap);
-}
-
-void sh_append_str(pl_shader sh, enum pl_shader_buf buf, pl_str str)
-{
-    pl_assert(buf >= 0 && buf < SH_BUF_COUNT);
-    pl_str_append(sh, &sh->buffers[buf], str);
-}
-
 void sh_describef(pl_shader sh, const char *fmt, ...)
 {
     va_list ap;
@@ -549,8 +537,8 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
     sh->output_h = res_h;
 
     // Append the prelude and header
-    pl_str_append(sh, &sh->buffers[SH_BUF_PRELUDE], sub->buffers[SH_BUF_PRELUDE]);
-    pl_str_append(sh, &sh->buffers[SH_BUF_HEADER],  sub->buffers[SH_BUF_HEADER]);
+    pl_str_builder_concat(sh->buffers[SH_BUF_PRELUDE], sub->buffers[SH_BUF_PRELUDE]);
+    pl_str_builder_concat(sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_HEADER]);
 
     // Append the body as a new header function
     ident_t name = sh_fresh(sh, "sub");
@@ -562,7 +550,7 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
     } else {
         GLSLH("%s %s(%s) {\n", outsigs[sub->res.output], name, insigs[sub->res.input]);
     }
-    pl_str_append(sh, &sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_BODY]);
+    pl_str_builder_concat(sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_BODY]);
     GLSLH("%s\n}\n\n", retvals[sub->res.output]);
 
     // Copy over all of the descriptors etc.
@@ -577,38 +565,6 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
     return name;
 }
 
-// Finish the current shader body and return its function name
-static ident_t sh_split(pl_shader sh)
-{
-    pl_assert(sh->mutable);
-
-    // Concatenate the body onto the head as a new function
-    ident_t name = sh_fresh(sh, "main");
-    if (sh->res.input == PL_SHADER_SIG_SAMPLER) {
-        pl_assert(sh->sampler_prefix);
-        GLSLH("%s %s(%c%s src_tex, vec2 tex_coord) {\n",
-              outsigs[sh->res.output], name,
-              sh->sampler_prefix, samplers2D[sh->sampler_type]);
-    } else {
-        GLSLH("%s %s(%s) {\n", outsigs[sh->res.output], name, insigs[sh->res.input]);
-    }
-
-    if (sh->buffers[SH_BUF_BODY].len) {
-        pl_str_append(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_BODY]);
-        sh->buffers[SH_BUF_BODY].len = 0;
-        sh->buffers[SH_BUF_BODY].buf[0] = '\0'; // for sanity / efficiency
-    }
-
-    if (sh->buffers[SH_BUF_FOOTER].len) {
-        pl_str_append(sh, &sh->buffers[SH_BUF_HEADER], sh->buffers[SH_BUF_FOOTER]);
-        sh->buffers[SH_BUF_FOOTER].len = 0;
-        sh->buffers[SH_BUF_FOOTER].buf[0] = '\0';
-    }
-
-    GLSLH("%s\n}\n\n", retvals[sh->res.output]);
-    return name;
-}
-
 const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
 {
     if (sh->failed)
@@ -617,22 +573,32 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
     if (!sh->mutable)
         return &sh->res;
 
-    // Split the shader. This finalizes the body and adds it to the header
-    sh->res.name = sh_split(sh);
-
     // Padding for readability
     GLSLP("\n");
 
-    // Concatenate the header onto the prelude to form the final output
-    pl_str *glsl = &sh->buffers[SH_BUF_PRELUDE];
-    pl_str_append(sh, glsl, sh->buffers[SH_BUF_HEADER]);
+    // Concatenate everything onto the prelude to form the final output
+    pl_str_builder_concat(sh->buffers[SH_BUF_PRELUDE], sh->buffers[SH_BUF_HEADER]);
+
+    sh->res.name = sh_fresh(sh, "main");
+    if (sh->res.input == PL_SHADER_SIG_SAMPLER) {
+        pl_assert(sh->sampler_prefix);
+        GLSLP("%s %s(%c%s src_tex, vec2 tex_coord) {\n",
+              outsigs[sh->res.output], sh->res.name,
+              sh->sampler_prefix, samplers2D[sh->sampler_type]);
+    } else {
+        GLSLP("%s %s(%s) {\n", outsigs[sh->res.output], sh->res.name, insigs[sh->res.input]);
+    }
+
+    pl_str_builder_concat(sh->buffers[SH_BUF_PRELUDE], sh->buffers[SH_BUF_BODY]);
+    pl_str_builder_concat(sh->buffers[SH_BUF_PRELUDE], sh->buffers[SH_BUF_FOOTER]);
+    GLSLP("%s\n}\n\n", retvals[sh->res.output]);
 
     // Generate the pretty description
     sh->res.description = "(unknown shader)";
     if (sh->steps.num) {
-        // Reuse this buffer
-        pl_str *desc = &sh->buffers[SH_BUF_BODY];
-        desc->len = 0;
+        // Reuse this builder
+        pl_str_builder desc = sh->buffers[SH_BUF_BODY];
+        pl_str_builder_reset(desc);
 
         for (int i = 0; i < sh->steps.num; i++) {
             const char *step = sh->steps.elem[i];
@@ -650,13 +616,13 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
             }
 
             if (i > 0)
-                pl_str_append(sh, desc, pl_str0(", "));
-            pl_str_append(sh, desc, pl_str0(step));
+                pl_str_builder_const_str(desc, ", ");
+            pl_str_builder_str0(desc, step);
             if (count > 1)
-                pl_str_append_asprintf(sh, desc, " x%d", count);
+                pl_str_builder_printf_c(desc, " x%d", count);
         }
 
-        sh->res.description = (char *) desc->buf;
+        sh->res.description = (char *) pl_str_builder_exec(desc).buf;
     }
 
     // Set the vas/vars/descs
@@ -672,7 +638,7 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
     sh->res.num_steps = sh->steps.num;
 
     // Update the result pointer and return
-    sh->res.glsl = (char *) glsl->buf;
+    sh->res.glsl = (char *) pl_str_builder_exec(sh->buffers[SH_BUF_PRELUDE]).buf;
     sh->mutable = false;
     return &sh->res;
 }
