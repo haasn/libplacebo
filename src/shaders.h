@@ -69,6 +69,10 @@ struct pl_shader_t {
     PL_ARRAY(const char *) steps;
 };
 
+// Same as `pl_shader_finalize` but doesn't template `sh->res.glsl`, instead
+// returns the string builder to be used to finalize the shader.
+pl_str_builder sh_finalize_internal(pl_shader sh);
+
 // Helper functions for convenience
 #define SH_PARAMS(sh) ((sh)->res.params)
 #define SH_GPU(sh) (SH_PARAMS(sh).gpu)

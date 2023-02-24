@@ -565,13 +565,11 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
     return name;
 }
 
-const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
+pl_str_builder sh_finalize_internal(pl_shader sh)
 {
+    pl_assert(sh->mutable);
     if (sh->failed)
         return NULL;
-
-    if (!sh->mutable)
-        return &sh->res;
 
     // Padding for readability
     GLSLP("\n");
@@ -636,10 +634,23 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
     sh->res.num_constants = sh->consts.num;
     sh->res.steps = sh->steps.elem;
     sh->res.num_steps = sh->steps.num;
-
-    // Update the result pointer and return
-    sh->res.glsl = (char *) pl_str_builder_exec(sh->buffers[SH_BUF_PRELUDE]).buf;
     sh->mutable = false;
+    return sh->buffers[SH_BUF_PRELUDE];
+}
+
+const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
+{
+    pl_str_builder glsl = NULL;
+    if (sh->mutable) {
+        glsl = sh_finalize_internal(sh);
+        if (!glsl)
+            return NULL;
+    }
+
+    pl_assert(!sh->mutable);
+    if (!sh->res.glsl)
+        sh->res.glsl = (char *) pl_str_builder_exec(glsl).buf;
+
     return &sh->res;
 }
 

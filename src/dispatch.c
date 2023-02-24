@@ -72,7 +72,8 @@ struct pass_var {
 };
 
 struct pass {
-    uint64_t signature; // hash of shader contents
+    uint64_t signature;  // hash of string builders, not stable
+    uint64_t cache_hash; // hash of actual shader body, stable
     pl_pass pass;
     int last_index;
 
@@ -100,7 +101,7 @@ struct pass {
 };
 
 struct cached_pass {
-    uint64_t signature;
+    uint64_t hash;
     const uint8_t *cached_program;
     size_t cached_program_len;
     bool stale;
@@ -250,7 +251,6 @@ static bool add_pass_var(pl_dispatch dp, void *tmp, struct pass *pass,
 
 #define ADD(b, ...)     pl_str_builder_addf(b, __VA_ARGS__)
 #define ADD_CAT(b, cat) pl_str_builder_concat(b, cat)
-#define ADD_STR(b, str) pl_str_builder_str(b, str)
 
 static void add_var(pl_str_builder body, const struct pl_var *var)
 {
@@ -308,14 +308,18 @@ struct generate_params {
     ident_t out_off;
 };
 
-static void generate_shaders(pl_dispatch dp, const struct generate_params *params)
+static void generate_shaders(pl_dispatch dp,
+                             const struct generate_params *params,
+                             pl_str_builder *out_vert_builder,
+                             pl_str_builder *out_glsl_builder)
 {
     pl_gpu gpu = dp->gpu;
     pl_shader sh = params->sh;
     void *tmp = params->tmp;
-    const struct pl_shader_res *res = pl_shader_finalize(sh);
+    const struct pl_shader_res *res = &sh->res;
     struct pass *pass = params->pass;
     struct pl_pass_params *pass_params = params->pass_params;
+    pl_str_builder shader_body = sh_finalize_internal(sh);
 
     pl_str_builder pre = dp->tmp[TMP_PRELUDE];
     ADD(pre, "#version %d%s\n", gpu->glsl.version,
@@ -634,10 +638,8 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
 
         ADD(vert_body, "}");
         ADD_CAT(vert_head, vert_body);
-
-        pl_str vert_shader = pl_str_builder_exec(vert_head);
-        pass_params->vertex_shader = (char *) vert_shader.buf;
-        pl_hash_merge(&pass->signature, pl_str_hash(vert_shader));
+        pl_hash_merge(&pass->signature, pl_str_builder_hash(vert_head));
+        *out_vert_builder = vert_head;
 
         // GLSL 130+ doesn't use the magic gl_FragColor
         if (gpu->glsl.version >= 130) {
@@ -658,7 +660,7 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
     }
 
     // Set up the main shader body
-    ADD_STR(glsl, pl_str0(res->glsl));
+    ADD_CAT(glsl, shader_body);
     ADD(glsl, "void main() {\n");
 
     pl_assert(res->input == PL_SHADER_SIG_NONE);
@@ -677,14 +679,12 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
 
     ADD(glsl, "}");
 
-    pl_str glsl_shader = pl_str_builder_exec(glsl);
-    pass_params->glsl_shader = (char *) glsl_shader.buf;
-    pl_hash_merge(&pass->signature, pl_str_hash(glsl_shader));
+    pl_hash_merge(&pass->signature, pl_str_builder_hash(glsl));
+    *out_glsl_builder = glsl;
 }
 
 #undef ADD
 #undef ADD_CAT
-#undef ADD_STR
 
 #define pass_age(pass) (dp->current_index - (pass)->last_index)
 
@@ -876,7 +876,9 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
     }
 
     // Finalize the shader and look it up in the pass cache
-    generate_shaders(dp, &gen_params);
+    pl_str_builder vert_builder = NULL, glsl_builder = NULL;
+    pass->cache_hash = pass->signature; // don't depend on pl_str_builder_hash
+    generate_shaders(dp, &gen_params, &vert_builder, &glsl_builder);
     for (int i = 0; i < dp->passes.num; i++) {
         struct pass *p = dp->passes.elem[i];
         if (p->signature != pass->signature)
@@ -892,12 +894,21 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
         return p;
     }
 
+    // Need to compile new shader, execute templates now
+    if (vert_builder) {
+        pl_str vert = pl_str_builder_exec(vert_builder);
+        params.vertex_shader = (char *) vert.buf;
+        pl_hash_merge(&pass->cache_hash, pl_str_hash(vert));
+    }
+    pl_str glsl = pl_str_builder_exec(glsl_builder);
+    params.glsl_shader = (char *) glsl.buf;
+    pl_hash_merge(&pass->cache_hash, pl_str_hash(glsl));
+
     // Find and attach the cached program, if any
     for (int i = 0; i < dp->cached_passes.num; i++) {
-        if (dp->cached_passes.elem[i].signature == pass->signature) {
-            PL_DEBUG(dp, "Re-using cached program with signature 0x%llx",
-                     (unsigned long long) pass->signature);
-
+        if (dp->cached_passes.elem[i].hash == pass->cache_hash) {
+            PL_DEBUG(dp, "Re-using cached program with hash 0x%"PRIx64,
+                     pass->cache_hash);
             params.cached_program = dp->cached_passes.elem[i].cached_program;
             params.cached_program_len = dp->cached_passes.elem[i].cached_program_len;
             PL_ARRAY_REMOVE_AT(dp->cached_passes, i);
@@ -1108,7 +1119,7 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
 
 static void run_pass(pl_dispatch dp, pl_shader sh, struct pass *pass)
 {
-    const struct pl_shader_res *res = pl_shader_finalize(sh);
+    const struct pl_shader_res *res = &sh->res;
     pl_pass_run(dp->gpu, &pass->run_params);
 
     for (uint64_t ts; (ts = pl_timer_query(dp->gpu, pass->timer));) {
@@ -1628,12 +1639,12 @@ size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
             continue;
 
         if (out) {
-            PL_DEBUG(dp, "Saving %zu bytes of cached program with signature 0x%llx",
-                     params->cached_program_len, (unsigned long long) pass->signature);
+            PL_DEBUG(dp, "Saving %zu bytes of cached program with hash 0x%"PRIx64,
+                     params->cached_program_len, pass->cache_hash);
         }
 
         num_passes++;
-        WRITE(uint64_t, pass->signature);
+        WRITE(uint64_t, pass->cache_hash);
         WRITE(uint64_t, params->cached_program_len);
         write_buf(out, &size, params->cached_program, params->cached_program_len);
     }
@@ -1647,12 +1658,12 @@ size_t pl_dispatch_save(pl_dispatch dp, uint8_t *out)
             continue;
 
         if (out) {
-            PL_DEBUG(dp, "Saving %zu bytes of cached program with signature 0x%llx",
-                     pass->cached_program_len, (unsigned long long) pass->signature);
+            PL_DEBUG(dp, "Saving %zu bytes of cached program with hash 0x%"PRIx64,
+                     pass->cached_program_len, pass->hash);
         }
 
         num_passes++;
-        WRITE(uint64_t, pass->signature);
+        WRITE(uint64_t, pass->hash);
         WRITE(uint64_t, pass->cached_program_len);
         write_buf(out, &size, pass->cached_program, pass->cached_program_len);
     }
@@ -1691,26 +1702,25 @@ void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache)
 
     pl_mutex_lock(&dp->lock);
     for (int i = 0; i < num; i++) {
-        uint64_t sig, size;
-        LOAD(sig);
+        uint64_t hash, size;
+        LOAD(hash);
         LOAD(size);
         if (!size)
             continue;
 
         // Skip passes that are already compiled
         for (int n = 0; n < dp->passes.num; n++) {
-            if (dp->passes.elem[n]->signature == sig) {
-                PL_DEBUG(dp, "Skipping already compiled pass with signature %llx",
-                         (unsigned long long) sig);
+            if (dp->passes.elem[n]->cache_hash == hash) {
+                PL_DEBUG(dp, "Skipping already compiled pass with hash %"PRIx64, hash);
                 cache += size;
                 continue;
             }
         }
 
-        // Find a cached_pass entry with this signature, if any
+        // Find a cached_pass entry with this hash, if any
         struct cached_pass *pass = NULL;
         for (int n = 0; n < dp->cached_passes.num; n++) {
-            if (dp->cached_passes.elem[n].signature == sig) {
+            if (dp->cached_passes.elem[n].hash == hash) {
                 pass = &dp->cached_passes.elem[n];
                 break;
             }
@@ -1721,13 +1731,13 @@ void pl_dispatch_load(pl_dispatch dp, const uint8_t *cache)
             PL_ARRAY_GROW(dp, dp->cached_passes);
             pass = &dp->cached_passes.elem[dp->cached_passes.num++];
             *pass = (struct cached_pass) {
-                .signature = sig,
+                .hash = hash,
                 .stale = api_ver < PL_API_VER,
             };
         }
 
-        PL_DEBUG(dp, "Loading %zu bytes of cached program with signature 0x%llx",
-                 (size_t) size, (unsigned long long) sig);
+        PL_DEBUG(dp, "Loading %zu bytes of cached program with hash 0x%"PRIx64,
+                 (size_t) size, hash);
 
         pl_free((void *) pass->cached_program);
         pass->cached_program = pl_memdup(dp, cache, size);
