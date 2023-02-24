@@ -108,6 +108,99 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
     pl_str_append(alloc, str, pl_str0(fmt));
 }
 
+size_t pl_str_append_memprintf_c(void *alloc, pl_str *str, const char *fmt,
+                                 const void *args)
+{
+    const uint8_t *ptr = args;
+
+    for (const char *c; (c = strchr(fmt, '%')) != NULL; fmt = c + 1) {
+        pl_str_append_raw(alloc, str, fmt, c - fmt);
+        c++;
+
+        char buf[32];
+        int len;
+
+#define LOAD(var)                           \
+  do {                                      \
+      memcpy(&(var), ptr, sizeof(var));     \
+      ptr += sizeof(var);                   \
+  } while (0)
+
+        switch (c[0]) {
+        case '%':
+            pl_str_append_raw(alloc, str, c, 1);
+            continue;
+        case 's': {
+            len = strlen((const char *) ptr);
+            pl_str_append_raw(alloc, str, ptr, len);
+            ptr += len + 1; // also skip \0
+            continue;
+        }
+        case '.': {
+            assert(c[1] == '*');
+            assert(c[2] == 's');
+            LOAD(len);
+            pl_str_append_raw(alloc, str, ptr, len);
+            ptr += len; // no trailing \0
+            c += 2;
+            continue;
+        }
+        case 'c':
+            LOAD(buf[0]);
+            len = 1;
+            break;
+        case 'd': ;
+            int d;
+            LOAD(d);
+            len = ccStrPrintInt32(buf, d);
+            break;
+        case 'u': ;
+            unsigned u;
+            LOAD(u);
+            len = ccStrPrintUint32(buf, u);
+            break;
+        case 'l':
+            assert(c[1] == 'l');
+            switch (c[2]) {
+            case 'u': ;
+                long long unsigned llu;
+                LOAD(llu);
+                len = ccStrPrintUint64(buf, llu);
+                break;
+            case 'd': ;
+                long long int lld;
+                LOAD(lld);
+                len = ccStrPrintInt64(buf, lld);
+                break;
+            default: pl_unreachable();
+            }
+            c += 2;
+            break;
+        case 'z': ;
+            assert(c[1] == 'u');
+            size_t zu;
+            LOAD(zu);
+            len = ccStrPrintUint64(buf, zu);
+            c++;
+            break;
+        case 'f': ;
+            double f;
+            LOAD(f);
+            len = ccStrPrintDouble(buf, sizeof(buf), 20, f);
+            break;
+        default:
+            fprintf(stderr, "Invalid conversion character: '%c'!\n", c[0]);
+            abort();
+        }
+
+        pl_str_append_raw(alloc, str, buf, len);
+    }
+#undef LOAD
+
+    pl_str_append(alloc, str, pl_str0(fmt));
+    return (uintptr_t) ptr - (uintptr_t) args;
+}
+
 bool pl_str_parse_double(pl_str str, double *out)
 {
     return ccSeqParseDouble((char *) str.buf, str.len, out);

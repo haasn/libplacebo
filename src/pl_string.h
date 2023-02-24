@@ -78,6 +78,21 @@ void pl_str_append_asprintf_c(void *alloc, pl_str *str, const char *fmt, ...)
 void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt, va_list va)
     PL_PRINTF(3, 0);
 
+// Variant of the above which takes arguments directly from a pointer in memory,
+// reading them incrementally (tightly packed). Returns the amount of bytes
+// read from `args`, as determined by the following table:
+//
+// %c: sizeof(char)
+// %d, %u: sizeof(int)
+// %f: sizeof(double)
+// %lld, %llu: sizeof(long long int)
+// %zu: sizeof(size_t)
+// %s: \0 terminated string
+// %.*s: sizeof(int) + that many bytes (no \0 terminator)
+size_t pl_str_append_memprintf_c(void *alloc, pl_str *str, const char *fmt,
+                                 const void *args)
+    PL_PRINTF(3, 0);
+
 // Locale-invariant number parsing
 bool pl_str_parse_double(pl_str str, double *out);
 bool pl_str_parse_int64(pl_str str, int64_t *out);
