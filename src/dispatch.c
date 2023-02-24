@@ -52,7 +52,8 @@ struct pl_dispatch_t {
     PL_ARRAY(struct cached_pass) cached_passes; // not-yet-compiled passes
 
     // temporary buffers to help avoid re_allocations during pass creation
-    pl_str tmp[TMP_COUNT];
+    pl_str_builder tmp[TMP_COUNT];
+    uint8_t *ubo_tmp;
 };
 
 enum pass_var_type {
@@ -71,7 +72,7 @@ struct pass_var {
 };
 
 struct pass {
-    uint64_t signature; // as returned by pl_shader_signature
+    uint64_t signature; // hash of shader contents
     pl_pass pass;
     int last_index;
 
@@ -123,6 +124,8 @@ pl_dispatch pl_dispatch_create(pl_log log, pl_gpu gpu)
     dp->log = log;
     dp->gpu = gpu;
     dp->max_passes = MAX_PASSES;
+    for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
+        dp->tmp[i] = pl_str_builder_alloc(dp);
 
     return dp;
 }
@@ -245,10 +248,11 @@ static bool add_pass_var(pl_dispatch dp, void *tmp, struct pass *pass,
     return false;
 }
 
-#define ADD(x, ...) pl_str_append_asprintf_c(dp, (x), __VA_ARGS__)
-#define ADD_STR(x, s) pl_str_append(dp, (x), (s))
+#define ADD(b, ...)     pl_str_builder_addf(b, __VA_ARGS__)
+#define ADD_CAT(b, cat) pl_str_builder_concat(b, cat)
+#define ADD_STR(b, str) pl_str_builder_str(b, str)
 
-static void add_var(pl_dispatch dp, pl_str *body, const struct pl_var *var)
+static void add_var(pl_str_builder body, const struct pl_var *var)
 {
     ADD(body, "%s %s", pl_var_glsl_type_name(*var), var->name);
 
@@ -265,7 +269,7 @@ static int cmp_buffer_var(const void *pa, const void *pb)
     return PL_CMP((*a)->layout.offset, (*b)->layout.offset);
 }
 
-static void add_buffer_vars(pl_dispatch dp, void *tmp, pl_str *body,
+static void add_buffer_vars(pl_dispatch dp, void *tmp, pl_str_builder body,
                             const struct pl_buffer_var *vars, int num)
 {
     // Sort buffer vars
@@ -279,7 +283,7 @@ static void add_buffer_vars(pl_dispatch dp, void *tmp, pl_str *body,
         // Add an explicit offset wherever possible
         if (dp->gpu->glsl.version >= 440)
             ADD(body, "    layout(offset=%zu) ", sorted_vars[i]->layout.offset);
-        add_var(dp, body, &sorted_vars[i]->var);
+        add_var(body, &sorted_vars[i]->var);
     }
     ADD(body, "};\n");
 }
@@ -313,7 +317,7 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
     struct pass *pass = params->pass;
     struct pl_pass_params *pass_params = params->pass_params;
 
-    pl_str *pre = &dp->tmp[TMP_PRELUDE];
+    pl_str_builder pre = dp->tmp[TMP_PRELUDE];
     ADD(pre, "#version %d%s\n", gpu->glsl.version,
         (gpu->glsl.gles && gpu->glsl.version > 100) ? " es" : "");
     if (pass_params->type == PL_PASS_COMPUTE)
@@ -576,25 +580,25 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
         if (pv->type != PASS_VAR_GLOBAL)
             continue;
         ADD(pre, "uniform ");
-        add_var(dp, pre, var);
+        add_var(pre, var);
     }
 
     char *vert_in  = gpu->glsl.version >= 130 ? "in" : "attribute";
     char *vert_out = gpu->glsl.version >= 130 ? "out" : "varying";
     char *frag_in  = gpu->glsl.version >= 130 ? "in" : "varying";
 
-    pl_str *glsl = &dp->tmp[TMP_MAIN];
-    ADD_STR(glsl, *pre);
+    pl_str_builder glsl = dp->tmp[TMP_MAIN];
+    ADD_CAT(glsl, pre);
 
     const char *out_color = "gl_FragColor";
     switch(pass_params->type) {
     case PL_PASS_RASTER: {
         pl_assert(params->vert_pos);
-        pl_str *vert_head = &dp->tmp[TMP_VERT_HEAD];
-        pl_str *vert_body = &dp->tmp[TMP_VERT_BODY];
+        pl_str_builder vert_head = dp->tmp[TMP_VERT_HEAD];
+        pl_str_builder vert_body = dp->tmp[TMP_VERT_BODY];
 
         // Set up a trivial vertex shader
-        ADD_STR(vert_head, *pre);
+        ADD_CAT(vert_head, pre);
         ADD(vert_body, "void main() {\n");
         for (int i = 0; i < sh->vas.num; i++) {
             const struct pl_vertex_attrib *va = &pass_params->vertex_attribs[i];
@@ -629,9 +633,11 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
         }
 
         ADD(vert_body, "}");
-        ADD_STR(vert_head, *vert_body);
-        pass_params->vertex_shader = (char *) vert_head->buf;
-        pl_hash_merge(&pass->signature, pl_str_hash(*vert_head));
+        ADD_CAT(vert_head, vert_body);
+
+        pl_str vert_shader = pl_str_builder_exec(vert_head);
+        pass_params->vertex_shader = (char *) vert_shader.buf;
+        pl_hash_merge(&pass->signature, pl_str_hash(vert_shader));
 
         // GLSL 130+ doesn't use the magic gl_FragColor
         if (gpu->glsl.version >= 130) {
@@ -652,7 +658,7 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
     }
 
     // Set up the main shader body
-    ADD(glsl, "%s", res->glsl);
+    ADD_STR(glsl, pl_str0(res->glsl));
     ADD(glsl, "void main() {\n");
 
     pl_assert(res->input == PL_SHADER_SIG_NONE);
@@ -670,11 +676,14 @@ static void generate_shaders(pl_dispatch dp, const struct generate_params *param
     }
 
     ADD(glsl, "}");
-    pass_params->glsl_shader = (char *) glsl->buf;
-    pl_hash_merge(&pass->signature, pl_str_hash(*glsl));
+
+    pl_str glsl_shader = pl_str_builder_exec(glsl);
+    pass_params->glsl_shader = (char *) glsl_shader.buf;
+    pl_hash_merge(&pass->signature, pl_str_hash(glsl_shader));
 }
 
 #undef ADD
+#undef ADD_CAT
 #undef ADD_STR
 
 #define pass_age(pass) (dp->current_index - (pass)->last_index)
@@ -977,8 +986,8 @@ static void update_pass_var(pl_dispatch dp, struct pass *pass,
             // Coalesce strided UBO write into a single pl_buf_write to avoid
             // unnecessary synchronization overhead by assembling the correctly
             // strided upload in RAM
-            pl_grow(dp, &dp->tmp[0].buf, pv->layout.size);
-            uint8_t * const tmp = dp->tmp[0].buf;
+            pl_grow(dp, &dp->ubo_tmp, pv->layout.size);
+            uint8_t * const tmp = dp->ubo_tmp;
             const uint8_t *src = sv->data;
             const uint8_t *end = src + host_layout.size;
             uint8_t *dst = tmp;
@@ -1314,7 +1323,7 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
 error:
     // Reset the temporary buffers which we use to build the shader
     for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
-        dp->tmp[i].len = 0;
+        pl_str_builder_reset(dp->tmp[i]);
 
     pl_mutex_unlock(&dp->lock);
     pl_dispatch_abort(dp, params->shader);
@@ -1407,7 +1416,7 @@ bool pl_dispatch_compute(pl_dispatch dp, const struct pl_dispatch_compute_params
 error:
     // Reset the temporary buffers which we use to build the shader
     for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
-        dp->tmp[i].len = 0;
+        pl_str_builder_reset(dp->tmp[i]);
 
     pl_mutex_unlock(&dp->lock);
     pl_dispatch_abort(dp, params->shader);
@@ -1540,7 +1549,7 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
 error:
     // Reset the temporary buffers which we use to build the shader
     for (int i = 0; i < PL_ARRAY_SIZE(dp->tmp); i++)
-        dp->tmp[i].len = 0;
+        pl_str_builder_reset(dp->tmp[i]);
 
     pl_mutex_unlock(&dp->lock);
     pl_dispatch_abort(dp, params->shader);
