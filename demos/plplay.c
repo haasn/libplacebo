@@ -79,6 +79,7 @@ struct plplay {
     char *target_icc_name;
     pl_rotation target_rot;
     bool colorspace_hint;
+    bool colorspace_hint_dynamic;
     bool ignore_dovi;
     bool fullscreen;
 
@@ -404,6 +405,12 @@ static void apply_csp_overrides(struct plplay *p, struct pl_color_space *csp)
         csp->transfer = p->force_trc;
     if (p->force_hdr_enable)
         csp->hdr = p->force_hdr;
+    if (p->colorspace_hint_dynamic) {
+        float min_luma, max_luma;
+        pl_color_space_nominal_luma(csp, &min_luma, &max_luma);
+        csp->hdr.min_luma = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, min_luma);
+        csp->hdr.max_luma = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, max_luma);
+    }
 }
 
 static void update_settings(struct plplay *p, const struct pl_frame *target);
@@ -1367,6 +1374,11 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
 
             nk_layout_row_dynamic(nk, 24, 1);
             nk_checkbox_label(nk, "Forward input color space to display", &p->colorspace_hint);
+
+            if (p->colorspace_hint) {
+                nk_checkbox_label(nk, "Forward dynamic brightness changes to display",
+                                  &p->colorspace_hint_dynamic);
+            }
 
             nk_layout_row_dynamic(nk, 50, 1);
             if (ui_widget_hover(nk, "Drop ICC profile here...") && dropped_file) {
