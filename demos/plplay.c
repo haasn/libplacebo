@@ -794,6 +794,20 @@ static const char *pscale_desc(const struct pl_filter_preset *f)
     return f->filter ? f->description : "None (Use regular upscaler)";
 }
 
+static void auto_property_int(struct nk_context *nk, int auto_val, int min, int *val,
+                         int max, int step, float inc_per_pixel)
+{
+    int value = *val;
+    if (!value)
+        value = auto_val;
+
+    // Auto label will be delayed 1 frame
+    nk_property_int(nk, *val ? "" : "Auto", min, &value, max, step, inc_per_pixel);
+
+    if (*val || value != auto_val)
+        *val = value;
+}
+
 static void update_settings(struct plplay *p, const struct pl_frame *target)
 {
     struct nk_context *nk = ui_get_context(p->ui);
@@ -1365,12 +1379,27 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             trepr->alpha = nk_combo(nk, alphas, PL_ALPHA_MODE_COUNT, trepr->alpha,
                                     16, nk_vec2(nk_widget_width(nk), 200));
 
-            // Adjust these two fields in unison
-            int bits = trepr->bits.color_depth;
+            const struct pl_bit_encoding *bits = &target->repr.bits;
             nk_label(nk, "Bit depth:", NK_TEXT_LEFT);
-            nk_property_int(nk, "", 0, &bits, 16, 1, 0);
-            trepr->bits.color_depth = bits;
-            trepr->bits.sample_depth = bits;
+            auto_property_int(nk, bits->color_depth, 0,
+                              &trepr->bits.color_depth, 16, 1, 0);
+
+            if (bits->color_depth != bits->sample_depth) {
+                nk_label(nk, "Sample bit depth:", NK_TEXT_LEFT);
+                auto_property_int(nk, bits->sample_depth, 0,
+                                  &trepr->bits.sample_depth, 16, 1, 0);
+            } else {
+                // Adjust these two fields in unison
+                trepr->bits.sample_depth = trepr->bits.color_depth;
+            }
+
+            if (bits->bit_shift) {
+                nk_label(nk, "Bit shift:", NK_TEXT_LEFT);
+                auto_property_int(nk, bits->bit_shift, 0,
+                                  &trepr->bits.bit_shift, 16, 1, 0);
+            } else {
+                trepr->bits.bit_shift = 0;
+            }
 
             nk_layout_row_dynamic(nk, 24, 1);
             nk_checkbox_label(nk, "Forward input color space to display", &p->colorspace_hint);
