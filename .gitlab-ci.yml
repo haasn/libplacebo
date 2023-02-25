@@ -121,7 +121,7 @@ llvmpipe:
                       -Dshaderc=enabled
                       -Dglslang=enabled
         - ninja -C build
-        - cd build && meson test -t 5 -v --num-processes=1
+        - cd build && meson test -t 20 -v --num-processes=1
 
 gpu:
     image: $IMAGE_UBUNTU_JAMMY
