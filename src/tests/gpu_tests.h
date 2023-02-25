@@ -297,7 +297,7 @@ static void pl_planar_tests(pl_gpu gpu)
     uint8_t data[(width * height) >> 2];
     REQUIRE_CMP(plane->params.w * plane->params.h, ==, PL_ARRAY_SIZE(data), "d");
 
-    pl_tex_clear(gpu, plane, (float[]){ 0.5, 0.0, 0.0, 1.0 });
+    pl_tex_clear(gpu, plane, (float[]){ (float) 0x80 / 0xFF, 0.0, 0.0, 1.0 });
     REQUIRE(pl_tex_download(gpu, pl_tex_transfer_params(
         .tex = plane,
         .ptr = data,
