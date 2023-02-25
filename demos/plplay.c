@@ -1300,8 +1300,8 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                                 1e-2, &fix.hdr.max_luma, 10000.0,
                                 fix.hdr.max_luma / 100, fix.hdr.max_luma / 1000);
             nk_property_float(nk, "Black point (mcd/m²)",
-                                1e-3, &fix.hdr.min_luma, 10000.0,
-                                fix.hdr.min_luma / 100, fix.hdr.min_luma / 1000);
+                                1e-7 * 1000, &fix.hdr.min_luma, 10000.0 * 1000,
+                                5, 2);
             fix.hdr.min_luma /= 1000;
             pl_color_space_infer(&fix);
             p->force_hdr = fix.hdr;
