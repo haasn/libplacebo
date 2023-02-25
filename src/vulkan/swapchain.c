@@ -577,10 +577,10 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
     VkImage *vkimages = NULL;
     uint32_t num_images = 0;
 
-    VkSwapchainCreateInfoKHR sinfo = p->protoInfo;
-    if (!update_swapchain_info(p, &sinfo, w, h))
+    if (!update_swapchain_info(p, &p->protoInfo, w, h))
         return false;
 
+    VkSwapchainCreateInfoKHR sinfo = p->protoInfo;
 #ifdef VK_EXT_full_screen_exclusive
     // Explicitly disallow full screen exclusive mode if possible
     static const VkSurfaceFullScreenExclusiveInfoEXT fsinfo = {
