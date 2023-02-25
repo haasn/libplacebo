@@ -42,6 +42,7 @@ void window_get_scroll(const struct window *win, float *dx, float *dy);
 bool window_get_button(const struct window *win, enum button);
 bool window_get_key(const struct window *win, enum key);
 char *window_get_file(const struct window *win);
+bool window_toggle_fullscren(const struct window *win, bool fullscreen);
 
 // For implementations
 struct window_impl {
@@ -54,4 +55,5 @@ struct window_impl {
     __typeof__(window_get_button) *get_button;
     __typeof__(window_get_key) *get_key;
     __typeof__(window_get_file) *get_file;
+    __typeof__(window_toggle_fullscren) *toggle_fullscreen;
 };

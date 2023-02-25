@@ -52,6 +52,13 @@
 
 const struct window_impl IMPL;
 
+struct window_pos {
+    int x;
+    int y;
+    int w;
+    int h;
+};
+
 struct priv {
     struct window w;
     GLFWwindow *win;
@@ -75,6 +82,8 @@ struct priv {
     size_t files_num;
     size_t files_size;
     bool file_seen;
+
+    struct window_pos windowed_pos;
 };
 
 static void err_cb(int code, const char *desc)
@@ -333,8 +342,11 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
     p->w.gpu = p->d3d11->gpu;
 #endif // USE_D3D11
 
+    glfwGetWindowSize(p->win, &p->windowed_pos.w, &p->windowed_pos.h);
+    glfwGetWindowPos(p->win, &p->windowed_pos.x, &p->windowed_pos.y);
+
     int w, h;
-    glfwGetWindowSize(p->win, &w, &h);
+    glfwGetFramebufferSize(p->win, &w, &h);
     pl_swapchain_colorspace_hint(p->w.swapchain, &params->colors);
     if (!pl_swapchain_resize(p->w.swapchain, &w, &h)) {
         fprintf(stderr, "libplacebo: Failed initializing swapchain\n");
@@ -451,6 +463,37 @@ static char *glfw_get_file(const struct window *window)
     return p->files[0];
 }
 
+static bool glfw_toggle_fullscreen(const struct window *window, bool fullscreen)
+{
+    struct priv *p = (struct priv *) window;
+    bool window_fullscreen = !!glfwGetWindowMonitor(p->win);
+
+    if (window_fullscreen == fullscreen)
+        return true;
+
+    if (window_fullscreen) {
+        glfwSetWindowMonitor(p->win, NULL, p->windowed_pos.x, p->windowed_pos.y,
+                             p->windowed_pos.w, p->windowed_pos.h, GLFW_DONT_CARE);
+        return true;
+    }
+
+    // For simplicity sake use primary monitor
+    GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+    if (!monitor)
+        return false;
+
+    const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+    if (!mode)
+        return false;
+
+    glfwGetWindowPos(p->win, &p->windowed_pos.x, &p->windowed_pos.y);
+    glfwGetWindowSize(p->win, &p->windowed_pos.w, &p->windowed_pos.h);
+    glfwSetWindowMonitor(p->win, monitor, 0, 0, mode->width, mode->height,
+                         mode->refreshRate);
+
+    return true;
+}
+
 const struct window_impl IMPL = {
     .name = IMPL_NAME,
     .create = glfw_create,
@@ -461,4 +504,5 @@ const struct window_impl IMPL = {
     .get_key = glfw_get_key,
     .get_scroll = glfw_get_scroll,
     .get_file = glfw_get_file,
+    .toggle_fullscreen = glfw_toggle_fullscreen,
 };

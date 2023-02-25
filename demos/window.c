@@ -76,3 +76,8 @@ char *window_get_file(const struct window *win)
 {
     return win->impl->get_file(win);
 }
+
+bool window_toggle_fullscren(const struct window *win, bool fullscreen)
+{
+    return win->impl->toggle_fullscreen(win, fullscreen);
+}

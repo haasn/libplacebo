@@ -89,6 +89,8 @@ static struct window *sdl_create(pl_log log, const struct window_params *params)
         goto error;
     }
 
+    int w, h;
+
 #ifdef USE_VK
 
     unsigned int num = 0;
@@ -139,6 +141,8 @@ static struct window *sdl_create(pl_log log, const struct window_params *params)
     }
 
     p->w.gpu = p->vk->gpu;
+
+    SDL_Vulkan_GetDrawableSize(p->win, &w, &h);
 #endif // USE_VK
 
 #ifdef USE_GL
@@ -172,9 +176,10 @@ static struct window *sdl_create(pl_log log, const struct window_params *params)
     }
 
     p->w.gpu = p->gl->gpu;
+
+    SDL_GL_GetDrawableSize(p->win, &w, &h);
 #endif // USE_GL
 
-    int w = params->width, h = params->height;
     pl_swapchain_colorspace_hint(p->w.swapchain, &params->colors);
     if (!pl_swapchain_resize(p->w.swapchain, &w, &h)) {
         fprintf(stderr, "libplacebo: Failed initializing swapchain\n");
@@ -327,6 +332,23 @@ static char *sdl_get_file(const struct window *window)
     return p->files[0];
 }
 
+static bool sdl_toggle_fullscreen(const struct window *window, bool fullscreen)
+{
+    struct priv *p = (struct priv *) window;
+    bool window_fullscreen = SDL_GetWindowFlags(p->win) & SDL_WINDOW_FULLSCREEN;
+
+    if (window_fullscreen == fullscreen)
+        return true;
+
+    if (SDL_SetWindowFullscreen(p->win, fullscreen ? 0 : SDL_WINDOW_FULLSCREEN)) {
+        fprintf(stderr, "SDL2: SetWindowFullscreen failed: %s\n", SDL_GetError());
+        SDL_ClearError();
+        return false;
+    }
+
+    return true;
+}
+
 const struct window_impl IMPL = {
     .name = IMPL_NAME,
     .create = sdl_create,
@@ -337,4 +359,5 @@ const struct window_impl IMPL = {
     .get_key = sdl_get_key,
     .get_scroll = sdl_get_scroll,
     .get_file = sdl_get_file,
+    .toggle_fullscreen = sdl_toggle_fullscreen,
 };
