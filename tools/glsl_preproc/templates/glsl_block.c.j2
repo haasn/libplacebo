@@ -1,0 +1,17 @@
+#line {{ block.linenr }}
+{% if block.refs %}
+    pl_str_append_asprintf(alloc, buf,
+    {% for line in block.lines %}
+        {{ line.fmtstr }}{{ ',' if loop.last }}
+    {% endfor %}
+    {% for ref in block.refs %}
+        {{ ref }}{{ ',' if not loop.last }}
+    {% endfor %}
+    );
+{% else %}
+    pl_str_append(alloc, buf, pl_str0(
+    {% for line in block.lines %}
+        {{ line.rawstr }}
+    {% endfor %}
+    ));
+{% endif %}

@@ -1,0 +1,19 @@
+{
+{% if macro.vars %}
+    const {{ macro.render_struct() }} {{ macro.name }}_args = {
+    {% for var in macro.vars %}
+#line {{ var.linenr }}
+        .{{ var.name }} = {{ var.expr }},
+    {% endfor %}
+    };
+#line {{ macro.linenr }}
+{% endif %}
+    size_t {{ macro.name }}_fn(void *, pl_str *, const uint8_t *);
+{% if macro.vars %}
+    pl_str_builder_append(sh->buffers[{{ macro.buf }}], {{ macro.name }}_fn,
+                          &{{ macro.name }}_args, sizeof({{ macro.name }}_args));
+{% else %}
+    pl_str_builder_append(sh->buffers[{{ macro.buf }}], {{ macro.name }}_fn, NULL, 0);
+{% endif %}
+}
+

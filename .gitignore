@@ -6,3 +6,4 @@
 *.exe
 *.o
 .cache
+__pycache__

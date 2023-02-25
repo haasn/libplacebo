@@ -16,7 +16,7 @@
  */
 
 #include "shaders.h"
-#include "film_grain.h"
+#include "shaders/film_grain.h"
 
 static const int8_t Gaussian_LUT[2048+4];
 static const uint32_t Seed_LUT[256];

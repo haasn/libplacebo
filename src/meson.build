@@ -98,26 +98,29 @@ sources = [
   'log.c',
   'pl_alloc.c',
   'pl_string.c',
-  'renderer.c',
   'siphash.c',
-  'shaders.c',
-  'shaders/colorspace.c',
-  'shaders/custom.c',
-  'shaders/custom/mpv.c',
-  'shaders/deinterlacing.c',
-  'shaders/dithering.c',
-  'shaders/film_grain.c',
-  'shaders/film_grain_av1.c',
-  'shaders/film_grain_h274.c',
-  'shaders/icc.c',
-  'shaders/lut.c',
-  'shaders/sampling.c',
   'swapchain.c',
   'tone_mapping.c',
   'utils/dolbyvision.c',
   'utils/frame_queue.c',
   'utils/upload.c',
 ]
+
+# Source files that may use GLSL pragmas, we need to use custom_target
+# to the proper environment and dependency information for these
+foreach f : ['renderer.c', 'shaders.c']
+  sources += custom_target(f,
+    command: glsl_preproc,
+    depend_files: glsl_deps,
+    env: python_env,
+    input: f,
+    output: f,
+  )
+endforeach
+
+# More .c files defined here, we can't put them in this file because of meson
+# preventing the use of / in custom_target output filenames
+subdir('shaders')
 
 tests = [
   'colorspace.c',

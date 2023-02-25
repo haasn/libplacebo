@@ -24,8 +24,8 @@
  * SOFTWARE.
  */
 
-#include "film_grain.h"
 #include "shaders.h"
+#include "shaders/film_grain.h"
 
 // Taken from the spec. Range is [-2048, 2047], mean is 0 and stddev is 512
 static const int16_t gaussian_sequence[2048] = {

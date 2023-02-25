@@ -15,8 +15,8 @@
  * License along with libplacebo. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "film_grain.h"
 #include "shaders.h"
+#include "shaders/film_grain.h"
 
 bool pl_needs_film_grain(const struct pl_film_grain_params *params)
 {

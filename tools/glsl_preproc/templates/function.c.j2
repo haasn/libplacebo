@@ -1,0 +1,19 @@
+
+size_t {{ macro.name }}_fn(void *alloc, pl_str *buf, const uint8_t *ptr);
+size_t {{ macro.name }}_fn(void *alloc, pl_str *buf, const uint8_t *ptr)
+{
+{% if macro.vars %}
+{{ macro.render_struct() }} {{ Var.STRUCT_NAME }};
+memcpy(&{{ Var.STRUCT_NAME }}, ptr, sizeof({{ Var.STRUCT_NAME }}));
+{% endif %}
+
+{% for statement in macro.body %}
+{{ statement.render() }}
+{% endfor %}
+
+{% if macro.vars %}
+return sizeof({{ Var.STRUCT_NAME }});
+{% else %}
+return 0;
+{% endif %}
+}

@@ -1,0 +1,5 @@
+struct __attribute__((__packed__)) {
+{% for var in macro.vars %}
+    {{ var.ctype }} {{ var.name }};
+{% endfor %}
+}

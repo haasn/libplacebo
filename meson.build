@@ -416,6 +416,7 @@ endif
 
 build_deps = [ libm, threads ]
 
+subdir('tools')
 subdir('src')
 
 if get_option('demos')
