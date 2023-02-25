@@ -1208,10 +1208,11 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             nk_checkbox_label(nk, "Enable", &p->target_override);
             bool reset = nk_button_label(nk, "Reset settings");
             bool reset_icc = reset;
+            char buf[64] = {0};
 
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
 
-            static const char *primaries[PL_COLOR_PRIM_COUNT] = {
+            const char *primaries[PL_COLOR_PRIM_COUNT] = {
                 [PL_COLOR_PRIM_UNKNOWN]     = "Auto (unknown)",
                 [PL_COLOR_PRIM_BT_601_525]  = "ITU-R Rec. BT.601 (525-line = NTSC, SMPTE-C)",
                 [PL_COLOR_PRIM_BT_601_625]  = "ITU-R Rec. BT.601 (625-line = PAL, SECAM)",
@@ -1232,12 +1233,17 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 [PL_COLOR_PRIM_ACES_AP1]    = "ACES Primaries #1",
             };
 
+            if (target->color.primaries) {
+                snprintf(buf, sizeof(buf), "Auto (%s)", primaries[target->color.primaries]);
+                primaries[PL_COLOR_PRIM_UNKNOWN] = buf;
+            }
+
             nk_label(nk, "Primaries:", NK_TEXT_LEFT);
             p->force_prim = nk_combo(nk, primaries, PL_COLOR_PRIM_COUNT, p->force_prim,
                                        16, nk_vec2(nk_widget_width(nk), 200));
 
-            static const char *transfers[PL_COLOR_TRC_COUNT] = {
-                [PL_COLOR_TRC_UNKNOWN]      = "Auto (unknown)",
+            const char *transfers[PL_COLOR_TRC_COUNT] = {
+                [PL_COLOR_TRC_UNKNOWN]      = "Auto (unknown SDR)",
                 [PL_COLOR_TRC_BT_1886]      = "ITU-R Rec. BT.1886 (CRT emulation + OOTF)",
                 [PL_COLOR_TRC_SRGB]         = "IEC 61966-2-4 sRGB (CRT emulation)",
                 [PL_COLOR_TRC_LINEAR]       = "Linear light content",
@@ -1255,6 +1261,11 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 [PL_COLOR_TRC_S_LOG1]       = "Sony S-Log1",
                 [PL_COLOR_TRC_S_LOG2]       = "Sony S-Log2",
             };
+
+            if (target->color.transfer) {
+                snprintf(buf, sizeof(buf), "Auto (%s)", transfers[target->color.transfer]);
+                transfers[PL_COLOR_TRC_UNKNOWN] = buf;
+            }
 
             nk_label(nk, "Transfer:", NK_TEXT_LEFT);
             p->force_trc = nk_combo(nk, transfers, PL_COLOR_TRC_COUNT, p->force_trc,
@@ -1284,7 +1295,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             struct pl_color_repr *trepr = &p->force_repr;
             nk_layout_row(nk, NK_DYNAMIC, 24, 2, (float[]){ 0.3, 0.7 });
 
-            static const char *systems[PL_COLOR_SYSTEM_COUNT] = {
+            const char *systems[PL_COLOR_SYSTEM_COUNT] = {
                 [PL_COLOR_SYSTEM_UNKNOWN]       = "Auto (unknown)",
                 [PL_COLOR_SYSTEM_BT_601]        = "ITU-R Rec. BT.601 (SD)",
                 [PL_COLOR_SYSTEM_BT_709]        = "ITU-R Rec. BT.709 (HD)",
@@ -1299,27 +1310,42 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 [PL_COLOR_SYSTEM_XYZ]           = "Digital Cinema Distribution Master (XYZ)",
             };
 
+            if (target->repr.sys) {
+                snprintf(buf, sizeof(buf), "Auto (%s)", systems[target->repr.sys]);
+                systems[PL_COLOR_SYSTEM_UNKNOWN] = buf;
+            }
+
             nk_label(nk, "System:", NK_TEXT_LEFT);
             trepr->sys = nk_combo(nk, systems, PL_COLOR_SYSTEM_COUNT, trepr->sys,
                                   16, nk_vec2(nk_widget_width(nk), 200));
             if (trepr->sys == PL_COLOR_SYSTEM_DOLBYVISION)
                 trepr->sys = PL_COLOR_SYSTEM_UNKNOWN;
 
-            static const char *levels[PL_COLOR_LEVELS_COUNT] = {
+            const char *levels[PL_COLOR_LEVELS_COUNT] = {
                 [PL_COLOR_LEVELS_UNKNOWN]   = "Auto (unknown)",
                 [PL_COLOR_LEVELS_LIMITED]   = "Limited/TV range, e.g. 16-235",
                 [PL_COLOR_LEVELS_FULL]      = "Full/PC range, e.g. 0-255",
             };
 
+            if (target->repr.levels) {
+                snprintf(buf, sizeof(buf), "Auto (%s)", levels[target->repr.levels]);
+                levels[PL_COLOR_LEVELS_UNKNOWN] = buf;
+            }
+
             nk_label(nk, "Levels:", NK_TEXT_LEFT);
             trepr->levels = nk_combo(nk, levels, PL_COLOR_LEVELS_COUNT, trepr->levels,
                                      16, nk_vec2(nk_widget_width(nk), 200));
 
-            static const char *alphas[PL_ALPHA_MODE_COUNT] = {
+            const char *alphas[PL_ALPHA_MODE_COUNT] = {
                 [PL_ALPHA_UNKNOWN]          = "Auto (unknown, or no alpha)",
                 [PL_ALPHA_INDEPENDENT]      = "Independent alpha channel",
                 [PL_ALPHA_PREMULTIPLIED]    = "Premultiplied alpha channel",
             };
+
+            if (target->repr.alpha) {
+                snprintf(buf, sizeof(buf), "Auto (%s)", alphas[target->repr.alpha]);
+                alphas[PL_ALPHA_UNKNOWN] = buf;
+            }
 
             nk_label(nk, "Alpha:", NK_TEXT_LEFT);
             trepr->alpha = nk_combo(nk, alphas, PL_ALPHA_MODE_COUNT, trepr->alpha,
@@ -1337,15 +1363,15 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
 
             nk_layout_row_dynamic(nk, 50, 1);
             if (ui_widget_hover(nk, "Drop ICC profile here...") && dropped_file) {
-                uint8_t *buf;
+                uint8_t *iccbuf;
                 size_t size;
-                int ret = av_file_map(dropped_file, &buf, &size, 0, NULL);
+                int ret = av_file_map(dropped_file, &iccbuf, &size, 0, NULL);
                 if (ret < 0) {
                     fprintf(stderr, "Failed opening '%s': %s\n", dropped_file,
                             av_err2str(ret));
                 } else {
                     av_file_unmap((void *) p->target_icc.data, p->target_icc.len);
-                    p->target_icc.data = buf;
+                    p->target_icc.data = iccbuf;
                     p->target_icc.len = size;
                     p->target_icc.signature++;
                     free(p->target_icc_name);
