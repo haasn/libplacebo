@@ -529,7 +529,7 @@ static bool render_loop(struct plplay *p)
         if (window_get_key(p->win, KEY_ESC))
             break;
 
-        if (!window_toggle_fullscren(p->win, p->fullscreen))
+        if (!window_toggle_fullscreen(p->win, p->fullscreen))
             p->fullscreen = !p->fullscreen;
 
         update_colorspace_hint(p, &mix);
