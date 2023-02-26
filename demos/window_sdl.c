@@ -340,7 +340,22 @@ static bool sdl_toggle_fullscreen(const struct window *window, bool fullscreen)
     if (window_fullscreen == fullscreen)
         return true;
 
-    if (SDL_SetWindowFullscreen(p->win, fullscreen ? 0 : SDL_WINDOW_FULLSCREEN)) {
+    SDL_DisplayMode mode;
+    if (SDL_GetDesktopDisplayMode(0, &mode))
+    {
+        fprintf(stderr, "SDL2: Failed to get display mode: %s\n", SDL_GetError());
+        SDL_ClearError();
+        return false;
+    }
+
+    if (SDL_SetWindowDisplayMode(p->win, &mode))
+    {
+        fprintf(stderr, "SDL2: Failed to set window display mode: %s\n", SDL_GetError());
+        SDL_ClearError();
+        return false;
+    }
+
+    if (SDL_SetWindowFullscreen(p->win, fullscreen ? SDL_WINDOW_FULLSCREEN : 0)) {
         fprintf(stderr, "SDL2: SetWindowFullscreen failed: %s\n", SDL_GetError());
         SDL_ClearError();
         return false;
