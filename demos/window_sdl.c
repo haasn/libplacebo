@@ -332,10 +332,16 @@ static char *sdl_get_file(const struct window *window)
     return p->files[0];
 }
 
+static bool sdl_is_fullscreen(const struct window *window)
+{
+    const struct priv *p = (const struct priv *) window;
+    return SDL_GetWindowFlags(p->win) & SDL_WINDOW_FULLSCREEN;
+}
+
 static bool sdl_toggle_fullscreen(const struct window *window, bool fullscreen)
 {
     struct priv *p = (struct priv *) window;
-    bool window_fullscreen = SDL_GetWindowFlags(p->win) & SDL_WINDOW_FULLSCREEN;
+    bool window_fullscreen = sdl_is_fullscreen(window);
 
     if (window_fullscreen == fullscreen)
         return true;
@@ -375,4 +381,5 @@ const struct window_impl IMPL = {
     .get_scroll = sdl_get_scroll,
     .get_file = sdl_get_file,
     .toggle_fullscreen = sdl_toggle_fullscreen,
+    .is_fullscreen = sdl_is_fullscreen,
 };

@@ -81,7 +81,7 @@ struct plplay {
     bool colorspace_hint;
     bool colorspace_hint_dynamic;
     bool ignore_dovi;
-    bool fullscreen;
+    bool toggle_fullscreen;
 
     bool target_override; // if false, fields below are ignored
     struct pl_color_repr force_repr;
@@ -529,8 +529,8 @@ static bool render_loop(struct plplay *p)
         if (window_get_key(p->win, KEY_ESC))
             break;
 
-        if (!window_toggle_fullscreen(p->win, p->fullscreen))
-            p->fullscreen = !p->fullscreen;
+        if (p->toggle_fullscreen)
+            window_toggle_fullscreen(p->win, !window_is_fullscreen(p->win));
 
         update_colorspace_hint(p, &mix);
         if (!pl_swapchain_start_frame(p->win->swapchain, &frame)) {
@@ -824,7 +824,9 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Window settings", NK_MAXIMIZED)) {
             nk_layout_row_dynamic(nk, 24, 1);
-            nk_checkbox_label(nk, "Fullscreen", &p->fullscreen);
+
+            bool fullscreen = window_is_fullscreen(p->win);
+            p->toggle_fullscreen = nk_checkbox_label(nk, "Fullscreen", &fullscreen);
 
             struct nk_colorf bg = {
                 par->background_color[0],

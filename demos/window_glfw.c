@@ -463,10 +463,15 @@ static char *glfw_get_file(const struct window *window)
     return p->files[0];
 }
 
+static bool glfw_is_fullscreen(const struct window *window) {
+    const struct priv *p = (const struct priv *) window;
+    return glfwGetWindowMonitor(p->win);
+}
+
 static bool glfw_toggle_fullscreen(const struct window *window, bool fullscreen)
 {
     struct priv *p = (struct priv *) window;
-    bool window_fullscreen = !!glfwGetWindowMonitor(p->win);
+    bool window_fullscreen = glfw_is_fullscreen(window);
 
     if (window_fullscreen == fullscreen)
         return true;
@@ -505,4 +510,5 @@ const struct window_impl IMPL = {
     .get_scroll = glfw_get_scroll,
     .get_file = glfw_get_file,
     .toggle_fullscreen = glfw_toggle_fullscreen,
+    .is_fullscreen = glfw_is_fullscreen,
 };

@@ -81,3 +81,8 @@ bool window_toggle_fullscreen(const struct window *win, bool fullscreen)
 {
     return win->impl->toggle_fullscreen(win, fullscreen);
 }
+
+bool window_is_fullscreen(const struct window *win)
+{
+    return win->impl->is_fullscreen(win);
+}
