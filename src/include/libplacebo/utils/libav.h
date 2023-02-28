@@ -22,6 +22,19 @@
 #include <libplacebo/shaders/deinterlacing.h>
 #include <libplacebo/utils/upload.h>
 
+#if defined(__cplusplus) && !defined(PL_LIBAV_IMPLEMENTATION)
+# define PL_LIBAV_API
+# define PL_LIBAV_IMPLEMENTATION 0
+# warning Remember to include this file with a PL_LIBAV_IMPLEMENTATION set to 1 in \
+          C translation unit to provide implementation. Suppress this warning by \
+          defining PL_LIBAV_IMPLEMENTATION to 0 in C++ files.
+#elif !defined(PL_LIBAV_IMPLEMENTATION)
+# define PL_LIBAV_API static inline
+# define PL_LIBAV_IMPLEMENTATION 1
+#else
+# define PL_LIBAV_API
+#endif
+
 PL_API_BEGIN
 
 #include <libavformat/avformat.h>
@@ -65,7 +78,7 @@ PL_API_BEGIN
 // Note: This will ignore Dolby Vision metadata by default (to avoid leaking
 // memory), either switch to pl_map_avframe_ex or do it manually using
 // pl_map_dovi_metadata.
-static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *frame);
+PL_LIBAV_API void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *frame);
 
 // Deprecated aliases for backwards compatibility
 #define pl_image_from_avframe pl_frame_from_avframe
@@ -75,8 +88,8 @@ static void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFrame *fra
 // after `pl_frame_from_avframe` or `pl_upload_avframe` (respectively), and
 // sets metadata associated with stream-level side data. This is needed because
 // FFmpeg rather annoyingly does not propagate stream-level metadata to frames.
-static void pl_frame_copy_stream_props(struct pl_frame *out_frame,
-                                       const AVStream *stream);
+PL_LIBAV_API void pl_frame_copy_stream_props(struct pl_frame *out_frame,
+                                             const AVStream *stream);
 
 #ifdef PL_HAVE_LAV_HDR
 struct pl_av_hdr_metadata {
@@ -89,14 +102,14 @@ struct pl_av_hdr_metadata {
 // Helper function to update a `pl_hdr_metadata` struct from HDR10/HDR10+
 // metadata in the FFmpeg format. Unspecified/invalid elements will be left
 // uninitialized in `out`.
-static void pl_map_hdr_metadata(struct pl_hdr_metadata *out,
+PL_LIBAV_API void pl_map_hdr_metadata(struct pl_hdr_metadata *out,
                                 const struct pl_av_hdr_metadata *metadata);
 #endif
 
 #ifdef PL_HAVE_LAV_DOLBY_VISION
 // Helper function to map Dolby Vision metadata from the FFmpeg format.
-static void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
-                                 const AVDOVIMetadata *metadata);
+PL_LIBAV_API void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
+                                       const AVDOVIMetadata *metadata);
 
 // Helper function to map Dolby Vision metadata from the FFmpeg format
 // to `pl_dovi_metadata`, and adds it to the `pl_frame`.
@@ -106,23 +119,23 @@ static void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
 // Note: The `pl_dovi_metadata` must be allocated externally.
 // Also, currently the metadata is only used if the `AVDOVIRpuDataHeader`
 // `disable_residual_flag` field is not zero and can be checked before allocating.
-static void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
-                                         struct pl_dovi_metadata *dovi,
-                                         const AVDOVIMetadata *metadata);
+PL_LIBAV_API void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
+                                               struct pl_dovi_metadata *dovi,
+                                               const AVDOVIMetadata *metadata);
 #endif
 
 // Helper function to test if a pixfmt would be supported by the GPU.
 // Essentially, this can be used to check if `pl_upload_avframe` would work for
 // a given AVPixelFormat, without actually uploading or allocating anything.
-static bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt);
+PL_LIBAV_API bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt);
 
 // Like `pl_frame_from_avframe`, but the texture pointers are also initialized
 // to ensure they have the correct size and format to match the AVframe.
 // Similar in spirit to `pl_recreate_plane`, and the same notes apply. `tex`
 // must be an array of 4 pointers of type `pl_tex`, each either
 // pointing to a valid texture, or NULL. Returns whether successful.
-static bool pl_frame_recreate_from_avframe(pl_gpu gpu, struct pl_frame *out_frame,
-                                           pl_tex tex[4], const AVFrame *frame);
+PL_LIBAV_API bool pl_frame_recreate_from_avframe(pl_gpu gpu, struct pl_frame *out_frame,
+                                                 pl_tex tex[4], const AVFrame *frame);
 
 struct pl_avframe_params {
     // The AVFrame to map. Required.
@@ -154,19 +167,13 @@ struct pl_avframe_params {
 // Note: `out_frame->user_data` will hold a reference to the AVFrame
 // corresponding to the `pl_frame`. It will automatically be unref'd by
 // `pl_unmap_avframe`.
-static bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out_frame,
-                              const struct pl_avframe_params *params);
-static void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame);
+PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out_frame,
+                                    const struct pl_avframe_params *params);
+PL_LIBAV_API void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame);
 
 // Backwards compatibility with previous versions of this API.
-static inline bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out_frame,
-                                  pl_tex tex[4], const AVFrame *avframe)
-{
-    return pl_map_avframe_ex(gpu, out_frame, &(struct pl_avframe_params) {
-        .frame  = avframe,
-        .tex    = tex,
-    });
-}
+PL_LIBAV_API bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out_frame,
+                                 pl_tex tex[4], const AVFrame *avframe);
 
 // Deprecated variant of `pl_map_frame`, with the following differences:
 // - Does not support hardware-accelerated frames
@@ -174,8 +181,8 @@ static inline bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out_frame,
 // - Does not touch `frame->user_data`.
 // - Does not automatically map dovi metadata
 // - `frame` must not be freed by the user before `frame` is done being used
-static PL_DEPRECATED bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
-                                            pl_tex tex[4], const AVFrame *frame);
+PL_LIBAV_API PL_DEPRECATED bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
+                                                  pl_tex tex[4], const AVFrame *frame);
 
 // Download the texture contents of a `pl_frame` back to a corresponding
 // AVFrame. Blocks until completion.
@@ -183,18 +190,18 @@ static PL_DEPRECATED bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_fra
 // Note: This function performs minimal verification, so incorrect usage will
 // likely result in broken frames. Use `pl_frame_recreate_from_avframe` to
 // ensure matching formats.
-static bool pl_download_avframe(pl_gpu gpu,
-                                const struct pl_frame *frame,
-                                AVFrame *out_frame);
+PL_LIBAV_API bool pl_download_avframe(pl_gpu gpu,
+                                      const struct pl_frame *frame,
+                                      AVFrame *out_frame);
 
 // Helper functions to update the colorimetry data in an AVFrame based on
 // the values specified in the given color space / color repr / profile.
 //
 // Note: These functions can and will allocate AVFrame side data if needed,
 // in particular to encode HDR metadata in `space.hdr`.
-static void pl_avframe_set_color(AVFrame *frame, struct pl_color_space space);
-static void pl_avframe_set_repr(AVFrame *frame, struct pl_color_repr repr);
-static void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile profile);
+PL_LIBAV_API void pl_avframe_set_color(AVFrame *frame, struct pl_color_space space);
+PL_LIBAV_API void pl_avframe_set_repr(AVFrame *frame, struct pl_color_repr repr);
+PL_LIBAV_API void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile profile);
 
 // Map an AVPixelFormat to an array of pl_plane_data structs. The array must
 // have at least `av_pix_fmt_count_planes(fmt)` elements, but never more than
@@ -211,9 +218,9 @@ static void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile profile
 // functions above, but it might have some fringe use cases, for example if
 // the user wants to replace the data buffers by `pl_buf` references in the
 // `pl_plane_data` before uploading it to the GPU.
-static int pl_plane_data_from_pixfmt(struct pl_plane_data data[4],
-                                     struct pl_bit_encoding *bits,
-                                     enum AVPixelFormat pix_fmt);
+PL_LIBAV_API int pl_plane_data_from_pixfmt(struct pl_plane_data data[4],
+                                           struct pl_bit_encoding *bits,
+                                           enum AVPixelFormat pix_fmt);
 
 // Callback for AVCodecContext.get_buffer2 that allocates memory from
 // persistently mapped buffers. This can be more efficient than regular
@@ -222,7 +229,7 @@ static int pl_plane_data_from_pixfmt(struct pl_plane_data data[4],
 //
 // Note: `avctx->opaque` must be a pointer that *points* to the GPU instance.
 // That is, it should have type `pl_gpu *`.
-static int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags);
+PL_LIBAV_API int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags);
 
 // Mapping functions for the various libavutil enums. Note that these are not
 // quite 1:1, and even for values that exist in both, the semantics sometimes
@@ -232,31 +239,31 @@ static int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags);
 // Because of this, it's generally recommended to avoid these and instead use
 // helpers like `pl_frame_from_avframe`, which contain extra logic to patch
 // through all of the special cases.
-static enum pl_color_system pl_system_from_av(enum AVColorSpace spc);
-static enum AVColorSpace pl_system_to_av(enum pl_color_system sys);
-static enum pl_color_levels pl_levels_from_av(enum AVColorRange range);
-static enum AVColorRange pl_levels_to_av(enum pl_color_levels levels);
-static enum pl_color_primaries pl_primaries_from_av(enum AVColorPrimaries prim);
-static enum AVColorPrimaries pl_primaries_to_av(enum pl_color_primaries prim);
-static enum pl_color_transfer pl_transfer_from_av(enum AVColorTransferCharacteristic trc);
-static enum AVColorTransferCharacteristic pl_transfer_to_av(enum pl_color_transfer trc);
-static enum pl_chroma_location pl_chroma_from_av(enum AVChromaLocation loc);
-static enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc);
+PL_LIBAV_API enum pl_color_system pl_system_from_av(enum AVColorSpace spc);
+PL_LIBAV_API enum AVColorSpace pl_system_to_av(enum pl_color_system sys);
+PL_LIBAV_API enum pl_color_levels pl_levels_from_av(enum AVColorRange range);
+PL_LIBAV_API enum AVColorRange pl_levels_to_av(enum pl_color_levels levels);
+PL_LIBAV_API enum pl_color_primaries pl_primaries_from_av(enum AVColorPrimaries prim);
+PL_LIBAV_API enum AVColorPrimaries pl_primaries_to_av(enum pl_color_primaries prim);
+PL_LIBAV_API enum pl_color_transfer pl_transfer_from_av(enum AVColorTransferCharacteristic trc);
+PL_LIBAV_API enum AVColorTransferCharacteristic pl_transfer_to_av(enum pl_color_transfer trc);
+PL_LIBAV_API enum pl_chroma_location pl_chroma_from_av(enum AVChromaLocation loc);
+PL_LIBAV_API enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc);
 
 // Helper function to generate a `pl_color_space` struct from an AVFrame.
-static void pl_color_space_from_avframe(struct pl_color_space *out_csp,
-                                        const AVFrame *frame);
+PL_LIBAV_API void pl_color_space_from_avframe(struct pl_color_space *out_csp,
+                                              const AVFrame *frame);
 
 // Helper function to pick the right `pl_field` value for an AVFrame.
-static enum pl_field pl_field_from_avframe(const AVFrame *frame);
+PL_LIBAV_API enum pl_field pl_field_from_avframe(const AVFrame *frame);
 
 #ifdef PL_HAVE_LAV_FILM_GRAIN
 // Fill in film grain parameters from an AVFilmGrainParams.
 //
 // Note: The resulting struct will only remain valid as long as the
 // `AVFilmGrainParams` remains valid.
-static void pl_film_grain_from_av(struct pl_film_grain_data *out_data,
-                                  const AVFilmGrainParams *fgp);
+PL_LIBAV_API void pl_film_grain_from_av(struct pl_film_grain_data *out_data,
+                                        const AVFilmGrainParams *fgp);
 #endif
 
 // Deprecated alias for backwards compatibility
@@ -264,7 +271,9 @@ static void pl_film_grain_from_av(struct pl_film_grain_data *out_data,
 
 // Actual implementation, included as part of this header to avoid having
 // a compile-time dependency on libavutil.
-#include <libplacebo/utils/libav_internal.h>
+#if PL_LIBAV_IMPLEMENTATION
+# include <libplacebo/utils/libav_internal.h>
+#endif
 
 PL_API_END
 

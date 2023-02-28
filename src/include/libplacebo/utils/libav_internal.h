@@ -16,7 +16,9 @@
  */
 
 #ifndef LIBPLACEBO_LIBAV_H_
-# error This header should be included as part of <libplacebo/utils/libav.h>
+#error This header should be included as part of <libplacebo/utils/libav.h>
+#elif defined(__cplusplus)
+#error This header cannot be included from C++ define PL_LIBAV_IMPLEMENTATION appropriately
 #else
 
 #include <assert.h>
@@ -44,7 +46,7 @@
 # include <libplacebo/vulkan.h>
 #endif
 
-static inline enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
+PL_LIBAV_API enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
 {
     switch (spc) {
     case AVCOL_SPC_RGB:                 return PL_COLOR_SYSTEM_RGB;
@@ -71,7 +73,7 @@ static inline enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
     return PL_COLOR_SYSTEM_UNKNOWN;
 }
 
-static inline enum AVColorSpace pl_system_to_av(enum pl_color_system sys)
+PL_LIBAV_API enum AVColorSpace pl_system_to_av(enum pl_color_system sys)
 {
     switch (sys) {
     case PL_COLOR_SYSTEM_UNKNOWN:       return AVCOL_SPC_UNSPECIFIED;
@@ -92,7 +94,7 @@ static inline enum AVColorSpace pl_system_to_av(enum pl_color_system sys)
     return AVCOL_SPC_UNSPECIFIED;
 }
 
-static inline enum pl_color_levels pl_levels_from_av(enum AVColorRange range)
+PL_LIBAV_API enum pl_color_levels pl_levels_from_av(enum AVColorRange range)
 {
     switch (range) {
     case AVCOL_RANGE_UNSPECIFIED:       return PL_COLOR_LEVELS_UNKNOWN;
@@ -104,7 +106,7 @@ static inline enum pl_color_levels pl_levels_from_av(enum AVColorRange range)
     return PL_COLOR_LEVELS_UNKNOWN;
 }
 
-static inline enum AVColorRange pl_levels_to_av(enum pl_color_levels levels)
+PL_LIBAV_API enum AVColorRange pl_levels_to_av(enum pl_color_levels levels)
 {
     switch (levels) {
     case PL_COLOR_LEVELS_UNKNOWN:       return AVCOL_RANGE_UNSPECIFIED;
@@ -116,7 +118,7 @@ static inline enum AVColorRange pl_levels_to_av(enum pl_color_levels levels)
     return AVCOL_RANGE_UNSPECIFIED;
 }
 
-static inline enum pl_color_primaries pl_primaries_from_av(enum AVColorPrimaries prim)
+PL_LIBAV_API enum pl_color_primaries pl_primaries_from_av(enum AVColorPrimaries prim)
 {
     switch (prim) {
     case AVCOL_PRI_RESERVED0:       return PL_COLOR_PRIM_UNKNOWN;
@@ -139,7 +141,7 @@ static inline enum pl_color_primaries pl_primaries_from_av(enum AVColorPrimaries
     return PL_COLOR_PRIM_UNKNOWN;
 }
 
-static inline enum AVColorPrimaries pl_primaries_to_av(enum pl_color_primaries prim)
+PL_LIBAV_API enum AVColorPrimaries pl_primaries_to_av(enum pl_color_primaries prim)
 {
     switch (prim) {
     case PL_COLOR_PRIM_UNKNOWN:     return AVCOL_PRI_UNSPECIFIED;
@@ -166,7 +168,7 @@ static inline enum AVColorPrimaries pl_primaries_to_av(enum pl_color_primaries p
     return AVCOL_PRI_UNSPECIFIED;
 }
 
-static inline enum pl_color_transfer pl_transfer_from_av(enum AVColorTransferCharacteristic trc)
+PL_LIBAV_API enum pl_color_transfer pl_transfer_from_av(enum AVColorTransferCharacteristic trc)
 {
     switch (trc) {
     case AVCOL_TRC_RESERVED0:       return PL_COLOR_TRC_UNKNOWN;
@@ -194,7 +196,7 @@ static inline enum pl_color_transfer pl_transfer_from_av(enum AVColorTransferCha
     return PL_COLOR_TRC_UNKNOWN;
 }
 
-static inline enum AVColorTransferCharacteristic pl_transfer_to_av(enum pl_color_transfer trc)
+PL_LIBAV_API enum AVColorTransferCharacteristic pl_transfer_to_av(enum pl_color_transfer trc)
 {
     switch (trc) {
     case PL_COLOR_TRC_UNKNOWN:      return AVCOL_TRC_UNSPECIFIED;
@@ -220,7 +222,7 @@ static inline enum AVColorTransferCharacteristic pl_transfer_to_av(enum pl_color
     return AVCOL_TRC_UNSPECIFIED;
 }
 
-static inline enum pl_chroma_location pl_chroma_from_av(enum AVChromaLocation loc)
+PL_LIBAV_API enum pl_chroma_location pl_chroma_from_av(enum AVChromaLocation loc)
 {
     switch (loc) {
     case AVCHROMA_LOC_UNSPECIFIED:  return PL_CHROMA_UNKNOWN;
@@ -236,7 +238,7 @@ static inline enum pl_chroma_location pl_chroma_from_av(enum AVChromaLocation lo
     return PL_CHROMA_UNKNOWN;
 }
 
-static inline enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc)
+PL_LIBAV_API enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc)
 {
     switch (loc) {
     case PL_CHROMA_UNKNOWN:         return AVCHROMA_LOC_UNSPECIFIED;
@@ -253,8 +255,8 @@ static inline enum AVChromaLocation pl_chroma_to_av(enum pl_chroma_location loc)
 }
 
 #ifdef PL_HAVE_LAV_HDR
-static void pl_map_hdr_metadata(struct pl_hdr_metadata *out,
-                                const struct pl_av_hdr_metadata *data)
+PL_LIBAV_API void pl_map_hdr_metadata(struct pl_hdr_metadata *out,
+                                      const struct pl_av_hdr_metadata *data)
 {
     if (data->mdm) {
         if (data->mdm->has_luminance) {
@@ -326,8 +328,8 @@ static inline void *pl_get_side_data_raw(const AVFrame *frame,
     return sd ? (void *) sd->data : NULL;
 }
 
-static void pl_color_space_from_avframe(struct pl_color_space *out_csp,
-                                        const AVFrame *frame)
+PL_LIBAV_API void pl_color_space_from_avframe(struct pl_color_space *out_csp,
+                                              const AVFrame *frame)
 {
     *out_csp = (struct pl_color_space) {
         .primaries = pl_primaries_from_av(frame->color_primaries),
@@ -343,7 +345,7 @@ static void pl_color_space_from_avframe(struct pl_color_space *out_csp,
 #endif
 }
 
-static inline enum pl_field pl_field_from_avframe(const AVFrame *frame)
+PL_LIBAV_API enum pl_field pl_field_from_avframe(const AVFrame *frame)
 {
     if (!frame || !frame->interlaced_frame)
         return PL_FIELD_NONE;
@@ -351,8 +353,8 @@ static inline enum pl_field pl_field_from_avframe(const AVFrame *frame)
 }
 
 #ifdef PL_HAVE_LAV_FILM_GRAIN
-static void pl_film_grain_from_av(struct pl_film_grain_data *out_data,
-                                  const AVFilmGrainParams *fgp)
+PL_LIBAV_API void pl_film_grain_from_av(struct pl_film_grain_data *out_data,
+                                        const AVFilmGrainParams *fgp)
 {
     out_data->seed = fgp->seed;
 
@@ -434,9 +436,9 @@ static inline int pl_plane_data_num_comps(const struct pl_plane_data *data)
     return 4;
 }
 
-static inline int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
-                                            struct pl_bit_encoding *out_bits,
-                                            enum AVPixelFormat pix_fmt)
+PL_LIBAV_API int pl_plane_data_from_pixfmt(struct pl_plane_data out_data[4],
+                                           struct pl_bit_encoding *out_bits,
+                                           enum AVPixelFormat pix_fmt)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pix_fmt);
     int planes = av_pix_fmt_count_planes(pix_fmt);
@@ -545,7 +547,7 @@ misaligned:
     return planes;
 }
 
-static inline bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt)
+PL_LIBAV_API bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt)
 {
     struct pl_bit_encoding bits;
     struct pl_plane_data data[4];
@@ -577,7 +579,7 @@ static inline bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt)
     return true;
 }
 
-static inline void pl_avframe_set_color(AVFrame *frame, struct pl_color_space csp)
+PL_LIBAV_API void pl_avframe_set_color(AVFrame *frame, struct pl_color_space csp)
 {
     const AVFrameSideData *sd;
     (void) sd;
@@ -638,7 +640,7 @@ static inline void pl_avframe_set_color(AVFrame *frame, struct pl_color_space cs
 #endif // PL_HAVE_LAV_HDR
 }
 
-static inline void pl_avframe_set_repr(AVFrame *frame, struct pl_color_repr repr)
+PL_LIBAV_API void pl_avframe_set_repr(AVFrame *frame, struct pl_color_repr repr)
 {
     frame->colorspace = pl_system_to_av(repr.sys);
     frame->color_range = pl_levels_to_av(repr.levels);
@@ -646,7 +648,7 @@ static inline void pl_avframe_set_repr(AVFrame *frame, struct pl_color_repr repr
     // No real way to map repr.bits, the image format already has to match
 }
 
-static inline void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile profile)
+PL_LIBAV_API void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile profile)
 {
     const AVFrameSideData *sd;
     av_frame_remove_side_data(frame, AV_FRAME_DATA_ICC_PROFILE);
@@ -658,7 +660,7 @@ static inline void pl_avframe_set_profile(AVFrame *frame, struct pl_icc_profile 
     memcpy(sd->data, profile.data, profile.len);
 }
 
-static inline void pl_frame_from_avframe(struct pl_frame *out,
+PL_LIBAV_API void pl_frame_from_avframe(struct pl_frame *out,
                                          const AVFrame *frame)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
@@ -771,8 +773,8 @@ static inline void pl_frame_from_avframe(struct pl_frame *out,
     }
 }
 
-static inline void pl_frame_copy_stream_props(struct pl_frame *out,
-                                              const AVStream *stream)
+PL_LIBAV_API void pl_frame_copy_stream_props(struct pl_frame *out,
+                                                 const AVStream *stream)
 {
     const uint8_t *sd;
     if ((sd = av_stream_get_side_data(stream, AV_PKT_DATA_DISPLAYMATRIX, NULL))) {
@@ -795,8 +797,8 @@ static inline void pl_frame_copy_stream_props(struct pl_frame *out,
 }
 
 #ifdef PL_HAVE_LAV_DOLBY_VISION
-static inline void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
-                                        const AVDOVIMetadata *data)
+PL_LIBAV_API void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
+                                       const AVDOVIMetadata *data)
 {
     const AVDOVIRpuDataHeader *header;
     const AVDOVIDataMapping *mapping;
@@ -848,9 +850,9 @@ static inline void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
     }
 }
 
-static inline void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
-                                                struct pl_dovi_metadata *dovi,
-                                                const AVDOVIMetadata *metadata)
+PL_LIBAV_API void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
+                                               struct pl_dovi_metadata *dovi,
+                                               const AVDOVIMetadata *metadata)
 {
     const AVDOVIRpuDataHeader *header;
     const AVDOVIColorMetadata *color;
@@ -874,10 +876,10 @@ static inline void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
 }
 #endif // PL_HAVE_LAV_DOLBY_VISION
 
-static inline bool pl_frame_recreate_from_avframe(pl_gpu gpu,
-                                                  struct pl_frame *out,
-                                                  pl_tex tex[4],
-                                                  const AVFrame *frame)
+PL_LIBAV_API bool pl_frame_recreate_from_avframe(pl_gpu gpu,
+                                                 struct pl_frame *out,
+                                                 pl_tex tex[4],
+                                                 const AVFrame *frame)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     struct pl_plane_data data[4] = {0};
@@ -1191,13 +1193,23 @@ error:
     return false;
 }
 
-static inline bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out_frame,
-                                     const struct pl_avframe_params *params)
+PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out_frame,
+                                    const struct pl_avframe_params *params)
 {
     return pl_map_avframe_internal(gpu, out_frame, params, true);
 }
 
-static inline void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame)
+// Backwards compatibility with previous versions of this API.
+PL_LIBAV_API bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out_frame,
+                                     pl_tex tex[4], const AVFrame *avframe)
+{
+    return pl_map_avframe_ex(gpu, out_frame, &(struct pl_avframe_params) {
+        .frame  = avframe,
+        .tex    = tex,
+    });
+}
+
+PL_LIBAV_API void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame)
 {
     AVFrame *avframe = frame->user_data;
     const AVPixFmtDescriptor *desc;
@@ -1221,8 +1233,8 @@ done:
     memset(frame, 0, sizeof(*frame)); // sanity
 }
 
-static inline bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
-                                     pl_tex tex[4], const AVFrame *frame)
+PL_LIBAV_API bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
+                                    pl_tex tex[4], const AVFrame *frame)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     struct pl_avframe_params params = {
@@ -1245,9 +1257,9 @@ static void pl_done_cb(void *priv)
     *status = true;
 }
 
-static inline bool pl_download_avframe(pl_gpu gpu,
-                                       const struct pl_frame *frame,
-                                       AVFrame *out_frame)
+PL_LIBAV_API bool pl_download_avframe(pl_gpu gpu,
+                                      const struct pl_frame *frame,
+                                      AVFrame *out_frame)
 {
     bool done[4] = {0};
     if (frame->num_planes != av_pix_fmt_count_planes(out_frame->format))
@@ -1288,7 +1300,7 @@ static inline void pl_avalloc_free(void *opaque, uint8_t *data)
     free(alloc);
 }
 
-static inline int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
+PL_LIBAV_API int pl_get_buffer2(AVCodecContext *avctx, AVFrame *pic, int flags)
 {
     int alignment[AV_NUM_DATA_POINTERS];
     int width = pic->width;
