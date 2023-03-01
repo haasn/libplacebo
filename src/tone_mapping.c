@@ -621,7 +621,10 @@ static void spline(float *lut, const struct pl_tone_map_params *params)
     st2094_pick_knee(&src_pivot, &dst_pivot, params, adaptation);
 
     // Tune the slope at the knee point slightly
-    const float slope = params->param * dst_pivot / src_pivot;
+    const float slope_gamma = 1.0f - params->param;
+    float slope = (dst_pivot - params->output_min) /
+                  (src_pivot - params->input_min);
+    slope = powf(slope, slope_gamma);
 
     // Normalize everything the pivot to make the math easier
     const float in_min = params->input_min - src_pivot;
@@ -657,9 +660,9 @@ const struct pl_tone_map_function pl_tone_map_spline = {
     .name = "spline",
     .description = "Single-pivot polynomial spline",
     .param_desc = "Contrast",
-    .param_min = 0.50,
-    .param_def = 1.00,
-    .param_max = 1.50,
+    .param_min = 0.00f,
+    .param_def = 0.50f,
+    .param_max = 1.50f,
     .scaling = PL_HDR_PQ,
     .map = spline,
     .map_inverse = spline,
