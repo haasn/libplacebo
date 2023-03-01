@@ -1551,8 +1551,10 @@ static void tone_map(pl_shader sh,
              SH_FLOAT(dst_min), SH_FLOAT_DYN(desat));
 
         // Extra luminance correction when reducing dynamic range
-        if (src_max > dst_max)
-            GLSL("xyz.y -= max(0.1 * xyz.x, 0.0); \n");
+        if (src_max > dst_max) {
+            GLSL("xyz.y -= max(%s * xyz.x, 0.0); \n",
+                 SH_FLOAT_DYN(0.1f * fabsf(ratio)));
+        }
 
         pl_matrix3x3_invert(&rgb2xyz);
         GLSL("vec3 color_lin = %s * xyz; \n", sh_var(sh, (struct pl_shader_var) {
