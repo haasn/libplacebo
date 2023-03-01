@@ -473,7 +473,7 @@ static void st2094_40(float *lut, const struct pl_tone_map_params *params)
 
 const struct pl_tone_map_function pl_tone_map_st2094_40 = {
     .name = "st2094-40",
-    .description = "SAMPTE ST 2094-40 Annex B",
+    .description = "SMPTE ST 2094-40 Annex B",
     .param_desc = "Knee point target",
     .param_min = 0.00f,
     .param_def = 0.70f,
@@ -515,7 +515,7 @@ static void st2094_10(float *lut, const struct pl_tone_map_params *params)
 
 const struct pl_tone_map_function pl_tone_map_st2094_10 = {
     .name = "st2094-10",
-    .description = "SAMPTE ST 2094-10 Annex B.2",
+    .description = "SMPTE ST 2094-10 Annex B.2",
     .param_desc = "Knee point target",
     .param_min = 0.00f,
     .param_def = 0.50f,
