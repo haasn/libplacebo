@@ -138,14 +138,16 @@ extern const struct pl_tone_map_function pl_tone_map_clip;
 // EETF from SMPTE ST 2094-40 Annex B, which uses the provided OOTF based on
 // Bezier curves to perform tone-mapping. The OOTF used is adjusted based on
 // the ratio between the targeted and actual display peak luminances.
+//
+// In the absence of HDR10+ metadata, falls back to a simple constant bezier
+// curve with tunable knee point. The parameter gives the target brightness
+// adaptation strength for the knee point, defaulting to 0.7.
 extern const struct pl_tone_map_function pl_tone_map_st2094_40;
 
 // EETF from SMPTE ST 2094-10 Annex B.2, which takes into account the input
-// signal average luminance in addition to the maximum/minimum. The
-// configurable contrast parameter influences the slope of the linear output
-// segment, defaulting to 1.0 for no increase/decrease in contrast.
-//
-// Note: If the average luminance data is not known, it defaults to 10.
+// signal average luminance in addition to the maximum/minimum. The parameter
+// gives the target brightness adaptation strength for the knee point,
+// defaulting to 0.5.
 //
 // Note: This does *not* currently include the subjective gain/offset/gamma
 // controls defined in Annex B.3. (Open an issue with a valid sample file if

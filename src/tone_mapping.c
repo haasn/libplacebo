@@ -279,42 +279,56 @@ const struct pl_tone_map_function pl_tone_map_clip = {
     .map_inverse = noop,
 };
 
+#define ST2094_KNEE_PARAMS              \
+    .param_desc = "Knee point target",  \
+    .param_min = 0.00f,                 \
+    .param_max = 1.00f,                 \
+    .param_def = 0.70f
+
 // Helper function to pick a knee point (for suitable methods) based on the
-// HDR10+ brightness metadata and scene brightness average matching
+// HDR10+ brightness metadata and scene brightness average matching. The knee
+// point adaptation strength is optionally tunable (taken from `params->param`).
 //
 // Inspired by SMPTE ST2094-10, with some modifications
 static void st2094_pick_knee(float *out_src_knee, float *out_dst_knee,
-                             const struct pl_tone_map_params *params)
+                             const struct pl_tone_map_params *params,
+                             float adaptation)
 {
-    const float default_avg = 10.0f; // default avg input brightness in nits
-    const float max_slope   = 1.1f;  // maximum brightness boost on dark scenes
-    const float max_knee    = 0.8f;  // maximum relative brightness of knee point
-    const float adaptation  = 0.5f;  // balance between src and dst avg
-    const float target_avg  = 0.4f;  // balance between dst_min and dst_max
+    // Knee point default, minimum and maximum
+    const float min_src_knee = 0.3f;
+    const float def_src_knee = 0.4f;
+    const float max_src_knee = 0.5f;
 
     float src_min = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_min);
     float src_max = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_max);
     float dst_min = pl_hdr_rescale(params->output_scaling, PL_HDR_PQ, params->output_min);
     float dst_max = pl_hdr_rescale(params->output_scaling, PL_HDR_PQ, params->output_max);
 
-    // Infer the average from scene metadata if present, or default to 10 nits
-    // as this is a common industry value that produces good results on average
-    float src_avg = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ,
-                                   PL_DEF(params->hdr.scene_avg, default_avg));
-    src_avg = PL_CLAMP(src_avg, src_min, max_knee * src_max);
+    // Choose default scene average brightness to be a fixed percentage of the
+    // value range, override with (clamped) HDR10+ metadata if available
+    float target_avg = def_src_knee;
+    if (params->hdr.scene_avg) {
+        float scene_avg = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, params->hdr.scene_avg);
+        target_avg = (scene_avg - src_min) / (src_max - src_min);
+        target_avg = PL_CLAMP(target_avg, min_src_knee, max_src_knee);
+    }
 
-    // Use a fixed point on the output display as the default display target,
-    // but clamp slope to avoid raising brightness of very dark scenes
+    float src_avg = PL_MIX(src_min, src_max, target_avg);
     float dst_avg = PL_MIX(dst_min, dst_max, target_avg);
-    dst_avg = fminf(dst_avg, src_avg * max_slope);
 
-    // Calculate the destination adaptation point by picking the perceptual
-    // mid-point between the source average and the desired average
-    float target_knee = PL_MIX(src_avg, dst_avg, adaptation);
-    target_knee = fminf(target_knee, max_knee * dst_max);
+    // Adjust the destination adaptation point by picking the perceptual
+    // adaptation point between the source average and the desired average.
+    // This moves the knee point, on the vertical axis, closer to the 1:1
+    // (neutral) line.
+    dst_avg = PL_MIX(src_avg, dst_avg, adaptation);
+
+    // Hard-clamp at 20% from either edge to soften extreme cases
+    const float dst_knee_min = PL_MIX(dst_min, dst_max, 0.2f);
+    const float dst_knee_max = PL_MIX(dst_min, dst_max, 0.8f);
+    dst_avg = PL_CLAMP(dst_avg, dst_knee_min, dst_knee_max);
 
     *out_src_knee = pl_hdr_rescale(PL_HDR_PQ, params->input_scaling, src_avg);
-    *out_dst_knee = pl_hdr_rescale(PL_HDR_PQ, params->output_scaling, target_knee);
+    *out_dst_knee = pl_hdr_rescale(PL_HDR_PQ, params->output_scaling, dst_avg);
 }
 
 // Pascal's triangle
@@ -371,7 +385,7 @@ static void st2094_40(float *lut, const struct pl_tone_map_params *params)
 
         // Missing metadata, default to simple brightness matching
         float src_knee, dst_knee;
-        st2094_pick_knee(&src_knee, &dst_knee, params);
+        st2094_pick_knee(&src_knee, &dst_knee, params, params->param);
         Kx = src_knee / params->input_max;
         Ky = dst_knee / params->output_max;
 
@@ -460,6 +474,10 @@ static void st2094_40(float *lut, const struct pl_tone_map_params *params)
 const struct pl_tone_map_function pl_tone_map_st2094_40 = {
     .name = "st2094-40",
     .description = "SAMPTE ST 2094-40 Annex B",
+    .param_desc = "Knee point target",
+    .param_min = 0.00f,
+    .param_def = 0.70f,
+    .param_max = 1.00f,
     .scaling = PL_HDR_NITS,
     .map = st2094_40,
 };
@@ -467,11 +485,11 @@ const struct pl_tone_map_function pl_tone_map_st2094_40 = {
 static void st2094_10(float *lut, const struct pl_tone_map_params *params)
 {
     float src_knee, dst_knee;
-    st2094_pick_knee(&src_knee, &dst_knee, params);
+    st2094_pick_knee(&src_knee, &dst_knee, params, params->param);
 
-    const float x1 = powf(params->input_min, params->param);
-    const float x3 = powf(params->input_max, params->param);
-    const float x2 = powf(src_knee, params->param);
+    const float x1 = params->input_min;
+    const float x3 = params->input_max;
+    const float x2 = src_knee;
 
     const float y1 = params->output_min;
     const float y3 = params->output_max;
@@ -491,20 +509,18 @@ static void st2094_10(float *lut, const struct pl_tone_map_params *params)
     const float c2 = k * coeffs[1];
     const float c3 = k * coeffs[2];
 
-    FOREACH_LUT(lut, x) {
-        float Ln = powf(x, params->param);
-        x = (c1 + c2 * Ln) / (1 + c3 * Ln);
-    }
+    FOREACH_LUT(lut, x)
+        x = (c1 + c2 * x) / (1 + c3 * x);
 }
 
 const struct pl_tone_map_function pl_tone_map_st2094_10 = {
     .name = "st2094-10",
     .description = "SAMPTE ST 2094-10 Annex B.2",
+    .param_desc = "Knee point target",
+    .param_min = 0.00f,
+    .param_def = 0.50f,
+    .param_max = 1.00f,
     .scaling = PL_HDR_NITS,
-    .param_desc = "Contrast",
-    .param_min = 0.20,
-    .param_def = 1.00,
-    .param_max = 2.00,
     .map = st2094_10,
 };
 
@@ -601,7 +617,8 @@ const struct pl_tone_map_function pl_tone_map_bt2446a = {
 static void spline(float *lut, const struct pl_tone_map_params *params)
 {
     float src_pivot, dst_pivot;
-    st2094_pick_knee(&src_pivot, &dst_pivot, params);
+    const float adaptation = 0.70f;
+    st2094_pick_knee(&src_pivot, &dst_pivot, params, adaptation);
 
     // Tune the slope at the knee point slightly
     const float slope = params->param * dst_pivot / src_pivot;
