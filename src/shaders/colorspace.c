@@ -1462,8 +1462,8 @@ static void tone_map(pl_shader sh,
     }
 
     if (mode == PL_TONE_MAP_AUTO) {
-        if (is_noop || pure_bpc || src_max == dst_max) {
-            // No-op, clip, pure BPC, etc. - do this per-channel
+        if (is_noop) {
+            // No-op / clip - do this per-channel
             mode = PL_TONE_MAP_RGB;
         } else if (src_max / dst_max > 10) {
             // Extreme reduction: Pick hybrid to avoid blowing out highlights
