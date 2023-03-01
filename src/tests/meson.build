@@ -23,6 +23,8 @@ foreach t : tests
   test(t, e)
 endforeach
 
+include_tmpl_langs = ['c', 'cpp']
+
 # Ensure all headers compile
 foreach h : headers
 
@@ -33,16 +35,20 @@ foreach h : headers
     continue
   endif
 
-  t = configure_file(
-      input: 'include_tmpl.c',
-      output: 'include_@0@.c'.format(h.underscorify()),
-      configuration: {
-        'header': h
-      },
-  )
+  foreach lang : include_tmpl_langs
 
-  executable('test.include.' + h.underscorify(), t,
-      dependencies: tdep,
-      c_args: [ '-Wno-unused-function' ],
-  )
+    t = configure_file(
+        input: 'include_tmpl.' + lang,
+        output: 'include_@0@.@1@'.format(h.underscorify(), lang),
+        configuration: {
+          'header': h
+        },
+    )
+
+    executable('test.include.@0@.@1@'.format(h.underscorify(), lang), t,
+        dependencies: tdep,
+    )
+
+  endforeach
+
 endforeach
