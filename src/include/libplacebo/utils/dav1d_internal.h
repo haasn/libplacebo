@@ -17,13 +17,15 @@
 
 #ifndef LIBPLACEBO_DAV1D_H_
 #error This header should be included as part of <libplacebo/utils/dav1d.h>
+#elif defined(__cplusplus)
+#error This header cannot be included from C++ define PL_DAV1D_IMPLEMENTATION appropriately
 #else
 
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
-static inline enum pl_color_system pl_system_from_dav1d(enum Dav1dMatrixCoefficients mc)
+PL_DAV1D_API enum pl_color_system pl_system_from_dav1d(enum Dav1dMatrixCoefficients mc)
 {
     switch (mc) {
         case DAV1D_MC_IDENTITY:     return PL_COLOR_SYSTEM_RGB; // or XYZ (unlikely)
@@ -49,7 +51,7 @@ static inline enum pl_color_system pl_system_from_dav1d(enum Dav1dMatrixCoeffici
     return PL_COLOR_SYSTEM_UNKNOWN;
 }
 
-static inline enum Dav1dMatrixCoefficients pl_system_to_dav1d(enum pl_color_system sys)
+PL_DAV1D_API enum Dav1dMatrixCoefficients pl_system_to_dav1d(enum pl_color_system sys)
 {
     switch (sys) {
     case PL_COLOR_SYSTEM_UNKNOWN:       return DAV1D_MC_UNKNOWN;
@@ -70,17 +72,17 @@ static inline enum Dav1dMatrixCoefficients pl_system_to_dav1d(enum pl_color_syst
     return DAV1D_MC_UNKNOWN;
 }
 
-static inline enum pl_color_levels pl_levels_from_dav1d(int color_range)
+PL_DAV1D_API enum pl_color_levels pl_levels_from_dav1d(int color_range)
 {
     return color_range ? PL_COLOR_LEVELS_FULL : PL_COLOR_LEVELS_LIMITED;
 }
 
-static inline int pl_levels_to_dav1d(enum pl_color_levels levels)
+PL_DAV1D_API int pl_levels_to_dav1d(enum pl_color_levels levels)
 {
     return levels == PL_COLOR_LEVELS_FULL;
 }
 
-static inline enum pl_color_primaries pl_primaries_from_dav1d(enum Dav1dColorPrimaries prim)
+PL_DAV1D_API enum pl_color_primaries pl_primaries_from_dav1d(enum Dav1dColorPrimaries prim)
 {
     switch (prim) {
     case DAV1D_COLOR_PRI_BT709:         return PL_COLOR_PRIM_BT_709;
@@ -101,7 +103,7 @@ static inline enum pl_color_primaries pl_primaries_from_dav1d(enum Dav1dColorPri
     return PL_COLOR_PRIM_UNKNOWN;
 }
 
-static inline enum Dav1dColorPrimaries pl_primaries_to_dav1d(enum pl_color_primaries prim)
+PL_DAV1D_API enum Dav1dColorPrimaries pl_primaries_to_dav1d(enum pl_color_primaries prim)
 {
     switch (prim) {
     case PL_COLOR_PRIM_UNKNOWN:     return DAV1D_COLOR_PRI_UNKNOWN;
@@ -128,7 +130,7 @@ static inline enum Dav1dColorPrimaries pl_primaries_to_dav1d(enum pl_color_prima
     return DAV1D_COLOR_PRI_UNKNOWN;
 }
 
-static inline enum pl_color_transfer pl_transfer_from_dav1d(enum Dav1dTransferCharacteristics trc)
+PL_DAV1D_API enum pl_color_transfer pl_transfer_from_dav1d(enum Dav1dTransferCharacteristics trc)
 {
     switch (trc) {
     case DAV1D_TRC_BT709:           return PL_COLOR_TRC_BT_1886; // EOTF != OETF
@@ -154,7 +156,7 @@ static inline enum pl_color_transfer pl_transfer_from_dav1d(enum Dav1dTransferCh
     return PL_COLOR_TRC_UNKNOWN;
 }
 
-static inline enum Dav1dTransferCharacteristics pl_transfer_to_dav1d(enum pl_color_transfer trc)
+PL_DAV1D_API enum Dav1dTransferCharacteristics pl_transfer_to_dav1d(enum pl_color_transfer trc)
 {
     switch (trc) {
     case PL_COLOR_TRC_UNKNOWN:      return DAV1D_TRC_UNKNOWN;
@@ -180,7 +182,7 @@ static inline enum Dav1dTransferCharacteristics pl_transfer_to_dav1d(enum pl_col
     return DAV1D_TRC_UNKNOWN;
 }
 
-static inline enum pl_chroma_location pl_chroma_from_dav1d(enum Dav1dChromaSamplePosition loc)
+PL_DAV1D_API enum pl_chroma_location pl_chroma_from_dav1d(enum Dav1dChromaSamplePosition loc)
 {
     switch (loc) {
     case DAV1D_CHR_UNKNOWN:     return PL_CHROMA_UNKNOWN;
@@ -191,7 +193,7 @@ static inline enum pl_chroma_location pl_chroma_from_dav1d(enum Dav1dChromaSampl
     return PL_CHROMA_UNKNOWN;
 }
 
-static inline enum Dav1dChromaSamplePosition pl_chroma_to_dav1d(enum pl_chroma_location loc)
+PL_DAV1D_API enum Dav1dChromaSamplePosition pl_chroma_to_dav1d(enum pl_chroma_location loc)
 {
     switch (loc) {
     case PL_CHROMA_UNKNOWN:         return DAV1D_CHR_UNKNOWN;
@@ -225,8 +227,8 @@ static inline float pl_fixed0_16(uint16_t n)
 // Align to a power of 2
 #define PL_ALIGN2(x, align) (((x) + (align) - 1) & ~((align) - 1))
 
-static inline void pl_frame_from_dav1dpicture(struct pl_frame *out,
-                                              const Dav1dPicture *picture)
+PL_DAV1D_API void pl_frame_from_dav1dpicture(struct pl_frame *out,
+                                             const Dav1dPicture *picture)
 {
     const Dav1dSequenceHeader *seq_hdr = picture->seq_hdr;
     int num_planes;
@@ -358,8 +360,8 @@ static inline void pl_frame_from_dav1dpicture(struct pl_frame *out,
     }
 }
 
-static inline void pl_swapchain_colors_from_dav1dpicture(struct pl_swapchain_colors *out_colors,
-                                                         const Dav1dPicture *picture)
+PL_DAV1D_API void pl_swapchain_colors_from_dav1dpicture(struct pl_swapchain_colors *out_colors,
+                                                            const Dav1dPicture *picture)
 {
     struct pl_frame frame;
     pl_frame_from_dav1dpicture(&frame, picture);
@@ -413,10 +415,10 @@ static void pl_dav1dpicture_unref(void *priv)
     }
 }
 
-static inline bool pl_upload_dav1dpicture(pl_gpu gpu,
-                                          struct pl_frame *out,
-                                          pl_tex tex[3],
-                                          const struct pl_dav1d_upload_params *params)
+PL_DAV1D_API bool pl_upload_dav1dpicture(pl_gpu gpu,
+                                             struct pl_frame *out,
+                                             pl_tex tex[3],
+                                             const struct pl_dav1d_upload_params *params)
 {
     Dav1dPicture *pic = params->picture;
     pl_frame_from_dav1dpicture(out, pic);
@@ -518,7 +520,7 @@ static inline bool pl_upload_dav1dpicture(pl_gpu gpu,
     return true;
 }
 
-static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, void *cookie)
+PL_DAV1D_API int pl_allocate_dav1dpicture(Dav1dPicture *p, void *cookie)
 {
     pl_gpu gpu = cookie;
     if (!gpu->limits.max_mapped_size || !gpu->limits.host_cached ||
@@ -589,7 +591,7 @@ static inline int pl_allocate_dav1dpicture(Dav1dPicture *p, void *cookie)
     return 0;
 }
 
-static inline void pl_release_dav1dpicture(Dav1dPicture *p, void *cookie)
+PL_DAV1D_API void pl_release_dav1dpicture(Dav1dPicture *p, void *cookie)
 {
     struct pl_dav1dalloc *alloc = p->allocator_data;
     if (!alloc)

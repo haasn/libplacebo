@@ -22,6 +22,19 @@
 #include <libplacebo/utils/upload.h>
 #include <dav1d/dav1d.h>
 
+#if defined(__cplusplus) && !defined(PL_DAV1D_IMPLEMENTATION)
+# define PL_DAV1D_API
+# define PL_DAV1D_IMPLEMENTATION 0
+# warning Remember to include this file with a PL_DAV1D_IMPLEMENTATION set to 1 in \
+          C translation unit to provide implementation. Suppress this warning by \
+          defining PL_DAV1D_IMPLEMENTATION to 0 in C++ files.
+#elif !defined(PL_DAV1D_IMPLEMENTATION)
+# define PL_DAV1D_API static inline
+# define PL_DAV1D_IMPLEMENTATION 1
+#else
+# define PL_DAV1D_API
+#endif
+
 PL_API_BEGIN
 
 // Fill in the details of a `pl_frame` from a Dav1dPicture. This function will
@@ -31,13 +44,13 @@ PL_API_BEGIN
 //
 // Note: This will include all possible metadata, including HDR metadata and
 // AV1 film grain data. Users should explicitly clear this out if undesired.
-static void pl_frame_from_dav1dpicture(struct pl_frame *out_frame,
-                                       const Dav1dPicture *picture);
+PL_DAV1D_API void pl_frame_from_dav1dpicture(struct pl_frame *out_frame,
+                                             const Dav1dPicture *picture);
 
 // Helper function to generate a `pl_swapchain_colors` struct from a Dav1dPicture.
 // Useful to update the swapchain colorspace mode dynamically (e.g. for HDR).
-static void pl_swapchain_colors_from_dav1dpicture(struct pl_swapchain_colors *out_colors,
-                                                  const Dav1dPicture *picture);
+PL_DAV1D_API void pl_swapchain_colors_from_dav1dpicture(struct pl_swapchain_colors *out_colors,
+                                                        const Dav1dPicture *picture);
 
 struct pl_dav1d_upload_params {
     // The picture to upload. Not modified unless `asynchronous` is true.
@@ -73,9 +86,9 @@ struct pl_dav1d_upload_params {
 // the GPU. Similar in spirit to `pl_upload_plane`, and the same notes apply.
 // `tex` must be an array of 3 pointers of type `pl_tex`, each
 // either pointing to a valid texture, or NULL. Returns whether successful.
-static bool pl_upload_dav1dpicture(pl_gpu gpu,
-                                   struct pl_frame *out_frame, pl_tex tex[3],
-                                   const struct pl_dav1d_upload_params *params);
+PL_DAV1D_API bool pl_upload_dav1dpicture(pl_gpu gpu,
+                                         struct pl_frame *out_frame, pl_tex tex[3],
+                                         const struct pl_dav1d_upload_params *params);
 
 // Allocate a Dav1dPicture from persistently mapped buffers. This can be more
 // efficient than regular Dav1dPictures, especially when using the synchronous
@@ -86,27 +99,30 @@ static bool pl_upload_dav1dpicture(pl_gpu gpu,
 // passed as the value of `cookie` is `pl_gpu.limits.thread_safe`. Otherwise,
 // the user must manually synchronize this to ensure it runs on the correct
 // thread.
-static int pl_allocate_dav1dpicture(Dav1dPicture *picture, void *gpu);
-static void pl_release_dav1dpicture(Dav1dPicture *picture, void *gpu);
+PL_DAV1D_API int pl_allocate_dav1dpicture(Dav1dPicture *picture, void *gpu);
+PL_DAV1D_API void pl_release_dav1dpicture(Dav1dPicture *picture, void *gpu);
 
 // Mapping functions for the various Dav1dColor* enums. Note that these are not
 // quite 1:1, and even for values that exist in both, the semantics sometimes
 // differ. Some special cases (e.g. ICtCp, or XYZ) are handled differently in
 // libplacebo and libdav1d, respectively.
-static enum pl_color_system pl_system_from_dav1d(enum Dav1dMatrixCoefficients mc);
-static enum Dav1dMatrixCoefficients pl_system_to_dav1d(enum pl_color_system sys);
-static enum pl_color_levels pl_levels_from_dav1d(int color_range);
-static int pl_levels_to_dav1d(enum pl_color_levels levels);
-static enum pl_color_primaries pl_primaries_from_dav1d(enum Dav1dColorPrimaries prim);
-static enum Dav1dColorPrimaries pl_primaries_to_dav1d(enum pl_color_primaries prim);
-static enum pl_color_transfer pl_transfer_from_dav1d(enum Dav1dTransferCharacteristics trc);
-static enum Dav1dTransferCharacteristics pl_transfer_to_dav1d(enum pl_color_transfer trc);
-static enum pl_chroma_location pl_chroma_from_dav1d(enum Dav1dChromaSamplePosition loc);
-static enum Dav1dChromaSamplePosition pl_chroma_to_dav1d(enum pl_chroma_location loc);
+PL_DAV1D_API enum pl_color_system pl_system_from_dav1d(enum Dav1dMatrixCoefficients mc);
+PL_DAV1D_API enum Dav1dMatrixCoefficients pl_system_to_dav1d(enum pl_color_system sys);
+PL_DAV1D_API enum pl_color_levels pl_levels_from_dav1d(int color_range);
+PL_DAV1D_API int pl_levels_to_dav1d(enum pl_color_levels levels);
+PL_DAV1D_API enum pl_color_primaries pl_primaries_from_dav1d(enum Dav1dColorPrimaries prim);
+PL_DAV1D_API enum Dav1dColorPrimaries pl_primaries_to_dav1d(enum pl_color_primaries prim);
+PL_DAV1D_API enum pl_color_transfer pl_transfer_from_dav1d(enum Dav1dTransferCharacteristics trc);
+PL_DAV1D_API enum Dav1dTransferCharacteristics pl_transfer_to_dav1d(enum pl_color_transfer trc);
+PL_DAV1D_API enum pl_chroma_location pl_chroma_from_dav1d(enum Dav1dChromaSamplePosition loc);
+PL_DAV1D_API enum Dav1dChromaSamplePosition pl_chroma_to_dav1d(enum pl_chroma_location loc);
+
 
 // Actual implementation, included as part of this header to avoid having
 // a compile-time dependency on libdav1d.
-#include <libplacebo/utils/dav1d_internal.h>
+#if PL_DAV1D_IMPLEMENTATION
+# include <libplacebo/utils/dav1d_internal.h>
+#endif
 
 PL_API_END
 
