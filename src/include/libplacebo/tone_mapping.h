@@ -96,7 +96,7 @@ struct pl_tone_map_params {
     float output_max;
 
     // The input HDR metadata. Only used by a select few tone-mapping
-    // functions, currently only SMPTE ST2094. (Optional)
+    // functions, currently only SMPTE ST2094 and pl_tone_map_spline. (Optional)
     struct pl_hdr_metadata hdr;
 };
 
