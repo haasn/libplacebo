@@ -620,11 +620,22 @@ static void spline(float *lut, const struct pl_tone_map_params *params)
     const float adaptation = 0.70f;
     st2094_pick_knee(&src_pivot, &dst_pivot, params, adaptation);
 
-    // Tune the slope at the knee point slightly
-    const float slope_gamma = 1.0f - params->param;
+    // Solve for linear knee (Pa = 0)
     float slope = (dst_pivot - params->output_min) /
                   (src_pivot - params->input_min);
-    slope = powf(slope, slope_gamma);
+
+    // Tune the slope at the knee point slightly: raise it to a user-provided
+    // gamma exponent, multiplied by an extra tuning coefficient designed to
+    // make the slope closer to 1.0 when the difference in peaks is low, and
+    // closer to linear when the difference between peaks is high.
+    const float slope_tuning_strength = 1.5f;
+    const float slope_tuning_offset   = 0.2f;
+    const float slope_gamma = 1.0f - params->param;
+    float ratio = params->input_max / params->output_max - 1.0f;
+    ratio = PL_CLAMP(slope_tuning_strength * ratio,
+                     slope_tuning_offset,
+                     1.0f + slope_tuning_offset);
+    slope = powf(slope, slope_gamma * ratio);
 
     // Normalize everything the pivot to make the math easier
     const float in_min = params->input_min - src_pivot;
