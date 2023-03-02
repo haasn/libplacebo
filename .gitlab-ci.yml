@@ -97,13 +97,13 @@ scan:
         - docker
         - amd64
     script:
-        - env CC=clang meson build --buildtype debugoptimized
-                                   --werror
-                                   -Dtests=true
-                                   -Ddemos=true
-                                   -Dbench=true
-                                   -Dshaderc=enabled
-                                   -Dglslang=enabled
+        - env CC=clang CXX=clang++ meson build --buildtype debugoptimized
+                                               --werror
+                                               -Dtests=true
+                                               -Ddemos=true
+                                               -Dbench=true
+                                               -Dshaderc=enabled
+                                               -Dglslang=enabled
         - ninja -C build scan-build
 
 llvmpipe:
@@ -176,13 +176,13 @@ msan:
     variables:
         MSAN_OPTIONS: 'exitcode=1'
     script:
-        - env CC=clang meson build --buildtype debugoptimized
-                                   -Dtests=true
-                                   -Ddemos=false
-                                   -Dc_args='-DMSAN'
-                                   -Dglslang=disabled
-                                   -Db_sanitize=memory
-                                   -Db_lundef=false
+        - env CC=clang CXX=clang++ meson build --buildtype debugoptimized
+                                               -Dtests=true
+                                               -Ddemos=false
+                                               -Dc_args='-DMSAN'
+                                               -Dglslang=disabled
+                                               -Db_sanitize=memory
+                                               -Db_lundef=false
         - ninja -C build
         - cd build && time meson test -t 5 -v --num-processes=1
 
@@ -194,12 +194,12 @@ ubsan:
     variables:
         UBSAN_OPTIONS: 'print_stacktrace=1:halt_on_error=1'
     script:
-        - env CC=clang meson build --buildtype debugoptimized
-                                   -Dtests=true
-                                   -Ddemos=false
-                                   -Dc_args='-fPIE'
-                                   -Dglslang=disabled
-                                   -Db_sanitize=undefined
-                                   -Db_lundef=false
+        - env CC=clang CXX=clang++ meson build --buildtype debugoptimized
+                                               -Dtests=true
+                                               -Ddemos=false
+                                               -Dc_args='-fPIE'
+                                               -Dglslang=disabled
+                                               -Db_sanitize=undefined
+                                               -Db_lundef=false
         - ninja -C build
         - cd build && time meson test -t 5 -v --num-processes=1
