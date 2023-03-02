@@ -1359,10 +1359,11 @@ static void tone_map(pl_shader sh,
     ident_t lut = NULL;
 
     bool can_fixed = !params->force_tone_mapping_lut;
-    bool is_noop = can_fixed && (!fun || fun == &pl_tone_map_clip);
-    bool pure_bpc = can_fixed && src_max == dst_max;
+    bool is_clip = can_fixed && (!fun || fun == &pl_tone_map_clip);
+    bool is_linear = can_fixed && fun == &pl_tone_map_linear &&
+                     (!lut_params.param || lut_params.param == 1.0f);
 
-    if (state && !(is_noop || pure_bpc)) {
+    if (state && !(is_clip || is_linear)) {
         obj = SH_OBJ(sh, state, PL_SHADER_OBJ_TONE_MAP, struct sh_tone_map_obj,
                      sh_tone_map_uninit);
         if (!obj)
@@ -1389,16 +1390,17 @@ static void tone_map(pl_shader sh,
     GLSL("color.rgb = clamp(color.rgb, %s, %s); \n",
          SH_FLOAT_DYN(src_min), SH_FLOAT_DYN(src_max));
 
-    if (is_noop) {
+    if (is_clip) {
 
         GLSL("#define tone_map(x) clamp((x), %s, %s) \n",
              SH_FLOAT(dst_min), SH_FLOAT(dst_max));
 
-    } else if (pure_bpc) {
+    } else if (is_linear) {
 
         const float pq_src_min = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, src_min);
         const float pq_src_max = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, src_max);
         const float pq_dst_min = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, dst_min);
+        const float pq_dst_max = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, dst_max);
 
         ident_t bpc = sh_fresh(sh, "bpc_pq");
         GLSLH("float %s(float x) {                          \n"
@@ -1422,7 +1424,7 @@ static void tone_map(pl_shader sh,
              PL_COLOR_SDR_WHITE / 10000.0,
              PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
              SH_FLOAT_DYN(pq_src_min),
-             SH_FLOAT_DYN((pq_src_max - pq_dst_min) / (pq_src_max - pq_src_min)),
+             SH_FLOAT_DYN((pq_dst_max - pq_dst_min) / (pq_src_max - pq_src_min)),
              SH_FLOAT(pq_dst_min),
              PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
              10000.0 / PL_COLOR_SDR_WHITE);
@@ -1462,7 +1464,7 @@ static void tone_map(pl_shader sh,
     }
 
     if (mode == PL_TONE_MAP_AUTO) {
-        if (is_noop) {
+        if (is_clip) {
             // No-op / clip - do this per-channel
             mode = PL_TONE_MAP_RGB;
         } else if (src_max / dst_max > 10) {
