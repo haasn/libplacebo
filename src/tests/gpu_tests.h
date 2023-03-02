@@ -651,17 +651,18 @@ static void pl_shader_tests(pl_gpu gpu)
         for (int y = 0; y < FBO_H; y++) {
             for (int x = 0; x < FBO_W; x++) {
                 float *color = &data[(y * FBO_W + x) * 4];
-                float smax = powf(PL_MAX(color[0], color[1]), 2.2);
-                smax = (1 - 1e-3f) * smax + 1e-3f;
-                float slog = logf(PL_MAX(smax, 0.001));
-                real_peak = PL_MAX(smax, real_peak);
-                real_avg += slog;
+                float maxrgb = powf(PL_MAX3(color[0], color[1], color[2]), 2.2f);
+                maxrgb = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, maxrgb);
+                real_peak = PL_MAX(real_peak, maxrgb);
+                real_avg += maxrgb;
             }
         }
+        real_avg = real_avg / (FBO_W * FBO_H);
 
-        real_avg = expf(real_avg / (FBO_W * FBO_H));
-        REQUIRE_FEQ(peak, real_peak, 1e-4);
-        REQUIRE_FEQ(avg, real_avg, 1e-3);
+        real_avg  = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, real_avg);
+        real_peak = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, real_peak);
+        REQUIRE_FEQ(peak, real_peak, 1e-3);
+        REQUIRE_FEQ(avg, real_avg, 1e-2);
     }
 
     pl_dispatch_abort(dp, &sh);
