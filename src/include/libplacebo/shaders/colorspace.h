@@ -169,12 +169,23 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
                            pl_shader_obj *state,
                            const struct pl_peak_detect_params *params);
 
+// After dispatching the above shader, this function can be used to retrieve
+// the detected dynamic HDR10+ metadata parameters. The other fields of
+// `metadata` are not written to. Returns whether or not any values were
+// written. If not, the values are left untouched, so this can be used to
+// safely update `pl_hdr_metadata` values in-place. This function may or may
+// not block, depending on the previous setting of `allow_delayed`.
+bool pl_get_detected_hdr_metadata(const pl_shader_obj state,
+                                  struct pl_hdr_metadata *metadata);
+
 // After dispatching the above shader, this function *may* be used to read out
 // the detected CLL and FALL directly (in PL_HDR_NORM units). If the shader
 // has never been dispatched yet, i.e. no information is available, this will
 // return false.
-bool pl_get_detected_peak(const pl_shader_obj state,
-                          float *out_cll, float *out_fall);
+//
+// Deprecated in favor of `pl_get_detected_hdr_metadata`
+PL_DEPRECATED bool pl_get_detected_peak(const pl_shader_obj state,
+                                        float *out_cll, float *out_fall);
 
 // Resets the peak detection state in a given tone mapping state object. This
 // is not equal to `pl_shader_obj_destroy`, because it does not destroy any

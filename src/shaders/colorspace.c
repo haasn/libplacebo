@@ -1178,8 +1178,8 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     return true;
 }
 
-bool pl_get_detected_peak(const pl_shader_obj state,
-                          float *out_peak, float *out_avg)
+bool pl_get_detected_hdr_metadata(const pl_shader_obj state,
+                                  struct pl_hdr_metadata *out)
 {
     if (!state || state->type != PL_SHADER_OBJ_TONE_MAP)
         return false;
@@ -1189,12 +1189,28 @@ bool pl_get_detected_peak(const pl_shader_obj state,
     if (!obj->peak.avg_pq)
         return false;
 
-    float maxrgb_pq = PL_MAX3(obj->peak.max_pq[0],
-                              obj->peak.max_pq[1],
-                              obj->peak.max_pq[2]);
+    out->scene_avg = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, obj->peak.avg_pq);
+    for (int c = 0; c < PL_ARRAY_SIZE(obj->peak.max_pq); c++) {
+        out->scene_max[c] = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS,
+                                           obj->peak.max_pq[c]);
+    }
 
-    *out_peak = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, maxrgb_pq);
-    *out_avg = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, obj->peak.avg_pq);
+    return true;
+}
+
+bool pl_get_detected_peak(const pl_shader_obj state,
+                          float *out_peak, float *out_avg)
+{
+    struct pl_hdr_metadata data;
+    if (!pl_get_detected_hdr_metadata(state, &data))
+        return false;
+
+    // Preserves old behavior
+    float scene_maxrgb = PL_MAX3(data.scene_max[0],
+                                 data.scene_max[1],
+                                 data.scene_max[2]);
+    *out_peak = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, scene_maxrgb);
+    *out_avg  = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, data.scene_avg);
     return true;
 }
 
@@ -1734,22 +1750,8 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
         return;
     }
 
-    if (tone_map_state) {
-        float peak, avg;
-        if (pl_get_detected_peak(*tone_map_state, &peak, &avg) && avg > 0) {
-            peak = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, peak);
-            avg = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, avg);
-
-            // Add some headroom to avoid no-op tone mapping. (This is because
-            // many curves are not good approximations of a no-op tone mapping
-            // function even when tone mapping to very similar values)
-            if (dst.hdr.max_luma < src.hdr.max_luma)
-                peak = PL_MAX(peak, dst.hdr.max_luma + 1.0f);
-            for (int i = 0; i < 3; i++)
-                src.hdr.scene_max[i] = peak;
-            src.hdr.scene_avg = avg;
-        }
-    }
+    if (tone_map_state)
+        pl_get_detected_hdr_metadata(*tone_map_state, &src.hdr);
 
     sh_describe(sh, "colorspace conversion");
     GLSL("// pl_shader_color_map\n");
