@@ -161,6 +161,10 @@ static struct pl_tone_map_params fix_params(const struct pl_tone_map_params *par
     fixed.output_min = pl_hdr_rescale(params->output_scaling, fun->scaling, params->output_min);
     fixed.output_max = pl_hdr_rescale(params->output_scaling, fun->scaling, params->output_max);
 
+    // Constrain the output peak if function does not support inverse mapping
+    if (!fun->map_inverse && fixed.output_max > fixed.input_max)
+        fixed.output_max = fixed.input_max;
+
     return fixed;
 }
 
@@ -172,25 +176,8 @@ static void map_lut(float *lut, const struct pl_tone_map_params *params)
 {
     if (params->output_max > params->input_max + 1e-4) {
         // Inverse tone-mapping
-        if (params->function->map_inverse) {
-            params->function->map_inverse(lut, params);
-        } else {
-            // Perform (perceptually linear) BPC only
-            float input_min, input_max, output_min;
-            input_min = pl_hdr_rescale(params->input_scaling, PL_HDR_PQ,
-                                       params->input_min);
-            input_max = pl_hdr_rescale(params->input_scaling, PL_HDR_PQ,
-                                       params->input_max);
-            output_min = pl_hdr_rescale(params->output_scaling, PL_HDR_PQ,
-                                        params->output_min);
-            float coeff = (input_max - output_min) / (input_max - input_min);
-
-            FOREACH_LUT(lut, x) {
-                x = pl_hdr_rescale(params->input_scaling, PL_HDR_PQ, x);
-                x = coeff * (x - input_min) + output_min;
-                x = pl_hdr_rescale(PL_HDR_PQ, params->output_scaling, x);
-            }
-        }
+        pl_assert(params->function->map_inverse);
+        params->function->map_inverse(lut, params);
     } else {
         // Forward tone-mapping
         params->function->map(lut, params);
