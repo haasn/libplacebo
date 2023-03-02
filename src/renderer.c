@@ -1139,10 +1139,10 @@ static void hdr_update_peak(struct pass_state *pass)
     if (params->lut && params->lut_type == PL_LUT_CONVERSION)
         goto cleanup; // LUT handles tone mapping
 
-    if (!pass->fbofmt[4] && !params->allow_delayed_peak_detect) {
+    if (!pass->fbofmt[4] && !params->peak_detect_params->allow_delayed) {
         PL_WARN(rr, "Disabling peak detection because "
-                "`allow_delayed_peak_detect` is false, but lack of FBOs "
-                "forces the result to be delayed.");
+                "`pl_peak_detect_params.allow_delayed` is false, but lack of "
+                "FBOs forces the result to be delayed.");
         rr->errors |= PL_RENDER_ERR_PEAK_DETECT;
         goto cleanup;
     }
@@ -1853,7 +1853,7 @@ static bool pass_scale_main(struct pass_state *pass)
 
     const struct pl_frame *image = &pass->image;
     bool need_fbo = image->num_overlays > 0;
-    need_fbo |= rr->peak_detect_active && !params->allow_delayed_peak_detect;
+    need_fbo |= rr->peak_detect_active && !params->peak_detect_params->allow_delayed;
 
     // Force FBO indirection if this shader is non-resizable
     int out_w, out_h;
@@ -2872,8 +2872,11 @@ static struct params_info render_params_info(const struct pl_render_params *para
     HASH_PTR(params.sigmoid_params, NULL, false);
     HASH_PTR(params.deinterlace_params, NULL, false);
     HASH_PTR(params.color_adjustment, &pl_color_adjustment_neutral, true);
-    HASH_PTR(params.peak_detect_params, NULL, params.allow_delayed_peak_detect);
     HASH_PTR(params.color_map_params, &pl_color_map_default_params, true);
+    if (params.peak_detect_params) {
+        HASH_PTR(params.peak_detect_params, NULL,
+                 params.peak_detect_params->allow_delayed);
+    }
 
     // Hash all hooks
     for (int i = 0; i < params.num_hooks; i++) {

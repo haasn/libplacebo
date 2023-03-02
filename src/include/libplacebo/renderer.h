@@ -280,12 +280,6 @@ struct pl_render_params {
     // `pl_sample_filter_params` for more information.
     float polar_cutoff;
 
-    // Allows the peak detection result to be delayed by up to a single frame,
-    // which can sometimes (not always) allow skipping some otherwise redundant
-    // sampling work. Only relevant when peak detection is active (i.e.
-    // params->peak_detect_params is set and the source is HDR).
-    bool allow_delayed_peak_detect;
-
     // Normally, when the size of the `target` used with `pl_render_image_mix`
     // changes, or the render parameters are updated, the internal cache of
     // mixed frames must be discarded in order to re-render all required
@@ -356,6 +350,7 @@ struct pl_render_params {
 
     // --- Deprecated/removed fields
     bool force_icc_lut PL_DEPRECATED; // no longer functional
+    bool allow_delayed_peak_detect PL_DEPRECATED; // moved to pl_peak_detect_params
 };
 
 // Bare minimum parameters, with no features enabled. This is the fastest

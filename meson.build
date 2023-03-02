@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '254': 'deprecate pl_renderer_params.allow_delayed_peak_detect and add pl_peak_detect_params.allow_delayed',
       '253': 'remove pl_color_space.nominal_min/max and add pl_color_space_nominal_peak',
       '252': 'remove pl_swapchain.impl',
       '251': 'add `utils/dolbyvision.h` and `pl_hdr_metadata_from_dovi_rpu`',

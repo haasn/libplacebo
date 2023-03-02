@@ -994,17 +994,32 @@ static inline float iir_coeff(float rate)
     return sqrt(a*a + 2*a) - a;
 }
 
-static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj)
+// if `force` is true, ensures the buffer is read, even if `allow_delayed`
+static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
 {
     const struct pl_peak_detect_params *params = &obj->peak.params;
     if (!obj->peak.buf)
         return;
 
+    if (!force && params->allow_delayed && pl_buf_poll(gpu, obj->peak.buf, 0))
+        return; // buffer not ready yet
+
     struct peak_buf_data data = {0};
     pl_buf_read(gpu, obj->peak.buf, 0, &data, sizeof(data));
-    pl_buf_destroy(gpu, &obj->peak.buf);
-    if (!data.frame_wg_count)
-        return; // no data read?
+    if (!data.frame_wg_count) {
+        // No data read? Possibly this peak obj has not been executed yet
+        if (params->allow_delayed) {
+            PL_TRACE(gpu, "Peak detection buffer seems empty, ignoring..");
+        } else {
+            PL_WARN(gpu, "Peak detection usage error: attempted detecting peak "
+                    "and using detected peak in the same shader program, "
+                    "but `params->allow_delayed` is false! Ignoring, but "
+                    "expect incorrect output.");
+        }
+        if (force)
+            pl_buf_destroy(gpu, &obj->peak.buf);
+        return;
+    }
 
     const float scale = 1.0f / PQ_MAX;
     float avg_pq, max_pq[3];
@@ -1073,7 +1088,8 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
         return false;
 
     pl_gpu gpu = SH_GPU(sh);
-    update_peak_buf(gpu, obj); // prevent over-writing previous frame
+    update_peak_buf(gpu, obj, true); // prevent over-writing previous frame
+    obj->peak.params = *params; // set new params
 
     static const struct peak_buf_data zero = {0};
     obj->peak.buf = pl_buf_create(gpu, pl_buf_params(
@@ -1169,7 +1185,7 @@ bool pl_get_detected_peak(const pl_shader_obj state,
         return false;
 
     struct sh_tone_map_obj *obj = state->priv;
-    update_peak_buf(state->gpu, obj);
+    update_peak_buf(state->gpu, obj, false);
     if (!obj->peak.avg_pq)
         return false;
 

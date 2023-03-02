@@ -1051,6 +1051,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 nk_property_float(nk, "Threshold high", 0.0, &ppar->scene_threshold_high, 20.0, 0.5, 0.005);
                 nk_property_float(nk, "Smoothing period", 1.0, &ppar->smoothing_period, 1000.0, 5.0, 1.0);
                 nk_property_float(nk, "Minimum peak", 0.0, &ppar->minimum_peak, 10.0, 0.1, 0.01);
+                nk_checkbox_label(nk, "Allow 1-frame delay", &ppar->allow_delayed);
 
                 int overshoot = roundf(ppar->overshoot_margin * 100.0);
                 nk_property_int(nk, "Overshoot (%)", 0, &overshoot, 200, 1, 1);
@@ -1564,7 +1565,6 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Debug", NK_MINIMIZED)) {
             nk_layout_row_dynamic(nk, 24, 1);
-            nk_checkbox_label(nk, "Allow delayed peak-detect", &par->allow_delayed_peak_detect);
             nk_checkbox_label(nk, "Preserve mixing cache", &par->preserve_mixing_cache);
             nk_checkbox_label(nk, "Disable linear scaling", &par->disable_linear_scaling);
             nk_checkbox_label(nk, "Disable built-in scalers", &par->disable_builtin_scalers);

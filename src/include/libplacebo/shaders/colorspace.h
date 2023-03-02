@@ -134,6 +134,10 @@ struct pl_peak_detect_params {
     // imposes a hard lower bound on the detected peak. If left as 0.0, it
     // instead defaults to a value of 1.0.
     float minimum_peak;
+
+    // Allows the peak detection result to be delayed by up to a single frame,
+    // which can sometimes improve thoughpout. Disabled by default.
+    bool allow_delayed;
 };
 
 #define PL_PEAK_DETECT_DEFAULTS         \
@@ -169,12 +173,6 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
 // the detected CLL and FALL directly (in PL_HDR_NORM units). If the shader
 // has never been dispatched yet, i.e. no information is available, this will
 // return false.
-//
-// Note: This function will block until the shader object is no longer in use
-// by the GPU, so its use should be avoided due to performance reasons. This
-// function is *not* needed when the user only wants to use `pl_shader_color_map`,
-// since that can ingest the results from the state object directly. It only
-// serves as a utility/debugging function.
 bool pl_get_detected_peak(const pl_shader_obj state,
                           float *out_cll, float *out_fall);
 
