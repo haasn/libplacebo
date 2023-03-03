@@ -20,28 +20,24 @@ elif not glslang_req.disabled()
     cxx.find_library('glslang-default-resource-limits', required: false)
   ]
 
-  glslang_shared = cxx.find_library('glslang', required: false, static: false)
-  if glslang_shared.found()
-    glslang_deps += glslang_shared
-  else
-    glslang_deps += [
-      cxx.find_library('glslang',            required: glslang_req, static: true),
-      cxx.find_library('MachineIndependent', required: glslang_req, static: true),
-      cxx.find_library('OSDependent',        required: glslang_req, static: true),
-      cxx.find_library('OGLCompiler',        required: glslang_req, static: true),
-      cxx.find_library('GenericCodeGen',     required: glslang_req, static: true),
-      cxx.find_library('SPVRemapper',        required: glslang_req, static: true),
-    ]
-  endif
+  # meson doesn't respect generator expressions in INTERFACE_LINK_LIBRARIES
+  # https://github.com/mesonbuild/meson/issues/8232
+  # TODO: Use the following once it's fixed
+  # glslang = dependency('glslang', method: 'cmake', modules: ['glslang::SPIRV'])
 
   spirv_shared = cxx.find_library('SPIRV', required: false, static: false)
   if spirv_shared.found()
     glslang_deps += spirv_shared
   else
     glslang_deps += [
-      cxx.find_library('SPIRV',           required: glslang_req, static: true),
-      cxx.find_library('SPIRV-Tools',     required: glslang_req, static: true),
-      cxx.find_library('SPIRV-Tools-opt', required: glslang_req, static: true),
+      cxx.find_library('SPIRV',              required: glslang_req, static: true),
+      cxx.find_library('MachineIndependent', required: glslang_req, static: true),
+      cxx.find_library('OSDependent',        required: glslang_req, static: true),
+      cxx.find_library('OGLCompiler',        required: glslang_req, static: true),
+      cxx.find_library('GenericCodeGen',     required: glslang_req, static: true),
+      # SPIRV-Tools are required only if optimizer is enabled in glslang build
+      cxx.find_library('SPIRV-Tools',        required: false, static: true),
+      cxx.find_library('SPIRV-Tools-opt',    required: false, static: true),
     ]
   endif
 
@@ -60,4 +56,3 @@ if glslang.found()
     'glsl/spirv_glslang.c',
   ]
 endif
-
