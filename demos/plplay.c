@@ -430,7 +430,7 @@ static void update_colorspace_hint(struct plplay *p, const struct pl_frame_mix *
 
     struct pl_color_space hint = {0};
     if (p->colorspace_hint)
-        pl_color_space_from_avframe(&hint, frame->user_data);
+        hint = frame->color;
     if (p->target_override)
         apply_csp_overrides(p, &hint);
     pl_swapchain_colorspace_hint(p->win->swapchain, &hint);
