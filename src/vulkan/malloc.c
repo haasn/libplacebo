@@ -546,6 +546,7 @@ void vk_malloc_destroy(struct vk_malloc **ma_ptr)
     if (!ma)
         return;
 
+    vk_malloc_print_stats(ma, PL_LOG_DEBUG);
     for (int i = 0; i < ma->pools.num; i++)
         pool_uninit(ma->vk, &ma->pools.elem[i]);
 
