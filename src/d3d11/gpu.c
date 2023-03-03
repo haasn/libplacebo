@@ -298,9 +298,11 @@ static void d3d11_gpu_destroy(pl_gpu gpu)
 
     // Destroy the immediate context synchronously so referenced objects don't
     // show up in the leak check
-    ID3D11DeviceContext_ClearState(p->imm);
-    ID3D11DeviceContext_Flush(p->imm);
-    SAFE_RELEASE(p->imm);
+    if (p->imm) {
+        ID3D11DeviceContext_ClearState(p->imm);
+        ID3D11DeviceContext_Flush(p->imm);
+        SAFE_RELEASE(p->imm);
+    }
 
     pl_free((void *) gpu);
 }

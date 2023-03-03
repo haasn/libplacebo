@@ -843,11 +843,13 @@ void pl_vulkan_destroy(pl_vulkan *pl_vk)
 
     struct vk_ctx *vk = PL_PRIV(*pl_vk);
     if (vk->dev) {
-        PL_DEBUG(vk, "Waiting for remaining commands...");
-        pl_gpu_finish((*pl_vk)->gpu);
-        pl_assert(vk->cmds_pending.num == 0);
+        if ((*pl_vk)->gpu) {
+            PL_DEBUG(vk, "Waiting for remaining commands...");
+            pl_gpu_finish((*pl_vk)->gpu);
+            pl_assert(vk->cmds_pending.num == 0);
 
-        pl_gpu_destroy((*pl_vk)->gpu);
+            pl_gpu_destroy((*pl_vk)->gpu);
+        }
         vk_malloc_destroy(&vk->ma);
         for (int i = 0; i < vk->pools.num; i++)
             vk_cmdpool_destroy(vk, vk->pools.elem[i]);
