@@ -52,6 +52,7 @@ struct vk_malloc_params {
     enum pl_handle_type export_handle;
     enum pl_handle_type import_handle;
     struct pl_shared_mem shared_mem; // for `import_handle`
+    pl_debug_tag debug_tag;
 };
 
 // Returns the amount of available memory matching a given set of property

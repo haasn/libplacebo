@@ -58,6 +58,7 @@
 // each of which contains a list of slabs of differing page sizes.
 struct vk_slab {
     pl_mutex lock;
+    pl_debug_tag debug_tag; // debug tag of the triggering allocation
     VkDeviceMemory mem;     // underlying device allocation
     VkDeviceSize size;      // total allocated size of `mem`
     VkMemoryType mtype;     // underlying memory type
@@ -174,11 +175,12 @@ void vk_malloc_print_stats(struct vk_malloc *ma, enum pl_log_level lev)
             size_t slab_res = slab->size - avail;
 
             PL_MSG(vk, lev, "    Slab %2d: %8"PRIx64" x %s: "
-                   "%s used %s res %s alloc from heap %d, efficiency %.2f%%",
+                   "%s used %s res %s alloc from heap %d, efficiency %.2f%%  [%s]",
                    j, slab->spacemap, PRINT_SIZE(slab->pagesize),
                    PRINT_SIZE(slab->used), PRINT_SIZE(slab_res),
                    PRINT_SIZE(slab->size), (int) slab->mtype.heapIndex,
-                   efficiency(slab->used, slab_res));
+                   efficiency(slab->used, slab_res),
+                   PL_DEF(slab->debug_tag, "unknown"));
 
             pool_size += slab->size;
             pool_used += slab->used;
@@ -216,6 +218,8 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
         PL_WARN(vk, "slab total size: %zu bytes, heap: %d, flags: 0x%"PRIX64,
                 (size_t) slab->size, (int) slab->mtype.heapIndex,
                 (uint64_t) slab->mtype.propertyFlags);
+        if (slab->debug_tag)
+            PL_WARN(vk, "last used for: %s", slab->debug_tag);
         pl_log_stack_trace(vk->log, PL_LOG_WARN);
         pl_debug_abort();
     }
@@ -363,6 +367,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
         .age = ma->age,
         .size = params->reqs.size,
         .handle_type = params->export_handle,
+        .debug_tag = params->debug_tag,
     };
     pl_mutex_init(&slab->lock);
 
@@ -509,6 +514,8 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
     return slab;
 
 error:
+    if (params->debug_tag)
+        PL_ERR(vk, "  for malloc: %s", params->debug_tag);
     slab_free(vk, slab);
     return NULL;
 }
@@ -937,6 +944,8 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
     return true;
 
 error:
+    if (params->debug_tag)
+        PL_ERR(vk, "  for malloc: %s", params->debug_tag);
     vk->DestroyBuffer(vk->dev, buffer, PL_VK_ALLOC);
 #ifdef PL_HAVE_UNIX
     if (fdinfo.fd > -1)
@@ -1001,6 +1010,8 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
         size = PL_ALIGN(size, align);
         slab->used += size;
         slab->age = ma->age;
+        if (params->debug_tag)
+            slab->debug_tag = params->debug_tag;
         pl_mutex_unlock(&slab->lock);
     }
 

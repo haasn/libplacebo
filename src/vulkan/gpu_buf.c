@@ -121,6 +121,7 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
         .export_handle = params->export_handle,
         .import_handle = params->import_handle,
         .shared_mem = params->shared_mem,
+        .debug_tag = params->debug_tag,
     };
 
     // Mandatory/optimal buffer offset alignment
