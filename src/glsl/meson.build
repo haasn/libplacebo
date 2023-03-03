@@ -25,23 +25,38 @@ elif not glslang_req.disabled()
   # TODO: Use the following once it's fixed
   # glslang = dependency('glslang', method: 'cmake', modules: ['glslang::SPIRV'])
 
-  spirv_shared = cxx.find_library('SPIRV', required: false, static: false)
-  if spirv_shared.found()
-    glslang_deps += spirv_shared
-  else
-    glslang_deps += [
-      cxx.find_library('SPIRV',              required: glslang_req, static: true),
-      cxx.find_library('MachineIndependent', required: glslang_req, static: true),
-      cxx.find_library('OSDependent',        required: glslang_req, static: true),
-      cxx.find_library('OGLCompiler',        required: glslang_req, static: true),
-      cxx.find_library('GenericCodeGen',     required: glslang_req, static: true),
-      # SPIRV-Tools are required only if optimizer is enabled in glslang build
-      cxx.find_library('SPIRV-Tools',        required: false, static: true),
-      cxx.find_library('SPIRV-Tools-opt',    required: false, static: true),
-    ]
-  endif
+  prefer_static = get_option('prefer_static')
+  found_lib = false
+  foreach arg : [[prefer_static, false], [not prefer_static, glslang_req]]
+    static   = arg[0]
+    required = arg[1]
 
-  if glslang_deps[1].found() and cc.has_header('glslang/build_info.h')
+    spirv = cxx.find_library('SPIRV', required: required, static: static)
+
+    if not spirv.found()
+      continue
+    endif
+
+    glslang_deps += spirv
+
+    if static
+      glslang_deps += [
+        # Always required for static linking
+        cxx.find_library('MachineIndependent', required: true, static: true),
+        cxx.find_library('OSDependent',        required: true, static: true),
+        cxx.find_library('OGLCompiler',        required: true, static: true),
+        cxx.find_library('GenericCodeGen',     required: true, static: true),
+        # SPIRV-Tools are required only if optimizer is enabled in glslang build
+        cxx.find_library('SPIRV-Tools',        required: false, static: true),
+        cxx.find_library('SPIRV-Tools-opt',    required: false, static: true),
+      ]
+    endif
+
+    found_lib = true
+    break
+  endforeach
+
+  if found_lib and cc.has_header('glslang/build_info.h')
     glslang = declare_dependency(dependencies: glslang_deps)
   endif
 
