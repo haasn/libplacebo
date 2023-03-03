@@ -186,21 +186,6 @@ static bool open_file(struct plplay *p, const char *filename)
     return true;
 }
 
-static inline bool is_file_hdr(struct plplay *p)
-{
-    assert(p->stream);
-    enum AVColorTransferCharacteristic trc = p->stream->codecpar->color_trc;
-    if (pl_color_transfer_is_hdr(pl_transfer_from_av(trc)))
-        return true;
-
-#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 16, 100)
-    if (av_stream_get_side_data(p->stream, AV_PKT_DATA_DOVI_CONF, NULL))
-        return true;
-#endif
-
-    return false;
-}
-
 static bool init_codec(struct plplay *p)
 {
     assert(p->stream);
@@ -1040,24 +1025,22 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             nk_tree_pop(nk);
         }
 
-        if (is_file_hdr(p)) {
-            if (nk_tree_push(nk, NK_TREE_NODE, "HDR peak detection", NK_MINIMIZED)) {
-                struct pl_peak_detect_params *ppar = &p->peak_detect_params;
-                nk_layout_row_dynamic(nk, 24, 2);
-                par->peak_detect_params = nk_check_label(nk, "Enable", par->peak_detect_params) ? ppar : NULL;
-                if (nk_button_label(nk, "Reset settings"))
-                    *ppar = pl_peak_detect_default_params;
-                nk_property_float(nk, "Threshold low", 0.0, &ppar->scene_threshold_low, 20.0, 0.5, 0.005);
-                nk_property_float(nk, "Threshold high", 0.0, &ppar->scene_threshold_high, 20.0, 0.5, 0.005);
-                nk_property_float(nk, "Smoothing period", 1.0, &ppar->smoothing_period, 1000.0, 5.0, 1.0);
-                nk_property_float(nk, "Minimum peak", 0.0, &ppar->minimum_peak, 10.0, 0.1, 0.01);
-                nk_checkbox_label(nk, "Allow 1-frame delay", &ppar->allow_delayed);
+        if (nk_tree_push(nk, NK_TREE_NODE, "HDR peak detection", NK_MINIMIZED)) {
+            struct pl_peak_detect_params *ppar = &p->peak_detect_params;
+            nk_layout_row_dynamic(nk, 24, 2);
+            par->peak_detect_params = nk_check_label(nk, "Enable", par->peak_detect_params) ? ppar : NULL;
+            if (nk_button_label(nk, "Reset settings"))
+                *ppar = pl_peak_detect_default_params;
+            nk_property_float(nk, "Threshold low", 0.0, &ppar->scene_threshold_low, 20.0, 0.5, 0.005);
+            nk_property_float(nk, "Threshold high", 0.0, &ppar->scene_threshold_high, 20.0, 0.5, 0.005);
+            nk_property_float(nk, "Smoothing period", 1.0, &ppar->smoothing_period, 1000.0, 5.0, 1.0);
+            nk_property_float(nk, "Minimum peak", 0.0, &ppar->minimum_peak, 10.0, 0.1, 0.01);
+            nk_checkbox_label(nk, "Allow 1-frame delay", &ppar->allow_delayed);
 
-                int overshoot = roundf(ppar->overshoot_margin * 100.0);
-                nk_property_int(nk, "Overshoot (%)", 0, &overshoot, 200, 1, 1);
-                ppar->overshoot_margin = overshoot / 100.0;
-                nk_tree_pop(nk);
-            }
+            int overshoot = roundf(ppar->overshoot_margin * 100.0);
+            nk_property_int(nk, "Overshoot (%)", 0, &overshoot, 200, 1, 1);
+            ppar->overshoot_margin = overshoot / 100.0;
+            nk_tree_pop(nk);
         }
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Tone mapping", NK_MINIMIZED)) {
