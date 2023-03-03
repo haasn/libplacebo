@@ -388,6 +388,30 @@ static const VkFilter filters[PL_TEX_SAMPLE_MODE_COUNT] = {
 
 static inline struct pl_spirv_version get_spirv_version(const struct vk_ctx *vk)
 {
+#ifdef VK_VERSION_1_3
+    if (vk->api_ver >= VK_API_VERSION_1_3) {
+        const VkPhysicalDeviceMaintenance4Features *device_maintenance4;
+        device_maintenance4 = vk_find_struct(&vk->features,
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES);
+
+        if (device_maintenance4 && device_maintenance4->maintenance4) {
+            return (struct pl_spirv_version) {
+                .env_version = VK_API_VERSION_1_3,
+                .spv_version = PL_SPV_VERSION(1, 6),
+            };
+        }
+    }
+#endif
+
+#ifdef VK_VERSION_1_2
+    if (vk->api_ver >= VK_API_VERSION_1_2) {
+        return (struct pl_spirv_version) {
+            .env_version = VK_API_VERSION_1_2,
+            .spv_version = PL_SPV_VERSION(1, 5),
+        };
+    }
+#endif
+
     return (struct pl_spirv_version) {
         .env_version = VK_API_VERSION_1_1,
         .spv_version = PL_SPV_VERSION(1, 3),

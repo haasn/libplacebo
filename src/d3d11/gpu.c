@@ -399,7 +399,7 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
     gpu->log = ctx->log;
 
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
-    uint32_t spirv_ver = PL_MAX_SPIRV_VER;
+    uint32_t spirv_ver = PL_MIN(SPV_VERSION, PL_MAX_SPIRV_VER);
     *p = (struct pl_gpu_d3d11) {
         .ctx = ctx,
         .impl = pl_fns_d3d11,

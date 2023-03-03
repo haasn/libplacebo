@@ -26,7 +26,7 @@
 #define PL_VLK_VERSION(major, minor) ((major) << 22 | (minor) << 12)
 
 // Max version that can be used
-#define PL_MAX_SPIRV_VER PL_SPV_VERSION(1, 3)
+#define PL_MAX_SPIRV_VER PL_SPV_VERSION(1, 6)
 
 struct pl_spirv_version {
     uint32_t env_version;
