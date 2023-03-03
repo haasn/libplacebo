@@ -106,8 +106,8 @@ static inline int pl_cond_timedwait(pl_cond *cond, pl_mutex *mutex, uint64_t tim
     ts.tv_sec  += timeout / 1000000000LLU;
     ts.tv_nsec += timeout % 1000000000LLU;
 
-    if (ts.tv_nsec > 1000000000LLU) {
-        ts.tv_nsec -= 1000000000LLU;
+    if (ts.tv_nsec > 1000000000L) {
+        ts.tv_nsec -= 1000000000L;
         ts.tv_sec++;
     }
 
