@@ -1005,16 +1005,21 @@ static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
         return; // buffer not ready yet
 
     struct peak_buf_data data = {0};
-    pl_buf_read(gpu, obj->peak.buf, 0, &data, sizeof(data));
-    if (!data.frame_wg_count) {
+    bool ok = pl_buf_read(gpu, obj->peak.buf, 0, &data, sizeof(data));
+    if (ok && data.frame_wg_count > 0) {
+        // Peak detection completed successfully
+        pl_buf_destroy(gpu, &obj->peak.buf);
+    } else {
         // No data read? Possibly this peak obj has not been executed yet
         if (params->allow_delayed) {
             PL_TRACE(gpu, "Peak detection buffer seems empty, ignoring..");
-        } else {
+        } else if (ok) {
             PL_WARN(gpu, "Peak detection usage error: attempted detecting peak "
                     "and using detected peak in the same shader program, "
                     "but `params->allow_delayed` is false! Ignoring, but "
                     "expect incorrect output.");
+        } else {
+            PL_ERR(gpu, "Failed reading peak detection buffer!");
         }
         if (force)
             pl_buf_destroy(gpu, &obj->peak.buf);
@@ -1091,6 +1096,7 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     update_peak_buf(gpu, obj, true); // prevent over-writing previous frame
     obj->peak.params = *params; // set new params
 
+    pl_assert(!obj->peak.buf);
     static const struct peak_buf_data zero = {0};
     obj->peak.buf = pl_buf_create(gpu, pl_buf_params(
         .size           = sizeof(struct peak_buf_data),
