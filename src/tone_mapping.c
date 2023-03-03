@@ -295,9 +295,9 @@ static void st2094_pick_knee(float *out_src_knee, float *out_dst_knee,
                              float adaptation)
 {
     // Knee point default, minimum and maximum
-    const float min_src_knee = 0.3f;
-    const float def_src_knee = 0.4f;
-    const float max_src_knee = 0.5f;
+    const float min_knee = 0.1f;
+    const float def_knee = 0.4f;
+    const float max_knee = 0.8f;
 
     float src_min = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_min);
     float src_max = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_max);
@@ -306,11 +306,11 @@ static void st2094_pick_knee(float *out_src_knee, float *out_dst_knee,
 
     // Choose default scene average brightness to be a fixed percentage of the
     // value range, override with (clamped) HDR10+ metadata if available
-    float target_avg = def_src_knee;
+    float target_avg = def_knee;
     if (params->hdr.scene_avg) {
         float scene_avg = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, params->hdr.scene_avg);
         target_avg = (scene_avg - src_min) / (src_max - src_min);
-        target_avg = PL_CLAMP(target_avg, min_src_knee, max_src_knee);
+        target_avg = PL_CLAMP(target_avg, min_knee, max_knee);
     }
 
     float src_avg = PL_MIX(src_min, src_max, target_avg);
@@ -322,9 +322,8 @@ static void st2094_pick_knee(float *out_src_knee, float *out_dst_knee,
     // (neutral) line.
     dst_avg = PL_MIX(src_avg, dst_avg, adaptation);
 
-    // Hard-clamp at 20% from either edge to soften extreme cases
-    const float dst_knee_min = PL_MIX(dst_min, dst_max, 0.2f);
-    const float dst_knee_max = PL_MIX(dst_min, dst_max, 0.8f);
+    const float dst_knee_min = PL_MIX(dst_min, dst_max, min_knee);
+    const float dst_knee_max = PL_MIX(dst_min, dst_max, max_knee);
     dst_avg = PL_CLAMP(dst_avg, dst_knee_min, dst_knee_max);
 
     *out_src_knee = pl_hdr_rescale(PL_HDR_PQ, params->input_scaling, src_avg);
