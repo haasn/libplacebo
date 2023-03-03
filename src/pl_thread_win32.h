@@ -28,6 +28,7 @@ typedef CONDITION_VARIABLE pl_cond;
 
 static inline int pl_mutex_init_type_internal(pl_mutex *mutex, enum pl_mutex_type mtype)
 {
+    (void) mtype;
     return !InitializeCriticalSectionEx(mutex, 0, 0);
 }
 
@@ -61,6 +62,7 @@ static inline int pl_cond_init(pl_cond *cond)
 static inline int pl_cond_destroy(pl_cond *cond)
 {
     // condition variables are not destroyed
+    (void) cond;
     return 0;
 }
 

@@ -18,10 +18,10 @@
 #include "config_internal.h"
 
 #include <assert.h>
-#include <pthread.h>
 
 extern "C" {
 #include "pl_alloc.h"
+#include "pl_thread.h"
 }
 
 #include <glslang/Public/ShaderLang.h>
@@ -37,27 +37,27 @@ extern "C" {
 
 using namespace glslang;
 
-static pthread_mutex_t pl_glslang_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pl_static_mutex pl_glslang_mutex = PL_STATIC_MUTEX_INITIALIZER;
 static int pl_glslang_refcount;
 
 bool pl_glslang_init(void)
 {
     bool ret = true;
 
-    pthread_mutex_lock(&pl_glslang_mutex);
+    pl_static_mutex_lock(&pl_glslang_mutex);
     if (pl_glslang_refcount++ == 0)
         ret = InitializeProcess();
-    pthread_mutex_unlock(&pl_glslang_mutex);
+    pl_static_mutex_unlock(&pl_glslang_mutex);
 
     return ret;
 }
 
 void pl_glslang_uninit(void)
 {
-    pthread_mutex_lock(&pl_glslang_mutex);
+    pl_static_mutex_lock(&pl_glslang_mutex);
     if (--pl_glslang_refcount == 0)
         FinalizeProcess();
-    pthread_mutex_unlock(&pl_glslang_mutex);
+    pl_static_mutex_unlock(&pl_glslang_mutex);
 }
 
 struct pl_glslang_res *pl_glslang_compile(const struct pl_glsl_version *glsl,
