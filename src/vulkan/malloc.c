@@ -212,10 +212,12 @@ static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
 
 #ifndef NDEBUG
     if (!slab->dedicated && slab->used > 0) {
-        fprintf(stderr, "!!! libplacebo: leaked %zu bytes of vulkan memory\n"
-                "!!! slab total size: %zu bytes, heap: %d, flags: 0x%"PRIX64"\n",
-                slab->used, (size_t) slab->size, (int) slab->mtype.heapIndex,
+        PL_WARN(vk, "Leaked %zu bytes of vulkan memory!", slab->used);
+        PL_WARN(vk, "slab total size: %zu bytes, heap: %d, flags: 0x%"PRIX64,
+                (size_t) slab->size, (int) slab->mtype.heapIndex,
                 (uint64_t) slab->mtype.propertyFlags);
+        pl_log_stack_trace(vk->log, PL_LOG_WARN);
+        pl_debug_abort();
     }
 #endif
 
