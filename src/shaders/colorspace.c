@@ -1492,11 +1492,10 @@ static void tone_map(pl_shader sh,
         if (is_clip) {
             // No-op / clip - do this per-channel
             mode = PL_TONE_MAP_RGB;
-        } else if (src_max / dst_max > 10) {
-            // Extreme reduction: Pick hybrid to avoid blowing out highlights
-            mode = PL_TONE_MAP_HYBRID;
         } else {
-            mode = PL_TONE_MAP_LUMA;
+            // Pick this in all cases because it provides the best balance of
+            // trade-offs out-of-the-box
+            mode = PL_TONE_MAP_HYBRID;
         }
     }
 
