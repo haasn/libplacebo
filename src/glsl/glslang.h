@@ -46,6 +46,7 @@ struct pl_glslang_res {
 // Compile GLSL into a SPIRV stream, if possible. The resulting
 // pl_glslang_res can simply be freed with pl_free() when done.
 struct pl_glslang_res *pl_glslang_compile(const struct pl_glsl_version *glsl,
+                                          const struct pl_spirv_version *spirv_ver,
                                           enum glsl_shader_stage stage,
                                           const char *shader);
 

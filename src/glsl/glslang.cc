@@ -61,6 +61,7 @@ void pl_glslang_uninit(void)
 }
 
 struct pl_glslang_res *pl_glslang_compile(const struct pl_glsl_version *glsl,
+                                          const struct pl_spirv_version *spirv_ver,
                                           enum glsl_shader_stage stage,
                                           const char *text)
 {
@@ -77,10 +78,8 @@ struct pl_glslang_res *pl_glslang_compile(const struct pl_glsl_version *glsl,
 
     TShader *shader = new TShader(lang);
 
-    struct pl_spirv_version spirv_ver = pl_glsl_spv_version(glsl);
-    shader->setEnvClient(spirv_ver.vulkan ? EShClientVulkan : EShClientOpenGL,
-                         (EShTargetClientVersion) spirv_ver.env_version);
-    shader->setEnvTarget(EShTargetSpv, (EShTargetLanguageVersion) spirv_ver.spv_version);
+    shader->setEnvClient(EShClientVulkan, (EShTargetClientVersion) spirv_ver->env_version);
+    shader->setEnvTarget(EShTargetSpv, (EShTargetLanguageVersion) spirv_ver->spv_version);
     shader->setStrings(&text, 1);
 
     TBuiltInResource limits = DefaultTBuiltInResource;

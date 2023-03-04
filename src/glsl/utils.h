@@ -22,13 +22,27 @@
 
 #include <libplacebo/gpu.h>
 
+#define PL_SPV_VERSION(major, minor) ((major) << 16 | (minor) << 8)
+#define PL_VLK_VERSION(major, minor) ((major) << 22 | (minor) << 12)
+
+// Max version that can be used
+#define PL_MAX_SPIRV_VER PL_SPV_VERSION(1, 3)
+
 struct pl_spirv_version {
-    bool vulkan;
     uint32_t env_version;
     uint32_t spv_version;
 };
 
-struct pl_spirv_version pl_glsl_spv_version(const struct pl_glsl_version *glsl);
+static inline uint32_t pl_spirv_version_to_vulkan(uint32_t spirv_ver)
+{
+    if (spirv_ver >= PL_SPV_VERSION(1, 6))
+        return PL_VLK_VERSION(1, 3);
+    if (spirv_ver >= PL_SPV_VERSION(1, 5))
+        return PL_VLK_VERSION(1, 2);
+    if (spirv_ver >= PL_SPV_VERSION(1, 3))
+        return PL_VLK_VERSION(1, 1);
+    return PL_VLK_VERSION(1, 0);
+}
 
 enum glsl_shader_stage {
     GLSL_SHADER_VERTEX = 0,

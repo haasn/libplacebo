@@ -67,7 +67,6 @@ sources = [
   'filters.c',
   'format.c',
   'glsl/spirv.c',
-  'glsl/utils.c',
   'gpu.c',
   'gpu/utils.c',
   'log.c',

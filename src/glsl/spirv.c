@@ -29,10 +29,11 @@ static const struct spirv_compiler_impl *compilers[] = {
 #endif
 };
 
-struct spirv_compiler *spirv_compiler_create(pl_log log)
+struct spirv_compiler *spirv_compiler_create(pl_log log,
+                                             const struct pl_spirv_version *spirv_ver)
 {
     for (int i = 0; i < PL_ARRAY_SIZE(compilers); i++) {
-        struct spirv_compiler *spirv = compilers[i]->create(log);
+        struct spirv_compiler *spirv = compilers[i]->create(log, spirv_ver);
         if (!spirv)
             continue;
 

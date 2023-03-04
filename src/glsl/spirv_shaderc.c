@@ -25,6 +25,7 @@ const struct spirv_compiler_impl pl_spirv_shaderc;
 
 struct priv {
     shaderc_compiler_t compiler;
+    struct pl_spirv_version spirv_ver;
 };
 
 static void shaderc_destroy(struct spirv_compiler *spirv)
@@ -34,9 +35,9 @@ static void shaderc_destroy(struct spirv_compiler *spirv)
     pl_free(spirv);
 }
 
-static struct spirv_compiler *shaderc_create(pl_log log)
+static struct spirv_compiler *shaderc_create(pl_log log, const struct pl_spirv_version *spirv_ver)
 {
-    struct spirv_compiler *spirv = pl_alloc_obj(NULL, spirv, shaderc_compiler_t);
+    struct spirv_compiler *spirv = pl_alloc_obj(NULL, spirv, struct priv);
     *spirv = (struct spirv_compiler) {
         .signature = pl_str0_hash(pl_spirv_shaderc.name),
         .impl = &pl_spirv_shaderc,
@@ -44,6 +45,7 @@ static struct spirv_compiler *shaderc_create(pl_log log)
     };
 
     struct priv *p = PL_PRIV(spirv);
+    p->spirv_ver = *spirv_ver;
     p->compiler = shaderc_compiler_initialize();
     if (!p->compiler)
         goto error;
@@ -53,6 +55,14 @@ static struct spirv_compiler *shaderc_create(pl_log log)
     pl_info(log, "shaderc SPIR-V version %u.%u rev %u",
             ver >> 16, (ver >> 8) & 0xff, rev);
 
+    // Clamp to supported version by shaderc
+    if (ver < p->spirv_ver.spv_version) {
+        p->spirv_ver.spv_version = ver;
+        p->spirv_ver.env_version = pl_spirv_version_to_vulkan(ver);
+    }
+
+    pl_hash_merge(&spirv->signature, (uint64_t) p->spirv_ver.spv_version << 32 |
+                                                p->spirv_ver.env_version);
     pl_hash_merge(&spirv->signature, (uint64_t) ver << 32 | rev);
     return spirv;
 
@@ -73,14 +83,11 @@ static pl_str shaderc_compile(struct spirv_compiler *spirv, void *alloc,
     if (!opts)
         return (pl_str) {0};
 
-    struct pl_spirv_version spirv_ver = pl_glsl_spv_version(glsl);
     shaderc_compile_options_set_optimization_level(opts,
             shaderc_optimization_level_performance);
-    shaderc_compile_options_set_target_spirv(opts, spirv_ver.spv_version);
-    shaderc_compile_options_set_target_env(opts,
-            spirv_ver.vulkan ? shaderc_target_env_vulkan
-                             : shaderc_target_env_opengl,
-            spirv_ver.env_version);
+    shaderc_compile_options_set_target_spirv(opts, p->spirv_ver.spv_version);
+    shaderc_compile_options_set_target_env(opts, shaderc_target_env_vulkan,
+                                                 p->spirv_ver.env_version);
 
     for (int i = 0; i < 3; i++) {
         shaderc_compile_options_set_limit(opts,

@@ -386,6 +386,14 @@ static const VkFilter filters[PL_TEX_SAMPLE_MODE_COUNT] = {
     [PL_TEX_SAMPLE_LINEAR]  = VK_FILTER_LINEAR,
 };
 
+static inline struct pl_spirv_version get_spirv_version(const struct vk_ctx *vk)
+{
+    return (struct pl_spirv_version) {
+        .env_version = VK_API_VERSION_1_1,
+        .spv_version = PL_SPV_VERSION(1, 3),
+    };
+}
+
 static const struct pl_gpu_fns pl_fns_vk;
 
 pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
@@ -400,7 +408,8 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     p->impl = pl_fns_vk;
     p->vk = vk;
 
-    p->spirv = spirv_compiler_create(vk->log);
+    const struct pl_spirv_version spirv_ver = get_spirv_version(vk);
+    p->spirv = spirv_compiler_create(vk->log, &spirv_ver);
     if (!p->spirv)
         goto error;
 

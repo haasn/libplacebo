@@ -31,7 +31,8 @@ struct spirv_compiler {
 };
 
 // Initialize a SPIR-V compiler instance, or returns NULL on failure.
-struct spirv_compiler *spirv_compiler_create(pl_log log);
+struct spirv_compiler *spirv_compiler_create(pl_log log,
+                                             const struct pl_spirv_version *spirv_ver);
 void spirv_compiler_destroy(struct spirv_compiler **spirv);
 
 // Compile GLSL to SPIR-V. Returns {0} on failure.

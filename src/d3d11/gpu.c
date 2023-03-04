@@ -399,11 +399,15 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
     gpu->log = ctx->log;
 
     struct pl_gpu_d3d11 *p = PL_PRIV(gpu);
+    uint32_t spirv_ver = PL_MAX_SPIRV_VER;
     *p = (struct pl_gpu_d3d11) {
         .ctx = ctx,
         .impl = pl_fns_d3d11,
         .dev = ctx->dev,
-        .spirv = spirv_compiler_create(ctx->log),
+        .spirv = spirv_compiler_create(ctx->log, &(const struct pl_spirv_version) {
+                                          .env_version = pl_spirv_version_to_vulkan(spirv_ver),
+                                          .spv_version = spirv_ver,
+                                      }),
         .vbuf.bind_flags = D3D11_BIND_VERTEX_BUFFER,
         .ibuf.bind_flags = D3D11_BIND_INDEX_BUFFER,
     };
