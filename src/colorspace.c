@@ -423,11 +423,9 @@ void pl_color_space_nominal_luma(const struct pl_color_space *csp,
     float max_luma = csp->hdr.max_luma;
 
     if (csp->hdr.scene_max[0] || csp->hdr.scene_max[1] || csp->hdr.scene_max[2]) {
-        const struct pl_raw_primaries *prim = pl_raw_primaries_get(csp->primaries);
-        const struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
-        max_luma = rgb2xyz.m[1][0] * csp->hdr.scene_max[0] +
-                   rgb2xyz.m[1][1] * csp->hdr.scene_max[1] +
-                   rgb2xyz.m[1][2] * csp->hdr.scene_max[2];
+        max_luma = PL_MAX3(csp->hdr.scene_max[0],
+                           csp->hdr.scene_max[1],
+                           csp->hdr.scene_max[2]);
     }
 
     // PQ is always scaled down to absolute black, ignoring HDR metadata
