@@ -1049,11 +1049,11 @@ static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
 
     // Scene change hysteresis
     if (params->scene_threshold_low > 0 && params->scene_threshold_high > 0) {
-        const float log_db = 10.0f / log(10.0f);
-        const float thresh_low = params->scene_threshold_low / log_db;
-        const float thresh_high = params->scene_threshold_high / log_db;
-        const float delta = fabsf(logf(avg_pq / obj->peak.avg_pq));
-        // smoothstep(thresh_low, thresh_high, thresh);
+        const float log10_pq = 0.25f; // experimentally determined approximate
+        const float thresh_low = params->scene_threshold_low * log10_pq;
+        const float thresh_high = params->scene_threshold_high * log10_pq;
+        const float delta = fabsf(avg_pq - obj->peak.avg_pq);
+        // smoothstep(thresh_low, thresh_high, delta);
         float thresh = (delta - thresh_low) / (thresh_high - thresh_low);
         thresh = PL_CLAMP(thresh, 0.0f, 1.0f);
         const float mix_coeff = thresh * thresh * (3.0f - 2.0f * thresh);
