@@ -124,12 +124,6 @@ struct pl_peak_detect_params {
     float scene_threshold_low;
     float scene_threshold_high;
 
-    // In order to avoid clipping on fade-ins or other sudden brightness
-    // increases, we always over-estimate the peak brightness (in percent)
-    // by this amount, as a percentage of the actual measured peak. If left
-    // as 0.0, this logic is disabled. The default value is 0.05.
-    float overshoot_margin;
-
     // To avoid over-tone-mapping very dark scenes (or black frames), this
     // imposes a hard lower bound on the detected peak. If left as 0.0, it
     // instead defaults to a value of 1.0.
@@ -138,13 +132,15 @@ struct pl_peak_detect_params {
     // Allows the peak detection result to be delayed by up to a single frame,
     // which can sometimes improve thoughpout. Disabled by default.
     bool allow_delayed;
+
+    // --- Deprecated fields
+    float overshoot_margin PL_DEPRECATED;
 };
 
 #define PL_PEAK_DETECT_DEFAULTS         \
     .smoothing_period       = 100.0,    \
     .scene_threshold_low    = 5.5,      \
     .scene_threshold_high   = 10.0,     \
-    .overshoot_margin       = 0.05,     \
     .minimum_peak           = 1.0,
 
 #define pl_peak_detect_params(...) (&(struct pl_peak_detect_params) { PL_PEAK_DETECT_DEFAULTS __VA_ARGS__ })

@@ -1032,12 +1032,6 @@ static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
     for (int c = 0; c < PL_ARRAY_SIZE(max_pq); c++)
         max_pq[c] = scale * data.frame_max_pq[c];
 
-    // Allow a tiny bit of extra overshoot for the detected peak
-    if (params->overshoot_margin > 0) {
-        for (int c = 0; c < PL_ARRAY_SIZE(max_pq); c++)
-            max_pq[c] = fminf(max_pq[c] * (1 + params->overshoot_margin), 1.0f);
-    }
-
     // Set the initial value accordingly if it contains no data
     if (!obj->peak.avg_pq) {
         obj->peak.avg_pq = avg_pq;

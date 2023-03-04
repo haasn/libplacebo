@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '256': 'deprecate pl_peak_detect_params.overshoot_margin',
       '255': 'deprecate pl_get_detected_peak and add pl_get_detected_hdr_metadata',
       '254': 'deprecate pl_renderer_params.allow_delayed_peak_detect and add pl_peak_detect_params.allow_delayed',
       '253': 'remove pl_color_space.nominal_min/max and add pl_color_space_nominal_peak',
