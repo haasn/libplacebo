@@ -1048,8 +1048,10 @@ static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
     // Use an IIR low-pass filter to smooth out the detected values
     const float coeff = iir_coeff(PL_DEF(params->smoothing_period, 100.0f));
     obj->peak.avg_pq += coeff * (avg_pq - obj->peak.avg_pq);
-    for (int c = 0; c < PL_ARRAY_SIZE(max_pq); c++)
+    for (int c = 0; c < PL_ARRAY_SIZE(max_pq); c++) {
         obj->peak.max_pq[c] += coeff * (max_pq[c] - obj->peak.max_pq[c]);
+        obj->peak.max_pq[c] = fmaxf(obj->peak.max_pq[c], max_pq[c]); // don't clip
+    }
 
     // Scene change hysteresis
     if (params->scene_threshold_low > 0 && params->scene_threshold_high > 0) {
