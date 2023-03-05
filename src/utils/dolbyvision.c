@@ -48,14 +48,8 @@ void pl_hdr_metadata_from_dovi_rpu(struct pl_hdr_metadata *out,
             const DoviVdrDmData *vdr_dm_data = dovi_rpu_get_vdr_dm_data(rpu);
             if (vdr_dm_data->dm_data.level1) {
                 const DoviExtMetadataBlockLevel1 *l1 = vdr_dm_data->dm_data.level1;
-                const float max_luma =
-                    pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, l1->max_pq / 4095.0f);
-
-                for (int i = 0; i < 3; i++)
-                    out->scene_max[i] = max_luma;
-
-                out->scene_avg =
-                    pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, l1->avg_pq / 4095.0f);
+                out->max_pq_y = l1->max_pq / 4095.0f;
+                out->avg_pq_y = l1->avg_pq / 4095.0f;
             }
 
             dovi_rpu_free_vdr_dm_data(vdr_dm_data);
