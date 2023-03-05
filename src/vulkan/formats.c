@@ -578,9 +578,9 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
             int real_comps = PL_DEF(vk_fmt->icomps, fmt->num_components);
             fmt->glsl_format = pl_fmt_glsl_format(fmt, real_comps);
             if (!fmt->glsl_format && !has_nofmt) {
-                PL_WARN(gpu, "Storable format '%s' has no matching GLSL "
-                        "format qualifier but read/write without format "
-                        "is not supported.. disabling", fmt->name);
+                PL_DEBUG(gpu, "Storable format '%s' has no matching GLSL "
+                         "format qualifier but read/write without format "
+                         "is not supported.. disabling", fmt->name);
                 fmt->caps &= ~storable;
             }
         }
