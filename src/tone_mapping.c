@@ -266,12 +266,6 @@ const struct pl_tone_map_function pl_tone_map_clip = {
     .map_inverse = noop,
 };
 
-#define ST2094_KNEE_PARAMS              \
-    .param_desc = "Knee point target",  \
-    .param_min = 0.00f,                 \
-    .param_max = 1.00f,                 \
-    .param_def = 0.70f
-
 // Helper function to pick a knee point (for suitable methods) based on the
 // HDR10+ brightness metadata and scene brightness average matching. The knee
 // point adaptation strength is optionally tunable (taken from `params->param`).
