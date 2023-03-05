@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '260': 'add pl_tone_map_params.input_avg',
       '259': 'add pl_color_space_nominal_luma_ex',
       '258': 'add pl_hdr_metadata_type and pl_hdr_metadata_contains',
       '257': 'add pl_hdr_metadata.max_pq_y and avg_pq_y',

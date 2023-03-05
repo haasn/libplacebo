@@ -79,13 +79,14 @@ struct pl_tone_map_params {
     // The characteristics of the input, in `input_scaling` units.
     float input_min;
     float input_max;
+    float input_avg; // or 0 if unknown
 
     // The desired characteristics of the output, in `output_scaling` units.
     float output_min;
     float output_max;
 
     // The input HDR metadata. Only used by a select few tone-mapping
-    // functions, currently only SMPTE ST2094 and pl_tone_map_spline. (Optional)
+    // functions, currently only SMPTE ST2094. (Optional)
     struct pl_hdr_metadata hdr;
 };
 

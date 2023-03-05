@@ -31,6 +31,7 @@ bool pl_tone_map_params_equal(const struct pl_tone_map_params *a,
            a->lut_size == b->lut_size &&
            a->input_min == b->input_min &&
            a->input_max == b->input_max &&
+           a->input_avg == b->input_avg &&
            a->output_min == b->output_min &&
            a->output_max == b->output_max &&
            pl_hdr_metadata_equal(&a->hdr, &b->hdr);
@@ -64,7 +65,7 @@ void pl_tone_map_params_infer(struct pl_tone_map_params *par)
         if (par->hdr.ootf.num_anchors && ratio > 1) {
             // HDR10+ OOTF available: Pick SMPTE ST2094-40
             par->function = &pl_tone_map_st2094_40;
-        } else if (par->hdr.scene_avg || ratio > 10) {
+        } else if (par->input_avg || ratio > 10) {
             // Scene-average metadata available, or extreme reduction: Pick
             // spline for its good tunable properties and quasi-linear behavior
             par->function = &pl_tone_map_spline;
@@ -101,6 +102,7 @@ static struct pl_tone_map_params fix_params(const struct pl_tone_map_params *par
     fixed.output_scaling = fun->scaling;
     fixed.input_min = pl_hdr_rescale(params->input_scaling, fun->scaling, params->input_min);
     fixed.input_max = pl_hdr_rescale(params->input_scaling, fun->scaling, params->input_max);
+    fixed.input_avg = pl_hdr_rescale(params->input_scaling, fun->scaling, params->input_avg);
     fixed.output_min = pl_hdr_rescale(params->output_scaling, fun->scaling, params->output_min);
     fixed.output_max = pl_hdr_rescale(params->output_scaling, fun->scaling, params->output_max);
 
@@ -225,20 +227,21 @@ static void st2094_pick_knee(float *out_src_knee, float *out_dst_knee,
 
     float src_min = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_min);
     float src_max = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_max);
+    float src_avg = pl_hdr_rescale(params->input_scaling,  PL_HDR_PQ, params->input_avg);
     float dst_min = pl_hdr_rescale(params->output_scaling, PL_HDR_PQ, params->output_min);
     float dst_max = pl_hdr_rescale(params->output_scaling, PL_HDR_PQ, params->output_max);
+    float dst_avg;
 
     // Choose default scene average brightness to be a fixed percentage of the
-    // value range, override with (clamped) HDR10+ metadata if available
+    // value range, override with (clamped) dynamic metadata if available
     float target_avg = def_knee;
-    if (params->hdr.scene_avg) {
-        float scene_avg = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, params->hdr.scene_avg);
-        target_avg = (scene_avg - src_min) / (src_max - src_min);
+    if (src_avg) {
+        target_avg = (src_avg - src_min) / (src_max - src_min);
         target_avg = PL_CLAMP(target_avg, min_knee, max_knee);
     }
 
-    float src_avg = PL_MIX(src_min, src_max, target_avg);
-    float dst_avg = PL_MIX(dst_min, dst_max, target_avg);
+    src_avg = PL_MIX(src_min, src_max, target_avg);
+    dst_avg = PL_MIX(dst_min, dst_max, target_avg);
 
     // Adjust the destination adaptation point by picking the perceptual
     // adaptation point between the source average and the desired average.
