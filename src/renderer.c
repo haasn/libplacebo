@@ -1133,7 +1133,7 @@ static void hdr_update_peak(struct pass_state *pass)
     if (pass->img.color.hdr.max_luma <= pass->target.color.hdr.max_luma + 1e-6)
         goto cleanup; // no adaptation needed
 
-    if (pass->img.color.hdr.scene_avg)
+    if (pass->img.color.hdr.avg_pq_y)
         goto cleanup; // per-scene values already known
 
     if (params->lut && params->lut_type == PL_LUT_CONVERSION)

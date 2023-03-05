@@ -953,8 +953,8 @@ const struct pl_peak_detect_params pl_peak_detect_default_params = { PL_PEAK_DET
 #define PQ_MAX  ((1 << PQ_BITS) - 1)
 struct peak_buf_data {
     unsigned frame_wg_count;  // number of work groups processed
-    unsigned frame_sum_pq;    // sum of MaxRGB PQ values over all WGs (PQ_BITS)
-    unsigned frame_max_pq[3]; // maximum RGB PQ value among these WGs (PQ_BITS)
+    unsigned frame_sum_pq;    // sum of PQ Y values over all WGs (PQ_BITS)
+    unsigned frame_max_pq;    // maximum PQ Y value among these WGs (PQ_BITS)
 };
 
 static const struct pl_buffer_var peak_buf_vars[] = {
@@ -988,7 +988,7 @@ struct sh_tone_map_obj {
         struct pl_peak_detect_params params;    // currently active parameters
         pl_buf buf;                             // pending peak detection buffer
         float avg_pq;                           // current (smoothed) values
-        float max_pq[3];
+        float max_pq;
     } peak;
 };
 
@@ -1039,25 +1039,21 @@ static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
     }
 
     const float scale = 1.0f / PQ_MAX;
-    float avg_pq, max_pq[3];
+    float avg_pq, max_pq;
     avg_pq = scale * data.frame_sum_pq / data.frame_wg_count; // divide as float
-    for (int c = 0; c < PL_ARRAY_SIZE(max_pq); c++)
-        max_pq[c] = scale * data.frame_max_pq[c];
+    max_pq = scale * data.frame_max_pq;
 
     // Set the initial value accordingly if it contains no data
     if (!obj->peak.avg_pq) {
         obj->peak.avg_pq = avg_pq;
-        for (int c = 0; c < PL_ARRAY_SIZE(max_pq); c++)
-            obj->peak.max_pq[c] = max_pq[c];
+        obj->peak.max_pq = max_pq;
     }
 
     // Use an IIR low-pass filter to smooth out the detected values
     const float coeff = iir_coeff(PL_DEF(params->smoothing_period, 100.0f));
     obj->peak.avg_pq += coeff * (avg_pq - obj->peak.avg_pq);
-    for (int c = 0; c < PL_ARRAY_SIZE(max_pq); c++) {
-        obj->peak.max_pq[c] += coeff * (max_pq[c] - obj->peak.max_pq[c]);
-        obj->peak.max_pq[c] = fmaxf(obj->peak.max_pq[c], max_pq[c]); // don't clip
-    }
+    obj->peak.max_pq += coeff * (max_pq - obj->peak.max_pq);
+    obj->peak.max_pq = fmaxf(obj->peak.max_pq, max_pq); // don't clip
 
     // Scene change hysteresis
     if (params->scene_threshold_low > 0 && params->scene_threshold_high > 0) {
@@ -1070,8 +1066,7 @@ static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
         thresh = PL_CLAMP(thresh, 0.0f, 1.0f);
         const float mix_coeff = thresh * thresh * (3.0f - 2.0f * thresh);
         obj->peak.avg_pq = PL_MIX(obj->peak.avg_pq, avg_pq, mix_coeff);
-        for (int c = 0; c < PL_ARRAY_SIZE(max_pq); c++)
-            obj->peak.max_pq[c] = PL_MIX(obj->peak.max_pq[c], max_pq[c], mix_coeff);
+        obj->peak.max_pq = PL_MIX(obj->peak.max_pq, max_pq, mix_coeff);
     }
 }
 
@@ -1083,7 +1078,7 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return false;
 
-    if (!sh_try_compute(sh, 16, 16, true, 2 * sizeof(int32_t))) {
+    if (!sh_try_compute(sh, 16, 16, true, 2 * sizeof(uint32_t))) {
         PL_ERR(sh, "HDR peak detection requires compute shaders!");
         return false;
     }
@@ -1139,55 +1134,55 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     // For performance, we want to do as few atomic operations on global
     // memory as possible, so use an atomic in shmem for the work group.
     ident_t wg_sum = sh_fresh(sh, "wg_sum"), wg_max = sh_fresh(sh, "wg_max");
-    GLSLH("shared uint  %s;         \n", wg_sum);
-    GLSLH("shared uvec3 %s;         \n", wg_max);
-    GLSL("%s = 0u; %s = uvec3(0u);  \n"
-         "barrier();                \n",
+    GLSLH("shared uint %s, %s;  \n", wg_sum, wg_max);
+    GLSL("%s = 0u; %s = 0u;     \n"
+         "barrier();            \n",
          wg_sum, wg_max);
 
-    // Decode the color into N-bit PQ representation
+    // Decode color into linear light representation
     pl_color_space_infer(&csp);
     pl_shader_linearize(sh, &csp);
-    pl_shader_delinearize(sh, &pl_color_space_hdr10);
-    GLSL("// peak detection                                             \n"
-         "uvec3 color_pq = uvec3(vec3(%d.0) * color.rgb);               \n"
-         "uint maxrgb = max(max(color_pq.r, color_pq.g), color_pq.b);   \n",
+
+    // Measure luminance as N-bit PQ
+    GLSL("float luma = dot(%s, color.rgb);              \n"
+         "luma *= %f;                                   \n"
+         "luma = pow(max(luma, 0.0), %f);               \n"
+         "luma = (%f + %f * luma) / (1.0 + %f * luma);  \n"
+         "luma = pow(luma, %f);                         \n"
+         "uint y_pq = uint(%d.0 * luma);                \n",
+         sh_luma_coeffs(sh, &csp.hdr.prim),
+         PL_COLOR_SDR_WHITE / 10000.0,
+         PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
          PQ_MAX);
 
     // Update the work group's shared atomics
     if (sh_glsl(sh).subgroup_size) {
-        GLSL("uint group_sum  = subgroupAdd(maxrgb);    \n"
-             "uvec3 group_max = subgroupMax(color_pq);  \n"
-             "if (subgroupElect()) {                    \n"
-             "    atomicAdd(%s, group_sum);             \n"
-             "    atomicMax(%s.r, group_max.r);         \n"
-             "    atomicMax(%s.g, group_max.g);         \n"
-             "    atomicMax(%s.b, group_max.b);         \n"
-             "}                                         \n"
-             "barrier();                                \n",
-             wg_sum, wg_max, wg_max, wg_max);
+        GLSL("uint group_sum = subgroupAdd(y_pq);   \n"
+             "uint group_max = subgroupMax(y_pq);   \n"
+             "if (subgroupElect()) {                \n"
+             "    atomicAdd(%s, group_sum);         \n"
+             "    atomicMax(%s, group_max);         \n"
+             "}                                     \n"
+             "barrier();                            \n",
+             wg_sum, wg_max);
     } else {
-        GLSL("atomicAdd(%s, maxrgb);        \n"
-             "atomicMax(%s.r, color_pq.r);  \n"
-             "atomicMax(%s.g, color_pq.g);  \n"
-             "atomicMax(%s.b, color_pq.b);  \n"
-             "barrier();                    \n",
-             wg_sum, wg_max, wg_max, wg_max);
+        GLSL("atomicAdd(%s, y_pq);  \n"
+             "atomicMax(%s, y_pq);  \n"
+             "barrier();            \n",
+             wg_sum, wg_max);
     }
 
     // Have one thread per work group update the global atomics
     GLSL("if (gl_LocalInvocationIndex == 0u) {                              \n"
-         "    uint wg_avg = %s / (gl_WorkGroupSize.x * gl_WorkGroupSize.y); \n"
+         "    const uint wg_size = gl_WorkGroupSize.x * gl_WorkGroupSize.y; \n"
          "    atomicAdd(frame_wg_count, 1u);                                \n"
-         "    atomicAdd(frame_sum_pq, wg_avg);                              \n"
-         "    atomicMax(frame_max_pq[0], %s.r);                             \n"
-         "    atomicMax(frame_max_pq[1], %s.g);                             \n"
-         "    atomicMax(frame_max_pq[2], %s.b);                             \n"
+         "    atomicAdd(frame_sum_pq, %s / wg_size);                        \n"
+         "    atomicMax(frame_max_pq, %s);                                  \n"
          "    memoryBarrierBuffer();                                        \n"
          "}                                                                 \n"
          "color = color_orig;                                               \n"
          "}                                                                 \n",
-          wg_sum, wg_max, wg_max, wg_max);
+          wg_sum, wg_max);
 
     return true;
 }
@@ -1203,12 +1198,8 @@ bool pl_get_detected_hdr_metadata(const pl_shader_obj state,
     if (!obj->peak.avg_pq)
         return false;
 
-    out->scene_avg = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, obj->peak.avg_pq);
-    for (int c = 0; c < PL_ARRAY_SIZE(obj->peak.max_pq); c++) {
-        out->scene_max[c] = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS,
-                                           obj->peak.max_pq[c]);
-    }
-
+    out->max_pq_y = obj->peak.max_pq;
+    out->avg_pq_y = obj->peak.avg_pq;
     return true;
 }
 
@@ -1220,11 +1211,8 @@ bool pl_get_detected_peak(const pl_shader_obj state,
         return false;
 
     // Preserves old behavior
-    float scene_maxrgb = PL_MAX3(data.scene_max[0],
-                                 data.scene_max[1],
-                                 data.scene_max[2]);
-    *out_peak = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, scene_maxrgb);
-    *out_avg  = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_NORM, data.scene_avg);
+    *out_peak = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, data.max_pq_y);
+    *out_avg  = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, data.avg_pq_y);
     return true;
 }
 
