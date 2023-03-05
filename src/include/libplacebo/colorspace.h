@@ -339,6 +339,15 @@ enum pl_hdr_scaling {
 // Generic helper for performing HDR scale conversions.
 float pl_hdr_rescale(enum pl_hdr_scaling from, enum pl_hdr_scaling to, float x);
 
+enum pl_hdr_metadata_type {
+    PL_HDR_METADATA_ANY = 0,
+    PL_HDR_METADATA_NONE,
+    PL_HDR_METADATA_HDR10,          // HDR10 static mastering display metadata
+    PL_HDR_METADATA_HDR10PLUS,      // HDR10+ dynamic metadata
+    PL_HDR_METADATA_CIE_Y,          // CIE Y derived dynamic luminance metadata
+    PL_HDR_METADATA_TYPE_COUNT,
+};
+
 // Bezier curve for HDR metadata
 struct pl_hdr_bezier {
     float target_luma;      // target luminance (cd/m²) for this OOTF
@@ -351,22 +360,23 @@ struct pl_hdr_bezier {
 // often attached to HDR sources and can be forwarded to HDR-capable displays,
 // or used to guide the libplacebo built-in tone mapping.
 struct pl_hdr_metadata {
-    // Mastering display metadata. This is used for tone-mapping.
+    // --- PL_HDR_METADATA_HDR10
+    // Mastering display metadata.
     struct pl_raw_primaries prim;   // mastering display primaries
     float min_luma, max_luma;       // min/max luminance (in cd/m²)
 
-    // Content light level. This is ignored by libplacebo itself.
+    // Content light level. (Note: this is ignored by libplacebo itself)
     float max_cll;                  // max content light level (in cd/m²)
     float max_fall;                 // max frame average light level (in cd/m²)
 
-    // HDR10+ dynamic metadata (per-scene)
+    // --- PL_HDR_METADATA_HDR10PLUS
     float scene_max[3];             // maxSCL in cd/m² per component (RGB)
     float scene_avg;                // average of maxRGB in cd/m²
     struct pl_hdr_bezier ootf;      // reference OOTF (optional)
 
-    // Dynamic luminance (CIE Y) metadata (per-scene/frame)
-    float max_pq_y;                 // maximum luminance in PQ (0-1)
-    float avg_pq_y;                 // average luminance in PQ (0-1)
+    // --- PL_HDR_METADATA_CIE_Y
+    float max_pq_y;                 // maximum PQ luminance (in PQ, 0-1)
+    float avg_pq_y;                 // averaged PQ luminance (in PQ, 0-1)
 };
 
 extern const struct pl_hdr_metadata pl_hdr_metadata_empty; // equal to {0}
@@ -379,6 +389,12 @@ bool pl_hdr_metadata_equal(const struct pl_hdr_metadata *a,
 // Replaces unknown values in the first struct by those of the second struct.
 void pl_hdr_metadata_merge(struct pl_hdr_metadata *orig,
                            const struct pl_hdr_metadata *update);
+
+// Returns `true` if `data` contains a complete set of a given metadata type.
+// Note: for PL_HDR_METADATA_HDR10, only `min_luma` and `max_luma` are
+// considered - CLL/FALL and primaries are irrelevant for HDR tone-mapping.
+bool pl_hdr_metadata_contains(const struct pl_hdr_metadata *data,
+                              enum pl_hdr_metadata_type type);
 
 // Deprecated. No longer used by libplacebo.
 enum pl_color_light {

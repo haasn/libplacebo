@@ -398,6 +398,27 @@ void pl_hdr_metadata_merge(struct pl_hdr_metadata *orig,
         orig->avg_pq_y = update->avg_pq_y;
 }
 
+bool pl_hdr_metadata_contains(const struct pl_hdr_metadata *data,
+                              enum pl_hdr_metadata_type type)
+{
+    bool has_hdr10 = data->min_luma && data->max_luma;
+    bool has_hdr10plus = data->scene_avg && (data->scene_max[0] ||
+                                             data->scene_max[1] ||
+                                             data->scene_max[2]);
+    bool has_dv = data->max_pq_y && data->avg_pq_y;
+
+    switch (type) {
+    case PL_HDR_METADATA_NONE:          return true;
+    case PL_HDR_METADATA_ANY:           return has_hdr10 || has_hdr10plus || has_cie_y;
+    case PL_HDR_METADATA_HDR10:         return has_hdr10;
+    case PL_HDR_METADATA_HDR10PLUS:     return has_hdr10plus;
+    case PL_HDR_METADATA_DOLBYVISION:   return has_dv;
+    case PL_HDR_METADATA_TYPE_COUNT:    break;
+    }
+
+    pl_unreachable();
+}
+
 const struct pl_color_space pl_color_space_unknown = {0};
 
 const struct pl_color_space pl_color_space_srgb = {
