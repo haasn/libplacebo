@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '257': 'add pl_hdr_metadata.max_pq_y and avg_pq_y',
       '256': 'deprecate pl_peak_detect_params.overshoot_margin',
       '255': 'deprecate pl_get_detected_peak and add pl_get_detected_hdr_metadata',
       '254': 'deprecate pl_renderer_params.allow_delayed_peak_detect and add pl_peak_detect_params.allow_delayed',

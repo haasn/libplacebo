@@ -312,7 +312,9 @@ bool pl_hdr_metadata_equal(const struct pl_hdr_metadata *a,
            a->scene_max[1] == b->scene_max[1] &&
            a->scene_max[2] == b->scene_max[2] &&
            a->scene_avg == b->scene_avg &&
-           pl_hdr_bezier_equal(&a->ootf, &b->ootf);
+           pl_hdr_bezier_equal(&a->ootf, &b->ootf) &&
+           a->max_pq_y == b->max_pq_y &&
+           a->avg_pq_y == b->avg_pq_y;
 }
 
 void pl_hdr_metadata_merge(struct pl_hdr_metadata *orig,
@@ -333,6 +335,10 @@ void pl_hdr_metadata_merge(struct pl_hdr_metadata *orig,
         orig->scene_avg = update->scene_avg;
     if (!orig->ootf.target_luma)
         orig->ootf = update->ootf;
+    if (!orig->max_pq_y)
+        orig->max_pq_y = update->max_pq_y;
+    if (!orig->avg_pq_y)
+        orig->avg_pq_y = update->avg_pq_y;
 }
 
 const struct pl_color_space pl_color_space_unknown = {0};

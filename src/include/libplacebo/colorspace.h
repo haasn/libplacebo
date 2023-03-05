@@ -352,6 +352,10 @@ struct pl_hdr_metadata {
     float scene_max[3];             // maxSCL in cd/m² per component (RGB)
     float scene_avg;                // average of maxRGB in cd/m²
     struct pl_hdr_bezier ootf;      // reference OOTF (optional)
+
+    // Dynamic luminance (CIE Y) metadata (per-scene/frame)
+    float max_pq_y;                 // maximum luminance in PQ (0-1)
+    float avg_pq_y;                 // average luminance in PQ (0-1)
 };
 
 extern const struct pl_hdr_metadata pl_hdr_metadata_empty; // equal to {0}
