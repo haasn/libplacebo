@@ -1134,7 +1134,17 @@ static void hdr_update_peak(struct pass_state *pass)
         goto cleanup; // no adaptation needed
 
     if (pass->img.color.hdr.avg_pq_y)
-        goto cleanup; // per-scene values already known
+        goto cleanup; // DV metadata already present
+
+    enum pl_hdr_metadata_type metadata = PL_HDR_METADATA_ANY;
+    if (params->color_map_params)
+        metadata = params->color_map_params->metadata;
+
+    if (metadata && metadata != PL_HDR_METADATA_CIE_Y)
+        goto cleanup; // metadata will be unused
+
+    if (metadata == PL_HDR_METADATA_ANY && pass->img.color.hdr.scene_avg)
+        goto cleanup; // per-scene HDR10+ dynamic metadata is better
 
     if (params->lut && params->lut_type == PL_LUT_CONVERSION)
         goto cleanup; // LUT handles tone mapping
