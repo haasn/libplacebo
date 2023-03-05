@@ -1115,6 +1115,20 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 nk_label(nk, "(N/A)", NK_TEXT_LEFT);
             }
 
+            static const char *metadata_types[PL_HDR_METADATA_TYPE_COUNT] = {
+                [PL_HDR_METADATA_ANY]               = "Automatic selection",
+                [PL_HDR_METADATA_NONE]              = "None (disabled)",
+                [PL_HDR_METADATA_HDR10]             = "HDR10 (static)",
+                [PL_HDR_METADATA_HDR10PLUS]         = "HDR10+ (MaxRGB)",
+                [PL_HDR_METADATA_CIE_Y]             = "Luminance (CIE Y)",
+            };
+
+            nk_label(nk, "HDR metadata source:", NK_TEXT_LEFT);
+            cpar->metadata = nk_combo(nk, metadata_types,
+                                      PL_HDR_METADATA_TYPE_COUNT,
+                                      cpar->metadata,
+                                      16, nk_vec2(nk_widget_width(nk), 300));
+
             nk_property_int(nk, "LUT size", 16, &cpar->lut_size, 1024, 1, 1);
             nk_property_float(nk, "Crosstalk", 0.0, &cpar->tone_mapping_crosstalk, 0.30, 0.01, 0.001);
             nk_checkbox_label(nk, "Inverse tone mapping", &cpar->inverse_tone_mapping);
