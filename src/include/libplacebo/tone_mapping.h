@@ -26,17 +26,6 @@
 
 PL_API_BEGIN
 
-enum pl_hdr_scaling {
-    PL_HDR_NORM = 0,        // 0.0 is absolute black, 1.0 is PL_COLOR_SDR_WHITE
-    PL_HDR_SQRT,            // sqrt() of PL_HDR_NORM values
-    PL_HDR_NITS,            // absolute brightness in raw cd/m²
-    PL_HDR_PQ,              // absolute brightness in PQ (0.0 to 1.0)
-    PL_HDR_SCALING_COUNT,
-};
-
-// Generic helper for performing HDR scale conversions.
-float pl_hdr_rescale(enum pl_hdr_scaling from, enum pl_hdr_scaling to, float x);
-
 struct pl_tone_map_params;
 struct pl_tone_map_function {
     const char *name;        // Identifier

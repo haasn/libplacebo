@@ -290,6 +290,63 @@ const struct pl_hdr_metadata pl_hdr_metadata_hdr10 ={
     .max_fall = 0, // unknown
 };
 
+static const float PQ_M1 = 2610./4096 * 1./4,
+                   PQ_M2 = 2523./4096 * 128,
+                   PQ_C1 = 3424./4096,
+                   PQ_C2 = 2413./4096 * 32,
+                   PQ_C3 = 2392./4096 * 32;
+
+float pl_hdr_rescale(enum pl_hdr_scaling from, enum pl_hdr_scaling to, float x)
+{
+    if (from == to)
+        return x;
+    if (!x) // micro-optimization for common value
+        return x;
+
+    // Convert input to PL_SCALE_RELATIVE
+    switch (from) {
+    case PL_HDR_PQ:
+        x = powf(x, 1.0f / PQ_M2);
+        x = fmaxf(x - PQ_C1, 0.0f) / (PQ_C2 - PQ_C3 * x);
+        x = powf(x, 1.0f / PQ_M1);
+        x *= 10000.0f;
+        // fall through
+    case PL_HDR_NITS:
+        x /= PL_COLOR_SDR_WHITE;
+        // fall through
+    case PL_HDR_NORM:
+        goto output;
+    case PL_HDR_SQRT:
+        x *= x;
+        goto output;
+    case PL_HDR_SCALING_COUNT:
+        break;
+    }
+
+    pl_unreachable();
+
+output:
+    // Convert PL_SCALE_RELATIVE to output
+    switch (to) {
+    case PL_HDR_NORM:
+        return x;
+    case PL_HDR_SQRT:
+        return sqrtf(x);
+    case PL_HDR_NITS:
+        return x * PL_COLOR_SDR_WHITE;
+    case PL_HDR_PQ:
+        x *= PL_COLOR_SDR_WHITE / 10000.0f;
+        x = powf(x, PQ_M1);
+        x = (PQ_C1 + PQ_C2 * x) / (1.0f + PQ_C3 * x);
+        x = powf(x, PQ_M2);
+        return x;
+    case PL_HDR_SCALING_COUNT:
+        break;
+    }
+
+    pl_unreachable();
+}
+
 static inline bool pl_hdr_bezier_equal(const struct pl_hdr_bezier *a,
                                        const struct pl_hdr_bezier *b)
 {
