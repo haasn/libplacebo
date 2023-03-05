@@ -278,6 +278,10 @@ struct pl_color_map_params {
     // to improve the appearance of very bright, monochromatic highlights.
     float tone_mapping_crosstalk;
 
+    // Data source to use when tone-mapping. Setting this to a specific
+    // value allows overriding the default metadata preference logic.
+    enum pl_hdr_metadata_type metadata;
+
     // Tone mapping LUT size. Defaults to 1024.
     int lut_size;
 
@@ -306,6 +310,7 @@ struct pl_color_map_params {
     .tone_mapping_function  = &pl_tone_map_auto,                \
     .tone_mapping_mode      = PL_TONE_MAP_AUTO,                 \
     .tone_mapping_crosstalk = 0.04,                             \
+    .metadata               = PL_HDR_METADATA_ANY,              \
     .lut_size               = 1024,
 
 #define pl_color_map_params(...) (&(struct pl_color_map_params) { PL_COLOR_MAP_DEFAULTS __VA_ARGS__ })

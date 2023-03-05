@@ -1323,7 +1323,7 @@ static void tone_map(pl_shader sh,
     float src_min, src_max, src_avg;
     pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
         .color      = src,
-        .metadata   = PL_HDR_METADATA_ANY,
+        .metadata   = params->metadata,
         .scaling    = PL_HDR_NORM,
         .out_min    = &src_min,
         .out_max    = &src_max,
