@@ -26,6 +26,9 @@ option('shaderc', type: 'feature', value: 'auto',
 option('lcms', type: 'feature', value: 'auto',
        description: 'LittleCMS 2 support')
 
+option('dovi', type: 'feature', value: 'auto',
+       description: 'Dolby Vision reshaping support')
+
 option('libdovi', type: 'feature', value: 'auto',
        description: 'libdovi support')
 

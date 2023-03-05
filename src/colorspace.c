@@ -1461,6 +1461,7 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     double mul[3]   = { ymul, ymul, ymul };
     double black[3] = { ymin, ymin, ymin };
 
+#ifdef PL_HAVE_DOVI
     if (repr->sys == PL_COLOR_SYSTEM_DOLBYVISION) {
         // The RPU matrix already includes levels normalization, but in this
         // case we also have to respect the signalled color offsets
@@ -1468,7 +1469,9 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
             mul[i] = 1.0;
             black[i] = repr->dovi->nonlinear_offset[i] * scale;
         }
-    } else if (pl_color_system_is_ycbcr_like(repr->sys)) {
+    } else
+#endif
+    if (pl_color_system_is_ycbcr_like(repr->sys)) {
         mul[1]   = mul[2]   = cmul;
         black[1] = black[2] = cmid;
     }

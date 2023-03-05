@@ -62,6 +62,7 @@ void pl_shader_set_alpha(pl_shader sh, struct pl_color_repr *repr,
     }
 }
 
+#ifdef PL_HAVE_DOVI
 static inline void reshape_mmr(pl_shader sh, ident_t mmr, bool single,
                                int min_order, int max_order)
 {
@@ -119,9 +120,11 @@ static inline void reshape_poly(pl_shader sh)
 {
     GLSL("s = (coeffs.z * s + coeffs.y) * s + coeffs.x; \n");
 }
+#endif
 
 void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
 {
+#ifdef PL_HAVE_DOVI
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0) || !data)
         return;
 
@@ -283,6 +286,9 @@ void pl_shader_dovi_reshape(pl_shader sh, const struct pl_dovi_metadata *data)
     }
 
     GLSL("} \n");
+#else
+    SH_FAIL(sh, "libplacebo was compiled without support for dolbyvision reshaping");
+#endif
 }
 
 void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
@@ -418,6 +424,7 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
         break;
 
     case PL_COLOR_SYSTEM_DOLBYVISION:;
+#ifdef PL_HAVE_DOVI
         // Dolby Vision always outputs BT.2020-referred HPE LMS, so hard-code
         // the inverse LMS->RGB matrix corresponding to this color space.
         struct pl_matrix3x3 dovi_lms2rgb = {{
@@ -447,6 +454,10 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
              "color.rgb = pow(color.rgb, vec3(%f));                 \n",
              PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
         break;
+#else
+        SH_FAIL(sh, "libplacebo was compiled without support for dolbyvision reshaping");
+        return;
+#endif
 
     case PL_COLOR_SYSTEM_UNKNOWN:
     case PL_COLOR_SYSTEM_RGB:

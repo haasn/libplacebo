@@ -18,6 +18,7 @@
 #ifndef LIBPLACEBO_LIBAV_H_
 #define LIBPLACEBO_LIBAV_H_
 
+#include <libplacebo/config.h>
 #include <libplacebo/gpu.h>
 #include <libplacebo/shaders/deinterlacing.h>
 #include <libplacebo/utils/upload.h>
@@ -42,7 +43,7 @@ PL_API_BEGIN
 #include <libavutil/version.h>
 #include <libavcodec/avcodec.h>
 
-#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 16, 100)
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 16, 100) && defined(PL_HAVE_DOVI)
 # define PL_HAVE_LAV_DOLBY_VISION
 # include <libavutil/dovi_meta.h>
 #endif
