@@ -391,10 +391,13 @@ static void apply_csp_overrides(struct plplay *p, struct pl_color_space *csp)
     if (p->force_hdr_enable) {
         csp->hdr = p->force_hdr;
     } else if (p->colorspace_hint_dynamic) {
-        float min_luma, max_luma;
-        pl_color_space_nominal_luma(csp, &min_luma, &max_luma);
-        csp->hdr.min_luma = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, min_luma);
-        csp->hdr.max_luma = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, max_luma);
+        pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
+            .color      = csp,
+            .metadata   = PL_HDR_METADATA_ANY,
+            .scaling    = PL_HDR_NITS,
+            .out_min    = &csp->hdr.min_luma,
+            .out_max    = &csp->hdr.max_luma,
+        ));
     }
 }
 
