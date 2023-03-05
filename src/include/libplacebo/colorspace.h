@@ -448,15 +448,37 @@ bool pl_color_space_is_hdr(const struct pl_color_space *csp);
 // well as for HLG.
 bool pl_color_space_is_black_scaled(const struct pl_color_space *csp);
 
-// Returns the effective input/output luminance contained by a pl_color_space,
-// as a function of transfer function and HDR metadata, taking from the
-// per-scene values if known and static mastering display metadata otherwise.
-// Returns relative units (see pl_color_transfer_nominal_peak and PL_HDR_NORM).
-//
-// For SDR displays, this will default to a contrast level of 1000:1 unless
-// indicated otherwise in the `min/max_luma` fields.
-void pl_color_space_nominal_luma(const struct pl_color_space *csp,
-                                 float *out_min, float *out_max);
+struct pl_nominal_luma_params {
+    // The color space to infer luminance from
+    const struct pl_color_space *color;
+
+    // Which type of metadata to draw values from
+    enum pl_hdr_metadata_type metadata;
+
+    // This field controls the scaling of `out_*`
+    enum pl_hdr_scaling scaling;
+
+    // Fields to write the detected nominal luminance to. (Optional)
+    //
+    // For SDR displays, this will default to a contrast level of 1000:1 unless
+    // indicated otherwise in the `min/max_luma` static HDR10 metadata fields.
+    float *out_min;
+    float *out_max;
+
+    // Field to write the detected average luminance to, or 0.0 in the absence
+    // of dynamic metadata. (Optional)
+    float *out_avg;
+};
+
+#define pl_nominal_luma_params(...) \
+    (&(struct pl_nominal_luma_params) { __VA_ARGS__ })
+
+// Returns the effective luminance described by a pl_color_space.
+void pl_color_space_nominal_luma_ex(const struct pl_nominal_luma_params *params);
+
+// Backwards compatibility wrapper for `pl_color_space_nominal_luma_ex`
+PL_DEPRECATED void pl_color_space_nominal_luma(const struct pl_color_space *csp,
+                                               float *out_min, float *out_max);
 
 // Replaces unknown values in the first struct by those of the second struct.
 void pl_color_space_merge(struct pl_color_space *orig,
@@ -468,7 +490,7 @@ bool pl_color_space_equal(const struct pl_color_space *c1,
 
 // Go through a color-space and explicitly default all unknown fields to
 // reasonable values. After this function is called, none of the values will be
-// PL_COLOR_*_UNKNOWN or 0.0, except for some HDR metadata fields.
+// PL_COLOR_*_UNKNOWN or 0.0, except for the dynamic HDR metadata fields.
 void pl_color_space_infer(struct pl_color_space *space);
 
 // Like `pl_color_space_infer`, but takes default values from the reference
