@@ -629,7 +629,13 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
         return;
 
     float csp_min, csp_max;
-    pl_color_space_nominal_luma(csp, &csp_min, &csp_max);
+    pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
+        .color      = csp,
+        .metadata   = PL_HDR_METADATA_HDR10,
+        .scaling    = PL_HDR_NORM,
+        .out_min    = &csp_min,
+        .out_max    = &csp_max,
+    ));
 
     // Note that this clamp may technically violate the definition of
     // ITU-R BT.2100, which allows for sub-blacks and super-whites to be
@@ -756,7 +762,13 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         return;
 
     float csp_min, csp_max;
-    pl_color_space_nominal_luma(csp, &csp_min, &csp_max);
+    pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
+        .color      = csp,
+        .metadata   = PL_HDR_METADATA_HDR10,
+        .scaling    = PL_HDR_NORM,
+        .out_min    = &csp_min,
+        .out_max    = &csp_max,
+    ));
 
     GLSL("// pl_shader_delinearize \n");
     switch (csp->transfer) {
@@ -1229,9 +1241,8 @@ void pl_reset_detected_peak(pl_shader_obj state)
 const struct pl_color_map_params pl_color_map_default_params = { PL_COLOR_MAP_DEFAULTS };
 
 static inline void visualize_tone_map(pl_shader sh, ident_t fun,
-                                      float xmin, float xmax,
-                                      float ymin, float ymax,
-                                      float scene_avg)
+                                      float xmin, float xmax, float xavg,
+                                      float ymin, float ymax)
 {
     ident_t pos = sh_attr_vec2(sh, "screenpos", &(struct pl_rect2df) {
         .x0 = 0.0f, .x1 = 1.0f,
@@ -1291,7 +1302,7 @@ static inline void visualize_tone_map(pl_shader sh, ident_t fun,
          "}                                         \n",
          SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmin)),
          SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmax)),
-         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, scene_avg)),
+         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xavg)),
          SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymin)),
          SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymax)),
          pos,
@@ -1315,9 +1326,24 @@ static void tone_map(pl_shader sh,
                      pl_shader_obj *state,
                      const struct pl_color_map_params *params)
 {
-    float src_min, src_max, dst_min, dst_max;
-    pl_color_space_nominal_luma(src, &src_min, &src_max);
-    pl_color_space_nominal_luma(dst, &dst_min, &dst_max);
+    float src_min, src_max, src_avg;
+    pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
+        .color      = src,
+        .metadata   = PL_HDR_METADATA_ANY,
+        .scaling    = PL_HDR_NORM,
+        .out_min    = &src_min,
+        .out_max    = &src_max,
+        .out_avg    = &src_avg,
+    ));
+
+    float dst_min, dst_max;
+    pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
+        .color      = dst,
+        .metadata   = PL_HDR_METADATA_HDR10,
+        .scaling    = PL_HDR_NORM,
+        .out_min    = &dst_min,
+        .out_max    = &dst_max,
+    ));
 
     if (!params->inverse_tone_mapping) {
         // Never exceed the source unless requested, but still allow
@@ -1339,7 +1365,7 @@ static void tone_map(pl_shader sh,
         .lut_size = PL_DEF(params->lut_size, pl_color_map_default_params.lut_size),
         .input_min = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_SQRT, src_min),
         .input_max = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_SQRT, src_max),
-        .input_avg = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_SQRT, src->hdr.scene_avg),
+        .input_avg = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_SQRT, src_avg),
         .output_min = dst_min,
         .output_max = dst_max,
         .hdr = src->hdr,
@@ -1399,7 +1425,7 @@ static void tone_map(pl_shader sh,
             .width      = lut_params.lut_size,
             .comps      = 1,
             .update     = !pl_tone_map_params_equal(&lut_params, &obj->params),
-            .dynamic    = src->hdr.scene_avg > 0, // these change frequently
+            .dynamic    = src_avg > 0, // dynamic metadata was used
             .fill       = fill_lut,
             .priv       = &lut_params,
         ));
@@ -1584,8 +1610,8 @@ static void tone_map(pl_shader sh,
          ct);
 
     if (params->visualize_lut) {
-        visualize_tone_map(sh, "tone_map", src_min, src_max, dst_min, dst_max,
-                           src->hdr.scene_avg);
+        visualize_tone_map(sh, "tone_map", src_min, src_max, src_avg,
+                           dst_min, dst_max);
     }
 
     GLSL("#undef tone_map \n");
@@ -1618,9 +1644,16 @@ static void adapt_colors(pl_shader sh,
     const struct pl_matrix3x3 ref2ref =
         pl_get_color_mapping_matrix(&src->hdr.prim, &dst->hdr.prim, params->intent);
 
-    // Normalize colors to range [0-1]
     float lb, lw;
-    pl_color_space_nominal_luma(dst, &lb, &lw);
+    pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
+        .color      = dst,
+        .metadata   = PL_HDR_METADATA_HDR10,
+        .scaling    = PL_HDR_NORM,
+        .out_min    = &lb,
+        .out_max    = &lw,
+    ));
+
+    // Normalize colors to range [0-1]
     GLSL("color.rgb = %s * color.rgb + %s; \n",
          SH_FLOAT(1 / (lw - lb)), SH_FLOAT(-lb / (lw - lb)));
 
