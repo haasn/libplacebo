@@ -238,9 +238,20 @@ static_assert(PL_ARRAY_SIZE(pl_vulkan_recommended_extensions) + 1 ==
               "pl_vulkan_recommended_extensions out of sync with "
               "vk_device_extensions?");
 
+#ifdef VK_VERSION_1_3
+// Needed for LocalSizeId execution mode
+static const VkPhysicalDeviceMaintenance4Features device_maintenance4_features = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES,
+    .maintenance4 = true
+};
+#endif
+
 // pNext chain of features we want enabled
 static const VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphores = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
+#ifdef VK_VERSION_1_3
+    .pNext = (void *) &device_maintenance4_features,
+#endif
     .timelineSemaphore = true,
 };
 
