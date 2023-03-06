@@ -2886,6 +2886,8 @@ static struct params_info render_params_info(const struct pl_render_params *para
     HASH_PTR(params.deband_params, NULL, false);
     HASH_PTR(params.sigmoid_params, NULL, false);
     HASH_PTR(params.deinterlace_params, NULL, false);
+    HASH_PTR(params.cone_params, NULL, true);
+    HASH_PTR(params.icc_params, &pl_icc_default_params, true);
     HASH_PTR(params.color_adjustment, &pl_color_adjustment_neutral, true);
     HASH_PTR(params.color_map_params, &pl_color_map_default_params, true);
     if (params.peak_detect_params) {
@@ -2925,11 +2927,8 @@ static struct params_info render_params_info(const struct pl_render_params *para
 
     // Clear out fields only relevant to pass_output_target
     CLEAR(params.blend_params);
-    CLEAR(params.cone_params);
     CLEAR(params.dither_params);
     CLEAR(params.error_diffusion);
-    CLEAR(params.icc_params);
-    CLEAR(params.force_icc_lut);
     CLEAR(params.force_dither);
     CLEAR(params.dynamic_constants);
     CLEAR(params.allow_delayed_peak_detect);
@@ -2988,6 +2987,7 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     if (!pass.fbofmt[4])
         goto fallback;
 
+    const struct pl_frame *target = &pass.target;
     int out_w = abs(pl_rect_w(pass.dst_rect)),
         out_h = abs(pl_rect_h(pass.dst_rect));
 
@@ -3100,8 +3100,6 @@ retry:
             f = &rr->frames.elem[rr->frames.num++];
             *f = (struct cached_frame) {
                 .signature = sig,
-                .color = img->color,
-                .profile = img->profile,
             };
         }
 
@@ -3113,7 +3111,9 @@ retry:
             can_reuse = f->tex->params.w == out_w &&
                         f->tex->params.h == out_h &&
                         pl_rect2d_eq(f->crop, img->crop) &&
-                        f->params_hash == par_info.hash;
+                        f->params_hash == par_info.hash &&
+                        pl_color_space_equal(&f->color, &target->color) &&
+                        pl_icc_profile_equal(&f->profile, &target->profile);
         }
 
         if (!can_reuse && skip_cache) {
@@ -3164,6 +3164,7 @@ retry:
                 goto inter_pass_error;
             if (!(ok = pass_scale_main(&inter_pass)))
                 goto inter_pass_error;
+            pass_convert_colors(&inter_pass);
 
             pl_assert(inter_pass.img.w == out_w &&
                       inter_pass.img.h == out_h);
@@ -3267,13 +3268,6 @@ inter_pass_error:
          "{                             \n"
          "vec4 mix_color = vec4(0.0);   \n");
 
-    // Mix in the image color space, but using the transfer function of
-    // (arbitrarily) the latest rendered frame. This avoids unnecessary ping
-    // ponging between linear and nonlinear light when combining linearly
-    // scaled images with frame mixing.
-    struct pl_color_space mix_color = pass.image.color;
-    mix_color.transfer = frames[fidx - 1].color.transfer;
-
     int comps = 0;
     for (int i = 0; i < fidx; i++) {
         const struct pl_tex_params *tpars = &frames[i].tex->params;
@@ -3300,7 +3294,7 @@ inter_pass_error:
         // This also ignores differences in HDR metadata, which we deliberately
         // ignore because it causes aggressive shader recompilation.
         struct pl_color_space frame_csp = frames[i].color;
-        struct pl_color_space mix_csp = mix_color;
+        struct pl_color_space mix_csp = target->color;
         frame_csp.hdr = mix_csp.hdr = (struct pl_hdr_metadata) {0};
         pl_shader_color_map(sh, NULL, frame_csp, mix_csp, NULL, false);
 
@@ -3326,7 +3320,7 @@ inter_pass_error:
         .w = out_w,
         .h = out_h,
         .comps = comps,
-        .color = mix_color,
+        .color = target->color,
         .repr = {
             .sys = PL_COLOR_SYSTEM_RGB,
             .levels = PL_COLOR_LEVELS_PC,
@@ -3334,7 +3328,6 @@ inter_pass_error:
         },
     };
 
-    pass_convert_colors(&pass);
     if (!pass_output_target(&pass))
         goto fallback;
 
