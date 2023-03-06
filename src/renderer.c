@@ -2900,10 +2900,7 @@ static struct params_info render_params_info(const struct pl_render_params *para
     HASH_PTR(params.icc_params, &pl_icc_default_params, true);
     HASH_PTR(params.color_adjustment, &pl_color_adjustment_neutral, true);
     HASH_PTR(params.color_map_params, &pl_color_map_default_params, true);
-    if (params.peak_detect_params) {
-        HASH_PTR(params.peak_detect_params, NULL,
-                 params.peak_detect_params->allow_delayed);
-    }
+    HASH_PTR(params.peak_detect_params, NULL, false);
 
     // Hash all hooks
     for (int i = 0; i < params.num_hooks; i++) {
