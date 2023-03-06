@@ -18,6 +18,7 @@
 #pragma once
 
 #include <windows.h>
+#include <stdint.h>
 #include <errno.h>
 
 #include <pl_assert.h>
@@ -85,7 +86,11 @@ static inline int pl_cond_timedwait(pl_cond *cond, pl_mutex *mutex, uint64_t tim
     if (timeout == UINT64_MAX)
         return pl_cond_wait(cond, mutex);
 
-    BOOL bRet = SleepConditionVariableCS(cond, mutex, PL_MIN(timeout / 1000000LLU, INFINITE - 1));
+    timeout /= UINT64_C(1000000);
+    if (timeout > INFINITE - 1)
+        timeout = INFINITE - 1;
+
+    BOOL bRet = SleepConditionVariableCS(cond, mutex, timeout);
     if (bRet == FALSE)
     {
         if (GetLastError() == ERROR_TIMEOUT)
