@@ -35,13 +35,7 @@
 #define PL_PRINTF(fmt, va)
 #endif
 
-#ifdef __unix__
-#define PL_HAVE_UNIX
-#endif
-
-#ifdef _WIN32
-#define PL_HAVE_WIN32
-#endif
+#include "os.h"
 
 #include "config_internal.h"
 #include "pl_assert.h"
