@@ -1395,7 +1395,11 @@ static void tone_map(pl_shader sh,
     if (pl_tone_map_params_noop(&lut_params))
         return;
 
-    sh_describe(sh, "tone mapping");
+    sh_describef(sh, "tone mapping (%d -> %d nits%s)",
+                 (int) roundf(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, src_max)),
+                 (int) roundf(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, dst_max)),
+                 src_min != dst_min ? " + BPC" : "");
+
     const struct pl_tone_map_function *fun = lut_params.function;
     struct sh_tone_map_obj *obj = NULL;
     ident_t lut = NULL;
