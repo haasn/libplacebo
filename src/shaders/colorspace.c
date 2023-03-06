@@ -1078,14 +1078,21 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return false;
 
-    if (!sh_try_compute(sh, 16, 16, true, 2 * sizeof(uint32_t))) {
-        PL_ERR(sh, "HDR peak detection requires compute shaders!");
+    if (sh_glsl(sh).version < 130) { // uint support
+        PL_ERR(sh, "HDR peak detection requires GLSL >= 130!");
         return false;
     }
 
-    if (sh_glsl(sh).version < 130) {
-        // uint was added in GLSL 130
-        PL_ERR(sh, "HDR peak detection requires GLSL >= 130!");
+    pl_gpu gpu = SH_GPU(sh);
+    if (!gpu || gpu->limits.max_ssbo_size < sizeof(struct peak_buf_data)) {
+        PL_ERR(sh, "HDR peak detection requires a GPU with support for at "
+               "least %zu bytes of SSBO data (supported: %zu)",
+               sizeof(struct peak_buf_data), gpu ? gpu->limits.max_ssbo_size : 0);
+        return false;
+    }
+
+    if (!sh_try_compute(sh, 16, 16, true, 2 * sizeof(uint32_t))) {
+        PL_ERR(sh, "HDR peak detection requires compute shaders!");
         return false;
     }
 
@@ -1095,7 +1102,6 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     if (!obj)
         return false;
 
-    pl_gpu gpu = SH_GPU(sh);
     update_peak_buf(gpu, obj, true); // prevent over-writing previous frame
     obj->peak.params = *params; // set new params
 
