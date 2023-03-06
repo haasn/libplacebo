@@ -3105,8 +3105,9 @@ retry:
 
         // Check to see if we can blindly reuse this cache entry. This is the
         // case if either the params are compatible, or the user doesn't care
-        bool strict_reuse = !params->preserve_mixing_cache || skip_cache;
         bool can_reuse = f->tex;
+        bool strict_reuse = skip_cache || single_frame ||
+                            !params->preserve_mixing_cache;
         if (can_reuse && strict_reuse) {
             can_reuse = f->tex->params.w == out_w &&
                         f->tex->params.h == out_h &&
