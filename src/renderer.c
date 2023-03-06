@@ -1946,79 +1946,8 @@ static bool pass_scale_main(struct pass_state *pass)
     return true;
 }
 
-// Returns true if error diffusion was successfully performed
-static bool pass_error_diffusion(struct pass_state *pass, pl_shader *sh,
-                                 int new_depth, int comps, int out_w, int out_h)
-{
-    const struct pl_render_params *params = pass->params;
-    pl_renderer rr = pass->rr;
-    if (!params->error_diffusion || (rr->errors & PL_RENDER_ERR_ERROR_DIFFUSION))
-        return false;
-
-    size_t shmem_req = pl_error_diffusion_shmem_req(params->error_diffusion, out_h);
-    if (shmem_req > rr->gpu->glsl.max_shmem_size) {
-        PL_TRACE(rr, "Disabling error diffusion due to shmem requirements (%zu) "
-                 "exceeding capabilities (%zu)", shmem_req, rr->gpu->glsl.max_shmem_size);
-        return false;
-    }
-
-    pl_fmt fmt = pass->fbofmt[comps];
-    if (!fmt || !(fmt->caps & PL_FMT_CAP_STORABLE)) {
-        PL_ERR(rr, "Error diffusion requires storable FBOs but GPU does not "
-               "provide them... disabling!");
-        goto error;
-    }
-
-    struct pl_error_diffusion_params edpars = {
-        .new_depth = new_depth,
-        .kernel = params->error_diffusion,
-    };
-
-    // Create temporary framebuffers
-    edpars.input_tex = get_fbo(pass, out_w, out_h, fmt, comps, PL_DEBUG_TAG);
-    edpars.output_tex = get_fbo(pass, out_w, out_h, fmt, comps, PL_DEBUG_TAG);
-    if (!edpars.input_tex || !edpars.output_tex)
-        goto error;
-
-    pl_shader dsh = pl_dispatch_begin(rr->dp);
-    if (!pl_shader_error_diffusion(dsh, &edpars)) {
-        pl_dispatch_abort(rr->dp, &dsh);
-        goto error;
-    }
-
-    // Everything was okay, run the shaders
-    bool ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
-        .shader = sh,
-        .target = edpars.input_tex,
-    ));
-
-    if (ok) {
-        ok = pl_dispatch_compute(rr->dp, pl_dispatch_compute_params(
-            .shader = &dsh,
-            .dispatch_size = {1, 1, 1},
-        ));
-    }
-
-    *sh = pl_dispatch_begin(rr->dp);
-    pl_shader_sample_direct(*sh, pl_sample_src(
-        .tex = ok ? edpars.output_tex : edpars.input_tex,
-    ));
-    return ok;
-
-error:
-    rr->errors |= PL_RENDER_ERR_ERROR_DIFFUSION;
-    return false;
-}
-
-#define CLEAR_COL(params)                                                       \
-    (float[4]) {                                                                \
-        (params)->background_color[0],                                          \
-        (params)->background_color[1],                                          \
-        (params)->background_color[2],                                          \
-        1.0 - (params)->background_transparency,                                \
-    }
-
-static bool pass_output_target(struct pass_state *pass)
+// Transforms image into the output color space (tone-mapping, ICC 3DLUT, etc)
+static void pass_convert_colors(struct pass_state *pass)
 {
     const struct pl_render_params *params = pass->params;
     const struct pl_frame *image = &pass->image;
@@ -2028,7 +1957,6 @@ static bool pass_output_target(struct pass_state *pass)
     struct img *img = &pass->img;
     pl_shader sh = img_sh(pass, img);
 
-    // Color management
     bool prelinearized = false;
     bool need_conversion = true;
     assert(image->color.primaries == img->color.primaries);
@@ -2123,6 +2051,91 @@ static bool pass_output_target(struct pass_state *pass)
     if (lut_type == PL_LUT_NORMALIZED || lut_type == PL_LUT_CONVERSION)
         pl_shader_custom_lut(sh, target->lut, &rr->lut_state[LUT_TARGET]);
 
+    img->color = target->color;
+}
+
+// Returns true if error diffusion was successfully performed
+static bool pass_error_diffusion(struct pass_state *pass, pl_shader *sh,
+                                 int new_depth, int comps, int out_w, int out_h)
+{
+    const struct pl_render_params *params = pass->params;
+    pl_renderer rr = pass->rr;
+    if (!params->error_diffusion || (rr->errors & PL_RENDER_ERR_ERROR_DIFFUSION))
+        return false;
+
+    size_t shmem_req = pl_error_diffusion_shmem_req(params->error_diffusion, out_h);
+    if (shmem_req > rr->gpu->glsl.max_shmem_size) {
+        PL_TRACE(rr, "Disabling error diffusion due to shmem requirements (%zu) "
+                 "exceeding capabilities (%zu)", shmem_req, rr->gpu->glsl.max_shmem_size);
+        return false;
+    }
+
+    pl_fmt fmt = pass->fbofmt[comps];
+    if (!fmt || !(fmt->caps & PL_FMT_CAP_STORABLE)) {
+        PL_ERR(rr, "Error diffusion requires storable FBOs but GPU does not "
+               "provide them... disabling!");
+        goto error;
+    }
+
+    struct pl_error_diffusion_params edpars = {
+        .new_depth = new_depth,
+        .kernel = params->error_diffusion,
+    };
+
+    // Create temporary framebuffers
+    edpars.input_tex = get_fbo(pass, out_w, out_h, fmt, comps, PL_DEBUG_TAG);
+    edpars.output_tex = get_fbo(pass, out_w, out_h, fmt, comps, PL_DEBUG_TAG);
+    if (!edpars.input_tex || !edpars.output_tex)
+        goto error;
+
+    pl_shader dsh = pl_dispatch_begin(rr->dp);
+    if (!pl_shader_error_diffusion(dsh, &edpars)) {
+        pl_dispatch_abort(rr->dp, &dsh);
+        goto error;
+    }
+
+    // Everything was okay, run the shaders
+    bool ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
+        .shader = sh,
+        .target = edpars.input_tex,
+    ));
+
+    if (ok) {
+        ok = pl_dispatch_compute(rr->dp, pl_dispatch_compute_params(
+            .shader = &dsh,
+            .dispatch_size = {1, 1, 1},
+        ));
+    }
+
+    *sh = pl_dispatch_begin(rr->dp);
+    pl_shader_sample_direct(*sh, pl_sample_src(
+        .tex = ok ? edpars.output_tex : edpars.input_tex,
+    ));
+    return ok;
+
+error:
+    rr->errors |= PL_RENDER_ERR_ERROR_DIFFUSION;
+    return false;
+}
+
+#define CLEAR_COL(params)                                                       \
+    (float[4]) {                                                                \
+        (params)->background_color[0],                                          \
+        (params)->background_color[1],                                          \
+        (params)->background_color[2],                                          \
+        1.0 - (params)->background_transparency,                                \
+    }
+
+static bool pass_output_target(struct pass_state *pass)
+{
+    const struct pl_render_params *params = pass->params;
+    const struct pl_frame *image = &pass->image;
+    const struct pl_frame *target = &pass->target;
+    pl_renderer rr = pass->rr;
+
+    struct img *img = &pass->img;
+    pl_shader sh = img_sh(pass, img);
+
     bool need_blend = params->blend_against_tiles || !target->repr.alpha;
     if (img->comps == 4 && need_blend) {
         if (params->blend_against_tiles) {
@@ -2155,6 +2168,7 @@ static bool pass_output_target(struct pass_state *pass)
     // that the intermediate FBO (if any) has the correct precision.
     struct pl_color_repr repr = target->repr;
     float scale = pl_color_repr_normalize(&repr);
+    enum pl_lut_type lut_type = guess_frame_lut_type(target, true);
     if (lut_type != PL_LUT_CONVERSION)
         pl_shader_encode_color(sh, &repr);
     if (lut_type == PL_LUT_NATIVE) {
@@ -2814,6 +2828,7 @@ bool pl_render_image(pl_renderer rr, const struct pl_frame *pimage,
         goto error;
     if (!pass_scale_main(&pass))
         goto error;
+    pass_convert_colors(&pass);
     if (!pass_output_target(&pass))
         goto error;
 
@@ -3319,6 +3334,7 @@ inter_pass_error:
         },
     };
 
+    pass_convert_colors(&pass);
     if (!pass_output_target(&pass))
         goto fallback;
 
