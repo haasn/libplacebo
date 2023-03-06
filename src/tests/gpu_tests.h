@@ -1134,6 +1134,8 @@ static void pl_render_tests(pl_gpu gpu)
     TEST_PARAMS(color_map, tone_mapping_mode, PL_TONE_MAP_MODE_COUNT - 1);
     TEST_PARAMS(color_map, gamut_mode, PL_GAMUT_MODE_COUNT - 1);
     TEST_PARAMS(color_map, visualize_lut, true);
+    if (gpu->glsl.version >= 130 && gpu->limits.max_ssbo_size)
+        TEST_PARAMS(peak_detect, allow_delayed, true);
 
     // Test inverse tone-mapping and pure BPC
     image.color.hdr.max_luma = 1000;
