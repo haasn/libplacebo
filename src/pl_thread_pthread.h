@@ -22,6 +22,8 @@
 #include <sys/time.h>
 #include <time.h>
 
+#include <pl_assert.h>
+
 typedef pthread_mutex_t pl_mutex;
 typedef pthread_cond_t  pl_cond;
 typedef pthread_mutex_t pl_static_mutex;
@@ -57,7 +59,7 @@ static inline int pl_mutex_init_type_internal(pl_mutex *mutex, enum pl_mutex_typ
 }
 
 #define pl_mutex_init_type(mutex, mtype) \
-    PL_CHECK_ERR(pl_mutex_init_type_internal(mutex, mtype))
+    pl_assert(!pl_mutex_init_type_internal(mutex, mtype))
 
 #define pl_mutex_destroy    pthread_mutex_destroy
 #define pl_mutex_lock       pthread_mutex_lock

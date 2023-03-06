@@ -142,17 +142,6 @@ static inline size_t pl_lcm(size_t x, size_t y)
     return x * (y / pl_gcd(x, y));
 }
 
-// Error checking macro for stuff with integer errors, aborts on failure
-#define PL_CHECK_ERR(expr)                                                      \
-    do {                                                                        \
-        int _ret = (expr);                                                      \
-        if (_ret) {                                                             \
-            fprintf(stderr, "libplacebo: internal error: %s (%s:%d)\n",         \
-                    strerror(_ret), __FILE__, __LINE__);                        \
-            abort();                                                            \
-        }                                                                       \
-    } while (0)
-
 // Conditional abort() macro that depends on the configuration option
 #ifdef PL_DEBUG_ABORT
 # define pl_debug_abort() abort()

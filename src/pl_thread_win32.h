@@ -20,6 +20,8 @@
 #include <windows.h>
 #include <errno.h>
 
+#include <pl_assert.h>
+
 typedef CRITICAL_SECTION   pl_mutex;
 typedef CONDITION_VARIABLE pl_cond;
 
@@ -29,7 +31,7 @@ static inline int pl_mutex_init_type_internal(pl_mutex *mutex, enum pl_mutex_typ
 }
 
 #define pl_mutex_init_type(mutex, mtype) \
-    PL_CHECK_ERR(pl_mutex_init_type_internal(mutex, mtype))
+    pl_assert(!pl_mutex_init_type_internal(mutex, mtype))
 
 static inline int pl_mutex_destroy(pl_mutex *mutex)
 {
