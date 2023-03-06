@@ -2937,10 +2937,9 @@ static struct params_info render_params_info(const struct pl_render_params *para
     CLEAR(params.dither_params);
     CLEAR(params.error_diffusion);
     CLEAR(params.force_dither);
-    CLEAR(params.dynamic_constants);
-    CLEAR(params.allow_delayed_peak_detect);
 
     // Clear out other irrelevant fields
+    CLEAR(params.dynamic_constants);
     CLEAR(params.info_callback);
     CLEAR(params.info_priv);
 
