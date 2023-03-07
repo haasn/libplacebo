@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '262': 'add pl_color_map_params.visualize_rect',
       '261': 'add pl_color_map_params.metadata',
       '260': 'add pl_tone_map_params.input_avg',
       '259': 'add pl_color_space_nominal_luma_ex',

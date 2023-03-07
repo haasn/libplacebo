@@ -294,6 +294,10 @@ struct pl_color_map_params {
     // Visualize the tone-mapping curve / LUT. (PQ-PQ graph)
     bool visualize_lut;
 
+    // Controls where to draw the visualization, relative to the rendered
+    // video (dimensions 0-1). Optional, defaults to the full picture.
+    struct pl_rect2df visualize_rect;
+
     // --- Deprecated fields
     enum pl_tone_mapping_algorithm tone_mapping_algo PL_DEPRECATED;
     float desaturation_strength PL_DEPRECATED;

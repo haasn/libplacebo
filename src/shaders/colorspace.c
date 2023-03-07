@@ -1236,22 +1236,35 @@ const struct pl_color_map_params pl_color_map_default_params = { PL_COLOR_MAP_DE
 
 static inline void visualize_tone_map(pl_shader sh, ident_t fun,
                                       float xmin, float xmax, float xavg,
-                                      float ymin, float ymax)
+                                      float ymin, float ymax,
+                                      struct pl_rect2df rc)
 {
-    ident_t pos = sh_attr_vec2(sh, "screenpos", &(struct pl_rect2df) {
-        .x0 = 0.0f, .x1 = 1.0f,
-        .y0 = 1.0f, .y1 = 0.0f,
+    if (!rc.x0 && !rc.x1)
+        rc.x1 = 1.0f;
+    if (!rc.y0 && !rc.y1)
+        rc.y1 = 1.0f;
+    if (rc.x1 == rc.x0 || rc.y1 == rc.y0)
+        return;
+
+    ident_t pos = sh_attr_vec2(sh, "tone_map_coords", &(struct pl_rect2df) {
+        .x0 = -rc.x0         / (rc.x1 - rc.x0),
+        .x1 = (1.0f - rc.x0) / (rc.x1 - rc.x0),
+        .y0 = -rc.y1         / (rc.y0 - rc.y1),
+        .y1 = (1.0f - rc.y1) / (rc.y0 - rc.y1),
     });
 
     GLSL("// Visualize tone mapping                 \n"
+         "{                                         \n"
+         "vec2 pos = %s;                            \n"
+         "if (min(pos.x, pos.y) >= 0.0 &&           \n" // visualizer rect
+         "    max(pos.x, pos.y) <= 1.0)             \n"
          "{                                         \n"
          "float xmin = %s;                          \n"
          "float xmax = %s;                          \n"
          "float xavg = %s;                          \n"
          "float ymin = %s;                          \n"
          "float ymax = %s;                          \n"
-         "vec2 pos = %s;                            \n"
-         "vec3 viz = color.rgb;                     \n"
+         "vec3 viz = vec3(0.5) * color.rgb;         \n"
          // PQ EOTF
          "float vv = pos.x;                         \n"
          "vv = pow(max(vv, 0.0), 1.0/%f);           \n"
@@ -1292,14 +1305,15 @@ static inline void visualize_tone_map(pl_shader sh, ident_t fun,
          "    if (xavg > 0.0 && abs(pos.x - xavg) < 1e-3)\n" // source avg brightness
          "        viz = vec3(0.5);                  \n"
          "}                                         \n"
-         "color.rgb = mix(color.rgb, viz, 0.5);     \n"
+         "color.rgb = mix(color.rgb, viz, 0.8);     \n"
+         "}                                         \n"
          "}                                         \n",
+         pos,
          SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmin)),
          SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmax)),
          SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xavg)),
          SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymin)),
          SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymax)),
-         pos,
          PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
          10000.0 / PL_COLOR_SDR_WHITE,
          fun,
@@ -1609,7 +1623,7 @@ static void tone_map(pl_shader sh,
 
     if (params->visualize_lut) {
         visualize_tone_map(sh, "tone_map", src_min, src_max, src_avg,
-                           dst_min, dst_max);
+                           dst_min, dst_max, params->visualize_rect);
     }
 
     GLSL("#undef tone_map \n");
