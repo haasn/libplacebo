@@ -2168,8 +2168,8 @@ static bool pass_output_target(struct pass_state *pass)
                   SH_FLOAT(params->background_color[2]));
         }
 
-        pl_assert(img->repr.alpha != PL_ALPHA_PREMULTIPLIED);
-        GLSL("color = vec4(mix(bg_color, color.rgb, color.a), 1.0); \n");
+        pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_PREMULTIPLIED);
+        GLSL("color = vec4(color.rgb + bg_color * (1.0 - color.a), 1.0); \n");
         img->repr.alpha = PL_ALPHA_UNKNOWN;
         img->comps = 3;
     }
@@ -2182,6 +2182,7 @@ static bool pass_output_target(struct pass_state *pass)
     if (lut_type != PL_LUT_CONVERSION)
         pl_shader_encode_color(sh, &repr);
     if (lut_type == PL_LUT_NATIVE) {
+        pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_INDEPENDENT);
         pl_shader_custom_lut(sh, target->lut, &rr->lut_state[LUT_TARGET]);
         pl_shader_set_alpha(sh, &img->repr, PL_ALPHA_PREMULTIPLIED);
     }
@@ -3173,28 +3174,19 @@ retry:
                 goto inter_pass_error;
             pass_convert_colors(&inter_pass);
 
+            pl_assert(inter_pass.img.sh); // guaranteed by `pass_convert_colors`
+            pl_shader_set_alpha(inter_pass.img.sh, &inter_pass.img.repr,
+                                PL_ALPHA_PREMULTIPLIED); // for frame mixing
+
             pl_assert(inter_pass.img.w == out_w &&
                       inter_pass.img.h == out_h);
 
-            if (inter_pass.img.tex) {
-                struct pl_tex_blit_params blit = {
-                    .src = inter_pass.img.tex,
-                    .dst = f->tex,
-                };
-
-                if (blit.src->params.blit_src && blit.dst->params.blit_dst) {
-                    pl_tex_blit(rr->gpu, &blit);
-                } else {
-                    pl_tex_blit_raster(rr->gpu, &blit);
-                }
-            } else {
-                ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
-                    .shader = &inter_pass.img.sh,
-                    .target = f->tex,
-                ));
-                if (!ok)
-                    goto inter_pass_error;
-            }
+            ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
+                .shader = &inter_pass.img.sh,
+                .target = f->tex,
+            ));
+            if (!ok)
+                goto inter_pass_error;
 
             float sx = out_w / pl_rect_w(inter_pass.dst_rect),
                   sy = out_h / pl_rect_h(inter_pass.dst_rect);
@@ -3223,7 +3215,6 @@ retry:
             f->crop = img->crop;
             f->color = inter_pass.img.color;
             f->comps = inter_pass.img.comps;
-            pl_assert(inter_pass.img.repr.alpha != PL_ALPHA_INDEPENDENT);
             // fall through
 
 inter_pass_error:
