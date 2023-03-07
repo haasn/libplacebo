@@ -950,22 +950,39 @@ static bool peak_detect_params_eq(const struct pl_peak_detect_params *a,
     return a->smoothing_period     == b->smoothing_period     &&
            a->scene_threshold_low  == b->scene_threshold_low  &&
            a->scene_threshold_high == b->scene_threshold_high &&
-           a->minimum_peak         == b->minimum_peak;
+           a->minimum_peak         == b->minimum_peak         &&
+           a->percentile           == b->percentile;
     // don't compare `allow_delayed` because it doesn't change measurement
 }
 
-// How many bits to use for storing PQ data. Be careful when setting this too
-// high, as it may overflow `unsigned int` on large video sources.
-//
-// The value chosen is enough to guarantee no overflow for an 8K x 4K frame
-// consisting entirely of 100% 10k nits PQ values, with 16x16 workgroups.
-#define PQ_BITS 14
-#define PQ_MAX  ((1 << PQ_BITS) - 1)
+enum {
+    // How many bits to use for storing PQ data. Be careful when setting this
+    // too high, as it may overflow `unsigned int` on large video sources.
+    //
+    // The value chosen is enough to guarantee no overflow for an 8K x 4K frame
+    // consisting entirely of 100% 10k nits PQ values, with 16x16 workgroups.
+    PQ_BITS     = 14,
+    PQ_MAX      = (1 << PQ_BITS) - 1,
+
+    // How many bits to use for the histogram. We bias the histogram down
+    // by half the PQ range (~90 nits), effectively clumping the SDR part
+    // of the image into a single histogram bin.
+    HIST_BITS   = 7,
+    HIST_BIAS   = 1 << (HIST_BITS - 1),
+    HIST_BINS   = (1 << HIST_BITS) - HIST_BIAS,
+
+    // Convert from histogram bin to (starting) PQ value
+#define HIST_PQ(bin) (((bin) + HIST_BIAS) << (PQ_BITS - HIST_BITS))
+};
+
+
+pl_static_assert(PQ_BITS >= HIST_BITS);
 
 struct peak_buf_data {
     unsigned frame_wg_count;  // number of work groups processed
     unsigned frame_sum_pq;    // sum of PQ Y values over all WGs (PQ_BITS)
     unsigned frame_max_pq;    // maximum PQ Y value among these WGs (PQ_BITS)
+    unsigned frame_hist[HIST_BINS]; // always allocated, conditionally unsed
 };
 
 static const struct pl_buffer_var peak_buf_vars[] = {
@@ -987,6 +1004,7 @@ static const struct pl_buffer_var peak_buf_vars[] = {
     VAR(frame_wg_count),
     VAR(frame_sum_pq),
     VAR(frame_max_pq),
+    VAR(frame_hist),
 #undef VAR
 };
 
@@ -1015,6 +1033,51 @@ static inline float iir_coeff(float rate)
 {
     float a = 1.0 - cos(1.0 / rate);
     return sqrt(a*a + 2*a) - a;
+}
+
+static float measure_peak(const struct peak_buf_data *data, float percentile)
+{
+    const float frame_max = (float) data->frame_max_pq / PQ_MAX;
+    if (percentile <= 0 || percentile >= 100)
+        return frame_max;
+
+    unsigned total_pixels = 0;
+    for (int i = 0; i < HIST_BINS; i++)
+        total_pixels += data->frame_hist[i];
+    if (!total_pixels) // no histogram data available?
+        return frame_max;
+
+    const unsigned target_pixel = ceilf(percentile / 100.0f * total_pixels);
+    if (target_pixel >= total_pixels)
+        return frame_max;
+
+    unsigned sum = 0;
+    for (int i = 0; i < HIST_BINS; i++) {
+        const unsigned next = sum + data->frame_hist[i];
+        if (next < target_pixel) {
+            sum = next;
+            continue;
+        }
+
+        // Upper and lower frequency boundaries of the matching histogram bin
+        const unsigned count_low  = sum;      // last pixel of previous bin
+        const unsigned count_high = next + 1; // first pixel of next bin
+        pl_assert(count_low < target_pixel && target_pixel < count_high);
+
+        // PQ luminance associated with count_low/high respectively
+        const float pq_low  = (float) HIST_PQ(i)     / PQ_MAX;
+        float pq_high       = (float) HIST_PQ(i + 1) / PQ_MAX;
+        if (count_high > total_pixels) // special case for last histogram bin
+            pq_high = frame_max;
+
+        // Position of `target_pixel` inside this bin, assumes pixels are
+        // equidistributed inside a histogram bin
+        const float ratio = (float) (target_pixel - count_low) /
+                                    (count_high - count_low);
+        return PL_MIX(pq_low, pq_high, ratio);
+    }
+
+    pl_unreachable();
 }
 
 // if `force` is true, ensures the buffer is read, even if `allow_delayed`
@@ -1049,11 +1112,9 @@ static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
         return;
     }
 
+    float avg_pq = (float) data.frame_sum_pq / (data.frame_wg_count * PQ_MAX);
+    float max_pq = measure_peak(&data, params->percentile);
     const float min_peak = PL_DEF(params->minimum_peak, 1.0f);
-    const float scale = 1.0f / PQ_MAX;
-    float avg_pq, max_pq;
-    avg_pq = scale * data.frame_sum_pq / data.frame_wg_count; // divide as float
-    max_pq = scale * data.frame_max_pq;
     max_pq = fmaxf(max_pq, pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, min_peak));
 
     // Set the initial value accordingly if it contains no data
@@ -1103,8 +1164,15 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
         return false;
     }
 
-    if (!sh_try_compute(sh, 16, 16, true, 2 * sizeof(uint32_t))) {
-        PL_ERR(sh, "HDR peak detection requires compute shaders!");
+    const bool use_histogram = params->percentile > 0 && params->percentile < 100;
+    size_t shmem_req = 2 * sizeof(uint32_t);
+    if (use_histogram)
+        shmem_req += sizeof(uint32_t[HIST_BINS]);
+
+    if (!sh_try_compute(sh, 16, 16, true, shmem_req)) {
+        PL_ERR(sh, "HDR peak detection requires compute shaders with support "
+               "for at least %zu bytes of shared memory! (avail: %zu)",
+               shmem_req, sh_glsl(sh).max_shmem_size);
         return false;
     }
 
@@ -1150,14 +1218,24 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     });
 
     sh_describe(sh, "peak detection");
-    GLSL("// pl_shader_detect_peak \n"
-         "{                        \n"
-         "vec4 color_orig = color; \n");
+    GLSL("// pl_shader_detect_peak                                      \n"
+         "{                                                             \n"
+         "const uint wg_size = gl_WorkGroupSize.x * gl_WorkGroupSize.y; \n"
+         "vec4 color_orig = color;                                      \n");
 
     // For performance, we want to do as few atomic operations on global
     // memory as possible, so use an atomic in shmem for the work group.
-    ident_t wg_sum = sh_fresh(sh, "wg_sum"), wg_max = sh_fresh(sh, "wg_max");
+    ident_t wg_sum = sh_fresh(sh, "wg_sum"),
+            wg_max = sh_fresh(sh, "wg_max"),
+            wg_hist = NULL;
     GLSLH("shared uint %s, %s;  \n", wg_sum, wg_max);
+    if (use_histogram) {
+        wg_hist = sh_fresh(sh, "wg_hist");
+        GLSLH("shared uint %s[%u];  \n", wg_hist, HIST_BINS);
+        GLSL("for (uint i = gl_LocalInvocationIndex; i < %du; i += wg_size) \n"
+             "    %s[i] = 0u;                                               \n",
+             HIST_BINS, wg_hist);
+    }
     GLSL("%s = 0u; %s = 0u;     \n"
          "barrier();            \n",
          wg_sum, wg_max);
@@ -1179,7 +1257,27 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
          PQ_MAX);
 
     // Update the work group's shared atomics
-    if (sh_glsl(sh).subgroup_size) {
+    bool has_subgroups = sh_glsl(sh).subgroup_size > 0;
+    if (use_histogram) {
+        GLSL("int bin = (int(y_pq) >> %d) - %d; \n"
+             "bin = clamp(bin, 0, %d);          \n",
+             PQ_BITS - HIST_BITS, HIST_BIAS,
+             HIST_BINS - 1);
+        if (has_subgroups) {
+            // Optimize for the very common case of identical histogram bins
+            GLSL("if (subgroupAllEqual(bin)) {                  \n"
+                 "    if (subgroupElect())                      \n"
+                 "        atomicAdd(%s[bin], gl_SubgroupSize);  \n"
+                 "} else {                                      \n"
+                 "    atomicAdd(%s[bin], 1u);                   \n"
+                 "}                                             \n",
+                 wg_hist, wg_hist);
+        } else {
+            GLSL("atomicAdd(%s[bin], 1u); \n", wg_hist);
+        }
+    }
+
+    if (has_subgroups) {
         GLSL("uint group_sum = subgroupAdd(y_pq);   \n"
              "uint group_max = subgroupMax(y_pq);   \n"
              "if (subgroupElect()) {                \n"
@@ -1195,16 +1293,22 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
              wg_sum, wg_max);
     }
 
+    if (use_histogram) {
+        GLSL("for (uint i = gl_LocalInvocationIndex; i < %du; i += wg_size) \n"
+             "    atomicAdd(frame_hist[i], %s[i]);                          \n"
+             "memoryBarrierBuffer();                                        \n",
+             HIST_BINS, wg_hist);
+    }
+
     // Have one thread per work group update the global atomics
-    GLSL("if (gl_LocalInvocationIndex == 0u) {                              \n"
-         "    const uint wg_size = gl_WorkGroupSize.x * gl_WorkGroupSize.y; \n"
-         "    atomicAdd(frame_wg_count, 1u);                                \n"
-         "    atomicAdd(frame_sum_pq, %s / wg_size);                        \n"
-         "    atomicMax(frame_max_pq, %s);                                  \n"
-         "    memoryBarrierBuffer();                                        \n"
-         "}                                                                 \n"
-         "color = color_orig;                                               \n"
-         "}                                                                 \n",
+    GLSL("if (gl_LocalInvocationIndex == 0u) {          \n"
+         "    atomicAdd(frame_wg_count, 1u);            \n"
+         "    atomicAdd(frame_sum_pq, %s / wg_size);    \n"
+         "    atomicMax(frame_max_pq, %s);              \n"
+         "    memoryBarrierBuffer();                    \n"
+         "}                                             \n"
+         "color = color_orig;                           \n"
+         "}                                             \n",
           wg_sum, wg_max);
 
     return true;

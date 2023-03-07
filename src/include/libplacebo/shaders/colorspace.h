@@ -129,6 +129,17 @@ struct pl_peak_detect_params {
     // instead defaults to a value of 1.0.
     float minimum_peak;
 
+    // Which percentile of the input image brightness histogram to consider as
+    // the true peak of the scene. If this is set to 100 (or 0), the brightest
+    // pixel is measured. Otherwise, the top of the frequency distribution is
+    // progressively cut off. Setting this too low will cause clipping of very
+    // bright details, but can improve the dynamic brightness range of scenes
+    // with very bright isolated highlights.
+    //
+    // The default of 99.995% is very conservative and should cause no major
+    // issues in typical content.
+    float percentile;
+
     // Allows the peak detection result to be delayed by up to a single frame,
     // which can sometimes improve thoughpout. Disabled by default.
     bool allow_delayed;
@@ -138,10 +149,11 @@ struct pl_peak_detect_params {
 };
 
 #define PL_PEAK_DETECT_DEFAULTS         \
-    .smoothing_period       = 100.0,    \
-    .scene_threshold_low    = 5.5,      \
-    .scene_threshold_high   = 10.0,     \
-    .minimum_peak           = 1.0,
+    .smoothing_period       = 100.0f,   \
+    .scene_threshold_low    = 5.5f,     \
+    .scene_threshold_high   = 10.0f,    \
+    .minimum_peak           = 1.0f,     \
+    .percentile             = 99.995f,
 
 #define pl_peak_detect_params(...) (&(struct pl_peak_detect_params) { PL_PEAK_DETECT_DEFAULTS __VA_ARGS__ })
 extern const struct pl_peak_detect_params pl_peak_detect_default_params;
