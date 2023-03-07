@@ -639,13 +639,13 @@ void pl_color_space_infer(struct pl_color_space *space)
     if (!space->transfer)
         space->transfer = PL_COLOR_TRC_BT_1886;
 
-    // Default the static HDR metadata based on available metadata
+    // Sanitize the static HDR metadata
     pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
         .color      = space,
-        .metadata   = PL_HDR_METADATA_ANY,
+        .metadata   = PL_HDR_METADATA_HDR10,
         .scaling    = PL_HDR_NITS,
-        .out_min    = space->hdr.min_luma ? NULL : &space->hdr.min_luma,
-        .out_max    = space->hdr.max_luma ? NULL : &space->hdr.max_luma,
+        .out_min    = &space->hdr.min_luma,
+        .out_max    = &space->hdr.max_luma,
     ));
 
     // Default the signal color space based on the nominal raw primaries
