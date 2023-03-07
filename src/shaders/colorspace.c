@@ -1053,7 +1053,6 @@ static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
     const float coeff = iir_coeff(PL_DEF(params->smoothing_period, 100.0f));
     obj->peak.avg_pq += coeff * (avg_pq - obj->peak.avg_pq);
     obj->peak.max_pq += coeff * (max_pq - obj->peak.max_pq);
-    obj->peak.max_pq = fmaxf(obj->peak.max_pq, max_pq); // don't clip
 
     // Scene change hysteresis
     if (params->scene_threshold_low > 0 && params->scene_threshold_high > 0) {
