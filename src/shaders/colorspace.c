@@ -1038,10 +1038,12 @@ static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
         return;
     }
 
+    const float min_peak = PL_DEF(params->minimum_peak, 1.0f);
     const float scale = 1.0f / PQ_MAX;
     float avg_pq, max_pq;
     avg_pq = scale * data.frame_sum_pq / data.frame_wg_count; // divide as float
     max_pq = scale * data.frame_max_pq;
+    max_pq = fmaxf(max_pq, pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, min_peak));
 
     // Set the initial value accordingly if it contains no data
     if (!obj->peak.avg_pq) {
