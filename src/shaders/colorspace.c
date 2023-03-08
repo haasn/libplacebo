@@ -1638,6 +1638,15 @@ static void tone_map(pl_shader sh,
 
     }
 
+    if (params->show_clipping) {
+        GLSL("bool clip_lo = false, clip_hi = false; \n"
+             "#define cliptest(x) (clip_lo = clip_lo || x < %s,   \\\n"
+             "                     clip_hi = clip_hi || x > %s)     \n",
+             SH_FLOAT_DYN(src_min - 1e-6f), SH_FLOAT_DYN(src_max + 1e-6f));
+    } else {
+        GLSL("#define cliptest(x) \n");
+    }
+
     if (mode == PL_TONE_MAP_AUTO) {
         if (is_clip) {
             // No-op / clip - do this per-channel
@@ -1657,12 +1666,16 @@ static void tone_map(pl_shader sh,
 
     switch (mode) {
     case PL_TONE_MAP_RGB:
-        for (int c = 0; c < 3; c++)
-            GLSL("color[%d] = tone_map(color[%d]); \n", c, c);
+        for (int c = 0; c < 3; c++) {
+            GLSL("cliptest(color[%d]);             \n"
+                 "color[%d] = tone_map(color[%d]); \n",
+                 c, c, c);
+        }
         break;
 
     case PL_TONE_MAP_MAX:
         GLSL("float sig_max = max(max(color.r, color.g), color.b);  \n"
+             "cliptest(sig_max);                                    \n"
              "color.rgb *= tone_map(sig_max) / max(sig_max, %s);    \n",
              SH_FLOAT(dst_min));
         break;
@@ -1691,6 +1704,7 @@ static void tone_map(pl_shader sh,
         float desat = (coeff - 1) * fabsf(ratio) + 1;
 
         GLSL("float orig = max(xyz.y, %s);  \n"
+             "cliptest(xyz.y);              \n"
              "xyz.y = tone_map(xyz.y);      \n"
              "xyz.xz *= %s * xyz.y / orig;  \n",
              SH_FLOAT(dst_min), SH_FLOAT_DYN(desat));
@@ -1708,18 +1722,20 @@ static void tone_map(pl_shader sh,
         }));
 
         if (mode == PL_TONE_MAP_HYBRID) {
-            for (int c = 0; c < 3; c++)
-                GLSL("color[%d] = tone_map(color[%d]); \n", c, c);
-
             // coeff(x) = max(a * x^-y, b * x^y)
             //   solve for coeff(dst_min) = 1, coeff(dst_max) = 1
             const float y = 2.4f;
             const float a = powf(dst_min, y);
             const float b = powf(dst_max, -y);
-            GLSL("float coeff = pow(xyz.y, %f);                         \n"
-                 "coeff = max(%s / coeff, %s * coeff);                  \n"
-                 "color.rgb = mix(color_lin, color.rgb, coeff);         \n",
+            GLSL("float coeff = pow(xyz.y, %f);         \n"
+                 "coeff = max(%s / coeff, %s * coeff);  \n",
                  y, SH_FLOAT(a), SH_FLOAT_DYN(b));
+            for (int c = 0; c < 3; c++) {
+                GLSL("if (coeff > 0.8) cliptest(color[%d]); \n"
+                     "color[%d] = tone_map(color[%d]);      \n",
+                     c, c, c);
+            }
+            GLSL("color.rgb = mix(color_lin, color.rgb, coeff); \n");
         } else {
             GLSL("color.rgb = color_lin; \n");
         }
@@ -1736,12 +1752,29 @@ static void tone_map(pl_shader sh,
          "color.rgb = (color.rgb - vec3(ct)) / ct_scale;    \n",
          ct);
 
+    if (params->show_clipping) {
+        GLSL("if (clip_hi) {                                                \n"
+             "    float k = dot(color.rgb, vec3(2.0 / 3.0));                \n"
+             "    color.rgb = clamp(vec3(k) - color.rgb, 0.0, 1.0);         \n"
+             "    float cmin = min(min(color.r, color.g), color.b);         \n"
+             "    float cmax = max(max(color.r, color.g), color.b);         \n"
+             "    float delta = cmax - cmin;                                \n"
+             "    vec3 sat = smoothstep(cmin - 1e-6, cmax, color.rgb);      \n"
+             "    const vec3 red = vec3(1.0, 0.0, 0.0);                     \n"
+             "    color.rgb = mix(red, sat, smoothstep(0.0, 0.3, delta));   \n"
+             "} else if (clip_lo) {                                         \n"
+             "    vec3 hi = vec3(0.0, 0.3, 0.3);                            \n"
+             "    color.rgb = mix(color.rgb, hi, 0.5);                      \n"
+             "}                                                             \n");
+    }
+
     if (params->visualize_lut) {
         visualize_tone_map(sh, "tone_map", src_min, src_max, src_avg,
                            dst_min, dst_max, params->visualize_rect);
     }
 
-    GLSL("#undef tone_map \n");
+    GLSL("#undef tone_map \n"
+         "#undef cliptest \n");
 }
 
 static inline bool is_identity_mat(const struct pl_matrix3x3 *mat)

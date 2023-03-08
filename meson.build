@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     5,
     # API version
     {
+      '264': 'add pl_color_map_params.show_clipping',
       '263': 'add pl_peak_detect_params.percentile',
       '262': 'add pl_color_map_params.visualize_rect',
       '261': 'add pl_color_map_params.metadata',

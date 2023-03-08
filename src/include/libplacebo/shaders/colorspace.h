@@ -306,6 +306,15 @@ struct pl_color_map_params {
     // Visualize the tone-mapping curve / LUT. (PQ-PQ graph)
     bool visualize_lut;
 
+    // Graphically highlight hard-clipped pixels during tone-mapping (i.e.
+    // pixels that exceed the claimed source luminance range)
+    //
+    // Note that the difference between this and PL_GAMUT_WARN is that the
+    // latter only shows out-of-gamut colors (that are inside the monitor
+    // brightness range), while this shows out-of-range colors (regardless of
+    // whether or not they're in-gamut).
+    bool show_clipping;
+
     // Controls where to draw the visualization, relative to the rendered
     // video (dimensions 0-1). Optional, defaults to the full picture.
     struct pl_rect2df visualize_rect;
