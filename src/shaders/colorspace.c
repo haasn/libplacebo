@@ -1568,7 +1568,7 @@ static void tone_map(pl_shader sh,
     if (is_clip) {
 
         GLSL("#define tone_map(x) clamp((x), %s, %s) \n",
-             SH_FLOAT(dst_min), SH_FLOAT(dst_max));
+             SH_FLOAT(dst_min), SH_FLOAT_DYN(dst_max));
 
     } else if (is_linear) {
 
@@ -1719,7 +1719,7 @@ static void tone_map(pl_shader sh,
             GLSL("float coeff = pow(xyz.y, %f);                         \n"
                  "coeff = max(%s / coeff, %s * coeff);                  \n"
                  "color.rgb = mix(color_lin, color.rgb, coeff);         \n",
-                 y, SH_FLOAT(a), SH_FLOAT(b));
+                 y, SH_FLOAT(a), SH_FLOAT_DYN(b));
         } else {
             GLSL("color.rgb = color_lin; \n");
         }
