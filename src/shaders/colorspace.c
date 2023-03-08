@@ -944,6 +944,16 @@ void pl_shader_unsigmoidize(pl_shader sh, const struct pl_sigmoid_params *params
 
 const struct pl_peak_detect_params pl_peak_detect_default_params = { PL_PEAK_DETECT_DEFAULTS };
 
+static bool peak_detect_params_eq(const struct pl_peak_detect_params *a,
+                                  const struct pl_peak_detect_params *b)
+{
+    return a->smoothing_period     == b->smoothing_period     &&
+           a->scene_threshold_low  == b->scene_threshold_low  &&
+           a->scene_threshold_high == b->scene_threshold_high &&
+           a->minimum_peak         == b->minimum_peak;
+    // don't compare `allow_delayed` because it doesn't change measurement
+}
+
 // How many bits to use for storing PQ data. Be careful when setting this too
 // high, as it may overflow `unsigned int` on large video sources.
 //
@@ -951,6 +961,7 @@ const struct pl_peak_detect_params pl_peak_detect_default_params = { PL_PEAK_DET
 // consisting entirely of 100% 10k nits PQ values, with 16x16 workgroups.
 #define PQ_BITS 14
 #define PQ_MAX  ((1 << PQ_BITS) - 1)
+
 struct peak_buf_data {
     unsigned frame_wg_count;  // number of work groups processed
     unsigned frame_sum_pq;    // sum of PQ Y values over all WGs (PQ_BITS)
@@ -1103,8 +1114,11 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     if (!obj)
         return false;
 
-    update_peak_buf(gpu, obj, true); // prevent over-writing previous frame
-    obj->peak.params = *params; // set new params
+    if (peak_detect_params_eq(&obj->peak.params, params)) {
+        update_peak_buf(gpu, obj, true); // prevent over-writing previous frame
+    } else {
+        pl_reset_detected_peak(*state);
+    }
 
     pl_assert(!obj->peak.buf);
     static const struct peak_buf_data zero = {0};
@@ -1120,6 +1134,8 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
         SH_FAIL(sh, "Failed creating peak detection SSBO!");
         return false;
     }
+
+    obj->peak.params = *params;
 
     sh_desc(sh, (struct pl_shader_desc) {
         .desc = {
