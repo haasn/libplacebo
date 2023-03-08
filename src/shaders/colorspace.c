@@ -1069,7 +1069,7 @@ static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
 
     // Scene change hysteresis
     if (params->scene_threshold_low > 0 && params->scene_threshold_high > 0) {
-        const float log10_pq = 0.25f; // experimentally determined approximate
+        const float log10_pq = 1e-2f; // experimentally determined approximate
         const float thresh_low = params->scene_threshold_low * log10_pq;
         const float thresh_high = params->scene_threshold_high * log10_pq;
         const float delta = fabsf(avg_pq - obj->peak.avg_pq);

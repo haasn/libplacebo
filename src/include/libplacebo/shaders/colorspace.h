@@ -117,7 +117,7 @@ struct pl_peak_detect_params {
     // given threshold difference. But rather than a single hard cutoff, which
     // would lead to weird discontinuities on fades, we gradually disable it
     // over a small window of brightness ranges. These parameters control the
-    // lower and upper bounds of this window, in dB.
+    // lower and upper bounds of this window, in units of 1% PQ.
     //
     // The default values are 5.5 and 10.0, respectively. To disable this logic
     // entirely, set either one to a negative value.
