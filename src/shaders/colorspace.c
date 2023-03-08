@@ -1565,12 +1565,6 @@ static void tone_map(pl_shader sh,
         obj->params = lut_params;
     }
 
-    // Hard-clamp the input values to the claimed input peak. Do this
-    // per-channel to fix issues with excessively oversaturated highlights in
-    // broken files that contain values outside their stated brightness range.
-    GLSL("color.rgb = clamp(color.rgb, %s, %s); \n",
-         SH_FLOAT_DYN(src_min), SH_FLOAT_DYN(src_max));
-
     if (is_clip) {
 
         GLSL("#define tone_map(x) clamp((x), %s, %s) \n",
