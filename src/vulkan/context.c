@@ -559,23 +559,6 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
         },
     };
 
-    // Try enabling as many validation features as possible. Ignored for
-    // instances not supporting VK_EXT_validation_features.
-    VkValidationFeatureEnableEXT validation_features[] = {
-        VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
-        VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
-        VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-    };
-
-    VkValidationFeaturesEXT vinfo = {
-        .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
-        .pEnabledValidationFeatures = validation_features,
-        .enabledValidationFeatureCount = PL_ARRAY_SIZE(validation_features),
-    };
-
-    if (params->debug_extra)
-        info.pNext = &vinfo;
-
     // Enumerate all supported layers
     PL_VK_LOAD_FUN(NULL, EnumerateInstanceLayerProperties, get_addr);
     uint32_t num_layers_avail = 0;
@@ -773,6 +756,44 @@ next_opt_user_ext: ;
     }
 
 debug_ext_done: ;
+
+    if (debug && params->debug_extra) {
+
+        // Try enabling as many validation features as possible
+        static const VkValidationFeatureEnableEXT validation_features[] = {
+            VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+            VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
+            VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
+        };
+
+        static const VkValidationFeaturesEXT vinfo = {
+            .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
+            .pEnabledValidationFeatures = validation_features,
+            .enabledValidationFeatureCount = PL_ARRAY_SIZE(validation_features),
+        };
+
+        const char * const ext = VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME;
+        for (int n = 0; n < num_exts_avail; n++) {
+            if (strcmp(ext, exts_avail[n].extensionName) == 0) {
+                PL_ARRAY_APPEND(tmp, exts, ext);
+                vk_link_struct(&info, &vinfo);
+                goto debug_extra_ext_done;
+            }
+        }
+
+        for (int n = 0; n < layer_exts[debug_layer].num_exts; n++) {
+            if (strcmp(ext, layer_exts[debug_layer].exts[n].extensionName) == 0) {
+                PL_ARRAY_APPEND(tmp, exts, ext);
+                vk_link_struct(&info, &vinfo);
+                goto debug_extra_ext_done;
+            }
+        }
+
+        pl_warn(log, "GPU-assisted validation enabled but not supported by "
+                "instance, disabling...");
+    }
+
+debug_extra_ext_done: ;
 
     info.ppEnabledExtensionNames = exts.elem;
     info.enabledExtensionCount = exts.num;
