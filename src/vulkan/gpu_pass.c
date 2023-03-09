@@ -948,9 +948,13 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
                                    index_fmts[params->index_fmt]);
         }
 
+
+        VkAccessFlags fbo_access = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        if (pass->params.load_target)
+            fbo_access |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+
         vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                       VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                       fbo_access, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                        VK_QUEUE_FAMILY_IGNORED);
 
         VkViewport viewport = {
