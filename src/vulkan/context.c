@@ -559,15 +559,12 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
         },
     };
 
-#ifdef VK_EXT_validation_features
     // Try enabling as many validation features as possible. Ignored for
     // instances not supporting VK_EXT_validation_features.
     VkValidationFeatureEnableEXT validation_features[] = {
         VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
         VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
-# if VK_EXT_VALIDATION_FEATURES_SPEC_VERSION >= 2
         VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-# endif
     };
 
     VkValidationFeaturesEXT vinfo = {
@@ -578,12 +575,6 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
 
     if (params->debug_extra)
         info.pNext = &vinfo;
-#else
-    if (params->debug_extra) {
-        pl_warn(log, "Enabled extra debugging but vulkan headers too old to "
-                "support it, please update vulkan and recompile libplacebo!");
-    }
-#endif
 
     // Enumerate all supported layers
     PL_VK_LOAD_FUN(NULL, EnumerateInstanceLayerProperties, get_addr);
