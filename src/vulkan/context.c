@@ -600,12 +600,14 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
     // This layer has to be initialized first, otherwise all sorts of weirdness
     // happens (random segfaults, yum)
     bool debug = params->debug;
+    uint32_t debug_layer = 0; // layer idx of debug layer
     if (debug) {
         for (int i = 0; i < PL_ARRAY_SIZE(debug_layers); i++) {
             for (int n = 0; n < num_layers_avail; n++) {
                 if (strcmp(debug_layers[i], layers_avail[n].layerName) != 0)
                     continue;
 
+                debug_layer = n;
                 pl_info(log, "Enabling debug meta layer: %s", debug_layers[i]);
                 PL_ARRAY_APPEND(tmp, layers, debug_layers[i]);
                 goto debug_layers_done;
@@ -748,14 +750,19 @@ next_opt_user_ext: ;
 
     // If debugging is enabled, load the necessary debug utils extension
     if (debug) {
+        const char * const ext = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
         for (int n = 0; n < num_exts_avail; n++) {
-            const char * const debug_ext = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-            if (strcmp(debug_ext, exts_avail[n].extensionName) != 0)
-                continue;
+            if (strcmp(ext, exts_avail[n].extensionName) == 0) {
+                PL_ARRAY_APPEND(tmp, exts, ext);
+                goto debug_ext_done;
+            }
+        }
 
-            pl_info(log, "Enabling debug report extension: %s", debug_ext);
-            PL_ARRAY_APPEND(tmp, exts, debug_ext);
-            goto debug_ext_done;
+        for (int n = 0; n < layer_exts[debug_layer].num_exts; n++) {
+            if (strcmp(ext, layer_exts[debug_layer].exts[n].extensionName) == 0) {
+                PL_ARRAY_APPEND(tmp, exts, ext);
+                goto debug_ext_done;
+            }
         }
 
         // No extension found
