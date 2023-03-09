@@ -1536,7 +1536,6 @@ static void tone_map(pl_shader sh,
                  src_min != dst_min ? " + BPC" : "");
 
     const struct pl_tone_map_function *fun = lut_params.function;
-    struct sh_tone_map_obj *obj = NULL;
     ident_t lut = NULL;
 
     bool can_fixed = !params->force_tone_mapping_lut;
@@ -1545,6 +1544,7 @@ static void tone_map(pl_shader sh,
                      (!lut_params.param || lut_params.param == 1.0f);
 
     if (state && !(is_clip || is_linear)) {
+        struct sh_tone_map_obj *obj;
         obj = SH_OBJ(sh, state, PL_SHADER_OBJ_TONE_MAP, struct sh_tone_map_obj,
                      sh_tone_map_uninit);
         if (!obj)
