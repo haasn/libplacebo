@@ -3215,6 +3215,7 @@ retry:
             f->crop = img->crop;
             f->color = inter_pass.img.color;
             f->comps = inter_pass.img.comps;
+            f->profile = target->profile;
             // fall through
 
 inter_pass_error:
