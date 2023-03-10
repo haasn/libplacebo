@@ -403,14 +403,12 @@ static inline struct pl_spirv_version get_spirv_version(const struct vk_ctx *vk)
     }
 #endif
 
-#ifdef VK_VERSION_1_2
     if (vk->api_ver >= VK_API_VERSION_1_2) {
         return (struct pl_spirv_version) {
             .env_version = VK_API_VERSION_1_2,
             .spv_version = PL_SPV_VERSION(1, 5),
         };
     }
-#endif
 
     return (struct pl_spirv_version) {
         .env_version = VK_API_VERSION_1_1,
