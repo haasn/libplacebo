@@ -86,6 +86,9 @@ struct pl_renderer_t {
     // Frame cache (for frame mixing / interpolation)
     PL_ARRAY(struct cached_frame) frames;
     PL_ARRAY(pl_tex) frame_fbos;
+
+    // For debugging / logging purposes
+    int prev_depth;
 };
 
 enum {
@@ -2295,6 +2298,11 @@ static bool pass_output_target(struct pass_state *pass)
         // little sense to do so (and probably just adds errors)
         int depth = target->repr.bits.color_depth;
         if (depth && (depth < 16 || params->force_dither)) {
+            if (depth != rr->prev_depth) {
+                PL_INFO(rr, "Dithering to %d bit depth", depth);
+                rr->prev_depth = depth;
+            }
+
             bool ed = pass_error_diffusion(pass, &sh, depth, plane->components,
                                            rx1 - rx0, ry1 - ry0);
             if (!ed && params->dither_params) {
