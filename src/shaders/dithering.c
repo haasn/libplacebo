@@ -119,7 +119,7 @@ void pl_shader_dither(pl_shader sh, int new_depth,
         return;
     }
 
-    sh_describe(sh, "dithering");
+    sh_describef(sh, "dithering (%d bits)", new_depth);
     GLSL("// pl_shader_dither \n"
         "{                    \n"
         "float bias;          \n");
@@ -409,9 +409,11 @@ bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_par
         },
     });
 
-    // Defines the ring buffer in shared memory.
     sh->res.output = PL_SHADER_SIG_NONE;
-    sh_describe(sh, "error diffusion");
+    sh_describef(sh, "error diffusion (%s, %d bits)",
+                 kernel->name, params->new_depth);
+
+    // Defines the ring buffer in shared memory.
     GLSLH("shared uint err_rgb8[%s]; \n", ring_buffer_size);
     GLSL("// pl_shader_error_diffusion                                          \n"
          // Safeguard against accidental over-execution
