@@ -88,7 +88,7 @@ struct pl_renderer_t {
     PL_ARRAY(pl_tex) frame_fbos;
 
     // For debugging / logging purposes
-    int prev_depth;
+    int prev_dither;
 };
 
 enum {
@@ -2296,21 +2296,28 @@ static bool pass_output_target(struct pass_state *pass)
 
         // Ignore dithering for > 16-bit outputs by default, since it makes
         // little sense to do so (and probably just adds errors)
-        int depth = target->repr.bits.color_depth;
+        int depth = target->repr.bits.color_depth, applied_dither = 0;
         if (depth && (depth < 16 || params->force_dither)) {
-            if (depth != rr->prev_depth) {
-                PL_INFO(rr, "Dithering to %d bit depth", depth);
-                rr->prev_depth = depth;
-            }
-
-            bool ed = pass_error_diffusion(pass, &sh, depth, plane->components,
-                                           rx1 - rx0, ry1 - ry0);
-            if (!ed && params->dither_params) {
+            if (pass_error_diffusion(pass, &sh, depth, plane->components,
+                                     rx1 - rx0, ry1 - ry0))
+            {
+                applied_dither = depth;
+            } else if (params->dither_params) {
                 struct pl_dither_params dparams = *params->dither_params;
                 if (!params->disable_dither_gamma_correction)
                     dparams.transfer = target->color.transfer;
                 pl_shader_dither(sh, depth, &rr->dither_state, &dparams);
+                applied_dither = depth;
             }
+        }
+
+        if (applied_dither != rr->prev_dither) {
+            if (applied_dither) {
+                PL_INFO(rr, "Dithering to %d bit depth", applied_dither);
+            } else {
+                PL_INFO(rr, "Dithering disabled");
+            }
+            rr->prev_dither = applied_dither;
         }
 
         GLSL("color *= vec4(1.0 / %s); \n", SH_FLOAT(scale));
