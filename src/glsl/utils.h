@@ -33,13 +33,14 @@ struct pl_spirv_version {
     uint32_t spv_version;
 };
 
+// Returns minimum Vulkan version for given SPIR-V version
 static inline uint32_t pl_spirv_version_to_vulkan(uint32_t spirv_ver)
 {
     if (spirv_ver >= PL_SPV_VERSION(1, 6))
         return PL_VLK_VERSION(1, 3);
-    if (spirv_ver >= PL_SPV_VERSION(1, 5))
+    if (spirv_ver >= PL_SPV_VERSION(1, 4))
         return PL_VLK_VERSION(1, 2);
-    if (spirv_ver >= PL_SPV_VERSION(1, 3))
+    if (spirv_ver >= PL_SPV_VERSION(1, 1))
         return PL_VLK_VERSION(1, 1);
     return PL_VLK_VERSION(1, 0);
 }
