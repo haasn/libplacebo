@@ -610,9 +610,8 @@ next_dim: ; // `continue` out of the inner loop
             for (int i = 0; i < dims; i++)
                 pos_macros[i] = texel_scale(sh, sizes[i], method == SH_LUT_LINEAR);
 
-            GLSLH("#define %s(pos) (%s(%s, %s(\\\n",
-                  name, sh_tex_fn(sh, lut->tex->params),
-                  tex, vartypes[PL_VAR_FLOAT][texdim - 1]);
+            GLSLH("#define %s(pos) (texture(%s, %s(\\\n",
+                  name, tex, vartypes[PL_VAR_FLOAT][texdim - 1]);
 
             for (int i = 0; i < texdim; i++) {
                 char sep = i == 0 ? ' ' : ',';

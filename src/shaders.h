@@ -285,21 +285,6 @@ struct sh_lut_params {
 // gets interpolated and clamped as needed. Returns NULL on error.
 ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params);
 
-// Returns the appropriate `texture`-equivalent function for the shader and
-// given texture.
-static inline const char *sh_tex_fn(const pl_shader sh,
-                                    const struct pl_tex_params params)
-{
-    static const char *suffixed[] = {
-        [1] = "texture1D",
-        [2] = "texture2D",
-        [3] = "texture3D",
-    };
-
-    int dims = pl_tex_params_dimension(params);
-    return sh_glsl(sh).version >= 130 ? "texture" : suffixed[dims];
-}
-
 static inline const char *sh_float_type(uint8_t num_comps)
 {
     switch (num_comps) {
