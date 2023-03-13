@@ -1115,14 +1115,14 @@ static bool bind_pass_tex(pl_shader sh, pl_str name,
     if (!id)
         return false;
 
-    GLSLH("#define %.*s_raw %s \n", PL_STR_FMT(name), id);
-    GLSLH("#define %.*s_pos %s \n", PL_STR_FMT(name), pos);
-    GLSLH("#define %.*s_map %s_map \n", PL_STR_FMT(name), pos);
-    GLSLH("#define %.*s_size %s \n", PL_STR_FMT(name), size);
-    GLSLH("#define %.*s_pt %s \n", PL_STR_FMT(name), pt);
+    GLSLH("#define %.*s_raw "$" \n", PL_STR_FMT(name), id);
+    GLSLH("#define %.*s_pos "$" \n", PL_STR_FMT(name), pos);
+    GLSLH("#define %.*s_map "$"_map \n", PL_STR_FMT(name), pos);
+    GLSLH("#define %.*s_size "$" \n", PL_STR_FMT(name), size);
+    GLSLH("#define %.*s_pt "$" \n", PL_STR_FMT(name), pt);
 
     float off[2] = { ptex->rect.x0, ptex->rect.y0 };
-    GLSLH("#define %.*s_off %s \n", PL_STR_FMT(name),
+    GLSLH("#define %.*s_off "$" \n", PL_STR_FMT(name),
           sh_var(sh, (struct pl_shader_var) {
               .var = pl_var_vec2("offset"),
               .data = off,
@@ -1130,20 +1130,20 @@ static bool bind_pass_tex(pl_shader sh, pl_str name,
 
     struct pl_color_repr repr = ptex->repr;
     ident_t scale = SH_FLOAT(pl_color_repr_normalize(&repr));
-    GLSLH("#define %.*s_mul %s \n", PL_STR_FMT(name), scale);
+    GLSLH("#define %.*s_mul "$" \n", PL_STR_FMT(name), scale);
 
     // Compatibility with mpv
     GLSLH("#define %.*s_rot mat2(1.0, 0.0, 0.0, 1.0) \n", PL_STR_FMT(name));
 
     // Sampling function boilerplate
-    GLSLH("#define %.*s_tex(pos) (%s * vec4(texture(%s, pos))) \n",
+    GLSLH("#define %.*s_tex(pos) ("$" * vec4(texture("$", pos))) \n",
           PL_STR_FMT(name), scale, id);
-    GLSLH("#define %.*s_texOff(off) (%.*s_tex(%s + %s * vec2(off))) \n",
+    GLSLH("#define %.*s_texOff(off) (%.*s_tex("$" + "$" * vec2(off))) \n",
           PL_STR_FMT(name), PL_STR_FMT(name), pos, pt);
 
     bool can_gather = ptex->tex->params.format->gatherable;
     if (can_gather) {
-        GLSLH("#define %.*s_gather(pos, c) (%s * vec4(textureGather(%s, pos, c))) \n",
+        GLSLH("#define %.*s_gather(pos, c) ("$" * vec4(textureGather("$", pos, c))) \n",
               PL_STR_FMT(name), scale, id);
     }
 
@@ -1275,10 +1275,10 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                     // Directly bind this, no need to bother with all the
                     // `bind_pass_tex` boilerplate
                     ident_t id = sh_desc(sh, p->descriptors.elem[j]);
-                    GLSLH("#define %.*s %s \n", PL_STR_FMT(texname), id);
+                    GLSLH("#define %.*s "$" \n", PL_STR_FMT(texname), id);
 
                     if (p->descriptors.elem[j].desc.type == PL_DESC_SAMPLED_TEX) {
-                        GLSLH("#define %.*s_tex(pos) (texture(%s, pos)) \n",
+                        GLSLH("#define %.*s_tex(pos) (texture("$", pos)) \n",
                               PL_STR_FMT(texname), id);
                     }
                     goto next_bind;
@@ -1326,33 +1326,33 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         // Set up the input variables
         p->frame_count++;
-        GLSLH("#define frame %s \n", sh_var(sh, (struct pl_shader_var) {
+        GLSLH("#define frame "$" \n", sh_var(sh, (struct pl_shader_var) {
             .var = pl_var_int("frame"),
             .data = &p->frame_count,
             .dynamic = true,
         }));
 
         float random = prng_step(p->prng_state);
-        GLSLH("#define random %s \n", sh_var(sh, (struct pl_shader_var) {
+        GLSLH("#define random "$" \n", sh_var(sh, (struct pl_shader_var) {
             .var = pl_var_float("random"),
             .data = &random,
             .dynamic = true,
         }));
 
         float src_size[2] = { pl_rect_w(params->src_rect), pl_rect_h(params->src_rect) };
-        GLSLH("#define input_size %s \n", sh_var(sh, (struct pl_shader_var) {
+        GLSLH("#define input_size "$" \n", sh_var(sh, (struct pl_shader_var) {
             .var = pl_var_vec2("input_size"),
             .data = src_size,
         }));
 
         float dst_size[2] = { pl_rect_w(params->dst_rect), pl_rect_h(params->dst_rect) };
-        GLSLH("#define target_size %s \n", sh_var(sh, (struct pl_shader_var) {
+        GLSLH("#define target_size "$" \n", sh_var(sh, (struct pl_shader_var) {
             .var = pl_var_vec2("target_size"),
             .data = dst_size,
         }));
 
         float tex_off[2] = { params->src_rect.x0, params->src_rect.y0 };
-        GLSLH("#define tex_offset %s \n", sh_var(sh, (struct pl_shader_var) {
+        GLSLH("#define tex_offset "$" \n", sh_var(sh, (struct pl_shader_var) {
             .var = pl_var_vec2("tex_offset"),
             .data = tex_off,
         }));
@@ -1363,7 +1363,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             switch (hp->mode) {
             case PL_HOOK_PAR_VARIABLE:
             case PL_HOOK_PAR_DYNAMIC:
-                GLSLH("#define %s %s \n", hp->name,
+                GLSLH("#define %s "$" \n", hp->name,
                       sh_var(sh, (struct pl_shader_var) {
                         .var = {
                             .name = hp->name,
@@ -1378,7 +1378,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 break;
 
             case PL_HOOK_PAR_CONSTANT:
-                GLSLH("#define %s %s \n", hp->name,
+                GLSLH("#define %s "$" \n", hp->name,
                       sh_const(sh, (struct pl_shader_const) {
                         .name = hp->name,
                         .type = hp->type,
@@ -1403,14 +1403,14 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
             .gpu = p->gpu,
         ));
         pl_shader_linearize(p->trc_helper, params->orig_color);
-        GLSLH("#define linearize %s \n", sh_subpass(sh, p->trc_helper));
+        GLSLH("#define linearize "$" \n", sh_subpass(sh, p->trc_helper));
 
         pl_shader_reset(p->trc_helper, pl_shader_params(
             .id = ++sh_id,
             .gpu = p->gpu,
         ));
         pl_shader_delinearize(p->trc_helper, params->orig_color);
-        GLSLH("#define delinearize %s \n", sh_subpass(sh, p->trc_helper));
+        GLSLH("#define delinearize "$" \n", sh_subpass(sh, p->trc_helper));
 
         // Load and run the user shader itself
         sh_append_str(sh, SH_BUF_HEADER, hook->pass_body);
@@ -1448,7 +1448,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 goto error;
             }
 
-            GLSLP("#define out_image %s \n", sh_desc(sh, (struct pl_shader_desc) {
+            GLSLP("#define out_image "$" \n", sh_desc(sh, (struct pl_shader_desc) {
                 .binding.object = fbo,
                 .desc = {
                     .name = "out_image",
