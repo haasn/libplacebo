@@ -510,7 +510,7 @@ static void sample(pl_shader sh, enum offset off, ident_t lut, int idx,
     GLSL("offset = uvec2(%du, %du) * uvec2((data >> %d) & 0xFu, \n"
          "                                 (data >> %d) & 0xFu);\n"
          "pos = offset + local_id.xy + uvec2(%d, %d);           \n"
-         "val = %s(pos)%s;                                      \n",
+         "val = "$"(pos)%s;                                     \n",
          sub_x ? 1 : 2, sub_y ? 1 : 2, off + 4, off,
          (BLOCK_SIZE >> sub_x) * dx,
          (BLOCK_SIZE >> sub_y) * dy,
@@ -836,12 +836,12 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
     // Load the data vector which holds the offsets
     if (is_compute) {
         GLSLH("shared uint data; \n");
-        GLSL("if (gl_LocalInvocationIndex == 0u) \n"
-             "    data = uint(%s(block_id));     \n"
-             "barrier();                         \n",
+        GLSL("if (gl_LocalInvocationIndex == 0u)    \n"
+             "    data = uint("$"(block_id));       \n"
+             "barrier();                            \n",
              offsets);
     } else {
-        GLSL("uint data = uint(%s(block_id)); \n", offsets);
+        GLSL("uint data = uint("$"(block_id)); \n", offsets);
     }
 
     struct grain_scale scale = get_grain_scale(params);
@@ -873,7 +873,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
     });
 
     ident_t tex_scale = SH_FLOAT(scale.texture_scale);
-    GLSL("color = vec4(%s) * texelFetch(%s, ivec2(global_id), 0); \n",
+    GLSL("color = vec4("$") * texelFetch("$", ivec2(global_id), 0); \n",
          tex_scale, tex);
 
     // If we need access to the external luma plane, load it now
@@ -883,7 +883,7 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
             // We already have the luma channel as part of the pre-sampled color
             for (int i = 0; i < 3; i++) {
                 if (channel_map(i, params) == PL_CHANNEL_Y) {
-                    GLSL("averageLuma = color[%s]; \n", SH_INT(i));
+                    GLSL("averageLuma = color["$"]; \n", SH_INT(i));
                     break;
                 }
             }
@@ -899,9 +899,11 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
             });
 
             GLSL("pos = global_id * uvec2(%du, %du);                    \n"
-                 "averageLuma = %s * texelFetch(%s, ivec2(pos), 0)[%s]; \n",
-                 1 << sub_x, 1 << sub_y, tex_scale, luma,
-                 SH_INT(params->luma_comp));
+                 "averageLuma = texelFetch("$", ivec2(pos), 0)["$"];    \n"
+                 "averageLuma *= "$";                                   \n",
+                 1 << sub_x, 1 << sub_y,
+                 luma, SH_INT(params->luma_comp),
+                 tex_scale);
         }
     }
 
@@ -953,12 +955,12 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
                  "}                                             \n");
 
             // Correctly clip the interpolated grain
-            GLSL("grain = clamp(grain, %s, %s); \n", grain_min, grain_max);
+            GLSL("grain = clamp(grain, "$", "$"); \n", grain_min, grain_max);
         }
 
         if (c == PL_CHANNEL_Y) {
-            GLSL("color[%d] += %s(color[%d]) * grain;   \n"
-                 "color[%d] = clamp(color[%d], %s, %s); \n",
+            GLSL("color[%d] += "$"(color[%d]) * grain;      \n"
+                 "color[%d] = clamp(color[%d], "$", "$");   \n",
                  i, scaling[c], i,
                  i, i, minValue, maxLuma);
         } else {
@@ -981,11 +983,12 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
                     .data = &(float) { c_offset * scale.grain_scale },
                 });
 
-                GLSL("val = dot(vec2(val, color[%d]), %s);  \n", i, mult);
-                GLSL("val += %s; \n", offset);
+                GLSL("val = dot(vec2(val, color[%d]), "$"); \n"
+                     "val += "$";                           \n",
+                     i, mult, offset);
             }
-            GLSL("color[%d] += %s(val) * grain;         \n"
-                 "color[%d] = clamp(color[%d], %s, %s); \n",
+            GLSL("color[%d] += "$"(val) * grain;            \n"
+                 "color[%d] = clamp(color[%d], "$", "$");   \n",
                  i, scaling[c],
                  i, i, minValue, maxChroma);
         }

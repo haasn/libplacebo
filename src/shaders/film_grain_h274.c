@@ -149,14 +149,14 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
         return false;
 
     size_t shmem_req = 0;
-    ident_t group_sum = NULL;
+    ident_t group_sum = NULL_IDENT;
 
     const struct pl_glsl_version glsl = sh_glsl(sh);
     if (glsl.subgroup_size < 8*8) {
         group_sum = sh_fresh(sh, "group_sum");
         shmem_req += sizeof(int);
-        GLSLH("shared int %s; \n", group_sum);
-        GLSL("%s = 0; barrier(); \n", group_sum);
+        GLSLH("shared int "$"; \n", group_sum);
+        GLSL($" = 0; barrier(); \n", group_sum);
     }
 
     if (!sh_try_compute(sh, 8, 8, false, shmem_req)) {
@@ -188,7 +188,8 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
         },
     });
 
-    GLSL("color = vec4(%s) * texelFetch(%s, ivec2(gl_GlobalInvocationID), 0); \n",
+    GLSL("ivec2 pos = ivec2(gl_GlobalInvocationID);     \n"
+         "color = vec4("$") * texelFetch("$", pos, 0);  \n",
          SH_FLOAT(pl_color_repr_normalize(params->repr)), tex);
 
     const struct pl_h274_grain_data *data = &params->data.params.h274;
@@ -198,7 +199,7 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
     });
 
     // pcg3d (http://www.jcgt.org/published/0009/03/02/)
-    GLSL("uvec3 pcg = uvec3(%s, gl_WorkGroupID.xy / 2u);    \n"
+    GLSL("uvec3 pcg = uvec3("$", gl_WorkGroupID.xy / 2u);   \n"
          "pcg = pcg * 1664525u + 1013904223u;               \n"
          "pcg.x += pcg.y * pcg.z;                           \n"
          "pcg.y += pcg.z * pcg.x;                           \n"
@@ -230,15 +231,15 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
 
             if (glsl.subgroup_size < 8*8) {
                 GLSL("if (subgroupElect())                  \n"
-                     "    atomicAdd(%s, int(avg * %d.0));   \n"
+                     "    atomicAdd("$", int(avg * %d.0));  \n"
                      "barrier();                            \n"
-                     "avg = float(%s) / %d.0;               \n",
+                     "avg = float("$") / %d.0;              \n",
                      group_sum, precision, group_sum, precision);
             }
         } else {
-            GLSL("atomicAdd(%s, int(avg * %d.0));   \n"
+            GLSL("atomicAdd("$", int(avg * %d.0));  \n"
                  "barrier();                        \n"
-                 "avg = float(%s) / %d.0;           \n",
+                 "avg = float("$") / %d.0;          \n",
                  group_sum, precision, group_sum, precision);
         }
 
@@ -275,26 +276,26 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
                 },
             });
 
-            GLSL("if (avg >= %s.x && avg <= %s.y)   \n"
-                 "    val = %s; else                \n",
+            GLSL("if (avg >= "$".x && avg <= "$".y) \n"
+                 "    val = "$"; else               \n",
                  bounds, bounds, values);
         }
         GLSL("    val = 0u; \n");
 
         // Extract the grain parameters from comp_model_value
-        GLSL("uvec2 offset = uvec2((val & 0xFF00u) >> 2,\n"
-             "                     (val & 0xFFu) << 6); \n"
-             "float scale = %s * float(int(val >> 16)); \n"
+        GLSL("uvec2 offset = uvec2((val & 0xFF00u) >> 2,    \n"
+             "                     (val & 0xFFu) << 6);     \n"
+             "float scale = "$" * float(int(val >> 16));    \n"
              // Add randomness
-             "uint rand = pcg[%d];                      \n"
-             "offset.y += (rand >> 16u) %% 52u;         \n"
-             "offset.x += (rand & 0xFFFFu) %% 56u;      \n"
-             "if ((rand & 1u) == 1u) scale = -scale;    \n"
+             "uint rand = pcg[%d];                          \n"
+             "offset.y += (rand >> 16u) %% 52u;             \n"
+             "offset.x += (rand & 0xFFFFu) %% 56u;          \n"
+             "if ((rand & 1u) == 1u) scale = -scale;        \n"
              // Add local offset and compute grain
-             "offset += 8u * (gl_WorkGroupID.xy %% 2u); \n"
-             "offset += gl_LocalInvocationID.xy;        \n"
-             "float grain = %s(offset);                 \n"
-             "color[%d] += scale * grain;               \n",
+             "offset += 8u * (gl_WorkGroupID.xy %% 2u);     \n"
+             "offset += gl_LocalInvocationID.xy;            \n"
+             "float grain = "$"(offset);                    \n"
+             "color[%d] += scale * grain;                   \n",
              scale_factor, c, db, c);
 
         // TODO: Deblocking?
