@@ -271,8 +271,7 @@ done: ;
         }
 
         // Mix in the correct ratio corresponding to the offset and bias
-        GLSL("color = mix(low, high, %s(greaterThan(offset, vec4(bias)))); \n",
-             sh_bvec(sh, 4));
+        GLSL("color = mix(low, high, greaterThan(offset, vec4(bias))); \n");
     } else {
         // Approximate each gamma segment as a straight line, this simplifies
         // the process of dithering down to a single scale and (biased) round.

@@ -219,7 +219,6 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
          fn, tex, pos, pt, swiz,
          sh_float_type(num_comps));
 
-    const char *bvec = sh_bvec(sh, num_comps);
     ident_t prng = sh_prng(sh, true, NULL);
     GLSL("T avg, diff, bound;   \n"
          "T res = color.%s;     \n"
@@ -251,9 +250,9 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
                  threshold, i);
 
             if (num_comps > 1) {
-                GLSL("res = mix(avg, res, %s(greaterThan(diff, bound))); \n", bvec);
+                GLSL("res = mix(avg, res, greaterThan(diff, bound)); \n");
             } else {
-                GLSL("res = mix(avg, res, %s(diff > bound)); \n", bvec);
+                GLSL("res = mix(avg, res, diff > bound); \n");
             }
         }
     }

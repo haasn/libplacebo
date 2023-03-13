@@ -2161,9 +2161,9 @@ static bool pass_output_target(struct pass_state *pass)
                   SH_FLOAT(color[0][0]), SH_FLOAT(color[0][1]), SH_FLOAT(color[0][2]));
             GLSLH("#define bg_tile_b vec3(%s, %s, %s) \n",
                   SH_FLOAT(color[1][0]), SH_FLOAT(color[1][1]), SH_FLOAT(color[1][2]));
-            GLSL("%s tile = lessThan(fract(gl_FragCoord.xy * %s), vec2(0.5));   \n"
-                 "vec3 bg_color = tile.x == tile.y ? bg_tile_a : bg_tile_b;     \n",
-                 sh_bvec(sh, 2), SH_FLOAT(1.0 / size));
+            GLSL("bvec2 tile = lessThan(fract(gl_FragCoord.xy * %s), vec2(0.5));    \n"
+                 "vec3 bg_color = tile.x == tile.y ? bg_tile_a : bg_tile_b;         \n",
+                 SH_FLOAT(1.0 / size));
         } else {
             GLSLH("#define bg_color vec3(%s, %s, %s) \n",
                   SH_FLOAT(params->background_color[0]),

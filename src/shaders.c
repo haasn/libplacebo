@@ -866,23 +866,3 @@ ident_t sh_prng(pl_shader sh, bool temporal, ident_t *p_state)
     GLSLH("#define %s (%s(%s))\n", res, randfun, state);
     return res;
 }
-
-const char *sh_bvec(const pl_shader sh, int dims)
-{
-    static const char *bvecs[] = {
-        [1] = "bool",
-        [2] = "bvec2",
-        [3] = "bvec3",
-        [4] = "bvec4",
-    };
-
-    static const char *vecs[] = {
-        [1] = "float",
-        [2] = "vec2",
-        [3] = "vec3",
-        [4] = "vec4",
-    };
-
-    pl_assert(dims > 0 && dims < PL_ARRAY_SIZE(bvecs));
-    return sh_glsl(sh).version >= 130 ? bvecs[dims] : vecs[dims];
-}

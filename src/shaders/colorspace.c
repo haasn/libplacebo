@@ -349,12 +349,11 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
         // as per the BT.2020 specification, table 4. This is a non-linear
         // transformation because (constant) luminance receives non-equal
         // contributions from the three different channels.
-        GLSL("// constant luminance conversion                                  \n"
-             "color.br = color.br * mix(vec2(1.5816, 0.9936),                   \n"
-             "                          vec2(1.9404, 1.7184),                   \n"
-             "                          %s(lessThanEqual(color.br, vec2(0.0)))) \n"
-             "           + color.gg;                                            \n",
-             sh_bvec(sh, 2));
+        GLSL("// constant luminance conversion                              \n"
+             "color.br = color.br * mix(vec2(1.5816, 0.9936),               \n"
+             "                          vec2(1.9404, 1.7184),               \n"
+             "                          lessThanEqual(color.br, vec2(0.0))) \n"
+             "           + color.gg;                                        \n");
         // Expand channels to camera-linear light. This shader currently just
         // assumes everything uses the BT.2020 12-bit gamma function, since the
         // difference between 10 and 12-bit is negligible for anything other
@@ -362,15 +361,13 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
         GLSL("vec3 lin = mix(color.rgb * vec3(1.0/4.5),                        \n"
              "                pow((color.rgb + vec3(0.0993))*vec3(1.0/1.0993), \n"
              "                    vec3(1.0/0.45)),                             \n"
-             "                %s(lessThanEqual(vec3(0.08145), color.rgb)));    \n",
-             sh_bvec(sh, 3));
+             "                lessThanEqual(vec3(0.08145), color.rgb));        \n");
         // Calculate the green channel from the expanded RYcB, and recompress to G'
         // The BT.2020 specification says Yc = 0.2627*R + 0.6780*G + 0.0593*B
         GLSL("color.g = (lin.g - 0.2627*lin.r - 0.0593*lin.b)*1.0/0.6780;   \n"
              "color.g = mix(color.g * 4.5,                                  \n"
              "              1.0993 * pow(color.g, 0.45) - 0.0993,           \n"
-             "              %s(0.0181 <= color.g));                         \n",
-             sh_bvec(sh, 1));
+             "              0.0181 <= color.g);                             \n");
         break;
 
     case PL_COLOR_SYSTEM_BT_2100_PQ:;
@@ -412,15 +409,15 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
         GLSL("color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,         \n"
              "                exp((color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
              "                    + vec3(%f),                            \n"
-             "                %s(lessThan(vec3(0.5), color.rgb)));       \n",
-             HLG_C, HLG_A, HLG_B, sh_bvec(sh, 3));
+             "                lessThan(vec3(0.5), color.rgb));           \n",
+             HLG_C, HLG_A, HLG_B);
         // LMS matrix
         GLSL("color.rgb = %s * color.rgb; \n", bt2100_lms2rgb);
         // HLG OETF
         GLSL("color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                     \n"
              "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f), \n"
-             "                %s(lessThan(vec3(1.0), color.rgb)));             \n",
-             HLG_A, HLG_B, HLG_C, sh_bvec(sh, 3));
+             "                lessThan(vec3(1.0), color.rgb));                 \n",
+             HLG_A, HLG_B, HLG_C);
         break;
 
     case PL_COLOR_SYSTEM_DOLBYVISION:;
@@ -505,22 +502,19 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
         GLSL("vec3 lin = mix(color.rgb * vec3(1.0/4.5),                        \n"
              "                pow((color.rgb + vec3(0.0993))*vec3(1.0/1.0993), \n"
              "                    vec3(1.0/0.45)),                             \n"
-             "                %s(lessThanEqual(vec3(0.08145), color.rgb)));    \n",
-             sh_bvec(sh, 3));
+             "                lessThanEqual(vec3(0.08145), color.rgb));        \n");
 
         // Compute Yc from RGB and compress to R'Y'cB'
         GLSL("color.g = dot(vec3(0.2627, 0.6780, 0.0593), lin);     \n"
              "color.g = mix(color.g * 4.5,                          \n"
              "              1.0993 * pow(color.g, 0.45) - 0.0993,   \n"
-             "              %s(0.0181 <= color.g));                 \n",
-             sh_bvec(sh, 1));
+             "              0.0181 <= color.g);                     \n");
 
         // Compute C'bc and C'rc into color.br
-        GLSL("color.br = color.br - color.gg;                           \n"
-             "color.br *= mix(vec2(1.0/1.5816, 1.0/0.9936),             \n"
-             "                vec2(1.0/1.9404, 1.0/1.7184),             \n"
-             "                %s(lessThanEqual(color.br, vec2(0.0))));  \n",
-             sh_bvec(sh, 2));
+        GLSL("color.br = color.br - color.gg;                       \n"
+             "color.br *= mix(vec2(1.0/1.5816, 1.0/0.9936),         \n"
+             "                vec2(1.0/1.9404, 1.0/1.7184),         \n"
+             "                lessThanEqual(color.br, vec2(0.0)));  \n");
         break;
 
     case PL_COLOR_SYSTEM_BT_2100_PQ:;
@@ -547,13 +541,13 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
         GLSL("color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,         \n"
              "                exp((color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
              "                    + vec3(%f),                            \n"
-             "                %s(lessThan(vec3(0.5), color.rgb)));       \n",
-             HLG_C, HLG_A, HLG_B, sh_bvec(sh, 3));
+             "                lessThan(vec3(0.5), color.rgb));           \n",
+             HLG_C, HLG_A, HLG_B);
         GLSL("color.rgb = %s * color.rgb; \n", bt2100_rgb2lms);
         GLSL("color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                     \n"
              "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f), \n"
-             "                %s(lessThan(vec3(1.0), color.rgb)));             \n",
-             HLG_A, HLG_B, HLG_C, sh_bvec(sh, 3));
+             "                lessThan(vec3(1.0), color.rgb));                 \n",
+             HLG_A, HLG_B, HLG_C);
         break;
 
     case PL_COLOR_SYSTEM_DOLBYVISION:
@@ -661,8 +655,7 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
         GLSL("color.rgb = mix(color.rgb * vec3(1.0/12.92),               \n"
              "                pow((color.rgb + vec3(0.055))/vec3(1.055), \n"
              "                    vec3(2.4)),                            \n"
-             "                %s(lessThan(vec3(0.04045), color.rgb)));   \n",
-             sh_bvec(sh, 3));
+             "                lessThan(vec3(0.04045), color.rgb));       \n");
         goto scale_out;
     case PL_COLOR_TRC_BT_1886: {
         const float lb = powf(csp_min, 1/2.4f);
@@ -695,8 +688,7 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
     case PL_COLOR_TRC_PRO_PHOTO:
         GLSL("color.rgb = mix(color.rgb * vec3(1.0/16.0),              \n"
              "                pow(color.rgb, vec3(1.8)),               \n"
-             "                %s(lessThan(vec3(0.03125), color.rgb))); \n",
-             sh_bvec(sh, 3));
+             "                lessThan(vec3(0.03125), color.rgb));     \n");
         goto scale_out;
     case PL_COLOR_TRC_ST428:
         GLSL("color.rgb = vec3(52.37/48.0) * pow(color.rgb, vec3(2.6));\n");
@@ -719,9 +711,9 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
              "color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,         \n"
              "                exp((color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
              "                    + vec3(%f),                            \n"
-             "                %s(lessThan(vec3(0.5), color.rgb)));       \n",
+             "                lessThan(vec3(0.5), color.rgb));           \n",
              SH_FLOAT(1 - b), SH_FLOAT(b),
-             HLG_C, HLG_A, HLG_B, sh_bvec(sh, 3));
+             HLG_C, HLG_A, HLG_B);
         // OOTF
         GLSL("color.rgb *= 1.0 / 12.0;                                   \n"
              "color.rgb *= %s * pow(max(dot(%s, color.rgb), 0.0), %s);   \n",
@@ -734,8 +726,8 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
         GLSL("color.rgb = mix((color.rgb - vec3(0.125)) * vec3(1.0/5.6), \n"
              "    pow(vec3(10.0), (color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
              "              - vec3(%f),                                  \n"
-             "    %s(lessThanEqual(vec3(0.181), color.rgb)));            \n",
-             VLOG_D, VLOG_C, VLOG_B, sh_bvec(sh, 3));
+             "    lessThanEqual(vec3(0.181), color.rgb));                \n",
+             VLOG_D, VLOG_C, VLOG_B);
         return;
     case PL_COLOR_TRC_S_LOG1:
         GLSL("color.rgb = pow(vec3(10.0), (color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
@@ -746,9 +738,8 @@ void pl_shader_linearize(pl_shader sh, const struct pl_color_space *csp)
         GLSL("color.rgb = mix((color.rgb - vec3(%f)) * vec3(1.0/%f),      \n"
              "    (pow(vec3(10.0), (color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
              "              - vec3(%f)) * vec3(1.0/%f),                   \n"
-             "    %s(lessThanEqual(vec3(%f), color.rgb)));                \n",
-             SLOG_Q, SLOG_P, SLOG_C, SLOG_A, SLOG_B, SLOG_K2, sh_bvec(sh, 3),
-             SLOG_Q);
+             "    lessThanEqual(vec3(%f), color.rgb));                    \n",
+             SLOG_Q, SLOG_P, SLOG_C, SLOG_A, SLOG_B, SLOG_K2, SLOG_Q);
         return;
     case PL_COLOR_TRC_LINEAR:
     case PL_COLOR_TRC_COUNT:
@@ -818,8 +809,7 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         GLSL("color.rgb = mix(color.rgb * vec3(12.92),                        \n"
              "                vec3(1.055) * pow(color.rgb, vec3(1.0/2.4))     \n"
              "                    - vec3(0.055),                              \n"
-             "                %s(lessThanEqual(vec3(0.0031308), color.rgb))); \n",
-             sh_bvec(sh, 3));
+             "                lessThanEqual(vec3(0.0031308), color.rgb));     \n");
         return;
     case PL_COLOR_TRC_BT_1886: {
         const float lb = powf(csp_min, 1/2.4f);
@@ -855,8 +845,7 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
     case PL_COLOR_TRC_PRO_PHOTO:
         GLSL("color.rgb = mix(color.rgb * vec3(16.0),                        \n"
              "                pow(color.rgb, vec3(1.0/1.8)),                 \n"
-             "                %s(lessThanEqual(vec3(0.001953), color.rgb))); \n",
-             sh_bvec(sh, 3));
+             "                lessThanEqual(vec3(0.001953), color.rgb));     \n");
         return;
     case PL_COLOR_TRC_PQ:
         GLSL("color.rgb *= vec3(1.0/%f);                         \n"
@@ -878,9 +867,9 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         // OETF
         GLSL("color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                     \n"
              "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f), \n"
-             "                %s(lessThan(vec3(1.0), color.rgb)));             \n"
+             "                lessThan(vec3(1.0), color.rgb));                 \n"
              "color.rgb = %s * color.rgb + vec3(%s);                           \n",
-             HLG_A, HLG_B, HLG_C, sh_bvec(sh, 3),
+             HLG_A, HLG_B, HLG_C,
              SH_FLOAT(1 / (1 - b)), SH_FLOAT(-b / (1 - b)));
         return;
     }
@@ -888,8 +877,8 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         GLSL("color.rgb = mix(vec3(5.6) * color.rgb + vec3(0.125),       \n"
              "                vec3(%f) * log(color.rgb + vec3(%f))       \n"
              "                    + vec3(%f),                            \n"
-             "                %s(lessThanEqual(vec3(0.01), color.rgb))); \n",
-             VLOG_C / M_LN10, VLOG_B, VLOG_D, sh_bvec(sh, 3));
+             "                lessThanEqual(vec3(0.01), color.rgb));     \n",
+             VLOG_C / M_LN10, VLOG_B, VLOG_D);
         return;
     case PL_COLOR_TRC_S_LOG1:
         GLSL("color.rgb = vec3(%f) * log(color.rgb + vec3(%f)) + vec3(%f);\n",
@@ -899,9 +888,8 @@ void pl_shader_delinearize(pl_shader sh, const struct pl_color_space *csp)
         GLSL("color.rgb = mix(vec3(%f) * color.rgb + vec3(%f),                \n"
              "                vec3(%f) * log(vec3(%f) * color.rgb + vec3(%f)) \n"
              "                    + vec3(%f),                                 \n"
-             "                %s(lessThanEqual(vec3(0.0), color.rgb)));       \n",
-             SLOG_P, SLOG_Q, SLOG_A / M_LN10, SLOG_K2, SLOG_B, SLOG_C,
-             sh_bvec(sh, 3));
+             "                lessThanEqual(vec3(0.0), color.rgb));           \n",
+             SLOG_P, SLOG_Q, SLOG_A / M_LN10, SLOG_K2, SLOG_B, SLOG_C);
         return;
     case PL_COLOR_TRC_LINEAR:
     case PL_COLOR_TRC_COUNT:
