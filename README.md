@@ -246,10 +246,6 @@ Please open an issue if you have a use case for a BSD2-licensed libplacebo.
 
 ## Installing
 
-### Gentoo
-
-An ebuild is available as `media-libs/libplacebo` in the gentoo repository.
-
 ### Obtaining
 
 When cloning libplacebo, make sure to provide the `--recursive``` flag:
