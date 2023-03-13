@@ -1,13 +1,13 @@
 vulkan_build = get_option('vulkan')
 vulkan_link = get_option('vk-proc-addr')
-vulkan_loader = dependency('vulkan', version: '>=1.2.0', required: vulkan_link)
+vulkan_loader = dependency('vulkan', version: '>=1.3.0', required: vulkan_link)
 vulkan_headers = disabler()
 registry_xml = get_option('vulkan-registry')
 
 if vulkan_loader.found()
   vulkan_headers = vulkan_loader.partial_dependency(includes: true, compile_args: true)
 # Probe for <vulkan/vulkan.h> as a fallback for the vulkan headers
-elif cc.has_header_symbol('vulkan/vulkan_core.h', 'VK_VERSION_1_2')
+elif cc.has_header_symbol('vulkan/vulkan_core.h', 'VK_VERSION_1_3')
   vulkan_headers = declare_dependency()
 elif fs.is_dir(thirdparty/'Vulkan-Headers/include')
   vulkan_inc = include_directories('../../3rdparty/Vulkan-Headers/include')
