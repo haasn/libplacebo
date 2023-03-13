@@ -138,6 +138,15 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
         }
     }
 
+    static const int glsl_ver_req = 130;
+    if (glsl->version < glsl_ver_req) {
+        PL_FATAL(gpu, "GLSL version too old (%d < %d), please use a newer "
+                 "OpenGL implementation or downgrade libplacebo!",
+                 glsl->version, glsl_ver_req);
+        goto error;
+    }
+
+
     if (gl_test_ext(gpu, "GL_ARB_compute_shader", 43, 0)) {
         glsl->compute = true;
         get(GL_MAX_COMPUTE_SHARED_MEMORY_SIZE, &glsl->max_shmem_size);

@@ -49,7 +49,7 @@ libplacebo currently supports Vulkan (including MoltenVK), OpenGL, and
 Direct3D 11. It currently has the following minimum hardware requirements:
 
 - **Vulkan**: Core version 1.1 + timeline semaphores
-- **OpenGL**: GLSL version >= 110 (GL >= 2.0, GL ES >= 2.0)
+- **OpenGL**: GLSL version >= 130 (GL >= 3.0, GL ES >= 3.0)
 - **Direct3D**: Feature level >= 9_1
 
 For more documentation, including an introduction to the API, see [the project

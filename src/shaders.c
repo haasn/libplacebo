@@ -24,6 +24,13 @@
 
 pl_shader pl_shader_alloc(pl_log log, const struct pl_shader_params *params)
 {
+    static const int glsl_ver_req = 130;
+    if (params && params->glsl.version && params->glsl.version < 130) {
+        pl_err(log, "Requested GLSL version %d too low (required: %d)",
+               params->glsl.version, glsl_ver_req);
+        return NULL;
+    }
+
     pl_shader sh = pl_alloc_ptr(NULL, sh);
     *sh = (struct pl_shader_t) {
         .log = log,

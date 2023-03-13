@@ -200,6 +200,14 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
         goto error;
     }
 
+    static const int gl_ver_req = 3;
+    if (pl_gl->major < gl_ver_req) {
+        PL_FATAL(p, "OpenGL version too old (%d < %d), please use a newer "
+                 "OpenGL implementation or downgrade libplacebo!",
+                 pl_gl->major, gl_ver_req);
+        goto error;
+    }
+
     PL_INFO(p, "Detected OpenGL version strings:");
     PL_INFO(p, "    GL_VERSION:  %s", version);
     PL_INFO(p, "    GL_VENDOR:   %s", (char *) gl->GetString(GL_VENDOR));
@@ -293,7 +301,7 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
         goto error;
 
     // Restrict version
-    if (params->max_glsl_version) {
+    if (params->max_glsl_version && params->max_glsl_version >= 130) {
         struct pl_glsl_version *glsl = (struct pl_glsl_version *) &pl_gl->gpu->glsl;
         glsl->version = PL_MIN(glsl->version, params->max_glsl_version);
         PL_INFO(p, "Restricting GLSL version to %d... new version is %d",
