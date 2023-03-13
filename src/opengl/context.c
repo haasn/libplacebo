@@ -155,9 +155,9 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     }
 
     if (!ok) {
-        PL_INFO(p, "Failed loading core GL, retrying as GLES2...");
+        PL_INFO(p, "Failed loading core GL, retrying as GLES...");
     } else if (gl_is_gles(pl_gl)) {
-        PL_INFO(p, "GL context seems to be OpenGL ES, reloading as GLES2...");
+        PL_INFO(p, "GL context seems to be OpenGL ES, reloading as GLES...");
         ok = false;
     }
 
