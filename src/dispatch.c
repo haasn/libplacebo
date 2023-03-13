@@ -619,9 +619,9 @@ static void generate_shaders(pl_dispatch dp,
                 pl_assert(va->fmt->num_components == 2);
                 ADD(vert_body, "vec2 va_pos = %s; \n", va->name);
                 if (params->out_mat)
-                    ADD(vert_body, "va_pos = %s * va_pos; \n", params->out_mat);
+                    ADD(vert_body, "va_pos = "$" * va_pos; \n", params->out_mat);
                 if (params->out_off)
-                    ADD(vert_body, "va_pos += %s; \n", params->out_off);
+                    ADD(vert_body, "va_pos += "$"; \n", params->out_off);
                 ADD(vert_body, "gl_Position = vec4(va_pos, 0.0, 1.0); \n");
             } else {
                 // Everything else is just blindly passed through
@@ -1018,8 +1018,8 @@ static void compute_vertex_attribs(pl_dispatch dp, pl_shader sh,
         .dynamic = true,
     });
 
-    GLSLP("#define frag_pos(id) (vec2(id) + vec2(0.5)) \n"
-          "#define frag_map(id) (%s * frag_pos(id))    \n"
+    GLSLP("#define frag_pos(id) (vec2(id) + vec2(0.5))  \n"
+          "#define frag_map(id) ("$" * frag_pos(id))    \n"
           "#define gl_FragCoord vec4(frag_pos(gl_GlobalInvocationID), 0.0, 1.0) \n",
           *out_scale);
 
@@ -1034,10 +1034,10 @@ static void compute_vertex_attribs(pl_dispatch dp, pl_shader sh,
         }
 
         GLSLP("#define %s_map(id) "
-             "(mix(mix(%s, %s, frag_map(id).x), "
-             "     mix(%s, %s, frag_map(id).x), "
-             "frag_map(id).y))\n"
-             "#define %s (%s_map(gl_GlobalInvocationID))\n",
+             "(mix(mix("$", "$", frag_map(id).x), "
+             "     mix("$", "$", frag_map(id).x), "
+             "frag_map(id).y)) \n"
+             "#define %s (%s_map(gl_GlobalInvocationID)) \n",
              sva->attr.name,
              points[0], points[1], points[2], points[3],
              sva->attr.name, sva->attr.name);
@@ -1082,11 +1082,11 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
     int dx = rc->x0 > rc->x1 ? -1 : 1, dy = rc->y0 > rc->y1 ? -1 : 1;
     const char *swiz = sh->transpose ? "yx" : "xy";
     GLSL("ivec2 dir = ivec2(%d, %d);\n", dx, dy); // hard-code, not worth var
-    GLSL("ivec2 pos = %s + dir * ivec2(gl_GlobalInvocationID).%s;\n", base, swiz);
-    GLSL("vec2 fpos = %s * vec2(gl_GlobalInvocationID);\n", out_scale);
+    GLSL("ivec2 pos = "$" + dir * ivec2(gl_GlobalInvocationID).%s;\n", base, swiz);
+    GLSL("vec2 fpos = "$" * vec2(gl_GlobalInvocationID);\n", out_scale);
     GLSL("if (fpos.x < 1.0 && fpos.y < 1.0) {\n");
     if (params->blend_params) {
-        GLSL("vec4 orig = imageLoad(%s, pos);\n", fbo);
+        GLSL("vec4 orig = imageLoad("$", pos);\n", fbo);
 
         static const char *modes[] = {
             [PL_BLEND_ZERO] = "0.0",
@@ -1102,7 +1102,7 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
              modes[params->blend_params->dst_rgb],
              modes[params->blend_params->dst_alpha]);
     }
-    GLSL("imageStore(%s, pos, color);\n", fbo);
+    GLSL("imageStore("$", pos, color);\n", fbo);
     GLSL("}\n");
     sh->res.output = PL_SHADER_SIG_NONE;
 }
