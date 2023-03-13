@@ -131,7 +131,7 @@ void pl_shader_dither(pl_shader sh, int new_depth,
     }
 
     enum pl_dither_method method = params->method;
-    ident_t lut = NULL;
+    ident_t lut = NULL_IDENT;
     int lut_size = 0;
 
     if (dither_method_is_lut(method)) {
@@ -182,7 +182,7 @@ done: ;
 
     if (size) {
         // Transform the screen position to the cyclic range [0,1)
-        GLSL("vec2 pos = fract(gl_FragCoord.xy * 1.0/%s);\n", SH_FLOAT(size));
+        GLSL("vec2 pos = fract(gl_FragCoord.xy * 1.0/"$"); \n", SH_FLOAT(size));
 
         if (params->temporal) {
             int phase = SH_PARAMS(sh).index % 8;
@@ -198,14 +198,14 @@ done: ;
                 .data = &mat[0][0],
                 .dynamic = true,
             });
-            GLSL("pos = fract(%s * pos + vec2(1.0));\n", rot);
+            GLSL("pos = fract("$" * pos + vec2(1.0));\n", rot);
         }
     }
 
     switch (method) {
     case PL_DITHER_WHITE_NOISE: {
         ident_t prng = sh_prng(sh, params->temporal, NULL);
-        GLSL("bias = %s.x;\n", prng);
+        GLSL("bias = "$".x;\n", prng);
         break;
     }
 
@@ -229,7 +229,7 @@ done: ;
     case PL_DITHER_BLUE_NOISE:
     case PL_DITHER_ORDERED_LUT:
         pl_assert(lut);
-        GLSL("bias = %s(ivec2(pos * %s));\n", lut, SH_FLOAT(lut_size));
+        GLSL("bias = "$"(ivec2(pos * "$"));\n", lut, SH_FLOAT(lut_size));
         break;
 
     case PL_DITHER_METHOD_COUNT:
@@ -241,7 +241,7 @@ done: ;
 
     const float gamma = approx_gamma(params->transfer);
     if (gamma != 1.0f && new_depth <= 4) {
-        GLSL("const float gamma = %s;                   \n"
+        GLSL("const float gamma = "$";                  \n"
              "vec4 color_lin = pow(color, vec4(gamma)); \n",
              SH_FLOAT(gamma));
 
@@ -406,31 +406,31 @@ bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_par
                  kernel->name, params->new_depth);
 
     // Defines the ring buffer in shared memory.
-    GLSLH("shared uint err_rgb8[%s]; \n", ring_buffer_size);
+    GLSLH("shared uint err_rgb8["$"]; \n", ring_buffer_size);
     GLSL("// pl_shader_error_diffusion                                          \n"
          // Safeguard against accidental over-execution
          "if (gl_WorkGroupID != uvec3(0))                                       \n"
          "    return;                                                           \n"
          // Initialize the ring buffer.
-         "for (uint i = gl_LocalInvocationIndex; i < %s; i+=gl_WorkGroupSize.x) \n"
+         "for (uint i = gl_LocalInvocationIndex; i < "$"; i+=gl_WorkGroupSize.x)\n"
          "    err_rgb8[i] = 0u;                                                 \n"
 
         // Main block loop, add barrier here to have previous block all
         // processed before starting the processing of the next.
-         "for (uint block_id = 0; block_id < %s; block_id++) {                  \n"
+         "for (uint block_id = 0; block_id < "$"; block_id++) {                 \n"
          "barrier();                                                            \n"
         // Compute the coordinate of the pixel we are currently processing,
         // both before and after the shift mapping.
          "uint id = block_id * gl_WorkGroupSize.x + gl_LocalInvocationIndex;    \n"
-         "const uint height = %s;                                               \n"
+         "const uint height = "$";                                              \n"
          "int y = int(id %% height), x_shifted = int(id / height);              \n"
          "int x = x_shifted - y * %d;                                           \n"
          // Proceed only if we are processing a valid pixel.
-         "if (x >= 0 && x < %s) {                                               \n"
+         "if (x >= 0 && x < "$") {                                              \n"
          // The index that the current pixel have on the ring buffer.
-         "uint idx = uint(x_shifted * %s + y) %% %s;                            \n"
+         "uint idx = uint(x_shifted * "$" + y) %% "$";                          \n"
          // Fetch the current pixel.
-         "vec4 pix_orig = texelFetch(%s, ivec2(x, y), 0);                       \n"
+         "vec4 pix_orig = texelFetch("$", ivec2(x, y), 0);                      \n"
          "vec3 pix = pix_orig.rgb;                                              \n",
          ring_buffer_size,
          SH_UINT(blocks),
@@ -477,7 +477,7 @@ bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_par
          "err_rgb8[idx] = 0u;                                                   \n"
          // Write the dithered pixel.
          "vec3 dithered = round(pix);                                           \n"
-         "imageStore(%s, ivec2(x, y), vec4(dithered / %d.0, pix_orig.a));       \n"
+         "imageStore("$", ivec2(x, y), vec4(dithered / %d.0, pix_orig.a));      \n"
          // Prepare for error propagation pass
          "vec3 err_divided = (pix - dithered) * %d.0 / %d.0;                    \n"
          "ivec3 tmp;                                                            \n",
@@ -519,7 +519,7 @@ bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_par
                 // Calculate the new position in the ring buffer to propagate
                 // the error into.
                 int ring_buffer_delta = shifted_x * ring_buffer_rows + y;
-                GLSL("atomicAdd(err_rgb8[(idx + %du) %% %s], err_u32); \n",
+                GLSL("atomicAdd(err_rgb8[(idx + %du) %% "$"], err_u32); \n",
                      ring_buffer_delta, ring_buffer_size);
             }
         }
