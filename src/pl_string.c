@@ -359,6 +359,11 @@ void pl_str_builder_vprintf_c(pl_str_builder b, const char *fmt, va_list ap)
         case 'd': WRITE(int,        va_arg(ap, int)); break;
         case 'u': WRITE(unsigned,   va_arg(ap, unsigned)); break;
         case 'f': WRITE(double,     va_arg(ap, double)); break;
+        case 'h':
+            assert(c[1] == 'x');
+            WRITE(unsigned short, va_arg(ap, unsigned));
+            c++;
+            break;
         case 'l':
             assert(c[1] == 'l');
             switch (c[2]) {

@@ -19,6 +19,7 @@
 
 #include "common.h"
 
+static int print_hex(char *buf, unsigned int x);
 static int ccStrPrintInt32( char *str, int32_t n );
 static int ccStrPrintUint32( char *str, uint32_t n );
 static int ccStrPrintInt64( char *str, int64_t n );
@@ -71,6 +72,11 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
             break;
         case 'd':
             len = ccStrPrintInt32(buf, va_arg(ap, int));
+            break;
+        case 'h': ; // only used for %hx
+            assert(c[1] == 'x');
+            len = print_hex(buf, va_arg(ap, unsigned int));
+            c++;
             break;
         case 'u':
             len = ccStrPrintUint32(buf, va_arg(ap, unsigned int));
@@ -154,6 +160,13 @@ size_t pl_str_append_memprintf_c(void *alloc, pl_str *str, const char *fmt,
             LOAD(d);
             len = ccStrPrintInt32(buf, d);
             break;
+        case 'h': ;
+            assert(c[1] == 'x');
+            unsigned short hx;
+            LOAD(hx);
+            len = print_hex(buf, hx);
+            c++;
+            break;
         case 'u': ;
             unsigned u;
             LOAD(u);
@@ -214,6 +227,33 @@ bool pl_str_parse_int64(pl_str str, int64_t *out)
 bool pl_str_parse_uint64(pl_str str, uint64_t *out)
 {
     return ccSeqParseUint64((char *) str.buf, str.len, out);
+}
+
+static int print_hex(char *buf, unsigned int x)
+{
+    if (!x) {
+        *buf = '0';
+        return 1;
+    }
+
+    static const char *hexdigits = "0123456789abcdef";
+    const int nibbles0 = 8 - (__builtin_clz(x) >> 2);
+    buf -= nibbles0 ;
+
+    switch (nibbles0) {
+    pl_static_assert(sizeof(unsigned int) == sizeof(uint32_t));
+    case 0: buf[0] = hexdigits[(x >> 28) & 0xF]; // fall through
+    case 1: buf[1] = hexdigits[(x >> 24) & 0xF]; // fall through
+    case 2: buf[2] = hexdigits[(x >> 20) & 0xF]; // fall through
+    case 3: buf[3] = hexdigits[(x >> 16) & 0xF]; // fall through
+    case 4: buf[4] = hexdigits[(x >> 12) & 0xF]; // fall through
+    case 5: buf[5] = hexdigits[(x >>  8) & 0xF]; // fall through
+    case 6: buf[6] = hexdigits[(x >>  4) & 0xF]; // fall through
+    case 7: buf[7] = hexdigits[(x >>  0) & 0xF];
+            return 8 - nibbles0;
+    }
+
+    pl_unreachable();
 }
 
 /* *****************************************************************************
