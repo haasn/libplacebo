@@ -156,7 +156,7 @@ int main()
         .get_proc_addr = vkGetInstanceProcAddr,
         .opt_extensions = (const char *[]){
             VK_KHR_SURFACE_EXTENSION_NAME,
-            "VK_EXT_headless_surface", // in case it isn't defined
+            VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME,
         },
         .num_opt_extensions = 2,
     ));
@@ -179,7 +179,6 @@ int main()
 
     VkSurfaceKHR surf = VK_NULL_HANDLE;
 
-#ifdef VK_EXT_headless_surface
     PL_VK_LOAD_FUN(inst->instance, CreateHeadlessSurfaceEXT, inst->get_proc_addr);
     if (CreateHeadlessSurfaceEXT) {
         VkHeadlessSurfaceCreateInfoEXT info = {
@@ -189,7 +188,6 @@ int main()
         VkResult res = CreateHeadlessSurfaceEXT(inst->instance, &info, NULL, &surf);
         REQUIRE_CMP(res, ==, VK_SUCCESS, "u");
     }
-#endif // VK_EXT_headless_surface
 
     // Make sure choosing any device works
     VkPhysicalDevice dev;

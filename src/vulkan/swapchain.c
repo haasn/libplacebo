@@ -69,7 +69,6 @@ static bool map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
         *out = pl_color_space_monitor;
         return true;
 
-#ifdef VK_EXT_swapchain_colorspace
     case VK_COLOR_SPACE_BT709_NONLINEAR_EXT:
         *out = pl_color_space_monitor;
         return true;
@@ -137,7 +136,6 @@ static bool map_color_space(VkColorSpaceKHR space, struct pl_color_space *out)
     case VK_COLOR_SPACE_PASS_THROUGH_EXT:
         *out = pl_color_space_unknown;
         return true;
-#endif
 
 #ifdef VK_AMD_display_native_hdr
     case VK_COLOR_SPACE_DISPLAY_NATIVE_AMD:
