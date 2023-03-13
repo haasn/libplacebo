@@ -251,7 +251,7 @@ void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
 
     static const struct pl_matrix3x3 zero = {0};
     if (memcmp(&lut->shaper_in, &zero, sizeof(zero)) != 0) {
-        GLSL("color.rgb = %s * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
+        GLSL("color.rgb = "$" * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
             .var = pl_var_mat3("shaper_in"),
             .data = PL_TRANSPOSE_3X3(lut->shaper_in.m),
         }));
@@ -260,17 +260,19 @@ void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
     switch (dims) {
     case 1:
         sh_describe(sh, "custom 1DLUT");
-        GLSL("color.rgb = vec3(%s(color.r).r, %s(color.g).g, %s(color.b).b); \n",
+        GLSL("color.rgb = vec3("$"(color.r).r,  \n"
+             "                 "$"(color.g).g,  \n"
+             "                 "$"(color.b).b); \n",
              fun, fun, fun);
         break;
     case 3:
         sh_describe(sh, "custom 3DLUT");
-        GLSL("color.rgb = %s(color.rgb).rgb; \n", fun);
+        GLSL("color.rgb = "$"(color.rgb).rgb; \n", fun);
         break;
     }
 
     if (memcmp(&lut->shaper_out, &zero, sizeof(zero)) != 0) {
-        GLSL("color.rgb = %s * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
+        GLSL("color.rgb = "$" * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
             .var = pl_var_mat3("shaper_out"),
             .data = PL_TRANSPOSE_3X3(lut->shaper_out.m),
         }));
@@ -287,7 +289,8 @@ static ident_t texel_scale(pl_shader sh, int lut_size, bool normalized)
     const float scale = (end - base) / (normalized ? 1.0f : (lut_size - 1));
 
     ident_t name = sh_fresh(sh, "LUT_SCALE");
-    GLSLH("#define %s(x) (%s * (x) + %s) \n", name, SH_FLOAT(scale), SH_FLOAT(base));
+    GLSLH("#define "$"(x) ("$" * (x) + "$") \n",
+          name, SH_FLOAT(scale), SH_FLOAT(base));
     return name;
 }
 
@@ -349,7 +352,7 @@ ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
                                     struct sh_lut_obj, sh_lut_uninit);
 
     if (!lut)
-        return NULL;
+        return NULL_IDENT;
 
     bool update = params->update || lut->signature != params->signature ||
                   vartype != lut->vartype || params->fmt != lut->fmt ||
@@ -357,7 +360,7 @@ ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
                   params->depth != lut->depth || params->comps != lut->comps;
 
     if (lut->error && !update)
-        return NULL; // suppress error spam until something changes
+        return NULL_IDENT; // suppress error spam until something changes
 
     // Try picking the right number of dimensions for the texture LUT. This
     // allows e.g. falling back to 2D textures if 1D textures are unsupported.
@@ -579,7 +582,7 @@ next_dim: ; // `continue` out of the inner loop
 
     // Done updating, generate the GLSL
     ident_t name = sh_fresh(sh, "lut");
-    ident_t arr_name = NULL;
+    ident_t arr_name = NULL_IDENT;
 
     static const char * const swizzles[] = {"x", "xy", "xyz", "xyzw"};
     static const char * const vartypes[PL_VAR_TYPE_COUNT][4] = {
@@ -609,17 +612,17 @@ next_dim: ; // `continue` out of the inner loop
             for (int i = 0; i < dims; i++)
                 pos_macros[i] = texel_scale(sh, sizes[i], method == SH_LUT_LINEAR);
 
-            GLSLH("#define %s(pos) (texture(%s, %s(\\\n",
+            GLSLH("#define "$"(pos) (texture("$", %s(\\\n",
                   name, tex, vartypes[PL_VAR_FLOAT][texdim - 1]);
 
             for (int i = 0; i < texdim; i++) {
                 char sep = i == 0 ? ' ' : ',';
                 if (pos_macros[i]) {
                     if (dims > 1) {
-                        GLSLH("   %c%s(%s(pos).%c)\\\n", sep, pos_macros[i],
+                        GLSLH("   %c"$"(%s(pos).%c)\\\n", sep, pos_macros[i],
                               vartypes[PL_VAR_FLOAT][dims - 1], "xyzw"[i]);
                     } else {
-                        GLSLH("   %c%s(float(pos))\\\n", sep, pos_macros[i]);
+                        GLSLH("   %c"$"(float(pos))\\\n", sep, pos_macros[i]);
                     }
                 } else {
                     GLSLH("   %c%f\\\n", sep, 0.5);
@@ -627,7 +630,7 @@ next_dim: ; // `continue` out of the inner loop
             }
             GLSLH("  )).%s)\n", swizzles[params->comps - 1]);
         } else {
-            GLSLH("#define %s(pos) (texelFetch(%s, %s(pos",
+            GLSLH("#define "$"(pos) (texelFetch("$", %s(pos",
                   name, tex, vartypes[PL_VAR_SINT][texdim - 1]);
 
             // Fill up extra components of the index
@@ -654,7 +657,7 @@ next_dim: ; // `continue` out of the inner loop
 
     case SH_LUT_LITERAL:
         arr_name = sh_fresh(sh, "weights");
-        GLSLH("const %s %s[%d] = %s[](\n  ",
+        GLSLH("const %s "$"[%d] = %s[](\n  ",
               vartypes[vartype][params->comps - 1], arr_name, size,
               vartypes[vartype][params->comps - 1]);
         sh_append_str(sh, SH_BUF_HEADER, lut->str);
@@ -666,7 +669,7 @@ next_dim: ; // `continue` out of the inner loop
     }
 
     if (arr_name) {
-        GLSLH("#define %s(pos) (%s[int((pos)%s)\\\n",
+        GLSLH("#define "$"(pos) ("$"[int((pos)%s)\\\n",
               name, arr_name, dims > 1 ? "[0]" : "");
         int shift = params->width;
         for (int i = 1; i < dims; i++) {
@@ -680,12 +683,12 @@ next_dim: ; // `continue` out of the inner loop
             pl_assert(vartype == PL_VAR_FLOAT);
             ident_t arr_lut = name;
             name = sh_fresh(sh, "lut_lin");
-            GLSLH("%s %s(float fpos) {                              \n"
+            GLSLH("%s "$"(float fpos) {                             \n"
                   "    fpos = clamp(fpos, 0.0, 1.0) * %d.0;         \n"
                   "    float fbase = floor(fpos);                   \n"
                   "    float fceil = ceil(fpos);                    \n"
                   "    float fcoord = fpos - fbase;                 \n"
-                  "    return mix(%s(fbase), %s(fceil), fcoord);    \n"
+                  "    return mix("$"(fbase), "$"(fceil), fcoord);  \n"
                   "}                                                \n",
                   vartypes[PL_VAR_FLOAT][params->comps - 1], name,
                   size - 1,
@@ -696,22 +699,22 @@ next_dim: ; // `continue` out of the inner loop
     if (method == SH_LUT_TETRAHEDRAL) {
         ident_t int_lut = name;
         name = sh_fresh(sh, "lut_barycentric");
-        GLSLH("%s %s(vec3 pos) {                                            \n"
+        GLSLH("%s "$"(vec3 pos) {                                       \n"
               // Compute bounding vertices and fractinoal part
-              "    pos = clamp(pos, 0.0, 1.0) * vec3(%d.0, %d.0, %d.0);     \n"
-              "    vec3 base = floor(pos);                                  \n"
-              "    vec3 fpart = pos - base;                                 \n"
+              "    pos = clamp(pos, 0.0, 1.0) * vec3(%d.0, %d.0, %d.0); \n"
+              "    vec3 base = floor(pos);                              \n"
+              "    vec3 fpart = pos - base;                             \n"
               // v0 and v3 are always 'black' and 'white', respectively
               // v1 and v2 are the closest RGB and CMY vertices, respectively
-              "    ivec3 v0 = ivec3(base), v3 = ivec3(ceil(pos));           \n"
-              "    ivec3 v1 = v0, v2 = v3;                                  \n"
+              "    ivec3 v0 = ivec3(base), v3 = ivec3(ceil(pos));       \n"
+              "    ivec3 v1 = v0, v2 = v3;                              \n"
               // Table of boolean checks to simplify following math
-              "    bvec3 c = greaterThanEqual(fpart.xyz, fpart.yzx);        \n"
-              "    bool c_xy = c.x, c_yx = !c.x,                            \n"
-              "       c_yz = c.y, c_zy = !c.y,                              \n"
-              "       c_zx = c.z, c_xz = !c.z;                              \n"
-              "    vec3 s = fpart.xyz;                                      \n"
-              "    bool cond;                                               \n",
+              "    bvec3 c = greaterThanEqual(fpart.xyz, fpart.yzx);    \n"
+              "    bool c_xy = c.x, c_yx = !c.x,                        \n"
+              "       c_yz = c.y, c_zy = !c.y,                          \n"
+              "       c_zx = c.z, c_xz = !c.z;                          \n"
+              "    vec3 s = fpart.xyz;                                  \n"
+              "    bool cond;                                           \n",
               vartypes[PL_VAR_FLOAT][params->comps - 1], name,
               sizes[0] - 1, sizes[1] - 1, sizes[2] - 1);
 
@@ -734,10 +737,10 @@ next_dim: ; // `continue` out of the inner loop
         }
 
         // Interpolate in barycentric coordinates, with four texel fetches
-        GLSLH("    return (1.0 - s.x) * %s(v0) +    \n"
-              "           (s.x - s.y) * %s(v1) +    \n"
-              "           (s.y - s.z) * %s(v2) +    \n"
-              "           (s.z)       * %s(v3);     \n"
+        GLSLH("    return (1.0 - s.x) * "$"(v0) +   \n"
+              "           (s.x - s.y) * "$"(v1) +   \n"
+              "           (s.y - s.z) * "$"(v2) +   \n"
+              "           (s.z)       * "$"(v3);    \n"
               "}                                    \n",
               int_lut, int_lut, int_lut, int_lut);
     }
@@ -750,5 +753,5 @@ next_dim: ; // `continue` out of the inner loop
 error:
     lut->error = true;
     pl_free(tmp);
-    return NULL;
+    return NULL_IDENT;
 }
