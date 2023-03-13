@@ -267,10 +267,6 @@ static inline bool pl_color_transfer_is_hdr(enum pl_color_transfer trc)
 // display space. See ITU-R Report BT.2408 for more information.
 #define PL_COLOR_SDR_WHITE 203.0f
 
-// Deprecated. For compatibility with older versions of libplacebo.
-#define PL_COLOR_REF_WHITE      PL_COLOR_SDR_WHITE
-#define PL_COLOR_SDR_WHITE_HLG  3.17955
-
 // Represents a single CIE xy coordinate (e.g. CIE Yxy with Y = 1.0)
 struct pl_cie_xy {
     float x, y;
@@ -396,18 +392,6 @@ void pl_hdr_metadata_merge(struct pl_hdr_metadata *orig,
 bool pl_hdr_metadata_contains(const struct pl_hdr_metadata *data,
                               enum pl_hdr_metadata_type type);
 
-// Deprecated. No longer used by libplacebo.
-enum pl_color_light {
-    PL_COLOR_LIGHT_UNKNOWN = 0,
-    PL_COLOR_LIGHT_DISPLAY,     // Display-referred, output as-is
-    PL_COLOR_LIGHT_SCENE_HLG,   // Scene-referred, HLG OOTF
-    PL_COLOR_LIGHT_SCENE_709_1886, // Scene-referred, OOTF = BT.709+1886 interaction
-    PL_COLOR_LIGHT_SCENE_1_2,   // Scene-referred, OOTF = gamma 1.2
-    PL_COLOR_LIGHT_COUNT
-};
-
-PL_DEPRECATED bool pl_color_light_is_scene_referred(enum pl_color_light light);
-
 // Rendering intent for colorspace transformations. These constants match the
 // ICC specification (Table 23)
 enum pl_rendering_intent {
@@ -427,13 +411,6 @@ struct pl_color_space {
 
     // HDR metadata for this color space, if present. (Optional)
     struct pl_hdr_metadata hdr;
-
-    // Deprecated fields (Ignored)
-    enum pl_color_light light PL_DEPRECATED;
-    float sig_peak PL_DEPRECATED;
-    float sig_avg PL_DEPRECATED;
-    float sig_floor PL_DEPRECATED;
-    float sig_scale PL_DEPRECATED;
 };
 
 #define pl_color_space(...) (&(struct pl_color_space) { __VA_ARGS__ })

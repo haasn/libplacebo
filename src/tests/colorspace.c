@@ -229,12 +229,6 @@ int main()
     REQUIRE(pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_V_GAMUT));
     REQUIRE(pl_color_primaries_is_wide_gamut(PL_COLOR_PRIM_S_GAMUT));
 
-    REQUIRE(!pl_color_light_is_scene_referred(PL_COLOR_LIGHT_UNKNOWN));
-    REQUIRE(!pl_color_light_is_scene_referred(PL_COLOR_LIGHT_DISPLAY));
-    REQUIRE(pl_color_light_is_scene_referred(PL_COLOR_LIGHT_SCENE_HLG));
-    REQUIRE(pl_color_light_is_scene_referred(PL_COLOR_LIGHT_SCENE_709_1886));
-    REQUIRE(pl_color_light_is_scene_referred(PL_COLOR_LIGHT_SCENE_1_2));
-
     struct pl_color_space space = pl_color_space_unknown;
     pl_color_space_merge(&space, &pl_color_space_bt709);
     REQUIRE(pl_color_space_equal(&space, &pl_color_space_bt709));

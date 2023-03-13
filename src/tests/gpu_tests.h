@@ -1159,11 +1159,6 @@ static void pl_render_tests(pl_gpu gpu)
     REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     params = pl_render_default_params;
 
-    params.force_icc_lut = true;
-    REQUIRE(pl_render_image(rr, &image, &target, &params));
-    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
-    params = pl_render_default_params;
-
     // Test film grain synthesis
     image.film_grain.type = PL_FILM_GRAIN_AV1;
     image.film_grain.params.av1 = av1_grain_data;

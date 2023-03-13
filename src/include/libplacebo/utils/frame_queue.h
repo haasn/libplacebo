@@ -179,9 +179,6 @@ struct pl_queue_params {
     enum pl_queue_status (*get_frame)(struct pl_source_frame *out_frame,
                                       const struct pl_queue_params *params);
     void *priv;
-
-    // Deprecated fields
-    float frame_duration PL_DEPRECATED; // see `pl_source_frame.duration`
 };
 
 #define pl_queue_params(...) (&(struct pl_queue_params) { __VA_ARGS__ })

@@ -86,8 +86,8 @@ PL_LIBAV_API void pl_frame_from_avframe(struct pl_frame *out_frame, const AVFram
 #define pl_target_from_avframe pl_frame_from_avframe
 
 // Copy extra metadata from an AVStream to a pl_frame. This should be called
-// after `pl_frame_from_avframe` or `pl_upload_avframe` (respectively), and
-// sets metadata associated with stream-level side data. This is needed because
+// after `pl_frame_from_avframe` or `pl_map_avframe` (respectively), and sets
+// metadata associated with stream-level side data. This is needed because
 // FFmpeg rather annoyingly does not propagate stream-level metadata to frames.
 PL_LIBAV_API void pl_frame_copy_stream_props(struct pl_frame *out_frame,
                                              const AVStream *stream);
@@ -126,8 +126,8 @@ PL_LIBAV_API void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
 #endif
 
 // Helper function to test if a pixfmt would be supported by the GPU.
-// Essentially, this can be used to check if `pl_upload_avframe` would work for
-// a given AVPixelFormat, without actually uploading or allocating anything.
+// Essentially, this can be used to check if `pl_map_avframe` would work for a
+// given AVPixelFormat, without actually uploading or allocating anything.
 PL_LIBAV_API bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt);
 
 // Like `pl_frame_from_avframe`, but the texture pointers are also initialized
@@ -175,15 +175,6 @@ PL_LIBAV_API void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame);
 // Backwards compatibility with previous versions of this API.
 PL_LIBAV_API bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out_frame,
                                  pl_tex tex[4], const AVFrame *avframe);
-
-// Deprecated variant of `pl_map_frame`, with the following differences:
-// - Does not support hardware-accelerated frames
-// - Does not require manual unmapping
-// - Does not touch `frame->user_data`.
-// - Does not automatically map dovi metadata
-// - `frame` must not be freed by the user before `frame` is done being used
-PL_LIBAV_API PL_DEPRECATED bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
-                                                  pl_tex tex[4], const AVFrame *frame);
 
 // Download the texture contents of a `pl_frame` back to a corresponding
 // AVFrame. Blocks until completion.

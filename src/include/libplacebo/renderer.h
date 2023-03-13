@@ -349,7 +349,6 @@ struct pl_render_params {
     void *info_priv;
 
     // --- Deprecated/removed fields
-    bool force_icc_lut PL_DEPRECATED; // no longer functional
     bool allow_delayed_peak_detect PL_DEPRECATED; // moved to pl_peak_detect_params
 };
 

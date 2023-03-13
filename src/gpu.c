@@ -428,12 +428,8 @@ static bool fix_tex_transfer(pl_gpu gpu, struct pl_tex_transfer_params *params)
     infer_rc(tex, &rc);
     strip_coords(tex, &rc);
 
-    if (!params->row_pitch && params->stride_w)
-        params->row_pitch = params->stride_w * fmt->texel_size;
     if (!params->row_pitch || !tex->params.w)
         params->row_pitch = pl_rect_w(rc) * fmt->texel_size;
-    if (!params->depth_pitch && params->stride_h)
-        params->depth_pitch = params->stride_h * params->row_pitch;
     if (!params->depth_pitch || !tex->params.d)
         params->depth_pitch = pl_rect_h(rc) * params->row_pitch;
 
@@ -1003,8 +999,6 @@ static void log_spec_constants(pl_log log, enum pl_log_level lev,
 
 pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 {
-    struct pl_pass_params fixed;
-
     require(params->glsl_shader);
     switch(params->type) {
     case PL_PASS_RASTER:
@@ -1016,13 +1010,6 @@ pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
             require(va.fmt);
             require(va.fmt->caps & PL_FMT_CAP_VERTEX);
             require(va.offset + va.fmt->texel_size <= params->vertex_stride);
-        }
-
-        if (!params->target_format) {
-            // Compatibility with older API
-            fixed = *params;
-            fixed.target_format = params->target_dummy.params.format;
-            params = &fixed;
         }
 
         require(params->target_format);

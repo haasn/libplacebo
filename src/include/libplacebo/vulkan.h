@@ -243,9 +243,6 @@ struct pl_vulkan_params {
     // for testing purposes
     int max_glsl_version;       // limit the maximum GLSL version
     uint32_t max_api_version;   // limit the maximum vulkan API version
-
-    // Removed parameters (no effect)
-    bool disable_events PL_DEPRECATED;
 };
 
 // Default/recommended parameters. Should generally be safe and efficient.
@@ -410,9 +407,6 @@ struct pl_vulkan_import_params {
     // for testing purposes. See `pl_vulkan_params` for a description of these.
     int max_glsl_version;
     uint32_t max_api_version;
-
-    // Removed parameters (no effect)
-    bool disable_events PL_DEPRECATED;
 };
 
 #define pl_vulkan_import_params(...) (&(struct pl_vulkan_import_params) { __VA_ARGS__ })

@@ -1034,22 +1034,3 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
     GLSL("}\n");
     return true;
 }
-
-bool pl_shader_sample_ortho(pl_shader sh, int pass,
-                            const struct pl_sample_src *src,
-                            const struct pl_sample_filter_params *params)
-{
-    struct pl_sample_src srcfix = *src;
-    switch (pass) {
-    case PL_SEP_VERT:
-        srcfix.rect.x0 = 0;
-        srcfix.rect.x1 = srcfix.new_w = src_params(src).w;
-        break;
-    case PL_SEP_HORIZ:
-        srcfix.rect.y0 = 0;
-        srcfix.rect.y1 = srcfix.new_h = src_params(src).h;
-        break;
-    }
-
-    return pl_shader_sample_ortho2(sh, &srcfix, params);
-}

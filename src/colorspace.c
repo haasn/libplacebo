@@ -233,6 +233,9 @@ enum pl_color_primaries pl_color_primaries_guess(int width, int height)
     }
 }
 
+// HLG 75% value (scene-referred)
+#define HLG_75 3.17955
+
 float pl_color_transfer_nominal_peak(enum pl_color_transfer trc)
 {
     switch (trc) {
@@ -250,27 +253,11 @@ float pl_color_transfer_nominal_peak(enum pl_color_transfer trc)
     case PL_COLOR_TRC_ST428:
         return 1.0;
     case PL_COLOR_TRC_PQ:       return 10000.0 / PL_COLOR_SDR_WHITE;
-    case PL_COLOR_TRC_HLG:      return 12.0 / PL_COLOR_SDR_WHITE_HLG;
+    case PL_COLOR_TRC_HLG:      return 12.0 / HLG_75;
     case PL_COLOR_TRC_V_LOG:    return 46.0855;
     case PL_COLOR_TRC_S_LOG1:   return 6.52;
     case PL_COLOR_TRC_S_LOG2:   return 9.212;
     case PL_COLOR_TRC_COUNT: break;
-    }
-
-    pl_unreachable();
-}
-
-bool pl_color_light_is_scene_referred(enum pl_color_light light)
-{
-    switch (light) {
-    case PL_COLOR_LIGHT_UNKNOWN:
-    case PL_COLOR_LIGHT_DISPLAY:
-        return false;
-    case PL_COLOR_LIGHT_SCENE_HLG:
-    case PL_COLOR_LIGHT_SCENE_709_1886:
-    case PL_COLOR_LIGHT_SCENE_1_2:
-        return true;
-    case PL_COLOR_LIGHT_COUNT: break;
     }
 
     pl_unreachable();

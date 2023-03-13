@@ -1084,9 +1084,8 @@ static void pl_unmap_avframe_vulkan(pl_gpu gpu, struct pl_frame *frame)
 }
 #endif
 
-static inline bool pl_map_avframe_internal(pl_gpu gpu, struct pl_frame *out,
-                                           const struct pl_avframe_params *params,
-                                           bool can_alloc)
+PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out,
+                                    const struct pl_avframe_params *params)
 {
     const AVFrame *frame = params->frame;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
@@ -1096,11 +1095,10 @@ static inline bool pl_map_avframe_internal(pl_gpu gpu, struct pl_frame *out,
     int planes;
 
     pl_frame_from_avframe(out, frame);
-    if (can_alloc)
-        out->user_data = av_frame_clone(frame);
+    out->user_data = av_frame_clone(frame);
 
 #ifdef PL_HAVE_LAV_DOLBY_VISION
-    if (can_alloc && params->map_dovi) {
+    if (params->map_dovi) {
         AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DOVI_METADATA);
         if (sd) {
             const AVDOVIMetadata *metadata = (AVDOVIMetadata *) sd->data;
@@ -1193,12 +1191,6 @@ error:
     return false;
 }
 
-PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out_frame,
-                                    const struct pl_avframe_params *params)
-{
-    return pl_map_avframe_internal(gpu, out_frame, params, true);
-}
-
 // Backwards compatibility with previous versions of this API.
 PL_LIBAV_API bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out_frame,
                                      pl_tex tex[4], const AVFrame *avframe)
@@ -1231,24 +1223,6 @@ PL_LIBAV_API void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame)
 
 done:
     memset(frame, 0, sizeof(*frame)); // sanity
-}
-
-PL_LIBAV_API bool pl_upload_avframe(pl_gpu gpu, struct pl_frame *out_frame,
-                                    pl_tex tex[4], const AVFrame *frame)
-{
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
-    struct pl_avframe_params params = {
-        .frame = frame,
-        .tex = tex,
-    };
-
-    if (desc->flags & AV_PIX_FMT_FLAG_HWACCEL)
-        return false; // requires allocation
-
-    if (!pl_map_avframe_internal(gpu, out_frame, &params, false))
-        return false;
-
-    return true;
 }
 
 static void pl_done_cb(void *priv)

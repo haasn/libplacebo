@@ -907,7 +907,6 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
 {
     pl_mutex_lock(&p->lock_strong);
     pl_mutex_lock(&p->lock_weak);
-    default_estimate(&p->fps, params->frame_duration);
     default_estimate(&p->vps, params->vsync_duration);
 
     float delta = params->pts - p->prev_pts;

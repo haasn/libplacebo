@@ -197,13 +197,6 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
                              const struct pl_sample_filter_params *params);
 
-// Deprecated variant of `pl_shader_sample_ortho2` that hard-overrides the
-// unscaled component. Should not be used, because it breaks e.g. scaling
-// cropped sources.
-PL_DEPRECATED bool pl_shader_sample_ortho(pl_shader sh, int pass,
-                                          const struct pl_sample_src *src,
-                                          const struct pl_sample_filter_params *params);
-
 enum PL_DEPRECATED { // for `int pass`
     PL_SEP_VERT = 0,
     PL_SEP_HORIZ,

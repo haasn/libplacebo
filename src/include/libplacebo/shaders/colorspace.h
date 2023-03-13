@@ -200,18 +200,6 @@ PL_DEPRECATED bool pl_get_detected_peak(const pl_shader_obj state,
 // state used by `pl_shader_tone_map`.
 void pl_reset_detected_peak(pl_shader_obj state);
 
-// Deprecated. See <libplacebo/tone_mapping.h> for replacements.
-enum pl_tone_mapping_algorithm {
-    PL_TONE_MAPPING_CLIP,
-    PL_TONE_MAPPING_MOBIUS,
-    PL_TONE_MAPPING_REINHARD,
-    PL_TONE_MAPPING_HABLE,
-    PL_TONE_MAPPING_GAMMA,
-    PL_TONE_MAPPING_LINEAR,
-    PL_TONE_MAPPING_BT_2390,
-    PL_TONE_MAPPING_ALGORITHM_COUNT,
-};
-
 enum pl_tone_map_mode {
     // Picks the best tone-mapping mode based on internal heuristics.
     PL_TONE_MAP_AUTO,
@@ -318,15 +306,6 @@ struct pl_color_map_params {
     // Controls where to draw the visualization, relative to the rendered
     // video (dimensions 0-1). Optional, defaults to the full picture.
     struct pl_rect2df visualize_rect;
-
-    // --- Deprecated fields
-    enum pl_tone_mapping_algorithm tone_mapping_algo PL_DEPRECATED;
-    float desaturation_strength PL_DEPRECATED;
-    float desaturation_exponent PL_DEPRECATED;
-    float desaturation_base PL_DEPRECATED;
-    float max_boost PL_DEPRECATED;
-    bool gamut_warning PL_DEPRECATED;   // replaced by PL_GAMUT_WARN
-    bool gamut_clipping PL_DEPRECATED;  // replaced by PL_GAMUT_DESATURATE
 };
 
 #define PL_COLOR_MAP_DEFAULTS                                   \

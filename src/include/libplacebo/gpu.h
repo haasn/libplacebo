@@ -140,10 +140,6 @@ struct pl_gpu_limits {
     // this information to decide the appropriate type of shader to dispatch.
     uint32_t fragment_queues;
     uint32_t compute_queues;
-
-    // --- Deprecated fields. Provided for backwards compatibility. See the
-    // corresponding fields in `pl_glsl_version` for their replacements.
-    size_t max_variables PL_DEPRECATED; // see `max_variable_comps`
 };
 
 // Backwards compatibility aliases
@@ -250,13 +246,6 @@ typedef const struct pl_gpu_t {
     // This will only be filled in if interop is supported.
     struct pl_gpu_pci_address pci;
 } *pl_gpu;
-
-// No longer functional. See `pl_gpu_limits.align_tex_xfer_pitch`.
-PL_DEPRECATED static inline int pl_optimal_transfer_stride(pl_gpu _gpu, int dim)
-{
-    (void) _gpu;
-    return dim;
-}
 
 enum pl_fmt_type {
     PL_FMT_UNKNOWN = 0, // also used for inconsistent multi-component formats
@@ -866,11 +855,6 @@ struct pl_tex_transfer_params {
     size_t row_pitch;      // the number of bytes separating image rows
     size_t depth_pitch;    // the number of bytes separating image planes
 
-    // Deprecated variants of `row_pitch` and `depth_pitch` for backwards
-    // compatibility with older versions of libplacebo. Avoid using.
-    unsigned int stride_w PL_DEPRECATED;
-    unsigned int stride_h PL_DEPRECATED;
-
     // An optional timer to report the approximate duration of the texture
     // transfer to. Note that this is only an approximation, since the actual
     // texture transfer may happen entirely in the background (in particular,
@@ -1253,9 +1237,6 @@ struct pl_pass_params {
     //
     // Specifying `blend_params` requires `load_target` to be true.
     bool load_target;
-
-    // (Deprecated) Fallback for `target_format`.
-    struct pl_tex_t target_dummy PL_DEPRECATED;
 };
 
 #define pl_pass_params(...) (&(struct pl_pass_params) { __VA_ARGS__ })

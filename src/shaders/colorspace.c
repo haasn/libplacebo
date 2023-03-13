@@ -1511,32 +1511,6 @@ static void tone_map(pl_shader sh,
         .hdr = src->hdr,
     };
 
-    enum pl_tone_map_mode mode = params->tone_mapping_mode;
-    if (params->tone_mapping_algo) {
-        // Backwards compatibility
-        static const struct pl_tone_map_function *
-        funcs[PL_TONE_MAPPING_ALGORITHM_COUNT] = {
-            [PL_TONE_MAPPING_CLIP]      = &pl_tone_map_clip,
-            [PL_TONE_MAPPING_MOBIUS]    = &pl_tone_map_mobius,
-            [PL_TONE_MAPPING_REINHARD]  = &pl_tone_map_reinhard,
-            [PL_TONE_MAPPING_HABLE]     = &pl_tone_map_hable,
-            [PL_TONE_MAPPING_GAMMA]     = &pl_tone_map_gamma,
-            [PL_TONE_MAPPING_LINEAR]    = &pl_tone_map_linear,
-            [PL_TONE_MAPPING_BT_2390]   = &pl_tone_map_bt2390,
-        };
-        lut_params.function = funcs[params->tone_mapping_algo];
-
-        // Backwards compatibility with older API, explicitly default the tone
-        // mapping mode based on the previous values of desat_str etc.
-        if (params->desaturation_strength == 1 && params->desaturation_exponent == 0) {
-            mode = PL_DEF(mode, PL_TONE_MAP_RGB);
-        } else if (params->desaturation_strength > 0) {
-            mode = PL_DEF(mode, PL_TONE_MAP_HYBRID);
-        } else {
-            mode = PL_DEF(mode, PL_TONE_MAP_LUMA);
-        }
-    }
-
     pl_tone_map_params_infer(&lut_params);
     if (pl_tone_map_params_noop(&lut_params))
         return;
@@ -1658,6 +1632,7 @@ static void tone_map(pl_shader sh,
         GLSL("#define cliptest(x) \n");
     }
 
+    enum pl_tone_map_mode mode = params->tone_mapping_mode;
     if (mode == PL_TONE_MAP_AUTO) {
         if (is_clip) {
             // No-op / clip - do this per-channel
@@ -1845,10 +1820,6 @@ static void adapt_colors(pl_shader sh,
     }
 
     enum pl_gamut_mode mode = params->gamut_mode;
-    if (params->gamut_warning)
-        mode = PL_GAMUT_WARN;
-    if (params->gamut_clipping)
-        mode = PL_GAMUT_DESATURATE;
     if (!need_reduction)
         mode = PL_GAMUT_CLIP;
 

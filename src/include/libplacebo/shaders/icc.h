@@ -75,9 +75,6 @@ struct pl_icc_params {
     //
     // Note: These callbacks will only be called from within `pl_icc_decode` /
     // `pl_icc_encode`, so `cache_priv` should exceed this lifetime.
-
-    // Deprecated / removed options.
-    bool use_display_contrast PL_DEPRECATED; // Always on
 };
 
 #define PL_ICC_DEFAULTS                         \
