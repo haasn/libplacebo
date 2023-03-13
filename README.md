@@ -43,10 +43,14 @@ spaces, obscure subsampling modes, image metadata manipulation, and so on.
 Expert-level functionality is packed into easy-to-use functions like
 `pl_frame_from_avframe` and `pl_render_image`.
 
+### Hardware requirements
+
 libplacebo currently supports Vulkan (including MoltenVK), OpenGL, and
-Direct3D 11. It contains backwards compatibility code for very old versions of
-GLSL down to GLES 2.0 and OpenGL 1.3 and very old Direct3D feature levels down
-to 9_1.
+Direct3D 11. It currently has the following minimum hardware requirements:
+
+- **Vulkan**: Core version 1.1 + timeline semaphores
+- **OpenGL**: GLSL version >= 110 (GL >= 2.0, GL ES >= 2.0)
+- **Direct3D**: Feature level >= 9_1
 
 For more documentation, including an introduction to the API, see [the project
 website](https://libplacebo.org).
