@@ -228,7 +228,7 @@ pkg.generate(
 
 ### Testing
 tdep = [ declare_dependency(
-    dependencies: build_deps + test_deps,
+    dependencies: build_deps,
     include_directories: [ inc, include_directories('.') ],
     link_with: lib,
 ) ]

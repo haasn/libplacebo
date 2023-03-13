@@ -385,7 +385,6 @@ else
 endif
 
 build_deps = [ libm, threads ]
-test_deps = []
 
 subdir('src')
 
