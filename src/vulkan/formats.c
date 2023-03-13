@@ -192,8 +192,6 @@ static const struct vk_format vk_formats[] = {
     {VK_FORMAT_A2R10G10B10_SINT_PACK32,  FMT("bgr10a2i", 4,  4, SINT,  BITS(10, 10, 10, 2), IDX(2, 1, 0, 3))},
 
 
-#ifdef VK_VERSION_1_3
-
     // Packed 16 bit formats
     {VK_FORMAT_R10X6_UNORM_PACK16,                  PACKED16FMT("rx10",         1, 10)},
     {VK_FORMAT_R10X6G10X6_UNORM_2PACK16,            PACKED16FMT("rxgx10",       2, 10)},
@@ -366,8 +364,6 @@ static const struct vk_format vk_formats[] = {
             {VK_FORMAT_R12X4G12X4_UNORM_2PACK16},
         },
     },
-
-#endif // VK_VERSION_1_3
 
     {0}
 };
