@@ -28,7 +28,9 @@
 // This represents an identifier (e.g. name of function, uniform etc.) for
 // a shader resource. The generated identifiers are immutable, but only live
 // until pl_shader_reset - so make copies when passing to external stuff.
-typedef const char * ident_t;
+typedef const char *ident_t;
+#define $           "%s"
+#define NULL_IDENT  NULL
 
 enum pl_shader_buf {
     SH_BUF_PRELUDE, // extra #defines etc.

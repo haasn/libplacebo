@@ -231,12 +231,19 @@ ident_t sh_fresh(pl_shader sh, const char *name)
     return pl_asprintf(SH_TMP(sh), "_%hx_%s", id, name);
 }
 
+static inline ident_t sh_fresh_name(pl_shader sh, const char **pname)
+{
+    ident_t id = sh_fresh(sh, *pname);
+    *pname = (const char *) id;
+    return id;
+}
+
 ident_t sh_var(pl_shader sh, struct pl_shader_var sv)
 {
-    sv.var.name = sh_fresh(sh, sv.var.name);
+    ident_t id = sh_fresh_name(sh, &sv.var.name);
     sv.data = pl_memdup(SH_TMP(sh), sv.data, pl_var_host_layout(0, &sv.var).size);
     PL_ARRAY_APPEND(sh, sh->vars, sv);
-    return (ident_t) sv.var.name;
+    return id;
 }
 
 ident_t sh_var_int(pl_shader sh, const char *name, int val, bool dynamic)
@@ -289,9 +296,9 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
         pl_unreachable();
     }
 
-    sd.desc.name = sh_fresh(sh, sd.desc.name);
+    ident_t id = sh_fresh_name(sh, &sd.desc.name);
     PL_ARRAY_APPEND(sh, sh->descs, sd);
-    return (ident_t) sd.desc.name;
+    return id;
 }
 
 ident_t sh_const(pl_shader sh, struct pl_shader_const sc)
@@ -309,28 +316,28 @@ ident_t sh_const(pl_shader sh, struct pl_shader_const sc)
         });
     }
 
-    sc.name = sh_fresh(sh, sc.name);
+    ident_t id = sh_fresh_name(sh, &sc.name);
 
     pl_gpu gpu = SH_GPU(sh);
     if (gpu && gpu->limits.max_constants) {
         if (!sc.compile_time || gpu->limits.array_size_constants) {
             sc.data = pl_memdup(SH_TMP(sh), sc.data, pl_var_type_size(sc.type));
             PL_ARRAY_APPEND(sh, sh->consts, sc);
-            return (ident_t) sc.name;
+            return id;
         }
     }
 
     // Fallback for GPUs without specialization constants
     switch (sc.type) {
     case PL_VAR_SINT:
-        GLSLH("const int %s = %d; \n", sc.name, *(int *) sc.data);
-        return (ident_t) sc.name;
+        GLSLH("const int "$" = %d; \n", id, *(int *) sc.data);
+        return id;
     case PL_VAR_UINT:
-        GLSLH("const uint %s = %uu; \n", sc.name, *(unsigned int *) sc.data);
-        return (ident_t) sc.name;
+        GLSLH("const uint "$" = %uu; \n", id, *(unsigned int *) sc.data);
+        return id;
     case PL_VAR_FLOAT:
-        GLSLH("const float %s = %f; \n", sc.name, *(float *) sc.data);
-        return (ident_t) sc.name;
+        GLSLH("const float "$" = %f; \n", id, *(float *) sc.data);
+        return id;
     case PL_VAR_INVALID:
     case PL_VAR_TYPE_COUNT:
         break;
@@ -372,13 +379,13 @@ ident_t sh_attr_vec2(pl_shader sh, const char *name,
     pl_gpu gpu = SH_GPU(sh);
     if (!gpu) {
         SH_FAIL(sh, "Failed adding vertex attr '%s': No GPU available!", name);
-        return NULL;
+        return NULL_IDENT;
     }
 
     pl_fmt fmt = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 2);
     if (!fmt) {
         SH_FAIL(sh, "Failed adding vertex attr '%s': no vertex fmt!", name);
-        return NULL;
+        return NULL_IDENT;
     }
 
     float vals[4][2] = {
@@ -391,14 +398,15 @@ ident_t sh_attr_vec2(pl_shader sh, const char *name,
     float *data = pl_memdup(SH_TMP(sh), &vals[0][0], sizeof(vals));
     struct pl_shader_va va = {
         .attr = {
-            .name     = sh_fresh(sh, name),
+            .name     = name,
             .fmt      = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 2),
         },
         .data = { &data[0], &data[2], &data[4], &data[6] },
     };
 
+    ident_t id = sh_fresh_name(sh, &va.attr.name);
     PL_ARRAY_APPEND(sh, sh->vas, va);
-    return (ident_t) va.attr.name;
+    return id;
 }
 
 ident_t sh_bind(pl_shader sh, pl_tex tex,
@@ -409,12 +417,12 @@ ident_t sh_bind(pl_shader sh, pl_tex tex,
 {
     if (pl_tex_params_dimension(tex->params) != 2) {
         SH_FAIL(sh, "Failed binding texture '%s': not a 2D texture!", name);
-        return NULL;
+        return NULL_IDENT;
     }
 
     if (!tex->params.sampleable) {
         SH_FAIL(sh, "Failed binding texture '%s': texture not sampleable!", name);
-        return NULL;
+        return NULL_IDENT;
     }
 
     ident_t itex = sh_desc(sh, (struct pl_shader_desc) {
@@ -548,7 +556,7 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
 
     if (sh->prefix == sub->prefix) {
         PL_TRACE(sh, "Can't merge shaders: conflicting identifiers!");
-        return NULL;
+        return NULL_IDENT;
     }
 
     // Check for shader compatibility
@@ -560,7 +568,7 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
     {
         PL_TRACE(sh, "Can't merge shaders: incompatible sizes: %dx%d and %dx%d",
                  sh->output_w, sh->output_h, sub->output_w, sub->output_h);
-        return NULL;
+        return NULL_IDENT;
     }
 
     if (sub->type == SH_COMPUTE) {
@@ -571,7 +579,7 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
         if (!sh_try_compute(sh, subw, subh, flex, sub->res.compute_shmem)) {
             PL_TRACE(sh, "Can't merge shaders: incompatible block sizes or "
                      "exceeded shared memory resource capabilities");
-            return NULL;
+            return NULL_IDENT;
         }
     }
 
@@ -586,11 +594,12 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
     ident_t name = sh_fresh(sh, "sub");
     if (sub->res.input == PL_SHADER_SIG_SAMPLER) {
         pl_assert(sub->sampler_prefix);
-        GLSLH("%s %s(%c%s src_tex, vec2 tex_coord) {\n",
+        GLSLH("%s "$"(%c%s src_tex, vec2 tex_coord) {\n",
               outsigs[sub->res.output], name,
               sub->sampler_prefix, samplers2D[sub->sampler_type]);
     } else {
-        GLSLH("%s %s(%s) {\n", outsigs[sub->res.output], name, insigs[sub->res.input]);
+        GLSLH("%s "$"(%s) {\n",
+              outsigs[sub->res.output], name, insigs[sub->res.input]);
     }
     pl_str_builder_concat(sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_BODY]);
     GLSLH("%s\n}\n\n", retvals[sub->res.output]);
@@ -619,14 +628,17 @@ pl_str_builder sh_finalize_internal(pl_shader sh)
     // Concatenate everything onto the prelude to form the final output
     pl_str_builder_concat(sh->buffers[SH_BUF_PRELUDE], sh->buffers[SH_BUF_HEADER]);
 
-    sh->res.name = sh_fresh(sh, "main");
+    sh->res.name = "main";
+    ident_t id = sh_fresh_name(sh, &sh->res.name);
+
     if (sh->res.input == PL_SHADER_SIG_SAMPLER) {
         pl_assert(sh->sampler_prefix);
-        GLSLP("%s %s(%c%s src_tex, vec2 tex_coord) {\n",
-              outsigs[sh->res.output], sh->res.name,
+        GLSLP("%s "$"(%c%s src_tex, vec2 tex_coord) {\n",
+              outsigs[sh->res.output], id,
               sh->sampler_prefix, samplers2D[sh->sampler_type]);
     } else {
-        GLSLP("%s %s(%s) {\n", outsigs[sh->res.output], sh->res.name, insigs[sh->res.input]);
+        GLSLP("%s "$"(%s) {\n",
+              outsigs[sh->res.output], id, insigs[sh->res.input]);
     }
 
     pl_str_builder_concat(sh->buffers[SH_BUF_PRELUDE], sh->buffers[SH_BUF_BODY]);
@@ -804,7 +816,7 @@ ident_t sh_prng(pl_shader sh, bool temporal, ident_t *p_state)
 
     // Based on pcg3d (http://jcgt.org/published/0009/03/02/)
     GLSLP("#define prng_t uvec3\n");
-    GLSLH("vec3 %s(inout uvec3 s) {                     \n"
+    GLSLH("vec3 "$"(inout uvec3 s) {                    \n"
           "    s = 1664525u * s + uvec3(1013904223u);   \n"
           "    s.x += s.y * s.z;                        \n"
           "    s.y += s.z * s.x;                        \n"
@@ -817,21 +829,17 @@ ident_t sh_prng(pl_shader sh, bool temporal, ident_t *p_state)
           "}                                            \n",
           randfun);
 
-    const char *seed = "0u";
     if (temporal) {
-        seed = sh_var(sh, (struct pl_shader_var) {
-            .var  = pl_var_uint("seed"),
-            .data = &(unsigned int){ SH_PARAMS(sh).index },
-            .dynamic = true,
-        });
-    };
-
-    GLSL("uvec3 %s = uvec3(gl_FragCoord.xy, %s); \n", state, seed);
+        GLSL("uvec3 "$" = uvec3(gl_FragCoord.xy, "$"); \n",
+             state, SH_UINT_DYN(SH_PARAMS(sh).index));
+    } else {
+        GLSL("uvec3 "$" = uvec3(gl_FragCoord.xy, 0.0); \n", state);
+    }
 
     if (p_state)
         *p_state = state;
 
     ident_t res = sh_fresh(sh, "RAND");
-    GLSLH("#define %s (%s(%s))\n", res, randfun, state);
+    GLSLH("#define "$" ("$"("$"))\n", res, randfun, state);
     return res;
 }
