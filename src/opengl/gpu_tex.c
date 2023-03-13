@@ -904,22 +904,15 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         gl->PixelStorei(GL_UNPACK_ALIGNMENT, get_alignment(params->row_pitch));
 
     int rows = pl_rect_h(params->rc);
-    if (stride_w != pl_rect_w(params->rc) || misaligned) {
-        if (p->has_stride && !misaligned) {
-            gl->PixelStorei(GL_UNPACK_ROW_LENGTH, stride_w);
-        } else {
-            rows = 1;
-        }
+    if (misaligned) {
+        rows = 1;
+    } else if (stride_w != pl_rect_w(params->rc)) {
+        gl->PixelStorei(GL_UNPACK_ROW_LENGTH, stride_w);
     }
 
     int imgs = pl_rect_d(params->rc);
-    if (stride_h != pl_rect_h(params->rc) || rows < stride_h) {
-        if (p->has_unpack_image_height) {
-            gl->PixelStorei(GL_UNPACK_IMAGE_HEIGHT, stride_h);
-        } else {
-            imgs = 1;
-        }
-    }
+    if (stride_h != pl_rect_h(params->rc) || rows < stride_h)
+        gl->PixelStorei(GL_UNPACK_IMAGE_HEIGHT, stride_h);
 
     gl->BindTexture(tex_gl->target, tex_gl->texture);
     gl_timer_begin(gpu, params->timer);
@@ -954,10 +947,8 @@ bool gl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
     gl_timer_end(gpu, params->timer);
     gl->BindTexture(tex_gl->target, 0);
     gl->PixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    if (p->has_stride)
-        gl->PixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    if (p->has_unpack_image_height)
-        gl->PixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
+    gl->PixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    gl->PixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
 
     if (buf) {
         gl->BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
@@ -1035,12 +1026,10 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
             gl->PixelStorei(GL_PACK_ALIGNMENT, get_alignment(params->row_pitch));
 
         int rows = pl_rect_h(params->rc);
-        if (stride_w != tex->params.w || misaligned) {
-            if (p->has_stride && !misaligned) {
-                gl->PixelStorei(GL_PACK_ROW_LENGTH, stride_w);
-            } else {
-                rows = 1;
-            }
+        if (misaligned) {
+            rows = 1;
+        } else if (stride_w != tex->params.w) {
+            gl->PixelStorei(GL_PACK_ROW_LENGTH, stride_w);
         }
 
         // No 3D framebuffers
@@ -1054,8 +1043,7 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         }
         gl->BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         gl->PixelStorei(GL_PACK_ALIGNMENT, 4);
-        if (p->has_stride)
-            gl->PixelStorei(GL_PACK_ROW_LENGTH, 0);
+        gl->PixelStorei(GL_PACK_ROW_LENGTH, 0);
     } else if (is_copy) {
         // We're downloading the entire texture
         gl->BindTexture(tex_gl->target, tex_gl->texture);
