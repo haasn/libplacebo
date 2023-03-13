@@ -228,13 +228,13 @@ ident_t sh_fresh(pl_shader sh, const char *name)
     id |= sh->prefix;
 
     assert(name);
-    return pl_asprintf(SH_TMP(sh), "_%hx_%s", id, name);
+    return sh_mkident(id, name);
 }
 
 static inline ident_t sh_fresh_name(pl_shader sh, const char **pname)
 {
     ident_t id = sh_fresh(sh, *pname);
-    *pname = (const char *) id;
+    *pname = sh_ident_tostr(id);
     return id;
 }
 

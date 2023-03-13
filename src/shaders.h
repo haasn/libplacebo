@@ -28,9 +28,29 @@
 // This represents an identifier (e.g. name of function, uniform etc.) for
 // a shader resource. The generated identifiers are immutable, but only live
 // until pl_shader_reset - so make copies when passing to external stuff.
+//
+// Note: When PL_STRIP_SHADERS is set during compile time, identifiers will be
+// treated directly as integers, with no human-readable names.
+
+#ifdef PL_STRIP_SHADERS
+
+typedef unsigned short ident_t;
+#define $           "_%hx"
+#define NULL_IDENT  0u
+
+#define sh_mkident(id, name) ((ident_t) id)
+#define sh_ident_tostr(id)   pl_asprintf(SH_TMP(sh), $, id)
+
+#else // !PL_STRIP_SHADERS
+
 typedef const char *ident_t;
 #define $           "%s"
 #define NULL_IDENT  NULL
+
+#define sh_mkident(id, name) pl_asprintf(SH_TMP(sh), "_%hx_%s", id, name)
+#define sh_ident_tostr(id) ((const char *) id)
+
+#endif // PL_STRIP_SHADERS
 
 enum pl_shader_buf {
     SH_BUF_PRELUDE, // extra #defines etc.
