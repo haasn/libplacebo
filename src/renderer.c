@@ -3311,16 +3311,7 @@ inter_pass_error:
         frame_csp.hdr = mix_csp.hdr = (struct pl_hdr_metadata) {0};
         pl_shader_color_map(sh, NULL, frame_csp, mix_csp, NULL, false);
 
-        ident_t weight = "1.0";
-        if (weights[i] != wsum) { // skip loading weight for nearest neighbour
-            weight = sh_var(sh, (struct pl_shader_var) {
-                .var = pl_var_float("weight"),
-                .data = &(float){ weights[i] / wsum },
-                .dynamic = true,
-            });
-        }
-
-        GLSL("mix_color += %s * color; \n", weight);
+        GLSL("mix_color += vec4(%s) * color; \n", SH_FLOAT_DYN(weights[i] / wsum));
         comps = PL_MAX(comps, frames[i].comps);
     }
 
