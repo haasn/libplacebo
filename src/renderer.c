@@ -759,7 +759,7 @@ static void swizzle_color(pl_shader sh, int comps, const int comp_map[4],
                           bool force_alpha)
 {
     ident_t orig = sh_fresh(sh, "orig_color");
-    GLSL("vec4 %s = color;                  \n"
+    GLSL("vec4 "$" = color;                 \n"
          "color = vec4(0.0, 0.0, 0.0, 1.0); \n", orig);
 
     static const int def_map[4] = {0, 1, 2, 3};
@@ -767,11 +767,11 @@ static void swizzle_color(pl_shader sh, int comps, const int comp_map[4],
 
     for (int c = 0; c < comps; c++) {
         if (comp_map[c] >= 0)
-            GLSL("color[%d] = %s[%d]; \n", c, orig, comp_map[c]);
+            GLSL("color[%d] = "$"[%d]; \n", c, orig, comp_map[c]);
     }
 
     if (force_alpha)
-        GLSL("color.a = %s.a; \n", orig);
+        GLSL("color.a = "$".a; \n", orig);
 }
 
 // `scale` adapts from `pass->dst_rect` to the plane being rendered to
@@ -915,7 +915,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
 
         switch (ol.mode) {
         case PL_OVERLAY_NORMAL:
-            GLSL("vec4 color = texture(%s, coord); \n", tex);
+            GLSL("vec4 color = texture("$", coord); \n", tex);
             break;
         case PL_OVERLAY_MONOCHROME:
             GLSL("vec4 color = osd_color; \n");
@@ -931,7 +931,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
         bool premul = repr.alpha == PL_ALPHA_PREMULTIPLIED;
         pl_shader_encode_color(sh, &repr);
         if (ol.mode == PL_OVERLAY_MONOCHROME) {
-            GLSL("color.%s *= texture(%s, coord).r; \n",
+            GLSL("color.%s *= texture("$", coord).r; \n",
                  premul ? "rgba" : "a", tex);
         }
 
@@ -1559,7 +1559,7 @@ static bool pass_read_image(struct pass_state *pass)
 
             sh_describe(sh, "merging planes");
             GLSL("{                 \n"
-                 "vec4 tmp = %s();  \n", sub);
+                 "vec4 tmp = "$"(); \n", sub);
             for (int jc = 0; jc < stj->img.comps; jc++) {
                 int map = stj->plane.component_mapping[jc];
                 if (map == PL_CHANNEL_NONE)
@@ -1662,10 +1662,10 @@ static bool pass_read_image(struct pass_state *pass)
     sh_require(sh, PL_SHADER_SIG_NONE, 0, 0);
 
     // Initialize the color to black
-    GLSL("vec4 color = vec4(%s, vec2(%s), 1.0);  \n"
-         "// pass_read_image                     \n"
-         "{                                      \n"
-         "vec4 tmp;                              \n",
+    GLSL("vec4 color = vec4("$", vec2("$"), 1.0);   \n"
+         "// pass_read_image                        \n"
+         "{                                         \n"
+         "vec4 tmp;                                 \n",
          SH_FLOAT(neutral_luma), SH_FLOAT(neutral_chroma));
 
     // For quality reasons, explicitly drop subpixel offsets from the ref rect
@@ -1763,7 +1763,7 @@ static bool pass_read_image(struct pass_state *pass)
             pl_assert(sub);
         }
 
-        GLSL("tmp = %s();\n", sub);
+        GLSL("tmp = "$"(); \n", sub);
         for (int c = 0; c < src.components; c++) {
             if (plane->component_mapping[c] < 0)
                 continue;
@@ -1804,7 +1804,7 @@ static bool pass_read_image(struct pass_state *pass)
     if (lut_type == PL_LUT_NATIVE || lut_type == PL_LUT_CONVERSION) {
         // Fix bit depth normalization before applying LUT
         float scale = pl_color_repr_normalize(&pass->img.repr);
-        GLSL("color *= vec4(%s); \n", SH_FLOAT(scale));
+        GLSL("color *= vec4("$"); \n", SH_FLOAT(scale));
         pl_shader_set_alpha(sh, &pass->img.repr, PL_ALPHA_INDEPENDENT);
         pl_shader_custom_lut(sh, image->lut, &rr->lut_state[LUT_IMAGE]);
 
@@ -2028,14 +2028,14 @@ static void pass_convert_colors(struct pass_state *pass)
                             NULL, prelinearized);
 
         if (params->lut_type == PL_LUT_NORMALIZED) {
-            GLSLF("color.rgb *= vec3(1.0/%s); \n",
+            GLSLF("color.rgb *= vec3(1.0/"$"); \n",
                   SH_FLOAT(pl_color_transfer_nominal_peak(lut_in.transfer)));
         }
 
         pl_shader_custom_lut(sh, params->lut, &rr->lut_state[LUT_PARAMS]);
 
         if (params->lut_type == PL_LUT_NORMALIZED) {
-            GLSLF("color.rgb *= vec3(%s); \n",
+            GLSLF("color.rgb *= vec3("$"); \n",
                   SH_FLOAT(pl_color_transfer_nominal_peak(lut_out.transfer)));
         }
 
@@ -2155,15 +2155,16 @@ static bool pass_output_target(struct pass_state *pass)
             if (memcmp(color, zero, sizeof(zero)) == 0)
                 color = pl_render_default_params.tile_colors;
             int size = PL_DEF(params->tile_size, pl_render_default_params.tile_size);
-            GLSLH("#define bg_tile_a vec3(%s, %s, %s) \n",
+            GLSLH("#define bg_tile_a vec3("$", "$", "$") \n",
                   SH_FLOAT(color[0][0]), SH_FLOAT(color[0][1]), SH_FLOAT(color[0][2]));
-            GLSLH("#define bg_tile_b vec3(%s, %s, %s) \n",
+            GLSLH("#define bg_tile_b vec3("$", "$", "$") \n",
                   SH_FLOAT(color[1][0]), SH_FLOAT(color[1][1]), SH_FLOAT(color[1][2]));
-            GLSL("bvec2 tile = lessThan(fract(gl_FragCoord.xy * %s), vec2(0.5));    \n"
-                 "vec3 bg_color = tile.x == tile.y ? bg_tile_a : bg_tile_b;         \n",
+            GLSL("vec2 outcoord = gl_FragCoord.xy * "$";                    \n"
+                 "bvec2 tile = lessThan(fract(outcoord), vec2(0.5));        \n"
+                 "vec3 bg_color = tile.x == tile.y ? bg_tile_a : bg_tile_b; \n",
                  SH_FLOAT(1.0 / size));
         } else {
-            GLSLH("#define bg_color vec3(%s, %s, %s) \n",
+            GLSLH("#define bg_color vec3("$", "$", "$") \n",
                   SH_FLOAT(params->background_color[0]),
                   SH_FLOAT(params->background_color[1]),
                   SH_FLOAT(params->background_color[2]));
@@ -2318,7 +2319,7 @@ static bool pass_output_target(struct pass_state *pass)
             rr->prev_dither = applied_dither;
         }
 
-        GLSL("color *= vec4(1.0 / %s); \n", SH_FLOAT(scale));
+        GLSL("color *= vec4(1.0 / "$"); \n", SH_FLOAT(scale));
         swizzle_color(sh, plane->components, plane->component_mapping, false);
 
         struct pl_rect2d plane_rect = {
@@ -3296,7 +3297,7 @@ inter_pass_error:
         ident_t pos, tex = sh_bind(sh, frames[i].tex, PL_TEX_ADDRESS_CLAMP,
                                    sample_mode, "frame", NULL, &pos, NULL, NULL);
 
-        GLSL("color = texture(%s, %s); \n", tex, pos);
+        GLSL("color = texture("$", "$"); \n", tex, pos);
 
         // Note: This ignores differences in ICC profile, which we decide to
         // just simply not care about. Doing that properly would require
@@ -3311,7 +3312,8 @@ inter_pass_error:
         frame_csp.hdr = mix_csp.hdr = (struct pl_hdr_metadata) {0};
         pl_shader_color_map(sh, NULL, frame_csp, mix_csp, NULL, false);
 
-        GLSL("mix_color += vec4(%s) * color; \n", SH_FLOAT_DYN(weights[i] / wsum));
+        float weight = weights[i] / wsum;
+        GLSL("mix_color += vec4("$") * color; \n", SH_FLOAT_DYN(weight));
         comps = PL_MAX(comps, frames[i].comps);
     }
 
