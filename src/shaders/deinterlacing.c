@@ -64,19 +64,20 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
     if (!cur)
         return;
 
-    GLSL("#define GET(TEX, X, Y) (texture(TEX, %s + %s * vec2(X, Y)).%s) \n"
-         "T res;                                                         \n",
+    GLSL("#define GET(TEX, X, Y)                          \\\n"
+         "    (texture(TEX, "$" + "$" * vec2(X, Y)).%s)     \n"
+         "T res;                                            \n",
          pos, pt, swiz);
 
     if (src->field == PL_FIELD_NONE) {
-        GLSL("res = GET(%s, 0, 0); \n", cur);
+        GLSL("res = GET("$", 0, 0); \n", cur);
         goto done;
     }
 
     // Don't modify the primary field
-    GLSL("int yo = int(%s.y * %s.y);    \n"
+    GLSL("int yo = int("$".y * "$".y);  \n"
          "if (yo %% 2 == %d) {          \n"
-         "    res = GET(%s, 0, 0);      \n"
+         "    res = GET("$", 0, 0);     \n"
          "} else {                      \n",
          pos, size,
          src->field == PL_FIELD_TOP ? 0 : 1,
@@ -84,11 +85,11 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
 
     switch (params->algo) {
     case PL_DEINTERLACE_WEAVE:
-        GLSL("res = GET(%s, 0, 0); \n", cur);
+        GLSL("res = GET("$", 0, 0); \n", cur);
         break;
 
     case PL_DEINTERLACE_BOB:
-        GLSL("res = GET(%s, 0, %d); \n", cur,
+        GLSL("res = GET("$", 0, %d); \n", cur,
              src->field == PL_FIELD_TOP ? -1 : 1);
         break;
 
@@ -111,8 +112,8 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
 
         // Calculate spatial prediction
         ident_t spatial_pred = sh_fresh(sh, "spatial_predictor");
-        GLSLH("float %s(float a, float b, float c, float d, float e, float f, float g,  \n"
-              "         float h, float i, float j, float k, float l, float m, float n)  \n"
+        GLSLH("float "$"(float a, float b, float c, float d, float e, float f, float g, \n"
+              "          float h, float i, float j, float k, float l, float m, float n) \n"
               "{                                                                        \n"
               "    float spatial_pred = (d + k) / 2.0;                                  \n"
               "    float spatial_score = abs(c - j) + abs(d - k) + abs(e - l) - %f;     \n"
@@ -141,38 +142,38 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
               "}                                                                        \n",
               spatial_pred, spatial_bias);
 
-        GLSL("T a = GET(%s, -3, -1);    \n"
-             "T b = GET(%s, -2, -1);    \n"
-             "T c = GET(%s, -1, -1);    \n"
-             "T d = GET(%s,  0, -1);    \n"
-             "T e = GET(%s, +1, -1);    \n"
-             "T f = GET(%s, +2, -1);    \n"
-             "T g = GET(%s, +3, -1);    \n"
-             "T h = GET(%s, -3, +1);    \n"
-             "T i = GET(%s, -2, +1);    \n"
-             "T j = GET(%s, -1, +1);    \n"
-             "T k = GET(%s,  0, +1);    \n"
-             "T l = GET(%s, +1, +1);    \n"
-             "T m = GET(%s, +2, +1);    \n"
-             "T n = GET(%s, +3, +1);    \n",
+        GLSL("T a = GET("$", -3, -1); \n"
+             "T b = GET("$", -2, -1); \n"
+             "T c = GET("$", -1, -1); \n"
+             "T d = GET("$",  0, -1); \n"
+             "T e = GET("$", +1, -1); \n"
+             "T f = GET("$", +2, -1); \n"
+             "T g = GET("$", +3, -1); \n"
+             "T h = GET("$", -3, +1); \n"
+             "T i = GET("$", -2, +1); \n"
+             "T j = GET("$", -1, +1); \n"
+             "T k = GET("$",  0, +1); \n"
+             "T l = GET("$", +1, +1); \n"
+             "T m = GET("$", +2, +1); \n"
+             "T n = GET("$", +3, +1); \n",
              cur, cur, cur, cur, cur, cur, cur, cur, cur, cur, cur, cur, cur, cur);
 
         if (num_comps == 1) {
-            GLSL("res = %s(a, b, c, d, e, f, g, h, i, j, k, l, m, n); \n", spatial_pred);
+            GLSL("res = "$"(a, b, c, d, e, f, g, h, i, j, k, l, m, n); \n", spatial_pred);
         } else {
             for (uint8_t i = 0; i < num_comps; i++) {
                 char c = "xyzw"[i];
-                GLSL("res.%c = %s(a.%c, b.%c, c.%c, d.%c, e.%c, f.%c, g.%c,  \n"
-                     "            h.%c, i.%c, j.%c, k.%c, l.%c, m.%c, n.%c); \n",
+                GLSL("res.%c = "$"(a.%c, b.%c, c.%c, d.%c, e.%c, f.%c, g.%c,  \n"
+                     "             h.%c, i.%c, j.%c, k.%c, l.%c, m.%c, n.%c); \n",
                      c, spatial_pred, c, c, c, c, c, c, c, c, c, c, c, c, c, c);
             }
         }
 
         // Calculate temporal prediction
         ident_t temporal_pred = sh_fresh(sh, "temporal_predictor");
-        GLSLH("float %s(float A, float B, float C, float D, float E, float F,   \n"
-              "         float G, float H, float I, float J, float K, float L,   \n"
-              "         float spatial_pred)                                     \n"
+        GLSLH("float "$"(float A, float B, float C, float D, float E, float F,  \n"
+              "          float G, float H, float I, float J, float K, float L,  \n"
+              "          float spatial_pred)                                    \n"
               "{                                                                \n"
               "    float p0 = (C + H) / 2.0;                                    \n"
               "    float p1 = F;                                                \n"
@@ -220,18 +221,18 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
         ident_t prev1 = src->field == first_field ? prev2 : cur;
         ident_t next1 = src->field == first_field ? cur : next2;
 
-        GLSL("T A = GET(%s, 0, -1); \n"
-             "T B = GET(%s, 0,  1); \n"
-             "T C = GET(%s, 0, -2); \n"
-             "T D = GET(%s, 0,  0); \n"
-             "T E = GET(%s, 0, +2); \n"
-             "T F = GET(%s, 0, -1); \n"
-             "T G = GET(%s, 0, +1); \n"
-             "T H = GET(%s, 0, -2); \n"
-             "T I = GET(%s, 0,  0); \n"
-             "T J = GET(%s, 0, +2); \n"
-             "T K = GET(%s, 0, -1); \n"
-             "T L = GET(%s, 0, +1); \n",
+        GLSL("T A = GET("$", 0, -1); \n"
+             "T B = GET("$", 0,  1); \n"
+             "T C = GET("$", 0, -2); \n"
+             "T D = GET("$", 0,  0); \n"
+             "T E = GET("$", 0, +2); \n"
+             "T F = GET("$", 0, -1); \n"
+             "T G = GET("$", 0, +1); \n"
+             "T H = GET("$", 0, -2); \n"
+             "T I = GET("$", 0,  0); \n"
+             "T J = GET("$", 0, +2); \n"
+             "T K = GET("$", 0, -1); \n"
+             "T L = GET("$", 0, +1); \n",
              prev2, prev2,
              prev1, prev1, prev1,
              cur, cur,
@@ -239,13 +240,13 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
              next2, next2);
 
         if (num_comps == 1) {
-            GLSL("res = %s(A, B, C, D, E, F, G, H, I, J, K, L, res); \n", temporal_pred);
+            GLSL("res = "$"(A, B, C, D, E, F, G, H, I, J, K, L, res); \n", temporal_pred);
         } else {
             for (uint8_t i = 0; i < num_comps; i++) {
                 char c = "xyzw"[i];
-                GLSL("res.%c = %s(A.%c, B.%c, C.%c, D.%c, E.%c, F.%c,   \n"
-                     "            G.%c, H.%c, I.%c, J.%c, K.%c, L.%c,   \n"
-                     "            res.%c);                              \n",
+                GLSL("res.%c = "$"(A.%c, B.%c, C.%c, D.%c, E.%c, F.%c, \n"
+                     "             G.%c, H.%c, I.%c, J.%c, K.%c, L.%c, \n"
+                     "             res.%c);                            \n",
                      c, temporal_pred, c, c, c, c, c, c, c, c, c, c, c, c, c);
             }
         }
