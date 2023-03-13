@@ -303,9 +303,9 @@ struct generate_params {
     pl_shader sh;
     struct pass *pass;
     struct pl_pass_params *pass_params;
-    ident_t vert_pos;
     ident_t out_mat;
     ident_t out_off;
+    int vert_idx;
 };
 
 static void generate_shaders(pl_dispatch dp,
@@ -592,7 +592,7 @@ static void generate_shaders(pl_dispatch dp,
 
     switch(pass_params->type) {
     case PL_PASS_RASTER: {
-        pl_assert(params->vert_pos);
+        pl_assert(params->vert_idx >= 0);
         pl_str_builder vert_head = dp->tmp[TMP_VERT_HEAD];
         pl_str_builder vert_body = dp->tmp[TMP_VERT_BODY];
 
@@ -615,7 +615,7 @@ static void generate_shaders(pl_dispatch dp,
                 loc[0] = '\0';
             ADD(vert_head, "%s in %s %s;\n", loc, type, va->name);
 
-            if (strcmp(name, params->vert_pos) == 0) {
+            if (i == params->vert_idx) {
                 pl_assert(va->fmt->num_components == 2);
                 ADD(vert_body, "vec2 va_pos = %s; \n", va->name);
                 if (params->out_mat)
@@ -711,7 +711,7 @@ static void garbage_collect_passes(pl_dispatch dp)
 }
 
 static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
-                                  pl_tex target, ident_t vert_pos,
+                                  pl_tex target, int vert_idx,
                                   const struct pl_blend_params *blend, bool load,
                                   const struct pl_dispatch_vertex_params *vparams,
                                   const struct pl_transform2x2 *proj)
@@ -744,7 +744,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
         .pass = pass,
         .pass_params = &params,
         .sh = sh,
-        .vert_pos = vert_pos,
+        .vert_idx = vert_idx,
     };
 
     if (params.type == PL_PASS_RASTER) {
@@ -1222,7 +1222,7 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
         goto error;
     }
 
-    ident_t vert_pos = NULL;
+    int vert_idx = -1;
     const struct pl_transform2x2 *proj = NULL;
     if (pl_shader_is_compute(sh)) {
         // Translate the compute shader to simulate vertices etc.
@@ -1246,7 +1246,8 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
             PL_SWAP(vert_rect.x1, vert_rect.y1);
         }
 
-        vert_pos = sh_attr_vec2(sh, "position", &vert_rect);
+        sh_attr_vec2(sh, "position", &vert_rect);
+        vert_idx = sh->vas.num - 1;
     }
 
     // We need to set pl_pass_params.load_target when either blending is
@@ -1260,7 +1261,7 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
     rc_norm.y1 = PL_MIN(rc_norm.y1, tpars->h);
     bool load = params->blend_params || !pl_rect2d_eq(rc_norm, full);
 
-    struct pass *pass = finalize_pass(dp, sh, params->target, vert_pos,
+    struct pass *pass = finalize_pass(dp, sh, params->target, vert_idx,
                                       params->blend_params, load, NULL, proj);
 
     // Silently return on failed passes
@@ -1371,7 +1372,7 @@ bool pl_dispatch_compute(pl_dispatch dp, const struct pl_dispatch_compute_params
                                &(ident_t){0});
     }
 
-    struct pass *pass = finalize_pass(dp, sh, NULL, NULL, NULL, false, NULL, NULL);
+    struct pass *pass = finalize_pass(dp, sh, NULL, -1, NULL, false, NULL, NULL);
 
     // Silently return on failed passes
     if (!pass || !pass->pass)
@@ -1504,8 +1505,7 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
         break;
     }
 
-    ident_t vert_pos = params->vertex_attribs[pos_idx].name;
-    struct pass *pass = finalize_pass(dp, sh, params->target, vert_pos,
+    struct pass *pass = finalize_pass(dp, sh, params->target, pos_idx,
                                       params->blend_params, true, params, &proj);
 
     // Silently return on failed passes
