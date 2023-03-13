@@ -26,6 +26,8 @@ endforeach
 include_tmpl_langs = ['c', 'cpp']
 
 # Ensure all headers compile
+
+test_include_sources = []
 foreach h : headers
 
   if (h.contains('internal') or
@@ -37,7 +39,7 @@ foreach h : headers
 
   foreach lang : include_tmpl_langs
 
-    t = configure_file(
+    test_include_sources += configure_file(
         input: 'include_tmpl.' + lang,
         output: 'include_@0@.@1@'.format(h.underscorify(), lang),
         configuration: {
@@ -45,10 +47,11 @@ foreach h : headers
         },
     )
 
-    executable('test.include.@0@.@1@'.format(h.underscorify(), lang), t,
-        dependencies: tdep,
-    )
-
   endforeach
 
 endforeach
+
+static_library('test_include', test_include_sources,
+    dependencies: tdep,
+    implicit_include_directories: false
+)
