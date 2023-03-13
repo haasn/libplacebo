@@ -663,14 +663,14 @@ bool pl_tex_upload_texel(pl_gpu gpu, const struct pl_tex_transfer_params *params
     assert(fmt->texel_size == fmt->num_components * fmt->texel_align);
     GLSL("vec4 color = vec4(0.0, 0.0, 0.0, 1.0);                        \n"
          "ivec3 pos = ivec3(gl_GlobalInvocationID) + ivec3(%d, %d, %d); \n"
-         "int base = pos.z * %s + pos.y * %s + pos.x * %s;              \n",
+         "int base = pos.z * "$" + pos.y * "$" + pos.x * "$";           \n",
          params->rc.x0, params->rc.y0, params->rc.z0,
          SH_INT(params->depth_pitch / fmt->texel_align),
          SH_INT(params->row_pitch / fmt->texel_align),
          SH_INT(fmt->texel_size / fmt->texel_align));
 
     for (int i = 0; i < fmt->num_components; i++) {
-        GLSL("color[%d] = %s(%s, base + %d).r; \n",
+        GLSL("color[%d] = %s("$", base + %d).r; \n",
              i, ubo ? "texelFetch" : "imageLoad", buf, i);
     }
 
@@ -681,7 +681,7 @@ bool pl_tex_upload_texel(pl_gpu gpu, const struct pl_tex_transfer_params *params
         [3] = "ivec3",
     };
 
-    GLSL("imageStore(%s, %s(pos), color);\n", img, coord_types[dims]);
+    GLSL("imageStore("$", %s(pos), color);\n", img, coord_types[dims]);
     return pl_dispatch_compute(dp, pl_dispatch_compute_params(
         .shader = &sh,
         .dispatch_size = {
@@ -743,8 +743,8 @@ bool pl_tex_download_texel(pl_gpu gpu, const struct pl_tex_transfer_params *para
 
     assert(fmt->texel_size == fmt->num_components * fmt->texel_align);
     GLSL("ivec3 pos = ivec3(gl_GlobalInvocationID) + ivec3(%d, %d, %d); \n"
-         "int base = pos.z * %s + pos.y * %s + pos.x * %s;              \n"
-         "vec4 color = imageLoad(%s, %s(pos));                          \n",
+         "int base = pos.z * "$" + pos.y * "$" + pos.x * "$";           \n"
+         "vec4 color = imageLoad("$", %s(pos));                         \n",
          params->rc.x0, params->rc.y0, params->rc.z0,
          SH_INT(params->depth_pitch / fmt->texel_align),
          SH_INT(params->row_pitch / fmt->texel_align),
@@ -752,7 +752,7 @@ bool pl_tex_download_texel(pl_gpu gpu, const struct pl_tex_transfer_params *para
          img, coord_types[dims]);
 
     for (int i = 0; i < fmt->num_components; i++)
-        GLSL("imageStore(%s, base + %d, vec4(color[%d])); \n", buf, i, i);
+        GLSL("imageStore("$", base + %d, vec4(color[%d])); \n", buf, i, i);
 
     return pl_dispatch_compute(dp, pl_dispatch_compute_params(
         .shader = &sh,
@@ -897,7 +897,8 @@ bool pl_tex_blit_compute(pl_gpu gpu, const struct pl_tex_blit_params *params)
                  (float) src_rc.z1 / params->src->params.d);
         }
 
-        GLSL("imageStore(%s, dst_pos, texture(%s, src_pos)); \n", dst, src);
+        GLSL("imageStore("$", dst_pos, texture("$", src_pos)); \n",
+             dst, src);
 
     } else {
 
@@ -922,7 +923,7 @@ bool pl_tex_blit_compute(pl_gpu gpu, const struct pl_tex_blit_params *params)
         }
 
         GLSL("src_pos = ivec3(%d, %d, %d) * src_pos + ivec3(%d, %d, %d);    \n"
-             "imageStore(%s, dst_pos, imageLoad(%s, %s(src_pos)));          \n",
+             "imageStore("$", dst_pos, imageLoad("$", %s(src_pos)));        \n",
              src_rc.x1 < src_rc.x0 ? -1 : 1,
              src_rc.y1 < src_rc.y0 ? -1 : 1,
              src_rc.z1 < src_rc.z0 ? -1 : 1,
@@ -970,7 +971,7 @@ void pl_tex_blit_raster(pl_gpu gpu, const struct pl_tex_blit_params *params)
     ident_t pos, src = sh_bind(sh, params->src, PL_TEX_ADDRESS_CLAMP,
         params->sample_mode, "src_tex", &src_rc, &pos, NULL, NULL);
 
-    GLSL("vec4 color = texture(%s, %s); \n", src, pos);
+    GLSL("vec4 color = texture("$", "$"); \n", src, pos);
 
     pl_dispatch_finish(dp, pl_dispatch_params(
         .shader = &sh,
@@ -1055,7 +1056,7 @@ bool pl_buf_copy_swap(pl_gpu gpu, const struct pl_buf_copy_swap_params *params)
 
     GLSL("// pl_buf_copy_swap                               \n"
          "{                                                 \n"
-         "uint word = src[%s + gl_GlobalInvocationID.x];    \n"
+         "uint word = src["$" + gl_GlobalInvocationID.x];   \n"
          "word = (word & 0xFF00FF00u) >> 8 |                \n"
          "       (word & 0x00FF00FFu) << 8;                 \n",
          SH_UINT(src_off));
@@ -1063,7 +1064,7 @@ bool pl_buf_copy_swap(pl_gpu gpu, const struct pl_buf_copy_swap_params *params)
         GLSL("word = (word & 0xFFFF0000u) >> 16 |           \n"
              "       (word & 0x0000FFFFu) << 16;            \n");
     }
-    GLSL("dst[%s + gl_GlobalInvocationID.x] = word;         \n"
+    GLSL("dst["$" + gl_GlobalInvocationID.x] = word;        \n"
          "}                                                 \n",
          SH_UINT(dst_off));
 
