@@ -266,12 +266,6 @@ ident_t sh_var_float(pl_shader sh, const char *name, float val, bool dynamic)
     });
 }
 
-static void merge_access(enum pl_desc_access *a, enum pl_desc_access b)
-{
-    if (*a != b)
-        *a = PL_DESC_ACCESS_READWRITE;
-}
-
 ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
 {
     switch (sd.desc.type) {
@@ -279,16 +273,8 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
     case PL_DESC_BUF_STORAGE:
     case PL_DESC_BUF_TEXEL_UNIFORM:
     case PL_DESC_BUF_TEXEL_STORAGE:
-        // Skip re-attaching the same buffer desc twice
-        // FIXME: define aliases if the variable names differ
-        for (int i = 0; i < sh->descs.num; i++) {
-            if (sh->descs.elem[i].binding.object == sd.binding.object) {
-                merge_access(&sh->descs.elem[i].desc.access, sd.desc.access);
-                sh->descs.elem[i].memory |= sd.memory;
-                return (ident_t) sh->descs.elem[i].desc.name;
-            }
-        }
-
+        for (int i = 0; i < sh->descs.num; i++) // ensure uniqueness
+            pl_assert(sh->descs.elem[i].binding.object != sd.binding.object);
         size_t bsize = sizeof(sd.buffer_vars[0]) * sd.num_buffer_vars;
         sd.buffer_vars = pl_memdup(SH_TMP(sh), sd.buffer_vars, bsize);
         break;
