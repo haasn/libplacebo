@@ -554,13 +554,13 @@ void pl_icc_decode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj,
 
     // Y = scale * (aX + b)^y
     sh_describe(sh, "ICC 3DLUT");
-    GLSL("// pl_icc_decode                      \n"
-         "{                                     \n"
-         "color.rgb = %s(color.rgb).rgb;        \n"
-         "color.rgb = %s * color.rgb + vec3(%s);\n"
-         "color.rgb = pow(color.rgb, vec3(%s)); \n"
-         "color.rgb = %s * color.rgb;           \n"
-         "}                                     \n",
+    GLSL("// pl_icc_decode                          \n"
+         "{                                         \n"
+         "color.rgb = "$"(color.rgb).rgb;           \n"
+         "color.rgb = "$" * color.rgb + vec3("$");  \n"
+         "color.rgb = pow(color.rgb, vec3("$"));    \n"
+         "color.rgb = "$" * color.rgb;              \n"
+         "}                                         \n",
          lut,
          SH_FLOAT(p->a), SH_FLOAT(p->b),
          SH_FLOAT(icc->gamma),
@@ -603,14 +603,14 @@ void pl_icc_encode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj)
 
     // X = 1/a * (Y/scale)^(1/y) - b/a
     sh_describe(sh, "ICC 3DLUT");
-    GLSL("// pl_icc_encode                      \n"
-         "{                                     \n"
-         "color.rgb = max(color.rgb, 0.0);      \n"
-         "color.rgb = 1.0/%s * color.rgb;       \n"
-         "color.rgb = pow(color.rgb, vec3(%s)); \n"
-         "color.rgb = 1.0/%s * color.rgb - %s;  \n"
-         "color.rgb = %s(color.rgb).rgb;        \n"
-         "}                                     \n",
+    GLSL("// pl_icc_encode                          \n"
+         "{                                         \n"
+         "color.rgb = max(color.rgb, 0.0);          \n"
+         "color.rgb = 1.0/"$" * color.rgb;          \n"
+         "color.rgb = pow(color.rgb, vec3("$"));    \n"
+         "color.rgb = 1.0/"$" * color.rgb - "$";    \n"
+         "color.rgb = "$"(color.rgb).rgb;           \n"
+         "}                                         \n",
          SH_FLOAT(p->scale),
          SH_FLOAT(1.0f / icc->gamma),
          SH_FLOAT(p->a), SH_FLOAT(p->b / p->a),
