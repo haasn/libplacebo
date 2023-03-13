@@ -9,7 +9,7 @@ project('libplacebo', ['c', 'cpp'],
   meson_version: '>=0.59',
   version: '@0@.@1@.@2@'.format(
     # Major version
-    5,
+    6,
     # API version
     {
       '264': 'add pl_color_map_params.show_clipping',
