@@ -158,9 +158,7 @@ bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame)
         pl_shader sh = pl_dispatch_begin(ui->dp);
         pl_shader_custom(sh, &(struct pl_custom_shader) {
             .description = "nuklear UI",
-            .body = (ui->gpu->glsl.version >= 130) ?
-                    "color = texture(ui_tex, coord).r * vcolor;" :
-                    "color = texture2D(ui_tex, coord).r * vcolor;",
+            .body = "color = texture(ui_tex, coord).r * vcolor;",
             .output = PL_SHADER_SIG_COLOR,
             .num_descriptors = 1,
             .descriptors = &(struct pl_shader_desc) {

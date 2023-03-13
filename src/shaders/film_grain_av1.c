@@ -633,11 +633,6 @@ bool pl_shader_fg_av1(pl_shader sh, pl_shader_obj *grain_state,
         return false;
     }
 
-    if (sh_glsl(sh).version < 130) {
-        PL_ERR(sh, "AV1 film grain synthesis requires GLSL >= 130!");
-        return false;
-    }
-
     // Disable generation for unneeded component types
     fg_has_y &= tex_is_y;
     fg_has_u &= tex_is_cb;

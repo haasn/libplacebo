@@ -741,20 +741,18 @@ static void pl_shader_tests(pl_gpu gpu)
     }));
 
     // Test dolbyvision
-    if (gpu->glsl.version >= 130) {
-        struct pl_color_repr repr = {
-            .sys = PL_COLOR_SYSTEM_DOLBYVISION,
-            .dovi = &dovi_meta,
-        };
+    struct pl_color_repr repr = {
+        .sys = PL_COLOR_SYSTEM_DOLBYVISION,
+        .dovi = &dovi_meta,
+    };
 
-        sh = pl_dispatch_begin(dp);
-        pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
-        pl_shader_decode_color(sh, &repr, NULL);
-        REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
-            .shader = &sh,
-            .target = fbo,
-        }));
-    }
+    sh = pl_dispatch_begin(dp);
+    pl_shader_sample_direct(sh, pl_sample_src( .tex = src ));
+    pl_shader_decode_color(sh, &repr, NULL);
+    REQUIRE(pl_dispatch_finish(dp, &(struct pl_dispatch_params) {
+        .shader = &sh,
+        .target = fbo,
+    }));
 
     // Test deinterlacing
     sh = pl_dispatch_begin(dp);
@@ -1134,7 +1132,7 @@ static void pl_render_tests(pl_gpu gpu)
     TEST_PARAMS(color_map, tone_mapping_mode, PL_TONE_MAP_MODE_COUNT - 1);
     TEST_PARAMS(color_map, gamut_mode, PL_GAMUT_MODE_COUNT - 1);
     TEST_PARAMS(color_map, visualize_lut, true);
-    if (gpu->glsl.version >= 130 && gpu->limits.max_ssbo_size)
+    if (gpu->limits.max_ssbo_size)
         TEST_PARAMS(peak_detect, allow_delayed, true);
 
     // Test inverse tone-mapping and pure BPC
@@ -1163,19 +1161,13 @@ static void pl_render_tests(pl_gpu gpu)
     image.film_grain.type = PL_FILM_GRAIN_AV1;
     image.film_grain.params.av1 = av1_grain_data;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
-    // AV1 film grain synthesis requires GLSL >= 130
-    if (gpu->glsl.version >= 130) {
-        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
-    } else {
-        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_FILM_GRAIN);
-        pl_renderer_reset_errors(rr, NULL);
-    }
+    REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
 
     image.film_grain.type = PL_FILM_GRAIN_H274;
     image.film_grain.params.h274 = h274_grain_data;
     REQUIRE(pl_render_image(rr, &image, &target, &params));
     // H.274 film grain synthesis requires compute shaders
-    if (gpu->glsl.compute && gpu->glsl.version >= 130) {
+    if (gpu->glsl.compute) {
         REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     } else {
         const struct pl_render_errors rr_err = pl_renderer_get_errors(rr);
@@ -1391,26 +1383,24 @@ static void pl_render_tests(pl_gpu gpu)
     pl_queue_reset(queue);
     REQUIRE(pl_queue_update(queue, &mix, &qparams) == PL_QUEUE_EOF);
 
-    if (gpu->glsl.version >= 130) {
-        // Test deinterlacing
-        pl_queue_reset(queue);
-        printf("testing deinterlacing \n");
-        for (int i = 0; i < NUM_MIX_FRAMES; i++) {
-            struct pl_source_frame *src = &srcframes[i];
-            if (i > 10)
-                src = &srcframes[NUM_MIX_FRAMES + 10 - i];
-            src->first_field = PL_FIELD_EVEN;
-            pl_queue_push(queue, src);
-        }
-        pl_queue_push(queue, NULL);
+    // Test deinterlacing
+    pl_queue_reset(queue);
+    printf("testing deinterlacing \n");
+    for (int i = 0; i < NUM_MIX_FRAMES; i++) {
+        struct pl_source_frame *src = &srcframes[i];
+        if (i > 10)
+            src = &srcframes[NUM_MIX_FRAMES + 10 - i];
+        src->first_field = PL_FIELD_EVEN;
+        pl_queue_push(queue, src);
+    }
+    pl_queue_push(queue, NULL);
 
-        qparams.pts = 0;
-        qparams.get_frame = NULL;
-        while ((ret = pl_queue_update(queue, &mix, &qparams)) != PL_QUEUE_EOF) {
-            REQUIRE_CMP(ret, ==, PL_QUEUE_OK, "u");
-            REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
-            qparams.pts += qparams.vsync_duration;
-        }
+    qparams.pts = 0;
+    qparams.get_frame = NULL;
+    while ((ret = pl_queue_update(queue, &mix, &qparams)) != PL_QUEUE_EOF) {
+        REQUIRE_CMP(ret, ==, PL_QUEUE_OK, "u");
+        REQUIRE(pl_render_image_mix(rr, &mix, &target, &mix_params));
+        qparams.pts += qparams.vsync_duration;
     }
 
     pl_queue_destroy(&queue);

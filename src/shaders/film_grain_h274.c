@@ -159,7 +159,7 @@ bool pl_shader_fg_h274(pl_shader sh, pl_shader_obj *grain_state,
         GLSL("%s = 0; barrier(); \n", group_sum);
     }
 
-    if (!sh_try_compute(sh, 8, 8, false, shmem_req) || glsl.version < 130) {
+    if (!sh_try_compute(sh, 8, 8, false, shmem_req)) {
         SH_FAIL(sh, "H.274 film grain synthesis requires compute shaders!");
         return false;
     }

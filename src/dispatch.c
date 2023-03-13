@@ -508,7 +508,7 @@ static void generate_shaders(pl_dispatch dp,
                 } else {
                     ADD(pre, "layout(binding=%d) ", desc->binding);
                 }
-            } else if (gpu->glsl.version >= 130 && format) {
+            } else if (format) {
                 ADD(pre, "layout(%s) ", format);
             }
 
@@ -587,14 +587,9 @@ static void generate_shaders(pl_dispatch dp,
         add_var(pre, var);
     }
 
-    char *vert_in  = gpu->glsl.version >= 130 ? "in" : "attribute";
-    char *vert_out = gpu->glsl.version >= 130 ? "out" : "varying";
-    char *frag_in  = gpu->glsl.version >= 130 ? "in" : "varying";
-
     pl_str_builder glsl = dp->tmp[TMP_MAIN];
     ADD_CAT(glsl, pre);
 
-    const char *out_color = "gl_FragColor";
     switch(pass_params->type) {
     case PL_PASS_RASTER: {
         pl_assert(params->vert_pos);
@@ -618,7 +613,7 @@ static void generate_shaders(pl_dispatch dp,
             // Older GLSL doesn't support the use of explicit locations
             if (gpu->glsl.version < 430)
                 loc[0] = '\0';
-            ADD(vert_head, "%s %s %s %s;\n", loc, vert_in, type, va->name);
+            ADD(vert_head, "%s in %s %s;\n", loc, type, va->name);
 
             if (strcmp(name, params->vert_pos) == 0) {
                 pl_assert(va->fmt->num_components == 2);
@@ -630,9 +625,9 @@ static void generate_shaders(pl_dispatch dp,
                 ADD(vert_body, "gl_Position = vec4(va_pos, 0.0, 1.0); \n");
             } else {
                 // Everything else is just blindly passed through
-                ADD(vert_head, "%s %s %s %s;\n", loc, vert_out, type, name);
+                ADD(vert_head, "%s out %s %s;\n", loc, type, name);
                 ADD(vert_body, "%s = %s;\n", name, va->name);
-                ADD(glsl, "%s %s %s %s;\n", loc, frag_in, type, name);
+                ADD(glsl, "%s in %s %s;\n", loc, type, name);
             }
         }
 
@@ -641,13 +636,8 @@ static void generate_shaders(pl_dispatch dp,
         pl_hash_merge(&pass->signature, pl_str_builder_hash(vert_head));
         *out_vert_builder = vert_head;
 
-        // GLSL 130+ doesn't use the magic gl_FragColor
-        if (gpu->glsl.version >= 130) {
-            out_color = "out_color";
-            ADD(glsl, "%s out vec4 %s;\n",
-                gpu->glsl.version >= 430 ? "layout(location=0) " : "",
-                out_color);
-        }
+        ADD(glsl, "%s out vec4 out_color;\n",
+            gpu->glsl.version >= 430 ? "layout(location=0) " : "");
         break;
     }
     case PL_PASS_COMPUTE:
@@ -667,7 +657,7 @@ static void generate_shaders(pl_dispatch dp,
     switch (pass_params->type) {
     case PL_PASS_RASTER:
         pl_assert(res->output == PL_SHADER_SIG_COLOR);
-        ADD(glsl, "%s = %s();\n", out_color, res->name);
+        ADD(glsl, "out_color = %s();\n", res->name);
         break;
     case PL_PASS_COMPUTE:
         ADD(glsl, "%s();\n", res->name);

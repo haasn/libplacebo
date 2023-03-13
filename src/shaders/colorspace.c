@@ -66,11 +66,6 @@ void pl_shader_set_alpha(pl_shader sh, struct pl_color_repr *repr,
 static inline void reshape_mmr(pl_shader sh, ident_t mmr, bool single,
                                int min_order, int max_order)
 {
-    if (sh_glsl(sh).version < 130) {
-        SH_FAIL(sh, "MMR reshaping requires GLSL 130+");
-        return;
-    }
-
     if (single) {
         GLSL("const uint mmr_idx = 0u; \n");
     } else {
@@ -1149,11 +1144,6 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     params = PL_DEF(params, &pl_peak_detect_default_params);
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return false;
-
-    if (sh_glsl(sh).version < 130) { // uint support
-        PL_ERR(sh, "HDR peak detection requires GLSL >= 130!");
-        return false;
-    }
 
     pl_gpu gpu = SH_GPU(sh);
     if (!gpu || gpu->limits.max_ssbo_size < sizeof(struct peak_buf_data)) {

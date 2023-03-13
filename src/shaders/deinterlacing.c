@@ -26,10 +26,6 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
                            const struct pl_deinterlace_params *params)
 {
     params = PL_DEF(params, &pl_deinterlace_default_params);
-    if (sh_glsl(sh).version < 130) {
-        SH_FAIL(sh, "Deinterlacing requires GLSL >= 130!");
-        return;
-    }
 
     const struct pl_tex_params *texparams = &src->cur.top->params;
     if (!sh_require(sh, PL_SHADER_SIG_NONE, texparams->w, texparams->h))

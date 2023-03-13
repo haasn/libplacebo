@@ -604,8 +604,7 @@ next_dim: ; // `continue` out of the inner loop
             }
         });
 
-        bool can_fetch = sh_glsl(sh).version >= 130;
-        if (method == SH_LUT_LINEAR || !can_fetch) {
+        if (method == SH_LUT_LINEAR) {
             ident_t pos_macros[PL_ARRAY_SIZE(sizes)] = {0};
             for (int i = 0; i < dims; i++)
                 pos_macros[i] = texel_scale(sh, sizes[i], method == SH_LUT_LINEAR);

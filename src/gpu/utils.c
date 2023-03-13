@@ -982,7 +982,6 @@ void pl_tex_blit_raster(pl_gpu gpu, const struct pl_tex_blit_params *params)
 bool pl_buf_copy_swap(pl_gpu gpu, const struct pl_buf_copy_swap_params *params)
 {
     pl_buf src = params->src, dst = params->dst;
-    pl_require(gpu, gpu->glsl.version >= 130);
     pl_require(gpu, src->params.storable && dst->params.storable);
     pl_require(gpu, params->src_offset % sizeof(unsigned) == 0);
     pl_require(gpu, params->dst_offset % sizeof(unsigned) == 0);

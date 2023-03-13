@@ -628,9 +628,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
     ident_t in = NULL;
     int num_comps = __builtin_popcount(comp_mask);
     int shmem_req = (sizew * sizeh * num_comps + 2) * sizeof(float);
-    bool is_compute = !params->no_compute &&
-                      sh_glsl(sh).compute &&
-                      sh_glsl(sh).version >= 130 && // needed for round()
+    bool is_compute = !params->no_compute && sh_glsl(sh).compute &&
                       sh_try_compute(sh, bw, bh, false, shmem_req);
 
     // Note: SH_LUT_LITERAL might be faster in some specific cases, but not by

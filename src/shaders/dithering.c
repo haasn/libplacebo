@@ -131,15 +131,8 @@ void pl_shader_dither(pl_shader sh, int new_depth,
     }
 
     enum pl_dither_method method = params->method;
-    bool can_fixed = sh_glsl(sh).version >= 130;
     ident_t lut = NULL;
     int lut_size = 0;
-
-    if (method == PL_DITHER_ORDERED_FIXED && !can_fixed) {
-        PL_WARN(sh, "PL_DITHER_ORDERED_FIXED requires glsl version >= 130.."
-                " falling back.");
-        goto fallback;
-    }
 
     if (dither_method_is_lut(method)) {
         if (!dither_state) {
@@ -175,7 +168,7 @@ void pl_shader_dither(pl_shader sh, int new_depth,
     goto done;
 
 fallback:
-    method = can_fixed ? PL_DITHER_ORDERED_FIXED : PL_DITHER_WHITE_NOISE;
+    method = PL_DITHER_ORDERED_FIXED;
     // fall through
 
 done: ;
