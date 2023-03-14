@@ -605,15 +605,12 @@ void pl_icc_encode(pl_shader sh, pl_icc_object icc, pl_shader_obj *lut_obj)
     sh_describe(sh, "ICC 3DLUT");
     GLSL("// pl_icc_encode                      \n"
          "{                                     \n"
-         "if (any(greaterThan(color.rgb, vec3(%s)))) \n"
-         "    color.rgb = vec3(1,0,0); \n"
          "color.rgb = max(color.rgb, 0.0);      \n"
          "color.rgb = 1.0/%s * color.rgb;       \n"
          "color.rgb = pow(color.rgb, vec3(%s)); \n"
          "color.rgb = 1.0/%s * color.rgb - %s;  \n"
          "color.rgb = %s(color.rgb).rgb;        \n"
          "}                                     \n",
-         SH_FLOAT(icc->csp.hdr.min_luma + 1e4),
          SH_FLOAT(p->scale),
          SH_FLOAT(1.0f / icc->gamma),
          SH_FLOAT(p->a), SH_FLOAT(p->b / p->a),
