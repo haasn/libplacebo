@@ -194,8 +194,10 @@ static bool detect_contrast(pl_icc_object icc, struct pl_hdr_metadata *hdr,
      * brightness value here */
     if (intent == PL_INTENT_ABSOLUTE_COLORIMETRIC)
         intent = PL_INTENT_RELATIVE_COLORIMETRIC;
-    if (!cmsDetectDestinationBlackPoint(&p->black, p->profile, intent, 0))
+    if (!cmsDetectDestinationBlackPoint(&p->black, p->profile, intent, 0)) {
+        PL_ERR(p, "Failed detecting ICC profile black point!");
         return false;
+    }
 
     if (max_luma <= 0)
         max_luma = white ? white->Y : PL_COLOR_SDR_WHITE;
