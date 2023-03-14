@@ -1,7 +1,6 @@
 glfw = dependency('glfw3', required: false)
 sdl = dependency('sdl2', required: false)
 sdl_image = dependency('SDL2_image', required: false)
-pthread = dependency('threads', required: false)
 
 ffmpeg_deps = [
   dependency('libavcodec', required: false),
@@ -118,7 +117,7 @@ else
   endif
 
   if ffmpeg_found
-    plplay_deps = [ dep, pthread] + ffmpeg_deps
+    plplay_deps = [ dep, pl_thread ] + ffmpeg_deps
     if nuklear.found()
       plplay_deps += nuklear
     endif

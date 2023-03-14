@@ -9,7 +9,6 @@
  * License: CC0 / Public Domain
  */
 
-#include <pthread.h>
 #include <libgen.h>
 
 #include <libavutil/cpu.h>
@@ -21,6 +20,7 @@
 #include "common.h"
 #include "utils.h"
 #include "window.h"
+#include "pl_thread.h"
 
 #ifdef HAVE_NUKLEAR
 #include "ui.h"
@@ -54,7 +54,7 @@ struct plplay {
     AVFormatContext *format;
     AVCodecContext *codec;
     const AVStream *stream; // points to first video stream of `format`
-    pthread_t decoder_thread;
+    pl_thread decoder_thread;
     bool decoder_thread_created;
     bool exit_thread;
 
@@ -104,7 +104,7 @@ static void uninit(struct plplay *p)
     if (p->decoder_thread_created) {
         p->exit_thread = true;
         pl_queue_push(p->queue, NULL); // Signal EOF to wake up thread
-        pthread_join(p->decoder_thread, NULL);
+        pl_thread_join(p->decoder_thread);
     }
 
     pl_queue_destroy(&p->queue);
@@ -291,7 +291,7 @@ static void discard_frame(const struct pl_source_frame *src)
     printf("Dropped frame with PTS %.3f\n", src->pts);
 }
 
-static void *decode_loop(void *arg)
+static PL_THREAD_VOID decode_loop(void *arg)
 {
     int ret;
     struct plplay *p = arg;
@@ -381,7 +381,7 @@ done:
     pl_queue_push(p->queue, NULL); // Signal EOF to flush queue
     av_packet_free(&packet);
     av_frame_free(&frame);
-    return NULL;
+    PL_THREAD_RETURN();
 }
 
 static void apply_csp_overrides(struct plplay *p, struct pl_color_space *csp)
@@ -721,7 +721,7 @@ int main(int argc, char **argv)
         goto error;
 
     p->queue = pl_queue_create(p->win->gpu);
-    int ret = pthread_create(&p->decoder_thread, NULL, decode_loop, p);
+    int ret = pl_thread_create(&p->decoder_thread, decode_loop, p);
     if (ret != 0) {
         fprintf(stderr, "Failed creating decode thread: %s\n", strerror(errno));
         goto error;

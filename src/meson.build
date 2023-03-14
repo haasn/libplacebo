@@ -254,3 +254,8 @@ if get_option('fuzz')
     )
   endforeach
 endif
+
+pl_thread = declare_dependency(
+  include_directories: include_directories('.'),
+  dependencies: threads,
+)
