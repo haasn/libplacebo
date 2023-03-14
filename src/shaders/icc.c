@@ -29,6 +29,7 @@ const struct pl_icc_params pl_icc_default_params = { PL_ICC_DEFAULTS };
 #include <lcms2_plugin.h>
 
 struct icc_priv {
+    pl_log log;
     cmsContext cms;
     cmsHPROFILE profile;
     cmsHPROFILE approx; // approximation profile
@@ -58,8 +59,8 @@ void pl_icc_close(pl_icc_object *picc)
     pl_free_ptr((void **) picc);
 }
 
-static bool detect_csp(pl_log pllog, pl_icc_object icc,
-                       struct pl_raw_primaries *prim, float *gamma)
+static bool detect_csp(pl_icc_object icc, struct pl_raw_primaries *prim,
+                       float *out_gamma)
 {
     struct icc_priv *p = PL_PRIV(icc);
     cmsHTRANSFORM tf;
@@ -168,16 +169,16 @@ static bool detect_csp(pl_log pllog, pl_icc_object icc,
     }
     S = sqrt(S / (k - 1));
     if (S > 0.5) {
-        pl_warn(pllog, "Detected profile gamma (%.3f) very far from pure power "
+        PL_WARN(p, "Detected profile gamma (%.3f) very far from pure power "
                 "response (stddev=%.1f), suspected unusual or broken profile. "
                 "Using anyway, but results may be poor.", M, S);
     } else if (!(M > 0)) {
-        pl_err(pllog, "Arithmetic error in ICC profile gamma estimation? "
+        PL_ERR(p, "Arithmetic error in ICC profile gamma estimation? "
                "Please open an issue");
         return false;
     }
 
-    *gamma = M;
+    *out_gamma = M;
     p->gamma_stddev = S;
     return true;
 }
@@ -205,12 +206,12 @@ static bool detect_contrast(pl_icc_object icc, struct pl_hdr_metadata *hdr,
     return true;
 }
 
-static void infer_clut_size(pl_log log, struct pl_icc_object_t *icc)
+static void infer_clut_size(struct pl_icc_object_t *icc)
 {
     struct icc_priv *p = PL_PRIV(icc);
     struct pl_icc_params *params = &icc->params;
     if (params->size_r && params->size_g && params->size_b) {
-        pl_debug(log, "Using fixed 3DLUT size: %dx%dx%d",
+        PL_DEBUG(p, "Using fixed 3DLUT size: %dx%dx%d",
                  (int) params->size_r, (int) params->size_g, (int) params->size_b);
         return;
     }
@@ -314,7 +315,7 @@ static void infer_clut_size(pl_log log, struct pl_icc_object_t *icc)
         params->size_b = ceilf(factor * params->size_b);
     }
 
-    pl_info(log, "Chosen 3DLUT size: %dx%dx%d",
+    PL_INFO(p, "Chosen 3DLUT size: %dx%dx%d",
             (int) params->size_r, (int) params->size_g, (int) params->size_b);
 }
 
@@ -329,22 +330,23 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     struct pl_icc_params *params = &icc->params;
     *params = pparams ? *pparams : pl_icc_default_params;
     icc->signature = profile->signature;
+    p->log = log;
     p->cms = cmsCreateContext(NULL, (void *) log);
     if (!p->cms) {
-        pl_err(log, "Failed creating LittleCMS context!");
+        PL_ERR(p, "Failed creating LittleCMS context!");
         goto error;
     }
 
     cmsSetLogErrorHandlerTHR(p->cms, error_callback);
-    pl_info(log, "Opening ICC profile..");
+    PL_INFO(p, "Opening ICC profile..");
     p->profile = cmsOpenProfileFromMemTHR(p->cms, profile->data, profile->len);
     if (!p->profile) {
-        pl_err(log, "Failed opening ICC profile");
+        PL_ERR(p, "Failed opening ICC profile");
         goto error;
     }
 
     if (cmsGetColorSpace(p->profile) != cmsSigRgbData) {
-        pl_err(log, "Invalid ICC profile: not RGB");
+        PL_ERR(p, "Invalid ICC profile: not RGB");
         goto error;
     }
 
@@ -352,11 +354,11 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
         params->intent = cmsGetHeaderRenderingIntent(p->profile);
 
     struct pl_raw_primaries *out_prim = &icc->csp.hdr.prim;
-    if (!detect_csp(log, icc, out_prim, &icc->gamma))
+    if (!detect_csp(icc, out_prim, &icc->gamma))
         goto error;
     if (!detect_contrast(icc, &icc->csp.hdr, params->max_luma))
         goto error;
-    infer_clut_size(log, icc);
+    infer_clut_size(icc);
 
     const struct pl_raw_primaries *best = NULL;
     for (enum pl_color_primaries prim = 1; prim < PL_COLOR_PRIM_COUNT; prim++) {
@@ -377,7 +379,7 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     }
 
     if (!best) {
-        pl_warn(log, "ICC profile too wide to handle, colors may be clipped!");
+        PL_WARN(p, "ICC profile too wide to handle, colors may be clipped!");
         icc->containing_primaries = PL_COLOR_PRIM_ACES_AP0;
         best = pl_raw_primaries_get(icc->containing_primaries);
     }
@@ -446,14 +448,13 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
 {
     pl_icc_object icc = params->priv;
     struct icc_priv *p = PL_PRIV(icc);
-    pl_log log = cmsGetContextUserData(p->cms);
     cmsHPROFILE srcp = decode ? p->profile : p->approx;
     cmsHPROFILE dstp = decode ? p->approx  : p->profile;
 
     int s_r = params->width, s_g = params->height, s_b = params->depth;
     size_t data_size = s_r * s_g * s_b * sizeof(uint16_t[4]);
     if (cache_load(icc, params->signature, datap, data_size)) {
-        pl_info(log, "Using cached 3DLUT (0x%"PRIX64")", params->signature);
+        PL_INFO(p, "Using cached 3DLUT (0x%"PRIX64")", params->signature);
         return;
     }
 
@@ -467,7 +468,7 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
         return;
 
     clock_t after_transform = clock();
-    pl_log_cpu_time(log, start, after_transform, "creating ICC transform");
+    pl_log_cpu_time(p->log, start, after_transform, "creating ICC transform");
 
     uint16_t *tmp = pl_alloc(NULL, s_r * 3 * sizeof(tmp[0]));
     for (int b = 0; b < s_b; b++) {
@@ -502,7 +503,7 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
         }
     }
 
-    pl_log_cpu_time(log, after_transform, clock(), "generating ICC 3DLUT");
+    pl_log_cpu_time(p->log, after_transform, clock(), "generating ICC 3DLUT");
     cmsDeleteTransform(tf);
     pl_free(tmp);
 
