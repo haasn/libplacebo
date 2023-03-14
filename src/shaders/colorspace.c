@@ -1411,6 +1411,8 @@ static inline void visualize_tone_map(pl_shader sh, ident_t fun,
          "    if (pos.y > xmax) {                   \n" // inverse tone-mapping region
          "        vec3 hi = vec3(0.2, 0.5, 0.8);    \n"
          "        viz = mix(viz, hi, 0.5);          \n"
+         "    } else if (pos.y < xmin) {            \n" // black point region
+         "        viz = mix(viz, vec3(0.0), 0.3);   \n"
          "    }                                     \n"
          "    if (xavg > 0.0 && abs(pos.x - xavg) < 1e-3)\n" // source avg brightness
          "        viz = vec3(0.5);                  \n"
