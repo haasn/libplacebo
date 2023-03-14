@@ -584,6 +584,8 @@ void pl_color_space_nominal_luma_ex(const struct pl_nominal_luma_params *params)
         avg_luma = pl_hdr_rescale(PL_HDR_PQ, scaling, csp->hdr.avg_pq_y);
     }
 
+    if (min_luma < 0)
+        min_luma = 0; // sanity
     if (max_luma && min_luma > max_luma) // sanity
         min_luma = max_luma = 0;
 
