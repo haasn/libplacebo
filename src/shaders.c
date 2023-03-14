@@ -22,6 +22,30 @@
 #include "log.h"
 #include "shaders.h"
 
+static uint8_t reverse_bits(uint8_t x)
+{
+    static const uint8_t reverse_nibble[16] = {
+        0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
+        0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf,
+    };
+
+    return reverse_nibble[x & 0xF] << 4 | reverse_nibble[x >> 4];
+}
+
+static void update_params(pl_shader sh, const struct pl_shader_params *params)
+{
+    if (!params)
+        return;
+
+    sh->res.params = *params;
+
+    // To avoid collisions for shaders with very high number of
+    // identifiers, pack the shader ID into the highest bits (MSB -> LSB)
+    pl_static_assert(sizeof(sh->prefix) > sizeof(params->id));
+    const int shift = 8 * (sizeof(sh->prefix) - sizeof(params->id));
+    sh->prefix = reverse_bits(params->id) << shift;
+}
+
 pl_shader pl_shader_alloc(pl_log log, const struct pl_shader_params *params)
 {
     static const int glsl_ver_req = 130;
@@ -42,10 +66,7 @@ pl_shader pl_shader_alloc(pl_log log, const struct pl_shader_params *params)
 
     // Ensure there's always at least one `tmp` object
     PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_new(NULL));
-
-    if (params)
-        sh->res.params = *params;
-
+    update_params(sh, params);
     return sh;
 }
 
@@ -86,9 +107,6 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
         .steps.elem     = sh->steps.elem,
     };
 
-    if (params)
-        new.res.params = *params;
-
     // Preserve buffer allocations
     memcpy(new.buffers, sh->buffers, sizeof(new.buffers));
     for (int i = 0; i < PL_ARRAY_SIZE(new.buffers); i++)
@@ -96,6 +114,7 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
 
     *sh = new;
     PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_new(NULL));
+    update_params(sh, params);
 }
 
 bool pl_shader_is_failed(const pl_shader sh)
@@ -204,8 +223,15 @@ bool pl_shader_output_size(const pl_shader sh, int *w, int *h)
 
 ident_t sh_fresh(pl_shader sh, const char *name)
 {
-    return pl_asprintf(SH_TMP(sh), "_%s_%d_%u", PL_DEF(name, "var"),
-                       sh->fresh++, SH_PARAMS(sh).id);
+    unsigned short id = ++sh->fresh;
+    assert(!(sh->prefix & id));
+    id |= sh->prefix;
+
+    if (name) {
+        return pl_asprintf(SH_TMP(sh), "_%hx_%s", id, name);
+    } else {
+        return pl_asprintf(SH_TMP(sh), "_%hx", id);
+    }
 }
 
 ident_t sh_var(pl_shader sh, struct pl_shader_var sv)
@@ -537,7 +563,7 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
 {
     pl_assert(sh->mutable);
 
-    if (SH_PARAMS(sh).id == SH_PARAMS(sub).id) {
+    if (sh->prefix == sub->prefix) {
         PL_TRACE(sh, "Can't merge shaders: conflicting identifiers!");
         return NULL;
     }

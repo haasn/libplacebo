@@ -163,7 +163,7 @@ pl_shader pl_dispatch_begin_ex(pl_dispatch dp, bool unique)
     pl_mutex_unlock(&dp->lock);
 
     if (sh) {
-        sh->res.params = params;
+        pl_shader_reset(sh, &params);
         return sh;
     }
 

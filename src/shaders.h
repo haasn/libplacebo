@@ -59,7 +59,8 @@ struct pl_shader_t {
     bool flexible_work_groups;
     enum pl_sampler_type sampler_type;
     char sampler_prefix;
-    int fresh;
+    unsigned short prefix; // pre-processed version of res.params.id
+    unsigned short fresh;
 
     // mutable versions of the fields from pl_shader_res
     PL_ARRAY(struct pl_shader_va) vas;
