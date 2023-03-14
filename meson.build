@@ -369,14 +369,19 @@ python_env.append('PYTHONPATH', thirdparty/'glad')
 if host_machine.system() == 'windows'
     threads = declare_dependency()
 else
-    threads = dependency('threads')
-    conf_internal.set('PL_HAVE_PTHREAD', threads.found())
-    conf_internal.set('PTHREAD_HAS_SETCLOCK', cc.has_header_symbol(
-      'pthread.h',
-      'pthread_condattr_setclock',
-      dependencies: threads,
-      args: c_opts,
-    ))
+    pthreads = dependency('threads')
+    has_setclock = cc.has_header_symbol(
+                     'pthread.h',
+                     'pthread_condattr_setclock',
+                     dependencies: pthreads,
+                     args: c_opts,
+                   )
+
+    threads = declare_dependency(
+      dependencies: pthreads,
+      compile_args: [pthreads.found() ? '-DPL_HAVE_PTHREAD' : '',
+                     has_setclock ? '-DPTHREAD_HAS_SETCLOCK' : '',]
+    )
 endif
 
 build_deps = [ libm, threads ]
