@@ -2707,6 +2707,11 @@ static bool pass_init(struct pass_state *pass, bool acquire_image)
     fix_refs_and_rects(pass);
     find_fbo_format(pass);
 
+    // Update ICC profiles, do this before inferring color space parameters
+    // because the ICC profile may override tagged values
+    pass->src_icc = acquire_image ? update_icc(pass, &rr->icc[0], image) : NULL;
+    pass->dst_icc = update_icc(pass, &rr->icc[1], target);
+
     // Infer the target color space info based on the image's
     if (image) {
         fix_frame(image);
@@ -2744,10 +2749,6 @@ static bool pass_init(struct pass_state *pass, bool acquire_image)
             }
         }
     }
-
-    // Update ICC profiles
-    pass->src_icc = acquire_image ? update_icc(pass, &rr->icc[0], image) : NULL;
-    pass->dst_icc = update_icc(pass, &rr->icc[1], target);
 
     pass->tmp = pl_tmp(NULL);
     return true;
