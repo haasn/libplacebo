@@ -184,17 +184,27 @@ static bool detect_csp(pl_icc_object icc, struct pl_raw_primaries *prim,
 }
 
 static bool detect_contrast(pl_icc_object icc, struct pl_hdr_metadata *hdr,
-                            float max_luma)
+                            struct pl_icc_params *params, float max_luma)
 {
     struct icc_priv *p = PL_PRIV(icc);
     cmsCIEXYZ *white = cmsReadTag(p->profile, cmsSigLuminanceTag);
-    enum pl_rendering_intent intent = icc->params.intent;
+    enum pl_rendering_intent intent = params->intent;
     /* LittleCMS refuses to detect an intent in absolute colorimetric intent,
      * so fall back to relative colorimetric since we only care about the
      * brightness value here */
     if (intent == PL_INTENT_ABSOLUTE_COLORIMETRIC)
         intent = PL_INTENT_RELATIVE_COLORIMETRIC;
     if (!cmsDetectDestinationBlackPoint(&p->black, p->profile, intent, 0)) {
+        /*
+         * v4 ICC profiles have a black point tag but only for
+         * perceptual/saturation intents. So we change the rendering intent
+         * to perceptual if we are provided a v4 ICC profile.
+         */
+        if (cmsGetEncodedICCversion(p->profile) >= 0x4000000 && intent != PL_INTENT_PERCEPTUAL) {
+            params->intent = PL_INTENT_PERCEPTUAL;
+            return detect_contrast(icc, hdr, params, max_luma);
+        }
+
         PL_ERR(p, "Failed detecting ICC profile black point!");
         return false;
     }
@@ -358,7 +368,7 @@ pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
     struct pl_raw_primaries *out_prim = &icc->csp.hdr.prim;
     if (!detect_csp(icc, out_prim, &icc->gamma))
         goto error;
-    if (!detect_contrast(icc, &icc->csp.hdr, params->max_luma))
+    if (!detect_contrast(icc, &icc->csp.hdr, params, params->max_luma))
         goto error;
     infer_clut_size(icc);
 
