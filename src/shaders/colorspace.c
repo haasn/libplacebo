@@ -1503,8 +1503,7 @@ static void tone_map(pl_shader sh,
 
     bool can_fixed = !params->force_tone_mapping_lut;
     bool is_clip = can_fixed && (!fun || fun == &pl_tone_map_clip);
-    bool is_linear = can_fixed && fun == &pl_tone_map_linear &&
-                     (!lut_params.param || lut_params.param == 1.0f);
+    bool is_linear = can_fixed && fun == &pl_tone_map_linear;
 
     if (state && !(is_clip || is_linear)) {
         struct sh_tone_map_obj *obj;
@@ -1535,10 +1534,13 @@ static void tone_map(pl_shader sh,
 
     } else if (is_linear) {
 
+        const float gain = PL_DEF(lut_params.param, 1.0f);
         const float pq_src_min = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, src_min);
         const float pq_src_max = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, src_max);
         const float pq_dst_min = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, dst_min);
         const float pq_dst_max = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, dst_max);
+        const float src_scale = gain / (pq_src_max - pq_src_min);
+        const float dst_scale = pq_dst_max - pq_dst_min;
 
         ident_t bpc = sh_fresh(sh, "bpc_pq");
         GLSLH("float %s(float x) {                          \n"
@@ -1547,12 +1549,12 @@ static void tone_map(pl_shader sh,
              "    x = pow(max(x, 0.0), %f);                 \n"
              "    x = (%f + %f * x) / (1.0 + %f * x);       \n"
              "    x = pow(x, %f);                           \n"
-             // Stretch the black point
-             "    x -= %s;                                  \n"
-             "    x *= %s;                                  \n"
-             "    x += %s;                                  \n"
+             // Stretch the black point (while clipping)
+             "    x = %s * x + %s;                          \n"
+             "    x = clamp(x, 0.0, 1.0);                   \n"
+             "    x = %s * x + %s;                          \n"
              // PQ EOTF
-             "    x = pow(max(x, 0.0), 1.0/%f);             \n"
+             "    x = pow(x, 1.0 / %f);                     \n"
              "    x = max(x - %f, 0.0) / (%f - %f * x);     \n"
              "    x = pow(x, 1.0 / %f);                     \n"
              "    x *= %f;                                  \n"
@@ -1561,9 +1563,8 @@ static void tone_map(pl_shader sh,
              bpc,
              PL_COLOR_SDR_WHITE / 10000.0,
              PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
-             SH_FLOAT_DYN(pq_src_min),
-             SH_FLOAT_DYN((pq_dst_max - pq_dst_min) / (pq_src_max - pq_src_min)),
-             SH_FLOAT(pq_dst_min),
+             SH_FLOAT_DYN(src_scale), SH_FLOAT_DYN(-src_scale * pq_src_min),
+             SH_FLOAT_DYN(dst_scale), SH_FLOAT(pq_dst_min),
              PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
              10000.0 / PL_COLOR_SDR_WHITE);
 
