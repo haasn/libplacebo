@@ -30,9 +30,11 @@ int main()
     pl_str_append_asprintf(tmp, &buf, "%.*s", PL_STR_FMT(test));
     REQUIRE(pl_str_equals(buf, test));
 
-    pl_str_append_asprintf_c(tmp, &buf, "%d %f %lld %zu %.*sx %hx",
-        1, 1.0f, 0xFFll, (size_t) 0, PL_STR_FMT(empty), (unsigned short) 0xCAFE);
-    REQUIRE(pl_str_equals0(buf, "test1 1.00000000000000000000 255 0 x cafe"));
+    pl_str_append_asprintf_c(tmp, &buf, "%d %f %lld %zu %.*sx %hx %hx %hx %hx",
+        1, 1.0f, 0xFFll, (size_t) 0, PL_STR_FMT(empty),
+        (unsigned short) 0xCAFEu, (unsigned short) 0x1, (unsigned short) 0,
+        (unsigned short) 0xFFFFu);
+    REQUIRE(pl_str_equals0(buf, "test1 1.00000000000000000000 255 0 x cafe 1 0 ffff"));
 
     REQUIRE_CMP(pl_strchr(null, ' '), <, 0, "d");
     REQUIRE_CMP((int) pl_strspn(null, " "), ==, 0, "d");

@@ -237,8 +237,8 @@ static int print_hex(char *buf, unsigned int x)
     }
 
     static const char *hexdigits = "0123456789abcdef";
-    const int nibbles0 = 8 - (__builtin_clz(x) >> 2);
-    buf -= nibbles0 ;
+    const int nibbles0 = __builtin_clz(x) >> 2;
+    buf -= nibbles0;
 
     switch (nibbles0) {
     pl_static_assert(sizeof(unsigned int) == sizeof(uint32_t));
