@@ -203,3 +203,19 @@ ubsan:
                                                -Db_lundef=false
         - ninja -C build
         - cd build && time meson test -t 5 -v --num-processes=1
+
+gpu-strip:
+    image: $IMAGE_UBUNTU_JAMMY
+    stage: sanitize
+    tags:
+        - gpu
+    script:
+        - meson build --buildtype release
+                      --werror
+                      -Dtests=true
+                      -Ddemos=false
+                      -Dc_args='-DPL_STRIP_SHADERS'
+                      -Ddebug-abort=true
+                      -Dshaderc=disabled
+        - ninja -C build
+        - cd build && meson test -t 5 -v --num-processes=1
