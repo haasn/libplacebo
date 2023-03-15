@@ -68,13 +68,8 @@ if opengl_build.allowed()
     'EGL_MESA_platform_surfaceless',
   ]
 
-  # Generate GL loader. Adding it to `build_deps` instead of `sources` makes
-  # sure it also gets correctly pulled into the test framework
+  # Generate GL loader
   subdir('include/glad')
-  build_deps += declare_dependency(
-    include_directories: include_directories('./include'),
-    sources: glad,
-  )
 else
   sources += 'opengl/stubs.c'
 endif

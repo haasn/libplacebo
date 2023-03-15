@@ -27,6 +27,7 @@ foreach h : headers
 endforeach
 
 static_library('test_include', test_include_sources,
-    dependencies: tdep,
+    dependencies: [tdep_static, lavu, lavc, lavf],
+    include_directories: inc,
     implicit_include_directories: false
 )

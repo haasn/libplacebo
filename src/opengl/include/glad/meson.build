@@ -22,3 +22,8 @@ glad = custom_target('gl.h',
     '--extensions=' + ','.join(gl_extensions), 'c', '--header-only', '--mx'
   ] + (opengl_link.allowed() ? ['--loader'] : [])
 )
+
+glad_dep = declare_dependency(
+  include_directories: include_directories('..'),
+  sources: glad,
+)

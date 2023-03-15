@@ -189,7 +189,7 @@ sources += vcs_tag(
 inc = include_directories('./include')
 lib = library('placebo', sources,
   install: true,
-  dependencies: build_deps,
+  dependencies: build_deps + glad_dep,
   soversion: apiver,
   include_directories: inc,
   link_args: link_args,
@@ -227,11 +227,17 @@ pkg.generate(
 
 
 ### Testing
-tdep = [ declare_dependency(
+tdep_static = declare_dependency(
     dependencies: build_deps,
     include_directories: [ inc, include_directories('.') ],
+    # TODO: Define objects here once Meson 1.1.0 is ok to use
+    # objects: lib.extract_all_objects(recursive: false)
+  )
+
+tdep_shared = declare_dependency(
+    include_directories: [ inc, include_directories('.') ],
     link_with: lib,
-) ]
+  )
 
 if get_option('tests')
   subdir('tests')
@@ -242,7 +248,7 @@ if get_option('bench')
     error('Compiling the benchmark suite requires vulkan support!')
   endif
 
-  bench = executable('bench', 'tests/bench.c', dependencies: tdep)
+  bench = executable('bench', 'tests/bench.c', dependencies: tdep_shared)
   test('benchmark', bench, is_parallel: false, timeout: 600)
 endif
 
@@ -250,7 +256,7 @@ if get_option('fuzz')
   foreach f : fuzzers
     executable('fuzz.' + f, 'tests/fuzz/' + f,
         objects: lib.extract_all_objects(recursive: false),
-        dependencies: tdep,
+        dependencies: tdep_static,
     )
   endforeach
 endif
