@@ -646,8 +646,9 @@ void pl_color_space_infer(struct pl_color_space *space)
         .color      = space,
         .metadata   = PL_HDR_METADATA_HDR10,
         .scaling    = PL_HDR_NITS,
-        .out_min    = &space->hdr.min_luma,
         .out_max    = &space->hdr.max_luma,
+        // Preserve tagged minimum
+        .out_min    = space->hdr.min_luma ? NULL : &space->hdr.min_luma,
     ));
 
     // Default the signal color space based on the nominal raw primaries
