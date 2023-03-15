@@ -274,6 +274,10 @@ next:
         pl_opengl_destroy(&gl);
         eglDestroySurface(dpy, surf);
         eglDestroyContext(dpy, egl);
+#ifdef CI_MAXGL
+        if (last_glsl.version)
+            break;
+#endif
         continue;
 
 error: ;
