@@ -1559,14 +1559,14 @@ static void tone_map(pl_shader sh,
         const float src_scale = gain / (pq_src_max - pq_src_min);
         const float dst_scale = pq_dst_max - pq_dst_min;
 
-        ident_t bpc = sh_fresh(sh, "bpc_pq");
+        ident_t linfun = sh_fresh(sh, "linear_pq");
         GLSLH("float %s(float x) {                          \n"
              // PQ OETF
              "    x *= %f;                                  \n"
              "    x = pow(max(x, 0.0), %f);                 \n"
              "    x = (%f + %f * x) / (1.0 + %f * x);       \n"
              "    x = pow(x, %f);                           \n"
-             // Stretch the black point (while clipping)
+             // Stretch the input range (while clipping)
              "    x = %s * x + %s;                          \n"
              "    x = clamp(x, 0.0, 1.0);                   \n"
              "    x = %s * x + %s;                          \n"
@@ -1577,7 +1577,7 @@ static void tone_map(pl_shader sh,
              "    x *= %f;                                  \n"
              "    return x;                                 \n"
              "}                                             \n",
-             bpc,
+             linfun,
              PL_COLOR_SDR_WHITE / 10000.0,
              PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
              SH_FLOAT_DYN(src_scale), SH_FLOAT_DYN(-src_scale * pq_src_min),
@@ -1585,7 +1585,7 @@ static void tone_map(pl_shader sh,
              PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
              10000.0 / PL_COLOR_SDR_WHITE);
 
-        GLSL("#define tone_map(x) (%s(x)) \n", bpc);
+        GLSL("#define tone_map(x) (%s(x)) \n", linfun);
 
     } else if (lut) {
 
