@@ -227,11 +227,8 @@ ident_t sh_fresh(pl_shader sh, const char *name)
     assert(!(sh->prefix & id));
     id |= sh->prefix;
 
-    if (name) {
-        return pl_asprintf(SH_TMP(sh), "_%hx_%s", id, name);
-    } else {
-        return pl_asprintf(SH_TMP(sh), "_%hx", id);
-    }
+    assert(name);
+    return pl_asprintf(SH_TMP(sh), "_%hx_%s", id, name);
 }
 
 ident_t sh_var(pl_shader sh, struct pl_shader_var sv)
