@@ -22,6 +22,49 @@
 #include "log.h"
 #include "shaders.h"
 
+pl_shader_info pl_shader_info_ref(pl_shader_info pinfo)
+{
+    struct sh_info *info = (struct sh_info *) pinfo;
+    if (!info)
+        return NULL;
+
+    pl_rc_ref(&info->rc);
+    return &info->info;
+}
+
+void pl_shader_info_deref(pl_shader_info *pinfo)
+{
+    struct sh_info *info = (struct sh_info *) *pinfo;
+    if (!info)
+        return;
+
+    if (pl_rc_deref(&info->rc))
+        pl_free(info);
+    *pinfo = NULL;
+}
+
+static struct sh_info *sh_info_alloc(void *alloc)
+{
+    struct sh_info *info = pl_zalloc_ptr(alloc, info);
+    info->tmp = pl_tmp(info);
+    pl_rc_init(&info->rc);
+    return info;
+}
+
+// Re-use `sh_info` allocation if possible, allocate new otherwise
+static struct sh_info *sh_info_recycle(struct sh_info *info)
+{
+    if (!pl_rc_deref(&info->rc))
+        return sh_info_alloc(NULL);
+
+    memset(&info->info, 0, sizeof(info->info)); // reset public fields
+    pl_free_children(info->tmp);
+    pl_rc_ref(&info->rc);
+    info->desc.len = 0;
+    info->steps.num = 0;
+    return info;
+}
+
 static uint8_t reverse_bits(uint8_t x)
 {
     static const uint8_t reverse_nibble[16] = {
@@ -37,7 +80,7 @@ static void update_params(pl_shader sh, const struct pl_shader_params *params)
     if (!params)
         return;
 
-    sh->res.params = *params;
+    sh->info->info.params = *params;
 
     // To avoid collisions for shaders with very high number of
     // identifiers, pack the shader ID into the highest bits (MSB -> LSB)
@@ -57,8 +100,9 @@ pl_shader pl_shader_alloc(pl_log log, const struct pl_shader_params *params)
 
     pl_shader sh = pl_alloc_ptr(NULL, sh);
     *sh = (struct pl_shader_t) {
-        .log = log,
-        .mutable = true,
+        .log        = log,
+        .mutable    = true,
+        .info       = sh_info_alloc(NULL),
     };
 
     for (int i = 0; i < PL_ARRAY_SIZE(sh->buffers); i++)
@@ -86,6 +130,7 @@ void pl_shader_free(pl_shader *psh)
     if (!sh)
         return;
 
+    pl_shader_info_deref((pl_shader_info *) &sh->info);
     sh_deref(sh);
     pl_free_ptr(psh);
 }
@@ -95,8 +140,9 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
     sh_deref(sh);
 
     struct pl_shader_t new = {
-        .log = sh->log,
-        .mutable = true,
+        .log            = sh->log,
+        .mutable        = true,
+        .info           = sh_info_recycle(sh->info),
 
         // Preserve array allocations
         .tmp.elem       = sh->tmp.elem,
@@ -105,7 +151,6 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
         .vars.elem      = sh->vars.elem,
         .descs.elem     = sh->descs.elem,
         .consts.elem    = sh->consts.elem,
-        .steps.elem     = sh->steps.elem,
     };
 
     // Preserve buffer allocations
@@ -304,7 +349,7 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
 
 ident_t sh_const(pl_shader sh, struct pl_shader_const sc)
 {
-    if (sh->res.params.dynamic_constants && !sc.compile_time) {
+    if (SH_PARAMS(sh).dynamic_constants && !sc.compile_time) {
         return sh_var(sh, (struct pl_shader_var) {
             .var = {
                 .name = sc.name,
@@ -525,7 +570,7 @@ void sh_describef(pl_shader sh, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    sh_describe(sh, pl_vasprintf(SH_TMP(sh), fmt, ap));
+    sh_describe(sh, pl_vasprintf(sh->info->tmp, fmt, ap));
     va_end(ap);
 }
 
@@ -617,7 +662,10 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
     PL_ARRAY_CONCAT(sh, sh->vars, sub->vars);
     PL_ARRAY_CONCAT(sh, sh->descs, sub->descs);
     PL_ARRAY_CONCAT(sh, sh->consts, sub->consts);
-    PL_ARRAY_CONCAT(sh, sh->steps, sub->steps);
+
+    // Make a deep copy of shader description steps array
+    for (int i = 0; i < sub->info->steps.num; i++)
+        sh_describe(sh, pl_str0dup0(sh->info, sub->info->steps.elem[i]));
 
     return name;
 }
@@ -651,39 +699,45 @@ pl_str_builder sh_finalize_internal(pl_shader sh)
     pl_str_builder_concat(sh->buffers[SH_BUF_PRELUDE], sh->buffers[SH_BUF_FOOTER]);
     GLSLP("%s\n}\n\n", retvals[sh->res.output]);
 
-    // Generate the pretty description
-    sh->res.description = "(unknown shader)";
-    if (sh->steps.num) {
-        // Reuse this builder
-        pl_str_builder desc = sh->buffers[SH_BUF_BODY];
-        pl_str_builder_reset(desc);
+    // Generate the shader info
+    struct sh_info *info = sh->info;
+    info->info.steps = info->steps.elem;
+    info->info.num_steps = info->steps.num;
+    info->info.description = "(unknown shader)";
 
-        for (int i = 0; i < sh->steps.num; i++) {
-            const char *step = sh->steps.elem[i];
-            if (!step)
-                continue;
+    // Generate pretty description
+    for (int i = 0; i < info->steps.num; i++) {
+        const char *step = info->steps.elem[i];
 
-            // Group together duplicates. We're okay using a weak equality
-            // check here because all pass descriptions are static strings.
-            int count = 1;
-            for (int j = i+1; j < sh->steps.num; j++) {
-                if (sh->steps.elem[j] == step) {
-                    sh->steps.elem[j] = NULL;
-                    count++;
-                }
-            }
-
-            if (i > 0)
-                pl_str_builder_const_str(desc, ", ");
-            pl_str_builder_str0(desc, step);
-            if (count > 1)
-                pl_str_builder_printf_c(desc, " x%d", count);
+        // Prevent duplicates. We're okay using a weak equality check here
+        // because most pass descriptions are static strings.
+        for (int j = 0; j < i; j++) {
+            if (info->steps.elem[j] == step)
+                goto next_step;
         }
 
-        sh->res.description = (char *) pl_str_builder_exec(desc).buf;
+        int count = 1;
+        for (int j = i+1; j < info->steps.num; j++) {
+            if (info->steps.elem[j] == step)
+                count++;
+        }
+
+        const char *prefix = i > 0 ? ", " : "";
+        if (count > 1) {
+            pl_str_append_asprintf(info, &info->desc, "%s%s x%d",
+                                   prefix, step, count);
+        } else {
+            pl_str_append_asprintf(info, &info->desc, "%s%s", prefix, step);
+        }
+
+next_step: ;
     }
 
+    if (info->desc.len)
+        info->info.description = (char *) info->desc.buf;
+
     // Set the vas/vars/descs
+    sh->res.info = &info->info;
     sh->res.vertex_attribs = sh->vas.elem;
     sh->res.num_vertex_attribs = sh->vas.num;
     sh->res.variables = sh->vars.elem;
@@ -692,8 +746,6 @@ pl_str_builder sh_finalize_internal(pl_shader sh)
     sh->res.num_descriptors = sh->descs.num;
     sh->res.constants = sh->consts.elem;
     sh->res.num_constants = sh->consts.num;
-    sh->res.steps = sh->steps.elem;
-    sh->res.num_steps = sh->steps.num;
     sh->mutable = false;
     return sh->buffers[SH_BUF_PRELUDE];
 }
@@ -710,6 +762,13 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
     pl_assert(!sh->mutable);
     if (!sh->res.glsl)
         sh->res.glsl = (char *) pl_str_builder_exec(glsl).buf;
+
+    // Set deprecated fields for backwards compatibility
+    pl_shader_info info = sh->res.info;
+    sh->res.params      = info->params;
+    sh->res.steps       = info->steps;
+    sh->res.num_steps   = info->num_steps;
+    sh->res.description = info->description;
 
     return &sh->res;
 }

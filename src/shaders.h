@@ -66,8 +66,20 @@ enum pl_shader_type {
     SH_FRAGMENT
 };
 
+struct sh_info {
+    // public-facing struct
+    struct pl_shader_info_t info;
+
+    // internal fields
+    void *tmp;
+    pl_rc_t rc;
+    pl_str desc;
+    PL_ARRAY(const char *) steps;
+};
+
 struct pl_shader_t {
     pl_log log;
+    struct sh_info *info;
     struct pl_shader_res res; // for accumulating some of the fields
     PL_ARRAY(struct pl_ref *) tmp; // only used for var/va/desc names and data
     PL_ARRAY(pl_shader_obj) obj;
@@ -89,7 +101,6 @@ struct pl_shader_t {
     PL_ARRAY(struct pl_shader_var) vars;
     PL_ARRAY(struct pl_shader_desc) descs;
     PL_ARRAY(struct pl_shader_const) consts;
-    PL_ARRAY(const char *) steps;
 };
 
 // Same as `pl_shader_finalize` but doesn't template `sh->res.glsl`, instead
@@ -97,7 +108,7 @@ struct pl_shader_t {
 pl_str_builder sh_finalize_internal(pl_shader sh);
 
 // Helper functions for convenience
-#define SH_PARAMS(sh) ((sh)->res.params)
+#define SH_PARAMS(sh) ((sh)->info->info.params)
 #define SH_GPU(sh) (SH_PARAMS(sh).gpu)
 #define SH_TMP(sh) ((sh)->tmp.elem[0])
 
@@ -195,7 +206,7 @@ void sh_describef(pl_shader sh, const char *fmt, ...)
 
 static inline void sh_describe(pl_shader sh, const char *desc)
 {
-    PL_ARRAY_APPEND(sh, sh->steps, desc);
+    PL_ARRAY_APPEND(sh->info, sh->info->steps, desc);
 };
 
 // Requires that the share is mutable, has an output signature compatible

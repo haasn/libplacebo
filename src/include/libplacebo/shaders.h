@@ -118,10 +118,9 @@ enum pl_shader_sig {
                            // specifics depend on how the shader was generated
 };
 
-// Represents a finalized shader fragment. This is not a complete shader, but a
-// collection of raw shader text together with description of the input
-// attributes, variables and vertices it expects to be available.
-struct pl_shader_res {
+// Structure encapsulating information about a shader. This is internally
+// refcounted, to allow moving it around without having to create deep copies.
+typedef const struct pl_shader_info_t {
     // A copy of the parameters used to create the shader.
     struct pl_shader_params params;
 
@@ -133,6 +132,19 @@ struct pl_shader_res {
     // As a convenience, this contains a pretty-printed version of the
     // above list, with entries tallied and separated by commas
     const char *description;
+} *pl_shader_info;
+
+pl_shader_info pl_shader_info_ref(pl_shader_info info);
+void pl_shader_info_deref(pl_shader_info *info);
+
+// Represents a finalized shader fragment. This is not a complete shader, but a
+// collection of raw shader text together with description of the input
+// attributes, variables and vertices it expects to be available.
+struct pl_shader_res {
+    // Descriptive information about the shader. Note that this reference is
+    // attached to the shader itself - the user does not need to manually ref
+    // or deref `info` unless they wish to move it elsewhere.
+    pl_shader_info info;
 
     // The shader text, as literal GLSL. This will always be a function
     // definition, such that the the function with the indicated name and
@@ -166,6 +178,12 @@ struct pl_shader_res {
     // A list of compile-time constants used by this shader fragment.
     const struct pl_shader_const *constants;
     int num_constants;
+
+    // --- Deprecated fields (see `info`)
+    struct pl_shader_params params PL_DEPRECATED;
+    const char **steps PL_DEPRECATED;
+    int num_steps PL_DEPRECATED;
+    const char *description PL_DEPRECATED;
 };
 
 // Represents a vertex attribute. The four values will be bound to the four

@@ -1109,11 +1109,11 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
 
 static void run_pass(pl_dispatch dp, pl_shader sh, struct pass *pass)
 {
-    const struct pl_shader_res *res = &sh->res;
+    pl_shader_info shader = &sh->info->info;
     pl_pass_run(dp->gpu, &pass->run_params);
 
     for (uint64_t ts; (ts = pl_timer_query(dp->gpu, pass->timer));) {
-        PL_TRACE(dp, "Spent %.3f ms on shader: %s", ts / 1e6, res->description);
+        PL_TRACE(dp, "Spent %.3f ms on shader: %s", ts / 1e6, shader->description);
 
         uint64_t old = pass->samples[pass->ts_idx];
         pass->samples[pass->ts_idx] = ts;
@@ -1138,7 +1138,7 @@ static void run_pass(pl_dispatch dp, pl_shader sh, struct pass *pass)
 
     struct pl_dispatch_info info;
     info.signature = pass->signature;
-    info.shader = res;
+    info.shader = shader;
 
     // Test to see if the ring buffer already wrapped around once
     if (pass->samples[pass->ts_idx]) {

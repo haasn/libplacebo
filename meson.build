@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '266': 'add pl_shader_info and change type of pl_dispatch_info.shader',
       '265': 'remove fields deprecated for libplacebo v4',
       '264': 'add pl_color_map_params.show_clipping',
       '263': 'add pl_peak_detect_params.percentile',

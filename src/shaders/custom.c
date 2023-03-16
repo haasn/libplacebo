@@ -76,7 +76,7 @@ bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
         GLSLH("// pl_shader_custom header: \n%s\n", params->header);
 
     if (params->description)
-        sh_describe(sh, pl_strdup0(SH_TMP(sh), pl_str0(params->description)));
+        sh_describef(sh, "%s", params->description);
 
     if (params->body) {
         const char *output_decl = "";

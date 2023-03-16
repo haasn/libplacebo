@@ -48,9 +48,9 @@ pl_shader pl_dispatch_begin(pl_dispatch dp);
 
 // Struct passed to `info_callback`. Only valid until that function returns.
 struct pl_dispatch_info {
-    // The finalized/generated shader for this shader execution, as well
-    // as a signature uniquely identifying it.
-    const struct pl_shader_res *shader;
+    // Information about the shader for this shader execution, as well as a
+    // 64-bit signature uniquely identifying it.
+    pl_shader_info shader;
     uint64_t signature;
 
     // A list of execution times for this pass, in nanoseconds. May be empty.
@@ -63,6 +63,16 @@ struct pl_dispatch_info {
     uint64_t peak;
     uint64_t average;
 };
+
+// Helper function to make a copy of `pl_dispatch_info`, while overriding
+// (and dereferencing) whatever was previously stored there.
+static inline void pl_dispatch_info_move(struct pl_dispatch_info *dst,
+                                         const struct pl_dispatch_info *src)
+{
+    pl_shader_info_deref(&dst->shader);
+    *dst = *src;
+    dst->shader = pl_shader_info_ref(src->shader);
+}
 
 // Set up a dispatch callback for this `pl_dispatch` object. The given callback
 // will be run for every successfully dispatched shader. Call this again with

@@ -1414,7 +1414,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
 
         // Load and run the user shader itself
         sh_append_str(sh, SH_BUF_HEADER, hook->pass_body);
-        sh_describe(sh, pl_strdup0(SH_TMP(sh), hook->pass_desc));
+        sh_describef(sh, "%.*s", PL_STR_FMT(hook->pass_desc));
 
         // Resolve output size and create framebuffer
         float out_size[2] = {0};
