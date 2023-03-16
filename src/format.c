@@ -75,7 +75,7 @@ void pl_str_append_vasprintf_c(void *alloc, pl_str *str, const char *fmt,
             break;
         case 'h': ; // only used for %hx
             assert(c[1] == 'x');
-            len = print_hex(buf, va_arg(ap, unsigned int));
+            len = print_hex(buf, (unsigned short) va_arg(ap, unsigned int));
             c++;
             break;
         case 'u':
