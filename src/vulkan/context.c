@@ -447,10 +447,6 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
     case 0x6cfe18a5: // UNASSIGNED-BestPractices-SemaphoreCount
         return false;
 
-    // Work-around for validation layers bug
-    case 0xc05b3a9d: // VUID-vkMapMemory-memory-00683
-        return false;
-
     case 0x5f379b89: // UNASSIGNED-BestPractices-Error-Result
         if (strstr(data->pMessage, "VK_ERROR_FORMAT_NOT_SUPPORTED"))
             return false;
