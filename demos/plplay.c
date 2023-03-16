@@ -41,11 +41,6 @@ static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { ret
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
-struct pass_info {
-    struct pl_dispatch_info pass;
-    char *name;
-};
-
 struct plplay {
     struct window *win;
     struct ui *ui;
@@ -98,8 +93,8 @@ struct plplay {
     size_t shader_size;
 
     // pass metadata
-    struct pass_info blend_info[MAX_BLEND_FRAMES][MAX_BLEND_PASSES];
-    struct pass_info frame_info[MAX_FRAME_PASSES];
+    struct pl_dispatch_info blend_info[MAX_BLEND_FRAMES][MAX_BLEND_PASSES];
+    struct pl_dispatch_info frame_info[MAX_FRAME_PASSES];
     int num_frame_passes;
     int num_blend_passes[MAX_BLEND_FRAMES];
 };
@@ -118,6 +113,13 @@ static void uninit(struct plplay *p)
     for (int i = 0; i < p->shader_num; i++) {
         pl_mpv_user_shader_destroy(&p->shader_hooks[i]);
         free(p->shader_paths[i]);
+    }
+
+    for (int i = 0; i < MAX_FRAME_PASSES; i++)
+        pl_shader_info_deref(&p->frame_info[i].shader);
+    for (int j = 0; j < MAX_BLEND_FRAMES; j++) {
+        for (int i = 0; i < MAX_BLEND_PASSES; i++)
+            pl_shader_info_deref(&p->blend_info[j][i].shader);
     }
 
     free(p->shader_hooks);
@@ -572,28 +574,26 @@ error:
 static void info_callback(void *priv, const struct pl_render_info *info)
 {
     struct plplay *p = priv;
-    struct pass_info *pass = NULL;
     switch (info->stage) {
     case PL_RENDER_STAGE_FRAME:
         if (info->index >= MAX_FRAME_PASSES)
             return;
         p->num_frame_passes = info->index + 1;
-        pass = &p->frame_info[info->index];
-        break;
+        pl_dispatch_info_move(&p->frame_info[info->index], info->pass);
+        return;
 
     case PL_RENDER_STAGE_BLEND:
         if (info->index >= MAX_BLEND_PASSES || info->count >= MAX_BLEND_FRAMES)
             return;
         p->num_blend_passes[info->count] = info->index + 1;
-        pass = &p->blend_info[info->count][info->index];
-        break;
+        pl_dispatch_info_move(&p->blend_info[info->count][info->index], info->pass);
+        return;
 
-    case PL_RENDER_STAGE_COUNT: abort();
+    case PL_RENDER_STAGE_COUNT:
+        break;
     }
 
-    free(pass->name);
-    pass->name = strdup(info->pass->shader->description);
-    pass->pass = *info->pass;
+    abort();
 }
 
 static struct plplay state;
@@ -1592,21 +1592,21 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 nk_layout_row_dynamic(nk, 26, 1);
                 nk_label(nk, "Full frames:", NK_TEXT_LEFT);
                 for (int i = 0; i < p->num_frame_passes; i++) {
-                    struct pass_info *info = &p->frame_info[i];
+                    struct pl_dispatch_info *info = &p->frame_info[i];
                     nk_layout_row_dynamic(nk, 24, 1);
                     nk_labelf(nk, NK_TEXT_LEFT, "- %s: %.3f / %.3f / %.3f ms",
-                              info->name,
-                              info->pass.last / 1e6,
-                              info->pass.average / 1e6,
-                              info->pass.peak / 1e6);
+                              info->shader->description,
+                              info->last / 1e6,
+                              info->average / 1e6,
+                              info->peak / 1e6);
 
                     nk_layout_row_dynamic(nk, 32, 1);
                     if (nk_chart_begin(nk, NK_CHART_LINES,
-                                       info->pass.num_samples,
-                                       0.0f, info->pass.peak))
+                                       info->num_samples,
+                                       0.0f, info->peak))
                     {
-                        for (int k = 0; k < info->pass.num_samples; k++)
-                            nk_chart_push(nk, info->pass.samples[k]);
+                        for (int k = 0; k < info->num_samples; k++)
+                            nk_chart_push(nk, info->samples[k]);
                         nk_chart_end(nk);
                     }
                 }
@@ -1615,25 +1615,25 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 nk_label(nk, "Output blending:", NK_TEXT_LEFT);
                 for (int j = 0; j < MAX_BLEND_FRAMES; j++) {
                     for (int i = 0; i < p->num_blend_passes[j]; i++) {
-                        struct pass_info *info = &p->blend_info[j][i];
-                        if (!info->name)
+                        struct pl_dispatch_info *info = &p->blend_info[j][i];
+                        if (!info->shader)
                             continue;
 
                         nk_layout_row_dynamic(nk, 24, 1);
                         nk_labelf(nk, NK_TEXT_LEFT,
                                   "- (%d frame%s) %s: %.3f / %.3f / %.3f ms",
-                                  j, j == 1 ? "" : "s", info->name,
-                                  info->pass.last / 1e6,
-                                  info->pass.average / 1e6,
-                                  info->pass.peak / 1e6);
+                                  j, j == 1 ? "" : "s", info->shader->description,
+                                  info->last / 1e6,
+                                  info->average / 1e6,
+                                  info->peak / 1e6);
 
                         nk_layout_row_dynamic(nk, 32, 1);
                         if (nk_chart_begin(nk, NK_CHART_LINES,
-                                           info->pass.num_samples,
-                                           0.0f, info->pass.peak))
+                                           info->num_samples,
+                                           0.0f, info->peak))
                         {
-                            for (int k = 0; k < info->pass.num_samples; k++)
-                                nk_chart_push(nk, info->pass.samples[k]);
+                            for (int k = 0; k < info->num_samples; k++)
+                                nk_chart_push(nk, info->samples[k]);
                             nk_chart_end(nk);
                         }
                     }
