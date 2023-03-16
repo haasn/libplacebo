@@ -231,13 +231,8 @@ bool pl_str_parse_uint64(pl_str str, uint64_t *out)
 
 static int print_hex(char *buf, unsigned int x)
 {
-    if (!x) {
-        *buf = '0';
-        return 1;
-    }
-
-    static const char *hexdigits = "0123456789abcdef";
-    const int nibbles0 = __builtin_clz(x) >> 2;
+    static const char hexdigits[16] = "0123456789abcdef";
+    const int nibbles0 = __builtin_clz(x | 1) >> 2;
     buf -= nibbles0;
 
     switch (nibbles0) {
