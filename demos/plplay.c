@@ -796,6 +796,43 @@ static void auto_property_int(struct nk_context *nk, int auto_val, int min, int 
         *val = value;
 }
 
+static void draw_shader_pass(struct nk_context *nk,
+                             const struct pl_dispatch_info *info)
+{
+    pl_shader_info shader = info->shader;
+
+    char label[128];
+    int count = snprintf(label, sizeof(label), "%.3f/%.3f/%.3f ms: %s",
+             info->last / 1e6,
+             info->average / 1e6,
+             info->peak / 1e6,
+             shader->description);
+
+    if (count >= sizeof(label)) {
+        label[sizeof(label) - 4] = '.';
+        label[sizeof(label) - 3] = '.';
+        label[sizeof(label) - 2] = '.';
+    }
+
+    int id = (unsigned int) (uintptr_t) info; // pointer into `struct plplay`
+    if (nk_tree_push_id(nk, NK_TREE_NODE, label, NK_MINIMIZED, id)) {
+        nk_layout_row_dynamic(nk, 32, 1);
+        if (nk_chart_begin(nk, NK_CHART_LINES,
+                           info->num_samples,
+                           0.0f, info->peak))
+        {
+            for (int k = 0; k < info->num_samples; k++)
+                nk_chart_push(nk, info->samples[k]);
+            nk_chart_end(nk);
+        }
+
+        nk_layout_row_dynamic(nk, 24, 1);
+        for (int n = 0; n < shader->num_steps; n++)
+            nk_labelf(nk, NK_TEXT_LEFT, "%d. %s", n + 1, shader->steps[n]);
+        nk_tree_pop(nk);
+    }
+}
+
 static void update_settings(struct plplay *p, const struct pl_frame *target)
 {
     struct nk_context *nk = ui_get_context(p->ui);
@@ -1591,52 +1628,14 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             if (nk_tree_push(nk, NK_TREE_NODE, "Shader passes", NK_MINIMIZED)) {
                 nk_layout_row_dynamic(nk, 26, 1);
                 nk_label(nk, "Full frames:", NK_TEXT_LEFT);
-                for (int i = 0; i < p->num_frame_passes; i++) {
-                    struct pl_dispatch_info *info = &p->frame_info[i];
-                    nk_layout_row_dynamic(nk, 24, 1);
-                    nk_labelf(nk, NK_TEXT_LEFT, "- %s: %.3f / %.3f / %.3f ms",
-                              info->shader->description,
-                              info->last / 1e6,
-                              info->average / 1e6,
-                              info->peak / 1e6);
-
-                    nk_layout_row_dynamic(nk, 32, 1);
-                    if (nk_chart_begin(nk, NK_CHART_LINES,
-                                       info->num_samples,
-                                       0.0f, info->peak))
-                    {
-                        for (int k = 0; k < info->num_samples; k++)
-                            nk_chart_push(nk, info->samples[k]);
-                        nk_chart_end(nk);
-                    }
-                }
+                for (int i = 0; i < p->num_frame_passes; i++)
+                    draw_shader_pass(nk, &p->frame_info[i]);
 
                 nk_layout_row_dynamic(nk, 26, 1);
                 nk_label(nk, "Output blending:", NK_TEXT_LEFT);
                 for (int j = 0; j < MAX_BLEND_FRAMES; j++) {
-                    for (int i = 0; i < p->num_blend_passes[j]; i++) {
-                        struct pl_dispatch_info *info = &p->blend_info[j][i];
-                        if (!info->shader)
-                            continue;
-
-                        nk_layout_row_dynamic(nk, 24, 1);
-                        nk_labelf(nk, NK_TEXT_LEFT,
-                                  "- (%d frame%s) %s: %.3f / %.3f / %.3f ms",
-                                  j, j == 1 ? "" : "s", info->shader->description,
-                                  info->last / 1e6,
-                                  info->average / 1e6,
-                                  info->peak / 1e6);
-
-                        nk_layout_row_dynamic(nk, 32, 1);
-                        if (nk_chart_begin(nk, NK_CHART_LINES,
-                                           info->num_samples,
-                                           0.0f, info->peak))
-                        {
-                            for (int k = 0; k < info->num_samples; k++)
-                                nk_chart_push(nk, info->samples[k]);
-                            nk_chart_end(nk);
-                        }
-                    }
+                    for (int i = 0; i < p->num_blend_passes[j]; i++)
+                        draw_shader_pass(nk, &p->blend_info[j][i]);
                 }
 
                 nk_tree_pop(nk);
