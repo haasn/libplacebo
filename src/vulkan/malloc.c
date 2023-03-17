@@ -397,6 +397,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
         // Queue family sharing modes don't matter for buffers, so we just
         // set them as concurrent and stop worrying about it.
         uint32_t qfs[3] = {0};
+        pl_assert(vk->pools.num <= PL_ARRAY_SIZE(qfs));
         for (int i = 0; i < vk->pools.num; i++)
             qfs[i] = vk->pools.elem[i]->qf;
 
@@ -766,6 +767,7 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
 
     if (params->buf_usage) {
         uint32_t qfs[3] = {0};
+        pl_assert(vk->pools.num <= PL_ARRAY_SIZE(qfs));
         for (int i = 0; i < vk->pools.num; i++)
             qfs[i] = vk->pools.elem[i]->qf;
 

@@ -325,6 +325,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     // will belong to, we're forced to share all of our images between all
     // command pools.
     uint32_t qfs[3] = {0};
+    pl_assert(vk->pools.num <= PL_ARRAY_SIZE(qfs));
     for (int i = 0; i < vk->pools.num; i++)
         qfs[i] = vk->pools.elem[i]->qf;
 
