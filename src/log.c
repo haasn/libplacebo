@@ -240,8 +240,8 @@ void pl_log_stack_trace(pl_log log, enum pl_log_level lev)
 
     pl_msg(log, lev, "  Backtrace:");
     char **strings = backtrace_symbols(buf.elem, buf.num);
-    for (int i = 0; i < buf.num; i++)
-        pl_msg(log, lev, "    #%-2d %s", i, strings[i]);
+    for (int i = 1; i < buf.num; i++)
+        pl_msg(log, lev, "    #%-2d %s", i - 1, strings[i]);
 
     free(strings);
     pl_free(buf.elem);
