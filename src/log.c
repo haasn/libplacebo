@@ -285,7 +285,7 @@ void pl_log_stack_trace(pl_log log, enum pl_log_level lev)
     BOOL use_dbghelp = !!dbghelp;
 
 #define DBGHELP_SYM(sym)                                                        \
-    __typeof__(&sym) p##sym = (__typeof__(&sym)) GetProcAddress(dbghelp, #sym); \
+    __typeof__(&sym) p##sym = (__typeof__(&sym))(void *) GetProcAddress(dbghelp, #sym); \
     use_dbghelp &= !!p##sym
 
     DBGHELP_SYM(SymCleanup);
