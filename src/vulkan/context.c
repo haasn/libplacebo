@@ -456,6 +456,8 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
     case 0xdc18ad6b: // UNASSIGNED-BestPractices-vkAllocateMemory-small-allocation
     case 0xb3d4346b: // UNASSIGNED-BestPractices-vkBindMemory-small-dedicated-allocation
     case 0x6cfe18a5: // UNASSIGNED-BestPractices-SemaphoreCount
+    // profile chain expectations
+    case 0x30f4ac70: // VUID-VkImageCreateInfo-pNext-06811
         return false;
 
     case 0x5f379b89: // UNASSIGNED-BestPractices-Error-Result
