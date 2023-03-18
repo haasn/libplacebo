@@ -2,9 +2,13 @@
 unwind = dependency('libunwind', required: get_option('unwind'))
 libexecinfo = cc.find_library('execinfo', required: false)
 has_execinfo = cc.has_function('backtrace_symbols', dependencies: libexecinfo, prefix: '#include <execinfo.h>')
+dbghelp = cc.check_header('dbghelp.h', prefix: '#include <windows.h>')
+conf_internal.set('PL_HAVE_DBGHELP', dbghelp)
 conf_internal.set('PL_HAVE_UNWIND', unwind.found())
 conf_internal.set('PL_HAVE_EXECINFO', has_execinfo)
-if unwind.found()
+if dbghelp
+  build_deps += cc.find_library('shlwapi', required: true)
+elif unwind.found()
   build_deps += [unwind, cc.find_library('dl', required : false)]
 elif has_execinfo
   build_deps += libexecinfo
