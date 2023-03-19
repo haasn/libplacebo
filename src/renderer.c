@@ -3274,7 +3274,7 @@ inter_pass_error:
     pl_assert(fidx > 0);
 
     pl_shader sh = pl_dispatch_begin(rr->dp);
-    sh_describe(sh, "frame mixing");
+    sh_describef(sh, "frame mixing (%d frame%s)", fidx, fidx > 1 ? "s" : "");
     sh->res.output = PL_SHADER_SIG_COLOR;
     sh->output_w = out_w;
     sh->output_h = out_h;
