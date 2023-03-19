@@ -285,41 +285,6 @@ char *pl_strndup0(void *parent, const char *str, size_t size)
     return new;
 }
 
-struct pl_ref {
-    pl_rc_t rc;
-};
-
-struct pl_ref *pl_ref_new(void *parent)
-{
-    struct pl_ref *ref = pl_zalloc_ptr(parent, ref);
-    if (!ref)
-        return oom();
-
-    pl_rc_init(&ref->rc);
-    return ref;
-}
-
-struct pl_ref *pl_ref_dup(struct pl_ref *ref)
-{
-    if (!ref)
-        return NULL;
-
-    pl_rc_ref(&ref->rc);
-    return ref;
-}
-
-void pl_ref_deref(struct pl_ref **refp)
-{
-    struct pl_ref *ref = *refp;
-    if (!ref)
-        return;
-
-    if (pl_rc_deref(&ref->rc)) {
-        pl_free(ref);
-        *refp = NULL;
-    }
-}
-
 char *pl_asprintf(void *parent, const char *fmt, ...)
 {
     char *str;

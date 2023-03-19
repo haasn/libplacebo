@@ -95,16 +95,6 @@ char *pl_strndup0(void *parent, const char *str, size_t size);
 #define pl_zalloc_obj(parent, ptr, priv) \
     (__typeof__(ptr)) pl_zalloc(parent, PL_ALIGN_MEM(sizeof(*(ptr))) + sizeof(priv))
 
-// Refcounting helper
-
-struct pl_ref;
-
-// pl_ref_deref will free the ref and all of its children as soon as the
-// internal refcount reaches 0
-struct pl_ref *pl_ref_new(void *parent);
-struct pl_ref *pl_ref_dup(struct pl_ref *ref);
-void pl_ref_deref(struct pl_ref **ref);
-
 // Helper functions for dealing with arrays
 
 #define PL_ARRAY(type) struct { type *elem; int num; }
