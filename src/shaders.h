@@ -102,8 +102,8 @@ struct sh_info {
 
 struct pl_shader_t {
     pl_log log;
+    void *tmp; // temporary allocations (freed on pl_shader_reset)
     struct sh_info *info;
-    PL_ARRAY(struct pl_ref *) tmp; // only used for var/va/desc names and data
     PL_ARRAY(pl_shader_obj) obj;
     bool failed;
     bool mutable;
@@ -143,7 +143,7 @@ pl_str_builder sh_finalize_internal(pl_shader sh);
 // Helper functions for convenience
 #define SH_PARAMS(sh) ((sh)->info->info.params)
 #define SH_GPU(sh) (SH_PARAMS(sh).gpu)
-#define SH_TMP(sh) ((sh)->tmp.elem[0])
+#define SH_TMP(sh) ((sh)->tmp)
 
 // Returns the GLSL version, defaulting to desktop 130.
 struct pl_glsl_version sh_glsl(const pl_shader sh);
@@ -159,7 +159,10 @@ bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem);
 // Attempt merging a secondary shader into the current shader. Returns NULL if
 // merging fails (e.g. incompatible signatures); otherwise returns an identifier
 // corresponding to the generated subpass function.
-ident_t sh_subpass(pl_shader sh, const pl_shader sub);
+//
+// If successful, the subpass shader is set to an undefined failure state and
+// must be explicitly reset/aborted before being re-used.
+ident_t sh_subpass(pl_shader sh, pl_shader sub);
 
 // Helpers for adding new variables/descriptors/etc. with fresh, unique
 // identifier names. These will never conflict with other identifiers, even

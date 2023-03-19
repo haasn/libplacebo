@@ -75,12 +75,8 @@ static uint8_t reverse_bits(uint8_t x)
     return reverse_nibble[x & 0xF] << 4 | reverse_nibble[x >> 4];
 }
 
-static void reset_shader(pl_shader sh, const struct pl_shader_params *params)
+static void init_shader(pl_shader sh, const struct pl_shader_params *params)
 {
-    // Ensure there's always at least one `tmp` object
-    pl_assert(!sh->tmp.num);
-    PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_new(NULL));
-
     if (params) {
         sh->info->info.params = *params;
 
@@ -106,14 +102,15 @@ pl_shader pl_shader_alloc(pl_log log, const struct pl_shader_params *params)
     pl_shader sh = pl_alloc_ptr(NULL, sh);
     *sh = (struct pl_shader_t) {
         .log        = log,
-        .mutable    = true,
+        .tmp        = pl_tmp(sh),
         .info       = sh_info_alloc(NULL),
+        .mutable    = true,
     };
 
     for (int i = 0; i < PL_ARRAY_SIZE(sh->buffers); i++)
         sh->buffers[i] = pl_str_builder_alloc(sh);
 
-    reset_shader(sh, params);
+    init_shader(sh, params);
     return sh;
 }
 
@@ -121,10 +118,11 @@ static void sh_obj_deref(pl_shader_obj obj);
 
 static void sh_deref(pl_shader sh)
 {
-    for (int i = 0; i < sh->tmp.num; i++)
-        pl_ref_deref(&sh->tmp.elem[i]);
+    pl_free_children(sh->tmp);
+
     for (int i = 0; i < sh->obj.num; i++)
         sh_obj_deref(sh->obj.elem[i]);
+    sh->obj.num = 0;
 }
 
 void pl_shader_free(pl_shader *psh)
@@ -133,8 +131,8 @@ void pl_shader_free(pl_shader *psh)
     if (!sh)
         return;
 
-    pl_shader_info_deref((pl_shader_info *) &sh->info);
     sh_deref(sh);
+    pl_shader_info_deref((pl_shader_info *) &sh->info);
     pl_free_ptr(psh);
 }
 
@@ -144,11 +142,11 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
 
     struct pl_shader_t new = {
         .log            = sh->log,
-        .mutable        = true,
+        .tmp            = sh->tmp,
         .info           = sh_info_recycle(sh->info),
+        .mutable        = true,
 
         // Preserve array allocations
-        .tmp.elem       = sh->tmp.elem,
         .obj.elem       = sh->obj.elem,
         .vas.elem       = sh->vas.elem,
         .vars.elem      = sh->vars.elem,
@@ -162,7 +160,7 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
         pl_str_builder_reset(new.buffers[i]);
 
     *sh = new;
-    reset_shader(sh, params);
+    init_shader(sh, params);
 }
 
 bool pl_shader_is_failed(const pl_shader sh)
@@ -613,7 +611,7 @@ static const char *samplers2D[] = {
     [PL_SAMPLER_EXTERNAL]   = "samplerExternalOES",
 };
 
-ident_t sh_subpass(pl_shader sh, const pl_shader sub)
+ident_t sh_subpass(pl_shader sh, pl_shader sub)
 {
     pl_assert(sh->mutable);
 
@@ -666,22 +664,28 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
     pl_str_builder_concat(sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_BODY]);
     GLSLH("%s\n}\n\n", retvals[sub->output]);
 
-    // Ref all objects
-    PL_ARRAY_CONCAT(sh, sh->obj, sub->obj);
-    for (int i = 0; i < sub->obj.num; i++)
-        pl_rc_ref(&sub->obj.elem[i]->rc);
+    // Steal all inputs and objects from the subpass
+#define ARRAY_STEAL(arr) do                 \
+{                                           \
+    PL_ARRAY_CONCAT(sh, sh->arr, sub->arr); \
+    sub->arr.num = 0;                       \
+} while (0)
 
-    // Copy over all of the descriptors etc.
-    for (int i = 0; i < sub->tmp.num; i++)
-        PL_ARRAY_APPEND(sh, sh->tmp, pl_ref_dup(sub->tmp.elem[i]));
-    PL_ARRAY_CONCAT(sh, sh->vas, sub->vas);
-    PL_ARRAY_CONCAT(sh, sh->vars, sub->vars);
-    PL_ARRAY_CONCAT(sh, sh->descs, sub->descs);
-    PL_ARRAY_CONCAT(sh, sh->consts, sub->consts);
+    ARRAY_STEAL(obj);
+    ARRAY_STEAL(vas);
+    ARRAY_STEAL(vars);
+    ARRAY_STEAL(descs);
+    ARRAY_STEAL(consts);
+#undef ARRAY_STEAL
 
     // Make a deep copy of shader description steps array
     for (int i = 0; i < sub->info->steps.num; i++)
         sh_describe(sh, pl_str0dup0(sh->info, sub->info->steps.elem[i]));
+
+    // Steal all temporary allocations and mark the child as unusable
+    pl_steal(sh->tmp, sub->tmp);
+    sub->tmp = pl_tmp(sub);
+    sub->failed = true;
 
     return sub->name;
 }
