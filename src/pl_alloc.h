@@ -109,10 +109,18 @@ void pl_ref_deref(struct pl_ref **ref);
 
 #define PL_ARRAY(type) struct { type *elem; int num; }
 
-#define PL_ARRAY_RESIZE(parent, arr, len)                                       \
+#define PL_ARRAY_REALLOC(parent, arr, len)                                      \
     do {                                                                        \
         size_t _new_size = (len) * sizeof((arr).elem[0]);                       \
         (arr).elem = pl_realloc((void *) parent, (arr).elem, _new_size);        \
+    } while (0)
+
+#define PL_ARRAY_RESIZE(parent, arr, len)                                       \
+    do {                                                                        \
+        size_t _avail = pl_get_size((arr).elem) / sizeof((arr).elem[0]);        \
+        size_t _min_len = (len);                                                \
+        if (_avail < _min_len)                                                  \
+            PL_ARRAY_REALLOC(parent, arr, _min_len);                            \
     } while (0)
 
 #define PL_ARRAY_MEMDUP(parent, arr, ptr, len)                                  \
@@ -127,9 +135,9 @@ void pl_ref_deref(struct pl_ref **ref);
     do {                                                                        \
         size_t _avail = pl_get_size((arr).elem) / sizeof((arr).elem[0]);        \
         if (_avail < 10) {                                                      \
-            PL_ARRAY_RESIZE(parent, arr, 10);                                   \
+            PL_ARRAY_REALLOC(parent, arr, 10);                                  \
         } else if ((arr).num == _avail) {                                       \
-            PL_ARRAY_RESIZE(parent, arr, (arr).num * 1.5);                      \
+            PL_ARRAY_REALLOC(parent, arr, (arr).num * 1.5);                     \
         } else {                                                                \
             assert((arr).elem);                                                 \
         }                                                                       \
