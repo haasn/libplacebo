@@ -135,6 +135,10 @@ struct pl_shader_t {
     struct pl_shader_res result;
 };
 
+// Free temporary resources associated with a shader. Normally called by
+// pl_shader_reset(), but used internally to reduce memory waste.
+void sh_deref(pl_shader sh);
+
 // Same as `pl_shader_finalize` but doesn't generate `sh->res`, instead returns
 // the string builder to be used to finalize the shader. Assumes the caller
 // will access the shader's internal fields directly.

@@ -116,7 +116,7 @@ pl_shader pl_shader_alloc(pl_log log, const struct pl_shader_params *params)
 
 static void sh_obj_deref(pl_shader_obj obj);
 
-static void sh_deref(pl_shader sh)
+void sh_deref(pl_shader sh)
 {
     pl_free_children(sh->tmp);
 

@@ -1572,8 +1572,8 @@ void pl_dispatch_abort(pl_dispatch dp, pl_shader *psh)
     if (!sh)
         return;
 
-    // Reset this as early as possible to free temporary resources
-    pl_shader_reset(sh, NULL);
+    // Free unused memory as early as possible
+    sh_deref(sh);
 
     // Re-add the shader to the internal pool of shaders
     pl_mutex_lock(&dp->lock);
