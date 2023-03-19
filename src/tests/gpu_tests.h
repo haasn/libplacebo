@@ -614,8 +614,8 @@ static void pl_shader_tests(pl_gpu gpu)
         // For testing, force the use of CS if possible
         if (gpu->glsl.compute) {
             sh->type = SH_COMPUTE;
-            sh->res.compute_group_size[0] = 8;
-            sh->res.compute_group_size[1] = 8;
+            sh->group_size[0] = 8;
+            sh->group_size[1] = 8;
         }
 
         pl_shader_deband(sh, pl_sample_src( .tex = src ), pl_deband_params(

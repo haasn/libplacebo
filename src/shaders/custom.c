@@ -33,7 +33,7 @@ bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
     if (!sh_require(sh, params->input, params->output_w, params->output_h))
         return false;
 
-    sh->res.output = params->output;
+    sh->output = params->output;
 
     // Attach the variables, descriptors etc. directly instead of going via
     // `sh_var` / `sh_desc` etc. to avoid generating fresh names

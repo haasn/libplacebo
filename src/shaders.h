@@ -80,31 +80,36 @@ struct sh_info {
 struct pl_shader_t {
     pl_log log;
     struct sh_info *info;
-    struct pl_shader_res res; // for accumulating some of the fields
     PL_ARRAY(struct pl_ref *) tmp; // only used for var/va/desc names and data
     PL_ARRAY(pl_shader_obj) obj;
     bool failed;
     bool mutable;
+    ident_t name;
+    enum pl_shader_sig input, output;
     int output_w;
     int output_h;
     bool transpose;
     pl_str_builder buffers[SH_BUF_COUNT];
     enum pl_shader_type type;
     bool flexible_work_groups;
+    int group_size[2];
+    size_t shmem;
     enum pl_sampler_type sampler_type;
     char sampler_prefix;
     unsigned short prefix; // pre-processed version of res.params.id
     unsigned short fresh;
-
-    // mutable versions of the fields from pl_shader_res
     PL_ARRAY(struct pl_shader_va) vas;
     PL_ARRAY(struct pl_shader_var) vars;
     PL_ARRAY(struct pl_shader_desc) descs;
     PL_ARRAY(struct pl_shader_const) consts;
+
+    // cached result of `pl_shader_finalize`
+    struct pl_shader_res result;
 };
 
-// Same as `pl_shader_finalize` but doesn't template `sh->res.glsl`, instead
-// returns the string builder to be used to finalize the shader.
+// Same as `pl_shader_finalize` but doesn't generate `sh->res`, instead returns
+// the string builder to be used to finalize the shader. Assumes the caller
+// will access the shader's internal fields directly.
 pl_str_builder sh_finalize_internal(pl_shader sh);
 
 // Helper functions for convenience

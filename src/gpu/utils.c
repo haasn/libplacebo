@@ -966,7 +966,7 @@ void pl_tex_blit_raster(pl_gpu gpu, const struct pl_tex_blit_params *params)
 
     pl_dispatch dp = pl_gpu_dispatch(gpu);
     pl_shader sh = pl_dispatch_begin(dp);
-    sh->res.output = PL_SHADER_SIG_COLOR;
+    sh->output = PL_SHADER_SIG_COLOR;
 
     ident_t pos, src = sh_bind(sh, params->src, PL_TEX_ADDRESS_CLAMP,
         params->sample_mode, "src_tex", &src_rc, &pos, NULL, NULL);

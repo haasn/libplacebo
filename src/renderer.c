@@ -924,7 +924,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
             pl_unreachable();
         };
 
-        sh->res.output = PL_SHADER_SIG_COLOR;
+        sh->output = PL_SHADER_SIG_COLOR;
         pl_shader_decode_color(sh, &ol.repr, NULL);
         pl_shader_color_map(sh, NULL, ol.color, color, NULL, false);
 
@@ -3274,7 +3274,7 @@ inter_pass_error:
 
     pl_shader sh = pl_dispatch_begin(rr->dp);
     sh_describef(sh, "frame mixing (%d frame%s)", fidx, fidx > 1 ? "s" : "");
-    sh->res.output = PL_SHADER_SIG_COLOR;
+    sh->output = PL_SHADER_SIG_COLOR;
     sh->output_w = out_w;
     sh->output_h = out_h;
 

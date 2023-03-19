@@ -1457,7 +1457,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                 },
             }));
 
-            sh->res.output = PL_SHADER_SIG_NONE;
+            sh->output = PL_SHADER_SIG_NONE;
 
             GLSL("hook(); \n");
             ok = pl_dispatch_compute(params->dispatch, pl_dispatch_compute_params(

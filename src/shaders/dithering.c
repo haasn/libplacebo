@@ -401,7 +401,7 @@ bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_par
         },
     });
 
-    sh->res.output = PL_SHADER_SIG_NONE;
+    sh->output = PL_SHADER_SIG_NONE;
     sh_describef(sh, "error diffusion (%s, %d bits)",
                  kernel->name, params->new_depth);
 

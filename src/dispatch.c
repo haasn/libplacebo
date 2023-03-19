@@ -316,7 +316,6 @@ static void generate_shaders(pl_dispatch dp,
     pl_gpu gpu = dp->gpu;
     pl_shader sh = params->sh;
     void *tmp = params->tmp;
-    const struct pl_shader_res *res = &sh->res;
     struct pass *pass = params->pass;
     struct pl_pass_params *pass_params = params->pass_params;
     pl_str_builder shader_body = sh_finalize_internal(sh);
@@ -346,19 +345,19 @@ static void generate_shaders(pl_dispatch dp,
         case PL_DESC_BUF_STORAGE: has_ssbo = true; break;
         case PL_DESC_BUF_TEXEL_UNIFORM: has_texel = true; break;
         case PL_DESC_BUF_TEXEL_STORAGE: {
-            pl_buf buf = res->descriptors[i].binding.object;
+            pl_buf buf = sh->descs.elem[i].binding.object;
             has_nofmt |= !buf->params.format->glsl_format;
             has_texel = true;
             break;
         }
         case PL_DESC_STORAGE_IMG: {
-            pl_tex tex = res->descriptors[i].binding.object;
+            pl_tex tex = sh->descs.elem[i].binding.object;
             has_nofmt |= !tex->params.format->glsl_format;
             has_img = true;
             break;
         }
         case PL_DESC_SAMPLED_TEX: {
-            pl_tex tex = res->descriptors[i].binding.object;
+            pl_tex tex = sh->descs.elem[i].binding.object;
             has_gather |= tex->params.format->gatherable;
             switch (tex->sampler_type) {
             case PL_SAMPLER_NORMAL: break;
@@ -417,12 +416,12 @@ static void generate_shaders(pl_dispatch dp,
         // is important because the push constants can be out-of-order in
         // `pass->vars`
         PL_ARRAY(struct pl_buffer_var) pc_bvars = {0};
-        for (int i = 0; i < res->num_variables; i++) {
+        for (int i = 0; i < sh->vars.num; i++) {
             if (pass->vars[i].type != PASS_VAR_PUSHC)
                 continue;
 
             PL_ARRAY_APPEND(tmp, pc_bvars, (struct pl_buffer_var) {
-                .var = res->variables[i].var,
+                .var = sh->vars.elem[i].var,
                 .layout = pass->vars[i].layout,
             });
         }
@@ -432,14 +431,14 @@ static void generate_shaders(pl_dispatch dp,
     }
 
     // Add all of the specialization constants
-    for (int i = 0; i < res->num_constants; i++) {
+    for (int i = 0; i < sh->consts.num; i++) {
         static const char *types[PL_VAR_TYPE_COUNT] = {
             [PL_VAR_SINT]   = "int",
             [PL_VAR_UINT]   = "uint",
             [PL_VAR_FLOAT]  = "float",
         };
 
-        const struct pl_shader_const *sc = &res->constants[i];
+        const struct pl_shader_const *sc = &sh->consts.elem[i];
         ADD(pre, "layout(constant_id=%"PRIu32") const %s %s = 1; \n",
             pass_params->constants[i].id, types[sc->type], sc->name);
     }
@@ -453,8 +452,8 @@ static void generate_shaders(pl_dispatch dp,
     };
 
     // Add all of the required descriptors
-    for (int i = 0; i < res->num_descriptors; i++) {
-        const struct pl_shader_desc *sd = &res->descriptors[i];
+    for (int i = 0; i < sh->descs.num; i++) {
+        const struct pl_shader_desc *sd = &sh->descs.elem[i];
         const struct pl_desc *desc = &pass_params->descriptors[i];
 
         switch (desc->type) {
@@ -578,8 +577,8 @@ static void generate_shaders(pl_dispatch dp,
     }
 
     // Add all of the remaining variables
-    for (int i = 0; i < res->num_variables; i++) {
-        const struct pl_var *var = &res->variables[i].var;
+    for (int i = 0; i < sh->vars.num; i++) {
+        const struct pl_var *var = &sh->vars.elem[i].var;
         const struct pass_var *pv = &pass->vars[i];
         if (pv->type != PASS_VAR_GLOBAL)
             continue;
@@ -642,7 +641,7 @@ static void generate_shaders(pl_dispatch dp,
     }
     case PL_PASS_COMPUTE:
         ADD(glsl, "layout (local_size_x = %d, local_size_y = %d) in;\n",
-            res->compute_group_size[0], res->compute_group_size[1]);
+            sh->group_size[0], sh->group_size[1]);
         break;
     case PL_PASS_INVALID:
     case PL_PASS_TYPE_COUNT:
@@ -653,14 +652,14 @@ static void generate_shaders(pl_dispatch dp,
     ADD_CAT(glsl, shader_body);
     ADD(glsl, "void main() {\n");
 
-    pl_assert(res->input == PL_SHADER_SIG_NONE);
+    pl_assert(sh->input == PL_SHADER_SIG_NONE);
     switch (pass_params->type) {
     case PL_PASS_RASTER:
-        pl_assert(res->output == PL_SHADER_SIG_COLOR);
-        ADD(glsl, "out_color = %s();\n", res->name);
+        pl_assert(sh->output == PL_SHADER_SIG_COLOR);
+        ADD(glsl, "out_color = "$"();\n", sh->name);
         break;
     case PL_PASS_COMPUTE:
-        ADD(glsl, "%s();\n", res->name);
+        ADD(glsl, $"();\n", sh->name);
         break;
     case PL_PASS_INVALID:
     case PL_PASS_TYPE_COUNT:
@@ -1056,7 +1055,7 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
 
     // Simulate a framebuffer using storage images
     pl_assert(params->target->params.storable);
-    pl_assert(sh->res.output == PL_SHADER_SIG_COLOR);
+    pl_assert(sh->output == PL_SHADER_SIG_COLOR);
     ident_t fbo = sh_desc(sh, (struct pl_shader_desc) {
         .binding.object = params->target,
         .desc = {
@@ -1104,7 +1103,7 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
     }
     GLSL("imageStore("$", pos, color);\n", fbo);
     GLSL("}\n");
-    sh->res.output = PL_SHADER_SIG_NONE;
+    sh->output = PL_SHADER_SIG_NONE;
 }
 
 static void run_pass(pl_dispatch dp, pl_shader sh, struct pass *pass)
@@ -1163,7 +1162,6 @@ static void run_pass(pl_dispatch dp, pl_shader sh, struct pass *pass)
 bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
 {
     pl_shader sh = *params->shader;
-    const struct pl_shader_res *res = &sh->res;
     bool ret = false;
     pl_mutex_lock(&dp->lock);
 
@@ -1177,7 +1175,7 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
         goto error;
     }
 
-    if (res->input != PL_SHADER_SIG_NONE || res->output != PL_SHADER_SIG_COLOR) {
+    if (sh->input != PL_SHADER_SIG_NONE || sh->output != PL_SHADER_SIG_COLOR) {
         PL_ERR(dp, "Trying to dispatch shader with incompatible signature!");
         goto error;
     }
@@ -1301,8 +1299,8 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
         if (sh->transpose)
             PL_SWAP(width, height);
         // Round up to make sure we don't leave off a part of the target
-        int block_w = res->compute_group_size[0],
-            block_h = res->compute_group_size[1],
+        int block_w = sh->group_size[0],
+            block_h = sh->group_size[1],
             num_x   = PL_DIV_UP(width, block_w),
             num_y   = PL_DIV_UP(height, block_h);
 
@@ -1335,7 +1333,6 @@ error:
 bool pl_dispatch_compute(pl_dispatch dp, const struct pl_dispatch_compute_params *params)
 {
     pl_shader sh = *params->shader;
-    const struct pl_shader_res *res = &sh->res;
     bool ret = false;
     pl_mutex_lock(&dp->lock);
 
@@ -1349,7 +1346,7 @@ bool pl_dispatch_compute(pl_dispatch dp, const struct pl_dispatch_compute_params
         goto error;
     }
 
-    if (res->input != PL_SHADER_SIG_NONE) {
+    if (sh->input != PL_SHADER_SIG_NONE) {
         PL_ERR(dp, "Trying to dispatch shader with incompatible signature!");
         goto error;
     }
@@ -1398,8 +1395,8 @@ bool pl_dispatch_compute(pl_dispatch dp, const struct pl_dispatch_compute_params
 
     if (!groups) {
         pl_assert(params->width && params->height);
-        int block_w = res->compute_group_size[0],
-            block_h = res->compute_group_size[1],
+        int block_w = sh->group_size[0],
+            block_h = sh->group_size[1],
             num_x   = PL_DIV_UP(params->width, block_w),
             num_y   = PL_DIV_UP(params->height, block_h);
 
@@ -1428,7 +1425,6 @@ error:
 bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *params)
 {
     pl_shader sh = *params->shader;
-    const struct pl_shader_res *res = &sh->res;
     bool ret = false;
     pl_mutex_lock(&dp->lock);
 
@@ -1442,7 +1438,7 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
         goto error;
     }
 
-    if (res->input != PL_SHADER_SIG_NONE || res->output != PL_SHADER_SIG_COLOR) {
+    if (sh->input != PL_SHADER_SIG_NONE || sh->output != PL_SHADER_SIG_COLOR) {
         PL_ERR(dp, "Trying to dispatch shader with incompatible signature!");
         goto error;
     }
