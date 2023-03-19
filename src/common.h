@@ -35,6 +35,8 @@
 #define PL_PRINTF(fmt, va)
 #endif
 
+#define PL_NOINLINE __attribute__((noinline))
+
 #include "os.h"
 
 #include "config_internal.h"
