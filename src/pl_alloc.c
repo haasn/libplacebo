@@ -221,6 +221,7 @@ void pl_free_children(void *ptr)
         h->ext->children[i]->parent = NULL; // prevent recursive access
         pl_free(h->ext->children[i]->data);
     }
+    h->ext->num_children = 0;
 
 #ifndef NDEBUG
     h->magic = MAGIC;
