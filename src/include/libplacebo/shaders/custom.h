@@ -66,6 +66,10 @@ struct pl_custom_shader {
 
     // Extra descriptors, variables and vertex attributes to attach to the
     // resulting `pl_shader_res`.
+    //
+    // Note: The names inside these will possibly be replaced by fresh
+    // identifiers internally, so users should avoid looking for exact string
+    // matches for the given names inside the `pl_shader_res`.
     const struct pl_shader_desc *descriptors;
     int num_descriptors;
     const struct pl_shader_var *variables;

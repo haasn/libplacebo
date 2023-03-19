@@ -35,39 +35,24 @@ bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params)
 
     sh->output = params->output;
 
-    // Attach the variables, descriptors etc. directly instead of going via
-    // `sh_var` / `sh_desc` etc. to avoid generating fresh names
     for (int i = 0; i < params->num_variables; i++) {
         struct pl_shader_var sv = params->variables[i];
-        sv.data = pl_memdup(SH_TMP(sh), sv.data, pl_var_host_layout(0, &sv.var).size);
-        sv.var.name = pl_strdup0(SH_TMP(sh), pl_str0(sv.var.name));
-        PL_ARRAY_APPEND(sh, sh->vars, sv);
+        GLSLP("#define %s "$"\n", sv.var.name, sh_var(sh, sv));
     }
 
     for (int i = 0; i < params->num_descriptors; i++) {
         struct pl_shader_desc sd = params->descriptors[i];
-        size_t bsize = sizeof(sd.buffer_vars[0]) * sd.num_buffer_vars;
-        if (bsize)
-            sd.buffer_vars = pl_memdup(SH_TMP(sh), sd.buffer_vars, bsize);
-        sd.desc.name = pl_strdup0(SH_TMP(sh), pl_str0(sd.desc.name));
-        PL_ARRAY_APPEND(sh, sh->descs, sd);
+        GLSLP("#define %s "$"\n", sd.desc.name, sh_desc(sh, sd));
     }
 
     for (int i = 0; i < params->num_vertex_attribs; i++) {
         struct pl_shader_va sva = params->vertex_attribs[i];
-        size_t vsize = sva.attr.fmt->texel_size;
-        for (int n = 0; n < PL_ARRAY_SIZE(sva.data); n++)
-            sva.data[n] = pl_memdup(SH_TMP(sh), sva.data[n], vsize);
-        sva.attr.name = pl_strdup0(SH_TMP(sh), pl_str0(sva.attr.name));
-        PL_ARRAY_APPEND(sh, sh->vas, sva);
+        GLSLP("#define %s "$"\n", sva.attr.name, sh_attr(sh, sva));
     }
 
     for (int i = 0; i < params->num_constants; i++) {
         struct pl_shader_const sc = params->constants[i];
-        size_t csize = pl_var_type_size(sc.type);
-        sc.data = pl_memdup(SH_TMP(sh), sc.data, csize);
-        sc.name = pl_strdup0(SH_TMP(sh), pl_str0(sc.name));
-        PL_ARRAY_APPEND(sh, sh->consts, sc);
+        GLSLP("#define %s "$"\n", sc.name, sh_const(sh, sc));
     }
 
     if (params->prelude)
