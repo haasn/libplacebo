@@ -82,4 +82,4 @@ static inline void pl_log_cpu_time(pl_log log, time_t start, time_t stop,
 }
 
 // Log stack trace
-void pl_log_stack_trace(pl_log log, enum pl_log_level lev);
+PL_NOINLINE void pl_log_stack_trace(pl_log log, enum pl_log_level lev);
