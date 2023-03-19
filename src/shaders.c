@@ -678,14 +678,17 @@ ident_t sh_subpass(pl_shader sh, pl_shader sub)
     ARRAY_STEAL(consts);
 #undef ARRAY_STEAL
 
-    // Make a deep copy of shader description steps array
-    for (int i = 0; i < sub->info->steps.num; i++)
-        sh_describe(sh, pl_str0dup0(sh->info, sub->info->steps.elem[i]));
-
     // Steal all temporary allocations and mark the child as unusable
     pl_steal(sh->tmp, sub->tmp);
     sub->tmp = pl_tmp(sub);
     sub->failed = true;
+
+    // Steal the shader steps array (and allocations)
+    pl_assert(pl_rc_count(&sub->info->rc) == 1);
+    PL_ARRAY_CONCAT(sh->info, sh->info->steps, sub->info->steps);
+    pl_steal(sh->info->tmp, sub->info->tmp);
+    sub->info->tmp = pl_tmp(sub->info);
+    sub->info->steps.num = 0; // sanity
 
     return sub->name;
 }
