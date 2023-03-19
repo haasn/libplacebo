@@ -421,6 +421,21 @@ ident_t sh_const_float(pl_shader sh, const char *name, float val)
     });
 }
 
+ident_t sh_attr(pl_shader sh, struct pl_shader_va sva)
+{
+    const size_t vsize = sva.attr.fmt->texel_size;
+    uint8_t *data = pl_alloc(SH_TMP(sh), vsize * 4);
+    for (int i = 0; i < 4; i++) {
+        memcpy(data, sva.data[i], vsize);
+        sva.data[i] = data;
+        data += vsize;
+    }
+
+    ident_t id = sh_fresh_name(sh, &sva.attr.name);
+    PL_ARRAY_APPEND(sh, sh->vas, sva);
+    return id;
+}
+
 ident_t sh_attr_vec2(pl_shader sh, const char *name,
                      const struct pl_rect2df *rc)
 {
@@ -436,25 +451,20 @@ ident_t sh_attr_vec2(pl_shader sh, const char *name,
         return NULL_IDENT;
     }
 
-    float vals[4][2] = {
+    float verts[4][2] = {
         { rc->x0, rc->y0 },
         { rc->x1, rc->y0 },
         { rc->x0, rc->y1 },
         { rc->x1, rc->y1 },
     };
 
-    float *data = pl_memdup(SH_TMP(sh), &vals[0][0], sizeof(vals));
-    struct pl_shader_va va = {
+    return sh_attr(sh, (struct pl_shader_va) {
         .attr = {
             .name     = name,
             .fmt      = pl_find_vertex_fmt(gpu, PL_FMT_FLOAT, 2),
         },
-        .data = { &data[0], &data[2], &data[4], &data[6] },
-    };
-
-    ident_t id = sh_fresh_name(sh, &va.attr.name);
-    PL_ARRAY_APPEND(sh, sh->vas, va);
-    return id;
+        .data = { verts[0], verts[1], verts[2], verts[3] },
+    });
 }
 
 ident_t sh_bind(pl_shader sh, pl_tex tex,
