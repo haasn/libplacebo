@@ -18,6 +18,7 @@
 #pragma once
 
 #include <stdio.h>
+#include <limits.h>
 
 #include "common.h"
 #include "log.h"
@@ -41,14 +42,36 @@ typedef unsigned short ident_t;
 #define sh_mkident(id, name) ((ident_t) id)
 #define sh_ident_tostr(id)   pl_asprintf(SH_TMP(sh), $, id)
 
+enum {
+    IDENT_BITS     = 8 * sizeof(ident_t),
+    IDENT_MASK     = (uintptr_t) USHRT_MAX,
+    IDENT_SENTINEL = (uintptr_t) 0x20230319 << IDENT_BITS,
+};
+
+// Functions to pack/unpack an identifier into a `const char *` name field.
+// Used to defer string templating of friendly names until actually necessary
+static inline const char *sh_ident_pack(ident_t id)
+{
+    return (const char *) (IDENT_SENTINEL | id);
+}
+
+static inline ident_t sh_ident_unpack(const char *name)
+{
+    uintptr_t uname = (uintptr_t) name;
+    assert((uname & ~IDENT_MASK) == IDENT_SENTINEL);
+    return uname & IDENT_MASK;
+}
+
 #else // !PL_STRIP_SHADERS
 
 typedef const char *ident_t;
 #define $           "%s"
 #define NULL_IDENT  NULL
 
-#define sh_mkident(id, name) pl_asprintf(SH_TMP(sh), "_%hx_%s", id, name)
-#define sh_ident_tostr(id) ((const char *) id)
+#define sh_mkident(id, name)  pl_asprintf(SH_TMP(sh), "_%hx_%s", id, name)
+#define sh_ident_tostr(id)    ((const char *) id)
+#define sh_ident_pack(id)     ((const char *) id)
+#define sh_ident_unpack(name) ((ident_t) name)
 
 #endif // PL_STRIP_SHADERS
 
@@ -98,6 +121,11 @@ struct pl_shader_t {
     char sampler_prefix;
     unsigned short prefix; // pre-processed version of res.params.id
     unsigned short fresh;
+
+    // Note: internally, these `pl_shader_va` etc. use raw ident_t fields
+    // instead of `const char *` wherever a name is required! These are
+    // translated to legal strings either in `pl_shader_finalize`, or inside
+    // the `pl_dispatch` shader compilation step.
     PL_ARRAY(struct pl_shader_va) vas;
     PL_ARRAY(struct pl_shader_var) vars;
     PL_ARRAY(struct pl_shader_desc) descs;

@@ -282,7 +282,7 @@ ident_t sh_fresh(pl_shader sh, const char *name)
 static inline ident_t sh_fresh_name(pl_shader sh, const char **pname)
 {
     ident_t id = sh_fresh(sh, *pname);
-    *pname = sh_ident_tostr(id);
+    *pname = sh_ident_pack(id);
     return id;
 }
 
@@ -332,6 +332,11 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
             pl_assert(sh->descs.elem[i].binding.object != sd.binding.object);
         size_t bsize = sizeof(sd.buffer_vars[0]) * sd.num_buffer_vars;
         sd.buffer_vars = pl_memdup(SH_TMP(sh), sd.buffer_vars, bsize);
+        for (int i = 0; i < sd.num_buffer_vars; i++) {
+            struct pl_var *bv = &sd.buffer_vars[i].var;
+            const char *name = bv->name;
+            GLSLP("#define %s "$"\n", name, sh_fresh_name(sh, &bv->name));
+        }
         break;
 
     case PL_DESC_SAMPLED_TEX:
@@ -758,6 +763,24 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh)
 
     pl_shader_info info = &sh->info->info;
     pl_str_builder glsl = sh_finalize_internal(sh);
+
+    // Turn ident_t into friendly strings before passing it to users
+#define FIX_IDENT(name) \
+    name = sh_ident_tostr(sh_ident_unpack(name))
+    for (int i = 0; i < sh->vas.num; i++)
+        FIX_IDENT(sh->vas.elem[i].attr.name);
+    for (int i = 0; i < sh->vars.num; i++)
+        FIX_IDENT(sh->vars.elem[i].var.name);
+    for (int i = 0; i < sh->consts.num; i++)
+        FIX_IDENT(sh->consts.elem[i].name);
+    for (int i = 0; i < sh->descs.num; i++) {
+        struct pl_shader_desc *sd = &sh->descs.elem[i];
+        FIX_IDENT(sd->desc.name);
+        for (int j = 0; j < sd->num_buffer_vars; sd++)
+            FIX_IDENT(sd->buffer_vars[j].var.name);
+    }
+#undef FIX_IDENT
+
     sh->result = (struct pl_shader_res) {
         .info               = info,
         .glsl               = (char *) pl_str_builder_exec(glsl).buf,

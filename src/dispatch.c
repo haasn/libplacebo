@@ -245,8 +245,8 @@ static bool add_pass_var(pl_dispatch dp, void *tmp, struct pass *pass,
     // Ran out of variable binding methods. The most likely scenario in which
     // this can happen is if we're using a GPU that does not support global
     // input vars and we've exhausted the UBO size limits.
-    PL_ERR(dp, "Unable to add input variable '%s': possibly exhausted "
-           "variable count / UBO size limits?", sv->var.name);
+    PL_ERR(dp, "Unable to add input variable: possibly exhausted "
+           "variable count / UBO size limits?");
     return false;
 }
 
@@ -255,12 +255,11 @@ static bool add_pass_var(pl_dispatch dp, void *tmp, struct pass *pass,
 
 static void add_var(pl_str_builder body, const struct pl_var *var)
 {
-    ADD(body, "%s %s", pl_var_glsl_type_name(*var), var->name);
-
+    const char *type = pl_var_glsl_type_name(*var);
     if (var->dim_a > 1) {
-        ADD(body, "[%d];\n", var->dim_a);
+        ADD(body, "%s "$"[%d];\n", type, sh_ident_unpack(var->name), var->dim_a);
     } else {
-        ADD(body, ";\n");
+        ADD(body, "%s "$";\n", type, sh_ident_unpack(var->name));
     }
 }
 
@@ -288,16 +287,6 @@ static void add_buffer_vars(pl_dispatch dp, void *tmp, pl_str_builder body,
         add_var(body, &bv->var);
     }
     ADD(body, "};\n");
-}
-
-static ident_t sh_var_from_va(pl_shader sh, const char *name,
-                              const struct pl_vertex_attrib *va,
-                              const void *data)
-{
-    return sh_var(sh, (struct pl_shader_var) {
-        .var  = pl_var_from_fmt(va->fmt, name),
-        .data = data,
-    });
 }
 
 struct generate_params {
@@ -441,8 +430,9 @@ static void generate_shaders(pl_dispatch dp,
         };
 
         const struct pl_shader_const *sc = &sh->consts.elem[i];
-        ADD(pre, "layout(constant_id=%"PRIu32") const %s %s = 1; \n",
-            pass_params->constants[i].id, types[sc->type], sc->name);
+        ADD(pre, "layout(constant_id=%"PRIu32") const %s "$" = 1; \n",
+            pass_params->constants[i].id, types[sc->type],
+            sh_ident_unpack(sc->name));
     }
 
     static const char sampler_prefixes[PL_FMT_TYPE_COUNT] = {
@@ -486,7 +476,8 @@ static void generate_shaders(pl_dispatch dp,
                 ADD(pre, "layout(binding=%d) ", desc->binding);
 
             pl_assert(type && prefix);
-            ADD(pre, "uniform %s%c%s %s;\n", prec, prefix, type, desc->name);
+            ADD(pre, "uniform %s%c%s "$";\n", prec, prefix, type,
+                sh_ident_unpack(desc->name));
             break;
         }
 
@@ -513,10 +504,10 @@ static void generate_shaders(pl_dispatch dp,
                 ADD(pre, "layout(%s) ", format);
             }
 
-            ADD(pre, "%s%s%s restrict uniform %s %s;\n", access,
+            ADD(pre, "%s%s%s restrict uniform %s "$";\n", access,
                 (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
                 (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",
-                types[dims], desc->name);
+                types[dims], sh_ident_unpack(desc->name));
             break;
         }
 
@@ -526,18 +517,18 @@ static void generate_shaders(pl_dispatch dp,
             } else {
                 ADD(pre, "layout(std140) ");
             }
-            ADD(pre, "uniform %s ", desc->name);
+            ADD(pre, "uniform "$" ", sh_ident_unpack(desc->name));
             add_buffer_vars(dp, tmp, pre, sd->buffer_vars, sd->num_buffer_vars);
             break;
 
         case PL_DESC_BUF_STORAGE:
             if (gpu->glsl.version >= 140)
                 ADD(pre, "layout(std430, binding=%d) ", desc->binding);
-            ADD(pre, "%s%s%s restrict buffer %s ",
+            ADD(pre, "%s%s%s restrict buffer "$" ",
                 pl_desc_access_glsl_name(desc->access),
                 (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
                 (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",
-                desc->name);
+                sh_ident_unpack(desc->name));
             add_buffer_vars(dp, tmp, pre, sd->buffer_vars, sd->num_buffer_vars);
             break;
 
@@ -546,7 +537,8 @@ static void generate_shaders(pl_dispatch dp,
             char prefix = sampler_prefixes[buf->params.format->type];
             if (gpu->glsl.vulkan)
                 ADD(pre, "layout(binding=%d) ", desc->binding);
-            ADD(pre, "uniform %csamplerBuffer %s;\n", prefix, desc->name);
+            ADD(pre, "uniform %csamplerBuffer "$";\n", prefix,
+                sh_ident_unpack(desc->name));
             break;
         }
 
@@ -565,10 +557,10 @@ static void generate_shaders(pl_dispatch dp,
                 ADD(pre, "layout(%s) ", format);
             }
 
-            ADD(pre, "%s%s%s restrict uniform %cimageBuffer %s;\n", access,
+            ADD(pre, "%s%s%s restrict uniform %cimageBuffer "$";\n", access,
                 (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
                 (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",
-                prefix, desc->name);
+                prefix, sh_ident_unpack(desc->name));
             break;
         }
 
@@ -607,18 +599,18 @@ static void generate_shaders(pl_dispatch dp,
 
             // Use the pl_shader_va for the name in the fragment shader since
             // the pl_vertex_attrib is already mangled for the vertex shader
-            const char *name = sva->attr.name;
+            ident_t id = sh_ident_unpack(sva->attr.name);
 
             char loc[32];
             snprintf(loc, sizeof(loc), "layout(location=%d)", va->location);
             // Older GLSL doesn't support the use of explicit locations
             if (gpu->glsl.version < 430)
                 loc[0] = '\0';
-            ADD(vert_head, "%s in %s %s;\n", loc, type, va->name);
+            ADD(vert_head, "%s in %s "$";\n", loc, type, sh_ident_unpack(va->name));
 
             if (i == params->vert_idx) {
                 pl_assert(va->fmt->num_components == 2);
-                ADD(vert_body, "vec2 va_pos = %s; \n", va->name);
+                ADD(vert_body, "vec2 va_pos = "$"; \n", sh_ident_unpack(va->name));
                 if (params->out_mat)
                     ADD(vert_body, "va_pos = "$" * va_pos; \n", params->out_mat);
                 if (params->out_off)
@@ -626,9 +618,9 @@ static void generate_shaders(pl_dispatch dp,
                 ADD(vert_body, "gl_Position = vec4(va_pos, 0.0, 1.0); \n");
             } else {
                 // Everything else is just blindly passed through
-                ADD(vert_head, "%s out %s %s;\n", loc, type, name);
-                ADD(vert_body, "%s = %s;\n", name, va->name);
-                ADD(glsl, "%s in %s %s;\n", loc, type, name);
+                ADD(vert_head, "%s out %s "$";\n", loc, type, id);
+                ADD(vert_body, $" = "$";\n", id, sh_ident_unpack(va->name));
+                ADD(glsl, "%s in %s "$";\n", loc, type, id);
             }
         }
 
@@ -723,7 +715,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
         .last_index = dp->current_index,
         .ubo_desc = {
             .desc = {
-                .name = "UBO",
+                .name = sh_ident_pack(sh_fresh(sh, "UBO")),
                 .type = PL_DESC_BUF_UNIFORM,
             },
         },
@@ -763,8 +755,9 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
             *va = sh->vas.elem[i].attr;
 
             // Mangle the name to make sure it doesn't conflict with the
-            // fragment shader input
-            va->name = pl_asprintf(tmp, "%s_v", va->name);
+            // fragment shader input, this will be converted back to a legal
+            // string by the shader compilation code
+            va->name = sh_ident_pack(sh_fresh(sh, "va"));
 
             // Place the vertex attribute
             va->location = va_loc;
@@ -852,7 +845,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
     size_t ubo_size = sh_buf_desc_size(&pass->ubo_desc);
     if (ubo_size) {
         pass->ubo_index = sh->descs.num;
-        sh_desc(sh, pass->ubo_desc);
+        PL_ARRAY_APPEND(sh, sh->descs, pass->ubo_desc); // don't mangle names
     };
 
     // Place and fill in the descriptors
@@ -906,6 +899,18 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
             break;
         }
     }
+
+    // Turn all shader identifiers into actual strings before passing it
+    // to the `pl_gpu`
+#define FIX_IDENT(name) \
+    name = sh_ident_tostr(sh_ident_unpack(name))
+    for (int i = 0; i < params.num_variables; i++)
+        FIX_IDENT(params.variables[i].name);
+    for (int i = 0; i < params.num_descriptors; i++)
+        FIX_IDENT(params.descriptors[i].name);
+    for (int i = 0; i < params.num_vertex_attribs; i++)
+        FIX_IDENT(params.vertex_attribs[i].name);
+#undef FIX_IDENT
 
     pass->pass = pl_pass_create(dp->gpu, &params);
     if (!pass->pass) {
@@ -1029,19 +1034,21 @@ static void compute_vertex_attribs(pl_dispatch dp, pl_shader sh,
 
         ident_t points[4];
         for (int i = 0; i < PL_ARRAY_SIZE(points); i++) {
-            char name[4];
-            snprintf(name, sizeof(name), "p%d", i);
-            points[i] = sh_var_from_va(sh, name, &sva->attr, sva->data[i]);
+            points[i] = sh_var(sh, (struct pl_shader_var) {
+                .var  = pl_var_from_fmt(sva->attr.fmt, "pt"),
+                .data = sva->data[i],
+            });
         }
 
-        GLSLP("#define %s_map(id) "
+        GLSLP("#define "$"_map(id) "
              "(mix(mix("$", "$", frag_map(id).x), "
              "     mix("$", "$", frag_map(id).x), "
              "frag_map(id).y)) \n"
-             "#define %s (%s_map(gl_GlobalInvocationID)) \n",
-             sva->attr.name,
+             "#define "$" ("$"_map(gl_GlobalInvocationID)) \n",
+             sh_ident_unpack(sva->attr.name),
              points[0], points[1], points[2], points[3],
-             sva->attr.name, sva->attr.name);
+             sh_ident_unpack(sva->attr.name),
+             sh_ident_unpack(sva->attr.name));
     }
 }
 
@@ -1479,8 +1486,12 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
     // Attach all of the vertex attributes to the shader manually
     sh->vas.num = params->num_vertex_attribs;
     PL_ARRAY_RESIZE(sh, sh->vas, sh->vas.num);
-    for (int i = 0; i < params->num_vertex_attribs; i++)
+    for (int i = 0; i < params->num_vertex_attribs; i++) {
+        ident_t id = sh_fresh(sh, params->vertex_attribs[i].name);
         sh->vas.elem[i].attr = params->vertex_attribs[i];
+        sh->vas.elem[i].attr.name = sh_ident_pack(id);
+        GLSLP("#define %s "$"\n", params->vertex_attribs[i].name, id);
+    }
 
     // Compute the coordinate projection matrix
     struct pl_transform2x2 proj = pl_transform2x2_identity;
