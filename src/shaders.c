@@ -72,6 +72,7 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
 
         // Preserve array allocations
         .tmp.elem       = sh->tmp.elem,
+        .obj.elem       = sh->obj.elem,
         .vas.elem       = sh->vas.elem,
         .vars.elem      = sh->vars.elem,
         .descs.elem     = sh->descs.elem,
@@ -578,6 +579,11 @@ ident_t sh_subpass(pl_shader sh, const pl_shader sub)
     }
     pl_str_builder_concat(sh->buffers[SH_BUF_HEADER], sub->buffers[SH_BUF_BODY]);
     GLSLH("%s\n}\n\n", retvals[sub->res.output]);
+
+    // Ref all objects
+    PL_ARRAY_CONCAT(sh, sh->obj, sub->obj);
+    for (int i = 0; i < sub->obj.num; i++)
+        pl_rc_ref(&sub->obj.elem[i]->rc);
 
     // Copy over all of the descriptors etc.
     for (int i = 0; i < sub->tmp.num; i++)
