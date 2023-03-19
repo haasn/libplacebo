@@ -52,6 +52,7 @@ struct pl_dispatch_t {
     PL_ARRAY(struct cached_pass) cached_passes; // not-yet-compiled passes
 
     // temporary buffers to help avoid re_allocations during pass creation
+    PL_ARRAY(const struct pl_buffer_var *) buf_tmp;
     pl_str_builder tmp[TMP_COUNT];
     uint8_t *ubo_tmp;
 };
@@ -272,18 +273,19 @@ static int cmp_buffer_var(const void *pa, const void *pb)
 static void add_buffer_vars(pl_dispatch dp, void *tmp, pl_str_builder body,
                             const struct pl_buffer_var *vars, int num)
 {
-    // Sort buffer vars
-    const struct pl_buffer_var **sorted_vars = pl_calloc_ptr(tmp, num, sorted_vars);
+    // Sort buffer vars by offset
+    PL_ARRAY_RESIZE(dp, dp->buf_tmp, num);
     for (int i = 0; i < num; i++)
-        sorted_vars[i] = &vars[i];
-    qsort(sorted_vars, num, sizeof(sorted_vars[0]), cmp_buffer_var);
+        dp->buf_tmp.elem[i] = &vars[i];
+    qsort(dp->buf_tmp.elem, num, sizeof(&vars[0]), cmp_buffer_var);
 
     ADD(body, "{\n");
     for (int i = 0; i < num; i++) {
+        const struct pl_buffer_var *bv = dp->buf_tmp.elem[i];
         // Add an explicit offset wherever possible
         if (dp->gpu->glsl.version >= 440)
-            ADD(body, "    layout(offset=%zu) ", sorted_vars[i]->layout.offset);
-        add_var(body, &sorted_vars[i]->var);
+            ADD(body, "    layout(offset=%zu) ", bv->layout.offset);
+        add_var(body, &bv->var);
     }
     ADD(body, "};\n");
 }
