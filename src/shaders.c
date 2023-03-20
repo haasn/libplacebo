@@ -248,8 +248,6 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
     switch (sd.desc.type) {
     case PL_DESC_BUF_UNIFORM:
     case PL_DESC_BUF_STORAGE:
-    case PL_DESC_BUF_TEXEL_UNIFORM:
-    case PL_DESC_BUF_TEXEL_STORAGE:
         // Skip re-attaching the same buffer desc twice
         // FIXME: define aliases if the variable names differ
         for (int i = 0; i < sh->descs.num; i++) {
@@ -264,6 +262,8 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
         sd.buffer_vars = pl_memdup(SH_TMP(sh), sd.buffer_vars, bsize);
         break;
 
+    case PL_DESC_BUF_TEXEL_UNIFORM:
+    case PL_DESC_BUF_TEXEL_STORAGE:
     case PL_DESC_SAMPLED_TEX:
     case PL_DESC_STORAGE_IMG:
         pl_assert(!sd.num_buffer_vars);
