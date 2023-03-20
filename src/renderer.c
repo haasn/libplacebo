@@ -1573,6 +1573,7 @@ static bool pass_read_image(struct pass_state *pass)
             GLSL("} \n");
 
             sti->img.fmt = fmt;
+            pl_dispatch_abort(rr->dp, &stj->img.sh);
             *stj = (struct plane_state) {0};
             did_merge = true;
         }
