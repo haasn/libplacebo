@@ -100,7 +100,6 @@ scan:
         - env CC=clang CXX=clang++ meson build --buildtype debugoptimized
                                                --werror
                                                -Dtests=true
-                                               -Ddemos=true
                                                -Dbench=true
                                                -Dshaderc=enabled
                                                -Dglslang=enabled
@@ -116,7 +115,6 @@ llvmpipe:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
-                      -Ddemos=false
                       -Dc_args='-DCI_ALLOW_SW -DCI_MAXGL'
                       -Dshaderc=enabled
                       -Dglslang=enabled
@@ -132,7 +130,6 @@ gpu:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
-                      -Ddemos=false
                       -Ddebug-abort=true
                       -Dshaderc=disabled
                       -Db_coverage=true
@@ -162,7 +159,6 @@ asan:
     script:
         - meson build --buildtype debugoptimized
                       -Dtests=true
-                      -Ddemos=false
                       -Dc_args='-DCI_MAXGL'
                       -Dshaderc=disabled
                       -Db_sanitize=address
@@ -179,7 +175,6 @@ msan:
     script:
         - env CC=clang CXX=clang++ meson build --buildtype debugoptimized
                                                -Dtests=true
-                                               -Ddemos=false
                                                -Dc_args='-DMSAN -DCI_MAXGL'
                                                -Dglslang=disabled
                                                -Db_sanitize=memory
@@ -197,7 +192,6 @@ ubsan:
     script:
         - env CC=clang CXX=clang++ meson build --buildtype debugoptimized
                                                -Dtests=true
-                                               -Ddemos=false
                                                -Dc_args='-fPIE -DCI_MAXGL'
                                                -Dglslang=disabled
                                                -Db_sanitize=undefined
@@ -214,7 +208,6 @@ gpu-strip:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
-                      -Ddemos=false
                       -Dc_args='-DPL_STRIP_SHADERS -DCI_MAXGL'
                       -Ddebug-abort=true
                       -Dshaderc=disabled
