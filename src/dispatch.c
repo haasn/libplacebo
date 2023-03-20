@@ -722,7 +722,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
     };
 
     // For identifiers tied to the lifetime of this shader
-    void *tmp = SH_TMP(sh);
+    void *tmp = sh->tmp;
 
     struct pl_pass_params params = {
         .type = pl_shader_is_compute(sh) ? PL_PASS_COMPUTE : PL_PASS_RASTER,

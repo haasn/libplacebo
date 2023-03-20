@@ -40,7 +40,7 @@ typedef unsigned short ident_t;
 #define NULL_IDENT  0u
 
 #define sh_mkident(id, name) ((ident_t) id)
-#define sh_ident_tostr(id)   pl_asprintf(SH_TMP(sh), $, id)
+#define sh_ident_tostr(id)   pl_asprintf(sh->tmp, $, id)
 
 enum {
     IDENT_BITS     = 8 * sizeof(ident_t),
@@ -68,7 +68,7 @@ typedef const char *ident_t;
 #define $           "%s"
 #define NULL_IDENT  NULL
 
-#define sh_mkident(id, name)  pl_asprintf(SH_TMP(sh), "_%hx_%s", id, name)
+#define sh_mkident(id, name)  pl_asprintf(sh->tmp, "_%hx_%s", id, name)
 #define sh_ident_tostr(id)    ((const char *) id)
 #define sh_ident_pack(id)     ((const char *) id)
 #define sh_ident_unpack(name) ((ident_t) name)
@@ -143,7 +143,6 @@ pl_str_builder sh_finalize_internal(pl_shader sh);
 // Helper functions for convenience
 #define SH_PARAMS(sh) ((sh)->info->info.params)
 #define SH_GPU(sh) (SH_PARAMS(sh).gpu)
-#define SH_TMP(sh) ((sh)->tmp)
 
 // Returns the GLSL version, defaulting to desktop 130.
 struct pl_glsl_version sh_glsl(const pl_shader sh);

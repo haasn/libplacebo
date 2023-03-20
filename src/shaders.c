@@ -287,7 +287,7 @@ static inline ident_t sh_fresh_name(pl_shader sh, const char **pname)
 ident_t sh_var(pl_shader sh, struct pl_shader_var sv)
 {
     ident_t id = sh_fresh_name(sh, &sv.var.name);
-    sv.data = pl_memdup(SH_TMP(sh), sv.data, pl_var_host_layout(0, &sv.var).size);
+    sv.data = pl_memdup(sh->tmp, sv.data, pl_var_host_layout(0, &sv.var).size);
     PL_ARRAY_APPEND(sh, sh->vars, sv);
     return id;
 }
@@ -329,7 +329,7 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
         for (int i = 0; i < sh->descs.num; i++) // ensure uniqueness
             pl_assert(sh->descs.elem[i].binding.object != sd.binding.object);
         size_t bsize = sizeof(sd.buffer_vars[0]) * sd.num_buffer_vars;
-        sd.buffer_vars = pl_memdup(SH_TMP(sh), sd.buffer_vars, bsize);
+        sd.buffer_vars = pl_memdup(sh->tmp, sd.buffer_vars, bsize);
         for (int i = 0; i < sd.num_buffer_vars; i++) {
             struct pl_var *bv = &sd.buffer_vars[i].var;
             const char *name = bv->name;
@@ -372,7 +372,7 @@ ident_t sh_const(pl_shader sh, struct pl_shader_const sc)
     pl_gpu gpu = SH_GPU(sh);
     if (gpu && gpu->limits.max_constants) {
         if (!sc.compile_time || gpu->limits.array_size_constants) {
-            sc.data = pl_memdup(SH_TMP(sh), sc.data, pl_var_type_size(sc.type));
+            sc.data = pl_memdup(sh->tmp, sc.data, pl_var_type_size(sc.type));
             PL_ARRAY_APPEND(sh, sh->consts, sc);
             return id;
         }
@@ -427,7 +427,7 @@ ident_t sh_const_float(pl_shader sh, const char *name, float val)
 ident_t sh_attr(pl_shader sh, struct pl_shader_va sva)
 {
     const size_t vsize = sva.attr.fmt->texel_size;
-    uint8_t *data = pl_alloc(SH_TMP(sh), vsize * 4);
+    uint8_t *data = pl_alloc(sh->tmp, vsize * 4);
     for (int i = 0; i < 4; i++) {
         memcpy(data, sva.data[i], vsize);
         sva.data[i] = data;
