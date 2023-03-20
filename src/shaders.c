@@ -144,6 +144,7 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
         .log            = sh->log,
         .tmp            = sh->tmp,
         .info           = sh_info_recycle(sh->info),
+        .data.buf       = sh->data.buf,
         .mutable        = true,
 
         // Preserve array allocations
@@ -161,6 +162,37 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params)
 
     *sh = new;
     init_shader(sh, params);
+}
+
+static void *sh_alloc(pl_shader sh, size_t size, size_t align)
+{
+    const size_t offset = PL_ALIGN2(sh->data.len, align);
+    const size_t req_size = offset + size;
+    if (req_size <= pl_get_size(sh->data.buf)) {
+        sh->data.len = offset + size;
+        return sh->data.buf + offset;
+    }
+
+    // We can't realloc this buffer because various pointers will be left
+    // dangling, so just reparent it onto `sh->tmp` (so it will be cleaned
+    // up when the shader is next reset) and allocate a new, larger buffer
+    // in its place
+    const size_t new_size = PL_MAX(req_size << 1, 256);
+    pl_steal(sh->tmp, sh->data.buf);
+    sh->data.buf = pl_alloc(sh, new_size);
+    sh->data.len = size;
+    return sh->data.buf;
+}
+
+static void *sh_memdup(pl_shader sh, const void *data, size_t size, size_t align)
+{
+    if (!size)
+        return NULL;
+
+    void *dst = sh_alloc(sh, size, align);
+    assert(data);
+    memcpy(dst, data, size);
+    return dst;
 }
 
 bool pl_shader_is_failed(const pl_shader sh)
@@ -287,7 +319,8 @@ static inline ident_t sh_fresh_name(pl_shader sh, const char **pname)
 ident_t sh_var(pl_shader sh, struct pl_shader_var sv)
 {
     ident_t id = sh_fresh_name(sh, &sv.var.name);
-    sv.data = pl_memdup(sh->tmp, sv.data, pl_var_host_layout(0, &sv.var).size);
+    struct pl_var_layout layout = pl_var_host_layout(0, &sv.var);
+    sv.data = sh_memdup(sh, sv.data, layout.size, layout.stride);
     PL_ARRAY_APPEND(sh, sh->vars, sv);
     return id;
 }
@@ -327,7 +360,8 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
         for (int i = 0; i < sh->descs.num; i++) // ensure uniqueness
             pl_assert(sh->descs.elem[i].binding.object != sd.binding.object);
         size_t bsize = sizeof(sd.buffer_vars[0]) * sd.num_buffer_vars;
-        sd.buffer_vars = pl_memdup(sh->tmp, sd.buffer_vars, bsize);
+        sd.buffer_vars = sh_memdup(sh, sd.buffer_vars, bsize,
+                                   alignof(struct pl_buffer_var));
         for (int i = 0; i < sd.num_buffer_vars; i++) {
             struct pl_var *bv = &sd.buffer_vars[i].var;
             const char *name = bv->name;
@@ -372,7 +406,8 @@ ident_t sh_const(pl_shader sh, struct pl_shader_const sc)
     pl_gpu gpu = SH_GPU(sh);
     if (gpu && gpu->limits.max_constants) {
         if (!sc.compile_time || gpu->limits.array_size_constants) {
-            sc.data = pl_memdup(sh->tmp, sc.data, pl_var_type_size(sc.type));
+            size_t size = pl_var_type_size(sc.type);
+            sc.data = sh_memdup(sh, sc.data, size, size);
             PL_ARRAY_APPEND(sh, sh->consts, sc);
             return id;
         }
@@ -427,7 +462,7 @@ ident_t sh_const_float(pl_shader sh, const char *name, float val)
 ident_t sh_attr(pl_shader sh, struct pl_shader_va sva)
 {
     const size_t vsize = sva.attr.fmt->texel_size;
-    uint8_t *data = pl_alloc(sh->tmp, vsize * 4);
+    uint8_t *data = sh_alloc(sh, vsize * 4, vsize);
     for (int i = 0; i < 4; i++) {
         memcpy(data, sva.data[i], vsize);
         sva.data[i] = data;
@@ -677,6 +712,12 @@ ident_t sh_subpass(pl_shader sh, pl_shader sub)
     ARRAY_STEAL(descs);
     ARRAY_STEAL(consts);
 #undef ARRAY_STEAL
+
+    // Steal the scratch buffer (if it holds data)
+    if (sub->data.len) {
+        pl_steal(sh->tmp, sub->data.buf);
+        sub->data = (pl_str) {0};
+    }
 
     // Steal all temporary allocations and mark the child as unusable
     pl_steal(sh->tmp, sub->tmp);

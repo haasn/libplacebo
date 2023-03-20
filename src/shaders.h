@@ -104,6 +104,7 @@ struct pl_shader_t {
     pl_log log;
     void *tmp; // temporary allocations (freed on pl_shader_reset)
     struct sh_info *info;
+    pl_str data; // pooled/recycled scratch buffer for small allocations
     PL_ARRAY(pl_shader_obj) obj;
     bool failed;
     bool mutable;
