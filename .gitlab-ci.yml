@@ -97,7 +97,7 @@ scan:
         - docker
         - amd64
     script:
-        - env CC=clang CXX=clang++
+        - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
             meson build --buildtype debugoptimized
                         --werror
                         -Dtests=true
@@ -175,7 +175,7 @@ msan:
     variables:
         MSAN_OPTIONS: 'exitcode=1'
     script:
-        - env CC=clang CXX=clang++
+        - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
             meson build --buildtype debugoptimized
                         -Dtests=true
                         -Dc_args='-DMSAN -DCI_MAXGL'
@@ -193,7 +193,7 @@ ubsan:
     variables:
         UBSAN_OPTIONS: 'print_stacktrace=1:halt_on_error=1'
     script:
-        - env CC=clang CXX=clang++
+        - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
             meson build --buildtype debugoptimized
                         -Dtests=true
                         -Dc_args='-fPIE -DCI_MAXGL'
