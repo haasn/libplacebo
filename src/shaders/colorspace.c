@@ -1454,26 +1454,6 @@ static void visualize_tone_map(pl_shader sh, ident_t fun,
          PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
 }
 
-static void describe_tone_map(pl_shader sh, float src_min, float src_max,
-                              float dst_min, float dst_max,
-                              const struct pl_tone_map_function *fun)
-{
-    bool tonemap = src_max != dst_max;
-    bool bpc     = src_min != dst_min;
-
-    src_min = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, src_min);
-    src_max = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, src_max);
-    dst_min = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, dst_min);
-    dst_max = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, dst_max);
-
-    if (tonemap) {
-        sh_describef(sh, "tone mapping (%s, %.0f -> %.0f nits%s)", fun->name,
-                     src_max, dst_max, bpc ? " + bpc" : "");
-    } else if (bpc) {
-        sh_describef(sh, "bpc (%s, %.3f -> %.3f nits)", fun->name, src_min, dst_min);
-    }
-}
-
 static void fill_lut(void *data, const struct sh_lut_params *params)
 {
     const struct pl_tone_map_params *lut_params = params->priv;
@@ -1563,7 +1543,9 @@ static void tone_map(pl_shader sh,
         return;
 
     const struct pl_tone_map_function *fun = lut_params.function;
-    describe_tone_map(sh, src_min, src_max, dst_min, dst_max, fun);
+    sh_describef(sh, "%s tone map (%.0f -> %.0f)", fun->name,
+                 pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, src_max),
+                 pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, dst_max));
     ident_t lut = NULL;
 
     bool can_fixed = !params->force_tone_mapping_lut;
