@@ -324,8 +324,6 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
     switch (sd.desc.type) {
     case PL_DESC_BUF_UNIFORM:
     case PL_DESC_BUF_STORAGE:
-    case PL_DESC_BUF_TEXEL_UNIFORM:
-    case PL_DESC_BUF_TEXEL_STORAGE:
         for (int i = 0; i < sh->descs.num; i++) // ensure uniqueness
             pl_assert(sh->descs.elem[i].binding.object != sd.binding.object);
         size_t bsize = sizeof(sd.buffer_vars[0]) * sd.num_buffer_vars;
@@ -337,6 +335,8 @@ ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
         }
         break;
 
+    case PL_DESC_BUF_TEXEL_UNIFORM:
+    case PL_DESC_BUF_TEXEL_STORAGE:
     case PL_DESC_SAMPLED_TEX:
     case PL_DESC_STORAGE_IMG:
         pl_assert(!sd.num_buffer_vars);
