@@ -252,6 +252,7 @@ static bool add_pass_var(pl_dispatch dp, void *tmp, struct pass *pass,
 
 #define ADD(b, ...)     pl_str_builder_addf(b, __VA_ARGS__)
 #define ADD_CAT(b, cat) pl_str_builder_concat(b, cat)
+#define ADD_CONST(b, s) pl_str_builder_const_str(b, s)
 
 static void add_var(pl_str_builder body, const struct pl_var *var)
 {
@@ -374,8 +375,11 @@ static void generate_shaders(pl_dispatch dp,
     if (has_texel)
         ADD(pre, "#extension GL_ARB_texture_buffer_object : enable\n");
     if (has_ext) {
-        ADD(pre, "#extension GL_OES_EGL_image_external%s : enable\n",
-            gpu->glsl.version >= 300 ? "_essl3" : "");
+        if (gpu->glsl.version >= 300) {
+            ADD(pre, "#extension GL_OES_EGL_image_external_essl3 : enable\n");
+        } else {
+            ADD(pre, "#extension GL_OES_EGL_image_external : enable\n");
+        }
     }
     if (has_nofmt)
         ADD(pre, "#extension GL_EXT_shader_image_load_formatted : enable\n");
@@ -461,23 +465,20 @@ static void generate_shaders(pl_dispatch dp,
             pl_tex tex = sd->binding.object;
             int dims = pl_tex_params_dimension(tex->params);
             const char *type = types[tex->sampler_type][dims];
-            pl_assert(type);
-
             char prefix = sampler_prefixes[tex->params.format->type];
-            pl_assert(prefix);
-
-            const char *prec = "";
-            if (prefix != ' ' && gpu->glsl.gles)
-                prec = "highp ";
+            ident_t id = sh_ident_unpack(desc->name);
+            pl_assert(type && prefix);
 
             // Vulkan requires explicit bindings; GL always sets the
             // bindings manually to avoid relying on the user doing so
-            if (gpu->glsl.vulkan)
-                ADD(pre, "layout(binding=%d) ", desc->binding);
-
-            pl_assert(type && prefix);
-            ADD(pre, "uniform %s%c%s "$";\n", prec, prefix, type,
-                sh_ident_unpack(desc->name));
+            if (gpu->glsl.vulkan) {
+                ADD(pre, "layout(binding=%d) uniform %c%s "$";\n",
+                    desc->binding, prefix, type, id);
+            } else if (gpu->glsl.gles && prefix != ' ') {
+                ADD(pre, "uniform highp %c%s "$";\n", prefix, type, id);
+            } else {
+                ADD(pre, "uniform %c%s "$";\n", prefix, type, id);
+            }
             break;
         }
 
@@ -492,7 +493,6 @@ static void generate_shaders(pl_dispatch dp,
             // type of data we will be reading/writing to this image.
             pl_tex tex = sd->binding.object;
             const char *format = tex->params.format->glsl_format;
-            const char *access = pl_desc_access_glsl_name(desc->access);
             int dims = pl_tex_params_dimension(tex->params);
             if (gpu->glsl.vulkan) {
                 if (format) {
@@ -504,9 +504,12 @@ static void generate_shaders(pl_dispatch dp,
                 ADD(pre, "layout(%s) ", format);
             }
 
-            ADD(pre, "%s%s%s restrict uniform %s "$";\n", access,
-                (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
-                (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",
+            ADD_CONST(pre, pl_desc_access_glsl_name(desc->access));
+            if (sd->memory & PL_MEMORY_COHERENT)
+                ADD(pre, " coherent");
+            if (sd->memory & PL_MEMORY_VOLATILE)
+                ADD(pre, " volatile");
+            ADD(pre, " restrict uniform %s "$";\n",
                 types[dims], sh_ident_unpack(desc->name));
             break;
         }
@@ -524,11 +527,12 @@ static void generate_shaders(pl_dispatch dp,
         case PL_DESC_BUF_STORAGE:
             if (gpu->glsl.version >= 140)
                 ADD(pre, "layout(std430, binding=%d) ", desc->binding);
-            ADD(pre, "%s%s%s restrict buffer "$" ",
-                pl_desc_access_glsl_name(desc->access),
-                (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
-                (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",
-                sh_ident_unpack(desc->name));
+            ADD_CONST(pre, pl_desc_access_glsl_name(desc->access));
+            if (sd->memory & PL_MEMORY_COHERENT)
+                ADD(pre, " coherent");
+            if (sd->memory & PL_MEMORY_VOLATILE)
+                ADD(pre, " volatile");
+            ADD(pre, " restrict buffer "$" ", sh_ident_unpack(desc->name));
             add_buffer_vars(dp, tmp, pre, sd->buffer_vars, sd->num_buffer_vars);
             break;
 
@@ -545,7 +549,6 @@ static void generate_shaders(pl_dispatch dp,
         case PL_DESC_BUF_TEXEL_STORAGE: {
             pl_buf buf = sd->binding.object;
             const char *format = buf->params.format->glsl_format;
-            const char *access = pl_desc_access_glsl_name(desc->access);
             char prefix = sampler_prefixes[buf->params.format->type];
             if (gpu->glsl.vulkan) {
                 if (format) {
@@ -557,9 +560,12 @@ static void generate_shaders(pl_dispatch dp,
                 ADD(pre, "layout(%s) ", format);
             }
 
-            ADD(pre, "%s%s%s restrict uniform %cimageBuffer "$";\n", access,
-                (sd->memory & PL_MEMORY_COHERENT) ? " coherent" : "",
-                (sd->memory & PL_MEMORY_VOLATILE) ? " volatile" : "",
+            ADD_CONST(pre, pl_desc_access_glsl_name(desc->access));
+            if (sd->memory & PL_MEMORY_COHERENT)
+                ADD(pre, " coherent");
+            if (sd->memory & PL_MEMORY_VOLATILE)
+                ADD(pre, " volatile");
+            ADD(pre, " restrict uniform %cimageBuffer "$";\n",
                 prefix, sh_ident_unpack(desc->name));
             break;
         }
@@ -589,6 +595,9 @@ static void generate_shaders(pl_dispatch dp,
         pl_str_builder vert_head = dp->tmp[TMP_VERT_HEAD];
         pl_str_builder vert_body = dp->tmp[TMP_VERT_BODY];
 
+        // Older GLSL doesn't support the use of explicit locations
+        bool has_loc = gpu->glsl.version >= 430;
+
         // Set up a trivial vertex shader
         ADD_CAT(vert_head, pre);
         ADD(vert_body, "void main() {\n");
@@ -601,12 +610,12 @@ static void generate_shaders(pl_dispatch dp,
             // the pl_vertex_attrib is already mangled for the vertex shader
             ident_t id = sh_ident_unpack(sva->attr.name);
 
-            char loc[32];
-            snprintf(loc, sizeof(loc), "layout(location=%d)", va->location);
-            // Older GLSL doesn't support the use of explicit locations
-            if (gpu->glsl.version < 430)
-                loc[0] = '\0';
-            ADD(vert_head, "%s in %s "$";\n", loc, type, sh_ident_unpack(va->name));
+            if (has_loc) {
+                ADD(vert_head, "layout(location=%d) in %s "$";\n",
+                    va->location, type, sh_ident_unpack(va->name));
+            } else {
+                ADD(vert_head, "in %s "$";\n", type, sh_ident_unpack(va->name));
+            }
 
             if (i == params->vert_idx) {
                 pl_assert(va->fmt->num_components == 2);
@@ -618,9 +627,16 @@ static void generate_shaders(pl_dispatch dp,
                 ADD(vert_body, "gl_Position = vec4(va_pos, 0.0, 1.0); \n");
             } else {
                 // Everything else is just blindly passed through
-                ADD(vert_head, "%s out %s "$";\n", loc, type, id);
+                if (has_loc) {
+                    ADD(vert_head, "layout(location=%d) out %s "$";\n",
+                        va->location, type, id);
+                    ADD(glsl, "layout(location=%d) in %s "$";\n",
+                        va->location, type, id);
+                } else {
+                    ADD(vert_head, "out %s "$";\n", type, id);
+                    ADD(glsl, "in %s "$";\n", type, id);
+                }
                 ADD(vert_body, $" = "$";\n", id, sh_ident_unpack(va->name));
-                ADD(glsl, "%s in %s "$";\n", loc, type, id);
             }
         }
 
@@ -629,8 +645,11 @@ static void generate_shaders(pl_dispatch dp,
         pl_hash_merge(&pass->signature, pl_str_builder_hash(vert_head));
         *out_vert_builder = vert_head;
 
-        ADD(glsl, "%s out vec4 out_color;\n",
-            gpu->glsl.version >= 430 ? "layout(location=0) " : "");
+        if (has_loc) {
+            ADD(glsl, "layout(location=0) out vec4 out_color;\n");
+        } else {
+            ADD(glsl, "out vec4 out_color;\n");
+        }
         break;
     }
     case PL_PASS_COMPUTE:
@@ -1088,9 +1107,9 @@ static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
     });
 
     int dx = rc->x0 > rc->x1 ? -1 : 1, dy = rc->y0 > rc->y1 ? -1 : 1;
-    const char *swiz = sh->transpose ? "yx" : "xy";
     GLSL("ivec2 dir = ivec2(%d, %d);\n", dx, dy); // hard-code, not worth var
-    GLSL("ivec2 pos = "$" + dir * ivec2(gl_GlobalInvocationID).%s;\n", base, swiz);
+    GLSL("ivec2 pos = "$" + dir * ivec2(gl_GlobalInvocationID).%c%c;\n",
+         base, sh->transpose ? 'y' : 'x', sh->transpose ? 'x' : 'y');
     GLSL("vec2 fpos = "$" * vec2(gl_GlobalInvocationID);\n", out_scale);
     GLSL("if (fpos.x < 1.0 && fpos.y < 1.0) {\n");
     if (params->blend_params) {
