@@ -7,7 +7,7 @@ This document will serve as an introduction to and usage example for the
 intended as a full API reference, for that you should see the repository of
 [header
 files](https://code.videolan.org/videolan/libplacebo/-/tree/master/src/include/libplacebo),
-which area written to be (hopefully) understandable as-is.
+which are written to be (hopefully) understandable as-is.
 
 libplacebo exposes large parts of its internal abstractions publicly. This
 guide will take the general approach of starting as high level as possible and
