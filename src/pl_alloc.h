@@ -83,8 +83,7 @@ char *pl_strndup0(void *parent, const char *str, size_t size);
 // `priv` at the address of `pub` + sizeof(pub), rounded up to the maximum
 // alignment requirements.
 
-#define PL_ALIGN_MEM(size) \
-    (((size) + alignof(max_align_t) - 1) & ~(alignof(max_align_t) - 1))
+#define PL_ALIGN_MEM(size) PL_ALIGN2(size, alignof(max_align_t))
 
 #define PL_PRIV(pub) \
     (void *) ((uintptr_t) (pub) + PL_ALIGN_MEM(sizeof(*(pub))))
