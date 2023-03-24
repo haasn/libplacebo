@@ -329,6 +329,7 @@ void pl_log_stack_trace(pl_log log, enum pl_log_level lev)
         }
     }
 
+    pl_msg(log, lev, "  Backtrace:");
     for (int n = 0; n < frames.num; n++) {
         uintptr_t pc = get_prev_inst_pc((uintptr_t) frames.elem[n]);
         pl_str out = {0};
