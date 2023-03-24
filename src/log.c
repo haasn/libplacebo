@@ -279,7 +279,7 @@ void pl_log_stack_trace(pl_log log, enum pl_log_level lev)
     // no need to keep it loaded all the time as stack trace printing function,
     // in theory should be used repetitively rarely.
     HANDLE process = GetCurrentProcess();
-    HANDLE dbghelp = LoadLibrary("dbghelp.dll");
+    HMODULE dbghelp = LoadLibrary("dbghelp.dll");
     DWORD options;
     SYMBOL_INFO *symbol;
     BOOL use_dbghelp = !!dbghelp;
