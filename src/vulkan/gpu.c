@@ -96,7 +96,7 @@ static uint64_t vk_timer_query(pl_gpu gpu, pl_timer timer)
     switch (res) {
     case VK_SUCCESS:
         timer->index_read = (timer->index_read + 2) % QUERY_POOL_SIZE;
-        return (ts[1] - ts[0]) * vk->limits.timestampPeriod;
+        return (ts[1] - ts[0]) * vk->props.limits.timestampPeriod;
     case VK_NOT_READY:
         return 0;
     default:
@@ -480,18 +480,19 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
 #endif
 
     vk->GetPhysicalDeviceProperties2(vk->physd, &props);
+    VkPhysicalDeviceLimits limits = props.properties.limits;
 
     // Determine GLSL features and limits
     gpu->glsl = (struct pl_glsl_version) {
         .version = 450,
         .vulkan = true,
         .compute = true,
-        .max_shmem_size = vk->limits.maxComputeSharedMemorySize,
-        .max_group_threads = vk->limits.maxComputeWorkGroupInvocations,
+        .max_shmem_size = limits.maxComputeSharedMemorySize,
+        .max_group_threads = limits.maxComputeWorkGroupInvocations,
         .max_group_size = {
-            vk->limits.maxComputeWorkGroupSize[0],
-            vk->limits.maxComputeWorkGroupSize[1],
-            vk->limits.maxComputeWorkGroupSize[2],
+            limits.maxComputeWorkGroupSize[0],
+            limits.maxComputeWorkGroupSize[1],
+            limits.maxComputeWorkGroupSize[2],
         },
     };
 
@@ -510,8 +511,8 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     }
 
     if (vk->features.features.shaderImageGatherExtended) {
-        gpu->glsl.min_gather_offset = vk->limits.minTexelGatherOffset;
-        gpu->glsl.max_gather_offset = vk->limits.maxTexelGatherOffset;
+        gpu->glsl.min_gather_offset = limits.minTexelGatherOffset;
+        gpu->glsl.max_gather_offset = limits.maxTexelGatherOffset;
     }
 
     gpu->limits = (struct pl_gpu_limits) {
@@ -520,35 +521,35 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         .callbacks          = true,
         // pl_buf
         .max_buf_size       = vk_malloc_avail(vk->ma, 0),
-        .max_ubo_size       = vk->limits.maxUniformBufferRange,
-        .max_ssbo_size      = vk->limits.maxStorageBufferRange,
+        .max_ubo_size       = limits.maxUniformBufferRange,
+        .max_ssbo_size      = limits.maxStorageBufferRange,
         .max_vbo_size       = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
         .max_mapped_size    = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT),
-        .max_buffer_texels  = vk->limits.maxTexelBufferElements,
+        .max_buffer_texels  = limits.maxTexelBufferElements,
         .align_host_ptr     = host_props.minImportedHostPointerAlignment,
         .host_cached        = vk_malloc_avail(vk->ma, VK_MEMORY_PROPERTY_HOST_CACHED_BIT),
         // pl_tex
-        .max_tex_1d_dim     = vk->limits.maxImageDimension1D,
-        .max_tex_2d_dim     = vk->limits.maxImageDimension2D,
-        .max_tex_3d_dim     = vk->limits.maxImageDimension3D,
+        .max_tex_1d_dim     = limits.maxImageDimension1D,
+        .max_tex_2d_dim     = limits.maxImageDimension2D,
+        .max_tex_3d_dim     = limits.maxImageDimension3D,
         .blittable_1d_3d    = true,
         .buf_transfer       = true,
-        .align_tex_xfer_pitch  = vk->limits.optimalBufferCopyRowPitchAlignment,
-        .align_tex_xfer_offset = pl_lcm(vk->limits.optimalBufferCopyOffsetAlignment, 4),
+        .align_tex_xfer_pitch  = limits.optimalBufferCopyRowPitchAlignment,
+        .align_tex_xfer_offset = pl_lcm(limits.optimalBufferCopyOffsetAlignment, 4),
         // pl_pass
         .max_variable_comps = 0, // vulkan doesn't support these at all
         .max_constants      = SIZE_MAX,
         .array_size_constants = !is_portability,
-        .max_pushc_size     = vk->limits.maxPushConstantsSize,
+        .max_pushc_size     = limits.maxPushConstantsSize,
 #ifdef VK_KHR_portability_subset
         .align_vertex_stride = port_props.minVertexInputBindingStrideAlignment,
 #else
         .align_vertex_stride = 1,
 #endif
         .max_dispatch = {
-            vk->limits.maxComputeWorkGroupCount[0],
-            vk->limits.maxComputeWorkGroupCount[1],
-            vk->limits.maxComputeWorkGroupCount[2],
+            limits.maxComputeWorkGroupCount[0],
+            limits.maxComputeWorkGroupCount[1],
+            limits.maxComputeWorkGroupCount[2],
         },
         .fragment_queues    = vk->pool_graphics->num_queues,
         .compute_queues     = vk->pool_compute->num_queues,

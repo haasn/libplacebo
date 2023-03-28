@@ -126,7 +126,7 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
 
     // Mandatory/optimal buffer offset alignment
     VkDeviceSize *align = &mparams.reqs.alignment;
-    VkDeviceSize extra_align = vk->limits.optimalBufferCopyOffsetAlignment;
+    VkDeviceSize extra_align = vk->props.limits.optimalBufferCopyOffsetAlignment;
 
     // Try and align all buffers to the minimum texel alignment, to make sure
     // tex_upload/tex_download always gets aligned buffer copies if possible
@@ -137,7 +137,7 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
 
     if (params->uniform) {
         mparams.buf_usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        *align = pl_lcm(*align, vk->limits.minUniformBufferOffsetAlignment);
+        *align = pl_lcm(*align, vk->props.limits.minUniformBufferOffsetAlignment);
         mem_type = PL_BUF_MEM_DEVICE;
         if (params->format) {
             mparams.buf_usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
@@ -147,7 +147,7 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
 
     if (params->storable) {
         mparams.buf_usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        *align = pl_lcm(*align, vk->limits.minStorageBufferOffsetAlignment);
+        *align = pl_lcm(*align, vk->props.limits.minStorageBufferOffsetAlignment);
         buf_vk->update_queue = COMPUTE;
         mem_type = PL_BUF_MEM_DEVICE;
         if (params->format) {
@@ -157,7 +157,7 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
     }
 
     if (is_texel) {
-        *align = pl_lcm(*align, vk->limits.minTexelBufferOffsetAlignment);
+        *align = pl_lcm(*align, vk->props.limits.minTexelBufferOffsetAlignment);
         *align = pl_lcm(*align, params->format->texel_size);
     }
 

@@ -983,8 +983,8 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
     pl_assert(params->reqs.size);
     size_t size = params->reqs.size;
     size_t align = params->reqs.alignment;
-    align = pl_lcm(align, vk->limits.bufferImageGranularity);
-    align = pl_lcm(align, vk->limits.nonCoherentAtomSize);
+    align = pl_lcm(align, vk->props.limits.bufferImageGranularity);
+    align = pl_lcm(align, vk->props.limits.nonCoherentAtomSize);
 
     struct vk_slab *slab;
     VkDeviceSize offset;

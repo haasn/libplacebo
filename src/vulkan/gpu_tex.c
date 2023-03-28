@@ -205,13 +205,13 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, pl_debug_tag debug_tag)
             .layers = 1,
         };
 
-        if (finfo.width > vk->limits.maxFramebufferWidth ||
-            finfo.height > vk->limits.maxFramebufferHeight)
+        if (finfo.width > vk->props.limits.maxFramebufferWidth ||
+            finfo.height > vk->props.limits.maxFramebufferHeight)
         {
             PL_ERR(gpu, "Framebuffer of size %dx%d exceeds the maximum allowed "
                    "dimensions: %dx%d", finfo.width, finfo.height,
-                   vk->limits.maxFramebufferWidth,
-                   vk->limits.maxFramebufferHeight);
+                   vk->props.limits.maxFramebufferWidth,
+                   vk->props.limits.maxFramebufferHeight);
             goto error;
         }
 

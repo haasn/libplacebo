@@ -67,7 +67,7 @@ struct vk_ctx {
     pl_log log;
     VkInstance inst;
     VkPhysicalDevice physd;
-    VkPhysicalDeviceLimits limits;
+    VkPhysicalDeviceProperties props;
     VkPhysicalDeviceFeatures2 features;
     uint32_t api_ver; // device API version
     VkDevice dev;

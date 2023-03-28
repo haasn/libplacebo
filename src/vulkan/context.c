@@ -1469,7 +1469,7 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
     };
 
     vk->GetPhysicalDeviceProperties2(vk->physd, &prop);
-    vk->limits = prop.properties.limits;
+    vk->props = prop.properties;
 
     PL_INFO(vk, "Vulkan device properties:");
     PL_INFO(vk, "    Device Name: %s", prop.properties.deviceName);
@@ -1547,7 +1547,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
 
     pl_assert(vk->GetPhysicalDeviceProperties2);
     vk->GetPhysicalDeviceProperties2(vk->physd, &prop);
-    vk->limits = prop.properties.limits;
+    vk->props = prop.properties;
 
     PL_INFO(vk, "Imported vulkan device properties:");
     PL_INFO(vk, "    Device Name: %s", prop.properties.deviceName);
