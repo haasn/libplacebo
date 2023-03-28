@@ -46,6 +46,9 @@ int main(int argc, char **argv)
     }
 
     while (!win->window_lost) {
+        if (window_get_key(win, KEY_ESC))
+            break;
+
         struct pl_swapchain_frame frame;
         bool ok = pl_swapchain_start_frame(win->swapchain, &frame);
         if (!ok) {
