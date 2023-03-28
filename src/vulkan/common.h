@@ -57,6 +57,10 @@
     #endif
 #endif
 
+#ifndef VK_VENDOR_ID_NVIDIA
+#define VK_VENDOR_ID_NVIDIA 0x10DE
+#endif
+
 // Shared struct used to hold vulkan context information
 struct vk_ctx {
     pl_mutex lock;
@@ -201,6 +205,7 @@ struct vk_ctx {
     PL_VK_FUN(DestroySemaphore);
     PL_VK_FUN(DestroyShaderModule);
     PL_VK_FUN(DestroySwapchainKHR);
+    PL_VK_FUN(DeviceWaitIdle);
     PL_VK_FUN(EndCommandBuffer);
     PL_VK_FUN(FlushMappedMemoryRanges);
     PL_VK_FUN(FreeCommandBuffers);

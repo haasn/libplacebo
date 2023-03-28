@@ -598,6 +598,13 @@ static bool vk_sw_recreate(pl_swapchain sw, int w, int h)
              sinfo.imageExtent.width,
              sinfo.imageExtent.height);
 
+#ifdef PL_HAVE_UNIX
+    if (vk->props.vendorID == VK_VENDOR_ID_NVIDIA) {
+        vk->DeviceWaitIdle(vk->dev);
+        vk_wait_idle(vk);
+    }
+#endif
+
     // Calling `vkCreateSwapchainKHR` puts sinfo.oldSwapchain into a retired
     // state whether the call succeeds or not, so we always need to garbage
     // collect it afterwards - asynchronously as it may still be in use

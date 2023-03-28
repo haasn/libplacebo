@@ -347,6 +347,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(DestroySampler),
     PL_VK_DEV_FUN(DestroySemaphore),
     PL_VK_DEV_FUN(DestroyShaderModule),
+    PL_VK_DEV_FUN(DeviceWaitIdle),
     PL_VK_DEV_FUN(EndCommandBuffer),
     PL_VK_DEV_FUN(FlushMappedMemoryRanges),
     PL_VK_DEV_FUN(FreeCommandBuffers),
