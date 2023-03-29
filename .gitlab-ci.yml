@@ -159,11 +159,13 @@ asan:
     tags:
         - gpu
     script:
-        - meson build --buildtype debugoptimized
-                      -Dtests=true
-                      -Dc_args='-DCI_MAXGL'
-                      -Dshaderc=disabled
-                      -Db_sanitize=address
+        - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
+            meson build --buildtype debugoptimized
+                        -Dtests=true
+                        -Dc_args='-DCI_MAXGL'
+                        -Dshaderc=disabled
+                        -Db_sanitize=address
+                        -Db_lundef=false
         - ninja -C build
         - cd build && time meson test -t 5 -v --num-processes=1
 
