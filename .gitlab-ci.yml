@@ -161,6 +161,7 @@ asan:
     script:
         - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
             meson build --buildtype debugoptimized
+                        --werror
                         -Dtests=true
                         -Dc_args='-DCI_MAXGL'
                         -Dshaderc=disabled
@@ -179,6 +180,7 @@ msan:
     script:
         - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
             meson build --buildtype debugoptimized
+                        --werror
                         -Dtests=true
                         -Dc_args='-DMSAN -DCI_MAXGL'
                         -Dglslang=disabled
@@ -197,6 +199,7 @@ ubsan:
     script:
         - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
             meson build --buildtype debugoptimized
+                        --werror
                         -Dtests=true
                         -Dc_args='-fPIE -DCI_MAXGL'
                         -Dglslang=disabled
