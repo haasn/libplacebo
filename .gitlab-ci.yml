@@ -130,6 +130,7 @@ gpu:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
+                      -Ddemos=false
                       -Ddebug-abort=true
                       -Dshaderc=disabled
                       -Db_coverage=true
