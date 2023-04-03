@@ -248,7 +248,7 @@ static void bench_hdr_lut(pl_shader sh, pl_shader_obj *state, pl_tex src)
 {
     struct pl_color_map_params params = {
         PL_COLOR_MAP_DEFAULTS
-        .tone_mapping_function  = &pl_tone_map_linear,
+        .tone_mapping_function  = &pl_tone_map_bt2390,
         .tone_mapping_mode      = PL_TONE_MAP_RGB,
     };
 
