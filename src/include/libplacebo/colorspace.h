@@ -564,6 +564,16 @@ bool pl_primaries_superset(const struct pl_raw_primaries *a,
 // merely that they satisfy the requirements for colorspace math (to avoid NaN).
 bool pl_primaries_valid(const struct pl_raw_primaries *prim);
 
+// Primary-dependent RGB->LMS matrix for the IPTPQc4 color system. This is
+// derived from the HPE XYZ->LMS matrix with 4% crosstalk added.
+pl_matrix3x3 pl_ipt_rgb2lms(const struct pl_raw_primaries *prim);
+pl_matrix3x3 pl_ipt_lms2rgb(const struct pl_raw_primaries *prim);
+
+// Primary-independent L'M'S' -> IPT matrix for the IPTPQc4 color system, and
+// its inverse. This is identical to the Ebner & Fairchild (1998) IPT matrix.
+extern const pl_matrix3x3 pl_ipt_lms2ipt;
+extern const pl_matrix3x3 pl_ipt_ipt2lms;
+
 // Cone types involved in human vision
 enum pl_cone {
     PL_CONE_L = 1 << 0,

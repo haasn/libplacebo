@@ -1073,6 +1073,53 @@ pl_matrix3x3 pl_get_adaptation_matrix(struct pl_cie_xy src, struct pl_cie_xy dst
     return xyz2rgb;
 }
 
+pl_matrix3x3 pl_ipt_rgb2lms(const struct pl_raw_primaries *prim)
+{
+    static const pl_matrix3x3 hpe = {{ // HPE XYZ->LMS (D65) method
+        {  0.40024, 0.70760, -0.08081 },
+        { -0.22630, 1.16532,  0.04570 },
+        {  0.00000, 0.00000,  0.91822 },
+    }};
+
+    const float c = 0.04; // 4% crosstalk
+    pl_matrix3x3 m = {{
+        { 1 - 2*c,       c,       c },
+        {       c, 1 - 2*c,       c },
+        {       c,       c, 1 - 2*c },
+    }};
+
+    pl_matrix3x3_mul(&m, &hpe);
+
+    // Apply chromatic adaptation to D65 if the input white point differs
+    static const struct pl_cie_xy d65 = CIE_D65;
+    apply_chromatic_adaptation(prim->white, d65, &m);
+
+    const pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
+    pl_matrix3x3_mul(&m, &rgb2xyz);
+    return m;
+}
+
+pl_matrix3x3 pl_ipt_lms2rgb(const struct pl_raw_primaries *prim)
+{
+    pl_matrix3x3 m = pl_ipt_rgb2lms(prim);
+    pl_matrix3x3_invert(&m);
+    return m;
+}
+
+// As standardized in Ebner & Fairchild IPT (1998)
+const pl_matrix3x3 pl_ipt_lms2ipt = {{
+    { 0.4000,  0.4000,  0.2000 },
+    { 4.4550, -4.8510,  0.3960 },
+    { 0.8056,  0.3572, -1.1628 },
+}};
+
+// Numerically inverted from the matrix above
+const pl_matrix3x3 pl_ipt_ipt2lms = {{
+    { 1.0,  0.0975689,  0.205226 },
+    { 1.0, -0.1138760,  0.133217 },
+    { 1.0,  0.0326151, -0.676887 },
+}};
+
 const struct pl_cone_params pl_vision_normal        = {PL_CONE_NONE, 1.0};
 const struct pl_cone_params pl_vision_protanomaly   = {PL_CONE_L,    0.5};
 const struct pl_cone_params pl_vision_protanopia    = {PL_CONE_L,    0.0};
