@@ -377,41 +377,39 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
         // from the color system decoding, so we have to partially undo our
         // work here even though we will end up linearizing later on anyway)
 
-        // Inverted from the matrix in the spec, transposed to column major
-        static const char *bt2100_lms2rgb = "mat3("
-            "  3.43661,  -0.79133, -0.0259499, "
-            " -2.50645,    1.9836, -0.0989137, "
-            "0.0698454, -0.192271,    1.12486) ";
-
-        // PQ EOTF
-        GLSL("color.rgb = pow(max(color.rgb, 0.0), vec3(1.0/%f));   \n"
-             "color.rgb = max(color.rgb - vec3(%f), 0.0)            \n"
-             "             / (vec3(%f) - vec3(%f) * color.rgb);     \n"
-             "color.rgb = pow(color.rgb, vec3(1.0/%f));             \n",
-             PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1);
-        // LMS matrix
-        GLSL("color.rgb = %s * color.rgb; \n", bt2100_lms2rgb);
-        // PQ OETF
-        GLSL("color.rgb = pow(max(color.rgb, 0.0), vec3(%f));       \n"
-             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)         \n"
-             "             / (vec3(1.0) + vec3(%f) * color.rgb);    \n"
-             "color.rgb = pow(color.rgb, vec3(%f));                 \n",
+        GLSL(// PQ EOTF
+             "color.rgb = pow(max(color.rgb, 0.0), vec3(1.0/%f));           \n"
+             "color.rgb = max(color.rgb - vec3(%f), 0.0)                    \n"
+             "             / (vec3(%f) - vec3(%f) * color.rgb);             \n"
+             "color.rgb = pow(color.rgb, vec3(1.0/%f));                     \n"
+             // LMS matrix
+             "color.rgb = mat3( 3.43661, -0.79133, -0.0259499,              \n"
+             "                 -2.50645,  1.98360, -0.0989137,              \n"
+             "                  0.06984, -0.192271, 1.12486) * color.rgb;   \n"
+             // PQ OETF
+             "color.rgb = pow(max(color.rgb, 0.0), vec3(%f));               \n"
+             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)                 \n"
+             "             / (vec3(1.0) + vec3(%f) * color.rgb);            \n"
+             "color.rgb = pow(color.rgb, vec3(%f));                         \n",
+             PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
              PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
         break;
 
     case PL_COLOR_SYSTEM_BT_2100_HLG:
-        // HLG OETF^-1
-        GLSL("color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,         \n"
-             "                exp((color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
-             "                    + vec3(%f),                            \n"
-             "                lessThan(vec3(0.5), color.rgb));           \n",
-             HLG_C, HLG_A, HLG_B);
-        // LMS matrix
-        GLSL("color.rgb = %s * color.rgb; \n", bt2100_lms2rgb);
-        // HLG OETF
-        GLSL("color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                     \n"
-             "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f), \n"
-             "                lessThan(vec3(1.0), color.rgb));                 \n",
+        GLSL(// HLG OETF^-1
+             "color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,                \n"
+             "                exp((color.rgb - vec3(%f)) * vec3(1.0/%f))        \n"
+             "                    + vec3(%f),                                   \n"
+             "                lessThan(vec3(0.5), color.rgb));                  \n"
+             // LMS matrix
+             "color.rgb = mat3( 3.43661, -0.79133, -0.0259499,                  \n"
+             "                 -2.50645,  1.98360, -0.0989137,                  \n"
+             "                  0.06984, -0.192271, 1.12486) * color.rgb;       \n"
+            // HLG OETF
+             "color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                      \n"
+             "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f),  \n"
+             "                lessThan(vec3(1.0), color.rgb));                  \n",
+             HLG_C, HLG_A, HLG_B,
              HLG_A, HLG_B, HLG_C);
         break;
 
@@ -513,35 +511,33 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
         break;
 
     case PL_COLOR_SYSTEM_BT_2100_PQ:;
-        // Inverse of the matrix above
-        static const char *bt2100_rgb2lms = "mat3("
-            "0.412109, 0.166748, 0.024170, "
-            "0.523925, 0.720459, 0.075440, "
-            "0.063965, 0.112793, 0.900394) ";
-
-        GLSL("color.rgb = pow(max(color.rgb, 0.0), vec3(1.0/%f));   \n"
-             "color.rgb = max(color.rgb - vec3(%f), 0.0)            \n"
-             "             / (vec3(%f) - vec3(%f) * color.rgb);     \n"
-             "color.rgb = pow(color.rgb, vec3(1.0/%f));             \n",
-             PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1);
-        GLSL("color.rgb = %s * color.rgb; \n", bt2100_rgb2lms);
-        GLSL("color.rgb = pow(color.rgb, vec3(%f));                 \n"
-             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)         \n"
-             "             / (vec3(1.0) + vec3(%f) * color.rgb);    \n"
-             "color.rgb = pow(color.rgb, vec3(%f));                 \n",
+        GLSL("color.rgb = pow(max(color.rgb, 0.0), vec3(1.0/%f));           \n"
+             "color.rgb = max(color.rgb - vec3(%f), 0.0)                    \n"
+             "             / (vec3(%f) - vec3(%f) * color.rgb);             \n"
+             "color.rgb = pow(color.rgb, vec3(1.0/%f));                     \n"
+             "color.rgb = mat3(0.412109, 0.166748, 0.024170,                \n"
+             "                 0.523925, 0.720459, 0.075440,                \n"
+             "                 0.063965, 0.112793, 0.900394) * color.rgb;   \n"
+             "color.rgb = pow(color.rgb, vec3(%f));                         \n"
+             "color.rgb = (vec3(%f) + vec3(%f) * color.rgb)                 \n"
+             "             / (vec3(1.0) + vec3(%f) * color.rgb);            \n"
+             "color.rgb = pow(color.rgb, vec3(%f));                         \n",
+             PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
              PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
         break;
 
     case PL_COLOR_SYSTEM_BT_2100_HLG:
-        GLSL("color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,         \n"
-             "                exp((color.rgb - vec3(%f)) * vec3(1.0/%f)) \n"
-             "                    + vec3(%f),                            \n"
-             "                lessThan(vec3(0.5), color.rgb));           \n",
-             HLG_C, HLG_A, HLG_B);
-        GLSL("color.rgb = %s * color.rgb; \n", bt2100_rgb2lms);
-        GLSL("color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                     \n"
-             "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f), \n"
-             "                lessThan(vec3(1.0), color.rgb));                 \n",
+        GLSL("color.rgb = mix(vec3(4.0) * color.rgb * color.rgb,                \n"
+             "                exp((color.rgb - vec3(%f)) * vec3(1.0/%f))        \n"
+             "                    + vec3(%f),                                   \n"
+             "                lessThan(vec3(0.5), color.rgb));                  \n"
+             "color.rgb = mat3(0.412109, 0.166748, 0.024170,                    \n"
+             "                 0.523925, 0.720459, 0.075440,                    \n"
+             "                 0.063965, 0.112793, 0.900394) * color.rgb;       \n"
+             "color.rgb = mix(vec3(0.5) * sqrt(color.rgb),                      \n"
+             "                vec3(%f) * log(color.rgb - vec3(%f)) + vec3(%f),  \n"
+             "                lessThan(vec3(1.0), color.rgb));                  \n",
+             HLG_C, HLG_A, HLG_B,
              HLG_A, HLG_B, HLG_C);
         break;
 
