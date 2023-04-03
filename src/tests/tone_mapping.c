@@ -1,6 +1,7 @@
 #include "tests.h"
 #include "log.h"
 
+#include <libplacebo/gamut_mapping.h>
 #include <libplacebo/tone_mapping.h>
 
 //#define PRINT_LUTS
@@ -84,6 +85,33 @@ int main()
         float x = j / (PL_ARRAY_SIZE(lut) - 1.0f);
         x = PL_MIX(params.input_min, params.input_max, x);
         REQUIRE_FEQ(x, lut[j], 1e-5);
+    }
+
+    // Test some gamut mapping methods
+    for (int i = 0; i < pl_num_gamut_map_functions; i++) {
+        static const float min_rgb = 0.1f, max_rgb = PL_COLOR_SDR_WHITE;
+        struct pl_gamut_map_params gamut = {
+            .function     = pl_gamut_map_functions[i],
+            .input_gamut  = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_2020),
+            .output_gamut = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_709),
+            .min_luma     = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, min_rgb),
+            .max_luma     = pl_hdr_rescale(PL_HDR_NITS, PL_HDR_PQ, max_rgb),
+        };
+
+        printf("Testing gamut-mapping function %s\n", gamut.function->name);
+
+        // Require that black maps to black and white maps to white
+        float black[3] = { gamut.min_luma, 0.0f, 0.0f };
+        float white[3] = { gamut.max_luma, 0.0f, 0.0f };
+        pl_gamut_map_sample(black, &gamut);
+        pl_gamut_map_sample(white, &gamut);
+        REQUIRE_FEQ(black[0], gamut.min_luma, 1e-4);
+        REQUIRE_FEQ(black[1], 0.0f, 1e-4);
+        REQUIRE_FEQ(black[2], 0.0f, 1e-4);
+        if (gamut.function != &pl_gamut_map_darken)
+            REQUIRE_FEQ(white[0], gamut.max_luma, 1e-4);
+        REQUIRE_FEQ(white[1], 0.0f, 1e-4);
+        REQUIRE_FEQ(white[2], 0.0f, 1e-4);
     }
 
     pl_log_destroy(&log);
