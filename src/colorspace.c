@@ -290,6 +290,8 @@ float pl_hdr_rescale(enum pl_hdr_scaling from, enum pl_hdr_scaling to, float x)
     if (!x) // micro-optimization for common value
         return x;
 
+    x = fmaxf(x, 0.0f);
+
     // Convert input to PL_SCALE_RELATIVE
     switch (from) {
     case PL_HDR_PQ:
