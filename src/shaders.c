@@ -352,6 +352,14 @@ ident_t sh_var_float(pl_shader sh, const char *name, float val, bool dynamic)
     });
 }
 
+ident_t sh_var_mat3(pl_shader sh, const char *name, pl_matrix3x3 val)
+{
+    return sh_var(sh, (struct pl_shader_var) {
+        .var     = pl_var_mat3(name),
+        .data    = PL_TRANSPOSE_3X3(val.m),
+    });
+}
+
 ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd)
 {
     switch (sd.desc.type) {

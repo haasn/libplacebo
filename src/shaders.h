@@ -180,9 +180,11 @@ ident_t sh_var(pl_shader sh, struct pl_shader_var sv);
 ident_t sh_var_int(pl_shader sh, const char *name, int val, bool dynamic);
 ident_t sh_var_uint(pl_shader sh, const char *name, unsigned int val, bool dynamic);
 ident_t sh_var_float(pl_shader sh, const char *name, float val, bool dynamic);
+ident_t sh_var_mat3(pl_shader sh, const char *name, pl_matrix3x3 val);
 #define SH_INT_DYN(val)   sh_var_int(sh, "const", val, true)
 #define SH_UINT_DYN(val)  sh_var_uint(sh, "const", val, true)
 #define SH_FLOAT_DYN(val) sh_var_float(sh, "const", val, true)
+#define SH_MAT3(val) sh_var_mat3(sh, "mat", val)
 
 // Add a new shader desc and return its identifier.
 ident_t sh_desc(pl_shader sh, struct pl_shader_desc sd);
