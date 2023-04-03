@@ -1089,29 +1089,18 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             if (nk_button_label(nk, "Reset settings"))
                 *cpar = pl_color_map_default_params;
 
-            static const char *rendering_intents[4] = {
-                [PL_INTENT_PERCEPTUAL]              = "Perceptual",
-                [PL_INTENT_RELATIVE_COLORIMETRIC]   = "Relative colorimetric",
-                [PL_INTENT_SATURATION]              = "Saturation",
-                [PL_INTENT_ABSOLUTE_COLORIMETRIC]   = "Absolute colorimetric",
-            };
-
-            nk_label(nk, "Rendering intent:", NK_TEXT_LEFT);
-            cpar->intent = nk_combo(nk, rendering_intents, 4, cpar->intent,
-                                    16, nk_vec2(nk_widget_width(nk), 100));
-
-            static const char *gamut_modes[PL_GAMUT_MODE_COUNT] = {
-                [PL_GAMUT_CLIP]                     = "Hard-clip",
-                [PL_GAMUT_WARN]                     = "Highlight",
-                [PL_GAMUT_DARKEN]                   = "Darken",
-                [PL_GAMUT_DESATURATE]               = "Desaturate",
-            };
-
-            nk_label(nk, "Out-of-gamut handling:", NK_TEXT_LEFT);
-            cpar->gamut_mode = nk_combo(nk, gamut_modes,
-                                        PL_GAMUT_MODE_COUNT,
-                                        cpar->gamut_mode,
-                                        16, nk_vec2(nk_widget_width(nk), 300));
+            nk_label(nk, "Gamut mapping function:", NK_TEXT_LEFT);
+            if (nk_combo_begin_label(nk, cpar->gamut_mapping->description,
+                                     nk_vec2(nk_widget_width(nk), 500)))
+            {
+                nk_layout_row_dynamic(nk, 16, 1);
+                for (int i = 0; i < pl_num_gamut_map_functions; i++) {
+                    const struct pl_gamut_map_function *f = pl_gamut_map_functions[i];
+                    if (nk_combo_item_label(nk, f->description, NK_TEXT_LEFT))
+                        cpar->gamut_mapping = f;
+                }
+                nk_combo_end(nk);
+            }
 
             nk_label(nk, "Tone mapping function:", NK_TEXT_LEFT);
             if (nk_combo_begin_label(nk, cpar->tone_mapping_function->description,
@@ -1128,20 +1117,6 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 }
                 nk_combo_end(nk);
             }
-
-            static const char *tone_mapping_modes[PL_TONE_MAP_MODE_COUNT] = {
-                [PL_TONE_MAP_AUTO]                  = "Automatic selection",
-                [PL_TONE_MAP_RGB]                   = "Per-channel (RGB)",
-                [PL_TONE_MAP_MAX]                   = "Maximum component",
-                [PL_TONE_MAP_HYBRID]                = "Hybrid luminance",
-                [PL_TONE_MAP_LUMA]                  = "Luminance (BT.2446 A)",
-            };
-
-            nk_label(nk, "Tone mapping mode:", NK_TEXT_LEFT);
-            cpar->tone_mapping_mode = nk_combo(nk, tone_mapping_modes,
-                                               PL_TONE_MAP_MODE_COUNT,
-                                               cpar->tone_mapping_mode,
-                                               16, nk_vec2(nk_widget_width(nk), 300));
 
             nk_label(nk, "Algorithm parameter:", NK_TEXT_LEFT);
             const struct pl_tone_map_function *fun = cpar->tone_mapping_function;
@@ -1167,12 +1142,25 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                                       cpar->metadata,
                                       16, nk_vec2(nk_widget_width(nk), 300));
 
+            nk_property_float(nk, "Hybrid mix", 0.0, &cpar->hybrid_mix, 1.0, 0.05, 0.001);
             nk_property_int(nk, "LUT size", 16, &cpar->lut_size, 1024, 1, 1);
-            nk_property_float(nk, "Crosstalk", 0.0, &cpar->tone_mapping_crosstalk, 0.30, 0.01, 0.001);
-            nk_checkbox_label(nk, "Inverse tone mapping", &cpar->inverse_tone_mapping);
+
+            nk_property_int(nk, "3DLUT size I", 7, &cpar->lut3d_size[0], 66, 1, 1);
+            nk_property_int(nk, "3DLUT size C", 7, &cpar->lut3d_size[1], 66, 1, 1);
+            nk_property_int(nk, "3DLUT size h", 7, &cpar->lut3d_size[2], 66, 1, 1);
             nk_checkbox_label(nk, "Force full LUT", &cpar->force_tone_mapping_lut);
-            nk_checkbox_label(nk, "Visualize LUT", &cpar->visualize_lut);
+
+            nk_checkbox_label(nk, "Inverse tone mapping", &cpar->inverse_tone_mapping);
             nk_checkbox_label(nk, "Show clipping", &cpar->show_clipping);
+            nk_checkbox_label(nk, "Visualize LUT", &cpar->visualize_lut);
+
+            if (cpar->visualize_lut) {
+                nk_layout_row_dynamic(nk, 24, 2);
+                const float huerange = 2 * M_PI;
+                nk_property_float(nk, "Hue",   -1, &cpar->visualize_hue, huerange + 1.0, 0.1, 0.01);
+                nk_property_float(nk, "Theta", 0.0, &cpar->visualize_theta, M_PI_2, 0.1, 0.01);
+                cpar->visualize_hue = fmodf(cpar->visualize_hue + huerange, huerange);
+            }
 
             nk_layout_row_dynamic(nk, 50, 1);
             if (ui_widget_hover(nk, "Drop .cube file here...") && dropped_file) {
