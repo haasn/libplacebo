@@ -115,6 +115,9 @@ libplacebo to take care of everything.
   libplacebo's upscaling routines.
 - `tone_mapping.h`: A collection of tone mapping functions, used for
   conversions between HDR and SDR content.
+- `gamut_mapping.h`: A collection of gamut mapping functions, used for
+  conversions between wide gamut and standard gamut content, as well as
+  for gamut recompression after tone-mapping.
 
 The API functions in this tier are either used throughout the program
 (context, common etc.) or are low-level implementations of filter kernels,
