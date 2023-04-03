@@ -1004,8 +1004,17 @@ static const struct pl_buffer_var peak_buf_vars[] = {
 };
 
 struct sh_tone_map_obj {
-    struct pl_tone_map_params params;
-    pl_shader_obj lut;
+    // Tone map state
+    struct {
+        struct pl_tone_map_params params;
+        pl_shader_obj lut;
+    } tone;
+
+    // Gamut map state
+    struct {
+        struct pl_gamut_map_params params;
+        pl_shader_obj lut;
+    } gamut;
 
     // Peak detection state
     struct {
@@ -1019,7 +1028,8 @@ struct sh_tone_map_obj {
 static void sh_tone_map_uninit(pl_gpu gpu, void *ptr)
 {
     struct sh_tone_map_obj *obj = ptr;
-    pl_shader_obj_destroy(&obj->lut);
+    pl_shader_obj_destroy(&obj->tone.lut);
+    pl_shader_obj_destroy(&obj->gamut.lut);
     pl_buf_destroy(gpu, &obj->peak.buf);
     memset(obj, 0, sizeof(*obj));
 }
@@ -1346,8 +1356,8 @@ void pl_reset_detected_peak(pl_shader_obj state)
 
 const struct pl_color_map_params pl_color_map_default_params = { PL_COLOR_MAP_DEFAULTS };
 
-static void visualize_tone_map(pl_shader sh, float xmin, float xmax, float xavg,
-                               float ymin, float ymax, pl_rect2df rc)
+static void visualize_tone_map(pl_shader sh, pl_rect2df rc,
+                               const struct pl_tone_map_params *params)
 {
     if (!rc.x0 && !rc.x1)
         rc.x1 = 1.0f;
@@ -1363,6 +1373,9 @@ static void visualize_tone_map(pl_shader sh, float xmin, float xmax, float xavg,
         .y1 = (1.0f - rc.y1) / (rc.y0 - rc.y1),
     });
 
+    pl_assert(params->input_scaling  == PL_HDR_PQ);
+    pl_assert(params->output_scaling == PL_HDR_PQ);
+
     GLSL("// Visualize tone mapping                 \n"
          "{                                         \n"
          "vec2 pos = "$";                           \n"
@@ -1375,19 +1388,7 @@ static void visualize_tone_map(pl_shader sh, float xmin, float xmax, float xavg,
          "float ymin = "$";                         \n"
          "float ymax = "$";                         \n"
          "vec3 viz = vec3(0.5) * color.rgb;         \n"
-         // PQ EOTF
-         "float vv = pos.x;                         \n"
-         "vv = pow(max(vv, 0.0), 1.0/%f);           \n"
-         "vv = max(vv - %f, 0.0) / (%f - %f * vv);  \n"
-         "vv = pow(vv, 1.0 / %f);                   \n"
-         "vv *= %f;                                 \n"
-         // Apply tone-mapping function
-         "vv = tone_map(vv);                        \n"
-         // PQ OETF
-         "vv *= %f;                                 \n"
-         "vv = pow(max(vv, 0.0), %f);               \n"
-         "vv = (%f + %f * vv) / (1.0 + %f * vv);    \n"
-         "vv = pow(vv, %f);                         \n"
+         "float vv = tone_map(pos.x);               \n"
          // Color based on region
          "if (pos.x < xmin || pos.x > xmax) {       \n" // outside source
          "    viz = vec3(0.0);                      \n"
@@ -1421,301 +1422,356 @@ static void visualize_tone_map(pl_shader sh, float xmin, float xmax, float xavg,
          "}                                         \n"
          "}                                         \n",
          pos,
-         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmin)),
-         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xmax)),
-         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, xavg)),
-         SH_FLOAT(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymin)),
-         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ymax)),
-         PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
-         10000.0 / PL_COLOR_SDR_WHITE,
-         PL_COLOR_SDR_WHITE / 10000.0,
-         PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2);
+         SH_FLOAT_DYN(params->input_min),
+         SH_FLOAT_DYN(params->input_max),
+         SH_FLOAT_DYN(params->input_avg),
+         SH_FLOAT(params->output_min),
+         SH_FLOAT_DYN(params->output_max));
 }
 
-static void fill_lut(void *data, const struct sh_lut_params *params)
+static void fill_tone_lut(void *data, const struct sh_lut_params *params)
 {
     const struct pl_tone_map_params *lut_params = params->priv;
-    assert(lut_params->lut_size == params->width);
     pl_tone_map_generate(data, lut_params);
 }
 
-static void tone_map(pl_shader sh,
-                     const struct pl_color_space *src,
-                     const struct pl_color_space *dst,
-                     pl_shader_obj *state,
-                     const struct pl_color_map_params *params)
+static void fill_gamut_lut(void *data, const struct sh_lut_params *params)
 {
-    float src_min, src_max, src_avg;
+    const struct pl_gamut_map_params *lut_params = params->priv;
+    pl_gamut_map_generate(data, lut_params);
+}
+
+void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
+                         struct pl_color_space src, struct pl_color_space dst,
+                         pl_shader_obj *state, bool prelinearized)
+{
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
+    pl_color_space_infer_map(&src, &dst);
+    if (pl_color_space_equal(&src, &dst)) {
+        if (prelinearized)
+            pl_shader_delinearize(sh, &dst);
+        return;
+    }
+
+    struct sh_tone_map_obj *obj = NULL;
+    if (state) {
+        pl_get_detected_hdr_metadata(*state, &src.hdr);
+        obj = SH_OBJ(sh, state, PL_SHADER_OBJ_TONE_MAP, struct sh_tone_map_obj,
+                     sh_tone_map_uninit);
+        if (!obj)
+            return;
+    }
+
+    params = PL_DEF(params, &pl_color_map_default_params);
+    GLSL("// pl_shader_color_map \n"
+         "{                      \n");
+
+    struct pl_tone_map_params tone = {
+        .function = params->tone_mapping_function,
+        .param = params->tone_mapping_param,
+        .input_scaling = PL_HDR_PQ,
+        .output_scaling = PL_HDR_PQ,
+        .lut_size = PL_DEF(params->lut_size, pl_color_map_default_params.lut_size),
+        .hdr = src.hdr,
+    };
+
     pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
-        .color      = src,
+        .color      = &src,
         .metadata   = params->metadata,
-        .scaling    = PL_HDR_NORM,
-        .out_min    = &src_min,
-        .out_max    = &src_max,
-        .out_avg    = &src_avg,
+        .scaling    = tone.input_scaling,
+        .out_min    = &tone.input_min,
+        .out_max    = &tone.input_max,
+        .out_avg    = &tone.input_avg,
     ));
 
-    float dst_min, dst_max;
     pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
-        .color      = dst,
+        .color      = &dst,
         .metadata   = PL_HDR_METADATA_HDR10,
-        .scaling    = PL_HDR_NORM,
-        .out_min    = &dst_min,
-        .out_max    = &dst_max,
+        .scaling    = tone.output_scaling,
+        .out_min    = &tone.output_min,
+        .out_max    = &tone.output_max,
     ));
 
     if (!params->inverse_tone_mapping) {
         // Never exceed the source unless requested, but still allow
         // black point adaptation
-        dst_max = PL_MIN(dst_max, src_max);
+        tone.output_max = PL_MIN(tone.output_max, tone.input_max);
     }
 
     // Round sufficiently similar values
-    if (fabs(src_max - dst_max) < 1e-6)
-        dst_max = src_max;
-    if (fabs(src_min - dst_min) < 1e-6)
-        dst_min = src_min;
+    if (fabs(tone.input_max - tone.output_max) < 1e-6)
+        tone.output_max = tone.input_max;
+    if (fabs(tone.input_min - tone.output_min) < 1e-6)
+        tone.output_min = tone.input_min;
 
-    struct pl_tone_map_params lut_params = {
-        .function = params->tone_mapping_function,
-        .param = params->tone_mapping_param,
-        .input_scaling = PL_HDR_SQRT,
-        .output_scaling = PL_HDR_NORM,
-        .lut_size = PL_DEF(params->lut_size, pl_color_map_default_params.lut_size),
-        .input_min = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_SQRT, src_min),
-        .input_max = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_SQRT, src_max),
-        .input_avg = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_SQRT, src_avg),
-        .output_min = dst_min,
-        .output_max = dst_max,
-        .hdr = src->hdr,
+    pl_tone_map_params_infer(&tone);
+
+    struct pl_gamut_map_params gamut = {
+        .function        = PL_DEF(params->gamut_mapping, &pl_gamut_map_clip),
+        .input_gamut     = src.hdr.prim,
+        .output_gamut    = dst.hdr.prim,
+        .lut_size_I      = PL_DEF(params->lut3d_size[0], 33),
+        .lut_size_C      = PL_DEF(params->lut3d_size[1], 25),
+        .lut_size_h      = PL_DEF(params->lut3d_size[2], 45),
+        .lut_stride      = 4,
     };
 
-    pl_tone_map_params_infer(&lut_params);
-    if (pl_tone_map_params_noop(&lut_params))
-        return;
+    float src_peak_static;
+    pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
+        .color      = &src,
+        .metadata   = PL_HDR_METADATA_HDR10,
+        .scaling    = PL_HDR_PQ,
+        .out_max    = &src_peak_static,
+    ));
 
-    const struct pl_tone_map_function *fun = lut_params.function;
-    sh_describef(sh, "%s tone map (%.0f -> %.0f)", fun->name,
-                 pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, src_max),
-                 pl_hdr_rescale(PL_HDR_NORM, PL_HDR_NITS, dst_max));
-    ident_t lut = NULL_IDENT;
+    pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
+        .color      = &dst,
+        .metadata   = PL_HDR_METADATA_HDR10,
+        .scaling    = PL_HDR_PQ,
+        .out_min    = &gamut.min_luma,
+        .out_max    = &gamut.max_luma,
+    ));
 
-    bool can_fixed = !params->force_tone_mapping_lut;
-    bool is_clip = can_fixed && fun == &pl_tone_map_clip;
-    bool is_linear = can_fixed && fun == &pl_tone_map_linear;
+    // Add headroom based on tone mapping peak; use static peak only to avoid
+    // invalidating gamut mapping 3DLUT for dynamic peak updates
+    gamut.chroma_margin = src_peak_static / gamut.max_luma;
 
-    if (state && !(is_clip || is_linear)) {
-        struct sh_tone_map_obj *obj;
-        obj = SH_OBJ(sh, state, PL_SHADER_OBJ_TONE_MAP, struct sh_tone_map_obj,
-                     sh_tone_map_uninit);
-        if (!obj)
-            return;
-
-        lut = sh_lut(sh, sh_lut_params(
-            .object     = &obj->lut,
-            .var_type   = PL_VAR_FLOAT,
-            .lut_type   = SH_LUT_AUTO,
-            .method     = SH_LUT_LINEAR,
-            .width      = lut_params.lut_size,
-            .comps      = 1,
-            .update     = !pl_tone_map_params_equal(&lut_params, &obj->params),
-            .dynamic    = src_avg > 0, // dynamic metadata was used
-            .fill       = fill_lut,
-            .priv       = &lut_params,
-        ));
-        obj->params = lut_params;
-    }
-
-    if (is_clip) {
-
-        GLSL("#define tone_map(x) clamp((x), "$", "$") \n",
-             SH_FLOAT(dst_min), SH_FLOAT_DYN(dst_max));
-
-    } else if (is_linear) {
-
-        const float gain = PL_DEF(lut_params.param, 1.0f);
-        const float pq_src_min = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, src_min);
-        const float pq_src_max = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, src_max);
-        const float pq_dst_min = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, dst_min);
-        const float pq_dst_max = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, dst_max);
-        const float src_scale = gain / (pq_src_max - pq_src_min);
-        const float dst_scale = pq_dst_max - pq_dst_min;
-
-        ident_t linfun = sh_fresh(sh, "linear_pq");
-        GLSLH("float "$"(float x) {                         \n"
-             // PQ OETF
-             "    x *= %f;                                  \n"
-             "    x = pow(max(x, 0.0), %f);                 \n"
-             "    x = (%f + %f * x) / (1.0 + %f * x);       \n"
-             "    x = pow(x, %f);                           \n"
-             // Stretch the input range (while clipping)
-             "    x = "$" * x + "$";                        \n"
-             "    x = clamp(x, 0.0, 1.0);                   \n"
-             "    x = "$" * x + "$";                        \n"
-             // PQ EOTF
-             "    x = pow(x, 1.0 / %f);                     \n"
-             "    x = max(x - %f, 0.0) / (%f - %f * x);     \n"
-             "    x = pow(x, 1.0 / %f);                     \n"
-             "    x *= %f;                                  \n"
-             "    return x;                                 \n"
-             "}                                             \n",
-             linfun,
-             PL_COLOR_SDR_WHITE / 10000.0,
-             PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
-             SH_FLOAT_DYN(src_scale), SH_FLOAT_DYN(-src_scale * pq_src_min),
-             SH_FLOAT_DYN(dst_scale), SH_FLOAT(pq_dst_min),
-             PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
-             10000.0 / PL_COLOR_SDR_WHITE);
-
-        GLSL("#define tone_map(x) ("$"(x)) \n", linfun);
-
-    } else if (lut) {
-
-        // Regular 1D LUT
-        const float lut_range = lut_params.input_max - lut_params.input_min;
-        GLSL("#define tone_map(x) ("$"("$" * sqrt(x) + "$")) \n",
-             lut, SH_FLOAT_DYN(1.0f / lut_range),
-             SH_FLOAT_DYN(-lut_params.input_min / lut_range));
-
-    } else {
-
-        // Fall back to hard-coded hable function for lack of anything better
-        float A = 0.15f, B = 0.50f, C = 0.10f, D = 0.20f, E = 0.02f, F = 0.30f;
-        ident_t hable = sh_fresh(sh, "hable");
-        GLSLH("float "$"(float x) {                     \n"
-              "    return (x * (%f*x + %f) + %f) /      \n"
-              "           (x * (%f*x + %f) + %f) - %f;  \n"
-              "}                                        \n",
-              hable, A, C*B, D*E, A, B, D*F, E/F);
-
-        const float scale = 1.0f / (dst_max - dst_min);
-        const float peak = scale * (src_max - src_min);
-        const float peak_out = ((peak * (A*peak + C*B) + D*E) /
-                                (peak * (A*peak + B) + D*F)) - E/F;
-
-        GLSL("#define tone_map(x) ("$" * "$"("$" * x + "$") + "$") \n",
-             SH_FLOAT_DYN((dst_max - dst_min) / peak_out),
-             hable, SH_FLOAT_DYN(scale),
-             SH_FLOAT_DYN(-scale * src_min),
-             SH_FLOAT(dst_min));
-
-    }
-
-    if (params->show_clipping) {
-        GLSL("bool clip_lo = false, clip_hi = false;                \n"
-             "#define cliptest(x) (clip_lo = clip_lo || x < "$",  \\\n"
-             "                     clip_hi = clip_hi || x > "$")    \n",
-             SH_FLOAT_DYN(src_min - 1e-6f), SH_FLOAT_DYN(src_max + 1e-6f));
-    } else {
-        GLSL("#define cliptest(x) \n");
-    }
-
-    enum pl_tone_map_mode mode = params->tone_mapping_mode;
-    if (mode == PL_TONE_MAP_AUTO) {
-        if (is_clip) {
-            // No-op / clip - do this per-channel
-            mode = PL_TONE_MAP_RGB;
-        } else {
-            // Pick this in all cases because it provides the best balance of
-            // trade-offs out-of-the-box
-            mode = PL_TONE_MAP_HYBRID;
-        }
-    }
-
-    ident_t ct = SH_FLOAT(params->tone_mapping_crosstalk);
-    GLSL("float ct_scale = 1.0 - 3.0 * "$";                 \n"
-         "float ct = "$" * (color.r + color.g + color.b);   \n"
-         "color.rgb = ct_scale * color.rgb + vec3(ct);      \n",
-         ct, ct);
-
-    switch (mode) {
-    case PL_TONE_MAP_RGB:
-        for (int c = 0; c < 3; c++) {
-            GLSL("cliptest(color[%d]);             \n"
-                 "color[%d] = tone_map(color[%d]); \n",
-                 c, c, c);
+    // Backwards compatibility with older API
+    switch (params->gamut_mode) {
+    case PL_GAMUT_CLIP:
+        switch (params->intent) {
+        case PL_INTENT_AUTO:
+        case PL_INTENT_PERCEPTUAL:
+        case PL_INTENT_RELATIVE_COLORIMETRIC:
+            break; // leave default
+        case PL_INTENT_SATURATION:
+            gamut.function = &pl_gamut_map_saturation;
+            break;
+        case PL_INTENT_ABSOLUTE_COLORIMETRIC:
+            gamut.function = &pl_gamut_map_absolute;
+            break;
         }
         break;
-
-    case PL_TONE_MAP_MAX:
-        GLSL("float sig_max = max(max(color.r, color.g), color.b);  \n"
-             "cliptest(sig_max);                                    \n"
-             "color.rgb *= tone_map(sig_max) / max(sig_max, "$");   \n",
-             SH_FLOAT(dst_min));
+    case PL_GAMUT_DARKEN:
+        gamut.function = &pl_gamut_map_darken;
         break;
-
-    case PL_TONE_MAP_LUMA:
-    case PL_TONE_MAP_HYBRID: {
-        const struct pl_raw_primaries *prim = pl_raw_primaries_get(src->primaries);
-        pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
-
-        // Normalize X and Z by the white point
-        for (int i = 0; i < 3; i++) {
-            rgb2xyz.m[0][i] /= pl_cie_X(prim->white);
-            rgb2xyz.m[2][i] /= pl_cie_Z(prim->white);
-            rgb2xyz.m[0][i] -= rgb2xyz.m[1][i];
-            rgb2xyz.m[2][i] -= rgb2xyz.m[1][i];
-        }
-
-        GLSL("vec3 xyz = "$" * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
-            .var = pl_var_mat3("rgb2xyz"),
-            .data = PL_TRANSPOSE_3X3(rgb2xyz.m),
-        }));
-
-        // Tuned to meet the desired desaturation at 1000 <-> SDR
-        float ratio = logf(src_max / dst_max) / logf(1000 / PL_COLOR_SDR_WHITE);
-        float coeff = src_max > dst_max ? 1 / 1.1f : 1.075f;
-        float desat = (coeff - 1) * fabsf(ratio) + 1;
-
-        GLSL("float orig = max(xyz.y, "$"); \n"
-             "cliptest(xyz.y);              \n"
-             "xyz.y = tone_map(xyz.y);      \n"
-             "xyz.xz *= "$" * xyz.y / orig; \n",
-             SH_FLOAT(dst_min),
-             SH_FLOAT_DYN(desat));
-
-        // Extra luminance correction when reducing dynamic range
-        if (src_max > dst_max) {
-            GLSL("xyz.y -= max("$" * xyz.x, 0.0); \n",
-                 SH_FLOAT_DYN(0.1f * fabsf(ratio)));
-        }
-
-        pl_matrix3x3_invert(&rgb2xyz);
-        GLSL("vec3 color_lin = "$" * xyz; \n", sh_var(sh, (struct pl_shader_var) {
-            .var = pl_var_mat3("xyz2rgb"),
-            .data = PL_TRANSPOSE_3X3(rgb2xyz.m),
-        }));
-
-        if (mode == PL_TONE_MAP_HYBRID) {
-            // coeff(x) = max(a * x^-y, b * x^y)
-            //   solve for coeff(dst_min) = 1, coeff(dst_max) = 1
-            const float y = 2.4f;
-            const float a = powf(dst_min, y);
-            const float b = powf(dst_max, -y);
-            GLSL("float coeff = pow(xyz.y, %f);             \n"
-                 "coeff = max("$" / coeff, "$" * coeff);    \n",
-                 y, SH_FLOAT(a), SH_FLOAT_DYN(b));
-            for (int c = 0; c < 3; c++) {
-                GLSL("if (coeff > 0.8) cliptest(color[%d]); \n"
-                     "color[%d] = tone_map(color[%d]);      \n",
-                     c, c, c);
-            }
-            GLSL("color.rgb = mix(color_lin, color.rgb, coeff); \n");
-        } else {
-            GLSL("color.rgb = color_lin; \n");
-        }
+    case PL_GAMUT_WARN:
+        gamut.function = &pl_gamut_map_highlight;
         break;
+    case PL_GAMUT_DESATURATE:
+        gamut.function = &pl_gamut_map_desaturate;
+        break;
+    case PL_GAMUT_MODE_COUNT:
+        pl_unreachable();
     }
 
+    // Simulate the old `pl_tone_map_mode` by changing the hybrid mix strength
+    float hybrid_mix = params->hybrid_mix;
+    switch (params->tone_mapping_mode) {
     case PL_TONE_MAP_AUTO:
+        break;
+    case PL_TONE_MAP_RGB:
+        hybrid_mix = 1.0f;
+        break;
+    case PL_TONE_MAP_HYBRID:
+        hybrid_mix = 0.20f;
+        break;
+    case PL_TONE_MAP_LUMA:
+    case PL_TONE_MAP_MAX:
+        hybrid_mix = 0.00f;
+        break;
     case PL_TONE_MAP_MODE_COUNT:
         pl_unreachable();
     }
 
-    // Inverse crosstalk
-    GLSL("ct = "$" * (color.r + color.g + color.b);         \n"
-         "color.rgb = (color.rgb - vec3(ct)) / ct_scale;    \n",
-         ct);
+    if (!state) {
+        // No state object provided, forcibly disable advanced methods
+        tone.function = &pl_tone_map_clip;
+        gamut.function = &pl_gamut_map_clip;
+    }
+
+    bool need_tone_map = !pl_tone_map_params_noop(&tone);
+    bool need_gamut_map = !pl_gamut_map_params_noop(&gamut);
+
+    if (!prelinearized)
+        pl_shader_linearize(sh, &src);
+
+    pl_matrix3x3 rgb2lms = pl_ipt_rgb2lms(pl_raw_primaries_get(src.primaries));
+    pl_matrix3x3 lms2rgb = pl_ipt_lms2rgb(pl_raw_primaries_get(dst.primaries));
+    ident_t lms2ipt = SH_MAT3(pl_ipt_lms2ipt);
+    ident_t ipt2lms = SH_MAT3(pl_ipt_ipt2lms);
+
+    // Fast path: simply convert between primaries (if needed)
+    if (!need_tone_map && !need_gamut_map) {
+        if (src.primaries != dst.primaries) {
+            sh_describe(sh, "colorspace conversion");
+            pl_matrix3x3_mul(&lms2rgb, &rgb2lms);
+            GLSL("color.rgb = "$" * color.rgb; \n", SH_MAT3(lms2rgb));
+        }
+        goto done;
+    }
+
+    // Full path: convert input from normalized, clipped RGB to IPT
+    GLSL("vec3 clipped = clamp(color.rgb, "$", "$");\n"
+         "vec3 lms = "$" * clipped;                 \n"
+         "vec3 lmspq = %f * lms;                    \n"
+         "lmspq = pow(max(lmspq, 0.0), vec3(%f));   \n"
+         "lmspq = (vec3(%f) + %f * lmspq)           \n"
+         "        / (vec3(1.0) + %f * lmspq);       \n"
+         "lmspq = pow(lmspq, vec3(%f));             \n"
+         "vec3 ipt = "$" * lmspq;                   \n",
+         SH_FLOAT(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, tone.input_min)),
+         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, tone.input_max)),
+         SH_MAT3(rgb2lms),
+         PL_COLOR_SDR_WHITE / 10000,
+         PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
+         lms2ipt);
+
+    if (params->show_clipping) {
+        GLSL("bool clip_hi, clip_lo;                                        \n"
+             "clip_hi = any(greaterThan(color.rgb, clipped + vec3(1e-6)));  \n"
+             "clip_lo = any(lessThan(color.rgb, clipped - vec3(1e-6)));     \n"
+             "clip_hi = clip_hi || ipt.x > "$";                             \n"
+             "clip_lo = clip_lo || ipt.x < "$";                             \n",
+             SH_FLOAT_DYN(tone.input_max + 1e-6f),
+             SH_FLOAT(tone.input_min - 1e-6f));
+    }
+
+    if (need_tone_map) {
+        const struct pl_tone_map_function *fun = tone.function;
+        sh_describef(sh, "%s tone map (%.0f -> %.0f)", fun->name,
+                     pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, tone.input_max),
+                     pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, tone.output_max));
+
+        if (fun == &pl_tone_map_clip && !params->force_tone_mapping_lut) {
+
+            GLSL("#define tone_map(x) clamp((x), "$", "$") \n",
+                 SH_FLOAT(tone.input_min),
+                 SH_FLOAT_DYN(tone.input_max));
+
+        } else if (fun == &pl_tone_map_linear && !params->force_tone_mapping_lut) {
+
+            const float gain = PL_DEF(tone.param, 1.0f);
+            const float scale = tone.input_max - tone.input_min;
+
+            ident_t linfun = sh_fresh(sh, "linear_pq");
+            GLSLH("float "$"(float x) {                         \n"
+                 // Stretch the input range (while clipping)
+                 "    x = "$" * x + "$";                        \n"
+                 "    x = clamp(x, 0.0, 1.0);                   \n"
+                 "    x = "$" * x + "$";                        \n"
+                 "    return x;                                 \n"
+                 "}                                             \n",
+                 linfun,
+                 SH_FLOAT_DYN(gain / scale),
+                 SH_FLOAT_DYN(-gain / scale * tone.input_min),
+                 SH_FLOAT_DYN(tone.output_max - tone.output_min),
+                 SH_FLOAT(tone.output_min));
+
+            GLSL("#define tone_map(x) ("$"(x)) \n", linfun);
+
+        } else {
+
+            pl_assert(obj);
+            ident_t lut = sh_lut(sh, sh_lut_params(
+                .object     = &obj->tone.lut,
+                .var_type   = PL_VAR_FLOAT,
+                .lut_type   = SH_LUT_AUTO,
+                .method     = SH_LUT_LINEAR,
+                .width      = tone.lut_size,
+                .comps      = 1,
+                .update     = !pl_tone_map_params_equal(&tone, &obj->tone.params),
+                .dynamic    = tone.input_avg > 0, // dynamic metadata
+                .fill       = fill_tone_lut,
+                .priv       = &tone,
+            ));
+            obj->tone.params = tone;
+            if (!lut) {
+                SH_FAIL(sh, "Failed generating tone-mapping LUT!");
+                return;
+            }
+
+            const float lut_range = tone.input_max - tone.input_min;
+            GLSL("#define tone_map(x) ("$"("$" * (x) + "$")) \n",
+                 lut, SH_FLOAT_DYN(1.0f / lut_range),
+                 SH_FLOAT_DYN(-tone.input_min / lut_range));
+
+        }
+
+        // Tone-map on the intensity channel for brightness, and then
+        // component-wise on the LMS channels, mixing the resulting PT vector
+        // back into the IPT color to get some subjective desaturation
+        GLSL( "ipt.x = tone_map(ipt.x); \n");
+        if (hybrid_mix > 0) {
+            GLSL("vec3 lmsclip = lmspq;                     \n"
+                 "lmsclip.x = tone_map(lmsclip.x);          \n"
+                 "lmsclip.y = tone_map(lmsclip.y);          \n"
+                 "lmsclip.z = tone_map(lmsclip.z);          \n"
+                 "vec3 iptclip = "$" * lmsclip;             \n"
+                 "float imax = "$", imin = "$" * imax;      \n"
+                 "float k = smoothstep(imin, imax, ipt.x);  \n"
+                 "ipt.yz = mix(ipt.yz, iptclip.yz, 0.8 * k);\n",
+                 lms2ipt,
+                 SH_FLOAT_DYN(tone.output_max),
+                 SH_FLOAT(1.0 - hybrid_mix));
+        }
+    }
+
+    if (need_gamut_map) {
+        const struct pl_gamut_map_function *fun = gamut.function;
+        sh_describef(sh, "gamut map (%s)", fun->name);
+
+        pl_assert(obj);
+        ident_t lut = sh_lut(sh, sh_lut_params(
+            .object     = &obj->gamut.lut,
+            .var_type   = PL_VAR_FLOAT,
+            .lut_type   = SH_LUT_TEXTURE,
+            .method     = SH_LUT_LINEAR,
+            .width      = gamut.lut_size_I,
+            .height     = gamut.lut_size_C,
+            .depth      = gamut.lut_size_h,
+            .comps      = gamut.lut_stride,
+            .update     = !pl_gamut_map_params_equal(&gamut, &obj->gamut.params),
+            .fill       = fill_gamut_lut,
+            .priv       = &gamut,
+        ));
+        obj->gamut.params = gamut;
+        if (!lut) {
+            SH_FAIL(sh, "Failed generating gamut-mapping LUT!");
+            return;
+        }
+
+        // 3D LUT lookup (in ICh space)
+        const float lut_range = gamut.max_luma - gamut.min_luma;
+        GLSL("vec3 idx;                             \n"
+             "idx.x = "$" * ipt.x + "$";            \n"
+             "idx.y = 2.0 * length(ipt.yz);         \n"
+             "idx.z = %f * atan(ipt.z, ipt.y) + 0.5;\n"
+             "ipt = "$"(idx).xyz;                   \n",
+             SH_FLOAT(1.0f / lut_range),
+             SH_FLOAT(-gamut.min_luma / lut_range),
+             0.5f / M_PI, lut);
+
+        if (params->show_clipping) {
+            GLSL("clip_lo = clip_lo || any(lessThan(idx, vec3(0.0)));    \n"
+                 "clip_hi = clip_hi || any(greaterThan(idx, vec3(1.0))); \n");
+        }
+    }
+
+    // Convert IPT back to linear RGB
+    GLSL("lmspq = "$" * ipt;                        \n"
+         "lms = pow(max(lmspq, 0.0), vec3(1.0/%f)); \n"
+         "lms = max(lms - vec3(%f), 0.0)            \n"
+         "             / (vec3(%f) - %f * lms);     \n"
+         "lms = pow(lms, vec3(1.0/%f));             \n"
+         "lms *= %f;                                \n"
+         "color.rgb = "$" * lms;                    \n",
+         ipt2lms,
+         PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
+         10000 / PL_COLOR_SDR_WHITE,
+         SH_MAT3(lms2rgb));
 
     if (params->show_clipping) {
         GLSL("if (clip_hi) {                                                \n"
@@ -1733,160 +1789,13 @@ static void tone_map(pl_shader sh,
              "}                                                             \n");
     }
 
-    if (params->visualize_lut) {
-        visualize_tone_map(sh, src_min, src_max, src_avg, dst_min, dst_max,
-                           params->visualize_rect);
+    if (need_tone_map) {
+        if (params->visualize_lut)
+            visualize_tone_map(sh, params->visualize_rect, &tone);
+        GLSL("#undef tone_map \n");
     }
 
-    GLSL("#undef tone_map \n"
-         "#undef cliptest \n");
-}
-
-static inline bool is_identity_mat(const pl_matrix3x3 *mat)
-{
-    float delta = 0;
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            const float x = mat->m[i][j];
-            delta += fabsf((i == j) ? (x - 1) : x);
-        }
-    }
-
-    return delta < 1e-5f;
-}
-
-static void adapt_colors(pl_shader sh,
-                         const struct pl_color_space *src,
-                         const struct pl_color_space *dst,
-                         const struct pl_color_map_params *params)
-{
-    bool need_reduction = pl_primaries_superset(&src->hdr.prim, &dst->hdr.prim);
-    bool need_conversion = src->primaries != dst->primaries;
-    if (!need_reduction && !need_conversion)
-        return;
-
-    // Main gamut adaptation matrix, respecting the desired intent
-    const pl_matrix3x3 ref2ref =
-        pl_get_color_mapping_matrix(&src->hdr.prim, &dst->hdr.prim, params->intent);
-
-    float lb, lw;
-    pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
-        .color      = dst,
-        .metadata   = PL_HDR_METADATA_HDR10,
-        .scaling    = PL_HDR_NORM,
-        .out_min    = &lb,
-        .out_max    = &lw,
-    ));
-
-    // Normalize colors to range [0-1]
-    GLSL("color.rgb = "$" * color.rgb + "$"; \n",
-         SH_FLOAT(1 / (lw - lb)), SH_FLOAT(-lb / (lw - lb)));
-
-    // Convert the input colors to be represented relative to the target
-    // display's mastering primaries.
-    pl_matrix3x3 mat;
-    mat = pl_get_color_mapping_matrix(pl_raw_primaries_get(src->primaries),
-                                      &src->hdr.prim,
-                                      PL_INTENT_RELATIVE_COLORIMETRIC);
-
-
-    pl_matrix3x3_rmul(&ref2ref, &mat);
-    if (!is_identity_mat(&mat)) {
-        GLSL("color.rgb = "$" * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
-            .var = pl_var_mat3("src2ref"),
-            .data = PL_TRANSPOSE_3X3(mat.m),
-        }));
-    }
-
-    enum pl_gamut_mode mode = params->gamut_mode;
-    if (!need_reduction)
-        mode = PL_GAMUT_CLIP;
-
-    switch (mode) {
-    case PL_GAMUT_CLIP:
-        GLSL("color.rgb = clamp(color.rgb, 0.0, 1.0);           \n");
-        break;
-
-    case PL_GAMUT_WARN:
-        GLSL("if (any(lessThan(color.rgb, vec3(-1e-6))) ||          \n"
-             "    any(greaterThan(color.rgb, vec3(1.0 + 1e-6))))    \n"
-             "{                                                     \n"
-             "    float k = dot(color.rgb, vec3(2.0 / 3.0));        \n"
-             "    color.rgb = clamp(vec3(k) - color.rgb, 0.0, 1.0); \n"
-             "    color.rgb = sqrt(color.rgb);                      \n"
-             "}                                                     \n");
-        break;
-
-    case PL_GAMUT_DARKEN: {
-        float cmax = 1;
-        for (int i = 0; i < 3; i++)
-            cmax = PL_MAX(cmax, ref2ref.m[i][i]);
-        GLSL("color.rgb *= "$"; \n", SH_FLOAT(1 / cmax));
-        break;
-    }
-
-    case PL_GAMUT_DESATURATE:
-        GLSL("float cmin = min(min(color.r, color.g), color.b);     \n"
-             "float luma = clamp(dot("$", color.rgb), 0.0, 1.0);    \n"
-             "if (cmin < 0.0 - 1e-6)                                \n"
-             "    color.rgb = mix(color.rgb, vec3(luma),            \n"
-             "                    -cmin / (luma - cmin));           \n"
-             "float cmax = max(max(color.r, color.g), color.b);     \n"
-             "if (cmax > 1.0 + 1e-6)                                \n"
-             "    color.rgb = mix(color.rgb, vec3(luma),            \n"
-             "                    (1.0 - cmax) / (luma - cmax));    \n",
-            sh_luma_coeffs(sh, &dst->hdr.prim));
-        break;
-
-    case PL_GAMUT_MODE_COUNT:
-        pl_unreachable();
-    }
-
-    // Transform the colors from the destination mastering primaries to the
-    // destination nominal primaries
-    mat = pl_get_color_mapping_matrix(&dst->hdr.prim,
-                                      pl_raw_primaries_get(dst->primaries),
-                                      PL_INTENT_RELATIVE_COLORIMETRIC);
-
-    if (!is_identity_mat(&mat)) {
-        GLSL("color.rgb = "$" * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
-            .var = pl_var_mat3("ref2dst"),
-            .data = PL_TRANSPOSE_3X3(mat.m),
-        }));
-    }
-
-    // Undo normalization
-    GLSL("color.rgb = "$" * color.rgb + "$"; \n",
-         SH_FLOAT(lw - lb), SH_FLOAT(lb));
-}
-
-void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
-                         struct pl_color_space src, struct pl_color_space dst,
-                         pl_shader_obj *tone_map_state,
-                         bool prelinearized)
-{
-    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
-        return;
-
-    pl_color_space_infer_map(&src, &dst);
-    if (pl_color_space_equal(&src, &dst)) {
-        if (prelinearized)
-            pl_shader_delinearize(sh, &dst);
-        return;
-    }
-
-    if (tone_map_state)
-        pl_get_detected_hdr_metadata(*tone_map_state, &src.hdr);
-
-    sh_describe(sh, "colorspace conversion");
-    GLSL("// pl_shader_color_map\n");
-    GLSL("{\n");
-    params = PL_DEF(params, &pl_color_map_default_params);
-
-    if (!prelinearized)
-        pl_shader_linearize(sh, &src);
-    tone_map(sh, &src, &dst, tone_map_state, params);
-    adapt_colors(sh, &src, &dst, params);
+done:
     pl_shader_delinearize(sh, &dst);
     GLSL("}\n");
 }

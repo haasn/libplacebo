@@ -22,6 +22,7 @@
 // value (PL_SHADER_SIG_COLOR).
 
 #include <libplacebo/colorspace.h>
+#include <libplacebo/gamut_mapping.h>
 #include <libplacebo/tone_mapping.h>
 #include <libplacebo/shaders.h>
 
@@ -200,63 +201,38 @@ PL_DEPRECATED bool pl_get_detected_peak(const pl_shader_obj state,
 // state used by `pl_shader_tone_map`.
 void pl_reset_detected_peak(pl_shader_obj state);
 
+// Deprecated and unused. Libplacebo now always performs a variant of the old
+// hybrid tone-mapping, mixing together the intensity (I) and per-channel (LMS)
+// results.
 enum pl_tone_map_mode {
-    // Picks the best tone-mapping mode based on internal heuristics.
-    PL_TONE_MAP_AUTO,
-
-    // Per-channel tone-mapping in RGB. Guarantees no clipping and heavily
-    // desaturates the output, but distorts the colors quite significantly.
-    PL_TONE_MAP_RGB,
-
-    // Tone-mapping is performed on the brightest component found in the
-    // signal. Good at preserving details in highlights, but has a tendency to
-    // crush blacks.
-    PL_TONE_MAP_MAX,
-
-    // Tone-map per-channel for highlights and linearly (luma-based) for
-    // midtones/shadows, based on a fixed gamma 2.4 coefficient curve.
-    PL_TONE_MAP_HYBRID,
-
-    // Tone-map linearly on the luma component, and adjust (desaturate) the
-    // chromaticities to compensate using a simple constant factor. This is
-    // essentially the mode used in ITU-R BT.2446 method A.
-    PL_TONE_MAP_LUMA,
-
+    PL_TONE_MAP_AUTO    PL_DEPRECATED_ENUMERATOR,
+    PL_TONE_MAP_RGB     PL_DEPRECATED_ENUMERATOR,
+    PL_TONE_MAP_MAX     PL_DEPRECATED_ENUMERATOR,
+    PL_TONE_MAP_HYBRID  PL_DEPRECATED_ENUMERATOR,
+    PL_TONE_MAP_LUMA    PL_DEPRECATED_ENUMERATOR,
     PL_TONE_MAP_MODE_COUNT,
 };
 
+// Deprecated by <libplacebo/gamut_mapping.h>
 enum pl_gamut_mode {
-    // Do nothing, simply clip out-of-range colors to the RGB volume.
-    PL_GAMUT_CLIP,
-
-    // Equal to PL_GAMUT_CLIP but also highlights out-of-gamut colors (by
-    // coloring them pink).
-    PL_GAMUT_WARN,
-
-    // Linearly reduces content brightness to preserves saturated details,
-    // followed by clipping the remaining out-of-gamut colors. As the name
-    // implies, this makes everything darker, but provides a good balance
-    // between preserving details and colors.
-    PL_GAMUT_DARKEN,
-
-    // Hard-desaturates out-of-gamut colors towards white, while preserving the
-    // luminance. Has a tendency to shift colors.
-    PL_GAMUT_DESATURATE,
-
+    PL_GAMUT_CLIP       PL_DEPRECATED_ENUMERATOR, // pl_gamut_map_clip
+    PL_GAMUT_WARN       PL_DEPRECATED_ENUMERATOR, // pl_gamut_map_highlight
+    PL_GAMUT_DARKEN     PL_DEPRECATED_ENUMERATOR, // pl_gamut_map_darken
+    PL_GAMUT_DESATURATE PL_DEPRECATED_ENUMERATOR, // pl_gamut_map_desaturate
     PL_GAMUT_MODE_COUNT,
 };
 
 struct pl_color_map_params {
-    // The rendering intent to use for gamut mapping. Note that this does not
-    // affect tone mapping, which is always applied independently (to get the
-    // equivalent of colorimetric intent for tone mapping, set the function to
-    // NULL).
-    //
-    // Defaults to PL_INTENT_RELATIVE_COLORIMETRIC
-    enum pl_rendering_intent intent;
+    // --- Gamut mapping options
 
-    // How to handle out-of-gamut colors when changing the content primaries.
-    enum pl_gamut_mode gamut_mode;
+    // Gamut mapping function to use to handle out-of-gamut colors, including
+    // colors which are out-of-gamut as a consequence of tone mapping.
+    const struct pl_gamut_map_function *gamut_mapping;
+
+    // Gamut mapping 3DLUT size, for channels ICh. Defaults to {33, 25, 45}
+    int lut3d_size[3];
+
+    // --- Tone mapping options
 
     // Function and configuration used for tone-mapping. For non-tunable
     // functions, the `param` is ignored. If the tone mapping parameter is
@@ -266,7 +242,6 @@ struct pl_color_map_params {
     // Note: This pointer changing invalidates the LUT, so make sure to only
     // use stable (or static) storage for the pl_tone_map_function.
     const struct pl_tone_map_function *tone_mapping_function;
-    enum pl_tone_map_mode tone_mapping_mode;
     float tone_mapping_param;
 
     // If true, and supported by the given tone mapping function, libplacebo
@@ -274,9 +249,11 @@ struct pl_color_map_params {
     // signal. libplacebo is not liable for any HDR-induced eye damage.
     bool inverse_tone_mapping;
 
-    // Extra crosstalk factor to apply before tone-mapping. Optional. May help
-    // to improve the appearance of very bright, monochromatic highlights.
-    float tone_mapping_crosstalk;
+    // If nonzero, this much of the upper range of the tone-mapped result is
+    // smoothly mixed with a per-channel (LMS) tone-mapped version. Helps avoid
+    // unnatural blown-out highlights when tone-mapping very bright, strongly
+    // saturated colors.
+    float hybrid_mix;
 
     // Data source to use when tone-mapping. Setting this to a specific
     // value allows overriding the default metadata preference logic.
@@ -294,27 +271,27 @@ struct pl_color_map_params {
     // Visualize the tone-mapping curve / LUT. (PQ-PQ graph)
     bool visualize_lut;
 
-    // Graphically highlight hard-clipped pixels during tone-mapping (i.e.
-    // pixels that exceed the claimed source luminance range)
-    //
-    // Note that the difference between this and PL_GAMUT_WARN is that the
-    // latter only shows out-of-gamut colors (that are inside the monitor
-    // brightness range), while this shows out-of-range colors (regardless of
-    // whether or not they're in-gamut).
-    bool show_clipping;
-
     // Controls where to draw the visualization, relative to the rendered
     // video (dimensions 0-1). Optional, defaults to the full picture.
     pl_rect2df visualize_rect;
+
+    // Graphically highlight hard-clipped pixels during tone-mapping (i.e.
+    // pixels that exceed the claimed source luminance range).
+    bool show_clipping;
+
+    // --- Deprecated fields
+    enum pl_tone_map_mode tone_mapping_mode PL_DEPRECATED; // see `hybrid_mix`
+    float tone_mapping_crosstalk PL_DEPRECATED;     // now hard-coded as 0.04
+    enum pl_rendering_intent intent PL_DEPRECATED;  // see `gamut_mapping`
+    enum pl_gamut_mode gamut_mode PL_DEPRECATED;    // see `gamut_mapping`
 };
 
 #define PL_COLOR_MAP_DEFAULTS                                   \
-    .intent                 = PL_INTENT_RELATIVE_COLORIMETRIC,  \
-    .gamut_mode             = PL_GAMUT_CLIP,                    \
+    .gamut_mapping          = &pl_gamut_map_perceptual,         \
     .tone_mapping_function  = &pl_tone_map_auto,                \
-    .tone_mapping_mode      = PL_TONE_MAP_AUTO,                 \
-    .tone_mapping_crosstalk = 0.04,                             \
+    .hybrid_mix             = 0.20f,                            \
     .metadata               = PL_HDR_METADATA_ANY,              \
+    .lut3d_size             = {33, 25, 45},                     \
     .lut_size               = 1024,
 
 #define pl_color_map_params(...) (&(struct pl_color_map_params) { PL_COLOR_MAP_DEFAULTS __VA_ARGS__ })
@@ -326,23 +303,15 @@ extern const struct pl_color_map_params pl_color_map_default_params;
 // is true, the logic will assume the input has already been linearized by the
 // caller (e.g. as part of a previous linear light scaling operation).
 //
-// `tone_mapping_state` is required if tone mapping is desired, and will be
-// used to store state related to tone mapping. Note that this is the same
-// state object used by the peak detection shader (`pl_shader_detect_peak`). If
-// that function has been called on the same state object before this one, the
-// detected values may be used to guide the tone mapping algorithm.
-//
-// Note: The peak detection state object is only updated after the shader is
-// dispatched, so if `pl_shader_detect_peak` is called as part of the same
-// shader as `pl_shader_color_map`, the results will end up delayed by one
-// frame. If frame-level accuracy is desired, then users should call
-// `pl_shader_detect_peak` separately and dispatch the resulting shader
-// *before* dispatching this one.
+// `state` will be used to store generated LUTs. Note that this is the same
+// state object used by `pl_shader_detect_peak`, and if that function has been
+// called on `state` prior to `pl_shader_color_map`, the detected values will
+// be used to guide the tone mapping algorithm. If this is not provided,
+// tone/gamut mapping are disabled.
 void pl_shader_color_map(pl_shader sh,
                          const struct pl_color_map_params *params,
                          struct pl_color_space src, struct pl_color_space dst,
-                         pl_shader_obj *tone_mapping_state,
-                         bool prelinearized);
+                         pl_shader_obj *state, bool prelinearized);
 
 // Applies a set of cone distortion parameters to `vec4 color` in a given color
 // space. This can be used to simulate color blindness. See `pl_cone_params`
