@@ -463,12 +463,19 @@ next_dim: ; // `continue` out of the inner loop
     update |= method != lut->method;
 
     if (update) {
-        PL_MSG(sh, params->dynamic ? PL_LOG_TRACE : PL_LOG_DEBUG,
-               "LUT cache invalidated, regenerating..");
+        if (params->dynamic)
+            pl_log_level_cap(sh->log, PL_LOG_TRACE);
 
+        PL_DEBUG(sh, "LUT cache invalidated, regenerating..");
         size_t buf_size = size * params->comps * pl_var_type_size(vartype);
         tmp = pl_zalloc(NULL, buf_size);
+
+        clock_t start = clock();
         params->fill(tmp, params);
+        pl_log_cpu_time(sh->log, start, clock(), "generating shader LUT");
+
+        if (params->dynamic)
+            pl_log_level_cap(sh->log, PL_LOG_NONE);
 
         switch (type) {
         case SH_LUT_TEXTURE: {
