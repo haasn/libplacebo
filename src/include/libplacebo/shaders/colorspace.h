@@ -259,7 +259,7 @@ struct pl_color_map_params {
     // value allows overriding the default metadata preference logic.
     enum pl_hdr_metadata_type metadata;
 
-    // Tone mapping LUT size. Defaults to 1024.
+    // Tone mapping LUT size. Defaults to 256.
     int lut_size;
 
     // --- Debugging options
@@ -296,7 +296,7 @@ struct pl_color_map_params {
     .hybrid_mix             = 0.20f,                            \
     .metadata               = PL_HDR_METADATA_ANY,              \
     .lut3d_size             = {33, 25, 45},                     \
-    .lut_size               = 1024,
+    .lut_size               = 256,
 
 #define pl_color_map_params(...) (&(struct pl_color_map_params) { PL_COLOR_MAP_DEFAULTS __VA_ARGS__ })
 extern const struct pl_color_map_params pl_color_map_default_params;
