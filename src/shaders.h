@@ -262,7 +262,7 @@ bool sh_require(pl_shader sh, enum pl_shader_sig insig, int w, int h);
 
 enum pl_shader_obj_type {
     PL_SHADER_OBJ_INVALID = 0,
-    PL_SHADER_OBJ_TONE_MAP,
+    PL_SHADER_OBJ_COLOR_MAP,
     PL_SHADER_OBJ_SAMPLER,
     PL_SHADER_OBJ_DITHER,
     PL_SHADER_OBJ_LUT,

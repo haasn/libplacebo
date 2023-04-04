@@ -1003,7 +1003,7 @@ static const struct pl_buffer_var peak_buf_vars[] = {
 #undef VAR
 };
 
-struct sh_tone_map_obj {
+struct sh_color_map_obj {
     // Tone map state
     struct {
         struct pl_tone_map_params params;
@@ -1025,9 +1025,9 @@ struct sh_tone_map_obj {
     } peak;
 };
 
-static void sh_tone_map_uninit(pl_gpu gpu, void *ptr)
+static void sh_color_map_uninit(pl_gpu gpu, void *ptr)
 {
-    struct sh_tone_map_obj *obj = ptr;
+    struct sh_color_map_obj *obj = ptr;
     pl_shader_obj_destroy(&obj->tone.lut);
     pl_shader_obj_destroy(&obj->gamut.lut);
     pl_buf_destroy(gpu, &obj->peak.buf);
@@ -1086,7 +1086,7 @@ static float measure_peak(const struct peak_buf_data *data, float percentile)
 }
 
 // if `force` is true, ensures the buffer is read, even if `allow_delayed`
-static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
+static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force)
 {
     const struct pl_peak_detect_params *params = &obj->peak.params;
     if (!obj->peak.buf)
@@ -1180,9 +1180,9 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
         return false;
     }
 
-    struct sh_tone_map_obj *obj;
-    obj = SH_OBJ(sh, state, PL_SHADER_OBJ_TONE_MAP, struct sh_tone_map_obj,
-                 sh_tone_map_uninit);
+    struct sh_color_map_obj *obj;
+    obj = SH_OBJ(sh, state, PL_SHADER_OBJ_COLOR_MAP, struct sh_color_map_obj,
+                 sh_color_map_uninit);
     if (!obj)
         return false;
 
@@ -1318,10 +1318,10 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
 bool pl_get_detected_hdr_metadata(const pl_shader_obj state,
                                   struct pl_hdr_metadata *out)
 {
-    if (!state || state->type != PL_SHADER_OBJ_TONE_MAP)
+    if (!state || state->type != PL_SHADER_OBJ_COLOR_MAP)
         return false;
 
-    struct sh_tone_map_obj *obj = state->priv;
+    struct sh_color_map_obj *obj = state->priv;
     update_peak_buf(state->gpu, obj, false);
     if (!obj->peak.avg_pq)
         return false;
@@ -1346,10 +1346,10 @@ bool pl_get_detected_peak(const pl_shader_obj state,
 
 void pl_reset_detected_peak(pl_shader_obj state)
 {
-    if (!state || state->type != PL_SHADER_OBJ_TONE_MAP)
+    if (!state || state->type != PL_SHADER_OBJ_COLOR_MAP)
         return;
 
-    struct sh_tone_map_obj *obj = state->priv;
+    struct sh_color_map_obj *obj = state->priv;
     pl_buf_destroy(state->gpu, &obj->peak.buf);
     memset(&obj->peak, 0, sizeof(obj->peak));
 }
@@ -1551,11 +1551,11 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
         return;
     }
 
-    struct sh_tone_map_obj *obj = NULL;
+    struct sh_color_map_obj *obj = NULL;
     if (state) {
         pl_get_detected_hdr_metadata(*state, &src.hdr);
-        obj = SH_OBJ(sh, state, PL_SHADER_OBJ_TONE_MAP, struct sh_tone_map_obj,
-                     sh_tone_map_uninit);
+        obj = SH_OBJ(sh, state, PL_SHADER_OBJ_COLOR_MAP, struct sh_color_map_obj,
+                     sh_color_map_uninit);
         if (!obj)
             return;
     }
