@@ -316,7 +316,7 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
         pl_shader_dovi_reshape(sh, repr->dovi);
 
     enum pl_color_system orig_sys = repr->sys;
-    struct pl_transform3x3 tr = pl_color_repr_decode(repr, params);
+    pl_transform3x3 tr = pl_color_repr_decode(repr, params);
 
     if (memcmp(&tr, &pl_transform3x3_identity, sizeof(tr))) {
         ident_t cmat = sh_var(sh, (struct pl_shader_var) {
@@ -419,7 +419,7 @@ void pl_shader_decode_color(pl_shader sh, struct pl_color_repr *repr,
 #ifdef PL_HAVE_DOVI
         // Dolby Vision always outputs BT.2020-referred HPE LMS, so hard-code
         // the inverse LMS->RGB matrix corresponding to this color space.
-        struct pl_matrix3x3 dovi_lms2rgb = {{
+        pl_matrix3x3 dovi_lms2rgb = {{
             { 3.06441879, -2.16597676,  0.10155818},
             {-0.65612108,  1.78554118, -0.12943749},
             { 0.01736321, -0.04725154,  1.03004253},
@@ -577,7 +577,7 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
         if (repr->sys == PL_COLOR_SYSTEM_XYZ)
             xyzscale = SH_FLOAT(1.0 / pl_color_repr_normalize(&copy));
 
-        struct pl_transform3x3 tr = pl_color_repr_decode(&copy, NULL);
+        pl_transform3x3 tr = pl_color_repr_decode(&copy, NULL);
         pl_transform3x3_invert(&tr);
 
         ident_t cmat = sh_var(sh, (struct pl_shader_var) {
@@ -608,7 +608,7 @@ void pl_shader_encode_color(pl_shader sh, const struct pl_color_repr *repr)
 
 static ident_t sh_luma_coeffs(pl_shader sh, const struct pl_raw_primaries *prim)
 {
-    struct pl_matrix3x3 rgb2xyz;
+    pl_matrix3x3 rgb2xyz;
     rgb2xyz = pl_get_rgb2xyz_matrix(prim);
 
     // FIXME: Cannot use `const vec3` due to glslang bug #2025
@@ -1350,7 +1350,7 @@ void pl_reset_detected_peak(pl_shader_obj state)
 const struct pl_color_map_params pl_color_map_default_params = { PL_COLOR_MAP_DEFAULTS };
 
 static void visualize_tone_map(pl_shader sh, float xmin, float xmax, float xavg,
-                               float ymin, float ymax, struct pl_rect2df rc)
+                               float ymin, float ymax, pl_rect2df rc)
 {
     if (!rc.x0 && !rc.x1)
         rc.x1 = 1.0f;
@@ -1359,7 +1359,7 @@ static void visualize_tone_map(pl_shader sh, float xmin, float xmax, float xavg,
     if (rc.x1 == rc.x0 || rc.y1 == rc.y0)
         return;
 
-    ident_t pos = sh_attr_vec2(sh, "tone_map_coords", &(struct pl_rect2df) {
+    ident_t pos = sh_attr_vec2(sh, "tone_map_coords", &(pl_rect2df) {
         .x0 = -rc.x0         / (rc.x1 - rc.x0),
         .x1 = (1.0f - rc.x0) / (rc.x1 - rc.x0),
         .y0 = -rc.y1         / (rc.y0 - rc.y1),
@@ -1650,7 +1650,7 @@ static void tone_map(pl_shader sh,
     case PL_TONE_MAP_LUMA:
     case PL_TONE_MAP_HYBRID: {
         const struct pl_raw_primaries *prim = pl_raw_primaries_get(src->primaries);
-        struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
+        pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
 
         // Normalize X and Z by the white point
         for (int i = 0; i < 3; i++) {
@@ -1745,7 +1745,7 @@ static void tone_map(pl_shader sh,
          "#undef cliptest \n");
 }
 
-static inline bool is_identity_mat(const struct pl_matrix3x3 *mat)
+static inline bool is_identity_mat(const pl_matrix3x3 *mat)
 {
     float delta = 0;
     for (int i = 0; i < 3; i++) {
@@ -1769,7 +1769,7 @@ static void adapt_colors(pl_shader sh,
         return;
 
     // Main gamut adaptation matrix, respecting the desired intent
-    const struct pl_matrix3x3 ref2ref =
+    const pl_matrix3x3 ref2ref =
         pl_get_color_mapping_matrix(&src->hdr.prim, &dst->hdr.prim, params->intent);
 
     float lb, lw;
@@ -1787,7 +1787,7 @@ static void adapt_colors(pl_shader sh,
 
     // Convert the input colors to be represented relative to the target
     // display's mastering primaries.
-    struct pl_matrix3x3 mat;
+    pl_matrix3x3 mat;
     mat = pl_get_color_mapping_matrix(pl_raw_primaries_get(src->primaries),
                                       &src->hdr.prim,
                                       PL_INTENT_RELATIVE_COLORIMETRIC);
@@ -1909,7 +1909,7 @@ void pl_shader_cone_distort(pl_shader sh, struct pl_color_space csp,
     pl_color_space_infer(&csp);
     pl_shader_linearize(sh, &csp);
 
-    struct pl_matrix3x3 cone_mat;
+    pl_matrix3x3 cone_mat;
     cone_mat = pl_get_cone_matrix(params, pl_raw_primaries_get(csp.primaries));
     GLSL("color.rgb = "$" * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
         .var = pl_var_mat3("cone_mat"),

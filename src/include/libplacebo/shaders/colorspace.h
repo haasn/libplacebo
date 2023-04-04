@@ -305,7 +305,7 @@ struct pl_color_map_params {
 
     // Controls where to draw the visualization, relative to the rendered
     // video (dimensions 0-1). Optional, defaults to the full picture.
-    struct pl_rect2df visualize_rect;
+    pl_rect2df visualize_rect;
 };
 
 #define PL_COLOR_MAP_DEFAULTS                                   \

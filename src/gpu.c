@@ -331,7 +331,7 @@ void pl_tex_invalidate(pl_gpu gpu, pl_tex tex)
         impl->tex_invalidate(gpu, tex);
 }
 
-static void strip_coords(pl_tex tex, struct pl_rect3d *rc)
+static void strip_coords(pl_tex tex, pl_rect3d *rc)
 {
     if (!tex->params.d) {
         rc->z0 = 0;
@@ -344,7 +344,7 @@ static void strip_coords(pl_tex tex, struct pl_rect3d *rc)
     }
 }
 
-static void infer_rc(pl_tex tex, struct pl_rect3d *rc)
+static void infer_rc(pl_tex tex, pl_rect3d *rc)
 {
     if (!rc->x0 && !rc->x1)
         rc->x1 = tex->params.w;
@@ -398,10 +398,10 @@ void pl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
         require(fixed.dst_rc.z1 > 0 && fixed.dst_rc.z1 <= dst->params.d);
     }
 
-    struct pl_rect3d full = {0, 0, 0, dst->params.w, dst->params.h, dst->params.d};
+    pl_rect3d full = {0, 0, 0, dst->params.w, dst->params.h, dst->params.d};
     strip_coords(dst, &full);
 
-    struct pl_rect3d rcnorm = fixed.dst_rc;
+    pl_rect3d rcnorm = fixed.dst_rc;
     pl_rect3d_normalize(&rcnorm);
     if (pl_rect3d_eq(rcnorm, full))
         pl_tex_invalidate(gpu, dst);
@@ -422,7 +422,7 @@ static bool fix_tex_transfer(pl_gpu gpu, struct pl_tex_transfer_params *params)
 {
     pl_tex tex = params->tex;
     pl_fmt fmt = tex->params.format;
-    struct pl_rect3d rc = params->rc;
+    pl_rect3d rc = params->rc;
 
     // Infer the default values
     infer_rc(tex, &rc);
@@ -1177,8 +1177,8 @@ void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         require(pl_tex_params_dimension(target->params) == 2);
         require(target->params.format->signature == pass->params.target_format->signature);
         require(target->params.renderable);
-        struct pl_rect2d *vp = &new.viewport;
-        struct pl_rect2d *sc = &new.scissors;
+        pl_rect2d *vp = &new.viewport;
+        pl_rect2d *sc = &new.scissors;
 
         // Sanitize viewport/scissors
         if (!vp->x0 && !vp->x1)

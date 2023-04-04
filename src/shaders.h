@@ -202,8 +202,7 @@ ident_t sh_const_float(pl_shader sh, const char *name, float val);
 ident_t sh_attr(pl_shader sh, struct pl_shader_va sva);
 
 // Helper to add a a vec2 VA from a pl_rect2df. Returns NULL_IDENT on failure.
-ident_t sh_attr_vec2(pl_shader sh, const char *name,
-                     const struct pl_rect2df *rc);
+ident_t sh_attr_vec2(pl_shader sh, const char *name, const pl_rect2df *rc);
 
 // Bind a texture under a given transformation and make its attributes
 // available as well. If an output pointer for one of the attributes is left
@@ -215,7 +214,7 @@ ident_t sh_attr_vec2(pl_shader sh, const char *name,
 ident_t sh_bind(pl_shader sh, pl_tex tex,
                 enum pl_tex_address_mode address_mode,
                 enum pl_tex_sample_mode sample_mode,
-                const char *name, const struct pl_rect2df *rect,
+                const char *name, const pl_rect2df *rect,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt);
 
 // Incrementally build up a buffer by adding new variable elements to the

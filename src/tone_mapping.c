@@ -421,7 +421,7 @@ static void st2094_10(float *lut, const struct pl_tone_map_params *params)
     const float y3 = params->output_max;
     const float y2 = dst_knee;
 
-    const struct pl_matrix3x3 cmat = {{
+    const pl_matrix3x3 cmat = {{
         { x2*x3*(y2 - y3), x1*x3*(y3 - y1), x1*x2*(y1 - y2) },
         { x3*y3 - x2*y2,   x1*y1 - x3*y3,   x2*y2 - x1*y1   },
         { x3 - x2,         x1 - x3,         x2 - x1         },

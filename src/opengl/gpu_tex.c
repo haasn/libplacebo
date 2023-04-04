@@ -844,7 +844,7 @@ void gl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
         [PL_TEX_SAMPLE_LINEAR]  = GL_LINEAR,
     };
 
-    struct pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
+    pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
     gl->BlitFramebuffer(src_rc.x0, src_rc.y0, src_rc.x1, src_rc.y1,
                         dst_rc.x0, dst_rc.y0, dst_rc.x1, dst_rc.y1,
                         GL_COLOR_BUFFER_BIT, filters[params->sample_mode]);
@@ -1001,7 +1001,7 @@ bool gl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         dst = buf_gl->offset + params->buf_offset;
     }
 
-    struct pl_rect3d full = {
+    pl_rect3d full = {
         0, 0, 0,
         tex->params.w,
         PL_DEF(tex->params.h, 1),

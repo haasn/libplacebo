@@ -249,7 +249,7 @@ void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
 
     GLSL("// pl_shader_custom_lut \n");
 
-    static const struct pl_matrix3x3 zero = {0};
+    static const pl_matrix3x3 zero = {0};
     if (memcmp(&lut->shaper_in, &zero, sizeof(zero)) != 0) {
         GLSL("color.rgb = "$" * color.rgb; \n", sh_var(sh, (struct pl_shader_var) {
             .var = pl_var_mat3("shaper_in"),

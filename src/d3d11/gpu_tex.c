@@ -579,9 +579,9 @@ void pl_d3d11_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
 
     // If the blit operation doesn't require flipping, scaling or format
     // conversion, we can use CopySubresourceRegion
-    struct pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
+    pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
     if (pl_rect3d_eq(src_rc, dst_rc) && src_fmt == dst_fmt) {
-        struct pl_rect3d rc = params->src_rc;
+        pl_rect3d rc = params->src_rc;
         pl_rect3d_normalize(&rc);
 
         ID3D11DeviceContext_CopySubresourceRegion(p->imm, dst_p->res,

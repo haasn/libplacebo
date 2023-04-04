@@ -131,7 +131,7 @@ static bool setup_src(pl_shader sh, const struct pl_sample_src *src,
         return false;
 
     if (src->tex) {
-        struct pl_rect2df rect = {
+        pl_rect2df rect = {
             .x0 = src->rect.x0,
             .y0 = src->rect.y0,
             .x1 = src->rect.x0 + src_w,

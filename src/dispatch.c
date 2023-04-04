@@ -726,7 +726,7 @@ static struct pass *finalize_pass(pl_dispatch dp, pl_shader sh,
                                   pl_tex target, int vert_idx,
                                   const struct pl_blend_params *blend, bool load,
                                   const struct pl_dispatch_vertex_params *vparams,
-                                  const struct pl_transform2x2 *proj)
+                                  const pl_transform2x2 *proj)
 {
     struct pass *pass = pl_alloc_ptr(dp, pass);
     *pass = (struct pass) {
@@ -1072,7 +1072,7 @@ static void compute_vertex_attribs(pl_dispatch dp, pl_shader sh,
 }
 
 static void translate_compute_shader(pl_dispatch dp, pl_shader sh,
-                                     const struct pl_rect2d *rc,
+                                     const pl_rect2d *rc,
                                      const struct pl_dispatch_params *params)
 {
     int width = abs(pl_rect_w(*rc)), height = abs(pl_rect_h(*rc));
@@ -1229,7 +1229,7 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
             PL_TRACE(dp, "Upgrading fragment shader to compute shader.");
     }
 
-    struct pl_rect2d rc = params->rect;
+    pl_rect2d rc = params->rect;
     if (!pl_rect_w(rc)) {
         rc.x0 = 0;
         rc.x1 = tpars->w;
@@ -1249,13 +1249,13 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
     }
 
     int vert_idx = -1;
-    const struct pl_transform2x2 *proj = NULL;
+    const pl_transform2x2 *proj = NULL;
     if (pl_shader_is_compute(sh)) {
         // Translate the compute shader to simulate vertices etc.
         translate_compute_shader(dp, sh, &rc, params);
     } else {
         // Add the vertex information encoding the position
-        struct pl_rect2df vert_rect = {
+        pl_rect2df vert_rect = {
             .x0 = 2.0 * rc.x0 / tpars->w - 1.0,
             .y0 = 2.0 * rc.y0 / tpars->h - 1.0,
             .x1 = 2.0 * rc.x1 / tpars->w - 1.0,
@@ -1263,7 +1263,7 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
         };
 
         if (sh->transpose) {
-            static const struct pl_transform2x2 transpose_proj = {{{
+            static const pl_transform2x2 transpose_proj = {{{
                 { 0, 1 },
                 { 1, 0 },
             }}};
@@ -1278,8 +1278,8 @@ bool pl_dispatch_finish(pl_dispatch dp, const struct pl_dispatch_params *params)
 
     // We need to set pl_pass_params.load_target when either blending is
     // enabled or we're drawing to some scissored sub-rect of the texture
-    struct pl_rect2d full = { 0, 0, tpars->w, tpars->h };
-    struct pl_rect2d rc_norm = rc;
+    pl_rect2d full = { 0, 0, tpars->w, tpars->h };
+    pl_rect2d rc_norm = rc;
     pl_rect2d_normalize(&rc_norm);
     rc_norm.x0 = PL_MAX(rc_norm.x0, 0);
     rc_norm.y0 = PL_MAX(rc_norm.y0, 0);
@@ -1513,7 +1513,7 @@ bool pl_dispatch_vertex(pl_dispatch dp, const struct pl_dispatch_vertex_params *
     }
 
     // Compute the coordinate projection matrix
-    struct pl_transform2x2 proj = pl_transform2x2_identity;
+    pl_transform2x2 proj = pl_transform2x2_identity;
     switch (params->vertex_coords) {
     case PL_COORDS_ABSOLUTE:
         proj.mat.m[0][0] /= tpars->w;

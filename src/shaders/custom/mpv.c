@@ -884,7 +884,7 @@ struct pass_tex {
     pl_tex tex;
 
     // Metadata
-    struct pl_rect2df rect;
+    pl_rect2df rect;
     struct pl_color_repr repr;
     struct pl_color_space color;
     int comps;
@@ -1104,7 +1104,7 @@ static double prng_step(uint64_t s[4])
 
 static bool bind_pass_tex(pl_shader sh, pl_str name,
                           const struct pass_tex *ptex,
-                          const struct pl_rect2df *rect,
+                          const pl_rect2df *rect,
                           bool hooked, bool mainpresub)
 {
     ident_t id, pos, size, pt;
@@ -1291,7 +1291,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
                     // params->rect, because user shaders in general are not
                     // designed to handle cropped input textures.
                     const struct pass_tex *ptex = &p->pass_textures.elem[j];
-                    struct pl_rect2df rect = {
+                    pl_rect2df rect = {
                         0, 0, ptex->tex->params.w, ptex->tex->params.h,
                     };
 
@@ -1494,7 +1494,7 @@ static struct pl_hook_res hook_hook(void *priv, const struct pl_hook_params *par
               x0 = sx * params->rect.x0 + hook->offset[0],
               y0 = sy * params->rect.y0 + hook->offset[1];
 
-        struct pl_rect2df new_rect = {
+        pl_rect2df new_rect = {
             x0,
             y0,
             x0 + sx * pl_rect_w(params->rect),

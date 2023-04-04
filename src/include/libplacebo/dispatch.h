@@ -100,7 +100,7 @@ struct pl_dispatch_params {
 
     // The target rect to render to. Optional, if left as {0}, then the
     // entire texture will be rendered to.
-    struct pl_rect2d rect;
+    pl_rect2d rect;
 
     // If set, enables and controls the blending for this pass. Optional. When
     // using this with fragment shaders, `target->params.fmt->caps` must
@@ -173,7 +173,7 @@ struct pl_dispatch_vertex_params {
     pl_tex target;
 
     // The target rect to clip the rendering to. (Optional)
-    struct pl_rect2d scissors;
+    pl_rect2d scissors;
 
     // If set, enables and controls the blending for this pass. Optional. When
     // enabled, `target->params.fmt->caps` must include `PL_FMT_CAP_BLENDABLE`.

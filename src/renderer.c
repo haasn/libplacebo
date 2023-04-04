@@ -29,7 +29,7 @@ struct cached_frame {
     uint64_t params_hash; // for detecting `pl_render_params` changes
     struct pl_color_space color;
     struct pl_icc_profile profile;
-    struct pl_rect2df crop;
+    pl_rect2df crop;
     pl_tex tex;
     int comps;
     bool evict; // for garbage collection
@@ -271,7 +271,7 @@ struct img {
     pl_tex err_tex;
 
     // Current effective source area, will be sampled by the main scaler
-    struct pl_rect2df rect;
+    pl_rect2df rect;
 
     // The current effective colorspace
     struct pl_color_repr repr;
@@ -352,10 +352,10 @@ struct pass_state {
     // Represents the "reference rect". Canonically, this is functionally
     // equivalent to `image.crop`, but also updates as the refplane evolves
     // (e.g. due to user hook prescalers)
-    struct pl_rect2df ref_rect;
+    pl_rect2df ref_rect;
 
     // Integer version of `target.crop`. Semantically identical.
-    struct pl_rect2d dst_rect;
+    pl_rect2d dst_rect;
 
     // Logical end-to-end rotation
     pl_rotation rotation;
@@ -779,7 +779,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
                           int comps, const int comp_map[4],
                           const struct pl_overlay *overlays, int num,
                           struct pl_color_space color, struct pl_color_repr repr,
-                          const struct pl_transform2x2 *output_shift)
+                          const pl_transform2x2 *output_shift)
 {
     pl_renderer rr = pass->rr;
     if (num <= 0 || (rr->errors & PL_RENDER_ERR_OVERLAY))
@@ -795,11 +795,11 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
     }
 
     const struct pl_frame *image = pass->src_ref >= 0 ? &pass->image : NULL;
-    struct pl_transform2x2 src_to_dst;
+    pl_transform2x2 src_to_dst;
     if (image) {
         float rx = pl_rect_w(pass->dst_rect) / pl_rect_w(image->crop);
         float ry = pl_rect_h(pass->dst_rect) / pl_rect_h(image->crop);
-        src_to_dst = (struct pl_transform2x2) {
+        src_to_dst = (pl_transform2x2) {
             .mat.m = {{ rx, 0 }, { 0, ry }},
             .c = {
                 pass->dst_rect.x0 - rx * image->crop.x0,
@@ -809,12 +809,12 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
 
         if (pass->rotation % PL_ROTATION_180 == PL_ROTATION_90) {
             PL_SWAP(src_to_dst.c[0], src_to_dst.c[1]);
-            src_to_dst.mat = (struct pl_matrix2x2) {{{ 0, ry }, { rx, 0 }}};
+            src_to_dst.mat = (pl_matrix2x2) {{{ 0, ry }, { rx, 0 }}};
         }
     }
 
     const struct pl_frame *target = &pass->target;
-    struct pl_rect2df dst_crop = target->crop;
+    pl_rect2df dst_crop = target->crop;
     pl_rect2df_rotate(&dst_crop, -pass->rotation);
     pl_rect2df_normalize(&dst_crop);
 
@@ -829,7 +829,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
                             : PL_OVERLAY_COORDS_SRC_FRAME;
         }
 
-        struct pl_transform2x2 tf = pl_transform2x2_identity;
+        pl_transform2x2 tf = pl_transform2x2_identity;
         switch (ol.coords) {
             case PL_OVERLAY_COORDS_SRC_CROP:
                 if (!image)
@@ -1615,7 +1615,7 @@ static bool pass_read_image(struct pass_state *pass)
         float sx = st->plane.shift_x,
               sy = st->plane.shift_y;
 
-        st->img.rect = (struct pl_rect2df) {
+        st->img.rect = (pl_rect2df) {
             .x0 = (image->crop.x0 - sx) * rrx,
             .y0 = (image->crop.y0 - sy) * rry,
             .x1 = (image->crop.x1 - sx) * rrx,
@@ -1672,7 +1672,7 @@ static bool pass_read_image(struct pass_state *pass)
     // For quality reasons, explicitly drop subpixel offsets from the ref rect
     // and re-add them as part of `pass->img.rect`, always rounding towards 0.
     // Additionally, drop anamorphic subpixel mismatches.
-    struct pl_rect2d ref_rounded;
+    pl_rect2d ref_rounded;
     ref_rounded.x0 = truncf(ref->img.rect.x0);
     ref_rounded.y0 = truncf(ref->img.rect.y0);
     ref_rounded.x1 = ref_rounded.x0 + roundf(pl_rect_w(ref->img.rect));
@@ -1725,7 +1725,7 @@ static bool pass_read_image(struct pass_state *pass)
                  plane->flipped ? " (flipped) " : "");
 
         pl_shader psh;
-        struct pl_rect2d unscaled = { .x1 = src.new_w, .y1 = src.new_h };
+        pl_rect2d unscaled = { .x1 = src.new_w, .y1 = src.new_h };
         if (st->img.sh && st->img.w == src.new_w && st->img.h == src.new_h &&
             pl_rect2d_eq(src.rect, unscaled))
         {
@@ -2191,7 +2191,7 @@ static bool pass_output_target(struct pass_state *pass)
     }
 
     // Rotation handling
-    struct pl_rect2d dst_rect = pass->dst_rect;
+    pl_rect2d dst_rect = pass->dst_rect;
     if (pass->rotation % PL_ROTATION_180 == PL_ROTATION_90) {
         PL_SWAP(dst_rect.x0, dst_rect.y0);
         PL_SWAP(dst_rect.x1, dst_rect.y1);
@@ -2221,7 +2221,7 @@ static bool pass_output_target(struct pass_state *pass)
               rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry);
         float sx = plane->shift_x, sy = plane->shift_y;
 
-        struct pl_rect2df plane_rectf = {
+        pl_rect2df plane_rectf = {
             .x0 = (dst_rect.x0 - sx) * rrx,
             .y0 = (dst_rect.y0 - sy) * rry,
             .x1 = (dst_rect.x1 - sx) * rrx,
@@ -2323,14 +2323,14 @@ static bool pass_output_target(struct pass_state *pass)
         GLSL("color *= vec4(1.0 / "$"); \n", SH_FLOAT(scale));
         swizzle_color(sh, plane->components, plane->component_mapping, false);
 
-        struct pl_rect2d plane_rect = {
+        pl_rect2d plane_rect = {
             .x0 = flipped_x ? rx1 : rx0,
             .x1 = flipped_x ? rx0 : rx1,
             .y0 = flipped_y ? ry1 : ry0,
             .y1 = flipped_y ? ry0 : ry1,
         };
 
-        struct pl_transform2x2 tscale = {
+        pl_transform2x2 tscale = {
             .mat = {{{ rrx, 0.0 }, { 0.0, rry }}},
             .c = { -sx, -sy },
         };
@@ -2475,7 +2475,7 @@ static int frame_ref(const struct pl_frame *frame)
 static void fix_refs_and_rects(struct pass_state *pass)
 {
     struct pl_frame *target = &pass->target;
-    struct pl_rect2df *dst = &target->crop;
+    pl_rect2df *dst = &target->crop;
     pass->dst_ref = frame_ref(target);
     pl_tex dst_ref = target->planes[pass->dst_ref].texture;
     int dst_w = dst_ref->params.w, dst_h = dst_ref->params.h;
@@ -2493,14 +2493,14 @@ static void fix_refs_and_rects(struct pass_state *pass)
         if (pass->rotation % PL_ROTATION_180 == PL_ROTATION_90)
             PL_SWAP(dst_w, dst_h);
 
-        *dst = (struct pl_rect2df) {
+        *dst = (pl_rect2df) {
             .x0 = roundf(PL_CLAMP(dst->x0, 0.0, dst_w)),
             .y0 = roundf(PL_CLAMP(dst->y0, 0.0, dst_w)),
             .x1 = roundf(PL_CLAMP(dst->x1, 0.0, dst_w)),
             .y1 = roundf(PL_CLAMP(dst->y1, 0.0, dst_w)),
         };
 
-        pass->dst_rect = (struct pl_rect2d) {
+        pass->dst_rect = (pl_rect2d) {
             dst->x0, dst->y0, dst->x1, dst->y1,
         };
 
@@ -2508,7 +2508,7 @@ static void fix_refs_and_rects(struct pass_state *pass)
     }
 
     struct pl_frame *image = &pass->image;
-    struct pl_rect2df *src = &image->crop;
+    pl_rect2df *src = &image->crop;
     pass->src_ref = frame_ref(image);
     pl_tex src_ref = image->planes[pass->src_ref].texture;
 
@@ -2551,7 +2551,7 @@ static void fix_refs_and_rects(struct pass_state *pass)
     // Update dst_rect to the rounded values and re-apply flip if needed. We
     // always do this in the `dst` rather than the `src`` because this allows
     // e.g. polar sampling compute shaders to work.
-    *dst = (struct pl_rect2df) {
+    *dst = (pl_rect2df) {
         .x0 = flipped_x ? rx1 : rx0,
         .y0 = flipped_y ? ry1 : ry0,
         .x1 = flipped_x ? rx0 : rx1,
@@ -2560,7 +2560,7 @@ static void fix_refs_and_rects(struct pass_state *pass)
 
     // Copies of the above, for convenience
     pass->ref_rect = *src;
-    pass->dst_rect = (struct pl_rect2d) {
+    pass->dst_rect = (pl_rect2d) {
         dst->x0, dst->y0, dst->x1, dst->y1,
     };
 }
@@ -2810,7 +2810,7 @@ static bool draw_empty_overlays(pl_renderer rr,
               rry = ry >= 1 ? roundf(ry) : 1.0 / roundf(1.0 / ry);
         float sx = plane->shift_x, sy = plane->shift_y;
 
-        struct pl_transform2x2 tscale = {
+        pl_transform2x2 tscale = {
             .mat = {{{ rrx, 0.0 }, { 0.0, rry }}},
             .c = { -sx, -sy },
         };
@@ -3207,7 +3207,7 @@ retry:
             float sx = out_w / pl_rect_w(inter_pass.dst_rect),
                   sy = out_h / pl_rect_h(inter_pass.dst_rect);
 
-            struct pl_transform2x2 shift = {
+            pl_transform2x2 shift = {
                 .mat.m = {{ sx, 0, }, { 0, sy, }},
                 .c = {
                     -sx * inter_pass.dst_rect.x0,
@@ -3426,7 +3426,7 @@ void pl_frame_clear_rgba(pl_gpu gpu, const struct pl_frame *frame,
                          const float rgba[4])
 {
     struct pl_color_repr repr = frame->repr;
-    struct pl_transform3x3 tr = pl_color_repr_decode(&repr, NULL);
+    pl_transform3x3 tr = pl_color_repr_decode(&repr, NULL);
     pl_transform3x3_invert(&tr);
 
     float encoded[3] = { rgba[0], rgba[1], rgba[2] };

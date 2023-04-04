@@ -709,7 +709,7 @@ void vk_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
     bool planar_fallback = src_vk->aspect != VK_IMAGE_ASPECT_COLOR_BIT ||
                            dst_vk->aspect != VK_IMAGE_ASPECT_COLOR_BIT;
 
-    struct pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
+    pl_rect3d src_rc = params->src_rc, dst_rc = params->dst_rc;
     bool requires_scaling = !pl_rect3d_eq(src_rc, dst_rc);
     if ((requires_scaling && blit_emulated) || planar_fallback) {
         if (!pl_tex_blit_compute(gpu, params))
@@ -855,7 +855,7 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
     pl_buf buf = params->buf;
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
-    struct pl_rect3d rc = params->rc;
+    pl_rect3d rc = params->rc;
     size_t size = pl_tex_transfer_size(params);
 
     size_t buf_offset = buf_vk->mem.offset + params->buf_offset;
@@ -981,7 +981,7 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
 
     pl_buf buf = params->buf;
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
-    struct pl_rect3d rc = params->rc;
+    pl_rect3d rc = params->rc;
     size_t size = pl_tex_transfer_size(params);
 
     size_t buf_offset = buf_vk->mem.offset + params->buf_offset;

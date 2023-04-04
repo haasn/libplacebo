@@ -497,8 +497,8 @@ enum pl_overlay_coords {
 };
 
 struct pl_overlay_part {
-    struct pl_rect2df src; // source coordinate with respect to `pl_overlay.tex`
-    struct pl_rect2df dst; // target coordinates with respect to `pl_overlay.coords`
+    pl_rect2df src; // source coordinate with respect to `pl_overlay.tex`
+    pl_rect2df dst; // target coordinates with respect to `pl_overlay.coords`
 
     // If `mode` is PL_OVERLAY_MONOCHROME, then this specifies the color of
     // this overlay part. The color is multiplied into the sampled texture's
@@ -594,7 +594,7 @@ struct pl_frame {
     // Note that `pl_render_image` will map the input crop directly to the
     // output crop, stretching and scaling as needed. If you wish to preserve
     // the aspect ratio, use a dedicated function like pl_rect2df_aspect_copy.
-    struct pl_rect2df crop;
+    pl_rect2df crop;
 
     // Logical rotation of the image, with respect to the underlying planes.
     // For example, if this is PL_ROTATION_90, then the image will be rotated

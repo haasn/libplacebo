@@ -500,7 +500,7 @@ static void luma_from_maxrgb(const struct pl_color_space *csp,
 
     struct pl_raw_primaries prim = csp->hdr.prim;
     pl_raw_primaries_merge(&prim, pl_raw_primaries_get(csp->primaries));
-    const struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(&prim);
+    const pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(&prim);
 
     const float max_luma = rgb2xyz.m[1][0] * csp->hdr.scene_max[0] +
                            rgb2xyz.m[1][1] * csp->hdr.scene_max[1] +
@@ -961,9 +961,9 @@ const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim
 
 // Compute the RGB/XYZ matrix as described here:
 // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
-struct pl_matrix3x3 pl_get_rgb2xyz_matrix(const struct pl_raw_primaries *prim)
+pl_matrix3x3 pl_get_rgb2xyz_matrix(const struct pl_raw_primaries *prim)
 {
-    struct pl_matrix3x3 out = {{{0}}};
+    pl_matrix3x3 out = {{{0}}};
     float S[3], X[4], Z[4];
 
     // Convert from CIE xyY to XYZ. Note that Y=1 holds true for all primaries
@@ -999,17 +999,17 @@ struct pl_matrix3x3 pl_get_rgb2xyz_matrix(const struct pl_raw_primaries *prim)
     return out;
 }
 
-struct pl_matrix3x3 pl_get_xyz2rgb_matrix(const struct pl_raw_primaries *prim)
+pl_matrix3x3 pl_get_xyz2rgb_matrix(const struct pl_raw_primaries *prim)
 {
     // For simplicity, just invert the rgb2xyz matrix
-    struct pl_matrix3x3 out = pl_get_rgb2xyz_matrix(prim);
+    pl_matrix3x3 out = pl_get_rgb2xyz_matrix(prim);
     pl_matrix3x3_invert(&out);
     return out;
 }
 
 // LMS<-XYZ revised matrix from CIECAM97, based on a linear transform and
 // normalized for equal energy on monochrome inputs
-static const struct pl_matrix3x3 m_cat97 = {{
+static const pl_matrix3x3 m_cat97 = {{
     {  0.8562,  0.3372, -0.1934 },
     { -0.8360,  1.8327,  0.0033 },
     {  0.0357, -0.0469,  1.0112 },
@@ -1018,7 +1018,7 @@ static const struct pl_matrix3x3 m_cat97 = {{
 // M := M * XYZd<-XYZs
 static void apply_chromatic_adaptation(struct pl_cie_xy src,
                                        struct pl_cie_xy dest,
-                                       struct pl_matrix3x3 *mat)
+                                       pl_matrix3x3 *mat)
 {
     // If the white points are nearly identical, this is a wasteful identity
     // operation.
@@ -1043,27 +1043,27 @@ static void apply_chromatic_adaptation(struct pl_cie_xy src,
     }
 
     // tmp := I * [Cd/Cs] * Ma
-    struct pl_matrix3x3 tmp = {0};
+    pl_matrix3x3 tmp = {0};
     for (int i = 0; i < 3; i++)
         tmp.m[i][i] = C[i][1] / C[i][0];
 
     pl_matrix3x3_mul(&tmp, &m_cat97);
 
     // M := M * Ma^-1 * tmp
-    struct pl_matrix3x3 ma_inv = m_cat97;
+    pl_matrix3x3 ma_inv = m_cat97;
     pl_matrix3x3_invert(&ma_inv);
     pl_matrix3x3_mul(mat, &ma_inv);
     pl_matrix3x3_mul(mat, &tmp);
 }
 
-struct pl_matrix3x3 pl_get_adaptation_matrix(struct pl_cie_xy src, struct pl_cie_xy dst)
+pl_matrix3x3 pl_get_adaptation_matrix(struct pl_cie_xy src, struct pl_cie_xy dst)
 {
     // Use BT.709 primaries (with chosen white point) as an XYZ reference
     struct pl_raw_primaries csp = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_709);
     csp.white = src;
 
-    struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(&csp);
-    struct pl_matrix3x3 xyz2rgb = rgb2xyz;
+    pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(&csp);
+    pl_matrix3x3 xyz2rgb = rgb2xyz;
     pl_matrix3x3_invert(&xyz2rgb);
 
     apply_chromatic_adaptation(src, dst, &xyz2rgb);
@@ -1081,12 +1081,12 @@ const struct pl_cone_params pl_vision_tritanopia    = {PL_CONE_S,    0.0};
 const struct pl_cone_params pl_vision_monochromacy  = {PL_CONE_LM,   0.0};
 const struct pl_cone_params pl_vision_achromatopsia = {PL_CONE_LMS,  0.0};
 
-struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
-                                       const struct pl_raw_primaries *prim)
+pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
+                                const struct pl_raw_primaries *prim)
 {
     // LMS<-RGB := LMS<-XYZ * XYZ<-RGB
-    struct pl_matrix3x3 rgb2lms = m_cat97;
-    struct pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
+    pl_matrix3x3 rgb2lms = m_cat97;
+    pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(prim);
     pl_matrix3x3_mul(&rgb2lms, &rgb2xyz);
 
     // LMS versions of the two opposing primaries, plus neutral
@@ -1099,7 +1099,7 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
     pl_matrix3x3_apply(&rgb2lms, lms_w);
 
     float a, b, c = params->strength;
-    struct pl_matrix3x3 distort;
+    pl_matrix3x3 distort;
 
     switch (params->cones) {
     case PL_CONE_NONE:
@@ -1113,7 +1113,7 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
             (lms_b[2] - lms_b[1] * lms_w[2] / lms_w[1]);
         assert(fabs(a * lms_w[1] + b * lms_w[2] - lms_w[0]) < 1e-6);
 
-        distort = (struct pl_matrix3x3) {{
+        distort = (pl_matrix3x3) {{
             {            c, (1.0 - c) * a, (1.0 - c) * b},
             {          0.0,           1.0,           0.0},
             {          0.0,           0.0,           1.0},
@@ -1128,7 +1128,7 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
             (lms_b[2] - lms_b[0] * lms_w[2] / lms_w[0]);
         assert(fabs(a * lms_w[0] + b * lms_w[2] - lms_w[1]) < 1e-6);
 
-        distort = (struct pl_matrix3x3) {{
+        distort = (pl_matrix3x3) {{
             {          1.0,           0.0,           0.0},
             {(1.0 - c) * a,             c, (1.0 - c) * b},
             {          0.0,           0.0,           1.0},
@@ -1143,7 +1143,7 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
             (lms_r[1] - lms_r[0] * lms_w[1] / lms_w[0]);
         assert(fabs(a * lms_w[0] + b * lms_w[1] - lms_w[2]) < 1e-6);
 
-        distort = (struct pl_matrix3x3) {{
+        distort = (pl_matrix3x3) {{
             {          1.0,           0.0,           0.0},
             {          0.0,           1.0,           0.0},
             {(1.0 - c) * a, (1.0 - c) * b,             c},
@@ -1155,7 +1155,7 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
         a = lms_w[0] / lms_w[2];
         b = lms_w[1] / lms_w[2];
 
-        distort = (struct pl_matrix3x3) {{
+        distort = (pl_matrix3x3) {{
             {            c,           0.0, (1.0 - c) * a},
             {          0.0,             c, (1.0 - c) * b},
             {          0.0,           0.0,           1.0},
@@ -1167,7 +1167,7 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
         a = lms_w[1] / lms_w[0];
         b = lms_w[2] / lms_w[0];
 
-        distort = (struct pl_matrix3x3) {{
+        distort = (pl_matrix3x3) {{
             {          1.0,           0.0,           0.0},
             {(1.0 - c) * a,             c,           0.0},
             {(1.0 - c) * b,           0.0,             c},
@@ -1179,7 +1179,7 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
         a = lms_w[0] / lms_w[1];
         b = lms_w[2] / lms_w[1];
 
-        distort = (struct pl_matrix3x3) {{
+        distort = (pl_matrix3x3) {{
             {            c, (1.0 - c) * a,           0.0},
             {          0.0,           1.0,           0.0},
             {          0.0, (1.0 - c) * b,             c},
@@ -1208,7 +1208,7 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
     }
 
     // out := RGB<-LMS * distort * LMS<-RGB
-    struct pl_matrix3x3 out = rgb2lms;
+    pl_matrix3x3 out = rgb2lms;
     pl_matrix3x3_invert(&out);
     pl_matrix3x3_mul(&out, &distort);
     pl_matrix3x3_mul(&out, &rgb2lms);
@@ -1216,9 +1216,9 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
     return out;
 }
 
-struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *src,
-                                                const struct pl_raw_primaries *dst,
-                                                enum pl_rendering_intent intent)
+pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *src,
+                                         const struct pl_raw_primaries *dst,
+                                         enum pl_rendering_intent intent)
 {
     // In saturation mapping, we don't care about accuracy and just want
     // primaries to map to primaries, making this an identity transformation.
@@ -1231,14 +1231,14 @@ struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *s
     // definition for perceptual other than "make it look good".
 
     // RGBd<-XYZd matrix
-    struct pl_matrix3x3 xyz2rgb_d = pl_get_xyz2rgb_matrix(dst);
+    pl_matrix3x3 xyz2rgb_d = pl_get_xyz2rgb_matrix(dst);
 
     // Chromatic adaptation, except in absolute colorimetric intent
     if (intent != PL_INTENT_ABSOLUTE_COLORIMETRIC)
         apply_chromatic_adaptation(src->white, dst->white, &xyz2rgb_d);
 
     // XYZs<-RGBs
-    struct pl_matrix3x3 rgb2xyz_s = pl_get_rgb2xyz_matrix(src);
+    pl_matrix3x3 rgb2xyz_s = pl_get_rgb2xyz_matrix(src);
     pl_matrix3x3_mul(&xyz2rgb_d, &rgb2xyz_s);
     return xyz2rgb_d;
 }
@@ -1302,10 +1302,10 @@ bool pl_primaries_valid(const struct pl_raw_primaries *prim)
  * Under these conditions the given parameters lr, lg, lb uniquely
  * determine the mapping of Y, U, V to R, G, B.
  */
-static struct pl_matrix3x3 luma_coeffs(float lr, float lg, float lb)
+static pl_matrix3x3 luma_coeffs(float lr, float lg, float lb)
 {
     pl_assert(fabs(lr+lg+lb - 1) < 1e-6);
-    return (struct pl_matrix3x3) {{
+    return (pl_matrix3x3) {{
         {1, 0,                    2 * (1-lr)          },
         {1, -2 * (1-lb) * lb/lg, -2 * (1-lr) * lr/lg  },
         {1,  2 * (1-lb),          0                   },
@@ -1313,7 +1313,7 @@ static struct pl_matrix3x3 luma_coeffs(float lr, float lg, float lb)
 }
 
 // Applies hue and saturation controls to a YCbCr->RGB matrix
-static inline void apply_hue_sat(struct pl_matrix3x3 *m,
+static inline void apply_hue_sat(pl_matrix3x3 *m,
                                  const struct pl_color_adjustment *params)
 {
     // Hue is equivalent to rotating input [U, V] subvector around the origin.
@@ -1327,12 +1327,12 @@ static inline void apply_hue_sat(struct pl_matrix3x3 *m,
     }
 }
 
-struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
-                                    const struct pl_color_adjustment *params)
+pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
+                                     const struct pl_color_adjustment *params)
 {
     params = PL_DEF(params, &pl_color_adjustment_neutral);
 
-    struct pl_matrix3x3 m;
+    pl_matrix3x3 m;
     switch (repr->sys) {
     case PL_COLOR_SYSTEM_BT_709:     m = luma_coeffs(0.2126, 0.7152, 0.0722); break;
     case PL_COLOR_SYSTEM_BT_601:     m = luma_coeffs(0.2990, 0.5870, 0.1140); break;
@@ -1340,7 +1340,7 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     case PL_COLOR_SYSTEM_BT_2020_NC: m = luma_coeffs(0.2627, 0.6780, 0.0593); break;
     case PL_COLOR_SYSTEM_BT_2020_C:
         // Note: This outputs into the [-0.5,0.5] range for chroma information.
-        m = (struct pl_matrix3x3) {{
+        m = (pl_matrix3x3) {{
             {0, 0, 1},
             {1, 0, 0},
             {0, 1, 0},
@@ -1351,7 +1351,7 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         // and precision reasons. Exact values truncated from ITU-T H-series
         // Supplement 18.
         static const float lm_t = 0.008609, lm_p = 0.111029625;
-        m = (struct pl_matrix3x3) {{
+        m = (pl_matrix3x3) {{
             {1.0,  lm_t,  lm_p},
             {1.0, -lm_t, -lm_p},
             {1.0, 0.560031, -0.320627},
@@ -1361,7 +1361,7 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     case PL_COLOR_SYSTEM_BT_2100_HLG: {
         // Similar to BT.2100 PQ, exact values truncated from WolframAlpha
         static const float lm_t = 0.01571858011, lm_p = 0.2095810681;
-        m = (struct pl_matrix3x3) {{
+        m = (pl_matrix3x3) {{
             {1.0,  lm_t,  lm_p},
             {1.0, -lm_t, -lm_p},
             {1.0, 1.02127108, -0.605274491},
@@ -1372,7 +1372,7 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         m = repr->dovi->nonlinear;
         break;
     case PL_COLOR_SYSTEM_YCGCO:
-        m = (struct pl_matrix3x3) {{
+        m = (pl_matrix3x3) {{
             {1,  -1,  1},
             {1,   1,  0},
             {1,  -1, -1},
@@ -1400,8 +1400,8 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
         apply_hue_sat(&m, params);
     } else if (params->saturation != 1.0 || params->hue != 0.0) {
         // Arbitrarily simulate hue shifts using the BT.709 YCbCr model
-        struct pl_matrix3x3 yuv2rgb = luma_coeffs(0.2126, 0.7152, 0.0722);
-        struct pl_matrix3x3 rgb2yuv = yuv2rgb;
+        pl_matrix3x3 yuv2rgb = luma_coeffs(0.2126, 0.7152, 0.0722);
+        pl_matrix3x3 rgb2yuv = yuv2rgb;
         pl_matrix3x3_invert(&rgb2yuv);
         apply_hue_sat(&yuv2rgb, params);
         // M := RGB<-YUV * YUV<-RGB * M
@@ -1413,11 +1413,11 @@ struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
     if (params->temperature) {
         struct pl_cie_xy src = pl_white_from_temp(6500);
         struct pl_cie_xy dst = pl_white_from_temp(6500 + 3500 * params->temperature);
-        struct pl_matrix3x3 adapt = pl_get_adaptation_matrix(src, dst);
+        pl_matrix3x3 adapt = pl_get_adaptation_matrix(src, dst);
         pl_matrix3x3_rmul(&adapt, &m);
     }
 
-    struct pl_transform3x3 out = { .mat = m };
+    pl_transform3x3 out = { .mat = m };
     int bit_depth = PL_DEF(repr->bits.sample_depth,
                     PL_DEF(repr->bits.color_depth, 8));
 

@@ -124,9 +124,9 @@ bool pl_bit_encoding_equal(const struct pl_bit_encoding *b1,
 // Parsed metadata from the Dolby Vision RPU
 struct pl_dovi_metadata {
     // Colorspace transformation metadata
-    float nonlinear_offset[3];      // input offset ("ycc_to_rgb_offset")
-    struct pl_matrix3x3 nonlinear;  // before PQ, also called "ycc_to_rgb"
-    struct pl_matrix3x3 linear;     // after PQ, also called "rgb_to_lms"
+    float nonlinear_offset[3];  // input offset ("ycc_to_rgb_offset")
+    pl_matrix3x3 nonlinear;     // before PQ, also called "ycc_to_rgb"
+    pl_matrix3x3 linear;        // after PQ, also called "rgb_to_lms"
 
     // Reshape data, grouped by component
     struct pl_reshape_data {
@@ -537,22 +537,22 @@ void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y);
 // Returns an RGB->XYZ conversion matrix for a given set of primaries.
 // Multiplying this into the RGB color transforms it to CIE XYZ, centered
 // around the color space's white point.
-struct pl_matrix3x3 pl_get_rgb2xyz_matrix(const struct pl_raw_primaries *prim);
+pl_matrix3x3 pl_get_rgb2xyz_matrix(const struct pl_raw_primaries *prim);
 
 // Similar to pl_get_rgb2xyz_matrix, but gives the inverse transformation.
-struct pl_matrix3x3 pl_get_xyz2rgb_matrix(const struct pl_raw_primaries *prim);
+pl_matrix3x3 pl_get_xyz2rgb_matrix(const struct pl_raw_primaries *prim);
 
 // Returns a primary adaptation matrix, which converts from one set of
 // primaries to another. This is an RGB->RGB transformation. For rendering
 // intents other than PL_INTENT_ABSOLUTE_COLORIMETRIC, the white point is
 // adapted using the Bradford matrix.
-struct pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *src,
-                                                const struct pl_raw_primaries *dst,
-                                                enum pl_rendering_intent intent);
+pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *src,
+                                         const struct pl_raw_primaries *dst,
+                                         enum pl_rendering_intent intent);
 
 // Return a chromatic adaptation matrix, which converts from one white point to
 // another, using the Bradford matrix. This is an RGB->RGB transformation.
-struct pl_matrix3x3 pl_get_adaptation_matrix(struct pl_cie_xy src, struct pl_cie_xy dst);
+pl_matrix3x3 pl_get_adaptation_matrix(struct pl_cie_xy src, struct pl_cie_xy dst);
 
 // Returns true if 'b' is entirely contained in 'a'. Useful for figuring out if
 // colorimetric clipping will occur or not.
@@ -607,8 +607,8 @@ extern const struct pl_cone_params pl_vision_achromatopsia; // Rods only (<0.000
 // `strength` set to its inverse. For example, to partially counteract
 // deuteranomaly, you could generate a cone matrix for PL_CONE_M with the
 // strength 2.0 (or some other number above 1.0).
-struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
-                                       const struct pl_raw_primaries *prim);
+pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
+                                const struct pl_raw_primaries *prim);
 
 // Returns a color decoding matrix for a given combination of source color
 // representation and adjustment parameters. This mutates `repr` to reflect the
@@ -627,8 +627,8 @@ struct pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
 //
 // Note: XYZ system is expected to be in DCDM X'Y'Z' encoding (ST 428-1), in
 // practice this means normalizing by (48.0 / 52.37) factor and applying 2.6 gamma
-struct pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
-                                    const struct pl_color_adjustment *params);
+pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
+                                     const struct pl_color_adjustment *params);
 
 // Common struct to describe an ICC profile
 struct pl_icc_profile {

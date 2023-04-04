@@ -12,12 +12,12 @@ int main()
     pl_log_destroy(&log);
 
     // Test some misc helper functions
-    struct pl_rect2d rc2 = {
+    pl_rect2d rc2 = {
         irand(), irand(),
         irand(), irand(),
     };
 
-    struct pl_rect3d rc3 = {
+    pl_rect3d rc3 = {
         irand(), irand(), irand(),
         irand(), irand(), irand(),
     };
@@ -31,12 +31,12 @@ int main()
     REQUIRE_CMP(rc3.y1, >=, rc3.y0, "d");
     REQUIRE_CMP(rc3.z1, >=, rc3.z0, "d");
 
-    struct pl_rect2df rc2f = {
+    pl_rect2df rc2f = {
         RANDOM, RANDOM,
         RANDOM, RANDOM,
     };
 
-    struct pl_rect3df rc3f = {
+    pl_rect3df rc3f = {
         RANDOM, RANDOM, RANDOM,
         RANDOM, RANDOM, RANDOM,
     };
@@ -50,8 +50,8 @@ int main()
     REQUIRE_CMP(rc3f.y1, >=, rc3f.y0, "f");
     REQUIRE_CMP(rc3f.z1, >=, rc3f.z0, "f");
 
-    struct pl_rect2d rc2r = pl_rect2df_round(&rc2f);
-    struct pl_rect3d rc3r = pl_rect3df_round(&rc3f);
+    pl_rect2d rc2r = pl_rect2df_round(&rc2f);
+    pl_rect3d rc3r = pl_rect3df_round(&rc3f);
 
     REQUIRE_CMP(fabs(rc2r.x0 - rc2f.x0), <=, 0.5, "f");
     REQUIRE_CMP(fabs(rc2r.x1 - rc2f.x1), <=, 0.5, "f");
@@ -65,7 +65,7 @@ int main()
     REQUIRE_CMP(fabs(rc3r.z0 - rc3f.z0), <=, 0.5, "f");
     REQUIRE_CMP(fabs(rc3r.z1 - rc3f.z1), <=, 0.5, "f");
 
-    struct pl_transform3x3 tr = {
+    pl_transform3x3 tr = {
         .mat = {{
             { RANDOM, RANDOM, RANDOM },
             { RANDOM, RANDOM, RANDOM },
@@ -74,7 +74,7 @@ int main()
         .c = { RANDOM, RANDOM, RANDOM },
     };
 
-    struct pl_transform3x3 tr2 = tr;
+    pl_transform3x3 tr2 = tr;
     float scale = 1.0 + RANDOM;
     pl_transform3x3_scale(&tr2, scale);
     pl_transform3x3_invert(&tr2);
@@ -90,9 +90,9 @@ int main()
     }
 
     // Test aspect ratio code
-    const struct pl_rect2df rc1080p = {0, 0, 1920, 1080};
-    const struct pl_rect2df rc43 = {0, 0, 1024, 768};
-    struct pl_rect2df rc;
+    const pl_rect2df rc1080p = {0, 0, 1920, 1080};
+    const pl_rect2df rc43 = {0, 0, 1024, 768};
+    pl_rect2df rc;
 
     REQUIRE_FEQ(pl_rect2df_aspect(&rc1080p), 16.0/9.0, 1e-8);
     REQUIRE_FEQ(pl_rect2df_aspect(&rc43), 4.0/3.0, 1e-8);
@@ -127,7 +127,7 @@ int main()
     REQUIRE_FEQ(pl_rect2df_midy(rc), pl_rect2df_midy(rc43), 1e-6);
     REQUIRE_FEQ(pl_rect_w(rc), pl_rect_w(rc43), 1e-6);
 
-    rc = (struct pl_rect2df) { 1920, 1080, 0, 0 };
+    rc = (pl_rect2df) { 1920, 1080, 0, 0 };
     pl_rect2df_offset(&rc, 50, 100);
     REQUIRE_FEQ(rc.x0, 1870, 1e-6);
     REQUIRE_FEQ(rc.x1, -50, 1e-6);

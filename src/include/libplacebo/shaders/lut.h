@@ -48,7 +48,7 @@ struct pl_custom_lut {
     // Extra input/output shaper matrices. Ignored if equal to {0}. This is
     // mostly useful for 1D LUTs, since 3D LUTs can bake the shaper matrix into
     // the LUT itself - but it can still help optimize LUT precision.
-    struct pl_matrix3x3 shaper_in, shaper_out;
+    pl_matrix3x3 shaper_in, shaper_out;
 
     // Nominal metadata for the input/output of a LUT. Left as {0} if unknown.
     // Note: This is purely informative, `pl_shader_custom_lut` ignores it.

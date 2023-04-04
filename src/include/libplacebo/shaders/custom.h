@@ -201,7 +201,7 @@ struct pl_hook_params {
     // as a crop of either `sh` or `tex` (depending on the signature).
     //
     // Note: This is still set even for `PL_HOOK_SIG_NONE`!
-    struct pl_rect2df rect;
+    pl_rect2df rect;
 
     // The current effective colorspace and representation, of either the
     // pre-sampled color (in `sh`), or the contents of `tex`, respectively.
@@ -219,8 +219,8 @@ struct pl_hook_params {
     // rendering. These are functionallty equivalent to `image.crop` and
     // `target.crop`, respectively, but `src_rect` in particular may change as
     // a result of previous hooks being executed. (e.g. prescalers)
-    struct pl_rect2df src_rect;
-    struct pl_rect2d dst_rect;
+    pl_rect2df src_rect;
+    pl_rect2d dst_rect;
 };
 
 struct pl_hook_res {
@@ -253,7 +253,7 @@ struct pl_hook_res {
     // This contains the new effective rect of the contents. This may be
     // different from the original `rect` for resizable passes. Ignored for
     // non-resizable passes.
-    struct pl_rect2df rect;
+    pl_rect2df rect;
 };
 
 enum pl_hook_par_mode {

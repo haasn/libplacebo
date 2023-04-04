@@ -817,12 +817,12 @@ struct pl_tex_blit_params {
 
     // The region of the source texture to blit. Must be within the texture
     // bounds of `src`. May be flipped. (Optional)
-    struct pl_rect3d src_rc;
+    pl_rect3d src_rc;
 
     // The region of the destination texture to blit into. Must be within the
     // texture bounds of `dst`. May be flipped. Areas outside of `dst_rc` in
     // `dst` are preserved. (Optional)
-    struct pl_rect3d dst_rc;
+    pl_rect3d dst_rc;
 
     // If `src_rc` and `dst_rc` have different sizes, the texture will be
     // scaled using the given texture sampling mode.
@@ -851,9 +851,9 @@ struct pl_tex_transfer_params {
     // buffer). Otherwise, `row_pitch` *must* be a multiple of
     // `tex->params.format->texel_align`, and `depth_pitch` must be a multiple
     // of `row_pitch`.
-    struct pl_rect3d rc;   // region of the texture to transfer
-    size_t row_pitch;      // the number of bytes separating image rows
-    size_t depth_pitch;    // the number of bytes separating image planes
+    pl_rect3d rc;       // region of the texture to transfer
+    size_t row_pitch;   // the number of bytes separating image rows
+    size_t depth_pitch; // the number of bytes separating image planes
 
     // An optional timer to report the approximate duration of the texture
     // transfer to. Note that this is only an approximation, since the actual
@@ -1320,8 +1320,8 @@ struct pl_pass_run_params {
     // shader is undefined behavior. In general, trying to bind the same
     // resource multiple times to the same shader is undefined behavior.
     pl_tex target;
-    struct pl_rect2d viewport; // screen space viewport (must be normalized)
-    struct pl_rect2d scissors; // target render scissors (must be normalized)
+    pl_rect2d viewport; // screen space viewport (must be normalized)
+    pl_rect2d scissors; // target render scissors (must be normalized)
 
     // Number of vertices to render
     int vertex_count;

@@ -474,8 +474,7 @@ ident_t sh_attr(pl_shader sh, struct pl_shader_va sva)
     return id;
 }
 
-ident_t sh_attr_vec2(pl_shader sh, const char *name,
-                     const struct pl_rect2df *rc)
+ident_t sh_attr_vec2(pl_shader sh, const char *name, const pl_rect2df *rc)
 {
     pl_gpu gpu = SH_GPU(sh);
     if (!gpu) {
@@ -508,7 +507,7 @@ ident_t sh_attr_vec2(pl_shader sh, const char *name,
 ident_t sh_bind(pl_shader sh, pl_tex tex,
                 enum pl_tex_address_mode address_mode,
                 enum pl_tex_sample_mode sample_mode,
-                const char *name, const struct pl_rect2df *rect,
+                const char *name, const pl_rect2df *rect,
                 ident_t *out_pos, ident_t *out_size, ident_t *out_pt)
 {
     if (pl_tex_params_dimension(tex->params) != 2) {
@@ -543,13 +542,13 @@ ident_t sh_bind(pl_shader sh, pl_tex tex,
     }
 
     if (out_pos) {
-        struct pl_rect2df full = {
+        pl_rect2df full = {
             .x1 = tex->params.w,
             .y1 = tex->params.h,
         };
 
         rect = PL_DEF(rect, &full);
-        *out_pos = sh_attr_vec2(sh, "tex_coord", &(struct pl_rect2df) {
+        *out_pos = sh_attr_vec2(sh, "tex_coord", &(pl_rect2df) {
             .x0 = sx * rect->x0, .y0 = sy * rect->y0,
             .x1 = sx * rect->x1, .y1 = sy * rect->y1,
         });

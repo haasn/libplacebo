@@ -773,8 +773,8 @@ bool pl_tex_blit_compute(pl_gpu gpu, const struct pl_tex_blit_params *params)
         return false;
 
     // Normalize `dst_rc`, moving all flipping to `src_rc` instead.
-    struct pl_rect3d src_rc = params->src_rc;
-    struct pl_rect3d dst_rc = params->dst_rc;
+    pl_rect3d src_rc = params->src_rc;
+    pl_rect3d dst_rc = params->dst_rc;
     if (pl_rect_w(dst_rc) < 0) {
         PL_SWAP(src_rc.x0, src_rc.x1);
         PL_SWAP(dst_rc.x0, dst_rc.x1);
@@ -955,11 +955,11 @@ void pl_tex_blit_raster(pl_gpu gpu, const struct pl_tex_blit_params *params)
     pl_assert(src_type != PL_FMT_UINT && src_type != PL_FMT_SINT);
     pl_assert(dst_type != PL_FMT_UINT && dst_type != PL_FMT_SINT);
 
-    struct pl_rect2df src_rc = {
+    pl_rect2df src_rc = {
         .x0 = params->src_rc.x0, .x1 = params->src_rc.x1,
         .y0 = params->src_rc.y0, .y1 = params->src_rc.y1,
     };
-    struct pl_rect2d dst_rc = {
+    pl_rect2d dst_rc = {
         .x0 = params->dst_rc.x0, .x1 = params->dst_rc.x1,
         .y0 = params->dst_rc.y0, .y1 = params->dst_rc.y1,
     };

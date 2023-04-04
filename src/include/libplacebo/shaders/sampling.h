@@ -38,7 +38,7 @@ struct pl_sample_src {
     // a shader with input signature `PL_SHADER_SIG_NONE`, which binds the
     // texture as a descriptor (and the coordinates as a vertex attribute)
     pl_tex tex;             // texture to sample
-    struct pl_rect2df rect; // sub-rect to sample from (optional)
+    pl_rect2df rect;        // sub-rect to sample from (optional)
     enum pl_tex_address_mode address_mode; // preferred texture address mode
 
     // 2. Have the shader take it as an argument. Doing this requires

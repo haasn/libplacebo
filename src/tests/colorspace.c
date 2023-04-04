@@ -81,7 +81,7 @@ int main()
     REQUIRE(pl_primaries_superset(bt2020, bt709));
     REQUIRE(!pl_primaries_superset(bt709, bt2020));
 
-    struct pl_matrix3x3 rgb2xyz, rgb2xyz_;
+    pl_matrix3x3 rgb2xyz, rgb2xyz_;
     rgb2xyz = rgb2xyz_ = pl_get_rgb2xyz_matrix(bt709);
     pl_matrix3x3_invert(&rgb2xyz_);
     pl_matrix3x3_invert(&rgb2xyz_);
@@ -105,7 +105,7 @@ int main()
     REQUIRE_FEQ(rgb2xyz.m[2][2], pl_cie_Z(bt709->blue) * Y, 1e-7);
 
     // Make sure the gamut mapping round-trips
-    struct pl_matrix3x3 bt709_bt2020, bt2020_bt709;
+    pl_matrix3x3 bt709_bt2020, bt2020_bt709;
     bt709_bt2020 = pl_get_color_mapping_matrix(bt709, bt2020, PL_INTENT_RELATIVE_COLORIMETRIC);
     bt2020_bt709 = pl_get_color_mapping_matrix(bt2020, bt709, PL_INTENT_RELATIVE_COLORIMETRIC);
     for (int n = 0; n < 10; n++) {
@@ -134,7 +134,7 @@ int main()
         };
 
         float scale = pl_color_repr_normalize(&repr);
-        struct pl_transform3x3 yuv2rgb = pl_color_repr_decode(&repr, NULL);
+        pl_transform3x3 yuv2rgb = pl_color_repr_decode(&repr, NULL);
         pl_matrix3x3_scale(&yuv2rgb.mat, scale);
 
         static const float white_ycbcr[3] = { 235/1023., 128/1023., 128/1023. };
@@ -169,7 +169,7 @@ int main()
     bt709_d50 = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_709);
     bt709_d50.white = (struct pl_cie_xy) { 0.34567, 0.35850 };
 
-    struct pl_matrix3x3 d50_d65;
+    pl_matrix3x3 d50_d65;
     d50_d65 = pl_get_color_mapping_matrix(&bt709_d50, bt709, PL_INTENT_RELATIVE_COLORIMETRIC);
 
     float white[3] = { 1.0, 1.0, 1.0 };
@@ -181,7 +181,7 @@ int main()
     // Simulate a typical 10-bit YCbCr -> 16 bit texture conversion
     tv_repr.bits.color_depth  = 10;
     tv_repr.bits.sample_depth = 16;
-    struct pl_transform3x3 yuv2rgb;
+    pl_transform3x3 yuv2rgb;
     yuv2rgb = pl_color_repr_decode(&tv_repr, NULL);
     float test[3] = { 575/65535., 336/65535., 640/65535. };
     pl_transform3x3_apply(&yuv2rgb, test);
@@ -277,7 +277,7 @@ int main()
 #define TEST_CONE(model, color)                                                 \
     do {                                                                        \
         float tmp[3] = { (color)[0], (color)[1], (color)[2] };                  \
-        struct pl_matrix3x3 mat = pl_get_cone_matrix(&(model), bt709);          \
+        pl_matrix3x3 mat = pl_get_cone_matrix(&(model), bt709);                 \
         pl_matrix3x3_apply(&mat, tmp);                                          \
         printf("%s + %s = %f %f %f\n", #model, #color, tmp[0], tmp[1], tmp[2]); \
         for (int i = 0; i < 3; i++)                                             \
