@@ -1356,23 +1356,24 @@ void pl_reset_detected_peak(pl_shader_obj state)
 
 const struct pl_color_map_params pl_color_map_default_params = { PL_COLOR_MAP_DEFAULTS };
 
-static void visualize_tone_map(pl_shader sh, pl_rect2df rc,
-                               const struct pl_tone_map_params *params)
+static ident_t rect_pos(pl_shader sh, pl_rect2df rc)
 {
     if (!rc.x0 && !rc.x1)
         rc.x1 = 1.0f;
     if (!rc.y0 && !rc.y1)
         rc.y1 = 1.0f;
-    if (rc.x1 == rc.x0 || rc.y1 == rc.y0)
-        return;
 
-    ident_t pos = sh_attr_vec2(sh, "tone_map_coords", &(pl_rect2df) {
+    return sh_attr_vec2(sh, "tone_map_coords", &(pl_rect2df) {
         .x0 = -rc.x0         / (rc.x1 - rc.x0),
         .x1 = (1.0f - rc.x0) / (rc.x1 - rc.x0),
         .y0 = -rc.y1         / (rc.y0 - rc.y1),
         .y1 = (1.0f - rc.y1) / (rc.y0 - rc.y1),
     });
+}
 
+static void visualize_tone_map(pl_shader sh, pl_rect2df rc, float alpha,
+                               const struct pl_tone_map_params *params)
+{
     pl_assert(params->input_scaling  == PL_HDR_PQ);
     pl_assert(params->output_scaling == PL_HDR_PQ);
 
@@ -1387,27 +1388,28 @@ static void visualize_tone_map(pl_shader sh, pl_rect2df rc,
          "float xavg = "$";                         \n"
          "float ymin = "$";                         \n"
          "float ymax = "$";                         \n"
-         "vec3 viz = vec3(0.5) * color.rgb;         \n"
+         "float alpha = 0.8 * "$";                  \n"
+         "vec3 viz = color.rgb;                     \n"
          "float vv = tone_map(pos.x);               \n"
          // Color based on region
          "if (pos.x < xmin || pos.x > xmax) {       \n" // outside source
-         "    viz = vec3(0.0);                      \n"
          "} else if (pos.y < ymin || pos.y > ymax) {\n" // outside target
          "    if (pos.y < xmin || pos.y > xmax) {   \n" //  and also source
          "        viz = vec3(0.1, 0.1, 0.5);        \n"
          "    } else {                              \n"
-         "        viz = vec3(0.4, 0.1, 0.1);        \n" //  but inside source
+         "        viz = vec3(0.2, 0.05, 0.05);      \n" //  but inside source
          "    }                                     \n"
          "} else {                                  \n" // inside domain
          "    if (abs(pos.x - pos.y) < 1e-3) {      \n" // main diagonal
          "        viz = vec3(0.2);                  \n"
          "    } else if (pos.y < vv) {              \n" // inside function
-         "        viz = vec3(0.3, 1.0, 0.1);        \n"
+         "        alpha *= 0.6;                     \n"
+         "        viz = vec3(0.05);                 \n"
          "        if (vv > pos.x && pos.y > pos.x)  \n" // output brighter than input
-         "            viz.r = 0.7;                  \n"
+         "            viz.rg = vec2(0.5, 0.7);      \n"
          "    } else {                              \n" // outside function
          "        if (vv < pos.x && pos.y < pos.x)  \n" // output darker than input
-         "            viz = vec3(0.0, 0.05, 0.1);   \n"
+         "            viz = vec3(0.0, 0.1, 0.2);    \n"
          "    }                                     \n"
          "    if (pos.y > xmax) {                   \n" // inverse tone-mapping region
          "        vec3 hi = vec3(0.2, 0.5, 0.8);    \n"
@@ -1418,15 +1420,109 @@ static void visualize_tone_map(pl_shader sh, pl_rect2df rc,
          "    if (xavg > 0.0 && abs(pos.x - xavg) < 1e-3)\n" // source avg brightness
          "        viz = vec3(0.5);                  \n"
          "}                                         \n"
-         "color.rgb = mix(color.rgb, viz, 0.8);     \n"
+         "color.rgb = mix(color.rgb, viz, alpha);   \n"
          "}                                         \n"
          "}                                         \n",
-         pos,
+         rect_pos(sh, rc),
          SH_FLOAT_DYN(params->input_min),
          SH_FLOAT_DYN(params->input_max),
          SH_FLOAT_DYN(params->input_avg),
          SH_FLOAT(params->output_min),
-         SH_FLOAT_DYN(params->output_max));
+         SH_FLOAT_DYN(params->output_max),
+         SH_FLOAT_DYN(alpha));
+}
+
+static void visualize_gamut_map(pl_shader sh, pl_rect2df rc,
+                                ident_t lut, float hue, float theta,
+                                const struct pl_gamut_map_params *params)
+{
+    ident_t ipt2lms = SH_MAT3(pl_ipt_ipt2lms);
+    ident_t lms2rgb_src = SH_MAT3(pl_ipt_lms2rgb(&params->input_gamut));
+    ident_t lms2rgb_dst = SH_MAT3(pl_ipt_lms2rgb(&params->output_gamut));
+
+    GLSL("// Visualize gamut mapping                            \n"
+         "vec2 pos = "$";                                       \n"
+         "float pqmin = "$";                                    \n"
+         "float pqmax = "$";                                    \n"
+         "float rgbmin = "$";                                   \n"
+         "float rgbmax = "$";                                   \n"
+         "vec3 orig = ipt;                                      \n"
+         "if (min(pos.x, pos.y) >= 0.0 &&                       \n"
+         "    max(pos.x, pos.y) <= 1.0)                         \n"
+         "{                                                     \n"
+         // Source color to visualize
+         "float mid = mix(pqmin, pqmax, 0.6);                   \n"
+         "vec3 base = vec3(0.5, 0.0, 0.0);                      \n"
+         "float hue = "$", theta = "$";                         \n"
+         "base.x = mix(base.x, mid, sin(theta));                \n"
+         "mat3 rot1 = mat3(1.0,    0.0,      0.0,               \n"
+         "                 0.0,  cos(hue), sin(hue),            \n"
+         "                 0.0, -sin(hue), cos(hue));           \n"
+         "mat3 rot2 = mat3( cos(theta), 0.0, sin(theta),        \n"
+         "                     0.0,     1.0,    0.0,            \n"
+         "                 -sin(theta), 0.0, cos(theta));       \n"
+         "vec3 dir = vec3(pos.yx - vec2(0.5), 0.0);             \n"
+         "ipt = base + rot1 * rot2 * dir;                       \n"
+         // Convert back to RGB (for gamut boundary testing)
+         "lmspq = "$" * ipt;                                    \n"
+         "lms = pow(max(lmspq, 0.0), vec3(1.0/%f));             \n"
+         "lms = max(lms - vec3(%f), 0.0)                        \n"
+         "             / (vec3(%f) - %f * lms);                 \n"
+         "lms = pow(lms, vec3(1.0/%f));                         \n"
+         "lms *= %f;                                            \n"
+         // Check against src/dst gamut boundaries
+         "vec3 rgbsrc = "$" * lms;                              \n"
+         "vec3 rgbdst = "$" * lms;                              \n"
+         "bool ingamut_src, ingamut_dst;                        \n"
+         "ingamut_src = all(lessThan(rgbsrc, vec3(rgbmax))) &&  \n"
+         "              all(greaterThan(rgbsrc, vec3(rgbmin))); \n"
+         "ingamut_dst = all(lessThan(rgbdst, vec3(rgbmax))) &&  \n"
+         "              all(greaterThan(rgbdst, vec3(rgbmin))); \n"
+         // Sample from gamut mapping 3DLUT
+         "idx.x = (ipt.x - pqmin) / (pqmax - pqmin);            \n"
+         "idx.y = 2.0 * length(ipt.yz);                         \n"
+         "idx.z = %f * atan(ipt.z, ipt.y) + 0.5;                \n"
+         "bool inlut = all(lessThanEqual(idx, vec3(1.0))) &&    \n"
+         "             all(greaterThanEqual(idx, vec3(0.0)));   \n"
+         "vec3 mapped = "$"(idx).xyz;                           \n"
+         "float mappedhue = atan(mapped.z, mapped.y);           \n"
+         "ipt = mapped;                                         \n"
+         // Visualize gamuts
+         "if (!ingamut_src && !ingamut_dst) {                   \n"
+         "    ipt = orig;                                       \n"
+         "} else if (ingamut_src && !ingamut_dst) {             \n"
+         "    ipt.x -= 0.1;                                     \n"
+         "} else if (ingamut_dst && !ingamut_src) {             \n"
+         "    ipt.x += 0.1;                                     \n"
+         "}                                                     \n"
+         // Visualize iso-luminance and iso-hue lines
+         "vec3 line;                                            \n"
+         "if (inlut && fract(50.0 * mapped.x) < 1e-1) {         \n"
+         "    float k = smoothstep(0.1, 0.0, abs(sin(theta)));  \n"
+         "    line.x = mix(mapped.x, 0.3, 0.5);                 \n"
+         "    line.yz = sqrt(length(mapped.yz)) *               \n"
+         "              normalize(mapped.yz);                   \n"
+         "    ipt = mix(ipt, line, k);                          \n"
+         "}                                                     \n"
+         "if (inlut && fract(10.0 * mappedhue) < 1e-1) {        \n"
+         "    float k = smoothstep(0.3, 0.0, abs(cos(theta)));  \n"
+         "    line.x = mapped.x - 0.05;                         \n"
+         "    line.yz = 1.2 * mapped.yz;                        \n"
+         "    ipt = mix(ipt, line, k);                          \n"
+         "}                                                     \n"
+         "}                                                     \n",
+         rect_pos(sh, rc),
+         SH_FLOAT(params->min_luma), SH_FLOAT(params->max_luma),
+         SH_FLOAT(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, params->min_luma)),
+         SH_FLOAT(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, params->max_luma)),
+         SH_FLOAT_DYN(hue), SH_FLOAT_DYN(theta),
+         ipt2lms,
+         PQ_M2, PQ_C1, PQ_C2, PQ_C3, PQ_M1,
+         10000 / PL_COLOR_SDR_WHITE,
+         lms2rgb_src,
+         lms2rgb_dst,
+         0.5f / M_PI,
+         lut);
 }
 
 static void fill_tone_lut(void *data, const struct sh_lut_params *params)
@@ -1758,6 +1854,12 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
             GLSL("clip_lo = clip_lo || any(lessThan(idx, vec3(0.0)));    \n"
                  "clip_hi = clip_hi || any(greaterThan(idx, vec3(1.0))); \n");
         }
+
+        if (params->visualize_lut) {
+            visualize_gamut_map(sh, params->visualize_rect, lut,
+                                params->visualize_hue, params->visualize_theta,
+                                &gamut);
+        }
     }
 
     // Convert IPT back to linear RGB
@@ -1790,8 +1892,10 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
     }
 
     if (need_tone_map) {
-        if (params->visualize_lut)
-            visualize_tone_map(sh, params->visualize_rect, &tone);
+        if (params->visualize_lut) {
+            float alpha = need_gamut_map ? powf(cosf(params->visualize_theta), 5.0f) : 1.0f;
+            visualize_tone_map(sh, params->visualize_rect, alpha, &tone);
+        }
         GLSL("#undef tone_map \n");
     }
 

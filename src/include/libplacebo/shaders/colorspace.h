@@ -268,12 +268,16 @@ struct pl_color_map_params {
     // faster pure GLSL replacements (e.g. clip).
     bool force_tone_mapping_lut;
 
-    // Visualize the tone-mapping curve / LUT. (PQ-PQ graph)
+    // Visualize the tone-mapping LUT and gamut mapping 3DLUT, in IPT space.
     bool visualize_lut;
 
     // Controls where to draw the visualization, relative to the rendered
     // video (dimensions 0-1). Optional, defaults to the full picture.
     pl_rect2df visualize_rect;
+
+    // Controls the rotation of the 3DLUT visualization.
+    float visualize_hue;    // useful range [-pi, pi]
+    float visualize_theta;  // useful range [0, pi/2]
 
     // Graphically highlight hard-clipped pixels during tone-mapping (i.e.
     // pixels that exceed the claimed source luminance range).

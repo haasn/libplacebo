@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '270': 'add pl_color_map_params.visualize_hue/theta',
       '269': 'refactor pl_color_map_params gamut mapping settings',
       '268': 'add <libplacebo/gamut_mapping.h>',
       '267': 'add pl_ipt_lms2rgb/rgb2lms and pl_ipt_lms2ipt/ipt2lms',
