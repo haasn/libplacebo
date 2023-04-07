@@ -239,7 +239,7 @@ void pl_queue_reset(pl_queue p)
 
 static inline float delta(float old, float new)
 {
-    return fabs((new - old) / PL_MIN(new, old));
+    return fabsf((new - old) / PL_MIN(new, old));
 }
 
 static inline void default_estimate(struct pool *pool, float val)
