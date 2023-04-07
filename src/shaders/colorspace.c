@@ -1112,10 +1112,17 @@ static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
     const float min_peak = PL_DEF(params->minimum_peak, 1.0f);
     max_pq = fmaxf(max_pq, pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, min_peak));
 
-    // Set the initial value accordingly if it contains no data
     if (!obj->peak.avg_pq) {
+        // Set the initial value accordingly if it contains no data
         obj->peak.avg_pq = avg_pq;
         obj->peak.max_pq = max_pq;
+    } else {
+        // Ignore small deviations from existing peak (rounding error)
+        static const float epsilon = 1.0f / PQ_MAX;
+        if (fabsf(avg_pq - obj->peak.avg_pq) < epsilon)
+            avg_pq = obj->peak.avg_pq;
+        if (fabsf(max_pq - obj->peak.max_pq) < epsilon)
+            max_pq = obj->peak.max_pq;
     }
 
     // Use an IIR low-pass filter to smooth out the detected values
