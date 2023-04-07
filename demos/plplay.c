@@ -460,6 +460,13 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
                               mix->frames[0]->rotation - target.rotation,
                               0.0);
 
+    struct pl_color_map_params *cpars = &p->color_map_params;
+    if (cpars->visualize_lut) {
+        cpars->visualize_rect = (pl_rect2df) {0, 0, 1, 1};
+        float tar = pl_rect2df_aspect(&target.crop);
+        pl_rect2df_aspect_set(&cpars->visualize_rect, 1.0f / tar, 0.0f);
+    }
+
     if (!pl_render_image_mix(p->renderer, mix, &target, &p->params))
         return false;
 
