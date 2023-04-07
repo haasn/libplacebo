@@ -297,8 +297,8 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
     if (p->queue.num) {
         float last_pts = p->queue.elem[p->queue.num - 1]->pts;
         float delta = src->pts - last_pts;
-        if (delta < 0.0) {
-            PL_DEBUG(p, "Backwards source PTS jump %f -> %f", last_pts, src->pts);
+        if (delta <= 0.0) {
+            PL_DEBUG(p, "Non monotonically increasing PTS %f -> %f", last_pts, src->pts);
         } else if (p->fps.estimate && delta > 10.0 * p->fps.estimate) {
             PL_DEBUG(p, "Discontinuous source PTS jump %f -> %f", last_pts, src->pts);
         } else {
