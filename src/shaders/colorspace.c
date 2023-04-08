@@ -1208,7 +1208,6 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
             .type   = PL_DESC_BUF_STORAGE,
             .access = PL_DESC_ACCESS_READWRITE,
         },
-        .memory          = PL_MEMORY_COHERENT,
         .binding.object  = obj->peak.buf,
         .buffer_vars     = (struct pl_buffer_var *) peak_buf_vars,
         .num_buffer_vars = PL_ARRAY_SIZE(peak_buf_vars),
@@ -1292,8 +1291,7 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
 
     if (use_histogram) {
         GLSL("for (uint i = gl_LocalInvocationIndex; i < %du; i += wg_size) \n"
-             "    atomicAdd(frame_hist[i], "$"[i]);                         \n"
-             "memoryBarrierBuffer();                                        \n",
+             "    atomicAdd(frame_hist[i], "$"[i]);                         \n",
              HIST_BINS, wg_hist);
     }
 
@@ -1302,7 +1300,6 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
          "    atomicAdd(frame_wg_count, 1u);            \n"
          "    atomicAdd(frame_sum_pq, "$" / wg_size);   \n"
          "    atomicMax(frame_max_pq, "$");             \n"
-         "    memoryBarrierBuffer();                    \n"
          "}                                             \n"
          "color = color_orig;                           \n"
          "}                                             \n",
