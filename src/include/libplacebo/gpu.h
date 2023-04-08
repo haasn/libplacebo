@@ -373,7 +373,7 @@ bool pl_fmt_has_modifier(pl_fmt fmt, uint64_t modifier);
 // format will always be non-opaque, unpadded, ordered and have exactly this
 // bit depth for each component. Finally, all `caps` must be supported.
 pl_fmt pl_find_fmt(pl_gpu gpu, enum pl_fmt_type type, int num_components,
-                    int min_depth, int host_bits, enum pl_fmt_caps caps);
+                   int min_depth, int host_bits, enum pl_fmt_caps caps);
 
 // Finds a vertex format for a given configuration. The resulting vertex will
 // have a component depth equivalent to the sizeof() the equivalent host type.
