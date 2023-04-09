@@ -197,10 +197,12 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
 
     params = PL_DEF(params, &pl_deband_default_params);
     sh_describe(sh, "debanding");
-    GLSL("vec4 color = texture("$", "$");   \n"
+    GLSL("vec4 color;                       \n"
          "// pl_shader_deband               \n"
-         "{                                 \n",
-         tex, pos);
+         "{                                 \n"
+         "vec2 pos = "$", pt = "$";         \n"
+         "color = texture("$", pos);        \n",
+         pos, pt, tex);
 
     uint8_t num_comps = sh_tex_swiz(swiz, mask & ~0x8u); // ignore alpha
     pl_assert(num_comps <= 3);
@@ -212,10 +214,9 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
     }
 
     GLSL("#define GET(X, Y)                           \\\n"
-         "    (texture("$", "$" + "$" * vec2(X, Y)).%s) \n"
+         "    (texture("$", pos + pt * vec2(X, Y)).%s)  \n"
          "#define T %s                                  \n",
-         tex, pos, pt, swiz,
-         sh_float_type(num_comps));
+         tex, swiz, sh_float_type(num_comps));
 
     ident_t prng = sh_prng(sh, true, NULL);
     GLSL("T avg, diff, bound;   \n"
