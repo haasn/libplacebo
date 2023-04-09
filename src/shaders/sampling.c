@@ -322,24 +322,6 @@ bool pl_shader_sample_bilinear(pl_shader sh, const struct pl_sample_src *src)
     return true;
 }
 
-static void bicubic_calcweights(pl_shader sh, const char *t, const char *s)
-{
-    // Explanation of how bicubic scaling with only 4 texel fetches is done:
-    //   http://www.mate.tue.nl/mate/pdfs/10318.pdf
-    //   'Efficient GPU-Based Texture Interpolation using Uniform B-Splines'
-    GLSL("vec4 %s = vec4(-0.5, 0.1666, 0.3333, -0.3333) * %s \n"
-         "          + vec4(1, 0, -0.5, 0.5);                 \n"
-         "%s = %s * %s + vec4(0.0, 0.0, -0.5, 0.5);          \n"
-         "%s = %s * %s + vec4(-0.6666, 0, 0.8333, 0.1666);   \n"
-         "%s.xy /= %s.zw;                                    \n"
-         "%s.xy += vec2(1.0 + %s, 1.0 - %s);                 \n",
-         t, s,
-         t, t, s,
-         t, t, s,
-         t, t,
-         t, s, s);
-}
-
 bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
 {
     ident_t tex, pos, size, pt;
@@ -353,6 +335,10 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
                  "will most likely result in nasty aliasing!");
     }
 
+    // Explanation of how bicubic scaling with only 4 texel fetches is done:
+    //   http://www.mate.tue.nl/mate/pdfs/10318.pdf
+    //   'Efficient GPU-Based Texture Interpolation using Uniform B-Splines'
+
     sh_describe(sh, "bicubic");
     GLSL("// pl_shader_sample_bicubic                   \n"
          "vec4 color;                                   \n"
@@ -360,27 +346,30 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
          "vec2 pos  = "$";                              \n"
          "vec2 pt   = "$";                              \n"
          "vec2 size = "$";                              \n"
-         "vec2 fcoord = fract(pos * size + vec2(0.5));  \n",
-         pos, pt, size);
-
-    bicubic_calcweights(sh, "parmx", "fcoord.x");
-    bicubic_calcweights(sh, "parmy", "fcoord.y");
-
-    GLSL("vec4 cdelta;                              \n"
-         "cdelta.xz = parmx.rg * vec2(-pt.x, pt.x); \n"
-         "cdelta.yw = parmy.rg * vec2(-pt.y, pt.y); \n"
-         // first y-interpolation
-         "vec4 ar = texture("$", pos + cdelta.xy);  \n"
-         "vec4 ag = texture("$", pos + cdelta.xw);  \n"
-         "vec4 ab = mix(ag, ar, parmy.b);           \n"
-         // second y-interpolation
-         "vec4 br = texture("$", pos + cdelta.zy);  \n"
-         "vec4 bg = texture("$", pos + cdelta.zw);  \n"
-         "vec4 aa = mix(bg, br, parmy.b);           \n"
-         // x-interpolation
-         "color = vec4("$") * mix(aa, ab, parmx.b); \n"
-         "}                                         \n",
-         tex, tex, tex, tex, SH_FLOAT(scale));
+         "vec2 frac  = fract(pos * size + vec2(0.5));   \n"
+         "vec2 frac2 = frac * frac;                     \n"
+         "vec2 inv   = vec2(1.0) - frac;                \n"
+         "vec2 inv2  = inv * inv;                       \n"
+         // compute basis spline
+         "vec2 w0 = 1/6.0 * inv2 * inv;                 \n"
+         "vec2 w1 = 2/3.0 - 0.5 * frac2 * (2.0 - frac); \n"
+         "vec2 w2 = 2/3.0 - 0.5 * inv2  * (2.0 - inv);  \n"
+         "vec2 w3 = 1/6.0 * frac2 * frac;               \n"
+         "vec4 g = vec4(w0 + w1, w2 + w3);              \n"
+         "vec4 h = vec4(w1, w3) / g + inv.xyxy;         \n"
+         "h.xy -= vec2(2.0);                            \n"
+         // sample four corner pixels
+         "vec4 p = pos.xyxy + pt.xyxy * h;              \n"
+         "vec4 c00 = texture("$", p.xy);                \n"
+         "vec4 c10 = texture("$", p.zy);                \n"
+         "vec4 c01 = texture("$", p.xw);                \n"
+         "vec4 c11 = texture("$", p.zw);                \n"
+         // manual interpolation (y first, then x)
+         "vec4 c0 = mix(c01, c00, g.y);                 \n"
+         "vec4 c1 = mix(c11, c10, g.y);                 \n"
+         "color = vec4("$") * mix(c1, c0, g.x);         \n"
+         "}                                             \n",
+         pos, pt, size, tex, tex, tex, tex, SH_FLOAT(scale));
 
     return true;
 }
