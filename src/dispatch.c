@@ -405,6 +405,11 @@ static void generate_shaders(pl_dispatch dp,
         ADD(pre, "precision highp int; \n");
     }
 
+    // Override texture() and variants by textureLod(..., 0) for performance,
+    // we don't support mipmaps inside libplacebo so this is fine
+    ADD(pre, "#define texture(t, p) textureLod(t, p, 0.0)                   \n"
+             "#define textureOffset(t, p, o) textureLodOffset(t, p, 0.0, o) \n");
+
     // Add all of the push constants as their own element
     if (pass_params->push_constants_size) {
         // We re-use add_buffer_vars to make sure variables are sorted, this
