@@ -1240,7 +1240,7 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
     // Measure luminance as N-bit PQ
     GLSL("float luma = dot("$", color.rgb);             \n"
          "luma *= %f;                                   \n"
-         "luma = pow(clamp(luma, 0.0, 1e4), %f);        \n"
+         "luma = pow(clamp(luma, 0.0, 1.0), %f);        \n"
          "luma = (%f + %f * luma) / (1.0 + %f * luma);  \n"
          "luma = pow(luma, %f);                         \n"
          "uint y_pq = uint(%d.0 * luma);                \n",
