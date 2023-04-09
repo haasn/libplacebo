@@ -250,6 +250,11 @@ int main()
             goto next;
         }
 
+#ifdef CI_MAXGL
+        if (last_glsl.version && last_glsl.gles == gpu->glsl.gles)
+            goto next;
+#endif
+
         last_glsl = gpu->glsl;
         last_limits = gpu->limits;
 
@@ -266,10 +271,6 @@ next:
         pl_opengl_destroy(&gl);
         eglDestroySurface(dpy, surf);
         eglDestroyContext(dpy, egl);
-#ifdef CI_MAXGL
-        if (last_glsl.version)
-            break;
-#endif
         continue;
 
 error: ;
