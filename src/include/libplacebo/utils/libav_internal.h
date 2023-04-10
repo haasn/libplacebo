@@ -1090,7 +1090,6 @@ PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out,
     const AVFrame *frame = params->frame;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     struct pl_plane_data data[4] = {0};
-    struct pl_avalloc *alloc;
     pl_tex *tex = params->tex;
     int planes;
 
@@ -1152,7 +1151,10 @@ PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out,
         goto error;
 
     for (int p = 0; p < planes; p++) {
+        AVBufferRef *buf = av_frame_get_plane_buffer((AVFrame *) frame, p);
+        struct pl_avalloc *alloc = buf ? av_buffer_get_opaque(buf) : NULL;
         bool is_chroma = p == 1 || p == 2; // matches lavu logic
+
         data[p].width = AV_CEIL_RSHIFT(frame->width, is_chroma ? desc->log2_chroma_w : 0);
         data[p].height = AV_CEIL_RSHIFT(frame->height, is_chroma ? desc->log2_chroma_h : 0);
         if (frame->linesize[p] < 0) {
@@ -1165,7 +1167,6 @@ PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out,
         }
 
         // Probe for frames allocated by pl_get_buffer2
-        alloc = frame->buf[p] ? av_buffer_get_opaque(frame->buf[p]) : NULL;
         if (alloc && alloc->magic[0] == PL_MAGIC0 && alloc->magic[1] == PL_MAGIC1) {
             data[p].buf = alloc->buf;
             data[p].buf_offset = (uintptr_t) data[p].pixels - (uintptr_t) alloc->buf->data;
