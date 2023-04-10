@@ -1136,10 +1136,7 @@ static void update_peak_buf(pl_gpu gpu, struct sh_tone_map_obj *obj, bool force)
         const float thresh_low = params->scene_threshold_low * log10_pq;
         const float thresh_high = params->scene_threshold_high * log10_pq;
         const float delta = fabsf(avg_pq - obj->peak.avg_pq);
-        // smoothstep(thresh_low, thresh_high, delta);
-        float thresh = (delta - thresh_low) / (thresh_high - thresh_low);
-        thresh = PL_CLAMP(thresh, 0.0f, 1.0f);
-        const float mix_coeff = thresh * thresh * (3.0f - 2.0f * thresh);
+        const float mix_coeff = pl_smoothstep(thresh_low, thresh_high, delta);
         obj->peak.avg_pq = PL_MIX(obj->peak.avg_pq, avg_pq, mix_coeff);
         obj->peak.max_pq = PL_MIX(obj->peak.max_pq, max_pq, mix_coeff);
     }

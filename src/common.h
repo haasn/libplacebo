@@ -119,6 +119,13 @@ static inline float *pl_transpose(int dim, float *out, const float *in)
 #define PL_CUBE(x) ((x) * (x) * (x))
 #define PL_MIX(a, b, x) ((x) * (b) + (1 - (x)) * (a))
 
+static inline float pl_smoothstep(float edge0, float edge1, float x)
+{
+    x = (x - edge0) / (edge1 - edge0);
+    x = PL_CLAMP(x, 0.0f, 1.0f);
+    return x * x * (3.0f - 2.0f * x);
+}
+
 // Helpers for doing alignment calculations
 static inline size_t pl_gcd(size_t x, size_t y)
 {
