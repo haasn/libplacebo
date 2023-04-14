@@ -92,7 +92,7 @@ struct vk_ctx {
     struct vk_cmdpool *pool_transfer;
 
     // Queue locking functions
-    PL_ARRAY(pl_mutex *) queue_locks;
+    PL_ARRAY(PL_ARRAY(pl_mutex)) queue_locks;
     void (*lock_queue)(void *queue_ctx, int qf, int idx);
     void (*unlock_queue)(void *queue_ctx, int qf, int idx);
     void *queue_ctx;

@@ -1008,6 +1008,36 @@ error:
     return dev;
 }
 
+static void lock_queue_internal(void *priv, int qf, int qidx)
+{
+    struct vk_ctx *vk = priv;
+    pl_mutex_lock(&vk->queue_locks.elem[qf].elem[qidx]);
+}
+
+static void unlock_queue_internal(void *priv, int qf, int qidx)
+{
+    struct vk_ctx *vk = priv;
+    pl_mutex_unlock(&vk->queue_locks.elem[qf].elem[qidx]);
+}
+
+static void init_queue_locks(struct vk_ctx *vk, uint32_t qfnum,
+                             const VkQueueFamilyProperties *qfs)
+{
+    vk->queue_locks.elem = pl_calloc_ptr(vk->alloc, qfnum, vk->queue_locks.elem);
+    vk->queue_locks.num = qfnum;
+    for (int i = 0; i < qfnum; i++) {
+        const uint32_t qnum = qfs[i].queueCount;
+        vk->queue_locks.elem[i].elem = pl_calloc(vk->alloc, qnum, sizeof(pl_mutex));
+        vk->queue_locks.elem[i].num = qnum;
+        for (int n = 0; n < qnum; n++)
+            pl_mutex_init(&vk->queue_locks.elem[i].elem[n]);
+    }
+
+    vk->lock_queue = lock_queue_internal;
+    vk->unlock_queue = unlock_queue_internal;
+    vk->queue_ctx = vk;
+}
+
 // Find the most specialized queue supported a combination of flags. In cases
 // where there are multiple queue families at the same specialization level,
 // this finds the one with the most queues. Returns -1 if no queue was found.
@@ -1074,6 +1104,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, NULL);
     VkQueueFamilyProperties *qfs = pl_calloc_ptr(tmp, qfnum, qfs);
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, qfs);
+    init_queue_locks(vk, qfnum, qfs);
 
     PL_DEBUG(vk, "Queue families supported by device:");
 
@@ -1299,18 +1330,6 @@ error:
     return false;
 }
 
-static void lock_queue_internal(void *priv, int qf, int qidx)
-{
-    struct vk_ctx *vk = priv;
-    pl_mutex_lock(&vk->queue_locks.elem[qf][qidx]);
-}
-
-static void unlock_queue_internal(void *priv, int qf, int qidx)
-{
-    struct vk_ctx *vk = priv;
-    pl_mutex_unlock(&vk->queue_locks.elem[qf][qidx]);
-}
-
 static void lock_queue(pl_vulkan pl_vk, int qf, int qidx)
 {
     struct vk_ctx *vk = PL_PRIV(pl_vk);
@@ -1362,7 +1381,6 @@ static bool finalize_context(struct pl_vulkan_t *pl_vk, int max_glsl_version)
     pl_vk->lock_queue = lock_queue;
     pl_vk->unlock_queue = unlock_queue;
 
-    uint32_t max_qf = 0;
     for (int i = 0; i < vk->pools.num; i++) {
         struct pl_vulkan_queue *queues = (struct pl_vulkan_queue *) pl_vk->queues;
         queues[i] = (struct pl_vulkan_queue) {
@@ -1376,25 +1394,6 @@ static bool finalize_context(struct pl_vulkan_t *pl_vk, int max_glsl_version)
             pl_vk->queue_compute = queues[i];
         if (vk->pools.elem[i] == vk->pool_transfer)
             pl_vk->queue_transfer = queues[i];
-
-        max_qf = PL_MAX(max_qf, queues[i].index);
-    }
-
-    if (!vk->lock_queue) {
-        vk->queue_locks.num = max_qf + 1;
-        PL_ARRAY_RESIZE(vk->alloc, vk->queue_locks, vk->queue_locks.num);
-
-        for (int i = 0; i < vk->pools.num; i++) {
-            struct vk_cmdpool *pool = vk->pools.elem[i];
-            pl_mutex **locks = vk->queue_locks.elem;
-            locks[pool->qf] = pl_alloc(vk->alloc, pool->num_queues * sizeof(pl_mutex));
-            for (int n = 0; n < pool->num_queues; n++)
-                pl_mutex_init(&locks[pool->qf][n]);
-        }
-
-        vk->lock_queue = lock_queue_internal;
-        vk->unlock_queue = unlock_queue_internal;
-        vk->queue_ctx = vk;
     }
 
     pl_assert(vk->lock_queue);
@@ -1631,6 +1630,8 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, NULL);
     VkQueueFamilyProperties *qfs = pl_calloc_ptr(tmp, qfnum, qfs);
     vk->GetPhysicalDeviceQueueFamilyProperties(vk->physd, &qfnum, qfs);
+    if (!params->lock_queue)
+        init_queue_locks(vk, qfnum, qfs);
 
     // Create the command pools for each unique qf that exists
     struct {
