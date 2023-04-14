@@ -187,11 +187,6 @@ static inline struct RGB ipt2rgb(struct IPT c, struct gamut gamut)
     };
 }
 
-static inline struct RGB ich2rgb(struct ICh c, struct gamut gamut)
-{
-    return ipt2rgb(ich2ipt(c), gamut);
-}
-
 static inline bool ingamut(struct IPT c, struct gamut gamut)
 {
     const float Lp = c.I + 0.0975689f * c.P + 0.205226f * c.T;
