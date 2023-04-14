@@ -145,13 +145,6 @@ static void get_gamuts(struct gamut *dst, struct gamut *src,
     }
 }
 
-static inline bool ingamut(struct RGB c, struct gamut gamut)
-{
-    return c.R >= gamut.min_rgb && c.R <= gamut.max_rgb &&
-           c.G >= gamut.min_rgb && c.G <= gamut.max_rgb &&
-           c.B >= gamut.min_rgb && c.B <= gamut.max_rgb;
-}
-
 static inline struct IPT rgb2ipt(struct RGB c, struct gamut gamut)
 {
     const float L = gamut.rgb2lms.m[0][0] * c.R +
@@ -197,6 +190,38 @@ static inline struct RGB ipt2rgb(struct IPT c, struct gamut gamut)
 static inline struct RGB ich2rgb(struct ICh c, struct gamut gamut)
 {
     return ipt2rgb(ich2ipt(c), gamut);
+}
+
+static inline bool ingamut(struct IPT c, struct gamut gamut)
+{
+    const float Lp = c.I + 0.0975689f * c.P + 0.205226f * c.T;
+    const float Mp = c.I - 0.1138760f * c.P + 0.133217f * c.T;
+    const float Sp = c.I + 0.0326151f * c.P - 0.676887f * c.T;
+    if (Lp < gamut.min_luma || Lp > gamut.max_luma ||
+        Mp < gamut.min_luma || Mp > gamut.max_luma ||
+        Sp < gamut.min_luma || Sp > gamut.max_luma)
+    {
+        // Early exit for values outside legal LMS range
+        return false;
+    }
+
+    const float L = pq_eotf(Lp);
+    const float M = pq_eotf(Mp);
+    const float S = pq_eotf(Sp);
+    struct RGB rgb = {
+        .R = gamut.lms2rgb.m[0][0] * L +
+             gamut.lms2rgb.m[0][1] * M +
+             gamut.lms2rgb.m[0][2] * S,
+        .G = gamut.lms2rgb.m[1][0] * L +
+             gamut.lms2rgb.m[1][1] * M +
+             gamut.lms2rgb.m[1][2] * S,
+        .B = gamut.lms2rgb.m[2][0] * L +
+             gamut.lms2rgb.m[2][1] * M +
+             gamut.lms2rgb.m[2][2] * S,
+    };
+    return rgb.R >= gamut.min_rgb && rgb.R <= gamut.max_rgb &&
+           rgb.G >= gamut.min_rgb && rgb.G <= gamut.max_rgb &&
+           rgb.B >= gamut.min_rgb && rgb.B <= gamut.max_rgb;
 }
 
 void pl_gamut_map_generate(float *out, const struct pl_gamut_map_params *params)
@@ -272,7 +297,7 @@ desat_bounded(float I, float h, float Cmin, float Cmax, struct gamut gamut)
     const float maxDI = I * maxDelta;
     struct ICh res = { .I = I, .C = (Cmin + Cmax) / 2, .h = h };
     do {
-        if (ingamut(ich2rgb(res, gamut), gamut)) {
+        if (ingamut(ich2ipt(res), gamut)) {
             Cmin = res.C;
         } else {
             Cmax = res.C;
@@ -326,7 +351,7 @@ clip_gamma(struct IPT ipt, float gamma, struct gamut gamut)
 {
     if (ipt.I <= gamut.min_luma)
         return (struct IPT) { .I = gamut.min_luma };
-    if (ingamut(ipt2rgb(ipt, gamut), gamut))
+    if (ingamut(ipt, gamut))
         return ipt;
 
     struct ICh ich = ipt2ich(ipt);
@@ -339,7 +364,7 @@ clip_gamma(struct IPT ipt, float gamma, struct gamut gamut)
     float lo = 0.0f, hi = 1.0f, x = 0.5f;
     do {
         struct ICh test = mix_exp(ich, x, gamma, peak.I);
-        if (ingamut(ich2rgb(test, gamut), gamut)) {
+        if (ingamut(ich2ipt(test), gamut)) {
             lo = x;
         } else {
             hi = x;
@@ -374,7 +399,7 @@ static void perceptual(float *lut, const struct pl_gamut_map_params *params)
         float lo = 0.0f, x = 1.0f, hi = 1.0f / perceptual_knee + 3 * maxDelta;
         do {
             struct ICh test = mix_exp(ich, x, gamma, target.I);
-            if (ingamut(ich2rgb(test, dst), dst)) {
+            if (ingamut(ich2ipt(test), dst)) {
                 lo = x;
             } else {
                 hi = x;
@@ -479,7 +504,7 @@ static void highlight(float *lut, const struct pl_gamut_map_params *params)
     get_gamuts(&dst, NULL, params);
 
     FOREACH_LUT(lut, ipt) {
-        if (!ingamut(ipt2rgb(ipt, dst), dst)) {
+        if (!ingamut(ipt, dst)) {
             ipt.I += 0.1f;
             ipt.P *= -1.2f;
             ipt.T *= -1.2f;
