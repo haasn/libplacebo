@@ -880,6 +880,11 @@ void pl_vulkan_destroy(pl_vulkan *pl_vk)
             vk->DestroyDevice(vk->dev, PL_VK_ALLOC);
     }
 
+    for (int i = 0; i < vk->queue_locks.num; i++) {
+        for (int n = 0; n < vk->queue_locks.elem[i].num; n++)
+            pl_mutex_destroy(&vk->queue_locks.elem[i].elem[n]);
+    }
+
     pl_vk_inst_destroy(&vk->internal_instance);
     pl_mutex_destroy(&vk->lock);
     pl_free_ptr((void **) pl_vk);
