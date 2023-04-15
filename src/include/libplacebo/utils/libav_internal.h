@@ -44,6 +44,9 @@
 # define PL_HAVE_LAV_VULKAN
 # include <libavutil/hwcontext_vulkan.h>
 # include <libplacebo/vulkan.h>
+# if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(58, 11, 100)
+#  define PL_HAVE_LAV_VULKAN_V2
+# endif
 #endif
 
 PL_LIBAV_API enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
@@ -1019,7 +1022,13 @@ error:
 static bool pl_acquire_avframe(pl_gpu gpu, struct pl_frame *frame)
 {
     const struct pl_avframe_priv *priv = frame->user_data;
+    AVHWFramesContext *hwfc = (void *) priv->avframe->hw_frames_ctx->data;
+    AVVulkanFramesContext *vkfc = hwfc->hwctx;
     AVVkFrame *vkf = (AVVkFrame *) priv->avframe->data[0];
+
+#ifdef PL_HAVE_LAV_VULKAN_V2
+    vkfc->lock_frame(hwfc, vkf);
+#endif
 
     for (int n = 0; n < frame->num_planes; n++) {
         pl_vulkan_release_ex(gpu, pl_vulkan_release_params(
@@ -1039,6 +1048,8 @@ static bool pl_acquire_avframe(pl_gpu gpu, struct pl_frame *frame)
 static void pl_release_avframe(pl_gpu gpu, struct pl_frame *frame)
 {
     const struct pl_avframe_priv *priv = frame->user_data;
+    AVHWFramesContext *hwfc = (void *) priv->avframe->hw_frames_ctx->data;
+    AVVulkanFramesContext *vkfc = hwfc->hwctx;
     AVVkFrame *vkf = (AVVkFrame *) priv->avframe->data[0];
 
     for (int n = 0; n < frame->num_planes; n++) {
@@ -1055,6 +1066,10 @@ static void pl_release_avframe(pl_gpu gpu, struct pl_frame *frame)
         vkf->access[n] = 0;
         vkf->sem_value[n] += !!ok;
     }
+
+#ifdef PL_HAVE_LAV_VULKAN_V2
+    vkfc->unlock_frame(hwfc, vkf);
+#endif
 }
 
 static bool pl_map_avframe_vulkan(pl_gpu gpu, struct pl_frame *out,
