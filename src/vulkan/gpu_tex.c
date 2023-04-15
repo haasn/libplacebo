@@ -1197,7 +1197,13 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
     tex_vk->img_fmt = params->format;
     tex_vk->num_planes = fmt->num_planes;
     tex_vk->usage_flags = usage;
-    tex_vk->aspect = PL_DEF(params->aspect, VK_IMAGE_ASPECT_COLOR_BIT);
+    tex_vk->aspect = params->aspect;
+
+    if (!tex_vk->aspect) {
+        for (int i = 0; i < tex_vk->num_planes; i++)
+            tex_vk->aspect |= VK_IMAGE_ASPECT_PLANE_0_BIT << i;
+        tex_vk->aspect = PL_DEF(tex_vk->aspect, VK_IMAGE_ASPECT_COLOR_BIT);
+    }
 
     // Blitting to planar images requires fallback via compute shaders
     if (tex_vk->aspect != VK_IMAGE_ASPECT_COLOR_BIT) {
@@ -1212,10 +1218,10 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
     for (int i = 0; i < tex_vk->num_planes; i++) {
         struct pl_tex_t *plane;
         VkImageAspectFlags aspect = VK_IMAGE_ASPECT_PLANE_0_BIT << i;
-        if (!(aspect & params->aspect)) {
+        if (!(aspect & tex_vk->aspect)) {
             PL_INFO(gpu, "Not wrapping plane %d due to aspect bit 0x%x not "
                     "being contained in supplied params->aspect 0x%x!",
-                    i, (unsigned) aspect, (unsigned) params->aspect);
+                    i, (unsigned) aspect, (unsigned) tex_vk->aspect);
             continue;
         }
 
