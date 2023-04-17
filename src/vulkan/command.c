@@ -219,6 +219,8 @@ struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
         };
     }
 
+    // We never need to include pipeline barriers for reads, only writes
+    last.access &= vk_access_write;
     return last;
 }
 
