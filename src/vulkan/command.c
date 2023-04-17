@@ -173,9 +173,13 @@ struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
             // order execution dependencies already transitively imply a wait
             // for the previous write
         } else if (last.sync.sem) {
+            // Image barrier still needs to depend on this stage for implicit
+            // ordering guarantees to apply properly
             vk_cmd_dep(cmd, stage, last.sync);
+            last.stage = stage;
         }
-        last.stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+        // Last access is on different queue, so no pipeline barrier needed
         last.access = 0;
     }
 
@@ -185,7 +189,6 @@ struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
     {
         // A past pipeline barrier already covers this access transitively, so
         // we don't need to emit another pipeline barrier at all
-        last.stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         last.access = 0;
     }
 
