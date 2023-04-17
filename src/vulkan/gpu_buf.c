@@ -46,16 +46,6 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
     struct vk_sync_scope last;
     last = vk_sem_barrier(vk, cmd, &buf_vk->sem, stage, access, export);
 
-    if (needs_flush) {
-        last.access |= VK_ACCESS_HOST_WRITE_BIT;
-        last.stage  |= VK_PIPELINE_STAGE_HOST_BIT;
-    }
-
-    if (needs_flush || buf_vk->mem.data) {
-        last.access |= VK_ACCESS_HOST_READ_BIT;
-        last.stage  |= VK_PIPELINE_STAGE_HOST_BIT;
-    }
-
     // CONCURRENT buffers require transitioning to/from IGNORED, EXCLUSIVE
     // buffers require transitioning to/from the concrete QF index
     uint32_t qf = vk->pools.num > 1 ? VK_QUEUE_FAMILY_IGNORED : cmd->pool->qf;
