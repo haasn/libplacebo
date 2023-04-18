@@ -38,8 +38,10 @@
 #define MAXIMUM_PAGE_COUNT (sizeof(uint64_t) * 8)
 
 // Controls the maximum page size. Any allocations above this threshold
-// will be served by dedicated allocations. (Default: 64 MB)
-#define MAXIMUM_PAGE_SIZE (1LLU << 26)
+// (absolute size or fraction of VRAM, whichever is higher) will be served by
+// dedicated allocations. (Default: 64 MB or 1/16 of VRAM)
+#define MAXIMUM_PAGE_SIZE_ABSOLUTE (1LLU << 26)
+#define MAXIMUM_PAGE_SIZE_RELATIVE 16
 
 // Controls the minimum slab size, to avoid excessive re-allocation of very
 // small slabs. (Default: 256 KB)
@@ -98,6 +100,7 @@ struct vk_malloc {
     struct vk_ctx *vk;
     pl_mutex lock;
     VkPhysicalDeviceMemoryProperties props;
+    size_t maximum_page_size;
     PL_ARRAY(struct vk_pool) pools;
     uint64_t age;
 };
@@ -201,10 +204,11 @@ void vk_malloc_print_stats(struct vk_malloc *ma, enum pl_log_level lev)
     pl_mutex_unlock(&ma->lock);
 
     PL_MSG(vk, lev, "Memory summary: %s used %s res %s alloc, "
-           "efficiency %.2f%%, utilization %.2f%%",
+           "efficiency %.2f%%, utilization %.2f%%, max page: %s",
            PRINT_SIZE(total_used), PRINT_SIZE(total_res),
            PRINT_SIZE(total_size), efficiency(total_used, total_res),
-           efficiency(total_res, total_size));
+           efficiency(total_res, total_size),
+           PRINT_SIZE(ma->maximum_page_size));
 }
 
 static void slab_free(struct vk_ctx *vk, struct vk_slab *slab)
@@ -537,6 +541,16 @@ struct vk_malloc *vk_malloc_create(struct vk_ctx *vk)
     pl_mutex_init(&ma->lock);
     vk->GetPhysicalDeviceMemoryProperties(vk->physd, &ma->props);
     ma->vk = vk;
+
+    // Determine maximum page size
+    ma->maximum_page_size = MAXIMUM_PAGE_SIZE_ABSOLUTE;
+    for (int i = 0; i < ma->props.memoryHeapCount; i++) {
+        VkMemoryHeap heap = ma->props.memoryHeaps[i];
+        if (heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+            size_t size_max = heap.size / MAXIMUM_PAGE_SIZE_RELATIVE;
+            ma->maximum_page_size = PL_MAX(ma->maximum_page_size, size_max);
+        }
+    }
 
     vk_malloc_print_stats(ma, PL_LOG_INFO);
     return ma;
@@ -990,7 +1004,7 @@ bool vk_malloc_slice(struct vk_malloc *ma, struct vk_memslice *out,
     struct vk_slab *slab;
     VkDeviceSize offset;
 
-    if (params->ded_image || size > MAXIMUM_PAGE_SIZE) {
+    if (params->ded_image || size > ma->maximum_page_size) {
         slab = slab_alloc(ma, params);
         if (!slab)
             return false;
