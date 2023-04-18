@@ -285,8 +285,9 @@ bool pl_tex_recreate(pl_gpu gpu, pl_tex *tex, const struct pl_tex_params *params
         return true;
     }
 
-    PL_DEBUG(gpu, "(Re)creating %dx%dx%d texture with format %s",
-             params->w, params->h, params->d, params->format->name);
+    PL_DEBUG(gpu, "(Re)creating %dx%dx%d texture with format %s: %s",
+             params->w, params->h, params->d, params->format->name,
+             PL_DEF(params->debug_tag, "unknown"));
 
     pl_tex_destroy(gpu, tex);
     *tex = pl_tex_create(gpu, params);
