@@ -455,9 +455,10 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
         goto error;
 
     const VkMemoryType *mtype = &ma->props.memoryTypes[minfo.memoryTypeIndex];
-    PL_DEBUG(vk, "Allocating %zu memory of type 0x%x (id %d) in heap %d",
+    PL_DEBUG(vk, "Allocating %zu memory of type 0x%x (id %d) in heap %d: %s",
              (size_t) slab->size, (unsigned) mtype->propertyFlags,
-             (int) minfo.memoryTypeIndex, (int) mtype->heapIndex);
+             (int) minfo.memoryTypeIndex, (int) mtype->heapIndex,
+             PL_DEF(params->debug_tag, "unknown"));
 
     VkResult res = vk->AllocateMemory(vk->dev, &minfo, PL_VK_ALLOC, &slab->mem);
     switch (res) {
