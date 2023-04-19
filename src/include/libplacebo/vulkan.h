@@ -24,6 +24,8 @@
 
 PL_API_BEGIN
 
+#define PL_VK_MIN_VERSION VK_API_VERSION_1_1
+
 // Structure representing a VkInstance. Using this is not required.
 typedef const struct pl_vk_inst_t {
     VkInstance instance;
@@ -159,7 +161,7 @@ struct pl_vulkan_params {
     // create a VkInstance with the settings from `instance_params`.
     //
     // Note: The VkInstance provided by the user *MUST* be created with a
-    // VkApplicationInfo.apiVersion of VK_API_VERSION_1_1 or higher.
+    // VkApplicationInfo.apiVersion of PL_VK_MIN_VERSION or higher.
     VkInstance instance;
 
     // Pointer to `vkGetInstanceProcAddr`. If this is NULL, libplacebo will
@@ -290,7 +292,7 @@ struct pl_vulkan_device_params {
     // The instance to use. Required!
     //
     // Note: The VkInstance provided by the user *must* be created with a
-    // VkApplicationInfo.apiVersion of VK_API_VERSION_1_1 or higher.
+    // VkApplicationInfo.apiVersion of PL_VK_MIN_VERSION or higher.
     VkInstance instance;
 
     // Mirrored from `pl_vulkan_params`. All of these fields are optional.
@@ -363,7 +365,7 @@ struct pl_vulkan_import_params {
     // The vulkan instance. Required.
     //
     // Note: The VkInstance provided by the user *must* be created with a
-    // VkApplicationInfo.apiVersion of VK_API_VERSION_1_1 or higher.
+    // VkApplicationInfo.apiVersion of PL_VK_MIN_VERSION or higher.
     VkInstance instance;
 
     // Pointer to `vkGetInstanceProcAddr`. If this is NULL, libplacebo will

@@ -539,10 +539,10 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
                 PRINTF_VER(params->max_api_version), PRINTF_VER(api_ver));
     }
 
-    if (api_ver < VK_API_VERSION_1_1) {
+    if (api_ver < PL_VK_MIN_VERSION) {
         pl_fatal(log, "Instance API version %d.%d.%d is lower than the minimum "
                  "required version of %d.%d.%d, cannot proceed!",
-                 PRINTF_VER(api_ver), PRINTF_VER(VK_API_VERSION_1_1));
+                 PRINTF_VER(api_ver), PRINTF_VER(PL_VK_MIN_VERSION));
         goto error;
     }
 
@@ -996,7 +996,7 @@ VkPhysicalDevice pl_vulkan_choose_device(pl_log log,
             continue;
         }
 
-        if (prop.properties.apiVersion < VK_API_VERSION_1_1) {
+        if (prop.properties.apiVersion < PL_VK_MIN_VERSION) {
             PL_DEBUG(vk, "      -> excluding due to too low API version");
             continue;
         }
@@ -1479,10 +1479,10 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
                 PRINTF_VER(params->max_api_version), PRINTF_VER(vk->api_ver));
     }
 
-    if (vk->api_ver < VK_API_VERSION_1_1) {
+    if (vk->api_ver < PL_VK_MIN_VERSION) {
         PL_FATAL(vk, "Device API version %d.%d.%d is lower than the minimum "
                  "required version of %d.%d.%d, cannot proceed!",
-                 PRINTF_VER(vk->api_ver), PRINTF_VER(VK_API_VERSION_1_1));
+                 PRINTF_VER(vk->api_ver), PRINTF_VER(PL_VK_MIN_VERSION));
         goto error;
     }
 
@@ -1556,10 +1556,10 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
                 PRINTF_VER(params->max_api_version), PRINTF_VER(vk->api_ver));
     }
 
-    if (vk->api_ver < VK_API_VERSION_1_1) {
+    if (vk->api_ver < PL_VK_MIN_VERSION) {
         PL_FATAL(vk, "Device API version %d.%d.%d is lower than the minimum "
                  "required version of %d.%d.%d, cannot proceed!",
-                 PRINTF_VER(vk->api_ver), PRINTF_VER(VK_API_VERSION_1_1));
+                 PRINTF_VER(vk->api_ver), PRINTF_VER(PL_VK_MIN_VERSION));
         goto error;
     }
 
