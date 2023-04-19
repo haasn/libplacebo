@@ -226,6 +226,7 @@ static const VkPhysicalDeviceMaintenance4Features device_maintenance4_features =
 // pNext chain of features we want enabled
 static const VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphores = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
+    .pNext = (void *) &device_maintenance4_features,
     .timelineSemaphore = true,
 };
 
@@ -1165,11 +1166,6 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     VkPhysicalDeviceFeatures2 *device_features;
     device_features = vk_chain_memdup(tmp, &pl_vulkan_recommended_features);
-
-    if (vk->api_ver >= VK_API_VERSION_1_3) {
-        vk_link_struct(device_features,
-                       vk_struct_memdup(tmp, &device_maintenance4_features));
-    }
 
     // Query all supported device features by constructing a pNext chain
     // starting with the features we care about and ending with whatever
