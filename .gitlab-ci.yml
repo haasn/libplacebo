@@ -153,19 +153,20 @@ gpu:
               coverage_format: cobertura
               path: build/meson-logs/coverage.xml
 
-asan:
+sanitize:
     image: $IMAGE_UBUNTU_JAMMY
     stage: sanitize
     tags:
         - gpu
+    variables:
+        UBSAN_OPTIONS: 'print_stacktrace=1:halt_on_error=1'
     script:
         - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
             meson build --buildtype debugoptimized
                         --werror
                         -Dtests=true
                         -Dc_args='-DCI_MAXGL'
-                        -Dshaderc=disabled
-                        -Db_sanitize=address
+                        -Db_sanitize=address,undefined
                         -Db_lundef=false
         - ninja -C build
         - cd build && time meson test -t 5 -v --num-processes=1
@@ -185,25 +186,6 @@ msan:
                         -Dc_args='-DMSAN -DCI_MAXGL'
                         -Dglslang=disabled
                         -Db_sanitize=memory
-                        -Db_lundef=false
-        - ninja -C build
-        - cd build && time meson test -t 5 -v --num-processes=1
-
-ubsan:
-    image: $IMAGE_UBUNTU_JAMMY
-    stage: sanitize
-    tags:
-        - gpu
-    variables:
-        UBSAN_OPTIONS: 'print_stacktrace=1:halt_on_error=1'
-    script:
-        - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
-            meson build --buildtype debugoptimized
-                        --werror
-                        -Dtests=true
-                        -Dc_args='-fPIE -DCI_MAXGL'
-                        -Dglslang=disabled
-                        -Db_sanitize=undefined
                         -Db_lundef=false
         - ninja -C build
         - cd build && time meson test -t 5 -v --num-processes=1
