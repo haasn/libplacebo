@@ -22,7 +22,7 @@
 static VkResult vk_cmd_poll(struct vk_ctx *vk, struct vk_cmd *cmd,
                             uint64_t timeout)
 {
-    return vk->WaitSemaphoresKHR(vk->dev, &(VkSemaphoreWaitInfo) {
+    return vk->WaitSemaphores(vk->dev, &(VkSemaphoreWaitInfo) {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
         .semaphoreCount = 1,
         .pSemaphores = &cmd->sync.sem,

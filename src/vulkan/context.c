@@ -155,23 +155,9 @@ static const struct vk_ext vk_device_extensions[] = {
             {0}
         },
     }, {
-        .name = VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
-        .funs = (const struct vk_fun[]) {
-            PL_VK_DEV_FUN(ResetQueryPoolEXT),
-            {0}
-        },
-    }, {
-        .name = VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
-    }, {
         .name = VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
         .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(GetImageDrmFormatModifierPropertiesEXT),
-            {0}
-        },
-    }, {
-        .name = VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
-        .funs = (const struct vk_fun[]) {
-            PL_VK_DEV_FUN(WaitSemaphoresKHR),
             {0}
         },
 #ifdef VK_KHR_portability_subset
@@ -210,10 +196,7 @@ const char * const pl_vulkan_recommended_extensions[] = {
 #endif
     VK_EXT_PCI_BUS_INFO_EXTENSION_NAME,
     VK_EXT_HDR_METADATA_EXTENSION_NAME,
-    VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
-    VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
     VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
-    VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
 #ifdef VK_KHR_portability_subset
     VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
 #endif
@@ -360,9 +343,11 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(QueueWaitIdle),
     PL_VK_DEV_FUN(ResetEvent),
     PL_VK_DEV_FUN(ResetFences),
+    PL_VK_DEV_FUN(ResetQueryPool),
     PL_VK_DEV_FUN(SetDebugUtilsObjectNameEXT),
     PL_VK_DEV_FUN(UpdateDescriptorSets),
     PL_VK_DEV_FUN(WaitForFences),
+    PL_VK_DEV_FUN(WaitSemaphores),
 };
 
 static void load_vk_fun(struct vk_ctx *vk, const struct vk_fun *fun)
@@ -1138,8 +1123,6 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     // Add all extensions we need
     if (params->surface)
         PL_ARRAY_APPEND(vk->alloc, vk->exts, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    if (vk->api_ver < VK_API_VERSION_1_2)
-        PL_ARRAY_APPEND(vk->alloc, vk->exts, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
 
     // Keep track of all optional function pointers associated with extensions
     PL_ARRAY(const struct vk_fun *) ext_funs = {0};

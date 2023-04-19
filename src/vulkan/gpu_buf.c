@@ -392,7 +392,7 @@ bool vk_buf_read(pl_gpu gpu, pl_buf buf, size_t offset, void *dest, size_t size)
 
     if (vk_buf_poll(gpu, buf, 0) && buf_vk->sem.write.sync.sem) {
         // ensure no more queued writes
-        VK(vk->WaitSemaphoresKHR(vk->dev, &(VkSemaphoreWaitInfo) {
+        VK(vk->WaitSemaphores(vk->dev, &(VkSemaphoreWaitInfo) {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
             .semaphoreCount = 1,
             .pSemaphores = &buf_vk->sem.write.sync.sem,
