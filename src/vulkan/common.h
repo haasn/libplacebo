@@ -44,19 +44,6 @@
 #define PL_VK_LOAD_FUN(inst, name, get_addr) \
     PL_VK_FUN(name) = (PFN_vk##name) get_addr(inst, "vk" #name);
 
-// Shitty backwards compatibility for very old vulkan.h versions
-#ifndef VK_API_VERSION_1_2
-#define VK_API_VERSION_1_2 VK_MAKE_VERSION(1, 2, 0)
-#endif
-
-#ifndef VK_USE_64_BIT_PTR_DEFINES
-    #if defined(__LP64__) || defined(_WIN64) || (defined(__x86_64__) && !defined(__ILP32__) ) || defined(_M_X64) || defined(__ia64) || defined (_M_IA64) || defined(__aarch64__) || defined(__powerpc64__)
-        #define VK_USE_64_BIT_PTR_DEFINES 1
-    #else
-        #define VK_USE_64_BIT_PTR_DEFINES 0
-    #endif
-#endif
-
 #ifndef VK_VENDOR_ID_NVIDIA
 #define VK_VENDOR_ID_NVIDIA 0x10DE
 #endif
