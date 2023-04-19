@@ -133,7 +133,8 @@ gpu:
                       -Dtests=true
                       -Ddemos=false
                       -Ddebug-abort=true
-                      -Dshaderc=disabled
+                      -Dshaderc=enabled
+                      -Dglslang=enabled
                       -Db_coverage=true
         - ninja -C build
         - vulkaninfo
@@ -168,6 +169,7 @@ sanitize:
                         -Dc_args='-DCI_MAXGL'
                         -Db_sanitize=address,undefined
                         -Db_lundef=false
+                        -Dshaderc=enabled
         - ninja -C build
         - cd build && time meson test -t 5 -v --num-processes=1
 
@@ -201,6 +203,7 @@ gpu-strip:
                       -Dtests=true
                       -Dc_args='-DPL_STRIP_SHADERS -DCI_MAXGL'
                       -Ddebug-abort=true
-                      -Dshaderc=disabled
+                      -Dshaderc=enabled
+                      -Dglslang=enabled
         - ninja -C build
         - cd build && meson test -t 5 -v --num-processes=1
