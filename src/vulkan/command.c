@@ -224,30 +224,28 @@ struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
     return last;
 }
 
-struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk,
-                                     VkDeviceQueueCreateInfo qinfo,
+struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk, int qf, int qnum,
                                      VkQueueFamilyProperties props)
 {
     struct vk_cmdpool *pool = pl_alloc_ptr(NULL, pool);
     *pool = (struct vk_cmdpool) {
-        .props = props,
-        .qf = qinfo.queueFamilyIndex,
-        .queues = pl_calloc(pool, qinfo.queueCount, sizeof(VkQueue)),
-        .num_queues = qinfo.queueCount,
+        .props      = props,
+        .qf         = qf,
+        .queues     = pl_calloc(pool, qnum, sizeof(VkQueue)),
+        .num_queues = qnum,
     };
 
-    for (int n = 0; n < pool->num_queues; n++)
-        vk->GetDeviceQueue(vk->dev, pool->qf, n, &pool->queues[n]);
+    for (int n = 0; n < qnum; n++)
+        vk->GetDeviceQueue(vk->dev, qf, n, &pool->queues[n]);
 
     VkCommandPoolCreateInfo cinfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
                  VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = pool->qf,
+        .queueFamilyIndex = qf,
     };
 
     VK(vk->CreateCommandPool(vk->dev, &cinfo, PL_VK_ALLOC, &pool->pool));
-
     return pool;
 
 error:

@@ -115,9 +115,9 @@ struct vk_cmdpool {
     PL_ARRAY(struct vk_cmd *) cmds;
 };
 
-// Set up a vk_cmdpool corresponding to a queue family.
-struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk,
-                                     VkDeviceQueueCreateInfo qinfo,
+// Set up a vk_cmdpool corresponding to a queue family. `qnum` may be less than
+// `props.queueCount`, to restrict the number of queues in this queue family.
+struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk, int qf, int qnum,
                                      VkQueueFamilyProperties props);
 
 void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool);

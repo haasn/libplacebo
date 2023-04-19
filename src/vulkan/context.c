@@ -1075,34 +1075,6 @@ static int find_qf(VkQueueFamilyProperties *qfs, int qfnum, VkQueueFlags flags)
     return idx;
 }
 
-typedef PL_ARRAY(VkDeviceQueueCreateInfo) qinfo_arr_t;
-
-static void add_qinfo(void *alloc, qinfo_arr_t *qinfos,
-                      VkQueueFamilyProperties *qfs, int idx, int qcount)
-{
-    if (idx < 0)
-        return;
-
-    // Check to see if we've already added this queue family
-    for (int i = 0; i < qinfos->num; i++) {
-        if (qinfos->elem[i].queueFamilyIndex == idx)
-            return;
-    }
-
-    if (!qcount)
-        qcount = qfs[idx].queueCount;
-
-    float *priorities = pl_calloc_ptr(alloc, qcount, priorities);
-    VkDeviceQueueCreateInfo qinfo = {
-        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .queueFamilyIndex = idx,
-        .queueCount = PL_MIN(qcount, qfs[idx].queueCount),
-        .pQueuePriorities = priorities,
-    };
-
-    PL_ARRAY_APPEND(alloc, *qinfos, qinfo);
-}
-
 static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params)
 {
     pl_assert(vk->physd);
@@ -1116,7 +1088,6 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     init_queue_locks(vk, qfnum, qfs);
 
     PL_DEBUG(vk, "Queue families supported by device:");
-
     for (int i = 0; i < qfnum; i++) {
         PL_DEBUG(vk, "    %d: flags 0x%x num %d", i,
                  (unsigned) qfs[i].queueFlags, (int) qfs[i].queueCount);
@@ -1157,12 +1128,6 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
             goto error;
         }
     }
-
-    // Now that we know which QFs we want, we can create the logical device
-    qinfo_arr_t qinfos = {0};
-    add_qinfo(tmp, &qinfos, qfs, idx_gfx, params->queue_count);
-    add_qinfo(tmp, &qinfos, qfs, idx_comp, params->queue_count);
-    add_qinfo(tmp, &qinfos, qfs, idx_tf, params->queue_count);
 
     // Enumerate all supported extensions
     uint32_t num_exts_avail = 0;
@@ -1279,6 +1244,18 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
             req[i] &= wl_a[i] || wl_b[i];
     }
 
+    // Enable all queues at device creation time, to maximize compatibility
+    // with other API users (e.g. FFmpeg)
+    PL_ARRAY(VkDeviceQueueCreateInfo) qinfos = {0};
+    for (int i = 0; i < qfnum; i++) {
+        PL_ARRAY_APPEND(tmp, qinfos, (VkDeviceQueueCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueFamilyIndex = i,
+            .queueCount = qfs[i].queueCount,
+            .pQueuePriorities = pl_calloc(tmp, qfs[i].queueCount, sizeof(float)),
+        });
+    }
+
     VkDeviceCreateInfo dinfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &vk->features,
@@ -1302,25 +1279,34 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     for (int i = 0; i < ext_funs.num; i++)
         load_vk_fun(vk, ext_funs.elem[i]);
 
-    // Create the command pools
-    for (int i = 0; i < qinfos.num; i++) {
-        int qf = qinfos.elem[i].queueFamilyIndex;
-        struct vk_cmdpool *pool = vk_cmdpool_create(vk, qinfos.elem[i], qfs[qf]);
+    // Create the command pools for the queues we care about
+    const uint32_t qmax = PL_DEF(params->queue_count, UINT32_MAX);
+    for (int i = 0; i < qfnum; i++) {
+        if (i != idx_gfx && i != idx_tf && i != idx_comp)
+            continue; // ignore QFs not used internally
+
+        int qnum = qfs[i].queueCount;
+        if (qmax < qnum) {
+            PL_DEBUG(vk, "Restricing QF %d from %d queues to %d", i, qnum, qmax);
+            qnum = qmax;
+        }
+
+        struct vk_cmdpool *pool = vk_cmdpool_create(vk, i, qnum, qfs[i]);
         if (!pool)
             goto error;
         PL_ARRAY_APPEND(vk->alloc, vk->pools, pool);
 
         // Update the pool_* pointers based on the corresponding index
         const char *qf_name = NULL;
-        if (qf == idx_tf) {
+        if (i == idx_tf) {
             vk->pool_transfer = pool;
             qf_name = "transfer";
         }
-        if (qf == idx_comp) {
+        if (i == idx_comp) {
             vk->pool_compute = pool;
             qf_name = "compute";
         }
-        if (qf == idx_gfx) {
+        if (i == idx_gfx) {
             vk->pool_graphics = pool;
             qf_name = "graphics";
         }
@@ -1682,12 +1668,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
             }
         }
 
-        struct VkDeviceQueueCreateInfo qinfo = {
-            .queueFamilyIndex = qf,
-            .queueCount = qinfos[i].info->count,
-        };
-
-        *pool = vk_cmdpool_create(vk, qinfo, qfs[qf]);
+        *pool = vk_cmdpool_create(vk, qf, qinfos[i].info->count, qfs[qf]);
         if (!*pool)
             goto error;
         PL_ARRAY_APPEND(vk->alloc, vk->pools, *pool);

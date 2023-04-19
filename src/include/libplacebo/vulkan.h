@@ -137,17 +137,21 @@ struct pl_vulkan_t {
     struct pl_vulkan_queue queue_compute;  // provides VK_QUEUE_COMPUTE_BIT
     struct pl_vulkan_queue queue_transfer; // provides VK_QUEUE_TRANSFER_BIT
 
-    // For convenience, these are the same enabled queue families and their
-    // queue counts in list form. This list does not contain duplicates.
-    const struct pl_vulkan_queue *queues;
-    int num_queues;
-
     // Functions for locking a queue. These must be used to lock VkQueues for
     // submission or other related operations when sharing the VkDevice between
     // multiple threads, Using this on queue families or indices not contained
     // in `queues` is undefined behavior.
     void (*lock_queue)(pl_vulkan vk, int qf, int qidx);
     void (*unlock_queue)(pl_vulkan vk, int qf, int qidx);
+
+    // --- Deprecated fields
+
+    // These are the same active queue families and their queue counts in list
+    // form. This list does not contain duplicates, nor any extra queues
+    // enabled at device creation time. Deprecated in favor of querying
+    // `vkGetPhysicalDeviceQueueFamilyProperties` directly.
+    const struct pl_vulkan_queue *queues PL_DEPRECATED;
+    int num_queues PL_DEPRECATED;
 };
 
 struct pl_vulkan_params {
@@ -211,11 +215,14 @@ struct pl_vulkan_params {
     // fragment shaders. Enabled by default.
     bool async_compute;
 
-    // Limits the number of queues to request. If left as 0, this will enable
-    // as many queues as the device supports. Multiple queues can result in
+    // Limits the number of queues to use. If left as 0, libplacebo will use as
+    // many queues as the device supports. Multiple queues can result in
     // improved efficiency when submitting multiple commands that can entirely
     // or partially execute in parallel. Defaults to 1, since using more queues
     // can actually decrease performance.
+    //
+    // Note: libplacebo will always *create* logical devices with all available
+    // queues enabled, regardless of this setting.
     int queue_count;
 
     // Enables extra device extensions. Device creation will fail if these

@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '271': 'deprecate pl_vulkan.queues',
       '270': 'add pl_color_map_params.visualize_hue/theta',
       '269': 'refactor pl_color_map_params gamut mapping settings',
       '268': 'add <libplacebo/gamut_mapping.h>',
