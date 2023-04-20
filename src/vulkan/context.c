@@ -450,6 +450,10 @@ static VkBool32 VKAPI_PTR vk_dbg_utils_cb(VkDebugUtilsMessageSeverityFlagBitsEXT
         if (strstr(data->pMessage, "VK_ERROR_FORMAT_NOT_SUPPORTED"))
             return false;
         break;
+
+    case 0xf6a37cfa: // VUID-vkGetImageSubresourceLayout-format-04461
+        // Work around https://github.com/KhronosGroup/Vulkan-Docs/issues/2109
+        return false;
     }
 
     enum pl_log_level lev;
