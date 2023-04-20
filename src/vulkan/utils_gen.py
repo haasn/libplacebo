@@ -121,6 +121,17 @@ size_t vk_struct_size(VkStructureType stype)
     }
 }
 
+uint32_t vk_ext_promoted_ver(const char *extension)
+{
+{% for ext in vkexts %}
+{%  if ext.promotedto and ext.promotedto.startswith('VK_VERSION') %}
+    if (!strcmp(extension, "{{ ext.name }}"))
+        return {{ ext.promotedto }};
+{%  endif %}
+{% endfor %}
+    return 0;
+}
+
 const VkAccessFlags vk_access_read = {{ '0x%x' % vkaccess.read }}LLU;
 const VkAccessFlags vk_access_write = {{ '0x%x' % vkaccess.write }}LLU;
 """)
@@ -209,6 +220,11 @@ def get_vkaccess(registry):
             access.write |= 1 << int(e.attrib['bitpos'])
     return access
 
+def get_vkexts(registry):
+    for e in registry.iterfind('extensions/extension'):
+        yield Obj(name = e.attrib['name'],
+                  promotedto = e.attrib.get('promotedto'))
+
 def find_registry_xml(datadir):
     registry_paths = [
         '{0}/vulkan/registry/vk.xml'.format(datadir),
@@ -250,4 +266,5 @@ if __name__ == '__main__':
             vkobjects = get_vkobjects(registry),
             vkstructs = get_vkstructs(registry),
             vkaccess = get_vkaccess(registry),
+            vkexts = get_vkexts(registry),
         ))

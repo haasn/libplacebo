@@ -36,7 +36,6 @@ struct vk_fun {
 
 struct vk_ext {
     const char *name;
-    uint32_t core_ver;
     const struct vk_fun *funs;
 };
 
@@ -157,14 +156,12 @@ static const struct vk_ext vk_device_extensions[] = {
         },
     }, {
         .name = VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
-        .core_ver = VK_API_VERSION_1_2,
         .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(ResetQueryPoolEXT),
             {0}
         },
     }, {
         .name = VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
-        .core_ver = VK_API_VERSION_1_2,
     }, {
         .name = VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
         .funs = (const struct vk_fun[]) {
@@ -173,7 +170,6 @@ static const struct vk_ext vk_device_extensions[] = {
         },
     }, {
         .name = VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
-        .core_ver = VK_API_VERSION_1_2,
         .funs = (const struct vk_fun[]) {
             PL_VK_DEV_FUN(WaitSemaphoresKHR),
             {0}
@@ -1151,7 +1147,8 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     // Add all optional device-level extensions extensions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_device_extensions); i++) {
         const struct vk_ext *ext = &vk_device_extensions[i];
-        if (ext->core_ver && vk->api_ver >= ext->core_ver) {
+        uint32_t core_ver = vk_ext_promoted_ver(ext->name);
+        if (core_ver && vk->api_ver >= core_ver) {
             // Layer is already implicitly enabled by the API version
             for (const struct vk_fun *f = ext->funs; f && f->name; f++)
                 PL_ARRAY_APPEND(tmp, ext_funs,  f);
@@ -1609,9 +1606,10 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
     // Load all of the optional functions from the extensions enabled
     for (int i = 0; i < PL_ARRAY_SIZE(vk_device_extensions); i++) {
         const struct vk_ext *ext = &vk_device_extensions[i];
+        uint32_t core_ver = vk_ext_promoted_ver(ext->name);
         for (int n = 0; n < params->num_extensions; n++) {
             if (strcmp(ext->name, params->extensions[n]) == 0 ||
-                (ext->core_ver && ext->core_ver >= vk->api_ver))
+                (core_ver && core_ver >= vk->api_ver))
             {
                 // Extension is available, directly load it
                 for (const struct vk_fun *f = ext->funs; f && f->name; f++)

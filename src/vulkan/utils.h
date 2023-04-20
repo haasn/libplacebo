@@ -31,6 +31,10 @@ const char *vk_surface_transform(VkSurfaceTransformFlagsKHR transform);
 // Return the size of an arbitrary vulkan struct. Returns 0 for unknown structs
 size_t vk_struct_size(VkStructureType stype);
 
+// Returns the vulkan API version which a given extension was promoted to, or 0
+// if the extension is not promoted.
+uint32_t vk_ext_promoted_ver(const char *extension);
+
 // Enum translation boilerplate
 VkExternalMemoryHandleTypeFlagBitsKHR vk_mem_handle_type(enum pl_handle_type);
 VkExternalSemaphoreHandleTypeFlagBitsKHR vk_sync_handle_type(enum pl_handle_type);
