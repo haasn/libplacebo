@@ -412,6 +412,7 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 #endif
 
     if (params->export_handle == PL_HANDLE_DMA_BUF) {
+        pl_assert(drm_list.drmFormatModifierCount > 0);
         vk_link_struct(&iinfo, &drm_list);
         iinfo.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
     }
@@ -419,7 +420,6 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     // Double-check physical image format limits and fail if invalid
     VkPhysicalDeviceImageDrmFormatModifierInfoEXT drm_pinfo = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT,
-        .drmFormatModifier = drm_explicit.drmFormatModifier,
         .sharingMode = iinfo.sharingMode,
         .queueFamilyIndexCount = iinfo.queueFamilyIndexCount,
         .pQueueFamilyIndices = iinfo.pQueueFamilyIndices,
@@ -430,8 +430,19 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         .handleType = ext_info.handleTypes,
     };
 
-    if (handle_type == PL_HANDLE_DMA_BUF)
+    if (handle_type == PL_HANDLE_DMA_BUF) {
+        if (params->import_handle) {
+            // On import, we know exactly which format modifier to test
+            drm_pinfo.drmFormatModifier = drm_explicit.drmFormatModifier;
+        } else {
+            // On export, the choice of format modifier is ambiguous, because
+            // we offer the implementation a whole list to choose from. In
+            // principle, we must check *all* supported drm format modifiers,
+            // but in practice it should hopefully suffice to just check one
+            drm_pinfo.drmFormatModifier = drm_list.pDrmFormatModifiers[0];
+        }
         vk_link_struct(&ext_pinfo, &drm_pinfo);
+    }
 
     VkPhysicalDeviceImageFormatInfo2KHR pinfo = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR,
