@@ -24,7 +24,6 @@ struct pl_pass_vk {
     VkPipeline base;
     VkPipeline pipe;
     VkPipelineLayout pipeLayout;
-    VkRenderPass renderPass;
     // Descriptor set (bindings)
     bool use_pushd;
     VkDescriptorSetLayout dsLayout;
@@ -61,7 +60,6 @@ static void pass_destroy_cb(pl_gpu gpu, pl_pass pass)
 
     vk->DestroyPipeline(vk->dev, pass_vk->pipe, PL_VK_ALLOC);
     vk->DestroyPipeline(vk->dev, pass_vk->base, PL_VK_ALLOC);
-    vk->DestroyRenderPass(vk->dev, pass_vk->renderPass, PL_VK_ALLOC);
     vk->DestroyPipelineLayout(vk->dev, pass_vk->pipeLayout, PL_VK_ALLOC);
     vk->DestroyPipelineCache(vk->dev, pass_vk->cache, PL_VK_ALLOC);
     vk->DestroyDescriptorPool(vk->dev, pass_vk->dsPool, PL_VK_ALLOC);
@@ -231,8 +229,14 @@ static VkResult vk_recreate_pipelines(struct vk_ctx *vk, pl_pass pass,
             [PL_PRIM_TRIANGLE_STRIP] = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
         };
 
+        const VkFormat target_fmt = (VkFormat) params->target_format->signature;
         VkGraphicsPipelineCreateInfo cinfo = {
             .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &(VkPipelineRenderingCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+                .colorAttachmentCount = 1,
+                .pColorAttachmentFormats = &target_fmt,
+            },
             .flags = flags,
             .stageCount = 2,
             .pStages = (VkPipelineShaderStageCreateInfo[]) {
@@ -293,7 +297,6 @@ static VkResult vk_recreate_pipelines(struct vk_ctx *vk, pl_pass pass,
                 },
             },
             .layout = pass_vk->pipeLayout,
-            .renderPass = pass_vk->renderPass,
             .basePipelineHandle = base,
             .basePipelineIndex = -1,
         };
@@ -561,32 +564,6 @@ no_descriptors: ;
                 .format   = PL_DEF((*pfmt_vk)->bfmt, (*pfmt_vk)->tfmt),
             };
         }
-
-        VkRenderPassCreateInfo rinfo = {
-            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-            .attachmentCount = 1,
-            .pAttachments = &(VkAttachmentDescription) {
-                .format = (VkFormat) params->target_format->signature,
-                .samples = VK_SAMPLE_COUNT_1_BIT,
-                .loadOp = pass->params.load_target
-                            ? VK_ATTACHMENT_LOAD_OP_LOAD
-                            : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            },
-            .subpassCount = 1,
-            .pSubpasses = &(VkSubpassDescription) {
-                .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-                .colorAttachmentCount = 1,
-                .pColorAttachments = &(VkAttachmentReference) {
-                    .attachment = 0,
-                    .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                },
-            },
-        };
-
-        VK(vk->CreateRenderPass(vk->dev, &rinfo, PL_VK_ALLOC, &pass_vk->renderPass));
         break;
     }
     case PL_PASS_COMPUTE: {
@@ -980,15 +957,21 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 
         vk->CmdSetViewport(cmd->buf, 0, 1, &viewport);
         vk->CmdSetScissor(cmd->buf, 0, 1, &scissor);
-
-        VkRenderPassBeginInfo binfo = {
-            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-            .renderPass = pass_vk->renderPass,
-            .framebuffer = tex_vk->framebuffer,
-            .renderArea.extent = {tex->params.w, tex->params.h},
-        };
-
-        vk->CmdBeginRenderPass(cmd->buf, &binfo, VK_SUBPASS_CONTENTS_INLINE);
+        vk->CmdBeginRendering(cmd->buf, &(VkRenderingInfo) {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+            .renderArea.extent = { tex->params.w, tex->params.h },
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &(VkRenderingAttachmentInfo) {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                .imageView = tex_vk->view,
+                .imageLayout = tex_vk->layout,
+                .loadOp = pass->params.load_target
+                            ? VK_ATTACHMENT_LOAD_OP_LOAD
+                            : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            },
+        });
 
         if (index) {
             vk->CmdDrawIndexed(cmd->buf, params->vertex_count, 1, 0, 0, 0);
@@ -996,10 +979,7 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             vk->CmdDraw(cmd->buf, params->vertex_count, 1, 0, 0);
         }
 
-        vk->CmdEndRenderPass(cmd->buf);
-
-        // The renderPass implicitly transitions the texture to this layout
-        tex_vk->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        vk->CmdEndRendering(cmd->buf);
         break;
     }
     case PL_PASS_COMPUTE:
