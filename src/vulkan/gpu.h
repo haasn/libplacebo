@@ -58,7 +58,6 @@ struct pl_vk {
     // Some additional cached device limits and features checks
     uint32_t max_push_descriptors;
     size_t min_texel_alignment;
-    bool host_query_reset;
 
     // The "currently recording" command. This will be queued and replaced by
     // a new command every time we need to "switch" between queue families.

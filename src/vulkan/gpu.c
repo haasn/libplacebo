@@ -128,13 +128,9 @@ static void timer_begin(pl_gpu gpu, struct vk_cmd *cmd, pl_timer timer)
     if (cmd->pool->props.queueFlags & reset_flags) {
         // Use direct command buffer resets
         vk->CmdResetQueryPool(cmd->buf, timer->qpool, timer->index_write, 2);
-    } else if (p->host_query_reset) {
-        // Use host query resets
-        vk->ResetQueryPool(vk->dev, timer->qpool, timer->index_write, 2);
     } else {
-        PL_TRACE(gpu, "QF %d supports no mechanism for resetting queries",
-                 cmd->pool->qf);
-        return;
+        // Use host query reset
+        vk->ResetQueryPool(vk->dev, timer->qpool, timer->index_write, 2);
     }
 
     vk->CmdWriteTimestamp(cmd->buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
@@ -388,21 +384,10 @@ static const VkFilter filters[PL_TEX_SAMPLE_MODE_COUNT] = {
 
 static inline struct pl_spirv_version get_spirv_version(const struct vk_ctx *vk)
 {
-    const VkPhysicalDeviceMaintenance4Features *device_maintenance4;
-    device_maintenance4 = vk_find_struct(&vk->features,
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES);
-
     pl_assert(vk->api_ver >= VK_API_VERSION_1_3);
-    if (device_maintenance4 && device_maintenance4->maintenance4) {
-        return (struct pl_spirv_version) {
-            .env_version = VK_API_VERSION_1_3,
-            .spv_version = PL_SPV_VERSION(1, 6),
-        };
-    }
-
     return (struct pl_spirv_version) {
-        .env_version = VK_API_VERSION_1_2,
-        .spv_version = PL_SPV_VERSION(1, 5),
+        .env_version = VK_API_VERSION_1_3,
+        .spv_version = PL_SPV_VERSION(1, 6),
     };
 }
 
@@ -566,12 +551,6 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
 
     if (vk->CmdPushDescriptorSetKHR)
         p->max_push_descriptors = pushd_props.maxPushDescriptors;
-
-    const VkPhysicalDeviceHostQueryResetFeatures *host_query_reset;
-    host_query_reset = vk_find_struct(&vk->features,
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES);
-    if (host_query_reset)
-        p->host_query_reset = host_query_reset->hostQueryReset;
 
     vk_setup_formats(gpu);
 
