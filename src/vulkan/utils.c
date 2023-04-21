@@ -165,3 +165,17 @@ void *vk_chain_memdup(void *alloc, const void *pin)
     out->pNext = vk_chain_memdup(alloc, in->pNext);
     return out;
 }
+
+void *vk_chain_alloc(void *alloc, void *chain, VkStructureType stype)
+{
+    for (VkBaseOutStructure *out = chain;; out = out->pNext) {
+        if (out->sType == stype)
+            return out;
+        if (!out->pNext) {
+            VkBaseOutStructure *s = pl_zalloc(alloc, vk_struct_size(stype));
+            s->sType = stype;
+            out->pNext = s;
+            return s;
+        }
+    }
+}

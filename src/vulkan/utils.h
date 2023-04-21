@@ -65,6 +65,9 @@ void *vk_struct_memdup(void *alloc, const void *in);
 // Make a deep copy of an entire pNext chain
 void *vk_chain_memdup(void *alloc, const void *in);
 
+// Find a structure in a pNext chain, or allocate + link it if absent.
+void *vk_chain_alloc(void *alloc, void *chain, VkStructureType stype);
+
 // Convenience macros to simplify a lot of common boilerplate
 #define PL_VK_ASSERT(res, str)                            \
     do {                                                  \
