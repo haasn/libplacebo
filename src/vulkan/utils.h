@@ -68,6 +68,14 @@ void *vk_chain_memdup(void *alloc, const void *in);
 // Find a structure in a pNext chain, or allocate + link it if absent.
 void *vk_chain_alloc(void *alloc, void *chain, VkStructureType stype);
 
+// Renormalize input features into a state consistent for a given API version.
+// If `api_ver` is specified as 0, *both* meta-structs and extension structs
+// will be emitted. Note: `out` should be initialized by the user. In
+// particular, if it already contains a valid features chain, then this
+// function will effectively act as a union.
+void vk_features_normalize(void *alloc, const VkPhysicalDeviceFeatures2 *in,
+                           uint32_t api_ver, VkPhysicalDeviceFeatures2 *out);
+
 // Convenience macros to simplify a lot of common boilerplate
 #define PL_VK_ASSERT(res, str)                            \
     do {                                                  \

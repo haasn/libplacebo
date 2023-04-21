@@ -16,6 +16,7 @@
 # License along with libplacebo.  If not, see <http://www.gnu.org/licenses/>.
 
 import os.path
+import re
 import sys
 import xml.etree.ElementTree as ET
 
@@ -132,6 +133,38 @@ uint32_t vk_ext_promoted_ver(const char *extension)
     return 0;
 }
 
+void vk_features_normalize(void *alloc, const VkPhysicalDeviceFeatures2 *fin,
+                           uint32_t api_ver, VkPhysicalDeviceFeatures2 *out)
+{
+    for (const VkBaseInStructure *in = (void *) fin; in; in = in->pNext) {
+        switch (in->sType) {
+        default: break;
+{% for fs in vkfeatures %}
+        case {{ fs.stype }}: {
+            const {{ fs.name }} *i = (const void *) in;
+{% for f in fs.features %}
+            if (i->{{ f.name }}) {
+{% for r in f.replacements %}
+{% if r.core_ver %}
+               if (!api_ver || api_ver >= {{ r.core_ver }})
+{% elif r.max_ver %}
+               if (!api_ver || api_ver < {{ r.max_ver }})
+{% endif %}
+{% if fs.is_base %}
+                out->{{ f.name }} = true;
+{% else %}
+                (({{ r.name }} *) vk_chain_alloc(alloc, out, {{ r.stype }}))->{{ f.name }} = true;
+{% endif %}
+{% endfor %}
+            }
+{% endfor %}
+            break;
+        }
+{% endfor %}
+        }
+    }
+}
+
 const VkAccessFlags vk_access_read = {{ '0x%x' % vkaccess.read }}LLU;
 const VkAccessFlags vk_access_write = {{ '0x%x' % vkaccess.write }}LLU;
 """)
@@ -225,6 +258,53 @@ def get_vkexts(registry):
         yield Obj(name = e.attrib['name'],
                   promotedto = e.attrib.get('promotedto'))
 
+def get_vkfeatures(registry):
+    structs = [];
+    featuremap = {}; # features -> [struct]
+    for t in registry.findall_type('struct'):
+        sname = t.attrib['name']
+        is_base = sname == 'VkPhysicalDeviceFeatures'
+        extends = t.attrib.get('structextends', [])
+        if is_base:
+            sname = 'VkPhysicalDeviceFeatures2'
+            stype = 'VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2'
+        elif not 'VkPhysicalDeviceFeatures2' in extends:
+            continue
+
+        features = []
+        for f in t.iterfind('member'):
+            if f.find('type').text == 'VkStructureType':
+                stype = f.attrib['values']
+            elif f.find('type').text == 'VkBool32':
+                fname = f.find('name').text
+                if is_base:
+                    fname = 'features.' + fname
+                features.append(Obj(name = fname))
+
+        core_ver = None
+        if res := re.match(r'VkPhysicalDeviceVulkan(\d)(\d)Features', sname):
+            core_ver = 'VK_VERSION_{0}_{1}'.format(res[1], res[2])
+
+        struct = Obj(name       = sname,
+                     stype      = stype,
+                     core_ver   = core_ver,
+                     is_base    = is_base,
+                     features   = features)
+
+        structs.append(struct)
+        for f in features:
+            featuremap.setdefault(f.name, []).append(struct)
+
+    for s in structs:
+        for f in s.features:
+            f.replacements = featuremap[f.name]
+            core_ver = next(( r.core_ver for r in f.replacements if r.core_ver ), None)
+            for r in f.replacements:
+                if not r.core_ver:
+                    r.max_ver = core_ver
+
+    yield from structs
+
 def find_registry_xml(datadir):
     registry_paths = [
         '{0}/vulkan/registry/vk.xml'.format(datadir),
@@ -267,4 +347,5 @@ if __name__ == '__main__':
             vkstructs = get_vkstructs(registry),
             vkaccess = get_vkaccess(registry),
             vkexts = get_vkexts(registry),
+            vkfeatures = get_vkfeatures(registry),
         ))
