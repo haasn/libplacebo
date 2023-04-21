@@ -400,8 +400,8 @@ struct pl_vulkan_import_params {
     struct pl_vulkan_queue queue_compute;  // must support VK_QUEUE_COMPUTE_BIT
     struct pl_vulkan_queue queue_transfer; // must support VK_QUEUE_TRANSFER_BIT
 
-    // Enabled VkPhysicalDeviceFeatures. The VkDevice provided by the user
-    // *must* be created with the `timelineSemaphore` feature enabled.
+    // Enabled VkPhysicalDeviceFeatures. The device *must* be created with
+    // all of the features in `pl_vulkan_required_features` enabled.
     const VkPhysicalDeviceFeatures2 *features;
 
     // Functions for locking a queue. If set, these will be used instead of
@@ -490,6 +490,12 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params);
 extern const char * const pl_vulkan_recommended_extensions[];
 extern const int pl_vulkan_num_recommended_extensions;
 extern const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features;
+
+// A list of device features that are required by libplacebo. These
+// *must* be provided by imported Vulkan devices.
+//
+// Note: `pl_vulkan_recommended_features` does not include this list.
+extern const VkPhysicalDeviceFeatures2 pl_vulkan_required_features;
 
 // Analogous to `pl_vulkan_wrap`, this function takes any `pl_tex` (including
 // ones created by `pl_tex_create`) and unwraps it to expose the underlying

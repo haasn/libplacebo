@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '273': 'add pl_vulkan_required_features and refactor pl_vulkan_recommended_features',
       '272': 'require vulkan version 1.3 minimum',
       '271': 'deprecate pl_vulkan.queues',
       '270': 'add pl_color_map_params.visualize_hue/theta',

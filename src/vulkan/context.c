@@ -217,28 +217,9 @@ static_assert(PL_ARRAY_SIZE(pl_vulkan_recommended_extensions) + 1 ==
               "pl_vulkan_recommended_extensions out of sync with "
               "vk_device_extensions?");
 
-// Needed for LocalSizeId execution mode
-static const VkPhysicalDeviceMaintenance4Features device_maintenance4_features = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES,
-    .maintenance4 = true
-};
-
-// pNext chain of features we want enabled
-static const VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphores = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-    .pNext = (void *) &device_maintenance4_features,
-    .timelineSemaphore = true,
-};
-
-static const VkPhysicalDeviceHostQueryResetFeatures host_query_reset = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES,
-    .pNext = (void *) &timeline_semaphores,
-    .hostQueryReset = true,
-};
-
+// Recommended features
 const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-    .pNext = (void *) &host_query_reset,
     .features = {
         .shaderImageGatherExtended = true,
         .shaderStorageImageReadWithoutFormat = true,
@@ -249,6 +230,29 @@ const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features = {
         .vertexPipelineStoresAndAtomics = true,
         .shaderInt64 = true,
     }
+};
+
+// Required features
+static const VkPhysicalDeviceVulkan13Features required_vk13 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+    .maintenance4 = true
+};
+
+static const VkPhysicalDeviceVulkan12Features required_vk12 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+    .pNext = (void *) &required_vk13,
+    .hostQueryReset = true,
+    .timelineSemaphore = true,
+};
+
+static const VkPhysicalDeviceVulkan11Features required_vk11 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+    .pNext = (void *) &required_vk12,
+};
+
+const VkPhysicalDeviceFeatures2 pl_vulkan_required_features = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+    .pNext = (void *) &required_vk11,
 };
 
 // List of mandatory device-level functions
@@ -1059,12 +1063,18 @@ static int find_qf(VkQueueFamilyProperties *qfs, int qfnum, VkQueueFlags flags)
 
 static bool check_features(struct vk_ctx *vk)
 {
-    const VkPhysicalDeviceVulkan12Features *vk12 = vk_find_struct(&vk->features,
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES);
 
-    if (!vk12->timelineSemaphore) {
-        PL_ERR(vk, "Vulkan device does not support timeline semaphores!");
-        return false;
+    for (const VkBaseInStructure *req = (const VkBaseInStructure *) &pl_vulkan_required_features;
+            req; req = req->pNext)
+    {
+        const VkBaseInStructure *avail = vk_find_struct(&vk->features, req->sType);
+        const VkBool32 *fr = (const VkBool32 *) &req[1];
+        const VkBool32 *fa = avail ? (const VkBool32 *) &avail[1] : NULL;
+        const size_t size = vk_struct_size(req->sType) - sizeof(req[0]);
+        for (int i = 0; i < size / sizeof(VkBool32); i++) {
+            if (fr[i] && (!fa || !fa[i]))
+                return false;
+        }
     }
 
     return true;
@@ -1181,6 +1191,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR
     };
 
+    vk_features_normalize(tmp, &pl_vulkan_required_features, vk->api_ver, &features);
     vk_features_normalize(tmp, &pl_vulkan_recommended_features, vk->api_ver, &features);
     vk_features_normalize(tmp, params->features, vk->api_ver, &features);
 
@@ -1199,8 +1210,10 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     // Construct normalized output chain
     vk_features_normalize(vk->alloc, &features, 0, &vk->features);
-    if (!check_features(vk))
+    if (!check_features(vk)) {
+        PL_FATAL(vk, "Vulkan device does not support all required features!");
         goto error;
+    }
 
     // Enable all queues at device creation time, to maximize compatibility
     // with other API users (e.g. FFmpeg)
@@ -1525,8 +1538,11 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
     }
 
     vk_features_normalize(vk->alloc, params->features, 0, &vk->features);
-    if (!check_features(vk))
+    if (!check_features(vk)) {
+        PL_FATAL(vk, "Imported Vulkan device was not created with all required "
+                 "features!");
         goto error;
+    }
 
     // Load all mandatory device-level functions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++)
