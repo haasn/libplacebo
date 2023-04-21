@@ -51,10 +51,7 @@ static void vk_cmd_reset(struct vk_ctx *vk, struct vk_cmd *cmd)
 
     cmd->callbacks.num = 0;
     cmd->deps.num = 0;
-    cmd->depstages.num = 0;
-    cmd->depvalues.num = 0;
     cmd->sigs.num = 0;
-    cmd->sigvalues.num = 0;
 }
 
 static void vk_cmd_destroy(struct vk_ctx *vk, struct vk_cmd *cmd)
@@ -130,33 +127,40 @@ void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback,
     });
 }
 
-void vk_cmd_dep(struct vk_cmd *cmd, VkPipelineStageFlags stage, pl_vulkan_sem dep)
+void vk_cmd_dep(struct vk_cmd *cmd, VkPipelineStageFlags2 stage, pl_vulkan_sem dep)
 {
-    assert(cmd->deps.num == cmd->depstages.num);
-    assert(cmd->deps.num == cmd->depvalues.num);
-    PL_ARRAY_APPEND(cmd, cmd->deps, dep.sem);
-    PL_ARRAY_APPEND(cmd, cmd->depvalues, dep.value);
-    PL_ARRAY_APPEND(cmd, cmd->depstages, stage);
+    PL_ARRAY_APPEND(cmd, cmd->deps, (VkSemaphoreSubmitInfo) {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore  = dep.sem,
+        .value      = dep.value,
+        .stageMask  = stage,
+    });
 }
 
-void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig)
+void vk_cmd_sig(struct vk_cmd *cmd, VkPipelineStageFlags2 stage, pl_vulkan_sem sig)
 {
+    VkSemaphoreSubmitInfo sinfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore  = sig.sem,
+        .value      = sig.value,
+        .stageMask  = stage,
+    };
+
     // Try updating existing semaphore signal operations in-place
     for (int i = 0; i < cmd->sigs.num; i++) {
-        if (cmd->sigs.elem[i] == sig.sem) {
-            cmd->sigvalues.elem[i] = PL_MAX(cmd->sigvalues.elem[i], sig.value);
+        if (cmd->sigs.elem[i].semaphore == sig.sem) {
+            pl_assert(sig.value > cmd->sigs.elem[i].value);
+            cmd->sigs.elem[i] = sinfo;
             return;
         }
     }
 
-    assert(cmd->sigs.num == cmd->sigvalues.num);
-    PL_ARRAY_APPEND(cmd, cmd->sigs, sig.sem);
-    PL_ARRAY_APPEND(cmd, cmd->sigvalues, sig.value);
+    PL_ARRAY_APPEND(cmd, cmd->sigs, sinfo);
 }
 
 struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
-                                    struct vk_sem *sem, VkPipelineStageFlags stage,
-                                    VkAccessFlags access, bool is_trans)
+                                    struct vk_sem *sem, VkPipelineStageFlags2 stage,
+                                    VkAccessFlags2 access, bool is_trans)
 {
     bool is_write = (access & vk_access_write) || is_trans;
 
@@ -299,7 +303,7 @@ struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool,
     PL_VK_NAME(SEMAPHORE, cmd->sync.sem, debug_tag);
 
     cmd->sync.value++;
-    vk_cmd_sig(cmd, cmd->sync);
+    vk_cmd_sig(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, cmd->sync);
     return cmd;
 
 error:
@@ -320,24 +324,17 @@ bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
 
     VK(vk->EndCommandBuffer(cmd->buf));
 
-    VkTimelineSemaphoreSubmitInfo tinfo = {
-        .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
-        .waitSemaphoreValueCount = cmd->depvalues.num,
-        .pWaitSemaphoreValues = cmd->depvalues.elem,
-        .signalSemaphoreValueCount = cmd->sigvalues.num,
-        .pSignalSemaphoreValues = cmd->sigvalues.elem,
-    };
-
-    VkSubmitInfo sinfo = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .pNext = &tinfo,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &cmd->buf,
-        .waitSemaphoreCount = cmd->deps.num,
-        .pWaitSemaphores = cmd->deps.elem,
-        .pWaitDstStageMask = cmd->depstages.elem,
-        .signalSemaphoreCount = cmd->sigs.num,
-        .pSignalSemaphores = cmd->sigs.elem,
+    VkSubmitInfo2 sinfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .waitSemaphoreInfoCount = cmd->deps.num,
+        .pWaitSemaphoreInfos = cmd->deps.elem,
+        .signalSemaphoreInfoCount = cmd->sigs.num,
+        .pSignalSemaphoreInfos = cmd->sigs.elem,
+        .commandBufferInfoCount = 1,
+        .pCommandBufferInfos = &(VkCommandBufferSubmitInfo) {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .commandBuffer = cmd->buf,
+        },
     };
 
     if (pl_msg_test(vk->log, PL_LOG_TRACE)) {
@@ -345,20 +342,20 @@ bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
                  (void *) cmd->buf, (void *) cmd->queue, pool->qf);
         for (int n = 0; n < cmd->deps.num; n++) {
             PL_TRACE(vk, "    waits on semaphore 0x%"PRIx64" = %"PRIu64,
-                     (uint64_t) cmd->deps.elem[n], cmd->depvalues.elem[n]);
+                     (uint64_t) cmd->deps.elem[n].semaphore, cmd->deps.elem[n].value);
         }
         for (int n = 0; n < cmd->sigs.num; n++) {
             PL_TRACE(vk, "    signals semaphore 0x%"PRIx64" = %"PRIu64,
-                    (uint64_t) cmd->sigs.elem[n], cmd->sigvalues.elem[n]);
+                    (uint64_t) cmd->sigs.elem[n].semaphore, cmd->sigs.elem[n].value);
         }
         if (cmd->callbacks.num)
             PL_TRACE(vk, "    signals %d callbacks", cmd->callbacks.num);
     }
 
     vk->lock_queue(vk->queue_ctx, pool->qf, cmd->qindex);
-    VkResult res = vk->QueueSubmit(cmd->queue, 1, &sinfo, VK_NULL_HANDLE);
+    VkResult res = vk->QueueSubmit2(cmd->queue, 1, &sinfo, VK_NULL_HANDLE);
     vk->unlock_queue(vk->queue_ctx, pool->qf, cmd->qindex);
-    PL_VK_ASSERT(res, "vkQueueSubmit");
+    PL_VK_ASSERT(res, "vkQueueSubmit2");
 
     pl_mutex_lock(&vk->lock);
     PL_ARRAY_APPEND(vk->alloc, vk->cmds_pending, cmd);

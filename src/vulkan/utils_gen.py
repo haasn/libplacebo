@@ -165,8 +165,8 @@ void vk_features_normalize(void *alloc, const VkPhysicalDeviceFeatures2 *fin,
     }
 }
 
-const VkAccessFlags vk_access_read = {{ '0x%x' % vkaccess.read }}LLU;
-const VkAccessFlags vk_access_write = {{ '0x%x' % vkaccess.write }}LLU;
+const VkAccessFlags2 vk_access_read = {{ '0x%x' % vkaccess.read }}LLU;
+const VkAccessFlags2 vk_access_write = {{ '0x%x' % vkaccess.write }}LLU;
 """)
 
 class Obj(object):
@@ -246,7 +246,7 @@ def get_vkstructs(registry):
 
 def get_vkaccess(registry):
     access = Obj(read = 0, write = 0)
-    for e in registry.findall_enum('VkAccessFlagBits'):
+    for e in registry.findall_enum('VkAccessFlagBits2'):
         if '_READ_' in e.attrib['name']:
             access.read |= 1 << int(e.attrib['bitpos'])
         if '_WRITE_' in e.attrib['name']:

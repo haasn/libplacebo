@@ -664,10 +664,9 @@ error:
     return pass;
 }
 
-static const VkPipelineStageFlags passStages[] = {
-    [PL_PASS_RASTER]  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-                        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
-    [PL_PASS_COMPUTE] = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+static const VkPipelineStageFlags2 shaderStages[] = {
+    [PL_PASS_RASTER]  = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+    [PL_PASS_COMPUTE] = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 };
 
 static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
@@ -687,11 +686,11 @@ static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
         .descriptorType = dsType[desc->type],
     };
 
-    static const VkAccessFlags access[PL_DESC_ACCESS_COUNT] = {
-        [PL_DESC_ACCESS_READONLY]   = VK_ACCESS_SHADER_READ_BIT,
-        [PL_DESC_ACCESS_WRITEONLY]  = VK_ACCESS_SHADER_WRITE_BIT,
-        [PL_DESC_ACCESS_READWRITE]  = VK_ACCESS_SHADER_READ_BIT |
-                                      VK_ACCESS_SHADER_WRITE_BIT,
+    static const VkAccessFlags2 storageAccess[PL_DESC_ACCESS_COUNT] = {
+        [PL_DESC_ACCESS_READONLY]   = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+        [PL_DESC_ACCESS_WRITEONLY]  = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        [PL_DESC_ACCESS_READWRITE]  = VK_ACCESS_2_SHADER_STORAGE_READ_BIT |
+                                      VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
     };
 
     switch (desc->type) {
@@ -699,8 +698,8 @@ static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
         pl_tex tex = db.object;
         struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
-        vk_tex_barrier(gpu, cmd, tex, passStages[pass->params.type],
-                       VK_ACCESS_SHADER_READ_BIT,
+        vk_tex_barrier(gpu, cmd, tex, shaderStages[pass->params.type],
+                       VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                        VK_QUEUE_FAMILY_IGNORED);
 
@@ -718,8 +717,8 @@ static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
         pl_tex tex = db.object;
         struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
-        vk_tex_barrier(gpu, cmd, tex, passStages[pass->params.type],
-                       access[desc->access], VK_IMAGE_LAYOUT_GENERAL,
+        vk_tex_barrier(gpu, cmd, tex, shaderStages[pass->params.type],
+                       storageAccess[desc->access], VK_IMAGE_LAYOUT_GENERAL,
                        VK_QUEUE_FAMILY_IGNORED);
 
         VkDescriptorImageInfo *iinfo = &pass_vk->dsiinfo[idx];
@@ -736,8 +735,12 @@ static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
         pl_buf buf = db.object;
         struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
-        vk_buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
-                       access[desc->access], 0, buf->params.size, false);
+        VkAccessFlags2 access = VK_ACCESS_2_UNIFORM_READ_BIT;
+        if (desc->type == PL_DESC_BUF_STORAGE)
+            access = storageAccess[desc->access];
+
+        vk_buf_barrier(gpu, cmd, buf, shaderStages[pass->params.type],
+                       access, 0, buf->params.size, false);
 
         VkDescriptorBufferInfo *binfo = &pass_vk->dsbinfo[idx];
         *binfo = (VkDescriptorBufferInfo) {
@@ -754,8 +757,12 @@ static void vk_update_descriptor(pl_gpu gpu, struct vk_cmd *cmd, pl_pass pass,
         pl_buf buf = db.object;
         struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
-        vk_buf_barrier(gpu, cmd, buf, passStages[pass->params.type],
-                       access[desc->access], 0, buf->params.size, false);
+        VkAccessFlags2 access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+        if (desc->type == PL_DESC_BUF_TEXEL_STORAGE)
+            access = storageAccess[desc->access];
+
+        vk_buf_barrier(gpu, cmd, buf, shaderStages[pass->params.type],
+                       access, 0, buf->params.size, false);
 
         wds->pTexelBufferView = &buf_vk->view;
         return;
@@ -921,20 +928,22 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 
         // In the edge case that vert = index buffer, we need to synchronize
         // for both flags simultaneously
-        VkAccessFlags vbo_flags = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-        if (index == vert)
-            vbo_flags |= VK_ACCESS_INDEX_READ_BIT;
+        VkPipelineStageFlags2 vbo_stage = VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
+        VkAccessFlags2 vbo_flags = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+        if (index == vert) {
+            vbo_stage |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
+            vbo_flags |= VK_ACCESS_2_INDEX_READ_BIT;
+        }
 
-        vk_buf_barrier(gpu, cmd, vert, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
-                       vbo_flags, 0, vert->params.size, false);
+        vk_buf_barrier(gpu, cmd, vert, vbo_stage, vbo_flags, 0, vert->params.size, false);
 
         VkDeviceSize offset = vert_vk->mem.offset + params->buf_offset;
         vk->CmdBindVertexBuffers(cmd->buf, 0, 1, &vert_vk->mem.buf, &offset);
 
         if (index) {
             if (index != vert) {
-                vk_buf_barrier(gpu, cmd, index, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
-                               VK_ACCESS_INDEX_READ_BIT, 0, index->params.size,
+                vk_buf_barrier(gpu, cmd, index, VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT,
+                               VK_ACCESS_2_INDEX_READ_BIT, 0, index->params.size,
                                false);
             }
 
@@ -949,11 +958,11 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
         }
 
 
-        VkAccessFlags fbo_access = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        VkAccessFlags2 fbo_access = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
         if (pass->params.load_target)
-            fbo_access |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+            fbo_access |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
 
-        vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                        fbo_access, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                        VK_QUEUE_FAMILY_IGNORED);
 

@@ -127,8 +127,8 @@ bool vk_tex_upload(pl_gpu, const struct pl_tex_transfer_params *);
 bool vk_tex_download(pl_gpu, const struct pl_tex_transfer_params *);
 bool vk_tex_poll(pl_gpu, pl_tex, uint64_t timeout);
 bool vk_tex_export(pl_gpu, pl_tex, pl_sync);
-void vk_tex_barrier(pl_gpu, struct vk_cmd *, pl_tex, VkPipelineStageFlags,
-                    VkAccessFlags, VkImageLayout, uint32_t qf);
+void vk_tex_barrier(pl_gpu, struct vk_cmd *, pl_tex, VkPipelineStageFlags2,
+                    VkAccessFlags2, VkImageLayout, uint32_t qf);
 
 struct pl_buf_vk {
     pl_rc_t rc;
@@ -152,8 +152,8 @@ bool vk_buf_export(pl_gpu, pl_buf);
 bool vk_buf_poll(pl_gpu, pl_buf, uint64_t timeout);
 
 // Helper to ease buffer barrier creation. (`offset` is relative to pl_buf)
-void vk_buf_barrier(pl_gpu, struct vk_cmd *, pl_buf, VkPipelineStageFlags,
-                    VkAccessFlags, size_t offset, size_t size, bool export);
+void vk_buf_barrier(pl_gpu, struct vk_cmd *, pl_buf, VkPipelineStageFlags2,
+                    VkAccessFlags2, size_t offset, size_t size, bool export);
 
 // Flush visible writes to a buffer made by the API
 void vk_buf_flush(pl_gpu, struct vk_cmd *, pl_buf, size_t offset, size_t size);

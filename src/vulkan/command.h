@@ -45,15 +45,9 @@ struct vk_cmd {
     VkQueue queue;           // the submission queue (for recording/pending)
     int qindex;              // the index of `queue` in `pool`
     VkCommandBuffer buf;     // the command buffer itself
-    // The semaphores represent dependencies that need to complete before
-    // this command can be executed. These are *not* owned by the vk_cmd
-    PL_ARRAY(VkSemaphore) deps;
-    PL_ARRAY(VkPipelineStageFlags) depstages;
-    PL_ARRAY(uint64_t) depvalues;
-    // The signals represent semaphores that fire once the command finishes
-    // executing. These are also not owned by the vk_cmd
-    PL_ARRAY(VkSemaphore) sigs;
-    PL_ARRAY(uint64_t) sigvalues;
+    // Command dependencies and signals. Not owned by the vk_cmd.
+    PL_ARRAY(VkSemaphoreSubmitInfo) deps;
+    PL_ARRAY(VkSemaphoreSubmitInfo) sigs;
     // "Callbacks" to fire once a command completes. These are used for
     // multiple purposes, ranging from resource deallocation to fencing.
     PL_ARRAY(struct vk_callback) callbacks;
@@ -66,31 +60,23 @@ void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback,
 
 // Associate a raw dependency for the current command. This semaphore must
 // signal by the corresponding stage before the command may execute.
-void vk_cmd_dep(struct vk_cmd *cmd, VkPipelineStageFlags stage, pl_vulkan_sem dep);
+void vk_cmd_dep(struct vk_cmd *cmd, VkPipelineStageFlags2 stage, pl_vulkan_sem dep);
 
 // Associate a raw signal with the current command. This semaphore will signal
-// after the command completes.
-void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig);
+// after the given stage completes.
+void vk_cmd_sig(struct vk_cmd *cmd, VkPipelineStageFlags2 stage, pl_vulkan_sem sig);
 
 // Synchronization scope
 struct vk_sync_scope {
     pl_vulkan_sem sync;         // semaphore of last access
     VkQueue queue;              // source queue of last access
-    VkPipelineStageFlags stage; // stage bitmask of last access
-    VkAccessFlags access;       // access type bitmask
+    VkPipelineStageFlags2 stage;// stage bitmask of last access
+    VkAccessFlags2 access;      // access type bitmask
 };
 
 // Synchronization primitive
 struct vk_sem {
     struct vk_sync_scope read, write;
-};
-
-static inline void vk_sem_init(struct vk_sem *sem)
-{
-    *sem = (struct vk_sem) {
-        .write.stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        .read.stage  = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-    };
 };
 
 // Updates the `vk_sem` state for a given access. If `is_trans` is set, this
@@ -99,8 +85,8 @@ static inline void vk_sem_init(struct vk_sem *sem)
 // Returns a struct describing the previous access to a resource. A pipeline
 // barrier is only required if the previous access scope is nonzero.
 struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
-                                    struct vk_sem *sem, VkPipelineStageFlags stage,
-                                    VkAccessFlags access, bool is_trans);
+                                    struct vk_sem *sem, VkPipelineStageFlags2 stage,
+                                    VkAccessFlags2 access, bool is_trans);
 
 // Command pool / queue family hybrid abstraction
 struct vk_cmdpool {

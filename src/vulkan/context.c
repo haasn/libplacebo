@@ -235,7 +235,8 @@ const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features = {
 // Required features
 static const VkPhysicalDeviceVulkan13Features required_vk13 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-    .maintenance4 = true
+    .maintenance4 = true,
+    .synchronization2 = true,
 };
 
 static const VkPhysicalDeviceVulkan12Features required_vk12 = {
@@ -283,15 +284,13 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(CmdDrawIndexed),
     PL_VK_DEV_FUN(CmdEndDebugUtilsLabelEXT),
     PL_VK_DEV_FUN(CmdEndRenderPass),
-    PL_VK_DEV_FUN(CmdPipelineBarrier),
+    PL_VK_DEV_FUN(CmdPipelineBarrier2),
     PL_VK_DEV_FUN(CmdPushConstants),
     PL_VK_DEV_FUN(CmdResetQueryPool),
-    PL_VK_DEV_FUN(CmdSetEvent),
     PL_VK_DEV_FUN(CmdSetScissor),
     PL_VK_DEV_FUN(CmdSetViewport),
     PL_VK_DEV_FUN(CmdUpdateBuffer),
-    PL_VK_DEV_FUN(CmdWaitEvents),
-    PL_VK_DEV_FUN(CmdWriteTimestamp),
+    PL_VK_DEV_FUN(CmdWriteTimestamp2),
     PL_VK_DEV_FUN(CreateBuffer),
     PL_VK_DEV_FUN(CreateBufferView),
     PL_VK_DEV_FUN(CreateCommandPool),
@@ -344,7 +343,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(GetQueryPoolResults),
     PL_VK_DEV_FUN(InvalidateMappedMemoryRanges),
     PL_VK_DEV_FUN(MapMemory),
-    PL_VK_DEV_FUN(QueueSubmit),
+    PL_VK_DEV_FUN(QueueSubmit2),
     PL_VK_DEV_FUN(QueueWaitIdle),
     PL_VK_DEV_FUN(ResetEvent),
     PL_VK_DEV_FUN(ResetFences),

@@ -18,7 +18,7 @@
 #include "gpu.h"
 
 void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
-                    VkPipelineStageFlags stage, VkAccessFlags access,
+                    VkPipelineStageFlags2 stage, VkAccessFlags2 access,
                     VkImageLayout layout, uint32_t qf)
 {
     struct pl_vk *p = PL_PRIV(gpu);
@@ -41,14 +41,16 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
     bool is_trans = layout != tex_vk->layout, is_xfer = qf != tex_vk->qf;
     last = vk_sem_barrier(vk, cmd, &tex_vk->sem, stage, access, is_trans || is_xfer);
 
-    VkImageMemoryBarrier barr = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+    VkImageMemoryBarrier2 barr = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask = last.stage,
+        .srcAccessMask = last.access,
+        .dstStageMask = stage,
+        .dstAccessMask = access,
         .oldLayout = tex_vk->layout,
         .newLayout = layout,
         .srcQueueFamilyIndex = tex_vk->qf,
         .dstQueueFamilyIndex = qf,
-        .srcAccessMask = last.access,
-        .dstAccessMask = access,
         .image = tex_vk->img,
         .subresourceRange = {
             .aspectMask = tex_vk->aspect,
@@ -63,8 +65,11 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
     }
 
     if (last.access || is_trans || is_xfer) {
-        vk->CmdPipelineBarrier(cmd->buf, last.stage, stage, 0, 0, NULL,
-                               0, NULL, 1, &barr);
+        vk->CmdPipelineBarrier2(cmd->buf, &(VkDependencyInfo) {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &barr,
+        });
     }
 
     tex_vk->qf = qf;
@@ -127,7 +132,6 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, pl_debug_tag debug_tag)
     pl_rc_init(&tex_vk->rc);
     if (tex_vk->num_planes)
         return true;
-    vk_sem_init(&tex_vk->sem);
     tex_vk->layout = VK_IMAGE_LAYOUT_UNDEFINED;
     tex_vk->transfer_queue = GRAPHICS;
     tex_vk->qf = VK_QUEUE_FAMILY_IGNORED; // will be set on first use, if needed
@@ -687,8 +691,8 @@ void vk_tex_clear_ex(pl_gpu gpu, pl_tex tex, const union pl_clear_color color)
     if (!cmd)
         return;
 
-    vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                   VK_ACCESS_TRANSFER_WRITE_BIT,
+    vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_2_CLEAR_BIT,
+                   VK_ACCESS_2_TRANSFER_WRITE_BIT,
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    VK_QUEUE_FAMILY_IGNORED);
 
@@ -732,19 +736,19 @@ void vk_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
     if (!cmd)
         return;
 
-    vk_tex_barrier(gpu, cmd, params->src, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                   VK_ACCESS_TRANSFER_READ_BIT,
-                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                   VK_QUEUE_FAMILY_IGNORED);
-
-    vk_tex_barrier(gpu, cmd, params->dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                   VK_ACCESS_TRANSFER_WRITE_BIT,
-                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                   VK_QUEUE_FAMILY_IGNORED);
-
     // When the blit operation doesn't require scaling, we can use the more
     // efficient vkCmdCopyImage instead of vkCmdBlitImage
     if (!requires_scaling) {
+        vk_tex_barrier(gpu, cmd, params->src, VK_PIPELINE_STAGE_2_COPY_BIT,
+                       VK_ACCESS_2_TRANSFER_READ_BIT,
+                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       VK_QUEUE_FAMILY_IGNORED);
+
+        vk_tex_barrier(gpu, cmd, params->dst, VK_PIPELINE_STAGE_2_COPY_BIT,
+                       VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                       VK_QUEUE_FAMILY_IGNORED);
+
         pl_rect3d_normalize(&src_rc);
 
         VkImageCopy region = {
@@ -768,6 +772,16 @@ void vk_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params)
         vk->CmdCopyImage(cmd->buf, src_vk->img, src_vk->layout,
                          dst_vk->img, dst_vk->layout, 1, &region);
     } else {
+        vk_tex_barrier(gpu, cmd, params->src, VK_PIPELINE_STAGE_2_BLIT_BIT,
+                       VK_ACCESS_2_TRANSFER_READ_BIT,
+                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       VK_QUEUE_FAMILY_IGNORED);
+
+        vk_tex_barrier(gpu, cmd, params->dst, VK_PIPELINE_STAGE_2_BLIT_BIT,
+                       VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                       VK_QUEUE_FAMILY_IGNORED);
+
         VkImageBlit region = {
             .srcSubresource = {
                 .aspectMask = src_vk->aspect,
@@ -914,11 +928,11 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
             .size = size,
         };
 
-        vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_ACCESS_TRANSFER_READ_BIT, params->buf_offset, size,
+        vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_2_COPY_BIT,
+                       VK_ACCESS_2_TRANSFER_READ_BIT, params->buf_offset, size,
                        false);
-        vk_buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_ACCESS_TRANSFER_WRITE_BIT, 0, size, false);
+        vk_buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_2_COPY_BIT,
+                       VK_ACCESS_2_TRANSFER_WRITE_BIT, 0, size, false);
         vk->CmdCopyBuffer(cmd->buf, buf_vk->mem.buf, tbuf_vk->mem.buf,
                           1, &region);
 
@@ -957,11 +971,11 @@ bool vk_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         if (!cmd)
             goto error;
 
-        vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_ACCESS_TRANSFER_READ_BIT, params->buf_offset, size,
+        vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_2_COPY_BIT,
+                       VK_ACCESS_2_TRANSFER_READ_BIT, params->buf_offset, size,
                        false);
-        vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_ACCESS_TRANSFER_WRITE_BIT,
+        vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_2_COPY_BIT,
+                       VK_ACCESS_2_TRANSFER_WRITE_BIT,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                        VK_QUEUE_FAMILY_IGNORED);
         vk->CmdCopyBufferToImage(cmd->buf, buf_vk->mem.buf, tex_vk->img,
@@ -1039,10 +1053,10 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
             .size = size,
         };
 
-        vk_buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_ACCESS_TRANSFER_READ_BIT, 0, size, false);
-        vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size,
+        vk_buf_barrier(gpu, cmd, tbuf, VK_PIPELINE_STAGE_2_COPY_BIT,
+                       VK_ACCESS_2_TRANSFER_READ_BIT, 0, size, false);
+        vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_2_COPY_BIT,
+                       VK_ACCESS_2_TRANSFER_WRITE_BIT, params->buf_offset, size,
                        false);
         vk->CmdCopyBuffer(cmd->buf, tbuf_vk->mem.buf, buf_vk->mem.buf,
                           1, &region);
@@ -1076,11 +1090,11 @@ bool vk_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params)
         if (!cmd)
             goto error;
 
-        vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_ACCESS_TRANSFER_WRITE_BIT, params->buf_offset, size,
+        vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_2_COPY_BIT,
+                       VK_ACCESS_2_TRANSFER_WRITE_BIT, params->buf_offset, size,
                        false);
-        vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_ACCESS_TRANSFER_READ_BIT,
+        vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_2_COPY_BIT,
+                       VK_ACCESS_2_TRANSFER_READ_BIT,
                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                        VK_QUEUE_FAMILY_IGNORED);
         vk->CmdCopyImageToBuffer(cmd->buf, tex_vk->img, tex_vk->layout,
@@ -1143,13 +1157,13 @@ bool vk_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync)
     if (!cmd)
         goto error;
 
-    vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+    vk_tex_barrier(gpu, cmd, tex, VK_PIPELINE_STAGE_2_NONE,
                    0, VK_IMAGE_LAYOUT_GENERAL, VK_QUEUE_FAMILY_EXTERNAL);
 
     // Make the next barrier appear as though coming from a different queue
     tex_vk->sem.write.queue = tex_vk->sem.read.queue = NULL;
 
-    vk_cmd_sig(cmd, (pl_vulkan_sem){ sync_vk->wait });
+    vk_cmd_sig(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, (pl_vulkan_sem){ sync_vk->wait });
     if (!CMD_SUBMIT(&cmd))
         goto error;
 
@@ -1339,19 +1353,17 @@ bool pl_vulkan_hold_ex(pl_gpu gpu, const struct pl_vulkan_hold_params *params)
     bool may_invalidate = true;
     if (!tex_vk->num_planes) {
         may_invalidate &= tex_vk->may_invalidate;
-        vk_tex_barrier(gpu, cmd, params->tex,
-                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        vk_tex_barrier(gpu, cmd, params->tex, VK_PIPELINE_STAGE_2_NONE,
                        0, layout, params->qf);
     }
 
     for (int i = 0; i < tex_vk->num_planes; i++) {
         may_invalidate &= tex_vk->planes[i]->may_invalidate;
         vk_tex_barrier(gpu, cmd, params->tex->planes[i],
-                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                       0, layout, params->qf);
+                       VK_PIPELINE_STAGE_2_NONE, 0, layout, params->qf);
     }
 
-    vk_cmd_sig(cmd, params->semaphore);
+    vk_cmd_sig(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, params->semaphore);
     bool ok = CMD_SUBMIT(&cmd);
 
     if (!tex_vk->num_planes) {

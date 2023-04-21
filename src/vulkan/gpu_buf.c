@@ -18,7 +18,7 @@
 #include "gpu.h"
 
 void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
-                    VkPipelineStageFlags stage, VkAccessFlags access,
+                    VkPipelineStageFlags2 stage, VkAccessFlags2 access,
                     size_t offset, size_t size, bool export)
 {
     struct pl_vk *p = PL_PRIV(gpu);
@@ -49,20 +49,26 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
     // CONCURRENT buffers require transitioning to/from IGNORED, EXCLUSIVE
     // buffers require transitioning to/from the concrete QF index
     uint32_t qf = vk->pools.num > 1 ? VK_QUEUE_FAMILY_IGNORED : cmd->pool->qf;
-    VkBufferMemoryBarrier barr = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-        .srcQueueFamilyIndex = buf_vk->exported ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
-        .dstQueueFamilyIndex = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf,
-        .srcAccessMask = last.access,
-        .dstAccessMask = access,
-        .buffer = buf_vk->mem.buf,
-        .offset = buf_vk->mem.offset + offset,
-        .size = size,
-    };
+    uint32_t src_qf = buf_vk->exported ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf;
+    uint32_t dst_qf = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf;
 
-    if (last.access || barr.srcQueueFamilyIndex != barr.dstQueueFamilyIndex) {
-        vk->CmdPipelineBarrier(cmd->buf, last.stage, stage, 0, 0, NULL,
-                               1, &barr, 0, NULL);
+    if (last.access || src_qf != dst_qf) {
+        vk->CmdPipelineBarrier2(cmd->buf, &(VkDependencyInfo) {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .bufferMemoryBarrierCount = 1,
+            .pBufferMemoryBarriers = &(VkBufferMemoryBarrier2) {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .srcStageMask = last.stage,
+                .srcAccessMask = last.access,
+                .dstStageMask = stage,
+                .dstAccessMask = access,
+                .srcQueueFamilyIndex = src_qf,
+                .dstQueueFamilyIndex = dst_qf,
+                .buffer = buf_vk->mem.buf,
+                .offset = buf_vk->mem.offset + offset,
+                .size = size,
+            },
+        });
     }
 
     buf_vk->needs_flush = false;
@@ -97,7 +103,6 @@ pl_buf vk_buf_create(pl_gpu gpu, const struct pl_buf_params *params)
 
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
     pl_rc_init(&buf_vk->rc);
-    vk_sem_init(&buf_vk->sem);
 
     struct vk_malloc_params mparams = {
         .reqs = {
@@ -283,21 +288,23 @@ void vk_buf_flush(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
     if (!can_read && !can_write)
         return;
 
-    VkBufferMemoryBarrier buffBarrier = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .srcAccessMask = buf_vk->sem.write.access,
-        .dstAccessMask = (can_read ? VK_ACCESS_HOST_READ_BIT : 0)
-                       | (can_write ? VK_ACCESS_HOST_WRITE_BIT : 0),
-        .buffer = buf_vk->mem.buf,
-        .offset = buf_vk->mem.offset + offset,
-        .size = size,
-    };
-
-    vk->CmdPipelineBarrier(cmd->buf, buf_vk->sem.write.stage,
-                           VK_PIPELINE_STAGE_HOST_BIT, 0,
-                           0, NULL, 1, &buffBarrier, 0, NULL);
+    vk->CmdPipelineBarrier2(cmd->buf, &(VkDependencyInfo) {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .bufferMemoryBarrierCount = 1,
+        .pBufferMemoryBarriers = &(VkBufferMemoryBarrier2) {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .srcStageMask = buf_vk->sem.write.stage,
+            .srcAccessMask = buf_vk->sem.write.access,
+            .dstStageMask = VK_PIPELINE_STAGE_2_HOST_BIT,
+            .dstAccessMask = (can_read ? VK_ACCESS_2_HOST_READ_BIT : 0)
+                           | (can_write ? VK_ACCESS_2_HOST_WRITE_BIT : 0),
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = buf_vk->mem.buf,
+            .offset = buf_vk->mem.offset + offset,
+            .size = size,
+        },
+    });
 
     // We need to hold on to the buffer until this barrier completes
     vk_cmd_callback(cmd, (vk_cb) invalidate_buf, gpu, buf);
@@ -348,8 +355,8 @@ void vk_buf_write(pl_gpu gpu, pl_buf buf, size_t offset,
             return;
         }
 
-        vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_ACCESS_TRANSFER_WRITE_BIT, offset, size, false);
+        vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_2_COPY_BIT,
+                       VK_ACCESS_2_TRANSFER_WRITE_BIT, offset, size, false);
 
         // Vulkan requires `size` to be a multiple of 4, so we need to make
         // sure to handle the end separately if the original data is not
@@ -425,10 +432,10 @@ void vk_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
         return;
     }
 
-    vk_buf_barrier(gpu, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                   VK_ACCESS_TRANSFER_WRITE_BIT, dst_offset, size, false);
-    vk_buf_barrier(gpu, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                   VK_ACCESS_TRANSFER_READ_BIT, src_offset, size, false);
+    vk_buf_barrier(gpu, cmd, dst, VK_PIPELINE_STAGE_2_COPY_BIT,
+                   VK_ACCESS_2_TRANSFER_WRITE_BIT, dst_offset, size, false);
+    vk_buf_barrier(gpu, cmd, src, VK_PIPELINE_STAGE_2_COPY_BIT,
+                   VK_ACCESS_2_TRANSFER_READ_BIT, src_offset, size, false);
 
     VkBufferCopy region = {
         .srcOffset = src_vk->mem.offset + src_offset,
@@ -457,8 +464,8 @@ bool vk_buf_export(pl_gpu gpu, pl_buf buf)
 
     // For the queue family ownership transfer, we can ignore all pipeline
     // stages since the synchronization via fences/semaphores is required
-    vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
-                   0, buf->params.size, true);
+    vk_buf_barrier(gpu, cmd, buf, VK_PIPELINE_STAGE_2_NONE, 0, 0,
+                   buf->params.size, true);
 
 
     return CMD_SUBMIT(&cmd);

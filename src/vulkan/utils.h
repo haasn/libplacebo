@@ -40,8 +40,8 @@ VkExternalMemoryHandleTypeFlagBitsKHR vk_mem_handle_type(enum pl_handle_type);
 VkExternalSemaphoreHandleTypeFlagBitsKHR vk_sync_handle_type(enum pl_handle_type);
 
 // Bitmask of all access flags that imply a read/write operation, respectively
-extern const VkAccessFlags vk_access_read;
-extern const VkAccessFlags vk_access_write;
+extern const VkAccessFlags2 vk_access_read;
+extern const VkAccessFlags2 vk_access_write;
 
 // Check for compatibility of a VkExternalMemoryProperties
 bool vk_external_mem_check(struct vk_ctx *vk,
