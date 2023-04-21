@@ -132,6 +132,9 @@ struct pl_vulkan_t {
     int num_extensions;
 
     // The device features that were enabled at device creation time.
+    //
+    // Note: Whenever a feature flag is ambiguious between several alternative
+    // locations, for completeness' sake, we include both.
     const VkPhysicalDeviceFeatures2 *features;
 
     // The explicit queue families we are using to provide a given capability.
@@ -240,10 +243,7 @@ struct pl_vulkan_params {
 
     // Optional extra features to enable at device creation time. These are
     // opportunistically enabled if supported by the physical device, but
-    // otherwise kept disabled. Users may include extra extension-specific
-    // features in the pNext chain, however these *must* all be
-    // extension-specific structs, i.e. the use of "meta-structs" like
-    // VkPhysicalDeviceVulkan11Features is not allowed.
+    // otherwise kept disabled.
     const VkPhysicalDeviceFeatures2 *features;
 
     // --- Misc/debugging options

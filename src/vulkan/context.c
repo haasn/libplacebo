@@ -1057,6 +1057,19 @@ static int find_qf(VkQueueFamilyProperties *qfs, int qfnum, VkQueueFlags flags)
     return idx;
 }
 
+static bool check_features(struct vk_ctx *vk)
+{
+    const VkPhysicalDeviceVulkan12Features *vk12 = vk_find_struct(&vk->features,
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES);
+
+    if (!vk12->timelineSemaphore) {
+        PL_ERR(vk, "Vulkan device does not support timeline semaphores!");
+        return false;
+    }
+
+    return true;
+}
+
 static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params)
 {
     pl_assert(vk->physd);
@@ -1164,61 +1177,30 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
         }
     }
 
-    VkPhysicalDeviceFeatures2 *device_features;
-    device_features = vk_chain_memdup(tmp, &pl_vulkan_recommended_features);
+    VkPhysicalDeviceFeatures2 features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR
+    };
 
-    // Query all supported device features by constructing a pNext chain
-    // starting with the features we care about and ending with whatever
-    // features were requested by the user
-    vk->features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR;
-    for (const VkBaseInStructure *in = device_features->pNext;
-            in; in = in->pNext)
-        vk_link_struct(&vk->features, vk_struct_memdup(vk->alloc, in));
+    vk_features_normalize(tmp, &pl_vulkan_recommended_features, vk->api_ver, &features);
+    vk_features_normalize(tmp, params->features, vk->api_ver, &features);
 
-    for (const VkBaseInStructure *in = (const VkBaseInStructure *) params->features;
-            in; in = in->pNext)
-    {
-        if (vk_find_struct(&vk->features, in->sType))
-            continue; // skip structs already present
+    VkPhysicalDeviceFeatures2 *features_sup = vk_chain_memdup(tmp, &features);;
+    vk->GetPhysicalDeviceFeatures2KHR(vk->physd, features_sup);
 
-        void *copy = vk_struct_memdup(vk->alloc, in);
-        if (!copy) {
-            PL_ERR(vk, "Unknown struct type %"PRIu64"?", (uint64_t) in->sType);
-            continue;
-        }
-
-        vk_link_struct(&vk->features, copy);
-    }
-
-    vk->GetPhysicalDeviceFeatures2KHR(vk->physd, &vk->features);
-
-    const VkPhysicalDeviceTimelineSemaphoreFeatures *timeline_sem;
-    timeline_sem = vk_find_struct(&vk->features,
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES);
-    if (!timeline_sem || !timeline_sem->timelineSemaphore) {
-        PL_ERR(vk, "Selected vulkan device does not support timeline semaphores!");
-        goto error;
-    }
-
-    // Go through the features chain a second time and mask every option
-    // that wasn't whitelisted by either libplacebo or the user
-    for (VkBaseOutStructure *chain = (VkBaseOutStructure *) &vk->features;
-            chain; chain = chain->pNext)
-    {
-        const VkBaseInStructure *in_a, *in_b;
-        in_a = vk_find_struct(device_features, chain->sType);
-        in_b = vk_find_struct(params->features, chain->sType);
-        in_a = PL_DEF(in_a, in_b);
-        in_b = PL_DEF(in_b, in_a);
-        pl_assert(in_a && in_b);
-
-        VkBool32 *req = (VkBool32 *) &chain[1];
-        const VkBool32 *wl_a = (const VkBool32 *) &in_a[1];
-        const VkBool32 *wl_b = (const VkBool32 *) &in_b[1];
-        size_t size = vk_struct_size(chain->sType) - sizeof(chain[0]);
+    // Filter out unsupported features
+    for (VkBaseOutStructure *f = (VkBaseOutStructure *) &features; f; f = f->pNext) {
+        const VkBaseInStructure *sup = vk_find_struct(features_sup, f->sType);
+        VkBool32 *flags = (VkBool32 *) &f[1];
+        const VkBool32 *flags_sup = (const VkBool32 *) &sup[1];
+        const size_t size = vk_struct_size(f->sType) - sizeof(VkBaseOutStructure);
         for (int i = 0; i < size / sizeof(VkBool32); i++)
-            req[i] &= wl_a[i] || wl_b[i];
+            flags[i] &= flags_sup[i];
     }
+
+    // Construct normalized output chain
+    vk_features_normalize(vk->alloc, &features, 0, &vk->features);
+    if (!check_features(vk))
+        goto error;
 
     // Enable all queues at device creation time, to maximize compatibility
     // with other API users (e.g. FFmpeg)
@@ -1234,7 +1216,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     VkDeviceCreateInfo dinfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = &vk->features,
+        .pNext = &features,
         .pQueueCreateInfos = qinfos.elem,
         .queueCreateInfoCount = qinfos.num,
         .ppEnabledExtensionNames = vk->exts.elem,
@@ -1542,41 +1524,9 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
         goto error;
     }
 
-    VkPhysicalDeviceFeatures2 *features;
-    features = vk_chain_memdup(vk->alloc, params->features);
-    if (features) {
-        // Go through and replace all meta-features structs by their individual
-        // extension variants, since that's what we check for in our code
-        const VkPhysicalDeviceVulkan12Features *vk12 = vk_find_struct(features,
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES);
-
-        if (vk12 && vk12->hostQueryReset) {
-            const VkPhysicalDeviceHostQueryResetFeatures hqr = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES,
-                .hostQueryReset = true,
-            };
-            vk_link_struct(features, vk_struct_memdup(vk->alloc, &hqr));
-        }
-
-        if (vk12 && vk12->timelineSemaphore) {
-            const VkPhysicalDeviceTimelineSemaphoreFeatures ts = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-                .timelineSemaphore = true,
-            };
-            vk_link_struct(features, vk_struct_memdup(vk->alloc, &ts));
-        }
-
-        vk->features = *features;
-    }
-
-    const VkPhysicalDeviceTimelineSemaphoreFeatures *timeline_sem;
-    timeline_sem = vk_find_struct(&vk->features,
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES);
-    if (!timeline_sem || !timeline_sem->timelineSemaphore) {
-        PL_ERR(vk, "Imported Vulkan device does not support timeline "
-               "semaphores. Please enable this device feature.");
+    vk_features_normalize(vk->alloc, params->features, 0, &vk->features);
+    if (!check_features(vk))
         goto error;
-    }
 
     // Load all mandatory device-level functions
     for (int i = 0; i < PL_ARRAY_SIZE(vk_dev_funs); i++)
