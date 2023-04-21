@@ -341,10 +341,16 @@ if cc.get_id() == 'clang'
   c_opts += ['-Wno-missing-braces']
 endif
 
-# don't leak library symbols if possible
-vflag = '-Wl,--exclude-libs=ALL'
-if cc.has_link_argument(vflag)
-  link_args += [vflag]
+# For sanitizers to work/link properly some public symbols have to be available.
+# We do exception for MSAN to intentionally cripple it's interceptors, which
+# allows us to run it on CI with not all the external libraries instrumented.
+if get_option('b_sanitize') == 'none' or (get_option('b_sanitize') == 'memory' and
+                                          get_option('default_library') == 'static')
+  # don't leak library symbols if possible
+  vflag = '-Wl,--exclude-libs=ALL'
+  if cc.has_link_argument(vflag)
+    link_args += [vflag]
+  endif
 endif
 
 # OS specific build options

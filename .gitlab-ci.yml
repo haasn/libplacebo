@@ -184,6 +184,7 @@ msan:
         - env CC=clang CXX=clang++ CC_LD=lld CXX_LD=lld
             meson build --buildtype debugoptimized
                         --werror
+                        --default-library static
                         -Dtests=true
                         -Dc_args='-DMSAN -DCI_MAXGL'
                         -Dglslang=disabled
