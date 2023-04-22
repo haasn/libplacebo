@@ -37,7 +37,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/time.h>
 #include <time.h>
 
 #include "common.h"
@@ -722,8 +721,8 @@ static void api1_example(void)
     dst.planes[0].data = dstbuf + OFFSET0;
     dst.planes[1].data = dstbuf + OFFSET1;
 
-    struct timeval start = {0}, stop = {0};
-    gettimeofday(&start, NULL);
+    struct timespec start = {0}, stop = {0};
+    timespec_get(&start, TIME_UTC);
 
     // Process this dummy frame a bunch of times
     unsigned frames = 0;
@@ -734,9 +733,9 @@ static void api1_example(void)
         }
     }
 
-    gettimeofday(&stop, NULL);
+    timespec_get(&stop, TIME_UTC);
     float secs = (float) (stop.tv_sec - start.tv_sec) +
-                 1e-6 * (stop.tv_usec - start.tv_usec);
+                 1e-9 * (stop.tv_nsec - start.tv_nsec);
 
     printf("api1: %4u frames in %1.6f s => %2.6f ms/frame (%5.2f fps)\n",
            frames, secs, 1000 * secs / frames, frames / secs);
@@ -789,8 +788,8 @@ static void api2_example(void)
         images[i].planes[1].data = data + OFFSET1;
     }
 
-    struct timeval start = {0}, stop = {0};
-    gettimeofday(&start, NULL);
+    struct timespec start = {0}, stop = {0};
+    timespec_get(&start, TIME_UTC);
 
     // Just keep driving the event loop regardless of the return status
     // until we reach the critical number of frames. (Good enough for this PoC)
@@ -810,9 +809,9 @@ static void api2_example(void)
         check_timers(vf);
     }
 
-    gettimeofday(&stop, NULL);
+    timespec_get(&stop, TIME_UTC);
     float secs = (float) (stop.tv_sec - start.tv_sec) +
-                 1e-6 * (stop.tv_usec - start.tv_usec);
+                 1e-9 * (stop.tv_nsec - start.tv_nsec);
 
     printf("api2: %4u frames in %1.6f s => %2.6f ms/frame (%5.2f fps)\n",
            api2_frames_out, secs, 1000 * secs / api2_frames_out,
