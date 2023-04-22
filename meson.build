@@ -348,7 +348,9 @@ if get_option('b_sanitize') == 'none' or (get_option('b_sanitize') == 'memory' a
                                           get_option('default_library') == 'static')
   # don't leak library symbols if possible
   vflag = '-Wl,--exclude-libs=ALL'
-  if cc.has_link_argument(vflag)
+  # link and lld-link don't support this arg, but it only shows warning about
+  # unsupported argument. Meson doesn't detect it, so manually exclude them.
+  if cc.has_link_argument(vflag) and not ['lld-link', 'link'].contains(cc.get_linker_id())
     link_args += [vflag]
   endif
 endif
