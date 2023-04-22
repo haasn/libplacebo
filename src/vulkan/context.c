@@ -217,9 +217,37 @@ static_assert(PL_ARRAY_SIZE(pl_vulkan_recommended_extensions) + 1 ==
               "pl_vulkan_recommended_extensions out of sync with "
               "vk_device_extensions?");
 
-// Recommended features
+// Recommended features; keep in sync with libavutil vulkan hwcontext
+static const VkPhysicalDeviceVulkan13Features recommended_vk13 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+    .computeFullSubgroups = true,
+    .shaderZeroInitializeWorkgroupMemory = true,
+};
+
+static const VkPhysicalDeviceVulkan12Features recommended_vk12 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+    .pNext = (void *) &recommended_vk13,
+    .bufferDeviceAddress = true,
+    .storagePushConstant8 = true,
+    .shaderInt8 = true,
+    .shaderFloat16 = true,
+    .shaderSharedInt64Atomics = true,
+    .storageBuffer8BitAccess = true,
+    .uniformAndStorageBuffer8BitAccess = true,
+    .vulkanMemoryModel = true,
+    .vulkanMemoryModelDeviceScope = true,
+};
+
+static const VkPhysicalDeviceVulkan11Features recommended_vk11 = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+    .pNext = (void *) &recommended_vk12,
+    .samplerYcbcrConversion = true,
+    .storagePushConstant16 = true,
+};
+
 const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+    .pNext = (void *) &recommended_vk11,
     .features = {
         .shaderImageGatherExtended = true,
         .shaderStorageImageReadWithoutFormat = true,
