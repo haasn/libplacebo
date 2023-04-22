@@ -82,7 +82,7 @@ struct pl_icc_params {
     .max_luma = PL_COLOR_SDR_WHITE,
 
 #define pl_icc_params(...) (&(struct pl_icc_params) { PL_ICC_DEFAULTS __VA_ARGS__ })
-extern const struct pl_icc_params pl_icc_default_params;
+PL_API extern const struct pl_icc_params pl_icc_default_params;
 
 // This object represents a "parsed" ICC profile.
 typedef const struct pl_icc_object_t {
@@ -107,22 +107,22 @@ typedef const struct pl_icc_object_t {
 // Attempts opening/parsing the contents of an ICC profile. The resulting
 // object is memory managed and may outlive the original profile - access
 // to the underlying profile is no longer needed once this returns.
-pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
-                          const struct pl_icc_params *params);
-void pl_icc_close(pl_icc_object *icc);
+PL_API pl_icc_object pl_icc_open(pl_log log, const struct pl_icc_profile *profile,
+                                 const struct pl_icc_params *params);
+PL_API void pl_icc_close(pl_icc_object *icc);
 
 // Decode the input from the colorspace determined by the attached ICC profile
 // to linear light RGB (in the profile's containing primary set). `lut` must be
 // set to a shader object that will store the GPU resources associated with the
 // generated LUT. The resulting color space will be written to `out_csp`.
-void pl_icc_decode(pl_shader sh, pl_icc_object profile, pl_shader_obj *lut,
-                   struct pl_color_space *out_csp);
+PL_API void pl_icc_decode(pl_shader sh, pl_icc_object profile, pl_shader_obj *lut,
+                          struct pl_color_space *out_csp);
 
 // Encode the input from linear light RGB (in the profile's containing primary
 // set) into the colorspace determined by the attached ICC profile. `lut` must
 // be set to a shader object that will store the GPU resources associated with
 // the generated LUT.
-void pl_icc_encode(pl_shader sh, pl_icc_object profile, pl_shader_obj *lut);
+PL_API void pl_icc_encode(pl_shader sh, pl_icc_object profile, pl_shader_obj *lut);
 
 PL_API_END
 

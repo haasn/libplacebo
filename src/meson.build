@@ -188,6 +188,7 @@ sources += vcs_tag(
 ### Main library build process
 inc = include_directories('./include')
 lib = library('placebo', sources,
+  c_args: '-DPL_EXPORT',
   install: true,
   dependencies: build_deps + glad_dep,
   soversion: apiver,
@@ -230,6 +231,7 @@ pkg.generate(
 tdep_static = declare_dependency(
     dependencies: build_deps,
     include_directories: [ inc, include_directories('.') ],
+    compile_args: '-DPL_STATIC'
     # TODO: Define objects here once Meson 1.1.0 is ok to use
     # objects: lib.extract_all_objects(recursive: false)
   )

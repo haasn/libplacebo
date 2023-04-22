@@ -121,7 +121,7 @@ struct pl_film_grain_params {
 // Test if film grain needs to be applied. This is a helper function that users
 // can use to decide whether or not `pl_shader_film_grain` needs to be called,
 // based on the given grain metadata.
-bool pl_needs_film_grain(const struct pl_film_grain_params *params);
+PL_API bool pl_needs_film_grain(const struct pl_film_grain_params *params);
 
 // Sample from a texture while applying film grain at the same time.
 // `grain_state` must be unique for every plane configuration, as it may
@@ -129,8 +129,8 @@ bool pl_needs_film_grain(const struct pl_film_grain_params *params);
 //
 // Returns false on any error, or if film grain generation is not supported
 // due to GLSL limitations.
-bool pl_shader_film_grain(pl_shader sh, pl_shader_obj *grain_state,
-                          const struct pl_film_grain_params *params);
+PL_API bool pl_shader_film_grain(pl_shader sh, pl_shader_obj *grain_state,
+                                 const struct pl_film_grain_params *params);
 
 PL_API_END
 

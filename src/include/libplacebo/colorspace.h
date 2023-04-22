@@ -45,17 +45,17 @@ enum pl_color_system {
     PL_COLOR_SYSTEM_COUNT
 };
 
-bool pl_color_system_is_ycbcr_like(enum pl_color_system sys);
+PL_API bool pl_color_system_is_ycbcr_like(enum pl_color_system sys);
 
 // Returns true for color systems that are linear transformations of the RGB
 // equivalent, i.e. are simple matrix multiplications. For color systems with
 // this property, `pl_color_repr_decode` is sufficient for conversion to RGB.
-bool pl_color_system_is_linear(enum pl_color_system sys);
+PL_API bool pl_color_system_is_linear(enum pl_color_system sys);
 
 // Guesses the best YCbCr-like colorspace based on a image given resolution.
 // This only picks conservative values. (In particular, BT.2020 is never
 // auto-guessed, even for 4K resolution content)
-enum pl_color_system pl_color_system_guess_ycbcr(int width, int height);
+PL_API enum pl_color_system pl_color_system_guess_ycbcr(int width, int height);
 
 // Friendly names for the canonical channel names and order.
 enum pl_channel {
@@ -118,8 +118,8 @@ struct pl_bit_encoding {
 };
 
 // Returns whether two bit encodings are exactly identical.
-bool pl_bit_encoding_equal(const struct pl_bit_encoding *b1,
-                           const struct pl_bit_encoding *b2);
+PL_API bool pl_bit_encoding_equal(const struct pl_bit_encoding *b1,
+                                  const struct pl_bit_encoding *b2);
 
 // Parsed metadata from the Dolby Vision RPU
 struct pl_dovi_metadata {
@@ -162,32 +162,32 @@ struct pl_color_repr {
 // Some common color representations. It's worth pointing out that all of these
 // presets leave `alpha` and `bits` as unknown - that is, only the system and
 // levels are predefined
-extern const struct pl_color_repr pl_color_repr_unknown;
-extern const struct pl_color_repr pl_color_repr_rgb;
-extern const struct pl_color_repr pl_color_repr_sdtv;
-extern const struct pl_color_repr pl_color_repr_hdtv;  // also Blu-ray
-extern const struct pl_color_repr pl_color_repr_uhdtv; // SDR, NCL system
-extern const struct pl_color_repr pl_color_repr_jpeg;
+PL_API extern const struct pl_color_repr pl_color_repr_unknown;
+PL_API extern const struct pl_color_repr pl_color_repr_rgb;
+PL_API extern const struct pl_color_repr pl_color_repr_sdtv;
+PL_API extern const struct pl_color_repr pl_color_repr_hdtv;  // also Blu-ray
+PL_API extern const struct pl_color_repr pl_color_repr_uhdtv; // SDR, NCL system
+PL_API extern const struct pl_color_repr pl_color_repr_jpeg;
 
 // Returns whether two colorspace representations are exactly identical.
-bool pl_color_repr_equal(const struct pl_color_repr *c1,
-                         const struct pl_color_repr *c2);
+PL_API bool pl_color_repr_equal(const struct pl_color_repr *c1,
+                                const struct pl_color_repr *c2);
 
 // Replaces unknown values in the first struct by those of the second struct.
-void pl_color_repr_merge(struct pl_color_repr *orig,
-                         const struct pl_color_repr *update);
+PL_API void pl_color_repr_merge(struct pl_color_repr *orig,
+                                const struct pl_color_repr *update);
 
 // This function normalizes the color representation such that
 // color_depth=sample_depth and bit_shift=0; and returns the scaling factor
 // that must be multiplied into the color value to accomplish this, assuming
 // it has already been sampled by the GPU. If unknown, the color and sample
 // depth will both be inferred as 8 bits for the purposes of this conversion.
-float pl_color_repr_normalize(struct pl_color_repr *repr);
+PL_API float pl_color_repr_normalize(struct pl_color_repr *repr);
 
 // Guesses the best color levels based on the specified color levels and
 // falling back to using the color system instead. YCbCr-like systems are
 // assumed to be TV range, otherwise this defaults to PC range.
-enum pl_color_levels pl_color_levels_guess(const struct pl_color_repr *repr);
+PL_API enum pl_color_levels pl_color_levels_guess(const struct pl_color_repr *repr);
 
 // The colorspace's primaries (gamut)
 enum pl_color_primaries {
@@ -214,12 +214,12 @@ enum pl_color_primaries {
     PL_COLOR_PRIM_COUNT
 };
 
-bool pl_color_primaries_is_wide_gamut(enum pl_color_primaries prim);
+PL_API bool pl_color_primaries_is_wide_gamut(enum pl_color_primaries prim);
 
 // Guesses the best primaries based on a resolution. This always guesses
 // conservatively, i.e. it will never return a wide gamut color space even if
 // the resolution is 4K.
-enum pl_color_primaries pl_color_primaries_guess(int width, int height);
+PL_API enum pl_color_primaries pl_color_primaries_guess(int width, int height);
 
 // The colorspace's transfer function (gamma / EOTF)
 enum pl_color_transfer {
@@ -255,7 +255,7 @@ enum pl_color_transfer {
 // different from the signal peak after applying the OOTF to go from scene
 // referred to display referred (resulting in a display-referred peak of around
 // 4.92 for a 1000 cd/m^2 HLG reference display).
-float pl_color_transfer_nominal_peak(enum pl_color_transfer trc);
+PL_API float pl_color_transfer_nominal_peak(enum pl_color_transfer trc);
 
 static inline bool pl_color_transfer_is_hdr(enum pl_color_transfer trc)
 {
@@ -302,7 +302,7 @@ static inline bool pl_cie_xy_equal(const struct pl_cie_xy *a,
 // with the given correlated color temperature.
 //
 // `temperature` must be between 2500 K and 25000 K, inclusive.
-struct pl_cie_xy pl_white_from_temp(float temperature);
+PL_API struct pl_cie_xy pl_white_from_temp(float temperature);
 
 // Represents the raw physical primaries corresponding to a color space.
 struct pl_raw_primaries {
@@ -310,19 +310,19 @@ struct pl_raw_primaries {
 };
 
 // Returns whether two raw primaries are exactly identical.
-bool pl_raw_primaries_equal(const struct pl_raw_primaries *a,
-                            const struct pl_raw_primaries *b);
+PL_API bool pl_raw_primaries_equal(const struct pl_raw_primaries *a,
+                                   const struct pl_raw_primaries *b);
 
 // Returns whether two raw primaries are approximately equal
-bool pl_raw_primaries_similar(const struct pl_raw_primaries *a,
-                              const struct pl_raw_primaries *b);
+PL_API bool pl_raw_primaries_similar(const struct pl_raw_primaries *a,
+                                     const struct pl_raw_primaries *b);
 
 // Replaces unknown values in the first struct by those of the second struct.
-void pl_raw_primaries_merge(struct pl_raw_primaries *orig,
-                            const struct pl_raw_primaries *update);
+PL_API void pl_raw_primaries_merge(struct pl_raw_primaries *orig,
+                                   const struct pl_raw_primaries *update);
 
 // Returns the raw primaries for a given color space.
-const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim);
+PL_API const struct pl_raw_primaries *pl_raw_primaries_get(enum pl_color_primaries prim);
 
 enum pl_hdr_scaling {
     PL_HDR_NORM = 0,        // 0.0 is absolute black, 1.0 is PL_COLOR_SDR_WHITE
@@ -333,7 +333,7 @@ enum pl_hdr_scaling {
 };
 
 // Generic helper for performing HDR scale conversions.
-float pl_hdr_rescale(enum pl_hdr_scaling from, enum pl_hdr_scaling to, float x);
+PL_API float pl_hdr_rescale(enum pl_hdr_scaling from, enum pl_hdr_scaling to, float x);
 
 enum pl_hdr_metadata_type {
     PL_HDR_METADATA_ANY = 0,
@@ -375,22 +375,22 @@ struct pl_hdr_metadata {
     float avg_pq_y;                 // averaged PQ luminance (in PQ, 0-1)
 };
 
-extern const struct pl_hdr_metadata pl_hdr_metadata_empty; // equal to {0}
-extern const struct pl_hdr_metadata pl_hdr_metadata_hdr10; // generic HDR10 display
+PL_API extern const struct pl_hdr_metadata pl_hdr_metadata_empty; // equal to {0}
+PL_API extern const struct pl_hdr_metadata pl_hdr_metadata_hdr10; // generic HDR10 display
 
 // Returns whether two sets of HDR metadata are exactly identical.
-bool pl_hdr_metadata_equal(const struct pl_hdr_metadata *a,
-                           const struct pl_hdr_metadata *b);
+PL_API bool pl_hdr_metadata_equal(const struct pl_hdr_metadata *a,
+                                  const struct pl_hdr_metadata *b);
 
 // Replaces unknown values in the first struct by those of the second struct.
-void pl_hdr_metadata_merge(struct pl_hdr_metadata *orig,
-                           const struct pl_hdr_metadata *update);
+PL_API void pl_hdr_metadata_merge(struct pl_hdr_metadata *orig,
+                                  const struct pl_hdr_metadata *update);
 
 // Returns `true` if `data` contains a complete set of a given metadata type.
 // Note: for PL_HDR_METADATA_HDR10, only `min_luma` and `max_luma` are
 // considered - CLL/FALL and primaries are irrelevant for HDR tone-mapping.
-bool pl_hdr_metadata_contains(const struct pl_hdr_metadata *data,
-                              enum pl_hdr_metadata_type type);
+PL_API bool pl_hdr_metadata_contains(const struct pl_hdr_metadata *data,
+                                     enum pl_hdr_metadata_type type);
 
 // Rendering intent for colorspace transformations. These constants match the
 // ICC specification (Table 23)
@@ -418,12 +418,12 @@ struct pl_color_space {
 // Returns whether or not a color space is considered as effectively HDR.
 // This is true when the effective signal peak is greater than the SDR
 // reference white (1.0), taking into account `csp->hdr`.
-bool pl_color_space_is_hdr(const struct pl_color_space *csp);
+PL_API bool pl_color_space_is_hdr(const struct pl_color_space *csp);
 
 // Returns whether or not a color space is "black scaled", in which case 0.0 is
 // the true black point. This is true for SDR signals other than BT.1886, as
 // well as for HLG.
-bool pl_color_space_is_black_scaled(const struct pl_color_space *csp);
+PL_API bool pl_color_space_is_black_scaled(const struct pl_color_space *csp);
 
 struct pl_nominal_luma_params {
     // The color space to infer luminance from
@@ -451,29 +451,29 @@ struct pl_nominal_luma_params {
     (&(struct pl_nominal_luma_params) { __VA_ARGS__ })
 
 // Returns the effective luminance described by a pl_color_space.
-void pl_color_space_nominal_luma_ex(const struct pl_nominal_luma_params *params);
+PL_API void pl_color_space_nominal_luma_ex(const struct pl_nominal_luma_params *params);
 
 // Backwards compatibility wrapper for `pl_color_space_nominal_luma_ex`
-PL_DEPRECATED void pl_color_space_nominal_luma(const struct pl_color_space *csp,
-                                               float *out_min, float *out_max);
+PL_DEPRECATED PL_API void pl_color_space_nominal_luma(const struct pl_color_space *csp,
+                                                      float *out_min, float *out_max);
 
 // Replaces unknown values in the first struct by those of the second struct.
-void pl_color_space_merge(struct pl_color_space *orig,
-                          const struct pl_color_space *update);
+PL_API void pl_color_space_merge(struct pl_color_space *orig,
+                                 const struct pl_color_space *update);
 
 // Returns whether two colorspaces are exactly identical.
-bool pl_color_space_equal(const struct pl_color_space *c1,
-                          const struct pl_color_space *c2);
+PL_API bool pl_color_space_equal(const struct pl_color_space *c1,
+                                 const struct pl_color_space *c2);
 
 // Go through a color-space and explicitly default all unknown fields to
 // reasonable values. After this function is called, none of the values will be
 // PL_COLOR_*_UNKNOWN or 0.0, except for the dynamic HDR metadata fields.
-void pl_color_space_infer(struct pl_color_space *space);
+PL_API void pl_color_space_infer(struct pl_color_space *space);
 
 // Like `pl_color_space_infer`, but takes default values from the reference
 // color space (excluding certain special cases like HDR or wide gamut).
-void pl_color_space_infer_ref(struct pl_color_space *space,
-                              const struct pl_color_space *ref);
+PL_API void pl_color_space_infer_ref(struct pl_color_space *space,
+                                     const struct pl_color_space *ref);
 
 // Infer both the source and destination gamut simultaneously, and also adjust
 // values for optimal display. This is mostly the same as
@@ -482,17 +482,17 @@ void pl_color_space_infer_ref(struct pl_color_space *space,
 // basically the logic used by `pl_shader_color_map` and `pl_renderer` to
 // decide the output color space in a conservative way and compute the final
 // end-to-end color transformation that needs to be done.
-void pl_color_space_infer_map(struct pl_color_space *src,
-                              struct pl_color_space *dst);
+PL_API void pl_color_space_infer_map(struct pl_color_space *src,
+                                     struct pl_color_space *dst);
 
 // Some common color spaces. Note: These don't necessarily have all fields
 // filled, in particular `hdr` is left unset.
-extern const struct pl_color_space pl_color_space_unknown;
-extern const struct pl_color_space pl_color_space_srgb;
-extern const struct pl_color_space pl_color_space_bt709;
-extern const struct pl_color_space pl_color_space_hdr10;
-extern const struct pl_color_space pl_color_space_bt2020_hlg;
-extern const struct pl_color_space pl_color_space_monitor; // typical display
+PL_API extern const struct pl_color_space pl_color_space_unknown;
+PL_API extern const struct pl_color_space pl_color_space_srgb;
+PL_API extern const struct pl_color_space pl_color_space_bt709;
+PL_API extern const struct pl_color_space pl_color_space_hdr10;
+PL_API extern const struct pl_color_space pl_color_space_bt2020_hlg;
+PL_API extern const struct pl_color_space pl_color_space_monitor; // typical display
 
 // This represents metadata about extra operations to perform during colorspace
 // conversion, which correspond to artistic adjustments of the color.
@@ -513,7 +513,7 @@ struct pl_color_adjustment {
 };
 
 // A struct pre-filled with all-neutral values.
-extern const struct pl_color_adjustment pl_color_adjustment_neutral;
+PL_API extern const struct pl_color_adjustment pl_color_adjustment_neutral;
 
 // Represents the chroma placement with respect to the luma samples. This is
 // only relevant for YCbCr-like colorspaces with chroma subsampling.
@@ -532,47 +532,47 @@ enum pl_chroma_location {
 // chroma location.
 //
 // Note: PL_CHROMA_UNKNOWN defaults to PL_CHROMA_LEFT
-void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y);
+PL_API void pl_chroma_location_offset(enum pl_chroma_location loc, float *x, float *y);
 
 // Returns an RGB->XYZ conversion matrix for a given set of primaries.
 // Multiplying this into the RGB color transforms it to CIE XYZ, centered
 // around the color space's white point.
-pl_matrix3x3 pl_get_rgb2xyz_matrix(const struct pl_raw_primaries *prim);
+PL_API pl_matrix3x3 pl_get_rgb2xyz_matrix(const struct pl_raw_primaries *prim);
 
 // Similar to pl_get_rgb2xyz_matrix, but gives the inverse transformation.
-pl_matrix3x3 pl_get_xyz2rgb_matrix(const struct pl_raw_primaries *prim);
+PL_API pl_matrix3x3 pl_get_xyz2rgb_matrix(const struct pl_raw_primaries *prim);
 
 // Returns a primary adaptation matrix, which converts from one set of
 // primaries to another. This is an RGB->RGB transformation. For rendering
 // intents other than PL_INTENT_ABSOLUTE_COLORIMETRIC, the white point is
 // adapted using the Bradford matrix.
-pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *src,
-                                         const struct pl_raw_primaries *dst,
-                                         enum pl_rendering_intent intent);
+PL_API pl_matrix3x3 pl_get_color_mapping_matrix(const struct pl_raw_primaries *src,
+                                                const struct pl_raw_primaries *dst,
+                                                enum pl_rendering_intent intent);
 
 // Return a chromatic adaptation matrix, which converts from one white point to
 // another, using the Bradford matrix. This is an RGB->RGB transformation.
-pl_matrix3x3 pl_get_adaptation_matrix(struct pl_cie_xy src, struct pl_cie_xy dst);
+PL_API pl_matrix3x3 pl_get_adaptation_matrix(struct pl_cie_xy src, struct pl_cie_xy dst);
 
 // Returns true if 'b' is entirely contained in 'a'. Useful for figuring out if
 // colorimetric clipping will occur or not.
-bool pl_primaries_superset(const struct pl_raw_primaries *a,
-                           const struct pl_raw_primaries *b);
+PL_API bool pl_primaries_superset(const struct pl_raw_primaries *a,
+                                  const struct pl_raw_primaries *b);
 
 // Returns true if `prim` forms a nominally valid set of primaries. This does
 // not check whether or not these primaries are actually physically realisable,
 // merely that they satisfy the requirements for colorspace math (to avoid NaN).
-bool pl_primaries_valid(const struct pl_raw_primaries *prim);
+PL_API bool pl_primaries_valid(const struct pl_raw_primaries *prim);
 
 // Primary-dependent RGB->LMS matrix for the IPTPQc4 color system. This is
 // derived from the HPE XYZ->LMS matrix with 4% crosstalk added.
-pl_matrix3x3 pl_ipt_rgb2lms(const struct pl_raw_primaries *prim);
-pl_matrix3x3 pl_ipt_lms2rgb(const struct pl_raw_primaries *prim);
+PL_API pl_matrix3x3 pl_ipt_rgb2lms(const struct pl_raw_primaries *prim);
+PL_API pl_matrix3x3 pl_ipt_lms2rgb(const struct pl_raw_primaries *prim);
 
 // Primary-independent L'M'S' -> IPT matrix for the IPTPQc4 color system, and
 // its inverse. This is identical to the Ebner & Fairchild (1998) IPT matrix.
-extern const pl_matrix3x3 pl_ipt_lms2ipt;
-extern const pl_matrix3x3 pl_ipt_ipt2lms;
+PL_API extern const pl_matrix3x3 pl_ipt_lms2ipt;
+PL_API extern const pl_matrix3x3 pl_ipt_ipt2lms;
 
 // Cone types involved in human vision
 enum pl_cone {
@@ -598,15 +598,15 @@ struct pl_cone_params {
 #define pl_cone_params(...) (&(struct pl_cone_params) { __VA_ARGS__ })
 
 // Built-in color blindness models
-extern const struct pl_cone_params pl_vision_normal;        // No distortion (92%)
-extern const struct pl_cone_params pl_vision_protanomaly;   // Red deficiency (0.66%)
-extern const struct pl_cone_params pl_vision_protanopia;    // Red absence (0.59%)
-extern const struct pl_cone_params pl_vision_deuteranomaly; // Green deficiency (2.7%)
-extern const struct pl_cone_params pl_vision_deuteranopia;  // Green absence (0.56%)
-extern const struct pl_cone_params pl_vision_tritanomaly;   // Blue deficiency (0.01%)
-extern const struct pl_cone_params pl_vision_tritanopia;    // Blue absence (0.016%)
-extern const struct pl_cone_params pl_vision_monochromacy;  // Blue cones only (<0.001%)
-extern const struct pl_cone_params pl_vision_achromatopsia; // Rods only (<0.0001%)
+PL_API extern const struct pl_cone_params pl_vision_normal;        // No distortion (92%)
+PL_API extern const struct pl_cone_params pl_vision_protanomaly;   // Red deficiency (0.66%)
+PL_API extern const struct pl_cone_params pl_vision_protanopia;    // Red absence (0.59%)
+PL_API extern const struct pl_cone_params pl_vision_deuteranomaly; // Green deficiency (2.7%)
+PL_API extern const struct pl_cone_params pl_vision_deuteranopia;  // Green absence (0.56%)
+PL_API extern const struct pl_cone_params pl_vision_tritanomaly;   // Blue deficiency (0.01%)
+PL_API extern const struct pl_cone_params pl_vision_tritanopia;    // Blue absence (0.016%)
+PL_API extern const struct pl_cone_params pl_vision_monochromacy;  // Blue cones only (<0.001%)
+PL_API extern const struct pl_cone_params pl_vision_achromatopsia; // Rods only (<0.0001%)
 
 // Returns a cone adaptation matrix. Applying this to an RGB color in the given
 // color space will apply the given cone adaptation coefficients for simulating
@@ -617,8 +617,8 @@ extern const struct pl_cone_params pl_vision_achromatopsia; // Rods only (<0.000
 // `strength` set to its inverse. For example, to partially counteract
 // deuteranomaly, you could generate a cone matrix for PL_CONE_M with the
 // strength 2.0 (or some other number above 1.0).
-pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
-                                const struct pl_raw_primaries *prim);
+PL_API pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
+                                       const struct pl_raw_primaries *prim);
 
 // Returns a color decoding matrix for a given combination of source color
 // representation and adjustment parameters. This mutates `repr` to reflect the
@@ -637,8 +637,8 @@ pl_matrix3x3 pl_get_cone_matrix(const struct pl_cone_params *params,
 //
 // Note: XYZ system is expected to be in DCDM X'Y'Z' encoding (ST 428-1), in
 // practice this means normalizing by (48.0 / 52.37) factor and applying 2.6 gamma
-pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
-                                     const struct pl_color_adjustment *params);
+PL_API pl_transform3x3 pl_color_repr_decode(struct pl_color_repr *repr,
+                                            const struct pl_color_adjustment *params);
 
 // Common struct to describe an ICC profile
 struct pl_icc_profile {
@@ -656,8 +656,8 @@ struct pl_icc_profile {
 };
 
 // This doesn't do a comparison of the actual contents, only of the signature.
-bool pl_icc_profile_equal(const struct pl_icc_profile *p1,
-                          const struct pl_icc_profile *p2);
+PL_API bool pl_icc_profile_equal(const struct pl_icc_profile *p1,
+                                 const struct pl_icc_profile *p2);
 
 // Sets `signature` to a hash of `profile->data`, if non-NULL. Provided as a
 // convenience function for the sake of users ingesting arbitrary ICC profiles
@@ -665,7 +665,7 @@ bool pl_icc_profile_equal(const struct pl_icc_profile *p1,
 //
 // Note: This is based on a very fast hash, and will compute a signature for
 // even large (10 MB) ICC profiles in, typically, a fraction of a millisecond.
-void pl_icc_profile_compute_signature(struct pl_icc_profile *profile);
+PL_API void pl_icc_profile_compute_signature(struct pl_icc_profile *profile);
 
 PL_API_END
 

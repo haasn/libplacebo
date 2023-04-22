@@ -93,37 +93,37 @@ struct pl_tone_map_params {
 #define pl_tone_map_params(...) (&(struct pl_tone_map_params) { __VA_ARGS__ });
 
 // Note: Only does pointer equality testing on `function`
-bool pl_tone_map_params_equal(const struct pl_tone_map_params *a,
-                              const struct pl_tone_map_params *b);
+PL_API bool pl_tone_map_params_equal(const struct pl_tone_map_params *a,
+                                     const struct pl_tone_map_params *b);
 
 // Resolves `pl_tone_map_auto` to a specific tone-mapping function, based on
 // the tone mapping parameters, and also clamps/defaults the parameter.
-void pl_tone_map_params_infer(struct pl_tone_map_params *params);
+PL_API void pl_tone_map_params_infer(struct pl_tone_map_params *params);
 
 // Returns true if the given tone mapping configuration effectively represents
 // a no-op configuration. Tone mapping can be skipped in this case (although
 // strictly speaking, the LUT would still clip illegal input values)
-bool pl_tone_map_params_noop(const struct pl_tone_map_params *params);
+PL_API bool pl_tone_map_params_noop(const struct pl_tone_map_params *params);
 
 // Generate a tone-mapping LUT for a given configuration. This will always
 // span the entire input range, as given by `input_min` and `input_max`.
-void pl_tone_map_generate(float *out, const struct pl_tone_map_params *params);
+PL_API void pl_tone_map_generate(float *out, const struct pl_tone_map_params *params);
 
 // Samples a tone mapping function at a single position. Note that this is less
 // efficient than `pl_tone_map_generate` for generating multiple values.
 //
 // Ignores `params->lut_size`.
-float pl_tone_map_sample(float x, const struct pl_tone_map_params *params);
+PL_API float pl_tone_map_sample(float x, const struct pl_tone_map_params *params);
 
 // Special tone mapping function that means "automatically pick a good function
 // based on the HDR levels". This is an opaque tone map function with no
 // meaningful internal representation. (Besides `name` and `description`)
-extern const struct pl_tone_map_function pl_tone_map_auto;
+PL_API extern const struct pl_tone_map_function pl_tone_map_auto;
 
 // Performs no tone-mapping, just clips out-of-range colors. Retains perfect
 // color accuracy for in-range colors but completely destroys out-of-range
 // information. Does not perform any black point adaptation.
-extern const struct pl_tone_map_function pl_tone_map_clip;
+PL_API extern const struct pl_tone_map_function pl_tone_map_clip;
 
 // EETF from SMPTE ST 2094-40 Annex B, which uses the provided OOTF based on
 // Bezier curves to perform tone-mapping. The OOTF used is adjusted based on
@@ -132,7 +132,7 @@ extern const struct pl_tone_map_function pl_tone_map_clip;
 // In the absence of HDR10+ metadata, falls back to a simple constant bezier
 // curve with tunable knee point. The parameter gives the target brightness
 // adaptation strength for the knee point, defaulting to 0.7.
-extern const struct pl_tone_map_function pl_tone_map_st2094_40;
+PL_API extern const struct pl_tone_map_function pl_tone_map_st2094_40;
 
 // EETF from SMPTE ST 2094-10 Annex B.2, which takes into account the input
 // signal average luminance in addition to the maximum/minimum. The parameter
@@ -142,16 +142,16 @@ extern const struct pl_tone_map_function pl_tone_map_st2094_40;
 // Note: This does *not* currently include the subjective gain/offset/gamma
 // controls defined in Annex B.3. (Open an issue with a valid sample file if
 // you want such parameters to be respected.)
-extern const struct pl_tone_map_function pl_tone_map_st2094_10;
+PL_API extern const struct pl_tone_map_function pl_tone_map_st2094_10;
 
 // EETF from the ITU-R Report BT.2390, a hermite spline roll-off with linear
 // segment. The knee point offset is configurable. Note that this defaults to
 // 1.0, rather than the value of 0.5 from the ITU-R spec.
-extern const struct pl_tone_map_function pl_tone_map_bt2390;
+PL_API extern const struct pl_tone_map_function pl_tone_map_bt2390;
 
 // EETF from ITU-R Report BT.2446, method A. Can be used for both forward
 // and inverse tone mapping. Not configurable.
-extern const struct pl_tone_map_function pl_tone_map_bt2446a;
+PL_API extern const struct pl_tone_map_function pl_tone_map_bt2446a;
 
 // Simple spline consisting of two polynomials, joined by a single pivot point,
 // which is tuned based on the source scene average brightness (taking into
@@ -163,14 +163,14 @@ extern const struct pl_tone_map_function pl_tone_map_bt2446a;
 // contrast. Values above 1.0 are possible, resulting in an output with more
 // contrast than the input. The default value is 0.5. This function can be used
 // for both forward and inverse tone mapping.
-extern const struct pl_tone_map_function pl_tone_map_spline;
+PL_API extern const struct pl_tone_map_function pl_tone_map_spline;
 
 // Simple non-linear, global tone mapping algorithm. Named after Erik Reinhard.
 // The parameter specifies the local contrast coefficient at the display peak.
 // Essentially, a value of param=0.5 implies that the reference white will be
 // about half as bright as when clipping. Defaults to 0.5, which results in the
 // simplest formulation of this function.
-extern const struct pl_tone_map_function pl_tone_map_reinhard;
+PL_API extern const struct pl_tone_map_function pl_tone_map_reinhard;
 
 // Generalization of the reinhard tone mapping algorithm to support an
 // additional linear slope near black. The tone mapping parameter indicates the
@@ -182,7 +182,7 @@ extern const struct pl_tone_map_function pl_tone_map_reinhard;
 // provides a good balance between colorimetric accuracy and preserving
 // out-of-gamut details. The name is derived from its function shape
 // (ax+b)/(cx+d), which is known as a Möbius transformation in mathematics.
-extern const struct pl_tone_map_function pl_tone_map_mobius;
+PL_API extern const struct pl_tone_map_function pl_tone_map_mobius;
 
 // Piece-wise, filmic tone-mapping algorithm developed by John Hable for use in
 // Uncharted 2, inspired by a similar tone-mapping algorithm used by Kodak.
@@ -190,28 +190,28 @@ extern const struct pl_tone_map_function pl_tone_map_mobius;
 // dark and bright details very well, but comes with the drawback of changing
 // the average brightness quite significantly. This is sort of similar to
 // pl_tone_map_reinhard with parameter 0.24.
-extern const struct pl_tone_map_function pl_tone_map_hable;
+PL_API extern const struct pl_tone_map_function pl_tone_map_hable;
 
 // Fits a gamma (power) function to transfer between the source and target
 // color spaces, effectively resulting in a perceptual hard-knee joining two
 // roughly linear sections. This preserves details at all scales fairly
 // accurately, but can result in an image with a muted or dull appearance. The
 // parameter is used as the cutoff point, defaulting to 0.5.
-extern const struct pl_tone_map_function pl_tone_map_gamma;
+PL_API extern const struct pl_tone_map_function pl_tone_map_gamma;
 
 // Linearly stretches the input range to the output range, in PQ space. This
 // will preserve all details accurately, but results in a significantly
 // different average brightness. Can be used for inverse tone-mapping in
 // addition to regular tone-mapping. The parameter can be used as an additional
 // linear gain coefficient (defaulting to 1.0).
-extern const struct pl_tone_map_function pl_tone_map_linear;
+PL_API extern const struct pl_tone_map_function pl_tone_map_linear;
 
 // A list of built-in tone mapping functions, terminated by NULL
-extern const struct pl_tone_map_function * const pl_tone_map_functions[];
-extern const int pl_num_tone_map_functions; // excluding trailing NULL
+PL_API extern const struct pl_tone_map_function * const pl_tone_map_functions[];
+PL_API extern const int pl_num_tone_map_functions; // excluding trailing NULL
 
 // Find the tone mapping function with the given name, or NULL on failure.
-const struct pl_tone_map_function *pl_find_tone_map_function(const char *name);
+PL_API const struct pl_tone_map_function *pl_find_tone_map_function(const char *name);
 
 PL_API_END
 

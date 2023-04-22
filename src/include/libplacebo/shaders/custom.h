@@ -98,7 +98,7 @@ struct pl_custom_shader {
 // existing `pl_shader` object. Returns whether successful. This function may
 // fail in the event that e.g. the custom shader requires compute shaders on
 // an unsupported GPU, or exceeds the GPU's shared memory capabilities.
-bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params);
+PL_API bool pl_shader_custom(pl_shader sh, const struct pl_custom_shader *params);
 
 // Which "rendering stages" are available for user shader hooking purposes.
 // Except where otherwise noted, all stages are "non-resizable", i.e. the
@@ -324,11 +324,11 @@ struct pl_hook {
 //
 // The resulting `pl_hook` objects should be destroyed with the corresponding
 // destructor when no longer needed.
-const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
-                                               const char *shader_text,
-                                               size_t shader_len);
+PL_API const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
+                                                      const char *shader_text,
+                                                      size_t shader_len);
 
-void pl_mpv_user_shader_destroy(const struct pl_hook **hook);
+PL_API void pl_mpv_user_shader_destroy(const struct pl_hook **hook);
 
 PL_API_END
 

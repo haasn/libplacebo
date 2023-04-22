@@ -46,11 +46,6 @@
 
 #define PL_DEPRECATED
 
-// Include all of the symbols that should be public in a way that marks them
-// as being externally visible. (Otherwise, all symbols are hidden by default)
-#define PL_API_BEGIN _Pragma("GCC visibility push(default)")
-#define PL_API_END _Pragma("GCC visibility pop")
-
 #include <libplacebo/config.h>
 
 #if PL_API_VER != BUILD_API_VER

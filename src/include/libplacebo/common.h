@@ -62,15 +62,15 @@ typedef struct pl_rect3df {
      (a).z0 == (b).z0 && (a).z1 == (b).z1)
 
 // "Normalize" a rectangle: This ensures d1 >= d0 for all dimensions.
-void pl_rect2d_normalize(pl_rect2d *rc);
-void pl_rect3d_normalize(pl_rect3d *rc);
+PL_API void pl_rect2d_normalize(pl_rect2d *rc);
+PL_API void pl_rect3d_normalize(pl_rect3d *rc);
 
-void pl_rect2df_normalize(pl_rect2df *rc);
-void pl_rect3df_normalize(pl_rect3df *rc);
+PL_API void pl_rect2df_normalize(pl_rect2df *rc);
+PL_API void pl_rect3df_normalize(pl_rect3df *rc);
 
 // Return the rounded form of a rect.
-pl_rect2d pl_rect2df_round(const pl_rect2df *rc);
-pl_rect3d pl_rect3df_round(const pl_rect3df *rc);
+PL_API pl_rect2d pl_rect2df_round(const pl_rect2df *rc);
+PL_API pl_rect3d pl_rect3df_round(const pl_rect3df *rc);
 
 // Represents a row-major matrix, i.e. the following matrix
 //     [ a11 a12 a13 ]
@@ -84,27 +84,27 @@ typedef struct pl_matrix3x3 {
     float m[3][3];
 } pl_matrix3x3;
 
-extern const pl_matrix3x3 pl_matrix3x3_identity;
+PL_API extern const pl_matrix3x3 pl_matrix3x3_identity;
 
 // Applies a matrix to a float vector in-place.
-void pl_matrix3x3_apply(const pl_matrix3x3 *mat, float vec[3]);
+PL_API void pl_matrix3x3_apply(const pl_matrix3x3 *mat, float vec[3]);
 
 // Applies a matrix to a pl_rect3df
-void pl_matrix3x3_apply_rc(const pl_matrix3x3 *mat, pl_rect3df *rc);
+PL_API void pl_matrix3x3_apply_rc(const pl_matrix3x3 *mat, pl_rect3df *rc);
 
 // Scales a color matrix by a linear factor.
-void pl_matrix3x3_scale(pl_matrix3x3 *mat, float scale);
+PL_API void pl_matrix3x3_scale(pl_matrix3x3 *mat, float scale);
 
 // Inverts a matrix. Only use where precision is not that important.
-void pl_matrix3x3_invert(pl_matrix3x3 *mat);
+PL_API void pl_matrix3x3_invert(pl_matrix3x3 *mat);
 
 // Composes/multiplies two matrices. Multiples B into A, i.e.
 // A := A * B
-void pl_matrix3x3_mul(pl_matrix3x3 *a, const pl_matrix3x3 *b);
+PL_API void pl_matrix3x3_mul(pl_matrix3x3 *a, const pl_matrix3x3 *b);
 
 // Flipped version of `pl_matrix3x3_mul`.
 // B := A * B
-void pl_matrix3x3_rmul(const pl_matrix3x3 *a, pl_matrix3x3 *b);
+PL_API void pl_matrix3x3_rmul(const pl_matrix3x3 *a, pl_matrix3x3 *b);
 
 // Represents an affine transformation, which is basically a 3x3 matrix
 // together with a column vector to add onto the output.
@@ -113,21 +113,21 @@ typedef struct pl_transform3x3 {
     float c[3];
 } pl_transform3x3;
 
-extern const pl_transform3x3 pl_transform3x3_identity;
+PL_API extern const pl_transform3x3 pl_transform3x3_identity;
 
 // Applies a transform to a float vector in-place.
-void pl_transform3x3_apply(const pl_transform3x3 *t, float vec[3]);
+PL_API void pl_transform3x3_apply(const pl_transform3x3 *t, float vec[3]);
 
 // Applies a transform to a pl_rect3df
-void pl_transform3x3_apply_rc(const pl_transform3x3 *t, pl_rect3df *rc);
+PL_API void pl_transform3x3_apply_rc(const pl_transform3x3 *t, pl_rect3df *rc);
 
 // Scales the output of a transform by a linear factor. Since an affine
 // transformation is non-linear, this does not commute. If you want to scale
 // the *input* of a transform, use pl_matrix3x3_scale on `t.mat`.
-void pl_transform3x3_scale(pl_transform3x3 *t, float scale);
+PL_API void pl_transform3x3_scale(pl_transform3x3 *t, float scale);
 
 // Inverts a transform. Only use where precision is not that important.
-void pl_transform3x3_invert(pl_transform3x3 *t);
+PL_API void pl_transform3x3_invert(pl_transform3x3 *t);
 
 // 2D analog of the above structs. Since these are featured less prominently,
 // we omit some of the other helper functions.
@@ -135,32 +135,32 @@ typedef struct pl_matrix2x2 {
     float m[2][2];
 } pl_matrix2x2;
 
-extern const pl_matrix2x2 pl_matrix2x2_identity;
+PL_API extern const pl_matrix2x2 pl_matrix2x2_identity;
 
-void pl_matrix2x2_apply(const pl_matrix2x2 *mat, float vec[2]);
-void pl_matrix2x2_apply_rc(const pl_matrix2x2 *mat, pl_rect2df *rc);
+PL_API void pl_matrix2x2_apply(const pl_matrix2x2 *mat, float vec[2]);
+PL_API void pl_matrix2x2_apply_rc(const pl_matrix2x2 *mat, pl_rect2df *rc);
 
-void pl_matrix2x2_mul(pl_matrix2x2 *a, const pl_matrix2x2 *b);
-void pl_matrix2x2_rmul(const pl_matrix2x2 *a, pl_matrix2x2 *b);
+PL_API void pl_matrix2x2_mul(pl_matrix2x2 *a, const pl_matrix2x2 *b);
+PL_API void pl_matrix2x2_rmul(const pl_matrix2x2 *a, pl_matrix2x2 *b);
 
 typedef struct pl_transform2x2 {
     pl_matrix2x2 mat;
     float c[2];
 } pl_transform2x2;
 
-extern const pl_transform2x2 pl_transform2x2_identity;
+PL_API extern const pl_transform2x2 pl_transform2x2_identity;
 
-void pl_transform2x2_apply(const pl_transform2x2 *t, float vec[2]);
-void pl_transform2x2_apply_rc(const pl_transform2x2 *t, pl_rect2df *rc);
+PL_API void pl_transform2x2_apply(const pl_transform2x2 *t, float vec[2]);
+PL_API void pl_transform2x2_apply_rc(const pl_transform2x2 *t, pl_rect2df *rc);
 
-void pl_transform2x2_mul(pl_transform2x2 *a, const pl_transform2x2 *b);
-void pl_transform2x2_rmul(const pl_transform2x2 *a, pl_transform2x2 *b);
+PL_API void pl_transform2x2_mul(pl_transform2x2 *a, const pl_transform2x2 *b);
+PL_API void pl_transform2x2_rmul(const pl_transform2x2 *a, pl_transform2x2 *b);
 
 // Helper functions for dealing with aspect ratios and stretched/scaled rects.
 
 // Return the (absolute) aspect ratio (width/height) of a given pl_rect2df.
 // This will always be a positive number, even if `rc` is flipped.
-float pl_rect2df_aspect(const pl_rect2df *rc);
+PL_API float pl_rect2df_aspect(const pl_rect2df *rc);
 
 // Set the aspect of a `rc` to a given aspect ratio with an extra 'panscan'
 // factor choosing the balance between shrinking and growing the `rc` to meet
@@ -170,7 +170,7 @@ float pl_rect2df_aspect(const pl_rect2df *rc);
 // - If `panscan` is 0.0, this function will only ever shrink the `rc`.
 // - If `panscan` is 1.0, this function will only ever grow the `rc`.
 // - If `panscan` is 0.5, this function is area-preserving.
-void pl_rect2df_aspect_set(pl_rect2df *rc, float aspect, float panscan);
+PL_API void pl_rect2df_aspect_set(pl_rect2df *rc, float aspect, float panscan);
 
 // Set one rect's aspect to that of another
 #define pl_rect2df_aspect_copy(rc, src, panscan) \
@@ -179,14 +179,14 @@ void pl_rect2df_aspect_set(pl_rect2df *rc, float aspect, float panscan);
 // 'Fit' one rect inside another. `rc` will be set to the same size and aspect
 // ratio as `src`, but with the size limited to fit inside the original `rc`.
 // Like `pl_rect2df_aspect_set`, `panscan` controls the pan&scan factor.
-void pl_rect2df_aspect_fit(pl_rect2df *rc, const pl_rect2df *src, float panscan);
+PL_API void pl_rect2df_aspect_fit(pl_rect2df *rc, const pl_rect2df *src, float panscan);
 
 // Scale rect in each direction while keeping it centered.
-void pl_rect2df_stretch(pl_rect2df *rc, float stretch_x, float stretch_y);
+PL_API void pl_rect2df_stretch(pl_rect2df *rc, float stretch_x, float stretch_y);
 
 // Offset rect by an arbitrary offset factor. If the corresponding dimension
 // of a rect is flipped, so too is the applied offset.
-void pl_rect2df_offset(pl_rect2df *rc, float offset_x, float offset_y);
+PL_API void pl_rect2df_offset(pl_rect2df *rc, float offset_x, float offset_y);
 
 // Scale a rect uniformly in both dimensions.
 #define pl_rect2df_zoom(rc, zoom) pl_rect2df_stretch((rc), (zoom), (zoom))
@@ -214,7 +214,7 @@ static inline pl_rotation pl_rotation_normalize(pl_rotation rot)
 // the coordinate system 90° to the right (so the x axis becomes the y axis).
 //
 // The resulting rect is re-normalized in the same coordinate system.
-void pl_rect2df_rotate(pl_rect2df *rc, pl_rotation rot);
+PL_API void pl_rect2df_rotate(pl_rect2df *rc, pl_rotation rot);
 
 // Returns the aspect ratio in a rotated frame of reference.
 static inline float pl_aspect_rotate(float aspect, pl_rotation rot)

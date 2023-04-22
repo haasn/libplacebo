@@ -81,7 +81,7 @@ struct pl_dither_params {
     .temporal   = false,
 
 #define pl_dither_params(...) (&(struct pl_dither_params) { PL_DITHER_DEFAULTS __VA_ARGS__ })
-extern const struct pl_dither_params pl_dither_default_params;
+PL_API extern const struct pl_dither_params pl_dither_default_params;
 
 // Dither the colors to a lower depth, given in bits. This can be used on input
 // colors of any precision. Basically, this rounds the colors to only linear
@@ -100,9 +100,9 @@ extern const struct pl_dither_params pl_dither_default_params;
 // of the resulting image. When doing low bit depth dithering for aesthetic
 // purposes, it's recommended that the user explicitly (de)linearize the colors
 // before and after this algorithm.
-void pl_shader_dither(pl_shader sh, int new_depth,
-                      pl_shader_obj *dither_state,
-                      const struct pl_dither_params *params);
+PL_API void pl_shader_dither(pl_shader sh, int new_depth,
+                             pl_shader_obj *dither_state,
+                             const struct pl_dither_params *params);
 
 struct pl_error_diffusion_params {
     // Both the input and output texture must be provided up-front, with the
@@ -124,8 +124,8 @@ struct pl_error_diffusion_params {
 // Computes the shared memory requirements for a given error diffusion kernel.
 // This can be used to test up-front whether or not error diffusion would be
 // supported or not, before having to initialize textures.
-size_t pl_error_diffusion_shmem_req(const struct pl_error_diffusion_kernel *kernel,
-                                    int height);
+PL_API size_t pl_error_diffusion_shmem_req(const struct pl_error_diffusion_kernel *kernel,
+                                           int height);
 
 // Apply an error diffusion dithering kernel. This is a much more expensive and
 // heavy dithering method, and is not generally recommended for realtime usage
@@ -134,7 +134,7 @@ size_t pl_error_diffusion_shmem_req(const struct pl_error_diffusion_kernel *kern
 // Requires compute shader support. Returns false if dithering fail e.g. as a
 // result of shader memory limits being exceeded. The resulting shader must be
 // dispatched with a work group count of exactly 1.
-bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_params *params);
+PL_API bool pl_shader_error_diffusion(pl_shader sh, const struct pl_error_diffusion_params *params);
 
 PL_API_END
 

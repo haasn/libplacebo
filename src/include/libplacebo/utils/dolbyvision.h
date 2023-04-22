@@ -26,8 +26,8 @@ PL_API_BEGIN
 // brightness metadata fields accordingly.
 //
 // Note: requires `PL_HAVE_LIBDOVI` to be defined, no-op otherwise.
-void pl_hdr_metadata_from_dovi_rpu(struct pl_hdr_metadata *out,
-                                   const uint8_t *buf, size_t size);
+PL_API void pl_hdr_metadata_from_dovi_rpu(struct pl_hdr_metadata *out,
+                                          const uint8_t *buf, size_t size);
 
 PL_API_END
 

@@ -71,15 +71,15 @@ struct pl_shader_params {
 //
 // Note: Rather than allocating and destroying many shaders, users are
 // encouraged to reuse them (using `pl_shader_reset`) for efficiency.
-pl_shader pl_shader_alloc(pl_log log, const struct pl_shader_params *params);
+PL_API pl_shader pl_shader_alloc(pl_log log, const struct pl_shader_params *params);
 
 // Frees a pl_shader and all resources associated with it.
-void pl_shader_free(pl_shader *sh);
+PL_API void pl_shader_free(pl_shader *sh);
 
 // Resets a pl_shader to a blank slate, without releasing internal memory.
 // If you're going to be re-generating shaders often, this function will let
 // you skip the re-allocation overhead.
-void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params);
+PL_API void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params);
 
 // Returns whether or not a shader is in a "failed" state. Trying to modify a
 // shader in illegal ways (e.g. signature mismatch) will result in the shader
@@ -87,19 +87,19 @@ void pl_shader_reset(pl_shader sh, const struct pl_shader_params *params);
 // return type, the user can use this function to figure out whether a specific
 // shader operation has failed or not. This function is somewhat redundant
 // since `pl_shader_finalize` will also return NULL in this case.
-bool pl_shader_is_failed(const pl_shader sh);
+PL_API bool pl_shader_is_failed(const pl_shader sh);
 
 // Returns whether or not a pl_shader needs to be run as a compute shader. This
 // will never be the case unless the `pl_glsl_version` this `pl_shader` was
 // created using has `compute` support enabled.
-bool pl_shader_is_compute(const pl_shader sh);
+PL_API bool pl_shader_is_compute(const pl_shader sh);
 
 // Returns whether or not the shader has any particular output size
 // requirements. Some shaders, in particular those that sample from other
 // textures, have specific output size requirements which need to be respected
 // by the caller. If this is false, then the shader is compatible with every
 // output size. If true, the size requirements are stored into *w and *h.
-bool pl_shader_output_size(const pl_shader sh, int *w, int *h);
+PL_API bool pl_shader_output_size(const pl_shader sh, int *w, int *h);
 
 // Indicates the type of signature that is associated with a shader result.
 // Every shader result defines a function that may be called by the user, and
@@ -134,8 +134,8 @@ typedef const struct pl_shader_info_t {
     const char *description;
 } *pl_shader_info;
 
-pl_shader_info pl_shader_info_ref(pl_shader_info info);
-void pl_shader_info_deref(pl_shader_info *info);
+PL_API pl_shader_info pl_shader_info_ref(pl_shader_info info);
+PL_API void pl_shader_info_deref(pl_shader_info *info);
 
 // Represents a finalized shader fragment. This is not a complete shader, but a
 // collection of raw shader text together with description of the input
@@ -255,7 +255,7 @@ struct pl_shader_const {
 //
 // This function will return NULL if the shader is considered to be in a
 // "failed" state (see pl_shader_is_failed).
-const struct pl_shader_res *pl_shader_finalize(pl_shader sh);
+PL_API const struct pl_shader_res *pl_shader_finalize(pl_shader sh);
 
 // Shader objects represent abstract resources that shaders need to manage in
 // order to ensure their operation. This could include shader storage buffers,
@@ -266,7 +266,7 @@ const struct pl_shader_res *pl_shader_finalize(pl_shader sh);
 // Note: pl_shader_obj objects must be initialized to NULL by the caller.
 typedef struct pl_shader_obj_t *pl_shader_obj;
 
-void pl_shader_obj_destroy(pl_shader_obj *obj);
+PL_API void pl_shader_obj_destroy(pl_shader_obj *obj);
 
 PL_API_END
 

@@ -57,10 +57,10 @@ struct pl_custom_lut {
 };
 
 // Parse a 3DLUT in .cube format. Returns NULL if the file fails parsing.
-struct pl_custom_lut *pl_lut_parse_cube(pl_log log, const char *str, size_t str_len);
+PL_API struct pl_custom_lut *pl_lut_parse_cube(pl_log log, const char *str, size_t str_len);
 
 // Frees a LUT created by `pl_lut_parse_*`.
-void pl_lut_free(struct pl_custom_lut **lut);
+PL_API void pl_lut_free(struct pl_custom_lut **lut);
 
 // Apply a `pl_custom_lut`. The user is responsible for ensuring colors going
 // into the LUT are in the expected format as informed by the LUT metadata.
@@ -70,8 +70,8 @@ void pl_lut_free(struct pl_custom_lut **lut);
 //
 // Note: `lut` does not have to be allocated by `pl_lut_parse_*`. It can be a
 // struct filled out by the user.
-void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
-                          pl_shader_obj *lut_state);
+PL_API void pl_shader_custom_lut(pl_shader sh, const struct pl_custom_lut *lut,
+                                 pl_shader_obj *lut_state);
 
 PL_API_END
 

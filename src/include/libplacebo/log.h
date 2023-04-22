@@ -51,7 +51,7 @@ struct pl_log_params {
 };
 
 #define pl_log_params(...) (&(struct pl_log_params) { __VA_ARGS__ })
-extern const struct pl_log_params pl_log_default_params;
+PL_API extern const struct pl_log_params pl_log_default_params;
 
 // Thread-safety: Safe
 //
@@ -71,7 +71,7 @@ typedef const struct pl_log_t {
 //
 // Note: As a general rule, any `params` struct used as an argument to a
 // function need only live until the corresponding function returns.
-pl_log pl_log_create(int api_ver, const struct pl_log_params *params);
+PL_API pl_log pl_log_create(int api_ver, const struct pl_log_params *params);
 
 // Destroy a `pl_log` object.
 //
@@ -79,20 +79,20 @@ pl_log pl_log_create(int api_ver, const struct pl_log_params *params);
 // object to free as their parameter. This pointer is overwritten by NULL
 // afterwards. Calling a _destroy function on &{NULL} is valid, but calling it
 // on NULL itself is invalid.
-void pl_log_destroy(pl_log *log);
+PL_API void pl_log_destroy(pl_log *log);
 
 // Update the parameters of a `pl_log` without destroying it. This can be
 // used to change the log function, log context or log level retroactively.
 // `params` defaults to `&pl_log_default_params` if left as NULL.
 //
 // Returns the previous params, atomically.
-struct pl_log_params pl_log_update(pl_log log, const struct pl_log_params *params);
+PL_API struct pl_log_params pl_log_update(pl_log log, const struct pl_log_params *params);
 
 // Like `pl_log_update` but only updates the log level, leaving the log
 // callback intact.
 //
 // Returns the previous log level, atomically.
-enum pl_log_level pl_log_level_update(pl_log log, enum pl_log_level level);
+PL_API enum pl_log_level pl_log_level_update(pl_log log, enum pl_log_level level);
 
 // Two simple, stream-based loggers. You can use these as the log_cb. If you
 // also set log_priv to a FILE* (e.g. stdout or stderr) it will be printed
@@ -101,8 +101,8 @@ enum pl_log_level pl_log_level_update(pl_log log, enum pl_log_level level);
 //
 // The version with colors will use ANSI escape sequences to indicate the log
 // level. The version without will use explicit prefixes.
-void pl_log_simple(void *stream, enum pl_log_level level, const char *msg);
-void pl_log_color(void *stream, enum pl_log_level level, const char *msg);
+PL_API void pl_log_simple(void *stream, enum pl_log_level level, const char *msg);
+PL_API void pl_log_color(void *stream, enum pl_log_level level, const char *msg);
 
 // Backwards compatibility with older versions of libplacebo
 #define pl_context pl_log

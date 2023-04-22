@@ -102,7 +102,7 @@ struct pl_deband_params {
     .grain      = 6.0,
 
 #define pl_deband_params(...) (&(struct pl_deband_params) {PL_DEBAND_DEFAULTS __VA_ARGS__ })
-extern const struct pl_deband_params pl_deband_default_params;
+PL_API extern const struct pl_deband_params pl_deband_default_params;
 
 // Debands a given texture and returns the sampled color in `vec4 color`. If
 // `params` is left as NULL, it defaults to &pl_deband_default_params. Note
@@ -112,29 +112,29 @@ extern const struct pl_deband_params pl_deband_default_params;
 //
 // Note: This can also be used as a pure grain function, by setting the number
 // of iterations to 0.
-void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
-                      const struct pl_deband_params *params);
+PL_API void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
+                             const struct pl_deband_params *params);
 
 // Performs direct / native texture sampling, using whatever texture filter is
 // available (linear for linearly sampleable sources, nearest otherwise).
 //
 // Note: This is generally very low quality and should be avoided if possible,
 // for both upscaling and downscaling.
-bool pl_shader_sample_direct(pl_shader sh, const struct pl_sample_src *src);
+PL_API bool pl_shader_sample_direct(pl_shader sh, const struct pl_sample_src *src);
 
 // Performs hardware-accelerated nearest neighbour sampling. This is similar to
 // `pl_shader_sample_direct`, but forces nearest neighbour interpolation.
-bool pl_shader_sample_nearest(pl_shader sh, const struct pl_sample_src *src);
+PL_API bool pl_shader_sample_nearest(pl_shader sh, const struct pl_sample_src *src);
 
 // Performs hardware-accelerated bilinear sampling. This is similar to
 // `pl_shader_sample_direct`, but forces bilinear interpolation.
-bool pl_shader_sample_bilinear(pl_shader sh, const struct pl_sample_src *src);
+PL_API bool pl_shader_sample_bilinear(pl_shader sh, const struct pl_sample_src *src);
 
 // Performs hardware-accelerated / efficient bicubic sampling. This is more
 // efficient than using the generalized sampling routines and
 // pl_filter_function_bicubic. Only works well when upscaling - avoid for
 // downscaling.
-bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src);
+PL_API bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src);
 
 // A sampler that is similar to nearest neighbour sampling, but tries to
 // preserve pixel aspect ratios. This is mathematically equivalent to taking an
@@ -146,8 +146,8 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src);
 // pixels should be ignored, trading some amount of aspect ratio distortion for
 // a slightly crisper image. A value of `threshold == 0.5` makes this filter
 // equivalent to regular nearest neighbour sampling.
-bool pl_shader_sample_oversample(pl_shader sh, const struct pl_sample_src *src,
-                                 float threshold);
+PL_API bool pl_shader_sample_oversample(pl_shader sh, const struct pl_sample_src *src,
+                                        float threshold);
 
 struct pl_sample_filter_params {
     // The filter to use for sampling.
@@ -180,8 +180,8 @@ struct pl_sample_filter_params {
 // and GPU features. Returns whether or not it was successful.
 //
 // Note: `params->filter.polar` must be true to use this function.
-bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
-                            const struct pl_sample_filter_params *params);
+PL_API bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
+                                   const struct pl_sample_filter_params *params);
 
 // Performs orthogonal (1D) sampling. Using this twice in a row (once vertical
 // and once horizontal) effectively performs a 2D upscale. This is lower
@@ -194,8 +194,8 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
 // Note: Due to internal limitations, this may currently only be used on 2D
 // textures - even though the basic principle would work for 1D and 3D textures
 // as well.
-bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
-                             const struct pl_sample_filter_params *params);
+PL_API bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
+                                    const struct pl_sample_filter_params *params);
 
 enum PL_DEPRECATED { // for `int pass`
     PL_SEP_VERT = 0,

@@ -360,31 +360,31 @@ struct pl_fmt_t {
 
 // Returns whether or not a pl_fmt's components are ordered sequentially
 // in memory in the order RGBA.
-bool pl_fmt_is_ordered(pl_fmt fmt);
+PL_API bool pl_fmt_is_ordered(pl_fmt fmt);
 
 // Returns whether or not a pl_fmt is sampled as a float (e.g. UNORM)
-bool pl_fmt_is_float(pl_fmt fmt);
+PL_API bool pl_fmt_is_float(pl_fmt fmt);
 
 // Returns whether or not a pl_fmt supports a given DRM modifier.
-bool pl_fmt_has_modifier(pl_fmt fmt, uint64_t modifier);
+PL_API bool pl_fmt_has_modifier(pl_fmt fmt, uint64_t modifier);
 
 // Helper function to find a format with a given number of components and
 // minimum effective precision per component. If `host_bits` is set, then the
 // format will always be non-opaque, unpadded, ordered and have exactly this
 // bit depth for each component. Finally, all `caps` must be supported.
-pl_fmt pl_find_fmt(pl_gpu gpu, enum pl_fmt_type type, int num_components,
-                   int min_depth, int host_bits, enum pl_fmt_caps caps);
+PL_API pl_fmt pl_find_fmt(pl_gpu gpu, enum pl_fmt_type type, int num_components,
+                          int min_depth, int host_bits, enum pl_fmt_caps caps);
 
 // Finds a vertex format for a given configuration. The resulting vertex will
 // have a component depth equivalent to the sizeof() the equivalent host type.
 // (e.g. PL_FMT_FLOAT will always have sizeof(float))
-pl_fmt pl_find_vertex_fmt(pl_gpu gpu, enum pl_fmt_type type, int num_components);
+PL_API pl_fmt pl_find_vertex_fmt(pl_gpu gpu, enum pl_fmt_type type, int num_components);
 
 // Find a format based on its name.
-pl_fmt pl_find_named_fmt(pl_gpu gpu, const char *name);
+PL_API pl_fmt pl_find_named_fmt(pl_gpu gpu, const char *name);
 
 // Find a format based on its fourcc.
-pl_fmt pl_find_fourcc(pl_gpu gpu, uint32_t fourcc);
+PL_API pl_fmt pl_find_fourcc(pl_gpu gpu, uint32_t fourcc);
 
 // A generic 'timer query' object. These can be used to measure an
 // approximation of the GPU execution time of a given operation. Due to the
@@ -404,8 +404,8 @@ typedef struct pl_timer_t *pl_timer;
 // implementation does not support timers, but since passing NULL to
 // `pl_timer_destroy` and `pl_timer_query` is safe, users generally need not
 // concern themselves with handling this.
-pl_timer pl_timer_create(pl_gpu gpu);
-void pl_timer_destroy(pl_gpu gpu, pl_timer *);
+PL_API pl_timer pl_timer_create(pl_gpu gpu);
+PL_API void pl_timer_destroy(pl_gpu gpu, pl_timer *);
 
 // Queries any results that have been measured since the last execution of
 // `pl_timer_query`. There may be more than one result, in which case the user
@@ -420,7 +420,7 @@ void pl_timer_destroy(pl_gpu gpu, pl_timer *);
 // will only keep track of a small, fixed number of results internally. Make
 // sure to include this function as part of your main rendering loop to process
 // all of its results, or older results will be overwritten by newer ones.
-uint64_t pl_timer_query(pl_gpu gpu, pl_timer);
+PL_API uint64_t pl_timer_query(pl_gpu gpu, pl_timer);
 
 enum pl_buf_mem_type {
     PL_BUF_MEM_AUTO = 0, // use whatever seems most appropriate
@@ -526,8 +526,8 @@ typedef const struct pl_buf_t {
 // For buffers with shared memory, the buffer is considered to be in an
 // "exported" state by default, and may be used directly by the external API
 // after being created (until the first libplacebo operation on the buffer).
-pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *params);
-void pl_buf_destroy(pl_gpu gpu, pl_buf *buf);
+PL_API pl_buf pl_buf_create(pl_gpu gpu, const struct pl_buf_params *params);
+PL_API void pl_buf_destroy(pl_gpu gpu, pl_buf *buf);
 
 // This behaves like `pl_buf_create`, but if the buffer already exists and has
 // incompatible parameters, it will get destroyed first. A buffer is considered
@@ -546,7 +546,7 @@ void pl_buf_destroy(pl_gpu gpu, pl_buf *buf);
 // Note: If the `user_data` alone changes, this does not trigger a buffer
 // recreation. In theory, this can be used to detect when the buffer ended
 // up being recreated.
-bool pl_buf_recreate(pl_gpu gpu, pl_buf *buf, const struct pl_buf_params *params);
+PL_API bool pl_buf_recreate(pl_gpu gpu, pl_buf *buf, const struct pl_buf_params *params);
 
 // Update the contents of a buffer, starting at a given offset (must be a
 // multiple of 4) and up to a given size, with the contents of *data.
@@ -558,21 +558,21 @@ bool pl_buf_recreate(pl_gpu gpu, pl_buf *buf, const struct pl_buf_params *params
 // used in tight loops. If you do need to loop (e.g. to perform a strided
 // write), consider using host-mapped buffers, or fixing the memory in RAM,
 // before calling this function.
-void pl_buf_write(pl_gpu gpu, pl_buf buf, size_t buf_offset,
-                  const void *data, size_t size);
+PL_API void pl_buf_write(pl_gpu gpu, pl_buf buf, size_t buf_offset,
+                         const void *data, size_t size);
 
 // Read back the contents of a buffer, starting at a given offset, storing the
 // data into *dest. Returns whether successful.
 //
 // This function will block until the buffer is no longer in use. Use
 // `pl_buf_poll` to perform non-blocking queries of buffer availability.
-bool pl_buf_read(pl_gpu gpu, pl_buf buf, size_t buf_offset,
-                 void *dest, size_t size);
+PL_API bool pl_buf_read(pl_gpu gpu, pl_buf buf, size_t buf_offset,
+                        void *dest, size_t size);
 
 // Copy `size` bytes from one buffer to another, reading from and writing to
 // the respective offsets.
-void pl_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
-                 pl_buf src, size_t src_offset, size_t size);
+PL_API void pl_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
+                        pl_buf src, size_t src_offset, size_t size);
 
 // Initiates a buffer export operation, allowing a buffer to be accessed by an
 // external API. This is only valid for buffers with `params.handle_type`.
@@ -609,7 +609,7 @@ void pl_buf_copy(pl_gpu gpu, pl_buf dst, size_t dst_offset,
 // i.e. perform an external API operation, then use and immediately export the
 // buffer in libplacebo, and finally wait until `pl_buf_poll` is false before
 // re-using it in the external API. (Or get a new buffer in the meantime)
-bool pl_buf_export(pl_gpu gpu, pl_buf buf);
+PL_API bool pl_buf_export(pl_gpu gpu, pl_buf buf);
 
 // Returns whether or not a buffer is currently "in use". This can either be
 // because of a pending read operation, a pending write operation or a pending
@@ -639,7 +639,7 @@ bool pl_buf_export(pl_gpu gpu, pl_buf buf);
 // Note: If `pl_gpu_limits.thread_safe` is set, this function is implicitly
 // synchronized, meaning it can safely be called on a `pl_buf` that is in use
 // by another thread.
-bool pl_buf_poll(pl_gpu gpu, pl_buf buf, uint64_t timeout);
+PL_API bool pl_buf_poll(pl_gpu gpu, pl_buf buf, uint64_t timeout);
 
 enum pl_tex_sample_mode {
     PL_TEX_SAMPLE_NEAREST,  // nearest neighbour sampling
@@ -769,8 +769,8 @@ struct pl_tex_t {
 // Create a texture (with undefined contents). Returns NULL on failure. This is
 // assumed to be an expensive/rare operation, and may need to perform memory
 // allocation or framebuffer creation.
-pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params);
-void pl_tex_destroy(pl_gpu gpu, pl_tex *tex);
+PL_API pl_tex pl_tex_create(pl_gpu gpu, const struct pl_tex_params *params);
+PL_API void pl_tex_destroy(pl_gpu gpu, pl_tex *tex);
 
 // This works like `pl_tex_create`, but if the texture already exists and has
 // incompatible texture parameters, it will get destroyed first. A texture is
@@ -784,11 +784,11 @@ void pl_tex_destroy(pl_gpu gpu, pl_tex *tex);
 // Note: If the `user_data` alone changes, this does not trigger a texture
 // recreation. In theory, this can be used to detect when the texture ended
 // up being recreated.
-bool pl_tex_recreate(pl_gpu gpu, pl_tex *tex, const struct pl_tex_params *params);
+PL_API bool pl_tex_recreate(pl_gpu gpu, pl_tex *tex, const struct pl_tex_params *params);
 
 // Invalidates the contents of a texture. After this, the contents are fully
 // undefined.
-void pl_tex_invalidate(pl_gpu gpu, pl_tex tex);
+PL_API void pl_tex_invalidate(pl_gpu gpu, pl_tex tex);
 
 union pl_clear_color {
     float f[4];
@@ -799,10 +799,10 @@ union pl_clear_color {
 // Clear the dst texture with the given color (rgba). This is functionally
 // identical to a blit operation, which means `dst->params.blit_dst` must be
 // set.
-void pl_tex_clear_ex(pl_gpu gpu, pl_tex dst, const union pl_clear_color color);
+PL_API void pl_tex_clear_ex(pl_gpu gpu, pl_tex dst, const union pl_clear_color color);
 
 // Wrapper for `pl_tex_clear_ex` which only works for floating point textures.
-void pl_tex_clear(pl_gpu gpu, pl_tex dst, const float color[4]);
+PL_API void pl_tex_clear(pl_gpu gpu, pl_tex dst, const float color[4]);
 
 struct pl_tex_blit_params {
     // The texture to blit from. Must have `params.blit_src` enabled.
@@ -832,7 +832,7 @@ struct pl_tex_blit_params {
 #define pl_tex_blit_params(...) (&(struct pl_tex_blit_params) { __VA_ARGS__ })
 
 // Copy a sub-rectangle from one texture to another.
-void pl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params);
+PL_API void pl_tex_blit(pl_gpu gpu, const struct pl_tex_blit_params *params);
 
 // Structure describing a texture transfer operation.
 struct pl_tex_transfer_params {
@@ -898,10 +898,10 @@ struct pl_tex_transfer_params {
 #define pl_tex_transfer_params(...) (&(struct pl_tex_transfer_params) { __VA_ARGS__ })
 
 // Upload data to a texture. Returns whether successful.
-bool pl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params);
+PL_API bool pl_tex_upload(pl_gpu gpu, const struct pl_tex_transfer_params *params);
 
 // Download data from a texture. Returns whether successful.
-bool pl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params);
+PL_API bool pl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params);
 
 // Returns whether or not a texture is currently "in use". This can either be
 // because of a pending read operation, a pending write operation or a pending
@@ -932,7 +932,7 @@ bool pl_tex_download(pl_gpu gpu, const struct pl_tex_transfer_params *params);
 // Note: If `pl_gpu_limits.thread_safe` is set, this function is implicitly
 // synchronized, meaning it can safely be called on a `pl_tex` that is in use
 // by another thread.
-bool pl_tex_poll(pl_gpu gpu, pl_tex tex, uint64_t timeout);
+PL_API bool pl_tex_poll(pl_gpu gpu, pl_tex tex, uint64_t timeout);
 
 // Data type of a shader input variable (e.g. uniform, or UBO member)
 enum pl_var_type {
@@ -944,7 +944,7 @@ enum pl_var_type {
 };
 
 // Returns the host size (in bytes) of a pl_var_type.
-size_t pl_var_type_size(enum pl_var_type type);
+PL_API size_t pl_var_type_size(enum pl_var_type type);
 
 // Represents a shader input variable (concrete data, e.g. vector, matrix)
 struct pl_var {
@@ -960,26 +960,26 @@ struct pl_var {
 
 // Helper functions for constructing the most common pl_vars, with names
 // corresponding to their corresponding GLSL built-in types.
-struct pl_var pl_var_float(const char *name);
-struct pl_var pl_var_vec2(const char *name);
-struct pl_var pl_var_vec3(const char *name);
-struct pl_var pl_var_vec4(const char *name);
-struct pl_var pl_var_mat2(const char *name);
-struct pl_var pl_var_mat2x3(const char *name);
-struct pl_var pl_var_mat2x4(const char *name);
-struct pl_var pl_var_mat3(const char *name);
-struct pl_var pl_var_mat3x4(const char *name);
-struct pl_var pl_var_mat4x2(const char *name);
-struct pl_var pl_var_mat4x3(const char *name);
-struct pl_var pl_var_mat4(const char *name);
-struct pl_var pl_var_int(const char *name);
-struct pl_var pl_var_ivec2(const char *name);
-struct pl_var pl_var_ivec3(const char *name);
-struct pl_var pl_var_ivec4(const char *name);
-struct pl_var pl_var_uint(const char *name);
-struct pl_var pl_var_uvec2(const char *name);
-struct pl_var pl_var_uvec3(const char *name);
-struct pl_var pl_var_uvec4(const char *name);
+PL_API struct pl_var pl_var_float(const char *name);
+PL_API struct pl_var pl_var_vec2(const char *name);
+PL_API struct pl_var pl_var_vec3(const char *name);
+PL_API struct pl_var pl_var_vec4(const char *name);
+PL_API struct pl_var pl_var_mat2(const char *name);
+PL_API struct pl_var pl_var_mat2x3(const char *name);
+PL_API struct pl_var pl_var_mat2x4(const char *name);
+PL_API struct pl_var pl_var_mat3(const char *name);
+PL_API struct pl_var pl_var_mat3x4(const char *name);
+PL_API struct pl_var pl_var_mat4x2(const char *name);
+PL_API struct pl_var pl_var_mat4x3(const char *name);
+PL_API struct pl_var pl_var_mat4(const char *name);
+PL_API struct pl_var pl_var_int(const char *name);
+PL_API struct pl_var pl_var_ivec2(const char *name);
+PL_API struct pl_var pl_var_ivec3(const char *name);
+PL_API struct pl_var pl_var_ivec4(const char *name);
+PL_API struct pl_var pl_var_uint(const char *name);
+PL_API struct pl_var pl_var_uvec2(const char *name);
+PL_API struct pl_var pl_var_uvec3(const char *name);
+PL_API struct pl_var pl_var_uvec4(const char *name);
 
 struct pl_named_var {
     const char *glsl_name;
@@ -987,17 +987,17 @@ struct pl_named_var {
 };
 
 // The same list as above, tagged by name and terminated with a {0} entry.
-extern const struct pl_named_var pl_var_glsl_types[];
+PL_API extern const struct pl_named_var pl_var_glsl_types[];
 
 // Efficient helper function for performing a lookup in the above array.
 // Returns NULL if the variable is not legal. Note that the array dimension is
 // ignored, since it's usually part of the variable name and not the type name.
-const char *pl_var_glsl_type_name(struct pl_var var);
+PL_API const char *pl_var_glsl_type_name(struct pl_var var);
 
 // Converts a pl_fmt to an "equivalent" pl_var. Equivalent in this sense means
 // that the pl_var's type will be the same as the vertex's sampled type (e.g.
 // PL_FMT_UNORM gets turned into PL_VAR_FLOAT).
-struct pl_var pl_var_from_fmt(pl_fmt fmt, const char *name);
+PL_API struct pl_var pl_var_from_fmt(pl_fmt fmt, const char *name);
 
 // Describes the memory layout of a variable, relative to some starting location
 // (typically the offset within a uniform/storage/pushconstant buffer)
@@ -1052,7 +1052,7 @@ struct pl_var_layout {
 
 // Returns the host layout of an input variable as required for a
 // tightly-packed, byte-aligned C data type, given a starting offset.
-struct pl_var_layout pl_var_host_layout(size_t offset, const struct pl_var *var);
+PL_API struct pl_var_layout pl_var_host_layout(size_t offset, const struct pl_var *var);
 
 // Returns the GLSL std140 layout of an input variable given a current buffer
 // offset, as required for a buffer descriptor of type PL_DESC_BUF_UNIFORM
@@ -1060,12 +1060,12 @@ struct pl_var_layout pl_var_host_layout(size_t offset, const struct pl_var *var)
 // The normal way to use this function is when calculating the size and offset
 // requirements of a uniform buffer in an incremental fashion, to calculate the
 // new offset of the next variable in this buffer.
-struct pl_var_layout pl_std140_layout(size_t offset, const struct pl_var *var);
+PL_API struct pl_var_layout pl_std140_layout(size_t offset, const struct pl_var *var);
 
 // Returns the GLSL std430 layout of an input variable given a current buffer
 // offset, as required for a buffer descriptor of type PL_DESC_BUF_STORAGE, and
 // for push constants.
-struct pl_var_layout pl_std430_layout(size_t offset, const struct pl_var *var);
+PL_API struct pl_var_layout pl_std430_layout(size_t offset, const struct pl_var *var);
 
 // Convenience definitions / friendly names for these
 #define pl_buf_uniform_layout pl_std140_layout
@@ -1075,8 +1075,8 @@ struct pl_var_layout pl_std430_layout(size_t offset, const struct pl_var *var);
 // Like memcpy, but copies bytes from `src` to `dst` in a manner governed by
 // the stride and size of `dst_layout` as well as `src_layout`. Also takes
 // into account the respective `offset`.
-void memcpy_layout(void *dst, struct pl_var_layout dst_layout,
-                   const void *src, struct pl_var_layout src_layout);
+PL_API void memcpy_layout(void *dst, struct pl_var_layout dst_layout,
+                          const void *src, struct pl_var_layout src_layout);
 
 // Represents a compile-time constant.
 struct pl_constant {
@@ -1097,7 +1097,7 @@ struct pl_vertex_attrib {
 // always be a value >= 0 and < PL_DESC_TYPE_COUNT. Implementations can use
 // this to figure out which descriptors may share the same value of `binding`.
 // Bindings must only be unique for all descriptors within the same namespace.
-int pl_desc_namespace(pl_gpu gpu, enum pl_desc_type type);
+PL_API int pl_desc_namespace(pl_gpu gpu, enum pl_desc_type type);
 
 // Access mode of a shader input descriptor.
 enum pl_desc_access {
@@ -1108,7 +1108,7 @@ enum pl_desc_access {
 };
 
 // Returns the GLSL syntax for a given access mode (e.g. "readonly").
-const char *pl_desc_access_glsl_name(enum pl_desc_access mode);
+PL_API const char *pl_desc_access_glsl_name(enum pl_desc_access mode);
 
 // Represents a shader descriptor (e.g. texture or buffer binding)
 struct pl_desc {
@@ -1145,7 +1145,7 @@ struct pl_blend_params {
 #define pl_blend_params(...) (&(struct pl_blend_params) { __VA_ARGS__ })
 
 // Typical alpha compositing
-extern const struct pl_blend_params pl_alpha_overlay;
+PL_API extern const struct pl_blend_params pl_alpha_overlay;
 
 enum pl_prim_type {
     PL_PRIM_TRIANGLE_LIST,
@@ -1259,8 +1259,8 @@ typedef const struct pl_pass_t {
 //
 // The resulting pl_pass->params.cached_program will be initialized by
 // this function to point to a new, valid cached program (if any).
-pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params);
-void pl_pass_destroy(pl_gpu gpu, pl_pass *pass);
+PL_API pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params);
+PL_API void pl_pass_destroy(pl_gpu gpu, pl_pass *pass);
 
 struct pl_desc_binding {
     const void *object; // pl_* object with type corresponding to pl_desc_type
@@ -1357,7 +1357,7 @@ struct pl_pass_run_params {
 #define pl_pass_run_params(...) (&(struct pl_pass_run_params) { __VA_ARGS__ })
 
 // Execute a render pass.
-void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params);
+PL_API void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params);
 
 // This is semantically a no-op, but it provides a hint that you want to flush
 // any partially queued up commands and begin execution. There is normally no
@@ -1375,7 +1375,7 @@ void pl_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params);
 //
 // It's worth noting that this function may block if you're over-feeding the
 // GPU without waiting for existing results to finish.
-void pl_gpu_flush(pl_gpu gpu);
+PL_API void pl_gpu_flush(pl_gpu gpu);
 
 // This is like `pl_gpu_flush` but also blocks until the GPU is fully idle
 // before returning. Using this in your rendering loop is seriously disadvised,
@@ -1392,7 +1392,7 @@ void pl_gpu_flush(pl_gpu gpu);
 // you have many buffers it may be more convenient to call this function
 // instead. The difference is that this function will also affect e.g. renders
 // to a `pl_swapchain`.
-void pl_gpu_finish(pl_gpu gpu);
+PL_API void pl_gpu_finish(pl_gpu gpu);
 
 // Returns true if the GPU is considered to be in a "failed" state, which
 // during normal operation is typically the result of things like the device
@@ -1400,7 +1400,7 @@ void pl_gpu_finish(pl_gpu gpu);
 //
 // If this returns true, users *should* destroy and recreate the `pl_gpu`,
 // including all associated resources, via the appropriate mechanism.
-bool pl_gpu_is_failed(pl_gpu gpu);
+PL_API bool pl_gpu_is_failed(pl_gpu gpu);
 
 
 // Deprecated objects and functions:
@@ -1430,7 +1430,7 @@ typedef const struct pl_sync_t {
 //
 // Deprecated in favor of API-specific semaphore creation operations such as
 // `pl_vulkan_sem_create`.
-PL_DEPRECATED pl_sync pl_sync_create(pl_gpu gpu, enum pl_handle_type handle_type);
+PL_DEPRECATED PL_API pl_sync pl_sync_create(pl_gpu gpu, enum pl_handle_type handle_type);
 
 // Destroy a `pl_sync`. Note that this invalidates the externally imported
 // semaphores. Users should therefore make sure that all operations that
@@ -1439,7 +1439,7 @@ PL_DEPRECATED pl_sync pl_sync_create(pl_gpu gpu, enum pl_handle_type handle_type
 //
 // Despite this, it's safe to destroy a `pl_sync` if the only pending
 // operations that involve it are internal to libplacebo.
-PL_DEPRECATED void pl_sync_destroy(pl_gpu gpu, pl_sync *sync);
+PL_DEPRECATED PL_API void pl_sync_destroy(pl_gpu gpu, pl_sync *sync);
 
 // Initiates a texture export operation, allowing a texture to be accessed by
 // an external API. Returns whether successful. After this operation
@@ -1459,7 +1459,7 @@ PL_DEPRECATED void pl_sync_destroy(pl_gpu gpu, pl_sync *sync);
 //
 // Deprecated in favor of API-specific synchronization mechanisms such as
 // `pl_vulkan_hold/release_ex`.
-PL_DEPRECATED bool pl_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync);
+PL_DEPRECATED PL_API bool pl_tex_export(pl_gpu gpu, pl_tex tex, pl_sync sync);
 
 
 PL_API_END

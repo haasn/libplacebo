@@ -102,15 +102,15 @@ struct pl_source_frame {
 // It's highly recommended to fully render a single frame with `pts == 0.0`,
 // and flush the GPU pipeline with `pl_gpu_finish`, prior to starting the timed
 // playback loop.
-pl_queue pl_queue_create(pl_gpu gpu);
-void pl_queue_destroy(pl_queue *queue);
+PL_API pl_queue pl_queue_create(pl_gpu gpu);
+PL_API void pl_queue_destroy(pl_queue *queue);
 
 // Explicitly clear the queue. This is essentially equivalent to destroying
 // and recreating the queue, but preserves any internal memory allocations.
 //
 // Note: Calling `pl_queue_reset` may block, if another thread is currently
 // blocked on a different `pl_queue_*` call.
-void pl_queue_reset(pl_queue queue);
+PL_API void pl_queue_reset(pl_queue queue);
 
 // Explicitly push a frame. This is an alternative way to feed the frame queue
 // with incoming frames, the other method being the asynchronous callback
@@ -120,7 +120,7 @@ void pl_queue_reset(pl_queue queue);
 //
 // When no more frames are available, call this function with `frame == NULL`
 // to indicate EOF and begin draining the frame queue.
-void pl_queue_push(pl_queue queue, const struct pl_source_frame *frame);
+PL_API void pl_queue_push(pl_queue queue, const struct pl_source_frame *frame);
 
 // Variant of `pl_queue_push` that blocks while the queue is judged
 // (internally) to be "too full". This is useful for asynchronous decoder loops
@@ -129,8 +129,8 @@ void pl_queue_push(pl_queue queue, const struct pl_source_frame *frame);
 //
 // The given `timeout` parameter specifies how long to wait before giving up,
 // in nanoseconds. Returns false if this timeout was reached.
-bool pl_queue_push_block(pl_queue queue, uint64_t timeout,
-                         const struct pl_source_frame *frame);
+PL_API bool pl_queue_push_block(pl_queue queue, uint64_t timeout,
+                                const struct pl_source_frame *frame);
 
 struct pl_queue_params {
     // The PTS of the frame that will be rendered. This should be set to the
@@ -203,8 +203,8 @@ struct pl_queue_params {
 //
 // Note: `out_mix` will only remain valid until the next call to
 // `pl_queue_update` or `pl_queue_reset`.
-enum pl_queue_status pl_queue_update(pl_queue queue, struct pl_frame_mix *out_mix,
-                                     const struct pl_queue_params *params);
+PL_API enum pl_queue_status pl_queue_update(pl_queue queue, struct pl_frame_mix *out_mix,
+                                            const struct pl_queue_params *params);
 
 PL_API_END
 

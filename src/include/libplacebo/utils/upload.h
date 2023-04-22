@@ -97,15 +97,15 @@ struct pl_plane_data {
 // Fills in the `component_size`, `component_pad` and `component_map` fields
 // based on the supplied mask for each component (in semantic order, i.e.
 // RGBA). Each element of `mask` must have a contiguous range of set bits.
-void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4]);
+PL_API void pl_plane_data_from_mask(struct pl_plane_data *data, uint64_t mask[4]);
 
 // Fills in the `component_size`, `component_pad` and `component_map` fields
 // based on the supplied sizes (in bits) and shift of each component (in
 // semantic order).
 //
 // Similar to `pl_plane_data_from_mask` but not limited to 64-bit pixels.
-void pl_plane_data_from_comps(struct pl_plane_data *data, int size[4],
-                              int shift[4]);
+PL_API void pl_plane_data_from_comps(struct pl_plane_data *data, int size[4],
+                                     int shift[4]);
 
 // Helper function to take a `pl_plane_data` struct and try and improve its
 // alignment to make it more likely to correspond to a real `pl_fmt`. It does
@@ -116,13 +116,13 @@ void pl_plane_data_from_comps(struct pl_plane_data *data, int size[4],
 // The resulting shift must be consistent across all components, in which case
 // it's returned in `out_bits`. If no alignment was possible, `out_bits` is set
 // to {0}, and this function returns false.
-bool pl_plane_data_align(struct pl_plane_data *data, struct pl_bit_encoding *out_bits);
+PL_API bool pl_plane_data_align(struct pl_plane_data *data, struct pl_bit_encoding *out_bits);
 
 // Helper function to find a suitable `pl_fmt` based on a pl_plane_data's
 // requirements. This is called internally by `pl_upload_plane`, but it's
 // exposed to users both as a convenience and so they may pre-emptively check
 // if a format would be supported without actually having to attempt the upload.
-pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data *data);
+PL_API pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data *data);
 
 // Upload an image plane to a texture, and output the resulting `pl_plane`
 // struct to `out_plane` (optional). `tex` must be a valid pointer to a texture
@@ -135,8 +135,8 @@ pl_fmt pl_plane_find_fmt(pl_gpu gpu, int out_map[4], const struct pl_plane_data 
 //
 // Note: `out_plane->shift_x/y` and `out_plane->flipped` are left
 // uninitialized, and should be set explicitly by the user.
-bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
-                     pl_tex *tex, const struct pl_plane_data *data);
+PL_API bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
+                            pl_tex *tex, const struct pl_plane_data *data);
 
 // Like `pl_upload_plane`, but only creates an uninitialized texture object
 // rather than actually performing an upload. This can be useful to, for
@@ -145,8 +145,8 @@ bool pl_upload_plane(pl_gpu gpu, struct pl_plane *out_plane,
 // The resulting texture is guaranteed to be `renderable`, and it will also try
 // to maximize compatibility with the other `pl_renderer` requirements
 // (blittable, storable, etc.).
-bool pl_recreate_plane(pl_gpu gpu, struct pl_plane *out_plane,
-                       pl_tex *tex, const struct pl_plane_data *data);
+PL_API bool pl_recreate_plane(pl_gpu gpu, struct pl_plane *out_plane,
+                              pl_tex *tex, const struct pl_plane_data *data);
 
 PL_API_END
 

@@ -65,29 +65,29 @@ struct pl_render_errors {
 // Creates a new renderer object, which is backed by a GPU context. This is a
 // high-level object that takes care of the rendering chain as a whole, from
 // the source textures to the finished frame.
-pl_renderer pl_renderer_create(pl_log log, pl_gpu gpu);
-void pl_renderer_destroy(pl_renderer *rr);
+PL_API pl_renderer pl_renderer_create(pl_log log, pl_gpu gpu);
+PL_API void pl_renderer_destroy(pl_renderer *rr);
 
 // Saves the internal shader cache of this renderer into an abstract cache
 // object that can be saved to disk and later re-loaded to speed up
 // recompilation of shaders. See `pl_dispatch_save` for more information.
-size_t pl_renderer_save(pl_renderer rr, uint8_t *out_cache);
+PL_API size_t pl_renderer_save(pl_renderer rr, uint8_t *out_cache);
 
 // Load the result of a previous `pl_renderer_save` call. See
 // `pl_dispatch_load` for more information.
 //
 // Note: See the security warnings on `pl_pass_params.cached_program`.
-void pl_renderer_load(pl_renderer rr, const uint8_t *cache);
+PL_API void pl_renderer_load(pl_renderer rr, const uint8_t *cache);
 
 // Returns current renderer state, see pl_render_errors.
-struct pl_render_errors pl_renderer_get_errors(pl_renderer rr);
+PL_API struct pl_render_errors pl_renderer_get_errors(pl_renderer rr);
 
 // Clears errors state of renderer. If `errors` is NULL, all render errors will
 // be cleared. Otherwise only selected errors/hooks will be cleared.
 // If `PL_RENDER_ERR_HOOKS` is set and `num_disabled_hooks` is 0, clear all hooks.
 // Otherwise only selected hooks will be cleard based on `disabled_hooks` array.
-void pl_renderer_reset_errors(pl_renderer rr,
-                              const struct pl_render_errors *errors);
+PL_API void pl_renderer_reset_errors(pl_renderer rr,
+                                     const struct pl_render_errors *errors);
 
 enum pl_lut_type {
     PL_LUT_UNKNOWN = 0,
@@ -365,7 +365,7 @@ struct pl_render_params {
     .polar_cutoff       = 0.001,
 
 #define pl_render_params(...) (&(struct pl_render_params) { PL_RENDER_DEFAULTS __VA_ARGS__ })
-extern const struct pl_render_params pl_render_fast_params;
+PL_API extern const struct pl_render_params pl_render_fast_params;
 
 // This contains the default/recommended options for reasonable image quality,
 // while also not being too terribly slow. All of the *_params structs are
@@ -374,33 +374,33 @@ extern const struct pl_render_params pl_render_fast_params;
 //
 // This should be fine on most integrated GPUs, but if it's too slow,
 // consider using `pl_render_fast_params` instead.
-extern const struct pl_render_params pl_render_default_params;
+PL_API extern const struct pl_render_params pl_render_default_params;
 
 // This contains a higher quality preset for better image quality at the cost
 // of quite a bit of performance. In addition to the settings implied by
 // `pl_render_default_params`, it sets the upscaler to `pl_filter_ewa_lanczos`,
 // and enables debanding and peak detection. This should only really be used
 // with a discrete GPU and where maximum image quality is desired.
-extern const struct pl_render_params pl_render_high_quality_params;
+PL_API extern const struct pl_render_params pl_render_high_quality_params;
 
 // Special filter config for the built-in oversampling algorithm. This is an
 // opaque filter with no meaningful representation. though it has one tunable
 // parameter controlling the threshold at which to switch back to ordinary
 // nearest neighbour sampling. (See `pl_shader_sample_oversample`)
-extern const struct pl_filter_config pl_filter_oversample;
+PL_API extern const struct pl_filter_config pl_filter_oversample;
 
 // Backwards compatibility
 #define pl_oversample_frame_mixer pl_filter_oversample
 
 // A list of recommended frame mixer presets, terminated by {0}
-extern const struct pl_filter_preset pl_frame_mixers[];
-extern const int pl_num_frame_mixers; // excluding trailing {0}
+PL_API extern const struct pl_filter_preset pl_frame_mixers[];
+PL_API extern const int pl_num_frame_mixers; // excluding trailing {0}
 
 // A list of recommended scaler presets, terminated by {0}. This is almost
 // equivalent to `pl_filter_presets` with the exception of including extra
 // built-in filters that don't map to the `pl_filter` architecture.
-extern const struct pl_filter_preset pl_scale_filters[];
-extern const int pl_num_scale_filters; // excluding trailing {0}
+PL_API extern const struct pl_filter_preset pl_scale_filters[];
+PL_API extern const int pl_num_scale_filters; // excluding trailing {0}
 
 #define PL_MAX_PLANES 4
 
@@ -649,23 +649,23 @@ struct pl_frame {
 // Helper function to infer the chroma location offset for each plane in a
 // frame. This is equivalent to calling `pl_chroma_location_offset` on all
 // subsampled planes' shift_x/shift_y variables.
-void pl_frame_set_chroma_location(struct pl_frame *frame,
-                                  enum pl_chroma_location chroma_loc);
+PL_API void pl_frame_set_chroma_location(struct pl_frame *frame,
+                                         enum pl_chroma_location chroma_loc);
 
 // Fills in a `pl_frame` based on a swapchain frame's FBO and metadata.
-void pl_frame_from_swapchain(struct pl_frame *out_frame,
-                             const struct pl_swapchain_frame *frame);
+PL_API void pl_frame_from_swapchain(struct pl_frame *out_frame,
+                                    const struct pl_swapchain_frame *frame);
 
 // Helper function to determine if a frame is logically cropped or not. In
 // particular, this is useful in determining whether or not an output frame
 // needs to be cleared before rendering or not.
-bool pl_frame_is_cropped(const struct pl_frame *frame);
+PL_API bool pl_frame_is_cropped(const struct pl_frame *frame);
 
 // Helper function to reset a frame to a given RGB color. If the frame's
 // color representation is something other than RGB, the clear color will
 // be adjusted accordingly. `clear_color` should be non-premultiplied.
-void pl_frame_clear_rgba(pl_gpu gpu, const struct pl_frame *frame,
-                         const float clear_color[4]);
+PL_API void pl_frame_clear_rgba(pl_gpu gpu, const struct pl_frame *frame,
+                                const float clear_color[4]);
 
 // Like `pl_frame_clear_rgba` but without an alpha channel.
 static inline void pl_frame_clear(pl_gpu gpu, const struct pl_frame *frame,
@@ -700,9 +700,9 @@ static inline void pl_frame_clear(pl_gpu gpu, const struct pl_frame *frame,
 //
 // Note: `image` may be NULL, in which case `target.overlays` will still be
 // rendered, but nothing else.
-bool pl_render_image(pl_renderer rr, const struct pl_frame *image,
-                     const struct pl_frame *target,
-                     const struct pl_render_params *params);
+PL_API bool pl_render_image(pl_renderer rr, const struct pl_frame *image,
+                            const struct pl_frame *target,
+                            const struct pl_render_params *params);
 
 // Flushes the internal state of this renderer. This is normally not needed,
 // even if the image parameters, colorspace or target configuration change,
@@ -711,7 +711,7 @@ bool pl_render_image(pl_renderer rr, const struct pl_frame *image,
 // purge some state related to things like HDR peak detection or frame mixing,
 // so calling it is a good idea if the content source is expected to change
 // dramatically (e.g. when switching to a different file).
-void pl_renderer_flush_cache(pl_renderer rr);
+PL_API void pl_renderer_flush_cache(pl_renderer rr);
 
 // Represents a mixture of input frames, distributed temporally.
 //
@@ -799,9 +799,9 @@ static inline float pl_frame_mix_radius(const struct pl_render_params *params)
 // This allows libplacebo to perform rudimentary frame mixing / interpolation,
 // in order to eliminate judder artifacts typically associated with
 // source/display frame rate mismatch.
-bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
-                         const struct pl_frame *target,
-                         const struct pl_render_params *params);
+PL_API bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
+                                const struct pl_frame *target,
+                                const struct pl_render_params *params);
 
 PL_API_END
 

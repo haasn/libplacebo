@@ -125,25 +125,25 @@ struct pl_d3d11_params {
     .allow_software = true,
 
 #define pl_d3d11_params(...) (&(struct pl_d3d11_params) { PL_D3D11_DEFAULTS __VA_ARGS__ })
-extern const struct pl_d3d11_params pl_d3d11_default_params;
+PL_API extern const struct pl_d3d11_params pl_d3d11_default_params;
 
 // Creates a new Direct3D 11 device based on the given parameters, or wraps an
 // existing device, and initializes a new GPU instance. If params is left as
 // NULL, it defaults to &pl_d3d11_default_params. If an existing device is
 // provided in params->device, `pl_d3d11_create` will take a reference to it
 // that will be released in `pl_d3d11_destroy`.
-pl_d3d11 pl_d3d11_create(pl_log log, const struct pl_d3d11_params *params);
+PL_API pl_d3d11 pl_d3d11_create(pl_log log, const struct pl_d3d11_params *params);
 
 // Release the D3D11 device.
 //
 // Note that all libplacebo objects allocated from this pl_d3d11 object (e.g.
 // via `d3d11->gpu` or using `pl_d3d11_create_swapchain`) *must* be explicitly
 // destroyed by the user before calling this.
-void pl_d3d11_destroy(pl_d3d11 *d3d11);
+PL_API void pl_d3d11_destroy(pl_d3d11 *d3d11);
 
 // For a `pl_gpu` backed by `pl_d3d11`, this function can be used to retrieve
 // the underlying `pl_d3d11`. Returns NULL for any other type of `gpu`.
-pl_d3d11 pl_d3d11_get(pl_gpu gpu);
+PL_API pl_d3d11 pl_d3d11_get(pl_gpu gpu);
 
 struct pl_d3d11_swapchain_params {
     // The Direct3D 11 swapchain to wrap. Optional. If NULL, libplacebo will
@@ -198,13 +198,13 @@ struct pl_d3d11_swapchain_params {
 // Creates a new Direct3D 11 swapchain, or wraps an existing one. If an existing
 // swapchain is provided in params->swapchain, `pl_d3d11_create_swapchain` will
 // take a reference to it that will be released in `pl_swapchain_destroy`.
-pl_swapchain pl_d3d11_create_swapchain(pl_d3d11 d3d11,
+PL_API pl_swapchain pl_d3d11_create_swapchain(pl_d3d11 d3d11,
     const struct pl_d3d11_swapchain_params *params);
 
 // Takes a `pl_swapchain` created by pl_d3d11_create_swapchain and returns a
 // reference to the underlying IDXGISwapChain. This increments the refcount, so
 // call IDXGISwapChain::Release when finished with it.
-IDXGISwapChain *pl_d3d11_swapchain_unwrap(pl_swapchain sw);
+PL_API IDXGISwapChain *pl_d3d11_swapchain_unwrap(pl_swapchain sw);
 
 struct pl_d3d11_wrap_params {
     // The D3D11 texture to wrap, or a texture array containing the texture to
@@ -240,7 +240,7 @@ struct pl_d3d11_wrap_params {
 //
 // This function may fail due to incompatible formats, incompatible flags or
 // other reasons, in which case it will return NULL.
-pl_tex pl_d3d11_wrap(pl_gpu gpu, const struct pl_d3d11_wrap_params *params);
+PL_API pl_tex pl_d3d11_wrap(pl_gpu gpu, const struct pl_d3d11_wrap_params *params);
 
 PL_API_END
 

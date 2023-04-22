@@ -124,13 +124,13 @@ struct pl_deinterlace_params {
     .algo   = PL_DEINTERLACE_YADIF,
 
 #define pl_deinterlace_params(...) (&(struct pl_deinterlace_params) { PL_DEINTERLACE_DEFAULTS __VA_ARGS__ })
-extern const struct pl_deinterlace_params pl_deinterlace_default_params;
+PL_API extern const struct pl_deinterlace_params pl_deinterlace_default_params;
 
 // Deinterlaces a set of interleaved source frames and outputs the result into
 // `vec4 color`. If `params` is left as NULL, it defaults to
 // `&pl_deinterlace_default_params`.
-void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src,
-                           const struct pl_deinterlace_params *params);
+PL_API void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src,
+                                  const struct pl_deinterlace_params *params);
 
 PL_API_END
 

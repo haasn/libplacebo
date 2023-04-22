@@ -57,15 +57,27 @@
 # endif
 #endif
 
-// C++ compatibility
-#ifndef PL_API_BEGIN
-# ifdef __cplusplus
-#  define PL_API_BEGIN extern "C" {
-#  define PL_API_END }
+#if defined(_WIN32) || defined(__CYGWIN__)
+# ifdef PL_EXPORT
+#  define PL_API __declspec(dllexport)
 # else
-#  define PL_API_BEGIN
-#  define PL_API_END
+#  ifndef PL_STATIC
+#   define PL_API __declspec(dllimport)
+#  else
+#   define PL_API
+#  endif
 # endif
+#else
+# define PL_API __attribute__ ((visibility ("default")))
+#endif
+
+// C++ compatibility
+#ifdef __cplusplus
+# define PL_API_BEGIN extern "C" {
+# define PL_API_END }
+#else
+# define PL_API_BEGIN
+# define PL_API_END
 #endif
 
 #ifndef __cplusplus
@@ -82,8 +94,8 @@
 
 PL_API_BEGIN
 
-int pl_fix_ver(void);
-const char *pl_version(void);
+PL_API int pl_fix_ver(void);
+PL_API const char *pl_version(void);
 
 PL_API_END
 

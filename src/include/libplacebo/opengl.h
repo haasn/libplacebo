@@ -106,15 +106,15 @@ extern const struct pl_opengl_params pl_opengl_default_params;
 //
 // Note that creating multiple `pl_opengl` instances from the same OpenGL
 // context is undefined behavior.
-pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params);
+PL_API pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params);
 
 // All resources allocated from the `pl_gpu` contained by this `pl_opengl` must
 // be explicitly destroyed by the user before calling `pl_opengl_destroy`.
-void pl_opengl_destroy(pl_opengl *gl);
+PL_API void pl_opengl_destroy(pl_opengl *gl);
 
 // For a `pl_gpu` backed by `pl_opengl`, this function can be used to retrieve
 // the underlying `pl_opengl`. Returns NULL for any other type of `gpu`.
-pl_opengl pl_opengl_get(pl_gpu gpu);
+PL_API pl_opengl pl_opengl_get(pl_gpu gpu);
 
 struct pl_opengl_framebuffer {
     // ID of the framebuffer, or 0 to use the context's default framebuffer.
@@ -155,14 +155,14 @@ struct pl_opengl_swapchain_params {
 // Note: Due to OpenGL semantics, users *must* call `pl_swapchain_resize`
 // before attempting to use this swapchain, otherwise calls to
 // `pl_swapchain_start_frame` will fail.
-pl_swapchain pl_opengl_create_swapchain(pl_opengl gl,
-                            const struct pl_opengl_swapchain_params *params);
+PL_API pl_swapchain pl_opengl_create_swapchain(pl_opengl gl,
+                                               const struct pl_opengl_swapchain_params *params);
 
 // Update the framebuffer description. After calling this function, users
 // *must* call `pl_swapchain_resize` before attempting to use the swapchain
 // again, otherwise calls to `pl_swapchain_start_frame` will fail.
-void pl_opengl_swapchain_update_fb(pl_swapchain sw,
-                                   const struct pl_opengl_framebuffer *fb);
+PL_API void pl_opengl_swapchain_update_fb(pl_swapchain sw,
+                                          const struct pl_opengl_framebuffer *fb);
 
 struct pl_opengl_wrap_params {
     // The GLuint texture object itself. Optional. If no texture is provided,
@@ -210,7 +210,7 @@ struct pl_opengl_wrap_params {
 // which will *not* destroy the user-provided OpenGL texture or framebuffer.
 //
 // This function may fail, in which case it returns NULL.
-pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params);
+PL_API pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params);
 
 // Analogous to `pl_opengl_wrap`, this function takes any `pl_tex` (including
 // ones created by `pl_tex_create`) and unwraps it to expose the underlying
@@ -222,8 +222,8 @@ pl_tex pl_opengl_wrap(pl_gpu gpu, const struct pl_opengl_wrap_params *params);
 //
 // For renderable/blittable textures, `out_fbo` will be updated to the ID of
 // the framebuffer attached to this texture, or 0 if there is none. (Optional)
-unsigned int pl_opengl_unwrap(pl_gpu gpu, pl_tex tex, unsigned int *out_target,
-                              int *out_iformat, unsigned int *out_fbo);
+PL_API unsigned int pl_opengl_unwrap(pl_gpu gpu, pl_tex tex, unsigned int *out_target,
+                                     int *out_iformat, unsigned int *out_fbo);
 
 PL_API_END
 

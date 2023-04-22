@@ -88,7 +88,7 @@ struct pl_gpu_dummy_params {
     },
 
 #define pl_gpu_dummy_params(...) (&(struct pl_gpu_dummy_params) { PL_GPU_DUMMY_DEFAULTS __VA_ARGS__ })
-extern const struct pl_gpu_dummy_params pl_gpu_dummy_default_params;
+PL_API extern const struct pl_gpu_dummy_params pl_gpu_dummy_default_params;
 
 // Create a dummy GPU context based on the given parameters. This GPU will have
 // a format for each host-representable type (i.e. intN_t, floats and doubles),
@@ -96,16 +96,16 @@ extern const struct pl_gpu_dummy_params pl_gpu_dummy_default_params;
 // capability activated, respectively.
 //
 // If `params` is left as NULL, it defaults to `&pl_gpu_dummy_params`.
-pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params);
-void pl_gpu_dummy_destroy(pl_gpu *gpu);
+PL_API pl_gpu pl_gpu_dummy_create(pl_log log, const struct pl_gpu_dummy_params *params);
+PL_API void pl_gpu_dummy_destroy(pl_gpu *gpu);
 
 // Back-doors into the `pl_tex` and `pl_buf` representations. These allow you
 // to access the raw data backing this object. Textures are always laid out in
 // a tightly packed manner.
 //
 // For "placeholder" dummy textures, this always returns NULL.
-uint8_t *pl_buf_dummy_data(pl_buf buf);
-uint8_t *pl_tex_dummy_data(pl_tex tex);
+PL_API uint8_t *pl_buf_dummy_data(pl_buf buf);
+PL_API uint8_t *pl_tex_dummy_data(pl_tex tex);
 
 // Skeleton of `pl_tex_params` containing only the fields relevant to
 // `pl_tex_dummy_create`, plus the extra `sampler_type` field.
@@ -124,7 +124,7 @@ struct pl_tex_dummy_params {
 //
 // All of the permissions will be set to `false`, except `sampleable`, which is
 // set to `true`. (So you can use it as an input to shader sampling functions)
-pl_tex pl_tex_dummy_create(pl_gpu gpu, const struct pl_tex_dummy_params *params);
+PL_API pl_tex pl_tex_dummy_create(pl_gpu gpu, const struct pl_tex_dummy_params *params);
 
 PL_API_END
 
