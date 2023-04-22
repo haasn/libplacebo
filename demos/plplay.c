@@ -23,6 +23,7 @@
 #ifdef PL_HAVE_WIN32
 #include <shlwapi.h>
 #define PL_BASENAME PathFindFileNameA
+#define strdup _strdup
 #else
 #include <libgen.h>
 #define PL_BASENAME basename

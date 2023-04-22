@@ -42,6 +42,10 @@
 #include <GLFW/glfw3native.h>
 #endif
 
+#ifdef _WIN32
+#define strdup _strdup
+#endif
+
 #ifdef NDEBUG
 #define DEBUG false
 #else

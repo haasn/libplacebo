@@ -40,6 +40,10 @@
 #include "filters.h"
 #include "log.h"
 
+#ifdef PL_HAVE_WIN32
+#define j1 _j1
+#endif
+
 bool pl_filter_function_eq(const struct pl_filter_function *a,
                            const struct pl_filter_function *b)
 {

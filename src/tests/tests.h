@@ -25,9 +25,16 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <math.h>
 #include <time.h>
+
+#ifdef PL_HAVE_WIN32
+#include <io.h>
+#define isatty _isatty
+#define fileno _fileno
+#else
+#include <unistd.h>
+#endif
 
 static void pl_log_timestamp(void *stream, enum pl_log_level level, const char *msg)
 {
