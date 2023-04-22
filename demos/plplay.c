@@ -9,8 +9,6 @@
  * License: CC0 / Public Domain
  */
 
-#include <libgen.h>
-
 #include <libavutil/cpu.h>
 #include <libavutil/file.h>
 #include <libavutil/pixdesc.h>
@@ -21,6 +19,14 @@
 #include "utils.h"
 #include "window.h"
 #include "pl_thread.h"
+
+#ifdef PL_HAVE_WIN32
+#include <shlwapi.h>
+#define PL_BASENAME PathFindFileNameA
+#else
+#include <libgen.h>
+#define PL_BASENAME basename
+#endif
 
 #ifdef HAVE_NUKLEAR
 #include "ui.h"
@@ -1456,7 +1462,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                     p->target_icc.len = size;
                     p->target_icc.signature++;
                     free(p->target_icc_name);
-                    p->target_icc_name = strdup(basename((char *) dropped_file));
+                    p->target_icc_name = strdup(PL_BASENAME((char *) dropped_file));
                 }
             }
 

@@ -121,6 +121,9 @@ else
     if nuklear.found()
       plplay_deps += nuklear
     endif
+    if host_machine.system() == 'windows'
+      plplay_deps += cc.find_library('shlwapi', required: true)
+    endif
     executable('plplay', 'plplay.c',
       dependencies: plplay_deps,
       install: true,
