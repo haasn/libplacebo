@@ -1,8 +1,19 @@
 vulkan_build = get_option('vulkan')
 vulkan_link = get_option('vk-proc-addr')
-vulkan_loader = dependency('vulkan', version: '>=1.3.0', required: vulkan_link)
+vulkan_loader = dependency('vulkan', required: vulkan_link)
 vulkan_headers = disabler()
 registry_xml = get_option('vulkan-registry')
+
+if vulkan_loader.version() == 'unknown'
+  warning('Vulkan found with unknown version, may not build correctly.')
+elif vulkan_loader.version().version_compare('<1.3.0')
+  if vulkan_link.enabled()
+    error('Found Vulkan @0@, required >=1.3.0'.format(vulkan_loader.version()))
+  elif vulkan_link.auto()
+    message('Found Vulkan @0@, required >=1.3.0, disabling vk-proc-addr...'.format(vulkan_loader.version()))
+  endif
+  vulkan_loader = disabler()
+endif
 
 if vulkan_loader.found()
   vulkan_headers = vulkan_loader.partial_dependency(includes: true, compile_args: true)
