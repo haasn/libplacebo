@@ -355,7 +355,9 @@ endif
 
 # OS specific build options
 if host_machine.system() == 'windows'
-    build_opts += ['-D_WIN32_WINNT=0x0601', '-D_USE_MATH_DEFINES']
+    build_opts += ['-D_WIN32_WINNT=0x0601',
+                   '-D_USE_MATH_DEFINES',
+                   '-D_CRT_SECURE_NO_WARNINGS']
 endif
 
 add_project_arguments(build_opts + c_opts, language: 'c')
