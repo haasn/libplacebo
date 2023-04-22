@@ -250,7 +250,7 @@ if get_option('bench')
     error('Compiling the benchmark suite requires vulkan support!')
   endif
 
-  bench = executable('bench', 'tests/bench.c', dependencies: tdep_shared)
+  bench = executable('bench', 'tests/bench.c', dependencies: [tdep_shared, vulkan_headers])
   test('benchmark', bench, is_parallel: false, timeout: 600)
 endif
 
