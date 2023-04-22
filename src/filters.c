@@ -34,7 +34,6 @@
  * - https://github.com/AviSynth/jinc-resize (only used to verify the math)
  */
 
-#define _USE_MATH_DEFINES
 #include <math.h>
 
 #include "common.h"
