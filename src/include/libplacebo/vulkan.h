@@ -426,6 +426,18 @@ struct pl_vulkan_import_params {
 // VkDevice intact.
 PL_API pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *params);
 
+// For purely informative reasons, this contains a list of extensions and
+// device features that libplacebo *can* make use of. These are all strictly
+// optional, but provide a hint to the API user as to what might be worth
+// enabling at device creation time.
+//
+// Note: This also includes physical device features provided by extensions.
+// They are all provided using extension-specific features structs, rather
+// than the more general purpose VkPhysicalDeviceVulkan11Features etc.
+PL_API extern const char * const pl_vulkan_recommended_extensions[];
+PL_API extern const int pl_vulkan_num_recommended_extensions;
+PL_API extern const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features;
+
 struct pl_vulkan_wrap_params {
     // The image itself. It *must* be usable concurrently by all of the queue
     // family indices listed in `pl_vulkan->queues`. Note that this requires
@@ -478,18 +490,6 @@ struct pl_vulkan_wrap_params {
 //
 // This function may fail, in which case it returns NULL.
 PL_API pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params);
-
-// For purely informative reasons, this contains a list of extensions and
-// device features that libplacebo *can* make use of. These are all strictly
-// optional, but provide a hint to the API user as to what might be worth
-// enabling at device creation time.
-//
-// Note: This also includes physical device features provided by extensions.
-// They are all provided using extension-specific features structs, rather
-// than the more general purpose VkPhysicalDeviceVulkan11Features etc.
-PL_API extern const char * const pl_vulkan_recommended_extensions[];
-PL_API extern const int pl_vulkan_num_recommended_extensions;
-PL_API extern const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features;
 
 // A list of device features that are required by libplacebo. These
 // *must* be provided by imported Vulkan devices.
