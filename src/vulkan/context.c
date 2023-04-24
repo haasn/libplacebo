@@ -1220,7 +1220,15 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     vk_features_normalize(tmp, &pl_vulkan_recommended_features, vk->api_ver, &features);
     vk_features_normalize(tmp, params->features, vk->api_ver, &features);
 
+    // Explicitly clear the features struct before querying feature support
+    // from the driver. This way, we don't mistakenly mark as supported
+    // features coming from structs the driver doesn't have support for.
     VkPhysicalDeviceFeatures2 *features_sup = vk_chain_memdup(tmp, &features);;
+    for (VkBaseOutStructure *out = (void *) features_sup; out; out = out->pNext) {
+        const size_t size = vk_struct_size(out->sType);
+        memset(&out[1], 0, size - sizeof(out[0]));
+    }
+
     vk->GetPhysicalDeviceFeatures2KHR(vk->physd, features_sup);
 
     // Filter out unsupported features
