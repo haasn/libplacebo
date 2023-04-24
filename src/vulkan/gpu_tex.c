@@ -1355,3 +1355,37 @@ void pl_vulkan_release_ex(pl_gpu gpu, const struct pl_vulkan_release_params *par
     tex_vk->layout = params->layout;
     tex_vk->held = false;
 }
+
+bool pl_vulkan_hold(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
+                    pl_vulkan_sem sem_out)
+{
+    return pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
+        .tex        = tex,
+        .layout     = layout,
+        .semaphore  = sem_out,
+        .qf         = VK_QUEUE_FAMILY_IGNORED,
+    ));
+}
+
+bool pl_vulkan_hold_raw(pl_gpu gpu, pl_tex tex,
+                        VkImageLayout *out_layout,
+                        pl_vulkan_sem sem_out)
+{
+    return pl_vulkan_hold_ex(gpu, pl_vulkan_hold_params(
+        .tex        = tex,
+        .out_layout = out_layout,
+        .semaphore  = sem_out,
+        .qf         = VK_QUEUE_FAMILY_IGNORED,
+    ));
+}
+
+void pl_vulkan_release(pl_gpu gpu, pl_tex tex, VkImageLayout layout,
+                       pl_vulkan_sem sem_in)
+{
+    pl_vulkan_release_ex(gpu, pl_vulkan_release_params(
+        .tex        = tex,
+        .layout     = layout,
+        .semaphore  = sem_in,
+        .qf         = VK_QUEUE_FAMILY_IGNORED,
+    ));
+}
