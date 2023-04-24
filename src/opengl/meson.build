@@ -71,5 +71,6 @@ if opengl_build.allowed()
   # Generate GL loader
   subdir('include/glad')
 else
+  glad_dep = []
   sources += 'opengl/stubs.c'
 endif
