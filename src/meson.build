@@ -218,6 +218,14 @@ foreach h : headers
   install_headers('include' / proj_name / h, subdir: path)
 endforeach
 
+extra_cflags = []
+if get_option('default_library') == 'static'
+  extra_cflags = ['-DPL_STATIC']
+elif get_option('default_library') == 'both'
+  # meson doesn't support Cflags.private, insert it forcefully...
+  extra_cflags = ['\nCflags.private:', '-DPL_STATIC']
+endif
+
 pkg = import('pkgconfig')
 pkg.generate(
   name: proj_name,
@@ -225,6 +233,7 @@ pkg.generate(
   libraries: lib,
   version: version,
   variables: pc_vars,
+  extra_cflags: extra_cflags,
 )
 
 
