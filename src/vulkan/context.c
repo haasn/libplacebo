@@ -1234,6 +1234,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     }
 
     // Construct normalized output chain
+    vk->features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vk_features_normalize(vk->alloc, &features, 0, &vk->features);
     if (!check_features(vk)) {
         PL_FATAL(vk, "Vulkan device does not support all required features!");
@@ -1562,6 +1563,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
         goto error;
     }
 
+    vk->features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vk_features_normalize(vk->alloc, params->features, 0, &vk->features);
     if (!check_features(vk)) {
         PL_FATAL(vk, "Imported Vulkan device was not created with all required "
