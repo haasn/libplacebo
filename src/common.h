@@ -149,7 +149,7 @@ static inline size_t pl_lcm(size_t x, size_t y)
 #ifdef PL_DEBUG_ABORT
 # define pl_debug_abort() abort()
 #else
-# define pl_debug_abort()
+# define pl_debug_abort() do {} while (0)
 #endif
 
 // Refcounting helpers
