@@ -141,6 +141,10 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
             PL_MSG(ctx, level, "  %d: %.*s", (int) d3dmsg->ID,
                    (int) d3dmsg->DescriptionByteLength, d3dmsg->pDescription);
         }
+
+        if (d3dmsg->Severity <= D3D11_MESSAGE_SEVERITY_ERROR)
+            pl_debug_abort();
+
         pl_free_ptr(&d3dmsg);
     }
 
