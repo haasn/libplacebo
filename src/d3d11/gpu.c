@@ -640,7 +640,7 @@ pl_gpu pl_gpu_create_d3d11(struct d3d11_ctx *ctx)
     if (p->dev5 && p->has_monitored_fences) {
         hr = ID3D11Device5_CreateFence(p->dev5, 0, D3D11_FENCE_FLAG_NONE,
                                        &IID_ID3D11Fence,
-                                       (void **) p->finish_fence);
+                                       (void **) &p->finish_fence);
         if (SUCCEEDED(hr)) {
             p->finish_event = CreateEventW(NULL, FALSE, FALSE, NULL);
             if (!p->finish_event) {
