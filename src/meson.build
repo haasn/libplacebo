@@ -199,6 +199,7 @@ lib = library('placebo', sources,
 
 libplacebo = declare_dependency(
   include_directories: inc,
+  compile_args: get_option('default_library') == 'static' ? ['-DPL_STATIC'] : [],
   link_with: lib,
 )
 
@@ -238,6 +239,7 @@ tdep_static = declare_dependency(
 
 tdep_shared = declare_dependency(
     include_directories: [ inc, include_directories('.') ],
+    compile_args: get_option('default_library') == 'static' ? ['-DPL_STATIC'] : [],
     link_with: lib,
   )
 
