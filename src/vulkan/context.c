@@ -977,7 +977,8 @@ VkPhysicalDevice pl_vulkan_choose_device(pl_log log,
         GetPhysicalDeviceProperties2(devices[i], &prop);
         VkPhysicalDeviceType t = prop.properties.deviceType;
         const char *dtype = t < PL_ARRAY_SIZE(types) ? types[t].name : "unknown?";
-        PL_INFO(vk, "    GPU %d: %s (%s)", i, prop.properties.deviceName, dtype);
+        PL_INFO(vk, "    GPU %d: %s v%d.%d.%d (%s)", i, prop.properties.deviceName,
+                PRINTF_VER(prop.properties.apiVersion), dtype);
         PL_INFO(vk, "           uuid: %s", PRINT_UUID(id_props.deviceUUID));
 
         if (params->surface) {
