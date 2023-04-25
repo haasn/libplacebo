@@ -111,7 +111,7 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
         header_printed = PL_LOG_WARN;
 
         // Notify number of messages skipped due to the message count limit
-        PL_WARN(ctx, "    (skipped %llu debug layer messages)",
+        PL_WARN(ctx, "    (skipped %"PRIu64" debug layer messages)",
                 discarded - ctx->last_discarded);
         ctx->last_discarded = discarded;
     }
