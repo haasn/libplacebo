@@ -5,3 +5,4 @@
 /3rdparty
 *.exe
 *.o
+.cache
