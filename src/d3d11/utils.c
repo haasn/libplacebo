@@ -100,8 +100,18 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
     };
 
     enum pl_log_level header_printed = PL_LOG_NONE;
-    uint64_t messages = ID3D11InfoQueue_GetNumStoredMessages(ctx->iqueue);
-    if (!messages)
+
+    // After the storage limit is reached and ID3D11InfoQueue::ClearStoredMessages
+    // is called message counter seems to be initialized to -1 which is quite big
+    // number if we read it as uint64_t. Any subsequent call to the
+    // ID3D11InfoQueue::GetNumStoredMessages will be off by one.
+    // Use ID3D11InfoQueue_GetNumStoredMessagesAllowedByRetrievalFilter without
+    // any filter set, which seem to be unaffected by this bug and return correct
+    // number of messages.
+    uint64_t messages = ID3D11InfoQueue_GetNumStoredMessagesAllowedByRetrievalFilter(ctx->iqueue);
+
+    // Just to be on the safe side, check also for the mentioned -1 value...
+    if (!messages || messages == UINT64_C(-1))
         return;
 
     uint64_t discarded =
