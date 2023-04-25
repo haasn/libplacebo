@@ -1556,7 +1556,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
     PL_INFO(vk, "    Device ID: %x:%x", (unsigned) prop.properties.vendorID,
             (unsigned) prop.properties.deviceID);
     PL_INFO(vk, "    Device UUID: %s", PRINT_UUID(id_props.deviceUUID));
-    PL_INFO(vk, "    Driver version: %d", (int) prop.properties.driverVersion);
+    PL_INFO(vk, "    Driver version: %x", (unsigned) prop.properties.driverVersion);
     PL_INFO(vk, "    API version: %d.%d.%d", PRINTF_VER(prop.properties.apiVersion));
 
     vk->api_ver = prop.properties.apiVersion;
