@@ -120,10 +120,12 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
     D3D11_MESSAGE *d3dmsg = NULL;
     for (uint64_t i = 0; i < messages; i++) {
         SIZE_T len;
-        D3D(ID3D11InfoQueue_GetMessage(ctx->iqueue, i, NULL, &len));
+        if (FAILED(ID3D11InfoQueue_GetMessage(ctx->iqueue, i, NULL, &len)))
+            goto error;
 
         d3dmsg = pl_zalloc(NULL, len);
-        D3D(ID3D11InfoQueue_GetMessage(ctx->iqueue, i, d3dmsg, &len));
+        if (FAILED(ID3D11InfoQueue_GetMessage(ctx->iqueue, i, d3dmsg, &len)))
+            goto error;
 
         enum pl_log_level level = log_level_override(d3dmsg->ID);
         if (level == PL_LOG_NONE)
