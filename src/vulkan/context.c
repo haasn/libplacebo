@@ -1121,8 +1121,8 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
     PL_DEBUG(vk, "Queue families supported by device:");
     for (int i = 0; i < qfnum; i++) {
-        PL_DEBUG(vk, "    %d: flags 0x%x num %d", i,
-                 (unsigned) qfs[i].queueFlags, (int) qfs[i].queueCount);
+        PL_DEBUG(vk, "    %d: flags 0x%"PRIx32" num %"PRIu32, i,
+                 qfs[i].queueFlags, qfs[i].queueCount);
     }
 
     VkQueueFlagBits gfx_flags = VK_QUEUE_GRAPHICS_BIT;
@@ -1475,10 +1475,10 @@ pl_vulkan pl_vulkan_create(pl_log log, const struct pl_vulkan_params *params)
 
     PL_INFO(vk, "Vulkan device properties:");
     PL_INFO(vk, "    Device Name: %s", prop.properties.deviceName);
-    PL_INFO(vk, "    Device ID: %x:%x", (unsigned) prop.properties.vendorID,
-            (unsigned) prop.properties.deviceID);
+    PL_INFO(vk, "    Device ID: %"PRIx32":%"PRIx32, prop.properties.vendorID,
+            prop.properties.deviceID);
     PL_INFO(vk, "    Device UUID: %s", PRINT_UUID(id_props.deviceUUID));
-    PL_INFO(vk, "    Driver version: %x", (unsigned) prop.properties.driverVersion);
+    PL_INFO(vk, "    Driver version: %"PRIx32, prop.properties.driverVersion);
     PL_INFO(vk, "    API version: %d.%d.%d", PRINTF_VER(prop.properties.apiVersion));
 
     // Needed by device_init
@@ -1553,10 +1553,10 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
 
     PL_INFO(vk, "Imported vulkan device properties:");
     PL_INFO(vk, "    Device Name: %s", prop.properties.deviceName);
-    PL_INFO(vk, "    Device ID: %x:%x", (unsigned) prop.properties.vendorID,
-            (unsigned) prop.properties.deviceID);
+    PL_INFO(vk, "    Device ID: %"PRIx32":%"PRIx32, prop.properties.vendorID,
+            prop.properties.deviceID);
     PL_INFO(vk, "    Device UUID: %s", PRINT_UUID(id_props.deviceUUID));
-    PL_INFO(vk, "    Driver version: %x", (unsigned) prop.properties.driverVersion);
+    PL_INFO(vk, "    Driver version: %"PRIx32, prop.properties.driverVersion);
     PL_INFO(vk, "    API version: %d.%d.%d", PRINTF_VER(prop.properties.apiVersion));
 
     vk->api_ver = prop.properties.apiVersion;
