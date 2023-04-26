@@ -160,8 +160,8 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
         pl_free_ptr(&d3dmsg);
     }
 
-    ID3D11InfoQueue_ClearStoredMessages(ctx->iqueue);
 error:
+    ID3D11InfoQueue_ClearStoredMessages(ctx->iqueue);
     pl_free_ptr(&d3dmsg);
 }
 
