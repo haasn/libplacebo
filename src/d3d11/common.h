@@ -38,6 +38,7 @@ struct d3d11_ctx {
     ID3D11Debug *debug;
     ID3D11InfoQueue *iqueue;
     uint64_t last_discarded; // Last count of discarded messages
+    D3D11_MESSAGE *d3dmsg;
 
     // pl_gpu_is_failed (We saw a device removed error!)
     bool is_failed;

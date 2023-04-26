@@ -127,13 +127,14 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
     }
 
     // Copy debug layer messages to libplacebo's log output
-    D3D11_MESSAGE *d3dmsg = NULL;
     for (uint64_t i = 0; i < messages; i++) {
         SIZE_T len;
         if (FAILED(ID3D11InfoQueue_GetMessage(ctx->iqueue, i, NULL, &len)))
             goto error;
 
-        d3dmsg = pl_zalloc(NULL, len);
+        pl_grow((void *) ctx->d3d11, &ctx->d3dmsg, len);
+        D3D11_MESSAGE *d3dmsg = ctx->d3dmsg;
+
         if (FAILED(ID3D11InfoQueue_GetMessage(ctx->iqueue, i, d3dmsg, &len)))
             goto error;
 
@@ -156,13 +157,10 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
 
         if (d3dmsg->Severity <= D3D11_MESSAGE_SEVERITY_ERROR)
             pl_debug_abort();
-
-        pl_free_ptr(&d3dmsg);
     }
 
 error:
     ID3D11InfoQueue_ClearStoredMessages(ctx->iqueue);
-    pl_free_ptr(&d3dmsg);
 }
 
 HRESULT pl_d3d11_check_device_removed(struct d3d11_ctx *ctx, HRESULT hr)
