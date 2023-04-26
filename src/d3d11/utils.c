@@ -151,7 +151,7 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
                 header_printed = level;
             }
 
-            PL_MSG(ctx, level, "  %d: %.*s", (int) d3dmsg->ID,
+            PL_MSG(ctx, level, " %d: %.*s", (int) d3dmsg->ID,
                    (int) d3dmsg->DescriptionByteLength, d3dmsg->pDescription);
         }
 
