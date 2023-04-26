@@ -525,9 +525,9 @@ static PFN_vkGetInstanceProcAddr get_proc_addr_fallback(pl_log log,
 }
 
 #define PRINTF_VER(ver) \
-    (int) VK_VERSION_MAJOR(ver), \
-    (int) VK_VERSION_MINOR(ver), \
-    (int) VK_VERSION_PATCH(ver)
+    (int) VK_API_VERSION_MAJOR(ver), \
+    (int) VK_API_VERSION_MINOR(ver), \
+    (int) VK_API_VERSION_PATCH(ver)
 
 pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
 {
