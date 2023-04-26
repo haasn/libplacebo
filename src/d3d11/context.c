@@ -277,6 +277,8 @@ static void init_debug_layer(struct d3d11_ctx *ctx)
     };
     ID3D11InfoQueue_PushStorageFilter(ctx->iqueue, &filter);
 
+    ID3D11InfoQueue_SetMessageCountLimit(ctx->iqueue, -1);
+
 error:
     return;
 }
