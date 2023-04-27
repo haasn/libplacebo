@@ -237,6 +237,7 @@ static_assert(PL_ARRAY_SIZE(pl_vulkan_recommended_extensions) + 1 ==
 static const VkPhysicalDeviceVulkan13Features recommended_vk13 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
     .computeFullSubgroups = true,
+    .maintenance4 = true,
     .shaderZeroInitializeWorkgroupMemory = true,
 };
 
@@ -280,7 +281,6 @@ const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features = {
 static const VkPhysicalDeviceVulkan13Features required_vk13 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
     .dynamicRendering = true,
-    .maintenance4 = true,
     .synchronization2 = true,
 };
 
