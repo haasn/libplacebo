@@ -154,7 +154,6 @@ struct vk_ctx {
     PL_VK_FUN(CreateDebugReportCallbackEXT);
     PL_VK_FUN(CreateDescriptorPool);
     PL_VK_FUN(CreateDescriptorSetLayout);
-    PL_VK_FUN(CreateEvent);
     PL_VK_FUN(CreateFence);
     PL_VK_FUN(CreateGraphicsPipelines);
     PL_VK_FUN(CreateImage);
@@ -173,7 +172,6 @@ struct vk_ctx {
     PL_VK_FUN(DestroyDescriptorPool);
     PL_VK_FUN(DestroyDescriptorSetLayout);
     PL_VK_FUN(DestroyDevice);
-    PL_VK_FUN(DestroyEvent);
     PL_VK_FUN(DestroyFence);
     PL_VK_FUN(DestroyImage);
     PL_VK_FUN(DestroyImageView);
@@ -208,7 +206,6 @@ struct vk_ctx {
     PL_VK_FUN(QueuePresentKHR);
     PL_VK_FUN(QueueSubmit2);
     PL_VK_FUN(QueueWaitIdle);
-    PL_VK_FUN(ResetEvent);
     PL_VK_FUN(ResetFences);
     PL_VK_FUN(ResetQueryPool);
     PL_VK_FUN(SetDebugUtilsObjectNameEXT);
