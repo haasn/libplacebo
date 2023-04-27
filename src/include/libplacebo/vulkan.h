@@ -24,7 +24,7 @@
 
 PL_API_BEGIN
 
-#define PL_VK_MIN_VERSION VK_API_VERSION_1_3
+#define PL_VK_MIN_VERSION VK_API_VERSION_1_2
 
 // Structure representing a VkInstance. Using this is not required.
 typedef const struct pl_vk_inst_t {
