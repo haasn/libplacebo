@@ -631,6 +631,19 @@ debug_layers_done: ;
         }
     }
 
+    static const char *extra_layers[] = {
+        "VK_LAYER_KHRONOS_synchronization2",
+    };
+
+    for (int i = 0; i < PL_ARRAY_SIZE(extra_layers); i++) {
+        for (int n = 0; n < num_layers_avail; n++) {
+            if (strcmp(extra_layers[i], layers_avail[n].layerName) == 0) {
+                PL_ARRAY_APPEND(tmp, layers, extra_layers[i]);
+                break;
+            }
+        }
+    }
+
     // Enumerate all supported extensions
     PL_VK_LOAD_FUN(NULL, EnumerateInstanceExtensionProperties, get_addr);
     uint32_t num_exts_avail = 0;
