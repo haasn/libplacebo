@@ -1589,11 +1589,13 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
     for (int i = 0; i < PL_ARRAY_SIZE(vk_device_extensions); i++) {
         const struct vk_ext *ext = &vk_device_extensions[i];
         uint32_t core_ver = vk_ext_promoted_ver(ext->name);
+        if (core_ver && vk->api_ver >= core_ver) {
+            for (const struct vk_fun *f = ext->funs; f && f->name; f++)
+                load_vk_fun(vk, f);
+            continue;
+        }
         for (int n = 0; n < params->num_extensions; n++) {
-            if (strcmp(ext->name, params->extensions[n]) == 0 ||
-                (core_ver && core_ver >= vk->api_ver))
-            {
-                // Extension is available, directly load it
+            if (strcmp(ext->name, params->extensions[n]) == 0) {
                 for (const struct vk_fun *f = ext->funs; f && f->name; f++)
                     load_vk_fun(vk, f);
                 break;
