@@ -957,7 +957,7 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 
         vk->CmdSetViewport(cmd->buf, 0, 1, &viewport);
         vk->CmdSetScissor(cmd->buf, 0, 1, &scissor);
-        vk->CmdBeginRendering(cmd->buf, &(VkRenderingInfo) {
+        vk->CmdBeginRenderingKHR(cmd->buf, &(VkRenderingInfo) {
             .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
             .renderArea.extent = { tex->params.w, tex->params.h },
             .layerCount = 1,
@@ -979,7 +979,7 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
             vk->CmdDraw(cmd->buf, params->vertex_count, 1, 0, 0);
         }
 
-        vk->CmdEndRendering(cmd->buf);
+        vk->CmdEndRenderingKHR(cmd->buf);
         break;
     }
     case PL_PASS_COMPUTE:

@@ -123,7 +123,7 @@ struct vk_ctx {
     PL_VK_FUN(BindBufferMemory);
     PL_VK_FUN(BindImageMemory);
     PL_VK_FUN(CmdBeginDebugUtilsLabelEXT);
-    PL_VK_FUN(CmdBeginRendering);
+    PL_VK_FUN(CmdBeginRenderingKHR);
     PL_VK_FUN(CmdBindDescriptorSets);
     PL_VK_FUN(CmdBindIndexBuffer);
     PL_VK_FUN(CmdBindPipeline);
@@ -138,7 +138,7 @@ struct vk_ctx {
     PL_VK_FUN(CmdDraw);
     PL_VK_FUN(CmdDrawIndexed);
     PL_VK_FUN(CmdEndDebugUtilsLabelEXT);
-    PL_VK_FUN(CmdEndRendering);
+    PL_VK_FUN(CmdEndRenderingKHR);
     PL_VK_FUN(CmdPipelineBarrier2KHR);
     PL_VK_FUN(CmdPushConstants);
     PL_VK_FUN(CmdPushDescriptorSetKHR);
