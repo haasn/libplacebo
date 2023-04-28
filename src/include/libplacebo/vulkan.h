@@ -420,12 +420,6 @@ struct pl_vulkan_import_params {
 
 #define pl_vulkan_import_params(...) (&(struct pl_vulkan_import_params) { __VA_ARGS__ })
 
-// Import an existing VkDevice instead of creating a new one, and wrap it into
-// a `pl_vulkan` abstraction. It's safe to `pl_vulkan_destroy` this, which will
-// destroy application state related to libplacebo but leave the underlying
-// VkDevice intact.
-PL_API pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *params);
-
 // For purely informative reasons, this contains a list of extensions and
 // device features that libplacebo *can* make use of. These are all strictly
 // optional, but provide a hint to the API user as to what might be worth
@@ -437,6 +431,18 @@ PL_API pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_para
 PL_API extern const char * const pl_vulkan_recommended_extensions[];
 PL_API extern const int pl_vulkan_num_recommended_extensions;
 PL_API extern const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features;
+
+// A list of device features that are required by libplacebo. These
+// *must* be provided by imported Vulkan devices.
+//
+// Note: `pl_vulkan_recommended_features` does not include this list.
+extern const VkPhysicalDeviceFeatures2 pl_vulkan_required_features;
+
+// Import an existing VkDevice instead of creating a new one, and wrap it into
+// a `pl_vulkan` abstraction. It's safe to `pl_vulkan_destroy` this, which will
+// destroy application state related to libplacebo but leave the underlying
+// VkDevice intact.
+PL_API pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *params);
 
 struct pl_vulkan_wrap_params {
     // The image itself. It *must* be usable concurrently by all of the queue
@@ -492,12 +498,6 @@ struct pl_vulkan_wrap_params {
 //
 // This function may fail, in which case it returns NULL.
 PL_API pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params);
-
-// A list of device features that are required by libplacebo. These
-// *must* be provided by imported Vulkan devices.
-//
-// Note: `pl_vulkan_recommended_features` does not include this list.
-extern const VkPhysicalDeviceFeatures2 pl_vulkan_required_features;
 
 // Analogous to `pl_vulkan_wrap`, this function takes any `pl_tex` (including
 // ones created by `pl_tex_create`) and unwraps it to expose the underlying
