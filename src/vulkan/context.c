@@ -180,7 +180,14 @@ static const struct vk_ext vk_device_extensions[] = {
             {0}
         },
 #endif
-    },
+    }, {
+        .name = VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+        .funs = (const struct vk_fun[]) {
+            PL_VK_DEV_FUN(CmdPipelineBarrier2KHR),
+            PL_VK_DEV_FUN(QueueSubmit2KHR),
+            {0}
+        },
+    }
 };
 
 // Make sure to keep this in sync with the above!
@@ -206,6 +213,7 @@ const char * const pl_vulkan_recommended_extensions[] = {
 #ifdef VK_EXT_full_screen_exclusive
     VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME,
 #endif
+    VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
 };
 
 const int pl_vulkan_num_recommended_extensions =
@@ -313,7 +321,6 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(CmdDrawIndexed),
     PL_VK_DEV_FUN(CmdEndDebugUtilsLabelEXT),
     PL_VK_DEV_FUN(CmdEndRendering),
-    PL_VK_DEV_FUN(CmdPipelineBarrier2),
     PL_VK_DEV_FUN(CmdPushConstants),
     PL_VK_DEV_FUN(CmdResetQueryPool),
     PL_VK_DEV_FUN(CmdSetScissor),
@@ -366,7 +373,6 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(GetQueryPoolResults),
     PL_VK_DEV_FUN(InvalidateMappedMemoryRanges),
     PL_VK_DEV_FUN(MapMemory),
-    PL_VK_DEV_FUN(QueueSubmit2),
     PL_VK_DEV_FUN(QueueWaitIdle),
     PL_VK_DEV_FUN(ResetFences),
     PL_VK_DEV_FUN(ResetQueryPool),

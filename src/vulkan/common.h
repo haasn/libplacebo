@@ -139,7 +139,7 @@ struct vk_ctx {
     PL_VK_FUN(CmdDrawIndexed);
     PL_VK_FUN(CmdEndDebugUtilsLabelEXT);
     PL_VK_FUN(CmdEndRendering);
-    PL_VK_FUN(CmdPipelineBarrier2);
+    PL_VK_FUN(CmdPipelineBarrier2KHR);
     PL_VK_FUN(CmdPushConstants);
     PL_VK_FUN(CmdPushDescriptorSetKHR);
     PL_VK_FUN(CmdResetQueryPool);
@@ -204,7 +204,7 @@ struct vk_ctx {
     PL_VK_FUN(InvalidateMappedMemoryRanges);
     PL_VK_FUN(MapMemory);
     PL_VK_FUN(QueuePresentKHR);
-    PL_VK_FUN(QueueSubmit2);
+    PL_VK_FUN(QueueSubmit2KHR);
     PL_VK_FUN(QueueWaitIdle);
     PL_VK_FUN(ResetFences);
     PL_VK_FUN(ResetQueryPool);

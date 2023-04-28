@@ -353,7 +353,7 @@ bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
     }
 
     vk->lock_queue(vk->queue_ctx, pool->qf, cmd->qindex);
-    VkResult res = vk->QueueSubmit2(cmd->queue, 1, &sinfo, VK_NULL_HANDLE);
+    VkResult res = vk->QueueSubmit2KHR(cmd->queue, 1, &sinfo, VK_NULL_HANDLE);
     vk->unlock_queue(vk->queue_ctx, pool->qf, cmd->qindex);
     PL_VK_ASSERT(res, "vkQueueSubmit2");
 

@@ -53,7 +53,7 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
     uint32_t dst_qf = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf;
 
     if (last.access || src_qf != dst_qf) {
-        vk->CmdPipelineBarrier2(cmd->buf, &(VkDependencyInfo) {
+        vk->CmdPipelineBarrier2KHR(cmd->buf, &(VkDependencyInfo) {
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
             .bufferMemoryBarrierCount = 1,
             .pBufferMemoryBarriers = &(VkBufferMemoryBarrier2) {
@@ -288,7 +288,7 @@ void vk_buf_flush(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
     if (!can_read && !can_write)
         return;
 
-    vk->CmdPipelineBarrier2(cmd->buf, &(VkDependencyInfo) {
+    vk->CmdPipelineBarrier2KHR(cmd->buf, &(VkDependencyInfo) {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .bufferMemoryBarrierCount = 1,
         .pBufferMemoryBarriers = &(VkBufferMemoryBarrier2) {
