@@ -302,6 +302,7 @@ static const struct vk_format vk_formats[] = {
         },
     },
     {VK_FORMAT_G8_B8R8_2PLANE_444_UNORM, PLANARFMT("g8_br8_444", 2, 24, 8),
+        .min_ver = VK_API_VERSION_1_3,
         .pfmt = {
             {VK_FORMAT_R8_UNORM},
             {VK_FORMAT_R8G8_UNORM},
@@ -321,6 +322,7 @@ static const struct vk_format vk_formats[] = {
         },
     },
     {VK_FORMAT_G16_B16R16_2PLANE_444_UNORM, PLANARFMT("g16_br16_444", 2, 48, 16),
+        .min_ver = VK_API_VERSION_1_3,
         .pfmt = {
             {VK_FORMAT_R16_UNORM},
             {VK_FORMAT_R16G16_UNORM},
@@ -340,6 +342,7 @@ static const struct vk_format vk_formats[] = {
         },
     },
     {VK_FORMAT_G10X6_B10X6R10X6_2PLANE_444_UNORM_3PACK16, PLANARFMT("gx10_bxrx10_444", 2, 48, 10),
+        .min_ver = VK_API_VERSION_1_3,
         .pfmt = {
             {VK_FORMAT_R10X6_UNORM_PACK16},
             {VK_FORMAT_R10X6G10X6_UNORM_2PACK16},
@@ -359,6 +362,7 @@ static const struct vk_format vk_formats[] = {
         },
     },
     {VK_FORMAT_G12X4_B12X4R12X4_2PLANE_444_UNORM_3PACK16, PLANARFMT("gx12_bxrx12_444", 2, 48, 12),
+        .min_ver = VK_API_VERSION_1_3,
         .pfmt = {
             {VK_FORMAT_R12X4_UNORM_PACK16},
             {VK_FORMAT_R12X4G12X4_UNORM_2PACK16},
@@ -384,6 +388,10 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
 
     for (const struct vk_format *pvk_fmt = vk_formats; pvk_fmt->tfmt; pvk_fmt++) {
         const struct vk_format *vk_fmt = pvk_fmt;
+
+        // Skip formats that require a too new version of Vulkan
+        if (vk_fmt->min_ver > vk->api_ver)
+            continue;
 
         // Skip formats with innately emulated representation if unsupported
         if (vk_fmt->fmt.emulated && !has_emu)

@@ -26,6 +26,7 @@ struct vk_format {
     int icomps;         // internal component count (or 0 to infer from `fmt`)
     VkFormat bfmt;      // vulkan format for use as buffers (or 0 to use `tfmt`)
     const struct vk_format *emufmt; // alternate format for emulation
+    uint32_t min_ver;   // minimum vulkan API version for this format to exist
     struct { VkFormat fmt; int sx, sy; } pfmt[4]; // plane formats (for planar textures)
 };
 
