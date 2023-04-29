@@ -325,7 +325,9 @@ static void generate_shaders(pl_dispatch dp,
                  "#extension GL_KHR_shader_subgroup_vote : enable \n"
                  "#extension GL_KHR_shader_subgroup_arithmetic : enable \n"
                  "#extension GL_KHR_shader_subgroup_ballot : enable \n"
-                 "#extension GL_KHR_shader_subgroup_shuffle : enable \n");
+                 "#extension GL_KHR_shader_subgroup_shuffle : enable \n"
+                 "#extension GL_KHR_shader_subgroup_clustered : enable \n"
+                 "#extension GL_KHR_shader_subgroup_quad : enable \n");
     }
 
     // Enable all extensions needed for different types of input
