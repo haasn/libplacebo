@@ -1067,6 +1067,7 @@ pl_pass pl_pass_create(pl_gpu gpu, const struct pl_pass_params *params)
 
 error:
     log_shader_sources(gpu->log, PL_LOG_ERR, params);
+    pl_log_stack_trace(gpu->log, PL_LOG_ERR);
     pl_debug_abort();
     return NULL;
 }
