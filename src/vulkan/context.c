@@ -301,6 +301,28 @@ const VkPhysicalDeviceFeatures2 pl_vulkan_required_features = {
     .pNext = (void *) &required_vk11,
 };
 
+static bool check_required_features(struct vk_ctx *vk)
+{
+    #define CHECK_FEATURE(maj, min, feat) do {                                  \
+        const VkPhysicalDeviceVulkan##maj##min##Features *f;                    \
+        f = vk_find_struct(&vk->features,                                       \
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_##maj##_##min##_FEATURES); \
+        if (!f->feat) {                                                         \
+            PL_ERR(vk, "Missing device feature: " #feat);                       \
+            return false;                                                       \
+        }                                                                       \
+    } while (0)
+
+    CHECK_FEATURE(1, 3, dynamicRendering);
+    CHECK_FEATURE(1, 3, synchronization2);
+    CHECK_FEATURE(1, 2, hostQueryReset);
+    CHECK_FEATURE(1, 2, timelineSemaphore);
+
+    #undef CHECK_FEATURE
+    return true;
+}
+
+
 // List of mandatory device-level functions
 //
 // Note: Also includes VK_EXT_debug_utils functions, even though they aren't
@@ -1110,25 +1132,6 @@ static int find_qf(VkQueueFamilyProperties *qfs, int qfnum, VkQueueFlags flags)
     return idx;
 }
 
-static bool check_features(struct vk_ctx *vk)
-{
-
-    for (const VkBaseInStructure *req = (const VkBaseInStructure *) &pl_vulkan_required_features;
-            req; req = req->pNext)
-    {
-        const VkBaseInStructure *avail = vk_find_struct(&vk->features, req->sType);
-        const VkBool32 *fr = (const VkBool32 *) &req[1];
-        const VkBool32 *fa = avail ? (const VkBool32 *) &avail[1] : NULL;
-        const size_t size = vk_struct_size(req->sType) - sizeof(req[0]);
-        for (int i = 0; i < size / sizeof(VkBool32); i++) {
-            if (fr[i] && (!fa || !fa[i]))
-                return false;
-        }
-    }
-
-    return true;
-}
-
 static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params)
 {
     pl_assert(vk->physd);
@@ -1268,7 +1271,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     // Construct normalized output chain
     vk->features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vk_features_normalize(vk->alloc, &features, 0, &vk->features);
-    if (!check_features(vk)) {
+    if (!check_required_features(vk)) {
         PL_FATAL(vk, "Vulkan device does not support all required features!");
         goto error;
     }
@@ -1597,7 +1600,7 @@ pl_vulkan pl_vulkan_import(pl_log log, const struct pl_vulkan_import_params *par
 
     vk->features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vk_features_normalize(vk->alloc, params->features, 0, &vk->features);
-    if (!check_features(vk)) {
+    if (!check_required_features(vk)) {
         PL_FATAL(vk, "Imported Vulkan device was not created with all required "
                  "features!");
         goto error;
