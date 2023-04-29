@@ -202,6 +202,7 @@ libplacebo = declare_dependency(
   include_directories: inc,
   compile_args: get_option('default_library') == 'static' ? ['-DPL_STATIC'] : [],
   link_with: lib,
+  variables: pc_vars,
 )
 
 
