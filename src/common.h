@@ -142,7 +142,10 @@ static inline size_t pl_lcm(size_t x, size_t y)
 
 // Conditional abort() macro that depends on the configuration option
 #ifdef PL_DEBUG_ABORT
-# define pl_debug_abort() abort()
+# define pl_debug_abort() do {                          \
+    fprintf(stderr, "pl_debug_abort() triggered!\n");   \
+    abort();                                            \
+} while (0)
 #else
 # define pl_debug_abort() do {} while (0)
 #endif
