@@ -307,7 +307,7 @@ static bool check_required_features(struct vk_ctx *vk)
         const VkPhysicalDeviceVulkan##maj##min##Features *f;                    \
         f = vk_find_struct(&vk->features,                                       \
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_##maj##_##min##_FEATURES); \
-        if (!f->feat) {                                                         \
+        if (!f || !f->feat) {                                                   \
             PL_ERR(vk, "Missing device feature: " #feat);                       \
             return false;                                                       \
         }                                                                       \
