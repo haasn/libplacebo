@@ -213,6 +213,8 @@ static ID3D11Device *create_device(struct pl_d3d11_t *d3d11,
         if (SUCCEEDED(hr))
             break;
 
+        pl_d3d11_after_error(ctx, hr);
+
         // Trying to create a D3D_FEATURE_LEVEL_12_0 device on Windows 8.1 or
         // below will not succeed. Try an 11_1 device.
         if (hr == E_INVALIDARG && max_fl >= D3D_FEATURE_LEVEL_12_0 &&

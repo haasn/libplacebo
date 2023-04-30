@@ -412,6 +412,8 @@ static void update_swapchain_color_config(pl_swapchain sw,
         p->csp_map.d3d11_fmt = csp_map.d3d11_fmt;
     }
 
+    pl_d3d11_flush_message_queue(ctx, "After colorspace hint");
+
 cleanup:
     SAFE_RELEASE(swapchain3);
 }
@@ -577,6 +579,7 @@ static IDXGISwapChain *create_swapchain(struct d3d11_ctx *ctx,
         if (SUCCEEDED(hr))
             break;
 
+        pl_d3d11_after_error(ctx, hr);
         if (flip) {
             PL_DEBUG(ctx, "Failed to create flip-model swapchain, trying bitblt");
             flip = false;
