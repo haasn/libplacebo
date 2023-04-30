@@ -243,7 +243,7 @@ static bool init_codec(struct plplay *p)
     if (!hwcfg)
         printf("Using software decoding\n");
 
-    p->codec->thread_count = av_cpu_count();
+    p->codec->thread_count = MIN(av_cpu_count() + 1, 16);
     p->codec->get_buffer2 = pl_get_buffer2;
     p->codec->opaque = &p->win->gpu;
 #if LIBAVCODEC_VERSION_MAJOR < 60
