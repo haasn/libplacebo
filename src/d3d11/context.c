@@ -25,6 +25,8 @@ const struct pl_d3d11_params pl_d3d11_default_params = { PL_D3D11_DEFAULTS };
 static INIT_ONCE d3d11_once = INIT_ONCE_STATIC_INIT;
 static PFN_D3D11_CREATE_DEVICE pD3D11CreateDevice = NULL;
 static PFN_CREATE_DXGI_FACTORY pCreateDXGIFactory1 = NULL;
+static __typeof__(&DXGIGetDebugInterface) pDXGIGetDebugInterface = NULL;
+
 static void d3d11_load(void)
 {
     BOOL bPending = FALSE;
@@ -42,6 +44,12 @@ static void d3d11_load(void)
         if (dxgi) {
             pCreateDXGIFactory1 = (void *)
                 GetProcAddress(dxgi, "CreateDXGIFactory1");
+        }
+
+        HMODULE dxgi_debug = LoadLibraryW(L"dxgidebug.dll");
+        if (dxgi_debug) {
+            pDXGIGetDebugInterface = (void *)
+                GetProcAddress(dxgi_debug, "DXGIGetDebugInterface");
         }
     }
 
@@ -255,13 +263,20 @@ error:
 
 static void init_debug_layer(struct d3d11_ctx *ctx)
 {
-    D3D(ID3D11Device_QueryInterface(ctx->dev, &IID_ID3D11Debug,
-                                    (void **) &ctx->debug));
-    D3D(ID3D11Device_QueryInterface(ctx->dev, &IID_ID3D11InfoQueue,
-                                    (void **) &ctx->iqueue));
+    if (!pDXGIGetDebugInterface)
+        d3d11_load();
 
-    // Filter some annoying messages
-    D3D11_MESSAGE_ID deny_ids[] = {
+    if (!pDXGIGetDebugInterface)
+        goto error;
+
+    D3D(pDXGIGetDebugInterface(&IID_IDXGIInfoQueue, (void **) &ctx->iqueue));
+
+    // Push empty filter to get everything
+    IDXGIInfoQueue_PushStorageFilter(ctx->iqueue, DXGI_DEBUG_ALL,
+                                     &(DXGI_INFO_QUEUE_FILTER){0});
+
+    // Filter some annoying D3D11 messages
+    DXGI_INFO_QUEUE_MESSAGE_ID deny_ids[] = {
         // This false-positive error occurs every time we Draw() with a shader
         // that samples from a texture format that only supports point sampling.
         // Since we already use CheckFormatSupport to know which formats can be
@@ -269,15 +284,18 @@ static void init_debug_layer(struct d3d11_ctx *ctx)
         // a format that doesn't support it.
         D3D11_MESSAGE_ID_DEVICE_DRAW_RESOURCE_FORMAT_SAMPLE_UNSUPPORTED,
     };
-    D3D11_INFO_QUEUE_FILTER filter = {
+    DXGI_INFO_QUEUE_FILTER filter = {
         .DenyList = {
             .NumIDs = PL_ARRAY_SIZE(deny_ids),
             .pIDList = deny_ids,
         },
     };
-    ID3D11InfoQueue_PushStorageFilter(ctx->iqueue, &filter);
+    IDXGIInfoQueue_PushStorageFilter(ctx->iqueue, DXGI_DEBUG_D3D11, &filter);
 
-    ID3D11InfoQueue_SetMessageCountLimit(ctx->iqueue, -1);
+    IDXGIInfoQueue_SetMessageCountLimit(ctx->iqueue, DXGI_DEBUG_D3D11, -1);
+    IDXGIInfoQueue_SetMessageCountLimit(ctx->iqueue, DXGI_DEBUG_DXGI, -1);
+
+    D3D(pDXGIGetDebugInterface(&IID_IDXGIDebug, (void **) &ctx->debug));
 
 error:
     return;
@@ -298,9 +316,9 @@ void pl_d3d11_destroy(pl_d3d11 *ptr)
     if (ctx->debug) {
         // Report any leaked objects
         pl_d3d11_flush_message_queue(ctx, "After destroy");
-        ID3D11Debug_ReportLiveDeviceObjects(ctx->debug, D3D11_RLDO_DETAIL);
+        IDXGIDebug_ReportLiveObjects(ctx->debug, DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
         pl_d3d11_flush_message_queue(ctx, "After leak check");
-        ID3D11Debug_ReportLiveDeviceObjects(ctx->debug, D3D11_RLDO_SUMMARY);
+        IDXGIDebug_ReportLiveObjects(ctx->debug, DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_SUMMARY);
         pl_d3d11_flush_message_queue(ctx, "After leak summary");
     }
 
@@ -332,6 +350,9 @@ pl_d3d11 pl_d3d11_create(pl_log log, const struct pl_d3d11_params *params)
             goto error;
     }
     ctx->dev = d3d11->device;
+
+    if (ID3D11Device_GetCreationFlags(d3d11->device) & D3D11_CREATE_DEVICE_DEBUG)
+        init_debug_layer(ctx);
 
     D3D(ID3D11Device_QueryInterface(d3d11->device, &IID_IDXGIDevice1,
                                     (void **) &ctx->dxgi_dev));
@@ -434,10 +455,6 @@ pl_d3d11 pl_d3d11_create(pl_log log, const struct pl_d3d11_params *params)
 
         PL_MSG(ctx, level, "Using a software adapter");
     }
-
-    // Init debug layer
-    if (ID3D11Device_GetCreationFlags(d3d11->device) & D3D11_CREATE_DEVICE_DEBUG)
-        init_debug_layer(ctx);
 
     d3d11->gpu = pl_gpu_create_d3d11(ctx);
     if (!d3d11->gpu)

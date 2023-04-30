@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <dxgidebug.h>
+
 #include "../common.h"
 #include "../log.h"
 
@@ -35,10 +37,10 @@ struct d3d11_ctx {
     IDXGIDevice1 *dxgi_dev;
 
     // Debug interfaces
-    ID3D11Debug *debug;
-    ID3D11InfoQueue *iqueue;
+    IDXGIDebug *debug;
+    IDXGIInfoQueue *iqueue;
     uint64_t last_discarded; // Last count of discarded messages
-    D3D11_MESSAGE *d3dmsg;
+    DXGI_INFO_QUEUE_MESSAGE *dxgi_msg;
 
     // pl_gpu_is_failed (We saw a device removed error!)
     bool is_failed;
@@ -57,4 +59,7 @@ typedef HRESULT (WINAPI *PFN_CREATE_DXGI_FACTORY)(REFIID riid, void **ppFactory)
 #endif
 #ifndef D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD
 #define D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD (0x40)
+#endif
+#ifndef PL_HAVE_DXGI_DEBUG_D3D11
+DEFINE_GUID(DXGI_DEBUG_D3D11, 0x4b99317b, 0xac39, 0x4aa6, 0xbb, 0xb, 0xba, 0xa0, 0x47, 0x84, 0x79, 0x8f);
 #endif

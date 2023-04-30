@@ -92,11 +92,11 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
         return;
 
     static const enum pl_log_level severity_map[] = {
-        [D3D11_MESSAGE_SEVERITY_CORRUPTION] = PL_LOG_FATAL,
-        [D3D11_MESSAGE_SEVERITY_ERROR] = PL_LOG_ERR,
-        [D3D11_MESSAGE_SEVERITY_WARNING] = PL_LOG_WARN,
-        [D3D11_MESSAGE_SEVERITY_INFO] = PL_LOG_DEBUG,
-        [D3D11_MESSAGE_SEVERITY_MESSAGE] = PL_LOG_DEBUG,
+        [DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION] = PL_LOG_FATAL,
+        [DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR]      = PL_LOG_ERR,
+        [DXGI_INFO_QUEUE_MESSAGE_SEVERITY_WARNING]    = PL_LOG_WARN,
+        [DXGI_INFO_QUEUE_MESSAGE_SEVERITY_INFO]       = PL_LOG_DEBUG,
+        [DXGI_INFO_QUEUE_MESSAGE_SEVERITY_MESSAGE]    = PL_LOG_DEBUG,
     };
 
     enum pl_log_level header_printed = PL_LOG_NONE;
@@ -108,14 +108,15 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
     // Use ID3D11InfoQueue_GetNumStoredMessagesAllowedByRetrievalFilter without
     // any filter set, which seem to be unaffected by this bug and return correct
     // number of messages.
-    uint64_t messages = ID3D11InfoQueue_GetNumStoredMessagesAllowedByRetrievalFilter(ctx->iqueue);
+    // IDXGIInfoQueue seems to be unaffected, but keep the same way of retrival
+    uint64_t messages = IDXGIInfoQueue_GetNumStoredMessagesAllowedByRetrievalFilters(ctx->iqueue, DXGI_DEBUG_ALL);
 
     // Just to be on the safe side, check also for the mentioned -1 value...
     if (!messages || messages == UINT64_C(-1))
         return;
 
     uint64_t discarded =
-        ID3D11InfoQueue_GetNumMessagesDiscardedByMessageCountLimit(ctx->iqueue);
+        IDXGIInfoQueue_GetNumMessagesDiscardedByMessageCountLimit(ctx->iqueue, DXGI_DEBUG_ALL);
     if (discarded > ctx->last_discarded) {
         PL_WARN(ctx, "%s:", header);
         header_printed = PL_LOG_WARN;
@@ -129,16 +130,18 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
     // Copy debug layer messages to libplacebo's log output
     for (uint64_t i = 0; i < messages; i++) {
         SIZE_T len;
-        if (FAILED(ID3D11InfoQueue_GetMessage(ctx->iqueue, i, NULL, &len)))
+        if (FAILED(IDXGIInfoQueue_GetMessage(ctx->iqueue, DXGI_DEBUG_ALL, i, NULL, &len)))
             goto error;
 
-        pl_grow((void *) ctx->d3d11, &ctx->d3dmsg, len);
-        D3D11_MESSAGE *d3dmsg = ctx->d3dmsg;
+        pl_grow((void *) ctx->d3d11, &ctx->dxgi_msg, len);
+        DXGI_INFO_QUEUE_MESSAGE *d3dmsg = ctx->dxgi_msg;
 
-        if (FAILED(ID3D11InfoQueue_GetMessage(ctx->iqueue, i, d3dmsg, &len)))
+        if (FAILED(IDXGIInfoQueue_GetMessage(ctx->iqueue, DXGI_DEBUG_ALL, i, d3dmsg, &len)))
             goto error;
 
-        enum pl_log_level level = log_level_override(d3dmsg->ID);
+        enum pl_log_level level = PL_LOG_NONE;
+        if (IsEqualGUID(&d3dmsg->Producer, &DXGI_DEBUG_D3D11))
+            level = log_level_override(d3dmsg->ID);
         if (level == PL_LOG_NONE)
             level = severity_map[d3dmsg->Severity];
 
@@ -155,12 +158,12 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
                    (int) d3dmsg->DescriptionByteLength, d3dmsg->pDescription);
         }
 
-        if (d3dmsg->Severity <= D3D11_MESSAGE_SEVERITY_ERROR)
+        if (d3dmsg->Severity <= DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR)
             pl_debug_abort();
     }
 
 error:
-    ID3D11InfoQueue_ClearStoredMessages(ctx->iqueue);
+    IDXGIInfoQueue_ClearStoredMessages(ctx->iqueue, DXGI_DEBUG_ALL);
 }
 
 HRESULT pl_d3d11_check_device_removed(struct d3d11_ctx *ctx, HRESULT hr)
