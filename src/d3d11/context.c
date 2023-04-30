@@ -263,7 +263,7 @@ error:
     return dev;
 }
 
-static void init_debug_layer(struct d3d11_ctx *ctx)
+static void init_debug_layer(struct d3d11_ctx *ctx, bool leak_check)
 {
     if (!pDXGIGetDebugInterface)
         d3d11_load();
@@ -297,7 +297,8 @@ static void init_debug_layer(struct d3d11_ctx *ctx)
     IDXGIInfoQueue_SetMessageCountLimit(ctx->iqueue, DXGI_DEBUG_D3D11, -1);
     IDXGIInfoQueue_SetMessageCountLimit(ctx->iqueue, DXGI_DEBUG_DXGI, -1);
 
-    D3D(pDXGIGetDebugInterface(&IID_IDXGIDebug, (void **) &ctx->debug));
+    if (leak_check)
+        D3D(pDXGIGetDebugInterface(&IID_IDXGIDebug, (void **) &ctx->debug));
 
 error:
     return;
@@ -353,8 +354,13 @@ pl_d3d11 pl_d3d11_create(pl_log log, const struct pl_d3d11_params *params)
     }
     ctx->dev = d3d11->device;
 
-    if (ID3D11Device_GetCreationFlags(d3d11->device) & D3D11_CREATE_DEVICE_DEBUG)
-        init_debug_layer(ctx);
+    if (params->debug ||
+        ID3D11Device_GetCreationFlags(d3d11->device) & D3D11_CREATE_DEVICE_DEBUG)
+    {
+        // Do not report live object on pl_d3d11_destroy if device was created
+        // externally, it makes no sense as there will be a lot of things alive.
+        init_debug_layer(ctx, !params->device);
+    }
 
     D3D(ID3D11Device_QueryInterface(d3d11->device, &IID_IDXGIDevice1,
                                     (void **) &ctx->dxgi_dev));

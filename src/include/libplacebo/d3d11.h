@@ -67,6 +67,7 @@ struct pl_d3d11_params {
     // --- Device creation options
 
     // Enable the debug layer (D3D11_CREATE_DEVICE_DEBUG)
+    // Also logs IDXGIInfoQueue messages
     bool debug;
 
     // Extra flags to pass to D3D11CreateDevice (D3D11_CREATE_DEVICE_FLAG).
