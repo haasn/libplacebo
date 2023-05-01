@@ -17,10 +17,12 @@
 
 #pragma once
 
-#include <dxgidebug.h>
-
 #include "../common.h"
 #include "../log.h"
+
+#ifdef PL_HAVE_DXGI_DEBUG
+#include <dxgidebug.h>
+#endif
 
 #include <libplacebo/d3d11.h>
 
@@ -36,11 +38,13 @@ struct d3d11_ctx {
     // DXGI device. This does hold a reference.
     IDXGIDevice1 *dxgi_dev;
 
+#ifdef PL_HAVE_DXGI_DEBUG
     // Debug interfaces
     IDXGIDebug *debug;
     IDXGIInfoQueue *iqueue;
     uint64_t last_discarded; // Last count of discarded messages
     DXGI_INFO_QUEUE_MESSAGE *dxgi_msg;
+#endif
 
     // pl_gpu_is_failed (We saw a device removed error!)
     bool is_failed;

@@ -23,6 +23,7 @@
 #define D3D11_MESSAGE_ID_CREATE_FENCE (0x300209)
 #define D3D11_MESSAGE_ID_DESTROY_FENCE (0x30020b)
 
+#ifdef PL_HAVE_DXGI_DEBUG
 static enum pl_log_level log_level_override(unsigned int id)
 {
     switch (id) {
@@ -85,9 +86,11 @@ static enum pl_log_level log_level_override(unsigned int id)
         return PL_LOG_NONE;
     }
 }
+#endif
 
 void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
 {
+#ifdef PL_HAVE_DXGI_DEBUG
     if (!ctx->iqueue)
         return;
 
@@ -164,6 +167,7 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
 
 error:
     IDXGIInfoQueue_ClearStoredMessages(ctx->iqueue, DXGI_DEBUG_ALL);
+#endif
 }
 
 HRESULT pl_d3d11_check_device_removed(struct d3d11_ctx *ctx, HRESULT hr)

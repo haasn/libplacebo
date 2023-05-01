@@ -19,6 +19,8 @@ endforeach
 
 components.set('d3d11', d3d11.allowed())
 if d3d11.allowed()
+  conf_internal.set('PL_HAVE_DXGI_DEBUG',
+    cc.has_header_symbol('dxgidebug.h', 'IID_IDXGIInfoQueue'))
   conf_internal.set('PL_HAVE_DXGI_DEBUG_D3D11',
     cc.has_header_symbol('d3d11sdklayers.h', 'DXGI_DEBUG_D3D11'))
   add_project_arguments(['-DCOBJMACROS'], language: 'c')

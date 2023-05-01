@@ -25,7 +25,9 @@ const struct pl_d3d11_params pl_d3d11_default_params = { PL_D3D11_DEFAULTS };
 static INIT_ONCE d3d11_once = INIT_ONCE_STATIC_INIT;
 static PFN_D3D11_CREATE_DEVICE pD3D11CreateDevice = NULL;
 static __typeof__(&CreateDXGIFactory1) pCreateDXGIFactory1 = NULL;
+#ifdef PL_HAVE_DXGI_DEBUG
 static __typeof__(&DXGIGetDebugInterface) pDXGIGetDebugInterface = NULL;
+#endif
 
 static void d3d11_load(void)
 {
@@ -46,11 +48,13 @@ static void d3d11_load(void)
                 GetProcAddress(dxgi, "CreateDXGIFactory1");
         }
 
+#ifdef PL_HAVE_DXGI_DEBUG
         HMODULE dxgi_debug = LoadLibraryW(L"dxgidebug.dll");
         if (dxgi_debug) {
             pDXGIGetDebugInterface = (void *)
                 GetProcAddress(dxgi_debug, "DXGIGetDebugInterface");
         }
+#endif
     }
 
     InitOnceComplete(&d3d11_once, 0, NULL);
@@ -265,6 +269,7 @@ error:
 
 static void init_debug_layer(struct d3d11_ctx *ctx, bool leak_check)
 {
+#ifdef PL_HAVE_DXGI_DEBUG
     if (!pDXGIGetDebugInterface)
         d3d11_load();
 
@@ -302,6 +307,7 @@ static void init_debug_layer(struct d3d11_ctx *ctx, bool leak_check)
 
 error:
     return;
+#endif
 }
 
 void pl_d3d11_destroy(pl_d3d11 *ptr)
@@ -316,6 +322,7 @@ void pl_d3d11_destroy(pl_d3d11 *ptr)
     SAFE_RELEASE(ctx->dev);
     SAFE_RELEASE(ctx->dxgi_dev);
 
+#ifdef PL_HAVE_DXGI_DEBUG
     if (ctx->debug) {
         // Report any leaked objects
         pl_d3d11_flush_message_queue(ctx, "After destroy");
@@ -327,6 +334,7 @@ void pl_d3d11_destroy(pl_d3d11 *ptr)
 
     SAFE_RELEASE(ctx->debug);
     SAFE_RELEASE(ctx->iqueue);
+#endif
 
     pl_free_ptr((void **) ptr);
 }
