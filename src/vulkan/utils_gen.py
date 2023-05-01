@@ -283,7 +283,7 @@ def get_vkfeatures(registry):
 
         core_ver = None
         if res := re.match(r'VkPhysicalDeviceVulkan(\d)(\d)Features', sname):
-            core_ver = 'VK_VERSION_{0}_{1}'.format(res[1], res[2])
+            core_ver = 'VK_API_VERSION_{0}_{1}'.format(res[1], res[2])
 
         struct = Obj(name       = sname,
                      stype      = stype,
