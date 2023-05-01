@@ -134,16 +134,16 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
             goto error;
 
         pl_grow((void *) ctx->d3d11, &ctx->dxgi_msg, len);
-        DXGI_INFO_QUEUE_MESSAGE *d3dmsg = ctx->dxgi_msg;
+        DXGI_INFO_QUEUE_MESSAGE *dxgi_msg = ctx->dxgi_msg;
 
-        if (FAILED(IDXGIInfoQueue_GetMessage(ctx->iqueue, DXGI_DEBUG_ALL, i, d3dmsg, &len)))
+        if (FAILED(IDXGIInfoQueue_GetMessage(ctx->iqueue, DXGI_DEBUG_ALL, i, dxgi_msg, &len)))
             goto error;
 
         enum pl_log_level level = PL_LOG_NONE;
-        if (IsEqualGUID(&d3dmsg->Producer, &DXGI_DEBUG_D3D11))
-            level = log_level_override(d3dmsg->ID);
+        if (IsEqualGUID(&dxgi_msg->Producer, &DXGI_DEBUG_D3D11))
+            level = log_level_override(dxgi_msg->ID);
         if (level == PL_LOG_NONE)
-            level = severity_map[d3dmsg->Severity];
+            level = severity_map[dxgi_msg->Severity];
 
         if (pl_msg_test(ctx->log, level)) {
             // If the header hasn't been printed, or it was printed for a lower
@@ -154,11 +154,11 @@ void pl_d3d11_flush_message_queue(struct d3d11_ctx *ctx, const char *header)
                 header_printed = level;
             }
 
-            PL_MSG(ctx, level, " %d: %.*s", (int) d3dmsg->ID,
-                   (int) d3dmsg->DescriptionByteLength, d3dmsg->pDescription);
+            PL_MSG(ctx, level, " %d: %.*s", (int) dxgi_msg->ID,
+                   (int) dxgi_msg->DescriptionByteLength, dxgi_msg->pDescription);
         }
 
-        if (d3dmsg->Severity <= DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR)
+        if (dxgi_msg->Severity <= DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR)
             pl_debug_abort();
     }
 
