@@ -125,9 +125,9 @@ size_t vk_struct_size(VkStructureType stype)
 uint32_t vk_ext_promoted_ver(const char *extension)
 {
 {% for ext in vkexts %}
-{%  if ext.promotedto and ext.promotedto.startswith('VK_VERSION') %}
+{%  if ext.promoted_ver %}
     if (!strcmp(extension, "{{ ext.name }}"))
-        return {{ ext.promotedto }};
+        return {{ ext.promoted_ver }};
 {%  endif %}
 {% endfor %}
     return 0;
@@ -255,8 +255,11 @@ def get_vkaccess(registry):
 
 def get_vkexts(registry):
     for e in registry.iterfind('extensions/extension'):
+        promoted_ver = None
+        if res := re.match(r'VK_VERSION_(\d)_(\d)', e.attrib.get('promotedto', '')):
+            promoted_ver = 'VK_API_VERSION_{0}_{1}'.format(res[1], res[2])
         yield Obj(name = e.attrib['name'],
-                  promotedto = e.attrib.get('promotedto'))
+                  promoted_ver = promoted_ver)
 
 def get_vkfeatures(registry):
     structs = [];
