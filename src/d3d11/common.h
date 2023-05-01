@@ -46,9 +46,6 @@ struct d3d11_ctx {
     bool is_failed;
 };
 
-// Pointer to dxgi.dll!CreateDXGIFactory1()
-typedef HRESULT (WINAPI *PFN_CREATE_DXGI_FACTORY)(REFIID riid, void **ppFactory);
-
 // DDK value. Apparently some D3D functions can return this instead of the
 // proper user-mode error code. See:
 // https://docs.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgiswapchain-present

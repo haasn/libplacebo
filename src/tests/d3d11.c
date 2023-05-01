@@ -15,7 +15,7 @@ int main()
     if (!dxgi)
         return SKIP;
 
-    PFN_CREATE_DXGI_FACTORY pCreateDXGIFactory1 =
+    __typeof__(&CreateDXGIFactory1) pCreateDXGIFactory1 =
         (void *) GetProcAddress(dxgi, "CreateDXGIFactory1");
     if (!pCreateDXGIFactory1)
         return SKIP;

@@ -24,7 +24,7 @@ const struct pl_d3d11_params pl_d3d11_default_params = { PL_D3D11_DEFAULTS };
 
 static INIT_ONCE d3d11_once = INIT_ONCE_STATIC_INIT;
 static PFN_D3D11_CREATE_DEVICE pD3D11CreateDevice = NULL;
-static PFN_CREATE_DXGI_FACTORY pCreateDXGIFactory1 = NULL;
+static __typeof__(&CreateDXGIFactory1) pCreateDXGIFactory1 = NULL;
 static __typeof__(&DXGIGetDebugInterface) pDXGIGetDebugInterface = NULL;
 
 static void d3d11_load(void)
