@@ -305,8 +305,10 @@ static bool alloc_hlsl_reg_bindings(pl_gpu gpu, pl_pass pass,
             // already been allocated
             bool uav_bound = false;
             for (int j = 0; j < pass_p->uavs.num; j++) {
-                if (pass_p->uavs.elem[j] == binding)
+                if (pass_p->uavs.elem[j] == binding) {
                     uav_bound = true;
+                    break;
+                }
             }
 
             if (!uav_bound) {
