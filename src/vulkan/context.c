@@ -354,7 +354,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(CmdSetScissor),
     PL_VK_DEV_FUN(CmdSetViewport),
     PL_VK_DEV_FUN(CmdUpdateBuffer),
-    PL_VK_DEV_FUN(CmdWriteTimestamp2),
+    PL_VK_DEV_FUN(CmdWriteTimestamp2KHR),
     PL_VK_DEV_FUN(CreateBuffer),
     PL_VK_DEV_FUN(CreateBufferView),
     PL_VK_DEV_FUN(CreateCommandPool),
