@@ -284,7 +284,7 @@ static bool alloc_hlsl_reg_bindings(pl_gpu gpu, pl_pass pass,
         if (has_sampler) {
             hlslbind.sampler.register_binding = pass_s->samplers.num;
             PL_ARRAY_APPEND(pass, pass_s->samplers, binding);
-            if (pass_s->srvs.num > D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT) {
+            if (pass_s->samplers.num > D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT) {
                 PL_ERR(gpu, "Too many samplers in shader");
                 goto error;
             }
