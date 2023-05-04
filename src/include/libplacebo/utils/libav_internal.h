@@ -920,6 +920,7 @@ struct pl_avalloc {
 // Attached to `pl_frame.user_data` for mapped AVFrames
 struct pl_avframe_priv {
     AVFrame *avframe;
+    struct pl_dovi_metadata dovi; // backing storage for per-frame dovi metadata
 };
 
 static void pl_fix_hwframe_sample_depth(struct pl_frame *out, const AVFrame *frame)
@@ -1113,14 +1114,9 @@ PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out,
         if (sd) {
             const AVDOVIMetadata *metadata = (AVDOVIMetadata *) sd->data;
             const AVDOVIRpuDataHeader *header = av_dovi_get_header(metadata);
-            if (header->disable_residual_flag) {
-                // Only automatically map DoVi RPUs that don't require an EL
-                struct pl_dovi_metadata *dovi = malloc(sizeof(*dovi));
-                if (!dovi)
-                    goto error; // oom
-
-                pl_frame_map_avdovi_metadata(out, dovi, metadata);
-            }
+            // Only automatically map DoVi RPUs that don't require an EL
+            if (header->disable_residual_flag)
+                pl_frame_map_avdovi_metadata(out, &priv->dovi, metadata);
         }
 
 #ifdef PL_HAVE_LIBDOVI
