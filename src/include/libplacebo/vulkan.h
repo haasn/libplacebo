@@ -227,8 +227,14 @@ struct pl_vulkan_params {
     // can actually decrease performance.
     //
     // Note: libplacebo will always *create* logical devices with all available
-    // queues enabled, regardless of this setting.
+    // queues for a given QF enabled, regardless of this setting.
     int queue_count;
+
+    // Bitmask of extra queue families to enable. If set, then *all* queue
+    // families matching *any* of these flags will be enabled at device
+    // creation time. Setting this to VK_QUEUE_FLAG_BITS_MAX_ENUM effectively
+    // enables all queue families supported by the device.
+    VkQueueFlags extra_queues;
 
     // Enables extra device extensions. Device creation will fail if these
     // extensions are not all supported. The user may use this to enable e.g.

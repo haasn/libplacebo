@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '275': 'add pl_vulkan_params.extra_queues',
       '274': 'drop minimum vulkan version to 1.2',
       '273': 'add pl_vulkan_required_features and refactor pl_vulkan_recommended_features',
       '272': 'require vulkan version 1.3 minimum',

@@ -1280,6 +1280,10 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
     // with other API users (e.g. FFmpeg)
     PL_ARRAY(VkDeviceQueueCreateInfo) qinfos = {0};
     for (int i = 0; i < qfnum; i++) {
+        bool use_qf = i == idx_gfx || i == idx_comp || i == idx_tf;
+        use_qf |= qfs[i].queueFlags & params->extra_queues;
+        if (!use_qf)
+            continue;
         PL_ARRAY_APPEND(tmp, qinfos, (VkDeviceQueueCreateInfo) {
             .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .queueFamilyIndex = i,
