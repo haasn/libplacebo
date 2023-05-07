@@ -1234,6 +1234,12 @@ done:
     memset(frame, 0, sizeof(*frame)); // sanity
 }
 
+PL_LIBAV_API AVFrame *pl_get_mapped_avframe(const struct pl_frame *frame)
+{
+    struct pl_avframe_priv *priv = frame->user_data;
+    return priv->avframe;
+}
+
 static void pl_done_cb(void *priv)
 {
     bool *status = priv;

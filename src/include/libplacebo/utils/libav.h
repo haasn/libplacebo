@@ -165,9 +165,8 @@ struct pl_avframe_params {
 // which must be called at some point to clean up state. The `AVFrame` is
 // automatically ref'd and unref'd if needed. Returns whether successful.
 //
-// Note: `out_frame` will hold a reference to the AVFrame
-// corresponding to the `pl_frame`. It will automatically be unref'd by
-// `pl_unmap_avframe`.
+// Note: `out_frame->user_data` points to a privately managed opaque struct
+// and must not be touched by the user.
 PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out_frame,
                                     const struct pl_avframe_params *params);
 PL_LIBAV_API void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame);
@@ -175,6 +174,11 @@ PL_LIBAV_API void pl_unmap_avframe(pl_gpu gpu, struct pl_frame *frame);
 // Backwards compatibility with previous versions of this API.
 PL_LIBAV_API bool pl_map_avframe(pl_gpu gpu, struct pl_frame *out_frame,
                                  pl_tex tex[4], const AVFrame *avframe);
+
+// Return the AVFrame* that a pl_frame was mapped from (via pl_map_avframe_ex)
+// Note: This reference is attached to the `pl_frame` and will get freed by
+// pl_unmap_avframe.
+PL_LIBAV_API AVFrame *pl_get_mapped_avframe(const struct pl_frame *frame);
 
 // Download the texture contents of a `pl_frame` back to a corresponding
 // AVFrame. Blocks until completion.
