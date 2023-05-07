@@ -458,10 +458,9 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
     }
 
     assert(mix->num_frames);
-    const AVFrame *avframe = mix->frames[0]->user_data;
     double dar = pl_rect2df_aspect(&mix->frames[0]->crop);
-    if (avframe->sample_aspect_ratio.num)
-        dar *= av_q2d(avframe->sample_aspect_ratio);
+    if (p->stream->sample_aspect_ratio.num)
+        dar *= av_q2d(p->stream->sample_aspect_ratio);
     target.rotation = p->target_rot;
     pl_rect2df_aspect_set_rot(&target.crop, dar,
                               mix->frames[0]->rotation - target.rotation,
