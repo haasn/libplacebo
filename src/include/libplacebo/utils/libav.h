@@ -165,7 +165,7 @@ struct pl_avframe_params {
 // which must be called at some point to clean up state. The `AVFrame` is
 // automatically ref'd and unref'd if needed. Returns whether successful.
 //
-// Note: `out_frame->user_data` will hold a reference to the AVFrame
+// Note: `out_frame` will hold a reference to the AVFrame
 // corresponding to the `pl_frame`. It will automatically be unref'd by
 // `pl_unmap_avframe`.
 PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out_frame,
