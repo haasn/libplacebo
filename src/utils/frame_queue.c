@@ -623,7 +623,9 @@ done:
 
         // Last frame is held for an extra `p->fps.estimate` duration,
         // afterwards this function just returns EOF.
-        if (p->queue.elem[0]->pts + p->fps.estimate < pts) {
+        if (pts < p->queue.elem[0]->pts + p->fps.estimate) {
+            ret = PL_QUEUE_OK;
+        } else {
             entry_cull(p, p->queue.elem[0], true);
             p->queue.num = 0;
             return PL_QUEUE_EOF;
@@ -826,8 +828,9 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
         case PL_QUEUE_EOF:
             // Don't forward EOF until we've held the last frame for the
             // desired ZOH hold duration
-            if (params->pts <= p->queue.elem[p->queue.num - 1]->pts + p->fps.estimate)
-                ret = PL_QUEUE_OK;
+            if (params->pts >= p->queue.elem[p->queue.num - 1]->pts + p->fps.estimate)
+                return ret;
+            ret = PL_QUEUE_OK;
             goto done;
         case PL_QUEUE_OK:
             continue;
