@@ -830,9 +830,14 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
     }
 
     if (!entry_complete(p->queue.elem[p->queue.num - 1])) {
-        ret = get_frame(p, params);
-        if (ret == PL_QUEUE_ERR)
+        switch ((ret = get_frame(p, params))) {
+        case PL_QUEUE_MORE:
+        case PL_QUEUE_OK:
+            break;
+        case PL_QUEUE_ERR:
+        case PL_QUEUE_EOF:
             return ret;
+        }
     }
 
 done: ;
