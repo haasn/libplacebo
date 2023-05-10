@@ -347,9 +347,16 @@ PL_LIBAV_API void pl_color_space_from_avframe(struct pl_color_space *out_csp,
 
 PL_LIBAV_API enum pl_field pl_field_from_avframe(const AVFrame *frame)
 {
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(58, 7, 100)
+    if (!frame || !(frame->flags & AV_FRAME_FLAG_INTERLACED))
+        return PL_FIELD_NONE;
+    return (frame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST)
+                ? PL_FIELD_TOP : PL_FIELD_BOTTOM;
+#else
     if (!frame || !frame->interlaced_frame)
         return PL_FIELD_NONE;
     return frame->top_field_first ? PL_FIELD_TOP : PL_FIELD_BOTTOM;
+#endif
 }
 
 #ifdef PL_HAVE_LAV_FILM_GRAIN
