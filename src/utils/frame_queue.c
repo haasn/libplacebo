@@ -959,9 +959,10 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
     // Ignore unrealistically high or low FPS, common near start of playback
     static const float max_vsync = 1.0 / MIN_FPS;
     static const float min_vsync = 1.0 / MAX_FPS;
+    bool estimation_ok = p->vps.estimate > min_vsync && p->vps.estimate < max_vsync;
     enum pl_queue_status ret;
 
-    if (p->vps.estimate > min_vsync && p->vps.estimate < max_vsync) {
+    if (estimation_ok || params->vsync_duration > 0) {
         // We know the vsync duration, so construct an interpolation mix
         ret = interpolate(p, out_mix, params);
     } else {
