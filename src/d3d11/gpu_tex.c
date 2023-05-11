@@ -185,7 +185,7 @@ pl_tex pl_d3d11_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 
         if (!tex_p->texel_fmt) {
             PL_ERR(gpu, "Failed picking texel format for emulated texture!");
-            return NULL;
+            goto error;
         }
 
         // Statically check to see if we'd even be able to upload it at all
