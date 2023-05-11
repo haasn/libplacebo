@@ -1107,18 +1107,18 @@ static bool bind_pass_tex(pl_shader sh, pl_str name,
                           const pl_rect2df *rect,
                           bool hooked, bool mainpresub)
 {
-    ident_t id, pos, size, pt;
+    ident_t id, pos, pt;
 
     // Compatibility with mpv texture binding semantics
     id = sh_bind(sh, ptex->tex, PL_TEX_ADDRESS_CLAMP, PL_TEX_SAMPLE_LINEAR,
-                 "hook_tex", rect, &pos, &size, &pt);
+                 "hook_tex", rect, &pos, &pt);
     if (!id)
         return false;
 
     GLSLH("#define %.*s_raw "$" \n", PL_STR_FMT(name), id);
     GLSLH("#define %.*s_pos "$" \n", PL_STR_FMT(name), pos);
     GLSLH("#define %.*s_map "$"_map \n", PL_STR_FMT(name), pos);
-    GLSLH("#define %.*s_size "$" \n", PL_STR_FMT(name), size);
+    GLSLH("#define %.*s_size vec2(textureSize("$", 0)) \n", PL_STR_FMT(name), id);
     GLSLH("#define %.*s_pt "$" \n", PL_STR_FMT(name), pt);
 
     float off[2] = { ptex->rect.x0, ptex->rect.y0 };

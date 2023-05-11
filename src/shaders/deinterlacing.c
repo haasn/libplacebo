@@ -58,9 +58,9 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
         .dim_m = 1,
     }));
 
-    ident_t pos, size, pt;
+    ident_t pos, pt;
     ident_t cur = sh_bind(sh, src->cur.top, PL_TEX_ADDRESS_MIRROR,
-                          PL_TEX_SAMPLE_NEAREST, "cur", NULL, &pos, &size, &pt);
+                          PL_TEX_SAMPLE_NEAREST, "cur", NULL, &pos, &pt);
     if (!cur)
         return;
 
@@ -77,11 +77,12 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
     }
 
     // Don't modify the primary field
-    GLSL("int yo = int("$".y * "$".y);  \n"
-         "if (yo %% 2 == %d) {          \n"
-         "    res = GET("$", 0, 0);     \n"
-         "} else {                      \n",
-         pos, size,
+    GLSL("int yh = textureSize("$", 0).y;   \n"
+         "int yo = int("$".y * float(yh));  \n"
+         "if (yo %% 2 == %d) {              \n"
+         "    res = GET("$", 0, 0);         \n"
+         "} else {                          \n",
+         cur, pos,
          src->field == PL_FIELD_TOP ? 0 : 1,
          cur);
 
@@ -205,7 +206,7 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
             pl_assert(src->prev.top->params.w == texparams->w);
             pl_assert(src->prev.top->params.h == texparams->h);
             prev2 = sh_bind(sh, src->prev.top, PL_TEX_ADDRESS_MIRROR,
-                            PL_TEX_SAMPLE_NEAREST, "prev", NULL, NULL, NULL, NULL);
+                            PL_TEX_SAMPLE_NEAREST, "prev", NULL, NULL, NULL);
             if (!prev2)
                 return;
         }
@@ -214,7 +215,7 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
             pl_assert(src->next.top->params.w == texparams->w);
             pl_assert(src->next.top->params.h == texparams->h);
             next2 = sh_bind(sh, src->next.top, PL_TEX_ADDRESS_MIRROR,
-                            PL_TEX_SAMPLE_NEAREST, "next", NULL, NULL, NULL, NULL);
+                            PL_TEX_SAMPLE_NEAREST, "next", NULL, NULL, NULL);
             if (!next2)
                 return;
         }

@@ -516,7 +516,7 @@ ident_t sh_bind(pl_shader sh, pl_tex tex,
                 enum pl_tex_address_mode address_mode,
                 enum pl_tex_sample_mode sample_mode,
                 const char *name, const pl_rect2df *rect,
-                ident_t *out_pos, ident_t *out_size, ident_t *out_pt)
+                ident_t *out_pos, ident_t *out_pt)
 {
     if (pl_tex_params_dimension(tex->params) != 2) {
         SH_FAIL(sh, "Failed binding texture '%s': not a 2D texture!", name);
@@ -559,13 +559,6 @@ ident_t sh_bind(pl_shader sh, pl_tex tex,
         *out_pos = sh_attr_vec2(sh, "tex_coord", &(pl_rect2df) {
             .x0 = sx * rect->x0, .y0 = sy * rect->y0,
             .x1 = sx * rect->x1, .y1 = sy * rect->y1,
-        });
-    }
-
-    if (out_size) {
-        *out_size = sh_var(sh, (struct pl_shader_var) {
-            .var  = pl_var_vec2("tex_size"),
-            .data = &(float[2]) {tex->params.w, tex->params.h},
         });
     }
 

@@ -3297,7 +3297,7 @@ inter_pass_error:
         }
 
         ident_t pos, tex = sh_bind(sh, frames[i].tex, PL_TEX_ADDRESS_CLAMP,
-                                   sample_mode, "frame", NULL, &pos, NULL, NULL);
+                                   sample_mode, "frame", NULL, &pos, NULL);
 
         GLSL("color = texture("$", "$"); \n", tex, pos);
 

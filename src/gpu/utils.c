@@ -969,7 +969,7 @@ void pl_tex_blit_raster(pl_gpu gpu, const struct pl_tex_blit_params *params)
     sh->output = PL_SHADER_SIG_COLOR;
 
     ident_t pos, src = sh_bind(sh, params->src, PL_TEX_ADDRESS_CLAMP,
-        params->sample_mode, "src_tex", &src_rc, &pos, NULL, NULL);
+        params->sample_mode, "src_tex", &src_rc, &pos, NULL);
 
     GLSL("vec4 color = texture("$", "$"); \n", src, pos);
 

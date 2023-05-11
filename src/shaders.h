@@ -217,7 +217,7 @@ ident_t sh_bind(pl_shader sh, pl_tex tex,
                 enum pl_tex_address_mode address_mode,
                 enum pl_tex_sample_mode sample_mode,
                 const char *name, const pl_rect2df *rect,
-                ident_t *out_pos, ident_t *out_size, ident_t *out_pt);
+                ident_t *out_pos, ident_t *out_pt);
 
 // Incrementally build up a buffer by adding new variable elements to the
 // buffer, resizing buf.buffer_vars if necessary. Returns whether or not the
