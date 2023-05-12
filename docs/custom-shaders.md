@@ -142,9 +142,8 @@ A bound texture will define the following GLSL functions (as macros):
   coordinates of the top-left corner of the sampled area.
 * `float NAME_mul`: The coefficient that must be multiplied into sampled
   values in order to rescale them to `[0,1]`.
-* `vec4 NAME_tex(vec2 pos)`: A wrapper around `NAME_mul * texture(NAME_raw,
-  pos)`, which picks the correct `texture` function for the version of GLSL in
-  use.
+* `vec4 NAME_tex(vec2 pos)`: A wrapper around `NAME_mul * textureLod(NAME_raw,
+  pos, 0.0)`.
 * `vec4 NAME_texOff(vec2 offset)`: A wrapper around `NAME_tex(NAME_pos + NAME_pt * offset)`.
   This can be used to easily access adjacent pixels, e.g. `NAME_texOff(-1,2)`
   samples a pixel one to the left and two to the bottom of the current

@@ -619,7 +619,7 @@ next_dim: ; // `continue` out of the inner loop
             for (int i = 0; i < dims; i++)
                 pos_macros[i] = texel_scale(sh, sizes[i], method == SH_LUT_LINEAR);
 
-            GLSLH("#define "$"(pos) (texture("$", %s(\\\n",
+            GLSLH("#define "$"(pos) (textureLod("$", %s(\\\n",
                   name, tex, vartypes[PL_VAR_FLOAT][texdim - 1]);
 
             for (int i = 0; i < texdim; i++) {
@@ -635,7 +635,7 @@ next_dim: ; // `continue` out of the inner loop
                     GLSLH("   %c%f\\\n", sep, 0.5);
                 }
             }
-            GLSLH("  )).%s)\n", swizzles[params->comps - 1]);
+            GLSLH("  ), 0.0).%s)\n", swizzles[params->comps - 1]);
         } else {
             GLSLH("#define "$"(pos) (texelFetch("$", %s(pos",
                   name, tex, vartypes[PL_VAR_SINT][texdim - 1]);

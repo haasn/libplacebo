@@ -192,7 +192,7 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
          "// pl_shader_deband               \n"
          "{                                 \n"
          "vec2 pos = "$", pt = "$";         \n"
-         "color = texture("$", pos);        \n",
+         "color = textureLod("$", pos, 0.0);\n",
          pos, pt, tex);
 
     uint8_t num_comps = sh_tex_swiz(swiz, mask & ~0x8u); // ignore alpha
@@ -204,9 +204,9 @@ void pl_shader_deband(pl_shader sh, const struct pl_sample_src *src,
         return;
     }
 
-    GLSL("#define GET(X, Y)                           \\\n"
-         "    (texture("$", pos + pt * vec2(X, Y)).%s)  \n"
-         "#define T %s                                  \n",
+    GLSL("#define GET(X, Y)                                   \\\n"
+         "    (textureLod("$", pos + pt * vec2(X, Y), 0.0).%s)  \n"
+         "#define T %s                                          \n",
          tex, swiz, sh_float_type(num_comps));
 
     ident_t prng = sh_prng(sh, true, NULL);
@@ -276,8 +276,8 @@ bool pl_shader_sample_direct(pl_shader sh, const struct pl_sample_src *src)
     if (!setup_src(sh, src, &tex, &pos, NULL, NULL, NULL, NULL, &scale, true, BEST))
         return false;
 
-    GLSL("// pl_shader_sample_direct                    \n"
-         "vec4 color = vec4("$") * texture("$", "$");   \n",
+    GLSL("// pl_shader_sample_direct                            \n"
+         "vec4 color = vec4("$") * textureLod("$", "$", 0.0);   \n",
          SH_FLOAT(scale), tex, pos);
     return true;
 }
@@ -290,8 +290,8 @@ bool pl_shader_sample_nearest(pl_shader sh, const struct pl_sample_src *src)
         return false;
 
     sh_describe(sh, "nearest");
-    GLSL("// pl_shader_sample_nearest                   \n"
-         "vec4 color = vec4("$") * texture("$", "$");   \n",
+    GLSL("// pl_shader_sample_nearest                           \n"
+         "vec4 color = vec4("$") * textureLod("$", "$", 0.0);   \n",
          SH_FLOAT(scale), tex, pos);
     return true;
 }
@@ -304,8 +304,8 @@ bool pl_shader_sample_bilinear(pl_shader sh, const struct pl_sample_src *src)
         return false;
 
     sh_describe(sh, "bilinear");
-    GLSL("// pl_shader_sample_bilinear                  \n"
-         "vec4 color = vec4("$") * texture("$", "$");   \n",
+    GLSL("// pl_shader_sample_bilinear                          \n"
+         "vec4 color = vec4("$") * textureLod("$", "$", 0.0);   \n",
          SH_FLOAT(scale), tex, pos);
     return true;
 }
@@ -347,10 +347,10 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
          "h.xy -= vec2(2.0);                            \n"
          // sample four corner pixels
          "vec4 p = pos.xyxy + pt.xyxy * h;              \n"
-         "vec4 c00 = texture("$", p.xy);                \n"
-         "vec4 c10 = texture("$", p.zy);                \n"
-         "vec4 c01 = texture("$", p.xw);                \n"
-         "vec4 c11 = texture("$", p.zw);                \n"
+         "vec4 c00 = textureLod("$", p.xy, 0.0);        \n"
+         "vec4 c10 = textureLod("$", p.zy, 0.0);        \n"
+         "vec4 c01 = textureLod("$", p.xw, 0.0);        \n"
+         "vec4 c11 = textureLod("$", p.zw, 0.0);        \n"
          // manual interpolation (y first, then x)
          "vec4 c0 = mix(c01, c00, g.y);                 \n"
          "vec4 c1 = mix(c11, c10, g.y);                 \n"
@@ -397,9 +397,9 @@ bool pl_shader_sample_oversample(pl_shader sh, const struct pl_sample_src *src,
     }
 
     // Compute the right output blend of colors
-    GLSL("pos += (coeff - fcoord) * pt;             \n"
-         "color = vec4("$") * texture("$", pos);    \n"
-         "}                                         \n",
+    GLSL("pos += (coeff - fcoord) * pt;                 \n"
+         "color = vec4("$") * textureLod("$", pos, 0.0);\n"
+         "}                                             \n",
          SH_FLOAT(scale), tex);
 
     return true;
@@ -482,7 +482,7 @@ static void polar_sample(pl_shader sh, pl_filter filter,
             comps &= ~(1 << c);
         }
     } else {
-        GLSL("c = texture("$", base + pt * vec2(%d.0, %d.0)); \n",
+        GLSL("c = textureLod("$", base + pt * vec2(%d.0, %d.0), 0.0); \n",
              tex, x, y);
         for (uint8_t comps = comp_mask; comps;) {
             uint8_t c = __builtin_ctz(comps);
@@ -672,9 +672,9 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         }
 
         // Load all relevant texels into shmem
-        GLSL("for (int y = int(gl_LocalInvocationID.y); y < "$"; y += %d) { \n"
-             "for (int x = int(gl_LocalInvocationID.x); x < "$"; x += %d) { \n"
-             "c = texture("$", "$"_base + pt * vec2(x - %d, y - %d));       \n",
+        GLSL("for (int y = int(gl_LocalInvocationID.y); y < "$"; y += %d) {     \n"
+             "for (int x = int(gl_LocalInvocationID.x); x < "$"; x += %d) {     \n"
+             "c = textureLod("$", "$"_base + pt * vec2(x - %d, y - %d), 0.0);   \n",
              ih_c, bh, iw_c, bw, src_tex, in, offset, offset);
 
         for (uint8_t comps = cmask; comps;) {
@@ -973,7 +973,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
         GLSL("weight = ws[%d];\n", n % 4);
 
         // Load the input texel and add it to the running sum
-        GLSL("c = texture("$", base + pt * vec2(%d.0)); \n", src_tex, n);
+        GLSL("c = textureLod("$", base + pt * vec2(%d.0), 0.0); \n", src_tex, n);
 
         for (uint8_t comps = comp_mask; comps;) {
             uint8_t c = __builtin_ctz(comps);

@@ -64,11 +64,11 @@ void pl_shader_deinterlace(pl_shader sh, const struct pl_deinterlace_source *src
     if (!cur)
         return;
 
-    GLSL("#define GET(TEX, X, Y)                          \\\n"
-         "    (texture(TEX, pos + pt * vec2(X, Y)).%s)      \n"
-         "vec2 pos = "$";                                   \n"
-         "vec2 pt  = "$";                                   \n"
-         "T res;                                            \n",
+    GLSL("#define GET(TEX, X, Y)                              \\\n"
+         "    (textureLod(TEX, pos + pt * vec2(X, Y), 0.0).%s)  \n"
+         "vec2 pos = "$";                                       \n"
+         "vec2 pt  = "$";                                       \n"
+         "T res;                                                \n",
          swiz, pos, pt);
 
     if (src->field == PL_FIELD_NONE) {

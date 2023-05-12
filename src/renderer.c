@@ -916,7 +916,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
 
         switch (ol.mode) {
         case PL_OVERLAY_NORMAL:
-            GLSL("vec4 color = texture("$", coord); \n", tex);
+            GLSL("vec4 color = textureLod("$", coord, 0.0); \n", tex);
             break;
         case PL_OVERLAY_MONOCHROME:
             GLSL("vec4 color = osd_color; \n");
@@ -932,7 +932,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
         bool premul = repr.alpha == PL_ALPHA_PREMULTIPLIED;
         pl_shader_encode_color(sh, &repr);
         if (ol.mode == PL_OVERLAY_MONOCHROME) {
-            GLSL("color.%s *= texture("$", coord).r; \n",
+            GLSL("color.%s *= textureLod("$", coord, 0.0).r; \n",
                  premul ? "rgba" : "a", tex);
         }
 
@@ -3299,7 +3299,7 @@ inter_pass_error:
         ident_t pos, tex = sh_bind(sh, frames[i].tex, PL_TEX_ADDRESS_CLAMP,
                                    sample_mode, "frame", NULL, &pos, NULL);
 
-        GLSL("color = texture("$", "$"); \n", tex, pos);
+        GLSL("color = textureLod("$", "$", 0.0); \n", tex, pos);
 
         // Note: This ignores differences in ICC profile, which we decide to
         // just simply not care about. Doing that properly would require
