@@ -861,10 +861,11 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
     if (nk_begin(nk, "Settings", nk_rect(100, 100, 600, 600), win_flags)) {
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Window settings", NK_MAXIMIZED)) {
-            nk_layout_row_dynamic(nk, 24, 1);
+            nk_layout_row_dynamic(nk, 24, 2);
 
             bool fullscreen = window_is_fullscreen(p->win);
             p->toggle_fullscreen = nk_checkbox_label(nk, "Fullscreen", &fullscreen);
+            nk_property_float(nk, "Corner rounding", 0.0, &par->corner_rounding, 1.0, 0.1, 0.01);
 
             struct nk_colorf bg = {
                 par->background_color[0],
