@@ -255,6 +255,12 @@ struct pl_render_params {
     float background_transparency; // 0.0 for opaque, 1.0 for fully transparent
     bool skip_target_clearing;
 
+    // If set to a value above 0.0, the output will be rendered with rounded
+    // corners, as if an alpha transparency mask had been applied. The value
+    // indicates the relative fraction of the side length to round - a value
+    // of 1.0 rounds the corners as much as possible.
+    float corner_rounding;
+
     // If true, then transparent images will made opaque by painting them
     // against a checkerboard pattern consisting of alternating colors. If both
     // colors are left as {0}, they default respectively to 93% and 87% gray.

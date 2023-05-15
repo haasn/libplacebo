@@ -2149,6 +2149,42 @@ static bool pass_output_target(struct pass_state *pass)
     struct img *img = &pass->img;
     pl_shader sh = img_sh(pass, img);
 
+    if (params->corner_rounding > 0.0f) {
+        const float out_w2 = pl_rect_w(target->crop) / 2.0f;
+        const float out_h2 = pl_rect_h(target->crop) / 2.0f;
+        const float radius = fminf(params->corner_rounding, 1.0f) *
+                             fminf(out_w2, out_h2);
+        const struct pl_rect2df relpos = {
+            .x0 = -out_w2, .y0 = -out_h2,
+            .x1 =  out_w2, .y1 =  out_h2,
+        };
+        GLSL("float radius = "$";                           \n"
+             "vec2 size2 = vec2("$", "$");                  \n"
+             "vec2 relpos = "$";                            \n"
+             "vec2 rd = abs(relpos) - size2 + vec2(radius); \n"
+             "float rdist = length(max(rd, 0.0)) - radius;  \n"
+             "float border = smoothstep(2.0f, 0.0f, rdist); \n",
+             SH_FLOAT_DYN(radius),
+             SH_FLOAT_DYN(out_w2), SH_FLOAT_DYN(out_h2),
+             sh_attr_vec2(sh, "relpos", &relpos));
+
+        switch (img->repr.alpha) {
+        case PL_ALPHA_UNKNOWN:
+            GLSL("color.a = border; \n");
+            img->repr.alpha = PL_ALPHA_INDEPENDENT;
+            img->comps = 4;
+            break;
+        case PL_ALPHA_INDEPENDENT:
+            GLSL("color.a *= border; \n");
+            break;
+        case PL_ALPHA_PREMULTIPLIED:
+            GLSL("color *= border; \n");
+            break;
+        case PL_ALPHA_MODE_COUNT:
+            pl_unreachable();
+        }
+    }
+
     bool need_blend = params->blend_against_tiles || !target->repr.alpha;
     if (img->comps == 4 && need_blend) {
         if (params->blend_against_tiles) {
