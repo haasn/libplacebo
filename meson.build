@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '278': 'switch pl_vulkan.(un)lock_queue to uint32_t',
       '277': 'add pl_render_params.corner_rounding',
       '276': 'add pl_get_mapped_avframe',
       '275': 'add pl_vulkan_params.extra_queues',

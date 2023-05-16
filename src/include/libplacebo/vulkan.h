@@ -146,8 +146,8 @@ struct pl_vulkan_t {
     // submission or other related operations when sharing the VkDevice between
     // multiple threads, Using this on queue families or indices not contained
     // in `queues` is undefined behavior.
-    void (*lock_queue)(pl_vulkan vk, int qf, int qidx);
-    void (*unlock_queue)(pl_vulkan vk, int qf, int qidx);
+    void (*lock_queue)(pl_vulkan vk, uint32_t qf, uint32_t qidx);
+    void (*unlock_queue)(pl_vulkan vk, uint32_t qf, uint32_t qidx);
 
     // --- Deprecated fields
 
@@ -412,8 +412,8 @@ struct pl_vulkan_import_params {
 
     // Functions for locking a queue. If set, these will be used instead of
     // libplacebo's internal functions for `pl_vulkan.(un)lock_queue`.
-    void (*lock_queue)(void *ctx, int qf, int qidx);
-    void (*unlock_queue)(void *ctx, int qf, int qidx);
+    void (*lock_queue)(void *ctx, uint32_t qf, uint32_t qidx);
+    void (*unlock_queue)(void *ctx, uint32_t qf, uint32_t qidx);
     void *queue_ctx;
 
     // --- Misc/debugging options

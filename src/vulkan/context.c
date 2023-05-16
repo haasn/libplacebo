@@ -1074,13 +1074,13 @@ error:
     return dev;
 }
 
-static void lock_queue_internal(void *priv, int qf, int qidx)
+static void lock_queue_internal(void *priv, uint32_t qf, uint32_t qidx)
 {
     struct vk_ctx *vk = priv;
     pl_mutex_lock(&vk->queue_locks.elem[qf].elem[qidx]);
 }
 
-static void unlock_queue_internal(void *priv, int qf, int qidx)
+static void unlock_queue_internal(void *priv, uint32_t qf, uint32_t qidx)
 {
     struct vk_ctx *vk = priv;
     pl_mutex_unlock(&vk->queue_locks.elem[qf].elem[qidx]);
@@ -1361,13 +1361,13 @@ error:
     return false;
 }
 
-static void lock_queue(pl_vulkan pl_vk, int qf, int qidx)
+static void lock_queue(pl_vulkan pl_vk, uint32_t qf, uint32_t qidx)
 {
     struct vk_ctx *vk = PL_PRIV(pl_vk);
     vk->lock_queue(vk->queue_ctx, qf, qidx);
 }
 
-static void unlock_queue(pl_vulkan pl_vk, int qf, int qidx)
+static void unlock_queue(pl_vulkan pl_vk, uint32_t qf, uint32_t qidx)
 {
     struct vk_ctx *vk = PL_PRIV(pl_vk);
     vk->unlock_queue(vk->queue_ctx, qf, qidx);
