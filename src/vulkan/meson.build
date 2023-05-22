@@ -1,44 +1,30 @@
 vulkan_build = get_option('vulkan')
 vulkan_link = get_option('vk-proc-addr')
-vulkan_loader = dependency('vulkan', required: vulkan_link)
-vulkan_headers = disabler()
+vulkan_loader = dependency('vulkan', required: false)
+vulkan_headers = vulkan_loader.partial_dependency(includes: true, compile_args: true)
 registry_xml = get_option('vulkan-registry')
 
-if vulkan_loader.version() == 'unknown'
-  warning('Vulkan found with unknown version, may not build correctly.')
-elif vulkan_loader.version().version_compare('<1.3.0')
-  if vulkan_link.enabled()
-    error('Found Vulkan @0@, required >=1.3.0'.format(vulkan_loader.version()))
-  elif vulkan_link.auto()
-    message('Found Vulkan @0@, required >=1.3.0, disabling vk-proc-addr...'.format(vulkan_loader.version()))
-  endif
-  vulkan_loader = disabler()
-endif
-
-if vulkan_loader.found()
-  vulkan_headers = vulkan_loader.partial_dependency(includes: true, compile_args: true)
-# Probe for <vulkan/vulkan.h> as a fallback for the vulkan headers
-elif cc.has_header_symbol('vulkan/vulkan_core.h', 'VK_VERSION_1_3')
-  vulkan_headers = declare_dependency()
-elif fs.is_dir(thirdparty/'Vulkan-Headers/include')
+# Prefer our Vulkan headers for portability
+if fs.is_dir(thirdparty/'Vulkan-Headers/include')
   vulkan_inc = include_directories('../../3rdparty/Vulkan-Headers/include')
   vulkan_headers = declare_dependency(include_directories: vulkan_inc)
   # Force the use of this vk.xml because it has to be in sync with the headers
   registry_xml = thirdparty/'Vulkan-Headers/registry/vk.xml'
 endif
 
-build_deps += vulkan_headers
-if not vulkan_headers.found()
-  error('vulkan.h was not found on the system, nor inside ' +
-        '`3rdparty/Vulkan-Headers`. Please run `git submodule update --init` ' +
-        'followed by `meson --wipe`.')
-endif
-
-vulkan_link = vulkan_link.require(vulkan_loader.found())
+vulkan_build = vulkan_build.require(
+  cc.has_header_symbol('vulkan/vulkan_core.h', 'VK_VERSION_1_3', dependencies: vulkan_headers),
+  error_message: 'vulkan.h was not found on the system, nor inside ' +
+                 '`3rdparty/Vulkan-Headers`. Please run `git submodule update --init` ' +
+                 'followed by `meson --wipe`.')
 components.set('vulkan', vulkan_build.allowed())
+
+vulkan_link = vulkan_link.require(vulkan_loader.found() and vulkan_build.allowed())
 components.set('vk-proc-addr', vulkan_link.allowed())
 
 if vulkan_build.allowed()
+  build_deps += vulkan_headers
+
   sources += [
     'vulkan/command.c',
     'vulkan/context.c',
