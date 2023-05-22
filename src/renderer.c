@@ -380,6 +380,10 @@ struct pass_state {
     pl_fmt fbofmt[5];
     bool *fbos_used;
 
+    // Map of acquired frames
+    struct {
+        bool target, image, prev, next;
+    } acquired;
 };
 
 static void find_fbo_format(struct pass_state *pass)
@@ -2638,26 +2642,32 @@ static void fix_frame(struct pl_frame *frame)
     }
 }
 
-static bool acquire_frame(struct pass_state *pass, struct pl_frame *frame)
+static bool acquire_frame(struct pass_state *pass, struct pl_frame *frame,
+                          bool *acquired)
 {
-    if (!frame || !frame->acquire)
+    if (!frame || !frame->acquire || *acquired)
         return true;
 
+    *acquired = true;
     return frame->acquire(pass->rr->gpu, frame);
+}
+
+static void release_frame(struct pass_state *pass, struct pl_frame *frame,
+                          bool *acquired)
+{
+    if (frame && frame->release && *acquired)
+        frame->release(pass->rr->gpu, frame);
+    *acquired = false;
 }
 
 static void pass_uninit(struct pass_state *pass)
 {
     pl_renderer rr = pass->rr;
     pl_dispatch_abort(rr->dp, &pass->img.sh);
-    if (pass->next.release)
-        pass->next.release(rr->gpu, &pass->next);
-    if (pass->prev.release)
-        pass->prev.release(rr->gpu, &pass->prev);
-    if (pass->image.release)
-        pass->image.release(rr->gpu, &pass->image);
-    if (pass->target.release)
-        pass->target.release(rr->gpu, &pass->target);
+    release_frame(pass, &pass->next, &pass->acquired.next);
+    release_frame(pass, &pass->prev, &pass->acquired.prev);
+    release_frame(pass, &pass->image, &pass->acquired.image);
+    release_frame(pass, &pass->target, &pass->acquired.target);
     pl_free_ptr(&pass->tmp);
 }
 
@@ -2713,11 +2723,11 @@ static bool pass_init(struct pass_state *pass, bool acquire_image)
     struct pl_frame *image = pass->src_ref < 0 ? NULL : &pass->image;
     struct pl_frame *target = &pass->target;
 
-    // Acquire all frames before handling any errors, to avoid calling
-    // release() on a never-acquired frame
-    bool acquire_ok = acquire_frame(pass, target);
+    if (!acquire_frame(pass, target, &pass->acquired.target))
+        goto error;
     if (acquire_image && image) {
-        acquire_ok &= acquire_frame(pass, image);
+        if (!acquire_frame(pass, image, &pass->acquired.image))
+            goto error;
 
         const struct pl_deinterlace_params *deint = params->deinterlace_params;
         bool needs_refs = image->field != PL_FIELD_NONE && deint &&
@@ -2727,16 +2737,16 @@ static bool pass_init(struct pass_state *pass, bool acquire_image)
             // Move into local copy so we can acquire/release it
             pass->prev = *image->prev;
             image->prev = &pass->prev;
-            acquire_ok &= acquire_frame(pass, &pass->prev);
+            if (!acquire_frame(pass, &pass->prev, &pass->acquired.prev))
+                goto error;
         }
         if (image->next && needs_refs) {
             pass->next = *image->next;
             image->next = &pass->next;
-            acquire_ok &= acquire_frame(pass, &pass->next);
+            if (!acquire_frame(pass, &pass->next, &pass->acquired.next))
+                goto error;
         }
     }
-    if (!acquire_ok)
-        goto error;
 
     if (!validate_structs(pass->rr, acquire_image ? image : NULL, target))
         goto error;
@@ -3213,6 +3223,7 @@ retry:
                 .image = *img,
                 .target = *ptarget,
                 .info.stage = PL_RENDER_STAGE_FRAME,
+                .acquired = pass.acquired,
             };
 
             // Render a single frame up to `pass_output_target`
@@ -3272,6 +3283,7 @@ retry:
             // fall through
 
 inter_pass_error:
+            inter_pass.acquired.target = false; // don't release target
             pass_uninit(&inter_pass);
             if (!ok)
                 goto fail;
