@@ -730,11 +730,10 @@ PL_LIBAV_API void pl_frame_from_avframe(struct pl_frame *out,
         out->repr.sys = PL_COLOR_SYSTEM_RGB;
         out->repr.levels = PL_COLOR_LEVELS_FULL; // libav* ignores levels for RGB
 
-    } else if (!out->repr.sys) {
-
-        // libav* likes leaving this as UNKNOWN for YCbCr frames, which
-        // confuses libplacebo since we infer UNKNOWN as RGB. To get around
-        // this, explicitly infer a suitable colorspace for non-RGB formats.
+    } else if (!pl_color_system_is_ycbcr_like(out->repr.sys)) {
+        // libav* likes leaving this as UNKNOWN (or even RGB) for YCbCr frames,
+        // which confuses libplacebo since we infer UNKNOWN as RGB. To get
+        // around this, explicitly infer a suitable colorspace.
         out->repr.sys = pl_color_system_guess_ycbcr(frame->width, frame->height);
     }
 
