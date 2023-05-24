@@ -2536,9 +2536,9 @@ static void fix_refs_and_rects(struct pass_state *pass)
 
         *dst = (pl_rect2df) {
             .x0 = roundf(PL_CLAMP(dst->x0, 0.0, dst_w)),
-            .y0 = roundf(PL_CLAMP(dst->y0, 0.0, dst_w)),
+            .y0 = roundf(PL_CLAMP(dst->y0, 0.0, dst_h)),
             .x1 = roundf(PL_CLAMP(dst->x1, 0.0, dst_w)),
-            .y1 = roundf(PL_CLAMP(dst->y1, 0.0, dst_w)),
+            .y1 = roundf(PL_CLAMP(dst->y1, 0.0, dst_h)),
         };
 
         pass->dst_rect = (pl_rect2d) {
