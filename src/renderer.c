@@ -2189,7 +2189,8 @@ static bool pass_output_target(struct pass_state *pass)
         }
     }
 
-    bool need_blend = params->blend_against_tiles || !target->repr.alpha;
+    bool need_blend = params->blend_against_tiles ||
+                      (!target->repr.alpha && !params->blend_params);
     if (img->comps == 4 && need_blend) {
         if (params->blend_against_tiles) {
             static const float zero[2][3] = {0};
@@ -2362,7 +2363,8 @@ static bool pass_output_target(struct pass_state *pass)
         }
 
         GLSL("color *= vec4(1.0 / "$"); \n", SH_FLOAT(scale));
-        swizzle_color(sh, plane->components, plane->component_mapping, false);
+        swizzle_color(sh, plane->components, plane->component_mapping,
+                      params->blend_params);
 
         pl_rect2d plane_rect = {
             .x0 = flipped_x ? rx1 : rx0,
