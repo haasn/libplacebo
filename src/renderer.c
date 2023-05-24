@@ -2573,10 +2573,10 @@ static void fix_refs_and_rects(struct pass_state *pass)
     pl_rect2df_normalize(dst);
 
     // Round the output rect and clip it to the framebuffer dimensions
-    float rx0 = roundf(PL_MAX(dst->x0, 0.0)),
-          ry0 = roundf(PL_MAX(dst->y0, 0.0)),
-          rx1 = roundf(PL_MIN(dst->x1, dst_w)),
-          ry1 = roundf(PL_MIN(dst->y1, dst_h));
+    float rx0 = roundf(PL_CLAMP(dst->x0, 0.0, dst_w)),
+          ry0 = roundf(PL_CLAMP(dst->y0, 0.0, dst_h)),
+          rx1 = roundf(PL_CLAMP(dst->x1, 0.0, dst_w)),
+          ry1 = roundf(PL_CLAMP(dst->y1, 0.0, dst_h));
 
     // Adjust the src rect corresponding to the rounded crop
     float scale_x = pl_rect_w(*src) / pl_rect_w(*dst),
@@ -2897,6 +2897,12 @@ bool pl_render_image(pl_renderer rr, const struct pl_frame *pimage,
     if (!pass_init(&pass, true))
         return false;
 
+    // No-op (empty crop)
+    if (!pl_rect_w(pass.dst_rect) || !pl_rect_h(pass.dst_rect)) {
+        pass_uninit(&pass);
+        return draw_empty_overlays(rr, ptarget, params);
+    }
+
     pass_begin_frame(&pass);
     if (!pass_read_image(&pass))
         goto error;
@@ -3060,6 +3066,8 @@ bool pl_render_image_mix(pl_renderer rr, const struct pl_frame_mix *images,
     const struct pl_frame *target = &pass.target;
     int out_w = abs(pl_rect_w(pass.dst_rect)),
         out_h = abs(pl_rect_h(pass.dst_rect));
+    if (!out_w || !out_h)
+        goto fallback;
 
     int fidx = 0;
     struct cached_frame frames[MAX_MIX_FRAMES];
