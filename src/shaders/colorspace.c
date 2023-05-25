@@ -1503,7 +1503,7 @@ static void visualize_gamut_map(pl_shader sh, pl_rect2df rc,
          "              normalize(mapped.yz);                   \n"
          "    ipt = mix(ipt, line, k);                          \n"
          "}                                                     \n"
-         "if (inlut && fract(10.0 * mappedhue) < 1e-1) {        \n"
+         "if (inlut && fract(10.0 * (mappedhue - hue)) < 1e-1) {\n"
          "    float k = smoothstep(0.3, 0.0, abs(cos(theta)));  \n"
          "    line.x = mapped.x - 0.05;                         \n"
          "    line.yz = 1.2 * mapped.yz;                        \n"
