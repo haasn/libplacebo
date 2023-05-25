@@ -373,11 +373,83 @@ clip_gamma(struct IPT ipt, float gamma, struct gamut gamut)
 static const float perceptual_gamma    = 1.80f;
 static const float perceptual_knee     = 0.70f;
 
+static int cmp_float(const void *a, const void *b)
+{
+    float fa = *(const float*) a;
+    float fb = *(const float*) b;
+    return PL_CMP(fa, fb);
+}
+
+static float wrap(float h)
+{
+    if (h > M_PI) {
+        return h - 2 * M_PI;
+    } else if (h < -M_PI) {
+        return h + 2 * M_PI;
+    } else {
+        return h;
+    }
+}
+
 static void perceptual(float *lut, const struct pl_gamut_map_params *params)
 {
     struct gamut dst, src;
     get_gamuts(&dst, &src, params);
 
+    const float O = pq_eotf(params->min_luma), X = pq_eotf(params->max_luma);
+    const float M = (O + X) / 2.0f;
+    const struct RGB refpoints[] = {
+        {X, O, O}, {O, X, O}, {O, O, X},
+        {O, X, X}, {X, O, X}, {X, X, O},
+        {O, X, M}, {X, O, M}, {X, M, O},
+        {O, M, X}, {M, O, X}, {M, X, O},
+    };
+
+    enum {
+        S = PL_ARRAY_SIZE(refpoints),
+        N = S + 2, // +2 for the endpoints
+    };
+
+    struct { float hue, delta; } hueshift[N];
+    for (int i = 0; i < S; i++) {
+        struct ICh ich_src = ipt2ich(rgb2ipt(refpoints[i], src));
+        struct ICh ich_dst = ipt2ich(rgb2ipt(refpoints[i], dst));
+        hueshift[i+1].hue = ich_src.h;
+        hueshift[i+1].delta = wrap(ich_dst.h - ich_src.h);
+    }
+
+    // Sort and wrap endpoints
+    qsort(hueshift + 1, S, sizeof(*hueshift), cmp_float);
+    hueshift[0]   = hueshift[S];
+    hueshift[S+1] = hueshift[1];
+    hueshift[0].hue   -= 2 * M_PI;
+    hueshift[S+1].hue += 2 * M_PI;
+
+    // Construction of cubic spline coefficients
+    float dh[N], dddh[N], K[N] = {0}, tmp[N][N] = {0};
+    for (int i = N - 1; i > 0; i--) {
+        dh[i-1] = hueshift[i].hue - hueshift[i-1].hue;
+        dddh[i] = (hueshift[i].delta - hueshift[i-1].delta) / dh[i-1];
+    }
+    for (int i = 1; i < N - 1; i++) {
+        tmp[i][i] = 2 * (dh[i-1] + dh[i]);
+        if (i != 1)
+            tmp[i][i-1] = tmp[i-1][i] = dh[i-1];
+        tmp[i][N-1] = 6 * (dddh[i+1] - dddh[i]);
+    }
+    for (int i = 1; i < N - 2; i++) {
+        const float q = (tmp[i+1][i] / tmp[i][i]);
+        for (int j = 1; j <= N - 1; j++)
+            tmp[i+1][j] -= q * tmp[i][j];
+    }
+    for (int i = N - 2; i > 0; i--) {
+        float sum = 0.0f;
+        for (int j = i; j <= N - 2; j++)
+            sum += tmp[i][j] * K[j];
+        K[i] = (tmp[i][N-1] - sum) / tmp[i][i];
+    }
+
+    float prev_hue = -10.0f, prev_delta = 0.0f;
     FOREACH_LUT(lut, ipt) {
 
         if (ipt.I <= dst.min_luma) {
@@ -385,8 +457,39 @@ static void perceptual(float *lut, const struct pl_gamut_map_params *params)
             continue;
         }
 
-        // Determine intersections with source and target gamuts
         struct ICh ich = ipt2ich(ipt);
+        if (ich.C <= 1e-2f)
+            continue; // Fast path for achromatic colors
+
+        // Determine perceptual hue shift delta by interpolation of refpoints
+        float delta = 0.0f;
+        if (fabsf(ich.h - prev_hue) < 1e-6f) {
+            delta = prev_delta;
+        } else {
+            for (int i = 0; i < N - 1; i++) {
+                if (hueshift[i+1].hue > ich.h) {
+                    pl_assert(hueshift[i].hue <= ich.h);
+                    float a = (K[i+1] - K[i]) / (6 * dh[i]);
+                    float b = K[i] / 2;
+                    float c = dddh[i+1] - (2 * dh[i] * K[i] + K[i+1] * dh[i]) / 6;
+                    float d = hueshift[i].delta;
+                    float x = ich.h - hueshift[i].hue;
+                    delta = ((a * x + b) * x + c) * x + d;
+                    prev_delta = delta;
+                    prev_hue = ich.h;
+                    break;
+                }
+            }
+        }
+
+        const float margin = PL_DEF(params->chroma_margin, 1.0f);
+        if (fabsf(delta) >= 1e-3f) {
+            struct ICh src_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, src);
+            struct ICh dst_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, dst);
+            ich.h += delta * pl_smoothstep(dst_border.C, src_border.C * margin, ich.C);
+        }
+
+        // Determine intersections with source and target gamuts
         struct ICh source = saturate(ich.h, src);
         struct ICh target = saturate(ich.h, dst);
         const float gamma = scale_gamma(perceptual_gamma, ich, target, dst);
@@ -404,7 +507,6 @@ static void perceptual(float *lut, const struct pl_gamut_map_params *params)
 
         // Apply simple Mobius tone mapping curve
         const float j = PL_MIX(1.0f, perceptual_knee, ich.C / 0.5f);
-        const float margin = PL_DEF(params->chroma_margin, 1.0f);
         const float peak = margin * fmaxf(source.C / target.C, 1.0f);
         float xx = 1.0f / x;
         if (j < 1.0f && peak >= 1.0f) {
