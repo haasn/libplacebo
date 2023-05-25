@@ -5,11 +5,14 @@ vulkan_headers = vulkan_loader.partial_dependency(includes: true, compile_args: 
 registry_xml = get_option('vulkan-registry')
 
 # Prefer our Vulkan headers for portability
-if fs.is_dir(thirdparty/'Vulkan-Headers/include')
-  vulkan_inc = include_directories('../../3rdparty/Vulkan-Headers/include')
-  vulkan_headers = declare_dependency(include_directories: vulkan_inc)
+vulkan_headers_dir = thirdparty/'Vulkan-Headers'
+if fs.is_dir(vulkan_headers_dir/'include')
+  # `include_directories` doesn't currently work for `has_header_symbol` checks
+  # It will be fixed by https://github.com/mesonbuild/meson/pull/10122
+  # For now workaround the issue with `compile_args`
+  vulkan_headers = declare_dependency(compile_args: '-isystem' + vulkan_headers_dir/'include')
   # Force the use of this vk.xml because it has to be in sync with the headers
-  registry_xml = thirdparty/'Vulkan-Headers/registry/vk.xml'
+  registry_xml = vulkan_headers_dir/'registry/vk.xml'
 endif
 
 vulkan_build = vulkan_build.require(
