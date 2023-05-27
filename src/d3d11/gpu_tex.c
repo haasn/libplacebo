@@ -201,6 +201,8 @@ pl_tex pl_d3d11_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
                    "again with a different (non-emulated) format?");
             goto error;
         }
+
+        tex->params.storable = true;
     }
 
     if (p->fl >= D3D_FEATURE_LEVEL_11_0) {
@@ -225,9 +227,11 @@ pl_tex pl_d3d11_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 
     // Apparently IMMUTABLE textures are efficient, so try to infer whether we
     // can use one
-    if (params->initial_data && !tex->params.renderable &&
-        !tex->params.storable && !params->host_writable)
+    if (params->initial_data && !params->format->emulated &&
+        !tex->params.renderable && !tex->params.storable && !params->host_writable)
+    {
         usage = D3D11_USAGE_IMMUTABLE;
+    }
 
     // In FL9_x, resources with only D3D11_BIND_SHADER_RESOURCE can't be copied
     // from GPU-accessible memory to CPU-accessible memory. The only other bind
@@ -241,7 +245,7 @@ pl_tex pl_d3d11_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 
     D3D11_SUBRESOURCE_DATA data;
     D3D11_SUBRESOURCE_DATA *pdata = NULL;
-    if (params->initial_data) {
+    if (params->initial_data && !params->format->emulated) {
         data = (D3D11_SUBRESOURCE_DATA) {
             .pSysMem = params->initial_data,
             .SysMemPitch = params->w * params->format->texel_size,
@@ -332,6 +336,21 @@ pl_tex pl_d3d11_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
 
     if (!tex_init(gpu, tex))
         goto error;
+
+    if (params->initial_data && params->format->emulated) {
+        struct pl_tex_transfer_params ul_params = {
+            .tex = tex,
+            .ptr = (void *) params->initial_data,
+            .rc = { 0, 0, 0, params->w, params->h, params->d },
+        };
+
+        // Since we re-use GPU helpers which require writable images, just fake it
+        bool writable = tex->params.host_writable;
+        tex->params.host_writable = true;
+        if (!pl_tex_upload(gpu, &ul_params))
+            goto error;
+        tex->params.host_writable = writable;
+    }
 
     pl_d3d11_flush_message_queue(ctx, "After texture create");
 
