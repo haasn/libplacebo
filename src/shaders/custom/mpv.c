@@ -1677,10 +1677,17 @@ const struct pl_hook *pl_mpv_user_shader_parse(pl_gpu gpu,
 
     hook->parameters = p->hook_params.elem;
     hook->num_parameters = p->hook_params.num;
+
+    PL_MSG(gpu, PL_LOG_DEBUG, "Loaded user shader:");
+    pl_msg_source(gpu->log, PL_LOG_DEBUG, shader_text);
+
     return hook;
 
 error:
     pl_mpv_user_shader_destroy((const struct pl_hook **) &hook);
+    PL_MSG(gpu, PL_LOG_ERR, "Failed to parse user shader:");
+    pl_msg_source(gpu->log, PL_LOG_ERR, shader_text);
+    pl_log_stack_trace(gpu->log, PL_LOG_ERR);
     return NULL;
 }
 
