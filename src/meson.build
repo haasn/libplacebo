@@ -14,6 +14,23 @@ elif has_execinfo
   build_deps += libexecinfo
 endif
 
+if host_machine.system() == 'windows' and cc.get_define('__MINGW32__') != ''
+  # MinGW-w64 math functions are significantly slower than the UCRT ones.
+  # In particular powf is over 7 times slower than UCRT counterpart.
+  # MinGW-w64 explicitly excludes some math functions from their ucrtbase def
+  # file and replaces with own versions. To workaround the issue, generate the
+  # import library and link it with UCRT versions of math functions.
+  dlltool = find_program('llvm-dlltool', 'dlltool')
+  ucrt_math = custom_target('ucrt_math.lib',
+                            output : ['ucrt_math.lib'],
+                            input : 'ucrt_math.def',
+                            command : [dlltool, '-d', '@INPUT@', '-l', '@OUTPUT@'])
+  build_deps += declare_dependency(link_with: ucrt_math)
+  # MinGW-w64 inlines functions like powf, rewriting them to pow. We want to use
+  # the powf specialization from UCRT, so disable inlining.
+  add_project_arguments(['-D__CRT__NO_INLINE'], language: ['c', 'cpp'])
+endif
+
 # Work around missing atomics on some (obscure) platforms
 atomic_test = '''
 #include <stdatomic.h>
