@@ -114,14 +114,19 @@ int main()
         REQUIRE_FEQ(white[2], 0.0f, 1e-4);
     }
 
-    // Test that primaries round-trip for perceptual gamut mapping
+    enum { LUT3D_SIZE = 65 }; // for benchmarking
     struct pl_gamut_map_params perceptual = {
         .function     = &pl_gamut_map_perceptual,
         .input_gamut  = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_2020),
         .output_gamut = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_709),
         .max_luma     = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, 1.0f),
+        .lut_size_I   = LUT3D_SIZE,
+        .lut_size_C   = LUT3D_SIZE,
+        .lut_size_h   = LUT3D_SIZE,
+        .lut_stride   = 3,
     };
 
+    // Test that primaries round-trip for perceptual gamut mapping
     const pl_matrix3x3 rgb2lms_src = pl_ipt_rgb2lms(&perceptual.input_gamut);
     const pl_matrix3x3 rgb2lms_dst = pl_ipt_rgb2lms(&perceptual.output_gamut);
     static const float refpoints[][3] = {
@@ -148,6 +153,14 @@ int main()
         float hue_mapped = atan2f(c[2], c[1]);
         float hue_ref = atan2f(ref[2], ref[1]);
         REQUIRE_FEQ(hue_mapped, hue_ref, 1e-3);
+    }
+
+    float *tmp = malloc(sizeof(float[LUT3D_SIZE][LUT3D_SIZE][LUT3D_SIZE][3]));
+    if (tmp) {
+        clock_t start = clock();
+        pl_gamut_map_generate(tmp, &perceptual);
+        pl_log_cpu_time(log, start, clock(), "generating 3DLUT");
+        free(tmp);
     }
 
     pl_log_destroy(&log);
