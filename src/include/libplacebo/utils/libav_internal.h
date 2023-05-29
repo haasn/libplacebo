@@ -1029,6 +1029,8 @@ static bool pl_acquire_avframe(pl_gpu gpu, struct pl_frame *frame)
 
 #ifdef PL_HAVE_LAV_VULKAN_V2
     vkfc->lock_frame(hwfc, vkf);
+#else
+    (void) vkfc;
 #endif
 
     for (int n = 0; n < frame->num_planes; n++) {
@@ -1074,6 +1076,8 @@ static void pl_release_avframe(pl_gpu gpu, struct pl_frame *frame)
 
 #ifdef PL_HAVE_LAV_VULKAN_V2
     vkfc->unlock_frame(hwfc, vkf);
+#else
+    (void) vkfc;
 #endif
 }
 
