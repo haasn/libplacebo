@@ -75,7 +75,6 @@ struct pl_renderer_t {
     struct sampler sampler_main;
     struct sampler samplers_src[4];
     struct sampler samplers_dst[4];
-    bool peak_detect_active;
     struct icc_state icc[2];
 
     // Temporary storage for vertex/index data
@@ -193,7 +192,6 @@ void pl_renderer_flush_cache(pl_renderer rr)
     rr->frames.num = 0;
 
     pl_reset_detected_peak(rr->tone_map_state);
-    rr->peak_detect_active = false;
 }
 
 const struct pl_render_params pl_render_fast_params = { PL_RENDER_DEFAULTS };
@@ -379,6 +377,7 @@ struct pass_state {
     // Metadata for `rr->fbos`
     pl_fmt fbofmt[5];
     bool *fbos_used;
+    bool need_fbo; // force main scaler indirection
 
     // Map of acquired frames
     struct {
@@ -1171,14 +1170,13 @@ static void hdr_update_peak(struct pass_state *pass)
         goto cleanup;
     }
 
-    rr->peak_detect_active = true;
+    pass->need_fbo = !params->peak_detect_params->allow_delayed;
     return;
 
 cleanup:
     // No peak detection required or supported, so clean up the state to avoid
     // confusing it with later frames where peak detection is enabled again
     pl_reset_detected_peak(rr->tone_map_state);
-    rr->peak_detect_active = false;
 }
 
 struct plane_state {
@@ -1869,8 +1867,7 @@ static bool pass_scale_main(struct pass_state *pass)
     };
 
     const struct pl_frame *image = &pass->image;
-    bool need_fbo = image->num_overlays > 0;
-    need_fbo |= rr->peak_detect_active && !params->peak_detect_params->allow_delayed;
+    bool need_fbo = pass->need_fbo || image->num_overlays > 0;
 
     // Force FBO indirection if this shader is non-resizable
     int out_w, out_h;
