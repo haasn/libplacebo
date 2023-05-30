@@ -269,17 +269,16 @@ bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem)
         return true;
     }
 
-    // If the other shader is rigid but this is flexible, change nothing
-    if (flex)
-        return true;
-
-    // If neither are flexible, make sure the parameters match
-    pl_assert(!flex && !sh->flexible_work_groups);
-    if (bw != *sh_bw || bh != *sh_bh) {
-        PL_TRACE(sh, "Disabling compute shader due to incompatible group "
-                 "sizes %dx%d and %dx%d", *sh_bw, *sh_bh, bw, bh);
-        sh->shmem -= mem;
-        return false;
+    // At this point we're looking only at a non-flexible compute shader
+    pl_assert(sh->type == SH_COMPUTE && !sh->flexible_work_groups);
+    if (!flex) {
+        // Ensure parameters match
+        if (bw != *sh_bw || bh != *sh_bh) {
+            PL_TRACE(sh, "Disabling compute shader due to incompatible group "
+                     "sizes %dx%d and %dx%d", *sh_bw, *sh_bh, bw, bh);
+            sh->shmem -= mem;
+            return false;
+        }
     }
 
     return true;
