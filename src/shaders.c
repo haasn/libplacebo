@@ -257,6 +257,7 @@ bool sh_try_compute(pl_shader sh, int bw, int bh, bool flex, size_t mem)
         *sh_bw = bw;
         *sh_bh = bh;
         sh->type = SH_COMPUTE;
+        sh->flexible_work_groups = flex;
         return true;
     }
 
