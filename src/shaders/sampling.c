@@ -1000,3 +1000,128 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
     GLSL("}\n");
     return true;
 }
+
+const struct pl_distort_params pl_distort_default_params = { PL_DISTORT_DEFAULTS };
+
+void pl_shader_distort(pl_shader sh, pl_tex src_tex, int out_w, int out_h,
+                       const struct pl_distort_params *params)
+{
+    pl_assert(params);
+    if (!sh_require(sh, PL_SHADER_SIG_NONE, out_w, out_h))
+        return;
+
+    const int src_w = src_tex->params.w, src_h = src_tex->params.h;
+    float rx = 1.0f, ry = 1.0f;
+    if (src_w > src_h) {
+        ry = (float) src_h / src_w;
+    } else {
+        rx = (float) src_w / src_h;
+    }
+
+    // Map from texel coordinates [0,1]² to aspect-normalized representation
+    const pl_transform2x2 tex2norm = {
+        .mat.m = {
+            { 2 * rx, 0 },
+            { 0, -2 * ry },
+        },
+        .c = { -rx, ry },
+    };
+
+    // Map from aspect-normalized representation to canvas coords [-1,1]²
+    const float sx = params->unscaled ? (float) src_w / out_w : 1.0f;
+    const float sy = params->unscaled ? (float) src_h / out_h : 1.0f;
+    const pl_transform2x2 norm2canvas = {
+        .mat.m = {
+            { sx / rx, 0 },
+            { 0, sy / ry },
+        },
+    };
+
+    struct pl_transform2x2 transform = params->transform;
+    pl_transform2x2_mul(&transform, &tex2norm);
+    pl_transform2x2_rmul(&norm2canvas, &transform);
+
+    if (params->constrain) {
+        float p[4][2] = {
+            { 0, 0 }, { 0, 1 },
+            { 1, 0 }, { 1, 1 },
+        };
+        for (int i = 0; i < PL_ARRAY_SIZE(p); i++)
+            pl_transform2x2_apply(&transform, p[i]);
+        pl_rect2df bb = { // bounding box
+            .x0 = fminf(fminf(p[0][0], p[1][0]), fminf(p[2][0], p[3][0])),
+            .x1 = fmaxf(fmaxf(p[0][0], p[1][0]), fmaxf(p[2][0], p[3][0])),
+            .y0 = fminf(fminf(p[0][1], p[1][1]), fminf(p[2][1], p[3][1])),
+            .y1 = fmaxf(fmaxf(p[0][1], p[1][1]), fmaxf(p[2][1], p[3][1])),
+        };
+        const float k = fmaxf(fmaxf(pl_rect_w(bb), pl_rect_h(bb)), 2.0f);
+        pl_transform2x2_scale(&transform, 2.0f / k);
+    };
+
+    // Bind the canvas coordinates as [-1,1]², flipped vertically to correspond
+    // to normal mathematical axis conventions
+    static const pl_rect2df canvas = {
+        .x0 = -1.0f, .x1 =  1.0f,
+        .y0 =  1.0f, .y1 = -1.0f,
+    };
+
+    ident_t pos = sh_attr_vec2(sh, "pos", &canvas);
+    ident_t pt, tex = sh_bind(sh, src_tex, params->address_mode,
+                              PL_TEX_SAMPLE_LINEAR, "tex", NULL, NULL, &pt);
+
+    // Bind the inverse of the tex2canvas transform (i.e. canvas2tex)
+    pl_transform2x2_invert(&transform);
+    ident_t tf = sh_var(sh, (struct pl_shader_var) {
+        .var  = pl_var_mat2("tf"),
+        .data = PL_TRANSPOSE_2X2(transform.mat.m),
+    });
+
+    ident_t tf_c = sh_var(sh, (struct pl_shader_var) {
+        .var  = pl_var_vec2("tf_c"),
+        .data = transform.c,
+    });
+
+    // See pl_shader_sample_bicubic
+    sh_describe(sh, "distortion");
+    GLSL("// pl_shader_sample_distort   \n"
+         "vec4 color;                   \n"
+         "{                             \n"
+         "vec2 pos  = "$" * "$" + "$";  \n"
+         "vec2 pt   = "$";              \n",
+         tf, pos, tf_c, pt);
+
+    if (params->bicubic) {
+        GLSL("vec2 size = vec2(textureSize("$", 0));            \n"
+             "vec2 frac  = fract(pos * size + vec2(0.5));       \n"
+             "vec2 frac2 = frac * frac;                         \n"
+             "vec2 inv   = vec2(1.0) - frac;                    \n"
+             "vec2 inv2  = inv * inv;                           \n"
+             "vec2 w0 = 1.0/6.0 * inv2 * inv;                   \n"
+             "vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac);   \n"
+             "vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);    \n"
+             "vec2 w3 = 1.0/6.0 * frac2 * frac;                 \n"
+             "vec4 g = vec4(w0 + w1, w2 + w3);                  \n"
+             "vec4 h = vec4(w1, w3) / g + inv.xyxy;             \n"
+             "h.xy -= vec2(2.0);                                \n"
+             "vec4 p = pos.xyxy + pt.xyxy * h;                  \n"
+             "vec4 c00 = textureLod("$", p.xy, 0.0);            \n"
+             "vec4 c10 = textureLod("$", p.zy, 0.0);            \n"
+             "vec4 c01 = textureLod("$", p.xw, 0.0);            \n"
+             "vec4 c11 = textureLod("$", p.zw, 0.0);            \n"
+             "vec4 c0 = mix(c01, c00, g.y);                     \n"
+             "vec4 c1 = mix(c11, c10, g.y);                     \n"
+             "color = mix(c1, c0, g.x);                         \n",
+             tex, tex, tex, tex, tex);
+    } else {
+        GLSL("color = texture("$", pos); \n", tex);
+    }
+
+    if (params->alpha_mode) {
+        GLSL("vec2 border = min(pos, vec2(1.0) - pos);      \n"
+             "border = smoothstep(vec2(0.0), pt, border);   \n"
+             "color.%s *= border.x * border.y;              \n",
+             params->alpha_mode == PL_ALPHA_PREMULTIPLIED ? "rgba" : "a");
+    }
+
+    GLSL("} \n");
+}

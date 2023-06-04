@@ -24,6 +24,7 @@
 // is undefined behavior. They require nothing (PL_SHADER_SIG_NONE) and return
 // a color (PL_SHADER_SIG_COLOR).
 
+#include <libplacebo/colorspace.h>
 #include <libplacebo/filters.h>
 #include <libplacebo/shaders.h>
 
@@ -196,6 +197,48 @@ PL_API bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src
 // as well.
 PL_API bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
                                     const struct pl_sample_filter_params *params);
+
+struct pl_distort_params {
+    // An arbitrary 2x2 affine transformation to apply to the input image.
+    // For simplicity, the input image is explicitly centered and scaled such
+    // that the longer dimension is in [-1,1], before applying this.
+    pl_transform2x2 transform;
+
+    // If true, the texture is placed inside the center of the canvas without
+    // scaling. If false, it is effectively stretched to the canvas size.
+    bool unscaled;
+
+    // If true, the transformation is automatically scaled down and shifted to
+    // ensure that the resulting image fits inside the output canvas.
+    bool constrain;
+
+    // If true, use bicubic interpolation rather than faster bilinear
+    // interpolation. Higher quality but slower.
+    bool bicubic;
+
+    // Specifies the texture address mode to use when sampling out of bounds.
+    enum pl_tex_address_mode address_mode;
+
+    // If set, all out-of-bounds accesses will instead be treated as
+    // transparent, according to the given alpha mode. (Which should match the
+    // alpha mode of the texture)
+    //
+    // Note: `address_mode` has no effect when this is specified.
+    enum pl_alpha_mode alpha_mode;
+};
+
+#define PL_DISTORT_DEFAULTS \
+    .transform.mat.m = {{ 1, 0 }, {0, 1}},
+
+#define pl_distort_params(...) (&(struct pl_distort_params) {PL_DISTORT_DEFAULTS __VA_ARGS__ })
+PL_API extern const struct pl_distort_params pl_distort_default_params;
+
+// Distorts the input image using a given set of transformation parameters.
+// `out_w` and `out_h` determine the size of the effective canvas inside which
+// the distorted result may be rendered. Areas outside of this canvas will
+// be implicitly cut off.
+PL_API void pl_shader_distort(pl_shader sh, pl_tex tex, int out_w, int out_h,
+                              const struct pl_distort_params *params);
 
 enum PL_DEPRECATED { // for `int pass`
     PL_SEP_VERT = 0,

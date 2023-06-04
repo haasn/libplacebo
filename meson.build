@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '280': 'add pl_distortion_params and pl_shader_distort',
       '279': 'add pl_matrix2x2_scale/invert and pl_transform2x2_scale/invert',
       '278': 'switch pl_vulkan.(un)lock_queue to uint32_t',
       '277': 'add pl_render_params.corner_rounding',
