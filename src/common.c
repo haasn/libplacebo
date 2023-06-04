@@ -244,6 +244,14 @@ const pl_matrix2x2 pl_matrix2x2_identity = {{
     { 0, 1 },
 }};
 
+pl_matrix2x2 pl_matrix2x2_rotation(float a)
+{
+    return (pl_matrix2x2) {{
+        { cosf(a), -sinf(a) },
+        { sinf(a),  cosf(a) },
+    }};
+}
+
 void pl_matrix2x2_apply(const pl_matrix2x2 *mat, float vec[2])
 {
     float x = vec[0], y = vec[1];

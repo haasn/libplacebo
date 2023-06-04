@@ -136,6 +136,7 @@ typedef struct pl_matrix2x2 {
 } pl_matrix2x2;
 
 PL_API extern const pl_matrix2x2 pl_matrix2x2_identity;
+PL_API pl_matrix2x2 pl_matrix2x2_rotation(float angle);
 
 PL_API void pl_matrix2x2_apply(const pl_matrix2x2 *mat, float vec[2]);
 PL_API void pl_matrix2x2_apply_rc(const pl_matrix2x2 *mat, pl_rect2df *rc);
