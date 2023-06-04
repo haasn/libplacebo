@@ -282,6 +282,26 @@ void pl_matrix2x2_rmul(const pl_matrix2x2 *a, pl_matrix2x2 *b)
     *b = m;
 }
 
+void pl_matrix2x2_scale(pl_matrix2x2 *mat, float scale)
+{
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++)
+            mat->m[i][j] *= scale;
+    }
+}
+
+void pl_matrix2x2_invert(pl_matrix2x2 *mat)
+{
+    float m00 = mat->m[0][0], m01 = mat->m[0][1],
+          m10 = mat->m[1][0], m11 = mat->m[1][1];
+    float invdet = 1.0f / (m11 * m00 - m10 * m01);
+
+    mat->m[0][0] =  m11 * invdet;
+    mat->m[0][1] = -m01 * invdet;
+    mat->m[1][0] = -m10 * invdet;
+    mat->m[1][1] =  m00 * invdet;
+}
+
 const pl_transform2x2 pl_transform2x2_identity = {
     .mat = {{
         { 1, 0 },
@@ -319,6 +339,25 @@ void pl_transform2x2_rmul(const pl_transform2x2 *a, pl_transform2x2 *b)
 {
     pl_transform2x2_apply(a, b->c);
     pl_matrix2x2_rmul(&a->mat, &b->mat);
+}
+
+void pl_transform2x2_scale(pl_transform2x2 *t, float scale)
+{
+    pl_matrix2x2_scale(&t->mat, scale);
+
+    for (int i = 0; i < 2; i++)
+        t->c[i] *= scale;
+}
+
+void pl_transform2x2_invert(pl_transform2x2 *t)
+{
+    pl_matrix2x2_invert(&t->mat);
+
+    float m00 = t->mat.m[0][0], m01 = t->mat.m[0][1],
+          m10 = t->mat.m[1][0], m11 = t->mat.m[1][1];
+    float c0 = t->c[0], c1 = t->c[1];
+    t->c[0] = -(m00 * c0 + m01 * c1);
+    t->c[1] = -(m10 * c0 + m11 * c1);
 }
 
 float pl_rect2df_aspect(const pl_rect2df *rc)

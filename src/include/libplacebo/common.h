@@ -143,6 +143,9 @@ PL_API void pl_matrix2x2_apply_rc(const pl_matrix2x2 *mat, pl_rect2df *rc);
 PL_API void pl_matrix2x2_mul(pl_matrix2x2 *a, const pl_matrix2x2 *b);
 PL_API void pl_matrix2x2_rmul(const pl_matrix2x2 *a, pl_matrix2x2 *b);
 
+PL_API void pl_matrix2x2_scale(pl_matrix2x2 *mat, float scale);
+PL_API void pl_matrix2x2_invert(pl_matrix2x2 *mat);
+
 typedef struct pl_transform2x2 {
     pl_matrix2x2 mat;
     float c[2];
@@ -155,6 +158,9 @@ PL_API void pl_transform2x2_apply_rc(const pl_transform2x2 *t, pl_rect2df *rc);
 
 PL_API void pl_transform2x2_mul(pl_transform2x2 *a, const pl_transform2x2 *b);
 PL_API void pl_transform2x2_rmul(const pl_transform2x2 *a, pl_transform2x2 *b);
+
+PL_API void pl_transform2x2_scale(pl_transform2x2 *t, float scale);
+PL_API void pl_transform2x2_invert(pl_transform2x2 *t);
 
 // Helper functions for dealing with aspect ratios and stretched/scaled rects.
 
