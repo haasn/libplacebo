@@ -229,6 +229,15 @@ struct pl_render_params {
     // source frames as interlaced in the first place.
     const struct pl_deinterlace_params *deinterlace_params;
 
+    // If set, applies an extra distortion matrix to the image, after
+    // scaling and before presenting it to the screen. Can be used for e.g.
+    // fractional rotation.
+    //
+    // Note: The distortion canvas will be set to the size of `target->crop`,
+    // so this cannot effectively draw outside the specified target area,
+    // nor change the aspect ratio of the image.
+    const struct pl_distort_params *distort_params;
+
     // List of custom user shaders / hooks.
     // See <libplacebo/shaders/custom.h> for more information.
     const struct pl_hook * const *hooks;

@@ -2186,6 +2186,21 @@ static bool pass_output_target(struct pass_state *pass)
         }
     }
 
+    if (params->distort_params) {
+        const struct pl_distort_params *dpars = params->distort_params;
+        if (dpars->alpha_mode) {
+            pl_shader_set_alpha(sh, &img->repr, dpars->alpha_mode);
+            img->repr.alpha = dpars->alpha_mode;
+            img->comps = 4;
+        }
+        pl_tex tex = img_tex(pass, img);
+        if (!tex)
+            return false;
+        img->tex = NULL;
+        img->sh = sh = pl_dispatch_begin(rr->dp);
+        pl_shader_distort(sh, tex, img->w, img->h, dpars);
+    }
+
     pass_hook(pass, img, PL_HOOK_PRE_OUTPUT);
 
     bool need_blend = params->blend_against_tiles ||
@@ -3005,6 +3020,7 @@ static struct params_info render_params_info(const struct pl_render_params *para
 
     // Clear out fields only relevant to pass_output_target
     CLEAR(params.blend_params);
+    CLEAR(params.distort_params);
     CLEAR(params.dither_params);
     CLEAR(params.error_diffusion);
     CLEAR(params.force_dither);

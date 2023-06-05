@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '283': 'add pl_render_params.distort_params',
       '282': 'add PL_HOOK_PRE_OUTPUT',
       '281': 'add pl_matrix2x2_rotation',
       '280': 'add pl_distortion_params and pl_shader_distort',
