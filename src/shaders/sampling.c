@@ -327,35 +327,35 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
     //   'Efficient GPU-Based Texture Interpolation using Uniform B-Splines'
 
     sh_describe(sh, "bicubic");
-    GLSL("// pl_shader_sample_bicubic                   \n"
-         "vec4 color;                                   \n"
-         "{                                             \n"
-         "vec2 pos  = "$";                              \n"
-         "vec2 pt   = "$";                              \n"
-         "vec2 size = vec2(textureSize("$", 0));        \n"
-         "vec2 frac  = fract(pos * size + vec2(0.5));   \n"
-         "vec2 frac2 = frac * frac;                     \n"
-         "vec2 inv   = vec2(1.0) - frac;                \n"
-         "vec2 inv2  = inv * inv;                       \n"
+    GLSL("// pl_shader_sample_bicubic                       \n"
+         "vec4 color;                                       \n"
+         "{                                                 \n"
+         "vec2 pos  = "$";                                  \n"
+         "vec2 pt   = "$";                                  \n"
+         "vec2 size = vec2(textureSize("$", 0));            \n"
+         "vec2 frac  = fract(pos * size + vec2(0.5));       \n"
+         "vec2 frac2 = frac * frac;                         \n"
+         "vec2 inv   = vec2(1.0) - frac;                    \n"
+         "vec2 inv2  = inv * inv;                           \n"
          // compute basis spline
-         "vec2 w0 = 1/6.0 * inv2 * inv;                 \n"
-         "vec2 w1 = 2/3.0 - 0.5 * frac2 * (2.0 - frac); \n"
-         "vec2 w2 = 2/3.0 - 0.5 * inv2  * (2.0 - inv);  \n"
-         "vec2 w3 = 1/6.0 * frac2 * frac;               \n"
-         "vec4 g = vec4(w0 + w1, w2 + w3);              \n"
-         "vec4 h = vec4(w1, w3) / g + inv.xyxy;         \n"
-         "h.xy -= vec2(2.0);                            \n"
+         "vec2 w0 = 1.0/6.0 * inv2 * inv;                   \n"
+         "vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac);   \n"
+         "vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);    \n"
+         "vec2 w3 = 1.0/6.0 * frac2 * frac;                 \n"
+         "vec4 g = vec4(w0 + w1, w2 + w3);                  \n"
+         "vec4 h = vec4(w1, w3) / g + inv.xyxy;             \n"
+         "h.xy -= vec2(2.0);                                \n"
          // sample four corner pixels
-         "vec4 p = pos.xyxy + pt.xyxy * h;              \n"
-         "vec4 c00 = textureLod("$", p.xy, 0.0);        \n"
-         "vec4 c10 = textureLod("$", p.zy, 0.0);        \n"
-         "vec4 c01 = textureLod("$", p.xw, 0.0);        \n"
-         "vec4 c11 = textureLod("$", p.zw, 0.0);        \n"
+         "vec4 p = pos.xyxy + pt.xyxy * h;                  \n"
+         "vec4 c00 = textureLod("$", p.xy, 0.0);            \n"
+         "vec4 c10 = textureLod("$", p.zy, 0.0);            \n"
+         "vec4 c01 = textureLod("$", p.xw, 0.0);            \n"
+         "vec4 c11 = textureLod("$", p.zw, 0.0);            \n"
          // manual interpolation (y first, then x)
-         "vec4 c0 = mix(c01, c00, g.y);                 \n"
-         "vec4 c1 = mix(c11, c10, g.y);                 \n"
-         "color = vec4("$") * mix(c1, c0, g.x);         \n"
-         "}                                             \n",
+         "vec4 c0 = mix(c01, c00, g.y);                     \n"
+         "vec4 c1 = mix(c11, c10, g.y);                     \n"
+         "color = vec4("$") * mix(c1, c0, g.x);             \n"
+         "}                                                 \n",
          pos, pt, tex, tex, tex, tex, tex, SH_FLOAT(scale));
 
     return true;
