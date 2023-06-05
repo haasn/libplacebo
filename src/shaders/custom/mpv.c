@@ -841,6 +841,8 @@ static enum pl_hook_stage mp_stage_to_pl(pl_str stage)
 
     if (pl_str_equals0(stage, "SCALED"))
         return PL_HOOK_SCALED;
+    if (pl_str_equals0(stage, "PREOUTPUT"))
+        return PL_HOOK_PRE_OUTPUT;
     if (pl_str_equals0(stage, "OUTPUT"))
         return PL_HOOK_OUTPUT;
 
@@ -868,6 +870,7 @@ static pl_str pl_stage_to_mp(enum pl_hook_stage stage)
     case PL_HOOK_POST_KERNEL:   return pl_str0("POSTKERNEL");
 
     case PL_HOOK_SCALED:        return pl_str0("SCALED");
+    case PL_HOOK_PRE_OUTPUT:    return pl_str0("PREOUTPUT");
     case PL_HOOK_OUTPUT:        return pl_str0("OUTPUT");
     };
 

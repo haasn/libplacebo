@@ -2186,6 +2186,8 @@ static bool pass_output_target(struct pass_state *pass)
         }
     }
 
+    pass_hook(pass, img, PL_HOOK_PRE_OUTPUT);
+
     bool need_blend = params->blend_against_tiles ||
                       (!target->repr.alpha && !params->blend_params);
     if (img->comps == 4 && need_blend) {

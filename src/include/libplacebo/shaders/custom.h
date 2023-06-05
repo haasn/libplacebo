@@ -124,7 +124,8 @@ enum pl_hook_stage {
     PL_HOOK_PRE_KERNEL      = 1 << 11, // Immediately before the main scaler kernel
     PL_HOOK_POST_KERNEL     = 1 << 12, // Immediately after the main scaler kernel
     PL_HOOK_SCALED          = 1 << 13, // After scaling, before color management
-    PL_HOOK_OUTPUT          = 1 << 14, // After color management, before dithering
+    PL_HOOK_PRE_OUTPUT      = 1 << 14, // After color management, before blending/rotation
+    PL_HOOK_OUTPUT          = 1 << 15, // After blending/rotation, before dithering
 };
 
 // Returns true if a given hook stage is resizable
@@ -146,6 +147,7 @@ static inline bool pl_hook_stage_resizable(enum pl_hook_stage stage) {
     case PL_HOOK_PRE_KERNEL:
     case PL_HOOK_POST_KERNEL:
     case PL_HOOK_SCALED:
+    case PL_HOOK_PRE_OUTPUT:
     case PL_HOOK_OUTPUT:
         return false;
     }

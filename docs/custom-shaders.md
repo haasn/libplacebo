@@ -103,7 +103,8 @@ Here is a current list of hook points:
 * `PREKERNEL`: Immediately before the execution of the main scaler kernel
 * `POSTKERNEL`: Immediately after the execution of the main scaler kernel
 * `SCALED`: After scaling, in either linear or non-linear light RGB
-* `OUTPUT`: After color conversion to the output display's native colorspace
+* `PREOUTPUT`: After color conversion to target colorspace, before alpha blending
+* `OUTPUT`: After alpha blending, before dithering and final output pass
 
 !!! warning "`MAINPRESUB`"
     In mpv, `MAIN` and `MAINPRESUB` are separate shader stages, because the
