@@ -5,6 +5,8 @@
 #include <libplacebo/utils/frame_queue.h>
 #include <libplacebo/utils/upload.h>
 
+//#define PRINT_OUTPUT
+
 static void pl_buffer_tests(pl_gpu gpu)
 {
     const size_t buf_size = 1024;
@@ -857,6 +859,7 @@ static void pl_scaler_tests(pl_gpu gpu)
             .ptr            = fbo_data,
         }));
 
+#ifdef PRINT_OUTPUT
         int max = 255;
         printf("P2\n%d %d\n%d\n", fbo->params.w, fbo->params.h, max);
         for (int y = 0; y < fbo->params.h; y++) {
@@ -866,6 +869,7 @@ static void pl_scaler_tests(pl_gpu gpu)
             }
             printf("\n");
         }
+#endif
     }
 
 error:
