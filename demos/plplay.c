@@ -75,6 +75,7 @@ struct plplay {
     struct pl_color_map_params color_map_params;
     struct pl_dither_params dither_params;
     struct pl_deinterlace_params deinterlace_params;
+    struct pl_distort_params distort_params;
     struct pl_icc_params icc_params;
     struct pl_cone_params cone_params;
     struct pl_icc_profile target_icc;
@@ -639,6 +640,7 @@ int main(int argc, char **argv)
         .icc_params = pl_icc_default_params,
         .cone_params = pl_vision_normal,
         .deinterlace_params = pl_deinterlace_default_params,
+        .distort_params = pl_distort_default_params,
         .target_override = true,
     };
 
@@ -1038,6 +1040,70 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             nk_property_float(nk, "Threshold", 0, &dpar->threshold, 256, 1, 0.5);
             nk_property_float(nk, "Radius", 0, &dpar->radius, 256, 1, 0.2);
             nk_property_float(nk, "Grain", 0, &dpar->grain, 512, 1, 0.5);
+            nk_tree_pop(nk);
+        }
+
+        if (nk_tree_push(nk, NK_TREE_NODE, "Distortion", NK_MINIMIZED)) {
+            struct pl_distort_params *dpar = &p->distort_params;
+            nk_layout_row_dynamic(nk, 24, 2);
+            par->distort_params = nk_check_label(nk, "Enable", par->distort_params) ? dpar : NULL;
+            if (nk_button_label(nk, "Reset settings"))
+                *dpar = pl_distort_default_params;
+
+            static const char *address_modes[PL_TEX_ADDRESS_MODE_COUNT] = {
+                [PL_TEX_ADDRESS_CLAMP]  = "Clamp edges",
+                [PL_TEX_ADDRESS_REPEAT] = "Repeat edges",
+                [PL_TEX_ADDRESS_MIRROR] = "Mirror edges",
+            };
+
+            nk_checkbox_label(nk, "Constrain bounds", &dpar->constrain);
+            dpar->address_mode = nk_combo(nk, address_modes, PL_TEX_ADDRESS_MODE_COUNT,
+                                          dpar->address_mode, 16, nk_vec2(nk_widget_width(nk), 100));
+            bool alpha = nk_check_label(nk, "Transparent background", dpar->alpha_mode);
+            dpar->alpha_mode = alpha ? PL_ALPHA_INDEPENDENT : PL_ALPHA_UNKNOWN;
+            nk_checkbox_label(nk, "Bicubic interpolation", &dpar->bicubic);
+
+            struct pl_transform2x2 *tf = &dpar->transform;
+            nk_property_float(nk, "Scale X", -10.0, &tf->mat.m[0][0], 10.0, 0.1, 0.005);
+            nk_property_float(nk, "Shear X", -10.0, &tf->mat.m[0][1], 10.0, 0.1, 0.005);
+            nk_property_float(nk, "Shear Y", -10.0, &tf->mat.m[1][0], 10.0, 0.1, 0.005);
+            nk_property_float(nk, "Scale Y", -10.0, &tf->mat.m[1][1], 10.0, 0.1, 0.005);
+            nk_property_float(nk, "Offset X", -10.0, &tf->c[0], 10.0, 0.1, 0.005);
+            nk_property_float(nk, "Offset Y", -10.0, &tf->c[1], 10.0, 0.1, 0.005);
+
+            float zoom_ref = fabsf(tf->mat.m[0][0] * tf->mat.m[1][1] -
+                                   tf->mat.m[0][1] * tf->mat.m[1][0]);
+            zoom_ref = logf(fmaxf(zoom_ref, 1e-4));
+            float zoom = zoom_ref;
+            nk_property_float(nk, "log(Zoom)", -10.0, &zoom, 10.0, 0.1, 0.005);
+            pl_transform2x2_scale(tf, expf(zoom - zoom_ref));
+
+            float angle_ref = (atan2f(tf->mat.m[1][0], tf->mat.m[1][1]) -
+                               atan2f(tf->mat.m[0][1], tf->mat.m[0][0])) / 2;
+            angle_ref = fmodf(angle_ref * 180/M_PI + 540, 360) - 180;
+            float angle = angle_ref;
+            nk_property_float(nk, "Rotate (°)", -200, &angle, 200, -5, -0.2);
+            float angle_delta = (angle - angle_ref) * M_PI / 180;
+            const pl_matrix2x2 rot = pl_matrix2x2_rotation(angle_delta);
+            pl_matrix2x2_rmul(&rot, &tf->mat);
+
+            bool flip_ox = nk_button_label(nk, "Flip output X");
+            bool flip_oy = nk_button_label(nk, "Flip output Y");
+            bool flip_ix = nk_button_label(nk, "Flip input X");
+            bool flip_iy = nk_button_label(nk, "Flip input Y");
+            if (flip_ox ^ flip_ix)
+                tf->mat.m[0][0] = -tf->mat.m[0][0];
+            if (flip_ox ^ flip_iy)
+                tf->mat.m[0][1] = -tf->mat.m[0][1];
+            if (flip_oy ^ flip_ix)
+                tf->mat.m[1][0] = -tf->mat.m[1][0];
+            if (flip_oy ^ flip_iy)
+                tf->mat.m[1][1] = -tf->mat.m[1][1];
+            if (flip_ox)
+                tf->c[0] = -tf->c[0];
+            if (flip_oy)
+                tf->c[1] = -tf->c[1];
+
             nk_tree_pop(nk);
         }
 
