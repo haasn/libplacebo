@@ -1120,6 +1120,9 @@ static void pl_render_tests(pl_gpu gpu)
     TEST_PARAMS(color_map, intent, PL_INTENT_ABSOLUTE_COLORIMETRIC);
     TEST_PARAMS(dither, method, PL_DITHER_WHITE_NOISE);
     TEST_PARAMS(dither, temporal, true);
+    TEST_PARAMS(distort, alpha_mode, PL_ALPHA_INDEPENDENT);
+    TEST_PARAMS(distort, constrain, true);
+    TEST_PARAMS(distort, bicubic, true);
     TEST(cone_params, pl_cone_params, pl_vision_deuteranomaly, strength, 0);
 
     // Test gamma-correct dithering
