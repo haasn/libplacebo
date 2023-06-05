@@ -1023,33 +1023,31 @@ static void render_info_cb(void *priv, const struct pl_render_info *info)
 
 static void pl_render_tests(pl_gpu gpu)
 {
-    pl_tex img5x5_tex = NULL, fbo = NULL;
+    pl_tex img_tex = NULL, fbo = NULL;
     pl_renderer rr = NULL;
 
-    static float data_5x5[5][5] = {
-        { 0.0, 0.0, 0.0, 0.0, 0.0 },
-        { 0.0, 0.0, 0.0, 0.0, 0.0 },
-        { 1.0, 0.0, 0.5, 0.0, 0.0 },
-        { 0.0, 0.0, 0.0, 1.0, 0.0 },
-        { 0.0, 0.3, 0.0, 0.0, 0.0 },
-    };
+    enum { width = 50, height = 50 };
+    static float data[width][height];
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++)
+            data[y][x] = RANDOM;
+    }
 
-    const int width = 5, height = 5;
-    struct pl_plane img5x5 = {0};
-    struct pl_plane_data img5x5_data = {
+    struct pl_plane img_plane = {0};
+    struct pl_plane_data plane_data = {
         .type = PL_FMT_FLOAT,
         .width = width,
         .height = height,
         .component_size = { 8 * sizeof(float) },
         .component_map  = { 0 },
         .pixel_stride = sizeof(float),
-        .pixels = &data_5x5,
+        .pixels = data,
     };
 
-    if (!pl_recreate_plane(gpu, NULL, &fbo, &img5x5_data))
+    if (!pl_recreate_plane(gpu, NULL, &fbo, &plane_data))
         return;
 
-    if (!pl_upload_plane(gpu, &img5x5, &img5x5_tex, &img5x5_data))
+    if (!pl_upload_plane(gpu, &img_plane, &img_tex, &plane_data))
         goto error;
 
     rr = pl_renderer_create(gpu->log, gpu);
@@ -1057,13 +1055,12 @@ static void pl_render_tests(pl_gpu gpu)
 
     struct pl_frame image = {
         .num_planes     = 1,
-        .planes         = { img5x5 },
+        .planes         = { img_plane },
         .repr = {
             .sys        = PL_COLOR_SYSTEM_BT_709,
             .levels     = PL_COLOR_LEVELS_FULL,
         },
         .color          = pl_color_space_srgb,
-        .crop           = {-1.0, 0.0, width - 1.0, height},
     };
 
     struct pl_frame target = {
@@ -1073,7 +1070,6 @@ static void pl_render_tests(pl_gpu gpu)
             .components         = 3,
             .component_mapping  = {0, 1, 2},
         }},
-        .crop           = {2, 2, fbo->params.w - 2, fbo->params.h - 2},
         .repr = {
             .sys        = PL_COLOR_SYSTEM_RGB,
             .levels     = PL_COLOR_LEVELS_FULL,
@@ -1106,6 +1102,8 @@ static void pl_render_tests(pl_gpu gpu)
 #define TEST_PARAMS(NAME, FIELD, LIMIT) \
     TEST(NAME##_params, pl_##NAME##_params, pl_##NAME##_default_params, FIELD, LIMIT)
 
+    image.crop.x1 = width / 2.0;
+    image.crop.y1 = height / 2.0;
     for (int i = 0; i < pl_num_scale_filters; i++) {
         struct pl_render_params params = pl_render_default_params;
         params.upscaler = pl_scale_filters[i].filter;
@@ -1114,6 +1112,19 @@ static void pl_render_tests(pl_gpu gpu)
         pl_gpu_flush(gpu);
         REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
     }
+    image.crop.x1 = image.crop.y1 = 0;
+
+    target.crop.x1 = width / 2.0;
+    target.crop.y1 = height / 2.0;
+    for (int i = 0; i < pl_num_scale_filters; i++) {
+        struct pl_render_params params = pl_render_default_params;
+        params.downscaler = pl_scale_filters[i].filter;
+        printf("testing `params.downscaler = /* %s */`\n", pl_scale_filters[i].name);
+        REQUIRE(pl_render_image(rr, &image, &target, &params));
+        pl_gpu_flush(gpu);
+        REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
+    }
+    target.crop.x1 = target.crop.y1 = 0;
 
     TEST_PARAMS(deband, iterations, 3);
     TEST_PARAMS(sigmoid, center, 1);
@@ -1263,7 +1274,7 @@ static void pl_render_tests(pl_gpu gpu)
     // Test overlays
     image.num_overlays = 1;
     image.overlays = &(struct pl_overlay) {
-        .tex = img5x5.texture,
+        .tex = img_plane.texture,
         .mode = PL_OVERLAY_NORMAL,
         .num_parts = 2,
         .parts = (struct pl_overlay_part[]) {{
@@ -1284,7 +1295,7 @@ static void pl_render_tests(pl_gpu gpu)
 
     target.num_overlays = 1;
     target.overlays = &(struct pl_overlay) {
-        .tex = img5x5.texture,
+        .tex = img_plane.texture,
         .mode = PL_OVERLAY_MONOCHROME,
         .num_parts = 1,
         .parts = &(struct pl_overlay_part) {
@@ -1415,7 +1426,7 @@ static void pl_render_tests(pl_gpu gpu)
 
 error:
     pl_renderer_destroy(&rr);
-    pl_tex_destroy(gpu, &img5x5_tex);
+    pl_tex_destroy(gpu, &img_tex);
     pl_tex_destroy(gpu, &fbo);
 }
 
