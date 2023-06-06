@@ -301,21 +301,49 @@ struct pl_color_map_params {
 #define pl_color_map_params(...) (&(struct pl_color_map_params) { PL_COLOR_MAP_DEFAULTS __VA_ARGS__ })
 PL_API extern const struct pl_color_map_params pl_color_map_default_params;
 
+// Execution arguments for the `pl_shader_color_map_ex` call. Distinct from
+// `pl_color_map_params` because it is filled by internally-provided execution
+// metadata, instead of user-tunable aesthetic parameters.
+struct pl_color_map_args {
+    // Input/output color space for the mapping.
+    struct pl_color_space src;
+    struct pl_color_space dst;
+
+    // If true, the logic will assume the input has already been linearized by
+    // the caller (e.g. as part of a previous linear light scaling operation).
+    bool prelinearized;
+
+    // Object to be used to store generated LUTs. Note that this is the same
+    // state object used by `pl_shader_detect_peak`, and if that function has
+    // been called on `state` prior to `pl_shader_color_map`, the detected
+    // values will be used to guide the tone mapping algorithm. If this is not
+    // provided, tone/gamut mapping are disabled.
+    pl_shader_obj *state;
+};
+
+#define pl_color_map_args(...) (&(struct pl_color_map_args) { __VA_ARGS__ })
+
 // Maps `vec4 color` from one color space to another color space according
 // to the parameters (described in greater depth above). If `params` is left
-// as NULL, it defaults to `&pl_color_map_default_params`. If `prelinearized`
-// is true, the logic will assume the input has already been linearized by the
-// caller (e.g. as part of a previous linear light scaling operation).
-//
-// `state` will be used to store generated LUTs. Note that this is the same
-// state object used by `pl_shader_detect_peak`, and if that function has been
-// called on `state` prior to `pl_shader_color_map`, the detected values will
-// be used to guide the tone mapping algorithm. If this is not provided,
-// tone/gamut mapping are disabled.
-PL_API void pl_shader_color_map(pl_shader sh,
-                                const struct pl_color_map_params *params,
-                                struct pl_color_space src, struct pl_color_space dst,
-                                pl_shader_obj *state, bool prelinearized);
+// as NULL, it defaults to `&pl_color_map_default_params`
+PL_API void pl_shader_color_map_ex(pl_shader sh,
+                                   const struct pl_color_map_params *params,
+                                   const struct pl_color_map_args *args);
+
+// Backwards compatibility wrapper around `pl_shader_color_map_ex`
+static inline void
+pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
+                    struct pl_color_space src, struct pl_color_space dst,
+                    pl_shader_obj *state, bool prelinearized)
+{
+    struct pl_color_map_args args = {
+        .src           = src,
+        .dst           = dst,
+        .prelinearized = prelinearized,
+        .state         = state,
+    };
+    pl_shader_color_map_ex(sh, params, &args);
+}
 
 // Applies a set of cone distortion parameters to `vec4 color` in a given color
 // space. This can be used to simulate color blindness. See `pl_cone_params`

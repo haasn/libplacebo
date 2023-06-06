@@ -1536,24 +1536,24 @@ static void fill_gamut_lut(void *data, const struct sh_lut_params *params)
     pl_gamut_map_generate(data, lut_params);
 }
 
-void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
-                         struct pl_color_space src, struct pl_color_space dst,
-                         pl_shader_obj *state, bool prelinearized)
+void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *params,
+                            const struct pl_color_map_args *args)
 {
     if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
         return;
 
+    struct pl_color_space src = args->src, dst = args->dst;
     pl_color_space_infer_map(&src, &dst);
     if (pl_color_space_equal(&src, &dst)) {
-        if (prelinearized)
+        if (args->prelinearized)
             pl_shader_delinearize(sh, &dst);
         return;
     }
 
     struct sh_color_map_obj *obj = NULL;
-    if (state) {
-        pl_get_detected_hdr_metadata(*state, &src.hdr);
-        obj = SH_OBJ(sh, state, PL_SHADER_OBJ_COLOR_MAP, struct sh_color_map_obj,
+    if (args->state) {
+        pl_get_detected_hdr_metadata(*args->state, &src.hdr);
+        obj = SH_OBJ(sh, args->state, PL_SHADER_OBJ_COLOR_MAP, struct sh_color_map_obj,
                      sh_color_map_uninit);
         if (!obj)
             return;
@@ -1681,7 +1681,7 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
         pl_unreachable();
     }
 
-    if (!state) {
+    if (!args->state) {
         // No state object provided, forcibly disable advanced methods
         tone.function = &pl_tone_map_clip;
         gamut.function = &pl_gamut_map_clip;
@@ -1690,7 +1690,7 @@ void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
     bool need_tone_map = !pl_tone_map_params_noop(&tone);
     bool need_gamut_map = !pl_gamut_map_params_noop(&gamut);
 
-    if (!prelinearized)
+    if (!args->prelinearized)
         pl_shader_linearize(sh, &src);
 
     pl_matrix3x3 rgb2lms = pl_ipt_rgb2lms(pl_raw_primaries_get(src.primaries));
