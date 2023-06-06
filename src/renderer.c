@@ -930,7 +930,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
 
         sh->output = PL_SHADER_SIG_COLOR;
         pl_shader_decode_color(sh, &ol.repr, NULL);
-        pl_shader_color_map(sh, NULL, ol.color, color, NULL, false);
+        pl_shader_color_map_ex(sh, NULL, pl_color_map_args(ol.color, color));
 
         bool premul = repr.alpha == PL_ALPHA_PREMULTIPLIED;
         pl_shader_encode_color(sh, &repr);
@@ -2027,8 +2027,11 @@ static void pass_convert_colors(struct pass_state *pass)
             break;
         }
 
-        pl_shader_color_map(sh, params->color_map_params, image->color, lut_in,
-                            NULL, prelinearized);
+        pl_shader_color_map_ex(sh, params->color_map_params, pl_color_map_args(
+            .src = image->color,
+            .dst = lut_in,
+            .prelinearized = prelinearized,
+        ));
 
         if (params->lut_type == PL_LUT_NORMALIZED) {
             GLSLF("color.rgb *= vec3(1.0/"$"); \n",
@@ -2043,8 +2046,10 @@ static void pass_convert_colors(struct pass_state *pass)
         }
 
         if (params->lut_type != PL_LUT_CONVERSION) {
-            pl_shader_color_map(sh, params->color_map_params, lut_out, img->color,
-                                NULL, false);
+            pl_shader_color_map_ex(sh, params->color_map_params, pl_color_map_args(
+                .src = lut_out,
+                .dst = img->color,
+            ));
         }
     }
 
@@ -2054,8 +2059,12 @@ static void pass_convert_colors(struct pass_state *pass)
             target_csp.transfer = PL_COLOR_TRC_LINEAR;
 
         // current -> target
-        pl_shader_color_map(sh, params->color_map_params, image->color,
-                            target_csp, &rr->tone_map_state, prelinearized);
+        pl_shader_color_map_ex(sh, params->color_map_params, pl_color_map_args(
+            .src           = image->color,
+            .dst           = target_csp,
+            .prelinearized = prelinearized,
+            .state         = &rr->tone_map_state,
+        ));
 
         if (pass->dst_icc)
             pl_icc_encode(sh, pass->dst_icc->obj, &pass->dst_icc->lut);
@@ -3386,7 +3395,7 @@ inter_pass_error:
         struct pl_color_space frame_csp = frames[i].color;
         struct pl_color_space mix_csp = target->color;
         frame_csp.hdr = mix_csp.hdr = (struct pl_hdr_metadata) {0};
-        pl_shader_color_map(sh, NULL, frame_csp, mix_csp, NULL, false);
+        pl_shader_color_map_ex(sh, NULL, pl_color_map_args(frame_csp, mix_csp));
 
         float weight = weights[i] / wsum;
         GLSL("mix_color += vec4("$") * color; \n", SH_FLOAT_DYN(weight));

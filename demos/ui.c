@@ -174,7 +174,10 @@ bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame)
         });
 
         struct pl_color_repr repr = frame->color_repr;
-        pl_shader_color_map(sh, NULL, pl_color_space_srgb, frame->color_space, NULL, false);
+        pl_shader_color_map_ex(sh, NULL, pl_color_map_args(
+            .src = pl_color_space_srgb,
+            .dst = frame->color_space,
+        ));
         pl_shader_encode_color(sh, &repr);
 
         bool ok = pl_dispatch_vertex(ui->dp, pl_dispatch_vertex_params(

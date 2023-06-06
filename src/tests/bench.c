@@ -253,8 +253,11 @@ static void bench_hdr_lut(pl_shader sh, pl_shader_obj *state, pl_tex src)
     };
 
     REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
-    pl_shader_color_map(sh, &params, pl_color_space_hdr10,
-                        pl_color_space_monitor, state, false);
+    pl_shader_color_map_ex(sh, &params, pl_color_map_args(
+        .src = pl_color_space_hdr10,
+        .dst = pl_color_space_monitor,
+        .state = state,
+    ));
 }
 
 static void bench_hdr_clip(pl_shader sh, pl_shader_obj *state, pl_tex src)
@@ -266,8 +269,11 @@ static void bench_hdr_clip(pl_shader sh, pl_shader_obj *state, pl_tex src)
     };
 
     REQUIRE(pl_shader_sample_direct(sh, pl_sample_src( .tex = src )));
-    pl_shader_color_map(sh, &params, pl_color_space_hdr10,
-                        pl_color_space_monitor, state, false);
+    pl_shader_color_map_ex(sh, &params, pl_color_map_args(
+        .src = pl_color_space_hdr10,
+        .dst = pl_color_space_monitor,
+        .state = state,
+    ));
 }
 
 static void bench_weave(pl_shader sh, pl_shader_obj *state, pl_tex src)
