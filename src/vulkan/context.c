@@ -1323,7 +1323,7 @@ static bool device_init(struct vk_ctx *vk, const struct pl_vulkan_params *params
 
         int qnum = qfs[i].queueCount;
         if (qmax < qnum) {
-            PL_DEBUG(vk, "Restricing QF %d from %d queues to %d", i, qnum, qmax);
+            PL_DEBUG(vk, "Restricting QF %d from %d queues to %d", i, qnum, qmax);
             qnum = qmax;
         }
 
