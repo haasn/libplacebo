@@ -1353,6 +1353,29 @@ void pl_reset_detected_peak(pl_shader_obj state)
     memset(&obj->peak, 0, sizeof(obj->peak));
 }
 
+void pl_shader_extract_features(pl_shader sh, struct pl_color_space csp)
+{
+    if (!sh_require(sh, PL_SHADER_SIG_COLOR, 0, 0))
+        return;
+
+    sh_describe(sh, "feature extraction");
+    pl_shader_linearize(sh, &csp);
+    GLSL("// pl_shader_extract_features             \n"
+         "{                                         \n"
+         "vec3 lms = %f * "$" * color.rgb;          \n"
+         "lms = pow(max(lms, 0.0), vec3(%f));       \n"
+         "lms = (vec3(%f) + %f * lms)               \n"
+         "        / (vec3(1.0) + %f * lms);         \n"
+         "lms = pow(lms, vec3(%f));                 \n"
+         "float I = dot(vec3(%f, %f, %f), lms);     \n"
+         "color = vec4(I, 0.0, 0.0, 1.0);           \n"
+         "}                                         \n",
+         PL_COLOR_SDR_WHITE / 10000,
+         SH_MAT3(pl_ipt_rgb2lms(pl_raw_primaries_get(csp.primaries))),
+         PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
+         pl_ipt_lms2ipt.m[0][0], pl_ipt_lms2ipt.m[0][1], pl_ipt_lms2ipt.m[0][2]);
+}
+
 const struct pl_color_map_params pl_color_map_default_params = { PL_COLOR_MAP_DEFAULTS };
 
 static ident_t rect_pos(pl_shader sh, pl_rect2df rc)
@@ -1795,10 +1818,53 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
 
         }
 
-        // Tone-map on the intensity channel for brightness, and then
-        // component-wise on the LMS channels, mixing the resulting PT vector
-        // back into the IPT color to get some subjective desaturation
-        GLSL( "ipt.x = tone_map(ipt.x); \n");
+        bool need_recovery = tone.input_max >= tone.output_max;
+        if (need_recovery && params->contrast_recovery && args->feature_map) {
+            ident_t pos, pt;
+            ident_t lowres = sh_bind(sh, args->feature_map, PL_TEX_ADDRESS_CLAMP,
+                                     PL_TEX_SAMPLE_LINEAR, "feature_map",
+                                     NULL, &pos, &pt);
+
+            // Obtain HF detail map from bicubic interpolation of LF features
+            GLSL("vec2 lpos  = "$";                                 \n"
+                 "vec2 lpt   = "$";                                 \n"
+                 "vec2 lsize = vec2(textureSize("$", 0));           \n"
+                 "vec2 frac  = fract(lpos * lsize + vec2(0.5));     \n"
+                 "vec2 frac2 = frac * frac;                         \n"
+                 "vec2 inv   = vec2(1.0) - frac;                    \n"
+                 "vec2 inv2  = inv * inv;                           \n"
+                 "vec2 w0 = 1.0/6.0 * inv2 * inv;                   \n"
+                 "vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac);   \n"
+                 "vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);    \n"
+                 "vec2 w3 = 1.0/6.0 * frac2 * frac;                 \n"
+                 "vec4 g = vec4(w0 + w1, w2 + w3);                  \n"
+                 "vec4 h = vec4(w1, w3) / g + inv.xyxy;             \n"
+                 "h.xy -= vec2(2.0);                                \n"
+                 "vec4 p = lpos.xyxy + lpt.xyxy * h;                \n"
+                 "float l00 = textureLod("$", p.xy, 0.0).r;         \n"
+                 "float l10 = textureLod("$", p.zy, 0.0).r;         \n"
+                 "float l01 = textureLod("$", p.xw, 0.0).r;         \n"
+                 "float l11 = textureLod("$", p.zw, 0.0).r;         \n"
+                 "float l0 = mix(l01, l00, g.y);                    \n"
+                 "float l1 = mix(l11, l10, g.y);                    \n"
+                 "float luma = mix(l1, l0, g.x);                    \n"
+                 // Mix low-resolution tone mapped image with high-resolution
+                 // tone mapped image according to desired strength.
+                 "float highres = clamp(ipt.x, 0.0, 1.0);           \n"
+                 "float lowres = clamp(luma, 0.0, 1.0);             \n"
+                 "float detail = highres - lowres;                  \n"
+                 "float base = tone_map(highres);                   \n"
+                 "float sharp = tone_map(lowres) + detail;          \n"
+                 "ipt.x = mix(base, sharp, "$");                    \n",
+                 pos, pt, lowres,
+                 lowres, lowres, lowres, lowres,
+                 SH_FLOAT(params->contrast_recovery));
+
+        } else {
+
+            GLSL("ipt.x = tone_map(ipt.x); \n");
+        }
+
         if (hybrid_mix > 0) {
             GLSL("vec3 lmsclip = lmspq;                     \n"
                  "lmsclip.x = tone_map(lmsclip.x);          \n"
