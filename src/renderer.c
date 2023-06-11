@@ -71,7 +71,6 @@ struct pl_renderer_t {
     pl_shader_obj grain_state[4];
     pl_shader_obj lut_state[3];
     PL_ARRAY(pl_tex) fbos;
-    // Remember to update `is_plane_sampler` when adding anything new
     struct sampler sampler_main;
     struct sampler samplers_src[4];
     struct sampler samplers_dst[4];
@@ -129,11 +128,6 @@ static void sampler_destroy(pl_renderer rr, struct sampler *sampler)
 {
     pl_shader_obj_destroy(&sampler->upscaler_state);
     pl_shader_obj_destroy(&sampler->downscaler_state);
-}
-
-static bool is_plane_sampler(pl_renderer rr, struct sampler *sampler)
-{
-    return sampler != &rr->sampler_main;
 }
 
 void pl_renderer_destroy(pl_renderer *p_rr)
@@ -581,8 +575,14 @@ enum sampler_dir {
     SAMPLER_DOWN, // downscaling
 };
 
+enum sampler_usage {
+    SAMPLER_MAIN,
+    SAMPLER_PLANE,
+};
+
 struct sampler_info {
     const struct pl_filter_config *config; // if applicable
+    enum sampler_usage usage;
     enum sampler_type type;
     enum sampler_dir dir;
     enum sampler_dir dir_sep[2];
@@ -590,10 +590,10 @@ struct sampler_info {
 
 static struct sampler_info sample_src_info(struct pass_state *pass,
                                            const struct pl_sample_src *src,
-                                           bool plane_sampling)
+                                           enum sampler_usage usage)
 {
     const struct pl_render_params *params = pass->params;
-    struct sampler_info info = {0};
+    struct sampler_info info = { .usage = usage };
     pl_renderer rr = pass->rr;
 
     float rx = src->new_w / fabsf(pl_rect_w(src->rect));
@@ -614,14 +614,18 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
     info.dir = PL_MAX(info.dir_sep[0], info.dir_sep[1]);
     switch (info.dir) {
     case SAMPLER_DOWN:
-        info.config = params->downscaler;
-        if (plane_sampling && params->plane_downscaler)
+        if (usage == SAMPLER_PLANE && params->plane_downscaler) {
             info.config = params->plane_downscaler;
+        } else {
+            info.config = params->downscaler;
+        }
         break;
     case SAMPLER_UP:
-        info.config = params->upscaler;
-        if (plane_sampling && params->plane_upscaler)
+        if (usage == SAMPLER_PLANE && params->plane_upscaler) {
             info.config = params->plane_upscaler;
+        } else {
+            info.config = params->upscaler;
+        }
         break;
     case SAMPLER_NOOP:
         info.type = SAMPLER_NEAREST;
@@ -656,16 +660,15 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
 }
 
 static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
-                             struct sampler *sampler, pl_tex target_tex,
-                             const struct pl_sample_src *src)
+                             struct sampler *sampler, enum sampler_usage usage,
+                             pl_tex target_tex, const struct pl_sample_src *src)
 {
     const struct pl_render_params *params = pass->params;
     if (!sampler)
         goto fallback;
 
     pl_renderer rr = pass->rr;
-    bool plane_sampling = is_plane_sampler(rr, sampler);
-    struct sampler_info info = sample_src_info(pass, src, plane_sampling);
+    struct sampler_info info = sample_src_info(pass, src, usage);
     pl_shader_obj *lut = NULL;
     switch (info.dir) {
     case SAMPLER_NOOP:
@@ -1443,7 +1446,7 @@ static bool want_merge(struct pass_state *pass,
         },
     };
 
-    struct sampler_info info = sample_src_info(pass, &src, true);
+    struct sampler_info info = sample_src_info(pass, &src, SAMPLER_PLANE);
     if (info.type == SAMPLER_COMPLEX)
         return true;
 
@@ -1737,7 +1740,8 @@ static bool pass_read_image(struct pass_state *pass)
         } else {
             src.tex = img_tex(pass, &st->img);
             psh = pl_dispatch_begin_ex(rr->dp, true);
-            dispatch_sampler(pass, psh, &rr->samplers_src[i], NULL, &src);
+            dispatch_sampler(pass, psh, &rr->samplers_src[i], SAMPLER_PLANE,
+                             NULL, &src);
         }
 
         ident_t sub = sh_subpass(sh, psh);
@@ -1874,7 +1878,7 @@ static bool pass_scale_main(struct pass_state *pass)
     if (img->sh && pl_shader_output_size(img->sh, &out_w, &out_h))
         need_fbo |= out_w != src.new_w || out_h != src.new_h;
 
-    struct sampler_info info = sample_src_info(pass, &src, false);
+    struct sampler_info info = sample_src_info(pass, &src, SAMPLER_MAIN);
     bool use_sigmoid = info.dir == SAMPLER_UP && params->sigmoid_params;
     bool use_linear  = info.dir == SAMPLER_DOWN;
 
@@ -1940,7 +1944,7 @@ static bool pass_scale_main(struct pass_state *pass)
         return false;
 
     pl_shader sh = pl_dispatch_begin_ex(rr->dp, true);
-    dispatch_sampler(pass, sh, &rr->sampler_main, NULL, &src);
+    dispatch_sampler(pass, sh, &rr->sampler_main, SAMPLER_MAIN, NULL, &src);
     *img = (struct img) {
         .sh     = sh,
         .w      = src.new_w,
@@ -2338,7 +2342,8 @@ static bool pass_output_target(struct pass_state *pass)
             }
 
             sh = pl_dispatch_begin(rr->dp);
-            dispatch_sampler(pass, sh, &rr->samplers_dst[p], plane->texture, &src);
+            dispatch_sampler(pass, sh, &rr->samplers_dst[p], SAMPLER_PLANE,
+                             plane->texture, &src);
 
         } else {
 
