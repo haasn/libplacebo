@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '286': 'add PL_RENDER_ERR_CONTRAST_RECOVERY',
       '285': 'add pl_color_map_params.contrast_recovery/smoothness, ' +
              'pl_color_map_args.feature_map and pl_shader_extract_features',
       '284': 'add pl_color_map_args and pl_shader_color_map_ex',

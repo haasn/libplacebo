@@ -72,6 +72,7 @@ struct pl_renderer_t {
     pl_shader_obj lut_state[3];
     PL_ARRAY(pl_tex) fbos;
     struct sampler sampler_main;
+    struct sampler sampler_contrast;
     struct sampler samplers_src[4];
     struct sampler samplers_dst[4];
     struct icc_state icc[2];
@@ -154,6 +155,7 @@ void pl_renderer_destroy(pl_renderer *p_rr)
 
     // Free all samplers
     sampler_destroy(rr, &rr->sampler_main);
+    sampler_destroy(rr, &rr->sampler_contrast);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->samplers_src); i++)
         sampler_destroy(rr, &rr->samplers_src[i]);
     for (int i = 0; i < PL_ARRAY_SIZE(rr->samplers_dst); i++)
@@ -578,6 +580,7 @@ enum sampler_dir {
 enum sampler_usage {
     SAMPLER_MAIN,
     SAMPLER_PLANE,
+    SAMPLER_CONTRAST,
 };
 
 struct sampler_info {
@@ -614,7 +617,9 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
     info.dir = PL_MAX(info.dir_sep[0], info.dir_sep[1]);
     switch (info.dir) {
     case SAMPLER_DOWN:
-        if (usage == SAMPLER_PLANE && params->plane_downscaler) {
+        if (usage == SAMPLER_CONTRAST) {
+            info.config = &pl_filter_bicubic;
+        } else if (usage == SAMPLER_PLANE && params->plane_downscaler) {
             info.config = params->plane_downscaler;
         } else {
             info.config = params->downscaler;
@@ -624,6 +629,7 @@ static struct sampler_info sample_src_info(struct pass_state *pass,
         if (usage == SAMPLER_PLANE && params->plane_upscaler) {
             info.config = params->plane_upscaler;
         } else {
+            pl_assert(usage != SAMPLER_CONTRAST);
             info.config = params->upscaler;
         }
         break;
@@ -1964,6 +1970,73 @@ static bool pass_scale_main(struct pass_state *pass)
     return true;
 }
 
+static pl_tex get_feature_map(struct pass_state *pass)
+{
+    const struct pl_render_params *params = pass->params;
+    pl_renderer rr = pass->rr;
+    const struct pl_color_map_params *cparams = params->color_map_params;
+    cparams = PL_DEF(cparams, &pl_color_map_default_params);
+    if (!cparams->contrast_recovery || cparams->contrast_smoothness <= 1)
+        return NULL;
+    if (!pl_color_space_is_hdr(&pass->img.color))
+        return NULL;
+    if (!pass->fbofmt[4] || !params->downscaler || params->skip_anti_aliasing)
+        return NULL;
+    if (rr->errors & (PL_RENDER_ERR_SAMPLING | PL_RENDER_ERR_CONTRAST_RECOVERY))
+        return NULL;
+    if (pass->img.color.hdr.max_luma <= pass->target.color.hdr.max_luma + 1e-6)
+        return NULL; // no adaptation needed
+    if (params->lut && params->lut_type == PL_LUT_CONVERSION)
+        return NULL; // LUT handles tone mapping
+
+    struct img *img = &pass->img;
+    if (!img_tex(pass, img))
+        return NULL;
+
+    const float ratio = cparams->contrast_smoothness;
+    const int cr_w = ceilf(abs(pl_rect_w(pass->dst_rect)) / ratio);
+    const int cr_h = ceilf(abs(pl_rect_h(pass->dst_rect)) / ratio);
+    pl_tex inter_tex = get_fbo(pass, img->w, img->h, NULL, 1, PL_DEBUG_TAG);
+    pl_tex out_tex   = get_fbo(pass, cr_w, cr_h, NULL, 1, PL_DEBUG_TAG);
+    if (!inter_tex || !out_tex)
+        goto error;
+
+    pl_shader sh = pl_dispatch_begin(rr->dp);
+    pl_shader_sample_direct(sh, pl_sample_src( .tex = img->tex ));
+    pl_shader_extract_features(sh, img->color);
+    bool ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
+        .shader = &sh,
+        .target = inter_tex,
+    ));
+    if (!ok)
+        goto error;
+
+    const struct pl_sample_src src = {
+        .tex          = inter_tex,
+        .rect         = img->rect,
+        .address_mode = PL_TEX_ADDRESS_MIRROR,
+        .components   = 1,
+        .new_w        = cr_w,
+        .new_h        = cr_h,
+    };
+
+    sh = pl_dispatch_begin(rr->dp);
+    dispatch_sampler(pass, sh, &rr->sampler_contrast, SAMPLER_CONTRAST, out_tex, &src);
+    ok = pl_dispatch_finish(rr->dp, pl_dispatch_params(
+        .shader = &sh,
+        .target = out_tex,
+    ));
+    if (!ok)
+        goto error;
+
+    return out_tex;
+
+error:
+    PL_ERR(rr, "Failed extracting luma for contrast recovery, disabling");
+    rr->errors |= PL_RENDER_ERR_CONTRAST_RECOVERY;
+    return NULL;
+}
+
 // Transforms image into the output color space (tone-mapping, ICC 3DLUT, etc)
 static void pass_convert_colors(struct pass_state *pass)
 {
@@ -2062,12 +2135,17 @@ static void pass_convert_colors(struct pass_state *pass)
         if (pass->dst_icc)
             target_csp.transfer = PL_COLOR_TRC_LINEAR;
 
+        // generate HDR feature map if required
+        pl_tex feature_map = get_feature_map(pass);
+        sh = img_sh(pass, img); // `get_feature_map` dispatches previous shader
+
         // current -> target
         pl_shader_color_map_ex(sh, params->color_map_params, pl_color_map_args(
             .src           = image->color,
             .dst           = target_csp,
             .prelinearized = prelinearized,
             .state         = &rr->tone_map_state,
+            .feature_map   = feature_map,
         ));
 
         if (pass->dst_icc)

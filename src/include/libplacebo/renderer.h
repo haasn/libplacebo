@@ -39,18 +39,19 @@ typedef struct pl_renderer_t *pl_renderer;
 
 // Enum values used in pl_renderer_errors_t as a bit positions for error flags
 enum pl_render_error {
-    PL_RENDER_ERR_NONE            = 0,
-    PL_RENDER_ERR_FBO             = 1 << 0,
-    PL_RENDER_ERR_SAMPLING        = 1 << 1,
-    PL_RENDER_ERR_DEBANDING       = 1 << 2,
-    PL_RENDER_ERR_BLENDING        = 1 << 3,
-    PL_RENDER_ERR_OVERLAY         = 1 << 4,
-    PL_RENDER_ERR_PEAK_DETECT     = 1 << 5,
-    PL_RENDER_ERR_FILM_GRAIN      = 1 << 6,
-    PL_RENDER_ERR_FRAME_MIXING    = 1 << 7,
-    PL_RENDER_ERR_DEINTERLACING   = 1 << 8,
-    PL_RENDER_ERR_ERROR_DIFFUSION = 1 << 9,
-    PL_RENDER_ERR_HOOKS           = 1 << 10,
+    PL_RENDER_ERR_NONE              = 0,
+    PL_RENDER_ERR_FBO               = 1 << 0,
+    PL_RENDER_ERR_SAMPLING          = 1 << 1,
+    PL_RENDER_ERR_DEBANDING         = 1 << 2,
+    PL_RENDER_ERR_BLENDING          = 1 << 3,
+    PL_RENDER_ERR_OVERLAY           = 1 << 4,
+    PL_RENDER_ERR_PEAK_DETECT       = 1 << 5,
+    PL_RENDER_ERR_FILM_GRAIN        = 1 << 6,
+    PL_RENDER_ERR_FRAME_MIXING      = 1 << 7,
+    PL_RENDER_ERR_DEINTERLACING     = 1 << 8,
+    PL_RENDER_ERR_ERROR_DIFFUSION   = 1 << 9,
+    PL_RENDER_ERR_HOOKS             = 1 << 10,
+    PL_RENDER_ERR_CONTRAST_RECOVERY = 1 << 11,
 };
 
 // Struct describing current renderer state, including internal processing errors,
