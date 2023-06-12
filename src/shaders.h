@@ -27,13 +27,7 @@
 #include <libplacebo/shaders.h>
 
 // This represents an identifier (e.g. name of function, uniform etc.) for
-// a shader resource. The generated identifiers are immutable, but only live
-// until pl_shader_reset - so make copies when passing to external stuff.
-//
-// Note: When PL_STRIP_SHADERS is set during compile time, identifiers will be
-// treated directly as integers, with no human-readable names.
-
-#ifdef PL_STRIP_SHADERS
+// a shader resource. Not human-readable.
 
 typedef unsigned short ident_t;
 #define $           "_%hx"
@@ -61,19 +55,6 @@ static inline ident_t sh_ident_unpack(const char *name)
     assert((uname & ~IDENT_MASK) == IDENT_SENTINEL);
     return uname & IDENT_MASK;
 }
-
-#else // !PL_STRIP_SHADERS
-
-typedef const char *ident_t;
-#define $           "%s"
-#define NULL_IDENT  NULL
-
-#define sh_mkident(id, name)  pl_asprintf(sh->tmp, "_%hx_%s", id, name)
-#define sh_ident_tostr(id)    ((const char *) id)
-#define sh_ident_pack(id)     ((const char *) id)
-#define sh_ident_unpack(name) ((ident_t) name)
-
-#endif // PL_STRIP_SHADERS
 
 enum pl_shader_buf {
     SH_BUF_PRELUDE, // extra #defines etc.
