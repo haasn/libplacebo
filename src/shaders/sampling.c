@@ -327,35 +327,33 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
     //   'Efficient GPU-Based Texture Interpolation using Uniform B-Splines'
 
     sh_describe(sh, "bicubic");
-    GLSL("// pl_shader_sample_bicubic                       \n"
-         "vec4 color;                                       \n"
-         "{                                                 \n"
-         "vec2 pos  = "$";                                  \n"
-         "vec2 pt   = "$";                                  \n"
-         "vec2 size = vec2(textureSize("$", 0));            \n"
-         "vec2 frac  = fract(pos * size + vec2(0.5));       \n"
-         "vec2 frac2 = frac * frac;                         \n"
-         "vec2 inv   = vec2(1.0) - frac;                    \n"
-         "vec2 inv2  = inv * inv;                           \n"
-         // compute basis spline
-         "vec2 w0 = 1.0/6.0 * inv2 * inv;                   \n"
-         "vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac);   \n"
-         "vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);    \n"
-         "vec2 w3 = 1.0/6.0 * frac2 * frac;                 \n"
-         "vec4 g = vec4(w0 + w1, w2 + w3);                  \n"
-         "vec4 h = vec4(w1, w3) / g + inv.xyxy;             \n"
-         "h.xy -= vec2(2.0);                                \n"
-         // sample four corner pixels, then interpolate (y first)
-         "vec4 p = pos.xyxy + pt.xyxy * h;                  \n"
-         "vec4 c00 = textureLod("$", p.xy, 0.0);            \n"
-         "vec4 c01 = textureLod("$", p.xw, 0.0);            \n"
-         "vec4 c0 = mix(c01, c00, g.y);                     \n"
-         "vec4 c10 = textureLod("$", p.zy, 0.0);            \n"
-         "vec4 c11 = textureLod("$", p.zw, 0.0);            \n"
-         "vec4 c1 = mix(c11, c10, g.y);                     \n"
-         "color = vec4("$") * mix(c1, c0, g.x);             \n"
-         "}                                                 \n",
-         pos, pt, tex, tex, tex, tex, tex, SH_FLOAT(scale));
+#pragma GLSL /* pl_shader_sample_bicubic */         \
+    vec4 color;                                     \
+    {                                               \
+    vec2 pos = $pos;                                \
+    vec2 size = vec2(textureSize($tex, 0));         \
+    vec2 frac  = fract(pos * size + vec2(0.5));     \
+    vec2 frac2 = frac * frac;                       \
+    vec2 inv   = vec2(1.0) - frac;                  \
+    vec2 inv2  = inv * inv;                         \
+    /* compute basis spline */                      \
+    vec2 w0 = 1.0/6.0 * inv2 * inv;                 \
+    vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac); \
+    vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);  \
+    vec2 w3 = 1.0/6.0 * frac2 * frac;               \
+    vec4 g = vec4(w0 + w1, w2 + w3);                \
+    vec4 h = vec4(w1, w3) / g + inv.xyxy;           \
+    h.xy -= vec2(2.0);                              \
+    /* sample four corners, then interpolate */     \
+    vec4 p = pos.xyxy + $pt.xyxy * h;               \
+    vec4 c00 = textureLod($tex, p.xy, 0.0);         \
+    vec4 c01 = textureLod($tex, p.xw, 0.0);         \
+    vec4 c0 = mix(c01, c00, g.y);                   \
+    vec4 c10 = textureLod($tex, p.zy, 0.0);         \
+    vec4 c11 = textureLod($tex, p.zw, 0.0);         \
+    vec4 c1 = mix(c11, c10, g.y);                   \
+    color = ${float:scale} * mix(c1, c0, g.x);      \
+    }
 
     return true;
 }
@@ -368,38 +366,31 @@ bool pl_shader_sample_oversample(pl_shader sh, const struct pl_sample_src *src,
     if (!setup_src(sh, src, &tex, &pos, &pt, &rx, &ry, NULL, &scale, true, LINEAR))
         return false;
 
-    ident_t ratio = sh_var(sh, (struct pl_shader_var) {
-        .var = pl_var_vec2("ratio"),
-        .data = &(float[2]) { rx, ry },
-    });
-
-    // Round the position to the nearest pixel
+    threshold = PL_CLAMP(threshold, 0.0f, 0.5f);
     sh_describe(sh, "oversample");
-    GLSL("// pl_shader_sample_oversample                \n"
-         "vec4 color;                                   \n"
-         "{                                             \n"
-         "vec2 pt = "$", pos = "$";                     \n"
-         "vec2 size = vec2(textureSize("$", 0));        \n"
-         "vec2 fcoord = fract(pos * size - vec2(0.5));  \n"
-         "vec2 coeff = (fcoord - vec2(0.5)) * "$";      \n"
-         "coeff = clamp(coeff + vec2(0.5), 0.0, 1.0);   \n",
-         pt, pos, tex, ratio);
-
-    if (threshold > 0) {
-        threshold = PL_MIN(threshold, 0.5f);
-        ident_t thresh = sh_const_float(sh, "threshold", threshold);
-        GLSL("coeff = mix(coeff, vec2(0.0),             \n"
-             "    lessThan(coeff, vec2("$")));          \n"
-             "coeff = mix(coeff, vec2(1.0),             \n"
-             "    greaterThan(coeff, vec2(1.0 - "$"))); \n",
-             thresh, thresh);
+    #pragma GLSL /* pl_shader_sample_oversample */       \
+    vec4 color;                                          \
+    {                                                    \
+    vec2 pos = $pos;                                     \
+    vec2 size = vec2(textureSize($tex, 0));              \
+    /* Round the position to the nearest pixel */        \
+    vec2 fcoord = fract(pos * size - vec2(0.5));         \
+    float rx = ${dynamic float:rx};                      \
+    float ry = ${dynamic float:ry};                      \
+    vec2 coeff = (fcoord - vec2(0.5)) * vec2(rx, ry);    \
+    coeff = clamp(coeff + vec2(0.5), 0.0, 1.0);          \
+    @if (threshold > 0) {                                \
+        float thresh = ${float:threshold};               \
+        coeff = mix(coeff, vec2(0.0),                    \
+            lessThan(coeff, vec2(thresh)));              \
+        coeff = mix(coeff, vec2(1.0),                    \
+            greaterThan(coeff, vec2(1.0 - thresh)));     \
+    @}                                                   \
+                                                         \
+    /* Compute the right output blend of colors */       \
+    pos += (coeff - fcoord) * $pt;                       \
+    color = ${float:scale} * textureLod($tex, pos, 0.0); \
     }
-
-    // Compute the right output blend of colors
-    GLSL("pos += (coeff - fcoord) * pt;                 \n"
-         "color = vec4("$") * textureLod("$", pos, 0.0);\n"
-         "}                                             \n",
-         SH_FLOAT(scale), tex);
 
     return true;
 }
@@ -1073,45 +1064,43 @@ void pl_shader_distort(pl_shader sh, pl_tex src_tex, int out_w, int out_h,
 
     // See pl_shader_sample_bicubic
     sh_describe(sh, "distortion");
-    GLSL("// pl_shader_sample_distort   \n"
-         "vec4 color;                   \n"
-         "{                             \n"
-         "vec2 pos  = "$" * "$" + "$";  \n"
-         "vec2 pt   = "$";              \n",
-         tf, pos, tf_c, pt);
-
-    if (params->bicubic) {
-        GLSL("vec2 size = vec2(textureSize("$", 0));            \n"
-             "vec2 frac  = fract(pos * size + vec2(0.5));       \n"
-             "vec2 frac2 = frac * frac;                         \n"
-             "vec2 inv   = vec2(1.0) - frac;                    \n"
-             "vec2 inv2  = inv * inv;                           \n"
-             "vec2 w0 = 1.0/6.0 * inv2 * inv;                   \n"
-             "vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac);   \n"
-             "vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);    \n"
-             "vec2 w3 = 1.0/6.0 * frac2 * frac;                 \n"
-             "vec4 g = vec4(w0 + w1, w2 + w3);                  \n"
-             "vec4 h = vec4(w1, w3) / g + inv.xyxy;             \n"
-             "h.xy -= vec2(2.0);                                \n"
-             "vec4 p = pos.xyxy + pt.xyxy * h;                  \n"
-             "vec4 c00 = textureLod("$", p.xy, 0.0);            \n"
-             "vec4 c01 = textureLod("$", p.xw, 0.0);            \n"
-             "vec4 c0 = mix(c01, c00, g.y);                     \n"
-             "vec4 c10 = textureLod("$", p.zy, 0.0);            \n"
-             "vec4 c11 = textureLod("$", p.zw, 0.0);            \n"
-             "vec4 c1 = mix(c11, c10, g.y);                     \n"
-             "color = mix(c1, c0, g.x);                         \n",
-             tex, tex, tex, tex, tex);
-    } else {
-        GLSL("color = texture("$", pos); \n", tex);
+#pragma GLSL /* pl_shader_sample_distort */                 \
+    vec4 color;                                             \
+    {                                                       \
+    vec2 pos = $tf * $pos + $tf_c;                          \
+    vec2 pt = $pt;                                          \
+    @if (params->bicubic) {                                 \
+        vec2 size = vec2(textureSize($tex, 0));             \
+        vec2 frac  = fract(pos * size + vec2(0.5));         \
+        vec2 frac2 = frac * frac;                           \
+        vec2 inv   = vec2(1.0) - frac;                      \
+        vec2 inv2  = inv * inv;                             \
+        vec2 w0 = 1.0/6.0 * inv2 * inv;                     \
+        vec2 w1 = 2.0/3.0 - 0.5 * frac2 * (2.0 - frac);     \
+        vec2 w2 = 2.0/3.0 - 0.5 * inv2  * (2.0 - inv);      \
+        vec2 w3 = 1.0/6.0 * frac2 * frac;                   \
+        vec4 g = vec4(w0 + w1, w2 + w3);                    \
+        vec4 h = vec4(w1, w3) / g + inv.xyxy;               \
+        h.xy -= vec2(2.0);                                  \
+        vec4 p = pos.xyxy + pt.xyxy * h;                    \
+        vec4 c00 = textureLod($tex, p.xy, 0.0);             \
+        vec4 c01 = textureLod($tex, p.xw, 0.0);             \
+        vec4 c0 = mix(c01, c00, g.y);                       \
+        vec4 c10 = textureLod($tex, p.zy, 0.0);             \
+        vec4 c11 = textureLod($tex, p.zw, 0.0);             \
+        vec4 c1 = mix(c11, c10, g.y);                       \
+        color = mix(c1, c0, g.x);                           \
+    @} else {                                               \
+        color = texture($tex, pos);                         \
+    @}                                                      \
+    @if (params->alpha_mode) {                              \
+        vec2 border = min(pos, vec2(1.0) - pos);            \
+        border = smoothstep(vec2(0.0), pt, border);         \
+        @if (params->alpha_mode == PL_ALPHA_PREMULTIPLIED)  \
+            color.rgba *= border.x * border.y;              \
+        @else                                               \
+            color.a *= border.x * border.y;                 \
+    @}                                                      \
     }
 
-    if (params->alpha_mode) {
-        GLSL("vec2 border = min(pos, vec2(1.0) - pos);      \n"
-             "border = smoothstep(vec2(0.0), pt, border);   \n"
-             "color.%s *= border.x * border.y;              \n",
-             params->alpha_mode == PL_ALPHA_PREMULTIPLIED ? "rgba" : "a");
-    }
-
-    GLSL("} \n");
 }
