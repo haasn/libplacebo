@@ -21,7 +21,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 try:
-    from jinja2 import Environment
+    import jinja2
 except ModuleNotFoundError:
     print('Module \'jinja2\' not found, please install \'python3-Jinja2\' or '
           'an equivalent package on your system! Alternatively, run '
@@ -29,145 +29,10 @@ except ModuleNotFoundError:
           file=sys.stderr)
     sys.exit(1)
 
-TEMPLATE = Environment(trim_blocks=True).from_string("""
-#define VK_ENABLE_BETA_EXTENSIONS
-#include "vulkan/utils.h"
-
-const char *vk_res_str(VkResult res)
-{
-    switch (res) {
-{% for res in vkresults %}
-    case {{ res }}: return "{{ res }}";
-{% endfor %}
-
-    default: return "unknown error";
-    }
-}
-
-const char *vk_fmt_name(VkFormat fmt)
-{
-    switch (fmt) {
-{% for fmt in vkformats %}
-    case {{ fmt }}: return "{{ fmt }}";
-{% endfor %}
-
-    default: return "unknown format";
-    }
-}
-
-const char *vk_csp_name(VkColorSpaceKHR csp)
-{
-    switch (csp) {
-{% for csp in vkspaces %}
-    case {{ csp }}: return "{{ csp }}";
-{% endfor %}
-
-    default: return "unknown color space";
-    }
-}
-
-const char *vk_handle_name(VkExternalMemoryHandleTypeFlagBitsKHR handle)
-{
-    switch (handle) {
-{% for handle in vkhandles %}
-    case {{ handle }}: return "{{ handle }}";
-{% endfor %}
-
-    default: return "unknown handle type";
-    }
-}
-
-const char *vk_alpha_mode(VkCompositeAlphaFlagsKHR alpha)
-{
-    switch (alpha) {
-{% for mode in vkalphas %}
-    case {{ mode }}: return "{{ mode }}";
-{% endfor %}
-
-    default: return "unknown alpha mode";
-    }
-}
-
-const char *vk_surface_transform(VkSurfaceTransformFlagsKHR tf)
-{
-    switch (tf) {
-{% for tf in vktransforms %}
-    case {{ tf }}: return "{{ tf }}";
-{% endfor %}
-
-    default: return "unknown surface transform";
-    }
-}
-
-
-const char *vk_obj_type(VkObjectType obj)
-{
-    switch (obj) {
-{% for obj in vkobjects %}
-    case {{ obj.enum }}: return "{{ obj.name }}";
-{% endfor %}
-
-    default: return "unknown object";
-    }
-}
-
-size_t vk_struct_size(VkStructureType stype)
-{
-    switch (stype) {
-{% for struct in vkstructs %}
-    case {{ struct.stype }}: return sizeof({{ struct.name }});
-{% endfor %}
-
-    default: return 0;
-    }
-}
-
-uint32_t vk_ext_promoted_ver(const char *extension)
-{
-{% for ext in vkexts %}
-{%  if ext.promoted_ver %}
-    if (!strcmp(extension, "{{ ext.name }}"))
-        return {{ ext.promoted_ver }};
-{%  endif %}
-{% endfor %}
-    return 0;
-}
-
-void vk_features_normalize(void *alloc, const VkPhysicalDeviceFeatures2 *fin,
-                           uint32_t api_ver, VkPhysicalDeviceFeatures2 *out)
-{
-    for (const VkBaseInStructure *in = (void *) fin; in; in = in->pNext) {
-        switch (in->sType) {
-        default: break;
-{% for fs in vkfeatures %}
-        case {{ fs.stype }}: {
-            const {{ fs.name }} *i = (const void *) in;
-{% for f in fs.features %}
-            if (i->{{ f.name }}) {
-{% for r in f.replacements %}
-{% if r.core_ver %}
-               if (!api_ver || api_ver >= {{ r.core_ver }})
-{% elif r.max_ver %}
-               if (!api_ver || api_ver < {{ r.max_ver }})
-{% endif %}
-{% if fs.is_base %}
-                out->{{ f.name }} = true;
-{% else %}
-                (({{ r.name }} *) vk_chain_alloc(alloc, out, {{ r.stype }}))->{{ f.name }} = true;
-{% endif %}
-{% endfor %}
-            }
-{% endfor %}
-            break;
-        }
-{% endfor %}
-        }
-    }
-}
-
-const VkAccessFlags2 vk_access_read = {{ '0x%x' % vkaccess.read }}LLU;
-const VkAccessFlags2 vk_access_write = {{ '0x%x' % vkaccess.write }}LLU;
-""")
+TEMPLATE = jinja2.Environment(
+    loader = jinja2.FileSystemLoader(searchpath=os.path.dirname(__file__)),
+    trim_blocks=True,
+).get_template('utils_gen.c.j2')
 
 class Obj(object):
     def __init__(self, **kwargs):
