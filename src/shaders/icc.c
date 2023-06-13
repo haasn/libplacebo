@@ -147,7 +147,7 @@ static bool detect_csp(pl_icc_object icc, struct pl_raw_primaries *prim,
     prim->white = pl_cie_from_XYZ(dst[WHITE].X, dst[WHITE].Y, dst[WHITE].Z);
 
     // Rough estimate of overall gamma and starting point for curve black point
-    const float y_approx = log(dst[GRAY].Y) / log(0.5);
+    const float y_approx = dst[GRAY].Y ? log(dst[GRAY].Y) / log(0.5) : 1.0f;
     const float kb = fmaxf(dst[BLACK].Y, 0.0f);
     float b = powf(kb, 1 / y_approx);
 
