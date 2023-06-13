@@ -454,35 +454,26 @@ static void polar_sample(pl_shader sh, pl_filter filter,
     if (dmax >= filter->radius_cutoff)
         return;
 
-    GLSL("d = length(vec2(%d.0, %d.0) - fcoord);\n", x, y);
     // Check for samples that might be skippable
     bool maybe_skippable = dmax >= filter->radius_cutoff - M_SQRT2;
-    if (maybe_skippable)
-        GLSL("if (d < "$") { \n", cutoff);
 
-    // Get the weight for this pixel
-    GLSL("w = "$"(d * 1.0/"$"); \n"
-         "wsum += w;            \n",
-         lut, radius);
-
-    if (in) {
-        for (uint8_t comps = comp_mask; comps;) {
-            uint8_t c = __builtin_ctz(comps);
-            GLSL("color[%d] += w * "$"%d[idx]; \n", c, in, c);
-            comps &= ~(1 << c);
+#pragma GLSL                                                    \
+    offset = ivec2(${const int: x}, ${const int: y});           \
+    d = length(vec2(offset) - fcoord);                          \
+    @if (maybe_skippable)                                       \
+        if (d < $cutoff) {                                      \
+    w = $lut(d * 1.0 / $radius);                                \
+    wsum += w;                                                  \
+    @if (in != NULL_IDENT) {                                    \
+        @for (c : comp_mask)                                    \
+            color[@c] += w * $in@c[idx];                        \
+    @} else {                                                   \
+        c = textureLod($tex, base + pt * vec2(offset), 0.0);    \
+        @for (c : comp_mask)                                    \
+            color[@c] += w * c[@c];                             \
+    @}                                                          \
+    @if (maybe_skippable)                                       \
         }
-    } else {
-        GLSL("c = textureLod("$", base + pt * vec2(%d.0, %d.0), 0.0); \n",
-             tex, x, y);
-        for (uint8_t comps = comp_mask; comps;) {
-            uint8_t c = __builtin_ctz(comps);
-            GLSL("color[%d] += w * c[%d]; \n", c, c);
-            comps &= ~(1 << c);
-        }
-    }
-
-    if (maybe_skippable)
-        GLSL("}\n");
 }
 
 struct sh_sampler_obj {
@@ -566,6 +557,7 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
          "vec2 fcoord = fract(pos * size - vec2(0.5));  \n"
          "vec2 base = pos - pt * fcoord;                \n"
          "vec2 center = base + pt * vec2(0.5);          \n"
+         "ivec2 offset;                                 \n"
          "float w, d, wsum = 0.0;                       \n"
          "int idx;                                      \n"
          "vec4 c;                                       \n",
