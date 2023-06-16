@@ -163,6 +163,10 @@ PL_API void pl_transform2x2_rmul(const pl_transform2x2 *a, pl_transform2x2 *b);
 PL_API void pl_transform2x2_scale(pl_transform2x2 *t, float scale);
 PL_API void pl_transform2x2_invert(pl_transform2x2 *t);
 
+// Compute new bounding box of a transformation (as applied to a given rect).
+PL_API pl_rect2df pl_transform2x2_bounds(const pl_transform2x2 *t,
+                                         const pl_rect2df *rc);
+
 // Helper functions for dealing with aspect ratios and stretched/scaled rects.
 
 // Return the (absolute) aspect ratio (width/height) of a given pl_rect2df.

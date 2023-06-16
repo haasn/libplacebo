@@ -368,6 +368,25 @@ void pl_transform2x2_invert(pl_transform2x2 *t)
     t->c[1] = -(m10 * c0 + m11 * c1);
 }
 
+pl_rect2df pl_transform2x2_bounds(const pl_transform2x2 *t, const pl_rect2df *rc)
+{
+    float p[4][2] = {
+        { rc->x0, rc->y0 },
+        { rc->x0, rc->y1 },
+        { rc->x1, rc->y0 },
+        { rc->x1, rc->y1 },
+    };
+    for (int i = 0; i < PL_ARRAY_SIZE(p); i++)
+        pl_transform2x2_apply(t, p[i]);
+
+    return (pl_rect2df) {
+        .x0 = fminf(fminf(p[0][0], p[1][0]), fminf(p[2][0], p[3][0])),
+        .x1 = fmaxf(fmaxf(p[0][0], p[1][0]), fmaxf(p[2][0], p[3][0])),
+        .y0 = fminf(fminf(p[0][1], p[1][1]), fminf(p[2][1], p[3][1])),
+        .y1 = fmaxf(fmaxf(p[0][1], p[1][1]), fmaxf(p[2][1], p[3][1])),
+    };
+}
+
 float pl_rect2df_aspect(const pl_rect2df *rc)
 {
     float w = fabs(pl_rect_w(*rc)), h = fabs(pl_rect_h(*rc));

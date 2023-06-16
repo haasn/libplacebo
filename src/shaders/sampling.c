@@ -1042,18 +1042,9 @@ void pl_shader_distort(pl_shader sh, pl_tex src_tex, int out_w, int out_h,
     pl_transform2x2_rmul(&norm2canvas, &transform);
 
     if (params->constrain) {
-        float p[4][2] = {
-            { 0, 0 }, { 0, 1 },
-            { 1, 0 }, { 1, 1 },
-        };
-        for (int i = 0; i < PL_ARRAY_SIZE(p); i++)
-            pl_transform2x2_apply(&transform, p[i]);
-        pl_rect2df bb = { // bounding box
-            .x0 = fminf(fminf(p[0][0], p[1][0]), fminf(p[2][0], p[3][0])),
-            .x1 = fmaxf(fmaxf(p[0][0], p[1][0]), fmaxf(p[2][0], p[3][0])),
-            .y0 = fminf(fminf(p[0][1], p[1][1]), fminf(p[2][1], p[3][1])),
-            .y1 = fmaxf(fmaxf(p[0][1], p[1][1]), fmaxf(p[2][1], p[3][1])),
-        };
+        pl_rect2df bb = pl_transform2x2_bounds(&transform, &(pl_rect2df) {
+            .x1 = 1, .y1 = 1,
+        });
         const float k = fmaxf(fmaxf(pl_rect_w(bb), pl_rect_h(bb)), 2.0f);
         pl_transform2x2_scale(&transform, 2.0f / k);
     };
