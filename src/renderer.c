@@ -2277,19 +2277,50 @@ static bool pass_output_target(struct pass_state *pass)
         }
     }
 
+    const struct pl_plane *ref = &target->planes[pass->dst_ref];
+    pl_rect2d dst_rect = pass->dst_rect;
     if (params->distort_params) {
-        const struct pl_distort_params *dpars = params->distort_params;
-        if (dpars->alpha_mode) {
-            pl_shader_set_alpha(sh, &img->repr, dpars->alpha_mode);
-            img->repr.alpha = dpars->alpha_mode;
+        struct pl_distort_params dpars = *params->distort_params;
+        if (dpars.alpha_mode) {
+            pl_shader_set_alpha(sh, &img->repr, dpars.alpha_mode);
+            img->repr.alpha = dpars.alpha_mode;
             img->comps = 4;
         }
         pl_tex tex = img_tex(pass, img);
         if (!tex)
             return false;
+        // Expand canvas to fit result of distortion
+        const float ar = pl_rect2df_aspect(&target->crop);
+        const float sx = fminf(ar, 1.0f);
+        const float sy = fminf(1.0f / ar, 1.0f);
+        pl_rect2df bb = pl_transform2x2_bounds(&dpars.transform, &(pl_rect2df) {
+            .x0 = -sx, .x1 = sx,
+            .y0 = -sy, .y1 = sy,
+        });
+
+        // Clamp to output size and adjust as needed when constraining output
+        pl_rect2df tmp = target->crop;
+        pl_rect2df_stretch(&tmp, pl_rect_w(bb) / (2*sx), pl_rect_h(bb) / (2*sy));
+        const float tmp_w = pl_rect_w(tmp), tmp_h = pl_rect_h(tmp);
+        tmp.x0 = PL_CLAMP(tmp.x0, 0.0f, ref->texture->params.w);
+        tmp.x1 = PL_CLAMP(tmp.x1, 0.0f, ref->texture->params.w);
+        tmp.y0 = PL_CLAMP(tmp.y0, 0.0f, ref->texture->params.h);
+        tmp.y1 = PL_CLAMP(tmp.y1, 0.0f, ref->texture->params.h);
+        if (dpars.constrain) {
+            const float rx = pl_rect_w(tmp) / tmp_w;
+            const float ry = pl_rect_h(tmp) / tmp_h;
+            pl_rect2df_stretch(&tmp, fminf(ry / rx, 1.0f), fminf(rx / ry, 1.0f));
+        }
+        dst_rect.x0 = roundf(tmp.x0);
+        dst_rect.x1 = roundf(tmp.x1);
+        dst_rect.y0 = roundf(tmp.y0);
+        dst_rect.y1 = roundf(tmp.y1);
+        dpars.unscaled = true;
+        img->w = pl_rect_w(dst_rect);
+        img->h = pl_rect_h(dst_rect);
         img->tex = NULL;
         img->sh = sh = pl_dispatch_begin(rr->dp);
-        pl_shader_distort(sh, tex, img->w, img->h, dpars);
+        pl_shader_distort(sh, tex, img->w, img->h, &dpars);
     }
 
     pass_hook(pass, img, PL_HOOK_PRE_OUTPUT);
@@ -2338,7 +2369,6 @@ static bool pass_output_target(struct pass_state *pass)
     }
 
     // Rotation handling
-    pl_rect2d dst_rect = pass->dst_rect;
     if (pass->rotation % PL_ROTATION_180 == PL_ROTATION_90) {
         PL_SWAP(dst_rect.x0, dst_rect.y0);
         PL_SWAP(dst_rect.x1, dst_rect.y1);
@@ -2349,7 +2379,6 @@ static bool pass_output_target(struct pass_state *pass)
     pass_hook(pass, img, PL_HOOK_OUTPUT);
     sh = NULL;
 
-    const struct pl_plane *ref = &target->planes[pass->dst_ref];
     bool flipped_x = dst_rect.x1 < dst_rect.x0,
          flipped_y = dst_rect.y1 < dst_rect.y0;
 
