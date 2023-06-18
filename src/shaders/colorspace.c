@@ -1739,7 +1739,8 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
          "lmspq = (vec3(%f) + %f * lmspq)           \n"
          "        / (vec3(1.0) + %f * lmspq);       \n"
          "lmspq = pow(lmspq, vec3(%f));             \n"
-         "vec3 ipt = "$" * lmspq;                   \n",
+         "vec3 ipt = "$" * lmspq;                   \n"
+         "float i_orig = ipt.x;                     \n",
          SH_FLOAT(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, tone.input_min)),
          SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, tone.input_max)),
          SH_MAT3(rgb2lms),
@@ -1864,6 +1865,9 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
 
             GLSL("ipt.x = tone_map(ipt.x); \n");
         }
+
+        // Avoid raising saturation excessively when raising brightness
+        GLSL("ipt.yz *= min(i_orig / ipt.x, 1.0); \n");
 
         if (hybrid_mix > 0) {
             GLSL("vec3 lmsclip = lmspq;                     \n"
