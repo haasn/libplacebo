@@ -6,6 +6,7 @@ dbghelp = cc.check_header('dbghelp.h', prefix: '#include <windows.h>')
 conf_internal.set('PL_HAVE_DBGHELP', dbghelp)
 conf_internal.set('PL_HAVE_UNWIND', unwind.found())
 conf_internal.set('PL_HAVE_EXECINFO', has_execinfo)
+conf_internal.set('PL_STRIP_SHADERS', not get_option('debug'))
 if dbghelp
   build_deps += cc.find_library('shlwapi', required: true)
 elif unwind.found()
