@@ -202,7 +202,7 @@ gpu-strip:
         - meson build --buildtype release
                       --werror
                       -Dtests=true
-                      -Dc_args='-DPL_STRIP_SHADERS -DCI_MAXGL'
+                      -Dc_args='-DCI_MAXGL'
                       -Ddebug-abort=true
                       -Dshaderc=enabled
                       -Dglslang=enabled
