@@ -94,7 +94,7 @@ struct pl_opengl_params {
 
 // Default/recommended parameters
 #define pl_opengl_params(...) (&(struct pl_opengl_params) { __VA_ARGS__ })
-extern const struct pl_opengl_params pl_opengl_default_params;
+PL_API extern const struct pl_opengl_params pl_opengl_default_params;
 
 // Creates a new OpenGL renderer based on the given parameters. This will
 // internally use whatever platform-defined mechanism (WGL, X11, EGL) is

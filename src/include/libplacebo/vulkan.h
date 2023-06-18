@@ -442,7 +442,7 @@ PL_API extern const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features;
 // *must* be provided by imported Vulkan devices.
 //
 // Note: `pl_vulkan_recommended_features` does not include this list.
-extern const VkPhysicalDeviceFeatures2 pl_vulkan_required_features;
+PL_API extern const VkPhysicalDeviceFeatures2 pl_vulkan_required_features;
 
 // Import an existing VkDevice instead of creating a new one, and wrap it into
 // a `pl_vulkan` abstraction. It's safe to `pl_vulkan_destroy` this, which will
