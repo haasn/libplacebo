@@ -355,20 +355,9 @@ PL_API void pl_shader_color_map_ex(pl_shader sh,
                                    const struct pl_color_map_args *args);
 
 // Backwards compatibility wrapper around `pl_shader_color_map_ex`
-static inline void
-pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
-                    struct pl_color_space src, struct pl_color_space dst,
-                    pl_shader_obj *state, bool prelinearized)
-{
-    struct pl_color_map_args args = {
-        .src           = src,
-        .dst           = dst,
-        .prelinearized = prelinearized,
-        .state         = state,
-        .feature_map   = NULL,
-    };
-    pl_shader_color_map_ex(sh, params, &args);
-}
+PL_API void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
+                                struct pl_color_space src, struct pl_color_space dst,
+                                pl_shader_obj *state, bool prelinearized);
 
 // Applies a set of cone distortion parameters to `vec4 color` in a given color
 // space. This can be used to simulate color blindness. See `pl_cone_params`

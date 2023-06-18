@@ -1969,6 +1969,20 @@ done:
     GLSL("}\n");
 }
 
+// Backwards compatibility wrapper around `pl_shader_color_map_ex`
+void pl_shader_color_map(pl_shader sh, const struct pl_color_map_params *params,
+                         struct pl_color_space src, struct pl_color_space dst,
+                         pl_shader_obj *state, bool prelinearized)
+{
+    pl_shader_color_map_ex(sh, params, pl_color_map_args(
+        .src           = src,
+        .dst           = dst,
+        .prelinearized = prelinearized,
+        .state         = state,
+        .feature_map   = NULL
+    ));
+}
+
 void pl_shader_cone_distort(pl_shader sh, struct pl_color_space csp,
                             const struct pl_cone_params *params)
 {
