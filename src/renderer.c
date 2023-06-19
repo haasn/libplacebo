@@ -2302,10 +2302,14 @@ static bool pass_output_target(struct pass_state *pass)
         pl_rect2df tmp = target->crop;
         pl_rect2df_stretch(&tmp, pl_rect_w(bb) / (2*sx), pl_rect_h(bb) / (2*sy));
         const float tmp_w = pl_rect_w(tmp), tmp_h = pl_rect_h(tmp);
-        tmp.x0 = PL_CLAMP(tmp.x0, 0.0f, ref->texture->params.w);
-        tmp.x1 = PL_CLAMP(tmp.x1, 0.0f, ref->texture->params.w);
-        tmp.y0 = PL_CLAMP(tmp.y0, 0.0f, ref->texture->params.h);
-        tmp.y1 = PL_CLAMP(tmp.y1, 0.0f, ref->texture->params.h);
+        int canvas_w = ref->texture->params.w,
+            canvas_h = ref->texture->params.h;
+        if (pass->rotation % PL_ROTATION_180 == PL_ROTATION_90)
+            PL_SWAP(canvas_w, canvas_h);
+        tmp.x0 = PL_CLAMP(tmp.x0, 0.0f, canvas_w);
+        tmp.x1 = PL_CLAMP(tmp.x1, 0.0f, canvas_w);
+        tmp.y0 = PL_CLAMP(tmp.y0, 0.0f, canvas_h);
+        tmp.y1 = PL_CLAMP(tmp.y1, 0.0f, canvas_h);
         if (dpars.constrain) {
             const float rx = pl_rect_w(tmp) / tmp_w;
             const float ry = pl_rect_h(tmp) / tmp_h;
