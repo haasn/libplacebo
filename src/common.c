@@ -389,7 +389,7 @@ pl_rect2df pl_transform2x2_bounds(const pl_transform2x2 *t, const pl_rect2df *rc
 
 float pl_rect2df_aspect(const pl_rect2df *rc)
 {
-    float w = fabs(pl_rect_w(*rc)), h = fabs(pl_rect_h(*rc));
+    float w = fabsf(pl_rect_w(*rc)), h = fabsf(pl_rect_h(*rc));
     return h ? (w / h) : 0.0;
 }
 
