@@ -2320,8 +2320,8 @@ static bool pass_output_target(struct pass_state *pass)
         dst_rect.y0 = roundf(tmp.y0);
         dst_rect.y1 = roundf(tmp.y1);
         dpars.unscaled = true;
-        img->w = pl_rect_w(dst_rect);
-        img->h = pl_rect_h(dst_rect);
+        img->w = abs(pl_rect_w(dst_rect));
+        img->h = abs(pl_rect_h(dst_rect));
         img->tex = NULL;
         img->sh = sh = pl_dispatch_begin(rr->dp);
         pl_shader_distort(sh, tex, img->w, img->h, &dpars);
