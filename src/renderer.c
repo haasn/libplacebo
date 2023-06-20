@@ -2242,8 +2242,8 @@ static bool pass_output_target(struct pass_state *pass)
     pl_shader sh = img_sh(pass, img);
 
     if (params->corner_rounding > 0.0f) {
-        const float out_w2 = pl_rect_w(target->crop) / 2.0f;
-        const float out_h2 = pl_rect_h(target->crop) / 2.0f;
+        const float out_w2 = fabsf(pl_rect_w(target->crop)) / 2.0f;
+        const float out_h2 = fabsf(pl_rect_h(target->crop)) / 2.0f;
         const float radius = fminf(params->corner_rounding, 1.0f) *
                              fminf(out_w2, out_h2);
         const struct pl_rect2df relpos = {
