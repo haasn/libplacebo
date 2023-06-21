@@ -215,8 +215,8 @@ static bool detect_contrast(pl_icc_object icc, struct pl_hdr_metadata *hdr,
         PL_DEBUG(p, "Detected raw white point X=%.2f Y=%.2f Z=%.2f cd/m^2",
                  white->X, white->Y, white->Z);
     }
-    PL_DEBUG(p, "Detected raw black point X=%.4f Y=%.4f Z=%.4f mcd/m^2",
-             p->black.X * 1e3f, p->black.Y * 1e3f, p->black.Z * 1e3f);
+    PL_DEBUG(p, "Detected raw black point X=%.6f%% Y=%.6f%% Z=%.6f%%",
+             p->black.X * 100, p->black.Y * 100, p->black.Z * 100);
 
     if (max_luma <= 0)
         max_luma = white ? white->Y : PL_COLOR_SDR_WHITE;
