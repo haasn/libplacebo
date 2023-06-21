@@ -168,6 +168,8 @@ static bool detect_csp(pl_icc_object icc, struct pl_raw_primaries *prim,
         b = powf(kb, 1 / M);
     }
     S = sqrt(S / (k - 1));
+
+    PL_INFO(p, "Detected profile approximation gamma %.3f", M);
     if (S > 0.5) {
         PL_WARN(p, "Detected profile gamma (%.3f) very far from pure power "
                 "response (stddev=%.1f), suspected unusual or broken profile. "
@@ -209,12 +211,20 @@ static bool detect_contrast(pl_icc_object icc, struct pl_hdr_metadata *hdr,
         return false;
     }
 
+    if (white) {
+        PL_DEBUG(p, "Detected raw white point X=%.2f Y=%.2f Z=%.2f cd/m^2",
+                 white->X, white->Y, white->Z);
+    }
+    PL_DEBUG(p, "Detected raw black point X=%.4f Y=%.4f Z=%.4f mcd/m^2",
+             p->black.X * 1e3f, p->black.Y * 1e3f, p->black.Z * 1e3f);
+
     if (max_luma <= 0)
         max_luma = white ? white->Y : PL_COLOR_SDR_WHITE;
 
     hdr->max_luma = max_luma;
     hdr->min_luma = p->black.Y * max_luma;
     hdr->min_luma = PL_MAX(hdr->min_luma, 1e-6); // prevent true 0
+    PL_INFO(p, "Using ICC contrast %.0f:1", hdr->max_luma / hdr->min_luma);
     return true;
 }
 
