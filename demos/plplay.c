@@ -394,8 +394,10 @@ done:
 
 static void apply_csp_overrides(struct plplay *p, struct pl_color_space *csp)
 {
-    if (p->force_prim)
+    if (p->force_prim) {
         csp->primaries = p->force_prim;
+        csp->hdr.prim = *pl_raw_primaries_get(csp->primaries);
+    }
     if (p->force_trc)
         csp->transfer = p->force_trc;
     if (p->force_hdr_enable) {
