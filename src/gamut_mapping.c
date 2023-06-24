@@ -321,7 +321,7 @@ static inline float scale_gamma(float gamma, struct ICh ich, struct ICh peak,
     return gamma * powf(Irel, 3) * fminf(ich.C / peak.C, 1.0f);
 }
 
-static const float maxDelta = 4e-3;
+static const float maxDelta = 5e-5f;
 
 // Find gamut intersection using specified bounds
 static inline struct ICh
