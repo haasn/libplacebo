@@ -496,7 +496,7 @@ static void perceptual(float *lut, const struct pl_gamut_map_params *params)
         K[i] = (tmp[i][N-1] - sum) / tmp[i][i];
     }
 
-hueshift_done:
+hueshift_done: ;
 
     float prev_hue = -10.0f, prev_delta = 0.0f;
     FOREACH_LUT(lut, ipt) {
