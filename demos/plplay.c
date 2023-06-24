@@ -399,7 +399,9 @@ static void apply_csp_overrides(struct plplay *p, struct pl_color_space *csp)
     if (p->force_trc)
         csp->transfer = p->force_trc;
     if (p->force_hdr_enable) {
-        csp->hdr = p->force_hdr;
+        struct pl_hdr_metadata fix = p->force_hdr;
+        fix.prim = csp->hdr.prim;
+        csp->hdr = fix;
     } else if (p->colorspace_hint_dynamic) {
         pl_color_space_nominal_luma_ex(pl_nominal_luma_params(
             .color      = csp,
