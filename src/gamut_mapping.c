@@ -448,12 +448,21 @@ static void perceptual(float *lut, const struct pl_gamut_map_params *params)
         N = S + 2, // +2 for the endpoints
     };
 
+    bool disable_hueshift = false;
     struct { float hue, delta; } hueshift[N];
     for (int i = 0; i < S; i++) {
         struct ICh ich_src = ipt2ich(rgb2ipt(refpoints[i], src));
         struct ICh ich_dst = ipt2ich(rgb2ipt(refpoints[i], dst));
+        float delta = wrap(ich_dst.h - ich_src.h);
+        if (fabsf(delta) > 1.0f) {
+            // Disable hue-shifting becuase one hue vector is rotated too far,
+            // probably as the result of this being some sort of synthetic / fake
+            // "test" image - preserve hues in this case
+            disable_hueshift = true;
+            goto hueshift_done;
+        }
         hueshift[i+1].hue = ich_src.h;
-        hueshift[i+1].delta = wrap(ich_dst.h - ich_src.h);
+        hueshift[i+1].delta = delta;
     }
 
     // Sort and wrap endpoints
@@ -487,6 +496,8 @@ static void perceptual(float *lut, const struct pl_gamut_map_params *params)
         K[i] = (tmp[i][N-1] - sum) / tmp[i][i];
     }
 
+hueshift_done:
+
     float prev_hue = -10.0f, prev_delta = 0.0f;
     FOREACH_LUT(lut, ipt) {
 
@@ -501,7 +512,9 @@ static void perceptual(float *lut, const struct pl_gamut_map_params *params)
 
         // Determine perceptual hue shift delta by interpolation of refpoints
         float delta = 0.0f;
-        if (fabsf(ich.h - prev_hue) < 1e-6f) {
+        if (disable_hueshift) {
+            // do nothing
+        } else if (fabsf(ich.h - prev_hue) < 1e-6f) {
             delta = prev_delta;
         } else {
             for (int i = 0; i < N - 1; i++) {
