@@ -1232,8 +1232,8 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             nk_property_float(nk, "Contrast smoothness", 1.0, &cpar->contrast_smoothness, 32.0, 0.1, 0.005);
 
             nk_property_int(nk, "3DLUT size I", 7, &cpar->lut3d_size[0], 65, 1, 1);
-            nk_property_int(nk, "3DLUT size C", 7, &cpar->lut3d_size[1], 65, 1, 1);
-            nk_property_int(nk, "3DLUT size h", 7, &cpar->lut3d_size[2], 65, 1, 1);
+            nk_property_int(nk, "3DLUT size C", 7, &cpar->lut3d_size[1], 256, 1, 1);
+            nk_property_int(nk, "3DLUT size h", 7, &cpar->lut3d_size[2], 1024, 1, 1);
             nk_checkbox_label(nk, "Tricubic interpolation", &cpar->lut3d_tricubic);
 
             nk_checkbox_label(nk, "Force full LUT", &cpar->force_tone_mapping_lut);
