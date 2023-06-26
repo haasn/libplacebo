@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '288': 'add pl_color_map_params.lut3d_tricubic',
       '287': 'add pl_transform2x2_bounds',
       '286': 'add PL_RENDER_ERR_CONTRAST_RECOVERY',
       '285': 'add pl_color_map_params.contrast_recovery/smoothness, ' +

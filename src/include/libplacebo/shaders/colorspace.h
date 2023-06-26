@@ -237,6 +237,11 @@ struct pl_color_map_params {
     // Gamut mapping 3DLUT size, for channels ICh. Defaults to {33, 25, 45}
     int lut3d_size[3];
 
+    // Use higher quality tricubic interpolation for gamut mapping 3DLUTs.
+    // Off by default for performance reasons, but may substantially improve
+    // the 3DLUT gamut mapping accuracy.
+    bool lut3d_tricubic;
+
     // --- Tone mapping options
 
     // Function and configuration used for tone-mapping. For non-tunable

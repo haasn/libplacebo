@@ -1893,7 +1893,7 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
             .object     = &obj->gamut.lut,
             .var_type   = PL_VAR_FLOAT,
             .lut_type   = SH_LUT_TEXTURE,
-            .method     = SH_LUT_LINEAR,
+            .method     = params->lut3d_tricubic ? SH_LUT_CUBIC : SH_LUT_LINEAR,
             .width      = gamut.lut_size_I,
             .height     = gamut.lut_size_C,
             .depth      = gamut.lut_size_h,
