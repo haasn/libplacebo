@@ -391,7 +391,7 @@ clip_gamma(struct IPT ipt, float gamma, struct gamut gamut)
     if (!gamma)
         return ich2ipt(desat_bounded(ich.I, ich.h, 0.0f, ich.C, gamut));
 
-    const float maxDI = ich.I * maxDelta;
+    const float maxDI = fmaxf(ich.I * maxDelta, 1e-7f);
     struct ICh peak = saturate(ich.h, gamut);
     gamma = scale_gamma(gamma, ich, peak, gamut);
     float lo = 0.0f, hi = 1.0f, x = 0.5f;
