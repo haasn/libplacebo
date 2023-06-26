@@ -1843,10 +1843,10 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
                  "h.xy -= vec2(2.0);                                \n"
                  "vec4 p = lpos.xyxy + lpt.xyxy * h;                \n"
                  "float l00 = textureLod("$", p.xy, 0.0).r;         \n"
-                 "float l10 = textureLod("$", p.zy, 0.0).r;         \n"
                  "float l01 = textureLod("$", p.xw, 0.0).r;         \n"
-                 "float l11 = textureLod("$", p.zw, 0.0).r;         \n"
                  "float l0 = mix(l01, l00, g.y);                    \n"
+                 "float l10 = textureLod("$", p.zy, 0.0).r;         \n"
+                 "float l11 = textureLod("$", p.zw, 0.0).r;         \n"
                  "float l1 = mix(l11, l10, g.y);                    \n"
                  "float luma = mix(l1, l0, g.x);                    \n"
                  // Mix low-resolution tone mapped image with high-resolution

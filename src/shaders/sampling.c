@@ -345,14 +345,13 @@ bool pl_shader_sample_bicubic(pl_shader sh, const struct pl_sample_src *src)
          "vec4 g = vec4(w0 + w1, w2 + w3);                  \n"
          "vec4 h = vec4(w1, w3) / g + inv.xyxy;             \n"
          "h.xy -= vec2(2.0);                                \n"
-         // sample four corner pixels
+         // sample four corner pixels, then interpolate (y first)
          "vec4 p = pos.xyxy + pt.xyxy * h;                  \n"
          "vec4 c00 = textureLod("$", p.xy, 0.0);            \n"
-         "vec4 c10 = textureLod("$", p.zy, 0.0);            \n"
          "vec4 c01 = textureLod("$", p.xw, 0.0);            \n"
-         "vec4 c11 = textureLod("$", p.zw, 0.0);            \n"
-         // manual interpolation (y first, then x)
          "vec4 c0 = mix(c01, c00, g.y);                     \n"
+         "vec4 c10 = textureLod("$", p.zy, 0.0);            \n"
+         "vec4 c11 = textureLod("$", p.zw, 0.0);            \n"
          "vec4 c1 = mix(c11, c10, g.y);                     \n"
          "color = vec4("$") * mix(c1, c0, g.x);             \n"
          "}                                                 \n",
@@ -1096,10 +1095,10 @@ void pl_shader_distort(pl_shader sh, pl_tex src_tex, int out_w, int out_h,
              "h.xy -= vec2(2.0);                                \n"
              "vec4 p = pos.xyxy + pt.xyxy * h;                  \n"
              "vec4 c00 = textureLod("$", p.xy, 0.0);            \n"
-             "vec4 c10 = textureLod("$", p.zy, 0.0);            \n"
              "vec4 c01 = textureLod("$", p.xw, 0.0);            \n"
-             "vec4 c11 = textureLod("$", p.zw, 0.0);            \n"
              "vec4 c0 = mix(c01, c00, g.y);                     \n"
+             "vec4 c10 = textureLod("$", p.zy, 0.0);            \n"
+             "vec4 c11 = textureLod("$", p.zw, 0.0);            \n"
              "vec4 c1 = mix(c11, c10, g.y);                     \n"
              "color = mix(c1, c0, g.x);                         \n",
              tex, tex, tex, tex, tex);
