@@ -1076,9 +1076,9 @@ pl_matrix3x3 pl_get_adaptation_matrix(struct pl_cie_xy src, struct pl_cie_xy dst
 pl_matrix3x3 pl_ipt_rgb2lms(const struct pl_raw_primaries *prim)
 {
     static const pl_matrix3x3 hpe = {{ // HPE XYZ->LMS (D65) method
-        {  0.40024, 0.70760, -0.08081 },
-        { -0.22630, 1.16532,  0.04570 },
-        {  0.00000, 0.00000,  0.91822 },
+        {  0.40024f, 0.70760f, -0.08081f },
+        { -0.22630f, 1.16532f,  0.04570f },
+        {  0.00000f, 0.00000f,  0.91822f },
     }};
 
     const float c = 0.04; // 4% crosstalk
