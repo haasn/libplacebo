@@ -1630,9 +1630,9 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         .function        = PL_DEF(params->gamut_mapping, &pl_gamut_map_clip),
         .input_gamut     = src.hdr.prim,
         .output_gamut    = dst.hdr.prim,
-        .lut_size_I      = PL_DEF(params->lut3d_size[0], 33),
-        .lut_size_C      = PL_DEF(params->lut3d_size[1], 25),
-        .lut_size_h      = PL_DEF(params->lut3d_size[2], 45),
+        .lut_size_I      = PL_DEF(params->lut3d_size[0], 23),
+        .lut_size_C      = PL_DEF(params->lut3d_size[1], 32),
+        .lut_size_h      = PL_DEF(params->lut3d_size[2], 128),
         .lut_stride      = 4,
     };
 
