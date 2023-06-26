@@ -480,7 +480,7 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
         return;
     }
 
-    clock_t start = clock();
+    pl_clock_t start = pl_clock_now();
     cmsHTRANSFORM tf = cmsCreateTransformTHR(p->cms, srcp, TYPE_RGB_16,
                                              dstp, TYPE_RGBA_16,
                                              icc->params.intent,
@@ -489,7 +489,7 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
     if (!tf)
         return;
 
-    clock_t after_transform = clock();
+    pl_clock_t after_transform = pl_clock_now();
     pl_log_cpu_time(p->log, start, after_transform, "creating ICC transform");
 
     uint16_t *tmp = pl_alloc(NULL, s_r * 3 * sizeof(tmp[0]));
@@ -525,7 +525,7 @@ static void fill_lut(void *datap, const struct sh_lut_params *params, bool decod
         }
     }
 
-    pl_log_cpu_time(p->log, after_transform, clock(), "generating ICC 3DLUT");
+    pl_log_cpu_time(p->log, after_transform, pl_clock_now(), "generating ICC 3DLUT");
     cmsDeleteTransform(tf);
     pl_free(tmp);
 

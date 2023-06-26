@@ -49,9 +49,9 @@ int main()
 
         printf("Testing tone-mapping function %s\n", fun->name);
         params.function = params_inv.function = fun;
-        clock_t start = clock();
+        pl_clock_t start = pl_clock_now();
         pl_tone_map_generate(lut, &params);
-        pl_log_cpu_time(log, start, clock(), "generating LUT");
+        pl_log_cpu_time(log, start, pl_clock_now(), "generating LUT");
         for (int j = 0; j < PL_ARRAY_SIZE(lut); j++) {
             REQUIRE(isfinite(lut[j]) && !isnan(lut[j]));
             if (j > 0)
@@ -62,9 +62,9 @@ int main()
         }
 
         if (fun->map_inverse || !tested_pure_bpc++) {
-            start = clock();
+            start = pl_clock_now();
             pl_tone_map_generate(lut, &params_inv);
-            pl_log_cpu_time(log, start, clock(), "generating inverse LUT");
+            pl_log_cpu_time(log, start, pl_clock_now(), "generating inverse LUT");
             for (int j = 0; j < PL_ARRAY_SIZE(lut); j++) {
                 REQUIRE(isfinite(lut[j]) && !isnan(lut[j]));
                 if (j > 0)
@@ -157,9 +157,9 @@ int main()
 
     float *tmp = malloc(sizeof(float[LUT3D_SIZE][LUT3D_SIZE][LUT3D_SIZE][3]));
     if (tmp) {
-        clock_t start = clock();
+        pl_clock_t start = pl_clock_now();
         pl_gamut_map_generate(tmp, &perceptual);
-        pl_log_cpu_time(log, start, clock(), "generating 3DLUT");
+        pl_log_cpu_time(log, start, pl_clock_now(), "generating 3DLUT");
         free(tmp);
     }
 

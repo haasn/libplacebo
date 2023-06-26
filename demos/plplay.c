@@ -16,8 +16,8 @@
 #include <libavcodec/avcodec.h>
 
 #include "common.h"
-#include "utils.h"
 #include "window.h"
+#include "pl_clock.h"
 #include "pl_thread.h"
 
 #ifdef PL_HAVE_WIN32
@@ -526,8 +526,8 @@ static bool render_loop(struct plplay *p)
     // first vsync.
     pl_gpu_finish(p->win->gpu);
 
-    double ts, ts_prev;
-    if (!utils_gettime(&ts_prev))
+    pl_clock_t ts, ts_prev;
+    if ((ts_prev = pl_clock_now()) == 0)
         goto error;
 
     pl_swapchain_swap_buffers(p->win->swapchain);
@@ -551,11 +551,11 @@ static bool render_loop(struct plplay *p)
         }
 
 retry:
-        if (!utils_gettime(&ts))
+        if ((ts = pl_clock_now()) == 0)
             goto error;
 
         if (!stuck) {
-            pts += (ts - ts_prev);
+            pts += pl_clock_diff(ts, ts_prev);
         }
         ts_prev = ts;
 

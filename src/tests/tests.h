@@ -47,7 +47,12 @@ static void pl_log_timestamp(void *stream, enum pl_log_level level, const char *
         [PL_LOG_TRACE] = 't',
     };
 
-    float secs = (float) clock() / CLOCKS_PER_SEC;
+    // Log time relative to the first message
+    static pl_clock_t base = 0;
+    if (!base)
+        base = pl_clock_now();
+
+    double secs = pl_clock_diff(pl_clock_now(), base);
     printf("[%2.3f][%c] %s\n", secs, letter[level], msg);
 
     if (level <= PL_LOG_WARN) {

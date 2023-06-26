@@ -300,3 +300,7 @@ pl_thread = declare_dependency(
   include_directories: include_directories('.'),
   dependencies: threads,
 )
+
+pl_clock = declare_dependency(
+  include_directories: include_directories('.'),
+)

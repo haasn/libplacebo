@@ -350,12 +350,12 @@ static ID3DBlob *shader_compile_glsl(pl_gpu gpu, pl_pass pass,
     ID3DBlob *errors = NULL;
     HRESULT hr;
 
-    clock_t start = clock();
+    pl_clock_t start = pl_clock_now();
     pl_str spirv = spirv_compile_glsl(p->spirv, tmp, &gpu->glsl, stage, glsl);
     if (!spirv.len)
         goto error;
 
-    clock_t after_glsl = clock();
+    pl_clock_t after_glsl = pl_clock_now();
     pl_log_cpu_time(gpu->log, start, after_glsl, "translating GLSL to SPIR-V");
 
     SC(spvc_context_create(&sc));
@@ -461,7 +461,7 @@ static ID3DBlob *shader_compile_glsl(pl_gpu gpu, pl_pass pass,
 
     SC(spvc_compiler_compile(sc_comp, &hlsl));
 
-    clock_t after_spvc = clock();
+    pl_clock_t after_spvc = pl_clock_now();
     pl_log_cpu_time(gpu->log, after_glsl, after_spvc, "translating SPIR-V to HLSL");
 
     hr = p->D3DCompile(hlsl, strlen(hlsl), NULL, NULL, NULL, "main",
@@ -476,7 +476,7 @@ static ID3DBlob *shader_compile_glsl(pl_gpu gpu, pl_pass pass,
         goto error;
     }
 
-    pl_log_cpu_time(gpu->log, after_spvc, clock(), "translating HLSL to DXBC");
+    pl_log_cpu_time(gpu->log, after_spvc, pl_clock_now(), "translating HLSL to DXBC");
 
 error:;
     if (hlsl) {

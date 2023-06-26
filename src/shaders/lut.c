@@ -137,7 +137,7 @@ struct pl_custom_lut *pl_lut_parse_cube(pl_log log, const char *cstr, size_t cst
     lut->data = data;
 
     // Parse LUT body
-    clock_t start = clock();
+    pl_clock_t start = pl_clock_now();
     for (int n = 0; n < entries; n++) {
         for (int c = 0; c < 3; c++) {
             static const char * const digits = "0123456789.-+e";
@@ -177,7 +177,7 @@ struct pl_custom_lut *pl_lut_parse_cube(pl_log log, const char *cstr, size_t cst
     if (str.len)
         pl_warn(log, "Extra data after LUT?... ignoring '%c'", str.buf[0]);
 
-    pl_log_cpu_time(log, start, clock(), "parsing .cube LUT");
+    pl_log_cpu_time(log, start, pl_clock_now(), "parsing .cube LUT");
     return lut;
 
 error:
@@ -473,9 +473,9 @@ next_dim: ; // `continue` out of the inner loop
         size_t buf_size = size * params->comps * pl_var_type_size(vartype);
         tmp = pl_zalloc(NULL, buf_size);
 
-        clock_t start = clock();
+        pl_clock_t start = pl_clock_now();
         params->fill(tmp, params);
-        pl_log_cpu_time(sh->log, start, clock(), "generating shader LUT");
+        pl_log_cpu_time(sh->log, start, pl_clock_now(), "generating shader LUT");
 
         if (params->dynamic)
             pl_log_level_cap(sh->log, PL_LOG_NONE);

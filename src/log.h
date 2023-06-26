@@ -18,7 +18,6 @@
 #pragma once
 
 #include <stdarg.h>
-#include <time.h>
 
 #include "common.h"
 
@@ -67,10 +66,10 @@ void pl_msg_source(pl_log log, enum pl_log_level lev, const char *src);
 void pl_log_level_cap(pl_log log, enum pl_log_level cap);
 
 // CPU execution time reporting helper
-static inline void pl_log_cpu_time(pl_log log, time_t start, time_t stop,
+static inline void pl_log_cpu_time(pl_log log, pl_clock_t start, pl_clock_t stop,
                                    const char *operation)
 {
-    double ms = (stop - start) * 1e3 / CLOCKS_PER_SEC;
+    double ms = pl_clock_diff(stop, start) * 1e3;
     enum pl_log_level lev = PL_LOG_DEBUG;
     if (ms > 10)
         lev = PL_LOG_INFO;

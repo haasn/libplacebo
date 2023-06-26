@@ -1,5 +1,4 @@
 #include "tests.h"
-#include <time.h>
 
 #include <libplacebo/dispatch.h>
 #include <libplacebo/vulkan.h>
@@ -117,7 +116,7 @@ static void benchmark(pl_gpu gpu, const char *name,
     pl_gpu_finish(gpu);
 
     // Perform the actual benchmark
-    struct timespec start = {0}, stop = {0};
+    pl_clock_t start = 0, stop = 0;
     unsigned long frames = 0;
     int index = 0;
 
@@ -126,32 +125,31 @@ static void benchmark(pl_gpu gpu, const char *name,
     unsigned long gputime_count = 0;
     uint64_t gputime;
 
-    timespec_get(&start, TIME_UTC);
+    start = pl_clock_now();
     do {
         frames++;
         run_bench(gpu, dp, &state, src, fbos[index++], timer, bench);
         index %= NUM_FBOS;
         if (index == 0) {
             pl_gpu_flush(gpu);
-            timespec_get(&stop, TIME_UTC);
+            stop = pl_clock_now();
         }
         while ((gputime = pl_timer_query(gpu, timer))) {
             gputime_total += gputime;
             gputime_count++;
         }
-    } while (stop.tv_sec - start.tv_sec < BENCH_DUR);
+    } while (pl_clock_diff(stop, start) < BENCH_DUR);
 
     // Force the GPU to finish execution and re-measure the final stop time
     pl_gpu_finish(gpu);
 
-    timespec_get(&stop, TIME_UTC);
+    stop = pl_clock_now();
     while ((gputime = pl_timer_query(gpu, timer))) {
         gputime_total += gputime;
         gputime_count++;
     }
 
-    float secs = (float) (stop.tv_sec - start.tv_sec) +
-                 1e-9 * (stop.tv_nsec - start.tv_nsec);
+    double secs = pl_clock_diff(stop, start);
     printf("'%s':\t%4lu frames in %1.6f seconds => %2.6f ms/frame (%5.2f FPS)",
           name, frames, secs, 1000 * secs / frames, frames / secs);
     if (gputime_count)

@@ -101,13 +101,13 @@ else
 
   dep = declare_dependency(
     dependencies: [ libplacebo, build_deps ],
-    sources: ['window.c', 'utils.c'],
+    sources: ['window.c'],
     link_with: apis,
   )
 
   # Graphical demo programs
   executable('colors', 'colors.c',
-    dependencies: [ dep, libm ],
+    dependencies: [ dep, pl_clock, libm ],
   )
 
   if sdl_image.found()
@@ -117,7 +117,7 @@ else
   endif
 
   if ffmpeg_found
-    plplay_deps = [ dep, pl_thread ] + ffmpeg_deps
+    plplay_deps = [ dep, pl_thread, pl_clock ] + ffmpeg_deps
     if nuklear.found()
       plplay_deps += nuklear
     endif

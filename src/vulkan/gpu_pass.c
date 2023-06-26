@@ -153,9 +153,9 @@ static VkResult vk_compile_glsl(pl_gpu gpu, void *alloc,
 {
     struct pl_vk *p = PL_PRIV(gpu);
 
-    clock_t start = clock();
+    pl_clock_t start = pl_clock_now();
     *out_spirv = spirv_compile_glsl(p->spirv, alloc, &gpu->glsl, stage, shader);
-    pl_log_cpu_time(gpu->log, start, clock(), "translating SPIR-V");
+    pl_log_cpu_time(gpu->log, start, pl_clock_now(), "translating SPIR-V");
 
     return out_spirv->len ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
 }
@@ -539,7 +539,7 @@ no_descriptors: ;
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
     };
 
-    clock_t start = clock();
+    pl_clock_t start = pl_clock_now();
     switch (params->type) {
     case PL_PASS_RASTER: {
         sinfo.pCode = (uint32_t *) vert.buf;
@@ -578,13 +578,13 @@ no_descriptors: ;
         pl_unreachable();
     }
 
-    clock_t after_compilation = clock();
+    pl_clock_t after_compilation = pl_clock_now();
     pl_log_cpu_time(gpu->log, start, after_compilation, "compiling shader");
 
     // Create the graphics/compute pipeline
     VkPipeline *pipe = has_spec ? &pass_vk->base : &pass_vk->pipe;
     VK(vk_recreate_pipelines(vk, pass, has_spec, VK_NULL_HANDLE, pipe));
-    pl_log_cpu_time(gpu->log, after_compilation, clock(), "creating pipeline");
+    pl_log_cpu_time(gpu->log, after_compilation, pl_clock_now(), "creating pipeline");
 
     if (!has_spec) {
         // We can free these if we no longer need them for specialization
@@ -819,9 +819,9 @@ void vk_pass_run(pl_gpu gpu, const struct pl_pass_run_params *params)
 
     // Check if we need to re-specialize this pipeline
     if (need_respec(pass, params)) {
-        clock_t start = clock();
+        pl_clock_t start = pl_clock_now();
         VK(vk_recreate_pipelines(vk, pass, false, pass_vk->base, &pass_vk->pipe));
-        pl_log_cpu_time(gpu->log, start, clock(), "re-specializing shader");
+        pl_log_cpu_time(gpu->log, start, pl_clock_now(), "re-specializing shader");
     }
 
     if (!pass_vk->use_pushd) {

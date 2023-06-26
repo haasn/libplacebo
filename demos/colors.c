@@ -8,10 +8,9 @@
 #include <errno.h>
 #include <math.h>
 #include <string.h>
-#include <time.h>
 
 #include "common.h"
-#include "utils.h"
+#include "pl_clock.h"
 #include "window.h"
 
 static pl_log logger;
@@ -40,8 +39,8 @@ int main(int argc, char **argv)
     if (!win)
         uninit(1);
 
-    double ts_start, ts;
-    if (!utils_gettime(&ts_start)) {
+    pl_clock_t ts_start, ts;
+    if ((ts_start = pl_clock_now()) == 0) {
         uninit(1);
     }
 
@@ -58,14 +57,14 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if (!utils_gettime(&ts))
+        if ((ts = pl_clock_now()) == 0)
             uninit(1);
 
         const double period = 10.; // in seconds
-        float secs = fmod(ts - ts_start, period);
+        double secs = fmod(pl_clock_diff(ts, ts_start), period);
 
-        float pos = 2 * M_PI * secs / period;
-        float alpha = (cosf(pos) + 1.0) / 2.0;
+        double pos = 2 * M_PI * secs / period;
+        float alpha = (cos(pos) + 1.0) / 2.0;
 
         assert(frame.fbo->params.blit_dst);
         pl_tex_clear(win->gpu, frame.fbo, (float[4]) {
