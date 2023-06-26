@@ -42,6 +42,7 @@
 #include "config_internal.h"
 #include "pl_assert.h"
 #include "pl_alloc.h"
+#include "pl_clock.h"
 #include "pl_string.h"
 
 #define PL_DEPRECATED

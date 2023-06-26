@@ -24,3 +24,7 @@
 #ifdef _WIN32
 #define PL_HAVE_WIN32
 #endif
+
+#ifdef __APPLE__
+#define PL_HAVE_APPLE
+#endif
