@@ -18,6 +18,7 @@
 #include <math.h>
 
 #include "common.h"
+#include "pl_thread.h"
 
 #include <libplacebo/gamut_mapping.h>
 
@@ -257,10 +258,21 @@ static inline bool ingamut(struct IPT c, struct gamut gamut)
            rgb.B >= gamut.min_rgb && rgb.B <= gamut.max_rgb;
 }
 
-void pl_gamut_map_generate(float *out, const struct pl_gamut_map_params *params)
+struct generate_args {
+    const struct pl_gamut_map_params *params;
+    float *out;
+    int start;
+    int count;
+};
+
+static PL_THREAD_VOID generate(void *priv)
 {
-    float *in = out;
-    for (int h = 0; h < params->lut_size_h; h++) {
+    const struct generate_args *args = priv;
+    const struct pl_gamut_map_params *params = args->params;
+
+    float *in = args->out;
+    const int end = args->start + args->count;
+    for (int h = args->start; h < end; h++) {
         for (int C = 0; C < params->lut_size_C; C++) {
             for (int I = 0; I < params->lut_size_I; I++) {
                 float Ix = (float) I / (params->lut_size_I - 1);
@@ -279,7 +291,43 @@ void pl_gamut_map_generate(float *out, const struct pl_gamut_map_params *params)
         }
     }
 
-    FUN(params).map(out, params);
+    struct pl_gamut_map_params fixed = *params;
+    fixed.lut_size_h = args->count;
+    FUN(params).map(args->out, &fixed);
+    PL_THREAD_RETURN();
+}
+
+void pl_gamut_map_generate(float *out, const struct pl_gamut_map_params *params)
+{
+    enum { MAX_WORKERS = 32 };
+    struct generate_args args[MAX_WORKERS];
+
+    const int num_per_worker = PL_DIV_UP(params->lut_size_h, MAX_WORKERS);
+    const int num_workers = PL_DIV_UP(params->lut_size_h, num_per_worker);
+    for (int i = 0; i < num_workers; i++) {
+        const int start = i * num_per_worker;
+        const int count = PL_MIN(num_per_worker, params->lut_size_h - start);
+        args[i] = (struct generate_args) {
+            .params = params,
+            .out    = out,
+            .start  = start,
+            .count  = count,
+        };
+        out += count * params->lut_size_C * params->lut_size_I * params->lut_stride;
+    }
+
+    pl_thread workers[MAX_WORKERS] = {0};
+    for (int i = 0; i < num_workers; i++) {
+        if (pl_thread_create(&workers[i], generate, &args[i]) != 0)
+            generate(&args[i]); // fallback
+    }
+
+    for (int i = 0; i < num_workers; i++) {
+        if (!workers[i])
+            continue;
+        if (pl_thread_join(workers[i]) != 0)
+            generate(&args[i]); // fallback
+    }
 }
 
 void pl_gamut_map_sample(float x[3], const struct pl_gamut_map_params *params)
