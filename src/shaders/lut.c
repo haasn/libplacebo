@@ -340,6 +340,8 @@ ident_t sh_lut(pl_shader sh, const struct sh_lut_params *params)
     enum sh_lut_method method = params->method;
     if (method == SH_LUT_TETRAHEDRAL && dims != 3)
         method = SH_LUT_LINEAR;
+    if (method == SH_LUT_CUBIC && dims != 3)
+        method = SH_LUT_LINEAR;
 
     int texdim = 0;
     uint32_t max_tex_dim[] = {
@@ -386,7 +388,8 @@ next_dim: ; // `continue` out of the inner loop
     };
 
     enum pl_fmt_caps texcaps = PL_FMT_CAP_SAMPLEABLE;
-    if (method == SH_LUT_LINEAR)
+    bool is_linear = method == SH_LUT_LINEAR || method == SH_LUT_CUBIC;
+    if (is_linear)
         texcaps |= PL_FMT_CAP_LINEAR;
 
     pl_fmt texfmt = params->fmt;
@@ -421,7 +424,7 @@ next_dim: ; // `continue` out of the inner loop
     enum sh_lut_type type = params->lut_type;
 
     // The linear sampling code currently only supports 1D linear interpolation
-    if (method == SH_LUT_LINEAR && dims > 1) {
+    if (is_linear && dims > 1) {
         if (texfmt) {
             type = SH_LUT_TEXTURE;
         } else {
@@ -608,16 +611,15 @@ next_dim: ; // `continue` out of the inner loop
             },
             .binding = {
                 .object = lut->tex,
-                .sample_mode = method == SH_LUT_LINEAR
-                                    ? PL_TEX_SAMPLE_LINEAR
-                                    : PL_TEX_SAMPLE_NEAREST,
+                .sample_mode = is_linear ? PL_TEX_SAMPLE_LINEAR
+                                         : PL_TEX_SAMPLE_NEAREST,
             }
         });
 
-        if (method == SH_LUT_LINEAR) {
+        if (is_linear) {
             ident_t pos_macros[PL_ARRAY_SIZE(sizes)] = {0};
             for (int i = 0; i < dims; i++)
-                pos_macros[i] = texel_scale(sh, sizes[i], method == SH_LUT_LINEAR);
+                pos_macros[i] = texel_scale(sh, sizes[i], true);
 
             GLSLH("#define "$"(pos) (textureLod("$", %s(\\\n",
                   name, tex, vartypes[PL_VAR_FLOAT][texdim - 1]);
@@ -685,7 +687,7 @@ next_dim: ; // `continue` out of the inner loop
         }
         GLSLH("  ])\n");
 
-        if (method == SH_LUT_LINEAR) {
+        if (is_linear) {
             pl_assert(dims == 1);
             pl_assert(vartype == PL_VAR_FLOAT);
             ident_t arr_lut = name;
@@ -703,11 +705,55 @@ next_dim: ; // `continue` out of the inner loop
         }
     }
 
+    if (method == SH_LUT_CUBIC && dims == 3) {
+        ident_t lin_lut = name;
+        name = sh_fresh(sh, "lut_tricubic");
+        GLSLH("%s "$"(vec3 pos) {                                       \n"
+              "    vec3 scale = vec3(%d.0, %d.0, %d.0);                 \n"
+              "    vec3 scale_inv = 1.0 / scale;                        \n"
+              "    pos *= scale;                                        \n"
+              "    vec3 fpos = fract(pos);                              \n"
+              "    vec3 base = pos - fpos;                              \n"
+              "    vec3 fpos2 = fpos * fpos;                            \n"
+              "    vec3 inv = 1.0 - fpos;                               \n"
+              "    vec3 inv2 = inv * inv;                               \n"
+              "    vec3 w0 = 1.0/6.0 * inv2 * inv;                      \n"
+              "    vec3 w1 = 2.0/3.0 - 0.5 * fpos2 * (2.0 - fpos);      \n"
+              "    vec3 w2 = 2.0/3.0 - 0.5 * inv2 * (2.0 - inv);        \n"
+              "    vec3 w3 = 1.0/6.0 * fpos2 * fpos;                    \n"
+              "    vec3 g0 = w0 + w1;                                   \n"
+              "    vec3 g1 = w2 + w3;                                   \n"
+              "    vec3 h0 = scale_inv * ((w1 / g0) - 1.0 + base);      \n"
+              "    vec3 h1 = scale_inv * ((w3 / g1) + 1.0 + base);      \n"
+              "    %s c000, c001, c010, c011, c100, c101, c110, c111;   \n"
+              "    c000 = "$"(h0);                                      \n"
+              "    c100 = "$"(vec3(h1.x, h0.y, h0.z));                  \n"
+              "    c000 = mix(c100, c000, g0.x);                        \n"
+              "    c010 = "$"(vec3(h0.x, h1.y, h0.z));                  \n"
+              "    c110 = "$"(vec3(h1.x, h1.y, h0.z));                  \n"
+              "    c010 = mix(c110, c010, g0.x);                        \n"
+              "    c000 = mix(c010, c000, g0.y);                        \n"
+              "    c001 = "$"(vec3(h0.x, h0.y, h1.z));                  \n"
+              "    c101 = "$"(vec3(h1.x, h0.y, h1.z));                  \n"
+              "    c001 = mix(c101, c001, g0.x);                        \n"
+              "    c011 = "$"(vec3(h0.x, h1.y, h1.z));                  \n"
+              "    c111 = "$"(h1);                                      \n"
+              "    c011 = mix(c111, c011, g0.x);                        \n"
+              "    c001 = mix(c011, c001, g0.y);                        \n"
+              "    return mix(c001, c000, g0.z);                        \n"
+              "}                                                        \n",
+              vartypes[PL_VAR_FLOAT][params->comps - 1], name,
+              sizes[0] - 1, sizes[1] - 1, sizes[2] - 1,
+              vartypes[PL_VAR_FLOAT][params->comps - 1],
+              lin_lut, lin_lut, lin_lut, lin_lut,
+              lin_lut, lin_lut, lin_lut, lin_lut);
+    }
+
     if (method == SH_LUT_TETRAHEDRAL) {
         ident_t int_lut = name;
         name = sh_fresh(sh, "lut_barycentric");
         GLSLH("%s "$"(vec3 pos) {                                       \n"
-              // Compute bounding vertices and fractinoal part
+              // Compute bounding vertices and fractional part
               "    pos = clamp(pos, 0.0, 1.0) * vec3(%d.0, %d.0, %d.0); \n"
               "    vec3 base = floor(pos);                              \n"
               "    vec3 fpart = pos - base;                             \n"
