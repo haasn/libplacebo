@@ -137,30 +137,35 @@ void pl_matrix3x3_scale(pl_matrix3x3 *mat, float scale)
 
 void pl_matrix3x3_invert(pl_matrix3x3 *mat)
 {
-    float m00 = mat->m[0][0], m01 = mat->m[0][1], m02 = mat->m[0][2],
-          m10 = mat->m[1][0], m11 = mat->m[1][1], m12 = mat->m[1][2],
-          m20 = mat->m[2][0], m21 = mat->m[2][1], m22 = mat->m[2][2];
+    double m00 = mat->m[0][0], m01 = mat->m[0][1], m02 = mat->m[0][2],
+           m10 = mat->m[1][0], m11 = mat->m[1][1], m12 = mat->m[1][2],
+           m20 = mat->m[2][0], m21 = mat->m[2][1], m22 = mat->m[2][2];
 
     // calculate the adjoint
-    mat->m[0][0] =  (m11 * m22 - m21 * m12);
-    mat->m[0][1] = -(m01 * m22 - m21 * m02);
-    mat->m[0][2] =  (m01 * m12 - m11 * m02);
-    mat->m[1][0] = -(m10 * m22 - m20 * m12);
-    mat->m[1][1] =  (m00 * m22 - m20 * m02);
-    mat->m[1][2] = -(m00 * m12 - m10 * m02);
-    mat->m[2][0] =  (m10 * m21 - m20 * m11);
-    mat->m[2][1] = -(m00 * m21 - m20 * m01);
-    mat->m[2][2] =  (m00 * m11 - m10 * m01);
+    double a00 =  (m11 * m22 - m21 * m12);
+    double a01 = -(m01 * m22 - m21 * m02);
+    double a02 =  (m01 * m12 - m11 * m02);
+    double a10 = -(m10 * m22 - m20 * m12);
+    double a11 =  (m00 * m22 - m20 * m02);
+    double a12 = -(m00 * m12 - m10 * m02);
+    double a20 =  (m10 * m21 - m20 * m11);
+    double a21 = -(m00 * m21 - m20 * m01);
+    double a22 =  (m00 * m11 - m10 * m01);
 
     // calculate the determinant (as inverse == 1/det * adjoint,
     // adjoint * m == identity * det, so this calculates the det)
-    float det = m00 * mat->m[0][0] + m10 * mat->m[0][1] + m20 * mat->m[0][2];
-    det = 1.0f / det;
+    double det = m00 * a00 + m10 * a01 + m20 * a02;
+    det = 1.0 / det;
 
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++)
-            mat->m[i][j] *= det;
-    }
+    mat->m[0][0] = det * a00;
+    mat->m[0][1] = det * a01;
+    mat->m[0][2] = det * a02;
+    mat->m[1][0] = det * a10;
+    mat->m[1][1] = det * a11;
+    mat->m[1][2] = det * a12;
+    mat->m[2][0] = det * a20;
+    mat->m[2][1] = det * a21;
+    mat->m[2][2] = det * a22;
 }
 
 void pl_matrix3x3_mul(pl_matrix3x3 *a, const pl_matrix3x3 *b)

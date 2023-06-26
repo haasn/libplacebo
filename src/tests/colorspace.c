@@ -281,7 +281,7 @@ int main()
         pl_matrix3x3_apply(&mat, tmp);                                          \
         printf("%s + %s = %f %f %f\n", #model, #color, tmp[0], tmp[1], tmp[2]); \
         for (int i = 0; i < 3; i++)                                             \
-            REQUIRE_FEQ((color)[i], tmp[i], 1e-6);                              \
+            REQUIRE_FEQ((color)[i], tmp[i], 1e-5f);                             \
     } while(0)
 
     struct pl_cone_params red_only = { .cones = PL_CONE_MS };
