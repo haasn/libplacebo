@@ -1866,8 +1866,8 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
             GLSL("ipt.x = tone_map(ipt.x); \n");
         }
 
-        // Avoid raising saturation excessively when raising brightness
-        GLSL("ipt.yz *= min(i_orig / ipt.x, 1.0); \n");
+        // Avoid raising saturation excessively when changing brightness
+        GLSL("ipt.yz *= min(i_orig / ipt.x, ipt.x / i_orig); \n");
 
         if (hybrid_mix > 0) {
             GLSL("vec3 lmsclip = lmspq;                     \n"
