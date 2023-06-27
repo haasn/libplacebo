@@ -579,7 +579,8 @@ hueshift_done: ;
         if (fabsf(delta) >= 1e-3f) {
             struct ICh src_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, src);
             struct ICh dst_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, dst);
-            ich.h += delta * pl_smoothstep(dst_border.C, src_border.C, ich.C);
+            ich.h += delta * pl_smoothstep(dst_border.C * perceptual_knee,
+                                           src_border.C, ich.C);
         }
 
         // Determine intersections with source and target gamuts
