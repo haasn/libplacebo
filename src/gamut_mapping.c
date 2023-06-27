@@ -247,10 +247,16 @@ struct gamut {
     struct ICh *peak_cache;     // 1-item cache for computed peaks (per hue)
 };
 
-static void get_gamuts(struct gamut *dst, struct gamut *src,
+struct cache {
+    struct ICh src_cache;
+    struct ICh dst_cache;
+};
+
+static void get_gamuts(struct gamut *dst, struct gamut *src, struct cache *cache,
                        const struct pl_gamut_map_params *params)
 {
     const float epsilon = 1e-6;
+    memset(cache, 0, sizeof(*cache));
     struct gamut base = {
         .min_luma = params->min_luma,
         .max_luma = params->max_luma,
@@ -259,18 +265,16 @@ static void get_gamuts(struct gamut *dst, struct gamut *src,
     };
 
     if (dst) {
-        static _Thread_local struct ICh dst_cache;
         *dst = base;
         dst->lms2rgb = dst->rgb2lms = pl_ipt_rgb2lms(&params->output_gamut);
-        dst->peak_cache = &dst_cache;
+        dst->peak_cache = &cache->dst_cache;
         pl_matrix3x3_invert(&dst->lms2rgb);
     }
 
     if (src) {
-        static _Thread_local struct ICh src_cache;
         *src = base;
         src->lms2rgb = src->rgb2lms = pl_ipt_rgb2lms(&params->input_gamut);
-        src->peak_cache = &src_cache;
+        src->peak_cache = &cache->src_cache;
         pl_matrix3x3_invert(&src->lms2rgb);
     }
 }
@@ -570,8 +574,9 @@ static float wrap(float h)
 
 static void perceptual(float *lut, const struct pl_gamut_map_params *params)
 {
+    struct cache cache;
     struct gamut dst, src;
-    get_gamuts(&dst, &src, params);
+    get_gamuts(&dst, &src, &cache, params);
 
     const float O = pq_eotf(params->min_luma), X = pq_eotf(params->max_luma);
     const float M = (O + X) / 2.0f;
@@ -724,8 +729,9 @@ const struct pl_gamut_map_function pl_gamut_map_perceptual = {
 
 static void relative(float *lut, const struct pl_gamut_map_params *params)
 {
+    struct cache cache;
     struct gamut dst;
-    get_gamuts(&dst, NULL, params);
+    get_gamuts(&dst, NULL, &cache, params);
 
     FOREACH_LUT(lut, ipt)
         ipt = clip_gamma(ipt, perceptual_gamma, dst);
@@ -739,8 +745,9 @@ const struct pl_gamut_map_function pl_gamut_map_relative = {
 
 static void desaturate(float *lut, const struct pl_gamut_map_params *params)
 {
+    struct cache cache;
     struct gamut dst;
-    get_gamuts(&dst, NULL, params);
+    get_gamuts(&dst, NULL, &cache, params);
 
     FOREACH_LUT(lut, ipt)
         ipt = clip_gamma(ipt, 0.0f, dst);
@@ -754,8 +761,9 @@ const struct pl_gamut_map_function pl_gamut_map_desaturate = {
 
 static void saturation(float *lut, const struct pl_gamut_map_params *params)
 {
+    struct cache cache;
     struct gamut dst, src;
-    get_gamuts(&dst, &src, params);
+    get_gamuts(&dst, &src, &cache, params);
 
     FOREACH_LUT(lut, ipt)
         ipt = rgb2ipt(ipt2rgb(ipt, src), dst);
@@ -770,8 +778,9 @@ const struct pl_gamut_map_function pl_gamut_map_saturation = {
 
 static void absolute(float *lut, const struct pl_gamut_map_params *params)
 {
+    struct cache cache;
     struct gamut dst;
-    get_gamuts(&dst, NULL, params);
+    get_gamuts(&dst, NULL, &cache, params);
     pl_matrix3x3 m = pl_get_adaptation_matrix(params->output_gamut.white,
                                               params->input_gamut.white);
 
@@ -791,8 +800,9 @@ const struct pl_gamut_map_function pl_gamut_map_absolute = {
 
 static void highlight(float *lut, const struct pl_gamut_map_params *params)
 {
+    struct cache cache;
     struct gamut dst;
-    get_gamuts(&dst, NULL, params);
+    get_gamuts(&dst, NULL, &cache, params);
 
     FOREACH_LUT(lut, ipt) {
         if (!ingamut(ipt, dst)) {
@@ -811,8 +821,9 @@ const struct pl_gamut_map_function pl_gamut_map_highlight = {
 
 static void linear(float *lut, const struct pl_gamut_map_params *params)
 {
+    struct cache cache;
     struct gamut dst, src;
-    get_gamuts(&dst, &src, params);
+    get_gamuts(&dst, &src, &cache, params);
 
     float gain = 1.0f;
     for (float hue = -M_PI; hue < M_PI; hue += 0.1f)
@@ -833,8 +844,9 @@ const struct pl_gamut_map_function pl_gamut_map_linear = {
 
 static void darken(float *lut, const struct pl_gamut_map_params *params)
 {
+    struct cache cache;
     struct gamut dst, src;
-    get_gamuts(&dst, &src, params);
+    get_gamuts(&dst, &src, &cache, params);
 
     static const struct RGB points[6] = {
         {1, 0, 0}, {0, 1, 0}, {0, 0, 1},
