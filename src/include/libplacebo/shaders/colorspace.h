@@ -259,12 +259,6 @@ struct pl_color_map_params {
     // signal. libplacebo is not liable for any HDR-induced eye damage.
     bool inverse_tone_mapping;
 
-    // If nonzero, this much of the upper range of the tone-mapped result is
-    // smoothly mixed with a per-channel (LMS) tone-mapped version. Helps avoid
-    // unnatural blown-out highlights when tone-mapping very bright, strongly
-    // saturated colors.
-    float hybrid_mix;
-
     // Data source to use when tone-mapping. Setting this to a specific
     // value allows overriding the default metadata preference logic.
     enum pl_hdr_metadata_type metadata;
@@ -306,16 +300,16 @@ struct pl_color_map_params {
     bool show_clipping;
 
     // --- Deprecated fields
-    enum pl_tone_map_mode tone_mapping_mode PL_DEPRECATED; // see `hybrid_mix`
+    enum pl_tone_map_mode tone_mapping_mode PL_DEPRECATED; // removed
     float tone_mapping_crosstalk PL_DEPRECATED;     // now hard-coded as 0.04
     enum pl_rendering_intent intent PL_DEPRECATED;  // see `gamut_mapping`
     enum pl_gamut_mode gamut_mode PL_DEPRECATED;    // see `gamut_mapping`
+    float hybrid_mix PL_DEPRECATED;                 // removed
 };
 
 #define PL_COLOR_MAP_DEFAULTS                                   \
     .gamut_mapping          = &pl_gamut_map_perceptual,         \
     .tone_mapping_function  = &pl_tone_map_auto,                \
-    .hybrid_mix             = 0.20f,                            \
     .metadata               = PL_HDR_METADATA_ANY,              \
     .lut3d_size             = {23, 32, 128},                    \
     .lut_size               = 256,                              \

@@ -1681,25 +1681,6 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         pl_unreachable();
     }
 
-    // Simulate the old `pl_tone_map_mode` by changing the hybrid mix strength
-    float hybrid_mix = params->hybrid_mix;
-    switch (params->tone_mapping_mode) {
-    case PL_TONE_MAP_AUTO:
-        break;
-    case PL_TONE_MAP_RGB:
-        hybrid_mix = 1.0f;
-        break;
-    case PL_TONE_MAP_HYBRID:
-        hybrid_mix = 0.20f;
-        break;
-    case PL_TONE_MAP_LUMA:
-    case PL_TONE_MAP_MAX:
-        hybrid_mix = 0.00f;
-        break;
-    case PL_TONE_MAP_MODE_COUNT:
-        pl_unreachable();
-    }
-
     if (!args->state) {
         // No state object provided, forcibly disable advanced methods
         tone.function = &pl_tone_map_clip;
@@ -1864,20 +1845,6 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
 
         // Avoid raising saturation excessively when changing brightness
         GLSL("ipt.yz *= min(i_orig / ipt.x, ipt.x / i_orig); \n");
-
-        if (hybrid_mix > 0) {
-            GLSL("vec3 lmsclip = lmspq;                     \n"
-                 "lmsclip.x = tone_map(lmsclip.x);          \n"
-                 "lmsclip.y = tone_map(lmsclip.y);          \n"
-                 "lmsclip.z = tone_map(lmsclip.z);          \n"
-                 "vec3 iptclip = "$" * lmsclip;             \n"
-                 "float imax = "$", imin = "$" * imax;      \n"
-                 "float k = smoothstep(imin, imax, ipt.x);  \n"
-                 "ipt.yz = mix(ipt.yz, iptclip.yz, 0.8 * k);\n",
-                 lms2ipt,
-                 SH_FLOAT_DYN(tone.output_max),
-                 SH_FLOAT(1.0 - hybrid_mix));
-        }
     }
 
     if (need_gamut_map) {
