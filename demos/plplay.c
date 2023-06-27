@@ -1226,16 +1226,15 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                                       cpar->metadata,
                                       16, nk_vec2(nk_widget_width(nk), 300));
 
-            nk_property_float(nk, "Hybrid mix", 0.0, &cpar->hybrid_mix, 1.0, 0.05, 0.001);
-            nk_property_int(nk, "LUT size", 16, &cpar->lut_size, 1024, 1, 1);
             nk_property_float(nk, "Contrast recovery", 0.0, &cpar->contrast_recovery, 2.0, 0.05, 0.005);
             nk_property_float(nk, "Contrast smoothness", 1.0, &cpar->contrast_smoothness, 32.0, 0.1, 0.005);
 
+            nk_property_int(nk, "LUT size", 16, &cpar->lut_size, 1024, 1, 1);
             nk_property_int(nk, "3DLUT size I", 7, &cpar->lut3d_size[0], 65, 1, 1);
             nk_property_int(nk, "3DLUT size C", 7, &cpar->lut3d_size[1], 256, 1, 1);
             nk_property_int(nk, "3DLUT size h", 7, &cpar->lut3d_size[2], 1024, 1, 1);
-            nk_checkbox_label(nk, "Tricubic interpolation", &cpar->lut3d_tricubic);
 
+            nk_checkbox_label(nk, "Tricubic interpolation", &cpar->lut3d_tricubic);
             nk_checkbox_label(nk, "Force full LUT", &cpar->force_tone_mapping_lut);
             nk_checkbox_label(nk, "Inverse tone mapping", &cpar->inverse_tone_mapping);
             nk_checkbox_label(nk, "Show clipping", &cpar->show_clipping);
