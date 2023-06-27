@@ -1652,10 +1652,6 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         .out_max    = &gamut.max_luma,
     ));
 
-    // Add headroom based on tone mapping peak; use static peak only to avoid
-    // invalidating gamut mapping 3DLUT for dynamic peak updates
-    gamut.chroma_margin = src_peak_static / gamut.max_luma;
-
     // Backwards compatibility with older API
     switch (params->gamut_mode) {
     case PL_GAMUT_CLIP:

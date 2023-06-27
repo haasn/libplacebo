@@ -28,7 +28,6 @@ bool pl_gamut_map_params_equal(const struct pl_gamut_map_params *a,
     return a->function      == b->function      &&
            a->min_luma      == b->min_luma      &&
            a->max_luma      == b->max_luma      &&
-           a->chroma_margin == b->chroma_margin &&
            a->lut_size_I    == b->lut_size_I    &&
            a->lut_size_C    == b->lut_size_C    &&
            a->lut_size_h    == b->lut_size_h    &&
@@ -48,12 +47,8 @@ bool pl_gamut_map_params_noop(const struct pl_gamut_map_params *params)
     struct pl_raw_primaries src = params->input_gamut, dst = params->output_gamut;
     bool need_map = !pl_primaries_superset(&dst, &src);
     need_map |= !pl_cie_xy_equal(&src.white, &dst.white);
-    need_map |= params->chroma_margin > 1.0f;
-
-    if (FUN(params).bidirectional) {
+    if (FUN(params).bidirectional)
         need_map |= !pl_raw_primaries_equal(&dst, &src);
-        need_map |= params->chroma_margin && params->chroma_margin < 1.0f;
-    }
 
     return !need_map;
 }
@@ -581,11 +576,10 @@ hueshift_done: ;
             }
         }
 
-        const float margin = PL_DEF(params->chroma_margin, 1.0f);
         if (fabsf(delta) >= 1e-3f) {
             struct ICh src_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, src);
             struct ICh dst_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, dst);
-            ich.h += delta * pl_smoothstep(dst_border.C, src_border.C * margin, ich.C);
+            ich.h += delta * pl_smoothstep(dst_border.C, src_border.C, ich.C);
         }
 
         // Determine intersections with source and target gamuts
@@ -606,7 +600,7 @@ hueshift_done: ;
 
         // Apply simple Mobius tone mapping curve
         const float j = PL_MIX(1.0f, perceptual_knee, ich.C / 0.5f);
-        const float peak = margin * fmaxf(source.C / target.C, 1.0f);
+        const float peak = fmaxf(source.C / target.C, 1.0f);
         float xx = 1.0f / x;
         if (j < 1.0f && peak >= 1.0f) {
             const float a = -j*j * (peak - 1.0f) / (j*j - 2.0f * j + peak);

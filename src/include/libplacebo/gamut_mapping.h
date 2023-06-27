@@ -59,10 +59,6 @@ struct pl_gamut_map_params {
     float min_luma;
     float max_luma;
 
-    // Extra margin of maximum input chrominance, to add headroom when reducing
-    // source peak intensity (tone mapping).
-    float chroma_margin;
-
     // -- LUT generation options (for `pl_gamut_map_generate` only)
 
     // The size of the resulting LUT, per channel.
@@ -74,6 +70,9 @@ struct pl_gamut_map_params {
 
     // The stride (in number of floats) between elements in the resulting LUT.
     int lut_stride;
+
+    // -- Removed parameters
+    float chroma_margin PL_DEPRECATED; // non-functional
 };
 
 #define pl_gamut_map_params(...) (&(struct pl_gamut_map_params) { __VA_ARGS__ })
