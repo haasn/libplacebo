@@ -574,9 +574,11 @@ static float wrap(float h)
 
 static void perceptual(float *lut, const struct pl_gamut_map_params *params)
 {
-    struct cache cache;
-    struct gamut dst, src;
-    get_gamuts(&dst, &src, &cache, params);
+    // Separate cache after hueshift, because this invalidates previous cache
+    struct cache cache_pre, cache_post;
+    struct gamut dst_pre, src_pre, src_post, dst_post;
+    get_gamuts(&dst_pre, &src_pre, &cache_pre, params);
+    get_gamuts(&dst_post, &src_post, &cache_post, params);
 
     const float O = pq_eotf(params->min_luma), X = pq_eotf(params->max_luma);
     const float M = (O + X) / 2.0f;
@@ -595,8 +597,8 @@ static void perceptual(float *lut, const struct pl_gamut_map_params *params)
     bool disable_hueshift = false;
     struct { float hue, delta; } hueshift[N];
     for (int i = 0; i < S; i++) {
-        struct ICh ich_src = ipt2ich(rgb2ipt(refpoints[i], src));
-        struct ICh ich_dst = ipt2ich(rgb2ipt(refpoints[i], dst));
+        struct ICh ich_src = ipt2ich(rgb2ipt(refpoints[i], src_pre));
+        struct ICh ich_dst = ipt2ich(rgb2ipt(refpoints[i], dst_pre));
         float delta = wrap(ich_dst.h - ich_src.h);
         if (fabsf(delta) > 1.0f) {
             // Disable hue-shifting becuase one hue vector is rotated too far,
@@ -644,6 +646,8 @@ hueshift_done: ;
 
     float prev_hue = -10.0f, prev_delta = 0.0f;
     FOREACH_LUT(lut, ipt) {
+        struct gamut src = src_pre;
+        struct gamut dst = dst_pre;
 
         if (ipt.I <= dst.min_luma) {
             ipt.P = ipt.T = 0.0f;
@@ -686,6 +690,8 @@ hueshift_done: ;
             struct ICh dst_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, dst);
             ich.h += delta * pl_smoothstep(dst_border.C * perceptual_knee,
                                            src_border.C, ich.C);
+            src = src_post;
+            dst = dst_post;
         }
 
         // Determine intersections with source and target gamuts
