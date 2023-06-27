@@ -1708,9 +1708,8 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         goto done;
     }
 
-    // Full path: convert input from normalized, clipped RGB to IPT
-    GLSL("vec3 clipped = clamp(color.rgb, "$", "$");\n"
-         "vec3 lms = "$" * clipped;                 \n"
+    // Full path: convert input from normalized RGB to IPT
+    GLSL("vec3 lms = "$" * color.rgb;               \n"
          "vec3 lmspq = %f * lms;                    \n"
          "lmspq = pow(max(lmspq, 0.0), vec3(%f));   \n"
          "lmspq = (vec3(%f) + %f * lmspq)           \n"
@@ -1718,21 +1717,22 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
          "lmspq = pow(lmspq, vec3(%f));             \n"
          "vec3 ipt = "$" * lmspq;                   \n"
          "float i_orig = ipt.x;                     \n",
-         SH_FLOAT(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, tone.input_min)),
-         SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, tone.input_max)),
          SH_MAT3(rgb2lms),
          PL_COLOR_SDR_WHITE / 10000,
          PQ_M1, PQ_C1, PQ_C2, PQ_C3, PQ_M2,
          lms2ipt);
 
     if (params->show_clipping) {
-        GLSL("bool clip_hi, clip_lo;                                        \n"
-             "clip_hi = any(greaterThan(color.rgb, clipped + vec3(1e-6)));  \n"
-             "clip_lo = any(lessThan(color.rgb, clipped - vec3(1e-6)));     \n"
-             "clip_hi = clip_hi || ipt.x > "$";                             \n"
-             "clip_lo = clip_lo || ipt.x < "$";                             \n",
-             SH_FLOAT_DYN(tone.input_max + 1e-6f),
-             SH_FLOAT(tone.input_min - 1e-6f));
+        const float eps = 1e-6f;
+        GLSL("bool clip_hi, clip_lo;                            \n"
+             "clip_hi = any(greaterThan(color.rgb, vec3("$"))); \n"
+             "clip_lo = any(lessThan(color.rgb, vec3("$")));    \n"
+             "clip_hi = clip_hi || ipt.x > "$";                 \n"
+             "clip_lo = clip_lo || ipt.x < "$";                 \n",
+             SH_FLOAT_DYN(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, tone.input_max) + eps),
+             SH_FLOAT(pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, tone.input_min) - eps),
+             SH_FLOAT_DYN(tone.input_max + eps),
+             SH_FLOAT(tone.input_min - eps));
     }
 
     if (need_tone_map) {
