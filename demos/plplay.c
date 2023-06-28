@@ -618,20 +618,39 @@ static struct plplay state;
 
 int main(int argc, char **argv)
 {
-    const char *filename;
+    const char *filename = NULL;
     enum pl_log_level log_level = PL_LOG_INFO;
+    bool print_help = false;
 
-    if (argc == 3 && strcmp(argv[1], "-v") == 0) {
-        filename = argv[2];
-        log_level = PL_LOG_DEBUG;
-        av_log_set_level(AV_LOG_VERBOSE);
-    } else if (argc == 2) {
-        filename = argv[1];
-        av_log_set_level(AV_LOG_INFO);
-    } else {
-        fprintf(stderr, "Usage: ./%s [-v] <filename>\n", argv[0]);
+    for (char **arg = argv + 1; !print_help && *arg; ++arg) {
+        if ((*arg)[0] != '-') {
+            filename = *arg++;
+            while (*arg)
+                fprintf(stderr, "Ignored trailing arg: %s\n", *arg++);
+            break;
+        }
+        switch ((*arg)[1]) {
+        case 'v': log_level = PL_LOG_DEBUG; break;
+        default:
+            fprintf(stderr, "Invalid arg: %s\n", *arg);
+            print_help = true;
+            break;
+        }
+    }
+
+    if (print_help || !filename) {
+        fprintf(stderr,
+            "Usage: %s [-v] <filename>\n\n"
+            "Options:\n"
+            "\t-v\tverbose\n"
+        , argv[0]);
         return -1;
     }
+
+    if (log_level == PL_LOG_DEBUG)
+        av_log_set_level(AV_LOG_VERBOSE);
+    else
+        av_log_set_level(AV_LOG_INFO);
 
     state = (struct plplay) {
         .params = pl_render_default_params,
