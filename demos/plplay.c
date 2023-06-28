@@ -85,6 +85,7 @@ struct plplay {
     bool colorspace_hint_dynamic;
     bool ignore_dovi;
     bool toggle_fullscreen;
+    bool software_decoding;
 
     bool target_override; // if false, fields below are ignored
     struct pl_color_repr force_repr;
@@ -220,25 +221,27 @@ static bool init_codec(struct plplay *p)
 
     printf("Codec: %s (%s)\n", codec->name, codec->long_name);
 
-    const AVCodecHWConfig *hwcfg;
-    for (int i = 0; (hwcfg = avcodec_get_hw_config(codec, i)); i++) {
-        if (!pl_test_pixfmt(p->win->gpu, hwcfg->pix_fmt))
-            continue;
-        if (!(hwcfg->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX))
-            continue;
+    const AVCodecHWConfig *hwcfg = 0;
+    if (!p->software_decoding) {
+        for (int i = 0; (hwcfg = avcodec_get_hw_config(codec, i)); i++) {
+            if (!pl_test_pixfmt(p->win->gpu, hwcfg->pix_fmt))
+                continue;
+            if (!(hwcfg->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX))
+                continue;
 
-        int ret = av_hwdevice_ctx_create(&p->codec->hw_device_ctx,
-                                         hwcfg->device_type,
-                                         NULL, NULL, 0);
-        if (ret < 0) {
-            fprintf(stderr, "libavcodec: Failed opening HW device context, skipping\n");
-            continue;
+            int ret = av_hwdevice_ctx_create(&p->codec->hw_device_ctx,
+                                            hwcfg->device_type,
+                                            NULL, NULL, 0);
+            if (ret < 0) {
+                fprintf(stderr, "libavcodec: Failed opening HW device context, skipping\n");
+                continue;
+            }
+
+            const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwcfg->pix_fmt);
+            printf("Using hardware frame format: %s\n", desc->name);
+            p->codec->extra_hw_frames = 4;
+            break;
         }
-
-        const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwcfg->pix_fmt);
-        printf("Using hardware frame format: %s\n", desc->name);
-        p->codec->extra_hw_frames = 4;
-        break;
     }
 
     if (!hwcfg)
@@ -618,40 +621,6 @@ static struct plplay state;
 
 int main(int argc, char **argv)
 {
-    const char *filename = NULL;
-    enum pl_log_level log_level = PL_LOG_INFO;
-    bool print_help = false;
-
-    for (char **arg = argv + 1; !print_help && *arg; ++arg) {
-        if ((*arg)[0] != '-') {
-            filename = *arg++;
-            while (*arg)
-                fprintf(stderr, "Ignored trailing arg: %s\n", *arg++);
-            break;
-        }
-        switch ((*arg)[1]) {
-        case 'v': log_level = PL_LOG_DEBUG; break;
-        default:
-            fprintf(stderr, "Invalid arg: %s\n", *arg);
-            print_help = true;
-            break;
-        }
-    }
-
-    if (print_help || !filename) {
-        fprintf(stderr,
-            "Usage: %s [-v] <filename>\n\n"
-            "Options:\n"
-            "\t-v\tverbose\n"
-        , argv[0]);
-        return -1;
-    }
-
-    if (log_level == PL_LOG_DEBUG)
-        av_log_set_level(AV_LOG_VERBOSE);
-    else
-        av_log_set_level(AV_LOG_INFO);
-
     state = (struct plplay) {
         .params = pl_render_default_params,
         .deband_params = pl_deband_default_params,
@@ -666,6 +635,42 @@ int main(int argc, char **argv)
         .distort_params = pl_distort_default_params,
         .target_override = true,
     };
+
+    const char *filename = NULL;
+    enum pl_log_level log_level = PL_LOG_INFO;
+    bool print_help = false;
+
+    for (char **arg = argv + 1; !print_help && *arg; ++arg) {
+        if ((*arg)[0] != '-') {
+            filename = *arg++;
+            while (*arg)
+                fprintf(stderr, "Ignored trailing arg: %s\n", *arg++);
+            break;
+        }
+        switch ((*arg)[1]) {
+        case 's': state.software_decoding = true; break;
+        case 'v': log_level = PL_LOG_DEBUG; break;
+        default:
+            fprintf(stderr, "Invalid arg: %s\n", *arg);
+            print_help = true;
+            break;
+        }
+    }
+
+    if (print_help || !filename) {
+        fprintf(stderr,
+            "Usage: %s [-s] [-v] <filename>\n\n"
+            "Options:\n"
+            "\t-s\tsoftware decoding\n"
+            "\t-v\tverbose\n"
+        , argv[0]);
+        return -1;
+    }
+
+    if (log_level == PL_LOG_DEBUG)
+        av_log_set_level(AV_LOG_VERBOSE);
+    else
+        av_log_set_level(AV_LOG_INFO);
 
     // Redirect all of the pointers in `params.default` to instead point to the
     // structs inside `struct plplay`, so we can adjust them using the UI
