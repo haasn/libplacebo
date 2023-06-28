@@ -639,6 +639,7 @@ int main(int argc, char **argv)
     const char *filename = NULL;
     enum pl_log_level log_level = PL_LOG_INFO;
     bool print_help = false;
+    const char *win_tag = NULL;
 
     for (char **arg = argv + 1; !print_help && *arg; ++arg) {
         if ((*arg)[0] != '-') {
@@ -650,6 +651,11 @@ int main(int argc, char **argv)
         switch ((*arg)[1]) {
         case 's': state.software_decoding = true; break;
         case 'v': log_level = PL_LOG_DEBUG; break;
+        case 'a':
+        win_tag = *++arg;
+        if (!win_tag)
+            print_help = true;
+        break;
         default:
             fprintf(stderr, "Invalid arg: %s\n", *arg);
             print_help = true;
@@ -659,8 +665,9 @@ int main(int argc, char **argv)
 
     if (print_help || !filename) {
         fprintf(stderr,
-            "Usage: %s [-s] [-v] <filename>\n\n"
+            "Usage: %s [-a] [-s] [-v] <filename>\n\n"
             "Options:\n"
+            "\t-a api\twindow api selection [glfw-vk, glfw-gl, glfw-d3d11, sdl2-vk, sdl2-gl]\n"
             "\t-s\tsoftware decoding\n"
             "\t-v\tverbose\n"
         , argv[0]);
@@ -707,6 +714,7 @@ int main(int argc, char **argv)
         .title = "plplay",
         .width = par->width,
         .height = par->height,
+        .forced_impl = win_tag,
     };
 
     if (desc->flags & AV_PIX_FMT_FLAG_ALPHA) {

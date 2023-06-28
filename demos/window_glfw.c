@@ -16,18 +16,21 @@
 #define GLFW_INCLUDE_VULKAN
 #define IMPL win_impl_glfw_vk
 #define IMPL_NAME "GLFW (vulkan)"
+#define IMPL_TAG "glfw-vk"
 #endif
 
 #ifdef USE_GL
 #include <libplacebo/opengl.h>
 #define IMPL win_impl_glfw_gl
 #define IMPL_NAME "GLFW (opengl)"
+#define IMPL_TAG "glfw-gl"
 #endif
 
 #ifdef USE_D3D11
 #include <libplacebo/d3d11.h>
 #define IMPL win_impl_glfw_d3d11
 #define IMPL_NAME "GLFW (D3D11)"
+#define IMPL_TAG "glfw-d3d11"
 #endif
 
 #include <GLFW/glfw3.h>
@@ -505,6 +508,7 @@ static bool glfw_toggle_fullscreen(const struct window *window, bool fullscreen)
 
 const struct window_impl IMPL = {
     .name = IMPL_NAME,
+    .tag = IMPL_TAG,
     .create = glfw_create,
     .destroy = glfw_destroy,
     .poll = glfw_poll,

@@ -16,6 +16,7 @@
 #define WINFLAG_API SDL_WINDOW_VULKAN
 #define IMPL win_impl_sdl_vk
 #define IMPL_NAME "SDL2 (vulkan)"
+#define IMPL_TAG "sdl2-vk"
 #endif
 
 #ifdef USE_GL
@@ -23,6 +24,7 @@
 #define WINFLAG_API SDL_WINDOW_OPENGL
 #define IMPL win_impl_sdl_gl
 #define IMPL_NAME "SDL2 (opengl)"
+#define IMPL_TAG "sdl2-gl"
 #endif
 
 #ifdef NDEBUG
@@ -372,6 +374,7 @@ static bool sdl_toggle_fullscreen(const struct window *window, bool fullscreen)
 
 const struct window_impl IMPL = {
     .name = IMPL_NAME,
+    .tag = IMPL_TAG,
     .create = sdl_create,
     .destroy = sdl_destroy,
     .poll = sdl_poll,

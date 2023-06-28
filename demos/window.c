@@ -1,5 +1,7 @@
 // License: CC0 / Public Domain
 
+#include <string.h>
+
 #include "common.h"
 #include "window.h"
 
@@ -31,13 +33,20 @@ static const struct window_impl *win_impls[] = {
 struct window *window_create(pl_log log, const struct window_params *params)
 {
     for (const struct window_impl **impl = win_impls; *impl; impl++) {
+        if (params->forced_impl && strcmp((*impl)->tag, params->forced_impl) != 0)
+            continue;
+
         printf("Attempting to initialize API: %s\n", (*impl)->name);
         struct window *win = (*impl)->create(log, params);
         if (win)
             return win;
     }
 
-    fprintf(stderr, "No windowing system / graphical API compiled or supported!\n");
+    if (params->forced_impl)
+        fprintf(stderr, "'%s' windowing system not compiled or supported!\n", params->forced_impl);
+    else
+        fprintf(stderr, "No windowing system / graphical API compiled or supported!\n");
+
     exit(1);
 }
 

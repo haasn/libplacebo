@@ -14,6 +14,7 @@ struct window_params {
     const char *title;
     int width;
     int height;
+    const char *forced_impl;
 
     // initial color space
     struct pl_swapchain_colors colors;
@@ -48,6 +49,7 @@ bool window_is_fullscreen(const struct window *win);
 // For implementations
 struct window_impl {
     const char *name;
+    const char *tag;
     __typeof__(window_create) *create;
     __typeof__(window_destroy) *destroy;
     __typeof__(window_poll) *poll;
