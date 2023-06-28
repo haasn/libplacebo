@@ -86,6 +86,7 @@ macos:
         - meson build --buildtype release
                       -Ddefault_library=both
                       -Dtests=true
+                      -Dc_args='-mmacosx-version-min=10.11 -Wunguarded-availability'
                       --werror
         - ninja -C build
         - cd build && meson test -t 5 -v --num-processes=1
