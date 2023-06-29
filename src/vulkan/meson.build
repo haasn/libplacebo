@@ -25,9 +25,9 @@ components.set('vulkan', vulkan_build.allowed())
 vulkan_link = vulkan_link.require(vulkan_loader.found() and vulkan_build.allowed())
 components.set('vk-proc-addr', vulkan_link.allowed())
 
-if vulkan_build.allowed()
-  build_deps += vulkan_headers
+build_deps += vulkan_headers
 
+if vulkan_build.allowed()
   sources += [
     'vulkan/command.c',
     'vulkan/context.c',
