@@ -569,7 +569,7 @@ void pl_color_space_nominal_luma_ex(const struct pl_nominal_luma_params *params)
     float max_luma = 0, avg_luma = 0;
     if (!params->metadata || params->metadata == PL_HDR_METADATA_HDR10) {
         // This metadata is very often completely broken
-        if (csp->hdr.max_luma >= 50.0f)
+        if (csp->hdr.max_luma >= 10.0f)
             max_luma = pl_hdr_rescale(PL_HDR_NITS, scaling, csp->hdr.max_luma);
     }
 
