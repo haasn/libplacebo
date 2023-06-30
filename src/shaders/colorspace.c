@@ -1019,6 +1019,7 @@ struct sh_color_map_obj {
     struct {
         struct pl_peak_detect_params params;    // currently active parameters
         pl_buf buf;                             // pending peak detection buffer
+        pl_buf readback;                        // readback buffer (fallback)
         float avg_pq;                           // current (smoothed) values
         float max_pq;
     } peak;
@@ -1030,6 +1031,7 @@ static void sh_color_map_uninit(pl_gpu gpu, void *ptr)
     pl_shader_obj_destroy(&obj->tone.lut);
     pl_shader_obj_destroy(&obj->gamut.lut);
     pl_buf_destroy(gpu, &obj->peak.buf);
+    pl_buf_destroy(gpu, &obj->peak.readback);
     memset(obj, 0, sizeof(*obj));
 }
 
@@ -1094,8 +1096,14 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
     if (!force && params->allow_delayed && pl_buf_poll(gpu, obj->peak.buf, 0))
         return; // buffer not ready yet
 
+    bool ok;
     struct peak_buf_data data = {0};
-    bool ok = pl_buf_read(gpu, obj->peak.buf, 0, &data, sizeof(data));
+    if (obj->peak.readback) {
+        pl_buf_copy(gpu, obj->peak.readback, 0, obj->peak.buf, 0, sizeof(data));
+        ok = pl_buf_read(gpu, obj->peak.readback, 0, &data, sizeof(data));
+    } else {
+        ok = pl_buf_read(gpu, obj->peak.buf, 0, &data, sizeof(data));
+    }
     if (ok && data.frame_wg_count > 0) {
         // Peak detection completed successfully
         pl_buf_destroy(gpu, &obj->peak.buf);
@@ -1193,13 +1201,34 @@ bool pl_shader_detect_peak(pl_shader sh, struct pl_color_space csp,
 
     pl_assert(!obj->peak.buf);
     static const struct peak_buf_data zero = {0};
-    obj->peak.buf = pl_buf_create(gpu, pl_buf_params(
-        .size           = sizeof(struct peak_buf_data),
-        .memory_type    = PL_BUF_MEM_DEVICE,
-        .host_readable  = true,
-        .storable       = true,
-        .initial_data   = &zero,
-    ));
+
+retry_ssbo:
+    if (obj->peak.readback) {
+        obj->peak.buf = pl_buf_create(gpu, pl_buf_params(
+            .size           = sizeof(struct peak_buf_data),
+            .storable       = true,
+            .initial_data   = &zero,
+        ));
+    } else {
+        obj->peak.buf = pl_buf_create(gpu, pl_buf_params(
+            .size           = sizeof(struct peak_buf_data),
+            .memory_type    = PL_BUF_MEM_DEVICE,
+            .host_readable  = true,
+            .storable       = true,
+            .initial_data   = &zero,
+        ));
+    }
+
+    if (!obj->peak.buf && !obj->peak.readback) {
+        PL_WARN(sh, "Failed creating host-readable peak detection SSBO, "
+                "retrying with fallback buffer");
+        obj->peak.readback = pl_buf_create(gpu, pl_buf_params(
+            .size           = sizeof(struct peak_buf_data),
+            .host_readable  = true,
+        ));
+        if (obj->peak.readback)
+            goto retry_ssbo;
+    }
 
     if (!obj->peak.buf) {
         SH_FAIL(sh, "Failed creating peak detection SSBO!");
@@ -1349,8 +1378,10 @@ void pl_reset_detected_peak(pl_shader_obj state)
         return;
 
     struct sh_color_map_obj *obj = state->priv;
+    pl_buf readback = obj->peak.readback;
     pl_buf_destroy(state->gpu, &obj->peak.buf);
     memset(&obj->peak, 0, sizeof(obj->peak));
+    obj->peak.readback = readback;
 }
 
 void pl_shader_extract_features(pl_shader sh, struct pl_color_space csp)
