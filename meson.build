@@ -12,8 +12,8 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
-      '299': 'remove pl_color_map_params.hybrid_mix',
-      '298': 'remove pl_gamut_map_params.chroma_margin',
+      '290': 'remove pl_color_map_params.hybrid_mix',
+      '289': 'remove pl_gamut_map_params.chroma_margin',
       '288': 'add pl_color_map_params.lut3d_tricubic',
       '287': 'add pl_transform2x2_bounds',
       '286': 'add PL_RENDER_ERR_CONTRAST_RECOVERY',
