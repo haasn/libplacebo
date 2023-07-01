@@ -390,7 +390,7 @@ void pl_hdr_metadata_merge(struct pl_hdr_metadata *orig,
 bool pl_hdr_metadata_contains(const struct pl_hdr_metadata *data,
                               enum pl_hdr_metadata_type type)
 {
-    bool has_hdr10 = data->min_luma && data->max_luma;
+    bool has_hdr10 = data->max_luma;
     bool has_hdr10plus = data->scene_avg && (data->scene_max[0] ||
                                              data->scene_max[1] ||
                                              data->scene_max[2]);
