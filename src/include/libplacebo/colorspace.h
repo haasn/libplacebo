@@ -376,7 +376,14 @@ struct pl_hdr_bezier {
 
 // Represents raw HDR metadata as defined by SMPTE 2086 / CTA 861.3, which is
 // often attached to HDR sources and can be forwarded to HDR-capable displays,
-// or used to guide the libplacebo built-in tone mapping.
+// or used to guide the libplacebo built-in tone mapping. Values left as 0
+// are treated as unknown by libplacebo.
+//
+// Note: This means that a value of `min_luma == 0.0` gets treated as "minimum
+// luminance not known", which in practice may end up inferring a default
+// contrast of 1000:1 for SDR transfer functions. To avoid this, the user should
+// set these fields to a low positive value, e.g. PL_COLOR_HDR_BLACK, to signal
+// a "zero" black point (i.e. infinite contrast display).
 struct pl_hdr_metadata {
     // --- PL_HDR_METADATA_HDR10
     // Mastering display metadata.
