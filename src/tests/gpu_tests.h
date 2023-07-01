@@ -539,7 +539,10 @@ static void pl_shader_tests(pl_gpu gpu)
 
     // Test encoding/decoding of all gamma functions, color spaces, etc.
     for (enum pl_color_transfer trc = 0; trc < PL_COLOR_TRC_COUNT; trc++) {
-        struct pl_color_space test_csp = { .transfer = trc, .hdr.min_luma = 1e-7 };
+        struct pl_color_space test_csp = {
+            .transfer = trc,
+            .hdr.min_luma = PL_COLOR_HDR_BLACK,
+        };
         sh = pl_dispatch_begin(dp);
         pl_shader_sample_nearest(sh, pl_sample_src( .tex = src ));
         pl_shader_delinearize(sh, &test_csp);

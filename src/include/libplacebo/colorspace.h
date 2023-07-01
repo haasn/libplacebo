@@ -267,6 +267,28 @@ static inline bool pl_color_transfer_is_hdr(enum pl_color_transfer trc)
 // display space. See ITU-R Report BT.2408 for more information.
 #define PL_COLOR_SDR_WHITE 203.0f
 
+// This defines the assumed contrast level of an unknown SDR display. This
+// will be used to determine the black point in the absence of any tagged
+// minimum luminance, relative to the tagged maximum luminance (or
+// PL_COLOR_SDR_WHITE in the absence of all tagging)
+#define PL_COLOR_SDR_CONTRAST 1000.0f
+
+// This defines the default black point assumed for "infinite contrast" HDR
+// displays. This is not exactly 0.0 because a value of 0.0 is interpreted
+// as "unknown / missing metadata" inside struct pl_hdr_metadata, and also
+// to avoid numerical issues in a variety of tone mapping functions.
+// Essentially, a black level below this number is functionally meaningless
+// inside libplacebo, and will be clamped to this value regardless.
+//
+// The value used here (1e-6) is about one 13-bit PQ step above absolute zero,
+// which is a small fraction of the human JND at this brightness level, and also
+// about 3 bits above the floating point machine epsilon.
+#define PL_COLOR_HDR_BLACK 1e-6f
+
+// This defines the assumed peak brightness of a HLG display with no HDR10
+// metadata. This is set to the brightness of a "nominal" HLG reference display.
+#define PL_COLOR_HLG_PEAK 1000.0f
+
 // Represents a single CIE xy coordinate (e.g. CIE Yxy with Y = 1.0)
 struct pl_cie_xy {
     float x, y;

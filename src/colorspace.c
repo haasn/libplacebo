@@ -525,28 +525,17 @@ void pl_color_space_nominal_luma_ex(const struct pl_nominal_luma_params *params)
     // description and built-in default assumptions
     if (params->metadata == PL_HDR_METADATA_NONE) {
         float min_luma, max_luma; // in nits
-        max_luma = pl_color_transfer_nominal_peak(csp->transfer) *
-                   PL_COLOR_SDR_WHITE;
-
-        // Exception: For HLG content, we want to infer a value of 1000 cd/m²,
-        // a value which is considered the "reference" HLG display.
-        if (csp->transfer == PL_COLOR_TRC_HLG)
-            max_luma = 1000;
+        if (csp->transfer == PL_COLOR_TRC_HLG) {
+            max_luma = PL_COLOR_HLG_PEAK;
+        } else {
+            max_luma = pl_color_transfer_nominal_peak(csp->transfer) *
+                       PL_COLOR_SDR_WHITE;
+        }
 
         if (pl_color_transfer_is_hdr(csp->transfer)) {
-            // Use a slightly nonzero black level, for the following reasons:
-            // - 0 may be seen as 'missing/undefined' in HDR10 metadata structs
-            //
-            // - we need to clamp to 1e-7 to avoid issues with some tone
-            //   mapping functions anyway, so doing it here also advertises
-            //   this fact downstream
-            //
-            // - true infinite contrast does not exist in reality, even 1e-7
-            //   is extremely generous considering typical viewing environments
-            //   are not absolutely devoid of stray ambient light
-            min_luma = 1e-7;
+            min_luma = PL_COLOR_HDR_BLACK;
         } else {
-            min_luma = max_luma / 1000; // Typical SDR contrast
+            min_luma = max_luma / PL_COLOR_SDR_CONTRAST;
         }
 
         if (params->out_min)
