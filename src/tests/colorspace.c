@@ -425,8 +425,8 @@ int main()
     REQUIRE(!pl_hdr_metadata_contains(&sdr50.hdr, PL_HDR_METADATA_HDR10PLUS));
 
     TEST_METADATA(sdr50, PL_HDR_METADATA_NONE,  sdr_black, PL_COLOR_SDR_WHITE, 0);
-    TEST_METADATA(sdr50, PL_HDR_METADATA_HDR10, 0.203, 50, 0); // FIXME!
-    TEST_METADATA(sdr50, PL_HDR_METADATA_ANY,   0.203, 50, 0); // FIXME!
+    TEST_METADATA(sdr50, PL_HDR_METADATA_HDR10, 50 / PL_COLOR_SDR_CONTRAST, 50, 0);
+    TEST_METADATA(sdr50, PL_HDR_METADATA_ANY,   50 / PL_COLOR_SDR_CONTRAST, 50, 0);
 
     const struct pl_color_space sdr10k = {
         .primaries    = PL_COLOR_PRIM_BT_709,
