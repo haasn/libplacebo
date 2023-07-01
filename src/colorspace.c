@@ -547,14 +547,17 @@ void pl_color_space_nominal_luma_ex(const struct pl_nominal_luma_params *params)
         avg_luma = pl_hdr_rescale(PL_HDR_PQ, scaling, csp->hdr.avg_pq_y);
     }
 
+    // Clamp to sane value range
+    const float hdr_min = pl_hdr_rescale(PL_HDR_NITS, scaling, PL_COLOR_HDR_BLACK);
+    const float hdr_max = pl_hdr_rescale(PL_HDR_PQ,   scaling, 1.0f);
+    max_luma = max_luma ? PL_CLAMP(max_luma, hdr_min, hdr_max) : 0;
+    min_luma = min_luma ? PL_CLAMP(min_luma, hdr_min, hdr_max) : 0;
+    if ((max_luma && min_luma >= max_luma) || min_luma >= hdr_max)
+        min_luma = max_luma = 0; // sanity
+
     // PQ is always scaled down to absolute black, ignoring HDR metadata
     if (csp->transfer == PL_COLOR_TRC_PQ)
-        min_luma = 0;
-    // Sanity clamps
-    if (min_luma < 0)
-        min_luma = 0;
-    if (max_luma && min_luma >= max_luma)
-        min_luma = max_luma = 0;
+        min_luma = hdr_min;
 
     // Baseline/fallback metadata, inferred entirely from the colorspace
     // description and built-in default assumptions
@@ -569,10 +572,11 @@ void pl_color_space_nominal_luma_ex(const struct pl_nominal_luma_params *params)
 
     if (!min_luma) {
         if (pl_color_transfer_is_hdr(csp->transfer)) {
-            min_luma = pl_hdr_rescale(PL_HDR_NITS, scaling, PL_COLOR_HDR_BLACK);
+            min_luma = hdr_min;
         } else {
             const float peak = pl_hdr_rescale(scaling, PL_HDR_NITS, max_luma);
-            min_luma = pl_hdr_rescale(PL_HDR_NITS, scaling, peak / PL_COLOR_SDR_CONTRAST);
+            min_luma = pl_hdr_rescale(PL_HDR_NITS, scaling,
+                                      peak / PL_COLOR_SDR_CONTRAST);
         }
     }
 

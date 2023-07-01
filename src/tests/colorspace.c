@@ -440,4 +440,29 @@ int main()
     TEST_METADATA(sdr10k, PL_HDR_METADATA_NONE,  sdr_black, PL_COLOR_SDR_WHITE, 0);
     TEST_METADATA(sdr10k, PL_HDR_METADATA_HDR10, PL_COLOR_SDR_WHITE / 10000, PL_COLOR_SDR_WHITE, 0);
     TEST_METADATA(sdr10k, PL_HDR_METADATA_ANY,   PL_COLOR_SDR_WHITE / 10000, PL_COLOR_SDR_WHITE, 0);
+
+    const struct pl_color_space bogus_vals = {
+        .primaries = PL_COLOR_PRIM_BT_2020,
+        .transfer  = PL_COLOR_TRC_HLG,
+        .hdr.min_luma = 1e-9,
+        .hdr.max_luma = 1000000,
+    };
+
+    const struct pl_color_space bogus_flip = {
+        .primaries = PL_COLOR_PRIM_BT_2020,
+        .transfer  = PL_COLOR_TRC_PQ,
+        .hdr.min_luma = 4000,
+        .hdr.max_luma = 0.05,
+    };
+
+    const struct pl_color_space bogus_sign = {
+        .primaries = PL_COLOR_PRIM_BT_2020,
+        .transfer  = PL_COLOR_TRC_HLG,
+        .hdr.min_luma = -0.5,
+        .hdr.max_luma = -4000,
+    };
+
+    TEST_METADATA(bogus_vals, PL_HDR_METADATA_HDR10, PL_COLOR_HDR_BLACK, 10000, 0);
+    TEST_METADATA(bogus_flip, PL_HDR_METADATA_HDR10, PL_COLOR_HDR_BLACK, 10000, 0);
+    TEST_METADATA(bogus_sign, PL_HDR_METADATA_HDR10, PL_COLOR_HDR_BLACK, PL_COLOR_HLG_PEAK, 0);
 }
