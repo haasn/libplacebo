@@ -249,12 +249,9 @@ enum pl_color_transfer {
 // reference white. This refers to the highest encodable signal level.
 // Always equal to 1.0 for SDR curves.
 //
-// Note: This returns the highest encodable signal by definition of the EOTF,
-// regardless of the ultimate representation (e.g. scene or display referred).
-// For HLG in particular, this is always around 3.77 - which is potentially
-// different from the signal peak after applying the OOTF to go from scene
-// referred to display referred (resulting in a display-referred peak of around
-// 4.92 for a 1000 cd/m^2 HLG reference display).
+// Note: For HLG in particular, which is scene-referred, this returns the
+// highest nominal peak in scene-referred space (3.77), which may be different
+// from the actual peak in display space after application of the HLG OOTF.
 PL_API float pl_color_transfer_nominal_peak(enum pl_color_transfer trc);
 
 static inline bool pl_color_transfer_is_hdr(enum pl_color_transfer trc)
