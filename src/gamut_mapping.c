@@ -659,7 +659,7 @@ hueshift_done: ;
             continue; // Fast path for achromatic colors
 
         // Determine perceptual hue shift delta by interpolation of refpoints
-        float delta = 0.0f;
+        float delta = 0.0f, margin = 1.0f;
         if (disable_hueshift) {
             // do nothing
         } else if (fabsf(ich.h - prev_hue) < 1e-6f) {
@@ -688,12 +688,17 @@ hueshift_done: ;
                                            src_border.C, ich.C);
             src = src_post;
             dst = dst_post;
+
+            // Expand/contract chromaticity margin to correspond to the altered
+            // size of the hue leaf after applying the hue delta
+            struct ICh shifted = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, src);
+            margin *= fmaxf(1.0f, shifted.C / src_border.C);
         }
 
         // Determine intersections with source and target gamuts
         struct ICh source = saturate(ich.h, src);
         struct ICh target = saturate(ich.h, dst);
-        const float peak = fmaxf(source.C / target.C, 1.0f);
+        const float peak = fmaxf(margin * source.C / target.C, 1.0f);
         if (peak > 1.0f) {
             // Apply simple mobius soft-knee
             const float j = perceptual_knee;
@@ -701,7 +706,7 @@ hueshift_done: ;
             const float b = (j*j - 2.0f * j * peak + peak) /
                             fmaxf(1e-6f, peak - 1.0f);
             const float k = (b*b + 2.0f * b*j + j*j) / (b - a);
-            float x = fminf(ich.C, source.C) / target.C;
+            float x = fminf(ich.C / target.C, peak);
             x = x <= j ? x : k * (x + a) / (x + b);
             ich.C = x * target.C;
         }
