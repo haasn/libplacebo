@@ -152,7 +152,7 @@ int main()
 
         float hue_mapped = atan2f(c[2], c[1]);
         float hue_ref = atan2f(ref[2], ref[1]);
-        REQUIRE_FEQ(hue_mapped, hue_ref, 1e-3);
+        REQUIRE_FEQ(hue_mapped, hue_ref, 1e-2);
     }
 
     float *tmp = malloc(sizeof(float[LUT3D_SIZE][LUT3D_SIZE][LUT3D_SIZE][3]));

@@ -716,7 +716,15 @@ hueshift_done: ;
         struct ICh target = saturate(ich.h, dst);
         ich.C = softclip(ich.C, margin * source.C, target.C);
 
-        ipt = ich2ipt(ich);
+        // Soft-clip the resulting RGB color. This will generally distort
+        // hues slightly, but hopefully in an aesthetically pleasing way.
+        struct ICh saturated = { ich.I, target.C, ich.h };
+        struct RGB peak = ipt2rgb(ich2ipt(saturated), dst);
+        struct RGB rgb = ipt2rgb(ich2ipt(ich), dst);
+        rgb.R = fmaxf(softclip(rgb.R, peak.R, dst.max_rgb), dst.min_rgb);
+        rgb.G = fmaxf(softclip(rgb.G, peak.G, dst.max_rgb), dst.min_rgb);
+        rgb.B = fmaxf(softclip(rgb.B, peak.B, dst.max_rgb), dst.min_rgb);
+        ipt = rgb2ipt(rgb, dst);
     }
 }
 
