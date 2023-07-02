@@ -554,6 +554,21 @@ clip_gamma(struct IPT ipt, float gamma, struct gamut gamut)
 static const float perceptual_gamma    = 1.80f;
 static const float perceptual_knee     = 0.70f;
 
+static float softclip(float value, float source, float target)
+{
+    const float peak = source / target;
+    const float x = fminf(value / target, peak);
+    const float j = perceptual_knee;
+    if (x <= j || peak <= 1.0)
+        return value;
+    // Apply simple mobius function
+    const float a = -j*j * (peak - 1.0f) / (j*j - 2.0f * j + peak);
+    const float b = (j*j - 2.0f * j * peak + peak) /
+                    fmaxf(1e-6f, peak - 1.0f);
+    const float scale = (b*b + 2.0f * b*j + j*j) / (b - a);
+    return scale * (x + a) / (x + b) * target;
+}
+
 static int cmp_float(const void *a, const void *b)
 {
     float fa = *(const float*) a;
@@ -695,21 +710,11 @@ hueshift_done: ;
             margin *= fmaxf(1.0f, shifted.C / src_border.C);
         }
 
-        // Determine intersections with source and target gamuts
+        // Determine intersections with source and target gamuts, and
+        // apply softclip to the chromaticity
         struct ICh source = saturate(ich.h, src);
         struct ICh target = saturate(ich.h, dst);
-        const float peak = fmaxf(margin * source.C / target.C, 1.0f);
-        if (peak > 1.0f) {
-            // Apply simple mobius soft-knee
-            const float j = perceptual_knee;
-            const float a = -j*j * (peak - 1.0f) / (j*j - 2.0f * j + peak);
-            const float b = (j*j - 2.0f * j * peak + peak) /
-                            fmaxf(1e-6f, peak - 1.0f);
-            const float k = (b*b + 2.0f * b*j + j*j) / (b - a);
-            float x = fminf(ich.C / target.C, peak);
-            x = x <= j ? x : k * (x + a) / (x + b);
-            ich.C = x * target.C;
-        }
+        ich.C = softclip(ich.C, margin * source.C, target.C);
 
         ipt = ich2ipt(ich);
     }
