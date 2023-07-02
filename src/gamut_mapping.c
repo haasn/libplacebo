@@ -693,33 +693,20 @@ hueshift_done: ;
         // Determine intersections with source and target gamuts
         struct ICh source = saturate(ich.h, src);
         struct ICh target = saturate(ich.h, dst);
-        const float gamma = scale_gamma(perceptual_gamma, ich, target, dst);
-
-        float lo = 0.0f, x = 1.0f, hi = 1.0f / perceptual_knee + 3 * maxDelta;
-        do {
-            struct ICh test = mix_exp(ich, x, gamma, target.I);
-            if (ingamut(ich2ipt(test), dst)) {
-                lo = x;
-            } else {
-                hi = x;
-            }
-            x = (lo + hi) / 2.0f;
-        } while (hi - lo > maxDelta);
-
-        // Apply simple Mobius tone mapping curve
-        const float j = PL_MIX(1.0f, perceptual_knee, ich.C / 0.5f);
         const float peak = fmaxf(source.C / target.C, 1.0f);
-        float xx = 1.0f / x;
-        if (j < 1.0f && peak >= 1.0f) {
+        if (peak > 1.0f) {
+            // Apply simple mobius soft-knee
+            const float j = perceptual_knee;
             const float a = -j*j * (peak - 1.0f) / (j*j - 2.0f * j + peak);
             const float b = (j*j - 2.0f * j * peak + peak) /
                             fmaxf(1e-6f, peak - 1.0f);
             const float k = (b*b + 2.0f * b*j + j*j) / (b - a);
-            xx = fminf(xx, peak);
-            xx = xx <= j ? xx : k * (xx + a) / (xx + b);
+            float x = fminf(ich.C, source.C) / target.C;
+            x = x <= j ? x : k * (x + a) / (x + b);
+            ich.C = x * target.C;
         }
 
-        ipt = ich2ipt(mix_exp(ich, xx * x, gamma, target.I));
+        ipt = ich2ipt(ich);
     }
 }
 
