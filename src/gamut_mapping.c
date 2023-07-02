@@ -654,10 +654,6 @@ hueshift_done: ;
             continue;
         }
 
-        // Clip to stated source gamut
-        if (!ingamut(ipt, src))
-            ipt = clip_gamma(ipt, 0.5f, src);
-
         struct ICh ich = ipt2ich(ipt);
         if (ich.C <= 1e-2f)
             continue; // Fast path for achromatic colors
