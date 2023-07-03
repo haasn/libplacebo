@@ -129,6 +129,7 @@ int main()
     // Test that primaries round-trip for perceptual gamut mapping
     const pl_matrix3x3 rgb2lms_src = pl_ipt_rgb2lms(&perceptual.input_gamut);
     const pl_matrix3x3 rgb2lms_dst = pl_ipt_rgb2lms(&perceptual.output_gamut);
+    const pl_matrix3x3 lms2rgb_dst = pl_ipt_lms2rgb(&perceptual.output_gamut);
     static const float refpoints[][3] = {
         {1, 0, 0}, {0, 1, 0}, {0, 0, 1},
         {0, 1, 1}, {1, 0, 1}, {1, 1, 0},
@@ -137,22 +138,33 @@ int main()
     for (int i = 0; i < PL_ARRAY_SIZE(refpoints); i++) {
         float c[3]   = { refpoints[i][0], refpoints[i][1], refpoints[i][2] };
         float ref[3] = { refpoints[i][0], refpoints[i][1], refpoints[i][2] };
+        printf("Testing primary: RGB {%.0f %.0f %.0f}\n", c[0], c[1], c[2]);
         pl_matrix3x3_apply(&rgb2lms_src, c);
         c[0] = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, c[0]);
         c[1] = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, c[1]);
         c[2] = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, c[2]);
         pl_matrix3x3_apply(&pl_ipt_lms2ipt, c);
+        printf("Before:    ICh {%f %f %f}\n",
+               c[0], sqrtf(c[1]*c[1] + c[2]*c[2]), atan2f(c[2], c[1]));
         pl_gamut_map_sample(c, &perceptual);
-
+        float rgb[3] = { c[0], c[1], c[2] };
+        pl_matrix3x3_apply(&pl_ipt_ipt2lms, rgb);
+        rgb[0] = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, rgb[0]);
+        rgb[1] = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, rgb[1]);
+        rgb[2] = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NORM, rgb[2]);
+        pl_matrix3x3_apply(&lms2rgb_dst, rgb);
+        const float hue = atan2f(c[2], c[1]);
+        printf("After:     ICh {%f %f %f} = RGB {%f %f %f}\n",
+               c[0], sqrtf(c[1]*c[1] + c[2]*c[2]), hue, rgb[0], rgb[1], rgb[2]);
         pl_matrix3x3_apply(&rgb2lms_dst, ref);
         ref[0] = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ref[0]);
         ref[1] = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ref[1]);
         ref[2] = pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, ref[2]);
         pl_matrix3x3_apply(&pl_ipt_lms2ipt, ref);
-
-        float hue_mapped = atan2f(c[2], c[1]);
-        float hue_ref = atan2f(ref[2], ref[1]);
-        REQUIRE_FEQ(hue_mapped, hue_ref, 1e-2);
+        const float hue_ref = atan2f(ref[2], ref[1]);
+        printf("Should be: ICh {%f %f %f}\n",
+               ref[0], sqrtf(ref[1]*ref[1] + ref[2]*ref[2]), hue_ref);
+        REQUIRE_FEQ(hue, hue_ref, 1e-2);
     }
 
     float *tmp = malloc(sizeof(float[LUT3D_SIZE][LUT3D_SIZE][LUT3D_SIZE][3]));
