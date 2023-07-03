@@ -553,6 +553,7 @@ clip_gamma(struct IPT ipt, float gamma, struct gamut gamut)
 
 static const float perceptual_gamma    = 1.80f;
 static const float perceptual_knee     = 0.70f;
+static const float perceptual_desat    = 0.35f;
 
 static float softclip(float value, float source, float target)
 {
@@ -714,11 +715,13 @@ hueshift_done: ;
         // apply softclip to the chromaticity
         struct ICh source = saturate(ich.h, src);
         struct ICh target = saturate(ich.h, dst);
-        ich.C = softclip(ich.C, margin * source.C, target.C);
+        struct ICh border = desat_bounded(ich.I, ich.h, 0.0f, target.C, dst);
+        const float chromaticity = PL_MIX(target.C, border.C, perceptual_desat);
+        ich.C = softclip(ich.C, margin * source.C, chromaticity);
 
         // Soft-clip the resulting RGB color. This will generally distort
         // hues slightly, but hopefully in an aesthetically pleasing way.
-        struct ICh saturated = { ich.I, target.C, ich.h };
+        struct ICh saturated = { ich.I, chromaticity, ich.h };
         struct RGB peak = ipt2rgb(ich2ipt(saturated), dst);
         struct RGB rgb = ipt2rgb(ich2ipt(ich), dst);
         rgb.R = fmaxf(softclip(rgb.R, peak.R, dst.max_rgb), dst.min_rgb);

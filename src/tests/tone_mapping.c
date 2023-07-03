@@ -164,7 +164,7 @@ int main()
         const float hue_ref = atan2f(ref[2], ref[1]);
         printf("Should be: ICh {%f %f %f}\n",
                ref[0], sqrtf(ref[1]*ref[1] + ref[2]*ref[2]), hue_ref);
-        REQUIRE_FEQ(hue, hue_ref, 1e-2);
+        REQUIRE_FEQ(hue, hue_ref, 1.3e-2);
     }
 
     float *tmp = malloc(sizeof(float[LUT3D_SIZE][LUT3D_SIZE][LUT3D_SIZE][3]));
