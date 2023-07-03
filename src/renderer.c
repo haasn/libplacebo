@@ -1144,6 +1144,9 @@ static void hdr_update_peak(struct pass_state *pass)
     if (pass->fbofmt[4] && !(pass->fbofmt[4]->caps & PL_FMT_CAP_STORABLE))
         goto cleanup;
 
+    if (!rr->gpu->limits.max_ssbo_size)
+        goto cleanup;
+
     if (pass->img.color.hdr.max_luma <= pass->target.color.hdr.max_luma + 1e-6)
         goto cleanup; // no adaptation needed
 
