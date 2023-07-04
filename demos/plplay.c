@@ -93,7 +93,7 @@ struct plplay {
     enum pl_color_transfer force_trc;
     struct pl_hdr_metadata force_hdr;
     bool force_hdr_enable;
-    bool force_icc_luma;
+    bool use_icc_luma;
 
     // custom shaders
     const struct pl_hook **shader_hooks;
@@ -454,7 +454,7 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
         pl_color_repr_merge(&target.repr, &frame->color_repr);
         apply_csp_overrides(p, &target.color);
 
-        if (p->force_icc_luma) {
+        if (p->use_icc_luma) {
             // Always use detected luminance
             p->icc_params.max_luma = 0;
         } else {
@@ -1577,7 +1577,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                           p->target_icc_name ? p->target_icc_name : "(unknown)");
                 reset_icc |= nk_button_label(nk, "Reset ICC");
                 nk_checkbox_label(nk, "Force BPC", &iccpar->force_bpc);
-                nk_checkbox_label(nk, "Use detected luminance", &p->force_icc_luma);
+                nk_checkbox_label(nk, "Use detected luminance", &p->use_icc_luma);
             }
 
             // Apply the reset last to prevent the UI from flashing for a frame
