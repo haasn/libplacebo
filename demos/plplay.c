@@ -653,10 +653,10 @@ int main(int argc, char **argv)
         case 's': state.software_decoding = true; break;
         case 'v': log_level = PL_LOG_DEBUG; break;
         case 'a':
-        win_tag = *++arg;
-        if (!win_tag)
-            print_help = true;
-        break;
+            win_tag = *++arg;
+            if (!win_tag)
+                print_help = true;
+            break;
         default:
             fprintf(stderr, "Invalid arg: %s\n", *arg);
             print_help = true;
