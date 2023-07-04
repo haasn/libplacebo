@@ -711,7 +711,7 @@ static void dispatch_sampler(struct pass_state *pass, pl_shader sh,
         .lut_entries = params->lut_entries,
         .cutoff      = params->polar_cutoff,
         .antiring    = params->antiringing_strength,
-        .no_widening = params->skip_anti_aliasing,
+        .no_widening = params->skip_anti_aliasing && usage != SAMPLER_CONTRAST,
         .lut         = lut,
     };
 
@@ -1988,9 +1988,9 @@ static pl_tex get_feature_map(struct pass_state *pass)
     cparams = PL_DEF(cparams, &pl_color_map_default_params);
     if (!cparams->contrast_recovery || cparams->contrast_smoothness <= 1)
         return NULL;
-    if (!pl_color_space_is_hdr(&pass->img.color))
+    if (!pass->fbofmt[4])
         return NULL;
-    if (!pass->fbofmt[4] || params->skip_anti_aliasing)
+    if (!pl_color_space_is_hdr(&pass->img.color))
         return NULL;
     if (rr->errors & (PL_RENDER_ERR_SAMPLING | PL_RENDER_ERR_CONTRAST_RECOVERY))
         return NULL;
