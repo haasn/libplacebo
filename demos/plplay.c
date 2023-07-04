@@ -634,6 +634,7 @@ int main(int argc, char **argv)
         .deinterlace_params = pl_deinterlace_default_params,
         .distort_params = pl_distort_default_params,
         .target_override = true,
+        .use_icc_luma = true,
     };
 
     const char *filename = NULL;
