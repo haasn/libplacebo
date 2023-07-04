@@ -1990,7 +1990,7 @@ static pl_tex get_feature_map(struct pass_state *pass)
         return NULL;
     if (!pl_color_space_is_hdr(&pass->img.color))
         return NULL;
-    if (!pass->fbofmt[4] || !params->downscaler || params->skip_anti_aliasing)
+    if (!pass->fbofmt[4] || params->skip_anti_aliasing)
         return NULL;
     if (rr->errors & (PL_RENDER_ERR_SAMPLING | PL_RENDER_ERR_CONTRAST_RECOVERY))
         return NULL;
