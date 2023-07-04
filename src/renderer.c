@@ -1906,14 +1906,14 @@ static bool pass_scale_main(struct pass_state *pass)
     if (info.dir == SAMPLER_NOOP && !need_fbo) {
         pl_assert(src.new_w == img->w && src.new_h == img->h);
         PL_TRACE(rr, "Skipping main scaler (would be no-op)");
-        return true;
+        goto done;
     }
 
     if (info.type == SAMPLER_DIRECT && !need_fbo) {
         img->w = src.new_w;
         img->h = src.new_h;
         PL_TRACE(rr, "Skipping main scaler (free sampling)");
-        return true;
+        goto done;
     }
 
     // Hard-disable both sigmoidization and linearization when required
@@ -1966,6 +1966,7 @@ static bool pass_scale_main(struct pass_state *pass)
     if (use_sigmoid)
         pl_shader_unsigmoidize(img_sh(pass, img), params->sigmoid_params);
 
+done:
     pass_hook(pass, img, PL_HOOK_SCALED);
     return true;
 }
