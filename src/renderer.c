@@ -1877,7 +1877,7 @@ static bool pass_scale_main(struct pass_state *pass)
     };
 
     const struct pl_frame *image = &pass->image;
-    bool need_fbo = pass->need_fbo || image->num_overlays > 0;
+    bool need_fbo = pass->need_fbo;
 
     // Force FBO indirection if this shader is non-resizable
     int out_w, out_h;
