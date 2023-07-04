@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '292': 'add pl_peak_detect_high_quality_params and pl_color_map_high_quality_params',
       '291': 'add PL_COLOR_HDR_BLACK, PL_COLOR_SDR_CONTRAST and PL_COLOR_HLG_PEAK',
       '290': 'remove pl_color_map_params.hybrid_mix',
       '289': 'remove pl_gamut_map_params.chroma_margin',

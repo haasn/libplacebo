@@ -937,6 +937,7 @@ void pl_shader_unsigmoidize(pl_shader sh, const struct pl_sigmoid_params *params
 }
 
 const struct pl_peak_detect_params pl_peak_detect_default_params = { PL_PEAK_DETECT_DEFAULTS };
+const struct pl_peak_detect_params pl_peak_detect_high_quality_params = { PL_PEAK_DETECT_HQ_DEFAULTS };
 
 static bool peak_detect_params_eq(const struct pl_peak_detect_params *a,
                                   const struct pl_peak_detect_params *b)
@@ -1427,6 +1428,7 @@ void pl_shader_extract_features(pl_shader sh, struct pl_color_space csp)
 }
 
 const struct pl_color_map_params pl_color_map_default_params = { PL_COLOR_MAP_DEFAULTS };
+const struct pl_color_map_params pl_color_map_high_quality_params = { PL_COLOR_MAP_HQ_DEFAULTS };
 
 static ident_t rect_pos(pl_shader sh, pl_rect2df rc)
 {

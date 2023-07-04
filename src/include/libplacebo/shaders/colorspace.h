@@ -137,8 +137,8 @@ struct pl_peak_detect_params {
     // bright details, but can improve the dynamic brightness range of scenes
     // with very bright isolated highlights.
     //
-    // The default of 99.995% is very conservative and should cause no major
-    // issues in typical content.
+    // A recommended value is 99.995%, which is very conservative and should
+    // cause no major issues in typical content.
     float percentile;
 
     // Allows the peak detection result to be delayed by up to a single frame,
@@ -154,10 +154,15 @@ struct pl_peak_detect_params {
     .scene_threshold_low    = 5.5f,     \
     .scene_threshold_high   = 10.0f,    \
     .minimum_peak           = 1.0f,     \
+    .percentile             = 100.0f,
+
+#define PL_PEAK_DETECT_HQ_DEFAULTS      \
+    PL_PEAK_DETECT_DEFAULTS             \
     .percentile             = 99.995f,
 
 #define pl_peak_detect_params(...) (&(struct pl_peak_detect_params) { PL_PEAK_DETECT_DEFAULTS __VA_ARGS__ })
 PL_API extern const struct pl_peak_detect_params pl_peak_detect_default_params;
+PL_API extern const struct pl_peak_detect_params pl_peak_detect_high_quality_params;
 
 // This function can be used to measure the CLL and FALL of a video
 // source automatically, using a compute shader. The measured values are
@@ -313,11 +318,15 @@ struct pl_color_map_params {
     .metadata               = PL_HDR_METADATA_ANY,              \
     .lut3d_size             = {23, 32, 128},                    \
     .lut_size               = 256,                              \
-    .contrast_recovery      = 0.30f,                            \
     .contrast_smoothness    = 3.5f,
+
+#define PL_COLOR_MAP_HQ_DEFAULTS                                \
+    PL_COLOR_MAP_DEFAULTS                                       \
+    .contrast_recovery      = 0.30f,
 
 #define pl_color_map_params(...) (&(struct pl_color_map_params) { PL_COLOR_MAP_DEFAULTS __VA_ARGS__ })
 PL_API extern const struct pl_color_map_params pl_color_map_default_params;
+PL_API extern const struct pl_color_map_params pl_color_map_high_quality_params;
 
 // Execution arguments for the `pl_shader_color_map_ex` call. Distinct from
 // `pl_color_map_params` because it is filled by internally-provided execution
