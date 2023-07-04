@@ -950,6 +950,10 @@ static bool peak_detect_params_eq(const struct pl_peak_detect_params *a,
 }
 
 enum {
+    // Split the peak buffer into several independent slices to reduce pressure
+    // on global atomics
+    SLICES = 12,
+
     // How many bits to use for storing PQ data. Be careful when setting this
     // too high, as it may overflow `unsigned int` on large video sources.
     //
@@ -973,10 +977,10 @@ enum {
 pl_static_assert(PQ_BITS >= HIST_BITS);
 
 struct peak_buf_data {
-    unsigned frame_wg_count;  // number of work groups processed
-    unsigned frame_sum_pq;    // sum of PQ Y values over all WGs (PQ_BITS)
-    unsigned frame_max_pq;    // maximum PQ Y value among these WGs (PQ_BITS)
-    unsigned frame_hist[HIST_BINS]; // always allocated, conditionally unsed
+    unsigned frame_wg_count[SLICES]; // number of work groups processed
+    unsigned frame_sum_pq[SLICES];   // sum of PQ Y values over all WGs (PQ_BITS)
+    unsigned frame_max_pq[SLICES];   // maximum PQ Y value among these WGs (PQ_BITS)
+    unsigned frame_hist[SLICES][HIST_BINS]; // always allocated, conditionally used
 };
 
 static const struct pl_buffer_var peak_buf_vars[] = {
@@ -1043,13 +1047,17 @@ static inline float iir_coeff(float rate)
 
 static float measure_peak(const struct peak_buf_data *data, float percentile)
 {
-    const float frame_max = (float) data->frame_max_pq / PQ_MAX;
+    unsigned frame_max_pq = data->frame_max_pq[0];
+    for (int k = 1; k < SLICES; k++)
+        frame_max_pq = PL_MAX(frame_max_pq, data->frame_max_pq[k]);
+    const float frame_max = (float) frame_max_pq / PQ_MAX;
     if (percentile <= 0 || percentile >= 100)
         return frame_max;
-
     unsigned total_pixels = 0;
-    for (int i = 0; i < HIST_BINS; i++)
-        total_pixels += data->frame_hist[i];
+    for (int k = 0; k < SLICES; k++) {
+        for (int i = 0; i < HIST_BINS; i++)
+            total_pixels += data->frame_hist[k][i];
+    }
     if (!total_pixels) // no histogram data available?
         return frame_max;
 
@@ -1059,7 +1067,9 @@ static float measure_peak(const struct peak_buf_data *data, float percentile)
 
     unsigned sum = 0;
     for (int i = 0; i < HIST_BINS; i++) {
-        const unsigned next = sum + data->frame_hist[i];
+        unsigned next = sum;
+        for (int k = 0; k < SLICES; k++)
+            next += data->frame_hist[k][i];
         if (next < target_pixel) {
             sum = next;
             continue;
@@ -1104,7 +1114,7 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
     } else {
         ok = pl_buf_read(gpu, obj->peak.buf, 0, &data, sizeof(data));
     }
-    if (ok && data.frame_wg_count > 0) {
+    if (ok && data.frame_wg_count[0] > 0) {
         // Peak detection completed successfully
         pl_buf_destroy(gpu, &obj->peak.buf);
     } else {
@@ -1124,7 +1134,12 @@ static void update_peak_buf(pl_gpu gpu, struct sh_color_map_obj *obj, bool force
         return;
     }
 
-    float avg_pq = (float) data.frame_sum_pq / (data.frame_wg_count * PQ_MAX);
+    uint64_t frame_sum_pq = 0u, frame_wg_count = 0u;
+    for (int k = 0; k < SLICES; k++) {
+        frame_sum_pq   += data.frame_sum_pq[k];
+        frame_wg_count += data.frame_wg_count[k];
+    }
+    float avg_pq = (float) frame_sum_pq / (frame_wg_count * PQ_MAX);
     float max_pq = measure_peak(&data, params->percentile);
     const float min_peak = PL_DEF(params->minimum_peak, 1.0f);
     max_pq = fmaxf(max_pq, pl_hdr_rescale(PL_HDR_NORM, PL_HDR_PQ, min_peak));
@@ -1252,7 +1267,11 @@ retry_ssbo:
     GLSL("// pl_shader_detect_peak                                      \n"
          "{                                                             \n"
          "const uint wg_size = gl_WorkGroupSize.x * gl_WorkGroupSize.y; \n"
-         "vec4 color_orig = color;                                      \n");
+         "uint wg_idx = gl_WorkGroupID.y * gl_NumWorkGroups.x +         \n"
+         "              gl_WorkGroupID.x;                               \n"
+         "uint slice = wg_idx %% %du;                                   \n"
+         "vec4 color_orig = color;                                      \n",
+         SLICES);
 
     // For performance, we want to do as few atomic operations on global
     // memory as possible, so use an atomic in shmem for the work group.
@@ -1326,18 +1345,18 @@ retry_ssbo:
 
     if (use_histogram) {
         GLSL("for (uint i = gl_LocalInvocationIndex; i < %du; i += wg_size) \n"
-             "    atomicAdd(frame_hist[i], "$"[i]);                         \n",
-             HIST_BINS, wg_hist);
+             "    atomicAdd(frame_hist[slice * %du + i], "$"[i]);           \n",
+             HIST_BINS, HIST_BINS, wg_hist);
     }
 
     // Have one thread per work group update the global atomics
-    GLSL("if (gl_LocalInvocationIndex == 0u) {          \n"
-         "    atomicAdd(frame_wg_count, 1u);            \n"
-         "    atomicAdd(frame_sum_pq, "$" / wg_size);   \n"
-         "    atomicMax(frame_max_pq, "$");             \n"
-         "}                                             \n"
-         "color = color_orig;                           \n"
-         "}                                             \n",
+    GLSL("if (gl_LocalInvocationIndex == 0u) {              \n"
+         "    atomicAdd(frame_wg_count[slice], 1u);         \n"
+         "    atomicAdd(frame_sum_pq[slice], "$" / wg_size);\n"
+         "    atomicMax(frame_max_pq[slice], "$");          \n"
+         "}                                                 \n"
+         "color = color_orig;                               \n"
+         "}                                                 \n",
           wg_sum, wg_max);
 
     return true;
