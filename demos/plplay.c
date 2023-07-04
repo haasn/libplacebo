@@ -657,6 +657,11 @@ int main(int argc, char **argv)
             if (!win_tag)
                 print_help = true;
             break;
+        case 'h':
+            state.params = pl_render_high_quality_params;
+            state.color_map_params = pl_color_map_high_quality_params;
+            state.peak_detect_params = pl_peak_detect_high_quality_params;;
+            break;
         default:
             fprintf(stderr, "Invalid arg: %s\n", *arg);
             print_help = true;
@@ -666,9 +671,10 @@ int main(int argc, char **argv)
 
     if (print_help || !filename) {
         fprintf(stderr,
-            "Usage: %s [-a] [-s] [-v] <filename>\n\n"
+            "Usage: %s [-a] [-h] [-s] [-v] <filename>\n\n"
             "Options:\n"
             "\t-a api\twindow api selection [glfw-vk, glfw-gl, glfw-d3d11, sdl2-vk, sdl2-gl]\n"
+            "\t-h\thigh quality defaults\n"
             "\t-s\tsoftware decoding\n"
             "\t-v\tverbose\n"
         , argv[0]);
