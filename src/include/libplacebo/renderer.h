@@ -305,15 +305,15 @@ struct pl_render_params {
     // resize, but should make it much more smooth.
     bool preserve_mixing_cache;
 
+    // --- Performance tuning / debugging options
+    // These may affect performance or may make debugging problems easier,
+    // but shouldn't have any effect on the quality.
+
     // Normally, `pl_render_image_mix` will also push single frames through the
     // mixer cache, in order to speed up re-draws. Enabling this option
     // disables that logic, causing single frames to bypass the cache. (Though
     // it will still read from, if they happen to already be cached)
     bool skip_caching_single_frame;
-
-    // --- Performance tuning / debugging options
-    // These may affect performance or may make debugging problems easier,
-    // but shouldn't have any effect on the quality.
 
     // Disables linearization / sigmoidization before scaling. This might be
     // useful when tracking down unexpected image artifacts or excessing
