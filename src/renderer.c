@@ -205,7 +205,8 @@ const struct pl_render_params pl_render_high_quality_params = {
     .upscaler           = &pl_filter_ewa_lanczos,
     .downscaler         = &pl_filter_mitchell,
     .sigmoid_params     = &pl_sigmoid_default_params,
-    .peak_detect_params = &pl_peak_detect_default_params,
+    .peak_detect_params = &pl_peak_detect_high_quality_params,
+    .color_map_params   = &pl_color_map_high_quality_params,
     .dither_params      = &pl_dither_default_params,
     .deband_params      = &pl_deband_default_params,
 };

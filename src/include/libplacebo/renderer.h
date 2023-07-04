@@ -395,8 +395,9 @@ PL_API extern const struct pl_render_params pl_render_default_params;
 // This contains a higher quality preset for better image quality at the cost
 // of quite a bit of performance. In addition to the settings implied by
 // `pl_render_default_params`, it sets the upscaler to `pl_filter_ewa_lanczos`,
-// and enables debanding. This should only really be used with a discrete GPU
-// and where maximum image quality is desired.
+// enables debanding, and uses pl_*_high_quality_params structs where available.
+// This should only really be used with a discrete GPU and where maximum image
+// quality is desired.
 PL_API extern const struct pl_render_params pl_render_high_quality_params;
 
 // Special filter config for the built-in oversampling algorithm. This is an
