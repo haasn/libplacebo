@@ -373,7 +373,7 @@ struct pass_state {
     // Metadata for `rr->fbos`
     pl_fmt fbofmt[5];
     bool *fbos_used;
-    bool need_fbo; // force main scaler indirection
+    bool need_peak_fbo; // need indirection for peak detection
 
     // Map of acquired frames
     struct {
@@ -1179,7 +1179,7 @@ static void hdr_update_peak(struct pass_state *pass)
         goto cleanup;
     }
 
-    pass->need_fbo = !params->peak_detect_params->allow_delayed;
+    pass->need_peak_fbo = !params->peak_detect_params->allow_delayed;
     return;
 
 cleanup:
@@ -1851,9 +1851,6 @@ static bool pass_read_image(struct pass_state *pass)
 
     pass_hook(pass, &pass->img, PL_HOOK_RGB);
     sh = NULL;
-
-    // HDR peak detection, do this as early as possible
-    hdr_update_peak(pass);
     return true;
 }
 
@@ -1877,7 +1874,7 @@ static bool pass_scale_main(struct pass_state *pass)
     };
 
     const struct pl_frame *image = &pass->image;
-    bool need_fbo = pass->need_fbo;
+    bool need_fbo = false;
 
     // Force FBO indirection if this shader is non-resizable
     int out_w, out_h;
@@ -1887,6 +1884,10 @@ static bool pass_scale_main(struct pass_state *pass)
     struct sampler_info info = sample_src_info(pass, &src, SAMPLER_MAIN);
     bool use_sigmoid = info.dir == SAMPLER_UP && params->sigmoid_params;
     bool use_linear  = info.dir == SAMPLER_DOWN;
+
+    // Opportunistically update peak here if it would save performance
+    if (info.dir == SAMPLER_UP)
+        hdr_update_peak(pass);
 
     // We need to enable the full rendering pipeline if there are any user
     // shaders / hooks that might depend on it.
@@ -1948,6 +1949,7 @@ static bool pass_scale_main(struct pass_state *pass)
     src.tex = img_tex(pass, img);
     if (!src.tex)
         return false;
+    pass->need_peak_fbo = false;
 
     pl_shader sh = pl_dispatch_begin_ex(rr->dp, true);
     dispatch_sampler(pass, sh, &rr->sampler_main, SAMPLER_MAIN, NULL, &src);
@@ -1967,6 +1969,8 @@ static bool pass_scale_main(struct pass_state *pass)
         pl_shader_unsigmoidize(img_sh(pass, img), params->sigmoid_params);
 
 done:
+    if (info.dir != SAMPLER_UP)
+        hdr_update_peak(pass);
     pass_hook(pass, img, PL_HOOK_SCALED);
     return true;
 }
@@ -2135,6 +2139,9 @@ static void pass_convert_colors(struct pass_state *pass)
         struct pl_color_space target_csp = target->color;
         if (pass->dst_icc)
             target_csp.transfer = PL_COLOR_TRC_LINEAR;
+
+        if (pass->need_peak_fbo && !img_tex(pass, img))
+            return;
 
         // generate HDR feature map if required
         pl_tex feature_map = get_feature_map(pass);
