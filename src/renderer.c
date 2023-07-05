@@ -942,6 +942,7 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
         static const struct pl_color_map_params osd_params = {
             PL_COLOR_MAP_DEFAULTS
             .tone_mapping_function = &pl_tone_map_linear,
+            .gamut_mapping         = &pl_gamut_map_saturation,
         };
 
         sh->output = PL_SHADER_SIG_COLOR;
