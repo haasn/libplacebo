@@ -286,7 +286,7 @@ struct pl_color_map_params {
     // --- Debugging options
 
     // Force the use of a full tone-mapping LUT even for functions that have
-    // faster pure GLSL replacements (e.g. clip, linear).
+    // faster pure GLSL replacements (e.g. clip, linear, saturation).
     bool force_tone_mapping_lut;
 
     // Visualize the tone-mapping LUT and gamut mapping 3DLUT, in IPT space.

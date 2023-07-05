@@ -1739,7 +1739,8 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         can_fast = true;
         if (tone.function != &pl_tone_map_linear)
             tone.function = &pl_tone_map_clip;
-        gamut.function = &pl_gamut_map_clip;
+        if (gamut.function != &pl_gamut_map_saturation)
+            gamut.function = &pl_gamut_map_clip;
     }
 
     bool need_tone_map = !pl_tone_map_params_noop(&tone);
@@ -1752,6 +1753,15 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
     pl_matrix3x3 lms2rgb = pl_ipt_lms2rgb(pl_raw_primaries_get(dst.primaries));
     ident_t lms2ipt = SH_MAT3(pl_ipt_lms2ipt);
     ident_t ipt2lms = SH_MAT3(pl_ipt_ipt2lms);
+
+    if (gamut.function == &pl_gamut_map_saturation && can_fast) {
+        const pl_matrix3x3 lms2src = pl_ipt_lms2rgb(&gamut.input_gamut);
+        const pl_matrix3x3 dst2lms = pl_ipt_rgb2lms(&gamut.output_gamut);
+        sh_describe(sh, "gamut map (saturation)");
+        pl_matrix3x3_mul(&lms2rgb, &dst2lms);
+        pl_matrix3x3_mul(&lms2rgb, &lms2src);
+        need_gamut_map = false;
+    }
 
     // Fast path: simply convert between primaries (if needed)
     if (!need_tone_map && !need_gamut_map) {
