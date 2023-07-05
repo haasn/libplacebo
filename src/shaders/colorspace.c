@@ -1733,9 +1733,12 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
         pl_unreachable();
     }
 
+    bool can_fast = !params->force_tone_mapping_lut;
     if (!args->state) {
         // No state object provided, forcibly disable advanced methods
-        tone.function = &pl_tone_map_clip;
+        can_fast = true;
+        if (tone.function != &pl_tone_map_linear)
+            tone.function = &pl_tone_map_clip;
         gamut.function = &pl_gamut_map_clip;
     }
 
@@ -1793,13 +1796,13 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
                      pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, tone.input_max),
                      pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, tone.output_max));
 
-        if (fun == &pl_tone_map_clip && !params->force_tone_mapping_lut) {
+        if (fun == &pl_tone_map_clip && can_fast) {
 
             GLSL("#define tone_map(x) clamp((x), "$", "$") \n",
                  SH_FLOAT(tone.input_min),
                  SH_FLOAT_DYN(tone.input_max));
 
-        } else if (fun == &pl_tone_map_linear && !params->force_tone_mapping_lut) {
+        } else if (fun == &pl_tone_map_linear && can_fast) {
 
             const float gain = PL_DEF(tone.param, 1.0f);
             const float scale = tone.input_max - tone.input_min;
