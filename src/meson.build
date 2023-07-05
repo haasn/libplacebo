@@ -197,7 +197,7 @@ sources += configure_file(
 )
 
 sources += vcs_tag(
-  command: ['git', 'describe'],
+  command: ['git', 'describe', '--dirty'],
   fallback: version_pretty,
   replace_string: '@buildver@',
   input: 'version.h.in',
