@@ -939,9 +939,14 @@ static void draw_overlays(struct pass_state *pass, pl_tex fbo,
             pl_unreachable();
         };
 
+        static const struct pl_color_map_params osd_params = {
+            PL_COLOR_MAP_DEFAULTS
+            .tone_mapping_function = &pl_tone_map_linear,
+        };
+
         sh->output = PL_SHADER_SIG_COLOR;
         pl_shader_decode_color(sh, &ol.repr, NULL);
-        pl_shader_color_map_ex(sh, NULL, pl_color_map_args(ol.color, color));
+        pl_shader_color_map_ex(sh, &osd_params, pl_color_map_args(ol.color, color));
 
         bool premul = repr.alpha == PL_ALPHA_PREMULTIPLIED;
         pl_shader_encode_color(sh, &repr);
