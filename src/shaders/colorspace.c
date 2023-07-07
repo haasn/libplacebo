@@ -1560,6 +1560,7 @@ static void visualize_gamut_map(pl_shader sh, pl_rect2df rc,
          "             all(greaterThanEqual(idx, vec3(0.0)));   \n"
          "vec3 mapped = "$"(idx).xyz;                           \n"
          "float mappedhue = atan(mapped.z, mapped.y);           \n"
+         "float mappedchroma = length(mapped.yz);               \n"
          "ipt = mapped;                                         \n"
          // Visualize gamuts
          "if (!ingamut_src && !ingamut_dst) {                   \n"
@@ -1583,6 +1584,11 @@ static void visualize_gamut_map(pl_shader sh, pl_rect2df rc,
          "    line.x = mapped.x - 0.05;                         \n"
          "    line.yz = 1.2 * mapped.yz;                        \n"
          "    ipt = mix(ipt, line, k);                          \n"
+         "}                                                     \n"
+         "if (inlut && fract(100.0 * mappedchroma) < 1e-1) {    \n"
+         "    line.x = mapped.x + 0.1;                          \n"
+         "    line.yz = 0.4 * mapped.yz;                        \n"
+         "    ipt = mix(ipt, line, 0.5);                        \n"
          "}                                                     \n"
          "}                                                     \n",
          rect_pos(sh, rc),
