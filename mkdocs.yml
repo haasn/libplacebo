@@ -34,7 +34,10 @@ markdown_extensions:
   - pymdownx.superfences
 
 nav:
-  - index.md
-  - basic-rendering.md
-  - renderer.md
-  - custom-shaders.md
+  - 'Using':
+    - index.md
+    - basic-rendering.md
+    - renderer.md
+    - custom-shaders.md
+  - 'Developing':
+    - glsl.md
