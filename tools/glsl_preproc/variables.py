@@ -27,7 +27,7 @@ class Var(object):
         self.name   = name
         self.linenr = linenr
 
-    def ref(self):
+    def __str__(self):
         return f'{Var.STRUCT_NAME}.{self.name}'
 
 def is_literal(expr):
@@ -48,7 +48,22 @@ class VarSet(object):
     def __bool__(self):
         return True if self.varmap else False
 
-    # Returns a reference to the added var
+    def add_var_raw(self, var):
+        # Re-use existing entry for identical expression/type pairs
+        if old := self.varmap.get(var.expr):
+            if var.ctype != old.ctype:
+                raise SyntaxError(f'Conflicting types for expression {var.expr}, '
+                                  f'got {var.ctype}, expected {old.ctype}')
+            assert old.name == var.name
+            return old
+
+        names = [ v.name for v in self.varmap.values() ]
+        while var.name in names:
+            var.name += '_'
+        self.varmap[var.expr] = var
+        return var
+
+    # Returns the added variable
     def add_var(self, ctype, expr, name=None, linenr=0):
         assert expr
         expr = expr.strip()
@@ -56,24 +71,12 @@ class VarSet(object):
             return expr
         name = name or slugify(expr)
 
-        # re-use existing entry for identical expression/type pairs
-        if var := self.varmap.get(expr):
-            if ctype != var.ctype:
-                raise SyntaxError(f'Conflicting types for expression {expr}, '
-                                  f'got {ctype}, expected {var.ctype}')
-            assert var.name == name
-            return var
-
         var = Var(ctype, expr=expr, name=name, linenr=linenr)
-        names = [ v.name for v in self.varmap.values() ]
-        while var.name in names:
-            var.name += '_'
-        self.varmap[expr] = var
-        return var.ref()
+        return self.add_var_raw(var)
 
     def merge(self, other):
         for var in other:
-            self.add_var(var.ctype, var.expr, var.name, var.linenr)
+            self.add_var_raw(var)
 
 # Format specifier + corresponding C type and expression wrapper
 class FmtSpec(object):
