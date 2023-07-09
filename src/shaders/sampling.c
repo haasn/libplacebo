@@ -954,7 +954,7 @@ bool pl_shader_sample_ortho2(pl_shader sh, const struct pl_sample_src *src,
          dir[pass][0], dir[pass][1],
          N / 2 - 1);
 
-    bool use_ar = params->antiring > 0;
+    bool use_ar = params->antiring > 0 && ratio[pass] > 1.0;
     if (use_ar) {
         GLSL("vec4 hi = vec4(0.0); \n"
              "vec4 lo = vec4(1e9); \n");
