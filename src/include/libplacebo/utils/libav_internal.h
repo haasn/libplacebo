@@ -559,10 +559,12 @@ misaligned:
     return planes;
 }
 
-PL_LIBAV_API bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt)
+PL_LIBAV_API bool pl_test_pixfmt_caps(pl_gpu gpu, enum AVPixelFormat pixfmt,
+                                      enum pl_fmt_caps caps)
 {
     struct pl_bit_encoding bits;
     struct pl_plane_data data[4];
+    pl_fmt fmt;
     int planes;
 
     switch (pixfmt) {
@@ -584,11 +586,18 @@ PL_LIBAV_API bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt)
 
     for (int i = 0; i < planes; i++) {
         data[i].row_stride = 0;
-        if (!pl_plane_find_fmt(gpu, NULL, &data[i]))
+        fmt = pl_plane_find_fmt(gpu, NULL, &data[i]);
+        if (!fmt || (fmt->caps & caps) != caps)
             return false;
+
     }
 
     return true;
+}
+
+PL_LIBAV_API bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt)
+{
+    return pl_test_pixfmt_caps(gpu, pixfmt, 0);
 }
 
 PL_LIBAV_API void pl_avframe_set_color(AVFrame *frame, struct pl_color_space csp)

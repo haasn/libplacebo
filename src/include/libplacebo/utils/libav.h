@@ -130,6 +130,14 @@ PL_LIBAV_API void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
 // given AVPixelFormat, without actually uploading or allocating anything.
 PL_LIBAV_API bool pl_test_pixfmt(pl_gpu gpu, enum AVPixelFormat pixfmt);
 
+// Variant of `pl_test_pixfmt` that also tests for the given capabilities
+// being present. Note that in the presence of hardware accelerated frames,
+// this cannot be tested without frame-specific information (i.e. swformat),
+// but in practice this should be a non-issue as GPU-native hwformats will
+// probably be fully supported.
+PL_LIBAV_API bool pl_test_pixfmt_caps(pl_gpu gpu, enum AVPixelFormat pixfmt,
+                                      enum pl_fmt_caps caps);
+
 // Like `pl_frame_from_avframe`, but the texture pointers are also initialized
 // to ensure they have the correct size and format to match the AVframe.
 // Similar in spirit to `pl_recreate_plane`, and the same notes apply. `tex`
