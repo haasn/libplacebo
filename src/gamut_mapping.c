@@ -588,63 +588,67 @@ static float wrap(float h)
     }
 }
 
-static void perceptual(float *lut, const struct pl_gamut_map_params *params)
-{
-    // Separate cache after hueshift, because this invalidates previous cache
-    struct cache cache_pre, cache_post;
-    struct gamut dst_pre, src_pre, src_post, dst_post;
-    get_gamuts(&dst_pre, &src_pre, &cache_pre, params);
-    get_gamuts(&dst_post, &src_post, &cache_post, params);
+enum {
+    S = 12,    // number of hue shift vertices
+    N = S + 2, // +2 for the endpoints
+};
 
-    const float O = pq_eotf(params->min_luma), X = pq_eotf(params->max_luma);
+// Hue-shift helper struct
+struct hueshift {
+    bool disabled;
+    float dh[N];
+    float dddh[N];
+    float K[N];
+    float prev_hue;
+    float prev_shift;
+    struct { float hue, delta; } hueshift[N];
+};
+
+static void hueshift_prepare(struct hueshift *s, struct gamut src, struct gamut dst)
+{
+    const float O = pq_eotf(src.min_luma), X = pq_eotf(src.max_luma);
     const float M = (O + X) / 2.0f;
-    const struct RGB refpoints[] = {
+    const struct RGB refpoints[S] = {
         {X, O, O}, {O, X, O}, {O, O, X},
         {O, X, X}, {X, O, X}, {X, X, O},
         {O, X, M}, {X, O, M}, {X, M, O},
         {O, M, X}, {M, O, X}, {M, X, O},
     };
 
-    enum {
-        S = PL_ARRAY_SIZE(refpoints),
-        N = S + 2, // +2 for the endpoints
-    };
-
-    bool disable_hueshift = false;
-    struct { float hue, delta; } hueshift[N];
+    memset(s, 0, sizeof(*s));
     for (int i = 0; i < S; i++) {
-        struct ICh ich_src = ipt2ich(rgb2ipt(refpoints[i], src_pre));
-        struct ICh ich_dst = ipt2ich(rgb2ipt(refpoints[i], dst_pre));
+        struct ICh ich_src = ipt2ich(rgb2ipt(refpoints[i], src));
+        struct ICh ich_dst = ipt2ich(rgb2ipt(refpoints[i], dst));
         float delta = wrap(ich_dst.h - ich_src.h);
         if (fabsf(delta) > 1.0f) {
             // Disable hue-shifting because one hue vector is rotated too far,
             // probably as the result of this being some sort of synthetic / fake
             // "test" image - preserve hues in this case
-            disable_hueshift = true;
-            goto hueshift_done;
+            s->disabled = true;
+            return;
         }
-        hueshift[i+1].hue = ich_src.h;
-        hueshift[i+1].delta = delta;
+        s->hueshift[i+1].hue = ich_src.h;
+        s->hueshift[i+1].delta = delta;
     }
 
     // Sort and wrap endpoints
-    qsort(hueshift + 1, S, sizeof(*hueshift), cmp_float);
-    hueshift[0]   = hueshift[S];
-    hueshift[S+1] = hueshift[1];
-    hueshift[0].hue   -= 2 * M_PI;
-    hueshift[S+1].hue += 2 * M_PI;
+    qsort(s->hueshift + 1, S, sizeof(*s->hueshift), cmp_float);
+    s->hueshift[0]   = s->hueshift[S];
+    s->hueshift[S+1] = s->hueshift[1];
+    s->hueshift[0].hue   -= 2 * M_PI;
+    s->hueshift[S+1].hue += 2 * M_PI;
 
     // Construction of cubic spline coefficients
-    float dh[N], dddh[N], K[N] = {0}, tmp[N][N] = {0};
+    float tmp[N][N] = {0};
     for (int i = N - 1; i > 0; i--) {
-        dh[i-1] = hueshift[i].hue - hueshift[i-1].hue;
-        dddh[i] = (hueshift[i].delta - hueshift[i-1].delta) / dh[i-1];
+        s->dh[i-1] = s->hueshift[i].hue - s->hueshift[i-1].hue;
+        s->dddh[i] = (s->hueshift[i].delta - s->hueshift[i-1].delta) / s->dh[i-1];
     }
     for (int i = 1; i < N - 1; i++) {
-        tmp[i][i] = 2 * (dh[i-1] + dh[i]);
+        tmp[i][i] = 2 * (s->dh[i-1] + s->dh[i]);
         if (i != 1)
-            tmp[i][i-1] = tmp[i-1][i] = dh[i-1];
-        tmp[i][N-1] = 6 * (dddh[i+1] - dddh[i]);
+            tmp[i][i-1] = tmp[i-1][i] = s->dh[i-1];
+        tmp[i][N-1] = 6 * (s->dddh[i+1] - s->dddh[i]);
     }
     for (int i = 1; i < N - 2; i++) {
         const float q = (tmp[i+1][i] / tmp[i][i]);
@@ -654,13 +658,54 @@ static void perceptual(float *lut, const struct pl_gamut_map_params *params)
     for (int i = N - 2; i > 0; i--) {
         float sum = 0.0f;
         for (int j = i; j <= N - 2; j++)
-            sum += tmp[i][j] * K[j];
-        K[i] = (tmp[i][N-1] - sum) / tmp[i][i];
+            sum += tmp[i][j] * s->K[j];
+        s->K[i] = (tmp[i][N-1] - sum) / tmp[i][i];
     }
 
-hueshift_done: ;
+    s->prev_hue = -10.0f;
+}
 
-    float prev_hue = -10.0f, prev_delta = 0.0f;
+static struct ICh hueshift_apply(struct hueshift *s, struct ICh ich)
+{
+    if (s->disabled)
+        return ich;
+    if (fabsf(ich.h - s->prev_hue) < 1e-6f)
+        goto done;
+
+    // Determine perceptual hue shift delta by interpolation of refpoints
+    for (int i = 0; i < N - 1; i++) {
+        if (s->hueshift[i+1].hue > ich.h) {
+            pl_assert(s->hueshift[i].hue <= ich.h);
+            float a = (s->K[i+1] - s->K[i]) / (6 * s->dh[i]);
+            float b = s->K[i] / 2;
+            float c = s->dddh[i+1] - (2 * s->dh[i] * s->K[i] + s->K[i+1] * s->dh[i]) / 6;
+            float d = s->hueshift[i].delta;
+            float x = ich.h - s->hueshift[i].hue;
+            float delta = ((a * x + b) * x + c) * x + d;
+            s->prev_shift = ich.h + delta;
+            s->prev_hue = ich.h;
+            break;
+        }
+    }
+
+done:
+    return (struct ICh) {
+        .I = ich.I,
+        .C = ich.C,
+        .h = s->prev_shift,
+    };
+}
+
+static void perceptual(float *lut, const struct pl_gamut_map_params *params)
+{
+    // Separate cache after hueshift, because this invalidates previous cache
+    struct cache cache_pre, cache_post;
+    struct gamut dst_pre, src_pre, src_post, dst_post;
+    struct hueshift hueshift;
+    get_gamuts(&dst_pre, &src_pre, &cache_pre, params);
+    get_gamuts(&dst_post, &src_post, &cache_post, params);
+    hueshift_prepare(&hueshift, src_pre, dst_pre);
+
     FOREACH_LUT(lut, ipt) {
         struct gamut src = src_pre;
         struct gamut dst = dst_pre;
@@ -674,41 +719,21 @@ hueshift_done: ;
         if (ich.C <= 1e-2f)
             continue; // Fast path for achromatic colors
 
-        // Determine perceptual hue shift delta by interpolation of refpoints
-        float delta = 0.0f, margin = 1.0f;
-        if (disable_hueshift) {
-            // do nothing
-        } else if (fabsf(ich.h - prev_hue) < 1e-6f) {
-            delta = prev_delta;
-        } else {
-            for (int i = 0; i < N - 1; i++) {
-                if (hueshift[i+1].hue > ich.h) {
-                    pl_assert(hueshift[i].hue <= ich.h);
-                    float a = (K[i+1] - K[i]) / (6 * dh[i]);
-                    float b = K[i] / 2;
-                    float c = dddh[i+1] - (2 * dh[i] * K[i] + K[i+1] * dh[i]) / 6;
-                    float d = hueshift[i].delta;
-                    float x = ich.h - hueshift[i].hue;
-                    delta = ((a * x + b) * x + c) * x + d;
-                    prev_delta = delta;
-                    prev_hue = ich.h;
-                    break;
-                }
-            }
-        }
-
-        if (fabsf(delta) >= 1e-3f) {
+        float margin = 1.0f;
+        struct ICh shifted = hueshift_apply(&hueshift, ich);
+        if (fabsf(shifted.h - ich.h) >= 1e-3f) {
             struct ICh src_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, src);
             struct ICh dst_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, dst);
-            ich.h += delta * pl_smoothstep(dst_border.C * perceptual_knee,
-                                           src_border.C, ich.C);
+            const float k = pl_smoothstep(dst_border.C * perceptual_knee,
+                                          src_border.C, ich.C);
+            ich.h = PL_MIX(ich.h, shifted.h, k);
             src = src_post;
             dst = dst_post;
 
             // Expand/contract chromaticity margin to correspond to the altered
             // size of the hue leaf after applying the hue delta
-            struct ICh shifted = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, src);
-            margin *= fmaxf(1.0f, src_border.C / shifted.C);
+            struct ICh shift_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, src);
+            margin *= fmaxf(1.0f, src_border.C / shift_border.C);
         }
 
         // Determine intersections with source and target gamuts, and
