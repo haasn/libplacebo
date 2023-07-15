@@ -617,7 +617,7 @@ static void perceptual(float *lut, const struct pl_gamut_map_params *params)
         struct ICh ich_dst = ipt2ich(rgb2ipt(refpoints[i], dst_pre));
         float delta = wrap(ich_dst.h - ich_src.h);
         if (fabsf(delta) > 1.0f) {
-            // Disable hue-shifting becuase one hue vector is rotated too far,
+            // Disable hue-shifting because one hue vector is rotated too far,
             // probably as the result of this being some sort of synthetic / fake
             // "test" image - preserve hues in this case
             disable_hueshift = true;
@@ -708,7 +708,7 @@ hueshift_done: ;
             // Expand/contract chromaticity margin to correspond to the altered
             // size of the hue leaf after applying the hue delta
             struct ICh shifted = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, src);
-            margin *= fmaxf(1.0f, shifted.C / src_border.C);
+            margin *= fmaxf(1.0f, src_border.C / shifted.C);
         }
 
         // Determine intersections with source and target gamuts, and
