@@ -96,6 +96,7 @@ static void vk_tex_destroy(pl_gpu gpu, struct pl_tex_t *tex)
     struct pl_tex_vk *tex_vk = PL_PRIV(tex);
 
     vk_sync_deref(gpu, tex_vk->ext_sync);
+    vk->DestroyFramebuffer(vk->dev, tex_vk->framebuffer, PL_VK_ALLOC);
     vk->DestroyImageView(vk->dev, tex_vk->view, PL_VK_ALLOC);
     for (int i = 0; i < tex_vk->num_planes; i++)
         vk_tex_deref(gpu, tex->planes[i]);
@@ -118,7 +119,7 @@ void vk_tex_deref(pl_gpu gpu, pl_tex tex)
 }
 
 
-// Initializes non-VkImage values like the image view and metadata
+// Initializes non-VkImage values like the image view, framebuffers, etc.
 static bool vk_init_image(pl_gpu gpu, pl_tex tex, pl_debug_tag debug_tag)
 {
     struct pl_vk *p = PL_PRIV(gpu);
@@ -144,6 +145,9 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, pl_debug_tag debug_tag)
     if (params->format->emulated)
         tex_vk->transfer_queue = COMPUTE;
 
+    bool ret = false;
+    VkRenderPass dummyPass = VK_NULL_HANDLE;
+
     if (params->sampleable || params->renderable || params->storable) {
         static const VkImageViewType viewType[] = {
             [VK_IMAGE_TYPE_1D] = VK_IMAGE_VIEW_TYPE_1D,
@@ -167,10 +171,64 @@ static bool vk_init_image(pl_gpu gpu, pl_tex tex, pl_debug_tag debug_tag)
         PL_VK_NAME(IMAGE_VIEW, tex_vk->view, debug_tag);
     }
 
-    return true;
+    if (params->renderable) {
+        // Framebuffers need to be created against a specific render pass
+        // layout, so we need to temporarily create a skeleton/dummy render
+        // pass for vulkan to figure out the compatibility
+        VkRenderPassCreateInfo rinfo = {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            .attachmentCount = 1,
+            .pAttachments = &(VkAttachmentDescription) {
+                .format = tex_vk->img_fmt,
+                .samples = VK_SAMPLE_COUNT_1_BIT,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            },
+            .subpassCount = 1,
+            .pSubpasses = &(VkSubpassDescription) {
+                .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+                .colorAttachmentCount = 1,
+                .pColorAttachments = &(VkAttachmentReference) {
+                    .attachment = 0,
+                    .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                },
+            },
+        };
+
+        VK(vk->CreateRenderPass(vk->dev, &rinfo, PL_VK_ALLOC, &dummyPass));
+
+        VkFramebufferCreateInfo finfo = {
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = dummyPass,
+            .attachmentCount = 1,
+            .pAttachments = &tex_vk->view,
+            .width = tex->params.w,
+            .height = tex->params.h,
+            .layers = 1,
+        };
+
+        if (finfo.width > vk->props.limits.maxFramebufferWidth ||
+            finfo.height > vk->props.limits.maxFramebufferHeight)
+        {
+            PL_ERR(gpu, "Framebuffer of size %dx%d exceeds the maximum allowed "
+                   "dimensions: %dx%d", finfo.width, finfo.height,
+                   vk->props.limits.maxFramebufferWidth,
+                   vk->props.limits.maxFramebufferHeight);
+            goto error;
+        }
+
+        VK(vk->CreateFramebuffer(vk->dev, &finfo, PL_VK_ALLOC,
+                                 &tex_vk->framebuffer));
+        PL_VK_NAME(FRAMEBUFFER, tex_vk->framebuffer, debug_tag);
+    }
+
+    ret = true;
 
 error:
-    return false;
+    vk->DestroyRenderPass(vk->dev, dummyPass, PL_VK_ALLOC);
+    return ret;
 }
 
 pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
