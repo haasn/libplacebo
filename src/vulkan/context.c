@@ -187,13 +187,6 @@ static const struct vk_ext vk_device_extensions[] = {
             PL_VK_DEV_FUN(QueueSubmit2KHR),
             {0}
         },
-    }, {
-        .name = VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-        .funs = (const struct vk_fun[]) {
-            PL_VK_DEV_FUN(CmdBeginRenderingKHR),
-            PL_VK_DEV_FUN(CmdEndRenderingKHR),
-            {0}
-        },
     },
 };
 
@@ -221,7 +214,6 @@ const char * const pl_vulkan_recommended_extensions[] = {
     VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME,
 #endif
     VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
-    VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
 };
 
 const int pl_vulkan_num_recommended_extensions =
@@ -280,7 +272,6 @@ const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features = {
 // Required features
 static const VkPhysicalDeviceVulkan13Features required_vk13 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-    .dynamicRendering = true,
     .synchronization2 = true,
 };
 
@@ -313,7 +304,6 @@ static bool check_required_features(struct vk_ctx *vk)
         }                                                                       \
     } while (0)
 
-    CHECK_FEATURE(1, 3, dynamicRendering);
     CHECK_FEATURE(1, 3, synchronization2);
     CHECK_FEATURE(1, 2, hostQueryReset);
     CHECK_FEATURE(1, 2, timelineSemaphore);
@@ -335,6 +325,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(BindBufferMemory),
     PL_VK_DEV_FUN(BindImageMemory),
     PL_VK_DEV_FUN(CmdBeginDebugUtilsLabelEXT),
+    PL_VK_DEV_FUN(CmdBeginRenderPass),
     PL_VK_DEV_FUN(CmdBindDescriptorSets),
     PL_VK_DEV_FUN(CmdBindIndexBuffer),
     PL_VK_DEV_FUN(CmdBindPipeline),
@@ -349,6 +340,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(CmdDraw),
     PL_VK_DEV_FUN(CmdDrawIndexed),
     PL_VK_DEV_FUN(CmdEndDebugUtilsLabelEXT),
+    PL_VK_DEV_FUN(CmdEndRenderPass),
     PL_VK_DEV_FUN(CmdPushConstants),
     PL_VK_DEV_FUN(CmdResetQueryPool),
     PL_VK_DEV_FUN(CmdSetScissor),
@@ -362,12 +354,14 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(CreateDescriptorPool),
     PL_VK_DEV_FUN(CreateDescriptorSetLayout),
     PL_VK_DEV_FUN(CreateFence),
+    PL_VK_DEV_FUN(CreateFramebuffer),
     PL_VK_DEV_FUN(CreateGraphicsPipelines),
     PL_VK_DEV_FUN(CreateImage),
     PL_VK_DEV_FUN(CreateImageView),
     PL_VK_DEV_FUN(CreatePipelineCache),
     PL_VK_DEV_FUN(CreatePipelineLayout),
     PL_VK_DEV_FUN(CreateQueryPool),
+    PL_VK_DEV_FUN(CreateRenderPass),
     PL_VK_DEV_FUN(CreateSampler),
     PL_VK_DEV_FUN(CreateSemaphore),
     PL_VK_DEV_FUN(CreateShaderModule),
@@ -378,6 +372,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(DestroyDescriptorSetLayout),
     PL_VK_DEV_FUN(DestroyDevice),
     PL_VK_DEV_FUN(DestroyFence),
+    PL_VK_DEV_FUN(DestroyFramebuffer),
     PL_VK_DEV_FUN(DestroyImage),
     PL_VK_DEV_FUN(DestroyImageView),
     PL_VK_DEV_FUN(DestroyInstance),
@@ -385,6 +380,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(DestroyPipelineCache),
     PL_VK_DEV_FUN(DestroyPipelineLayout),
     PL_VK_DEV_FUN(DestroyQueryPool),
+    PL_VK_DEV_FUN(DestroyRenderPass),
     PL_VK_DEV_FUN(DestroySampler),
     PL_VK_DEV_FUN(DestroySemaphore),
     PL_VK_DEV_FUN(DestroyShaderModule),

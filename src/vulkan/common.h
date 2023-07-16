@@ -123,7 +123,7 @@ struct vk_ctx {
     PL_VK_FUN(BindBufferMemory);
     PL_VK_FUN(BindImageMemory);
     PL_VK_FUN(CmdBeginDebugUtilsLabelEXT);
-    PL_VK_FUN(CmdBeginRenderingKHR);
+    PL_VK_FUN(CmdBeginRenderPass);
     PL_VK_FUN(CmdBindDescriptorSets);
     PL_VK_FUN(CmdBindIndexBuffer);
     PL_VK_FUN(CmdBindPipeline);
@@ -138,7 +138,7 @@ struct vk_ctx {
     PL_VK_FUN(CmdDraw);
     PL_VK_FUN(CmdDrawIndexed);
     PL_VK_FUN(CmdEndDebugUtilsLabelEXT);
-    PL_VK_FUN(CmdEndRenderingKHR);
+    PL_VK_FUN(CmdEndRenderPass);
     PL_VK_FUN(CmdPipelineBarrier2KHR);
     PL_VK_FUN(CmdPushConstants);
     PL_VK_FUN(CmdPushDescriptorSetKHR);
@@ -155,12 +155,14 @@ struct vk_ctx {
     PL_VK_FUN(CreateDescriptorPool);
     PL_VK_FUN(CreateDescriptorSetLayout);
     PL_VK_FUN(CreateFence);
+    PL_VK_FUN(CreateFramebuffer);
     PL_VK_FUN(CreateGraphicsPipelines);
     PL_VK_FUN(CreateImage);
     PL_VK_FUN(CreateImageView);
     PL_VK_FUN(CreatePipelineCache);
     PL_VK_FUN(CreatePipelineLayout);
     PL_VK_FUN(CreateQueryPool);
+    PL_VK_FUN(CreateRenderPass);
     PL_VK_FUN(CreateSampler);
     PL_VK_FUN(CreateSemaphore);
     PL_VK_FUN(CreateShaderModule);
@@ -173,6 +175,7 @@ struct vk_ctx {
     PL_VK_FUN(DestroyDescriptorSetLayout);
     PL_VK_FUN(DestroyDevice);
     PL_VK_FUN(DestroyFence);
+    PL_VK_FUN(DestroyFramebuffer);
     PL_VK_FUN(DestroyImage);
     PL_VK_FUN(DestroyImageView);
     PL_VK_FUN(DestroyInstance);
@@ -180,6 +183,7 @@ struct vk_ctx {
     PL_VK_FUN(DestroyPipelineCache);
     PL_VK_FUN(DestroyPipelineLayout);
     PL_VK_FUN(DestroyQueryPool);
+    PL_VK_FUN(DestroyRenderPass);
     PL_VK_FUN(DestroySampler);
     PL_VK_FUN(DestroySemaphore);
     PL_VK_FUN(DestroyShaderModule);

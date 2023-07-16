@@ -100,6 +100,8 @@ struct pl_tex_vk {
     VkImageUsageFlags usage_flags;
     // for sampling
     VkImageView view;
+    // for rendering
+    VkFramebuffer framebuffer;
     // for vk_tex_upload/download fallback code
     pl_fmt texel_fmt;
     // for planar textures (as a convenience)
