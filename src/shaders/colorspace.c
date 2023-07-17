@@ -1743,10 +1743,10 @@ void pl_shader_color_map_ex(pl_shader sh, const struct pl_color_map_params *para
     if (!args->state) {
         // No state object provided, forcibly disable advanced methods
         can_fast = true;
-        if (tone.function != &pl_tone_map_linear)
-            tone.function = &pl_tone_map_clip;
-        if (gamut.function != &pl_gamut_map_saturation)
-            gamut.function = &pl_gamut_map_clip;
+        if (tone.function != &pl_tone_map_clip)
+            tone.function = &pl_tone_map_linear;
+        if (gamut.function != &pl_gamut_map_clip)
+            gamut.function = &pl_gamut_map_saturation;
     }
 
     bool need_tone_map = !pl_tone_map_params_noop(&tone);
