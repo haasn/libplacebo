@@ -470,6 +470,11 @@ static const float maxDelta = 5e-5f;
 static inline struct ICh
 desat_bounded(float I, float h, float Cmin, float Cmax, struct gamut gamut)
 {
+    if (I <= gamut.min_luma)
+        return (struct ICh) { .I = gamut.min_luma, .C = 0, .h = h };
+    if (I >= gamut.max_luma)
+        return (struct ICh) { .I = gamut.max_luma, .C = 0, .h = h };
+
     const float maxDI = I * maxDelta;
     struct ICh res = { .I = I, .C = (Cmin + Cmax) / 2, .h = h };
     do {
