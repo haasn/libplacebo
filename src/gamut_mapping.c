@@ -562,6 +562,8 @@ static const float perceptual_desat    = 0.35f;
 
 static float softclip(float value, float source, float target)
 {
+    if (!target)
+        return 0.0f;
     const float peak = source / target;
     const float x = fminf(value / target, peak);
     const float j = perceptual_knee;
