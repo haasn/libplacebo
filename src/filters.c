@@ -168,7 +168,7 @@ pl_filter pl_filter_generate(pl_log log, const struct pl_filter_params *params)
             double x = radius * i / (params->lut_entries - 1);
             weights[i] = pl_filter_sample(&f->params.config, x);
             if (fabs(weights[i]) > params->cutoff)
-                f->radius_cutoff = x;
+                f->radius_cutoff = x * params->filter_scale;
         }
     } else {
         // Pick the most appropriate row size
