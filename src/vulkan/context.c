@@ -231,6 +231,7 @@ static const VkPhysicalDeviceVulkan13Features recommended_vk13 = {
     .computeFullSubgroups = true,
     .maintenance4 = true,
     .shaderZeroInitializeWorkgroupMemory = true,
+    .synchronization2 = true,
 };
 
 static const VkPhysicalDeviceVulkan12Features recommended_vk12 = {
@@ -270,14 +271,8 @@ const VkPhysicalDeviceFeatures2 pl_vulkan_recommended_features = {
 };
 
 // Required features
-static const VkPhysicalDeviceVulkan13Features required_vk13 = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-    .synchronization2 = true,
-};
-
 static const VkPhysicalDeviceVulkan12Features required_vk12 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-    .pNext = (void *) &required_vk13,
     .hostQueryReset = true,
     .timelineSemaphore = true,
 };
@@ -304,7 +299,6 @@ static bool check_required_features(struct vk_ctx *vk)
         }                                                                       \
     } while (0)
 
-    CHECK_FEATURE(1, 3, synchronization2);
     CHECK_FEATURE(1, 2, hostQueryReset);
     CHECK_FEATURE(1, 2, timelineSemaphore);
 
