@@ -163,6 +163,9 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
         if (!map_color_space(p->formats.elem[i].colorSpace, &space))
             continue;
 
+        bool disable10 = !pl_color_transfer_is_hdr(space.transfer) &&
+                         p->params.disable_10bit_sdr;
+
         switch (p->formats.elem[i].format) {
         // Only accept floating point formats for linear curves
         case VK_FORMAT_R16G16B16_SFLOAT:
@@ -188,14 +191,16 @@ static bool pick_surf_format(pl_swapchain sw, const struct pl_color_space *hint)
         // Only accept 10 bit formats for non-linear curves
         case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
         case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-            if (space.transfer != PL_COLOR_TRC_LINEAR)
+            if (space.transfer != PL_COLOR_TRC_LINEAR && !disable10)
                 break; // accept
             continue;
 
         // Accept 16-bit formats for everything
         case VK_FORMAT_R16G16B16_UNORM:
         case VK_FORMAT_R16G16B16A16_UNORM:
-             break; // accept
+            if (!disable10)
+                break; // accept
+            continue;
 
         default: continue;
         }

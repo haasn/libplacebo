@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '294': 'add pl_vulkan_swapchain_params.disable_10bit_sdr',
       '293': 'add pl_test_pixfmt_caps',
       '292': 'add pl_peak_detect_high_quality_params and pl_color_map_high_quality_params',
       '291': 'add PL_COLOR_HDR_BLACK, PL_COLOR_SDR_CONTRAST and PL_COLOR_HLG_PEAK',

@@ -347,6 +347,11 @@ struct pl_vulkan_swapchain_params {
     // calling `pl_swapchain_resize` as appropriate. libplacebo will tolerate
     // the "suboptimal" status indefinitely.
     bool allow_suboptimal;
+
+    // Disable high-bit (10 or more) SDR formats. May help work around buggy
+    // drivers which don't dither properly when outputting high bit depth
+    // SDR backbuffers to 8-bit screens.
+    bool disable_10bit_sdr;
 };
 
 #define pl_vulkan_swapchain_params(...) (&(struct pl_vulkan_swapchain_params) { __VA_ARGS__ })
