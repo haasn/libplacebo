@@ -65,7 +65,7 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
     }
 
     if (last.access || is_trans || is_xfer) {
-        vk->CmdPipelineBarrier2KHR(cmd->buf, &(VkDependencyInfo) {
+        vk_cmd_barrier(cmd, &(VkDependencyInfo) {
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &barr,

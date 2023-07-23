@@ -53,7 +53,7 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
     uint32_t dst_qf = export ? VK_QUEUE_FAMILY_EXTERNAL_KHR : qf;
 
     if (last.access || src_qf != dst_qf) {
-        vk->CmdPipelineBarrier2KHR(cmd->buf, &(VkDependencyInfo) {
+        vk_cmd_barrier(cmd, &(VkDependencyInfo) {
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
             .bufferMemoryBarrierCount = 1,
             .pBufferMemoryBarriers = &(VkBufferMemoryBarrier2) {
@@ -274,8 +274,6 @@ error: ;
 void vk_buf_flush(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
                   size_t offset, size_t size)
 {
-    struct pl_vk *p = PL_PRIV(gpu);
-    struct vk_ctx *vk = p->vk;
     struct pl_buf_vk *buf_vk = PL_PRIV(buf);
 
     // We need to perform a flush if the host is capable of reading back from
@@ -288,7 +286,7 @@ void vk_buf_flush(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
     if (!can_read && !can_write)
         return;
 
-    vk->CmdPipelineBarrier2KHR(cmd->buf, &(VkDependencyInfo) {
+    vk_cmd_barrier(cmd, &(VkDependencyInfo) {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .bufferMemoryBarrierCount = 1,
         .pBufferMemoryBarriers = &(VkBufferMemoryBarrier2) {
