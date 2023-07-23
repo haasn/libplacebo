@@ -797,7 +797,7 @@ static bool vk_sw_submit_frame(pl_swapchain sw)
 
     pl_rc_ref(&p->frames_in_flight);
     vk_cmd_callback(cmd, (vk_cb) present_cb, p, NULL);
-    if (!vk_cmd_submit(vk, &cmd)) {
+    if (!vk_cmd_submit(&cmd)) {
         pl_mutex_unlock(&p->lock);
         return false;
     }
