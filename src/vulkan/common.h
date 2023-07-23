@@ -209,6 +209,7 @@ struct vk_ctx {
     PL_VK_FUN(InvalidateMappedMemoryRanges);
     PL_VK_FUN(MapMemory);
     PL_VK_FUN(QueuePresentKHR);
+    PL_VK_FUN(QueueSubmit);
     PL_VK_FUN(QueueSubmit2KHR);
     PL_VK_FUN(QueueWaitIdle);
     PL_VK_FUN(ResetFences);

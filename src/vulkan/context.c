@@ -398,6 +398,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(GetQueryPoolResults),
     PL_VK_DEV_FUN(InvalidateMappedMemoryRanges),
     PL_VK_DEV_FUN(MapMemory),
+    PL_VK_DEV_FUN(QueueSubmit),
     PL_VK_DEV_FUN(QueueWaitIdle),
     PL_VK_DEV_FUN(ResetFences),
     PL_VK_DEV_FUN(ResetQueryPool),

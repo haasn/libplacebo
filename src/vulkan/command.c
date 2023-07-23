@@ -402,6 +402,62 @@ error:
     return NULL;
 }
 
+static VkResult vk_queue_submit2(struct vk_ctx *vk, VkQueue queue,
+                                 const VkSubmitInfo2 *info2, VkFence fence)
+{
+    if (vk->QueueSubmit2KHR)
+        return vk->QueueSubmit2KHR(queue, 1, info2, fence);
+
+    const uint32_t num_deps = info2->waitSemaphoreInfoCount;
+    const uint32_t num_sigs = info2->signalSemaphoreInfoCount;
+    const uint32_t num_cmds = info2->commandBufferInfoCount;
+
+    void *tmp = pl_tmp(NULL);
+    VkSemaphore *deps           = pl_calloc_ptr(tmp, num_deps, deps);
+    VkPipelineStageFlags *masks = pl_calloc_ptr(tmp, num_deps, masks);
+    uint64_t *depvals           = pl_calloc_ptr(tmp, num_deps, depvals);
+    VkSemaphore *sigs           = pl_calloc_ptr(tmp, num_sigs, sigs);
+    uint64_t *sigvals           = pl_calloc_ptr(tmp, num_sigs, sigvals);
+    VkCommandBuffer *cmds       = pl_calloc_ptr(tmp, num_cmds, cmds);
+
+    for (int i = 0; i < num_deps; i++) {
+        deps[i] = info2->pWaitSemaphoreInfos[i].semaphore;
+        masks[i] = info2->pWaitSemaphoreInfos[i].stageMask;
+        depvals[i] = info2->pWaitSemaphoreInfos[i].value;
+    }
+    for (int i = 0; i < num_sigs; i++) {
+        sigs[i] = info2->pSignalSemaphoreInfos[i].semaphore;
+        sigvals[i] = info2->pSignalSemaphoreInfos[i].value;
+    }
+    for (int i = 0; i < num_cmds; i++)
+        cmds[i] = info2->pCommandBufferInfos[i].commandBuffer;
+
+    const VkTimelineSemaphoreSubmitInfo tinfo = {
+        .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
+        .pNext = info2->pNext,
+        .waitSemaphoreValueCount = num_deps,
+        .pWaitSemaphoreValues = depvals,
+        .signalSemaphoreValueCount = num_sigs,
+        .pSignalSemaphoreValues = sigvals,
+    };
+
+    const VkSubmitInfo info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = &tinfo,
+        .waitSemaphoreCount = num_deps,
+        .pWaitSemaphores = deps,
+        .pWaitDstStageMask = masks,
+        .commandBufferCount = num_cmds,
+        .pCommandBuffers = cmds,
+        .signalSemaphoreCount = num_sigs,
+        .pSignalSemaphores = sigs,
+    };
+
+    VkResult res = vk->QueueSubmit(queue, 1, &info, fence);
+    pl_free(tmp);
+    return res;
+}
+
 bool vk_cmd_submit(struct vk_cmd **pcmd)
 {
     struct vk_cmd *cmd = *pcmd;
@@ -443,7 +499,7 @@ bool vk_cmd_submit(struct vk_cmd **pcmd)
     }
 
     vk->lock_queue(vk->queue_ctx, pool->qf, cmd->qindex);
-    VkResult res = vk->QueueSubmit2KHR(cmd->queue, 1, &sinfo, VK_NULL_HANDLE);
+    VkResult res = vk_queue_submit2(vk, cmd->queue, &sinfo, VK_NULL_HANDLE);
     vk->unlock_queue(vk->queue_ctx, pool->qf, cmd->qindex);
     PL_VK_ASSERT(res, "vkQueueSubmit2");
 
