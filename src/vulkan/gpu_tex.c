@@ -39,7 +39,7 @@ void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
 
     struct vk_sync_scope last;
     bool is_trans = layout != tex_vk->layout, is_xfer = qf != tex_vk->qf;
-    last = vk_sem_barrier(vk, cmd, &tex_vk->sem, stage, access, is_trans || is_xfer);
+    last = vk_sem_barrier(cmd, &tex_vk->sem, stage, access, is_trans || is_xfer);
 
     VkImageMemoryBarrier2 barr = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,

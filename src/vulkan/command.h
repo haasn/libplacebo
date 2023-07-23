@@ -84,8 +84,8 @@ struct vk_sem {
 //
 // Returns a struct describing the previous access to a resource. A pipeline
 // barrier is only required if the previous access scope is nonzero.
-struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
-                                    struct vk_sem *sem, VkPipelineStageFlags2 stage,
+struct vk_sync_scope vk_sem_barrier(struct vk_cmd *cmd, struct vk_sem *sem,
+                                    VkPipelineStageFlags2 stage,
                                     VkAccessFlags2 access, bool is_trans);
 
 // Command pool / queue family hybrid abstraction

@@ -158,8 +158,8 @@ void vk_cmd_sig(struct vk_cmd *cmd, VkPipelineStageFlags2 stage, pl_vulkan_sem s
     PL_ARRAY_APPEND(cmd, cmd->sigs, sinfo);
 }
 
-struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
-                                    struct vk_sem *sem, VkPipelineStageFlags2 stage,
+struct vk_sync_scope vk_sem_barrier(struct vk_cmd *cmd, struct vk_sem *sem,
+                                    VkPipelineStageFlags2 stage,
                                     VkAccessFlags2 access, bool is_trans)
 {
     bool is_write = (access & vk_access_write) || is_trans;
