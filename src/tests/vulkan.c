@@ -50,11 +50,11 @@ static void vulkan_interop_tests(pl_vulkan pl_vk,
 
         // Re-use our internal helpers to signal this VkSemaphore
         struct vk_ctx *vk = PL_PRIV(pl_vk);
-        struct vk_cmd *cmd = vk_cmd_begin(vk, vk->pool_graphics, NULL);
+        struct vk_cmd *cmd = vk_cmd_begin(vk->pool_graphics, NULL);
         REQUIRE(cmd);
         struct pl_sync_vk *sync_vk = PL_PRIV(sync);
         vk_cmd_sig(cmd, VK_PIPELINE_STAGE_2_NONE, (pl_vulkan_sem){ sync_vk->signal });
-        REQUIRE(vk_cmd_submit(vk, &cmd));
+        REQUIRE(vk_cmd_submit(&cmd));
 
         // Do something with the image again to "import" it
         pl_tex_clear(gpu, tex, (float[4]){0});

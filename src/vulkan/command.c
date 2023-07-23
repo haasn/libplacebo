@@ -19,9 +19,9 @@
 #include "utils.h"
 
 // returns VK_SUCCESS (completed), VK_TIMEOUT (not yet completed) or an error
-static VkResult vk_cmd_poll(struct vk_ctx *vk, struct vk_cmd *cmd,
-                            uint64_t timeout)
+static VkResult vk_cmd_poll(struct vk_cmd *cmd, uint64_t timeout)
 {
+    struct vk_ctx *vk = cmd->pool->vk;
     return vk->WaitSemaphores(vk->dev, &(VkSemaphoreWaitInfo) {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
         .semaphoreCount = 1,
@@ -39,8 +39,10 @@ static void flush_callbacks(struct vk_ctx *vk)
     }
 }
 
-static void vk_cmd_reset(struct vk_ctx *vk, struct vk_cmd *cmd)
+static void vk_cmd_reset(struct vk_cmd *cmd)
 {
+    struct vk_ctx *vk = cmd->pool->vk;
+
     // Flush possible callbacks left over from a previous command still in the
     // process of being reset, whose callback triggered this command being
     // reset.
@@ -54,21 +56,23 @@ static void vk_cmd_reset(struct vk_ctx *vk, struct vk_cmd *cmd)
     cmd->sigs.num = 0;
 }
 
-static void vk_cmd_destroy(struct vk_ctx *vk, struct vk_cmd *cmd)
+static void vk_cmd_destroy(struct vk_cmd *cmd)
 {
     if (!cmd)
         return;
 
-    vk_cmd_poll(vk, cmd, UINT64_MAX);
-    vk_cmd_reset(vk, cmd);
+    struct vk_ctx *vk = cmd->pool->vk;
+    vk_cmd_poll(cmd, UINT64_MAX);
+    vk_cmd_reset(cmd);
     vk->DestroySemaphore(vk->dev, cmd->sync.sem, PL_VK_ALLOC);
     vk->FreeCommandBuffers(vk->dev, cmd->pool->pool, 1, &cmd->buf);
 
     pl_free(cmd);
 }
 
-static struct vk_cmd *vk_cmd_create(struct vk_ctx *vk, struct vk_cmdpool *pool)
+static struct vk_cmd *vk_cmd_create(struct vk_cmdpool *pool)
 {
+    struct vk_ctx *vk = pool->vk;
     struct vk_cmd *cmd = pl_zalloc_ptr(NULL, cmd);
     cmd->pool = pool;
 
@@ -98,7 +102,7 @@ static struct vk_cmd *vk_cmd_create(struct vk_ctx *vk, struct vk_cmdpool *pool)
     return cmd;
 
 error:
-    vk_cmd_destroy(vk, cmd);
+    vk_cmd_destroy(cmd);
     vk->failed = true;
     return NULL;
 }
@@ -254,26 +258,28 @@ struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk, int qf, int qnum,
     return pool;
 
 error:
-    vk_cmdpool_destroy(vk, pool);
+    vk_cmdpool_destroy(pool);
     vk->failed = true;
     return NULL;
 }
 
-void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool)
+void vk_cmdpool_destroy(struct vk_cmdpool *pool)
 {
     if (!pool)
         return;
 
     for (int i = 0; i < pool->cmds.num; i++)
-        vk_cmd_destroy(vk, pool->cmds.elem[i]);
+        vk_cmd_destroy(pool->cmds.elem[i]);
 
+    struct vk_ctx *vk = pool->vk;
     vk->DestroyCommandPool(vk->dev, pool->pool, PL_VK_ALLOC);
     pl_free(pool);
 }
 
-struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool,
-                            pl_debug_tag debug_tag)
+struct vk_cmd *vk_cmd_begin(struct vk_cmdpool *pool, pl_debug_tag debug_tag)
 {
+    struct vk_ctx *vk = pool->vk;
+
     // Garbage collect the cmdpool first, to increase the chances of getting
     // an already-available command buffer.
     vk_poll_commands(vk, 0);
@@ -281,7 +287,7 @@ struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool,
     struct vk_cmd *cmd = NULL;
     pl_mutex_lock(&vk->lock);
     if (!PL_ARRAY_POP(pool->cmds, &cmd)) {
-        cmd = vk_cmd_create(vk, pool);
+        cmd = vk_cmd_create(pool);
         if (!cmd) {
             pl_mutex_unlock(&vk->lock);
             goto error;
@@ -309,12 +315,12 @@ struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool,
 
 error:
     // Something has to be seriously messed up if we get to this point
-    vk_cmd_destroy(vk, cmd);
+    vk_cmd_destroy(cmd);
     vk->failed = true;
     return NULL;
 }
 
-bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
+bool vk_cmd_submit(struct vk_cmd **pcmd)
 {
     struct vk_cmd *cmd = *pcmd;
     if (!cmd)
@@ -322,6 +328,7 @@ bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
 
     *pcmd = NULL;
     struct vk_cmdpool *pool = cmd->pool;
+    struct vk_ctx *vk = pool->vk;
 
     VK(vk->EndCommandBuffer(cmd->buf));
 
@@ -364,7 +371,7 @@ bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **pcmd)
     return true;
 
 error:
-    vk_cmd_reset(vk, cmd);
+    vk_cmd_reset(cmd);
     pl_mutex_lock(&vk->lock);
     PL_ARRAY_APPEND(pool, pool->cmds, cmd);
     pl_mutex_unlock(&vk->lock);
@@ -381,7 +388,7 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
         struct vk_cmd *cmd = vk->cmds_pending.elem[0];
         struct vk_cmdpool *pool = cmd->pool;
         pl_mutex_unlock(&vk->lock); // don't hold mutex while blocking
-        if (vk_cmd_poll(vk, cmd, timeout) == VK_TIMEOUT)
+        if (vk_cmd_poll(cmd, timeout) == VK_TIMEOUT)
             return ret;
         pl_mutex_lock(&vk->lock);
         if (!vk->cmds_pending.num || vk->cmds_pending.elem[0] != cmd)
@@ -390,7 +397,7 @@ bool vk_poll_commands(struct vk_ctx *vk, uint64_t timeout)
         PL_TRACE(vk, "VkSemaphore signalled: 0x%"PRIx64" = %"PRIu64,
                  (uint64_t) cmd->sync.sem, cmd->sync.value);
         PL_ARRAY_REMOVE_AT(vk->cmds_pending, 0); // remove before callbacks
-        vk_cmd_reset(vk, cmd);
+        vk_cmd_reset(cmd);
         PL_ARRAY_APPEND(pool, pool->cmds, cmd);
         ret = true;
 

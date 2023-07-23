@@ -930,7 +930,7 @@ void pl_vulkan_destroy(pl_vulkan *pl_vk)
         }
         vk_malloc_destroy(&vk->ma);
         for (int i = 0; i < vk->pools.num; i++)
-            vk_cmdpool_destroy(vk, vk->pools.elem[i]);
+            vk_cmdpool_destroy(vk->pools.elem[i]);
 
         if (!vk->imported)
             vk->DestroyDevice(vk->dev, PL_VK_ALLOC);

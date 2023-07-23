@@ -162,8 +162,8 @@ struct vk_cmd *_begin_cmd(pl_gpu gpu, enum queue_type type, const char *label,
     }
 
     if (!p->cmd || p->cmd->pool != pool) {
-        vk_cmd_submit(vk, &p->cmd);
-        p->cmd = vk_cmd_begin(vk, pool, label);
+        vk_cmd_submit(&p->cmd);
+        p->cmd = vk_cmd_begin(pool, label);
         if (!p->cmd) {
             pl_mutex_unlock(&p->recording);
             return NULL;
@@ -196,7 +196,7 @@ bool _end_cmd(pl_gpu gpu, struct vk_cmd **pcmd, bool submit)
     if (!pcmd) {
         if (submit) {
             pl_mutex_lock(&p->recording);
-            ret = vk_cmd_submit(p->vk, &p->cmd);
+            ret = vk_cmd_submit(&p->cmd);
             pl_mutex_unlock(&p->recording);
         }
         return ret;
@@ -227,7 +227,7 @@ bool _end_cmd(pl_gpu gpu, struct vk_cmd **pcmd, bool submit)
         vk->CmdEndDebugUtilsLabelEXT(cmd->buf);
 
     if (submit)
-        ret = vk_cmd_submit(vk, &p->cmd);
+        ret = vk_cmd_submit(&p->cmd);
 
     pl_mutex_unlock(&p->recording);
     return ret;
@@ -252,7 +252,7 @@ static void vk_gpu_destroy(pl_gpu gpu)
     struct pl_vk *p = PL_PRIV(gpu);
     struct vk_ctx *vk = p->vk;
 
-    vk_cmd_submit(vk, &p->cmd);
+    vk_cmd_submit(&p->cmd);
     vk_wait_idle(vk);
 
     for (enum pl_tex_sample_mode s = 0; s < PL_TEX_SAMPLE_MODE_COUNT; s++) {
@@ -877,8 +877,8 @@ struct vk_cmd *pl_vk_steal_cmd(pl_gpu gpu)
 
     struct vk_cmdpool *pool = vk->pool_graphics;
     if (!cmd || cmd->pool != pool) {
-        vk_cmd_submit(vk, &cmd);
-        cmd = vk_cmd_begin(vk, pool, NULL);
+        vk_cmd_submit(&cmd);
+        cmd = vk_cmd_begin(pool, NULL);
     }
 
     return cmd;

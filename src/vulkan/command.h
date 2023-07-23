@@ -107,16 +107,15 @@ struct vk_cmdpool {
 struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk, int qf, int qnum,
                                      VkQueueFamilyProperties props);
 
-void vk_cmdpool_destroy(struct vk_ctx *vk, struct vk_cmdpool *pool);
+void vk_cmdpool_destroy(struct vk_cmdpool *pool);
 
 // Fetch a command buffer from a command pool and begin recording to it.
 // Returns NULL on failure.
-struct vk_cmd *vk_cmd_begin(struct vk_ctx *vk, struct vk_cmdpool *pool,
-                            pl_debug_tag debug_tag);
+struct vk_cmd *vk_cmd_begin(struct vk_cmdpool *pool, pl_debug_tag debug_tag);
 
 // Finish recording a command buffer and submit it for execution. This function
 // takes over ownership of **cmd, and sets *cmd to NULL in doing so.
-bool vk_cmd_submit(struct vk_ctx *vk, struct vk_cmd **cmd);
+bool vk_cmd_submit(struct vk_cmd **cmd);
 
 // Block until some commands complete executing. This is the only function that
 // actually processes the callbacks. Will wait at most `timeout` nanoseconds
