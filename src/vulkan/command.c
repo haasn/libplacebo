@@ -233,6 +233,7 @@ struct vk_cmdpool *vk_cmdpool_create(struct vk_ctx *vk, int qf, int qnum,
 {
     struct vk_cmdpool *pool = pl_alloc_ptr(NULL, pool);
     *pool = (struct vk_cmdpool) {
+        .vk         = vk,
         .props      = props,
         .qf         = qf,
         .queues     = pl_calloc(pool, qnum, sizeof(VkQueue)),

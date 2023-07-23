@@ -90,6 +90,7 @@ struct vk_sync_scope vk_sem_barrier(struct vk_ctx *vk, struct vk_cmd *cmd,
 
 // Command pool / queue family hybrid abstraction
 struct vk_cmdpool {
+    struct vk_ctx *vk;
     VkQueueFamilyProperties props;
     int qf; // queue family index
     VkCommandPool pool;
