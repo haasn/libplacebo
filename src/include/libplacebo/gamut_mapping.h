@@ -100,8 +100,10 @@ PL_API void pl_gamut_map_sample(float x[3], const struct pl_gamut_map_params *pa
 // Performs no gamut-mapping, just hard clips out-of-range colors per-channel.
 PL_API extern const struct pl_gamut_map_function pl_gamut_map_clip;
 
-// Performs a perceptually balanced gamut mapping using a soft knee function to
-// roll-off clipped regions, and a hue shifting function to preserve saturation.
+// Performs a perceptually balanced (saturation) gamut mapping, using a soft
+// knee function to preserve in-gamut colors, followed by a final softclip
+// operation. This works bidirectionally, meaning it can both compress and
+// expand the gamut. Behaves similar to a blend of `saturation` and `clip`.
 PL_API extern const struct pl_gamut_map_function pl_gamut_map_perceptual;
 
 // Performs relative colorimetric clipping, while maintaining an exponential

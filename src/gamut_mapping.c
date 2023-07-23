@@ -559,6 +559,7 @@ clip_gamma(struct IPT ipt, float gamma, struct gamut gamut)
 static const float perceptual_gamma    = 1.80f;
 static const float perceptual_knee     = 0.70f;
 static const float perceptual_desat    = 0.35f;
+static const float perceptual_deadzone = 0.20f;
 
 static float softclip(float value, float source, float target)
 {
@@ -705,67 +706,36 @@ done:
 
 static void perceptual(float *lut, const struct pl_gamut_map_params *params)
 {
-    // Separate cache after hueshift, because this invalidates previous cache
-    struct cache cache_pre, cache_post;
-    struct gamut dst_pre, src_pre, src_post, dst_post;
-    struct hueshift hueshift;
-    get_gamuts(&dst_pre, &src_pre, &cache_pre, params);
-    get_gamuts(&dst_post, &src_post, &cache_post, params);
-    hueshift_prepare(&hueshift, src_pre, dst_pre);
+    struct cache cache;
+    struct gamut dst, src;
+    get_gamuts(&dst, &src, &cache, params);
 
     FOREACH_LUT(lut, ipt) {
-        struct gamut src = src_pre;
-        struct gamut dst = dst_pre;
-
-        if (ipt.I <= dst.min_luma) {
-            ipt.P = ipt.T = 0.0f;
-            continue;
-        }
-
         struct ICh ich = ipt2ich(ipt);
-        if (ich.C <= 1e-2f)
-            continue; // Fast path for achromatic colors
+        struct ICh src_peak = saturate(ich.h, src);
+        struct ICh dst_peak = saturate(ich.h, dst);
+        struct IPT mapped = rgb2ipt(ipt2rgb(ipt, src), dst);
 
-        float margin = 1.0f;
-        struct ICh shifted = hueshift_apply(&hueshift, ich);
-        if (fabsf(shifted.h - ich.h) >= 1e-3f) {
-            struct ICh src_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, src);
-            struct ICh dst_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, dst);
-            const float k = pl_smoothstep(dst_border.C * perceptual_knee,
-                                          src_border.C, ich.C);
-            ich.h = PL_MIX(ich.h, shifted.h, k);
-            src = src_post;
-            dst = dst_post;
+        // Protect in gamut region
+        const float maxC = fmaxf(src_peak.C, dst_peak.C);
+        const float k = pl_smoothstep(perceptual_deadzone, 1.0f, ich.C / maxC);
+        ipt.I = PL_MIX(ipt.I, mapped.I, k);
+        ipt.P = PL_MIX(ipt.P, mapped.P, k);
+        ipt.T = PL_MIX(ipt.T, mapped.T, k);
 
-            // Expand/contract chromaticity margin to correspond to the altered
-            // size of the hue leaf after applying the hue delta
-            struct ICh shift_border = desat_bounded(ich.I, ich.h, 0.0f, 0.5f, src);
-            margin *= fmaxf(1.0f, src_border.C / shift_border.C);
-        }
-
-        // Determine intersections with source and target gamuts, and
-        // apply softclip to the chromaticity
-        struct ICh source = saturate(ich.h, src);
-        struct ICh target = saturate(ich.h, dst);
-        struct ICh border = desat_bounded(ich.I, ich.h, 0.0f, target.C, dst);
-        const float chromaticity = PL_MIX(target.C, border.C, perceptual_desat);
-        ich.C = softclip(ich.C, margin * source.C, chromaticity);
-
-        // Soft-clip the resulting RGB color. This will generally distort
-        // hues slightly, but hopefully in an aesthetically pleasing way.
-        struct ICh saturated = { ich.I, chromaticity, ich.h };
-        struct RGB peak = ipt2rgb(ich2ipt(saturated), dst);
-        struct RGB rgb = ipt2rgb(ich2ipt(ich), dst);
-        rgb.R = fmaxf(softclip(rgb.R, peak.R, dst.max_rgb), dst.min_rgb);
-        rgb.G = fmaxf(softclip(rgb.G, peak.G, dst.max_rgb), dst.min_rgb);
-        rgb.B = fmaxf(softclip(rgb.B, peak.B, dst.max_rgb), dst.min_rgb);
+        struct RGB rgb = ipt2rgb(ipt, dst);
+        const float maxRGB = fmaxf(rgb.R, fmaxf(rgb.G, rgb.B));
+        rgb.R = fmaxf(softclip(rgb.R, maxRGB, dst.max_rgb), dst.min_rgb);
+        rgb.G = fmaxf(softclip(rgb.G, maxRGB, dst.max_rgb), dst.min_rgb);
+        rgb.B = fmaxf(softclip(rgb.B, maxRGB, dst.max_rgb), dst.min_rgb);
         ipt = rgb2ipt(rgb, dst);
     }
 }
 
 const struct pl_gamut_map_function pl_gamut_map_perceptual = {
     .name = "perceptual",
-    .description = "Perceptual soft-clip",
+    .description = "Perceptual mapping",
+    .bidirectional = true,
     .map = perceptual,
 };
 
