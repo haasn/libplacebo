@@ -162,6 +162,88 @@ void vk_cmd_sig(struct vk_cmd *cmd, VkPipelineStageFlags2 stage, pl_vulkan_sem s
     PL_ARRAY_APPEND(cmd, cmd->sigs, sinfo);
 }
 
+#define SET(FLAG, CHECK)  \
+    if (flags2 & (CHECK)) \
+        flags |= FLAG
+
+static VkAccessFlags lower_access2(VkAccessFlags2 flags2)
+{
+    VkAccessFlags flags = flags2 & VK_ACCESS_FLAG_BITS_MAX_ENUM;
+    SET(VK_ACCESS_SHADER_READ_BIT,  VK_ACCESS_2_SHADER_SAMPLED_READ_BIT |
+                                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+    SET(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    return flags;
+}
+
+static VkPipelineStageFlags lower_stage2(VkPipelineStageFlags2 flags2)
+{
+    VkPipelineStageFlags flags = flags2 & VK_PIPELINE_STAGE_FLAG_BITS_MAX_ENUM;
+    SET(VK_PIPELINE_STAGE_TRANSFER_BIT,     VK_PIPELINE_STAGE_2_COPY_BIT |
+                                            VK_PIPELINE_STAGE_2_RESOLVE_BIT |
+                                            VK_PIPELINE_STAGE_2_BLIT_BIT |
+                                            VK_PIPELINE_STAGE_2_CLEAR_BIT);
+    SET(VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT |
+                                            VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT);
+    return flags;
+}
+
+#undef SET
+
+void vk_cmd_barrier(struct vk_cmd *cmd, const VkDependencyInfo *info)
+{
+    struct vk_ctx *vk = cmd->pool->vk;
+    if (vk->CmdPipelineBarrier2KHR) {
+        vk->CmdPipelineBarrier2KHR(cmd->buf, info);
+        return;
+    }
+
+    pl_assert(!info->pNext);
+    pl_assert(info->memoryBarrierCount == 0);
+    pl_assert(info->bufferMemoryBarrierCount + info->imageMemoryBarrierCount == 1);
+
+    if (info->bufferMemoryBarrierCount) {
+
+        const VkBufferMemoryBarrier2 *barr2 = info->pBufferMemoryBarriers;
+        const VkBufferMemoryBarrier barr = {
+            .sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            .pNext               = barr2->pNext,
+            .srcAccessMask       = lower_access2(barr2->srcAccessMask),
+            .dstAccessMask       = lower_access2(barr2->dstAccessMask),
+            .srcQueueFamilyIndex = barr2->srcQueueFamilyIndex,
+            .dstQueueFamilyIndex = barr2->dstQueueFamilyIndex,
+            .buffer              = barr2->buffer,
+            .offset              = barr2->offset,
+            .size                = barr2->size,
+        };
+
+        vk->CmdPipelineBarrier(cmd->buf, lower_stage2(barr2->srcStageMask),
+                               lower_stage2(barr2->dstStageMask),
+                               info->dependencyFlags,
+                               0, NULL, 1, &barr, 0, NULL);
+
+    } else {
+
+        const VkImageMemoryBarrier2 *barr2 = info->pImageMemoryBarriers;
+        const VkImageMemoryBarrier barr = {
+            .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .pNext               = barr2->pNext,
+            .srcAccessMask       = lower_access2(barr2->srcAccessMask),
+            .dstAccessMask       = lower_access2(barr2->dstAccessMask),
+            .oldLayout           = barr2->oldLayout,
+            .newLayout           = barr2->newLayout,
+            .srcQueueFamilyIndex = barr2->srcQueueFamilyIndex,
+            .dstQueueFamilyIndex = barr2->dstQueueFamilyIndex,
+            .image               = barr2->image,
+            .subresourceRange    = barr2->subresourceRange,
+        };
+
+        vk->CmdPipelineBarrier(cmd->buf, lower_stage2(barr2->srcStageMask),
+                               lower_stage2(barr2->dstStageMask),
+                               info->dependencyFlags,
+                               0, NULL, 0, NULL, 1, &barr);
+    }
+}
+
 struct vk_sync_scope vk_sem_barrier(struct vk_cmd *cmd, struct vk_sem *sem,
                                     VkPipelineStageFlags2 stage,
                                     VkAccessFlags2 access, bool is_trans)

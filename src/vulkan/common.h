@@ -139,6 +139,7 @@ struct vk_ctx {
     PL_VK_FUN(CmdDrawIndexed);
     PL_VK_FUN(CmdEndDebugUtilsLabelEXT);
     PL_VK_FUN(CmdEndRenderPass);
+    PL_VK_FUN(CmdPipelineBarrier);
     PL_VK_FUN(CmdPipelineBarrier2KHR);
     PL_VK_FUN(CmdPushConstants);
     PL_VK_FUN(CmdPushDescriptorSetKHR);

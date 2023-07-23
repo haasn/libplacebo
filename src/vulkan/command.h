@@ -66,6 +66,9 @@ void vk_cmd_dep(struct vk_cmd *cmd, VkPipelineStageFlags2 stage, pl_vulkan_sem d
 // after the given stage completes.
 void vk_cmd_sig(struct vk_cmd *cmd, VkPipelineStageFlags2 stage, pl_vulkan_sem sig);
 
+// Compatibility wrappers for vkCmdPipelineBarrier2 (works with pre-1.3)
+void vk_cmd_barrier(struct vk_cmd *cmd, const VkDependencyInfo *info);
+
 // Synchronization scope
 struct vk_sync_scope {
     pl_vulkan_sem sync;         // semaphore of last access

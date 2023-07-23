@@ -341,6 +341,7 @@ static const struct vk_fun vk_dev_funs[] = {
     PL_VK_DEV_FUN(CmdDrawIndexed),
     PL_VK_DEV_FUN(CmdEndDebugUtilsLabelEXT),
     PL_VK_DEV_FUN(CmdEndRenderPass),
+    PL_VK_DEV_FUN(CmdPipelineBarrier),
     PL_VK_DEV_FUN(CmdPushConstants),
     PL_VK_DEV_FUN(CmdResetQueryPool),
     PL_VK_DEV_FUN(CmdSetScissor),
