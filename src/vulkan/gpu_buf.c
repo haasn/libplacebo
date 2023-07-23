@@ -44,7 +44,7 @@ void vk_buf_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_buf buf,
     }
 
     struct vk_sync_scope last;
-    last = vk_sem_barrier(vk, cmd, &buf_vk->sem, stage, access, export);
+    last = vk_sem_barrier(cmd, &buf_vk->sem, stage, access, export);
 
     // CONCURRENT buffers require transitioning to/from IGNORED, EXCLUSIVE
     // buffers require transitioning to/from the concrete QF index
