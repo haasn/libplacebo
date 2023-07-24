@@ -17,7 +17,7 @@ endif
 
 # Looks like meson in certain configuration returns ' ' instead of empty string
 mingw32 = cc.get_define('__MINGW32__').strip()
-if host_machine.system() == 'windows' and mingw32 != ''
+if host_machine.system() == 'windows' and mingw32 != '' and host_machine.cpu() in ['aarch64', 'arm', 'x86_64']
   # MinGW-w64 math functions are significantly slower than the UCRT ones.
   # In particular powf is over 7 times slower than UCRT counterpart.
   # MinGW-w64 explicitly excludes some math functions from their ucrtbase def
