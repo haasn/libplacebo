@@ -30,7 +30,7 @@ struct cache_entry {
 
 struct entry {
     pl_rc_t rc;
-    float pts;
+    double pts;
     struct cache_entry cache;
     struct pl_source_frame src;
     struct pl_frame frame;
@@ -96,7 +96,7 @@ struct pl_queue_t {
     struct pool vps, fps;
     float reported_vps;
     float reported_fps;
-    float prev_pts;
+    double prev_pts;
 
     // Storage for temporary arrays
     PL_ARRAY(uint64_t) tmp_sig;
@@ -295,9 +295,9 @@ static void queue_push(pl_queue p, const struct pl_source_frame *src)
     // Update FPS estimates if possible/reasonable
     default_estimate(&p->fps, src->first_field ? src->duration / 2 : src->duration);
     if (p->queue.num) {
-        float last_pts = p->queue.elem[p->queue.num - 1]->pts;
+        double last_pts = p->queue.elem[p->queue.num - 1]->pts;
         float delta = src->pts - last_pts;
-        if (delta <= 0.0) {
+        if (delta <= 0.0f) {
             PL_DEBUG(p, "Non monotonically increasing PTS %f -> %f", last_pts, src->pts);
         } else if (p->fps.estimate && delta > 10.0 * p->fps.estimate) {
             PL_DEBUG(p, "Discontinuous source PTS jump %f -> %f", last_pts, src->pts);
@@ -460,7 +460,7 @@ static void report_estimates(pl_queue p)
         if (p->reported_fps && p->reported_vps) {
             // Only re-report the estimates if they've changed considerably
             // from the previously reported values
-            static const float report_delta = 0.3;
+            static const float report_delta = 0.3f;
             float delta_fps = delta(p->reported_fps, p->fps.estimate);
             float delta_vps = delta(p->reported_vps, p->vps.estimate);
             if (delta_fps < report_delta && delta_vps < report_delta)
@@ -567,7 +567,7 @@ static bool entry_complete(struct entry *entry)
 // `pts`, and idx 1 is the first frame after `pts` (unless this is the last).
 //
 // Returns PL_QUEUE_OK only if idx 0 is still legal under ZOH semantics.
-static enum pl_queue_status advance(pl_queue p, float pts,
+static enum pl_queue_status advance(pl_queue p, double pts,
                                     const struct pl_queue_params *params)
 {
     // Cull all frames except the last frame before `pts`
@@ -812,8 +812,8 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
     if (!params->radius)
         return oversample(p, mix, params);
 
-    float min_pts = params->pts - params->radius * p->fps.estimate,
-          max_pts = params->pts + params->radius * p->fps.estimate;
+    double min_pts = params->pts - params->radius * p->fps.estimate,
+           max_pts = params->pts + params->radius * p->fps.estimate;
 
     enum pl_queue_status ret;
     switch ((ret = advance(p, min_pts, params))) {
@@ -934,7 +934,7 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
     default_estimate(&p->vps, params->vsync_duration);
 
     float delta = params->pts - p->prev_pts;
-    if (delta < 0.0) {
+    if (delta < 0.0f) {
 
         // This is a backwards PTS jump. This is something we can handle
         // semi-gracefully, but only if we haven't culled past the current
@@ -950,7 +950,7 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
             return PL_QUEUE_ERR;
         }
 
-    } else if (delta > 1.0) {
+    } else if (delta > 1.0f) {
 
         // A jump of more than a second is probably the result of a
         // discontinuous jump after a suspend. To prevent this from exploding

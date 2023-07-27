@@ -46,7 +46,7 @@ struct pl_source_frame {
     // frame. These must be monotonically increasing for subsequent frames.
     // To implement a discontinuous jump, users must explicitly reset the
     // frame queue with `pl_queue_reset` and restart from PTS 0.0.
-    float pts;
+    double pts;
 
     // The frame's duration. This is not needed in normal scenarios, as the
     // FPS can be inferred from the `pts` values themselves. Providing it
@@ -139,7 +139,7 @@ struct pl_queue_params {
     // These must be monotonically increasing. To implement a discontinuous
     // jump, users must explicitly reset the frame queue with `pl_queue_reset`
     // and restart from PTS 0.0.
-    float pts;
+    double pts;
 
     // The radius of the configured mixer. This should be set to the value
     // as returned by `pl_frame_mix_radius`.
