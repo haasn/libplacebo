@@ -51,7 +51,7 @@ struct entry {
 
 // Limits for FPS estimation state
 #define MAX_SAMPLES 32
-#define MIN_SAMPLES 8
+#define MIN_SAMPLES 4
 
 // Stickiness to prevent `interpolation_threshold` oscillation
 #define THRESHOLD_MAX_RATIO 0.3
