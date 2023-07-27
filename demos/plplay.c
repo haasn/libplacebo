@@ -115,7 +115,9 @@ struct plplay {
         uint32_t rendered;
         uint32_t mapped;
         uint32_t dropped;
+        uint32_t missed;
         uint32_t stalled;
+        double missed_ms;
         double stalled_ms;
         double current_pts;
     } stats;
@@ -551,6 +553,8 @@ static bool render_loop(struct plplay *p)
     pl_swapchain_swap_buffers(p->win->swapchain);
     window_poll(p->win, false);
 
+    double pts_target = 0.0;
+
     while (!p->win->window_lost) {
         if (window_get_key(p->win, KEY_ESC))
             break;
@@ -563,6 +567,21 @@ static bool render_loop(struct plplay *p)
             // Window stuck/invisible? Block for events and try again.
             window_poll(p->win, true);
             continue;
+        }
+
+        if (pts_target) {
+            double pts = pl_clock_diff(pl_clock_now(), ts_start);
+            if (pts_target >= pts) {
+                pl_clock_sleep(pts_target - pts);
+            } else {
+                double missed_ms = 1e3 * (pts - pts_target);
+                fprintf(stderr, "Missed PTS target %.3f (%.3f ms in the past)\n",
+                        pts_target, missed_ms);
+                p->stats.missed++;
+                p->stats.missed_ms += missed_ms;
+            }
+
+            pts_target = 0.0;
         }
 
         pl_clock_t ts_present = pl_clock_now();
@@ -604,6 +623,20 @@ retry:
 
         pl_swapchain_swap_buffers(p->win->swapchain);
         window_poll(p->win, false);
+
+        // In content-timed mode (frame mixing disabled), delay rendering
+        // until the next frame should become visible
+        if (!p->params.frame_mixer) {
+            struct pl_source_frame next;
+            for (int i = 0;; i++) {
+                if (!pl_queue_peek(p->queue, i, &next))
+                    goto error;
+                if (next.pts > qparams.pts) {
+                    pts_target = next.pts;
+                    break;
+                }
+            }
+        }
     }
 
     return true;
@@ -1789,6 +1822,9 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 nk_labelf(nk, NK_TEXT_LEFT, "%"PRIu32, atomic_load(&p->stats.decoded));
                 nk_label(nk, "Dropped frames:", NK_TEXT_LEFT);
                 nk_labelf(nk, NK_TEXT_LEFT, "%"PRIu32, p->stats.dropped);
+                nk_label(nk, "Missed timestamps:", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%"PRIu32" (%.3f ms)",
+                          p->stats.missed, p->stats.missed_ms);
                 nk_label(nk, "Times stalled:", NK_TEXT_LEFT);
                 nk_labelf(nk, NK_TEXT_LEFT, "%"PRIu32" (%.3f ms)",
                           p->stats.stalled, p->stats.stalled_ms);
