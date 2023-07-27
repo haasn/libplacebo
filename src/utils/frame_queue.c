@@ -47,7 +47,7 @@ struct entry {
 
 // Hard limits for vsync timing validity
 #define MIN_FPS 10
-#define MAX_FPS 200
+#define MAX_FPS 400
 
 // Limits for FPS estimation state
 #define MAX_SAMPLES 32
