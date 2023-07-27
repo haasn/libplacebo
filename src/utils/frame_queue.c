@@ -418,11 +418,15 @@ static bool queue_has_room(pl_queue p)
     if (p->want_frame)
         return true;
 
+    int wanted_frames = PREFETCH_FRAMES;
+    if (p->fps.estimate && p->vps.estimate && p->vps.estimate <= 1.0f / MIN_FPS)
+        wanted_frames += ceilf(p->vps.estimate / p->fps.estimate) - 1;
+
     // Examine the queue tail
     for (int i = p->queue.num - 1; i >= 0; i--) {
         if (entry_mapped(p->queue.elem[i]))
             return true;
-        if (p->queue.num - i >= PREFETCH_FRAMES)
+        if (p->queue.num - i >= wanted_frames)
             return false;
     }
 
@@ -894,6 +898,8 @@ done: ;
 static bool prefill(pl_queue p, const struct pl_queue_params *params)
 {
     int min_frames = 2 * ceilf(params->radius);
+    if (p->fps.estimate && p->vps.estimate && p->vps.estimate <= 1.0f / MIN_FPS)
+        min_frames *= ceilf(p->vps.estimate / p->fps.estimate);
     min_frames = PL_MAX(min_frames, PREFETCH_FRAMES);
 
     while (p->queue.num < min_frames) {
