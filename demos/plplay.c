@@ -9,6 +9,8 @@
  * License: CC0 / Public Domain
  */
 
+#include <stdatomic.h>
+
 #include <libavutil/cpu.h>
 #include <libavutil/file.h>
 #include <libavutil/pixdesc.h>
@@ -106,6 +108,17 @@ struct plplay {
     struct pl_dispatch_info frame_info[MAX_FRAME_PASSES];
     int num_frame_passes;
     int num_blend_passes[MAX_BLEND_FRAMES];
+
+    // playback statistics
+    struct {
+        _Atomic uint32_t decoded;
+        uint32_t rendered;
+        uint32_t mapped;
+        uint32_t dropped;
+        uint32_t stalled;
+        double stalled_ms;
+        double current_pts;
+    } stats;
 };
 
 static void uninit(struct plplay *p)
@@ -285,6 +298,7 @@ static bool map_frame(pl_gpu gpu, pl_tex *tex,
         return false;
     }
 
+    p->stats.mapped++;
     pl_frame_copy_stream_props(out_frame, p->stream);
     return true;
 }
@@ -298,6 +312,8 @@ static void unmap_frame(pl_gpu gpu, struct pl_frame *frame,
 static void discard_frame(const struct pl_source_frame *src)
 {
     AVFrame *frame = src->frame_data;
+    struct plplay *p = frame->opaque;
+    p->stats.dropped++;
     av_frame_free(&frame);
     printf("Dropped frame with PTS %.3f\n", src->pts);
 }
@@ -348,6 +364,7 @@ static PL_THREAD_VOID decode_loop(void *arg)
             if (num_frames++ == 0)
                 first_pts = last_pts;
             frame->opaque = p;
+            (void) atomic_fetch_add(&p->stats.decoded, 1);
             pl_queue_push_block(p->queue, UINT64_MAX, &(struct pl_source_frame) {
                 .pts = last_pts - first_pts + base_pts,
                 .duration = frame_duration,
@@ -487,6 +504,7 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
     if (!ui_draw(p->ui, frame))
         return false;
 
+    p->stats.rendered++;
     return true;
 }
 
@@ -553,6 +571,7 @@ static bool render_loop(struct plplay *p)
         qparams.timeout = 0; // non-blocking update
         qparams.radius = pl_frame_mix_radius(&p->params);
         qparams.pts = pl_clock_diff(ts_present, ts_start);
+        p->stats.current_pts = qparams.pts;
 
 retry:
         switch (pl_queue_update(p->queue, &mix, &qparams)) {
@@ -574,6 +593,8 @@ retry:
             fprintf(stderr, "Stalled for %.4f ms due to insufficient decoding "
                     "speed!\n", stuck_ms);
             ts_start += ts_unstuck - ts_present; // subtract time spent waiting
+            p->stats.stalled++;
+            p->stats.stalled_ms += stuck_ms;
         }
 
         if (!pl_swapchain_submit_frame(p->win->swapchain)) {
@@ -1750,6 +1771,23 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                     for (int i = 0; i < p->num_blend_passes[j]; i++)
                         draw_shader_pass(nk, &p->blend_info[j][i]);
                 }
+
+                nk_tree_pop(nk);
+            }
+
+            if (nk_tree_push(nk, NK_TREE_NODE, "Frame statistics", NK_MINIMIZED)) {
+                nk_layout_row_dynamic(nk, 24, 2);
+                nk_label(nk, "Current PTS:", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%.3f", p->stats.current_pts);
+                nk_label(nk, "Frames rendered:", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%"PRIu32, p->stats.rendered);
+                nk_label(nk, "Decoded frames", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%"PRIu32, atomic_load(&p->stats.decoded));
+                nk_label(nk, "Dropped frames:", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%"PRIu32, p->stats.dropped);
+                nk_label(nk, "Times stalled:", NK_TEXT_LEFT);
+                nk_labelf(nk, NK_TEXT_LEFT, "%"PRIu32" (%.3f ms)",
+                          p->stats.stalled, p->stats.stalled_ms);
 
                 nk_tree_pop(nk);
             }
