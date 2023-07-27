@@ -994,3 +994,37 @@ enum pl_queue_status pl_queue_update(pl_queue p, struct pl_frame_mix *out_mix,
     pl_mutex_unlock(&p->lock_strong);
     return ret;
 }
+
+float pl_queue_estimate_fps(pl_queue p)
+{
+    pl_mutex_lock(&p->lock_weak);
+    float estimate = p->fps.estimate;
+    pl_mutex_unlock(&p->lock_weak);
+    return estimate ? 1.0f / estimate : 0.0f;
+}
+
+float pl_queue_estimate_vps(pl_queue p)
+{
+    pl_mutex_lock(&p->lock_weak);
+    float estimate = p->vps.estimate;
+    pl_mutex_unlock(&p->lock_weak);
+    return estimate ? 1.0f / estimate : 0.0f;
+}
+
+int pl_queue_num_frames(pl_queue p)
+{
+    pl_mutex_lock(&p->lock_weak);
+    int count = p->queue.num;
+    pl_mutex_unlock(&p->lock_weak);
+    return count;
+}
+
+bool pl_queue_peek(pl_queue p, int idx, struct pl_source_frame *out)
+{
+    pl_mutex_lock(&p->lock_weak);
+    bool ok = idx >= 0 && idx < p->queue.num;
+    if (ok)
+        *out = p->queue.elem[idx]->src;
+    pl_mutex_unlock(&p->lock_weak);
+    return ok;
+}

@@ -12,6 +12,7 @@ project('libplacebo', ['c', 'cpp'],
     6,
     # API version
     {
+      '296': 'add pl_queue_estimate_fps/fps, pl_queue_num_frames and pl_queue_peek',
       '295': 'change pl_source_frame.pts and pl_queue_params.pts to double',
       '294': 'add pl_vulkan_swapchain_params.disable_10bit_sdr',
       '293': 'add pl_test_pixfmt_caps',

@@ -206,6 +206,25 @@ struct pl_queue_params {
 PL_API enum pl_queue_status pl_queue_update(pl_queue queue, struct pl_frame_mix *out_mix,
                                             const struct pl_queue_params *params);
 
+// Returns a pl_queue's internal estimates for FPS and VPS (vsyncs per second).
+// Returns 0.0 if no estimate is available.
+PL_API float pl_queue_estimate_fps(pl_queue queue);
+PL_API float pl_queue_estimate_vps(pl_queue queue);
+
+// Returns the number of frames currently contained in a pl_queue.
+PL_API int pl_queue_num_frames(pl_queue queue);
+
+// Inspect the contents of the Nth queued frame. Returns false if `idx` is
+// out of range.
+//
+// Warning: No guarantee is made to ensure validity of `out->frame_data`
+// after this call. In particular, pl_queue_* calls made from another thread
+// may call `discard()` on the frame in question. The user bears responsibility
+// to avoid accessing `out->frame_data` in a multi-threaded scenario unless
+// an external guarantee can be made that the frame won't be dequeued until
+// it is done being used by the user.
+PL_API bool pl_queue_peek(pl_queue queue, int idx, struct pl_source_frame *out);
+
 PL_API_END
 
 #endif // LIBPLACEBO_FRAME_QUEUE_H
