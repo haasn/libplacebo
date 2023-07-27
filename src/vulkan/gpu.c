@@ -133,8 +133,8 @@ static void timer_begin(pl_gpu gpu, struct vk_cmd *cmd, pl_timer timer)
         vk->ResetQueryPool(vk->dev, timer->qpool, timer->index_write, 2);
     }
 
-    vk->CmdWriteTimestamp2KHR(cmd->buf, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                              timer->qpool, timer->index_write);
+    vk->CmdWriteTimestamp(cmd->buf, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                          timer->qpool, timer->index_write);
 
     p->cmd_timer = timer;
 }
@@ -207,8 +207,8 @@ bool _end_cmd(pl_gpu gpu, struct vk_cmd **pcmd, bool submit)
 
     if (p->cmd_timer) {
         pl_timer timer = p->cmd_timer;
-        vk->CmdWriteTimestamp2KHR(cmd->buf, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                                  timer->qpool, timer->index_write + 1);
+        vk->CmdWriteTimestamp(cmd->buf, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                              timer->qpool, timer->index_write + 1);
 
         timer->pending |= timer_bit(timer->index_write);
         vk_cmd_callback(cmd, (vk_cb) timer_end_cb, timer,
