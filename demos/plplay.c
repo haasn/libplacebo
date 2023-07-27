@@ -96,6 +96,8 @@ struct plplay {
     struct pl_hdr_metadata force_hdr;
     bool force_hdr_enable;
     bool use_icc_luma;
+    bool fps_override;
+    float fps;
 
     // custom shaders
     const struct pl_hook **shader_hooks;
@@ -637,6 +639,9 @@ retry:
                 }
             }
         }
+
+        if (p->fps_override)
+            pts_target = fmax(pts_target, qparams.pts + 1.0 / p->fps);
     }
 
     return true;
@@ -689,6 +694,7 @@ int main(int argc, char **argv)
         .distort_params = pl_distort_default_params,
         .target_override = true,
         .use_icc_luma = true,
+        .fps = 60.0,
     };
 
     const char *filename = NULL;
@@ -1785,6 +1791,9 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             }
 
             nk_layout_row_dynamic(nk, 24, 2);
+            nk_checkbox_label(nk, "Override display FPS", &p->fps_override);
+            nk_property_float(nk, "FPS", 10.0, &p->fps, 240.0, 5, 0.1);
+
             if (nk_button_label(nk, "Flush renderer cache"))
                 pl_renderer_flush_cache(p->renderer);
             if (nk_button_label(nk, "Recreate renderer")) {
