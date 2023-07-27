@@ -526,15 +526,12 @@ static bool render_loop(struct plplay *p)
     // first vsync.
     pl_gpu_finish(p->win->gpu);
 
-    pl_clock_t ts, ts_prev;
-    if ((ts_prev = pl_clock_now()) == 0)
+    pl_clock_t ts_start;
+    if ((ts_start = pl_clock_now()) == 0)
         goto error;
 
     pl_swapchain_swap_buffers(p->win->swapchain);
     window_poll(p->win, false);
-
-    double pts = 0.0;
-    bool stuck = false;
 
     while (!p->win->window_lost) {
         if (window_get_key(p->win, KEY_ESC))
@@ -550,30 +547,33 @@ static bool render_loop(struct plplay *p)
             continue;
         }
 
-retry:
-        if ((ts = pl_clock_now()) == 0)
-            goto error;
+        pl_clock_t ts_present = pl_clock_now();
+        bool stuck = false;
 
-        if (!stuck) {
-            pts += pl_clock_diff(ts, ts_prev);
-        }
-        ts_prev = ts;
-
+        qparams.timeout = 0; // non-blocking update
         qparams.radius = pl_frame_mix_radius(&p->params);
-        qparams.timeout = 50000000; // 50 ms
-        qparams.pts = pts;
+        qparams.pts = pl_clock_diff(ts_present, ts_start);
 
+retry:
         switch (pl_queue_update(p->queue, &mix, &qparams)) {
         case PL_QUEUE_ERR: goto error;
         case PL_QUEUE_EOF: return true;
         case PL_QUEUE_OK:
             if (!render_frame(p, &frame, &mix))
                 goto error;
-            stuck = false;
             break;
         case PL_QUEUE_MORE:
+            qparams.timeout = UINT64_MAX; // retry in blocking mode
             stuck = true;
             goto retry;
+        }
+
+        if (stuck) {
+            pl_clock_t ts_unstuck = pl_clock_now();
+            double stuck_ms = 1e3 * pl_clock_diff(ts_unstuck, ts_present);
+            fprintf(stderr, "Stalled for %.4f ms due to insufficient decoding "
+                    "speed!\n", stuck_ms);
+            ts_start += ts_unstuck - ts_present; // subtract time spent waiting
         }
 
         if (!pl_swapchain_submit_frame(p->win->swapchain)) {
