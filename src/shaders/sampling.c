@@ -449,13 +449,13 @@ static void polar_sample(pl_shader sh, pl_filter filter,
     // worst case scenario
     int yy = y > 0 ? y-1 : y;
     int xx = x > 0 ? x-1 : x;
-    float dmax = sqrt(xx*xx + yy*yy);
+    float dmin = sqrt(xx*xx + yy*yy);
     // Skip samples definitely outside the radius
-    if (dmax >= filter->radius_cutoff)
+    if (dmin >= filter->radius_cutoff)
         return;
 
     // Check for samples that might be skippable
-    bool maybe_skippable = dmax >= filter->radius_cutoff - M_SQRT2;
+    bool maybe_skippable = dmin >= filter->radius_cutoff - M_SQRT2;
 
 #pragma GLSL                                                    \
     offset = ivec2(${const int: x}, ${const int: y});           \
