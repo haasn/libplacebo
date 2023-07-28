@@ -466,12 +466,12 @@ static void polar_sample(pl_shader sh, pl_filter filter,
     wsum += w;                                                  \
     @if (in != NULL_IDENT) {                                    \
         @for (c : comp_mask)                                    \
-            color[@c] += w * $in@c[idx];                        \
+            c[@c] = $in@c[idx];                                 \
     @} else {                                                   \
         c = textureLod($tex, base + pt * vec2(offset), 0.0);    \
-        @for (c : comp_mask)                                    \
-            color[@c] += w * c[@c];                             \
     @}                                                          \
+    @for (c : comp_mask)                                        \
+        color[@c] += w * c[@c];                                 \
     @if (maybe_skippable)                                       \
         }
 }
