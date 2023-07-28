@@ -787,11 +787,12 @@ bool pl_shader_sample_polar(pl_shader sh, const struct pl_sample_src *src,
         }
     }
 
-    GLSL("color = vec4("$" / wsum) * color; \n", SH_FLOAT(scale));
-    if (!(cmask & (1 << PL_CHANNEL_A)))
-        GLSL("color.a = 1.0; \n");
+#pragma GLSL                                                                    \
+    color = ${float:scale} / wsum * color;                                      \
+    @if (!(cmask & (1 << PL_CHANNEL_A)))                                        \
+        color.a = 1.0;                                                          \
+    }
 
-    GLSL("}\n");
     return true;
 }
 
