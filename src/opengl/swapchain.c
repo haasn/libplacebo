@@ -228,6 +228,7 @@ static bool gl_sw_submit_frame(pl_swapchain sw)
             PL_ARRAY_APPEND(sw, p->vsync_fences, fence);
     }
 
+    gl->Flush();
     p->frame_started = false;
     bool ok = gl_check_err(sw->gpu, "gl_sw_submit_frame");
     gl_release_current(p->gl);
