@@ -146,9 +146,37 @@ static inline bool pl_thread_sleep(double t)
     if (t <= 0.0)
         return true;
 
-    struct timespec ts;
-    ts.tv_sec = (time_t) t;
-    ts.tv_nsec = (t - ts.tv_sec) * 1e9;
+    bool ret = false;
 
-    return nanosleep(&ts, NULL) == 0;
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+# define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x2
+#endif
+
+    HANDLE timer = CreateWaitableTimerEx(NULL, NULL,
+                                         CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                         TIMER_ALL_ACCESS);
+
+    // CREATE_WAITABLE_TIMER_HIGH_RESOLUTION is supported in Windows 10 1803+,
+    // retry without it.
+    if (!timer)
+        timer = CreateWaitableTimerEx(NULL, NULL, 0, TIMER_ALL_ACCESS);
+
+    if (!timer)
+        goto end;
+
+    // Time is expected in 100 nanosecond intervals.
+    // Negative values indicate relative time.
+    LARGE_INTEGER time = (LARGE_INTEGER){ .QuadPart = -(t * 1e7) };
+    if (!SetWaitableTimer(timer, &time, 0, NULL, NULL, 0))
+        goto end;
+
+    if (WaitForSingleObject(timer, INFINITE) != WAIT_OBJECT_0)
+        goto end;
+
+    ret = true;
+
+end:
+    if (timer)
+        CloseHandle(timer);
+    return ret;
 }
