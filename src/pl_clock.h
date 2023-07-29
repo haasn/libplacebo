@@ -96,16 +96,3 @@ static inline double pl_clock_diff(pl_clock_t a, pl_clock_t b)
     else
         return (a - b) / frequency;
 }
-
-// Returns true, if slept full time
-static inline bool pl_clock_sleep(double t)
-{
-    if (t <= 0.0)
-        return true;
-
-    struct timespec ts;
-    ts.tv_sec = (time_t) t;
-    ts.tv_nsec = (t - ts.tv_sec) * 1e9;
-
-    return nanosleep(&ts, NULL) == 0;
-}

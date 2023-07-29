@@ -574,7 +574,7 @@ static bool render_loop(struct plplay *p)
         if (pts_target) {
             double pts = pl_clock_diff(pl_clock_now(), ts_start);
             if (pts_target >= pts) {
-                pl_clock_sleep(pts_target - pts);
+                pl_thread_sleep(pts_target - pts);
             } else {
                 double missed_ms = 1e3 * (pts - pts_target);
                 fprintf(stderr, "Missed PTS target %.3f (%.3f ms in the past)\n",
