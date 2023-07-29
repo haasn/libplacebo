@@ -139,3 +139,16 @@ static inline int pl_thread_join(pl_thread thread)
     CloseHandle(thread);
     return 0;
 }
+
+// Returns true, if slept full time
+static inline bool pl_thread_sleep(double t)
+{
+    if (t <= 0.0)
+        return true;
+
+    struct timespec ts;
+    ts.tv_sec = (time_t) t;
+    ts.tv_nsec = (t - ts.tv_sec) * 1e9;
+
+    return nanosleep(&ts, NULL) == 0;
+}

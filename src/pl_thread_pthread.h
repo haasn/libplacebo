@@ -123,3 +123,16 @@ static inline int pl_cond_timedwait(pl_cond *cond, pl_mutex *mutex, uint64_t tim
 
 #define pl_thread_create(t, f, a) pthread_create(t, NULL, f, a)
 #define pl_thread_join(t)         pthread_join(t, NULL)
+
+// Returns true, if slept full time
+static inline bool pl_thread_sleep(double t)
+{
+    if (t <= 0.0)
+        return true;
+
+    struct timespec ts;
+    ts.tv_sec = (time_t) t;
+    ts.tv_nsec = (t - ts.tv_sec) * 1e9;
+
+    return nanosleep(&ts, NULL) == 0;
+}
