@@ -46,7 +46,7 @@ enum {
 // Used to defer string templating of friendly names until actually necessary
 static inline const char *sh_ident_pack(ident_t id)
 {
-    return (const char *) (IDENT_SENTINEL | id);
+    return (const char *)(uintptr_t) (IDENT_SENTINEL | id);
 }
 
 static inline ident_t sh_ident_unpack(const char *name)
