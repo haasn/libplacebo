@@ -594,7 +594,6 @@ static bool render_loop(struct plplay *p)
         if (!ts_start)
             ts_start = ts_pre_update;
 
-        bool stuck = false;
         qparams.timeout = 0; // non-blocking update
         qparams.radius = pl_frame_mix_radius(&p->params);
         qparams.pts = fmax(pts_target, pl_clock_diff(ts_pre_update, ts_start));
@@ -613,14 +612,13 @@ retry:
             break;
         case PL_QUEUE_MORE:
             qparams.timeout = UINT64_MAX; // retry in blocking mode
-            stuck = true;
             goto retry;
         }
 
         pl_clock_t ts_post_update = pl_clock_now();
         log_time(&p->stats.update, pl_clock_diff(ts_post_update, ts_pre_update));
 
-        if (stuck) {
+        if (qparams.timeout) {
             double stuck_ms = 1e3 * pl_clock_diff(ts_post_update, ts_pre_update);
             fprintf(stderr, "Stalled for %.4f ms due to insufficient decoding "
                     "speed!\n", stuck_ms);
