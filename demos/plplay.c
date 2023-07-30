@@ -1,10 +1,6 @@
-/* Very basic video player based on ffmpeg. All it does is render a single
- * video stream to completion, and then exits. It exits on most errors, rather
- * than gracefully trying to recreate the context.
- *
- * The timing code is also rather naive, due to the current lack of
- * presentation feedback. That being said, an effort is made to time the video
- * stream to the system clock, using frame mixing for mismatches.
+/* Example video player based on ffmpeg. Designed to expose every libplacebo
+ * option for testing purposes. Not a serious video player, no real error
+ * handling. Simply infinitely loops its input.
  *
  * License: CC0 / Public Domain
  */
