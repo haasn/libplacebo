@@ -582,7 +582,9 @@ static bool render_loop(struct plplay *p)
 retry:
         switch (pl_queue_update(p->queue, &mix, &qparams)) {
         case PL_QUEUE_ERR: goto error;
-        case PL_QUEUE_EOF: return true;
+        case PL_QUEUE_EOF:
+            printf("End of file reached\n");
+            return true;
         case PL_QUEUE_OK:
             if (!render_frame(p, &frame, &mix))
                 goto error;
