@@ -61,7 +61,13 @@ This screenshot from the included [plplay demo program](./demos/plplay.c)
 highlights just some of the features supported by the libplacebo rendering
 code, all of which are adjustable dynamically during video playback.
 
-[<img src="./demos/plplay-screenshot.png" width="200" alt="plplay settings" />](./demos/plplay-screenshot.png)
+[<img src="./demos/screenshots/plplay1.png" width="200" alt="plplay settings 1" />](./demos/screenshots/plplay1.png)
+[<img src="./demos/screenshots/plplay2.png" width="200" alt="plplay settings 2" />](./demos/screenshots/plplay2.png)
+[<img src="./demos/screenshots/plplay3.png" width="200" alt="plplay settings 3" />](./demos/screenshots/plplay3.png)
+
+[<img src="./demos/screenshots/plplay4.png" width="200" alt="plplay settings 4" />](./demos/screenshots/plplay4.png)
+[<img src="./demos/screenshots/plplay5.png" width="200" alt="plplay settings 5" />](./demos/screenshots/plplay5.png)
+[<img src="./demos/screenshots/plplay6.png" width="200" alt="plplay settings 6" />](./demos/screenshots/plplay6.png)
 
 ### History
 
