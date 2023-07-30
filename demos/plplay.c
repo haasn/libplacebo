@@ -122,8 +122,22 @@ struct plplay {
         double missed_ms;
         double stalled_ms;
         double current_pts;
+
+        struct timing {
+            double sum, sum2, peak;
+            uint64_t count;
+        } acquire, update, render, draw_ui, sleep, submit, swap,
+          vsync_interval, pts_interval;
     } stats;
 };
+
+static inline void log_time(struct timing *t, double ts)
+{
+    t->sum += ts;
+    t->sum2 += ts * ts;
+    t->peak = fmax(t->peak, ts);
+    t->count++;
+}
 
 static void uninit(struct plplay *p)
 {
@@ -502,11 +516,16 @@ static bool render_frame(struct plplay *p, const struct pl_swapchain_frame *fram
         pl_rect2df_aspect_set(&cpars->visualize_rect, 1.0f / tar, 0.0f);
     }
 
+    pl_clock_t ts_pre = pl_clock_now();
     if (!pl_render_image_mix(p->renderer, mix, &target, &p->params))
         return false;
-
+    pl_clock_t ts_rendered = pl_clock_now();
     if (!ui_draw(p->ui, frame))
         return false;
+    pl_clock_t ts_ui_drawn = pl_clock_now();
+
+    log_time(&p->stats.render, pl_clock_diff(ts_rendered, ts_pre));
+    log_time(&p->stats.draw_ui, pl_clock_diff(ts_ui_drawn, ts_rendered));
 
     p->stats.rendered++;
     return true;
@@ -547,15 +566,16 @@ static bool render_loop(struct plplay *p)
     // start, to ensure we don't count initialization overhead as part of the
     // first vsync.
     pl_gpu_finish(p->win->gpu);
+    p->stats.render = p->stats.draw_ui = (struct timing) {0};
 
-    pl_clock_t ts_start;
+    pl_clock_t ts_start, ts_prev = 0;
     if ((ts_start = pl_clock_now()) == 0)
         goto error;
 
     pl_swapchain_swap_buffers(p->win->swapchain);
     window_poll(p->win, false);
 
-    double pts_target = 0.0;
+    double pts_target = 0.0, prev_pts = 0.0;
 
     while (!p->win->window_lost) {
         if (window_get_key(p->win, KEY_ESC))
@@ -565,19 +585,24 @@ static bool render_loop(struct plplay *p)
             window_toggle_fullscreen(p->win, !window_is_fullscreen(p->win));
 
         update_colorspace_hint(p, &mix);
+        pl_clock_t ts_acquire = pl_clock_now();
         if (!pl_swapchain_start_frame(p->win->swapchain, &frame)) {
             // Window stuck/invisible? Block for events and try again.
             window_poll(p->win, true);
             continue;
         }
 
-        pl_clock_t ts_update = pl_clock_now();
-        bool stuck = false;
+        pl_clock_t ts_pre_update = pl_clock_now();
+        log_time(&p->stats.acquire, pl_clock_diff(ts_pre_update, ts_acquire));
 
+        bool stuck = false;
         qparams.timeout = 0; // non-blocking update
         qparams.radius = pl_frame_mix_radius(&p->params);
-        qparams.pts = fmax(pts_target, pl_clock_diff(ts_update, ts_start));
+        qparams.pts = fmax(pts_target, pl_clock_diff(ts_pre_update, ts_start));
         p->stats.current_pts = qparams.pts;
+        if (qparams.pts != prev_pts)
+            log_time(&p->stats.pts_interval, qparams.pts - prev_pts);
+        prev_pts = qparams.pts;
 
 retry:
         switch (pl_queue_update(p->queue, &mix, &qparams)) {
@@ -586,8 +611,6 @@ retry:
             printf("End of file reached\n");
             return true;
         case PL_QUEUE_OK:
-            if (!render_frame(p, &frame, &mix))
-                goto error;
             break;
         case PL_QUEUE_MORE:
             qparams.timeout = UINT64_MAX; // retry in blocking mode
@@ -595,21 +618,27 @@ retry:
             goto retry;
         }
 
+        pl_clock_t ts_post_update = pl_clock_now();
+        log_time(&p->stats.update, pl_clock_diff(ts_post_update, ts_pre_update));
+
         if (stuck) {
-            pl_clock_t ts_unstuck = pl_clock_now();
-            double stuck_ms = 1e3 * pl_clock_diff(ts_unstuck, ts_update);
+            double stuck_ms = 1e3 * pl_clock_diff(ts_post_update, ts_pre_update);
             fprintf(stderr, "Stalled for %.4f ms due to insufficient decoding "
                     "speed!\n", stuck_ms);
-            ts_start += ts_unstuck - ts_update; // subtract time spent waiting
+            ts_start += ts_post_update - ts_pre_update; // subtract time spent waiting
             p->stats.stalled++;
             p->stats.stalled_ms += stuck_ms;
         }
+
+        if (!render_frame(p, &frame, &mix))
+            goto error;
 
         if (pts_target) {
             pl_gpu_flush(p->win->gpu);
             pl_clock_t ts_wait = pl_clock_now();
             double pts_now = pl_clock_diff(ts_wait, ts_start);
             if (pts_target >= pts_now) {
+                log_time(&p->stats.sleep, pts_target - pts_now);
                 pl_thread_sleep(pts_target - pts_now);
             } else {
                 double missed_ms = 1e3 * (pts_now - pts_target);
@@ -622,12 +651,22 @@ retry:
             pts_target = 0.0;
         }
 
+        pl_clock_t ts_pre_submit = pl_clock_now();
         if (!pl_swapchain_submit_frame(p->win->swapchain)) {
             fprintf(stderr, "libplacebo: failed presenting frame!\n");
             goto error;
         }
+        pl_clock_t ts_post_submit = pl_clock_now();
+        log_time(&p->stats.submit, pl_clock_diff(ts_post_submit, ts_pre_submit));
+
+        if (ts_prev)
+            log_time(&p->stats.vsync_interval, pl_clock_diff(ts_post_submit, ts_prev));
+        ts_prev = ts_post_submit;
 
         pl_swapchain_swap_buffers(p->win->swapchain);
+        pl_clock_t ts_post_swap = pl_clock_now();
+        log_time(&p->stats.swap, pl_clock_diff(ts_post_swap, ts_post_submit));
+
         window_poll(p->win, false);
 
         // In content-timed mode (frame mixing disabled), delay rendering
@@ -953,6 +992,16 @@ static void draw_shader_pass(struct nk_context *nk,
             nk_labelf(nk, NK_TEXT_LEFT, "%d. %s", n + 1, shader->steps[n]);
         nk_tree_pop(nk);
     }
+}
+
+static void draw_timing(struct nk_context *nk, const char *label,
+                        const struct timing *t)
+{
+    const double avg = t->count ? t->sum / t->count : 0.0;
+    const double stddev = t->count ? sqrt(t->sum2 / t->count - avg * avg) : 0.0;
+    nk_label(nk, label, NK_TEXT_LEFT);
+    nk_labelf(nk, NK_TEXT_LEFT, "%.4f ± %.4f ms (%.3f ms)",
+              avg * 1e3, stddev * 1e3, t->peak * 1e3);
 }
 
 static void update_settings(struct plplay *p, const struct pl_frame *target)
@@ -1795,8 +1844,12 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
             }
 
             nk_layout_row_dynamic(nk, 24, 2);
-            nk_checkbox_label(nk, "Override display FPS", &p->fps_override);
+
+            double prev_fps = p->fps;
+            bool fps_changed = nk_checkbox_label(nk, "Override display FPS", &p->fps_override);
             nk_property_float(nk, "FPS", 10.0, &p->fps, 240.0, 5, 0.1);
+            if (fps_changed || p->fps != prev_fps)
+                p->stats.pts_interval = p->stats.vsync_interval = (struct timing) {0};
 
             if (nk_button_label(nk, "Flush renderer cache"))
                 pl_renderer_flush_cache(p->renderer);
@@ -1805,7 +1858,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 p->renderer = pl_renderer_create(p->log, p->win->gpu);
             }
 
-            if (nk_tree_push(nk, NK_TREE_NODE, "Shader passes", NK_MINIMIZED)) {
+            if (nk_tree_push(nk, NK_TREE_NODE, "Shader passes / GPU timing", NK_MINIMIZED)) {
                 nk_layout_row_dynamic(nk, 26, 1);
                 nk_label(nk, "Full frames:", NK_TEXT_LEFT);
                 for (int i = 0; i < p->num_frame_passes; i++)
@@ -1821,7 +1874,7 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 nk_tree_pop(nk);
             }
 
-            if (nk_tree_push(nk, NK_TREE_NODE, "Frame statistics", NK_MINIMIZED)) {
+            if (nk_tree_push(nk, NK_TREE_NODE, "Frame statistics / CPU timing", NK_MINIMIZED)) {
                 nk_layout_row_dynamic(nk, 24, 2);
                 nk_label(nk, "Current PTS:", NK_TEXT_LEFT);
                 nk_labelf(nk, NK_TEXT_LEFT, "%.3f", p->stats.current_pts);
@@ -1841,7 +1894,18 @@ static void update_settings(struct plplay *p, const struct pl_frame *target)
                 nk_label(nk, "Times stalled:", NK_TEXT_LEFT);
                 nk_labelf(nk, NK_TEXT_LEFT, "%"PRIu32" (%.3f ms)",
                           p->stats.stalled, p->stats.stalled_ms);
+                draw_timing(nk, "Acquire FBO:", &p->stats.acquire);
+                draw_timing(nk, "Update queue:", &p->stats.update);
+                draw_timing(nk, "Render frame:", &p->stats.render);
+                draw_timing(nk, "Draw interface:", &p->stats.draw_ui);
+                draw_timing(nk, "Voluntary sleep:", &p->stats.sleep);
+                draw_timing(nk, "Submit frame:", &p->stats.submit);
+                draw_timing(nk, "Swap buffers:", &p->stats.swap);
+                draw_timing(nk, "Vsync interval:", &p->stats.vsync_interval);
+                draw_timing(nk, "PTS interval:", &p->stats.pts_interval);
 
+                if (nk_button_label(nk, "Reset statistics"))
+                    memset(&p->stats, 0, sizeof(p->stats));
                 nk_tree_pop(nk);
             }
 
