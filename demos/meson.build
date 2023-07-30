@@ -99,8 +99,13 @@ if apis.length() == 0
           'SDL and either Vulkan or OpenGL to function.')
 else
 
+  additional_dep = []
+  if host_machine.system() == 'windows'
+    additional_dep += cc.find_library('winmm')
+  endif
+
   dep = declare_dependency(
-    dependencies: [ libplacebo, build_deps ],
+    dependencies: [ libplacebo, build_deps ] + additional_dep,
     sources: ['window.c'],
     link_with: apis,
   )
