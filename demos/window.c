@@ -38,8 +38,13 @@ struct window *window_create(pl_log log, const struct window_params *params)
 
         printf("Attempting to initialize API: %s\n", (*impl)->name);
         struct window *win = (*impl)->create(log, params);
-        if (win)
+        if (win) {
+#ifdef PL_HAVE_WIN32
+            if (timeBeginPeriod(1) != TIMERR_NOERROR)
+                fprintf(stderr, "timeBeginPeriod failed!\n");
+#endif
             return win;
+        }
     }
 
     if (params->forced_impl)
@@ -52,8 +57,14 @@ struct window *window_create(pl_log log, const struct window_params *params)
 
 void window_destroy(struct window **win)
 {
-    if (*win)
-        (*win)->impl->destroy(win);
+    if (!*win)
+        return;
+
+    (*win)->impl->destroy(win);
+
+#ifdef PL_HAVE_WIN32
+    timeEndPeriod(1);
+#endif
 }
 
 void window_poll(struct window *win, bool block)
