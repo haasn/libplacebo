@@ -1876,11 +1876,16 @@ static bool pass_scale_main(struct pass_state *pass)
         return true;
     }
 
+    const pl_rect2df new_rect = {
+        .x1 = abs(pl_rect_w(pass->dst_rect)),
+        .y1 = abs(pl_rect_h(pass->dst_rect)),
+    };
+
     struct img *img = &pass->img;
     struct pl_sample_src src = {
         .components = img->comps,
-        .new_w      = abs(pl_rect_w(pass->dst_rect)),
-        .new_h      = abs(pl_rect_h(pass->dst_rect)),
+        .new_w      = pl_rect_w(new_rect),
+        .new_h      = pl_rect_h(new_rect),
         .rect       = img->rect,
     };
 
@@ -1924,6 +1929,7 @@ static bool pass_scale_main(struct pass_state *pass)
     if (info.type == SAMPLER_DIRECT && !need_fbo) {
         img->w = src.new_w;
         img->h = src.new_h;
+        img->rect = new_rect;
         PL_TRACE(rr, "Skipping main scaler (free sampling)");
         goto done;
     }
