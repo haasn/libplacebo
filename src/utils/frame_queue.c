@@ -827,10 +827,11 @@ static enum pl_queue_status interpolate(pl_queue p, struct pl_frame_mix *mix,
             return ret;
         case PL_QUEUE_MORE:
             goto done;
-        case PL_QUEUE_EOF:
+        case PL_QUEUE_EOF:;
             // Don't forward EOF until we've held the last frame for the
             // desired ZOH hold duration
-            if (params->pts >= p->queue.elem[p->queue.num - 1]->pts + p->fps.estimate)
+            double last_pts = p->queue.elem[p->queue.num - 1]->pts;
+            if (last_pts && params->pts >= last_pts + p->fps.estimate)
                 return ret;
             ret = PL_QUEUE_OK;
             goto done;
