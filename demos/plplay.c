@@ -616,8 +616,7 @@ retry:
 
         if (qparams.timeout) {
             double stuck_ms = 1e3 * pl_clock_diff(ts_post_update, ts_pre_update);
-            fprintf(stderr, "Stalled for %.4f ms due to insufficient decoding "
-                    "speed!\n", stuck_ms);
+            fprintf(stderr, "Stalled for %.4f ms due to frame queue underrun!\n", stuck_ms);
             ts_start += ts_post_update - ts_pre_update; // subtract time spent waiting
             p->stats.stalled++;
             p->stats.stalled_ms += stuck_ms;
