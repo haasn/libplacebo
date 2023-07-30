@@ -1970,15 +1970,11 @@ static bool pass_scale_main(struct pass_state *pass)
 
     pl_shader sh = pl_dispatch_begin_ex(rr->dp, true);
     dispatch_sampler(pass, sh, &rr->sampler_main, SAMPLER_MAIN, NULL, &src);
-    *img = (struct img) {
-        .sh     = sh,
-        .w      = src.new_w,
-        .h      = src.new_h,
-        .repr   = img->repr,
-        .rect   = { 0, 0, src.new_w, src.new_h },
-        .color  = img->color,
-        .comps  = img->comps,
-    };
+    img->tex  = NULL;
+    img->sh   = sh;
+    img->w    = src.new_w;
+    img->h    = src.new_h;
+    img->rect = new_rect;
 
     pass_hook(pass, img, PL_HOOK_POST_KERNEL);
 
