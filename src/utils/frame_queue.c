@@ -696,20 +696,13 @@ static enum pl_queue_status nearest(pl_queue p, struct pl_frame_mix *mix,
     case PL_QUEUE_EOF:
         return ret;
     case PL_QUEUE_OK:
-        break;
     case PL_QUEUE_MORE:
-        if (!p->queue.num) {
-            if (mix)
-                *mix = (struct pl_frame_mix) {0};
-            return ret;
-        }
-        break;
+        if (mix && point(p, mix, params) != PL_QUEUE_OK)
+            return PL_QUEUE_ERR;
+        return ret;
     }
 
-    if (!mix)
-        return PL_QUEUE_OK;
-
-    return point(p, mix, params);
+    pl_unreachable();
 }
 
 // Special case of `interpolate` for radius = 0, in which case we need exactly
