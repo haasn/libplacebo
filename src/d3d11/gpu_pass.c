@@ -678,6 +678,7 @@ void pl_d3d11_pass_destroy(pl_gpu gpu, pl_pass pass)
     SAFE_RELEASE(pass_p->cs);
     SAFE_RELEASE(pass_p->layout);
     SAFE_RELEASE(pass_p->bstate);
+    SAFE_RELEASE(pass_p->num_workgroups_buf);
 
     pl_d3d11_flush_message_queue(ctx, "After pass destroy");
 
