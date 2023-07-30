@@ -632,7 +632,7 @@ retry:
             struct pl_source_frame next;
             for (int i = 0;; i++) {
                 if (!pl_queue_peek(p->queue, i, &next))
-                    goto error;
+                    break;
                 if (next.pts > qparams.pts) {
                     pts_target = next.pts;
                     break;
