@@ -564,10 +564,7 @@ static bool render_loop(struct plplay *p)
     pl_gpu_finish(p->win->gpu);
     p->stats.render = p->stats.draw_ui = (struct timing) {0};
 
-    pl_clock_t ts_start, ts_prev = 0;
-    if ((ts_start = pl_clock_now()) == 0)
-        goto error;
-
+    pl_clock_t ts_start = 0, ts_prev = 0;
     pl_swapchain_swap_buffers(p->win->swapchain);
     window_poll(p->win, false);
 
@@ -590,6 +587,8 @@ static bool render_loop(struct plplay *p)
 
         pl_clock_t ts_pre_update = pl_clock_now();
         log_time(&p->stats.acquire, pl_clock_diff(ts_pre_update, ts_acquire));
+        if (!ts_start)
+            ts_start = ts_pre_update;
 
         bool stuck = false;
         qparams.timeout = 0; // non-blocking update
