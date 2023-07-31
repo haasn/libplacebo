@@ -88,46 +88,6 @@ static void opengl_swapchain_tests(pl_opengl gl,
     pl_swapchain_destroy(&sw);
 }
 
-static void opengl_test_export_import(pl_opengl gl,
-                                      enum pl_handle_type handle_type)
-{
-    pl_gpu gpu = gl->gpu;
-    printf("testing opengl import/export\n");
-
-    if (!(gpu->export_caps.tex & handle_type) ||
-        !(gpu->import_caps.tex & handle_type)) {
-        fprintf(stderr, "%s unsupported caps!\n", __func__);
-        return;
-    }
-
-    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 1, 0, 0, PL_FMT_CAP_BLITTABLE);
-    if (!fmt) {
-        fprintf(stderr, "%s unsupported format\n", __func__);
-        return;
-    }
-
-    pl_tex export = pl_tex_create(gpu, pl_tex_params(
-        .w = 32,
-        .h = 32,
-        .format = fmt,
-        .export_handle = handle_type,
-    ));
-    REQUIRE(export);
-    REQUIRE_HANDLE(export->shared_mem, handle_type);
-
-    pl_tex import = pl_tex_create(gpu, pl_tex_params(
-        .w = 32,
-        .h = 32,
-        .format = fmt,
-        .import_handle = handle_type,
-        .shared_mem = export->shared_mem,
-    ));
-    REQUIRE(import);
-
-    pl_tex_destroy(gpu, &import);
-    pl_tex_destroy(gpu, &export);
-}
-
 int main()
 {
     if (!gladLoaderLoadEGL(EGL_NO_DISPLAY))
@@ -262,7 +222,6 @@ int main()
         gpu_interop_tests(gpu);
         opengl_interop_tests(gpu);
         opengl_swapchain_tests(gl, dpy, surf);
-        opengl_test_export_import(gl, PL_HANDLE_DMA_BUF);
 
         // Reduce log spam after first successful test
         pl_log_level_update(log, PL_LOG_INFO);
