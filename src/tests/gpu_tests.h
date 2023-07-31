@@ -887,7 +887,6 @@ error:
 }
 
 static const char *user_shader_tests[] = {
-
     // Test hooking, saving and loading
     "// Example of a comment at the beginning                               \n"
     "                                                                       \n"
@@ -936,6 +935,29 @@ static const char *user_shader_tests[] = {
     "00803f000000000000803f0000803f00000000000000009a99993e9a99993e9a99993e000"
     "000009a99193F9A99193f9a99193f000000000000803f0000803f0000803f00000000  \n",
 
+    // Test custom parameters
+    "//!PARAM test                                                          \n"
+    "//!DESC test parameter                                                 \n"
+    "//!TYPE DYNAMIC float                                                  \n"
+    "//!MINIMUM 0.0                                                         \n"
+    "//!MAXIMUM 100.0                                                       \n"
+    "1.0                                                                    \n"
+    "                                                                       \n"
+    "//!PARAM testconst                                                     \n"
+    "//!TYPE CONSTANT uint                                                  \n"
+    "//!MAXIMUM 16                                                          \n"
+    "3                                                                      \n"
+    "                                                                       \n"
+    "//!PARAM testdefine                                                    \n"
+    "//!TYPE DEFINE                                                         \n"
+    "100                                                                    \n"
+    "                                                                       \n"
+    "//!HOOK MAIN                                                           \n"
+    "//!WHEN testconst 30 >                                                 \n"
+    "#error should not be run                                               \n",
+};
+
+static const char *compute_shader_tests[] = {
     // Test use of storage/buffer resources
     "//!HOOK MAIN                                                           \n"
     "//!DESC attach some storage objects                                    \n"
@@ -964,26 +986,6 @@ static const char *user_shader_tests[] = {
     "//!VAR int big[32];                                                    \n"
     "//!STORAGE                                                             \n",
 
-    // Test custom parameters
-    "//!PARAM test                                                          \n"
-    "//!DESC test parameter                                                 \n"
-    "//!TYPE DYNAMIC float                                                  \n"
-    "//!MINIMUM 0.0                                                         \n"
-    "//!MAXIMUM 100.0                                                       \n"
-    "1.0                                                                    \n"
-    "                                                                       \n"
-    "//!PARAM testconst                                                     \n"
-    "//!TYPE CONSTANT uint                                                  \n"
-    "//!MAXIMUM 16                                                          \n"
-    "3                                                                      \n"
-    "                                                                       \n"
-    "//!PARAM testdefine                                                    \n"
-    "//!TYPE DEFINE                                                         \n"
-    "100                                                                    \n"
-    "                                                                       \n"
-    "//!HOOK MAIN                                                           \n"
-    "//!WHEN testconst 30 >                                                 \n"
-    "#error should not be run                                               \n",
 };
 
 static const char *test_luts[] = {
@@ -1211,14 +1213,7 @@ static void pl_render_tests(pl_gpu gpu)
         const struct pl_hook *hook;
         hook = pl_mpv_user_shader_parse(gpu, user_shader_tests[i],
                                         strlen(user_shader_tests[i]));
-
-        if (gpu->glsl.compute && gpu->limits.max_ssbo_size) {
-            REQUIRE(hook);
-        } else {
-            // Not all shaders compile without compute shader support
-            if (!hook)
-                continue;
-        }
+        REQUIRE(hook);
 
         params.hooks = &hook;
         params.num_hooks = 1;
@@ -1226,6 +1221,23 @@ static void pl_render_tests(pl_gpu gpu)
         REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
 
         pl_mpv_user_shader_destroy(&hook);
+    }
+
+    if (gpu->glsl.compute && gpu->limits.max_ssbo_size) {
+        for (int i = 0; i < PL_ARRAY_SIZE(compute_shader_tests); i++) {
+            printf("testing user shader:\n\n%s\n", compute_shader_tests[i]);
+            const struct pl_hook *hook;
+            hook = pl_mpv_user_shader_parse(gpu, compute_shader_tests[i],
+                                            strlen(compute_shader_tests[i]));
+            REQUIRE(hook);
+
+            params.hooks = &hook;
+            params.num_hooks = 1;
+            REQUIRE(pl_render_image(rr, &image, &target, &params));
+            REQUIRE(pl_renderer_get_errors(rr).errors == PL_RENDER_ERR_NONE);
+
+            pl_mpv_user_shader_destroy(&hook);
+        }
     }
     params = pl_render_default_params;
 
