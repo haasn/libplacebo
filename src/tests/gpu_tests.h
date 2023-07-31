@@ -414,7 +414,7 @@ static void pl_shader_tests(pl_gpu gpu)
     printf("timer query result: %"PRIu64"\n", pl_timer_query(gpu, timer));
     pl_timer_destroy(gpu, &timer);
 
-    static float data[FBO_H * FBO_W * 4] = {0};
+    static float test_data[FBO_H * FBO_W * 4] = {0};
 
     // Test against the known pattern of `src`, only useful for roundtrip tests
 #define TEST_FBO_PATTERN(eps, fmt, ...)                                     \
@@ -422,12 +422,12 @@ static void pl_shader_tests(pl_gpu gpu)
         printf("testing pattern of " fmt "\n", __VA_ARGS__);                \
         REQUIRE(pl_tex_download(gpu, &(struct pl_tex_transfer_params) {     \
             .tex = fbo,                                                     \
-            .ptr = data,                                                    \
+            .ptr = test_data,                                               \
         }));                                                                \
                                                                             \
         for (int y = 0; y < FBO_H; y++) {                                   \
             for (int x = 0; x < FBO_W; x++) {                               \
-                float *color = &data[(y * FBO_W + x) * 4];                  \
+                float *color = &test_data[(y * FBO_W + x) * 4];             \
                 REQUIRE_FEQ(color[0], (x + 0.5) / FBO_W, eps);              \
                 REQUIRE_FEQ(color[1], (y + 0.5) / FBO_H, eps);              \
                 REQUIRE_FEQ(color[2], 0.0, eps);                            \
@@ -505,6 +505,9 @@ static void pl_shader_tests(pl_gpu gpu)
 
     TEST_FBO_PATTERN(1e-6, "%s", "using custom vertices");
 
+    static float src_data[FBO_H * FBO_W * 4] = {0};
+    memcpy(src_data, test_data, sizeof(src_data));
+
     pl_tex src;
     src = pl_tex_create(gpu, &(struct pl_tex_params) {
         .format         = fbo_fmt,
@@ -512,7 +515,7 @@ static void pl_shader_tests(pl_gpu gpu)
         .h              = FBO_H,
         .storable       = fbo->params.storable,
         .sampleable     = true,
-        .initial_data   = data,
+        .initial_data   = src_data,
     });
 
     if (fbo->params.storable) {
@@ -655,7 +658,7 @@ static void pl_shader_tests(pl_gpu gpu)
         float real_peak = 0, real_avg = 0;
         for (int y = 0; y < FBO_H; y++) {
             for (int x = 0; x < FBO_W; x++) {
-                float *color = &data[(y * FBO_W + x) * 4];
+                float *color = &src_data[(y * FBO_W + x) * 4];
                 float luma = 0.212639f * powf(color[0], 2.2f) +
                              0.715169f * powf(color[1], 2.2f) +
                              0.072192f * powf(color[2], 2.2f);
