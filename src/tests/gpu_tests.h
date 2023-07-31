@@ -1601,8 +1601,8 @@ static void pl_test_export_import(pl_gpu gpu,
     REQUIRE_HANDLE(export->shared_mem, handle_type);
 
     pl_tex import = pl_tex_create(gpu, &(struct pl_tex_params) {
-        .w = 32,
-        .h = 32,
+        .w = export->params.w,
+        .h = export->params.h,
         .format = fmt,
         .import_handle = handle_type,
         .shared_mem = export->shared_mem,
