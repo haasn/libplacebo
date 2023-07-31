@@ -302,20 +302,6 @@ pl_opengl pl_opengl_create(pl_log log, const struct pl_opengl_params *params)
     if (!pl_gl->gpu)
         goto error;
 
-    // Restrict version
-    if (params->max_glsl_version && params->max_glsl_version >= 130) {
-        struct pl_glsl_version *glsl = (struct pl_glsl_version *) &pl_gl->gpu->glsl;
-        glsl->version = PL_MIN(glsl->version, params->max_glsl_version);
-        PL_INFO(p, "Restricting GLSL version to %d... new version is %d",
-                params->max_glsl_version, glsl->version);
-    }
-
-    // The layout of variables inside an SSBO is implementation-defined,
-    // disable SSBO if layout qualifier is not supported.
-    struct pl_gpu_t *gpu = (struct pl_gpu_t *) pl_gl->gpu;
-    if (gpu->glsl.version < 140)
-        gpu->limits.max_ssbo_size = 0;
-
     gl_release_current(pl_gl);
     return pl_gl;
 

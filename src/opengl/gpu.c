@@ -146,6 +146,11 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
         goto error;
     }
 
+    if (params->max_glsl_version && params->max_glsl_version >= glsl_ver_req) {
+        glsl->version = PL_MIN(glsl->version, params->max_glsl_version);
+        PL_INFO(gpu, "Restricting GLSL version to %d... new version is %d",
+                params->max_glsl_version, glsl->version);
+    }
 
     if (gl_test_ext(gpu, "GL_ARB_compute_shader", 43, 0) && glsl->version >= 420) {
         glsl->compute = true;
