@@ -810,7 +810,7 @@ debug_ext_done: ;
 
     // Limit this to 1.3.250+ because of bugs in older versions.
     if (debug && params->debug_extra &&
-        debug_layer_version >= VK_MAKE_API_VERSION(0, 1, 3, 250))
+        debug_layer_version >= VK_MAKE_API_VERSION(0, 1, 3, 259))
     {
         // Try enabling as many validation features as possible
         static const VkValidationFeatureEnableEXT validation_features[] = {
