@@ -808,8 +808,10 @@ next_opt_user_ext: ;
 
 debug_ext_done: ;
 
-    if (debug && params->debug_extra) {
-
+    // Limit this to 1.3.250+ because of bugs in older versions.
+    if (debug && params->debug_extra &&
+        debug_layer_version >= VK_MAKE_API_VERSION(0, 1, 3, 250))
+    {
         // Try enabling as many validation features as possible
         static const VkValidationFeatureEnableEXT validation_features[] = {
             VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
