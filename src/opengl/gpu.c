@@ -169,8 +169,11 @@ pl_gpu pl_gpu_create_gl(pl_log log, pl_opengl pl_gl, const struct pl_opengl_para
         limits->max_buf_size = SIZE_MAX; // no restriction imposed by GL
     if (gl_test_ext(gpu, "GL_ARB_uniform_buffer_object", 31, 0))
         get(GL_MAX_UNIFORM_BLOCK_SIZE, &limits->max_ubo_size);
-    if (gl_test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0))
+    if (gl_test_ext(gpu, "GL_ARB_shader_storage_buffer_object", 43, 0) &&
+        gpu->glsl.version >= 140)
+    {
         get(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &limits->max_ssbo_size);
+    }
     limits->max_vbo_size = limits->max_buf_size; // No additional restrictions
     if (gl_test_ext(gpu, "GL_ARB_buffer_storage", 44, 0)) {
         const char *vendor = (char *) gl->GetString(GL_VENDOR);
