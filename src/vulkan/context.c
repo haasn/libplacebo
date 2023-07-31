@@ -619,6 +619,7 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
     // happens (random segfaults, yum)
     bool debug = params->debug;
     uint32_t debug_layer = 0; // layer idx of debug layer
+    uint32_t debug_layer_version = 0;
     if (debug) {
         for (int i = 0; i < PL_ARRAY_SIZE(debug_layers); i++) {
             for (int n = 0; n < num_layers_avail; n++) {
@@ -626,7 +627,9 @@ pl_vk_inst pl_vk_inst_create(pl_log log, const struct pl_vk_inst_params *params)
                     continue;
 
                 debug_layer = n;
-                pl_info(log, "Enabling debug meta layer: %s", debug_layers[i]);
+                debug_layer_version = layers_avail[n].specVersion;
+                pl_info(log, "Enabling debug meta layer: %s (v%d.%d.%d)",
+                        debug_layers[i], PRINTF_VER(debug_layer_version));
                 PL_ARRAY_APPEND(tmp, layers, debug_layers[i]);
                 goto debug_layers_done;
             }
