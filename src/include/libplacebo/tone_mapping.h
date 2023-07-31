@@ -206,6 +206,11 @@ PL_API extern const struct pl_tone_map_function pl_tone_map_gamma;
 // linear gain coefficient (defaulting to 1.0).
 PL_API extern const struct pl_tone_map_function pl_tone_map_linear;
 
+// Like `pl_tone_map_linear`, but in linear light (instead of perceptually
+// linear). Works well for small range adjustments but may cause severe
+// darkening when downconverting from e.g. 10k nits to SDR.
+PL_API extern const struct pl_tone_map_function pl_tone_map_linear_light;
+
 // A list of built-in tone mapping functions, terminated by NULL
 PL_API extern const struct pl_tone_map_function * const pl_tone_map_functions[];
 PL_API extern const int pl_num_tone_map_functions; // excluding trailing NULL

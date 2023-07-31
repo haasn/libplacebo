@@ -731,6 +731,18 @@ const struct pl_tone_map_function pl_tone_map_linear = {
     .map_inverse = linear,
 };
 
+const struct pl_tone_map_function pl_tone_map_linear_light = {
+    .name = "linearlight",
+    .description = "Linear light stretch",
+    .param_desc = "Exposure",
+    .param_min = 0.001,
+    .param_def = 1.00,
+    .param_max = 10.0,
+    .scaling = PL_HDR_NORM,
+    .map = linear,
+    .map_inverse = linear,
+};
+
 const struct pl_tone_map_function * const pl_tone_map_functions[] = {
     &pl_tone_map_auto,
     &pl_tone_map_clip,
@@ -744,6 +756,7 @@ const struct pl_tone_map_function * const pl_tone_map_functions[] = {
     &pl_tone_map_hable,
     &pl_tone_map_gamma,
     &pl_tone_map_linear,
+    &pl_tone_map_linear_light,
     NULL
 };
 
